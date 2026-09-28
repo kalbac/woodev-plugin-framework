@@ -1072,6 +1072,9 @@ class FrameworkResolverTest extends TestCase {
 			'Nothing is actually deactivated yet — only registered for admin_init.'
 		);
 
+		$store = [];
+		$this->stub_transient_store( $store );
+		Functions\when( 'get_current_user_id' )->justReturn( 7 );
 		Functions\expect( 'deactivate_plugins' )->once()->with( 'download-id-b/download-id-b.php', false, false );
 
 		// Simulates WordPress firing admin_init later in the same request.
@@ -1082,32 +1085,40 @@ class FrameworkResolverTest extends TestCase {
 			'The quarantine entry must record that the plugin was actually deactivated.'
 		);
 
+		// #943: the deactivation notice is announced ONLY through the queued transient —
+		// rendering it from the quarantine list as well would print it twice on a request
+		// that does reach admin_notices.
 		ob_start();
 		$resolver->render_update_notices();
+		$resolver->render_activation_guard_notice();
 		$output = (string) ob_get_clean();
 
 		$this->assertStringContainsString( 'Плагин отключён', $output );
 		$this->assertStringNotContainsString( 'не запущен', $output );
 
 		// #916 round 2 (coordinator's rig probe): the self-heal notice must render exactly
-		// once, never twice, on a single admin_notices call.
+		// once, never twice, when both admin_notices renderers run.
 		$this->assertSame( 1, substr_count( $output, 'Плагин отключён' ) );
 		$this->assertSame( 1, substr_count( $output, '<div class="error">' ) );
+		$this->assertSame( [], $store, 'The transient is single-use: rendering must clear it.' );
 	}
 
 	/**
-	 * #916 round 2 (coordinator's rig probe): on an admin-post.php request — which processes
-	 * an action and never fires admin_notices/network_admin_notices on that same request —
-	 * the self-heal must queue its notice through the same single-use transient the
-	 * activation guard uses, so it survives to the next request that does render notices.
-	 * It must render exactly once there too: render_update_notices() on that later request
-	 * finds no quarantine entry (the collision is gone — the duplicate was deactivated on the
-	 * admin-post.php request), so only render_activation_guard_notice() shows it.
+	 * #916 round 2 (coordinator's rig probe) + #943: on ANY admin request that processes an
+	 * action and redirects/exits before admin_notices fires — admin-post.php, a POST to
+	 * options.php, plugins.php?action=…, a post.php save — the self-heal must queue its notice
+	 * through the same single-use transient the activation guard uses, so it survives to the
+	 * next request that does render notices. It used to do so for admin-post.php only; every
+	 * other redirecting request deactivated the duplicate silently.
+	 *
+	 * @dataProvider redirecting_admin_request_provider
+	 *
+	 * @param string $pagenow The admin script the request runs under.
 	 */
-	public function test_resolver_self_heal_on_admin_post_queues_the_notice_through_the_transient(): void {
+	public function test_resolver_self_heal_queues_the_notice_through_the_transient_on_a_redirecting_admin_request( string $pagenow ): void {
 		$resolver = new \Woodev\Framework\Framework_Resolver();
 
-		$GLOBALS['pagenow'] = 'admin-post.php';
+		$GLOBALS['pagenow'] = $pagenow;
 
 		Functions\when( 'plugin_dir_path' )->justReturn( dirname( __DIR__, 2 ) . '/' );
 		Functions\when( 'untrailingslashit' )->alias(
@@ -1163,17 +1174,99 @@ class FrameworkResolverTest extends TestCase {
 
 		$resolver->load_plugins();
 
+		$store = [];
+		$this->stub_transient_store( $store );
 		Functions\expect( 'deactivate_plugins' )->once()->with( 'download-id-b/download-id-b.php', false, false );
-		Functions\expect( 'set_transient' )->once()->with(
-			'woodev_download_id_guard_notice_7',
-			\Mockery::type( 'string' ),
-			60
-		);
 
-		// Simulates WordPress firing admin_init on the admin-post.php request.
+		// Simulates WordPress firing admin_init on the redirecting request.
 		( $admin_init_callbacks[0] )();
 
 		unset( $GLOBALS['pagenow'] );
+
+		$this->assertArrayHasKey( 'woodev_download_id_guard_notice_7', $store );
+		$this->assertCount( 1, $store['woodev_download_id_guard_notice_7'] );
+		$this->assertStringContainsString( 'Download Id Plugin B', $store['woodev_download_id_guard_notice_7'][0] );
+		$this->assertStringContainsString( 'Download Id Plugin A', $store['woodev_download_id_guard_notice_7'][0] );
+	}
+
+	/**
+	 * @return array<string,array{0:string}>
+	 */
+	public function redirecting_admin_request_provider(): array {
+		return [
+			'admin-post.php'       => [ 'admin-post.php' ],
+			'options.php (POST)'   => [ 'options.php' ],
+			'plugins.php?action=…' => [ 'plugins.php' ],
+			'post.php (save)'      => [ 'post.php' ],
+		];
+	}
+
+	/**
+	 * #943: two duplicates refused in ONE request share the one per-user transient. The
+	 * second must append to the first, never overwrite it — and both must render, once each,
+	 * from a single render_activation_guard_notice() call that then clears the transient.
+	 */
+	public function test_two_refusals_in_one_request_are_both_rendered_once(): void {
+		$resolver = new \Woodev\Framework\Framework_Resolver();
+		$store    = [];
+
+		$this->stub_transient_store( $store );
+		$this->stub_load_environment();
+		Functions\when( 'get_current_user_id' )->justReturn( 7 );
+		Functions\when( 'plugin_basename' )->alias(
+			static function ( string $file ): string {
+				return basename( dirname( $file ) ) . '/' . basename( $file );
+			}
+		);
+		Functions\when( 'deactivate_plugins' )->justReturn( null );
+
+		foreach ( [ 'a', 'b', 'c' ] as $letter ) {
+			$resolver->register_loader_definition(
+				$this->get_loader_definition(
+					[
+						'plugin_id'   => 'multi-' . $letter,
+						'download_id' => 801,
+						'plugin_name' => 'Multi ' . strtoupper( $letter ),
+						'plugin_file' => '/plugins/multi-' . $letter . '/multi-' . $letter . '.php',
+					]
+				)
+			);
+		}
+
+		$resolver->load_plugins();
+
+		$resolver->guard_activated_plugin( 'multi-b/multi-b.php' );
+		$resolver->guard_activated_plugin( 'multi-c/multi-c.php' );
+
+		$this->assertCount( 2, $store['woodev_download_id_guard_notice_7'], 'The second refusal must append, not overwrite.' );
+
+		ob_start();
+		$resolver->render_activation_guard_notice();
+		$output = (string) ob_get_clean();
+
+		$this->assertSame( 2, substr_count( $output, '<div class="error">' ) );
+		$this->assertStringContainsString( 'Multi B', $output );
+		$this->assertStringContainsString( 'Multi C', $output );
+		$this->assertSame( [], $store );
+	}
+
+	/**
+	 * #943: a transient written by an older framework copy in a mixed fleet is a plain STRING.
+	 * The renderer must still show it.
+	 */
+	public function test_render_activation_guard_notice_still_renders_a_legacy_single_string_transient(): void {
+		$resolver = new \Woodev\Framework\Framework_Resolver();
+		$store    = [ 'woodev_download_id_guard_notice_7' => 'Legacy notice text' ];
+
+		$this->stub_transient_store( $store );
+		Functions\when( 'get_current_user_id' )->justReturn( 7 );
+
+		ob_start();
+		$resolver->render_activation_guard_notice();
+		$output = (string) ob_get_clean();
+
+		$this->assertSame( 1, substr_count( $output, 'Legacy notice text' ) );
+		$this->assertSame( [], $store );
 	}
 
 	/**
@@ -1305,6 +1398,9 @@ class FrameworkResolverTest extends TestCase {
 			)
 		);
 
+		$store = [];
+		$this->stub_transient_store( $store );
+		Functions\when( 'get_current_user_id' )->justReturn( 7 );
 		Functions\expect( 'deactivate_plugins' )->once()->with( 'download-id-b/download-id-b.php', false, true );
 
 		$resolver->load_plugins();
@@ -1406,9 +1502,10 @@ class FrameworkResolverTest extends TestCase {
 		);
 		Functions\when( 'get_current_user_id' )->justReturn( 1 );
 		Functions\expect( 'deactivate_plugins' )->once()->with( 'guard-b/guard-b.php' );
+		Functions\when( 'get_transient' )->justReturn( false );
 		Functions\expect( 'set_transient' )->once()->with(
 			\Woodev\Framework\Framework_Resolver::ACTIVATION_GUARD_NOTICE_TRANSIENT . '1',
-			\Mockery::type( 'string' ),
+			\Mockery::type( 'array' ),
 			60
 		);
 
@@ -1515,6 +1612,7 @@ class FrameworkResolverTest extends TestCase {
 		);
 		Functions\when( 'get_current_user_id' )->justReturn( 1 );
 		Functions\expect( 'deactivate_plugins' )->once()->with( 'bulk-b/bulk-b.php' );
+		Functions\when( 'get_transient' )->justReturn( false );
 		Functions\expect( 'set_transient' )->once();
 
 		$resolver->guard_activated_plugin( 'bulk-a/bulk-a.php' );
@@ -1676,6 +1774,35 @@ class FrameworkResolverTest extends TestCase {
 		$resolver = new \Woodev\Framework\Framework_Resolver();
 
 		$this->assertNull( $resolver->get_loader_definition_for_class_ancestor( 'Some_Never_Registered_Class' ) );
+	}
+
+	/**
+	 * Backs get_transient()/set_transient()/delete_transient() with a plain array so a test
+	 * can read back what the resolver queued and confirm a render clears it.
+	 *
+	 * @param array<string,mixed> $store Transient store, filled by reference.
+	 * @return void
+	 */
+	private function stub_transient_store( array &$store ): void {
+		Functions\when( 'get_transient' )->alias(
+			static function ( string $key ) use ( &$store ) {
+				return $store[ $key ] ?? false;
+			}
+		);
+		Functions\when( 'set_transient' )->alias(
+			static function ( string $key, $value ) use ( &$store ): bool {
+				$store[ $key ] = $value;
+
+				return true;
+			}
+		);
+		Functions\when( 'delete_transient' )->alias(
+			static function ( string $key ) use ( &$store ): bool {
+				unset( $store[ $key ] );
+
+				return true;
+			}
+		);
 	}
 
 	/**
@@ -1856,6 +1983,35 @@ class FrameworkResolverTest extends TestCase {
 		$resolver->register_loader_definition( [ 'plugin_id' => 'broken-plugin', 'plugin_name' => 'Broken Plugin' ] );
 		$resolver->load_plugins();
 
+		$this->assertSame( $injected_renderer, $hooks['admin_notices'] ?? null );
+		$this->assertSame( $injected_renderer, $hooks['network_admin_notices'] ?? null );
+	}
+
+	/**
+	 * #943: the renderer must be wired to BOTH `admin_notices` and `network_admin_notices` —
+	 * a network-active plugin's problems are read on the network admin screen, which never
+	 * fires `admin_notices`. Pinned for a download id collision (a quarantined plugin), so the
+	 * wiring is covered independently of the invalid-definition trigger above.
+	 */
+	public function test_load_plugins_wires_the_renderer_to_both_notice_hooks_for_a_quarantined_plugin(): void {
+		$injected_renderer = static function (): void {};
+		$resolver          = new \Woodev\Framework\Framework_Resolver( $injected_renderer );
+		$hooks             = [];
+
+		$this->stub_load_environment( true );
+		// Not permitted to self-heal: the quarantine alone must still wire the renderer.
+		Functions\when( 'current_user_can' )->justReturn( false );
+		Functions\when( 'add_action' )->alias(
+			static function ( string $hook, callable $callback ) use ( &$hooks ): void {
+				$hooks[ $hook ] = $callback;
+			}
+		);
+
+		$resolver->register_loader_definition( $this->get_loader_definition( [ 'plugin_id' => 'wired-a', 'download_id' => 802, 'plugin_name' => 'Wired A' ] ) );
+		$resolver->register_loader_definition( $this->get_loader_definition( [ 'plugin_id' => 'wired-b', 'download_id' => 802, 'plugin_name' => 'Wired B' ] ) );
+		$resolver->load_plugins();
+
+		$this->assertCount( 1, $resolver->get_quarantined_download_id_plugins(), 'sanity check: the collision must have quarantined one plugin.' );
 		$this->assertSame( $injected_renderer, $hooks['admin_notices'] ?? null );
 		$this->assertSame( $injected_renderer, $hooks['network_admin_notices'] ?? null );
 	}

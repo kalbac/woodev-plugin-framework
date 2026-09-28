@@ -162,6 +162,30 @@ if ( ! class_exists( 'Woodev_Download_Id_Never_Invoked_Test_Plugin', false ) ) {
 	}
 }
 
+if ( ! class_exists( 'Woodev_Download_Id_Child_Test_Plugin', false ) ) {
+
+	/**
+	 * A CHILD of the match test plugin with its own PLUGIN_ID. Never invoked through the
+	 * resolver, so its class has no exact-class entry — but its PARENT has (once the parent's
+	 * loader definition has been through load_plugins()), which makes the ancestor lookup hit
+	 * a DIFFERENT definition than the plugin_id lookup does. That is the only shape that can
+	 * tell the plugin_id -> ancestor order apart from the swapped one.
+	 */
+	class Woodev_Download_Id_Child_Test_Plugin extends Woodev_Download_Id_Match_Test_Plugin {
+
+		const PLUGIN_ID = 'download-id-child-test-plugin';
+
+		public function __construct() {
+			// Skip the parent's constructor: it would pass the PARENT's PLUGIN_ID.
+			\Woodev_Plugin::__construct( self::PLUGIN_ID, self::VERSION );
+		}
+
+		public function get_plugin_name() {
+			return 'Download Id Child Test Plugin';
+		}
+	}
+}
+
 /**
  * @covers \Woodev_Plugin::get_download_id
  */
@@ -331,6 +355,48 @@ class PluginDownloadIdResolutionTest extends TestCase {
 		$plugin = new Woodev_Download_Id_Never_Invoked_Test_Plugin();
 
 		$this->assertSame( 9202, $plugin->get_download_id() );
+	}
+
+	/**
+	 * #943: the lookup order is class -> plugin_id -> ancestor. An ancestor match means some
+	 * OTHER plugin's main_class is a parent of this class; a plugin's own exact plugin_id
+	 * registration must never lose to it (#916 round 2). The resolver level pins each lookup
+	 * on its own; only here, at the plugin level, does a swap of the last two `??` operands
+	 * show — the child's plugin_id definition (9502) and its parent's main-class definition
+	 * (9501) both resolve, and the plugin_id one must win.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_get_download_id_prefers_the_plugin_id_match_over_an_ancestor_class_match(): void {
+		$this->mock_construction_and_resolver_functions();
+
+		$bootstrap = \Woodev_Plugin_Bootstrap::instance();
+
+		// The parent is invoked through the resolver, which records it in the main-class map.
+		$bootstrap->register_loader_definition(
+			$this->get_loader_definition( Woodev_Download_Id_Match_Test_Plugin::PLUGIN_ID, Woodev_Download_Id_Match_Test_Plugin::class, 9501 )
+		);
+		$bootstrap->load_plugins();
+
+		// The child's own definition is registered AFTER load_plugins(), under a main class
+		// nobody constructs: it exists only in the plugin_id map, never in the class map.
+		$bootstrap->register_loader_definition(
+			$this->get_loader_definition( Woodev_Download_Id_Child_Test_Plugin::PLUGIN_ID, 'Some_Other_Class_Nobody_Constructs', 9502 )
+		);
+
+		$plugin = new Woodev_Download_Id_Child_Test_Plugin();
+
+		$this->assertNull(
+			$bootstrap->get_loader_definition_for_class( Woodev_Download_Id_Child_Test_Plugin::class ),
+			'sanity check: the exact-class lookup must miss for the child.'
+		);
+		$this->assertSame(
+			9501,
+			$bootstrap->get_loader_definition_for_class_ancestor( Woodev_Download_Id_Child_Test_Plugin::class )->get_download_id(),
+			'sanity check: the ancestor lookup must resolve to the PARENT definition.'
+		);
+		$this->assertSame( 9502, $plugin->get_download_id(), 'The plugin_id match must win over the ancestor match.' );
 	}
 
 	/**
