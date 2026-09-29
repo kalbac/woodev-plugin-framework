@@ -2032,6 +2032,22 @@ msgstr ""
 msgid "Статус «%s» при редактировании не выставляется — отмена, возврат и завершение заказа делаются штатными средствами WooCommerce."
 msgstr ""
 
+#: shipping-method/admin/orders/class-order-payload-validator.php:579
+msgid "Укажите регион доставки."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-payload-validator.php:581
+msgid "Укажите улицу и дом."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-payload-validator.php:582
+msgid "Укажите квартиру или офис."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-payload-validator.php:583
+msgid "Укажите индекс."
+msgstr ""
+
 #: shipping-method/admin/orders/class-orders-registry.php:215
 #: assets/build/shipping-orders-page/index.js:1
 msgid "Заказы доставки"

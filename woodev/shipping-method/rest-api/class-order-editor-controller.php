@@ -3,8 +3,9 @@
  * Woodev Shipping Orders — order editor REST controller
  *
  * `POST woodev/v1/shipping/orders` (create), `PUT woodev/v1/shipping/orders/{id}` (update) and
- * `GET woodev/v1/shipping/orders/{id}/edit` (the wizard's prefill): the transport of the admin
- * order wizard (#710 spec D4 / D5, card #968). Registered through {@see \Woodev_REST_V1_Registrar}
+ * `GET woodev/v1/shipping/orders/{id}/edit` (the wizard's prefill) and
+ * `GET woodev/v1/shipping/orders/address-policy` (the checkout's address-field rules, #985): the
+ * transport of the admin order wizard (#710 spec D4 / D5, card #968). Registered through {@see \Woodev_REST_V1_Registrar}
  * by {@see \Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::register_rest()}, next to
  * {@see Orders_Controller}, and gated like that controller's write routes.
  *
@@ -15,6 +16,7 @@ namespace Woodev\Framework\Shipping\Rest_Api;
 
 use Woodev\Framework\Shipping\Admin\Orders\Order_Editor;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
+use Woodev\Framework\Shipping\Checkout\Checkout_Field_Policy;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -93,7 +95,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Order_Editor_Cont
 		}
 
 		/**
-		 * Registers the three routes.
+		 * Registers the four routes.
 		 *
 		 * `/shipping/orders` shares its path with {@see Orders_Controller}'s list route — WordPress
 		 * merges the handlers of one route registered twice, keyed by HTTP method.
@@ -135,6 +137,32 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Order_Editor_Cont
 					'permission_callback' => [ $this, 'permissions_check' ],
 					'args'                => [
 						'id' => [ 'type' => 'integer' ],
+					],
+				]
+			);
+
+			register_rest_route(
+				\Woodev_REST_V1_Registrar::ROUTE_NAMESPACE,
+				'/shipping/orders/address-policy',
+				[
+					'methods'             => \WP_REST_Server::READABLE,
+					'callback'            => [ $this, 'address_policy' ],
+					'permission_callback' => [ $this, 'permissions_check' ],
+					'args'                => [
+						'country' => [
+							'type'              => 'string',
+							'required'          => true,
+							'sanitize_callback' => static function ( $value ): string {
+								return strtoupper( trim( (string) $value ) );
+							},
+							'validate_callback' => static function ( $value ): bool {
+								return 1 === preg_match( '/^[A-Za-z]{2}$/', trim( (string) $value ) );
+							},
+						],
+						'pickup'  => [
+							'type'    => 'boolean',
+							'default' => false,
+						],
 					],
 				]
 			);
@@ -246,6 +274,34 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Order_Editor_Cont
 			}
 
 			return rest_ensure_response( $prefill );
+		}
+
+		/**
+		 * `GET /shipping/orders/address-policy?country=RU&pickup=0` — which delivery-address fields the
+		 * checkout requires, hides or removes for a country (#985).
+		 *
+		 * Answers from {@see Checkout_Field_Policy::address_rules()} — the object the checkout itself uses,
+		 * so the wizard's «Адрес» step and the save-time check ({@see \Woodev\Framework\Shipping\Admin\Orders\Order_Payload_Validator}) can never
+		 * disagree with it. `fields` is keyed by `country`, `state`, `city`, `address_1`, `address_2`,
+		 * `postcode`, each `{ required, hidden, removed }`; an EMPTY `fields` means «no rule» (WooCommerce
+		 * absent), never «everything removed».
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WP_REST_Request $request request; `country` (ISO code) and `pickup` (the chosen tariff is a pickup one).
+		 * @return \WP_REST_Response|\WP_Error
+		 */
+		public function address_policy( $request ) {
+			$country = strtoupper( trim( (string) $request->get_param( 'country' ) ) );
+			$pickup  = rest_sanitize_boolean( $request->get_param( 'pickup' ) );
+
+			return rest_ensure_response(
+				[
+					'country' => $country,
+					'pickup'  => $pickup,
+					'fields'  => (object) Checkout_Field_Policy::instance()->address_rules( $country, $pickup ),
+				]
+			);
 		}
 
 		/**

@@ -1097,6 +1097,13 @@
 		&.has-error select {
 			border-color: wd.$error;
 		}
+
+		// A field the checkout requires (#985): the «*» is drawn, so the label's own text — and the
+		// control's accessible name — stays exactly what the manager reads.
+		&.is-required label::after {
+			content: ' *';
+			color: wd.$error-text;
+		}
 	}
 
 	&__errors {

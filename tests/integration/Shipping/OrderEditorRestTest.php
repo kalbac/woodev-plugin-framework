@@ -128,8 +128,10 @@ class OrderEditorRestTest extends TestCase {
 				'billing'        => [
 					'first_name' => 'Иван',
 					'country'    => 'RU',
+					'state'      => 'Москва',
 					'city'       => 'Москва',
 					'address_1'  => 'ул. Тверская, 1',
+					'postcode'   => '125009',
 					'email'      => 'ivan-968-rest@example.test',
 				],
 				'items'          => [

@@ -10,6 +10,7 @@
 namespace Woodev\Framework\Shipping\Admin\Orders;
 
 use Woodev\Framework\Shipping\Checkout\Checkout_Config;
+use Woodev\Framework\Shipping\Checkout\Checkout_Field_Policy;
 use Woodev\Framework\Shipping\Checkout\Checkout_Handler;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -104,7 +105,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Payloa
 		 * @param array<string, callable>|null $lookups optional overrides — `pickup_method_ids`
 		 *                                            `fn(): string[]`, `gateway_ids` `fn(): string[]`,
 		 *                                            `countries` `fn(): array<string,string>`,
-		 *                                            `states` `fn( string $country ): array<string,string>`.
+		 *                                            `states` `fn( string $country ): array<string,string>`,
+		 *                                            `address_rules` `fn( string $country, bool $pickup ): array` — the
+		 *                                            checkout's address-field rules ({@see Checkout_Field_Policy::address_rules()}).
 		 */
 		public function __construct( Orders_Registry $registry, ?array $lookups = null ) {
 			$this->registry = $registry;
@@ -114,6 +117,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Payloa
 					'gateway_ids'       => [ self::class, 'registered_gateway_ids' ],
 					'countries'         => [ self::class, 'wc_countries' ],
 					'states'            => [ self::class, 'wc_states' ],
+					'address_rules'     => [ self::class, 'checkout_address_rules' ],
 				],
 				$lookups ?? []
 			);
@@ -162,6 +166,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Payloa
 			$shipping_line = $this->check_shipping_line( $payload['shipping_line'] ?? null, $errors );
 			$pickup_point  = $this->check_pickup_point( $payload['pickup_point'] ?? null, $shipping_line, $errors );
 			$carrier_data  = $this->check_carrier_fields( $payload['carrier_fields'] ?? [], $shipping_line, $errors );
+
+			$this->apply_address_policy( $billing, $shipping, $shipping_filled ? 'shipping' : 'billing', $this->is_pickup_line( $shipping_line ), $errors );
 
 			$data = [
 				'customer'       => $customer,
@@ -479,13 +485,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Payloa
 		 * @return array{id: string}|null
 		 */
 		private function check_pickup_point( $raw, ?array $shipping_line, array &$errors ): ?array {
-			if ( null === $shipping_line ) {
-				return null;
-			}
-
-			$chosen = $shipping_line['instance_id'] > 0 ? $shipping_line['method_id'] . ':' . $shipping_line['instance_id'] : $shipping_line['method_id'];
-
-			if ( ! Checkout_Handler::chosen_method_matches( $chosen, (array) call_user_func( $this->lookups['pickup_method_ids'] ) ) ) {
+			if ( ! $this->is_pickup_line( $shipping_line ) ) {
 				return null;
 			}
 
@@ -498,6 +498,103 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Payloa
 			}
 
 			return [ 'id' => $id ];
+		}
+
+		/**
+		 * Whether the checked shipping line is a pickup tariff — the one reading of «pickup» the point
+		 * check and the address policy share.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string, mixed>|null $shipping_line the checked shipping line.
+		 * @return bool
+		 */
+		private function is_pickup_line( ?array $shipping_line ): bool {
+			if ( null === $shipping_line ) {
+				return false;
+			}
+
+			$chosen = $shipping_line['instance_id'] > 0 ? $shipping_line['method_id'] . ':' . $shipping_line['instance_id'] : $shipping_line['method_id'];
+
+			return Checkout_Handler::chosen_method_matches( $chosen, (array) call_user_func( $this->lookups['pickup_method_ids'] ) );
+		}
+
+		/**
+		 * The checkout's address-field policy, applied to the DELIVERY address (#985): a field the policy
+		 * makes required and the address leaves empty is refused, a field the checkout removes outright
+		 * (the merchant's «Удалять») is emptied on both address blocks — its value never reaches a checkout
+		 * order, so it must not reach this one. A field only hidden (locale, or `hide_for_pickup`) is left
+		 * as sent: the checkout keeps such a value too.
+		 *
+		 * The rules are the checkout's own ({@see Checkout_Field_Policy::address_rules()}); the wizard's
+		 * step ② reads the same object through `GET …/orders/address-policy`, so client and server judge
+		 * one rule. No rule for a country (WooCommerce absent) means nothing is enforced here.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string, string>            $billing  the checked billing address (emptied fields are written back).
+		 * @param array<string, string>            $shipping the checked delivery address (emptied fields are written back).
+		 * @param string                           $section  `shipping`, or `billing` when the delivery address follows billing — the error path prefix.
+		 * @param bool                             $pickup   whether the chosen tariff is a pickup one.
+		 * @param array<int, array<string,string>> $errors   collected problems.
+		 * @return void
+		 */
+		private function apply_address_policy( array &$billing, array &$shipping, string $section, bool $pickup, array &$errors ): void {
+			if ( '' === $shipping['country'] ) {
+				return;
+			}
+
+			$rules = (array) call_user_func( $this->lookups['address_rules'], $shipping['country'], $pickup );
+
+			foreach ( self::address_field_messages() as $key => $message ) {
+				$rule = $rules[ $key ] ?? null;
+
+				if ( ! is_array( $rule ) ) {
+					continue;
+				}
+
+				if ( ! empty( $rule['removed'] ) ) {
+					$billing[ $key ]  = '';
+					$shipping[ $key ] = '';
+
+					continue;
+				}
+
+				if ( ! empty( $rule['required'] ) && '' === $shipping[ $key ] ) {
+					self::add_error( $errors, $section . '.' . $key, 'field_required', $message );
+				}
+			}
+		}
+
+		/**
+		 * The sentence for each address field the policy can require — the wizard's step ② says the same
+		 * words (`validation.ts` → `validateAddress()`), so a problem reads alike wherever it is caught.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<string, string> address key → message.
+		 */
+		private static function address_field_messages(): array {
+			return [
+				'state'     => __( 'Укажите регион доставки.', 'woodev-plugin-framework' ),
+				'city'      => __( 'Укажите город или населённый пункт.', 'woodev-plugin-framework' ),
+				'address_1' => __( 'Укажите улицу и дом.', 'woodev-plugin-framework' ),
+				'address_2' => __( 'Укажите квартиру или офис.', 'woodev-plugin-framework' ),
+				'postcode'  => __( 'Укажите индекс.', 'woodev-plugin-framework' ),
+			];
+		}
+
+		/**
+		 * The checkout's address-field rules for a country — the default of the `address_rules` lookup.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $country ISO country code of the delivery address.
+		 * @param bool   $pickup  whether the chosen tariff is a pickup one.
+		 * @return array<string, array{required: bool, hidden: bool, removed: bool}>
+		 */
+		private static function checkout_address_rules( string $country, bool $pickup ): array {
+			return Checkout_Field_Policy::instance()->address_rules( $country, $pickup );
 		}
 
 		/**
