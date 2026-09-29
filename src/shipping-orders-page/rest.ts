@@ -475,7 +475,13 @@ export interface BulkActionResult {
 	 * user-facing string on this route) — render them verbatim, never compose one from the
 	 * numeric fields above. Either may be absent.
 	 */
-	messages: { success?: string; error?: string };
+	messages: { success?: string; error?: string; warning?: string };
+	/**
+	 * #1000 — the orders skipped because another manager is editing them in the wizard, each with
+	 * the server's own reason («Этот заказ уже редактируется пользователем …»). Optional: an older
+	 * server sends none. Already counted in `skipped`; never in `failures`.
+	 */
+	locked?: Array<{ id: number; message: string }>;
 }
 
 /**

@@ -138,6 +138,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		 * actions at all — the framework cannot act on an order it cannot route to a
 		 * carrier's handler.
 		 *
+		 * An order another manager holds the native edit lock on (#1000) offers none either: this
+		 * is the gate the action route, the bulk route and the metabox all recompute, so a lock
+		 * taken by the wizard after the row was drawn refuses the click server-side — an export
+		 * landing under an open wizard would make its save fail on the now-exported order. The
+		 * lock of the CURRENT manager never counts ({@see self::edit_lock_owner()}), so WooCommerce's
+		 * own order screen, which takes that lock for its user, is untouched. The row still shows
+		 * the actions, greyed out — {@see self::for_row()}.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @param \WC_Order            $order    the order.
@@ -151,6 +159,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		 * ]
 		 */
 		public function for_order( \WC_Order $order, ?Orders_Provider $provider ): array {
+			if ( null !== self::edit_lock_owner( $order ) ) {
+				return [];
+			}
+
+			return $this->carrier_actions( $order, $provider );
+		}
+
+		/**
+		 * The carrier actions the order's own state offers, whoever holds its edit lock — the set
+		 * {@see self::for_order()} returns for an unlocked order and {@see self::for_row()} greys
+		 * out for a locked one (#1000).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order            $order    the order.
+		 * @param Orders_Provider|null $provider the matched carrier, or null.
+		 * @return array<int,array<string,mixed>> the shape {@see self::for_order()} documents.
+		 */
+		private function carrier_actions( \WC_Order $order, ?Orders_Provider $provider ): array {
 			if ( null === $provider ) {
 				return [];
 			}
@@ -229,7 +256,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		 *                                        action, when offered, comes first.
 		 */
 		public function for_row( \WC_Order $order, ?Orders_Provider $provider ): array {
-			$actions = $this->for_order( $order, $provider );
+			$lock_owner = self::edit_lock_owner( $order );
+			$actions    = $this->carrier_actions( $order, $provider );
+
+			if ( null !== $lock_owner ) {
+				// #1000: greyed out, not removed — the manager sees what the row would offer and why
+				// it cannot be used. The server refuses them all the same ({@see self::for_order()}).
+				foreach ( $actions as $index => $carrier_action ) {
+					$actions[ $index ] = self::lock_action( $carrier_action, $lock_owner );
+				}
+			}
 
 			if ( ! self::is_editable( $order, $provider ) ) {
 				return $actions;
@@ -241,16 +277,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 				__( 'Изменить заказ, пока он не выгружен перевозчику', 'woodev-plugin-framework' ),
 				false
 			);
-			$lock_owner  = self::edit_lock_owner( $order );
 
 			if ( null !== $lock_owner ) {
-				$edit_action['disabled']   = true;
-				$edit_action['lock_owner'] = $lock_owner['display_name'];
-				$edit_action['title']      = sprintf(
-					/* translators: %s: display name of the manager currently editing the order. */
-					__( 'This order is already being edited by %s', 'woodev-plugin-framework' ),
-					$lock_owner['display_name']
-				);
+				$edit_action = self::lock_action( $edit_action, $lock_owner );
 			}
 
 			array_unshift(
@@ -419,6 +448,55 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		}
 
 		/**
+		 * The sentence a refusal or a greyed-out button gives when another manager holds the
+		 * order's edit lock — or `''` when none does (#1000).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order the order to inspect.
+		 * @return string a sentence for the manager; empty when the order is not locked by another.
+		 */
+		public static function edit_locked_reason( \WC_Order $order ): string {
+			$lock_owner = self::edit_lock_owner( $order );
+
+			return null === $lock_owner ? '' : self::locked_by_message( $lock_owner['display_name'] );
+		}
+
+		/**
+		 * «Этот заказ уже редактируется пользователем {имя}» — ONE sentence for the row button, the
+		 * server's refusals and the wizard's own lock error.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $display_name display name of the manager holding the lock.
+		 * @return string
+		 */
+		public static function locked_by_message( string $display_name ): string {
+			return sprintf(
+				/* translators: %s: display name of the manager currently editing the order. */
+				__( 'This order is already being edited by %s', 'woodev-plugin-framework' ),
+				$display_name
+			);
+		}
+
+		/**
+		 * Marks one built action as unusable because another manager holds the order's lock.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string,mixed>                    $action     a built action.
+		 * @param array{user_id:int,display_name:string} $lock_owner the manager holding the lock.
+		 * @return array<string,mixed>
+		 */
+		private static function lock_action( array $action, array $lock_owner ): array {
+			$action['disabled']   = true;
+			$action['lock_owner'] = $lock_owner['display_name'];
+			$action['title']      = self::locked_by_message( $lock_owner['display_name'] );
+
+			return $action;
+		}
+
+		/**
 		 * Refreshes the current manager's native edit lock.
 		 *
 		 * @since 2.0.2
@@ -503,6 +581,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		 * @return string a sentence for the merchant; never empty.
 		 */
 		public function unavailable_reason( \WC_Order $order, ?Orders_Provider $provider, string $action ): string {
+			$locked_reason = self::edit_locked_reason( $order );
+
+			if ( '' !== $locked_reason ) {
+				return $locked_reason;
+			}
+
 			if ( null === $provider ) {
 				return __( 'Для этого заказа не удалось определить перевозчика.', 'woodev-plugin-framework' );
 			}

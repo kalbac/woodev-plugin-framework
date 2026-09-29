@@ -28,6 +28,9 @@ if ( ! class_exists( '\\WP_REST_Controller' ) ) {
 
 require_once dirname( __DIR__, 4 ) . '/woodev/compatibility/class-plugin-compatibility.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/compatibility/class-order-compatibility.php';
+// #1000: `Order_Actions::for_order()` reads the order's edit lock, so the lock's doubles must be loaded.
+require_once dirname( __DIR__ ) . '/Admin/order-edit-lock-fixtures.php';
+require_once dirname( __DIR__ ) . '/Admin/order-edit-lock-cpt-fixtures.php';
 
 /**
  * @covers \Woodev\Framework\Shipping\Rest_Api\Orders_Controller::perform_action
@@ -70,6 +73,7 @@ final class OrdersControllerPerformActionTest extends TestCase {
 	}
 
 	protected function tearDown(): void {
+		\Automattic\WooCommerce\Internal\Admin\Orders\EditLock::$locks = [];
 		Orders_Registry::instance()->reset_for_tests();
 
 		parent::tearDown();
@@ -201,6 +205,29 @@ final class OrdersControllerPerformActionTest extends TestCase {
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 400, $result->get_error_data()['status'] );
 		$this->assertSame( 'woodev_shipping_orders_action_not_available', $result->get_error_code() );
+	}
+
+	// ----- #1000: another manager is editing the order -----
+
+	public function test_an_order_another_manager_is_editing_is_refused_with_a_409_and_the_carrier_is_never_called(): void {
+		$this->register_provider();
+		$handler = $this->register_handler();
+		$handler->shouldNotReceive( 'export' );
+
+		$this->order( 'pending' );
+		\Automattic\WooCommerce\Internal\Admin\Orders\EditLock::$locks[123] = [ 'time' => time(), 'user_id' => 7 ];
+
+		$user               = new \stdClass();
+		$user->ID           = 7;
+		$user->display_name = 'Мария';
+		Functions\when( 'get_user_by' )->justReturn( $user );
+
+		$result = $this->controller()->perform_action( $this->request( 123, Order_Actions::EXPORT ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'woodev_shipping_order_locked', $result->get_error_code() );
+		$this->assertSame( 409, $result->get_error_data()['status'] );
+		$this->assertSame( 'This order is already being edited by Мария', $result->get_error_message() );
 	}
 
 	// ----- #860: export() returning '' is not success -----

@@ -21,6 +21,9 @@ use Woodev\Framework\Shipping\Order\Delivery_Status;
 
 require_once dirname( __DIR__, 2 ) . '/woodev/compatibility/class-plugin-compatibility.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/compatibility/class-order-compatibility.php';
+// #1000: `Order_Actions::for_order()` reads the order's edit lock, so the lock's doubles must be loaded.
+require_once __DIR__ . '/Shipping/Admin/order-edit-lock-fixtures.php';
+require_once __DIR__ . '/Shipping/Admin/order-edit-lock-cpt-fixtures.php';
 
 class ShippingOrderActionsTest extends TestCase {
 

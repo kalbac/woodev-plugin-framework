@@ -36,6 +36,9 @@ if ( ! class_exists( '\\WP_REST_Controller' ) ) {
 
 require_once dirname( __DIR__, 4 ) . '/woodev/compatibility/class-plugin-compatibility.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/compatibility/class-order-compatibility.php';
+// #1000: `Order_Actions::for_order()` reads the order's edit lock, so the lock's doubles must be loaded.
+require_once dirname( __DIR__ ) . '/Admin/order-edit-lock-fixtures.php';
+require_once dirname( __DIR__ ) . '/Admin/order-edit-lock-cpt-fixtures.php';
 
 /**
  * @covers \Woodev\Framework\Shipping\Rest_Api\Orders_Controller::perform_bulk_action
@@ -91,6 +94,7 @@ final class OrdersControllerBulkActionTest extends TestCase {
 	}
 
 	protected function tearDown(): void {
+		\Automattic\WooCommerce\Internal\Admin\Orders\EditLock::$locks = [];
 		Orders_Registry::instance()->reset_for_tests();
 
 		parent::tearDown();
@@ -377,6 +381,81 @@ final class OrdersControllerBulkActionTest extends TestCase {
 		$this->assertSame( 1, $result['requested'] );
 		$this->assertSame( 0, $result['eligible'] );
 		$this->assertSame( 1, $result['skipped'] );
+	}
+
+	// ----- #1000: orders another manager is editing -----
+
+	private function lock_for_another_manager( int $order_id, int $user_id, string $name ): void {
+		\Automattic\WooCommerce\Internal\Admin\Orders\EditLock::$locks[ $order_id ] = [ 'time' => time(), 'user_id' => $user_id ];
+
+		Functions\when( 'get_user_by' )->alias(
+			static function ( string $field, int $id ) use ( $user_id, $name ) {
+				$user               = new \stdClass();
+				$user->ID           = $id;
+				$user->display_name = $name;
+
+				return $user_id === $id ? $user : false;
+			}
+		);
+	}
+
+	/** A locked order is skipped WITH its reason; the rest of the batch still runs. */
+	public function test_a_locked_order_is_skipped_with_its_reason_and_the_rest_of_the_batch_runs(): void {
+		$this->register_provider( 'cdek', 'СДЭК', '_cdek_marker' );
+		$handler = $this->register_handler( 'cdek' );
+		$handler->shouldReceive( 'export' )->once()->andReturn( Action_Result::success( 'CARRIER-1' ) );
+
+		$this->order( 1, 'pending', '_cdek_marker' );
+		$this->order( 2, 'pending', '_cdek_marker' );      // locked by another manager.
+		$this->order( 3, 'completed', '_cdek_marker' );    // locked, but export never applies to it anyway.
+		$this->lock_for_another_manager( 2, 7, 'Мария' );
+		\Automattic\WooCommerce\Internal\Admin\Orders\EditLock::$locks[3] = [ 'time' => time(), 'user_id' => 7 ];
+
+		$result = $this->controller()->perform_bulk_action( $this->request( Order_Actions::EXPORT, [ 1, 2, 3 ] ) );
+
+		$this->assertSame( 3, $result['requested'] );
+		$this->assertSame( 1, $result['eligible'] );
+		$this->assertSame( 2, $result['skipped'] );
+		$this->assertSame( 1, $result['succeeded'] );
+		$this->assertSame( 0, $result['failed'] );
+		$this->assertSame(
+			[ [ 'id' => 2, 'message' => 'This order is already being edited by Мария' ] ],
+			$result['locked'],
+			'only the order the action would have applied to is reported'
+		);
+		$this->assertArrayHasKey( 'success', $result['messages'] );
+		$this->assertArrayHasKey( 'warning', $result['messages'] );
+		$this->assertStringContainsString( '1', $result['messages']['warning'] );
+	}
+
+	/** Nothing but locked orders: the warning stands in for «no order supports this action». */
+	public function test_when_every_order_is_locked_the_message_says_so_instead_of_unsupported(): void {
+		$this->register_provider( 'cdek', 'СДЭК', '_cdek_marker' );
+		$handler = $this->register_handler( 'cdek' );
+		$handler->shouldNotReceive( 'export' );
+
+		$this->order( 1, 'pending', '_cdek_marker' );
+		$this->lock_for_another_manager( 1, 7, 'Мария' );
+
+		$result = $this->controller()->perform_bulk_action( $this->request( Order_Actions::EXPORT, [ 1 ] ) );
+
+		$this->assertSame( 0, $result['eligible'] );
+		$this->assertSame( 1, $result['skipped'] );
+		$this->assertCount( 1, $result['locked'] );
+		$this->assertSame( [ 'warning' ], array_keys( $result['messages'] ) );
+	}
+
+	public function test_no_locked_orders_means_an_empty_list_and_no_warning(): void {
+		$this->register_provider( 'cdek', 'СДЭК', '_cdek_marker' );
+		$handler = $this->register_handler( 'cdek' );
+		$handler->shouldReceive( 'export' )->once()->andReturn( Action_Result::success( 'CARRIER-1' ) );
+
+		$this->order( 1, 'pending', '_cdek_marker' );
+
+		$result = $this->controller()->perform_bulk_action( $this->request( Order_Actions::EXPORT, [ 1 ] ) );
+
+		$this->assertSame( [], $result['locked'] );
+		$this->assertArrayNotHasKey( 'warning', $result['messages'] );
 	}
 
 	// ----- the 100-id cap -----

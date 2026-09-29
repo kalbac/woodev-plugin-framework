@@ -23,6 +23,9 @@ require_once dirname( __DIR__, 2 ) . '/woodev/compatibility/class-plugin-compati
 require_once dirname( __DIR__, 2 ) . '/woodev/compatibility/class-order-compatibility.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/shipping-method/class-shipping-helper.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/shipping-method/order/class-delivery-status.php';
+// #1000: every row now reads the order's edit lock, so the lock's WordPress / WooCommerce doubles must be loaded.
+require_once __DIR__ . '/Shipping/Admin/order-edit-lock-fixtures.php';
+require_once __DIR__ . '/Shipping/Admin/order-edit-lock-cpt-fixtures.php';
 
 class OrderRowBuilderTest extends TestCase {
 

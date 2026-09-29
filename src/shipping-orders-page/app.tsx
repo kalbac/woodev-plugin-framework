@@ -461,12 +461,12 @@ function ActionsCell( {
 			>
 				{ actions.map( ( action ) => {
 					const tone = ACTION_TONES[ action.action ] || FALLBACK_ACTION_TONE;
-					const locked = EDIT_ACTION === action.action && action.disabled;
+					const locked = Boolean( action.disabled );
 
 					return (
 						<Tooltip key={ action.action } text={ action.title || action.label }>
 							<Button
-								icon={ <Dashicon icon={ locked ? 'lock' : ACTION_ICONS[ action.action ] || FALLBACK_ACTION_ICON } /> }
+								icon={ <Dashicon icon={ locked && EDIT_ACTION === action.action ? 'lock' : ACTION_ICONS[ action.action ] || FALLBACK_ACTION_ICON } /> }
 								label={ action.label }
 								showTooltip={ false }
 								className={ `woodev-orders-actions__button woodev-orders-actions__button--${ tone }` }
@@ -555,12 +555,25 @@ function confirmQuestion( action: OrderRowAction, row: ActionableOrder ): string
 const EDIT_ACTION = 'edit';
 
 /**
+ * The action that carries a row's edit lock (#1000): the server greys out EVERY action of an order
+ * another manager is editing and stamps each with that manager's name. `null` for a free row.
+ */
+function rowLockAction( row: Pick<OrderRow, 'actions'> ): OrderRowAction | null {
+	return row.actions?.find( ( action ) => action.disabled && action.lock_owner ) ?? null;
+}
+
+/**
  * Whether the server can EXECUTE any of a row's actions — what makes it worth a bulk checkbox.
  * «Редактировать» only opens the wizard on the client, so a row that offers nothing else is not
- * selectable: the bulk routes would refuse it (#972).
+ * selectable: the bulk routes would refuse it (#972). A row under another manager's edit lock is
+ * not selectable either: the bulk route would skip it (#1000).
  */
 function hasBulkableActions( row: Pick<OrderRow, 'actions'> ): boolean {
-	return Boolean( row.actions && row.actions.some( ( action ) => EDIT_ACTION !== action.action ) );
+	return Boolean(
+		row.actions &&
+			! rowLockAction( row ) &&
+			row.actions.some( ( action ) => EDIT_ACTION !== action.action )
+	);
 }
 
 /**
@@ -570,6 +583,10 @@ function hasBulkableActions( row: Pick<OrderRow, 'actions'> ): boolean {
  * a bulk request that targeted it — {@link isRowBusy}) disables the control without hiding
  * it, so the row stays legible as "selected, currently working" rather than vanishing from
  * the selection the merchant just made.
+ *
+ * A row under another manager's edit lock shows a lock in place of the checkbox, as
+ * WooCommerce's own order list does (`wp-locked`), with the manager's name as its tooltip
+ * (#1000).
  */
 function CheckboxCell( {
 	row,
@@ -582,6 +599,21 @@ function CheckboxCell( {
 	rowState?: RowActionState;
 	onToggle: ( orderId: number, checked: boolean ) => void;
 } ) {
+	const lock = rowLockAction( row );
+
+	if ( lock ) {
+		return (
+			<span
+				className="woodev-orders-cb-lock"
+				role="img"
+				title={ lock.title }
+				aria-label={ lock.title }
+			>
+				<Dashicon icon="lock" />
+			</span>
+		);
+	}
+
 	if ( ! hasBulkableActions( row ) ) {
 		return null;
 	}
@@ -1440,7 +1472,7 @@ export default function OrdersPage() {
 	 * failure), and `actionNotice` only ever holds one. Both render — inline here, and as
 	 * a snackbar each, same as `actionNotice` — when both are present.
 	 */
-	const [ bulkNotice, setBulkNotice ] = useState<{ success?: string; error?: string } | null>( null );
+	const [ bulkNotice, setBulkNotice ] = useState<BulkActionResult[ 'messages' ] | null>( null );
 	/**
 	 * #874 — the ids currently checked in the `cb` column, page-scoped: cleared whenever a
 	 * new page of `rows` is fetched (below), so a stale id from a page the merchant has
@@ -1841,6 +1873,9 @@ export default function OrdersPage() {
 				if ( res.messages.error ) {
 					dispatch( noticesStore ).createErrorNotice( res.messages.error, { type: 'snackbar' } );
 				}
+				if ( res.messages.warning ) {
+					dispatch( noticesStore ).createWarningNotice( res.messages.warning, { type: 'snackbar' } );
+				}
 
 				const changedIds = new Set( res.rows.map( ( r ) => r.id ) );
 
@@ -1890,6 +1925,12 @@ export default function OrdersPage() {
 	 * both end up calling {@link performAction} the same way.
 	 */
 	const onActionClick = ( row: ActionableOrder, action: OrderRowAction ) => {
+		// #1000 — an action greyed out for another manager's edit lock does nothing; the server would
+		// refuse it with a 409 anyway.
+		if ( action.disabled ) {
+			return;
+		}
+
 		// #972 — «Редактировать» opens the wizard on this order; nothing goes to the carrier, so it
 		// skips the pending/confirm bookkeeping below. A preview it was clicked in closes first —
 		// two modals stacked would leave the stale preview under the wizard.
@@ -2190,6 +2231,15 @@ export default function OrdersPage() {
 					onRemove={ () => setBulkNotice( ( current ) => current && { ...current, error: undefined } ) }
 				>
 					{ bulkNotice.error }
+				</Notice>
+			) }
+			{ bulkNotice?.warning && (
+				<Notice
+					status="warning"
+					isDismissible
+					onRemove={ () => setBulkNotice( ( current ) => current && { ...current, warning: undefined } ) }
+				>
+					{ bulkNotice.warning }
 				</Notice>
 			) }
 			{ hasAnyFilterControl && (

@@ -40,6 +40,21 @@
 }
 
 /**
+ * The lock a row shows instead of its checkbox while another manager is editing the order (#1000) —
+ * WooCommerce's own list does the same (`wp-locked`). Sized to the checkbox it stands in for, so the
+ * column does not jump when a lock appears.
+ */
+.woodev-orders-cb-lock {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.5rem;
+	height: 1.5rem;
+	color: #757575;
+	cursor: help;
+}
+
+/**
  * The busy-row indicator (#873) — operator: on click the whole row drops to `opacity:
  * 0.85` and an indeterminate bar runs along its BOTTOM EDGE until the request settles.
  *
