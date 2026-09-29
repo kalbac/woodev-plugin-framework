@@ -256,7 +256,9 @@ class OrderAddressPolicyRestTest extends TestCase {
 		$this->assertSame( 'RU', $data['country'] );
 		$this->assertFalse( $data['pickup'] );
 		$this->assertSame( [ 'country', 'state', 'city', 'address_1', 'address_2', 'postcode' ], array_keys( $data['fields'] ) );
-		$this->assertSame( Checkout_Field_Policy::instance()->address_rules( 'RU', false ), $data['fields'] );
+		$expected                         = Checkout_Field_Policy::instance()->address_rules( 'RU', false );
+		$expected['postcode']['required'] = false; // #999: the wizard never requires the postcode.
+		$this->assertSame( $expected, $data['fields'] );
 
 		$this->assertSame( [ 'required' => false, 'hidden' => true, 'removed' => true ], $data['fields']['state'], 'the merchant removed the region' );
 		$this->assertTrue( $data['fields']['city']['required'], 'the settlement is always required' );
@@ -277,7 +279,7 @@ class OrderAddressPolicyRestTest extends TestCase {
 		$this->assertSame( [ 'required' => false, 'hidden' => true, 'removed' => false ], $pickup['fields']['address_1'] );
 		$this->assertSame( [ 'required' => false, 'hidden' => true, 'removed' => false ], $pickup['fields']['postcode'] );
 		$this->assertTrue( $courier['fields']['address_1']['required'] );
-		$this->assertTrue( $courier['fields']['postcode']['required'] );
+		$this->assertFalse( $courier['fields']['postcode']['required'], 'the wizard never requires the postcode (#999)' );
 	}
 
 	/**
@@ -306,8 +308,8 @@ class OrderAddressPolicyRestTest extends TestCase {
 		$response = $this->send( 'POST', self::ORDERS, $this->payload( [ 'postcode' => null, 'address_1' => null ] ) );
 
 		$this->assertSame( 422, $response->get_status(), wp_json_encode( $response->get_data() ) );
-		$this->assertContains( 'billing.postcode:field_required', $this->problems( $response ) );
 		$this->assertContains( 'billing.address_1:field_required', $this->problems( $response ) );
+		$this->assertNotContains( 'billing.postcode:field_required', $this->problems( $response ), 'the postcode is never required in the wizard (#999)' );
 		$this->assertSame( $before, count( wc_get_orders( [ 'limit' => -1, 'return' => 'ids' ] ) ) );
 	}
 
@@ -403,6 +405,23 @@ class OrderAddressPolicyRestTest extends TestCase {
 
 		$this->assertSame( 422, $response->get_status() );
 		$this->assertContains( 'shipping.address_1:field_required', $this->problems( $response ) );
-		$this->assertContains( 'shipping.postcode:field_required', $this->problems( $response ) );
+		$this->assertNotContains( 'shipping.postcode:field_required', $this->problems( $response ), 'the postcode is never required in the wizard (#999)' );
+	}
+
+	/**
+	 * #999: whatever the locale says (WC 11.1 RU requires the postcode), a wizard order without one is saved,
+	 * and the route tells the step ② the same — while the checkout's own rule is untouched.
+	 *
+	 * @return void
+	 */
+	public function test_an_order_without_a_postcode_is_accepted_and_the_checkout_rule_is_untouched(): void {
+		$this->policy_says( [] );
+
+		$this->assertTrue( Checkout_Field_Policy::instance()->address_rules( 'RU', false )['postcode']['required'], 'the checkout still requires it' );
+
+		$response = $this->send( 'POST', self::ORDERS, $this->payload( [ 'postcode' => null ] ) );
+
+		$this->assertSame( 201, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assertFalse( $this->wire( $this->send( 'GET', self::ROUTE, [ 'country' => 'RU' ] ) )['fields']['postcode']['required'] );
 	}
 }

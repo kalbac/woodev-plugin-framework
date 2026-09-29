@@ -574,7 +574,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Payloa
 				return [];
 			}
 
-			$rules = (array) call_user_func( $this->lookups['address_rules'], $shipping['country'], $pickup );
+			$rules = self::wizard_address_rules( (array) call_user_func( $this->lookups['address_rules'], $shipping['country'], $pickup ) );
 
 			foreach ( self::address_field_messages() as $key => $message ) {
 				$rule = $rules[ $key ] ?? null;
@@ -593,6 +593,28 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Payloa
 				if ( ! empty( $rule['required'] ) && '' === $shipping[ $key ] ) {
 					self::add_error( $errors, $section . '.' . $key, 'field_required', $message );
 				}
+			}
+
+			return $rules;
+		}
+
+		/**
+		 * The checkout's address rules as the WIZARD reads them (#999): the postcode is never required.
+		 *
+		 * The checkout is a fool-proof screen for the buyer; the wizard is for the shop staff, who rarely
+		 * know a customer's postcode (WooCommerce's own RU locale requires it). Only `required` is
+		 * neutralised — whether the postcode is shown, hidden or removed still follows the shop's policy —
+		 * and the checkout keeps its own rules untouched. The route `GET …/orders/address-policy` answers
+		 * through this too, so the step ② and the save-time check stay one rule.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string, mixed> $rules the checkout's rules, as `Checkout_Field_Policy::address_rules()` returns them.
+		 * @return array<string, mixed> the same rules, the postcode optional.
+		 */
+		public static function wizard_address_rules( array $rules ): array {
+			if ( isset( $rules['postcode'] ) && is_array( $rules['postcode'] ) ) {
+				$rules['postcode']['required'] = false;
 			}
 
 			return $rules;

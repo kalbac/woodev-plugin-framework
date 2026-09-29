@@ -15,6 +15,7 @@
 namespace Woodev\Framework\Shipping\Rest_Api;
 
 use Woodev\Framework\Shipping\Admin\Orders\Order_Editor;
+use Woodev\Framework\Shipping\Admin\Orders\Order_Payload_Validator;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
 use Woodev\Framework\Shipping\Checkout\Checkout_Field_Policy;
 
@@ -284,7 +285,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Order_Editor_Cont
 		 * so the wizard's «Адрес» step and the save-time check ({@see \Woodev\Framework\Shipping\Admin\Orders\Order_Payload_Validator}) can never
 		 * disagree with it. `fields` is keyed by `country`, `state`, `city`, `address_1`, `address_2`,
 		 * `postcode`, each `{ required, hidden, removed }`; an EMPTY `fields` means «no rule» (WooCommerce
-		 * absent), never «everything removed».
+		 * absent), never «everything removed». The one departure from the checkout: the postcode is never
+		 * `required` here ({@see Order_Payload_Validator::wizard_address_rules()}, #999) — the wizard is for
+		 * shop staff, not a fool-proof buyer screen.
 		 *
 		 * @since 2.0.2
 		 *
@@ -299,7 +302,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Order_Editor_Cont
 				[
 					'country' => $country,
 					'pickup'  => $pickup,
-					'fields'  => (object) Checkout_Field_Policy::instance()->address_rules( $country, $pickup ),
+					'fields'  => (object) Order_Payload_Validator::wizard_address_rules( Checkout_Field_Policy::instance()->address_rules( $country, $pickup ) ),
 				]
 			);
 		}

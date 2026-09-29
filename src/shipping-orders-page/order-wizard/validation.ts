@@ -153,7 +153,8 @@ export function validateAddress(
 	for ( const key of Object.keys( messages ) as AddressFieldKey[] ) {
 		const rule = ruleOf( policy, key );
 
-		if ( rule.required && ! rule.hidden && '' === data.shipping[ key as keyof typeof data.shipping ].trim() ) {
+		// The postcode is never required in the wizard (#999), whatever a policy says.
+		if ( 'postcode' !== key && rule.required && ! rule.hidden && '' === data.shipping[ key as keyof typeof data.shipping ].trim() ) {
 			add( errors, `shipping.${ key }`, messages[ key ] as string );
 		}
 	}
