@@ -3440,6 +3440,34 @@ describe( 'a row another manager is editing (#1000)', () => {
 		expect( screen.queryByRole( 'img', { name: /уже редактируется/ } ) ).toBeNull();
 	} );
 
+	test( 'a click refused with the lock code refetches the list so the row greys at once', async () => {
+		fetchOrders.mockResolvedValueOnce( resultOf( [ makeRow( { actions: FREE_ACTIONS } ) ] ) );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow( { actions: LOCKED_ACTIONS } ) ] ) );
+		performOrderAction.mockRejectedValue( { code: 'woodev_shipping_order_locked', message: TITLE } );
+
+		render( <App /> );
+
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Выгрузить' } ) );
+
+		await waitFor( () => expect( fetchOrders ).toHaveBeenCalledTimes( 2 ) );
+		expect( screen.getAllByText( TITLE ).length ).toBeGreaterThan( 0 );
+		await waitFor( () =>
+			expect( screen.getByRole( 'button', { name: 'Выгрузить' } ) ).toHaveAttribute( 'aria-disabled', 'true' )
+		);
+	} );
+
+	test( 'a refusal with any other code does not refetch the list', async () => {
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow( { actions: FREE_ACTIONS } ) ] ) );
+		performOrderAction.mockRejectedValue( { code: 'woodev_shipping_action_refused', message: 'Нельзя.' } );
+
+		render( <App /> );
+
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Выгрузить' } ) );
+
+		await waitFor( () => expect( screen.getAllByText( 'Нельзя.' ).length ).toBeGreaterThan( 0 ) );
+		expect( fetchOrders ).toHaveBeenCalledTimes( 1 );
+	} );
+
 	test( 'the bulk warning about skipped locked orders renders as its own notice', async () => {
 		fetchOrders.mockResolvedValue( resultOf( [ makeRow( { actions: FREE_ACTIONS } ) ] ) );
 		performBulkOrderAction.mockResolvedValue( {

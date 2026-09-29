@@ -44,6 +44,8 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 	require_once dirname( __DIR__, 4 ) . '/woodev/compatibility/class-order-compatibility.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/class-shipping-helper.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/api/class-api-base.php';
+	require_once __DIR__ . '/order-edit-lock-fixtures.php';
+	require_once __DIR__ . '/order-edit-lock-cpt-fixtures.php';
 
 	/**
 	 * @covers \Woodev\Framework\Shipping\Admin\Shipping_Admin_Order
@@ -60,6 +62,7 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			parent::setUp();
 
 			Orders_Registry::instance()->reset_for_tests();
+			\Automattic\WooCommerce\Internal\Admin\Orders\EditLock::$locks = [];
 
 			$this->meta = [];
 
@@ -91,6 +94,13 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 				return 'https://example.test/wp-admin/' . $path;
 			} );
 			Functions\when( 'has_action' )->justReturn( false );
+			Functions\when( 'disabled' )->alias( static function ( $disabled, $current = true, bool $display = true ): string {
+				$attribute = (string) $disabled === (string) $current ? " disabled='disabled'" : '';
+				if ( $display ) {
+					echo $attribute; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- test double.
+				}
+				return $attribute;
+			} );
 			Functions\when( 'wp_date' )->alias( static function ( string $format, int $timestamp ): string {
 				return gmdate( $format, $timestamp );
 			} );
@@ -98,6 +108,7 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 
 		protected function tearDown(): void {
 			Orders_Registry::instance()->reset_for_tests();
+			\Automattic\WooCommerce\Internal\Admin\Orders\EditLock::$locks = [];
 
 			parent::tearDown();
 		}
@@ -237,6 +248,41 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$this->assertStringNotContainsString( 'Трек-номер', $html, 'a field the carrier did not supply must be absent entirely' );
 			$this->assertStringNotContainsString( 'История доставки', $html, 'no tracking number must quietly omit the history section' );
 			$this->assertStringNotContainsString( '&ndash;', $html, 'KISS: an absent field is omitted, never rendered as a dash' );
+		}
+
+		public function test_render_metabox_disables_the_button_of_an_order_another_manager_is_editing(): void {
+			$provider = $this->provider();
+			$order    = $this->make_order();
+
+			$this->meta = [];
+			$this->register_handler();
+
+			\Automattic\WooCommerce\Internal\Admin\Orders\EditLock::$locks[123] = [ 'time' => time(), 'user_id' => 7 ];
+			$user               = new \stdClass();
+			$user->ID           = 7;
+			$user->display_name = 'Мария';
+			Functions\when( 'get_user_by' )->justReturn( $user );
+
+			ob_start();
+			( new Shipping_Admin_Order( Orders_Registry::instance() ) )->render_metabox( $order, $provider );
+			$html = ob_get_clean();
+
+			$this->assertMatchesRegularExpression( '/<button[^>]*title="[^"]*Мария[^"]*"[^>]*disabled=\'disabled\'/s', $html, 'the locked button is disabled and carries the lock reason' );
+		}
+
+		public function test_render_metabox_keeps_the_button_live_when_nobody_else_holds_the_lock(): void {
+			$provider = $this->provider();
+			$order    = $this->make_order();
+
+			$this->meta = [];
+			$this->register_handler();
+
+			ob_start();
+			( new Shipping_Admin_Order( Orders_Registry::instance() ) )->render_metabox( $order, $provider );
+			$html = ob_get_clean();
+
+			$this->assertStringContainsString( 'value="export"', $html );
+			$this->assertStringNotContainsString( "disabled='disabled'", $html );
 		}
 
 		public function test_render_metabox_never_draws_a_button_for_the_edit_row_action(): void {

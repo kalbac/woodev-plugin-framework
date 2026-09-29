@@ -424,11 +424,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 		private static function edit_locked_error( string $display_name ): \WP_Error {
 			return self::error(
 				'woodev_shipping_order_locked',
-				sprintf(
-					/* translators: %s: display name of the manager currently editing the order. */
-					__( 'This order is already being edited by %s', 'woodev-plugin-framework' ),
-					$display_name
-				),
+				Order_Actions::locked_by_message( $display_name ),
 				409
 			);
 		}

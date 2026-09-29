@@ -1809,7 +1809,7 @@ export default function OrdersPage() {
 					return next;
 				} );
 			} )
-			.catch( ( err: { message?: string } ) => {
+			.catch( ( err: { message?: string; code?: string } ) => {
 				const text =
 					( err && err.message ) ||
 					__( 'Не удалось выполнить действие.', 'woodev-plugin-framework' );
@@ -1830,6 +1830,12 @@ export default function OrdersPage() {
 					delete next[ row.id ];
 					return next;
 				} );
+				// #1000 — another manager took the order's edit lock after this table loaded: the
+				// server now builds the row locked, so refetch and grey it at once instead of
+				// letting a second click repeat the 409.
+				if ( err && 'woodev_shipping_order_locked' === err.code ) {
+					setReloadKey( ( key ) => key + 1 );
+				}
 			} );
 	};
 
