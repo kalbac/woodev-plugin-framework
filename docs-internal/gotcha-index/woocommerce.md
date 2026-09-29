@@ -29,6 +29,7 @@
 - [woocommerce/meta-query-joins] **On HPOS every leaf meta clause is its own join; `WP_Meta_Query` on CPT shares an alias between POSITIVE `OR` siblings — and the CPT wall is the PLANNER, not the count.** → [on-hpos-a-leaf-meta-clause-is-always-one-join-on-cpt-wp-meta-query-shares-aliases](../gotchas/on-hpos-a-leaf-meta-clause-is-always-one-join-on-cpt-wp-meta-query-shares-aliases.md) (s138)
 - [woocommerce/email] **`woocommerce_email_recipient_{id}` fires for e-mails WC did NOT send (10.9+ EmailLogger) and twice per send on 8.5 — count `woocommerce_email_sent`.** → [woocommerce-email-recipient-filter-is-not-a-sent-signal](../gotchas/woocommerce-email-recipient-filter-is-not-a-sent-signal.md) (s143)
 - [woocommerce/email] **A filter added and removed around a status change cannot mute a DEFERRED e-mail — persist the intent on the order; and WC ≤ 10.7 dispatches a batch from stale order copies.** → [a-call-scoped-filter-cannot-mute-a-deferred-woocommerce-email](../gotchas/a-call-scoped-filter-cannot-mute-a-deferred-woocommerce-email.md) (s143)
+- [woocommerce/*] **`EditLock` is HPOS-only, but its heartbeat handler is global: on CPT it adds an `_edit_lock` row per tick.** → [woocommerce-editlock-is-hpos-only-and-its-heartbeat-breeds-cpt-lock-rows](../gotchas/woocommerce-editlock-is-hpos-only-and-its-heartbeat-breeds-cpt-lock-rows.md) (s144)
 
 ## Related
 

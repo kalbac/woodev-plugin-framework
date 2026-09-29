@@ -477,6 +477,18 @@ Operator, 28.09.2026: the local **qwen3.8:27b** is a worker only, and it is laun
 
 ## Traps
 
+### Added in s144
+
+- **Codex 0.158.0 fails Orca's readiness with no flags at all; the file-report fallback is the normal path now** — gotcha
+  `starting-codex-under-orca-needs-four-steps-not-one`, s144 section (also the usage-limit reset recipe).
+- **A Codex worker whose gates are green may start writing session docs on its own** (it read `DOCS-SCHEMA.md` and `s143.md`).
+  Every brief now says «no session docs — the coordinator owns them».
+- **A PR stacked on another PR's branch gets ONE check, not the matrix** (#995/#997/#998 against a non-`main` base) — the workflows
+  filter on the `main` base. Full CI arrives only after the lower PR merges and the stacked one is retargeted to `main`.
+- **Stacking parked UI work is the cheap answer to file overlap overnight:** #985 → #982 → #991 → #992 each touched the wizard; each
+  branch was cut from the one below, workers ran in the PRIMARY checkout (integration available), the coordinator rebuilt bundles and
+  ran integration on every branch before its critic.
+
 ### Added in s141
 
 - **Orca updates ITSELF mid-session and restarts its runtime** (1.4.212 → 1.4.214 at ~04:00, s141). A

@@ -358,6 +358,25 @@ ran normally; with no preamble it has no lifecycle ids, so the report comes back
 where, with the canary as its first word) and the coordinator waits on the file, then releases the failed
 dispatch and closes the terminal. Three critics ran this way in s141.
 
+## s144 (macOS, Orca 1.4.215, codex 0.158.0): readiness times out even WITHOUT flags
+
+29.09.2026. The first launch met codex 0.157.1's update dialog and the injected brief's Enter picked «Update now»: Codex updated itself
+to 0.158.0 and exited to the shell (dispatch `outcome_unknown` / `turn_start_unobserved`). `worker-stop` (it reported
+`closed_agent_terminal`) + `--retry-of` started 0.158.0 cleanly — and `worker-start` still returned `failed / agent_readiness /
+timeout`, with NO `--model`/`--effort`. The terminal held a healthy Codex at `› Ask Codex to do anything` behind a new welcome line
+and the same `⚠ 1 warning` footer. Every one of six Codex launches that night did the same.
+
+✅ **What worked, six times out of six:** keep the terminal the failed start created, send
+`Read the file <brief> … do what it says` with `terminal send --enter`, have the brief name a REPORT FILE (canary first word) instead
+of `worker_done`, and watch the file (plus the buffer's last lines for a usage-limit message). Afterwards `worker-release` the failed
+dispatch and `terminal close` the terminal. Orca's lifecycle ids are unused on this path.
+
+**Usage-limit resets (the account had three).** When Codex prints «You've hit your usage limit», it first offers
+«Switch to gpt-6-luna?» — answer `2` (keep the model). Then in the composer: `/usage` + Enter → `2` «Redeem reset» → pick the
+EARLIEST-expiring reset → `1` «Yes, use reset» → `1` «Close» → send «Continue». The turn in flight survives. Orca has no command for
+it; `orca account list` shows `rateLimitResetCredits.availableCount`. A watcher that greps the WHOLE buffer for the limit text fires
+again on the stale line — match only the last few lines.
+
 ## Related
 
 - [input-accepted-is-not-proof-a-worker-started](input-accepted-is-not-proof-a-worker-started.md) — the s83 half of this: the receipt lies about delivery

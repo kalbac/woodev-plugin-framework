@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Topic map.** 343 atomic gotchas across 31 topics. At session start read THIS file, then open
+> **Topic map.** 345 atomic gotchas across 31 topics. At session start read THIS file, then open
 > the topic indexes your task touches — each holds one line per gotcha, linking the detail file.
 > `[tooling/*]`, `[testing/*]` and `[rig/*]` apply to almost every session.
 > **Adding one:** create `gotchas/{slug}.md`, then add ONE line to the right `gotcha-index/{topic}.md`
@@ -18,7 +18,7 @@
 | [`compat/*`](gotcha-index/compat.md) | 3 | Backward compatibility, HPOS |
 | [`lifecycle/*`](gotcha-index/lifecycle.md) | 1 | Install/upgrade routines |
 | [`woocommerce/states`](gotcha-index/woocommerce-states.md) | 2 | The `woocommerce_states` table |
-| [`woocommerce/*`](gotcha-index/woocommerce.md) | 20 | WooCommerce-specific · WooCommerce-specific (session) |
+| [`woocommerce/*`](gotcha-index/woocommerce.md) | 21 | WooCommerce-specific · WooCommerce-specific (session) |
 | [`framework/*`](gotcha-index/framework.md) | 6 | Framework internals |
 | [`framework/contracts`](gotcha-index/framework-contracts.md) | 3 | What the framework guarantees to its consumers |
 | [`shipping/location`](gotcha-index/shipping-location.md) | 12 | Location provider layer |
@@ -34,7 +34,7 @@
 | [`admin-ui/modal`](gotcha-index/admin-ui-modal.md) | 3 | Framework modal shell |
 | [`admin-ui/react-state`](gotcha-index/admin-ui-react-state.md) | 2 | React component state |
 | [`box-packer/*`](gotcha-index/box-packer.md) | 2 | Box-packer algorithm (S2) |
-| [`shipping/checkout`](gotcha-index/shipping-checkout.md) | 18 | Checkout field layer (§8) |
+| [`shipping/checkout`](gotcha-index/shipping-checkout.md) | 19 | Checkout field layer (§8) |
 | [`shipping/pickup`](gotcha-index/shipping-pickup.md) | 26 | Pickup point picker / ymaps |
 | [`shipping/*`](gotcha-index/shipping.md) | 6 | Shipping module (S1) |
 | [`perf/*`](gotcha-index/perf.md) | 3 | Payload size and wire cost |

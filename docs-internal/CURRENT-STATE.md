@@ -6,7 +6,7 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-29 (s143).** ✅ **#710 MERGED and accepted on the rig** (epic closed): PRs #978 (incl. #981 «New order» mute + per-order `GET_LOCK`), #983 (block checkout rates/pickup refusal), #984, #986 (wizard UI + manager-mode pickup map). **PR #987** (#941) waits for the Russian-locale acceptance. Follow-ups #982 #985 #988. Details: `sessions/s143.md`. ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
+**As of 2026-09-29 (s144).** ⏸ **The order-wizard stack is PARKED for the operator's eye:** PR #993 (#985 address policy, base `main`) ← #995 (#982 edit lock) ← #997 (#991 + #996) ← #998 (#992 pickup address) — merge bottom-up, retargeting each to `main`; the rig serves the stack top `feat/992-wizard-pickup-address`. #988 merged (PR #989). ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
 orders-page slug redirects to the framework page with that carrier preselected, accepted on the rig.
 ✅ **Both machines are live**; routine sync is git ONLY (`wiki/two-machine-setup.md`). The order
 metabox (#856) and the orders table (#870) stay accepted.
@@ -43,7 +43,7 @@ selector matches nothing. One line each under the `[rig/*]` and `[build/*]` topi
 
 ⛔ **The operator reordered the work, 12.09.2026, reconfirmed 13.09** — *«пока у нас не будет готов
 базовый минимум самого фреймворка, мы плагин не пилим»*. **#786 is OUT of the queue** («Заморожено»).
-Next: see `next-session-prompt.md` — #988, #985, #982 (UI → parked for his eye), PR #987 acceptance. ⚠ **Codex is at ~6 % of its WEEKLY limit until 04.10.2026 02:38** — critic by Fable 5 meanwhile (operator decision s143).
+Next: see `next-session-prompt.md` — the parked wizard stack (#993 → #995 → #997 → #998), PR #987 acceptance (Russian locale), #990 (his question). Codex is back in use (operator, 29.09.2026): **1 of 3 usage-limit resets spent**, recipe in gotcha `starting-codex-under-orca-needs-four-steps-not-one`.
 
 ✅ **CI first-try reliability is ENFORCED** (#871): `.githooks/pre-push` rebuilds the bundles and
 runs the catalogue gates by exit code in ~22 s — a worker may not build bundles while
@@ -79,7 +79,7 @@ FIXTURES**; the shipping plugin is written later, from scratch, own repo, versio
 these are not platform-dependent): unit **4132 / 14586**, 1 skipped, sodium ON; jest **1975** in
 **33** suites; **integration 200 / 730**; e2e **7** in 13 s; `npm run build` zero git diff; phpcs
 clean **with the warning level ON**; phpstan level 3 no errors. ⚠ A number copied from a handoff is an INFERENCE — re-measure.
-**`main` after s143's merges (29.09.2026, measured on `main` = `48dc2586`):** unit **4555 / 21144**, 1 skipped; jest **2333** (45 suites); integration **355 / 4279**; e2e **7/7** (28.09, wizard branch).
+**`main` after s144 (`2dd158d9` = s143 + #989):** not re-measured as a whole; #989's branch measured unit **4557 / 21146**, integration **357 / 4297** (29.09.2026), CI green. **Stack top `feat/992` (29.09.2026):** unit **4578**, jest **2365** (46 suites), integration **377 / 4395**, e2e **7/7**.
 
 ⚠ **A `.ts` msgid fails `lint:i18n-sources`** — it extracts from the BUILT bundle (s129).
 
@@ -109,7 +109,7 @@ region whose `key()` is not in the settlement's own `ancestors()` is refused. �
 `Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that IS
 its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards — 64, measured 29.09.2026 (s143):** Инбокс holds **#922** (Supermemory, parked by his word) .
+**Open cards — 66, measured 29.09.2026 (s144):** Инбокс holds **#922** (Supermemory, parked by his word) and **#990** (his question on carrier-declared required fields).
 ⚠ Count with
 `gh issue list --limit 300` and `project item-list --limit 1000` — s127's 53 was an undercount from
 exactly that trap, and a naive reader reports a milestone-carrying card as empty. **PRIORITY LIVES ON
