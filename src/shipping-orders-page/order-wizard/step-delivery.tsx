@@ -67,7 +67,7 @@ import PickupMap from './pickup-map';
 import { isPickupRuntimeAvailable } from './pickup-session';
 import type { PickupPoint, PickupWizardConfig } from './pickup-session';
 import type { StepProps } from './step-props';
-import type { CarrierField, FieldErrors, RateGroup, RateOption, RatesResponse } from './types';
+import type { CarrierField, FieldErrors, RateGroup, RateOption, RatesResponse, WizardData } from './types';
 import { formatMoney } from './wizard-data';
 
 type Phase = 'idle' | 'loading' | 'ready' | 'failed';
@@ -76,6 +76,11 @@ interface RatesState {
 	phase: Phase;
 	response: RatesResponse | null;
 	error: string;
+}
+
+/** A locality comparison that ignores only spelling noise a carrier must not turn into a new destination. */
+function normalizedLocality( value: string ): string {
+	return value.trim().replace( /\s+/g, ' ' ).toLocaleLowerCase();
 }
 
 /** «Название — адрес» of the chosen point, decoded for display; '' when nothing is known beyond the id. */
@@ -192,11 +197,21 @@ export default function StepDelivery( { data, setData, errors }: StepProps ) {
 	// The effect below reads the state as it is when the answer LANDS, not when it was asked.
 	const latest = useRef( data );
 	latest.current = data;
+	// Replacing the address is a consequence of selecting a point from the current quote, not a
+	// manager edit of the destination. Do not ask that same quote again and let its answer erase
+	// the selection which caused the substitution.
+	const ignoredRequestKey = useRef( '' );
 
 	const request = buildRatesRequest( data );
 	const requestKey = ratesRequestKey( request );
 
 	useEffect( () => {
+		if ( ignoredRequestKey.current === requestKey ) {
+			ignoredRequestKey.current = '';
+
+			return undefined;
+		}
+
 		const body = buildRatesRequest( latest.current );
 
 		if ( null === body ) {
@@ -289,14 +304,48 @@ export default function StepDelivery( { data, setData, errors }: StepProps ) {
 		)
 	);
 
-	const onPickPoint = ( point: PickupPoint ) =>
-		setData( ( d ) =>
-			setPickupPoint( d, {
-				id: String( point.id ),
-				name: 'string' === typeof point.name ? point.name : '',
-				address: 'string' === typeof point.address ? point.address : 'string' === typeof point.short_address ? point.short_address : '',
-			} )
-		);
+	const replaceAddressFromPoint = ( current: WizardData, point: PickupPoint ): WizardData => {
+		const selected = setPickupPoint( current, {
+			id: String( point.id ),
+			name: 'string' === typeof point.name ? point.name : '',
+			address: 'string' === typeof point.address ? point.address : 'string' === typeof point.short_address ? point.short_address : '',
+		} );
+
+		if ( ! pickupConfig?.replaceAddress?.enabled ) {
+			return selected;
+		}
+
+		const address = 'string' === typeof point.address ? decodeEntities( point.address ) : '';
+		const locality = 'string' === typeof point.locality ? decodeEntities( point.locality ) : '';
+		const postcode = 'string' === typeof point.postal_code ? decodeEntities( point.postal_code ) : '';
+		const cityChanged = '' !== locality && normalizedLocality( locality ) !== normalizedLocality( selected.shipping.city );
+
+		return {
+			...selected,
+			shipping: {
+				...selected.shipping,
+				address_1: address,
+				// A point without a locality does not make the existing settlement unknown.
+				city: cityChanged ? locality : selected.shipping.city,
+				postcode,
+			},
+			// The confirmed settlement record survives the pick, as it does on the checkout
+			// (location-cascade.js handlePickupAddressReplacing, #339 — re-seeding, not
+			// suppressing): a point may stand in a neighbouring settlement, and the record is what
+			// addresses the picker and step ⑤'s point check for a settlement-keyed carrier.
+		};
+	};
+
+	const onPickPoint = ( point: PickupPoint ) => {
+		const replaced = replaceAddressFromPoint( latest.current, point );
+		const replacedRequestKey = ratesRequestKey( buildRatesRequest( replaced ) );
+
+		if ( pickupConfig?.replaceAddress?.enabled && replacedRequestKey !== requestKey ) {
+			ignoredRequestKey.current = replacedRequestKey;
+		}
+
+		setData( ( current ) => replaceAddressFromPoint( current, point ) );
+	};
 
 	return (
 		<div className="woodev-order-wizard__step">

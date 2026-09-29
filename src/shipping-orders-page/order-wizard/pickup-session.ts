@@ -59,6 +59,7 @@ export interface PickupWizardConfig {
 	provider: string;
 	strategy: 'bulk' | 'viewport' | string;
 	restRoot: string;
+	replaceAddress?: { enabled?: boolean; billingOnly?: boolean };
 	i18n?: Record<string, string>;
 	mapConfig?: Record<string, unknown> & { ownsChrome?: boolean; lang?: string };
 	defaultLocation?: unknown;

@@ -48,7 +48,7 @@ const filled = () => {
 
 let probe;
 
-function Harness( { initial, errors = {} } ) {
+function Harness( { initial, errors = {}, mode = 'create' } ) {
 	const [ data, setData ] = useState( initial );
 	const [ open, setOpen ] = useState( true );
 
@@ -59,11 +59,11 @@ function Harness( { initial, errors = {} } ) {
 		'div',
 		{ 'data-testid': 'shell' },
 		createElement( 'button', { type: 'button', onClick: () => setOpen( false ) }, 'leave' ),
-		open && createElement( StepDelivery, { data, setData: ( update ) => setData( update ), errors, mode: 'create', order: null, submit: jest.fn(), busy: false } )
+		open && createElement( StepDelivery, { data, setData: ( update ) => setData( update ), errors, mode, order: null, submit: jest.fn(), busy: false } )
 	);
 }
 
-const mount = ( initial = filled(), errors = {} ) => render( createElement( Harness, { initial, errors } ) );
+const mount = ( initial = filled(), errors = {}, mode = 'create' ) => render( createElement( Harness, { initial, errors, mode } ) );
 
 /**
  * Queries scoped to the step itself: a `Notice` also speaks its text into a live region that
@@ -362,6 +362,139 @@ describe( 'the pickup point inside the step (D3, O10)', () => {
 		expect( screen.queryByText( 'Пункт ещё не выбран — выберите его в списке или на карте.' ) ).toBeNull();
 		// The picker is NOT rebuilt by choosing a point in it.
 		expect( createPickupSession ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	test( 'an enabled store setting replaces the delivery address from the selected point, as checkout does', async () => {
+		window.woodevShippingOrders.wizard.pickup.cdek = { ...PICKER_CONFIG, replaceAddress: { enabled: true, billingOnly: false } };
+		mount();
+		await choosePvz();
+		await waitFor( () => expect( createPickupSession ).toHaveBeenCalled() );
+
+		await pick( { id: 'P-1', address: 'ул. Пушкина, 1', locality: 'Жуковский', postal_code: '140180' } );
+
+		await waitFor( () => expect( probe.data.shipping ).toMatchObject( {
+			address_1: 'ул. Пушкина, 1',
+			city: 'Жуковский',
+			postcode: '140180',
+		} ) );
+	} );
+
+	test( 'decodes the selected point address, locality and postcode before the order carries them', async () => {
+		window.woodevShippingOrders.wizard.pickup.cdek = { ...PICKER_CONFIG, replaceAddress: { enabled: true, billingOnly: false } };
+		const data = filled();
+		data.settlementKey = 'dadata:77';
+		data.settlementRecord = { key: 'dadata:77', level: 'settlement' };
+		mount( data );
+		await choosePvz();
+		await waitFor( () => expect( createPickupSession ).toHaveBeenCalled() );
+
+		await pick( { id: 'P-1', address: 'ул. Ленина, 5 &quot;А&quot;', locality: 'Мира &amp; Ко', postal_code: '140&amp;180' } );
+
+		await waitFor( () => expect( probe.data.shipping ).toMatchObject( {
+			address_1: 'ул. Ленина, 5 "А"',
+			city: 'Мира & Ко',
+			postcode: '140&180',
+		} ) );
+		// The confirmed record survives the pick, as on the checkout (#339): the point may stand in a
+		// neighbouring settlement, and the record still addresses the picker and step ⑤'s point check.
+		expect( probe.data.settlementKey ).toBe( 'dadata:77' );
+		expect( probe.data.settlementRecord ).toEqual( { key: 'dadata:77', level: 'settlement' } );
+	} );
+
+	test( 'clears an absent address or postcode but keeps the settled city when the point has no locality', async () => {
+		window.woodevShippingOrders.wizard.pickup.cdek = { ...PICKER_CONFIG, replaceAddress: { enabled: true, billingOnly: false } };
+		const data = filled();
+		data.shipping = { ...data.shipping, address_1: 'ул Тверская 1', postcode: '125009' };
+		data.settlementKey = 'dadata:77';
+		data.settlementRecord = { key: 'dadata:77', level: 'settlement' };
+		mount( data );
+		await choosePvz();
+		await waitFor( () => expect( createPickupSession ).toHaveBeenCalled() );
+
+		await pick( { id: 'P-1' } );
+
+		await waitFor( () => expect( probe.data.shipping ).toMatchObject( { address_1: '', city: 'Москва', postcode: '' } ) );
+		expect( probe.data.settlementKey ).toBe( 'dadata:77' );
+		expect( probe.data.settlementRecord ).toEqual( { key: 'dadata:77', level: 'settlement' } );
+	} );
+
+	test( 'a disabled replacement setting leaves the delivery address untouched', async () => {
+		const data = filled();
+		data.shipping = { ...data.shipping, address_1: 'ул Тверская 1', city: 'Москва', postcode: '125009' };
+		mount( data );
+		await choosePvz();
+		await waitFor( () => expect( createPickupSession ).toHaveBeenCalled() );
+
+		await pick( { id: 'P-1', address: 'ул. Пушкина, 1', locality: 'Жуковский', postal_code: '140180' } );
+
+		expect( probe.data.shipping ).toMatchObject( { address_1: 'ул Тверская 1', city: 'Москва', postcode: '125009' } );
+	} );
+
+	test( 'an edit may replace its saved delivery address from a newly selected point', async () => {
+		window.woodevShippingOrders.wizard.pickup.cdek = { ...PICKER_CONFIG, replaceAddress: { enabled: true, billingOnly: false } };
+		const loaded = filled();
+		loaded.rest = {
+			...loaded.rest,
+			shipping_line: { method_id: 'cdek_pvz', instance_id: 5, rate_id: 'cdek_pvz:5', label: 'Пункт выдачи СДЭК', cost: '120', meta: {} },
+			pickup_point: { id: 'P-old', name: 'Старый пункт', address: 'ул Тверская 1' },
+			rate_is_pickup: true,
+			rate_cost: '',
+		};
+		mount( loaded, {}, 'edit' );
+		await waitFor( () => expect( createPickupSession ).toHaveBeenCalled() );
+
+		await pick( { id: 'P-1', address: 'ул. Пушкина, 1', locality: 'Жуковский', postal_code: '140180' } );
+
+		await waitFor( () => expect( probe.data ).toMatchObject( {
+			shipping: { address_1: 'ул. Пушкина, 1', city: 'Жуковский', postcode: '140180' },
+			rest: { pickup_point: { id: 'P-1' }, shipping_line: { rate_id: 'cdek_pvz:5' } },
+		} ) );
+	} );
+
+	test( 'a point changing city retains its tariff and selection instead of re-quoting itself away', async () => {
+		window.woodevShippingOrders.wizard.pickup.cdek = { ...PICKER_CONFIG, replaceAddress: { enabled: true, billingOnly: false } };
+		apiFetch.mockResolvedValueOnce( CDEK ).mockResolvedValueOnce( response( [ { id: 'cdek', label: 'СДЭК', rates: [ COURIER ] } ] ) );
+		const data = filled();
+		data.settlementKey = 'dadata:77';
+		data.settlementRecord = { key: 'dadata:77', level: 'settlement' };
+		mount( data );
+		await choosePvz();
+		await waitFor( () => expect( createPickupSession ).toHaveBeenCalledTimes( 1 ) );
+
+		await pick( { id: 'P-1', address: 'Ленина, 2', locality: 'Жуковский', postal_code: '140181' } );
+
+		await waitFor( () => expect( probe.data.shipping.city ).toBe( 'Жуковский' ) );
+		expect( rateBodies() ).toHaveLength( 1 );
+		expect( probe.data.rest.shipping_line ).toMatchObject( { rate_id: 'cdek_pvz:5' } );
+		expect( probe.data.rest.pickup_point ).toMatchObject( { id: 'P-1' } );
+		// The city really changes the map input, so the session is rebuilt onto the retained point.
+		await waitFor( () => expect( createPickupSession ).toHaveBeenCalledTimes( 2 ) );
+		expect( createPickupSession.mock.calls[ 1 ][ 0 ] ).toMatchObject( { locality: 'Жуковский', localityKey: 'dadata:77', selectedId: 'P-1' } );
+	} );
+
+	test( 'a new point replaces the prior point address, while switching back to courier keeps it', async () => {
+		window.woodevShippingOrders.wizard.pickup.cdek = { ...PICKER_CONFIG, replaceAddress: { enabled: true, billingOnly: false } };
+		mount();
+		await choosePvz();
+		await waitFor( () => expect( createPickupSession ).toHaveBeenCalled() );
+
+		await pick( { id: 'P-1', address: 'Арбат, 1', locality: 'Москва', postal_code: '119019' } );
+		await pick( { id: 'P-2', address: 'Ленина, 2', locality: 'Жуковский', postal_code: '140181' } );
+
+		await waitFor( () => expect( probe.data.shipping ).toMatchObject( {
+			address_1: 'Ленина, 2',
+			city: 'Жуковский',
+			postcode: '140181',
+		} ) );
+
+		fireEvent.click( screen.getByRole( 'radio', { name: /Курьер/ } ) );
+
+		expect( probe.data.rest.pickup_point ).toBeNull();
+		expect( probe.data.shipping ).toMatchObject( {
+			address_1: 'Ленина, 2',
+			city: 'Жуковский',
+			postcode: '140181',
+		} );
 	} );
 
 	test( 'falls back to a short address when the point has no full one', async () => {

@@ -2212,9 +2212,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * - the remembered selection, the chosen address and the customer's location block are the
 		 *   visitor's session state — the admin is not the buyer, so they are never read
 		 *   ({@see self::build_js_config()}).
-		 * - the address-replacement and close-on-select behaviours are checkout mechanics: the
-		 *   wizard writes nothing into address fields from a picked point and keeps its own step
-		 *   open, so both are off.
+		 * - address replacement follows the store's `pickup_replace_address` setting, like the
+		 *   checkout. The wizard has one delivery address, so its browser always writes there;
+		 *   `billingOnly` is false because there is no checkout-style live target to resolve.
+		 *   Close-on-select remains off: the picker lives inside the wizard step.
 		 * - the REST nonce is dropped; the orders page carries its own (`window.woodevShippingOrders`).
 		 *
 		 * @since 2.0.2
@@ -2229,7 +2230,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			$config['nonce']          = '';
 			$config['nonceNodeId']    = '';
 			$config['replaceAddress'] = [
-				'enabled'     => false,
+				'enabled'     => (bool) Pickup_Map_Settings::current()->get_value( 'pickup_replace_address' ),
 				'billingOnly' => false,
 			];
 			$config['selection']      = [
