@@ -14,7 +14,7 @@
  */
 
 import '@testing-library/jest-dom';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { createElement } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
 import OrderWizard from '../../src/shipping-orders-page/order-wizard/order-wizard';
@@ -866,6 +866,40 @@ describe( 'edit mode (the load route)', () => {
 		payment_method: 'cod',
 		status: 'processing',
 	};
+
+	test( 'the edit lock heartbeat uses the bootstrap key and order id, then reads its response under that key', async () => {
+		const heartbeat = {};
+		window.woodevShippingOrders.wizard.editLockHeartbeatKey = 'server-edit-lock-key';
+		window.jQuery = () => ( {
+			on: ( event, handler ) => {
+				heartbeat[ event ] = handler;
+			},
+			off: jest.fn(),
+		} );
+		routeApi( { '/shipping/orders/7/edit': () => Promise.resolve( PREFILL ) } );
+		mount( { orderId: 7 } );
+
+		await screen.findByRole( 'dialog', { name: 'Редактировать заказ №7' } );
+		const payload = {};
+		heartbeat[ 'heartbeat-send.woodevOrderWizard' ]( {}, payload );
+
+		expect( payload ).toEqual( { 'server-edit-lock-key': 7 } );
+		act( () => heartbeat[ 'heartbeat-tick.woodevOrderWizard' ]( {}, { 'server-edit-lock-key': { error: { message: 'Этот заказ уже открыт.' } } } ) );
+		expect( await modal().findByText( 'Этот заказ уже открыт.' ) ).toBeInTheDocument();
+	} );
+
+	test( 'a create does not subscribe to the edit lock heartbeat', () => {
+		const heartbeat = { on: jest.fn(), off: jest.fn() };
+		window.jQuery = () => heartbeat;
+
+		mount();
+
+		expect( heartbeat.on ).not.toHaveBeenCalled();
+	} );
+
+	afterEach( () => {
+		delete window.jQuery;
+	} );
 
 	test( 'loads GET …/{id}/edit, shows the order number, and opens every step prefilled', async () => {
 		routeApi( { '/shipping/orders/7/edit': () => Promise.resolve( PREFILL ) } );

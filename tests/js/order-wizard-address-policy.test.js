@@ -98,6 +98,23 @@ describe( 'validateAddress with the checkout policy', () => {
 		expect( validateAddress( filled( { address_1: '', postcode: '' } ), COUNTRIES, {}, hidden ) ).toEqual( {} );
 	} );
 
+	test.each( [
+		[ 'hidden', rule( { hidden: true } ) ],
+		[ 'removed', rule( { hidden: true, removed: true } ) ],
+	] )( 'a %s region with a stored invalid code is not checked', ( mode, state ) => {
+		const policy = normalizeAddressPolicy( { ...POLICY_FIELDS, state } );
+
+		expect( validateAddress( filled( { state: 'MOW' } ), COUNTRIES, { RU: { MOS: 'Москва' } }, policy ) ).toEqual( {} );
+	} );
+
+	test( 'a visible region with a stored invalid code is checked', () => {
+		const policy = normalizeAddressPolicy( { ...POLICY_FIELDS, state: rule() } );
+
+		expect( validateAddress( filled( { state: 'MOW' } ), COUNTRIES, { RU: { MOS: 'Москва' } }, policy )[ 'shipping.state' ] ).toEqual( [
+			'Такого региона нет в справочнике магазина для выбранной страны.',
+		] );
+	} );
+
 	test( 'a required region and a required flat are checked too', () => {
 		const strict = normalizeAddressPolicy( { ...POLICY_FIELDS, state: rule( { required: true } ), address_2: rule( { required: true } ) } );
 		const errors = validateAddress( filled(), COUNTRIES, {}, strict );

@@ -1011,6 +1011,10 @@ class ShippingOrdersRegistryTest extends TestCase {
 
 		$this->assertSame( [ 'RU' => 'Россия', 'KZ' => 'Казахстан' ], $data['wizard']['countries'] );
 		$this->assertSame( 'RU', $data['wizard']['defaultCountry'] );
+		$this->assertSame(
+			( new \ReflectionClass( Orders_Registry::class ) )->getConstant( 'EDIT_LOCK_HEARTBEAT_KEY' ),
+			$data['wizard']['editLockHeartbeatKey']
+		);
 		// Regions are keyed by the WooCommerce STATE CODE the payload validator checks; a country
 		// without regions is absent, so the client falls back to a free-text field for it.
 		$this->assertSame( [ 'RU' ], array_keys( $data['wizard']['states'] ) );
