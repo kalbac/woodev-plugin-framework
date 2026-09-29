@@ -126,9 +126,8 @@ export interface OrdersScopeCounts {
 
 /**
  * One action offered on a row (#824), e.g. «Выгрузить» / «Обновить» / «Отменить» — or a
- * carrier extra registered through the server-side filter. Only AVAILABLE actions are
- * sent; there is no disabled state to render, so an action missing from this array is an
- * action that does not exist for this row, never one the merchant cannot currently use.
+ * carrier extra registered through the server-side filter. An available action can be
+ * temporarily disabled when another manager holds the order's native WooCommerce edit lock.
  */
 export interface OrderRowAction {
 	/**
@@ -142,6 +141,10 @@ export interface OrderRowAction {
 	title: string;
 	/** `true` => confirm before sending. */
 	destructive: boolean;
+	/** `true` when another manager holds the order's live WooCommerce edit lock. */
+	disabled?: boolean;
+	/** Display name of that other manager, present only with `disabled`. */
+	lock_owner?: string;
 }
 
 /** The full response envelope `Orders_Controller::get_items()` returns. */

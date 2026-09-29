@@ -461,16 +461,18 @@ function ActionsCell( {
 			>
 				{ actions.map( ( action ) => {
 					const tone = ACTION_TONES[ action.action ] || FALLBACK_ACTION_TONE;
+					const locked = EDIT_ACTION === action.action && action.disabled;
 
 					return (
 						<Tooltip key={ action.action } text={ action.title || action.label }>
 							<Button
-								icon={ <Dashicon icon={ ACTION_ICONS[ action.action ] || FALLBACK_ACTION_ICON } /> }
+								icon={ <Dashicon icon={ locked ? 'lock' : ACTION_ICONS[ action.action ] || FALLBACK_ACTION_ICON } /> }
 								label={ action.label }
 								showTooltip={ false }
 								className={ `woodev-orders-actions__button woodev-orders-actions__button--${ tone }` }
 								isBusy={ pendingAction === action.action }
-								disabled={ rowBusy }
+								disabled={ rowBusy || action.disabled }
+								accessibleWhenDisabled={ locked }
 								onClick={ () => onActionClick( row, action ) }
 							/>
 						</Tooltip>
@@ -976,7 +978,7 @@ function OrderPreviewModal( {
 									variant={ action.destructive ? 'secondary' : 'primary' }
 									isDestructive={ action.destructive }
 									isBusy={ rowState?.pendingAction === action.action }
-									disabled={ isRowBusy( rowState ) }
+									disabled={ isRowBusy( rowState ) || action.disabled }
 									onClick={ () => onActionClick( target, action ) }
 								>
 									{ action.label }

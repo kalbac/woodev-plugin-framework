@@ -465,6 +465,31 @@ class ShippingOrdersRegistryTest extends TestCase {
 	}
 
 	/**
+	 * The order wizard sends a framework-owned heartbeat key, so WooCommerce's global handler
+	 * cannot write another lock before the datastore-aware handler runs (#982).
+	 */
+	public function test_add_hooks_hooks_the_datastore_aware_edit_lock_refresh_onto_heartbeat(): void {
+		$calls = [];
+		Functions\when( 'add_filter' )->alias(
+			static function ( ...$args ) use ( &$calls ): void {
+				$calls[] = $args;
+			}
+		);
+
+		$registry = $this->registryOnWcAdminScreen();
+		$registry->register_provider( $this->provider( 'cdek' ) );
+
+		$this->assertContains( [ 'heartbeat_received', [ $registry, 'refresh_order_edit_lock' ], 20, 2 ], $calls );
+	}
+
+	public function test_edit_lock_heartbeat_ignores_non_array_values_from_earlier_filters(): void {
+		$registry = $this->registryOnWcAdminScreen();
+
+		$this->assertSame( 'not an array', $registry->refresh_order_edit_lock( 'not an array', [] ) );
+		$this->assertSame( [], $registry->refresh_order_edit_lock( [], 'not an array' ) );
+	}
+
+	/**
 	 * Card #842: `check_method_ids_contract()` must run at `admin_menu` priority
 	 * 41 — right after {@see Orders_Registry::register_page()}'s 40 — so both
 	 * sides of the comparison (the provider and the plugin's own declared class
@@ -799,7 +824,9 @@ class ShippingOrdersRegistryTest extends TestCase {
 		// URL-driven, `wc-admin-app` so our script runs after the app shell and
 		// `woocommerce_admin_pages_list` is read with our page already on it, then
 		// `wc-date` for `DateRangeFilterPicker`'s period resolution and
-		// `wc-currency` because `AdvancedFilters` consumes a `CurrencyFactory`.
+		// `wc-currency` because `AdvancedFilters` consumes a `CurrencyFactory`, and
+		// WordPress's `heartbeat` because the order wizard refreshes WooCommerce's
+		// shared `_edit_lock` while an edit modal is open (#982).
 		//
 		// `wc-settings` is deliberately NOT in this list and must not be added: it
 		// is only conditionally registered, and naming an unregistered handle makes
@@ -812,7 +839,7 @@ class ShippingOrdersRegistryTest extends TestCase {
 			->with(
 				'woodev-shipping-orders-page',
 				\Mockery::type( 'string' ),
-				[ 'wc-components', 'wc-navigation', 'wc-admin-app', 'wc-date', 'wc-currency' ],
+				[ 'wc-components', 'wc-navigation', 'wc-admin-app', 'wc-date', 'wc-currency', 'heartbeat' ],
 				'1.2.3',
 				true
 			);

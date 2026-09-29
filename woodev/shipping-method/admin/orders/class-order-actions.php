@@ -235,14 +235,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 				return $actions;
 			}
 
+			$edit_action = self::build_action(
+				self::EDIT,
+				__( 'Редактировать', 'woodev-plugin-framework' ),
+				__( 'Изменить заказ, пока он не выгружен перевозчику', 'woodev-plugin-framework' ),
+				false
+			);
+			$lock_owner  = self::edit_lock_owner( $order );
+
+			if ( null !== $lock_owner ) {
+				$edit_action['disabled']   = true;
+				$edit_action['lock_owner'] = $lock_owner['display_name'];
+				$edit_action['title']      = sprintf(
+					/* translators: %s: display name of the manager currently editing the order. */
+					__( 'This order is already being edited by %s', 'woodev-plugin-framework' ),
+					$lock_owner['display_name']
+				);
+			}
+
 			array_unshift(
 				$actions,
-				self::build_action(
-					self::EDIT,
-					__( 'Редактировать', 'woodev-plugin-framework' ),
-					__( 'Изменить заказ, пока он не выгружен перевозчику', 'woodev-plugin-framework' ),
-					false
-				)
+				$edit_action
 			);
 
 			return $actions;
@@ -391,6 +404,30 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		 */
 		public static function is_editable( \WC_Order $order, ?Orders_Provider $provider ): bool {
 			return '' === self::not_editable_reason( $order, $provider );
+		}
+
+		/**
+		 * Returns the user holding a live native edit lock for another manager.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order the order to inspect.
+		 * @return array{user_id:int,display_name:string}|null the other lock owner, or null.
+		 */
+		public static function edit_lock_owner( \WC_Order $order ): ?array {
+			return Order_Edit_Lock::get_owner( $order );
+		}
+
+		/**
+		 * Refreshes the current manager's native edit lock.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order the order to lock.
+		 * @return bool whether the native backend accepted the lock.
+		 */
+		public static function refresh_edit_lock( \WC_Order $order ): bool {
+			return Order_Edit_Lock::refresh( $order );
 		}
 
 		/**
@@ -628,6 +665,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 					'title'       => isset( $action['title'] ) && is_string( $action['title'] ) ? $action['title'] : '',
 					'destructive' => (bool) ( $action['destructive'] ?? false ),
 				];
+
+				if ( isset( $action['disabled'] ) ) {
+					$sanitized[ count( $sanitized ) - 1 ]['disabled'] = (bool) $action['disabled'];
+				}
+
+				if ( isset( $action['lock_owner'] ) && is_string( $action['lock_owner'] ) ) {
+					$sanitized[ count( $sanitized ) - 1 ]['lock_owner'] = $action['lock_owner'];
+				}
 			}
 
 			return $sanitized;

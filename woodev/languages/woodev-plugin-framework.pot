@@ -1940,6 +1940,12 @@ msgstr ""
 msgid "Заказ сейчас сохраняется в другом окне или вкладке. Дождитесь окончания и обновите страницу."
 msgstr ""
 
+#. translators: %s: display name of the manager currently editing the order.
+#: shipping-method/admin/orders/class-order-actions.php:251
+#: shipping-method/admin/orders/class-order-editor.php:429
+msgid "This order is already being edited by %s"
+msgstr ""
+
 #. translators: 1: the order total before the edit, 2: the total after it.
 #: shipping-method/admin/orders/class-order-editor.php:332
 #, php-format

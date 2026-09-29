@@ -79,6 +79,17 @@ function typedPointCheckKey( data: WizardData, restRoot: string, pointId: string
 
 type Phase = 'loading' | 'ready' | 'failed';
 
+type HeartbeatData = Record<string, unknown>;
+
+const ORDER_LOCK_HEARTBEAT_KEY = 'woodev-refresh-order-lock';
+
+type HeartbeatJquery = {
+	on: ( event: string, handler: ( event: unknown, data: HeartbeatData ) => void ) => void;
+	off: ( event: string ) => void;
+};
+
+type HeartbeatJqueryFactory = ( element: Document ) => HeartbeatJquery;
+
 export default function OrderWizard( { orderId = null, onClose, onSaved, renderers = {} }: OrderWizardProps ) {
 	const editing = null !== orderId;
 	const mode = editing ? 'edit' : 'create';
@@ -100,6 +111,9 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 	const [ submitError, setSubmitError ] = useState( '' );
 	const [ confirmingClose, setConfirmingClose ] = useState( false );
 	const saved = useRef( false );
+	// State disables the visible button after React renders; this ref closes the tiny gap
+	// before that render, when two click events can otherwise both enter `submit()`.
+	const submitting = useRef( false );
 	// The latest render's state — what an `await` in `goNext` finds when it resumes (its closure holds the state it started with).
 	const latest = useRef( { data, index } );
 
@@ -136,6 +150,42 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 			cancelled = true;
 		};
 	}, [ editing, orderId ] );
+
+	// The framework's datastore-aware heartbeat handler listens for this exact payload.
+	// Its private key deliberately avoids WooCommerce's global lock refresher.
+	// Namespaced handlers leave the page's heartbeat listeners untouched when the modal closes.
+	useEffect( () => {
+		if ( ! editing || 'ready' !== phase ) {
+			return undefined;
+		}
+
+		const jquery = ( window as Window & { jQuery?: HeartbeatJqueryFactory } ).jQuery;
+
+		if ( ! jquery ) {
+			return undefined;
+		}
+
+		const documentHeartbeat = jquery( document );
+		const send = ( event: unknown, data: HeartbeatData ) => {
+			data[ ORDER_LOCK_HEARTBEAT_KEY ] = orderId as number;
+		};
+		const tick = ( event: unknown, data: HeartbeatData ) => {
+			const response = data[ ORDER_LOCK_HEARTBEAT_KEY ] as { error?: { message?: unknown } } | undefined;
+			const message = response?.error?.message;
+
+			if ( 'string' === typeof message && message ) {
+				setSubmitError( message );
+			}
+		};
+
+		documentHeartbeat.on( 'heartbeat-send.woodevOrderWizard', send );
+		documentHeartbeat.on( 'heartbeat-tick.woodevOrderWizard', tick );
+
+		return () => {
+			documentHeartbeat.off( 'heartbeat-send.woodevOrderWizard' );
+			documentHeartbeat.off( 'heartbeat-tick.woodevOrderWizard' );
+		};
+	}, [ editing, orderId, phase ] );
 
 	const setData: SetWizardData = ( update ) => setDataState( ( current ) => update( current ) );
 
@@ -234,7 +284,7 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 	};
 
 	const submit = async (): Promise<void> => {
-		if ( busy ) {
+		if ( busy || submitting.current ) {
 			return;
 		}
 
@@ -255,6 +305,7 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 			return;
 		}
 
+		submitting.current = true;
 		setBusy( true );
 		setSubmitError( '' );
 
@@ -262,6 +313,7 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 			const result = await saveOrder( editing ? ( orderId as number ) : null, buildPayload( data ) );
 
 			saved.current = true;
+			submitting.current = false;
 			setBusy( false );
 			onSaved( result, mode );
 			onClose();
@@ -270,6 +322,7 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 			const grouped = groupServerErrors( error.errors );
 			const target = firstStepWithErrors( grouped );
 
+			submitting.current = false;
 			setBusy( false );
 			setSubmitError( error.message );
 

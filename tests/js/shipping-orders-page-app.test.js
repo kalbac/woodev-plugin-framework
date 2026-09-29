@@ -3281,6 +3281,7 @@ describe( 'the «Создать заказ» button and the order wizard (#969, 
 
 describe( 'the «Редактировать» row action (#972, #710 O2 / O4)', () => {
 	const EDIT = { action: 'edit', label: 'Редактировать', title: 'Изменить заказ', destructive: false };
+	const LOCKED_EDIT = { action: 'edit', label: 'Редактировать', title: 'This order is already being edited by Мария', destructive: false, disabled: true, lock_owner: 'Мария' };
 	const EXPORT = { action: 'export', label: 'Выгрузить', title: '', destructive: false };
 
 	beforeEach( () => {
@@ -3316,6 +3317,19 @@ describe( 'the «Редактировать» row action (#972, #710 O2 / O4)', 
 
 		expect( screen.queryByText( /Вы уверены/ ) ).toBeNull();
 		expect( screen.getByRole( 'button', { name: 'Выгрузить' } ) ).not.toBeDisabled();
+	} );
+
+	test( 'another manager\'s lock disables edit, keeps its reason focusable, and changes the pencil to a lock (#982)', async () => {
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow( { actions: [ LOCKED_EDIT, EXPORT ] } ) ] ) );
+
+		render( <App /> );
+
+		const edit = await screen.findByRole( 'button', { name: 'Редактировать' } );
+		expect( edit ).not.toBeDisabled();
+		expect( edit ).toHaveAttribute( 'aria-disabled', 'true' );
+		edit.focus();
+		expect( document.activeElement ).toBe( edit );
+		expect( edit.querySelector( '.dashicons-lock' ) ).not.toBeNull();
 	} );
 
 	test( 'a row whose ONLY action is «Редактировать» has no bulk checkbox — the bulk routes would refuse it', async () => {

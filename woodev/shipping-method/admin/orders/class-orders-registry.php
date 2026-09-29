@@ -44,6 +44,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		/** @var string admin page slug. */
 		const PAGE_SLUG = 'woodev-shipping-orders';
 
+		/** Framework-owned heartbeat payload key for the order wizard edit lock. */
+		private const EDIT_LOCK_HEARTBEAT_KEY = 'woodev-refresh-order-lock';
+
 		/**
 		 * Transient holding the menu badge's counts — the aggregate AND the per-carrier
 		 * breakdown, in ONE entry (#834 follow-up).
@@ -536,6 +539,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			add_action( 'woodev_shipping_order_exported', [ $this, 'flush_new_order_counts' ] );
 			add_action( 'admin_page_access_denied', [ $this, 'maybe_redirect_legacy_page' ] );
 			add_filter( 'woocommerce_order_data_store_cpt_get_orders_query', [ $this, 'translate_marker_keys_query_var' ], 10, 2 );
+			add_filter( 'heartbeat_received', [ $this, 'refresh_order_edit_lock' ], 20, 2 );
 
 			// #981: the process-wide half of the order editor's «an edit sends no New order» rule
 			// (spec C4). A WooCommerce transactional e-mail may be DEFERRED to a later request, so
@@ -548,6 +552,56 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			add_action( 'add_meta_boxes', [ $this->admin_order(), 'add_meta_box' ], 10, 2 );
 			add_action( 'admin_post_' . Shipping_Admin_Order::ADMIN_POST_ACTION, [ $this->admin_order(), 'handle_order_action' ] );
 			add_action( 'admin_notices', [ $this->admin_order(), 'render_action_notice' ] );
+		}
+
+		/**
+		 * Refreshes the wizard's native order edit lock from its heartbeat request.
+		 *
+		 * The framework-owned payload key prevents WooCommerce's global handler from
+		 * refreshing a second time. {@see Order_Edit_Lock} then selects the WordPress
+		 * post-lock API for legacy CPT orders and WooCommerce's API for HPOS orders.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param mixed $response heartbeat response so far.
+		 * @param mixed $data     heartbeat request data.
+		 * @return mixed
+		 */
+		public function refresh_order_edit_lock( $response, $data ) {
+			if ( ! is_array( $response ) || ! is_array( $data ) ) {
+				return $response;
+			}
+
+			$order_id = absint( $data[ self::EDIT_LOCK_HEARTBEAT_KEY ] ?? 0 );
+
+			if ( $order_id < 1 ) {
+				return $response;
+			}
+
+			$order = wc_get_order( $order_id );
+
+			if ( ! $order instanceof \WC_Order || ( ! current_user_can( 'edit_post', $order_id ) && ! current_user_can( 'manage_woocommerce' ) ) ) {
+				return $response;
+			}
+
+			$response[ self::EDIT_LOCK_HEARTBEAT_KEY ] = [];
+			$lock_owner                                  = Order_Edit_Lock::get_owner( $order );
+
+			if ( null !== $lock_owner ) {
+				$response[ self::EDIT_LOCK_HEARTBEAT_KEY ]['error'] = [
+					/* translators: %s: display name of the manager currently editing the order. */
+					'message' => sprintf(
+						__( 'This order is already being edited by %s', 'woodev-plugin-framework' ),
+						$lock_owner['display_name']
+					),
+				];
+
+				return $response;
+			}
+
+			$response[ self::EDIT_LOCK_HEARTBEAT_KEY ]['lock'] = Order_Edit_Lock::refresh( $order );
+
+			return $response;
 		}
 
 		/**
@@ -1228,7 +1282,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			// for that. So: consume it opportunistically, never require it.
 			$dependencies = array_merge(
 				(array) $asset['dependencies'],
-				[ 'wc-components', 'wc-navigation', 'wc-admin-app', 'wc-date', 'wc-currency' ]
+				[ 'wc-components', 'wc-navigation', 'wc-admin-app', 'wc-date', 'wc-currency', 'heartbeat' ]
 			);
 
 			// The wizard's delivery step draws the pickup list and map INSIDE itself (#970, O10):
@@ -1677,6 +1731,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			remove_action( 'rest_api_init', [ $this, 'register_rest' ], 5 );
 			remove_action( 'admin_page_access_denied', [ $this, 'maybe_redirect_legacy_page' ] );
 			remove_filter( 'woocommerce_order_data_store_cpt_get_orders_query', [ $this, 'translate_marker_keys_query_var' ], 10 );
+			remove_filter( 'heartbeat_received', [ $this, 'refresh_order_edit_lock' ], 20 );
 			remove_filter( 'woocommerce_email_enabled_new_order', [ Order_Editor::class, 'mute_new_order_email' ], PHP_INT_MAX );
 
 			if ( null !== $this->admin_order ) {

@@ -264,6 +264,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/order/class-order-marker.php';
 			require_once $path . '/admin/orders/class-orders-query.php';
 			require_once $path . '/admin/orders/class-orders-id-resolver.php';
+			require_once $path . '/admin/orders/class-order-edit-lock.php';
 			require_once $path . '/admin/orders/class-order-actions.php';
 			require_once $path . '/admin/orders/class-order-row-builder.php';
 
