@@ -46,8 +46,8 @@ if ( ! class_exists( 'Woodev_Cacheable_API_Base' ) ) :
 
 			parent::handle_response( $response );
 
-			// cache the response
-			if ( ! $this->is_response_loaded_from_cache() && $this->is_request_cacheable() ) {
+			// cache the response, unless the request opted out of the write (`set_should_cache( false )`, `bypass_cache()`) (#1004)
+			if ( ! $this->is_response_loaded_from_cache() && $this->is_request_cacheable() && $this->get_request()->should_cache() ) {
 				$this->save_response_to_cache( $response );
 			}
 
