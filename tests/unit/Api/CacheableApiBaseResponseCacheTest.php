@@ -54,6 +54,42 @@ class Testable_Cacheable_Api_Base extends \Woodev_Cacheable_API_Base {
 	}
 
 	/**
+	 * Runs a raw HTTP response through the real handle_response() path.
+	 *
+	 * @param array<string, mixed> $response HTTP response.
+	 * @return mixed whatever handle_response() hands back to the caller.
+	 */
+	public function handle_response_for_test( array $response ) {
+		return $this->handle_response( $response );
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @return bool
+	 */
+	protected function is_request_cacheable() {
+		return true;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @param string $raw_response_body Raw response body.
+	 * @return object
+	 */
+	protected function get_parsed_response( $raw_response_body ) {
+		return (object) [ 'raw' => $raw_response_body ];
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @return void
+	 */
+	protected function broadcast_request() {}
+
+	/**
 	 * Seeds the processed response data consumed by the cache writer.
 	 *
 	 * @param array<string, mixed> $headers Response headers.
@@ -129,6 +165,7 @@ final class CacheableApiBaseResponseCacheTest extends TestCase {
 		parent::setUp();
 
 		Functions\when( 'maybe_serialize' )->alias( 'serialize' );
+		Functions\when( 'delete_transient' )->justReturn( true );
 
 		$memo = new \ReflectionProperty( \Woodev_Cacheable_API_Base::class, 'oversized_response_logged' );
 		if ( PHP_VERSION_ID < 80100 ) {
@@ -245,7 +282,26 @@ final class CacheableApiBaseResponseCacheTest extends TestCase {
 	}
 
 	/**
-	 * A payload over the default cap is not cached and nothing else breaks.
+	 * Captures delete_transient() calls.
+	 *
+	 * @return \ArrayObject
+	 */
+	private function capture_transient_deletes(): \ArrayObject {
+		$deletes = new \ArrayObject();
+
+		Functions\when( 'delete_transient' )->alias(
+			static function ( $key ) use ( $deletes ) {
+				$deletes[] = $key;
+
+				return true;
+			}
+		);
+
+		return $deletes;
+	}
+
+	/**
+	 * A payload over the default cap is not cached.
 	 *
 	 * @return void
 	 */
@@ -255,6 +311,96 @@ final class CacheableApiBaseResponseCacheTest extends TestCase {
 		$this->api_with_body_of( \Woodev_Cacheable_API_Base::DEFAULT_CACHE_MAX_BYTES + 1 )->save_response_to_cache_for_test( [] );
 
 		$this->assertCount( 0, $writes );
+	}
+
+	/**
+	 * An oversized fresh response removes the older entry under the same key, so a
+	 * forced refresh never leaves a stale response to be served next time (#952).
+	 *
+	 * @return void
+	 */
+	public function test_oversized_response_deletes_the_existing_cached_entry(): void {
+		$writes  = $this->capture_transient_writes();
+		$deletes = $this->capture_transient_deletes();
+
+		$this->api_with_body_of( \Woodev_Cacheable_API_Base::DEFAULT_CACHE_MAX_BYTES + 1 )->save_response_to_cache_for_test( [] );
+
+		$this->assertCount( 0, $writes );
+		$this->assertSame( [ 'woodev_test_cacheable_api_response' ], $deletes->getArrayCopy() );
+	}
+
+	/**
+	 * A response that is cached never deletes the entry it just wrote.
+	 *
+	 * @return void
+	 */
+	public function test_cached_response_does_not_delete_the_entry(): void {
+		$this->capture_transient_writes();
+		$deletes = $this->capture_transient_deletes();
+
+		$this->api_with_body_of( 1024 )->save_response_to_cache_for_test( [] );
+
+		$this->assertCount( 0, $deletes );
+	}
+
+	/**
+	 * Through the real handle_response() path an oversized response is still handed
+	 * back to the caller, uncached, with the stale entry removed.
+	 *
+	 * @return void
+	 */
+	public function test_oversized_response_is_still_returned_by_handle_response(): void {
+		$writes  = $this->capture_transient_writes();
+		$deletes = $this->capture_transient_deletes();
+		$body    = str_repeat( 'x', \Woodev_Cacheable_API_Base::DEFAULT_CACHE_MAX_BYTES + 1 );
+
+		Functions\when( 'is_wp_error' )->justReturn( false );
+		Functions\when( 'wp_remote_retrieve_response_code' )->justReturn( 200 );
+		Functions\when( 'wp_remote_retrieve_response_message' )->justReturn( 'OK' );
+		Functions\when( 'wp_remote_retrieve_body' )->justReturn( $body );
+		Functions\when( 'wp_remote_retrieve_headers' )->justReturn( [] );
+
+		$result = ( new Testable_Cacheable_Api_Base() )->handle_response_for_test(
+			[
+				'headers'  => [],
+				'body'     => $body,
+				'response' => [ 'code' => 200, 'message' => 'OK' ],
+			]
+		);
+
+		$this->assertSame( $body, $result->raw );
+		$this->assertCount( 0, $writes, 'not cached' );
+		$this->assertCount( 1, $deletes, 'stale entry removed' );
+	}
+
+	/**
+	 * A filter value that is not a number is ignored: the cap stays, never lifts.
+	 *
+	 * @dataProvider non_numeric_filter_values
+	 *
+	 * @param mixed $bad_value Value the filter returns.
+	 * @return void
+	 */
+	public function test_non_numeric_filter_value_keeps_the_cap( $bad_value ): void {
+		$writes = $this->capture_transient_writes();
+
+		Filters\expectApplied( 'woodev_plugin_test_plugin_api_request_cache_max_bytes' )->andReturn( $bad_value );
+
+		$this->api_with_body_of( \Woodev_Cacheable_API_Base::DEFAULT_CACHE_MAX_BYTES + 1 )->save_response_to_cache_for_test( [] );
+
+		$this->assertCount( 0, $writes );
+	}
+
+	/**
+	 * @return array<string, array{0: mixed}>
+	 */
+	public function non_numeric_filter_values(): array {
+		return [
+			'false'          => [ false ],
+			'null'           => [ null ],
+			'empty string'   => [ '' ],
+			'unit suffix'    => [ '1M' ],
+		];
 	}
 
 	/**
