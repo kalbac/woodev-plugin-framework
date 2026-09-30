@@ -3,7 +3,10 @@
  *
  * The rule itself lives in PHP — `Checkout_Field_Policy::address_rules()`, the object the storefront
  * checkout runs — and reaches the wizard through `GET …/orders/address-policy`. This file only
- * fetches it and reads it; it holds no copy of the rule. Until the server has answered (or when it
+ * fetches it and reads it; it holds no copy of the rule, with ONE deliberate exception: the postcode
+ * is never required in the wizard (#999 — a manager rarely knows the buyer's postcode; the server
+ * drops the same flag in `Order_Payload_Validator::wizard_address_rules()`), and
+ * {@link normalizeAddressPolicy} enforces it here as well. Until the server has answered (or when it
  * cannot — a failed request, WooCommerce absent) {@link FALLBACK_POLICY} stands in: the two fields
  * every carrier needs, a country and a city, and every field shown. The server judges the whole
  * payload again when the order is saved, so a stand-in never lets a wrong order through.
@@ -31,7 +34,8 @@ export const FALLBACK_POLICY: AddressPolicy = {
 
 /**
  * Reads the route's `fields` into a full policy. `null` when the answer holds no rule (an empty list
- * or object, or nothing at all) — the caller then keeps the stand-in.
+ * or object, or nothing at all) — the caller then keeps the stand-in. The postcode is never
+ * `required` here, whatever the route says (#999).
  *
  * @param {unknown} fields the response's `fields`.
  * @return {AddressPolicy|null} the policy.
@@ -53,6 +57,10 @@ export function normalizeAddressPolicy( fields: unknown ): AddressPolicy | null 
 			found = true;
 		}
 	}
+
+	// The wizard is for shop staff, who rarely know a postcode: it is never required here, whatever the
+	// checkout's locale says (#999). Shown / hidden / removed still follow the shop's policy.
+	policy.postcode = { ...policy.postcode, required: false };
 
 	return found ? policy : null;
 }

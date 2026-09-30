@@ -628,15 +628,40 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 
 		public function test_a_field_the_checkout_requires_is_refused_when_the_address_leaves_it_empty(): void {
 			$this->address_rules = [
-				'city'     => $this->rule( [ 'required' => true ] ),
-				'postcode' => $this->rule( [ 'required' => true ] ),
+				'city'      => $this->rule( [ 'required' => true ] ),
+				'address_2' => $this->rule( [ 'required' => true ] ),
 			];
 
-			// The payload's billing block carries no postcode and no shipping block: the delivery address IS billing's.
+			// The payload's billing block carries no address_2 and no shipping block: the delivery address IS billing's.
 			$result = $this->validator()->validate( $this->payload(), false );
 
-			$this->assertSame( [ 'billing.postcode:field_required' ], $this->codes( $result ) );
-			$this->assertSame( 'Укажите индекс.', $result['errors'][0]['message'] );
+			$this->assertSame( [ 'billing.address_2:field_required' ], $this->codes( $result ) );
+			$this->assertSame( 'Укажите квартиру или офис.', $result['errors'][0]['message'] );
+		}
+
+		/**
+		 * #999: the checkout is a fool-proof screen for the buyer, the wizard is for shop staff who rarely
+		 * know the postcode — a locale (WC 11.1 RU) that requires it must not make the wizard refuse.
+		 */
+		public function test_the_postcode_is_never_required_even_when_the_checkout_requires_it(): void {
+			$this->address_rules = [ 'postcode' => $this->rule( [ 'required' => true ] ) ];
+
+			$this->assertSame( [], $this->validator()->validate( $this->payload(), false )['errors'] );
+			$this->assertSame( [], $this->validator()->validate( $this->payload( [ 'shipping' => [ 'country' => 'RU', 'city' => 'Казань' ] ] ), false )['errors'] );
+		}
+
+		public function test_wizard_address_rules_neutralise_only_the_postcode_requirement(): void {
+			$rules = Order_Payload_Validator::wizard_address_rules(
+				[
+					'city'     => $this->rule( [ 'required' => true ] ),
+					'postcode' => $this->rule( [ 'required' => true, 'hidden' => true ] ),
+				]
+			);
+
+			$this->assertSame( $this->rule( [ 'required' => true ] ), $rules['city'] );
+			$this->assertSame( $this->rule( [ 'hidden' => true ] ), $rules['postcode'], 'visibility still follows the policy' );
+			$this->assertSame( [ 'city' => $this->rule( [ 'required' => true ] ) ], Order_Payload_Validator::wizard_address_rules( [ 'city' => $this->rule( [ 'required' => true ] ) ] ), 'no postcode rule, none invented' );
+			$this->assertSame( [], Order_Payload_Validator::wizard_address_rules( [] ) );
 		}
 
 		public function test_the_refusal_is_on_the_shipping_path_when_the_manager_filled_a_delivery_address(): void {

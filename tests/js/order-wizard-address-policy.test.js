@@ -64,6 +64,14 @@ describe( 'normalizeAddressPolicy', () => {
 		expect( policy.city ).toEqual( FALLBACK_POLICY.city );
 	} );
 
+	test( 'the postcode is never required, whatever the checkout locale says (#999) — its visibility still follows the policy', () => {
+		const required = normalizeAddressPolicy( { postcode: rule( { required: true } ) } );
+		const hidden = normalizeAddressPolicy( { postcode: rule( { required: true, hidden: true } ) } );
+
+		expect( required.postcode ).toEqual( { required: false, hidden: false, removed: false } );
+		expect( hidden.postcode ).toEqual( { required: false, hidden: true, removed: false } );
+	} );
+
 	test( 'only a literal true counts — a stray string never makes a field required', () => {
 		const policy = normalizeAddressPolicy( { postcode: { required: 'yes', hidden: 1, removed: 'true' } } );
 
@@ -81,15 +89,21 @@ describe( 'validateAddress with the checkout policy', () => {
 	const policy = normalizeAddressPolicy( POLICY_FIELDS );
 
 	test( 'a required field left empty is reported on its own path in the server\'s words', () => {
-		const errors = validateAddress( filled( { address_1: '', postcode: '' } ), COUNTRIES, {}, policy );
+		const errors = validateAddress( filled( { address_1: '', city: '' } ), COUNTRIES, {}, policy );
 
 		expect( errors[ 'shipping.address_1' ] ).toEqual( [ 'Укажите улицу и дом.' ] );
-		expect( errors[ 'shipping.postcode' ] ).toEqual( [ 'Укажите индекс.' ] );
+		expect( errors[ 'shipping.city' ] ).toEqual( [ 'Укажите город или населённый пункт.' ] );
 		expect( Object.keys( errors ) ).toHaveLength( 2 );
 	} );
 
 	test( 'a whitespace-only value counts as empty', () => {
-		expect( validateAddress( filled( { postcode: '   ' } ), COUNTRIES, {}, policy )[ 'shipping.postcode' ] ).toEqual( [ 'Укажите индекс.' ] );
+		expect( validateAddress( filled( { address_1: '   ' } ), COUNTRIES, {}, policy )[ 'shipping.address_1' ] ).toEqual( [ 'Укажите улицу и дом.' ] );
+	} );
+
+	test( 'an empty postcode never blocks the step, even when the checkout requires it (#999)', () => {
+		expect( validateAddress( filled( { postcode: '' } ), COUNTRIES, {}, policy ) ).toEqual( {} );
+		// Even a raw policy that was not normalised cannot make the wizard ask for it.
+		expect( validateAddress( filled( { postcode: '' } ), COUNTRIES, {}, POLICY_FIELDS ) ).toEqual( {} );
 	} );
 
 	test( 'a field the policy hides is never asked, even one that reads required', () => {
@@ -216,21 +230,21 @@ describe( 'step ② Адрес under the checkout policy', () => {
 
 		await waitFor( () => expect( screen.getByLabelText( 'Улица, дом' ) ).toBeRequired() );
 
-		expect( screen.getByLabelText( 'Индекс' ) ).toBeRequired();
+		expect( screen.getByLabelText( 'Индекс' ) ).not.toBeRequired();
 		expect( screen.getByLabelText( 'Город или населённый пункт' ) ).toBeRequired();
 		expect( screen.getByLabelText( 'Квартира, офис' ) ).not.toBeRequired();
-		expect( screen.getByLabelText( 'Индекс' ).closest( '.woodev-order-wizard__field' ) ).toHaveClass( 'is-required' );
+		expect( screen.getByLabelText( 'Индекс' ).closest( '.woodev-order-wizard__field' ) ).not.toHaveClass( 'is-required' );
 		expect( screen.getByLabelText( 'Квартира, офис' ).closest( '.woodev-order-wizard__field' ) ).not.toHaveClass( 'is-required' );
 
 		fireEvent.change( screen.getByLabelText( 'Город или населённый пункт' ), { target: { value: 'Москва' } } );
 		next();
 
 		expect( screen.getByText( 'Укажите улицу и дом.' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Укажите индекс.' ) ).toBeInTheDocument();
+		expect( screen.queryByText( 'Укажите индекс.' ) ).toBeNull();
 		expect( screen.queryByText( 'Что в заказе' ) ).toBeNull();
 
+		// The street alone is enough — the postcode stays empty (#999).
 		fireEvent.change( screen.getByLabelText( 'Улица, дом' ), { target: { value: 'ул Тверская 1' } } );
-		fireEvent.change( screen.getByLabelText( 'Индекс' ), { target: { value: '125009' } } );
 		next();
 
 		expect( await screen.findByText( 'Что в заказе' ) ).toBeInTheDocument();
