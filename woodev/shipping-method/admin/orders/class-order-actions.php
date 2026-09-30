@@ -336,7 +336,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		/**
 		 * Performs one action against the carrier's shipment handler — the ONE place an action id
 		 * becomes a carrier call, shared by the row / bulk routes ({@see \Woodev\Framework\Shipping\Rest_Api\Orders_Controller})
-		 * and the wizard's «сразу выгрузить перевозчику» ({@see Order_Editor::export_created()}, #710 D6).
+		 * the order-edit metabox ({@see \Woodev\Framework\Shipping\Admin\Shipping_Admin_Order}, #1016) and the
+		 * wizard's «сразу выгрузить перевозчику» ({@see Order_Editor::export_created()}, #710 D6). A rule that
+		 * belongs to performing an action is added HERE, never in a caller.
 		 *
 		 * Does NOT gate: the caller has already asked {@see self::is_offered()} (each keeps its own
 		 * refusal wording), and catches what the carrier call throws — the routes log it and answer
@@ -414,14 +416,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		 * the settlement the customer picked at checkout and the SAME provider that produced it
 		 * (#488 slice 2).
 		 *
-		 * Mirrors {@see \Woodev\Framework\Shipping\Admin\Shipping_Admin_Order::resolve_popular_settlement_context()},
-		 * but reads the framework's own shared singleton ({@see Location_Provider_Registry::instance()})
-		 * directly: `Shipping_Admin_Order` is plugin-constructed and this class has no guaranteed
-		 * access to one. An order made in the admin has no such candidate (the admin is not the
-		 * buyer), so the answer is then `[ null, null ]`.
+		 * Reads the framework's own shared singleton ({@see Location_Provider_Registry::instance()}).
+		 * An order made in the admin has no such candidate (the admin is not the buyer), so the
+		 * answer is then `[ null, null ]`. It returns `[ null, null ]` too when the provider that
+		 * produced the candidate is no longer registered — the export still runs, just without
+		 * enrolment.
 		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 Card #974: moved here from `Orders_Controller`, unchanged.
+		 * @since 2.0.2 Card #1016: the order-edit metabox's own copy is gone — this is the only one.
 		 *
 		 * @param \WC_Order $order the order about to be exported.
 		 * @return array{0: Location_Record|null, 1: Location_Provider|null}
