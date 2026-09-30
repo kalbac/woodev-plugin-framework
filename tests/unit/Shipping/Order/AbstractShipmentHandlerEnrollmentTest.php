@@ -29,8 +29,6 @@ namespace {
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-provider-registry.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/api/interface-shipping-api.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/order/class-shipping-order-handler.php';
-	require_once dirname( __DIR__, 4 ) . '/woodev/utilities/class-woodev-async-request.php';
-	require_once dirname( __DIR__, 4 ) . '/woodev/utilities/class-woodev-background-job-handler.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/order/abstract-shipment-handler.php';
 
 	use Woodev\Framework\Shipping\Location\Abstract_Location_Provider;
@@ -164,9 +162,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$order_handler->shouldReceive( 'get' )->andReturn( '' );
 			$order_handler->shouldReceive( 'set' )->withAnyArgs();
 
-			$retry_handler = Mockery::mock( '\Woodev_Background_Job_Handler' );
-
-			return new \Test_Shipment_Handler( $api, $order_handler, $retry_handler, 'test', $store );
+			return new \Test_Shipment_Handler( $api, $order_handler, 'test', $store );
 		}
 
 		/**
@@ -275,9 +271,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$order_handler->shouldReceive( 'get' )->andReturn( '' );
 			$order_handler->shouldNotReceive( 'set' );
 
-			$retry_handler = Mockery::mock( '\Woodev_Background_Job_Handler' );
-
-			$handler                        = new \Test_Shipment_Handler( $api, $order_handler, $retry_handler, 'test', null );
+			$handler                        = new \Test_Shipment_Handler( $api, $order_handler, 'test', null );
 			$handler->next_carrier_order_id = '';
 
 			$order = Mockery::mock( '\WC_Order' )->shouldIgnoreMissing( 0 );

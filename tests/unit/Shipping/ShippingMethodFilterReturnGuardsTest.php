@@ -205,6 +205,12 @@ namespace Woodev\Tests\Unit\Shipping {
 		/** @var \Throwable|null thrown by rate_package() when set. */
 		public ?\Throwable $rate_package_throws = null;
 
+		/** @var int how many times rate_package() ran — a rate call is never retried (#954). */
+		public int $rate_package_calls = 0;
+
+		/** @var string[] the request purpose in force at each rate_package() call. */
+		public array $seen_purposes = [];
+
 		public function __construct() {
 			$this->test_plugin = new Woodev_Test_Shipping_Plugin_For_Guards();
 		}
@@ -253,6 +259,9 @@ namespace Woodev\Tests\Unit\Shipping {
 		 * @return Shipping_Rate|null
 		 */
 		protected function rate_package( array $package, ?\Woodev_Packer_Result $packed ): ?Shipping_Rate {
+			++$this->rate_package_calls;
+			$this->seen_purposes[] = \Woodev_API_Request_Purpose::current();
+
 			if ( null !== $this->rate_package_throws ) {
 				throw $this->rate_package_throws;
 			}
@@ -705,6 +714,62 @@ namespace Woodev\Tests\Unit\Shipping {
 			$this->assertStringContainsString( 'Woodev_API_Exception', $logged[0][0] );
 			$this->assertStringContainsString( 'carrier is down', $logged[0][0] );
 			$this->assertSame( 'guards-shipping_guards-method', $logged[0][1] );
+		}
+
+		/**
+		 * #954: the rating runs under the `rates` request purpose, and the purpose is gone again afterwards.
+		 *
+		 * @return void
+		 */
+		public function test_a_rate_call_runs_under_the_rates_purpose_and_restores_it(): void {
+			$method                      = new Woodev_Test_Shipping_Method_For_Guards();
+			$method->rate_package_return = new Shipping_Rate( 'guards-method', 'rate-purpose', 'Purpose Rate', '100' );
+
+			$method->calculate_shipping( [] );
+
+			$this->assertSame( [ \Woodev_API_Request_Purpose::RATES ], $method->seen_purposes );
+			$this->assertSame( \Woodev_API_Request_Purpose::DEFAULT_PURPOSE, \Woodev_API_Request_Purpose::current() );
+		}
+
+		/**
+		 * #954: a rate call that TIMED OUT behaves as any failed rate call — the method is not
+		 * offered this time, nothing is retried, and the short rates timeout does not leak into
+		 * the next call.
+		 *
+		 * @return void
+		 */
+		public function test_a_timed_out_rate_call_hides_the_method_is_not_retried_and_leaves_no_purpose_behind(): void {
+			$exception = new \Woodev_API_Transport_Exception( 'cURL error 28: Operation timed out after 8001 milliseconds' );
+
+			$method                      = new Woodev_Test_Shipping_Method_For_Guards();
+			$method->rate_package_throws = $exception;
+
+			Actions\expectDone( 'woodev_shipping_method_rate_calculation_failed' )->once()->with( $exception, [], $method );
+
+			$method->calculate_shipping( [] );
+
+			$this->assertSame( [], $method->added_rates );
+			$this->assertSame( 1, $method->rate_package_calls, 'a rate call is never retried' );
+			$this->assertSame( \Woodev_API_Request_Purpose::DEFAULT_PURPOSE, \Woodev_API_Request_Purpose::current() );
+		}
+
+		/**
+		 * #954: an HTTP 429 at checkout is just a failed rate call: no rate, no retry, no wait.
+		 *
+		 * @return void
+		 */
+		public function test_a_429_at_checkout_hides_the_method_and_is_not_retried(): void {
+			$exception = new \Woodev_API_Rate_Limit_Exception( 'Too Many Requests', 429, null, 30 );
+
+			$method                      = new Woodev_Test_Shipping_Method_For_Guards();
+			$method->rate_package_throws = $exception;
+
+			Actions\expectDone( 'woodev_shipping_method_rate_calculation_failed' )->once()->with( $exception, [], $method );
+
+			$method->calculate_shipping( [] );
+
+			$this->assertSame( [], $method->added_rates );
+			$this->assertSame( 1, $method->rate_package_calls, 'a rate call is never retried, whatever Retry-After says' );
 		}
 
 		/**

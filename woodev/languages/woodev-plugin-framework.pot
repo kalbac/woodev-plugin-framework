@@ -2063,6 +2063,14 @@ msgstr ""
 msgid "Все перевозчики"
 msgstr ""
 
+#: shipping-method/admin/orders/class-orders-registry.php:1058
+msgid "Повтор выгрузки не выполнен: перевозчик не найден (плагин отключён?)"
+msgstr ""
+
+#: shipping-method/admin/orders/class-orders-registry.php:1064
+msgid "заказ открыт для редактирования"
+msgstr ""
+
 #: shipping-method/admin/views/html-admin-shipping-method-status.php:27
 msgid "Курьерская доставка"
 msgstr ""
@@ -2684,16 +2692,20 @@ msgstr ""
 msgid "Этот заказ уже выгружается — дождитесь окончания."
 msgstr ""
 
-#: shipping-method/order/abstract-shipment-handler.php:293
+#: shipping-method/order/abstract-shipment-handler.php:297
 msgid "Ответ перевозчика не содержит номера заказа"
 msgstr ""
 
-#: shipping-method/order/abstract-shipment-handler.php:405
+#: shipping-method/order/abstract-shipment-handler.php:422
+msgid "Перевозчик временно ограничил число запросов. Выгрузка будет повторена автоматически."
+msgstr ""
+
+#: shipping-method/order/abstract-shipment-handler.php:429
 msgid "Перевозчик ответил без номера заявки — заявка могла быть создана. Проверьте личный кабинет перевозчика перед повторной выгрузкой."
 msgstr ""
 
 #. translators: %s: the transport error, e.g. a timeout
-#: shipping-method/order/abstract-shipment-handler.php:413
+#: shipping-method/order/abstract-shipment-handler.php:437
 #, php-format
 msgid "Перевозчик не ответил (%s). Заказ мог быть создан у него — проверьте личный кабинет перевозчика, прежде чем выгружать снова."
 msgstr ""
@@ -2736,6 +2748,12 @@ msgstr ""
 
 #: shipping-method/order/class-delivery-status.php:97
 msgid "Неизвестно"
+msgstr ""
+
+#. translators: 1: number of attempts, 2: the carrier's last error
+#: shipping-method/order/class-export-retry.php:230
+#, php-format
+msgid "Не удалось выгрузить заказ перевозчику за %1$d попыток: %2$s"
 msgstr ""
 
 #. translators: 1: cart weight in kg, 2: point weight limit in kg

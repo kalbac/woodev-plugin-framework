@@ -663,17 +663,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 *
 		 * @since 1.4.0
 		 * @since 2.0.0 Now a final template; carrier logic moved to {@see self::rate_package()}.
+		 * @since 2.0.2 Runs under the `rates` request purpose (#954): every API call the rating
+		 *              makes gets the short rates timeout. A rate call is never retried.
 		 *
 		 * @param array $package Package data.
 		 * @return Shipping_Rate|null Shipping rate object, or null if no rate should be added.
 		 */
 		final protected function calculate_rate( array $package ): ?Shipping_Rate {
 
-			$packed = $this->supports_box_packing()
-				? $this->pack_package( $package )
-				: null;
+			// A customer is waiting for this answer, so every API call the rating makes gets the short «rates» timeout
+			// (#954). The scope is reset in a `finally`: a failed rate call must not leave it behind for the next call.
+			return \Woodev_API_Request_Purpose::run(
+				\Woodev_API_Request_Purpose::RATES,
+				function () use ( $package ): ?Shipping_Rate {
 
-			return $this->rate_package( $package, $packed );
+					$packed = $this->supports_box_packing()
+						? $this->pack_package( $package )
+						: null;
+
+					return $this->rate_package( $package, $packed );
+				}
+			);
 		}
 
 		/**

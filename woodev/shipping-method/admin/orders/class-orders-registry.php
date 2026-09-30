@@ -14,6 +14,7 @@ use Woodev\Framework\Shipping\Admin\Shipping_Admin_Order;
 use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
 use Woodev\Framework\Shipping\Order\Abstract_Tracking_Handler;
 use Woodev\Framework\Shipping\Order\Delivery_Status;
+use Woodev\Framework\Shipping\Order\Export_Retry;
 use Woodev\Framework\Shipping\Rest_Api\Order_Editor_Controller;
 use Woodev\Framework\Shipping\Rest_Api\Orders_Controller;
 use Woodev\Framework\Shipping\Rest_Api\Rates_Controller;
@@ -519,6 +520,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 *              `admin_menu`, priority 41 — right after {@see self::register_page()}
 		 *              (priority 40) — see that method's own docblock for the timing this
 		 *              was measured against.
+		 * @since 2.0.2 Card #954: also hooks {@see self::run_export_retry()} onto
+		 *              {@see Export_Retry::HOOK}, the Action Scheduler action that carries out a
+		 *              delayed export attempt — in every request, so a queue run from WP-Cron (no
+		 *              admin) finds it.
 		 * @since 2.0.2 Card #981: also hooks {@see Order_Editor::mute_new_order_email()} onto
 		 *              `woocommerce_email_enabled_new_order`, the half of the editor's e-mail mute
 		 *              that must be present in the request WooCommerce dispatches a DEFERRED e-mail in.
@@ -537,6 +542,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_assets' ] );
 			add_action( 'rest_api_init', [ $this, 'register_rest' ], 5 );
 			add_action( 'woodev_shipping_order_exported', [ $this, 'flush_new_order_counts' ] );
+			add_action( Export_Retry::HOOK, [ $this, 'run_export_retry' ] );
 			add_action( 'admin_page_access_denied', [ $this, 'maybe_redirect_legacy_page' ] );
 			add_filter( 'woocommerce_order_data_store_cpt_get_orders_query', [ $this, 'translate_marker_keys_query_var' ], 10, 2 );
 			add_filter( 'heartbeat_received', [ $this, 'refresh_order_edit_lock' ], 20, 2 );
@@ -1010,6 +1016,95 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 */
 		public function flush_new_order_counts(): void {
 			delete_transient( self::NEW_COUNTS_TRANSIENT );
+		}
+
+		/**
+		 * Carries out one delayed export attempt — the callback of the Action Scheduler action
+		 * {@see Export_Retry} queues (#954).
+		 *
+		 * Finds the order's carrier through {@see self::resolve_provider_for_order()} and its handler
+		 * through {@see self::get_shipment_handler()}, then performs the same «export» the order
+		 * screen does ({@see Order_Actions::perform()}), so the popular-settlements enrolment and every
+		 * export hook behave identically. The handler schedules the NEXT attempt itself when this one
+		 * fails and is retryable.
+		 *
+		 * The chain ends only for a TERMINAL reason: the order is gone, it was exported or cancelled in
+		 * the meantime ({@see Order_Actions::is_offered()}), the carrier's plugin is no longer there
+		 * (a private note says so), or the attempts ran out. A BUSY order is not terminal — a manager
+		 * has it open in the order wizard (the native edit lock; in a WP-Cron run, where the current
+		 * user is 0, every lock is «another manager's»), or a concurrent export holds the per-order
+		 * lock (the export's «busy» answer, which never reached the carrier): the attempt is put back
+		 * ({@see Export_Retry::defer()}) without counting.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param int|string $order_id the order to export (Action Scheduler passes the stored argument as is).
+		 * @return void
+		 */
+		public function run_export_retry( $order_id ): void {
+
+			$order = wc_get_order( absint( $order_id ) );
+
+			if ( ! $order instanceof \WC_Order ) {
+				return;
+			}
+
+			$provider = $this->resolve_provider_for_order( $order );
+			$handler  = null !== $provider ? $this->get_shipment_handler( $provider->get_id() ) : null;
+
+			if ( null === $provider || null === $handler ) {
+				// The plugin that registered the carrier is deactivated (or registers it only in some requests): nobody can export. Say so, and end.
+				Export_Retry::reset( $order, $order );
+				$order->add_order_note( __( 'Повтор выгрузки не выполнен: перевозчик не найден (плагин отключён?)', 'woodev-plugin-framework' ) );
+
+				return;
+			}
+
+			if ( null !== Order_Actions::edit_lock_owner( $order ) ) {
+				$this->defer_export_retry( $order->get_id(), __( 'заказ открыт для редактирования', 'woodev-plugin-framework' ) );
+
+				return;
+			}
+
+			$actions = new Order_Actions( $this );
+
+			if ( ! $actions->is_offered( $order, $provider, Order_Actions::EXPORT ) ) {
+				Export_Retry::reset( $order, $order );
+
+				return;
+			}
+
+			$result = $actions->perform( $handler, $order, Order_Actions::EXPORT, $provider );
+
+			if ( $result->is_busy() ) {
+				$this->defer_export_retry( $order->get_id(), $result->get_message() );
+			}
+		}
+
+		/**
+		 * Puts a due export attempt back in the queue, uncounted, because the order is busy.
+		 *
+		 * The order is read again: the request that holds the lock may have written the counters
+		 * since this one loaded it. When the attempt cannot be queued (Action Scheduler is gone) the
+		 * chain ends, its counters cleared — there is nothing left to come back.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param int    $order_id the order.
+		 * @param string $reason   why it is busy, for the note written if the attempts run out.
+		 * @return void
+		 */
+		private function defer_export_retry( int $order_id, string $reason ): void {
+
+			$fresh = wc_get_order( $order_id );
+
+			if ( ! $fresh instanceof \WC_Order ) {
+				return;
+			}
+
+			if ( Export_Retry::NOT_SCHEDULED === Export_Retry::defer( $fresh, $reason ) ) {
+				Export_Retry::reset( $fresh, $fresh );
+			}
 		}
 
 		/**
@@ -1732,6 +1827,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			remove_action( 'admin_menu', [ $this, 'check_method_ids_contract' ], 41 );
 			remove_action( 'admin_enqueue_scripts', [ $this, 'enqueue_assets' ] );
 			remove_action( 'rest_api_init', [ $this, 'register_rest' ], 5 );
+			remove_action( Export_Retry::HOOK, [ $this, 'run_export_retry' ] );
 			remove_action( 'admin_page_access_denied', [ $this, 'maybe_redirect_legacy_page' ] );
 			remove_filter( 'woocommerce_order_data_store_cpt_get_orders_query', [ $this, 'translate_marker_keys_query_var' ], 10 );
 			remove_filter( 'heartbeat_received', [ $this, 'refresh_order_edit_lock' ], 20 );

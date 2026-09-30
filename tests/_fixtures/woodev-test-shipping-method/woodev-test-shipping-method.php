@@ -948,7 +948,6 @@ function woodev_test_shipping_method_plugin_init(): void {
 								'status'            => '_woodev_test_shipping_status',
 							]
 						),
-						new \Woodev_Test_Shipment_Retry_Job_Handler(),
 						self::PLUGIN_ID
 					)
 				);

@@ -590,7 +590,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 			}
 
 			try {
-				$point = $this->source->fetch_details( $point_id );
+				$point = $this->from_source( fn() => $this->source->fetch_details( $point_id ) );
 			} catch ( \Woodev_API_Exception $e ) {
 				$this->log_carrier_failure( $e, 'point selection' );
 				return $this->upstream_error();
@@ -1202,6 +1202,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 		}
 
 		/**
+		 * Runs a point-source call under the `reference` request purpose (#954): a pickup-point
+		 * load is reference data, so it gets the reference timeout instead of the generic minute.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param callable $call the point-source call.
+		 * @return mixed whatever the call returns.
+		 */
+		private function from_source( callable $call ) {
+			return \Woodev_API_Request_Purpose::run( \Woodev_API_Request_Purpose::REFERENCE, $call );
+		}
+
+		/**
 		 * Fetches a query's points and shapes the response — the loop
 		 * {@see self::get_points_data()} and {@see self::get_points_data_for()} share, so
 		 * the public and the admin list can never diverge in shape or verdict.
@@ -1220,7 +1233,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 
 			$points = [];
 
-			foreach ( $this->source->fetch_points( $query ) as $point ) {
+			foreach ( $this->from_source( fn() => $this->source->fetch_points( $query ) ) as $point ) {
 
 				if ( ! $point instanceof Pickup_Point ) {
 					continue; // Defensive: a misbehaving source returning junk must not break the map.
@@ -1301,9 +1314,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 			$context = $this->resolve_explicit_context( $record );
 
 			if ( null !== $context && $this->source instanceof Location_Aware_Point_Source ) {
-				$point = $this->source->fetch_details_for( $id, $context['record'], $context['resolved_identity'] );
+				$point = $this->from_source( fn() => $this->source->fetch_details_for( $id, $context['record'], $context['resolved_identity'] ) );
 			} else {
-				$point = $this->source->fetch_details( $id );
+				$point = $this->from_source( fn() => $this->source->fetch_details( $id ) );
 			}
 
 			if ( null === $point ) {
@@ -1436,7 +1449,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 		 */
 		public function get_point_data( string $id ): ?array {
 
-			$point = $this->source->fetch_details( $id );
+			$point = $this->from_source( fn() => $this->source->fetch_details( $id ) );
 
 			if ( null === $point ) {
 				return null;

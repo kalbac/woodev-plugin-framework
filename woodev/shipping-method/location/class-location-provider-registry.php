@@ -858,8 +858,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 * This is the ONLY place in the framework that genuinely knows the picked
 		 * settlement without any carrier-plugin cooperation: `Customer_Location_Store`
 		 * holds it in the LIVE session/user-meta, which is only reliably available
-		 * during THIS synchronous request — an async retry of a failed carrier export
-		 * (see {@see \Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler::schedule_retry()})
+		 * during THIS synchronous request — a delayed retry of a failed carrier export
+		 * (see {@see \Woodev\Framework\Shipping\Order\Export_Retry}, run by Action Scheduler)
 		 * runs later, with no customer session at all. Stamping the record onto the
 		 * order NOW, while the session is live, is what makes it recoverable then.
 		 *

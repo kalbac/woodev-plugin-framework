@@ -27,8 +27,6 @@ namespace {
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/api/interface-shipping-api.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/order/class-shipping-order-handler.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/order/class-action-result.php';
-	require_once dirname( __DIR__, 4 ) . '/woodev/utilities/class-woodev-async-request.php';
-	require_once dirname( __DIR__, 4 ) . '/woodev/utilities/class-woodev-background-job-handler.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/api/class-api-exception.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/order/abstract-shipment-handler.php';
 
@@ -91,15 +89,11 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 		/**
 		 * @param mixed $api           a Shipping_API mock
 		 * @param mixed $order_handler a Shipping_Order_Handler mock
-		 * @param mixed $retry_handler a Woodev_Background_Job_Handler mock
 		 */
-		private function handler( $api, $order_handler, $retry_handler = null ): \ActionResult_Test_Shipment_Handler {
-			$retry_handler = $retry_handler ?? Mockery::mock( '\Woodev_Background_Job_Handler' );
-
+		private function handler( $api, $order_handler ): \ActionResult_Test_Shipment_Handler {
 			return new \ActionResult_Test_Shipment_Handler(
 				$api,
 				$order_handler,
-				$retry_handler,
 				'test',
 				Mockery::mock( Popular_Settlement_Store::class )
 			);
@@ -145,14 +139,11 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$order_handler->shouldReceive( 'get' )->andReturn( '' );
 			$order_handler->shouldNotReceive( 'set' );
 
-			$retry_handler = Mockery::mock( '\Woodev_Background_Job_Handler' );
-			$retry_handler->shouldNotReceive( 'create_job' );
-			$retry_handler->shouldNotReceive( 'dispatch' );
-
 			$order = Mockery::mock( '\WC_Order' );
 			$order->shouldReceive( 'get_id' )->andReturn( 55 );
+			$order->shouldReceive( 'get_meta' )->andReturn( '' ); // no retry attempt has ever been counted.
 
-			$result = $this->handler( $this->failing_api( 'create_order', 'Неверный индекс получателя' ), $order_handler, $retry_handler )
+			$result = $this->handler( $this->failing_api( 'create_order', 'Неверный индекс получателя' ), $order_handler )
 				->export( $order );
 
 			$this->assertFalse( $result->is_success() );
@@ -193,18 +184,15 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$order_handler->shouldReceive( 'get' )->andReturn( '' );
 			$order_handler->shouldNotReceive( 'set' );
 
-			$retry_handler = Mockery::mock( '\Woodev_Background_Job_Handler' );
-			$retry_handler->shouldNotReceive( 'create_job' );
-			$retry_handler->shouldNotReceive( 'dispatch' );
-
 			$order = Mockery::mock( '\WC_Order' );
 			$order->shouldReceive( 'get_id' )->andReturn( 55 );
+			$order->shouldReceive( 'get_meta' )->andReturn( '' ); // no retry attempt has ever been counted.
 			$order->shouldNotReceive( 'add_order_note' );
 			$order->shouldNotReceive( 'update_meta_data' );
 			$order->shouldNotReceive( 'set_customer_note' );
 			$order->shouldNotReceive( 'save' );
 
-			$this->handler( $this->failing_api( 'create_order', 'Неверный индекс получателя' ), $order_handler, $retry_handler )
+			$this->handler( $this->failing_api( 'create_order', 'Неверный индекс получателя' ), $order_handler )
 				->export( $order );
 
 			$this->addToAssertionCount( 1 ); // the shouldNotReceive() expectations are the assertion.

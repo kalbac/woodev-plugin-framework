@@ -757,6 +757,8 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			// generic API base
 			require_once $framework_path . '/api/class-api-exception.php';
 			require_once $framework_path . '/api/class-api-transport-exception.php';
+			require_once $framework_path . '/api/class-api-rate-limit-exception.php';
+			require_once $framework_path . '/api/class-api-request-purpose.php';
 			require_once $framework_path . '/api/class-api-base.php';
 			require_once $framework_path . '/api/interface-api-request.php';
 			require_once $framework_path . '/api/interface-api-response.php';
