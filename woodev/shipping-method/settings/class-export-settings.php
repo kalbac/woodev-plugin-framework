@@ -49,15 +49,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Export_Settings' 
 		/** @var string the carrier plugin's underscored id */
 		private string $plugin_id;
 
+		/** @var \Closure|null returns the v1 integration option's name (the handler's `get_option_key()`), or null when there is none */
+		private ?\Closure $legacy_option_key_resolver;
+
 		/**
 		 * @since 2.0.2
 		 *
-		 * @param string $plugin_id the carrier plugin's underscored id ({@see \Woodev_Plugin::get_id_underscored()}) —
-		 *                          the same id its WooCommerce integration option is keyed by.
+		 * @param string        $plugin_id                  the carrier plugin's underscored id ({@see \Woodev_Plugin::get_id_underscored()}) —
+		 *                                                  the same id its WooCommerce integration option is keyed by.
+		 * @param \Closure|null $legacy_option_key_resolver optional; returns the name of the v1 integration option — the
+		 *                                                  integration handler's own `get_option_key()`. Called lazily, only
+		 *                                                  while the migration is still pending, and may return null (no
+		 *                                                  handler yet): the id-derived name of {@see self::get_legacy_option_key()}
+		 *                                                  is used then.
 		 */
-		public function __construct( string $plugin_id ) {
+		public function __construct( string $plugin_id, ?\Closure $legacy_option_key_resolver = null ) {
 
-			$this->plugin_id = $plugin_id;
+			$this->plugin_id                  = $plugin_id;
+			$this->legacy_option_key_resolver = $legacy_option_key_resolver;
 
 			// BEFORE the parent loads the stored values: the carried-over v1 values must be what it reads.
 			$this->migrate_from_integration();
@@ -270,9 +279,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Export_Settings' 
 		 * every plugin — cannot know. Run from the constructor instead, it is version-independent and
 		 * happens before the first read, so there is no window in which an upgraded site reads defaults.
 		 *
-		 * Idempotent and non-destructive: a done-flag makes every later call a single option read, a value
+		 * Idempotent and non-destructive: the done-flag makes every later call a single option read, a value
 		 * already stored in the new place (the merchant saved it there first) is never overwritten, and the
 		 * v1 keys stay in the integration option — still the record of what v1 had, and a way back.
+		 *
+		 * The done-flag is written ONLY once the v1 option has actually been read as an array — whether or
+		 * not it held the two keys. A miss (no v1 option, or a malformed non-array one) leaves the flag
+		 * unset, so the carry-over is retried on a later request instead of turning one wrong read into a
+		 * permanent loss. The price is one extra option read per construction on a site that has no v1
+		 * option at all (a fresh install).
+		 *
+		 * The v1 auto-export value is carried over as a bool (`true`/`false`) or a string (through
+		 * `wc_string_to_bool()`, so `'yes'` is on); any other type (int, array, null) is not something v1 ever
+		 * wrote — it is treated as not set, and the new default (off) applies.
 		 *
 		 * @return void
 		 */
@@ -285,35 +304,65 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Export_Settings' 
 				return;
 			}
 
-			$legacy = get_option( 'woocommerce_' . $this->plugin_id . '_settings', [] );
+			$legacy = get_option( $this->get_legacy_option_key(), null );
 
-			if ( is_array( $legacy ) ) {
+			if ( ! is_array( $legacy ) ) {
+				return; // a miss: no done-flag, so a later request tries again
+			}
 
-				$auto_export = Order_Automation::SETTING_AUTO_EXPORT;
-				$statuses    = Order_Automation::SETTING_EXPORT_STATUSES;
+			$auto_export = Order_Automation::SETTING_AUTO_EXPORT;
+			$statuses    = Order_Automation::SETTING_EXPORT_STATUSES;
 
-				if ( array_key_exists( $auto_export, $legacy ) && null === get_option( $prefix . $auto_export, null ) ) {
-					update_option( $prefix . $auto_export, wc_string_to_bool( $legacy[ $auto_export ] ) ? 'yes' : 'no' );
+			if ( array_key_exists( $auto_export, $legacy ) && null === get_option( $prefix . $auto_export, null ) ) {
+
+				$value = $legacy[ $auto_export ];
+
+				if ( is_string( $value ) ) {
+					$value = wc_string_to_bool( $value );
 				}
 
-				if ( array_key_exists( $statuses, $legacy ) && null === get_option( $prefix . $statuses, null ) ) {
-
-					$carried = [];
-
-					foreach ( (array) $legacy[ $statuses ] as $status ) {
-
-						$status = is_string( $status ) ? self::unprefix( $status ) : '';
-
-						if ( '' !== $status ) {
-							$carried[] = 'wc-' . $status;
-						}
-					}
-
-					update_option( $prefix . $statuses, array_values( array_unique( $carried ) ) );
+				if ( is_bool( $value ) ) {
+					update_option( $prefix . $auto_export, $value ? 'yes' : 'no' );
 				}
 			}
 
+			if ( array_key_exists( $statuses, $legacy ) && null === get_option( $prefix . $statuses, null ) ) {
+
+				$carried = [];
+
+				foreach ( (array) $legacy[ $statuses ] as $status ) {
+
+					$status = is_string( $status ) ? self::unprefix( $status ) : '';
+
+					if ( '' !== $status ) {
+						$carried[] = 'wc-' . $status;
+					}
+				}
+
+				update_option( $prefix . $statuses, array_values( array_unique( $carried ) ) );
+			}
+
 			update_option( $flag, 'yes' );
+		}
+
+		/**
+		 * The name of the v1 integration option the carry-over reads.
+		 *
+		 * The source of truth is the integration handler's own `get_option_key()` (WC_Settings_API:
+		 * `{plugin_id}{id}_settings`), handed in by {@see \Woodev\Framework\Shipping\Shipping_Plugin::get_export_settings()}.
+		 * The handler is not always reachable — `get_integration_handler()` returns null by default, and
+		 * the carriers' own implementations read WooCommerce's integrations registry, which is empty until
+		 * WooCommerce has booted — so this falls back to the name the framework's integration gives itself
+		 * (`woocommerce_` + the plugin's underscored id, the same derivation as
+		 * {@see \Woodev\Framework\Shipping\Shipping_Plugin::get_integration_option()}).
+		 *
+		 * @return string
+		 */
+		private function get_legacy_option_key(): string {
+
+			$key = null !== $this->legacy_option_key_resolver ? ( $this->legacy_option_key_resolver )() : null;
+
+			return is_string( $key ) && '' !== $key ? $key : 'woocommerce_' . $this->plugin_id . '_settings';
 		}
 
 		/**

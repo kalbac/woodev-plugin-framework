@@ -66,7 +66,16 @@ final class ExportSettingsTest extends TestCase {
 			static fn( $args, $defaults = [] ) => array_merge( (array) $defaults, (array) $args )
 		);
 		Functions\when( 'apply_filters' )->returnArg( 2 );
-		Functions\when( 'wc_string_to_bool' )->alias( static fn( $value ) => in_array( strtolower( (string) $value ), [ 'yes', 'true', '1' ], true ) );
+		// like WooCommerce 9+: declared `string|bool`, so any other type is a TypeError
+		Functions\when( 'wc_string_to_bool' )->alias(
+			static function ( $value ) {
+				if ( ! is_string( $value ) && ! is_bool( $value ) ) {
+					throw new \TypeError( 'wc_string_to_bool(): Argument #1 ($string) must be of type string|bool, ' . gettype( $value ) . ' given' );
+				}
+
+				return is_bool( $value ) ? $value : in_array( strtolower( $value ), [ 'yes', 'true', '1' ], true );
+			}
+		);
 		Functions\when( 'wc_get_order_status_name' )->alias( static fn( string $status ) => 'Status ' . $status );
 		Functions\when( 'sanitize_text_field' )->returnArg();
 	}
@@ -225,23 +234,117 @@ final class ExportSettingsTest extends TestCase {
 		$this->assertFalse( $settings->is_auto_export_enabled() );
 		$this->assertArrayNotHasKey( self::AUTO_EXPORT_OPTION, $this->options );
 		$this->assertArrayNotHasKey( self::STATUSES_OPTION, $this->options );
-		$this->assertSame( 'yes', $this->options[ self::FLAG_OPTION ], 'still one-time' );
+		$this->assertSame( 'yes', $this->options[ self::FLAG_OPTION ], 'the v1 option was read, so it is done' );
 	}
 
-	public function test_a_fresh_install_with_no_integration_option_is_marked_done_and_left_on_defaults(): void {
+	public function test_no_v1_option_means_nothing_is_migrated_and_no_flag_is_written(): void {
 		$settings = $this->settings();
 
 		$this->assertFalse( $settings->is_auto_export_enabled() );
-		$this->assertSame( [ self::FLAG_OPTION ], $this->writes );
+		$this->assertSame( [], $this->writes );
+		$this->assertArrayNotHasKey( self::FLAG_OPTION, $this->options );
 	}
 
-	public function test_a_malformed_integration_option_is_ignored(): void {
+	public function test_a_malformed_integration_option_is_ignored_and_does_not_count_as_done(): void {
 		$this->options[ self::LEGACY_OPTION ] = 'garbage';
 
 		$settings = $this->settings();
 
 		$this->assertFalse( $settings->is_auto_export_enabled() );
+		$this->assertSame( [], $this->writes );
+		$this->assertArrayNotHasKey( self::FLAG_OPTION, $this->options );
+	}
+
+	public function test_a_v1_option_that_appears_after_the_first_construction_is_migrated_then(): void {
+		$first = $this->settings();
+
+		$this->assertFalse( $first->is_auto_export_enabled() );
+		$this->assertArrayNotHasKey( self::FLAG_OPTION, $this->options );
+
+		$this->options[ self::LEGACY_OPTION ] = [
+			'auto_export_orders' => 'yes',
+			'export_statuses'    => [ 'wc-on-hold' ],
+		];
+
+		$second = $this->settings();
+
+		$this->assertTrue( $second->is_auto_export_enabled() );
+		$this->assertSame( [ 'on-hold' ], $second->get_export_statuses() );
 		$this->assertSame( 'yes', $this->options[ self::FLAG_OPTION ] );
+	}
+
+	/**
+	 * @return array<string,array{0:mixed,1:?string}> the stored v1 value => the option the carry-over writes (null: nothing written)
+	 */
+	public function v1_auto_export_value_provider(): array {
+		return [
+			'string yes'      => [ 'yes', 'yes' ],
+			'string no'       => [ 'no', 'no' ],
+			'bool true'       => [ true, 'yes' ],
+			'bool false'      => [ false, 'no' ],
+			'int (not v1)'    => [ 1, null ],
+			'array (not v1)'  => [ [ 'yes' ], null ],
+			'null (not v1)'   => [ null, null ],
+		];
+	}
+
+	/**
+	 * @dataProvider v1_auto_export_value_provider
+	 *
+	 * @param mixed   $stored   what the v1 option held under the auto-export key
+	 * @param ?string $expected the value written to the new option, or null when nothing is
+	 */
+	public function test_a_v1_auto_export_value_of_any_type_is_carried_safely( $stored, ?string $expected ): void {
+		$this->options[ self::LEGACY_OPTION ] = [ 'auto_export_orders' => $stored ];
+
+		$settings = $this->settings(); // a TypeError from wc_string_to_bool() would surface here
+
+		if ( null === $expected ) {
+			$this->assertArrayNotHasKey( self::AUTO_EXPORT_OPTION, $this->options, 'not a value v1 wrote: treated as not set' );
+		} else {
+			$this->assertSame( $expected, $this->options[ self::AUTO_EXPORT_OPTION ] );
+		}
+
+		$this->assertSame( 'yes' === $expected, $settings->is_auto_export_enabled() );
+		$this->assertSame( 'yes', $this->options[ self::FLAG_OPTION ] );
+	}
+
+	public function test_the_v1_option_is_read_from_the_key_the_integration_handler_gives(): void {
+		$this->options['woocommerce_handler_given_settings'] = [
+			'auto_export_orders' => 'yes',
+			'export_statuses'    => [ 'wc-on-hold' ],
+		];
+		$this->options[ self::LEGACY_OPTION ]               = [ 'auto_export_orders' => 'no' ];
+
+		$settings = new Export_Settings( self::PLUGIN_ID, static fn(): ?string => 'woocommerce_handler_given_settings' );
+
+		$this->assertTrue( $settings->is_auto_export_enabled(), 'the handler\'s key wins over the derived one' );
+		$this->assertSame( 'yes', $this->options[ self::FLAG_OPTION ] );
+	}
+
+	public function test_without_a_handler_the_v1_option_key_is_derived_from_the_plugin_id(): void {
+		$this->options[ self::LEGACY_OPTION ] = [ 'auto_export_orders' => 'yes' ];
+
+		$settings = new Export_Settings( self::PLUGIN_ID, static fn(): ?string => null );
+
+		$this->assertTrue( $settings->is_auto_export_enabled() );
+	}
+
+	public function test_the_key_resolver_is_not_called_once_the_migration_is_done(): void {
+		$this->options[ self::FLAG_OPTION ] = 'yes';
+
+		$called = false;
+
+		new Export_Settings(
+			self::PLUGIN_ID,
+			static function () use ( &$called ): ?string {
+				$called = true;
+
+				return null;
+			}
+		);
+
+		$this->assertFalse( $called );
 	}
 
 	public function test_the_migration_runs_once_and_a_second_run_changes_nothing(): void {
