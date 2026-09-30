@@ -49,6 +49,8 @@ jest.mock( '../../src/shipping-orders-page/rest', () => ( {
 	// filter offer every canonical state, so these tests keep asserting what
 	// they asserted before the list existed.
 	getReachableDeliveryStatuses: jest.fn( () => [] ),
+	// #1007: no background-export figure in the bootstrap — the notice then renders nothing.
+	getExportsInProgress: jest.fn( () => null ),
 } ) );
 
 /**
@@ -1034,6 +1036,25 @@ describe( 'status cell', () => {
 		// No Tooltip wrapper was rendered at all — the badge stays a plain,
 		// non-focusable span, not a focusable anchor with nothing to show.
 		expect( badge ).not.toHaveAttribute( 'tabindex' );
+	} );
+} );
+
+describe( 'status cell — cancel_failed (#1007)', () => {
+	test( 'a row with cancel_failed shows the warn badge under the status; rows without it do not', async () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue(
+			resultOf( [
+				makeRow( { id: 1, order_number: '1', cancel_failed: true } ),
+				makeRow( { id: 2, order_number: '2', cancel_failed: false } ),
+				makeRow( { id: 3, order_number: '3' } ),
+			] )
+		);
+
+		render( <App /> );
+
+		const badges = await screen.findAllByText( 'Не отменена у перевозчика' );
+		expect( badges ).toHaveLength( 1 );
+		expect( badges[ 0 ] ).toHaveClass( 'woodev-orders-badge--warn' );
 	} );
 } );
 

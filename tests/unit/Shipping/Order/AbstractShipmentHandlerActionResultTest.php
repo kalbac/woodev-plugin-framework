@@ -221,6 +221,10 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 		 * page and the order wizard's immediate export (#974) go through — may name it; a
 		 * storefront / checkout / email / tracking file that starts to would be a path for the
 		 * carrier's text to a buyer.
+		 *
+		 * `Order_Automation` (#1007) is the one background performer on the list: it writes the
+		 * carrier's text of a refused cancellation to a PRIVATE order note (never a customer note),
+		 * the same thing `Export_Retry::after_failure()` already does for the last export error.
 		 */
 		public function test_only_the_handler_and_the_merchant_surfaces_name_action_result(): void {
 			$root    = dirname( __DIR__, 4 ) . '/woodev';
@@ -230,6 +234,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 				'shipping-method/rest-api/class-orders-controller.php',
 				'shipping-method/admin/class-shipping-admin-order.php',
 				'shipping-method/admin/orders/class-order-actions.php',
+				'shipping-method/order/class-order-automation.php',
 			];
 
 			$found = [];

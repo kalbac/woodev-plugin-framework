@@ -8,7 +8,7 @@
  */
 
 import apiFetch from '@wordpress/api-fetch';
-import { fetchOrders, fetchSyncStatus, performOrderAction } from '../../src/shipping-orders-page/rest';
+import { fetchOrders, fetchSyncStatus, getExportsInProgress, performOrderAction } from '../../src/shipping-orders-page/rest';
 
 jest.mock( '@wordpress/api-fetch' );
 
@@ -206,5 +206,36 @@ describe( 'match — «Все / Любое» (#843)', () => {
 
 		await fetchOrders( {} );
 		expect( new URL( calledUrl() ).searchParams.has( 'match' ) ).toBe( false );
+	} );
+} );
+
+describe( 'getExportsInProgress (#1007)', () => {
+	const good = { count: 2, text: 'Сейчас выгружаются 2 заказа перевозчику', heartbeatKey: 'woodev-exports-in-progress' };
+
+	test( 'returns the inlined object as is', () => {
+		window.woodevShippingOrders.exportsInProgress = good;
+
+		expect( getExportsInProgress() ).toEqual( good );
+	} );
+
+	test( 'accepts count 0 with an empty sentence', () => {
+		window.woodevShippingOrders.exportsInProgress = { ...good, count: 0, text: '' };
+
+		expect( getExportsInProgress() ).toEqual( { ...good, count: 0, text: '' } );
+	} );
+
+	test.each( [
+		[ 'absent', undefined ],
+		[ 'a non-object', 'nope' ],
+		[ 'a string count', { ...good, count: '2' } ],
+		[ 'a negative count', { ...good, count: -1 } ],
+		[ 'an infinite count', { ...good, count: Infinity } ],
+		[ 'a non-string text', { ...good, text: 2 } ],
+		[ 'an empty heartbeat key', { ...good, heartbeatKey: '' } ],
+		[ 'a missing heartbeat key', { count: 1, text: 'x' } ],
+	] )( 'returns null for %s', ( label, value ) => {
+		window.woodevShippingOrders.exportsInProgress = value;
+
+		expect( getExportsInProgress() ).toBeNull();
 	} );
 } );

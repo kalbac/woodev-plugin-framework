@@ -40,6 +40,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		/** @var Location\Location_Service|null lazily-built location service façade */
 		private ?Location\Location_Service $location_service = null;
 
+		/** @var Settings\Export_Settings|null lazily-built «Выгрузка» settings of this carrier (#1007) */
+		private ?Settings\Export_Settings $export_settings = null;
+
 		/**
 		 * Initializes the shipping plugin.
 		 *
@@ -162,6 +165,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/checkout/class-checkout-field-policy.php';
 			require_once $path . '/pickup/class-pickup-map-settings.php';
 			require_once $path . '/settings/class-shipping-settings-tab.php';
+			require_once $path . '/settings/class-export-settings.php';
 
 			// checkout field definitions + presets
 			require_once $path . '/checkout/class-field.php';
@@ -241,6 +245,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/order/class-action-result.php';
 			require_once $path . '/order/class-order-lock.php';
 			require_once $path . '/order/class-export-retry.php';
+			require_once $path . '/order/class-carrier-cancel.php';
+			require_once $path . '/order/class-export-queue.php';
+			require_once $path . '/order/class-order-automation.php';
 			require_once $path . '/order/abstract-shipment-handler.php';
 			require_once $path . '/order/abstract-tracking-handler.php';
 			require_once $path . '/order/abstract-webhook-handler.php';
@@ -262,6 +269,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			// inert until a carrier plugin calls register_provider().
 			require_once $path . '/admin/orders/class-orders-provider.php';
 			require_once $path . '/admin/orders/class-orders-registry.php';
+			require_once $path . '/admin/orders/class-export-queue-notice.php';
 			// The carrier marker contract (#967): loaded with the registry it reads providers from.
 			require_once $path . '/order/class-order-marker.php';
 			require_once $path . '/admin/orders/class-orders-query.php';
@@ -357,6 +365,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			// order that the carrier was not found instead of letting the action complete in silence.
 			// add_action() ignores a second identical callback, so the registry's own wiring is harmless.
 			add_action( Order\Export_Retry::HOOK, [ Admin\Orders\Orders_Registry::instance(), 'run_export_retry' ] );
+
+			// #1007: the same reasoning for the background auto-export and the cancellation at the
+			// carrier. An order changes status on the storefront (a payment gateway's callback, the
+			// thank-you page) and in cron as much as in the admin, and the cancellation runs from the
+			// queue — so both hooks are wired in every request, not only where the carrier registered
+			// itself for the admin.
+			add_action( 'woocommerce_order_status_changed', [ Admin\Orders\Orders_Registry::instance(), 'handle_order_status_changed' ], 20, 4 );
+			add_action( Order\Carrier_Cancel::HOOK, [ Admin\Orders\Orders_Registry::instance(), 'run_cancel_at_carrier' ] );
 
 			// admin suite. Shipping_Admin self-wires its admin_init/admin_menu
 			// registration in its constructor, so obtaining the host instance is what
@@ -672,6 +688,62 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			$settings = get_option( 'woocommerce_' . $this->get_id_underscored() . '_settings', [] );
 
 			return $settings[ $key ] ?? $default;
+		}
+
+		/**
+		 * The «Выгрузка» settings of this carrier (#1007): auto-export on / off and the statuses it fires
+		 * on. Stored per plugin, edited on the plugin's own tab of the framework settings page
+		 * (`woodev-settings`), and read by {@see Order\Order_Automation}.
+		 *
+		 * The first call carries the v1 values over from the WooCommerce integration option, once
+		 * ({@see Settings\Export_Settings::migrate_from_integration()}).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return Settings\Export_Settings
+		 */
+		public function get_export_settings(): Settings\Export_Settings {
+
+			if ( null === $this->export_settings ) {
+				$this->export_settings = new Settings\Export_Settings( $this->get_id_underscored() );
+			}
+
+			return $this->export_settings;
+		}
+
+		/**
+		 * This carrier's tab on the framework settings page (`woodev-settings`): every shipping plugin
+		 * gets it from the framework, with the «Выгрузка» section (#1007), and writes no code.
+		 *
+		 * A carrier that contributes providers of its own overrides this and MUST merge
+		 * `parent::get_settings_providers()` in — overriding it without the parent's providers drops
+		 * the framework's tab.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return \Woodev\Framework\Settings\Settings_Provider[]
+		 */
+		public function get_settings_providers(): array {
+
+			$export = $this->get_export_settings();
+
+			return array_merge(
+				parent::get_settings_providers(),
+				[
+					\Woodev\Framework\Settings\Settings_Provider::create_with_sections(
+						$this->get_id(),
+						$this->get_plugin_name(),
+						$export,
+						[],
+						\Woodev\Framework\Settings\Settings_Section::create(
+							Settings\Export_Settings::SECTION_ID,
+							__( 'Выгрузка', 'woodev-plugin-framework' ),
+							$export->get_owned_setting_ids(),
+							$export->get_section_description()
+						)
+					),
+				]
+			);
 		}
 
 		/**

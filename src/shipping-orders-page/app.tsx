@@ -111,6 +111,7 @@ import {
 	scopeQuery,
 } from './filters';
 import type { UrlFilters } from './filters';
+import { ExportsInProgressNotice } from './exports-in-progress';
 import { MatchLabelScope } from './match-labels';
 import PeriodPicker from './period-picker';
 import OrderWizard from './order-wizard/order-wizard';
@@ -190,7 +191,7 @@ const TYPE_LABELS: Record<string, string> = {
  * dressed up as a real state (it already carries its own canonical_label
  * from the server, so no special-casing is needed here).
  */
-function StatusCell( { deliveryStatus }: { deliveryStatus: OrderRowDeliveryStatus } ) {
+export function StatusCell( { deliveryStatus, cancelFailed = false }: { deliveryStatus: OrderRowDeliveryStatus; cancelFailed?: boolean } ) {
 	const tone = getStatusTone( deliveryStatus.canonical );
 	const badge = (
 		<span className={ `woodev-orders-status woodev-orders-status--${ tone }` }>
@@ -203,7 +204,27 @@ function StatusCell( { deliveryStatus }: { deliveryStatus: OrderRowDeliveryStatu
 	// canonical status lost ("Неизвестно" / "Задержан на таможне"). No
 	// tooltip at all when there is nothing to say, per the card: an empty
 	// `raw_label` renders no `Tooltip`, never an empty one.
-	return deliveryStatus.raw_label ? <Tooltip text={ deliveryStatus.raw_label }>{ badge }</Tooltip> : badge;
+	const status = deliveryStatus.raw_label ? <Tooltip text={ deliveryStatus.raw_label }>{ badge }</Tooltip> : badge;
+
+	if ( ! cancelFailed ) {
+		return status;
+	}
+
+	// #1007: the order is cancelled in the shop, but the carrier kept the request alive. The
+	// badge sits under the status (its own block line) and explains itself on hover.
+	return (
+		<>
+			{ status }
+			<span className="woodev-orders-cell__meta">
+				<span
+					className="woodev-orders-badge woodev-orders-badge--warn"
+					title={ __( 'Заказ отменён в магазине, но перевозчик не отменил заявку — свяжитесь с перевозчиком', 'woodev-plugin-framework' ) }
+				>
+					{ __( 'Не отменена у перевозчика', 'woodev-plugin-framework' ) }
+				</span>
+			</span>
+		</>
+	);
 }
 
 /**
@@ -1136,7 +1157,7 @@ function buildRow( row: OrderRow, actions: OrderActionsCallbacks ): WcTableRowCe
 			value: row.id,
 		},
 		{ display: <span title={ date.title }>{ date.text }</span>, value: row.date_created || '' },
-		{ display: <StatusCell deliveryStatus={ row.delivery_status } />, value: row.delivery_status.canonical },
+		{ display: <StatusCell deliveryStatus={ row.delivery_status } cancelFailed={ true === row.cancel_failed } />, value: row.delivery_status.canonical },
 		{ display: <CustomerCell customer={ row.customer } />, value: row.customer.name },
 		{ display: <ShippingCell row={ row } />, value: row.shipping.destination_text },
 		{ display: <PaymentCell payment={ row.payment } />, value: row.payment.formatted_total },
@@ -2208,6 +2229,8 @@ export default function OrdersPage() {
 					{ error }
 				</Notice>
 			) }
+			{ /* #1007 — background carrier exports still running; the server words the sentence. */ }
+			<ExportsInProgressNotice />
 			{ /* #824 — one row action's outcome, in the SAME slot as the fetch error above. */ }
 			{ actionNotice && (
 				<Notice

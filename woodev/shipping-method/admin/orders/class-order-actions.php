@@ -313,6 +313,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		}
 
 		/**
+		 * Whether «Отменить» is on offer for the order's state — the gate of the button, without the
+		 * native edit lock that {@see self::for_order()} also applies (#1007).
+		 *
+		 * The background cancellation of a cancelled / fully refunded WooCommerce order asks this. It
+		 * runs without a current manager (every edit lock looks «another manager's» there), and the lock
+		 * exists to keep an export from landing under an open wizard: an order that has a shipment cannot
+		 * be edited by the wizard at all, so there is nothing for it to protect. Everything else is the
+		 * button's own gate — exported, the delivery not in an end state ({@see self::CANCEL_RETIRED_STATUSES}),
+		 * and whatever a plugin did to the set through `woodev_shipping_order_actions`.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order            $order    the order.
+		 * @param Orders_Provider|null $provider the matched carrier, or null.
+		 * @return bool
+		 */
+		public function can_cancel( \WC_Order $order, ?Orders_Provider $provider ): bool {
+			return in_array( self::CANCEL, array_column( $this->carrier_actions( $order, $provider ), 'action' ), true );
+		}
+
+		/**
 		 * Performs one action against the carrier's shipment handler — the ONE place an action id
 		 * becomes a carrier call, shared by the row / bulk routes ({@see \Woodev\Framework\Shipping\Rest_Api\Orders_Controller})
 		 * and the wizard's «сразу выгрузить перевозчику» ({@see Order_Editor::export_created()}, #710 D6).
@@ -661,11 +682,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		 *
 		 * @since 2.0.2
 		 *
+		 * Public since #1007: the background cancel asks the same question before it calls the carrier.
+		 *
 		 * @param \WC_Order       $order    order.
 		 * @param Orders_Provider $provider matched carrier.
 		 * @return bool
 		 */
-		private static function is_exported( \WC_Order $order, Orders_Provider $provider ): bool {
+		public static function is_exported( \WC_Order $order, Orders_Provider $provider ): bool {
 			$meta_key = $provider->get_carrier_order_id_meta_key();
 
 			if ( null === $meta_key ) {
@@ -684,12 +707,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		 *
 		 * @since 2.0.2
 		 *
+		 * Public since #1007: the background cancel names this status in its order note.
+		 *
 		 * @param \WC_Order       $order    order.
 		 * @param Orders_Provider $provider matched carrier.
 		 * @return string one of {@see Delivery_Status::canonical_states()} or
 		 *                {@see Delivery_Status::UNKNOWN}.
 		 */
-		private static function resolve_canonical_status( \WC_Order $order, Orders_Provider $provider ): string {
+		public static function resolve_canonical_status( \WC_Order $order, Orders_Provider $provider ): string {
 			if ( null === $provider->get_status_meta_key() ) {
 				return Delivery_Status::UNKNOWN;
 			}

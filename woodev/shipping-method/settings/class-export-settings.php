@@ -1,0 +1,328 @@
+<?php
+/**
+ * Woodev Export Settings
+ *
+ * The «Выгрузка» settings of ONE carrier plugin (#1007): whether its orders are exported to the carrier
+ * on their own, and on which WooCommerce statuses. They live on the plugin's own tab of the framework
+ * settings page (`wp-admin/admin.php?page=woodev-settings`), not on WooCommerce → Settings →
+ * Integrations: every Woodev plugin keeps its settings on `woodev-settings`
+ * ({@see \Woodev\Framework\Settings\Settings_Page_Registry}), and the framework hands this tab to every
+ * {@see \Woodev\Framework\Shipping\Shipping_Plugin} through
+ * {@see \Woodev\Framework\Shipping\Shipping_Plugin::get_settings_providers()} — a carrier writes no code.
+ *
+ * @since 2.0.2
+ */
+
+namespace Woodev\Framework\Shipping\Settings;
+
+use Woodev\Framework\Shipping\Admin\Orders\Order_Actions;
+use Woodev\Framework\Shipping\Order\Order_Automation;
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+} // Exit if accessed directly
+
+if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Export_Settings' ) ) :
+
+	/**
+	 * Settings handler of one carrier plugin's «Выгрузка» section.
+	 *
+	 * Storage is the framework settings API's: one option per setting, `woodev_{plugin id}_export_{key}`.
+	 * The two keys are the ones the shipped v1 carrier plugins stored inside their WooCommerce integration
+	 * option (`woocommerce_{plugin id}_settings`, see {@see Order_Automation::SETTING_AUTO_EXPORT}); a
+	 * site that upgrades keeps what it had chosen — {@see self::migrate_from_integration()} carries the
+	 * two values over, once.
+	 *
+	 * @since 2.0.2
+	 */
+	class Export_Settings extends \Woodev_Abstract_Settings {
+
+		/** @var string the section id on the plugin's tab */
+		public const SECTION_ID = 'export';
+
+		/** @var string the suffix of the handler id (the option namespace) after the plugin id */
+		private const HANDLER_ID_SUFFIX = '_export';
+
+		/** @var string the key, in the handler's option namespace, of the option that records the one-time migration as done */
+		private const MIGRATED_FLAG = 'migrated_from_integration';
+
+		/** @var string the carrier plugin's underscored id */
+		private string $plugin_id;
+
+		/**
+		 * @since 2.0.2
+		 *
+		 * @param string $plugin_id the carrier plugin's underscored id ({@see \Woodev_Plugin::get_id_underscored()}) —
+		 *                          the same id its WooCommerce integration option is keyed by.
+		 */
+		public function __construct( string $plugin_id ) {
+
+			$this->plugin_id = $plugin_id;
+
+			// BEFORE the parent loads the stored values: the carried-over v1 values must be what it reads.
+			$this->migrate_from_integration();
+
+			parent::__construct( $plugin_id . self::HANDLER_ID_SUFFIX );
+		}
+
+		/**
+		 * The setting ids this handler owns, in display order — the section's field list.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string[]
+		 */
+		public function get_owned_setting_ids(): array {
+			return [ Order_Automation::SETTING_AUTO_EXPORT, Order_Automation::SETTING_EXPORT_STATUSES ];
+		}
+
+		/**
+		 * Whether the merchant switched auto-export on for this carrier. Default OFF (spec §12).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public function is_auto_export_enabled(): bool {
+			return true === $this->get_value( Order_Automation::SETTING_AUTO_EXPORT );
+		}
+
+		/**
+		 * The WooCommerce statuses the merchant chose auto-export for — whatever was saved, including a
+		 * status the framework no longer exports on (the gate refuses such an order; see
+		 * {@see self::get_unsupported_statuses()}).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string[] status slugs without the `wc-` prefix.
+		 */
+		public function get_export_statuses(): array {
+
+			$statuses = [];
+
+			foreach ( (array) $this->get_value( Order_Automation::SETTING_EXPORT_STATUSES ) as $status ) {
+
+				if ( ! is_string( $status ) ) {
+					continue;
+				}
+
+				$status = self::unprefix( $status );
+
+				if ( '' !== $status ) {
+					$statuses[] = $status;
+				}
+			}
+
+			return array_values( array_unique( $statuses ) );
+		}
+
+		/**
+		 * The saved auto-export statuses the framework no longer exports on — a v1 site could pick any
+		 * non-final status, including a custom one, and v2 offers only
+		 * {@see Order_Actions::EXPORTABLE_STATUSES}. The runner refuses such an order, so the merchant is
+		 * told instead of finding out from orders that never reach the carrier.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<string,string> `wc-` status slug => its name, for every saved status outside the allowed set.
+		 */
+		public function get_unsupported_statuses(): array {
+
+			$unsupported = [];
+
+			foreach ( $this->get_export_statuses() as $status ) {
+
+				if ( ! in_array( $status, Order_Actions::EXPORTABLE_STATUSES, true ) ) {
+					$unsupported[ 'wc-' . $status ] = wc_get_order_status_name( $status );
+				}
+			}
+
+			return $unsupported;
+		}
+
+		/**
+		 * The note under the section title: what the section does, and — when a saved status can no
+		 * longer be exported on — which ones, so the merchant learns it from the page instead of from
+		 * orders that never reach the carrier. Plain text: the page renders it as text.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		public function get_section_description(): string {
+
+			$description = __( 'Когда заказ сам отправляется перевозчику. Отмена заказа и его полный возврат отменяют заявку у перевозчика сами, независимо от этих настроек.', 'woodev-plugin-framework' );
+
+			foreach ( $this->get_unsupported_statuses() as $name ) {
+				$description .= ' ' . sprintf(
+					/* translators: %s: the order status name */
+					__( 'Статус «%s» больше не поддерживается для автоэкспорта: заказы в нём не выгружаются автоматически. Выберите поддерживаемый статус.', 'woodev-plugin-framework' ),
+					$name
+				);
+			}
+
+			return $description;
+		}
+
+		/**
+		 * Registers the two settings.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		protected function register_settings() {
+
+			$this->register_setting(
+				Order_Automation::SETTING_AUTO_EXPORT,
+				\Woodev_Setting::TYPE_BOOLEAN,
+				[
+					'name'    => __( 'Автоэкспорт', 'woodev-plugin-framework' ),
+					'default' => false,
+				]
+			);
+			$this->register_control(
+				Order_Automation::SETTING_AUTO_EXPORT,
+				\Woodev_Control::TYPE_TOGGLE,
+				[
+					'description' => __( 'Когда заказ получает один из выбранных ниже статусов, он сам отправляется перевозчику — в фоне, покупатель ничего не ждёт. Вручную заказ можно выгрузить всегда.', 'woodev-plugin-framework' ),
+				]
+			);
+
+			$this->register_setting(
+				Order_Automation::SETTING_EXPORT_STATUSES,
+				\Woodev_Setting::TYPE_STRING,
+				[
+					'name'     => __( 'Статусы для автоэкспорта', 'woodev-plugin-framework' ),
+					'is_multi' => true,
+					'options'  => $this->get_status_options(),
+					'default'  => [ 'wc-processing' ],
+				]
+			);
+			$this->register_control(
+				Order_Automation::SETTING_EXPORT_STATUSES,
+				\Woodev_Control::TYPE_MULTISELECT,
+				[
+					'tooltip' => __( 'Заказ выгружается в тот момент, когда переходит в один из этих статусов. Здесь только статусы, в которых заказ ещё можно отправить перевозчику.', 'woodev-plugin-framework' ),
+				]
+			);
+		}
+
+		/**
+		 * Loads the stored values, then keeps a saved status the list cannot offer in the list.
+		 *
+		 * A saved status outside the allowed set stays selectable, marked by its name: a saved value the
+		 * field cannot show is one the next save would erase without the merchant seeing it, and the
+		 * setting would reject it as «not an option». It goes away only when the merchant deselects it
+		 * (the v1 data contract).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		protected function load_settings() {
+
+			parent::load_settings();
+
+			$setting = $this->get_setting( Order_Automation::SETTING_EXPORT_STATUSES );
+
+			if ( ! $setting ) {
+				return;
+			}
+
+			$options = $setting->get_options();
+
+			foreach ( $this->get_unsupported_statuses() as $slug => $name ) {
+				$options[ $slug ] = sprintf(
+					/* translators: %s: the order status name */
+					__( '%s (не поддерживается)', 'woodev-plugin-framework' ),
+					$name
+				);
+			}
+
+			$setting->set_options( $options );
+		}
+
+		/**
+		 * The statuses auto-export may be set to: the ones «Экспорт» is offered in
+		 * ({@see Order_Actions::EXPORTABLE_STATUSES}) — a later status would queue an export the gate refuses.
+		 *
+		 * @return array<string,string> `wc-` status slug => its name.
+		 */
+		private function get_status_options(): array {
+
+			$options = [];
+
+			foreach ( Order_Actions::EXPORTABLE_STATUSES as $status ) {
+				$options[ 'wc-' . $status ] = wc_get_order_status_name( $status );
+			}
+
+			return $options;
+		}
+
+		/**
+		 * One-time carry-over (#1007) of the two values the v1 carrier plugins kept inside their
+		 * WooCommerce integration option (`woocommerce_{plugin id}_settings` — an installed-site data
+		 * contract), so a merchant who had auto-export on in v1 keeps it.
+		 *
+		 * Deliberately NOT a per-plugin {@see \Woodev_Lifecycle::upgrade_to_X_Y_Z()} routine: that mechanism
+		 * is keyed to each carrier plugin's own `$upgrade_versions`, which the framework — vendored inside
+		 * every plugin — cannot know. Run from the constructor instead, it is version-independent and
+		 * happens before the first read, so there is no window in which an upgraded site reads defaults.
+		 *
+		 * Idempotent and non-destructive: a done-flag makes every later call a single option read, a value
+		 * already stored in the new place (the merchant saved it there first) is never overwritten, and the
+		 * v1 keys stay in the integration option — still the record of what v1 had, and a way back.
+		 *
+		 * @return void
+		 */
+		private function migrate_from_integration(): void {
+
+			$prefix = 'woodev_' . $this->plugin_id . self::HANDLER_ID_SUFFIX . '_';
+			$flag   = $prefix . self::MIGRATED_FLAG;
+
+			if ( 'yes' === get_option( $flag, '' ) ) {
+				return;
+			}
+
+			$legacy = get_option( 'woocommerce_' . $this->plugin_id . '_settings', [] );
+
+			if ( is_array( $legacy ) ) {
+
+				$auto_export = Order_Automation::SETTING_AUTO_EXPORT;
+				$statuses    = Order_Automation::SETTING_EXPORT_STATUSES;
+
+				if ( array_key_exists( $auto_export, $legacy ) && null === get_option( $prefix . $auto_export, null ) ) {
+					update_option( $prefix . $auto_export, wc_string_to_bool( $legacy[ $auto_export ] ) ? 'yes' : 'no' );
+				}
+
+				if ( array_key_exists( $statuses, $legacy ) && null === get_option( $prefix . $statuses, null ) ) {
+
+					$carried = [];
+
+					foreach ( (array) $legacy[ $statuses ] as $status ) {
+
+						$status = is_string( $status ) ? self::unprefix( $status ) : '';
+
+						if ( '' !== $status ) {
+							$carried[] = 'wc-' . $status;
+						}
+					}
+
+					update_option( $prefix . $statuses, array_values( array_unique( $carried ) ) );
+				}
+			}
+
+			update_option( $flag, 'yes' );
+		}
+
+		/**
+		 * @param string $status a status slug, with or without the `wc-` prefix.
+		 * @return string the slug without the prefix.
+		 */
+		private static function unprefix( string $status ): string {
+			return 0 === strpos( $status, 'wc-' ) ? substr( $status, 3 ) : $status;
+		}
+	}
+
+endif;

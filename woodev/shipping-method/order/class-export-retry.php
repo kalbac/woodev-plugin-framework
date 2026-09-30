@@ -92,6 +92,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Export_Retry' ) ) :
 		/** @var string the Action Scheduler status of an action that is waiting its turn — NOT `in-progress`, which is the action now being carried out (`ActionScheduler_Store::STATUS_PENDING`) */
 		private const PENDING_STATUS = 'pending';
 
+		/** @var string the Action Scheduler status of the action being carried out now (`ActionScheduler_Store::STATUS_RUNNING`) */
+		private const RUNNING_STATUS = 'in-progress';
+
 		/** @var array<int,int> seconds to wait after the Nth failed attempt, before attempt N + 1 */
 		private const DELAYS = [
 			1 => MINUTE_IN_SECONDS,
@@ -239,6 +242,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Export_Retry' ) ) :
 		}
 
 		/**
+		 * Whether a failure text is the «attempts ran out» sentence of {@see self::give_up_text()}.
+		 *
+		 * The handler hands that sentence back as the failure's text AFTER {@see self::after_failure()}
+		 * has already written it to the order as a note, so a caller that notes every failed background
+		 * attempt recognises it by this and does not write the same note twice.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $message the text of a failed export result.
+		 * @return bool
+		 */
+		public static function is_give_up_text( string $message ): bool {
+			return 0 === strpos( $message, rtrim( self::give_up_text( '' ) ) );
+		}
+
+		/**
 		 * Schedules one export attempt of an order, `$delay` seconds from now.
 		 *
 		 * Idempotent per order: an attempt already WAITING for this order is not doubled. «Waiting» is
@@ -292,14 +311,43 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Export_Retry' ) ) :
 		}
 
 		/**
+		 * Whether an export attempt of this order is being carried out right now.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param int $order_id the order.
+		 * @return bool
+		 */
+		public static function is_running( int $order_id ): bool {
+
+			if ( ! function_exists( 'as_get_scheduled_actions' ) ) {
+				return false;
+			}
+
+			return [] !== (array) as_get_scheduled_actions(
+				[
+					'hook'     => self::HOOK,
+					'args'     => [ $order_id ],
+					'group'    => self::GROUP,
+					'status'   => self::RUNNING_STATUS,
+					'per_page' => 1,
+				],
+				'ids'
+			);
+		}
+
+		/**
 		 * Cancels the attempt waiting for an order, if any. The running one is not touched.
+		 *
+		 * Public since #1007: a WooCommerce order that is cancelled or fully refunded must not be
+		 * exported by an auto-export or a retry that was still waiting for it.
 		 *
 		 * @since 2.0.2
 		 *
 		 * @param int $order_id the order.
 		 * @return void
 		 */
-		private static function cancel_pending( int $order_id ): void {
+		public static function cancel_pending( int $order_id ): void {
 
 			if ( function_exists( 'as_unschedule_all_actions' ) ) {
 				as_unschedule_all_actions( self::HOOK, [ $order_id ], self::GROUP );

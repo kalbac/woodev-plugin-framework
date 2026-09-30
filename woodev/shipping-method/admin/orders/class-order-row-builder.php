@@ -9,7 +9,9 @@
 
 namespace Woodev\Framework\Shipping\Admin\Orders;
 
+use Woodev\Framework\Shipping\Order\Carrier_Cancel;
 use Woodev\Framework\Shipping\Order\Delivery_Status;
+use Woodev\Framework\Shipping\Order\Order_Automation;
 use Woodev\Framework\Shipping\Shipping_Helper;
 use Woodev\Framework\Shipping\Shipping_Method;
 
@@ -80,6 +82,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Bu
 		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 Added `is_exported` and `actions` (card #824).
+		 * @since 2.0.2 Added `cancel_failed` (card #1007).
 		 *
 		 * @param \WC_Order            $order    matched order.
 		 * @param Orders_Provider|null $provider the carrier this row belongs to, or null
@@ -116,6 +119,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Bu
 				'tracking'        => $this->build_tracking( $order, $provider ),
 				'delivery_status' => $this->resolve_delivery_status( $order, $provider ),
 				'is_exported'     => self::is_exported( $order, $provider ),
+				// #1007: cancelled in WooCommerce, but the carrier refused to cancel its shipment.
+				'cancel_failed'   => null !== $provider && Carrier_Cancel::has_failed( $order, Order_Automation::carrier_order_id( $order, $provider ) ),
 				'actions'         => $this->order_actions->for_row( $order, $provider ),
 			];
 

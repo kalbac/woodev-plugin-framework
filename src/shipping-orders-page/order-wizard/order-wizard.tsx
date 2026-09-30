@@ -79,16 +79,16 @@ function typedPointCheckKey( data: WizardData, restRoot: string, pointId: string
 
 type Phase = 'loading' | 'ready' | 'failed';
 
-type HeartbeatData = Record<string, unknown>;
+export type HeartbeatData = Record<string, unknown>;
 
 const FALLBACK_ORDER_LOCK_HEARTBEAT_KEY = 'woodev-refresh-order-lock';
 
-type HeartbeatJquery = {
+export type HeartbeatJquery = {
 	on: ( event: string, handler: ( event: unknown, data: HeartbeatData ) => void ) => void;
 	off: ( event: string ) => void;
 };
 
-type HeartbeatJqueryFactory = ( element: Document ) => HeartbeatJquery;
+export type HeartbeatJqueryFactory = ( element: Document ) => HeartbeatJquery;
 
 export default function OrderWizard( { orderId = null, onClose, onSaved, renderers = {} }: OrderWizardProps ) {
 	const editing = null !== orderId;
