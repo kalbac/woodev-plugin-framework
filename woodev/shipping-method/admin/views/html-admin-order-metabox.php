@@ -20,7 +20,7 @@
  * @var string                                                      $info_text         shown only when `$is_exported` is false
  * @var array<int, array{label: string, value: string, url: string|null, tone?:string}> $fields non-empty display fields, shown only when `$is_exported` is true
  * @var string                                                      $history_html      pre-rendered delivery-history markup ('' when there is none to show)
- * @var array<int, array{action: string, label: string, title: string, destructive: bool}> $actions the shared action set {@see \Woodev\Framework\Shipping\Admin\Orders\Order_Actions::for_order()} built for this order
+ * @var array<int, array{action: string, label: string, title: string, destructive: bool, disabled?: bool}> $actions the row action set {@see \Woodev\Framework\Shipping\Admin\Orders\Order_Actions::for_row()} built for this order; a locked action carries `disabled` and the lock reason as its `title`
  * @var string                                                      $admin_post_action forward-only admin-post action the button forms target
  * @var string                                                      $nonce_action      nonce action protecting the button forms
  * @var int                                                         $order_id          the order being edited
@@ -82,6 +82,7 @@ defined( 'ABSPATH' ) || exit;
 						type="submit"
 						class="button<?php echo ! empty( $action['destructive'] ) ? ' button-link-delete' : ''; ?>"
 						title="<?php echo esc_attr( (string) ( $action['title'] ?? '' ) ); ?>"
+						<?php disabled( ! empty( $action['disabled'] ) ); ?>
 						<?php echo ! empty( $action['destructive'] ) ? 'onclick="return confirm( \'' . esc_js( __( 'Вы уверены?', 'woodev-plugin-framework' ) ) . '\' );"' : ''; ?>
 					>
 						<?php echo esc_html( $action['label'] ); ?>

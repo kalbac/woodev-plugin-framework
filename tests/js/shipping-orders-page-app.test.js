@@ -3363,3 +3363,139 @@ describe( 'the «Редактировать» row action (#972, #710 O2 / O4)', 
 		await waitFor( () => expect( fetchOrders.mock.calls.length ).toBe( before + 1 ) );
 	} );
 } );
+
+/**
+ * A row under another manager's edit lock (#1000): the checkbox is replaced by a lock (as
+ * WooCommerce's own list does), every carrier action is greyed out with the manager's name, and a
+ * bulk run that skipped locked orders says so.
+ */
+describe( 'a row another manager is editing (#1000)', () => {
+	const TITLE = 'Этот заказ уже редактируется пользователем Мария';
+	const lockedAction = ( action, label ) => ( { action, label, title: TITLE, destructive: false, disabled: true, lock_owner: 'Мария' } );
+	const LOCKED_ACTIONS = [ lockedAction( 'edit', 'Редактировать' ), lockedAction( 'export', 'Выгрузить' ) ];
+	const FREE_ACTIONS = [ { action: 'export', label: 'Выгрузить', title: '', destructive: false } ];
+
+	beforeEach( () => {
+		getProviders.mockReturnValue( oneProvider() );
+	} );
+
+	test( 'the checkbox is replaced by a lock naming the manager', async () => {
+		fetchOrders.mockResolvedValue(
+			resultOf( [
+				makeRow( { id: 1, order_number: '1', actions: LOCKED_ACTIONS } ),
+				makeRow( { id: 2, order_number: '2', actions: FREE_ACTIONS } ),
+			] )
+		);
+
+		render( <App /> );
+
+		expect( await screen.findByRole( 'checkbox', { name: 'Выбрать заказ 2' } ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'checkbox', { name: 'Выбрать заказ 1' } ) ).toBeNull();
+
+		const lock = screen.getByRole( 'img', { name: TITLE } );
+		expect( lock ).toHaveAttribute( 'title', TITLE );
+		expect( lock.querySelector( '.dashicons-lock' ) ).not.toBeNull();
+	} );
+
+	test( 'every carrier action of the row is greyed out and does not fire', async () => {
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow( { actions: LOCKED_ACTIONS } ) ] ) );
+
+		render( <App /> );
+
+		const exportButton = await screen.findByRole( 'button', { name: 'Выгрузить' } );
+		expect( exportButton ).toHaveAttribute( 'aria-disabled', 'true' );
+
+		fireEvent.click( exportButton );
+
+		expect( performOrderAction ).not.toHaveBeenCalled();
+	} );
+
+	test( 'select-all leaves a locked row out of the selection', async () => {
+		fetchOrders.mockResolvedValue(
+			resultOf( [
+				makeRow( { id: 1, order_number: '1', actions: LOCKED_ACTIONS } ),
+				makeRow( { id: 2, order_number: '2', actions: FREE_ACTIONS } ),
+			] )
+		);
+		performBulkOrderAction.mockResolvedValue( {
+			action: 'export', requested: 1, eligible: 1, skipped: 0, succeeded: 1, failed: 0, rows: [], messages: {},
+		} );
+
+		render( <App /> );
+
+		await screen.findByRole( 'checkbox', { name: 'Выбрать заказ 2' } );
+		fireEvent.click( screen.getByRole( 'checkbox', { name: 'Выбрать все заказы на странице' } ) );
+		fireEvent.change( screen.getByLabelText( 'Массовые действия' ), { target: { value: 'export' } } );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Применить действие' } ) );
+
+		await waitFor( () => expect( performBulkOrderAction ).toHaveBeenCalledWith( 'export', [ 2 ] ) );
+	} );
+
+	test( 'a row nobody else is editing keeps its checkbox and no lock', async () => {
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow( { actions: FREE_ACTIONS } ) ] ) );
+
+		render( <App /> );
+
+		expect( await screen.findByRole( 'checkbox', { name: 'Выбрать заказ 42' } ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'img', { name: /уже редактируется/ } ) ).toBeNull();
+	} );
+
+	test( 'a click refused with the lock code refetches the list so the row greys at once', async () => {
+		fetchOrders.mockResolvedValueOnce( resultOf( [ makeRow( { actions: FREE_ACTIONS } ) ] ) );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow( { actions: LOCKED_ACTIONS } ) ] ) );
+		performOrderAction.mockRejectedValue( { code: 'woodev_shipping_order_locked', message: TITLE } );
+
+		render( <App /> );
+
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Выгрузить' } ) );
+
+		await waitFor( () => expect( fetchOrders ).toHaveBeenCalledTimes( 2 ) );
+		expect( screen.getAllByText( TITLE ).length ).toBeGreaterThan( 0 );
+		await waitFor( () =>
+			expect( screen.getByRole( 'button', { name: 'Выгрузить' } ) ).toHaveAttribute( 'aria-disabled', 'true' )
+		);
+	} );
+
+	test( 'a refusal with any other code does not refetch the list', async () => {
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow( { actions: FREE_ACTIONS } ) ] ) );
+		performOrderAction.mockRejectedValue( { code: 'woodev_shipping_action_refused', message: 'Нельзя.' } );
+
+		render( <App /> );
+
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Выгрузить' } ) );
+
+		await waitFor( () => expect( screen.getAllByText( 'Нельзя.' ).length ).toBeGreaterThan( 0 ) );
+		expect( fetchOrders ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	test( 'the bulk warning about skipped locked orders renders as its own notice', async () => {
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow( { actions: FREE_ACTIONS } ) ] ) );
+		performBulkOrderAction.mockResolvedValue( {
+			action: 'export',
+			requested: 2,
+			eligible: 1,
+			skipped: 1,
+			succeeded: 1,
+			failed: 0,
+			rows: [],
+			locked: [ { id: 7, message: TITLE } ],
+			messages: {
+				success: 'Экспортировано 1 из 1',
+				warning: 'Заказов пропущено, потому что их сейчас редактируют другие пользователи: 1',
+			},
+		} );
+
+		render( <App /> );
+
+		fireEvent.click( await screen.findByRole( 'checkbox', { name: 'Выбрать заказ 42' } ) );
+		fireEvent.change( screen.getByLabelText( 'Массовые действия' ), { target: { value: 'export' } } );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Применить действие' } ) );
+
+		await waitFor( () =>
+			expect(
+				screen.getAllByText( 'Заказов пропущено, потому что их сейчас редактируют другие пользователи: 1' ).length
+			).toBeGreaterThan( 0 )
+		);
+		expect( screen.getAllByText( 'Экспортировано 1 из 1' ).length ).toBeGreaterThan( 0 );
+	} );
+} );

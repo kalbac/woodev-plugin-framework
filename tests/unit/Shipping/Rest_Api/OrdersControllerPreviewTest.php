@@ -29,6 +29,9 @@ if ( ! class_exists( '\\WP_REST_Controller' ) ) {
 
 require_once dirname( __DIR__, 4 ) . '/woodev/compatibility/class-plugin-compatibility.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/compatibility/class-order-compatibility.php';
+// #1000: `Order_Actions::for_order()` reads the order's edit lock, so the lock's doubles must be loaded.
+require_once dirname( __DIR__ ) . '/Admin/order-edit-lock-fixtures.php';
+require_once dirname( __DIR__ ) . '/Admin/order-edit-lock-cpt-fixtures.php';
 
 /**
  * @covers \Woodev\Framework\Shipping\Rest_Api\Orders_Controller::get_preview

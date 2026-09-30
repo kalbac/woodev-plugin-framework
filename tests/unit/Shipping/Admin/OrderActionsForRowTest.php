@@ -55,6 +55,7 @@ final class OrderActionsForRowTest extends TestCase {
 	}
 
 	protected function tearDown(): void {
+		\Automattic\WooCommerce\Internal\Admin\Orders\EditLock::$locks = [];
 		Orders_Registry::instance()->reset_for_tests();
 
 		parent::tearDown();
@@ -205,5 +206,97 @@ final class OrderActionsForRowTest extends TestCase {
 
 		$this->assertNotContains( Order_Actions::EDIT, array_column( $this->actions()->for_order( $order, $this->provider() ), 'action' ) );
 		$this->assertFalse( $this->actions()->is_offered( $order, $this->provider(), Order_Actions::EDIT ), 'the action / bulk routes refuse it like any unknown id' );
+	}
+
+	// ----- #1000: an order another manager holds the edit lock on -----
+
+	private function lock_order_for_another_manager( int $order_id = 123, int $user_id = 7, string $name = 'Мария' ): void {
+		\Automattic\WooCommerce\Internal\Admin\Orders\EditLock::$locks[ $order_id ] = [ 'time' => time(), 'user_id' => $user_id ];
+
+		$user               = new \stdClass();
+		$user->ID           = $user_id;
+		$user->display_name = $name;
+		Functions\when( 'get_user_by' )->justReturn( $user );
+	}
+
+	public function test_a_locked_order_offers_no_executable_action_and_the_gate_refuses_each_of_them(): void {
+		$this->register_handler();
+		$this->lock_order_for_another_manager();
+
+		$order = $this->order();
+
+		$this->assertSame( [], $this->actions()->for_order( $order, $this->provider() ) );
+		$this->assertFalse( $this->actions()->is_offered( $order, $this->provider(), Order_Actions::EXPORT ) );
+	}
+
+	public function test_a_locked_exported_order_refuses_update_and_cancel_too(): void {
+		$this->register_handler();
+		$this->meta['_cdek_carrier_order_id'] = 'CARRIER-1';
+		$this->lock_order_for_another_manager();
+
+		$order = $this->order();
+
+		$this->assertFalse( $this->actions()->is_offered( $order, $this->provider(), Order_Actions::UPDATE ) );
+		$this->assertFalse( $this->actions()->is_offered( $order, $this->provider(), Order_Actions::CANCEL ) );
+	}
+
+	public function test_the_refusal_reason_names_the_manager_holding_the_lock(): void {
+		$this->register_handler();
+		$this->lock_order_for_another_manager();
+
+		$this->assertSame(
+			'This order is already being edited by Мария',
+			$this->actions()->unavailable_reason( $this->order(), $this->provider(), Order_Actions::EXPORT )
+		);
+	}
+
+	public function test_the_row_keeps_the_locked_orders_actions_but_disables_every_one_of_them(): void {
+		$this->register_handler();
+		$this->lock_order_for_another_manager();
+
+		$actions = $this->actions()->for_row( $this->order(), $this->provider() );
+
+		$this->assertSame( [ Order_Actions::EDIT, Order_Actions::EXPORT ], array_column( $actions, 'action' ) );
+
+		foreach ( $actions as $action ) {
+			$this->assertTrue( $action['disabled'], $action['action'] );
+			$this->assertSame( 'Мария', $action['lock_owner'], $action['action'] );
+			$this->assertSame( 'This order is already being edited by Мария', $action['title'], $action['action'] );
+		}
+	}
+
+	public function test_a_locked_row_without_a_handler_disables_the_edit_action_alone(): void {
+		$this->lock_order_for_another_manager();
+
+		$actions = $this->actions()->for_row( $this->order(), $this->provider() );
+
+		$this->assertSame( [ Order_Actions::EDIT ], array_column( $actions, 'action' ) );
+		$this->assertTrue( $actions[0]['disabled'] );
+	}
+
+	public function test_a_locked_exported_row_disables_update_and_cancel(): void {
+		$this->register_handler();
+		$this->meta['_cdek_carrier_order_id'] = 'CARRIER-1';
+		$this->lock_order_for_another_manager();
+
+		$actions = $this->actions()->for_row( $this->order(), $this->provider() );
+
+		$this->assertSame( [ Order_Actions::UPDATE, Order_Actions::CANCEL ], array_column( $actions, 'action' ) );
+		$this->assertSame( [ true, true ], array_column( $actions, 'disabled' ) );
+	}
+
+	public function test_an_order_nobody_else_has_locked_stays_fully_usable(): void {
+		$this->register_handler();
+
+		$order   = $this->order();
+		$actions = $this->actions()->for_row( $order, $this->provider() );
+
+		$this->assertSame( [ Order_Actions::EXPORT ], array_column( $this->actions()->for_order( $order, $this->provider() ), 'action' ) );
+		$this->assertSame( [ Order_Actions::EDIT, Order_Actions::EXPORT ], array_column( $actions, 'action' ) );
+
+		foreach ( $actions as $action ) {
+			$this->assertArrayNotHasKey( 'disabled', $action, $action['action'] );
+			$this->assertArrayNotHasKey( 'lock_owner', $action, $action['action'] );
+		}
 	}
 }

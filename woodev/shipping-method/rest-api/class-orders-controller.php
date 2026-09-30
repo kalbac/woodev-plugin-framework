@@ -760,6 +760,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 				);
 			}
 
+			// #1000: an order another manager is editing in the wizard is refused BEFORE the gate, with
+			// the lock's own code and status — the same 409 the wizard's routes answer — so the client
+			// can tell «someone is editing it» from «this action does not apply».
+			$locked_reason = Order_Actions::edit_locked_reason( $order );
+
+			if ( '' !== $locked_reason ) {
+				return new \WP_Error( 'woodev_shipping_order_locked', $locked_reason, [ 'status' => 409 ] );
+			}
+
 			$available = array_column( $this->order_actions->for_order( $order, $provider ), 'action' );
 
 			if ( ! in_array( $action, $available, true ) ) {
@@ -852,6 +861,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 			$failed    = 0;
 			$rows      = [];
 			$failures  = [];
+			$locked    = [];
 
 			foreach ( $ids as $id ) {
 				$order = wc_get_order( absint( $id ) );
@@ -863,6 +873,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 				$provider = $this->resolve_matched_provider( $order );
 
 				if ( null === $provider ) {
+					continue;
+				}
+
+				// #1000: an order another manager is editing is skipped WITH its reason, the rest of
+				// the batch goes on — `locked` carries who holds it, `skipped` counts it as it counts
+				// every other order the action did not touch. Only an order the action would otherwise
+				// apply to is reported: the lock is not the reason a carrier-less order is skipped.
+				$locked_reason = Order_Actions::edit_locked_reason( $order );
+
+				if ( '' !== $locked_reason ) {
+					if ( Order_Actions::EDIT !== $action && in_array( $action, array_column( $this->order_actions->for_row( $order, $provider ), 'action' ), true ) ) {
+						$locked[] = [
+							'id'      => $order->get_id(),
+							'message' => $locked_reason,
+						];
+					}
+
 					continue;
 				}
 
@@ -916,7 +943,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 					'failed'    => $failed,
 					'rows'      => $rows,
 					'failures'  => $failures,
-					'messages'  => self::build_bulk_messages( $action, $eligible, $succeeded, $failed ),
+					'locked'    => $locked,
+					'messages'  => self::build_bulk_messages( $action, $eligible, $succeeded, $failed, count( $locked ) ),
 				]
 			);
 		}
@@ -930,19 +958,36 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 		 * is honest but tells the merchant nothing about why; a single explanatory message is
 		 * returned instead.
 		 *
+		 * `warning` (#1000) is present only when orders were skipped because another manager is
+		 * editing them: not a failure, so not in `error`, and not «doesn't support the action», so
+		 * when the lock is the ONLY reason nothing was attempted it replaces that sentence.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @param string $action    the requested action id.
 		 * @param int    $eligible  orders that were actually attempted.
 		 * @param int    $succeeded of those, how many succeeded.
 		 * @param int    $failed    of those, how many failed.
-		 * @return array{success?:string,error?:string}
+		 * @param int    $locked    orders skipped because another manager holds their edit lock.
+		 * @return array{success?:string,error?:string,warning?:string}
 		 */
-		private static function build_bulk_messages( string $action, int $eligible, int $succeeded, int $failed ): array {
+		private static function build_bulk_messages( string $action, int $eligible, int $succeeded, int $failed, int $locked = 0 ): array {
+			$warning = $locked > 0
+				? [
+					'warning' => sprintf(
+						/* translators: %d: number of orders skipped because another manager is editing them. */
+						__( 'Заказов пропущено, потому что их сейчас редактируют другие пользователи: %d', 'woodev-plugin-framework' ),
+						$locked
+					),
+				]
+				: [];
+
 			if ( 0 === $eligible ) {
-				return [
-					'error' => __( 'Ни один из выбранных заказов не поддерживает это действие.', 'woodev-plugin-framework' ),
-				];
+				return $locked > 0
+					? $warning
+					: [
+						'error' => __( 'Ни один из выбранных заказов не поддерживает это действие.', 'woodev-plugin-framework' ),
+					];
 			}
 
 			$messages = [];
@@ -954,6 +999,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 			if ( $failed > 0 ) {
 				$messages['error'] = self::bulk_failure_message( $action, $failed, $eligible );
 			}
+
+			$messages += $warning;
 
 			return $messages;
 		}

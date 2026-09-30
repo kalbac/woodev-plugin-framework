@@ -1941,7 +1941,7 @@ msgid "Заказ сейчас сохраняется в другом окне �
 msgstr ""
 
 #. translators: %s: display name of the manager currently editing the order.
-#: shipping-method/admin/orders/class-order-actions.php:251
+#: shipping-method/admin/orders/class-order-actions.php:477
 #: shipping-method/admin/orders/class-order-editor.php:429
 msgid "This order is already being edited by %s"
 msgstr ""
@@ -4080,7 +4080,13 @@ msgstr ""
 msgid "За один раз можно обработать не более %d заказов."
 msgstr ""
 
-#: shipping-method/rest-api/class-orders-controller.php:922
+#. translators: %d: number of orders skipped because another manager is editing them.
+#: shipping-method/rest-api/class-orders-controller.php:979
+#, php-format
+msgid "Заказов пропущено, потому что их сейчас редактируют другие пользователи: %d"
+msgstr ""
+
+#: shipping-method/rest-api/class-orders-controller.php:989
 msgid "Ни один из выбранных заказов не поддерживает это действие."
 msgstr ""
 
