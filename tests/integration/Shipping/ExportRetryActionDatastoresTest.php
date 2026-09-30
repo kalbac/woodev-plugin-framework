@@ -129,6 +129,87 @@ namespace Woodev\Tests\Integration\Shipping {
 			);
 		}
 
+
+		/**
+		 * The seconds from now an action is scheduled for.
+		 *
+		 * @param int $action_id the Action Scheduler action.
+		 * @return int
+		 */
+		private function scheduled_in( int $action_id ): int {
+			return \ActionScheduler::store()->get_date( $action_id )->getTimestamp() - time();
+		}
+
+		/**
+		 * The one attempt waiting for an order, asserted to be the only one.
+		 *
+		 * @param int $order_id the order.
+		 * @return int the action id.
+		 */
+		private function the_pending_attempt( int $order_id ): int {
+			$pending = $this->actions_of( $order_id );
+
+			$this->assertCount( 1, $pending, 'exactly one attempt waits for the order' );
+
+			return (int) $pending[0];
+		}
+
+		/**
+		 * Carries an action out through the real queue runner — it is `in-progress` while it runs.
+		 *
+		 * @param int $action_id the action.
+		 * @return void
+		 */
+		private function run_action( int $action_id ): void {
+			\ActionScheduler::runner()->process_action( $action_id, 'Woodev export retry test' );
+		}
+
+		/**
+		 * The native edit lock of another manager, written for the selected datastore.
+		 *
+		 * @param \WC_Order $order the order.
+		 * @param bool      $hpos  active datastore.
+		 * @return void
+		 */
+		private function lock_for_another_manager( \WC_Order $order, bool $hpos ): void {
+			$manager = self::factory()->user->create( [ 'role' => 'shop_manager' ] );
+
+			if ( ! $hpos ) {
+				update_post_meta( $order->get_id(), '_edit_lock', time() . ':' . $manager );
+
+				return;
+			}
+
+			$fresh = $this->reread( $order );
+			$fresh->update_meta_data( '_edit_lock', time() . ':' . $manager );
+			$fresh->save_meta_data();
+		}
+
+		/**
+		 * @param \WC_Order $order the order.
+		 * @param bool      $hpos  active datastore.
+		 * @return void
+		 */
+		private function release_edit_lock( \WC_Order $order, bool $hpos ): void {
+			if ( ! $hpos ) {
+				delete_post_meta( $order->get_id(), '_edit_lock' );
+
+				return;
+			}
+
+			$fresh = $this->reread( $order );
+			$fresh->delete_meta_data( '_edit_lock' );
+			$fresh->save_meta_data();
+		}
+
+		/**
+		 * @param \WC_Order $order the order.
+		 * @return string[] the contents of the order's notes.
+		 */
+		private function note_texts( \WC_Order $order ): array {
+			return array_map( static fn( $note ) => $note->content, wc_get_order_notes( [ 'order_id' => $order->get_id() ] ) );
+		}
+
 		/**
 		 * @dataProvider datastore_provider
 		 * @param bool $hpos datastore under test.
@@ -230,6 +311,226 @@ namespace Woodev\Tests\Integration\Shipping {
 			foreach ( $notes as $note ) {
 				$this->assertFalse( (bool) $note->customer_note, 'the note is private: the buyer never sees the carrier\'s text' );
 			}
+		}
+
+		/**
+		 * The defect of round 1: the «already scheduled?» guard saw the action that was RUNNING, so the
+		 * chain died after the first automatic retry — two attempts instead of five, no note, a stuck counter.
+		 *
+		 * @dataProvider datastore_provider
+		 * @param bool $hpos datastore under test.
+		 * @return void
+		 */
+		public function test_an_attempt_that_fails_inside_the_queue_runner_queues_the_next_one( bool $hpos ): void {
+			$this->use_datastore( $hpos );
+			$order = $this->new_order();
+
+			$this->api->fail_with = new \Woodev_API_Rate_Limit_Exception( 'Too Many Requests', 429, null, 60 );
+			$this->handler->export( $order );
+
+			$second = $this->the_pending_attempt( $order->get_id() );
+
+			// The carrier is still throttling when attempt 2 runs — inside the real runner.
+			$this->api->fail_with = new \Woodev_API_Rate_Limit_Exception( 'Too Many Requests' );
+			$this->run_action( $second );
+
+			$this->assertSame( 2, $this->api->create_calls );
+			$this->assertSame( [ $second ], array_map( 'intval', $this->actions_of( $order->get_id(), \ActionScheduler_Store::STATUS_COMPLETE ) ) );
+
+			$third = $this->the_pending_attempt( $order->get_id() );
+			$this->assertNotSame( $second, $third );
+			$this->assertEqualsWithDelta( 300, $this->scheduled_in( $third ), 5, 'attempt 3 waits five minutes' );
+			$this->assertSame( 2, (int) $this->reread( $order )->get_meta( Export_Retry::ATTEMPTS_META ) );
+		}
+
+		/**
+		 * @dataProvider datastore_provider
+		 * @param bool $hpos datastore under test.
+		 * @return void
+		 */
+		public function test_a_chain_that_keeps_failing_makes_exactly_five_attempts_then_stops_with_a_note( bool $hpos ): void {
+			$this->use_datastore( $hpos );
+			$order = $this->new_order();
+
+			$this->api->fail_with = new \Woodev_API_Rate_Limit_Exception( 'Too Many Requests' );
+			$this->handler->export( $order );
+
+			// Failures 1..4 each queue the next attempt, after 1 min, 5 min, 30 min, 2 h.
+			foreach ( [ 60, 300, 1800, 7200 ] as $index => $wait ) {
+				$attempt = $this->the_pending_attempt( $order->get_id() );
+
+				$this->assertEqualsWithDelta( $wait, $this->scheduled_in( $attempt ), 5, 'wait before attempt ' . ( $index + 2 ) );
+				$this->assertSame( $index + 1, (int) $this->reread( $order )->get_meta( Export_Retry::ATTEMPTS_META ) );
+
+				$this->run_action( $attempt );
+			}
+
+			$this->assertSame( 5, $this->api->create_calls, 'the first export plus four retries — five attempts in all' );
+			$this->assertSame( [], $this->actions_of( $order->get_id() ), 'no sixth attempt' );
+
+			$fresh = $this->reread( $order );
+			$this->assertSame( '', (string) $fresh->get_meta( Export_Retry::ATTEMPTS_META ), 'the counter is cleared' );
+			$this->assertSame( '', (string) $fresh->get_meta( Export_Retry::DEFERRALS_META ) );
+			$this->assertSame(
+				1,
+				count( array_keys( $this->note_texts( $order ), 'Не удалось выгрузить заказ перевозчику за 5 попыток: Too Many Requests', true ) ),
+				'one note, written once'
+			);
+		}
+
+		/**
+		 * @dataProvider datastore_provider
+		 * @param bool $hpos datastore under test.
+		 * @return void
+		 */
+		public function test_a_due_attempt_under_an_edit_lock_is_put_back_uncounted_and_exports_once_the_lock_lets_go( bool $hpos ): void {
+			$this->use_datastore( $hpos );
+			$order = $this->new_order();
+
+			$this->api->fail_with = new \Woodev_API_Rate_Limit_Exception( 'Too Many Requests', 429, null, 60 );
+			$this->handler->export( $order );
+
+			$this->lock_for_another_manager( $order, $hpos );
+
+			$first = $this->the_pending_attempt( $order->get_id() );
+			$this->run_action( $first );
+
+			$this->assertSame( 1, $this->api->create_calls, 'the carrier is not called under a lock' );
+
+			$again = $this->the_pending_attempt( $order->get_id() );
+			$this->assertNotSame( $first, $again );
+			$this->assertEqualsWithDelta( 300, $this->scheduled_in( $again ), 5, 'back in five minutes' );
+
+			$fresh = $this->reread( $order );
+			$this->assertSame( 1, (int) $fresh->get_meta( Export_Retry::ATTEMPTS_META ), 'a lock is not an attempt' );
+			$this->assertSame( 1, (int) $fresh->get_meta( Export_Retry::DEFERRALS_META ) );
+
+			// The lock goes away; the attempt that comes back exports, and both counters clear.
+			$this->release_edit_lock( $order, $hpos );
+			$this->api->fail_with = null;
+			$this->run_action( $again );
+
+			$this->assertSame( 2, $this->api->create_calls );
+			$this->assertSame( [], $this->actions_of( $order->get_id() ) );
+
+			$done = $this->reread( $order );
+			$this->assertSame( 'CARRIER-' . $order->get_id(), $done->get_meta( self::CARRIER_ID_META ) );
+			$this->assertSame( '', (string) $done->get_meta( Export_Retry::ATTEMPTS_META ) );
+			$this->assertSame( '', (string) $done->get_meta( Export_Retry::DEFERRALS_META ) );
+		}
+
+		/**
+		 * @dataProvider datastore_provider
+		 * @param bool $hpos datastore under test.
+		 * @return void
+		 */
+		public function test_a_due_attempt_that_meets_the_export_lock_is_put_back_uncounted( bool $hpos ): void {
+			$this->use_datastore( $hpos );
+			$order = $this->new_order();
+
+			$this->api->fail_with = new \Woodev_API_Rate_Limit_Exception( 'Too Many Requests', 429, null, 60 );
+			$this->handler->export( $order );
+
+			$this->handler->lock_free = false; // a concurrent click holds the per-order export lock.
+			$this->run_action( $this->the_pending_attempt( $order->get_id() ) );
+
+			$this->assertSame( 1, $this->api->create_calls );
+			$again = $this->the_pending_attempt( $order->get_id() );
+			$this->assertEqualsWithDelta( 300, $this->scheduled_in( $again ), 5 );
+
+			$fresh = $this->reread( $order );
+			$this->assertSame( 1, (int) $fresh->get_meta( Export_Retry::ATTEMPTS_META ) );
+			$this->assertSame( 1, (int) $fresh->get_meta( Export_Retry::DEFERRALS_META ) );
+
+			$this->handler->lock_free = true;
+			$this->api->fail_with     = null;
+			$this->run_action( $again );
+
+			$this->assertSame( 2, $this->api->create_calls );
+			$this->assertSame( [], $this->actions_of( $order->get_id() ) );
+		}
+
+		/**
+		 * @dataProvider datastore_provider
+		 * @param bool $hpos datastore under test.
+		 * @return void
+		 */
+		public function test_a_lock_that_never_lets_go_is_put_back_at_most_24_times_then_counts_as_a_failed_attempt( bool $hpos ): void {
+			$this->use_datastore( $hpos );
+			$order = $this->new_order();
+
+			$this->api->fail_with = new \Woodev_API_Rate_Limit_Exception( 'Too Many Requests', 429, null, 60 );
+			$this->handler->export( $order );
+
+			$this->lock_for_another_manager( $order, $hpos );
+
+			for ( $round = 1; $round <= Export_Retry::MAX_DEFERRALS; $round++ ) {
+				$this->run_action( $this->the_pending_attempt( $order->get_id() ) );
+
+				$fresh = $this->reread( $order );
+				$this->assertSame( $round, (int) $fresh->get_meta( Export_Retry::DEFERRALS_META ), "deferral $round" );
+				$this->assertSame( 1, (int) $fresh->get_meta( Export_Retry::ATTEMPTS_META ), 'still one failed attempt' );
+			}
+
+			$this->assertSame( 1, $this->api->create_calls, 'the carrier was never called under the lock' );
+
+			// The 25th time the order is still locked: it is booked as a failed attempt.
+			$this->run_action( $this->the_pending_attempt( $order->get_id() ) );
+
+			$this->assertSame( 2, (int) $this->reread( $order )->get_meta( Export_Retry::ATTEMPTS_META ) );
+			$this->assertEqualsWithDelta( 300, $this->scheduled_in( $this->the_pending_attempt( $order->get_id() ) ), 5 );
+		}
+
+		/**
+		 * @dataProvider datastore_provider
+		 * @param bool $hpos datastore under test.
+		 * @return void
+		 */
+		public function test_a_manual_failure_while_an_attempt_waits_leaves_one_pending_action_and_a_true_count( bool $hpos ): void {
+			$this->use_datastore( $hpos );
+			$order = $this->new_order();
+
+			$this->api->fail_with = new \Woodev_API_Rate_Limit_Exception( 'Too Many Requests', 429, null, 3600 );
+			$this->handler->export( $order );
+			$this->assertEqualsWithDelta( 3600, $this->scheduled_in( $this->the_pending_attempt( $order->get_id() ) ), 5 );
+
+			// The merchant clicks «Выгрузить» while the hour-long wait is queued; the carrier times out.
+			$this->handler->reconcile = true;
+			$this->api->fail_with     = new \Woodev_API_Transport_Exception( 'cURL error 28: Operation timed out' );
+			$this->handler->export( $this->reread( $order ) );
+
+			$pending = $this->the_pending_attempt( $order->get_id() );
+			$this->assertEqualsWithDelta( 300, $this->scheduled_in( $pending ), 5, 'the newer failure sets the time, not the older one' );
+			$this->assertSame( 2, (int) $this->reread( $order )->get_meta( Export_Retry::ATTEMPTS_META ), 'the carrier was called twice' );
+		}
+
+		/**
+		 * @dataProvider datastore_provider
+		 * @param bool $hpos datastore under test.
+		 * @return void
+		 */
+		public function test_a_due_attempt_whose_carrier_is_gone_ends_the_chain_with_a_note( bool $hpos ): void {
+			$this->use_datastore( $hpos );
+			$order = $this->new_order();
+
+			$this->api->fail_with = new \Woodev_API_Rate_Limit_Exception( 'Too Many Requests', 429, null, 60 );
+			$this->handler->export( $order );
+			$attempt = $this->the_pending_attempt( $order->get_id() );
+
+			// The carrier's plugin is deactivated: the provider is still resolvable from the marker, the handler is not.
+			$registry = Orders_Registry::instance();
+			$registry->reset_for_tests();
+			$registry->register_provider(
+				Orders_Provider::create( self::PROVIDER_ID, 'Retry carrier', self::MARKER_META, [ self::PROVIDER_ID ], [ 'carrier_order_id_meta_key' => self::CARRIER_ID_META ] )
+			);
+
+			$this->api->fail_with = null;
+			$this->run_action( $attempt );
+
+			$this->assertSame( 1, $this->api->create_calls, 'nobody exported' );
+			$this->assertSame( [], $this->actions_of( $order->get_id() ) );
+			$this->assertSame( '', (string) $this->reread( $order )->get_meta( Export_Retry::ATTEMPTS_META ), 'the counter is cleared' );
+			$this->assertContains( 'Повтор выгрузки не выполнен: перевозчик не найден (плагин отключён?)', $this->note_texts( $order ) );
 		}
 
 		/**
@@ -366,6 +667,14 @@ namespace {
 
 			/** @var string|null what find_exported_order() answers */
 			public $found;
+
+			/** @var bool false => the per-order export lock is held by someone else, so export() answers «busy» */
+			public bool $lock_free = true;
+
+			/** @inheritDoc */
+			protected function acquire_export_lock( int $order_id ): bool {
+				return $this->lock_free && parent::acquire_export_lock( $order_id );
+			}
 
 			/** @inheritDoc */
 			protected function extract_carrier_order_id( \Woodev_API_Response $response ): string {

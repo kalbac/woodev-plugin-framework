@@ -2163,6 +2163,10 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * The timeout of the request about to be sent: {@see self::get_request_timeout()} for the
 		 * current purpose, passed through the `woodev_{api_id}_request_timeout` filter.
 		 *
+		 * Purpose scopes nest ({@see Woodev_API_Request_Purpose::run()}), and an inner scope can never
+		 * LENGTHEN the wait of the one around it: the timeout is the shortest of the running scopes'.
+		 * A reference lookup a carrier makes inside a checkout rate call stays at the rate timeout.
+		 *
 		 * A filter that returns something that is not a positive number falls back to the method's
 		 * own value — a zero or negative timeout would make WordPress fail every call at once.
 		 *
@@ -2173,7 +2177,10 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		private function resolve_request_timeout(): int {
 
 			$purpose = $this->get_request_purpose();
-			$timeout = $this->get_request_timeout( $purpose );
+
+			// Scopes nest, and an inner one never lengthens the wait of the one around it: the shortest timeout wins.
+			$purposes = array_values( array_unique( array_merge( Woodev_API_Request_Purpose::active(), [ $purpose ] ) ) );
+			$timeout  = min( array_map( [ $this, 'get_request_timeout' ], $purposes ) );
 
 			/**
 			 * Filters the HTTP timeout of an API request.
@@ -2182,8 +2189,8 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 			 *
 			 * @since 2.0.2
 			 *
-			 * @param int               $timeout seconds
-			 * @param string            $purpose `rates`, `reference`, `export` or `default`
+			 * @param int               $timeout seconds — the shortest timeout of the running purpose scopes
+			 * @param string            $purpose `rates`, `reference`, `export` or `default` — the innermost one
 			 * @param Woodev_API_Base   $api     the API about to send the request
 			 */
 			$filtered = apply_filters( 'woodev_' . $this->get_api_id() . '_request_timeout', $timeout, $purpose, $this );

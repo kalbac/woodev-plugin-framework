@@ -229,7 +229,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 			$order_id = $order->get_id();
 
 			if ( ! $this->acquire_export_lock( $order_id ) ) {
-				return Action_Result::failure( __( 'Этот заказ уже выгружается — дождитесь окончания.', 'woodev-plugin-framework' ) );
+				return Action_Result::busy( __( 'Этот заказ уже выгружается — дождитесь окончания.', 'woodev-plugin-framework' ) );
 			}
 
 			try {

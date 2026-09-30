@@ -221,6 +221,79 @@ final class ApiBaseRequestTimeoutTest extends TestCase {
 		$this->assertSame( \Woodev_API_Request_Purpose::DEFAULT_PURPOSE, \Woodev_API_Request_Purpose::current() );
 	}
 
+	/** @return array<string, array{0: string, 1: string, 2: int}> outer purpose, inner purpose, the timeout the call gets */
+	public function nested_provider(): array {
+		return [
+			'reference inside rates stays at the rate timeout'   => [ \Woodev_API_Request_Purpose::RATES, \Woodev_API_Request_Purpose::REFERENCE, 8 ],
+			'export inside rates stays at the rate timeout'      => [ \Woodev_API_Request_Purpose::RATES, \Woodev_API_Request_Purpose::EXPORT, 8 ],
+			'default inside rates stays at the rate timeout'     => [ \Woodev_API_Request_Purpose::RATES, \Woodev_API_Request_Purpose::DEFAULT_PURPOSE, 8 ],
+			'rates inside reference may shorten it'              => [ \Woodev_API_Request_Purpose::REFERENCE, \Woodev_API_Request_Purpose::RATES, 8 ],
+			'reference inside export may shorten it'             => [ \Woodev_API_Request_Purpose::EXPORT, \Woodev_API_Request_Purpose::REFERENCE, 20 ],
+			'export inside reference stays at the reference one' => [ \Woodev_API_Request_Purpose::REFERENCE, \Woodev_API_Request_Purpose::EXPORT, 20 ],
+		];
+	}
+
+	/**
+	 * @dataProvider nested_provider
+	 */
+	public function test_an_inner_scope_never_lengthens_the_outer_one( string $outer, string $inner, int $seconds ): void {
+		$timeout = \Woodev_API_Request_Purpose::run(
+			$outer,
+			fn() => \Woodev_API_Request_Purpose::run( $inner, fn() => $this->timeout_now() )
+		);
+
+		$this->assertSame( $seconds, $timeout );
+	}
+
+	public function test_the_outer_timeout_is_back_once_the_inner_scope_ends(): void {
+		$seen = [];
+
+		\Woodev_API_Request_Purpose::run(
+			\Woodev_API_Request_Purpose::RATES,
+			function () use ( &$seen ) {
+				\Woodev_API_Request_Purpose::run(
+					\Woodev_API_Request_Purpose::REFERENCE,
+					function () use ( &$seen ) {
+						$seen[] = $this->timeout_now();
+					}
+				);
+				$seen[] = $this->timeout_now();
+			}
+		);
+
+		$this->assertSame( [ 8, 8 ], $seen );
+		$this->assertSame( 60, $this->timeout_now(), 'and outside every scope the minute is back' );
+	}
+
+	public function test_nested_scopes_are_all_asked_of_an_api_that_overrides_the_timeout(): void {
+		$api = new Testable_Api_Base_For_Timeout_Test();
+
+		\Woodev_API_Request_Purpose::run(
+			\Woodev_API_Request_Purpose::RATES,
+			fn() => \Woodev_API_Request_Purpose::run( \Woodev_API_Request_Purpose::REFERENCE, fn() => $this->timeout_now( $api ) )
+		);
+
+		$this->assertSame( [ \Woodev_API_Request_Purpose::RATES, \Woodev_API_Request_Purpose::REFERENCE ], $api->asked );
+	}
+
+	public function test_the_filter_is_told_the_innermost_purpose_and_the_shortest_timeout(): void {
+		Functions\when( 'apply_filters' )->alias(
+			function ( $tag, $value = null, ...$rest ) {
+				$this->filter_calls[] = [ $tag, array_merge( [ $value ], $rest ) ];
+
+				return $value;
+			}
+		);
+
+		\Woodev_API_Request_Purpose::run(
+			\Woodev_API_Request_Purpose::RATES,
+			fn() => \Woodev_API_Request_Purpose::run( \Woodev_API_Request_Purpose::REFERENCE, fn() => $this->timeout_now() )
+		);
+
+		$this->assertSame( 8, $this->filter_calls[0][1][0] );
+		$this->assertSame( \Woodev_API_Request_Purpose::REFERENCE, $this->filter_calls[0][1][1] );
+	}
+
 	public function test_run_returns_what_the_callback_returns(): void {
 		$this->assertSame( 'answer', \Woodev_API_Request_Purpose::run( \Woodev_API_Request_Purpose::EXPORT, static fn() => 'answer' ) );
 	}

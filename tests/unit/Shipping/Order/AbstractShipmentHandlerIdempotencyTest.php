@@ -245,7 +245,8 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 		 * @return void
 		 */
 		private function expect_retries( int $times ): void {
-			Functions\when( 'as_has_scheduled_action' )->justReturn( false );
+			Functions\when( 'as_get_scheduled_actions' )->justReturn( [] );
+			Functions\when( 'as_unschedule_all_actions' )->justReturn( null );
 
 			if ( 0 === $times ) {
 				Functions\expect( 'as_schedule_single_action' )->never();

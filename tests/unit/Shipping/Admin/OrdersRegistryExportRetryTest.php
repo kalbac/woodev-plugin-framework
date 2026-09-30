@@ -4,8 +4,9 @@
  *
  * `Orders_Registry::run_export_retry()` finds the order's carrier and handler through the registry
  * that already maps an order to its carrier, then performs the same «export» the order screen does.
- * It never exports — and never reschedules — an order that is gone, belongs to no registered carrier,
- * or no longer offers «export».
+ * It never exports an order that is gone or no longer offers «export», and ends the chain for those;
+ * for an order of a carrier that is not registered it says so in a note. A BUSY order (a native edit lock,
+ * or the export lock of a concurrent click) is put back in the queue without counting an attempt.
  *
  * @package Woodev\Tests\Unit\Shipping\Admin
  */
@@ -82,14 +83,20 @@ final class OrdersRegistryExportRetryTest extends TestCase {
 	 * @param int    $attempts   the export attempts the order's counter holds.
 	 * @return \WC_Order
 	 */
-	private function order( string $status = 'pending', int $attempts = 0 ) {
+	private function order( string $status = 'pending', int $attempts = 0, int $deferrals = 0 ) {
 		$this->meta['_cdek_marker'] = '1';
 
 		$order = Mockery::mock( '\WC_Order' );
 		$order->shouldReceive( 'get_id' )->andReturn( 123 );
 		$order->shouldReceive( 'get_status' )->andReturn( $status );
 		$order->shouldReceive( 'get_meta' )->andReturnUsing(
-			static fn( $key ) => Export_Retry::ATTEMPTS_META === $key ? $attempts : ''
+			static function ( $key ) use ( $attempts, $deferrals ) {
+				if ( Export_Retry::ATTEMPTS_META === $key ) {
+					return $attempts;
+				}
+
+				return Export_Retry::DEFERRALS_META === $key ? $deferrals : '';
+			}
 		);
 
 		Functions\when( 'wc_get_order' )->justReturn( $order );
@@ -129,12 +136,17 @@ final class OrdersRegistryExportRetryTest extends TestCase {
 		$this->addToAssertionCount( 1 );
 	}
 
-	public function test_an_order_of_no_registered_carrier_is_left_alone(): void {
+	public function test_an_order_of_no_registered_carrier_ends_the_chain_with_a_note(): void {
 		$handler = $this->register_handler(); // a handler, but no provider claims the order.
 		$handler->shouldNotReceive( 'export' );
 
 		$order = Mockery::mock( '\WC_Order' );
 		$order->shouldReceive( 'get_id' )->andReturn( 123 );
+		$order->shouldReceive( 'get_meta' )->with( Export_Retry::ATTEMPTS_META )->andReturn( 2 );
+		$order->shouldReceive( 'get_meta' )->with( Export_Retry::DEFERRALS_META )->andReturn( '' );
+		$order->shouldReceive( 'delete_meta_data' )->once()->with( Export_Retry::ATTEMPTS_META );
+		$order->shouldReceive( 'save_meta_data' )->once();
+		$order->shouldReceive( 'add_order_note' )->once()->with( 'Повтор выгрузки не выполнен: перевозчик не найден (плагин отключён?)' );
 		Functions\when( 'wc_get_order' )->justReturn( $order );
 
 		Orders_Registry::instance()->run_export_retry( 123 );
@@ -142,13 +154,17 @@ final class OrdersRegistryExportRetryTest extends TestCase {
 		$this->addToAssertionCount( 1 );
 	}
 
-	public function test_a_carrier_without_a_handler_is_left_alone(): void {
+	public function test_a_carrier_without_a_handler_ends_the_chain_with_a_note(): void {
 		$this->register_provider();
-		$this->order();
+		$order = $this->order( 'pending', 3 );
+
+		$order->shouldReceive( 'delete_meta_data' )->once()->with( Export_Retry::ATTEMPTS_META );
+		$order->shouldReceive( 'save_meta_data' )->once();
+		$order->shouldReceive( 'add_order_note' )->once()->with( 'Повтор выгрузки не выполнен: перевозчик не найден (плагин отключён?)' );
 
 		Orders_Registry::instance()->run_export_retry( 123 );
 
-		$this->addToAssertionCount( 1 ); // nothing to call, nothing thrown.
+		$this->addToAssertionCount( 1 );
 	}
 
 	public function test_an_order_exported_in_the_meantime_is_not_exported_again_and_its_counter_is_cleared(): void {
@@ -173,6 +189,109 @@ final class OrdersRegistryExportRetryTest extends TestCase {
 		$handler->shouldNotReceive( 'export' );
 
 		$order = $this->order( 'cancelled', 3 );
+
+		$order->shouldReceive( 'delete_meta_data' )->once()->with( Export_Retry::ATTEMPTS_META );
+		$order->shouldReceive( 'save_meta_data' )->once();
+
+		Orders_Registry::instance()->run_export_retry( 123 );
+
+		$this->addToAssertionCount( 1 );
+	}
+
+	// ----- a busy order is put back, uncounted -----
+
+	/** A queue double: the pending attempts `as_get_scheduled_actions()` reports, and every action scheduled. */
+	private function stub_queue( array &$scheduled ): void {
+		Functions\when( 'as_get_scheduled_actions' )->justReturn( [] );
+		Functions\when( 'as_unschedule_all_actions' )->justReturn( null );
+		Functions\when( 'as_schedule_single_action' )->alias(
+			static function ( $timestamp, $hook, $args = [], $group = '' ) use ( &$scheduled ) {
+				$scheduled[] = [ $timestamp, $hook, $args, $group ];
+
+				return 500 + count( $scheduled );
+			}
+		);
+	}
+
+	private function lock_order_for_another_manager(): void {
+		\Automattic\WooCommerce\Internal\Admin\Orders\EditLock::$locks[123] = [
+			'time'    => time(),
+			'user_id' => 7,
+		];
+
+		$user               = new \stdClass();
+		$user->ID           = 7;
+		$user->display_name = 'Мария';
+		Functions\when( 'get_user_by' )->justReturn( $user );
+	}
+
+	public function test_a_due_attempt_that_meets_the_edit_lock_is_put_back_without_counting(): void {
+		$this->register_provider();
+		$handler = $this->register_handler();
+		$handler->shouldNotReceive( 'export' );
+
+		$scheduled = [];
+		$this->stub_queue( $scheduled );
+		$this->lock_order_for_another_manager();
+
+		$order = $this->order( 'pending', 2, 3 );
+		$order->shouldReceive( 'update_meta_data' )->once()->with( Export_Retry::DEFERRALS_META, 4 );
+		$order->shouldReceive( 'save_meta_data' )->once();
+		$order->shouldNotReceive( 'delete_meta_data' ); // the chain is NOT over: nothing is cleared.
+
+		$before = time();
+		Orders_Registry::instance()->run_export_retry( 123 );
+
+		$this->assertCount( 1, $scheduled );
+		$this->assertSame( [ Export_Retry::HOOK, [ 123 ], Export_Retry::GROUP ], [ $scheduled[0][1], $scheduled[0][2], $scheduled[0][3] ] );
+		$this->assertEqualsWithDelta( $before + 300, $scheduled[0][0], 3, 'back in five minutes' );
+	}
+
+	public function test_a_due_attempt_that_meets_the_export_lock_is_put_back_without_counting(): void {
+		$this->register_provider();
+		$handler = $this->register_handler();
+		$order   = $this->order( 'pending', 2 );
+
+		$handler->shouldReceive( 'export' )->once()->andReturn( Action_Result::busy( 'Этот заказ уже выгружается' ) );
+
+		$scheduled = [];
+		$this->stub_queue( $scheduled );
+
+		$order->shouldReceive( 'update_meta_data' )->once()->with( Export_Retry::DEFERRALS_META, 1 );
+		$order->shouldReceive( 'save_meta_data' )->once();
+		$order->shouldNotReceive( 'delete_meta_data' );
+
+		Orders_Registry::instance()->run_export_retry( 123 );
+
+		$this->assertCount( 1, $scheduled );
+	}
+
+	public function test_a_carrier_failure_is_not_put_back_by_the_runner(): void {
+		$this->register_provider();
+		$handler = $this->register_handler();
+		$this->order( 'pending', 2 );
+
+		// The handler booked the failure and queued the next attempt itself; the runner adds nothing.
+		$handler->shouldReceive( 'export' )->once()->andReturn( Action_Result::failure( 'Too Many Requests' ) );
+
+		$scheduled = [];
+		$this->stub_queue( $scheduled );
+
+		Orders_Registry::instance()->run_export_retry( 123 );
+
+		$this->assertSame( [], $scheduled );
+	}
+
+	public function test_a_busy_order_that_cannot_be_queued_ends_the_chain(): void {
+		$this->register_provider();
+		$handler = $this->register_handler();
+		$order   = $this->order( 'pending', 2 );
+
+		$handler->shouldReceive( 'export' )->once()->andReturn( Action_Result::busy( 'Этот заказ уже выгружается' ) );
+
+		Functions\when( 'as_get_scheduled_actions' )->justReturn( [] );
+		Functions\when( 'as_unschedule_all_actions' )->justReturn( null );
+		Functions\when( 'as_schedule_single_action' )->justReturn( 0 );
 
 		$order->shouldReceive( 'delete_meta_data' )->once()->with( Export_Retry::ATTEMPTS_META );
 		$order->shouldReceive( 'save_meta_data' )->once();

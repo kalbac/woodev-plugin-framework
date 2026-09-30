@@ -53,8 +53,11 @@ namespace {
 				return null;
 			}
 
+			/** @var bool whether the per-order export lock can be taken */
+			public bool $lock_free = true;
+
 			protected function acquire_export_lock( int $order_id ): bool {
-				return true;
+				return $this->lock_free;
 			}
 
 			protected function release_export_lock( int $order_id ): void {}
@@ -94,8 +97,14 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 		/** @var string[] every order note written, in order */
 		private array $notes = [];
 
-		/** @var array<int, array{timestamp: int, hook: string, args: array, group: string}> every action queued */
+		/** @var array<int, array{timestamp: int, hook: string, args: array, group: string}> every action queued, in order — a log, cancelled ones included */
 		private array $queued = [];
+
+		/** @var array<int, array{hook: string, args: array, group: string}> action id => the actions WAITING in the queue now */
+		private array $pending = [];
+
+		/** @var array<int, array{hook: string, args: array, group: string}> action id => the actions being carried out right now (`in-progress`) */
+		private array $running = [];
 
 		protected function setUp(): void {
 			parent::setUp();
@@ -104,10 +113,45 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$this->carrier_ids = [];
 			$this->notes       = [];
 			$this->queued      = [];
+			$this->pending     = [];
+			$this->running     = [];
 
 			Location_Provider_Registry::instance()->reset_for_tests();
 
-			Functions\when( 'as_has_scheduled_action' )->justReturn( false );
+			// A queue that tells the statuses apart, like Action Scheduler: the status filter is honoured,
+			// so a guard that asks for more than `pending` sees the action that is running.
+			Functions\when( 'as_get_scheduled_actions' )->alias(
+				function ( array $query, string $return = 'objects' ) {
+					$pool = [];
+
+					if ( 'pending' === ( $query['status'] ?? '' ) ) {
+						$pool = $this->pending;
+					} elseif ( 'in-progress' === ( $query['status'] ?? '' ) ) {
+						$pool = $this->running;
+					} else {
+						$pool = $this->pending + $this->running;
+					}
+
+					$ids = [];
+
+					foreach ( $pool as $id => $action ) {
+						if ( ( $query['hook'] ?? $action['hook'] ) === $action['hook'] && ( $query['args'] ?? $action['args'] ) === $action['args'] && ( $query['group'] ?? $action['group'] ) === $action['group'] ) {
+							$ids[] = $id;
+						}
+					}
+
+					return $ids;
+				}
+			);
+			Functions\when( 'as_unschedule_all_actions' )->alias(
+				function ( $hook, $args = [], $group = '' ) {
+					foreach ( $this->pending as $id => $action ) {
+						if ( $hook === $action['hook'] && $args === $action['args'] && $group === $action['group'] ) {
+							unset( $this->pending[ $id ] );
+						}
+					}
+				}
+			);
 			Functions\when( 'as_schedule_single_action' )->alias(
 				function ( $timestamp, $hook, $args = [], $group = '' ) {
 					$this->queued[] = [
@@ -117,7 +161,14 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 						'group'     => $group,
 					];
 
-					return 100 + count( $this->queued );
+					$id                   = 100 + count( $this->queued );
+					$this->pending[ $id ] = [
+						'hook'  => $hook,
+						'args'  => $args,
+						'group' => $group,
+					];
+
+					return $id;
 				}
 			);
 		}
@@ -342,22 +393,153 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 
 		// ----- the queue seam -----
 
-		public function test_an_attempt_already_waiting_for_the_order_is_not_doubled(): void {
-			Functions\when( 'as_has_scheduled_action' )->alias(
-				function ( $hook, $args, $group ) {
-					return Export_Retry::HOOK === $hook && [ 55 ] === $args && Export_Retry::GROUP === $group;
-				}
-			);
+		public function test_enqueue_does_not_double_an_attempt_already_waiting_for_the_order(): void {
+			$this->assertTrue( Export_Retry::enqueue( 55, 60 ) );
+			$this->assertTrue( Export_Retry::enqueue( 55, 60 ) );
+
+			$this->assertCount( 1, $this->queued, 'one waiting attempt per order' );
+			$this->assertCount( 1, $this->pending );
+		}
+
+		public function test_a_failure_inside_the_running_attempt_queues_the_next_one(): void {
+			// The attempt being carried out is `in-progress`: it is the action that is failing, not a waiting one.
+			$this->running[90] = [
+				'hook'  => Export_Retry::HOOK,
+				'args'  => [ 55 ],
+				'group' => Export_Retry::GROUP,
+			];
+			$this->meta[55][ self::ATTEMPTS ] = 1;
 
 			$result = $this->handler( new \Woodev_API_Rate_Limit_Exception( 'Too Many Requests', 429, null, 60 ), false )->export( $this->order() );
 
-			$this->assertSame( [], $this->queued, 'one waiting attempt per order' );
+			$this->assertCount( 1, $this->queued, 'attempt 3 is waiting in the queue — the chain does not die with the running action' );
+			$this->assertDelay( 60, 0 );
+			$this->assertSame( 2, $this->meta[55][ self::ATTEMPTS ] );
 			$this->assertStringContainsString( 'повторена автоматически', $result->get_message() );
+		}
+
+		public function test_a_manual_failure_while_an_attempt_waits_replaces_it_instead_of_starting_a_second_chain(): void {
+			$order   = $this->order();
+			$handler = $this->handler( new \Woodev_API_Rate_Limit_Exception( 'Too Many Requests', 429, null, 3600 ), false );
+
+			$handler->export( $order );
+			$this->assertDelay( 3600, 0 );
+
+			// The merchant clicks «Выгрузить» while the hour-long wait is queued, and the carrier times out.
+			$manual = $this->handler( new \Woodev_API_Transport_Exception( 'timed out' ), true );
+			$manual->export( $order );
+
+			$this->assertCount( 1, $this->pending, 'one waiting attempt per order' );
+			$this->assertSame( 2, $this->meta[55][ self::ATTEMPTS ], 'the carrier was really called twice' );
+			$this->assertCount( 2, $this->queued );
+			$this->assertDelay( 300, 1 );
+		}
+
+		public function test_the_fifth_failure_cancels_the_attempt_that_is_still_waiting(): void {
+			$this->meta[55][ self::ATTEMPTS ] = 4;
+			$this->pending[70]                = [
+				'hook'  => Export_Retry::HOOK,
+				'args'  => [ 55 ],
+				'group' => Export_Retry::GROUP,
+			];
+
+			$this->handler( new \Woodev_API_Transport_Exception( 'timed out' ), true )->export( $this->order() );
+
+			$this->assertSame( [], $this->pending, 'a queued attempt must not come back later and start a fresh chain' );
+			$this->assertCount( 1, $this->notes );
+		}
+
+		public function test_an_attempt_that_could_not_be_queued_is_not_counted(): void {
+			Functions\when( 'as_schedule_single_action' )->justReturn( 0 );
+			$this->meta[55][ self::ATTEMPTS ] = 2;
+
+			$this->handler( new \Woodev_API_Rate_Limit_Exception( 'Too Many Requests', 429, null, 60 ), false )->export( $this->order() );
+
+			$this->assertSame( 2, $this->meta[55][ self::ATTEMPTS ], 'nothing is waiting, so there is nothing for the count to lead to' );
+		}
+
+		// ----- a busy order is put back, uncounted -----
+
+		public function test_a_busy_order_is_put_back_five_minutes_later_without_counting_an_attempt(): void {
+			$order = $this->order();
+
+			$this->assertSame( Export_Retry::DEFERRED, Export_Retry::defer( $order, 'заказ открыт' ) );
+
+			$this->assertCount( 1, $this->queued );
+			$this->assertDelay( 300, 0 );
+			$this->assertSame( 1, $this->meta[55][ Export_Retry::DEFERRALS_META ] );
+			$this->assertArrayNotHasKey( self::ATTEMPTS, $this->meta[55], 'no attempt was made' );
+		}
+
+		public function test_the_running_attempt_can_be_put_back_too(): void {
+			$this->running[90] = [
+				'hook'  => Export_Retry::HOOK,
+				'args'  => [ 55 ],
+				'group' => Export_Retry::GROUP,
+			];
+
+			$this->assertSame( Export_Retry::DEFERRED, Export_Retry::defer( $this->order(), 'заказ открыт' ) );
+			$this->assertCount( 1, $this->queued );
+		}
+
+		public function test_a_busy_order_is_put_back_at_most_24_times_then_it_counts_as_one_failed_attempt(): void {
+			$order                                     = $this->order();
+			$this->meta[55][ self::ATTEMPTS ]          = 1;
+			$this->meta[55][ Export_Retry::DEFERRALS_META ] = Export_Retry::MAX_DEFERRALS - 1;
+
+			$this->assertSame( Export_Retry::DEFERRED, Export_Retry::defer( $order, 'заказ открыт' ) );
+			$this->assertSame( Export_Retry::MAX_DEFERRALS, $this->meta[55][ Export_Retry::DEFERRALS_META ] );
+			$this->assertSame( 1, $this->meta[55][ self::ATTEMPTS ] );
+
+			// The 25th time the order is still busy: one failed attempt, on the normal schedule.
+			$this->assertSame( Export_Retry::SCHEDULED, Export_Retry::defer( $order, 'заказ открыт' ) );
+			$this->assertSame( 2, $this->meta[55][ self::ATTEMPTS ] );
+			$this->assertDelay( 300, 1 );
+		}
+
+		public function test_a_busy_order_at_the_cap_gives_up_with_a_note_and_clears_both_counters(): void {
+			$order                                          = $this->order();
+			$this->meta[55][ self::ATTEMPTS ]               = 4;
+			$this->meta[55][ Export_Retry::DEFERRALS_META ] = Export_Retry::MAX_DEFERRALS;
+
+			$this->assertSame( Export_Retry::GAVE_UP, Export_Retry::defer( $order, 'заказ открыт' ) );
+
+			$this->assertSame( [ 'Не удалось выгрузить заказ перевозчику за 5 попыток: заказ открыт' ], $this->notes );
+			$this->assertSame( [], $this->meta[55] );
+		}
+
+		public function test_a_busy_order_that_cannot_be_queued_reports_it(): void {
+			Functions\when( 'as_schedule_single_action' )->justReturn( 0 );
+
+			$this->assertSame( Export_Retry::NOT_SCHEDULED, Export_Retry::defer( $this->order(), 'заказ открыт' ) );
+			$this->assertArrayNotHasKey( Export_Retry::DEFERRALS_META, $this->meta[55] ?? [] );
+		}
+
+		public function test_a_success_clears_the_deferral_counter_too(): void {
+			$this->meta[55] = [
+				self::ATTEMPTS                      => 2,
+				Export_Retry::DEFERRALS_META        => 7,
+			];
+
+			$this->assertTrue( $this->handler( null, true )->export( $this->order() )->is_success() );
+			$this->assertSame( [], $this->meta[55] );
+		}
+
+		public function test_an_export_that_meets_the_export_lock_is_busy_not_a_carrier_failure(): void {
+			$handler            = $this->handler( new \Woodev_API_Transport_Exception( 'never called' ), true );
+			$handler->lock_free = false;
+
+			$result = $handler->export( $this->order() );
+
+			$this->assertFalse( $result->is_success() );
+			$this->assertTrue( $result->is_busy() );
+			$this->assertSame( [], $this->queued, 'the handler leaves the decision to the retry runner' );
+			$this->assertSame( [], $this->meta );
 		}
 
 		public function test_a_missing_action_scheduler_degrades_to_a_plain_failure(): void {
 			Functions\when( 'function_exists' )->alias(
-				static fn( $name ) => 'as_schedule_single_action' === $name ? false : \function_exists( $name )
+				static fn( $name ) => 'as_schedule_single_action' !== $name
 			);
 
 			$result = $this->handler( new \Woodev_API_Rate_Limit_Exception( 'Too Many Requests', 429, null, 60 ), false )->export( $this->order() );
@@ -381,6 +563,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$this->assertSame( 'woodev_shipping_export_retry', Export_Retry::HOOK );
 			$this->assertSame( 'woodev-shipping', Export_Retry::GROUP );
 			$this->assertSame( '_woodev_shipment_export_attempts', Export_Retry::ATTEMPTS_META );
+			$this->assertSame( '_woodev_shipment_export_deferrals', Export_Retry::DEFERRALS_META );
 			$this->assertSame( 5, Export_Retry::MAX_ATTEMPTS );
 			$this->assertSame( [ 60, 300, 1800, 7200, null ], array_map( [ Export_Retry::class, 'delay_after' ], [ 1, 2, 3, 4, 5 ] ) );
 		}

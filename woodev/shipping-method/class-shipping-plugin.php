@@ -350,6 +350,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 				$webhook_handler->register();
 			}
 
+			// #954: the delayed export retry is carried out by WP-Cron / the Action Scheduler runner,
+			// with no admin request in sight. The hook is wired here, in EVERY request of a shipping
+			// plugin, so an action due while the carrier registers itself only under is_admin() — or not
+			// at all, the plugin being deactivated — still reaches the registry, which then says on the
+			// order that the carrier was not found instead of letting the action complete in silence.
+			// add_action() ignores a second identical callback, so the registry's own wiring is harmless.
+			add_action( Order\Export_Retry::HOOK, [ Admin\Orders\Orders_Registry::instance(), 'run_export_retry' ] );
+
 			// admin suite. Shipping_Admin self-wires its admin_init/admin_menu
 			// registration in its constructor, so obtaining the host instance is what
 			// makes its handlers + pages live; calling register_handlers()/register_pages()

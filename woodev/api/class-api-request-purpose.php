@@ -37,22 +37,40 @@ if ( ! class_exists( 'Woodev_API_Request_Purpose' ) ) :
 		/** @var int the historical timeout of every API call, in seconds */
 		public const DEFAULT_TIMEOUT = 60;
 
-		/** @var string the purpose of the scope currently running */
-		private static string $current = self::DEFAULT_PURPOSE;
+		/** @var string[] the purposes of the scopes currently running, outermost first */
+		private static array $scopes = [];
 
 		/**
-		 * The purpose of the call being made now.
+		 * The purpose of the call being made now: the innermost scope's, or `default` outside any.
 		 *
 		 * @since 2.0.2
 		 *
 		 * @return string one of this class's purposes
 		 */
 		public static function current(): string {
-			return self::$current;
+			return [] === self::$scopes ? self::DEFAULT_PURPOSE : self::$scopes[ count( self::$scopes ) - 1 ];
+		}
+
+		/**
+		 * The purposes of every scope running now, outermost first — `default` alone outside any.
+		 *
+		 * A nested scope never lengthens the wait of the one around it, so the timeout of a call is
+		 * the SHORTEST of these ({@see Woodev_API_Base::get_request_timeout()}): a reference lookup
+		 * a carrier makes while a customer waits for its rate stays at the rate timeout.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string[] one or more of this class's purposes
+		 */
+		public static function active(): array {
+			return [] === self::$scopes ? [ self::DEFAULT_PURPOSE ] : self::$scopes;
 		}
 
 		/**
 		 * Runs a callback with a purpose in force, restoring the previous purpose afterwards.
+		 *
+		 * Scopes nest, and an inner scope can only SHORTEN the wait, never lengthen it: the effective
+		 * timeout is the smallest of the running scopes' ({@see self::active()}).
 		 *
 		 * @since 2.0.2
 		 *
@@ -63,13 +81,13 @@ if ( ! class_exists( 'Woodev_API_Request_Purpose' ) ) :
 		 */
 		public static function run( string $purpose, callable $callback ) {
 
-			$previous      = self::$current;
-			self::$current = $purpose;
+			$depth          = count( self::$scopes );
+			self::$scopes[] = $purpose;
 
 			try {
 				return $callback();
 			} finally {
-				self::$current = $previous;
+				self::$scopes = array_slice( self::$scopes, 0, $depth );
 			}
 		}
 

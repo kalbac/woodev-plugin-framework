@@ -40,15 +40,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Action_Result' ) ) :
 		/** @var string the carrier-assigned order id (export only), or '' */
 		private string $carrier_order_id;
 
+		/** @var bool whether the action was not attempted because the order was busy — a transient refusal, not a carrier answer */
+		private bool $busy;
+
 		/**
 		 * @param bool   $success          whether the carrier accepted the action
 		 * @param string $message          the carrier's text, or '' when it gave none
 		 * @param string $carrier_order_id the carrier-assigned order id, or ''
+		 * @param bool   $busy             whether the order was busy and the carrier was never called
 		 */
-		private function __construct( bool $success, string $message, string $carrier_order_id ) {
+		private function __construct( bool $success, string $message, string $carrier_order_id, bool $busy = false ) {
 			$this->success          = $success;
 			$this->message          = trim( $message );
 			$this->carrier_order_id = $carrier_order_id;
+			$this->busy             = $busy;
 		}
 
 		/**
@@ -74,6 +79,33 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Action_Result' ) ) :
 		 */
 		public static function failure( string $message = '' ): self {
 			return new self( false, $message, '' );
+		}
+
+		/**
+		 * The action was not attempted: another request is working on the order right now (#954).
+		 *
+		 * A failure for every caller that only asks {@see self::is_success()}; the delayed export
+		 * retry asks {@see self::is_busy()} to tell it from a carrier answer and try again later,
+		 * without counting an attempt.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $message the sentence for the merchant
+		 * @return self
+		 */
+		public static function busy( string $message = '' ): self {
+			return new self( false, $message, '', true );
+		}
+
+		/**
+		 * Whether the action was not attempted because the order was busy — no carrier call was made.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public function is_busy(): bool {
+			return $this->busy;
 		}
 
 		/**
