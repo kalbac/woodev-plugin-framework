@@ -659,8 +659,9 @@ export function buildAdvancedFiltersConfig(
 		/**
 		 * `{{select /}}` is the token `AdvancedFilters.getTitle()` swaps for its «Все / Любое»
 		 * `SelectControl` (#843) — without it the control is not rendered at all. The two
-		 * option labels are WooCommerce's own (`__( 'All' / 'Any', 'woocommerce' )`), so they
-		 * follow the shop's WooCommerce translation, not ours.
+		 * option labels are WooCommerce's own (`__( 'All' / 'Any', 'woocommerce' )`), in the
+		 * nominative; «соответствуют … условиям» needs the dative, so `./match-labels`
+		 * rewrites them to «всем» / «любым» on this page (#941).
 		 */
 		title: __( 'Заказы соответствуют {{select /}} условиям', 'woodev-plugin-framework' ),
 		filters,

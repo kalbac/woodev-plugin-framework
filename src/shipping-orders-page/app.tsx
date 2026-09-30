@@ -111,6 +111,7 @@ import {
 	scopeQuery,
 } from './filters';
 import type { UrlFilters } from './filters';
+import { MatchLabelScope } from './match-labels';
 import PeriodPicker from './period-picker';
 import OrderWizard from './order-wizard/order-wizard';
 import type { SaveResult } from './order-wizard/types';
@@ -2347,13 +2348,15 @@ export default function OrdersPage() {
 					 * control degrades the same way as the other two.
 					 */ }
 					{ advancedOpen && AdvancedFilters && navigation && currency && (
-						<AdvancedFilters
-							config={ advancedFiltersConfig }
-							path={ navigation.getPath() }
-							query={ navigation.getQuery() }
-							siteLocale="ru_RU"
-							currency={ currency }
-						/>
+						<MatchLabelScope>
+							<AdvancedFilters
+								config={ advancedFiltersConfig }
+								path={ navigation.getPath() }
+								query={ navigation.getQuery() }
+								siteLocale="ru_RU"
+								currency={ currency }
+							/>
+						</MatchLabelScope>
 					) }
 				</div>
 			) }
