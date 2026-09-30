@@ -3,7 +3,10 @@
  *
  * The rule itself lives in PHP — `Checkout_Field_Policy::address_rules()`, the object the storefront
  * checkout runs — and reaches the wizard through `GET …/orders/address-policy`. This file only
- * fetches it and reads it; it holds no copy of the rule. Until the server has answered (or when it
+ * fetches it and reads it; it holds no copy of the rule, with ONE deliberate exception: the postcode
+ * is never required in the wizard (#999 — a manager rarely knows the buyer's postcode; the server
+ * drops the same flag in `Order_Payload_Validator::wizard_address_rules()`), and
+ * {@link normalizeAddressPolicy} enforces it here as well. Until the server has answered (or when it
  * cannot — a failed request, WooCommerce absent) {@link FALLBACK_POLICY} stands in: the two fields
  * every carrier needs, a country and a city, and every field shown. The server judges the whole
  * payload again when the order is saved, so a stand-in never lets a wrong order through.

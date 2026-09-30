@@ -558,7 +558,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Payloa
 		 *
 		 * The rules are the checkout's own ({@see Checkout_Field_Policy::address_rules()}); the wizard's
 		 * step ② reads the same object through `GET …/orders/address-policy`, so client and server judge
-		 * one rule. No rule for a country (WooCommerce absent) means nothing is enforced here.
+		 * one rule. One deliberate exception: the postcode is never required here
+		 * ({@see self::wizard_address_rules()}, #999 — the admin trusts the merchant, the checkout's
+		 * «required» is buyer fool-proofing); do not re-add the checkout flag «to keep them in sync». No rule for a country (WooCommerce absent) means nothing is enforced here.
 		 *
 		 * @since 2.0.2
 		 *
