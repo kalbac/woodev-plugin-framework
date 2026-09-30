@@ -17,6 +17,7 @@ use Woodev\Framework\Shipping\Admin\Orders\Order_Row_Builder;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
 use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
+use Woodev\Framework\Shipping\Order\Carrier_Cancel;
 use Woodev\Framework\Shipping\Order\Delivery_Status;
 
 require_once dirname( __DIR__, 2 ) . '/woodev/compatibility/class-plugin-compatibility.php';
@@ -613,6 +614,48 @@ class OrderRowBuilderTest extends TestCase {
 		$row = ( new Order_Row_Builder() )->build( $this->make_order(), $provider );
 
 		$this->assertTrue( $row['is_exported'] );
+	}
+
+	// ----- cancel_failed (card #1007) -----
+
+	public function test_cancel_failed_is_false_for_an_ordinary_row(): void {
+		$this->meta['_wc_edostavka_carrier_order_id'] = 'CARRIER-1';
+
+		$provider = $this->provider( [ 'carrier_order_id_meta_key' => '_wc_edostavka_carrier_order_id' ] );
+
+		$row = ( new Order_Row_Builder() )->build( $this->make_order(), $provider );
+
+		$this->assertFalse( $row['cancel_failed'] );
+	}
+
+	public function test_cancel_failed_is_false_without_a_provider(): void {
+		$this->meta[ Carrier_Cancel::FAILED_META ] = 'CARRIER-1';
+
+		$row = ( new Order_Row_Builder() )->build( $this->make_order(), null );
+
+		$this->assertFalse( $row['cancel_failed'] );
+	}
+
+	public function test_cancel_failed_is_true_while_the_shipment_the_cancellation_failed_for_is_still_stored(): void {
+		$this->meta['_wc_edostavka_carrier_order_id'] = 'CARRIER-1';
+		$this->meta[ Carrier_Cancel::FAILED_META ]    = 'CARRIER-1';
+
+		$provider = $this->provider( [ 'carrier_order_id_meta_key' => '_wc_edostavka_carrier_order_id' ] );
+
+		$row = ( new Order_Row_Builder() )->build( $this->make_order(), $provider );
+
+		$this->assertTrue( $row['cancel_failed'] );
+	}
+
+	public function test_cancel_failed_is_false_once_the_shipment_is_another_one_or_gone(): void {
+		$this->meta[ Carrier_Cancel::FAILED_META ] = 'CARRIER-1';
+		$provider                                  = $this->provider( [ 'carrier_order_id_meta_key' => '_wc_edostavka_carrier_order_id' ] );
+
+		$this->meta['_wc_edostavka_carrier_order_id'] = 'CARRIER-2'; // exported again.
+		$this->assertFalse( ( new Order_Row_Builder() )->build( $this->make_order(), $provider )['cancel_failed'] );
+
+		$this->meta['_wc_edostavka_carrier_order_id'] = ''; // cancelled by hand later.
+		$this->assertFalse( ( new Order_Row_Builder() )->build( $this->make_order(), $provider )['cancel_failed'] );
 	}
 
 	public function test_actions_is_empty_when_provider_is_null(): void {

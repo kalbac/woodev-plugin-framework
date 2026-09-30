@@ -20,6 +20,7 @@ use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
 use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
 use Woodev\Framework\Shipping\Order\Action_Result;
+use Woodev\Framework\Shipping\Order\Carrier_Cancel;
 use Woodev\Framework\Shipping\Order\Export_Retry;
 use Woodev\Tests\Unit\TestCase;
 
@@ -269,10 +270,12 @@ final class OrdersRegistryExportRetryTest extends TestCase {
 	public function test_a_carrier_failure_is_not_put_back_by_the_runner(): void {
 		$this->register_provider();
 		$handler = $this->register_handler();
-		$this->order( 'pending', 2 );
+		$order   = $this->order( 'pending', 2 );
 
-		// The handler booked the failure and queued the next attempt itself; the runner adds nothing.
+		// The handler booked the failure and queued the next attempt itself; the runner adds nothing
+		// to the queue — only a note (#1007), because nobody is watching a background attempt.
 		$handler->shouldReceive( 'export' )->once()->andReturn( Action_Result::failure( 'Too Many Requests' ) );
+		$order->shouldReceive( 'add_order_note' )->once()->with( 'Не удалось выгрузить заказ перевозчику в фоне: Too Many Requests' );
 
 		$scheduled = [];
 		$this->stub_queue( $scheduled );
@@ -280,6 +283,89 @@ final class OrdersRegistryExportRetryTest extends TestCase {
 		Orders_Registry::instance()->run_export_retry( 123 );
 
 		$this->assertSame( [], $scheduled );
+	}
+
+	// ----- #1007: a failed background attempt leaves its reason on the order -----
+
+	public function test_a_refused_background_export_leaves_the_carriers_reason_in_a_private_note(): void {
+		$this->register_provider();
+		$handler = $this->register_handler();
+		$order   = $this->order( 'processing' );
+
+		$handler->shouldReceive( 'export' )->once()->andReturn( Action_Result::failure( 'Неверный индекс получателя' ) );
+		// `add_order_note( $note )` — no second argument: a customer note is the second one, and it stays off.
+		$order->shouldReceive( 'add_order_note' )->once()->with( 'Не удалось выгрузить заказ перевозчику в фоне: Неверный индекс получателя' );
+
+		Orders_Registry::instance()->run_export_retry( 123 );
+
+		$this->addToAssertionCount( 1 );
+	}
+
+	public function test_a_failure_without_a_reason_says_so(): void {
+		$this->register_provider();
+		$handler = $this->register_handler();
+		$order   = $this->order( 'processing' );
+
+		$handler->shouldReceive( 'export' )->once()->andReturn( Action_Result::failure() );
+		$order->shouldReceive( 'add_order_note' )->once()->with( 'Не удалось выгрузить заказ перевозчику в фоне: перевозчик не назвал причину' );
+
+		Orders_Registry::instance()->run_export_retry( 123 );
+
+		$this->addToAssertionCount( 1 );
+	}
+
+	public function test_the_attempts_ran_out_sentence_is_not_noted_twice(): void {
+		$this->register_provider();
+		$handler = $this->register_handler();
+		$order   = $this->order( 'processing', 4 );
+
+		// The handler wrote this very sentence as a note when the cap was reached; the runner must not repeat it.
+		$handler->shouldReceive( 'export' )->once()->andReturn( Action_Result::failure( Export_Retry::give_up_text( 'Too Many Requests' ) ) );
+		$order->shouldNotReceive( 'add_order_note' );
+
+		Orders_Registry::instance()->run_export_retry( 123 );
+
+		$this->addToAssertionCount( 1 );
+	}
+
+	public function test_a_successful_background_export_leaves_no_note(): void {
+		$this->register_provider();
+		$handler = $this->register_handler();
+		$order   = $this->order( 'processing' );
+
+		$handler->shouldReceive( 'export' )->once()->andReturn( Action_Result::success( 'CARRIER-1' ) );
+		$order->shouldNotReceive( 'add_order_note' );
+
+		Orders_Registry::instance()->run_export_retry( 123 );
+
+		$this->addToAssertionCount( 1 );
+	}
+
+	public function test_a_busy_order_leaves_no_note(): void {
+		$this->register_provider();
+		$handler = $this->register_handler();
+		$order   = $this->order( 'processing' );
+
+		$handler->shouldReceive( 'export' )->once()->andReturn( Action_Result::busy( 'Этот заказ уже выгружается' ) );
+		$order->shouldReceive( 'update_meta_data' );
+		$order->shouldReceive( 'save_meta_data' );
+		$order->shouldNotReceive( 'add_order_note' );
+
+		$scheduled = [];
+		$this->stub_queue( $scheduled );
+
+		Orders_Registry::instance()->run_export_retry( 123 );
+
+		$this->addToAssertionCount( 1 );
+	}
+
+	public function test_the_registry_hooks_the_status_change_and_the_cancellation_in_every_request(): void {
+		Actions\expectAdded( 'woocommerce_order_status_changed' )->once()->with( Mockery::on( fn( $callback ) => is_array( $callback ) && 'handle_order_status_changed' === $callback[1] ), 20, 4 );
+		Actions\expectAdded( Carrier_Cancel::HOOK )->once()->with( Mockery::on( fn( $callback ) => is_array( $callback ) && 'run_cancel_at_carrier' === $callback[1] ) );
+
+		$this->register_provider();
+
+		$this->addToAssertionCount( 1 ); // expectAdded() is the assertion.
 	}
 
 	public function test_a_busy_order_that_cannot_be_queued_ends_the_chain(): void {

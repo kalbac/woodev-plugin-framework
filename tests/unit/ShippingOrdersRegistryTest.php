@@ -815,6 +815,8 @@ class ShippingOrdersRegistryTest extends TestCase {
 	}
 
 	public function test_enqueue_assets_enqueues_the_bundle_and_inlines_the_provider_list(): void {
+		Functions\when( 'as_get_scheduled_actions' )->justReturn( [] ); // the «exports in progress» count (#1007).
+
 		$plugin = \Mockery::mock( '\Woodev_Plugin' );
 		$plugin->shouldReceive( 'get_framework_path' )->andReturn( '/nonexistent/framework' );
 		$plugin->shouldReceive( 'get_framework_assets_url' )->andReturn( 'https://example.test/vendor/woodev/framework/assets' );
@@ -896,6 +898,9 @@ class ShippingOrdersRegistryTest extends TestCase {
 		$this->assertSame( [ 'all', 'cdek', 'yandex' ], array_column( $data['providers'], 'id' ) );
 		$this->assertSame( [ 'Все перевозчики', 'СДЭК', 'Яндекс' ], array_column( $data['providers'], 'label' ) );
 
+		// #1007: the «exports in progress» state the page starts from, and the heartbeat key that keeps it current.
+		$this->assertSame( [ 'count' => 0, 'text' => '', 'heartbeatKey' => 'woodev-exports-in-progress' ], $data['exportsInProgress'] );
+
 		/*
 		 * ⚠ ID AND LABEL ONLY (#855). The bootstrap used to inline a count per carrier,
 		 * run at page-render time with no filters at all — so with any period or scope
@@ -919,6 +924,8 @@ class ShippingOrdersRegistryTest extends TestCase {
 	 * `edit_shop_orders`, does not imply).
 	 */
 	public function test_enqueue_assets_inlines_the_order_wizard_reference_data(): void {
+		Functions\when( 'as_get_scheduled_actions' )->justReturn( [] ); // the «exports in progress» count (#1007).
+
 		$plugin = \Mockery::mock( '\Woodev_Plugin' );
 		$plugin->shouldReceive( 'get_framework_path' )->andReturn( '/nonexistent/framework' );
 		$plugin->shouldReceive( 'get_framework_assets_url' )->andReturn( 'https://example.test/vendor/woodev/framework/assets' );

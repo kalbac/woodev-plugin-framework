@@ -3680,6 +3680,73 @@ msgstr ""
 msgid "заказ открыт для редактирования"
 msgstr ""
 
+#. translators: %s: the carrier's reason for refusing or failing the export
+#: shipping-method/admin/orders/class-orders-registry.php:1157
+#, php-format
+msgid "Не удалось выгрузить заказ перевозчику в фоне: %s"
+msgstr ""
+
+#: shipping-method/admin/orders/class-orders-registry.php:1158
+msgid "перевозчик не назвал причину"
+msgstr ""
+
+#. translators: %d: number of orders being exported to the carrier in the background
+#: shipping-method/order/class-export-queue.php:88
+#, php-format
+msgid "Сейчас выгружается %d заказ перевозчику"
+msgid_plural "Сейчас выгружаются %d заказов перевозчику"
+msgstr[0] "Сейчас выгружается %d заказ перевозчику"
+msgstr[1] "Сейчас выгружаются %d заказа перевозчику"
+msgstr[2] "Сейчас выгружаются %d заказов перевозчику"
+
+#: shipping-method/order/class-order-automation.php:229
+msgid "Отменить заявку у перевозчика не удалось: перевозчик не найден (плагин отключён?)"
+msgstr ""
+
+#. translators: %s: the shipment's delivery status at the carrier, e.g. "Доставлено"
+#: shipping-method/order/class-order-automation.php:240
+#, php-format
+msgid "Отменить заявку у перевозчика нельзя (статус «%s») — свяжитесь с перевозчиком"
+msgstr ""
+
+#: shipping-method/order/class-order-automation.php:281
+msgid "Заявка отменена у перевозчика"
+msgstr ""
+
+#. translators: %s: the carrier's reason for refusing the cancellation
+#: shipping-method/order/class-order-automation.php:291
+#, php-format
+msgid "Не удалось отменить заявку у перевозчика: %s"
+msgstr ""
+
+#: shipping-method/order/class-order-automation.php:314
+msgid "Не удалось отменить заявку у перевозчика: заказ слишком долго выгружается. Проверьте заявку в личном кабинете перевозчика."
+msgstr ""
+
+#: shipping-method/settings/class-shipping-integration.php:112
+msgid "Автоэкспорт"
+msgstr ""
+
+#: shipping-method/settings/class-shipping-integration.php:115
+msgid "Когда заказ получает один из выбранных ниже статусов, он сам отправляется перевозчику — в фоне, покупатель ничего не ждёт. Вручную заказ можно выгрузить всегда."
+msgstr ""
+
+#: shipping-method/settings/class-shipping-integration.php:116
+msgid "Отмена заказа и его полный возврат отменяют заявку у перевозчика сами, независимо от этой настройки."
+msgstr ""
+
+#: shipping-method/settings/class-shipping-integration.php:119
+msgid "Статусы для автоэкспорта"
+msgstr ""
+
+#: shipping-method/settings/class-shipping-integration.php:125
+msgid "Заказ выгружается в тот момент, когда переходит в один из этих статусов. Здесь только статусы, в которых заказ ещё можно отправить перевозчику."
+msgstr ""
+
+#: shipping-method/settings/class-shipping-integration.php:127
+msgid "Выберите статусы заказа"
+msgstr ""
+
 #: assets/build/shipping-orders-page/index.js:1
 msgid "Курьер"
 msgstr ""
@@ -4705,4 +4772,12 @@ msgstr ""
 
 #: assets/build/shipping-orders-page/index.js:1
 msgid "Найти адрес"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Не отменена у перевозчика"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Заказ отменён в магазине, но перевозчик не отменил заявку — свяжитесь с перевозчиком"
 msgstr ""

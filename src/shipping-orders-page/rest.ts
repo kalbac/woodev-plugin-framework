@@ -104,6 +104,12 @@ export interface OrderRow {
 	 * an empty cell, never an invented button.
 	 */
 	actions?: OrderRowAction[];
+	/**
+	 * #1007: the WC order is cancelled but the carrier refused to cancel its shipment, so the
+	 * request is still live on the carrier's side. Optional like `is_exported` — an older server
+	 * sends no such field, and «not stated» must not be rendered as a failure.
+	 */
+	cancel_failed?: boolean;
 }
 
 /**
@@ -241,6 +247,19 @@ export interface ShippingOrdersBootstrap {
 	deliveryStatuses?: string[];
 	/** The order wizard's reference data (#969). */
 	wizard?: WizardBootstrap;
+	/** #1007: the background carrier exports running right now, as the server worded them. */
+	exportsInProgress?: ExportsInProgress;
+}
+
+/**
+ * The «orders being exported right now» figure: `text` is the FINISHED Russian sentence with
+ * the right plural ('' when `count` is 0), so the page shows it verbatim and never words it.
+ * `heartbeatKey` names the WordPress heartbeat payload key that keeps it current.
+ */
+export interface ExportsInProgress {
+	count: number;
+	text: string;
+	heartbeatKey: string;
 }
 
 declare global {
@@ -290,6 +309,28 @@ export function getProviders(): OrdersProvider[] {
  */
 export function getReachableDeliveryStatuses(): string[] {
 	return bootstrap().deliveryStatuses || [];
+}
+
+/**
+ * The background-export figure inlined at page load (#1007), or `null` when the bootstrap does
+ * not carry a well-formed one (an older server, a cached page) — the notice then never shows.
+ */
+export function getExportsInProgress(): ExportsInProgress | null {
+	const { exportsInProgress } = bootstrap();
+
+	if (
+		! exportsInProgress ||
+		'number' !== typeof exportsInProgress.count ||
+		! Number.isFinite( exportsInProgress.count ) ||
+		exportsInProgress.count < 0 ||
+		'string' !== typeof exportsInProgress.text ||
+		'string' !== typeof exportsInProgress.heartbeatKey ||
+		'' === exportsInProgress.heartbeatKey
+	) {
+		return null;
+	}
+
+	return exportsInProgress;
 }
 
 /**

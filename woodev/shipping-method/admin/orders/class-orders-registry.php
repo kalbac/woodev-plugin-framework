@@ -14,7 +14,9 @@ use Woodev\Framework\Shipping\Admin\Shipping_Admin_Order;
 use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
 use Woodev\Framework\Shipping\Order\Abstract_Tracking_Handler;
 use Woodev\Framework\Shipping\Order\Delivery_Status;
+use Woodev\Framework\Shipping\Order\Carrier_Cancel;
 use Woodev\Framework\Shipping\Order\Export_Retry;
+use Woodev\Framework\Shipping\Order\Order_Automation;
 use Woodev\Framework\Shipping\Rest_Api\Order_Editor_Controller;
 use Woodev\Framework\Shipping\Rest_Api\Orders_Controller;
 use Woodev\Framework\Shipping\Rest_Api\Rates_Controller;
@@ -120,6 +122,26 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 * @var Shipping_Admin_Order|null
 		 */
 		private $admin_order;
+
+		/**
+		 * What the framework does when an order changes status — the background auto-export and the
+		 * background cancellation at the carrier (#1007). Lazily created, see {@see self::automation()}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var Order_Automation|null
+		 */
+		private $automation;
+
+		/**
+		 * The «exports in progress» notice and its heartbeat answer (#1007). Lazily created, see
+		 * {@see self::export_queue_notice()}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var Export_Queue_Notice|null
+		 */
+		private $export_notice;
 
 		/** @var bool whether the shared hooks were added. */
 		private $hooked = false;
@@ -482,6 +504,37 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		}
 
 		/**
+		 * The framework's reaction to an order changing status (#1007), created once.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return Order_Automation
+		 */
+		public function automation(): Order_Automation {
+			if ( null === $this->automation ) {
+				$this->automation = new Order_Automation( $this );
+			}
+
+			return $this->automation;
+		}
+
+		/**
+		 * The «exports in progress» notice (#1007), created once so the hooks added in
+		 * {@see self::add_hooks()} and removed in {@see self::reset_for_tests()} refer to the same callable.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return Export_Queue_Notice
+		 */
+		public function export_queue_notice(): Export_Queue_Notice {
+			if ( null === $this->export_notice ) {
+				$this->export_notice = new Export_Queue_Notice( $this );
+			}
+
+			return $this->export_notice;
+		}
+
+		/**
 		 * Returns the page/REST capability.
 		 *
 		 * Reuses {@see Settings_Page_Registry::resolve_capability()} rather than inventing a
@@ -527,6 +580,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 * @since 2.0.2 Card #981: also hooks {@see Order_Editor::mute_new_order_email()} onto
 		 *              `woocommerce_email_enabled_new_order`, the half of the editor's e-mail mute
 		 *              that must be present in the request WooCommerce dispatches a DEFERRED e-mail in.
+		 * @since 2.0.2 Card #1007: also hooks {@see self::handle_order_status_changed()} onto
+		 *              `woocommerce_order_status_changed` (the one trigger of the background
+		 *              auto-export and cancellation), {@see self::run_cancel_at_carrier()} onto
+		 *              {@see Carrier_Cancel::HOOK}, and the «exports in progress» notice
+		 *              ({@see Export_Queue_Notice}).
 		 *
 		 * @return void
 		 */
@@ -543,6 +601,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			add_action( 'rest_api_init', [ $this, 'register_rest' ], 5 );
 			add_action( 'woodev_shipping_order_exported', [ $this, 'flush_new_order_counts' ] );
 			add_action( Export_Retry::HOOK, [ $this, 'run_export_retry' ] );
+			add_action( Carrier_Cancel::HOOK, [ $this, 'run_cancel_at_carrier' ] );
+			add_action( 'woocommerce_order_status_changed', [ $this, 'handle_order_status_changed' ], 20, 4 );
+			$this->export_queue_notice()->add_hooks();
 			add_action( 'admin_page_access_denied', [ $this, 'maybe_redirect_legacy_page' ] );
 			add_filter( 'woocommerce_order_data_store_cpt_get_orders_query', [ $this, 'translate_marker_keys_query_var' ], 10, 2 );
 			add_filter( 'heartbeat_received', [ $this, 'refresh_order_edit_lock' ], 20, 2 );
@@ -1036,6 +1097,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 * lock (the export's «busy» answer, which never reached the carrier): the attempt is put back
 		 * ({@see Export_Retry::defer()}) without counting.
 		 *
+		 * Card #1007: the same action also carries out the background AUTO-export that
+		 * {@see Order_Automation} queues on a status change, so a failed attempt leaves its reason on the
+		 * order as a private note — nobody is watching it — except the «attempts ran out» sentence the
+		 * handler has already written.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @param int|string $order_id the order to export (Action Scheduler passes the stored argument as is).
@@ -1078,7 +1144,51 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 
 			if ( $result->is_busy() ) {
 				$this->defer_export_retry( $order->get_id(), $result->get_message() );
+
+				return;
 			}
+
+			if ( ! $result->is_success() && ! Export_Retry::is_give_up_text( $result->get_message() ) ) {
+				// #1007: nobody is watching a background attempt, so the reason is left on the order — a
+				// private note. The attempts-ran-out sentence is skipped: the handler wrote it already.
+				$order->add_order_note(
+					sprintf(
+						/* translators: %s: the carrier's reason for refusing or failing the export */
+						__( 'Не удалось выгрузить заказ перевозчику в фоне: %s', 'woodev-plugin-framework' ),
+						'' !== $result->get_message() ? $result->get_message() : __( 'перевозчик не назвал причину', 'woodev-plugin-framework' )
+					)
+				);
+			}
+		}
+
+		/**
+		 * The `woocommerce_order_status_changed` callback (#1007): hands the change to
+		 * {@see Order_Automation}, which queues the background export or cancellation it calls for.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param int|string     $order_id the order.
+		 * @param string         $from     the status it left.
+		 * @param string         $to       the status it entered.
+		 * @param \WC_Order|null $order    the order, when WooCommerce passes it.
+		 * @return void
+		 */
+		public function handle_order_status_changed( $order_id, $from = '', $to = '', $order = null ): void {
+			$this->automation()->handle_status_change( $order_id, $from, $to, $order );
+		}
+
+		/**
+		 * The callback of the Action Scheduler action {@see Carrier_Cancel} queues (#1007): cancels the
+		 * shipment of a cancelled / fully refunded order at its carrier. See
+		 * {@see Order_Automation::run_cancel()}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param int|string $order_id the order (Action Scheduler passes the stored argument as is).
+		 * @return void
+		 */
+		public function run_cancel_at_carrier( $order_id ): void {
+			$this->automation()->run_cancel( $order_id );
 		}
 
 		/**
@@ -1404,6 +1514,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 						// defect 4) — see build_reachable_delivery_statuses() for why the
 						// full canonical list was wrong to offer.
 						'deliveryStatuses' => $this->build_reachable_delivery_statuses(),
+						// «Сейчас выгружаются N заказов» (#1007): the count at page load and the heartbeat
+						// key that keeps it current; the sentence arrives finished from the server.
+						'exportsInProgress' => $this->export_queue_notice()->state(),
 						// What the order wizard's address step needs before its first request (#969).
 						'wizard'           => $this->build_wizard_bootstrap() + [
 							'pickup'                => (object) $wizard_pickup['configs'],
@@ -1861,10 +1974,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			remove_action( 'admin_enqueue_scripts', [ $this, 'enqueue_assets' ] );
 			remove_action( 'rest_api_init', [ $this, 'register_rest' ], 5 );
 			remove_action( Export_Retry::HOOK, [ $this, 'run_export_retry' ] );
+			remove_action( Carrier_Cancel::HOOK, [ $this, 'run_cancel_at_carrier' ] );
+			remove_action( 'woocommerce_order_status_changed', [ $this, 'handle_order_status_changed' ], 20 );
 			remove_action( 'admin_page_access_denied', [ $this, 'maybe_redirect_legacy_page' ] );
 			remove_filter( 'woocommerce_order_data_store_cpt_get_orders_query', [ $this, 'translate_marker_keys_query_var' ], 10 );
 			remove_filter( 'heartbeat_received', [ $this, 'refresh_order_edit_lock' ], 20 );
 			remove_filter( 'woocommerce_email_enabled_new_order', [ Order_Editor::class, 'mute_new_order_email' ], PHP_INT_MAX );
+
+			if ( null !== $this->export_notice ) {
+				$this->export_notice->remove_hooks();
+			}
 
 			if ( null !== $this->admin_order ) {
 				remove_action( 'add_meta_boxes', [ $this->admin_order, 'add_meta_box' ], 10 );
@@ -1877,6 +1996,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			$this->tracking_handlers = [];
 			$this->provider_plugins  = [];
 			$this->admin_order       = null;
+			$this->automation        = null;
+			$this->export_notice     = null;
 			$this->hooked            = false;
 			$this->plugin            = null;
 

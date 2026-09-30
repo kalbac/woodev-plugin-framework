@@ -781,6 +781,46 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		}
 
 		/**
+		 * Cancels an order's shipment with the carrier while holding the order's export lock.
+		 *
+		 * The background cancellation of a WooCommerce order that was cancelled or fully refunded
+		 * (#1007) must not run beside an export of the same order: an export that is still in flight
+		 * would store a carrier id that this cancellation never saw, leaving a live shipment for a
+		 * cancelled order. So it takes the SAME per-order lock as {@see self::export()} (#945), without
+		 * waiting, and reads the stored carrier id AGAIN under it, from a fresh copy of the order — a
+		 * request that lost the race to an export that has since finished cancels that export's shipment.
+		 * The carrier call itself is {@see self::cancel()}, under the `export` request purpose.
+		 *
+		 * @since 2.0.2 Card #1007.
+		 *
+		 * @param \WC_Order $order the order whose shipment to cancel.
+		 * @return Action_Result|null null when the order has no carrier shipment — nothing was asked of
+		 *                            the carrier; a busy {@see Action_Result} when an export holds the
+		 *                            lock (nothing was asked of the carrier, look again shortly);
+		 *                            otherwise what {@see self::cancel()} answers.
+		 */
+		public function cancel_under_lock( \WC_Order $order ): ?Action_Result {
+
+			$order_id = $order->get_id();
+
+			if ( ! $this->acquire_export_lock( $order_id ) ) {
+				return Action_Result::busy( __( 'Этот заказ уже выгружается — дождитесь окончания.', 'woodev-plugin-framework' ) );
+			}
+
+			try {
+				$fresh = $this->fresh_order( $order );
+
+				if ( '' === $this->stored_carrier_order_id( $fresh ) ) {
+					return null;
+				}
+
+				return $this->cancel( $fresh );
+			} finally {
+				$this->release_export_lock( $order_id );
+			}
+		}
+
+		/**
 		 * Whether this carrier can refresh one order's state from its own API (card
 		 * #824). `false` by default — the framework has NO generic pull of a
 		 * carrier's state; that sync is SP-8 (spec §D4). A carrier overriding this to

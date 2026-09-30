@@ -241,6 +241,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/order/class-action-result.php';
 			require_once $path . '/order/class-order-lock.php';
 			require_once $path . '/order/class-export-retry.php';
+			require_once $path . '/order/class-carrier-cancel.php';
+			require_once $path . '/order/class-export-queue.php';
+			require_once $path . '/order/class-order-automation.php';
 			require_once $path . '/order/abstract-shipment-handler.php';
 			require_once $path . '/order/abstract-tracking-handler.php';
 			require_once $path . '/order/abstract-webhook-handler.php';
@@ -262,6 +265,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			// inert until a carrier plugin calls register_provider().
 			require_once $path . '/admin/orders/class-orders-provider.php';
 			require_once $path . '/admin/orders/class-orders-registry.php';
+			require_once $path . '/admin/orders/class-export-queue-notice.php';
 			// The carrier marker contract (#967): loaded with the registry it reads providers from.
 			require_once $path . '/order/class-order-marker.php';
 			require_once $path . '/admin/orders/class-orders-query.php';
@@ -357,6 +361,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			// order that the carrier was not found instead of letting the action complete in silence.
 			// add_action() ignores a second identical callback, so the registry's own wiring is harmless.
 			add_action( Order\Export_Retry::HOOK, [ Admin\Orders\Orders_Registry::instance(), 'run_export_retry' ] );
+
+			// #1007: the same reasoning for the background auto-export and the cancellation at the
+			// carrier. An order changes status on the storefront (a payment gateway's callback, the
+			// thank-you page) and in cron as much as in the admin, and the cancellation runs from the
+			// queue — so both hooks are wired in every request, not only where the carrier registered
+			// itself for the admin.
+			add_action( 'woocommerce_order_status_changed', [ Admin\Orders\Orders_Registry::instance(), 'handle_order_status_changed' ], 20, 4 );
+			add_action( Order\Carrier_Cancel::HOOK, [ Admin\Orders\Orders_Registry::instance(), 'run_cancel_at_carrier' ] );
 
 			// admin suite. Shipping_Admin self-wires its admin_init/admin_menu
 			// registration in its constructor, so obtaining the host instance is what
