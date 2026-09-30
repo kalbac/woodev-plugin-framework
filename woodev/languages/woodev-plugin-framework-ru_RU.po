@@ -3723,34 +3723,40 @@ msgstr ""
 msgid "Не удалось отменить заявку у перевозчика: заказ слишком долго выгружается. Проверьте заявку в личном кабинете перевозчика."
 msgstr ""
 
-#: shipping-method/settings/class-shipping-integration.php:101
-msgid "Автоэкспорт"
-msgstr ""
-
-#: shipping-method/settings/class-shipping-integration.php:104
-msgid "Когда заказ получает один из выбранных ниже статусов, он сам отправляется перевозчику — в фоне, покупатель ничего не ждёт. Вручную заказ можно выгрузить всегда."
-msgstr ""
-
-#: shipping-method/settings/class-shipping-integration.php:105
-msgid "Отмена заказа и его полный возврат отменяют заявку у перевозчика сами, независимо от этой настройки."
-msgstr ""
-
-#: shipping-method/settings/class-shipping-integration.php:108
-msgid "Статусы для автоэкспорта"
-msgstr ""
-
-#: shipping-method/settings/class-shipping-integration.php:114
-msgid "Заказ выгружается в тот момент, когда переходит в один из этих статусов. Здесь только статусы, в которых заказ ещё можно отправить перевозчику."
-msgstr ""
-
-#: shipping-method/settings/class-shipping-integration.php:116
-msgid "Выберите статусы заказа"
+#: shipping-method/settings/class-export-settings.php:154
+msgid "Когда заказ сам отправляется перевозчику. Отмена заказа и его полный возврат отменяют заявку у перевозчика сами, независимо от этих настроек."
 msgstr ""
 
 #. translators: %s: the order status name
-#: shipping-method/settings/class-shipping-integration.php:204
+#: shipping-method/settings/class-export-settings.php:159
 #, php-format
 msgid "Статус «%s» больше не поддерживается для автоэкспорта: заказы в нём не выгружаются автоматически. Выберите поддерживаемый статус."
+msgstr ""
+
+#: shipping-method/settings/class-export-settings.php:180
+msgid "Автоэкспорт"
+msgstr ""
+
+#: shipping-method/settings/class-export-settings.php:188
+msgid "Когда заказ получает один из выбранных ниже статусов, он сам отправляется перевозчику — в фоне, покупатель ничего не ждёт. Вручную заказ можно выгрузить всегда."
+msgstr ""
+
+#: shipping-method/settings/class-export-settings.php:196
+msgid "Статусы для автоэкспорта"
+msgstr ""
+
+#: shipping-method/settings/class-export-settings.php:206
+msgid "Заказ выгружается в тот момент, когда переходит в один из этих статусов. Здесь только статусы, в которых заказ ещё можно отправить перевозчику."
+msgstr ""
+
+#. translators: %s: the order status name
+#: shipping-method/settings/class-export-settings.php:238
+#, php-format
+msgid "%s (не поддерживается)"
+msgstr ""
+
+#: shipping-method/class-shipping-plugin.php:740
+msgid "Выгрузка"
 msgstr ""
 
 #: assets/build/shipping-orders-page/index.js:1

@@ -33,22 +33,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Order_Automation' ) 
 	 * ({@see Orders_Registry::run_export_retry()}), the cancellation under the export lock of #945
 	 * ({@see Abstract_Shipment_Handler::cancel_under_lock()}). The order of a carrier is found through the
 	 * registry that already maps an order to it, and the merchant's per-carrier choice is read off that
-	 * carrier's integration settings ({@see \Woodev\Framework\Shipping\Settings\Shipping_Integration}).
+	 * carrier's «Выгрузка» settings ({@see \Woodev\Framework\Shipping\Settings\Export_Settings}, on the plugin's own
+	 * tab of the `woodev-settings` page).
 	 *
 	 * @since 2.0.2
 	 */
 	final class Order_Automation {
 
 		/**
-		 * The integration setting (checkbox) that switches auto-export on. The key of the shipped v1
-		 * carrier plugins, kept byte-for-byte: a v1 site that had it on keeps it on.
+		 * The setting (toggle) that switches auto-export on. The key of the shipped v1 carrier plugins
+		 * (they kept it in their WooCommerce integration option), kept byte-for-byte: a v1 site that had
+		 * it on keeps it on — {@see \Woodev\Framework\Shipping\Settings\Export_Settings} carries the value over.
 		 *
 		 * @var string
 		 */
 		public const SETTING_AUTO_EXPORT = 'auto_export_orders';
 
 		/**
-		 * The integration setting (multiselect) that lists the WooCommerce statuses auto-export fires on.
+		 * The setting (multiselect) that lists the WooCommerce statuses auto-export fires on.
 		 * The key of the shipped v1 carrier plugins, kept byte-for-byte; the values are status slugs with
 		 * the `wc-` prefix, as `wc_get_order_statuses()` keys them.
 		 *
@@ -69,39 +71,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Order_Automation' ) 
 			$this->registry = $registry;
 		}
 
-		/**
-		 * The WooCommerce statuses the merchant chose auto-export for on this carrier — empty while
-		 * auto-export is off, and for a carrier whose plugin the registry does not know.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @param Orders_Provider $provider the carrier.
-		 * @return string[] status slugs without the `wc-` prefix.
-		 */
 		public function auto_export_statuses( Orders_Provider $provider ): array {
 
 			$plugin = $this->registry->get_provider_plugin( $provider->get_id() );
 
-			if ( null === $plugin || ! wc_string_to_bool( $plugin->get_integration_option( self::SETTING_AUTO_EXPORT, 'no' ) ) ) {
+			if ( null === $plugin ) {
 				return [];
 			}
 
-			$statuses = [];
+			$settings = $plugin->get_export_settings();
 
-			foreach ( (array) $plugin->get_integration_option( self::SETTING_EXPORT_STATUSES, null ) as $status ) {
-
-				if ( ! is_string( $status ) ) {
-					continue;
-				}
-
-				$status = 0 === strpos( $status, 'wc-' ) ? substr( $status, 3 ) : $status;
-
-				if ( '' !== $status ) {
-					$statuses[] = $status;
-				}
-			}
-
-			return array_values( array_unique( $statuses ) );
+			return $settings->is_auto_export_enabled() ? $settings->get_export_statuses() : [];
 		}
 
 		/**

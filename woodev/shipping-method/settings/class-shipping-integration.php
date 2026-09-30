@@ -9,8 +9,6 @@
 
 namespace Woodev\Framework\Shipping\Settings;
 
-use Woodev\Framework\Shipping\Admin\Orders\Order_Actions;
-use Woodev\Framework\Shipping\Order\Order_Automation;
 use Woodev\Framework\Shipping\Shipping_Plugin;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -73,140 +71,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Integrat
 			add_action( 'woocommerce_update_options_integration_' . $this->id, [ $this, 'process_admin_options' ] );
 		}
 
+		/**
+		 * Displays admin options.
+		 *
+		 * Override this method to add custom display logic.
+		 *
+		 * @since 1.4.0
+		 */
 		public function admin_options() {
 			$this->display_errors();
-
-			$this->prepare_export_statuses_field();
-
 			parent::admin_options();
-		}
-
-		/**
-		 * The auto-export settings every carrier gets from the framework (#1007): whether orders are
-		 * exported to the carrier on their own, and in which WooCommerce statuses.
-		 *
-		 * The keys are the ones the shipped v1 carrier plugins stored
-		 * ({@see Order_Automation::SETTING_AUTO_EXPORT}, {@see Order_Automation::SETTING_EXPORT_STATUSES}),
-		 * so a site that upgrades keeps what it had chosen. Default OFF (spec §12). Cancelling the carrier's
-		 * shipment when the order is cancelled or fully refunded is NOT here: it is always on.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @return array<string,array<string,mixed>>
-		 */
-		protected function get_auto_export_form_fields(): array {
-
-			return [
-				Order_Automation::SETTING_AUTO_EXPORT    => [
-					'title'       => __( 'Автоэкспорт', 'woodev-plugin-framework' ),
-					'type'        => 'checkbox',
-					'default'     => 'no',
-					'desc_tip'    => __( 'Когда заказ получает один из выбранных ниже статусов, он сам отправляется перевозчику — в фоне, покупатель ничего не ждёт. Вручную заказ можно выгрузить всегда.', 'woodev-plugin-framework' ),
-					'description' => __( 'Отмена заказа и его полный возврат отменяют заявку у перевозчика сами, независимо от этой настройки.', 'woodev-plugin-framework' ),
-				],
-				Order_Automation::SETTING_EXPORT_STATUSES => [
-					'title'             => __( 'Статусы для автоэкспорта', 'woodev-plugin-framework' ),
-					'type'              => 'multiselect',
-					'class'             => 'wc-enhanced-select',
-					'css'               => 'width: 400px;',
-					'default'           => [ 'wc-processing' ],
-					'options'           => [],
-					'desc_tip'          => __( 'Заказ выгружается в тот момент, когда переходит в один из этих статусов. Здесь только статусы, в которых заказ ещё можно отправить перевозчику.', 'woodev-plugin-framework' ),
-					'custom_attributes' => [
-						'data-placeholder' => __( 'Выберите статусы заказа', 'woodev-plugin-framework' ),
-					],
-				],
-			];
-		}
-
-		/**
-		 * The statuses auto-export may be set to: the ones «Экспорт» is offered in
-		 * ({@see Order_Actions::EXPORTABLE_STATUSES}) — a later status would queue an export the gate refuses.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @return array<string,string> `wc-` status slug => its name.
-		 */
-		protected function get_export_status_options(): array {
-
-			$options = [];
-
-			foreach ( Order_Actions::EXPORTABLE_STATUSES as $status ) {
-				$options[ 'wc-' . $status ] = wc_get_order_status_name( $status );
-			}
-
-			return $options;
-		}
-
-		/**
-		 * The saved auto-export statuses the framework no longer exports on (#1007) — a v1 site could pick
-		 * any non-final status, including a custom one, and v2 offers only
-		 * {@see Order_Actions::EXPORTABLE_STATUSES}. The runner refuses such an order, so the merchant is
-		 * told instead of finding out from orders that never reach the carrier.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @return array<string,string> `wc-` status slug => its name, for every saved status outside the allowed set.
-		 */
-		protected function get_unsupported_export_statuses(): array {
-
-			$unsupported = [];
-
-			foreach ( (array) $this->get_option( Order_Automation::SETTING_EXPORT_STATUSES, [] ) as $saved ) {
-
-				if ( ! is_string( $saved ) || '' === $saved ) {
-					continue;
-				}
-
-				$status = 0 === strpos( $saved, 'wc-' ) ? substr( $saved, 3 ) : $saved;
-
-				if ( '' !== $status && ! in_array( $status, Order_Actions::EXPORTABLE_STATUSES, true ) ) {
-					$unsupported[ 'wc-' . $status ] = wc_get_order_status_name( $status );
-				}
-			}
-
-			return $unsupported;
-		}
-
-		/**
-		 * Fills the auto-export status list when the form is drawn, and warns about a saved status the
-		 * framework no longer exports on (#1007).
-		 *
-		 * The status names are read when the form is DRAWN, not when the integration is built: the
-		 * integration is built early in every request, and order-status names are translated text. A
-		 * saved status outside the allowed set stays in the list, marked by its name — a saved value the
-		 * field cannot show is one the next save would erase without the merchant seeing it; it goes
-		 * away only when the merchant deselects it (the v1 data contract).
-		 *
-		 * @since 2.0.2
-		 *
-		 * @return void
-		 */
-		protected function prepare_export_statuses_field(): void {
-
-			if ( ! isset( $this->form_fields[ Order_Automation::SETTING_EXPORT_STATUSES ] ) ) {
-				return;
-			}
-
-			$unsupported = $this->get_unsupported_export_statuses();
-
-			$this->form_fields[ Order_Automation::SETTING_EXPORT_STATUSES ]['options'] = array_merge(
-				$this->get_export_status_options(),
-				$unsupported
-			);
-
-			foreach ( $unsupported as $name ) {
-				printf(
-					'<div class="notice notice-warning inline"><p>%s</p></div>',
-					esc_html(
-						sprintf(
-							/* translators: %s: the order status name */
-							__( 'Статус «%s» больше не поддерживается для автоэкспорта: заказы в нём не выгружаются автоматически. Выберите поддерживаемый статус.', 'woodev-plugin-framework' ),
-							$name
-						)
-					)
-				);
-			}
 		}
 
 		/**
@@ -232,10 +106,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Integrat
 			if ( count( $this->get_environments() ) > 1 ) {
 				$this->form_fields = $this->add_environment_form_fields( $this->form_fields );
 			}
-
-			// #1007: the carrier's export behaviour is the framework's, so every carrier plugin gets it
-			// without code; a plugin that defines the same keys itself (the v1 ports) overrides these.
-			$this->form_fields = array_merge( $this->form_fields, $this->get_auto_export_form_fields() );
 
 			$this->form_fields = array_merge( $this->form_fields, $this->get_method_form_fields() );
 

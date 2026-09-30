@@ -112,6 +112,7 @@ return [
 	'Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller' => 'woodev/shipping-method/rest-api/class-pickup-controller.php',
 	'Woodev\\Framework\\Shipping\\Rest_Api\\Rates_Controller' => 'woodev/shipping-method/rest-api/class-rates-controller.php',
 	'Woodev\\Framework\\Shipping\\Rest_Api\\Shipping_REST_API' => 'woodev/shipping-method/rest-api/class-shipping-rest-api.php',
+	'Woodev\\Framework\\Shipping\\Settings\\Export_Settings' => 'woodev/shipping-method/settings/class-export-settings.php',
 	'Woodev\\Framework\\Shipping\\Settings\\Shipping_Integration' => 'woodev/shipping-method/settings/class-shipping-integration.php',
 	'Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings_Tab' => 'woodev/shipping-method/settings/class-shipping-settings-tab.php',
 	'Woodev\\Framework\\Shipping\\Settings\\Shipping_Tool' => 'woodev/shipping-method/settings/class-shipping-tool.php',

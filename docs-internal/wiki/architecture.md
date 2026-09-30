@@ -334,6 +334,12 @@ Moved here from `CURRENT-STATE.md` in s139: they are reference, true regardless 
   `plugins_loaded` and pass the `Shipping_Plugin` to `register_provider()`; a provider without it has
   no auto-export (`_doing_it_wrong()` from the admin menu under `WP_DEBUG`). Registered only in admin, auto-export, retry and
   auto-cancel silently do nothing off the manager's screen.
+- **The auto-export settings («Выгрузка») live on the carrier's own tab of `woodev-settings`, not on the
+  WooCommerce Integrations tab (#1007, #1010 round 3).** `Shipping_Plugin::get_settings_providers()` hands
+  every carrier that tab (`Export_Settings`, options `woodev_{plugin id}_export_*`); a carrier that
+  overrides the method must merge `parent::get_settings_providers()`. The v1 keys
+  (`auto_export_orders`, `export_statuses` in `woocommerce_{id}_settings`) are carried over once, on the
+  first construction of the handler, and left in place.
 
 ## Subsystem phase status
 

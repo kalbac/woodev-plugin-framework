@@ -17,6 +17,7 @@
 
 namespace Woodev\Tests\Integration\Shipping {
 
+	use Woodev\Framework\Settings\Settings_Page_Registry;
 	use Woodev\Framework\Shipping\Admin\Orders\Export_Queue_Notice;
 	use Woodev\Framework\Shipping\Admin\Orders\Order_Row_Builder;
 	use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
@@ -25,6 +26,7 @@ namespace Woodev\Tests\Integration\Shipping {
 	use Woodev\Framework\Shipping\Order\Export_Queue;
 	use Woodev\Framework\Shipping\Order\Export_Retry;
 	use Woodev\Framework\Shipping\Order\Shipping_Order_Handler;
+	use Woodev\Framework\Shipping\Settings\Export_Settings;
 	use Woodev\Tests\Integration\TestCase;
 
 	/**
@@ -56,8 +58,8 @@ namespace Woodev\Tests\Integration\Shipping {
 				'auto'
 			);
 
-			// The fixture shipping plugin is the carrier's real `Shipping_Plugin`: its integration settings are
-			// where the merchant's «Автоэкспорт» choice lives.
+			// The fixture shipping plugin is the carrier's real `Shipping_Plugin`: its «Выгрузка» settings (the
+			// plugin's own tab on `woodev-settings`) are where the merchant's «Автоэкспорт» choice lives.
 			$plugin = \woodev_test_shipping_method_plugin();
 
 			$registry = Orders_Registry::instance();
@@ -78,14 +80,13 @@ namespace Woodev\Tests\Integration\Shipping {
 			);
 			$registry->register_shipment_handler( self::PROVIDER_ID, $this->handler );
 
-			$this->set_settings( [ 'auto_export_orders' => 'yes', 'export_statuses' => [ 'wc-processing' ] ] );
+			$this->set_settings( true, [ 'wc-processing' ] );
 		}
 
 		protected function tearDown(): void {
 			$plugin = \woodev_test_shipping_method_plugin();
 
-			delete_option( 'woocommerce_' . $plugin->get_id_underscored() . '_settings' );
-			$plugin->get_integration_handler()->init_settings();
+			$this->reset_export_settings();
 			unload_textdomain( 'woodev-plugin-framework' );
 			Orders_Registry::instance()->reset_for_tests();
 
@@ -117,11 +118,31 @@ namespace Woodev\Tests\Integration\Shipping {
 		 * @param array<string,mixed> $settings option values.
 		 * @return void
 		 */
-		private function set_settings( array $settings ): void {
-			$plugin = \woodev_test_shipping_method_plugin();
+		/**
+		 * Sets the carrier's «Выгрузка» settings the way the settings page does — through the plugin's own
+		 * handler, so its in-memory copy and the stored options agree.
+		 *
+		 * @param bool     $auto_export whether auto-export is on.
+		 * @param string[] $statuses    the `wc-` statuses it fires on.
+		 */
+		private function set_settings( bool $auto_export, array $statuses ): void {
+			$settings = \woodev_test_shipping_method_plugin()->get_export_settings();
 
-			update_option( 'woocommerce_' . $plugin->get_id_underscored() . '_settings', $settings );
-			$plugin->get_integration_handler()->init_settings();
+			$settings->update_value( 'auto_export_orders', $auto_export );
+			$settings->update_value( 'export_statuses', $statuses );
+		}
+
+		/** Back to a clean slate: the plugin's handler at its defaults, the stored options and the v1 option gone. */
+		private function reset_export_settings(): void {
+			$plugin = \woodev_test_shipping_method_plugin();
+			$prefix = 'woodev_' . $plugin->get_id_underscored() . '_export_';
+
+			$this->set_settings( false, [ 'wc-processing' ] );
+
+			delete_option( $prefix . 'auto_export_orders' );
+			delete_option( $prefix . 'export_statuses' );
+			delete_option( $prefix . 'migrated_from_integration' );
+			delete_option( 'woocommerce_' . $plugin->get_id_underscored() . '_settings' );
 		}
 
 		/** A pending order of this carrier — the status change under test is made by the caller. */
@@ -256,7 +277,7 @@ namespace Woodev\Tests\Integration\Shipping {
 		 */
 		public function test_auto_export_switched_off_queues_nothing( bool $hpos ): void {
 			$this->use_datastore( $hpos );
-			$this->set_settings( [ 'auto_export_orders' => 'no', 'export_statuses' => [ 'wc-processing' ] ] );
+			$this->set_settings( false, [ 'wc-processing' ] );
 			$order = $this->new_order();
 
 			$order->update_status( 'processing' );
@@ -605,31 +626,84 @@ namespace Woodev\Tests\Integration\Shipping {
 			);
 		}
 
-		// ----- the carrier's own settings -----
+		// ----- the carrier's own settings: the plugin's tab on `woodev-settings` -----
 
-		public function test_the_framework_gives_every_carrier_the_auto_export_fields_with_the_right_defaults(): void {
+		public function test_the_framework_gives_every_carrier_the_export_section_on_its_own_tab_with_the_right_defaults(): void {
 			$plugin = \woodev_test_shipping_method_plugin();
-			delete_option( 'woocommerce_' . $plugin->get_id_underscored() . '_settings' );
+			$this->reset_export_settings();
 
-			$integration = $plugin->get_integration_handler();
-			$integration->init_settings();
+			$providers = $plugin->get_settings_providers();
+			$this->assertCount( 1, $providers );
+			$this->assertSame( $plugin->get_id(), $providers[0]->get_id() );
 
-			$this->assertSame( 'no', $integration->get_option( 'auto_export_orders' ), 'default OFF' );
-			$this->assertSame( [ 'wc-processing' ], $integration->get_option( 'export_statuses' ) );
+			$tabs = Settings_Page_Registry::instance()->build_tabs(
+				array_map( static fn( $provider ) => [ 'provider' => $provider, 'is_woocommerce' => true ], $providers ),
+				static fn( string $capability ): bool => true
+			);
+
+			$this->assertCount( 1, $tabs );
+			$this->assertSame( [ 'export' ], array_column( $tabs[0]['sections'], 'id' ) );
+			$this->assertSame( 'Выгрузка', $tabs[0]['sections'][0]['label'] );
+
+			$fields = $tabs[0]['sections'][0]['fields'];
+
+			$this->assertSame( [ 'auto_export_orders', 'export_statuses' ], array_keys( $fields ) );
+			$this->assertFalse( $fields['auto_export_orders']['value'], 'default OFF' );
+			$this->assertSame( [ 'wc-processing' ], $fields['export_statuses']['value'] );
+			$this->assertSame( [ 'wc-pending', 'wc-on-hold', 'wc-processing' ], array_keys( $fields['export_statuses']['options'] ), 'only statuses the export gate accepts' );
 			$this->assertSame(
 				[],
 				Orders_Registry::instance()->automation()->auto_export_statuses( Orders_Registry::instance()->get_provider( self::PROVIDER_ID ) ),
-				'while the checkbox is off the carrier reports no statuses'
+				'while auto-export is off the carrier reports no statuses'
 			);
+		}
 
-			ob_start();
-			$integration->admin_options();
-			$html = (string) ob_get_clean();
+		public function test_the_export_settings_are_no_longer_on_the_woocommerce_integration(): void {
+			$integration = \woodev_test_shipping_method_plugin()->get_integration_handler();
 
-			$this->assertStringContainsString( 'name="woocommerce_' . $plugin->get_id_underscored() . '_export_statuses[]"', $html );
-			$this->assertStringContainsString( 'value="wc-processing"', $html );
-			$this->assertStringContainsString( 'value="wc-on-hold"', $html );
-			$this->assertStringNotContainsString( 'value="wc-completed"', $html, 'only statuses the export gate accepts' );
+			$this->assertArrayNotHasKey( 'auto_export_orders', $integration->get_form_fields() );
+			$this->assertArrayNotHasKey( 'export_statuses', $integration->get_form_fields() );
+		}
+
+		public function test_the_values_saved_on_the_page_are_stored_per_plugin_and_read_by_the_automation(): void {
+			$plugin = \woodev_test_shipping_method_plugin();
+			$this->reset_export_settings();
+
+			$this->set_settings( true, [ 'wc-on-hold', 'wc-pending' ] );
+
+			$this->assertSame( 'yes', get_option( 'woodev_' . $plugin->get_id_underscored() . '_export_auto_export_orders' ) );
+			$this->assertSame( [ 'wc-on-hold', 'wc-pending' ], get_option( 'woodev_' . $plugin->get_id_underscored() . '_export_export_statuses' ) );
+			$this->assertSame(
+				[ 'on-hold', 'pending' ],
+				Orders_Registry::instance()->automation()->auto_export_statuses( Orders_Registry::instance()->get_provider( self::PROVIDER_ID ) )
+			);
+		}
+
+		public function test_a_v1_site_keeps_its_auto_export_when_the_settings_move_and_the_carry_over_runs_once(): void {
+			$plugin = \woodev_test_shipping_method_plugin();
+			$id     = $plugin->get_id_underscored();
+			$prefix = 'woodev_' . $id . '_export_';
+			$this->reset_export_settings();
+
+			$legacy = [
+				'auto_export_orders' => 'yes',
+				'export_statuses'    => [ 'wc-processing', 'wc-shipped' ],
+				'api_key'            => 'secret',
+			];
+			update_option( 'woocommerce_' . $id . '_settings', $legacy );
+
+			$migrated = new Export_Settings( $id );
+
+			$this->assertTrue( $migrated->is_auto_export_enabled() );
+			$this->assertSame( [ 'processing', 'shipped' ], $migrated->get_export_statuses() );
+			$this->assertSame( [ 'wc-shipped' ], array_keys( $migrated->get_unsupported_statuses() ), 'reported, not erased' );
+			$this->assertSame( 'yes', get_option( $prefix . 'migrated_from_integration' ) );
+			$this->assertSame( $legacy, get_option( 'woocommerce_' . $id . '_settings' ), 'the v1 option is left as it was' );
+
+			// the merchant changes their mind on the new page; the v1 option still says «yes» and must not win again
+			$migrated->update_value( 'auto_export_orders', false );
+
+			$this->assertFalse( ( new Export_Settings( $id ) )->is_auto_export_enabled() );
 		}
 	}
 }

@@ -777,8 +777,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		/**
 		 * WP_DEBUG-only contract gate (#1007): a carrier that registered its provider AND its shipment
 		 * handler but no `Shipping_Plugin` has a dead auto-export. The auto-export settings live on the
-		 * carrier plugin's integration ({@see Order_Automation::auto_export_statuses()} reads them
-		 * through {@see self::get_provider_plugin()}), so with no plugin recorded nothing is ever
+		 * carrier plugin's own tab of the `woodev-settings` page ({@see Order_Automation::auto_export_statuses()} reads
+		 * them through {@see self::get_provider_plugin()}), so with no plugin recorded nothing is ever
 		 * queued while the merchant may well have ticked «Автоэкспорт». Cancelling at the carrier does
 		 * not need the plugin and keeps working; behaviour is unchanged, this only makes the dead
 		 * feature diagnosable, once per provider, via `_doing_it_wrong()`.

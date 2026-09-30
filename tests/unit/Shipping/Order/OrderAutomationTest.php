@@ -23,11 +23,17 @@ use Woodev\Framework\Shipping\Order\Carrier_Cancel;
 use Woodev\Framework\Shipping\Order\Delivery_Status;
 use Woodev\Framework\Shipping\Order\Export_Retry;
 use Woodev\Framework\Shipping\Order\Order_Automation;
+use Woodev\Framework\Shipping\Settings\Export_Settings;
 use Woodev\Framework\Shipping\Shipping_Plugin;
 use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__, 4 ) . '/woodev/compatibility/class-plugin-compatibility.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/compatibility/class-order-compatibility.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/class-plugin-exception.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-control.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-setting.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/abstract-class-settings.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/settings/class-export-settings.php';
 
 /**
  * @covers \Woodev\Framework\Shipping\Order\Order_Automation
@@ -50,7 +56,7 @@ final class OrderAutomationTest extends TestCase {
 	/** @var bool whether an export attempt of the order is running right now. */
 	private bool $export_running = false;
 
-	/** @var array<string,mixed> the integration settings of the carrier's plugin. */
+	/** @var array<string,mixed> the carrier plugin's «Выгрузка» settings, by setting key (`auto_export_orders` stored as `yes`/`no`). */
 	private array $settings = [];
 
 	protected function setUp(): void {
@@ -70,6 +76,20 @@ final class OrderAutomationTest extends TestCase {
 		Functions\when( 'apply_filters' )->returnArg( 2 );
 		Functions\when( 'absint' )->alias( static fn( $value ) => abs( (int) $value ) );
 		Functions\when( 'wc_string_to_bool' )->alias( static fn( $value ) => in_array( strtolower( (string) $value ), [ 'yes', 'true', '1' ], true ) );
+		// The carrier's «Выгрузка» settings are real `Export_Settings` over the options table, so the read
+		// path — storage keys, the `wc-` prefix, the default — is the one a site runs.
+		Functions\when( 'get_option' )->alias(
+			function ( string $name, $default = false ) {
+				$key = 'woodev_cdek_export_';
+
+				return 0 === strpos( $name, $key ) && array_key_exists( substr( $name, strlen( $key ) ), $this->settings )
+					? $this->settings[ substr( $name, strlen( $key ) ) ]
+					: $default;
+			}
+		);
+		Functions\when( 'update_option' )->justReturn( true );
+		Functions\when( 'wp_parse_args' )->alias( static fn( $args, $defaults = [] ) => array_merge( (array) $defaults, (array) $args ) );
+		Functions\when( 'wc_get_order_status_name' )->alias( static fn( string $status ) => $status );
 		Functions\when( 'get_post_meta' )->alias(
 			function ( int $post_id, string $key, bool $single ) {
 				return $this->meta[ $key ] ?? '';
@@ -116,9 +136,7 @@ final class OrderAutomationTest extends TestCase {
 
 		if ( $with_plugin ) {
 			$plugin = Mockery::mock( Shipping_Plugin::class );
-			$plugin->shouldReceive( 'get_integration_option' )->andReturnUsing(
-				fn( string $key, $default = null ) => $this->settings[ $key ] ?? $default
-			);
+			$plugin->shouldReceive( 'get_export_settings' )->andReturnUsing( static fn() => new Export_Settings( 'cdek' ) );
 		}
 
 		Orders_Registry::instance()->register_provider(

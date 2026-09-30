@@ -40,6 +40,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		/** @var Location\Location_Service|null lazily-built location service façade */
 		private ?Location\Location_Service $location_service = null;
 
+		/** @var Settings\Export_Settings|null lazily-built «Выгрузка» settings of this carrier (#1007) */
+		private ?Settings\Export_Settings $export_settings = null;
+
 		/**
 		 * Initializes the shipping plugin.
 		 *
@@ -162,6 +165,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/checkout/class-checkout-field-policy.php';
 			require_once $path . '/pickup/class-pickup-map-settings.php';
 			require_once $path . '/settings/class-shipping-settings-tab.php';
+			require_once $path . '/settings/class-export-settings.php';
 
 			// checkout field definitions + presets
 			require_once $path . '/checkout/class-field.php';
@@ -684,6 +688,62 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			$settings = get_option( 'woocommerce_' . $this->get_id_underscored() . '_settings', [] );
 
 			return $settings[ $key ] ?? $default;
+		}
+
+		/**
+		 * The «Выгрузка» settings of this carrier (#1007): auto-export on / off and the statuses it fires
+		 * on. Stored per plugin, edited on the plugin's own tab of the framework settings page
+		 * (`woodev-settings`), and read by {@see Order\Order_Automation}.
+		 *
+		 * The first call carries the v1 values over from the WooCommerce integration option, once
+		 * ({@see Settings\Export_Settings::migrate_from_integration()}).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return Settings\Export_Settings
+		 */
+		public function get_export_settings(): Settings\Export_Settings {
+
+			if ( null === $this->export_settings ) {
+				$this->export_settings = new Settings\Export_Settings( $this->get_id_underscored() );
+			}
+
+			return $this->export_settings;
+		}
+
+		/**
+		 * This carrier's tab on the framework settings page (`woodev-settings`): every shipping plugin
+		 * gets it from the framework, with the «Выгрузка» section (#1007), and writes no code.
+		 *
+		 * A carrier that contributes providers of its own overrides this and MUST merge
+		 * `parent::get_settings_providers()` in — overriding it without the parent's providers drops
+		 * the framework's tab.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return \Woodev\Framework\Settings\Settings_Provider[]
+		 */
+		public function get_settings_providers(): array {
+
+			$export = $this->get_export_settings();
+
+			return array_merge(
+				parent::get_settings_providers(),
+				[
+					\Woodev\Framework\Settings\Settings_Provider::create_with_sections(
+						$this->get_id(),
+						$this->get_plugin_name(),
+						$export,
+						[],
+						\Woodev\Framework\Settings\Settings_Section::create(
+							Settings\Export_Settings::SECTION_ID,
+							__( 'Выгрузка', 'woodev-plugin-framework' ),
+							$export->get_owned_setting_ids(),
+							$export->get_section_description()
+						)
+					),
+				]
+			);
 		}
 
 		/**
