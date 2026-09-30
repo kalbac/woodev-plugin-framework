@@ -1730,7 +1730,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 */
 		public function validate_posted_point( string $point_id, string $payment_method, int $cart_weight ): bool {
 			try {
-				$point = $this->fetch_point( $point_id );
+				// The re-check runs inside the checkout POST — the customer waits for it (#1017).
+				$point = $this->fetch_point( $point_id, true );
 			} catch ( \Throwable $e ) {
 				return $this->evaluate_recheck_outage( $e, $point_id );
 			}
@@ -1758,14 +1759,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param string $point_id the point id to fetch.
+		 * @since 2.0.2 Card #1017: `$at_checkout` — a lookup made inside a checkout request gets
+		 *              the checkout budget instead of the `reference` timeout (the admin order
+		 *              editor, which persists a point too, keeps the longer one). The budget is
+		 *              the FIRST lookup's: a memoized point or failure is reused as is.
+		 *
+		 * @param string $point_id    the point id to fetch.
+		 * @param bool   $at_checkout whether a customer is waiting for the lookup in a checkout request.
 		 *
 		 * @return Pickup_Point|null
 		 *
 		 * @throws \Throwable whatever {@see Point_Source::fetch_details()} threw on the
 		 *                     first lookup for this id.
 		 */
-		private function fetch_point( string $point_id ): ?Pickup_Point {
+		private function fetch_point( string $point_id, bool $at_checkout ): ?Pickup_Point {
 			if ( array_key_exists( $point_id, $this->fetch_failures ) ) {
 				throw $this->fetch_failures[ $point_id ];
 			}
@@ -1775,8 +1782,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			}
 
 			try {
-				// The pickup-point lookup is a reference-data load: it gets the «reference» timeout (#954).
-				$point = \Woodev_API_Request_Purpose::run( \Woodev_API_Request_Purpose::REFERENCE, fn() => $this->source->fetch_details( $point_id ) );
+				// The pickup-point lookup is a reference-data load (#954): the «reference» timeout, or the
+				// checkout budget when a customer waits for it inside a checkout request (#1017).
+				$point = \Woodev_API_Request_Purpose::run_reference( $at_checkout, fn() => $this->source->fetch_details( $point_id ) );
 			} catch ( \Throwable $e ) {
 				$this->fetch_failures[ $point_id ] = $e;
 
@@ -3445,7 +3453,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		public function handle_checkout_order_processed( int $order_id, array $posted_data, \WC_Order $order ): void {
 			$this->forget_remembered_selections();
 
-			$this->persist_full_point( $order, $this->posted_field_value() );
+			$this->persist_full_point( $order, $this->posted_field_value(), true );
 		}
 
 		/**
@@ -3476,7 +3484,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 
 			$this->forget_remembered_selections();
 
-			$this->persist_full_point( $order, $point_id );
+			$this->persist_full_point( $order, $point_id, true );
 		}
 
 		/**
@@ -3531,12 +3539,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param \WC_Order $order    the order to store the point onto.
-		 * @param string    $point_id the carrier's id of the chosen point.
+		 * @since 2.0.2 Card #1017: `$at_checkout` — the two checkout hooks pass `true` (the customer
+		 *              waits for the re-fetch: the checkout budget), the admin order editor leaves
+		 *              the default `false` (the `reference` timeout).
+		 *
+		 * @param \WC_Order $order       the order to store the point onto.
+		 * @param string    $point_id    the carrier's id of the chosen point.
+		 * @param bool      $at_checkout whether the call runs inside a checkout request.
 		 *
 		 * @return void
 		 */
-		public function persist_full_point( \WC_Order $order, string $point_id ): void {
+		public function persist_full_point( \WC_Order $order, string $point_id, bool $at_checkout = false ): void {
 			if ( null === $this->order_handler || null === $this->point_field_logical ) {
 				return;
 			}
@@ -3546,7 +3559,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			}
 
 			try {
-				$point = $this->fetch_point( $point_id );
+				$point = $this->fetch_point( $point_id, $at_checkout );
 			} catch ( \Throwable $e ) {
 				$this->log_carrier_failure( $e, 'order persistence re-fetch' );
 

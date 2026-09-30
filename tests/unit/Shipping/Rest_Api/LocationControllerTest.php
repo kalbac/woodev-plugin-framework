@@ -797,6 +797,28 @@ final class Location_Controller_Forget_Order_Probe extends Location_Controller {
 }
 
 /**
+ * #1017: a popular-settlements provider fixture that also records the timeout each of its two
+ * upstream calls (`resolve_key()`, `suggest()`) would get.
+ */
+final class Location_Controller_Timeout_Probe_Provider extends Location_Controller_Popular_Provider_Fixture {
+
+	/** @var int[] the timeout, in seconds, of each upstream call — in call order */
+	public array $timeouts = [];
+
+	public function resolve_key( string $key ): ?Location_Record {
+		$this->timeouts[] = \Woodev_API_Request_Purpose::default_timeout( \Woodev_API_Request_Purpose::current() );
+
+		return parent::resolve_key( $key );
+	}
+
+	public function suggest( string $query, Location_Scope $scope ): array {
+		$this->timeouts[] = \Woodev_API_Request_Purpose::default_timeout( \Woodev_API_Request_Purpose::current() );
+
+		return parent::suggest( $query, $scope );
+	}
+}
+
+/**
  * @covers \Woodev\Framework\Shipping\Rest_Api\Location_Controller
  */
 final class LocationControllerTest extends TestCase {
@@ -3418,4 +3440,96 @@ final class LocationControllerTest extends TestCase {
 	// prove every customer-facing handler that can reach
 	// Location_Service::get_customer_record() calls the bridge — that is the
 	// part specific to this controller.
+
+	// -------------------------------------------------------------------
+	// #1017: the provider calls a CUSTOMER waits for at checkout run under
+	// the checkout budget (8 s); the admin route does not.
+	// -------------------------------------------------------------------
+
+	/** The timeout the API call made right now would get, in seconds. */
+	private static function timeout_now(): int {
+		return \Woodev_API_Request_Purpose::default_timeout( \Woodev_API_Request_Purpose::current() );
+	}
+
+	public function test_public_suggest_calls_the_provider_under_the_checkout_budget(): void {
+		$seen     = [];
+		$provider = new Location_Controller_Fake_Provider(
+			static function () use ( &$seen ) {
+				$seen[] = self::timeout_now();
+
+				return [];
+			}
+		);
+		$ctrl     = new Location_Controller_Probe( new Location_Controller_Fake_Service( true, $provider ) );
+
+		$ctrl->handle_suggest_request( new WP_REST_Request( [ 'q' => 'Мос', 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'RU' ] ) );
+
+		$this->assertSame( [ 8 ], $seen, 'address autocomplete at checkout gives up like a rate call' );
+		$this->assertSame( 60, self::timeout_now(), 'and the scope does not leak past the request' );
+	}
+
+	public function test_admin_suggest_keeps_the_default_timeout(): void {
+		$seen     = [];
+		$provider = new Location_Controller_Fake_Provider(
+			static function () use ( &$seen ) {
+				$seen[] = self::timeout_now();
+
+				return [];
+			}
+		);
+		$ctrl     = new Location_Controller_Probe( new Location_Controller_Fake_Service( true, $provider ) );
+
+		$ctrl->handle_admin_suggest_request( new WP_REST_Request( [ 'q' => 'Мос', 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'RU' ] ) );
+
+		$this->assertSame( [ 60 ], $seen, 'the admin picker is not a customer waiting' );
+	}
+
+	public function test_select_rechecks_a_popular_pick_with_the_provider_under_the_checkout_budget(): void {
+		$posted = $this->record( 'dadata:fias-1' );
+		$entry  = new Popular_Settlement_Entry( 7, 'dadata', 'RU', $posted, 5, time(), null, time() );
+
+		$provider = new Location_Controller_Timeout_Probe_Provider( 'dadata', $posted );
+		$service  = new Location_Controller_Fake_Service(
+			true, null, null, true, true, null, null, null, false, null, null, [], [],
+			new Location_Controller_Fake_Popular_Store( $entry, true ), $provider
+		);
+
+		( new Location_Controller_Probe( $service ) )->handle_select_request( new WP_REST_Request( [ 'record' => $posted->to_array() ] ) );
+
+		$this->assertSame( [ 8 ], $provider->timeouts, 'the customer waits for the pick to be accepted' );
+	}
+
+	public function test_select_searches_for_a_replacement_of_a_gone_pick_under_the_checkout_budget(): void {
+		$stored    = $this->settlement_record( 'dadata:fias-1' );
+		$candidate = $this->settlement_record( 'dadata:fias-2', ' МОСКВА ', ' московская область ' );
+		$entry     = new Popular_Settlement_Entry( 7, 'dadata', 'RU', $stored, 5, time(), null, time() );
+
+		// resolve_key() => null ("gone"), then suggest() looks for a replacement.
+		$provider = new Location_Controller_Timeout_Probe_Provider( 'dadata', null, [ $candidate ] );
+		$service  = new Location_Controller_Fake_Service(
+			true, null, null, true, true, null, null, null, false, null, null, [], [],
+			new Location_Controller_Fake_Popular_Store( $entry, true ), $provider
+		);
+
+		( new Location_Controller_Probe( $service ) )->handle_select_request( new WP_REST_Request( [ 'record' => $stored->to_array() ] ) );
+
+		$this->assertSame( [ 8, 8 ], $provider->timeouts, 'both the re-check and the replacement search' );
+	}
+
+	public function test_public_list_calls_the_provider_under_the_checkout_budget(): void {
+		$seen     = [];
+		$provider = new Location_Controller_Fake_List_Provider(
+			static function () use ( &$seen ) {
+				$seen[] = self::timeout_now();
+
+				return [];
+			}
+		);
+		$service  = new Location_Controller_Fake_Service( true, null, null, true, true, null, null, $provider );
+		$ctrl     = new Location_Controller_Probe( $service );
+
+		$ctrl->handle_list_request( new WP_REST_Request( [ 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'RU' ] ) );
+
+		$this->assertSame( [ 8 ], $seen );
+	}
 }

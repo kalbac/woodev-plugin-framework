@@ -2166,6 +2166,8 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * Purpose scopes nest ({@see Woodev_API_Request_Purpose::run()}), and an inner scope can never
 		 * LENGTHEN the wait of the one around it: the timeout is the shortest of the running scopes'.
 		 * A reference lookup a carrier makes inside a checkout rate call stays at the rate timeout.
+		 * A reference lookup made inside a checkout request gets that same checkout budget directly
+		 * ({@see Woodev_API_Request_Purpose::run_reference()}); in the admin it keeps the reference one.
 		 *
 		 * A filter that returns something that is not a positive number falls back to the method's
 		 * own value — a zero or negative timeout would make WordPress fail every call at once.
@@ -2190,7 +2192,9 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 			 * @since 2.0.2
 			 *
 			 * @param int               $timeout seconds — the shortest timeout of the running purpose scopes
-			 * @param string            $purpose `rates`, `reference`, `export` or `default` — the innermost one
+			 * @param string            $purpose `rates`, `reference`, `export` or `default` — the innermost one;
+			 *                                   `rates` is the checkout budget, so it also marks any other call a
+			 *                                   customer waits for inside a checkout request (#1017)
 			 * @param Woodev_API_Base   $api     the API about to send the request
 			 */
 			$filtered = apply_filters( 'woodev_' . $this->get_api_id() . '_request_timeout', $timeout, $purpose, $this );
