@@ -705,7 +705,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		public function get_export_settings(): Settings\Export_Settings {
 
 			if ( null === $this->export_settings ) {
-				$this->export_settings = new Settings\Export_Settings( $this->get_id_underscored() );
+				// the v1 option's name comes from the integration handler itself, when there is one
+				$this->export_settings = new Settings\Export_Settings(
+					$this->get_id_underscored(),
+					function (): ?string {
+						$handler = $this->get_integration_handler();
+
+						return $handler ? $handler->get_option_key() : null;
+					}
+				);
 			}
 
 			return $this->export_settings;
