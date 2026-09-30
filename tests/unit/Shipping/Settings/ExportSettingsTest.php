@@ -66,7 +66,9 @@ final class ExportSettingsTest extends TestCase {
 			static fn( $args, $defaults = [] ) => array_merge( (array) $defaults, (array) $args )
 		);
 		Functions\when( 'apply_filters' )->returnArg( 2 );
-		// like WooCommerce 9+: declared `string|bool`, so any other type is a TypeError
+		// Deliberately STRICTER than WooCommerce: its wc_string_to_bool() is untyped and only fails on an
+		// array / object (int 1 => true, null => false), while this stub throws on anything but string|bool,
+		// so the migration must never hand it a value v1 did not write.
 		Functions\when( 'wc_string_to_bool' )->alias(
 			static function ( $value ) {
 				if ( ! is_string( $value ) && ! is_bool( $value ) ) {
