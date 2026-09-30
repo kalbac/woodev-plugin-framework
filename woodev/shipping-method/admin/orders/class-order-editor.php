@@ -9,6 +9,7 @@
 
 namespace Woodev\Framework\Shipping\Admin\Orders;
 
+use Woodev\Framework\Shipping\Order\Order_Lock;
 use Woodev\Framework\Shipping\Order\Order_Marker;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -330,30 +331,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 		/**
 		 * The name of the MySQL named lock that serialises admin saves of one order.
 		 *
-		 * `woodev_order_edit_{id}_{site}` — `site` being the first 16 hex digits of the MD5 of the
-		 * database name and the table prefix, so two sites sharing one MySQL server (two databases,
-		 * two prefixes in one database, the blogs of a multisite) never share a lock. Named locks
-		 * are server-wide and their names at most 64 characters (MySQL 5.7+, MariaDB 10.0.2+);
-		 * this shape is at most 55 for any order id, whatever the prefix.
+		 * `woodev_order_edit_{id}_{site}` — see {@see Order_Lock::name()} for the site digest and
+		 * the length bound.
 		 *
 		 * @since 2.0.2 #981 round 4.
+		 * @since 2.0.2 #945: built by {@see Order_Lock}, the helper the carrier export shares.
 		 *
 		 * @param int $order_id the order.
 		 * @return string
 		 */
 		public static function update_lock_name( int $order_id ): string {
-			global $wpdb;
-
-			return 'woodev_order_edit_' . $order_id . '_' . substr( md5( (string) $wpdb->dbname . '|' . (string) $wpdb->prefix ), 0, 16 );
+			return Order_Lock::name( 'edit', $order_id );
 		}
 
 		/**
 		 * Takes the order's edit lock, waiting up to the constructor's `$lock_timeout` seconds.
 		 *
-		 * One `SELECT GET_LOCK()` on the request's own database connection: MySQL grants the name
-		 * to one connection at a time and frees it when that connection closes, so a request that
-		 * died mid-save blocks nobody. Protected as the seam the integration tests use to run a
-		 * concurrent save right before the lock is taken.
+		 * Protected as the seam the integration tests use to run a concurrent save right before
+		 * the lock is taken.
 		 *
 		 * @since 2.0.2 #981 round 4.
 		 *
@@ -361,12 +356,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 		 * @return bool whether the lock is held; false on a timeout or a database error.
 		 */
 		protected function lock_order( int $order_id ): bool {
-			global $wpdb;
-
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- a server-side lock, not data: nothing to cache.
-			$granted = $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', self::update_lock_name( $order_id ), $this->lock_timeout ) );
-
-			return '1' === (string) $granted;
+			return Order_Lock::acquire( 'edit', $order_id, $this->lock_timeout );
 		}
 
 		/**
@@ -378,10 +368,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 		 * @return void
 		 */
 		private function unlock_order( int $order_id ): void {
-			global $wpdb;
-
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- releases a server-side lock: nothing to cache.
-			$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', self::update_lock_name( $order_id ) ) );
+			Order_Lock::release( 'edit', $order_id );
 		}
 
 		/**

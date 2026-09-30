@@ -82,6 +82,16 @@ namespace {
 		protected function extract_carrier_order_id( \Woodev_API_Response $response ): string {
 			return $this->next_carrier_order_id;
 		}
+
+		protected function acquire_export_lock( int $order_id ): bool {
+			return true;
+		}
+
+		protected function release_export_lock( int $order_id ): void {}
+
+		protected function fresh_order( \WC_Order $order ): \WC_Order {
+			return $order;
+		}
 	}
 }
 
@@ -151,6 +161,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			}
 
 			$order_handler = Mockery::mock( Shipping_Order_Handler::class );
+			$order_handler->shouldReceive( 'get' )->andReturn( '' );
 			$order_handler->shouldReceive( 'set' )->withAnyArgs();
 
 			$retry_handler = Mockery::mock( '\Woodev_Background_Job_Handler' );
@@ -172,7 +183,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$handler                        = $this->handler( $store );
 			$handler->next_carrier_order_id = 'CARRIER-1';
 
-			$order  = Mockery::mock( '\WC_Order' );
+			$order  = Mockery::mock( '\WC_Order' )->shouldIgnoreMissing( 0 );
 			$result = $handler->export( $order, $record, $provider );
 
 			$this->assertTrue( $result->is_success() );
@@ -194,11 +205,11 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$handler                        = $this->handler( $store );
 			$handler->next_carrier_order_id = '';
 
-			$order  = Mockery::mock( '\WC_Order' );
+			$order  = Mockery::mock( '\WC_Order' )->shouldIgnoreMissing( 0 );
 			$result = $handler->export( $order, $record, $provider );
 
 			$this->assertFalse( $result->is_success(), 'a response with no carrier id is a failure (#860)' );
-			$this->assertSame( '', $result->get_message() );
+			$this->assertNotSame( '', $result->get_message(), 'and, since #945, an «unknown» one that tells the merchant to check the carrier' );
 		}
 
 		// -------------------------------------------------------------------
@@ -220,7 +231,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$handler                        = $this->handler( $store );
 			$handler->next_carrier_order_id = 'CARRIER-1';
 
-			$order = Mockery::mock( '\WC_Order' );
+			$order = Mockery::mock( '\WC_Order' )->shouldIgnoreMissing( 0 );
 
 			Actions\expectDone( 'woodev_shipping_order_exported' )->once()->with( $order, 'CARRIER-1' );
 
@@ -228,14 +239,11 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 		}
 
 		/**
-		 * The flush action must fire even when the carrier id is empty — same as
-		 * the plugin-prefixed `shipment_exported` hook it fires alongside (see the
-		 * MEDIUM 3 test above): the meta write itself is unconditional (verified in
-		 * test_export_writes_the_meta_even_when_the_carrier_id_is_empty() below), so
-		 * a stale badge count must not survive an export attempt just because the
-		 * carrier response happened to carry no id.
+		 * A response with no carrier id is an «unknown» export (#945), not a success: neither the
+		 * framework-wide flush action nor the plugin-prefixed hook fires for it, and no empty id
+		 * is stored — an empty meta row would count as «exported» to a key-EXISTS query.
 		 */
-		public function test_export_fires_the_order_exported_action_even_when_the_carrier_id_is_empty(): void {
+		public function test_export_fires_no_order_exported_action_when_the_carrier_id_is_empty(): void {
 			$provider = new \ShipmentHandlerEnrollment_Fixture_Provider();
 			$record   = $this->record();
 
@@ -245,39 +253,34 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$handler                        = $this->handler( $store );
 			$handler->next_carrier_order_id = '';
 
-			$order = Mockery::mock( '\WC_Order' );
+			$order = Mockery::mock( '\WC_Order' )->shouldIgnoreMissing( 0 );
 
-			Actions\expectDone( 'woodev_shipping_order_exported' )->once()->with( $order, '' );
+			Actions\expectDone( 'woodev_shipping_order_exported' )->never();
+			Actions\expectDone( 'woodev_shipping_test_shipment_exported' )->never();
 
 			$handler->export( $order, $record, $provider );
 		}
 
 		/**
-		 * #853 measurement (required by the card): export() writes
-		 * `carrier_order_id` UNCONDITIONALLY at line 191 — the empty-id branch
-		 * (`'' !== $carrier_order_id`) is only checked AFTERWARDS, and only to gate
-		 * popular-settlement enrolment. This is the write-side half of the
-		 * empty-carrier-id defect chain; see OrderCompatibilityEmptyCarrierIdTest for
-		 * proof the underlying meta write actually persists an empty string in both
-		 * HPOS and legacy storage, and
-		 * ShippingOrdersQueryTest::test_is_exported_true_builds_an_exists_clause()
-		 * for proof the query then treats that row as "exported" (a pure key-EXISTS
-		 * test, not a value comparison).
+		 * #853 measurement, superseded by #945: an EMPTY carrier id used to be written to the order
+		 * (a meta row that a key-EXISTS query counts as «exported»). It is not written any more —
+		 * the export is «unknown» instead.
 		 */
-		public function test_export_writes_the_meta_even_when_the_carrier_id_is_empty(): void {
+		public function test_export_does_not_write_the_meta_when_the_carrier_id_is_empty(): void {
 			$response = Mockery::mock( '\Woodev_API_Response' );
 			$api      = Mockery::mock( '\Woodev\Framework\Shipping\Api\Shipping_API' );
 			$api->shouldReceive( 'create_order' )->andReturn( $response );
 
 			$order_handler = Mockery::mock( Shipping_Order_Handler::class );
-			$order_handler->shouldReceive( 'set' )->once()->with( Mockery::type( '\WC_Order' ), 'carrier_order_id', '' );
+			$order_handler->shouldReceive( 'get' )->andReturn( '' );
+			$order_handler->shouldNotReceive( 'set' );
 
 			$retry_handler = Mockery::mock( '\Woodev_Background_Job_Handler' );
 
 			$handler                        = new \Test_Shipment_Handler( $api, $order_handler, $retry_handler, 'test', null );
 			$handler->next_carrier_order_id = '';
 
-			$order = Mockery::mock( '\WC_Order' );
+			$order = Mockery::mock( '\WC_Order' )->shouldIgnoreMissing( 0 );
 
 			$result = $handler->export( $order );
 
@@ -326,7 +329,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			);
 
 			$handler = $this->handler( $store );
-			$order   = Mockery::mock( '\WC_Order' );
+			$order   = Mockery::mock( '\WC_Order' )->shouldIgnoreMissing( 0 );
 
 			$result = $handler->export( $order, $record, $provider );
 
@@ -350,7 +353,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			);
 
 			$handler = $this->handler( $store );
-			$order   = Mockery::mock( '\WC_Order' );
+			$order   = Mockery::mock( '\WC_Order' )->shouldIgnoreMissing( 0 );
 
 			$captured = null;
 			Functions\expect( 'error_log' )
@@ -391,7 +394,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			);
 
 			$handler = $this->handler( $store );
-			$order   = Mockery::mock( '\WC_Order' );
+			$order   = Mockery::mock( '\WC_Order' )->shouldIgnoreMissing( 0 );
 
 			$captured = null;
 			Functions\expect( 'error_log' )
@@ -425,7 +428,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$store->shouldNotReceive( 'enroll' );
 
 			$handler = $this->handler( $store );
-			$order   = Mockery::mock( '\WC_Order' );
+			$order   = Mockery::mock( '\WC_Order' )->shouldIgnoreMissing( 0 );
 
 			$handler->export( $order, null, $provider );
 		}
@@ -435,7 +438,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$store->shouldNotReceive( 'enroll' );
 
 			$handler = $this->handler( $store );
-			$order   = Mockery::mock( '\WC_Order' );
+			$order   = Mockery::mock( '\WC_Order' )->shouldIgnoreMissing( 0 );
 
 			$handler->export( $order, $this->record(), null );
 		}
