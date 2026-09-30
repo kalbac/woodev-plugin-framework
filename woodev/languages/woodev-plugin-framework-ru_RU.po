@@ -4290,11 +4290,11 @@ msgstr ""
 msgid "ID заказа у перевозчика"
 msgstr ""
 
-#: shipping-method/admin/views/html-admin-order-metabox.php:60
+#: shipping-method/admin/views/html-admin-order-metabox.php:68
 msgid "История доставки"
 msgstr ""
 
-#: shipping-method/admin/views/html-admin-order-metabox.php:83
+#: shipping-method/admin/views/html-admin-order-metabox.php:91
 msgid "Вы уверены?"
 msgstr ""
 

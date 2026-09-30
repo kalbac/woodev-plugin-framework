@@ -215,6 +215,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 			// sources the already-built shared badge stylesheet from the active
 			// framework copy, so it never loads on an order-edit screen without ours.
 			$this->registry->enqueue_metabox_style();
+			$this->registry->enqueue_metabox_script();
 		}
 
 		/**
@@ -438,7 +439,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 
 		/**
 		 * Handles an export / update / cancel (or carrier-extra) submission from
-		 * the metabox's action-button forms.
+		 * the metabox's action buttons — posted by `order-metabox-actions.js` from a
+		 * detached form, never a nested one (#1012).
 		 *
 		 * Resolves the order's provider the same way {@see self::add_meta_box()}
 		 * did — never trusting a posted provider id — and dispatches to

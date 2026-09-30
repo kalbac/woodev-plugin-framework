@@ -1444,6 +1444,39 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		}
 
 		/**
+		 * Enqueues the script that turns the order-edit metabox's action buttons into POSTs.
+		 *
+		 * The buttons are `type="button"` with data attributes instead of nested `<form>`s —
+		 * the metabox sits inside WooCommerce's order form, and a nested form's `</form>`
+		 * closed the OUTER one, so the order's own fields (status included) were never
+		 * saved (#1012). Called only by {@see Shipping_Admin_Order::add_meta_box()} after it
+		 * has registered the box, so the script never loads on another screen. Raw JS served
+		 * as-is, no build step and no dependencies — like the other files under
+		 * `shipping-method/assets/js/`.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		public function enqueue_metabox_script(): void {
+			$path = dirname( __DIR__, 2 ) . '/assets/js/admin/order-metabox-actions.js';
+
+			if ( ! file_exists( $path ) ) {
+				return;
+			}
+
+			wp_enqueue_script(
+				'woodev-shipping-order-metabox-actions',
+				plugins_url( basename( $path ), $path ),
+				[],
+				(string) filemtime( $path ),
+				true
+			);
+		}
+
+		/**
 		 * Whether the current admin screen is a WooCommerce Admin (`wc-admin`) page.
 		 *
 		 * A protected, overridable seam, not a Brain-Monkey-stubbed function call:
