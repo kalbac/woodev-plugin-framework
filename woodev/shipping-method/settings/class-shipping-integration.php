@@ -73,21 +73,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Integrat
 			add_action( 'woocommerce_update_options_integration_' . $this->id, [ $this, 'process_admin_options' ] );
 		}
 
-		/**
-		 * Displays admin options.
-		 *
-		 * Override this method to add custom display logic.
-		 *
-		 * @since 1.4.0
-		 */
 		public function admin_options() {
 			$this->display_errors();
 
-			// The status names are read when the form is DRAWN, not when the integration is built: the
-			// integration is built early in every request, and order-status names are translated text.
-			if ( isset( $this->form_fields[ Order_Automation::SETTING_EXPORT_STATUSES ] ) ) {
-				$this->form_fields[ Order_Automation::SETTING_EXPORT_STATUSES ]['options'] = $this->get_export_status_options();
-			}
+			$this->prepare_export_statuses_field();
 
 			parent::admin_options();
 		}
@@ -147,6 +136,77 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Integrat
 			}
 
 			return $options;
+		}
+
+		/**
+		 * The saved auto-export statuses the framework no longer exports on (#1007) — a v1 site could pick
+		 * any non-final status, including a custom one, and v2 offers only
+		 * {@see Order_Actions::EXPORTABLE_STATUSES}. The runner refuses such an order, so the merchant is
+		 * told instead of finding out from orders that never reach the carrier.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<string,string> `wc-` status slug => its name, for every saved status outside the allowed set.
+		 */
+		protected function get_unsupported_export_statuses(): array {
+
+			$unsupported = [];
+
+			foreach ( (array) $this->get_option( Order_Automation::SETTING_EXPORT_STATUSES, [] ) as $saved ) {
+
+				if ( ! is_string( $saved ) || '' === $saved ) {
+					continue;
+				}
+
+				$status = 0 === strpos( $saved, 'wc-' ) ? substr( $saved, 3 ) : $saved;
+
+				if ( '' !== $status && ! in_array( $status, Order_Actions::EXPORTABLE_STATUSES, true ) ) {
+					$unsupported[ 'wc-' . $status ] = wc_get_order_status_name( $status );
+				}
+			}
+
+			return $unsupported;
+		}
+
+		/**
+		 * Fills the auto-export status list when the form is drawn, and warns about a saved status the
+		 * framework no longer exports on (#1007).
+		 *
+		 * The status names are read when the form is DRAWN, not when the integration is built: the
+		 * integration is built early in every request, and order-status names are translated text. A
+		 * saved status outside the allowed set stays in the list, marked by its name — a saved value the
+		 * field cannot show is one the next save would erase without the merchant seeing it; it goes
+		 * away only when the merchant deselects it (the v1 data contract).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		protected function prepare_export_statuses_field(): void {
+
+			if ( ! isset( $this->form_fields[ Order_Automation::SETTING_EXPORT_STATUSES ] ) ) {
+				return;
+			}
+
+			$unsupported = $this->get_unsupported_export_statuses();
+
+			$this->form_fields[ Order_Automation::SETTING_EXPORT_STATUSES ]['options'] = array_merge(
+				$this->get_export_status_options(),
+				$unsupported
+			);
+
+			foreach ( $unsupported as $name ) {
+				printf(
+					'<div class="notice notice-warning inline"><p>%s</p></div>',
+					esc_html(
+						sprintf(
+							/* translators: %s: the order status name */
+							__( 'Статус «%s» больше не поддерживается для автоэкспорта: заказы в нём не выгружаются автоматически. Выберите поддерживаемый статус.', 'woodev-plugin-framework' ),
+							$name
+						)
+					)
+				);
+			}
 		}
 
 		/**

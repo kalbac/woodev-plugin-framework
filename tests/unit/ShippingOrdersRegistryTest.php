@@ -755,6 +755,71 @@ class ShippingOrdersRegistryTest extends TestCase {
 	}
 
 	/**
+	 * #1007: a carrier that registered its provider AND its shipment handler but no
+	 * `Shipping_Plugin` has a dead auto-export (its settings live on the plugin) — said
+	 * once per provider via `_doing_it_wrong()` under `WP_DEBUG`, naming the carrier.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_check_auto_export_contract_reports_a_carrier_with_a_handler_but_no_plugin(): void {
+		define( 'WP_DEBUG', true );
+
+		$registry = Orders_Registry::instance();
+		$registry->register_provider( $this->provider_with_method_ids( 'cdek', [ 'cdek_courier' ] ) );
+		$registry->register_shipment_handler( 'cdek', Mockery::mock( Abstract_Shipment_Handler::class ) );
+
+		Functions\expect( '_doing_it_wrong' )
+			->once()
+			->with(
+				Orders_Registry::class . '::register_provider',
+				Mockery::on(
+					static function ( $message ) {
+						return is_string( $message )
+							&& false !== strpos( $message, 'cdek' )
+							&& false !== strpos( $message, 'no Shipping_Plugin' );
+					}
+				),
+				'2.0.2'
+			);
+
+		$registry->check_auto_export_contract();
+	}
+
+	/**
+	 * Controls: a carrier WITH its plugin, and one with no handler (it cannot export at all),
+	 * are not reported.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_check_auto_export_contract_reports_nothing_for_a_plugin_or_a_provider_without_a_handler(): void {
+		define( 'WP_DEBUG', true );
+
+		$registry = Orders_Registry::instance();
+		$registry->register_provider( $this->provider_with_method_ids( 'cdek', [ 'cdek_courier' ] ), $this->shipping_plugin_double( [ 'cdek_courier' ] ) );
+		$registry->register_shipment_handler( 'cdek', Mockery::mock( Abstract_Shipment_Handler::class ) );
+		$registry->register_provider( $this->provider_with_method_ids( 'yandex', [ 'yandex' ] ) );
+
+		Functions\expect( '_doing_it_wrong' )->never();
+
+		$registry->check_auto_export_contract();
+	}
+
+	/**
+	 * #1007: the gate is WP_DEBUG-only and this test, like the suite's default, defines nothing.
+	 */
+	public function test_check_auto_export_contract_is_silent_without_wp_debug(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider( $this->provider_with_method_ids( 'cdek', [ 'cdek_courier' ] ) );
+		$registry->register_shipment_handler( 'cdek', Mockery::mock( Abstract_Shipment_Handler::class ) );
+
+		Functions\expect( '_doing_it_wrong' )->never();
+
+		$registry->check_auto_export_contract();
+	}
+
+	/**
 	 * Registering a replacement descriptor under the same id drops the PREVIOUS
 	 * plugin, exactly like {@see self::$shipment_handlers}/{@see self::$tracking_handlers}
 	 * — a replacement with no plugin of its own must not still be checked against the

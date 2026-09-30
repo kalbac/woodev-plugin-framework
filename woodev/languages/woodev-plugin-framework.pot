@@ -2113,28 +2113,34 @@ msgstr ""
 msgid "Не удалось отменить заявку у перевозчика: заказ слишком долго выгружается. Проверьте заявку в личном кабинете перевозчика."
 msgstr ""
 
-#: shipping-method/settings/class-shipping-integration.php:112
+#: shipping-method/settings/class-shipping-integration.php:101
 msgid "Автоэкспорт"
 msgstr ""
 
-#: shipping-method/settings/class-shipping-integration.php:115
+#: shipping-method/settings/class-shipping-integration.php:104
 msgid "Когда заказ получает один из выбранных ниже статусов, он сам отправляется перевозчику — в фоне, покупатель ничего не ждёт. Вручную заказ можно выгрузить всегда."
 msgstr ""
 
-#: shipping-method/settings/class-shipping-integration.php:116
+#: shipping-method/settings/class-shipping-integration.php:105
 msgid "Отмена заказа и его полный возврат отменяют заявку у перевозчика сами, независимо от этой настройки."
 msgstr ""
 
-#: shipping-method/settings/class-shipping-integration.php:119
+#: shipping-method/settings/class-shipping-integration.php:108
 msgid "Статусы для автоэкспорта"
 msgstr ""
 
-#: shipping-method/settings/class-shipping-integration.php:125
+#: shipping-method/settings/class-shipping-integration.php:114
 msgid "Заказ выгружается в тот момент, когда переходит в один из этих статусов. Здесь только статусы, в которых заказ ещё можно отправить перевозчику."
 msgstr ""
 
-#: shipping-method/settings/class-shipping-integration.php:127
+#: shipping-method/settings/class-shipping-integration.php:116
 msgid "Выберите статусы заказа"
+msgstr ""
+
+#. translators: %s: the order status name
+#: shipping-method/settings/class-shipping-integration.php:204
+#, php-format
+msgid "Статус «%s» больше не поддерживается для автоэкспорта: заказы в нём не выгружаются автоматически. Выберите поддерживаемый статус."
 msgstr ""
 
 #: shipping-method/admin/views/html-admin-shipping-method-status.php:27

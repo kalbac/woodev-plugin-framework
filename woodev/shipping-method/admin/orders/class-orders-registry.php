@@ -585,6 +585,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 *              auto-export and cancellation), {@see self::run_cancel_at_carrier()} onto
 		 *              {@see Carrier_Cancel::HOOK}, and the «exports in progress» notice
 		 *              ({@see Export_Queue_Notice}).
+		 * @since 2.0.2 Card #1007 (round 2): also hooks {@see self::check_auto_export_contract()}
+		 *              onto `admin_menu`, priority 41, beside the method-ids contract check.
 		 *
 		 * @return void
 		 */
@@ -596,6 +598,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 
 			add_action( 'admin_menu', [ $this, 'register_page' ], 40 );
 			add_action( 'admin_menu', [ $this, 'check_method_ids_contract' ], 41 );
+			add_action( 'admin_menu', [ $this, 'check_auto_export_contract' ], 41 );
 			add_action( 'admin_menu', [ $this, 'move_menu_item_after_orders' ], 99 );
 			add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_assets' ] );
 			add_action( 'rest_api_init', [ $this, 'register_rest' ], 5 );
@@ -765,6 +768,44 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 						esc_html( $provider_id ),
 						esc_html( implode( '", "', $missing_ids ) ),
 						esc_html( implode( '", "', $declared_ids ) )
+					),
+					'2.0.2'
+				);
+			}
+		}
+
+		/**
+		 * WP_DEBUG-only contract gate (#1007): a carrier that registered its provider AND its shipment
+		 * handler but no `Shipping_Plugin` has a dead auto-export. The auto-export settings live on the
+		 * carrier plugin's integration ({@see Order_Automation::auto_export_statuses()} reads them
+		 * through {@see self::get_provider_plugin()}), so with no plugin recorded nothing is ever
+		 * queued while the merchant may well have ticked «Автоэкспорт». Cancelling at the carrier does
+		 * not need the plugin and keeps working; behaviour is unchanged, this only makes the dead
+		 * feature diagnosable, once per provider, via `_doing_it_wrong()`.
+		 *
+		 * A provider with no handler is skipped: it cannot export at all, plugin or not.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @internal Hooked on `admin_menu`, priority 41, beside {@see self::check_method_ids_contract()}.
+		 *
+		 * @return void
+		 */
+		public function check_auto_export_contract(): void {
+			if ( ! defined( 'WP_DEBUG' ) || ! WP_DEBUG ) {
+				return;
+			}
+
+			foreach ( $this->providers as $provider_id => $provider ) {
+				if ( isset( $this->provider_plugins[ $provider_id ] ) || ! isset( $this->shipment_handlers[ $provider_id ] ) ) {
+					continue;
+				}
+
+				_doing_it_wrong(
+					self::class . '::register_provider',
+					sprintf(
+						'Carrier "%s" registered an Orders_Provider and a shipment handler but no Shipping_Plugin: its auto-export settings cannot be read, so orders entering a status are never exported in the background. Pass the plugin as the second argument of register_provider().',
+						esc_html( (string) $provider_id )
 					),
 					'2.0.2'
 				);
@@ -1971,6 +2012,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		public function reset_for_tests(): void {
 			remove_action( 'admin_menu', [ $this, 'register_page' ], 40 );
 			remove_action( 'admin_menu', [ $this, 'check_method_ids_contract' ], 41 );
+			remove_action( 'admin_menu', [ $this, 'check_auto_export_contract' ], 41 );
 			remove_action( 'admin_enqueue_scripts', [ $this, 'enqueue_assets' ] );
 			remove_action( 'rest_api_init', [ $this, 'register_rest' ], 5 );
 			remove_action( Export_Retry::HOOK, [ $this, 'run_export_retry' ] );

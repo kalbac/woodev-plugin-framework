@@ -53,7 +53,24 @@ namespace Woodev\Tests\Unit\Shipping\Settings {
 		/** @var string */
 		public $id = 'auto_export_test';
 
+		/** @var mixed what the merchant saved under `export_statuses` */
+		public $saved_statuses = [ 'wc-processing' ];
+
 		public function __construct() {}
+
+		/** @return mixed */
+		public function get_option( $key, $empty_value = null ) {
+			return $this->saved_statuses;
+		}
+
+		public function prepare_field(): void {
+			$this->prepare_export_statuses_field();
+		}
+
+		/** @return array<string,string> */
+		public function unsupported(): array {
+			return $this->get_unsupported_export_statuses();
+		}
 
 		/** @return array<string,array<string,mixed>> */
 		public function auto_export_fields(): array {
@@ -79,6 +96,8 @@ namespace Woodev\Tests\Unit\Shipping\Settings {
 	/**
 	 * @covers \Woodev\Framework\Shipping\Settings\Shipping_Integration::get_auto_export_form_fields
 	 * @covers \Woodev\Framework\Shipping\Settings\Shipping_Integration::get_export_status_options
+	 * @covers \Woodev\Framework\Shipping\Settings\Shipping_Integration::get_unsupported_export_statuses
+	 * @covers \Woodev\Framework\Shipping\Settings\Shipping_Integration::prepare_export_statuses_field
 	 */
 	final class ShippingIntegrationAutoExportFieldsTest extends TestCase {
 
@@ -131,6 +150,50 @@ namespace Woodev\Tests\Unit\Shipping\Settings {
 			$fields = ( new Woodev_Test_Auto_Export_Integration() )->auto_export_fields();
 
 			$this->assertSame( [], $fields['export_statuses']['options'], 'the names are translated text: filled when the form is drawn' );
+		}
+
+		public function test_a_saved_status_outside_the_allowed_set_is_reported_with_its_name(): void {
+			$integration                = new Woodev_Test_Auto_Export_Integration();
+			$integration->saved_statuses = [ 'wc-processing', 'wc-pickup-ready', 'completed' ];
+
+			$this->assertSame(
+				[
+					'wc-pickup-ready' => 'Name of pickup-ready',
+					'wc-completed'    => 'Name of completed',
+				],
+				$integration->unsupported(),
+				'a v1 site could pick any non-final status; the ones v2 no longer exports on are named, not dropped'
+			);
+		}
+
+		public function test_supported_empty_and_malformed_selections_report_nothing(): void {
+			$integration = new Woodev_Test_Auto_Export_Integration();
+
+			foreach ( [ [ 'wc-pending', 'wc-on-hold', 'wc-processing' ], [], '', null, [ '', 7, 'wc-' ] ] as $saved ) {
+				$integration->saved_statuses = $saved;
+				$this->assertSame( [], $integration->unsupported() );
+			}
+		}
+
+		public function test_the_unsupported_status_stays_in_the_list_and_the_warning_names_it(): void {
+			Functions\when( 'esc_html' )->returnArg();
+			Functions\when( '__' )->returnArg();
+
+			$integration                 = new Woodev_Test_Auto_Export_Integration();
+			$integration->saved_statuses = [ 'wc-processing', 'wc-pickup-ready' ];
+			$integration->form_fields    = $integration->auto_export_fields();
+
+			ob_start();
+			$integration->prepare_field();
+			$html = (string) ob_get_clean();
+
+			$this->assertStringContainsString( 'больше не поддерживается для автоэкспорта', $html );
+			$this->assertStringContainsString( 'Name of pickup-ready', $html );
+			$this->assertSame(
+				[ 'wc-pending', 'wc-on-hold', 'wc-processing', 'wc-pickup-ready' ],
+				array_keys( $integration->form_fields['export_statuses']['options'] ),
+				'kept in the field, so saving the screen does not erase it before the merchant has seen the warning'
+			);
 		}
 	}
 }

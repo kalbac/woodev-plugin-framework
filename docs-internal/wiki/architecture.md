@@ -326,6 +326,14 @@ Moved here from `CURRENT-STATE.md` in s139: they are reference, true regardless 
   update (before validation, and again on a fresh read before the writes: the stale-row race). **No
   explicit «New order» trigger** — `set_status()` on a fresh order already sends it through
   WooCommerce's `pending_to_*_notification` (#962 I0, contradiction 1); an extra one double-sends.
+- **A carrier registers its provider AND shipment handler on EVERY request (#1007, #1010).** Not only
+  under `is_admin()`: `Order_Automation::handle_status_change()` and the Action Scheduler runners
+  (auto-export, delayed retry, auto-cancel) act only for a carrier whose `Orders_Provider` and handler are
+  registered in THAT request, and the requests that move orders are mostly not admin — a gateway's
+  IPN/webhook (`payment_complete()` on the storefront), REST, WP-Cron. Register on `init` /
+  `plugins_loaded` and pass the `Shipping_Plugin` to `register_provider()`; a provider without it has
+  no auto-export (`_doing_it_wrong()` from the admin menu under `WP_DEBUG`). Registered only in admin, auto-export, retry and
+  auto-cancel silently do nothing off the manager's screen.
 
 ## Subsystem phase status
 
