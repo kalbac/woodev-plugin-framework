@@ -154,6 +154,83 @@ namespace Woodev\Tests\Integration\Shipping {
 		}
 
 		/**
+		 * Writes an order meta row the way ANOTHER request's connection does: straight into the
+		 * datastore's table, so nothing this request cached (the post-meta cache, an order object it
+		 * already loaded) hears about it. No `wp_cache_flush()` anywhere on this path.
+		 *
+		 * @param int    $order_id the order.
+		 * @param string $key      the meta key.
+		 * @param string $value    the value.
+		 * @return void
+		 */
+		private function write_meta_behind_the_caches( int $order_id, string $key, string $value ): void {
+			global $wpdb;
+
+			if ( \Woodev_Plugin_Compatibility::is_hpos_enabled() ) {
+				$wpdb->insert(
+					$wpdb->prefix . 'wc_orders_meta',
+					[
+						'order_id'   => $order_id,
+						'meta_key'   => $key, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+						'meta_value' => $value, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+					]
+				);
+
+				return;
+			}
+
+			$wpdb->insert(
+				$wpdb->postmeta,
+				[
+					'post_id'    => $order_id,
+					'meta_key'   => $key, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+					'meta_value' => $value, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+				]
+			);
+		}
+
+		/**
+		 * How many rows of a meta key the datastore holds for the order — read from the table itself.
+		 *
+		 * @param int    $order_id the order.
+		 * @param string $key      the meta key.
+		 * @return int
+		 */
+		private function meta_rows( int $order_id, string $key ): int {
+			global $wpdb;
+
+			if ( \Woodev_Plugin_Compatibility::is_hpos_enabled() ) {
+				$table  = $wpdb->prefix . 'wc_orders_meta';
+				$column = 'order_id';
+			} else {
+				$table  = $wpdb->postmeta;
+				$column = 'post_id';
+			}
+
+			return (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE {$column} = %d AND meta_key = %s", $order_id, $key ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		}
+
+		/**
+		 * An order object loaded BEFORE another request wrote, with the caches primed the way a
+		 * real request primes them (the carrier id and the unknown flag both read once).
+		 *
+		 * @param \WC_Order $order the order.
+		 * @return \WC_Order
+		 */
+		private function load_and_prime( \WC_Order $order ): \WC_Order {
+			$loaded = wc_get_order( $order->get_id() );
+
+			$this->assertInstanceOf( \WC_Order::class, $loaded );
+
+			foreach ( [ self::CARRIER_ID_META, Abstract_Shipment_Handler::EXPORT_UNKNOWN_META ] as $key ) {
+				$this->assertSame( '', (string) \Woodev_Order_Compatibility::get_order_meta( $loaded, $key ), 'primed: nothing stored yet' );
+				$this->assertSame( '', $loaded->get_meta( $key ) );
+			}
+
+			return $loaded;
+		}
+
+		/**
 		 * @dataProvider datastore_provider
 		 * @param bool $hpos datastore under test.
 		 * @return void
@@ -266,6 +343,104 @@ namespace Woodev\Tests\Integration\Shipping {
 			$this->assertSame( 'CARRIER-ALREADY-THERE', $fresh->get_meta( self::CARRIER_ID_META ) );
 			$this->assertSame( '', $fresh->get_meta( Abstract_Shipment_Handler::EXPORT_UNKNOWN_META ), 'the unknown state is gone' );
 		}
+
+		/**
+		 * The delayed double click (#945, round 2): request B loaded the order BEFORE request A
+		 * stored the carrier id, then took the lock A had just released. The re-read under the lock
+		 * must see A's id — `wc_get_order()` alone is served from the request's caches and does not.
+		 *
+		 * @dataProvider datastore_provider
+		 * @param bool $hpos datastore under test.
+		 * @return void
+		 */
+		public function test_a_stale_order_object_still_sees_the_id_another_request_stored_and_makes_no_call( bool $hpos ): void {
+			$this->use_datastore( $hpos );
+			$order = $this->new_order();
+			$stale = $this->load_and_prime( $order );
+
+			$this->write_meta_behind_the_caches( $order->get_id(), self::CARRIER_ID_META, 'CARRIER-FROM-REQUEST-A' );
+
+			// The premise: the caller's object and the request caches really are stale.
+			$this->assertSame( '', $stale->get_meta( self::CARRIER_ID_META ), 'the loaded object does not know the id' );
+			$this->assertSame( '', (string) \Woodev_Order_Compatibility::get_order_meta( $stale, self::CARRIER_ID_META ), 'and neither does the plugin\'s own read of it' );
+
+			$result = $this->handler->export( $stale );
+
+			$this->assertSame( 0, $this->api->create_calls, 'no second carrier order' );
+			$this->assertTrue( $result->is_success() );
+			$this->assertSame( 'CARRIER-FROM-REQUEST-A', $result->get_carrier_order_id() );
+		}
+
+		/**
+		 * The same staleness hides a just-written «unknown» flag: the export must still see it, so a
+		 * carrier that can reconcile is asked FIRST instead of being sent a second create call — and
+		 * the flag must not survive beside the id the reconcile stores.
+		 *
+		 * @dataProvider datastore_provider
+		 * @param bool $hpos datastore under test.
+		 * @return void
+		 */
+		public function test_a_stale_order_object_still_sees_the_unknown_flag_and_the_reconcile_clears_it( bool $hpos ): void {
+			$this->use_datastore( $hpos );
+			$order = $this->new_order();
+			$stale = $this->load_and_prime( $order );
+
+			$this->write_meta_behind_the_caches( $order->get_id(), Abstract_Shipment_Handler::EXPORT_UNKNOWN_META, '1000' );
+
+			$this->assertSame( '', $stale->get_meta( Abstract_Shipment_Handler::EXPORT_UNKNOWN_META ), 'the loaded object never saw the flag' );
+
+			$this->handler->reconcile = true;
+			$this->handler->found     = 'CARRIER-ALREADY-THERE';
+
+			$result = $this->handler->export( $stale );
+
+			$this->assertSame( 0, $this->api->create_calls, 'the reconcile ran first: no create call' );
+			$this->assertTrue( $result->is_success() );
+			$this->assertSame( 'CARRIER-ALREADY-THERE', $result->get_carrier_order_id() );
+
+			$this->assertSame( 0, $this->meta_rows( $order->get_id(), Abstract_Shipment_Handler::EXPORT_UNKNOWN_META ), 'the flag row is gone from the datastore' );
+			$this->assertSame( 1, $this->meta_rows( $order->get_id(), self::CARRIER_ID_META ) );
+		}
+
+		/**
+		 * A failure after another request already flagged the order must not add a second flag row.
+		 *
+		 * @dataProvider datastore_provider
+		 * @param bool $hpos datastore under test.
+		 * @return void
+		 */
+		public function test_a_transport_failure_on_a_stale_object_does_not_duplicate_the_unknown_flag( bool $hpos ): void {
+			$this->use_datastore( $hpos );
+			$order = $this->new_order();
+			$stale = $this->load_and_prime( $order );
+
+			$this->write_meta_behind_the_caches( $order->get_id(), Abstract_Shipment_Handler::EXPORT_UNKNOWN_META, '1000' );
+
+			$this->api->fail_with = new \Woodev_API_Transport_Exception( 'cURL error 28: Operation timed out' );
+
+			$this->assertFalse( $this->handler->export( $stale )->is_success() );
+
+			$this->assertSame( 1, $this->meta_rows( $order->get_id(), Abstract_Shipment_Handler::EXPORT_UNKNOWN_META ), 'one flag row, with the time of the FIRST failure' );
+			$this->assertSame( '1000', $this->reread( $order )->get_meta( Abstract_Shipment_Handler::EXPORT_UNKNOWN_META ) );
+		}
+
+		/**
+		 * @dataProvider datastore_provider
+		 * @param bool $hpos datastore under test.
+		 * @return void
+		 */
+		public function test_a_response_without_a_carrier_id_is_unknown_and_stores_no_empty_id( bool $hpos ): void {
+			$this->use_datastore( $hpos );
+			$order = $this->new_order();
+
+			$this->api->id_prefix = '';
+
+			$result = $this->handler->export( $order );
+
+			$this->assertFalse( $result->is_success() );
+			$this->assertSame( 0, $this->meta_rows( $order->get_id(), self::CARRIER_ID_META ), 'no empty id row: a key-EXISTS query would count it as «exported»' );
+			$this->assertGreaterThan( 0, (int) $this->reread( $order )->get_meta( Abstract_Shipment_Handler::EXPORT_UNKNOWN_META ) );
+		}
 	}
 }
 
@@ -316,6 +491,9 @@ namespace {
 			/** @var \Throwable|null thrown by create_order() when set */
 			public $fail_with;
 
+			/** @var string prepended to the order id; '' makes the response carry NO carrier id */
+			public string $id_prefix = 'CARRIER-';
+
 			/** @inheritDoc */
 			public function create_order( \WC_Order $order ): \Woodev_API_Response {
 				++$this->create_calls;
@@ -324,7 +502,7 @@ namespace {
 					throw $this->fail_with;
 				}
 
-				return new Woodev_Idempotency_Fake_Response( 'CARRIER-' . $order->get_id() );
+				return new Woodev_Idempotency_Fake_Response( '' === $this->id_prefix ? '' : $this->id_prefix . $order->get_id() );
 			}
 
 			/** @inheritDoc */

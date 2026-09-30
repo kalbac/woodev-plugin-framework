@@ -3,9 +3,11 @@
  * Unit tests for the transport/carrier classification `Woodev_API_Base::handle_response()` gives
  * a failed call (card #945).
  *
- * A transport failure (a `WP_Error`), a 5xx, a missing status or an empty non-4xx body throws
- * {@see \Woodev_API_Transport_Exception}: the server MAY have acted on the request. A validation
- * exception for a 4xx — a deliberate refusal — stays a plain {@see \Woodev_API_Exception}.
+ * A transport failure (a `WP_Error`) throws {@see \Woodev_API_Transport_Exception}: the server MAY
+ * have acted on the request. The base adds no throw for a 5xx, a missing status or an empty body —
+ * it only RE-TYPES the plain {@see \Woodev_API_Exception} a carrier's own validation threw for such a
+ * response. A validation exception for a 4xx — a deliberate refusal — stays a plain
+ * {@see \Woodev_API_Exception}, and a subclass of it is never re-typed, whatever the response.
  *
  * @package Woodev\Tests\Unit\Api
  */
@@ -29,6 +31,9 @@ class Testable_Api_Base_For_Transport_Test extends \Woodev_API_Base {
 	/** @var string|null message of the exception the carrier's pre-parse validation throws; null = none */
 	public $validation_message;
 
+	/** @var class-string<\Woodev_API_Exception> the class of that exception */
+	public $validation_class = \Woodev_API_Exception::class;
+
 	/**
 	 * @param mixed $response whatever the transport returned.
 	 * @return mixed
@@ -39,7 +44,7 @@ class Testable_Api_Base_For_Transport_Test extends \Woodev_API_Base {
 
 	protected function do_pre_parse_response_validation() {
 		if ( null !== $this->validation_message ) {
-			throw new \Woodev_API_Exception( $this->validation_message, 42 );
+			throw new $this->validation_class( $this->validation_message, 42 );
 		}
 	}
 
@@ -57,6 +62,11 @@ class Testable_Api_Base_For_Transport_Test extends \Woodev_API_Base {
 		return null;
 	}
 }
+
+/**
+ * A third-party exception class: a subclass of the base.
+ */
+class Third_Party_Api_Exception extends \Woodev_API_Exception {}
 
 /**
  * @covers \Woodev_API_Base::handle_response
@@ -80,15 +90,17 @@ final class ApiBaseTransportExceptionTest extends TestCase {
 	 * @param int|string $code    the HTTP status the transport reports.
 	 * @param string     $body    the response body.
 	 * @param string|null $message the carrier validation's exception message; null = it accepts the response.
+	 * @param string      $class   the class of the exception the validation throws.
 	 * @return \Woodev_API_Exception|null what handle_response() threw, or null.
 	 */
-	private function failure_for( $code, string $body, ?string $message = 'carrier text' ): ?\Woodev_API_Exception {
+	private function failure_for( $code, string $body, ?string $message = 'carrier text', string $class = \Woodev_API_Exception::class ): ?\Woodev_API_Exception {
 		Functions\when( 'is_wp_error' )->justReturn( false );
 		Functions\when( 'wp_remote_retrieve_response_code' )->justReturn( $code );
 		Functions\when( 'wp_remote_retrieve_body' )->justReturn( $body );
 
 		$api                     = new Testable_Api_Base_For_Transport_Test();
 		$api->validation_message = $message;
+		$api->validation_class   = $class;
 
 		try {
 			$api->handle_response_for_test( [ 'stubbed' => true ] );
@@ -176,6 +188,19 @@ final class ApiBaseTransportExceptionTest extends TestCase {
 			'404 with an empty body'   => [ 404, '' ],
 			'200 with a carrier error' => [ 200, '{"error":"unknown pvz"}' ],
 		];
+	}
+
+	/**
+	 * @dataProvider provide_transport_level_responses
+	 *
+	 * @param int|string $code the status.
+	 * @param string     $body the body.
+	 */
+	public function test_a_third_party_subclass_keeps_its_class_even_on_a_transport_level_response( $code, string $body ): void {
+		$exception = $this->failure_for( $code, $body, 'carrier text', Third_Party_Api_Exception::class );
+
+		$this->assertSame( Third_Party_Api_Exception::class, get_class( $exception ), 'a `catch ( My_API_Exception )` keeps matching' );
+		$this->assertSame( 42, $exception->getCode(), 'and the code it carries is what a caller classifies it by' );
 	}
 
 	public function test_an_accepted_response_throws_nothing(): void {

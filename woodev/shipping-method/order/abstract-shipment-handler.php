@@ -186,11 +186,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 * to null: an existing call site that does not pass them sees no behaviour
 		 * change.
 		 *
-		 * A response that does not throw but still yields an EMPTY carrier id
-		 * (round 2 critic finding, MEDIUM 3) is explicitly NOT evidence the shop
-		 * shipped anywhere — an order-meta write and the `shipment_exported` hook
-		 * still both fire as before (that is existing, unrelated behaviour this fix
-		 * does not touch), but enrolment is skipped.
+		 * A create call that RETURNS without an exception but yields an EMPTY carrier id is
+		 * «unknown», like a transport failure (#945): the request went out and was not refused,
+		 * so the carrier may well have created the order. No empty id is stored, no export hook
+		 * fires and nothing is enrolled; the failure text and the retry follow the same rules
+		 * as for a transport failure.
 		 *
 		 * @since 1.5.0
 		 * @since 2.0.2 Added `$settlement` / `$provider` (#488 slice 2) to enrol the
@@ -211,6 +211,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 *              reconciled. BEHAVIOUR CHANGE (ADR-005): a failure is no longer always
 		 *              queued for retry — a carrier refusal is not retried at all, and a
 		 *              transport failure is retried only by a carrier that can reconcile.
+		 *              A response with NO carrier id is no longer stored as `''` with the export
+		 *              hooks fired: it is an «unknown» failure and fires neither hook.
 		 *
 		 * @param \WC_Order              $order      the order to export to the carrier
 		 * @param Location_Record|null   $settlement the settlement this order ships to, if known; null skips enrolment
@@ -241,6 +243,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		/**
 		 * The export proper, run while the order's export lock is held.
 		 *
+		 * `$fresh` — the order as it is in the datastore NOW — is what the stored id and the
+		 * «unknown» flag are read from and written to; `$order` is the caller's copy, the one the
+		 * carrier call and the hooks get.
+		 *
 		 * @since 2.0.2 Card #945.
 		 *
 		 * @param \WC_Order              $order      the order to export
@@ -264,21 +270,33 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 					$found = (string) $this->find_exported_order( $fresh );
 				} catch ( \Woodev_API_Exception $exception ) {
 					// The carrier could not say either way: do NOT create — the state stays unknown.
-					return $this->fail_export( $order, $exception );
+					return $this->fail_export( $order, $fresh, $exception );
 				}
 
 				if ( '' !== $found ) {
-					return $this->complete_export( $order, $found, $settlement, $provider );
+					return $this->complete_export( $order, $fresh, $found, $settlement, $provider );
 				}
 			}
 
 			try {
 				$response = $this->api->create_order( $order );
 			} catch ( \Woodev_API_Exception $exception ) {
-				return $this->fail_export( $order, $exception );
+				return $this->fail_export( $order, $fresh, $exception );
 			}
 
-			return $this->complete_export( $order, $this->extract_carrier_order_id( $response ), $settlement, $provider );
+			$carrier_order_id = $this->extract_carrier_order_id( $response );
+
+			if ( '' === $carrier_order_id ) {
+				// The request went out and was not refused, yet no id came back: the carrier may well have created the order.
+				return $this->fail_export(
+					$order,
+					$fresh,
+					new \Woodev_API_Transport_Exception( __( 'Ответ перевозчика не содержит номера заказа', 'woodev-plugin-framework' ) ),
+					true
+				);
+			}
+
+			return $this->complete_export( $order, $fresh, $carrier_order_id, $settlement, $provider );
 		}
 
 		/**
@@ -287,19 +305,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 *
 		 * @since 2.0.2 Card #945: the body of the old success path of {@see self::export()}.
 		 *
-		 * @param \WC_Order              $order            the exported order
-		 * @param string                 $carrier_order_id the carrier-assigned id (empty when the response carried none)
+		 * @param \WC_Order              $order            the caller's copy of the exported order
+		 * @param \WC_Order              $fresh            the order as {@see self::fresh_order()} read it
+		 * @param string                 $carrier_order_id the carrier-assigned id (never empty)
 		 * @param Location_Record|null   $settlement       the settlement this order ships to, if known
 		 * @param Location_Provider|null $provider         the provider that produced `$settlement`, if known
 		 * @return Action_Result
 		 */
-		private function complete_export( \WC_Order $order, string $carrier_order_id, ?Location_Record $settlement, ?Location_Provider $provider ): Action_Result {
+		private function complete_export( \WC_Order $order, \WC_Order $fresh, string $carrier_order_id, ?Location_Record $settlement, ?Location_Provider $provider ): Action_Result {
 
 			$this->order_handler->set( $order, static::CARRIER_ORDER_ID_FIELD, $carrier_order_id );
-
-			if ( '' !== $carrier_order_id ) {
-				$this->clear_export_unknown( $order );
-			}
+			$this->clear_export_unknown( $order, $fresh );
 
 			/**
 			 * Fires after an order is successfully exported to the carrier.
@@ -310,6 +326,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 			 * which plugin produced it uses `woodev_shipping_order_exported` below
 			 * instead. Also fires when an export that had timed out is reconciled —
 			 * the carrier's order is found and stored, and no second one is created.
+			 * Never fires without a carrier order id (#945): a create call that returns
+			 * no id is an «unknown» export, not a success.
 			 *
 			 * @since 1.5.0
 			 *
@@ -326,24 +344,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 			 * framework cannot subscribe to a fixed hook built from it. This is the
 			 * framework's OWN internal notification (e.g.
 			 * {@see \Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::flush_new_order_counts()}
-			 * uses it to drop the cached "new orders" badge count). Fires
-			 * unconditionally, including when `$carrier_order_id` is empty — same as
-			 * the plugin-facing hook above.
+			 * uses it to drop the cached "new orders" badge count). Never fires
+			 * without a carrier order id, same as the plugin-facing hook above.
 			 *
 			 * @since 2.0.2
 			 *
 			 * @param \WC_Order $order            the exported order
-			 * @param string    $carrier_order_id the carrier-assigned order id now stored on the order (may be empty)
+			 * @param string    $carrier_order_id the carrier-assigned order id now stored on the order
 			 */
 			do_action( 'woodev_shipping_order_exported', $order, $carrier_order_id );
 
-			if ( '' !== $carrier_order_id ) {
-				$this->enroll_popular_settlement( $settlement, $provider );
+			$this->enroll_popular_settlement( $settlement, $provider );
 
-				return Action_Result::success( $carrier_order_id );
-			}
-
-			return Action_Result::failure();
+			return Action_Result::success( $carrier_order_id );
 		}
 
 		/**
@@ -351,17 +364,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 *
 		 * @since 2.0.2 Card #945.
 		 *
-		 * @param \WC_Order             $order     the order whose export failed
+		 * @param \WC_Order             $order     the caller's copy of the order whose export failed
+		 * @param \WC_Order             $fresh     the order as {@see self::fresh_order()} read it
 		 * @param \Woodev_API_Exception $exception the carrier/network failure
+		 * @param bool                  $unknown   true to treat the failure as «unknown» whatever {@see self::is_transport_failure()} says (a create call that returned no id)
 		 * @return Action_Result
 		 */
-		private function fail_export( \WC_Order $order, \Woodev_API_Exception $exception ): Action_Result {
+		private function fail_export( \WC_Order $order, \WC_Order $fresh, \Woodev_API_Exception $exception, bool $unknown = false ): Action_Result {
 
-			$transport_failure = $this->is_transport_failure( $exception );
+			$transport_failure = $unknown || $this->is_transport_failure( $exception );
 			$can_reconcile     = $this->supports_reconcile();
 
 			if ( $transport_failure ) {
-				$this->mark_export_unknown( $order );
+				$this->mark_export_unknown( $fresh );
 
 				if ( $can_reconcile ) {
 					$this->schedule_retry( $order );
@@ -373,7 +388,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 			 *
 			 * The export is queued for retry only after a transport failure of a carrier that can
 			 * reconcile ({@see self::supports_reconcile()}); a refusal, or a carrier that cannot look
-			 * an order up, is not retried automatically (#945).
+			 * an order up, is not retried automatically (#945). A create call that returned without
+			 * an id fires it too, with a {@see \Woodev_API_Transport_Exception}.
 			 *
 			 * @since 1.5.0
 			 *
@@ -404,8 +420,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 * refused, DNS), or the server answered with a 5xx or an empty response
 		 * ({@see \Woodev_API_Transport_Exception}); the carrier may have created the order
 		 * before the answer was lost. `false` for a carrier-level one — an HTTP 4xx or a parsed
-		 * carrier error: the carrier refused, so nothing was created. A carrier whose API signals a
-		 * transport problem some other way overrides this.
+		 * carrier error: the carrier refused, so nothing was created. An exception that is not a
+		 * {@see \Woodev_API_Transport_Exception} — the API base re-types only a plain
+		 * {@see \Woodev_API_Exception}, a subclass keeps its class — is read by the HTTP status it
+		 * carries as its code: 5xx is transport-level. A carrier whose API signals a transport
+		 * problem some other way overrides this.
 		 *
 		 * @since 2.0.2 Card #945.
 		 *
@@ -413,7 +432,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 * @return bool
 		 */
 		protected function is_transport_failure( \Woodev_API_Exception $exception ): bool {
-			return $exception instanceof \Woodev_API_Transport_Exception;
+
+			if ( $exception instanceof \Woodev_API_Transport_Exception ) {
+				return true;
+			}
+
+			// A third-party subclass is not re-typed by the API base (it keeps its class), so it is read by the HTTP status it carries.
+			$code = (int) $exception->getCode();
+
+			return $code >= 500 && $code < 600;
 		}
 
 		/**
@@ -441,8 +468,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 * {@see self::supports_reconcile()} is true. Return the carrier's order id when the carrier
 		 * has the order — it is stored, the unknown state is cleared, the success hooks fire and
 		 * NO second order is created. Return null when the carrier has no such order — the export
-		 * then creates it. Throw {@see \Woodev_API_Exception} when the carrier could not answer:
-		 * nothing is created, and the state stays unknown.
+		 * then creates it. «Not found» MUST return null and never throw: an exception is read as
+		 * «the carrier could not answer», so a lookup whose 404 surfaces as an exception leaves the
+		 * order unknown and blocks the creation for good. Throw {@see \Woodev_API_Exception} only
+		 * when the carrier could not answer: nothing is created, and the state stays unknown.
 		 *
 		 * @since 2.0.2 Card #945.
 		 *
@@ -471,17 +500,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 *
 		 * @since 2.0.2 Card #945.
 		 *
-		 * @param \WC_Order $order the order whose export may have reached the carrier.
+		 * @param \WC_Order $fresh the order as {@see self::fresh_order()} read it — never a caller's possibly stale copy.
 		 * @return void
 		 */
-		private function mark_export_unknown( \WC_Order $order ): void {
+		private function mark_export_unknown( \WC_Order $fresh ): void {
 
-			if ( $this->export_unknown_since( $order ) > 0 ) {
+			if ( $this->export_unknown_since( $fresh ) > 0 ) {
 				return;
 			}
 
-			$order->update_meta_data( self::EXPORT_UNKNOWN_META, time() );
-			$order->save_meta_data();
+			$fresh->update_meta_data( self::EXPORT_UNKNOWN_META, time() );
+			$fresh->save_meta_data();
 		}
 
 		/**
@@ -489,12 +518,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 *
 		 * @since 2.0.2 Card #945.
 		 *
-		 * @param \WC_Order $order the exported order.
+		 * @param \WC_Order $order the caller's copy of the exported order.
+		 * @param \WC_Order $fresh the order as {@see self::fresh_order()} read it; the flag is deleted here, so it never survives beside a stored id.
 		 * @return void
 		 */
-		private function clear_export_unknown( \WC_Order $order ): void {
-			$order->delete_meta_data( self::EXPORT_UNKNOWN_META );
-			$order->save_meta_data();
+		private function clear_export_unknown( \WC_Order $order, \WC_Order $fresh ): void {
+
+			// The flag is deleted on the FRESH object: `delete_meta_data()` on a caller's object that never saw the flag is a no-op.
+			$fresh->delete_meta_data( self::EXPORT_UNKNOWN_META );
+			$fresh->save_meta_data();
+
+			if ( $fresh !== $order ) {
+				// Keep the caller's in-memory copy honest for the export hooks that run next.
+				$order->delete_meta_data( self::EXPORT_UNKNOWN_META );
+				$order->save_meta_data();
+			}
 		}
 
 		/**
@@ -512,7 +550,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		/**
 		 * The order re-read from the datastore, or the given one when it cannot be.
 		 *
-		 * Protected as the seam a unit test overrides.
+		 * Really fresh on both datastores: `wc_get_order()` alone hands back what the request
+		 * cached when it loaded the order, so the post-meta cache and the object's own meta are
+		 * dropped too. Protected as the seam a unit test overrides.
 		 *
 		 * @since 2.0.2 Card #945.
 		 *
@@ -520,9 +560,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 * @return \WC_Order
 		 */
 		protected function fresh_order( \WC_Order $order ): \WC_Order {
-			$reread = wc_get_order( $order->get_id() );
 
-			return $reread instanceof \WC_Order ? $reread : $order;
+			$order_id = $order->get_id();
+			$reread   = wc_get_order( $order_id );
+
+			if ( ! $reread instanceof \WC_Order ) {
+				return $order;
+			}
+
+			// wc_get_order() alone is served from request-local caches: it returns what THIS request saw at load time.
+			// The carrier id is read through get_post_meta() on the legacy post store and through the object on HPOS,
+			// so both the post-meta cache and the object's own meta are dropped.
+			wp_cache_delete( $order_id, 'post_meta' );
+			$reread->read_meta_data( true );
+
+			return $reread;
 		}
 
 		/**

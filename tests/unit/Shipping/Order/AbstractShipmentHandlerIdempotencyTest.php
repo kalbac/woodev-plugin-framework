@@ -30,6 +30,13 @@ namespace {
 
 	use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
 
+	if ( ! class_exists( 'Idempotency_Test_Api_Exception' ) ) {
+		/**
+		 * A third-party exception class: a subclass of the base, so the API base leaves it alone.
+		 */
+		class Idempotency_Test_Api_Exception extends Woodev_API_Exception {}
+	}
+
 	if ( ! class_exists( 'Idempotency_Test_Shipment_Handler' ) ) {
 		/**
 		 * Concrete handler whose lock, fresh-order and reconcile seams the test drives.
@@ -57,8 +64,11 @@ namespace {
 			/** @var int how many times the carrier was asked to look the order up */
 			public int $lookups = 0;
 
+			/** @var string what extract_carrier_order_id() yields; '' = the response carried no id */
+			public string $extracted = 'CARRIER-NEW';
+
 			protected function extract_carrier_order_id( \Woodev_API_Response $response ): string {
-				return 'CARRIER-NEW';
+				return $this->extracted;
 			}
 
 			public function supports_reconcile(): bool {
@@ -73,6 +83,13 @@ namespace {
 				}
 
 				return $this->found;
+			}
+
+			/** @var bool a carrier that classifies EVERY failure as a refusal */
+			public bool $never_transport = false;
+
+			protected function is_transport_failure( \Woodev_API_Exception $exception ): bool {
+				return ! $this->never_transport && parent::is_transport_failure( $exception );
 			}
 
 			public function classify( \Woodev_API_Exception $exception ): bool {
@@ -445,6 +462,105 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 
 			$this->assertFalse( $result->is_success() );
 			$this->assertSame( 1000, $this->meta[55][ self::META ] );
+		}
+
+		public function test_a_response_without_a_carrier_id_is_unknown_stores_nothing_and_fires_no_hook(): void {
+			$handler            = $this->handler( $this->api(), $this->retry_queue( 0 ) );
+			$handler->extracted = '';
+
+			Actions\expectDone( 'woodev_shipping_test_shipment_exported' )->never();
+			Actions\expectDone( 'woodev_shipping_order_exported' )->never();
+			Actions\expectDone( 'woodev_shipping_test_shipment_export_failed' )->once();
+
+			$result = $handler->export( $this->order() );
+
+			$this->assertFalse( $result->is_success() );
+			$this->assertStringContainsString( 'мог быть создан', $result->get_message(), 'the same text as a transport failure without reconcile' );
+			$this->assertStringContainsString( 'личный кабинет', $result->get_message() );
+			$this->assertSame( [], $this->id_writes, 'no empty id is stored' );
+			$this->assertGreaterThan( 0, $this->meta[55][ self::META ] ?? 0, 'the state is «unknown»' );
+		}
+
+		public function test_a_response_without_a_carrier_id_is_queued_for_retry_by_a_carrier_that_can_reconcile(): void {
+			$handler            = $this->handler( $this->api(), $this->retry_queue( 1 ) );
+			$handler->reconcile = true;
+			$handler->extracted = '';
+
+			Actions\expectDone( 'woodev_shipping_test_shipment_exported' )->never();
+
+			$result = $handler->export( $this->order() );
+
+			$this->assertFalse( $result->is_success() );
+			$this->assertStringNotContainsString( 'личный кабинет', $result->get_message(), 'a reconcile-capable carrier retries: the transport-failure text, not the check-the-account one' );
+			$this->assertSame( [], $this->id_writes );
+			$this->assertGreaterThan( 0, $this->meta[55][ self::META ] ?? 0 );
+		}
+
+		public function test_a_response_without_a_carrier_id_is_unknown_even_when_the_carrier_classifies_every_failure_as_a_refusal(): void {
+			$handler            = $this->handler( $this->api(), $this->retry_queue( 0 ) );
+			$handler->extracted = '';
+			$handler->never_transport = true;
+
+			$handler->export( $this->order() );
+
+			$this->assertGreaterThan( 0, $this->meta[55][ self::META ] ?? 0 );
+		}
+
+		public function test_a_third_party_subclass_is_classified_by_the_http_status_it_carries(): void {
+			$handler = $this->handler( $this->api( null, 0 ) );
+
+			$this->assertTrue( $handler->classify( new \Idempotency_Test_Api_Exception( 'gateway', 503 ) ) );
+			$this->assertFalse( $handler->classify( new \Idempotency_Test_Api_Exception( 'bad zip', 422 ) ) );
+			$this->assertFalse( $handler->classify( new \Idempotency_Test_Api_Exception( 'no code' ) ) );
+			$this->assertFalse( $handler->classify( new \Idempotency_Test_Api_Exception( 'not http', 600 ) ) );
+		}
+
+		public function test_a_subclass_exception_with_a_5xx_code_makes_the_order_unknown(): void {
+			$handler = $this->handler( $this->api( new \Idempotency_Test_Api_Exception( 'gateway', 502 ) ), $this->retry_queue( 0 ) );
+
+			$handler->export( $this->order() );
+
+			$this->assertGreaterThan( 0, $this->meta[55][ self::META ] ?? 0 );
+		}
+
+		public function test_the_unknown_flag_is_written_to_the_fresh_order_not_to_a_stale_copy(): void {
+			$fresh = $this->order( 56 );
+
+			$stale = Mockery::mock( '\WC_Order' );
+			$stale->shouldReceive( 'get_id' )->andReturn( 55 );
+			$stale->shouldReceive( 'get_meta' )->andReturn( '' );
+			$stale->shouldNotReceive( 'update_meta_data' );
+
+			$handler        = $this->handler( $this->api( new \Woodev_API_Transport_Exception( 'timed out' ) ), $this->retry_queue( 0 ) );
+			$handler->fresh = $fresh;
+
+			$handler->export( $stale );
+
+			$this->assertGreaterThan( 0, $this->meta[56][ self::META ] ?? 0 );
+		}
+
+		public function test_the_unknown_flag_the_stale_copy_never_saw_is_still_seen_and_cleared_on_the_fresh_order(): void {
+			// Another request stored the flag after this request loaded its copy of the order.
+			$this->meta[56][ self::META ] = 1000;
+
+			$fresh = $this->order( 56 );
+
+			$stale = Mockery::mock( '\WC_Order' );
+			$stale->shouldReceive( 'get_id' )->andReturn( 55 );
+			$stale->shouldReceive( 'get_meta' )->andReturn( '' );
+			$stale->shouldReceive( 'delete_meta_data' );
+			$stale->shouldReceive( 'save_meta_data' );
+
+			$handler            = $this->handler( $this->api( null, 0 ), $this->retry_queue( 0 ) );
+			$handler->fresh     = $fresh;
+			$handler->reconcile = true;
+			$handler->found     = 'CARRIER-FOUND';
+
+			$result = $handler->export( $stale );
+
+			$this->assertTrue( $result->is_success(), 'the fresh order carried the flag, so the carrier was asked' );
+			$this->assertSame( 1, $handler->lookups );
+			$this->assertArrayNotHasKey( self::META, $this->meta[56], 'the flag does not survive beside the stored id' );
 		}
 
 		public function test_a_plain_success_leaves_no_unknown_state_behind(): void {

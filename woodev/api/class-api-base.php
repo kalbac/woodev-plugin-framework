@@ -1114,9 +1114,13 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 *                 (#395) and response bodies (#427), and an admin-visible string
 		 *                 is if anything MORE likely to be pasted into a support ticket.
 		 *
-		 * @since 2.0.2 A transport failure (a `WP_Error`), a 5xx, a missing status or an empty
-		 *              non-4xx body throws {@see Woodev_API_Transport_Exception} — a subclass of
-		 *              {@see Woodev_API_Exception}, so every existing `catch` still matches (#945).
+		 * @since 2.0.2 A transport failure (a `WP_Error`) throws {@see Woodev_API_Transport_Exception},
+		 *              and so does a plain {@see Woodev_API_Exception} that a subclass's validation
+		 *              throws for a transport-level response (a 5xx, a missing status, an empty
+		 *              non-4xx body) — it is re-typed, message, code and `previous` kept. This adds
+		 *              NO throw: a response no validation rejects is returned as before. A subclass
+		 *              of `Woodev_API_Exception` passes through unchanged. The type is a subclass
+		 *              of {@see Woodev_API_Exception}, so every existing `catch` still matches (#945).
 		 *
 		 * @param array|WP_Error $response response data
 		 * @throws Woodev_API_Exception network issues, timeouts, API errors, etc
@@ -1156,7 +1160,8 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 
 			} catch ( Woodev_API_Exception $exception ) {
 
-				if ( ! $exception instanceof Woodev_API_Transport_Exception && $this->is_transport_level_response() ) {
+				// Only the plain base class is re-typed: a third-party subclass keeps its own class, and the caller classifies it by the code it carries.
+				if ( Woodev_API_Exception::class === get_class( $exception ) && $this->is_transport_level_response() ) {
 					throw new Woodev_API_Transport_Exception( $exception->getMessage(), (int) $exception->getCode(), $exception );
 				}
 
@@ -1258,8 +1263,8 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * request without us learning the outcome.
 		 *
 		 * True for a 5xx status, for no usable status at all, and for an empty body on anything
-		 * but a 4xx — a 4xx is a deliberate refusal even when its body is empty. A validation
-		 * exception thrown for such a response is re-thrown as a
+		 * but a 4xx — a 4xx is a deliberate refusal even when its body is empty. A plain
+		 * {@see Woodev_API_Exception} thrown by a validation for such a response is re-typed as a
 		 * {@see Woodev_API_Transport_Exception}, so a caller can tell «the server said no» from
 		 * «the server did not answer properly».
 		 *
