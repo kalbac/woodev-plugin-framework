@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Topic map.** 345 atomic gotchas across 31 topics. At session start read THIS file, then open
+> **Topic map.** 348 atomic gotchas across 31 topics. At session start read THIS file, then open
 > the topic indexes your task touches — each holds one line per gotcha, linking the detail file.
 > `[tooling/*]`, `[testing/*]` and `[rig/*]` apply to almost every session.
 > **Adding one:** create `gotchas/{slug}.md`, then add ONE line to the right `gotcha-index/{topic}.md`
@@ -18,7 +18,7 @@
 | [`compat/*`](gotcha-index/compat.md) | 3 | Backward compatibility, HPOS |
 | [`lifecycle/*`](gotcha-index/lifecycle.md) | 1 | Install/upgrade routines |
 | [`woocommerce/states`](gotcha-index/woocommerce-states.md) | 2 | The `woocommerce_states` table |
-| [`woocommerce/*`](gotcha-index/woocommerce.md) | 21 | WooCommerce-specific · WooCommerce-specific (session) |
+| [`woocommerce/*`](gotcha-index/woocommerce.md) | 23 | WooCommerce-specific · WooCommerce-specific (session) |
 | [`framework/*`](gotcha-index/framework.md) | 6 | Framework internals |
 | [`framework/contracts`](gotcha-index/framework-contracts.md) | 3 | What the framework guarantees to its consumers |
 | [`shipping/location`](gotcha-index/shipping-location.md) | 12 | Location provider layer |
@@ -29,7 +29,7 @@
 | [`testing/js`](gotcha-index/testing-js.md) | 8 | JavaScript testing pitfalls |
 | [`api/*`](gotcha-index/api.md) | 4 | API layer |
 | [`licensing/*`](gotcha-index/licensing.md) | 7 | License/EDD store |
-| [`build/*`](gotcha-index/build.md) | 17 | Build/CI/release |
+| [`build/*`](gotcha-index/build.md) | 18 | Build/CI/release |
 | [`admin-ui/*`](gotcha-index/admin-ui.md) | 8 | Admin pages / React UI |
 | [`admin-ui/modal`](gotcha-index/admin-ui-modal.md) | 3 | Framework modal shell |
 | [`admin-ui/react-state`](gotcha-index/admin-ui-react-state.md) | 2 | React component state |

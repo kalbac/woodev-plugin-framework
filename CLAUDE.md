@@ -57,7 +57,7 @@ Package: `@upstash/context7-mcp`.
 ## Orca — the runtime this session lives in
 
 Sessions run inside the Orca app, so Orca owns worktrees, agent terminals and multi-agent
-coordination. **Substantial work goes through Orca orchestration: worker = Sonnet 5, critic =
+coordination. **Substantial work goes through Orca orchestration: worker = Sonnet 5.5, critic =
 Codex, nobody accepts their own work.**
 
 **The critic-only restriction on Codex is LIFTED (operator, 24.08.2026), and the subscription was
@@ -69,7 +69,7 @@ agents.* A paid resource left idle is a loss, not a saving.
 
 | | |
 |---|---|
-| routine, well-bounded work against a plan | a **Sonnet 5** subagent |
+| routine, well-bounded work against a plan | a **Sonnet 5.5** subagent (`claude-sonnet-5-5`, not the bare `sonnet` alias) |
 | a second pair of hands, independent implementation, criticism | **Codex** |
 | a genuinely hard problem that wants the best head | **Fable 5** — propose it yourself; do not default to Opus for everything hard (operator, 29.08.2026) |
 | coordination, gates, git, synthesis | **Opus 5** (this session) |

@@ -31,7 +31,7 @@ first, and pass `--json` on every agent-driven call.
 
 ## The adopted worker loop — worker Sonnet, critic Codex
 
-The operator's standing shape for substantial work (s83): **the worker is Sonnet 5, the critic
+The operator's standing shape for substantial work (s83): **the worker is Sonnet 5.5 (s145: `claude-sonnet-5-5`), the critic
 is Codex, and the orchestrator is whoever runs the session.** Nobody accepts their own work.
 
 ```bash
@@ -39,7 +39,7 @@ orca orchestration run-create --objective "<what this whole batch is for>" --jso
 orca orchestration task-create --spec "<full brief>" --json
 orca orchestration task-create --spec "<full brief>" --deps '["task_<upstream>"]' --json
 orca orchestration worker-start --task <task_id> --worktree new-top-level \
-  --name <slug> --agent claude --model sonnet --effort high --setup run --json
+  --name <slug> --agent claude --model claude-sonnet-5-5 --effort high --setup run --json
 orca orchestration check --wait --types worker_done,escalation,question --timeout-ms 900000 --json
 orca orchestration worker-release --dispatch <dispatch_id> --json
 ```

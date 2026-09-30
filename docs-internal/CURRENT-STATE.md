@@ -6,7 +6,7 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-29 (s144).** ⏸ **The order-wizard stack is PARKED for the operator's eye:** PR #993 (#985 address policy, base `main`) ← #995 (#982 edit lock) ← #997 (#991 + #996) ← #998 (#992 pickup address) — merge bottom-up, retargeting each to `main`; the rig serves the stack top `feat/992-wizard-pickup-address`. #988 merged (PR #989). ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
+**As of 2026-10-01 (s145).** ✅ Order-wizard stack merged; s145 added idempotent export (#945), API timeouts + delayed export retry on Action Scheduler (#954), background auto-export / auto-cancel / exports notice with settings on the carrier's `woodev-settings` tab (#1007), API cache cap (#952 #1004). ⚠ A nested `<form>` in the carrier metabox broke saving WC orders until #1012. Follow-ups: #1011 #1014 #1015. No open PRs. Details: `sessions/s145.md`. ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
 orders-page slug redirects to the framework page with that carrier preselected, accepted on the rig.
 ✅ **Both machines are live**; routine sync is git ONLY (`wiki/two-machine-setup.md`). The order
 metabox (#856) and the orders table (#870) stay accepted.
@@ -32,10 +32,6 @@ datastores, a DB error is logged). Gotcha
 
 ⚠ **Addressing a `meta_query` part by "has a `relation` key" cannot tell the `AND` wrapper from a single
 unwrapped part** — gotcha `a-relation-key-does-not-tell-the-and-wrapper-from-a-single-meta-query-part`.
-
-✅ **Codex under Orca on this Mac works again** (#926 closed 27.09.2026: smoke via `worker-start
---agent codex` returned the right hash, no 401). If the s139 failure recurs, check the terminal
-BUFFER, not `stage` — it read `live` while every request 401'd.
 
 ⚠ **Four ways a UI change passes every gate and is still wrong** — a GREP'd vendor rule, a green
 build that committed no bundles, a row rebuilt after an action (legacy CPT only), a probe whose

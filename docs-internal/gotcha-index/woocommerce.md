@@ -30,6 +30,8 @@
 - [woocommerce/email] **`woocommerce_email_recipient_{id}` fires for e-mails WC did NOT send (10.9+ EmailLogger) and twice per send on 8.5 — count `woocommerce_email_sent`.** → [woocommerce-email-recipient-filter-is-not-a-sent-signal](../gotchas/woocommerce-email-recipient-filter-is-not-a-sent-signal.md) (s143)
 - [woocommerce/email] **A filter added and removed around a status change cannot mute a DEFERRED e-mail — persist the intent on the order; and WC ≤ 10.7 dispatches a batch from stale order copies.** → [a-call-scoped-filter-cannot-mute-a-deferred-woocommerce-email](../gotchas/a-call-scoped-filter-cannot-mute-a-deferred-woocommerce-email.md) (s143)
 - [woocommerce/*] **`EditLock` is HPOS-only, but its heartbeat handler is global: on CPT it adds an `_edit_lock` row per tick.** → [woocommerce-editlock-is-hpos-only-and-its-heartbeat-breeds-cpt-lock-rows](../gotchas/woocommerce-editlock-is-hpos-only-and-its-heartbeat-breeds-cpt-lock-rows.md) (s144)
+- [woocommerce/order-metabox] **A `<form>` inside an order-edit metabox closes WooCommerce's order form — the status and every main-column field stop being submitted.** → [a-form-inside-a-wc-order-metabox-closes-the-order-form](../gotchas/a-form-inside-a-wc-order-metabox-closes-the-order-form.md) (s145)
+- [woocommerce/action-scheduler] **`as_has_scheduled_action()` also matches the IN-PROGRESS action — a retry scheduled from inside its own run finds itself and schedules nothing.** → [as-has-scheduled-action-matches-the-running-action](../gotchas/as-has-scheduled-action-matches-the-running-action.md) (s145)
 
 ## Related
 
