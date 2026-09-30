@@ -317,8 +317,9 @@ class OrdersIdResolverDatastoresTest extends TestCase {
 	 * The oracle: whether one seeded order belongs to the page a request asks for. An order
 	 * is selected iff it is in scope (carries the marker of a carrier the request covers)
 	 * AND satisfies the advanced filters — all of them under `all`, at least one under
-	 * `any` when two or more were asked for — AND, when no order-status filter was asked,
-	 * is in the default view (not cancelled / failed).
+	 * `any` when two or more were asked for. With no order-status filter asked EVERY order
+	 * status is in the default view, cancelled / failed included (#1011; this request space
+	 * never carries the «new» scope, the one that narrows it).
 	 *
 	 * @param array<string,mixed> $request the request.
 	 * @param array<string,mixed> $row     one universe row.
@@ -373,10 +374,6 @@ class OrdersIdResolverDatastoresTest extends TestCase {
 			$filters[] = in_array( $row['order_status'], array_intersect( $normalise( $request['status'] ), $valid ), true );
 		} elseif ( isset( $request['status_not'] ) ) {
 			$filters[] = in_array( $row['order_status'], array_diff( $valid, $normalise( $request['status_not'] ) ), true );
-		}
-
-		if ( ! isset( $request['status'] ) && ! isset( $request['status_not'] ) && in_array( $row['order_status'], [ 'wc-cancelled', 'wc-failed' ], true ) ) {
-			return false;
 		}
 
 		$is_any = 'any' === $request['match'] && count( $filters ) >= 2;

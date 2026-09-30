@@ -647,6 +647,21 @@ class OrderRowBuilderTest extends TestCase {
 		$this->assertTrue( $row['cancel_failed'] );
 	}
 
+	/**
+	 * #1011: the row of a CANCELLED order is on the page by default now, and the marker is what
+	 * tells the merchant the carrier still holds its request.
+	 */
+	public function test_a_cancelled_orders_row_carries_the_not_cancelled_at_the_carrier_marker(): void {
+		$this->meta['_wc_edostavka_carrier_order_id'] = 'CARRIER-1';
+		$this->meta[ Carrier_Cancel::FAILED_META ]    = 'CARRIER-1';
+
+		$provider = $this->provider( [ 'carrier_order_id_meta_key' => '_wc_edostavka_carrier_order_id' ] );
+
+		$row = ( new Order_Row_Builder() )->build( $this->make_order( [ 'get_status' => 'cancelled' ] ), $provider );
+
+		$this->assertTrue( $row['cancel_failed'] );
+	}
+
 	public function test_cancel_failed_is_false_once_the_shipment_is_another_one_or_gone(): void {
 		$this->meta[ Carrier_Cancel::FAILED_META ] = 'CARRIER-1';
 		$provider                                  = $this->provider( [ 'carrier_order_id_meta_key' => '_wc_edostavka_carrier_order_id' ] );
