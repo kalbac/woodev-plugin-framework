@@ -46,6 +46,16 @@ namespace {
 			protected function extract_carrier_order_id( \Woodev_API_Response $response ): string {
 				return $this->next_carrier_order_id;
 			}
+
+			protected function acquire_export_lock( int $order_id ): bool {
+				return true;
+			}
+
+			protected function release_export_lock( int $order_id ): void {}
+
+			protected function fresh_order( \WC_Order $order ): \WC_Order {
+				return $order;
+			}
 		}
 	}
 }
@@ -130,13 +140,14 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 
 		// ----- the handler carries the carrier's text -----
 
-		public function test_a_failed_export_carries_the_carriers_text_and_is_still_queued_for_retry(): void {
+		public function test_a_failed_export_carries_the_carriers_text_and_is_not_retried(): void {
 			$order_handler = Mockery::mock( Shipping_Order_Handler::class );
+			$order_handler->shouldReceive( 'get' )->andReturn( '' );
 			$order_handler->shouldNotReceive( 'set' );
 
 			$retry_handler = Mockery::mock( '\Woodev_Background_Job_Handler' );
-			$retry_handler->shouldReceive( 'create_job' )->once();
-			$retry_handler->shouldReceive( 'dispatch' )->once();
+			$retry_handler->shouldNotReceive( 'create_job' );
+			$retry_handler->shouldNotReceive( 'dispatch' );
 
 			$order = Mockery::mock( '\WC_Order' );
 			$order->shouldReceive( 'get_id' )->andReturn( 55 );
@@ -179,11 +190,12 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 		 */
 		public function test_a_failed_export_writes_nothing_to_the_order(): void {
 			$order_handler = Mockery::mock( Shipping_Order_Handler::class );
+			$order_handler->shouldReceive( 'get' )->andReturn( '' );
 			$order_handler->shouldNotReceive( 'set' );
 
 			$retry_handler = Mockery::mock( '\Woodev_Background_Job_Handler' );
-			$retry_handler->shouldReceive( 'create_job' )->once();
-			$retry_handler->shouldReceive( 'dispatch' )->once();
+			$retry_handler->shouldNotReceive( 'create_job' );
+			$retry_handler->shouldNotReceive( 'dispatch' );
 
 			$order = Mockery::mock( '\WC_Order' );
 			$order->shouldReceive( 'get_id' )->andReturn( 55 );

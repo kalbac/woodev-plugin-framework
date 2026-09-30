@@ -2680,6 +2680,16 @@ msgstr ""
 msgid "Инструкция по получению ключа: %s."
 msgstr ""
 
+#: shipping-method/order/abstract-shipment-handler.php:231
+msgid "Этот заказ уже выгружается — дождитесь окончания."
+msgstr ""
+
+#. translators: %s: the transport error, e.g. a timeout
+#: shipping-method/order/abstract-shipment-handler.php:391
+#, php-format
+msgid "Перевозчик не ответил (%s). Заказ мог быть создан у него — проверьте личный кабинет перевозчика, прежде чем выгружать снова."
+msgstr ""
+
 #: shipping-method/order/class-delivery-status.php:88
 msgid "К отправке"
 msgstr ""

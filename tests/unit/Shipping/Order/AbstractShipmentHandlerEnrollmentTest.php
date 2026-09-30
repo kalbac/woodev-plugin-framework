@@ -82,6 +82,16 @@ namespace {
 		protected function extract_carrier_order_id( \Woodev_API_Response $response ): string {
 			return $this->next_carrier_order_id;
 		}
+
+		protected function acquire_export_lock( int $order_id ): bool {
+			return true;
+		}
+
+		protected function release_export_lock( int $order_id ): void {}
+
+		protected function fresh_order( \WC_Order $order ): \WC_Order {
+			return $order;
+		}
 	}
 }
 
@@ -151,6 +161,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			}
 
 			$order_handler = Mockery::mock( Shipping_Order_Handler::class );
+			$order_handler->shouldReceive( 'get' )->andReturn( '' );
 			$order_handler->shouldReceive( 'set' )->withAnyArgs();
 
 			$retry_handler = Mockery::mock( '\Woodev_Background_Job_Handler' );
@@ -172,7 +183,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$handler                        = $this->handler( $store );
 			$handler->next_carrier_order_id = 'CARRIER-1';
 
-			$order  = Mockery::mock( '\WC_Order' );
+			$order  = Mockery::mock( '\WC_Order' )->shouldIgnoreMissing( 0 );
 			$result = $handler->export( $order, $record, $provider );
 
 			$this->assertTrue( $result->is_success() );
@@ -194,7 +205,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$handler                        = $this->handler( $store );
 			$handler->next_carrier_order_id = '';
 
-			$order  = Mockery::mock( '\WC_Order' );
+			$order  = Mockery::mock( '\WC_Order' )->shouldIgnoreMissing( 0 );
 			$result = $handler->export( $order, $record, $provider );
 
 			$this->assertFalse( $result->is_success(), 'a response with no carrier id is a failure (#860)' );
@@ -220,7 +231,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$handler                        = $this->handler( $store );
 			$handler->next_carrier_order_id = 'CARRIER-1';
 
-			$order = Mockery::mock( '\WC_Order' );
+			$order = Mockery::mock( '\WC_Order' )->shouldIgnoreMissing( 0 );
 
 			Actions\expectDone( 'woodev_shipping_order_exported' )->once()->with( $order, 'CARRIER-1' );
 
@@ -245,7 +256,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$handler                        = $this->handler( $store );
 			$handler->next_carrier_order_id = '';
 
-			$order = Mockery::mock( '\WC_Order' );
+			$order = Mockery::mock( '\WC_Order' )->shouldIgnoreMissing( 0 );
 
 			Actions\expectDone( 'woodev_shipping_order_exported' )->once()->with( $order, '' );
 
@@ -270,6 +281,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$api->shouldReceive( 'create_order' )->andReturn( $response );
 
 			$order_handler = Mockery::mock( Shipping_Order_Handler::class );
+			$order_handler->shouldReceive( 'get' )->andReturn( '' );
 			$order_handler->shouldReceive( 'set' )->once()->with( Mockery::type( '\WC_Order' ), 'carrier_order_id', '' );
 
 			$retry_handler = Mockery::mock( '\Woodev_Background_Job_Handler' );
@@ -277,7 +289,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$handler                        = new \Test_Shipment_Handler( $api, $order_handler, $retry_handler, 'test', null );
 			$handler->next_carrier_order_id = '';
 
-			$order = Mockery::mock( '\WC_Order' );
+			$order = Mockery::mock( '\WC_Order' )->shouldIgnoreMissing( 0 );
 
 			$result = $handler->export( $order );
 
@@ -326,7 +338,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			);
 
 			$handler = $this->handler( $store );
-			$order   = Mockery::mock( '\WC_Order' );
+			$order   = Mockery::mock( '\WC_Order' )->shouldIgnoreMissing( 0 );
 
 			$result = $handler->export( $order, $record, $provider );
 
@@ -350,7 +362,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			);
 
 			$handler = $this->handler( $store );
-			$order   = Mockery::mock( '\WC_Order' );
+			$order   = Mockery::mock( '\WC_Order' )->shouldIgnoreMissing( 0 );
 
 			$captured = null;
 			Functions\expect( 'error_log' )
@@ -391,7 +403,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			);
 
 			$handler = $this->handler( $store );
-			$order   = Mockery::mock( '\WC_Order' );
+			$order   = Mockery::mock( '\WC_Order' )->shouldIgnoreMissing( 0 );
 
 			$captured = null;
 			Functions\expect( 'error_log' )
@@ -425,7 +437,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$store->shouldNotReceive( 'enroll' );
 
 			$handler = $this->handler( $store );
-			$order   = Mockery::mock( '\WC_Order' );
+			$order   = Mockery::mock( '\WC_Order' )->shouldIgnoreMissing( 0 );
 
 			$handler->export( $order, null, $provider );
 		}
@@ -435,7 +447,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$store->shouldNotReceive( 'enroll' );
 
 			$handler = $this->handler( $store );
-			$order   = Mockery::mock( '\WC_Order' );
+			$order   = Mockery::mock( '\WC_Order' )->shouldIgnoreMissing( 0 );
 
 			$handler->export( $order, $this->record(), null );
 		}
