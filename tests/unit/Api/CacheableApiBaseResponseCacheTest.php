@@ -12,7 +12,15 @@ use Brain\Monkey\Functions;
 use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__, 3 ) . '/woodev/api/class-api-base.php';
+require_once dirname( __DIR__, 3 ) . '/woodev/api/traits/cacheable-request-trait.php';
 require_once dirname( __DIR__, 3 ) . '/woodev/api/abstract-cacheable-api-base.php';
+
+/**
+ * Minimal request double carrying the cache flags.
+ */
+class Testable_Cacheable_Request {
+	use \Woodev_Cacheable_Request_Trait;
+}
 
 /**
  * Concrete cacheable API double exposing the cache-writing seam.
@@ -29,7 +37,8 @@ class Testable_Cacheable_Api_Base extends \Woodev_Cacheable_API_Base {
 	public $plugin;
 
 	public function __construct() {
-		$this->plugin = new class() {
+		$this->request = new Testable_Cacheable_Request();
+		$this->plugin  = new class() {
 			/** @var string[] */
 			public $logged = [];
 
@@ -51,6 +60,15 @@ class Testable_Cacheable_Api_Base extends \Woodev_Cacheable_API_Base {
 	 */
 	public function save_response_to_cache_for_test( array $response ): void {
 		$this->save_response_to_cache( $response );
+	}
+
+	/**
+	 * Runs the real do_remote_request() (cache read, then transport).
+	 *
+	 * @return mixed
+	 */
+	public function do_remote_request_for_test() {
+		return $this->do_remote_request( 'https://example.test/api', [] );
 	}
 
 	/**
@@ -454,7 +472,7 @@ final class CacheableApiBaseResponseCacheTest extends TestCase {
 
 		Filters\expectApplied( 'woodev_plugin_test_plugin_api_request_cache_max_bytes' )
 			->once()
-			->with( \Woodev_Cacheable_API_Base::DEFAULT_CACHE_MAX_BYTES, null )
+			->with( \Woodev_Cacheable_API_Base::DEFAULT_CACHE_MAX_BYTES, \Mockery::type( Testable_Cacheable_Request::class ) )
 			->andReturn( 1024 );
 
 		$this->api_with_body_of( 2048 )->save_response_to_cache_for_test( [] );
@@ -543,5 +561,101 @@ final class CacheableApiBaseResponseCacheTest extends TestCase {
 		$api->save_response_to_cache_for_test( [] );
 
 		$this->assertSame( [], $api->plugin->logged );
+	}
+
+	/**
+	 * Runs a 200 response through the real handle_response() path.
+	 *
+	 * @param Testable_Cacheable_Api_Base $api API double.
+	 * @return mixed
+	 */
+	private function handle_ok_response( Testable_Cacheable_Api_Base $api ) {
+		Functions\when( 'is_wp_error' )->justReturn( false );
+		Functions\when( 'wp_remote_retrieve_response_code' )->justReturn( 200 );
+		Functions\when( 'wp_remote_retrieve_response_message' )->justReturn( 'OK' );
+		Functions\when( 'wp_remote_retrieve_body' )->justReturn( '{"ok":true}' );
+		Functions\when( 'wp_remote_retrieve_headers' )->justReturn( [] );
+
+		return $api->handle_response_for_test(
+			[
+				'headers'  => [],
+				'body'     => '{"ok":true}',
+				'response' => [ 'code' => 200, 'message' => 'OK' ],
+			]
+		);
+	}
+
+	/**
+	 * A default request is cached through handle_response(), as before (#1004).
+	 *
+	 * @return void
+	 */
+	public function test_default_request_is_cached_by_handle_response(): void {
+		$writes = $this->capture_transient_writes();
+
+		$result = $this->handle_ok_response( new Testable_Cacheable_Api_Base() );
+
+		$this->assertSame( '{"ok":true}', $result->raw );
+		$this->assertCount( 1, $writes );
+	}
+
+	/**
+	 * set_should_cache( false ) writes no transient, and the response is still returned (#1004).
+	 *
+	 * @return void
+	 */
+	public function test_should_cache_false_writes_no_transient(): void {
+		$writes = $this->capture_transient_writes();
+		$api    = new Testable_Cacheable_Api_Base();
+		$api->get_request()->set_should_cache( false );
+
+		$result = $this->handle_ok_response( $api );
+
+		$this->assertSame( '{"ok":true}', $result->raw );
+		$this->assertCount( 0, $writes );
+	}
+
+	/**
+	 * bypass_cache() neither reads the cache nor writes it (#1004).
+	 *
+	 * @return void
+	 */
+	public function test_bypass_cache_neither_reads_nor_writes(): void {
+		$writes = $this->capture_transient_writes();
+		$reads  = new \ArrayObject();
+
+		Functions\when( 'get_transient' )->alias(
+			static function ( $key ) use ( $reads ) {
+				$reads[] = $key;
+
+				return [ 'body' => 'stale' ];
+			}
+		);
+		Functions\when( 'wp_safe_remote_request' )->justReturn( [ 'fresh' => true ] );
+
+		$api = new Testable_Cacheable_Api_Base();
+		$api->get_request()->bypass_cache();
+
+		$this->assertSame( [ 'fresh' => true ], $api->do_remote_request_for_test(), 'transport used, not the cache' );
+
+		$this->handle_ok_response( $api );
+
+		$this->assertCount( 0, $reads, 'no cache read' );
+		$this->assertCount( 0, $writes, 'no cache write' );
+	}
+
+	/**
+	 * A forced refresh alone still rewrites the entry: only should_cache() gates the write (#1004).
+	 *
+	 * @return void
+	 */
+	public function test_force_refresh_alone_still_writes(): void {
+		$writes = $this->capture_transient_writes();
+		$api    = new Testable_Cacheable_Api_Base();
+		$api->get_request()->set_force_refresh( true );
+
+		$this->handle_ok_response( $api );
+
+		$this->assertCount( 1, $writes );
 	}
 }
