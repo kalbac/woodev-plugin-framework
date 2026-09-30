@@ -475,8 +475,9 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$result = $handler->export( $this->order() );
 
 			$this->assertFalse( $result->is_success() );
-			$this->assertStringContainsString( 'мог быть создан', $result->get_message(), 'the same text as a transport failure without reconcile' );
+			$this->assertStringContainsString( 'могла быть создана', $result->get_message() );
 			$this->assertStringContainsString( 'личный кабинет', $result->get_message() );
+			$this->assertStringNotContainsString( 'не ответил', $result->get_message(), 'the carrier DID answer, only without an id' );
 			$this->assertSame( [], $this->id_writes, 'no empty id is stored' );
 			$this->assertGreaterThan( 0, $this->meta[55][ self::META ] ?? 0, 'the state is «unknown»' );
 		}
@@ -513,6 +514,14 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$this->assertFalse( $handler->classify( new \Idempotency_Test_Api_Exception( 'bad zip', 422 ) ) );
 			$this->assertFalse( $handler->classify( new \Idempotency_Test_Api_Exception( 'no code' ) ) );
 			$this->assertFalse( $handler->classify( new \Idempotency_Test_Api_Exception( 'not http', 600 ) ) );
+		}
+
+		public function test_a_plain_exception_is_a_refusal_whatever_code_it_carries(): void {
+			$handler = $this->handler( $this->api( null, 0 ) );
+
+			// A carrier error code that happens to lie in 500-599 is not an HTTP status.
+			$this->assertFalse( $handler->classify( new \Woodev_API_Exception( 'invalid address', 500 ) ) );
+			$this->assertFalse( $handler->classify( new \Woodev_API_Exception( 'invalid address', 510 ) ) );
 		}
 
 		public function test_a_subclass_exception_with_a_5xx_code_makes_the_order_unknown(): void {

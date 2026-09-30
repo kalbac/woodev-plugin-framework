@@ -204,7 +204,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 *              can react without depending on `$hook_prefix` (#853).
 		 * @since 2.0.2 Card #872: returns an {@see Action_Result} instead of the bare
 		 *              carrier order id, so a failure can carry the carrier's text.
-		 *              A carrier response with NO id is a failure with no text (#860).
 		 * @since 2.0.2 Card #945: exports at most once — an already exported order is not sent
 		 *              again, the call runs under a per-order lock, and a failure that does not
 		 *              tell whether the carrier created the order is kept as «unknown» and
@@ -400,6 +399,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 
 			$text = self::exception_text( $exception );
 
+			if ( $unknown && ! $can_reconcile ) {
+				// The carrier DID answer (no id in it), so the «did not answer» wording of a transport failure would be untrue.
+				return Action_Result::failure(
+					__( 'Перевозчик ответил без номера заявки — заявка могла быть создана. Проверьте личный кабинет перевозчика перед повторной выгрузкой.', 'woodev-plugin-framework' )
+				);
+			}
+
 			if ( $transport_failure && ! $can_reconcile ) {
 				return Action_Result::failure(
 					sprintf(
@@ -422,7 +428,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 * before the answer was lost. `false` for a carrier-level one — an HTTP 4xx or a parsed
 		 * carrier error: the carrier refused, so nothing was created. An exception that is not a
 		 * {@see \Woodev_API_Transport_Exception} — the API base re-types only a plain
-		 * {@see \Woodev_API_Exception}, a subclass keeps its class — is read by the HTTP status it
+		 * {@see \Woodev_API_Exception}, a subclass keeps its class. A plain one that reached here is
+		 * a refusal (its code may be a carrier error code); a SUBCLASS is read by the HTTP status it
 		 * carries as its code: 5xx is transport-level. A carrier whose API signals a transport
 		 * problem some other way overrides this.
 		 *
@@ -437,7 +444,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 				return true;
 			}
 
-			// A third-party subclass is not re-typed by the API base (it keeps its class), so it is read by the HTTP status it carries.
+			// A plain exception is re-typed by the API base on a real transport failure, so its code may be a carrier error code — never read it as a status.
+			if ( \Woodev_API_Exception::class === get_class( $exception ) ) {
+				return false;
+			}
+
+			// A subclass is not re-typed by the API base (it keeps its class), so it is read by the HTTP status it carries.
 			$code = (int) $exception->getCode();
 
 			return $code >= 500 && $code < 600;

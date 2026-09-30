@@ -2680,16 +2680,20 @@ msgstr ""
 msgid "Инструкция по получению ключа: %s."
 msgstr ""
 
-#: shipping-method/order/abstract-shipment-handler.php:233
+#: shipping-method/order/abstract-shipment-handler.php:232
 msgid "Этот заказ уже выгружается — дождитесь окончания."
 msgstr ""
 
-#: shipping-method/order/abstract-shipment-handler.php:294
+#: shipping-method/order/abstract-shipment-handler.php:293
 msgid "Ответ перевозчика не содержит номера заказа"
 msgstr ""
 
+#: shipping-method/order/abstract-shipment-handler.php:405
+msgid "Перевозчик ответил без номера заявки — заявка могла быть создана. Проверьте личный кабинет перевозчика перед повторной выгрузкой."
+msgstr ""
+
 #. translators: %s: the transport error, e.g. a timeout
-#: shipping-method/order/abstract-shipment-handler.php:407
+#: shipping-method/order/abstract-shipment-handler.php:413
 #, php-format
 msgid "Перевозчик не ответил (%s). Заказ мог быть создан у него — проверьте личный кабинет перевозчика, прежде чем выгружать снова."
 msgstr ""
