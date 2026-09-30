@@ -6,8 +6,14 @@ if ( ! class_exists( 'Woodev_Cacheable_API_Base' ) ) :
 
 	abstract class Woodev_Cacheable_API_Base extends Woodev_API_Base {
 
+		/** Default cap on a cached response's serialized size, in bytes. @see get_request_cache_max_bytes() */
+		public const DEFAULT_CACHE_MAX_BYTES = 524288;
+
 		/** @var bool whether the response was loaded from cache */
 		protected $response_loaded_from_cache = false;
+
+		/** @var array<string, true> request keys already reported as too big to cache, this page load */
+		private static $oversized_response_logged = [];
 
 		/**
 		 * Simple wrapper for wp_remote_request() so child classes can override this
@@ -140,6 +146,12 @@ if ( ! class_exists( 'Woodev_Cacheable_API_Base' ) ) :
 		 * value directly; this reduced shape is therefore safe for existing entries
 		 * and avoids treating a raw wp_remote_* result as an installed-site contract.
 		 *
+		 * A response whose serialized form is above the cap from
+		 * {@see get_request_cache_max_bytes()} is not cached at all (#952); the
+		 * request itself is unaffected. Any entry already stored under the same key
+		 * is deleted, so a forced refresh never leaves a stale older response to be
+		 * served on the next request.
+		 *
 		 * @since 2.0.2
 		 * @param array $response
 		 * @return void
@@ -154,7 +166,92 @@ if ( ! class_exists( 'Woodev_Cacheable_API_Base' ) ) :
 				],
 			];
 
+			// Measure the serialized form that set_transient() will actually store.
+			$max_bytes = $this->resolve_request_cache_max_bytes();
+			$size      = $max_bytes > 0 ? strlen( maybe_serialize( $cached_response ) ) : 0;
+
+			if ( $max_bytes > 0 && $size > $max_bytes ) {
+				$this->log_oversized_response_skipped( $size, $max_bytes );
+
+				// Drop the older entry too: this path is reached on a forced refresh, whose contract is "replace what is cached".
+				delete_transient( $this->get_request_transient_key() );
+				return;
+			}
+
 			set_transient( $this->get_request_transient_key(), $cached_response, $this->get_request_cache_lifetime() );
+		}
+
+		/**
+		 * Gets the default cap, in bytes, on a response written to the response cache.
+		 *
+		 * A response whose serialized form is above the cap is not cached; the request
+		 * itself still succeeds and returns normally. The cap applies to whatever
+		 * backs transients. Without a persistent object cache that is a single
+		 * `wp_options` row per response, and MySQL refuses a statement bigger than
+		 * `max_allowed_packet` with «MySQL server has gone away» — 4 MB by default on
+		 * MySQL 5.7, 64 MB on 8.0, and often lower on shared hosting. With an external
+		 * object cache (Redis, Memcached) the same cap still applies, since such
+		 * stores limit item size too (Memcached: 1 MB by default). One entry must
+		 * stay far below those limits, so the default is 512 KB. A carrier reference
+		 * dump (pickup points, a full location directory) is what crosses it.
+		 *
+		 * An API class overrides this method to set its own cap; the
+		 * `woodev_plugin_{plugin_id}_api_request_cache_max_bytes` filter then has the
+		 * last word (see {@see resolve_request_cache_max_bytes()}). `0` or a negative
+		 * value means no cap.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return int maximum serialized size in bytes; 0 or negative for no cap
+		 */
+		protected function get_request_cache_max_bytes(): int {
+			return self::DEFAULT_CACHE_MAX_BYTES;
+		}
+
+		/**
+		 * Gets the cap that applies to the current request: the class's own value, filtered.
+		 *
+		 * A filter value that is not numeric (`false`, `null`, `''`, `'1M'`) is ignored
+		 * and the class's own value is used, so a broken filter never lifts the cap.
+		 *
+		 * @return int maximum serialized size in bytes; 0 or negative for no cap
+		 */
+		private function resolve_request_cache_max_bytes(): int {
+
+			$default  = $this->get_request_cache_max_bytes();
+			$filtered = apply_filters( 'woodev_plugin_' . $this->get_plugin()->get_id() . '_api_request_cache_max_bytes', $default, $this->get_request() );
+
+			return is_numeric( $filtered ) ? (int) $filtered : $default;
+		}
+
+		/**
+		 * Logs, once per request key per page load, that a response was too big to cache.
+		 *
+		 * The message carries only the hashed transient key and the sizes: never the
+		 * URI or the body, which can hold credentials.
+		 *
+		 * @param int $size      serialized size of the response, in bytes
+		 * @param int $max_bytes the cap that was exceeded, in bytes
+		 * @return void
+		 */
+		private function log_oversized_response_skipped( int $size, int $max_bytes ): void {
+
+			$key = $this->get_request_transient_key();
+
+			if ( isset( self::$oversized_response_logged[ $key ] ) ) {
+				return;
+			}
+
+			self::$oversized_response_logged[ $key ] = true;
+
+			$this->get_plugin()->log(
+				sprintf(
+					'API response not cached: %1$d bytes exceeds the %2$d byte cache limit (request key %3$s).',
+					$size,
+					$max_bytes,
+					$key
+				)
+			);
 		}
 
 
