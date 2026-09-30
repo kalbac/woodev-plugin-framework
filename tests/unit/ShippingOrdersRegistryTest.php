@@ -643,6 +643,31 @@ class ShippingOrdersRegistryTest extends TestCase {
 		$registry->enqueue_metabox_style();
 	}
 
+	/** #1012: the metabox's action buttons are driven by one raw script, enqueued in the footer, no deps. */
+	public function test_enqueue_metabox_script_enqueues_the_button_script_in_the_footer(): void {
+		$captured = [];
+
+		Functions\when( 'plugins_url' )->alias(
+			static function ( string $path, string $plugin ): string {
+				return 'https://example.test/plugins/' . $path;
+			}
+		);
+		Functions\expect( 'wp_enqueue_script' )
+			->once()
+			->andReturnUsing(
+				static function ( ...$args ) use ( &$captured ): void {
+					$captured = $args;
+				}
+			);
+
+		Orders_Registry::instance()->enqueue_metabox_script();
+
+		$this->assertSame( 'woodev-shipping-order-metabox-actions', $captured[0] );
+		$this->assertSame( 'https://example.test/plugins/order-metabox-actions.js', $captured[1] );
+		$this->assertSame( [], $captured[2], 'plain JS, no script dependency' );
+		$this->assertTrue( $captured[4], 'printed in the footer' );
+	}
+
 	/**
 	 * A non-`Woodev_Plugin` second argument (a caller mistake) must be ignored
 	 * rather than accepted and blown up on later — `enqueue_assets()` still finds

@@ -16,13 +16,19 @@
  * right in the TABLE, where one column serves every row; here there is no
  * column to keep, so an absent field is just a shorter list.
  *
+ * NO `<form>` HERE (#1012): this box sits INSIDE WooCommerce's order form, and HTML forbids nested
+ * forms — the browser drops the inner opening tag and the inner `</form>` closes the OUTER order
+ * form, so every field after it (the status select among them) stopped being submitted. Each action
+ * is a `type="button"` carrying its payload as data attributes; `order-metabox-actions.js` builds a
+ * detached form outside the order form on click and posts it to the same admin-post handler.
+ *
  * @var bool                                                        $is_exported       whether the order has been exported to the carrier
  * @var string                                                      $info_text         shown only when `$is_exported` is false
  * @var array<int, array{label: string, value: string, url: string|null, tone?:string}> $fields non-empty display fields, shown only when `$is_exported` is true
  * @var string                                                      $history_html      pre-rendered delivery-history markup ('' when there is none to show)
  * @var array<int, array{action: string, label: string, title: string, destructive: bool, disabled?: bool}> $actions the row action set {@see \Woodev\Framework\Shipping\Admin\Orders\Order_Actions::for_row()} built for this order; a locked action carries `disabled` and the lock reason as its `title`
- * @var string                                                      $admin_post_action forward-only admin-post action the button forms target
- * @var string                                                      $nonce_action      nonce action protecting the button forms
+ * @var string                                                      $admin_post_action forward-only admin-post action the buttons post to
+ * @var string                                                      $nonce_action      nonce action protecting the buttons' post
  * @var int                                                         $order_id          the order being edited
  *
  * @since 1.5.0
@@ -73,21 +79,20 @@ defined( 'ABSPATH' ) || exit;
 	<?php if ( [] !== $actions ) : ?>
 		<p class="woodev-shipping-order-actions-buttons">
 			<?php foreach ( $actions as $action ) : ?>
-				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="woodev-shipping-order-action">
-					<?php wp_nonce_field( $nonce_action ); ?>
-					<input type="hidden" name="action" value="<?php echo esc_attr( $admin_post_action ); ?>" />
-					<input type="hidden" name="order_id" value="<?php echo esc_attr( (string) $order_id ); ?>" />
-					<input type="hidden" name="woodev_shipping_order_action" value="<?php echo esc_attr( $action['action'] ); ?>" />
-					<button
-						type="submit"
-						class="button<?php echo ! empty( $action['destructive'] ) ? ' button-link-delete' : ''; ?>"
-						title="<?php echo esc_attr( (string) ( $action['title'] ?? '' ) ); ?>"
-						<?php disabled( ! empty( $action['disabled'] ) ); ?>
-						<?php echo ! empty( $action['destructive'] ) ? 'onclick="return confirm( \'' . esc_js( __( 'Вы уверены?', 'woodev-plugin-framework' ) ) . '\' );"' : ''; ?>
-					>
-						<?php echo esc_html( $action['label'] ); ?>
-					</button>
-				</form>
+				<button
+					type="button"
+					class="button woodev-shipping-order-action<?php echo ! empty( $action['destructive'] ) ? ' button-link-delete' : ''; ?>"
+					title="<?php echo esc_attr( (string) ( $action['title'] ?? '' ) ); ?>"
+					data-woodev-order-action="<?php echo esc_attr( $action['action'] ); ?>"
+					data-post-url="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"
+					data-post-action="<?php echo esc_attr( $admin_post_action ); ?>"
+					data-order-id="<?php echo esc_attr( (string) $order_id ); ?>"
+					data-nonce="<?php echo esc_attr( wp_create_nonce( $nonce_action ) ); ?>"
+					<?php echo ! empty( $action['destructive'] ) ? 'data-confirm="' . esc_attr( __( 'Вы уверены?', 'woodev-plugin-framework' ) ) . '"' : ''; ?>
+					<?php disabled( ! empty( $action['disabled'] ) ); ?>
+				>
+					<?php echo esc_html( $action['label'] ); ?>
+				</button>
 			<?php endforeach; ?>
 		</p>
 	<?php endif; ?>

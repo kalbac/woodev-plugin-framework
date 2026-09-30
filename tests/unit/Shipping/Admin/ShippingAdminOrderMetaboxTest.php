@@ -89,7 +89,7 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 
 			// Metabox-specific WP surface.
 			Functions\when( 'add_meta_box' )->justReturn( null );
-			Functions\when( 'wp_nonce_field' )->justReturn( '' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'nonce-123' );
 			Functions\when( 'admin_url' )->alias( static function ( string $path = '' ): string {
 				return 'https://example.test/wp-admin/' . $path;
 			} );
@@ -197,6 +197,7 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$registry = Mockery::mock( Orders_Registry::class );
 			$registry->shouldReceive( 'resolve_provider_for_order' )->once()->andReturn( $provider );
 			$registry->shouldReceive( 'enqueue_metabox_style' )->once();
+			$registry->shouldReceive( 'enqueue_metabox_script' )->once();
 
 			$captured_title = null;
 			Functions\when( 'add_meta_box' )->alias(
@@ -281,8 +282,68 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			( new Shipping_Admin_Order( Orders_Registry::instance() ) )->render_metabox( $order, $provider );
 			$html = ob_get_clean();
 
-			$this->assertStringContainsString( 'value="export"', $html );
+			$this->assertStringContainsString( 'data-woodev-order-action="export"', $html );
 			$this->assertStringNotContainsString( "disabled='disabled'", $html );
+		}
+
+		/**
+		 * #1012: the metabox sits INSIDE WooCommerce's order form; a nested `<form>` closed the outer one
+		 * and the status select stopped being submitted. No form tag may survive anywhere in the output.
+		 */
+		public function test_render_metabox_contains_no_form_element(): void {
+			$provider = $this->provider();
+			$order    = $this->make_order();
+
+			$this->meta['_wc_cdek_order_id'] = 'CARRIER-1'; // exported => several buttons.
+			$this->register_handler( true );
+
+			ob_start();
+			( new Shipping_Admin_Order( Orders_Registry::instance() ) )->render_metabox( $order, $provider );
+			$html = ob_get_clean();
+
+			$this->assertStringContainsString( '<button', $html, 'the actions still render' );
+			$this->assertStringNotContainsString( '<form', $html );
+			$this->assertStringNotContainsString( '</form', $html );
+		}
+
+		/** #1012: every button carries the whole payload the detached form will post. */
+		public function test_render_metabox_buttons_carry_the_payload_as_data_attributes(): void {
+			$provider = $this->provider();
+			$order    = $this->make_order();
+
+			$this->meta = [];
+			$this->register_handler();
+
+			ob_start();
+			( new Shipping_Admin_Order( Orders_Registry::instance() ) )->render_metabox( $order, $provider );
+			$html = ob_get_clean();
+
+			$this->assertSame( 1, preg_match( '/<button[^>]*data-woodev-order-action="export"[^>]*>/s', $html, $m ) );
+			$button = $m[0];
+
+			$this->assertStringContainsString( 'type="button"', $button, 'a submit button would be wrong outside a form of its own' );
+			$this->assertStringContainsString( 'data-post-url="https://example.test/wp-admin/admin-post.php"', $button );
+			$this->assertStringContainsString( 'data-post-action="' . Shipping_Admin_Order::ADMIN_POST_ACTION . '"', $button );
+			$this->assertStringContainsString( 'data-order-id="123"', $button );
+			$this->assertStringContainsString( 'data-nonce="nonce-123"', $button );
+			$this->assertStringNotContainsString( 'data-confirm', $button, 'a non-destructive action asks nothing' );
+		}
+
+		/** #1012: the destructive action keeps its «Вы уверены?» question, now as a data attribute. */
+		public function test_render_metabox_destructive_button_carries_the_confirm_question(): void {
+			$provider = $this->provider();
+			$order    = $this->make_order();
+
+			$this->meta['_wc_cdek_order_id'] = 'CARRIER-1'; // exported => cancel is offered.
+			$this->register_handler();
+
+			ob_start();
+			( new Shipping_Admin_Order( Orders_Registry::instance() ) )->render_metabox( $order, $provider );
+			$html = ob_get_clean();
+
+			$this->assertSame( 1, preg_match( '/<button[^>]*data-woodev-order-action="cancel"[^>]*>/s', $html, $m ) );
+			$this->assertStringContainsString( 'data-confirm="Вы уверены?"', $m[0] );
+			$this->assertStringNotContainsString( 'onclick', $html, 'no inline handler — the script owns the click' );
 		}
 
 		public function test_render_metabox_never_draws_a_button_for_the_edit_row_action(): void {
@@ -297,9 +358,9 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$html = ob_get_clean();
 
 			// The orders page's row carries «Редактировать» (#972); the order screen has no wizard to open,
-			// and a form posting `edit` would only be refused.
-			$this->assertStringContainsString( 'value="export"', $html, 'the carrier actions still render' );
-			$this->assertStringNotContainsString( 'value="edit"', $html );
+			// and a button posting `edit` would only be refused.
+			$this->assertStringContainsString( 'data-woodev-order-action="export"', $html, 'the carrier actions still render' );
+			$this->assertStringNotContainsString( 'data-woodev-order-action="edit"', $html );
 			$this->assertStringNotContainsString( 'Редактировать', $html );
 		}
 
