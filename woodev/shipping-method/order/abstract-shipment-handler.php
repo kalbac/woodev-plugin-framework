@@ -14,20 +14,12 @@
  * An export happens at most once per order (#945): an order that already has a carrier id is
  * not sent again, the call runs under a per-order lock, and a failure that does not tell whether
  * the carrier created the order is kept as «unknown» and reconciled — see {@see self::export()}.
- * A failed export the carrier may still complete is not lost: it is re-queued through the plugin's
- * {@see \Woodev_Background_Job_Handler} so it is retried out-of-band. The retry
- * job is enqueued in the exact shape that handler consumes — a job whose `data`
- * key is the array {@see \Woodev_Background_Job_Handler::process_job()} iterates,
- * handing each item to `process_item()`. One retry is one order id in that data
- * array; enqueuing any other shape (e.g. `['order_id' => …]`) persists a job whose
- * `data` key is unset, which `process_job()` rejects before any item runs — the
- * retry would then never fire. See docs-internal/gotchas if this regresses.
- *
- * The background-job id is built from the plugin-supplied handler's own identifier
- * (prefix = plugin id); the framework introduces no installed-site job id literal.
- * Lifecycle events are broadcast through forward-only, plugin-namespaced action
+ * A failed export the carrier may still complete is not lost: {@see Export_Retry} schedules another
+ * attempt through WooCommerce's Action Scheduler, with a growing pause and at most five attempts in
+ * all (#954). Lifecycle events are broadcast through forward-only, plugin-namespaced action
  * hooks (`woodev_shipping_{prefix}_shipment_*`); no installed-site contract string
- * — no shipping-method id, no existing hook name, no meta key — is introduced here.
+ * — no shipping-method id, no existing hook name — is introduced here (the retry's own hook,
+ * group and meta key live in {@see Export_Retry}).
  *
  * See docs-internal/platform-v2-s1-shipping-spec.md §4.3.
  *
@@ -51,8 +43,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 	/**
 	 * Exports, persists, cancels, and retries a shipment against a carrier.
 	 *
-	 * A carrier constructs the handler with the API seam, the order-meta handler,
-	 * and the plugin's background-job handler used to retry a failed export.
+	 * A carrier constructs the handler with the API seam and the order-meta handler;
+	 * a failed export is retried by the framework ({@see Export_Retry}).
 	 * Concrete carriers implement only the response→carrier-id mapping
 	 * ({@see self::extract_carrier_order_id()}); everything else is carrier-neutral.
 	 *
@@ -84,9 +76,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 
 		/** @var Shipping_Order_Handler HPOS-safe order-meta accessor for the plugin's keys */
 		protected Shipping_Order_Handler $order_handler;
-
-		/** @var \Woodev_Background_Job_Handler plugin-supplied queue used to retry a failed export */
-		protected \Woodev_Background_Job_Handler $retry_handler;
 
 		/** @var string plugin-supplied token that namespaces this handler's forward hooks */
 		protected string $hook_prefix;
@@ -126,23 +115,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 *              instead of leaving enrolment permanently disabled — an
 		 *              explicit instance remains a genuine override (tests, or a
 		 *              plugin that wants its own).
+		 * @since 2.0.2 Card #954 (BREAKING, ADR-005): the `$retry_handler` parameter is gone. A
+		 *              failed export is retried through the framework's own delayed Action
+		 *              Scheduler action ({@see Export_Retry}), not through a plugin-supplied
+		 *              background-job queue, which cannot delay. A carrier plugin drops the third
+		 *              argument of its construction call.
 		 *
-		 * @param Shipping_API                   $api                      carrier API used to create/cancel orders
-		 * @param Shipping_Order_Handler         $order_handler            order-meta accessor that persists the carrier id under the plugin's key
-		 * @param \Woodev_Background_Job_Handler $retry_handler            plugin's background-job queue used to retry a failed export
-		 * @param string                         $hook_prefix              plugin-supplied token (e.g. the plugin id) that namespaces forward hooks; defaults to none
-		 * @param Popular_Settlement_Store|null  $popular_settlement_store popular-settlements store used to bump usage on a successful export; null resolves the framework's shared instance
+		 * @param Shipping_API                  $api                      carrier API used to create/cancel orders
+		 * @param Shipping_Order_Handler        $order_handler            order-meta accessor that persists the carrier id under the plugin's key
+		 * @param string                        $hook_prefix              plugin-supplied token (e.g. the plugin id) that namespaces forward hooks; defaults to none
+		 * @param Popular_Settlement_Store|null $popular_settlement_store popular-settlements store used to bump usage on a successful export; null resolves the framework's shared instance
 		 */
 		public function __construct(
 			Shipping_API $api,
 			Shipping_Order_Handler $order_handler,
-			\Woodev_Background_Job_Handler $retry_handler,
 			string $hook_prefix = '',
 			?Popular_Settlement_Store $popular_settlement_store = null
 		) {
 			$this->api                      = $api;
 			$this->order_handler            = $order_handler;
-			$this->retry_handler            = $retry_handler;
 			$this->hook_prefix              = $hook_prefix;
 			$this->popular_settlement_store = $popular_settlement_store ?? Location_Provider_Registry::instance()->popular_settlement_store();
 		}
@@ -169,11 +160,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 * - the carrier did not ANSWER (timeout, connection error, 5xx, empty response): it MAY have
 		 *   created the order, so the order is marked «export state unknown»
 		 *   ({@see self::EXPORT_UNKNOWN_META}, kept until an export succeeds or is reconciled). A carrier
-		 *   that can look an order up ({@see self::supports_reconcile()}) gets the export re-queued
-		 *   via {@see self::schedule_retry()}; the retry, like any next export of an unknown order,
+		 *   that can look an order up ({@see self::supports_reconcile()}) gets the export retried
+		 *   later by {@see Export_Retry} (1 min, 5 min, 30 min, 2 h — five attempts in all, then a
+		 *   note on the order); the retry, like any next export of an unknown order,
 		 *   asks {@see self::find_exported_order()} FIRST and only creates an order when the carrier
 		 *   has none. A carrier that cannot look up gets no automatic retry and a failure text that
 		 *   tells the merchant to check the carrier's account; a MANUAL export stays allowed.
+		 * - the carrier answered HTTP 429 ({@see \Woodev_API_Rate_Limit_Exception}): it is throttling
+		 *   us and created nothing. Not a refusal and not «unknown» — the export is retried by
+		 *   {@see Export_Retry} after the `Retry-After` wait the carrier asked for (the standard
+		 *   schedule when it gave none), for any carrier, and counts towards the same five attempts.
 		 *
 		 * A successful export with a NON-EMPTY carrier order id is also "an order
 		 * shipped to this settlement" (#488 popular-settlements spec D2) — the
@@ -204,6 +200,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 *              can react without depending on `$hook_prefix` (#853).
 		 * @since 2.0.2 Card #872: returns an {@see Action_Result} instead of the bare
 		 *              carrier order id, so a failure can carry the carrier's text.
+		 * @since 2.0.2 Card #954: the carrier calls run under the `export` request purpose (30 s), a
+		 *              retry is DELAYED and capped at five attempts ({@see Export_Retry}), and an HTTP 429
+		 *              is retried after its `Retry-After`. BEHAVIOUR CHANGE (ADR-005): the retry no
+		 *              longer goes through a plugin-supplied background-job queue.
 		 * @since 2.0.2 Card #945: exports at most once — an already exported order is not sent
 		 *              again, the call runs under a per-order lock, and a failure that does not
 		 *              tell whether the carrier created the order is kept as «unknown» and
@@ -233,7 +233,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 			}
 
 			try {
-				return $this->export_locked( $order, $settlement, $provider );
+				// The carrier call and the lookup before it are an export: they get the «export» timeout (#954).
+				return \Woodev_API_Request_Purpose::run(
+					\Woodev_API_Request_Purpose::EXPORT,
+					fn() => $this->export_locked( $order, $settlement, $provider )
+				);
 			} finally {
 				$this->release_export_lock( $order_id );
 			}
@@ -315,6 +319,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 
 			$this->order_handler->set( $order, static::CARRIER_ORDER_ID_FIELD, $carrier_order_id );
 			$this->clear_export_unknown( $order, $fresh );
+			Export_Retry::reset( $fresh, $order );
 
 			/**
 			 * Fires after an order is successfully exported to the carrier.
@@ -373,22 +378,32 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 
 			$transport_failure = $unknown || $this->is_transport_failure( $exception );
 			$can_reconcile     = $this->supports_reconcile();
+			$rate_limited      = $exception instanceof \Woodev_API_Rate_Limit_Exception;
+			$text              = self::exception_text( $exception );
 
 			if ( $transport_failure ) {
 				$this->mark_export_unknown( $fresh );
+			}
 
-				if ( $can_reconcile ) {
-					$this->schedule_retry( $order );
-				}
+			// A transport failure of a carrier that can reconcile, or a 429 (nothing was created), is worth another attempt.
+			$retryable = $rate_limited || ( $transport_failure && $can_reconcile );
+			$outcome   = '';
+
+			if ( $retryable ) {
+				$outcome = Export_Retry::after_failure( $fresh, $rate_limited ? $exception->get_retry_after() : null, $text );
+			} else {
+				Export_Retry::reset( $fresh, $order );
 			}
 
 			/**
 			 * Fires when an order export to the carrier fails.
 			 *
-			 * The export is queued for retry only after a transport failure of a carrier that can
-			 * reconcile ({@see self::supports_reconcile()}); a refusal, or a carrier that cannot look
-			 * an order up, is not retried automatically (#945). A create call that returned without
-			 * an id fires it too, with a {@see \Woodev_API_Transport_Exception}.
+			 * The export is retried — later, with a growing pause and at most five attempts in all
+			 * ({@see Export_Retry}) — only after a transport failure of a carrier that can reconcile
+			 * ({@see self::supports_reconcile()}) or an HTTP 429 ({@see \Woodev_API_Rate_Limit_Exception});
+			 * a refusal, or a carrier that cannot look an order up, is not retried automatically
+			 * (#945). A create call that returned without an id fires it too, with a
+			 * {@see \Woodev_API_Transport_Exception}.
 			 *
 			 * @since 1.5.0
 			 *
@@ -397,7 +412,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 			 */
 			do_action( $this->hook( 'shipment_export_failed' ), $order, $exception );
 
-			$text = self::exception_text( $exception );
+			if ( Export_Retry::GAVE_UP === $outcome ) {
+				// The attempts ran out: the order carries the note, and the merchant is told the same.
+				return Action_Result::failure( Export_Retry::give_up_text( $text ) );
+			}
+
+			if ( $rate_limited && Export_Retry::SCHEDULED === $outcome ) {
+				return Action_Result::failure(
+					__( 'Перевозчик временно ограничил число запросов. Выгрузка будет повторена автоматически.', 'woodev-plugin-framework' )
+				);
+			}
 
 			if ( $unknown && ! $can_reconcile ) {
 				// The carrier DID answer (no id in it), so the «did not answer» wording of a transport failure would be untrue.
@@ -717,7 +741,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 			}
 
 			try {
-				$this->api->cancel_order( $carrier_order_id );
+				\Woodev_API_Request_Purpose::run(
+					\Woodev_API_Request_Purpose::EXPORT,
+					function () use ( $carrier_order_id ): void {
+						$this->api->cancel_order( $carrier_order_id );
+					}
+				);
 			} catch ( \Woodev_API_Exception $exception ) {
 
 				/**
@@ -784,31 +813,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 */
 		public function update( \WC_Order $order ): Action_Result {
 			return Action_Result::failure();
-		}
-
-		/**
-		 * Queues a failed export for out-of-band retry.
-		 *
-		 * Called by {@see self::export()} only after a transport failure of a carrier that can
-		 * reconcile ({@see self::supports_reconcile()}) — the job's `process_item()` calls
-		 * `export()` again, which reconciles first.
-		 *
-		 * The job is created in the exact shape {@see \Woodev_Background_Job_Handler}
-		 * consumes: its `data` key is the array {@see \Woodev_Background_Job_Handler::process_job()}
-		 * iterates, passing each entry to `process_item()`. A single retry is therefore
-		 * one order id inside that `data` array — NOT a flat `['order_id' => …]`, which
-		 * leaves `data` unset and makes `process_job()` throw before any retry runs.
-		 *
-		 * @since 1.5.0
-		 *
-		 * @param \WC_Order $order the order to re-export on the next queue run
-		 * @return void
-		 */
-		protected function schedule_retry( \WC_Order $order ): void {
-
-			$this->retry_handler->create_job( [ 'data' => [ $order->get_id() ] ] );
-
-			$this->retry_handler->dispatch();
 		}
 
 		/**

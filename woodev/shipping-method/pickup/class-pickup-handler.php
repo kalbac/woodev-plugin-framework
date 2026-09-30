@@ -1775,7 +1775,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			}
 
 			try {
-				$point = $this->source->fetch_details( $point_id );
+				// The pickup-point lookup is a reference-data load: it gets the «reference» timeout (#954).
+				$point = \Woodev_API_Request_Purpose::run( \Woodev_API_Request_Purpose::REFERENCE, fn() => $this->source->fetch_details( $point_id ) );
 			} catch ( \Throwable $e ) {
 				$this->fetch_failures[ $point_id ] = $e;
 

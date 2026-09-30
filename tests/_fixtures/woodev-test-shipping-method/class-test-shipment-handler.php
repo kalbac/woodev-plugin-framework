@@ -170,31 +170,6 @@ if ( ! class_exists( 'Woodev_Test_Shipping_Api' ) ) {
 	}
 }
 
-if ( ! class_exists( 'Woodev_Test_Shipment_Retry_Job_Handler' ) ) {
-
-	/**
-	 * Background-job handler {@see \Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler}
-	 * requires for a failed export's retry queue. Never actually dispatched by this
-	 * fixture's own `Woodev_Test_Shipping_Api::create_order()`, which never throws —
-	 * only present because the base class's constructor requires one.
-	 */
-	class Woodev_Test_Shipment_Retry_Job_Handler extends \Woodev_Background_Job_Handler {
-
-		/** @var string */
-		protected $prefix = 'woodev_test_shipping';
-
-		/** @var string */
-		protected $action = 'shipment_retry';
-
-		/**
-		 * @inheritDoc
-		 */
-		protected function process_item( $item, $job ) {
-			return null;
-		}
-	}
-}
-
 if ( ! class_exists( 'Woodev_Test_Shipment_Handler' ) ) {
 
 	/**

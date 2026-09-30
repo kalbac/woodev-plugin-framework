@@ -16,6 +16,7 @@
 namespace Woodev\Tests\Integration\Shipping {
 
 	use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
+	use Woodev\Framework\Shipping\Order\Export_Retry;
 	use Woodev\Framework\Shipping\Order\Order_Lock;
 	use Woodev\Framework\Shipping\Order\Shipping_Order_Handler;
 	use Woodev\Tests\Integration\TestCase;
@@ -34,9 +35,6 @@ namespace Woodev\Tests\Integration\Shipping {
 		/** @var \Woodev_Idempotency_Fake_Api */
 		private $api;
 
-		/** @var \Woodev_Idempotency_Retry_Queue */
-		private $queue;
-
 		/** @var \Woodev_Idempotency_Shipment_Handler */
 		private $handler;
 
@@ -44,11 +42,9 @@ namespace Woodev\Tests\Integration\Shipping {
 			parent::setUp();
 
 			$this->api     = new \Woodev_Idempotency_Fake_Api();
-			$this->queue   = new \Woodev_Idempotency_Retry_Queue();
 			$this->handler = new \Woodev_Idempotency_Shipment_Handler(
 				$this->api,
 				new Shipping_Order_Handler( [ 'carrier_order_id' => self::CARRIER_ID_META ] ),
-				$this->queue,
 				'idempotency'
 			);
 		}
@@ -80,6 +76,27 @@ namespace Woodev\Tests\Integration\Shipping {
 			update_option( 'woocommerce_custom_orders_table_enabled', $hpos ? 'yes' : 'no' );
 
 			$this->assertSame( $hpos, \Woodev_Plugin_Compatibility::is_hpos_enabled(), 'the framework must see the datastore this test selected' );
+		}
+
+		/**
+		 * How many export attempts of the order wait in the Action Scheduler queue.
+		 *
+		 * @param int $order_id the order.
+		 * @return int
+		 */
+		private function pending_retries( int $order_id ): int {
+			return count(
+				as_get_scheduled_actions(
+					[
+						'hook'     => Export_Retry::HOOK,
+						'args'     => [ $order_id ],
+						'group'    => Export_Retry::GROUP,
+						'status'   => \ActionScheduler_Store::STATUS_PENDING,
+						'per_page' => -1,
+					],
+					'ids'
+				)
+			);
 		}
 
 		private function new_order(): \WC_Order {
@@ -269,7 +286,7 @@ namespace Woodev\Tests\Integration\Shipping {
 			$this->assertFalse( $refused->is_success() );
 			$this->assertSame( 'Этот заказ уже выгружается — дождитесь окончания.', $refused->get_message() );
 			$this->assertSame( 0, $this->api->create_calls );
-			$this->assertSame( 0, $this->queue->queued, 'a busy order is not queued for retry' );
+			$this->assertSame( 0, $this->pending_retries( $order->get_id() ), 'a busy order is not queued for retry' );
 
 			$this->assertSame( '1', $this->export_lock_call( $other, 'RELEASE_LOCK(%s)', $order->get_id() ) );
 
@@ -296,7 +313,7 @@ namespace Woodev\Tests\Integration\Shipping {
 
 			$this->assertFalse( $result->is_success() );
 			$this->assertSame( 'Неверный индекс получателя', $result->get_message() );
-			$this->assertSame( 0, $this->queue->queued );
+			$this->assertSame( 0, $this->pending_retries( $order->get_id() ) );
 			$this->assertSame( '', $this->reread( $order )->get_meta( Abstract_Shipment_Handler::EXPORT_UNKNOWN_META ) );
 		}
 
@@ -315,7 +332,7 @@ namespace Woodev\Tests\Integration\Shipping {
 			$timed_out = $this->handler->export( $order );
 
 			$this->assertFalse( $timed_out->is_success() );
-			$this->assertSame( 1, $this->queue->queued, 'a carrier that can reconcile is retried' );
+			$this->assertSame( 1, $this->pending_retries( $order->get_id() ), 'a carrier that can reconcile is retried' );
 
 			$fresh = $this->reread( $order );
 			$this->assertGreaterThan( 0, (int) $fresh->get_meta( Abstract_Shipment_Handler::EXPORT_UNKNOWN_META ), 'the unknown state survives on the datastore' );
@@ -537,41 +554,6 @@ namespace {
 
 			/** @inheritDoc */
 			public function get_response(): ?\Woodev_API_Response {
-				return null;
-			}
-		}
-	}
-
-	if ( ! class_exists( 'Woodev_Idempotency_Retry_Queue' ) ) {
-
-		/**
-		 * The retry queue: records what the handler queues instead of dispatching a real job.
-		 */
-		class Woodev_Idempotency_Retry_Queue extends \Woodev_Background_Job_Handler {
-
-			/** @var string */
-			protected $prefix = 'woodev_idempotency';
-
-			/** @var string */
-			protected $action = 'export_retry';
-
-			/** @var int */
-			public int $queued = 0;
-
-			/** @inheritDoc */
-			public function create_job( $attrs = [] ) {
-				++$this->queued;
-
-				return null;
-			}
-
-			/** @inheritDoc */
-			public function dispatch() {
-				return null;
-			}
-
-			/** @inheritDoc */
-			protected function process_item( $item, $job ) {
 				return null;
 			}
 		}

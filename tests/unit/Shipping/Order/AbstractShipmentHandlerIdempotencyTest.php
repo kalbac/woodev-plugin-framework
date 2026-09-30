@@ -22,10 +22,11 @@ namespace {
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/order/class-shipping-order-handler.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/order/class-action-result.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/order/class-order-lock.php';
-	require_once dirname( __DIR__, 4 ) . '/woodev/utilities/class-woodev-async-request.php';
-	require_once dirname( __DIR__, 4 ) . '/woodev/utilities/class-woodev-background-job-handler.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/api/class-api-exception.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/api/class-api-transport-exception.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/api/class-api-rate-limit-exception.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/api/class-api-request-purpose.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/order/class-export-retry.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/order/abstract-shipment-handler.php';
 
 	use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
@@ -116,6 +117,7 @@ namespace {
 namespace Woodev\Tests\Unit\Shipping\Order {
 
 	use Brain\Monkey\Actions;
+	use Brain\Monkey\Functions;
 	use Mockery;
 	use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
 	use Woodev\Framework\Shipping\Location\Popular_Settlement_Store;
@@ -184,11 +186,10 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 		}
 
 		/**
-		 * @param mixed                $api           a Shipping_API mock.
-		 * @param mixed                $retry_handler a Woodev_Background_Job_Handler mock.
+		 * @param mixed $api a Shipping_API mock.
 		 * @return \Idempotency_Test_Shipment_Handler
 		 */
-		private function handler( $api, $retry_handler = null ): \Idempotency_Test_Shipment_Handler {
+		private function handler( $api ): \Idempotency_Test_Shipment_Handler {
 			$order_handler = Mockery::mock( Shipping_Order_Handler::class );
 			$order_handler->shouldReceive( 'get' )->andReturnUsing(
 				fn( $order ) => $this->carrier_ids[ $order->get_id() ] ?? ''
@@ -203,7 +204,6 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			return new \Idempotency_Test_Shipment_Handler(
 				$api,
 				$order_handler,
-				$retry_handler ?? Mockery::mock( '\Woodev_Background_Job_Handler' ),
 				'test',
 				Mockery::mock( Popular_Settlement_Store::class )
 			);
@@ -238,18 +238,22 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			return $api;
 		}
 
-		private function retry_queue( int $times ) {
-			$retry = Mockery::mock( '\Woodev_Background_Job_Handler' );
+		/**
+		 * Expects exactly `$times` export attempts to be put in the Action Scheduler queue.
+		 *
+		 * @param int $times how many retries the test expects.
+		 * @return void
+		 */
+		private function expect_retries( int $times ): void {
+			Functions\when( 'as_has_scheduled_action' )->justReturn( false );
 
 			if ( 0 === $times ) {
-				$retry->shouldNotReceive( 'create_job' );
-				$retry->shouldNotReceive( 'dispatch' );
-			} else {
-				$retry->shouldReceive( 'create_job' )->times( $times )->with( [ 'data' => [ 55 ] ] );
-				$retry->shouldReceive( 'dispatch' )->times( $times );
+				Functions\expect( 'as_schedule_single_action' )->never();
+
+				return;
 			}
 
-			return $retry;
+			Functions\expect( 'as_schedule_single_action' )->times( $times )->andReturn( 77 );
 		}
 
 		// ----- D1: already exported → no call -----
@@ -289,7 +293,8 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 		// ----- D2: the lock -----
 
 		public function test_a_busy_lock_refuses_the_export_without_a_call_and_without_a_retry(): void {
-			$handler               = $this->handler( $this->api( null, 0 ), $this->retry_queue( 0 ) );
+			$this->expect_retries( 0 );
+			$handler               = $this->handler( $this->api( null, 0 ) );
 			$handler->lock_granted = false;
 
 			$result = $handler->export( $this->order() );
@@ -308,7 +313,8 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 
 			$this->carrier_ids = []; // the first export stored an id; the second handler starts from an un-exported order.
 
-			$failed = $this->handler( $this->api( new \Woodev_API_Exception( 'refused' ) ), $this->retry_queue( 0 ) );
+			$this->expect_retries( 0 );
+			$failed = $this->handler( $this->api( new \Woodev_API_Exception( 'refused' ) ) );
 			$failed->export( $this->order() );
 			$this->assertSame( [ 55 ], $failed->released );
 		}
@@ -327,7 +333,8 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 		// ----- D3 / D4 / D6: classification, the unknown state, the retry policy -----
 
 		public function test_a_carrier_level_failure_carries_the_carriers_text_marks_nothing_and_is_not_retried(): void {
-			$handler = $this->handler( $this->api( new \Woodev_API_Exception( 'Неверный индекс получателя' ) ), $this->retry_queue( 0 ) );
+			$this->expect_retries( 0 );
+			$handler = $this->handler( $this->api( new \Woodev_API_Exception( 'Неверный индекс получателя' ) ) );
 			$handler->reconcile = true; // even a carrier that CAN reconcile does not retry a refusal.
 
 			Actions\expectDone( 'woodev_shipping_test_shipment_export_failed' )->once();
@@ -341,10 +348,8 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 		}
 
 		public function test_a_transport_failure_without_reconcile_is_unknown_not_retried_and_tells_the_merchant_to_check_the_carrier(): void {
-			$handler = $this->handler(
-				$this->api( new \Woodev_API_Transport_Exception( 'cURL error 28: timed out' ) ),
-				$this->retry_queue( 0 )
-			);
+			$this->expect_retries( 0 );
+			$handler = $this->handler( $this->api( new \Woodev_API_Transport_Exception( 'cURL error 28: timed out' ) ) );
 
 			Actions\expectDone( 'woodev_shipping_test_shipment_export_failed' )->once();
 
@@ -358,10 +363,8 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 		}
 
 		public function test_a_transport_failure_with_reconcile_is_unknown_and_queued_for_retry(): void {
-			$handler = $this->handler(
-				$this->api( new \Woodev_API_Transport_Exception( 'cURL error 28: timed out' ) ),
-				$this->retry_queue( 1 )
-			);
+			$this->expect_retries( 1 );
+			$handler = $this->handler( $this->api( new \Woodev_API_Transport_Exception( 'cURL error 28: timed out' ) ) );
 			$handler->reconcile = true;
 
 			$result = $handler->export( $this->order() );
@@ -375,7 +378,8 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 		public function test_a_second_transport_failure_keeps_the_time_of_the_first(): void {
 			$this->meta[55][ self::META ] = 1000;
 
-			$handler = $this->handler( $this->api( new \Woodev_API_Transport_Exception( 'timed out' ) ), $this->retry_queue( 0 ) );
+			$this->expect_retries( 0 );
+			$handler = $this->handler( $this->api( new \Woodev_API_Transport_Exception( 'timed out' ) ) );
 			$handler->export( $this->order() );
 
 			$this->assertSame( 1000, $this->meta[55][ self::META ] );
@@ -393,7 +397,8 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 		public function test_an_unknown_order_the_carrier_already_has_is_stored_without_a_create_call(): void {
 			$this->meta[55][ self::META ] = 1000;
 
-			$handler        = $this->handler( $this->api( null, 0 ), $this->retry_queue( 0 ) );
+			$this->expect_retries( 0 );
+			$handler        = $this->handler( $this->api( null, 0 ) );
 			$handler->reconcile = true;
 			$handler->found     = 'CARRIER-FOUND';
 
@@ -439,7 +444,8 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 		public function test_a_lookup_that_could_not_answer_creates_nothing_and_keeps_the_state(): void {
 			$this->meta[55][ self::META ] = 1000;
 
-			$handler            = $this->handler( $this->api( null, 0 ), $this->retry_queue( 1 ) );
+			$this->expect_retries( 1 );
+			$handler            = $this->handler( $this->api( null, 0 ) );
 			$handler->reconcile = true;
 			$handler->found     = new \Woodev_API_Transport_Exception( 'lookup timed out' );
 
@@ -454,7 +460,8 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 		public function test_a_lookup_the_carrier_refused_creates_nothing_and_is_not_retried(): void {
 			$this->meta[55][ self::META ] = 1000;
 
-			$handler            = $this->handler( $this->api( null, 0 ), $this->retry_queue( 0 ) );
+			$this->expect_retries( 0 );
+			$handler            = $this->handler( $this->api( null, 0 ) );
 			$handler->reconcile = true;
 			$handler->found     = new \Woodev_API_Exception( 'forbidden' );
 
@@ -465,7 +472,8 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 		}
 
 		public function test_a_response_without_a_carrier_id_is_unknown_stores_nothing_and_fires_no_hook(): void {
-			$handler            = $this->handler( $this->api(), $this->retry_queue( 0 ) );
+			$this->expect_retries( 0 );
+			$handler            = $this->handler( $this->api() );
 			$handler->extracted = '';
 
 			Actions\expectDone( 'woodev_shipping_test_shipment_exported' )->never();
@@ -483,7 +491,8 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 		}
 
 		public function test_a_response_without_a_carrier_id_is_queued_for_retry_by_a_carrier_that_can_reconcile(): void {
-			$handler            = $this->handler( $this->api(), $this->retry_queue( 1 ) );
+			$this->expect_retries( 1 );
+			$handler            = $this->handler( $this->api() );
 			$handler->reconcile = true;
 			$handler->extracted = '';
 
@@ -498,7 +507,8 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 		}
 
 		public function test_a_response_without_a_carrier_id_is_unknown_even_when_the_carrier_classifies_every_failure_as_a_refusal(): void {
-			$handler            = $this->handler( $this->api(), $this->retry_queue( 0 ) );
+			$this->expect_retries( 0 );
+			$handler            = $this->handler( $this->api() );
 			$handler->extracted = '';
 			$handler->never_transport = true;
 
@@ -525,7 +535,8 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 		}
 
 		public function test_a_subclass_exception_with_a_5xx_code_makes_the_order_unknown(): void {
-			$handler = $this->handler( $this->api( new \Idempotency_Test_Api_Exception( 'gateway', 502 ) ), $this->retry_queue( 0 ) );
+			$this->expect_retries( 0 );
+			$handler = $this->handler( $this->api( new \Idempotency_Test_Api_Exception( 'gateway', 502 ) ) );
 
 			$handler->export( $this->order() );
 
@@ -540,7 +551,8 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$stale->shouldReceive( 'get_meta' )->andReturn( '' );
 			$stale->shouldNotReceive( 'update_meta_data' );
 
-			$handler        = $this->handler( $this->api( new \Woodev_API_Transport_Exception( 'timed out' ) ), $this->retry_queue( 0 ) );
+			$this->expect_retries( 0 );
+			$handler        = $this->handler( $this->api( new \Woodev_API_Transport_Exception( 'timed out' ) ) );
 			$handler->fresh = $fresh;
 
 			$handler->export( $stale );
@@ -560,7 +572,8 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$stale->shouldReceive( 'delete_meta_data' );
 			$stale->shouldReceive( 'save_meta_data' );
 
-			$handler            = $this->handler( $this->api( null, 0 ), $this->retry_queue( 0 ) );
+			$this->expect_retries( 0 );
+			$handler            = $this->handler( $this->api( null, 0 ) );
 			$handler->fresh     = $fresh;
 			$handler->reconcile = true;
 			$handler->found     = 'CARRIER-FOUND';

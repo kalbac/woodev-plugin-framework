@@ -240,6 +240,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/order/class-shipping-order-handler.php';
 			require_once $path . '/order/class-action-result.php';
 			require_once $path . '/order/class-order-lock.php';
+			require_once $path . '/order/class-export-retry.php';
 			require_once $path . '/order/abstract-shipment-handler.php';
 			require_once $path . '/order/abstract-tracking-handler.php';
 			require_once $path . '/order/abstract-webhook-handler.php';

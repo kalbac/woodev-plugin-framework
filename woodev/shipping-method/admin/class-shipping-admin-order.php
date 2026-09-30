@@ -574,7 +574,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 					return $handler->cancel( $order );
 
 				case Order_Actions::UPDATE:
-					return $handler->update( $order );
+					// A carrier overrides update(), so the framework marks the call from outside: it gets the «export» timeout (#954).
+					return \Woodev_API_Request_Purpose::run( \Woodev_API_Request_Purpose::EXPORT, fn() => $handler->update( $order ) );
 
 				default:
 					/** This filter is documented in class-orders-controller.php ({@see \Woodev\Framework\Shipping\Rest_Api\Orders_Controller::dispatch_action()}). */

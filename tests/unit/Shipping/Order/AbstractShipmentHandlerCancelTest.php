@@ -22,8 +22,6 @@ namespace {
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-provider-registry.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/api/interface-shipping-api.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/order/class-shipping-order-handler.php';
-	require_once dirname( __DIR__, 4 ) . '/woodev/utilities/class-woodev-async-request.php';
-	require_once dirname( __DIR__, 4 ) . '/woodev/utilities/class-woodev-background-job-handler.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/api/class-api-exception.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/order/abstract-shipment-handler.php';
 
@@ -73,10 +71,9 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 		 * @param mixed $api A Shipping_API mock.
 		 */
 		private function handler( $api, Shipping_Order_Handler $order_handler ): \Cancel_Test_Shipment_Handler {
-			$retry_handler = Mockery::mock( '\Woodev_Background_Job_Handler' );
 			$store         = Mockery::mock( Popular_Settlement_Store::class );
 
-			return new \Cancel_Test_Shipment_Handler( $api, $order_handler, $retry_handler, 'test', $store );
+			return new \Cancel_Test_Shipment_Handler( $api, $order_handler, 'test', $store );
 		}
 
 		public function test_a_successful_cancel_clears_the_stored_carrier_order_id(): void {

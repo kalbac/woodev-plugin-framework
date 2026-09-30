@@ -1121,6 +1121,10 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 *              NO throw: a response no validation rejects is returned as before. A subclass
 		 *              of `Woodev_API_Exception` passes through unchanged. The type is a subclass
 		 *              of {@see Woodev_API_Exception}, so every existing `catch` still matches (#945).
+		 * @since 2.0.2 A plain {@see Woodev_API_Exception} that a subclass's validation throws for an
+		 *              HTTP 429 is re-typed as {@see Woodev_API_Rate_Limit_Exception}, carrying the
+		 *              `Retry-After` wait (#954). Like the transport re-typing it adds no throw and
+		 *              leaves a subclass of `Woodev_API_Exception` untouched.
 		 *
 		 * @param array|WP_Error $response response data
 		 * @throws Woodev_API_Exception network issues, timeouts, API errors, etc
@@ -1161,6 +1165,16 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 			} catch ( Woodev_API_Exception $exception ) {
 
 				// Only the plain base class is re-typed: a third-party subclass keeps its own class, and the caller classifies it by the code it carries.
+				if ( Woodev_API_Exception::class === get_class( $exception ) && 429 === (int) $this->response_code ) {
+					// A 429 is throttling, not a refusal and not an unknown outcome: nothing was done, and the server says when to come back.
+					throw new Woodev_API_Rate_Limit_Exception(
+						$exception->getMessage(),
+						(int) $exception->getCode(),
+						$exception,
+						Woodev_API_Rate_Limit_Exception::parse_retry_after( $this->get_response_header_value( $response, 'Retry-After' ) )
+					);
+				}
+
 				if ( Woodev_API_Exception::class === get_class( $exception ) && $this->is_transport_level_response() ) {
 					throw new Woodev_API_Transport_Exception( $exception->getMessage(), (int) $exception->getCode(), $exception );
 				}
@@ -2100,7 +2114,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 
 			$args = [
 				'method'      => $this->get_request_method(),
-				'timeout'     => MINUTE_IN_SECONDS,
+				'timeout'     => $this->resolve_request_timeout(),
 				'redirection' => 0,
 				'httpversion' => $this->get_request_http_version(),
 				'sslverify'   => apply_filters( 'woodev_sl_api_request_verify_ssl', true, $this ),
@@ -2112,6 +2126,69 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 			];
 
 			return apply_filters( 'woodev_' . $this->get_api_id() . '_http_request_args', $args, $this );
+		}
+
+		/**
+		 * What the call being made is for: the purpose the framework marked the running code with
+		 * ({@see Woodev_API_Request_Purpose::run()}), or `default` when it marked nothing.
+		 *
+		 * An API that knows better than the framework — one that serves only one kind of call —
+		 * overrides this.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string one of the {@see Woodev_API_Request_Purpose} purposes
+		 */
+		protected function get_request_purpose(): string {
+			return Woodev_API_Request_Purpose::current();
+		}
+
+		/**
+		 * The HTTP timeout for a call of the given purpose, in seconds (#954).
+		 *
+		 * The framework's defaults: rates 8, reference 20, export 30, everything else 60 — the
+		 * historical value, which a payment, licensing or location API keeps unless it opts in by
+		 * overriding this. The `woodev_{api_id}_request_timeout` filter has the last word.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $purpose one of the {@see Woodev_API_Request_Purpose} purposes
+		 * @return int seconds
+		 */
+		protected function get_request_timeout( string $purpose ): int {
+			return Woodev_API_Request_Purpose::default_timeout( $purpose );
+		}
+
+		/**
+		 * The timeout of the request about to be sent: {@see self::get_request_timeout()} for the
+		 * current purpose, passed through the `woodev_{api_id}_request_timeout` filter.
+		 *
+		 * A filter that returns something that is not a positive number falls back to the method's
+		 * own value — a zero or negative timeout would make WordPress fail every call at once.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return int seconds
+		 */
+		private function resolve_request_timeout(): int {
+
+			$purpose = $this->get_request_purpose();
+			$timeout = $this->get_request_timeout( $purpose );
+
+			/**
+			 * Filters the HTTP timeout of an API request.
+			 *
+			 * The hook name carries the API id, like `woodev_{api_id}_http_request_args`.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param int               $timeout seconds
+			 * @param string            $purpose `rates`, `reference`, `export` or `default`
+			 * @param Woodev_API_Base   $api     the API about to send the request
+			 */
+			$filtered = apply_filters( 'woodev_' . $this->get_api_id() . '_request_timeout', $timeout, $purpose, $this );
+
+			return is_numeric( $filtered ) && (int) $filtered > 0 ? (int) $filtered : $timeout;
 		}
 
 		protected function get_request_method() {

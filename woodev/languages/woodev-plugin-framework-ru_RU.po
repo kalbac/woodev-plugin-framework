@@ -2653,6 +2653,10 @@ msgstr ""
 msgid "Ответ перевозчика не содержит номера заказа"
 msgstr ""
 
+#: shipping-method/order/abstract-shipment-handler.php:422
+msgid "Перевозчик временно ограничил число запросов. Выгрузка будет повторена автоматически."
+msgstr ""
+
 #: shipping-method/order/abstract-shipment-handler.php:405
 msgid "Перевозчик ответил без номера заявки — заявка могла быть создана. Проверьте личный кабинет перевозчика перед повторной выгрузкой."
 msgstr ""
@@ -3656,6 +3660,12 @@ msgstr ""
 
 #: shipping-method/order/class-delivery-status.php:97
 msgid "Неизвестно"
+msgstr ""
+
+#. translators: 1: number of attempts, 2: the carrier's last error
+#: shipping-method/order/class-export-retry.php:162
+#, php-format
+msgid "Не удалось выгрузить заказ перевозчику за %1$d попыток: %2$s"
 msgstr ""
 
 #: shipping-method/admin/orders/class-orders-registry.php:340

@@ -141,7 +141,6 @@ final class Woodev_Realistic_Shipping_Plugin extends \Woodev\Framework\Shipping\
 						'status'            => '_woodev_realistic_status',
 					]
 				),
-				new Woodev_Realistic_Shipment_Retry_Job_Handler(),
 				'realistic'
 			)
 		);
