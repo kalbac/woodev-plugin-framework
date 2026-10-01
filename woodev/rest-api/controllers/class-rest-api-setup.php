@@ -92,6 +92,26 @@ if ( ! class_exists( 'Woodev_REST_API_Setup' ) ) :
 		 * persisted BEFORE on_save; a thrown on_save reports an error while settings
 		 * are already saved (on_save must therefore be idempotent too).
 		 *
+		 * Failure contract (#1048). Anything the plugin's on_save callback throws —
+		 * an Exception or an Error, any \Throwable — is caught, logged through
+		 * error_log() with secrets masked by Woodev_API_Base::redact_secret_log_text(),
+		 * and answered with a WP_Error `woodev_setup_step_failed` (HTTP 500, generic
+		 * translated message). The exception's own message never reaches the browser.
+		 * What the caller can rely on after that error:
+		 *
+		 * - every setting of the step that was submitted and valid IS persisted
+		 *   (the step's values are written before on_save runs, and are not rolled back);
+		 * - on_save may have done part of its own work — the framework cannot know
+		 *   how far it got and does not undo it;
+		 * - a retry is safe exactly when on_save is idempotent, which register_step()
+		 *   already requires of it: the retry re-writes the same settings and re-runs
+		 *   the callback from the top. A callback with a non-repeatable side effect
+		 *   (creates a remote account, sends a message) is NOT made safe by this catch.
+		 *
+		 * A validation failure of a setting (Woodev_Plugin_Exception from the settings
+		 * handler) is a different path: it carries the field-keyed `errors` map and the
+		 * handler's own message, and on_save does not run.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @param \WP_REST_Request $request request.
@@ -172,11 +192,18 @@ if ( ! class_exists( 'Woodev_REST_API_Setup' ) ) :
 				$step_values = array_intersect_key( $values, array_flip( $step->get_setting_ids() ) );
 				try {
 					call_user_func( $on_save, $step_values, $request );
-				} catch ( \Exception $e ) {
-					// on_save is the plugin's own callback; surface its message as a 400
-					// (settings are already persisted — on_save must be idempotent), and log.
+				} catch ( \Throwable $e ) {
+					// on_save is the plugin's own (untrusted) callback and may throw an Error
+					// (TypeError, ArgumentCountError…) as readily as an Exception. Log the
+					// secret-redacted detail for the operator and hand the browser only a
+					// generic message — a raw message can carry a credential or an internal
+					// path. Settings are already persisted at this point (see the docblock).
 					error_log( sprintf( '[woodev] setup wizard on_save failed for step "%s": %s', $step_id, \Woodev_API_Base::redact_secret_log_text( $e->getMessage() ) ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic for an on_save failure.
-					return new WP_Error( 'woodev_setup_step_failed', $e->getMessage(), [ 'status' => 400 ] );
+					return new WP_Error(
+						'woodev_setup_step_failed',
+						__( 'Внутренняя ошибка сервера. Попробуйте ещё раз.', 'woodev-plugin-framework' ),
+						[ 'status' => 500 ]
+					);
 				}
 			}
 
