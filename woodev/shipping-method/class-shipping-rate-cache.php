@@ -109,6 +109,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Rate_Cache' ) ) :
 		private const SHAPE_VERSION = 2;
 
 		/**
+		 * Deepest array nesting {@see self::is_plain()} accepts. A real key context or rate snapshot is
+		 * about five levels deep (package → contents → line → product data → attributes; rate → meta →
+		 * value), so 16 leaves wide headroom while still ending a self-referencing array quickly.
+		 *
+		 * @since 2.0.2
+		 * @var int
+		 */
+		private const MAX_PLAIN_DEPTH = 16;
+
+		/**
 		 * Returns the cached rate for this method and package, or `null` on a miss (or a disabled cache).
 		 *
 		 * @since 2.0.2
@@ -436,16 +446,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Rate_Cache' ) ) :
 		 * Whether a value is scalars, null and arrays all the way down — finite numbers and valid
 		 * UTF-8 strings only, so it always encodes to JSON and distinct values never share a hash.
 		 *
+		 * Nesting deeper than {@see self::MAX_PLAIN_DEPTH} is not plain: that also stops a
+		 * self-referencing array (`$a['self'] = &$a`), which would otherwise recurse until the process dies.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @param mixed $value Value to check.
+		 * @param int   $depth Array levels already entered; internal.
 		 * @return bool
 		 */
-		private static function is_plain( $value ): bool {
+		private static function is_plain( $value, int $depth = 0 ): bool {
 
 			if ( is_array( $value ) ) {
+				if ( $depth >= self::MAX_PLAIN_DEPTH ) {
+					return false;
+				}
+
 				foreach ( $value as $item ) {
-					if ( ! self::is_plain( $item ) ) {
+					if ( ! self::is_plain( $item, $depth + 1 ) ) {
 						return false;
 					}
 				}

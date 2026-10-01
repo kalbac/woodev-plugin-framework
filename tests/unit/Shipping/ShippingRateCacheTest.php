@@ -810,6 +810,57 @@ namespace Woodev\Tests\Unit\Shipping {
 		}
 
 		/** @return void */
+		public function test_a_self_referencing_context_disables_caching_instead_of_recursing_forever(): void {
+			$method            = new Woodev_Test_Shipping_Method_With_Origin();
+			$method->next_rate = $this->rate();
+
+			$loop         = [];
+			$loop['self'] = &$loop;
+			$method->origin = $loop;
+
+			$this->assertNull( ( new Shipping_Rate_Cache() )->build_key( $method, $this->package() ) );
+
+			$method->calculate_shipping( $this->package() );
+			$method->calculate_shipping( $this->package() );
+
+			$this->assertSame( 2, $method->carrier_calls, 'both calls reach the carrier and return rates' );
+			$this->assertSame( [], $this->store );
+		}
+
+		/** @return void */
+		public function test_a_context_nested_past_the_depth_limit_disables_caching_and_a_normal_one_still_caches(): void {
+			$method            = new Woodev_Test_Shipping_Method_With_Origin();
+			$method->next_rate = $this->rate();
+			$cache             = new Shipping_Rate_Cache();
+
+			$nest = static function ( int $levels ) {
+				$value = 'leaf';
+
+				for ( $i = 0; $i < $levels; $i++ ) {
+					$value = [ 'n' => $value ];
+				}
+
+				return $value;
+			};
+
+			$method->origin = $nest( 8 );
+			$this->assertNotNull( $cache->build_key( $method, $this->package() ), 'realistic nesting is hashed' );
+
+			$method->origin = $nest( 5000 );
+			$this->assertNull( $cache->build_key( $method, $this->package() ), 'absurd nesting is declined' );
+
+			$method->calculate_shipping( $this->package() );
+			$method->calculate_shipping( $this->package() );
+			$this->assertSame( 2, $method->carrier_calls );
+			$this->assertSame( [], $this->store );
+
+			$method->origin = $nest( 8 );
+			$method->calculate_shipping( $this->package() );
+			$method->calculate_shipping( $this->package() );
+			$this->assertSame( 3, $method->carrier_calls, 'a normal nested context is cached after the first call' );
+		}
+
+		/** @return void */
 		public function test_a_failed_encode_disables_caching_instead_of_hashing_an_empty_string(): void {
 			Functions\when( 'wp_json_encode' )->justReturn( false );
 
