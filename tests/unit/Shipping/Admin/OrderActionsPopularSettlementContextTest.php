@@ -21,7 +21,9 @@
  * store onto that singleton, so they also pin that default: remove it and enrolment into the
  * popular-settlements list switches off silently for every surface.
  *
- * The resolver is private, so it is reached by reflection.
+ * The resolver is private, so it is reached by reflection. Card #1026 adds the end-to-end half:
+ * the PUBLIC {@see \Woodev\Framework\Shipping\Admin\Orders\Order_Actions::perform()} with EXPORT
+ * must hand `Abstract_Shipment_Handler::export()` exactly what the resolver produced.
  *
  * @package Woodev\Tests\Unit\Shipping\Admin
  */
@@ -86,13 +88,17 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 
 	use Mockery;
 	use Woodev\Framework\Shipping\Admin\Orders\Order_Actions;
+		use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
 	use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
 	use Woodev\Framework\Shipping\Location\Location_Record;
 	use Woodev\Framework\Shipping\Location\Popular_Settlement_Store;
+		use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
+		use Woodev\Framework\Shipping\Order\Action_Result;
 	use Woodev\Tests\Unit\TestCase;
 
 	/**
 	 * @covers \Woodev\Framework\Shipping\Admin\Orders\Order_Actions::resolve_popular_settlement_context
+		 * @covers \Woodev\Framework\Shipping\Admin\Orders\Order_Actions::perform
 	 */
 	final class OrderActionsPopularSettlementContextTest extends TestCase {
 
@@ -258,6 +264,113 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 
 			$this->assertSame( $record, $settlement );
 			$this->assertNull( $provider );
+		}
+
+		/**
+		 * Card #1026 — the end-to-end seam: the PUBLIC perform() with EXPORT recalls the settlement
+		 * from the shared store and hands the handler that record AND the provider that produced it.
+		 * The resolver tests above would stay green if perform() stopped passing the pair on.
+		 */
+		public function test_perform_export_hands_the_recalled_settlement_and_its_provider_to_the_handler(): void {
+			$this->register_providers(
+				[
+					new \Order_Actions_Fixture_Provider( 'acme' ),
+					new \Order_Actions_Fixture_Provider( 'other-carrier' ),
+				]
+			);
+
+			$record = Location_Record::from_array(
+				[
+					'key'         => 'other-carrier:1',
+					'provider_id' => 'other-carrier',
+					'level'       => Location_Record::LEVEL_SETTLEMENT,
+					'country'     => 'RU',
+				]
+			);
+
+			$order = Mockery::mock( '\WC_Order' );
+
+			$store = Mockery::mock( Popular_Settlement_Store::class );
+			$store->shouldReceive( 'recall_candidate' )->once()->with( $order )->andReturn( $record );
+
+			$expected = Action_Result::success( 'CARRIER-1' );
+
+			$handler = Mockery::mock( Abstract_Shipment_Handler::class );
+			$handler->shouldReceive( 'export' )
+				->once()
+				->with(
+					$order,
+					Mockery::on( fn( $settlement ) => $settlement === $record ),
+					Mockery::on( fn( $provider ) => $provider instanceof \Order_Actions_Fixture_Provider && 'other-carrier' === $provider->get_id() )
+				)
+				->andReturn( $expected );
+
+			$result = $this->actions_with_store( $store )->perform( $handler, $order, Order_Actions::EXPORT, $this->orders_provider() );
+
+			$this->assertSame( $expected, $result );
+		}
+
+		/**
+		 * Card #1026 — the no-context contract: nothing recalled (an admin-made order, an expired
+		 * session) → export() is still called, with `null, null`, so the export runs without
+		 * enrolment rather than not at all.
+		 */
+		public function test_perform_export_passes_null_null_when_nothing_was_recalled(): void {
+			$order = Mockery::mock( '\WC_Order' );
+
+			$store = Mockery::mock( Popular_Settlement_Store::class );
+			$store->shouldReceive( 'recall_candidate' )->once()->with( $order )->andReturn( null );
+
+			$expected = Action_Result::success( 'CARRIER-1' );
+
+			$handler = Mockery::mock( Abstract_Shipment_Handler::class );
+			$handler->shouldReceive( 'export' )->once()->with( $order, null, null )->andReturn( $expected );
+
+			$result = $this->actions_with_store( $store )->perform( $handler, $order, Order_Actions::EXPORT, $this->orders_provider() );
+
+			$this->assertSame( $expected, $result );
+		}
+
+		/**
+		 * Card #1026 — the recalled settlement's own provider is gone: the handler still gets the
+		 * record, with a null provider (no fallback to another provider).
+		 */
+		public function test_perform_export_passes_a_null_provider_when_the_settlements_provider_is_gone(): void {
+			$this->register_providers( [ new \Order_Actions_Fixture_Provider( 'acme' ) ] );
+
+			$record = Location_Record::from_array(
+				[
+					'key'         => 'ghost:1',
+					'provider_id' => 'ghost',
+					'level'       => Location_Record::LEVEL_SETTLEMENT,
+					'country'     => 'RU',
+				]
+			);
+
+			$order = Mockery::mock( '\WC_Order' );
+
+			$store = Mockery::mock( Popular_Settlement_Store::class );
+			$store->shouldReceive( 'recall_candidate' )->once()->with( $order )->andReturn( $record );
+
+			$expected = Action_Result::success( 'CARRIER-1' );
+
+			$handler = Mockery::mock( Abstract_Shipment_Handler::class );
+			$handler->shouldReceive( 'export' )
+				->once()
+				->with( $order, Mockery::on( fn( $settlement ) => $settlement === $record ), null )
+				->andReturn( $expected );
+
+			$result = $this->actions_with_store( $store )->perform( $handler, $order, Order_Actions::EXPORT, $this->orders_provider() );
+
+			$this->assertSame( $expected, $result );
+		}
+
+		/**
+		 * The carrier descriptor perform() is handed — it only forwards it to the extension filter,
+		 * which EXPORT never reaches.
+		 */
+		private function orders_provider(): Orders_Provider {
+			return Orders_Provider::create( 'cdek', 'СДЭК', '_cdek_marker', [ 'cdek_courier' ], [ 'carrier_order_id_meta_key' => '_cdek_carrier_order_id' ] );
 		}
 	}
 }
