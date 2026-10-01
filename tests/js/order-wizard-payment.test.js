@@ -97,6 +97,23 @@ afterEach( () => {
 	delete window.woodevShippingOrders;
 } );
 
+/**
+ * Fake timers for a `describe` whose tests walk the WHOLE shell: they pick a product through the
+ * debounced search box (300 ms of real wall-clock on real timers — #1042). RTL's `findBy*` /
+ * `waitFor` notice Jest's fake clock and advance it while they poll, so the tests themselves are
+ * unchanged. Scoped to those blocks on purpose: the step-on-its-own tests above never wait on a
+ * timer, and two of them (the point re-check) fail under a frozen clock for reasons of their own.
+ */
+const withFakeTimers = () => {
+	beforeEach( () => {
+		jest.useFakeTimers();
+	} );
+
+	afterEach( () => {
+		jest.useRealTimers();
+	} );
+};
+
 describe( 'summary and totals', () => {
 	test( 'the summary reads back ①–④ and each row has its «Изменить»', () => {
 		const { goToStep } = mountStep();
@@ -602,6 +619,8 @@ const walkToPayment = async () => {
 };
 
 describe( 'a point code typed by hand is checked before «Далее» leaves ④ (m6)', () => {
+	withFakeTimers();
+
 	const PVZ_RATE = { id: 'cdek_pvz:5', method_id: 'cdek_pvz', instance_id: 5, label: 'Пункт СДЭК', cost: 120, delivery_time: '', description: '', is_pickup: true, meta: {} };
 	const pointCalls = () => apiFetch.mock.calls.map( ( c ) => c[ 0 ] ).filter( ( r ) => r.url.startsWith( POINTS_ROOT ) );
 
@@ -706,6 +725,8 @@ describe( 'a point code typed by hand is checked before «Далее» leaves �
 } );
 
 describe( 'the real step inside the shell', () => {
+	withFakeTimers();
+
 	test( 'the send button POSTs the whole order with the payment method and status picked on ⑤, then reports and closes', async () => {
 		routeApi( () => Promise.resolve( { id: 91, number: '91', message: 'Заказ №91 создан.' } ) );
 		const { onSaved, onClose } = await walkToPayment();
@@ -845,6 +866,8 @@ describe( 'the real step inside the shell', () => {
 } );
 
 describe( 'editing an order through the whole shell (#972)', () => {
+	withFakeTimers();
+
 	/** `Order_Editor::build_prefill()` for a PAID order: one mug at 1000 and the courier at 250.5, saved at 1250.50. */
 	const PREFILL = {
 		order: { id: 7, number: '7', status: 'processing', status_name: 'В обработке', is_paid: true, total: '1250.50', currency: 'RUB' },

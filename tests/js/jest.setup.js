@@ -25,3 +25,25 @@ window.scrollTo = () => {};
 
 // Same family: focus management inside dialogs and menus reaches for `scrollIntoView`.
 window.Element.prototype.scrollIntoView = () => {};
+
+// `matchMedia` is the third jsdom hole, and unlike the two above it costs TIME, not a red test.
+// `@wordpress/components`' `Modal` closes through an exit animation: it waits for `animationend`
+// — which jsdom never fires, there is no layout engine — and only then falls back to a real
+// `setTimeout` of 1.2 × its 200 ms transition. Every Modal close in every suite therefore waited
+// ~240 ms of wall-clock for nothing (#1042: the close-and-reopen preview tests cost 350–410 ms
+// against 60–90 ms for their neighbours; on a starved CI runner that stretch is what ran into
+// the 5 s per-test limit). Modal skips the animation entirely when the user prefers reduced
+// motion, and that preference is read through `matchMedia` — so the stub reports exactly that one
+// query as matching, and every other query as not matching, which is what jsdom's missing
+// `matchMedia` has always meant to `useMediaQuery` (`getValue()` falls back to `false`).
+// A real user with the OS setting «reduce motion» gets this same code path in production.
+window.matchMedia = ( query ) => ( {
+	matches: query.includes( 'prefers-reduced-motion: reduce' ),
+	media: query,
+	onchange: null,
+	addEventListener: () => {},
+	removeEventListener: () => {},
+	addListener: () => {},
+	removeListener: () => {},
+	dispatchEvent: () => false,
+} );

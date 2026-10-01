@@ -134,6 +134,12 @@ const passDelivery = async () => {
 };
 
 beforeEach( () => {
+	// The search boxes debounce a typed query by 300 ms (`remote-search.tsx`, `location-picker.tsx`).
+	// On real timers every search-driven test sat out that wait in wall-clock — over half of this
+	// file's runtime (#1042) — and a CPU-starved CI runner stretches the rest of each test on top of
+	// it. Fake timers collapse the wait to nothing: RTL's `waitFor` / `findBy*` notice Jest's fake
+	// clock and advance it themselves while they poll, so no test below needs to know about it.
+	jest.useFakeTimers();
 	apiFetch.mockReset();
 	window.woodevShippingOrders = {
 		restRoot: ORDERS_ROOT,
@@ -150,6 +156,7 @@ beforeEach( () => {
 } );
 
 afterEach( () => {
+	jest.useRealTimers();
 	delete window.woodevShippingOrders;
 } );
 
