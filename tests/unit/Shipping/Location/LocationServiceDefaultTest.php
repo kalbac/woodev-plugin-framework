@@ -1352,6 +1352,65 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			\WC_Geolocation::$address = null;
 		}
 
+		/**
+		 * #1036: the unpersisted-default fallback (a resolved default the store refused to write)
+		 * used to survive forget_customer_record(), so a forgotten customer was still served the
+		 * old guess and the provider was never asked again. Mutant this pins: dropping
+		 * `$this->unpersisted_default = null` from forget_default_resolution().
+		 */
+		public function test_forget_customer_record_also_drops_the_unpersisted_default_and_asks_the_provider_again(): void {
+			$located  = $this->record( 'geo:by-ip' );
+			$provider = new Default_Test_Fake_Locate_Provider( 'geo', static fn() => $located );
+
+			$this->stub_default_locality_options( 'geo', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_GEOIP );
+			$registry = $this->activate( [ $provider ] );
+
+			\WC_Geolocation::$address = '203.0.113.5';
+
+			// No session: the store refuses every write — the F1 state.
+			$service = new Location_Service( $registry, new Default_Test_Customer_Store_Probe( null ) );
+
+			$this->assertNotNull( $service->get_customer_record() );
+			$this->assertNotNull( $service->get_customer_record() );
+			$this->assertCount( 1, $provider->locate_calls, 'resolved once, then served from the unpersisted fallback' );
+
+			$service->forget_customer_record();
+
+			$this->assertNotNull( $service->get_customer_record() );
+			$this->assertCount( 2, $provider->locate_calls, 'forget must make the next read ask the provider afresh' );
+
+			\WC_Geolocation::$address = null;
+		}
+
+		/**
+		 * #1036: clearing the unpersisted fallback must not lose a record that was just SET — the
+		 * reset runs before the write, and an accepted record is served from the store.
+		 */
+		public function test_a_just_set_record_survives_the_default_resolution_reset(): void {
+			$located  = $this->record( 'geo:by-ip' );
+			$chosen   = $this->record( 'geo:chosen', Location_Record::LEVEL_SETTLEMENT, [ 'label' => 'Казань' ] );
+			$provider = new Default_Test_Fake_Locate_Provider( 'geo', static fn() => $located );
+
+			$this->stub_default_locality_options( 'geo', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_GEOIP );
+			$registry = $this->activate( [ $provider ] );
+
+			\WC_Geolocation::$address = '203.0.113.5';
+
+			$service = $this->service( $registry );
+
+			$this->assertSame( 'geo:by-ip', $service->get_customer_record()['record']->key() );
+			$this->assertTrue( $service->set_customer_record( $chosen ) );
+
+			$entry = $service->get_customer_record();
+
+			$this->assertNotNull( $entry );
+			$this->assertSame( 'geo:chosen', $entry['record']->key() );
+			$this->assertFalse( $entry['implicit'] );
+			$this->assertCount( 1, $provider->locate_calls, 'the SET record is served; the provider is not asked again' );
+
+			\WC_Geolocation::$address = null;
+		}
+
 		// -------------------------------------------------------------------
 		// policy `geoip` — locate( $ip ) called ONCE per resolution, stored
 		// implicit; failure/null -> no store write, next call may retry

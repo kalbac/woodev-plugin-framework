@@ -88,46 +88,78 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Provider_Selection_
 
 		/**
 		 * The Location Provider layer's service façade this scope reads
-		 * `current_locality()` through.
+		 * `current_locality()` through: the injected one, the one the framework adopted from
+		 * the owning plugin ({@see self::adopt_location_service()}), or — only when neither
+		 * happened — a fresh instance built on first use by {@see self::location_service()}.
 		 *
 		 * @since 2.0.2
-		 * @var Location_Service
+		 * @var Location_Service|null
 		 */
-		private Location_Service $location_service;
+		private ?Location_Service $location_service;
 
 		/**
 		 * Constructor.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 #1036: `null` no longer builds a private instance up front — a
+		 *              {@see Pickup_Handler} given the owning plugin hands this scope the plugin's
+		 *              ONE façade at register time, so the memoized default-locality lookup is
+		 *              shared with the other readers of the same render instead of repeated per
+		 *              instance.
 		 *
 		 * @param Location_Service|null $location_service The Location Provider layer's
-		 *                                                 service façade; defaults to a
-		 *                                                 fresh instance, matching every
-		 *                                                 other framework consumer of
-		 *                                                 this façade (e.g.
-		 *                                                 {@see \Woodev\Framework\Shipping\Shipping_Plugin::get_location_service()}).
-		 *                                                 A test injects a fake/probe
+		 *                                                 service façade. Pass one to pin it
+		 *                                                 explicitly — an injected instance is
+		 *                                                 never replaced by the framework's
+		 *                                                 wiring (a test injects a fake/probe
 		 *                                                 exactly as
 		 *                                                 {@see \Woodev\Tests\Unit\Shipping\Location\LocationServiceTest}
 		 *                                                 already does for
-		 *                                                 {@see Location_Service} itself.
+		 *                                                 {@see Location_Service} itself). Left
+		 *                                                 `null`, the scope uses
+		 *                                                 {@see \Woodev\Framework\Shipping\Shipping_Plugin::get_location_service()}
+		 *                                                 once a {@see Pickup_Handler} built with
+		 *                                                 the plugin has registered, and a fresh
+		 *                                                 instance of its own when it has not.
 		 */
 		public function __construct( ?Location_Service $location_service = null ) {
-			$this->location_service = $location_service ?? new Location_Service();
+			$this->location_service = $location_service;
 		}
 
 		/**
-		 * Gets the Location Provider layer's service façade this scope was
-		 * constructed with — a `protected` accessor, not a bare property read, so a
-		 * subclass may reuse the SAME instance (e.g. inside its own
-		 * {@see self::locality_for_point()}) rather than constructing a second one.
+		 * Adopts the owning plugin's Location Provider façade (#1036), unless one was injected
+		 * explicitly or this scope has already built a default of its own.
+		 *
+		 * Called by {@see Pickup_Handler::register()} — the framework's wiring, not plugin code.
+		 * The lazily-memoized default locality lives on the {@see Location_Service} INSTANCE, so
+		 * a scope holding its own instance makes a failing provider cost one more wait per render
+		 * on top of the checkout handler's and the pickup handler's.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Location_Service $service The plugin's shared façade.
+		 *
+		 * @return void
+		 */
+		public function adopt_location_service( Location_Service $service ): void {
+			if ( null === $this->location_service ) {
+				$this->location_service = $service;
+			}
+		}
+
+		/**
+		 * Gets the Location Provider layer's service façade this scope reads — a `protected`
+		 * accessor, not a bare property read, so a subclass may reuse the SAME instance (e.g.
+		 * inside its own {@see self::locality_for_point()}) rather than constructing a second one.
 		 *
 		 * @since 2.0.2
 		 *
 		 * @return Location_Service
 		 */
 		protected function location_service(): Location_Service {
-			return $this->location_service;
+			return $this->location_service ??= new Location_Service();
 		}
 
 		/**
@@ -180,7 +212,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Provider_Selection_
 		 * @return string
 		 */
 		final public function current_locality(): string {
-			$settlement = $this->location_service->get_customer_record_at( Location_Record::LEVEL_SETTLEMENT );
+			$settlement = $this->location_service()->get_customer_record_at( Location_Record::LEVEL_SETTLEMENT );
 
 			return null !== $settlement ? $settlement->key() : '';
 		}

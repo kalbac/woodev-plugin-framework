@@ -49,13 +49,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 
 		/**
 		 * The Location Provider layer's service façade (location-provider layer
-		 * Task 9). `null` until {@see self::location_service()} lazily builds a
-		 * default instance — mirrors
+		 * Task 9). `null` until it is injected, adopted from the owning plugin
+		 * ({@see self::adopt_location_service()}, #1036) or lazily built by
+		 * {@see self::location_service()} — mirrors
 		 * {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller}'s own
 		 * "optional constructor collaborator, defaults to a fresh instance" test
-		 * seam. A fresh default instance is equivalent to any other: the layer's
-		 * actual state lives in `WC()->session`/user meta/store options, not in
-		 * this object, so which instance answers `is_active()` never matters.
+		 * seam. The layer's actual state lives in `WC()->session`/user meta/store
+		 * options, not in this object, so which instance answers `is_active()` never
+		 * matters — but the memoized default-locality lookup IS per instance, which is
+		 * why {@see \Woodev\Framework\Shipping\Shipping_Plugin} hands every
+		 * handler it registers the plugin's one shared instance.
 		 *
 		 * @since 2.0.2
 		 * @var \Woodev\Framework\Shipping\Location\Location_Service|null
@@ -146,8 +149,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 *     namespaces this handler's forward hooks so each plugin's hooks stay distinct;
 		 *     defaults to none, yielding bare `woodev_shipping_*` hooks
 		 * @param \Woodev\Framework\Shipping\Location\Location_Service|null $location_service Location Provider layer façade; `null`
-		 *        (the default) lazily builds a fresh instance on first use — see
-		 *        {@see self::location_service()}.
+		 *        (the default) uses the plugin's shared instance once
+		 *        {@see \Woodev\Framework\Shipping\Shipping_Plugin} registers the handler, or
+		 *        lazily builds a fresh one on first use when it never does — see
+		 *        {@see self::adopt_location_service()} and {@see self::location_service()}.
+		 *        An injected instance is never replaced.
 		 */
 		public function __construct(
 			Checkout_Fields $fields,
@@ -171,6 +177,30 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 */
 		private function location_service(): \Woodev\Framework\Shipping\Location\Location_Service {
 			return $this->location_service ??= new \Woodev\Framework\Shipping\Location\Location_Service();
+		}
+
+		/**
+		 * Adopts the owning plugin's Location Provider façade (#1036), unless one was injected
+		 * explicitly through the constructor or this handler has already built a default.
+		 *
+		 * Called by {@see \Woodev\Framework\Shipping\Shipping_Plugin} right before it registers
+		 * the handler — the framework's wiring, not plugin code. The memoized default locality
+		 * lives on the {@see Location_Service} INSTANCE, so a handler holding its own instance
+		 * would make a failing provider cost one more wait per render on top of the pickup
+		 * handler's and the selection scope's.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \Woodev\Framework\Shipping\Location\Location_Service $service The plugin's shared façade.
+		 *
+		 * @return void
+		 */
+		public function adopt_location_service( \Woodev\Framework\Shipping\Location\Location_Service $service ): void {
+			if ( null === $this->location_service ) {
+				$this->location_service = $service;
+			}
 		}
 
 		/**

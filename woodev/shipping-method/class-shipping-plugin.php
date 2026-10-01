@@ -350,6 +350,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			// checkout field injection + posted-data processing/save
 			$checkout_handler = $this->get_checkout_handler();
 			if ( null !== $checkout_handler ) {
+				// #1036: the memoized default-locality lookup lives on the Location_Service
+				// INSTANCE — hand the handler this plugin's one shared façade (an explicitly
+				// injected one is kept) so a failing provider is waited on once per render.
+				$checkout_handler->adopt_location_service( $this->get_location_service() );
 				$checkout_handler->register();
 			}
 

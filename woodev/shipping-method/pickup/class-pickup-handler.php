@@ -1868,6 +1868,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * the checkout fragment that replaces it — see {@see self::print_nonce_node()} for
 		 * why the localized config's own nonce cannot be refreshed in place.
 		 *
+		 * Also hands a {@see Provider_Selection_Scope} the plugin's shared Location Provider
+		 * façade when this handler was built with the plugin and the scope was not given one
+		 * explicitly (#1036).
+		 *
 		 * Also wires pickup-selection persistence (issue #176), unconditionally: both
 		 * callbacks self-guard on {@see self::$selection_scope} being null, so a plugin
 		 * that has not wired one pays for two harmless hook registrations and nothing
@@ -1891,6 +1895,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * @return void
 		 */
 		public function register(): void {
+			// #1036: the memoized default-locality lookup lives on the Location_Service
+			// INSTANCE, and this handler already reads the plugin's own — so a provider-backed
+			// scope shares it (an injected one is kept) rather than waiting on a second. No
+			// plugin wired (see self::$plugin) → the scope keeps an instance of its own.
+			if ( null !== $this->plugin && $this->selection_scope instanceof Provider_Selection_Scope ) {
+				$this->selection_scope->adopt_location_service( $this->plugin->get_location_service() );
+			}
+
 			add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_assets' ] );
 			add_action( 'rest_api_init', [ $this, 'register_rest' ] );
 			add_action( 'woocommerce_checkout_process', [ $this, 'handle_checkout_process' ] );

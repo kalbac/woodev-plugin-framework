@@ -161,7 +161,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * staleness gate that follows it: one classic-checkout render reads the customer record
 		 * from the checkout config, the pickup handler and the provider-selection scope, and a
 		 * hung provider would otherwise be waited on (8 s each) at every one of those reads.
-		 * Per request only: the next request asks the provider again, so an outage never
+		 * Once per request PER INSTANCE (#1036): the memo is a field of this object, so readers
+		 * holding different instances each wait. The framework therefore wires the plugin's
+		 * single {@see \Woodev\Framework\Shipping\Shipping_Plugin::get_location_service()}
+		 * instance into the checkout handler and the pickup handler's selection scope (the pickup
+		 * handler itself already reads it); only an explicitly injected instance stays separate. Per
+		 * request only: the next request asks the provider again, so an outage never
 		 * outlives it. Cleared wherever the customer's record is written or forgotten
 		 * ({@see self::forget_default_resolution()}).
 		 *
@@ -370,7 +375,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 			// non-empty scope, which reaches get_customer_chain() with no explicit record and so
 			// gets the same 8 s lazy default — benign, its behaviour is unchanged. A timeout is
 			// already answered as «no default» by both paths, and the answer (even `null`) is
-			// memoized for the request so a hung provider is waited on once, not once per read.
+			// memoized for the request (per instance — the framework shares the plugin's one
+			// instance among its readers, #1036) so a hung provider is waited on once, not once
+			// per read.
 			if ( ! $this->default_resolved ) {
 				$this->resolved_default = \Woodev_API_Request_Purpose::run_at_checkout( fn() => $this->resolve_default() );
 				$this->default_resolved = true;
@@ -1266,17 +1273,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		}
 
 		/**
-		 * Drops the request's memoized default-locality resolution (#1025), so the next read of
-		 * the customer record asks the provider afresh — called wherever the customer's record
-		 * is written or forgotten, since the answer was computed for the state before.
+		 * Drops the instance's memoized default-locality resolution (#1025) AND the resolved
+		 * default the store refused to persist ({@see self::$unpersisted_default}, #1036), so
+		 * the next read of the customer record asks the provider afresh — called wherever the
+		 * customer's record is written or forgotten, since the answer was computed for the
+		 * state before.
+		 *
+		 * Safe for a just-SET record: the callers clear this BEFORE their write, and a record
+		 * the store accepted is served from the store, never from this in-memory fallback.
 		 *
 		 * @since 2.0.2
 		 *
 		 * @return void
 		 */
 		private function forget_default_resolution(): void {
-			$this->default_resolved = false;
-			$this->resolved_default = null;
+			$this->default_resolved    = false;
+			$this->resolved_default    = null;
+			$this->unpersisted_default = null;
 		}
 
 
