@@ -19,6 +19,7 @@
 - [rig/browser] **The pickup modal sends NO `locality` unless the region and settlement AGREE — and the region select's values are UPPERCASE, so a title-case write renders it empty and drops the parameter silently.** → [the-pickup-modal-s-locality-comes-from-the-resolved-record-not-the-city-field](../gotchas/the-pickup-modal-s-locality-comes-from-the-resolved-record-not-the-city-field.md) (s113)
 - [rig/wp-env] **`npx wp-env` is a STUB package on npm — it prints a hint, exits 0 and starts nothing, so the rig is simply absent and the error names docker instead. The real tool is `npx @wordpress/env`; this repo does not depend on it.** → [npx-wp-env-installs-a-stub-package-not-wordpress-env](../gotchas/npx-wp-env-installs-a-stub-package-not-wordpress-env.md) (s136)
 - [rig/fixtures] **A fixture's synthetic timestamps anchored to a CONSTANT drift out of the data beside them — a history dated 2024 rendered inside a 2026 order. Anchor to `time()`, keep only the SHAPE deterministic.** → [a-fixtures-synthetic-timestamps-must-be-anchored-to-now-not-to-a-constant](../gotchas/a-fixtures-synthetic-timestamps-must-be-anchored-to-now-not-to-a-constant.md) (s136)
+- [rig/browser] **On Storefront every select2 on the checkout is 28px next to 46px inputs — that is WooCommerce's `select2.css` default, identical with every `woodev-*` sheet disabled; the framework does not restyle WP/WC defaults.** → [short-select2-fields-on-storefront-are-woocommerce-s-not-ours](../gotchas/short-select2-fields-on-storefront-are-woocommerce-s-not-ours.md) (s147)
 
 ## Related
 

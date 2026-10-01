@@ -6,7 +6,7 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-01 (s146).** ✅ All s145 follow-ups merged: v1 migration flag (#1015), one action dispatcher (#1016), 8 s checkout budget (#1017 #1025), all orders by default (#1011), one composite carrier tab + connection forwarding + guards (#1014 #1028 #1033), metabox buttons column (#1018), catalogue regenerated (#1029). ✅ A carrier cancellation now reads «Отменено» via the framework-owned meta `_woodev_shipment_cancelled_at` (#1037). No open PRs. Details: `sessions/s146.md`. ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
+**As of 2026-10-02 (s147).** ✅ Merged, accepted on the rig: #181, #110 item 2, #152 (+ tooltip), #379 (+ trigger in the theme's button class), #1052; #1042; #1032 + JS translations reach the browser (`lint:js-i18n` in CI). No open PRs. Details: `sessions/s147.md`. ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
 orders-page slug redirects to the framework page with that carrier preselected, accepted on the rig.
 ✅ **Both machines are live**; routine sync is git ONLY (`wiki/two-machine-setup.md`). The order
 metabox (#856) and the orders table (#870) stay accepted.
@@ -57,6 +57,7 @@ and why every filter is URL-driven. They are reference: true regardless of which
 browser catches a client defect** (s128). ⛔ **And no screenshots for him** — UI acceptance is
 «готово, смотри риг»; artifacts live in temp and are deleted (operator, 13.09.2026).
 ⚠ The rig runs **`WPLANG=en_US`** — English chrome is the LOCALE, not a defect.
+⚠ The rig theme is **Storefront** (s147, his choice). **We do not restyle WP/WC defaults** — gotcha `short-select2-fields-on-storefront-are-woocommerce-s-not-ours`.
 
 ⛔ **THE PILOT IS STOPPED (operator, 05.09.2026).** s116 refactored the old plugin instead of WRITING
 A NEW one on v2; post-mortem in `sessions/s116.md`. **New course: the framework is finished ON
@@ -71,7 +72,7 @@ FIXTURES**; the shipping plugin is written later, from scratch, own repo, versio
 
 ✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — no quota consumed; the exhaustion symptom is gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`.
 
-**`main` after s146 (`0eac9b29`, macOS, 01.10.2026):** unit **5009 / 29238** (1 skipped), integration **474 / 6422**, jest **2424** in **49** suites.
+**`main` after s147 (`f64bc3bd`, macOS, 02.10.2026):** unit **5111 / 29517** (1 skipped), integration **475 / 6432**, jest **2493** in **51** suites.
 
 **Baselines — macOS laptop, 27.09.2026 (s140)** (the two machines matched to the digit in s136, so
 these are not platform-dependent): unit **4132 / 14586**, 1 skipped, sodium ON; jest **1975** in
@@ -106,7 +107,7 @@ region whose `key()` is not in the settlement's own `ancestors()` is refused. �
 `Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that IS
 its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards — 58, measured 01.10.2026 (s146):** Инбокс holds only **#922** (Supermemory, parked by his word).
+**Open cards — 58, measured 02.10.2026 (s147):** Инбокс holds only **#922** (Supermemory, parked by his word).
 ⚠ Count with
 `gh issue list --limit 300` and `project item-list --limit 1000` — s127's 53 was an undercount from
 exactly that trap, and a naive reader reports a milestone-carrying card as empty. **PRIORITY LIVES ON
