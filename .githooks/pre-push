@@ -50,6 +50,7 @@ cd "$repo_root"
 zero='0000000000000000000000000000000000000000'
 relevant=0
 build_relevant=0
+build_skipped=0
 
 # A linked worktree has its own git dir, distinct from the common one. One of the two is
 # often printed relative, so compare physical absolute paths.
@@ -107,6 +108,7 @@ if [ "$in_worktree" -eq 0 ] || [ "$build_relevant" -eq 1 ]; then
 		exit 1
 	fi
 else
+	build_skipped=1
 	printf 'pre-push: linked worktree, no build input changed — skipping the bundle build.\n'
 fi
 
@@ -137,5 +139,9 @@ if [ -n "$failed" ]; then
 	exit 1
 fi
 
-printf 'pre-push: bundles reproduce and the catalogue is complete.\n'
+if [ "$build_skipped" -eq 1 ]; then
+	printf 'pre-push: the catalogue is complete (bundle build skipped — no build input changed).\n'
+else
+	printf 'pre-push: bundles reproduce and the catalogue is complete.\n'
+fi
 exit 0
