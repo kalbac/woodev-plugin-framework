@@ -38,6 +38,9 @@ final class DadataApiClientTest extends TestCase {
 	/** @var array<string, mixed> In-memory stand-in for the wp_options table (#956). */
 	private array $options = [];
 
+	/** @var array<string, mixed> In-memory stand-in for transients (#1060). */
+	private array $transients = [];
+
 	/** @var int How many times update_option()/delete_option() ran. */
 	private int $option_writes = 0;
 
@@ -45,6 +48,7 @@ final class DadataApiClientTest extends TestCase {
 		parent::setUp();
 
 		$this->options       = [];
+		$this->transients    = [];
 		$this->option_writes = 0;
 
 		Functions\when( 'get_option' )->alias(
@@ -62,6 +66,14 @@ final class DadataApiClientTest extends TestCase {
 			function ( $name ) {
 				++$this->option_writes;
 				unset( $this->options[ $name ] );
+
+				return true;
+			}
+		);
+
+		Functions\when( 'delete_transient' )->alias(
+			function ( $name ) {
+				unset( $this->transients[ $name ] );
 
 				return true;
 			}
@@ -395,6 +407,74 @@ final class DadataApiClientTest extends TestCase {
 		( self::client( 'tok' ) )->clean_address( 'Москва' );
 
 		$this->assertTrue( Dadata_Api_Client::is_access_denied() );
+	}
+
+	// -------------------------------------------------------------------------
+	// #1060 — the balance lookup (account host) and its isolation from the
+	// suggestions-quota state.
+	// -------------------------------------------------------------------------
+
+	public function test_get_balance_calls_the_account_host_with_token_and_secret(): void {
+		$this->stub_http_response( 200, '{"balance": 123.45}' );
+
+		$balance = ( self::client( 'tok', 'sec' ) )->get_balance();
+
+		$this->assertSame( 123.45, $balance );
+		$this->assertSame( 'https://dadata.ru/api/v2/profile/balance', $this->last_request['url'] );
+		$this->assertSame( 'GET', $this->last_request['args']['method'] );
+		$this->assertSame( 'Token tok', $this->last_request['args']['headers']['Authorization'] );
+		$this->assertSame( 'sec', $this->last_request['args']['headers']['X-Secret'] );
+		$this->assertSame( 5, $this->last_request['args']['timeout'], 'a short timeout: this runs on an admin page' );
+	}
+
+	public function test_get_balance_throws_on_a_malformed_body(): void {
+		$this->stub_http_response( 200, '{"nope": 1}' );
+
+		$this->expectException( \Woodev_API_Exception::class );
+
+		( self::client( 'tok', 'sec' ) )->get_balance();
+	}
+
+	public function test_a_balance_403_does_not_record_the_access_denied_state(): void {
+		$this->stub_http_response( 403, '' );
+
+		try {
+			( self::client( 'tok', 'sec' ) )->get_balance();
+			$this->fail( 'A 403 must throw.' );
+		} catch ( \Woodev_API_Exception $e ) {
+			$this->assertSame( 403, $e->getCode() );
+		}
+
+		$this->assertFalse( Dadata_Api_Client::is_access_denied() );
+		$this->assertSame( 0, $this->option_writes );
+	}
+
+	public function test_a_balance_success_does_not_clear_the_access_denied_state(): void {
+		$this->options[ Dadata_Api_Client::OPTION_ACCESS_DENIED ] = 1700000000;
+		$this->stub_http_response( 200, '{"balance": 10}' );
+
+		( self::client( 'tok', 'sec' ) )->get_balance();
+
+		$this->assertTrue( Dadata_Api_Client::is_access_denied() );
+	}
+
+	public function test_clearing_the_state_drops_the_cached_cause(): void {
+		$this->options[ Dadata_Api_Client::OPTION_ACCESS_DENIED ]       = 1700000000;
+		$this->transients[ Dadata_Api_Client::TRANSIENT_ACCESS_DENIED_CAUSE ] = [ 'since' => 1700000000, 'cause' => 'balance_exhausted' ];
+		$this->stub_http_response( 200, '{"suggestions":[]}' );
+
+		( self::client( 'tok' ) )->suggest_address( 'q' );
+
+		$this->assertArrayNotHasKey( Dadata_Api_Client::TRANSIENT_ACCESS_DENIED_CAUSE, $this->transients );
+	}
+
+	public function test_re_setting_the_state_drops_a_stale_cached_cause(): void {
+		$this->transients[ Dadata_Api_Client::TRANSIENT_ACCESS_DENIED_CAUSE ] = [ 'since' => 1, 'cause' => 'balance_exhausted' ];
+		$this->stub_http_response( 403, '' );
+
+		$this->suggest_expecting_failure( self::client( 'tok' ) );
+
+		$this->assertArrayNotHasKey( Dadata_Api_Client::TRANSIENT_ACCESS_DENIED_CAUSE, $this->transients );
 	}
 
 	public function test_a_500_response_throws_a_woodev_api_exception(): void {

@@ -40,6 +40,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		}
 
 		/**
+		 * Configures a `GET profile/balance` request against the account host
+		 * (full URL: `https://dadata.ru/api/v2/profile/balance`, #1060).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		public function get_balance(): void {
+			$this->method = 'GET';
+			$this->path   = '/profile/balance';
+			$this->params = [];
+		}
+
+		/**
 		 * Configures a `GET iplocate/address` request.
 		 *
 		 * @since 2.0.2

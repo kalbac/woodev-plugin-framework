@@ -92,6 +92,35 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		private const CLEANER_BASE_URL = 'https://cleaner.dadata.ru/api/v1/clean';
 
 		/**
+		 * Account/profile API base URL — a THIRD host, used only for
+		 * `GET profile/balance` (#1060); needs the token AND the secret.
+		 * dadata.ru/api/v2, as the v1 reference client's `'core'` case.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		private const CORE_BASE_URL = 'https://dadata.ru/api/v2';
+
+		/**
+		 * Seconds the balance lookup may wait. It runs in the merchant's admin,
+		 * lazily, and must never hold a page for the default 60.
+		 *
+		 * @since 2.0.2
+		 * @var int
+		 */
+		private const BALANCE_TIMEOUT = 5;
+
+		/**
+		 * Transient holding the cause of the recorded 403 as the balance API
+		 * explained it (#1060). Keyed to the state's own timestamp, and dropped
+		 * whenever that state is set or cleared.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		public const TRANSIENT_ACCESS_DENIED_CAUSE = 'woodev_location_dadata_403_cause';
+
+		/**
 		 * The framework-owned API id used for the `woodev_{id}_api_request_performed`
 		 * logging action and the `woodev_{id}_http_request_args` /
 		 * `woodev_{id}_api_request_uri` filters — stable regardless of which plugin
@@ -144,6 +173,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		 * @var bool
 		 */
 		private bool $is_cleaner_request = false;
+
+		/**
+		 * Whether the request currently being built targets the account API
+		 * (balance). Like the Clean API, its 401/403 says nothing about the
+		 * suggestions quota, so it never touches the access-denied state (#1060).
+		 *
+		 * @since 2.0.2
+		 * @var bool
+		 */
+		private bool $is_core_request = false;
 
 		/**
 		 * Constructor.
@@ -406,17 +445,39 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		}
 
 		/**
+		 * Account balance — `GET profile/balance` on the account host (#1060).
+		 * Needs the secret; without one DaData answers 401/403.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return float The balance in roubles.
+		 *
+		 * @throws \Woodev_API_Exception On a network failure, a non-2xx response
+		 *                               (the code is the HTTP status) or an unreadable body.
+		 */
+		public function get_balance(): float {
+			$request = $this->get_new_request( 'core' );
+			$request->get_balance();
+
+			/** @var Dadata_Api_Response $response */
+			$response = $this->perform_request( $request );
+
+			return $response->get_balance();
+		}
+
+		/**
 		 * {@inheritDoc}
 		 *
 		 * Selects the request host by request type — mirrors
 		 * `class-wc-edostavka-dadata-api.php`'s own `get_new_request( $request_type )`
 		 * switch exactly (its `'suggestions'` and `'cleaner'` cases; its `'core'`
 		 * case, `https://dadata.ru/api/v2`, has no call site in this class — nothing
-		 * in the Task 7 contract needs the account/balance API).
+		 * in the Task 7 contract needs the account/balance API — until #1060 added
+		 * `'core'` for the balance lookup).
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param mixed $args Request type: `'suggestions'` (default) or `'cleaner'`.
+		 * @param mixed $args Request type: `'suggestions'` (default), `'cleaner'` or `'core'`.
 		 *
 		 * @return Dadata_Api_Request
 		 */
@@ -424,7 +485,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 			$request_type = is_string( $args ) && '' !== $args ? $args : 'suggestions';
 
 			$this->is_cleaner_request = 'cleaner' === $request_type;
-			$this->request_uri        = $this->is_cleaner_request ? self::CLEANER_BASE_URL : self::SUGGESTIONS_BASE_URL;
+			$this->is_core_request    = 'core' === $request_type;
+
+			if ( $this->is_core_request ) {
+				$this->request_uri = self::CORE_BASE_URL;
+			} else {
+				$this->request_uri = $this->is_cleaner_request ? self::CLEANER_BASE_URL : self::SUGGESTIONS_BASE_URL;
+			}
 
 			return new Dadata_Api_Request();
 		}
@@ -473,6 +540,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		 */
 		protected function get_api_id() {
 			return self::API_ID;
+		}
+
+		/**
+		 * {@inheritDoc}
+		 *
+		 * Only the balance lookup is tightened (#1060); it runs on an admin page
+		 * and must not hold it. Everything else keeps the framework default.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $purpose One of the {@see \Woodev_API_Request_Purpose} purposes.
+		 *
+		 * @return int
+		 */
+		protected function get_request_timeout( string $purpose ): int {
+			return $this->is_core_request ? self::BALANCE_TIMEOUT : parent::get_request_timeout( $purpose );
 		}
 
 		/**
@@ -552,10 +635,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		 * @return void
 		 */
 		private function record_access_denied(): void {
-			if ( $this->is_cleaner_request || self::is_access_denied() ) {
+			if ( $this->is_cleaner_request || $this->is_core_request || self::is_access_denied() ) {
 				return;
 			}
 
+			// A new state must not inherit an older state's explained cause (#1060).
+			delete_transient( self::TRANSIENT_ACCESS_DENIED_CAUSE );
 			update_option( self::OPTION_ACCESS_DENIED, time() );
 		}
 
@@ -569,10 +654,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		 * @return void
 		 */
 		private function clear_access_denied(): void {
-			if ( $this->is_cleaner_request || ! self::is_access_denied() ) {
+			if ( $this->is_cleaner_request || $this->is_core_request || ! self::is_access_denied() ) {
 				return;
 			}
 
+			delete_transient( self::TRANSIENT_ACCESS_DENIED_CAUSE );
 			delete_option( self::OPTION_ACCESS_DENIED );
 		}
 	}
