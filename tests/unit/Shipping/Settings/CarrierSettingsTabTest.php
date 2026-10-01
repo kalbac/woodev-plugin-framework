@@ -404,6 +404,33 @@ final class CarrierSettingsTabTest extends TestCase {
 		$this->assertFalse( $provider->get_handler()->supports_connection_test( Export_Settings::SECTION_ID ), '«Выгрузка» is not a connection block' );
 	}
 
+	public function test_an_empty_section_id_is_an_id_like_any_other_and_a_later_clash_on_it_is_left_out(): void {
+		// '' is a valid section id, so it must not double as the "no clash" sentinel
+		$plugin = $this->carrier( 'cdek', [ $this->connection( '', 'token', false ), $this->connection( '', 'other_token', true ) ] );
+
+		Functions\expect( '_doing_it_wrong' )
+			->once()
+			->with( Mockery::type( 'string' ), Mockery::pattern( '/"cdek".*entry 1/' ), '2.0.2' );
+
+		$provider  = $plugin->get_settings_providers()[0];
+		$composite = $provider->get_handler();
+
+		$this->assertSame( [ '' ], $this->section_ids( $provider ), 'one section, not two under one id' );
+		$this->assertArrayNotHasKey( 'other_token', $composite->get_settings() );
+		$this->assertFalse( $composite->supports_connection_test( '' ), 'the first owner is not overwritten' );
+	}
+
+	public function test_a_connection_section_whose_id_is_a_numeric_string_keeps_its_owner(): void {
+		// PHP turns the key '0' into int 0: the owner map must still carry it
+		$plugin = $this->carrier( 'cdek', [ $this->connection( '0', 'token', true ) ] );
+
+		Functions\expect( '_doing_it_wrong' )->never();
+
+		$composite = $plugin->get_settings_providers()[0]->get_handler();
+
+		$this->assertTrue( $composite->supports_connection_test( '0' ) );
+	}
+
 	public function test_the_export_section_id_is_free_for_a_carrier_that_does_not_export(): void {
 		$plugin = $this->carrier( 'cdek', [ $this->connection( Export_Settings::SECTION_ID, 'token', true ) ] );
 

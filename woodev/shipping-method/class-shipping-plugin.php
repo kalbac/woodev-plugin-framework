@@ -809,7 +809,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 				// a section id taken by «Выгрузка» or an earlier contribution would silently replace the connection
 				// owner (or render two sections under one id) — same policy as the setting-id clash: left out whole
-				$colliding = '';
+				// null is the "no clash" sentinel: '' is a valid section id, so it cannot be one
+				$colliding = null;
 				foreach ( $contribution->get_sections() as $section ) {
 					if ( isset( $section_ids[ $section->get_id() ] ) ) {
 						$colliding = $section->get_id();
@@ -817,7 +818,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 					}
 				}
 
-				if ( '' !== $colliding ) {
+				if ( null !== $colliding ) {
 					_doing_it_wrong(
 						__METHOD__,
 						sprintf(

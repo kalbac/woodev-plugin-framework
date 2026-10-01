@@ -146,6 +146,21 @@ final class CompositeConnectionForwardingTest extends TestCase {
 		$this->assertFalse( $composite->supports_connection_test( 'broken' ) );
 	}
 
+	public function test_a_numeric_string_connection_id_is_forwarded_like_any_other(): void {
+		$owner = $this->child( 'token', '\Woodev_Settings_Connection_Test, \Woodev_Settings_Connection_Status' );
+		$owner->shouldReceive( 'test_connection' )->once()->with( '0', [] )->andReturn( \Woodev_Connection_Result::success( 'ok' ) );
+		$owner->shouldReceive( 'get_connection_status' )->once()->with( '0' )->andReturn( \Woodev_Connection_Result::success( 'Подключено' ) );
+
+		Functions\expect( '_doing_it_wrong' )->never();
+
+		// the literal key '0' is an int in PHP — exactly what Shipping_Plugin hands over for a section id '0'
+		$composite = new Composite_Settings_Handler( 'cdek', [ $owner ], [ '0' => $owner ] );
+
+		$this->assertTrue( $composite->supports_connection_test( '0' ) );
+		$this->assertTrue( $composite->test_connection( '0', [] )->is_success() );
+		$this->assertSame( 'Подключено', $composite->get_connection_status( '0' )->get_message() );
+	}
+
 	public function test_a_bad_owner_map_does_not_break_the_schema(): void {
 		$child = $this->child( 'token', '\Woodev_Settings_Connection_Test' );
 
