@@ -1126,6 +1126,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			// add a notice when the fixed default locality was picked under a
 			// provider that is no longer the active one (#410)
 			$this->add_default_locality_stale_notice();
+
+			// add a notice when DaData is refusing the store's requests —
+			// exhausted balance / daily limit, unconfirmed e-mail or a bad key (#956)
+			$this->add_location_provider_access_denied_notice();
 		}
 
 		/**
@@ -1440,6 +1444,88 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 				[
 					'dismissible'  => false,
 					'notice_class' => 'notice-warning',
+				]
+			);
+		}
+
+		/**
+		 * Decides whether the merchant should be told that DaData is refusing the
+		 * store's requests (#956) — the active-provider counterpart to
+		 * {@see self::location_provider_not_configured_notice()}.
+		 *
+		 * DaData signals an exhausted balance or daily limit with HTTP 403, the
+		 * same status it uses for an unknown key and an unconfirmed e-mail (it has
+		 * no 402), so the message names all three causes rather than guessing one.
+		 * A pure decision over {@see \Woodev\Framework\Shipping\Location\Providers\Dadata_Api_Client::is_access_denied()};
+		 * public for the same reason as its sibling.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array{message: string, notice_id: string}|null
+		 */
+		public function location_provider_access_denied_notice(): ?array {
+
+			if ( ! $this->needs_location_provider() ) {
+				return null;
+			}
+
+			$provider = Location\Location_Provider_Registry::instance()->get_active_provider();
+
+			if ( null === $provider || Location\Providers\Dadata_Provider::PROVIDER_ID !== $provider->get_id() ) {
+				return null;
+			}
+
+			if ( ! Location\Providers\Dadata_Api_Client::is_access_denied() ) {
+				return null;
+			}
+
+			$message = sprintf(
+				/* translators: %1$s - opening <a> tag to the DaData account, %2$s - opening <a> tag to the plugin settings, %3$s - closing </a> tag */
+				__( 'DaData отклонил запросы магазина (ответ 403), поэтому подсказки адресов при оформлении заказа не работают — покупатели вводят адрес вручную. Чаще всего это значит, что на счёте DaData закончились средства или исчерпан дневной лимит: %1$sпополните баланс в личном кабинете DaData%3$s. Также проверьте, что почта аккаунта подтверждена, а %2$sключи в настройках%3$s указаны верно. Уведомление исчезнет само, как только DaData снова начнёт отвечать.', 'woodev-plugin-framework' ),
+				'<a href="https://dadata.ru/profile/" target="_blank" rel="noopener noreferrer">',
+				'<a href="' . esc_url( $this->get_settings_url() ) . '">',
+				'</a>'
+			);
+
+			return [
+				'message'   => $message,
+				// Keyed by PROVIDER id — the layer is fleet-wide, see the
+				// not-configured notice above.
+				'notice_id' => 'location-provider-' . $provider->get_id() . '-access-denied',
+			];
+		}
+
+		/**
+		 * Adds the DaData-refusing-requests admin notice (#956).
+		 *
+		 * NON-dismissible and self-clearing: the underlying state is dropped by the
+		 * next successful DaData answer, and a dismiss flag in user meta would keep
+		 * a repeat outage hidden from a merchant who dismissed the first one. Shown
+		 * on every admin screen the handler renders on — a dead suggestions box
+		 * hurts checkout everywhere, like the not-configured notice.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		protected function add_location_provider_access_denied_notice(): void {
+
+			$notice = $this->location_provider_access_denied_notice();
+
+			if ( null === $notice ) {
+				return;
+			}
+
+			if ( ! Location\Location_Provider_Registry::instance()->claim_notice_id( $notice['notice_id'] ) ) {
+				return;
+			}
+
+			$this->get_admin_notice_handler()->add_admin_notice(
+				$notice['message'],
+				$notice['notice_id'],
+				[
+					'dismissible'  => false,
+					'notice_class' => 'notice-error',
 				]
 			);
 		}

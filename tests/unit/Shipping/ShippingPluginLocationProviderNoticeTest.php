@@ -47,6 +47,17 @@ require_once dirname( __DIR__, 3 ) . '/woodev/shipping-method/location/abstract-
 require_once dirname( __DIR__, 3 ) . '/woodev/shipping-method/location/class-location-settings.php';
 require_once dirname( __DIR__, 3 ) . '/woodev/shipping-method/location/class-customer-location-store.php';
 require_once dirname( __DIR__, 3 ) . '/woodev/shipping-method/location/class-location-provider-registry.php';
+require_once dirname( __DIR__, 3 ) . '/woodev/shipping-method/location/class-location-provider-exception.php';
+require_once dirname( __DIR__, 3 ) . '/woodev/api/interface-api-request.php';
+require_once dirname( __DIR__, 3 ) . '/woodev/api/interface-api-response.php';
+require_once dirname( __DIR__, 3 ) . '/woodev/api/class-api-exception.php';
+require_once dirname( __DIR__, 3 ) . '/woodev/api/class-api-base.php';
+require_once dirname( __DIR__, 3 ) . '/woodev/api/abstract-api-json-request.php';
+require_once dirname( __DIR__, 3 ) . '/woodev/api/abstract-api-json-response.php';
+require_once dirname( __DIR__, 3 ) . '/woodev/shipping-method/location/providers/class-dadata-api-request.php';
+require_once dirname( __DIR__, 3 ) . '/woodev/shipping-method/location/providers/class-dadata-api-response.php';
+require_once dirname( __DIR__, 3 ) . '/woodev/shipping-method/location/providers/class-dadata-api-client.php';
+require_once dirname( __DIR__, 3 ) . '/woodev/shipping-method/location/providers/class-dadata-provider.php';
 require_once dirname( __DIR__, 3 ) . '/woodev/shipping-method/class-shipping-plugin.php';
 
 /**
@@ -167,6 +178,10 @@ class Notice_Deduplication_Shipping_Plugin_Fixture extends Notice_Opted_In_Shipp
 
 	public function publish_location_provider_not_configured_notice(): void {
 		$this->add_location_provider_not_configured_notice();
+	}
+
+	public function publish_location_provider_access_denied_notice(): void {
+		$this->add_location_provider_access_denied_notice();
 	}
 
 	public function get_admin_notice_handler() {
@@ -312,5 +327,98 @@ final class ShippingPluginLocationProviderNoticeTest extends TestCase {
 
 		$this->assertCount( 1, $first_handler->notices );
 		$this->assertCount( 0, $second_handler->notices );
+	}
+
+	// -------------------------------------------------------------------------
+	// #956 — DaData refusing requests (403: exhausted balance / daily limit,
+	// unconfirmed e-mail, bad key) → one merchant notice, gone once DaData answers.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * @param string   $active_provider_id the stored active provider id
+	 * @param int|null $denied_since       the stored access-denied timestamp, or null when clear
+	 */
+	private function open_gate_with_dadata_state( string $active_provider_id, ?int $denied_since ): void {
+		// The real bundled DaData provider registers itself (its class is loaded
+		// above); only the competing provider needs a fixture.
+		$providers = [
+			new Notice_Fake_Location_Provider( 'other-fixture', 'Other', true ),
+		];
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( $providers );
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = false ) use ( $active_provider_id, $denied_since ) {
+				if ( 'woodev_location_active_provider' === $name ) {
+					return $active_provider_id;
+				}
+
+				if ( \Woodev\Framework\Shipping\Location\Providers\Dadata_Api_Client::OPTION_ACCESS_DENIED === $name && null !== $denied_since ) {
+					return $denied_since;
+				}
+
+				return $default;
+			}
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+	}
+
+	public function test_no_access_denied_notice_while_dadata_answers_normally(): void {
+		$this->open_gate_with_dadata_state( 'dadata', null );
+
+		$plugin = ( new \ReflectionClass( Notice_Opted_In_Shipping_Plugin_Fixture::class ) )->newInstanceWithoutConstructor();
+
+		$this->assertNull( $plugin->location_provider_access_denied_notice() );
+	}
+
+	public function test_access_denied_notice_when_dadata_is_active_and_refusing(): void {
+		$this->open_gate_with_dadata_state( 'dadata', 1700000000 );
+
+		$plugin = ( new \ReflectionClass( Notice_Opted_In_Shipping_Plugin_Fixture::class ) )->newInstanceWithoutConstructor();
+
+		$notice = $plugin->location_provider_access_denied_notice();
+
+		$this->assertNotNull( $notice );
+		$this->assertSame( 'location-provider-dadata-access-denied', $notice['notice_id'] );
+		$this->assertStringContainsString( '403', $notice['message'] );
+		$this->assertStringContainsString( 'пополните баланс', $notice['message'] );
+		$this->assertStringContainsString( 'https://dadata.ru/profile/', $notice['message'] );
+	}
+
+	public function test_no_access_denied_notice_when_another_provider_is_active(): void {
+		$this->open_gate_with_dadata_state( 'other-fixture', 1700000000 );
+
+		$plugin = ( new \ReflectionClass( Notice_Opted_In_Shipping_Plugin_Fixture::class ) )->newInstanceWithoutConstructor();
+
+		$this->assertNull( $plugin->location_provider_access_denied_notice() );
+	}
+
+	public function test_no_access_denied_notice_for_a_plugin_that_did_not_opt_in(): void {
+		$this->open_gate_with_dadata_state( 'dadata', 1700000000 );
+
+		$plugin = ( new \ReflectionClass( Notice_Bare_Shipping_Plugin_Fixture::class ) )->newInstanceWithoutConstructor();
+
+		$this->assertNull( $plugin->location_provider_access_denied_notice() );
+	}
+
+	public function test_the_access_denied_notice_is_registered_once_for_the_fleet_and_is_not_dismissible(): void {
+		$this->open_gate_with_dadata_state( 'dadata', 1700000000 );
+
+		$first_handler  = new Notice_Recording_Admin_Notice_Handler();
+		$second_handler = new Notice_Recording_Admin_Notice_Handler();
+		$first_plugin   = ( new \ReflectionClass( Notice_Deduplication_Shipping_Plugin_Fixture::class ) )->newInstanceWithoutConstructor();
+		$second_plugin  = ( new \ReflectionClass( Notice_Deduplication_Shipping_Plugin_Fixture::class ) )->newInstanceWithoutConstructor();
+		$first_plugin->set_notice_handler( $first_handler );
+		$second_plugin->set_notice_handler( $second_handler );
+
+		$first_plugin->publish_location_provider_access_denied_notice();
+		$second_plugin->publish_location_provider_access_denied_notice();
+
+		$this->assertCount( 1, $first_handler->notices );
+		$this->assertCount( 0, $second_handler->notices );
+		$this->assertFalse( $first_handler->notices[0]['params']['dismissible'] );
 	}
 }

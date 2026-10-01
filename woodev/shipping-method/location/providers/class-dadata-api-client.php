@@ -123,6 +123,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		private string $secret;
 
 		/**
+		 * Option holding the Unix time DaData first answered a suggestions-host
+		 * request with a 403 since the last successful one (#956), or absent while
+		 * the account is answering normally. Read by
+		 * {@see \Woodev\Framework\Shipping\Shipping_Plugin} to raise the merchant
+		 * admin notice; see {@see self::is_access_denied()}.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		public const OPTION_ACCESS_DENIED = 'woodev_location_dadata_access_denied';
+
+		/**
+		 * Whether the request currently being built targets the Clean API host.
+		 * Its 403s are NOT a signal about the suggestions quota (a missing Clean
+		 * secret is rejected there by design), so they never touch the
+		 * access-denied state.
+		 *
+		 * @since 2.0.2
+		 * @var bool
+		 */
+		private bool $is_cleaner_request = false;
+
+		/**
 		 * Constructor.
 		 *
 		 * @since 2.0.2
@@ -400,7 +423,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		protected function get_new_request( $args = 'suggestions' ) {
 			$request_type = is_string( $args ) && '' !== $args ? $args : 'suggestions';
 
-			$this->request_uri = 'cleaner' === $request_type ? self::CLEANER_BASE_URL : self::SUGGESTIONS_BASE_URL;
+			$this->is_cleaner_request = 'cleaner' === $request_type;
+			$this->request_uri        = $this->is_cleaner_request ? self::CLEANER_BASE_URL : self::SUGGESTIONS_BASE_URL;
 
 			return new Dadata_Api_Request();
 		}
@@ -468,35 +492,33 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 			return sprintf( 'Woodev-Location-Dadata/%s (WordPress/%s)', \Woodev_Plugin::VERSION, $wp_version );
 		}
 
-		/**
-		 * {@inheritDoc}
-		 *
-		 * Throws on a non-2xx response so every call site
-		 * ({@see Dadata_Provider}) can rely on `perform_request()` either
-		 * returning a usable {@see Dadata_Api_Response} or throwing — never a
-		 * response object silently carrying an error body. A 401/403 gets its own
-		 * message (matches the reference client's own "неверно указаны данные
-		 * авторизации" 401 special-case) since that specific failure means the
-		 * store's token/secret setting is wrong, not a transient network issue.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @throws \Woodev_API_Exception
-		 */
 		protected function do_post_parse_response_validation() {
 			$code = (int) $this->get_response_code();
 
 			if ( $code >= 200 && $code < 300 ) {
+				$this->clear_access_denied();
+
 				return;
 			}
 
 			if ( 401 === $code || 403 === $code ) {
+				// DaData answers 403 for an unknown key, an unconfirmed e-mail AND an
+				// exhausted balance / daily limit (dadata.ru/api/suggest/address/,
+				// "Коды ответа"; there is no 402), so the status alone cannot tell the
+				// merchant which — record it and let the admin notice list the causes
+				// (#956). 401 is "no key sent": a settings problem, not a quota one.
+				if ( 403 === $code ) {
+					$this->record_access_denied();
+				}
+
 				throw new \Woodev_API_Exception(
 					__( 'DaData API: неверный токен или секретный ключ.', 'woodev-plugin-framework' ),
 					$code
 				);
 			}
 
+			// 429 (too many requests per second / new connections per minute) is a
+			// transient throttle, deliberately NOT recorded as a quota problem.
 			throw new \Woodev_API_Exception(
 				sprintf(
 					/* translators: 1: HTTP response code, 2: response message */
@@ -506,6 +528,52 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 				),
 				$code
 			);
+		}
+
+		/**
+		 * Whether DaData's last suggestions-host answer was a 403 (#956) — the
+		 * state the merchant admin notice is raised from. Self-clearing: the next
+		 * 2xx from the same host removes it.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public static function is_access_denied(): bool {
+			return (int) get_option( self::OPTION_ACCESS_DENIED, 0 ) > 0;
+		}
+
+		/**
+		 * Records the 403 — once. Re-writing on every failing request would turn
+		 * an exhausted balance into a database write per keystroke at checkout.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		private function record_access_denied(): void {
+			if ( $this->is_cleaner_request || self::is_access_denied() ) {
+				return;
+			}
+
+			update_option( self::OPTION_ACCESS_DENIED, time() );
+		}
+
+		/**
+		 * Clears the 403 state after a successful suggestions-host answer. A plain
+		 * option read first (autoloaded, so no query) keeps the healthy path free
+		 * of writes.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		private function clear_access_denied(): void {
+			if ( $this->is_cleaner_request || ! self::is_access_denied() ) {
+				return;
+			}
+
+			delete_option( self::OPTION_ACCESS_DENIED );
 		}
 	}
 
