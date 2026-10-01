@@ -32,6 +32,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Schedule' ) 
 	 * absent day is the lack of one ("unknown"). A flat string cannot tell them apart, and
 	 * collapsing them is exactly the information loss this value exists to stop.
 	 *
+	 * OVERNIGHT INTERVALS. An interval whose end is not after its start (`[ '22:00', '02:00' ]`)
+	 * is kept and means «from that time until that time on the NEXT day». It belongs to the
+	 * day it is listed under (it starts there) and is rendered verbatim, `22:00–02:00`;
+	 * nothing splits it across midnight or adds it to the following day. Real carriers
+	 * publish such hours (late pickup lockers), and a schedule here is display-only, so no
+	 * code needs to know where an interval ends. The one exception is an interval whose
+	 * start and end are IDENTICAL (`[ '09:00', '09:00' ]`): that is neither «open for 0
+	 * minutes» nor «open for 24 hours» with any certainty, so it is dropped as unreadable.
+	 * `24:00` is accepted only as an end (`[ '00:00', '24:00' ]` is the whole day).
+	 *
 	 * NO TIME ZONE ARITHMETIC. The point's time zone, when a source has one, is carried
 	 * alongside (see {@see self::normalize_time_zone()}) but never used to compute anything:
 	 * Почта России gives no zone for a point, so an «open now» badge would be right for one
@@ -92,7 +102,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Schedule' ) 
 		 * - a non-array schedule, or one with no usable day, is `null` ("unknown");
 		 * - an unknown day key, or a day whose value is not a list, is dropped;
 		 * - an interval that is not a `[ from, to ]` pair of `HH:MM` strings (`from` and `to`
-		 *   equal is also refused, `24:00` is accepted as an end only) is dropped;
+		 *   equal is also refused, `24:00` is accepted as an end only) is dropped; an OVERNIGHT
+		 *   interval (end before start, e.g. `22:00`–`02:00`) is kept — see the class docblock;
 		 * - a day that was given a NON-empty list of which nothing survived is dropped too —
 		 *   reporting it as an empty list would turn "we could not read it" into "closed";
 		 * - intervals within a day are sorted by start and de-duplicated;
@@ -142,6 +153,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Schedule' ) 
 		/**
 		 * Validates one `[ from, to ]` interval.
 		 *
+		 * Each clock is checked on its own; the ORDER of the two is deliberately not. An end
+		 * that is earlier than the start is an overnight interval — «until that time on the
+		 * next day» — and is returned as given. Only `from === to` is refused, because that
+		 * pair says nothing (empty or round-the-clock?). `24:00` is valid as `to` only.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @param mixed $interval Raw interval.
@@ -166,6 +182,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Schedule' ) 
 				return null;
 			}
 
+			// No `$to > $from` check on purpose: an earlier end is an overnight interval (class docblock).
 			if ( 1 !== preg_match( '/^(?:(?:[01]\d|2[0-3]):[0-5]\d|24:00)\z/', $to ) || $from === $to ) {
 				return null;
 			}

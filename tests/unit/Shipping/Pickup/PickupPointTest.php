@@ -809,6 +809,17 @@ final class PickupPointTest extends TestCase {
 		$this->assertSame( 'Mon–Tue 09:00–18:00; Sat 10:00–14:00', $point->to_array()['work_time'] );
 	}
 
+	public function test_an_overnight_interval_reaches_the_flat_work_time_and_the_storefront_rows_verbatim(): void {
+		$point = $this->make_point( [ 'schedule' => [ 'fri' => [ [ '22:00', '02:00' ] ] ] ] );
+
+		$this->assertSame( [ 'fri' => [ [ '22:00', '02:00' ] ] ], $point->get_schedule() );
+		$this->assertSame( 'Fri 22:00–02:00', $point->to_array()['work_time'] );
+		$this->assertSame(
+			[ [ 'days' => 'Fri', 'hours' => '22:00–02:00' ] ],
+			$point->to_browser_array()['schedule_rows']
+		);
+	}
+
 	public function test_a_blank_work_time_is_derived_too(): void {
 		$point = $this->make_point( [ 'schedule' => $this->weekly_schedule(), 'work_time' => "  \n" ] );
 

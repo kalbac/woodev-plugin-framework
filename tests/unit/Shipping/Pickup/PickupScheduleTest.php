@@ -92,6 +92,40 @@ final class PickupScheduleTest extends TestCase {
 		);
 	}
 
+	public function test_an_overnight_interval_is_kept_as_given(): void {
+		// «Until that time on the next day»: a late locker, not a malformed pair.
+		$this->assertSame(
+			[ 'fri' => [ [ '22:00', '02:00' ] ] ],
+			Pickup_Schedule::normalize( [ 'fri' => [ [ '22:00', '02:00' ] ] ] )
+		);
+	}
+
+	public function test_an_interval_with_equal_start_and_end_is_dropped_not_read_as_overnight(): void {
+		$this->assertNull( Pickup_Schedule::normalize( [ 'mon' => [ [ '22:00', '22:00' ] ] ] ) );
+		$this->assertSame(
+			[ 'mon' => [ [ '22:00', '02:00' ] ] ],
+			Pickup_Schedule::normalize( [ 'mon' => [ [ '22:00', '22:00' ], [ '22:00', '02:00' ] ] ] )
+		);
+	}
+
+	public function test_overnight_intervals_sort_by_start_and_deduplicate_without_breaking(): void {
+		$schedule = Pickup_Schedule::normalize(
+			[
+				'mon' => [
+					[ '22:00', '02:00' ],
+					[ '09:00', '13:00' ],
+					[ '22:00', '02:00' ],
+					[ '13:00', '09:00' ],
+				],
+			]
+		);
+
+		$this->assertSame(
+			[ 'mon' => [ [ '09:00', '13:00' ], [ '13:00', '09:00' ], [ '22:00', '02:00' ] ] ],
+			$schedule
+		);
+	}
+
 	public function test_a_day_whose_only_intervals_are_malformed_is_unknown_not_closed(): void {
 		$schedule = Pickup_Schedule::normalize(
 			[
@@ -153,6 +187,25 @@ final class PickupScheduleTest extends TestCase {
 			Pickup_Schedule::rows( $schedule )
 		);
 		$this->assertSame( 'Mon–Fri 09:00–18:00; Sat 10:00–14:00', Pickup_Schedule::format( $schedule ) );
+	}
+
+	public function test_an_overnight_interval_is_rendered_verbatim_and_groups_like_any_other(): void {
+		$schedule = Pickup_Schedule::normalize(
+			[
+				'fri' => [ [ '22:00', '02:00' ] ],
+				'sat' => [ [ '22:00', '02:00' ] ],
+				'sun' => [ [ '10:00', '14:00' ], [ '22:00', '24:00' ] ],
+			]
+		);
+
+		$this->assertSame(
+			[
+				[ 'days' => 'Fri–Sat', 'hours' => '22:00–02:00' ],
+				[ 'days' => 'Sun', 'hours' => '10:00–14:00, 22:00–24:00' ],
+			],
+			Pickup_Schedule::rows( $schedule )
+		);
+		$this->assertSame( 'Fri–Sat 22:00–02:00; Sun 10:00–14:00, 22:00–24:00', Pickup_Schedule::format( $schedule ) );
 	}
 
 	public function test_a_closed_or_unknown_day_breaks_a_run_and_gets_no_row(): void {
