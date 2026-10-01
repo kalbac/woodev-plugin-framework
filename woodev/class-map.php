@@ -128,6 +128,7 @@ return [
 	'Woodev\\Framework\\Shipping\\Shipping_Method_Postal' => 'woodev/shipping-method/class-shipping-method-postal.php',
 	'Woodev\\Framework\\Shipping\\Shipping_Plugin' => 'woodev/shipping-method/class-shipping-plugin.php',
 	'Woodev\\Framework\\Shipping\\Shipping_Rate' => 'woodev/shipping-method/class-shipping-rate.php',
+	'Woodev\\Framework\\Shipping\\Shipping_Rate_Cache' => 'woodev/shipping-method/class-shipping-rate-cache.php',
 	'Woodev\\Framework\\Woocommerce_Helper' => 'woodev/class-woocommerce-helper.php',
 	'Woodev\\Framework\\Woocommerce_Plugin' => 'woodev/class-woocommerce-plugin.php',
 	'Woodev_API_Base' => 'woodev/api/class-api-base.php',
