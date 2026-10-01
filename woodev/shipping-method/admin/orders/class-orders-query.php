@@ -758,7 +758,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 			$clauses = $this->status_map_clauses( $providers, $canonical, $negate );
 
 			// A cancelled order resolves `cancelled`: it satisfies 'is cancelled' and every 'is not X' but cancelled.
-			if ( false ) {
+			if ( ( Delivery_Status::CANCELLED === $canonical ) !== $negate ) {
 				$clauses[] = [
 					'key'     => Shipment_Cancellation::CANCELLED_AT_META,
 					'compare' => 'EXISTS',
