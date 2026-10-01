@@ -4266,6 +4266,33 @@
 	}
 
 	/**
+	 * The trigger button's class list (issue #379): `button` + our own class + the theme's button
+	 * class when the server sent one (`config.themeButtonClass` — `wp-element-button` on a block
+	 * theme, `''` on a classic one; `Pickup_Handler::resolve_theme_button_class()`). That is how
+	 * WooCommerce styles its own buttons: the site decides the SHAPE, `pickup.css` keeps only the
+	 * accent colour and the states. Re-validated here to a class-name token list — a value from
+	 * a page global never reaches `className` unchecked — and a missing, empty or non-string value
+	 * leaves the list exactly as it was before the key existed.
+	 *
+	 * @param {Object} config
+	 * @returns {string}
+	 */
+	function triggerClassName( config ) {
+		var classes = [ 'button', TRIGGER_CLASS ];
+		var themeClass = config && 'string' === typeof config.themeButtonClass ? config.themeButtonClass : '';
+
+		themeClass.split( /\s+/ ).forEach( function( token ) {
+			token = token.replace( /[^A-Za-z0-9_-]/g, '' );
+
+			if ( token && -1 === classes.indexOf( token ) ) {
+				classes.push( token );
+			}
+		} );
+
+		return classes.join( ' ' );
+	}
+
+	/**
 	 * Mounts a trigger button into ONE §8 anchor, wiring the button's click handler.
 	 * Idempotent — an anchor that already holds a `TRIGGER_CLASS` button is left
 	 * untouched, so this is safe to call on every `mountAll()` pass without ever
@@ -4297,7 +4324,7 @@
 		var button = document.createElement( 'button' );
 
 		button.type = 'button';
-		button.className = 'button ' + TRIGGER_CLASS;
+		button.className = triggerClassName( config );
 
 		applyTriggerAccent( button, config );
 

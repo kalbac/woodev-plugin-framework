@@ -590,6 +590,43 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		}
 
 		/**
+		 * The class the active theme wants on a button — `wp-element-button` on a block theme,
+		 * `''` otherwise (issue #379).
+		 *
+		 * Asked of WooCommerce, the way its own templates style their buttons
+		 * (`wc_wp_theme_get_element_class_name( 'button' )`, `includes/wc-conditional-functions.php`,
+		 * `@since 7.0.1`): the checkout trigger then takes the site's button padding, size, font and
+		 * radius, while pickup.css keeps only the accent colour and the states. The function is
+		 * guarded because the framework supports WooCommerce 7.0.0, which predates it.
+		 *
+		 * Sanitised to a class-name token list (letters, digits, `_`, `-`, single spaces): the
+		 * value is written into a `className` on the client, and WooCommerce's function is
+		 * backed by a theme-level hook.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string space-separated class tokens, or `''`.
+		 */
+		private function resolve_theme_button_class(): string {
+			if ( ! function_exists( 'wc_wp_theme_get_element_class_name' ) ) {
+				return '';
+			}
+
+			$raw    = (string) wc_wp_theme_get_element_class_name( 'button' );
+			$tokens = [];
+
+			foreach ( preg_split( '/\s+/', $raw, -1, PREG_SPLIT_NO_EMPTY ) as $token ) {
+				$token = (string) preg_replace( '/[^A-Za-z0-9_-]/', '', $token );
+
+				if ( '' !== $token ) {
+					$tokens[] = $token;
+				}
+			}
+
+			return implode( ' ', $tokens );
+		}
+
+		/**
 		 * Resolves the map's accent colour: the store's «Карта»-tab setting
 		 * ({@see Pickup_Map_Settings::SETTING_ACCENT_COLOR}), else the constructor's merchant
 		 * setting, else the plugin's default, else the framework's (spec D-15, issue #379). Filterable, and sanitised AFTER the
@@ -1199,6 +1236,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *     accentColor: string,
 		 *     accentFillColor: string,
 		 *     accentContrastColor: string,
+		 *     themeButtonClass: string,
 		 *     modal: array{width: int, bodyHeight: string},
 		 *     search: bool,
 		 *     location?: array{current: array{key: string}}
@@ -1598,6 +1636,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				'accentColor'         => $this->resolve_accent_color(),
 				'accentFillColor'     => $this->resolve_accent_fill_color(),
 				'accentContrastColor' => $this->resolve_accent_contrast_color(),
+
+				// The theme's own button class for the checkout trigger (issue #379), so the
+				// button takes its SHAPE from the site while keeping the accent colour above.
+				// `''` on a classic theme. See self::resolve_theme_button_class().
+				'themeButtonClass'    => $this->resolve_theme_button_class(),
 
 				// Consumed by the map provider's own address-search fit (Task 19, D-6) — see
 

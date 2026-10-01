@@ -2486,6 +2486,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 					'accentColor',
 					'accentFillColor',
 					'accentContrastColor',
+					'themeButtonClass',
 					'modal',
 					'search',
 				],
@@ -3211,6 +3212,82 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 
 			$this->assertSame( '#ffeb3b', $config['accentFillColor'] );
 			$this->assertSame( '#000000', $config['accentContrastColor'] );
+		}
+
+		// -------------------------------------------------------------------------
+		// themeButtonClass (issue #379) — the theme's own button class for the checkout trigger,
+		// asked of WooCommerce's `wc_wp_theme_get_element_class_name( 'button' )` (7.0.1+).
+		// -------------------------------------------------------------------------
+
+		/**
+		 * Runs isolated: defining the function through Brain Monkey leaves it defined for the rest
+		 * of the process (Patchwork), which fails every later test that never mocked it.
+		 *
+		 * @runInSeparateProcess
+		 * @preserveGlobalState disabled
+		 */
+		public function test_theme_button_class_carries_what_woocommerce_returns_for_a_block_theme(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+			Functions\expect( 'wc_wp_theme_get_element_class_name' )
+				->once()
+				->with( 'button' )
+				->andReturn( 'wp-element-button' );
+
+			$this->assertSame( 'wp-element-button', $this->make_handler()->get_js_config()['themeButtonClass'] );
+		}
+
+		/**
+		 * Runs isolated: defining the function through Brain Monkey leaves it defined for the rest
+		 * of the process (Patchwork), which fails every later test that never mocked it.
+		 *
+		 * @runInSeparateProcess
+		 * @preserveGlobalState disabled
+		 */
+		public function test_theme_button_class_is_empty_for_a_classic_theme(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+			Functions\when( 'wc_wp_theme_get_element_class_name' )->justReturn( '' );
+
+			$this->assertSame( '', $this->make_handler()->get_js_config()['themeButtonClass'] );
+		}
+
+		/**
+		 * The value ends up in a `className`, and WooCommerce's function is backed by a
+		 * theme-level hook — only a class-name token list may leave here.
+		 *
+		 * Isolated for the same reason as the tests above.
+		 *
+		 * @runInSeparateProcess
+		 * @preserveGlobalState disabled
+		 */
+		public function test_theme_button_class_is_reduced_to_class_name_tokens(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+			Functions\when( 'wc_wp_theme_get_element_class_name' )
+				->justReturn( "  wp-element-button\t<b>x\" onclick=\"y  is-style_1 " );
+
+			$this->assertSame(
+				'wp-element-button bx onclicky is-style_1',
+				$this->make_handler()->get_js_config()['themeButtonClass']
+			);
+		}
+
+		/**
+		 * WooCommerce 7.0.0 — the framework's floor — predates the function.
+		 *
+		 * Runs isolated: once any test defines the function through Brain Monkey, Patchwork keeps
+		 * `function_exists()` true for the rest of the process.
+		 *
+		 * @runInSeparateProcess
+		 * @preserveGlobalState disabled
+		 */
+		public function test_theme_button_class_is_empty_when_woocommerce_predates_the_function(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+
+			$this->assertFalse( function_exists( 'wc_wp_theme_get_element_class_name' ) );
+			$this->assertSame( '', $this->make_handler()->get_js_config()['themeButtonClass'] );
 		}
 
 		/**

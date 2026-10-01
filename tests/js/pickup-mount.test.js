@@ -1232,6 +1232,41 @@ describe( 'trigger accent colour', () => {
 } );
 
 // -------------------------------------------------------------------------
+// Trigger shape (issue #379): the theme's button class rides the server's `themeButtonClass`
+// -------------------------------------------------------------------------
+
+describe( 'trigger theme button class', () => {
+	function triggerClasses( overrides ) {
+		setConfig( makeConfig( overrides ) );
+		mountAll();
+
+		return document.querySelector( '.woodev-pickup-trigger' ).className;
+	}
+
+	test( 'appends the theme class after `button` and our own class', () => {
+		expect( triggerClasses( { themeButtonClass: 'wp-element-button' } ) )
+			.toBe( 'button woodev-pickup-trigger wp-element-button' );
+	} );
+
+	test( 'is unchanged when the key is absent', () => {
+		expect( triggerClasses() ).toBe( 'button woodev-pickup-trigger' );
+	} );
+
+	test( 'an empty string leaves the class list as it was', () => {
+		expect( triggerClasses( { themeButtonClass: '' } ) ).toBe( 'button woodev-pickup-trigger' );
+	} );
+
+	test( 'a non-string value is ignored', () => {
+		expect( triggerClasses( { themeButtonClass: [ 'wp-element-button' ] } ) ).toBe( 'button woodev-pickup-trigger' );
+	} );
+
+	test( 'reduces the value to class-name tokens, once each', () => {
+		expect( triggerClasses( { themeButtonClass: ' wp-element-button <b>x" onclick="y button  wp-element-button ' } ) )
+			.toBe( 'button woodev-pickup-trigger wp-element-button bx onclicky' );
+	} );
+} );
+
+// -------------------------------------------------------------------------
 // Trigger label toggle: i18n.trigger vs i18n.triggerChange
 // -------------------------------------------------------------------------
 
