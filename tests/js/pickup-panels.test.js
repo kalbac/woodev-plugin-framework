@@ -2201,9 +2201,70 @@ it( 'puts the address BEFORE the name in a search point result', () => {
 	const row = layout.querySelector( '.woodev-pickup-search__item--point' );
 	const lines = [ ...row.children ].map( ( el ) => el.className );
 
-	expect( lines ).toEqual( [ 'woodev-pickup-search__address', 'woodev-pickup-search__name' ] );
+	// The default point has a type, so its chip sits between the two lines (issue #181).
+	expect( lines ).toEqual( [
+		'woodev-pickup-search__address',
+		'woodev-pickup-search__type',
+		'woodev-pickup-search__name',
+	] );
 	expect( row.querySelector( '.woodev-pickup-search__address' ).textContent ).toBe( 'Ленина, 5' );
 	expect( row.querySelector( '.woodev-pickup-search__name' ).textContent ).toBe( 'ПВЗ «Магнит»' );
+} );
+
+// Issue #181 — the type chip. A point row shows `type.label` (server-escaped, so an entity
+// renders decoded), a point without a type or label shows none, an address row never does.
+describe( 'type chip in a search point result (#181)', () => {
+	const render = ( points, addresses = [] ) => {
+		const panels = mount( searchConfig );
+		const layout = panels.buildSearchLayout();
+		panels.renderSearchResults( { points, addresses } );
+
+		return layout;
+	};
+
+	it( 'renders the point type label as a chip', () => {
+		const layout = render( [ point( { type: { code: 'postamat', label: 'Постамат' } } ) ] );
+		const chip = layout.querySelector( '.woodev-pickup-search__item--point .woodev-pickup-search__type' );
+
+		expect( chip ).not.toBeNull();
+		expect( chip.textContent ).toBe( 'Постамат' );
+	} );
+
+	it( 'renders a server-escaped label decoded, not double-escaped', () => {
+		const layout = render( [ point( { type: { code: 'x', label: 'Пункт &quot;А&quot;' } } ) ] );
+
+		expect( layout.querySelector( '.woodev-pickup-search__type' ).textContent ).toBe( 'Пункт "А"' );
+	} );
+
+	it( 'renders no chip for a point without a type, or with an empty/missing label', () => {
+		const layout = render( [
+			point( { id: 'a', type: undefined } ),
+			point( { id: 'b', type: { code: 'x' } } ),
+			point( { id: 'c', type: { code: 'x', label: '' } } ),
+		] );
+
+		expect( layout.querySelectorAll( '.woodev-pickup-search__item--point' ) ).toHaveLength( 3 );
+		expect( layout.querySelector( '.woodev-pickup-search__type' ) ).toBeNull();
+	} );
+
+	it( 'renders no chip for an address row', () => {
+		const layout = render( [], [ { displayName: 'Москва, Ленина 5' } ] );
+
+		expect( layout.querySelectorAll( '.woodev-pickup-search__item--address' ) ).toHaveLength( 1 );
+		expect( layout.querySelector( '.woodev-pickup-search__type' ) ).toBeNull();
+	} );
+
+	it( 'keeps the row click picking the point when the chip itself is clicked', () => {
+		const panels = mount( searchConfig );
+		const layout = panels.buildSearchLayout();
+		const picked = [];
+		panels.on( 'searchPointPicked', ( id ) => picked.push( id ) );
+		panels.renderSearchResults( { points: [ point( { id: 'p9' } ) ], addresses: [] } );
+
+		layout.querySelector( '.woodev-pickup-search__type' ).click();
+
+		expect( picked ).toEqual( [ 'p9' ] );
+	} );
 } );
 
 // The row reads ONE field and trusts it — the `short_address || address` fallback it never had

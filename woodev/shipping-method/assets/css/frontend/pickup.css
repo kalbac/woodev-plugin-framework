@@ -1236,6 +1236,39 @@
 	color: #1e1e1e;
 }
 
+/* Issue #181 — a POINT row is a two-column grid so the type chip sits to the right of the
+   address without a wrapper element: address and chip share row 1, the name spans row 2. The
+   address column is `minmax( 0, 1fr )` so a long address wraps inside its column instead of
+   pushing the chip out of the row. Address rows (`--address`) keep the plain block layout. */
+.woodev-pickup-search__item--point {
+	display: grid;
+	grid-template-columns: minmax( 0, 1fr ) auto;
+	column-gap: 8px;
+	align-items: start;
+}
+
+.woodev-pickup-search__item--point .woodev-pickup-search__address {
+	grid-column: 1;
+}
+
+.woodev-pickup-search__item--point .woodev-pickup-search__name {
+	grid-column: 1 / -1;
+}
+
+.woodev-pickup-search__type {
+	grid-column: 2;
+	grid-row: 1;
+	align-self: start;
+	padding: 1px 8px;
+	font-size: 11px;
+	font-weight: 600;
+	line-height: 1.5;
+	white-space: nowrap;
+	color: #50575e;
+	background: #f0f0f1;
+	border-radius: 10px;
+}
+
 .woodev-pickup-search__name,
 .woodev-pickup-search__display-name {
 	display: block;

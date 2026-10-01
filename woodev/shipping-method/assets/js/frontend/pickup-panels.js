@@ -1001,6 +1001,22 @@
 		nameEl.innerHTML = fieldValue( point.name ); // eslint-disable-line -- server-escaped, see file docblock.
 
 		item.appendChild( addressEl );
+
+		// TYPE CHIP (issue #181): inside the «points» section a ПВЗ and a postamat read the same,
+		// and for the customer the difference is real (fitting, card payment, parcel size). The
+		// label is the point's own `type.label` — the very string the co-located card's tabs fall
+		// back to — server-escaped like every other point field, so `innerHTML` as above. A point
+		// with no type (or an empty label) simply gets no chip. ADDRESS rows never do: a geocoder
+		// suggestion carries no coordinates, so nothing can say what it is until it is resolved.
+		var typeLabel = ( point.type && 'string' === typeof point.type.label ) ? point.type.label : '';
+
+		if ( '' !== typeLabel ) {
+			var typeEl = document.createElement( 'span' );
+			typeEl.className = 'woodev-pickup-search__type';
+			typeEl.innerHTML = typeLabel; // eslint-disable-line -- server-escaped, see file docblock.
+			item.appendChild( typeEl );
+		}
+
 		item.appendChild( nameEl );
 
 		item.addEventListener( 'click', function() {
