@@ -1,6 +1,7 @@
 <?php
 namespace Woodev\Tests\Unit;
 
+use Brain\Monkey\Functions;
 use Mockery;
 use Woodev\Framework\Settings\Composite_Settings_Handler;
 use Woodev\Framework\Settings\Settings_Page_Registry;
@@ -104,6 +105,69 @@ final class CompositeConnectionForwardingTest extends TestCase {
 
 		$this->assertFalse( $composite->supports_connection_test( 'api' ) );
 		$this->assertNull( $composite->get_connection_status( 'api' ) );
+	}
+
+	/** @return array<string,array{0:array<mixed>,1:int}> a bad map and how many entries are reported */
+	public static function invalid_owner_maps(): array {
+		return [
+			'null owner'           => [ [ 'api' => null ], 1 ],
+			'non-object owner'     => [ [ 'api' => 'not-a-handler' ], 1 ],
+			'foreign object owner' => [ [ 'api' => new \stdClass() ], 1 ],
+			'list instead of map'  => [ [ 0 => null ], 1 ],
+			'two bad entries'      => [ [ 'api' => null, 'widget' => 42 ], 2 ],
+		];
+	}
+
+	/**
+	 * @dataProvider invalid_owner_maps
+	 *
+	 * @param array<mixed> $map
+	 */
+	public function test_a_bad_owner_map_is_reported_and_dropped_without_a_type_error( array $map, int $reported ): void {
+		Functions\expect( '_doing_it_wrong' )
+			->times( $reported )
+			->with( Mockery::type( 'string' ), Mockery::pattern( '/"cdek".*Woodev_Abstract_Settings/' ), '2.0.2' );
+
+		$composite = new Composite_Settings_Handler( 'cdek', [ $this->child( 'token', '\Woodev_Settings_Connection_Test' ) ], $map );
+
+		$this->assertFalse( $composite->supports_connection_test( 'api' ), 'no owner, so no button' );
+		$this->assertFalse( $composite->supports_connection_test( 'widget' ) );
+		$this->assertNull( $composite->get_connection_status( 'api' ) );
+	}
+
+	public function test_a_valid_owner_survives_next_to_an_invalid_one(): void {
+		$owner = $this->child( 'token', '\Woodev_Settings_Connection_Test' );
+
+		Functions\expect( '_doing_it_wrong' )->once();
+
+		$composite = new Composite_Settings_Handler( 'cdek', [ $owner ], [ 'broken' => null, 'api' => $owner ] );
+
+		$this->assertTrue( $composite->supports_connection_test( 'api' ) );
+		$this->assertFalse( $composite->supports_connection_test( 'broken' ) );
+	}
+
+	public function test_a_bad_owner_map_does_not_break_the_schema(): void {
+		$child = $this->child( 'token', '\Woodev_Settings_Connection_Test' );
+
+		Functions\expect( '_doing_it_wrong' )->once();
+
+		$composite = new Composite_Settings_Handler( 'cdek', [ $child ], [ 'api' => null ] );
+		$provider  = Settings_Provider::create_with_sections(
+			'cdek',
+			'СДЭК',
+			$composite,
+			[],
+			Settings_Section::create_connection( 'api', 'Подключение', [ 'token' ], 'Проверить' )
+		);
+
+		$ref = new \ReflectionMethod( Settings_Page_Registry::instance(), 'build_sections' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$ref->setAccessible( true );
+		}
+		$sections = $ref->invoke( Settings_Page_Registry::instance(), $provider );
+
+		$this->assertFalse( $sections[0]['supports_test'] );
+		$this->assertArrayNotHasKey( 'status', $sections[0] );
 	}
 
 	public function test_the_schema_shows_the_button_only_for_a_block_whose_owner_can_test(): void {

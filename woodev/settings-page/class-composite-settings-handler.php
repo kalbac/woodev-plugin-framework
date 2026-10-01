@@ -63,11 +63,13 @@ final class Composite_Settings_Handler implements \Woodev_Settings_Connection_Te
 	 * @param \Woodev_Abstract_Settings[]             $children handlers, in section order.
 	 * @param array<string,\Woodev_Abstract_Settings> $connections optional: connection section id => the child handler
 	 *                                                 that contributed it, so a connection test / status is forwarded there.
+	 *                                                 An entry that is not a string id => settings handler is reported
+	 *                                                 with `_doing_it_wrong()` and dropped.
 	 * @throws \InvalidArgumentException when two children register the same setting id.
 	 */
 	public function __construct( string $id, array $children, array $connections = [] ) {
 		$this->id          = $id;
-		$this->connections = $connections;
+		$this->connections = $this->valid_connections( $connections );
 		$this->children    = array_values( $children );
 
 		foreach ( $this->children as $child ) {
@@ -79,6 +81,41 @@ final class Composite_Settings_Handler implements \Woodev_Settings_Connection_Te
 				$this->owner_by_id[ $sid ] = $child;
 			}
 		}
+	}
+
+	/**
+	 * Keeps only the connection owners the read path can use.
+	 *
+	 * The map is typed in the docblock only, and `get_connection_owner()` returns a typed
+	 * `?\Woodev_Abstract_Settings` — a `null` or foreign value would TypeError on every wp-admin page
+	 * that collects the tab. So a bad entry is reported and dropped here, never thrown: the block
+	 * without an owner simply has no test button, like any block outside the map.
+	 *
+	 * @param array<mixed> $connections the constructor's raw map.
+	 * @return array<string,\Woodev_Abstract_Settings>
+	 */
+	private function valid_connections( array $connections ): array {
+
+		$valid = [];
+
+		foreach ( $connections as $connection_id => $owner ) {
+			if ( ! is_string( $connection_id ) || ! $owner instanceof \Woodev_Abstract_Settings ) {
+				_doing_it_wrong(
+					__METHOD__,
+					sprintf(
+						'Composite settings "%1$s": the connection owner map must be connection section id => Woodev_Abstract_Settings; entry %2$s was ignored.',
+						esc_html( $this->id ),
+						esc_html( (string) $connection_id )
+					),
+					'2.0.2'
+				);
+				continue;
+			}
+
+			$valid[ $connection_id ] = $owner;
+		}
+
+		return $valid;
 	}
 
 	/**

@@ -104,6 +104,27 @@ final class CarrierSettingsTabTest extends TestCase {
 		);
 	}
 
+	/**
+	 * A contribution whose only section is a `create_connection()` block over one setting.
+	 *
+	 * @param bool $can_test whether its handler implements the connection-test interface.
+	 */
+	private function connection( string $section_id, string $setting_id, bool $can_test ): Settings_Provider {
+		$setting = Mockery::mock();
+		$setting->shouldReceive( 'get_id' )->andReturn( $setting_id );
+
+		$handler = Mockery::mock( \Woodev_Abstract_Settings::class . ( $can_test ? ', \Woodev_Settings_Connection_Test' : '' ) );
+		$handler->shouldReceive( 'get_settings' )->andReturn( [ $setting_id => $setting ] );
+
+		return Settings_Provider::create_with_sections(
+			'cdek',
+			'Подключение',
+			$handler,
+			[],
+			Settings_Section::create_connection( $section_id, 'Доступ', [ $setting_id ], 'Проверить' )
+		);
+	}
+
 	/** @return string[] */
 	private function section_ids( Settings_Provider $provider ): array {
 		return array_map( static fn( Settings_Section $section ) => $section->get_id(), $provider->get_sections() );
@@ -323,6 +344,75 @@ final class CarrierSettingsTabTest extends TestCase {
 		$plugin = $this->carrier( 'cdek', [ $null_handler, $this->credentials() ] );
 
 		$this->assertSame( [ 'credentials' ], $this->section_ids( $plugin->get_settings_providers()[0] ) );
+	}
+
+	// ----- a section-id clash (a connection id is the owner-map key) must not replace an owner (#1033) -----
+
+	public function test_two_contributions_declaring_the_same_connection_id_keep_the_first_owner_and_leave_the_second_out(): void {
+		// the first cannot test, the second can: a silent replace would flip `supports_connection_test` to true
+		$plugin = $this->carrier( 'cdek', [ $this->connection( 'api', 'token', false ), $this->connection( 'api', 'other_token', true ) ] );
+
+		Functions\expect( '_doing_it_wrong' )
+			->once()
+			->with( Mockery::type( 'string' ), Mockery::pattern( '/"cdek".*entry 1.*"api"/' ), '2.0.2' );
+
+		$provider  = $plugin->get_settings_providers()[0];
+		$composite = $provider->get_handler();
+
+		$this->assertSame( [ 'api' ], $this->section_ids( $provider ), 'one section, not two under one id' );
+		$this->assertArrayNotHasKey( 'other_token', $composite->get_settings(), 'the whole contribution is left out' );
+		$this->assertFalse( $composite->supports_connection_test( 'api' ), 'the owner is still the first contribution' );
+	}
+
+	public function test_a_connection_id_equal_to_an_ordinary_section_id_leaves_the_later_contribution_out(): void {
+		$plugin = $this->carrier( 'cdek', [ $this->credentials(), $this->connection( 'credentials', 'token', true ) ] );
+
+		Functions\expect( '_doing_it_wrong' )
+			->once()
+			->with( Mockery::type( 'string' ), Mockery::pattern( '/"cdek".*entry 1.*"credentials"/' ), '2.0.2' );
+
+		$provider = $plugin->get_settings_providers()[0];
+
+		$this->assertSame( [ 'credentials' ], $this->section_ids( $provider ) );
+		$this->assertFalse( $provider->get_handler()->supports_connection_test( 'credentials' ) );
+	}
+
+	public function test_an_ordinary_section_id_equal_to_an_earlier_connection_id_leaves_the_later_contribution_out(): void {
+		$plugin = $this->carrier( 'cdek', [ $this->connection( 'api', 'token', true ), $this->credentials( [], 'api_key', 'api' ) ] );
+
+		Functions\expect( '_doing_it_wrong' )
+			->once()
+			->with( Mockery::type( 'string' ), Mockery::pattern( '/"cdek".*entry 1.*"api"/' ), '2.0.2' );
+
+		$provider = $plugin->get_settings_providers()[0];
+
+		$this->assertSame( [ 'api' ], $this->section_ids( $provider ) );
+		$this->assertTrue( $provider->get_handler()->supports_connection_test( 'api' ), 'the first owner is intact' );
+	}
+
+	public function test_a_connection_id_equal_to_the_export_section_id_is_left_out_and_the_export_section_survives(): void {
+		$plugin = $this->carrier( 'cdek', [ $this->connection( Export_Settings::SECTION_ID, 'token', true ) ] );
+		$this->make_it_export( $plugin );
+
+		Functions\expect( '_doing_it_wrong' )
+			->once()
+			->with( Mockery::type( 'string' ), Mockery::pattern( '/"cdek".*entry 0.*"' . Export_Settings::SECTION_ID . '"/' ), '2.0.2' );
+
+		$provider = $plugin->get_settings_providers()[0];
+
+		$this->assertSame( [ Export_Settings::SECTION_ID ], $this->section_ids( $provider ) );
+		$this->assertFalse( $provider->get_handler()->supports_connection_test( Export_Settings::SECTION_ID ), '«Выгрузка» is not a connection block' );
+	}
+
+	public function test_the_export_section_id_is_free_for_a_carrier_that_does_not_export(): void {
+		$plugin = $this->carrier( 'cdek', [ $this->connection( Export_Settings::SECTION_ID, 'token', true ) ] );
+
+		Functions\expect( '_doing_it_wrong' )->never();
+
+		$provider = $plugin->get_settings_providers()[0];
+
+		$this->assertSame( [ Export_Settings::SECTION_ID ], $this->section_ids( $provider ) );
+		$this->assertTrue( $provider->get_handler()->supports_connection_test( Export_Settings::SECTION_ID ) );
 	}
 
 	// ----- a duplicate tab id is reported, first still wins -----
