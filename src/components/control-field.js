@@ -147,7 +147,7 @@ function ColorControl( { value, optional, onChange, disabled } ) {
 			createElement(
 				'span',
 				{ className: 'woodev-field__color-note' },
-				'Не задан — используется цвет по умолчанию'
+				__( 'Не задан — используется цвет по умолчанию', 'woodev-plugin-framework' )
 			),
 		optional && hasValue &&
 			createElement(
@@ -158,7 +158,7 @@ function ColorControl( { value, optional, onChange, disabled } ) {
 					disabled,
 					onClick: () => onChange( '' ),
 				},
-				'Сбросить'
+				__( 'Сбросить', 'woodev-plugin-framework' )
 			)
 	);
 }

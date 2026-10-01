@@ -587,4 +587,35 @@ describe( 'optional colour control', () => {
 
 		expect( screen.queryByRole( 'button', { name: 'Сбросить' } ) ).not.toBeInTheDocument();
 	} );
+
+	// The Russian msgids are a catalogue key, not display text: a hardcoded literal would
+	// render «Сбросить» whatever the locale says (the #1032 defect class), so drive a real
+	// catalogue through `setLocaleData` and assert the TRANSLATION is what shows. Each string
+	// is its own `__()` call and appears in its own state, so both states are checked.
+	describe( 'goes through gettext', () => {
+		afterEach( () => {
+			resetLocaleData( undefined, 'woodev-plugin-framework' );
+		} );
+
+		const catalogue = {
+			'Не задан — используется цвет по умолчанию': [ 'Not set — the default colour is used' ],
+			'Сбросить': [ 'Reset' ],
+		};
+
+		test( 'the empty-value note comes from the loaded catalogue', () => {
+			setLocaleData( catalogue, 'woodev-plugin-framework' );
+			renderColor( { value: '' } );
+
+			expect( screen.getByText( 'Not set — the default colour is used' ) ).toBeInTheDocument();
+			expect( screen.queryByText( 'Не задан — используется цвет по умолчанию' ) ).not.toBeInTheDocument();
+		} );
+
+		test( 'the reset button comes from the loaded catalogue', () => {
+			setLocaleData( catalogue, 'woodev-plugin-framework' );
+			renderColor( { value: '#1937ff' } );
+
+			expect( screen.getByRole( 'button', { name: 'Reset' } ) ).toBeInTheDocument();
+			expect( screen.queryByRole( 'button', { name: 'Сбросить' } ) ).not.toBeInTheDocument();
+		} );
+	} );
 } );

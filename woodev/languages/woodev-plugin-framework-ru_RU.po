@@ -4782,5 +4782,13 @@ msgid "Show password"
 msgstr "Показать пароль"
 
 #: assets/build/settings-page/index.js:1 assets/build/setup-wizard/index.js:1 assets/build/shipping-orders-page/index.js:1 assets/build/ui-kit-gallery/index.js:1
+msgid "Не задан — используется цвет по умолчанию"
+msgstr ""
+
+#: assets/build/settings-page/index.js:1 assets/build/setup-wizard/index.js:1 assets/build/shipping-orders-page/index.js:1 assets/build/ui-kit-gallery/index.js:1
+msgid "Сбросить"
+msgstr ""
+
+#: assets/build/settings-page/index.js:1 assets/build/setup-wizard/index.js:1 assets/build/shipping-orders-page/index.js:1 assets/build/ui-kit-gallery/index.js:1
 msgid "Hide password"
 msgstr "Скрыть пароль"
