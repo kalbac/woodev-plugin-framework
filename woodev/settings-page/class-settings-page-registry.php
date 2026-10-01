@@ -117,7 +117,7 @@ final class Settings_Page_Registry {
 	 * Builds the cap-filtered, deduped tab list (pure; injectable for tests).
 	 *
 	 * Each entry: [ 'provider' => Settings_Provider, 'is_woocommerce' => bool ].
-	 * Dedup is by provider id (first wins). Tabs whose resolved capability the
+	 * Dedup is by provider id (first wins; a duplicate is reported with `_doing_it_wrong()`). Tabs whose resolved capability the
 	 * current user lacks are omitted.
 	 *
 	 * @since 2.0.2
@@ -135,9 +135,22 @@ final class Settings_Page_Registry {
 			$id       = $provider->get_id();
 
 			if ( isset( $seen[ $id ] ) ) {
+				// First wins, as ever — but a second provider under one tab id is a plugin bug
+				// (a carrier's own tab under its plugin id beside the framework's, #1014), and
+				// silently dropping a whole tab is the failure nobody can see.
+				_doing_it_wrong(
+					__METHOD__,
+					sprintf(
+						'Two settings providers share the tab id "%1$s" (%2$s kept, %3$s ignored). A tab id must be unique; a Shipping_Plugin adds its own sections through get_tab_settings_providers() instead of a second tab.',
+						esc_html( $id ),
+						esc_html( $this->describe_provider( $seen[ $id ] ) ),
+						esc_html( $this->describe_provider( $provider ) )
+					),
+					'2.0.2'
+				);
 				continue;
 			}
-			$seen[ $id ] = true;
+			$seen[ $id ] = $provider;
 
 			$capability = self::resolve_capability(
 				$provider->get_declared_capability(),
@@ -157,6 +170,22 @@ final class Settings_Page_Registry {
 		}
 
 		return $tabs;
+	}
+
+	/**
+	 * Names a provider for a diagnostic: its label and the class of its handler, which is what
+	 * tells the owning plugin's code apart from the framework's. The handler is untyped on the
+	 * provider, so a non-object one is named by its type rather than fatalling the diagnostic.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param Settings_Provider $provider provider.
+	 * @return string
+	 */
+	private function describe_provider( Settings_Provider $provider ): string {
+		$handler = $provider->get_handler();
+
+		return sprintf( '"%1$s" / %2$s', $provider->get_label(), is_object( $handler ) ? get_class( $handler ) : gettype( $handler ) );
 	}
 
 	/**
@@ -215,7 +244,11 @@ final class Settings_Page_Registry {
 			if ( $section->is_connection() ) {
 				$entry['is_connection'] = true;
 				$entry['action_label']  = $section->get_action_label();
-				$entry['supports_test'] = $handler instanceof \Woodev_Settings_Connection_Test;
+				// A composite implements the interface for every tab it serves, so the class says nothing
+				// about THIS block: only the child that owns the block's settings can test it (#1028).
+				$entry['supports_test'] = $handler instanceof Composite_Settings_Handler
+					? $handler->supports_connection_test( $section->get_id() )
+					: $handler instanceof \Woodev_Settings_Connection_Test;
 
 				if ( $handler instanceof \Woodev_Settings_Connection_Status ) {
 					$status = $handler->get_connection_status( $section->get_id() );

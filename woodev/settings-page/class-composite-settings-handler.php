@@ -15,9 +15,17 @@ defined( 'ABSPATH' ) || exit;
  * `Settings_Provider` binds ONE handler per tab; the «Доставка» tab shows sections owned by
  * three handlers (location / checkout fields / pickup map), each keeping its own option
  * namespace. This class routes every call `Field_Schema` and the settings REST controller make
- * to the child that registered the setting id. It deliberately implements neither
- * `Woodev_Settings_Connection_Test` nor `Woodev_Settings_Connection_Status` — none of the
- * children needs them today; add delegation when one does.
+ * to the child that registered the setting id.
+ *
+ * It implements `Woodev_Settings_Connection_Test` and `Woodev_Settings_Connection_Status` so a
+ * carrier's `create_connection()` section can live in a composite tab (#1014, #1028): the call is
+ * forwarded to the child that CONTRIBUTED the connection section, and ONLY a child that
+ * implements the interface is asked. Implementing an interface is a class-level fact, so
+ * `instanceof` cannot tell whether THIS tab's connection block can be tested — ask
+ * {@see self::supports_connection_test()} (the schema builder and the REST controller do). The
+ * owner is declared, not derived: the constructor's `$connections` maps a connection section id to its
+ * handler, because a handshake block (`create_connection()` with no setting ids) has no setting to
+ * derive an owner from. A connection id outside the map has no owner, so nothing is forwarded.
  *
  * `get_value()` / `update_value()` throw `\Woodev_Plugin_Exception` on an unknown id, mirroring
  * `Woodev_Abstract_Settings` exactly, so this class is behaviourally substitutable for a real
@@ -35,10 +43,13 @@ defined( 'ABSPATH' ) || exit;
  *
  * @since 2.0.2
  */
-final class Composite_Settings_Handler {
+final class Composite_Settings_Handler implements \Woodev_Settings_Connection_Test, \Woodev_Settings_Connection_Status {
 
 	/** @var string */
 	private string $id;
+
+	/** @var array<string,\Woodev_Abstract_Settings> connection section id => the handler that contributed the section. */
+	private array $connections;
 
 	/** @var \Woodev_Abstract_Settings[] setting id => owning child. */
 	private array $owner_by_id = [];
@@ -48,13 +59,16 @@ final class Composite_Settings_Handler {
 
 	/**
 	 * @since 2.0.2
-	 * @param string                      $id       tab-level id (NOT an option namespace — children own those).
-	 * @param \Woodev_Abstract_Settings[] $children handlers, in section order.
+	 * @param string                                  $id       tab-level id (NOT an option namespace — children own those).
+	 * @param \Woodev_Abstract_Settings[]             $children handlers, in section order.
+	 * @param array<string,\Woodev_Abstract_Settings> $connections optional: connection section id => the child handler
+	 *                                                 that contributed it, so a connection test / status is forwarded there.
 	 * @throws \InvalidArgumentException when two children register the same setting id.
 	 */
-	public function __construct( string $id, array $children ) {
-		$this->id       = $id;
-		$this->children = array_values( $children );
+	public function __construct( string $id, array $children, array $connections = [] ) {
+		$this->id          = $id;
+		$this->connections = $connections;
+		$this->children    = array_values( $children );
 
 		foreach ( $this->children as $child ) {
 			foreach ( $child->get_settings() as $setting ) {
@@ -152,6 +166,65 @@ final class Composite_Settings_Handler {
 			throw new \Woodev_Plugin_Exception( "Setting {$id} does not exist", 404 );
 		}
 		$this->owner_by_id[ $id ]->update_value( $id, $value );
+	}
+
+	/**
+	 * Whether the connection block `$connection_id` can be tested: its owning child implements
+	 * `Woodev_Settings_Connection_Test`.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param string $connection_id the connection section id.
+	 * @return bool
+	 */
+	public function supports_connection_test( string $connection_id ): bool {
+		return $this->get_connection_owner( $connection_id ) instanceof \Woodev_Settings_Connection_Test;
+	}
+
+	/**
+	 * Forwards the connection test to the child that owns the block's setting ids.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param string              $connection_id the connection section id.
+	 * @param array<string,mixed> $values        merged field values (POSTed ∪ stored).
+	 * @return \Woodev_Connection_Result
+	 * @throws \Woodev_Plugin_Exception when no child that can test the block owns it — callers gate on
+	 *                                  {@see self::supports_connection_test()} first.
+	 */
+	public function test_connection( string $connection_id, array $values ): \Woodev_Connection_Result {
+		$owner = $this->get_connection_owner( $connection_id );
+
+		if ( ! $owner instanceof \Woodev_Settings_Connection_Test ) {
+			throw new \Woodev_Plugin_Exception( "Connection {$connection_id} cannot be tested" );
+		}
+
+		return $owner->test_connection( $connection_id, $values );
+	}
+
+	/**
+	 * Forwards the status badge lookup to the child that owns the block's setting ids; null when that child
+	 * has no status to give (it does not implement `Woodev_Settings_Connection_Status`).
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param string $connection_id the connection section id.
+	 * @return \Woodev_Connection_Result|null
+	 */
+	public function get_connection_status( string $connection_id ): ?\Woodev_Connection_Result {
+		$owner = $this->get_connection_owner( $connection_id );
+
+		return $owner instanceof \Woodev_Settings_Connection_Status ? $owner->get_connection_status( $connection_id ) : null;
+	}
+
+	/**
+	 * The child that owns a connection block: the handler it was declared with.
+	 *
+	 * @param string $connection_id the connection section id.
+	 * @return \Woodev_Abstract_Settings|null null for a block outside the map.
+	 */
+	private function get_connection_owner( string $connection_id ): ?\Woodev_Abstract_Settings {
+		return $this->connections[ $connection_id ] ?? null;
 	}
 
 	/**

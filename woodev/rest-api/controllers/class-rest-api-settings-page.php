@@ -245,7 +245,16 @@ if ( ! class_exists( 'Woodev_REST_API_Settings_Page' ) ) :
 
 			$handler = $provider->get_handler();
 
-			if ( ! $handler instanceof \Woodev_Settings_Connection_Test ) {
+			// A composite tab implements the interface for all its blocks; only the block's own child decides (#1028).
+			$tester = null;
+
+			if ( $handler instanceof \Woodev\Framework\Settings\Composite_Settings_Handler ) {
+				$tester = $handler->supports_connection_test( $connection_id ) ? $handler : null;
+			} elseif ( $handler instanceof \Woodev_Settings_Connection_Test ) {
+				$tester = $handler;
+			}
+
+			if ( null === $tester ) {
 				return new WP_Error(
 					'woodev_settings_no_connection_test',
 					__( 'Проверка подключения для этого раздела недоступна.', 'woodev-plugin-framework' ),
@@ -300,7 +309,7 @@ if ( ! class_exists( 'Woodev_REST_API_Settings_Page' ) ) :
 			}
 
 			try {
-				$result = $handler->test_connection( $connection_id, $merged );
+				$result = $tester->test_connection( $connection_id, $merged );
 			} catch ( \Throwable $e ) {
 				error_log( sprintf( '[woodev] connection test failed for %s/%s: %s', $provider_id, $connection_id, \Woodev_API_Base::redact_secret_log_text( $e->getMessage() ) ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic for an unexpected callback failure.
 				return new WP_Error(
