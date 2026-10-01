@@ -3393,6 +3393,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'howToGet'       => 'Getting there',
 				'paymentMethods' => 'Payment methods',
 				'workTime'       => 'Opening hours',
+				'workTimeNote'   => 'Local time at the pickup point',
 				'phone'          => 'Phone',
 				'maxWeight'      => 'Maximum weight',
 				'allTypes'       => 'All point types',
@@ -3461,6 +3462,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'howToGet'         => 'Getting there',
 				'paymentMethods'   => 'Payment methods',
 				'workTime'         => 'Opening hours',
+				// #152: the hint behind the info icon beside the hours heading.
+				'workTimeNote'     => 'Local time at the pickup point',
 				'phone'            => 'Phone',
 				'maxWeight'        => 'Maximum weight',
 				'allTypes'         => 'All point types',

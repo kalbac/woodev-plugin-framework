@@ -3089,6 +3089,10 @@ msgstr "Способы оплаты"
 msgid "Opening hours"
 msgstr "Часы работы"
 
+#: shipping-method/pickup/class-pickup-handler.php:1258
+msgid "Local time at the pickup point"
+msgstr "Время указано местное — по часовому поясу пункта выдачи"
+
 #: shipping-method/pickup/class-pickup-handler.php:1256
 msgid "Phone"
 msgstr "Телефон"

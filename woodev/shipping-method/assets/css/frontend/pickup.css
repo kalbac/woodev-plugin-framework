@@ -1916,11 +1916,56 @@
 	border-top: 1px solid #dcdcde;
 }
 
+/* `display: flex` so a heading can carry the info button (#152) on the same line. */
 .woodev-pickup-card__section-title {
+	display: flex;
+	align-items: center;
+	gap: 6px;
 	padding: 4px 0;
 	font-size: 14px;
 	font-weight: 500;
 	line-height: 1.4;
+}
+
+/* The info button beside the "Opening hours" heading (#152). A bare icon, 20px square so the tap
+   target is not a 16px sliver; the tooltip it describes is `.woodev-pickup-tip` below. */
+.woodev-pickup-card__tip-toggle {
+	width: 20px;
+	height: 20px;
+	border-radius: 50%;
+	color: #646970;
+	cursor: help;
+}
+
+.woodev-pickup-card__tip-toggle:hover,
+.woodev-pickup-card__tip-toggle:focus-visible {
+	color: #1e1e1e;
+}
+
+/* The tooltip itself. Rests inside its card section while hidden and is moved into the STAGE while
+   shown (see `addHoursTip()` in pickup-panels.js): the card and its body scroll, and `position:
+   fixed` resolves against the modal's centring `transform`, so the stage is the one ancestor
+   that neither clips it nor mis-anchors it. `left`/`top` are set by the script. `z-index` above
+   the card (3) and the busy overlay (6). */
+.woodev-pickup-tip {
+	position: absolute;
+	z-index: 8;
+	width: max-content;
+	max-width: min( 240px, calc( 100% - 16px ) );
+	padding: 6px 10px;
+	font-size: 13px;
+	line-height: 1.4;
+	color: #fff;
+	background: #1e1e1e;
+	border-radius: 4px;
+	box-shadow: 0 2px 6px rgba( 0, 0, 0, 0.2 );
+	pointer-events: none;
+}
+
+/* (0,2,0) beats the style-isolation block's `display: block` on `div`, the same fix as the
+   overlay/message `[hidden]` rules. */
+.woodev-pickup-tip[hidden] {
+	display: none;
 }
 
 .woodev-pickup-card__section-content {
@@ -2235,6 +2280,7 @@
 .woodev-pickup-card__close:focus-visible,
 .woodev-pickup-card__back:focus-visible,
 .woodev-pickup-card__cta:focus-visible,
+.woodev-pickup-card__tip-toggle:focus-visible,
 .woodev-pickup-card__howto > summary:focus-visible {
 	outline: 2px solid var( --woodev-pickup-accent, #06aedd );
 	outline-offset: 1px;
