@@ -81,6 +81,9 @@ class SettingsPageRegistryTest extends TestCase {
 	}
 
 	public function test_build_tabs_dedupes_by_id_keeping_first_and_preserves_order(): void {
+		// #1014: the duplicate is still dropped, but no longer silently.
+		Functions\expect( '_doing_it_wrong' )->once();
+
 		$registry = Settings_Page_Registry::instance();
 
 		$tabs = $registry->build_tabs(

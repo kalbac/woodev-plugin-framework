@@ -9,6 +9,8 @@
  * ({@see \Woodev\Framework\Settings\Settings_Page_Registry}), and the framework hands this tab to every
  * {@see \Woodev\Framework\Shipping\Shipping_Plugin} through
  * {@see \Woodev\Framework\Shipping\Shipping_Plugin::get_settings_providers()} — a carrier writes no code.
+ * The section shares the plugin's ONE tab with the carrier's own sections (#1014) and is left out for a
+ * carrier that does not export orders.
  *
  * @since 2.0.2
  */

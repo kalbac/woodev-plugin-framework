@@ -658,6 +658,16 @@ namespace Woodev\Tests\Integration\Shipping {
 			);
 		}
 
+		public function test_a_carrier_that_does_not_export_gets_no_export_tab(): void {
+			$plugin = \woodev_test_shipping_method_plugin();
+
+			// rates-only: the plugin registered no Orders_Provider / shipment handler of its own (#1014)
+			Orders_Registry::instance()->reset_for_tests();
+
+			$this->assertFalse( Orders_Registry::instance()->plugin_exports_orders( $plugin ) );
+			$this->assertSame( [], $plugin->get_settings_providers() );
+		}
+
 		public function test_the_export_settings_are_no_longer_on_the_woocommerce_integration(): void {
 			$integration = \woodev_test_shipping_method_plugin()->get_integration_handler();
 

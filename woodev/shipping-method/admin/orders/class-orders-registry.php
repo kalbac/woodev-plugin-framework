@@ -392,6 +392,30 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		}
 
 		/**
+		 * Whether a carrier plugin exports orders: it registered an {@see Orders_Provider} WITH itself as the
+		 * owning plugin AND a shipment handler for it (#1014).
+		 *
+		 * A rates-only carrier registers neither, so it has nothing to export and the «Выгрузка» settings
+		 * would be dead controls. The answer reflects what has been registered SO FAR — ask it once the
+		 * carrier has had its `init`, as {@see Shipping_Plugin::get_settings_providers()} does (the settings
+		 * page collects its tabs on `admin_menu` / `rest_api_init`).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Shipping_Plugin $plugin the carrier plugin.
+		 * @return bool
+		 */
+		public function plugin_exports_orders( Shipping_Plugin $plugin ): bool {
+			foreach ( $this->provider_plugins as $provider_id => $owner ) {
+				if ( $owner === $plugin && isset( $this->shipment_handlers[ $provider_id ] ) ) {
+					return true;
+				}
+			}
+
+			return false;
+		}
+
+		/**
 		 * Whether at least one provider is registered.
 		 *
 		 * @since 2.0.2
