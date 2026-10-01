@@ -33,6 +33,13 @@
 # Cost, measured: build 18s + the three catalogue gates 4s = ~22s, and only on a push
 # that actually touches the relevant sources.
 #
+# IN A LINKED WORKTREE (#1057) the build and the «Assets build parity» check run only when
+# the pushed range touches the build's own inputs: src/, package.json, package-lock.json or
+# tsconfig.json (there is no webpack config in the repo — wp-scripts defaults). A worktree
+# build cannot match CI's anyway (rule 1 above), so on a PHP-only push it was pure noise that
+# forced `--no-verify`. The catalogue gates are unchanged: they run whenever src/ or woodev/
+# changed. The primary checkout behaves exactly as before.
+#
 # Enable once per clone:  git config core.hooksPath .githooks
 # Escape hatch (do not make it a habit): git push --no-verify
 set -e
@@ -42,6 +49,14 @@ cd "$repo_root"
 
 zero='0000000000000000000000000000000000000000'
 relevant=0
+build_relevant=0
+
+# A linked worktree has its own git dir, distinct from the common one. One of the two is
+# often printed relative, so compare physical absolute paths.
+git_dir=$(cd "$(git rev-parse --git-dir)" && pwd -P)
+common_dir=$(cd "$(git rev-parse --git-common-dir)" && pwd -P)
+in_worktree=0
+[ "$git_dir" != "$common_dir" ] && in_worktree=1
 
 # stdin: <local ref> <local sha> <remote ref> <remote sha>, one line per ref pushed.
 while read -r _local_ref local_sha _remote_ref remote_sha; do
@@ -61,6 +76,11 @@ while read -r _local_ref local_sha _remote_ref remote_sha; do
 		| grep -q .; then
 		relevant=1
 	fi
+
+	if git diff --name-only "$base" "$local_sha" -- src package.json package-lock.json tsconfig.json \
+		| grep -q .; then
+		build_relevant=1
+	fi
 done
 
 if [ "$relevant" -eq 0 ]; then
@@ -69,20 +89,25 @@ fi
 
 printf 'pre-push: sources under src/ or woodev/ changed — checking bundles and catalogue.\n'
 
-if ! npm run build >/dev/null 2>&1; then
-	printf '\npre-push: REFUSED — `npm run build` failed. Run it yourself to see why.\n'
-	exit 1
-fi
+# Primary checkout: always build. Linked worktree: only when a build input changed (#1057).
+if [ "$in_worktree" -eq 0 ] || [ "$build_relevant" -eq 1 ]; then
+	if ! npm run build >/dev/null 2>&1; then
+		printf '\npre-push: REFUSED — `npm run build` failed. Run it yourself to see why.\n'
+		exit 1
+	fi
 
-# The exact question CI's "Assets build parity" job asks: does a fresh build reproduce
-# what is committed?
-stale=$(git status --porcelain -- woodev/assets/build)
+	# The exact question CI's "Assets build parity" job asks: does a fresh build reproduce
+	# what is committed?
+	stale=$(git status --porcelain -- woodev/assets/build)
 
-if [ -n "$stale" ]; then
-	printf '\npre-push: REFUSED — the build changed committed bundles, so this push would fail\n'
-	printf '          CI'"'"'s "Assets build parity" job:\n\n%s\n\n' "$stale"
-	printf '          Commit the rebuilt bundles (primary checkout only) and push again.\n'
-	exit 1
+	if [ -n "$stale" ]; then
+		printf '\npre-push: REFUSED — the build changed committed bundles, so this push would fail\n'
+		printf '          CI'"'"'s "Assets build parity" job:\n\n%s\n\n' "$stale"
+		printf '          Commit the rebuilt bundles (primary checkout only) and push again.\n'
+		exit 1
+	fi
+else
+	printf 'pre-push: linked worktree, no build input changed — skipping the bundle build.\n'
 fi
 
 # Read the EXIT CODE of each gate, never its last lines: s134 pushed a red `lint:i18n`
