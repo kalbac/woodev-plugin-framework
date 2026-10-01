@@ -12,7 +12,10 @@
 	padding: 0.5em 0.75em;
 	border: 1px solid currentColor;
 	border-radius: 4px;
-	font-size: 0.95em;
+	/* rem, not em: the block sits inside the rate row, which some themes (Twenty Twenty-Five) set
+	   large, so an em size stayed large. The 13px floor guards themes that shrink the root
+	   (`html { font-size: 62.5% }`), where 0.95rem alone would be ~9.5px. Operator, 02.10.2026. */
+	font-size: max( 13px, 0.95rem );
 	font-weight: normal;
 	line-height: 1.4;
 	text-align: start;
