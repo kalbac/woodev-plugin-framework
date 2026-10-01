@@ -19,8 +19,10 @@ use Woodev\Framework\Shipping\Location\Location_Record;
 use Woodev\Framework\Shipping\Order\Shipping_Order_Handler;
 use Woodev\Framework\Shipping\Pickup\Pickup_Handler;
 use Woodev\Framework\Shipping\Pickup\Pickup_Point;
+use Woodev\Framework\Shipping\Pickup\Pickup_Selection;
 use Woodev\Framework\Shipping\Pickup\Point_Query;
 use Woodev\Framework\Shipping\Pickup\Point_Source;
+use Woodev\Framework\Shipping\Pickup\Selection_Scope;
 use Woodev\Framework\Shipping\Rest_Api\Pickup_Controller;
 use Woodev\Tests\Unit\TestCase;
 
@@ -34,6 +36,8 @@ require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-point
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/interface-point-source.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-constraint-checker.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-selection-result.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/interface-selection-scope.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-pickup-selection.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/map/interface-map-provider.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/order/class-shipping-order-handler.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/compatibility/class-plugin-compatibility.php';
@@ -85,6 +89,95 @@ final class Pickup_Timeout_Probe_Source implements Point_Source {
 				'type'    => [ 'code' => 'PVZ', 'label' => 'ПВЗ' ],
 			]
 		);
+	}
+}
+
+/**
+ * Array-backed `\WC_Session` stand-in — get()/set() only.
+ */
+final class Pickup_Timeout_Fake_Session {
+
+	/** @var array<string, mixed> */
+	public array $store = [];
+
+	public function get( $key, $default = null ) {
+		return $this->store[ $key ] ?? $default;
+	}
+
+	public function set( $key, $value ): void {
+		$this->store[ $key ] = $value;
+	}
+}
+
+/**
+ * One plugin's selection scope: `carrier_pickup` is its pickup method (type `PVZ`).
+ */
+final class Pickup_Timeout_Scope implements Selection_Scope {
+
+	public function session_key(): string {
+		return 'carrier_selection';
+	}
+
+	public function locality_for_point( Pickup_Point $point ): string {
+		return 'msk';
+	}
+
+	public function current_locality(): string {
+		return 'msk';
+	}
+
+	public function type_for_method( string $method_id ): ?string {
+		return 'carrier_pickup' === $method_id ? 'PVZ' : null;
+	}
+}
+
+/**
+ * {@see Pickup_Selection} reading the fake session instead of `WC()->session`.
+ */
+final class Pickup_Timeout_Selection extends Pickup_Selection {
+
+	private Pickup_Timeout_Fake_Session $fake_session;
+
+	public function __construct( Selection_Scope $scope, Pickup_Timeout_Fake_Session $fake_session ) {
+		parent::__construct( $scope );
+		$this->fake_session = $fake_session;
+	}
+
+	protected function session() {
+		return $this->fake_session;
+	}
+}
+
+/**
+ * A {@see Pickup_Handler} whose selection map is backed by the fake session — the Store API path
+ * recalls the point the customer confirmed from it.
+ */
+final class Pickup_Timeout_Store_Api_Handler extends Pickup_Handler {
+
+	private Pickup_Selection $forced_selection;
+
+	public function __construct( Point_Source $source, Selection_Scope $scope, Pickup_Selection $selection ) {
+		parent::__construct(
+			'p',
+			'pickup_point',
+			$source,
+			new Pickup_Timeout_Probe_Map_Provider(),
+			[ 'center' => [ 55.75, 37.61 ], 'zoom' => 10 ],
+			new Shipping_Order_Handler( [ 'pickup_full' => 'cdek_full_point' ] ),
+			'pickup_full',
+			[],
+			'#000000',
+			'',
+			true,
+			false,
+			$scope
+		);
+
+		$this->forced_selection = $selection;
+	}
+
+	protected function selection(): ?Pickup_Selection {
+		return $this->forced_selection;
 	}
 }
 
@@ -208,6 +301,32 @@ final class PickupCheckoutTimeoutTest extends TestCase {
 		$this->handler( $source )->handle_checkout_order_processed( 1, [], $this->order() );
 
 		$this->assertSame( [ 8 ], $source->timeouts );
+	}
+
+	public function test_persisting_the_point_from_the_store_api_hook_gets_the_checkout_budget(): void {
+		$source  = new Pickup_Timeout_Probe_Source();
+		$session = new Pickup_Timeout_Fake_Session();
+		$scope   = new Pickup_Timeout_Scope();
+
+		// The REST `select` route remembers the confirmed point in the session; the block checkout
+		// posts no field, so the order-processed hook recalls it from there.
+		( new Pickup_Timeout_Selection( $scope, $session ) )->remember( 'msk', 'PVZ', 'P1', 'Москва' );
+
+		$line = new class() {
+			public function get_method_id(): string {
+				return 'carrier_pickup';
+			}
+		};
+
+		$order = \Mockery::mock( 'WC_Order' );
+		$order->shouldReceive( 'get_id' )->andReturn( 123 );
+		$order->shouldReceive( 'get_items' )->with( 'shipping' )->andReturn( [ $line ] );
+
+		$handler = new Pickup_Timeout_Store_Api_Handler( $source, $scope, new Pickup_Timeout_Selection( $scope, $session ) );
+
+		$handler->handle_store_api_order_processed( $order );
+
+		$this->assertSame( [ 8 ], $source->timeouts, 'the re-fetch of the confirmed point runs in the Store API request' );
 	}
 
 	public function test_persisting_the_point_from_the_admin_order_editor_keeps_the_reference_timeout(): void {

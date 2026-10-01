@@ -26,6 +26,8 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 	use Woodev\Tests\Unit\TestCase;
 
 	require_once dirname( __DIR__, 4 ) . '/woodev/class-plugin-exception.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/api/class-api-exception.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/api/class-api-request-purpose.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-control.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-setting.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/abstract-class-settings.php';
@@ -1746,6 +1748,182 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertNull( $service->get_customer_record(), 'precondition: the gate refuses this record' );
 			$this->assertFalse( $service->promote_customer_record_to_explicit() );
 			$this->assertTrue( $store->get_chain()['implicit'], 'the refused record must still be flagged a guess' );
+		}
+
+		// -------------------------------------------------------------------
+		// request context -> timeout budget (#1025): a customer's own lookups get the
+		// checkout budget (8 s); the admin's explicit-record chain and a direct
+		// resolve_default() call keep the budget their caller set (the 60 s default)
+		// -------------------------------------------------------------------
+
+		/**
+		 * The timeout a provider call made RIGHT NOW would get.
+		 */
+		private function timeout_now(): int {
+			return \Woodev_API_Request_Purpose::default_timeout( \Woodev_API_Request_Purpose::current() );
+		}
+
+		public function test_the_lazy_geoip_default_of_a_customer_gets_the_checkout_budget(): void {
+			$timeouts = [];
+			$located  = $this->record( 'geo:by-ip' );
+			$provider = new Default_Test_Fake_Locate_Provider(
+				'geo',
+				function () use ( &$timeouts, $located ) {
+					$timeouts[] = $this->timeout_now();
+
+					return $located;
+				}
+			);
+
+			$this->stub_default_locality_options( 'geo', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_GEOIP );
+			$registry = $this->activate( [ $provider ] );
+
+			\WC_Geolocation::$address = '203.0.113.5';
+
+			$this->service( $registry )->get_customer_record();
+
+			$this->assertSame( [ 8 ], $timeouts );
+
+			\WC_Geolocation::$address = null;
+		}
+
+		public function test_a_direct_resolve_default_call_keeps_the_default_budget(): void {
+			$timeouts = [];
+			$located  = $this->record( 'geo:by-ip' );
+			$provider = new Default_Test_Fake_Locate_Provider(
+				'geo',
+				function () use ( &$timeouts, $located ) {
+					$timeouts[] = $this->timeout_now();
+
+					return $located;
+				}
+			);
+
+			$this->stub_default_locality_options( 'geo', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_GEOIP );
+			$registry = $this->activate( [ $provider ] );
+
+			\WC_Geolocation::$address = '203.0.113.5';
+
+			// Not through the customer accessor: the admin-side callers of the public method set their own budget.
+			$this->service( $registry )->resolve_default();
+
+			$this->assertSame( [ 60 ], $timeouts );
+
+			\WC_Geolocation::$address = null;
+		}
+
+		public function test_the_stranded_fixed_default_re_resolution_of_a_customer_gets_the_checkout_budget(): void {
+			$timeouts        = [];
+			$stale_provider  = new Default_Test_Fake_Provider( 'prov-a', static fn() => [] );
+			$active_provider = new Default_Test_Fake_Provider(
+				'prov-b',
+				function () use ( &$timeouts ) {
+					$timeouts[] = $this->timeout_now();
+
+					return [ $this->record( 'prov-b:new-city', Location_Record::LEVEL_SETTLEMENT ) ];
+				}
+			);
+
+			$stale = $this->record( 'prov-a:old-city', Location_Record::LEVEL_SETTLEMENT, [ 'region' => [ 'name' => 'Московская область', 'type' => 'обл' ] ] );
+
+			$this->stub_default_locality_options( 'prov-b', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED, wp_json_encode( $stale->to_array() ) );
+			$registry = $this->activate( [ $stale_provider, $active_provider ] );
+
+			$result = $this->service( $registry )->get_customer_record();
+
+			$this->assertNotNull( $result, 'precondition: the re-resolution answered' );
+			$this->assertSame( [ 8 ], $timeouts );
+		}
+
+		public function test_the_region_derivation_of_a_customer_chain_gets_the_checkout_budget(): void {
+			$this->stub_region_ancestor_transients();
+
+			$timeouts      = [];
+			$region_record = $this->record( 'prov-a:region-1', Location_Record::LEVEL_REGION );
+			$provider      = new Default_Test_Fake_Resolve_Key_Provider(
+				'prov-a',
+				function () use ( &$timeouts, $region_record ): ?Location_Record {
+					$timeouts[] = $this->timeout_now();
+
+					return $region_record;
+				}
+			);
+
+			$stored = $this->record( 'prov-a:city-1', Location_Record::LEVEL_SETTLEMENT, [ 'ancestors' => [ 'prov-a:region-1' ] ] );
+			$this->stub_default_locality_options( 'prov-a', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED, wp_json_encode( $stored->to_array() ) );
+			$registry = $this->activate( [ $provider ] );
+
+			$chain = $this->service( $registry )->get_customer_chain();
+
+			$this->assertArrayHasKey( Location_Record::LEVEL_REGION, $chain['records'], 'precondition: the region was derived' );
+			$this->assertSame( [ 8 ], $timeouts );
+		}
+
+		public function test_the_region_dictionary_of_a_customer_chain_gets_the_checkout_budget(): void {
+			$this->stub_region_ancestor_transients();
+
+			$timeouts      = [];
+			$region_record = $this->record( 'prov-a:region-1', Location_Record::LEVEL_REGION );
+			$provider      = new Default_Test_Fake_List_Provider(
+				'prov-a',
+				function () use ( &$timeouts, $region_record ): array {
+					$timeouts[] = $this->timeout_now();
+
+					return [ $region_record ];
+				}
+			);
+
+			$stored = $this->record( 'prov-a:city-1', Location_Record::LEVEL_SETTLEMENT, [ 'ancestors' => [ 'prov-a:region-1' ] ] );
+			$this->stub_default_locality_options( 'prov-a', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED, wp_json_encode( $stored->to_array() ) );
+			$registry = $this->activate( [ $provider ] );
+
+			$this->service( $registry )->get_customer_chain();
+
+			$this->assertSame( [ 8 ], $timeouts );
+		}
+
+		public function test_the_region_derivation_of_the_admins_explicit_record_keeps_the_default_budget(): void {
+			$this->stub_region_ancestor_transients();
+
+			$timeouts      = [];
+			$region_record = $this->record( 'prov-a:region-1', Location_Record::LEVEL_REGION );
+			$provider      = new Default_Test_Fake_Resolve_Key_Provider(
+				'prov-a',
+				function () use ( &$timeouts, $region_record ): ?Location_Record {
+					$timeouts[] = $this->timeout_now();
+
+					return $region_record;
+				}
+			);
+
+			$typed_in = $this->record( 'prov-a:city-1', Location_Record::LEVEL_SETTLEMENT, [ 'ancestors' => [ 'prov-a:region-1' ] ] );
+			$this->stub_default_locality_options( 'prov-a' );
+			$registry = $this->activate( [ $provider ] );
+
+			$service = $this->service( $registry );
+			$chain   = $service->with_explicit_record( $typed_in, static fn() => $service->get_customer_chain() );
+
+			$this->assertArrayHasKey( Location_Record::LEVEL_REGION, $chain['records'], 'precondition: the region was derived' );
+			$this->assertSame( [ 60 ], $timeouts );
+		}
+
+		public function test_a_timeout_of_the_lazy_default_still_answers_no_default(): void {
+			$provider = new Default_Test_Fake_Locate_Provider(
+				'geo',
+				static function () {
+					throw new \Woodev_API_Exception( 'cURL error 28: Operation timed out' );
+				}
+			);
+
+			$this->stub_default_locality_options( 'geo', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_GEOIP );
+			$registry = $this->activate( [ $provider ] );
+
+			\WC_Geolocation::$address = '203.0.113.5';
+
+			$this->assertNull( $this->service( $registry )->get_customer_record(), 'the page renders without a default locality' );
+			$this->assertSame( \Woodev_API_Request_Purpose::DEFAULT_PURPOSE, \Woodev_API_Request_Purpose::current(), 'and the budget scope is restored' );
+
+			\WC_Geolocation::$address = null;
 		}
 	}
 }

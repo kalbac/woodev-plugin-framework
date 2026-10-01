@@ -338,7 +338,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 					: self::implicit_entry( $this->unpersisted_default );
 			}
 
-			$default = $this->resolve_default();
+			// A customer's own record is read here (an admin destination comes in as the explicit
+			// record, which returned above), so the lazy default-locality lookup — geoip `locate()`
+			// or the stranded-default re-resolution `suggest()` — is a call the visitor waits for
+			// while the page renders or the order is processed: the checkout budget (#1025).
+			// A timeout is already answered as «no default» by both paths.
+			$default = \Woodev_API_Request_Purpose::run_at_checkout( fn() => $this->resolve_default() );
 
 			if ( null === $default ) {
 				return null;
@@ -593,7 +598,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 				return $chain;
 			}
 
-			$region = $this->region_ancestor_of( $chain['records'][ Location_Record::LEVEL_SETTLEMENT ] );
+			$settlement = $chain['records'][ Location_Record::LEVEL_SETTLEMENT ];
+
+			// The customer's own chain is read while the visitor waits (a page render, an order being
+			// processed): the checkout budget (#1025). The explicit record is the ADMIN's typed-in
+			// destination — it keeps the budget its caller already set. A timeout is answered as «no
+			// region» by both derivation paths.
+			$region = $this->has_explicit_record
+				? $this->region_ancestor_of( $settlement )
+				: \Woodev_API_Request_Purpose::run_at_checkout( fn() => $this->region_ancestor_of( $settlement ) );
 
 			if ( null !== $region ) {
 				$chain['records'][ Location_Record::LEVEL_REGION ] = $region;
