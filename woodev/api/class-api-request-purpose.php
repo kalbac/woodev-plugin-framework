@@ -22,10 +22,15 @@ if ( ! class_exists( 'Woodev_API_Request_Purpose' ) ) :
 	 */
 	final class Woodev_API_Request_Purpose {
 
-		/** @var string a rate calculation a customer is waiting for at checkout */
+		/**
+		 * The CHECKOUT budget: a rate calculation, or any other call a customer is waiting for in
+		 * the middle of a checkout request ({@see self::run_at_checkout()}, #1017).
+		 *
+		 * @var string
+		 */
 		public const RATES = 'rates';
 
-		/** @var string a reference-data load (pickup points, directories) */
+		/** @var string a reference-data load outside a checkout request (pickup points, directories) */
 		public const REFERENCE = 'reference';
 
 		/** @var string a shipment export, cancel or update */
@@ -92,12 +97,51 @@ if ( ! class_exists( 'Woodev_API_Request_Purpose' ) ) :
 		}
 
 		/**
+		 * Runs a callback under the checkout budget: a customer is waiting for it inside a checkout
+		 * request, exactly as for a rate answer (#1017).
+		 *
+		 * The budget is the `rates` one ({@see self::RATES}), so a call that would otherwise get the
+		 * generic minute — or the reference 20 s — gives up in the same seconds a rate call does.
+		 * The caller knows it is on the checkout path; the framework does not sniff the request
+		 * (classic AJAX, Store API and the plugin's own REST routes would each need their own test,
+		 * and one of them would be missed). Admin callers simply do not use this.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param callable $callback the work that calls the API
+		 * @return mixed whatever the callback returns
+		 * @throws \Throwable whatever the callback throws, after the purpose is restored
+		 */
+		public static function run_at_checkout( callable $callback ) {
+			return self::run( self::RATES, $callback );
+		}
+
+		/**
+		 * Runs a reference-data load (pickup points, directories) with the timeout its request needs
+		 * — the ONE place that decides it (#1017).
+		 *
+		 * Inside a checkout request the customer waits for the lookup like for a rate, so it gets the
+		 * checkout budget ({@see self::run_at_checkout()}); anywhere else (the admin order editor,
+		 * the admin pickup routes) it keeps the `reference` timeout.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param bool     $at_checkout whether a customer is waiting for this call in a checkout request
+		 * @param callable $callback    the work that calls the API
+		 * @return mixed whatever the callback returns
+		 * @throws \Throwable whatever the callback throws, after the purpose is restored
+		 */
+		public static function run_reference( bool $at_checkout, callable $callback ) {
+			return $at_checkout ? self::run_at_checkout( $callback ) : self::run( self::REFERENCE, $callback );
+		}
+
+		/**
 		 * The framework's timeout for a purpose, in seconds.
 		 *
 		 * @since 2.0.2
 		 *
 		 * @param string $purpose one of this class's purposes
-		 * @return int rates 8, reference 20, export 30, anything else 60
+		 * @return int rates (the checkout budget) 8, reference 20, export 30, anything else 60
 		 */
 		public static function default_timeout( string $purpose ): int {
 

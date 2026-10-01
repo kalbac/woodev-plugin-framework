@@ -294,6 +294,47 @@ final class ApiBaseRequestTimeoutTest extends TestCase {
 		$this->assertSame( \Woodev_API_Request_Purpose::REFERENCE, $this->filter_calls[0][1][1] );
 	}
 
+	// ---- #1017: a reference load inside a checkout request gets the checkout budget ----
+
+	public function test_a_reference_load_inside_a_checkout_request_gets_the_checkout_budget(): void {
+		$timeout = \Woodev_API_Request_Purpose::run_reference( true, fn() => $this->timeout_now() );
+
+		$this->assertSame( 8, $timeout );
+	}
+
+	public function test_a_reference_load_outside_a_checkout_request_keeps_the_reference_timeout(): void {
+		$timeout = \Woodev_API_Request_Purpose::run_reference( false, fn() => $this->timeout_now() );
+
+		$this->assertSame( 20, $timeout );
+	}
+
+	public function test_the_checkout_budget_is_the_rate_one_and_any_call_under_it_gets_it(): void {
+		$this->assertSame( 8, \Woodev_API_Request_Purpose::run_at_checkout( fn() => $this->timeout_now() ), 'an unmarked call (the minute) made at checkout' );
+		$this->assertSame(
+			8,
+			\Woodev_API_Request_Purpose::run_at_checkout(
+				fn() => \Woodev_API_Request_Purpose::run( \Woodev_API_Request_Purpose::EXPORT, fn() => $this->timeout_now() )
+			),
+			'and a longer purpose nested inside it cannot lengthen it'
+		);
+	}
+
+	public function test_the_checkout_scope_ends_with_the_call_even_when_it_throws(): void {
+		try {
+			\Woodev_API_Request_Purpose::run_reference(
+				true,
+				static function () {
+					throw new \Woodev_API_Transport_Exception( 'cURL error 28: timed out' );
+				}
+			);
+			$this->fail( 'the exception must propagate' );
+		} catch ( \Woodev_API_Transport_Exception $exception ) {
+			$this->assertSame( 'cURL error 28: timed out', $exception->getMessage() );
+		}
+
+		$this->assertSame( 60, $this->timeout_now(), 'the next, unrelated call is back to the minute' );
+	}
+
 	public function test_run_returns_what_the_callback_returns(): void {
 		$this->assertSame( 'answer', \Woodev_API_Request_Purpose::run( \Woodev_API_Request_Purpose::EXPORT, static fn() => 'answer' ) );
 	}

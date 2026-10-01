@@ -590,7 +590,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 			}
 
 			try {
-				$point = $this->from_source( fn() => $this->source->fetch_details( $point_id ) );
+				$point = $this->from_source( true, fn() => $this->source->fetch_details( $point_id ) );
 			} catch ( \Woodev_API_Exception $e ) {
 				$this->log_carrier_failure( $e, 'point selection' );
 				return $this->upstream_error();
@@ -1198,7 +1198,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 			$cart_weight    = ( $this->cart_weight )();
 			$payment_method = ( $this->payment_method )();
 
-			return $this->collect_points( $query, $cart_weight, $payment_method );
+			return $this->collect_points( $query, $cart_weight, $payment_method, true );
 		}
 
 		/**
@@ -1206,12 +1206,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 		 * load is reference data, so it gets the reference timeout instead of the generic minute.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Card #1017: `$at_checkout` — the public routes are what the checkout picker
+		 *              calls while a customer waits, so they get the checkout budget; the admin
+		 *              routes keep the reference timeout.
 		 *
-		 * @param callable $call the point-source call.
+		 * @param bool     $at_checkout whether the route serves the checkout picker (public) rather than the admin.
+		 * @param callable $call        the point-source call.
 		 * @return mixed whatever the call returns.
 		 */
-		private function from_source( callable $call ) {
-			return \Woodev_API_Request_Purpose::run( \Woodev_API_Request_Purpose::REFERENCE, $call );
+		private function from_source( bool $at_checkout, callable $call ) {
+			return \Woodev_API_Request_Purpose::run_reference( $at_checkout, $call );
 		}
 
 		/**
@@ -1224,16 +1228,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 		 * @param Point_Query $query          the built, strategy-validated query.
 		 * @param int         $cart_weight    order weight in grams.
 		 * @param string      $payment_method chosen gateway id; `''` when unknown.
+		 * @param bool        $at_checkout    `true` for the public (checkout picker) list, `false` for the admin one (#1017).
 		 *
 		 * @return array{points: array<int, array<string, mixed>>}
 		 *
 		 * @throws \Woodev_API_Exception on a carrier transport, auth, or API failure.
 		 */
-		private function collect_points( Point_Query $query, int $cart_weight, string $payment_method ): array {
+		private function collect_points( Point_Query $query, int $cart_weight, string $payment_method, bool $at_checkout ): array {
 
 			$points = [];
 
-			foreach ( $this->from_source( fn() => $this->source->fetch_points( $query ) ) as $point ) {
+			foreach ( $this->from_source( $at_checkout, fn() => $this->source->fetch_points( $query ) ) as $point ) {
 
 				if ( ! $point instanceof Pickup_Point ) {
 					continue; // Defensive: a misbehaving source returning junk must not break the map.
@@ -1279,7 +1284,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 
 			$query = $this->attach_explicit_location( $query, $record );
 
-			return $this->collect_points( $query, $cart_weight, $payment_method );
+			return $this->collect_points( $query, $cart_weight, $payment_method, false );
 		}
 
 		/**
@@ -1314,9 +1319,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 			$context = $this->resolve_explicit_context( $record );
 
 			if ( null !== $context && $this->source instanceof Location_Aware_Point_Source ) {
-				$point = $this->from_source( fn() => $this->source->fetch_details_for( $id, $context['record'], $context['resolved_identity'] ) );
+				$point = $this->from_source( false, fn() => $this->source->fetch_details_for( $id, $context['record'], $context['resolved_identity'] ) );
 			} else {
-				$point = $this->from_source( fn() => $this->source->fetch_details( $id ) );
+				$point = $this->from_source( false, fn() => $this->source->fetch_details( $id ) );
 			}
 
 			if ( null === $point ) {
@@ -1449,7 +1454,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 		 */
 		public function get_point_data( string $id ): ?array {
 
-			$point = $this->from_source( fn() => $this->source->fetch_details( $id ) );
+			$point = $this->from_source( true, fn() => $this->source->fetch_details( $id ) );
 
 			if ( null === $point ) {
 				return null;

@@ -709,7 +709,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 * @return \WP_REST_Response|\WP_Error|array{suggestions: array<int, array<string, mixed>>}
 		 */
 		public function handle_suggest_request( \WP_REST_Request $request ) {
-			return $this->perform_suggest( $request, 'woodev_location_sug_rl_' );
+			// Address autocomplete at checkout: the customer waits for it like for a rate (#1017).
+			return \Woodev_API_Request_Purpose::run_at_checkout( fn() => $this->perform_suggest( $request, 'woodev_location_sug_rl_' ) );
 		}
 
 		/**
@@ -1190,7 +1191,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 			$scope = $scope->for_provider( $provider->get_id() );
 
 			try {
-				$records = $provider->list_localities( $scope );
+				// The public list feeds the checkout's own dropdowns: a customer waits for it (#1017).
+				$records = \Woodev_API_Request_Purpose::run_at_checkout( fn() => $provider->list_localities( $scope ) );
 			} catch ( \Throwable $exception ) {
 				$this->log_failure( $provider->get_id(), 'list', $exception );
 
@@ -1320,7 +1322,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 						)
 					);
 				} else {
-					$verification = ( new Popular_Settlement_Verifier( $popular_store ) )->verify_entry( $provider, $entry );
+					// The pick's provider re-check runs while the customer waits for the pick to be accepted (#1017).
+					$verification = \Woodev_API_Request_Purpose::run_at_checkout( fn() => ( new Popular_Settlement_Verifier( $popular_store ) )->verify_entry( $provider, $entry ) );
 
 					switch ( $verification->outcome() ) {
 						case Popular_Settlement_Verification::OUTCOME_UPDATED:
@@ -1347,7 +1350,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 							// The row is already deleted by now (D6). D7 decides
 							// whether to silently adopt a search match or cancel
 							// the pick outright.
-							$adopted = $this->resolve_stale_pick_replacement( $provider, $entry );
+							$adopted = \Woodev_API_Request_Purpose::run_at_checkout( fn() => $this->resolve_stale_pick_replacement( $provider, $entry ) );
 
 							if ( null !== $adopted ) {
 								$record_to_persist = $adopted;
