@@ -31,6 +31,24 @@ namespace Woodev\Tests\Unit {
 
 	class WcPackerDispatcherUnitsTest extends TestCase {
 
+		protected function setUp(): void {
+			parent::setUp();
+
+			// the effective values read the store's default dimensions (#955), a settings handler: none stored here
+			Functions\when( 'get_option' )->justReturn( null );
+			Functions\when( 'wp_parse_args' )->alias(
+				static function ( $args, $defaults = [] ) {
+					return array_merge( (array) $defaults, (array) $args );
+				}
+			);
+			\Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab::reset_for_tests();
+		}
+
+		protected function tearDown(): void {
+			\Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab::reset_for_tests();
+			parent::tearDown();
+		}
+
 		/** Units → kg. */
 		private const WEIGHT_TO_KG = [
 			'kg'  => 1.0,
@@ -140,7 +158,8 @@ namespace Woodev\Tests\Unit {
 		}
 
 		/**
-		 * Missing dimensions keep the current behaviour (0.0): defaults are a separate card (#955).
+		 * With no store default set, missing dimensions keep the current behaviour (0.0) — see
+		 * WcPackerDispatcherDefaultsTest for the fallback itself (#955).
 		 */
 		public function test_missing_dimensions_and_weight_stay_zero_in_both_converters(): void {
 			$this->store_uses( 'g', 'mm' );

@@ -302,12 +302,25 @@ namespace Woodev\Tests\Unit\Shipping {
 			Functions\when( 'is_admin' )->justReturn( false );
 			Functions\when( 'get_option' )->alias( fn( $name, $default = false ) => $this->options[ $name ] ?? $default );
 			Functions\when( 'wp_unslash' )->returnArg( 1 );
+			// the effective package values read the store's default dimensions (#955), a settings handler
+			Functions\when( 'wp_parse_args' )->alias(
+				static function ( $args, $defaults = [] ) {
+					return array_merge( (array) $defaults, (array) $args );
+				}
+			);
+			\Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab::reset_for_tests();
 			Functions\when( 'apply_filters' )->alias(
 				function ( $tag, $value = null, ...$args ) {
 					return isset( $this->filters[ $tag ] ) ? ( $this->filters[ $tag ] )( $value, ...$args ) : $value;
 				}
 			);
 			Functions\when( 'do_action' )->justReturn( null );
+		}
+
+		/** @return void */
+		protected function tearDown(): void {
+			\Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab::reset_for_tests();
+			parent::tearDown();
 		}
 
 		/**
@@ -622,6 +635,66 @@ namespace Woodev\Tests\Unit\Shipping {
 			$product->shouldReceive( 'is_virtual' )->andReturn( $virtual );
 
 			return [ $this->package( [ 'contents' => [ 'a' => [ 'product_id' => 10, 'variation_id' => 0, 'quantity' => 1, 'data' => $product ] ] ] ), $product ];
+		}
+
+		/**
+		 * A product with no dimensions of its own, in a cart line, as the cache reads it.
+		 *
+		 * @param array<string,string> $own the product's own values by `l`, `w`, `h`, `kg`.
+		 * @return array the package.
+		 */
+		private function package_with_dimensions( array $own ): array {
+			$product = Mockery::mock( 'WC_Product' );
+			$product->shouldReceive( 'get_length' )->andReturn( $own['l'] ?? '' );
+			$product->shouldReceive( 'get_width' )->andReturn( $own['w'] ?? '' );
+			$product->shouldReceive( 'get_height' )->andReturn( $own['h'] ?? '' );
+			$product->shouldReceive( 'get_weight' )->andReturn( $own['kg'] ?? '' );
+			$product->shouldReceive( 'get_shipping_class_id' )->andReturn( 0 );
+			$product->shouldReceive( 'is_virtual' )->andReturn( false );
+
+			return $this->package( [ 'contents' => [ 'a' => [ 'product_id' => 10, 'variation_id' => 0, 'quantity' => 1, 'data' => $product ] ] ] );
+		}
+
+		/**
+		 * #955: the key follows what is PACKED. A changed store default is a new key for a product that
+		 * relies on it, and a product that spells the default out shares the key of one that relies on it.
+		 *
+		 * @return void
+		 */
+		public function test_key_reflects_the_effective_dimensions_with_the_store_defaults(): void {
+			$method = $this->method();
+
+			$bare = $this->package_with_dimensions( [] );
+			$none = $this->key( $method, $bare );
+
+			$this->options['woodev_default_dimensions_default_length'] = '30';
+			\Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab::reset_for_tests();
+			$with_default = $this->key( $method, $bare );
+
+			$this->assertNotNull( $none );
+			$this->assertNotSame( $none, $with_default, 'a default length is a new key for a product without one' );
+
+			$this->assertSame(
+				$with_default,
+				$this->key( $method, $this->package_with_dimensions( [ 'l' => '30' ] ) ),
+				'a product with the default spelled out packs the same'
+			);
+			$this->assertNotSame(
+				$with_default,
+				$this->key( $method, $this->package_with_dimensions( [ 'l' => '31' ] ) ),
+				'a product with its own length does not follow the default'
+			);
+
+			$own_before = $this->key( $method, $this->package_with_dimensions( [ 'l' => '31' ] ) );
+
+			$this->options['woodev_default_dimensions_default_length'] = '40';
+			\Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab::reset_for_tests();
+			$this->assertNotSame( $with_default, $this->key( $method, $bare ), 'a changed default changes the key' );
+			$this->assertSame(
+				$own_before,
+				$this->key( $method, $this->package_with_dimensions( [ 'l' => '31' ] ) ),
+				'a product with its own length is unaffected by the default'
+			);
 		}
 
 		/** @return void */
