@@ -391,6 +391,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 * @since 1.4.0
 		 * @since 2.0.2 A carrier exception hides the method instead of reaching the cart, and fires
 		 *              {@see 'woodev_shipping_method_rate_calculation_failed'}.
+		 * @since 2.0.2 A successful rate is cached for a few minutes ({@see Shipping_Rate_Cache}, #958); a
+		 *              failure or an empty result never is.
 		 */
 		final public function calculate_shipping( $package = [] ): void {
 
@@ -441,9 +443,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 
 			$rate = $pre_calculated_rate instanceof Shipping_Rate ? $pre_calculated_rate : null;
 
+			// A rate a pre-filter supplied is its owner's business; the framework cache only fronts the carrier call.
+			$rate_cache = null === $rate ? new Shipping_Rate_Cache() : null;
+
+			if ( null !== $rate_cache ) {
+				$rate = $rate_cache->get( $this, $package );
+			}
+
 			if ( null === $rate ) {
 				try {
 					$rate = $this->calculate_rate( $package );
+
+					// Only a calculation that returned a rate is kept — a failure (below) and a «no rate» answer never are.
+					if ( null !== $rate_cache && null !== $rate ) {
+						$rate_cache->put( $this, $package, $rate );
+					}
 				} catch ( \Woodev_Plugin_Exception $exception ) {
 					$rate = null;
 

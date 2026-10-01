@@ -139,6 +139,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 			// base shipping method and specializations
 			require_once $path . '/class-shipping-rate.php';
+			require_once $path . '/class-shipping-rate-cache.php';
 			require_once $path . '/class-shipping-method.php';
 			require_once $path . '/class-shipping-method-courier.php';
 			require_once $path . '/class-shipping-method-pickup.php';

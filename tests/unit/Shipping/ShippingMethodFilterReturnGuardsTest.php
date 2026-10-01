@@ -333,6 +333,13 @@ namespace Woodev\Tests\Unit\Shipping {
 				}
 			);
 			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			// calculate_shipping() fronts the carrier call with the rate cache (#958); a miss that stores nothing
+			// keeps these tests about the guards, not the cache (Shipping_Rate_CacheTest owns the cache).
+			Functions\when( 'get_transient' )->justReturn( false );
+			Functions\when( 'set_transient' )->justReturn( true );
+			Functions\when( 'get_woocommerce_currency' )->justReturn( 'RUB' );
+			Functions\when( 'wp_json_encode' )->alias( 'json_encode' );
 			Functions\when( 'wp_parse_args' )->alias(
 				static function ( $args, $defaults = [] ) {
 					return array_merge( $defaults, (array) $args );

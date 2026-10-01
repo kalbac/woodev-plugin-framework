@@ -213,6 +213,11 @@ namespace Woodev\Tests\Unit\Shipping {
 
 			Functions\when( 'is_admin' )->justReturn( false );
 			Functions\when( 'get_option' )->justReturn( null );
+			// calculate_shipping() fronts the carrier call with the rate cache (#958): a miss that stores nothing.
+			Functions\when( 'get_transient' )->justReturn( false );
+			Functions\when( 'set_transient' )->justReturn( true );
+			Functions\when( 'get_woocommerce_currency' )->justReturn( 'RUB' );
+			Functions\when( 'wp_json_encode' )->alias( 'json_encode' );
 			// the Store API detection (#949) reads the request URI through it
 			Functions\when( 'wp_unslash' )->returnArg( 1 );
 
