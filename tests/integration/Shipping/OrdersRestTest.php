@@ -459,22 +459,28 @@ class OrdersRestTest extends TestCase {
 	}
 
 	/**
-	 * #1011: «Новые» is WORK TO DO — the same set as the menu badge. A cancelled or failed order
-	 * nobody exported is listed under «Все» but counted and listed under «Новые» never, unless a
-	 * status filter asks for exactly that.
+	 * #1011 / #1024: «Новые» is WORK TO DO — the same set as the menu badge: an order nobody exported
+	 * AND whose status can be exported (`Order_Actions::EXPORTABLE_STATUSES`). A cancelled, failed,
+	 * completed or refunded order nobody exported is listed under «Все» but counted and listed under
+	 * «Новые» never; an explicit status filter applies on top of the scope, never past it.
 	 */
-	public function test_the_new_scope_is_work_to_do_and_leaves_cancelled_and_failed_orders_out(): void {
+	public function test_the_new_scope_is_work_to_do_and_counts_only_exportable_statuses(): void {
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'shop_manager' ] ) );
 
-		$new = $this->create_marked_order( self::CDEK_MARKER );
+		$new     = $this->create_marked_order( self::CDEK_MARKER );
+		$on_hold = $this->create_marked_order( self::CDEK_MARKER );
+		$on_hold->set_status( 'on-hold' );
+		$on_hold->save();
 
-		$cancelled = $this->create_marked_order( self::CDEK_MARKER );
-		$cancelled->set_status( 'cancelled' );
-		$cancelled->save();
+		$not_work = [];
 
-		$failed = $this->create_marked_order( self::CDEK_MARKER );
-		$failed->set_status( 'failed' );
-		$failed->save();
+		foreach ( [ 'cancelled', 'failed', 'completed', 'refunded' ] as $status ) {
+			$order = $this->create_marked_order( self::CDEK_MARKER );
+			$order->set_status( $status );
+			$order->save();
+
+			$not_work[ $status ] = $order;
+		}
 
 		$request = new WP_REST_Request( 'GET', '/woodev/v1/shipping/orders' );
 		$request->set_param( 'is_exported', false );
@@ -483,19 +489,97 @@ class OrdersRestTest extends TestCase {
 		$ids  = array_column( $data['rows'], 'id' );
 
 		$this->assertContains( $new->get_id(), $ids );
-		$this->assertNotContains( $cancelled->get_id(), $ids );
-		$this->assertNotContains( $failed->get_id(), $ids );
+		$this->assertContains( $on_hold->get_id(), $ids );
 
-		// The scope links describe the tables they lead to: «Все» holds all three, «Новые» one.
-		$this->assertSame( 3, $data['scope_counts']['all'] );
-		$this->assertSame( 1, $data['scope_counts']['new'] );
+		foreach ( $not_work as $status => $order ) {
+			$this->assertNotContains( $order->get_id(), $ids, "an unexported {$status} order is not work." );
+		}
 
+		// The scope links describe the tables they lead to: «Все» holds all six, «Новые» two.
+		$this->assertSame( 6, $data['scope_counts']['all'] );
+		$this->assertSame( 2, $data['scope_counts']['new'] );
+
+		// An explicit status filter applies on top of the scope: an exportable one narrows it …
 		$explicit = new WP_REST_Request( 'GET', '/woodev/v1/shipping/orders' );
 		$explicit->set_param( 'is_exported', false );
-		$explicit->set_param( 'status', [ 'cancelled' ] );
+		$explicit->set_param( 'status', [ 'on-hold', 'completed' ] );
 		$explicit_ids = array_column( rest_get_server()->dispatch( $explicit )->get_data()['rows'], 'id' );
 
-		$this->assertContains( $cancelled->get_id(), $explicit_ids );
+		$this->assertSame( [ $on_hold->get_id() ], $explicit_ids );
+
+		// … and one naming no exportable status selects nothing.
+		$none = new WP_REST_Request( 'GET', '/woodev/v1/shipping/orders' );
+		$none->set_param( 'is_exported', false );
+		$none->set_param( 'status', [ 'cancelled' ] );
+
+		$this->assertSame( [], rest_get_server()->dispatch( $none )->get_data()['rows'] );
+
+		// «Все» still reaches the completed order.
+		$all = new WP_REST_Request( 'GET', '/woodev/v1/shipping/orders' );
+
+		$this->assertContains( $not_work['completed']->get_id(), array_column( rest_get_server()->dispatch( $all )->get_data()['rows'], 'id' ) );
+	}
+
+	/**
+	 * #1024 round 2: the «new» scope is an AND gate on top of `match=any`. A status leaf outside the
+	 * exportable statuses is dead — the OR goes on with its other leg — and an empty status intersection
+	 * must never widen into «every status» (the #928 fail-open): a cancelled and a completed order that
+	 * satisfy the OTHER leg stay out of «Новые».
+	 */
+	public function test_the_new_scope_under_match_any_with_an_empty_status_intersection_stays_gated(): void {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'shop_manager' ] ) );
+
+		$marker            = '_woodev_test_new_any_marker';
+		$tracking_meta_key = '_woodev_test_new_any_tracking';
+
+		Orders_Registry::instance()->register_provider(
+			Orders_Provider::create(
+				'new_any_carrier',
+				'New Any Carrier',
+				$marker,
+				[ 'new_any_carrier' ],
+				[ 'tracking_meta_key' => $tracking_meta_key ]
+			)
+		);
+
+		$GLOBALS['wp_rest_server'] = null;
+		rest_get_server();
+
+		$make = static function ( string $status, bool $with_tracking ) use ( $marker, $tracking_meta_key ): \WC_Order {
+			$order = wc_create_order();
+			$order->set_status( $status );
+			$order->update_meta_data( $marker, '1' );
+
+			if ( $with_tracking ) {
+				$order->update_meta_data( $tracking_meta_key, 'TRACK-' . $status );
+			}
+
+			$order->save();
+
+			return $order;
+		};
+
+		$exportable_tracked   = $make( 'processing', true );
+		$exportable_untracked = $make( 'processing', false );
+		$cancelled_tracked    = $make( 'cancelled', true );
+		$completed_tracked    = $make( 'completed', true );
+
+		$request = new WP_REST_Request( 'GET', '/woodev/v1/shipping/orders' );
+		$request->set_param( 'carrier', 'new_any_carrier' );
+		$request->set_param( 'is_exported', false );
+		$request->set_param( 'match', 'any' );
+		$request->set_param( 'status', [ 'cancelled' ] );
+		$request->set_param( 'has_tracking', true );
+
+		$response = rest_get_server()->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+
+		$ids = array_column( $response->get_data()['rows'], 'id' );
+
+		$this->assertSame( [ $exportable_tracked->get_id() ], $ids, 'only the exportable order satisfying the live leg is «new»' );
+		$this->assertNotContains( $exportable_untracked->get_id(), $ids );
+		$this->assertNotContains( $cancelled_tracked->get_id(), $ids, 'the status leaf names it, but nothing outside the exportable statuses is «new»' );
+		$this->assertNotContains( $completed_tracked->get_id(), $ids, 'the OTHER leg matches it, but the scope gate still holds' );
 	}
 
 	public function test_an_invalid_delivery_status_is_a_400(): void {

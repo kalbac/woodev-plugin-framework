@@ -33,9 +33,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 	 * `wc-failed`; the v2 page is an order list, and a cancelled order that vanished from
 	 * it also hid the «not cancelled at the carrier» marker (#1007). The one exception is
 	 * the «new» scope (`is_exported = false` — the «Новые» link and the menu badge, which
-	 * both count WORK TO DO): it keeps {@see self::WORK_EXCLUDED_STATUSES} out, so a
-	 * cancelled or failed order nobody exported is not work. An explicit `status` /
-	 * `status_not` request overrides either default entirely.
+	 * both count WORK TO DO): it is narrowed to {@see Order_Actions::EXPORTABLE_STATUSES}
+	 * (#1024, operator, 01.10.2026), the very list the «Выгрузить» button reads, so an
+	 * unexported order that cannot be exported (cancelled, failed, completed, refunded…)
+	 * is not work and the tab, the badge and the button cannot disagree. Those orders
+	 * stay under «Все». An explicit `status` / `status_not` request overrides the DEFAULT
+	 * status list, but under the «new» scope it still applies on top of that narrowing
+	 * (the intersection), never past it.
 	 *
 	 * **The scope does not travel as a `meta_query`** (#928; it did through s139). One
 	 * `meta_query`-shaped tree is still BUILT ({@see self::build_meta_query()}) — it is
@@ -71,18 +75,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 
 		/** @var string `match` request value: at least one advanced filter must hold (#843). */
 		const MATCH_ANY = 'any';
-
-		/**
-		 * Order statuses the «new» scope (`is_exported = false`) leaves out of its default
-		 * status list (#1011): an order that was cancelled or failed before anybody exported
-		 * it is not work to do, so it counts neither in the menu badge nor under «Новые».
-		 * The default view without that scope does NOT use this list — it shows every status.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @var string[]
-		 */
-		const WORK_EXCLUDED_STATUSES = [ 'wc-cancelled', 'wc-failed' ];
 
 		/**
 		 * Custom query var carrying the marker meta keys in scope, for the legacy CPT
@@ -183,9 +175,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 		 *     @type string[] $status              native WC order statuses ('is'), with or without the
 		 *                                         `wc-` prefix. Omitted or empty keeps the default status
 		 *                                         list (#1011: EVERY status — except under the «new»
-		 *                                         scope, `$is_exported` false, which leaves out
-		 *                                         {@see self::WORK_EXCLUDED_STATUSES}).
-		 *                                         Recognized values override that default entirely.
+		 *                                         scope, `$is_exported` false, which is narrowed to
+		 *                                         {@see Order_Actions::EXPORTABLE_STATUSES}, #1024).
+		 *                                         Recognized values override that default entirely —
+		 *                                         except that under the «new» scope they are
+		 *                                         intersected with the exportable statuses, so a
+		 *                                         request naming none of them narrows to nothing.
 		 *                                         A non-empty request in which NOTHING is recognized
 		 *                                         narrows to nothing, through the same
 		 *                                         {@see self::NO_MATCH_META_QUERY} an unrecognized
@@ -195,7 +190,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 		 *     @type string[] $status_not          native WC order statuses ('is not', #836) — "every
 		 *                                         valid status except these", computed against the FULL
 		 *                                         valid list (cancelled/failed included), never the
-		 *                                         «new» scope's narrower default. This is a native `status`
+		 *                                         «new» scope's narrower default (the «new» scope
+		 *                                         still intersects the result with the exportable
+		 *                                         statuses). This is a native `status`
 		 *                                         arg, not a meta clause — order status lives on the
 		 *                                         order itself. Ignored when `$status` is also present.
 		 *     @type string   $delivery_status     one of
@@ -228,6 +225,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 		 *                                         list instead of carrying the requested statuses (it
 		 *                                         would AND them back on); a status request nothing in
 		 *                                         which is real makes just that leaf match nothing.
+		 *                                         The «new» scope (`$is_exported` false, #1024) is an
+		 *                                         AND gate on top of EVERY match mode: outside
+		 *                                         {@see Order_Actions::EXPORTABLE_STATUSES} nothing is
+		 *                                         «new». So under `'any'` the status leaf is the
+		 *                                         requested statuses ∩ the exportable ones; an empty
+		 *                                         intersection is a leaf that matches nothing — the OR
+		 *                                         goes on with its other legs, and with none left
+		 *                                         selects nothing, never «every order».
 		 *     @type bool     $is_exported         present (any value) => filters on whether the matched
 		 *                                         carrier's own carrier-order-id meta exists (SP-10 #841)
 		 *                                         — i.e. whether the order has ever been exported to the
@@ -247,7 +252,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 
 			$args = [
 				'type'     => wc_get_order_types( 'view-orders' ),
-				'status'   => $this->default_statuses( $request ),
+				'status'   => $this->default_statuses(),
 				'limit'    => $per_page,
 				'paged'    => $page,
 				'orderby'  => $orderby,
@@ -275,24 +280,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 			 * An empty status ARRAY is worse still: HPOS's `OrdersTableQuery::sanitize_status()`
 			 * expands it into every valid status.
 			 */
-			$requested_statuses     = $this->resolve_requested_statuses( $request );
-			$status_matches_nothing = $this->status_empties_scope( $request );
+			$native_statuses        = $this->native_statuses( $request );
+			$status_matches_nothing = [] === $native_statuses || $this->status_empties_scope( $request );
 
-			if ( null !== $requested_statuses && $this->is_or_match( $request ) ) {
-				/*
-				 * #843, `match=any`: the status filter is a LEAF inside the OR of the id
-				 * query, so the native `status` arg must NOT carry it too — that would AND
-				 * it back on and turn «Любое» into «Все». The native arg is widened to the
-				 * FULL valid list, the very list `status_not` computes against (cancelled /
-				 * failed included), so the leaf alone decides which statuses are shown. It
-				 * is widened even when nothing in the request is a real status: that leaf
-				 * then matches nothing and the OR goes on with the other filters, over the
-				 * whole table rather than the «new» scope's default, because a status filter
-				 * WAS asked for and that default is what an absent one falls back to.
-				 */
-				$args['status'] = array_keys( wc_get_order_statuses() );
-			} elseif ( null !== $requested_statuses && ! $status_matches_nothing ) {
-				$args['status'] = $requested_statuses;
+			/*
+			 * ⚠ Never an EMPTY array into `wc_get_orders()`: both datastores read it as "every
+			 * status" (#928). An empty list is `$status_matches_nothing` — it empties the provider
+			 * scope below, and the status arg keeps its default.
+			 *
+			 * #1024: inside the «new» scope the list is cut to the exportable statuses whatever it
+			 * was — the default, an explicit request, or the list widened under `match=any` — an AND
+			 * gate in every match mode; see {@see self::native_statuses()}.
+			 */
+			if ( [] !== $native_statuses ) {
+				$args['status'] = $native_statuses;
 			}
 
 			$scope = $this->build_scope( $request, $status_matches_nothing );
@@ -412,6 +413,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 				$requested_statuses = $this->resolve_requested_statuses( $request );
 
 				if ( null !== $requested_statuses ) {
+					// #1024: inside the «new» scope the leaf is the requested statuses ∩ the exportable
+					// ones. Nothing outside them is «new» whatever the OR says, so an empty
+					// intersection is a leaf that matches nothing — it leaves the OR (see
+					// `any_of()`), which goes on with its other legs; with none left, nothing matches.
+					if ( $this->is_new_scope( $request ) ) {
+						$requested_statuses = array_values( array_intersect( $requested_statuses, self::exportable_statuses() ) );
+					}
+
 					$filters[] = self::order_status_part( $requested_statuses );
 				}
 
@@ -469,9 +478,61 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 		}
 
 		/**
-		 * Whether a status request nothing in which is real empties the PROVIDER scope
-		 * (#837 defect 3). Only under `all`: under an OR that request is one leaf that
-		 * matches nothing, and the OR goes on with the others.
+		 * The native `status` arg of a request — the list `wc_get_orders()` filters on.
+		 *
+		 * - no status request: {@see self::default_statuses()};
+		 * - `match=any` with a status request ({@see self::is_or_match()}): the FULL valid
+		 *   list (#843) — the status is a leaf of the OR instead, and carrying it here too
+		 *   would AND it back on;
+		 * - otherwise: the recognised requested statuses (`[]` when nothing in the request is
+		 *   real, #837 defect 3).
+		 *
+		 * Inside the «new» scope (#1024) the result is then cut to
+		 * {@see self::exportable_statuses()} — an AND gate in EVERY match mode, so an
+		 * explicit filter can only narrow it further.
+		 *
+		 * The result CAN be empty, and an empty list must never reach `wc_get_orders()`
+		 * (it expands to every status, #928): {@see self::build_args()} turns it into the
+		 * shared "matches nothing" mechanism, as {@see self::status_empties_scope()} does for
+		 * the pure tree. Under `match=any` the list is widened even when nothing in the
+		 * request is a real status — that leaf then matches nothing and the OR goes on with
+		 * the other filters, over the whole table rather than the default view.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string,mixed> $request see {@see self::build_args()}.
+		 * @return string[] `wc-`-prefixed statuses.
+		 */
+		private function native_statuses( array $request ): array {
+			$requested = $this->resolve_requested_statuses( $request );
+
+			if ( null === $requested ) {
+				$statuses = $this->default_statuses();
+			} elseif ( $this->is_or_match( $request ) ) {
+				$statuses = array_keys( wc_get_order_statuses() );
+			} else {
+				$statuses = $requested;
+			}
+
+			if ( $this->is_new_scope( $request ) ) {
+				$statuses = array_values( array_intersect( $statuses, self::exportable_statuses() ) );
+			}
+
+			return $statuses;
+		}
+
+		/**
+		 * Whether the status part of a request empties the PROVIDER scope — the one "matches
+		 * nothing" mechanism, never an empty `status` arg (#928) — without reading the
+		 * default view (the pure tree of {@see self::build_meta_query()} must not):
+		 *
+		 * - a status request nothing in which is real, under `all` (#837 defect 3). Under an
+		 *   OR that request is one leaf that matches nothing, and the OR goes on with the
+		 *   others;
+		 * - inside the «new» scope (#1024), a status request naming real statuses none of
+		 *   which is exportable, under `all`. Under `match=any` the same request is a dead
+		 *   leaf instead ({@see self::build_scope()}): the gate still holds, the OR goes on;
+		 * - inside the «new» scope, a shop that has none of the exportable statuses at all.
 		 *
 		 * @since 2.0.2
 		 *
@@ -479,7 +540,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 		 * @return bool
 		 */
 		private function status_empties_scope( array $request ): bool {
-			return [] === $this->resolve_requested_statuses( $request ) && ! $this->is_or_match( $request );
+			$requested = $this->resolve_requested_statuses( $request );
+			$new_scope = $this->is_new_scope( $request );
+
+			if ( null === $requested || $this->is_or_match( $request ) ) {
+				// The native list is the default view, or the widened valid list: it is empty
+				// only when the «new» scope's gate leaves nothing of it.
+				return $new_scope && [] === array_intersect( array_keys( wc_get_order_statuses() ), self::exportable_statuses() );
+			}
+
+			return [] === ( $new_scope ? array_intersect( $requested, self::exportable_statuses() ) : $requested );
 		}
 
 		/**
@@ -1315,23 +1385,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 		 *   too. A status with NO post status object registered is kept: HPOS custom statuses
 		 *   may lack one, and only an object saying `false` is a reason to hide.
 		 * - The «new» scope (`is_exported` present and false — the «Новые» link and the menu
-		 *   badge) counts WORK TO DO, so it leaves out {@see self::WORK_EXCLUDED_STATUSES}.
-		 *   Both callers reach this through {@see self::build_args()}, which is what makes
-		 *   «Новые (7)» and the badge agree by construction.
+		 *   badge) counts WORK TO DO, so {@see self::build_args()} cuts whatever status list
+		 *   it ends up with — this default included — down to
+		 *   {@see Order_Actions::EXPORTABLE_STATUSES} (#1024), the statuses the «Выгрузить»
+		 *   button is offered for. Both callers reach it through `build_args()`, which is what
+		 *   makes «Новые (7)» and the badge agree by construction.
 		 *
 		 * An explicit `status` / `status_not` request never reaches this list — it is
 		 * validated against the FULL {@see wc_get_order_statuses()}, so any status, drafts
 		 * included, can still be asked for; see {@see self::resolve_requested_statuses()}.
 		 *
-		 * `is_exported` is read the way {@see self::build_scope()} reads it — presence, then
-		 * `wc_string_to_bool()` — so a request cannot be «new» here and «exported» there.
-		 *
 		 * @since 2.0.2
 		 *
-		 * @param array<string,mixed> $request see {@see self::build_args()}.
 		 * @return string[] `wc-`-prefixed statuses.
 		 */
-		private function default_statuses( array $request ): array {
+		private function default_statuses(): array {
 			$statuses = array_values(
 				array_filter(
 					array_keys( wc_get_order_statuses() ),
@@ -1343,11 +1411,41 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 				)
 			);
 
-			if ( array_key_exists( 'is_exported', $request ) && ! wc_string_to_bool( $request['is_exported'] ) ) {
-				$statuses = array_values( array_diff( $statuses, self::WORK_EXCLUDED_STATUSES ) );
-			}
-
 			return $statuses;
+		}
+
+		/**
+		 * Whether the request is the «new» scope: `is_exported` present and false (#1024).
+		 *
+		 * Read the way {@see self::build_scope()} reads it — presence, then
+		 * `wc_string_to_bool()` — so a request cannot be «new» in one place and «exported» in
+		 * another.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string,mixed> $request see {@see self::build_args()}.
+		 * @return bool
+		 */
+		private function is_new_scope( array $request ): bool {
+			return array_key_exists( 'is_exported', $request ) && ! wc_string_to_bool( $request['is_exported'] );
+		}
+
+		/**
+		 * {@see Order_Actions::EXPORTABLE_STATUSES} as `wc-`-prefixed native statuses — the single
+		 * source of the «new» scope's status set (#1024), so the tab, the badge and the
+		 * «Выгрузить» button cannot disagree.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string[]
+		 */
+		private static function exportable_statuses(): array {
+			return array_map(
+				static function ( string $status ): string {
+					return 'wc-' . $status;
+				},
+				Order_Actions::EXPORTABLE_STATUSES
+			);
 		}
 
 		/**

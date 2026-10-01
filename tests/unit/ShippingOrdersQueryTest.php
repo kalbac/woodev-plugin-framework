@@ -29,6 +29,7 @@
 namespace Woodev\Tests\Unit;
 
 use Brain\Monkey\Functions;
+use Woodev\Framework\Shipping\Admin\Orders\Order_Actions;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Query;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
@@ -511,7 +512,8 @@ class ShippingOrdersQueryTest extends TestCase {
 
 		$args = $this->query_with_hpos( true )->build_args( [ 'is_exported' => false ] );
 
-		$this->assertSame( [ 'wc-pending', 'wc-custom' ], $args['status'] );
+		// A custom status is not exportable either (#1024), so only `pending` survives of this shop's four.
+		$this->assertSame( [ 'wc-pending' ], $args['status'] );
 	}
 
 	/** The explicit filter is validated against the FULL status list, so the hidden status stays reachable. */
@@ -539,14 +541,70 @@ class ShippingOrdersQueryTest extends TestCase {
 	}
 
 	/**
-	 * «Новые» and the menu badge count WORK TO DO: a cancelled or failed order nobody exported
-	 * is not. Both ask `Orders_Query` with `is_exported = false`, so one rule here keeps them in
-	 * agreement — the badge request is {@see ShippingOrdersRegistryTest::badge_request()}.
+	 * «Новые» and the menu badge count WORK TO DO: an unexported order that cannot be exported
+	 * (cancelled, failed — and, #1024, completed or refunded) is not. Both ask `Orders_Query`
+	 * with `is_exported = false`, so one rule here keeps them in agreement — the badge request
+	 * is {@see ShippingOrdersRegistryTest::badge_request()}.
 	 */
 	public function test_the_new_scope_keeps_cancelled_and_failed_out_of_its_default_status_list(): void {
 		$args = $this->query_with_hpos( true )->build_args( [ 'is_exported' => false ] );
 
 		$this->assertSame( [ 'wc-pending', 'wc-processing' ], $args['status'] );
+	}
+
+	/**
+	 * A shop with every status the framework page can meet — the four the default stub knows plus
+	 * `on-hold`, `completed` and `refunded`.
+	 */
+	private function stub_a_shop_with_every_status(): void {
+		Functions\when( 'wc_get_order_statuses' )->justReturn(
+			[
+				'wc-pending'    => 'Pending',
+				'wc-processing' => 'Processing',
+				'wc-on-hold'    => 'On hold',
+				'wc-completed'  => 'Completed',
+				'wc-cancelled'  => 'Cancelled',
+				'wc-refunded'   => 'Refunded',
+				'wc-failed'     => 'Failed',
+			]
+		);
+	}
+
+	/** #1024 (operator, 01.10.2026): a completed or refunded order nobody exported is not work either. */
+	public function test_the_new_scope_leaves_out_completed_and_refunded_but_the_default_view_keeps_them(): void {
+		$this->stub_a_shop_with_every_status();
+
+		$query = $this->query_with_hpos( true );
+		$new   = $query->build_args( [ 'is_exported' => false ] )['status'];
+		$all   = $query->build_args( [] )['status'];
+
+		$this->assertSame( [ 'wc-pending', 'wc-processing', 'wc-on-hold' ], $new );
+		$this->assertNotContains( 'wc-completed', $new );
+		$this->assertNotContains( 'wc-refunded', $new );
+		$this->assertContains( 'wc-completed', $all );
+		$this->assertContains( 'wc-refunded', $all );
+		$this->assertContains( 'wc-cancelled', $all );
+		$this->assertContains( 'wc-failed', $all );
+	}
+
+	/**
+	 * The «new» set IS `Order_Actions::EXPORTABLE_STATUSES` (prefixed) — the list the «Выгрузить» button
+	 * reads — not a second hand-typed list. Pinned on a shop that registers every status, so the
+	 * intersection can only be as wide as the constant says.
+	 */
+	public function test_the_new_scope_is_exactly_the_exportable_statuses(): void {
+		$this->stub_a_shop_with_every_status();
+
+		$expected = array_map(
+			static function ( string $status ): string {
+				return 'wc-' . $status;
+			},
+			Order_Actions::EXPORTABLE_STATUSES
+		);
+		$actual   = $this->query_with_hpos( true )->build_args( [ 'is_exported' => false ] )['status'];
+
+		$this->assertEqualsCanonicalizing( $expected, $actual );
+		$this->assertNotSame( [], $actual );
 	}
 
 	/** The scope is read the way `build_scope()` reads it — `wc_string_to_bool()` — so `'false'` is «new» too. */
@@ -556,14 +614,52 @@ class ShippingOrdersQueryTest extends TestCase {
 		$this->assertSame( [ 'wc-pending', 'wc-processing' ], $args['status'] );
 	}
 
-	/** An explicit status filter beats the «new» scope's default, exactly as it beats the default view. */
-	public function test_an_explicit_status_overrides_the_new_scope_default_too(): void {
+	/** #1024: an explicit status filter applies ON TOP of the «new» scope — the intersection, never past it. */
+	public function test_an_explicit_status_is_intersected_with_the_new_scope(): void {
+		$this->stub_a_shop_with_every_status();
+
 		$args = $this->query_with_hpos( true )->build_args(
+			[
+				'is_exported' => false,
+				'status'      => [ 'wc-processing', 'wc-completed' ],
+			]
+		);
+
+		$this->assertSame( [ 'wc-processing' ], $args['status'] );
+	}
+
+	/** `status_not` is the complement of the full list; the «new» scope still cuts it down to the exportable ones. */
+	public function test_status_not_is_intersected_with_the_new_scope(): void {
+		$this->stub_a_shop_with_every_status();
+
+		$args = $this->query_with_hpos( true )->build_args(
+			[
+				'is_exported' => false,
+				'status_not'  => [ 'wc-pending' ],
+			]
+		);
+
+		$this->assertSame( [ 'wc-processing', 'wc-on-hold' ], $args['status'] );
+	}
+
+	/** A status filter that names only non-exportable statuses selects nothing under «Новые». */
+	public function test_an_explicit_status_with_nothing_exportable_narrows_the_new_scope_to_nothing(): void {
+		$registry = $this->registry_with_one_provider();
+
+		$args = $this->query_with_hpos( true, $registry )->build_args(
 			[
 				'is_exported' => false,
 				'status'      => [ 'wc-cancelled' ],
 			]
 		);
+
+		$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $args['meta_query'] );
+		$this->assertArrayNotHasKey( 'post__in', $args );
+	}
+
+	/** The same explicit status without the «new» scope still reaches cancelled orders («Все»). */
+	public function test_an_explicit_cancelled_status_still_works_outside_the_new_scope(): void {
+		$args = $this->query_with_hpos( true )->build_args( [ 'status' => [ 'wc-cancelled' ] ] );
 
 		$this->assertSame( [ 'wc-cancelled' ], $args['status'] );
 	}
@@ -2195,6 +2291,188 @@ class ShippingOrdersQueryTest extends TestCase {
 		);
 
 		$this->assertSame( [ 'wc-pending', 'wc-processing', 'wc-cancelled', 'wc-failed' ], $args['status'] );
+	}
+
+	/** #1024: under «Любое» the widened native status list is still cut to the exportable statuses inside the «new» scope. */
+	public function test_match_any_inside_the_new_scope_is_still_limited_to_the_exportable_statuses(): void {
+		$args = $this->query_with_hpos( true, $this->registry_for_match() )->build_args(
+			[
+				'match'           => 'any',
+				'is_exported'     => false,
+				'delivery_status' => Delivery_Status::DELIVERED,
+				'status'          => [ 'processing', 'cancelled' ],
+			]
+		);
+
+		$this->assertSame( [ 'wc-pending', 'wc-processing' ], $args['status'] );
+	}
+
+	/**
+	 * #1024 round 2: under «Любое» inside the «new» scope a status leaf with an EMPTY exportable
+	 * intersection is dead — it leaves the OR, which goes on with the other legs. The scope is an AND
+	 * gate: the native status arg is never an empty array (WooCommerce reads one as EVERY status).
+	 */
+	public function test_match_any_in_the_new_scope_with_an_empty_status_intersection_drops_only_that_leaf(): void {
+		[ $scope, $delivery ] = $this->match_parts();
+
+		$query = $this->query_with_hpos( true, $this->registry_for_match() );
+		$args  = $query->build_args(
+			[
+				'match'           => 'any',
+				'is_exported'     => false,
+				'delivery_status' => Delivery_Status::DELIVERED,
+				'status'          => [ 'cancelled' ],
+			]
+		);
+
+		$this->assertSame( [ 'wc-pending', 'wc-processing' ], $args['status'], 'the gate holds; never an empty status array' );
+		$this->assertSame( [ 11, 12, 13 ], $args['post__in'], 'the other leg still selects rows' );
+		$this->assertSame( $scope, $query->resolved[0][1][0] );
+		$this->assertContains( $delivery, $query->resolved[0][1], 'the delivery leg stays' );
+		$this->assertStringNotContainsString( 'order_status', (string) wp_json_encode( $query->resolved[0][1] ), 'the dead status leaf is gone from the tree' );
+	}
+
+	/** The same request WITHOUT the «new» scope keeps its status leaf — so it is the gate, nothing else, that kills it above. */
+	public function test_match_any_outside_the_new_scope_keeps_the_cancelled_status_leaf(): void {
+		$query = $this->query_with_hpos( true, $this->registry_for_match() );
+		$query->build_args(
+			[
+				'match'           => 'any',
+				'delivery_status' => Delivery_Status::DELIVERED,
+				'status'          => [ 'cancelled' ],
+			]
+		);
+
+		$this->assertStringContainsString( 'wc-cancelled', (string) wp_json_encode( $query->resolved[0][1] ) );
+	}
+
+	/** The live status leaf of a partly-exportable request is narrowed to the exportable statuses inside the OR itself. */
+	public function test_match_any_in_the_new_scope_narrows_the_status_leaf_to_the_exportable_statuses(): void {
+		$query = $this->query_with_hpos( true, $this->registry_for_match() );
+		$query->build_args(
+			[
+				'match'           => 'any',
+				'is_exported'     => false,
+				'delivery_status' => Delivery_Status::DELIVERED,
+				'status'          => [ 'processing', 'cancelled' ],
+			]
+		);
+
+		$tree = (string) wp_json_encode( $query->resolved[0][1] );
+
+		$this->assertStringContainsString( 'wc-processing', $tree );
+		$this->assertStringNotContainsString( 'wc-cancelled', $tree );
+	}
+
+	/** Every leg dead — the empty status leaf included — selects NOTHING, on both datastores, never «every order». */
+	public function test_match_any_in_the_new_scope_with_every_leg_dead_selects_nothing(): void {
+		foreach ( [ true, false ] as $hpos ) {
+			Orders_Registry::instance()->reset_for_tests();
+			$registry = Orders_Registry::instance();
+			$registry->register_provider( $this->provider( 'bare', '_bare_marker' ) );
+
+			$query = $this->query_with_hpos( $hpos, $registry );
+			$args  = $query->build_args(
+				[
+					'match'           => 'any',
+					'is_exported'     => false,
+					'delivery_status' => Delivery_Status::IN_TRANSIT, // a bare carrier maps nothing.
+					'status'          => [ 'cancelled' ],
+				]
+			);
+
+			$this->assertArrayNotHasKey( 'post__in', $args );
+			$this->assertSame( [], $query->resolved, 'known to match nothing — the database is not asked' );
+			$this->assertNotSame( [], $args['status'] );
+
+			if ( $hpos ) {
+				$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $args['meta_query'] );
+			} else {
+				$this->assertSame( [], $args[ Orders_Query::QUERY_VAR_MARKER_KEYS ] );
+			}
+		}
+	}
+
+	/** Under `all` an empty exportable intersection still empties the whole result, whatever else is asked. */
+	public function test_match_all_in_the_new_scope_with_an_empty_status_intersection_selects_nothing(): void {
+		$query = $this->query_with_hpos( true, $this->registry_for_match() );
+		$args  = $query->build_args(
+			[
+				'match'           => 'all',
+				'is_exported'     => false,
+				'delivery_status' => Delivery_Status::DELIVERED,
+				'status'          => [ 'cancelled' ],
+			]
+		);
+
+		$this->assertArrayNotHasKey( 'post__in', $args );
+		$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $args['meta_query'] );
+		$this->assertSame( [], $query->resolved );
+		$this->assertNotSame( [], $args['status'], 'never an empty status array into wc_get_orders()' );
+	}
+
+	/**
+	 * The pure tree (`build_meta_query()`, which never reads the default view) says «nothing» for the
+	 * same request `build_args()` answers with the sentinel — the two cannot disagree.
+	 */
+	public function test_the_pure_tree_of_the_new_scope_with_an_empty_status_intersection_is_the_sentinel(): void {
+		$tree = $this->query_with_hpos( true, $this->registry_for_match() )->build_meta_query(
+			[
+				'is_exported'     => false,
+				'delivery_status' => Delivery_Status::DELIVERED,
+				'status'          => [ 'cancelled' ],
+			]
+		);
+
+		$this->assertContains( Orders_Query::NO_MATCH_META_QUERY, $tree );
+	}
+
+	/**
+	 * Every exportable status is hidden from the default view (`show_in_admin_all_list` false): the
+	 * «new» scope's native list is then empty although the shop HAS the statuses. It must narrow to
+	 * nothing, not fall back to the un-gated default view (completed / cancelled orders).
+	 */
+	public function test_the_new_scope_with_every_exportable_status_hidden_from_the_default_view_selects_nothing(): void {
+		Functions\when( 'get_post_status_object' )->alias(
+			static function ( string $status ): object {
+				return (object) [ 'show_in_admin_all_list' => ! in_array( $status, [ 'wc-pending', 'wc-processing', 'wc-on-hold' ], true ) ];
+			}
+		);
+
+		$query = $this->query_with_hpos( true, $this->registry_for_match() );
+		$args  = $query->build_args( [ 'is_exported' => false ] );
+
+		$this->assertArrayNotHasKey( 'post__in', $args );
+		$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $args['meta_query'] );
+		$this->assertSame( [], $query->resolved );
+		$this->assertNotSame( [], $args['status'] );
+	}
+
+	/** A shop that registers none of the exportable statuses has no «new» order — in every match mode, with a non-empty status arg. */
+	public function test_the_new_scope_of_a_shop_without_exportable_statuses_selects_nothing(): void {
+		Functions\when( 'wc_get_order_statuses' )->justReturn(
+			[
+				'wc-cancelled' => 'Cancelled',
+				'wc-failed'    => 'Failed',
+			]
+		);
+
+		foreach ( [ 'all', 'any' ] as $match ) {
+			$query = $this->query_with_hpos( true, $this->registry_for_match() );
+			$args  = $query->build_args(
+				[
+					'match'           => $match,
+					'is_exported'     => false,
+					'delivery_status' => Delivery_Status::DELIVERED,
+					'has_tracking'    => true,
+				]
+			);
+
+			$this->assertArrayNotHasKey( 'post__in', $args, $match );
+			$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $args['meta_query'], $match );
+			$this->assertSame( [], $query->resolved, $match );
+			$this->assertNotSame( [], $args['status'], $match );
+		}
 	}
 
 	/** A status request nothing in which is real: that leaf matches nothing, the OR goes on, providers are NOT emptied. */
