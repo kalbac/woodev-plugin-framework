@@ -41,10 +41,7 @@ use Woodev\Framework\Shipping\Admin\Orders\Order_Actions;
 use Woodev\Framework\Shipping\Admin\Orders\Order_Row_Builder;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
-use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
-use Woodev\Framework\Shipping\Location\Popular_Settlement_Store;
 use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
-use Woodev\Framework\Shipping\Order\Action_Result;
 use Woodev\Framework\Shipping\Order\Delivery_Status;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -83,21 +80,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 		/** @var Orders_Registry registry this metabox resolves providers/handlers through */
 		private Orders_Registry $registry;
 
-		/**
-		 * Popular-settlements store (#488) used to resolve the settlement + the
-		 * provider that produced it before the export action calls
-		 * {@see Abstract_Shipment_Handler::export()} — see
-		 * {@see self::resolve_popular_settlement_context()}.
-		 *
-		 * Always non-null after construction: a null/omitted constructor argument
-		 * defaults to the framework's shared instance
-		 * ({@see Location_Provider_Registry::popular_settlement_store()}) instead
-		 * of disabling enrolment.
-		 *
-		 * @var Popular_Settlement_Store
-		 */
-		private Popular_Settlement_Store $popular_settlement_store;
-
 		/** @var Order_Row_Builder|null lazily built; @see self::row_builder() */
 		private ?Order_Row_Builder $row_builder = null;
 
@@ -117,13 +99,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 		 *              or a field/title/action-name override — every one of those is
 		 *              now resolved per-order through {@see Orders_Provider}.
 		 *
-		 * @param Orders_Registry|null          $registry                 registry providers/handlers are resolved through; null resolves the framework's singleton
-		 * @param Popular_Settlement_Store|null $popular_settlement_store popular-settlements store (#488); null resolves the framework's shared instance
+		 * @since 2.0.2 Card #1016: no longer takes a popular-settlements store — the export's
+		 *              enrolment context is resolved by {@see Order_Actions::perform()}, the one dispatcher.
+		 *
+		 * @param Orders_Registry|null $registry registry providers/handlers are resolved through; null resolves the framework's singleton
 		 */
-		public function __construct( ?Orders_Registry $registry = null, ?Popular_Settlement_Store $popular_settlement_store = null ) {
+		public function __construct( ?Orders_Registry $registry = null ) {
 
-			$this->registry                 = $registry ?? Orders_Registry::instance();
-			$this->popular_settlement_store = $popular_settlement_store ?? Location_Provider_Registry::instance()->popular_settlement_store();
+			$this->registry = $registry ?? Orders_Registry::instance();
 		}
 
 		/**
@@ -444,8 +427,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 		 *
 		 * Resolves the order's provider the same way {@see self::add_meta_box()}
 		 * did — never trusting a posted provider id — and dispatches to
-		 * {@see self::perform_action()}, the metabox's sibling of
-		 * {@see \Woodev\Framework\Shipping\Rest_Api\Orders_Controller::dispatch_action()}.
+		 * {@see self::perform_action()}.
 		 *
 		 * @internal
 		 *
@@ -497,14 +479,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 		 * currently offer it, and classifying the outcome the same way
 		 * {@see \Woodev\Framework\Shipping\Rest_Api\Orders_Controller::perform_action()}
 		 * does: an exception is caught and logged, a handler return that means
-		 * failure is reported as one, and only then is the switch below (the
-		 * metabox's sibling of {@see \Woodev\Framework\Shipping\Rest_Api\Orders_Controller::dispatch_action()})
-		 * reached. Same three verbs, same `default:` extension point, so a carrier
-		 * plugin that hooks `woodev_shipping_perform_order_action` for its own extra
-		 * action (e.g. «Печать документа») works from EITHER surface without
-		 * change. Card #710 («Создать заказ») is explicitly out of scope here: if
-		 * it ever reaches the shared action set, its button flows through this
-		 * same `default:` branch unchanged, like any other carrier extra.
+		 * failure is reported as one. The call itself goes through
+		 * {@see Order_Actions::perform()} — the ONE dispatcher the row, bulk and REST routes
+		 * share (#1016) — so a carrier plugin that hooks `woodev_shipping_perform_order_action`
+		 * for its own extra action (e.g. «Печать документа») works from EITHER surface without
+		 * change, and a rule added to the dispatcher reaches this surface too. Card #710
+		 * («Создать заказ») is explicitly out of scope here: if it ever reaches the shared
+		 * action set, its button flows through the `default:` branch unchanged, like any
+		 * other carrier extra.
 		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 Round 2 (#856): recomputes the gate via
@@ -513,6 +495,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 		 *              checks the handler's return instead of assuming success —
 		 *              flashing a notice {@see self::render_action_notice()} shows
 		 *              on the redirect for every one of those outcomes.
+		 * @since 2.0.2 Card #1016: dispatches through {@see Order_Actions::perform()} instead of
+		 *              a private copy of its `switch`.
 		 *
 		 * @param Abstract_Shipment_Handler $handler  handler resolved for the order's carrier.
 		 * @param \WC_Order                 $order    the order.
@@ -531,7 +515,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 			}
 
 			try {
-				$result = $this->dispatch_action( $handler, $order, $action, $provider );
+				$result = $order_actions->perform( $handler, $order, $action, $provider );
 			} catch ( \Throwable $exception ) {
 				self::log_action_failure( $provider->get_id(), $action, $exception );
 
@@ -544,46 +528,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 				// The carrier's own reason, prefixed with its name — for the merchant only
 				// (#872, #608/#610). No text from the carrier → the generic sentence.
 				$this->flash_notice( $result->merchant_message( $provider->get_label(), self::action_failure_message( $action ) ) );
-			}
-		}
-
-		/**
-		 * Dispatches one action to the carrier's shipment handler, reporting whether
-		 * it succeeded — the metabox's sibling of
-		 * {@see \Woodev\Framework\Shipping\Rest_Api\Orders_Controller::dispatch_action()}.
-		 *
-		 * Every verb returns an {@see Action_Result} (card #872); a carrier response
-		 * with no id (card #860) is a failure with no text.
-		 *
-		 * @since 2.0.2
-		 * @since 2.0.2 Card #872: returns an {@see Action_Result}.
-		 *
-		 * @param Abstract_Shipment_Handler $handler  handler resolved for the order's carrier.
-		 * @param \WC_Order                 $order    the order.
-		 * @param string                    $action   one of {@see Order_Actions}' action ids.
-		 * @param Orders_Provider           $provider the matched carrier descriptor.
-		 * @return Action_Result
-		 */
-		private function dispatch_action( Abstract_Shipment_Handler $handler, \WC_Order $order, string $action, Orders_Provider $provider ): Action_Result {
-
-			switch ( $action ) {
-				case Order_Actions::EXPORT:
-					[ $settlement, $settlement_provider ] = $this->resolve_popular_settlement_context( $order );
-
-					return $handler->export( $order, $settlement, $settlement_provider );
-
-				case Order_Actions::CANCEL:
-					return $handler->cancel( $order );
-
-				case Order_Actions::UPDATE:
-					// A carrier overrides update(), so the framework marks the call from outside: it gets the «export» timeout (#954).
-					return \Woodev_API_Request_Purpose::run( \Woodev_API_Request_Purpose::EXPORT, fn() => $handler->update( $order ) );
-
-				default:
-					/** This filter is documented in class-orders-controller.php ({@see \Woodev\Framework\Shipping\Rest_Api\Orders_Controller::dispatch_action()}). */
-					$result = apply_filters( 'woodev_shipping_perform_order_action', Action_Result::failure(), $action, $order, $provider );
-
-					return $result instanceof Action_Result ? $result : Action_Result::failure();
 			}
 		}
 
@@ -700,35 +644,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 					\Woodev_API_Base::redact_secret_log_text( $exception->getMessage() )
 				)
 			);
-		}
-
-		/**
-		 * Resolves the popular-settlements enrolment context for an order about to
-		 * be exported — the settlement the customer picked at checkout (via
-		 * {@see Popular_Settlement_Store::recall_candidate()}) and the SAME
-		 * provider that produced it, looked up by the settlement's own
-		 * `provider_id()` via {@see Location_Provider_Registry::get_providers()}.
-		 *
-		 * Returns `[ null, null ]` when no candidate was recalled, or when the
-		 * provider that produced it is no longer registered — the export action
-		 * still runs, just without enrolment.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @param \WC_Order $order the order about to be exported
-		 *
-		 * @return array{0: \Woodev\Framework\Shipping\Location\Location_Record|null, 1: \Woodev\Framework\Shipping\Location\Location_Provider|null}
-		 */
-		protected function resolve_popular_settlement_context( \WC_Order $order ): array {
-			$settlement = $this->popular_settlement_store->recall_candidate( $order );
-
-			if ( null === $settlement ) {
-				return [ null, null ];
-			}
-
-			$provider = Location_Provider_Registry::instance()->get_providers()[ $settlement->provider_id() ] ?? null;
-
-			return [ $settlement, $provider ];
 		}
 
 		/**

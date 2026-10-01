@@ -17,8 +17,7 @@
  * Round 2 (#856, critic DO NOT MERGE finding): `perform_action()` — the
  * `handle_order_action()` sibling actually reached by a posted action, minus
  * the trailing `wp_safe_redirect()` + `exit` that makes `handle_order_action()`
- * itself unsafe to invoke from a unit test (same reasoning as
- * ShippingAdminOrderPopularSettlementContextTest) — must refuse an action the
+ * itself unsafe to invoke from a unit test — must refuse an action the
  * shared {@see Order_Actions::for_order()} gate does not offer instead of
  * dispatching it straight to the carrier handler, and must classify the
  * handler's outcome (empty export id, thrown exception) as a failure instead
@@ -453,9 +452,7 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 		//
 		// Invoked via reflection, never through handle_order_action(): that public
 		// method ends in wp_safe_redirect()+exit (a real WP admin-post handler),
-		// which would kill the test process — the same reasoning
-		// ShippingAdminOrderPopularSettlementContextTest documents for
-		// resolve_popular_settlement_context().
+		// which would kill the test process.
 		// -----------------------------------------------------------------------
 
 		/**
@@ -613,6 +610,79 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			Functions\expect( 'set_transient' )->never();
 
 			$this->invoke_perform_action( new Shipping_Admin_Order( Orders_Registry::instance() ), $handler, $order, Order_Actions::CANCEL, $provider );
+		}
+
+		// -----------------------------------------------------------------------
+		// #1016 — ONE dispatcher. The metabox no longer owns a copy of the action
+		// `switch`: what it enforces is what Order_Actions enforces, so a rule added
+		// there reaches this surface, and these tests fail if a private dispatcher
+		// that skips one comes back.
+		// -----------------------------------------------------------------------
+
+		/**
+		 * #1000 through the metabox: an order another manager is editing in the wizard is refused with
+		 * the lock's own sentence, and the carrier is never called — the same refusal the REST route
+		 * gives, because both recompute {@see Order_Actions::for_order()}.
+		 */
+		public function test_perform_action_refuses_an_order_another_manager_is_editing_and_never_reaches_the_carrier(): void {
+			$provider = $this->provider();
+			$handler  = $this->register_handler();
+
+			// Exported and in a cancellable state: without the lock CANCEL WOULD be offered.
+			$this->meta['_wc_cdek_order_id'] = 'CARRIER-1';
+			$order                            = $this->make_order( [ 'get_status' => 'processing' ] );
+
+			$this->capture_flashed_notices();
+
+			\Automattic\WooCommerce\Internal\Admin\Orders\EditLock::$locks[123] = [ 'time' => time(), 'user_id' => 8 ];
+			$user               = new \stdClass();
+			$user->ID           = 8;
+			$user->display_name = 'Мария';
+			Functions\when( 'get_user_by' )->justReturn( $user );
+
+			// No expectation on cancel(): Mockery fails the test if the handler is reached.
+			$this->invoke_perform_action( new Shipping_Admin_Order( Orders_Registry::instance() ), $handler, $order, Order_Actions::CANCEL, $provider );
+
+			$this->assertCount( 1, $this->flashed_notices );
+			$this->assertStringContainsString( 'Мария', $this->flashed_notices[0], 'the merchant is told WHO holds the order' );
+		}
+
+		/**
+		 * The performing itself is delegated: the admin order hands the call to
+		 * {@see Order_Actions::perform()} with exactly what it was given. A private copy of the
+		 * `switch` would call the handler directly and leave this expectation unmet.
+		 */
+		public function test_perform_action_dispatches_through_order_actions_perform(): void {
+			$provider = $this->provider();
+			$handler  = $this->register_handler();
+
+			$this->meta['_wc_cdek_order_id'] = 'CARRIER-1'; // exported => CANCEL is offered.
+			$order                            = $this->make_order( [ 'get_status' => 'processing' ] );
+
+			$performer = Mockery::mock( Order_Actions::class, [ Orders_Registry::instance() ] )->makePartial();
+			$performer->shouldReceive( 'perform' )->once()->with( $handler, $order, Order_Actions::CANCEL, $provider )->andReturn( Action_Result::success() );
+
+			$admin    = new Shipping_Admin_Order( Orders_Registry::instance() );
+			$property = new \ReflectionProperty( Shipping_Admin_Order::class, 'order_actions' );
+			if ( PHP_VERSION_ID < 80100 ) {
+				$property->setAccessible( true );
+			}
+			$property->setValue( $admin, $performer );
+
+			$this->capture_flashed_notices();
+
+			// The handler carries no cancel() expectation: reaching it directly throws, which flashes.
+			$this->invoke_perform_action( $admin, $handler, $order, Order_Actions::CANCEL, $provider );
+
+			$this->assertSame( [], $this->flashed_notices, 'the performer\'s success is the whole outcome — nothing is flashed' );
+		}
+
+		/**
+		 * The metabox has no dispatcher of its own to drift from {@see Order_Actions::perform()}.
+		 */
+		public function test_the_metabox_keeps_no_private_dispatcher(): void {
+			$this->assertFalse( method_exists( Shipping_Admin_Order::class, 'dispatch_action' ) );
+			$this->assertFalse( method_exists( Shipping_Admin_Order::class, 'resolve_popular_settlement_context' ) );
 		}
 	}
 }

@@ -1,10 +1,9 @@
 <?php
 /**
- * Unit tests for Shipping_Admin_Order::resolve_popular_settlement_context() — the
- * fix for round 2 critic finding HIGH 2 ("the enrolment seam is inert"): the export
- * action is the ONE real framework caller of
- * {@see \Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler::export()}, and
- * before this fix nothing in the repo ever supplied its settlement/provider params.
+ * Unit tests for Order_Actions::resolve_popular_settlement_context() — the fix for round 2
+ * critic finding HIGH 2 ("the enrolment seam is inert"): the export action is the ONE real
+ * framework caller of {@see \Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler::export()},
+ * and before this fix nothing in the repo ever supplied its settlement/provider params.
  * This proves the real call site now genuinely resolves both — via
  * {@see \Woodev\Framework\Shipping\Location\Popular_Settlement_Store::recall_candidate()}
  * and, since round 3 (HIGH 2), the SAME provider that produced the recalled
@@ -16,9 +15,13 @@
  * (it throws `\InvalidArgumentException` when it does, AFTER the carrier order
  * already exists).
  *
- * `handle_order_action()` itself ends in `exit` (a real WP admin-post handler), so it
- * is unsafe to invoke directly from a unit test; the resolution logic is exercised
- * through the small, extracted `resolve_popular_settlement_context()` seam instead.
+ * Card #1016: the order-edit metabox no longer keeps its own copy of this resolver or its own
+ * store — it reaches it through {@see \Woodev\Framework\Shipping\Admin\Orders\Order_Actions::perform()},
+ * which reads the framework's SHARED store (the registry singleton's). The tests here stamp the
+ * store onto that singleton, so they also pin that default: remove it and enrolment into the
+ * popular-settlements list switches off silently for every surface.
+ *
+ * The resolver is private, so it is reached by reflection.
  *
  * @package Woodev\Tests\Unit\Shipping\Admin
  */
@@ -33,12 +36,7 @@ namespace {
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-popular-settlement-entry.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-popular-settlement-store.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-provider-registry.php';
-	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/admin/class-shipping-admin-order.php';
-
-	// The class type-hints \WC_Order and Shipping_Plugin/Shipping_Order_Handler/
-	// Abstract_Shipment_Handler/Abstract_Tracking_Handler in its constructor, but
-	// resolve_popular_settlement_context() is reached WITHOUT running that
-	// constructor (see the reflection helper below), so none of those need loading.
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/admin/orders/class-order-actions.php';
 
 	use Woodev\Framework\Shipping\Location\Abstract_Location_Provider;
 	use Woodev\Framework\Shipping\Location\Location_Record;
@@ -50,7 +48,7 @@ namespace {
 	 * settlement's own provider_id(), not by whichever provider happens to be
 	 * active (round 3, HIGH 2).
 	 */
-	class Shipping_Admin_Order_Fixture_Provider extends Abstract_Location_Provider {
+	class Order_Actions_Fixture_Provider extends Abstract_Location_Provider {
 
 		private string $id;
 
@@ -87,16 +85,16 @@ namespace {
 namespace Woodev\Tests\Unit\Shipping\Admin {
 
 	use Mockery;
-	use Woodev\Framework\Shipping\Admin\Shipping_Admin_Order;
+	use Woodev\Framework\Shipping\Admin\Orders\Order_Actions;
 	use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
 	use Woodev\Framework\Shipping\Location\Location_Record;
 	use Woodev\Framework\Shipping\Location\Popular_Settlement_Store;
 	use Woodev\Tests\Unit\TestCase;
 
 	/**
-	 * @covers \Woodev\Framework\Shipping\Admin\Shipping_Admin_Order::resolve_popular_settlement_context
+	 * @covers \Woodev\Framework\Shipping\Admin\Orders\Order_Actions::resolve_popular_settlement_context
 	 */
-	final class ShippingAdminOrderPopularSettlementContextTest extends TestCase {
+	final class OrderActionsPopularSettlementContextTest extends TestCase {
 
 		protected function setUp(): void {
 			parent::setUp();
@@ -114,66 +112,64 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 		}
 
 		/**
-		 * Builds a Shipping_Admin_Order without running its real constructor (which
-		 * needs Shipping_Plugin/Shipping_Order_Handler/Abstract_Shipment_Handler —
-		 * unrelated to what this method resolves), and reflectively stamps the given
-		 * store onto it.
-		 *
-		 * @param Popular_Settlement_Store $store
-		 * @return Shipping_Admin_Order
+		 * Reads a private property of the registry singleton, for {@see self::stamp()}.
 		 */
-		private function admin_order( Popular_Settlement_Store $store ): Shipping_Admin_Order {
-			$reflection  = new \ReflectionClass( Shipping_Admin_Order::class );
-			$admin_order = $reflection->newInstanceWithoutConstructor();
-
-			$property = $reflection->getProperty( 'popular_settlement_store' );
+		private function registry_property( string $name ): \ReflectionProperty {
+			$property = ( new \ReflectionClass( Location_Provider_Registry::class ) )->getProperty( $name );
 			if ( PHP_VERSION_ID < 80100 ) {
 				$property->setAccessible( true );
 			}
-			$property->setValue( $admin_order, $store );
 
-			return $admin_order;
+			return $property;
 		}
 
 		/**
-		 * @param Shipping_Admin_Order $admin_order
-		 * @param mixed                 $order
+		 * Stamps `$store` onto the registry singleton — the shared store
+		 * {@see Order_Actions} reads — and returns the performer.
+		 *
+		 * @param Popular_Settlement_Store $store
+		 * @return Order_Actions
+		 */
+		private function actions_with_store( Popular_Settlement_Store $store ): Order_Actions {
+			$this->registry_property( 'popular_settlement_store' )->setValue( Location_Provider_Registry::instance(), $store );
+
+			$reflection = new \ReflectionClass( Order_Actions::class );
+
+			// The constructor only stores the Orders_Registry, which this resolver never touches.
+			return $reflection->newInstanceWithoutConstructor();
+		}
+
+		/**
+		 * @param Order_Actions $actions
+		 * @param mixed         $order
 		 * @return array{0: Location_Record|null, 1: mixed}
 		 */
-		private function invoke( Shipping_Admin_Order $admin_order, $order ): array {
-			$method = ( new \ReflectionClass( $admin_order ) )->getMethod( 'resolve_popular_settlement_context' );
+		private function invoke( Order_Actions $actions, $order ): array {
+			$method = new \ReflectionMethod( Order_Actions::class, 'resolve_popular_settlement_context' );
 			if ( PHP_VERSION_ID < 80100 ) {
 				$method->setAccessible( true );
 			}
 
-			return $method->invoke( $admin_order, $order );
+			return $method->invoke( $actions, $order );
 		}
 
 		/**
 		 * Stamps `$providers` directly onto the REAL registry singleton's backing
 		 * array, bypassing {@see Location_Provider_Registry::collect()} entirely
 		 * (its bundled-provider registration and `register_settings()` call are
-		 * unrelated to what {@see \Woodev\Framework\Shipping\Admin\Shipping_Admin_Order::resolve_popular_settlement_context()}
-		 * exercises — `get_providers()` only ever reads this array).
+		 * unrelated to what the resolver exercises — `get_providers()` only ever
+		 * reads this array).
 		 *
 		 * @param array<int, \Woodev\Framework\Shipping\Location\Location_Provider> $providers
 		 * @return void
 		 */
 		private function register_providers( array $providers ): void {
-			$registry = Location_Provider_Registry::instance();
-
-			$reflection = new \ReflectionClass( Location_Provider_Registry::class );
-			$property   = $reflection->getProperty( 'providers' );
-			if ( PHP_VERSION_ID < 80100 ) {
-				$property->setAccessible( true );
-			}
-
 			$indexed = [];
 			foreach ( $providers as $provider ) {
 				$indexed[ $provider->get_id() ] = $provider;
 			}
 
-			$property->setValue( $registry, $indexed );
+			$this->registry_property( 'providers' )->setValue( Location_Provider_Registry::instance(), $indexed );
 		}
 
 		/**
@@ -187,9 +183,7 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$store = Mockery::mock( Popular_Settlement_Store::class );
 			$store->shouldReceive( 'recall_candidate' )->once()->with( $order )->andReturn( null );
 
-			$admin_order = $this->admin_order( $store );
-
-			[ $settlement, $provider ] = $this->invoke( $admin_order, $order );
+			[ $settlement, $provider ] = $this->invoke( $this->actions_with_store( $store ), $order );
 
 			$this->assertNull( $settlement );
 			$this->assertNull( $provider );
@@ -212,8 +206,8 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 		public function test_resolves_the_provider_that_produced_the_settlement(): void {
 			$this->register_providers(
 				[
-					new \Shipping_Admin_Order_Fixture_Provider( 'acme' ),
-					new \Shipping_Admin_Order_Fixture_Provider( 'other-carrier' ),
+					new \Order_Actions_Fixture_Provider( 'acme' ),
+					new \Order_Actions_Fixture_Provider( 'other-carrier' ),
 				]
 			);
 
@@ -231,9 +225,7 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$store = Mockery::mock( Popular_Settlement_Store::class );
 			$store->shouldReceive( 'recall_candidate' )->once()->with( $order )->andReturn( $record );
 
-			$admin_order = $this->admin_order( $store );
-
-			[ $settlement, $provider ] = $this->invoke( $admin_order, $order );
+			[ $settlement, $provider ] = $this->invoke( $this->actions_with_store( $store ), $order );
 
 			$this->assertSame( $record, $settlement );
 			$this->assertNotNull( $provider );
@@ -246,7 +238,7 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 		 * [settlement, null] rather than falling back to any other provider.
 		 */
 		public function test_resolves_null_provider_when_the_settlements_own_provider_is_no_longer_registered(): void {
-			$this->register_providers( [ new \Shipping_Admin_Order_Fixture_Provider( 'acme' ) ] );
+			$this->register_providers( [ new \Order_Actions_Fixture_Provider( 'acme' ) ] );
 
 			$record = Location_Record::from_array(
 				[
@@ -262,9 +254,7 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$store = Mockery::mock( Popular_Settlement_Store::class );
 			$store->shouldReceive( 'recall_candidate' )->once()->with( $order )->andReturn( $record );
 
-			$admin_order = $this->admin_order( $store );
-
-			[ $settlement, $provider ] = $this->invoke( $admin_order, $order );
+			[ $settlement, $provider ] = $this->invoke( $this->actions_with_store( $store ), $order );
 
 			$this->assertSame( $record, $settlement );
 			$this->assertNull( $provider );
