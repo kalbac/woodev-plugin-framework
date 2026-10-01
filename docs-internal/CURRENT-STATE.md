@@ -6,7 +6,7 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-01 (s146, overnight).** ✅ s146 merged the s145 follow-ups that need no eye: v1 auto-export migration flag only after a real read (#1015), one order-action dispatcher (#1016), checkout-time reference/location calls at the 8 s budget (#1017 #1025; follow-up #1036), export-retry hook pinned once (#1009), perform(EXPORT) end-to-end test (#1026), catalogue references regenerated and 20 dead msgids dropped (#1029). ⏸ **Parked for his eye:** PR #1020 (#1011 all orders by default), #1027 (#1014 one composite carrier tab + connection forwarding, also #1028), #1034 (#1018 metabox buttons column). Details: `sessions/s146.md`. ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
+**As of 2026-10-01 (s146).** ✅ All s145 follow-ups merged: v1 migration flag (#1015), one action dispatcher (#1016), 8 s checkout budget (#1017 #1025), all orders by default (#1011), one composite carrier tab + connection forwarding + guards (#1014 #1028 #1033), metabox buttons column (#1018), catalogue regenerated (#1029). ✅ A carrier cancellation now reads «Отменено» via the framework-owned meta `_woodev_shipment_cancelled_at` (#1037). No open PRs. Details: `sessions/s146.md`. ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
 orders-page slug redirects to the framework page with that carrier preselected, accepted on the rig.
 ✅ **Both machines are live**; routine sync is git ONLY (`wiki/two-machine-setup.md`). The order
 metabox (#856) and the orders table (#870) stay accepted.
@@ -39,7 +39,7 @@ selector matches nothing. One line each under the `[rig/*]` and `[build/*]` topi
 
 ⛔ **The operator reordered the work, 12.09.2026, reconfirmed 13.09** — *«пока у нас не будет готов
 базовый минимум самого фреймворка, мы плагин не пилим»*. **#786 is OUT of the queue** («Заморожено»).
-Next: see `next-session-prompt.md` — the three parked UI PRs (#1020 #1027 #1034) and his question #1024. Codex is back in use (operator, 29.09.2026): **1 of 3 usage-limit resets spent** (none spent in s146), recipe in gotcha `starting-codex-under-orca-needs-four-steps-not-one` — on 0.158 the report-FILE path works, `worker_done` never comes.
+Next: see `next-session-prompt.md` — his question #1024 and the Codex default-model choice. Codex is back in use (operator, 29.09.2026): **1 of 3 usage-limit resets spent** (none spent in s146), recipe in gotcha `starting-codex-under-orca-needs-four-steps-not-one` — on 0.158 the report-FILE path works, `worker_done` never comes.
 
 ✅ **CI first-try reliability is ENFORCED** (#871): `.githooks/pre-push` rebuilds the bundles and
 runs the catalogue gates by exit code in ~22 s — a worker may not build bundles while
@@ -71,7 +71,7 @@ FIXTURES**; the shipping plugin is written later, from scratch, own repo, versio
 
 ✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — no quota consumed; the exhaustion symptom is gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`.
 
-**`main` after s146 (`fb2cf79e`, macOS, 01.10.2026):** unit **4873 / 22064** (1 skipped), integration **471 / 5326**; jest **2424** in **49** suites (on `a77cae5a`; no JS change after it).
+**`main` after s146 (`0eac9b29`, macOS, 01.10.2026):** unit **5009 / 29238** (1 skipped), integration **474 / 6422**, jest **2424** in **49** suites.
 
 **Baselines — macOS laptop, 27.09.2026 (s140)** (the two machines matched to the digit in s136, so
 these are not platform-dependent): unit **4132 / 14586**, 1 skipped, sodium ON; jest **1975** in

@@ -71,6 +71,7 @@
 - [tooling/orca] **A Codex worker will not use the app-bundle `orca` path unless the brief explicitly AUTHORIZES it — it idles «blocked».** → [a-codex-worker-refuses-the-full-path-orca-binary-unless-the-brief-authorizes-it](../gotchas/a-codex-worker-refuses-the-full-path-orca-binary-unless-the-brief-authorizes-it.md) (s143)
 - [tooling/orca] **A Codex worker under Orca loses its app-server after ~20–30 min ; the dispatch stays `live` and never reports. Resume the SAME session by id — work and lifecycle ids survive.** → [codex-app-server-drops-mid-task-under-orca-resume-by-session-id](../gotchas/codex-app-server-drops-mid-task-under-orca-resume-by-session-id.md) (s142)
 - [tooling/ci] **gitleaks reads WooCommerce md5 cart-item keys in a committed research log as `generic-api-key`; the tree scan then fails EVERY open PR, and a re-run reuses the old merge ref.** → [gitleaks-reads-woocommerce-cart-item-keys-in-a-research-log-as-api-keys](../gotchas/gitleaks-reads-woocommerce-cart-item-keys-in-a-research-log-as-api-keys.md) (s142)
+- [tooling/orca] **Take a dispatch id from the START RECEIPT, never from `worker-list` order — s146 stopped a live worker mid-task thinking it was the Codex critic.** → [take-a-dispatch-id-from-the-start-receipt-never-from-worker-list-order](../gotchas/take-a-dispatch-id-from-the-start-receipt-never-from-worker-list-order.md) (s146)
 
 ## Related
 
