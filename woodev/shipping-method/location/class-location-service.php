@@ -145,15 +145,39 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 *
 		 * Deliberately NOT set when {@see self::resolve_default()} itself
 		 * returns `null` (a genuine "no answer" miss, e.g. an unresolvable
-		 * geo-IP, or a `fixed` re-resolution that found nothing) — that case
-		 * keeps retrying on every call, exactly as before this fix, since there
-		 * is nothing to memoize (see `LocationServiceDefaultTest`'s own
-		 * "no failure caching" tests, which this must not break).
+		 * geo-IP, or a `fixed` re-resolution that found nothing) — there is
+		 * no record to serve. That miss is memoized for the request by
+		 * {@see self::$default_resolved} instead (#1025).
 		 *
 		 * @since 2.0.2
 		 * @var Location_Record|null
 		 */
 		private ?Location_Record $unpersisted_default = null;
+
+		/**
+		 * Whether {@see self::resolve_default()} already ran in THIS request (#1025).
+		 *
+		 * The RESOLUTION is memoized — a record, or `null` for a miss or a failure — not the
+		 * staleness gate that follows it: one classic-checkout render reads the customer record
+		 * from the checkout config, the pickup handler and the provider-selection scope, and a
+		 * hung provider would otherwise be waited on (8 s each) at every one of those reads.
+		 * Per request only: the next request asks the provider again, so an outage never
+		 * outlives it. Cleared wherever the customer's record is written or forgotten
+		 * ({@see self::forget_default_resolution()}).
+		 *
+		 * @since 2.0.2
+		 * @var bool
+		 */
+		private bool $default_resolved = false;
+
+		/**
+		 * The memoized answer of {@see self::resolve_default()} — meaningful only while
+		 * {@see self::$default_resolved} is `true` (#1025).
+		 *
+		 * @since 2.0.2
+		 * @var Location_Record|null
+		 */
+		private ?Location_Record $resolved_default = null;
 
 		/**
 		 * Whether {@see self::with_explicit_record()} is running, i.e. whether the customer
@@ -338,7 +362,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 					: self::implicit_entry( $this->unpersisted_default );
 			}
 
-			$default = $this->resolve_default();
+			// A customer's own record is read here, so the lazy default-locality lookup — geoip
+			// `locate()` or the stranded-default re-resolution `suggest()` — is a call the visitor
+			// waits for while the page renders or the order is processed: the checkout budget
+			// (#1025). An admin destination normally comes in as the explicit record, which returned
+			// above; the one exception is the admin default-locality picker's suggest with a
+			// non-empty scope, which reaches get_customer_chain() with no explicit record and so
+			// gets the same 8 s lazy default — benign, its behaviour is unchanged. A timeout is
+			// already answered as «no default» by both paths, and the answer (even `null`) is
+			// memoized for the request so a hung provider is waited on once, not once per read.
+			if ( ! $this->default_resolved ) {
+				$this->resolved_default = \Woodev_API_Request_Purpose::run_at_checkout( fn() => $this->resolve_default() );
+				$this->default_resolved = true;
+			}
+
+			$default = $this->resolved_default;
 
 			if ( null === $default ) {
 				return null;
@@ -349,8 +387,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 				// record would have to pass (#346/#333) — see this method's
 				// own docblock (FIX 1) for why serving it anyway would
 				// disagree with get_customer_chain(). Neither persisted nor
-				// cached: a later call in the same request re-resolves it
-				// exactly as if nothing had ever resolved.
+				// served: a later call in the same request re-gates the
+				// memoized resolution (#1025) without asking the provider
+				// again.
 				return null;
 			}
 
@@ -593,7 +632,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 				return $chain;
 			}
 
-			$region = $this->region_ancestor_of( $chain['records'][ Location_Record::LEVEL_SETTLEMENT ] );
+			$settlement = $chain['records'][ Location_Record::LEVEL_SETTLEMENT ];
+
+			// The customer's own chain is read while the visitor waits (a page render, an order being
+			// processed): the checkout budget (#1025). The explicit record is the ADMIN's typed-in
+			// destination — it keeps the budget its caller already set. A timeout is answered as «no
+			// region» by both derivation paths.
+			$region = $this->has_explicit_record
+				? $this->region_ancestor_of( $settlement )
+				: \Woodev_API_Request_Purpose::run_at_checkout( fn() => $this->region_ancestor_of( $settlement ) );
 
 			if ( null !== $region ) {
 				$chain['records'][ Location_Record::LEVEL_REGION ] = $region;
@@ -1213,7 +1260,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * @return bool `true` when the write happened.
 		 */
 		public function set_customer_record( Location_Record $record, bool $implicit = false ): bool {
+			$this->forget_default_resolution();
+
 			return $this->customer_store->set( $record, $implicit );
+		}
+
+		/**
+		 * Drops the request's memoized default-locality resolution (#1025), so the next read of
+		 * the customer record asks the provider afresh — called wherever the customer's record
+		 * is written or forgotten, since the answer was computed for the state before.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		private function forget_default_resolution(): void {
+			$this->default_resolved = false;
+			$this->resolved_default = null;
 		}
 
 
@@ -1233,6 +1296,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * @return void
 		 */
 		public function forget_customer_record(): void {
+			$this->forget_default_resolution();
 			$this->customer_store->forget( null );
 		}
 
@@ -1288,6 +1352,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 			}
 
 			if ( $this->customer_store->promote_chain_to_explicit() ) {
+				$this->forget_default_resolution();
+
 				return true;
 			}
 
