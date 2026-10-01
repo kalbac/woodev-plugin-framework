@@ -140,6 +140,39 @@ class DeliveryStatusTest extends TestCase {
 		$this->assertSame( [ 'canonical', 'canonical_label', 'raw', 'raw_label' ], array_keys( $result ) );
 	}
 
+	/**
+	 * Makes `woodev_shipping_delivery_status_resolved` answer `$replacement` whatever it is given.
+	 */
+	private function replace_resolved_status_with( string $replacement ): void {
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $hook, $value ) use ( $replacement ) {
+				return 'woodev_shipping_delivery_status_resolved' === $hook ? $replacement : $value;
+			}
+		);
+	}
+
+	/**
+	 * #1037: a cancellation the framework recorded is authoritative — a filter callback that tries
+	 * to replace CANCELLED fails, so the row agrees with the database-side status filter.
+	 */
+	public function test_the_resolved_filter_cannot_override_a_framework_recorded_cancellation(): void {
+		$this->replace_resolved_status_with( Delivery_Status::IN_TRANSIT );
+
+		$resolved = Delivery_Status::resolve( 'CDEK_ACCEPTED', [ 'CDEK_ACCEPTED' => Delivery_Status::IN_TRANSIT ], [], true );
+
+		$this->assertSame( Delivery_Status::CANCELLED, $resolved['canonical'] );
+		$this->assertSame( Delivery_Status::label( Delivery_Status::CANCELLED ), $resolved['canonical_label'] );
+		$this->assertSame( 'CDEK_ACCEPTED', $resolved['raw'] );
+	}
+
+	public function test_the_resolved_filter_still_applies_to_an_order_without_the_cancellation_marker(): void {
+		$this->replace_resolved_status_with( Delivery_Status::DELIVERED );
+
+		$resolved = Delivery_Status::resolve( 'CDEK_ACCEPTED', [ 'CDEK_ACCEPTED' => Delivery_Status::IN_TRANSIT ] );
+
+		$this->assertSame( Delivery_Status::DELIVERED, $resolved['canonical'] );
+	}
+
 	// ----- invert_status_map() (SP-10 spec D10 — the delivery-status filter) -----
 
 	public function test_invert_status_map_groups_raw_values_by_canonical_state(): void {
