@@ -7,7 +7,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-07T00:54:28+00:00\n"
+"POT-Creation-Date: 2026-10-01T00:18:01+00:00\n"
 "PO-Revision-Date: \n"
 "Language: ru\n"
 "Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
@@ -73,8 +73,7 @@ msgstr ""
 msgid "Не удалось установить плагин."
 msgstr ""
 
-#: admin/class-admin-pages.php:80
-#: admin/class-admin-pages.php:81
+#: admin/class-admin-pages.php:80 admin/class-admin-pages.php:81
 msgid "Woodev"
 msgstr "Woodev"
 
@@ -90,8 +89,7 @@ msgstr "Лицензии"
 msgid "Лицензии Woodev"
 msgstr ""
 
-#: admin/class-admin-pages.php:238
-#: admin/class-admin-pages.php:355
+#: admin/class-admin-pages.php:238 admin/class-admin-pages.php:355
 #: admin/class-plugin-install-tab.php:39
 msgid "Плагины Woodev"
 msgstr ""
@@ -113,23 +111,22 @@ msgstr "Компоненты интерфейса Woodev"
 msgid "Для этой страницы нужен JavaScript."
 msgstr ""
 
-#: bootstrap.php:117
+#: bootstrap.php:127 class-framework-resolver.php:800
 msgid "Неизвестный плагин"
 msgstr ""
 
-#: bootstrap.php:157
-#: loader.php:145
+#: bootstrap.php:167 loader.php:145
 msgctxt "coordinating conjunction for a list of items: a, b и c"
 msgid "и"
 msgstr ""
 
 #. translators: %s — list of plugin names.
-#: bootstrap.php:167
+#: bootstrap.php:177
 #, php-format
 msgid "Следующие плагины устарели и поэтому не были запущены: %s. Обновите их до последней версии."
 msgstr ""
 
-#: bootstrap.php:328
+#: bootstrap.php:362
 #, php-format
 msgid "Deactivated %d plugin"
 msgid_plural "Deactivated %d plugins"
@@ -137,33 +134,9 @@ msgstr[0] "Деактивирован %d плагин"
 msgstr[1] "Деактивировано %d плагина"
 msgstr[2] "Деактивировано %d плагинов"
 
-#: bootstrap.php:329
+#: bootstrap.php:363
 msgid "Deactivated one plugin"
 msgstr "Один плагин деактивирован"
-
-#. translators: 1: list of dormant plugin names, 2: the conflicting plugin name.
-#: loader.php:159
-#, php-format
-msgid "Плагины %1$s не запущены: на сайте активен плагин %2$s с устаревшей версией, который блокирует их запуск. Обновите %2$s до последней версии."
-msgstr ""
-
-#. translators: 1: dormant plugin name, 2: the conflicting plugin name.
-#: loader.php:165
-#, php-format
-msgid "Плагин %1$s не запущен: на сайте активен плагин %2$s с устаревшей версией, который блокирует его запуск. Обновите %2$s до последней версии."
-msgstr ""
-
-#. translators: %s — list of dormant plugin names.
-#: loader.php:173
-#, php-format
-msgid "Плагины %s не запущены: на сайте активен другой плагин Woodev с устаревшей версией. Обновите все плагины Woodev до последней версии."
-msgstr ""
-
-#. translators: %s — the dormant plugin name.
-#: loader.php:178
-#, php-format
-msgid "Плагин %s не запущен: на сайте активен другой плагин Woodev с устаревшей версией. Обновите все плагины Woodev до последней версии."
-msgstr ""
 
 #: box-packer/class-packer-dispatcher.php:99
 msgid "Virtual box (minimal size)"
@@ -177,7 +150,13 @@ msgstr "Каждый товар в отдельной коробке"
 msgid "Single box (items stacked along one axis)"
 msgstr "Одна коробка (товары укладываются в один ряд)"
 
-#: class-framework-resolver.php:246
+#. translators: Placeholders: %1$s - the plugin that was refused, %2$s - the plugin already holding the same license identifier
+#: class-framework-resolver.php:556
+#, php-format
+msgid "Невозможно активировать «%1$s»: он использует тот же идентификатор лицензии, что и «%2$s». Плагин отключён. Обратитесь к автору плагина."
+msgstr ""
+
+#: class-framework-resolver.php:627
 #, php-format
 msgid "%1$sAttention!%2$s The plugin %3$s was disabled because it is out of date and incompatible with the"
 msgid_plural "%1$sAttention!%2$s The plugins %3$s were disabled because they are out of date and incompatible with the"
@@ -185,7 +164,7 @@ msgstr[0] "%1$sВнимание!%2$s Плагин %3$s был отключен, 
 msgstr[1] "%1$sВнимание!%2$s Плагины %3$s были отключены, поскольку они устарели и несовместимы с"
 msgstr[2] "%1$sВнимание!%2$s Плагины %3$s были отключены, поскольку они устарели и несовместимы с"
 
-#: class-framework-resolver.php:259
+#: class-framework-resolver.php:640
 #, php-format
 msgid " newer plugin %s."
 msgid_plural " newer plugins %s."
@@ -193,12 +172,12 @@ msgstr[0] " новым плагином %s."
 msgstr[1] " новыми плагинами %s."
 msgstr[2] " новыми плагинами %s."
 
-#: class-framework-resolver.php:271
+#: class-framework-resolver.php:652
 #, php-format
 msgid "To resolve this, please %1$supdate%2$s (recommended) or %1$sdeactivate%2$s"
 msgstr "Чтобы решить это, пожалуйста, %1$sобновите%2$s (рекомендуется) или %1$sдеактивируйте%2$s"
 
-#: class-framework-resolver.php:276
+#: class-framework-resolver.php:657
 #, php-format
 msgid " the plugin %1$s, or %2$sdeactivate%3$s"
 msgid_plural " the plugins %1$s, or %2$sdeactivate%3$s"
@@ -206,7 +185,7 @@ msgstr[0] " плагин %1$s, или %2$sдективируйте%3$s"
 msgstr[1] " плагины %1$s, или %2$sдективируйте%3$s"
 msgstr[2] " плагины %1$s, или %2$sдективируйте%3$s"
 
-#: class-framework-resolver.php:289
+#: class-framework-resolver.php:670
 #, php-format
 msgid " the plugin %s."
 msgid_plural " the plugins %s."
@@ -214,67 +193,67 @@ msgstr[0] " плагин %s."
 msgstr[1] " плагины %s."
 msgstr[2] " плагины %s."
 
-#: class-framework-resolver.php:307
+#: class-framework-resolver.php:688
 msgid "The following plugins are inactive because they require a newer version of PHP:"
 msgstr "Следующие плагины отключены, так как требуют более новую версию PHP:"
 
-#: class-framework-resolver.php:307
+#: class-framework-resolver.php:688
 msgid "The following plugin is inactive because it requires a newer version of PHP:"
 msgstr "Следующий плагин отключён, так как требует более новую версию PHP:"
 
-#: class-framework-resolver.php:310
+#: class-framework-resolver.php:691
 #, php-format
 msgid "%1$s requires PHP %2$s or newer"
 msgstr "%1$s требует PHP версии %2$s или новее"
 
-#: class-framework-resolver.php:317
+#: class-framework-resolver.php:698
 msgid "The following plugins are inactive because they require a newer version of WooCommerce:"
 msgstr "Следующие плагины неактивны, поскольку для них требуется более новая версия WooCommerce:"
 
-#: class-framework-resolver.php:317
+#: class-framework-resolver.php:698
 msgid "The following plugin is inactive because it requires a newer version of WooCommerce:"
 msgstr "Следующий плагин неактивен, поскольку для него требуется более новая версия WooCommerce:"
 
 #. translators: Placeholders: %1$s - plugin name, %2$s - WooCommerce version number
-#: class-framework-resolver.php:321
+#: class-framework-resolver.php:702
 #, php-format
 msgid "%1$s requires WooCommerce %2$s or newer"
 msgstr "%1$s требуется версия WooCommerce %2$s или выше"
 
 #. translators: Placeholders: %1$s - <a> tag, %2$s - </a> tag
-#: class-framework-resolver.php:325
+#: class-framework-resolver.php:706
 #, php-format
 msgid "Please %1$supdate WooCommerce%2$s"
 msgstr "Пожалуйста %1$sобновите WooCommerce%2$s"
 
-#: class-framework-resolver.php:329
+#: class-framework-resolver.php:710
 msgid "The following plugins are inactive because they require a newer version of WordPress:"
 msgstr "Следующие плагины неактивны, поскольку для них требуется более новая версия WordPress:"
 
-#: class-framework-resolver.php:329
+#: class-framework-resolver.php:710
 msgid "The following plugin is inactive because it requires a newer version of WordPress:"
 msgstr "Следующий плагин неактивен, поскольку для него требуется более новая версия WordPress:"
 
-#: class-framework-resolver.php:333
+#: class-framework-resolver.php:714
 #, php-format
 msgid "%1$s requires WordPress %2$s or newer"
 msgstr "%1$s требуется версия WordPress %2$s или выше"
 
-#: class-framework-resolver.php:337
+#: class-framework-resolver.php:718
 #, php-format
 msgid "Please %1$supdate WordPress%2$s"
 msgstr "Пожалуйста %1$sобновите WordPress%2$s"
 
-#: class-framework-resolver.php:372
-#: class-framework-resolver.php:516
-#: class-framework-resolver.php:692
-#, php-format
-msgid "Невозможно активировать «%1$s»: он использует тот же идентификатор лицензии, что и «%2$s». Плагин отключён. Обратитесь к автору плагина."
-msgstr ""
-
-#: class-framework-resolver.php:698
+#. translators: Placeholders: %1$s - the plugin that was not started, %2$s - the plugin already holding the same license identifier
+#: class-framework-resolver.php:731
 #, php-format
 msgid "Плагин «%1$s» не запущен: он использует тот же идентификатор лицензии, что и «%2$s». Обратитесь к автору плагина."
+msgstr ""
+
+#. translators: Placeholder: %s - the name of the plugin that did not start
+#: class-framework-resolver.php:770
+#, php-format
+msgid "Плагин «%s» не запущен: он собран с ошибкой. Обратитесь к автору плагина."
 msgstr ""
 
 #: class-helper.php:402
@@ -332,15 +311,15 @@ msgstr "Поздравляем"
 msgid "Are you having a great experience with %1$s so far? Please consider %2$sleaving a review%3$s! If things aren't going quite as expected, we're happy to help -- please %4$sreach out to our support team%5$s."
 msgstr "У вас уже есть хороший опыт в использовании плагина  %1$s? Если вас не затруднит %2$sоставьте отзыв%3$s! Если что-то пойдет не так, как ожидалось, мы будем рады помочь — %4$sобратитесь в нашу службу поддержки%5$s."
 
-#: class-plugin.php:725
+#: class-plugin.php:728
 msgid "Указать лицензию"
 msgstr ""
 
-#: class-plugin.php:726
+#: class-plugin.php:729 assets/build/shipping-orders-page/index.js:9
 msgid "Закрыть"
 msgstr ""
 
-#: class-plugin.php:728
+#: class-plugin.php:731
 msgid "Во время загрузки данных о лицензии произошла ошибка. Закройте это окно и попробуйте снова."
 msgstr ""
 
@@ -424,7 +403,7 @@ msgid "Once Weekly"
 msgstr "Раз в неделю"
 
 #: licensing/api/class-licensing-api.php:189
-#: licensing/class-plugin-license.php:334
+#: licensing/class-plugin-license.php:372
 msgid "Cannot get license data"
 msgstr "Не удалось получить данные лицензии"
 
@@ -432,11 +411,12 @@ msgstr "Не удалось получить данные лицензии"
 msgid "Недостаточно прав для управления лицензиями."
 msgstr ""
 
-#: licensing/api/class-rest-api-license.php:301
+#: licensing/api/class-rest-api-license.php:307
+#: licensing/api/class-rest-api-license.php:317
 msgid "Плагин с указанным идентификатором не найден."
 msgstr ""
 
-#: licensing/api/class-rest-api-license.php:332
+#: licensing/api/class-rest-api-license.php:348
 #: assets/build/license-page/index.js:1
 msgid "Не удалось выполнить запрос к серверу лицензий."
 msgstr ""
@@ -514,113 +494,110 @@ msgstr ""
 msgid "Лицензия недействительна. %1$sПерейдите в личный кабинет%2$s и проверьте её."
 msgstr ""
 
-#: licensing/class-plugin-license.php:248
+#: licensing/class-plugin-license.php:286
 msgid "Лицензия не найдена"
 msgstr ""
 
-#: licensing/class-plugin-license.php:249
+#: licensing/class-plugin-license.php:287
 msgid "URL сайта не передан"
 msgstr ""
 
-#: licensing/class-plugin-license.php:250
+#: licensing/class-plugin-license.php:288
 msgid "Это родительский ключ комплекта"
 msgstr ""
 
-#: licensing/class-plugin-license.php:251
-#: licensing/class-plugin-license.php:252
-#: assets/build/license-page/index.js:1
+#: licensing/class-plugin-license.php:289
+#: licensing/class-plugin-license.php:290 assets/build/license-page/index.js:1
 msgid "Ключ отозван"
 msgstr ""
 
-#: licensing/class-plugin-license.php:253
+#: licensing/class-plugin-license.php:291
 msgid "Лимит активаций исчерпан"
 msgstr ""
 
-#: licensing/class-plugin-license.php:254
+#: licensing/class-plugin-license.php:292
 msgid "Срок лицензии истёк"
 msgstr ""
 
-#: licensing/class-plugin-license.php:255
-#: licensing/class-plugin-license.php:257
+#: licensing/class-plugin-license.php:293
+#: licensing/class-plugin-license.php:295
 msgid "Ключ не подходит для этого плагина"
 msgstr ""
 
-#: licensing/class-plugin-license.php:256
+#: licensing/class-plugin-license.php:294
 msgid "Неверный идентификатор плагина"
 msgstr ""
 
-#: licensing/class-plugin-license.php:258
+#: licensing/class-plugin-license.php:296
 msgid "Сайт не активирован для этой лицензии"
 msgstr ""
 
-#: licensing/class-plugin-license.php:259
+#: licensing/class-plugin-license.php:297
 msgid "Неверный лицензионный ключ"
 msgstr ""
 
-#: licensing/class-plugin-license.php:260
+#: licensing/class-plugin-license.php:298
 msgid "Лицензия активна"
 msgstr ""
 
-#: licensing/class-plugin-license.php:263
-#: assets/build/license-page/index.js:1
+#: licensing/class-plugin-license.php:301 assets/build/license-page/index.js:1
 msgid "Неизвестный статус"
 msgstr ""
 
-#: licensing/class-plugin-license.php:445
+#: licensing/class-plugin-license.php:483
 msgid "Лицензионный ключ не указан."
 msgstr ""
 
-#: licensing/class-plugin-license.php:468
+#: licensing/class-plugin-license.php:506
 msgid "Не удалось получить данные лицензии. Попробуйте ещё раз."
 msgstr ""
 
-#: licensing/class-plugin-license.php:520
-#: assets/build/license-page/index.js:1
+#: licensing/class-plugin-license.php:558 assets/build/license-page/index.js:1
 msgid "Не удалось деактивировать лицензию. Попробуйте ещё раз."
 msgstr ""
 
-#: licensing/class-plugin-license.php:727
+#: licensing/class-plugin-license.php:765
 msgid "License key was not provided."
 msgstr "Лицензионный ключ не был предоставлен."
 
-#: licensing/class-plugin-license.php:734
-#: licensing/class-plugin-license.php:803
+#: licensing/class-plugin-license.php:772
+#: licensing/class-plugin-license.php:841
 msgid "Cannot get license data. Please try again."
 msgstr "Невозможно получить данные лицензии. Пожалуйста, попробуйте еще раз."
 
-#: licensing/class-plugin-license.php:768
+#: licensing/class-plugin-license.php:806
 #, php-format
 msgid "Your license key for %s is not valid. The key is not existing, or linked customer was deleted. Please provide another license key to continue to get support and updates."
 msgstr "Ваш лицензионный ключ для %s недействителен. Ключ не существует или связанный клиент был удален. Укажите другой действующий лицензионный ключ, чтобы продолжать использовать плагин, получать поддержку и обновления."
 
-#: licensing/class-plugin-license.php:771
+#: licensing/class-plugin-license.php:809
 msgid "Cannot verify license key. Please try again."
 msgstr "Невозможно проверить лицензионный ключ. Пожалуйста, попробуйте еще раз."
 
-#: licensing/class-plugin-license.php:822
+#: licensing/class-plugin-license.php:860
 #, php-format
 msgid "Your license key for %s is not valid. The key is not existing, or linked customer was deleted. Please provide another key to continue to get support and updates."
 msgstr "Ваш лицензионный ключ для %s недействителен. Ключ не существует или связанный клиент был удален. Укажите другой действующий лицензионный ключ, чтобы продолжать использовать плагин, получать поддержку и обновления."
 
-#: licensing/class-plugin-license.php:876
+#: licensing/class-plugin-license.php:914
 #, php-format
 msgid "You have invalid or expired license keys for %1$s. %2$sActivate License%3$s"
 msgstr "У вас есть недействительные или просроченные лицензионные ключи для %1$s. %2$sАктивировать лицензию%3$s"
 
-#: licensing/class-plugin-license.php:905
+#: licensing/class-plugin-license.php:943
 msgid "Enter valid license key for automatic updates."
 msgstr "Введите действующий лицензионный ключ для автоматического обновления."
 
-#: licensing/class-plugin-license.php:928
+#: licensing/class-plugin-license.php:966
 msgid "Attention! Please Backup your site before updating."
 msgstr "Внимание! Пожалуйста, сделайте резервную копию вашего сайта перед обновлением."
 
-#: licensing/class-plugin-license.php:930
+#: licensing/class-plugin-license.php:968
 #, php-format
 msgid "The latest version of %1$s%2$s %3$s%4$s includes massive changes across different areas of the plugin with revamped code structure for optimized performance. We would highly recommend you to backup your entire site before updating the plugin & test it on your staging website. %5$sContact our Support%6$s if you encounter any kind of errors or if you need any kind of assistance."
 msgstr "Последняя версия %1$s%2$s %3$s%4$s включает значительные изменения в различных областях плагина с обновленной структурой кода для оптимизации производительности. Мы настоятельно рекомендуем вам сделать резервную копию всего вашего сайта перед обновлением плагина и протестировать его на своем тестовом сайте. %5$sСвяжитесь с нашей службой поддержки%6$s, если у вас возникнут какие-либо ошибки или вам понадобится какая-либо помощь."
 
-#: licensing/class-plugin-license.php:941
+#: licensing/class-plugin-license.php:979
 #, php-format
 msgid "We also recommend that you %1$sread the documentation%2$s after updating the plugin."
 msgstr "Мы также рекомендуем вам %1$sпрочитать документацию%2$s после обновления плагина."
@@ -669,6 +646,30 @@ msgstr "У вас нет разрешения на установку обнов
 #: licensing/updater/class-plugin-updater.php:521
 msgid "Error"
 msgstr "Ошибка"
+
+#. translators: 1: list of dormant plugin names, 2: the conflicting plugin name.
+#: loader.php:159
+#, php-format
+msgid "Плагины %1$s не запущены: на сайте активен плагин %2$s с устаревшей версией, который блокирует их запуск. Обновите %2$s до последней версии."
+msgstr ""
+
+#. translators: 1: dormant plugin name, 2: the conflicting plugin name.
+#: loader.php:165
+#, php-format
+msgid "Плагин %1$s не запущен: на сайте активен плагин %2$s с устаревшей версией, который блокирует его запуск. Обновите %2$s до последней версии."
+msgstr ""
+
+#. translators: %s — list of dormant plugin names.
+#: loader.php:173
+#, php-format
+msgid "Плагины %s не запущены: на сайте активен другой плагин Woodev с устаревшей версией. Обновите все плагины Woodev до последней версии."
+msgstr ""
+
+#. translators: %s — the dormant plugin name.
+#: loader.php:178
+#, php-format
+msgid "Плагин %s не запущен: на сайте активен другой плагин Woodev с устаревшей версией. Обновите все плагины Woodev до последней версии."
+msgstr ""
 
 #: payment-gateway/admin/class-payment-gateway-admin-order.php:97
 msgid "Are you sure you wish to process this capture? The action cannot be undone."
@@ -840,7 +841,6 @@ msgstr "Списать %s"
 
 #: payment-gateway/admin/views/html-order-partial-capture.php:52
 #: payment-gateway/class-payment-gateway-my-payment-methods.php:553
-#: shipping-method/admin/class-shipping-admin-order.php:331
 msgid "Cancel"
 msgstr "Отмена"
 
@@ -1137,7 +1137,7 @@ msgstr "Редактировать"
 
 #: payment-gateway/class-payment-gateway-my-payment-methods.php:321
 #: payment-gateway/class-payment-gateway.php:880
-#: shipping-method/class-shipping-method.php:218
+#: shipping-method/class-shipping-method.php:231
 msgid "Title"
 msgstr "Заголовок"
 
@@ -1292,7 +1292,7 @@ msgid "Payment method title that the customer will see during checkout."
 msgstr "Название способа оплаты, которое покупатель увидит при оформлении заказа."
 
 #: payment-gateway/class-payment-gateway.php:887
-#: shipping-method/class-shipping-method.php:228
+#: shipping-method/class-shipping-method.php:241
 msgid "Description"
 msgstr "Описание"
 
@@ -1593,7 +1593,7 @@ msgid "Allow customers to securely save their payment details for future checkou
 msgstr "Позволять клиентам безопасно сохранять свои платежные реквизиты для будущих покупок."
 
 #: payment-gateway/class-payment-gateway.php:3221
-#: shipping-method/settings/class-shipping-integration.php:368
+#: shipping-method/settings/class-shipping-integration.php:441
 msgctxt "software environment"
 msgid "Production"
 msgstr "Боевой"
@@ -1647,17 +1647,17 @@ msgstr "Средства по транзакции уже списаны пол�
 msgid "Transaction cannot be captured"
 msgstr "Списание средств по транзакции невозможно"
 
-#. translators: Placeholders: %1$s - payment gateway title (such as Tinkoff, Yandex PAY etc), %2$s - transaction amount. Definitions: Capture, as in capture funds from a credit card.
-#: payment-gateway/handlers/capture.php:189
-#, php-format
-msgid "%1$s Capture of %2$s Approved"
-msgstr "%1$s: списание на сумму %2$s подтверждено"
-
 #. translators: Placeholders: %1$s - the requested capture amount, %2$s - the amount that can still be captured for this order. Definitions: Capture, as in capture funds from a credit card.
 #: payment-gateway/handlers/capture.php:158
 #, php-format
 msgid "Сумма списания %1$s должна быть больше нуля и не может превышать доступную к списанию сумму %2$s"
 msgstr ""
+
+#. translators: Placeholders: %1$s - payment gateway title (such as Tinkoff, Yandex PAY etc), %2$s - transaction amount. Definitions: Capture, as in capture funds from a credit card.
+#: payment-gateway/handlers/capture.php:189
+#, php-format
+msgid "%1$s Capture of %2$s Approved"
+msgstr "%1$s: списание на сумму %2$s подтверждено"
 
 #. translators: Placeholders: %1$s - payment gateway title (such as Authorize.net, Braintree, etc), %2$s - failure message. Definitions: "capture" as in capturing funds from a credit card.
 #: payment-gateway/handlers/capture.php:240
@@ -1796,8 +1796,7 @@ msgid "Не удалось сохранить статус настройки. �
 msgstr ""
 
 #: settings-api/abstract-class-settings.php:371
-#: settings-api/class-setting.php:506
-#: settings-api/class-setting.php:600
+#: settings-api/class-setting.php:506 settings-api/class-setting.php:600
 msgid "Обязательное поле."
 msgstr ""
 
@@ -1859,8 +1858,7 @@ msgstr ""
 msgid "Для страницы настроек нужен JavaScript. Включите его и обновите страницу."
 msgstr ""
 
-#: setup/class-setup-wizard.php:412
-#: setup/class-setup-wizard.php:487
+#: setup/class-setup-wizard.php:412 setup/class-setup-wizard.php:487
 msgid "Для мастера настройки нужен JavaScript. Включите его и обновите страницу."
 msgstr ""
 
@@ -1874,8 +1872,7 @@ msgstr ""
 msgid "Setup wizard step \"%s\" declares setting ids but none resolved — ensure the plugin returns a settings handler from get_settings_handler()."
 msgstr ""
 
-#: setup/class-setup-wizard.php:588
-#: assets/build/setup-wizard/index.js:2
+#: setup/class-setup-wizard.php:588 assets/build/setup-wizard/index.js:2
 msgid "Готово"
 msgstr ""
 
@@ -1913,165 +1910,365 @@ msgstr ""
 msgid "Настройка"
 msgstr ""
 
-#: shipping-method/admin/class-shipping-admin-order.php:149
-msgid "Carrier order ID"
-msgstr "Номер заказа у перевозчика"
+#. translators: %s: carrier label, e.g. "СДЭК"
+#: shipping-method/admin/class-shipping-admin-order.php:186
+#, php-format
+msgid "Информация %s"
+msgstr ""
 
-#: shipping-method/admin/class-shipping-admin-order.php:150
-msgid "Tracking number"
-msgstr "Номер отслеживания"
+#. translators: %s: carrier label, e.g. "СДЭК"
+#: shipping-method/admin/class-shipping-admin-order.php:251
+#, php-format
+msgid "Заказ ещё не передан перевозчику «%s»."
+msgstr ""
 
-#: shipping-method/admin/class-shipping-admin-order.php:151
-msgid "Chosen pickup point"
-msgstr "Выбранный пункт выдачи"
+#: shipping-method/admin/class-shipping-admin-order.php:293
+msgid "ID заказа у перевозчика"
+msgstr ""
 
-#: shipping-method/admin/class-shipping-admin-order.php:163
-#: shipping-method/admin/class-shipping-admin-order.php:168
-msgid "Shipment"
-msgstr "Отправление"
+#: shipping-method/admin/class-shipping-admin-order.php:304
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Трек-номер"
+msgstr ""
 
-#: shipping-method/admin/class-shipping-admin-order.php:321
-msgid "Export"
-msgstr "Экспорт"
+#: shipping-method/admin/class-shipping-admin-order.php:315
+#: assets/build/shipping-orders-page/index.js:1
+#: assets/build/shipping-orders-page/index.js:2
+#: assets/build/shipping-orders-page/index.js:9
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Пункт выдачи"
+msgstr ""
 
 #: shipping-method/admin/class-shipping-admin-order.php:326
-msgid "Track"
-msgstr "Отследить"
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Статус доставки"
+msgstr ""
 
-#: shipping-method/admin/class-shipping-admin-order.php:389
+#: shipping-method/admin/class-shipping-admin-order.php:453
 msgid "You do not have permission to manage this shipment."
 msgstr "У вас нет прав для управления этим отправлением."
 
-#: shipping-method/admin/orders/class-order-editor.php:115
-#: shipping-method/admin/orders/class-order-editor.php:126
-msgid "Не удалось создать заказ."
+#: shipping-method/admin/class-shipping-admin-order.php:595
+#: shipping-method/rest-api/class-orders-controller.php:1193
+msgid "Не удалось выгрузить заказ перевозчику."
 msgstr ""
 
-#: shipping-method/admin/orders/class-order-editor.php:181
-msgid "Не удалось сохранить заказ. Проверьте его в списке — часть изменений могла примениться."
+#: shipping-method/admin/class-shipping-admin-order.php:598
+#: shipping-method/rest-api/class-orders-controller.php:1196
+msgid "Не удалось отменить отправление."
 msgstr ""
 
-#: shipping-method/admin/orders/class-order-editor.php:249
-msgid "Заказ сейчас сохраняется в другом окне или вкладке. Дождитесь окончания и обновите страницу."
+#: shipping-method/admin/class-shipping-admin-order.php:601
+#: shipping-method/rest-api/class-orders-controller.php:1199
+msgid "Не удалось обновить информацию по заказу."
+msgstr ""
+
+#: shipping-method/admin/class-shipping-admin-order.php:604
+#: shipping-method/rest-api/class-orders-controller.php:1202
+msgid "Действие не выполнено."
+msgstr ""
+
+#: shipping-method/admin/class-shipping-admin-order.php:622
+#: shipping-method/rest-api/class-orders-controller.php:1229
+msgid "Сервис перевозчика временно недоступен. Попробуйте повторить действие позже."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:197
+msgid "Экспорт"
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:198
+msgid "Выгрузить заказ в систему перевозчика"
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:206
+#: assets/build/shipping-orders-page/index.js:13
+msgid "Обновить"
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:207
+msgid "Запросить у перевозчика текущий статус заказа"
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:215
+#: assets/build/shipping-orders-page/index.js:13
+msgid "Отменить"
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:216
+msgid "Отменить заказ у перевозчика"
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:276
+msgid "Редактировать"
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:277
+msgid "Изменить заказ, пока он не выгружен перевозчику"
 msgstr ""
 
 #. translators: %s: display name of the manager currently editing the order.
-#: shipping-method/admin/orders/class-order-actions.php:477
-#: shipping-method/admin/orders/class-order-editor.php:429
+#: shipping-method/admin/orders/class-order-actions.php:502
+#: shipping-method/admin/orders/class-orders-registry.php:664
+#, php-format
 msgid "This order is already being edited by %s"
 msgstr "Этот заказ уже редактируется пользователем %s"
 
+#: shipping-method/admin/orders/class-order-actions.php:554
+#: shipping-method/admin/orders/class-order-actions.php:616
+msgid "Для этого заказа не удалось определить перевозчика."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:558
+msgid "Заказ уже выгружен перевозчику — чтобы изменить его, сначала отмените выгрузку."
+msgstr ""
+
+#. translators: %s: WooCommerce order status name, e.g. "Выполнен".
+#: shipping-method/admin/orders/class-order-actions.php:564
+#, php-format
+msgid "Заказ в статусе «%s» — редактировать его нельзя."
+msgstr ""
+
+#. translators: %s: canonical delivery status label, e.g. "Доставлено".
+#: shipping-method/admin/orders/class-order-actions.php:574
+#, php-format
+msgid "Отправление уже в конечном статусе «%s» — редактировать заказ нельзя."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:620
+msgid "Для этого перевозчика не настроен обработчик отправлений — действия недоступны."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:628
+msgid "Заказ уже выгружен перевозчику."
+msgstr ""
+
+#. translators: %s: comma-separated WooCommerce order status names.
+#: shipping-method/admin/orders/class-order-actions.php:633
+#, php-format
+msgid "Выгрузить можно только заказ в одном из статусов: %s."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:639
+msgid "Заказ ещё не выгружен перевозчику — обновлять нечего."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:642
+msgid "Этот перевозчик не умеет запрашивать статус заказа из админки."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:646
+msgid "Заказ ещё не выгружен перевозчику — отменять нечего."
+msgstr ""
+
+#. translators: %s: canonical delivery status label, e.g. "Доставлено".
+#: shipping-method/admin/orders/class-order-actions.php:651
+#, php-format
+msgid "Отправление уже в конечном статусе «%s» — отменить его нельзя."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:656
+msgid "Это действие недоступно для данного заказа."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-editor.php:218
+#: shipping-method/admin/orders/class-order-editor.php:229
+msgid "Не удалось создать заказ."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-editor.php:263
+msgid "Заказ сейчас сохраняется в другом окне или вкладке. Дождитесь окончания и обновите страницу."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-editor.php:325
+msgid "Не удалось сохранить заказ. Проверьте его в списке — часть изменений могла примениться."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-editor.php:470
+msgid "Сервис перевозчика временно недоступен. Выгрузите заказ позже кнопкой «Экспорт» в списке заказов."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-editor.php:477
+#: shipping-method/rest-api/class-orders-controller.php:1169
+msgid "Заказ выгружен перевозчику."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-editor.php:483
+msgid "Перевозчик не принял заказ и не назвал причину. Повторите выгрузку кнопкой «Экспорт» в списке заказов."
+msgstr ""
+
 #. translators: 1: the order total before the edit, 2: the total after it.
-#: shipping-method/admin/orders/class-order-editor.php:332
+#: shipping-method/admin/orders/class-order-editor.php:618
 #, php-format
 msgid "Заказ изменён из админки: сумма была %1$s, стала %2$s. Возврат или доплата делаются штатными средствами WooCommerce."
 msgstr ""
 
-#: shipping-method/admin/orders/class-order-editor.php:826
+#: shipping-method/admin/orders/class-order-editor.php:1380
+#: shipping-method/rest-api/class-orders-controller.php:748
+#: shipping-method/rest-api/class-orders-controller.php:1118
+msgid "Заказ не найден."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-editor.php:1394
 msgid "Заказ не сохранён: проверьте отмеченные поля."
 msgstr ""
 
-#: shipping-method/admin/orders/class-order-payload-validator.php:150
+#: shipping-method/admin/orders/class-order-payload-validator.php:158
+#: shipping-method/rest-api/class-rates-controller.php:191
+#: assets/build/shipping-orders-page/index.js:2
 msgid "Укажите страну доставки."
 msgstr ""
 
-#: shipping-method/admin/orders/class-order-payload-validator.php:194
+#: shipping-method/admin/orders/class-order-payload-validator.php:212
+#: shipping-method/rest-api/class-rates-controller.php:172
 msgid "Покупатель не найден."
 msgstr ""
 
-#: shipping-method/admin/orders/class-order-payload-validator.php:214
+#: shipping-method/admin/orders/class-order-payload-validator.php:232
+#: assets/build/shipping-orders-page/index.js:2
 msgid "Чтобы создать аккаунт, укажите email покупателя."
 msgstr ""
 
-#: shipping-method/admin/orders/class-order-payload-validator.php:220
+#: shipping-method/admin/orders/class-order-payload-validator.php:238
 msgid "Покупатель с таким email уже есть — выберите его в списке."
 msgstr ""
 
-#: shipping-method/admin/orders/class-order-payload-validator.php:254
+#: shipping-method/admin/orders/class-order-payload-validator.php:272
+#: assets/build/shipping-orders-page/index.js:2
 msgid "Такой страны нет в справочнике магазина."
 msgstr ""
 
-#: shipping-method/admin/orders/class-order-payload-validator.php:259
-msgid "Такого региона нет в справочнике магазина для выбранной страны."
-msgstr ""
-
-#: shipping-method/admin/orders/class-order-payload-validator.php:268
+#: shipping-method/admin/orders/class-order-payload-validator.php:280
+#: assets/build/shipping-orders-page/index.js:2
 msgid "Проверьте email покупателя."
 msgstr ""
 
-#: shipping-method/admin/orders/class-order-payload-validator.php:291
+#: shipping-method/admin/orders/class-order-payload-validator.php:315
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Такого региона нет в справочнике магазина для выбранной страны."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-payload-validator.php:332
+#: assets/build/shipping-orders-page/index.js:2
 msgid "Добавьте в заказ хотя бы один товар."
 msgstr ""
 
-#: shipping-method/admin/orders/class-order-payload-validator.php:297
+#: shipping-method/admin/orders/class-order-payload-validator.php:338
 msgid "В заказе слишком много позиций."
 msgstr ""
 
-#: shipping-method/admin/orders/class-order-payload-validator.php:314
+#: shipping-method/admin/orders/class-order-payload-validator.php:355
+#: assets/build/shipping-orders-page/index.js:2
 msgid "Количество должно быть не меньше единицы."
 msgstr ""
 
-#: shipping-method/admin/orders/class-order-payload-validator.php:321
+#: shipping-method/admin/orders/class-order-payload-validator.php:362
+#: assets/build/shipping-orders-page/index.js:2
 msgid "Цена должна быть числом не меньше нуля."
 msgstr ""
 
-#: shipping-method/admin/orders/class-order-payload-validator.php:328
+#: shipping-method/admin/orders/class-order-payload-validator.php:369
 msgid "Товар не найден — выберите его из списка ещё раз."
 msgstr ""
 
-#: shipping-method/admin/orders/class-order-payload-validator.php:388
+#: shipping-method/admin/orders/class-order-payload-validator.php:429
+#: assets/build/shipping-orders-page/index.js:2
 msgid "Выберите способ доставки."
 msgstr ""
 
-#: shipping-method/admin/orders/class-order-payload-validator.php:400
+#: shipping-method/admin/orders/class-order-payload-validator.php:441
+#: assets/build/shipping-orders-page/index.js:2
 msgid "Стоимость доставки должна быть числом не меньше нуля."
 msgstr ""
 
-#: shipping-method/admin/orders/class-order-payload-validator.php:410
+#: shipping-method/admin/orders/class-order-payload-validator.php:451
 msgid "Этот способ доставки не относится к перевозчикам магазина. Такие заказы оформляются штатным редактором WooCommerce."
 msgstr ""
 
-#: shipping-method/admin/orders/class-order-payload-validator.php:421
+#: shipping-method/admin/orders/class-order-payload-validator.php:462
 msgid "Для этого перевозчика заказы из админки пока недоступны."
 msgstr ""
 
-#: shipping-method/admin/orders/class-order-payload-validator.php:490
+#: shipping-method/admin/orders/class-order-payload-validator.php:525
+#: assets/build/shipping-orders-page/index.js:2
 msgid "Для этого тарифа выберите пункт выдачи."
 msgstr ""
 
-#: shipping-method/admin/orders/class-order-payload-validator.php:511
+#: shipping-method/admin/orders/class-order-payload-validator.php:635
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Укажите регион доставки."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-payload-validator.php:636
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Укажите город или населённый пункт."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-payload-validator.php:637
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Укажите улицу и дом."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-payload-validator.php:638
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Укажите квартиру или офис."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-payload-validator.php:639
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Укажите индекс."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-payload-validator.php:700
 msgid "Такого способа оплаты нет в магазине."
 msgstr ""
 
-#: shipping-method/admin/orders/class-order-payload-validator.php:546
+#: shipping-method/admin/orders/class-order-payload-validator.php:735
+#: assets/build/shipping-orders-page/index.js:2
 msgid "Такого статуса заказа нет."
 msgstr ""
 
 #. translators: %s: WooCommerce order status name, e.g. "Выполнен".
-#: shipping-method/admin/orders/class-order-payload-validator.php:554
+#: shipping-method/admin/orders/class-order-payload-validator.php:743
 #, php-format
 msgid "Статус «%s» при редактировании не выставляется — отмена, возврат и завершение заказа делаются штатными средствами WooCommerce."
 msgstr ""
 
-#: shipping-method/admin/orders/class-order-payload-validator.php:579
-msgid "Укажите регион доставки."
+#: shipping-method/admin/orders/class-orders-registry.php:839
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Заказы доставки"
 msgstr ""
 
-#: shipping-method/admin/orders/class-order-payload-validator.php:581
-msgid "Укажите улицу и дом."
+#: shipping-method/admin/orders/class-orders-registry.php:1165
+msgid "Повтор выгрузки не выполнен: перевозчик не найден (плагин отключён?)"
 msgstr ""
 
-#: shipping-method/admin/orders/class-order-payload-validator.php:582
-msgid "Укажите квартиру или офис."
+#: shipping-method/admin/orders/class-orders-registry.php:1171
+msgid "заказ открыт для редактирования"
 msgstr ""
 
-#: shipping-method/admin/orders/class-order-payload-validator.php:583
-msgid "Укажите индекс."
+#. translators: %s: the carrier's reason for refusing or failing the export
+#: shipping-method/admin/orders/class-orders-registry.php:1198
+#, php-format
+msgid "Не удалось выгрузить заказ перевозчику в фоне: %s"
 msgstr ""
 
-#: shipping-method/pickup/class-pickup-handler.php:1250
-msgid "Address"
-msgstr "Адрес"
+#: shipping-method/admin/orders/class-orders-registry.php:1199
+#: shipping-method/order/class-order-automation.php:272
+msgid "перевозчик не назвал причину"
+msgstr ""
+
+#: shipping-method/admin/orders/class-orders-registry.php:1708
+msgid "Все перевозчики"
+msgstr ""
+
+#: shipping-method/admin/views/html-admin-order-metabox.php:68
+msgid "История доставки"
+msgstr ""
+
+#: shipping-method/admin/views/html-admin-order-metabox.php:91
+msgid "Вы уверены?"
+msgstr ""
 
 #: shipping-method/admin/views/html-admin-shipping-method-status.php:27
 msgid "Курьерская доставка"
@@ -2159,8 +2356,12 @@ msgstr "Не удалось сохранить выбор — попробуйт
 msgid "The suggestions service is unavailable. Try again later or enter the address manually."
 msgstr "Источник подсказок недоступен. Попробуйте ещё раз позже или введите вручную."
 
+#: shipping-method/checkout/class-checkout-config.php:669
+msgid "Showing results for a broader area — not limited to your selection."
+msgstr "Показаны результаты по более широкой области, а не только по вашему выбору."
+
 #: shipping-method/checkout/class-checkout-config.php:683
-#: shipping-method/checkout/class-checkout-handler.php:1548
+#: shipping-method/checkout/class-checkout-handler.php:1785
 msgid "Select…"
 msgstr "Выберите…"
 
@@ -2185,6 +2386,7 @@ msgid "Приводит порядок и формат полей адреса �
 msgstr ""
 
 #: shipping-method/checkout/class-checkout-field-settings.php:241
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Страна"
 msgstr ""
 
@@ -2205,6 +2407,7 @@ msgid "Показывать ли поле «Страна» в форме офо�
 msgstr ""
 
 #: shipping-method/checkout/class-checkout-field-settings.php:261
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Регион"
 msgstr ""
 
@@ -2219,6 +2422,8 @@ msgid "«Удалять» полностью убирает поле «Реги�
 msgstr ""
 
 #: shipping-method/checkout/class-checkout-field-settings.php:281
+#: assets/build/shipping-orders-page/index.js:6
+#: assets/build/shipping-orders-page/index.js:8
 msgid "Адрес"
 msgstr ""
 
@@ -2232,23 +2437,12 @@ msgid "«Скрывать для методов ПВЗ» прячет поле �
 msgstr ""
 
 #: shipping-method/checkout/class-checkout-field-settings.php:301
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Индекс"
 msgstr ""
 
 #: shipping-method/checkout/class-checkout-field-settings.php:314
 msgid "«Скрывать для методов ПВЗ» прячет поле «Индекс» при выборе пункта выдачи, но его значение всё ещё может уйти в заказ; «Удалять» убирает поле из формы совсем, и его значение никогда не попадёт в заказ. Первый вариант работает только в классической форме оформления заказа, второй — в обеих."
-msgstr ""
-
-#: shipping-method/checkout/class-checkout-field-settings.php:372
-msgid "Недоступно в блочной форме оформления заказа: эта опция работает через скрипт классической формы."
-msgstr ""
-
-#: shipping-method/checkout/class-checkout-field-settings.php:377
-msgid "Доступно, когда магазин доставляет ровно в одну страну (WooCommerce → Настройки → Общие → Доставка в)."
-msgstr ""
-
-#: shipping-method/checkout/class-checkout-field-settings.php:404
-msgid "Значение «Скрывать для методов ПВЗ» недоступно в блочной форме оформления заказа."
 msgstr ""
 
 #: shipping-method/checkout/class-checkout-field-settings.php:322
@@ -2267,6 +2461,18 @@ msgstr ""
 msgid "Пока не заполнены обязательные поля, нужные для доставки, кнопка «Оформить заказ» остаётся недоступной. Остальные обязательные поля формы WooCommerce проверяет при отправке."
 msgstr ""
 
+#: shipping-method/checkout/class-checkout-field-settings.php:372
+msgid "Недоступно в блочной форме оформления заказа: эта опция работает через скрипт классической формы."
+msgstr ""
+
+#: shipping-method/checkout/class-checkout-field-settings.php:377
+msgid "Доступно, когда магазин доставляет ровно в одну страну (WooCommerce → Настройки → Общие → Доставка в)."
+msgstr ""
+
+#: shipping-method/checkout/class-checkout-field-settings.php:404
+msgid "Значение «Скрывать для методов ПВЗ» недоступно в блочной форме оформления заказа."
+msgstr ""
+
 #: shipping-method/checkout/class-checkout-field-settings.php:446
 msgid "Не использовать"
 msgstr ""
@@ -2275,22 +2481,22 @@ msgstr ""
 msgid "Автоматически"
 msgstr ""
 
-#: shipping-method/checkout/class-checkout-handler.php:1845
+#: shipping-method/checkout/class-checkout-handler.php:2082
 msgid "This shipping method requires you to choose a pickup point."
 msgstr "Для этого способа доставки нужно выбрать пункт выдачи заказов."
 
-#: shipping-method/checkout/class-checkout-handler.php:2467
+#: shipping-method/checkout/class-checkout-handler.php:2882
 msgid "You have not chosen a pickup point."
 msgstr "Вы не выбрали пункт выдачи заказов."
 
 #. translators: %s: checkout field label
-#: shipping-method/checkout/class-checkout-handler.php:2471
+#: shipping-method/checkout/class-checkout-handler.php:2886
 #, php-format
 msgid "Please fill in the “%s” field."
 msgstr "Укажите значение поля «%s»."
 
 #. translators: %s: checkout field label
-#: shipping-method/checkout/class-checkout-handler.php:2528
+#: shipping-method/checkout/class-checkout-handler.php:2943
 #, php-format
 msgid "The “%s” field is filled in incorrectly."
 msgstr "Поле «%s» заполнено некорректно."
@@ -2326,67 +2532,71 @@ msgstr "Обязательный почтовый индекс"
 msgid "Require postal code for rate calculation"
 msgstr "Требовать почтовый индекс для расчёта стоимости"
 
-#: shipping-method/class-shipping-method.php:220
+#: shipping-method/class-shipping-method.php:233
 msgid "Shipping method title that the customer will see during checkout."
 msgstr "Название способа доставки, которое увидит покупатель при оформлении заказа."
 
-#: shipping-method/class-shipping-method.php:233
-msgid "Enter description here"
-msgstr "Введите описание"
-
-#: shipping-method/class-shipping-method.php:242
-msgid "Shipping class"
-msgstr "Класс доставки"
-
-#: shipping-method/class-shipping-method.php:247
-msgid "Select the shipping class that this method applies to."
-msgstr "Выберите класс доставки, к которому применяется этот способ."
-
-#: shipping-method/class-shipping-method.php:254
-msgid "Packing algorithm"
-msgstr "Алгоритм упаковки"
-
-#: shipping-method/class-shipping-method.php:259
-msgid "How cart items are combined into parcels before rate calculation."
-msgstr "Как товары корзины объединяются в посылки перед расчётом стоимости."
-
-#: shipping-method/class-shipping-method.php:230
+#: shipping-method/class-shipping-method.php:243
 msgid "This text is shown to the customer under the method name in the order form. Leave empty to hide it."
 msgstr "Этот текст показывается покупателю под названием способа доставки в форме оформления заказа. Чтобы скрыть его, оставьте поле пустым."
 
-#: shipping-method/class-shipping-method.php:336
+#: shipping-method/class-shipping-method.php:246
+msgid "Enter description here"
+msgstr "Введите описание"
+
+#: shipping-method/class-shipping-method.php:255
+msgid "Shipping class"
+msgstr "Класс доставки"
+
+#: shipping-method/class-shipping-method.php:260
+msgid "Select the shipping class that this method applies to."
+msgstr "Выберите класс доставки, к которому применяется этот способ."
+
+#: shipping-method/class-shipping-method.php:267
+msgid "Packing algorithm"
+msgstr "Алгоритм упаковки"
+
+#: shipping-method/class-shipping-method.php:272
+msgid "How cart items are combined into parcels before rate calculation."
+msgstr "Как товары корзины объединяются в посылки перед расчётом стоимости."
+
+#: shipping-method/class-shipping-method.php:349
 msgid "Courier delivery"
 msgstr "Курьерская доставка"
 
-#: shipping-method/class-shipping-method.php:338
+#: shipping-method/class-shipping-method.php:351
 msgid "Pickup delivery"
 msgstr "Доставка в пункт выдачи"
 
-#: shipping-method/class-shipping-method.php:340
+#: shipping-method/class-shipping-method.php:353
 msgid "Postal delivery"
 msgstr "Почтовая доставка"
 
-#: shipping-method/class-shipping-method.php:357
+#: shipping-method/class-shipping-method.php:370
 msgid "Delivery by courier to customer address."
 msgstr "Доставка курьером по адресу покупателя."
 
-#: shipping-method/class-shipping-method.php:359
+#: shipping-method/class-shipping-method.php:372
 msgid "Delivery to pickup point."
 msgstr "Доставка в пункт выдачи."
 
-#: shipping-method/class-shipping-method.php:361
+#: shipping-method/class-shipping-method.php:374
 msgid "Delivery to postal office."
 msgstr "Доставка в почтовое отделение."
 
-#: shipping-method/class-shipping-method.php:852
+#: shipping-method/class-shipping-method.php:1042
 msgid "Any shipping class"
 msgstr "Любой класс доставки"
 
-#: shipping-method/class-shipping-method.php:853
+#: shipping-method/class-shipping-method.php:1043
 msgid "No shipping class"
 msgstr "Без класса доставки"
 
-#: shipping-method/class-shipping-plugin.php:705
+#: shipping-method/class-shipping-plugin.php:748
+msgid "Выгрузка"
+msgstr ""
+
+#: shipping-method/class-shipping-plugin.php:867
 #, php-format
 msgid "%1$s accepts payment in %2$s only. %3$sConfigure%4$s WooCommerce to accept %2$s to enable this shipping method for checkout."
 msgid_plural "%1$s accepts payment in one of %2$s only. %3$sConfigure%4$s WooCommerce to accept one of %2$s to enable this shipping method for checkout."
@@ -2395,7 +2605,7 @@ msgstr[1] "%1$s принимает оплату только в одной из 
 msgstr[2] "%1$s принимает оплату только в одной из валют %2$s. %3$sНастройте%4$s WooCommerce для приёма одной из валют %2$s, чтобы включить этот способ доставки при оформлении заказа."
 
 #. translators: %1$s - plugin name, %2$s - list of accepted countries, %3$s - opening <a> tag, %4$s - closing </a> tag
-#: shipping-method/class-shipping-plugin.php:737
+#: shipping-method/class-shipping-plugin.php:899
 #, php-format
 msgid "%1$s поддерживает доставку только в %2$s. %3$sНастройте%4$s WooCommerce для использования поддерживаемой страны."
 msgid_plural "%1$s поддерживает доставку в одну из следующих стран: %2$s. %3$sНастройте%4$s WooCommerce для использования одной из поддерживаемых стран."
@@ -2404,71 +2614,115 @@ msgstr[1] ""
 msgstr[2] ""
 
 #. translators: %1$s - plugin name, %2$s - opening <a> tag, %3$s - closing </a> tag
-#: shipping-method/class-shipping-plugin.php:773
+#: shipping-method/class-shipping-plugin.php:935
 #, php-format
 msgid "Внимание! %1$s работает в режиме отладки и записывает данные в лог. Если у вас нет проблем с доставкой, рекомендуем %2$sотключить режим отладки%3$s."
 msgstr ""
 
 #. translators: %1$s - shipping method title, %2$s - opening <a> tag, %3$s - closing </a> tag
-#: shipping-method/class-shipping-plugin.php:810
+#: shipping-method/class-shipping-plugin.php:972
 #, php-format
 msgid "%1$s не настроен. Пожалуйста, %2$sзавершите настройку%3$s для начала работы."
 msgstr ""
 
 #. translators: %1$s - location provider name, %2$s - opening <a> tag, %3$s - closing </a> tag
-#: shipping-method/class-shipping-plugin.php:883
+#: shipping-method/class-shipping-plugin.php:1045
 #, php-format
 msgid "Провайдер локаций «%1$s» не настроен. Пожалуйста, %2$sукажите ключи%3$s — иначе подсказки по адресам и населённым пунктам работать не будут."
 msgstr ""
+
+#: shipping-method/location/class-customer-location-store.php:678
+msgid "Location key"
+msgstr "Ключ локации"
+
+#: shipping-method/location/class-customer-location-store.php:682
+msgid "Level"
+msgstr "Уровень"
+
+#: shipping-method/location/class-customer-location-store.php:686
+msgid "Country"
+msgstr "Страна"
+
+#: shipping-method/location/class-customer-location-store.php:690
+msgid "Location name"
+msgstr "Название"
+
+#: shipping-method/location/class-customer-location-store.php:694
+msgid "Saved at"
+msgstr "Сохранено"
+
+#: shipping-method/location/class-customer-location-store.php:698
+msgid "Detected automatically (not the customer's choice)"
+msgstr "Определено автоматически (не выбор покупателя)"
+
+#: shipping-method/location/class-customer-location-store.php:699
+msgid "Yes"
+msgstr "Да"
+
+#: shipping-method/location/class-customer-location-store.php:699
+msgid "No"
+msgstr "Нет"
+
+#: shipping-method/location/class-customer-location-store.php:708
+msgid "Raw provider response"
+msgstr "Необработанный ответ провайдера"
+
+#: shipping-method/location/class-customer-location-store.php:715
+msgid "Customer location"
+msgstr "Локация покупателя"
+
+#: shipping-method/location/class-customer-location-store.php:716
+msgid "The delivery location the customer selected, or that was detected automatically during checkout."
+msgstr "Локация доставки, которую покупатель выбрал или которая была определена автоматически при оформлении заказа."
 
 #: shipping-method/location/class-customer-location-store.php:809
 msgid "Не удалось удалить сохранённую локацию покупателя — запись осталась в базе данных."
 msgstr ""
 
-#: shipping-method/location/class-location-provider-registry.php:763
-#: shipping-method/location/class-location-provider-registry.php:785
+#: shipping-method/location/class-location-provider-registry.php:765
+#: shipping-method/location/class-location-provider-registry.php:787
 msgid "Локация покупателя (Woodev)"
 msgstr ""
 
-#: shipping-method/location/class-location-provider-registry.php:1419
+#: shipping-method/location/class-location-provider-registry.php:1460
 msgid "Text with suggestions"
 msgstr "Текст с подсказками"
 
-#: shipping-method/location/class-location-provider-registry.php:1420
+#: shipping-method/location/class-location-provider-registry.php:1461
 msgid "Preset list"
 msgstr "Предустановленный список"
 
-#: shipping-method/location/class-location-provider-registry.php:1421
+#: shipping-method/location/class-location-provider-registry.php:1462
 msgid "Searchable list"
 msgstr "Список с поиском"
 
-#: shipping-method/location/class-location-provider-registry.php:1822
+#: shipping-method/location/class-location-provider-registry.php:1863
 msgid "Disabled"
 msgstr "Отключено"
 
-#: shipping-method/location/class-location-provider-registry.php:1823
+#: shipping-method/location/class-location-provider-registry.php:1864
 msgid "Fixed location"
 msgstr "Фиксированная локация"
 
-#: shipping-method/location/class-location-provider-registry.php:1824
+#: shipping-method/location/class-location-provider-registry.php:1865
 msgid "By the customer's IP address"
 msgstr "По IP-адресу покупателя"
 
-#: shipping-method/location/class-location-provider-registry.php:2644
+#: shipping-method/location/class-location-provider-registry.php:2685
 msgid "The default location is not configured: until a valid record is saved, this policy applies nothing."
 msgstr "Локация по умолчанию не настроена: пока не будет сохранена корректная запись, эта политика ничего не применит."
 
-#: shipping-method/location/class-location-provider-registry.php:2652
+#: shipping-method/location/class-location-provider-registry.php:2693
 msgid "The fixed location was chosen through a different provider and may not suit the current one — choosing it again is recommended."
 msgstr "Зафиксированная локация была выбрана через другого провайдера и может не подойти текущему — рекомендуется выбрать её заново."
 
 #. translators: %1$s - opening <a> tag, %2$s - closing </a> tag
-#: shipping-method/location/class-location-provider-registry.php:2715
+#: shipping-method/location/class-location-provider-registry.php:2756
 #, php-format
 msgid "Зафиксированная локация по умолчанию была выбрана через другого провайдера и может не подходить активному сейчас. %1$sВыберите её заново%2$s."
 msgstr ""
 
-#: shipping-method/location/class-location-provider-registry.php:2760
+#: shipping-method/location/class-location-provider-registry.php:2801
 msgid "The selected provider does not serve addresses, and the DaData credentials are empty."
 msgstr "Выбранный провайдер не отдаёт адреса, а учётные данные DaData не заполнены."
 
@@ -2533,8 +2787,8 @@ msgid "Зафиксированная локация требует повтор
 msgstr ""
 
 #: shipping-method/location/class-location-settings.php:666
-#: assets/build/settings-page/index.js:1
-#: assets/build/setup-wizard/index.js:1
+#: assets/build/settings-page/index.js:1 assets/build/setup-wizard/index.js:1
+#: assets/build/shipping-orders-page/index.js:1
 #: assets/build/ui-kit-gallery/index.js:1
 msgid "Зафиксированная локация выбрана для другого провайдера — выберите её заново или верните прежнего провайдера."
 msgstr ""
@@ -2646,6 +2900,7 @@ msgid "Инструкция по получению ключа: %s."
 msgstr ""
 
 #: shipping-method/order/abstract-shipment-handler.php:232
+#: shipping-method/order/abstract-shipment-handler.php:807
 msgid "Этот заказ уже выгружается — дождитесь окончания."
 msgstr ""
 
@@ -2667,6 +2922,95 @@ msgstr ""
 msgid "Перевозчик не ответил (%s). Заказ мог быть создан у него — проверьте личный кабинет перевозчика, прежде чем выгружать снова."
 msgstr ""
 
+#: shipping-method/order/class-delivery-status.php:91
+#: assets/build/shipping-orders-page/index.js:1
+msgid "К отправке"
+msgstr ""
+
+#: shipping-method/order/class-delivery-status.php:92
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Принято"
+msgstr ""
+
+#: shipping-method/order/class-delivery-status.php:93
+#: assets/build/shipping-orders-page/index.js:1
+msgid "В пути"
+msgstr ""
+
+#: shipping-method/order/class-delivery-status.php:94
+#: assets/build/shipping-orders-page/index.js:1
+msgid "К выдаче"
+msgstr ""
+
+#: shipping-method/order/class-delivery-status.php:95
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Доставлено"
+msgstr ""
+
+#: shipping-method/order/class-delivery-status.php:96
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Возврат"
+msgstr ""
+
+#: shipping-method/order/class-delivery-status.php:97
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Возвращено"
+msgstr ""
+
+#: shipping-method/order/class-delivery-status.php:98
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Не доставлено"
+msgstr ""
+
+#: shipping-method/order/class-delivery-status.php:99
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Отменено"
+msgstr ""
+
+#: shipping-method/order/class-delivery-status.php:100
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Неизвестно"
+msgstr ""
+
+#. translators: %d: number of orders being exported to the carrier in the background
+#: shipping-method/order/class-export-queue.php:88
+#, php-format
+msgid "Сейчас выгружается %d заказ перевозчику"
+msgid_plural "Сейчас выгружаются %d заказов перевозчику"
+msgstr[0] "Сейчас выгружается %d заказ перевозчику"
+msgstr[1] "Сейчас выгружаются %d заказа перевозчику"
+msgstr[2] "Сейчас выгружаются %d заказов перевозчику"
+
+#. translators: 1: number of attempts, 2: the carrier's last error
+#: shipping-method/order/class-export-retry.php:238
+#, php-format
+msgid "Не удалось выгрузить заказ перевозчику за %1$d попыток: %2$s"
+msgstr ""
+
+#: shipping-method/order/class-order-automation.php:209
+msgid "Отменить заявку у перевозчика не удалось: перевозчик не найден (плагин отключён?)"
+msgstr ""
+
+#. translators: %s: the shipment's delivery status at the carrier, e.g. "Доставлено"
+#: shipping-method/order/class-order-automation.php:220
+#, php-format
+msgid "Отменить заявку у перевозчика нельзя (статус «%s») — свяжитесь с перевозчиком"
+msgstr ""
+
+#: shipping-method/order/class-order-automation.php:261
+msgid "Заявка отменена у перевозчика"
+msgstr ""
+
+#. translators: %s: the carrier's reason for refusing the cancellation
+#: shipping-method/order/class-order-automation.php:271
+#, php-format
+msgid "Не удалось отменить заявку у перевозчика: %s"
+msgstr ""
+
+#: shipping-method/order/class-order-automation.php:294
+msgid "Не удалось отменить заявку у перевозчика: заказ слишком долго выгружается. Проверьте заявку в личном кабинете перевозчика."
+msgstr ""
+
 #. translators: 1: cart weight in kg, 2: point weight limit in kg
 #: shipping-method/pickup/class-constraint-checker.php:100
 #, php-format
@@ -2677,205 +3021,227 @@ msgstr "Вес заказа %1$s кг превышает ограничение 
 msgid "This pickup point does not accept cash on delivery. Choose another point or another payment method."
 msgstr "В этом пункте выдачи недоступна оплата при получении. Выберите другой пункт или другой способ оплаты."
 
-#: shipping-method/pickup/class-pickup-handler.php:1197
+#: shipping-method/pickup/class-pickup-handler.php:1215
 msgid "Choose a pickup point"
 msgstr "Выберите пункт выдачи"
 
-#: shipping-method/pickup/class-pickup-handler.php:1198
+#: shipping-method/pickup/class-pickup-handler.php:1216
 msgid "Close"
 msgstr "Закрыть"
 
-#: shipping-method/pickup/class-pickup-handler.php:1199
+#: shipping-method/pickup/class-pickup-handler.php:1217
 msgid "Choose this point"
 msgstr "Выбрать этот пункт"
 
-#: shipping-method/pickup/class-pickup-handler.php:1200
+#: shipping-method/pickup/class-pickup-handler.php:1218
 msgid "Loading pickup points…"
 msgstr "Загрузка пунктов выдачи…"
 
-#: shipping-method/pickup/class-pickup-handler.php:1201
+#: shipping-method/pickup/class-pickup-handler.php:1219
 msgid "Could not load pickup points. Please try again."
 msgstr "Не удалось загрузить пункты выдачи. Попробуйте ещё раз."
 
-#: shipping-method/pickup/class-pickup-handler.php:1205
+#: shipping-method/pickup/class-pickup-handler.php:1223
 msgid "No results found."
 msgstr "Поиск не дал результатов."
 
-#: shipping-method/pickup/class-pickup-handler.php:1206
+#: shipping-method/pickup/class-pickup-handler.php:1224
 msgid "This pickup point is not available for your order."
 msgstr "Этот пункт выдачи недоступен для вашего заказа."
 
-#: shipping-method/pickup/class-pickup-handler.php:1212
+#: shipping-method/pickup/class-pickup-handler.php:1230
 msgid "Select a pickup point"
 msgstr "Выбрать пункт выдачи"
 
-#: shipping-method/pickup/class-pickup-handler.php:1213
+#: shipping-method/pickup/class-pickup-handler.php:1231
 msgid "Try again"
 msgstr "Повторить"
 
-#: shipping-method/pickup/class-pickup-handler.php:1214
+#: shipping-method/pickup/class-pickup-handler.php:1232
 msgid "The pickup point service is temporarily unavailable. Please try again later."
 msgstr "Сервис пунктов выдачи временно недоступен. Попробуйте ещё раз позже."
 
-#: shipping-method/pickup/class-pickup-handler.php:1218
+#: shipping-method/pickup/class-pickup-handler.php:1236
 msgid "Too many requests. Please wait a moment and try again."
 msgstr "Слишком много запросов. Подождите немного и попробуйте снова."
 
-#: shipping-method/pickup/class-pickup-handler.php:1222
+#: shipping-method/pickup/class-pickup-handler.php:1240
 msgid "This pickup point can no longer be found. Please choose another one."
 msgstr "Этот пункт выдачи больше не найден. Пожалуйста, выберите другой."
 
-#: shipping-method/pickup/class-pickup-handler.php:1230
+#: shipping-method/pickup/class-pickup-handler.php:1248
 msgid "Pickup points in this area"
 msgstr "Пункты выдачи в этой области"
 
-#: shipping-method/pickup/class-pickup-handler.php:1234
+#: shipping-method/pickup/class-pickup-handler.php:1252
 msgid "Show map"
 msgstr "Показать карту"
 
-#: shipping-method/pickup/class-pickup-handler.php:1235
+#: shipping-method/pickup/class-pickup-handler.php:1253
 msgid "Getting there"
 msgstr "Как добраться"
 
-#: shipping-method/pickup/class-pickup-handler.php:1236
+#: shipping-method/pickup/class-pickup-handler.php:1254
 msgid "Payment methods"
 msgstr "Способы оплаты"
 
-#: shipping-method/pickup/class-pickup-handler.php:1237
+#: shipping-method/pickup/class-pickup-handler.php:1255
 msgid "Opening hours"
 msgstr "Часы работы"
 
-#: shipping-method/pickup/class-pickup-handler.php:1238
+#: shipping-method/pickup/class-pickup-handler.php:1256
 msgid "Phone"
 msgstr "Телефон"
 
-#: shipping-method/pickup/class-pickup-handler.php:1239
+#: shipping-method/pickup/class-pickup-handler.php:1257
 msgid "Maximum weight"
 msgstr "Максимальный вес"
 
-#: shipping-method/pickup/class-pickup-handler.php:1240
+#: shipping-method/pickup/class-pickup-handler.php:1258
 msgid "All point types"
 msgstr "Все типы пунктов"
 
-#: shipping-method/pickup/class-pickup-handler.php:1241
+#: shipping-method/pickup/class-pickup-handler.php:1259
 msgid "Could not load the pickup point details. You can still choose it."
 msgstr "Не удалось загрузить подробности о пункте выдачи. Вы всё ещё можете его выбрать."
 
-#: shipping-method/pickup/class-pickup-handler.php:1251
+#: shipping-method/pickup/class-pickup-handler.php:1268
+msgid "Address"
+msgstr "Адрес"
+
+#: shipping-method/pickup/class-pickup-handler.php:1269
 msgid "Services"
 msgstr "Услуги"
 
-#: shipping-method/pickup/class-pickup-handler.php:1252
+#: shipping-method/pickup/class-pickup-handler.php:1270
 msgid "Your address"
 msgstr "Ваш адрес"
 
 #. translators: %s: the searched address.
-#: shipping-method/pickup/class-pickup-handler.php:1254
+#: shipping-method/pickup/class-pickup-handler.php:1272
 #, php-format
 msgid "Nearest to “%s”"
 msgstr "Ближайшие к «%s»"
 
-#: shipping-method/pickup/class-pickup-handler.php:1255
+#: shipping-method/pickup/class-pickup-handler.php:1273
 msgid "Reset"
 msgstr "Сбросить"
 
-#: shipping-method/pickup/class-pickup-handler.php:1256
+#: shipping-method/pickup/class-pickup-handler.php:1274
 msgid "There are no pickup points near this address."
 msgstr "Рядом с этим адресом пунктов выдачи нет."
 
-#: shipping-method/pickup/class-pickup-handler.php:1260
+#: shipping-method/pickup/class-pickup-handler.php:1278
 msgid "Show the nearest"
 msgstr "Показать ближайший"
 
-#: shipping-method/pickup/class-pickup-handler.php:1261
+#: shipping-method/pickup/class-pickup-handler.php:1279
 msgid "Continue to checkout"
 msgstr "Продолжить оформление заказа"
 
-#: shipping-method/pickup/class-pickup-handler.php:1262
+#: shipping-method/pickup/class-pickup-handler.php:1280
 msgid "Zoom in to see pickup points"
 msgstr "Приблизьте карту, чтобы увидеть пункты выдачи"
 
-#: shipping-method/pickup/class-pickup-handler.php:1266
+#: shipping-method/pickup/class-pickup-handler.php:1284
 msgid "Pickup points"
 msgstr "Пункты выдачи"
 
-#: shipping-method/pickup/class-pickup-handler.php:1267
+#: shipping-method/pickup/class-pickup-handler.php:1285
 msgid "Addresses"
 msgstr "Адреса"
 
-#: shipping-method/pickup/class-pickup-handler.php:1268
+#: shipping-method/pickup/class-pickup-handler.php:1286
 msgid "Point type"
 msgstr "Тип пунктов"
 
-#: shipping-method/pickup/class-pickup-handler.php:1269
+#: shipping-method/pickup/class-pickup-handler.php:1287
 msgid "No pickup points in this area"
 msgstr "В этой области пунктов выдачи нет"
 
-#: shipping-method/pickup/class-pickup-handler.php:1276
+#: shipping-method/pickup/class-pickup-handler.php:1294
 msgid "There are no pickup points in the selected locality"
 msgstr "В выбранном населённом пункте нет пунктов выдачи"
 
-#: shipping-method/pickup/class-pickup-handler.php:1282
+#: shipping-method/pickup/class-pickup-handler.php:1300
 msgid "Choose a different pickup point"
 msgstr "Выбрать другой пункт выдачи"
 
-#: shipping-method/pickup/class-pickup-handler.php:1287
+#: shipping-method/pickup/class-pickup-handler.php:1305
 msgid "Chosen pickup point:"
 msgstr "Выбранный пункт выдачи:"
 
-#: shipping-method/pickup/class-pickup-handler.php:1296
+#: shipping-method/pickup/class-pickup-handler.php:1314
 msgid "in the order summary"
 msgstr "в сводке заказа"
 
-#: shipping-method/pickup/class-pickup-handler.php:1297
+#: shipping-method/pickup/class-pickup-handler.php:1315
 msgid "next to the selected shipping method"
 msgstr "у выбранного способа доставки"
 
-#: shipping-method/pickup/class-pickup-handler.php:1302
+#: shipping-method/pickup/class-pickup-handler.php:1320
 msgid "Zoom in"
 msgstr "Приблизить карту"
 
-#: shipping-method/pickup/class-pickup-handler.php:1303
+#: shipping-method/pickup/class-pickup-handler.php:1321
 msgid "Zoom out"
 msgstr "Отдалить карту"
 
-#: shipping-method/pickup/class-pickup-handler.php:1309
+#: shipping-method/pickup/class-pickup-handler.php:1327
 msgid "Checking…"
 msgstr "Проверяем…"
 
-#: shipping-method/pickup/class-pickup-handler.php:1316
+#: shipping-method/pickup/class-pickup-handler.php:1334
 msgid "Checking availability…"
 msgstr "Проверяем доступность…"
 
-#: shipping-method/pickup/class-pickup-handler.php:1317
+#: shipping-method/pickup/class-pickup-handler.php:1335
 msgid "Could not confirm your choice. Please try again."
 msgstr "Не удалось подтвердить выбор. Попробуйте ещё раз."
 
-#: shipping-method/pickup/class-pickup-handler.php:1332
+#: shipping-method/pickup/class-pickup-handler.php:1350
 msgid "Could not confirm your choice. Please choose a point again."
 msgstr "Не удалось подтвердить выбор. Выберите пункт ещё раз."
 
-#: shipping-method/pickup/class-pickup-handler.php:1338
+#: shipping-method/pickup/class-pickup-handler.php:1356
 msgid "This page is out of date. Refresh it and choose a pickup point again."
 msgstr "Страница устарела. Обновите её и выберите пункт выдачи заново."
 
-#: shipping-method/pickup/class-pickup-handler.php:1648
+#. translators: abbreviation for metres, shown after a distance number.
+#: shipping-method/pickup/class-pickup-handler.php:1367
+msgctxt "distance unit abbreviation: metres"
+msgid "m"
+msgstr "м"
+
+#. translators: abbreviation for kilometres, shown after a distance number.
+#: shipping-method/pickup/class-pickup-handler.php:1369
+msgctxt "distance unit abbreviation: kilometres"
+msgid "km"
+msgstr "км"
+
+#. translators: abbreviation for miles, shown after a distance number.
+#: shipping-method/pickup/class-pickup-handler.php:1371
+msgctxt "distance unit abbreviation: miles"
+msgid "mi"
+msgstr "миль"
+
+#: shipping-method/pickup/class-pickup-handler.php:1666
 msgid "Акцентный цвет карты"
 msgstr ""
 
-#: shipping-method/pickup/class-pickup-handler.php:1651
+#: shipping-method/pickup/class-pickup-handler.php:1669
 msgid "Цвет кнопок, активных пунктов и кластеров на карте пунктов выдачи."
 msgstr ""
 
-#: shipping-method/pickup/class-pickup-handler.php:3363
+#: shipping-method/pickup/class-pickup-handler.php:3708
 msgid "This pickup point is not available for your order. Please choose another pickup point."
 msgstr "Этот пункт выдачи недоступен для вашего заказа. Пожалуйста, выберите другой пункт выдачи."
 
-#: shipping-method/pickup/class-pickup-handler.php:3377
+#: shipping-method/pickup/class-pickup-handler.php:3722
 msgid "The chosen pickup point is no longer available. Please choose a pickup point again."
 msgstr "Выбранный пункт выдачи больше недоступен. Пожалуйста, выберите пункт выдачи заново."
 
-#: shipping-method/pickup/class-pickup-handler.php:3392
+#: shipping-method/pickup/class-pickup-handler.php:3737
 msgid "Could not verify the pickup point. Please try placing your order again in a few minutes."
 msgstr "Не удалось проверить пункт выдачи. Пожалуйста, повторите оформление заказа через несколько минут."
 
@@ -2916,7 +3282,7 @@ msgid "Too many requests. Please slow down."
 msgstr "Слишком много запросов. Пожалуйста, не так быстро."
 
 #: shipping-method/rest-api/class-location-controller.php:569
-#: shipping-method/rest-api/class-pickup-controller.php:493
+#: shipping-method/rest-api/class-pickup-controller.php:517
 msgid "Страница оформления заказа устарела. Обновите её и попробуйте снова."
 msgstr ""
 
@@ -2924,116 +3290,237 @@ msgstr ""
 msgid "У вас нет прав для выполнения этого действия."
 msgstr ""
 
-#: shipping-method/rest-api/class-location-controller.php:834
+#: shipping-method/rest-api/class-location-controller.php:835
 msgid "Слишком короткий или слишком длинный поисковый запрос."
 msgstr ""
 
-#: shipping-method/rest-api/class-location-controller.php:844
-#: shipping-method/rest-api/class-location-controller.php:1141
+#: shipping-method/rest-api/class-location-controller.php:845
+#: shipping-method/rest-api/class-location-controller.php:1142
 msgid "Некорректный уровень поиска."
 msgstr ""
 
-#: shipping-method/rest-api/class-location-controller.php:868
+#: shipping-method/rest-api/class-location-controller.php:869
 msgid "Неизвестный провайдер."
 msgstr ""
 
-#: shipping-method/rest-api/class-location-controller.php:900
-#: shipping-method/rest-api/class-location-controller.php:1004
-#: shipping-method/rest-api/class-location-controller.php:1166
+#: shipping-method/rest-api/class-location-controller.php:901
+#: shipping-method/rest-api/class-location-controller.php:1005
+#: shipping-method/rest-api/class-location-controller.php:1167
 msgid "Некорректный код страны."
 msgstr ""
 
-#: shipping-method/rest-api/class-location-controller.php:1182
+#: shipping-method/rest-api/class-location-controller.php:1183
 msgid "Список населённых пунктов сейчас недоступен."
 msgstr ""
 
-#: shipping-method/rest-api/class-location-controller.php:1249
-#: shipping-method/rest-api/class-location-controller.php:1460
+#: shipping-method/rest-api/class-location-controller.php:1251
+#: shipping-method/rest-api/class-location-controller.php:1463
 msgid "Сервис определения местоположения сейчас недоступен."
 msgstr ""
 
-#: shipping-method/rest-api/class-location-controller.php:1280
-#: shipping-method/rest-api/class-location-controller.php:1290
+#: shipping-method/rest-api/class-location-controller.php:1282
+#: shipping-method/rest-api/class-location-controller.php:1292
+#: shipping-method/rest-api/class-pickup-controller.php:1160
+#: shipping-method/rest-api/class-rates-controller.php:264
 msgid "Некорректные данные о местоположении."
 msgstr ""
 
-#: shipping-method/rest-api/class-location-controller.php:1571
+#: shipping-method/rest-api/class-location-controller.php:1574
 msgid "This information is out of date, please choose again"
 msgstr "Данные не актуальны, выберите заново"
 
-#: shipping-method/rest-api/class-location-controller.php:1704
+#: shipping-method/rest-api/class-location-controller.php:1707
 msgid "Определение локации по IP-адресу сейчас недоступно."
 msgstr ""
 
-#: shipping-method/rest-api/class-location-controller.php:1718
+#: shipping-method/rest-api/class-location-controller.php:1721
 msgid "Не удалось определить IP-адрес."
 msgstr ""
 
-#: shipping-method/rest-api/class-location-controller.php:2002
+#: shipping-method/rest-api/class-location-controller.php:2005
 msgid "Сервис определения местоположения временно недоступен. Попробуйте обновить страницу позже."
 msgstr ""
 
-#: shipping-method/rest-api/class-location-controller.php:2020
-#: shipping-method/rest-api/class-pickup-controller.php:1096
+#: shipping-method/rest-api/class-location-controller.php:2023
+#: shipping-method/rest-api/class-pickup-controller.php:1614
 msgid "Слишком много запросов. Пожалуйста, подождите немного."
 msgstr ""
 
 #. translators: %s: order number.
-#: shipping-method/rest-api/class-order-editor-controller.php:177
+#: shipping-method/rest-api/class-order-editor-controller.php:201
 #, php-format
 msgid "Заказ №%s создан."
 msgstr ""
 
 #. translators: 1: order number, 2: the carrier's note or the framework's own «Заказ выгружен перевозчику.».
-#: shipping-method/rest-api/class-order-editor-controller.php:186
+#: shipping-method/rest-api/class-order-editor-controller.php:215
 #, php-format
 msgid "Заказ №%1$s создан. %2$s"
 msgstr ""
 
 #. translators: 1: order number, 2: why the export did not happen — the carrier's own text, prefixed with its name.
-#: shipping-method/rest-api/class-order-editor-controller.php:192
+#: shipping-method/rest-api/class-order-editor-controller.php:221
 #, php-format
 msgid "Заказ №%1$s создан, но не выгружен. %2$s"
 msgstr ""
 
-#: shipping-method/admin/orders/class-order-editor.php:272
-msgid "Сервис перевозчика временно недоступен. Выгрузите заказ позже кнопкой «Экспорт» в списке заказов."
-msgstr ""
-
-#: shipping-method/admin/orders/class-order-editor.php:285
-msgid "Перевозчик не принял заказ и не назвал причину. Повторите выгрузку кнопкой «Экспорт» в списке заказов."
-msgstr ""
-
 #. translators: %s: order number.
-#: shipping-method/rest-api/class-order-editor-controller.php:209
+#: shipping-method/rest-api/class-order-editor-controller.php:255
 #, php-format
 msgid "Заказ №%s сохранён."
 msgstr ""
 
-#: shipping-method/rest-api/class-pickup-controller.php:563
+#. translators: %s: parameter name.
+#: shipping-method/rest-api/class-orders-controller.php:346
+#, php-format
+msgid "%s must be an ISO 8601 date (YYYY-MM-DD)."
+msgstr "%s должен быть датой в формате ISO 8601 (ГГГГ-ММ-ДД)."
+
+#. translators: %s: parameter name.
+#: shipping-method/rest-api/class-orders-controller.php:371
+#, php-format
+msgid "%s is not a recognized delivery status."
+msgstr "%s — неизвестный статус доставки."
+
+#. translators: %d: maximum number of order ids accepted per bulk request.
+#: shipping-method/rest-api/class-orders-controller.php:396
+#, php-format
+msgid "За один раз можно обработать не более %d заказов."
+msgstr ""
+
+#: shipping-method/rest-api/class-orders-controller.php:427
+msgid "Неизвестный перевозчик."
+msgstr ""
+
+#: shipping-method/rest-api/class-orders-controller.php:758
+msgid "Не удалось определить перевозчика для этого заказа."
+msgstr ""
+
+#: shipping-method/rest-api/class-orders-controller.php:796
+msgid "Для этого перевозчика не настроен обработчик отправлений."
+msgstr ""
+
+#. translators: %d: number of orders skipped because another manager is editing them.
+#: shipping-method/rest-api/class-orders-controller.php:979
+#, php-format
+msgid "Заказов пропущено, потому что их сейчас редактируют другие пользователи: %d"
+msgstr ""
+
+#: shipping-method/rest-api/class-orders-controller.php:989
+msgid "Ни один из выбранных заказов не поддерживает это действие."
+msgstr ""
+
+#: shipping-method/rest-api/class-orders-controller.php:1026
+#, php-format
+msgid "Экспортировано %1$d из %2$d"
+msgstr ""
+
+#: shipping-method/rest-api/class-orders-controller.php:1030
+#, php-format
+msgid "Отменено %1$d из %2$d"
+msgstr ""
+
+#: shipping-method/rest-api/class-orders-controller.php:1034
+#, php-format
+msgid "Обновлено %1$d из %2$d"
+msgstr ""
+
+#: shipping-method/rest-api/class-orders-controller.php:1038
+#, php-format
+msgid "Выполнено %1$d из %2$d"
+msgstr ""
+
+#: shipping-method/rest-api/class-orders-controller.php:1067
+#, php-format
+msgid "Не удалось экспортировать %1$d заказ из %2$d"
+msgid_plural "Не удалось экспортировать %1$d заказов из %2$d"
+msgstr[0] "Не удалось экспортировать %1$d заказ из %2$d"
+msgstr[1] "Не удалось экспортировать %1$d заказа из %2$d"
+msgstr[2] "Не удалось экспортировать %1$d заказов из %2$d"
+
+#: shipping-method/rest-api/class-orders-controller.php:1076
+#, php-format
+msgid "Не удалось отменить %1$d заказ из %2$d"
+msgid_plural "Не удалось отменить %1$d заказов из %2$d"
+msgstr[0] "Не удалось отменить %1$d заказ из %2$d"
+msgstr[1] "Не удалось отменить %1$d заказа из %2$d"
+msgstr[2] "Не удалось отменить %1$d заказов из %2$d"
+
+#: shipping-method/rest-api/class-orders-controller.php:1085
+#, php-format
+msgid "Не удалось обновить %1$d заказ из %2$d"
+msgid_plural "Не удалось обновить %1$d заказов из %2$d"
+msgstr[0] "Не удалось обновить %1$d заказ из %2$d"
+msgstr[1] "Не удалось обновить %1$d заказа из %2$d"
+msgstr[2] "Не удалось обновить %1$d заказов из %2$d"
+
+#: shipping-method/rest-api/class-orders-controller.php:1094
+#, php-format
+msgid "Не удалось выполнить действие для %1$d из %2$d"
+msgstr ""
+
+#: shipping-method/rest-api/class-orders-controller.php:1172
+msgid "Отправление отменено."
+msgstr ""
+
+#: shipping-method/rest-api/class-orders-controller.php:1175
+msgid "Информация по заказу обновлена."
+msgstr ""
+
+#: shipping-method/rest-api/class-orders-controller.php:1178
+msgid "Готово."
+msgstr ""
+
+#: shipping-method/rest-api/class-pickup-controller.php:587
 msgid "Пункт выдачи не указан."
 msgstr ""
 
-#: shipping-method/rest-api/class-pickup-controller.php:578
-#: shipping-method/rest-api/class-pickup-controller.php:828
+#: shipping-method/rest-api/class-pickup-controller.php:602
+#: shipping-method/rest-api/class-pickup-controller.php:852
+#: shipping-method/rest-api/class-pickup-controller.php:1090
 msgid "Пункт выдачи не найден."
 msgstr ""
 
-#: shipping-method/rest-api/class-pickup-controller.php:1077
+#: shipping-method/rest-api/class-pickup-controller.php:1595
 msgid "Сервис пунктов выдачи временно недоступен. Попробуйте обновить страницу позже."
-msgstr ""
-
-#: shipping-method/rest-api/class-rates-controller.php:172
-msgid "Покупатель не найден."
-msgstr ""
-
-#: shipping-method/rest-api/class-rates-controller.php:191
-msgid "Укажите страну доставки."
 msgstr ""
 
 #. translators: %d: product id.
 #: shipping-method/rest-api/class-rates-controller.php:224
+#, php-format
 msgid "Товар №%d не найден."
+msgstr ""
+
+#: shipping-method/settings/class-export-settings.php:163
+msgid "Когда заказ сам отправляется перевозчику. Отмена заказа и его полный возврат отменяют заявку у перевозчика сами, независимо от этих настроек."
+msgstr ""
+
+#. translators: %s: the order status name
+#: shipping-method/settings/class-export-settings.php:168
+#, php-format
+msgid "Статус «%s» больше не поддерживается для автоэкспорта: заказы в нём не выгружаются автоматически. Выберите поддерживаемый статус."
+msgstr ""
+
+#: shipping-method/settings/class-export-settings.php:189
+msgid "Автоэкспорт"
+msgstr ""
+
+#: shipping-method/settings/class-export-settings.php:197
+msgid "Когда заказ получает один из выбранных ниже статусов, он сам отправляется перевозчику — в фоне, покупатель ничего не ждёт. Вручную заказ можно выгрузить всегда."
+msgstr ""
+
+#: shipping-method/settings/class-export-settings.php:205
+msgid "Статусы для автоэкспорта"
+msgstr ""
+
+#: shipping-method/settings/class-export-settings.php:215
+msgid "Заказ выгружается в тот момент, когда переходит в один из этих статусов. Здесь только статусы, в которых заказ ещё можно отправить перевозчику."
+msgstr ""
+
+#. translators: %s: the order status name
+#: shipping-method/settings/class-export-settings.php:247
+#, php-format
+msgid "%s (не поддерживается)"
 msgstr ""
 
 #: shipping-method/settings/class-shipping-integration.php:100
@@ -3055,7 +3542,7 @@ msgctxt "Shipping plugin production or test environment modes"
 msgid "Select the plugin environment to use."
 msgstr "Выберите режим работы плагина."
 
-#: shipping-method/settings/class-shipping-integration.php:461
+#: shipping-method/settings/class-shipping-integration.php:534
 #, php-format
 msgid "Heads up! Plugin %1$s is not fully configured and cannot calculate delivery. Please %2$sreview the documentation%3$s and configure the %4$sgeneral plugin settings%5$s."
 msgstr "Внимание! Плагин %1$s настроен не полностью и не может рассчитать доставку. %2$sОзнакомьтесь с документацией%3$s и настройте %4$sосновные параметры плагина%5$s."
@@ -3072,12 +3559,12 @@ msgstr ""
 msgid "Определяет, какие поля адреса показываются в форме оформления заказа, в каком порядке и как вводится регион с населённым пунктом, а также — блокируется ли кнопка «Оформить заказ», пока не заполнены обязательные поля доставки: это не конструктор полей, а набор правил присутствия и поведения для уже существующих элементов формы."
 msgstr ""
 
-#: shipping-method/settings/class-shipping-settings-tab.php:331
-msgid "Карта"
-msgstr ""
-
 #: shipping-method/settings/class-shipping-settings-tab.php:323
 msgid "Форма заказа"
+msgstr ""
+
+#: shipping-method/settings/class-shipping-settings-tab.php:331
+msgid "Карта"
 msgstr ""
 
 #: shipping-method/settings/class-shipping-settings-tab.php:333
@@ -3093,7 +3580,9 @@ msgid "Действия над данными раздела «Доставка�
 msgstr ""
 
 #: shipping-method/settings/class-shipping-settings-tab.php:413
-#: assets/build/shipping-orders-page/index.js:1
+#: assets/build/shipping-orders-page/index.js:7
+#: assets/build/shipping-orders-page/index.js:8
+#: assets/build/shipping-orders-page/index.js:16
 msgid "Доставка"
 msgstr ""
 
@@ -3253,6 +3742,7 @@ msgid "Изменить ключ"
 msgstr ""
 
 #: assets/build/license-page/index.js:1
+#: assets/build/shipping-orders-page/index.js:9
 msgid "Отмена"
 msgstr ""
 
@@ -3293,11 +3783,11 @@ msgid "Поиск плагинов"
 msgstr ""
 
 #: assets/build/plugins-page/index.js:1
+#: assets/build/shipping-orders-page/index.js:16
 msgid "Все"
 msgstr ""
 
 #: assets/build/plugins-page/index.js:1
-#, js-format
 msgid "Рейтинг: %s из 5"
 msgstr ""
 
@@ -3311,7 +3801,6 @@ msgstr ""
 
 #. translators: %s is a formatted RUB amount.
 #: assets/build/plugins-page/index.js:4
-#, js-format
 msgid "Купить за %s ₽"
 msgstr ""
 
@@ -3323,9 +3812,9 @@ msgstr ""
 msgid "Куплено"
 msgstr ""
 
-#: assets/build/plugins-page/index.js:4
-#: assets/build/settings-page/index.js:1
+#: assets/build/plugins-page/index.js:4 assets/build/settings-page/index.js:1
 #: assets/build/setup-wizard/index.js:1
+#: assets/build/shipping-orders-page/index.js:1
 #: assets/build/ui-kit-gallery/index.js:1
 msgid "Ничего не найдено"
 msgstr ""
@@ -3378,8 +3867,7 @@ msgstr ""
 msgid "Мои покупки"
 msgstr ""
 
-#: assets/build/plugins-page/index.js:4
-#: assets/build/settings-page/index.js:1
+#: assets/build/plugins-page/index.js:4 assets/build/settings-page/index.js:1
 msgid "Загрузка…"
 msgstr ""
 
@@ -3387,80 +3875,80 @@ msgstr ""
 msgid "Не удалось загрузить каталог, попробуйте позже."
 msgstr ""
 
-#: assets/build/settings-page/index.js:1
-#: assets/build/setup-wizard/index.js:1
+#: assets/build/settings-page/index.js:1 assets/build/setup-wizard/index.js:1
+#: assets/build/shipping-orders-page/index.js:1
 #: assets/build/ui-kit-gallery/index.js:1
 msgid "Некорректное сохранённое значение — выберите заново"
 msgstr ""
 
-#: assets/build/settings-page/index.js:1
-#: assets/build/setup-wizard/index.js:1
+#: assets/build/settings-page/index.js:1 assets/build/setup-wizard/index.js:1
+#: assets/build/shipping-orders-page/index.js:1
 #: assets/build/ui-kit-gallery/index.js:1
 msgid "Выберите локацию…"
 msgstr ""
 
-#: assets/build/settings-page/index.js:1
-#: assets/build/setup-wizard/index.js:1
+#: assets/build/settings-page/index.js:1 assets/build/setup-wizard/index.js:1
+#: assets/build/shipping-orders-page/index.js:1
 #: assets/build/ui-kit-gallery/index.js:1
 msgid "Начните вводить название…"
 msgstr ""
 
-#: assets/build/settings-page/index.js:1
-#: assets/build/setup-wizard/index.js:1
+#: assets/build/settings-page/index.js:1 assets/build/setup-wizard/index.js:1
+#: assets/build/shipping-orders-page/index.js:1
 #: assets/build/ui-kit-gallery/index.js:1
 msgid "Введите минимум 2 символа для поиска"
 msgstr ""
 
-#: assets/build/settings-page/index.js:1
-#: assets/build/setup-wizard/index.js:1
+#: assets/build/settings-page/index.js:1 assets/build/setup-wizard/index.js:1
+#: assets/build/shipping-orders-page/index.js:1
 #: assets/build/ui-kit-gallery/index.js:1
 msgid "Поиск…"
 msgstr ""
 
-#: assets/build/settings-page/index.js:1
-#: assets/build/setup-wizard/index.js:1
+#: assets/build/settings-page/index.js:1 assets/build/setup-wizard/index.js:1
+#: assets/build/shipping-orders-page/index.js:1
 #: assets/build/ui-kit-gallery/index.js:1
 msgid "Не удалось загрузить подсказки. Попробуйте ещё раз."
 msgstr ""
 
-#: assets/build/settings-page/index.js:1
-#: assets/build/setup-wizard/index.js:1
+#: assets/build/settings-page/index.js:1 assets/build/setup-wizard/index.js:1
+#: assets/build/shipping-orders-page/index.js:1
 #: assets/build/ui-kit-gallery/index.js:1
 msgid "Зафиксированная локация была выбрана через другого провайдера и может не подойти текущему — рекомендуется выбрать её заново."
 msgstr ""
 
-#: assets/build/settings-page/index.js:1
-#: assets/build/setup-wizard/index.js:1
+#: assets/build/settings-page/index.js:1 assets/build/setup-wizard/index.js:1
+#: assets/build/shipping-orders-page/index.js:1
 #: assets/build/ui-kit-gallery/index.js:1
 msgid "Выберите…"
 msgstr ""
 
-#: assets/build/settings-page/index.js:1
-#: assets/build/setup-wizard/index.js:1
+#: assets/build/settings-page/index.js:1 assets/build/setup-wizard/index.js:1
+#: assets/build/shipping-orders-page/index.js:1
 #: assets/build/ui-kit-gallery/index.js:1
 msgid "Полужирный"
 msgstr ""
 
-#: assets/build/settings-page/index.js:1
-#: assets/build/setup-wizard/index.js:1
+#: assets/build/settings-page/index.js:1 assets/build/setup-wizard/index.js:1
+#: assets/build/shipping-orders-page/index.js:1
 #: assets/build/ui-kit-gallery/index.js:1
 msgid "Курсив"
 msgstr ""
 
-#: assets/build/settings-page/index.js:1
-#: assets/build/setup-wizard/index.js:1
+#: assets/build/settings-page/index.js:1 assets/build/setup-wizard/index.js:1
+#: assets/build/shipping-orders-page/index.js:1
 #: assets/build/ui-kit-gallery/index.js:1
 msgid "Список"
 msgstr ""
 
-#: assets/build/settings-page/index.js:1
-#: assets/build/setup-wizard/index.js:1
+#: assets/build/settings-page/index.js:1 assets/build/setup-wizard/index.js:1
+#: assets/build/shipping-orders-page/index.js:1
 #: assets/build/ui-kit-gallery/index.js:1
 msgid "Ссылка"
 msgstr ""
 
-#: assets/build/settings-page/index.js:1
-#: assets/build/setup-wizard/index.js:1
+#: assets/build/settings-page/index.js:1 assets/build/setup-wizard/index.js:1
+#: assets/build/shipping-orders-page/index.js:1
 #: assets/build/ui-kit-gallery/index.js:1
 msgid "Адрес ссылки (URL):"
 msgstr ""
@@ -3494,6 +3982,7 @@ msgid "Не удалось сохранить настройки."
 msgstr ""
 
 #: assets/build/settings-page/index.js:1
+#: assets/build/shipping-orders-page/index.js:8
 msgid "Сохранить"
 msgstr ""
 
@@ -3519,7 +4008,6 @@ msgstr ""
 
 #. translators: %s plugin name
 #: assets/build/setup-wizard/index.js:2
-#, js-format
 msgid "Плагин «%s» готов к работе!"
 msgstr ""
 
@@ -3532,6 +4020,8 @@ msgid "Вы также можете:"
 msgstr ""
 
 #: assets/build/setup-wizard/index.js:2
+#: assets/build/shipping-orders-page/index.js:1
+#: assets/build/shipping-orders-page/index.js:9
 msgid "Назад"
 msgstr ""
 
@@ -3545,459 +4035,6 @@ msgstr ""
 
 #: assets/build/setup-wizard/index.js:2
 msgid "Что-то пошло не так. Попробуйте ещё раз."
-msgstr ""
-
-#. translators: abbreviation for metres, shown after a distance number.
-#: shipping-method/pickup/class-pickup-handler.php:1349
-msgctxt "distance unit abbreviation: metres"
-msgid "m"
-msgstr "м"
-
-#. translators: abbreviation for kilometres, shown after a distance number.
-#: shipping-method/pickup/class-pickup-handler.php:1351
-msgctxt "distance unit abbreviation: kilometres"
-msgid "km"
-msgstr "км"
-
-#. translators: abbreviation for miles, shown after a distance number.
-#: shipping-method/pickup/class-pickup-handler.php:1353
-msgctxt "distance unit abbreviation: miles"
-msgid "mi"
-msgstr "миль"
-
-#: shipping-method/checkout/class-checkout-config.php:669
-msgid "Showing results for a broader area — not limited to your selection."
-msgstr "Показаны результаты по более широкой области, а не только по вашему выбору."
-
-#: shipping-method/location/class-customer-location-store.php:678
-msgid "Location key"
-msgstr "Ключ локации"
-
-#: shipping-method/location/class-customer-location-store.php:682
-msgid "Level"
-msgstr "Уровень"
-
-#: shipping-method/location/class-customer-location-store.php:686
-msgid "Country"
-msgstr "Страна"
-
-#: shipping-method/location/class-customer-location-store.php:690
-msgid "Location name"
-msgstr "Название"
-
-#: shipping-method/location/class-customer-location-store.php:694
-msgid "Saved at"
-msgstr "Сохранено"
-
-#: shipping-method/location/class-customer-location-store.php:698
-msgid "Detected automatically (not the customer's choice)"
-msgstr "Определено автоматически (не выбор покупателя)"
-
-#: shipping-method/location/class-customer-location-store.php:699
-msgid "Yes"
-msgstr "Да"
-
-#: shipping-method/location/class-customer-location-store.php:699
-msgid "No"
-msgstr "Нет"
-
-#: shipping-method/location/class-customer-location-store.php:708
-msgid "Raw provider response"
-msgstr "Необработанный ответ провайдера"
-
-#: shipping-method/location/class-customer-location-store.php:715
-msgid "Customer location"
-msgstr "Локация покупателя"
-
-#: shipping-method/location/class-customer-location-store.php:716
-msgid "The delivery location the customer selected, or that was detected automatically during checkout."
-msgstr "Локация доставки, которую покупатель выбрал или которая была определена автоматически при оформлении заказа."
-
-#: shipping-method/admin/orders/class-orders-registry.php:215
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Заказы доставки"
-msgstr ""
-
-#: shipping-method/rest-api/class-orders-controller.php:235
-msgid "Неизвестный перевозчик."
-msgstr ""
-
-#: shipping-method/order/class-delivery-status.php:88
-msgid "К отправке"
-msgstr ""
-
-#: shipping-method/order/class-delivery-status.php:89
-msgid "Принято"
-msgstr ""
-
-#: shipping-method/order/class-delivery-status.php:90
-msgid "В пути"
-msgstr ""
-
-#: shipping-method/order/class-delivery-status.php:91
-msgid "К выдаче"
-msgstr ""
-
-#: shipping-method/order/class-delivery-status.php:92
-msgid "Доставлено"
-msgstr ""
-
-#: shipping-method/order/class-delivery-status.php:93
-msgid "Возврат"
-msgstr ""
-
-#: shipping-method/order/class-delivery-status.php:94
-msgid "Возвращено"
-msgstr ""
-
-#: shipping-method/order/class-delivery-status.php:95
-msgid "Не доставлено"
-msgstr ""
-
-#: shipping-method/order/class-delivery-status.php:96
-msgid "Отменено"
-msgstr ""
-
-#: shipping-method/order/class-delivery-status.php:97
-msgid "Неизвестно"
-msgstr ""
-
-#. translators: 1: number of attempts, 2: the carrier's last error
-#: shipping-method/order/class-export-retry.php:238
-#, php-format
-msgid "Не удалось выгрузить заказ перевозчику за %1$d попыток: %2$s"
-msgstr ""
-
-#: shipping-method/admin/orders/class-orders-registry.php:340
-msgid "Все перевозчики"
-msgstr ""
-
-#: shipping-method/admin/orders/class-orders-registry.php:1058
-msgid "Повтор выгрузки не выполнен: перевозчик не найден (плагин отключён?)"
-msgstr ""
-
-#: shipping-method/admin/orders/class-orders-registry.php:1064
-msgid "заказ открыт для редактирования"
-msgstr ""
-
-#. translators: %s: the carrier's reason for refusing or failing the export
-#: shipping-method/admin/orders/class-orders-registry.php:1157
-#, php-format
-msgid "Не удалось выгрузить заказ перевозчику в фоне: %s"
-msgstr ""
-
-#: shipping-method/admin/orders/class-orders-registry.php:1158
-msgid "перевозчик не назвал причину"
-msgstr ""
-
-#. translators: %d: number of orders being exported to the carrier in the background
-#: shipping-method/order/class-export-queue.php:88
-#, php-format
-msgid "Сейчас выгружается %d заказ перевозчику"
-msgid_plural "Сейчас выгружаются %d заказов перевозчику"
-msgstr[0] "Сейчас выгружается %d заказ перевозчику"
-msgstr[1] "Сейчас выгружаются %d заказа перевозчику"
-msgstr[2] "Сейчас выгружаются %d заказов перевозчику"
-
-#: shipping-method/order/class-order-automation.php:229
-msgid "Отменить заявку у перевозчика не удалось: перевозчик не найден (плагин отключён?)"
-msgstr ""
-
-#. translators: %s: the shipment's delivery status at the carrier, e.g. "Доставлено"
-#: shipping-method/order/class-order-automation.php:240
-#, php-format
-msgid "Отменить заявку у перевозчика нельзя (статус «%s») — свяжитесь с перевозчиком"
-msgstr ""
-
-#: shipping-method/order/class-order-automation.php:281
-msgid "Заявка отменена у перевозчика"
-msgstr ""
-
-#. translators: %s: the carrier's reason for refusing the cancellation
-#: shipping-method/order/class-order-automation.php:291
-#, php-format
-msgid "Не удалось отменить заявку у перевозчика: %s"
-msgstr ""
-
-#: shipping-method/order/class-order-automation.php:314
-msgid "Не удалось отменить заявку у перевозчика: заказ слишком долго выгружается. Проверьте заявку в личном кабинете перевозчика."
-msgstr ""
-
-#: shipping-method/settings/class-export-settings.php:154
-msgid "Когда заказ сам отправляется перевозчику. Отмена заказа и его полный возврат отменяют заявку у перевозчика сами, независимо от этих настроек."
-msgstr ""
-
-#. translators: %s: the order status name
-#: shipping-method/settings/class-export-settings.php:159
-#, php-format
-msgid "Статус «%s» больше не поддерживается для автоэкспорта: заказы в нём не выгружаются автоматически. Выберите поддерживаемый статус."
-msgstr ""
-
-#: shipping-method/settings/class-export-settings.php:180
-msgid "Автоэкспорт"
-msgstr ""
-
-#: shipping-method/settings/class-export-settings.php:188
-msgid "Когда заказ получает один из выбранных ниже статусов, он сам отправляется перевозчику — в фоне, покупатель ничего не ждёт. Вручную заказ можно выгрузить всегда."
-msgstr ""
-
-#: shipping-method/settings/class-export-settings.php:196
-msgid "Статусы для автоэкспорта"
-msgstr ""
-
-#: shipping-method/settings/class-export-settings.php:206
-msgid "Заказ выгружается в тот момент, когда переходит в один из этих статусов. Здесь только статусы, в которых заказ ещё можно отправить перевозчику."
-msgstr ""
-
-#. translators: %s: the order status name
-#: shipping-method/settings/class-export-settings.php:238
-#, php-format
-msgid "%s (не поддерживается)"
-msgstr ""
-
-#: shipping-method/class-shipping-plugin.php:740
-msgid "Выгрузка"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Курьер"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Пункт выдачи"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Почта"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Ожидает оплаты"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-#, js-format
-msgid "Заказ %s"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Не удалось загрузить заказы."
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Поиск по заказам…"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Заказов доставки пока нет."
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Заказ"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Дата"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Статус"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Покупатель"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Оплата"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Трек"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Заказов"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Компонент WooCommerce «TableCard» недоступен — обновите WooCommerce."
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Показать"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Скоро"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Здесь появится аналитика по доставке — показатели и график за период."
-msgstr ""
-
-#. translators: %s: parameter name.
-#: shipping-method/rest-api/class-orders-controller.php:188
-#, php-format
-msgid "%s must be an ISO 8601 date (YYYY-MM-DD)."
-msgstr "%s должен быть датой в формате ISO 8601 (ГГГГ-ММ-ДД)."
-
-#. translators: %s: parameter name.
-#: shipping-method/rest-api/class-orders-controller.php:213
-#, php-format
-msgid "%s is not a recognized delivery status."
-msgstr "%s — неизвестный статус доставки."
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "равен"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "не равен"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Статус доставки"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Убрать фильтр по статусу доставки"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Статус доставки {{rule /}} {{filter /}}"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Трек-номер"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Убрать фильтр по трек-номеру"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Трек-номер {{rule /}} {{filter /}}"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Убрать фильтр по пункту выдачи"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Пункт выдачи {{rule /}} {{filter /}}"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Статус данных"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Трек-номер {{filter /}}"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Пункт выдачи {{filter /}}"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Обновлено"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Обновится"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Ни разу"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Не по расписанию"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "ни разу не синхронизировалось"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "по расписанию не обновляется"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Обновлено %s"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Обновится %s"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Ни разу не синхронизировалось"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "По расписанию не обновляется"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Не все перевозчики синхронизировались хотя бы раз — часть статусов доставки может быть устаревшей."
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Есть"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Отсутствует"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Статус заказа"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Убрать фильтр по статусу заказа"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Статус заказа {{rule /}} {{filter /}}"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Заказы соответствуют {{select /}} условиям"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "всем"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "любым"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Расширенные фильтры"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Перевозчик"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Фильтры"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Все заказы"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Новые"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Всё время"
 msgstr ""
 
 #: assets/build/shipping-orders-page/index.js:1
@@ -4041,15 +4078,27 @@ msgid "Прошлый год"
 msgstr ""
 
 #: assets/build/shipping-orders-page/index.js:1
+msgid "всем"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "любым"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Всё время"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Применить"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Произвольный период"
 msgstr ""
 
 #: assets/build/shipping-orders-page/index.js:1
 msgid "Выберите период"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Применить"
 msgstr ""
 
 #: assets/build/shipping-orders-page/index.js:1
@@ -4060,591 +4109,172 @@ msgstr ""
 msgid "Период заказов"
 msgstr ""
 
-#: shipping-method/admin/orders/class-order-actions.php:136
-msgid "Выгрузить"
-msgstr ""
-
-#: shipping-method/admin/orders/class-order-actions.php:137
-msgid "Передать заказ перевозчику"
-msgstr ""
-
-#: shipping-method/admin/orders/class-order-actions.php:145
-msgid "Обновить"
-msgstr ""
-
-#: shipping-method/admin/orders/class-order-actions.php:146
-msgid "Запросить у перевозчика текущий статус заказа"
-msgstr ""
-
-#: shipping-method/admin/orders/class-order-actions.php:154
-msgid "Отменить"
-msgstr ""
-
-#: shipping-method/admin/orders/class-order-actions.php:155
-msgid "Отменить заказ у перевозчика"
-msgstr ""
-
-#: shipping-method/rest-api/class-orders-controller.php:650
-msgid "Заказ не найден."
-msgstr ""
-
-#: shipping-method/rest-api/class-orders-controller.php:660
-msgid "Не удалось определить перевозчика для этого заказа."
-msgstr ""
-
-#: shipping-method/rest-api/class-orders-controller.php:670
-msgid "Это действие недоступно для данного заказа."
-msgstr ""
-
-#: shipping-method/rest-api/class-orders-controller.php:683
-msgid "Для этого перевозчика не настроен обработчик отправлений."
-msgstr ""
-
-#: shipping-method/rest-api/class-orders-controller.php:787
-msgid "Заказ выгружен перевозчику."
-msgstr ""
-
-#: shipping-method/rest-api/class-orders-controller.php:790
-msgid "Отправление отменено."
-msgstr ""
-
-#: shipping-method/rest-api/class-orders-controller.php:793
-msgid "Информация по заказу обновлена."
-msgstr ""
-
-#: shipping-method/rest-api/class-orders-controller.php:796
-msgid "Готово."
-msgstr ""
-
-#: shipping-method/rest-api/class-orders-controller.php:811
-msgid "Не удалось выгрузить заказ перевозчику."
-msgstr ""
-
-#: shipping-method/rest-api/class-orders-controller.php:814
-msgid "Не удалось отменить отправление."
-msgstr ""
-
-#: shipping-method/rest-api/class-orders-controller.php:817
-msgid "Не удалось обновить информацию по заказу."
-msgstr ""
-
-#: shipping-method/rest-api/class-orders-controller.php:820
-msgid "Действие не выполнено."
-msgstr ""
-
-#: shipping-method/rest-api/class-orders-controller.php:834
-msgid "Сервис перевозчика временно недоступен. Попробуйте повторить действие позже."
-msgstr ""
-
-#. translators: %s: the action's own label, e.g. "Отменить".
-#: assets/build/shipping-orders-page/index.js:2
-#, js-format
-msgid "%s?"
-msgstr "%s?"
-
-#: assets/build/shipping-orders-page/index.js:2
-msgid "Да"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:2
-msgid "Нет"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:2
-msgid "Действие"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:2
-msgid "Не удалось выполнить действие."
-msgstr ""
-
-#: shipping-method/admin/orders/class-order-actions.php:208
-msgid "Для этого заказа не удалось определить перевозчика."
-msgstr ""
-
-#: shipping-method/admin/orders/class-order-actions.php:212
-msgid "Для этого перевозчика не настроен обработчик отправлений — действия недоступны."
-msgstr ""
-
-#: shipping-method/admin/orders/class-order-actions.php:220
-msgid "Заказ уже выгружен перевозчику."
-msgstr ""
-
-#. translators: %s: comma-separated WooCommerce order status names.
-#: shipping-method/admin/orders/class-order-actions.php:225
-#, php-format
-msgid "Выгрузить можно только заказ в одном из статусов: %s."
-msgstr ""
-
-#: shipping-method/admin/orders/class-order-actions.php:231
-msgid "Заказ ещё не выгружен перевозчику — обновлять нечего."
-msgstr ""
-
-#: shipping-method/admin/orders/class-order-actions.php:234
-msgid "Этот перевозчик не умеет запрашивать статус заказа из админки."
-msgstr ""
-
-#: shipping-method/admin/orders/class-order-actions.php:238
-msgid "Заказ ещё не выгружен перевозчику — отменять нечего."
-msgstr ""
-
-#. translators: %s: canonical delivery status label, e.g. "Доставлено".
-#: shipping-method/admin/orders/class-order-actions.php:243
-#, php-format
-msgid "Отправление уже в конечном статусе «%s» — отменить его нельзя."
-msgstr ""
-
-#. translators: %s: carrier name, e.g. "СДЭК".
-#: assets/build/shipping-orders-page/index.js:2
-#, js-format
-msgid "Вы уверены, что хотите отменить этот заказ в «%s»?"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:2
-msgid "Вы уверены, что хотите отменить этот заказ у перевозчика?"
-msgstr ""
-
-#. translators: 1: action label, e.g. "Обновить". 2: carrier name, e.g. "СДЭК".
-#: assets/build/shipping-orders-page/index.js:3
-#, js-format
-msgid "Вы уверены, что хотите выполнить «%1$s» для этого заказа в «%2$s»?"
-msgstr ""
-
-#. translators: %s: action label, e.g. "Обновить".
-#: assets/build/shipping-orders-page/index.js:4
-#, js-format
-msgid "Вы уверены, что хотите выполнить «%s» для этого заказа?"
-msgstr ""
-
-#. translators: %d: maximum number of order ids accepted per bulk request.
-#: shipping-method/rest-api/class-orders-controller.php:392
-#, php-format
-msgid "За один раз можно обработать не более %d заказов."
-msgstr ""
-
-#. translators: %d: number of orders skipped because another manager is editing them.
-#: shipping-method/rest-api/class-orders-controller.php:979
-#, php-format
-msgid "Заказов пропущено, потому что их сейчас редактируют другие пользователи: %d"
-msgstr ""
-
-#: shipping-method/rest-api/class-orders-controller.php:989
-msgid "Ни один из выбранных заказов не поддерживает это действие."
-msgstr ""
-
-#: shipping-method/rest-api/class-orders-controller.php:957
-#, php-format
-msgid "Экспортировано %1$d из %2$d"
-msgstr ""
-
-#: shipping-method/rest-api/class-orders-controller.php:961
-#, php-format
-msgid "Отменено %1$d из %2$d"
-msgstr ""
-
-#: shipping-method/rest-api/class-orders-controller.php:965
-#, php-format
-msgid "Обновлено %1$d из %2$d"
-msgstr ""
-
-#: shipping-method/rest-api/class-orders-controller.php:969
-#, php-format
-msgid "Выполнено %1$d из %2$d"
-msgstr ""
-
-#: shipping-method/rest-api/class-orders-controller.php:998
-#, php-format
-msgid "Не удалось экспортировать %1$d заказ из %2$d"
-msgid_plural "Не удалось экспортировать %1$d заказов из %2$d"
-msgstr[0] "Не удалось экспортировать %1$d заказ из %2$d"
-msgstr[1] "Не удалось экспортировать %1$d заказа из %2$d"
-msgstr[2] "Не удалось экспортировать %1$d заказов из %2$d"
-
-#: shipping-method/rest-api/class-orders-controller.php:1007
-#, php-format
-msgid "Не удалось отменить %1$d заказ из %2$d"
-msgid_plural "Не удалось отменить %1$d заказов из %2$d"
-msgstr[0] "Не удалось отменить %1$d заказ из %2$d"
-msgstr[1] "Не удалось отменить %1$d заказа из %2$d"
-msgstr[2] "Не удалось отменить %1$d заказов из %2$d"
-
-#: shipping-method/rest-api/class-orders-controller.php:1016
-#, php-format
-msgid "Не удалось обновить %1$d заказ из %2$d"
-msgid_plural "Не удалось обновить %1$d заказов из %2$d"
-msgstr[0] "Не удалось обновить %1$d заказ из %2$d"
-msgstr[1] "Не удалось обновить %1$d заказа из %2$d"
-msgstr[2] "Не удалось обновить %1$d заказов из %2$d"
-
-#: shipping-method/rest-api/class-orders-controller.php:1025
-#, php-format
-msgid "Не удалось выполнить действие для %1$d из %2$d"
-msgstr ""
-
-#. translators: %s: order number, e.g. "42".
-#: assets/build/shipping-orders-page/index.js:5
-#, js-format
-msgid "Выбрать заказ %s"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:5
-msgid "Экспортировать"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:5
-msgid "Массовые действия"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:5
-msgid "Применить действие"
-msgstr ""
-
-#. translators: 1: action label, e.g. "Отменить". 2: number of selected orders.
-#: assets/build/shipping-orders-page/index.js:6
-#, js-format
-msgid "Вы уверены, что хотите выполнить «%1$s» для %2$d выбранного заказа?"
-msgid_plural "Вы уверены, что хотите выполнить «%1$s» для %2$d выбранных заказов?"
-msgstr[0] ""
-msgstr[1] ""
-
-#. translators: %s: order number, e.g. "42".
-#: assets/build/shipping-orders-page/index.js:7
-#, js-format
-msgid "Просмотреть заказ %s"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:7
-msgid "Не удалось загрузить заказ."
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:7
-msgid "Просмотр заказа"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:7
-msgid "Выбрать все заказы на странице"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:7
-msgid "Не удалось выполнить массовое действие."
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:5
-msgid "Выберите действие"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:8
-msgid "Товар"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:8
-msgid "Кол-во"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:8
-msgid "Сумма"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:8
-msgid "Итого"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:8
-msgid "Комментарий покупателя"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:8
-msgid "Открыть заказ"
-msgstr ""
-
-#: shipping-method/admin/class-shipping-admin-order.php:167
-msgid "Информация %s"
-msgstr ""
-
-#: shipping-method/admin/class-shipping-admin-order.php:215
-msgid "Заказ ещё не передан перевозчику «%s»."
-msgstr ""
-
-#: shipping-method/admin/class-shipping-admin-order.php:257
-msgid "ID заказа у перевозчика"
-msgstr ""
-
-#: shipping-method/admin/views/html-admin-order-metabox.php:68
-msgid "История доставки"
-msgstr ""
-
-#: shipping-method/admin/views/html-admin-order-metabox.php:91
-msgid "Вы уверены?"
-msgstr ""
-
-#: shipping-method/admin/orders/class-order-actions.php:142
-msgid "Экспорт"
-msgstr ""
-
-#: shipping-method/admin/orders/class-order-actions.php:143
-msgid "Выгрузить заказ в систему перевозчика"
-msgstr ""
-
-#: shipping-method/admin/orders/class-order-actions.php:254
-msgid "Заказ уже выгружен перевозчику — чтобы изменить его, сначала отмените выгрузку."
-msgstr ""
-
-#. translators: %s: WooCommerce order status name, e.g. "Выполнен".
-#: shipping-method/admin/orders/class-order-actions.php:260
-#, php-format
-msgid "Заказ в статусе «%s» — редактировать его нельзя."
-msgstr ""
-
-#. translators: %s: canonical delivery status label, e.g. "Доставлено".
-#: shipping-method/admin/orders/class-order-actions.php:270
-#, php-format
-msgid "Отправление уже в конечном статусе «%s» — редактировать заказ нельзя."
-
-#. translators: Placeholder: %s - the name of the plugin that did not start
-#: class-framework-resolver.php:770
-#, php-format
-msgid "Плагин «%s» не запущен: он собран с ошибкой. Обратитесь к автору плагина."
-msgstr ""
-
-#: shipping-method/admin/orders/class-order-actions.php:238
-msgid "Редактировать"
-msgstr ""
-
-#: shipping-method/admin/orders/class-order-actions.php:239
-msgid "Изменить заказ, пока он не выгружен перевозчику"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:2
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Не удалось выполнить запрос. Попробуйте ещё раз."
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:2
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Пункт выдачи не найден — выберите другой."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Артикул"
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:2
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Вариативный товар — выберите вариант"
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:2
+#: assets/build/shipping-orders-page/index.js:1
 msgid "— выберите страну —"
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:2
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Куда доставить"
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:2
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Страна (код, например RU)"
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:2
+#: assets/build/shipping-orders-page/index.js:1
 msgid "— выберите регион —"
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:2
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Город или населённый пункт"
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:2
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Найти населённый пункт…"
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:2
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Улица, дом"
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:2
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Найти адрес…"
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:2
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Квартира, офис"
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:2
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Результаты поиска"
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:2
+#: assets/build/shipping-orders-page/index.js:1
 msgid "← К результатам поиска"
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:2
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Не удалось выполнить поиск. Попробуйте ещё раз."
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:2
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Кто покупатель"
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:2
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Покупатель из магазина:"
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:2
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Выбрать другого или указать нового"
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:2
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Найти покупателя"
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:2
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Имя или email"
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:2
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Имя"
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:2
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Фамилия"
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:2
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Телефон"
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:2
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Электронная почта"
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:2
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Создать аккаунт покупателя"
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:2
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Без галочки заказ оформляется как гостевой. Покупатель получит письмо со ссылкой для входа."
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:2
-msgid "Что в заказе"
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Выбрать"
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:2
-msgid "Добавить товар"
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Выбрано"
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:2
-msgid "Название или артикул"
+#: assets/build/shipping-orders-page/index.js:1
+msgid "К списку"
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:2
-msgid "Цена за шт."
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Найти адрес"
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:2
-msgid "Убрать"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:2
-msgid "Товары:"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:4
-msgid "Заказ создастся в любом случае. Если перевозчик его не примет, вы увидите причину, а выгрузить заказ можно будет позже из списка."
-msgstr ""
-
-#. translators: %s: comma-separated names of the order statuses the export works in.
-#: assets/build/shipping-orders-page/index.js:5
-#, php-format
-msgid "Выгрузить можно заказ в статусах: %s."
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:7
-msgid "Сразу выгрузить перевозчику"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:8
-msgid "Создать и выгрузить"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:2
-msgid "Укажите город или населённый пункт."
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:2
-msgid "Товары"
-msgstr ""
-
-#. translators: %s: order number, e.g. "301".
-#: assets/build/shipping-orders-page/index.js:2
-#, js-format
-msgid "Редактировать заказ №%s"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:2
-msgid "Редактировать заказ"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:2
-msgid "Создать заказ"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:2
-msgid "Загружаем заказ…"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:2
-msgid "Закрыть окно? Введённые данные не сохранятся."
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:2
-msgid "Продолжить оформление"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:2
-msgid "Закрыть без сохранения"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:2
-msgid "Далее"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:2
-msgid "Как доставить"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:2
-msgid "Данные для перевозчика"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:2
-msgid "Считаем тарифы…"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:2
-msgid "Повторить"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:2
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Для этого адреса и товаров тарифов нет."
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:2
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Данные для перевозчика"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Как доставить"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Считаем тарифы…"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Повторить"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Чтобы посчитать доставку, укажите на предыдущих шагах страну и товары."
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:2
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Выбранный тариф больше не подходит для этого адреса и товаров — выберите другой."
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:2
+#: assets/build/shipping-orders-page/index.js:1
 msgid "В заказе нет товаров, которым нужна доставка."
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:2
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Перевозчики не предложили тарифов. Проверьте адрес и товары на предыдущих шагах."
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:2
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Стоимость доставки"
 msgstr ""
 
 #. translators: %s: the carrier's own price, e.g. "250,00 ₽".
 #: assets/build/shipping-orders-page/index.js:2
-#, js-format
 msgid "Тариф перевозчика: %s."
 msgstr ""
 
@@ -4673,123 +4303,460 @@ msgid "Код пункта выдачи"
 msgstr ""
 
 #: assets/build/shipping-orders-page/index.js:2
-msgid "Дождитесь расчёта тарифов."
+msgid "Что в заказе"
 msgstr ""
 
 #: assets/build/shipping-orders-page/index.js:2
-msgid "Оплата и итоги"
+msgid "Добавить товар"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Название или артикул"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Кол-во"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Цена за шт."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Убрать"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Товары:"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Дождитесь расчёта тарифов."
 msgstr ""
 
 #: assets/build/shipping-orders-page/index.js:2
 msgid "Изменить"
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:2
-msgid "Имя не указано"
-msgstr ""
-
-#. translators: %s: the registered customer's name / email.
-#: assets/build/shipping-orders-page/index.js:2
-#, js-format
-msgid "Зарегистрированный покупатель: %s"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:2
-msgid "Гость; при создании заказа заведём аккаунт"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:2
-msgid "Гость"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:2
-msgid "Не указан"
-msgstr ""
-
-#. translators: 1: product name, 2: quantity, 3: unit price.
-#: assets/build/shipping-orders-page/index.js:2
-#, js-format
-msgid "%1$s — %2$s шт. × %3$s"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:2
-msgid "Не выбрана"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:2
-msgid "Способ оплаты"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:2
-msgid "Деньги не списываются. От статуса зависит, какие письма получит покупатель и спишутся ли остатки — это делает сам WooCommerce."
-msgstr ""
-
-#. translators: 1: the payment method's name, 2: the carrier's own reason (may be empty).
-#: assets/build/shipping-orders-page/index.js:2
-#, js-format
-msgid "Выбранный пункт выдачи не подходит для способа оплаты «%1$s». %2$s"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:2
-msgid "Выбрать другой пункт"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:2
-msgid "Налоги WooCommerce добавит сам при сохранении заказа — итог в заказе может быть больше."
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:2
-msgid "Пункт выдачи не найден — выберите другой."
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:2
-msgid "Этот пункт выдачи не подходит для заказа — проверьте код."
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:2
-msgid "Проверьте отмеченные поля — заказ ещё не создан."
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:2
-msgid "Проверьте отмеченные поля — заказ не сохранён."
-msgstr ""
-
 #. translators: 1: the order total now, 2: the approximate total after the edit.
-#: assets/build/shipping-orders-page/index.js:2
-#, js-format
+#: assets/build/shipping-orders-page/index.js:3
 msgid "Заказ уже оплачен, а его сумма меняется: было %1$s, станет примерно %2$s."
 msgstr ""
 
 #. translators: 1: the order total now, 2: the total after the edit.
-#: assets/build/shipping-orders-page/index.js:2
-#, js-format
+#: assets/build/shipping-orders-page/index.js:4
 msgid "Заказ уже оплачен, а его сумма меняется: было %1$s, стало %2$s."
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:2
+#: assets/build/shipping-orders-page/index.js:4
+#: assets/build/shipping-orders-page/index.js:6
+msgid "Не указан"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:4
+msgid "Заказ создастся в любом случае. Если перевозчик его не примет, вы увидите причину, а выгрузить заказ можно будет позже из списка."
+msgstr ""
+
+#. translators: %s: comma-separated names of the order statuses the export works in.
+#: assets/build/shipping-orders-page/index.js:5
+msgid "Выгрузить можно заказ в статусах: %s."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:5
+msgid "Оплата и итоги"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:5
+#: assets/build/shipping-orders-page/index.js:8
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Покупатель"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:5
+msgid "Имя не указано"
+msgstr ""
+
+#. translators: %s: the registered customer's name / email.
+#: assets/build/shipping-orders-page/index.js:6
+msgid "Зарегистрированный покупатель: %s"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:6
+msgid "Гость; при создании заказа заведём аккаунт"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:6
+msgid "Гость"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:6
+#: assets/build/shipping-orders-page/index.js:8
+msgid "Товары"
+msgstr ""
+
+#. translators: 1: product name, 2: quantity, 3: unit price.
+#: assets/build/shipping-orders-page/index.js:7
+msgid "%1$s — %2$s шт. × %3$s"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:7
+msgid "Не выбрана"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:7
+msgid "Способ оплаты"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:7
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Статус заказа"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:7
+msgid "Деньги не списываются. От статуса зависит, какие письма получит покупатель и спишутся ли остатки — это делает сам WooCommerce."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:7
+msgid "Сразу выгрузить перевозчику"
+msgstr ""
+
+#. translators: 1: the payment method's name, 2: the carrier's own reason (may be empty).
+#: assets/build/shipping-orders-page/index.js:8
+msgid "Выбранный пункт выдачи не подходит для способа оплаты «%1$s». %2$s"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:8
+msgid "Выбрать другой пункт"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:8
 msgid "Возврат или доплату сделайте средствами WooCommerce; в заказ добавится заметка об изменении."
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Выбрать"
+#: assets/build/shipping-orders-page/index.js:8
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Итого"
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Выбрано"
+#: assets/build/shipping-orders-page/index.js:8
+msgid "Налоги WooCommerce добавит сам при сохранении заказа — итог в заказе может быть больше."
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:1
-msgid "К списку"
+#: assets/build/shipping-orders-page/index.js:8
+msgid "Создать и выгрузить"
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Найти адрес"
+#: assets/build/shipping-orders-page/index.js:8
+#: assets/build/shipping-orders-page/index.js:9
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Создать заказ"
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:1
+#: assets/build/shipping-orders-page/index.js:8
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Оплата"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:8
+msgid "Проверьте отмеченные поля — заказ не сохранён."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:8
+msgid "Проверьте отмеченные поля — заказ ещё не создан."
+msgstr ""
+
+#. translators: %s: order number, e.g. "301".
+#: assets/build/shipping-orders-page/index.js:9
+msgid "Редактировать заказ №%s"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:9
+msgid "Редактировать заказ"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:9
+msgid "Загружаем заказ…"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:9
+msgid "Закрыть окно? Введённые данные не сохранятся."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:9
+msgid "Продолжить оформление"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:9
+msgid "Закрыть без сохранения"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:9
+msgid "Этот пункт выдачи не подходит для заказа — проверьте код."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:9
+msgid "Далее"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:9
+msgid "Курьер"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:9
+msgid "Почта"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:9
+msgid "Заказ отменён в магазине, но перевозчик не отменил заявку — свяжитесь с перевозчиком"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:9
 msgid "Не отменена у перевозчика"
 msgstr ""
 
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Заказ отменён в магазине, но перевозчик не отменил заявку — свяжитесь с перевозчиком"
+#: assets/build/shipping-orders-page/index.js:9
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Ожидает оплаты"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:9
+#: assets/build/shipping-orders-page/index.js:14
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Нет"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:9
+#: assets/build/shipping-orders-page/index.js:14
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Да"
+msgstr ""
+
+#. translators: %s: carrier name, e.g. "СДЭК".
+#: assets/build/shipping-orders-page/index.js:10
+msgid "Вы уверены, что хотите отменить этот заказ в «%s»?"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:10
+msgid "Вы уверены, что хотите отменить этот заказ у перевозчика?"
+msgstr ""
+
+#. translators: 1: action label, e.g. "Обновить". 2: carrier name, e.g. "СДЭК".
+#: assets/build/shipping-orders-page/index.js:11
+msgid "Вы уверены, что хотите выполнить «%1$s» для этого заказа в «%2$s»?"
+msgstr ""
+
+#. translators: %s: action label, e.g. "Обновить".
+#: assets/build/shipping-orders-page/index.js:12
+msgid "Вы уверены, что хотите выполнить «%s» для этого заказа?"
+msgstr ""
+
+#. translators: %s: order number, e.g. "42".
+#: assets/build/shipping-orders-page/index.js:13
+msgid "Выбрать заказ %s"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:13
+msgid "Экспортировать"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:13
+msgid "Массовые действия"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:13
+msgid "Выберите действие"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:13
+msgid "Применить действие"
+msgstr ""
+
+#. translators: 1: action label, e.g. "Отменить". 2: number of selected orders.
+#: assets/build/shipping-orders-page/index.js:14
+msgid "Вы уверены, что хотите выполнить «%1$s» для %2$d выбранного заказа?"
+msgid_plural "Вы уверены, что хотите выполнить «%1$s» для %2$d выбранных заказов?"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %s: order number, e.g. "42".
+#: assets/build/shipping-orders-page/index.js:15
+msgid "Просмотреть заказ %s"
+msgstr ""
+
+#. translators: %s: order number, e.g. "301".
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Заказ %s"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Трек"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Товар"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Сумма"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Комментарий покупателя"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Открыть заказ"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Выбрать все заказы на странице"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Заказ"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Дата"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Статус"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Действие"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Скоро"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Здесь появится аналитика по доставке — показатели и график за период."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "ни разу не синхронизировалось"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "по расписанию не обновляется"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Статус данных"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Обновлено"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Ни разу"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Обновится"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Не по расписанию"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Новые"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Не удалось загрузить заказы."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Не удалось выполнить массовое действие."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Не удалось выполнить действие."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Не удалось загрузить заказ."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Поиск по заказам…"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Перевозчик"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "равен"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "не равен"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Есть"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Отсутствует"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Убрать фильтр по статусу доставки"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Статус доставки {{rule /}} {{filter /}}"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Убрать фильтр по трек-номеру"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Трек-номер {{filter /}}"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Убрать фильтр по пункту выдачи"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Пункт выдачи {{filter /}}"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Убрать фильтр по статусу заказа"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Статус заказа {{rule /}} {{filter /}}"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Заказы соответствуют {{select /}} условиям"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Компонент WooCommerce «TableCard» недоступен — обновите WooCommerce."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Расширенные фильтры"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Заказов доставки пока нет."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:16
+msgid "Заказов"
 msgstr ""
