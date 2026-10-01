@@ -35,8 +35,37 @@ final class DadataApiClientTest extends TestCase {
 	/** @var array{url: string, args: array<string, mixed>}|null */
 	private ?array $last_request = null;
 
+	/** @var array<string, mixed> In-memory stand-in for the wp_options table (#956). */
+	private array $options = [];
+
+	/** @var int How many times update_option()/delete_option() ran. */
+	private int $option_writes = 0;
+
 	protected function setUp(): void {
 		parent::setUp();
+
+		$this->options       = [];
+		$this->option_writes = 0;
+
+		Functions\when( 'get_option' )->alias(
+			fn( $name, $default = false ) => $this->options[ $name ] ?? $default
+		);
+		Functions\when( 'update_option' )->alias(
+			function ( $name, $value ) {
+				++$this->option_writes;
+				$this->options[ $name ] = $value;
+
+				return true;
+			}
+		);
+		Functions\when( 'delete_option' )->alias(
+			function ( $name ) {
+				++$this->option_writes;
+				unset( $this->options[ $name ] );
+
+				return true;
+			}
+		);
 
 		Functions\when( 'apply_filters' )->returnArg( 2 );
 		Functions\when( 'wp_json_encode' )->alias(
@@ -247,6 +276,125 @@ final class DadataApiClientTest extends TestCase {
 
 		$this->expectException( \Woodev_API_Exception::class );
 		( self::client( 'bad-token' ) )->suggest_address( 'q' );
+	}
+
+	// -------------------------------------------------------------------------
+	// #956 — a 403 from the suggestions host is remembered so the merchant can
+	// be told; the next success forgets it. DaData has no 402: an exhausted
+	// balance / daily limit is a 403 (dadata.ru/api/suggest/address/, "Коды ответа").
+	// -------------------------------------------------------------------------
+
+	private function suggest_expecting_failure( Dadata_Api_Client $client ): void {
+		try {
+			$client->suggest_address( 'q' );
+			$this->fail( 'A non-2xx response must throw.' );
+		} catch ( \Woodev_API_Exception $e ) {
+			$this->assertInstanceOf( \Woodev_API_Exception::class, $e );
+		}
+	}
+
+	public function test_a_403_response_records_the_access_denied_state(): void {
+		$this->stub_http_response( 403, '' );
+
+		$this->assertFalse( Dadata_Api_Client::is_access_denied() );
+
+		$this->suggest_expecting_failure( self::client( 'tok' ) );
+
+		$this->assertTrue( Dadata_Api_Client::is_access_denied() );
+		$this->assertGreaterThan( 0, $this->options[ Dadata_Api_Client::OPTION_ACCESS_DENIED ] );
+	}
+
+	public function test_a_403_response_still_throws_the_unchanged_credentials_message(): void {
+		$this->stub_http_response( 403, '' );
+
+		try {
+			( self::client( 'tok' ) )->suggest_address( 'q' );
+			$this->fail( 'A 403 must throw.' );
+		} catch ( \Woodev_API_Exception $e ) {
+			$this->assertSame( 403, $e->getCode() );
+			$this->assertSame( 'DaData API: неверный токен или секретный ключ.', $e->getMessage() );
+		}
+	}
+
+	public function test_repeated_403_responses_write_the_state_only_once(): void {
+		$this->stub_http_response( 403, '' );
+
+		$client = self::client( 'tok' );
+		$this->suggest_expecting_failure( $client );
+		$this->suggest_expecting_failure( $client );
+		$this->suggest_expecting_failure( $client );
+
+		$this->assertSame( 1, $this->option_writes, 'an exhausted balance must not become a DB write per request' );
+	}
+
+	public function test_a_later_success_clears_the_access_denied_state(): void {
+		$this->options[ Dadata_Api_Client::OPTION_ACCESS_DENIED ] = 1700000000;
+		$this->stub_http_response( 200, '{"suggestions":[]}' );
+
+		( self::client( 'tok' ) )->suggest_address( 'q' );
+
+		$this->assertFalse( Dadata_Api_Client::is_access_denied() );
+		$this->assertArrayNotHasKey( Dadata_Api_Client::OPTION_ACCESS_DENIED, $this->options );
+	}
+
+	public function test_a_success_with_no_recorded_state_writes_nothing(): void {
+		$this->stub_http_response( 200, '{"suggestions":[]}' );
+
+		( self::client( 'tok' ) )->suggest_address( 'q' );
+
+		$this->assertSame( 0, $this->option_writes );
+	}
+
+	public function test_a_401_response_does_not_record_the_state(): void {
+		$this->stub_http_response( 401, '' );
+
+		$this->suggest_expecting_failure( self::client( 'tok' ) );
+
+		$this->assertFalse( Dadata_Api_Client::is_access_denied() );
+		$this->assertSame( 0, $this->option_writes );
+	}
+
+	public function test_a_429_throttle_does_not_record_the_state(): void {
+		$this->stub_http_response( 429, '' );
+
+		$this->suggest_expecting_failure( self::client( 'tok' ) );
+
+		$this->assertFalse( Dadata_Api_Client::is_access_denied() );
+	}
+
+	public function test_a_429_or_500_does_not_clear_an_existing_state(): void {
+		$this->options[ Dadata_Api_Client::OPTION_ACCESS_DENIED ] = 1700000000;
+
+		$this->stub_http_response( 429, '' );
+		$this->suggest_expecting_failure( self::client( 'tok' ) );
+		$this->stub_http_response( 500, '' );
+		$this->suggest_expecting_failure( self::client( 'tok' ) );
+
+		$this->assertTrue( Dadata_Api_Client::is_access_denied() );
+	}
+
+	public function test_a_clean_api_403_does_not_record_the_state(): void {
+		// A missing Clean secret is rejected by design; it says nothing about
+		// the suggestions balance.
+		$this->stub_http_response( 403, '' );
+
+		try {
+			( self::client( 'tok' ) )->clean_address( 'Москва' );
+			$this->fail( 'A 403 must throw.' );
+		} catch ( \Woodev_API_Exception $e ) {
+			$this->assertSame( 403, $e->getCode() );
+		}
+
+		$this->assertFalse( Dadata_Api_Client::is_access_denied() );
+	}
+
+	public function test_a_clean_api_success_does_not_clear_the_state(): void {
+		$this->options[ Dadata_Api_Client::OPTION_ACCESS_DENIED ] = 1700000000;
+		$this->stub_http_response( 200, '[]' );
+
+		( self::client( 'tok' ) )->clean_address( 'Москва' );
+
+		$this->assertTrue( Dadata_Api_Client::is_access_denied() );
 	}
 
 	public function test_a_500_response_throws_a_woodev_api_exception(): void {
