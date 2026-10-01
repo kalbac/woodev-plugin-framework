@@ -88,6 +88,19 @@ $upcoming-ink: #9a9a9a;
 		color: inherit;
 	}
 
+	// The step's state as text for assistive tech (#1047): visually hidden, still read.
+	&__status {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		margin: -1px;
+		padding: 0;
+		overflow: hidden;
+		clip: rect( 0, 0, 0, 0 );
+		white-space: nowrap;
+		border: 0;
+	}
+
 	// The active step's label is a non-clickable <span> — keep the default cursor.
 	li.is-active .woodev-stepper__label {
 		cursor: default;

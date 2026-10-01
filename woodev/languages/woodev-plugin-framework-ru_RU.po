@@ -4802,3 +4802,23 @@ msgstr ""
 #: assets/build/settings-page/index.js:1 assets/build/setup-wizard/index.js:1 assets/build/shipping-orders-page/index.js:1 assets/build/ui-kit-gallery/index.js:1
 msgid "Hide password"
 msgstr "Скрыть пароль"
+
+#: assets/build/setup-wizard/index.js:1
+msgid "Шаг пройден"
+msgstr ""
+
+#: assets/build/setup-wizard/index.js:1
+msgid "Текущий шаг"
+msgstr ""
+
+#: assets/build/setup-wizard/index.js:1
+msgid "Шаг ещё не пройден"
+msgstr ""
+
+#: assets/build/setup-wizard/index.js:1
+msgid "Настройки сохранены, но отметить мастер завершённым не удалось — при следующем визите он может открыться снова."
+msgstr ""
+
+#: assets/build/setup-wizard/index.js:2
+msgid "Не удалось запомнить, что мастер пропущен, — он может открыться снова. Нажмите ссылку ещё раз, чтобы выйти всё равно."
+msgstr ""
