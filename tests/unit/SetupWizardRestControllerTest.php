@@ -314,9 +314,9 @@ class SetupWizardRestControllerTest extends TestCase {
 	/**
 	 * save_step()'s catch of \Exception around the step's on_save callback — foreign
 	 * in the sense that on_save IS the plugin author's own callback, which is free to
-	 * wrap or call third-party code of its own. The WP_Error returned to the browser
-	 * deliberately keeps the raw message (an admin configuring the wizard needs it and
-	 * owns the credentials); only the error_log() line is redacted.
+	 * wrap or call third-party code of its own. #1048: the WP_Error returned to the
+	 * browser carries a generic message, never the raw one; the redacted detail goes to
+	 * error_log() only.
 	 */
 	public function test_save_step_redacts_a_secret_in_a_foreign_on_save_exception_message(): void {
 		Functions\when( 'apply_filters' )->returnArg( 2 );
@@ -348,6 +348,83 @@ class SetupWizardRestControllerTest extends TestCase {
 		$this->assertSame( 'woodev_setup_step_failed', $result->get_error_code() );
 		$this->assertSame(
 			'[woodev] setup wizard on_save failed for step "connection": carrier rejected api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK,
+			$captured
+		);
+	}
+
+	/**
+	 * Builds a wizard + controller whose only step runs `$on_save` (api_key persists fine).
+	 *
+	 * @param callable $on_save step callback.
+	 * @return \Woodev_REST_API_Setup
+	 */
+	private function make_controller_with_on_save( callable $on_save ) {
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+		Functions\when( 'rest_ensure_response' )->returnArg( 1 );
+
+		$handler = Mockery::mock( '\Woodev_Abstract_Settings' );
+		$handler->shouldReceive( 'filter_visible_values' )->andReturnUsing( static fn( $values ) => $values );
+		$handler->shouldReceive( 'update_value' )->once()->with( 'api_key', 'K' );
+
+		$plugin = Mockery::mock( '\Woodev_Plugin' );
+		$plugin->shouldReceive( 'get_settings_handler' )->andReturn( $handler );
+
+		$wizard = Mockery::mock( '\Woodev\Framework\Setup\Setup_Wizard' );
+		$wizard->shouldReceive( 'get_steps' )->andReturn(
+			[ 'connection' => Step::settings( 'connection', 'C', [ 'api_key' ], $on_save ) ]
+		);
+		$wizard->shouldReceive( 'get_plugin' )->andReturn( $plugin );
+
+		return new \Woodev_REST_API_Setup( $wizard );
+	}
+
+	/**
+	 * #1048: a throwing on_save yields a generic 500 WP_Error — the raw message (which here
+	 * carries a secret and a path) is absent from the whole response, the logger is called
+	 * once, and the settings were persisted before the callback ran (update_value ->once()).
+	 */
+	public function test_save_step_returns_a_safe_error_and_hides_the_message_when_on_save_throws(): void {
+		$controller = $this->make_controller_with_on_save(
+			static function (): void {
+				throw new \Exception( 'carrier rejected api_key=LIVESECRET at /srv/www/secret-path.php' );
+			}
+		);
+
+		$captured = null;
+		$this->expect_one_error_log_call( $captured );
+		$result = $controller->save_step( $this->make_request( [ 'api_key' => 'K' ] ) );
+
+		$this->assertInstanceOf( 'WP_Error', $result );
+		$this->assertSame( 'woodev_setup_step_failed', $result->get_error_code() );
+		$this->assertSame( [ 'status' => 500 ], $result->get_error_data() );
+		$this->assertSame( 'Внутренняя ошибка сервера. Попробуйте ещё раз.', $result->get_error_message() );
+		$this->assertStringNotContainsString( 'LIVESECRET', serialize( $result ) );
+		$this->assertStringNotContainsString( 'secret-path', serialize( $result ) );
+		$this->assertStringContainsString( 'step "connection"', (string) $captured );
+		$this->assertStringNotContainsString( 'LIVESECRET', (string) $captured );
+	}
+
+	/**
+	 * #1048: a PHP Error (TypeError and friends) is NOT an \Exception — before the fix it
+	 * escaped save_step() entirely. It now takes the same safe path.
+	 */
+	public function test_save_step_catches_an_error_thrown_by_on_save(): void {
+		$controller = $this->make_controller_with_on_save(
+			static function (): void {
+				throw new \TypeError( 'Argument #1 ($carrier) must be of type Carrier, null given' );
+			}
+		);
+
+		$captured = null;
+		$this->expect_one_error_log_call( $captured );
+		$result = $controller->save_step( $this->make_request( [ 'api_key' => 'K' ] ) );
+
+		$this->assertInstanceOf( 'WP_Error', $result );
+		$this->assertSame( 'woodev_setup_step_failed', $result->get_error_code() );
+		$this->assertSame( [ 'status' => 500 ], $result->get_error_data() );
+		$this->assertStringNotContainsString( 'Carrier', $result->get_error_message() );
+		$this->assertSame(
+			'[woodev] setup wizard on_save failed for step "connection": Argument #1 ($carrier) must be of type Carrier, null given',
 			$captured
 		);
 	}

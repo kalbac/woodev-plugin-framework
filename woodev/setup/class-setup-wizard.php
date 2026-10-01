@@ -102,6 +102,12 @@ abstract class Setup_Wizard {
 	/**
 	 * Registers a settings step (fields resolved from the plugin's Settings API).
 	 *
+	 * `$on_save` runs AFTER the step's settings are persisted, and may be run more than
+	 * once for the same step (the user retries). If it throws anything (a \Throwable),
+	 * the REST layer logs it (secrets masked) and answers a generic HTTP 500 error — the
+	 * exception message is never shown — while the settings stay saved. Make it
+	 * idempotent: see Woodev_REST_API_Setup::save_step() for the full failure contract.
+	 *
 	 * @since 2.0.2
 	 *
 	 * @param string        $id          step id.

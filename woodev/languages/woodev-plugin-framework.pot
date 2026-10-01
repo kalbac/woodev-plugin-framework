@@ -2624,6 +2624,12 @@ msgstr ""
 msgid "Провайдер локаций «%1$s» не настроен. Пожалуйста, %2$sукажите ключи%3$s — иначе подсказки по адресам и населённым пунктам работать не будут."
 msgstr ""
 
+#. translators: %1$s - opening <a> tag to the DaData account, %2$s - opening <a> tag to the plugin settings, %3$s - closing </a> tag
+#: shipping-method/class-shipping-plugin.php:1484
+#, php-format
+msgid "DaData отклонил запросы магазина (ответ 403), поэтому подсказки адресов при оформлении заказа не работают — покупатели вводят адрес вручную. Чаще всего это значит, что на счёте DaData закончились средства или исчерпан дневной лимит: %1$sпополните баланс в личном кабинете DaData%3$s. Также проверьте, что почта аккаунта подтверждена, а %2$sключи в настройках%3$s указаны верно. Уведомление исчезнет само, как только DaData снова начнёт отвечать."
+msgstr ""
+
 #: shipping-method/location/class-customer-location-store.php:678
 msgid "Location key"
 msgstr ""
