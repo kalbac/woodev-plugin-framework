@@ -48,7 +48,7 @@ final class Composite_Settings_Handler implements \Woodev_Settings_Connection_Te
 	/** @var string */
 	private string $id;
 
-	/** @var array<string,\Woodev_Abstract_Settings> connection section id => the handler that contributed the section. */
+	/** @var array<int|string,\Woodev_Abstract_Settings> connection section id => the handler that contributed the section. */
 	private array $connections;
 
 	/** @var \Woodev_Abstract_Settings[] setting id => owning child. */
@@ -63,11 +63,13 @@ final class Composite_Settings_Handler implements \Woodev_Settings_Connection_Te
 	 * @param \Woodev_Abstract_Settings[]             $children handlers, in section order.
 	 * @param array<string,\Woodev_Abstract_Settings> $connections optional: connection section id => the child handler
 	 *                                                 that contributed it, so a connection test / status is forwarded there.
+	 *                                                 An entry whose value is not a settings handler is reported
+	 *                                                 with `_doing_it_wrong()` and dropped.
 	 * @throws \InvalidArgumentException when two children register the same setting id.
 	 */
 	public function __construct( string $id, array $children, array $connections = [] ) {
 		$this->id          = $id;
-		$this->connections = $connections;
+		$this->connections = $this->valid_connections( $connections );
 		$this->children    = array_values( $children );
 
 		foreach ( $this->children as $child ) {
@@ -79,6 +81,45 @@ final class Composite_Settings_Handler implements \Woodev_Settings_Connection_Te
 				$this->owner_by_id[ $sid ] = $child;
 			}
 		}
+	}
+
+	/**
+	 * Keeps only the connection owners the read path can use.
+	 *
+	 * The map is typed in the docblock only, and `get_connection_owner()` returns a typed
+	 * `?\Woodev_Abstract_Settings` — a `null` or foreign value would TypeError on every wp-admin page
+	 * that collects the tab. So a bad entry is reported and dropped here, never thrown: the block
+	 * without an owner simply has no test button, like any block outside the map.
+	 *
+	 * @param array<mixed> $connections the constructor's raw map.
+	 * @return array<int|string,\Woodev_Abstract_Settings> a numeric-string id such as '0' is an int key in PHP.
+	 */
+	private function valid_connections( array $connections ): array {
+
+		$valid = [];
+
+		foreach ( $connections as $connection_id => $owner ) {
+			// PHP turns a canonical integer-string key ('0') into an int one, and every section id is a string,
+			// so an int key can only be a numeric-string id: normalise it, do not reject it
+			$connection_id = (string) $connection_id;
+
+			if ( ! $owner instanceof \Woodev_Abstract_Settings ) {
+				_doing_it_wrong(
+					__METHOD__,
+					sprintf(
+						'Composite settings "%1$s": the connection owner map must be connection section id => Woodev_Abstract_Settings; entry %2$s was ignored.',
+						esc_html( $this->id ),
+						esc_html( $connection_id )
+					),
+					'2.0.2'
+				);
+				continue;
+			}
+
+			$valid[ $connection_id ] = $owner;
+		}
+
+		return $valid;
 	}
 
 	/**

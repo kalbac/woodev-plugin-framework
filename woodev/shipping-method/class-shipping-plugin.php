@@ -735,8 +735,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 *
 		 * This runs on the read path of every wp-admin page (the settings page collects its tabs on
 		 * `admin_menu`), so a carrier's mistake must not fatal it: a contribution whose setting ids collide
-		 * with «Выгрузка» or with an earlier contribution is reported with `_doing_it_wrong()` and left out
-		 * of the tab, and the framework's «Выгрузка» stays.
+		 * with «Выгрузка» or with an earlier contribution — or whose section ids do (a connection id is the
+		 * key of the connection-owner map) — is reported with `_doing_it_wrong()` and left out of the tab,
+		 * and the framework's «Выгрузка» stays.
 		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 One composite tab per carrier, with an extension point for the carrier's own
@@ -752,6 +753,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			$sections    = [];
 			$args        = [];
 			$connections = [];
+			// every accepted SECTION id (not only connection ones): «Выгрузка» is added last but always survives,
+			// so its id is taken from the start
+			$section_ids = null === $export ? [] : [ Settings\Export_Settings::SECTION_ID => true ];
 
 			foreach ( $this->get_tab_settings_providers() as $index => $contribution ) {
 
@@ -803,12 +807,39 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 					continue;
 				}
 
+				// a section id taken by «Выгрузка» or an earlier contribution would silently replace the connection
+				// owner (or render two sections under one id) — same policy as the setting-id clash: left out whole
+				// null is the "no clash" sentinel: '' is a valid section id, so it cannot be one
+				$colliding = null;
+				foreach ( $contribution->get_sections() as $section ) {
+					if ( isset( $section_ids[ $section->get_id() ] ) ) {
+						$colliding = $section->get_id();
+						break;
+					}
+				}
+
+				if ( null !== $colliding ) {
+					_doing_it_wrong(
+						__METHOD__,
+						sprintf(
+							'Carrier "%1$s": the sections of get_tab_settings_providers() entry %2$s were left out of the tab: section id "%3$s" is already taken.',
+							esc_html( $this->get_id() ),
+							esc_html( (string) $index ),
+							esc_html( $colliding )
+						),
+						'2.0.2'
+					);
+					continue;
+				}
+
 				$handlers[] = $contribution->get_handler();
 				$sections   = array_merge( $sections, $contribution->get_sections() );
 
 				// a connection block is tested by the handler that CONTRIBUTED it — not derived from its setting ids,
 				// which a handshake block (`create_connection()` with `[]`) does not have (#1028)
 				foreach ( $contribution->get_sections() as $section ) {
+					$section_ids[ $section->get_id() ] = true;
+
 					if ( $section->is_connection() ) {
 						$connections[ $section->get_id() ] = $contribution->get_handler();
 					}
