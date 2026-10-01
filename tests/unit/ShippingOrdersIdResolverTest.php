@@ -121,17 +121,19 @@ class ShippingOrdersIdResolverTest extends TestCase {
 	 * The smallest real filter, HPOS: one mapped carrier, `delivery_status=unknown`. The
 	 * driver is the marker key on `wc_orders_meta.order_id`; the scope part is NOT emitted
 	 * again; the status pair is two subqueries, each keyed on the driver's order id and
-	 * the status key, the `NOT IN` one carrying its values.
+	 * the status key, the `NOT IN` one carrying its values; the whole is ANDed with the one
+	 * `NOT EXISTS` on the framework's cancellation marker (#1037).
 	 */
 	public function test_hpos_unknown_for_one_mapped_carrier_compiles_to_the_pinned_statement(): void {
 		$registry = $this->registry_of( 1, 0 );
 
 		$this->assertSame(
 			'SELECT DISTINCT mk.order_id FROM wp_wc_orders_meta AS mk WHERE mk.meta_key IN (\'_mapped1_marker\')'
-			. ' AND (EXISTS (SELECT 1 FROM wp_wc_orders_meta AS m WHERE m.order_id = mk.order_id AND m.meta_key = \'_mapped1_marker\')'
+			. ' AND ((EXISTS (SELECT 1 FROM wp_wc_orders_meta AS m WHERE m.order_id = mk.order_id AND m.meta_key = \'_mapped1_marker\')'
 			. ' AND (NOT EXISTS (SELECT 1 FROM wp_wc_orders_meta AS m WHERE m.order_id = mk.order_id AND m.meta_key = \'_mapped1_status\')'
 			. ' OR EXISTS (SELECT 1 FROM wp_wc_orders_meta AS m WHERE m.order_id = mk.order_id AND m.meta_key = \'_mapped1_status\''
-			. ' AND m.meta_value NOT IN (\'M1_ACCEPTED\',\'M1_DONE\'))))',
+			. ' AND m.meta_value NOT IN (\'M1_ACCEPTED\',\'M1_DONE\'))))'
+			. ' AND NOT EXISTS (SELECT 1 FROM wp_wc_orders_meta AS m WHERE m.order_id = mk.order_id AND m.meta_key = \'_woodev_shipment_cancelled_at\'))',
 			$this->sql_for( $registry, [ 'delivery_status' => Delivery_Status::UNKNOWN ], true )
 		);
 	}
@@ -177,10 +179,10 @@ class ShippingOrdersIdResolverTest extends TestCase {
 		$sql      = $this->sql_for( $registry, [ 'delivery_status' => Delivery_Status::UNKNOWN ], true );
 
 		$this->assertSame( 0, preg_match_all( '/\bJOIN\b/i', $sql ), "The id query must never join: {$sql}" );
-		$this->assertSame( 8, $this->subquery_count( $sql ) );
+		$this->assertSame( 9, $this->subquery_count( $sql ) );
 		$this->assertSame(
-			8,
-			preg_match_all( '/SELECT 1 FROM wp_wc_orders_meta AS m WHERE m\.order_id = mk\.order_id AND m\.meta_key = \'_[a-z0-9]+_(?:marker|status)\'/', $sql ),
+			9,
+			preg_match_all( '/SELECT 1 FROM wp_wc_orders_meta AS m WHERE m\.order_id = mk\.order_id AND m\.meta_key = \'_(?:[a-z0-9]+_(?:marker|status)|woodev_shipment_cancelled_at)\'/', $sql ),
 			'every subquery is keyed on the order id and a meta key — never an un-predicated scan'
 		);
 		$this->assertSame( 2, preg_match_all( '/m\.meta_value NOT IN \(\'M[12]_ACCEPTED\',\'M[12]_DONE\'\)/', $sql ), 'the NOT IN subqueries carry their values' );
@@ -188,7 +190,7 @@ class ShippingOrdersIdResolverTest extends TestCase {
 
 	/**
 	 * The `d^N` term is gone: the number of subqueries is linear in the carrier count,
-	 * `3M + B` for `unknown`, and there is still not one JOIN at six carriers.
+	 * `3M + B + 1` for `unknown`, and there is still not one JOIN at six carriers.
 	 */
 	public function test_subqueries_grow_linearly_and_joins_stay_at_zero(): void {
 		foreach ( range( 1, 6 ) as $n ) {
@@ -197,7 +199,7 @@ class ShippingOrdersIdResolverTest extends TestCase {
 			$sql      = $this->sql_for( $registry, [ 'delivery_status' => Delivery_Status::UNKNOWN ], true );
 
 			$this->assertSame( 0, preg_match_all( '/\bJOIN\b/i', $sql ), "no JOIN at N={$n}" );
-			$this->assertSame( 3 * $n, $this->subquery_count( $sql ), "3M + B subqueries at N={$n}" );
+			$this->assertSame( ( 3 * $n ) + 1, $this->subquery_count( $sql ), "3M + B + 1 subqueries at N={$n}" );
 		}
 	}
 
@@ -211,22 +213,23 @@ class ShippingOrdersIdResolverTest extends TestCase {
 		$sql      = $this->sql_for( $registry, [ 'delivery_status_not' => Delivery_Status::IN_TRANSIT ], true );
 
 		$this->assertStringStartsWith( 'SELECT DISTINCT mk.order_id FROM wp_wc_orders_meta AS mk WHERE mk.meta_key IN (\'_mapped1_marker\',\'_mapped2_marker\',\'_bare1_marker\') AND (', $sql );
-		// `not in_transit`: mapped => AND( marker, OR( NOT EXISTS, NOT IN ) ) = 3 leaves; bare => marker EXISTS = 1.
-		$this->assertSame( 7, $this->subquery_count( $sql ) );
+		// `not in_transit`: mapped => AND( marker, OR( NOT EXISTS, NOT IN ) ) = 3 leaves; bare => marker EXISTS = 1; plus the cancellation leaf (#1037).
+		$this->assertSame( 8, $this->subquery_count( $sql ) );
 		$this->assertSame( 3, preg_match_all( '/EXISTS \(SELECT 1 FROM wp_wc_orders_meta AS m WHERE m\.order_id = mk\.order_id AND m\.meta_key = \'_[a-z0-9]+_marker\'\)/', $sql ), 'one marker subquery per provider clause — the bindings, not a second scope' );
 	}
 
 	/**
-	 * When every carrier in scope lacks a status concept, the `unknown` filter part is
-	 * byte for byte the scope part — each provider's "always unknown" is its marker
-	 * `EXISTS` — and folds into the driver as well: the filter IS the scope.
+	 * When every carrier in scope lacks a tracking concept, the `has_tracking=false` filter
+	 * part is byte for byte the scope part — each provider's "never has a tracking number" is
+	 * its marker `EXISTS` — and folds into the driver as well: the filter IS the scope.
+	 * (The delivery-status filters no longer fold since #1037 — they carry the cancellation leaf.)
 	 */
 	public function test_a_filter_part_identical_to_the_scope_folds_into_the_driver_too(): void {
 		$registry = $this->registry_of( 0, 2 );
 
 		$this->assertSame(
 			'SELECT DISTINCT mk.order_id FROM wp_wc_orders_meta AS mk WHERE mk.meta_key IN (\'_bare1_marker\',\'_bare2_marker\')',
-			$this->sql_for( $registry, [ 'delivery_status' => Delivery_Status::UNKNOWN ], true )
+			$this->sql_for( $registry, [ 'has_tracking' => false ], true )
 		);
 	}
 
@@ -373,10 +376,11 @@ class ShippingOrdersIdResolverTest extends TestCase {
 	public function test_hpos_the_order_status_leaf_compiles_against_the_wc_orders_status_column(): void {
 		$this->assertSame(
 			'SELECT DISTINCT mk.order_id FROM wp_wc_orders_meta AS mk WHERE mk.meta_key IN (\'_mapped1_marker\')'
-			. ' AND ((EXISTS (SELECT 1 FROM wp_wc_orders_meta AS m WHERE m.order_id = mk.order_id AND m.meta_key = \'_mapped1_marker\')'
+			. ' AND (((EXISTS (SELECT 1 FROM wp_wc_orders_meta AS m WHERE m.order_id = mk.order_id AND m.meta_key = \'_mapped1_marker\')'
 			. ' AND (NOT EXISTS (SELECT 1 FROM wp_wc_orders_meta AS m WHERE m.order_id = mk.order_id AND m.meta_key = \'_mapped1_status\')'
 			. ' OR EXISTS (SELECT 1 FROM wp_wc_orders_meta AS m WHERE m.order_id = mk.order_id AND m.meta_key = \'_mapped1_status\''
 			. ' AND m.meta_value NOT IN (\'M1_ACCEPTED\',\'M1_DONE\'))))'
+			. ' AND NOT EXISTS (SELECT 1 FROM wp_wc_orders_meta AS m WHERE m.order_id = mk.order_id AND m.meta_key = \'_woodev_shipment_cancelled_at\'))'
 			. ' OR EXISTS (SELECT 1 FROM wp_wc_orders AS o WHERE o.id = mk.order_id AND o.status IN (\'wc-processing\')))',
 			$this->any_sql( true )
 		);

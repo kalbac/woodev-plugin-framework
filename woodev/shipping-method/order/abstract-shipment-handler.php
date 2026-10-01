@@ -319,6 +319,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 
 			$this->order_handler->set( $order, static::CARRIER_ORDER_ID_FIELD, $carrier_order_id );
 			$this->clear_export_unknown( $order, $fresh );
+			Shipment_Cancellation::clear( $fresh, $order );
 			Export_Retry::reset( $fresh, $order );
 
 			/**
@@ -722,12 +723,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 * cancellation (carrier rejects, or the API throws) leaves the stored id
 		 * untouched, so the button remains available for a retry.
 		 *
+		 * It also records the framework's OWN fact of the cancellation — the order meta
+		 * {@see Shipment_Cancellation::CANCELLED_AT_META} (`_woodev_shipment_cancelled_at`, unix
+		 * time) — never a raw carrier status: the carrier's own status meta is left as it is,
+		 * and the canonical delivery status reads «Отменено» while the marker is present
+		 * ({@see \Woodev\Framework\Shipping\Admin\Orders\Order_Actions::resolve_delivery_status()}).
+		 * A later successful {@see self::export()} of the order deletes the marker. A failed
+		 * cancellation writes nothing.
+		 *
 		 * @since 1.5.0
 		 * @since 2.0.2 Round 2 (HIGH 1): clear the stored carrier order id on a
 		 *              successful cancel, so a merchant cannot send the same
 		 *              destructive carrier cancellation twice.
 		 * @since 2.0.2 Card #872: returns an {@see Action_Result}; a rejection carries
 		 *              the carrier's text, a missing stored id carries none.
+		 * @since 2.0.2 Card #1037: records {@see Shipment_Cancellation::CANCELLED_AT_META} on success,
+		 *              so the delivery status reads «Отменено».
 		 *
 		 * @param \WC_Order $order the order whose shipment to cancel
 		 * @return Action_Result success when the carrier accepted the cancellation, a failure otherwise
@@ -763,6 +774,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 			}
 
 			$this->order_handler->set( $order, static::CARRIER_ORDER_ID_FIELD, '' );
+			Shipment_Cancellation::mark( $order );
 
 			/**
 			 * Fires after a shipment is successfully cancelled with the carrier.

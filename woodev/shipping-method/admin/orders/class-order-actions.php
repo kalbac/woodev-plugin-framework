@@ -15,6 +15,7 @@ use Woodev\Framework\Shipping\Location\Location_Record;
 use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
 use Woodev\Framework\Shipping\Order\Action_Result;
 use Woodev\Framework\Shipping\Order\Delivery_Status;
+use Woodev\Framework\Shipping\Order\Shipment_Cancellation;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -566,7 +567,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 				);
 			}
 
-			$canonical = self::resolve_canonical_status( $order, $provider );
+			// The framework's own cancellation marker does not count: a cancelled shipment may be edited and exported again.
+			$canonical = self::resolve_canonical_status( $order, $provider, false );
 
 			if ( in_array( $canonical, self::CANCEL_RETIRED_STATUSES, true ) ) {
 				return sprintf(
@@ -702,29 +704,65 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		}
 
 		/**
-		 * Resolves the order's canonical delivery status for the cancel gate, the
-		 * same mapping {@see \Woodev\Framework\Shipping\Admin\Orders\Order_Row_Builder::resolve_delivery_status()}
-		 * uses for display — duplicated rather than shared to avoid a dependency in
-		 * the wrong direction (`Order_Row_Builder` already depends on this class to
-		 * build the `actions` row field).
+		 * Resolves the order's canonical delivery status — the ONE resolution every reader shares
+		 * (#1037): the orders page row ({@see \Woodev\Framework\Shipping\Admin\Orders\Order_Row_Builder}, and
+		 * through it the order-edit metabox), the cancel gate, the edit gate and the background
+		 * cancel's order note. Its database-side twin is
+		 * {@see \Woodev\Framework\Shipping\Admin\Orders\Orders_Query}'s delivery-status filter, which
+		 * must agree with it order by order.
+		 *
+		 * The carrier's raw status goes through {@see Delivery_Status::resolve()}, EXCEPT that an order
+		 * whose shipment the framework recorded as cancelled ({@see Shipment_Cancellation}) resolves
+		 * {@see Delivery_Status::CANCELLED} whatever the raw status still says — the raw status and its
+		 * label are kept beside it. A provider with no status meta key still honours the marker (it is
+		 * the framework's own fact, not the carrier's); an order with no provider at all has no carrier
+		 * to speak for and resolves unknown.
+		 *
+		 * `$honour_cancellation` is `false` only for the edit gate ({@see self::not_editable_reason()}):
+		 * a cancelled shipment has no live carrier order any more, so editing the order and exporting it
+		 * again is exactly what the merchant may do next.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Card #1037: the single shared resolver; the row builder no longer keeps a copy.
 		 *
-		 * Public since #1007: the background cancel names this status in its order note.
-		 *
-		 * @param \WC_Order       $order    order.
-		 * @param Orders_Provider $provider matched carrier.
-		 * @return string one of {@see Delivery_Status::canonical_states()} or
-		 *                {@see Delivery_Status::UNKNOWN}.
+		 * @param \WC_Order            $order               order.
+		 * @param Orders_Provider|null $provider            matched carrier, or null.
+		 * @param bool                 $honour_cancellation false => ignore the framework's cancellation marker.
+		 * @return array{canonical:string,canonical_label:string,raw:?string,raw_label:?string}
 		 */
-		public static function resolve_canonical_status( \WC_Order $order, Orders_Provider $provider ): string {
+		public static function resolve_delivery_status( \WC_Order $order, ?Orders_Provider $provider, bool $honour_cancellation = true ): array {
+			if ( null === $provider ) {
+				return Delivery_Status::resolve( null, [] );
+			}
+
+			$cancelled = $honour_cancellation && Shipment_Cancellation::is_cancelled( $order );
+
 			if ( null === $provider->get_status_meta_key() ) {
-				return Delivery_Status::UNKNOWN;
+				return Delivery_Status::resolve( null, [], [], $cancelled );
 			}
 
 			$raw = (string) \Woodev_Order_Compatibility::get_order_meta( $order, $provider->get_status_meta_key() );
 
-			return Delivery_Status::resolve( '' !== $raw ? $raw : null, $provider->get_status_map() )['canonical'];
+			return Delivery_Status::resolve( '' !== $raw ? $raw : null, $provider->get_status_map(), $provider->get_status_labels(), $cancelled );
+		}
+
+		/**
+		 * Resolves the order's canonical delivery status for the cancel gate and the order notes —
+		 * the `canonical` of {@see self::resolve_delivery_status()}.
+		 *
+		 * Public since #1007: the background cancel names this status in its order note.
+		 *
+		 * @since 2.0.2
+		 * @since 2.0.2 Card #1037: reads {@see self::resolve_delivery_status()}, so it agrees with the row.
+		 *
+		 * @param \WC_Order       $order               order.
+		 * @param Orders_Provider $provider            matched carrier.
+		 * @param bool            $honour_cancellation false => ignore the framework's cancellation marker.
+		 * @return string one of {@see Delivery_Status::canonical_states()} or
+		 *                {@see Delivery_Status::UNKNOWN}.
+		 */
+		public static function resolve_canonical_status( \WC_Order $order, Orders_Provider $provider, bool $honour_cancellation = true ): string {
+			return self::resolve_delivery_status( $order, $provider, $honour_cancellation )['canonical'];
 		}
 
 		/**

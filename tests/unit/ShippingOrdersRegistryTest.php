@@ -141,25 +141,26 @@ class ShippingOrdersRegistryTest extends TestCase {
 			$this->provider_with_map( 'cdek', [ 'CREATED' => 'created', 'ON_THE_WAY' => 'in_transit' ] )
 		);
 
-		$this->assertSame( [ 'created', 'in_transit', 'unknown' ], $this->reachable_delivery_statuses() );
+		$this->assertSame( [ 'created', 'in_transit', 'cancelled', 'unknown' ], $this->reachable_delivery_statuses() );
 	}
 
 	public function test_reachable_delivery_statuses_unions_every_provider(): void {
 		Orders_Registry::instance()->register_provider( $this->provider_with_map( 'cdek', [ 'CREATED' => 'created' ] ) );
 		Orders_Registry::instance()->register_provider( $this->provider_with_map( 'yandex', [ 'DONE' => 'delivered' ] ) );
 
-		$this->assertSame( [ 'created', 'delivered', 'unknown' ], $this->reachable_delivery_statuses() );
+		$this->assertSame( [ 'created', 'delivered', 'cancelled', 'unknown' ], $this->reachable_delivery_statuses() );
 	}
 
 	/**
 	 * ⚠ `unknown` is not derived and must never drop out: it is what an unmapped raw
 	 * status AND an order with no status meta both resolve to, so it is reachable even
-	 * on a shop whose carriers declare no map between them.
+	 * on a shop whose carriers declare no map between them. `cancelled` is always offered
+	 * too (#1037): the framework records a cancellation in a meta of its own, whatever the maps say.
 	 */
 	public function test_unknown_is_always_offered_even_with_no_status_map_anywhere(): void {
 		Orders_Registry::instance()->register_provider( $this->provider( 'cdek' ) );
 
-		$this->assertSame( [ 'unknown' ], $this->reachable_delivery_statuses() );
+		$this->assertSame( [ 'cancelled', 'unknown' ], $this->reachable_delivery_statuses() );
 	}
 
 	/**
@@ -170,7 +171,7 @@ class ShippingOrdersRegistryTest extends TestCase {
 		Orders_Registry::instance()->register_provider( $this->provider_with_map( 'a', [ 'X' => 'delivered' ] ) );
 		Orders_Registry::instance()->register_provider( $this->provider_with_map( 'b', [ 'Y' => 'created' ] ) );
 
-		$this->assertSame( [ 'created', 'delivered', 'unknown' ], $this->reachable_delivery_statuses() );
+		$this->assertSame( [ 'created', 'delivered', 'cancelled', 'unknown' ], $this->reachable_delivery_statuses() );
 	}
 
 	public function test_has_providers_is_false_initially(): void {

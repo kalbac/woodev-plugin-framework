@@ -209,22 +209,26 @@ class ShippingOrdersQueryJoinGrowthTest extends TestCase {
 	}
 
 	/**
-	 * The measured budget, RE-PINNED for #928. `M` carriers own a usable status map, `B`
-	 * own no status concept, and `N = M + B`. The MAIN query: zero meta joins, always,
-	 * except the one-leaf sentinel when the tree matches nothing. The ID query, in
+	 * The measured budget, RE-PINNED for #928 and again for #1037. `M` carriers own a usable
+	 * status map, `B` own no status concept, and `N = M + B`. The MAIN query: zero meta joins,
+	 * always, except the one-leaf sentinel when the tree matches nothing. The ID query, in
 	 * correlated subqueries (the `N` scope keys are the driver's `IN` list, not counted):
 	 *
 	 *     no filter                         0               (was N joins in the main query)
-	 *     delivery_status=unknown           3M + B          (was 3M + B joins; 4M + 2B before #839;
-	 *                                                        0 when M is 0 — see below)
-	 *     delivery_status=<canonical>       M               (was N + M joins; sentinel when M is 0)
-	 *     delivery_status_not=<canonical>   3M + B          (was 3M + B joins; 0 when M is 0)
-	 *     delivery_status_not=unknown       M               (was N + M joins; sentinel when M is 0)
+	 *     delivery_status=unknown           3M + B + 1      (was 3M + B joins; 4M + 2B before #839)
+	 *     delivery_status=<canonical>       M + 1           (was N + M joins; sentinel when M is 0)
+	 *     delivery_status_not=<canonical>   3M + B + 1      (was 3M + B joins)
+	 *     delivery_status_not=unknown       M + 1           (was N + M joins; sentinel when M is 0)
+	 *     delivery_status=cancelled         1               (#1037: the marker alone — no map carries it)
+	 *     delivery_status_not=cancelled     M + B + 1       (#1037)
 	 *
-	 * With no mapped carrier at all, the `unknown` / `is not <canonical>` filter part is
-	 * every bare carrier's marker `EXISTS` OR-ed — byte for byte the scope part — and
-	 * {@see Orders_Id_Resolver::compile()} folds a part identical to the scope into the
-	 * driver predicate, so it costs nothing: the filter IS the scope there.
+	 * The `+ 1` is #1037's price, and it is a CONSTANT: the framework's own cancellation marker
+	 * ({@see \Woodev\Framework\Shipping\Order\Shipment_Cancellation}) is one leaf — `NOT EXISTS` under
+	 * a filter a cancelled order does not satisfy, `EXISTS` under one it does — whatever the carrier
+	 * count, never one per carrier. The `unknown` / `is not <canonical>` filter over bare carriers
+	 * only is no longer byte for byte the scope part, so it no longer folds into the driver:
+	 * `B + 1` instead of `0`. `delivery_status_not=unknown` is no longer the sentinel when `M` is 0
+	 * either — a cancelled order is «not unknown», so the marker leaf alone answers it.
 	 *
 	 * @return array<string,array{0:int,1:int,2:array<string,mixed>,3:string}>
 	 */
@@ -237,6 +241,8 @@ class ShippingOrdersQueryJoinGrowthTest extends TestCase {
 			'delivery_status=in_transit'     => [ 'delivery_status' => Delivery_Status::IN_TRANSIT ],
 			'delivery_status_not=in_transit' => [ 'delivery_status_not' => Delivery_Status::IN_TRANSIT ],
 			'delivery_status_not=unknown'    => [ 'delivery_status_not' => Delivery_Status::UNKNOWN ],
+			'delivery_status=cancelled'      => [ 'delivery_status' => Delivery_Status::CANCELLED ],
+			'delivery_status_not=cancelled'  => [ 'delivery_status_not' => Delivery_Status::CANCELLED ],
 		];
 
 		$splits = [
@@ -272,13 +278,22 @@ class ShippingOrdersQueryJoinGrowthTest extends TestCase {
 
 			case 'delivery_status=unknown':
 			case 'delivery_status_not=in_transit':
-				// No mapped carrier => the filter part IS the scope part and folds into the driver.
-				return 0 === $mapped ? 0 : ( 3 * $mapped ) + $bare;
+				// The status-map clauses, plus the one cancellation leaf; with no mapped carrier they are the bare markers OR-ed.
+				return 0 === $mapped ? $bare + 1 : ( 3 * $mapped ) + $bare + 1;
 
 			case 'delivery_status=in_transit':
-			case 'delivery_status_not=unknown':
 				// No carrier can report it => the NO_MATCH sentinel, answered without an id query.
-				return 0 === $mapped ? null : $mapped;
+				return 0 === $mapped ? null : $mapped + 1;
+
+			case 'delivery_status_not=unknown':
+				// A cancelled order is «not unknown», so the marker leaf alone answers it when no carrier maps anything.
+				return $mapped + 1;
+
+			case 'delivery_status=cancelled':
+				return 1;
+
+			case 'delivery_status_not=cancelled':
+				return $mapped + $bare + 1;
 		}
 
 		throw new \LogicException( "no budget for {$request_label}" );
@@ -331,7 +346,7 @@ class ShippingOrdersQueryJoinGrowthTest extends TestCase {
 
 		$this->assertSame( 0, $sizes['main_leaves'], 'This is the exact query that hung the integration suite in s128 (#928: no meta join in the main query).' );
 		$this->assertSame( 0, $this->joins( (string) $sizes['id_sql'] ) );
-		$this->assertSame( 8, $this->subqueries( (string) $sizes['id_sql'] ), 'eight keyed subqueries, one per leaf (was eight joins after #839, twelve before)' );
+		$this->assertSame( 9, $this->subqueries( (string) $sizes['id_sql'] ), 'nine keyed subqueries, one per leaf: eight status leaves (twelve joins before #839) + the one cancellation leaf (#1037)' );
 	}
 
 	/**
@@ -371,8 +386,8 @@ class ShippingOrdersQueryJoinGrowthTest extends TestCase {
 
 	/**
 	 * A carrier with NO status concept costs exactly ONE subquery under `unknown` beside
-	 * a mapped carrier — its own marker standing in for "always unknown" — and NOTHING
-	 * on its own (the filter part is then the scope itself) or without a filter, where
+	 * a mapped carrier — its own marker standing in for "always unknown" — and only the one
+	 * cancellation leaf on its own (#1037), or nothing without a filter, where
 	 * its marker is only the driver's `IN` entry.
 	 */
 	public function test_a_carrier_with_no_status_concept_pays_one_subquery_under_unknown_and_none_without_a_filter(): void {
@@ -380,7 +395,8 @@ class ShippingOrdersQueryJoinGrowthTest extends TestCase {
 		$mapped_alone        = $this->subqueries( (string) $this->sizes_for( 1, 0, [ 'delivery_status' => Delivery_Status::UNKNOWN ] )['id_sql'] );
 
 		$this->assertSame( 1, $beside_a_mapped_one - $mapped_alone );
-		$this->assertSame( 0, $this->subqueries( (string) $this->sizes_for( 0, 1, [ 'delivery_status' => Delivery_Status::UNKNOWN ] )['id_sql'] ) );
+		// On its own the carrier's marker is the whole filter part; only the cancellation leaf (#1037) joins it.
+		$this->assertSame( 2, $this->subqueries( (string) $this->sizes_for( 0, 1, [ 'delivery_status' => Delivery_Status::UNKNOWN ] )['id_sql'] ) );
 		$this->assertSame( 0, $this->subqueries( (string) $this->sizes_for( 0, 1, [] )['id_sql'] ) );
 	}
 
@@ -396,7 +412,7 @@ class ShippingOrdersQueryJoinGrowthTest extends TestCase {
 		$this->assertSame( 0, $cpt['main_leaves'], 'The CPT path must never emit meta_query (its presence alone drops the whole filter there).' );
 		$this->assertTrue( $cpt['post__in'] );
 		$this->assertSame( 0, $this->joins( (string) $cpt['id_sql'] ) );
-		$this->assertSame( 8, $this->subqueries( (string) $cpt['id_sql'] ) );
+		$this->assertSame( 9, $this->subqueries( (string) $cpt['id_sql'] ) );
 		$this->assertSame(
 			$cpt['id_sql'],
 			str_replace( [ 'wp_wc_orders_meta', 'order_id' ], [ 'wp_postmeta', 'post_id' ], (string) $hpos['id_sql'] ),

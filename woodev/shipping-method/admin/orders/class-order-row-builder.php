@@ -10,7 +10,6 @@
 namespace Woodev\Framework\Shipping\Admin\Orders;
 
 use Woodev\Framework\Shipping\Order\Carrier_Cancel;
-use Woodev\Framework\Shipping\Order\Delivery_Status;
 use Woodev\Framework\Shipping\Order\Order_Automation;
 use Woodev\Framework\Shipping\Shipping_Helper;
 use Woodev\Framework\Shipping\Shipping_Method;
@@ -677,7 +676,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Bu
 		}
 
 		/**
-		 * Resolves the `delivery_status` field group via {@see Delivery_Status::resolve()}.
+		 * Resolves the `delivery_status` field group — {@see Order_Actions::resolve_delivery_status()},
+		 * the one resolution the row, the metabox and the action gates share (#1037).
 		 *
 		 * @since 2.0.2
 		 *
@@ -686,13 +686,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Bu
 		 * @return array{canonical:string,canonical_label:string,raw:?string,raw_label:?string}
 		 */
 		private function resolve_delivery_status( \WC_Order $order, ?Orders_Provider $provider ): array {
-			if ( null === $provider || null === $provider->get_status_meta_key() ) {
-				return Delivery_Status::resolve( null, [] );
-			}
-
-			$raw = (string) \Woodev_Order_Compatibility::get_order_meta( $order, $provider->get_status_meta_key() );
-
-			return Delivery_Status::resolve( '' !== $raw ? $raw : null, $provider->get_status_map(), $provider->get_status_labels() );
+			return Order_Actions::resolve_delivery_status( $order, $provider );
 		}
 	}
 

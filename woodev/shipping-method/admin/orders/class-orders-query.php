@@ -10,6 +10,7 @@
 namespace Woodev\Framework\Shipping\Admin\Orders;
 
 use Woodev\Framework\Shipping\Order\Delivery_Status;
+use Woodev\Framework\Shipping\Order\Shipment_Cancellation;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -725,10 +726,72 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 		}
 
 		/**
-		 * Builds one delivery-status meta clause per provider able to say anything about
+		 * Builds the delivery-status meta clauses, the database-side twin of
+		 * {@see \Woodev\Framework\Shipping\Admin\Orders\Order_Actions::resolve_delivery_status()} (#1037).
+		 *
+		 * An order's canonical status is `cancelled` while the framework's own cancellation marker
+		 * ({@see Shipment_Cancellation::CANCELLED_AT_META}) is on it, and the provider's raw status
+		 * mapped through its `status_map` otherwise. The status-map clauses
+		 * ({@see self::status_map_clauses()}, which know nothing of the marker) are therefore
+		 * combined with the marker ONCE, not per provider — the marker is the framework's own meta,
+		 * the same key whichever carrier owns the order, so one extra leaf is enough and the id
+		 * query grows by one correlated subquery, not by one per carrier:
+		 *
+		 * - a cancelled order SATISFIES the request (`is cancelled`, or `is not X` for any X but
+		 *   cancelled): one more OR'd clause, `marker present`. The scope part already confines the
+		 *   result to orders carrying a registered carrier's marker, so the leaf needs no binding;
+		 * - it does NOT (`is X` for any X but cancelled, `is not cancelled`): the OR of the status-map
+		 *   clauses is ANDed with `marker absent`, so a cancelled order whose raw status still maps to
+		 *   X is not matched as X. No status-map clause at all stays no clause at all — the caller's
+		 *   «matches nothing» sentinel.
+		 *
+		 * @since 2.0.2
+		 * @since 2.0.2 Card #1037: composes the cancellation marker with the status-map clauses.
+		 *
+		 * @param Orders_Provider[] $providers providers in scope.
+		 * @param string            $canonical one of {@see Delivery_Status::canonical_states()}
+		 *                                     or {@see Delivery_Status::UNKNOWN}.
+		 * @param bool              $negate    false => 'is' (default); true => 'is not' (#836).
+		 * @return array<int,array<string,mixed>> clauses to OR together; empty when nothing can match.
+		 */
+		private function delivery_status_meta_clauses( array $providers, string $canonical, bool $negate = false ): array {
+			$clauses = $this->status_map_clauses( $providers, $canonical, $negate );
+
+			// A cancelled order resolves `cancelled`: it satisfies 'is cancelled' and every 'is not X' but cancelled.
+			if ( false ) {
+				$clauses[] = [
+					'key'     => Shipment_Cancellation::CANCELLED_AT_META,
+					'compare' => 'EXISTS',
+				];
+
+				return $clauses;
+			}
+
+			if ( [] === $clauses ) {
+				return [];
+			}
+
+			return [
+				[
+					'relation' => 'AND',
+					1 === count( $clauses ) ? $clauses[0] : array_merge( [ 'relation' => 'OR' ], $clauses ),
+					[
+						'key'     => Shipment_Cancellation::CANCELLED_AT_META,
+						'compare' => 'NOT EXISTS',
+					],
+				],
+			];
+		}
+
+		/**
+		 * Builds one status-map meta clause per provider able to say anything about
 		 * a canonical state, inverting each provider's OWN `status_map` (SP-10 spec D10) —
 		 * never a single shared map, because carriers do not share raw vocabularies.
 		 * `$negate` (#836) builds the 'is not' rule instead of 'is' — see below.
+		 *
+		 * This is the carrier's raw status ONLY: it knows nothing of the framework's own
+		 * cancellation marker, which {@see self::delivery_status_meta_clauses()} composes
+		 * with the clauses returned here (#1037). Returns at most one clause per provider.
 		 *
 		 * `unknown` is deliberately BOTH things {@see Delivery_Status::resolve()} already
 		 * treats as unknown: a raw value absent from the map, and a raw value present but
@@ -794,7 +857,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 		 * @param bool              $negate    false => 'is' (default); true => 'is not' (#836).
 		 * @return array<int,array<string,mixed>> one clause per participating provider.
 		 */
-		private function delivery_status_meta_clauses( array $providers, string $canonical, bool $negate = false ): array {
+		private function status_map_clauses( array $providers, string $canonical, bool $negate = false ): array {
 			$clauses = [];
 
 			foreach ( $providers as $provider ) {

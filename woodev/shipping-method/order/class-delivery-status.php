@@ -223,14 +223,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Delivery_Status' ) )
 		 * @param array<string,string> $status_map    raw status => one of
 		 *                                             {@see self::canonical_states()}.
 		 * @param array<string,string> $status_labels raw status => human label. Optional.
+		 * @param bool                 $cancelled     whether the framework recorded a cancellation of the
+		 *                                             shipment ({@see Shipment_Cancellation}, #1037): the
+		 *                                             canonical state is then {@see self::CANCELLED}
+		 *                                             whatever the raw status maps to, while `raw` and
+		 *                                             `raw_label` still carry the carrier's own value.
 		 * @return array{canonical:string,canonical_label:string,raw:?string,raw_label:?string}
 		 */
-		public static function resolve( ?string $raw_status, array $status_map, array $status_labels = [] ): array {
+		public static function resolve( ?string $raw_status, array $status_map, array $status_labels = [], bool $cancelled = false ): array {
 			$raw = ( null !== $raw_status && '' !== $raw_status ) ? $raw_status : null;
 
 			$canonical = self::UNKNOWN;
 
-			if ( null !== $raw && array_key_exists( $raw, $status_map ) ) {
+			if ( $cancelled ) {
+				$canonical = self::CANCELLED;
+			} elseif ( null !== $raw && array_key_exists( $raw, $status_map ) ) {
 				$mapped = (string) $status_map[ $raw ];
 
 				if ( in_array( $mapped, self::canonical_states(), true ) ) {
