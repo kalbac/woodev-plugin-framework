@@ -1487,12 +1487,13 @@ class ShippingOrdersRegistryTest extends TestCase {
 	}
 
 	/**
-	 * #1011: the orders page now shows EVERY status by default, but the badge counts WORK TO DO —
-	 * a cancelled or failed order nobody exported is not. Pinned on what reaches
+	 * #1011 / #1024: the orders page shows EVERY status by default, but the badge counts WORK TO DO —
+	 * an order nobody exported that cannot be exported (cancelled, failed, completed, refunded) is
+	 * not: the badge counts only {@see Order_Actions::EXPORTABLE_STATUSES}. Pinned on what reaches
 	 * `wc_get_orders()` for the badge's own request, under a shop that really has those statuses
 	 * (the stub of the other badge tests knows only `processing`, which would pass vacuously).
 	 */
-	public function test_badge_count_leaves_cancelled_and_failed_orders_out(): void {
+	public function test_badge_count_counts_only_exportable_statuses(): void {
 		$captured = [];
 		$this->stubOrdersQueryEnvironment(
 			static function (): int {
@@ -1503,8 +1504,10 @@ class ShippingOrdersRegistryTest extends TestCase {
 			[
 				'wc-pending'    => 'Pending',
 				'wc-processing' => 'Processing',
+				'wc-on-hold'    => 'On hold',
 				'wc-completed'  => 'Completed',
 				'wc-cancelled'  => 'Cancelled',
+				'wc-refunded'   => 'Refunded',
 				'wc-failed'     => 'Failed',
 			]
 		);
@@ -1517,16 +1520,24 @@ class ShippingOrdersRegistryTest extends TestCase {
 		$this->assertNotSame( [], $captured, 'the badge must actually have run a query' );
 
 		foreach ( $captured as $args ) {
-			$this->assertSame( [ 'wc-pending', 'wc-processing', 'wc-completed' ], $args['status'] );
-			$this->assertNotContains( 'wc-cancelled', $args['status'] );
-			$this->assertNotContains( 'wc-failed', $args['status'] );
+			$this->assertSame( [ 'wc-pending', 'wc-processing', 'wc-on-hold' ], $args['status'] );
+
+			foreach ( [ 'wc-completed', 'wc-cancelled', 'wc-refunded', 'wc-failed' ] as $not_work ) {
+				$this->assertNotContains( $not_work, $args['status'] );
+			}
 		}
+
+		// The «Новые» tab asks the same query with the same scope, so it carries the very same statuses (#1024).
+		$tab = ( new Orders_Query( $registry ) )->build_args( [ 'carrier' => 'all', 'is_exported' => false ] );
+
+		$this->assertSame( $tab['status'], $captured[0]['status'], 'the badge and the «Новые» tab cannot disagree' );
 
 		// The page's «Все» view, by contrast, carries them.
 		$all = ( new Orders_Query( $registry ) )->build_args( [ 'carrier' => 'all' ] );
 
-		$this->assertContains( 'wc-cancelled', $all['status'] );
-		$this->assertContains( 'wc-failed', $all['status'] );
+		foreach ( [ 'wc-completed', 'wc-cancelled', 'wc-refunded', 'wc-failed' ] as $status ) {
+			$this->assertContains( $status, $all['status'] );
+		}
 	}
 
 	public function test_badge_tooltip_breaks_the_count_down_per_carrier(): void {

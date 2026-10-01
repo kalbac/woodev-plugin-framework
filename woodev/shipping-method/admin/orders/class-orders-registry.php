@@ -1451,7 +1451,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 *
 		 * ⚠ "New" is `is_exported => false` and nothing else — settled by measurement in
 		 * #841: an order is new until {@see \Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler::export()}
-		 * has written its `carrier_order_id`. There is no separate "new" flag to read.
+		 * has written its `carrier_order_id`. There is no separate "new" flag to read. The
+		 * status side is {@see Order_Actions::EXPORTABLE_STATUSES} (#1024), applied by
+		 * {@see Orders_Query} itself — this request names no status.
 		 *
 		 * ⚠ This goes through {@see Orders_Query} — the very query the table runs — and
 		 * NOT through a hand-rolled `wc_get_orders()`/`$wpdb` count. That is what makes

@@ -64,7 +64,13 @@ with a legacy custom query var (`is_edostavka`, `is_yandex_delivery`) on the non
 exclude `wc-cancelled` and `wc-failed` and restrict `type` to `wc_get_order_types( 'view-orders' )`.
 That exclusion describes the v1 export QUEUE, not a decision for the framework page: by operator decision
 (s145, #1011) the framework page's default view shows every status WooCommerce's own «All» list shows;
-only the «new» scope and the badge keep cancelled/failed out (PR #1020, s146).
+only the «new» scope and the badge are narrower — since #1024 (operator, 01.10.2026, s146) they count
+exactly the orders that can be exported: not exported AND status in `Order_Actions::EXPORTABLE_STATUSES`
+(pending, on-hold, processing), the list the «Выгрузить» button reads, so the tab, the badge and the
+button cannot disagree. Unexported completed / refunded / cancelled / failed orders stay under «Все». An
+explicit `status` / `status_not` filter applies on top of the «new» scope (the intersection; a request
+naming no exportable status selects nothing). The first cut of this rule (PR #1020) excluded only
+cancelled/failed.
 
 This is what makes #694's open condition — «при условии что агрегат дёшев» — answerable: the
 aggregate is **the same single query** with `relation => OR` across the providers' marker keys, not
