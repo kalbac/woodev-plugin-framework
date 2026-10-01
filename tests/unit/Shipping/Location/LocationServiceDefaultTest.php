@@ -1145,11 +1145,11 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		}
 
 		/**
-		 * No-failure-caching, extended to the provider-switch case (mirrors the
-		 * `geoip` policy's own "no failure caching" discipline): a re-resolution
-		 * failure is retried on the very next call, never sticky.
+		 * A re-resolution failure is memoized for the REQUEST only (#1025): every read of the
+		 * customer record in one request used to ask the provider again (a hung one cost 8 s per
+		 * read); the next request still retries, so an outage is never sticky.
 		 */
-		public function test_fixed_default_re_resolution_failure_is_retried_not_cached(): void {
+		public function test_fixed_default_re_resolution_failure_is_asked_once_per_request_and_retried_by_the_next(): void {
 			$stale_provider  = new Default_Test_Fake_Provider( 'prov-a', static fn() => [] );
 			$active_provider = new Default_Test_Fake_Provider( 'prov-b', static fn() => [] );
 
@@ -1167,7 +1167,11 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertNull( $service->get_customer_record() );
 			$this->assertNull( $service->get_customer_record() );
 
-			$this->assertCount( 2, $active_provider->suggest_calls, 'nothing was persisted after a failure, so every read retries' );
+			$this->assertCount( 1, $active_provider->suggest_calls, 'the failure is memoized for the rest of the request' );
+
+			$this->assertNull( $this->service( $registry )->get_customer_record() );
+
+			$this->assertCount( 2, $active_provider->suggest_calls, 'a new request asks the provider again' );
 		}
 
 		// -------------------------------------------------------------------
@@ -1399,7 +1403,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			\WC_Geolocation::$address = null;
 		}
 
-		public function test_policy_geoip_locate_miss_stores_nothing_and_the_next_call_retries(): void {
+		public function test_policy_geoip_locate_miss_stores_nothing_and_the_next_request_retries(): void {
 			$provider = new Default_Test_Fake_Locate_Provider( 'geo', static fn() => null );
 
 			$this->stub_default_locality_options( 'geo', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_GEOIP );
@@ -1412,7 +1416,11 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertNull( $service->get_customer_record() );
 			$this->assertNull( $service->get_customer_record() );
 
-			$this->assertCount( 2, $provider->locate_calls, 'no failure caching — geo-IP is transient, every call retries' );
+			$this->assertCount( 1, $provider->locate_calls, 'the miss is memoized for the rest of the request (#1025)' );
+
+			$this->assertNull( $this->service( $registry )->get_customer_record() );
+
+			$this->assertCount( 2, $provider->locate_calls, 'no failure caching beyond the request — geo-IP is transient, the next request retries' );
 
 			\WC_Geolocation::$address = null;
 		}
@@ -1920,8 +1928,80 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			\WC_Geolocation::$address = '203.0.113.5';
 
+			// locate() swallows the exception itself, so this proves the graceful answer only;
+			// the scope restore after a THROWING callback is Woodev_API_Request_Purpose's own
+			// test (ApiBaseRequestTimeoutTest).
 			$this->assertNull( $this->service( $registry )->get_customer_record(), 'the page renders without a default locality' );
-			$this->assertSame( \Woodev_API_Request_Purpose::DEFAULT_PURPOSE, \Woodev_API_Request_Purpose::current(), 'and the budget scope is restored' );
+
+			\WC_Geolocation::$address = null;
+		}
+
+		public function test_a_failed_lazy_default_is_asked_once_however_many_times_the_record_is_read(): void {
+			$provider = new Default_Test_Fake_Locate_Provider(
+				'geo',
+				static function () {
+					throw new \Woodev_API_Exception( 'cURL error 28: Operation timed out' );
+				}
+			);
+
+			$this->stub_default_locality_options( 'geo', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_GEOIP );
+			$registry = $this->activate( [ $provider ] );
+
+			\WC_Geolocation::$address = '203.0.113.5';
+
+			$service = $this->service( $registry );
+
+			$this->assertNull( $service->get_customer_record() );
+			$this->assertNull( $service->get_customer_record() );
+			$this->assertNull( $service->get_customer_chain() );
+
+			$this->assertCount( 1, $provider->locate_calls, 'a hung provider is waited on once per request, not once per read' );
+
+			\WC_Geolocation::$address = null;
+		}
+
+		public function test_forgetting_the_customer_record_drops_the_memoized_default(): void {
+			$provider = new Default_Test_Fake_Locate_Provider( 'geo', static fn() => null );
+
+			$this->stub_default_locality_options( 'geo', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_GEOIP );
+			$registry = $this->activate( [ $provider ] );
+
+			\WC_Geolocation::$address = '203.0.113.5';
+
+			$service = $this->service( $registry );
+
+			$service->get_customer_record();
+			$service->get_customer_record();
+			$this->assertCount( 1, $provider->locate_calls, 'precondition: memoized' );
+
+			$service->forget_customer_record();
+			$service->get_customer_record();
+
+			$this->assertCount( 2, $provider->locate_calls, 'the forgotten customer is resolved afresh' );
+
+			\WC_Geolocation::$address = null;
+		}
+
+		public function test_setting_the_customer_record_drops_the_memoized_default(): void {
+			$provider = new Default_Test_Fake_Locate_Provider( 'geo', static fn() => null );
+
+			$this->stub_default_locality_options( 'geo', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_GEOIP );
+			$registry = $this->activate( [ $provider ] );
+
+			\WC_Geolocation::$address = '203.0.113.5';
+
+			// No session: the write below fails, so the record the customer just set is not there
+			// to short-circuit the next read — only the memo's reset can make it ask again.
+			$service = new Location_Service( $registry, new Default_Test_Customer_Store_Probe( null ) );
+
+			$service->get_customer_record();
+			$service->get_customer_record();
+			$this->assertCount( 1, $provider->locate_calls, 'precondition: memoized' );
+
+			$this->assertFalse( $service->set_customer_record( $this->record( 'geo:picked' ) ), 'precondition: the write could not land' );
+			$service->get_customer_record();
+
+			$this->assertCount( 2, $provider->locate_calls, 'a customer write invalidates the memoized default' );
 
 			\WC_Geolocation::$address = null;
 		}
