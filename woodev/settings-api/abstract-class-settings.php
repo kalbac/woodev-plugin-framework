@@ -204,6 +204,10 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 					$control->set_step( $args['step'] );
 				}
 
+				if ( ! empty( $args['native_bounds'] ) ) {
+					$control->set_native_bounds( true );
+				}
+
 				if ( isset( $args['tooltip'] ) ) {
 					$control->set_tooltip( (string) $args['tooltip'] );
 				}

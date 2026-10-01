@@ -272,6 +272,10 @@ namespace Woodev\Tests\Unit\Shipping {
 		protected function setUp(): void {
 			parent::setUp();
 
+			// the default-dimensions handler converts its built-in defaults (#955): units are not under test here
+			Functions\when( 'wc_get_weight' )->returnArg( 1 );
+			Functions\when( 'wc_get_dimension' )->returnArg( 1 );
+
 			$this->store    = [];
 			$this->ttls     = [];
 			$this->filters  = [];

@@ -3514,7 +3514,7 @@ msgid "Длина по умолчанию, %s"
 msgstr ""
 
 #: shipping-method/settings/class-default-dimensions-settings.php:142
-msgid "Подставляется в расчёт доставки, если у товара не указана длина. Пусто — ничего не подставляется."
+msgid "Подставляется в расчёт доставки, если у товара не указана длина."
 msgstr ""
 
 #. translators: the store's dimension unit, e.g. cm
@@ -3524,7 +3524,7 @@ msgid "Ширина по умолчанию, %s"
 msgstr ""
 
 #: shipping-method/settings/class-default-dimensions-settings.php:147
-msgid "Подставляется в расчёт доставки, если у товара не указана ширина. Пусто — ничего не подставляется."
+msgid "Подставляется в расчёт доставки, если у товара не указана ширина."
 msgstr ""
 
 #. translators: the store's dimension unit, e.g. cm
@@ -3534,7 +3534,7 @@ msgid "Высота по умолчанию, %s"
 msgstr ""
 
 #: shipping-method/settings/class-default-dimensions-settings.php:152
-msgid "Подставляется в расчёт доставки, если у товара не указана высота. Пусто — ничего не подставляется."
+msgid "Подставляется в расчёт доставки, если у товара не указана высота."
 msgstr ""
 
 #. translators: the store's weight unit, e.g. kg
@@ -3544,7 +3544,11 @@ msgid "Вес по умолчанию, %s"
 msgstr ""
 
 #: shipping-method/settings/class-default-dimensions-settings.php:157
-msgid "Подставляется в расчёт доставки, если у товара не указан вес. Пусто — ничего не подставляется."
+msgid "Подставляется в расчёт доставки, если у товара не указан вес."
+msgstr ""
+
+#: shipping-method/settings/class-default-dimensions-settings.php:219
+msgid "Значение должно быть больше нуля."
 msgstr ""
 
 #: shipping-method/settings/class-export-settings.php:163
@@ -3632,7 +3636,7 @@ msgid "Габариты по умолчанию"
 msgstr ""
 
 #: shipping-method/settings/class-shipping-settings-tab.php:361
-msgid "Если у товара не указаны длина, ширина, высота или вес, в расчёт доставки подставляется значение отсюда — отдельно для каждого незаполненного поля. Значения вводятся в единицах магазина (WooCommerce → Настройки → Товары). Пустое поле — ничего не подставляется."
+msgid "Эти значения подставляются, только если у товара не указаны вес или габариты. Для точного расчёта стоимости доставки укажите вес и габариты в карточке каждого товара."
 msgstr ""
 
 #: shipping-method/settings/class-shipping-settings-tab.php:344

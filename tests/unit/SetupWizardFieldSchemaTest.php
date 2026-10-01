@@ -86,6 +86,7 @@ class SetupWizardFieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'get_step' )->andReturn( 1.0 );
 		$control->shouldReceive( 'is_disabled' )->andReturn( false )->byDefault();
 		$control->shouldReceive( 'get_country' )->andReturn( '' )->byDefault();
+		$control->shouldReceive( 'is_native_bounds' )->andReturn( false )->byDefault();
 
 		// Build the setting mock.
 		$setting = Mockery::mock( 'Woodev_Setting' );
@@ -134,6 +135,9 @@ class SetupWizardFieldSchemaTest extends TestCase {
 		$this->assertSame( 0.0, $entry['min'] );
 		$this->assertSame( 100.0, $entry['max'] );
 		$this->assertSame( 1.0, $entry['step'] );
+
+		// Not opted in (#955): the key is absent, so the control renders as it always did.
+		$this->assertArrayNotHasKey( 'native_bounds', $entry );
 	}
 
 	/**
@@ -152,6 +156,7 @@ class SetupWizardFieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'get_step' )->andReturn( null );
 		$control->shouldReceive( 'is_disabled' )->andReturn( false )->byDefault();
 		$control->shouldReceive( 'get_country' )->andReturn( '' )->byDefault();
+		$control->shouldReceive( 'is_native_bounds' )->andReturn( false )->byDefault();
 
 		$setting = Mockery::mock( 'Woodev_Setting' );
 		$setting->shouldReceive( 'get_id' )->andReturn( 'api_key' );

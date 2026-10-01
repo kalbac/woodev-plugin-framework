@@ -358,7 +358,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 				Default_Dimensions_Settings::SECTION_ID,
 				__( 'Габариты по умолчанию', 'woodev-plugin-framework' ),
 				$this->get_default_dimensions_settings()->get_owned_setting_ids(),
-				__( 'Если у товара не указаны длина, ширина, высота или вес, в расчёт доставки подставляется значение отсюда — отдельно для каждого незаполненного поля. Значения вводятся в единицах магазина (WooCommerce → Настройки → Товары). Пустое поле — ничего не подставляется.', 'woodev-plugin-framework' )
+				__( 'Эти значения подставляются, только если у товара не указаны вес или габариты. Для точного расчёта стоимости доставки укажите вес и габариты в карточке каждого товара.', 'woodev-plugin-framework' )
 			);
 
 			// «Инструменты» (#505) is always LAST, and exists only when at least one

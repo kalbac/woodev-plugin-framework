@@ -6,10 +6,15 @@
  * (#955): the length, width, height and weight a product is packed with when it has none of its own.
  * Registered with the `default_dimensions` option namespace (`woodev_default_dimensions_*`).
  *
- * The values are a STORE decision, never a carrier's: the packer ({@see \Woodev_WC_Packer_Dispatcher})
- * builds one set of items for every carrier and for the rate cache key, so a per-carrier answer would
- * make two carriers quote the same cart as two different parcels. They live on the framework settings
- * page (`woodev-settings`) — a carrier plugin gets the fields without writing code.
+ * The values are a STORE decision, never a carrier's. Dimensions and weight describe the PRODUCT, not
+ * the carrier that ships it; customers compare carriers' prices on the same parcel, so two carriers
+ * must not quote one cart as two different parcels; and with four or more carriers a merchant fills
+ * one place, not four. They live on the framework settings page (`woodev-settings`) — a carrier
+ * plugin gets the fields without writing code.
+ *
+ * The fields are required and pre-filled (weight 100 g, 10 × 10 × 10 cm — what v1 CDEK and v1 Yandex
+ * both used), converted to the store's units at registration. A merchant who never opens the section
+ * still gets sane parcels, and the effective value is always positive.
  *
  * Units: the merchant types the value in the STORE's units (`woocommerce_dimension_unit` /
  * `woocommerce_weight_unit`) — the same ones a product's own fields are in — and the field label says
@@ -48,6 +53,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Default_Dimension
 		/** @var string setting id: weight, in the store's weight unit */
 		public const SETTING_WEIGHT = 'default_weight';
 
+		/** @var float the built-in default weight, in grams (v1 CDEK / v1 Yandex used the same) */
+		public const BUILTIN_WEIGHT_G = 100.0;
+
+		/** @var float the built-in default length, width and height, in centimetres */
+		public const BUILTIN_SIZE_CM = 10.0;
+
 		/**
 		 * @since 2.0.2
 		 */
@@ -79,10 +90,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Default_Dimension
 		}
 
 		/**
-		 * The fallback for one setting, in the store's unit, or 0.0 when the merchant left it empty.
+		 * The fallback for one setting, in the store's unit — always positive.
 		 *
-		 * An empty field, a non-numeric stored value and a non-positive one all mean «no fallback»:
-		 * a zero or negative size is no size a parcel can have.
+		 * The fields are required and refused when not positive, so the stored value normally is. A value
+		 * that got past that anyway (written straight to the database, or left by an older version) is
+		 * replaced by the registered default rather than passed on as a zero-size parcel.
 		 *
 		 * @since 2.0.2
 		 *
@@ -99,7 +111,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Default_Dimension
 
 			$value = $this->get_value( $setting_id );
 
-			return is_numeric( $value ) && (float) $value > 0 ? (float) $value : 0.0;
+			if ( is_numeric( $value ) && (float) $value > 0 ) {
+				return (float) $value;
+			}
+
+			$default = $this->get_setting( $setting_id )->get_default();
+
+			return is_numeric( $default ) ? (float) $default : 0.0;
 		}
 
 		/**
@@ -110,7 +128,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Default_Dimension
 		 * @return string
 		 */
 		public static function get_dimension_unit(): string {
-			return (string) get_option( 'woocommerce_dimension_unit', 'cm' );
+			$unit = (string) get_option( 'woocommerce_dimension_unit', 'cm' );
+
+			return '' !== $unit ? $unit : 'cm';
 		}
 
 		/**
@@ -121,12 +141,33 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Default_Dimension
 		 * @return string
 		 */
 		public static function get_weight_unit(): string {
-			return (string) get_option( 'woocommerce_weight_unit', 'kg' );
+			$unit = (string) get_option( 'woocommerce_weight_unit', 'kg' );
+
+			return '' !== $unit ? $unit : 'kg';
 		}
 
 		/**
-		 * Registers the four settings. Empty by default — an empty setting changes nothing: the packer
-		 * keeps turning a missing value into 0.
+		 * A built-in default converted to the store's unit and rounded to the control's step, so
+		 * 100 g in a store that weighs in pounds is 0.22, not 0.2204622622.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param float $value value in the built-in unit (g / cm).
+		 * @param bool  $weight true for a weight, false for a dimension.
+		 * @return float
+		 */
+		private static function convert_builtin_default( float $value, bool $weight ): float {
+
+			$converted = $weight
+				? wc_get_weight( $value, self::get_weight_unit(), 'g' )
+				: wc_get_dimension( $value, self::get_dimension_unit(), 'cm' );
+
+			return round( (float) $converted, 2 );
+		}
+
+		/**
+		 * Registers the four settings: required, pre-filled with the built-in default
+		 * ({@see self::BUILTIN_WEIGHT_G}, {@see self::BUILTIN_SIZE_CM}) converted to the store's units.
 		 *
 		 * @since 2.0.2
 		 *
@@ -139,22 +180,26 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Default_Dimension
 				self::SETTING_LENGTH => [
 					/* translators: %s: the store's dimension unit, e.g. cm */
 					'name'    => sprintf( __( 'Длина по умолчанию, %s', 'woodev-plugin-framework' ), $dimension_unit ),
-					'tooltip' => __( 'Подставляется в расчёт доставки, если у товара не указана длина. Пусто — ничего не подставляется.', 'woodev-plugin-framework' ),
+					'tooltip' => __( 'Подставляется в расчёт доставки, если у товара не указана длина.', 'woodev-plugin-framework' ),
+					'default' => self::convert_builtin_default( self::BUILTIN_SIZE_CM, false ),
 				],
 				self::SETTING_WIDTH  => [
 					/* translators: %s: the store's dimension unit, e.g. cm */
 					'name'    => sprintf( __( 'Ширина по умолчанию, %s', 'woodev-plugin-framework' ), $dimension_unit ),
-					'tooltip' => __( 'Подставляется в расчёт доставки, если у товара не указана ширина. Пусто — ничего не подставляется.', 'woodev-plugin-framework' ),
+					'tooltip' => __( 'Подставляется в расчёт доставки, если у товара не указана ширина.', 'woodev-plugin-framework' ),
+					'default' => self::convert_builtin_default( self::BUILTIN_SIZE_CM, false ),
 				],
 				self::SETTING_HEIGHT => [
 					/* translators: %s: the store's dimension unit, e.g. cm */
 					'name'    => sprintf( __( 'Высота по умолчанию, %s', 'woodev-plugin-framework' ), $dimension_unit ),
-					'tooltip' => __( 'Подставляется в расчёт доставки, если у товара не указана высота. Пусто — ничего не подставляется.', 'woodev-plugin-framework' ),
+					'tooltip' => __( 'Подставляется в расчёт доставки, если у товара не указана высота.', 'woodev-plugin-framework' ),
+					'default' => self::convert_builtin_default( self::BUILTIN_SIZE_CM, false ),
 				],
 				self::SETTING_WEIGHT => [
 					/* translators: %s: the store's weight unit, e.g. kg */
 					'name'    => sprintf( __( 'Вес по умолчанию, %s', 'woodev-plugin-framework' ), self::get_weight_unit() ),
-					'tooltip' => __( 'Подставляется в расчёт доставки, если у товара не указан вес. Пусто — ничего не подставляется.', 'woodev-plugin-framework' ),
+					'tooltip' => __( 'Подставляется в расчёт доставки, если у товара не указан вес.', 'woodev-plugin-framework' ),
+					'default' => self::convert_builtin_default( self::BUILTIN_WEIGHT_G, true ),
 				],
 			];
 
@@ -164,8 +209,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Default_Dimension
 					$id,
 					\Woodev_Setting::TYPE_FLOAT,
 					[
-						'name'    => $field['name'],
-						'default' => '',
+						'name'             => $field['name'],
+						'default'          => $field['default'],
+						'required'         => true,
+						// Strictly positive: a zero or negative size is no size a parcel can have. The
+						// callback only sees a non-empty value — an empty one is refused by `required`.
+						'validate'         => static function ( $value ): bool {
+							return is_numeric( $value ) && (float) $value > 0;
+						},
+						'validate_message' => __( 'Значение должно быть больше нуля.', 'woodev-plugin-framework' ),
 					]
 				);
 				$this->register_control(
@@ -173,8 +225,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Default_Dimension
 					\Woodev_Control::TYPE_NUMBER,
 					[
 						'tooltip' => $field['tooltip'],
-						'min'     => 0,
+						'min'     => 0.01,
 						'step'    => 0.01,
+						// the browser itself refuses 0 and -1; the server-side validate stays the real guard
+						'native_bounds' => true,
 					]
 				);
 			}

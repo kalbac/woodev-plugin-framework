@@ -90,6 +90,11 @@ final class Field_Schema {
 				$entry['step'] = $control->get_step();
 			}
 
+			// Opt-in: only a control that asked for it renders min / max / step on the DOM input.
+			if ( $control && $control->is_native_bounds() ) {
+				$entry['native_bounds'] = true;
+			}
+
 			if ( null !== $setting->get_validate() ) {
 				$entry['server_validated'] = true;
 			}

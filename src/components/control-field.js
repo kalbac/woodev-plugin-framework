@@ -594,7 +594,17 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 		case 'text':
 		default: {
 			const type = [ 'email', 'url', 'tel', 'number', 'date' ].includes( control ) ? control : 'text';
+			// Opt-in per field (`native_bounds`): only then do min / max / step reach the DOM input, so the
+			// browser itself refuses an out-of-range number. Every other number field renders as before.
+			const nativeBounds = 'number' === control && true === schema.native_bounds
+				? Object.fromEntries(
+					[ 'min', 'max', 'step' ]
+						.filter( ( key ) => schema[ key ] !== undefined && schema[ key ] !== null )
+						.map( ( key ) => [ key, schema[ key ] ] )
+				)
+				: {};
 			const input = createElement( TextControl, {
+				...nativeBounds,
 				__nextHasNoMarginBottom: true,
 				__next40pxDefaultSize: true,
 				type,

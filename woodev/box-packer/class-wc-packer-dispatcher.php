@@ -94,7 +94,7 @@ if ( ! class_exists( 'Woodev_WC_Packer_Dispatcher' ) ) :
 		 * `woocommerce_weight_unit` — mm, m, in, yd / g, lbs, oz). `wc_get_dimension()` and
 		 * `wc_get_weight()` are WooCommerce's own conversion authority. The values converted are the
 		 * EFFECTIVE ones ({@see self::get_effective_values()}): a missing dimension or weight is
-		 * replaced by the store's default, and with no default set it stays 0.0.
+		 * replaced by the store's default ({@see Default_Dimensions_Settings}, always positive).
 		 *
 		 * @since  2.0.2
 		 *
@@ -121,8 +121,8 @@ if ( ! class_exists( 'Woodev_WC_Packer_Dispatcher' ) ) :
 		 * ({@see Default_Dimensions_Settings}, #955) takes its place. «Missing» is empty (WooCommerce
 		 * stores '' for an unset field) OR not positive — a product saved with 0 ships as the same
 		 * zero-size parcel the carrier refuses, so it is treated as unset. Each of the four is decided
-		 * on its own: a product with a weight and no size keeps its weight. With no default set the
-		 * value is 0.0, exactly as before.
+		 * on its own: a product with a weight and no size keeps its weight. Outside the shipping framework
+		 * (the settings class is not loaded) there is no store default and a missing value stays 0.0.
 		 *
 		 * Public because the shipping rate cache keys on what is packed, not on what the product has
 		 * ({@see \Woodev\Framework\Shipping\Shipping_Rate_Cache}): the two must not disagree.

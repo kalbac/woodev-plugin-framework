@@ -41,6 +41,10 @@ class ShippingSettingsTabTest extends TestCase {
 	protected function setUp(): void {
 		parent::setUp();
 
+		// the default-dimensions handler converts its built-in defaults (#955): units are not under test here
+		Functions\when( 'wc_get_weight' )->returnArg( 1 );
+		Functions\when( 'wc_get_dimension' )->returnArg( 1 );
+
 		// hook_once()'s add_action() is never actually fired in these tests — register()
 		// is invoked directly, exactly like LocationProviderRegistryTest invokes collect()
 		// directly instead of firing a real `init` action.
