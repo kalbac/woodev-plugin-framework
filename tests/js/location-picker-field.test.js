@@ -28,11 +28,19 @@ jest.mock( '@wordpress/api-fetch' );
 const SUGGEST_URL_PREFIX = 'https://example.test/wp-json/woodev/v1/location/default-locality/suggest';
 
 beforeEach( () => {
+	// The search box debounces a typed query by 300 ms (`DEBOUNCE_MS`, location-picker.tsx). Fake timers
+	// keep that wait out of wall-clock (#1056): RTL's `waitFor` / `findBy*` advance Jest's fake clock while
+	// they poll, and the two tests that pin the debounce itself advance it by hand.
+	jest.useFakeTimers();
 	apiFetch.mockReset();
 	window.woodevSettings = {
 		restRoot: 'https://example.test/wp-json/woodev/v1/settings',
 		nonce: 'nonce-123',
 	};
+} );
+
+afterEach( () => {
+	jest.useRealTimers();
 } );
 
 describe( 'namespaceRoot', () => {
@@ -162,7 +170,7 @@ describe( 'LocationPickerField', () => {
 
 		// Give the debounce window a chance to elapse — still must not fetch.
 		await act( async () => {
-			await new Promise( ( resolve ) => setTimeout( resolve, 350 ) );
+			jest.advanceTimersByTime( 350 );
 		} );
 		expect( apiFetch ).not.toHaveBeenCalled();
 	} );
@@ -182,6 +190,14 @@ describe( 'LocationPickerField', () => {
 		const search = await screen.findByPlaceholderText( 'Начните вводить название…' );
 		fireEvent.change( search, { target: { value: 'Мос' } } );
 
+		// Nothing is fetched while the debounce is still running — just under it, then past it.
+		await act( async () => {
+			jest.advanceTimersByTime( 299 );
+		} );
+		expect( apiFetch ).not.toHaveBeenCalled();
+		await act( async () => {
+			jest.advanceTimersByTime( 1 );
+		} );
 		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 1 ) );
 
 		const call = apiFetch.mock.calls[ 0 ][ 0 ];
