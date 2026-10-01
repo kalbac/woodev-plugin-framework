@@ -1242,17 +1242,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 		/**
 		 * The native `status` list a request falls back to when it names no status (#1011).
 		 *
-		 * - The default view — every request without the «new» scope — is EVERY registered
-		 *   order status, cancelled and failed included (operator, 01.10.2026): the page is
-		 *   an order list, and a cancelled order must stay visible, with its «not cancelled
-		 *   at the carrier» marker (#1007).
+		 * - The default view — every request without the «new» scope — is every registered
+		 *   order status WooCommerce's own «All» list shows, cancelled and failed included
+		 *   (operator, 01.10.2026): the page is an order list, and a cancelled order must stay
+		 *   visible, with its «not cancelled at the carrier» marker (#1007). «All» in WC is
+		 *   every status whose post status object has `show_in_admin_all_list` — which
+		 *   `wc-checkout-draft` (the Store API's unfinished cart, listed by
+		 *   `wc_get_order_statuses()` all the same) does not, so it stays out of the default
+		 *   too. A status with NO post status object registered is kept: HPOS custom statuses
+		 *   may lack one, and only an object saying `false` is a reason to hide.
 		 * - The «new» scope (`is_exported` present and false — the «Новые» link and the menu
 		 *   badge) counts WORK TO DO, so it leaves out {@see self::WORK_EXCLUDED_STATUSES}.
 		 *   Both callers reach this through {@see self::build_args()}, which is what makes
 		 *   «Новые (7)» and the badge agree by construction.
 		 *
-		 * An explicit `status` / `status_not` request never reaches this list; see
-		 * {@see self::resolve_requested_statuses()}.
+		 * An explicit `status` / `status_not` request never reaches this list — it is
+		 * validated against the FULL {@see wc_get_order_statuses()}, so any status, drafts
+		 * included, can still be asked for; see {@see self::resolve_requested_statuses()}.
 		 *
 		 * `is_exported` is read the way {@see self::build_scope()} reads it — presence, then
 		 * `wc_string_to_bool()` — so a request cannot be «new» here and «exported» there.
@@ -1263,7 +1269,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 		 * @return string[] `wc-`-prefixed statuses.
 		 */
 		private function default_statuses( array $request ): array {
-			$statuses = array_keys( wc_get_order_statuses() );
+			$statuses = array_values(
+				array_filter(
+					array_keys( wc_get_order_statuses() ),
+					static function ( string $status ): bool {
+						$object = get_post_status_object( $status );
+
+						return ! is_object( $object ) || false !== ( $object->show_in_admin_all_list ?? true );
+					}
+				)
+			);
 
 			if ( array_key_exists( 'is_exported', $request ) && ! wc_string_to_bool( $request['is_exported'] ) ) {
 				$statuses = array_values( array_diff( $statuses, self::WORK_EXCLUDED_STATUSES ) );

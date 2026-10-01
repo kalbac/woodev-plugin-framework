@@ -1273,6 +1273,7 @@ class ShippingOrdersRegistryTest extends TestCase {
 			}
 		);
 		Functions\when( 'wc_get_order_types' )->justReturn( [ 'shop_order' ] );
+		Functions\when( 'get_post_status_object' )->justReturn( null ); // no post status objects: every status is kept (#1011).
 		Functions\when( 'wc_get_order_statuses' )->justReturn( $statuses );
 		Functions\when( 'wc_string_to_bool' )->alias(
 			static function ( $value ): bool {

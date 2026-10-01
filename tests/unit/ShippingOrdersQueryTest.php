@@ -43,6 +43,7 @@ class ShippingOrdersQueryTest extends TestCase {
 		Functions\when( 'apply_filters' )->returnArg( 2 );
 
 		Functions\when( 'wc_get_order_types' )->justReturn( [ 'shop_order' ] );
+		Functions\when( 'get_post_status_object' )->justReturn( null ); // no post status objects: every status is kept (#1011).
 		Functions\when( 'wc_get_order_statuses' )->justReturn(
 			[
 				'wc-pending'    => 'Pending',
@@ -437,6 +438,61 @@ class ShippingOrdersQueryTest extends TestCase {
 		$args = $this->query_with_hpos( true )->build_args( [] );
 
 		$this->assertSame( [ 'wc-pending', 'wc-processing', 'wc-cancelled', 'wc-failed' ], $args['status'] );
+	}
+
+	/**
+	 * Shop with `wc-checkout-draft` (WooCommerce lists it in `wc_get_order_statuses()`, but its post
+	 * status object has `show_in_admin_all_list = false`, so WC's own «All» list hides it) and a
+	 * custom status with no post status object at all.
+	 */
+	private function stub_a_shop_with_a_checkout_draft(): void {
+		Functions\when( 'wc_get_order_statuses' )->justReturn(
+			[
+				'wc-pending'        => 'Pending',
+				'wc-checkout-draft' => 'Draft',
+				'wc-cancelled'      => 'Cancelled',
+				'wc-custom'         => 'Custom (HPOS, no post status object)',
+			]
+		);
+		Functions\when( 'get_post_status_object' )->alias(
+			static function ( string $status ): ?object {
+				$flags = [
+					'wc-pending'        => true,
+					'wc-checkout-draft' => false,
+					'wc-cancelled'      => true,
+				];
+
+				return array_key_exists( $status, $flags ) ? (object) [ 'show_in_admin_all_list' => $flags[ $status ] ] : null;
+			}
+		);
+	}
+
+	/** #1011: the default view mirrors WC's own «All» list — a status hidden from it there is hidden here. */
+	public function test_the_default_view_leaves_out_a_status_hidden_from_the_wc_all_list(): void {
+		$this->stub_a_shop_with_a_checkout_draft();
+
+		$args = $this->query_with_hpos( true )->build_args( [] );
+
+		$this->assertSame( [ 'wc-pending', 'wc-cancelled', 'wc-custom' ], $args['status'] );
+		$this->assertNotContains( 'wc-checkout-draft', $args['status'] );
+	}
+
+	public function test_the_new_scope_leaves_out_the_hidden_status_too(): void {
+		$this->stub_a_shop_with_a_checkout_draft();
+
+		$args = $this->query_with_hpos( true )->build_args( [ 'is_exported' => false ] );
+
+		$this->assertSame( [ 'wc-pending', 'wc-custom' ], $args['status'] );
+	}
+
+	/** The explicit filter is validated against the FULL status list, so the hidden status stays reachable. */
+	public function test_an_explicit_status_filter_can_still_request_the_hidden_status(): void {
+		$this->stub_a_shop_with_a_checkout_draft();
+
+		$query = $this->query_with_hpos( true );
+
+		$this->assertSame( [ 'wc-checkout-draft' ], $query->build_args( [ 'status' => [ 'checkout-draft' ] ] )['status'] );
+		$this->assertContains( 'wc-checkout-draft', $query->build_args( [ 'status_not' => [ 'wc-pending' ] ] )['status'] );
 	}
 
 	/** An absent `is_exported` and an «exported» one are both the default view, not the «new» scope. */
