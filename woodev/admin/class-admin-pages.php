@@ -150,6 +150,7 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 				$asset['version'],
 				true
 			);
+			\Woodev\Framework\Handlers\Script_Translations::register( $this->woodev_plugin, 'woodev-license-app' );
 
 			// Collect initial state for every registered license engine.
 			$states = [];
@@ -314,6 +315,7 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 				$asset['version'],
 				true
 			);
+			\Woodev\Framework\Handlers\Script_Translations::register( $this->woodev_plugin, 'woodev-plugins-app' );
 
 			$connection = new Woodev_Account_Connection();
 

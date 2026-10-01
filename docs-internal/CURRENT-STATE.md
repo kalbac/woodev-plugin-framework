@@ -134,6 +134,7 @@ caller's concrete order class or a `WC_Subscription` becomes a plain order (`ses
 сносит хвост `#~` — готчи `the-mo-is-reproducible-from-the-po`,
 `a-po-merge-that-drops-obsolete-entries-still-looks-well-formed`,
 `lint-i18n-answers-about-the-catalogue-not-the-code`.
+⚠ JS-бандлы читают переводы из handle-named JSON, не из `.mo` (`lint:js-i18n`, #1032) — готча `js-translations-are-handle-named-json-files`.
 ⛔ **Остаток #567 — визуальный проход по переводам — ГЕЙТОВАН РЕЛИЗОМ, не ответом оператора**
 (05.09.2026, повторено 07.09): перед релизом каталог всё равно проходят целиком, а строки до того ещё
 изменятся. Код и каталог закрыты, карточка «Заморожено» с этим условием. Не переоткрывать.

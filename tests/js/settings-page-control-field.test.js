@@ -14,6 +14,7 @@
 import '@testing-library/jest-dom';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { createElement } from '@wordpress/element';
+import { setLocaleData, resetLocaleData } from '@wordpress/i18n';
 import ControlField from '../../src/components/control-field';
 
 /**
@@ -491,4 +492,55 @@ test( 'control: with no serverError the client message is what shows', () => {
 	// string handed to it and had no precedence rule at all.
 	expect( screen.queryByText( 'Сервер отказал.' ) ).not.toBeInTheDocument();
 	expect( screen.getByText( /обязательн/i ) ).toBeInTheDocument();
+} );
+
+/**
+ * Issue #1032 — the password eye toggle's aria-label used to be two hardcoded Russian
+ * literals that bypassed gettext, so no locale could ever change what a screen reader
+ * announced. It is now `__()` with an ENGLISH msgid.
+ *
+ * A real catalogue is loaded through `setLocaleData` rather than mocking `__`: the
+ * assertion is that the label is whatever the TRANSLATION says, which a hardcoded string
+ * can never satisfy. Both states are checked, because the two labels are separate
+ * `__()` calls and a regression could revert either one alone.
+ */
+describe( 'password toggle aria-label (#1032)', () => {
+	const renderPassword = () =>
+		render(
+			createElement( ControlField, {
+				settingId: 'api_key',
+				schema: { type: 'string', controlType: 'password', name: 'API-ключ' },
+				value: 'typed-secret',
+				onChange: () => {},
+				showErrors: false,
+			} )
+		);
+
+	afterEach( () => {
+		resetLocaleData( undefined, 'woodev-plugin-framework' );
+	} );
+
+	test( 'with no catalogue loaded the toggle is labelled by its English msgids', () => {
+		renderPassword();
+
+		const toggle = screen.getByRole( 'button', { name: 'Show password' } );
+		fireEvent.click( toggle );
+
+		expect( screen.getByRole( 'button', { name: 'Hide password' } ) ).toBeInTheDocument();
+	} );
+
+	test( 'the label comes from the loaded catalogue in both states', () => {
+		setLocaleData(
+			{
+				'Show password': [ 'Показать пароль' ],
+				'Hide password': [ 'Скрыть пароль' ],
+			},
+			'woodev-plugin-framework'
+		);
+		renderPassword();
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Показать пароль' } ) );
+
+		expect( screen.getByRole( 'button', { name: 'Скрыть пароль' } ) ).toHaveAttribute( 'aria-pressed', 'true' );
+	} );
 } );

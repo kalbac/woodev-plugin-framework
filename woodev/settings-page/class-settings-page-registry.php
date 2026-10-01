@@ -531,6 +531,7 @@ final class Settings_Page_Registry {
 		wp_enqueue_style( 'wp-components' );
 		wp_enqueue_style( 'woodev-settings-page', $build_url . '/style-index.css', [ 'wp-components' ], $style_version );
 		wp_enqueue_script( 'woodev-settings-page', $build_url . '/index.js', $asset['dependencies'], $asset['version'], true );
+		\Woodev\Framework\Handlers\Script_Translations::register( $plugin, 'woodev-settings-page' );
 
 		wp_add_inline_script(
 			'woodev-settings-page',

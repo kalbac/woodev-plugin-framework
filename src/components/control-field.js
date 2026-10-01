@@ -12,6 +12,7 @@
  */
 
 import { createElement, useState, Fragment, RawHTML } from '@wordpress/element';
+import { __ } from '@wordpress/i18n';
 import { validateField, isRequirable } from './validate';
 import {
 	TextControl,
@@ -86,7 +87,9 @@ function PasswordControl( { value, onChange, isSet, disabled } ) {
 					type: 'button',
 					className: 'woodev-field__password-toggle',
 					onClick: () => setShow( ( s ) => ! s ),
-					'aria-label': show ? 'Скрыть' : 'Показать',
+					'aria-label': show
+						? __( 'Hide password', 'woodev-plugin-framework' )
+						: __( 'Show password', 'woodev-plugin-framework' ),
 					'aria-pressed': show,
 				},
 				createElement(

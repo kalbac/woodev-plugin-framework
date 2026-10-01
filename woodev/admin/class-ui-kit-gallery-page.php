@@ -140,5 +140,6 @@ class Ui_Kit_Gallery_Page {
 		wp_enqueue_style( 'wp-components' );
 		wp_enqueue_style( 'woodev-ui-kit-gallery', $build_url . '/style-index.css', [ 'wp-components' ], $style_version );
 		wp_enqueue_script( 'woodev-ui-kit-gallery', $build_url . '/index.js', $asset['dependencies'], $asset['version'], true );
+		\Woodev\Framework\Handlers\Script_Translations::register( $this->plugin, 'woodev-ui-kit-gallery' );
 	}
 }

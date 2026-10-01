@@ -683,12 +683,11 @@ const BULK_ACTIONS: BulkAction[] = [
 /**
  * The bulk destructive confirm's question.
  *
- * ⚠ `_n()` HERE IS SAFE, AND THE REASON IS NOT GENERAL — read before rewording. In JS the
- * catalogue is never consulted at all: `wp_set_script_translations()` is called nowhere in
- * this framework and there is no `make-json` step (measured, s134), so `@wordpress/i18n`'s
- * `_n()` always falls back to its own BINARY rule — `1 === n ? single : plural`. Russian
- * has three forms, so a JS plural is normally wrong at 2-4 and cannot be fixed by adding a
- * catalogue entry, the way the PHP side's can.
+ * ⚠ `_n()` HERE IS SAFE, AND THE REASON IS NOT GENERAL — read before rewording. This
+ * entry has no translation, so `@wordpress/i18n`'s `_n()` falls back to its own BINARY
+ * rule — `1 === n ? single : plural` (JS translations are delivered since #1032, but only for
+ * entries whose `msgstr[n]` are filled in; this one is not). Russian has three forms, so a JS
+ * plural is normally wrong at 2-4 unless the `.po` carries all three.
  *
  * This particular phrasing survives that because of the preposition: «для» takes the
  * genitive, and there both 2 and 5 inflect identically — «для 1 выбранного заказа», «для 2

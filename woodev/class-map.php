@@ -16,6 +16,7 @@ return [
 	'Woodev\\Framework\\Framework_Plugin_Loader_Definition' => 'woodev/class-framework-plugin-loader-definition.php',
 	'Woodev\\Framework\\Framework_Resolver' => 'woodev/class-framework-resolver.php',
 	'Woodev\\Framework\\Handlers\\Cron_Handler' => 'woodev/handlers/class-cron-handler.php',
+	'Woodev\\Framework\\Handlers\\Script_Translations' => 'woodev/handlers/class-script-translations.php',
 	'Woodev\\Framework\\Handlers\\Translation_Handler' => 'woodev/handlers/class-translation-handler.php',
 	'Woodev\\Framework\\Http\\Rest_Rate_Limit_Trait' => 'woodev/http/trait-rest-rate-limit.php',
 	'Woodev\\Framework\\Settings\\Composite_Settings_Handler' => 'woodev/settings-page/class-composite-settings-handler.php',

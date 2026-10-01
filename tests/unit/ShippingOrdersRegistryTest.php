@@ -937,6 +937,12 @@ class ShippingOrdersRegistryTest extends TestCase {
 				true
 			);
 
+		// The bundle's JS translations are wired by handle (#1032).
+		Functions\expect( 'wp_set_script_translations' )
+			->once()
+			->with( 'woodev-shipping-orders-page', 'woodev-plugin-framework', \Mockery::type( 'string' ) )
+			->andReturn( true );
+
 		$captured = null;
 		Functions\expect( 'wp_add_inline_script' )
 			->once()
@@ -1092,6 +1098,7 @@ class ShippingOrdersRegistryTest extends TestCase {
 		Functions\when( 'wc_get_orders' )->justReturn( (object) [ 'orders' => [], 'total' => 0, 'max_num_pages' => 1 ] );
 		Functions\when( 'wp_enqueue_style' )->justReturn( null );
 		Functions\when( 'wp_enqueue_script' )->justReturn( null );
+		Functions\when( 'wp_set_script_translations' )->justReturn( true );
 
 		$captured = null;
 		Functions\when( 'wp_add_inline_script' )->alias(
