@@ -99,7 +99,7 @@ const mount = ( props = {} ) => {
 /** Queries scoped to the wizard's dialog: a `Notice` also speaks into a live region outside it. */
 const modal = () => within( screen.getByRole( 'dialog' ) );
 
-const stepperLabels = () => Array.from( document.querySelectorAll( '.woodev-stepper > li' ) ).map( ( li ) => li.textContent );
+const stepperLabels = () => Array.from( document.querySelectorAll( '.woodev-stepper > li .woodev-stepper__label' ) ).map( ( el ) => el.textContent );
 const stepperButton = ( name ) => screen.queryByRole( 'button', { name, selector: '.woodev-stepper__label' } );
 const next = () => fireEvent.click( screen.getByRole( 'button', { name: 'Далее' } ) );
 

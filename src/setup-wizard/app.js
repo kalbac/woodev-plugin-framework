@@ -19,7 +19,10 @@
  *   furthest step reached, so a deep link cannot skip the steps in between.
  * - Footer link EXITS the wizard: marks it skipped (non-finish) and redirects to
  *   the admin dashboard.
- * - Finish step: marks the wizard completed once, then shows the success screen.
+ * - Finish step: marks the wizard completed once, then shows the success screen. When that
+ *   write fails the screen stays (the settings were saved step by step) but an alert says the
+ *   completion was NOT recorded and offers a retry — it never pretends (#1047).
+ * - After every step change focus moves to the new step's heading (not on first load).
  *
  * All step data + copy come from window.woodevSetupWizard (PHP-driven). Classic
  * JSX runtime: createElement / Fragment used directly.
@@ -143,6 +146,12 @@ export default function App() {
 	const [ showErrors, setShowErrors ] = useState( false );
 	const [ fieldErrors, setFieldErrors ] = useState( {} );
 	const [ errorRevealGen, setErrorRevealGen ] = useState( 0 );
+	// The finish step's «completed» write failed / the footer exit's «skipped» write failed.
+	const [ completeFailed, setCompleteFailed ] = useState( false );
+	const [ completeRetrying, setCompleteRetrying ] = useState( false );
+	const [ exitFailed, setExitFailed ] = useState( false );
+	const rootRef = useRef( null );
+	const firstRenderRef = useRef( true );
 
 	const step = steps[ index ];
 	const isFinish = 'finish' === step.type;
@@ -191,6 +200,7 @@ export default function App() {
 	 */
 	function goTo( i ) {
 		setError( null );
+		setExitFailed( false );
 		setShowErrors( false );
 		setFieldErrors( {} );
 		if ( i >= 0 && i < steps.length && i !== index ) {
@@ -198,16 +208,43 @@ export default function App() {
 		}
 	}
 
-	// Mark the wizard complete once when the finish step becomes active.
-	useEffect( () => {
-		if ( isFinish ) {
-			complete( 'completed' ).catch( ( e ) => {
+	/**
+	 * Records the wizard as completed; on failure raises `completeFailed` so the finish
+	 * screen says so instead of showing an unqualified success (#1047).
+	 */
+	function markCompleted() {
+		setCompleteRetrying( true );
+		return complete( 'completed' )
+			.then( () => setCompleteFailed( false ) )
+			.catch( ( e ) => {
+				setCompleteFailed( true );
 				if ( window.console ) {
 					window.console.warn( 'woodev setup: complete() failed', e );
 				}
-			} );
+			} )
+			.then( () => setCompleteRetrying( false ) );
+	}
+
+	// Mark the wizard complete once when the finish step becomes active.
+	useEffect( () => {
+		if ( isFinish ) {
+			markCompleted();
 		}
 	}, [ isFinish ] );
+
+	// Move focus to the new step's heading after every step change, so a keyboard / screen
+	// reader user lands on the new content instead of on a button that no longer exists.
+	// Skipped on the first render: loading the page must not steal focus (#1047).
+	useEffect( () => {
+		if ( firstRenderRef.current ) {
+			firstRenderRef.current = false;
+			return;
+		}
+		const heading = rootRef.current && rootRef.current.querySelector( '.woodev-setup__step-title' );
+		if ( heading ) {
+			heading.focus();
+		}
+	}, [ index ] );
 
 	// Scroll to the first invalid field and focus its control whenever validation
 	// errors are revealed (client-side block or server-side 400 reject).
@@ -248,6 +285,7 @@ export default function App() {
 	 */
 	async function goNext() {
 		setError( null );
+		setExitFailed( false );
 
 		if ( isSettings ) {
 			const stepValues = {};
@@ -298,6 +336,7 @@ export default function App() {
 	 */
 	function skipStep() {
 		setError( null );
+		setExitFailed( false );
 		setShowErrors( false );
 		setFieldErrors( {} );
 		setIndex( index + 1 );
@@ -307,11 +346,15 @@ export default function App() {
 	 * Exits the wizard: marks it skipped (non-finish) then redirects to admin.
 	 */
 	async function exitWizard() {
-		if ( ! isFinish ) {
+		// A second click after a failure leaves anyway: the merchant is never trapped in the
+		// wizard by a broken endpoint, but the first failure is not swallowed (#1047).
+		if ( ! isFinish && ! exitFailed ) {
 			try {
 				await complete( 'skipped' );
 			} catch ( e ) {
-				// Best-effort: redirect regardless of the completion call result.
+				setExitFailed( true );
+				setError( __( 'Не удалось запомнить, что мастер пропущен, — он может открыться снова. Нажмите ссылку ещё раз, чтобы выйти всё равно.', 'woodev-plugin-framework' ) );
+				return;
 			}
 		}
 		window.location.href = adminUrl();
@@ -327,7 +370,7 @@ export default function App() {
 
 	return createElement(
 		'div',
-		{ className: 'woodev-setup' },
+		{ className: 'woodev-setup', ref: rootRef },
 		renderHeader( pluginName, headerLogoUrl ),
 		createElement( Stepper, {
 			steps,
@@ -340,6 +383,27 @@ export default function App() {
 			? createElement(
 				Fragment,
 				null,
+				completeFailed &&
+					createElement(
+						'div',
+						{ className: 'woodev-setup__error woodev-setup__error--finish', role: 'alert' },
+						createElement(
+							'span',
+							null,
+							__( 'Настройки сохранены, но отметить мастер завершённым не удалось — при следующем визите он может открыться снова.', 'woodev-plugin-framework' )
+						),
+						' ',
+						createElement(
+							Button,
+							{
+								variant: 'link',
+								disabled: completeRetrying,
+								onClick: markCompleted,
+								className: 'woodev-setup__retry',
+							},
+							__( 'Повторить', 'woodev-plugin-framework' )
+						)
+					),
 				renderFinish( pluginName, finishActions, finishSecondaryActions ),
 				createElement(
 					'div',
@@ -525,7 +589,7 @@ function renderFinish( pluginName, actions, secondaryActions ) {
 			),
 			createElement(
 				'h1',
-				{ className: 'woodev-setup__step-title woodev-setup__finish-title' },
+				{ className: 'woodev-setup__step-title woodev-setup__finish-title', tabIndex: -1 },
 				sprintf(
 					/* translators: %s plugin name */
 					__( 'Плагин «%s» готов к работе!', 'woodev-plugin-framework' ),

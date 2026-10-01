@@ -26,10 +26,24 @@ describe( 'Stepper', () => {
 
 		const items = container.querySelectorAll( 'ol.woodev-stepper > li' );
 
-		expect( Array.from( items ).map( ( li ) => li.textContent ) ).toEqual( [ 'Приветствие', 'Доставка', 'Готово' ] );
+		expect( Array.from( items ).map( ( li ) => li.querySelector( '.woodev-stepper__label' ).textContent ) ).toEqual( [ 'Приветствие', 'Доставка', 'Готово' ] );
 		expect( items[ 0 ] ).toHaveClass( 'is-done' );
 		expect( items[ 1 ] ).toHaveClass( 'is-active' );
 		expect( items[ 2 ] ).toHaveClass( 'is-upcoming' );
+	} );
+
+	test( 'the active step has aria-current="step" and every step states its state as text (#1047)', () => {
+		const { container } = render( createElement( Stepper, { steps: STEPS, index: 1 } ) );
+
+		const items = container.querySelectorAll( 'li' );
+
+		expect( items[ 0 ] ).not.toHaveAttribute( 'aria-current' );
+		expect( items[ 1 ] ).toHaveAttribute( 'aria-current', 'step' );
+		expect( items[ 2 ] ).not.toHaveAttribute( 'aria-current' );
+		expect( Array.from( items ).map( ( li ) => li.querySelector( '.woodev-stepper__status' ).textContent ) )
+			.toEqual( [ 'Шаг пройден', 'Текущий шаг', 'Шаг ещё не пройден' ] );
+		// The status is a sibling of the button, so it does not rename it.
+		expect( screen.getByRole( 'button', { name: 'Приветствие' } ) ).toBeInTheDocument();
 	} );
 
 	test( 'the current step is a plain span; every other step is a button', () => {
