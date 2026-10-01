@@ -14,6 +14,8 @@
  * @package woodev-plugin-framework
  */
 
+import { __ } from '@wordpress/i18n';
+
 /** One step of the indicator. */
 export interface StepperStep {
 	/** Stable key — never the index, so a re-ordered list keeps its elements. */
@@ -50,6 +52,12 @@ export default function Stepper( { steps, index, onNavigate, disabled, canNaviga
 		<ol className="woodev-stepper">
 			{ steps.map( ( step, i ) => {
 				const state = i < index ? 'done' : ( i === index ? 'active' : 'upcoming' );
+				// The state as TEXT for assistive tech — the CSS class alone says nothing to it (#1047).
+				const status = 'done' === state
+					? __( 'Шаг пройден', 'woodev-plugin-framework' )
+					: ( 'active' === state
+						? __( 'Текущий шаг', 'woodev-plugin-framework' )
+						: __( 'Шаг ещё не пройден', 'woodev-plugin-framework' ) );
 
 				// The current step — and any step `canNavigate` refuses — is a plain
 				// (non-clickable) label; any other step is a button that navigates to it.
@@ -67,8 +75,14 @@ export default function Stepper( { steps, index, onNavigate, disabled, canNaviga
 					);
 
 				return (
-					<li key={ step.id } className={ `is-${ state }` }>
+					<li
+						key={ step.id }
+						className={ `is-${ state }` }
+						aria-current={ 'active' === state ? 'step' : undefined }
+					>
 						{ label }
+						{ /* A sibling of the label, not inside the button: it must not become the button's accessible name. */ }
+						<span className="woodev-stepper__status">{ status }</span>
 					</li>
 				);
 			} ) }

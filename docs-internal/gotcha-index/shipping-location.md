@@ -15,6 +15,7 @@
 - [shipping/location] **DaData gives a city of federal significance ONE key on both levels and `ancestors: []` — measured for Moscow/SPb/Sevastopol/Baikonur plus most big BY/KZ/UZ cities. Never test `ancestors()` raw; ask `is_within()`.** → [dadata-collapses-region-and-settlement-into-one-key](../gotchas/dadata-collapses-region-and-settlement-into-one-key.md) (s111)
 - [shipping/location] **A DOM attribute is the wrong seam on a WooCommerce checkout — the node is not yours.** → [a-dom-attribute-is-the-wrong-seam-on-a-woocommerce-checkout](../gotchas/a-dom-attribute-is-the-wrong-seam-on-a-woocommerce-checkout.md) (s72)
 - [shipping/location] **A locality's display NAME is not an identifier — the same settlement answers «Москва» or «Moscow» depending on the account's locale.** → [a-locality-display-name-is-not-an-identifier](../gotchas/a-locality-display-name-is-not-an-identifier.md) (s71)
+- [shipping/location] **DaData has no 402: an exhausted balance, an exhausted daily limit, an unconfirmed e-mail and a bad key are all 403; 429 is a per-second throttle, never a quota signal.** → [dadata-has-no-402-an-exhausted-balance-is-a-403](../gotchas/dadata-has-no-402-an-exhausted-balance-is-a-403.md) (s148)
 
 ## Related
 

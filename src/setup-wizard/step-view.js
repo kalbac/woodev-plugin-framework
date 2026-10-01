@@ -135,7 +135,7 @@ export default function StepView( { step, values, onChange, showErrors, serverEr
 	return createElement(
 		Fragment,
 		null,
-		createElement( 'h1', { className: 'woodev-setup__step-title' }, step.label ),
+		createElement( 'h1', { className: 'woodev-setup__step-title', tabIndex: -1 }, step.label ),
 		step.description &&
 			createElement( 'p', { className: 'woodev-setup__step-desc' }, step.description ),
 		body
