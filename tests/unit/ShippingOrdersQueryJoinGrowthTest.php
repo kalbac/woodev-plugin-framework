@@ -60,6 +60,7 @@ class ShippingOrdersQueryJoinGrowthTest extends TestCase {
 		Functions\when( 'apply_filters' )->returnArg( 2 );
 
 		Functions\when( 'wc_get_order_types' )->justReturn( [ 'shop_order' ] );
+		Functions\when( 'get_post_status_object' )->justReturn( null ); // no post status objects: every status is kept (#1011).
 		Functions\when( 'wc_get_order_statuses' )->justReturn(
 			[
 				'wc-pending'    => 'Pending',

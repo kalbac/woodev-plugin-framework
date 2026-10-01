@@ -43,6 +43,7 @@ class ShippingOrdersQueryTest extends TestCase {
 		Functions\when( 'apply_filters' )->returnArg( 2 );
 
 		Functions\when( 'wc_get_order_types' )->justReturn( [ 'shop_order' ] );
+		Functions\when( 'get_post_status_object' )->justReturn( null ); // no post status objects: every status is kept (#1011).
 		Functions\when( 'wc_get_order_statuses' )->justReturn(
 			[
 				'wc-pending'    => 'Pending',
@@ -428,10 +429,122 @@ class ShippingOrdersQueryTest extends TestCase {
 
 	// ----- Neutral (status/type/pagination) — identical on both datastores -----
 
-	public function test_status_excludes_cancelled_and_failed(): void {
+	/**
+	 * #1011 (operator, 01.10.2026): the default view is an order LIST — every status, cancelled
+	 * and failed included. v1's export-queue exclusion is gone, and a cancelled order keeps its
+	 * «not cancelled at the carrier» marker on screen.
+	 */
+	public function test_the_default_view_shows_every_status_cancelled_and_failed_included(): void {
 		$args = $this->query_with_hpos( true )->build_args( [] );
 
+		$this->assertSame( [ 'wc-pending', 'wc-processing', 'wc-cancelled', 'wc-failed' ], $args['status'] );
+	}
+
+	/**
+	 * Shop with `wc-checkout-draft` (WooCommerce lists it in `wc_get_order_statuses()`, but its post
+	 * status object has `show_in_admin_all_list = false`, so WC's own «All» list hides it) and a
+	 * custom status with no post status object at all.
+	 */
+	private function stub_a_shop_with_a_checkout_draft(): void {
+		Functions\when( 'wc_get_order_statuses' )->justReturn(
+			[
+				'wc-pending'        => 'Pending',
+				'wc-checkout-draft' => 'Draft',
+				'wc-cancelled'      => 'Cancelled',
+				'wc-custom'         => 'Custom (HPOS, no post status object)',
+			]
+		);
+		Functions\when( 'get_post_status_object' )->alias(
+			static function ( string $status ): ?object {
+				$flags = [
+					'wc-pending'        => true,
+					'wc-checkout-draft' => false,
+					'wc-cancelled'      => true,
+				];
+
+				return array_key_exists( $status, $flags ) ? (object) [ 'show_in_admin_all_list' => $flags[ $status ] ] : null;
+			}
+		);
+	}
+
+	/** #1011: the default view mirrors WC's own «All» list — a status hidden from it there is hidden here. */
+	public function test_the_default_view_leaves_out_a_status_hidden_from_the_wc_all_list(): void {
+		$this->stub_a_shop_with_a_checkout_draft();
+
+		$args = $this->query_with_hpos( true )->build_args( [] );
+
+		$this->assertSame( [ 'wc-pending', 'wc-cancelled', 'wc-custom' ], $args['status'] );
+		$this->assertNotContains( 'wc-checkout-draft', $args['status'] );
+	}
+
+	public function test_the_new_scope_leaves_out_the_hidden_status_too(): void {
+		$this->stub_a_shop_with_a_checkout_draft();
+
+		$args = $this->query_with_hpos( true )->build_args( [ 'is_exported' => false ] );
+
+		$this->assertSame( [ 'wc-pending', 'wc-custom' ], $args['status'] );
+	}
+
+	/** The explicit filter is validated against the FULL status list, so the hidden status stays reachable. */
+	public function test_an_explicit_status_filter_can_still_request_the_hidden_status(): void {
+		$this->stub_a_shop_with_a_checkout_draft();
+
+		$query = $this->query_with_hpos( true );
+
+		$this->assertSame( [ 'wc-checkout-draft' ], $query->build_args( [ 'status' => [ 'checkout-draft' ] ] )['status'] );
+		$this->assertContains( 'wc-checkout-draft', $query->build_args( [ 'status_not' => [ 'wc-pending' ] ] )['status'] );
+	}
+
+	/** An absent `is_exported` and an «exported» one are both the default view, not the «new» scope. */
+	public function test_only_the_new_scope_narrows_the_default_status_list(): void {
+		$query = $this->query_with_hpos( true );
+
+		$this->assertSame(
+			[ 'wc-pending', 'wc-processing', 'wc-cancelled', 'wc-failed' ],
+			$query->build_args( [ 'is_exported' => true ] )['status']
+		);
+		$this->assertSame(
+			[ 'wc-pending', 'wc-processing', 'wc-cancelled', 'wc-failed' ],
+			$query->build_args( [ 'carrier' => 'all' ] )['status']
+		);
+	}
+
+	/**
+	 * «Новые» and the menu badge count WORK TO DO: a cancelled or failed order nobody exported
+	 * is not. Both ask `Orders_Query` with `is_exported = false`, so one rule here keeps them in
+	 * agreement — the badge request is {@see ShippingOrdersRegistryTest::badge_request()}.
+	 */
+	public function test_the_new_scope_keeps_cancelled_and_failed_out_of_its_default_status_list(): void {
+		$args = $this->query_with_hpos( true )->build_args( [ 'is_exported' => false ] );
+
 		$this->assertSame( [ 'wc-pending', 'wc-processing' ], $args['status'] );
+	}
+
+	/** The scope is read the way `build_scope()` reads it — `wc_string_to_bool()` — so `'false'` is «new» too. */
+	public function test_the_new_scope_is_recognised_from_a_query_string_value(): void {
+		$args = $this->query_with_hpos( true )->build_args( [ 'is_exported' => 'false' ] );
+
+		$this->assertSame( [ 'wc-pending', 'wc-processing' ], $args['status'] );
+	}
+
+	/** An explicit status filter beats the «new» scope's default, exactly as it beats the default view. */
+	public function test_an_explicit_status_overrides_the_new_scope_default_too(): void {
+		$args = $this->query_with_hpos( true )->build_args(
+			[
+				'is_exported' => false,
+				'status'      => [ 'wc-cancelled' ],
+			]
+		);
+
+		$this->assertSame( [ 'wc-cancelled' ], $args['status'] );
+	}
+
+	/** Filtering by `processing` returns processing orders only — the default list is not merged in. */
+	public function test_filtering_by_processing_does_not_carry_cancelled_orders(): void {
+		$args = $this->query_with_hpos( true )->build_args( [ 'status' => [ 'processing' ] ] );
+
+		$this->assertSame( [ 'wc-processing' ], $args['status'] );
+		$this->assertNotContains( 'wc-cancelled', $args['status'] );
 	}
 
 	public function test_type_is_view_orders_types(): void {
@@ -607,7 +720,7 @@ class ShippingOrdersQueryTest extends TestCase {
 		$args = $this->query_with_hpos( true, $registry )->build_args( [ 'status' => [ 'not-a-real-status' ] ] );
 
 		$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $args['meta_query'] );
-		$this->assertSame( [ 'wc-pending', 'wc-processing' ], $args['status'], 'The status arg itself is left alone — the narrowing is expressed in the meta_query.' );
+		$this->assertSame( [ 'wc-pending', 'wc-processing', 'wc-cancelled', 'wc-failed' ], $args['status'], 'The status arg itself is left alone — the narrowing is expressed in the meta_query.' );
 	}
 
 	/**
@@ -644,7 +757,7 @@ class ShippingOrdersQueryTest extends TestCase {
 	public function test_a_blank_status_request_still_means_no_override(): void {
 		$args = $this->query_with_hpos( true )->build_args( [ 'status' => [ '', '   ' ] ] );
 
-		$this->assertSame( [ 'wc-pending', 'wc-processing' ], $args['status'] );
+		$this->assertSame( [ 'wc-pending', 'wc-processing', 'wc-cancelled', 'wc-failed' ], $args['status'] );
 	}
 
 	public function test_a_mixed_valid_and_invalid_status_list_keeps_only_the_valid_entries(): void {
@@ -1342,7 +1455,7 @@ class ShippingOrdersQueryTest extends TestCase {
 	public function test_a_blank_status_not_request_still_means_no_override(): void {
 		$args = $this->query_with_hpos( true )->build_args( [ 'status_not' => [ '', '   ' ] ] );
 
-		$this->assertSame( [ 'wc-pending', 'wc-processing' ], $args['status'] );
+		$this->assertSame( [ 'wc-pending', 'wc-processing', 'wc-cancelled', 'wc-failed' ], $args['status'] );
 	}
 
 	// ----- pickup-point-presence filter (#836) -----
@@ -1908,7 +2021,7 @@ class ShippingOrdersQueryTest extends TestCase {
 		$this->assertSame( [ [ 'order_status' => [ 'wc-pending', 'wc-processing' ] ] ], $query->resolved[0][1][1][1] );
 	}
 
-	/** No status filter requested: the default view (no cancelled/failed) stays an AND on the native arg, even under «Любое». */
+	/** No status filter requested: the default view (every status, #1011) stays an AND on the native arg, even under «Любое». */
 	public function test_match_any_without_a_status_filter_keeps_the_default_status_view(): void {
 		$args = $this->query_with_hpos( true, $this->registry_for_match() )->build_args(
 			[
@@ -1918,7 +2031,7 @@ class ShippingOrdersQueryTest extends TestCase {
 			]
 		);
 
-		$this->assertSame( [ 'wc-pending', 'wc-processing' ], $args['status'] );
+		$this->assertSame( [ 'wc-pending', 'wc-processing', 'wc-cancelled', 'wc-failed' ], $args['status'] );
 	}
 
 	/** A status request nothing in which is real: that leaf matches nothing, the OR goes on, providers are NOT emptied. */

@@ -23,10 +23,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 	 *
 	 * All three shipped carrier plugins select their rows the same way — one
 	 * `wc_get_orders()` call scoped to their marker key, `type` restricted to
-	 * `wc_get_order_types( 'view-orders' )`, and `wc-cancelled`/`wc-failed` excluded
-	 * from the status list. The aggregate (all carriers) view is the SAME single query
-	 * matching ANY registered provider's marker key — never N queries stitched
-	 * together.
+	 * `wc_get_order_types( 'view-orders' )`. The aggregate (all carriers) view is the
+	 * SAME single query matching ANY registered provider's marker key — never N queries
+	 * stitched together.
+	 *
+	 * **The default view shows ALL orders, whatever their WooCommerce status** (operator,
+	 * 01.10.2026, #1011). The v1 pages were an export queue and hid `wc-cancelled` /
+	 * `wc-failed`; the v2 page is an order list, and a cancelled order that vanished from
+	 * it also hid the «not cancelled at the carrier» marker (#1007). The one exception is
+	 * the «new» scope (`is_exported = false` — the «Новые» link and the menu badge, which
+	 * both count WORK TO DO): it keeps {@see self::WORK_EXCLUDED_STATUSES} out, so a
+	 * cancelled or failed order nobody exported is not work. An explicit `status` /
+	 * `status_not` request overrides either default entirely.
 	 *
 	 * **The scope does not travel as a `meta_query`** (#928; it did through s139). One
 	 * `meta_query`-shaped tree is still BUILT ({@see self::build_meta_query()}) — it is
@@ -62,6 +70,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 
 		/** @var string `match` request value: at least one advanced filter must hold (#843). */
 		const MATCH_ANY = 'any';
+
+		/**
+		 * Order statuses the «new» scope (`is_exported = false`) leaves out of its default
+		 * status list (#1011): an order that was cancelled or failed before anybody exported
+		 * it is not work to do, so it counts neither in the menu badge nor under «Новые».
+		 * The default view without that scope does NOT use this list — it shows every status.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var string[]
+		 */
+		const WORK_EXCLUDED_STATUSES = [ 'wc-cancelled', 'wc-failed' ];
 
 		/**
 		 * Custom query var carrying the marker meta keys in scope, for the legacy CPT
@@ -161,7 +181,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 		 *                                         day. Independent of `$after`.
 		 *     @type string[] $status              native WC order statuses ('is'), with or without the
 		 *                                         `wc-` prefix. Omitted or empty keeps the default status
-		 *                                         list (every status except cancelled/failed).
+		 *                                         list (#1011: EVERY status — except under the «new»
+		 *                                         scope, `$is_exported` false, which leaves out
+		 *                                         {@see self::WORK_EXCLUDED_STATUSES}).
 		 *                                         Recognized values override that default entirely.
 		 *                                         A non-empty request in which NOTHING is recognized
 		 *                                         narrows to nothing, through the same
@@ -172,7 +194,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 		 *     @type string[] $status_not          native WC order statuses ('is not', #836) — "every
 		 *                                         valid status except these", computed against the FULL
 		 *                                         valid list (cancelled/failed included), never the
-		 *                                         default view's narrower one. This is a native `status`
+		 *                                         «new» scope's narrower default. This is a native `status`
 		 *                                         arg, not a meta clause — order status lives on the
 		 *                                         order itself. Ignored when `$status` is also present.
 		 *     @type string   $delivery_status     one of
@@ -224,7 +246,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 
 			$args = [
 				'type'     => wc_get_order_types( 'view-orders' ),
-				'status'   => array_keys( array_diff_key( wc_get_order_statuses(), array_flip( [ 'wc-cancelled', 'wc-failed' ] ) ) ),
+				'status'   => $this->default_statuses( $request ),
 				'limit'    => $per_page,
 				'paged'    => $page,
 				'orderby'  => $orderby,
@@ -264,8 +286,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 				 * failed included), so the leaf alone decides which statuses are shown. It
 				 * is widened even when nothing in the request is a real status: that leaf
 				 * then matches nothing and the OR goes on with the other filters, over the
-				 * whole table rather than the default view, because a status filter WAS asked
-				 * for and the default view is what an absent one falls back to.
+				 * whole table rather than the «new» scope's default, because a status filter
+				 * WAS asked for and that default is what an absent one falls back to.
 				 */
 				$args['status'] = array_keys( wc_get_order_statuses() );
 			} elseif ( null !== $requested_statuses && ! $status_matches_nothing ) {
@@ -1218,6 +1240,54 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 		}
 
 		/**
+		 * The native `status` list a request falls back to when it names no status (#1011).
+		 *
+		 * - The default view — every request without the «new» scope — is every registered
+		 *   order status WooCommerce's own «All» list shows, cancelled and failed included
+		 *   (operator, 01.10.2026): the page is an order list, and a cancelled order must stay
+		 *   visible, with its «not cancelled at the carrier» marker (#1007). «All» in WC is
+		 *   every status whose post status object has `show_in_admin_all_list` — which
+		 *   `wc-checkout-draft` (the Store API's unfinished cart, listed by
+		 *   `wc_get_order_statuses()` all the same) does not, so it stays out of the default
+		 *   too. A status with NO post status object registered is kept: HPOS custom statuses
+		 *   may lack one, and only an object saying `false` is a reason to hide.
+		 * - The «new» scope (`is_exported` present and false — the «Новые» link and the menu
+		 *   badge) counts WORK TO DO, so it leaves out {@see self::WORK_EXCLUDED_STATUSES}.
+		 *   Both callers reach this through {@see self::build_args()}, which is what makes
+		 *   «Новые (7)» and the badge agree by construction.
+		 *
+		 * An explicit `status` / `status_not` request never reaches this list — it is
+		 * validated against the FULL {@see wc_get_order_statuses()}, so any status, drafts
+		 * included, can still be asked for; see {@see self::resolve_requested_statuses()}.
+		 *
+		 * `is_exported` is read the way {@see self::build_scope()} reads it — presence, then
+		 * `wc_string_to_bool()` — so a request cannot be «new» here and «exported» there.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string,mixed> $request see {@see self::build_args()}.
+		 * @return string[] `wc-`-prefixed statuses.
+		 */
+		private function default_statuses( array $request ): array {
+			$statuses = array_values(
+				array_filter(
+					array_keys( wc_get_order_statuses() ),
+					static function ( string $status ): bool {
+						$object = get_post_status_object( $status );
+
+						return ! is_object( $object ) || false !== ( $object->show_in_admin_all_list ?? true );
+					}
+				)
+			);
+
+			if ( array_key_exists( 'is_exported', $request ) && ! wc_string_to_bool( $request['is_exported'] ) ) {
+				$statuses = array_values( array_diff( $statuses, self::WORK_EXCLUDED_STATUSES ) );
+			}
+
+			return $statuses;
+		}
+
+		/**
 		 * Resolves an explicit native WC order-status filter (SP-10 spec D10; `is not`
 		 * added #836) — validated against {@see wc_get_order_statuses()}, tolerating the
 		 * value with or without its `wc-` prefix (both are seen in the wild:
@@ -1227,8 +1297,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 		 * ⚠ Three outcomes, and the middle one is the defect this method used to have
 		 * (#837 defect 3):
 		 *
-		 * - `null` — nothing was asked for. The caller keeps its default status list,
-		 *   cancelled/failed exclusion included.
+		 * - `null` — nothing was asked for. The caller keeps its default status list
+		 *   ({@see self::default_statuses()}).
 		 * - `[]` — a filter WAS asked for and nothing in it is a real status. The request
 		 *   must narrow to NOTHING. This used to return the same empty array as the case
 		 *   above, so `status=["Pending payment"]` or `status=["nonsense"]` silently

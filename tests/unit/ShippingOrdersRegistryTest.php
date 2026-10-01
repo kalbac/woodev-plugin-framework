@@ -1231,7 +1231,7 @@ class ShippingOrdersRegistryTest extends TestCase {
 	 * @param bool             $user_can what current_user_can() answers.
 	 * @return void
 	 */
-	private function stubOrdersQueryEnvironment( callable $totals, array &$captured, bool $user_can = true ): void {
+	private function stubOrdersQueryEnvironment( callable $totals, array &$captured, bool $user_can = true, array $statuses = [ 'wc-processing' => 'Processing' ] ): void {
 		/*
 		 * A real round-tripping transient store, not a pair of no-ops: the badge's cache
 		 * is only observable if a value written by set_transient() comes back out of
@@ -1273,7 +1273,8 @@ class ShippingOrdersRegistryTest extends TestCase {
 			}
 		);
 		Functions\when( 'wc_get_order_types' )->justReturn( [ 'shop_order' ] );
-		Functions\when( 'wc_get_order_statuses' )->justReturn( [ 'wc-processing' => 'Processing' ] );
+		Functions\when( 'get_post_status_object' )->justReturn( null ); // no post status objects: every status is kept (#1011).
+		Functions\when( 'wc_get_order_statuses' )->justReturn( $statuses );
 		Functions\when( 'wc_string_to_bool' )->alias(
 			static function ( $value ): bool {
 				return is_bool( $value ) ? $value : ( 'yes' === $value || 'true' === $value || '1' === $value || 1 === $value );
@@ -1482,6 +1483,49 @@ class ShippingOrdersRegistryTest extends TestCase {
 		// row fetch down to a single order.
 		$this->assertTrue( $captured[0]['paginate'] );
 		$this->assertSame( 1, $captured[0]['limit'] );
+	}
+
+	/**
+	 * #1011: the orders page now shows EVERY status by default, but the badge counts WORK TO DO —
+	 * a cancelled or failed order nobody exported is not. Pinned on what reaches
+	 * `wc_get_orders()` for the badge's own request, under a shop that really has those statuses
+	 * (the stub of the other badge tests knows only `processing`, which would pass vacuously).
+	 */
+	public function test_badge_count_leaves_cancelled_and_failed_orders_out(): void {
+		$captured = [];
+		$this->stubOrdersQueryEnvironment(
+			static function (): int {
+				return 2;
+			},
+			$captured,
+			true,
+			[
+				'wc-pending'    => 'Pending',
+				'wc-processing' => 'Processing',
+				'wc-completed'  => 'Completed',
+				'wc-cancelled'  => 'Cancelled',
+				'wc-failed'     => 'Failed',
+			]
+		);
+
+		$registry = Orders_Registry::instance();
+		$registry->register_provider( $this->exportable_provider( 'cdek', 'СДЭК' ) );
+
+		$this->menu_title( $registry );
+
+		$this->assertNotSame( [], $captured, 'the badge must actually have run a query' );
+
+		foreach ( $captured as $args ) {
+			$this->assertSame( [ 'wc-pending', 'wc-processing', 'wc-completed' ], $args['status'] );
+			$this->assertNotContains( 'wc-cancelled', $args['status'] );
+			$this->assertNotContains( 'wc-failed', $args['status'] );
+		}
+
+		// The page's «Все» view, by contrast, carries them.
+		$all = ( new Orders_Query( $registry ) )->build_args( [ 'carrier' => 'all' ] );
+
+		$this->assertContains( 'wc-cancelled', $all['status'] );
+		$this->assertContains( 'wc-failed', $all['status'] );
 	}
 
 	public function test_badge_tooltip_breaks_the_count_down_per_carrier(): void {

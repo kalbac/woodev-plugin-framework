@@ -114,6 +114,22 @@ class ShippingOrderActionsTest extends TestCase {
 		$this->assertNotContains( Order_Actions::EXPORT, $this->action_ids( $actions ) );
 	}
 
+	/**
+	 * #1011: the orders page now lists cancelled and failed orders, so «Выгрузить» must be
+	 * withheld from them by the gate — not by the list happening to hide them.
+	 */
+	public function test_export_is_not_offered_for_a_cancelled_or_failed_order(): void {
+		$this->register_handler();
+
+		foreach ( [ 'cancelled', 'failed', 'refunded' ] as $status ) {
+			$this->assertNotContains( $status, Order_Actions::EXPORTABLE_STATUSES, "status: {$status}" );
+
+			$actions = $this->actions()->for_order( $this->order( $status ), $this->provider() );
+
+			$this->assertSame( [], $this->action_ids( $actions ), "status: {$status}" );
+		}
+	}
+
 	public function test_export_is_not_offered_once_exported(): void {
 		$this->register_handler();
 		$this->meta['_cdek_carrier_order_id'] = 'CARRIER-1';

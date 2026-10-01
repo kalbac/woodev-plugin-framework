@@ -417,6 +417,87 @@ class OrdersRestTest extends TestCase {
 		$this->assertNotContains( $processing->get_id(), $ids );
 	}
 
+	/**
+	 * #1011 (operator, 01.10.2026): the default view shows EVERY order, whatever its WooCommerce
+	 * status — a cancelled or failed order no longer disappears, and with it its «not cancelled
+	 * at the carrier» marker stays on screen. An explicit status filter still overrides the
+	 * default: `processing` returns no cancelled order, `cancelled` returns it.
+	 */
+	public function test_the_default_view_lists_cancelled_and_failed_orders_and_an_explicit_status_overrides_it(): void {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'shop_manager' ] ) );
+
+		$processing = $this->create_marked_order( self::CDEK_MARKER );
+
+		$cancelled = $this->create_marked_order( self::CDEK_MARKER );
+		$cancelled->set_status( 'cancelled' );
+		$cancelled->save();
+
+		$failed = $this->create_marked_order( self::CDEK_MARKER );
+		$failed->set_status( 'failed' );
+		$failed->save();
+
+		$default_ids = array_column( rest_get_server()->dispatch( new WP_REST_Request( 'GET', '/woodev/v1/shipping/orders' ) )->get_data()['rows'], 'id' );
+
+		$this->assertContains( $processing->get_id(), $default_ids );
+		$this->assertContains( $cancelled->get_id(), $default_ids, '#1011: a cancelled order stays on the page by default.' );
+		$this->assertContains( $failed->get_id(), $default_ids, '#1011: a failed order stays on the page by default.' );
+
+		$only_processing = new WP_REST_Request( 'GET', '/woodev/v1/shipping/orders' );
+		$only_processing->set_param( 'status', [ 'processing' ] );
+		$processing_ids = array_column( rest_get_server()->dispatch( $only_processing )->get_data()['rows'], 'id' );
+
+		$this->assertContains( $processing->get_id(), $processing_ids );
+		$this->assertNotContains( $cancelled->get_id(), $processing_ids );
+		$this->assertNotContains( $failed->get_id(), $processing_ids );
+
+		$only_cancelled = new WP_REST_Request( 'GET', '/woodev/v1/shipping/orders' );
+		$only_cancelled->set_param( 'status', [ 'cancelled' ] );
+		$cancelled_ids = array_column( rest_get_server()->dispatch( $only_cancelled )->get_data()['rows'], 'id' );
+
+		$this->assertContains( $cancelled->get_id(), $cancelled_ids );
+		$this->assertNotContains( $processing->get_id(), $cancelled_ids );
+	}
+
+	/**
+	 * #1011: «Новые» is WORK TO DO — the same set as the menu badge. A cancelled or failed order
+	 * nobody exported is listed under «Все» but counted and listed under «Новые» never, unless a
+	 * status filter asks for exactly that.
+	 */
+	public function test_the_new_scope_is_work_to_do_and_leaves_cancelled_and_failed_orders_out(): void {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'shop_manager' ] ) );
+
+		$new = $this->create_marked_order( self::CDEK_MARKER );
+
+		$cancelled = $this->create_marked_order( self::CDEK_MARKER );
+		$cancelled->set_status( 'cancelled' );
+		$cancelled->save();
+
+		$failed = $this->create_marked_order( self::CDEK_MARKER );
+		$failed->set_status( 'failed' );
+		$failed->save();
+
+		$request = new WP_REST_Request( 'GET', '/woodev/v1/shipping/orders' );
+		$request->set_param( 'is_exported', false );
+
+		$data = rest_get_server()->dispatch( $request )->get_data();
+		$ids  = array_column( $data['rows'], 'id' );
+
+		$this->assertContains( $new->get_id(), $ids );
+		$this->assertNotContains( $cancelled->get_id(), $ids );
+		$this->assertNotContains( $failed->get_id(), $ids );
+
+		// The scope links describe the tables they lead to: «Все» holds all three, «Новые» one.
+		$this->assertSame( 3, $data['scope_counts']['all'] );
+		$this->assertSame( 1, $data['scope_counts']['new'] );
+
+		$explicit = new WP_REST_Request( 'GET', '/woodev/v1/shipping/orders' );
+		$explicit->set_param( 'is_exported', false );
+		$explicit->set_param( 'status', [ 'cancelled' ] );
+		$explicit_ids = array_column( rest_get_server()->dispatch( $explicit )->get_data()['rows'], 'id' );
+
+		$this->assertContains( $cancelled->get_id(), $explicit_ids );
+	}
+
 	public function test_an_invalid_delivery_status_is_a_400(): void {
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'shop_manager' ] ) );
 
@@ -970,8 +1051,8 @@ class OrdersRestTest extends TestCase {
 	 * The integration-level confirmation of the unit-pinned "excludes nothing"
 	 * behaviour (#836): a `status_not` request in which nothing is a real status
 	 * must NOT narrow the result — the honest reading is "no override", not
-	 * "exclude the whole table" nor "exclude nothing recognized therefore keep the
-	 * default view's cancelled/failed exclusion" (it is the FULL valid list).
+	 * "exclude the whole table" nor "exclude nothing recognized therefore fall back
+	 * to the «new» scope's narrower default" (it is the FULL valid list).
 	 */
 	public function test_a_status_not_filter_with_nothing_recognized_excludes_nothing(): void {
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'shop_manager' ] ) );

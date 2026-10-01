@@ -70,6 +70,7 @@ class ShippingOrdersQueryRowSemanticsTest extends TestCase {
 		Functions\when( 'apply_filters' )->returnArg( 2 );
 
 		Functions\when( 'wc_get_order_types' )->justReturn( [ 'shop_order' ] );
+		Functions\when( 'get_post_status_object' )->justReturn( null ); // no post status objects: every status is kept (#1011).
 		Functions\when( 'wc_get_order_statuses' )->justReturn(
 			[
 				'wc-pending'    => 'Pending',
@@ -838,8 +839,10 @@ class ShippingOrdersQueryRowSemanticsTest extends TestCase {
 	 * an order is selected iff it is in scope (carries a registered carrier's marker)
 	 * AND satisfies the advanced filters — ALL of them under `all` or absent, AT LEAST
 	 * ONE under `any` when two or more were requested (one or none: same as `all`) —
-	 * AND, when no order-status filter was requested, is in the default view (not
-	 * cancelled / failed). An order-status filter is a filter like the others: `is` =
+	 * — and, since #1011, with no order-status filter requested EVERY order status is
+	 * in the default view (cancelled / failed included; the request space here never
+	 * carries the «new» scope, the one that narrows it). An order-status filter is a
+	 * filter like the others: `is` =
 	 * the order's status is among the recognised requested ones (none recognised =>
 	 * nothing satisfies it), `is not` = it is not among the excluded ones.
 	 *
@@ -915,8 +918,6 @@ class ShippingOrdersQueryRowSemanticsTest extends TestCase {
 			);
 		};
 
-		$status_requested = isset( $request['status'] ) || isset( $request['status_not'] );
-
 		if ( isset( $request['status'] ) ) {
 			$filters[] = in_array( $status, array_intersect( $normalise( $request['status'] ), $valid ), true );
 		} elseif ( isset( $request['status_not'] ) ) {
@@ -925,10 +926,6 @@ class ShippingOrdersQueryRowSemanticsTest extends TestCase {
 
 		$is_any     = 'any' === ( $request['match'] ?? null ) && count( $filters ) >= 2;
 		$filters_ok = $is_any ? in_array( true, $filters, true ) : ! in_array( false, $filters, true );
-
-		if ( ! $status_requested && in_array( $status, [ 'wc-cancelled', 'wc-failed' ], true ) ) {
-			return false;
-		}
 
 		return $filters_ok;
 	}
