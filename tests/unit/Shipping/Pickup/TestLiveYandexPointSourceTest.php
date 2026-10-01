@@ -345,24 +345,55 @@ final class TestLiveYandexPointSourceTest extends TestCase {
 		);
 	}
 
-	public function test_schedule_flattens_seven_identical_days_into_one_span(): void {
+	public function test_schedule_keeps_the_structure_and_the_time_zone(): void {
 		$this->stub_successful_transport( [ $this->real_pickup_point_record() ] );
 		Functions\when( 'set_transient' )->justReturn( true );
 
 		$source = new \Woodev_Test_Live_Yandex_Point_Source();
 		$points = $source->fetch_points( Point_Query::from_request( [ 'locality' => 'Москва' ] ) );
+		$array  = $points[0]->to_array();
 
-		$this->assertSame( 'Пн–Вс 00:00–23:59', $points[0]->to_array()['work_time'] );
+		$round_the_clock = [ [ '00:00', '23:59' ] ];
+
+		$this->assertSame(
+			[
+				'mon' => $round_the_clock,
+				'tue' => $round_the_clock,
+				'wed' => $round_the_clock,
+				'thu' => $round_the_clock,
+				'fri' => $round_the_clock,
+				'sat' => $round_the_clock,
+				'sun' => $round_the_clock,
+			],
+			$array['schedule']
+		);
+		// Yandex sends a bare UTC offset in hours (`time_zone: 3`).
+		$this->assertSame( 'UTC+3', $array['time_zone'] );
+		// The flat string is derived by `Pickup_Point` from the schedule, not built here.
+		$this->assertSame( 'Mon–Sun 00:00–23:59', $array['work_time'] );
 	}
 
-	public function test_schedule_flattens_differing_span_from_the_terminal_record(): void {
+	public function test_schedule_of_the_terminal_record_keeps_its_own_hours(): void {
 		$this->stub_successful_transport( [ $this->real_terminal_record() ] );
 		Functions\when( 'set_transient' )->justReturn( true );
 
 		$source = new \Woodev_Test_Live_Yandex_Point_Source();
 		$points = $source->fetch_points( Point_Query::from_request( [ 'locality' => 'Москва' ] ) );
 
-		$this->assertSame( 'Пн–Вс 08:00–22:00', $points[0]->to_array()['work_time'] );
+		$this->assertSame( [ [ '08:00', '22:00' ] ], $points[0]->get_schedule()['wed'] );
+		$this->assertSame( 'Mon–Sun 08:00–22:00', $points[0]->to_array()['work_time'] );
+	}
+
+	public function test_a_weekday_no_restriction_names_stays_unknown_not_closed(): void {
+		$record                                    = $this->real_pickup_point_record();
+		$record['schedule']['restrictions']        = [ $record['schedule']['restrictions'][0] ];
+		$this->stub_successful_transport( [ $record ] );
+		Functions\when( 'set_transient' )->justReturn( true );
+
+		$source = new \Woodev_Test_Live_Yandex_Point_Source();
+		$points = $source->fetch_points( Point_Query::from_request( [ 'locality' => 'Москва' ] ) );
+
+		$this->assertSame( [ 'mon' => [ [ '00:00', '23:59' ] ] ], $points[0]->get_schedule() );
 	}
 
 	public function test_pickup_services_flags_map_to_russian_service_labels(): void {

@@ -107,12 +107,13 @@
  * week-stale one. Real pickup-point lists do not churn minute-to-minute, and this is a
  * manually-opted-in dev/demo path, not a production freshness guarantee.
  *
- * SCHEDULE: `Pickup_Point::work_time` is a plain string; Yandex's `schedule` is structured
- * (per-weekday time restrictions). `flatten_schedule()` groups consecutive weekdays sharing
- * an identical time range into readable spans ("Пн–Вс 00:00–23:59"). This is a flattening,
- * not a redesign of the point contract for structured schedules — that is issue #152,
- * explicitly out of scope here. `dayoffs`/`deactivation_date` (specific calendar exceptions)
- * have no home in a flat string either and are dropped rather than mushed in.
+ * SCHEDULE (issue #152): Yandex's `schedule` is structured (per-weekday time restrictions) and
+ * is handed to `Pickup_Point` AS structure — `map_schedule()` only re-keys it (Yandex day
+ * numbers 1..7 -> `mon`..`sun`, `{hours,minutes}` -> `HH:MM`), and `schedule.time_zone` rides
+ * along as `time_zone`. The flat `work_time` is no longer built here: `Pickup_Point` derives it
+ * from the schedule in one place. A weekday no restriction names is left OUT (unknown), not
+ * reported closed. `dayoffs`/`deactivation_date` (specific calendar exceptions) have no home
+ * in a weekly schedule either and are dropped rather than mushed in.
  *
  * PAYMENT METHODS: raw API codes (`already_paid`, `card_on_receipt`, `bound_card`,
  * `postpay` — confirmed live, matching the brief) are display text once they reach the
@@ -246,15 +247,15 @@ if ( ! class_exists( 'Woodev_Test_Live_Yandex_Point_Source' ) ) {
 			'postpay'         => 'Постоплата',
 		];
 
-		/** Russian weekday abbreviations, Yandex's 1 (Monday) .. 7 (Sunday). */
-		private const DAY_LABELS = [
-			1 => 'Пн',
-			2 => 'Вт',
-			3 => 'Ср',
-			4 => 'Чт',
-			5 => 'Пт',
-			6 => 'Сб',
-			7 => 'Вс',
+		/** `Pickup_Schedule` day keys, indexed by Yandex's 1 (Monday) .. 7 (Sunday). */
+		private const DAY_KEYS = [
+			1 => 'mon',
+			2 => 'tue',
+			3 => 'wed',
+			4 => 'thu',
+			5 => 'fri',
+			6 => 'sat',
+			7 => 'sun',
 		];
 
 		/**
@@ -487,7 +488,8 @@ if ( ! class_exists( 'Woodev_Test_Live_Yandex_Point_Source' ) ) {
 					'postal_code'      => $address['postal_code'] ?? '',
 					'phone'            => $contact['phone'] ?? '',
 					'instruction'      => $raw_point['instruction'] ?? '',
-					'work_time'        => $this->flatten_schedule( $schedule ),
+					'schedule'         => $this->map_schedule( $schedule ),
+					'time_zone'        => $schedule['time_zone'] ?? null,
 					'payment_methods'  => $this->map_payment_methods(
 						is_array( $raw_point['payment_methods'] ?? null ) ? $raw_point['payment_methods'] : []
 					),
@@ -619,126 +621,45 @@ if ( ! class_exists( 'Woodev_Test_Live_Yandex_Point_Source' ) ) {
 		}
 
 		/**
-		 * Flattens Yandex's structured `schedule.restrictions` into a readable string —
-		 * see the file docblock's SCHEDULE section for why this stays a flattening rather
-		 * than a redesign of `Pickup_Point::work_time` (issue #152).
+		 * Re-keys Yandex's structured `schedule.restrictions` into the `Pickup_Schedule` shape
+		 * (day key => list of `[ 'HH:MM', 'HH:MM' ]`) — see the file docblock's SCHEDULE section.
 		 *
-		 * Consecutive weekdays sharing an identical time range are grouped into one span
-		 * (e.g. every day 00:00-23:59 becomes "Пн–Вс 00:00–23:59" instead of seven repeated
-		 * entries); non-consecutive or differing spans are joined with "; ".
+		 * Nothing is validated here: a restriction missing its `hours`/`minutes` is skipped and
+		 * whatever is built is handed to `Pickup_Point::from_array()`, which owns validation.
 		 *
 		 * @param array<string, mixed> $schedule Raw `schedule` object from the API.
 		 *
-		 * @return string
+		 * @return array<string, array<int, array{0: string, 1: string}>>
 		 */
-		private function flatten_schedule( array $schedule ): string {
+		private function map_schedule( array $schedule ): array {
 			$restrictions = is_array( $schedule['restrictions'] ?? null ) ? $schedule['restrictions'] : [];
-
-			$range_by_day = [];
+			$by_day       = [];
 
 			foreach ( $restrictions as $restriction ) {
 				if ( ! is_array( $restriction ) ) {
 					continue;
 				}
 
-				$range = $this->format_time_range( $restriction );
+				$from = is_array( $restriction['time_from'] ?? null ) ? $restriction['time_from'] : [];
+				$to   = is_array( $restriction['time_to'] ?? null ) ? $restriction['time_to'] : [];
 
-				if ( '' === $range ) {
+				if ( ! isset( $from['hours'], $from['minutes'], $to['hours'], $to['minutes'] ) ) {
 					continue;
 				}
 
+				$interval = [
+					sprintf( '%02d:%02d', (int) $from['hours'], (int) $from['minutes'] ),
+					sprintf( '%02d:%02d', (int) $to['hours'], (int) $to['minutes'] ),
+				];
+
 				foreach ( (array) ( $restriction['days'] ?? [] ) as $day ) {
-					$day = (int) $day;
-
-					if ( isset( self::DAY_LABELS[ $day ] ) ) {
-						$range_by_day[ $day ] = $range;
+					if ( isset( self::DAY_KEYS[ (int) $day ] ) ) {
+						$by_day[ self::DAY_KEYS[ (int) $day ] ][] = $interval;
 					}
 				}
 			}
 
-			if ( [] === $range_by_day ) {
-				return '';
-			}
-
-			ksort( $range_by_day );
-
-			return implode( '; ', $this->group_consecutive_days( $range_by_day ) );
-		}
-
-		/**
-		 * Groups a day => time-range map into "Пн–Пт HH:MM–HH:MM"-style spans, merging
-		 * consecutive weekday numbers that share an identical range.
-		 *
-		 * @param array<int, string> $range_by_day Sorted by day number; day => "HH:MM–HH:MM".
-		 *
-		 * @return string[]
-		 */
-		private function group_consecutive_days( array $range_by_day ): array {
-			$groups       = [];
-			$group_start  = null;
-			$group_range  = null;
-			$previous_day = null;
-
-			foreach ( $range_by_day as $day => $range ) {
-				$is_contiguous = ( null !== $previous_day && $day === $previous_day + 1 && $range === $group_range );
-
-				if ( ! $is_contiguous ) {
-					if ( null !== $group_start ) {
-						$groups[] = $this->format_day_group( $group_start, $previous_day, $group_range );
-					}
-
-					$group_start = $day;
-					$group_range = $range;
-				}
-
-				$previous_day = $day;
-			}
-
-			$groups[] = $this->format_day_group( $group_start, $previous_day, $group_range );
-
-			return $groups;
-		}
-
-		/**
-		 * Formats one grouped day span, e.g. "Пн–Пт 09:00–21:00" or "Вс 10:00–18:00".
-		 *
-		 * @param int    $start First day number of the span.
-		 * @param int    $end   Last day number of the span.
-		 * @param string $range Already-formatted "HH:MM–HH:MM" time range.
-		 *
-		 * @return string
-		 */
-		private function format_day_group( int $start, int $end, string $range ): string {
-			$label = ( $start === $end )
-				? self::DAY_LABELS[ $start ]
-				: self::DAY_LABELS[ $start ] . '–' . self::DAY_LABELS[ $end ];
-
-			return $label . ' ' . $range;
-		}
-
-		/**
-		 * Formats one `{time_from, time_to}` restriction as "HH:MM–HH:MM", or '' when either
-		 * side is missing its `hours`/`minutes`.
-		 *
-		 * @param array<string, mixed> $restriction One raw restriction entry.
-		 *
-		 * @return string
-		 */
-		private function format_time_range( array $restriction ): string {
-			$from = is_array( $restriction['time_from'] ?? null ) ? $restriction['time_from'] : [];
-			$to   = is_array( $restriction['time_to'] ?? null ) ? $restriction['time_to'] : [];
-
-			if ( ! isset( $from['hours'], $from['minutes'], $to['hours'], $to['minutes'] ) ) {
-				return '';
-			}
-
-			return sprintf(
-				'%02d:%02d–%02d:%02d',
-				(int) $from['hours'],
-				(int) $from['minutes'],
-				(int) $to['hours'],
-				(int) $to['minutes']
-			);
+			return $by_day;
 		}
 	}
 }

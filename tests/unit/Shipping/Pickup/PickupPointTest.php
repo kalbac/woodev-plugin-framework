@@ -768,4 +768,150 @@ final class PickupPointTest extends TestCase {
 
 		$this->assertNull( $point->to_browser_array()['icons'] );
 	}
+
+	// -----------------------------------------------------------------------------
+	// Structured schedule (issue #152, variant (a): structure only).
+	// -----------------------------------------------------------------------------
+
+	/**
+	 * @return array<string, array<int, array{0: string, 1: string}>>
+	 */
+	private function weekly_schedule(): array {
+		return [
+			'mon' => [ [ '09:00', '18:00' ] ],
+			'tue' => [ [ '09:00', '18:00' ] ],
+			'sat' => [ [ '10:00', '14:00' ] ],
+			'sun' => [],
+		];
+	}
+
+	public function test_a_point_without_a_schedule_has_none_and_keeps_its_flat_work_time(): void {
+		$point = $this->make_point( [ 'work_time' => 'Круглосуточно' ] );
+
+		$this->assertNull( $point->get_schedule() );
+		$this->assertNull( $point->get_time_zone() );
+		$this->assertSame( 'Круглосуточно', $point->to_array()['work_time'] );
+		$this->assertSame( [], $point->to_browser_array()['schedule_rows'] );
+	}
+
+	public function test_the_schedule_and_time_zone_are_kept_on_the_point(): void {
+		$point = $this->make_point( [ 'schedule' => $this->weekly_schedule(), 'time_zone' => 'Europe/Moscow' ] );
+
+		$this->assertSame( $this->weekly_schedule(), $point->get_schedule() );
+		$this->assertSame( 'Europe/Moscow', $point->get_time_zone() );
+		$this->assertSame( $this->weekly_schedule(), $point->to_array()['schedule'] );
+		$this->assertSame( 'Europe/Moscow', $point->to_array()['time_zone'] );
+	}
+
+	public function test_work_time_is_derived_from_the_schedule_when_the_source_gave_none(): void {
+		$point = $this->make_point( [ 'schedule' => $this->weekly_schedule() ] );
+
+		$this->assertSame( 'Mon–Tue 09:00–18:00; Sat 10:00–14:00', $point->to_array()['work_time'] );
+	}
+
+	public function test_an_overnight_interval_reaches_the_flat_work_time_and_the_storefront_rows_verbatim(): void {
+		$point = $this->make_point( [ 'schedule' => [ 'fri' => [ [ '22:00', '02:00' ] ] ] ] );
+
+		$this->assertSame( [ 'fri' => [ [ '22:00', '02:00' ] ] ], $point->get_schedule() );
+		$this->assertSame( 'Fri 22:00–02:00', $point->to_array()['work_time'] );
+		$this->assertSame(
+			[ [ 'days' => 'Fri', 'hours' => '22:00–02:00' ] ],
+			$point->to_browser_array()['schedule_rows']
+		);
+	}
+
+	public function test_a_blank_work_time_is_derived_too(): void {
+		$point = $this->make_point( [ 'schedule' => $this->weekly_schedule(), 'work_time' => "  \n" ] );
+
+		$this->assertSame( 'Mon–Tue 09:00–18:00; Sat 10:00–14:00', $point->to_array()['work_time'] );
+	}
+
+	public function test_the_sources_own_work_time_wins_over_the_derived_one(): void {
+		// A carrier string can say what a weekly schedule cannot (holidays, «по звонку»).
+		$point = $this->make_point( [ 'schedule' => $this->weekly_schedule(), 'work_time' => 'Пн–Вт; выходные: 1 января' ] );
+
+		$this->assertSame( 'Пн–Вт; выходные: 1 января', $point->to_array()['work_time'] );
+		$this->assertSame( $this->weekly_schedule(), $point->get_schedule() );
+	}
+
+	public function test_a_malformed_schedule_never_rejects_the_point(): void {
+		foreach ( [ 'Пн-Пт 9-18', 7, [ 'mon' => 'open' ], [ 'mon' => [ [ 'x', 'y' ] ] ], new \stdClass() ] as $junk ) {
+			$point = Pickup_Point::from_array( array_merge( $this->valid(), [ 'schedule' => $junk ] ) );
+
+			$this->assertNotNull( $point, var_export( $junk, true ) );
+			$this->assertNull( $point->get_schedule() );
+			$this->assertSame( '', $point->to_array()['work_time'], 'no schedule, no derived string' );
+		}
+	}
+
+	public function test_a_malformed_time_zone_degrades_to_null_and_keeps_the_schedule(): void {
+		$point = $this->make_point( [ 'schedule' => $this->weekly_schedule(), 'time_zone' => [ 'Europe/Moscow' ] ] );
+
+		$this->assertNull( $point->get_time_zone() );
+		$this->assertSame( $this->weekly_schedule(), $point->get_schedule() );
+	}
+
+	public function test_a_yandex_style_hour_offset_becomes_a_utc_label(): void {
+		$this->assertSame( 'UTC+3', $this->make_point( [ 'time_zone' => 3 ] )->get_time_zone() );
+	}
+
+	/**
+	 * `Selection_Result` rebuilds a persisted point through `from_array( to_array() )`; the
+	 * schedule must survive that trip byte for byte, and the already-derived `work_time`
+	 * must not be recomputed into something else.
+	 */
+	public function test_to_array_round_trips_through_from_array(): void {
+		$point = $this->make_point( [ 'schedule' => $this->weekly_schedule(), 'time_zone' => 'Europe/Moscow' ] );
+
+		$rebuilt = Pickup_Point::from_array( $point->to_array() );
+
+		$this->assertNotNull( $rebuilt );
+		$this->assertSame( $point->to_array(), $rebuilt->to_array() );
+	}
+
+	public function test_to_browser_array_carries_the_schedule_and_the_display_rows(): void {
+		$array = $this->make_point( [ 'schedule' => $this->weekly_schedule(), 'time_zone' => 'Europe/Moscow' ] )->to_browser_array();
+
+		$this->assertSame( $this->weekly_schedule(), $array['schedule'] );
+		$this->assertSame( 'Europe/Moscow', $array['time_zone'] );
+		$this->assertSame(
+			[
+				[ 'days' => 'Mon–Tue', 'hours' => '09:00–18:00' ],
+				[ 'days' => 'Sat', 'hours' => '10:00–14:00' ],
+			],
+			$array['schedule_rows']
+		);
+	}
+
+	public function test_to_browser_array_escapes_the_display_rows(): void {
+		\Brain\Monkey\Functions\when( 'esc_html' )->alias(
+			static function ( $text ) {
+				return htmlspecialchars( (string) $text, ENT_QUOTES );
+			}
+		);
+
+		$GLOBALS['wp_locale'] = new class() {
+			public function get_weekday( int $index ): string {
+				return '<b>' . $index;
+			}
+
+			public function get_weekday_abbrev( string $name ): string {
+				return $name;
+			}
+		};
+
+		try {
+			$rows = $this->make_point( [ 'schedule' => [ 'mon' => [ [ '09:00', '18:00' ] ] ] ] )->to_browser_array()['schedule_rows'];
+		} finally {
+			unset( $GLOBALS['wp_locale'] );
+		}
+
+		$this->assertSame( '&lt;b&gt;1', $rows[0]['days'] );
+	}
+
+	public function test_the_canonical_array_keeps_the_schedule_unescaped_for_persistence(): void {
+		$array = $this->make_point( [ 'schedule' => $this->weekly_schedule() ] )->to_array();
+
+		$this->assertArrayNotHasKey( 'schedule_rows', $array, 'display rows are a browser-boundary view, never persisted' );
+	}
 }

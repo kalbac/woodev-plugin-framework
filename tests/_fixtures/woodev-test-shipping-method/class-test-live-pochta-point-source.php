@@ -905,6 +905,7 @@ if ( ! class_exists( 'Woodev_Test_Live_Pochta_Point_Source' ) ) {
 					'point_short_name' => $type['short'],
 					'locality'         => self::address_field( $address, 'place' ),
 					'work_time'        => $this->format_work_time( $raw_point ),
+					'schedule'         => $this->map_schedule( $raw_point ),
 					'payment_methods'  => $this->map_payment_methods( $raw_point ),
 					'services'         => $this->map_services( $raw_point ),
 					// COD IS DECIDED BY POINT TYPE, NOT BY `cashPayment` — see the file docblock's own
@@ -914,6 +915,62 @@ if ( ! class_exists( 'Woodev_Test_Live_Pochta_Point_Source' ) ) {
 					'photos'           => [],
 				]
 			);
+		}
+
+		/**
+		 * Parses `workTime` (one already-formatted Russian line per weekday) into the
+		 * `Pickup_Schedule` shape, so the structure survives next to the flat string (#152).
+		 *
+		 * Recognised lines: `пн, выходной` (closed -> empty list) and `вт, открыто: 10:00 - 19:00`
+		 * (one or more `HH:MM - HH:MM` intervals). A line this does not recognise leaves its day
+		 * OUT — unknown, never a guess. No time zone: Почта does not send one, so `time_zone`
+		 * is not set at all. `work_time` stays the flat string (it also carries `holidays`,
+		 * which a weekly schedule has no home for).
+		 *
+		 * @param array<string, mixed> $raw_point Full detail record.
+		 *
+		 * @return array<string, array<int, array{0: string, 1: string}>>
+		 */
+		private function map_schedule( array $raw_point ): array {
+			$day_keys = [
+				'пн' => 'mon',
+				'вт' => 'tue',
+				'ср' => 'wed',
+				'чт' => 'thu',
+				'пт' => 'fri',
+				'сб' => 'sat',
+				'вс' => 'sun',
+			];
+
+			$schedule = [];
+
+			foreach ( (array) ( $raw_point['workTime'] ?? [] ) as $line ) {
+				if ( ! is_string( $line ) || 1 !== preg_match( '/^\s*(пн|вт|ср|чт|пт|сб|вс)\s*,\s*(.+?)\s*$/u', mb_strtolower( $line ), $parts ) ) {
+					continue;
+				}
+
+				if ( 'выходной' === $parts[2] ) {
+					$schedule[ $day_keys[ $parts[1] ] ] = [];
+					continue;
+				}
+
+				if ( 1 !== preg_match( '/^открыто:/u', $parts[2] ) ) {
+					continue;
+				}
+
+				$count = preg_match_all( '/(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})/u', $parts[2], $times, PREG_SET_ORDER );
+
+				if ( $count > 0 ) {
+					$schedule[ $day_keys[ $parts[1] ] ] = array_map(
+						static function ( array $pair ): array {
+							return [ str_pad( $pair[1], 5, '0', STR_PAD_LEFT ), str_pad( $pair[2], 5, '0', STR_PAD_LEFT ) ];
+						},
+						$times
+					);
+				}
+			}
+
+			return $schedule;
 		}
 
 		/**

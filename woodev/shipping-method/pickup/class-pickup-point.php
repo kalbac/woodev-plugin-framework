@@ -204,6 +204,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 		 *              `''`, `type.code`/`type.label` having no emptiness check, and
 		 *              whitespace-only values (issue #803).
 		 *
+		 * @since 2.0.2 Accepts the optional structured `schedule` (day key => `[ from, to ]`
+		 *              intervals) and `time_zone`, both validated by {@see Pickup_Schedule}; a
+		 *              malformed value degrades to `null`, never rejects the point. When
+		 *              `work_time` is empty and a schedule exists, `work_time` is derived from
+		 *              it (issue #152).
+		 *
 		 * @param array<string, mixed> $payload Raw normalized payload from the plugin.
 		 *
 		 * @return self|null
@@ -261,6 +267,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 				? self::sanitize_string_list( (array) $payload['services'] )
 				: [];
 
+			// Structured opening hours (issue #152). Both keys are optional and degrade to
+			// `null` ("unknown"), never reject the point — see {@see Pickup_Schedule}.
+			$schedule  = Pickup_Schedule::normalize( $payload['schedule'] ?? null );
+			$time_zone = Pickup_Schedule::normalize_time_zone( $payload['time_zone'] ?? null );
+
+			// The flat `work_time` stays the display fallback. A source's OWN string wins (it
+			// may say what a schedule cannot — holidays, «по звонку»); only when it gave none
+			// is one derived from the schedule, here, once, so every renderer that only knows
+			// the flat string keeps working.
+			$work_time = isset( $payload['work_time'] ) && is_scalar( $payload['work_time'] )
+				? (string) $payload['work_time']
+				: '';
+
+			if ( null !== $schedule && '' === trim( $work_time ) ) {
+				$work_time = Pickup_Schedule::format( $schedule );
+			}
+
 			return new self(
 				[
 					'id'              => $id,
@@ -313,9 +336,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 					'instruction'     => isset( $payload['instruction'] ) && is_scalar( $payload['instruction'] )
 						? (string) $payload['instruction']
 						: '',
-					'work_time'       => isset( $payload['work_time'] ) && is_scalar( $payload['work_time'] )
-						? (string) $payload['work_time']
-						: '',
+					'work_time'       => $work_time,
+					'schedule'        => $schedule,
+					'time_zone'       => $time_zone,
 					// Card tab label override (issue #199) — the framework numbers co-located
 					// tabs, the domain names them; an absent value falls back to `type.label`
 					// (`pickup-panels.js`'s `buildTabs()`), same `isset() ? … : ''` cascade every
@@ -499,6 +522,32 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 		}
 
 		/**
+		 * Gets the structured weekly schedule, or null when the carrier gave none.
+		 *
+		 * Shape and the closed/unknown distinction: {@see Pickup_Schedule}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<string, array<int, array{0: string, 1: string}>>|null
+		 */
+		public function get_schedule(): ?array {
+			return $this->data['schedule'];
+		}
+
+		/**
+		 * Gets the point's time zone as the carrier reported it, or null.
+		 *
+		 * Informational only — nothing computes with it (variant (a) of issue #152).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string|null
+		 */
+		public function get_time_zone(): ?string {
+			return $this->data['time_zone'];
+		}
+
+		/**
 		 * Whether the point accepts cash on delivery. Null means the carrier did not say.
 		 *
 		 * @since 2.0.2
@@ -567,6 +616,26 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 
 			foreach ( $escaped_keys as $key ) {
 				$out[ $key ] = esc_html( $out[ $key ] );
+			}
+
+			// `schedule` (day keys + `HH:MM` digits, validated) goes out as stored. The display
+			// rows are derived HERE, once, so the browser renders them and never regroups days;
+			// their labels come from the site locale, hence escaped like any other text.
+			// `time_zone` is a validated identifier, escaped anyway: it is a string in a payload.
+			$out['schedule_rows'] = null === $out['schedule']
+				? []
+				: array_map(
+					static function ( array $row ): array {
+						return [
+							'days'  => esc_html( $row['days'] ),
+							'hours' => esc_html( $row['hours'] ),
+						];
+					},
+					Pickup_Schedule::rows( $out['schedule'] )
+				);
+
+			if ( null !== $out['time_zone'] ) {
+				$out['time_zone'] = esc_html( $out['time_zone'] );
 			}
 
 			$out['type']['code']    = esc_html( $out['type']['code'] );
