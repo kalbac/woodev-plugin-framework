@@ -10,6 +10,13 @@
  * - "Продолжить" / "Начать настройку" saves the current settings step (advance on
  *   success only) and advances; on a content/welcome step it just advances.
  * - "Пропустить" skips THIS step (advance WITHOUT saving) — never exits.
+ * - The stepper is back-free but forward-gated (#110): a step label is a button only for
+ *   a step already VISITED in this session (index <= the furthest one reached) and never
+ *   for the terminal finish step, which is reachable only through the primary button of
+ *   the last real step. The same gate covers `#{id}-step` hash navigation. The server has
+ *   no per-step completion state, so the visited boundary lives in the tab's
+ *   sessionStorage (per plugin): a reload resumes at the hash step but never beyond the
+ *   furthest step reached, so a deep link cannot skip the steps in between.
  * - Footer link EXITS the wizard: marks it skipped (non-finish) and redirects to
  *   the admin dashboard.
  * - Finish step: marks the wizard completed once, then shows the success screen.
@@ -20,7 +27,7 @@
  * @package woodev-plugin-framework
  */
 
-import { createElement, Fragment, useState, useEffect } from '@wordpress/element';
+import { createElement, Fragment, useState, useEffect, useRef } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import { Button } from '@wordpress/components';
 import Stepper from '../components/stepper';
@@ -39,6 +46,50 @@ function adminUrl() {
 }
 
 /**
+ * sessionStorage key of the furthest visited step index for this plugin's wizard.
+ *
+ * @param {string} pluginId plugin id from the bootstrap.
+ * @return {string} storage key.
+ */
+function visitedKey( pluginId ) {
+	return `woodevSetupWizard:visited:${ pluginId || '' }`;
+}
+
+/**
+ * Reads the furthest visited step from storage, by step id; 0 (nothing visited
+ * beyond the first step) when storage is unavailable, empty, or names a step the
+ * current list does not have (a plugin update removed it, or the value is garbage)
+ * — an index would silently point at a different step once the list changes.
+ *
+ * @param {string} pluginId plugin id from the bootstrap.
+ * @param {Array}  steps    the current step list.
+ * @return {number} furthest visited step index.
+ */
+function readVisited( pluginId, steps ) {
+	try {
+		const raw = window.sessionStorage.getItem( visitedKey( pluginId ) );
+		const found = null === raw ? -1 : steps.findIndex( ( s ) => String( s.id ) === raw );
+		return found > 0 ? found : 0;
+	} catch ( e ) {
+		return 0;
+	}
+}
+
+/**
+ * Stores the furthest visited step's id (best-effort: storage may be blocked).
+ *
+ * @param {string} pluginId plugin id from the bootstrap.
+ * @param {string} stepId   id of the furthest visited step.
+ */
+function writeVisited( pluginId, stepId ) {
+	try {
+		window.sessionStorage.setItem( visitedKey( pluginId ), String( stepId ) );
+	} catch ( e ) {
+		// Unavailable storage just means the boundary is not remembered across reloads.
+	}
+}
+
+/**
  * Wizard root.
  *
  * @return {Object} React element.
@@ -50,6 +101,7 @@ export default function App() {
 		finishSecondaryActions,
 		pluginName,
 		headerLogoUrl,
+		pluginId,
 	} = window.woodevSetupWizard;
 
 	/**
@@ -61,10 +113,30 @@ export default function App() {
 	function initialIndex() {
 		const hash = window.location.hash.replace( /^#/, '' );
 		const found = steps.findIndex( ( s ) => `${ s.id }-step` === hash );
-		return found >= 0 ? found : 0;
+		if ( found < 0 ) {
+			return 0;
+		}
+		// A deep link (or reload) may resume a step, but never lands on the finish
+		// step — that one is reached only through the last real step's «Продолжить».
+		const wanted = 'finish' === steps[ found ].type ? Math.max( 0, found - 1 ) : found;
+		// …and never beyond the furthest step this tab has actually visited, so a
+		// hand-typed or bookmarked hash cannot seed the boundary past unvisited steps.
+		return Math.min( wanted, readVisited( pluginId, steps ) );
 	}
 
 	const [ index, setIndex ] = useState( initialIndex );
+	// Furthest step index reached in this tab; monotonic, so writing it during render
+	// is idempotent. Seeded once from sessionStorage (the stored boundary may sit
+	// beyond the resumed step) and mirrored by `indexRef` for the hashchange listener,
+	// which must not close over a stale value.
+	const maxVisitedRef = useRef( null );
+	if ( null === maxVisitedRef.current ) {
+		maxVisitedRef.current = Math.max( index, readVisited( pluginId, steps ) );
+	}
+	const indexRef = useRef( index );
+	maxVisitedRef.current = Math.max( maxVisitedRef.current, index );
+	indexRef.current = index;
+	const maxVisited = maxVisitedRef.current;
 	const [ values, setValues ] = useState( {} );
 	const [ error, setError ] = useState( null );
 	const [ busy, setBusy ] = useState( false );
@@ -76,6 +148,11 @@ export default function App() {
 	const isFinish = 'finish' === step.type;
 	const isWelcome = 'content' === step.type && 0 === index;
 	const isSettings = 'settings' === step.type;
+
+	// Remember the visited boundary for a reload in this tab.
+	useEffect( () => {
+		writeVisited( pluginId, steps[ maxVisited ].id );
+	}, [ pluginId, steps, maxVisited ] );
 
 	// Keep the URL hash in sync with the active step (WooCommerce-style anchor).
 	useEffect( () => {
@@ -90,9 +167,16 @@ export default function App() {
 		function handleHashChange() {
 			const hash = window.location.hash.replace( /^#/, '' );
 			const found = steps.findIndex( ( s ) => `${ s.id }-step` === hash );
-			if ( found >= 0 ) {
-				setIndex( ( current ) => ( current === found ? current : found ) );
+			if ( found < 0 ) {
+				return;
 			}
+			if ( ! canReach( found, maxVisitedRef.current ) ) {
+				// Forward past the visited range (or onto finish) by hand-edited hash:
+				// refuse and put the hash back on the current step.
+				window.location.hash = `#${ steps[ indexRef.current ].id }-step`;
+				return;
+			}
+			setIndex( ( current ) => ( current === found ? current : found ) );
 		}
 
 		window.addEventListener( 'hashchange', handleHashChange );
@@ -100,7 +184,8 @@ export default function App() {
 	}, [ steps ] );
 
 	/**
-	 * Navigates to an arbitrary step index (used by the stepper + Back button).
+	 * Navigates to an arbitrary step index (used by the stepper + Back button; the
+	 * stepper only offers reachable ones, see `canReach`).
 	 *
 	 * @param {number} i target step index.
 	 */
@@ -139,6 +224,18 @@ export default function App() {
 			}
 		}
 	}, [ errorRevealGen ] );
+
+	/**
+	 * Whether the stepper / hash may take the user to step `i`: any step up to the
+	 * furthest one visited, but never the terminal finish step.
+	 *
+	 * @param {number} i          target step index.
+	 * @param {number} furthest   furthest visited step index.
+	 * @return {boolean} true when navigation is allowed.
+	 */
+	function canReach( i, furthest ) {
+		return i <= furthest && !! steps[ i ] && 'finish' !== steps[ i ].type;
+	}
 
 	/**
 	 * Advances to the next step, saving the current settings step first.
@@ -232,7 +329,13 @@ export default function App() {
 		'div',
 		{ className: 'woodev-setup' },
 		renderHeader( pluginName, headerLogoUrl ),
-		createElement( Stepper, { steps, index, onNavigate: goTo, disabled: busy } ),
+		createElement( Stepper, {
+			steps,
+			index,
+			onNavigate: goTo,
+			disabled: busy,
+			canNavigate: ( i ) => canReach( i, maxVisited ),
+		} ),
 		isFinish
 			? createElement(
 				Fragment,
