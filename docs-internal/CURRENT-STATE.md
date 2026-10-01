@@ -106,7 +106,7 @@ region whose `key()` is not in the settlement's own `ancestors()` is refused. �
 `Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that IS
 its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards — 64, measured 01.10.2026 (s146):** Инбокс holds **#922** (Supermemory, parked by his word) and **#1024** (his question: should the «new» badge count unexported completed/refunded orders).
+**Open cards — 58, measured 01.10.2026 (s146):** Инбокс holds only **#922** (Supermemory, parked by his word).
 ⚠ Count with
 `gh issue list --limit 300` and `project item-list --limit 1000` — s127's 53 was an undercount from
 exactly that trap, and a naive reader reports a milestone-carrying card as empty. **PRIORITY LIVES ON
