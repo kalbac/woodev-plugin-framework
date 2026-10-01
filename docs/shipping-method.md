@@ -1038,6 +1038,7 @@ flags. The `Shipping_Method` class defines these built-in feature constants:
 - `Shipping_Method::FEATURE_SHIPPING_ZONES` -- enabled by default
 - `Shipping_Method::FEATURE_INSTANCE_SETTINGS` -- enabled by default
 - `Shipping_Method::FEATURE_SHIPPING_CLASSES` -- opt-in via `add_support()`
+- `Shipping_Method::FEATURE_RATE_CACHE` -- opt-in via `add_support()`; see [Use Caching for API Calls](#2-use-caching-for-api-calls)
 
 For plugin-level features (like tracking or pickup points), pass custom strings
 in the `supports` array:
@@ -1055,15 +1056,32 @@ parent::__construct(
 
 ### 2. Use Caching for API Calls
 
+The framework caches a method's **successful** rate in a transient for 10 minutes, so a customer
+editing checkout fields does not hit the carrier API on every `update_order_review`. It is
+**off by default**: a cache that is wrong is worse than none, and only the carrier knows what its
+price depends on. A method opts in with `add_support( Shipping_Method::FEATURE_RATE_CACHE )` (after
+`parent::__construct()`), which is a promise that `get_rate_cache_context()` names **every input
+of its rate**.
+
+The default context holds what the framework can see: method, instance and instance settings, the
+packing mode, package lines (product, variation, quantity, dimensions, weight, class, virtual
+flag), the store's units and currency, the destination down to the street, the chosen payment method,
+and the pickup point selected for this method. Add what only your carrier knows — credentials,
+account or origin from global plugin settings, any request parameter your `rate_package()` reads:
+
 ```php
 <?php
-$rates = get_transient( 'my_shipping_rates_' . md5( $cache_key ) );
+public function get_rate_cache_context( array $package ): array {
+    $context            = parent::get_rate_cache_context( $package );
+    $context['account'] = $this->get_plugin()->get_account_fingerprint();
 
-if ( false === $rates ) {
-    $rates = $api->calculate_rates( $params );
-    set_transient( 'my_shipping_rates_' . md5( $cache_key ), $rates, HOUR_IN_SECONDS );
+    return $context;
 }
 ```
+
+Values must be scalars, `null` or arrays of them, and finite; anything else disables caching for
+that call. Errors and empty results are never cached. Filters: `woodev_shipping_rate_cache_enabled`
+(veto), `woodev_shipping_rate_cache_ttl` (seconds; `0` disables), `woodev_shipping_rate_cache_key_parts`.
 
 ### 3. Log API Requests
 

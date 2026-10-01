@@ -20,6 +20,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Rate_Cache' ) ) :
 	 * Caches the {@see Shipping_Rate} a method produced for a package, so the carrier API is not
 	 * called again on every `update_order_review` (each checkout field change).
 	 *
+	 * OPT-IN, OFF BY DEFAULT. A cache that is wrong by default is worse than no cache: the framework
+	 * cannot see what a carrier's price depends on (credentials, origin, a request parameter), so a
+	 * method is cached only when it declares {@see Shipping_Method::FEATURE_RATE_CACHE} — which is a
+	 * promise that {@see Shipping_Method::get_rate_cache_context()} names every input of its rate. A
+	 * method that did not declare it never touches a transient. {@see self::FILTER_ENABLED} stays as a
+	 * further veto.
+	 *
 	 * WHY TRANSIENTS. The decision is a cache that works for every merchant. `wp_cache_*` — what the
 	 * v1 CDEK plugin used — lives for ONE request without a persistent object cache, which is the
 	 * common case and exactly the case that hurts: every AJAX refresh is a new request. A transient
@@ -31,21 +38,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Rate_Cache' ) ) :
 	 * tariff would be booked at a price the carrier no longer honours): an error is never cached,
 	 * and a cached rate is never served in place of a failed call — the entry just expires.
 	 *
-	 * WHAT THE KEY IS MADE OF — everything that changes the answer:
+	 * THE PACKAGE IS NEVER STORED. A rate that carries the calculation's package gets the CURRENT
+	 * package on a hit (the key discards cart order and package fields it does not price by, so the
+	 * stored copy could be stale). A rate carrying a package that is NOT the calculation's own is
+	 * simply not cached — there is nothing safe to rebuild it from.
 	 *
-	 *  - the method (`get_id()`) and its INSTANCE (zone placement carries its own settings);
-	 *  - a hash of the method's instance settings. A merchant editing the tariff, markup, origin or
-	 *    packing algorithm therefore lands on a new key — that is the invalidation, no hook needed;
-	 *  - the package contents: product id, variation id, quantity, dimensions, weight and shipping
-	 *    class of every line (sorted, so cart order is irrelevant), plus `contents_cost` — insurance
-	 *    and declared value follow it;
-	 *  - the destination: country, state, city, postcode;
-	 *  - the store currency.
-	 *
-	 * What the framework CANNOT see is added through {@see self::FILTER_KEY_PARTS}: the pickup point
-	 * a customer chose (the framework has no accessor for it — the carrier plugin owns that
-	 * selection), the payment method when COD changes the price, the street address when a carrier
-	 * prices by it, global plugin settings such as credentials or origin.
+	 * THE KEY is a hash of {@see Shipping_Method::get_rate_cache_context()} (see its docblock for
+	 * the default inputs) plus whatever {@see self::FILTER_KEY_PARTS} adds. The data must be plain,
+	 * finite and encodable: an object, a resource, INF/NAN, invalid UTF-8 or a failed encode makes
+	 * the key `null`, which DISABLES caching for that call — it never collapses to a shared hash.
+	 * A changed instance setting lands on a new key: that is the invalidation, no hook needed.
 	 *
 	 * @since 2.0.2
 	 */
@@ -104,7 +106,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Rate_Cache' ) ) :
 		 * @since 2.0.2
 		 * @var int
 		 */
-		private const SHAPE_VERSION = 1;
+		private const SHAPE_VERSION = 2;
 
 		/**
 		 * Returns the cached rate for this method and package, or `null` on a miss (or a disabled cache).
@@ -129,7 +131,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Rate_Cache' ) ) :
 				return null;
 			}
 
-			return $this->restore( $stored['rate'] );
+			return $this->restore( $stored['rate'], $package );
 		}
 
 		/**
@@ -150,7 +152,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Rate_Cache' ) ) :
 				return false;
 			}
 
-			$snapshot = $this->snapshot( $rate );
+			$rate_package = $rate->get_package();
+
+			// A rate carrying some OTHER package cannot be rebuilt on a hit: the stored copy could be stale.
+			if ( is_array( $rate_package ) && $rate_package !== $package ) {
+				return false;
+			}
+
+			$snapshot = $this->snapshot( $rate, $package );
 
 			// A rate carrying an object (a WC_Product inside its package, say) is not plain data: it would
 			// be serialised into the database and unserialised on every hit.
@@ -169,7 +178,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Rate_Cache' ) ) :
 		}
 
 		/**
-		 * Builds the cache key, or `null` when the method cannot be identified.
+		 * Builds the cache key, or `null` when the call must not be cached: the method cannot be
+		 * identified, its context cannot be built, or the context is not plain, finite, encodable data.
 		 *
 		 * @since 2.0.2
 		 *
@@ -179,39 +189,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Rate_Cache' ) ) :
 		 */
 		public function build_key( Shipping_Method $method, array $package ): ?string {
 
-			$method_id = (string) $method->get_id();
-
-			if ( '' === $method_id ) {
+			if ( '' === (string) $method->get_id() ) {
 				return null;
 			}
 
-			$settings = property_exists( $method, 'instance_settings' ) && is_array( $method->instance_settings )
-				? $method->instance_settings
-				: [];
-
-			$destination = isset( $package['destination'] ) && is_array( $package['destination'] ) ? $package['destination'] : [];
-
-			$parts = [
-				'method'      => $method_id,
-				'instance'    => property_exists( $method, 'instance_id' ) ? (int) $method->instance_id : 0,
-				'settings'    => self::hash( $settings ),
-				'contents'    => $this->normalize_contents( $package ),
-				'cost'        => isset( $package['contents_cost'] ) && is_scalar( $package['contents_cost'] ) ? (string) $package['contents_cost'] : '',
-				'destination' => [
-					'country'  => self::normalize_text( $destination['country'] ?? '' ),
-					'state'    => self::normalize_text( $destination['state'] ?? '' ),
-					'city'     => self::normalize_text( $destination['city'] ?? '' ),
-					'postcode' => str_replace( ' ', '', self::normalize_text( $destination['postcode'] ?? '' ) ),
-				],
-				'currency'    => function_exists( 'get_woocommerce_currency' ) ? (string) get_woocommerce_currency() : '',
-			];
+			try {
+				$parts = $method->get_rate_cache_context( $package );
+			} catch ( \Throwable $exception ) {
+				// A context that cannot be built is an unknown input: do not cache.
+				return null;
+			}
 
 			/**
 			 * Shipping Rate Cache Key Parts Filter.
 			 *
-			 * Adds what changes this method's answer but the framework cannot see: the pickup point the
-			 * customer chose, the payment method when COD alters the price, the street address, global
-			 * plugin settings. Parts must be plain data (scalars and arrays).
+			 * Adds what changes this method's answer but its context does not name. Prefer overriding
+			 * {@see Shipping_Method::get_rate_cache_context()} in the carrier; this filter is for code
+			 * that does not own the method class. Parts must be plain data (scalars, `null`, arrays) and
+			 * finite.
 			 *
 			 * @since 2.0.2
 			 *
@@ -225,7 +220,43 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Rate_Cache' ) ) :
 				$parts = $filtered;
 			}
 
-			return self::TRANSIENT_PREFIX . self::hash( $parts );
+			$hash = self::hash( $parts );
+
+			return null === $hash ? null : self::TRANSIENT_PREFIX . $hash;
+		}
+
+		/**
+		 * The part of {@see Shipping_Method::get_rate_cache_context()} that comes from the package:
+		 * lines (cart-order independent), contents cost, destination down to the street, the store
+		 * currency and the dimension/weight units the packer converts with.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array $package WooCommerce shipping package.
+		 * @return array<string, mixed>
+		 */
+		public static function package_context( array $package ): array {
+
+			$destination = isset( $package['destination'] ) && is_array( $package['destination'] ) ? $package['destination'] : [];
+
+			return [
+				'contents'    => self::normalize_contents( $package ),
+				'cost'        => isset( $package['contents_cost'] ) && is_scalar( $package['contents_cost'] ) ? (string) $package['contents_cost'] : '',
+				'destination' => [
+					'country'   => self::normalize_text( $destination['country'] ?? '' ),
+					'state'     => self::normalize_text( $destination['state'] ?? '' ),
+					'city'      => self::normalize_text( $destination['city'] ?? '' ),
+					'postcode'  => str_replace( ' ', '', self::normalize_text( $destination['postcode'] ?? '' ) ),
+					'address'   => self::normalize_text( $destination['address'] ?? '' ),
+					'address_1' => self::normalize_text( $destination['address_1'] ?? '' ),
+					'address_2' => self::normalize_text( $destination['address_2'] ?? '' ),
+				],
+				'currency'    => function_exists( 'get_woocommerce_currency' ) ? (string) get_woocommerce_currency() : '',
+				'units'       => [
+					'dimension' => (string) get_option( 'woocommerce_dimension_unit', '' ),
+					'weight'    => (string) get_option( 'woocommerce_weight_unit', '' ),
+				],
+			];
 		}
 
 		/**
@@ -242,7 +273,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Rate_Cache' ) ) :
 			/**
 			 * Shipping Rate Cache Enabled Filter.
 			 *
-			 * Return `false` to calculate every rate afresh.
+			 * Return `false` to calculate every rate afresh. Only consulted for a method that declared
+			 * {@see Shipping_Method::FEATURE_RATE_CACHE}: the filter can veto the cache, never force it on.
 			 *
 			 * @since 2.0.2
 			 *
@@ -250,6 +282,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Rate_Cache' ) ) :
 			 * @param Shipping_Method $method  Method instance.
 			 * @param array           $package Package data.
 			 */
+			if ( ! $method->supports_rate_cache() ) {
+				return false;
+			}
+
 			return true === apply_filters( self::FILTER_ENABLED, true, $method, $package ) && $this->get_ttl( $method, $package ) > 0;
 		}
 
@@ -299,7 +335,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Rate_Cache' ) ) :
 		 * @param array $package WooCommerce shipping package.
 		 * @return array<int, array<string, string>>
 		 */
-		private function normalize_contents( array $package ): array {
+		private static function normalize_contents( array $package ): array {
 
 			$contents = isset( $package['contents'] ) && is_array( $package['contents'] ) ? $package['contents'] : [];
 			$lines    = [];
@@ -324,6 +360,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Rate_Cache' ) ) :
 					$line['height'] = (string) $product->get_height();
 					$line['weight'] = (string) $product->get_weight();
 					$line['class']  = (string) $product->get_shipping_class_id();
+
+					// The packer treats a virtual product as weightless and skips it.
+					$line['virtual'] = $product->is_virtual() ? '1' : '0';
 				}
 
 				$lines[] = $line;
@@ -332,7 +371,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Rate_Cache' ) ) :
 			usort(
 				$lines,
 				static function ( array $a, array $b ): int {
-					return strcmp( wp_json_encode( $a ), wp_json_encode( $b ) );
+					return strcmp( (string) wp_json_encode( $a ), (string) wp_json_encode( $b ) );
 				}
 			);
 
@@ -344,16 +383,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Rate_Cache' ) ) :
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param Shipping_Rate $rate Rate to snapshot.
+		 * @param Shipping_Rate $rate    Rate to snapshot.
+		 * @param array         $package The package the rate was calculated for.
 		 * @return array
 		 */
-		private function snapshot( Shipping_Rate $rate ): array {
+		private function snapshot( Shipping_Rate $rate, array $package ): array {
+			$rate_package = $rate->get_package();
+
 			return [
 				'method_id' => $rate->get_method_id(),
 				'id'        => $rate->get_id(),
 				'label'     => $rate->get_label(),
 				'cost'      => $rate->get_cost(),
-				'package'   => $rate->get_package(),
+				// The calculation's own package is stored as a marker and rebuilt from the CURRENT one.
+				'package'   => is_array( $rate_package ) && $rate_package === $package ? true : $rate_package,
 				'meta_data' => $rate->get_meta_data(),
 				'args'      => $rate->get_args(),
 			];
@@ -364,10 +407,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Rate_Cache' ) ) :
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param array $data Snapshot from {@see self::snapshot()}.
+		 * @param array $data    Snapshot from {@see self::snapshot()}.
+		 * @param array $package The package of the CURRENT calculation.
 		 * @return Shipping_Rate|null
 		 */
-		private function restore( array $data ): ?Shipping_Rate {
+		private function restore( array $data, array $package ): ?Shipping_Rate {
 
 			if ( ! isset( $data['method_id'], $data['id'], $data['label'] ) || ! array_key_exists( 'cost', $data ) ) {
 				return null;
@@ -379,7 +423,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Rate_Cache' ) ) :
 					(string) $data['id'],
 					(string) $data['label'],
 					$data['cost'],
-					$data['package'] ?? null,
+					true === ( $data['package'] ?? null ) ? $package : ( $data['package'] ?? null ),
 					is_array( $data['meta_data'] ?? null ) ? $data['meta_data'] : [],
 					is_array( $data['args'] ?? null ) ? $data['args'] : []
 				);
@@ -389,7 +433,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Rate_Cache' ) ) :
 		}
 
 		/**
-		 * Whether a value is scalars, null and arrays all the way down.
+		 * Whether a value is scalars, null and arrays all the way down — finite numbers and valid
+		 * UTF-8 strings only, so it always encodes to JSON and distinct values never share a hash.
 		 *
 		 * @since 2.0.2
 		 *
@@ -408,6 +453,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Rate_Cache' ) ) :
 				return true;
 			}
 
+			if ( is_float( $value ) ) {
+				return is_finite( $value );
+			}
+
+			if ( is_string( $value ) ) {
+				return 1 === preg_match( '//u', $value );
+			}
+
 			return null === $value || is_scalar( $value );
 		}
 
@@ -424,21 +477,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Rate_Cache' ) ) :
 		}
 
 		/**
-		 * Stable hash of an arbitrary plain structure (key order does not matter).
+		 * Stable hash of an arbitrary plain structure (key order does not matter), or `null` when the
+		 * structure is not plain data or does not encode — never a hash of an empty string.
 		 *
 		 * @since 2.0.2
 		 *
 		 * @param mixed $value Structure to hash.
-		 * @return string
+		 * @return string|null
 		 */
-		private static function hash( $value ): string {
+		private static function hash( $value ): ?string {
 
-			if ( is_array( $value ) ) {
-				ksort( $value );
-				$value = array_map( [ self::class, 'canonicalize' ], $value );
+			if ( ! self::is_plain( $value ) ) {
+				return null;
 			}
 
-			return md5( (string) wp_json_encode( $value ) );
+			$encoded = wp_json_encode( self::canonicalize( $value ) );
+
+			return is_string( $encoded ) && '' !== $encoded ? md5( $encoded ) : null;
 		}
 
 		/**

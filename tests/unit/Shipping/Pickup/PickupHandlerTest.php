@@ -6057,6 +6057,67 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		}
 
 		/**
+		 * #958: the rate cache keys on the point selected for the method being RATED — resolved
+		 * from the method id it is handed, never from `chosen_shipping_methods[0]`.
+		 */
+		public function test_get_selected_point_for_method_reports_the_point_remembered_for_that_method(): void {
+			$scope     = new Pickup_Handler_Selection_Test_Scope(
+				'woodev_test_selection',
+				static fn( Pickup_Point $point ) => 'msk',
+				static fn() => 'msk',
+				static fn( string $method_id ) => 'pickup-method' === $method_id ? 'pvz' : null
+			);
+			$selection = new Pickup_Handler_Selection_Probe( $scope, new Pickup_Handler_Fake_Session() );
+			$selection->remember( 'msk', 'pvz', 'P1' );
+
+			// `chosen_shipping_methods` names ANOTHER method — it must not be consulted.
+			$handler = new Pickup_Handler_With_Selection_Probe(
+				'p',
+				'pickup_point',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				$scope,
+				$selection,
+				[ 'other-method:3' ]
+			);
+
+			$this->assertSame(
+				[ 'locality' => 'msk', 'type' => 'pvz', 'point_id' => 'P1' ],
+				$handler->get_selected_point_for_method( 'pickup-method' )
+			);
+			$this->assertNull( $handler->get_selected_point_for_method( 'courier-method' ), 'a method with no pickup type' );
+
+			$selection->remember( 'msk', 'pvz', 'P2' );
+			$this->assertSame( 'P2', $handler->get_selected_point_for_method( 'pickup-method' )['point_id'] );
+		}
+
+		/** #958: nothing remembered is an empty point id, not `null` — the method IS a pickup method. */
+		public function test_get_selected_point_for_method_reports_an_empty_point_when_nothing_is_remembered(): void {
+			$scope     = new Pickup_Handler_Selection_Test_Scope(
+				'woodev_test_selection',
+				static fn( Pickup_Point $point ) => 'msk',
+				static fn() => 'msk',
+				static fn( string $method_id ) => 'pvz'
+			);
+			$selection = new Pickup_Handler_Selection_Probe( $scope, new Pickup_Handler_Fake_Session() );
+
+			$handler = new Pickup_Handler_With_Selection_Probe( 'p', 'pickup_point', $this->source_returning( null ), $this->yandex_provider(), $this->default_location(), $scope, $selection );
+
+			$this->assertSame(
+				[ 'locality' => 'msk', 'type' => 'pvz', 'point_id' => '' ],
+				$handler->get_selected_point_for_method( 'pickup-method' )
+			);
+		}
+
+		/** #958: no scope wired, no answer. */
+		public function test_get_selected_point_for_method_is_null_without_a_scope(): void {
+			$handler = new Pickup_Handler_With_Selection_Probe( 'p', 'pickup_point', $this->source_returning( null ), $this->yandex_provider(), $this->default_location(), null, null );
+
+			$this->assertNull( $handler->get_selected_point_for_method( 'pickup-method' ) );
+		}
+
+		/**
 		 * The load-bearing bridge test: {@see Pickup_Handler_Bridge_Probe} starts with
 		 * NO usable session at all (`wc_cart()` forced absent) — it becomes usable
 		 * ONLY once `remember_selection()` calls `load_wc_cart()`, exactly the way a

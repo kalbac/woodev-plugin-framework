@@ -3251,6 +3251,45 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		}
 
 		/**
+		 * The pickup point remembered in the session for an EXPLICIT shipping method, with the
+		 * (locality, type) pair it was remembered under.
+		 *
+		 * The public read of the same gate {@see self::restore_selection()} and the Store API path
+		 * use ({@see self::selection_pair_for_method()} + {@see self::recall_for_pair()}), for a
+		 * caller that already knows WHICH method it is rating — the rate cache keys on this, so a
+		 * price that depends on the chosen point is never served for another point (#958). The
+		 * method is passed in, never read from `chosen_shipping_methods[0]`: while rating, the
+		 * cart may be calculating a method other than the one the customer has chosen.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $method_id Bare shipping-method id (no `:instance_id` suffix).
+		 *
+		 * @return array{locality: string, type: string, point_id: string}|null `null` when no
+		 *         scope is wired or the method carries no pickup type for this plugin; `point_id`
+		 *         is `''` when nothing is remembered (also the case in admin, with no WC session).
+		 */
+		public function get_selected_point_for_method( string $method_id ): ?array {
+			$selection = $this->selection();
+
+			if ( null === $selection ) {
+				return null;
+			}
+
+			$pair = $this->selection_pair_for_method( $method_id );
+
+			if ( null === $pair ) {
+				return null;
+			}
+
+			return [
+				'locality' => $pair['locality'],
+				'type'     => $pair['type'],
+				'point_id' => (string) $this->recall_for_pair( $selection, $pair ),
+			];
+		}
+
+		/**
 		 * Reconciles {@see Selection_Scope::type_for_method()} — the one pickup
 		 * declaration that cannot be derived from
 		 * {@see \Woodev\Framework\Shipping\Shipping_Method::is_pickup_shipping()} — against

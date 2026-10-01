@@ -55,6 +55,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		const FEATURE_DECLARED_VALUE = 'declared-value';
 
 		/**
+		 * Rate-cache feature: successful rates of this method may be reused for a few minutes.
+		 *
+		 * OFF unless declared. Declaring it is a promise that {@see self::get_rate_cache_context()}
+		 * names every input the carrier's price depends on (#958).
+		 */
+		const FEATURE_RATE_CACHE = 'rate-cache';
+
+		/**
 		 * The features whose declaration changes what {@see self::init_form_fields()} builds.
 		 *
 		 * Exactly these two gate a control there. The rest — the two framework features and the
@@ -391,8 +399,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 * @since 1.4.0
 		 * @since 2.0.2 A carrier exception hides the method instead of reaching the cart, and fires
 		 *              {@see 'woodev_shipping_method_rate_calculation_failed'}.
-		 * @since 2.0.2 A successful rate is cached for a few minutes ({@see Shipping_Rate_Cache}, #958); a
-		 *              failure or an empty result never is.
+		 * @since 2.0.2 A method that declared {@see self::FEATURE_RATE_CACHE} has its successful rate cached
+		 *              for a few minutes ({@see Shipping_Rate_Cache}, #958); a failure or an empty result
+		 *              never is, and a method that did not declare it is never cached.
 		 */
 		final public function calculate_shipping( $package = [] ): void {
 
@@ -443,8 +452,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 
 			$rate = $pre_calculated_rate instanceof Shipping_Rate ? $pre_calculated_rate : null;
 
-			// A rate a pre-filter supplied is its owner's business; the framework cache only fronts the carrier call.
-			$rate_cache = null === $rate ? new Shipping_Rate_Cache() : null;
+			// A rate a pre-filter supplied is its owner's business; the framework cache only fronts the carrier
+			// call, and only for a method that opted in (FEATURE_RATE_CACHE) — a method that did not never
+			// touches a transient.
+			$rate_cache = null === $rate && $this->supports_rate_cache() ? new Shipping_Rate_Cache() : null;
 
 			if ( null !== $rate_cache ) {
 				$rate = $rate_cache->get( $this, $package );
@@ -1118,6 +1129,97 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 */
 		public function supports_shipping_classes(): bool {
 			return $this->supports( self::FEATURE_SHIPPING_CLASSES );
+		}
+
+		/**
+		 * Determines whether this method opted in to the rate cache.
+		 *
+		 * Named predicate over {@see self::FEATURE_RATE_CACHE}. Declare it with `add_support()` only
+		 * once {@see self::get_rate_cache_context()} covers every input the rate depends on.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public function supports_rate_cache(): bool {
+			return $this->supports( self::FEATURE_RATE_CACHE );
+		}
+
+		/**
+		 * Everything the rate of this method depends on, as plain data — the identity of a cached rate.
+		 *
+		 * Two calculations with an equal context MUST produce the same rate; the rate cache serves
+		 * the first one's answer for the second. **Opting in to {@see self::FEATURE_RATE_CACHE} is
+		 * declaring that this array is complete** for the carrier.
+		 *
+		 * The default is what the framework itself can see: the method and instance, the instance
+		 * settings, the effective packing mode, the package lines (product, variation, quantity,
+		 * dimensions, weight, shipping class, virtual flag) with the store's dimension/weight units
+		 * and currency, the contents cost, the destination down to the street, the chosen payment
+		 * method (when a WooCommerce session exists) and — for a method with a pickup type — the point
+		 * selected for THIS method.
+		 *
+		 * A carrier overrides it, calls the parent and adds what only it knows: credentials, the
+		 * account or origin read from global plugin settings (those are NOT instance settings, so a
+		 * change to them would otherwise keep serving the old tariff), and any request parameter
+		 * its `rate_package()` reads that is not on the list above. Values must be scalars, `null` or
+		 * arrays of them, and finite: anything else disables caching for that call.
+		 *
+		 * Public, not protected, because {@see Shipping_Rate_Cache} reads it from outside the class.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array $package WooCommerce shipping package.
+		 *
+		 * @return array<string, mixed>
+		 */
+		public function get_rate_cache_context( array $package ): array {
+
+			$context = Shipping_Rate_Cache::package_context( $package );
+
+			$context['method']   = (string) $this->get_id();
+			$context['instance'] = property_exists( $this, 'instance_id' ) ? (int) $this->instance_id : 0;
+			$context['settings'] = property_exists( $this, 'instance_settings' ) && is_array( $this->instance_settings ) ? $this->instance_settings : [];
+			$context['packing']  = [
+				'enabled'   => $this->supports_box_packing(),
+				'algorithm' => $this->supports_box_packing() ? $this->get_packing_algorithm() : '',
+			];
+			$context['payment']  = $this->chosen_payment_method();
+
+			$handler = $this->get_plugin()->get_pickup_handler();
+
+			// `null` for a method that carries no pickup type; `point_id` is '' while nothing is chosen.
+			$context['pickup'] = null === $handler ? null : $handler->get_selected_point_for_method( (string) $this->get_id() );
+
+			return $context;
+		}
+
+		/**
+		 * The payment method chosen at checkout, or `''` with no WooCommerce session (admin, REST).
+		 *
+		 * `protected` as a test seam, like the pickup handler's session readers: a probe overrides this
+		 * one line rather than `WC()` having to exist in the unit-test process.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		protected function chosen_payment_method(): string {
+
+			if ( ! function_exists( 'WC' ) ) {
+				return '';
+			}
+
+			$wc      = WC();
+			$session = is_object( $wc ) && isset( $wc->session ) ? $wc->session : null;
+
+			if ( ! is_object( $session ) ) {
+				return '';
+			}
+
+			$chosen = $session->get( 'chosen_payment_method' );
+
+			return is_scalar( $chosen ) ? (string) $chosen : '';
 		}
 
 
