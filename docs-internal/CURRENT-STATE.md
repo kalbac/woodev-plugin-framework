@@ -39,7 +39,7 @@ selector matches nothing. One line each under the `[rig/*]` and `[build/*]` topi
 
 ⛔ **The operator reordered the work, 12.09.2026, reconfirmed 13.09** — *«пока у нас не будет готов
 базовый минимум самого фреймворка, мы плагин не пилим»*. **#786 is OUT of the queue** («Заморожено»).
-Next: see `next-session-prompt.md` — his question #1024. Codex: default `gpt-6-luna`, hard tasks `gpt-6.1-sol` (operator, 01.10.2026; `CLAUDE.md`). Codex is back in use (operator, 29.09.2026): **1 of 3 usage-limit resets spent** (none spent in s146), recipe in gotcha `starting-codex-under-orca-needs-four-steps-not-one` — on 0.158 the report-FILE path works, `worker_done` never comes.
+Next: see `next-session-prompt.md`. The «new» scope + badge = unexported ∩ `EXPORTABLE_STATUSES` (#1024, his decision). Codex: default `gpt-6-luna`, hard tasks `gpt-6.1-sol` (operator, 01.10.2026; `CLAUDE.md`). Codex is back in use (operator, 29.09.2026): **1 of 3 usage-limit resets spent** (none spent in s146), recipe in gotcha `starting-codex-under-orca-needs-four-steps-not-one` — on 0.158 the report-FILE path works, `worker_done` never comes.
 
 ✅ **CI first-try reliability is ENFORCED** (#871): `.githooks/pre-push` rebuilds the bundles and
 runs the catalogue gates by exit code in ~22 s — a worker may not build bundles while
