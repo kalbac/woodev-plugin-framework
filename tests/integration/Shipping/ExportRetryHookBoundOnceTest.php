@@ -20,7 +20,6 @@
  *     (private) `add_hooks()`, and the hook must be back exactly once — then a retry payload fired at it
  *     reaches the export of the right carrier and of that carrier only.
  *
- * NOT RUN BY THE WORKER THAT AUTHORED THIS FILE — the coordinator runs the integration suite.
  *
  * @package Woodev\Tests\Integration\Shipping
  * @since   2.0.2
