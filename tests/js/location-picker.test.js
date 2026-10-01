@@ -12,7 +12,7 @@
  */
 
 import '@testing-library/jest-dom';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { createElement } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
 import LocationPicker, { fillFromRecord } from '../../src/components/location-picker';
@@ -67,9 +67,17 @@ const typeQuery = async ( text, triggerName = 'Выберите локацию�
 };
 
 beforeEach( () => {
+	// The search box debounces a typed query by 300 ms (`DEBOUNCE_MS`, location-picker.tsx). Fake timers
+	// keep that wait out of wall-clock (#1056): RTL's `waitFor` / `findBy*` advance Jest's fake clock while
+	// they poll, and the two tests that pin the debounce itself advance it by hand.
+	jest.useFakeTimers();
 	apiFetch.mockReset();
 	// The picker must not need the settings page's global — make any read of it visible.
 	delete window.woodevSettings;
+} );
+
+afterEach( () => {
+	jest.useRealTimers();
 } );
 
 describe( 'fillFromRecord', () => {
@@ -152,6 +160,14 @@ describe( 'LocationPicker', () => {
 		renderPicker( { level: 'address', country: 'KZ' } );
 		await typeQuery( 'Гага' );
 
+		// Nothing is fetched while the debounce is still running — just under it, then past it.
+		await act( async () => {
+			jest.advanceTimersByTime( 299 );
+		} );
+		expect( apiFetch ).not.toHaveBeenCalled();
+		await act( async () => {
+			jest.advanceTimersByTime( 1 );
+		} );
 		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 1 ) );
 
 		const call = apiFetch.mock.calls[ 0 ][ 0 ];
@@ -214,7 +230,9 @@ describe( 'LocationPicker', () => {
 		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 1 ) );
 
 		rerender( createElement( LocationPicker, { ...props, params: { provider: 'a' } } ) );
-		await new Promise( ( resolve ) => setTimeout( resolve, 400 ) );
+		await act( async () => {
+			jest.advanceTimersByTime( 400 );
+		} );
 
 		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
 	} );
