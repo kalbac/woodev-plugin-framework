@@ -219,6 +219,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/location/providers/class-dadata-provider.php';
 
 			// pickup models
+			require_once $path . '/pickup/class-pickup-schedule.php';
 			require_once $path . '/pickup/class-pickup-point.php';
 
 			// pickup selection engine (SP-5): scope + query + constraint checking, the

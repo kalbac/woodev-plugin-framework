@@ -100,6 +100,7 @@ return [
 	'Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' => 'woodev/shipping-method/pickup/class-pickup-handler.php',
 	'Woodev\\Framework\\Shipping\\Pickup\\Pickup_Map_Settings' => 'woodev/shipping-method/pickup/class-pickup-map-settings.php',
 	'Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' => 'woodev/shipping-method/pickup/class-pickup-point.php',
+	'Woodev\\Framework\\Shipping\\Pickup\\Pickup_Schedule' => 'woodev/shipping-method/pickup/class-pickup-schedule.php',
 	'Woodev\\Framework\\Shipping\\Pickup\\Pickup_Selection' => 'woodev/shipping-method/pickup/class-pickup-selection.php',
 	'Woodev\\Framework\\Shipping\\Pickup\\Point_Query' => 'woodev/shipping-method/pickup/class-point-query.php',
 	'Woodev\\Framework\\Shipping\\Pickup\\Point_Source' => 'woodev/shipping-method/pickup/interface-point-source.php',

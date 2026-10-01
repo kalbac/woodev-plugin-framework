@@ -15,7 +15,7 @@
  *
  * ESCAPING (two rules, opposite directions — see the project's own gotcha on
  * this): point display fields (`name`, `address`, `short_address`,
- * `locality`, `instruction`, `work_time`, `payment_methods`, `services`,
+ * `locality`, `instruction`, `work_time`, `schedule_rows`, `payment_methods`, `services`,
  * `type.label`, `point_short_name`, …) arrive from PHP ALREADY `esc_html()`-escaped
  * (`Pickup_Point::to_browser_array()`) and are written into `innerHTML`
  * AS-IS, so the browser's own parser decodes the entity (a point named
@@ -600,6 +600,49 @@
 		} );
 
 		return wrap;
+	}
+
+	/**
+	 * Builds the card's opening-hours block from the server's display rows, or null when there
+	 * are none worth drawing.
+	 *
+	 * @since 2.0.2
+	 * @param {*} rows `point.schedule_rows`: `[ { days, hours } ]`, both ALREADY escaped.
+	 * @returns {HTMLElement|null} the `.woodev-pickup-card__worktime` container, or null.
+	 */
+	function buildScheduleRows( rows ) {
+		if ( ! Array.isArray( rows ) ) {
+			return null;
+		}
+
+		var wrap = document.createElement( 'div' );
+		wrap.className = 'woodev-pickup-card__worktime';
+
+		rows.forEach( function( row ) {
+			var days = row && fieldValue( row.days );
+			var hours = row && fieldValue( row.hours );
+
+			if ( ! days || ! hours ) {
+				return;
+			}
+
+			var line = document.createElement( 'div' );
+			line.className = 'woodev-pickup-card__worktime-row';
+
+			var daysEl = document.createElement( 'span' );
+			daysEl.className = 'woodev-pickup-card__worktime-days';
+			daysEl.innerHTML = days; // eslint-disable-line -- server-escaped, see file docblock.
+
+			var hoursEl = document.createElement( 'span' );
+			hoursEl.className = 'woodev-pickup-card__worktime-hours';
+			hoursEl.innerHTML = hours; // eslint-disable-line -- server-escaped, see file docblock.
+
+			line.appendChild( daysEl );
+			line.appendChild( hoursEl );
+			wrap.appendChild( line );
+		} );
+
+		return wrap.childNodes.length > 0 ? wrap : null;
 	}
 
 	// -------------------------------------------------------------------------
@@ -1423,7 +1466,15 @@
 			) );
 		}
 
-		if ( fieldValue( point.work_time ) ) {
+		// Structured hours (issue #152): `schedule_rows` are grouped and escaped server-side
+		// (`Pickup_Point::to_browser_array()`), so this only draws them — it never regroups days.
+		// A point without them (a carrier with no structure, or the embedded provider's own
+		// normalisation) falls back to the flat `work_time` string.
+		var scheduleRows = buildScheduleRows( point.schedule_rows );
+
+		if ( scheduleRows ) {
+			body.appendChild( cardSection( text( config, 'workTime' ), scheduleRows ) );
+		} else if ( fieldValue( point.work_time ) ) {
 			body.appendChild( cardSection(
 				text( config, 'workTime' ),
 				cardValue( 'woodev-pickup-card__worktime', fieldValue( point.work_time ) )

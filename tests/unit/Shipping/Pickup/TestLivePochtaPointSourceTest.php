@@ -591,12 +591,61 @@ final class TestLivePochtaPointSourceTest extends TestCase {
 		$this->assertSame( [], $point->to_array()['payment_methods'] );
 
 		// Pochta returns already-readable Russian strings, one per weekday, days off included —
-		// there is nothing to parse, so the mapper joins them and stops.
+		// the mapper joins them into the flat `work_time` (which also carries `holidays`) AND
+		// parses them into the structured schedule (see the test below).
 		$this->assertStringContainsString( 'вт, открыто: 10:00 - 19:00', $point->to_array()['work_time'] );
 		$this->assertStringContainsString( 'пн, выходной', $point->to_array()['work_time'] );
 
 		// Every service flag is false on this real record.
 		$this->assertSame( [], $point->to_array()['services'] );
+	}
+
+	public function test_unrecognised_work_time_lines_leave_their_day_unknown_and_breaks_are_kept(): void {
+		$record             = $this->full_russian_post_record();
+		$record['workTime'] = [
+			'Пн, ОТКРЫТО: 9:00 - 13:00, 14:00 – 18:00',
+			'вт, по звонку',
+			'ср, открыто: 25:00 - 26:00',
+			42,
+			'чт, выходной',
+		];
+		$this->stub_successful_details_transport( $record );
+
+		$point = ( new \Woodev_Test_Live_Pochta_Point_Source() )->fetch_details( '62257' );
+
+		$this->assertNotNull( $point );
+		// `вт` is free text, `ср` is unreadable (the point drops it), `42` is not a line.
+		$this->assertSame(
+			[
+				'mon' => [ [ '09:00', '13:00' ], [ '14:00', '18:00' ] ],
+				'thu' => [],
+			],
+			$point->get_schedule()
+		);
+	}
+
+	public function test_work_time_lines_are_parsed_into_a_structured_schedule(): void {
+		// Same real record as above: `пн, выходной` is a CLOSED day (empty list), the one
+		// `вт, открыто: 10:00 - 19:00` line is the only open interval, and Почта sends no
+		// time zone — so none is invented.
+		$this->stub_successful_details_transport( $this->full_russian_post_record() );
+
+		$point = ( new \Woodev_Test_Live_Pochta_Point_Source() )->fetch_details( '62257' );
+
+		$this->assertNotNull( $point );
+		$this->assertSame(
+			[
+				'mon' => [],
+				'tue' => [ [ '10:00', '19:00' ] ],
+				'wed' => [],
+				'thu' => [],
+				'fri' => [],
+				'sat' => [],
+				'sun' => [],
+			],
+			$point->get_schedule()
+		);
+		$this->assertNull( $point->get_time_zone() );
 	}
 
 	/**

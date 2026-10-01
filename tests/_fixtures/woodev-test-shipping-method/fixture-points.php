@@ -494,6 +494,18 @@ $spb_points = [
 		'phone'           => '+7 812 200-00-02',
 		'instruction'     => '',
 		'work_time'       => 'Пн-Сб 09:00-20:00',
+		// Structured hours (#152): Sunday is an explicit empty list = CLOSED, which the flat
+		// string above cannot tell apart from a day the carrier never mentioned.
+		'schedule'        => [
+			'mon' => [ [ '09:00', '20:00' ] ],
+			'tue' => [ [ '09:00', '20:00' ] ],
+			'wed' => [ [ '09:00', '20:00' ] ],
+			'thu' => [ [ '09:00', '20:00' ] ],
+			'fri' => [ [ '09:00', '20:00' ] ],
+			'sat' => [ [ '09:00', '20:00' ] ],
+			'sun' => [],
+		],
+		'time_zone'       => 'Europe/Moscow',
 		'payment_methods' => [ 'Картой при получении' ],
 		'photos'          => [],
 		'type'            => [ 'code' => 'PVZ', 'label' => 'Пункт выдачи заказов' ],

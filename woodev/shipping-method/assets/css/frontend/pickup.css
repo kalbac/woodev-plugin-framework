@@ -1964,6 +1964,16 @@
 	color: #646970;
 }
 
+.woodev-pickup-card__worktime-row {
+	display: flex;
+	gap: 12px;
+}
+
+.woodev-pickup-card__worktime-days {
+	flex: 0 0 5.5em;
+	font-weight: 500;
+}
+
 .woodev-pickup-card__services {
 	display: flex;
 	flex-wrap: wrap;

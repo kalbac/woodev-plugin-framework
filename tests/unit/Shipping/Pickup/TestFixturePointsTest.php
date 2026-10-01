@@ -101,4 +101,13 @@ final class TestFixturePointsTest extends TestCase {
 
 		$this->assertNotEmpty( $long, 'The fixture must contain at least one address of 80+ characters.' );
 	}
+
+	public function test_contains_a_point_with_a_structured_schedule_that_has_a_closed_day(): void {
+		$with_closed_day = array_filter(
+			$this->load_points(),
+			static fn( array $p ): bool => isset( $p['schedule'] ) && in_array( [], $p['schedule'], true )
+		);
+
+		$this->assertNotEmpty( $with_closed_day, 'The rig needs one point whose schedule marks a day closed (issue #152).' );
+	}
 }

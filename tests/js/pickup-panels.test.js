@@ -1467,6 +1467,67 @@ it( 'renders phone, work time and a 2-decimal kilogram weight when present', () 
 } );
 
 // -----------------------------------------------------------------------
+// Issue #152 (variant (a)): the structured schedule arrives pre-grouped and pre-escaped as
+// `schedule_rows`; the card only draws it and falls back to the flat `work_time`.
+// -----------------------------------------------------------------------
+
+describe( 'opening hours from the structured schedule', () => {
+	const rows = [
+		{ days: 'Mon–Fri', hours: '09:00–18:00' },
+		{ days: 'Sat', hours: '10:00–14:00' },
+	];
+
+	it( 'draws one row per group, in the server order, instead of the flat string', () => {
+		const panels = mount( cardConfig );
+		panels.openCard( { key: 'k', size: 1, points: [ point( {
+			work_time: 'flat fallback', schedule_rows: rows,
+		} ) ] } );
+
+		const lines = panels.root.querySelectorAll( '.woodev-pickup-card__worktime-row' );
+
+		expect( lines ).toHaveLength( 2 );
+		expect( lines[ 0 ].querySelector( '.woodev-pickup-card__worktime-days' ).textContent ).toBe( 'Mon–Fri' );
+		expect( lines[ 0 ].querySelector( '.woodev-pickup-card__worktime-hours' ).textContent ).toBe( '09:00–18:00' );
+		expect( lines[ 1 ].textContent ).toBe( 'Sat10:00–14:00' );
+		expect( panels.root.querySelector( '.woodev-pickup-card__worktime' ).textContent ).not.toContain( 'flat fallback' );
+	} );
+
+	it( 'falls back to the flat work_time when there are no rows', () => {
+		const panels = mount( cardConfig );
+		panels.openCard( { key: 'k', size: 1, points: [ point( {
+			work_time: 'ежедневно 9:00-21:00', schedule_rows: [],
+		} ) ] } );
+
+		expect( panels.root.querySelector( '.woodev-pickup-card__worktime-row' ) ).toBeNull();
+		expect( panels.root.querySelector( '.woodev-pickup-card__worktime' ).textContent ).toBe( 'ежедневно 9:00-21:00' );
+	} );
+
+	it( 'falls back when every row is unusable, and shows nothing when there is no flat string either', () => {
+		const junk = [ null, { days: 'Mon' }, { hours: '09:00–18:00' }, { days: 5, hours: 6 } ];
+
+		const withFlat = mount( cardConfig );
+		withFlat.openCard( { key: 'k', size: 1, points: [ point( { work_time: 'flat', schedule_rows: junk } ) ] } );
+		expect( withFlat.root.querySelector( '.woodev-pickup-card__worktime' ).textContent ).toBe( 'flat' );
+
+		const without = mount( cardConfig );
+		without.openCard( { key: 'k', size: 1, points: [ point( { schedule_rows: junk } ) ] } );
+		expect( without.root.querySelector( '.woodev-pickup-card__worktime' ) ).toBeNull();
+	} );
+
+	it( 'treats a server-escaped label as escaped HTML (one decode), never as markup', () => {
+		const panels = mount( cardConfig );
+		panels.openCard( { key: 'k', size: 1, points: [ point( {
+			schedule_rows: [ { days: '&lt;b&gt;Mon&lt;/b&gt;', hours: '09:00–18:00' } ],
+		} ) ] } );
+
+		const days = panels.root.querySelector( '.woodev-pickup-card__worktime-days' );
+
+		expect( days.textContent ).toBe( '<b>Mon</b>' );
+		expect( days.querySelector( 'b' ) ).toBeNull();
+	} );
+} );
+
+// -----------------------------------------------------------------------
 // Issue #200: payment methods used to render as a bare `', '`-joined string while the
 // neighbouring "Услуги" block was already chips — "два разных языка для двух однотипных
 // списков" in the operator's own words. Both lists now share the SAME chip markup/classes
