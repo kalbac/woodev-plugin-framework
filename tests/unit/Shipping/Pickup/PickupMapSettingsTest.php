@@ -3,7 +3,7 @@
  * Unit tests for Pickup_Map_Settings — the «Карта» section of the «Доставка» tab
  * (design S1/S7/S9, issue #362, Task 8): the three store-level pickup map behaviour
  * settings (`pickup_button_placement`, `pickup_replace_address`, `pickup_close_on_select`)
- * that a carrier plugin can no longer override per-instance, plus the `current()`
+ * plus the store accent colour `pickup_accent_color` (issue #379) that a carrier plugin can no longer override per-instance, plus the `current()`
  * accessor {@see \Woodev\Framework\Shipping\Checkout\Checkout_Config} and
  * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler} read them through.
  *
@@ -59,7 +59,7 @@ final class PickupMapSettingsTest extends TestCase {
 		$s = new Pickup_Map_Settings();
 
 		$this->assertSame(
-			[ 'pickup_button_placement', 'pickup_replace_address', 'pickup_close_on_select' ],
+			[ 'pickup_button_placement', 'pickup_replace_address', 'pickup_close_on_select', 'pickup_accent_color' ],
 			$s->get_owned_setting_ids()
 		);
 	}
@@ -70,6 +70,7 @@ final class PickupMapSettingsTest extends TestCase {
 		$this->assertSame( 'rate', $s->get_value( 'pickup_button_placement' ) );
 		$this->assertTrue( $s->get_value( 'pickup_replace_address' ) );
 		$this->assertFalse( $s->get_value( 'pickup_close_on_select' ) );
+		$this->assertSame( '', $s->get_value( 'pickup_accent_color' ) );
 	}
 
 	public function test_button_placement_offers_exactly_rate_and_review(): void {
@@ -94,6 +95,7 @@ final class PickupMapSettingsTest extends TestCase {
 					'woodev_pickup_map_pickup_button_placement' => 'review',
 					'woodev_pickup_map_pickup_replace_address'  => 'no',
 					'woodev_pickup_map_pickup_close_on_select'  => 'yes',
+					'woodev_pickup_map_pickup_accent_color'     => '#1937ff',
 				];
 
 				return $stored[ $name ] ?? $default;
@@ -105,6 +107,99 @@ final class PickupMapSettingsTest extends TestCase {
 		$this->assertSame( 'review', $s->get_value( 'pickup_button_placement' ) );
 		$this->assertFalse( $s->get_value( 'pickup_replace_address' ) );
 		$this->assertTrue( $s->get_value( 'pickup_close_on_select' ) );
+		$this->assertSame( '#1937ff', $s->get_value( 'pickup_accent_color' ) );
+	}
+
+	// -------------------------------------------------------------------------
+	// pickup_accent_color (issue #379)
+	// -------------------------------------------------------------------------
+
+	public function test_the_accent_field_is_a_colour_control_with_an_empty_default(): void {
+		$setting = ( new Pickup_Map_Settings() )->get_setting( 'pickup_accent_color' );
+
+		$this->assertSame( \Woodev_Control::TYPE_COLOR, $setting->get_control()->get_type() );
+		$this->assertSame( '', $setting->get_default(), 'a concrete default would freeze into every store' );
+		$this->assertFalse( $setting->is_required() );
+	}
+
+	/**
+	 * The field must be on the «Карта» section the tab actually builds — registering it
+	 * on the handler alone is invisible, which is exactly the gap the card reports.
+	 */
+	public function test_the_accent_field_is_listed_on_the_map_section_of_the_tab(): void {
+		$tab = Shipping_Settings_Tab::instance();
+		$tab->declare_shipping_plugin();
+		$tab->declare_map_needed();
+
+		$map = null;
+
+		foreach ( $tab->build_sections() as $section ) {
+			if ( 'map' === $section->get_id() ) {
+				$map = $section;
+			}
+		}
+
+		$this->assertNotNull( $map );
+		$this->assertContains( 'pickup_accent_color', $map->get_setting_ids() );
+	}
+
+	public function test_a_valid_hex_is_accepted_and_stored(): void {
+		$setting = ( new Pickup_Map_Settings() )->get_setting( 'pickup_accent_color' );
+
+		$this->assertNull( $setting->get_validation_error( '#1937ff' ) );
+		$this->assertNull( $setting->get_validation_error( '#1937FF' ) );
+
+		$setting->update_value( '#0a8c37' );
+
+		$this->assertSame( '#0a8c37', $setting->get_value() );
+	}
+
+	/**
+	 * Empty is the "inherit the carrier / framework default" state, so it must be
+	 * savable — it is how a merchant undoes an override.
+	 */
+	public function test_an_empty_value_is_accepted(): void {
+		$setting = ( new Pickup_Map_Settings() )->get_setting( 'pickup_accent_color' );
+
+		$this->assertNull( $setting->get_validation_error( '' ) );
+
+		$setting->update_value( '' );
+
+		$this->assertSame( '', $setting->get_value() );
+	}
+
+	/**
+	 * @dataProvider garbage_colours
+	 */
+	public function test_garbage_is_rejected_and_not_stored( string $garbage ): void {
+		$setting = ( new Pickup_Map_Settings() )->get_setting( 'pickup_accent_color' );
+
+		$this->assertNotNull( $setting->get_validation_error( $garbage ) );
+
+		try {
+			$setting->update_value( $garbage );
+			$this->fail( 'update_value() must throw for a non-hex colour.' );
+		} catch ( \Woodev_Plugin_Exception $exception ) {
+			$this->assertSame( 400, $exception->getCode() );
+		}
+
+		$this->assertNotSame( $garbage, $setting->get_value() );
+	}
+
+	/**
+	 * @return array<string, array{0: string}>
+	 */
+	public function garbage_colours(): array {
+		return [
+			'css injection'     => [ 'red; } body { display:none } .x {' ],
+			'colour name'       => [ 'red' ],
+			'no hash'           => [ '1937ff' ],
+			'short form'        => [ '#fff' ],
+			'too long'          => [ '#1937ff00' ],
+			'non-hex digits'    => [ '#gggggg' ],
+			'trailing newline'  => [ "#1937ff\n" ],
+			'javascript scheme' => [ 'javascript:alert(1)' ],
+		];
 	}
 
 	// -------------------------------------------------------------------------

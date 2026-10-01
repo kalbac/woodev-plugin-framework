@@ -406,6 +406,34 @@
 		}
 	}
 
+	// Optional colour: the swatch plus what an empty value means, or «Сбросить».
+	&__color {
+		display: flex;
+		align-items: center;
+		gap: wd.$gap;
+	}
+
+	&__color-note {
+		font-size: 13px;
+		color: wd.$muted;
+	}
+
+	&__color-reset {
+		padding: 0;
+		border: 0;
+		background: none;
+		color: wd.$muted;
+		font-size: 13px;
+		cursor: pointer;
+
+		&:hover,
+		&:focus {
+			color: wd.$accent-strong;
+			text-decoration: underline;
+			outline: none;
+		}
+	}
+
 	// Sensitive-secret "clear stored value" affordance (disconnect). A subtle
 	// text link under the masked input; clicking it swaps the control for the
 	// pending-clear notice + «Отменить».

@@ -590,8 +590,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		}
 
 		/**
-		 * Resolves the map's accent colour: the merchant's setting, else the plugin's
-		 * default, else the framework's (spec D-15). Filterable, and sanitised AFTER the
+		 * Resolves the map's accent colour: the store's «Карта»-tab setting
+		 * ({@see Pickup_Map_Settings::SETTING_ACCENT_COLOR}), else the constructor's merchant
+		 * setting, else the plugin's default, else the framework's (spec D-15, issue #379). Filterable, and sanitised AFTER the
 		 * filter — a filter is an untrusted input on a path that ends in CSS; sanitising
 		 * only the merchant setting and the plugin default would let a filter returning
 		 * garbage reach `setProperty()` unvalidated.
@@ -607,7 +608,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * @return string a valid, lower-cased hex colour, never an empty string.
 		 */
 		private function resolve_accent_color(): string {
-			$candidate = '' !== $this->setting_accent_color ? $this->setting_accent_color : $this->accent_color;
+			// Issue #379: the store's «Карта»-tab value comes first. An empty one — the
+			// default — is "no store override", and so is one that is not a hex colour
+			// (hand-edited option): either falls through to the constructor's value, then to
+			// the carrier's default. Checked against sanitize_hex_color() HERE rather than
+			// trusting the save-time validator, because an option row can be written by anything.
+			$store_value = (string) Pickup_Map_Settings::current()->get_value( Pickup_Map_Settings::SETTING_ACCENT_COLOR );
+
+			if ( '' !== (string) sanitize_hex_color( $store_value ) ) {
+				$candidate = $store_value;
+			} else {
+				$candidate = '' !== $this->setting_accent_color ? $this->setting_accent_color : $this->accent_color;
+			}
 
 			/**
 			 * Filters the pickup map's accent colour.
@@ -1625,29 +1637,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		}
 
 		/**
-		 * Gets the settings fields the active map provider needs, if any, merged with the
-		 * framework's own `pickup_accent_color` field (spec D-15).
+		 * Gets the settings fields the active map provider needs, if any.
 		 *
-		 * Stopped being a pure pass-through to {@see Map_Provider::get_settings_fields()}
-		 * as of Task 8B — the accent colour is a framework-owned field, not something any
-		 * provider knows about (a provider merely READS the resolved colour via
-		 * {@see self::resolve_accent_color()} for e.g. `clusterIconColor`; see spec D-15).
-		 * The FRAMEWORK's field is added LAST, after the provider's own fields — a provider
-		 * field named `pickup_accent_color` would otherwise silently win, and a provider
-		 * accidentally shadowing the framework's own settings key is a much stranger bug to
-		 * chase than "the framework's key always wins"; see
-		 * {@see PickupHandlerTest::test_a_provider_field_cannot_shadow_the_frameworks_accent_field()}.
+		 * A pass-through to {@see Map_Provider::get_settings_fields()}. It used to ALSO carry the
+		 * framework's `pickup_accent_color` field (spec D-15); since issue #379 that field is
+		 * owned by {@see Pickup_Map_Settings} and shown on the «Карта» tab by the framework
+		 * itself, so a plugin no longer has to remember to merge it — and merging it again would
+		 * only register a second, unread copy. A provider field named `pickup_accent_color` is
+		 * therefore dropped here for the same reason: the store setting is the one the handler reads.
 		 *
 		 * This is NOT automatic. Nothing on the framework side calls this method — the
 		 * plugin that owns the shipping integration MUST call it itself and merge the
 		 * result into its own settings registration for the merchant-facing
-		 * `map_api_key` and `pickup_accent_color` fields to exist at all. Spec §10.8
-		 * amends §4.7's "auto-registers" wording, which described the field as something a
-		 * plugin "automatically gains"; the framework cannot register a field into a
-		 * plugin's own settings provider without owning it, the same boundary §10.6 already
-		 * drew for the fallback key. Skip the call and every install of the plugin stays
-		 * pinned to the plugin's shared fallback key and default accent colour — exactly
-		 * the quota risk §4.7 flagged as a watch item.
+		 * `map_api_key` field to exist at all. Spec §10.8 amends §4.7's "auto-registers"
+		 * wording; the framework cannot register a field into a plugin's own settings
+		 * provider without owning it, the same boundary §10.6 already drew for the fallback
+		 * key. Skip the call and every install of the plugin stays pinned to the plugin's
+		 * shared fallback key — exactly the quota risk §4.7 flagged as a watch item.
 		 *
 		 * The provider's own descriptors are passed through UNMODIFIED — in the Woodev
 		 * settings-API `register_setting()` args shape (`name`, `type`, `default`,
@@ -1659,22 +1665,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * @return array<string, array<string, mixed>> settings field definitions keyed by field id.
 		 */
 		public function get_settings_fields(): array {
-			return array_merge(
-				$this->map_provider->get_settings_fields(),
-				[
-					'pickup_accent_color' => [
-						'name'        => __( 'Акцентный цвет карты', 'woodev-plugin-framework' ),
-						'type'        => \Woodev_Setting::TYPE_STRING,
-						'controlType' => \Woodev_Control::TYPE_COLOR,
-						'description' => __(
-							'Цвет кнопок, активных пунктов и кластеров на карте пунктов выдачи.',
-							'woodev-plugin-framework'
-						),
-						'default'     => $this->accent_color,
-						'required'    => false,
-					],
-				]
-			);
+			$fields = $this->map_provider->get_settings_fields();
+
+			unset( $fields[ Pickup_Map_Settings::SETTING_ACCENT_COLOR ] );
+
+			return $fields;
 		}
 
 		/**

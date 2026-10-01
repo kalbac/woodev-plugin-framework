@@ -114,6 +114,56 @@ function PasswordControl( { value, onChange, isSet, disabled } ) {
 }
 
 /**
+ * Colour picker with an explicit "no colour" state.
+ *
+ * A native `<input type="color">` cannot be empty — it paints black for '' and has no way
+ * back once a colour is picked. For an OPTIONAL field whose empty value means "inherit a
+ * default" (e.g. the pickup map accent, issue #379) that is a trap: the merchant would see
+ * black and could never undo an override. So an optional control says what empty means and
+ * offers «Сбросить» while a colour is set. A required field keeps the bare picker.
+ *
+ * @param {Object}   props            component props.
+ * @param {string}   props.value      current value ('' = no colour).
+ * @param {boolean}  props.optional   whether an empty value is allowed.
+ * @param {Function} props.onChange   change handler.
+ * @param {boolean}  [props.disabled] whether the control is disabled (D11).
+ * @return {Object} React element.
+ */
+function ColorControl( { value, optional, onChange, disabled } ) {
+	const hasValue = '' !== ( value ?? '' );
+
+	return createElement(
+		'div',
+		{ className: 'woodev-field__color' },
+		createElement( TextControl, {
+			__nextHasNoMarginBottom: true,
+			__next40pxDefaultSize: true,
+			type: 'color',
+			value: value ?? '',
+			disabled,
+			onChange,
+		} ),
+		optional && ! hasValue &&
+			createElement(
+				'span',
+				{ className: 'woodev-field__color-note' },
+				'Не задан — используется цвет по умолчанию'
+			),
+		optional && hasValue &&
+			createElement(
+				'button',
+				{
+					type: 'button',
+					className: 'woodev-field__color-reset',
+					disabled,
+					onClick: () => onChange( '' ),
+				},
+				'Сбросить'
+			)
+	);
+}
+
+/**
  * Sensitive-secret control: a masked PasswordControl plus an explicit
  * "clear stored secret" (disconnect) affordance.
  *
@@ -520,11 +570,9 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 		case 'color':
 			return withAnatomy(
 				schema,
-				createElement( TextControl, {
-					__nextHasNoMarginBottom: true,
-					__next40pxDefaultSize: true,
-					type: 'color',
+				createElement( ColorControl, {
 					value: value ?? schema.value ?? '',
+					optional: ! schema.required,
 					disabled,
 					onChange,
 				} ),

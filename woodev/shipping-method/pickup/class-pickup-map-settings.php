@@ -40,6 +40,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Map_Settings
 	class Pickup_Map_Settings extends \Woodev_Abstract_Settings {
 
 		/**
+		 * Setting id of the store's accent colour (issue #379). The id is the one the
+		 * framework has always used for this field — only its home changed.
+		 */
+		public const SETTING_ACCENT_COLOR = 'pickup_accent_color';
+
+		/**
 		 * Constructor.
 		 *
 		 * @since 2.0.2
@@ -85,7 +91,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Map_Settings
 				'pickup_button_placement',
 				'pickup_replace_address',
 				'pickup_close_on_select',
+				self::SETTING_ACCENT_COLOR,
 			];
+		}
+
+		/**
+		 * Validates a stored accent colour: a `#rrggbb` hex, either case.
+		 *
+		 * Deliberately stricter than WordPress's `sanitize_hex_color()`, which also accepts the
+		 * `#rgb` short form — the colour control submits `#rrggbb` only, so a short form here can
+		 * only be hand-crafted input. Anchored with `\z`, not `$`, which would also let a
+		 * trailing newline through. An EMPTY value never reaches this callback
+		 * ({@see \Woodev_Setting::get_validation_error()} returns early for it): empty is the
+		 * "inherit the carrier / framework default" state, not an error.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param mixed $value the submitted value.
+		 * @return bool
+		 */
+		public static function is_valid_accent_color( $value ): bool {
+			return is_string( $value ) && 1 === preg_match( '/^#[0-9a-fA-F]{6}\z/', $value );
 		}
 
 		protected function register_settings() {
@@ -139,6 +165,30 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Map_Settings
 				\Woodev_Control::TYPE_CHECKBOX,
 				[
 					'tooltip' => __( 'Когда включено, карта пунктов выдачи закрывается сама сразу после выбора точки. Выключено — покупатель закрывает карту вручную.', 'woodev-plugin-framework' ),
+				]
+			);
+
+			// Issue #379. The default is EMPTY on purpose: empty means "no store override",
+			// so the resolution chain falls through to the carrier's own brand colour and
+			// then the framework's — Pickup_Handler::resolve_accent_color(). A concrete
+			// default here would be frozen into every store the first time it saved the tab
+			// and silently outvote every carrier's brand colour from then on.
+			$this->register_setting(
+				self::SETTING_ACCENT_COLOR,
+				\Woodev_Setting::TYPE_STRING,
+				[
+					'name'             => __( 'Акцентный цвет', 'woodev-plugin-framework' ),
+					'description'      => __( 'Оставьте пустым — тогда цвет берётся из настроек способа доставки.', 'woodev-plugin-framework' ),
+					'default'          => '',
+					'validate'         => [ self::class, 'is_valid_accent_color' ],
+					'validate_message' => __( 'Введите цвет в формате #rrggbb.', 'woodev-plugin-framework' ),
+				]
+			);
+			$this->register_control(
+				self::SETTING_ACCENT_COLOR,
+				\Woodev_Control::TYPE_COLOR,
+				[
+					'tooltip' => __( 'Цвет кнопок, выбранных пунктов и кластеров на карте пунктов выдачи; цвет текста на нём подбирается автоматически, чтобы он читался. Если поле пустое, используется фирменный цвет самого способа доставки.', 'woodev-plugin-framework' ),
 				]
 			);
 		}

@@ -544,3 +544,47 @@ describe( 'password toggle aria-label (#1032)', () => {
 		expect( screen.getByRole( 'button', { name: 'Скрыть пароль' } ) ).toHaveAttribute( 'aria-pressed', 'true' );
 	} );
 } );
+
+/**
+ * An optional colour field is "no colour" when empty (issue #379: the pickup map accent
+ * inherits the carrier default). A native colour input paints black for '' and cannot be
+ * emptied, so the control must say what empty means and offer a way back.
+ */
+describe( 'optional colour control', () => {
+	const renderColor = ( props ) =>
+		render(
+			createElement( ControlField, {
+				settingId: 'pickup_accent_color',
+				schema: { type: 'string', name: 'Акцентный цвет', controlType: 'color', required: false },
+				onChange: () => {},
+				showErrors: false,
+				...props,
+			} )
+		);
+
+	test( 'an empty value explains itself and offers no reset', () => {
+		renderColor( { value: '' } );
+
+		expect( screen.getByText( 'Не задан — используется цвет по умолчанию' ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'button', { name: 'Сбросить' } ) ).not.toBeInTheDocument();
+	} );
+
+	test( 'a set value offers a reset that stages the empty value', () => {
+		const onChange = jest.fn();
+		renderColor( { value: '#1937ff', onChange } );
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Сбросить' } ) );
+
+		expect( onChange ).toHaveBeenCalledWith( '' );
+		expect( screen.queryByText( 'Не задан — используется цвет по умолчанию' ) ).not.toBeInTheDocument();
+	} );
+
+	test( 'a required colour keeps the bare picker', () => {
+		renderColor( {
+			value: '#1937ff',
+			schema: { type: 'string', name: 'Цвет', controlType: 'color', required: true },
+		} );
+
+		expect( screen.queryByRole( 'button', { name: 'Сбросить' } ) ).not.toBeInTheDocument();
+	} );
+} );
