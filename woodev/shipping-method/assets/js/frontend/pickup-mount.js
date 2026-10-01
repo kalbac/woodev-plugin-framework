@@ -4223,6 +4223,49 @@
 	}
 
 	/**
+	 * Which top-level config key feeds which accent custom property on the trigger — the SAME
+	 * three properties, fed by the SAME server-resolved values, that `pickup-panels.js`'s
+	 * `applyAccentColor()` sets on `.woodev-pickup-stage` for the modal (issue #379).
+	 *
+	 * @type {Object<string,string>}
+	 */
+	var TRIGGER_ACCENT_PROPERTIES = {
+		accentColor: '--woodev-pickup-accent',
+		accentFillColor: '--woodev-pickup-accent-fill',
+		accentContrastColor: '--woodev-pickup-accent-contrast',
+	};
+
+	/**
+	 * Hands the trigger button the accent the modal already wears. The modal's host is
+	 * `.woodev-pickup-stage`, and custom properties only reach DESCENDANTS — the trigger lives in
+	 * the checkout's own DOM, outside any stage, so it needs the properties on ITSELF. Same
+	 * discipline as `applyAccentColor()`: CSSOM `style.setProperty()` only (D-15), every value
+	 * re-validated through `geo.safeColor()`. A value that is absent or unsafe is simply NOT written,
+	 * so the var() fallbacks in `pickup.css` (`#06aedd` / `#047a9b` / `#fff` — the very literals the
+	 * modal's own defaults pin) paint instead: no accent set → the button looks exactly like the
+	 * modal's default. The darken/WCAG derivation is NOT recomputed here; the fill/contrast pair
+	 * arrives already derived (`Pickup_Handler::resolve_accent_fill_color()` /
+	 * `resolve_accent_contrast_color()`).
+	 *
+	 * @param {HTMLElement} button
+	 * @param {Object}      config
+	 * @returns {void}
+	 */
+	function applyTriggerAccent( button, config ) {
+		if ( ! geo ) {
+			return;
+		}
+
+		Object.keys( TRIGGER_ACCENT_PROPERTIES ).forEach( function( key ) {
+			var colour = geo.safeColor( config && config[ key ], '' );
+
+			if ( colour ) {
+				button.style.setProperty( TRIGGER_ACCENT_PROPERTIES[ key ], colour );
+			}
+		} );
+	}
+
+	/**
 	 * Mounts a trigger button into ONE §8 anchor, wiring the button's click handler.
 	 * Idempotent — an anchor that already holds a `TRIGGER_CLASS` button is left
 	 * untouched, so this is safe to call on every `mountAll()` pass without ever
@@ -4255,6 +4298,8 @@
 
 		button.type = 'button';
 		button.className = 'button ' + TRIGGER_CLASS;
+
+		applyTriggerAccent( button, config );
 
 		button.addEventListener( 'click', function( event ) {
 			event.preventDefault();

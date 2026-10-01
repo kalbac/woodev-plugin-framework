@@ -1134,6 +1134,104 @@ test( 'hooks `updated_checkout`, deferred by EXACTLY 60ms, and re-mounts through
 } );
 
 // -------------------------------------------------------------------------
+// Trigger accent colour (issue #379): the checkout button wears the modal's accent
+// -------------------------------------------------------------------------
+
+describe( 'trigger accent colour', () => {
+	function mountedTrigger( overrides ) {
+		setConfig( makeConfig( overrides ) );
+		mountAll();
+
+		return document.querySelector( '.woodev-pickup-trigger' );
+	}
+
+	test( 'writes the three server-resolved accent values onto the button itself, under the modal\'s own property names', () => {
+		const trigger = mountedTrigger( {
+			accentColor: '#e91e63',
+			accentFillColor: '#c2185b',
+			accentContrastColor: '#ffffff',
+		} );
+
+		expect( trigger.style.getPropertyValue( '--woodev-pickup-accent' ) ).toBe( '#e91e63' );
+		expect( trigger.style.getPropertyValue( '--woodev-pickup-accent-fill' ) ).toBe( '#c2185b' );
+		expect( trigger.style.getPropertyValue( '--woodev-pickup-accent-contrast' ) ).toBe( '#ffffff' );
+	} );
+
+	test( 'carries the SERVER\'s contrast decision verbatim, black included — it recomputes nothing', () => {
+		const trigger = mountedTrigger( {
+			accentColor: '#ffeb3b',
+			accentFillColor: '#ffeb3b',
+			accentContrastColor: '#000000',
+		} );
+
+		expect( trigger.style.getPropertyValue( '--woodev-pickup-accent-fill' ) ).toBe( '#ffeb3b' );
+		expect( trigger.style.getPropertyValue( '--woodev-pickup-accent-contrast' ) ).toBe( '#000000' );
+	} );
+
+	test( 'writes nothing for a value the config does not carry, so the CSS var() fallbacks (the modal\'s defaults) paint', () => {
+		// `makeConfig()` carries only `accentColor` — the other two keys are absent, as on a
+		// page whose config predates #203.
+		const trigger = mountedTrigger();
+
+		expect( trigger.style.getPropertyValue( '--woodev-pickup-accent' ) ).toBe( '#06aedd' );
+		expect( trigger.style.getPropertyValue( '--woodev-pickup-accent-fill' ) ).toBe( '' );
+		expect( trigger.style.getPropertyValue( '--woodev-pickup-accent-contrast' ) ).toBe( '' );
+	} );
+
+	test( 'refuses a value that is not a safe hex colour — a filter returning garbage never reaches the CSSOM', () => {
+		const trigger = mountedTrigger( {
+			accentColor: 'red; background: url(x)',
+			accentFillColor: 'javascript:alert(1)',
+			accentContrastColor: 12345,
+		} );
+
+		expect( trigger.style.getPropertyValue( '--woodev-pickup-accent' ) ).toBe( '' );
+		expect( trigger.style.getPropertyValue( '--woodev-pickup-accent-fill' ) ).toBe( '' );
+		expect( trigger.style.getPropertyValue( '--woodev-pickup-accent-contrast' ) ).toBe( '' );
+		expect( trigger.getAttribute( 'style' ) || '' ).not.toMatch( /url|javascript/ );
+	} );
+
+	test( 'a re-mount pass leaves the already-styled button as it was (one button, one set of properties)', () => {
+		const trigger = mountedTrigger( { accentFillColor: '#c2185b' } );
+
+		mountAll();
+
+		expect( document.querySelectorAll( '.woodev-pickup-trigger' ).length ).toBe( 1 );
+		expect( document.querySelector( '.woodev-pickup-trigger' ) ).toBe( trigger );
+		expect( trigger.style.getPropertyValue( '--woodev-pickup-accent-fill' ) ).toBe( '#c2185b' );
+	} );
+
+	test( 'pickup.css styles the trigger from the same three properties, with every state, scoped to its own class', () => {
+		const css = require( 'fs' ).readFileSync(
+			require( 'path' ).join( __dirname, '../../woodev/shipping-method/assets/css/frontend/pickup.css' ),
+			'utf8'
+		);
+		const block = ( selector ) => {
+			const at = css.indexOf( selector + ' {' );
+
+			expect( at ).toBeGreaterThan( -1 );
+
+			return css.slice( at, css.indexOf( '}', at ) );
+		};
+		const base = '.woodev-pickup-trigger.woodev-pickup-trigger.button';
+
+		expect( block( base ) ).toMatch( /color: var\( --woodev-pickup-accent-contrast, #fff \)/ );
+		expect( block( base ) ).toMatch( /background: var\( --woodev-pickup-accent-fill, #047a9b \)/ );
+		expect( block( base + ':hover' ) ).toMatch( /filter: brightness/ );
+		expect( block( base + ':active' ) ).toMatch( /filter: brightness/ );
+		expect( block( base + ':focus-visible' ) ).toMatch( /outline: 2px solid var\( --woodev-pickup-accent, #06aedd \)/ );
+		expect( block( base + ':disabled[disabled]' ) ).toMatch( /cursor: not-allowed/ );
+
+		// Never leaks into other theme buttons: every rule that paints the accent names our class.
+		css.replace( /\/\*[\s\S]*?\*\//g, '' ).split( '}' ).forEach( ( rule ) => {
+			if ( /--woodev-pickup-accent/.test( rule ) && /\.woodev-pickup-trigger/.test( rule ) ) {
+				expect( rule ).toMatch( /\.woodev-pickup-trigger\.woodev-pickup-trigger\.button/ );
+			}
+		} );
+	} );
+} );
+
+// -------------------------------------------------------------------------
 // Trigger label toggle: i18n.trigger vs i18n.triggerChange
 // -------------------------------------------------------------------------
 
