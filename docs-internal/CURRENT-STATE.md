@@ -6,7 +6,7 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-01 (s145).** ✅ Order-wizard stack merged; s145 added idempotent export (#945), API timeouts + delayed export retry on Action Scheduler (#954), background auto-export / auto-cancel / exports notice with settings on the carrier's `woodev-settings` tab (#1007), API cache cap (#952 #1004). ⚠ A nested `<form>` in the carrier metabox broke saving WC orders until #1012. Follow-ups: #1011 #1014 #1015. No open PRs. Details: `sessions/s145.md`. ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
+**As of 2026-10-01 (s146, overnight).** ✅ s146 merged the s145 follow-ups that need no eye: v1 auto-export migration flag only after a real read (#1015), one order-action dispatcher (#1016), checkout-time reference/location calls at the 8 s budget (#1017 #1025; follow-up #1036), export-retry hook pinned once (#1009), perform(EXPORT) end-to-end test (#1026), catalogue references regenerated and 20 dead msgids dropped (#1029). ⏸ **Parked for his eye:** PR #1020 (#1011 all orders by default), #1027 (#1014 one composite carrier tab + connection forwarding, also #1028), #1034 (#1018 metabox buttons column). Details: `sessions/s146.md`. ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
 orders-page slug redirects to the framework page with that carrier preselected, accepted on the rig.
 ✅ **Both machines are live**; routine sync is git ONLY (`wiki/two-machine-setup.md`). The order
 metabox (#856) and the orders table (#870) stay accepted.
@@ -39,7 +39,7 @@ selector matches nothing. One line each under the `[rig/*]` and `[build/*]` topi
 
 ⛔ **The operator reordered the work, 12.09.2026, reconfirmed 13.09** — *«пока у нас не будет готов
 базовый минимум самого фреймворка, мы плагин не пилим»*. **#786 is OUT of the queue** («Заморожено»).
-Next: see `next-session-prompt.md` — the parked wizard stack (#993 → #995 → #997 → #998), PR #987 acceptance (Russian locale), #990 (his question). Codex is back in use (operator, 29.09.2026): **1 of 3 usage-limit resets spent**, recipe in gotcha `starting-codex-under-orca-needs-four-steps-not-one`.
+Next: see `next-session-prompt.md` — the three parked UI PRs (#1020 #1027 #1034) and his question #1024. Codex is back in use (operator, 29.09.2026): **1 of 3 usage-limit resets spent** (none spent in s146), recipe in gotcha `starting-codex-under-orca-needs-four-steps-not-one` — on 0.158 the report-FILE path works, `worker_done` never comes.
 
 ✅ **CI first-try reliability is ENFORCED** (#871): `.githooks/pre-push` rebuilds the bundles and
 runs the catalogue gates by exit code in ~22 s — a worker may not build bundles while
@@ -71,11 +71,12 @@ FIXTURES**; the shipping plugin is written later, from scratch, own repo, versio
 
 ✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — no quota consumed; the exhaustion symptom is gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`.
 
+**`main` after s146 (`fb2cf79e`, macOS, 01.10.2026):** unit **4873 / 22064** (1 skipped), integration **471 / 5326**; jest **2424** in **49** suites (on `a77cae5a`; no JS change after it).
+
 **Baselines — macOS laptop, 27.09.2026 (s140)** (the two machines matched to the digit in s136, so
 these are not platform-dependent): unit **4132 / 14586**, 1 skipped, sodium ON; jest **1975** in
 **33** suites; **integration 200 / 730**; e2e **7** in 13 s; `npm run build` zero git diff; phpcs
 clean **with the warning level ON**; phpstan level 3 no errors. ⚠ A number copied from a handoff is an INFERENCE — re-measure.
-**`main` after s144 (`2dd158d9` = s143 + #989):** not re-measured as a whole; #989's branch measured unit **4557 / 21146**, integration **357 / 4297** (29.09.2026), CI green. **Stack top `feat/992` (29.09.2026):** unit **4578**, jest **2365** (46 suites), integration **377 / 4395**, e2e **7/7**.
 
 ⚠ **A `.ts` msgid fails `lint:i18n-sources`** — it extracts from the BUILT bundle (s129).
 
@@ -105,7 +106,7 @@ region whose `key()` is not in the settlement's own `ancestors()` is refused. �
 `Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that IS
 its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards — 66, measured 29.09.2026 (s144):** Инбокс holds **#922** (Supermemory, parked by his word) and **#990** (his question on carrier-declared required fields).
+**Open cards — 64, measured 01.10.2026 (s146):** Инбокс holds **#922** (Supermemory, parked by his word) and **#1024** (his question: should the «new» badge count unexported completed/refunded orders).
 ⚠ Count with
 `gh issue list --limit 300` and `project item-list --limit 1000` — s127's 53 was an undercount from
 exactly that trap, and a naive reader reports a milestone-carrying card as empty. **PRIORITY LIVES ON

@@ -26,6 +26,20 @@ you stopped: check git status and your last step, finish what is missing, run th
 
 Every nudged worker in s143 resumed and reported correctly.
 
+## s146: a background watchdog that greps the WRONG JSON field never fires
+
+From s145 a scratchpad watchdog loops over the worker handles and nudges on that line. In s146 it was written to read
+`result.tail` — **`orca terminal read --json` (Orca 1.4.217) puts the lines in `result.terminal.tail`**, so the
+watchdog read an empty string forever, logged nothing, and two workers sat stalled from 03:15 to 03:53 while every check
+looked green. Parse the right field, and look at the LAST lines only (an old «Connection lost» higher up re-fires):
+
+```bash
+orca terminal read --terminal "$H" --screen --json | python3 -c "import json,sys
+d=json.load(sys.stdin); print('\n'.join(d['result']['terminal']['tail'][-8:]))" | grep -q "Connection lost"
+```
+
+Prove a watchdog on a known stalled screen once before trusting its silence — an empty log is not evidence.
+
 ## Related
 
 - [codex-app-server-drops-mid-task-under-orca-resume-by-session-id](codex-app-server-drops-mid-task-under-orca-resume-by-session-id.md) — the Codex equivalent

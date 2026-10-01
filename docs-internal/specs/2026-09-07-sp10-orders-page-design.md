@@ -62,6 +62,9 @@ All three select their rows the same way: one `wc_get_orders()` call with a `met
 asserting a carrier marker key `EXISTS` (`_wc_edostavka_shipping`, `_yandex_delivery_state_status`),
 with a legacy custom query var (`is_edostavka`, `is_yandex_delivery`) on the non-HPOS path. Both also
 exclude `wc-cancelled` and `wc-failed` and restrict `type` to `wc_get_order_types( 'view-orders' )`.
+That exclusion describes the v1 export QUEUE, not a decision for the framework page: by operator decision
+(s145, #1011) the framework page's default view shows every status WooCommerce's own «All» list shows;
+only the «new» scope and the badge keep cancelled/failed out (PR #1020, s146).
 
 This is what makes #694's open condition — «при условии что агрегат дёшев» — answerable: the
 aggregate is **the same single query** with `relation => OR` across the providers' marker keys, not
