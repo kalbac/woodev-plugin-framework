@@ -433,6 +433,23 @@
 }
 
 /**
+ * The order-edit metabox's action buttons (#1018) — one per line, natural width.
+ *
+ * Before #1012 each button sat in its own block-level `<form>`, so they stacked in a column. The
+ * nested forms are gone (the box lives inside WooCommerce's order form), and bare `<button>`s are
+ * inline — they ran together in a row. A column flexbox restores the stack without a wrapper per
+ * button; `align-items: flex-start` keeps each at its natural width (a column flex would stretch
+ * them full-width otherwise), and the small gap stands in for the line-box slack the old inline
+ * buttons-inside-block-forms had. Scoped to the metabox's own wrapper, so no WP/WC selector is touched.
+ */
+.woodev-shipping-order-actions-buttons {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 4px;
+}
+
+/**
  * The «Действие» cell (#824) — a BUTTON GROUP, sized 1:1 with the status badges.
  *
  * Operator, rig round 2: *«кнопки должны быть кнопками, а не просто иконками. Один экшен
