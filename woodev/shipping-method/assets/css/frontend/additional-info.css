@@ -1,0 +1,33 @@
+/**
+ * The extra information block under a shipping rate on the classic order form and the cart
+ * (`Shipping_Plugin::render_rate_additional_info()`): a small bordered card.
+ *
+ * Deliberately theme-neutral — the border follows the text colour (`currentColor`, softened
+ * with `color-mix()` where supported), sizes are relative, nothing has a fixed width — so it
+ * reads on light and dark themes alike.
+ */
+.woodev-shipping-method-additional-info {
+	box-sizing: border-box;
+	margin: 0.5em 0;
+	padding: 0.5em 0.75em;
+	border: 1px solid currentColor;
+	border-radius: 4px;
+	font-size: 0.95em;
+	font-weight: normal;
+	line-height: 1.4;
+	text-align: start;
+}
+
+@supports (border-color: color-mix(in srgb, currentColor 25%, transparent)) {
+	.woodev-shipping-method-additional-info {
+		border-color: color-mix(in srgb, currentColor 25%, transparent);
+	}
+}
+
+.woodev-shipping-method-additional-info > :first-child {
+	margin-top: 0;
+}
+
+.woodev-shipping-method-additional-info > :last-child {
+	margin-bottom: 0;
+}

@@ -314,6 +314,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			// Shipping_Method::apply_rate_attributes() fills in.
 			add_action( 'woocommerce_after_shipping_rate', [ $this, 'render_rate_additional_info' ], 10, 2 );
 
+			// …and the card styling for it. Every shipping plugin of the process hooks this
+			// with the same handle, so WordPress prints the one stylesheet once.
+			add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_additional_info_styles' ] );
+
 			// register WC_Integration if configured
 			if ( $this->get_integration_handler() instanceof Settings\Shipping_Integration ) {
 				add_filter( 'woocommerce_integrations', [ $this, 'register_integration' ] );
@@ -553,6 +557,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 * pickup-point button. The filter receives an array keyed by block name, so a
 		 * plugin can add, replace or drop a block rather than append blindly.
 		 *
+		 * Printed only under the rate the customer has chosen ({@see self::is_rate_selected()}) and
+		 * styled as a card by `additional-info.css` ({@see self::enqueue_additional_info_styles()}).
+		 *
 		 * @since 2.0.2
 		 *
 		 * @internal Hooked on `woocommerce_after_shipping_rate`; not for direct calls.
@@ -577,6 +584,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			$method = \WC_Shipping_Zones::get_shipping_method( $rate->get_instance_id() );
 
 			if ( ! $method instanceof Shipping_Method ) {
+				return;
+			}
+
+			// Only under the rate the customer has chosen — the other rates' cards would
+			// stack up to a wall of text. WooCommerce re-renders this block on every
+			// rate change (`updated_checkout`, the cart's shipping AJAX), after saving
+			// the new choice to the session, so no script is needed to follow it.
+			if ( ! self::is_rate_selected( (string) $rate->get_id(), (int) $index, self::read_chosen_shipping_methods(), self::count_rates_in_package( (int) $index ) ) ) {
 				return;
 			}
 
@@ -636,6 +651,108 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 				// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- each block is escaped by whoever built it; see the filter docblock.
 				implode( '', $blocks )
 			);
+		}
+
+		/**
+		 * Whether the additional-info card belongs under this rate — i.e. the customer has it chosen.
+		 *
+		 * Pure, so the rule is testable without WooCommerce. It mirrors what WooCommerce's own
+		 * `cart/cart-shipping.php` does to tick a radio, with two deliberate openings:
+		 *
+		 * - a LONE rate is always shown — the template prints it as a hidden input, never a radio,
+		 *   so there is nothing to "choose" and the customer could not otherwise ever see it;
+		 * - an UNKNOWN state (no session, or a package whose rates could not be counted) shows the
+		 *   card — losing information the customer needs is worse than showing one card too many.
+		 *
+		 * With several rates and nothing chosen yet the template ticks no radio, and so no card is shown.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string                       $rate_id          the rate being rendered, e.g. `edostavka_courier:7`
+		 * @param int                          $index            the package index
+		 * @param array<int|string,mixed>|null $chosen      the session's `chosen_shipping_methods`, `null` when there is no session
+		 * @param int                          $rates_in_package how many rates the package offers; `0` when unknown
+		 *
+		 * @return bool
+		 */
+		public static function is_rate_selected( string $rate_id, int $index, ?array $chosen, int $rates_in_package ): bool {
+
+			if ( null === $chosen || $rates_in_package <= 1 ) {
+				return true;
+			}
+
+			return isset( $chosen[ $index ] ) && (string) $chosen[ $index ] === $rate_id;
+		}
+
+		/**
+		 * The session's `chosen_shipping_methods`, or `null` when there is no session to read.
+		 *
+		 * Read the way `wc_cart_totals_shipping_html()` reads it (`WC()->session`, guarded with `??`
+		 * rather than the codebase's usual `function_exists( 'WC' )` — see Checkout_Field_Policy for why).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<int|string,mixed>|null
+		 */
+		private static function read_chosen_shipping_methods(): ?array {
+
+			if ( ! function_exists( 'WC' ) ) {
+				return null;
+			}
+
+			$session = WC()->session ?? null;
+
+			if ( ! $session ) {
+				return null;
+			}
+
+			return (array) $session->get( 'chosen_shipping_methods' );
+		}
+
+		/**
+		 * How many rates the given shipping package offers; `0` when it cannot be told.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param int $index the package index
+		 *
+		 * @return int
+		 */
+		private static function count_rates_in_package( int $index ): int {
+
+			if ( ! function_exists( 'WC' ) || ! WC()->shipping() ) {
+				return 0;
+			}
+
+			$packages = WC()->shipping()->get_packages();
+
+			return isset( $packages[ $index ]['rates'] ) && is_array( $packages[ $index ]['rates'] ) ? count( $packages[ $index ]['rates'] ) : 0;
+		}
+
+		/**
+		 * Enqueues the additional-info card stylesheet on the pages that print the block.
+		 *
+		 * The block is printed by the CLASSIC order form and cart (`woocommerce_after_shipping_rate`
+		 * does not fire for the block form), so the sheet is only loaded on those two pages. The
+		 * version is the file's own mtime, so an edited stylesheet is never served stale.
+		 *
+		 * @internal Hooked on `wp_enqueue_scripts`; not for direct calls.
+		 *
+		 * @since 2.0.2
+		 */
+		public function enqueue_additional_info_styles(): void {
+
+			if ( ! function_exists( 'is_checkout' ) || ! ( is_checkout() || is_cart() ) ) {
+				return;
+			}
+
+			$path = __DIR__ . '/assets/css/frontend/additional-info.css';
+
+			if ( ! file_exists( $path ) ) {
+				return;
+			}
+
+			wp_enqueue_style( 'woodev-shipping-additional-info', plugins_url( basename( $path ), $path ), [], (string) filemtime( $path ) );
 		}
 
 		/**
