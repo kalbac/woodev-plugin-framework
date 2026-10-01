@@ -174,7 +174,8 @@ final class Settings_Page_Registry {
 
 	/**
 	 * Names a provider for a diagnostic: its label and the class of its handler, which is what
-	 * tells the owning plugin's code apart from the framework's.
+	 * tells the owning plugin's code apart from the framework's. The handler is untyped on the
+	 * provider, so a non-object one is named by its type rather than fatalling the diagnostic.
 	 *
 	 * @since 2.0.2
 	 *
@@ -182,7 +183,9 @@ final class Settings_Page_Registry {
 	 * @return string
 	 */
 	private function describe_provider( Settings_Provider $provider ): string {
-		return sprintf( '"%1$s" / %2$s', $provider->get_label(), get_class( $provider->get_handler() ) );
+		$handler = $provider->get_handler();
+
+		return sprintf( '"%1$s" / %2$s', $provider->get_label(), is_object( $handler ) ? get_class( $handler ) : gettype( $handler ) );
 	}
 
 	/**
@@ -241,7 +244,11 @@ final class Settings_Page_Registry {
 			if ( $section->is_connection() ) {
 				$entry['is_connection'] = true;
 				$entry['action_label']  = $section->get_action_label();
-				$entry['supports_test'] = $handler instanceof \Woodev_Settings_Connection_Test;
+				// A composite implements the interface for every tab it serves, so the class says nothing
+				// about THIS block: only the child that owns the block's settings can test it (#1028).
+				$entry['supports_test'] = $handler instanceof Composite_Settings_Handler
+					? $handler->supports_connection_test( $section->get_id() )
+					: $handler instanceof \Woodev_Settings_Connection_Test;
 
 				if ( $handler instanceof \Woodev_Settings_Connection_Status ) {
 					$status = $handler->get_connection_status( $section->get_id() );

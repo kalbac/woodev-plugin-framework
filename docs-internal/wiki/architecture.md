@@ -333,11 +333,20 @@ Moved here from `CURRENT-STATE.md` in s139: they are reference, true regardless 
   IPN/webhook (`payment_complete()` on the storefront), REST, WP-Cron. Register on `init` /
   `plugins_loaded` and pass the `Shipping_Plugin` to `register_provider()`; a provider without it has
   no auto-export (`_doing_it_wrong()` from the admin menu under `WP_DEBUG`). Registered only in admin, auto-export, retry and
-  auto-cancel silently do nothing off the manager's screen.
-- **The auto-export settings («Выгрузка») live on the carrier's own tab of `woodev-settings`, not on the
-  WooCommerce Integrations tab (#1007, #1010 round 3).** `Shipping_Plugin::get_settings_providers()` hands
-  every carrier that tab (`Export_Settings`, options `woodev_{plugin id}_export_*`); a carrier that
-  overrides the method must merge `parent::get_settings_providers()`. The v1 keys
+  auto-cancel silently do nothing off the manager's screen. The same rule decides the «Выгрузка» settings
+  (#1014): `Orders_Registry::plugin_exports_orders()` is evaluated per request and the React settings page
+  reads its schema over REST (not `is_admin()`), so a carrier registered only under `is_admin()` loses
+  the «Выгрузка» section from the UI.
+- **The auto-export settings («Выгрузка») live on the carrier's ONE tab of `woodev-settings`, not on the
+  WooCommerce Integrations tab (#1007, #1010 round 3, #1014).** `Shipping_Plugin::get_settings_providers()`
+  returns a single composite provider (`Composite_Settings_Handler`, tab id = the plugin id). A carrier does
+  NOT override it and does not register a second provider under its plugin id (`Settings_Page_Registry::
+  build_tabs()` keeps the first and reports the duplicate with `_doing_it_wrong()`): its own sections come
+  from `get_tab_settings_providers()` (handler + sections of each returned `Settings_Provider`, merged ahead
+  of «Выгрузка»; a setting-id clash is reported and the contribution left out; a connection section is served
+  by the child that owns it). «Выгрузка» (`Export_Settings`, options `woodev_{plugin id}_export_*`) is added
+  only when `Orders_Registry::plugin_exports_orders()` — the plugin owns an `Orders_Provider` AND a shipment
+  handler in that request — and a rates-only carrier with no sections of its own gets no tab. The v1 keys
   (`auto_export_orders`, `export_statuses` in `woocommerce_{id}_settings`) are carried over once, on the
   first construction of the handler, and left in place.
 

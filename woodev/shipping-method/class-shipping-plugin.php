@@ -733,6 +733,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 * duplicate tab, and `Settings_Page_Registry::build_tabs()` keeps only the first. It overrides
 		 * {@see self::get_tab_settings_providers()} instead.
 		 *
+		 * This runs on the read path of every wp-admin page (the settings page collects its tabs on
+		 * `admin_menu`), so a carrier's mistake must not fatal it: a contribution whose setting ids collide
+		 * with «Выгрузка» or with an earlier contribution is reported with `_doing_it_wrong()` and left out
+		 * of the tab, and the framework's «Выгрузка» stays.
+		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 One composite tab per carrier, with an extension point for the carrier's own
 		 *              sections (#1014); «Выгрузка» only for a carrier that exports.
@@ -742,16 +747,41 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		public function get_settings_providers(): array {
 
 			$providers = parent::get_settings_providers();
+			$export    = Admin\Orders\Orders_Registry::instance()->plugin_exports_orders( $this ) ? $this->get_export_settings() : null;
 			$handlers  = [];
 			$sections  = [];
 			$args      = [];
 
-			foreach ( $this->get_tab_settings_providers() as $contribution ) {
+			foreach ( $this->get_tab_settings_providers() as $index => $contribution ) {
 
 				if ( ! $contribution instanceof \Woodev\Framework\Settings\Settings_Provider ) {
 					_doing_it_wrong(
 						__METHOD__,
-						'get_tab_settings_providers() must return Settings_Provider instances; another entry was ignored.',
+						sprintf(
+							'Carrier "%s": get_tab_settings_providers() must return Settings_Provider instances; entry %s was ignored.',
+							esc_html( $this->get_id() ),
+							esc_html( (string) $index )
+						),
+						'2.0.2'
+					);
+					continue;
+				}
+
+				// «Выгрузка» is validated first, so it is the carrier's contribution that gives way to a clash.
+				try {
+					new \Woodev\Framework\Settings\Composite_Settings_Handler(
+						$this->get_id(),
+						array_merge( $handlers, null === $export ? [] : [ $export ], [ $contribution->get_handler() ] )
+					);
+				} catch ( \InvalidArgumentException $e ) {
+					_doing_it_wrong(
+						__METHOD__,
+						sprintf(
+							'Carrier "%1$s": the settings of get_tab_settings_providers() entry %2$s were left out of the tab. %3$s',
+							esc_html( $this->get_id() ),
+							esc_html( (string) $index ),
+							esc_html( $e->getMessage() )
+						),
 						'2.0.2'
 					);
 					continue;
@@ -774,9 +804,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 				}
 			}
 
-			if ( Admin\Orders\Orders_Registry::instance()->plugin_exports_orders( $this ) ) {
+			if ( null !== $export ) {
 
-				$export     = $this->get_export_settings();
 				$handlers[] = $export;
 				$sections[] = \Woodev\Framework\Settings\Settings_Section::create(
 					Settings\Export_Settings::SECTION_ID,
@@ -790,10 +819,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 				return $providers;
 			}
 
+			// a connection block is tested by the handler that owns its settings (#1028)
+			$connections = [];
+
+			foreach ( $sections as $section ) {
+				if ( $section->is_connection() ) {
+					$connections[ $section->get_id() ] = $section->get_setting_ids();
+				}
+			}
+
 			$providers[] = \Woodev\Framework\Settings\Settings_Provider::create_with_sections(
 				$this->get_id(),
 				$this->get_plugin_name(),
-				new \Woodev\Framework\Settings\Composite_Settings_Handler( $this->get_id(), $handlers ),
+				new \Woodev\Framework\Settings\Composite_Settings_Handler( $this->get_id(), $handlers, $connections ),
 				$args,
 				...$sections
 			);
@@ -811,13 +849,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 * merges them into the carrier's single tab, in the order returned and ahead of the framework's
 		 * «Выгрузка» section. The descriptor's id and label are not used (the tab is named after the
 		 * plugin); the first declared `capability`, `legacy_option_key` and `legacy_page` become the
-		 * tab's. Handlers keep their own option namespaces — no key moves — but two handlers of one tab
-		 * must not share a setting id (`Composite_Settings_Handler` throws), and the ids of «Выгрузка»
-		 * are taken too.
+		 * tab's. A descriptor's `supports` flags are DROPPED: the tab carries none. Handlers keep their own
+		 * option namespaces — no key moves — but two handlers of one tab must not share a setting id, and
+		 * the ids of «Выгрузка» are taken too: a clashing contribution is reported with `_doing_it_wrong()`
+		 * and left out of the tab.
 		 *
-		 * Known limit: a composite tab does not forward `Woodev_Settings_Connection_Test` /
-		 * `Woodev_Settings_Connection_Status`, so a connection section (a «Проверить подключение»
-		 * button) cannot yet live in this tab.
+		 * A connection section (`Settings_Section::create_connection()`) works here: its «Проверить
+		 * подключение» button and status badge are served by the handler that owns the section's settings,
+		 * provided that handler implements `Woodev_Settings_Connection_Test` /
+		 * `Woodev_Settings_Connection_Status`; one that does not shows no button.
 		 *
 		 * Default: none.
 		 *

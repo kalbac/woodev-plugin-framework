@@ -396,9 +396,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 * owning plugin AND a shipment handler for it (#1014).
 		 *
 		 * A rates-only carrier registers neither, so it has nothing to export and the «Выгрузка» settings
-		 * would be dead controls. The answer reflects what has been registered SO FAR — ask it once the
-		 * carrier has had its `init`, as {@see Shipping_Plugin::get_settings_providers()} does (the settings
-		 * page collects its tabs on `admin_menu` / `rest_api_init`).
+		 * would be dead controls. The answer reflects what has been registered SO FAR IN THIS REQUEST — ask
+		 * it once the carrier has had its `init`, as {@see Shipping_Plugin::get_settings_providers()} does (the
+		 * settings page collects its tabs on `admin_menu` / `rest_api_init`).
+		 *
+		 * Per request, and the settings page reads its schema over REST: a carrier that registers its
+		 * provider and handler only under `is_admin()` has them on the admin page load but NOT in the REST
+		 * request that feeds the React page, so «Выгрузка» would vanish from the UI. Register on every
+		 * request (the same rule auto-export itself already needs).
 		 *
 		 * @since 2.0.2
 		 *

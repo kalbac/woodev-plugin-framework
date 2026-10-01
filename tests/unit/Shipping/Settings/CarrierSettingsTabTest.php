@@ -217,11 +217,77 @@ final class CarrierSettingsTabTest extends TestCase {
 	}
 
 	public function test_a_contribution_that_is_not_a_provider_is_reported_and_ignored(): void {
-		Functions\expect( '_doing_it_wrong' )->once();
+		Functions\expect( '_doing_it_wrong' )
+			->once()
+			->with( Mockery::type( 'string' ), Mockery::pattern( '/"cdek".*entry 0/' ), '2.0.2' );
 
 		$plugin = $this->carrier( 'cdek', [ 'not-a-provider', $this->credentials() ] );
 
 		$this->assertSame( [ 'credentials' ], $this->section_ids( $plugin->get_settings_providers()[0] ) );
+	}
+
+	// ----- a setting-id clash must not fatal the admin (#1014 round 2) -----
+
+	public function test_a_contribution_reusing_an_export_setting_id_is_reported_and_left_out_while_the_export_section_stays(): void {
+		$plugin = $this->carrier( 'cdek', [ $this->credentials( [], 'auto_export_orders' ) ] );
+		$this->make_it_export( $plugin );
+
+		Functions\expect( '_doing_it_wrong' )
+			->once()
+			->with( Mockery::type( 'string' ), Mockery::on( static fn( string $m ): bool => str_contains( $m, '"cdek"' ) && str_contains( $m, 'auto_export_orders' ) ), '2.0.2' );
+
+		$providers = $plugin->get_settings_providers();
+
+		$this->assertCount( 1, $providers );
+		$this->assertSame( [ Export_Settings::SECTION_ID ], $this->section_ids( $providers[0] ) );
+	}
+
+	public function test_of_two_contributions_sharing_a_setting_id_the_second_is_left_out(): void {
+		$plugin = $this->carrier( 'cdek', [ $this->credentials(), $this->credentials( [], 'api_key', 'again' ) ] );
+		$this->make_it_export( $plugin );
+
+		Functions\expect( '_doing_it_wrong' )->once();
+
+		$providers = $plugin->get_settings_providers();
+
+		$this->assertSame( [ 'credentials', Export_Settings::SECTION_ID ], $this->section_ids( $providers[0] ) );
+	}
+
+	public function test_a_clash_without_export_leaves_the_first_contribution_in_place(): void {
+		$plugin = $this->carrier( 'cdek', [ $this->credentials(), $this->credentials( [], 'api_key', 'again' ) ] );
+
+		Functions\expect( '_doing_it_wrong' )->once();
+
+		$this->assertSame( [ 'credentials' ], $this->section_ids( $plugin->get_settings_providers()[0] ) );
+	}
+
+	// ----- a connection block of the carrier inside the composite tab (#1028) -----
+
+	public function test_a_contributed_connection_section_is_tested_by_the_handler_that_owns_it(): void {
+		$setting = Mockery::mock();
+		$setting->shouldReceive( 'get_id' )->andReturn( 'token' );
+
+		$handler = Mockery::mock( \Woodev_Abstract_Settings::class . ', \Woodev_Settings_Connection_Test' );
+		$handler->shouldReceive( 'get_settings' )->andReturn( [ 'token' => $setting ] );
+
+		$plugin = $this->carrier(
+			'cdek',
+			[
+				Settings_Provider::create_with_sections(
+					'cdek',
+					'Подключение',
+					$handler,
+					[],
+					Settings_Section::create_connection( 'api', 'Доступ', [ 'token' ], 'Проверить' )
+				),
+			]
+		);
+		$this->make_it_export( $plugin );
+
+		$composite = $plugin->get_settings_providers()[0]->get_handler();
+
+		$this->assertTrue( $composite->supports_connection_test( 'api' ) );
+		$this->assertFalse( $composite->supports_connection_test( Export_Settings::SECTION_ID ) );
 	}
 
 	// ----- a duplicate tab id is reported, first still wins -----

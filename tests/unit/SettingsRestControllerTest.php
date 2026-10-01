@@ -329,6 +329,59 @@ class SettingsRestControllerTest extends TestCase {
 	}
 
 	/**
+	 * #1028: a composite tab satisfies `instanceof Woodev_Settings_Connection_Test` for every block, so the
+	 * controller asks it about THIS block — a block whose owning child cannot test answers 400, not a 500.
+	 */
+	public function test_connection_on_a_composite_whose_owner_cannot_test_is_a_400(): void {
+		$child = Mockery::mock( '\Woodev_Abstract_Settings' );
+		$child->shouldReceive( 'get_settings' )->andReturn( [ 'api_key' => Mockery::mock( [ 'get_id' => 'api_key' ] ) ] );
+
+		$composite = new \Woodev\Framework\Settings\Composite_Settings_Handler( 'cdek', [ $child ], [ 'main' => [ 'api_key' ] ] );
+
+		$provider = Mockery::mock();
+		$provider->shouldReceive( 'get_handler' )->andReturn( $composite );
+		$provider->shouldReceive( 'get_sections' )->andReturn( [ $this->connection_section( 'main', [ 'api_key' ] ) ] );
+
+		$registry = Mockery::mock();
+		$registry->shouldReceive( 'get_provider' )->with( 'cdek' )->andReturn( $provider );
+
+		$controller = new \Woodev_REST_API_Settings_Page( $registry );
+		$result     = $controller->test_connection(
+			$this->request( [ 'provider_id' => 'cdek', 'connection_id' => 'main', 'values' => [] ] )
+		);
+
+		$this->assertInstanceOf( 'WP_Error', $result );
+		$this->assertSame( 'woodev_settings_no_connection_test', $result->get_error_code() );
+	}
+
+	public function test_connection_on_a_composite_is_forwarded_to_the_owning_child(): void {
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+		Functions\when( 'rest_ensure_response' )->returnArg( 1 );
+
+		$child = Mockery::mock( '\Woodev_Abstract_Settings, \Woodev_Settings_Connection_Test' );
+		$child->shouldReceive( 'get_settings' )->andReturn( [ 'api_key' => Mockery::mock( [ 'get_id' => 'api_key' ] ) ] );
+		$child->shouldReceive( 'get_setting' )->with( 'api_key' )->andReturn( null );
+		$child->shouldReceive( 'get_value' )->with( 'api_key', true )->andReturn( 'K' );
+		$child->shouldReceive( 'test_connection' )->once()->with( 'main', [ 'api_key' => 'K' ] )->andReturn( \Woodev_Connection_Result::success( 'ok' ) );
+
+		$composite = new \Woodev\Framework\Settings\Composite_Settings_Handler( 'cdek', [ $child ], [ 'main' => [ 'api_key' ] ] );
+
+		$provider = Mockery::mock();
+		$provider->shouldReceive( 'get_handler' )->andReturn( $composite );
+		$provider->shouldReceive( 'get_sections' )->andReturn( [ $this->connection_section( 'main', [ 'api_key' ] ) ] );
+
+		$registry = Mockery::mock();
+		$registry->shouldReceive( 'get_provider' )->with( 'cdek' )->andReturn( $provider );
+
+		$controller = new \Woodev_REST_API_Settings_Page( $registry );
+		$result     = $controller->test_connection(
+			$this->request( [ 'provider_id' => 'cdek', 'connection_id' => 'main', 'values' => [] ] )
+		);
+
+		$this->assertTrue( $result['success'] );
+	}
+
+	/**
 	 * Control for the connection-test site: no secret in the message, rendered
 	 * line untouched byte-for-byte. Without this, a redactor that returned ''
 	 * or mangled the line would pass silently.
