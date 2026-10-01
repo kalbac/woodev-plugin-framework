@@ -13,8 +13,10 @@
  * - The stepper is back-free but forward-gated (#110): a step label is a button only for
  *   a step already VISITED in this session (index <= the furthest one reached) and never
  *   for the terminal finish step, which is reachable only through the primary button of
- *   the last real step. The same gate covers `#{id}-step` hash navigation. Progress is
- *   in-memory only — the server has no per-step completion state to seed it from.
+ *   the last real step. The same gate covers `#{id}-step` hash navigation. The server has
+ *   no per-step completion state, so the visited boundary lives in the tab's
+ *   sessionStorage (per plugin): a reload resumes at the hash step but never beyond the
+ *   furthest step reached, so a deep link cannot skip the steps in between.
  * - Footer link EXITS the wizard: marks it skipped (non-finish) and redirects to
  *   the admin dashboard.
  * - Finish step: marks the wizard completed once, then shows the success screen.
@@ -44,6 +46,47 @@ function adminUrl() {
 }
 
 /**
+ * sessionStorage key of the furthest visited step index for this plugin's wizard.
+ *
+ * @param {string} pluginId plugin id from the bootstrap.
+ * @return {string} storage key.
+ */
+function visitedKey( pluginId ) {
+	return `woodevSetupWizard:visited:${ pluginId || '' }`;
+}
+
+/**
+ * Reads the stored furthest visited index; 0 (nothing visited beyond the first
+ * step) when storage is unavailable, empty or holds garbage.
+ *
+ * @param {string} pluginId plugin id from the bootstrap.
+ * @return {number} furthest visited step index.
+ */
+function readVisited( pluginId ) {
+	try {
+		const raw = window.sessionStorage.getItem( visitedKey( pluginId ) );
+		const n = parseInt( raw, 10 );
+		return Number.isFinite( n ) && n > 0 ? n : 0;
+	} catch ( e ) {
+		return 0;
+	}
+}
+
+/**
+ * Stores the furthest visited index (best-effort: storage may be blocked).
+ *
+ * @param {string} pluginId plugin id from the bootstrap.
+ * @param {number} value    furthest visited step index.
+ */
+function writeVisited( pluginId, value ) {
+	try {
+		window.sessionStorage.setItem( visitedKey( pluginId ), String( value ) );
+	} catch ( e ) {
+		// Unavailable storage just means the boundary is not remembered across reloads.
+	}
+}
+
+/**
  * Wizard root.
  *
  * @return {Object} React element.
@@ -55,6 +98,7 @@ export default function App() {
 		finishSecondaryActions,
 		pluginName,
 		headerLogoUrl,
+		pluginId,
 	} = window.woodevSetupWizard;
 
 	/**
@@ -71,14 +115,21 @@ export default function App() {
 		}
 		// A deep link (or reload) may resume a step, but never lands on the finish
 		// step — that one is reached only through the last real step's «Продолжить».
-		return 'finish' === steps[ found ].type ? Math.max( 0, found - 1 ) : found;
+		const wanted = 'finish' === steps[ found ].type ? Math.max( 0, found - 1 ) : found;
+		// …and never beyond the furthest step this tab has actually visited, so a
+		// hand-typed or bookmarked hash cannot seed the boundary past unvisited steps.
+		return Math.min( wanted, readVisited( pluginId ) );
 	}
 
 	const [ index, setIndex ] = useState( initialIndex );
-	// Furthest step index reached in this session; monotonic, so writing it during
-	// render is idempotent. Mirrors `index` for the hashchange listener, which
-	// must not close over a stale value.
-	const maxVisitedRef = useRef( index );
+	// Furthest step index reached in this tab; monotonic, so writing it during render
+	// is idempotent. Seeded once from sessionStorage (the stored boundary may sit
+	// beyond the resumed step) and mirrored by `indexRef` for the hashchange listener,
+	// which must not close over a stale value.
+	const maxVisitedRef = useRef( null );
+	if ( null === maxVisitedRef.current ) {
+		maxVisitedRef.current = Math.min( Math.max( index, readVisited( pluginId ) ), steps.length - 1 );
+	}
 	const indexRef = useRef( index );
 	maxVisitedRef.current = Math.max( maxVisitedRef.current, index );
 	indexRef.current = index;
@@ -94,6 +145,11 @@ export default function App() {
 	const isFinish = 'finish' === step.type;
 	const isWelcome = 'content' === step.type && 0 === index;
 	const isSettings = 'settings' === step.type;
+
+	// Remember the visited boundary for a reload in this tab.
+	useEffect( () => {
+		writeVisited( pluginId, maxVisited );
+	}, [ pluginId, maxVisited ] );
 
 	// Keep the URL hash in sync with the active step (WooCommerce-style anchor).
 	useEffect( () => {
