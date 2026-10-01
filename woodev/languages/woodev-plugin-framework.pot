@@ -3082,6 +3082,10 @@ msgstr ""
 msgid "Opening hours"
 msgstr ""
 
+#: shipping-method/pickup/class-pickup-handler.php:1258
+msgid "Local time at the pickup point"
+msgstr ""
+
 #: shipping-method/pickup/class-pickup-handler.php:1256
 msgid "Phone"
 msgstr ""

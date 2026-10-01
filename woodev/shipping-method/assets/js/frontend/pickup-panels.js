@@ -382,6 +382,17 @@
 		'<path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
 
 	/**
+	 * Lucide's `info` glyph (ISC-licensed, redrawn) — the hint button next to the card's
+	 * "Opening hours" heading (#152). Decorative: the button carries its own `aria-label`.
+	 *
+	 * @since 2.0.2
+	 * @type {string}
+	 */
+	var INFO_ICON_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" ' +
+		'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' +
+		'<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>';
+
+	/**
 	 * The framework's own built-in point-type glyphs (issue #195, operator decision) — the
 	 * sidebar list row and the point card's chip now ALWAYS show one of these, replacing the
 	 * old "plugin supplies a marker URL or nothing renders" contract (see {@see pointGlyphMarkup}).
@@ -643,6 +654,184 @@
 		} );
 
 		return wrap.childNodes.length > 0 ? wrap : null;
+	}
+
+	// -------------------------------------------------------------------------
+	// Opening-hours hint — an info button + tooltip beside the section heading (#152)
+	// -------------------------------------------------------------------------
+
+	/** @type {number} counter behind the unique `id` each tooltip needs for `aria-describedby`. */
+	var hoursTipSeq = 0;
+
+	/**
+	 * The one tooltip currently shown, as `{ hide }`, or null. At most one is ever open: a card
+	 * renders one hours block, and {@see hideHoursTip} is also how a re-render, a closing card and
+	 * `destroy()` dismiss a tooltip whose button is about to leave the DOM (no `mouseleave`/`blur`
+	 * ever fires on a removed element, so without this the tooltip would be stranded in the stage).
+	 *
+	 * @since 2.0.2
+	 * @type {{hide: function(): void}|null}
+	 */
+	var activeHoursTip = null;
+
+	/**
+	 * Hides the open opening-hours tooltip, if any.
+	 *
+	 * @since 2.0.2
+	 * @returns {void}
+	 */
+	function hideHoursTip() {
+		if ( activeHoursTip ) {
+			activeHoursTip.hide();
+		}
+	}
+
+	/**
+	 * Adds an info button to a card section's heading, with a tooltip saying the hours are in the
+	 * point's own time zone (by design they are never converted to the buyer's — #152). A no-op when
+	 * the `workTimeNote` i18n string is blank, like every other label here.
+	 *
+	 * WHERE THE TOOLTIP LIVES: the card (`overflow: auto`) and its body (`overflow-y: auto`) would
+	 * clip it, and `position: fixed` is no way out — it resolves against `.woodev-modal__content`'s
+	 * centring `transform` (see the stage's own note in pickup.css). So while shown it sits in the
+	 * STAGE (the positioning context, `overflow: hidden` only at the dialog's edge) at coordinates
+	 * measured from the button; while hidden it rests inside the section, so the `id` its
+	 * `aria-describedby` points at is always in the document. It is a sibling of the heading, never a
+	 * child, so the heading's `textContent` stays exactly the i18n label.
+	 *
+	 * Shown on hover and focus, toggled (pinned) by a click or tap, dismissed by Escape — caught on
+	 * `window` in the CAPTURE phase, which runs before `WoodevModal`'s own capture listener on
+	 * `document`, so Escape closes the tooltip and not the whole dialog — by an outside click, by a
+	 * scroll, and by {@see hideHoursTip}.
+	 *
+	 * @since 2.0.2
+	 * @param {Object}      config  the pickup config (`i18n`).
+	 * @param {HTMLElement} section a section built by {@see cardSection}.
+	 * @returns {void}
+	 */
+	function addHoursTip( config, section ) {
+		var note = text( config, 'workTimeNote' );
+		var heading = section.querySelector( '.woodev-pickup-card__section-title' );
+
+		if ( ! note || ! heading ) {
+			return;
+		}
+
+		var button = document.createElement( 'button' );
+		button.type = 'button';
+		button.className = 'woodev-pickup-card__tip-toggle';
+		button.setAttribute( 'aria-label', text( config, 'workTime' ) );
+		button.innerHTML = INFO_ICON_SVG;
+
+		var tip = document.createElement( 'div' );
+		tip.id = 'woodev-pickup-tip-' + ( ++hoursTipSeq );
+		tip.className = 'woodev-pickup-tip';
+		tip.setAttribute( 'role', 'tooltip' );
+		tip.textContent = note;
+		tip.hidden = true;
+		button.setAttribute( 'aria-describedby', tip.id );
+
+		var stage = null;
+		var visible = false;
+		var pinned = false;
+		var handle = { hide: hide };
+
+		function onKeydown( event ) {
+			if ( 'Escape' === event.key || 'Esc' === event.key || 27 === event.keyCode ) {
+				event.stopPropagation(); // Before the modal's capture listener: dismiss the tip, not the dialog.
+				hide();
+			}
+		}
+
+		function onOutsideClick( event ) {
+			if ( event.target !== button && ! button.contains( event.target ) ) {
+				hide();
+			}
+		}
+
+		function place() {
+			var stageRect = stage.getBoundingClientRect();
+			var buttonRect = button.getBoundingClientRect();
+			var width = tip.offsetWidth;
+			var height = tip.offsetHeight;
+			var left = Math.max( 8, Math.min( buttonRect.left - stageRect.left, stageRect.width - width - 8 ) );
+			var top = buttonRect.bottom - stageRect.top + 6;
+
+			// No room below: flip above the button, when that fits.
+			if ( top + height > stageRect.height - 8 && buttonRect.top - stageRect.top - height - 6 >= 8 ) {
+				top = buttonRect.top - stageRect.top - height - 6;
+			}
+
+			tip.style.left = left + 'px';
+			tip.style.top = top + 'px';
+		}
+
+		function show() {
+			if ( visible ) {
+				return;
+			}
+
+			var host = button.closest( '.woodev-pickup-stage' );
+
+			if ( ! host ) {
+				return;
+			}
+
+			hideHoursTip();
+
+			stage = host;
+			stage.appendChild( tip );
+			tip.hidden = false;
+			place();
+
+			visible = true;
+			activeHoursTip = handle;
+			window.addEventListener( 'keydown', onKeydown, true );
+			document.addEventListener( 'click', onOutsideClick, true );
+			stage.addEventListener( 'scroll', hide, true );
+		}
+
+		function hide() {
+			if ( ! visible ) {
+				return;
+			}
+
+			visible = false;
+			pinned = false;
+			tip.hidden = true;
+			section.appendChild( tip ); // Back home, so `aria-describedby` keeps resolving.
+			window.removeEventListener( 'keydown', onKeydown, true );
+			document.removeEventListener( 'click', onOutsideClick, true );
+			stage.removeEventListener( 'scroll', hide, true );
+
+			if ( activeHoursTip === handle ) {
+				activeHoursTip = null;
+			}
+		}
+
+		button.addEventListener( 'mouseenter', show );
+		button.addEventListener( 'focus', show );
+		button.addEventListener( 'mouseleave', function() {
+			if ( ! pinned ) {
+				hide();
+			}
+		} );
+		button.addEventListener( 'blur', hide );
+
+		// A tap (touch has no hover) or a click pins the tooltip open; the next one closes it.
+		button.addEventListener( 'click', function() {
+			if ( pinned ) {
+				hide();
+
+				return;
+			}
+
+			show();
+			pinned = visible;
+		} );
+
+		heading.appendChild( button );
+		section.appendChild( tip );
 	}
 
 	// -------------------------------------------------------------------------
@@ -1472,13 +1661,22 @@
 		// normalisation) falls back to the flat `work_time` string.
 		var scheduleRows = buildScheduleRows( point.schedule_rows );
 
+		// The schedule is the carrier's, in the POINT's time zone — never converted to the buyer's —
+		// so the heading carries an info button saying so, for either form of the hours block.
+		var hoursSection = null;
+
 		if ( scheduleRows ) {
-			body.appendChild( cardSection( text( config, 'workTime' ), scheduleRows ) );
+			hoursSection = cardSection( text( config, 'workTime' ), scheduleRows );
 		} else if ( fieldValue( point.work_time ) ) {
-			body.appendChild( cardSection(
+			hoursSection = cardSection(
 				text( config, 'workTime' ),
 				cardValue( 'woodev-pickup-card__worktime', fieldValue( point.work_time ) )
-			) );
+			);
+		}
+
+		if ( hoursSection ) {
+			addHoursTip( config, hoursSection );
+			body.appendChild( hoursSection );
 		}
 
 		if ( null !== point.max_weight && undefined !== point.max_weight ) {
@@ -1697,6 +1895,7 @@
 	 * @returns {void}
 	 */
 	function renderCard( self ) {
+		hideHoursTip();
 		captureCardFocusIntent( self );
 
 		var scrollTop = self._cardEl.scrollTop;
@@ -3611,6 +3810,7 @@
 	 * @returns {void}
 	 */
 	Panels.prototype.closeCard = function() {
+		hideHoursTip();
 		this._stage.classList.remove( 'is-card' );
 		this._activeGroup = null;
 		this._cardFocusIntent = null; // #171 — the card is gone; nothing left to restore focus into.
@@ -4023,6 +4223,8 @@
 	 * @returns {void}
 	 */
 	Panels.prototype.destroy = function() {
+		hideHoursTip();
+
 		if ( this._searchTimer ) {
 			window.clearTimeout( this._searchTimer );
 			this._searchTimer = null;

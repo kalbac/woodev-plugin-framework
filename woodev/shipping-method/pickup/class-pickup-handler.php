@@ -1253,6 +1253,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				'howToGet'       => __( 'Getting there', 'woodev-plugin-framework' ),
 				'paymentMethods' => __( 'Payment methods', 'woodev-plugin-framework' ),
 				'workTime'       => __( 'Opening hours', 'woodev-plugin-framework' ),
+				// The hint behind the info icon next to `workTime` (#152): the schedule is the
+				// carrier's own, in the POINT's time zone, never converted to the buyer's.
+				'workTimeNote'   => __( 'Local time at the pickup point', 'woodev-plugin-framework' ),
 				'phone'          => __( 'Phone', 'woodev-plugin-framework' ),
 				'maxWeight'      => __( 'Maximum weight', 'woodev-plugin-framework' ),
 				'allTypes'       => __( 'All point types', 'woodev-plugin-framework' ),

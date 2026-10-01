@@ -1528,6 +1528,177 @@ describe( 'opening hours from the structured schedule', () => {
 } );
 
 // -----------------------------------------------------------------------
+// Issue #152 follow-up: the hours are the carrier's, in the POINT's time zone, never converted to the
+// buyer's — an info button next to the heading says so, with a tooltip (hover, focus, tap, Escape).
+// -----------------------------------------------------------------------
+
+describe( 'the opening-hours info tooltip', () => {
+	const NOTE = 'Время указано местное — по часовому поясу пункта выдачи';
+	const tipConfig = { ...cardConfig, i18n: { ...cardConfig.i18n, workTimeNote: NOTE } };
+	const rows = [ { days: 'Mon–Fri', hours: '09:00–18:00' } ];
+
+	function open( cfg, over ) {
+		const panels = mount( cfg );
+		panels.openCard( { key: 'k', size: 1, points: [ point( over ) ] } );
+
+		return panels;
+	}
+
+	const toggleOf = ( panels ) => panels.root.querySelector( '.woodev-pickup-card__tip-toggle' );
+	const tipOf = ( panels ) => document.getElementById( toggleOf( panels ).getAttribute( 'aria-describedby' ) );
+	const fire = ( el, type, init ) => el.dispatchEvent( new window.Event( type, init ) );
+	const escape = ( target ) => target.dispatchEvent(
+		new window.KeyboardEvent( 'keydown', { key: 'Escape', bubbles: true, cancelable: true } )
+	);
+
+	it( 'puts the button in the hours heading when structured rows are shown', () => {
+		const panels = open( tipConfig, { schedule_rows: rows } );
+		const heading = toggleOf( panels ).closest( '.woodev-pickup-card__section-title' );
+
+		expect( heading ).not.toBeNull();
+		expect( heading.firstChild.textContent ).toBe( cardConfig.i18n.workTime );
+		expect( heading.textContent ).toBe( cardConfig.i18n.workTime ); // the icon adds no text.
+	} );
+
+	it( 'puts the button in the hours heading on the flat work_time fallback too', () => {
+		const panels = open( tipConfig, { work_time: 'ежедневно 9:00-21:00' } );
+
+		expect( toggleOf( panels ) ).not.toBeNull();
+	} );
+
+	it( 'draws no button when the point has no hours', () => {
+		const panels = open( tipConfig, { address: 'Москва, Тверская 5' } );
+
+		expect( toggleOf( panels ) ).toBeNull();
+		expect( panels.root.querySelector( '.woodev-pickup-tip' ) ).toBeNull();
+	} );
+
+	it( 'draws no button when the note string is missing, never a hardcoded default', () => {
+		const panels = open( cardConfig, { schedule_rows: rows } );
+
+		expect( toggleOf( panels ) ).toBeNull();
+		expect( panels.root.querySelector( '.woodev-pickup-tip' ) ).toBeNull();
+	} );
+
+	it( 'wires a focusable button to a role=tooltip element carrying the localized text', () => {
+		const panels = open( tipConfig, { schedule_rows: rows } );
+		const button = toggleOf( panels );
+		const tip = tipOf( panels );
+
+		expect( button.tagName ).toBe( 'BUTTON' );
+		expect( button.getAttribute( 'type' ) ).toBe( 'button' );
+		expect( button.getAttribute( 'aria-label' ) ).toBe( cardConfig.i18n.workTime );
+		expect( tip ).not.toBeNull();
+		expect( tip.getAttribute( 'role' ) ).toBe( 'tooltip' );
+		expect( tip.textContent ).toBe( NOTE );
+		expect( tip.hidden ).toBe( true );
+	} );
+
+	it( 'shows on hover and focus, hides on mouseleave and blur, inside the stage', () => {
+		const panels = open( tipConfig, { schedule_rows: rows } );
+		const button = toggleOf( panels );
+		const tip = tipOf( panels );
+
+		fire( button, 'mouseenter' );
+		expect( tip.hidden ).toBe( false );
+		expect( tip.parentNode ).toBe( panels._stage ); // out of the scrolling card, so never clipped by it.
+
+		fire( button, 'mouseleave' );
+		expect( tip.hidden ).toBe( true );
+
+		fire( button, 'focus' );
+		expect( tip.hidden ).toBe( false );
+
+		fire( button, 'blur' );
+		expect( tip.hidden ).toBe( true );
+		expect( panels.root.contains( tip ) ).toBe( true ); // rests back in the card, `aria-describedby` still resolves.
+	} );
+
+	it( 'a tap pins it open past mouseleave, and a second tap closes it', () => {
+		const panels = open( tipConfig, { schedule_rows: rows } );
+		const button = toggleOf( panels );
+		const tip = tipOf( panels );
+
+		button.click(); // a touch tap with no preceding hover.
+		expect( tip.hidden ).toBe( false );
+
+		fire( button, 'mouseleave' );
+		expect( tip.hidden ).toBe( false );
+
+		button.click();
+		expect( tip.hidden ).toBe( true );
+	} );
+
+	it( 'a click after hovering pins it instead of closing it', () => {
+		const panels = open( tipConfig, { schedule_rows: rows } );
+		const button = toggleOf( panels );
+		const tip = tipOf( panels );
+
+		fire( button, 'mouseenter' );
+		button.click();
+		fire( button, 'mouseleave' );
+
+		expect( tip.hidden ).toBe( false );
+	} );
+
+	it( 'Escape hides it and does not reach the modal listener behind it', () => {
+		const panels = open( tipConfig, { schedule_rows: rows } );
+		const button = toggleOf( panels );
+		const tip = tipOf( panels );
+		const modalEscape = jest.fn();
+
+		// Same shape as WoodevModal's own: `document`, capture phase.
+		document.addEventListener( 'keydown', modalEscape, true );
+
+		fire( button, 'focus' );
+		escape( button );
+
+		expect( tip.hidden ).toBe( true );
+		expect( modalEscape ).not.toHaveBeenCalled();
+
+		// Once dismissed the tooltip no longer swallows Escape: the dialog closes as usual.
+		escape( button );
+		expect( modalEscape ).toHaveBeenCalledTimes( 1 );
+
+		document.removeEventListener( 'keydown', modalEscape, true );
+	} );
+
+	it( 'an outside click closes a pinned tooltip', () => {
+		const panels = open( tipConfig, { schedule_rows: rows } );
+		const tip = tipOf( panels );
+
+		toggleOf( panels ).click();
+		expect( tip.hidden ).toBe( false );
+
+		panels.root.click();
+		expect( tip.hidden ).toBe( true );
+	} );
+
+	it( 'is dismissed when the card closes, so it is never stranded in the stage', () => {
+		const panels = open( tipConfig, { schedule_rows: rows } );
+		const tip = tipOf( panels );
+
+		toggleOf( panels ).click();
+		panels.closeCard();
+
+		expect( tip.hidden ).toBe( true );
+		expect( panels._stage.querySelector( ':scope > .woodev-pickup-tip' ) ).toBeNull();
+	} );
+
+	it( 'is dismissed when the card re-renders, and the new card has its own wiring', () => {
+		const panels = open( tipConfig, { schedule_rows: rows } );
+		const oldTip = tipOf( panels );
+
+		toggleOf( panels ).click();
+		panels.setSelectedId( 'p1' ); // re-renders the open card.
+
+		expect( oldTip.hidden ).toBe( true );
+		expect( tipOf( panels ) ).not.toBe( oldTip );
+		expect( tipOf( panels ).hidden ).toBe( true );
+	} );
+} );
+
+// -----------------------------------------------------------------------
 // Issue #200: payment methods used to render as a bare `', '`-joined string while the
 // neighbouring "Услуги" block was already chips — "два разных языка для двух однотипных
 // списков" in the operator's own words. Both lists now share the SAME chip markup/classes
