@@ -748,9 +748,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 			$providers = parent::get_settings_providers();
 			$export    = Admin\Orders\Orders_Registry::instance()->plugin_exports_orders( $this ) ? $this->get_export_settings() : null;
-			$handlers  = [];
-			$sections  = [];
-			$args      = [];
+			$handlers    = [];
+			$sections    = [];
+			$args        = [];
+			$connections = [];
 
 			foreach ( $this->get_tab_settings_providers() as $index => $contribution ) {
 
@@ -767,7 +768,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 					continue;
 				}
 
+				// a descriptor built with a null / foreign handler would fatal the composite (an \Error, not caught below)
+				if ( ! $contribution->get_handler() instanceof \Woodev_Abstract_Settings ) {
+					_doing_it_wrong(
+						__METHOD__,
+						sprintf(
+							'Carrier "%1$s": the handler of get_tab_settings_providers() entry %2$s is not a Woodev_Abstract_Settings; the entry was ignored.',
+							esc_html( $this->get_id() ),
+							esc_html( (string) $index )
+						),
+						'2.0.2'
+					);
+					continue;
+				}
+
 				// «Выгрузка» is validated first, so it is the carrier's contribution that gives way to a clash.
+				// A throwaway composite per contribution is O(n^2) in handlers — fine at one to three contributions.
 				try {
 					new \Woodev\Framework\Settings\Composite_Settings_Handler(
 						$this->get_id(),
@@ -789,6 +805,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 				$handlers[] = $contribution->get_handler();
 				$sections   = array_merge( $sections, $contribution->get_sections() );
+
+				// a connection block is tested by the handler that CONTRIBUTED it — not derived from its setting ids,
+				// which a handshake block (`create_connection()` with `[]`) does not have (#1028)
+				foreach ( $contribution->get_sections() as $section ) {
+					if ( $section->is_connection() ) {
+						$connections[ $section->get_id() ] = $contribution->get_handler();
+					}
+				}
 
 				// the tab-level attributes: the first contribution that declares one supplies it
 				$declared = [
@@ -819,15 +843,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 				return $providers;
 			}
 
-			// a connection block is tested by the handler that owns its settings (#1028)
-			$connections = [];
-
-			foreach ( $sections as $section ) {
-				if ( $section->is_connection() ) {
-					$connections[ $section->get_id() ] = $section->get_setting_ids();
-				}
-			}
-
 			$providers[] = \Woodev\Framework\Settings\Settings_Provider::create_with_sections(
 				$this->get_id(),
 				$this->get_plugin_name(),
@@ -854,9 +869,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 * the ids of «Выгрузка» are taken too: a clashing contribution is reported with `_doing_it_wrong()`
 		 * and left out of the tab.
 		 *
-		 * A connection section (`Settings_Section::create_connection()`) works here: its «Проверить
-		 * подключение» button and status badge are served by the handler that owns the section's settings,
-		 * provided that handler implements `Woodev_Settings_Connection_Test` /
+		 * A connection section (`Settings_Section::create_connection()`) works here, a handshake one (no
+		 * setting ids) included: its «Проверить подключение» button and status badge are served by the
+		 * handler of the descriptor that contributed the section, provided that handler implements `Woodev_Settings_Connection_Test` /
 		 * `Woodev_Settings_Connection_Status`; one that does not shows no button.
 		 *
 		 * Default: none.

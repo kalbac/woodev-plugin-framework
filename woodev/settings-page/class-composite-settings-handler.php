@@ -19,12 +19,13 @@ defined( 'ABSPATH' ) || exit;
  *
  * It implements `Woodev_Settings_Connection_Test` and `Woodev_Settings_Connection_Status` so a
  * carrier's `create_connection()` section can live in a composite tab (#1014, #1028): the call is
- * forwarded to the child that owns the connection section's setting ids, and ONLY a child that
+ * forwarded to the child that CONTRIBUTED the connection section, and ONLY a child that
  * implements the interface is asked. Implementing an interface is a class-level fact, so
  * `instanceof` cannot tell whether THIS tab's connection block can be tested — ask
  * {@see self::supports_connection_test()} (the schema builder and the REST controller do). The
- * section → setting ids map is the constructor's `$connections`; a connection id outside it has no
- * owner, so nothing is forwarded.
+ * owner is declared, not derived: the constructor's `$connections` maps a connection section id to its
+ * handler, because a handshake block (`create_connection()` with no setting ids) has no setting to
+ * derive an owner from. A connection id outside the map has no owner, so nothing is forwarded.
  *
  * `get_value()` / `update_value()` throw `\Woodev_Plugin_Exception` on an unknown id, mirroring
  * `Woodev_Abstract_Settings` exactly, so this class is behaviourally substitutable for a real
@@ -47,7 +48,7 @@ final class Composite_Settings_Handler implements \Woodev_Settings_Connection_Te
 	/** @var string */
 	private string $id;
 
-	/** @var array<string,string[]> connection section id => the setting ids that section declares. */
+	/** @var array<string,\Woodev_Abstract_Settings> connection section id => the handler that contributed the section. */
 	private array $connections;
 
 	/** @var \Woodev_Abstract_Settings[] setting id => owning child. */
@@ -58,10 +59,10 @@ final class Composite_Settings_Handler implements \Woodev_Settings_Connection_Te
 
 	/**
 	 * @since 2.0.2
-	 * @param string                      $id       tab-level id (NOT an option namespace — children own those).
-	 * @param \Woodev_Abstract_Settings[] $children handlers, in section order.
-	 * @param array<string,string[]>      $connections optional: connection section id => its declared setting ids, so a
-	 *                                                 connection test / status is forwarded to the child that owns them.
+	 * @param string                                  $id       tab-level id (NOT an option namespace — children own those).
+	 * @param \Woodev_Abstract_Settings[]             $children handlers, in section order.
+	 * @param array<string,\Woodev_Abstract_Settings> $connections optional: connection section id => the child handler
+	 *                                                 that contributed it, so a connection test / status is forwarded there.
 	 * @throws \InvalidArgumentException when two children register the same setting id.
 	 */
 	public function __construct( string $id, array $children, array $connections = [] ) {
@@ -217,19 +218,13 @@ final class Composite_Settings_Handler implements \Woodev_Settings_Connection_Te
 	}
 
 	/**
-	 * The child that owns a connection block: the owner of its first declared setting id.
+	 * The child that owns a connection block: the handler it was declared with.
 	 *
 	 * @param string $connection_id the connection section id.
-	 * @return \Woodev_Abstract_Settings|null null for an unknown block, or one declaring no setting owned here.
+	 * @return \Woodev_Abstract_Settings|null null for a block outside the map.
 	 */
 	private function get_connection_owner( string $connection_id ): ?\Woodev_Abstract_Settings {
-		foreach ( $this->connections[ $connection_id ] ?? [] as $setting_id ) {
-			if ( isset( $this->owner_by_id[ $setting_id ] ) ) {
-				return $this->owner_by_id[ $setting_id ];
-			}
-		}
-
-		return null;
+		return $this->connections[ $connection_id ] ?? null;
 	}
 
 	/**

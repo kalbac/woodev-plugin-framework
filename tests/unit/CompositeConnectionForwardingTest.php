@@ -57,7 +57,7 @@ final class CompositeConnectionForwardingTest extends TestCase {
 		$owner = $this->child( 'token', '\Woodev_Settings_Connection_Test' );
 		$owner->shouldReceive( 'test_connection' )->once()->with( 'api', [ 'token' => 'T' ] )->andReturn( \Woodev_Connection_Result::success( 'ok' ) );
 
-		$composite = new Composite_Settings_Handler( 'cdek', [ $other, $owner ], [ 'api' => [ 'token' ] ] );
+		$composite = new Composite_Settings_Handler( 'cdek', [ $other, $owner ], [ 'api' => $owner ] );
 
 		$this->assertTrue( $composite->supports_connection_test( 'api' ) );
 		$this->assertTrue( $composite->test_connection( 'api', [ 'token' => 'T' ] )->is_success() );
@@ -68,7 +68,7 @@ final class CompositeConnectionForwardingTest extends TestCase {
 		$with->shouldReceive( 'get_connection_status' )->once()->with( 'api' )->andReturn( \Woodev_Connection_Result::success( 'Подключено' ) );
 		$without = $this->child( 'other_token', '\Woodev_Settings_Connection_Test' );
 
-		$composite = new Composite_Settings_Handler( 'cdek', [ $with, $without ], [ 'api' => [ 'token' ], 'second' => [ 'other_token' ] ] );
+		$composite = new Composite_Settings_Handler( 'cdek', [ $with, $without ], [ 'api' => $with, 'second' => $without ] );
 
 		$this->assertSame( 'Подключено', $composite->get_connection_status( 'api' )->get_message() );
 		$this->assertNull( $composite->get_connection_status( 'second' ) );
@@ -77,13 +77,26 @@ final class CompositeConnectionForwardingTest extends TestCase {
 	public function test_a_child_without_the_interface_is_not_asked_and_cannot_be_tested(): void {
 		$plain = $this->child( 'token' );
 
-		$composite = new Composite_Settings_Handler( 'cdek', [ $plain ], [ 'api' => [ 'token' ] ] );
+		$composite = new Composite_Settings_Handler( 'cdek', [ $plain ], [ 'api' => $plain ] );
 
 		$this->assertFalse( $composite->supports_connection_test( 'api' ) );
 		$this->assertNull( $composite->get_connection_status( 'api' ) );
 
 		$this->expectException( \Woodev_Plugin_Exception::class );
 		$composite->test_connection( 'api', [] );
+	}
+
+	public function test_a_handshake_block_with_no_setting_ids_is_forwarded_to_its_declared_handler(): void {
+		$other = $this->child( 'currency' );
+		$owner = $this->child( 'token', '\Woodev_Settings_Connection_Test, \Woodev_Settings_Connection_Status' );
+		$owner->shouldReceive( 'test_connection' )->once()->with( 'widget', [] )->andReturn( \Woodev_Connection_Result::success( 'ok' ) );
+		$owner->shouldReceive( 'get_connection_status' )->once()->with( 'widget' )->andReturn( \Woodev_Connection_Result::success( 'Подключено' ) );
+
+		$composite = new Composite_Settings_Handler( 'cdek', [ $other, $owner ], [ 'widget' => $owner ] );
+
+		$this->assertTrue( $composite->supports_connection_test( 'widget' ) );
+		$this->assertTrue( $composite->test_connection( 'widget', [] )->is_success() );
+		$this->assertSame( 'Подключено', $composite->get_connection_status( 'widget' )->get_message() );
 	}
 
 	public function test_a_connection_id_outside_the_map_has_no_owner(): void {
@@ -95,17 +108,18 @@ final class CompositeConnectionForwardingTest extends TestCase {
 
 	public function test_the_schema_shows_the_button_only_for_a_block_whose_owner_can_test(): void {
 		$tester = $this->child( 'token', '\Woodev_Settings_Connection_Test, \Woodev_Settings_Connection_Status' );
-		$tester->shouldReceive( 'get_connection_status' )->with( 'tested' )->andReturn( \Woodev_Connection_Result::success( 'Подключено' ) );
+		$tester->shouldReceive( 'get_connection_status' )->andReturn( \Woodev_Connection_Result::success( 'Подключено' ) );
 		$plain = $this->child( 'login' );
 
-		$composite = new Composite_Settings_Handler( 'cdek', [ $tester, $plain ], [ 'tested' => [ 'token' ], 'untested' => [ 'login' ] ] );
+		$composite = new Composite_Settings_Handler( 'cdek', [ $tester, $plain ], [ 'tested' => $tester, 'untested' => $plain, 'handshake' => $tester ] );
 		$provider  = Settings_Provider::create_with_sections(
 			'cdek',
 			'СДЭК',
 			$composite,
 			[],
 			Settings_Section::create_connection( 'tested', 'Подключение', [ 'token' ], 'Проверить' ),
-			Settings_Section::create_connection( 'untested', 'Вход', [ 'login' ], 'Проверить' )
+			Settings_Section::create_connection( 'untested', 'Вход', [ 'login' ], 'Проверить' ),
+			Settings_Section::create_connection( 'handshake', 'Виджет', [], 'Подключить' )
 		);
 
 		$ref = new \ReflectionMethod( Settings_Page_Registry::instance(), 'build_sections' );
@@ -118,5 +132,6 @@ final class CompositeConnectionForwardingTest extends TestCase {
 		$this->assertArrayHasKey( 'status', $sections[0] );
 		$this->assertFalse( $sections[1]['supports_test'] );
 		$this->assertArrayNotHasKey( 'status', $sections[1] );
+		$this->assertTrue( $sections[2]['supports_test'], 'a handshake block (no setting ids) still has its owner' );
 	}
 }

@@ -290,6 +290,41 @@ final class CarrierSettingsTabTest extends TestCase {
 		$this->assertFalse( $composite->supports_connection_test( Export_Settings::SECTION_ID ) );
 	}
 
+	public function test_a_contributed_handshake_connection_section_with_no_setting_ids_is_still_tested_by_its_handler(): void {
+		$handler = Mockery::mock( \Woodev_Abstract_Settings::class . ', \Woodev_Settings_Connection_Test' );
+		$handler->shouldReceive( 'get_settings' )->andReturn( [] );
+
+		$plugin = $this->carrier(
+			'cdek',
+			[
+				Settings_Provider::create_with_sections(
+					'cdek',
+					'Виджет',
+					$handler,
+					[],
+					Settings_Section::create_connection( 'widget', 'Виджет ЛК', [], 'Подключить' )
+				),
+			]
+		);
+		$this->make_it_export( $plugin );
+
+		$composite = $plugin->get_settings_providers()[0]->get_handler();
+
+		$this->assertTrue( $composite->supports_connection_test( 'widget' ) );
+	}
+
+	public function test_a_contribution_whose_handler_is_not_a_settings_handler_is_reported_and_left_out(): void {
+		$null_handler = Settings_Provider::create( 'cdek', 'Битый', null, [ Settings_Section::create( 'broken', 'Битый', [] ) ] );
+
+		Functions\expect( '_doing_it_wrong' )
+			->once()
+			->with( Mockery::type( 'string' ), Mockery::pattern( '/"cdek".*entry 0.*not a Woodev_Abstract_Settings/' ), '2.0.2' );
+
+		$plugin = $this->carrier( 'cdek', [ $null_handler, $this->credentials() ] );
+
+		$this->assertSame( [ 'credentials' ], $this->section_ids( $plugin->get_settings_providers()[0] ) );
+	}
+
 	// ----- a duplicate tab id is reported, first still wins -----
 
 	public function test_a_second_provider_under_the_plugin_id_is_reported_and_the_first_one_wins(): void {

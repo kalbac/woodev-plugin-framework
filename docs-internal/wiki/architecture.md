@@ -343,8 +343,8 @@ Moved here from `CURRENT-STATE.md` in s139: they are reference, true regardless 
   NOT override it and does not register a second provider under its plugin id (`Settings_Page_Registry::
   build_tabs()` keeps the first and reports the duplicate with `_doing_it_wrong()`): its own sections come
   from `get_tab_settings_providers()` (handler + sections of each returned `Settings_Provider`, merged ahead
-  of «Выгрузка»; a setting-id clash is reported and the contribution left out; a connection section is served
-  by the child that owns it). «Выгрузка» (`Export_Settings`, options `woodev_{plugin id}_export_*`) is added
+  of «Выгрузка»; a setting-id clash is reported and the contribution left out; a connection section — handshake ones with no
+  setting ids included — is served by the contributing handler). «Выгрузка» (`Export_Settings`, options `woodev_{plugin id}_export_*`) is added
   only when `Orders_Registry::plugin_exports_orders()` — the plugin owns an `Orders_Provider` AND a shipment
   handler in that request — and a rates-only carrier with no sections of its own gets no tab. The v1 keys
   (`auto_export_orders`, `export_statuses` in `woocommerce_{id}_settings`) are carried over once, on the

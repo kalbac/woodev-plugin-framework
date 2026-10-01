@@ -336,7 +336,7 @@ class SettingsRestControllerTest extends TestCase {
 		$child = Mockery::mock( '\Woodev_Abstract_Settings' );
 		$child->shouldReceive( 'get_settings' )->andReturn( [ 'api_key' => Mockery::mock( [ 'get_id' => 'api_key' ] ) ] );
 
-		$composite = new \Woodev\Framework\Settings\Composite_Settings_Handler( 'cdek', [ $child ], [ 'main' => [ 'api_key' ] ] );
+		$composite = new \Woodev\Framework\Settings\Composite_Settings_Handler( 'cdek', [ $child ], [ 'main' => $child ] );
 
 		$provider = Mockery::mock();
 		$provider->shouldReceive( 'get_handler' )->andReturn( $composite );
@@ -364,7 +364,7 @@ class SettingsRestControllerTest extends TestCase {
 		$child->shouldReceive( 'get_value' )->with( 'api_key', true )->andReturn( 'K' );
 		$child->shouldReceive( 'test_connection' )->once()->with( 'main', [ 'api_key' => 'K' ] )->andReturn( \Woodev_Connection_Result::success( 'ok' ) );
 
-		$composite = new \Woodev\Framework\Settings\Composite_Settings_Handler( 'cdek', [ $child ], [ 'main' => [ 'api_key' ] ] );
+		$composite = new \Woodev\Framework\Settings\Composite_Settings_Handler( 'cdek', [ $child ], [ 'main' => $child ] );
 
 		$provider = Mockery::mock();
 		$provider->shouldReceive( 'get_handler' )->andReturn( $composite );
