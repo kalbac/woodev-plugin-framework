@@ -76,3 +76,4 @@
 ## Related
 
 - [../GOTCHAS.md](../GOTCHAS.md) — the topic map
+- [tooling/git] **`gh pr merge --delete-branch` from a DETACHED checkout merges the PR, then errors «not on any branch» — it reads as a refusal, a retry is a no-op, and the remote branch survives. Pass `-R <owner/repo>` and verify with `gh pr view`.** → [gh-pr-merge-from-a-detached-head-merges-then-errors](../gotchas/gh-pr-merge-from-a-detached-head-merges-then-errors.md) (s149)
