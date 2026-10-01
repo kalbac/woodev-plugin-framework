@@ -213,13 +213,71 @@
 .woodev-pickup-stage :where( img )     { max-width: none; height: auto; }
 
 /* -------------------------------------------------------------------------
- * Trigger — the button mounted into the §8 `data-woodev-pickup-slot` anchor.
- * Intentionally minimal: it carries WooCommerce's own `.button` class too, so
- * the theme's button styling should lead. Only spacing is asserted.
+ * Trigger — the button mounted into the §8 `data-woodev-pickup-slot` anchor (classic checkout;
+ * the block checkout mounts no trigger of ours).
+ *
+ * Shape = the SITE's, colour = OURS (issue #379; operator, 01.10.2026). The button carries
+ * `button` plus the theme's own button class — `wp-element-button` on a block theme, nothing on a
+ * classic one — which `pickup-mount.js`'s `triggerClassName()` appends from the server's
+ * `themeButtonClass` (`wc_wp_theme_get_element_class_name( 'button' )`, the way WooCommerce styles
+ * its own buttons). So padding, size, font, weight, line height, radius and display come from
+ * the theme's `.button` / theme.json's button element, and NOTHING here sets them. What this file
+ * owns is the fill, the text colour and the states: the same fill/contrast pair as the modal's
+ * primary button `.woodev-pickup-card__cta`, read as
+ * `--woodev-pickup-accent-fill` / `-contrast` / `-accent` off ITSELF (`applyTriggerAccent()`
+ * writes them on the button, because the modal's host — the stage — is not an ancestor of a
+ * checkout button). No accent set → the var() literals below are the modal's own defaults, so the
+ * two still match.
+ *
+ * NOT full width, unlike the card CTA: the card's button is the one action of a footer, while this
+ * one sits inline in a theme-owned shipping-rate list / review table cell, where an auto-width
+ * button is what every other `.button` there does.
+ *
+ * Scoped to OUR class only. The class is written twice (and `.button` kept) so the colour
+ * rules outrank both WooCommerce's `.woocommerce button.button` (0,2,1) / its `:hover` (0,3,1)
+ * and theme.json's `:root :where( .wp-element-button )` family (0,1,0, `:hover` / `:focus` /
+ * `:active` included: `:where()` adds nothing) without `!important`; a theme that wants its own
+ * look can still beat this with an ID or `!important`.
  * ---------------------------------------------------------------------- */
 
 .woodev-pickup-trigger {
 	margin-top: 0.5em;
+}
+
+.woodev-pickup-trigger.woodev-pickup-trigger.button {
+	color: var( --woodev-pickup-accent-contrast, #fff );
+	background: var( --woodev-pickup-accent-fill, #047a9b );
+	cursor: pointer;
+}
+
+/* Hover/active darken the whole button through `filter`, not a recomputed background: the fill and
+   the text scale together, so whichever of white/black the server paired with the accent keeps
+   reading, and no `color-mix()` support is needed. */
+.woodev-pickup-trigger.woodev-pickup-trigger.button:hover {
+	color: var( --woodev-pickup-accent-contrast, #fff );
+	background: var( --woodev-pickup-accent-fill, #047a9b );
+	filter: brightness( 0.9 );
+}
+
+.woodev-pickup-trigger.woodev-pickup-trigger.button:active {
+	filter: brightness( 0.8 );
+}
+
+/* `outline-offset: 2px` (the modal's controls use 1px): the ring is the accent and the fill is the
+   accent, so it needs a gap to stay visible against the button itself. */
+.woodev-pickup-trigger.woodev-pickup-trigger.button:focus-visible {
+	outline: 2px solid var( --woodev-pickup-accent, #06aedd );
+	outline-offset: 2px;
+}
+
+/* Same grey as `.woodev-pickup-card__cta:disabled`. `[disabled]` is in the selector (0,5,0) because
+   WooCommerce's own `.woocommerce button.button:disabled[disabled]` rule is (0,4,1). */
+.woodev-pickup-trigger.woodev-pickup-trigger.button:disabled[disabled] {
+	color: #646970;
+	background: #dcdcde;
+	filter: none;
+	cursor: not-allowed;
+	opacity: 1;
 }
 
 /* -------------------------------------------------------------------------

@@ -3274,6 +3274,22 @@ msgstr ""
 msgid "Когда включено, карта пунктов выдачи закрывается сама сразу после выбора точки. Выключено — покупатель закрывает карту вручную."
 msgstr ""
 
+#: shipping-method/pickup/class-pickup-map-settings.php:180
+msgid "Акцентный цвет"
+msgstr ""
+
+#: shipping-method/pickup/class-pickup-map-settings.php:181
+msgid "Оставьте пустым — тогда цвет берётся из настроек способа доставки."
+msgstr ""
+
+#: shipping-method/pickup/class-pickup-map-settings.php:184
+msgid "Введите цвет в формате #rrggbb."
+msgstr ""
+
+#: shipping-method/pickup/class-pickup-map-settings.php:191
+msgid "Цвет кнопок, выбранных пунктов и кластеров на карте пунктов выдачи; цвет текста на нём подбирается автоматически, чтобы он читался. Если поле пустое, используется фирменный цвет самого способа доставки."
+msgstr ""
+
 #: shipping-method/rest-api/class-field-source-controller.php:181
 msgid "Too many requests. Please slow down."
 msgstr ""
@@ -4789,6 +4805,14 @@ msgstr ""
 
 #: assets/build/settings-page/index.js:1 assets/build/setup-wizard/index.js:1 assets/build/shipping-orders-page/index.js:1 assets/build/ui-kit-gallery/index.js:1
 msgid "Show password"
+msgstr ""
+
+#: assets/build/settings-page/index.js:1 assets/build/setup-wizard/index.js:1 assets/build/shipping-orders-page/index.js:1 assets/build/ui-kit-gallery/index.js:1
+msgid "Не задан — используется цвет по умолчанию"
+msgstr ""
+
+#: assets/build/settings-page/index.js:1 assets/build/setup-wizard/index.js:1 assets/build/shipping-orders-page/index.js:1 assets/build/ui-kit-gallery/index.js:1
+msgid "Сбросить"
 msgstr ""
 
 #: assets/build/settings-page/index.js:1 assets/build/setup-wizard/index.js:1 assets/build/shipping-orders-page/index.js:1 assets/build/ui-kit-gallery/index.js:1

@@ -417,7 +417,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 
 		/**
 		 * What {@see self::get_settings_fields()} returns — public so a collision test
-		 * (a provider naming its own field the same as the framework's `pickup_accent_color`)
+		 * (a provider naming its own field the same as the store's `pickup_accent_color`)
 		 * can set it directly without a constructor argument every other test would have
 		 * to pass a default for.
 		 *
@@ -2486,6 +2486,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 					'accentColor',
 					'accentFillColor',
 					'accentContrastColor',
+					'themeButtonClass',
 					'modal',
 					'search',
 				],
@@ -3213,6 +3214,82 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$this->assertSame( '#000000', $config['accentContrastColor'] );
 		}
 
+		// -------------------------------------------------------------------------
+		// themeButtonClass (issue #379) — the theme's own button class for the checkout trigger,
+		// asked of WooCommerce's `wc_wp_theme_get_element_class_name( 'button' )` (7.0.1+).
+		// -------------------------------------------------------------------------
+
+		/**
+		 * Runs isolated: defining the function through Brain Monkey leaves it defined for the rest
+		 * of the process (Patchwork), which fails every later test that never mocked it.
+		 *
+		 * @runInSeparateProcess
+		 * @preserveGlobalState disabled
+		 */
+		public function test_theme_button_class_carries_what_woocommerce_returns_for_a_block_theme(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+			Functions\expect( 'wc_wp_theme_get_element_class_name' )
+				->once()
+				->with( 'button' )
+				->andReturn( 'wp-element-button' );
+
+			$this->assertSame( 'wp-element-button', $this->make_handler()->get_js_config()['themeButtonClass'] );
+		}
+
+		/**
+		 * Runs isolated: defining the function through Brain Monkey leaves it defined for the rest
+		 * of the process (Patchwork), which fails every later test that never mocked it.
+		 *
+		 * @runInSeparateProcess
+		 * @preserveGlobalState disabled
+		 */
+		public function test_theme_button_class_is_empty_for_a_classic_theme(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+			Functions\when( 'wc_wp_theme_get_element_class_name' )->justReturn( '' );
+
+			$this->assertSame( '', $this->make_handler()->get_js_config()['themeButtonClass'] );
+		}
+
+		/**
+		 * The value ends up in a `className`, and WooCommerce's function is backed by a
+		 * theme-level hook — only a class-name token list may leave here.
+		 *
+		 * Isolated for the same reason as the tests above.
+		 *
+		 * @runInSeparateProcess
+		 * @preserveGlobalState disabled
+		 */
+		public function test_theme_button_class_is_reduced_to_class_name_tokens(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+			Functions\when( 'wc_wp_theme_get_element_class_name' )
+				->justReturn( "  wp-element-button\t<b>x\" onclick=\"y  is-style_1 " );
+
+			$this->assertSame(
+				'wp-element-button bx onclicky is-style_1',
+				$this->make_handler()->get_js_config()['themeButtonClass']
+			);
+		}
+
+		/**
+		 * WooCommerce 7.0.0 — the framework's floor — predates the function.
+		 *
+		 * Runs isolated: once any test defines the function through Brain Monkey, Patchwork keeps
+		 * `function_exists()` true for the rest of the process.
+		 *
+		 * @runInSeparateProcess
+		 * @preserveGlobalState disabled
+		 */
+		public function test_theme_button_class_is_empty_when_woocommerce_predates_the_function(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+
+			$this->assertFalse( function_exists( 'wc_wp_theme_get_element_class_name' ) );
+			$this->assertSame( '', $this->make_handler()->get_js_config()['themeButtonClass'] );
+		}
+
 		/**
 		 * The fill/contrast derivation reads {@see Pickup_Handler::resolve_accent_color()}'s
 		 * FINAL resolved value (merchant setting wins over the plugin default), not the raw
@@ -3287,37 +3364,93 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		}
 
 		/**
-		 * The `pickup_accent_color` field's `type` is the setting's underlying VALUE type
-		 * (`Woodev_Setting::TYPE_STRING`) and its `controlType` is the UI widget
-		 * (`Woodev_Control::TYPE_COLOR`) — two distinct keys, matching the established
-		 * shape {@see \Woodev\Framework\Settings\Field_Schema::from_handler()} already uses
-		 * for every other settings field in this codebase (`'type' => $setting->get_type()`,
-		 * `'controlType' => $control->get_type()`). `default` carries the PLUGIN's own
-		 * accent colour, not the framework's.
+		 * Issue #379: the accent field moved out of `get_settings_fields()` into
+		 * {@see Pickup_Map_Settings} (the «Карта» tab), so a plugin merging this method's
+		 * result no longer registers a second, unread copy of it.
 		 */
-		/**
-		 * Pins the WHOLE field descriptor, not just `type`/`controlType`/`default` — the
-		 * Russian `name` and `description` and `required => false` were previously
-		 * unpinned, so a mutation to any one of them (e.g. flipping `required` to `true`,
-		 * or blanking `description`) would have survived the suite green.
-		 */
-		public function test_the_accent_is_offered_as_a_colour_setting_field(): void {
-			require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-setting.php';
-			require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-control.php';
-
+		public function test_the_handler_no_longer_offers_the_accent_field_to_plugins(): void {
 			$fields = $this->make_handler( [ 'accent_color' => '#FCE000' ] )->get_settings_fields();
 
-			$this->assertSame(
-				[
-					'name'        => 'Акцентный цвет карты',
-					'type'        => \Woodev_Setting::TYPE_STRING,
-					'controlType' => \Woodev_Control::TYPE_COLOR,
-					'description' => 'Цвет кнопок, активных пунктов и кластеров на карте пунктов выдачи.',
-					'default'     => '#FCE000',
-					'required'    => false,
-				],
-				$fields['pickup_accent_color']
+			$this->assertArrayNotHasKey( 'pickup_accent_color', $fields );
+		}
+
+		// -------------------------------------------------------------------------
+		// Issue #379 — the store's «Карта»-tab accent is the FIRST link of the chain:
+		// store -> constructor setting -> plugin default -> framework default.
+		// -------------------------------------------------------------------------
+
+		/**
+		 * Rebuilds the cached store settings against a `pickup_accent_color` option value.
+		 *
+		 * @param string $stored what the option row holds.
+		 */
+		private function store_accent_option( string $stored ): void {
+			Functions\when( 'get_option' )->alias(
+				static fn( $k, $d = false ) => 'woodev_pickup_map_pickup_accent_color' === $k ? $stored : $d
 			);
+			Shipping_Settings_Tab::reset_for_tests();
+		}
+
+		public function test_the_store_accent_overrides_the_plugin_default(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+			$this->store_accent_option( '#1937FF' );
+
+			$config = $this->make_handler( [ 'accent_color' => '#FCE000' ] )->get_js_config();
+
+			$this->assertSame( '#1937ff', $config['accentColor'] );
+		}
+
+		public function test_the_store_accent_outranks_the_constructor_setting(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+			$this->store_accent_option( '#1937ff' );
+
+			$config = $this->make_handler( [ 'accent_color' => '#FCE000', 'setting_accent' => '#0a8c37' ] )->get_js_config();
+
+			$this->assertSame( '#1937ff', $config['accentColor'] );
+		}
+
+		/**
+		 * The empty default is "no store override" — the carrier's brand colour must survive
+		 * a store that has saved the «Карта» tab without touching the colour.
+		 */
+		public function test_an_empty_store_accent_leaves_the_carrier_default_alone(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+			$this->store_accent_option( '' );
+
+			$config = $this->make_handler( [ 'accent_color' => '#FCE000' ] )->get_js_config();
+
+			$this->assertSame( '#fce000', $config['accentColor'] );
+		}
+
+		/**
+		 * The garbage is skipped at its own link, not only by the final sanitiser: with a valid
+		 * constructor setting present, falling all the way to the plugin default would be wrong.
+		 */
+		public function test_a_garbage_store_accent_falls_through_to_the_next_link_not_past_it(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+			$this->store_accent_option( 'not-a-colour' );
+
+			$config = $this->make_handler( [ 'accent_color' => '#FCE000', 'setting_accent' => '#0a8c37' ] )->get_js_config();
+
+			$this->assertSame( '#0a8c37', $config['accentColor'] );
+		}
+
+		/**
+		 * An option row can be written by anything (WP-CLI, a migration, a hand edit), so a
+		 * non-hex stored value must neither reach CSS nor knock out the carrier's colour.
+		 */
+		public function test_a_garbage_store_accent_falls_through_to_the_carrier_default(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+			$this->store_accent_option( 'red; } body { display:none } .x {' );
+
+			$config = $this->make_handler( [ 'accent_color' => '#FCE000' ] )->get_js_config();
+
+			$this->assertSame( '#fce000', $config['accentColor'] );
 		}
 
 		// -------------------------------------------------------------------------
@@ -3692,8 +3825,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		}
 
 		// -------------------------------------------------------------------------
-		// get_settings_fields() (SP-5 Task 16, merged with `pickup_accent_color` as of
-		// Task 8B / D-15) — the provider's own fields, plus the framework's accent field
+		// get_settings_fields() (SP-5 Task 16) — the provider's own fields; the accent
+		// field moved to Pickup_Map_Settings in issue #379
 		// -------------------------------------------------------------------------
 
 		/**
@@ -3706,9 +3839,9 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		 * such a mutation would corrupt both sides identically and still compare equal.
 		 * That content is genuinely pinned, just not here: see
 		 * `tests/unit/Shipping/Map/MapProviderRegistryTest.php` for the assertions against
-		 * the descriptor's actual shape and values. The handler's OWN merged-in
-		 * `pickup_accent_color` field is asserted separately below, and by
-		 * {@see self::test_the_accent_is_offered_as_a_colour_setting_field()}.
+		 * the descriptor's actual shape and values. The accent field is no longer
+		 * the handler's to offer (issue #379) — see
+		 * {@see self::test_the_handler_no_longer_offers_the_accent_field_to_plugins()}.
 		 */
 		public function test_get_settings_fields_passes_the_yandex_providers_descriptor_through_unmodified(): void {
 			require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-setting.php';
@@ -3729,21 +3862,18 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$fields = $handler->get_settings_fields();
 
 			$this->assertArrayHasKey( 'map_api_key', $fields );
-			$this->assertArrayHasKey( 'pickup_accent_color', $fields );
 			$this->assertSame(
 				$provider->get_settings_fields(),
-				array_diff_key( $fields, [ 'pickup_accent_color' => null ] ),
-				"the provider's own fields must pass through unmodified alongside the framework's field"
+				$fields,
+				"the provider's own fields must pass through unmodified"
 			);
 		}
 
 		/**
-		 * A plugin using the embedded provider gains no PROVIDER field at all, but still
-		 * gets the framework's own `pickup_accent_color` — the handler must not invent a
-		 * provider field of its own, but the accent field is framework-owned, not
-		 * provider-owned, so it is never conditional on which provider is active.
+		 * A plugin using the embedded provider gains no field at all — the handler must not
+		 * invent one of its own.
 		 */
-		public function test_get_settings_fields_has_only_the_accent_field_for_the_embedded_provider(): void {
+		public function test_get_settings_fields_is_empty_for_the_embedded_provider(): void {
 			require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-setting.php';
 			require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-control.php';
 			require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/map/class-embedded-map-provider.php';
@@ -3765,17 +3895,15 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 
 			$fields = $handler->get_settings_fields();
 
-			$this->assertSame( [ 'pickup_accent_color' ], array_keys( $fields ) );
-			$this->assertArrayNotHasKey( 'map_api_key', $fields );
+			$this->assertSame( [], $fields );
 		}
 
 		/**
 		 * Collision guard: a (misbehaving) provider that names one of ITS OWN fields
-		 * `pickup_accent_color` must never win — the framework's own field is merged in
-		 * LAST and always wins, so a provider accidentally reusing this key can never
-		 * silently shadow the framework's accent setting.
+		 * `pickup_accent_color` must not leak it to the plugin — the key belongs to the store
+		 * setting on the «Карта» tab, and a second copy would be registered but never read.
 		 */
-		public function test_a_provider_field_cannot_shadow_the_frameworks_accent_field(): void {
+		public function test_a_provider_field_cannot_shadow_the_stores_accent_setting(): void {
 			require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-setting.php';
 			require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-control.php';
 
@@ -3788,7 +3916,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 
 			$handler = $this->make_handler( [ 'map_provider' => $provider, 'accent_color' => '#FCE000' ] );
 
-			$this->assertSame( '#FCE000', $handler->get_settings_fields()['pickup_accent_color']['default'] );
+			$this->assertArrayNotHasKey( 'pickup_accent_color', $handler->get_settings_fields() );
 		}
 
 		// -------------------------------------------------------------------------
