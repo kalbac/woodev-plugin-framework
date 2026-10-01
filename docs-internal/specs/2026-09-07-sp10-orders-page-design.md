@@ -69,7 +69,11 @@ exactly the orders that can be exported: not exported AND status in `Order_Actio
 (pending, on-hold, processing), the list the «Выгрузить» button reads, so the tab, the badge and the
 button cannot disagree. Unexported completed / refunded / cancelled / failed orders stay under «Все». An
 explicit `status` / `status_not` filter applies on top of the «new» scope (the intersection; a request
-naming no exportable status selects nothing). The first cut of this rule (PR #1020) excluded only
+naming no exportable status selects nothing). The gate is an AND on top of EVERY match mode: under
+«Любое» (`match=any`) the status leg is the requested statuses ∩ the exportable ones, an empty
+intersection is a leg that matches nothing — the OR goes on with its other legs, and with none left selects
+nothing; an empty status array never reaches `wc_get_orders()` (it would expand to every status, #928).
+The first cut of this rule (PR #1020) excluded only
 cancelled/failed.
 
 This is what makes #694's open condition — «при условии что агрегат дёшев» — answerable: the

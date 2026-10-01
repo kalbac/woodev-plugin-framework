@@ -520,6 +520,68 @@ class OrdersRestTest extends TestCase {
 		$this->assertContains( $not_work['completed']->get_id(), array_column( rest_get_server()->dispatch( $all )->get_data()['rows'], 'id' ) );
 	}
 
+	/**
+	 * #1024 round 2: the «new» scope is an AND gate on top of `match=any`. A status leaf outside the
+	 * exportable statuses is dead — the OR goes on with its other leg — and an empty status intersection
+	 * must never widen into «every status» (the #928 fail-open): a cancelled and a completed order that
+	 * satisfy the OTHER leg stay out of «Новые».
+	 */
+	public function test_the_new_scope_under_match_any_with_an_empty_status_intersection_stays_gated(): void {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'shop_manager' ] ) );
+
+		$marker            = '_woodev_test_new_any_marker';
+		$tracking_meta_key = '_woodev_test_new_any_tracking';
+
+		Orders_Registry::instance()->register_provider(
+			Orders_Provider::create(
+				'new_any_carrier',
+				'New Any Carrier',
+				$marker,
+				[ 'new_any_carrier' ],
+				[ 'tracking_meta_key' => $tracking_meta_key ]
+			)
+		);
+
+		$GLOBALS['wp_rest_server'] = null;
+		rest_get_server();
+
+		$make = static function ( string $status, bool $with_tracking ) use ( $marker, $tracking_meta_key ): \WC_Order {
+			$order = wc_create_order();
+			$order->set_status( $status );
+			$order->update_meta_data( $marker, '1' );
+
+			if ( $with_tracking ) {
+				$order->update_meta_data( $tracking_meta_key, 'TRACK-' . $status );
+			}
+
+			$order->save();
+
+			return $order;
+		};
+
+		$exportable_tracked   = $make( 'processing', true );
+		$exportable_untracked = $make( 'processing', false );
+		$cancelled_tracked    = $make( 'cancelled', true );
+		$completed_tracked    = $make( 'completed', true );
+
+		$request = new WP_REST_Request( 'GET', '/woodev/v1/shipping/orders' );
+		$request->set_param( 'carrier', 'new_any_carrier' );
+		$request->set_param( 'is_exported', false );
+		$request->set_param( 'match', 'any' );
+		$request->set_param( 'status', [ 'cancelled' ] );
+		$request->set_param( 'has_tracking', true );
+
+		$response = rest_get_server()->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+
+		$ids = array_column( $response->get_data()['rows'], 'id' );
+
+		$this->assertSame( [ $exportable_tracked->get_id() ], $ids, 'only the exportable order satisfying the live leg is «new»' );
+		$this->assertNotContains( $exportable_untracked->get_id(), $ids );
+		$this->assertNotContains( $cancelled_tracked->get_id(), $ids, 'the status leaf names it, but nothing outside the exportable statuses is «new»' );
+		$this->assertNotContains( $completed_tracked->get_id(), $ids, 'the OTHER leg matches it, but the scope gate still holds' );
+	}
+
 	public function test_an_invalid_delivery_status_is_a_400(): void {
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'shop_manager' ] ) );
 
