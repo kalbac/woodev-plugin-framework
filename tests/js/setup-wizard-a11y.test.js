@@ -190,4 +190,83 @@ describe( 'persistence failures are not silent', () => {
 		expect( window.location.hash ).toBe( '#left-the-wizard' );
 		expect( complete ).toHaveBeenCalledTimes( 1 );
 	} );
+
+	test( 'a second click while the «skipped» write is pending sends no second request; reject → alert, resolve → leaves once', async () => {
+		let settle;
+		complete.mockImplementation( () => new Promise( ( resolve, reject ) => {
+			settle = { resolve, reject };
+		} ) );
+		window.woodevSetupWizard.adminUrl = '#left-the-wizard';
+		render( createElement( App ) );
+		const hashBefore = window.location.hash;
+
+		await act( async () => {
+			fireEvent.click( exitLink() );
+			fireEvent.click( exitLink() );
+		} );
+
+		expect( complete ).toHaveBeenCalledTimes( 1 );
+		expect( exitLink() ).toHaveAttribute( 'aria-disabled', 'true' );
+		expect( window.location.hash ).toBe( hashBefore );
+
+		// Reject: the alert appears, the control is live again, and nothing has redirected.
+		await act( async () => {
+			settle.reject( new Error( 'boom' ) );
+		} );
+		expect( screen.getByRole( 'alert' ) ).toHaveTextContent( 'Не удалось запомнить, что мастер пропущен' );
+		expect( exitLink() ).not.toHaveAttribute( 'aria-disabled' );
+		expect( window.location.hash ).toBe( hashBefore );
+
+		// The retry that follows a failure leaves anyway, without another request.
+		await clickExit();
+		expect( window.location.hash ).toBe( '#left-the-wizard' );
+		expect( complete ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	test( 'a pending «skipped» write that resolves redirects exactly once despite repeated clicks', async () => {
+		let settle;
+		complete.mockImplementation( () => new Promise( ( resolve ) => {
+			settle = resolve;
+		} ) );
+		window.woodevSetupWizard.adminUrl = '#left-the-wizard';
+		render( createElement( App ) );
+
+		await act( async () => {
+			fireEvent.click( exitLink() );
+			fireEvent.click( exitLink() );
+			fireEvent.click( exitLink() );
+		} );
+		await act( async () => {
+			settle( { complete: true } );
+		} );
+		await clickExit();
+
+		expect( complete ).toHaveBeenCalledTimes( 1 );
+		expect( window.location.hash ).toBe( '#left-the-wizard' );
+		expect( screen.queryByRole( 'alert' ) ).toBeNull();
+	} );
+
+	test( 'a hash-driven step change after a failed «skipped» write starts a fresh exit attempt', async () => {
+		complete.mockImplementation( () => Promise.reject( new Error( 'boom' ) ) );
+		window.woodevSetupWizard.adminUrl = '#left-the-wizard';
+		render( createElement( App ) );
+		await next(); // «Доставка» — «Приветствие» is now a permitted hash target
+
+		await clickExit(); // fails → exitFailed
+		expect( screen.getByRole( 'alert' ) ).toHaveTextContent( 'Не удалось запомнить, что мастер пропущен' );
+
+		await act( async () => {
+			window.location.hash = '#welcome-step';
+			await new Promise( ( resolve ) => setTimeout( resolve, 0 ) );
+		} );
+		expect( document.querySelector( '.woodev-setup__step-title' ) ).toHaveTextContent( 'Приветствие' );
+		expect( screen.queryByRole( 'alert' ) ).toBeNull();
+
+		await clickExit();
+
+		// It POSTed again instead of leaving on the strength of the old failure.
+		expect( complete ).toHaveBeenCalledTimes( 2 );
+		expect( window.location.hash ).toBe( '#welcome-step' );
+		expect( screen.getByRole( 'alert' ) ).toBeInTheDocument();
+	} );
 } );

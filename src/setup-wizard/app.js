@@ -150,6 +150,10 @@ export default function App() {
 	const [ completeFailed, setCompleteFailed ] = useState( false );
 	const [ completeRetrying, setCompleteRetrying ] = useState( false );
 	const [ exitFailed, setExitFailed ] = useState( false );
+	// The footer exit's «skipped» write is in flight (a ref, so a second click in the same
+	// tick is already refused; the state mirrors it into `aria-disabled`).
+	const exitingRef = useRef( false );
+	const [ exiting, setExiting ] = useState( false );
 	const rootRef = useRef( null );
 	const firstRenderRef = useRef( true );
 
@@ -184,6 +188,14 @@ export default function App() {
 				// refuse and put the hash back on the current step.
 				window.location.hash = `#${ steps[ indexRef.current ].id }-step`;
 				return;
+			}
+			if ( found !== indexRef.current ) {
+				// A real step change by hash / back / forward starts a fresh footer-exit attempt,
+				// exactly like `goTo`: an earlier failure must not pre-authorise leaving.
+				setError( null );
+				setExitFailed( false );
+				setShowErrors( false );
+				setFieldErrors( {} );
 			}
 			setIndex( ( current ) => ( current === found ? current : found ) );
 		}
@@ -348,10 +360,17 @@ export default function App() {
 	async function exitWizard() {
 		// A second click after a failure leaves anyway: the merchant is never trapped in the
 		// wizard by a broken endpoint, but the first failure is not swallowed (#1047).
+		if ( exitingRef.current ) {
+			return;
+		}
 		if ( ! isFinish && ! exitFailed ) {
+			exitingRef.current = true;
+			setExiting( true );
 			try {
 				await complete( 'skipped' );
 			} catch ( e ) {
+				exitingRef.current = false;
+				setExiting( false );
 				setExitFailed( true );
 				setError( __( 'Не удалось запомнить, что мастер пропущен, — он может открыться снова. Нажмите ссылку ещё раз, чтобы выйти всё равно.', 'woodev-plugin-framework' ) );
 				return;
@@ -508,6 +527,7 @@ export default function App() {
 				'a',
 				{
 					href: adminUrl(),
+					'aria-disabled': exiting ? 'true' : undefined,
 					onClick: ( e ) => {
 						e.preventDefault();
 						exitWizard();
