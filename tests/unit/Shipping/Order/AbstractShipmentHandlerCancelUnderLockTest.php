@@ -104,6 +104,9 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 		private function order( int $id ) {
 			$order = Mockery::mock( '\WC_Order' );
 			$order->shouldReceive( 'get_id' )->andReturn( $id );
+			// A successful cancel records the framework's own marker on the order it cancelled (#1037).
+			$order->shouldReceive( 'update_meta_data' )->with( '_woodev_shipment_cancelled_at', Mockery::type( 'int' ) )->byDefault();
+			$order->shouldReceive( 'save_meta_data' )->byDefault();
 
 			return $order;
 		}
@@ -169,6 +172,10 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$order_handler->shouldReceive( 'get' )->with( $stale, 'carrier_order_id' )->andReturn( '' );
 			$order_handler->shouldReceive( 'get' )->with( $fresh, 'carrier_order_id' )->andReturn( 'CARRIER-FINISHED-JUST-NOW' );
 			$order_handler->shouldReceive( 'set' )->once()->with( $fresh, 'carrier_order_id', '' );
+
+			// #1037: the marker goes onto the copy that was cancelled — the fresh one — never the stale one.
+			$fresh->shouldReceive( 'update_meta_data' )->once()->with( '_woodev_shipment_cancelled_at', Mockery::type( 'int' ) );
+			$stale->shouldNotReceive( 'update_meta_data' );
 
 			$handler        = $this->handler( $api, $order_handler );
 			$handler->fresh = $fresh;

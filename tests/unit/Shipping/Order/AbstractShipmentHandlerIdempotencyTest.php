@@ -122,6 +122,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 	use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
 	use Woodev\Framework\Shipping\Location\Popular_Settlement_Store;
 	use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
+	use Woodev\Framework\Shipping\Order\Shipment_Cancellation;
 	use Woodev\Framework\Shipping\Order\Shipping_Order_Handler;
 	use Woodev\Tests\Unit\TestCase;
 
@@ -592,6 +593,39 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$this->assertTrue( $result->is_success() );
 			$this->assertSame( 'CARRIER-NEW', $this->carrier_ids[55] );
 			$this->assertArrayNotHasKey( self::META, $this->meta[55] ?? [] );
+		}
+
+		// ----- #1037: a new export ends the cancellation -----
+
+		public function test_a_new_export_clears_the_cancellation_marker(): void {
+			$this->meta[55][ Shipment_Cancellation::CANCELLED_AT_META ] = 1790000000;
+
+			$result = $this->handler( $this->api() )->export( $this->order() );
+
+			$this->assertTrue( $result->is_success() );
+			$this->assertArrayNotHasKey( Shipment_Cancellation::CANCELLED_AT_META, $this->meta[55], 'the order has a live shipment again: it is no longer «Отменено»' );
+		}
+
+		public function test_the_cancellation_marker_is_cleared_on_the_fresh_order_not_only_the_stale_copy(): void {
+			$fresh = $this->order( 56 );
+
+			$this->meta[56][ Shipment_Cancellation::CANCELLED_AT_META ] = 1790000000;
+
+			$handler        = $this->handler( $this->api() );
+			$handler->fresh = $fresh;
+
+			$this->assertTrue( $handler->export( $this->order( 55 ) )->is_success() );
+			$this->assertArrayNotHasKey( Shipment_Cancellation::CANCELLED_AT_META, $this->meta[56] );
+		}
+
+		public function test_a_failed_export_keeps_the_cancellation_marker(): void {
+			$this->expect_retries( 0 );
+			$this->meta[55][ Shipment_Cancellation::CANCELLED_AT_META ] = 1790000000;
+
+			$result = $this->handler( $this->api( new \Woodev_API_Exception( 'refused' ) ) )->export( $this->order() );
+
+			$this->assertFalse( $result->is_success() );
+			$this->assertSame( 1790000000, $this->meta[55][ Shipment_Cancellation::CANCELLED_AT_META ], 'no new shipment exists, so the cancellation stands' );
 		}
 	}
 }

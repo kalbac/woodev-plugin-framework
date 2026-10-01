@@ -46,11 +46,14 @@
 namespace Woodev\Tests\Unit;
 
 use Brain\Monkey\Functions;
+use Mockery;
+use Woodev\Framework\Shipping\Admin\Orders\Order_Actions;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Id_Resolver;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Query;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
 use Woodev\Framework\Shipping\Order\Delivery_Status;
+use Woodev\Framework\Shipping\Order\Shipment_Cancellation;
 
 /**
  * @since 2.0.2
@@ -274,6 +277,9 @@ class ShippingOrdersQueryRowSemanticsTest extends TestCase {
 			$axes[] = [ [ "_b{$i}_marker" => '1' ], [] ];
 		}
 
+		// #1037: the framework's own cancellation marker, present or absent on every order.
+		$axes[] = [ [], [ Shipment_Cancellation::CANCELLED_AT_META => '1790000000' ] ];
+
 		$rows = [ [] ];
 
 		foreach ( $axes as $axis ) {
@@ -302,7 +308,10 @@ class ShippingOrdersQueryRowSemanticsTest extends TestCase {
 			array_filter(
 				$rows,
 				static function ( array $meta ) use ( $marker_keys ): bool {
-					return count( array_intersect_key( $meta, array_flip( $marker_keys ) ) ) <= 1;
+					$markers = count( array_intersect_key( $meta, array_flip( $marker_keys ) ) );
+
+					// At most one carrier marker; and a cancellation is only ever recorded on an order a carrier owns (#1037).
+					return $markers <= 1 && ( 1 === $markers || ! array_key_exists( Shipment_Cancellation::CANCELLED_AT_META, $meta ) );
 				}
 			)
 		);
@@ -412,6 +421,12 @@ class ShippingOrdersQueryRowSemanticsTest extends TestCase {
 			return false;
 		}
 
+		// #1037: a shipment the framework recorded as cancelled resolves `cancelled` whatever the carrier's raw
+		// status says — so it satisfies 'is cancelled' and every 'is not X' but cancelled, and nothing else.
+		if ( array_key_exists( Shipment_Cancellation::CANCELLED_AT_META, $meta ) ) {
+			return ( Delivery_Status::CANCELLED === $canonical ) !== $negate;
+		}
+
 		foreach ( $providers as $provider ) {
 			if ( $this->provider_satisfies_delivery_status( $provider, $meta, $canonical, $negate ) ) {
 				return true;
@@ -509,9 +524,9 @@ class ShippingOrdersQueryRowSemanticsTest extends TestCase {
 	}
 
 	/**
-	 * Fixture x filter x datastore combinations. Three fixtures (12 / 48 / 64 orders after the 26.09.2026
-	 * single-marker narrowing, was 16 / 64 / 128),
-	 * five filters, two datastores — the same three fixtures the research harness used
+	 * Fixture x filter x datastore combinations. Three fixtures (20 / 80 / 112 orders: the 26.09.2026
+	 * single-marker narrowing, then #1037's cancellation axis),
+	 * seven filters, two datastores — the same three fixtures the research harness used
 	 * for card #839.
 	 *
 	 * @since 2.0.2
@@ -531,6 +546,8 @@ class ShippingOrdersQueryRowSemanticsTest extends TestCase {
 			'delivery_status=delivered'      => [ Delivery_Status::DELIVERED, false ],
 			'delivery_status_not=in_transit' => [ Delivery_Status::IN_TRANSIT, true ],
 			'delivery_status_not=unknown'    => [ Delivery_Status::UNKNOWN, true ],
+			'delivery_status=cancelled'      => [ Delivery_Status::CANCELLED, false ],
+			'delivery_status_not=cancelled'  => [ Delivery_Status::CANCELLED, true ],
 		];
 
 		$datastores = [
@@ -566,9 +583,9 @@ class ShippingOrdersQueryRowSemanticsTest extends TestCase {
 
 	/**
 	 * Builds the universe ONCE per (fixture, filter, datastore) and runs ONE
-	 * `build_args()` over it — the in-memory resolver walks the 12-64 rows against the
+	 * `build_args()` over it — the in-memory resolver walks the 20-112 rows against the
 	 * tree — then compares the selected id set with the oracle's, row by row, so a
-	 * mismatch names the order. The 124 orders x 5 filters x 2 datastores this file
+	 * mismatch names the order. The 212 orders x 7 filters x 2 datastores this file
 	 * covers stay a few seconds.
 	 *
 	 * @dataProvider meta_query_matches_oracle_provider
@@ -651,8 +668,9 @@ class ShippingOrdersQueryRowSemanticsTest extends TestCase {
 
 	/**
 	 * The empty ⇒ sentinel rule, proven on a universe where a real filter selects
-	 * nothing: one bare carrier, `delivery_status_not=unknown` — a bare carrier is
-	 * always unknown, so no order is "not unknown", the tree is the sentinel, the seam
+	 * nothing: one bare carrier, `delivery_status=in_transit` — a bare carrier never
+	 * maps anything to a state and the cancellation marker only ever answers
+	 * `cancelled`, so no order is `in_transit`, the tree is the sentinel, the seam
 	 * is never asked, and each datastore gets its own "matches nothing" form rather
 	 * than an empty `post__in`.
 	 *
@@ -664,7 +682,7 @@ class ShippingOrdersQueryRowSemanticsTest extends TestCase {
 			$rows     = $this->universe( 0, 1 );
 			$query    = $this->query_over( $registry, $is_hpos, $rows );
 
-			$this->assertSame( [], $this->selected_ids( $query, [ 'delivery_status_not' => Delivery_Status::UNKNOWN ], $is_hpos ) );
+			$this->assertSame( [], $this->selected_ids( $query, [ 'delivery_status' => Delivery_Status::IN_TRANSIT ], $is_hpos ) );
 			$this->assertSame( [], $query->resolved, 'a tree that matches nothing is answered without the seam' );
 		}
 	}
@@ -693,6 +711,90 @@ class ShippingOrdersQueryRowSemanticsTest extends TestCase {
 			$this->assertSame( [], $this->selected_ids( $query, [ 'delivery_status' => Delivery_Status::UNKNOWN ], $is_hpos ) );
 			$this->assertCount( 1, $query->resolved, 'the seam WAS asked this time' );
 		}
+	}
+
+	// ----- the filter agrees with the shared resolver, order by order (#1037) -----
+
+	/**
+	 * The oracle above is a SPECIFICATION written next to the query; this test closes the other
+	 * side: for every order a carrier owns, the filter selects it under exactly the canonical
+	 * status {@see Order_Actions::resolve_delivery_status()} — the one resolution the row, the
+	 * metabox and the action gates read — gives it, for every canonical state and both `is` /
+	 * `is not`. A reader and the filter cannot drift apart without one of them failing here.
+	 *
+	 * Rows carrying another carrier's status meta beside their own marker are skipped: the
+	 * filter's documented invariant 1 (a carrier writes only its own status meta) is exactly
+	 * what they violate.
+	 *
+	 * @dataProvider datastore_provider
+	 *
+	 * @since 2.0.2
+	 */
+	public function test_the_filter_selects_what_the_shared_resolver_resolves( bool $is_hpos ): void {
+		$registry  = $this->registry_of( 2, 1 );
+		$providers = array_values( $registry->get_providers() );
+		$rows      = $this->universe( 2, 1 );
+
+		Functions\when( 'get_post_meta' )->alias(
+			static function ( int $post_id, string $key ) use ( $rows ) {
+				return $rows[ $post_id - 1 ][ $key ] ?? '';
+			}
+		);
+
+		$checked = 0;
+
+		foreach ( array_merge( Delivery_Status::canonical_states(), [ Delivery_Status::UNKNOWN ] ) as $canonical ) {
+			foreach ( [ false, true ] as $negate ) {
+				$request  = $negate ? [ 'delivery_status_not' => $canonical ] : [ 'delivery_status' => $canonical ];
+				$selected = $this->selected_ids( $this->query_over( $registry, $is_hpos, $rows ), $request, $is_hpos );
+
+				foreach ( $rows as $index => $meta ) {
+					$owner = null;
+
+					foreach ( $providers as $provider ) {
+						if ( array_key_exists( $provider->get_marker_meta_key(), $meta ) ) {
+							$owner = $provider;
+						}
+					}
+
+					if ( null === $owner ) {
+						$this->assertNotContains( $index + 1, $selected, 'an order no carrier owns is never in the aggregate' );
+						continue;
+					}
+
+					$foreign_status = false;
+
+					foreach ( $providers as $provider ) {
+						if ( $provider !== $owner && null !== $provider->get_status_meta_key() && array_key_exists( $provider->get_status_meta_key(), $meta ) ) {
+							$foreign_status = true;
+						}
+					}
+
+					if ( $foreign_status ) {
+						continue;
+					}
+
+					$order = Mockery::mock( '\WC_Order' );
+					$order->shouldReceive( 'get_id' )->andReturn( $index + 1 );
+
+					$resolved = Order_Actions::resolve_delivery_status( $order, $owner )['canonical'];
+
+					$this->assertSame(
+						( $resolved === $canonical ) !== $negate,
+						in_array( $index + 1, $selected, true ),
+						sprintf(
+							"The filter and the shared resolver disagree (#1037).\nrequest: %s\norder meta: %s\nresolver says: %s",
+							(string) json_encode( $request ),
+							(string) json_encode( $meta ),
+							$resolved
+						)
+					);
+					++$checked;
+				}
+			}
+		}
+
+		$this->assertGreaterThan( 300, $checked, 'the cross-check must actually cover the universe' );
 	}
 
 	// ----- «Все / Любое» — `match` and the order status (#843) -----

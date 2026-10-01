@@ -33,6 +33,7 @@ use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Query;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
 use Woodev\Framework\Shipping\Order\Delivery_Status;
+use Woodev\Framework\Shipping\Order\Shipment_Cancellation;
 
 class ShippingOrdersQueryTest extends TestCase {
 
@@ -185,6 +186,34 @@ class ShippingOrdersQueryTest extends TestCase {
 		);
 
 		return 1 === count( $parts ) ? $parts[0] : $parts[1];
+	}
+
+	/**
+	 * The status-map half of a delivery-status filter part that must EXCLUDE cancelled orders (#1037).
+	 *
+	 * Asserts the wrapper the builder puts around it — `AND( <status-map clauses>, marker NOT EXISTS )` — and
+	 * hands back the clauses inside it in the shape the part had before the marker existed: the OR group of a
+	 * multi-provider filter, or a one-clause list for a single provider.
+	 *
+	 * @param array<int|string, mixed> $filter_part the part {@see self::meta_query_filter_part()} found.
+	 * @return array<int|string, mixed>
+	 */
+	private function status_map_part( array $filter_part ): array {
+		$this->assertCount( 1, $filter_part, 'one wrapper clause' );
+		$wrapper = $filter_part[0];
+
+		$this->assertSame( 'AND', $wrapper['relation'] );
+		$this->assertSame(
+			[
+				'key'     => Shipment_Cancellation::CANCELLED_AT_META,
+				'compare' => 'NOT EXISTS',
+			],
+			$wrapper[1],
+			'a cancelled order must not match a state its raw status maps to'
+		);
+
+		// A provider's own clause is a leaf or an AND, never an OR: an OR here is the group of several providers.
+		return 'OR' === ( $wrapper[0]['relation'] ?? '' ) ? $wrapper[0] : [ $wrapper[0] ];
 	}
 
 	// ----- HPOS: real meta_query -----
@@ -818,9 +847,16 @@ class ShippingOrdersQueryTest extends TestCase {
 				],
 				[
 					[
-						'key'     => '_cdek_status',
-						'value'   => [ 'CDEK_ACCEPTED', 'CDEK_ENROUTE' ],
-						'compare' => 'IN',
+						'relation' => 'AND',
+						[
+							'key'     => '_cdek_status',
+							'value'   => [ 'CDEK_ACCEPTED', 'CDEK_ENROUTE' ],
+							'compare' => 'IN',
+						],
+						[
+							'key'     => '_woodev_shipment_cancelled_at',
+							'compare' => 'NOT EXISTS',
+						],
 					],
 				],
 			],
@@ -840,7 +876,7 @@ class ShippingOrdersQueryTest extends TestCase {
 			]
 		);
 
-		$status_part = $this->meta_query_filter_part( $tree, [ '_cdek_marker', '_yandex_marker' ] );
+		$status_part = $this->status_map_part( $this->meta_query_filter_part( $tree, [ '_cdek_marker', '_yandex_marker' ] ) );
 
 		$this->assertSame(
 			[
@@ -881,7 +917,7 @@ class ShippingOrdersQueryTest extends TestCase {
 				'key'     => '_novendor_marker',
 				'compare' => 'EXISTS',
 			],
-			$this->meta_query_filter_part( $tree, [ '_novendor_marker' ] )[0]
+			$this->status_map_part( $this->meta_query_filter_part( $tree, [ '_novendor_marker' ] ) )[0]
 		);
 	}
 
@@ -935,7 +971,7 @@ class ShippingOrdersQueryTest extends TestCase {
 					],
 				],
 			],
-			$this->meta_query_filter_part( $tree, [ '_cdek_marker' ] )[0]
+			$this->status_map_part( $this->meta_query_filter_part( $tree, [ '_cdek_marker' ] ) )[0]
 		);
 	}
 
@@ -967,7 +1003,7 @@ class ShippingOrdersQueryTest extends TestCase {
 			[ 'delivery_status' => Delivery_Status::UNKNOWN ]
 		);
 
-		$status_part = $this->meta_query_filter_part( $tree, [ '_cdek_marker', '_yandex_marker' ] );
+		$status_part = $this->status_map_part( $this->meta_query_filter_part( $tree, [ '_cdek_marker', '_yandex_marker' ] ) );
 
 		$this->assertSame( 'OR', $status_part['relation'] );
 
@@ -1401,8 +1437,128 @@ class ShippingOrdersQueryTest extends TestCase {
 				'value'   => [ 'CDEK_ACCEPTED' ],
 				'compare' => 'IN',
 			],
-			$this->meta_query_filter_part( $tree, [ '_cdek_marker' ] )[0]
+			$this->status_map_part( $this->meta_query_filter_part( $tree, [ '_cdek_marker' ] ) )[0]
 		);
+	}
+
+
+	// ----- the framework's own cancellation marker (#1037) -----
+
+	private function cdek_registry_for_cancellation(): Orders_Registry {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider(
+			$this->provider_with_status( 'cdek', '_cdek_marker', '_cdek_status', [ 'CDEK_ACCEPTED' => Delivery_Status::IN_TRANSIT ] )
+		);
+
+		return $registry;
+	}
+
+	private function cancelled_exists(): array {
+		return [
+			'key'     => '_woodev_shipment_cancelled_at',
+			'compare' => 'EXISTS',
+		];
+	}
+
+	/** «Отменено»: the marker is the whole filter — no raw status maps to it. Scope already confines it to a carrier's orders. */
+	public function test_delivery_status_cancelled_is_the_marker_alone(): void {
+		$tree = $this->query_with_hpos( true, $this->cdek_registry_for_cancellation() )->build_meta_query( [ 'delivery_status' => Delivery_Status::CANCELLED ] );
+
+		$this->assertSame( [ $this->cancelled_exists() ], $this->meta_query_filter_part( $tree, [ '_cdek_marker' ] ) );
+	}
+
+	/** A carrier that DOES map a raw status to cancelled keeps matching it, beside the marker. */
+	public function test_delivery_status_cancelled_keeps_the_carriers_own_cancelled_raw_values(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider(
+			$this->provider_with_status( 'cdek', '_cdek_marker', '_cdek_status', [ 'CDEK_CANCELLED' => Delivery_Status::CANCELLED ] )
+		);
+
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query( [ 'delivery_status' => Delivery_Status::CANCELLED ] );
+
+		$this->assertSame(
+			[
+				'relation' => 'OR',
+				[
+					'key'     => '_cdek_status',
+					'value'   => [ 'CDEK_CANCELLED' ],
+					'compare' => 'IN',
+				],
+				$this->cancelled_exists(),
+			],
+			$this->meta_query_filter_part( $tree, [ '_cdek_marker' ] )
+		);
+	}
+
+	/** «Не отменено»: every order of the carrier, minus the cancelled ones. */
+	public function test_delivery_status_not_cancelled_excludes_the_marker(): void {
+		$tree = $this->query_with_hpos( true, $this->cdek_registry_for_cancellation() )->build_meta_query( [ 'delivery_status_not' => Delivery_Status::CANCELLED ] );
+
+		$this->assertSame(
+			[
+				[
+					'relation' => 'AND',
+					[
+						'key'     => '_cdek_marker',
+						'compare' => 'EXISTS',
+					],
+					[
+						'key'     => '_woodev_shipment_cancelled_at',
+						'compare' => 'NOT EXISTS',
+					],
+				],
+			],
+			$this->meta_query_filter_part( $tree, [ '_cdek_marker' ] )
+		);
+	}
+
+	/** A cancelled order is «not in transit» whatever its raw status says: the marker is one more disjunct. */
+	public function test_delivery_status_not_x_also_matches_a_cancelled_order(): void {
+		$tree = $this->query_with_hpos( true, $this->cdek_registry_for_cancellation() )->build_meta_query( [ 'delivery_status_not' => Delivery_Status::IN_TRANSIT ] );
+		$part = $this->meta_query_filter_part( $tree, [ '_cdek_marker' ] );
+
+		$this->assertSame( 'OR', $part['relation'] );
+		$this->assertSame( $this->cancelled_exists(), $part[1] );
+	}
+
+	/** …and «cancelled» is a known status, so a cancelled order is «not unknown» too. */
+	public function test_delivery_status_not_unknown_also_matches_a_cancelled_order(): void {
+		$tree = $this->query_with_hpos( true, $this->cdek_registry_for_cancellation() )->build_meta_query( [ 'delivery_status_not' => Delivery_Status::UNKNOWN ] );
+		$part = $this->meta_query_filter_part( $tree, [ '_cdek_marker' ] );
+
+		$this->assertSame( 'OR', $part['relation'] );
+		$this->assertSame( $this->cancelled_exists(), $part[1] );
+	}
+
+	/** Every state but cancelled EXCLUDES a cancelled order: its raw status may still map to the state asked for. */
+	public function test_delivery_status_x_excludes_a_cancelled_order(): void {
+		foreach ( [ Delivery_Status::IN_TRANSIT, Delivery_Status::UNKNOWN ] as $canonical ) {
+			Orders_Registry::instance()->reset_for_tests();
+
+			$tree = $this->query_with_hpos( true, $this->cdek_registry_for_cancellation() )->build_meta_query( [ 'delivery_status' => $canonical ] );
+			$part = $this->meta_query_filter_part( $tree, [ '_cdek_marker' ] );
+
+			$this->assertSame( 'AND', $part[0]['relation'], $canonical );
+			$this->assertSame(
+				[
+					'key'     => '_woodev_shipment_cancelled_at',
+					'compare' => 'NOT EXISTS',
+				],
+				$part[0][1],
+				$canonical
+			);
+		}
+	}
+
+	/** One marker leaf for the whole filter, not one per carrier: the id query grows by a constant. */
+	public function test_the_cancellation_leaf_is_added_once_not_per_carrier(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider( $this->provider_with_status( 'cdek', '_cdek_marker', '_cdek_status', [ 'A' => Delivery_Status::IN_TRANSIT ] ) );
+		$registry->register_provider( $this->provider_with_status( 'yandex', '_yandex_marker', '_yandex_status', [ 'B' => Delivery_Status::IN_TRANSIT ] ) );
+
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query( [ 'delivery_status_not' => Delivery_Status::IN_TRANSIT ] );
+
+		$this->assertSame( 1, substr_count( (string) json_encode( $tree ), '_woodev_shipment_cancelled_at' ) );
 	}
 
 
@@ -1913,9 +2069,16 @@ class ShippingOrdersQueryTest extends TestCase {
 			],
 			[
 				[
-					'key'     => '_cdek_status',
-					'value'   => [ 'CDEK_DONE' ],
-					'compare' => 'IN',
+					'relation' => 'AND',
+					[
+						'key'     => '_cdek_status',
+						'value'   => [ 'CDEK_DONE' ],
+						'compare' => 'IN',
+					],
+					[
+						'key'     => '_woodev_shipment_cancelled_at',
+						'compare' => 'NOT EXISTS',
+					],
 				],
 			],
 			[
@@ -2079,7 +2242,7 @@ class ShippingOrdersQueryTest extends TestCase {
 			$args  = $query->build_args(
 				[
 					'match'               => 'any',
-					'delivery_status_not' => Delivery_Status::UNKNOWN, // a bare carrier is always unknown => nothing is "not unknown".
+					'delivery_status'     => Delivery_Status::IN_TRANSIT, // a bare carrier maps nothing => nothing is in transit.
 					'status'              => [ 'nonsense' ],
 				]
 			);

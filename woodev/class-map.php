@@ -91,6 +91,7 @@ return [
 	'Woodev\\Framework\\Shipping\\Order\\Order_Automation' => 'woodev/shipping-method/order/class-order-automation.php',
 	'Woodev\\Framework\\Shipping\\Order\\Order_Lock' => 'woodev/shipping-method/order/class-order-lock.php',
 	'Woodev\\Framework\\Shipping\\Order\\Order_Marker' => 'woodev/shipping-method/order/class-order-marker.php',
+	'Woodev\\Framework\\Shipping\\Order\\Shipment_Cancellation' => 'woodev/shipping-method/order/class-shipment-cancellation.php',
 	'Woodev\\Framework\\Shipping\\Order\\Shipping_Order_Handler' => 'woodev/shipping-method/order/class-shipping-order-handler.php',
 	'Woodev\\Framework\\Shipping\\Pickup\\Abstract_Bulk_Point_Source' => 'woodev/shipping-method/pickup/abstract-bulk-point-source.php',
 	'Woodev\\Framework\\Shipping\\Pickup\\Address_Target' => 'woodev/shipping-method/pickup/class-address-target.php',

@@ -398,6 +398,54 @@ class OrderRowBuilderTest extends TestCase {
 		$this->assertSame( Delivery_Status::UNKNOWN, $row['delivery_status']['canonical'] );
 	}
 
+	// ----- delivery_status: the framework's own cancellation marker (#1037) -----
+
+	public function test_a_cancelled_shipment_reads_cancelled_whatever_the_carriers_raw_status_still_says(): void {
+		$this->meta['_wc_edostavka_status']         = 'CDEK_ACCEPTED';
+		$this->meta['_woodev_shipment_cancelled_at'] = '1790000000';
+
+		$provider = $this->provider(
+			[
+				'status_meta_key'    => '_wc_edostavka_status',
+				'status_map'         => [ 'CDEK_ACCEPTED' => Delivery_Status::IN_TRANSIT ],
+				'status_labels'      => [ 'CDEK_ACCEPTED' => 'Принят СДЭК' ],
+			]
+		);
+
+		$row = ( new Order_Row_Builder() )->build( $this->make_order(), $provider );
+
+		$this->assertSame( Delivery_Status::CANCELLED, $row['delivery_status']['canonical'] );
+		$this->assertSame( 'Отменено', $row['delivery_status']['canonical_label'] );
+		$this->assertSame( 'CDEK_ACCEPTED', $row['delivery_status']['raw'], 'the carrier\'s own value is never rewritten or hidden' );
+		$this->assertSame( 'Принят СДЭК', $row['delivery_status']['raw_label'] );
+	}
+
+	public function test_a_cancelled_shipment_of_a_carrier_with_no_status_meta_key_reads_cancelled(): void {
+		$this->meta['_woodev_shipment_cancelled_at'] = '1790000000';
+
+		$row = ( new Order_Row_Builder() )->build( $this->make_order(), $this->provider() );
+
+		$this->assertSame( Delivery_Status::CANCELLED, $row['delivery_status']['canonical'] );
+		$this->assertNull( $row['delivery_status']['raw'] );
+	}
+
+	public function test_the_row_and_the_action_gates_read_the_same_canonical_status(): void {
+		$this->meta['_wc_edostavka_status']         = 'CDEK_ACCEPTED';
+		$this->meta['_woodev_shipment_cancelled_at'] = '1790000000';
+
+		$provider = $this->provider(
+			[
+				'status_meta_key' => '_wc_edostavka_status',
+				'status_map'      => [ 'CDEK_ACCEPTED' => Delivery_Status::IN_TRANSIT ],
+			]
+		);
+		$order    = $this->make_order();
+
+		$row = ( new Order_Row_Builder() )->build( $order, $provider );
+
+		$this->assertSame( $row['delivery_status']['canonical'], Order_Actions::resolve_canonical_status( $order, $provider ) );
+	}
+
 	// ----- type: all four outcomes -----
 
 	public function test_type_is_unknown_when_provider_is_null(): void {

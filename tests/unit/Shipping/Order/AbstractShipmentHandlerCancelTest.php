@@ -84,11 +84,51 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$order_handler->shouldReceive( 'get' )->once()->with( Mockery::type( '\WC_Order' ), 'carrier_order_id' )->andReturn( 'CARRIER-1' );
 			$order_handler->shouldReceive( 'set' )->once()->with( Mockery::type( '\WC_Order' ), 'carrier_order_id', '' );
 
-			$order = Mockery::mock( '\WC_Order' );
+			$order = $this->order_expecting_the_cancellation_marker();
 
 			$result = $this->handler( $api, $order_handler )->cancel( $order );
 
 			$this->assertTrue( $result->is_success() );
+		}
+
+		/**
+		 * #1037: the framework records ITS OWN fact of the cancellation — the unix time in
+		 * `_woodev_shipment_cancelled_at` — and never a raw carrier status.
+		 */
+		public function test_a_successful_cancel_records_the_framework_owned_cancellation_marker(): void {
+			$api = Mockery::mock( '\Woodev\Framework\Shipping\Api\Shipping_API' );
+			$api->shouldReceive( 'cancel_order' )->once()->with( 'CARRIER-1' );
+
+			$order_handler = Mockery::mock( Shipping_Order_Handler::class );
+			$order_handler->shouldReceive( 'get' )->andReturn( 'CARRIER-1' );
+			$order_handler->shouldReceive( 'set' )->once()->with( Mockery::type( '\WC_Order' ), 'carrier_order_id', '' );
+
+			$before = time();
+			$order  = Mockery::mock( '\WC_Order' );
+			$order->shouldReceive( 'update_meta_data' )
+				->once()
+				->with(
+					'_woodev_shipment_cancelled_at',
+					Mockery::on(
+						static function ( $value ) use ( $before ): bool {
+							return is_int( $value ) && $value >= $before && $value <= time();
+						}
+					)
+				);
+			$order->shouldReceive( 'save_meta_data' )->once();
+
+			$this->handler( $api, $order_handler )->cancel( $order );
+		}
+
+		/**
+		 * @return \Mockery\MockInterface&\WC_Order
+		 */
+		private function order_expecting_the_cancellation_marker() {
+			$order = Mockery::mock( '\WC_Order' );
+			$order->shouldReceive( 'update_meta_data' )->with( '_woodev_shipment_cancelled_at', Mockery::type( 'int' ) );
+			$order->shouldReceive( 'save_meta_data' );
+
+			return $order;
 		}
 
 		/**
@@ -104,7 +144,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$order_handler->shouldReceive( 'get' )->andReturn( 'CARRIER-1' );
 			$order_handler->shouldReceive( 'set' )->once()->with( Mockery::type( '\WC_Order' ), 'carrier_order_id', '' );
 
-			$order = Mockery::mock( '\WC_Order' );
+			$order = $this->order_expecting_the_cancellation_marker();
 
 			Actions\expectDone( 'woodev_shipping_test_shipment_cancelled' )->once()->with( $order, 'CARRIER-1' );
 
@@ -119,7 +159,10 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$order_handler->shouldReceive( 'get' )->once()->with( Mockery::type( '\WC_Order' ), 'carrier_order_id' )->andReturn( 'CARRIER-1' );
 			$order_handler->shouldNotReceive( 'set' );
 
+			// A rejected cancellation writes nothing: the order has no update_meta_data expectation at all (#1037).
 			$order = Mockery::mock( '\WC_Order' );
+			$order->shouldNotReceive( 'update_meta_data' );
+			$order->shouldNotReceive( 'save_meta_data' );
 
 			$result = $this->handler( $api, $order_handler )->cancel( $order );
 

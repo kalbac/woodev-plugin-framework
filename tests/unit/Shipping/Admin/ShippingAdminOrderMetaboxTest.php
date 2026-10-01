@@ -385,6 +385,62 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$this->assertStringContainsString( '>Доставлено</span>', $html );
 		}
 
+		/**
+		 * #1037: the metabox draws its status badge from the SAME row the orders page does, so a
+		 * shipment the framework recorded as cancelled never shows the carrier's stale «в пути».
+		 * (Cancelling clears the stored carrier id, so the metabox is then in its «not transferred»
+		 * state, which draws no status at all — the marker can only surface here through the row.)
+		 */
+		public function test_render_metabox_never_shows_the_stale_raw_status_of_a_cancelled_shipment(): void {
+			$provider = $this->provider(
+				[
+					'status_meta_key' => '_wc_cdek_status',
+					'status_map'      => [ 'CDEK_ON_THE_WAY' => 'in_transit' ],
+				]
+			);
+			$order    = $this->make_order();
+
+			$this->meta = [
+				'_wc_cdek_status'               => 'CDEK_ON_THE_WAY',
+				'_woodev_shipment_cancelled_at' => '1790000000',
+			];
+
+			ob_start();
+			( new Shipping_Admin_Order( Orders_Registry::instance() ) )->render_metabox( $order, $provider );
+			$html = ob_get_clean();
+
+			$this->assertStringNotContainsString( '>В пути</span>', $html );
+			$this->assertStringContainsString( 'Заказ ещё не передан перевозчику', $html );
+		}
+
+		/**
+		 * The status field of an order that IS exported reads the one resolver: should a carrier plugin
+		 * ever store a carrier id of its own after a cancellation without clearing the marker, the badge
+		 * says what the resolver says — never a different word than the orders page.
+		 */
+		public function test_render_metabox_status_badge_is_the_resolvers_answer_for_the_marker(): void {
+			$provider = $this->provider(
+				[
+					'status_meta_key' => '_wc_cdek_status',
+					'status_map'      => [ 'CDEK_ON_THE_WAY' => 'in_transit' ],
+				]
+			);
+			$order    = $this->make_order();
+
+			$this->meta = [
+				'_wc_cdek_order_id'             => 'CDEK-999',
+				'_wc_cdek_status'               => 'CDEK_ON_THE_WAY',
+				'_woodev_shipment_cancelled_at' => '1790000000',
+			];
+
+			ob_start();
+			( new Shipping_Admin_Order( Orders_Registry::instance() ) )->render_metabox( $order, $provider );
+			$html = ob_get_clean();
+
+			$this->assertStringContainsString( 'woodev-orders-status woodev-orders-status--error', $html );
+			$this->assertStringContainsString( '>Отменено</span>', $html );
+		}
+
 		public function test_render_metabox_renders_the_default_delivery_history_when_nothing_replaces_it(): void {
 			$provider = $this->provider();
 			$order    = $this->make_order();

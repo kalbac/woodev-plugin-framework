@@ -40,6 +40,7 @@ use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Query;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
 use Woodev\Framework\Shipping\Order\Delivery_Status;
+use Woodev\Framework\Shipping\Order\Shipment_Cancellation;
 use Woodev\Tests\Integration\TestCase;
 
 class OrdersIdResolverDatastoresTest extends TestCase {
@@ -128,9 +129,12 @@ class OrdersIdResolverDatastoresTest extends TestCase {
 	 * then the bare carrier's marker across four order statuses (failed too), two failed
 	 * mapped-carrier orders, and orders with NO marker: some carrying the mapped carrier's
 	 * own keys (delivery status / tracking / pickup) without its marker, which must never
-	 * leave the scope, and a plain one.
+	 * leave the scope, and a plain one. Seven more carry the framework's own cancellation marker
+	 * (#1037) — on every raw status the mapped carrier can have, on the bare carrier, and on an
+	 * order no carrier owns (which must not leave the scope either): a cancelled order resolves
+	 * `cancelled` whatever the carrier's raw status says.
 	 *
-	 * @return array<int,array{marker:?string,delivery:?string,tracking:bool,pickup:bool,order_status:string}>
+	 * @return array<int,array{marker:?string,delivery:?string,tracking:bool,pickup:bool,order_status:string,cancelled?:bool}>
 	 */
 	private function universe(): array {
 		$rows = [];
@@ -192,6 +196,43 @@ class OrdersIdResolverDatastoresTest extends TestCase {
 			'order_status' => 'wc-processing',
 		];
 
+		// #1037: shipments the framework recorded as cancelled — the carrier's raw status is left as it was.
+		foreach ( [ null, 'M1_GO', 'M1_DONE', 'JUNK' ] as $delivery ) {
+			$rows[] = [
+				'marker'       => 'm1',
+				'delivery'     => $delivery,
+				'tracking'     => false,
+				'pickup'       => false,
+				'order_status' => 'wc-processing',
+				'cancelled'    => true,
+			];
+		}
+
+		$rows[] = [
+			'marker'       => 'm1',
+			'delivery'     => 'M1_GO',
+			'tracking'     => false,
+			'pickup'       => false,
+			'order_status' => 'wc-cancelled',
+			'cancelled'    => true,
+		];
+		$rows[] = [
+			'marker'       => 'b1',
+			'delivery'     => null,
+			'tracking'     => false,
+			'pickup'       => false,
+			'order_status' => 'wc-processing',
+			'cancelled'    => true,
+		];
+		$rows[] = [
+			'marker'       => null,
+			'delivery'     => 'M1_GO',
+			'tracking'     => false,
+			'pickup'       => false,
+			'order_status' => 'wc-processing',
+			'cancelled'    => true,
+		];
+
 		return $rows;
 	}
 
@@ -215,6 +256,10 @@ class OrdersIdResolverDatastoresTest extends TestCase {
 
 			if ( null !== $row['delivery'] ) {
 				$order->update_meta_data( self::M1_STATUS, $row['delivery'] );
+			}
+
+			if ( ! empty( $row['cancelled'] ) ) {
+				$order->update_meta_data( Shipment_Cancellation::CANCELLED_AT_META, '1790000000' );
 			}
 
 			if ( $row['tracking'] ) {
@@ -249,7 +294,7 @@ class OrdersIdResolverDatastoresTest extends TestCase {
 
 	/**
 	 * The request space: `match` (all / any) x delivery status (none / is unknown / is in
-	 * transit / is not in transit) x tracking (none / yes / no) x pickup point (none / yes /
+	 * transit / is not in transit / is cancelled / is not cancelled) x tracking (none / yes / no) x pickup point (none / yes /
 	 * no) x order status (none / is / is several / is not / is nothing real) x carrier
 	 * (aggregate / the mapped one). `per_page` is wide enough for the whole universe.
 	 *
@@ -261,6 +306,8 @@ class OrdersIdResolverDatastoresTest extends TestCase {
 			[ 'delivery_status' => Delivery_Status::UNKNOWN ],
 			[ 'delivery_status' => Delivery_Status::IN_TRANSIT ],
 			[ 'delivery_status_not' => Delivery_Status::IN_TRANSIT ],
+			[ 'delivery_status' => Delivery_Status::CANCELLED ],
+			[ 'delivery_status_not' => Delivery_Status::CANCELLED ],
 		];
 		$trackings  = [ [], [ 'has_tracking' => true ], [ 'has_tracking' => false ] ];
 		$pickups    = [ [], [ 'has_pickup_point' => true ], [ 'has_pickup_point' => false ] ];
@@ -293,24 +340,27 @@ class OrdersIdResolverDatastoresTest extends TestCase {
 	}
 
 	/**
-	 * Whether the mapped carrier's own delivery-status condition holds (#836 / #837 / #839).
+	 * The canonical delivery status one seeded order RESOLVES to — the row's own reading, written
+	 * from the data and never from the query: a shipment the framework recorded as cancelled is
+	 * `cancelled` (#1037); otherwise the mapped carrier's raw status goes through its map
+	 * (`M1_GO` in transit, `M1_DONE` delivered, anything else, or nothing, unknown) and the bare
+	 * carrier, which has no status concept, is always unknown.
 	 *
-	 * @param array<string,mixed> $row       one universe row.
-	 * @param string              $canonical `unknown` or `in_transit` (the only ones requested).
-	 * @param bool                $negate    true => "is not".
+	 * @param array<string,mixed> $row one universe row.
 	 */
-	private function m1_delivery_holds( array $row, string $canonical, bool $negate ): bool {
-		$marker   = 'm1' === $row['marker'];
-		$present  = null !== $row['delivery'];
-		$mapped   = in_array( $row['delivery'], [ 'M1_GO', 'M1_DONE' ], true );
-		$in_trans = 'M1_GO' === $row['delivery'];
-
-		if ( Delivery_Status::UNKNOWN === $canonical ) {
-			// A mapped carrier is unknown when its marker is there and the status is absent or maps to nothing.
-			return $negate ? $mapped : ( $marker && ( ! $present || ! $mapped ) );
+	private function resolved_status( array $row ): string {
+		if ( ! empty( $row['cancelled'] ) ) {
+			return Delivery_Status::CANCELLED;
 		}
 
-		return $negate ? ( $marker && ! $in_trans ) : $in_trans;
+		if ( 'm1' === $row['marker'] ) {
+			return [
+				'M1_GO'   => Delivery_Status::IN_TRANSIT,
+				'M1_DONE' => Delivery_Status::DELIVERED,
+			][ (string) $row['delivery'] ] ?? Delivery_Status::UNKNOWN;
+		}
+
+		return Delivery_Status::UNKNOWN;
 	}
 
 	/**
@@ -340,11 +390,8 @@ class OrdersIdResolverDatastoresTest extends TestCase {
 		if ( null !== $canonical ) {
 			$negate = ! isset( $request['delivery_status'] );
 
-			// A bare carrier is ALWAYS unknown: `is unknown` holds, `is not unknown` never, and `is not <other>` always.
-			$b1_holds = $covers_b1 && 'b1' === $row['marker']
-				&& ( Delivery_Status::UNKNOWN === $canonical ? ! $negate : $negate );
-
-			$filters[] = $b1_holds || ( 'm1' === $row['marker'] && $this->m1_delivery_holds( $row, $canonical, $negate ) );
+			// The order is in scope (a marker above), so it IS some carrier's order: what it resolves to decides.
+			$filters[] = ( $this->resolved_status( $row ) === $canonical ) !== $negate;
 		}
 
 		foreach ( [ 'has_tracking' => 'tracking', 'has_pickup_point' => 'pickup' ] as $arg => $field ) {
@@ -422,8 +469,8 @@ class OrdersIdResolverDatastoresTest extends TestCase {
 		$query    = new Orders_Query( Orders_Registry::instance() );
 		$requests = $this->requests();
 
-		$this->assertCount( 720, $requests );
-		$this->assertCount( 57, $seeded );
+		$this->assertCount( 1080, $requests );
+		$this->assertCount( 64, $seeded );
 
 		$mismatches = [];
 		$non_empty  = 0;

@@ -1911,6 +1911,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 * rather than curated, so it stays true for whatever carriers a shop actually
 		 * has, and starts offering a state the day some carrier maps to it.
 		 *
+		 * `CANCELLED` is always included too (#1037): the framework records a cancellation in a
+		 * meta of its own, so it is reachable even when no provider maps anything to it.
+		 *
 		 * `UNKNOWN` is always included and is not derived: it is what
 		 * {@see \Woodev\Framework\Shipping\Order\Delivery_Status::resolve()} returns for
 		 * a raw status a provider left unmapped AND for an order carrying no status meta
@@ -1926,7 +1929,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 * @return array<int,string> canonical slugs, always non-empty (`unknown` at least).
 		 */
 		private function build_reachable_delivery_statuses(): array {
-			$produced = [];
+			// The framework's own cancellation marker (#1037) makes `cancelled` reachable on every shop, whatever the maps say.
+			$produced = [ Delivery_Status::CANCELLED => true ];
 
 			foreach ( $this->get_providers() as $provider ) {
 				foreach ( $provider->get_status_map() as $canonical ) {
