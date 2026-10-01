@@ -216,8 +216,10 @@
  * Trigger — the button mounted into the §8 `data-woodev-pickup-slot` anchor (classic checkout;
  * the block checkout mounts no trigger of ours).
  *
- * Accent-filled (issue #379), the same family as the modal's own primary button
- * `.woodev-pickup-card__cta`: same fill/contrast pair, padding, radius, weight. It reads
+ * Accent-filled (issue #379): the same fill/contrast pair as the modal's primary button
+ * `.woodev-pickup-card__cta`, and NOTHING about size — padding, font size, weight, line height,
+ * radius and display stay the theme's `.button` (operator, 01.10.2026: a minimal set, the site's
+ * own button styles decide the shape). It reads
  * `--woodev-pickup-accent-fill` / `-contrast` / `-accent` off ITSELF — `pickup-mount.js`'s
  * `applyTriggerAccent()` writes them on the button, because the modal's host (the stage) is not an
  * ancestor of a checkout button. No accent set → the var() literals below are the modal's own
@@ -227,7 +229,7 @@
  * one sits inline in a theme-owned shipping-rate list / review table cell, where an auto-width
  * button is what every other `.button` there does.
  *
- * Scoped to OUR class only. The class is written twice (and `.button` kept) so the colour/shape
+ * Scoped to OUR class only. The class is written twice (and `.button` kept) so the colour
  * rules outrank WooCommerce's `.woocommerce button.button` (0,2,1) and its `:hover` (0,3,1)
  * without `!important`; a theme that wants its own look can still beat this with an ID or `!important`.
  * ---------------------------------------------------------------------- */
@@ -237,17 +239,8 @@
 }
 
 .woodev-pickup-trigger.woodev-pickup-trigger.button {
-	display: inline-block;
-	padding: 10px 16px;
-	font-size: 14px;
-	font-weight: 600;
-	line-height: 1.4;
-	text-decoration: none;
 	color: var( --woodev-pickup-accent-contrast, #fff );
 	background: var( --woodev-pickup-accent-fill, #047a9b );
-	border: 0;
-	border-radius: 4px;
-	box-shadow: none;
 	cursor: pointer;
 }
 
