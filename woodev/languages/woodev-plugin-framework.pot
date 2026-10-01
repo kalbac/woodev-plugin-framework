@@ -2829,7 +2829,7 @@ msgid "Неизвестно"
 msgstr ""
 
 #. translators: 1: number of attempts, 2: the carrier's last error
-#: shipping-method/order/class-export-retry.php:230
+#: shipping-method/order/class-export-retry.php:238
 #, php-format
 msgid "Не удалось выгрузить заказ перевозчику за %1$d попыток: %2$s"
 msgstr ""
