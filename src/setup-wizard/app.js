@@ -56,31 +56,34 @@ function visitedKey( pluginId ) {
 }
 
 /**
- * Reads the stored furthest visited index; 0 (nothing visited beyond the first
- * step) when storage is unavailable, empty or holds garbage.
+ * Reads the furthest visited step from storage, by step id; 0 (nothing visited
+ * beyond the first step) when storage is unavailable, empty, or names a step the
+ * current list does not have (a plugin update removed it, or the value is garbage)
+ * — an index would silently point at a different step once the list changes.
  *
  * @param {string} pluginId plugin id from the bootstrap.
+ * @param {Array}  steps    the current step list.
  * @return {number} furthest visited step index.
  */
-function readVisited( pluginId ) {
+function readVisited( pluginId, steps ) {
 	try {
 		const raw = window.sessionStorage.getItem( visitedKey( pluginId ) );
-		const n = parseInt( raw, 10 );
-		return Number.isFinite( n ) && n > 0 ? n : 0;
+		const found = null === raw ? -1 : steps.findIndex( ( s ) => String( s.id ) === raw );
+		return found > 0 ? found : 0;
 	} catch ( e ) {
 		return 0;
 	}
 }
 
 /**
- * Stores the furthest visited index (best-effort: storage may be blocked).
+ * Stores the furthest visited step's id (best-effort: storage may be blocked).
  *
  * @param {string} pluginId plugin id from the bootstrap.
- * @param {number} value    furthest visited step index.
+ * @param {string} stepId   id of the furthest visited step.
  */
-function writeVisited( pluginId, value ) {
+function writeVisited( pluginId, stepId ) {
 	try {
-		window.sessionStorage.setItem( visitedKey( pluginId ), String( value ) );
+		window.sessionStorage.setItem( visitedKey( pluginId ), String( stepId ) );
 	} catch ( e ) {
 		// Unavailable storage just means the boundary is not remembered across reloads.
 	}
@@ -118,7 +121,7 @@ export default function App() {
 		const wanted = 'finish' === steps[ found ].type ? Math.max( 0, found - 1 ) : found;
 		// …and never beyond the furthest step this tab has actually visited, so a
 		// hand-typed or bookmarked hash cannot seed the boundary past unvisited steps.
-		return Math.min( wanted, readVisited( pluginId ) );
+		return Math.min( wanted, readVisited( pluginId, steps ) );
 	}
 
 	const [ index, setIndex ] = useState( initialIndex );
@@ -128,7 +131,7 @@ export default function App() {
 	// which must not close over a stale value.
 	const maxVisitedRef = useRef( null );
 	if ( null === maxVisitedRef.current ) {
-		maxVisitedRef.current = Math.min( Math.max( index, readVisited( pluginId ) ), steps.length - 1 );
+		maxVisitedRef.current = Math.max( index, readVisited( pluginId, steps ) );
 	}
 	const indexRef = useRef( index );
 	maxVisitedRef.current = Math.max( maxVisitedRef.current, index );
@@ -148,8 +151,8 @@ export default function App() {
 
 	// Remember the visited boundary for a reload in this tab.
 	useEffect( () => {
-		writeVisited( pluginId, maxVisited );
-	}, [ pluginId, maxVisited ] );
+		writeVisited( pluginId, steps[ maxVisited ].id );
+	}, [ pluginId, steps, maxVisited ] );
 
 	// Keep the URL hash in sync with the active step (WooCommerce-style anchor).
 	useEffect( () => {

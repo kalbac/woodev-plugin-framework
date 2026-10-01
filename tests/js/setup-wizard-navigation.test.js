@@ -180,7 +180,7 @@ test( 'a hand-edited hash cannot jump forward to an unvisited step or to finish'
 } );
 
 test( 'a deep link to the finish step lands on the last real step once it was visited', async () => {
-	window.sessionStorage.setItem( 'woodevSetupWizard:visited:woodev_test', '2' );
+	window.sessionStorage.setItem( 'woodevSetupWizard:visited:woodev_test', 'payment' );
 	window.location.hash = '#finish-step';
 	render( createElement( App ) );
 	await act( async () => {} );
@@ -211,7 +211,7 @@ test( 'a fresh load at the hash of an unvisited ordinary step lands on the first
 } );
 
 test( 'a deep link beyond the stored boundary lands on the furthest visited step', async () => {
-	window.sessionStorage.setItem( 'woodevSetupWizard:visited:woodev_test', '1' );
+	window.sessionStorage.setItem( 'woodevSetupWizard:visited:woodev_test', 'delivery' );
 	window.location.hash = '#payment-step';
 	render( createElement( App ) );
 	await act( async () => {} );
@@ -253,7 +253,7 @@ test( 'a reload on an earlier step keeps the furthest boundary', async () => {
 } );
 
 test( 'boundaries of different plugins do not leak into each other', async () => {
-	window.sessionStorage.setItem( 'woodevSetupWizard:visited:another_plugin', '2' );
+	window.sessionStorage.setItem( 'woodevSetupWizard:visited:another_plugin', 'payment' );
 	window.location.hash = '#payment-step';
 	render( createElement( App ) );
 	await act( async () => {} );
@@ -287,6 +287,30 @@ test( 'a garbage stored boundary is ignored', async () => {
 	await act( async () => {} );
 
 	expect( currentTitle() ).toBe( 'Приветствие' );
+} );
+
+test( 'a stored step the current list no longer has is ignored', async () => {
+	// A plugin update removed the step this tab had reached; an index would now point
+	// at a different (possibly the last real) step, an id simply is not found.
+	window.sessionStorage.setItem( 'woodevSetupWizard:visited:woodev_test', 'removed_step' );
+	window.location.hash = '#payment-step';
+	render( createElement( App ) );
+	await act( async () => {} );
+
+	expect( currentTitle() ).toBe( 'Приветствие' );
+	expect( stepperButton( 'Оплата' ) ).toBeNull();
+} );
+
+test( 'a legacy or partially numeric stored value grants nothing', async () => {
+	for ( const raw of [ '99', '2', '2garbage' ] ) {
+		window.sessionStorage.setItem( 'woodevSetupWizard:visited:woodev_test', raw );
+		window.location.hash = '#payment-step';
+		const view = render( createElement( App ) );
+		await act( async () => {} );
+
+		expect( currentTitle() ).toBe( 'Приветствие' );
+		view.unmount();
+	}
 } );
 
 test( 'browser back/forward (hashchange) obeys the visited gate', async () => {
