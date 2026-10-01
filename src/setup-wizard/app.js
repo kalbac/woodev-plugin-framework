@@ -10,6 +10,11 @@
  * - "Продолжить" / "Начать настройку" saves the current settings step (advance on
  *   success only) and advances; on a content/welcome step it just advances.
  * - "Пропустить" skips THIS step (advance WITHOUT saving) — never exits.
+ * - The stepper is back-free but forward-gated (#110): a step label is a button only for
+ *   a step already VISITED in this session (index <= the furthest one reached) and never
+ *   for the terminal finish step, which is reachable only through the primary button of
+ *   the last real step. The same gate covers `#{id}-step` hash navigation. Progress is
+ *   in-memory only — the server has no per-step completion state to seed it from.
  * - Footer link EXITS the wizard: marks it skipped (non-finish) and redirects to
  *   the admin dashboard.
  * - Finish step: marks the wizard completed once, then shows the success screen.
@@ -20,7 +25,7 @@
  * @package woodev-plugin-framework
  */
 
-import { createElement, Fragment, useState, useEffect } from '@wordpress/element';
+import { createElement, Fragment, useState, useEffect, useRef } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import { Button } from '@wordpress/components';
 import Stepper from '../components/stepper';
@@ -61,10 +66,23 @@ export default function App() {
 	function initialIndex() {
 		const hash = window.location.hash.replace( /^#/, '' );
 		const found = steps.findIndex( ( s ) => `${ s.id }-step` === hash );
-		return found >= 0 ? found : 0;
+		if ( found < 0 ) {
+			return 0;
+		}
+		// A deep link (or reload) may resume a step, but never lands on the finish
+		// step — that one is reached only through the last real step's «Продолжить».
+		return 'finish' === steps[ found ].type ? Math.max( 0, found - 1 ) : found;
 	}
 
 	const [ index, setIndex ] = useState( initialIndex );
+	// Furthest step index reached in this session; monotonic, so writing it during
+	// render is idempotent. Mirrors `index` for the hashchange listener, which
+	// must not close over a stale value.
+	const maxVisitedRef = useRef( index );
+	const indexRef = useRef( index );
+	maxVisitedRef.current = Math.max( maxVisitedRef.current, index );
+	indexRef.current = index;
+	const maxVisited = maxVisitedRef.current;
 	const [ values, setValues ] = useState( {} );
 	const [ error, setError ] = useState( null );
 	const [ busy, setBusy ] = useState( false );
@@ -90,9 +108,16 @@ export default function App() {
 		function handleHashChange() {
 			const hash = window.location.hash.replace( /^#/, '' );
 			const found = steps.findIndex( ( s ) => `${ s.id }-step` === hash );
-			if ( found >= 0 ) {
-				setIndex( ( current ) => ( current === found ? current : found ) );
+			if ( found < 0 ) {
+				return;
 			}
+			if ( ! canReach( found, maxVisitedRef.current ) ) {
+				// Forward past the visited range (or onto finish) by hand-edited hash:
+				// refuse and put the hash back on the current step.
+				window.location.hash = `#${ steps[ indexRef.current ].id }-step`;
+				return;
+			}
+			setIndex( ( current ) => ( current === found ? current : found ) );
 		}
 
 		window.addEventListener( 'hashchange', handleHashChange );
@@ -100,7 +125,8 @@ export default function App() {
 	}, [ steps ] );
 
 	/**
-	 * Navigates to an arbitrary step index (used by the stepper + Back button).
+	 * Navigates to an arbitrary step index (used by the stepper + Back button; the
+	 * stepper only offers reachable ones, see `canReach`).
 	 *
 	 * @param {number} i target step index.
 	 */
@@ -139,6 +165,18 @@ export default function App() {
 			}
 		}
 	}, [ errorRevealGen ] );
+
+	/**
+	 * Whether the stepper / hash may take the user to step `i`: any step up to the
+	 * furthest one visited, but never the terminal finish step.
+	 *
+	 * @param {number} i          target step index.
+	 * @param {number} furthest   furthest visited step index.
+	 * @return {boolean} true when navigation is allowed.
+	 */
+	function canReach( i, furthest ) {
+		return i <= furthest && !! steps[ i ] && 'finish' !== steps[ i ].type;
+	}
 
 	/**
 	 * Advances to the next step, saving the current settings step first.
@@ -232,7 +270,13 @@ export default function App() {
 		'div',
 		{ className: 'woodev-setup' },
 		renderHeader( pluginName, headerLogoUrl ),
-		createElement( Stepper, { steps, index, onNavigate: goTo, disabled: busy } ),
+		createElement( Stepper, {
+			steps,
+			index,
+			onNavigate: goTo,
+			disabled: busy,
+			canNavigate: ( i ) => canReach( i, maxVisited ),
+		} ),
 		isFinish
 			? createElement(
 				Fragment,
