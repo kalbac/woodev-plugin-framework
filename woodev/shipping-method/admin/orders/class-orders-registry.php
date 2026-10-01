@@ -1574,6 +1574,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 
 			wp_enqueue_style( 'woodev-shipping-orders-page', $build_url . '/style-index.css', [ 'wc-components' ], $style_version );
 			wp_enqueue_script( 'woodev-shipping-orders-page', $build_url . '/index.js', $dependencies, $asset['version'], true );
+			\Woodev\Framework\Handlers\Script_Translations::register( $plugin, 'woodev-shipping-orders-page' );
 
 			wp_add_inline_script(
 				'woodev-shipping-orders-page',

@@ -267,6 +267,11 @@ jobs:
       - name: Compiled .mo is current relative to the .po (#771)
         run: npm run lint:mo
 
+      # JS-бандлы читают переводы из handle-named JSON, а не из .mo: без файла msgid в JS
+      # показывается как написан при любой локали (#1032).
+      - name: Per-bundle JS translation JSON is current relative to the .po (#1032)
+        run: npm run lint:js-i18n
+
       - name: Run JS tests
         run: npm run test:js
 

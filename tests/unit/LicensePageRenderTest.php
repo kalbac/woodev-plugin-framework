@@ -240,6 +240,12 @@ class LicensePageRenderTest extends TestCase {
 			}
 		);
 
+		// The bundle's JS translations are wired by handle (#1032).
+		Functions\expect( 'wp_set_script_translations' )
+			->once()
+			->with( 'woodev-license-app', 'woodev-plugin-framework', \Mockery::type( 'string' ) )
+			->andReturn( true );
+
 		$pages = $this->make_admin_pages();
 		$pages->load_licenses_page_scripts();
 
@@ -319,6 +325,7 @@ class LicensePageRenderTest extends TestCase {
 		Functions\when( 'esc_url_raw' )->returnArg();
 		Functions\when( 'wp_create_nonce' )->justReturn( 'nonce' );
 		Functions\when( 'wp_json_encode' )->alias( 'json_encode' );
+		Functions\when( 'wp_set_script_translations' )->justReturn( true );
 
 		$pages = $this->make_admin_pages_without_asset_file();
 		$pages->load_licenses_page_scripts();

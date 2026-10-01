@@ -529,6 +529,7 @@ abstract class Setup_Wizard {
 		wp_enqueue_style( 'wp-components' );
 		wp_enqueue_style( 'woodev-setup-wizard', $build_url . '/style-index.css', [ 'wp-components' ], $style_version );
 		wp_enqueue_script( 'woodev-setup-wizard', $build_url . '/index.js', $asset['dependencies'], $asset['version'], true );
+		\Woodev\Framework\Handlers\Script_Translations::register( $this->plugin, 'woodev-setup-wizard' );
 
 		wp_add_inline_script(
 			'woodev-setup-wizard',

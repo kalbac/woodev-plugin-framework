@@ -53,6 +53,10 @@ is not a defect to chase.
 
 ## ❌ In JS: `_n()` cannot be fixed at all, so do not rely on it
 
+> ⚠ **Superseded in part, s147 (#1032):** JS translations are now delivered (handle-named JSON,
+> [js-translations-are-handle-named-json-files](js-translations-are-handle-named-json-files.md)), so a
+> JS plural CAN be fixed by a three-form entry. The measurement below describes s134, before the wiring.
+
 Measured s134: **`wp_set_script_translations()` is called nowhere in this framework and there is no
 `make-json` step.** No JS translations are loaded, ever, so `@wordpress/i18n`'s `_n()` always uses its
 own binary rule and no catalogue entry can change that.

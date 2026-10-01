@@ -89,7 +89,7 @@ fi
 # after reading `tail -3` of a `;`-chained run, where the failing lines had scrolled past.
 failed=''
 
-for gate in lint:i18n lint:i18n-sources lint:mo; do
+for gate in lint:i18n lint:i18n-sources lint:mo lint:js-i18n; do
 	if ! npm run "$gate" >/dev/null 2>&1; then
 		failed="$failed $gate"
 	fi
