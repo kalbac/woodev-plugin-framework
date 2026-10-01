@@ -74,24 +74,18 @@ agents.* A paid resource left idle is a loss, not a saving.
 | a genuinely hard problem that wants the best head | **Fable 5** — propose it yourself; do not default to Opus for everything hard (operator, 29.08.2026) |
 | coordination, gates, git, synthesis | **Opus 5** (this session) |
 
-Inside Codex the model is a third choice, and the default is deliberately not the best one.
-**Operator, 01.10.2026 (s146), after the catalogue moved to the 6.x generation: the default is
-`gpt-6-luna`, set in `~/.codex/config.toml`** — a launch naming no model is already right. **For a
-hard task — adversarial review of an architectural fork, a third round on one card, a defect where two
-runs already disagreed — use `gpt-6.1-sol`** («latest workhorse», priority 1 in the catalogue). Reach
-past the default with `--model` only for that reason (⚠ on the Mac `--model`/`--effort` broke Orca's
-readiness on 0.157 — the report-FILE launch path does not depend on readiness; gotcha
-`starting-codex-under-orca-needs-four-steps-not-one`). `gpt-6-astra` is no longer the go-to for hard
-work — only on his word. The live catalogue is `~/.codex/models_cache.json` (Orca's own copy under its
-app-data dir goes stale — it still showed 16.09 on 01.10); the 5.6 models are marked «older».
+Inside Codex the model is a third choice. **Operator, 01.10.2026: default `gpt-6-luna`** (set in
+`~/.codex/config.toml`, so a launch naming no model is right); **hard tasks — an architectural fork, a
+third round on one card, two runs that disagree — `gpt-6.1-sol`** via `--model`. `gpt-6-astra` only on
+his word. Live catalogue: `~/.codex/models_cache.json` (Orca's own copy goes stale). Launch recipe:
+gotcha `starting-codex-under-orca-needs-four-steps-not-one`.
 
 **Effort: `high` is the ceiling for routine use; `max` and `ultra` need their own reason** — they
 burn the limit without paying for themselves (operator, 06.09.2026). **This binds THIS session too:
 no Ultracode, no `max` on a Fable run unless he asks.** One Ultracode run cost him a five-hour
 window in five minutes.
 
-**The price of one astra round is MEASURED, s122 (06.09.2026)** — on the OLD generation (`gpt-5.6-luna`
-vs `gpt-6-astra`); `gpt-6-luna` / `gpt-6.1-sol` are not measured yet — same brief, same diff, same
+**The price of one astra round is MEASURED, s122 (06.09.2026)** (old generation; 6.x luna/sol not measured) — same brief, same diff, same
 `high` effort, one after the other:
 
 | | luna | astra |
