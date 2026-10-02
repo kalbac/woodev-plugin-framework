@@ -260,7 +260,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 		}
 
 		/**
-		 * The «Габариты по умолчанию» handler (#955). Lazily built, never `null`, so the packer can read
+		 * The «Вес и габариты» handler (#955). Lazily built, never `null`, so the packer can read
 		 * it on a request where the tab itself was never registered.
 		 *
 		 * @since 2.0.2
@@ -353,10 +353,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 				);
 			}
 
-			// «Габариты по умолчанию» (#955): store-wide, so it is always on the tab of any shipping plugin.
+			// «Вес и габариты» (#955): store-wide, so it is always on the tab of any shipping plugin.
 			$sections[] = Settings_Section::create(
 				Default_Dimensions_Settings::SECTION_ID,
-				__( 'Габариты по умолчанию', 'woodev-plugin-framework' ),
+				__( 'Вес и габариты', 'woodev-plugin-framework' ),
 				$this->get_default_dimensions_settings()->get_owned_setting_ids(),
 				__( 'Эти значения подставляются, только если у товара не указаны вес или габариты. Для точного расчёта стоимости доставки укажите вес и габариты в карточке каждого товара.', 'woodev-plugin-framework' )
 			);

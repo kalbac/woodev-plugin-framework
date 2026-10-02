@@ -3632,7 +3632,7 @@ msgid "Общие для всех способов доставки с пунк�
 msgstr ""
 
 #: shipping-method/settings/class-shipping-settings-tab.php:359
-msgid "Габариты по умолчанию"
+msgid "Вес и габариты"
 msgstr ""
 
 #: shipping-method/settings/class-shipping-settings-tab.php:361

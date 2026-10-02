@@ -2,7 +2,7 @@
 /**
  * Woodev Default Dimensions Settings
  *
- * Store-level settings handler owning the «Габариты по умолчанию» section of the «Доставка» tab
+ * Store-level settings handler owning the «Вес и габариты» section of the «Доставка» tab
  * (#955): the length, width, height and weight a product is packed with when it has none of its own.
  * Registered with the `default_dimensions` option namespace (`woodev_default_dimensions_*`).
  *
@@ -32,7 +32,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Default_Dimensions_Settings' ) ) :
 
 	/**
-	 * Settings handler for the product-without-dimensions fallback («Габариты по умолчанию» section).
+	 * Settings handler for the product-without-dimensions fallback («Вес и габариты» section).
 	 *
 	 * @since 2.0.2
 	 */

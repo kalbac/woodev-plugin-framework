@@ -1,7 +1,7 @@
 <?php
 /**
  * #955: Woodev_WC_Packer_Dispatcher fills a product's MISSING length / width / height / weight from the
- * store's «Габариты по умолчанию» settings — per value, in the store's units, and only when the product
+ * store's «Вес и габариты» settings — per value, in the store's units, and only when the product
  * has no value of its own. The settings are required and pre-filled (100 g, 10 cm) in the store's units.
  *
  * `wc_get_weight()` / `wc_get_dimension()` are faithful fakes of WooCommerce's conversion (see
