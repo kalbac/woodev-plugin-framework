@@ -6,7 +6,7 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-02 (s149, overnight).** ✅ Merged #1057 #1056 #1062 #955 (accepted by him on the rig; section «Вес и габариты») #1060 (DaData 403 cause, live-checked on the rig). No open PRs. Details: `sessions/s149.md`. ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
+**As of 2026-10-02 (s149, overnight).** ✅ Merged #1057 #1056 #1062 #955 #1060 #1069 #1071 #331. #332 in progress. Details: `sessions/s149.md`. ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
 orders-page slug redirects to the framework page with that carrier preselected, accepted on the rig.
 ✅ **Both machines are live**; routine sync is git ONLY (`wiki/two-machine-setup.md`). The order
 metabox (#856) and the orders table (#870) stay accepted.
