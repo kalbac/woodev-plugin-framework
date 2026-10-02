@@ -3691,6 +3691,8 @@
 			// `options.popular` at all, the same "omit rather than hand over an
 			// always-empty primitive" discipline `onAbandon` already follows elsewhere.
 			popular: 'settlement' === node.level ? popularFor( entry, node ) : null,
+			// Issue #331: see `attachRelatedListRegion()` — the cart's WooCommerce scripts re-fire `change` with an unchanged value.
+			seedSelectedText: CART_CONTEXT,
 			// Issue #1071: only for the level that carries the popular list — what the CUSTOMER
 			// picked here, never what the store filled in (#536).
 			pickedSettlement: 'settlement' === node.level ? function() {
@@ -4639,6 +4641,17 @@
 
 			if ( entry.resolved[ id ] === newValue ) {
 				return; // no real transition — WC-style no-op churn OR a duplicate delivery.
+			}
+
+			// Issue #331: the calculator's WooCommerce scripts rebuild the state `<select>` from
+			// their own state list and re-fire `change` (every time the calculator is opened).
+			// What we remembered is the region's TEXT (what backwards fill wrote), while the
+			// rebuilt option's `value` is WooCommerce's own code for the SAME region — the
+			// selected option still names what we remember, so this is no transition either.
+			if ( CART_CONTEXT && 'SELECT' === target.tagName && target.selectedIndex >= 0
+				&& target.options[ target.selectedIndex ].text === entry.resolved[ id ] ) {
+				entry.resolved[ id ] = newValue;
+				return;
 			}
 
 			entry.resolved[ id ] = newValue;

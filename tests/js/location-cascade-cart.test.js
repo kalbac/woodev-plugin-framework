@@ -254,3 +254,141 @@ describe( 'cart calculator boot path (issue #331)', () => {
 		expect( document.getElementById( 'calc_shipping_city' ).value ).toBe( 'Внуково' );
 	} );
 } );
+
+// ---------------------------------------------------------------------------
+// Fix round 2: WooCommerce's own scripts re-fire `change` on the state <select>
+// ---------------------------------------------------------------------------
+
+describe( 'cart calculator: WooCommerce state churn is not a customer region change', () => {
+	const MOSCOW = {
+		key: 'dadata:r77', provider_id: 'dadata', level: 'region', country: 'RU',
+		region: { name: 'Москва', type: 'г' }, label: 'Москва', ancestors: [],
+	};
+	const VNUKOVO = {
+		key: 'dadata:vn', provider_id: 'dadata', level: 'settlement', country: 'RU',
+		settlement: { name: 'Внуково', type: 'п' }, region: { name: 'Москва', type: 'г' },
+		label: 'Внуково, Москва', ancestors: [ 'dadata:r77' ],
+	};
+
+	function statesMarkup( selectedValue ) {
+		return '<option value="">Выберите…</option>'
+			+ '<option value="MOW">Москва</option>'
+			+ '<option value="SPE">Санкт-Петербург</option>'
+			+ ( selectedValue ? '' : '' );
+	}
+
+	function bootRealRelatedList( location = {} ) {
+		installCalculatorMarkup( 'RU' );
+
+		const state = document.createElement( 'select' );
+		state.id = 'calc_shipping_state';
+		state.name = 'calc_shipping_state';
+		state.innerHTML = statesMarkup();
+		state.value = 'MOW';
+		document.getElementById( 'calc_shipping_state' ).replaceWith( state );
+
+		global.jQuery = require( 'jquery' );
+		window.jQuery = global.jQuery;
+		window.WoodevCheckoutFieldStore = require( '../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js' );
+		require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
+
+		window.WoodevLocationTypeahead = jest.fn( () => ( { detach: jest.fn() } ) );
+
+		fetchCalls = [];
+		global.fetch = jest.fn( ( url, init ) => {
+			const entry = { url, init };
+
+			entry.promise = new Promise( ( resolve ) => {
+				entry.resolve = ( body ) => resolve( { ok: true, json: () => Promise.resolve( body ) } );
+			} );
+			fetchCalls.push( entry );
+
+			// The region list answers at once; everything else waits for the test.
+			if ( String( url ).includes( '/location/list' ) ) {
+				entry.resolve( { localities: [ { key: MOSCOW.key, label: 'Москва', level: 'region', record: MOSCOW } ] } );
+			}
+
+			return entry.promise;
+		} );
+
+		window[ CONFIG_GLOBAL ] = {
+			context: 'cart',
+			fields: { calc_shipping_state: field( 'region' ), calc_shipping_city: field( 'settlement' ) },
+			endpoint: 'x', nonce: 'n', takeover: {}, pickup_method_ids: [],
+			location: {
+				endpoints: { suggest: SUGGEST_URL, select: SELECT_URL, list: 'https://example.test/wp-json/woodev/v1/location/list', forget: 'y' },
+				nonce: 'n', countries: [ 'RU' ],
+				mode: { region: 'related-list', settlement: 'typeahead' },
+				allowCustomSettlement: false,
+				levels: { RU: { region: false, settlement: true, address: false } },
+				current: null, implicit: false, defaultCountry: 'RU', i18n: {},
+				...location,
+			},
+		};
+
+		require( '../../woodev/shipping-method/assets/js/frontend/location-cascade.js' );
+	}
+
+	const selectPosts = () => fetchCalls.filter( ( c ) => SELECT_URL === c.url );
+
+	/** What WooCommerce's country-select.js does on `change` of the country field. */
+	function wcRebuildState() {
+		const $ = window.jQuery;
+		const $state = $( '#calc_shipping_state' );
+		const value = $state.val();
+
+		$state.empty().append( '<option value="">Выберите…</option>' )
+			.append( '<option value="MOW">Москва</option>' )
+			.append( '<option value="SPE">Санкт-Петербург</option>' );
+		$state.val( value ).trigger( 'change' );
+		$( document.body ).trigger( 'country_to_state_changed', [ 'RU' ] );
+	}
+
+	it( '(a) page load with a stored chain posts no /select', async () => {
+		bootRealRelatedList( {
+			current: { key: VNUKOVO.key, level: 'settlement' },
+			chain: { settlement: { key: VNUKOVO.key, level: 'settlement' }, region: { key: MOSCOW.key, level: 'region' } },
+		} );
+
+		wcRebuildState(); // cart.js / country-select.js on load
+		await flushMicrotasks();
+
+		expect( selectPosts() ).toHaveLength( 0 );
+	} );
+
+	it( '(b) re-opening the calculator keeps the picked city and posts no /select', async () => {
+		bootRealRelatedList();
+
+		const city = document.getElementById( 'calc_shipping_city' );
+		const call = window.WoodevLocationTypeahead.mock.calls.find( ( c ) => c[ 0 ] === city );
+
+		city.value = 'Внуково';
+		call[ 1 ].onSelect( { key: VNUKOVO.key, label: VNUKOVO.label, level: 'settlement', record: VNUKOVO } );
+		await flushMicrotasks();
+		const postsAfterPick = selectPosts().length;
+
+		wcRebuildState(); // toggle -> country `change` -> state rebuilt -> same-value change
+		await flushMicrotasks();
+
+		expect( document.getElementById( 'calc_shipping_city' ).value ).toBe( 'Внуково' );
+		expect( selectPosts() ).toHaveLength( postsAfterPick );
+	} );
+
+	it( '(c) a real, different region change still clears the city and persists', async () => {
+		bootRealRelatedList();
+
+		const city = document.getElementById( 'calc_shipping_city' );
+		const call = window.WoodevLocationTypeahead.mock.calls.find( ( c ) => c[ 0 ] === city );
+
+		city.value = 'Внуково';
+		call[ 1 ].onSelect( { key: VNUKOVO.key, label: VNUKOVO.label, level: 'settlement', record: VNUKOVO } );
+		await flushMicrotasks();
+
+		const state = document.getElementById( 'calc_shipping_state' );
+		state.value = 'SPE';
+		window.jQuery( state ).trigger( 'change' );
+		await flushMicrotasks();
+
+		expect( document.getElementById( 'calc_shipping_city' ).value ).toBe( '' );
+	} );
+} );

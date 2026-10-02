@@ -168,6 +168,16 @@
 		var listCountry = null;
 		var lastHandledText = null;
 
+		// Issue #331: on the cart, WooCommerce's own scripts re-fire `change` on the state
+		// `<select>` with the value already there (page load, re-opening the calculator). That
+		// is not a customer pick — treat what is selected NOW as already handled, so only a
+		// genuinely different region reaches `onSelect()`. The checkout never opts in.
+		if ( options.seedSelectedText ) {
+			var seeded = el.options[ el.selectedIndex ];
+
+			lastHandledText = seeded && seeded.text ? seeded.text : null;
+		}
+
 		/**
 		 * Fetches (and caches, per country) the region-level `/location/list` entries.
 		 *
