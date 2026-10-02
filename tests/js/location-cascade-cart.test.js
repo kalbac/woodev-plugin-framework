@@ -391,4 +391,32 @@ describe( 'cart calculator: WooCommerce state churn is not a customer region cha
 
 		expect( document.getElementById( 'calc_shipping_city' ).value ).toBe( '' );
 	} );
+
+	it( '(d) two regions sharing a label but not a value: choosing the other one clears the city and posts /select', async () => {
+		bootRealRelatedList();
+
+		const state = document.getElementById( 'calc_shipping_state' );
+		// WooCommerce's list carries two options with the SAME label and different codes.
+		state.innerHTML = '<option value="">Выберите…</option><option value="MOW">Москва</option><option value="MOS">Москва</option>';
+		state.value = 'MOW';
+
+		const city = document.getElementById( 'calc_shipping_city' );
+		const call = window.WoodevLocationTypeahead.mock.calls.find( ( c ) => c[ 0 ] === city );
+
+		city.value = 'Внуково';
+		call[ 1 ].onSelect( { key: VNUKOVO.key, label: VNUKOVO.label, level: 'settlement', record: VNUKOVO } );
+		await flushMicrotasks();
+		const posts = selectPosts().length;
+
+		// The first pick's /select answers, freeing the single-flight queue.
+		selectPosts()[ 0 ].resolve( { current: { key: VNUKOVO.key, level: 'settlement' }, persisted: true, chain: { settlement: { key: VNUKOVO.key, level: 'settlement' } } } );
+		await flushMicrotasks();
+
+		state.value = 'MOS';
+		window.jQuery( state ).trigger( 'change' );
+		await flushMicrotasks();
+
+		expect( document.getElementById( 'calc_shipping_city' ).value ).toBe( '' );
+		expect( selectPosts().length ).toBeGreaterThan( posts );
+	} );
 } );

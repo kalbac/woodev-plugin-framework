@@ -1015,9 +1015,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 				return;
 			}
 
-			$city = self::normalize_for_settlement_match( (string) $customer->get_shipping_city() );
+			$saved_city = (string) $customer->get_shipping_city();
 
-			if ( '' === $city ) {
+			if ( '' === self::normalize_for_settlement_match( $saved_city ) ) {
 				return;
 			}
 
@@ -1033,9 +1033,46 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 				return;
 			}
 
-			if ( $city !== self::normalize_for_settlement_match( self::settlement_record_value( $record ) ) ) {
+			$settlement = $record->settlement();
+			$type       = null !== $settlement ? (string) $settlement['type'] : '';
+
+			if (
+				self::normalize_city_for_comparison( $saved_city, $type )
+				!== self::normalize_city_for_comparison( self::settlement_record_value( $record ), $type )
+			) {
 				$service->forget_customer_record();
 			}
+		}
+
+		/**
+		 * Normalizes a city name for the calculator-versus-record comparison: lower-cased,
+		 * «ё» folded to «е», whitespace collapsed, and a leading settlement-type word dropped
+		 * («г. Москва», «город Москва», «пос Внуково»). The record's own `type` is stripped
+		 * first (it is what the provider actually emits), then the common Russian types, so
+		 * WooCommerce's free-text city and the record's bare name meet on the same string. A
+		 * prefix is only dropped when a name remains behind it.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $value The city text.
+		 * @param string $type  The record's own settlement type, or ''.
+		 *
+		 * @return string
+		 */
+		private static function normalize_city_for_comparison( string $value, string $type = '' ): string {
+			$value = str_replace( 'ё', 'е', mb_strtolower( trim( $value ) ) );
+			$value = (string) preg_replace( '/\s+/u', ' ', $value );
+
+			$types = [ 'город', 'гор', 'г', 'поселок', 'посёлок', 'пос', 'пгт', 'п', 'село', 'с', 'деревня', 'д', 'станица', 'ст-ца', 'хутор', 'х', 'аул' ];
+
+			if ( '' !== trim( $type ) ) {
+				array_unshift( $types, str_replace( 'ё', 'е', mb_strtolower( trim( $type, " \t." ) ) ) );
+			}
+
+			$alternatives = implode( '|', array_map( static fn( $t ) => preg_quote( str_replace( 'ё', 'е', $t ), '/' ), array_filter( $types ) ) );
+			$stripped     = (string) preg_replace( '/^(?:' . $alternatives . ')(?:\.\s*|\s+)(?=\S)/u', '', $value );
+
+			return '' !== $stripped ? $stripped : $value;
 		}
 
 		/**

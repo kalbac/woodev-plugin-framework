@@ -1199,6 +1199,9 @@
 			// Per-field remembered value the field is currently CONSISTENT with — gates
 			// destructive clearing exactly like `checkout-field-classic.js`'s own `resolved`.
 			resolved: {},
+			// Issue #331 (cart only): the `<select>` VALUE each field last held, so a rebuilt
+			// state list is judged by region identity (WooCommerce's code), not by label alone.
+			seenValues: {},
 			// Per-LEVEL confirmed record (only chain levels; postcode never has one of its own).
 			records: {},
 			// Per-LEVEL text a COMPLETED search already proved the provider has nothing for
@@ -1905,6 +1908,7 @@
 
 		if ( el ) {
 			applyValueToElement( el, value );
+			entry.seenValues[ fieldId ] = cascadeKey( el.value );
 		}
 
 		if ( previous !== next ) {
@@ -4646,14 +4650,20 @@
 			// Issue #331: the calculator's WooCommerce scripts rebuild the state `<select>` from
 			// their own state list and re-fire `change` (every time the calculator is opened).
 			// What we remembered is the region's TEXT (what backwards fill wrote), while the
-			// rebuilt option's `value` is WooCommerce's own code for the SAME region — the
-			// selected option still names what we remember, so this is no transition either.
+			// rebuilt option's `value` is WooCommerce's own code for the SAME region. Same
+			// region = same VALUE as the field last held (a different value is a transition even
+			// under an identical label); the text check only bridges the remembered TEXT, and a
+			// value we wrote ourselves as a synthetic option (value === text) that WooCommerce's
+			// rebuild replaced by its own code.
 			if ( CART_CONTEXT && 'SELECT' === target.tagName && target.selectedIndex >= 0
-				&& target.options[ target.selectedIndex ].text === entry.resolved[ id ] ) {
+				&& target.options[ target.selectedIndex ].text === entry.resolved[ id ]
+				&& ( undefined === entry.seenValues[ id ] || newValue === entry.seenValues[ id ] || entry.seenValues[ id ] === entry.resolved[ id ] ) ) {
 				entry.resolved[ id ] = newValue;
+				entry.seenValues[ id ] = newValue;
 				return;
 			}
 
+			entry.seenValues[ id ] = newValue;
 			entry.resolved[ id ] = newValue;
 			entry.store.setValue( id, target.value );
 
@@ -5153,6 +5163,7 @@
 			if ( el ) {
 				entry.store.setValue( node.fieldId, el.value );
 				entry.resolved[ node.fieldId ] = cascadeKey( el.value );
+				entry.seenValues[ node.fieldId ] = cascadeKey( el.value );
 			}
 		} );
 

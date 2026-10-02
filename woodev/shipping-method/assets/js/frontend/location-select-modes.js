@@ -167,6 +167,7 @@
 		var listPromise = null;
 		var listCountry = null;
 		var lastHandledText = null;
+		var lastHandledValue = null;
 
 		// Issue #331: on the cart, WooCommerce's own scripts re-fire `change` on the state
 		// `<select>` with the value already there (page load, re-opening the calculator). That
@@ -176,6 +177,7 @@
 			var seeded = el.options[ el.selectedIndex ];
 
 			lastHandledText = seeded && seeded.text ? seeded.text : null;
+			lastHandledValue = seeded ? seeded.value : null;
 		}
 
 		/**
@@ -212,11 +214,14 @@
 			var selected = el.options[ el.selectedIndex ];
 			var text = selected ? selected.text : '';
 
-			if ( ! text || text === lastHandledText ) {
+			// Issue #331: on the cart the same region is the same option VALUE (WooCommerce's
+			// state code) — two regions sharing a label are still two regions.
+			if ( ! text || ( text === lastHandledText && ( ! options.seedSelectedText || selected.value === lastHandledValue ) ) ) {
 				return; // nothing selected, or the SAME event delivered a second time (dual-world binding).
 			}
 
 			lastHandledText = text;
+			lastHandledValue = selected.value;
 
 			// Issue #541. THE PICK IS ALREADY A FACT HERE; only its identity is not. Everything
 			// below this line is a lookup — `fetchRegionList()` is a `GET /location/list` that

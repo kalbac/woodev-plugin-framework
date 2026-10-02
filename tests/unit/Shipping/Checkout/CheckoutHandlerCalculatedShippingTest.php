@@ -111,6 +111,45 @@ class CheckoutHandlerCalculatedShippingTest extends TestCase {
 		$this->assertSame( 0, $this->run_with( $this->record(), '  казань ' ) );
 	}
 
+	/**
+	 * @dataProvider same_city_spellings
+	 */
+	public function test_equivalent_spellings_of_the_stored_city_keep_the_record( string $record_name, string $saved ): void {
+		$record = Location_Record::from_array(
+			[
+				'key'         => 'test:77',
+				'provider_id' => 'test',
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'country'     => 'RU',
+				'label'       => $record_name,
+				'settlement'  => [ 'name' => $record_name, 'type' => 'г' ],
+			]
+		);
+
+		$this->assertSame( 0, $this->run_with( $record, $saved ) );
+	}
+
+	/**
+	 * @return array<string, array{0: string, 1: string}>
+	 */
+	public function same_city_spellings(): array {
+		return [
+			'type prefix with dot'   => [ 'Москва', 'г. Москва' ],
+			'type prefix word'       => [ 'Москва', 'город Москва' ],
+			'type prefix no dot'     => [ 'Москва', 'г Москва' ],
+			'yo folded'              => [ 'Королёв', 'Королев' ],
+			'yo folded the other way' => [ 'Королев', 'Королёв' ],
+			'case and spaces'        => [ 'Москва', '  москва ' ],
+			'inner whitespace'       => [ 'Нижний Новгород', 'Нижний   Новгород' ],
+			'prefix and yo'          => [ 'Королёв', 'г. Королев' ],
+		];
+	}
+
+	public function test_a_genuinely_different_city_still_forgets_even_with_a_type_prefix(): void {
+		$this->assertSame( 1, $this->run_with( $this->record(), 'г. Москва' ) );
+		$this->assertSame( 1, $this->run_with( $this->record(), 'Казанка' ) );
+	}
+
 	public function test_a_blank_city_never_forgets(): void {
 		$this->assertSame( 0, $this->run_with( $this->record(), '' ) );
 	}
