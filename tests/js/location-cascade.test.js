@@ -6503,6 +6503,48 @@ describe( 'issue #536: a FIXED default locality writes its text into the field o
 		expect( document.getElementById( 'billing_state' ).value ).toBe( 'Тверская область' );
 	} );
 
+	// Issue #1069 — drives the REAL seeding path (boot-time prefill() of a fixed default), not a
+	// hand-built region record: with the region field removed neither the suggest request nor
+	// the popular list may be scoped by the region the default backwards-filled.
+	it( 'region removed + fixed default: suggest carries no `within` and the popular list is unscoped (issue #1069)', () => {
+		const calls = [];
+
+		window.WoodevLocationRenderers = {
+			'custom-mode:settlement': ( el, options ) => {
+				calls.push( options );
+
+				return { detach: jest.fn() };
+			},
+			'custom-mode:region': () => ( { detach: jest.fn() } ),
+		};
+
+		const record = { ...DEFAULT_RECORD, ancestors: [ 'dadata:tver-region' ] };
+		const entryFor = ( key, name, region ) => ( {
+			key, label: name, level: 'settlement',
+			record: {
+				key, provider_id: 'dadata', level: 'settlement', country: 'RU',
+				settlement: { name, type: 'г' }, label: name, ancestors: [ region ],
+			},
+		} );
+
+		bootWithDefaultLocality( {
+			mode: 'custom-mode',
+			regionFieldRemoved: true,
+			defaultLocality: { policy: 'fixed', record },
+			popular: { RU: [ entryFor( 'dadata:in', 'Тверь', 'dadata:tver-region' ), entryFor( 'dadata:out', 'Казань', 'dadata:other' ) ] },
+		} );
+
+		// The default really was seeded (region text backwards-filled)…
+		expect( document.getElementById( 'billing_state' ).value ).toBe( 'Тверская область' );
+
+		// …yet nothing is scoped by it.
+		expect( calls[ 0 ].popular().map( ( p ) => p.key ) ).toEqual( [ 'dadata:in', 'dadata:out' ] );
+
+		calls[ 0 ].fetch( 'Каз' );
+
+		expect( fetchCalls[ fetchCalls.length - 1 ].url ).not.toContain( 'within=' );
+	} );
+
 	it( 'does NOT write any text when the policy is geoip, even though implicit is true (control)', () => {
 		bootWithDefaultLocality( { defaultLocality: { policy: 'geoip', record: DEFAULT_RECORD } } );
 
