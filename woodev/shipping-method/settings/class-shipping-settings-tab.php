@@ -81,6 +81,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 		/** @var Pickup_Map_Settings|null lazily built so tests can read it without WP. */
 		private $map_settings = null;
 
+		/** @var Default_Dimensions_Settings|null lazily built so tests (and the packer) can read it without the tab registered. */
+		private $default_dimensions_settings = null;
+
 		/** @var bool whether the `init` registration hook has already been added. */
 		private $hooked = false;
 
@@ -256,6 +259,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 			return $this->map_settings;
 		}
 
+		/**
+		 * The «Вес и габариты» handler (#955). Lazily built, never `null`, so the packer can read
+		 * it on a request where the tab itself was never registered.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return Default_Dimensions_Settings
+		 */
+		public function get_default_dimensions_settings(): Default_Dimensions_Settings {
+			if ( null === $this->default_dimensions_settings ) {
+				$this->default_dimensions_settings = new Default_Dimensions_Settings();
+			}
+
+			return $this->default_dimensions_settings;
+		}
+
 		public function build_sections(): array {
 			if ( ! $this->shipping_plugin_declared ) {
 				return [];
@@ -334,6 +353,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 				);
 			}
 
+			// «Вес и габариты» (#955): store-wide, so it is always on the tab of any shipping plugin.
+			$sections[] = Settings_Section::create(
+				Default_Dimensions_Settings::SECTION_ID,
+				__( 'Вес и габариты', 'woodev-plugin-framework' ),
+				$this->get_default_dimensions_settings()->get_owned_setting_ids(),
+				__( 'Эти значения подставляются, только если у товара не указаны вес или габариты. Для точного расчёта стоимости доставки укажите вес и габариты в карточке каждого товара.', 'woodev-plugin-framework' )
+			);
+
 			// «Инструменты» (#505) is always LAST, and exists only when at least one
 			// tool is registered — an empty section is worse than no section.
 			$tools = Shipping_Tools_Registry::instance()->get_tools();
@@ -402,6 +429,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 					$this->location_handler,
 					$this->get_field_settings(),
 					$this->map_needed ? $this->get_map_settings() : null,
+					$this->get_default_dimensions_settings(),
 				]
 			);
 

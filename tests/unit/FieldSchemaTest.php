@@ -92,6 +92,7 @@ class FieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'get_step' )->andReturn( 0.5 );
 		$control->shouldReceive( 'is_disabled' )->andReturn( false )->byDefault();
 		$control->shouldReceive( 'get_country' )->andReturn( '' )->byDefault();
+		$control->shouldReceive( 'is_native_bounds' )->andReturn( false )->byDefault();
 
 		$setting = $this->make_setting( 'weight', 'integer', $control );
 
@@ -122,6 +123,7 @@ class FieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'get_step' )->andReturn( null );
 		$control->shouldReceive( 'is_disabled' )->andReturn( false )->byDefault();
 		$control->shouldReceive( 'get_country' )->andReturn( '' )->byDefault();
+		$control->shouldReceive( 'is_native_bounds' )->andReturn( false )->byDefault();
 
 		$setting = $this->make_setting( 'api_key', 'string', $control );
 
@@ -235,6 +237,7 @@ class FieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'get_step' )->andReturn( null );
 		$control->shouldReceive( 'is_disabled' )->andReturn( false )->byDefault();
 		$control->shouldReceive( 'get_country' )->andReturn( '' )->byDefault();
+		$control->shouldReceive( 'is_native_bounds' )->andReturn( false )->byDefault();
 
 		$required_setting = $this->make_setting( 'phone', 'string', $control );
 		$required_setting->shouldReceive( 'is_required' )->andReturn( true );
@@ -299,6 +302,7 @@ class FieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'get_step' )->andReturn( null );
 		$control->shouldReceive( 'is_disabled' )->andReturn( false )->byDefault();
 		$control->shouldReceive( 'get_country' )->andReturn( '' )->byDefault();
+		$control->shouldReceive( 'is_native_bounds' )->andReturn( false )->byDefault();
 
 		$setting = $this->make_setting( 'city', 'string', $control );
 
@@ -331,6 +335,7 @@ class FieldSchemaTest extends TestCase {
 		$picker_control->shouldReceive( 'get_step' )->andReturn( null );
 		$picker_control->shouldReceive( 'is_disabled' )->andReturn( false );
 		$picker_control->shouldReceive( 'get_country' )->andReturn( 'RU' );
+		$picker_control->shouldReceive( 'is_native_bounds' )->andReturn( false )->byDefault();
 
 		$plain_control = Mockery::mock();
 		$plain_control->shouldReceive( 'get_type' )->andReturn( 'text' );
@@ -342,6 +347,7 @@ class FieldSchemaTest extends TestCase {
 		$plain_control->shouldReceive( 'get_step' )->andReturn( null );
 		$plain_control->shouldReceive( 'is_disabled' )->andReturn( false );
 		$plain_control->shouldReceive( 'get_country' )->andReturn( '' );
+		$plain_control->shouldReceive( 'is_native_bounds' )->andReturn( false )->byDefault();
 
 		$picker_setting = $this->make_setting( 'default_locality_record', 'string', $picker_control );
 		$plain_setting  = $this->make_setting( 'city', 'string', $plain_control );
@@ -409,6 +415,7 @@ class FieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'is_disabled' )->andReturn( true );
 		$control->shouldReceive( 'get_disabled_reason' )->andReturn( 'Недоступно на блочном чекауте' );
 		$control->shouldReceive( 'get_country' )->andReturn( '' )->byDefault();
+		$control->shouldReceive( 'is_native_bounds' )->andReturn( false )->byDefault();
 
 		$setting = $this->make_setting( 'x', 'boolean', $control );
 		$handler = Mockery::mock();
@@ -431,7 +438,7 @@ class FieldSchemaTest extends TestCase {
 	 */
 	public function test_enabled_control_emits_no_disabled_key(): void {
 		$control = Mockery::mock( \Woodev_Control::class );
-		foreach ( [ 'get_type' => 'text', 'get_description' => 'd', 'get_tooltip' => '', 'get_placeholder' => '', 'get_min' => null, 'get_max' => null, 'get_step' => null, 'is_disabled' => false, 'get_disabled_reason' => '', 'get_country' => '' ] as $m => $r ) {
+		foreach ( [ 'get_type' => 'text', 'get_description' => 'd', 'get_tooltip' => '', 'get_placeholder' => '', 'get_min' => null, 'get_max' => null, 'get_step' => null, 'is_disabled' => false, 'get_disabled_reason' => '', 'get_country' => '', 'is_native_bounds' => false ] as $m => $r ) {
 			$control->shouldReceive( $m )->andReturn( $r );
 		}
 		$setting = $this->make_setting( 'y', 'string', $control );

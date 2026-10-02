@@ -365,10 +365,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Rate_Cache' ) ) :
 				$product = $item['data'] ?? null;
 
 				if ( $product instanceof \WC_Product ) {
-					$line['length'] = (string) $product->get_length();
-					$line['width']  = (string) $product->get_width();
-					$line['height'] = (string) $product->get_height();
-					$line['weight'] = (string) $product->get_weight();
+					// What the packer will pack — the product's own values with the store's defaults (#955)
+					// filled in — so a change of a default is a new key, and a product that has the default
+					// spelled out shares the key of one that relies on it.
+					$values         = \Woodev_WC_Packer_Dispatcher::get_effective_values( $product );
+					$line['length'] = (string) $values['length'];
+					$line['width']  = (string) $values['width'];
+					$line['height'] = (string) $values['height'];
+					$line['weight'] = (string) $values['weight'];
 					$line['class']  = (string) $product->get_shipping_class_id();
 
 					// The packer treats a virtual product as weightless and skips it.

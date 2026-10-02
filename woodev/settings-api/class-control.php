@@ -97,6 +97,9 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 		/** @var float|null the step value for range/number controls */
 		protected $step = null;
 
+		/** @var bool whether a number control also hands min/max/step to the browser's own input (opt-in, see set_native_bounds()) */
+		protected $native_bounds = false;
+
 		/** @var string the tooltip text for the control */
 		protected $tooltip = '';
 
@@ -330,6 +333,31 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 		 */
 		public function set_step( $value ): void {
 			$this->step = is_numeric( $value ) ? (float) $value : null;
+		}
+
+		/**
+		 * Whether a number control renders its min / max / step as attributes on the `<input>`,
+		 * so the browser itself refuses an out-of-range value.
+		 *
+		 * Off by default: min / max / step otherwise reach only the validation (client and server),
+		 * and every existing number field renders as it always did.
+		 *
+		 * @since 2.0.2
+		 * @return bool
+		 */
+		public function is_native_bounds(): bool {
+			return $this->native_bounds;
+		}
+
+		/**
+		 * Opts a number control in to the browser-side min / max / step attributes.
+		 *
+		 * @since 2.0.2
+		 * @param bool $value whether to render the bounds on the DOM input.
+		 * @return void
+		 */
+		public function set_native_bounds( bool $value ): void {
+			$this->native_bounds = $value;
 		}
 
 		/**

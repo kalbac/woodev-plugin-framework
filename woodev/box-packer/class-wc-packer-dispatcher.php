@@ -92,8 +92,9 @@ if ( ! class_exists( 'Woodev_WC_Packer_Dispatcher' ) ) :
 		 * The packer works in centimetres and kilograms, while WooCommerce stores product
 		 * dimensions and weight in the store's own units (`woocommerce_dimension_unit`,
 		 * `woocommerce_weight_unit` — mm, m, in, yd / g, lbs, oz). `wc_get_dimension()` and
-		 * `wc_get_weight()` are WooCommerce's own conversion authority. A missing dimension
-		 * or weight is an empty string, which converts to 0.0.
+		 * `wc_get_weight()` are WooCommerce's own conversion authority. The values converted are the
+		 * EFFECTIVE ones ({@see self::get_effective_values()}): a missing dimension or weight is
+		 * replaced by the store's default ({@see Default_Dimensions_Settings}, always positive).
 		 *
 		 * @since  2.0.2
 		 *
@@ -102,13 +103,56 @@ if ( ! class_exists( 'Woodev_WC_Packer_Dispatcher' ) ) :
 		 * @return Woodev_Packer_Input_Item
 		 */
 		private static function to_input_item( \WC_Product $product, int $quantity ): Woodev_Packer_Input_Item {
+			$values = self::get_effective_values( $product );
+
 			return new Woodev_Packer_Input_Item(
-				(float) wc_get_dimension( (float) $product->get_length(), 'cm' ),
-				(float) wc_get_dimension( (float) $product->get_width(), 'cm' ),
-				(float) wc_get_dimension( (float) $product->get_height(), 'cm' ),
-				(float) wc_get_weight( (float) $product->get_weight(), 'kg' ),
+				(float) wc_get_dimension( $values['length'], 'cm' ),
+				(float) wc_get_dimension( $values['width'], 'cm' ),
+				(float) wc_get_dimension( $values['height'], 'cm' ),
+				(float) wc_get_weight( $values['weight'], 'kg' ),
 				$quantity
 			);
+		}
+
+		/**
+		 * The length, width, height and weight a product is packed with, in the STORE's units.
+		 *
+		 * A product's own value wins; when it is missing the store's default for that one dimension
+		 * ({@see Default_Dimensions_Settings}, #955) takes its place. «Missing» is empty (WooCommerce
+		 * stores '' for an unset field) OR not positive — a product saved with 0 ships as the same
+		 * zero-size parcel the carrier refuses, so it is treated as unset. Each of the four is decided
+		 * on its own: a product with a weight and no size keeps its weight. Outside the shipping framework
+		 * (the settings class is not loaded) there is no store default and a missing value stays 0.0.
+		 *
+		 * Public because the shipping rate cache keys on what is packed, not on what the product has
+		 * ({@see \Woodev\Framework\Shipping\Shipping_Rate_Cache}): the two must not disagree.
+		 *
+		 * @since  2.0.2
+		 *
+		 * @param  \WC_Product $product
+		 * @return array{length: float, width: float, height: float, weight: float}
+		 */
+		public static function get_effective_values( \WC_Product $product ): array {
+			$defaults = class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Default_Dimensions_Settings' )
+				? \Woodev\Framework\Shipping\Settings\Default_Dimensions_Settings::current()
+				: null;
+
+			$values = [];
+
+			foreach (
+				[
+					'length' => $product->get_length(),
+					'width'  => $product->get_width(),
+					'height' => $product->get_height(),
+					'weight' => $product->get_weight(),
+				] as $key => $own
+			) {
+				$own = is_numeric( $own ) ? (float) $own : 0.0;
+
+				$values[ $key ] = $own > 0 || null === $defaults ? max( 0.0, $own ) : $defaults->get_fallback( $key );
+			}
+
+			return $values;
 		}
 	}
 

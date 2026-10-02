@@ -276,6 +276,10 @@ final class LocationProviderRegistryTest extends TestCase {
 	protected function setUp(): void {
 		parent::setUp();
 
+		// the default-dimensions handler converts its built-in defaults (#955): units are not under test here
+		Functions\when( 'wc_get_weight' )->returnArg( 1 );
+		Functions\when( 'wc_get_dimension' )->returnArg( 1 );
+
 		// Harmless generically-stubbed WP primitives every code path under test
 		// touches; individual tests re-stub add_action/apply_filters/get_option
 		// with assertions of their own where the test is actually ABOUT them.

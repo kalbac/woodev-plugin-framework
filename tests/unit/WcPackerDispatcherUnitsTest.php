@@ -31,6 +31,24 @@ namespace Woodev\Tests\Unit {
 
 	class WcPackerDispatcherUnitsTest extends TestCase {
 
+		protected function setUp(): void {
+			parent::setUp();
+
+			// the effective values read the store's default dimensions (#955), a settings handler: none stored here
+			Functions\when( 'get_option' )->justReturn( null );
+			Functions\when( 'wp_parse_args' )->alias(
+				static function ( $args, $defaults = [] ) {
+					return array_merge( (array) $defaults, (array) $args );
+				}
+			);
+			\Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab::reset_for_tests();
+		}
+
+		protected function tearDown(): void {
+			\Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab::reset_for_tests();
+			parent::tearDown();
+		}
+
 		/** Units → kg. */
 		private const WEIGHT_TO_KG = [
 			'kg'  => 1.0,
@@ -53,13 +71,13 @@ namespace Woodev\Tests\Unit {
 		 */
 		private function store_uses( string $weight_unit, string $dimension_unit ): void {
 			Functions\when( 'wc_get_weight' )->alias(
-				static function ( $weight, $to_unit ) use ( $weight_unit ) {
-					return (float) $weight * self::WEIGHT_TO_KG[ $weight_unit ] / self::WEIGHT_TO_KG[ $to_unit ];
+				static function ( $weight, $to_unit, $from_unit = '' ) use ( $weight_unit ) {
+					return (float) $weight * self::WEIGHT_TO_KG[ '' === $from_unit ? $weight_unit : $from_unit ] / self::WEIGHT_TO_KG[ $to_unit ];
 				}
 			);
 			Functions\when( 'wc_get_dimension' )->alias(
-				static function ( $dimension, $to_unit ) use ( $dimension_unit ) {
-					return (float) $dimension * self::DIMENSION_TO_CM[ $dimension_unit ] / self::DIMENSION_TO_CM[ $to_unit ];
+				static function ( $dimension, $to_unit, $from_unit = '' ) use ( $dimension_unit ) {
+					return (float) $dimension * self::DIMENSION_TO_CM[ '' === $from_unit ? $dimension_unit : $from_unit ] / self::DIMENSION_TO_CM[ $to_unit ];
 				}
 			);
 		}
@@ -140,10 +158,12 @@ namespace Woodev\Tests\Unit {
 		}
 
 		/**
-		 * Missing dimensions keep the current behaviour (0.0): defaults are a separate card (#955).
+		 * A product with nothing of its own is packed with the built-in default (10 cm, 100 g — here a
+		 * kg / cm store, so 0.1 kg) through both converters — see WcPackerDispatcherDefaultsTest for the
+		 * fallback itself (#955).
 		 */
-		public function test_missing_dimensions_and_weight_stay_zero_in_both_converters(): void {
-			$this->store_uses( 'g', 'mm' );
+		public function test_missing_dimensions_and_weight_get_the_builtin_default_in_both_converters(): void {
+			$this->store_uses( 'kg', 'cm' );
 
 			$cart  = \Woodev_WC_Packer_Dispatcher::from_cart_items(
 				[ [ 'data' => $this->product( '', '', '', '' ), 'quantity' => 1 ] ]
@@ -153,10 +173,10 @@ namespace Woodev\Tests\Unit {
 			);
 
 			foreach ( [ $cart[0], $order[0] ] as $item ) {
-				$this->assertSame( 0.0, $item->get_length() );
-				$this->assertSame( 0.0, $item->get_width() );
-				$this->assertSame( 0.0, $item->get_height() );
-				$this->assertSame( 0.0, $item->get_weight() );
+				$this->assertEqualsWithDelta( 10.0, $item->get_length(), 0.0001 );
+				$this->assertEqualsWithDelta( 10.0, $item->get_width(), 0.0001 );
+				$this->assertEqualsWithDelta( 10.0, $item->get_height(), 0.0001 );
+				$this->assertEqualsWithDelta( 0.1, $item->get_weight(), 0.0001 );
 			}
 		}
 
@@ -164,6 +184,10 @@ namespace Woodev\Tests\Unit {
 		 * The boundary must ask WooCommerce for exactly kg and cm — the packer's contract.
 		 */
 		public function test_boundary_requests_kg_and_cm_from_woocommerce(): void {
+			// the default-dimensions handler converts its built-in defaults (g / cm -> store units) once, on construction
+			Functions\expect( 'wc_get_dimension' )->times( 3 )->with( 10.0, 'cm', 'cm' )->andReturn( 10.0 );
+			Functions\expect( 'wc_get_weight' )->once()->with( 100.0, 'kg', 'g' )->andReturn( 0.1 );
+
 			Functions\expect( 'wc_get_dimension' )->times( 3 )->with( 5.0, 'cm' )->andReturn( 50.0 );
 			Functions\expect( 'wc_get_weight' )->once()->with( 7.0, 'kg' )->andReturn( 0.007 );
 

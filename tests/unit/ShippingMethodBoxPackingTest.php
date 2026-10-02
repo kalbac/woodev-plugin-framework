@@ -171,6 +171,20 @@ namespace Woodev\Tests\Unit {
 
 			\Brain\Monkey\Functions\when( 'wc_get_dimension' )->returnArg( 1 );
 			\Brain\Monkey\Functions\when( 'wc_get_weight' )->returnArg( 1 );
+
+			// the cart converter reads the store's default dimensions (#955), a settings handler: none stored
+			\Brain\Monkey\Functions\when( 'get_option' )->justReturn( null );
+			\Brain\Monkey\Functions\when( 'wp_parse_args' )->alias(
+				static function ( $args, $defaults = [] ) {
+					return array_merge( (array) $defaults, (array) $args );
+				}
+			);
+			\Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab::reset_for_tests();
+		}
+
+		protected function tearDown(): void {
+			\Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab::reset_for_tests();
+			parent::tearDown();
 		}
 
 		/**

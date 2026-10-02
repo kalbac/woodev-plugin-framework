@@ -30,6 +30,7 @@ require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-pho
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-field-settings.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-field-policy.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-pickup-map-settings.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/settings/class-default-dimensions-settings.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/settings/class-shipping-tool.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/settings/class-tool-result.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/settings/class-shipping-tools-registry.php';
@@ -39,6 +40,10 @@ class ShippingSettingsTabTest extends TestCase {
 
 	protected function setUp(): void {
 		parent::setUp();
+
+		// the default-dimensions handler converts its built-in defaults (#955): units are not under test here
+		Functions\when( 'wc_get_weight' )->returnArg( 1 );
+		Functions\when( 'wc_get_dimension' )->returnArg( 1 );
 
 		// hook_once()'s add_action() is never actually fired in these tests — register()
 		// is invoked directly, exactly like LocationProviderRegistryTest invokes collect()
@@ -105,14 +110,14 @@ class ShippingSettingsTabTest extends TestCase {
 		$tab->declare_shipping_plugin(); // any Shipping_Plugin → tab + «Форма заказа».
 		$this->assertTrue( $tab->is_needed() );
 		$this->assertSame(
-			[ 'checkout' ],
+			[ 'checkout', 'default_dimensions' ],
 			array_map( static function ( $s ) { return $s->get_id(); }, $tab->build_sections() )
 		);
 
 		$tab->set_location_section( $this->location_handler_stub(), [ 'active_provider', 'field_mode' ] );
 		$tab->declare_map_needed();
 		$this->assertSame(
-			[ 'location', 'checkout', 'map' ],
+			[ 'location', 'checkout', 'map', 'default_dimensions' ],
 			array_map( static function ( $s ) { return $s->get_id(); }, $tab->build_sections() )
 		);
 	}
@@ -212,7 +217,7 @@ class ShippingSettingsTabTest extends TestCase {
 		$this->assertSame( 'Доставка', $provider->get_label() );
 		$this->assertInstanceOf( Composite_Settings_Handler::class, $provider->get_handler() );
 		$this->assertSame(
-			[ 'location', 'checkout', 'map' ],
+			[ 'location', 'checkout', 'map', 'default_dimensions' ],
 			array_map( static function ( $s ) { return $s->get_id(); }, $provider->get_sections() )
 		);
 	}
@@ -230,7 +235,7 @@ class ShippingSettingsTabTest extends TestCase {
 		$provider = Settings_Page_Registry::instance()->get_provider( Shipping_Settings_Tab::SERVICE_ID );
 
 		$this->assertSame(
-			[ 'checkout' ],
+			[ 'checkout', 'default_dimensions' ],
 			array_map( static function ( $s ) { return $s->get_id(); }, $provider->get_sections() )
 		);
 	}
@@ -273,7 +278,7 @@ class ShippingSettingsTabTest extends TestCase {
 
 		$sections = $tab->build_sections();
 
-		$this->assertSame( [ 'location', 'checkout', 'map' ], array_map( static fn( $s ) => $s->get_id(), $sections ) );
+		$this->assertSame( [ 'location', 'checkout', 'map', 'default_dimensions' ], array_map( static fn( $s ) => $s->get_id(), $sections ) );
 
 		foreach ( $sections as $section ) {
 			$this->assertNotSame(
@@ -311,7 +316,7 @@ class ShippingSettingsTabTest extends TestCase {
 		$tab->declare_shipping_plugin();
 
 		$this->assertSame(
-			[ 'checkout' ],
+			[ 'checkout', 'default_dimensions' ],
 			array_map( static fn( $s ) => $s->get_id(), $tab->build_sections() )
 		);
 	}
@@ -343,7 +348,7 @@ class ShippingSettingsTabTest extends TestCase {
 		$sections = $tab->build_sections();
 
 		$this->assertSame(
-			[ 'location', 'checkout', 'map', 'tools' ],
+			[ 'location', 'checkout', 'map', 'default_dimensions', 'tools' ],
 			array_map( static fn( $s ) => $s->get_id(), $sections )
 		);
 

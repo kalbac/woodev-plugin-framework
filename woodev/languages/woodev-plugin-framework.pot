@@ -3507,6 +3507,50 @@ msgstr ""
 msgid "Товар №%d не найден."
 msgstr ""
 
+#. translators: the store's dimension unit, e.g. cm
+#: shipping-method/settings/class-default-dimensions-settings.php:141
+#, php-format
+msgid "Длина по умолчанию, %s"
+msgstr ""
+
+#: shipping-method/settings/class-default-dimensions-settings.php:142
+msgid "Подставляется в расчёт доставки, если у товара не указана длина."
+msgstr ""
+
+#. translators: the store's dimension unit, e.g. cm
+#: shipping-method/settings/class-default-dimensions-settings.php:146
+#, php-format
+msgid "Ширина по умолчанию, %s"
+msgstr ""
+
+#: shipping-method/settings/class-default-dimensions-settings.php:147
+msgid "Подставляется в расчёт доставки, если у товара не указана ширина."
+msgstr ""
+
+#. translators: the store's dimension unit, e.g. cm
+#: shipping-method/settings/class-default-dimensions-settings.php:151
+#, php-format
+msgid "Высота по умолчанию, %s"
+msgstr ""
+
+#: shipping-method/settings/class-default-dimensions-settings.php:152
+msgid "Подставляется в расчёт доставки, если у товара не указана высота."
+msgstr ""
+
+#. translators: the store's weight unit, e.g. kg
+#: shipping-method/settings/class-default-dimensions-settings.php:156
+#, php-format
+msgid "Вес по умолчанию, %s"
+msgstr ""
+
+#: shipping-method/settings/class-default-dimensions-settings.php:157
+msgid "Подставляется в расчёт доставки, если у товара не указан вес."
+msgstr ""
+
+#: shipping-method/settings/class-default-dimensions-settings.php:219
+msgid "Значение должно быть больше нуля."
+msgstr ""
+
 #: shipping-method/settings/class-export-settings.php:163
 msgid "Когда заказ сам отправляется перевозчику. Отмена заказа и его полный возврат отменяют заявку у перевозчика сами, независимо от этих настроек."
 msgstr ""
@@ -3585,6 +3629,14 @@ msgstr ""
 
 #: shipping-method/settings/class-shipping-settings-tab.php:333
 msgid "Общие для всех способов доставки с пунктами выдачи настройки карты: где показывается кнопка выбора точки и что происходит с адресом и картой после того, как покупатель выбрал пункт."
+msgstr ""
+
+#: shipping-method/settings/class-shipping-settings-tab.php:359
+msgid "Вес и габариты"
+msgstr ""
+
+#: shipping-method/settings/class-shipping-settings-tab.php:361
+msgid "Эти значения подставляются, только если у товара не указаны вес или габариты. Для точного расчёта стоимости доставки укажите вес и габариты в карточке каждого товара."
 msgstr ""
 
 #: shipping-method/settings/class-shipping-settings-tab.php:344

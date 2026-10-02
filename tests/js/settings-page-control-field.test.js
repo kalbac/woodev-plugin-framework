@@ -619,3 +619,45 @@ describe( 'optional colour control', () => {
 		} );
 	} );
 } );
+
+/**
+ * `native_bounds` (#955): a number field that opts in hands its min / step (and max, when set) to the
+ * browser's own `<input type="number">`, so the browser refuses 0 and -1 itself. A plain number field —
+ * min / step in the schema but no opt-in — renders exactly as before: no such attributes on the input.
+ */
+describe( 'number control — native_bounds opt-in', () => {
+	const renderNumber = ( schema ) =>
+		render(
+			createElement( ControlField, {
+				settingId: 'default_length',
+				schema: { type: 'float', name: 'Длина', controlType: 'number', ...schema },
+				value: '10',
+				onChange: () => {},
+				showErrors: false,
+			} )
+		).container.querySelector( 'input[type="number"]' );
+
+	test( 'a field that opts in carries min and step on the DOM input', () => {
+		const input = renderNumber( { min: 0.01, step: 0.01, native_bounds: true } );
+
+		expect( input ).not.toBeNull();
+		expect( input ).toHaveAttribute( 'min', '0.01' );
+		expect( input ).toHaveAttribute( 'step', '0.01' );
+		expect( input ).not.toHaveAttribute( 'max' );
+	} );
+
+	test( 'a plain number field does not change: schema min / step stay off the DOM input', () => {
+		const input = renderNumber( { min: 0, max: 100, step: 5 } );
+
+		expect( input ).not.toBeNull();
+		expect( input ).not.toHaveAttribute( 'min' );
+		expect( input ).not.toHaveAttribute( 'max' );
+		expect( input ).not.toHaveAttribute( 'step' );
+	} );
+
+	test( 'only a strict true opts in', () => {
+		const input = renderNumber( { min: 0.01, step: 0.01, native_bounds: 'yes' } );
+
+		expect( input ).not.toHaveAttribute( 'min' );
+	} );
+} );
