@@ -8763,3 +8763,83 @@ describe( 'the /select busy state is raised on ENQUEUE, not on send — issue #5
 		expect( document.getElementById( 'billing_address_1' ).disabled ).toBe( false );
 	} );
 } );
+
+describe( 'options.pickedSettlement() — issue #1071', () => {
+	const KZ = {
+		key: 'test-cdek:44', provider_id: 'test-cdek', level: 'settlement', country: 'RU',
+		settlement: { name: 'Казань', type: 'г' }, label: 'Казань, Татарстан', ancestors: [],
+	};
+
+	const optionsAfterBoot = ( extra ) => {
+		const calls = [];
+
+		window.WoodevLocationRenderers = {
+			'custom-mode:settlement': ( el, options ) => {
+				calls.push( options );
+
+				return { detach: jest.fn() };
+			},
+			'custom-mode:region': ( el, options ) => {
+				calls.push( options );
+
+				return { detach: jest.fn() };
+			},
+		};
+
+		boot( { region: true, settlement: true, mode: 'custom-mode', popular: { RU: [] }, ...extra } );
+
+		return calls;
+	};
+
+	it( 'is null for a level that carries no popular list', () => {
+		const calls = optionsAfterBoot( {} );
+
+		expect( calls.some( ( o ) => null === o.popular && null === o.pickedSettlement ) ).toBe( true );
+	} );
+
+	it( 'nothing picked → null', () => {
+		const calls = optionsAfterBoot( {} );
+
+		expect( calls.find( ( o ) => o.popular ).pickedSettlement() ).toBeNull();
+	} );
+
+	it( 'a customer pick (the server restoring a non-implicit record) → { name: "" } — the widget falls back to the field text', () => {
+		const calls = optionsAfterBoot( {
+			implicit: false,
+			current: { key: 'test-cdek:44', level: 'settlement' },
+			chain: { settlement: { key: 'test-cdek:44', level: 'settlement' } },
+		} );
+
+		expect( calls.find( ( o ) => o.popular ).pickedSettlement() ).toEqual( { name: '' } );
+	} );
+
+	it( 'a store-filled default (#536 fixed) is NOT a pick', () => {
+		const calls = optionsAfterBoot( {
+			implicit: true,
+			current: { key: 'test-cdek:44', level: 'settlement' },
+			chain: { settlement: { key: 'test-cdek:44', level: 'settlement' } },
+			defaultLocality: { policy: 'fixed', record: KZ },
+		} );
+
+		expect( calls.find( ( o ) => o.popular ).pickedSettlement() ).toBeNull();
+	} );
+
+	it( 'a GeoIP guess (implicit, no fixed policy) is NOT a pick either', () => {
+		const calls = optionsAfterBoot( {
+			implicit: true,
+			current: { key: 'test-cdek:44', level: 'settlement' },
+			chain: { settlement: { key: 'test-cdek:44', level: 'settlement' } },
+		} );
+
+		expect( calls.find( ( o ) => o.popular ).pickedSettlement() ).toBeNull();
+	} );
+
+	it( 'a pick through onSelect carries the record\'s bare name', () => {
+		const calls = optionsAfterBoot( {} );
+		const settlement = calls.find( ( o ) => o.popular );
+
+		settlement.onSelect( { record: KZ } );
+
+		expect( settlement.pickedSettlement() ).toEqual( { name: 'Казань' } );
+	} );
+} );
