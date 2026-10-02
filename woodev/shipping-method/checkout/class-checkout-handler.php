@@ -691,6 +691,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		public function enqueue_assets(): void {
 
 			if ( ! function_exists( 'is_checkout' ) || ! is_checkout() ) {
+				$this->enqueue_cart_assets();
+
 				return;
 			}
 
@@ -843,6 +845,147 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 				'woodev_checkout_field_config_' . $this->config_object_suffix(),
 				$config
 			);
+		}
+
+		/**
+		 * Enqueues the location suggestion layer for the CLASSIC cart's shipping calculator
+		 * (issue #331).
+		 *
+		 * The calculator is a plain form POST, so only the location client is wired — the
+		 * checkout-field adapter, pickup button/modal and phone mask are never loaded here
+		 * (operator decision: no pickup picker in the cart). The SAME config builder and the
+		 * SAME `location-cascade.js` serve it; the calculator's fields are described under
+		 * their own ids (`calc_shipping_*`) and the config is marked `context: 'cart'` so the
+		 * cascade scopes its country/section reads to them. The pick persists at pick time
+		 * through the existing `/select` call, i.e. into the same customer location store the
+		 * checkout reads.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		private function enqueue_cart_assets(): void {
+			if ( ! function_exists( 'is_cart' ) || ! is_cart() ) {
+				return;
+			}
+
+			if ( class_exists( '\\Woodev_Blocks_Handler' ) && \Woodev_Blocks_Handler::is_cart_block_in_use() ) {
+				return;
+			}
+
+			$service = $this->location_service();
+
+			if ( ! $service->is_active() ) {
+				return;
+			}
+
+			$fields = $this->cart_calculator_fields();
+
+			if ( [] === $fields ) {
+				return;
+			}
+
+			$config = ( new Checkout_Config(
+				$this->plugin_id(),
+				rtrim( rest_url( 'woodev/v1' ), '/' ),
+				wp_create_nonce( 'wp_rest' ),
+				$this->wc_country_codes(),
+				$service,
+				null
+			) )->build( Checkout_Fields::from_array( array_values( $fields ) ) );
+
+			if ( ! isset( $config['location'] ) ) {
+				return;
+			}
+
+			// Re-key onto the ids the calculator template renders.
+			$calc_fields = [];
+
+			foreach ( $config['fields'] as $id => $descriptor ) {
+				$calc_id               = 'calc_' . $id;
+				$descriptor['id']      = $calc_id;
+				$calc_fields[ $calc_id ] = $descriptor;
+			}
+
+			$config['fields']            = $calc_fields;
+			$config['takeover']          = [];
+			$config['pickup_method_ids'] = [];
+			$config['context']           = 'cart';
+
+			$typeahead_built = $this->enqueue_script_if_built( 'woodev-location-typeahead', 'js/frontend/location-typeahead.js', [] );
+
+			$select_modes_built = $this->enqueue_script_if_built(
+				'woodev-location-select-modes',
+				'js/frontend/location-select-modes.js',
+				[ 'jquery', 'selectWoo', 'wc-country-select' ]
+			);
+
+			wp_enqueue_script(
+				'woodev-checkout-field-store',
+				self::asset_url( 'js/frontend/checkout-field-store.js' ),
+				[],
+				self::asset_version( self::asset_path( 'js/frontend/checkout-field-store.js' ) ),
+				true
+			);
+
+			$cascade_built = $this->enqueue_script_if_built(
+				'woodev-location-cascade',
+				'js/frontend/location-cascade.js',
+				array_values(
+					array_filter(
+						[
+							'jquery',
+							'woodev-checkout-field-store',
+							$typeahead_built ? 'woodev-location-typeahead' : null,
+							$select_modes_built ? 'woodev-location-select-modes' : null,
+						]
+					)
+				)
+			);
+
+			if ( ! $cascade_built ) {
+				return;
+			}
+
+			$this->enqueue_style_if_built( 'woodev-location-styles', 'css/frontend/location.css', [] );
+
+			wp_localize_script(
+				'woodev-location-cascade',
+				'woodev_checkout_field_config_' . $this->config_object_suffix(),
+				$config
+			);
+		}
+
+		/**
+		 * The location fields the classic cart calculator can host: the region and settlement
+		 * level fields, as `shipping_*` section variants (the calculator is the shipping
+		 * address), keyed by the checkout-style id the config builder expects. The address
+		 * level has no calculator field and is left out.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<string, array<string, mixed>>
+		 */
+		private function cart_calculator_fields(): array {
+			$out = [];
+
+			foreach ( $this->fields->get_fields() as $id => $field ) {
+				if ( 'location' !== ( $field['source_kind'] ?? null ) || ! in_array( $field['location_level'] ?? null, [ 'region', 'settlement' ], true ) ) {
+					continue;
+				}
+
+				$variant_id = 'shipping_' . self::strip_address_prefix( $id );
+
+				if ( isset( $out[ $variant_id ] ) ) {
+					continue;
+				}
+
+				$field['id']         = $variant_id;
+				$field['section']    = 'shipping';
+				$out[ $variant_id ]  = $field;
+			}
+
+			return $out;
 		}
 
 		/**

@@ -166,7 +166,18 @@
 	 *
 	 * @type {{billing: string, shipping: string}}
 	 */
-	var COUNTRY_FIELD_ID = { billing: 'billing_country', shipping: 'shipping_country' };
+	/**
+	 * Issue #331: on the classic CART the shipping calculator is the only address — a config
+	 * marked `context: 'cart'` describes its fields under `calc_shipping_*` ids, there is no
+	 * "ship to a different address" toggle, and the shipping section is always the active one.
+	 *
+	 * @type {boolean}
+	 */
+	var CART_CONTEXT = Object.keys( window ).some( function( key ) {
+		return 0 === key.indexOf( PREFIX ) && window[ key ] && 'cart' === window[ key ].context;
+	} );
+
+	var COUNTRY_FIELD_ID = { billing: 'billing_country', shipping: CART_CONTEXT ? 'calc_shipping_country' : 'shipping_country' };
 
 	/** @type {string[]} both known country field ids — a change to EITHER re-runs arbitration. */
 	var COUNTRY_FIELD_IDS = [ COUNTRY_FIELD_ID.billing, COUNTRY_FIELD_ID.shipping ];
@@ -348,8 +359,11 @@
 	 */
 	function countryValue( fieldId ) {
 		var el = document.getElementById( fieldId );
+		var value = el ? ( el.value || '' ) : '';
 
-		return el ? ( el.value || '' ) : '';
+		// The cart calculator's «Select a country…» placeholder carries the value `default`
+		// (issue #331) — no selection, not a country code.
+		return 'default' === value ? '' : value;
 	}
 
 	/**
@@ -513,6 +527,10 @@
 	 * @returns {string} `'shipping'` or `'billing'`.
 	 */
 	function activeAddressSection() {
+		if ( CART_CONTEXT ) {
+			return 'shipping';
+		}
+
 		var checkbox = document.querySelector( '[name="ship_to_different_address"]' );
 
 		return checkbox && checkbox.checked ? 'shipping' : 'billing';
