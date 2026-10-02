@@ -1275,9 +1275,26 @@
 			return null;
 		}
 
+		// Issue #1069: with the region field REMOVED the customer cannot see or change the
+		// region, so a region record — whether the default's, or derived from a settlement
+		// they picked — must never scope the settlement search (it would lock them into it).
+		if ( 'region' === parentLevel && regionFieldRemoved( entry ) ) {
+			return null;
+		}
+
 		var record = entry.records[ parentLevel ];
 
 		return record && record.key ? record.key : null;
+	}
+
+	/**
+	 * Whether the merchant removed the region field (`region_field=remove`, issue #1069).
+	 *
+	 * @param {Object} entry
+	 * @returns {boolean}
+	 */
+	function regionFieldRemoved( entry ) {
+		return !! ( entry.location && entry.location.regionFieldRemoved );
 	}
 
 	// -------------------------------------------------------------------------
@@ -1515,7 +1532,8 @@
 			var within = scopeKeyFor( entry, node.level );
 			// Issue #538: the ancestor set of the locality ALREADY standing at this level, used
 			// only when there is no parent key to scope by. See the filter's own note below.
-			var siblingAncestors = within ? [] : ancestorsOfCurrent( entry, node.level );
+			// Issue #1069: no region field → nothing the customer can change narrows the list.
+			var siblingAncestors = ( within || regionFieldRemoved( entry ) ) ? [] : ancestorsOfCurrent( entry, node.level );
 
 			var scoped = raw.filter( function( item ) {
 				// Defensive: every stored popular entry is settlement-level today (only an

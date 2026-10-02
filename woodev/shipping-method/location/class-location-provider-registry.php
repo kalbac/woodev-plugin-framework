@@ -1661,6 +1661,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 				->effective( 'region_field' );
 		}
 
+		/**
+		 * Whether the merchant removed the checkout's region field
+		 * (`region_field=remove`, issue #1069).
+		 *
+		 * The client reads it to stop treating a region the customer cannot see — and
+		 * therefore cannot change — as a search/popular-list scope. Mirrors
+		 * {@see self::get_field_mode_region()}'s "no settings handler yet" shape: answers
+		 * `false` rather than reaching into the settings tab.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public function is_region_field_removed(): bool {
+			if ( null === $this->settings_handler ) {
+				return false;
+			}
+
+			return 'remove' === $this->region_field_effective_value();
+		}
+
 
 
 		/**

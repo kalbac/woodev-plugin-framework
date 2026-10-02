@@ -2796,6 +2796,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		}
 
 		/**
+		 * Whether the merchant removed the checkout's region field (issue #1069) — thin
+		 * pass-through to {@see Location_Provider_Registry::is_region_field_removed()}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public function is_region_field_removed(): bool {
+			return $this->registry->is_region_field_removed();
+		}
+
+		/**
 		 * Whether the `related-list` mode's own region injector
 		 * ({@see Location_Provider_Registry::inject_related_list_states()})
 		 * itself wrote `$country`'s `woocommerce_states` options THIS request AND

@@ -2052,6 +2052,47 @@ final class LocationProviderRegistryTest extends TestCase {
 	}
 
 	/**
+	 * Issue #1069: the client is told whether the region field is removed, so a region the
+	 * customer cannot change never scopes their settlement search.
+	 *
+	 * @dataProvider region_field_values
+	 */
+	public function test_is_region_field_removed_reads_the_region_field_setting( string $stored, bool $expected ): void {
+		$list_provider = new Fake_List_Location_Provider( 'list-fixture', 'List Fixture', [ 'RU' ] );
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $list_provider ] );
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = null ) use ( $stored ) {
+				if ( 'woodev_location_active_provider' === $name ) {
+					return 'list-fixture';
+				}
+				if ( 'woodev_checkout_fields_region_field' === $name ) {
+					return $stored;
+				}
+
+				return $default;
+			}
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$this->assertSame( $expected, $registry->is_region_field_removed() );
+	}
+
+	/**
+	 * @return array<string, array{string, bool}>
+	 */
+	public static function region_field_values(): array {
+		return [
+			'remove' => [ 'remove', true ],
+			'show'   => [ 'show', false ],
+		];
+	}
+
+	/**
 	 * The settlement axis carries no `region_field` clamp of its own: a
 	 * stored `related-list` still lands on the searchable-list successor when
 	 * the region field is removed, independently of the region axis.

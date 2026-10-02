@@ -91,6 +91,10 @@ namespace Woodev\Tests\Unit\Shipping {
 			return 'typeahead';
 		}
 
+		public function is_region_field_removed(): bool {
+			return false;
+		}
+
 		public function is_custom_settlement_allowed(): bool {
 			return false;
 		}

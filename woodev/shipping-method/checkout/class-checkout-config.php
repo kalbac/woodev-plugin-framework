@@ -1204,6 +1204,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 				// settlement the active provider does not carry — see
 				// Location_Provider_Registry::SETTING_ALLOW_CUSTOM_SETTLEMENT.
 				'allowCustomSettlement' => $service->is_custom_settlement_allowed(),
+				// Issue #1069: with the region field removed the customer cannot change the
+				// region, so the client must not let one derived from the default (or from a
+				// pick) scope the settlement search / popular list.
+				'regionFieldRemoved'    => $service->is_region_field_removed(),
 				'levels'                => $levels,
 				'owners'                => $owners,
 				// Issue #530: `{ [country]: Array<{key, label, level, record}> }`, one
