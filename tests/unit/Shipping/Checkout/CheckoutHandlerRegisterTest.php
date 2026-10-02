@@ -44,10 +44,10 @@ class CheckoutHandlerRegisterTest extends TestCase {
 
 	/**
 	 * register() must wire all hooks: 2 filters (woocommerce_checkout_fields +
-	 * woocommerce_states) + 9 actions (checkout_process, order_processed, the Store API
+	 * woocommerce_states) + 10 actions (checkout_process, order_processed, the Store API
 	 * order_processed, validate-before-payment and update-order-from-request callbacks, wp_enqueue_scripts,
 	 * rest_api_init, the Task 12 `init` suppression check, and issue #518's
-	 * `woodev_shipping_pickup_point_selected` listener).
+	 * `woodev_shipping_pickup_point_selected` listener, and issue #331's `woocommerce_calculated_shipping`).
 	 */
 	public function test_register_wires_all_nine_hooks(): void {
 
@@ -59,11 +59,11 @@ class CheckoutHandlerRegisterTest extends TestCase {
 			->once()
 			->with( 'woocommerce_states', \Mockery::type( 'array' ) );
 
-		// Nine since #966 added the Store API pickup-required validation on both hooks (seven since #964
+		// Ten since #331 added `woocommerce_calculated_shipping`; nine since #966 added the Store API pickup-required validation on both hooks (seven since #964
 		// added the Store API order-processed callback, six before, since issue #518 added
 		// `woodev_shipping_pickup_point_selected`).
 		Functions\expect( 'add_action' )
-			->times( 9 )
+			->times( 10 )
 			->withAnyArgs();
 
 		$fields  = Checkout_Fields::from_array( [] );
@@ -345,7 +345,7 @@ class CheckoutHandlerRegisterTest extends TestCase {
 	public function test_guard_fires_doing_it_wrong_on_native_field_conflict(): void {
 
 		Functions\expect( 'add_filter' )->times( 8 )->withAnyArgs();
-		Functions\expect( 'add_action' )->times( 18 )->withAnyArgs();
+		Functions\expect( 'add_action' )->times( 20 )->withAnyArgs();
 		Functions\expect( '_doing_it_wrong' )
 			->once()
 			->with(
@@ -368,7 +368,7 @@ class CheckoutHandlerRegisterTest extends TestCase {
 	public function test_guard_does_not_fire_for_same_plugin_id(): void {
 
 		Functions\expect( 'add_filter' )->times( 8 )->withAnyArgs();
-		Functions\expect( 'add_action' )->times( 18 )->withAnyArgs();
+		Functions\expect( 'add_action' )->times( 20 )->withAnyArgs();
 		Functions\expect( '_doing_it_wrong' )->never();
 
 		$field   = Field::create( 'billing_city' )->set_type( 'text' )->set_section( 'billing' )->to_array();
@@ -386,7 +386,7 @@ class CheckoutHandlerRegisterTest extends TestCase {
 	public function test_guard_ignores_non_native_fields(): void {
 
 		Functions\expect( 'add_filter' )->times( 8 )->withAnyArgs();
-		Functions\expect( 'add_action' )->times( 18 )->withAnyArgs();
+		Functions\expect( 'add_action' )->times( 20 )->withAnyArgs();
 		Functions\expect( '_doing_it_wrong' )->never();
 
 		$field = Field::create( 'carrier_pvz' )->set_type( 'hidden' )->set_section( 'order' )->to_array();

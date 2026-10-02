@@ -208,4 +208,49 @@ describe( 'cart calculator boot path (issue #331)', () => {
 
 		expect( calls.find( ( o ) => o.popular ).pickedSettlement() ).toEqual( { name: '' } );
 	} );
+
+	it( 're-binds to the NEW calculator fields after WooCommerce replaces the cart HTML (updated_wc_div)', () => {
+		boot();
+
+		const oldCity = document.getElementById( 'calc_shipping_city' );
+		const firstAttach = callFor( 'calc_shipping_city' );
+
+		// cart.js swaps in server markup: a fresh plain input carrying the saved value.
+		document.querySelector( 'form' ).outerHTML = `
+			<form class="woocommerce-shipping-calculator">
+				<select id="calc_shipping_country" name="calc_shipping_country"><option value="RU" selected>Россия</option></select>
+				<input type="text" id="calc_shipping_state" name="calc_shipping_state" value="" />
+				<input type="text" id="calc_shipping_city" name="calc_shipping_city" value="Внуково" />
+				<input type="text" id="calc_shipping_postcode" name="calc_shipping_postcode" value="" />
+			</form>`;
+
+		const before = attachCalls.length;
+		window.jQuery( document.body ).trigger( 'updated_wc_div' );
+
+		const fresh = document.getElementById( 'calc_shipping_city' );
+		expect( fresh ).not.toBe( oldCity );
+		expect( firstAttach.el ).toBe( oldCity );
+		expect( attachCalls.length ).toBeGreaterThan( before );
+		expect( attachCalls.slice( before ).some( ( c ) => c.el === fresh ) ).toBe( true );
+		expect( fresh.value ).toBe( 'Внуково' );
+	} );
+
+	it( 'restores the picked text into a replaced field that came back empty', () => {
+		boot();
+
+		const call = callFor( 'calc_shipping_city' );
+		call.el.value = 'Внуково';
+		call.el.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+		call.onSelect( { key: KZ.key, label: 'Внуково', level: 'settlement', record: KZ } );
+
+		document.querySelector( 'form' ).outerHTML = `
+			<form class="woocommerce-shipping-calculator">
+				<select id="calc_shipping_country" name="calc_shipping_country"><option value="RU" selected>Россия</option></select>
+				<input type="text" id="calc_shipping_state" name="calc_shipping_state" value="" />
+				<input type="text" id="calc_shipping_city" name="calc_shipping_city" value="" />
+			</form>`;
+		window.jQuery( document.body ).trigger( 'updated_cart_totals' );
+
+		expect( document.getElementById( 'calc_shipping_city' ).value ).toBe( 'Внуково' );
+	} );
 } );

@@ -303,6 +303,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			add_action( 'init', [ $this, 'maybe_suppress_wc_address_providers' ], 21 );
 			add_filter( 'woocommerce_checkout_get_value', [ $this, 'handle_checkout_get_value' ], 10, 2 );
 			add_action( 'woodev_shipping_pickup_point_selected', [ $this, 'handle_pickup_point_selected' ] );
+			add_action( 'woocommerce_calculated_shipping', [ $this, 'handle_calculated_shipping' ] );
 
 			self::$instances[] = $this;
 
@@ -986,6 +987,55 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			}
 
 			return $out;
+		}
+
+		/**
+		 * Keeps the stored customer locality consistent with what the cart's shipping
+		 * calculator just saved (issue #331).
+		 *
+		 * WooCommerce's calculator POST writes the customer's shipping country/state/city
+		 * itself, and the checkout then renders THAT (WC) text in the fields. Our stored
+		 * record only feeds scoping, rates and the pickup layer. A different COUNTRY already
+		 * makes the stored record stale server-side (`Location_Service::is_customer_record_stale()`
+		 * rule b), but a different CITY in the same country does not — so when the saved
+		 * city no longer names the stored settlement the record is forgotten, instead of the
+		 * checkout pairing a stale record with another city's text. WooCommerce's text wins;
+		 * a blank city (calculator without the city field) never forgets anything.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @internal
+		 *
+		 * @return void
+		 */
+		public function handle_calculated_shipping(): void {
+			$customer = $this->wc_customer();
+
+			if ( ! is_object( $customer ) || ! is_callable( [ $customer, 'get_shipping_city' ] ) ) {
+				return;
+			}
+
+			$city = self::normalize_for_settlement_match( (string) $customer->get_shipping_city() );
+
+			if ( '' === $city ) {
+				return;
+			}
+
+			$service = $this->location_service();
+
+			if ( ! $service->is_active() ) {
+				return;
+			}
+
+			$record = $service->get_customer_record_at( 'settlement' );
+
+			if ( null === $record ) {
+				return;
+			}
+
+			if ( $city !== self::normalize_for_settlement_match( self::settlement_record_value( $record ) ) ) {
+				$service->forget_customer_record();
+			}
 		}
 
 		/**

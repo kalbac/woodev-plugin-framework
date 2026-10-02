@@ -4814,12 +4814,19 @@
 	 * @returns {void}
 	 */
 	function bindCheckoutUpdatedWatcher() {
-		if ( window.jQuery ) {
-			window.jQuery( document.body ).on( 'updated_checkout', handleCheckoutUpdated );
-			return;
-		}
+		// Issue #331: WooCommerce's cart.js replaces the cart form and totals (the calculator
+		// lives in the totals) over AJAX and announces it with `updated_wc_div` /
+		// `updated_cart_totals` — the cart's `updated_checkout`. Only the cart context binds them.
+		var events = CART_CONTEXT ? [ 'updated_checkout', 'updated_wc_div', 'updated_cart_totals' ] : [ 'updated_checkout' ];
 
-		document.body.addEventListener( 'updated_checkout', handleCheckoutUpdated );
+		events.forEach( function( name ) {
+			if ( window.jQuery ) {
+				window.jQuery( document.body ).on( name, handleCheckoutUpdated );
+				return;
+			}
+
+			document.body.addEventListener( name, handleCheckoutUpdated );
+		} );
 	}
 
 	/**
