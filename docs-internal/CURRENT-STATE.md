@@ -6,7 +6,7 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-02 (s149, overnight).** ✅ Merged #1057 #1056 #1062 #955 (accepted by him on the rig; section «Вес и габариты»). ⏸ PR #1068 (#1060) open, parked for him. Details: `sessions/s149.md`. ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
+**As of 2026-10-02 (s149, overnight).** ✅ Merged #1057 #1056 #1062 #955 (accepted by him on the rig; section «Вес и габариты») #1060 (DaData 403 cause, live-checked on the rig). No open PRs. Details: `sessions/s149.md`. ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
 orders-page slug redirects to the framework page with that carrier preselected, accepted on the rig.
 ✅ **Both machines are live**; routine sync is git ONLY (`wiki/two-machine-setup.md`). The order
 metabox (#856) and the orders table (#870) stay accepted.
@@ -72,7 +72,7 @@ FIXTURES**; the shipping plugin is written later, from scratch, own repo, versio
 
 ✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — no quota consumed; the exhaustion symptom is gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`.
 
-**`main` after s149 (`60fd40ff`, macOS, 02.10.2026):** unit **5175 / 29692** (1 skipped), jest **2507** in **52** suites; integration local **475 / 6432** (s149, on the PR branches).
+**`main` after s149 (`7c61db98`, macOS, 02.10.2026):** unit **5222 / 29865** (1 skipped), jest **2510** in **52** suites; integration local **475 / 6432**.
 
 **Baselines — macOS laptop, 27.09.2026 (s140)** (the two machines matched to the digit in s136, so
 these are not platform-dependent): unit **4132 / 14586**, 1 skipped, sodium ON; jest **1975** in
@@ -107,7 +107,7 @@ region whose `key()` is not in the settlement's own `ancestors()` is refused. �
 `Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that IS
 its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards — 52, measured 02.10.2026 (s149):** Инбокс holds only **#922** (Supermemory, parked by his word).
+**Open cards — 51, measured 02.10.2026 (s149):** Инбокс holds only **#922** (Supermemory, parked by his word).
 ⚠ Count with
 `gh issue list --limit 300` and `project item-list --limit 1000` — s127's 53 was an undercount from
 exactly that trap, and a naive reader reports a milestone-carrying card as empty. **PRIORITY LIVES ON
