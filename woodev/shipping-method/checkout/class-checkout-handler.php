@@ -303,6 +303,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			add_action( 'init', [ $this, 'maybe_suppress_wc_address_providers' ], 21 );
 			add_filter( 'woocommerce_checkout_get_value', [ $this, 'handle_checkout_get_value' ], 10, 2 );
 			add_action( 'woodev_shipping_pickup_point_selected', [ $this, 'handle_pickup_point_selected' ] );
+			add_action( 'woocommerce_calculated_shipping', [ $this, 'handle_calculated_shipping' ] );
 
 			self::$instances[] = $this;
 
@@ -691,6 +692,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		public function enqueue_assets(): void {
 
 			if ( ! function_exists( 'is_checkout' ) || ! is_checkout() ) {
+				$this->enqueue_cart_assets();
+
 				return;
 			}
 
@@ -843,6 +846,233 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 				'woodev_checkout_field_config_' . $this->config_object_suffix(),
 				$config
 			);
+		}
+
+		/**
+		 * Enqueues the location suggestion layer for the CLASSIC cart's shipping calculator
+		 * (issue #331).
+		 *
+		 * The calculator is a plain form POST, so only the location client is wired — the
+		 * checkout-field adapter, pickup button/modal and phone mask are never loaded here
+		 * (operator decision: no pickup picker in the cart). The SAME config builder and the
+		 * SAME `location-cascade.js` serve it; the calculator's fields are described under
+		 * their own ids (`calc_shipping_*`) and the config is marked `context: 'cart'` so the
+		 * cascade scopes its country/section reads to them. The pick persists at pick time
+		 * through the existing `/select` call, i.e. into the same customer location store the
+		 * checkout reads.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		private function enqueue_cart_assets(): void {
+			if ( ! function_exists( 'is_cart' ) || ! is_cart() ) {
+				return;
+			}
+
+			if ( class_exists( '\\Woodev_Blocks_Handler' ) && \Woodev_Blocks_Handler::is_cart_block_in_use() ) {
+				return;
+			}
+
+			$service = $this->location_service();
+
+			if ( ! $service->is_active() ) {
+				return;
+			}
+
+			$fields = $this->cart_calculator_fields();
+
+			if ( [] === $fields ) {
+				return;
+			}
+
+			$config = ( new Checkout_Config(
+				$this->plugin_id(),
+				rtrim( rest_url( 'woodev/v1' ), '/' ),
+				wp_create_nonce( 'wp_rest' ),
+				$this->wc_country_codes(),
+				$service,
+				null
+			) )->build( Checkout_Fields::from_array( array_values( $fields ) ) );
+
+			if ( ! isset( $config['location'] ) ) {
+				return;
+			}
+
+			// Re-key onto the ids the calculator template renders.
+			$calc_fields = [];
+
+			foreach ( $config['fields'] as $id => $descriptor ) {
+				$calc_id               = 'calc_' . $id;
+				$descriptor['id']      = $calc_id;
+				$calc_fields[ $calc_id ] = $descriptor;
+			}
+
+			$config['fields']            = $calc_fields;
+			$config['takeover']          = [];
+			$config['pickup_method_ids'] = [];
+			$config['context']           = 'cart';
+
+			$typeahead_built = $this->enqueue_script_if_built( 'woodev-location-typeahead', 'js/frontend/location-typeahead.js', [] );
+
+			$select_modes_built = $this->enqueue_script_if_built(
+				'woodev-location-select-modes',
+				'js/frontend/location-select-modes.js',
+				[ 'jquery', 'selectWoo', 'wc-country-select' ]
+			);
+
+			wp_enqueue_script(
+				'woodev-checkout-field-store',
+				self::asset_url( 'js/frontend/checkout-field-store.js' ),
+				[],
+				self::asset_version( self::asset_path( 'js/frontend/checkout-field-store.js' ) ),
+				true
+			);
+
+			$cascade_built = $this->enqueue_script_if_built(
+				'woodev-location-cascade',
+				'js/frontend/location-cascade.js',
+				array_values(
+					array_filter(
+						[
+							'jquery',
+							'woodev-checkout-field-store',
+							$typeahead_built ? 'woodev-location-typeahead' : null,
+							$select_modes_built ? 'woodev-location-select-modes' : null,
+						]
+					)
+				)
+			);
+
+			if ( ! $cascade_built ) {
+				return;
+			}
+
+			$this->enqueue_style_if_built( 'woodev-location-styles', 'css/frontend/location.css', [] );
+
+			wp_localize_script(
+				'woodev-location-cascade',
+				'woodev_checkout_field_config_' . $this->config_object_suffix(),
+				$config
+			);
+		}
+
+		/**
+		 * The location fields the classic cart calculator can host: the region and settlement
+		 * level fields, as `shipping_*` section variants (the calculator is the shipping
+		 * address), keyed by the checkout-style id the config builder expects. The address
+		 * level has no calculator field and is left out.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<string, array<string, mixed>>
+		 */
+		private function cart_calculator_fields(): array {
+			$out = [];
+
+			foreach ( $this->fields->get_fields() as $id => $field ) {
+				if ( 'location' !== ( $field['source_kind'] ?? null ) || ! in_array( $field['location_level'] ?? null, [ 'region', 'settlement' ], true ) ) {
+					continue;
+				}
+
+				$variant_id = 'shipping_' . self::strip_address_prefix( $id );
+
+				if ( isset( $out[ $variant_id ] ) ) {
+					continue;
+				}
+
+				$field['id']         = $variant_id;
+				$field['section']    = 'shipping';
+				$out[ $variant_id ]  = $field;
+			}
+
+			return $out;
+		}
+
+		/**
+		 * Keeps the stored customer locality consistent with what the cart's shipping
+		 * calculator just saved (issue #331).
+		 *
+		 * WooCommerce's calculator POST writes the customer's shipping country/state/city
+		 * itself, and the checkout then renders THAT (WC) text in the fields. Our stored
+		 * record only feeds scoping, rates and the pickup layer. A different COUNTRY already
+		 * makes the stored record stale server-side (`Location_Service::is_customer_record_stale()`
+		 * rule b), but a different CITY in the same country does not — so when the saved
+		 * city no longer names the stored settlement the record is forgotten, instead of the
+		 * checkout pairing a stale record with another city's text. WooCommerce's text wins;
+		 * a blank city (calculator without the city field) never forgets anything.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @internal
+		 *
+		 * @return void
+		 */
+		public function handle_calculated_shipping(): void {
+			$customer = $this->wc_customer();
+
+			if ( ! is_object( $customer ) || ! is_callable( [ $customer, 'get_shipping_city' ] ) ) {
+				return;
+			}
+
+			$saved_city = (string) $customer->get_shipping_city();
+
+			if ( '' === self::normalize_for_settlement_match( $saved_city ) ) {
+				return;
+			}
+
+			$service = $this->location_service();
+
+			if ( ! $service->is_active() ) {
+				return;
+			}
+
+			$record = $service->get_customer_record_at( 'settlement' );
+
+			if ( null === $record ) {
+				return;
+			}
+
+			$settlement = $record->settlement();
+			$type       = null !== $settlement ? (string) $settlement['type'] : '';
+
+			if (
+				self::normalize_city_for_comparison( $saved_city, $type )
+				!== self::normalize_city_for_comparison( self::settlement_record_value( $record ), $type )
+			) {
+				$service->forget_customer_record();
+			}
+		}
+
+		/**
+		 * Normalizes a city name for the calculator-versus-record comparison: lower-cased,
+		 * «ё» folded to «е», whitespace collapsed, and a leading settlement-type word dropped
+		 * («г. Москва», «город Москва», «пос Внуково»). The record's own `type` is stripped
+		 * first (it is what the provider actually emits), then the common Russian types, so
+		 * WooCommerce's free-text city and the record's bare name meet on the same string. A
+		 * prefix is only dropped when a name remains behind it.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $value The city text.
+		 * @param string $type  The record's own settlement type, or ''.
+		 *
+		 * @return string
+		 */
+		private static function normalize_city_for_comparison( string $value, string $type = '' ): string {
+			$value = str_replace( 'ё', 'е', mb_strtolower( trim( $value ) ) );
+			$value = (string) preg_replace( '/\s+/u', ' ', $value );
+
+			$types = [ 'город', 'гор', 'г', 'поселок', 'посёлок', 'пос', 'пгт', 'п', 'село', 'с', 'деревня', 'д', 'станица', 'ст-ца', 'хутор', 'х', 'аул' ];
+
+			if ( '' !== trim( $type ) ) {
+				array_unshift( $types, str_replace( 'ё', 'е', mb_strtolower( trim( $type, " \t." ) ) ) );
+			}
+
+			$alternatives = implode( '|', array_map( static fn( $t ) => preg_quote( str_replace( 'ё', 'е', $t ), '/' ), array_filter( $types ) ) );
+			$stripped     = (string) preg_replace( '/^(?:' . $alternatives . ')(?:\.\s*|\s+)(?=\S)/u', '', $value );
+
+			return '' !== $stripped ? $stripped : $value;
 		}
 
 		/**

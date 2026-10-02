@@ -345,6 +345,80 @@ class CheckoutHandlerEnqueueTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------------
+	// Classic cart shipping calculator (issue #331)
+	// -------------------------------------------------------------------------
+
+	/**
+	 * @return array{0: array, 1: array, 2: array}
+	 */
+	private function enqueue_on_cart( bool $layer_active ): array {
+		Functions\when( 'is_checkout' )->justReturn( false );
+		Functions\when( 'is_cart' )->justReturn( true );
+
+		[ $fields ] = $this->fixture();
+		$scripts    = [];
+		$localized  = [];
+		$styles     = [];
+		$this->wire_spies( $scripts, $localized, $styles );
+
+		$handler = new Checkout_Handler_Location_Assets_Built_Probe(
+			$fields,
+			'carrier',
+			new Checkout_Handler_Fake_Location_Service( $layer_active )
+		);
+		$handler->enqueue_assets();
+
+		return [ $scripts, $localized, $styles ];
+	}
+
+	public function test_cart_page_enqueues_only_the_location_layer_with_calculator_ids(): void {
+		[ $scripts, $localized, $styles ] = $this->enqueue_on_cart( true );
+
+		$this->assertArrayHasKey( 'woodev-location-cascade', $scripts );
+		$this->assertArrayHasKey( 'woodev-location-typeahead', $scripts );
+		$this->assertArrayHasKey( 'woodev-location-styles', $styles );
+
+		// Not the checkout adapter, not the pickup layer, not the phone mask.
+		$this->assertArrayNotHasKey( 'woodev-checkout-field-classic', $scripts );
+		$this->assertArrayNotHasKey( 'woodev-phone-mask', $scripts );
+		$this->assertNotContains( 'woodev-checkout-field-classic', $scripts['woodev-location-cascade']['deps'] );
+
+		$this->assertCount( 1, $localized );
+		$this->assertSame( 'woodev-location-cascade', $localized[0][0] );
+
+		$config = $localized[0][2];
+		$this->assertSame( 'cart', $config['context'] );
+		$this->assertSame( [ 'calc_shipping_city' ], array_keys( $config['fields'] ) );
+		$this->assertSame( 'calc_shipping_city', $config['fields']['calc_shipping_city']['id'] );
+		$this->assertSame( 'shipping', $config['fields']['calc_shipping_city']['section'] );
+		$this->assertSame( 'settlement', $config['fields']['calc_shipping_city']['location_level'] );
+		$this->assertSame( [], $config['pickup_method_ids'] );
+		$this->assertArrayHasKey( 'location', $config );
+	}
+
+	public function test_cart_page_enqueues_nothing_when_the_layer_is_inactive(): void {
+		[ $scripts, $localized ] = $this->enqueue_on_cart( false );
+
+		$this->assertSame( [], $scripts );
+		$this->assertSame( [], $localized );
+	}
+
+	public function test_a_page_that_is_neither_checkout_nor_cart_enqueues_nothing(): void {
+		Functions\when( 'is_checkout' )->justReturn( false );
+		Functions\when( 'is_cart' )->justReturn( false );
+
+		[ $fields ] = $this->fixture();
+		$scripts    = [];
+		$localized  = [];
+		$this->wire_spies( $scripts, $localized );
+
+		( new Checkout_Handler_Location_Assets_Built_Probe( $fields, 'carrier', new Checkout_Handler_Fake_Location_Service( true ) ) )->enqueue_assets();
+
+		$this->assertSame( [], $scripts );
+		$this->assertSame( [], $localized );
+	}
+
+	// -------------------------------------------------------------------------
 	// CSS content itself
 	// -------------------------------------------------------------------------
 

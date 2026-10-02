@@ -166,7 +166,18 @@
 	 *
 	 * @type {{billing: string, shipping: string}}
 	 */
-	var COUNTRY_FIELD_ID = { billing: 'billing_country', shipping: 'shipping_country' };
+	/**
+	 * Issue #331: on the classic CART the shipping calculator is the only address — a config
+	 * marked `context: 'cart'` describes its fields under `calc_shipping_*` ids, there is no
+	 * "ship to a different address" toggle, and the shipping section is always the active one.
+	 *
+	 * @type {boolean}
+	 */
+	var CART_CONTEXT = Object.keys( window ).some( function( key ) {
+		return 0 === key.indexOf( PREFIX ) && window[ key ] && 'cart' === window[ key ].context;
+	} );
+
+	var COUNTRY_FIELD_ID = { billing: 'billing_country', shipping: CART_CONTEXT ? 'calc_shipping_country' : 'shipping_country' };
 
 	/** @type {string[]} both known country field ids — a change to EITHER re-runs arbitration. */
 	var COUNTRY_FIELD_IDS = [ COUNTRY_FIELD_ID.billing, COUNTRY_FIELD_ID.shipping ];
@@ -348,8 +359,11 @@
 	 */
 	function countryValue( fieldId ) {
 		var el = document.getElementById( fieldId );
+		var value = el ? ( el.value || '' ) : '';
 
-		return el ? ( el.value || '' ) : '';
+		// The cart calculator's «Select a country…» placeholder carries the value `default`
+		// (issue #331) — no selection, not a country code.
+		return 'default' === value ? '' : value;
 	}
 
 	/**
@@ -513,6 +527,10 @@
 	 * @returns {string} `'shipping'` or `'billing'`.
 	 */
 	function activeAddressSection() {
+		if ( CART_CONTEXT ) {
+			return 'shipping';
+		}
+
 		var checkbox = document.querySelector( '[name="ship_to_different_address"]' );
 
 		return checkbox && checkbox.checked ? 'shipping' : 'billing';
@@ -1181,6 +1199,9 @@
 			// Per-field remembered value the field is currently CONSISTENT with — gates
 			// destructive clearing exactly like `checkout-field-classic.js`'s own `resolved`.
 			resolved: {},
+			// Issue #331 (cart only): the `<select>` VALUE each field last held, so a rebuilt
+			// state list is judged by region identity (WooCommerce's code), not by label alone.
+			seenValues: {},
 			// Per-LEVEL confirmed record (only chain levels; postcode never has one of its own).
 			records: {},
 			// Per-LEVEL text a COMPLETED search already proved the provider has nothing for
@@ -1887,6 +1908,7 @@
 
 		if ( el ) {
 			applyValueToElement( el, value );
+			entry.seenValues[ fieldId ] = cascadeKey( el.value );
 		}
 
 		if ( previous !== next ) {
@@ -3673,6 +3695,8 @@
 			// `options.popular` at all, the same "omit rather than hand over an
 			// always-empty primitive" discipline `onAbandon` already follows elsewhere.
 			popular: 'settlement' === node.level ? popularFor( entry, node ) : null,
+			// Issue #331: see `attachRelatedListRegion()` — the cart's WooCommerce scripts re-fire `change` with an unchanged value.
+			seedSelectedText: CART_CONTEXT,
 			// Issue #1071: only for the level that carries the popular list — what the CUSTOMER
 			// picked here, never what the store filled in (#536).
 			pickedSettlement: 'settlement' === node.level ? function() {
@@ -4623,6 +4647,23 @@
 				return; // no real transition — WC-style no-op churn OR a duplicate delivery.
 			}
 
+			// Issue #331: the calculator's WooCommerce scripts rebuild the state `<select>` from
+			// their own state list and re-fire `change` (every time the calculator is opened).
+			// What we remembered is the region's TEXT (what backwards fill wrote), while the
+			// rebuilt option's `value` is WooCommerce's own code for the SAME region. Same
+			// region = same VALUE as the field last held (a different value is a transition even
+			// under an identical label); the text check only bridges the remembered TEXT, and a
+			// value we wrote ourselves as a synthetic option (value === text) that WooCommerce's
+			// rebuild replaced by its own code.
+			if ( CART_CONTEXT && 'SELECT' === target.tagName && target.selectedIndex >= 0
+				&& target.options[ target.selectedIndex ].text === entry.resolved[ id ]
+				&& ( undefined === entry.seenValues[ id ] || newValue === entry.seenValues[ id ] || entry.seenValues[ id ] === entry.resolved[ id ] ) ) {
+				entry.resolved[ id ] = newValue;
+				entry.seenValues[ id ] = newValue;
+				return;
+			}
+
+			entry.seenValues[ id ] = newValue;
 			entry.resolved[ id ] = newValue;
 			entry.store.setValue( id, target.value );
 
@@ -4796,12 +4837,19 @@
 	 * @returns {void}
 	 */
 	function bindCheckoutUpdatedWatcher() {
-		if ( window.jQuery ) {
-			window.jQuery( document.body ).on( 'updated_checkout', handleCheckoutUpdated );
-			return;
-		}
+		// Issue #331: WooCommerce's cart.js replaces the cart form and totals (the calculator
+		// lives in the totals) over AJAX and announces it with `updated_wc_div` /
+		// `updated_cart_totals` — the cart's `updated_checkout`. Only the cart context binds them.
+		var events = CART_CONTEXT ? [ 'updated_checkout', 'updated_wc_div', 'updated_cart_totals' ] : [ 'updated_checkout' ];
 
-		document.body.addEventListener( 'updated_checkout', handleCheckoutUpdated );
+		events.forEach( function( name ) {
+			if ( window.jQuery ) {
+				window.jQuery( document.body ).on( name, handleCheckoutUpdated );
+				return;
+			}
+
+			document.body.addEventListener( name, handleCheckoutUpdated );
+		} );
 	}
 
 	/**
@@ -5115,6 +5163,7 @@
 			if ( el ) {
 				entry.store.setValue( node.fieldId, el.value );
 				entry.resolved[ node.fieldId ] = cascadeKey( el.value );
+				entry.seenValues[ node.fieldId ] = cascadeKey( el.value );
 			}
 		} );
 
