@@ -82,6 +82,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		public const FIELD_CLEAN_SECRET = 'clean_secret';
 
 		/**
+		 * What the balance API says about a recorded 403 (#1060) — the values
+		 * {@see self::get_access_denied_cause()} returns.
+		 */
+		public const CAUSE_BALANCE_EXHAUSTED = 'balance_exhausted';
+		public const CAUSE_KEYS_REJECTED     = 'keys_rejected';
+		public const CAUSE_BALANCE_POSITIVE  = 'balance_positive';
+		public const CAUSE_UNKNOWN           = 'unknown';
+
+		/**
 		 * Filter tag: widens/narrows the static country list {@see self::get_countries()}
 		 * reports. Spec Task 7: "ship `[ 'RU' ]` and leave the filter ... for stores
 		 * that want to widen it."
@@ -1112,6 +1121,59 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 			 * @param \Throwable $exception The caught failure.
 			 */
 			do_action( 'woodev_location_dadata_operation_failed', $operation, $exception );
+		}
+
+		/**
+		 * Explains the recorded suggestions 403 through the account balance API (#1060).
+		 *
+		 * ADMIN-SIDE ONLY: called when the merchant notice is about to render, never from
+		 * the suggest / checkout path, so no customer request ever waits on it. Needs the
+		 * secret (the balance API rejects a token alone); without one it answers
+		 * {@see self::CAUSE_UNKNOWN} with no request. The answer is cached in a transient
+		 * keyed to the 403 state's own timestamp, so it is looked up once per window and
+		 * a re-set state never reuses an older answer; a failed lookup is cached too
+		 * (shorter), so a dead balance endpoint is not retried on every admin page.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string One of the `CAUSE_*` constants.
+		 */
+		public function get_access_denied_cause(): string {
+			$since = (int) get_option( Dadata_Api_Client::OPTION_ACCESS_DENIED, 0 );
+
+			if ( $since <= 0 || '' === $this->clean_secret() ) {
+				return self::CAUSE_UNKNOWN;
+			}
+
+			$cached = get_transient( Dadata_Api_Client::TRANSIENT_ACCESS_DENIED_CAUSE );
+
+			if ( is_array( $cached ) && ( $cached['since'] ?? null ) === $since && is_string( $cached['cause'] ?? null ) ) {
+				return $cached['cause'];
+			}
+
+			$ttl = 12 * HOUR_IN_SECONDS;
+
+			try {
+				$cause = $this->client()->get_balance() <= 0 ? self::CAUSE_BALANCE_EXHAUSTED : self::CAUSE_BALANCE_POSITIVE;
+			} catch ( \Woodev_API_Exception $e ) {
+				if ( in_array( $e->getCode(), [ 401, 403 ], true ) ) {
+					$cause = self::CAUSE_KEYS_REJECTED;
+				} else {
+					$cause = self::CAUSE_UNKNOWN;
+					$ttl   = 15 * MINUTE_IN_SECONDS;
+				}
+			}
+
+			set_transient(
+				Dadata_Api_Client::TRANSIENT_ACCESS_DENIED_CAUSE,
+				[
+					'since' => $since,
+					'cause' => $cause,
+				],
+				$ttl
+			);
+
+			return $cause;
 		}
 
 		/**

@@ -1457,7 +1457,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 *
 		 * DaData signals an exhausted balance or daily limit with HTTP 403, the
 		 * same status it uses for an unknown key and an unconfirmed e-mail (it has
-		 * no 402), so the message names all three causes rather than guessing one.
+		 * no 402), so the message names all three causes unless the balance API pins one down (#1060).
 		 * A pure decision over {@see \Woodev\Framework\Shipping\Location\Providers\Dadata_Api_Client::is_access_denied()};
 		 * public for the same reason as its sibling.
 		 *
@@ -1481,12 +1481,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 				return null;
 			}
 
-			$message = sprintf(
-				/* translators: %1$s - opening <a> tag to the DaData account, %2$s - opening <a> tag to the plugin settings, %3$s - closing </a> tag */
-				__( 'DaData отклонил запросы магазина (ответ 403), поэтому подсказки адресов при оформлении заказа не работают — покупатели вводят адрес вручную. Чаще всего это значит, что на счёте DaData закончились средства или исчерпан дневной лимит: %1$sпополните баланс в личном кабинете DaData%3$s. Также проверьте, что почта аккаунта подтверждена, а %2$sключи в настройках%3$s указаны верно. Уведомление исчезнет само, как только DaData снова начнёт отвечать.', 'woodev-plugin-framework' ),
-				'<a href="https://dadata.ru/profile/" target="_blank" rel="noopener noreferrer">',
-				'<a href="' . esc_url( $this->get_settings_url() ) . '">',
-				'</a>'
+			$message = $this->build_access_denied_message(
+				$provider instanceof Location\Providers\Dadata_Provider ? $provider->get_access_denied_cause() : Location\Providers\Dadata_Provider::CAUSE_UNKNOWN
 			);
 
 			return [
@@ -1495,6 +1491,58 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 				// not-configured notice above.
 				'notice_id' => 'location-provider-' . $provider->get_id() . '-access-denied',
 			];
+		}
+
+		/**
+		 * The merchant text of the DaData-refusing notice for a cause the balance API
+		 * named (#1060), or the three-cause text when the cause is not known (#956).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $cause One of the {@see \Woodev\Framework\Shipping\Location\Providers\Dadata_Provider} `CAUSE_*` constants.
+		 *
+		 * @return string
+		 */
+		private function build_access_denied_message( string $cause ): string {
+
+			$account  = '<a href="https://dadata.ru/profile/" target="_blank" rel="noopener noreferrer">';
+			$settings = '<a href="' . esc_url( $this->get_settings_url() ) . '">';
+
+			switch ( $cause ) {
+				case Location\Providers\Dadata_Provider::CAUSE_BALANCE_EXHAUSTED:
+					return sprintf(
+						/* translators: %1$s - opening <a> tag to the DaData account, %2$s - closing </a> tag */
+						__( 'На счёте DaData закончились средства, поэтому подсказки адресов при оформлении заказа не работают — покупатели вводят адрес вручную. %1$sПополните баланс в личном кабинете DaData%2$s. Уведомление исчезнет после первого успешного запроса подсказок к DaData.', 'woodev-plugin-framework' ),
+						$account,
+						'</a>'
+					);
+
+				case Location\Providers\Dadata_Provider::CAUSE_KEYS_REJECTED:
+					return sprintf(
+						/* translators: %1$s - opening <a> tag to the plugin settings, %2$s - opening <a> tag to the DaData account, %3$s - closing </a> tag */
+						__( 'DaData не принимает ключи магазина, поэтому подсказки адресов при оформлении заказа не работают — покупатели вводят адрес вручную. Проверьте, что %1$sключи в настройках%3$s указаны верно, а почта аккаунта подтверждена в %2$sличном кабинете DaData%3$s. Уведомление исчезнет после первого успешного запроса подсказок к DaData.', 'woodev-plugin-framework' ),
+						$settings,
+						$account,
+						'</a>'
+					);
+
+				case Location\Providers\Dadata_Provider::CAUSE_BALANCE_POSITIVE:
+					return sprintf(
+						/* translators: %1$s - opening <a> tag to the DaData account, %2$s - closing </a> tag */
+						__( 'DaData отклонил запросы магазина (ответ 403), хотя средства на счёте есть, поэтому подсказки адресов при оформлении заказа не работают — покупатели вводят адрес вручную. Скорее всего, исчерпан бесплатный дневной лимит запросов или доступ ограничен для аккаунта: посмотрите %1$sлимиты и статус аккаунта в личном кабинете DaData%2$s. Уведомление исчезнет после первого успешного запроса подсказок к DaData.', 'woodev-plugin-framework' ),
+						$account,
+						'</a>'
+					);
+
+				default:
+					return sprintf(
+						/* translators: %1$s - opening <a> tag to the DaData account, %2$s - opening <a> tag to the plugin settings, %3$s - closing </a> tag */
+						__( 'DaData отклонил запросы магазина (ответ 403), поэтому подсказки адресов при оформлении заказа не работают — покупатели вводят адрес вручную. Чаще всего это значит, что на счёте DaData закончились средства или исчерпан дневной лимит: %1$sпополните баланс в личном кабинете DaData%3$s. Также проверьте, что почта аккаунта подтверждена, а %2$sключи в настройках%3$s указаны верно. Уведомление исчезнет после первого успешного запроса подсказок к DaData.', 'woodev-plugin-framework' ),
+						$account,
+						$settings,
+						'</a>'
+					);
+			}
 		}
 
 		/**

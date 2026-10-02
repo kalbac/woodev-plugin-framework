@@ -56,6 +56,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		}
 
 		/**
+		 * Gets the account balance from a `profile/balance` response body
+		 * (`{ "balance": 1234.5 }`, #1060).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return float
+		 *
+		 * @throws \Woodev_API_Exception When the body carries no numeric `balance`.
+		 */
+		public function get_balance(): float {
+			if ( ! is_object( $this->response_data ) || ! isset( $this->response_data->balance ) || ! is_numeric( $this->response_data->balance ) ) {
+				throw new \Woodev_API_Exception( 'DaData balance response body is malformed or of the wrong shape.' );
+			}
+
+			return (float) $this->response_data->balance;
+		}
+
+		/**
 		 * Gets the raw `location` object from an `iplocate/address` response body
 		 * (`{ location: { value, unrestricted_value, data } }`), or null when
 		 * absent (DaData resolved nothing for the requested IP).

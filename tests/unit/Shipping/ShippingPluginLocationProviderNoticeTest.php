@@ -337,8 +337,9 @@ final class ShippingPluginLocationProviderNoticeTest extends TestCase {
 	/**
 	 * @param string   $active_provider_id the stored active provider id
 	 * @param int|null $denied_since       the stored access-denied timestamp, or null when clear
+	 * @param string|null $cached_cause    a balance-API cause already cached for that state (#1060), or null
 	 */
-	private function open_gate_with_dadata_state( string $active_provider_id, ?int $denied_since ): void {
+	private function open_gate_with_dadata_state( string $active_provider_id, ?int $denied_since, ?string $cached_cause = null ): void {
 		// The real bundled DaData provider registers itself (its class is loaded
 		// above); only the competing provider needs a fixture.
 		$providers = [
@@ -347,10 +348,20 @@ final class ShippingPluginLocationProviderNoticeTest extends TestCase {
 
 		Functions\when( 'add_action' )->justReturn( true );
 		$this->stub_providers_filter( $providers );
+		Functions\when( 'get_transient' )->justReturn(
+			null === $cached_cause ? false : [
+				'since' => $denied_since,
+				'cause' => $cached_cause,
+			]
+		);
 		Functions\when( 'get_option' )->alias(
-			static function ( $name, $default = false ) use ( $active_provider_id, $denied_since ) {
+			static function ( $name, $default = false ) use ( $active_provider_id, $denied_since, $cached_cause ) {
 				if ( 'woodev_location_active_provider' === $name ) {
 					return $active_provider_id;
+				}
+
+				if ( null !== $cached_cause && 'woodev_location_clean_secret' === $name ) {
+					return 'sec';
 				}
 
 				if ( \Woodev\Framework\Shipping\Location\Providers\Dadata_Api_Client::OPTION_ACCESS_DENIED === $name && null !== $denied_since ) {
@@ -386,6 +397,55 @@ final class ShippingPluginLocationProviderNoticeTest extends TestCase {
 		$this->assertStringContainsString( '403', $notice['message'] );
 		$this->assertStringContainsString( 'пополните баланс', $notice['message'] );
 		$this->assertStringContainsString( 'https://dadata.ru/profile/', $notice['message'] );
+	}
+
+	/**
+	 * @return array<string, array{0: string, 1: string, 2: string}>
+	 */
+	public static function known_cause_provider(): array {
+		return [
+			'balance exhausted' => [ 'balance_exhausted', 'закончились средства', 'ополните баланс' ],
+			'keys rejected'     => [ 'keys_rejected', 'не принимает ключи', 'ключи в настройках' ],
+			'balance positive'  => [ 'balance_positive', 'средства на счёте есть', 'лимиты и статус аккаунта' ],
+			'unknown'           => [ 'unknown', 'Чаще всего это значит', 'пополните баланс' ],
+		];
+	}
+
+	/**
+	 * @dataProvider known_cause_provider
+	 */
+	public function test_the_access_denied_notice_names_the_cause_the_balance_api_found( string $cause, string $names_cause, string $says_what_to_do ): void {
+		$this->open_gate_with_dadata_state( 'dadata', 1700000000, $cause );
+
+		$plugin = ( new \ReflectionClass( Notice_Opted_In_Shipping_Plugin_Fixture::class ) )->newInstanceWithoutConstructor();
+		$notice = $plugin->location_provider_access_denied_notice();
+
+		$this->assertNotNull( $notice );
+		$this->assertStringContainsString( $names_cause, $notice['message'] );
+		$this->assertStringContainsString( $says_what_to_do, $notice['message'] );
+		$this->assertStringContainsString( 'после первого успешного запроса подсказок', $notice['message'] );
+		$this->assertStringNotContainsString( 'снова начнёт отвечать', $notice['message'] );
+	}
+
+	public function test_without_a_secret_the_notice_keeps_the_three_cause_text_and_asks_nothing(): void {
+		// No cached cause and no secret: the lookup must not run (an uncached
+		// lookup would hit the un-stubbed HTTP layer and fail this test).
+		$this->open_gate_with_dadata_state( 'dadata', 1700000000 );
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = false ) {
+				if ( 'woodev_location_active_provider' === $name ) {
+					return 'dadata';
+				}
+
+				return \Woodev\Framework\Shipping\Location\Providers\Dadata_Api_Client::OPTION_ACCESS_DENIED === $name ? 1700000000 : $default;
+			}
+		);
+
+		$plugin = ( new \ReflectionClass( Notice_Opted_In_Shipping_Plugin_Fixture::class ) )->newInstanceWithoutConstructor();
+		$notice = $plugin->location_provider_access_denied_notice();
+
+		$this->assertNotNull( $notice );
+		$this->assertStringContainsString( 'Чаще всего это значит', $notice['message'] );
 	}
 
 	public function test_no_access_denied_notice_when_another_provider_is_active(): void {
