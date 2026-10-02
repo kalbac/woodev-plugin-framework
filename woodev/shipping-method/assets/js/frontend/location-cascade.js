@@ -177,6 +177,37 @@
 		return 0 === key.indexOf( PREFIX ) && window[ key ] && 'cart' === window[ key ].context;
 	} );
 
+	/**
+	 * Issue #332: on a My Account address form (`/edit-address/billing|shipping/`) the fields keep
+	 * their checkout ids (`billing_*` / `shipping_*`), but the page edits exactly ONE section —
+	 * named by the config's `accountSection` — and there is no "ship to a different address"
+	 * toggle. Empty string everywhere else.
+	 *
+	 * @type {string} `'billing'`, `'shipping'` or `''`.
+	 */
+	var ACCOUNT_SECTION = ( function() {
+		var section = '';
+
+		Object.keys( window ).forEach( function( key ) {
+			if ( 0 === key.indexOf( PREFIX ) && window[ key ] && 'account' === window[ key ].context
+				&& ( 'billing' === window[ key ].accountSection || 'shipping' === window[ key ].accountSection ) ) {
+				section = window[ key ].accountSection;
+			}
+		} );
+
+		return section;
+	}() );
+
+	/**
+	 * Cart and My Account share the trap that WooCommerce's own scripts (`country-select.js`)
+	 * re-fire `change` on the state `<select>` with the value already there — on load and on every
+	 * rebuild of its options. Where that is true the churn is judged by option VALUE, never as a
+	 * customer pick. The checkout never opts in.
+	 *
+	 * @type {boolean}
+	 */
+	var STATE_CHURN_GUARD = CART_CONTEXT || '' !== ACCOUNT_SECTION;
+
 	var COUNTRY_FIELD_ID = { billing: 'billing_country', shipping: CART_CONTEXT ? 'calc_shipping_country' : 'shipping_country' };
 
 	/** @type {string[]} both known country field ids — a change to EITHER re-runs arbitration. */
@@ -529,6 +560,10 @@
 	function activeAddressSection() {
 		if ( CART_CONTEXT ) {
 			return 'shipping';
+		}
+
+		if ( ACCOUNT_SECTION ) {
+			return ACCOUNT_SECTION;
 		}
 
 		var checkbox = document.querySelector( '[name="ship_to_different_address"]' );
@@ -3695,8 +3730,8 @@
 			// `options.popular` at all, the same "omit rather than hand over an
 			// always-empty primitive" discipline `onAbandon` already follows elsewhere.
 			popular: 'settlement' === node.level ? popularFor( entry, node ) : null,
-			// Issue #331: see `attachRelatedListRegion()` — the cart's WooCommerce scripts re-fire `change` with an unchanged value.
-			seedSelectedText: CART_CONTEXT,
+			// Issues #331/#332: see `attachRelatedListRegion()` — the cart's and account form's WooCommerce scripts re-fire `change` with an unchanged value.
+			seedSelectedText: STATE_CHURN_GUARD,
 			// Issue #1071: only for the level that carries the popular list — what the CUSTOMER
 			// picked here, never what the store filled in (#536).
 			pickedSettlement: 'settlement' === node.level ? function() {
@@ -4655,7 +4690,7 @@
 			// under an identical label); the text check only bridges the remembered TEXT, and a
 			// value we wrote ourselves as a synthetic option (value === text) that WooCommerce's
 			// rebuild replaced by its own code.
-			if ( CART_CONTEXT && 'SELECT' === target.tagName && target.selectedIndex >= 0
+			if ( STATE_CHURN_GUARD && 'SELECT' === target.tagName && target.selectedIndex >= 0
 				&& target.options[ target.selectedIndex ].text === entry.resolved[ id ]
 				&& ( undefined === entry.seenValues[ id ] || newValue === entry.seenValues[ id ] || entry.seenValues[ id ] === entry.resolved[ id ] ) ) {
 				entry.resolved[ id ] = newValue;
