@@ -90,6 +90,10 @@ final class Checkout_Handler_Fake_Location_Service extends Location_Service {
 		return \Woodev\Framework\Shipping\Location\Location_Provider_Registry::MODE_TYPEAHEAD;
 	}
 
+	public function is_region_field_removed(): bool {
+		return false;
+	}
+
 	public function is_custom_settlement_allowed(): bool {
 		return false;
 	}

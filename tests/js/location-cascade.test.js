@@ -206,6 +206,8 @@ function buildConfig( opts ) {
 			// Issue #528: the merchant opt-in for `ajax-select2` tags — default `false`,
 			// matching the store setting's own default (opt-in only).
 			allowCustomSettlement: o.allowCustomSettlement !== undefined ? o.allowCustomSettlement : false,
+			// Issue #1069: omitted unless a test opts in (an older server never sends it).
+			...( o.regionFieldRemoved !== undefined ? { regionFieldRemoved: o.regionFieldRemoved } : {} ),
 			// Keyed BY COUNTRY, mirroring Checkout_Config::build_location_block(): DaData's
 			// coverage is per country (street data for RU/BY/KZ/UZ, city-only elsewhere), so
 			// a flat per-level map cannot describe it without lying.
@@ -477,6 +479,34 @@ describe( 'suggestion scoping', () => {
 		expect( req.url ).toContain( SUGGEST_URL );
 		expect( req.url ).toContain( 'within=' + encodeURIComponent( 'dadata:region1' ) );
 		expect( req.url ).toContain( 'level=settlement' );
+	} );
+
+	// Issue #1069 — region_field=remove: the region record (here the default's, selected the
+	// same way a fixed default seeds it) must not lock the settlement search; shown → unchanged.
+	it( 'sends no `within` for a region record when the region field is removed (issue #1069)', () => {
+		boot( { region: true, settlement: true, address: true, regionFieldRemoved: true } );
+
+		selectViaFake( callFor( 'billing_state' ), {
+			key: 'dadata:region1', label: 'г Москва', level: 'region',
+			record: { key: 'dadata:region1', provider_id: 'dadata', level: 'region', country: 'RU', region: { name: 'Москва', type: 'г' }, label: 'г Москва' },
+		} );
+
+		callFor( 'billing_city' ).fetch( 'Каз' );
+
+		expect( fetchCalls[ fetchCalls.length - 1 ].url ).not.toContain( 'within=' );
+	} );
+
+	it( 'still sends `within` for a region record when the region field is shown (issue #1069 regression guard)', () => {
+		boot( { region: true, settlement: true, address: true, regionFieldRemoved: false } );
+
+		selectViaFake( callFor( 'billing_state' ), {
+			key: 'dadata:region1', label: 'г Москва', level: 'region',
+			record: { key: 'dadata:region1', provider_id: 'dadata', level: 'region', country: 'RU', region: { name: 'Москва', type: 'г' }, label: 'г Москва' },
+		} );
+
+		callFor( 'billing_city' ).fetch( 'Каз' );
+
+		expect( fetchCalls[ fetchCalls.length - 1 ].url ).toContain( 'within=' + encodeURIComponent( 'dadata:region1' ) );
 	} );
 
 	it( 'scopes settlement suggestions by country when the region field is present but empty', () => {
@@ -8562,6 +8592,33 @@ describe( 'options.popular() scoped by an AUTO-FILLED region — issue #538', ()
 	it( 'narrows to the auto-filled region — the defect the operator saw: three foreign-region entries were offered under «Москва»', () => {
 		const popular = popularCallbackAfterBoot( {
 			implicit: true,
+			current: { key: 'test-cdek:44', level: 'settlement' },
+			chain: { settlement: { key: 'test-cdek:44', level: 'settlement' } },
+			defaultLocality: { policy: 'fixed', record: DEFAULT_MSK },
+		} );
+
+		expect( popular().map( ( e ) => e.label ).sort() ).toEqual( [ 'Внуково', 'Москва' ] );
+	} );
+
+	// Issue #1069 — region_field=remove: the region is not the customer's to change, so a region
+	// that came from the fixed default must not narrow the list; with the field shown #538 stands
+	// (the first test above).
+	it( 'shows every popular entry when the region field is removed, even under a fixed default (issue #1069)', () => {
+		const popular = popularCallbackAfterBoot( {
+			implicit: true,
+			regionFieldRemoved: true,
+			current: { key: 'test-cdek:44', level: 'settlement' },
+			chain: { settlement: { key: 'test-cdek:44', level: 'settlement' } },
+			defaultLocality: { policy: 'fixed', record: DEFAULT_MSK },
+		} );
+
+		expect( popular() ).toHaveLength( 4 );
+	} );
+
+	it( 'still narrows when the region field is shown and the server says so explicitly (issue #1069 regression guard)', () => {
+		const popular = popularCallbackAfterBoot( {
+			implicit: true,
+			regionFieldRemoved: false,
 			current: { key: 'test-cdek:44', level: 'settlement' },
 			chain: { settlement: { key: 'test-cdek:44', level: 'settlement' } },
 			defaultLocality: { policy: 'fixed', record: DEFAULT_MSK },

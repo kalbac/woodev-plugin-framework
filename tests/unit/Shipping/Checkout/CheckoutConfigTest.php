@@ -113,6 +113,9 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 	/** @var string Issue #380: get_field_mode_settlement() return value. */
 	private string $mode_settlement;
 
+	/** @var bool Issue #1069: is_region_field_removed() return value (set directly by a test). */
+	public bool $region_field_removed = false;
+
 	/** @var bool Issue #528: is_custom_settlement_allowed() return value. */
 	private bool $allow_custom_settlement;
 
@@ -265,6 +268,10 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 
 	public function is_custom_settlement_allowed(): bool {
 		return $this->allow_custom_settlement;
+	}
+
+	public function is_region_field_removed(): bool {
+		return $this->region_field_removed;
 	}
 
 	public function owns_region_states( string $country, array $final_states ): bool {
@@ -1969,6 +1976,22 @@ class CheckoutConfigTest extends TestCase {
 			->build( Checkout_Fields::from_array( [] ) );
 
 		$this->assertTrue( $config['location']['allowCustomSettlement'] );
+	}
+
+	// Issue #1069 — `regionFieldRemoved` tells the client a region it cannot see must not scope
+	// the settlement search or the popular list.
+	public function test_region_field_removed_defaults_to_false_and_follows_the_location_service(): void {
+		$service = new Checkout_Config_Fake_Location_Service( true, [ 'region' => true ], null, [ 'RU' ] );
+		$config  = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )
+			->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertFalse( $config['location']['regionFieldRemoved'] );
+
+		$service->region_field_removed = true;
+		$config                        = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )
+			->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertTrue( $config['location']['regionFieldRemoved'] );
 	}
 
 	// -------------------------------------------------------------------------
