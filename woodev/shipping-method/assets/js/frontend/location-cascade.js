@@ -1525,6 +1525,29 @@
 		return record && Array.isArray( record.ancestors ) ? record.ancestors : [];
 	}
 
+	/**
+	 * Issue #1071: the record the CUSTOMER picked at `level` — `{ name }`, `name` being the
+	 * settlement's bare component name (`''` for a restored pick that carries no components) —
+	 * or `null` when nothing is picked. A store-filled record (#536 fixed default, GeoIP) carries
+	 * `implicit: true` ({@see adoptChain}) and never counts; a cleared or reset level has a null
+	 * record.
+	 *
+	 * @param {Object} entry
+	 * @param {string} level
+	 * @returns {{name: string}|null}
+	 */
+	function customerPickFor( entry, level ) {
+		var record = entry.records[ level ];
+
+		if ( ! record || record.implicit ) {
+			return null;
+		}
+
+		var component = record[ level ];
+
+		return { name: ( component && 'string' === typeof component.name ) ? component.name.trim() : '' };
+	}
+
 	function popularFor( entry, node ) {
 		return function() {
 			var country = countryFor( entry, node );
@@ -3650,6 +3673,11 @@
 			// `options.popular` at all, the same "omit rather than hand over an
 			// always-empty primitive" discipline `onAbandon` already follows elsewhere.
 			popular: 'settlement' === node.level ? popularFor( entry, node ) : null,
+			// Issue #1071: only for the level that carries the popular list — what the CUSTOMER
+			// picked here, never what the store filled in (#536).
+			pickedSettlement: 'settlement' === node.level ? function() {
+				return customerPickFor( entry, node.level );
+			} : null,
 			onSelect: onSelectFor( entry, node ),
 			// Issue #350: OPTIONAL for the widget (a mode-specific Task 13 renderer is free to
 			// ignore it, same as every other primitive here) — see {@see onAbandonFor}'s own

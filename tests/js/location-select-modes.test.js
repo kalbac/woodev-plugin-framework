@@ -3916,3 +3916,111 @@ describe( 'ajax-select2 renderer — issues #527/#532: abandon-flush scheduling'
 		expect( onAbandon ).not.toHaveBeenCalled();
 	} );
 } );
+
+// Issue #1071 — once the CUSTOMER has picked a settlement, reopening the field searches for its
+// name instead of showing the popular list. A store-filled default (#536) does not count.
+describe( 'issue #1071: popular list only before the customer picks', () => {
+	const POPULAR = [
+		{ key: 'p:1', value: 'Тверь', label: 'Тверь', record: { key: 'p:1', label: 'Тверь' } },
+		{ key: 'p:2', value: 'Пушкин', label: 'Пушкин', record: { key: 'p:2', label: 'Пушкин' } },
+	];
+	let picked;
+	let fetchSpy;
+	let box;
+
+	function mount( value ) {
+		document.body.innerHTML = '<input type="text" id="shipping_city" name="shipping_city" value="' + value + '" />';
+		const container = document.createElement( 'span' );
+
+		container.className = 'select2-container select2-container--open';
+		container.innerHTML = '<input class="select2-search__field" />';
+		document.body.appendChild( container );
+		box = container.querySelector( '.select2-search__field' );
+
+		const mod = require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
+		const instances = installFakeSelect2( window.jQuery );
+
+		fetchSpy = jest.fn( () => Promise.resolve( [] ) );
+		mod.attachAjaxSelect2( document.getElementById( 'shipping_city' ), buildOptions( {
+			node: { level: 'settlement', fieldId: 'shipping_city' },
+			fetch: fetchSpy,
+			popular: () => POPULAR,
+			pickedSettlement: () => picked,
+		} ) );
+
+		return instances[ 0 ];
+	}
+
+	afterEach( () => {
+		delete window.jQuery.fn.select2;
+	} );
+
+	it( 'picked: opening pre-fills the NAME, selected, and the empty-term query searches for it — no popular rows', () => {
+		picked = { name: 'Казань' };
+		const instance = mount( 'Казань' );
+
+		instance.open();
+
+		expect( box.value ).toBe( 'Казань' );
+		expect( box.selectionStart ).toBe( 0 );
+		expect( box.selectionEnd ).toBe( 'Казань'.length );
+
+		const q = instance.query( '' );
+
+		expect( fetchSpy ).toHaveBeenCalledTimes( 1 );
+		expect( JSON.stringify( fetchSpy.mock.calls[ 0 ] ) ).toContain( 'Казань' );
+		expect( JSON.stringify( q.success.mock.calls ) ).not.toContain( 'Пушкин' );
+	} );
+
+	it( 'picked and restored without components: falls back to the field text', () => {
+		picked = { name: '' };
+		const instance = mount( 'Казань' );
+
+		instance.open();
+		instance.query( '' );
+
+		expect( box.value ).toBe( 'Казань' );
+		expect( JSON.stringify( fetchSpy.mock.calls[ 0 ] ) ).toContain( 'Казань' );
+	} );
+
+	it( 'store-filled default (not a pick): the popular list still shows on an empty term, no pre-fill, no search', () => {
+		picked = null;
+		const instance = mount( 'Тверь' );
+
+		instance.open();
+		const q = instance.query( '' );
+
+		expect( box.value ).toBe( '' );
+		expect( fetchSpy ).not.toHaveBeenCalled();
+		expect( q.success.mock.calls[ 0 ][ 0 ].results.map( ( r ) => r.text ) ).toEqual( [ 'Тверь', 'Пушкин' ] );
+	} );
+
+	it( 'cleared / reset after a pick: the popular list is back', () => {
+		picked = { name: 'Казань' };
+		const instance = mount( '' );
+
+		instance.open();
+		instance.query( '' );
+		expect( fetchSpy ).toHaveBeenCalledTimes( 1 );
+
+		picked = null;
+		instance.close();
+		box.value = '';
+		instance.open();
+		const q = instance.query( '' );
+
+		expect( box.value ).toBe( '' );
+		expect( fetchSpy ).toHaveBeenCalledTimes( 1 );
+		expect( q.success.mock.calls[ 0 ][ 0 ].results ).toHaveLength( 2 );
+	} );
+
+	it( '#539 regression: a typed term still narrows the popular list locally while the picked name is ignored', () => {
+		picked = { name: 'Казань' };
+		const instance = mount( 'Казань' );
+
+		const q = instance.query( 'Пушк' );
+
+		expect( q.success.mock.calls[ 0 ][ 0 ].results.map( ( r ) => r.text ) ).toContain( 'Пушкин' );
+		expect( JSON.stringify( fetchSpy.mock.calls[ 0 ] ) ).toContain( 'Пушк' );
+	} );
+} );

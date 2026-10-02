@@ -358,6 +358,24 @@
 	}
 
 	/**
+	 * Issue #1071: the NAME of the settlement the customer picked in this field, or `''` when
+	 * they have not (nothing picked, a store-filled default, a cleared field, or a level with no
+	 * popular list at all). `seed.pickedName` is the cascade's live answer; absent → `''`.
+	 *
+	 * @param {{pickedName?: function(): string}} seed
+	 * @returns {string}
+	 */
+	function pickedName( seed ) {
+		if ( ! seed || 'function' !== typeof seed.pickedName || 'function' !== typeof seed.popular ) {
+			return '';
+		}
+
+		var name = seed.pickedName();
+
+		return 'string' === typeof name ? name.trim() : '';
+	}
+
+	/**
 	 * Issue #539: the subset of `entries` whose label matches `term` — what the popular list
 	 * narrows to while the real `/suggest` for that same term is still on its way.
 	 *
@@ -819,6 +837,15 @@
 				// unbounded "every keystroke" cost #449 opened with.
 				transport: function( params, success, failure ) {
 					var term = params && params.data && params.data.term ? params.data.term : '';
+
+					// Issue #1071: once the CUSTOMER has picked a settlement here, an empty term is
+					// not the idle state any more — the popular list is a quick start, not a
+					// replacement for search. The dropdown's own open() query (empty term) becomes
+					// a normal search for the picked name, which is also what the search box is
+					// pre-filled with ({@see handleSelect2Open}).
+					if ( ! term ) {
+						term = pickedName( seed );
+					}
 
 					// Issue #530 ROUND 2 (BLOCKER 2): neither branch below ever reaches the
 					// network — `/suggest` on the rig measures 6-10s per request, and neither
@@ -1675,6 +1702,23 @@
 			// re-schedules it and a customer who reopens and leaves again is still reported.
 			cancelScheduledAbandonFlush();
 
+			// Issue #1071: a customer-picked settlement pre-fills the search box with its NAME,
+			// selected so typing replaces it. The query itself is answered by the transport
+			// (empty term → the picked name), so no event is dispatched from here.
+			var prefill = 'function' === typeof options.popular && 'function' === typeof options.pickedSettlement
+				? options.pickedSettlement()
+				: null;
+
+			if ( prefill ) {
+				var prefillName = prefill.name || ( select.value || '' );
+				var prefillBox = document.querySelector( '.select2-container--open .select2-search__field' );
+
+				if ( prefillName && prefillBox ) {
+					prefillBox.value = prefillName;
+					prefillBox.select();
+				}
+			}
+
 			// Issue #540. select2 4.x exposes NO config option for the search box's own
 			// placeholder (`placeholder` names the closed control), so the attribute has to be
 			// set once the dropdown exists — `select2:open` is the documented public event for
@@ -1829,6 +1873,18 @@
 				// completed search, never captured once here, so a region picked AFTER this select2
 				// instance was built still scopes the ranking correctly.
 				popular: 'function' === typeof options.popular ? options.popular : null,
+				// Issue #1071: live answer to "what did the CUSTOMER pick here" — see `pickedName()`.
+				// The select's own current text is the fallback for a pick restored from a previous
+				// page view, whose record carries no components.
+				pickedName: 'function' === typeof options.pickedSettlement ? function() {
+					var picked = options.pickedSettlement();
+
+					if ( ! picked ) {
+						return '';
+					}
+
+					return picked.name || ( select.value || '' );
+				} : null,
 			} ) );
 
 			// Set only AFTER a successful call — issue #457: setting this BEFORE `.select2()`
