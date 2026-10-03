@@ -177,6 +177,46 @@
 		return 0 === key.indexOf( PREFIX ) && window[ key ] && 'cart' === window[ key ].context;
 	} );
 
+	/**
+	 * Issue #332: on a My Account address form (`/edit-address/billing|shipping/`) the fields keep
+	 * their checkout ids (`billing_*` / `shipping_*`), but the page edits exactly ONE section —
+	 * named by the config's `accountSection` — and there is no "ship to a different address"
+	 * toggle. Empty string everywhere else.
+	 *
+	 * @type {string} `'billing'`, `'shipping'` or `''`.
+	 */
+	var ACCOUNT_SECTION = ( function() {
+		var section = '';
+
+		Object.keys( window ).forEach( function( key ) {
+			if ( 0 === key.indexOf( PREFIX ) && window[ key ] && 'account' === window[ key ].context
+				&& ( 'billing' === window[ key ].accountSection || 'shipping' === window[ key ].accountSection ) ) {
+				section = window[ key ].accountSection;
+			}
+		} );
+
+		return section;
+	}() );
+
+	/**
+	 * Issue #332: name of the hidden input a My Account address form carries the picked
+	 * settlement record in, so «Save address» can persist it server-side
+	 * (`Checkout_Handler::ACCOUNT_RECORD_FIELD` — keep the two in step).
+	 *
+	 * @type {string}
+	 */
+	var ACCOUNT_RECORD_FIELD = 'woodev_location_record';
+
+	/**
+	 * Cart and My Account share the trap that WooCommerce's own scripts (`country-select.js`)
+	 * re-fire `change` on the state `<select>` with the value already there — on load and on every
+	 * rebuild of its options. Where that is true the churn is judged by option VALUE, never as a
+	 * customer pick. The checkout never opts in.
+	 *
+	 * @type {boolean}
+	 */
+	var STATE_CHURN_GUARD = CART_CONTEXT || '' !== ACCOUNT_SECTION;
+
 	var COUNTRY_FIELD_ID = { billing: 'billing_country', shipping: CART_CONTEXT ? 'calc_shipping_country' : 'shipping_country' };
 
 	/** @type {string[]} both known country field ids — a change to EITHER re-runs arbitration. */
@@ -529,6 +569,10 @@
 	function activeAddressSection() {
 		if ( CART_CONTEXT ) {
 			return 'shipping';
+		}
+
+		if ( ACCOUNT_SECTION ) {
+			return ACCOUNT_SECTION;
 		}
 
 		var checkbox = document.querySelector( '[name="ship_to_different_address"]' );
@@ -2402,6 +2446,16 @@
 		}
 
 		entry.pendingRecord = null;
+
+		// Issue #332: a My Account address form writes NOTHING until the customer presses
+		// «Save» — a pick stays in the form (the optimistic write already made it visible and
+		// scopes the descendants client-side), never in the shared store. Settled as a local
+		// no-op: no request, no trigger, no not-saved notice.
+		if ( '' !== ACCOUNT_SECTION ) {
+			settleSelect( entry, false, false, record );
+			return;
+		}
+
 		entry.selectInFlight = true;
 
 		// Issue #541: KEPT, and deliberately not removed when the mark moved to enqueueSelect().
@@ -2536,6 +2590,13 @@
 	 * @returns {void}
 	 */
 	function sendForget( entry ) {
+		// Issue #332: a My Account address form writes NOTHING until the customer presses «Save»
+		// (operator, s149) — a country change there only clears the form locally; the save hook
+		// forgets server-side when the saved city no longer matches the stored record.
+		if ( '' !== ACCOUNT_SECTION ) {
+			return;
+		}
+
 		fetchJson( entry.location.endpoints.forget, { method: 'POST', headers: nonceHeader( entry ) } ).then( null, logError );
 	}
 
@@ -3215,6 +3276,92 @@
 	}
 
 	/**
+	 * Issue #332: the My Account form's hidden {@see ACCOUNT_RECORD_FIELD} input for `entry`'s
+	 * settlement field — created on demand when `create` is true. Null outside the account form,
+	 * when the entry has no settlement field in the DOM, or (without `create`) before a first pick.
+	 *
+	 * @param {Object}  entry
+	 * @param {boolean} create
+	 * @returns {HTMLInputElement|null}
+	 */
+	function accountRecordInput( entry, create ) {
+		if ( '' === ACCOUNT_SECTION ) {
+			return null;
+		}
+
+		var node = null;
+
+		entry.allNodes.forEach( function( candidate ) {
+			if ( ! node && 'settlement' === candidate.level ) {
+				node = candidate;
+			}
+		} );
+
+		var host = node ? document.getElementById( node.fieldId ) : null;
+		var form = host ? host.form || host.closest( 'form' ) : null;
+
+		if ( ! form ) {
+			return null;
+		}
+
+		var hidden = form.querySelector( 'input[name="' + ACCOUNT_RECORD_FIELD + '"]' );
+
+		if ( ! hidden && create ) {
+			hidden = document.createElement( 'input' );
+			hidden.type = 'hidden';
+			hidden.name = ACCOUNT_RECORD_FIELD;
+			form.appendChild( hidden );
+		}
+
+		return hidden;
+	}
+
+	/**
+	 * Issue #332: a real pick — writes `entry.records.settlement` into the form's hidden
+	 * {@see ACCOUNT_RECORD_FIELD} input as JSON and makes `entry` the input's owner. A My Account
+	 * pick writes nothing to the store (operator, s149); the form submit carries it, and the server
+	 * decides on «Save address» whether it still names the saved city.
+	 *
+	 * ONE PICKED-RECORD AUTHORITY PER FORM: several plugin entries can share one form (and one
+	 * hidden input) while each keeps its own `entry.records`. Only the entry that PICKED writes
+	 * the value, and only that entry may clear it ({@see clearAccountRecordField}) — an entry that
+	 * handled neither the pick nor the edit must never overwrite or empty another entry's record.
+	 *
+	 * @param {Object} entry
+	 * @returns {void}
+	 */
+	function publishAccountRecord( entry ) {
+		var record = entry.records.settlement;
+		var hidden = record && 'settlement' === record.level ? accountRecordInput( entry, true ) : null;
+
+		if ( ! hidden ) {
+			return;
+		}
+
+		hidden.value = JSON.stringify( record );
+		hidden.woodevOwner = entry;
+	}
+
+	/**
+	 * Issue #332: empties the hidden {@see ACCOUNT_RECORD_FIELD} input once the entry that OWNS it
+	 * (the last one to {@see publishAccountRecord}) no longer holds a settlement record — a real
+	 * edit, a region change or a country change dropped it. Never writes, and a no-op for an entry
+	 * that does not own the value, so an unrelated change (postcode, same-value state churn) or an
+	 * entry that never picked leaves the owner's record alone. Safe as a `forEach` callback.
+	 *
+	 * @param {Object} entry
+	 * @returns {void}
+	 */
+	function clearAccountRecordField( entry ) {
+		var hidden = accountRecordInput( entry, false );
+
+		if ( hidden && hidden.woodevOwner === entry && ! entry.records.settlement ) {
+			hidden.value = '';
+			hidden.woodevOwner = null;
+		}
+	}
+
+	/**
 	 * Builds the `onSelect(item)` callback handed to the Task 10 widget for one chain node.
 	 *
 	 * ONLY POSTS `/select` FOR THE CURRENTLY ACTIVE SECTION (review finding F3): the Location
@@ -3275,6 +3422,7 @@
 			entry.clearedByEdit[ node.level ] = null;
 
 			backwardsFill( entry, node, record );
+			publishAccountRecord( entry );
 
 			// Issue #337 as AMENDED by the operator in s90: the address lock is refreshed on the
 			// spot off the optimistic record above — but {@see isAddressLocked} now also holds
@@ -3695,8 +3843,8 @@
 			// `options.popular` at all, the same "omit rather than hand over an
 			// always-empty primitive" discipline `onAbandon` already follows elsewhere.
 			popular: 'settlement' === node.level ? popularFor( entry, node ) : null,
-			// Issue #331: see `attachRelatedListRegion()` — the cart's WooCommerce scripts re-fire `change` with an unchanged value.
-			seedSelectedText: CART_CONTEXT,
+			// Issues #331/#332: see `attachRelatedListRegion()` — the cart's and account form's WooCommerce scripts re-fire `change` with an unchanged value.
+			seedSelectedText: STATE_CHURN_GUARD,
 			// Issue #1071: only for the level that carries the popular list — what the CUSTOMER
 			// picked here, never what the store filled in (#536).
 			pickedSettlement: 'settlement' === node.level ? function() {
@@ -4678,6 +4826,7 @@
 				sendForget( clearedEntry );
 			}
 
+			entries.forEach( clearAccountRecordField );
 			handleLayoutRelevantChange();
 			return;
 		}
@@ -4712,7 +4861,7 @@
 			// under an identical label); the text check only bridges the remembered TEXT, and a
 			// value we wrote ourselves as a synthetic option (value === text) that WooCommerce's
 			// rebuild replaced by its own code.
-			if ( CART_CONTEXT && 'SELECT' === target.tagName && target.selectedIndex >= 0
+			if ( STATE_CHURN_GUARD && 'SELECT' === target.tagName && target.selectedIndex >= 0
 				&& target.options[ target.selectedIndex ].text === entry.resolved[ id ]
 				&& ( undefined === entry.seenValues[ id ] || newValue === entry.seenValues[ id ] || entry.seenValues[ id ] === entry.resolved[ id ] ) ) {
 				entry.resolved[ id ] = newValue;
@@ -4754,6 +4903,9 @@
 		// address field must go back to locked in the same pass, while a field this entry does
 		// not own leaves {@see refreshAddressLock} a no-op anyway.
 		refreshAddressLocks();
+
+		// Issue #332: a real edit nulled the field's record — the hidden copy must follow.
+		entries.forEach( clearAccountRecordField );
 	}
 
 	/**

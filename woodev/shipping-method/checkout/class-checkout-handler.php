@@ -41,6 +41,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 	 */
 	class Checkout_Handler {
 
+		/**
+		 * Name of the hidden input the My Account address form carries the picked settlement
+		 * record in (issue #332) — written by `location-cascade.js` (`ACCOUNT_RECORD_FIELD`),
+		 * read on «Save address» by {@see self::posted_picked_record()}.
+		 *
+		 * @since 2.0.2
+		 */
+		public const ACCOUNT_RECORD_FIELD = 'woodev_location_record';
+
 		/** @var Checkout_Fields the field definitions this handler manages */
 		private Checkout_Fields $fields;
 
@@ -304,6 +313,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			add_filter( 'woocommerce_checkout_get_value', [ $this, 'handle_checkout_get_value' ], 10, 2 );
 			add_action( 'woodev_shipping_pickup_point_selected', [ $this, 'handle_pickup_point_selected' ] );
 			add_action( 'woocommerce_calculated_shipping', [ $this, 'handle_calculated_shipping' ] );
+			add_action( 'woocommerce_customer_save_address', [ $this, 'handle_customer_save_address' ], 10, 4 );
 
 			self::$instances[] = $this;
 
@@ -693,6 +703,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 
 			if ( ! function_exists( 'is_checkout' ) || ! is_checkout() ) {
 				$this->enqueue_cart_assets();
+				$this->enqueue_account_assets();
 
 				return;
 			}
@@ -848,23 +859,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			);
 		}
 
-		/**
-		 * Enqueues the location suggestion layer for the CLASSIC cart's shipping calculator
-		 * (issue #331).
-		 *
-		 * The calculator is a plain form POST, so only the location client is wired — the
-		 * checkout-field adapter, pickup button/modal and phone mask are never loaded here
-		 * (operator decision: no pickup picker in the cart). The SAME config builder and the
-		 * SAME `location-cascade.js` serve it; the calculator's fields are described under
-		 * their own ids (`calc_shipping_*`) and the config is marked `context: 'cart'` so the
-		 * cascade scopes its country/section reads to them. The pick persists at pick time
-		 * through the existing `/select` call, i.e. into the same customer location store the
-		 * checkout reads.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @return void
-		 */
 		private function enqueue_cart_assets(): void {
 			if ( ! function_exists( 'is_cart' ) || ! is_cart() ) {
 				return;
@@ -913,6 +907,182 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			$config['pickup_method_ids'] = [];
 			$config['context']           = 'cart';
 
+			$this->enqueue_location_client( $config );
+		}
+
+		/**
+		 * Enqueues the location suggestion layer for the CLASSIC My Account address forms
+		 * (`/my-account/edit-address/billing/` and `/shipping/`, issue #332).
+		 *
+		 * The forms render WooCommerce's own `billing_*` / `shipping_*` fields under their
+		 * checkout ids, so the field descriptors keep those ids — only the ONE section the
+		 * page edits is described (the other form is a different page). The config is
+		 * marked `context: 'account'` plus `accountSection`, so the cascade treats that
+		 * section as the active one and WooCommerce's same-value `change` churn as
+		 * no-ops (same seam as the cart's). No pickup layer, no takeover and no phone mask:
+		 * the account forms hold an address TEXT, not a delivery choice.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		private function enqueue_account_assets(): void {
+			$section = $this->account_address_section();
+
+			// The endpoint is login-gated by WooCommerce, but a saved address is only meaningful
+			// for a signed-in customer — no assets are ever served to a guest.
+			if ( '' === $section || ! is_user_logged_in() ) {
+				return;
+			}
+
+			$service = $this->location_service();
+
+			if ( ! $service->is_active() ) {
+				return;
+			}
+
+			$fields = $this->account_form_fields( $section );
+
+			if ( [] === $fields ) {
+				return;
+			}
+
+			$config = ( new Checkout_Config(
+				$this->plugin_id(),
+				rtrim( rest_url( 'woodev/v1' ), '/' ),
+				wp_create_nonce( 'wp_rest' ),
+				$this->wc_country_codes(),
+				$service,
+				null
+			) )->build( Checkout_Fields::from_array( array_values( $fields ) ) );
+
+			if ( ! isset( $config['location'] ) ) {
+				return;
+			}
+
+			$config['takeover']          = [];
+			$config['pickup_method_ids'] = [];
+			$config['context']           = 'account';
+			$config['accountSection']    = $section;
+
+			$config['location'] = $this->account_location_block( $config['location'], $section );
+
+			$this->enqueue_location_client( $config );
+		}
+
+		protected function account_address_section(): string {
+			$raw = $this->account_edit_address_slug();
+
+			if ( '' === $raw ) {
+				return '';
+			}
+
+			$slug = sanitize_title( $raw );
+
+			$type = function_exists( 'wc_edit_address_i18n' ) ? (string) wc_edit_address_i18n( $slug, true ) : $slug;
+
+			return in_array( $type, [ 'billing', 'shipping' ], true ) ? $type : '';
+		}
+
+		/**
+		 * The `edit-address` endpoint value of the current request (`'billing'`, `'shipping'`,
+		 * a translated slug), or `''` when this is not the edit-address endpoint or the
+		 * overview. A seam, like {@see self::wc_customer()}: it keeps the WooCommerce
+		 * conditionals out of the unit tests' function table (gotcha
+		 * `brain-monkey-function-pollution`).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		protected function account_edit_address_slug(): string {
+			if ( ! function_exists( 'is_wc_endpoint_url' ) || ! is_wc_endpoint_url( 'edit-address' ) ) {
+				return '';
+			}
+
+			return (string) get_query_var( 'edit-address' );
+		}
+
+		/**
+		 * The location fields the My Account `$section` form can host: every location-level
+		 * field the checkout attaches to that section ({@see self::effective_fields()}),
+		 * under the same `billing_*` / `shipping_*` id the form renders.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $section `'billing'` or `'shipping'`.
+		 *
+		 * @return array<string, array<string, mixed>>
+		 */
+		private function account_form_fields( string $section ): array {
+			$out = [];
+
+			foreach ( $this->effective_fields() as $id => $field ) {
+				if (
+					'location' !== ( $field['source_kind'] ?? null )
+					|| 0 !== strpos( (string) $id, $section . '_' )
+					|| ! in_array( $field['location_level'] ?? null, [ 'region', 'settlement', 'address' ], true )
+				) {
+					continue;
+				}
+
+				$out[ $id ] = $field;
+			}
+
+			return $out;
+		}
+
+		/**
+		 * Adapts the config's `location` block to an address FORM that carries its own saved
+		 * text (issue #332).
+		 *
+		 * The checkout fills its fields FROM the stored record; the account form shows what
+		 * WooCommerce saved in user meta, and that text wins. So the stored record only
+		 * scopes this form while the form's own saved city still names it — otherwise (a
+		 * blank form, another city, a record the provider no longer serves — #333) the form
+		 * starts record-free and degrades to plain fields holding the saved text. A merchant's
+		 * default locality is never offered here: it would pre-fill an address the customer
+		 * then saves as their own.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string, mixed> $location The built `location` block.
+		 * @param string               $section  `'billing'` or `'shipping'`.
+		 *
+		 * @return array<string, mixed>
+		 */
+		private function account_location_block( array $location, string $section ): array {
+			$location['defaultLocality'] = null;
+
+			$customer = $this->wc_customer();
+			$getter   = 'get_' . $section . '_city';
+			$saved    = is_object( $customer ) && is_callable( [ $customer, $getter ] ) ? (string) $customer->$getter() : '';
+			$record   = $this->location_service()->get_customer_record_at( 'settlement' );
+
+			if ( null !== $record && $this->city_names_record( $saved, $record ) ) {
+				return $location;
+			}
+
+			$location['current']  = null;
+			$location['chain']    = [];
+			$location['implicit'] = false;
+
+			return $location;
+		}
+
+		/**
+		 * Enqueues the location client scripts and stylesheet for a NON-checkout page and
+		 * localizes `$config` onto the cascade — the shared tail of the cart (#331) and My
+		 * Account (#332) enqueue paths. Loads only the location client: the checkout-field
+		 * adapter, pickup button/modal and phone mask are never part of it.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string, mixed> $config The built, context-marked config.
+		 *
+		 * @return void
+		 */
+		private function enqueue_location_client( array $config ): void {
 			$typeahead_built = $this->enqueue_script_if_built( 'woodev-location-typeahead', 'js/frontend/location-typeahead.js', [] );
 
 			$select_modes_built = $this->enqueue_script_if_built(
@@ -989,25 +1159,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			return $out;
 		}
 
-		/**
-		 * Keeps the stored customer locality consistent with what the cart's shipping
-		 * calculator just saved (issue #331).
-		 *
-		 * WooCommerce's calculator POST writes the customer's shipping country/state/city
-		 * itself, and the checkout then renders THAT (WC) text in the fields. Our stored
-		 * record only feeds scoping, rates and the pickup layer. A different COUNTRY already
-		 * makes the stored record stale server-side (`Location_Service::is_customer_record_stale()`
-		 * rule b), but a different CITY in the same country does not — so when the saved
-		 * city no longer names the stored settlement the record is forgotten, instead of the
-		 * checkout pairing a stale record with another city's text. WooCommerce's text wins;
-		 * a blank city (calculator without the city field) never forgets anything.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @internal
-		 *
-		 * @return void
-		 */
 		public function handle_calculated_shipping(): void {
 			$customer = $this->wc_customer();
 
@@ -1015,9 +1166,195 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 				return;
 			}
 
-			$saved_city = (string) $customer->get_shipping_city();
+			$this->forget_record_unless_it_names_city( (string) $customer->get_shipping_city() );
+		}
 
-			if ( '' === self::normalize_for_settlement_match( $saved_city ) ) {
+		/**
+		 * Keeps the stored customer locality consistent with the address the customer just
+		 * saved on a My Account address form (issue #332).
+		 *
+		 * WooCommerce wrote the address TEXT to user meta itself; this decides which RECORD
+		 * describes it. The record is the customer's DELIVERY locality (the checkout's shipping
+		 * chain, one record per customer shared by both addresses), so the city judged is the
+		 * delivery one: the saved shipping city — or the billing city when the store ships to
+		 * billing only or no shipping city is saved. Saving EITHER form therefore re-checks it.
+		 *
+		 * A pick on the form writes nothing until the customer saves (operator decision, s149);
+		 * the form carries the picked settlement record in a hidden field and THIS is where it is
+		 * written: when it is acceptable ({@see self::persist_picked_record_naming_city()}) it
+		 * becomes the customer's explicit record. Otherwise — no pick, a malformed or refused
+		 * record, or one that does not name the saved delivery city — the stored record is
+		 * dropped when the saved city no longer names it
+		 * ({@see self::forget_record_unless_it_names_city()}); a blank delivery city changes
+		 * nothing.
+		 *
+		 * The saved city is read authoritatively: WooCommerce 9.8+ hands the saved
+		 * `WC_Customer` as the fourth argument; before that the hook carried only
+		 * `( $user_id, $load_address )`, and `WC()->customer` is a copy loaded BEFORE the save,
+		 * so the legacy path reads the persisted user fresh through {@see self::saved_customer()}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @internal
+		 *
+		 * @param int         $user_id      The saved user's id.
+		 * @param string      $address_type `'billing'` or `'shipping'` (`$load_address` before WooCommerce 9.8).
+		 * @param array       $address      The address fields (WooCommerce 9.8+).
+		 * @param object|null $customer     The saved `WC_Customer` (WooCommerce 9.8+).
+		 *
+		 * @return void
+		 */
+		public function handle_customer_save_address( int $user_id = 0, string $address_type = '', array $address = [], ?object $customer = null ): void {
+			if ( ! in_array( $address_type, [ 'billing', 'shipping' ], true ) || (int) $user_id <= 0 || (int) $user_id !== (int) get_current_user_id() ) {
+				return;
+			}
+
+			if ( null === $customer ) {
+				$customer = $this->saved_customer( (int) $user_id );
+			}
+
+			if ( ! is_object( $customer ) || ! is_callable( [ $customer, 'get_billing_city' ] ) || ! is_callable( [ $customer, 'get_shipping_city' ] ) ) {
+				return;
+			}
+
+			$billing      = (string) $customer->get_billing_city();
+			$shipping     = (string) $customer->get_shipping_city();
+			$billing_only = function_exists( 'wc_ship_to_billing_address_only' ) && wc_ship_to_billing_address_only();
+			$use_billing  = $billing_only || '' === self::normalize_for_settlement_match( $shipping );
+			$city         = $use_billing ? $billing : $shipping;
+			$country      = $use_billing ? $this->saved_country( $customer, 'billing' ) : $this->saved_country( $customer, 'shipping' );
+
+			if ( $this->persist_picked_record_naming_city( $city, $country ) ) {
+				return;
+			}
+
+			$this->forget_record_unless_it_names_city( $city, $country );
+		}
+
+		/**
+		 * The customer as WooCommerce persisted it, read fresh from the database — the
+		 * legacy (pre-9.8) `woocommerce_customer_save_address` signature carries no customer
+		 * object, and `WC()->customer` predates the save. A seam, so a unit test needs no
+		 * WooCommerce.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param int $user_id The saved user's id.
+		 *
+		 * @return object|null
+		 */
+		protected function saved_customer( int $user_id ): ?object {
+			if ( ! class_exists( 'WC_Customer' ) ) {
+				return null;
+			}
+
+			try {
+				return new \WC_Customer( $user_id );
+			} catch ( \Exception $e ) {
+				return null;
+			}
+		}
+
+		/**
+		 * The settlement record the My Account address form carried in its hidden field, as the
+		 * raw JSON text — `''` when the field is absent or this request is not WooCommerce's own
+		 * nonce-checked address save. A seam, like {@see self::saved_customer()}: it keeps the
+		 * superglobal out of the unit tests.
+		 *
+		 * WooCommerce verifies its `woocommerce-edit_address` nonce before it saves and fires the
+		 * hook; it is checked again here because the hook is public and this field is a WRITE
+		 * into the customer's location record, the same barrier `POST /location/select` stands
+		 * behind (a nonce — no capability check is possible for a customer's own data).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		protected function posted_picked_record(): string {
+			// phpcs:disable WordPress.Security.NonceVerification.Missing -- verified just below.
+			$nonce = isset( $_POST['woocommerce-edit-address-nonce'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['woocommerce-edit-address-nonce'] ) ) : '';
+
+			if ( '' === $nonce || ! wp_verify_nonce( $nonce, 'woocommerce-edit_address' ) ) {
+				return '';
+			}
+
+			$raw = isset( $_POST[ self::ACCOUNT_RECORD_FIELD ] ) && is_string( $_POST[ self::ACCOUNT_RECORD_FIELD ] ) ? wp_unslash( $_POST[ self::ACCOUNT_RECORD_FIELD ] ) : '';
+			// phpcs:enable WordPress.Security.NonceVerification.Missing
+
+			return $raw;
+		}
+
+		/**
+		 * Persists the settlement record the customer picked on the My Account address form as
+		 * their EXPLICIT record (issue #332), when — and only when — all of these hold: the layer
+		 * is active, `$city` (the saved delivery city) is not blank, the form carried a record
+		 * ({@see self::posted_picked_record()}), it parses through
+		 * {@see \Woodev\Framework\Shipping\Location\Location_Record::from_array()} (the same
+		 * contract `POST /location/select` enforces) at the settlement level, the service accepts
+		 * it ({@see \Woodev\Framework\Shipping\Location\Location_Service::accepts_posted_pick()}),
+		 * and it NAMES `$city` — a tampered or stale field can never attach a record to a city
+		 * the customer did not save.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $city The saved delivery city text.
+		 *
+		 * @return bool Whether the record was written; `false` leaves the caller to the forget path.
+		 */
+		private function persist_picked_record_naming_city( string $city, string $country = '' ): bool {
+			if ( '' === self::normalize_for_settlement_match( $city ) ) {
+				return false;
+			}
+
+			$service = $this->location_service();
+
+			if ( ! $service->is_active() ) {
+				return false;
+			}
+
+			$raw = trim( $this->posted_picked_record() );
+
+			if ( '' === $raw ) {
+				return false;
+			}
+
+			$data = json_decode( $raw, true );
+
+			if ( ! is_array( $data ) ) {
+				return false;
+			}
+
+			try {
+				$record = \Woodev\Framework\Shipping\Location\Location_Record::from_array( $data );
+			} catch ( \InvalidArgumentException $exception ) {
+				return false;
+			}
+
+			if ( \Woodev\Framework\Shipping\Location\Location_Record::LEVEL_SETTLEMENT !== $record->level()
+				|| ! $this->city_names_record( $city, $record, $country )
+				|| ! $service->accepts_posted_pick( $record ) ) {
+				return false;
+			}
+
+			return $service->set_customer_record( $record, false );
+		}
+
+		/**
+		 * Forgets the customer's stored settlement record when `$city` — the text WooCommerce
+		 * saved — no longer names it (shared by the cart calculator, #331, and the My Account
+		 * address forms, #332). A given `$country` (the saved country of the same address) must
+		 * also match the record's — a record from another country is forgotten. A blank city,
+		 * an inactive layer or a customer without a settlement-level record change nothing.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $city    The saved city text.
+		 * @param string $country The saved country code of that address, or `''` to judge the city alone.
+		 *
+		 * @return void
+		 */
+		private function forget_record_unless_it_names_city( string $city, string $country = '' ): void {
+			if ( '' === self::normalize_for_settlement_match( $city ) ) {
 				return;
 			}
 
@@ -1029,19 +1366,54 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 
 			$record = $service->get_customer_record_at( 'settlement' );
 
-			if ( null === $record ) {
-				return;
+			if ( null !== $record && ! $this->city_names_record( $city, $record, $country ) ) {
+				$service->forget_customer_record();
+			}
+		}
+
+		/**
+		 * Whether `$city` (a saved free-text city) names the settlement of `$record`, compared
+		 * the way WooCommerce's text and the record's bare name can meet
+		 * ({@see self::normalize_city_for_comparison()}). When `$country` — the saved country of
+		 * the SAME address the city is judged from — is given, the record must also belong to it:
+		 * the same city text in another country is a different place. A blank `$country` judges
+		 * the city alone.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string                                              $city    The saved city text.
+		 * @param \Woodev\Framework\Shipping\Location\Location_Record $record  The stored record.
+		 * @param string                                              $country The saved country code of that address, or `''`.
+		 *
+		 * @return bool
+		 */
+		private function city_names_record( string $city, \Woodev\Framework\Shipping\Location\Location_Record $record, string $country = '' ): bool {
+			if ( '' !== $country && strtoupper( $country ) !== strtoupper( $record->country() ) ) {
+				return false;
 			}
 
 			$settlement = $record->settlement();
 			$type       = null !== $settlement ? (string) $settlement['type'] : '';
 
-			if (
-				self::normalize_city_for_comparison( $saved_city, $type )
-				!== self::normalize_city_for_comparison( self::settlement_record_value( $record ), $type )
-			) {
-				$service->forget_customer_record();
-			}
+			return self::normalize_city_for_comparison( $city, $type )
+				=== self::normalize_city_for_comparison( self::settlement_record_value( $record ), $type );
+		}
+
+		/**
+		 * The country code WooCommerce saved on one address of `$customer`, `''` when the
+		 * customer cannot say (see {@see self::city_names_record()}).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param object $customer The saved `WC_Customer`.
+		 * @param string $type     `'billing'` or `'shipping'`.
+		 *
+		 * @return string
+		 */
+		private function saved_country( object $customer, string $type ): string {
+			$getter = 'get_' . $type . '_country';
+
+			return is_callable( [ $customer, $getter ] ) ? (string) $customer->$getter() : '';
 		}
 
 		/**
