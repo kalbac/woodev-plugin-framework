@@ -600,6 +600,8 @@ class ShippingOrdersRegistryTest extends TestCase {
 		foreach ( $calls as $call ) {
 			if ( 'add_meta_boxes' === $call[0] && is_array( $call[1] ) && $call[1][0] instanceof Shipping_Admin_Order && 'add_meta_box' === $call[1][1] ) {
 				$found = true;
+				// #947: after WC's own order boxes (legacy callback at 30), or the box lands above «Order actions».
+				$this->assertSame( Shipping_Admin_Order::METABOX_HOOK_PRIORITY, $call[2] );
 			}
 		}
 

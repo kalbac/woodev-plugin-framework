@@ -210,6 +210,30 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$this->assertSame( 'Информация СДЭК', $captured_title );
 		}
 
+		/**
+		 * #947: the box sits in the sidebar's `high` band, right under WooCommerce's «Order actions»
+		 * (`side`/`high`) instead of at the bottom of the `default` band.
+		 */
+		public function test_add_meta_box_registers_in_the_side_high_band_under_order_actions(): void {
+			$registry = Mockery::mock( Orders_Registry::class );
+			$registry->shouldReceive( 'resolve_provider_for_order' )->once()->andReturn( $this->provider() );
+			$registry->shouldReceive( 'enqueue_metabox_style' )->once();
+			$registry->shouldReceive( 'enqueue_metabox_script' )->once();
+
+			$captured = [];
+			Functions\when( 'add_meta_box' )->alias(
+				static function ( $id, $title, $callback, $screen, $context, $priority ) use ( &$captured ) {
+					$captured = [ $id, $screen, $context, $priority ];
+				}
+			);
+
+			( new Shipping_Admin_Order( $registry ) )->add_meta_box( 'shop_order', $this->make_order() );
+
+			$this->assertSame( [ 'woodev_shipping_order', 'shop_order', 'side', 'high' ], $captured );
+			// WC's legacy `add_meta_boxes` callback adds «Order actions» at priority 30 — ours must be later.
+			$this->assertGreaterThan( 30, Shipping_Admin_Order::METABOX_HOOK_PRIORITY );
+		}
+
 		// -----------------------------------------------------------------------
 		// render_metabox() — two states on the SAME is_exported, KISS field list.
 		// -----------------------------------------------------------------------

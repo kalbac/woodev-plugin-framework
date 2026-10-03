@@ -67,6 +67,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 		const METABOX_ID = 'woodev_shipping_order';
 
 		/**
+		 * `add_meta_boxes` priority the metabox registers at (#947).
+		 *
+		 * The box sits in the sidebar's `high` band, directly under WooCommerce's «Order actions»
+		 * (`woocommerce-order-actions`, also `side`/`high`) — within one band the boxes keep their
+		 * REGISTRATION order. On the HPOS screen WC adds its boxes before it fires `add_meta_boxes`,
+		 * so any priority follows them; on the legacy `shop_order` screen WC adds them from its OWN
+		 * `add_meta_boxes` callback at priority 30, so ours has to be later or the box would land
+		 * ABOVE «Order actions». A merchant's saved drag order (`meta-box-order_*` user meta)
+		 * still overrides all of this, as it should.
+		 *
+		 * @var int
+		 */
+		const METABOX_HOOK_PRIORITY = 35;
+
+		/**
 		 * Transient key prefix a flashed action-refusal/failure notice is stored
 		 * under across the `handle_order_action()` redirect — one per user, so two
 		 * admins acting concurrently cannot clobber each other's notice. Mirrors
@@ -192,7 +207,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 				},
 				$post_type,
 				'side',
-				'default'
+				'high'
 			);
 
 			// This is the exact point at which the metabox becomes real. The registry

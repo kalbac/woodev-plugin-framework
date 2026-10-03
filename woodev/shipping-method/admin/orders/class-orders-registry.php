@@ -653,7 +653,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			// Card #856: the order-edit metabox is built by the FRAMEWORK the same way
 			// the «Заказы доставки» page is — the moment at least one provider exists,
 			// not per carrier plugin construction.
-			add_action( 'add_meta_boxes', [ $this->admin_order(), 'add_meta_box' ], 10, 2 );
+			add_action( 'add_meta_boxes', [ $this->admin_order(), 'add_meta_box' ], Shipping_Admin_Order::METABOX_HOOK_PRIORITY, 2 );
 			add_action( 'admin_post_' . Shipping_Admin_Order::ADMIN_POST_ACTION, [ $this->admin_order(), 'handle_order_action' ] );
 			add_action( 'admin_notices', [ $this->admin_order(), 'render_action_notice' ] );
 		}
@@ -2105,7 +2105,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			}
 
 			if ( null !== $this->admin_order ) {
-				remove_action( 'add_meta_boxes', [ $this->admin_order, 'add_meta_box' ], 10 );
+				remove_action( 'add_meta_boxes', [ $this->admin_order, 'add_meta_box' ], Shipping_Admin_Order::METABOX_HOOK_PRIORITY );
 				remove_action( 'admin_post_' . Shipping_Admin_Order::ADMIN_POST_ACTION, [ $this->admin_order, 'handle_order_action' ] );
 				remove_action( 'admin_notices', [ $this->admin_order, 'render_action_notice' ] );
 			}
