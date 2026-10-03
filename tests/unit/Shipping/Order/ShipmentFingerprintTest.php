@@ -42,24 +42,26 @@ final class ShipmentFingerprintTest extends TestCase {
 	}
 
 	/**
-	 * @param array{0:string,1:string,2:float,3?:float} ...$products name, sku, quantity, unit price
+	 * Product lines as the ORDER stores them — the double refuses to be asked for the live product.
+	 *
+	 * @param array{0:string,1:int,2:float,3?:float} ...$products name, product id, quantity, unit price
 	 * @return array<int,\WC_Order_Item_Product>
 	 */
 	private function items( array ...$products ): array {
 		$items = [];
 
 		foreach ( $products as $index => $spec ) {
+			$line_total = ( $spec[3] ?? 100.0 ) * $spec[2];
+
 			$item = Mockery::mock( '\\WC_Order_Item_Product' );
 			$item->shouldReceive( 'get_name' )->andReturn( $spec[0] );
+			$item->shouldReceive( 'get_product_id' )->andReturn( $spec[1] );
+			$item->shouldReceive( 'get_variation_id' )->andReturn( 0 );
 			$item->shouldReceive( 'get_quantity' )->andReturn( $spec[2] );
-			$item->shouldReceive( 'get_tax_class' )->andReturn( 'standard' );
-			$item->shouldReceive( 'get_taxes' )->andReturn( [] );
-			$item->shouldReceive( 'unit_price' )->andReturn( $spec[3] ?? 100.0 );
-
-			$product = Mockery::mock( '\\WC_Product' );
-			$product->shouldReceive( 'get_sku' )->andReturn( $spec[1] );
-			$product->shouldReceive( 'get_tax_status' )->andReturn( 'taxable' );
-			$item->shouldReceive( 'get_product' )->andReturn( $product );
+			$item->shouldReceive( 'get_subtotal' )->andReturn( (string) $line_total );
+			$item->shouldReceive( 'get_total' )->andReturn( (string) $line_total );
+			// Catalogue data is not order data: a read of the live product fails the test.
+			$item->shouldNotReceive( 'get_product' );
 
 			$items[ $index + 1 ] = $item;
 		}
@@ -99,7 +101,7 @@ final class ShipmentFingerprintTest extends TestCase {
 			$overrides
 		);
 
-		$items   = $values['items'] ?? $this->items( [ 'Книга', 'BK-1', 2.0 ], [ 'Ручка', 'PN-1', 1.0 ] );
+		$items   = $values['items'] ?? $this->items( [ 'Книга', 101, 2.0 ], [ 'Ручка', 102, 1.0 ] );
 		$methods = [];
 
 		foreach ( $values['methods'] ?? [ [ 'cdek_courier', 5 ] ] as $spec ) {
@@ -115,13 +117,10 @@ final class ShipmentFingerprintTest extends TestCase {
 		$order->shouldReceive( 'get_id' )->andReturn( 123 );
 		$order->shouldReceive( 'get_items' )->with( 'line_item' )->andReturn( $items );
 		$order->shouldReceive( 'get_items' )->with( 'fee' )->andReturn( [] );
-		$order->shouldReceive( 'get_qty_refunded_for_item' )->andReturn( 0 );
-		$order->shouldReceive( 'get_item_total' )->andReturnUsing(
-			static function ( $item ) {
-				return $item->unit_price();
-			}
-		);
 		$order->shouldReceive( 'get_shipping_methods' )->andReturn( $methods );
+		$order->shouldReceive( 'get_meta' )->andReturnUsing(
+			fn( $key ) => $this->meta[ $key ] ?? ''
+		)->byDefault();
 
 		foreach ( $values as $getter => $value ) {
 			$order->shouldReceive( $getter )->andReturn( $value );
@@ -133,6 +132,7 @@ final class ShipmentFingerprintTest extends TestCase {
 	public function test_the_meta_key_and_the_version_are_the_frameworks_own_and_stable(): void {
 		$this->assertSame( '_woodev_shipment_fingerprint', Shipment_Fingerprint::META );
 		$this->assertSame( 'v1', Shipment_Fingerprint::VERSION );
+		$this->assertSame( '_woodev_shipment_fingerprint_pending', Shipment_Fingerprint::PENDING_META );
 	}
 
 	public function test_the_fingerprint_is_versioned_and_stable_for_the_same_order(): void {
@@ -147,7 +147,7 @@ final class ShipmentFingerprintTest extends TestCase {
 		$base = Shipment_Fingerprint::for_order(
 			$this->order(
 				[
-					'items'   => $this->items( [ 'Книга', 'BK-1', 2.0 ], [ 'Ручка', 'PN-1', 1.0 ] ),
+					'items'   => $this->items( [ 'Книга', 101, 2.0 ], [ 'Ручка', 102, 1.0 ] ),
 					'methods' => [ [ 'cdek_courier', 5 ], [ 'cdek_pickup', 7 ] ],
 				]
 			)
@@ -156,7 +156,7 @@ final class ShipmentFingerprintTest extends TestCase {
 		$reordered = Shipment_Fingerprint::for_order(
 			$this->order(
 				[
-					'items'                 => $this->items( [ 'Ручка', 'PN-1', 1.0 ], [ 'Книга', 'BK-1', 2.0 ] ),
+					'items'                 => $this->items( [ 'Ручка', 102, 1.0 ], [ 'Книга', 101, 2.0 ] ),
 					'methods'               => [ [ 'cdek_pickup', 7 ], [ 'cdek_courier', 5 ] ],
 					'get_shipping_city'     => '  Москва ',
 					'get_shipping_phone'    => '79991234567',
@@ -204,10 +204,10 @@ final class ShipmentFingerprintTest extends TestCase {
 		};
 
 		return [
-			'quantity'             => [ [ 'items' => $items( [ 'Книга', 'BK-1', 3.0 ], [ 'Ручка', 'PN-1', 1.0 ] ) ] ],
-			'item added'           => [ [ 'items' => $items( [ 'Книга', 'BK-1', 2.0 ], [ 'Ручка', 'PN-1', 1.0 ], [ 'Блокнот', 'NB-1', 1.0 ] ) ] ],
-			'item removed'         => [ [ 'items' => $items( [ 'Книга', 'BK-1', 2.0 ] ) ] ],
-			'item price'           => [ [ 'items' => $items( [ 'Книга', 'BK-1', 2.0, 150.0 ], [ 'Ручка', 'PN-1', 1.0 ] ) ] ],
+			'quantity'             => [ [ 'items' => $items( [ 'Книга', 101, 3.0 ], [ 'Ручка', 102, 1.0 ] ) ] ],
+			'item added'           => [ [ 'items' => $items( [ 'Книга', 101, 2.0 ], [ 'Ручка', 102, 1.0 ], [ 'Блокнот', 103, 1.0 ] ) ] ],
+			'item removed'         => [ [ 'items' => $items( [ 'Книга', 101, 2.0 ] ) ] ],
+			'item price'           => [ [ 'items' => $items( [ 'Книга', 101, 2.0, 150.0 ], [ 'Ручка', 102, 1.0 ] ) ] ],
 			'city'                 => [ [ 'get_shipping_city' => 'Тверь' ] ],
 			'street'               => [ [ 'get_shipping_address_1' => 'ул. Арбат, 5' ] ],
 			'postcode'             => [ [ 'get_shipping_postcode' => '101001' ] ],
@@ -296,23 +296,93 @@ final class ShipmentFingerprintTest extends TestCase {
 		$this->assertFalse( Shipment_Fingerprint::is_outdated( $order ) );
 	}
 
-	public function test_record_writes_the_current_fingerprint_through_the_orders_own_meta_api_and_saves(): void {
+	public function test_catalogue_maintenance_on_an_unchanged_order_is_not_an_edit(): void {
+		// The order's own lines carry no SKU and no product object: the same order whose product was
+		// renamed in the catalogue, re-SKU'd or deleted hashes the same, because none of it is read.
+		$this->meta[ Shipment_Fingerprint::META ] = Shipment_Fingerprint::for_order( $this->order(), 'PVZ-1' );
+
+		$this->assertFalse( Shipment_Fingerprint::is_outdated( $this->order(), 'PVZ-1' ) );
+	}
+
+	public function test_snapshot_writes_the_pending_value_not_the_stored_one_and_saves(): void {
 		$order    = $this->order();
 		$expected = Shipment_Fingerprint::for_order( $order, 'PVZ-1' );
 
-		$order->shouldReceive( 'update_meta_data' )->once()->with( '_woodev_shipment_fingerprint', $expected )->ordered();
+		$order->shouldReceive( 'update_meta_data' )->once()->with( '_woodev_shipment_fingerprint_pending', $expected )->ordered();
 		$order->shouldReceive( 'save_meta_data' )->once()->ordered();
 
-		Shipment_Fingerprint::record( $order, 'PVZ-1' );
+		Shipment_Fingerprint::snapshot( $order, 'PVZ-1' );
 	}
 
-	public function test_clear_deletes_the_fingerprint_off_the_fresh_order_and_the_callers_copy(): void {
+	public function test_promote_stores_the_pending_snapshot_not_the_order_as_it_is_now(): void {
+		$sent = Shipment_Fingerprint::for_order( $this->order(), 'PVZ-1' );
+
+		$this->meta[ Shipment_Fingerprint::PENDING_META ] = $sent;
+
+		// The order was edited after the request went out.
+		$edited = $this->order( [ 'get_shipping_city' => 'Тверь' ] );
+		$edited->shouldReceive( 'update_meta_data' )->once()->with( '_woodev_shipment_fingerprint', $sent )->ordered();
+		$edited->shouldReceive( 'delete_meta_data' )->once()->with( '_woodev_shipment_fingerprint_pending' )->ordered();
+		$edited->shouldReceive( 'save_meta_data' )->once()->ordered();
+
+		Shipment_Fingerprint::promote( $edited );
+
+		// What was stored is the ORIGINAL request: the edited order is outdated against it.
+		$this->meta[ Shipment_Fingerprint::META ] = $sent;
+
+		$this->assertTrue( Shipment_Fingerprint::is_outdated( $this->order( [ 'get_shipping_city' => 'Тверь' ] ), 'PVZ-1' ) );
+	}
+
+	public function test_promote_without_a_pending_snapshot_stores_nothing_and_drops_a_stale_value(): void {
+		$order = $this->order();
+		$order->shouldNotReceive( 'update_meta_data' );
+		$order->shouldReceive( 'get_meta' )->with( '_woodev_shipment_fingerprint' )->andReturn( 'v1:stale' );
+		$order->shouldReceive( 'get_meta' )->with( '_woodev_shipment_fingerprint_pending' )->andReturn( '' );
+		$order->shouldReceive( 'delete_meta_data' )->once()->with( '_woodev_shipment_fingerprint' );
+		$order->shouldReceive( 'save_meta_data' )->once();
+
+		Shipment_Fingerprint::promote( $order );
+	}
+
+	public function test_promote_without_a_pending_snapshot_and_nothing_stored_writes_nothing(): void {
+		$order = $this->order();
+		$order->shouldNotReceive( 'update_meta_data' );
+		$order->shouldNotReceive( 'delete_meta_data' );
+		$order->shouldNotReceive( 'save_meta_data' );
+		$order->shouldReceive( 'get_meta' )->andReturn( '' );
+
+		Shipment_Fingerprint::promote( $order );
+
+		$this->addToAssertionCount( 1 );
+	}
+
+	public function test_discard_pending_deletes_it_and_is_a_no_op_when_there_is_none(): void {
+		$none = $this->order();
+		$none->shouldNotReceive( 'delete_meta_data' );
+		$none->shouldNotReceive( 'save_meta_data' );
+
+		Shipment_Fingerprint::discard_pending( $none );
+
+		$this->meta[ Shipment_Fingerprint::PENDING_META ] = 'v1:abc';
+
+		$held = $this->order();
+		$held->shouldReceive( 'delete_meta_data' )->once()->with( '_woodev_shipment_fingerprint_pending' );
+		$held->shouldReceive( 'save_meta_data' )->once();
+
+		Shipment_Fingerprint::discard_pending( $held );
+
+		$this->addToAssertionCount( 1 );
+	}
+
+	public function test_clear_deletes_both_fingerprints_off_the_fresh_order_and_the_callers_copy(): void {
 		$fresh  = Mockery::mock( '\\WC_Order' );
 		$caller = Mockery::mock( '\\WC_Order' );
 
 		foreach ( [ $fresh, $caller ] as $order ) {
 			$order->shouldReceive( 'get_meta' )->with( '_woodev_shipment_fingerprint' )->andReturn( 'v1:abc' );
+			$order->shouldReceive( 'get_meta' )->with( '_woodev_shipment_fingerprint_pending' )->andReturn( 'v1:def' );
 			$order->shouldReceive( 'delete_meta_data' )->once()->with( '_woodev_shipment_fingerprint' );
+			$order->shouldReceive( 'delete_meta_data' )->once()->with( '_woodev_shipment_fingerprint_pending' );
 			$order->shouldReceive( 'save_meta_data' )->once();
 		}
 
@@ -321,7 +391,7 @@ final class ShipmentFingerprintTest extends TestCase {
 
 	public function test_clear_is_a_no_op_with_no_datastore_write_when_nothing_was_recorded(): void {
 		$order = Mockery::mock( '\\WC_Order' );
-		$order->shouldReceive( 'get_meta' )->with( '_woodev_shipment_fingerprint' )->andReturn( '' );
+		$order->shouldReceive( 'get_meta' )->andReturn( '' );
 		$order->shouldNotReceive( 'delete_meta_data' );
 		$order->shouldNotReceive( 'save_meta_data' );
 

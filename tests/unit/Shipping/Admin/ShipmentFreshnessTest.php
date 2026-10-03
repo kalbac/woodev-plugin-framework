@@ -1,6 +1,6 @@
 <?php
 /**
- * Unit: Shipment_Freshness — the fingerprint is taken at export and compared later (#947).
+ * Unit: Shipment_Freshness — the fingerprint is snapshotted at the request, promoted at the export and compared later (#947).
  *
  * @package Woodev\Tests\Unit\Shipping\Admin
  */
@@ -23,6 +23,7 @@ require_once dirname( __DIR__, 4 ) . '/woodev/compatibility/class-order-compatib
 /**
  * @covers \Woodev\Framework\Shipping\Admin\Orders\Shipment_Freshness
  * @covers \Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::record_shipment_fingerprint
+ * @covers \Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::snapshot_shipment_fingerprint
  */
 final class ShipmentFreshnessTest extends TestCase {
 
@@ -110,7 +111,7 @@ final class ShipmentFreshnessTest extends TestCase {
 		);
 	}
 
-	public function test_an_export_records_the_fingerprint_of_the_order_with_its_pickup_point(): void {
+	public function test_a_request_snapshots_the_order_with_its_pickup_point_as_the_pending_fingerprint(): void {
 		$registry = Mockery::mock( Orders_Registry::class );
 		$registry->shouldReceive( 'resolve_provider_for_order' )->once()->andReturn( $this->provider() );
 
@@ -119,13 +120,13 @@ final class ShipmentFreshnessTest extends TestCase {
 		$order = $this->order();
 		$order->shouldReceive( 'update_meta_data' )
 			->once()
-			->with( '_woodev_shipment_fingerprint', Shipment_Fingerprint::for_order( $this->order(), 'PVZ-1' ) );
+			->with( '_woodev_shipment_fingerprint_pending', Shipment_Fingerprint::for_order( $this->order(), 'PVZ-1' ) );
 		$order->shouldReceive( 'save_meta_data' )->once();
 
-		( new Shipment_Freshness( $registry ) )->record( $order );
+		( new Shipment_Freshness( $registry ) )->snapshot( $order );
 	}
 
-	public function test_an_export_of_an_order_no_carrier_claims_records_nothing(): void {
+	public function test_a_request_for_an_order_no_carrier_claims_snapshots_nothing(): void {
 		$registry = Mockery::mock( Orders_Registry::class );
 		$registry->shouldReceive( 'resolve_provider_for_order' )->once()->andReturn( null );
 
@@ -133,12 +134,26 @@ final class ShipmentFreshnessTest extends TestCase {
 		$order->shouldNotReceive( 'update_meta_data' );
 		$order->shouldNotReceive( 'save_meta_data' );
 
-		( new Shipment_Freshness( $registry ) )->record( $order );
+		( new Shipment_Freshness( $registry ) )->snapshot( $order );
 
 		$this->addToAssertionCount( 1 );
 	}
 
-	public function test_the_registrys_export_listener_records_through_the_same_path(): void {
+	public function test_an_export_promotes_the_pending_snapshot_and_never_reads_the_order_as_it_is_now(): void {
+		// Nothing is resolved and no getter is called: the stored value is what the request carried.
+		$registry = Mockery::mock( Orders_Registry::class );
+		$registry->shouldNotReceive( 'resolve_provider_for_order' );
+
+		$order = Mockery::mock( '\WC_Order' );
+		$order->shouldReceive( 'get_meta' )->with( '_woodev_shipment_fingerprint_pending' )->andReturn( 'v1:' . str_repeat( 'a', 64 ) );
+		$order->shouldReceive( 'update_meta_data' )->once()->with( '_woodev_shipment_fingerprint', 'v1:' . str_repeat( 'a', 64 ) );
+		$order->shouldReceive( 'delete_meta_data' )->once()->with( '_woodev_shipment_fingerprint_pending' );
+		$order->shouldReceive( 'save_meta_data' )->once();
+
+		( new Shipment_Freshness( $registry ) )->record( $order );
+	}
+
+	public function test_the_registrys_listeners_snapshot_and_promote_through_the_same_path(): void {
 		$registry = Orders_Registry::instance();
 		$plugin   = Mockery::mock( Shipping_Plugin::class );
 		$plugin->shouldReceive( 'get_checkout_handler' )->andReturn( null );
@@ -147,10 +162,18 @@ final class ShipmentFreshnessTest extends TestCase {
 		$this->meta['_wc_cdek_marker'] = 'yes';
 
 		$order = $this->order();
-		$order->shouldReceive( 'update_meta_data' )->once()->with( '_woodev_shipment_fingerprint', Shipment_Fingerprint::for_order( $this->order() ) );
+		$order->shouldReceive( 'update_meta_data' )->once()->with( '_woodev_shipment_fingerprint_pending', Shipment_Fingerprint::for_order( $this->order() ) );
 		$order->shouldReceive( 'save_meta_data' )->once();
 
-		$registry->record_shipment_fingerprint( $order );
+		$registry->snapshot_shipment_fingerprint( $order );
+
+		$promoted = Mockery::mock( '\WC_Order' );
+		$promoted->shouldReceive( 'get_meta' )->with( '_woodev_shipment_fingerprint_pending' )->andReturn( 'v1:' . str_repeat( 'b', 64 ) );
+		$promoted->shouldReceive( 'update_meta_data' )->once()->with( '_woodev_shipment_fingerprint', 'v1:' . str_repeat( 'b', 64 ) );
+		$promoted->shouldReceive( 'delete_meta_data' )->once()->with( '_woodev_shipment_fingerprint_pending' );
+		$promoted->shouldReceive( 'save_meta_data' )->once();
+
+		$registry->record_shipment_fingerprint( $promoted );
 	}
 
 	public function test_an_order_unchanged_since_the_export_is_not_outdated(): void {

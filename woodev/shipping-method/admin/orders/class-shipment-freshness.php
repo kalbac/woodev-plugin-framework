@@ -18,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Shipment_Freshness' ) ) :
 
 	/**
-	 * Takes the {@see Shipment_Fingerprint} of an order when it is exported and says, later, whether
+	 * Takes the {@see Shipment_Fingerprint} of an order when the carrier request is built and says, later, whether
 	 * the order has changed since (#947).
 	 *
 	 * The ONLY place that decides which pickup point id goes into the fingerprint, so the moment
@@ -48,19 +48,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Shipment_Fre
 		}
 
 		/**
-		 * Records the order as it is now as the one handed to the carrier.
+		 * Takes the pending snapshot of the order as the carrier request is being built.
 		 *
-		 * Subscribed (through {@see Orders_Registry::record_shipment_fingerprint()}) to the
-		 * framework-wide `woodev_shipping_order_exported` action: every successful export — a first
-		 * one, a retry, a reconciled one — passes through it. An order no registered carrier claims is
-		 * left alone: nothing would ever show its warning.
+		 * Subscribed (through {@see Orders_Registry::snapshot_shipment_fingerprint()}) to the
+		 * framework-wide `woodev_shipping_order_export_requested` action, which fires just before the
+		 * create call. An order no registered carrier claims is left alone: nothing would ever show its
+		 * warning.
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param \WC_Order $order the exported order.
+		 * @param \WC_Order $order the order the request is built from.
 		 * @return void
 		 */
-		public function record( \WC_Order $order ): void {
+		public function snapshot( \WC_Order $order ): void {
 
 			$provider = $this->registry->resolve_provider_for_order( $order );
 
@@ -68,7 +68,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Shipment_Fre
 				return;
 			}
 
-			Shipment_Fingerprint::record( $order, $this->pickup_point_id( $order, $provider ) );
+			Shipment_Fingerprint::snapshot( $order, $this->pickup_point_id( $order, $provider ) );
+		}
+
+		/**
+		 * Promotes the pending snapshot to the stored fingerprint, once the export has succeeded.
+		 *
+		 * Subscribed (through {@see Orders_Registry::record_shipment_fingerprint()}) to the
+		 * framework-wide `woodev_shipping_order_exported` action: every successful export — a first
+		 * one, a retry, a reconciled one — passes through it. It never looks at the order as it is now:
+		 * a reconciled export promotes the snapshot of the ORIGINAL request, or stores nothing
+		 * («unknown») when that request left none.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order the exported order.
+		 * @return void
+		 */
+		public function record( \WC_Order $order ): void {
+			Shipment_Fingerprint::promote( $order );
 		}
 
 		/**

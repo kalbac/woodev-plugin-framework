@@ -568,6 +568,15 @@ class ShippingOrdersRegistryTest extends TestCase {
 		}
 
 		$this->assertTrue( $found, 'add_hooks() must subscribe record_shipment_fingerprint() to woodev_shipping_order_exported' );
+
+		$snapshot = false;
+		foreach ( $calls as $call ) {
+			if ( 'woodev_shipping_order_export_requested' === $call[0] && [ $registry, 'snapshot_shipment_fingerprint' ] === $call[1] ) {
+				$snapshot = true;
+			}
+		}
+
+		$this->assertTrue( $snapshot, 'add_hooks() must subscribe snapshot_shipment_fingerprint() to woodev_shipping_order_export_requested' );
 	}
 
 	/**

@@ -117,6 +117,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 				);
 			$order->shouldReceive( 'save_meta_data' )->once();
 			$order->shouldReceive( 'get_meta' )->with( '_woodev_shipment_fingerprint' )->andReturn( '' );
+			$order->shouldReceive( 'get_meta' )->with( '_woodev_shipment_fingerprint_pending' )->andReturn( '' );
 
 			$this->handler( $api, $order_handler )->cancel( $order );
 		}
@@ -135,7 +136,9 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$order = Mockery::mock( '\\WC_Order' );
 			$order->shouldReceive( 'update_meta_data' )->with( '_woodev_shipment_cancelled_at', Mockery::type( 'int' ) );
 			$order->shouldReceive( 'get_meta' )->with( '_woodev_shipment_fingerprint' )->andReturn( 'v1:abc' );
+			$order->shouldReceive( 'get_meta' )->with( '_woodev_shipment_fingerprint_pending' )->andReturn( 'v1:def' );
 			$order->shouldReceive( 'delete_meta_data' )->once()->with( '_woodev_shipment_fingerprint' );
+			$order->shouldReceive( 'delete_meta_data' )->once()->with( '_woodev_shipment_fingerprint_pending' );
 			$order->shouldReceive( 'save_meta_data' );
 
 			$this->handler( $api, $order_handler )->cancel( $order );
@@ -164,6 +167,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$order = Mockery::mock( '\WC_Order' );
 			$order->shouldReceive( 'update_meta_data' )->with( '_woodev_shipment_cancelled_at', Mockery::type( 'int' ) );
 			$order->shouldReceive( 'get_meta' )->with( '_woodev_shipment_fingerprint' )->andReturn( '' );
+			$order->shouldReceive( 'get_meta' )->with( '_woodev_shipment_fingerprint_pending' )->andReturn( '' );
 			$order->shouldReceive( 'save_meta_data' );
 
 			return $order;

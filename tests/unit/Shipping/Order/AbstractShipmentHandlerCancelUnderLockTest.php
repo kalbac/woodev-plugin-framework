@@ -108,6 +108,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$order->shouldReceive( 'update_meta_data' )->with( '_woodev_shipment_cancelled_at', Mockery::type( 'int' ) )->byDefault();
 			$order->shouldReceive( 'save_meta_data' )->byDefault();
 			$order->shouldReceive( 'get_meta' )->with( '_woodev_shipment_fingerprint' )->andReturn( '' )->byDefault();
+			$order->shouldReceive( 'get_meta' )->with( '_woodev_shipment_fingerprint_pending' )->andReturn( '' )->byDefault();
 
 			return $order;
 		}
