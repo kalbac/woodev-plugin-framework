@@ -88,6 +88,7 @@ namespace Woodev\Tests\Unit {
 		private function product( $length, $width, $height, $weight, bool $virtual = false ): \WC_Product {
 			$product = Mockery::mock( '\WC_Product' );
 			$product->shouldReceive( 'is_virtual' )->andReturn( $virtual );
+			$product->shouldReceive( 'needs_shipping' )->andReturn( ! $virtual );
 			$product->shouldReceive( 'get_length' )->andReturn( $length );
 			$product->shouldReceive( 'get_width' )->andReturn( $width );
 			$product->shouldReceive( 'get_height' )->andReturn( $height );
@@ -101,6 +102,8 @@ namespace Woodev\Tests\Unit {
 			$item->shouldReceive( 'get_product' )->andReturn( $product );
 			$item->shouldReceive( 'get_quantity' )->andReturn( $quantity );
 			$item->shouldReceive( 'get_id' )->andReturn( 1 );
+			$item->shouldReceive( 'get_product_id' )->andReturn( 7 );
+			$item->shouldReceive( 'get_variation_id' )->andReturn( 0 );
 
 			$order = Mockery::mock( '\WC_Order' );
 			$order->shouldReceive( 'get_items' )->andReturn( [ $item ] );

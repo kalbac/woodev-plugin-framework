@@ -85,6 +85,25 @@ namespace {
 			return $this->pack_package( $package );
 		}
 	}
+
+	/**
+	 * A carrier that customizes parcels by overriding the pack_package() seam: it records the package
+	 * it was handed and swaps the result for a fixed one.
+	 */
+	class ShippingMethodPackOrderTest_OverridingMethod extends ShippingMethodPackOrderTest_Method {
+
+		/** @var array<string,mixed>|null */
+		public ?array $seen_package = null;
+
+		/** @var \Woodev_Packer_Result|null what the override returns */
+		public ?\Woodev_Packer_Result $override_result = null;
+
+		protected function pack_package( array $package ): ?\Woodev_Packer_Result {
+			$this->seen_package = $package;
+
+			return $this->override_result;
+		}
+	}
 }
 
 namespace Woodev\Tests\Unit {
@@ -116,8 +135,8 @@ namespace Woodev\Tests\Unit {
 			parent::tearDown();
 		}
 
-		private function method( string $algorithm = \Woodev_Packer_Dispatcher::ALGORITHM_SEPARATELY ): \ShippingMethodPackOrderTest_Method {
-			$method                 = ( new \ReflectionClass( \ShippingMethodPackOrderTest_Method::class ) )->newInstanceWithoutConstructor();
+		private function method( string $algorithm = \Woodev_Packer_Dispatcher::ALGORITHM_SEPARATELY, string $class = \ShippingMethodPackOrderTest_Method::class ): \ShippingMethodPackOrderTest_Method {
+			$method                 = ( new \ReflectionClass( $class ) )->newInstanceWithoutConstructor();
 			$method->stored_options = [ 'packing_algorithm' => $algorithm ];
 
 			return $method;
@@ -126,9 +145,11 @@ namespace Woodev\Tests\Unit {
 		/**
 		 * A product double. Numbers (0 = «not set») rather than '' — the dispatcher treats both as missing.
 		 */
-		private function product( float $length, float $width, float $height, float $weight, bool $virtual = false ): \WC_Product {
+		private function product( float $length, float $width, float $height, float $weight, bool $virtual = false, ?bool $needs_shipping = null ): \WC_Product {
 			$product = Mockery::mock( '\WC_Product' );
 			$product->shouldReceive( 'is_virtual' )->andReturn( $virtual );
+			// WC: a virtual product needs no shipping; a filter can also switch a physical one off
+			$product->shouldReceive( 'needs_shipping' )->andReturn( $needs_shipping ?? ! $virtual );
 			$product->shouldReceive( 'get_length' )->andReturn( $length );
 			$product->shouldReceive( 'get_width' )->andReturn( $width );
 			$product->shouldReceive( 'get_height' )->andReturn( $height );
@@ -151,6 +172,8 @@ namespace Woodev\Tests\Unit {
 			$item->shouldReceive( 'get_product' )->andReturn( $product );
 			$item->shouldReceive( 'get_quantity' )->andReturn( $quantity );
 			$item->shouldReceive( 'get_id' )->andReturn( ++$next_id );
+			$item->shouldReceive( 'get_product_id' )->andReturn( 7 );
+			$item->shouldReceive( 'get_variation_id' )->andReturn( 0 );
 
 			return [
 				'item'     => $item,
@@ -164,6 +187,12 @@ namespace Woodev\Tests\Unit {
 		private function order( array $lines ): \WC_Order {
 			$order = Mockery::mock( '\WC_Order' );
 			$order->shouldReceive( 'get_items' )->andReturn( array_column( $lines, 'item' ) );
+			$order->shouldReceive( 'get_shipping_country' )->andReturn( 'RU' );
+			$order->shouldReceive( 'get_shipping_state' )->andReturn( '' );
+			$order->shouldReceive( 'get_shipping_postcode' )->andReturn( '101000' );
+			$order->shouldReceive( 'get_shipping_city' )->andReturn( 'Moscow' );
+			$order->shouldReceive( 'get_shipping_address_1' )->andReturn( 'Tverskaya 1' );
+			$order->shouldReceive( 'get_shipping_address_2' )->andReturn( '' );
 			$order->shouldReceive( 'get_qty_refunded_for_item' )->andReturnUsing(
 				static function ( $item_id ) use ( $lines ) {
 					foreach ( $lines as $line ) {
@@ -299,6 +328,99 @@ namespace Woodev\Tests\Unit {
 
 			$this->assertEqualsWithDelta( 0.2, $from_order->get_total_weight(), 0.0001 );
 			$this->assertEquals( $from_rate->to_array(), $from_order->to_array() );
+		}
+
+		/**
+		 * A non-virtual product that needs no shipping (woocommerce_product_needs_shipping, a product
+		 * subclass) is left out of a cart's package — and so out of the export, not exported as a parcel.
+		 */
+		public function test_a_product_that_needs_no_shipping_is_excluded_at_export_as_at_rate_time(): void {
+			$shipped = $this->product( 10.0, 5.0, 3.0, 1.5 );
+			$service = $this->product( 20.0, 10.0, 8.0, 4.0, false, false );
+			$method  = $this->method();
+
+			$from_order = $method->pack_order( $this->order( [ $this->line( $service, 1 ), $this->line( $shipped, 1 ) ] ) );
+
+			$this->assertSame( 1, $from_order->get_package_count() );
+			$this->assertSame( 1.5, $from_order->get_total_weight() );
+
+			// only the non-shippable line: nothing to pack, like the rate of an all-service cart
+			$this->assertNull( $method->pack_order( $this->order( [ $this->line( $service, 2 ) ] ) ) );
+		}
+
+		/**
+		 * Equality against the actual rate package: the cart package WC builds (contents filtered with
+		 * needs_shipping(), as WC_Cart::filter_items_needing_shipping() does) packs to exactly what the
+		 * order does.
+		 */
+		public function test_export_equals_the_filtered_rate_package(): void {
+			$first   = $this->product( 10.0, 5.0, 3.0, 1.5 );
+			$service = $this->product( 20.0, 10.0, 8.0, 4.0, false, false );
+			$virtual = $this->product( 0.0, 0.0, 0.0, 0.0, true );
+			$second  = $this->product( 20.0, 10.0, 8.0, 2.0 );
+			$method  = $this->method();
+
+			$cart = [
+				'a' => [ 'data' => $first, 'quantity' => 2 ],
+				'b' => [ 'data' => $service, 'quantity' => 1 ],
+				'c' => [ 'data' => $virtual, 'quantity' => 3 ],
+				'd' => [ 'data' => $second, 'quantity' => 1 ],
+			];
+
+			// what WC_Cart hands the shipping method
+			$rate_package = [
+				'contents' => array_filter(
+					$cart,
+					static fn( array $item ): bool => $item['data']->needs_shipping()
+				),
+			];
+
+			$from_rate  = $method->pack_cart_package( $rate_package );
+			$from_order = $method->pack_order(
+				$this->order(
+					[
+						$this->line( $first, 2 ),
+						$this->line( $service, 1 ),
+						$this->line( $virtual, 3 ),
+						$this->line( $second, 1 ),
+					]
+				)
+			);
+
+			$this->assertSame( 5.0, $from_order->get_total_weight() );
+			$this->assertEquals( $from_rate->to_array(), $from_order->to_array() );
+		}
+
+		/**
+		 * The export goes through the same overridable seam as the rate: a carrier's pack_package()
+		 * override applies to it, and receives a WC-shaped package.
+		 */
+		public function test_a_pack_package_override_applies_to_the_export(): void {
+			$product = $this->product( 10.0, 5.0, 3.0, 1.5 );
+
+			// the override disables packing for the package
+			$method = $this->method( \Woodev_Packer_Dispatcher::ALGORITHM_SEPARATELY, \ShippingMethodPackOrderTest_OverridingMethod::class );
+
+			$this->assertNull( $method->pack_order( $this->order( [ $this->line( $product, 2 ) ] ) ) );
+
+			$this->assertIsArray( $method->seen_package );
+			$this->assertCount( 1, $method->seen_package['contents'] );
+			$contents = array_values( $method->seen_package['contents'] );
+			$this->assertSame( $product, $contents[0]['data'] );
+			$this->assertSame( 2, $contents[0]['quantity'] );
+			$this->assertSame( 7, $contents[0]['product_id'] );
+			$this->assertSame( 0, $contents[0]['variation_id'] );
+			$this->assertSame( 'RU', $method->seen_package['destination']['country'] );
+			$this->assertSame( '101000', $method->seen_package['destination']['postcode'] );
+
+			// ... and it can swap the result: the export returns what the override returned
+			$replacement = ( new \ReflectionClass( \ShippingMethodPackOrderTest_Method::class ) )->newInstanceWithoutConstructor();
+			$replacement->stored_options = [ 'packing_algorithm' => \Woodev_Packer_Dispatcher::ALGORITHM_VIRTUAL ];
+			$fixed                       = $replacement->pack_cart_package( [ 'contents' => [ 'x' => [ 'data' => $this->product( 1.0, 1.0, 1.0, 9.0 ), 'quantity' => 1 ] ] ] );
+
+			$method->override_result = $fixed;
+
+			$this->assertSame( $fixed, $method->pack_order( $this->order( [ $this->line( $product, 2 ) ] ) ) );
 		}
 
 		public function test_a_method_without_box_packing_gets_null_as_at_rate_time(): void {
