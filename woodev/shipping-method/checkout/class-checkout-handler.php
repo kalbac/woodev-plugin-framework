@@ -920,7 +920,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		private function enqueue_account_assets(): void {
 			$section = $this->account_address_section();
 
-			if ( '' === $section ) {
+			// The endpoint is login-gated by WooCommerce, but a saved address is only meaningful
+			// for a signed-in customer — no assets are ever served to a guest.
+			if ( '' === $section || ! is_user_logged_in() ) {
 				return;
 			}
 
@@ -1166,44 +1168,71 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * our RECORD still describes it. The record is the customer's DELIVERY locality (the
 		 * checkout's shipping chain), so the city judged is the delivery one: the saved
 		 * shipping city — or the billing city when the store ships to billing only or no
-		 * shipping city is saved. Saving EITHER form therefore re-checks it: a billing pick
-		 * that landed in the store while the customer's delivery address is elsewhere is
-		 * dropped, and so is a shipping record the saved city no longer names. A blank
-		 * delivery city forgets nothing, and nothing is ever written here.
+		 * shipping city is saved. Saving EITHER form therefore re-checks it: a record the
+		 * saved delivery city no longer names is dropped. A blank delivery city forgets
+		 * nothing, and nothing is ever written here — a pick on the form writes nothing to
+		 * the store until the customer saves (operator decision, s149).
+		 *
+		 * The saved city is read authoritatively: WooCommerce 9.8+ hands the saved
+		 * `WC_Customer` as the fourth argument; before that the hook carried only
+		 * `( $user_id, $load_address )`, and `WC()->customer` is a copy loaded BEFORE the save,
+		 * so the legacy path reads the persisted user fresh through {@see self::saved_customer()}.
 		 *
 		 * @since 2.0.2
 		 *
 		 * @internal
 		 *
-		 * @param mixed $user_id      The saved user's id.
-		 * @param mixed $address_type `'billing'` or `'shipping'`.
-		 * @param mixed $address      The address fields (WooCommerce 9.8+).
-		 * @param mixed $customer     The saved `WC_Customer` (WooCommerce 9.8+).
+		 * @param int         $user_id      The saved user's id.
+		 * @param string      $address_type `'billing'` or `'shipping'` (`$load_address` before WooCommerce 9.8).
+		 * @param array       $address      The address fields (WooCommerce 9.8+).
+		 * @param object|null $customer     The saved `WC_Customer` (WooCommerce 9.8+).
 		 *
 		 * @return void
 		 */
-		public function handle_customer_save_address( $user_id = 0, $address_type = '', $address = [], $customer = null ): void {
+		public function handle_customer_save_address( $user_id = 0, string $address_type = '', array $address = [], ?object $customer = null ): void {
 			if ( ! in_array( $address_type, [ 'billing', 'shipping' ], true ) || (int) $user_id <= 0 || (int) $user_id !== (int) get_current_user_id() ) {
 				return;
 			}
 
-			// The `WC()->customer` object is a copy loaded BEFORE this save; the saved one is
-			// the one WooCommerce hands over (9.8+), so prefer it.
-			if ( ! is_object( $customer ) ) {
-				$customer = $this->wc_customer();
+			if ( null === $customer ) {
+				$customer = $this->saved_customer( (int) $user_id );
 			}
 
 			if ( ! is_object( $customer ) || ! is_callable( [ $customer, 'get_billing_city' ] ) || ! is_callable( [ $customer, 'get_shipping_city' ] ) ) {
 				return;
 			}
 
-			$billing  = (string) $customer->get_billing_city();
-			$shipping = (string) $customer->get_shipping_city();
+			$billing      = (string) $customer->get_billing_city();
+			$shipping     = (string) $customer->get_shipping_city();
 			$billing_only = function_exists( 'wc_ship_to_billing_address_only' ) && wc_ship_to_billing_address_only();
 
 			$this->forget_record_unless_it_names_city(
 				$billing_only || '' === self::normalize_for_settlement_match( $shipping ) ? $billing : $shipping
 			);
+		}
+
+		/**
+		 * The customer as WooCommerce persisted it, read fresh from the database — the
+		 * legacy (pre-9.8) `woocommerce_customer_save_address` signature carries no customer
+		 * object, and `WC()->customer` predates the save. A seam, so a unit test needs no
+		 * WooCommerce.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param int $user_id The saved user's id.
+		 *
+		 * @return object|null
+		 */
+		protected function saved_customer( int $user_id ): ?object {
+			if ( ! class_exists( 'WC_Customer' ) ) {
+				return null;
+			}
+
+			try {
+				return new \WC_Customer( $user_id );
+			} catch ( \Exception $e ) {
+				return null;
+			}
 		}
 
 		/**

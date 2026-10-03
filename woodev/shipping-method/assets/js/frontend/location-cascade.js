@@ -2437,6 +2437,16 @@
 		}
 
 		entry.pendingRecord = null;
+
+		// Issue #332: a My Account address form writes NOTHING until the customer presses
+		// «Save» — a pick stays in the form (the optimistic write already made it visible and
+		// scopes the descendants client-side), never in the shared store. Settled as a local
+		// no-op: no request, no trigger, no not-saved notice.
+		if ( '' !== ACCOUNT_SECTION ) {
+			settleSelect( entry, false, false, record );
+			return;
+		}
+
 		entry.selectInFlight = true;
 
 		// Issue #541: KEPT, and deliberately not removed when the mark moved to enqueueSelect().

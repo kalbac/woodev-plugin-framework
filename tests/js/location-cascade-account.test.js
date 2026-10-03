@@ -182,6 +182,38 @@ describe.each( [ 'billing', 'shipping' ] )( 'My Account %s address form (issue #
 		expect( document.getElementById( section + '_city' ).value ).toBe( 'Внуково' );
 	} );
 
+	it( 'writes nothing to the store on a settlement pick — only «Save» persists (operator, s149)', async () => {
+		boot( section );
+
+		const city = document.getElementById( section + '_city' );
+
+		city.value = 'Внуково';
+		cityCall( section )[ 1 ].onSelect( { key: VNUKOVO.key, label: VNUKOVO.label, level: 'settlement', record: VNUKOVO } );
+		await flushMicrotasks();
+
+		expect( selectPosts() ).toHaveLength( 0 );
+		expect( city.value ).toBe( 'Внуково' );
+	} );
+
+	it( 'writes nothing to the store on a region pick, and a second pick does not queue a request', async () => {
+		boot( section );
+
+		const state = document.getElementById( section + '_state' );
+
+		state.value = 'SPE';
+		window.jQuery( state ).trigger( 'change' );
+		await flushMicrotasks();
+
+		const city = document.getElementById( section + '_city' );
+
+		city.value = 'Внуково';
+		cityCall( section )[ 1 ].onSelect( { key: VNUKOVO.key, label: VNUKOVO.label, level: 'settlement', record: VNUKOVO } );
+		cityCall( section )[ 1 ].onSelect( { key: VNUKOVO.key, label: VNUKOVO.label, level: 'settlement', record: VNUKOVO } );
+		await flushMicrotasks();
+
+		expect( selectPosts() ).toHaveLength( 0 );
+	} );
+
 	it( 'keeps the picked city and posts no /select on a same-value state churn', async () => {
 		boot( section );
 

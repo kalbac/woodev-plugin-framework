@@ -119,6 +119,7 @@ final class Account_Address_Handler extends Checkout_Handler {
 
 	public ?object $customer = null;
 	public string $slug      = '';
+	public ?object $saved    = null;
 
 	protected static function asset_exists( string $path ): bool {
 		return true;
@@ -126,6 +127,10 @@ final class Account_Address_Handler extends Checkout_Handler {
 
 	protected function wc_customer() {
 		return $this->customer;
+	}
+
+	protected function saved_customer( int $user_id ): ?object {
+		return $this->saved;
 	}
 
 	protected function account_edit_address_slug(): string {
@@ -143,6 +148,7 @@ class CheckoutHandlerAccountAddressTest extends TestCase {
 		parent::setUp();
 		Functions\when( 'is_checkout' )->justReturn( false );
 		Functions\when( 'is_cart' )->justReturn( false );
+		Functions\when( 'is_user_logged_in' )->justReturn( true );
 		Functions\when( 'apply_filters' )->returnArg( 2 );
 		Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
 		Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
@@ -201,7 +207,9 @@ class CheckoutHandlerAccountAddressTest extends TestCase {
 	/**
 	 * @return array{0: array, 1: array}
 	 */
-	private function enqueue_on_account( ?string $slug, bool $active = true, ?Location_Record $record = null, string $saved_city = '' ): array {
+	private function enqueue_on_account( ?string $slug, bool $active = true, ?Location_Record $record = null, string $saved_city = '', bool $logged_in = true ): array {
+		Functions\when( 'is_user_logged_in' )->justReturn( $logged_in );
+
 		$scripts   = [];
 		$localized = [];
 		Functions\when( 'wp_enqueue_script' )->alias(
@@ -262,6 +270,13 @@ class CheckoutHandlerAccountAddressTest extends TestCase {
 		$this->assertSame( [], $scripts );
 	}
 
+	public function test_a_logged_out_visitor_gets_nothing_enqueued(): void {
+		[ $scripts, $localized ] = $this->enqueue_on_account( 'billing', true, null, '', false );
+
+		$this->assertSame( [], $scripts );
+		$this->assertSame( [], $localized );
+	}
+
 	public function test_an_inactive_layer_enqueues_nothing(): void {
 		[ $scripts, $localized ] = $this->enqueue_on_account( 'billing', false );
 
@@ -303,6 +318,42 @@ class CheckoutHandlerAccountAddressTest extends TestCase {
 		$handler->handle_customer_save_address( $user, $type, [], $this->customer( $billing, $shipping ) );
 
 		return $service->forgotten;
+	}
+
+	/**
+	 * The pre-9.8 hook signature: `( $user_id, $load_address )`, no customer object. The saved
+	 * city is read from the freshly loaded customer, never from the pre-save `WC()->customer`.
+	 */
+	private function save_legacy( string $type, string $saved_billing, string $saved_shipping, string $stale_city, ?Location_Record $record ): int {
+		Functions\when( 'get_current_user_id' )->justReturn( 7 );
+
+		$service = new Account_Address_Fake_Service( true, $record );
+		$handler = new Account_Address_Handler( Checkout_Fields::from_array( [] ), 'carrier', $service );
+
+		$handler->customer = $this->customer( $stale_city, $stale_city );
+		$handler->saved    = $this->customer( $saved_billing, $saved_shipping );
+
+		$handler->handle_customer_save_address( 7, $type );
+
+		return $service->forgotten;
+	}
+
+	public function test_the_legacy_hook_signature_reads_the_saved_city_not_the_pre_save_customer(): void {
+		// The pre-save copy still says Kazan (matches the record); the saved city is Moscow.
+		$this->assertSame( 1, $this->save_legacy( 'shipping', 'Москва', 'Москва', 'Казань', $this->record() ) );
+		// The pre-save copy says Moscow; the saved city is Kazan, which the record names.
+		$this->assertSame( 0, $this->save_legacy( 'shipping', 'Казань', 'Казань', 'Москва', $this->record() ) );
+	}
+
+	public function test_the_legacy_hook_signature_without_a_loadable_customer_changes_nothing(): void {
+		Functions\when( 'get_current_user_id' )->justReturn( 7 );
+
+		$service = new Account_Address_Fake_Service( true, $this->record() );
+		$handler = new Account_Address_Handler( Checkout_Fields::from_array( [] ), 'carrier', $service );
+
+		$handler->handle_customer_save_address( 7, 'billing' );
+
+		$this->assertSame( 0, $service->forgotten );
 	}
 
 	public function test_a_saved_shipping_city_that_names_another_settlement_forgets_the_record(): void {
