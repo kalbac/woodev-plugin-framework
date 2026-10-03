@@ -8887,4 +8887,88 @@ describe( 'a saved city that resolved to no record (#1075)', () => {
 		expect( address().disabled ).toBe( false );
 		expect( hint() ).toBeNull();
 	} );
+
+	describe( 'select-backed settlement (ajax-select2, the default mode)', () => {
+		const bootReal = ( settlementValue, saved ) => {
+			installMarkup( { settlement: true, address: true, settlementValue }, 'RU' );
+
+			global.jQuery = require( 'jquery' );
+			global.$ = global.jQuery;
+			window.jQuery = global.jQuery;
+
+			window.WoodevCheckoutFieldStore = require(
+				'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
+			);
+
+			fakeTypeahead();
+			mockFetch();
+
+			require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
+
+			installFakeSelect2( window.jQuery );
+
+			window[ CONFIG_GLOBAL ] = buildConfig( {
+				settlement: true, address: true, mode: { settlement: 'ajax-select2' },
+				...( saved ? { savedCityUnresolved: saved } : {} ),
+			} );
+
+			require( '../../woodev/shipping-method/assets/js/frontend/location-cascade.js' );
+		};
+
+		it( 'keeps the address live and shows the hint when the seeded <option> holds the saved city', () => {
+			bootReal( 'Несуществующск', 'Несуществующск' );
+
+			const select = document.getElementById( 'billing_city' );
+
+			expect( select.tagName ).toBe( 'SELECT' );
+			expect( address().disabled ).toBe( false );
+			expect( address().classList.contains( 'woodev-location-locked' ) ).toBe( false );
+			expect( hint() ).not.toBeNull();
+			expect( hint().textContent ).toContain( 'Выберите населённый пункт из списка подсказок' );
+		} );
+
+		it( 'locks the address and shows no hint without a saved-city config (control)', () => {
+			bootReal( 'Несуществующск', null );
+
+			expect( address().disabled ).toBe( true );
+			expect( hint() ).toBeNull();
+		} );
+
+		it( 'savedCityIsUnresolved is false once a different option is selected', () => {
+			bootReal( 'Несуществующск', 'Несуществующск' );
+
+			const select = document.getElementById( 'billing_city' );
+			const picked = document.createElement( 'option' );
+
+			picked.value = 'Москва';
+			picked.textContent = 'Москва';
+			select.appendChild( picked );
+			select.value = 'Москва';
+			window.jQuery( select ).trigger( 'change' );
+
+			expect( address().disabled ).toBe( true );
+		} );
+	} );
+
+	it( 'a plain <select> whose selected option text is the saved city counts as unresolved', () => {
+		installMarkup( { settlement: true, address: true }, 'RU' );
+		const input = document.getElementById( 'billing_city' );
+		const select = document.createElement( 'select' );
+
+		select.id = 'billing_city';
+		select.name = 'billing_city';
+		select.innerHTML = '<option value="БУТОВО" selected>Бутово</option>';
+		input.replaceWith( select );
+
+		global.jQuery = require( 'jquery' );
+		global.$ = global.jQuery;
+		window.jQuery = global.jQuery;
+		window.WoodevCheckoutFieldStore = require( '../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js' );
+		fakeTypeahead();
+		mockFetch();
+		window[ CONFIG_GLOBAL ] = buildConfig( { settlement: true, address: true, savedCityUnresolved: 'Бутово' } );
+		require( '../../woodev/shipping-method/assets/js/frontend/location-cascade.js' );
+
+		expect( address().disabled ).toBe( false );
+	} );
 } );

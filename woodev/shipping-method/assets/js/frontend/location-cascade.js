@@ -4026,8 +4026,11 @@
 	/**
 	 * Whether the settlement field still shows, untouched, the city WooCommerce had saved for the
 	 * customer when the server found no unique location record for it (issue #1075) —
-	 * `config.location.savedCityUnresolved` carries that text. Only a plain-text settlement input
-	 * qualifies: a `<select>` cannot display a saved city that is not one of its options.
+	 * `config.location.savedCityUnresolved` carries that text. Covers the plain-text input
+	 * (baseline typeahead) AND the select2-backed `<select>` of `ajax-select2` (the default
+	 * settlement mode): that renderer seeds the pre-existing value as a real, selected `<option>`
+	 * (`location-select-modes.js`'s `buildSelectField()` `initialValue`), so the saved text is the
+	 * SELECTED option's value/text. `related-list` is never offered on the settlement axis.
 	 *
 	 * @param {Object} entry
 	 * @returns {boolean}
@@ -4037,11 +4040,19 @@
 		var node = chainNodeForLevel( entry, 'settlement' );
 		var el = node ? document.getElementById( node.fieldId ) : null;
 
-		if ( 'string' !== typeof saved || '' === saved || ! el || 'SELECT' === el.tagName ) {
+		if ( 'string' !== typeof saved || '' === saved || ! el ) {
 			return false;
 		}
 
-		return String( el.value ).trim() === saved.trim();
+		var wanted = saved.trim();
+
+		if ( 'SELECT' === el.tagName ) {
+			var selected = el.options && el.selectedIndex > -1 ? el.options[ el.selectedIndex ] : null;
+
+			return !! selected && ( String( selected.value ).trim() === wanted || String( selected.text ).trim() === wanted );
+		}
+
+		return String( el.value ).trim() === wanted;
 	}
 
 	/**
