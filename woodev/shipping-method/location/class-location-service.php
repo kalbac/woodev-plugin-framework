@@ -184,6 +184,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 */
 		private const SAVED_CITY_MISS_META = '_woodev_location_saved_city_miss';
 
+		/** How many saved-city miss signatures are kept per customer (#1075). */
+		private const SAVED_CITY_MISS_LIMIT = 10;
+
 		/**
 		 * Signature of the saved city already looked up in THIS request (#1075), so a miss costs
 		 * one provider call at most and a hit is not re-asked while the write settles.
@@ -1319,24 +1322,35 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		}
 
 		/**
-		 * The signature of the saved city the last provider lookup found nothing unambiguous
-		 * for, or `''` (#1075). Persisted per customer (user meta) so a non-matching city does
-		 * not re-query on every render; a changed saved city changes the signature and re-tries.
+		 * The signatures of the saved cities a provider lookup found nothing unambiguous for
+		 * (#1075) — the last {@see self::SAVED_CITY_MISS_LIMIT}, persisted per customer (user
+		 * meta) so a non-matching city is asked once PER VALUE, however the customer flips
+		 * between values; a never-tried value is not in the set and gets its one call.
 		 *
 		 * `protected` as a test seam.
 		 *
 		 * @since 2.0.2
 		 *
-		 * @return string
+		 * @return array<int, string>
 		 */
-		protected function saved_city_miss_signature(): string {
-			return is_user_logged_in() ? (string) get_user_meta( get_current_user_id(), self::SAVED_CITY_MISS_META, true ) : '';
+		protected function saved_city_misses(): array {
+			if ( ! is_user_logged_in() ) {
+				return [];
+			}
+
+			$stored = get_user_meta( get_current_user_id(), self::SAVED_CITY_MISS_META, true );
+
+			// A pre-round-4 value was one signature string.
+			if ( is_string( $stored ) && '' !== $stored ) {
+				return [ $stored ];
+			}
+
+			return is_array( $stored ) ? array_values( array_filter( $stored, 'is_string' ) ) : [];
 		}
 
 		/**
-		 * Remembers `$signature` as a saved city that resolved to nothing (#1075).
-		 *
-		 * `protected` as a test seam.
+		 * Remembers `$signature` as a saved city that resolved to nothing (#1075), keeping only
+		 * the last {@see self::SAVED_CITY_MISS_LIMIT} so the user meta stays bounded.
 		 *
 		 * @since 2.0.2
 		 *
@@ -1345,8 +1359,26 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * @return void
 		 */
 		protected function remember_saved_city_miss( string $signature ): void {
+			$misses   = array_values( array_diff( $this->saved_city_misses(), [ $signature ] ) );
+			$misses[] = $signature;
+
+			$this->store_saved_city_misses( array_slice( $misses, -self::SAVED_CITY_MISS_LIMIT ) );
+		}
+
+		/**
+		 * Persists the bounded miss set (#1075).
+		 *
+		 * `protected` as a test seam.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<int, string> $signatures Miss signatures, oldest first.
+		 *
+		 * @return void
+		 */
+		protected function store_saved_city_misses( array $signatures ): void {
 			if ( is_user_logged_in() ) {
-				update_user_meta( get_current_user_id(), self::SAVED_CITY_MISS_META, $signature );
+				update_user_meta( get_current_user_id(), self::SAVED_CITY_MISS_META, $signatures );
 			}
 		}
 
@@ -1378,7 +1410,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 				return null;
 			}
 
-			if ( $this->saved_city_miss_signature() === $signature ) {
+			if ( in_array( $signature, $this->saved_city_misses(), true ) ) {
 				$this->saved_city_attempted = $signature;
 
 				return null;
@@ -1455,19 +1487,43 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 			}
 
 			if ( count( $matches ) > 1 && '' !== $region ) {
-				$wanted_region = self::normalize_place_name( $region );
+				$wanted_region = self::normalize_region_name( $region );
 				$matches       = array_filter(
 					$matches,
 					static function ( Location_Record $candidate ) use ( $wanted_region ): bool {
 						$component = $candidate->region();
-						$name      = null !== $component ? self::normalize_place_name( (string) $component['name'] ) : '';
 
-						return '' !== $name && '' !== $wanted_region && ( false !== strpos( $name, $wanted_region ) || false !== strpos( $wanted_region, $name ) );
+						if ( null === $component || '' === $wanted_region ) {
+							return false;
+						}
+
+						// Exact equality only — the record's bare name or name + its own type field.
+						return self::normalize_region_name( (string) $component['name'] ) === $wanted_region
+							|| self::normalize_region_name( trim( $component['name'] . ' ' . $component['type'] ) ) === $wanted_region;
 					}
 				);
 			}
 
 			return 1 === count( $matches ) ? reset( $matches ) : null;
+		}
+
+		/**
+		 * Case, «ё» and region-type-word insensitive form of a region name («Московская обл.»,
+		 * «Московская область», «московская» compare equal) — for EXACT matching only: no
+		 * containment test is ever applied to it (#1075).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $name Raw region name.
+		 *
+		 * @return string
+		 */
+		private static function normalize_region_name( string $name ): string {
+			$name = str_replace( 'ё', 'е', mb_strtolower( trim( $name ) ) );
+			$name = (string) preg_replace( '/[^\p{L}\p{N}\s-]+/u', ' ', $name );
+			$name = (string) preg_replace( '/(?<![\p{L}\p{N}-])(?:область|обл|край|республика|респ|г|город|автономный|автономная|округ|ао|аобл)(?![\p{L}\p{N}-])/u', ' ', $name );
+
+			return trim( (string) preg_replace( '/\s+/u', ' ', $name ) );
 		}
 
 		/**

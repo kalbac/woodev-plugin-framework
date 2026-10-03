@@ -111,8 +111,8 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		/** @var string the saved region's display name. */
 		public string $region_name = '';
 
-		/** @var string the persisted negative-cache signature. */
-		public string $miss = '';
+		/** @var array<int, string> the persisted negative-cache signatures. */
+		public array $misses = [];
 
 		public function __construct( Location_Provider_Registry $registry, Customer_Location_Store $store, string $saved_city ) {
 			parent::__construct( $registry, $store );
@@ -131,12 +131,12 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			return $this->resolves;
 		}
 
-		protected function saved_city_miss_signature(): string {
-			return $this->miss;
+		protected function saved_city_misses(): array {
+			return $this->misses;
 		}
 
-		protected function remember_saved_city_miss( string $signature ): void {
-			$this->miss = $signature;
+		protected function store_saved_city_misses( array $signatures ): void {
+			$this->misses = $signatures;
 		}
 	}
 
@@ -672,6 +672,57 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertSame( 'prov-a:two', $service->get_customer_record()['record']->key() );
 		}
 
+		public function test_a_region_that_is_only_a_substring_of_a_candidate_region_does_not_narrow(): void {
+			$provider = new Default_Test_Fake_Provider(
+				'prov-a',
+				fn() => [ $this->butovo( 'prov-a:one', 'Ленинградская область' ), $this->butovo( 'prov-a:two', 'Область Войска Донского' ) ]
+			);
+			$this->stub_default_locality_options( 'prov-a' );
+			$registry = $this->activate( [ $provider ] );
+			$session  = new Default_Test_Fake_Session();
+			$service  = $this->saved_city_service( $registry, 'Бутово', $session );
+
+			$service->region_name = 'Ленинград';
+
+			$this->assertNull( $service->get_customer_record(), 'a substring of one region name is not that region' );
+			$this->assertNull( ( new Default_Test_Customer_Store_Probe( $session ) )->get(), 'nothing is persisted' );
+		}
+
+		public function test_an_exact_region_with_a_different_type_word_narrows(): void {
+			$provider = new Default_Test_Fake_Provider(
+				'prov-a',
+				fn() => [ $this->butovo( 'prov-a:one', 'Тула' ), $this->butovo( 'prov-a:two', 'Тульская' ) ]
+			);
+			$this->stub_default_locality_options( 'prov-a' );
+			$registry = $this->activate( [ $provider ] );
+			$service  = $this->saved_city_service( $registry, 'Бутово' );
+
+			$service->region_name = 'Тульская область';
+
+			$this->assertSame( 'prov-a:two', $service->get_customer_record()['record']->key() );
+		}
+
+		public function test_a_revisited_saved_city_is_not_asked_again_and_the_miss_set_is_bounded(): void {
+			$provider = new Default_Test_Fake_Provider( 'prov-a', static fn() => [] );
+			$this->stub_default_locality_options( 'prov-a' );
+			$registry = $this->activate( [ $provider ] );
+			$service  = $this->saved_city_service( $registry, 'Бутово' );
+
+			$this->assertNull( $service->get_customer_record() );
+			$service->saved_city = 'Чехов';
+			$this->assertNull( $service->get_customer_record() );
+			$service->saved_city = 'Бутово';
+			$this->assertNull( $service->get_customer_record() );
+			$this->assertCount( 2, $provider->suggest_calls, 'A → B → A is two provider calls in total' );
+
+			for ( $i = 0; $i < 15; $i++ ) {
+				$service->saved_city = 'Город' . $i;
+				$service->get_customer_record();
+			}
+
+			$this->assertCount( 10, $service->misses, 'the stored miss set is bounded' );
+		}
+
 		public function test_an_ambiguous_saved_city_resolves_to_nothing_and_is_not_asked_again(): void {
 			$provider = new Default_Test_Fake_Provider(
 				'prov-a',
@@ -688,7 +739,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			// A later request keeps the persisted negative cache.
 			$later       = $this->saved_city_service( $registry, 'Бутово', $session );
-			$later->miss = $service->miss;
+			$later->misses = $service->misses;
 			$this->assertNull( $later->get_customer_record() );
 			$this->assertCount( 1, $provider->suggest_calls, 'the miss is cached per saved city' );
 			$this->assertNull( ( new Default_Test_Customer_Store_Probe( $session ) )->get(), 'no record is stored' );
@@ -702,7 +753,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertNull( $service->get_customer_record() );
 			$this->assertNull( $service->get_customer_record() );
 			$this->assertCount( 1, $empty->suggest_calls );
-			$this->assertNotSame( '', $service->miss );
+			$this->assertCount( 1, $service->misses );
 
 			Location_Provider_Registry::instance()->reset_for_tests();
 			$failing = new Default_Test_Fake_Provider( 'prov-a', static function () {
@@ -714,7 +765,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertNull( $service->get_customer_record() );
 			$this->assertNull( $service->get_customer_record() );
 			$this->assertCount( 1, $failing->suggest_calls );
-			$this->assertNotSame( '', $service->miss );
+			$this->assertCount( 1, $service->misses );
 		}
 
 		public function test_a_changed_saved_city_is_tried_again(): void {
