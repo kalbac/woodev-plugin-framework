@@ -271,6 +271,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *         current: array{key: string, level: string}|null,
 		 *         chain: array<string, array{key: string, level: string}>,
 		 *         implicit: bool,
+		 *         savedCityUnresolved: string|null,
 		 *         defaultLocality: array{policy: string, record: array<string, mixed>}|null
 		 *     }
 		 * }
@@ -631,6 +632,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 				// used to read for exactly one thing (not firing `update_checkout`) and
 				// otherwise discard. `location-cascade.js`'s `showNotPersistedNotice()` is
 				// the consumer this string exists for.
+				// #1075: shown at the city field when WooCommerce holds a city for the customer
+				// that matches no unique locality — they must pick one from the suggestions.
+				'pickFromSuggestions' => __(
+					'Select a locality from the suggestions',
+					'woodev-plugin-framework'
+				),
+
 				'notPersisted'       => __(
 					'Could not save your choice — please try again.',
 					'woodev-plugin-framework'
@@ -1017,6 +1025,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *     current: array{key: string, level: string}|null,
 		 *     chain: array<string, array{key: string, level: string}>,
 		 *     implicit: bool,
+		 *     savedCityUnresolved: string|null,
 		 *     defaultLocality: array{policy: string, record: array<string, mixed>}|null,
 		 *     defaultCountry: string
 		 * }
@@ -1164,6 +1173,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 				];
 			}
 
+			// Issue #1075: the customer has a city saved in WooCommerce but no location record
+			// (and none could be resolved from it) — the client keeps that city as plain text,
+			// leaves the address level unlocked and asks for a pick. The value is the saved text
+			// the field is rendered with, so the client can tell the customer has not edited it.
+			$saved_city_unresolved = null;
+
+			if ( null === $customer && '' !== $service->get_saved_city() ) {
+				$saved_city_unresolved = $service->get_saved_city();
+			}
+
 			// Issue #330 (location-chain design §8): every level in the customer's
 			// saved chain, same `{ key, level }` shape as `current` above, keyed by
 			// level. `[]` (never `null`) when there is no customer record at all —
@@ -1220,6 +1239,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 				'current'               => $current,
 				'chain'                 => $chain,
 				'implicit'              => $implicit,
+				// Issue #1075: the saved city text when it has no record, else `null`.
+				'savedCityUnresolved'   => $saved_city_unresolved,
 				// Issue #536 (spec §4.6/D11 amendment): `null` unless the policy is `fixed`
 				// AND a default actually resolved for THIS customer — see this method's own
 				// computation above for the full reasoning.

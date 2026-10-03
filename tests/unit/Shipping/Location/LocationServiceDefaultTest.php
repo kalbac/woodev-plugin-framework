@@ -98,6 +98,49 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 	}
 
 	/**
+	 * Probe pinning the city WooCommerce holds for the customer (#1075) instead of
+	 * reading the real `WC()->customer` global.
+	 */
+	final class Default_Test_Saved_City_Service extends Location_Service {
+
+		public string $saved_city;
+
+		/** @var bool whether the #1075 saved-city resolution is on (a logged-in customer). */
+		public bool $resolves = false;
+
+		/** @var string the saved region's display name. */
+		public string $region_name = '';
+
+		/** @var array<int, string> the persisted negative-cache signatures. */
+		public array $misses = [];
+
+		public function __construct( Location_Provider_Registry $registry, Customer_Location_Store $store, string $saved_city ) {
+			parent::__construct( $registry, $store );
+			$this->saved_city = $saved_city;
+		}
+
+		protected function customer_saved_city(): string {
+			return $this->saved_city;
+		}
+
+		protected function customer_saved_region_name(): string {
+			return $this->region_name;
+		}
+
+		protected function resolves_saved_city(): bool {
+			return $this->resolves;
+		}
+
+		protected function saved_city_misses(): array {
+			return $this->misses;
+		}
+
+		protected function store_saved_city_misses( array $signatures ): void {
+			$this->misses = $signatures;
+		}
+	}
+
+	/**
 	 * A suggest-only fake provider: id/countries/levels are fixed at
 	 * construction, `suggest()` is driven by a closure and spied. Never
 	 * overrides `locate()` — used for every `fixed`-policy test, where a
@@ -516,6 +559,239 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertSame( 'prov-a:city-1', $fetched['record']->key() );
 			$this->assertTrue( $fetched['implicit'], 'a resolved default must be flagged implicit' );
 			$this->assertCount( 0, $provider->suggest_calls, 'the provider is not the active-namespace mismatch case — no re-resolution needed' );
+		}
+
+		public function test_policy_fixed_does_not_override_a_city_the_customer_already_has_saved(): void {
+			$provider = new Default_Test_Fake_Provider( 'prov-a', static fn() => [] );
+			$stored   = $this->record( 'prov-a:city-1' );
+			$this->stub_default_locality_options( 'prov-a', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED, wp_json_encode( $stored->to_array() ) );
+			$registry = $this->activate( [ $provider ] );
+			$session  = new Default_Test_Fake_Session();
+			$service  = new Default_Test_Saved_City_Service( $registry, new Default_Test_Customer_Store_Probe( $session ), 'Бутово' );
+
+			$this->assertNull( $service->get_customer_record(), 'a saved city keeps the store default off' );
+			$this->assertNull( $service->get_customer_chain() );
+			$this->assertNull( ( new Default_Test_Customer_Store_Probe( $session ) )->get(), 'nothing implicit is persisted either' );
+		}
+
+		public function test_policy_fixed_still_applies_when_the_customer_has_no_saved_city(): void {
+			$provider = new Default_Test_Fake_Provider( 'prov-a', static fn() => [] );
+			$stored   = $this->record( 'prov-a:city-1' );
+			$this->stub_default_locality_options( 'prov-a', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED, wp_json_encode( $stored->to_array() ) );
+			$registry = $this->activate( [ $provider ] );
+			$service  = new Default_Test_Saved_City_Service( $registry, new Default_Test_Customer_Store_Probe( new Default_Test_Fake_Session() ), '' );
+
+			$fetched = $service->get_customer_record();
+
+			$this->assertNotNull( $fetched );
+			$this->assertTrue( $fetched['implicit'] );
+		}
+
+		public function test_a_city_arriving_after_an_unpersisted_default_was_resolved_retires_the_default(): void {
+			$provider = new Default_Test_Fake_Provider( 'prov-a', static fn() => [] );
+			$stored   = $this->record( 'prov-a:city-1' );
+			$this->stub_default_locality_options( 'prov-a', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED, wp_json_encode( $stored->to_array() ) );
+			$registry = $this->activate( [ $provider ] );
+			// No session: the store cannot persist, so the default is memoized in memory only.
+			$service = new Default_Test_Saved_City_Service( $registry, new Default_Test_Customer_Store_Probe( null ), '' );
+
+			$this->assertNotNull( $service->get_customer_record(), 'resolved while the customer has no city' );
+
+			$service->saved_city = 'Бутово';
+
+			$this->assertNull( $service->get_customer_record(), 'the memoized default must not outlive a saved city' );
+		}
+
+		public function test_a_saved_city_never_hides_an_existing_record(): void {
+			$provider = new Default_Test_Fake_Provider( 'prov-a', static fn() => [] );
+			$stored   = $this->record( 'prov-a:city-1' );
+			$this->stub_default_locality_options( 'prov-a', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED, wp_json_encode( $stored->to_array() ) );
+			$registry = $this->activate( [ $provider ] );
+			$session  = new Default_Test_Fake_Session();
+			$this->service( $registry, $session )->get_customer_record(); // seeds the implicit default
+
+			$service = new Default_Test_Saved_City_Service( $registry, new Default_Test_Customer_Store_Probe( $session ), 'Бутово' );
+
+			$this->assertNotNull( $service->get_customer_record(), 'a record already stored is served regardless of the saved city' );
+		}
+
+		// -------------------------------------------------------------------
+		// #1075 round 2 — the saved city is resolved into a record, once
+		// -------------------------------------------------------------------
+
+		private function saved_city_service( Location_Provider_Registry $registry, string $city, ?Default_Test_Fake_Session $session = null ): Default_Test_Saved_City_Service {
+			$service           = new Default_Test_Saved_City_Service( $registry, new Default_Test_Customer_Store_Probe( $session ?? new Default_Test_Fake_Session() ), $city );
+			$service->resolves = true;
+
+			return $service;
+		}
+
+		private function butovo( string $key, string $region = 'Москва' ): Location_Record {
+			return $this->record(
+				$key,
+				Location_Record::LEVEL_SETTLEMENT,
+				[
+					'label'      => 'г ' . $region . ', Бутово',
+					'region'     => [ 'name' => $region, 'type' => 'г' ],
+					'settlement' => [ 'name' => 'Бутово', 'type' => 'г' ],
+				]
+			);
+		}
+
+		public function test_a_unique_match_for_the_saved_city_is_persisted_and_asked_only_once(): void {
+			$provider = new Default_Test_Fake_Provider( 'prov-a', fn() => [ $this->butovo( 'prov-a:butovo' ) ] );
+			$this->stub_default_locality_options( 'prov-a' );
+			$registry = $this->activate( [ $provider ] );
+			$session  = new Default_Test_Fake_Session();
+			$service  = $this->saved_city_service( $registry, 'г. Бутово', $session );
+
+			$first = $service->get_customer_record();
+
+			$this->assertNotNull( $first );
+			$this->assertSame( 'prov-a:butovo', $first['record']->key() );
+			$this->assertFalse( $first['implicit'], 'the customer\'s own city is not an implicit default' );
+			$this->assertSame( 'prov-a:butovo', $service->get_customer_chain()['records']['settlement']->key() );
+
+			// A later request: a fresh service finds the stored record, no provider call.
+			$later = $this->saved_city_service( $registry, 'г. Бутово', $session );
+			$this->assertSame( 'prov-a:butovo', $later->get_customer_record()['record']->key() );
+			$this->assertCount( 1, $provider->suggest_calls, 'one provider call in total' );
+		}
+
+		public function test_an_ambiguous_saved_city_is_narrowed_by_the_saved_region(): void {
+			$provider = new Default_Test_Fake_Provider(
+				'prov-a',
+				fn() => [ $this->butovo( 'prov-a:one', 'Московская область' ), $this->butovo( 'prov-a:two', 'Тульская область' ) ]
+			);
+			$this->stub_default_locality_options( 'prov-a' );
+			$registry = $this->activate( [ $provider ] );
+			$service  = $this->saved_city_service( $registry, 'Бутово' );
+
+			$service->region_name = 'Тульская';
+
+			$this->assertSame( 'prov-a:two', $service->get_customer_record()['record']->key() );
+		}
+
+		public function test_a_region_that_is_only_a_substring_of_a_candidate_region_does_not_narrow(): void {
+			$provider = new Default_Test_Fake_Provider(
+				'prov-a',
+				fn() => [ $this->butovo( 'prov-a:one', 'Ленинградская область' ), $this->butovo( 'prov-a:two', 'Область Войска Донского' ) ]
+			);
+			$this->stub_default_locality_options( 'prov-a' );
+			$registry = $this->activate( [ $provider ] );
+			$session  = new Default_Test_Fake_Session();
+			$service  = $this->saved_city_service( $registry, 'Бутово', $session );
+
+			$service->region_name = 'Ленинград';
+
+			$this->assertNull( $service->get_customer_record(), 'a substring of one region name is not that region' );
+			$this->assertNull( ( new Default_Test_Customer_Store_Probe( $session ) )->get(), 'nothing is persisted' );
+		}
+
+		public function test_an_exact_region_with_a_different_type_word_narrows(): void {
+			$provider = new Default_Test_Fake_Provider(
+				'prov-a',
+				fn() => [ $this->butovo( 'prov-a:one', 'Тула' ), $this->butovo( 'prov-a:two', 'Тульская' ) ]
+			);
+			$this->stub_default_locality_options( 'prov-a' );
+			$registry = $this->activate( [ $provider ] );
+			$service  = $this->saved_city_service( $registry, 'Бутово' );
+
+			$service->region_name = 'Тульская область';
+
+			$this->assertSame( 'prov-a:two', $service->get_customer_record()['record']->key() );
+		}
+
+		public function test_a_revisited_saved_city_is_not_asked_again_and_the_miss_set_is_bounded(): void {
+			$provider = new Default_Test_Fake_Provider( 'prov-a', static fn() => [] );
+			$this->stub_default_locality_options( 'prov-a' );
+			$registry = $this->activate( [ $provider ] );
+			$service  = $this->saved_city_service( $registry, 'Бутово' );
+
+			$this->assertNull( $service->get_customer_record() );
+			$service->saved_city = 'Чехов';
+			$this->assertNull( $service->get_customer_record() );
+			$service->saved_city = 'Бутово';
+			$this->assertNull( $service->get_customer_record() );
+			$this->assertCount( 2, $provider->suggest_calls, 'A → B → A is two provider calls in total' );
+
+			for ( $i = 0; $i < 15; $i++ ) {
+				$service->saved_city = 'Город' . $i;
+				$service->get_customer_record();
+			}
+
+			$this->assertCount( 10, $service->misses, 'the stored miss set is bounded' );
+		}
+
+		public function test_an_ambiguous_saved_city_resolves_to_nothing_and_is_not_asked_again(): void {
+			$provider = new Default_Test_Fake_Provider(
+				'prov-a',
+				fn() => [ $this->butovo( 'prov-a:one', 'Московская область' ), $this->butovo( 'prov-a:two', 'Тульская область' ) ]
+			);
+			$this->stub_default_locality_options( 'prov-a' );
+			$registry = $this->activate( [ $provider ] );
+			$session  = new Default_Test_Fake_Session();
+			$service  = $this->saved_city_service( $registry, 'Бутово', $session );
+
+			$this->assertNull( $service->get_customer_record() );
+			$this->assertNull( $service->get_customer_record() );
+			$this->assertNull( $service->get_customer_chain() );
+
+			// A later request keeps the persisted negative cache.
+			$later       = $this->saved_city_service( $registry, 'Бутово', $session );
+			$later->misses = $service->misses;
+			$this->assertNull( $later->get_customer_record() );
+			$this->assertCount( 1, $provider->suggest_calls, 'the miss is cached per saved city' );
+			$this->assertNull( ( new Default_Test_Customer_Store_Probe( $session ) )->get(), 'no record is stored' );
+		}
+
+		public function test_no_match_and_a_provider_error_are_both_cached_misses(): void {
+			$empty = new Default_Test_Fake_Provider( 'prov-a', static fn() => [] );
+			$this->stub_default_locality_options( 'prov-a' );
+			$this->activate( [ $empty ] );
+			$service = $this->saved_city_service( Location_Provider_Registry::instance(), 'Бутово' );
+			$this->assertNull( $service->get_customer_record() );
+			$this->assertNull( $service->get_customer_record() );
+			$this->assertCount( 1, $empty->suggest_calls );
+			$this->assertCount( 1, $service->misses );
+
+			Location_Provider_Registry::instance()->reset_for_tests();
+			$failing = new Default_Test_Fake_Provider( 'prov-a', static function () {
+				throw new \RuntimeException( 'down' );
+			} );
+			$this->stub_default_locality_options( 'prov-a' );
+			$this->activate( [ $failing ] );
+			$service = $this->saved_city_service( Location_Provider_Registry::instance(), 'Бутово' );
+			$this->assertNull( $service->get_customer_record() );
+			$this->assertNull( $service->get_customer_record() );
+			$this->assertCount( 1, $failing->suggest_calls );
+			$this->assertCount( 1, $service->misses );
+		}
+
+		public function test_a_changed_saved_city_is_tried_again(): void {
+			$provider = new Default_Test_Fake_Provider( 'prov-a', static fn() => [] );
+			$this->stub_default_locality_options( 'prov-a' );
+			$registry = $this->activate( [ $provider ] );
+			$service  = $this->saved_city_service( $registry, 'Бутово' );
+
+			$this->assertNull( $service->get_customer_record() );
+
+			$service->saved_city = 'Чехов';
+
+			$this->assertNull( $service->get_customer_record() );
+			$this->assertCount( 2, $provider->suggest_calls, 'a different saved city re-queries' );
+		}
+
+		public function test_a_guest_saved_city_is_never_resolved(): void {
+			$provider = new Default_Test_Fake_Provider( 'prov-a', fn() => [ $this->butovo( 'prov-a:butovo' ) ] );
+			$this->stub_default_locality_options( 'prov-a' );
+			$registry = $this->activate( [ $provider ] );
+			$service  = $this->saved_city_service( $registry, 'Бутово' );
+
+			$service->resolves = false;
+
+			$this->assertNull( $service->get_customer_record() );
+			$this->assertCount( 0, $provider->suggest_calls );
 		}
 
 		public function test_policy_fixed_never_overwrites_an_existing_explicit_record(): void {

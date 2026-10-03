@@ -86,7 +86,7 @@ function installMarkup( which, country = 'RU' ) {
 		inputs += `<input type="text" id="${ fieldIdFor( 'region', section ) }" name="${ fieldIdFor( 'region', section ) }" value="" />`;
 	}
 	if ( w.settlement ) {
-		inputs += `<input type="text" id="${ fieldIdFor( 'settlement', section ) }" name="${ fieldIdFor( 'settlement', section ) }" value="" />`;
+		inputs += `<input type="text" id="${ fieldIdFor( 'settlement', section ) }" name="${ fieldIdFor( 'settlement', section ) }" value="${ w.settlementValue || '' }" />`;
 	}
 	if ( w.address ) {
 		inputs += `<input type="text" id="${ fieldIdFor( 'address', section ) }" name="${ fieldIdFor( 'address', section ) }" value="" />`;
@@ -235,6 +235,8 @@ function buildConfig( opts ) {
 			// convention — "no `defaultLocality` key at all" (an older server) is exercised
 			// as its own real case by every other test in this file.
 			...( o.defaultLocality !== undefined ? { defaultLocality: o.defaultLocality } : {} ),
+			// Issue #1075: the saved city text when it has no record — omitted unless a test opts in.
+			...( o.savedCityUnresolved !== undefined ? { savedCityUnresolved: o.savedCityUnresolved } : {} ),
 			// Issue #296: steps 2+3 of the checkout-field -> WC-store-setting -> RU chain,
 			// already merged into ONE value server-side by Location_Service::resolve_default_country().
 			defaultCountry: o.defaultCountry !== undefined ? o.defaultCountry : 'RU',
@@ -248,6 +250,7 @@ function buildConfig( opts ) {
 				// Issue #361: DISTINCT from noResults/noResultsAddress above — see
 				// emptyTextFor()'s own docblock in the module under test.
 				scopeWidened: 'Показаны результаты по более широкой области — не только по вашему выбору.',
+				pickFromSuggestions: 'Выберите населённый пункт из списка подсказок',
 			},
 		},
 	};
@@ -8841,5 +8844,131 @@ describe( 'options.pickedSettlement() — issue #1071', () => {
 		settlement.onSelect( { record: KZ } );
 
 		expect( settlement.pickedSettlement() ).toEqual( { name: 'Казань' } );
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// Issue #1075 — a saved city with no location record
+// -----------------------------------------------------------------------
+describe( 'a saved city that resolved to no record (#1075)', () => {
+	const hint = () => document.querySelector( '.woodev-location-notice' );
+	const address = () => document.getElementById( 'billing_address_1' );
+
+	it( 'keeps the address LIVE and shows the pick hint while the city text is the saved one', () => {
+		boot( { settlement: true, address: true, settlementValue: 'Бутово', savedCityUnresolved: 'Бутово' } );
+
+		expect( address().disabled ).toBe( false );
+		expect( address().classList.contains( 'woodev-location-locked' ) ).toBe( false );
+		expect( hint() ).not.toBeNull();
+		expect( hint().textContent ).toContain( 'Выберите населённый пункт из списка подсказок' );
+	} );
+
+	it( 'locks the address and shows no hint when the config carries no such city (control)', () => {
+		boot( { settlement: true, address: true, settlementValue: 'Бутово' } );
+
+		expect( address().disabled ).toBe( true );
+		expect( hint() ).toBeNull();
+	} );
+
+	it( 'locks the address again once the city text no longer is the saved one', () => {
+		boot( { settlement: true, address: true, settlementValue: 'Другой', savedCityUnresolved: 'Бутово' } );
+
+		expect( address().disabled ).toBe( true );
+		expect( hint() ).toBeNull();
+	} );
+
+	it( 'a restored record wins: the chain unlocks as before and no hint is shown', () => {
+		boot( {
+			settlement: true, address: true, settlementValue: 'Бутово',
+			current: { key: 'dadata:butovo', level: 'settlement' },
+			chain: { settlement: { key: 'dadata:butovo', level: 'settlement' } },
+		} );
+
+		expect( address().disabled ).toBe( false );
+		expect( hint() ).toBeNull();
+	} );
+
+	describe( 'select-backed settlement (ajax-select2, the default mode)', () => {
+		const bootReal = ( settlementValue, saved ) => {
+			installMarkup( { settlement: true, address: true, settlementValue }, 'RU' );
+
+			global.jQuery = require( 'jquery' );
+			global.$ = global.jQuery;
+			window.jQuery = global.jQuery;
+
+			window.WoodevCheckoutFieldStore = require(
+				'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
+			);
+
+			fakeTypeahead();
+			mockFetch();
+
+			require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
+
+			installFakeSelect2( window.jQuery );
+
+			window[ CONFIG_GLOBAL ] = buildConfig( {
+				settlement: true, address: true, mode: { settlement: 'ajax-select2' },
+				...( saved ? { savedCityUnresolved: saved } : {} ),
+			} );
+
+			require( '../../woodev/shipping-method/assets/js/frontend/location-cascade.js' );
+		};
+
+		it( 'keeps the address live and shows the hint when the seeded <option> holds the saved city', () => {
+			bootReal( 'Несуществующск', 'Несуществующск' );
+
+			const select = document.getElementById( 'billing_city' );
+
+			expect( select.tagName ).toBe( 'SELECT' );
+			expect( address().disabled ).toBe( false );
+			expect( address().classList.contains( 'woodev-location-locked' ) ).toBe( false );
+			expect( hint() ).not.toBeNull();
+			expect( hint().textContent ).toContain( 'Выберите населённый пункт из списка подсказок' );
+		} );
+
+		it( 'locks the address and shows no hint without a saved-city config (control)', () => {
+			bootReal( 'Несуществующск', null );
+
+			expect( address().disabled ).toBe( true );
+			expect( hint() ).toBeNull();
+		} );
+
+		it( 'savedCityIsUnresolved is false once a different option is selected', () => {
+			bootReal( 'Несуществующск', 'Несуществующск' );
+
+			const select = document.getElementById( 'billing_city' );
+			const picked = document.createElement( 'option' );
+
+			picked.value = 'Москва';
+			picked.textContent = 'Москва';
+			select.appendChild( picked );
+			select.value = 'Москва';
+			window.jQuery( select ).trigger( 'change' );
+
+			expect( address().disabled ).toBe( true );
+		} );
+	} );
+
+	it( 'a plain <select> whose selected option text is the saved city counts as unresolved', () => {
+		installMarkup( { settlement: true, address: true }, 'RU' );
+		const input = document.getElementById( 'billing_city' );
+		const select = document.createElement( 'select' );
+
+		select.id = 'billing_city';
+		select.name = 'billing_city';
+		select.innerHTML = '<option value="БУТОВО" selected>Бутово</option>';
+		input.replaceWith( select );
+
+		global.jQuery = require( 'jquery' );
+		global.$ = global.jQuery;
+		window.jQuery = global.jQuery;
+		window.WoodevCheckoutFieldStore = require( '../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js' );
+		fakeTypeahead();
+		mockFetch();
+		window[ CONFIG_GLOBAL ] = buildConfig( { settlement: true, address: true, savedCityUnresolved: 'Бутово' } );
+		require( '../../woodev/shipping-method/assets/js/frontend/location-cascade.js' );
+
+		expect( address().disabled ).toBe( false );
 	} );
 } );
