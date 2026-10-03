@@ -546,6 +546,40 @@ class ShippingOrdersRegistryTest extends TestCase {
 	}
 
 	/**
+	 * #947: the fingerprint an order's shipping metabox later compares against is taken on the same
+	 * framework-wide action, so every successful export — first, retried or reconciled — stores it.
+	 */
+	public function test_add_hooks_subscribes_the_shipment_fingerprint_to_the_order_exported_action(): void {
+		$calls = [];
+		Functions\when( 'add_action' )->alias(
+			static function ( ...$args ) use ( &$calls ): void {
+				$calls[] = $args;
+			}
+		);
+
+		$registry = $this->registryOnWcAdminScreen();
+		$registry->register_provider( $this->provider( 'cdek' ) );
+
+		$found = false;
+		foreach ( $calls as $call ) {
+			if ( 'woodev_shipping_order_exported' === $call[0] && [ $registry, 'record_shipment_fingerprint' ] === $call[1] ) {
+				$found = true;
+			}
+		}
+
+		$this->assertTrue( $found, 'add_hooks() must subscribe record_shipment_fingerprint() to woodev_shipping_order_exported' );
+
+		$snapshot = false;
+		foreach ( $calls as $call ) {
+			if ( 'woodev_shipping_order_export_requested' === $call[0] && [ $registry, 'snapshot_shipment_fingerprint' ] === $call[1] ) {
+				$snapshot = true;
+			}
+		}
+
+		$this->assertTrue( $snapshot, 'add_hooks() must subscribe snapshot_shipment_fingerprint() to woodev_shipping_order_export_requested' );
+	}
+
+	/**
 	 * Card #856: the order-edit metabox is built by the FRAMEWORK the moment at
 	 * least one provider is registered — the same trigger that builds the
 	 * «Заказы доставки» page — never by a carrier plugin constructing

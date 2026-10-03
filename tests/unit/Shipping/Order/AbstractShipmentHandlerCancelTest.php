@@ -116,6 +116,46 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 					)
 				);
 			$order->shouldReceive( 'save_meta_data' )->once();
+			$order->shouldReceive( 'get_meta' )->with( '_woodev_shipment_fingerprint' )->andReturn( '' );
+			$order->shouldReceive( 'get_meta' )->with( '_woodev_shipment_fingerprint_pending' )->andReturn( '' );
+
+			$this->handler( $api, $order_handler )->cancel( $order );
+		}
+
+		/**
+		 * #947: with no live shipment there is nothing for the order to be «changed after export» against.
+		 */
+		public function test_a_successful_cancel_removes_the_shipment_fingerprint(): void {
+			$api = Mockery::mock( '\\Woodev\\Framework\\Shipping\\Api\\Shipping_API' );
+			$api->shouldReceive( 'cancel_order' )->once()->with( 'CARRIER-1' );
+
+			$order_handler = Mockery::mock( Shipping_Order_Handler::class );
+			$order_handler->shouldReceive( 'get' )->andReturn( 'CARRIER-1' );
+			$order_handler->shouldReceive( 'set' )->once();
+
+			$order = Mockery::mock( '\\WC_Order' );
+			$order->shouldReceive( 'update_meta_data' )->with( '_woodev_shipment_cancelled_at', Mockery::type( 'int' ) );
+			$order->shouldReceive( 'get_meta' )->with( '_woodev_shipment_fingerprint' )->andReturn( 'v1:abc' );
+			$order->shouldReceive( 'get_meta' )->with( '_woodev_shipment_fingerprint_pending' )->andReturn( 'v1:def' );
+			$order->shouldReceive( 'delete_meta_data' )->once()->with( '_woodev_shipment_fingerprint' );
+			$order->shouldReceive( 'delete_meta_data' )->once()->with( '_woodev_shipment_fingerprint_pending' );
+			$order->shouldReceive( 'save_meta_data' );
+
+			$this->handler( $api, $order_handler )->cancel( $order );
+		}
+
+		/**
+		 * #947: a rejected cancellation leaves the shipment alive, so its fingerprint stays.
+		 */
+		public function test_a_failed_cancel_keeps_the_shipment_fingerprint(): void {
+			$api = Mockery::mock( '\\Woodev\\Framework\\Shipping\\Api\\Shipping_API' );
+			$api->shouldReceive( 'cancel_order' )->once()->andThrow( new \Woodev_API_Exception( 'carrier rejected' ) );
+
+			$order_handler = Mockery::mock( Shipping_Order_Handler::class );
+			$order_handler->shouldReceive( 'get' )->andReturn( 'CARRIER-1' );
+
+			$order = Mockery::mock( '\\WC_Order' );
+			$order->shouldNotReceive( 'delete_meta_data' );
 
 			$this->handler( $api, $order_handler )->cancel( $order );
 		}
@@ -126,6 +166,8 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 		private function order_expecting_the_cancellation_marker() {
 			$order = Mockery::mock( '\WC_Order' );
 			$order->shouldReceive( 'update_meta_data' )->with( '_woodev_shipment_cancelled_at', Mockery::type( 'int' ) );
+			$order->shouldReceive( 'get_meta' )->with( '_woodev_shipment_fingerprint' )->andReturn( '' );
+			$order->shouldReceive( 'get_meta' )->with( '_woodev_shipment_fingerprint_pending' )->andReturn( '' );
 			$order->shouldReceive( 'save_meta_data' );
 
 			return $order;

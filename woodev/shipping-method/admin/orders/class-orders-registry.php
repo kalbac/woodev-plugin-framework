@@ -616,6 +616,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 *              ({@see Export_Queue_Notice}).
 		 * @since 2.0.2 Card #1007 (round 2): also hooks {@see self::check_auto_export_contract()}
 		 *              onto `admin_menu`, priority 41, beside the method-ids contract check.
+		 * @since 2.0.2 Card #947: also subscribes {@see self::snapshot_shipment_fingerprint()} to
+		 *              `woodev_shipping_order_export_requested` and {@see self::record_shipment_fingerprint()}
+		 *              to `woodev_shipping_order_exported`.
 		 *
 		 * @return void
 		 */
@@ -632,6 +635,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_assets' ] );
 			add_action( 'rest_api_init', [ $this, 'register_rest' ], 5 );
 			add_action( 'woodev_shipping_order_exported', [ $this, 'flush_new_order_counts' ] );
+			add_action( 'woodev_shipping_order_export_requested', [ $this, 'snapshot_shipment_fingerprint' ] );
+			add_action( 'woodev_shipping_order_exported', [ $this, 'record_shipment_fingerprint' ] );
 			add_action( Export_Retry::HOOK, [ $this, 'run_export_retry' ] );
 			add_action( Carrier_Cancel::HOOK, [ $this, 'run_cancel_at_carrier' ] );
 			add_action( 'woocommerce_order_status_changed', [ $this, 'handle_order_status_changed' ], 20, 4 );
@@ -1147,6 +1152,42 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 */
 		public function flush_new_order_counts(): void {
 			delete_transient( self::NEW_COUNTS_TRANSIENT );
+		}
+
+		/**
+		 * Takes the pending fingerprint of an order as the carrier request is built (#947).
+		 *
+		 * Subscribed by {@see self::add_hooks()} to the framework-wide
+		 * `woodev_shipping_order_export_requested` action, which fires just before the create call.
+		 * The snapshot is only promoted to the stored fingerprint when the export succeeds
+		 * ({@see self::record_shipment_fingerprint()}).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order the order the request is built from.
+		 * @return void
+		 */
+		public function snapshot_shipment_fingerprint( \WC_Order $order ): void {
+			( new Shipment_Freshness( $this ) )->snapshot( $order );
+		}
+
+		/**
+		 * Promotes the pending fingerprint of an order the moment it is exported (#947).
+		 *
+		 * Subscribed by {@see self::add_hooks()} to the framework-wide
+		 * `woodev_shipping_order_exported` action, which fires after the carrier order id is stored —
+		 * for a first export, a retry and a reconciled one alike. What is promoted is the snapshot of
+		 * the request, never the order as it is now. The order's shipping metabox compares the stored
+		 * value with the order later and warns when they differ ({@see Shipment_Freshness}). Cancelling
+		 * the shipment removes it ({@see Abstract_Shipment_Handler::cancel()}).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order the exported order.
+		 * @return void
+		 */
+		public function record_shipment_fingerprint( \WC_Order $order ): void {
+			( new Shipment_Freshness( $this ) )->record( $order );
 		}
 
 		/**
