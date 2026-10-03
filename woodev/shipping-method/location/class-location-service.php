@@ -361,18 +361,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 				return $current;
 			}
 
+			// #1075: the store's default never overrides a city WooCommerce already holds
+			// for the customer (profile meta or the session's customer) — the saved text
+			// stays in the field. Checked BEFORE the memoized unpersisted default is
+			// served, and never memoized itself: the customer can gain a city later in the request.
+			if ( '' !== $this->customer_saved_city() ) {
+				return null;
+			}
+
 			if ( null !== $this->unpersisted_default ) {
 				return $this->is_customer_record_stale( $this->unpersisted_default, $for_country )
 					? null
 					: self::implicit_entry( $this->unpersisted_default );
-			}
-
-			// #1075: the store's default never overrides a city WooCommerce already holds
-			// for the customer (profile meta or the session's customer) — the saved text
-			// stays in the field. Not memoized: it is a cheap in-memory read, and the
-			// customer object can gain a city later in the request.
-			if ( '' !== $this->customer_saved_city() ) {
-				return null;
 			}
 
 			// A customer's own record is read here, so the lazy default-locality lookup — geoip

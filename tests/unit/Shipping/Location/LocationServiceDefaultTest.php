@@ -103,7 +103,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 	 */
 	final class Default_Test_Saved_City_Service extends Location_Service {
 
-		private string $saved_city;
+		public string $saved_city;
 
 		public function __construct( Location_Provider_Registry $registry, Customer_Location_Store $store, string $saved_city ) {
 			parent::__construct( $registry, $store );
@@ -560,6 +560,21 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			$this->assertNotNull( $fetched );
 			$this->assertTrue( $fetched['implicit'] );
+		}
+
+		public function test_a_city_arriving_after_an_unpersisted_default_was_resolved_retires_the_default(): void {
+			$provider = new Default_Test_Fake_Provider( 'prov-a', static fn() => [] );
+			$stored   = $this->record( 'prov-a:city-1' );
+			$this->stub_default_locality_options( 'prov-a', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED, wp_json_encode( $stored->to_array() ) );
+			$registry = $this->activate( [ $provider ] );
+			// No session: the store cannot persist, so the default is memoized in memory only.
+			$service = new Default_Test_Saved_City_Service( $registry, new Default_Test_Customer_Store_Probe( null ), '' );
+
+			$this->assertNotNull( $service->get_customer_record(), 'resolved while the customer has no city' );
+
+			$service->saved_city = 'Бутово';
+
+			$this->assertNull( $service->get_customer_record(), 'the memoized default must not outlive a saved city' );
 		}
 
 		public function test_a_saved_city_never_hides_an_existing_record(): void {
