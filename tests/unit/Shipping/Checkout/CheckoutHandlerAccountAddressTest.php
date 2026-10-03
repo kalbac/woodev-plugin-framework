@@ -203,19 +203,27 @@ class CheckoutHandlerAccountAddressTest extends TestCase {
 		);
 	}
 
-	private function customer( string $billing_city, string $shipping_city ): object {
-		return new class( $billing_city, $shipping_city ) {
+	private function customer( string $billing_city, string $shipping_city, string $country = 'RU' ): object {
+		return new class( $billing_city, $shipping_city, $country ) {
 			private string $billing;
 			private string $shipping;
-			public function __construct( string $billing, string $shipping ) {
+			private string $country;
+			public function __construct( string $billing, string $shipping, string $country ) {
 				$this->billing  = $billing;
 				$this->shipping = $shipping;
+				$this->country  = $country;
 			}
 			public function get_billing_city(): string {
 				return $this->billing;
 			}
 			public function get_shipping_city(): string {
 				return $this->shipping;
+			}
+			public function get_billing_country(): string {
+				return $this->country;
+			}
+			public function get_shipping_country(): string {
+				return $this->country;
 			}
 		};
 	}
@@ -437,7 +445,7 @@ class CheckoutHandlerAccountAddressTest extends TestCase {
 			$handler->saved = $this->customer( $shipping, $shipping );
 			$handler->handle_customer_save_address( 7, 'shipping' );
 		} else {
-			$handler->handle_customer_save_address( 7, 'shipping', [], $this->customer( $shipping, $shipping ) );
+			$handler->handle_customer_save_address( 7, 'shipping', [], $this->customer( $shipping, $shipping, $options['country'] ?? 'RU' ) );
 		}
 
 		return $service;
@@ -475,6 +483,33 @@ class CheckoutHandlerAccountAddressTest extends TestCase {
 
 		$this->assertSame( [], $service->written );
 		$this->assertSame( 1, $service->forgotten );
+	}
+
+	public function test_a_country_change_with_the_same_city_text_and_no_pick_forgets_the_record(): void {
+		// Kazan, RU is stored; the customer saved country KZ and typed «Казань» again.
+		$service = $this->save_with_pick( '', 'Казань', $this->record(), [ 'country' => 'KZ' ] );
+
+		$this->assertSame( [], $service->written );
+		$this->assertSame( 1, $service->forgotten );
+	}
+
+	public function test_a_pick_from_another_country_than_the_saved_one_is_not_persisted(): void {
+		$service = $this->save_with_pick( $this->picked_json(), 'Казань', null, [ 'country' => 'KZ' ] );
+
+		$this->assertSame( [], $service->written );
+	}
+
+	public function test_a_pick_from_another_country_forgets_the_stale_stored_record(): void {
+		$service = $this->save_with_pick( $this->picked_json(), 'Казань', $this->record(), [ 'country' => 'KZ' ] );
+
+		$this->assertSame( [], $service->written );
+		$this->assertSame( 1, $service->forgotten );
+	}
+
+	public function test_the_same_country_in_another_letter_case_still_keeps_the_record(): void {
+		$service = $this->save_with_pick( '', 'Казань', $this->record(), [ 'country' => 'ru' ] );
+
+		$this->assertSame( 0, $service->forgotten );
 	}
 
 	public function test_a_malformed_or_non_settlement_picked_record_falls_back_to_the_forget_path(): void {

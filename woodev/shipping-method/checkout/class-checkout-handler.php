@@ -1220,13 +1220,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			$billing      = (string) $customer->get_billing_city();
 			$shipping     = (string) $customer->get_shipping_city();
 			$billing_only = function_exists( 'wc_ship_to_billing_address_only' ) && wc_ship_to_billing_address_only();
-			$city         = $billing_only || '' === self::normalize_for_settlement_match( $shipping ) ? $billing : $shipping;
+			$use_billing  = $billing_only || '' === self::normalize_for_settlement_match( $shipping );
+			$city         = $use_billing ? $billing : $shipping;
+			$country      = $use_billing ? $this->saved_country( $customer, 'billing' ) : $this->saved_country( $customer, 'shipping' );
 
-			if ( $this->persist_picked_record_naming_city( $city ) ) {
+			if ( $this->persist_picked_record_naming_city( $city, $country ) ) {
 				return;
 			}
 
-			$this->forget_record_unless_it_names_city( $city );
+			$this->forget_record_unless_it_names_city( $city, $country );
 		}
 
 		/**
@@ -1299,7 +1301,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 *
 		 * @return bool Whether the record was written; `false` leaves the caller to the forget path.
 		 */
-		private function persist_picked_record_naming_city( string $city ): bool {
+		private function persist_picked_record_naming_city( string $city, string $country = '' ): bool {
 			if ( '' === self::normalize_for_settlement_match( $city ) ) {
 				return false;
 			}
@@ -1329,7 +1331,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			}
 
 			if ( \Woodev\Framework\Shipping\Location\Location_Record::LEVEL_SETTLEMENT !== $record->level()
-				|| ! $this->city_names_record( $city, $record )
+				|| ! $this->city_names_record( $city, $record, $country )
 				|| ! $service->accepts_posted_pick( $record ) ) {
 				return false;
 			}
@@ -1340,16 +1342,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		/**
 		 * Forgets the customer's stored settlement record when `$city` — the text WooCommerce
 		 * saved — no longer names it (shared by the cart calculator, #331, and the My Account
-		 * address forms, #332). A blank city, an inactive layer or a customer without a
-		 * settlement-level record change nothing.
+		 * address forms, #332). A given `$country` (the saved country of the same address) must
+		 * also match the record's — a record from another country is forgotten. A blank city,
+		 * an inactive layer or a customer without a settlement-level record change nothing.
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param string $city The saved city text.
+		 * @param string $city    The saved city text.
+		 * @param string $country The saved country code of that address, or `''` to judge the city alone.
 		 *
 		 * @return void
 		 */
-		private function forget_record_unless_it_names_city( string $city ): void {
+		private function forget_record_unless_it_names_city( string $city, string $country = '' ): void {
 			if ( '' === self::normalize_for_settlement_match( $city ) ) {
 				return;
 			}
@@ -1362,7 +1366,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 
 			$record = $service->get_customer_record_at( 'settlement' );
 
-			if ( null !== $record && ! $this->city_names_record( $city, $record ) ) {
+			if ( null !== $record && ! $this->city_names_record( $city, $record, $country ) ) {
 				$service->forget_customer_record();
 			}
 		}
@@ -1370,21 +1374,46 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		/**
 		 * Whether `$city` (a saved free-text city) names the settlement of `$record`, compared
 		 * the way WooCommerce's text and the record's bare name can meet
-		 * ({@see self::normalize_city_for_comparison()}).
+		 * ({@see self::normalize_city_for_comparison()}). When `$country` — the saved country of
+		 * the SAME address the city is judged from — is given, the record must also belong to it:
+		 * the same city text in another country is a different place. A blank `$country` judges
+		 * the city alone.
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param string                                              $city   The saved city text.
-		 * @param \Woodev\Framework\Shipping\Location\Location_Record $record The stored record.
+		 * @param string                                              $city    The saved city text.
+		 * @param \Woodev\Framework\Shipping\Location\Location_Record $record  The stored record.
+		 * @param string                                              $country The saved country code of that address, or `''`.
 		 *
 		 * @return bool
 		 */
-		private function city_names_record( string $city, \Woodev\Framework\Shipping\Location\Location_Record $record ): bool {
+		private function city_names_record( string $city, \Woodev\Framework\Shipping\Location\Location_Record $record, string $country = '' ): bool {
+			if ( '' !== $country && strtoupper( $country ) !== strtoupper( $record->country() ) ) {
+				return false;
+			}
+
 			$settlement = $record->settlement();
 			$type       = null !== $settlement ? (string) $settlement['type'] : '';
 
 			return self::normalize_city_for_comparison( $city, $type )
 				=== self::normalize_city_for_comparison( self::settlement_record_value( $record ), $type );
+		}
+
+		/**
+		 * The country code WooCommerce saved on one address of `$customer`, `''` when the
+		 * customer cannot say (see {@see self::city_names_record()}).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param object $customer The saved `WC_Customer`.
+		 * @param string $type     `'billing'` or `'shipping'`.
+		 *
+		 * @return string
+		 */
+		private function saved_country( object $customer, string $type ): string {
+			$getter = 'get_' . $type . '_country';
+
+			return is_callable( [ $customer, $getter ] ) ? (string) $customer->$getter() : '';
 		}
 
 		/**
