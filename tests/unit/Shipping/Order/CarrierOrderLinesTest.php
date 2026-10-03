@@ -226,6 +226,128 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$this->assertSame( 10500, self::unit_total( $lines ) );
 		}
 
+		public function test_keeps_fees_separate_when_apportionment_is_requested_without_reconciliation(): void {
+			Functions\when( 'wc_get_price_decimals' )->justReturn( 2 );
+			$order = $this->order(
+				[ 1 => $this->item( 'Товар', 'SKU', 1 ) ],
+				[ 'fees' => [ 2 => $this->fee( 'Сбор', 5.00 ) ], 'get_item_total' => 100.00 ]
+			);
+			$lines = Carrier_Order_Lines::from_order( $order, false, false, true );
+
+			$this->assertSame( [ 'SKU', '' ], array_map( static function ( Carrier_Order_Line $line ): string {
+				return $line->get_sku();
+			}, $lines ) );
+			$this->assertSame( [ 10000, 500 ], array_map( static function ( Carrier_Order_Line $line ): int {
+				return $line->get_total_minor();
+			}, $lines ) );
+		}
+
+		public function test_from_order_throws_when_refunded_quantities_leave_no_lines_for_remaining_total(): void {
+			Functions\when( 'wc_get_price_decimals' )->justReturn( 2 );
+			$order = $this->order(
+				[ 1 => $this->item( 'Возврат', 'REF', 1 ) ],
+				[
+					'get_total' => '30.00',
+					'get_qty_refunded_for_item' => [ 1 => 1 ],
+				]
+			);
+			$this->expectException( \UnexpectedValueException::class );
+
+			Carrier_Order_Lines::from_order( $order, false, true );
+		}
+
+		public function test_reconciles_after_refunded_shipping_and_shipping_tax(): void {
+			Functions\when( 'wc_get_price_decimals' )->justReturn( 2 );
+			$order = $this->order(
+				[ 1 => $this->item( 'Товар', 'SKU', 1 ) ],
+				[
+					'get_total' => '122.00',
+					'get_total_refunded' => '6.00',
+					'get_shipping_total' => '10.00',
+					'get_shipping_tax' => '2.00',
+					'get_total_tax' => '12.00',
+					'get_total_tax_refunded' => '1.00',
+					'get_total_shipping_refunded' => '5.00',
+					'get_total_shipping_tax_refunded' => '1.00',
+					'get_item_total' => 100.00,
+				]
+			);
+			$lines = Carrier_Order_Lines::from_order( $order, false, true );
+
+			$this->assertSame( 10000, self::unit_total( $lines ) );
+		}
+
+		public function test_reconciles_tax_inclusive_and_exclusive_prices_after_a_taxed_product_refund(): void {
+			Functions\when( 'wc_get_price_decimals' )->justReturn( 2 );
+			$exclusive_order = $this->order(
+				[ 1 => $this->item( 'Товар', 'SKU', 3 ) ],
+				[
+					'get_total' => '120.00',
+					'get_total_refunded' => '36.00',
+					'get_shipping_total' => '10.00',
+					'get_shipping_tax' => '2.00',
+					'get_total_tax' => '20.00',
+					'get_total_tax_refunded' => '6.00',
+					'get_item_total' => 30.00,
+					'get_qty_refunded_for_item' => [ 1 => 1 ],
+				]
+			);
+			$inclusive_order = $this->order(
+				[ 1 => $this->item( 'Товар', 'SKU', 3 ) ],
+				[
+					'get_total' => '120.00',
+					'get_total_refunded' => '36.00',
+					'get_shipping_total' => '10.00',
+					'get_shipping_tax' => '2.00',
+					'get_total_tax' => '20.00',
+					'get_total_tax_refunded' => '6.00',
+					'get_item_total' => 36.00,
+					'inc_tax' => true,
+					'get_qty_refunded_for_item' => [ 1 => 1 ],
+				]
+			);
+
+			$exclusive = Carrier_Order_Lines::from_order( $exclusive_order, false, true );
+			$inclusive = Carrier_Order_Lines::from_order( $inclusive_order, true, true );
+
+			$this->assertSame( 6000, self::unit_total( $exclusive ) );
+			$this->assertSame( 7200, self::unit_total( $inclusive ) );
+		}
+
+		public function test_skips_fully_refunded_fee_including_its_refunded_tax(): void {
+			Functions\when( 'wc_get_price_decimals' )->justReturn( 2 );
+			$order = $this->order(
+				[],
+				[
+					'fees' => [ 2 => $this->fee( 'Сбор', 5.00, 2.00, [ 'total' => [ 1 => '2.00' ] ] ) ],
+					'get_total_refunded_for_item' => [ 2 => 5.00 ],
+					'get_tax_refunded_for_item' => [ 2 => [ 1 => 2.00 ] ],
+				]
+			);
+			$lines = Carrier_Order_Lines::from_order( $order, true );
+
+			$this->assertSame( [], $lines );
+		}
+
+		public function test_reconciles_fractional_remaining_quantity_after_refund(): void {
+			Functions\when( 'wc_get_price_decimals' )->justReturn( 2 );
+			$order = $this->order(
+				[ 1 => $this->item( 'Товар', 'SKU', 3 ) ],
+				[
+					'get_total' => '100.00',
+					'get_total_refunded' => '45.00',
+					'get_shipping_total' => '10.00',
+					'get_item_total' => 30.00,
+					'get_qty_refunded_for_item' => [ 1 => -1.5 ],
+				]
+			);
+			$lines = Carrier_Order_Lines::from_order( $order, false, true );
+
+			$this->assertCount( 1, $lines );
+			$this->assertSame( 1, $lines[0]->get_quantity() );
+			$this->assertSame( 4500, self::unit_total( $lines ) );
+		}
+
 		public function test_represents_fractional_quantity_as_one_line_with_full_value(): void {
 			Functions\when( 'wc_get_price_decimals' )->justReturn( 2 );
 			$item  = $this->item( 'Половина', 'HALF', 0.5 );
@@ -302,13 +424,13 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 		 * @param float  $total Fee total.
 		 * @return \WC_Order_Item_Fee
 		 */
-		private function fee( string $name, float $total ): \WC_Order_Item_Fee {
+		private function fee( string $name, float $total, float $total_tax = 0.00, array $taxes = [] ): \WC_Order_Item_Fee {
 			$fee = Mockery::mock( '\\WC_Order_Item_Fee' );
 			$fee->shouldReceive( 'get_name' )->andReturn( $name );
 			$fee->shouldReceive( 'get_total' )->andReturn( $total );
-			$fee->shouldReceive( 'get_total_tax' )->andReturn( 0.00 );
+			$fee->shouldReceive( 'get_total_tax' )->andReturn( $total_tax );
 			$fee->shouldReceive( 'get_tax_class' )->andReturn( '' );
-			$fee->shouldReceive( 'get_taxes' )->andReturn( [] );
+			$fee->shouldReceive( 'get_taxes' )->andReturn( $taxes );
 
 			return $fee;
 		}
@@ -339,8 +461,18 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$order->shouldReceive( 'get_total_shipping_refunded' )->andReturn( $overrides['get_total_shipping_refunded'] ?? '0.00' );
 			$order->shouldReceive( 'get_total_shipping_tax_refunded' )->andReturn( $overrides['get_total_shipping_tax_refunded'] ?? '0.00' );
 			$order->shouldReceive( 'get_total_tax_refunded' )->andReturn( $overrides['get_total_tax_refunded'] ?? '0.00' );
-			$order->shouldReceive( 'get_total_refunded_for_item' )->andReturn( $overrides['get_total_refunded_for_item'] ?? 0.00 );
-			$order->shouldReceive( 'get_tax_refunded_for_item' )->andReturn( $overrides['get_tax_refunded_for_item'] ?? 0.00 );
+			$order->shouldReceive( 'get_total_refunded_for_item' )->andReturnUsing(
+				static function ( int $item_id, string $item_type = 'line_item' ) use ( $overrides ): float {
+					$refunds = $overrides['get_total_refunded_for_item'] ?? [];
+					return $refunds[ $item_id ] ?? ( is_numeric( $refunds ) ? (float) $refunds : 0.00 );
+				}
+			);
+			$order->shouldReceive( 'get_tax_refunded_for_item' )->andReturnUsing(
+				static function ( int $item_id, int $tax_id, string $item_type = 'line_item' ) use ( $overrides ): float {
+					$refunds = $overrides['get_tax_refunded_for_item'] ?? [];
+					return $refunds[ $item_id ][ $tax_id ] ?? 0.00;
+				}
+			);
 
 			return $order;
 		}

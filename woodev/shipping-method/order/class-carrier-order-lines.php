@@ -20,6 +20,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Carrier_Order_Lines'
 
 		/**
 		 * Builds product and fee lines from an order; shipping remains separate.
+		 * Fees are folded into product prices only when reconciliation is enabled.
 		 *
 		 * Refunded quantities are removed before the line is built. Fractional remaining
 		 * quantities are represented as one unit carrying the whole line total. When
@@ -31,13 +32,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Carrier_Order_Lines'
 		 * @param \WC_Order $order           Order being exported.
 		 * @param bool      $inc_tax         Whether to use tax-inclusive item prices.
 		 * @param bool      $reconcile_total Whether to reconcile to the remaining order total.
-		 * @param bool      $apportion_fees  Whether to fold fees into product prices instead of returning fee lines.
+		 * @param bool      $apportion_fees  Whether to fold fees into product prices during reconciliation; ignored otherwise.
 		 * @return Carrier_Order_Line[]
+		 * @throws \UnexpectedValueException When the remaining order total cannot be reconciled.
 		 */
 		public static function from_order( \WC_Order $order, bool $inc_tax = false, bool $reconcile_total = false, bool $apportion_fees = false ): array {
 			$lines     = [];
 			$fee_lines = [];
 			$decimals  = wc_get_price_decimals();
+			$apportion = $apportion_fees && $reconcile_total;
 
 			foreach ( $order->get_items( 'line_item' ) as $item_id => $item ) {
 				if ( ! $item instanceof \WC_Order_Item_Product ) {
@@ -63,8 +66,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Carrier_Order_Lines'
 				if ( 1 === $line_quantity && floor( $quantity ) !== $quantity ) {
 					$unit_price = $line_total;
 				}
-				$product    = $item->get_product();
-				$tax_info   = [
+				$product  = $item->get_product();
+				$tax_info = [
 					'tax_class'    => $item->get_tax_class(),
 					'tax_status'   => $product ? $product->get_tax_status() : '',
 					'taxes'        => $item->get_taxes(),
@@ -81,7 +84,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Carrier_Order_Lines'
 				);
 			}
 
-			if ( ! $apportion_fees ) {
+			if ( ! $apportion ) {
 				foreach ( $order->get_items( 'fee' ) as $item_id => $item ) {
 					if ( ! $item instanceof \WC_Order_Item_Fee ) {
 						continue;
@@ -101,7 +104,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Carrier_Order_Lines'
 					}
 
 					$fee_minor = self::to_minor_units( $fee_total, $decimals );
-					$fee_lines[]   = new Carrier_Order_Line(
+
+					if ( 0 === $fee_minor ) {
+						continue;
+					}
+
+					$fee_lines[] = new Carrier_Order_Line(
 						(string) $item->get_name(),
 						'',
 						1,
@@ -119,11 +127,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Carrier_Order_Lines'
 			if ( $reconcile_total ) {
 				$target = self::order_lines_target( $order, $inc_tax, $decimals );
 
-				if ( ! $apportion_fees ) {
+				if ( ! $apportion ) {
 					$target -= self::fee_lines_total( $fee_lines );
 				}
 
-				$lines = array_merge( self::reconcile( $lines, $target ), $apportion_fees ? [] : $fee_lines );
+				$lines = array_merge( self::reconcile( $lines, $target ), $apportion ? [] : $fee_lines );
 			} else {
 				$lines = array_merge( $lines, $fee_lines );
 			}
@@ -262,11 +270,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Carrier_Order_Lines'
 		 * @return int
 		 */
 		private static function order_lines_target( \WC_Order $order, bool $inc_tax, int $decimals ): int {
-			$total                   = (float) $order->get_total() - (float) $order->get_total_refunded();
-			$shipping_total          = (float) $order->get_shipping_total() - (float) $order->get_total_shipping_refunded();
-			$shipping_tax_refunded = self::shipping_tax_refunded( $order );
-			$shipping_tax            = (float) $order->get_shipping_tax() - $shipping_tax_refunded;
-			$remaining_tax            = (float) $order->get_total_tax() - (float) $order->get_total_tax_refunded();
+			$total                  = (float) $order->get_total() - (float) $order->get_total_refunded();
+			$shipping_total         = (float) $order->get_shipping_total() - (float) $order->get_total_shipping_refunded();
+			$shipping_tax_refunded  = self::shipping_tax_refunded( $order );
+			$shipping_tax           = (float) $order->get_shipping_tax() - $shipping_tax_refunded;
+			$remaining_tax          = (float) $order->get_total_tax() - (float) $order->get_total_tax_refunded();
 
 			if ( $inc_tax ) {
 				$shipping_total += $shipping_tax;
