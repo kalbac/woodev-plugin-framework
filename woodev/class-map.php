@@ -85,6 +85,8 @@ return [
 	'Woodev\\Framework\\Shipping\\Order\\Abstract_Webhook_Handler' => 'woodev/shipping-method/order/abstract-webhook-handler.php',
 	'Woodev\\Framework\\Shipping\\Order\\Action_Result' => 'woodev/shipping-method/order/class-action-result.php',
 	'Woodev\\Framework\\Shipping\\Order\\Carrier_Cancel' => 'woodev/shipping-method/order/class-carrier-cancel.php',
+	'Woodev\\Framework\\Shipping\\Order\\Carrier_Order_Line' => 'woodev/shipping-method/order/class-carrier-order-line.php',
+	'Woodev\\Framework\\Shipping\\Order\\Carrier_Order_Lines' => 'woodev/shipping-method/order/class-carrier-order-lines.php',
 	'Woodev\\Framework\\Shipping\\Order\\Delivery_Status' => 'woodev/shipping-method/order/class-delivery-status.php',
 	'Woodev\\Framework\\Shipping\\Order\\Delivery_Sync_Status' => 'woodev/shipping-method/order/class-delivery-sync-status.php',
 	'Woodev\\Framework\\Shipping\\Order\\Export_Queue' => 'woodev/shipping-method/order/class-export-queue.php',
