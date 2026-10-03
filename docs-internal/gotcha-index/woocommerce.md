@@ -36,3 +36,4 @@
 ## Related
 
 - [../GOTCHAS.md](../GOTCHAS.md) — the topic map
+- [woocommerce/hooks] **`woocommerce_customer_save_address` passes `$customer` only since WC 9.8 (before: `$user_id, $load_address`), and `WC()->customer` there is a pre-save copy — read `new WC_Customer( $user_id )`.** → [woocommerce-customer-save-address-passes-the-customer-only-since-9-8](../gotchas/woocommerce-customer-save-address-passes-the-customer-only-since-9-8.md) (s149)
