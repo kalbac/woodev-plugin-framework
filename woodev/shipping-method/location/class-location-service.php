@@ -176,6 +176,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		private bool $default_resolved = false;
 
 		/**
+		 * User meta holding the signature of the saved city that last resolved to no unambiguous
+		 * record (#1075) — the persisted negative cache.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		private const SAVED_CITY_MISS_META = '_woodev_location_saved_city_miss';
+
+		/**
+		 * Signature of the saved city already looked up in THIS request (#1075), so a miss costs
+		 * one provider call at most and a hit is not re-asked while the write settles.
+		 *
+		 * @since 2.0.2
+		 * @var string|null
+		 */
+		private ?string $saved_city_attempted = null;
+
+		/**
 		 * The memoized answer of {@see self::resolve_default()} — meaningful only while
 		 * {@see self::$default_resolved} is `true` (#1025).
 		 *
@@ -365,8 +383,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 			// for the customer (profile meta or the session's customer) — the saved text
 			// stays in the field. Checked BEFORE the memoized unpersisted default is
 			// served, and never memoized itself: the customer can gain a city later in the request.
-			if ( '' !== $this->customer_saved_city() ) {
-				return null;
+			$saved_city = $this->customer_saved_city();
+
+			if ( '' !== $saved_city ) {
+				// #1075 round 2: the saved city is resolved into a record ONCE (logged-in
+				// customers only) so the cascade has a settlement to scope the address by.
+				return $this->resolve_saved_city_entry( $saved_city, $for_country );
 			}
 
 			if ( null !== $this->unpersisted_default ) {
@@ -1219,7 +1241,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * @return string Trimmed city text, or '' when none is saved.
 		 */
 		protected function customer_saved_city(): string {
-			if ( ! function_exists( 'WC' ) || ! WC()->customer ) {
+			if ( ! function_exists( 'WC' ) || empty( WC()->customer ) ) {
 				return '';
 			}
 
@@ -1234,6 +1256,236 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 			}
 
 			return '';
+		}
+
+		/**
+		 * The city WooCommerce holds for the customer — the public face of
+		 * {@see self::customer_saved_city()}, for the checkout config's «saved city, no record»
+		 * signal (#1075).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string Trimmed city text, or '' when none is saved.
+		 */
+		public function get_saved_city(): string {
+			return $this->customer_saved_city();
+		}
+
+		/**
+		 * The display name of the region (WooCommerce state) of the address whose city
+		 * {@see self::customer_saved_city()} returns — shipping first, then billing. Used only
+		 * to narrow several same-named candidates (#1075), so an unknown state is `''`.
+		 *
+		 * `protected` as a test seam — same reasoning as {@see self::customer_saved_city()}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		protected function customer_saved_region_name(): string {
+			if ( ! function_exists( 'WC' ) || empty( WC()->customer ) ) {
+				return '';
+			}
+
+			$customer = WC()->customer;
+
+			foreach ( [ 'shipping', 'billing' ] as $address ) {
+				if ( '' === trim( (string) $customer->{"get_{$address}_city"}() ) ) {
+					continue;
+				}
+
+				$country = strtoupper( trim( (string) $customer->{"get_{$address}_country"}() ) );
+				$state   = trim( (string) $customer->{"get_{$address}_state"}() );
+				$states  = '' !== $country && ! empty( WC()->countries ) ? WC()->countries->get_states( $country ) : [];
+
+				return '' === $state ? '' : (string) ( is_array( $states ) && isset( $states[ $state ] ) ? $states[ $state ] : $state );
+			}
+
+			return '';
+		}
+
+		/**
+		 * Whether a saved city is resolved into a record for this customer — logged-in only
+		 * (#1075): a guest's «saved» city is whatever their own session typed.
+		 *
+		 * `protected` as a test seam.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		protected function resolves_saved_city(): bool {
+			return is_user_logged_in();
+		}
+
+		/**
+		 * The signature of the saved city the last provider lookup found nothing unambiguous
+		 * for, or `''` (#1075). Persisted per customer (user meta) so a non-matching city does
+		 * not re-query on every render; a changed saved city changes the signature and re-tries.
+		 *
+		 * `protected` as a test seam.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		protected function saved_city_miss_signature(): string {
+			return is_user_logged_in() ? (string) get_user_meta( get_current_user_id(), self::SAVED_CITY_MISS_META, true ) : '';
+		}
+
+		/**
+		 * Remembers `$signature` as a saved city that resolved to nothing (#1075).
+		 *
+		 * `protected` as a test seam.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $signature Hash of the customer's country, region and normalized saved city.
+		 *
+		 * @return void
+		 */
+		protected function remember_saved_city_miss( string $signature ): void {
+			if ( is_user_logged_in() ) {
+				update_user_meta( get_current_user_id(), self::SAVED_CITY_MISS_META, $signature );
+			}
+		}
+
+		/**
+		 * Resolves the city WooCommerce holds for a LOGGED-IN customer with no location record
+		 * into one (#1075, operator decision s149). Asks the settlement-level provider ONCE per
+		 * saved-city value: a unique normalized-name match is persisted as the customer's own
+		 * (explicit) record, so later requests need no call; no match, an ambiguous one or a
+		 * provider error is remembered as a miss and the city stays plain text. Guests are not
+		 * resolved. Never throws.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string      $saved_city  The trimmed saved city.
+		 * @param string|null $for_country See {@see self::get_customer_record()}.
+		 *
+		 * @return array{record: Location_Record, implicit: bool, saved_at: int}|null
+		 */
+		private function resolve_saved_city_entry( string $saved_city, ?string $for_country ): ?array {
+			if ( ! $this->resolves_saved_city() ) {
+				return null;
+			}
+
+			$country   = $this->customer_shipping_country();
+			$region    = $this->customer_saved_region_name();
+			$signature = md5( implode( '|', [ $country, self::normalize_place_name( $region ), self::normalize_place_name( $saved_city ) ] ) );
+
+			if ( $this->saved_city_attempted === $signature ) {
+				return null;
+			}
+
+			if ( $this->saved_city_miss_signature() === $signature ) {
+				$this->saved_city_attempted = $signature;
+
+				return null;
+			}
+
+			$this->saved_city_attempted = $signature;
+
+			$provider = $this->provider_for_level( Location_Record::LEVEL_SETTLEMENT, $country );
+			$match    = null;
+			$failed   = false;
+
+			if ( null === $provider ) {
+				return null;
+			}
+
+			try {
+				$records = \Woodev_API_Request_Purpose::run_at_checkout(
+					fn() => $provider->suggest( $saved_city, Location_Scope::for_country( $country, Location_Record::LEVEL_SETTLEMENT ) )
+				);
+				$match   = self::saved_city_match( (array) $records, $saved_city, $region );
+			} catch ( \Throwable $exception ) {
+				$failed = true;
+			}
+
+			if ( null === $match || $failed || $this->is_customer_record_stale( $match, $for_country ) ) {
+				$this->remember_saved_city_miss( $signature );
+
+				return null;
+			}
+
+			if ( $this->customer_store->set( $match, false ) ) {
+				$persisted = $this->gated_current_entry( $for_country );
+
+				if ( null !== $persisted ) {
+					return $persisted;
+				}
+			}
+
+			return [
+				'record'   => $match,
+				'implicit' => false,
+				'saved_at' => time(),
+			];
+		}
+
+		/**
+		 * The ONE settlement among `$records` whose normalized name equals the saved city,
+		 * narrowed by the saved region when several share the name; `null` when none or when
+		 * the name stays ambiguous (#1075).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<int, mixed> $records    Candidates from `suggest()`.
+		 * @param string            $saved_city The saved city text.
+		 * @param string            $region     The saved region's display name, or ''.
+		 *
+		 * @return Location_Record|null
+		 */
+		private static function saved_city_match( array $records, string $saved_city, string $region ): ?Location_Record {
+			$wanted  = self::normalize_place_name( $saved_city );
+			$matches = [];
+
+			foreach ( $records as $candidate ) {
+				if ( ! $candidate instanceof Location_Record || Location_Record::LEVEL_SETTLEMENT !== $candidate->level() ) {
+					continue;
+				}
+
+				$settlement = $candidate->settlement();
+				$name       = null !== $settlement ? (string) $settlement['name'] : $candidate->label();
+
+				if ( '' !== $wanted && self::normalize_place_name( $name ) === $wanted ) {
+					$matches[ $candidate->key() ] = $candidate;
+				}
+			}
+
+			if ( count( $matches ) > 1 && '' !== $region ) {
+				$wanted_region = self::normalize_place_name( $region );
+				$matches       = array_filter(
+					$matches,
+					static function ( Location_Record $candidate ) use ( $wanted_region ): bool {
+						$component = $candidate->region();
+						$name      = null !== $component ? self::normalize_place_name( (string) $component['name'] ) : '';
+
+						return '' !== $name && '' !== $wanted_region && ( false !== strpos( $name, $wanted_region ) || false !== strpos( $wanted_region, $name ) );
+					}
+				);
+			}
+
+			return 1 === count( $matches ) ? reset( $matches ) : null;
+		}
+
+		/**
+		 * Case, «ё» and settlement-type-prefix insensitive form of a place name («г. Бутово»,
+		 * «Бутово», «БУТОВО» compare equal) — for matching only, never displayed.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $name Raw name.
+		 *
+		 * @return string
+		 */
+		private static function normalize_place_name( string $name ): string {
+			$name = str_replace( 'ё', 'е', mb_strtolower( trim( $name ) ) );
+			$name = (string) preg_replace( '/[^\p{L}\p{N}\s-]+/u', ' ', $name );
+			$name = (string) preg_replace( '/^(?:(?:г|город|пгт|пос|посёлок|поселок|п|с|село|д|деревня|ст|станица|х|хутор)\s+)+/u', '', trim( $name ) );
+
+			return trim( (string) preg_replace( '/\s+/u', ' ', $name ) );
 		}
 
 		/**

@@ -3976,6 +3976,14 @@
 		// calculation exactly as before, because `scopeKeyFor()` itself is deliberately NOT
 		// changed here. Only the lock stops treating it as an answer.
 		if ( null === scopeKeyFor( entry, 'address' ) || settlementRecordIsImplicit( entry ) ) {
+			// ISSUE #1075 — the customer's SAVED city has no record and none could be resolved
+			// from it: the text is shown, the address must stay a live, submitted input (a
+			// disabled one is not posted and the order could never be placed); the hint beside
+			// the city asks for a pick, and the server's #531 guard still refuses an unlisted city.
+			if ( savedCityIsUnresolved( entry ) ) {
+				return false;
+			}
+
 			return ! settlementTextIsKnownUnresolved( entry );
 		}
 
@@ -4013,6 +4021,44 @@
 		var record = entry.records.settlement;
 
 		return !! ( record && record.implicit && 'fixed' !== record.implicitSource );
+	}
+
+	/**
+	 * Whether the settlement field still shows, untouched, the city WooCommerce had saved for the
+	 * customer when the server found no unique location record for it (issue #1075) —
+	 * `config.location.savedCityUnresolved` carries that text. Only a plain-text settlement input
+	 * qualifies: a `<select>` cannot display a saved city that is not one of its options.
+	 *
+	 * @param {Object} entry
+	 * @returns {boolean}
+	 */
+	function savedCityIsUnresolved( entry ) {
+		var saved = entry.location.savedCityUnresolved;
+		var node = chainNodeForLevel( entry, 'settlement' );
+		var el = node ? document.getElementById( node.fieldId ) : null;
+
+		if ( 'string' !== typeof saved || '' === saved || ! el || 'SELECT' === el.tagName ) {
+			return false;
+		}
+
+		return String( el.value ).trim() === saved.trim();
+	}
+
+	/**
+	 * Shows the «pick from the suggestions» hint at the city field while
+	 * {@see savedCityIsUnresolved} holds (issue #1075). Text is server-supplied
+	 * (`i18n.pickFromSuggestions`) — silence when absent, like {@see showNotPersistedNotice}.
+	 *
+	 * @param {Object} entry
+	 * @returns {void}
+	 */
+	function showSavedCityHint( entry ) {
+		var i18n = entry.location.i18n || {};
+		var node = chainNodeForLevel( entry, 'settlement' );
+
+		if ( node && savedCityIsUnresolved( entry ) && 'string' === typeof i18n.pickFromSuggestions ) {
+			showFieldNotice( entry, node.fieldId, i18n.pickFromSuggestions );
+		}
 	}
 
 	/**
@@ -5291,6 +5337,7 @@
 			// restored — a customer who already picked a settlement must find the address field
 			// live immediately after a reload, never only after some first event nudges it.
 			refreshAddressLock( entry );
+			showSavedCityHint( entry );
 		} );
 
 		suppressWcAddressAutocomplete();
