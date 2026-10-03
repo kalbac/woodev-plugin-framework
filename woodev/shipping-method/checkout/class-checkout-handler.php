@@ -1189,7 +1189,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 *
 		 * @return void
 		 */
-		public function handle_customer_save_address( $user_id = 0, string $address_type = '', array $address = [], ?object $customer = null ): void {
+		public function handle_customer_save_address( int $user_id = 0, string $address_type = '', array $address = [], ?object $customer = null ): void {
 			if ( ! in_array( $address_type, [ 'billing', 'shipping' ], true ) || (int) $user_id <= 0 || (int) $user_id !== (int) get_current_user_id() ) {
 				return;
 			}
