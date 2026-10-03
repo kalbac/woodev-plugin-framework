@@ -254,8 +254,10 @@ namespace Woodev\Tests\Unit {
 			$order_item = Mockery::mock( '\WC_Order_Item_Product' );
 			$order_item->shouldReceive( 'get_product' )->andReturn( $this->product( '', '', '', '' ) );
 			$order_item->shouldReceive( 'get_quantity' )->andReturn( 1 );
+			$order_item->shouldReceive( 'get_id' )->andReturn( 1 );
 			$order = Mockery::mock( '\WC_Order' );
 			$order->shouldReceive( 'get_items' )->andReturn( [ $order_item ] );
+			$order->shouldReceive( 'get_qty_refunded_for_item' )->andReturn( 0 );
 
 			$item = \Woodev_WC_Packer_Dispatcher::from_order_items( $order )[0];
 

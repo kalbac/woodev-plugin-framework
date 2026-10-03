@@ -58,8 +58,11 @@ if ( ! class_exists( 'Woodev_WC_Packer_Dispatcher' ) ) :
 		 *
 		 * Skips virtual/downloadable products and items whose product no longer exists.
 		 * Dimensions and weight are converted from the store's units to the packer's cm / kg.
+		 * The quantity is what is still to be shipped — the ordered quantity less the refunded one —
+		 * and a line refunded in full is skipped.
 		 *
 		 * @since  1.4.1
+		 * @since  2.0.2 Refunded quantities are excluded, a fully refunded line is skipped (#948).
 		 *
 		 * @param  \WC_Order $order
 		 * @return Woodev_Packer_Input_Item[]
@@ -78,7 +81,13 @@ if ( ! class_exists( 'Woodev_WC_Packer_Dispatcher' ) ) :
 					continue;
 				}
 
-				$qty = max( 1, (int) $order_item->get_quantity() );
+				// what is still to be shipped: a refunded unit is not packed. The sign of WooCommerce's
+				// refunded quantity has changed between versions, so only its size is used.
+				$qty = (int) $order_item->get_quantity() - abs( (int) $order->get_qty_refunded_for_item( $order_item->get_id() ) );
+
+				if ( $qty < 1 ) {
+					continue;
+				}
 
 				$items[] = self::to_input_item( $product, $qty );
 			}

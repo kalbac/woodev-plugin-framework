@@ -834,7 +834,49 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 
 			$contents = isset( $package['contents'] ) && is_array( $package['contents'] ) ? $package['contents'] : [];
 
-			$items = \Woodev_WC_Packer_Dispatcher::from_cart_items( $contents );
+			return $this->pack_items( \Woodev_WC_Packer_Dispatcher::from_cart_items( $contents ) );
+		}
+
+		/**
+		 * Packs an ORDER into parcels with the same packer the rate was calculated with.
+		 *
+		 * The packing of a carrier order is recomputed at export, not stored at checkout (#948): the
+		 * order's physical lines (the ordered quantity less the refunded one; virtual products, deleted
+		 * products and fully refunded lines are skipped) go through {@see self::pack_items()} — the
+		 * very step {@see self::pack_package()} ends in at rate time — with the same algorithm and the
+		 * same default dimensions (#955), so the parcels of the rate and of the order cannot diverge
+		 * because of a second copy of the logic. As at rate time, a method that has not opted into
+		 * {@see self::FEATURE_BOX_PACKING} gets null.
+		 *
+		 * Call path from an export: find the order's shipping line with
+		 * {@see Shipping_Helper::get_order_shipping_item()}, resolve the instance with
+		 * `\WC_Shipping_Zones::get_shipping_method( $line->get_instance_id() )` (false when the zone no
+		 * longer has it) and call this on the result. The handler cannot do that for a plugin — it does
+		 * not know which of the order's lines is the plugin's — so the plugin's own export code does.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order the order about to be exported
+		 * @return \Woodev_Packer_Result|null packed result, or null when nothing is packable or packing is not supported
+		 */
+		public function pack_order( \WC_Order $order ): ?\Woodev_Packer_Result {
+
+			if ( ! $this->supports_box_packing() || ! class_exists( '\\Woodev_WC_Packer_Dispatcher' ) ) {
+				return null;
+			}
+
+			return $this->pack_items( \Woodev_WC_Packer_Dispatcher::from_order_items( $order ) );
+		}
+
+		/**
+		 * Runs the configured algorithm over packer input items — the one step rate time and export share.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \Woodev_Packer_Input_Item[] $items packer input items
+		 * @return \Woodev_Packer_Result|null packed result, or null when there is nothing to pack
+		 */
+		private function pack_items( array $items ): ?\Woodev_Packer_Result {
 
 			if ( [] === $items ) {
 				return null;

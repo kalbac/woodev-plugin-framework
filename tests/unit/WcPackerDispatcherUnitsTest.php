@@ -100,9 +100,11 @@ namespace Woodev\Tests\Unit {
 			$item = Mockery::mock( '\WC_Order_Item_Product' );
 			$item->shouldReceive( 'get_product' )->andReturn( $product );
 			$item->shouldReceive( 'get_quantity' )->andReturn( $quantity );
+			$item->shouldReceive( 'get_id' )->andReturn( 1 );
 
 			$order = Mockery::mock( '\WC_Order' );
 			$order->shouldReceive( 'get_items' )->andReturn( [ $item ] );
+			$order->shouldReceive( 'get_qty_refunded_for_item' )->andReturn( 0 );
 
 			return $order;
 		}
