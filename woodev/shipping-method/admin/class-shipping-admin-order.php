@@ -41,6 +41,7 @@ use Woodev\Framework\Shipping\Admin\Orders\Order_Actions;
 use Woodev\Framework\Shipping\Admin\Orders\Order_Row_Builder;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
+use Woodev\Framework\Shipping\Admin\Orders\Shipment_Freshness;
 use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
 use Woodev\Framework\Shipping\Order\Delivery_Status;
 
@@ -222,6 +223,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 		 *              all come from {@see Order_Row_Builder}/{@see Order_Actions}
 		 *              instead of a plugin-supplied field map and a hardcoded
 		 *              export/track/cancel trio.
+		 * @since 2.0.2 Card #947: an exported order that changed after the export carries a
+		 *              warning ({@see Shipment_Freshness}).
 		 *
 		 * @param \WC_Order       $order    the order being displayed
 		 * @param Orders_Provider $provider the matched carrier
@@ -255,6 +258,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 			$history_html = $is_exported
 				? $this->resolve_history_html( $order, $provider, $row['tracking']['number'] ?? null )
 				: '';
+
+			// #947: only informs — there is no «send again» behind it.
+			$shipment_outdated = $is_exported && ( new Shipment_Freshness( $this->registry ) )->is_outdated( $order, $provider );
 
 			$admin_post_action = self::ADMIN_POST_ACTION;
 			$nonce_action      = self::ADMIN_POST_ACTION;

@@ -1922,6 +1922,10 @@ msgstr ""
 msgid "Заказ ещё не передан перевозчику «%s»."
 msgstr ""
 
+#: shipping-method/admin/views/html-admin-order-metabox.php:49
+msgid "Заказ изменён после передачи в службу доставки — данные в заявке могут не совпадать. Проверьте заявку в личном кабинете службы доставки."
+msgstr ""
+
 #: shipping-method/admin/class-shipping-admin-order.php:293
 msgid "ID заказа у перевозчика"
 msgstr ""

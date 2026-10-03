@@ -739,6 +739,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 *              the carrier's text, a missing stored id carries none.
 		 * @since 2.0.2 Card #1037: records {@see Shipment_Cancellation::CANCELLED_AT_META} on success,
 		 *              so the delivery status reads «Отменено».
+		 * @since 2.0.2 Card #947: also removes {@see Shipment_Fingerprint::META} on success.
 		 *
 		 * @param \WC_Order $order the order whose shipment to cancel
 		 * @return Action_Result success when the carrier accepted the cancellation, a failure otherwise
@@ -775,6 +776,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 
 			$this->order_handler->set( $order, static::CARRIER_ORDER_ID_FIELD, '' );
 			Shipment_Cancellation::mark( $order );
+			// #947: with no live shipment there is nothing for the order to be out of date against.
+			Shipment_Fingerprint::clear( $order, $order );
 
 			/**
 			 * Fires after a shipment is successfully cancelled with the carrier.

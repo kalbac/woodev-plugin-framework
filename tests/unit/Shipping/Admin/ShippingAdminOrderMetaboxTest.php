@@ -250,6 +250,108 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$this->assertStringNotContainsString( '&ndash;', $html, 'KISS: an absent field is omitted, never rendered as a dash' );
 		}
 
+		/**
+		 * The getters the shipment fingerprint reads (#947), on top of what {@see self::make_order()} gives.
+		 *
+		 * @param array<string,mixed> $overrides getter name => value
+		 * @return array<string,mixed>
+		 */
+		private function fingerprint_getters( array $overrides = [] ): array {
+			return array_merge(
+				[
+					'get_items'               => [],
+					'get_total'               => '1300.00',
+					'get_shipping_first_name' => 'Иван',
+					'get_shipping_last_name'  => 'Иванов',
+					'get_billing_first_name'  => 'Иван',
+					'get_billing_last_name'   => 'Иванов',
+					'get_shipping_phone'      => '+79991234567',
+					'get_shipping_country'    => 'RU',
+					'get_shipping_address_2'  => '',
+					'get_billing_country'     => 'RU',
+					'get_billing_address_2'   => '',
+					'get_shipping_city'       => 'Москва',
+					'get_shipping_address_1'  => 'ул. Тверская, 1',
+					'get_shipping_postcode'   => '101000',
+				],
+				$overrides
+			);
+		}
+
+		/** @return string the Russian warning of #947 */
+		private function outdated_warning(): string {
+			return 'Заказ изменён после передачи в службу доставки';
+		}
+
+		public function test_render_metabox_warns_when_the_order_changed_after_the_export(): void {
+			Functions\when( 'wc_get_price_decimals' )->justReturn( 2 );
+			Functions\when( 'wp_json_encode' )->alias( static fn( $data, int $flags = 0 ) => json_encode( $data, $flags ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- test double.
+
+			$provider = $this->provider();
+
+			$this->meta = [
+				'_wc_cdek_order_id'                              => 'CDEK-999',
+				\Woodev\Framework\Shipping\Order\Shipment_Fingerprint::META => \Woodev\Framework\Shipping\Order\Shipment_Fingerprint::for_order( $this->make_order( $this->fingerprint_getters() ) ),
+			];
+
+			ob_start();
+			( new Shipping_Admin_Order( Orders_Registry::instance() ) )->render_metabox( $this->make_order( $this->fingerprint_getters( [ 'get_shipping_city' => 'Тверь' ] ) ), $provider );
+			$html = ob_get_clean();
+
+			$this->assertStringContainsString( $this->outdated_warning(), $html );
+			$this->assertStringContainsString( 'notice-warning', $html, 'the warning reuses the admin notice styling' );
+			$this->assertStringNotContainsString( 'data-woodev-order-action="export"', $html, 'a warning, not a «send again» button' );
+		}
+
+		public function test_render_metabox_does_not_warn_when_the_order_is_as_it_was_exported(): void {
+			Functions\when( 'wc_get_price_decimals' )->justReturn( 2 );
+			Functions\when( 'wp_json_encode' )->alias( static fn( $data, int $flags = 0 ) => json_encode( $data, $flags ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- test double.
+
+			$provider = $this->provider();
+
+			$this->meta = [
+				'_wc_cdek_order_id'                              => 'CDEK-999',
+				\Woodev\Framework\Shipping\Order\Shipment_Fingerprint::META => \Woodev\Framework\Shipping\Order\Shipment_Fingerprint::for_order( $this->make_order( $this->fingerprint_getters() ) ),
+			];
+
+			ob_start();
+			( new Shipping_Admin_Order( Orders_Registry::instance() ) )->render_metabox( $this->make_order( $this->fingerprint_getters() ), $provider );
+			$html = ob_get_clean();
+
+			$this->assertStringContainsString( 'CDEK-999', $html );
+			$this->assertStringNotContainsString( $this->outdated_warning(), $html );
+		}
+
+		public function test_render_metabox_stays_quiet_for_an_order_with_no_fingerprint_or_one_of_another_version(): void {
+			$provider = $this->provider();
+
+			foreach ( [ null, 'v0:' . str_repeat( 'a', 64 ) ] as $stored ) {
+				$this->meta = [ '_wc_cdek_order_id' => 'CDEK-999' ];
+
+				if ( null !== $stored ) {
+					$this->meta[ \Woodev\Framework\Shipping\Order\Shipment_Fingerprint::META ] = $stored;
+				}
+
+				ob_start();
+				( new Shipping_Admin_Order( Orders_Registry::instance() ) )->render_metabox( $this->make_order(), $provider );
+				$html = ob_get_clean();
+
+				$this->assertStringNotContainsString( $this->outdated_warning(), $html, 'nothing to compare with is «unknown», never «changed»' );
+			}
+		}
+
+		public function test_render_metabox_never_warns_about_an_order_that_is_not_exported(): void {
+			$provider = $this->provider();
+
+			$this->meta = [ \Woodev\Framework\Shipping\Order\Shipment_Fingerprint::META => 'v1:' . str_repeat( 'a', 64 ) ];
+
+			ob_start();
+			( new Shipping_Admin_Order( Orders_Registry::instance() ) )->render_metabox( $this->make_order(), $provider );
+			$html = ob_get_clean();
+
+			$this->assertStringNotContainsString( $this->outdated_warning(), $html );
+		}
+
 		public function test_render_metabox_disables_the_button_of_an_order_another_manager_is_editing(): void {
 			$provider = $this->provider();
 			$order    = $this->make_order();
