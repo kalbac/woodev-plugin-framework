@@ -48,6 +48,7 @@ function installAccountMarkup( section, savedCity ) {
 		<form method="post" novalidate>
 			<select id="${ section }_country" name="${ section }_country">
 				<option value="RU">Россия</option>
+				<option value="US">США</option>
 			</select>
 			<select id="${ section }_state" name="${ section }_state">
 				<option value="">Выберите…</option>
@@ -61,7 +62,7 @@ function installAccountMarkup( section, savedCity ) {
 	document.getElementById( section + '_state' ).value = 'MOW';
 }
 
-function boot( section, { savedCity = '', location = {} } = {} ) {
+function boot( section, { savedCity = '', location = {}, configs = 1 } = {} ) {
 	installAccountMarkup( section, savedCity );
 
 	global.jQuery = require( 'jquery' );
@@ -87,7 +88,7 @@ function boot( section, { savedCity = '', location = {} } = {} ) {
 		return entry.promise;
 	} );
 
-	window[ CONFIG_GLOBAL ] = {
+	const config = {
 		context: 'account',
 		accountSection: section,
 		fields: {
@@ -107,9 +108,15 @@ function boot( section, { savedCity = '', location = {} } = {} ) {
 		},
 	};
 
+	// A second plugin on the same form: another config global with the same field ids.
+	for ( let i = 0; i < configs; i++ ) {
+		window[ 0 === i ? CONFIG_GLOBAL : CONFIG_GLOBAL + '_' + i ] = JSON.parse( JSON.stringify( config ) );
+	}
+
 	require( '../../woodev/shipping-method/assets/js/frontend/location-cascade.js' );
 }
 
+const posts = () => fetchCalls.filter( ( c ) => 'POST' === ( c.init && c.init.method ) );
 const selectPosts = () => fetchCalls.filter( ( c ) => SELECT_URL === c.url );
 
 function cityCall( section ) {
@@ -135,6 +142,7 @@ beforeEach( () => {
 	jest.resetModules();
 	document.body.replaceWith( document.createElement( 'body' ) );
 	delete window[ CONFIG_GLOBAL ];
+	delete window[ CONFIG_GLOBAL + '_1' ];
 	delete window.WoodevCheckoutFieldStore;
 	delete window.WoodevLocationTypeahead;
 	delete window.WoodevLocationRenderers;
@@ -261,6 +269,26 @@ describe.each( [ 'billing', 'shipping' ] )( 'My Account %s address form (issue #
 		expect( JSON.parse( city.form.querySelector( '[name="woodev_location_record"]' ).value ).key ).toBe( VNUKOVO.key );
 	} );
 
+	it( 'posts nothing on a country change — «Forget» waits for Save (#332)', async () => {
+		boot( section );
+
+		const city = document.getElementById( section + '_city' );
+
+		city.value = 'Внуково';
+		cityCall( section )[ 1 ].onSelect( { key: VNUKOVO.key, label: VNUKOVO.label, level: 'settlement', record: VNUKOVO } );
+		await flushMicrotasks();
+
+		const country = document.getElementById( section + '_country' );
+
+		country.value = 'US';
+		window.jQuery( country ).trigger( 'change' );
+		await flushMicrotasks();
+
+		expect( city.value ).toBe( '' );
+		expect( city.form.querySelector( '[name="woodev_location_record"]' ).value ).toBe( '' );
+		expect( posts() ).toHaveLength( 0 );
+	} );
+
 	it( 'writes nothing to the store on a region pick, and a second pick does not queue a request', async () => {
 		boot( section );
 
@@ -323,5 +351,72 @@ describe.each( [ 'billing', 'shipping' ] )( 'My Account %s address form (issue #
 		expect( document.getElementById( section + '_city' ).value ).toBe( 'Тверь' );
 		expect( document.getElementById( section + '_state' ).value ).toBe( 'MOW' );
 		expect( selectPosts() ).toHaveLength( 0 );
+	} );
+} );
+
+describe( 'My Account address form with two plugin entries on one form (issue #332)', () => {
+	const pickThroughFirst = async ( section ) => {
+		boot( section, { configs: 2 } );
+
+		const city = document.getElementById( section + '_city' );
+		const calls = window.WoodevLocationTypeahead.mock.calls.filter( ( c ) => c[ 0 ] === city );
+
+		expect( calls ).toHaveLength( 2 );
+
+		city.value = 'Внуково';
+		calls[ 0 ][ 1 ].onSelect( { key: VNUKOVO.key, label: VNUKOVO.label, level: 'settlement', record: VNUKOVO } );
+		await flushMicrotasks();
+
+		return { city, hidden: () => city.form.querySelector( '[name="woodev_location_record"]' ) };
+	};
+
+	it( 'keeps the first entry\'s record when an unrelated postcode field changes', async () => {
+		const { city, hidden } = await pickThroughFirst( 'billing' );
+		const postcode = document.getElementById( 'billing_postcode' );
+
+		postcode.value = '108800';
+		postcode.dispatchEvent( new window.Event( 'change', { bubbles: true } ) );
+		await flushMicrotasks();
+
+		expect( JSON.parse( hidden().value ).key ).toBe( VNUKOVO.key );
+		expect( city.value ).toBe( 'Внуково' );
+	} );
+
+	it( 'keeps the first entry\'s record on a same-value state churn', async () => {
+		const { hidden } = await pickThroughFirst( 'shipping' );
+
+		wcRebuildState( 'shipping' );
+		await flushMicrotasks();
+
+		expect( JSON.parse( hidden().value ).key ).toBe( VNUKOVO.key );
+	} );
+
+	it( 'empties the record when the city is edited through the entry that picked it', async () => {
+		const { city, hidden } = await pickThroughFirst( 'billing' );
+
+		city.value = 'Внуково-2';
+		city.dispatchEvent( new window.Event( 'change', { bubbles: true } ) );
+		await flushMicrotasks();
+
+		expect( hidden().value ).toBe( '' );
+	} );
+
+	it( 'lets the entry that picked LAST own the record', async () => {
+		const { city, hidden } = await pickThroughFirst( 'billing' );
+		const second = window.WoodevLocationTypeahead.mock.calls.filter( ( c ) => c[ 0 ] === city )[ 1 ];
+		const other = { ...VNUKOVO, key: 'dadata:vn2', label: 'Внуково-2, Москва' };
+
+		second[ 1 ].onSelect( { key: other.key, label: other.label, level: 'settlement', record: other } );
+		await flushMicrotasks();
+
+		expect( JSON.parse( hidden().value ).key ).toBe( 'dadata:vn2' );
+
+		const postcode = document.getElementById( 'billing_postcode' );
+
+		postcode.value = '108800';
+		postcode.dispatchEvent( new window.Event( 'change', { bubbles: true } ) );
+		await flushMicrotasks();
+
+		expect( JSON.parse( hidden().value ).key ).toBe( 'dadata:vn2' );
 	} );
 } );

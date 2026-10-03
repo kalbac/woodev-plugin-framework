@@ -2590,6 +2590,13 @@
 	 * @returns {void}
 	 */
 	function sendForget( entry ) {
+		// Issue #332: a My Account address form writes NOTHING until the customer presses «Save»
+		// (operator, s149) — a country change there only clears the form locally; the save hook
+		// forgets server-side when the saved city no longer matches the stored record.
+		if ( '' !== ACCOUNT_SECTION ) {
+			return;
+		}
+
 		fetchJson( entry.location.endpoints.forget, { method: 'POST', headers: nonceHeader( entry ) } ).then( null, logError );
 	}
 
@@ -3269,19 +3276,17 @@
 	}
 
 	/**
-	 * Issue #332: mirrors the customer's picked settlement into the My Account form's hidden
-	 * {@see ACCOUNT_RECORD_FIELD} input — the record as JSON while `entry.records.settlement` holds
-	 * one, an empty value the moment a real edit (or a region/country change) drops it. A My
-	 * Account pick writes nothing to the store (operator, s149); the form submit carries it, and
-	 * the server decides on «Save address» whether it still names the saved city. A no-op outside
-	 * the account form.
+	 * Issue #332: the My Account form's hidden {@see ACCOUNT_RECORD_FIELD} input for `entry`'s
+	 * settlement field — created on demand when `create` is true. Null outside the account form,
+	 * when the entry has no settlement field in the DOM, or (without `create`) before a first pick.
 	 *
-	 * @param {Object} entry
-	 * @returns {void}
+	 * @param {Object}  entry
+	 * @param {boolean} create
+	 * @returns {HTMLInputElement|null}
 	 */
-	function syncAccountRecordField( entry ) {
+	function accountRecordInput( entry, create ) {
 		if ( '' === ACCOUNT_SECTION ) {
-			return;
+			return null;
 		}
 
 		var node = null;
@@ -3296,20 +3301,64 @@
 		var form = host ? host.form || host.closest( 'form' ) : null;
 
 		if ( ! form ) {
-			return;
+			return null;
 		}
 
-		var record = entry.records.settlement;
 		var hidden = form.querySelector( 'input[name="' + ACCOUNT_RECORD_FIELD + '"]' );
 
-		if ( ! hidden ) {
+		if ( ! hidden && create ) {
 			hidden = document.createElement( 'input' );
 			hidden.type = 'hidden';
 			hidden.name = ACCOUNT_RECORD_FIELD;
 			form.appendChild( hidden );
 		}
 
-		hidden.value = record && 'settlement' === record.level ? JSON.stringify( record ) : '';
+		return hidden;
+	}
+
+	/**
+	 * Issue #332: a real pick — writes `entry.records.settlement` into the form's hidden
+	 * {@see ACCOUNT_RECORD_FIELD} input as JSON and makes `entry` the input's owner. A My Account
+	 * pick writes nothing to the store (operator, s149); the form submit carries it, and the server
+	 * decides on «Save address» whether it still names the saved city.
+	 *
+	 * ONE PICKED-RECORD AUTHORITY PER FORM: several plugin entries can share one form (and one
+	 * hidden input) while each keeps its own `entry.records`. Only the entry that PICKED writes
+	 * the value, and only that entry may clear it ({@see clearAccountRecordField}) — an entry that
+	 * handled neither the pick nor the edit must never overwrite or empty another entry's record.
+	 *
+	 * @param {Object} entry
+	 * @returns {void}
+	 */
+	function publishAccountRecord( entry ) {
+		var record = entry.records.settlement;
+		var hidden = record && 'settlement' === record.level ? accountRecordInput( entry, true ) : null;
+
+		if ( ! hidden ) {
+			return;
+		}
+
+		hidden.value = JSON.stringify( record );
+		hidden.woodevOwner = entry;
+	}
+
+	/**
+	 * Issue #332: empties the hidden {@see ACCOUNT_RECORD_FIELD} input once the entry that OWNS it
+	 * (the last one to {@see publishAccountRecord}) no longer holds a settlement record — a real
+	 * edit, a region change or a country change dropped it. Never writes, and a no-op for an entry
+	 * that does not own the value, so an unrelated change (postcode, same-value state churn) or an
+	 * entry that never picked leaves the owner's record alone. Safe as a `forEach` callback.
+	 *
+	 * @param {Object} entry
+	 * @returns {void}
+	 */
+	function clearAccountRecordField( entry ) {
+		var hidden = accountRecordInput( entry, false );
+
+		if ( hidden && hidden.woodevOwner === entry && ! entry.records.settlement ) {
+			hidden.value = '';
+			hidden.woodevOwner = null;
+		}
 	}
 
 	/**
@@ -3373,7 +3422,7 @@
 			entry.clearedByEdit[ node.level ] = null;
 
 			backwardsFill( entry, node, record );
-			syncAccountRecordField( entry );
+			publishAccountRecord( entry );
 
 			// Issue #337 as AMENDED by the operator in s90: the address lock is refreshed on the
 			// spot off the optimistic record above — but {@see isAddressLocked} now also holds
@@ -4777,7 +4826,7 @@
 				sendForget( clearedEntry );
 			}
 
-			entries.forEach( syncAccountRecordField );
+			entries.forEach( clearAccountRecordField );
 			handleLayoutRelevantChange();
 			return;
 		}
@@ -4856,7 +4905,7 @@
 		refreshAddressLocks();
 
 		// Issue #332: a real edit nulled the field's record — the hidden copy must follow.
-		entries.forEach( syncAccountRecordField );
+		entries.forEach( clearAccountRecordField );
 	}
 
 	/**
