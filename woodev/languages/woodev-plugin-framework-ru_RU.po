@@ -2349,6 +2349,10 @@ msgid "Address not found — enter it manually."
 msgstr "Адрес не найден — введите вручную."
 
 #: shipping-method/checkout/class-checkout-config.php:634
+msgid "Select a locality from the suggestions"
+msgstr "Выберите населённый пункт из списка подсказок"
+
+#: shipping-method/checkout/class-checkout-config.php:640
 msgid "Could not save your choice — please try again."
 msgstr "Не удалось сохранить выбор — попробуйте ещё раз."
 

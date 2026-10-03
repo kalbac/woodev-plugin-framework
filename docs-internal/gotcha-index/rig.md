@@ -24,3 +24,4 @@
 ## Related
 
 - [../GOTCHAS.md](../GOTCHAS.md) — the topic map
+- [rig/session] **A logged-in customer's WC session (server-side, `session_key` = user id) outranks the profile and holds our record too — a probe that edits only user meta reads stale data. Reset the session row with the meta.** → [a-logged-in-customer-s-wc-session-outranks-the-profile](../gotchas/a-logged-in-customer-s-wc-session-outranks-the-profile.md) (s149)

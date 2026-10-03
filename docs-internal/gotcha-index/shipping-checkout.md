@@ -26,3 +26,4 @@
 ## Related
 
 - [../GOTCHAS.md](../GOTCHAS.md) — the topic map
+- [shipping/checkout] **WooCommerce re-fires `change` on the state select with the SAME value (page load, every cart-calculator toggle) — read as a region change it sent `/select` and emptied the picked city. Judge by option VALUE.** → [woocommerce-refires-a-same-value-change-on-the-state-select](../gotchas/woocommerce-refires-a-same-value-change-on-the-state-select.md) (s149)
