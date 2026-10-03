@@ -2758,6 +2758,36 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		}
 
 		/**
+		 * Whether a settlement record a customer's form POSTED (not one a provider just answered) is
+		 * safe to persist without asking the provider again (issue #332, the My Account «Save
+		 * address» write).
+		 *
+		 * `POST /location/select` ({@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller::handle_select_request()})
+		 * trusts a posted record's shape ({@see Location_Record::from_array()}) and re-checks it
+		 * against the provider only when it is a STALE popular-list pick (D5). This is the same
+		 * rule for a caller that has no live request to spend on a provider: a record owned by a
+		 * provider that is no longer registered, or one whose popular-list row has outlived its
+		 * freshness clock, is refused here — the caller falls back to resolving the typed city by
+		 * name — instead of verified in-line, so a form save never waits on a provider call.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Location_Record $record The record the customer's form carried.
+		 *
+		 * @return bool
+		 */
+		public function accepts_posted_pick( Location_Record $record ): bool {
+			if ( null === $this->get_registered_provider( $record->provider_id() ) ) {
+				return false;
+			}
+
+			$store = $this->popular_settlement_store();
+			$entry = $store->find_entry_by_key( $record->provider_id(), $record->key() );
+
+			return null === $entry || ! $store->is_stale( $entry );
+		}
+
+		/**
 		 * Gets the active provider's popular-settlements list for ONE country
 		 * (issue #530 — #488's customer-facing half: the list existed, but nothing
 		 * served it to the checkout), in the same wire shape

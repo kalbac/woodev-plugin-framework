@@ -195,6 +195,72 @@ describe.each( [ 'billing', 'shipping' ] )( 'My Account %s address form (issue #
 		expect( city.value ).toBe( 'Внуково' );
 	} );
 
+	it( 'carries the picked settlement record in a hidden form field and still posts nothing (#332)', async () => {
+		boot( section );
+
+		const city = document.getElementById( section + '_city' );
+
+		city.value = 'Внуково';
+		cityCall( section )[ 1 ].onSelect( { key: VNUKOVO.key, label: VNUKOVO.label, level: 'settlement', record: VNUKOVO } );
+		await flushMicrotasks();
+
+		const hidden = city.form.querySelector( '[name="woodev_location_record"]' );
+
+		expect( hidden ).not.toBeNull();
+		expect( hidden.type ).toBe( 'hidden' );
+		expect( JSON.parse( hidden.value ) ).toEqual( VNUKOVO );
+		expect( fetchCalls.filter( ( c ) => 'POST' === ( c.init && c.init.method ) ) ).toHaveLength( 0 );
+	} );
+
+	it( 'empties the hidden field when the customer edits the city after a pick', async () => {
+		boot( section );
+
+		const city = document.getElementById( section + '_city' );
+
+		city.value = 'Внуково';
+		cityCall( section )[ 1 ].onSelect( { key: VNUKOVO.key, label: VNUKOVO.label, level: 'settlement', record: VNUKOVO } );
+		await flushMicrotasks();
+
+		city.value = 'Внуково-2';
+		city.dispatchEvent( new window.Event( 'change', { bubbles: true } ) );
+		await flushMicrotasks();
+
+		expect( city.form.querySelector( '[name="woodev_location_record"]' ).value ).toBe( '' );
+	} );
+
+	it( 'empties the hidden field when a real region change clears the city', async () => {
+		boot( section );
+
+		const city = document.getElementById( section + '_city' );
+
+		city.value = 'Внуково';
+		cityCall( section )[ 1 ].onSelect( { key: VNUKOVO.key, label: VNUKOVO.label, level: 'settlement', record: VNUKOVO } );
+		await flushMicrotasks();
+
+		const state = document.getElementById( section + '_state' );
+
+		state.value = 'SPE';
+		window.jQuery( state ).trigger( 'change' );
+		await flushMicrotasks();
+
+		expect( city.form.querySelector( '[name="woodev_location_record"]' ).value ).toBe( '' );
+	} );
+
+	it( 'adds no hidden field before a pick and keeps it on a same-value state churn', async () => {
+		boot( section );
+
+		const city = document.getElementById( section + '_city' );
+
+		expect( city.form.querySelector( '[name="woodev_location_record"]' ) ).toBeNull();
+
+		city.value = 'Внуково';
+		cityCall( section )[ 1 ].onSelect( { key: VNUKOVO.key, label: VNUKOVO.label, level: 'settlement', record: VNUKOVO } );
+		wcRebuildState( section );
+		await flushMicrotasks();
+
+		expect( JSON.parse( city.form.querySelector( '[name="woodev_location_record"]' ).value ).key ).toBe( VNUKOVO.key );
+	} );
+
 	it( 'writes nothing to the store on a region pick, and a second pick does not queue a request', async () => {
 		boot( section );
 

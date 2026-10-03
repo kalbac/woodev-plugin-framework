@@ -41,6 +41,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 	 */
 	class Checkout_Handler {
 
+		/**
+		 * Name of the hidden input the My Account address form carries the picked settlement
+		 * record in (issue #332) — written by `location-cascade.js` (`ACCOUNT_RECORD_FIELD`),
+		 * read on «Save address» by {@see self::posted_picked_record()}.
+		 *
+		 * @since 2.0.2
+		 */
+		public const ACCOUNT_RECORD_FIELD = 'woodev_location_record';
+
 		/** @var Checkout_Fields the field definitions this handler manages */
 		private Checkout_Fields $fields;
 
@@ -1164,14 +1173,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * Keeps the stored customer locality consistent with the address the customer just
 		 * saved on a My Account address form (issue #332).
 		 *
-		 * WooCommerce wrote the address TEXT to user meta itself; this only decides whether
-		 * our RECORD still describes it. The record is the customer's DELIVERY locality (the
-		 * checkout's shipping chain), so the city judged is the delivery one: the saved
-		 * shipping city — or the billing city when the store ships to billing only or no
-		 * shipping city is saved. Saving EITHER form therefore re-checks it: a record the
-		 * saved delivery city no longer names is dropped. A blank delivery city forgets
-		 * nothing, and nothing is ever written here — a pick on the form writes nothing to
-		 * the store until the customer saves (operator decision, s149).
+		 * WooCommerce wrote the address TEXT to user meta itself; this decides which RECORD
+		 * describes it. The record is the customer's DELIVERY locality (the checkout's shipping
+		 * chain, one record per customer shared by both addresses), so the city judged is the
+		 * delivery one: the saved shipping city — or the billing city when the store ships to
+		 * billing only or no shipping city is saved. Saving EITHER form therefore re-checks it.
+		 *
+		 * A pick on the form writes nothing until the customer saves (operator decision, s149);
+		 * the form carries the picked settlement record in a hidden field and THIS is where it is
+		 * written: when it is acceptable ({@see self::persist_picked_record_naming_city()}) it
+		 * becomes the customer's explicit record. Otherwise — no pick, a malformed or refused
+		 * record, or one that does not name the saved delivery city — the stored record is
+		 * dropped when the saved city no longer names it
+		 * ({@see self::forget_record_unless_it_names_city()}); a blank delivery city changes
+		 * nothing.
 		 *
 		 * The saved city is read authoritatively: WooCommerce 9.8+ hands the saved
 		 * `WC_Customer` as the fourth argument; before that the hook carried only
@@ -1205,10 +1220,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			$billing      = (string) $customer->get_billing_city();
 			$shipping     = (string) $customer->get_shipping_city();
 			$billing_only = function_exists( 'wc_ship_to_billing_address_only' ) && wc_ship_to_billing_address_only();
+			$city         = $billing_only || '' === self::normalize_for_settlement_match( $shipping ) ? $billing : $shipping;
 
-			$this->forget_record_unless_it_names_city(
-				$billing_only || '' === self::normalize_for_settlement_match( $shipping ) ? $billing : $shipping
-			);
+			if ( $this->persist_picked_record_naming_city( $city ) ) {
+				return;
+			}
+
+			$this->forget_record_unless_it_names_city( $city );
 		}
 
 		/**
@@ -1233,6 +1251,90 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			} catch ( \Exception $e ) {
 				return null;
 			}
+		}
+
+		/**
+		 * The settlement record the My Account address form carried in its hidden field, as the
+		 * raw JSON text — `''` when the field is absent or this request is not WooCommerce's own
+		 * nonce-checked address save. A seam, like {@see self::saved_customer()}: it keeps the
+		 * superglobal out of the unit tests.
+		 *
+		 * WooCommerce verifies its `woocommerce-edit_address` nonce before it saves and fires the
+		 * hook; it is checked again here because the hook is public and this field is a WRITE
+		 * into the customer's location record, the same barrier `POST /location/select` stands
+		 * behind (a nonce — no capability check is possible for a customer's own data).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		protected function posted_picked_record(): string {
+			// phpcs:disable WordPress.Security.NonceVerification.Missing -- verified just below.
+			$nonce = isset( $_POST['woocommerce-edit-address-nonce'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['woocommerce-edit-address-nonce'] ) ) : '';
+
+			if ( '' === $nonce || ! wp_verify_nonce( $nonce, 'woocommerce-edit_address' ) ) {
+				return '';
+			}
+
+			$raw = isset( $_POST[ self::ACCOUNT_RECORD_FIELD ] ) && is_string( $_POST[ self::ACCOUNT_RECORD_FIELD ] ) ? wp_unslash( $_POST[ self::ACCOUNT_RECORD_FIELD ] ) : '';
+			// phpcs:enable WordPress.Security.NonceVerification.Missing
+
+			return $raw;
+		}
+
+		/**
+		 * Persists the settlement record the customer picked on the My Account address form as
+		 * their EXPLICIT record (issue #332), when — and only when — all of these hold: the layer
+		 * is active, `$city` (the saved delivery city) is not blank, the form carried a record
+		 * ({@see self::posted_picked_record()}), it parses through
+		 * {@see \Woodev\Framework\Shipping\Location\Location_Record::from_array()} (the same
+		 * contract `POST /location/select` enforces) at the settlement level, the service accepts
+		 * it ({@see \Woodev\Framework\Shipping\Location\Location_Service::accepts_posted_pick()}),
+		 * and it NAMES `$city` — a tampered or stale field can never attach a record to a city
+		 * the customer did not save.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $city The saved delivery city text.
+		 *
+		 * @return bool Whether the record was written; `false` leaves the caller to the forget path.
+		 */
+		private function persist_picked_record_naming_city( string $city ): bool {
+			if ( '' === self::normalize_for_settlement_match( $city ) ) {
+				return false;
+			}
+
+			$service = $this->location_service();
+
+			if ( ! $service->is_active() ) {
+				return false;
+			}
+
+			$raw = trim( $this->posted_picked_record() );
+
+			if ( '' === $raw ) {
+				return false;
+			}
+
+			$data = json_decode( $raw, true );
+
+			if ( ! is_array( $data ) ) {
+				return false;
+			}
+
+			try {
+				$record = \Woodev\Framework\Shipping\Location\Location_Record::from_array( $data );
+			} catch ( \InvalidArgumentException $exception ) {
+				return false;
+			}
+
+			if ( \Woodev\Framework\Shipping\Location\Location_Record::LEVEL_SETTLEMENT !== $record->level()
+				|| ! $this->city_names_record( $city, $record )
+				|| ! $service->accepts_posted_pick( $record ) ) {
+				return false;
+			}
+
+			return $service->set_customer_record( $record, false );
 		}
 
 		/**

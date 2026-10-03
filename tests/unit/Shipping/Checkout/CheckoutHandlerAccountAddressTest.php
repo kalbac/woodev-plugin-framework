@@ -3,8 +3,9 @@
  * Tests for the My Account address forms (issue #332): the asset gate in
  * Checkout_Handler::enqueue_assets() and the `woocommerce_customer_save_address` hook.
  *
- * WooCommerce writes the address TEXT to user meta itself; the hook only decides whether our stored
- * settlement RECORD still names the customer's delivery city, and never writes anything.
+ * WooCommerce writes the address TEXT to user meta itself; the hook decides which settlement RECORD
+ * describes the customer's delivery city: the record the form carried in its hidden field when it is
+ * acceptable and names the saved city, otherwise the stored one unless it still names it.
  *
  * @package Woodev\Tests\Unit\Shipping\Checkout
  */
@@ -43,6 +44,10 @@ require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-che
 final class Account_Address_Fake_Service extends Location_Service {
 
 	public int $forgotten = 0;
+	/** @var Location_Record[] records written through set_customer_record() */
+	public array $written     = [];
+	public bool $accepts_pick = true;
+	public bool $write_result = true;
 	private bool $active;
 	private ?Location_Record $record;
 
@@ -61,6 +66,16 @@ final class Account_Address_Fake_Service extends Location_Service {
 
 	public function forget_customer_record(): void {
 		++$this->forgotten;
+	}
+
+	public function set_customer_record( Location_Record $record, bool $implicit = false ): bool {
+		$this->written[] = [ $record, $implicit ];
+
+		return $this->write_result;
+	}
+
+	public function accepts_posted_pick( Location_Record $record ): bool {
+		return $this->accepts_pick;
 	}
 
 	public function get_customer_record( ?string $for_country = null ): ?array {
@@ -120,6 +135,11 @@ final class Account_Address_Handler extends Checkout_Handler {
 	public ?object $customer = null;
 	public string $slug      = '';
 	public ?object $saved    = null;
+	public string $posted    = '';
+
+	protected function posted_picked_record(): string {
+		return $this->posted;
+	}
 
 	protected static function asset_exists( string $path ): bool {
 		return true;
@@ -389,5 +409,215 @@ class CheckoutHandlerAccountAddressTest extends TestCase {
 	public function test_a_save_for_another_user_or_an_unknown_address_type_is_ignored(): void {
 		$this->assertSame( 0, $this->save( 'shipping', 'Москва', 'Москва', $this->record(), false, 7, 9 ) );
 		$this->assertSame( 0, $this->save( 'other', 'Москва', 'Москва', $this->record() ) );
+	}
+
+	// -------------------------------------------------------------------------
+	// The picked record on «Save address» (issue #332)
+	// -------------------------------------------------------------------------
+
+	private function picked_json( ?Location_Record $record = null ): string {
+		return (string) json_encode( ( $record ?? $this->record() )->to_array(), JSON_UNESCAPED_UNICODE );
+	}
+
+	/**
+	 * Runs the hook with `$posted` as the form's hidden field.
+	 *
+	 * @return Account_Address_Fake_Service
+	 */
+	private function save_with_pick( string $posted, string $shipping, ?Location_Record $stored, array $options = [] ): Account_Address_Fake_Service {
+		Functions\when( 'get_current_user_id' )->justReturn( $options['current'] ?? 7 );
+
+		$service               = new Account_Address_Fake_Service( $options['active'] ?? true, $stored );
+		$service->accepts_pick = $options['accepts'] ?? true;
+		$service->write_result = $options['write_result'] ?? true;
+		$handler               = new Account_Address_Handler( Checkout_Fields::from_array( [] ), 'carrier', $service );
+		$handler->posted       = $posted;
+
+		if ( ! empty( $options['legacy'] ) ) {
+			$handler->saved = $this->customer( $shipping, $shipping );
+			$handler->handle_customer_save_address( 7, 'shipping' );
+		} else {
+			$handler->handle_customer_save_address( 7, 'shipping', [], $this->customer( $shipping, $shipping ) );
+		}
+
+		return $service;
+	}
+
+	public function test_a_picked_record_naming_the_saved_city_is_persisted_as_the_explicit_record(): void {
+		$service = $this->save_with_pick( $this->picked_json(), 'Казань', null );
+
+		$this->assertCount( 1, $service->written );
+		$this->assertSame( 'test:44', $service->written[0][0]->key() );
+		$this->assertFalse( $service->written[0][1], 'an explicit record, never an implicit default' );
+		$this->assertSame( 0, $service->forgotten );
+	}
+
+	public function test_a_picked_record_replaces_a_stored_record_for_another_city_without_forgetting_it(): void {
+		$stored = Location_Record::from_array(
+			[
+				'key'         => 'test:77',
+				'provider_id' => 'test',
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'country'     => 'RU',
+				'label'       => 'Тверь',
+				'settlement'  => [ 'name' => 'Тверь', 'type' => 'г' ],
+			]
+		);
+
+		$service = $this->save_with_pick( $this->picked_json(), 'Казань', $stored );
+
+		$this->assertCount( 1, $service->written );
+		$this->assertSame( 0, $service->forgotten );
+	}
+
+	public function test_a_picked_record_naming_another_city_is_not_persisted_and_the_stale_record_is_forgotten(): void {
+		$service = $this->save_with_pick( $this->picked_json(), 'Москва', $this->record() );
+
+		$this->assertSame( [], $service->written );
+		$this->assertSame( 1, $service->forgotten );
+	}
+
+	public function test_a_malformed_or_non_settlement_picked_record_falls_back_to_the_forget_path(): void {
+		$region = Location_Record::from_array(
+			[
+				'key'         => 'test:r1',
+				'provider_id' => 'test',
+				'level'       => Location_Record::LEVEL_REGION,
+				'country'     => 'RU',
+				'label'       => 'Казань',
+				'region'      => [ 'name' => 'Казань', 'type' => 'г' ],
+			]
+		);
+
+		foreach ( [ 'not json', '"Казань"', '{"key":"x"}', '[]', $this->picked_json( $region ) ] as $posted ) {
+			$service = $this->save_with_pick( $posted, 'Москва', $this->record() );
+
+			$this->assertSame( [], $service->written, $posted );
+			$this->assertSame( 1, $service->forgotten, $posted );
+		}
+	}
+
+	public function test_a_pick_the_service_refuses_is_not_persisted(): void {
+		$service = $this->save_with_pick( $this->picked_json(), 'Казань', null, [ 'accepts' => false ] );
+
+		$this->assertSame( [], $service->written );
+	}
+
+	public function test_a_pick_the_service_refuses_leaves_a_stale_stored_record_forgotten(): void {
+		$service = $this->save_with_pick( $this->picked_json(), 'Москва', $this->record(), [ 'accepts' => false ] );
+
+		$this->assertSame( [], $service->written );
+		$this->assertSame( 1, $service->forgotten );
+	}
+
+	public function test_a_failed_write_falls_back_to_the_forget_path(): void {
+		$service = $this->save_with_pick( $this->picked_json(), 'Казань', $this->record(), [ 'write_result' => false ] );
+
+		$this->assertCount( 1, $service->written );
+		$this->assertSame( 0, $service->forgotten, 'the stored record still names the saved city' );
+	}
+
+	public function test_no_pick_keeps_the_current_behaviour(): void {
+		$this->assertSame( [], $this->save_with_pick( '', 'Казань', $this->record() )->written );
+		$this->assertSame( 0, $this->save_with_pick( '', 'Казань', $this->record() )->forgotten );
+		$this->assertSame( 1, $this->save_with_pick( '', 'Москва', $this->record() )->forgotten );
+	}
+
+	public function test_a_blank_saved_city_or_an_inactive_layer_never_persists_a_pick(): void {
+		$this->assertSame( [], $this->save_with_pick( $this->picked_json(), '', null )->written );
+		$this->assertSame( [], $this->save_with_pick( $this->picked_json(), 'Казань', null, [ 'active' => false ] )->written );
+	}
+
+	public function test_a_pick_is_never_written_for_another_user(): void {
+		$service = $this->save_with_pick( $this->picked_json(), 'Казань', null, [ 'current' => 9 ] );
+
+		$this->assertSame( [], $service->written );
+		$this->assertSame( 0, $service->forgotten );
+	}
+
+	public function test_a_guest_saves_nothing(): void {
+		// A guest has no user id: the hook's own gate returns before anything is read.
+		Functions\when( 'get_current_user_id' )->justReturn( 0 );
+
+		$service         = new Account_Address_Fake_Service( true, null );
+		$handler         = new Account_Address_Handler( Checkout_Fields::from_array( [] ), 'carrier', $service );
+		$handler->posted = $this->picked_json();
+
+		$handler->handle_customer_save_address( 0, 'shipping', [], $this->customer( 'Казань', 'Казань' ) );
+
+		$this->assertSame( [], $service->written );
+	}
+
+	public function test_the_legacy_hook_signature_persists_the_pick_against_the_freshly_saved_city(): void {
+		$service = $this->save_with_pick( $this->picked_json(), 'Казань', null, [ 'legacy' => true ] );
+		$this->assertCount( 1, $service->written );
+
+		$service = $this->save_with_pick( $this->picked_json(), 'Москва', $this->record(), [ 'legacy' => true ] );
+		$this->assertSame( [], $service->written );
+		$this->assertSame( 1, $service->forgotten );
+	}
+
+	public function test_the_pick_is_judged_against_the_delivery_city_not_the_form_that_was_saved(): void {
+		Functions\when( 'get_current_user_id' )->justReturn( 7 );
+
+		// Saving the billing form while shipping delivers to Moscow: a Kazan pick must not become the record.
+		$service         = new Account_Address_Fake_Service( true, null );
+		$handler         = new Account_Address_Handler( Checkout_Fields::from_array( [] ), 'carrier', $service );
+		$handler->posted = $this->picked_json();
+		$handler->handle_customer_save_address( 7, 'billing', [], $this->customer( 'Казань', 'Москва' ) );
+
+		$this->assertSame( [], $service->written );
+
+		// No shipping city saved: the billing city is the delivery one and the pick is written.
+		$service         = new Account_Address_Fake_Service( true, null );
+		$handler         = new Account_Address_Handler( Checkout_Fields::from_array( [] ), 'carrier', $service );
+		$handler->posted = $this->picked_json();
+		$handler->handle_customer_save_address( 7, 'billing', [], $this->customer( 'Казань', '' ) );
+
+		$this->assertCount( 1, $service->written );
+	}
+
+	// -- the request reader (the real posted_picked_record()) ------------------
+
+	private function save_through_the_real_reader( array $post, bool $nonce_valid ): Account_Address_Fake_Service {
+		Functions\when( 'get_current_user_id' )->justReturn( 7 );
+		Functions\when( 'wp_unslash' )->returnArg();
+		Functions\when( 'sanitize_text_field' )->returnArg();
+		Functions\when( 'wp_verify_nonce' )->alias(
+			static fn( $nonce, $action ) => $nonce_valid && 'N0NCE' === $nonce && 'woocommerce-edit_address' === $action ? 1 : false
+		);
+
+		$service = new Account_Address_Fake_Service( true, null );
+		$handler = new Checkout_Handler( Checkout_Fields::from_array( [] ), 'carrier', $service );
+
+		$_POST = $post;
+
+		try {
+			$handler->handle_customer_save_address( 7, 'shipping', [], $this->customer( 'Казань', 'Казань' ) );
+		} finally {
+			$_POST = [];
+		}
+
+		return $service;
+	}
+
+	public function test_the_real_reader_takes_the_field_from_a_nonce_checked_request(): void {
+		$post = [
+			'woocommerce-edit-address-nonce'   => 'N0NCE',
+			Checkout_Handler::ACCOUNT_RECORD_FIELD => $this->picked_json(),
+		];
+
+		$this->assertCount( 1, $this->save_through_the_real_reader( $post, true )->written );
+	}
+
+	public function test_the_real_reader_ignores_the_field_without_a_valid_wc_nonce(): void {
+		$post = [ Checkout_Handler::ACCOUNT_RECORD_FIELD => $this->picked_json() ];
+		$this->assertSame( [], $this->save_through_the_real_reader( $post, true )->written );
+
+		$post['woocommerce-edit-address-nonce'] = 'N0NCE';
+		$this->assertSame( [], $this->save_through_the_real_reader( $post, false )->written );
+
+		$post[ Checkout_Handler::ACCOUNT_RECORD_FIELD ] = [ 'array' => 'not a string' ];
+		$this->assertSame( [], $this->save_through_the_real_reader( $post, true )->written );
 	}
 }

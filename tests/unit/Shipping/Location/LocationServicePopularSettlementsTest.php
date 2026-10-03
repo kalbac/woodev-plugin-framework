@@ -15,6 +15,9 @@
  * own MEASURED correction of an earlier draft that assumed a single "region
  * key" field; {@see Location_Record::region()} carries only `{ name, type }`).
  *
+ * Also covers Location_Service::accepts_posted_pick() (issue #332): the My Account «Save address»
+ * write refuses a posted record whose provider is gone or whose popular-list row is stale.
+ *
  * @package Woodev\Tests\Unit\Shipping\Location
  */
 
@@ -117,6 +120,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 	/**
 	 * @covers \Woodev\Framework\Shipping\Location\Location_Service::get_popular_settlements_for_country
+	 * @covers \Woodev\Framework\Shipping\Location\Location_Service::accepts_posted_pick
 	 */
 	final class LocationServicePopularSettlementsTest extends TestCase {
 
@@ -273,6 +277,47 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			// there is no separate "region key" field — the client's region filter
 			// is `record.ancestors`, the same flat key set is_within() already uses.
 			$this->assertSame( [ $region_key ], $popular[0]['record']['ancestors'] );
+		}
+
+		// -------------------------------------------------------------------
+		// accepts_posted_pick() — the My Account «Save address» write (#332)
+		// -------------------------------------------------------------------
+
+		public function test_a_posted_pick_of_a_provider_that_is_no_longer_registered_is_refused(): void {
+			$provider = new \Popular_Settlements_Service_Resolving_Fixture_Provider();
+			$store    = Mockery::mock( Popular_Settlement_Store::class );
+			$store->shouldNotReceive( 'find_entry_by_key' );
+
+			$service = new Location_Service( $this->registry_with( [ $provider ], $provider->get_id(), $store ) );
+
+			$this->assertFalse( $service->accepts_posted_pick( $this->record( 'gone-provider', 'x-1' ) ) );
+		}
+
+		public function test_a_posted_pick_that_is_not_a_popular_entry_is_accepted(): void {
+			$provider = new \Popular_Settlements_Service_Resolving_Fixture_Provider();
+			$record   = $this->record( $provider->get_id(), 'ru-1' );
+			$store    = Mockery::mock( Popular_Settlement_Store::class );
+			$store->shouldReceive( 'find_entry_by_key' )->with( $provider->get_id(), $record->key() )->andReturn( null );
+
+			$service = new Location_Service( $this->registry_with( [ $provider ], $provider->get_id(), $store ) );
+
+			$this->assertTrue( $service->accepts_posted_pick( $record ) );
+		}
+
+		public function test_a_posted_popular_pick_is_accepted_only_while_its_row_is_fresh(): void {
+			$provider = new \Popular_Settlements_Service_Resolving_Fixture_Provider();
+			$record   = $this->record( $provider->get_id(), 'ru-1' );
+			$entry    = $this->entry( 1, $record );
+
+			foreach ( [ false => true, true => false ] as $stale => $expected ) {
+				$store = Mockery::mock( Popular_Settlement_Store::class );
+				$store->shouldReceive( 'find_entry_by_key' )->andReturn( $entry );
+				$store->shouldReceive( 'is_stale' )->with( $entry )->andReturn( (bool) $stale );
+
+				$service = new Location_Service( $this->registry_with( [ $provider ], $provider->get_id(), $store ) );
+
+				$this->assertSame( $expected, $service->accepts_posted_pick( $record ), $stale ? 'stale row' : 'fresh row' );
+			}
 		}
 	}
 }

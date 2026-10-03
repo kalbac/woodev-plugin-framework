@@ -199,6 +199,15 @@
 	}() );
 
 	/**
+	 * Issue #332: name of the hidden input a My Account address form carries the picked
+	 * settlement record in, so «Save address» can persist it server-side
+	 * (`Checkout_Handler::ACCOUNT_RECORD_FIELD` — keep the two in step).
+	 *
+	 * @type {string}
+	 */
+	var ACCOUNT_RECORD_FIELD = 'woodev_location_record';
+
+	/**
 	 * Cart and My Account share the trap that WooCommerce's own scripts (`country-select.js`)
 	 * re-fire `change` on the state `<select>` with the value already there — on load and on every
 	 * rebuild of its options. Where that is true the churn is judged by option VALUE, never as a
@@ -3260,6 +3269,50 @@
 	}
 
 	/**
+	 * Issue #332: mirrors the customer's picked settlement into the My Account form's hidden
+	 * {@see ACCOUNT_RECORD_FIELD} input — the record as JSON while `entry.records.settlement` holds
+	 * one, an empty value the moment a real edit (or a region/country change) drops it. A My
+	 * Account pick writes nothing to the store (operator, s149); the form submit carries it, and
+	 * the server decides on «Save address» whether it still names the saved city. A no-op outside
+	 * the account form.
+	 *
+	 * @param {Object} entry
+	 * @returns {void}
+	 */
+	function syncAccountRecordField( entry ) {
+		if ( '' === ACCOUNT_SECTION ) {
+			return;
+		}
+
+		var node = null;
+
+		entry.allNodes.forEach( function( candidate ) {
+			if ( ! node && 'settlement' === candidate.level ) {
+				node = candidate;
+			}
+		} );
+
+		var host = node ? document.getElementById( node.fieldId ) : null;
+		var form = host ? host.form || host.closest( 'form' ) : null;
+
+		if ( ! form ) {
+			return;
+		}
+
+		var record = entry.records.settlement;
+		var hidden = form.querySelector( 'input[name="' + ACCOUNT_RECORD_FIELD + '"]' );
+
+		if ( ! hidden ) {
+			hidden = document.createElement( 'input' );
+			hidden.type = 'hidden';
+			hidden.name = ACCOUNT_RECORD_FIELD;
+			form.appendChild( hidden );
+		}
+
+		hidden.value = record && 'settlement' === record.level ? JSON.stringify( record ) : '';
+	}
+
+	/**
 	 * Builds the `onSelect(item)` callback handed to the Task 10 widget for one chain node.
 	 *
 	 * ONLY POSTS `/select` FOR THE CURRENTLY ACTIVE SECTION (review finding F3): the Location
@@ -3320,6 +3373,7 @@
 			entry.clearedByEdit[ node.level ] = null;
 
 			backwardsFill( entry, node, record );
+			syncAccountRecordField( entry );
 
 			// Issue #337 as AMENDED by the operator in s90: the address lock is refreshed on the
 			// spot off the optimistic record above — but {@see isAddressLocked} now also holds
@@ -4723,6 +4777,7 @@
 				sendForget( clearedEntry );
 			}
 
+			entries.forEach( syncAccountRecordField );
 			handleLayoutRelevantChange();
 			return;
 		}
@@ -4799,6 +4854,9 @@
 		// address field must go back to locked in the same pass, while a field this entry does
 		// not own leaves {@see refreshAddressLock} a no-op anyway.
 		refreshAddressLocks();
+
+		// Issue #332: a real edit nulled the field's record — the hidden copy must follow.
+		entries.forEach( syncAccountRecordField );
 	}
 
 	/**
