@@ -367,6 +367,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 					: self::implicit_entry( $this->unpersisted_default );
 			}
 
+			// #1075: the store's default never overrides a city WooCommerce already holds
+			// for the customer (profile meta or the session's customer) — the saved text
+			// stays in the field. Not memoized: it is a cheap in-memory read, and the
+			// customer object can gain a city later in the request.
+			if ( '' !== $this->customer_saved_city() ) {
+				return null;
+			}
+
 			// A customer's own record is read here, so the lazy default-locality lookup — geoip
 			// `locate()` or the stranded-default re-resolution `suggest()` — is a call the visitor
 			// waits for while the page renders or the order is processed: the checkout budget
@@ -1195,6 +1203,37 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 			$country = $for_country ?? $this->customer_shipping_country();
 
 			return $country !== $record->country();
+		}
+
+		/**
+		 * The city WooCommerce already holds for the customer — shipping first, then billing
+		 * (logged-in user meta is loaded into the same `WC()->customer` object). Empty when
+		 * the customer has none, which is the only state the store's default locality may
+		 * fill (#1075). The location record is one per customer, shared by both addresses,
+		 * so a saved city on either address is enough to keep the default off.
+		 *
+		 * `protected` as a test seam — same reasoning as {@see self::customer_shipping_country()}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string Trimmed city text, or '' when none is saved.
+		 */
+		protected function customer_saved_city(): string {
+			if ( ! function_exists( 'WC' ) || ! WC()->customer ) {
+				return '';
+			}
+
+			$customer = WC()->customer;
+
+			foreach ( [ $customer->get_shipping_city(), $customer->get_billing_city() ] as $city ) {
+				$city = trim( (string) $city );
+
+				if ( '' !== $city ) {
+					return $city;
+				}
+			}
+
+			return '';
 		}
 
 		/**

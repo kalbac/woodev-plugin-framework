@@ -98,6 +98,24 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 	}
 
 	/**
+	 * Probe pinning the city WooCommerce holds for the customer (#1075) instead of
+	 * reading the real `WC()->customer` global.
+	 */
+	final class Default_Test_Saved_City_Service extends Location_Service {
+
+		private string $saved_city;
+
+		public function __construct( Location_Provider_Registry $registry, Customer_Location_Store $store, string $saved_city ) {
+			parent::__construct( $registry, $store );
+			$this->saved_city = $saved_city;
+		}
+
+		protected function customer_saved_city(): string {
+			return $this->saved_city;
+		}
+	}
+
+	/**
 	 * A suggest-only fake provider: id/countries/levels are fixed at
 	 * construction, `suggest()` is driven by a closure and spied. Never
 	 * overrides `locate()` — used for every `fixed`-policy test, where a
@@ -516,6 +534,45 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertSame( 'prov-a:city-1', $fetched['record']->key() );
 			$this->assertTrue( $fetched['implicit'], 'a resolved default must be flagged implicit' );
 			$this->assertCount( 0, $provider->suggest_calls, 'the provider is not the active-namespace mismatch case — no re-resolution needed' );
+		}
+
+		public function test_policy_fixed_does_not_override_a_city_the_customer_already_has_saved(): void {
+			$provider = new Default_Test_Fake_Provider( 'prov-a', static fn() => [] );
+			$stored   = $this->record( 'prov-a:city-1' );
+			$this->stub_default_locality_options( 'prov-a', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED, wp_json_encode( $stored->to_array() ) );
+			$registry = $this->activate( [ $provider ] );
+			$session  = new Default_Test_Fake_Session();
+			$service  = new Default_Test_Saved_City_Service( $registry, new Default_Test_Customer_Store_Probe( $session ), 'Бутово' );
+
+			$this->assertNull( $service->get_customer_record(), 'a saved city keeps the store default off' );
+			$this->assertNull( $service->get_customer_chain() );
+			$this->assertNull( ( new Default_Test_Customer_Store_Probe( $session ) )->get(), 'nothing implicit is persisted either' );
+		}
+
+		public function test_policy_fixed_still_applies_when_the_customer_has_no_saved_city(): void {
+			$provider = new Default_Test_Fake_Provider( 'prov-a', static fn() => [] );
+			$stored   = $this->record( 'prov-a:city-1' );
+			$this->stub_default_locality_options( 'prov-a', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED, wp_json_encode( $stored->to_array() ) );
+			$registry = $this->activate( [ $provider ] );
+			$service  = new Default_Test_Saved_City_Service( $registry, new Default_Test_Customer_Store_Probe( new Default_Test_Fake_Session() ), '' );
+
+			$fetched = $service->get_customer_record();
+
+			$this->assertNotNull( $fetched );
+			$this->assertTrue( $fetched['implicit'] );
+		}
+
+		public function test_a_saved_city_never_hides_an_existing_record(): void {
+			$provider = new Default_Test_Fake_Provider( 'prov-a', static fn() => [] );
+			$stored   = $this->record( 'prov-a:city-1' );
+			$this->stub_default_locality_options( 'prov-a', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED, wp_json_encode( $stored->to_array() ) );
+			$registry = $this->activate( [ $provider ] );
+			$session  = new Default_Test_Fake_Session();
+			$this->service( $registry, $session )->get_customer_record(); // seeds the implicit default
+
+			$service = new Default_Test_Saved_City_Service( $registry, new Default_Test_Customer_Store_Probe( $session ), 'Бутово' );
+
+			$this->assertNotNull( $service->get_customer_record(), 'a record already stored is served regardless of the saved city' );
 		}
 
 		public function test_policy_fixed_never_overwrites_an_existing_explicit_record(): void {
