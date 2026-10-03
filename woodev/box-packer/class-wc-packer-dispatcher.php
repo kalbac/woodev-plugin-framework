@@ -56,16 +56,36 @@ if ( ! class_exists( 'Woodev_WC_Packer_Dispatcher' ) ) :
 		/**
 		 * Converts WooCommerce order items into Woodev_Packer_Input_Item instances.
 		 *
-		 * Skips virtual/downloadable products and items whose product no longer exists.
-		 * Dimensions and weight are converted from the store's units to the packer's cm / kg.
+		 * Goes through {@see self::order_to_cart_contents()} and {@see self::from_cart_items()}, so an
+		 * order is read exactly as a cart package is. Dimensions and weight are converted from the
+		 * store's units to the packer's cm / kg.
 		 *
 		 * @since  1.4.1
+		 * @since  2.0.2 Refunded quantities are excluded, a fully refunded line is skipped, lines that need no shipping are skipped (#948).
 		 *
 		 * @param  \WC_Order $order
 		 * @return Woodev_Packer_Input_Item[]
 		 */
 		public static function from_order_items( \WC_Order $order ): array {
-			$items = [];
+			return self::from_cart_items( self::order_to_cart_contents( $order ) );
+		}
+
+		/**
+		 * Converts an order's lines into the `contents` of a WooCommerce shipping package.
+		 *
+		 * The shape mirrors a cart's (`data` is the product, `quantity` what is still to be shipped), and
+		 * a line is left out exactly where `WC_Cart::filter_items_needing_shipping()` leaves it out of a
+		 * package: a product that does not need shipping (virtual, or suppressed by
+		 * `woocommerce_product_needs_shipping`) and a deleted product. The quantity is the ordered one
+		 * less the refunded one; a line refunded in full is skipped.
+		 *
+		 * @since  2.0.2
+		 *
+		 * @param  \WC_Order $order
+		 * @return array<string, array<string, mixed>> package contents, keyed by order item id
+		 */
+		public static function order_to_cart_contents( \WC_Order $order ): array {
+			$contents = [];
 
 			foreach ( $order->get_items() as $order_item ) {
 				if ( ! $order_item instanceof \WC_Order_Item_Product ) {
@@ -74,16 +94,30 @@ if ( ! class_exists( 'Woodev_WC_Packer_Dispatcher' ) ) :
 
 				$product = $order_item->get_product();
 
-				if ( ! $product instanceof \WC_Product || $product->is_virtual() ) {
+				if ( ! $product instanceof \WC_Product || ! $product->needs_shipping() ) {
 					continue;
 				}
 
-				$qty = max( 1, (int) $order_item->get_quantity() );
+				// what is still to be shipped: a refunded unit is not packed. The sign of WooCommerce's
+				// refunded quantity has changed between versions, so only its size is used.
+				$qty = (int) $order_item->get_quantity() - abs( (int) $order->get_qty_refunded_for_item( $order_item->get_id() ) );
 
-				$items[] = self::to_input_item( $product, $qty );
+				if ( $qty < 1 ) {
+					continue;
+				}
+
+				$key = (string) $order_item->get_id();
+
+				$contents[ $key ] = [
+					'key'          => $key,
+					'product_id'   => (int) $order_item->get_product_id(),
+					'variation_id' => (int) $order_item->get_variation_id(),
+					'quantity'     => $qty,
+					'data'         => $product,
+				];
 			}
 
-			return $items;
+			return $contents;
 		}
 
 		/**

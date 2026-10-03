@@ -821,6 +821,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 * to pack or the WooCommerce-aware dispatcher is unavailable, so callers
 		 * can skip dimensional rate logic without catching exceptions.
 		 *
+		 * This is the seam a carrier overrides to customize parcels: both the rate and
+		 * {@see self::pack_order()} go through it.
+		 *
 		 * @since 2.0.0
 		 *
 		 * @param array $package WooCommerce shipping package (expects a 'contents' array of cart items).
@@ -841,6 +844,62 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			}
 
 			return \Woodev_WC_Packer_Dispatcher::pack( $this->get_packing_algorithm(), $items );
+		}
+
+		/**
+		 * Packs an ORDER into parcels with the same packer the rate was calculated with.
+		 *
+		 * The packing of a carrier order is recomputed at export, not stored at checkout (#948): the
+		 * order is turned into a WooCommerce-shaped package (see
+		 * {@see \Woodev_WC_Packer_Dispatcher::order_to_cart_contents()} — lines that need no shipping,
+		 * deleted products and fully refunded lines are left out as a cart leaves them out, refunded
+		 * units are not counted) and handed to {@see self::pack_package()}, the very seam the rate
+		 * packs through. The algorithm, the default dimensions (#955) and any carrier override of
+		 * `pack_package()` therefore apply to the export exactly as to the rate. As at rate time, a
+		 * method that has not opted into {@see self::FEATURE_BOX_PACKING} gets null.
+		 *
+		 * Call path from an export: find the order's shipping line with
+		 * {@see Shipping_Helper::get_order_shipping_item()}, resolve the instance with
+		 * `\WC_Shipping_Zones::get_shipping_method( $line->get_instance_id() )` (false when the zone no
+		 * longer has it) and call this on the result. The handler cannot do that for a plugin — it does
+		 * not know which of the order's lines is the plugin's — so the plugin's own export code does.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order the order about to be exported
+		 * @return \Woodev_Packer_Result|null packed result, or null when nothing is packable or packing is not supported
+		 */
+		public function pack_order( \WC_Order $order ): ?\Woodev_Packer_Result {
+
+			if ( ! $this->supports_box_packing() || ! class_exists( '\\Woodev_WC_Packer_Dispatcher' ) ) {
+				return null;
+			}
+
+			return $this->pack_package( $this->build_order_package( $order ) );
+		}
+
+		/**
+		 * Builds the WooCommerce-shaped shipping package of an order.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order the order about to be exported
+		 * @return array<string, mixed> package: `contents` of the order's shippable lines, the order's shipping `destination`
+		 */
+		private function build_order_package( \WC_Order $order ): array {
+
+			return [
+				'contents'    => \Woodev_WC_Packer_Dispatcher::order_to_cart_contents( $order ),
+				'destination' => [
+					'country'   => (string) $order->get_shipping_country(),
+					'state'     => (string) $order->get_shipping_state(),
+					'postcode'  => (string) $order->get_shipping_postcode(),
+					'city'      => (string) $order->get_shipping_city(),
+					'address'   => (string) $order->get_shipping_address_1(),
+					'address_1' => (string) $order->get_shipping_address_1(),
+					'address_2' => (string) $order->get_shipping_address_2(),
+				],
+			];
 		}
 
 		/**

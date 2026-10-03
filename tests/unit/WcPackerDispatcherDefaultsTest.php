@@ -100,6 +100,7 @@ namespace Woodev\Tests\Unit {
 		private function product( $length, $width, $height, $weight ): \WC_Product {
 			$product = Mockery::mock( '\WC_Product' );
 			$product->shouldReceive( 'is_virtual' )->andReturn( false );
+			$product->shouldReceive( 'needs_shipping' )->andReturn( true );
 			$product->shouldReceive( 'get_length' )->andReturn( $length );
 			$product->shouldReceive( 'get_width' )->andReturn( $width );
 			$product->shouldReceive( 'get_height' )->andReturn( $height );
@@ -254,8 +255,12 @@ namespace Woodev\Tests\Unit {
 			$order_item = Mockery::mock( '\WC_Order_Item_Product' );
 			$order_item->shouldReceive( 'get_product' )->andReturn( $this->product( '', '', '', '' ) );
 			$order_item->shouldReceive( 'get_quantity' )->andReturn( 1 );
+			$order_item->shouldReceive( 'get_id' )->andReturn( 1 );
+			$order_item->shouldReceive( 'get_product_id' )->andReturn( 7 );
+			$order_item->shouldReceive( 'get_variation_id' )->andReturn( 0 );
 			$order = Mockery::mock( '\WC_Order' );
 			$order->shouldReceive( 'get_items' )->andReturn( [ $order_item ] );
+			$order->shouldReceive( 'get_qty_refunded_for_item' )->andReturn( 0 );
 
 			$item = \Woodev_WC_Packer_Dispatcher::from_order_items( $order )[0];
 
