@@ -234,6 +234,113 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$this->assertGreaterThan( 30, Shipping_Admin_Order::METABOX_HOOK_PRIORITY );
 		}
 
+		/**
+		 * @param array<string,mixed> $boxes
+		 * @return array<string,mixed>
+		 */
+		private function move_box_after( array $boxes, string $moved, string $anchor ): array {
+			$method = new \ReflectionMethod( Shipping_Admin_Order::class, 'move_box_after' );
+
+			// The framework supports PHP 7.4, where a private method is only invocable once made accessible.
+			if ( PHP_VERSION_ID < 80100 ) {
+				$method->setAccessible( true );
+			}
+
+			return $method->invoke( null, $boxes, $moved, $anchor );
+		}
+
+		/**
+		 * #947: WC registers «Order actions», «Order attribution» and «Customer history» as side/high
+		 * before `add_meta_boxes` fires, so our box lands behind them — it must be moved right under
+		 * «Order actions», the others keeping their relative order.
+		 */
+		public function test_move_box_after_places_the_box_directly_under_the_anchor_and_keeps_the_rest_in_order(): void {
+			$boxes = [
+				'woocommerce-order-actions'     => [ 'a' ],
+				'woocommerce-order-source-data' => [ 'b' ],
+				'woocommerce-customer-history'  => [ 'c' ],
+				'woodev_shipping_order'         => [ 'ours' ],
+				'woocommerce-order-notes'       => [ 'n' ],
+			];
+
+			$result = $this->move_box_after( $boxes, 'woodev_shipping_order', 'woocommerce-order-actions' );
+
+			$this->assertSame(
+				[
+					'woocommerce-order-actions',
+					'woodev_shipping_order',
+					'woocommerce-order-source-data',
+					'woocommerce-customer-history',
+					'woocommerce-order-notes',
+				],
+				array_keys( $result )
+			);
+			$this->assertSame( [ 'ours' ], $result['woodev_shipping_order'] );
+		}
+
+		public function test_move_box_after_leaves_the_band_alone_when_order_actions_is_absent(): void {
+			$boxes = [
+				'woocommerce-customer-history' => [ 'c' ],
+				'woodev_shipping_order'        => [ 'ours' ],
+			];
+
+			$this->assertSame( $boxes, $this->move_box_after( $boxes, 'woodev_shipping_order', 'woocommerce-order-actions' ) );
+		}
+
+		public function test_move_box_after_leaves_the_band_alone_when_our_box_is_absent(): void {
+			$boxes = [
+				'woocommerce-order-actions'    => [ 'a' ],
+				'woocommerce-customer-history' => [ 'c' ],
+			];
+
+			$this->assertSame( $boxes, $this->move_box_after( $boxes, 'woodev_shipping_order', 'woocommerce-order-actions' ) );
+		}
+
+		public function test_move_box_after_is_a_noop_when_already_directly_under_the_anchor(): void {
+			$boxes = [
+				'woocommerce-order-actions'    => [ 'a' ],
+				'woodev_shipping_order'        => [ 'ours' ],
+				'woocommerce-customer-history' => [ 'c' ],
+			];
+
+			$this->assertSame( $boxes, $this->move_box_after( $boxes, 'woodev_shipping_order', 'woocommerce-order-actions' ) );
+		}
+
+		public function test_add_meta_box_reorders_the_registered_side_high_band_under_order_actions(): void {
+			$registry = Mockery::mock( Orders_Registry::class );
+			$registry->shouldReceive( 'resolve_provider_for_order' )->once()->andReturn( $this->provider() );
+			$registry->shouldReceive( 'enqueue_metabox_style' )->once();
+			$registry->shouldReceive( 'enqueue_metabox_script' )->once();
+
+			$previous = $GLOBALS['wp_meta_boxes'] ?? null;
+
+			// Stand-in for WP: the real add_meta_box() appends to the band, behind WC's three.
+			$GLOBALS['wp_meta_boxes']['shop_order']['side']['high'] = [
+				'woocommerce-order-actions'    => [ 'a' ],
+				'woocommerce-customer-history' => [ 'c' ],
+			];
+			Functions\when( 'add_meta_box' )->alias(
+				static function ( $id, $title, $callback, $screen, $context, $priority ) {
+					$GLOBALS['wp_meta_boxes'][ $screen ][ $context ][ $priority ][ $id ] = [ 'ours' ];
+				}
+			);
+
+			try {
+				( new Shipping_Admin_Order( $registry ) )->add_meta_box( 'shop_order', $this->make_order() );
+
+				$this->assertSame(
+					[ 'woocommerce-order-actions', 'woodev_shipping_order', 'woocommerce-customer-history' ],
+					array_keys( $GLOBALS['wp_meta_boxes']['shop_order']['side']['high'] )
+				);
+			} finally {
+				if ( null === $previous ) {
+					unset( $GLOBALS['wp_meta_boxes'] );
+				} else {
+					$GLOBALS['wp_meta_boxes'] = $previous;
+				}
+			}
+		}
+
 		// -----------------------------------------------------------------------
 		// render_metabox() — two states on the SAME is_exported, KISS field list.
 		// -----------------------------------------------------------------------
