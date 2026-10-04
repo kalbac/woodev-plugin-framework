@@ -33,6 +33,10 @@
 - [woocommerce/order-metabox] **A `<form>` inside an order-edit metabox closes WooCommerce's order form — the status and every main-column field stop being submitted.** → [a-form-inside-a-wc-order-metabox-closes-the-order-form](../gotchas/a-form-inside-a-wc-order-metabox-closes-the-order-form.md) (s145)
 - [woocommerce/action-scheduler] **`as_has_scheduled_action()` also matches the IN-PROGRESS action — a retry scheduled from inside its own run finds itself and schedules nothing.** → [as-has-scheduled-action-matches-the-running-action](../gotchas/as-has-scheduled-action-matches-the-running-action.md) (s145)
 
+- [woocommerce/store-api] **Store API checkout hooks also run for pay-for-order.** → [store-api-checkout-hooks-also-run-for-pay-for-order](../gotchas/store-api-checkout-hooks-also-run-for-pay-for-order.md) (SP-11 C-2a fix round)
+
+- [woocommerce/store-api] **Store API extension schemas are endpoint-specific.** → [store-api-extension-schema-is-endpoint-specific](../gotchas/store-api-extension-schema-is-endpoint-specific.md) (SP-11 C-2a fix round)
+
 ## Related
 
 - [../GOTCHAS.md](../GOTCHAS.md) — the topic map

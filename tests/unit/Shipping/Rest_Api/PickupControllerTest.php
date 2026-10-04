@@ -1050,6 +1050,7 @@ final class PickupControllerTest extends TestCase {
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'woodev_pickup_invalid_selection', $result->get_error_code() );
+		$this->assertSame( 'Please choose a pickup point.', $result->get_error_message() );
 		$this->assertSame( 400, $result->get_error_data()['status'] );
 		$this->assertSame( 0, $called, 'the carrier must not be called for an empty id' );
 	}

@@ -281,6 +281,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 					return array_merge( (array) $defaults, (array) $args );
 				}
 			);
+			Functions\when( 'get_post_meta' )->justReturn( '' );
 			Functions\when( 'update_post_meta' )->alias(
 				function ( $id, $key, $value ) {
 					$this->events[] = [ 'meta', $key, $value ];
@@ -675,7 +676,8 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 		/**
 		 * `woocommerce_checkout_validate_order_before_payment` also fires for a pay-for-order
 		 * request against an EXISTING order: its point was persisted when it was placed and is
-		 * no longer in the session, so only a Store API draft is checked.
+		 * no longer in the session. An admin-created order may never have had a point;
+		 * the pay-for-order page has no picker, so this draft-only backstop must stay silent.
 		 */
 		public function test_an_existing_order_being_paid_for_is_not_refused(): void {
 			$order  = new Store_Api_Fake_Order( [ 'carrier_pickup' ], 'Москва', 'pending' );
@@ -803,8 +805,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 		}
 
 		/**
-		 * A non-pickup method, or an existing order being paid for, is left alone on the legacy
-		 * path exactly as on the 9.9+ one.
+		 * Non-pickup and existing pay-for-order orders pass on legacy WC too.
 		 */
 		public function test_a_legacy_wc_post_for_a_non_pickup_or_existing_order_passes(): void {
 			$handler = $this->legacy_wc_handler();
