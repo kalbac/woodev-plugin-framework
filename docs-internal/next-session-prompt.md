@@ -88,7 +88,11 @@ s83–s151; статус каждого на его карточке, детал
 
 # С чего начать
 
-0. **Проверить #1089:** `orca terminal list` / `orca orchestration worker-list --run run_a00ffcc2f1da` (путь к `orca` —
+0. **#1089 на момент записи:** Fable сдал `5ecf591a`; критик Codex sol — PASS WITH FIXES (3 major: в команду уходит имя
+   регистрации оплаты вместо id шлюза; устаревший COD из сессии делает предоплатные ПВЗ невыбираемыми; `pickup_replace_address`
+   игнорируется в блоках) → **раунд правок 1 у Fable** (бриф `scratchpad/brief-1089-fix.md`). Дальше — критик r2 (`gpt-6-luna`
+   или sol), бандл, зонд, приёмка. Отчёты: `scratchpad/report-1089*.md` сессии `12cfb77e…`.
+   **Проверить #1089:** `orca terminal list` / `orca orchestration worker-list --run run_a00ffcc2f1da` (путь к `orca` —
    `/Applications/Orca.app/Contents/Resources/bin/orca`). Отчёт воркера — `scratchpad/report-1089.md` прошлой сессии (скретчпад
    сессии `12cfb77e…`); если его нет, а терминал Fable жив — дождаться; если терминал мёртв — ветка `kalbac/feat-1089-blocks-pickup`
    на origin (если запушена) или ворктри `feat-1089-blocks-pickup` — продолжить свежим воркером по тому же брифу.
