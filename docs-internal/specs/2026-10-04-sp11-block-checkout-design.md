@@ -182,6 +182,25 @@ Three rules added by the C-2b critic round (#1089):
   move the chosen rate does not survive is undone. The city is never replaced: it is the
   customer's confirmed locality, and a record the native city no longer names is stale.
 
+Rules added by C-3 (#1090), from replaying the multi-request flows against WooCommerce 11.1:
+
+- **A retry's point is the order's.** `…_order_processed` fires on every `POST`, retries included,
+  and the first attempt has emptied the session's memory. The pickup handler then contributes the
+  point the order already carries (for the method it owns) instead of leaving the field absent —
+  an absent field is sanitised to `''` and written over the stored id. The full point is not
+  re-fetched or re-written on a retry.
+- **«The session's draft» is the order WooCommerce would reuse** (`checkout-draft`, or
+  pending/failed with the cart's hash) — never any order the session still names by id.
+- **A reused retry order follows its rate.** On `…_update_order_from_request` a field whose carrier
+  no longer owns the order's first shipping line drops the point the previous attempt stored. A
+  handler without a `Selection_Scope` is exempt. A clear with nothing to clear writes nothing.
+- **Client.** Confirmation commands leave one at a time. A confirmation answering after the shopper
+  left the rate it was asked for (or after the block unmounted) rejects as superseded and moves no
+  address; that is decided from the block's own latch, not the cart store, which the late reply
+  has just overwritten.
+- **Not changed (follow-up card):** after a failed payment the cart snapshot is `null` — the next
+  cart answer (a payment-method switch, a reload) makes the shopper pick the point again.
+
 Important existing code, not new work to recreate:
 
 - #949 is **closed**; the REST rate guard has already been fixed. Re-verify rates after address

@@ -239,6 +239,9 @@ function failure( error: unknown ): PickupFailure {
 	};
 }
 
+/** Settles when the last confirmation asked for has been answered; `null` while none is in flight. */
+let confirmationInFlight: Promise< void > | null = null;
+
 /**
  * Confirms `pointId` for `field` through the Store API (`cart/extensions`, operator decision
  * D-3 B) and answers in the classic confirmation's own shape, which the map session applies.
@@ -257,12 +260,50 @@ function failure( error: unknown ): PickupFailure {
  * moved the destination in the same request and the confirmation names the fields it moved; they
  * are taken into the native address here, before this resolves — so still under the caller's
  * checkout gate. `billingIsShipping`: the store ships to the billing address.
+ *
+ * TWO GUARDS AGAINST A LATE ANSWER (SP-11 C-3, #1090):
+ *
+ * - Commands leave ONE AT A TIME, in the order they were asked. The cart store takes whichever
+ *   reply arrives last, so two confirmations in flight together could leave the button showing
+ *   the point of the one the server processed first.
+ * - `isCurrent()` is asked when the reply lands: whether the shopper is still on the rate the
+ *   point was asked for. A reply that lands after they left it REJECTS (`…_superseded`) and moves
+ *   no address — the form must not take a pickup point's street for a courier order. The caller
+ *   answers from its own record, never from the cart store: the late reply has just overwritten
+ *   the store's selected rate with the one the server saw (`receiveCart()`).
  */
-export async function confirmPoint(
+export function confirmPoint(
 	namespace: string,
 	field: PickupFieldDescriptor,
 	pointId: string,
-	billingIsShipping = false
+	billingIsShipping = false,
+	isCurrent: () => boolean = () => true
+): Promise< PickupSelectionResult > {
+	const send = (): Promise< PickupSelectionResult > =>
+		sendConfirmation( namespace, field, pointId, billingIsShipping, isCurrent );
+	const result = confirmationInFlight ? confirmationInFlight.then( send ) : send();
+	const settled: Promise< void > = result
+		.then(
+			() => undefined,
+			() => undefined
+		)
+		.then( () => {
+			if ( confirmationInFlight === settled ) {
+				confirmationInFlight = null;
+			}
+		} );
+
+	confirmationInFlight = settled;
+
+	return result;
+}
+
+async function sendConfirmation(
+	namespace: string,
+	field: PickupFieldDescriptor,
+	pointId: string,
+	billingIsShipping: boolean,
+	isCurrent: () => boolean
 ): Promise< PickupSelectionResult > {
 	const update = wcRuntime()?.blocksCheckout?.extensionCartUpdate;
 
@@ -300,6 +341,10 @@ export async function confirmPoint(
 
 	if ( ! snapshot || snapshot.point_id !== pointId ) {
 		throw { status: 0, code: 'woodev_pickup_not_confirmed', message: '' } as PickupFailure;
+	}
+
+	if ( ! isCurrent() ) {
+		throw { status: 0, code: 'woodev_pickup_superseded', message: '' } as PickupFailure;
 	}
 
 	const destination = movedDestination( snapshot );

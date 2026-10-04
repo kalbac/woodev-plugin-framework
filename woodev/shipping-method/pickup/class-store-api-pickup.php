@@ -502,7 +502,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 				return;
 			}
 			self::reconcile( $request, $order );
+			self::drop_unowned_points( $order );
 			self::$echoes[ $order->get_id() ] = (array) ( $request->get_param( 'extensions' )[ self::EXTENSION_NAMESPACE ] ?? [] );
+		}
+
+		/**
+		 * Lets every field drop the previous attempt's point once its carrier no longer owns the
+		 * order's rate — {@see Pickup_Handler::drop_unowned_store_api_point()}.
+		 *
+		 * @since 2.0.2
+		 * @param \WC_Order $order The session's draft or retry order, already synced from the cart.
+		 * @return void
+		 */
+		private static function drop_unowned_points( \WC_Order $order ): void {
+			foreach ( self::$handlers as $fields ) {
+				foreach ( $fields as $handler ) {
+					$handler->drop_unowned_store_api_point( $order );
+				}
+			}
 		}
 
 		/**

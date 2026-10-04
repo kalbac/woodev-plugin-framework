@@ -52,9 +52,14 @@ export interface HostOptions {
 	trigger: HTMLElement | null;
 	/** The dialog closed after a selection: the caller destroys the session it holds. */
 	onClose: () => void;
+	/**
+	 * Whether the shopper is still on the rate this session was opened for — asked when a
+	 * confirmation's answer lands (see `confirmPoint()`). Omitted: always.
+	 */
+	isCurrent?: () => boolean;
 }
 
-export function createHost( { data, field, config, trigger, onClose }: HostOptions ): PickupSessionHost {
+export function createHost( { data, field, config, trigger, onClose, isCurrent }: HostOptions ): PickupSessionHost {
 	const namespace = data.namespace ?? '';
 
 	return {
@@ -98,7 +103,7 @@ export function createHost( { data, field, config, trigger, onClose }: HostOptio
 			// made exactly once either way, and its verdict — or its failure — is what the session
 			// gets, never the gate's own.
 			const send = (): Promise< PickupSelectionResult > =>
-				( outcome ??= confirmPoint( namespace, field, pointId, billingIsShipping ) );
+				( outcome ??= confirmPoint( namespace, field, pointId, billingIsShipping, isCurrent ) );
 
 			return gateCheckout( () =>
 				send().then(

@@ -180,10 +180,24 @@ export function PickupPicker( { data, checkoutExtensionData }: PickupPickerProps
 	/*
 	 * A session belongs to the rate it was opened for. The rate changing under an open dialog — or
 	 * the block going away — tears it down, which also discards an answer still in flight.
+	 *
+	 * `left` is LATCHED for everything opened under that rate: a confirmation answering after the
+	 * shopper moved on must not write the point's address into the form, even if its own late cart
+	 * puts the old rate back into the store for a moment (#1090).
 	 */
 	const sessionScope = field ? `${ field.pluginId }|${ field.fieldId }|${ selectedRateId }` : '';
+	const scopeRef = useRef( { left: false } );
 
-	useEffect( () => closeSession, [ sessionScope, closeSession ] );
+	useEffect( () => {
+		const scope = { left: false };
+
+		scopeRef.current = scope;
+
+		return () => {
+			scope.left = true;
+			closeSession();
+		};
+	}, [ sessionScope, closeSession ] );
 
 	useEffect( () => {
 		applyAccent( triggerRef.current, config ?? { fieldId: '' } );
@@ -206,10 +220,19 @@ export function PickupPicker( { data, checkoutExtensionData }: PickupPickerProps
 			return;
 		}
 
+		const scope = scopeRef.current;
+
 		setUnavailable( false );
 		sessionRef.current = api.open(
 			config,
-			createHost( { data, field, config, trigger: triggerRef.current, onClose: closeSession } )
+			createHost( {
+				data,
+				field,
+				config,
+				trigger: triggerRef.current,
+				onClose: closeSession,
+				isCurrent: () => ! scope.left,
+			} )
 		);
 	};
 
