@@ -853,6 +853,24 @@ describe( 'LocalityChooser — ordering under a slow network', () => {
 		expect( clearButton() ).not.toBeInTheDocument();
 	} );
 
+	it( 'keeps an applied choice when unmounted during rate recalculation', async () => {
+		let release: () => void = () => undefined;
+		mockStore.refreshHold = new Promise< void >( ( resolve ) => ( release = resolve ) );
+
+		const view = render( <LocalityChooser config={ baseConfig() } /> );
+		await chooseFirstSuggestion();
+		await waitFor( () => expect( mockStore.setShippingAddress ).toHaveBeenCalledTimes( 1 ) );
+		await waitFor( () => expect( mockStore.calculating ).toBe( 1 ) );
+
+		view.unmount();
+		render( <LocalityChooser config={ baseConfig() } /> );
+
+		expect( sent( 'forget' ) ).toHaveLength( 0 );
+		expect( mockStore.customer.shippingAddress.city ).toBe( 'Подольск' );
+		release();
+		await waitFor( () => expect( mockStore.calculating ).toBe( 0 ) );
+	} );
+
 	it( 'an unmount with a pick still queued: the pick is never sent', async () => {
 		mockStore.customer.shippingAddress = { ...mockStore.customer.shippingAddress, city: 'Подольск' };
 		holding.add( 'forget' );
