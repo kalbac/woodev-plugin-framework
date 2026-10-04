@@ -33,6 +33,12 @@ const mockStore = {
 	hasGate: true,
 	/** When set, `updateCustomerData` answers only once this settles. */
 	refreshHold: null as Promise< void > | null,
+	/**
+	 * `hasFinishedResolution( 'getCartData' )`: `false` is the page before WooCommerce's cart data
+	 * arrived (the store holds its empty defaults). `undefined` simulates a store without the
+	 * meta-selector.
+	 */
+	cartLoaded: undefined as boolean | undefined,
 };
 
 const notify = (): void => mockStore.listeners.forEach( ( listener ) => listener() );
@@ -41,6 +47,9 @@ jest.mock( '@wordpress/data', () => {
 	const selectFn = () => ( {
 		getCustomerData: () => mockStore.customer,
 		getUseShippingAsBilling: () => mockStore.useShippingAsBilling,
+		...( mockStore.cartLoaded === undefined
+			? {}
+			: { hasFinishedResolution: ( name: string ) => name === 'getCartData' && mockStore.cartLoaded === true } ),
 	} );
 
 	return {
@@ -285,6 +294,7 @@ beforeEach( () => {
 	mockStore.calculating = 0;
 	mockStore.hasGate = true;
 	mockStore.refreshHold = null;
+	mockStore.cartLoaded = undefined;
 	selectReply = { persisted: true };
 	suggestReply = [ podolsk ];
 	holding = new Set();
@@ -528,11 +538,168 @@ describe( 'LocalityChooser — hydrate (guest and logged in)', () => {
 		await waitFor( () => expect( sent( 'forget' ) ).toHaveLength( 1 ) );
 	} );
 
-	it( 'does not claim a saved locality while the native address names no city', async () => {
+	it( 'neither claims nor clears a saved locality while the native address names no city', async () => {
+		// The chain is shared with the classic checkout, the cart and My Account: a City that has
+		// simply not been filled in is no reason to erase a locality the customer chose there.
+		render( <LocalityChooser config={ podolskSaved() } /> );
+
+		expect( clearButton() ).not.toBeInTheDocument();
+		await act( settle );
+		expect( sent( 'forget' ) ).toHaveLength( 0 );
+		expect( mockStore.calculating ).toBe( 0 );
+	} );
+
+	it( 'claims the undecided locality once the shopper types a City that names it', async () => {
+		render( <LocalityChooser config={ podolskSaved() } /> );
+
+		editNative( { city: 'г. Подольск' } );
+
+		await waitFor( () => expect( clearButton() ).toBeInTheDocument() );
+		expect( screen.getByRole( 'combobox' ) ).toHaveValue( 'Подольск' );
+		await act( settle );
+		expect( sent( 'forget' ) ).toHaveLength( 0 );
+		// The native text is the shopper's: it is not rewritten.
+		expect( mockStore.setShippingAddress ).not.toHaveBeenCalled();
+	} );
+
+	it( 'clears the undecided locality once the shopper types a City that names another place', async () => {
+		render( <LocalityChooser config={ podolskSaved() } /> );
+
+		editNative( { city: 'Казань' } );
+
+		await waitFor( () => expect( sent( 'forget' ) ).toHaveLength( 1 ) );
+		expect( clearButton() ).not.toBeInTheDocument();
+	} );
+
+	it( 'does not judge the saved locality before WooCommerce has loaded the address', async () => {
+		// Before the cart data arrives the store holds its empty defaults — no city, no country.
+		mockStore.cartLoaded = false;
+		mockStore.customer.shippingAddress = { city: '', state: '', country: '' };
+
+		render( <LocalityChooser config={ podolskSaved() } /> );
+		await act( settle );
+		expect( sent( 'forget' ) ).toHaveLength( 0 );
+
+		// A default country alone, still not the customer's address, proves nothing either.
+		editNative( { city: 'Казань', country: 'RU' } );
+		await act( settle );
+		expect( sent( 'forget' ) ).toHaveLength( 0 );
+
+		// The cart arrives, and the address names the saved locality — in its own words.
+		mockStore.cartLoaded = true;
+		editNative( { first_name: 'Анна', city: 'г. ПОДОЛЬСК', state: 'МОСКОВСКАЯ ОБЛАСТЬ', country: 'RU' } );
+
+		await waitFor( () => expect( clearButton() ).toBeInTheDocument() );
+		await act( settle );
+		expect( sent( 'forget' ) ).toHaveLength( 0 );
+	} );
+
+	it( 'clears a saved locality the loaded address does not name — only once it HAS loaded', async () => {
+		mockStore.cartLoaded = false;
+		mockStore.customer.shippingAddress = { city: '', state: '', country: '' };
+
+		render( <LocalityChooser config={ podolskSaved() } /> );
+
+		mockStore.cartLoaded = true;
+		editNative( { city: 'Казань', state: 'ТАТАРСТАН', country: 'RU' } );
+
+		await waitFor( () => expect( sent( 'forget' ) ).toHaveLength( 1 ) );
+		expect( clearButton() ).not.toBeInTheDocument();
+	} );
+
+	/*
+	 * Critic round 2, F12: the chooser keeps exactly what the server's rule (c) keeps — the SAME cases
+	 * as `name_contract_cases()` in LocationServiceTest.php, here at the component boundary.
+	 */
+	it.each( [
+		[ 'Мостовской', 'рп', 'рп Мостовской' ],
+		[ 'Панахес', 'аул', 'аул Панахес' ],
+		[ 'Подольск', 'г', 'г. ПОДОЛЬСК' ],
+		[ 'Орёл', 'г', 'Орел' ],
+		[ 'Орел', 'г', 'Орёл' ],
+		[ 'Москва', 'г', 'г. Москва' ],
+	] )( 'restores a saved «%s» (type «%s») for the native City «%s» and never forgets it', async ( name, type, city ) => {
+		mockStore.customer.shippingAddress = { ...mockStore.customer.shippingAddress, city };
+		const saved = { ...podolsk.record, key: 'dadata:named', settlement: { name, type } };
+
+		render( <LocalityChooser config={ baseConfig( { selection: { record: saved } } ) } /> );
+
+		expect( screen.getByRole( 'combobox' ) ).toHaveValue( name );
+		expect( clearButton() ).toBeInTheDocument();
+		await act( settle );
+		expect( sent( 'forget' ) ).toHaveLength( 0 );
+	} );
+
+	it.each( [
+		[ 'Санкт-Петербург', 'г', 'Санкт Петербург' ],
+		[ 'Москва', 'г', 'Moscow' ],
+		[ 'Мостовской', 'г', 'рп Мостовской' ],
+	] )( 'does not guess that «%s» (type «%s») is the native City «%s»', async ( name, type, city ) => {
+		mockStore.customer.shippingAddress = { ...mockStore.customer.shippingAddress, city };
+		const saved = { ...podolsk.record, key: 'dadata:named', settlement: { name, type } };
+
+		render( <LocalityChooser config={ baseConfig( { selection: { record: saved } } ) } /> );
+
+		expect( clearButton() ).not.toBeInTheDocument();
+		await waitFor( () => expect( sent( 'forget' ) ).toHaveLength( 1 ) );
+	} );
+
+	// Critic round 2, F11: the restored record's State is derived from WooCommerce's state list.
+	it( 'does not claim a saved locality whose region the native State is not, and clears it', async () => {
+		mockStore.customer.shippingAddress = { ...mockStore.customer.shippingAddress, city: 'Подольск', state: 'ТАТАРСТАН' };
+
 		render( <LocalityChooser config={ podolskSaved() } /> );
 
 		expect( clearButton() ).not.toBeInTheDocument();
 		await waitFor( () => expect( sent( 'forget' ) ).toHaveLength( 1 ) );
+	} );
+
+	it( 'reload, then a State-only edit: the restored selection is dropped and forgotten', async () => {
+		mockStore.customer.shippingAddress = { ...mockStore.customer.shippingAddress, city: 'Подольск', state: 'МОСКОВСКАЯ ОБЛАСТЬ' };
+
+		render( <LocalityChooser config={ podolskSaved() } /> );
+		expect( clearButton() ).toBeInTheDocument();
+
+		// The City still says «Подольск»; only the region moved.
+		editNative( { state: 'ТАТАРСТАН' } );
+
+		await waitFor( () => expect( clearButton() ).not.toBeInTheDocument() );
+		await waitFor( () => expect( sent( 'forget' ) ).toHaveLength( 1 ) );
+		await waitFor( () =>
+			expect( mockStore.updateCustomerData ).toHaveBeenCalledWith(
+				{ shipping_address: { city: 'Подольск', state: 'ТАТАРСТАН', country: 'RU' } },
+				true,
+				true
+			)
+		);
+	} );
+
+	it( 'reload with a blank State: the selection is restored, and a State naming another region drops it', async () => {
+		mockStore.customer.shippingAddress = { ...mockStore.customer.shippingAddress, city: 'Подольск' };
+
+		render( <LocalityChooser config={ podolskSaved() } /> );
+		expect( clearButton() ).toBeInTheDocument();
+
+		// The record's own region is no disagreement…
+		editNative( { state: 'МОСКОВСКАЯ ОБЛАСТЬ' } );
+		await act( settle );
+		expect( clearButton() ).toBeInTheDocument();
+		expect( sent( 'forget' ) ).toHaveLength( 0 );
+
+		// …another one is.
+		editNative( { state: 'МОСКВА' } );
+		await waitFor( () => expect( sent( 'forget' ) ).toHaveLength( 1 ) );
+		expect( clearButton() ).not.toBeInTheDocument();
+	} );
+
+	it( 'reload with the region field removed: the State is not the shopper\'s to fix and is not judged', async () => {
+		mockStore.customer.shippingAddress = { ...mockStore.customer.shippingAddress, city: 'Подольск', state: 'ТАТАРСТАН' };
+
+		render( <LocalityChooser config={ podolskSaved( { regionFieldRemoved: true } ) } /> );
+
+		expect( clearButton() ).toBeInTheDocument();
+		await act( settle );
+		expect( sent( 'forget' ) ).toHaveLength( 0 );
 	} );
 
 	it( 'never counts the store default (implicit) as a pick, and never forgets it', async () => {
@@ -706,6 +873,94 @@ describe( 'LocalityChooser — ordering under a slow network', () => {
 		expect( mockStore.setShippingAddress ).not.toHaveBeenCalled();
 	} );
 
+	/*
+	 * Critic round 2, F10: the queue and its generations belong to the PAGE. WooCommerce remounts the
+	 * address block while the old mount's request is still on the wire.
+	 */
+	it( 'a remount BEFORE the old queue drains: the old cleanup forget cannot erase the new mount\'s pick', async () => {
+		holding.add( 'select' );
+		const config = baseConfig();
+
+		const first = render( <LocalityChooser config={ config } /> );
+		await chooseFirstSuggestion();
+		await waitFor( () => expect( unanswered( 'select' ) ).toHaveLength( 1 ) );
+
+		// Unmount with Podolsk's `/select` on the wire: its cleanup queues a `/forget`.
+		first.unmount();
+
+		// The block is mounted again and the shopper picks Kazan — before anything has drained.
+		suggestReply = [ kazan ];
+		render( <LocalityChooser config={ config } /> );
+		await chooseFirstSuggestion( 'Каза' );
+		await act( settle );
+
+		// ONE queue: Kazan waits behind the old mount's request instead of racing it.
+		expect( sentRecordKeys() ).toEqual( [ 'dadata:podolsk' ] );
+		expect( sent( 'forget' ) ).toHaveLength( 0 );
+		expect( mockStore.calculating ).toBe( 1 );
+
+		// Release the old request. The server did save Podolsk…
+		await answer( 'select', reply( { persisted: true } ) );
+		// …and the newer pick overwrites it; the superseded cleanup forget is never sent.
+		await answer( 'select', reply( { persisted: true } ) );
+
+		await waitFor( () => expect( mockStore.customer.shippingAddress.city ).toBe( 'Казань' ) );
+		await waitFor( () => expect( mockStore.calculating ).toBe( 0 ) );
+		await act( settle );
+
+		// What the server saw, in order: Kazan is the LAST write, so Kazan is what it holds.
+		expect( fetchCalls.map( ( call ) => writeOf( call.url ) ).filter( Boolean ) ).toEqual( [ 'select', 'select' ] );
+		expect( sentRecordKeys() ).toEqual( [ 'dadata:podolsk', 'dadata:kazan' ] );
+		expect( mockStore.setShippingAddress ).toHaveBeenCalledTimes( 1 );
+		expect( screen.getByRole( 'combobox' ) ).toHaveValue( 'Казань' );
+		expect( clearButton() ).toBeInTheDocument();
+	} );
+
+	it( 'a remount before the old queue drains, with no new pick: the abandoned pick is still erased', async () => {
+		holding.add( 'select' );
+		const config = baseConfig();
+
+		const first = render( <LocalityChooser config={ config } /> );
+		await chooseFirstSuggestion();
+		await waitFor( () => expect( unanswered( 'select' ) ).toHaveLength( 1 ) );
+
+		first.unmount();
+		render( <LocalityChooser config={ config } /> );
+		expect( clearButton() ).not.toBeInTheDocument();
+
+		await answer( 'select', reply( { persisted: true } ) );
+
+		await waitFor( () => expect( sent( 'forget' ) ).toHaveLength( 1 ) );
+		await waitFor( () => expect( mockStore.calculating ).toBe( 0 ) );
+		expect( fetchCalls.map( ( call ) => writeOf( call.url ) ).filter( Boolean ) ).toEqual( [ 'select', 'forget' ] );
+		expect( mockStore.setShippingAddress ).not.toHaveBeenCalled();
+	} );
+
+	it( 'a remount pick the server REFUSES overwrote nothing: the old mount\'s saved pick is still erased', async () => {
+		holding.add( 'select' );
+		const config = baseConfig();
+
+		const first = render( <LocalityChooser config={ config } /> );
+		await chooseFirstSuggestion();
+		await waitFor( () => expect( unanswered( 'select' ) ).toHaveLength( 1 ) );
+
+		first.unmount();
+		suggestReply = [ kazan ];
+		render( <LocalityChooser config={ config } /> );
+		await chooseFirstSuggestion( 'Каза' );
+
+		// Podolsk was saved; Kazan — which superseded Podolsk's cleanup forget — is not.
+		await answer( 'select', reply( { persisted: true } ) );
+		await answer( 'select', reply( { persisted: false } ) );
+
+		await waitFor( () => expect( sent( 'forget' ) ).toHaveLength( 1 ) );
+		await waitFor( () => expect( mockStore.calculating ).toBe( 0 ) );
+		expect( fetchCalls.map( ( call ) => writeOf( call.url ) ).filter( Boolean ) ).toEqual( [ 'select', 'select', 'forget' ] );
+		expect( screen.getByText( 'Could not save your choice — please try again.' ) ).toBeInTheDocument();
+		expect( mockStore.setShippingAddress ).not.toHaveBeenCalled();
+		expect( clearButton() ).not.toBeInTheDocument();
+	} );
+
 	it( 'a second pick during a slow select: only the newer locality is written', async () => {
 		holding.add( 'select' );
 
@@ -840,13 +1095,81 @@ describe( 'LocalityChooser — checkout gate and failures', () => {
 		);
 	} );
 
-	it( 'leaves the refresh to core when the pick did change the native address', async () => {
+	// Critic round 2, F13: core pushes a changed address only after its 1.5 s debounce.
+	it( 'Place Order right after a pick that changed the address stays blocked until the rates for it settle', async () => {
+		let release = (): void => undefined;
+		mockStore.refreshHold = new Promise< void >( ( resolve ) => ( release = resolve ) );
+
 		render( <LocalityChooser config={ baseConfig() } /> );
 		await chooseFirstSuggestion();
-		await waitFor( () => expect( mockStore.setShippingAddress ).toHaveBeenCalledTimes( 1 ) );
-		await act( settle );
 
-		expect( mockStore.updateCustomerData ).not.toHaveBeenCalled();
+		// The pick is saved and written into the form…
+		await waitFor( () => expect( mockStore.setShippingAddress ).toHaveBeenCalledTimes( 1 ) );
+		expect( mockStore.customer.shippingAddress ).toEqual( expect.objectContaining( { city: 'Подольск', state: 'МОСКОВСКАЯ ОБЛАСТЬ' } ) );
+
+		// …and the rates are asked for at once, for the address as it NOW stands, taking only the
+		// cart contents back. Until that answers, the old rates must not be orderable.
+		await waitFor( () => expect( mockStore.updateCustomerData ).toHaveBeenCalledTimes( 1 ) );
+		expect( mockStore.updateCustomerData ).toHaveBeenCalledWith(
+			{ shipping_address: { city: 'Подольск', state: 'МОСКОВСКАЯ ОБЛАСТЬ', country: 'RU' } },
+			true,
+			true
+		);
+		await act( settle );
+		expect( mockStore.calculating ).toBe( 1 );
+
+		await act( async () => {
+			release();
+			await settle();
+		} );
+
+		expect( mockStore.calculating ).toBe( 0 );
+		expect( clearButton() ).toBeInTheDocument();
+	} );
+
+	it( 'a native edit made while the rates for a pick are recalculated is not overwritten', async () => {
+		let release = (): void => undefined;
+		mockStore.refreshHold = new Promise< void >( ( resolve ) => ( release = resolve ) );
+
+		render( <LocalityChooser config={ baseConfig() } /> );
+		await chooseFirstSuggestion();
+		await waitFor( () => expect( mockStore.updateCustomerData ).toHaveBeenCalledTimes( 1 ) );
+
+		editNative( { address_1: 'Мира 5' } );
+		await act( async () => {
+			release();
+			await settle();
+		} );
+
+		expect( mockStore.customer.shippingAddress ).toEqual( expect.objectContaining( { address_1: 'Мира 5', city: 'Подольск' } ) );
+		expect( mockStore.setShippingAddress ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	// Critic round 2, F11: what the server holds after this is covered by its rule (c) —
+	// LocationServiceTest::test_gate_drops_a_record_whose_region_the_native_state_is_not.
+	it( 'a failed State-only forget is retried, then surfaced with a way to try again', async () => {
+		mockStore.customer.shippingAddress = { ...mockStore.customer.shippingAddress, city: 'Подольск', state: 'МОСКОВСКАЯ ОБЛАСТЬ' };
+		holding.add( 'forget' );
+
+		render( <LocalityChooser config={ podolskSaved() } retryDelayMs={ 1 } /> );
+		expect( clearButton() ).toBeInTheDocument();
+
+		editNative( { state: 'ТАТАРСТАН' } );
+
+		await answer( 'forget', reply( {}, 500 ) );
+		// Place Order is blocked through the automatic retry.
+		expect( mockStore.calculating ).toBe( 1 );
+		await answer( 'forget', new TypeError( 'network' ) );
+
+		expect( await screen.findByText( 'Your locality could not be updated.' ) ).toBeInTheDocument();
+		expect( clearButton() ).not.toBeInTheDocument();
+		expect( sent( 'forget' ) ).toHaveLength( 2 );
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Try again' } ) );
+		await answer( 'forget', reply( {} ) );
+
+		await waitFor( () => expect( screen.queryByText( 'Your locality could not be updated.' ) ).not.toBeInTheDocument() );
+		await waitFor( () => expect( mockStore.calculating ).toBe( 0 ) );
 	} );
 
 	it( 'still works on a WooCommerce without disableCheckoutFor', async () => {

@@ -1569,6 +1569,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * prefix is only dropped when a name remains behind it.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 The steps live in {@see \Woodev\Framework\Shipping\Location\Location_Record::normalize_city_name()},
+		 *              shared unchanged with the Store API rule and the Checkout Blocks chooser
+		 *              (SP-11 C-1, #1087).
 		 *
 		 * @param string $value The city text.
 		 * @param string $type  The record's own settlement type, or ''.
@@ -1576,19 +1579,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * @return string
 		 */
 		private static function normalize_city_for_comparison( string $value, string $type = '' ): string {
-			$value = str_replace( 'ё', 'е', mb_strtolower( trim( $value ) ) );
-			$value = (string) preg_replace( '/\s+/u', ' ', $value );
-
-			$types = [ 'город', 'гор', 'г', 'поселок', 'посёлок', 'пос', 'пгт', 'п', 'село', 'с', 'деревня', 'д', 'станица', 'ст-ца', 'хутор', 'х', 'аул' ];
-
-			if ( '' !== trim( $type ) ) {
-				array_unshift( $types, str_replace( 'ё', 'е', mb_strtolower( trim( $type, " \t." ) ) ) );
-			}
-
-			$alternatives = implode( '|', array_map( static fn( $t ) => preg_quote( str_replace( 'ё', 'е', $t ), '/' ), array_filter( $types ) ) );
-			$stripped     = (string) preg_replace( '/^(?:' . $alternatives . ')(?:\.\s*|\s+)(?=\S)/u', '', $value );
-
-			return '' !== $stripped ? $stripped : $value;
+			return \Woodev\Framework\Shipping\Location\Location_Record::normalize_city_name( $value, $type );
 		}
 
 		/**

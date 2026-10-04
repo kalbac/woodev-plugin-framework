@@ -8,9 +8,10 @@
  *
  * The invariant: the saved chain and the native City/State/Country never disagree in an order that
  * gets placed, and a server reply never overwrites what the shopper typed after the request began.
- * Every chain write goes through one serialized queue ({@link ChainSync}) that blocks Place Order
- * while it drains; the native address is written only by a reply that is still the latest intent
- * AND finds the form as the shopper left it.
+ * Every chain write goes through the page's one serialized queue ({@link sharedChainSync}) that
+ * blocks Place Order while it drains — a pick included, until the rates for it are recalculated; the
+ * native address is written only by a reply that is still the latest intent AND finds the form as
+ * the shopper left it. «Disagree» is one contract with the server (`invalidation.ts`).
  *
  * Hidden — and the native fields work alone — when the location layer is inactive, or when the
  * shipping country is one the provider chain does not serve at the settlement level.
@@ -21,13 +22,16 @@
 import { useCallback, useEffect, useId, useRef, useState } from '@wordpress/element';
 import { useSelect } from '@wordpress/data';
 import type { KeyboardEvent } from 'react';
-import { ChainSync } from './chain-sync';
-import { hasLocalityMoved, isSelectionStale } from './invalidation';
-import { recordCity, resolveNativeAddress } from './mapping';
+import { resetSharedChainSync, sharedChainSync } from './chain-sync';
+import type { ChainSync } from './chain-sync';
+import { hasLocalityMoved, isSelectionStale, judgeSavedRecord } from './invalidation';
+import { recordCity, recordCityComponent, resolveNativeAddress } from './mapping';
+import type { CountryStates } from './mapping';
 import { forgetSelection, selectRecord, suggest, SuggestUnavailableError } from './rest';
 import type { LocationConfig, Selection, Suggestion, WcAddress } from './types';
 import {
 	gateCheckout,
+	isShippingAddressAuthoritative,
 	readCountryStates,
 	readShippingAddress,
 	refreshRates,
@@ -46,43 +50,64 @@ const FORGET_RETRY_DELAY_MS = 1000;
  */
 let remembered: Selection | null | undefined;
 
-/** Forgets the remount memory. Tests only. */
+/** Forgets the remount memory and the page's queue. Tests only. */
 export function resetLocalityMemory(): void {
 	remembered = undefined;
+	resetSharedChainSync();
+}
+
+export interface InitialSelection {
+	selection: Selection | null;
+	/** A saved locality the address does NOT name: provenance for another place, which is cleared. */
+	orphaned: boolean;
+	/** The server's locality is not judged yet — nothing is claimed, nothing is cleared. */
+	pending: boolean;
 }
 
 /**
  * What the chooser may start from.
  *
  * A saved locality is claimed ONLY while the native address names the same place — the record's own
- * settlement and country, never «the address has some city». `orphaned` reports a saved locality the
- * address does NOT name: provenance for a place the form no longer shows, which is cleared.
+ * settlement, region and country, never «the address has some city» — and cleared only when the
+ * address names ANOTHER one. An address that cannot disagree yet (not loaded, or no City) leaves it
+ * `pending` ({@link judgeSavedRecord}).
+ *
+ * `context` defaults to the live state list of the address's country and a loaded address.
  */
 export function initialSelection(
 	config: LocationConfig,
-	address: WcAddress
-): { selection: Selection | null; orphaned: boolean } {
-	let candidate: Selection | null;
-
+	address: WcAddress,
+	context: { states?: CountryStates; authoritative?: boolean } = {}
+): InitialSelection {
 	if ( remembered !== undefined ) {
-		candidate = remembered;
-	} else {
-		// The server publishes only a record the customer EXPLICITLY chose: the store's own default
-		// (a fixed default locality, GeoIP) is never a pick.
-		const record = config.selection?.record;
+		if ( ! remembered ) {
+			return { selection: null, orphaned: false, pending: false };
+		}
 
-		candidate = record
-			? { key: record.key, city: recordCity( record ), country: record.country.toUpperCase(), state: null }
-			: null;
+		return isSelectionStale( remembered, address )
+			? { selection: null, orphaned: true, pending: false }
+			: { selection: remembered, orphaned: false, pending: false };
 	}
 
-	if ( ! candidate ) {
-		return { selection: null, orphaned: false };
+	// The server publishes only a record the customer EXPLICITLY chose: the store's own default
+	// (a fixed default locality, GeoIP) is never a pick.
+	const record = config.selection?.record;
+
+	if ( ! record ) {
+		return { selection: null, orphaned: false, pending: false };
 	}
 
-	return candidate.city !== '' && ! isSelectionStale( candidate, address )
-		? { selection: candidate, orphaned: false }
-		: { selection: null, orphaned: true };
+	const verdict = judgeSavedRecord( record, address, {
+		states: context.states ?? readCountryStates( address.country ),
+		regionFieldRemoved: config.regionFieldRemoved === true,
+		authoritative: context.authoritative ?? true,
+	} );
+
+	return {
+		selection: verdict.status === 'claimed' ? verdict.selection : null,
+		orphaned: verdict.status === 'orphaned',
+		pending: verdict.status === 'pending',
+	};
 }
 
 /** Whether the provider chain serves settlement suggestions for `country`. */
@@ -101,16 +126,22 @@ export function LocalityChooser( {
 	retryDelayMs = FORGET_RETRY_DELAY_MS,
 }: LocalityChooserProps ): JSX.Element | null {
 	const address: WcAddress = useSelect( ( registrySelect ) => readShippingAddress( registrySelect ), [] );
+	const authoritative: boolean = useSelect(
+		( registrySelect ) => isShippingAddressAuthoritative( registrySelect ),
+		[]
+	);
 	const country = address.country.toUpperCase();
 	const supported = isCountrySupported( config, country );
 
 	const inputId = useId();
 	const listId = `${ inputId }-list`;
 
-	const boot = useRef< { selection: Selection | null; orphaned: boolean } | null >( null );
+	const boot = useRef< InitialSelection | null >( null );
 
 	if ( boot.current === null ) {
-		boot.current = initialSelection( config, readShippingAddress() );
+		boot.current = initialSelection( config, readShippingAddress(), {
+			authoritative: isShippingAddressAuthoritative(),
+		} );
 	}
 
 	const [ query, setQuery ] = useState( '' );
@@ -133,10 +164,16 @@ export function LocalityChooser( {
 	 * staleness from the state would mistake the chooser's own native write for a hand edit.
 	 */
 	const held = useRef< Selection | null >( boot.current.selection );
+	/**
+	 * The locality the server holds has not been judged against the address yet (the cart is still
+	 * loading, or the City is blank): it is neither claimed nor cleared until it can be.
+	 */
+	const undecided = useRef( boot.current.pending );
 	const sync = useRef< ChainSync | null >( null );
 
 	if ( sync.current === null ) {
-		sync.current = new ChainSync( {
+		// The page's ONE queue: a remount joins the queue the previous mount left, cleanup included.
+		sync.current = sharedChainSync( {
 			select: ( record ) => selectRecord( config, record ),
 			forget: () => forgetSelection( config ),
 			refresh: refreshRates,
@@ -150,6 +187,7 @@ export function LocalityChooser( {
 	const commit = useCallback( ( next: Selection | null ) => {
 		held.current = next;
 		remembered = next;
+		undecided.current = false;
 
 		if ( mounted.current ) {
 			setSelection( next );
@@ -168,7 +206,11 @@ export function LocalityChooser( {
 
 	useEffect( () => {
 		mounted.current = true;
-		remembered = held.current;
+
+		// An undecided locality stays unremembered: a remount judges the server's record again.
+		if ( ! undecided.current ) {
+			remembered = held.current;
+		}
 
 		// The server holds a locality the native address does not name: clear that provenance.
 		if ( boot.current?.orphaned ) {
@@ -187,7 +229,30 @@ export function LocalityChooser( {
 		};
 	}, [ forget ] );
 
-	// Manual-edit invalidation: the native address no longer says what the selection wrote.
+	// Deferred hydration: judge the server's locality once the address can agree or disagree.
+	useEffect( () => {
+		const record = config.selection?.record;
+
+		if ( ! undecided.current || ! record ) {
+			return;
+		}
+
+		const current = readShippingAddress();
+		const verdict = judgeSavedRecord( record, current, {
+			states: readCountryStates( current.country ),
+			regionFieldRemoved: config.regionFieldRemoved === true,
+			authoritative: isShippingAddressAuthoritative(),
+		} );
+
+		if ( verdict.status === 'claimed' ) {
+			commit( verdict.selection );
+		} else if ( verdict.status === 'orphaned' ) {
+			commit( null );
+			forget();
+		}
+	}, [ address, authoritative, config, commit, forget ] );
+
+	// Manual-edit invalidation: the native address no longer says what the selection stands for.
 	useEffect( () => {
 		const current = held.current;
 
@@ -322,6 +387,7 @@ export function LocalityChooser( {
 					commit( {
 						key: suggestion.key,
 						city: patch.city,
+						cityType: recordCityComponent( record ).type,
 						country: current.country.toUpperCase(),
 						state: patch.state ? patch.state : null,
 					} );
@@ -331,8 +397,12 @@ export function LocalityChooser( {
 						setMessage( i18n.regionNotSet ?? '' );
 					}
 
-					// An address this pick did not change gives core nothing to push — ask for the rates.
-					return ! writeNativeLocality( patch.city, patch.state );
+					writeNativeLocality( patch.city, patch.state );
+
+					// Always recalculated before the checkout is let go: core pushes a changed address
+					// only after its debounce (the old rates would stay orderable meanwhile), and an
+					// unchanged one never.
+					return true;
 				} ) ?? 0;
 
 			setApplying( ticket );

@@ -24,6 +24,7 @@ const EMPTY_ADDRESS: WcAddress = { city: '', state: '', country: '' };
 
 interface CartSelectors {
 	getCustomerData?: () => { shippingAddress?: WcAddress; billingAddress?: WcAddress };
+	hasFinishedResolution?: ( selector: string, args?: unknown[] ) => boolean;
 }
 
 interface CartActions {
@@ -81,6 +82,27 @@ export function readShippingAddress( registrySelect: typeof select = select ): W
 	return selectors?.getCustomerData?.().shippingAddress ?? EMPTY_ADDRESS;
 }
 
+/**
+ * Whether the address {@link readShippingAddress} answers is the customer's — WooCommerce's cart
+ * data has arrived — rather than the store's empty defaults from before it did. The same test core
+ * uses for «the cart is loaded» (`hasFinishedResolution( 'getCartData' )` — read in WooCommerce
+ * 11.1's `wc-blocks-data.js` and `wc-cart-checkout-base-frontend.js`; a standard `@wordpress/data`
+ * meta-selector of any store with resolvers).
+ *
+ * Until it is, an address that names no city or another country proves nothing about the saved
+ * locality. A store without the meta-selector is taken at its word once it names a country: the
+ * empty defaults never do.
+ */
+export function isShippingAddressAuthoritative( registrySelect: typeof select = select ): boolean {
+	const selectors = registrySelect( CART_STORE ) as unknown as CartSelectors | undefined;
+
+	if ( typeof selectors?.hasFinishedResolution === 'function' ) {
+		return selectors.hasFinishedResolution( 'getCartData' ) === true;
+	}
+
+	return ( selectors?.getCustomerData?.().shippingAddress?.country ?? '' ) !== '';
+}
+
 export function readBillingAddress(): WcAddress {
 	const selectors = select( CART_STORE ) as unknown as CartSelectors | undefined;
 
@@ -98,22 +120,18 @@ export function readUseShippingAsBilling(): boolean {
  * merged into the CURRENT full address so names, street and phone survive — and mirrors it into the
  * billing address when the core «use shipping as billing» flag says the two are one.
  *
- * Answers whether the shipping address actually CHANGED: an unchanged address gives core's own
- * address sync nothing to push, so the caller has to ask for the rates itself.
+ * Core's own address sync pushes a changed address only after its 1.5 s debounce, and an unchanged
+ * one never — so the caller always follows this with {@link refreshRates}, under the checkout gate.
  */
-export function writeNativeLocality( city: string, state: string | null ): boolean {
+export function writeNativeLocality( city: string, state: string | null ): void {
 	const actions = dispatch( CART_STORE ) as unknown as CartActions | undefined;
 	const patch = state === null ? { city } : { city, state };
-	const current = readShippingAddress();
-	const changed = current.city !== city || ( state !== null && current.state !== state );
 
-	actions?.setShippingAddress?.( { ...current, ...patch } );
+	actions?.setShippingAddress?.( { ...readShippingAddress(), ...patch } );
 
 	if ( readUseShippingAsBilling() ) {
 		actions?.setBillingAddress?.( { ...readBillingAddress(), ...patch } );
 	}
-
-	return changed;
 }
 
 /**

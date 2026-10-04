@@ -83,18 +83,89 @@ export function normalizeCity( city: string ): string {
 }
 
 /**
- * The city text for a record: the settlement's bare name. A record that carries no settlement
- * component but IS its own region (a city of federal significance published without a settlement)
- * falls back to the region's name — its identity is the same.
+ * The component a record's city is read from: the settlement, or — for a record that carries no
+ * settlement but IS its own region (a city of federal significance published without one) — the
+ * region, whose identity is the same. `name` is bare; `type` is the provider's own type word for it
+ * («г», «рп», «аул»), `''` when it published none.
  */
-export function recordCity( record: LocationRecord ): string {
-	const settlement = record.settlement?.name?.trim();
+export function recordCityComponent( record: LocationRecord ): { name: string; type: string } {
+	for ( const component of [ record.settlement, record.region ] ) {
+		const name = component?.name?.trim();
 
-	if ( settlement ) {
-		return settlement;
+		if ( name ) {
+			return { name, type: typeof component?.type === 'string' ? component.type : '' };
+		}
 	}
 
-	return record.region?.name?.trim() ?? '';
+	return { name: '', type: '' };
+}
+
+/** The city text for a record: the bare name of {@link recordCityComponent}. */
+export function recordCity( record: LocationRecord ): string {
+	return recordCityComponent( record ).name;
+}
+
+/** The settlement-type words every comparison drops, whatever the record's own type is. */
+const CITY_TYPE_WORDS = [
+	'город',
+	'гор',
+	'г',
+	'поселок',
+	'посёлок',
+	'пос',
+	'пгт',
+	'п',
+	'село',
+	'с',
+	'деревня',
+	'д',
+	'станица',
+	'ст-ца',
+	'хутор',
+	'х',
+	'аул',
+];
+
+const foldCityText = ( value: string ): string => value.toLowerCase().replace( /ё/g, 'е' );
+
+/** What PHP's `trim()` strips — deliberately not `String.prototype.trim()`, which strips more. */
+const trimAscii = ( value: string ): string => value.replace( /^[ \t\n\r\0\x0B]+|[ \t\n\r\0\x0B]+$/g, '' );
+
+/**
+ * The ONE name-comparison contract, client side — `Location_Record::normalize_city_name()` step for
+ * step, in the same order: lower-cased, «ё» folded to «е», whitespace collapsed, and ONE leading
+ * settlement-type word dropped. The record's own `type` is tried first (it is what the provider
+ * emits — «рп», «аул»), then the common Russian types. A prefix is only dropped when a name remains
+ * behind it.
+ *
+ * The server judges a saved record by exactly this (rule (c) of
+ * `Location_Service::is_customer_record_stale()`), so the chooser never forgets a record the server
+ * would keep, nor claims one it would drop. Nothing else is recognized: a spelling alias or a
+ * transliteration is a different string, never guessed to be the same place.
+ */
+export function normalizeCityName( value: string, type = '' ): string {
+	const folded = foldCityText( trimAscii( value ) ).replace( /\s+/gu, ' ' );
+	const types = [ ...CITY_TYPE_WORDS ];
+
+	if ( trimAscii( type ) !== '' ) {
+		types.unshift( foldCityText( type.replace( /^[ \t.]+|[ \t.]+$/g, '' ) ) );
+	}
+
+	const alternatives = types
+		.filter( ( word ) => word !== '' && word !== '0' )
+		.map( ( word ) => foldCityText( word ).replace( /[.*+?^${}()|[\]\\]/g, '\\$&' ) )
+		.join( '|' );
+	const stripped = folded.replace( new RegExp( `^(?:${ alternatives })(?:\\.\\s*|\\s+)(?=\\S)`, 'u' ), '' );
+
+	return stripped !== '' ? stripped : folded;
+}
+
+/**
+ * Whether `city` — native address text — names the place a record's bare `name` (of type `type`)
+ * stands for. `Location_Service::record_names_city()` on the client.
+ */
+export function namesCity( name: string, type: string, city: string ): boolean {
+	return normalizeCityName( name, type ) === normalizeCityName( city, type );
 }
 
 /**

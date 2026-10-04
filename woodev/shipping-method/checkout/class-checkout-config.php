@@ -333,8 +333,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 * `[ 'record' => Location_Record::to_array() ]`, or `null` when there is none — and for the
 		 * store's own implicit default, which is never a pick. `chain`/`current` carry keys only,
 		 * and a key cannot be checked against an address: the chooser claims a selection only when
-		 * this record's own settlement and country are what the native address names, and clears
-		 * a saved locality the address does not name.
+		 * this record's own settlement, region and country are what the native address names, and
+		 * clears a saved locality only when the address names ANOTHER place — the same contract
+		 * as rule (c) of {@see \Woodev\Framework\Shipping\Location\Location_Service::is_customer_record_stale()}.
+		 * An address that names no city yet leaves it alone.
 		 *
 		 * @since 2.0.2
 		 *

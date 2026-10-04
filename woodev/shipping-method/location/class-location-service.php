@@ -188,6 +188,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		private const SAVED_CITY_MISS_LIMIT = 10;
 
 		/**
+		 * Words that name an administrative TYPE rather than the region itself — the same list,
+		 * for the same purpose, as `TYPE_WORDS` in `src/checkout-blocks/mapping.ts`
+		 * ({@see self::record_state_code()}).
+		 *
+		 * @since 2.0.2
+		 * @var array<int, string>
+		 */
+		private const REGION_TYPE_WORDS = [ 'область', 'обл', 'край', 'республика', 'респ', 'автономный', 'автономная', 'округ', 'ао', 'федеральный', 'город', 'г', 'region', 'oblast', 'republic', 'province', 'state', 'county', 'city', 'of' ];
+
+		/**
 		 * Signature of the saved city already looked up in THIS request (#1075), so a miss costs
 		 * one provider call at most and a hit is not re-asked while the write settles.
 		 *
@@ -1178,14 +1188,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * normalized ISO-3166 by the caller — see `$for_country` below) is
 		 * never empty either.
 		 *
-		 * (c) NATIVE CITY moved (SP-11 C-1, #1087) — Store API requests only: the
-		 * record names a settlement the customer's native shipping city no longer
-		 * names ({@see self::native_shipping_city()}, {@see self::record_names_city()}).
-		 * The block checkout writes the record and the native address through two
-		 * unordered requests, and a guest's session is a last-writer-wins blob, so
-		 * a `/forget` can be lost or arrive late; this rule is what keeps a carrier
-		 * from rating — and an order from being placed against — a locality the
-		 * address form no longer shows. Like (a) and (b) it only READS.
+		 * (c) NATIVE ADDRESS moved (SP-11 C-1, #1087) — Store API requests only
+		 * ({@see self::native_address_disagrees()}): the record names a settlement the
+		 * customer's native shipping city no longer names ({@see self::native_shipping_city()},
+		 * {@see self::record_names_city()}), or belongs to a region the native shipping
+		 * state is not ({@see self::native_shipping_state()}, {@see self::record_state_code()})
+		 * — the same city in another region is a different place. The block checkout
+		 * writes the record and the native address through two unordered requests, and a
+		 * guest's session is a last-writer-wins blob, so a `/forget` can be lost or arrive
+		 * late; this rule is what keeps a carrier from rating — and an order from being
+		 * placed against — a locality the address form no longer shows. Like (a) and (b)
+		 * it only READS.
 		 *
 		 * `$for_country` (optional, #350/#352 follow-up — call-site-aware
 		 * country authority): when given, rule (b) compares against IT
@@ -1220,7 +1233,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 *              longer forced through the ambient customer object.
 		 * @since 2.0.2 Added rule (c): in a Store API request a record whose
 		 *              settlement the native shipping city no longer names is
-		 *              stale (SP-11 C-1, #1087).
+		 *              stale (SP-11 C-1, #1087) — and so is one whose region maps to
+		 *              a WooCommerce state other than the native shipping state.
 		 *
 		 * @param Location_Record $record      Stored record to check.
 		 * @param string|null     $for_country Optional ISO-3166 alpha-2 country
@@ -1243,9 +1257,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 				return true;
 			}
 
-			$city = $this->native_shipping_city();
-
-			return null !== $city && ! self::record_names_city( $record, $city );
+			return $this->native_address_disagrees( $record );
 		}
 
 		/**
@@ -1275,22 +1287,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * @return string|null Trimmed city text, or `null` when rule (c) does not apply.
 		 */
 		protected function native_shipping_city(): ?string {
-			if ( ! function_exists( 'WC' ) ) {
+			if ( ! $this->is_native_address_authority() ) {
 				return null;
 			}
 
-			$woocommerce = WC();
-
-			// `is_store_api_request()` exists from WooCommerce 9.0; the Blocks adapter starts at 9.9.
-			if ( ! is_object( $woocommerce ) || ! method_exists( $woocommerce, 'is_store_api_request' ) || ! $woocommerce->is_store_api_request() ) {
-				return null;
-			}
-
-			if ( empty( $woocommerce->customer ) ) {
-				return null;
-			}
-
-			$city = trim( (string) $woocommerce->customer->get_shipping_city() );
+			$city = trim( (string) WC()->customer->get_shipping_city() );
 
 			return '' !== $city ? $city : null;
 		}
@@ -1304,6 +1305,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * published without a settlement component). A REGION-level record names no city at all and
 		 * is never judged by one.
 		 *
+		 * Compared through {@see Location_Record::normalize_city_name()} with the record's OWN
+		 * component type — the one contract the classic comparison and the chooser
+		 * (`recordNamesCity()`) share — so «рп Мостовской» names a record of type «рп» exactly as
+		 * «г. Подольск» names one of type «г», and nothing the chooser keeps is dropped here.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @param Location_Record $record Stored record.
@@ -1316,16 +1322,213 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 				return true;
 			}
 
-			$settlement = $record->settlement();
-			$name       = null !== $settlement ? trim( (string) $settlement['name'] ) : '';
+			$component = $record->settlement();
+			$name      = null !== $component ? trim( (string) $component['name'] ) : '';
 
 			if ( '' === $name ) {
-				$region = $record->region();
-				$name   = null !== $region ? trim( (string) $region['name'] ) : '';
+				$component = $record->region();
+				$name      = null !== $component ? trim( (string) $component['name'] ) : '';
 			}
 
 			// A record that carries no name to compare cannot be shown to disagree.
-			return '' === $name || self::normalize_place_name( $name ) === self::normalize_place_name( $city );
+			if ( '' === $name ) {
+				return true;
+			}
+
+			$type = (string) ( $component['type'] ?? '' );
+
+			return Location_Record::normalize_city_name( $name, $type ) === Location_Record::normalize_city_name( $city, $type );
+		}
+
+		/**
+		 * The state of the customer's NATIVE shipping address when THIS request is one where that
+		 * address is the authority a saved record must agree with — the region half of rule (c) of
+		 * {@see self::is_customer_record_stale()} — or `null` when the rule does not apply: outside
+		 * a Store API request ({@see self::is_native_address_authority()}), or for a blank state,
+		 * which names no region and so disagrees with none.
+		 *
+		 * `protected` as a test seam — same reasoning as {@see self::native_shipping_city()}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string|null Trimmed state value, or `null` when the rule does not apply.
+		 */
+		protected function native_shipping_state(): ?string {
+			if ( ! $this->is_native_address_authority() ) {
+				return null;
+			}
+
+			$state = trim( (string) WC()->customer->get_shipping_state() );
+
+			return '' !== $state ? $state : null;
+		}
+
+		/**
+		 * Whether this request is a WooCommerce Store API one with a customer to read — the only
+		 * place the native address is the authority rule (c) judges a saved record by.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		private function is_native_address_authority(): bool {
+			if ( ! function_exists( 'WC' ) ) {
+				return false;
+			}
+
+			$woocommerce = WC();
+
+			// `is_store_api_request()` exists from WooCommerce 9.0; the Blocks adapter starts at 9.9.
+			if ( ! is_object( $woocommerce ) || ! method_exists( $woocommerce, 'is_store_api_request' ) || ! $woocommerce->is_store_api_request() ) {
+				return false;
+			}
+
+			return ! empty( $woocommerce->customer );
+		}
+
+		/**
+		 * `$country`'s FINAL `woocommerce_states` list (code => label) — what the core State
+		 * control offers and what the Checkout Blocks chooser reads as `countryData[ country ].states`.
+		 *
+		 * `protected` as a test seam.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $country ISO-3166 alpha-2 country code.
+		 *
+		 * @return array<int|string, string>
+		 */
+		protected function native_states( string $country ): array {
+			if ( ! function_exists( 'WC' ) || empty( WC()->countries ) ) {
+				return [];
+			}
+
+			$states = WC()->countries->get_states( $country );
+
+			return is_array( $states ) ? $states : [];
+		}
+
+		/**
+		 * Whether the customer's native shipping address DISAGREES with `$record` — rule (c) of
+		 * {@see self::is_customer_record_stale()}: its city no longer names the record's settlement,
+		 * or its state is a different region than the one the record belongs to.
+		 *
+		 * The region half only speaks when it can vouch for both sides: the record's region maps
+		 * to exactly one option of the country's state list ({@see self::record_state_code()}) AND
+		 * the native state is not blank. Anything less is «unknown», never «disagrees».
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Location_Record $record Stored record.
+		 *
+		 * @return bool
+		 */
+		private function native_address_disagrees( Location_Record $record ): bool {
+			$city = $this->native_shipping_city();
+
+			if ( null !== $city && ! self::record_names_city( $record, $city ) ) {
+				return true;
+			}
+
+			$state = $this->native_shipping_state();
+
+			if ( null === $state ) {
+				return false;
+			}
+
+			$code = $this->record_state_code( $record );
+
+			return null !== $code && $code !== $state;
+		}
+
+		/**
+		 * The WooCommerce state code `$record`'s region stands for, or `null` when it cannot be
+		 * told — the PHP mirror of `matchState()` in `src/checkout-blocks/mapping.ts`, which is
+		 * what the Checkout Blocks chooser writes into the native State control. Same candidates
+		 * (the region's name; the settlement's only when the record carries no region — a city of
+		 * federal significance), same two passes, strictest first (the folded name, then the folded
+		 * name without type words), same refusal to choose between two options that both match.
+		 *
+		 * `null` too when the region field is removed: the shopper can neither see nor fix a
+		 * native state there, so it is not evidence of anything (the chooser does not write or
+		 * watch it either).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Location_Record $record Stored record.
+		 *
+		 * @return string|null
+		 */
+		private function record_state_code( Location_Record $record ): ?string {
+			if ( $this->is_region_field_removed() ) {
+				return null;
+			}
+
+			$states = $this->native_states( $record->country() );
+
+			if ( [] === $states ) {
+				return null;
+			}
+
+			$component = $record->region();
+			$name      = null !== $component ? trim( (string) $component['name'] ) : '';
+
+			if ( '' === $name ) {
+				$component = $record->settlement();
+				$name      = null !== $component ? trim( (string) $component['name'] ) : '';
+			}
+
+			foreach ( [ false, true ] as $drop_type_words ) {
+				$wanted = self::fold_region_name( $name, $drop_type_words );
+
+				if ( '' === $wanted ) {
+					continue;
+				}
+
+				$hits = [];
+
+				foreach ( $states as $code => $label ) {
+					if ( self::fold_region_name( (string) $label, $drop_type_words ) === $wanted || self::fold_region_name( (string) $code, $drop_type_words ) === $wanted ) {
+						$hits[] = (string) $code;
+					}
+				}
+
+				if ( 1 === count( $hits ) ) {
+					return $hits[0];
+				}
+
+				// Two options for one name is ambiguous — nothing to vouch for.
+				if ( count( $hits ) > 1 ) {
+					return null;
+				}
+			}
+
+			return null;
+		}
+
+		/**
+		 * Case-folded, `ё`→`е`, punctuation-free form of a region name, optionally with the
+		 * administrative type words dropped — `foldRegionName()` / `normalizeRegionName()` of
+		 * `src/checkout-blocks/mapping.ts`, token for token.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $name            Raw region name, state label or state code.
+		 * @param bool   $drop_type_words Whether {@see self::REGION_TYPE_WORDS} are dropped.
+		 *
+		 * @return string
+		 */
+		private static function fold_region_name( string $name, bool $drop_type_words ): string {
+			$name   = str_replace( 'ё', 'е', mb_strtolower( $name ) );
+			$name   = (string) preg_replace( '/[^\p{L}\p{N}\s]/u', ' ', $name );
+			$tokens = preg_split( '/\s+/u', $name, -1, PREG_SPLIT_NO_EMPTY );
+			$tokens = is_array( $tokens ) ? $tokens : [];
+
+			if ( $drop_type_words ) {
+				$tokens = array_filter( $tokens, static fn( string $token ): bool => ! in_array( $token, self::REGION_TYPE_WORDS, true ) );
+			}
+
+			return implode( ' ', $tokens );
 		}
 
 		/**
@@ -1354,7 +1557,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 				return '';
 			}
 
-			$city       = $this->native_shipping_city();
 			$provenance = '';
 
 			foreach ( Location_Record::LEVELS as $level ) {
@@ -1364,7 +1566,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 
 				$record = $chain['records'][ $level ];
 
-				if ( null !== $city && ! self::record_names_city( $record, $city ) ) {
+				if ( $this->native_address_disagrees( $record ) ) {
 					break;
 				}
 

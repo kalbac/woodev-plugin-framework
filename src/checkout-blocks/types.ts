@@ -91,11 +91,16 @@ export interface WcAddress {
 /** The locality the shopper chose and what it wrote into the native address. */
 export interface Selection {
 	key: string;
+	/** The record's bare city name. */
 	city: string;
+	/** The record's own type word for that city («г», «рп», «аул»), `''` when it published none. */
+	cityType: string;
 	country: string;
 	/**
-	 * The state code the chooser wrote, or `null` when it wrote none it can vouch for (region field
-	 * removed, no match, or a selection restored from the server) — the state is then not watched.
+	 * The WooCommerce state code the record's region stands for — written by a pick, derived from
+	 * the same state list for a selection restored from the server — or `null` when there is none
+	 * to vouch for (region field removed, no state list, no single matching option): the state is
+	 * then not watched.
 	 */
 	state: string | null;
 }
