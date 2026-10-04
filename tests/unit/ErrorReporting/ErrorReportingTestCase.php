@@ -7,6 +7,7 @@
 
 namespace Woodev\Tests\Unit\ErrorReporting;
 
+use Woodev\Framework\Error_Reporting\Browser_Event_Builder;
 use Woodev\Framework\Error_Reporting\Event_Builder;
 use Woodev\Framework\Error_Reporting\Plugin_Scope;
 use Woodev\Tests\Unit\TestCase;
@@ -21,6 +22,9 @@ abstract class ErrorReportingTestCase extends TestCase {
 	protected const HOME  = 'https://shop.example.ru';
 	protected const OURS  = '/srv/wp/wp-content/plugins/acme-delivery';
 	protected const OTHER = '/srv/wp/wp-content/plugins/some-other-plugin';
+
+	/** Asset base URL of the registered plugin (browser side, #1081). */
+	protected const OUR_URL = 'https://shop.example.ru/wp-content/plugins/acme-delivery';
 
 	/**
 	 * A throwable that claims to have been thrown at $file:$line with the given trace.
@@ -93,6 +97,39 @@ abstract class ErrorReportingTestCase extends TestCase {
 			[
 				'abspath'    => '/srv/wp/',
 				'plugin_dir' => '/srv/wp/wp-content/plugins',
+			]
+		);
+	}
+
+	/**
+	 * @return Plugin_Scope One registered plugin with a directory AND an asset base URL.
+	 */
+	protected function make_browser_scope(): Plugin_Scope {
+		return new Plugin_Scope(
+			[
+				[
+					'id'      => 'acme-delivery',
+					'version' => '1.4.0',
+					'dir'     => self::OURS,
+					'url'     => self::OUR_URL,
+				],
+			]
+		);
+	}
+
+	/**
+	 * @return Browser_Event_Builder Builder over {@see self::make_browser_scope()} with fixed context.
+	 */
+	protected function make_browser_builder(): Browser_Event_Builder {
+		return new Browser_Event_Builder(
+			$this->make_browser_scope(),
+			[
+				'site'              => 'abcdef0123456789',
+				'framework_version' => '2.0.1',
+				'wp_version'        => '6.8',
+				'wc_version'        => '10.0.0',
+				'php_version'       => '8.1.0',
+				'environment'       => 'production',
 			]
 		);
 	}

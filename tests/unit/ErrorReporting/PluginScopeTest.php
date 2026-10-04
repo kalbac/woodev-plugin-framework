@@ -154,4 +154,79 @@ final class PluginScopeTest extends ErrorReportingTestCase {
 		$this->assertSame( 'acme-delivery', $scope->match( [ self::OURS . '/src/a.php' ] )['id'] );
 		$this->assertNull( $scope->match( [ '/x/other.php' ] ) );
 	}
+
+	public function test_a_script_url_is_located_under_its_plugin_and_anonymised(): void {
+		$located = $this->make_browser_scope()->locate_url( 'http://Shop.Example.ru/wp-content/plugins/acme-delivery/assets/js/a.js?ver=1#x' );
+
+		$this->assertSame(
+			[
+				'id'      => 'acme-delivery',
+				'version' => '1.4.0',
+				'path'    => 'plugins/acme-delivery/assets/js/a.js',
+			],
+			$located
+		);
+	}
+
+	public function test_a_url_outside_every_plugin_root_is_not_located(): void {
+		$scope = $this->make_browser_scope();
+
+		$this->assertNull( $scope->locate_url( 'https://shop.example.ru/wp-content/plugins/other/a.js' ) );
+		$this->assertNull( $scope->locate_url( self::OUR_URL . '-pro/a.js' ) );
+		$this->assertNull( $scope->locate_url( self::OUR_URL ) );
+		$this->assertNull( $scope->locate_url( self::OUR_URL . '/../x.js' ) );
+		$this->assertNull( $scope->locate_url( '' ) );
+	}
+
+	public function test_a_plugin_without_a_url_has_no_url_claim_and_a_bare_host_is_refused(): void {
+		$scope = new Plugin_Scope(
+			[
+				[
+					'id'      => 'no-url',
+					'version' => '1',
+					'dir'     => '/srv/wp/wp-content/plugins/no-url',
+				],
+				[
+					'id'      => 'bare-host',
+					'version' => '1',
+					'dir'     => '/srv/wp/wp-content/plugins/bare-host',
+					'url'     => 'https://shop.example.ru',
+				],
+			]
+		);
+
+		$this->assertSame( [], $scope->url_bases() );
+		$this->assertNull( $scope->locate_url( 'https://shop.example.ru/anything.js' ) );
+	}
+
+	public function test_a_single_file_plugin_is_refused_for_its_url_too(): void {
+		$scope = new Plugin_Scope(
+			[
+				[
+					'id'      => 'single-file',
+					'version' => '1',
+					'dir'     => WP_PLUGIN_DIR,
+					'url'     => 'https://shop.example.ru/wp-content/plugins',
+				],
+			]
+		);
+
+		$this->assertSame( [], $scope->url_bases() );
+		$this->assertNull( $scope->locate_url( 'https://shop.example.ru/wp-content/plugins/other/a.js' ) );
+	}
+
+	public function test_the_browser_is_told_the_base_urls_without_a_trailing_slash(): void {
+		$scope = new Plugin_Scope(
+			[
+				[
+					'id'      => 'a',
+					'version' => '1',
+					'dir'     => '/p/a',
+					'url'     => 'https://shop.example.ru/wp-content/plugins/a/',
+				],
+			]
+		);
+
+		$this->assertSame( [ 'https://shop.example.ru/wp-content/plugins/a' ], $scope->url_bases() );
+	}
 }

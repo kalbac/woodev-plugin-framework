@@ -3267,6 +3267,16 @@ test( 'fires woodev_pickup_error when the provider reports a fatal error', async
 	} );
 } );
 
+test( 'woodev_pickup_error names the owning plugin (#1081 — the error reporter attributes by it)', async () => {
+	const seen = [];
+	document.body.addEventListener( 'woodev_pickup_error', ( e ) => seen.push( e.detail ) );
+
+	const session = await openSession( configWith( { pluginId: 'acme-delivery' } ) );
+	session.provider.emit( 'error', { code: 'map_script', message: '' } );
+
+	expect( seen[ 0 ].pluginId ).toBe( 'acme-delivery' );
+} );
+
 test( 'does NOT fire woodev_pickup_error for a transient (non-fatal) dataSource fetch failure', async () => {
 	window.WoodevPickupDataSource = fakeDataSourceFactory( () =>
 		Promise.reject( { status: 502, code: 'woodev_pickup_upstream_error', message: 'x' } )

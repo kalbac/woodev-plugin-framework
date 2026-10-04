@@ -72,10 +72,11 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Error_Reporter' ) ) :
 		/**
 		 * Installs the reporter. Safe to call repeatedly; only the first call does anything.
 		 *
-		 * Always registers the consent REST route (so the checkbox can be turned on) and the cron
-		 * callback that sends the queue. The error handlers are hooked only when a receiver is
+		 * Always registers the consent REST route (so the checkbox can be turned on), the browser
+		 * report route (which refuses while reporting is off) and the cron callback that sends the
+		 * queue. The error handlers and the browser script are hooked only when a receiver is
 		 * configured AND the merchant consented — a site that did not opt in keeps PHP's own
-		 * handlers untouched.
+		 * handlers untouched and serves no extra script.
 		 *
 		 * @since 2.0.2
 		 *
@@ -93,11 +94,15 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Error_Reporter' ) ) :
 				self::$scope = Plugin_Scope::from_registered_plugins( $registered_plugins );
 
 				\Woodev_REST_V1_Registrar::register_controller( new Consent_Rest_Controller() );
+				\Woodev_REST_V1_Registrar::register_controller( new Browser_Rest_Controller() );
 				add_action( Dispatcher::HOOK, [ Dispatcher::class, 'run' ] );
 
 				if ( ! Consent::is_active() ) {
 					return false;
 				}
+
+				// The browser half (#1081, D7): loaded only when reporting is active.
+				add_action( 'wp_enqueue_scripts', [ self::class, 'enqueue_browser_script' ] );
 
 				// Built with `str_repeat`: a literal would be interned, and freeing it would release nothing.
 				self::$reserve                    = str_repeat( ' ', self::MEMORY_RESERVE );
@@ -133,6 +138,51 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Error_Reporter' ) ) :
 		 */
 		public static function capture( \Throwable $e, ?string $plugin_id = null ): bool {
 			return self::report( $e, $plugin_id, true );
+		}
+
+		/**
+		 * Queues a report the BROWSER sent (D7), after the controller's own gates.
+		 *
+		 * Consent and the receiver are re-checked here, the payload is rebuilt by
+		 * {@see Browser_Event_Builder} (which re-validates everything and drops what is not ours), and the
+		 * event goes through the same filter, queue and cron scheduling as a PHP event.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string,mixed> $payload The decoded JSON body.
+		 * @return bool True when an event was queued; false when it was not ours, a duplicate, or reporting is off.
+		 */
+		public static function report_browser( array $payload ): bool {
+			if ( ! self::$installed || null === self::$scope ) {
+				return false;
+			}
+
+			try {
+				if ( ! Consent::is_active() ) {
+					return false;
+				}
+
+				return self::enqueue( ( new Browser_Event_Builder( self::$scope, self::context() ) )->from_payload( $payload ) );
+			} catch ( \Throwable $e ) {
+				unset( $e );
+
+				return false;
+			}
+		}
+
+		/**
+		 * Enqueues the browser reporter script and its config (`wp_enqueue_scripts`).
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		public static function enqueue_browser_script(): void {
+			if ( null !== self::$scope && Consent::is_active() ) {
+				Browser_Script::enqueue( self::$scope );
+			}
 		}
 
 		/**
@@ -319,21 +369,28 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Error_Reporter' ) ) :
 		}
 
 		/**
+		 * @return array<string,string> The emitted context shared by PHP and browser events.
+		 */
+		private static function context(): array {
+			global $wp_version;
+
+			return [
+				'site'              => substr( hash( 'sha256', self::SITE_SALT . untrailingslashit( (string) home_url() ) ), 0, 16 ),
+				'framework_version' => class_exists( '\\Woodev_Plugin', false ) ? \Woodev_Plugin::VERSION : '',
+				'wp_version'        => (string) $wp_version,
+				'wc_version'        => defined( 'WC_VERSION' ) ? (string) WC_VERSION : '',
+				'php_version'       => PHP_VERSION,
+				'environment'       => function_exists( 'wp_get_environment_type' ) ? wp_get_environment_type() : 'production',
+			];
+		}
+
+		/**
 		 * @return Event_Builder
 		 */
 		private static function event_builder(): Event_Builder {
-			global $wp_version;
-
 			return new Event_Builder(
 				self::$scope,
-				[
-					'site'              => substr( hash( 'sha256', self::SITE_SALT . untrailingslashit( (string) home_url() ) ), 0, 16 ),
-					'framework_version' => class_exists( '\Woodev_Plugin', false ) ? \Woodev_Plugin::VERSION : '',
-					'wp_version'        => (string) $wp_version,
-					'wc_version'        => defined( 'WC_VERSION' ) ? (string) WC_VERSION : '',
-					'php_version'       => PHP_VERSION,
-					'environment'       => function_exists( 'wp_get_environment_type' ) ? wp_get_environment_type() : 'production',
-				],
+				self::context(),
 				[
 					'abspath'    => defined( 'ABSPATH' ) ? ABSPATH : '',
 					'plugin_dir' => defined( 'WP_PLUGIN_DIR' ) ? WP_PLUGIN_DIR : '',

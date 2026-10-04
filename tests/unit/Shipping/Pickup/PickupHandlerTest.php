@@ -2467,6 +2467,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$this->assertSame(
 				[
 					'fieldId',
+					'pluginId',
 					'strategy',
 					'maxAccumulatedPoints',
 					'provider',

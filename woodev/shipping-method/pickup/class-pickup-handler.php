@@ -1552,6 +1552,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 
 			$config = [
 				'fieldId'              => $this->field_id,
+
+				// Names the owning plugin in the `woodev_pickup_error` event, so the error reporter
+				// (#1081) can attribute it; the browser has no other way to know.
+				'pluginId'             => $this->plugin_id,
 				'strategy'             => $this->source->get_strategy(),
 				'maxAccumulatedPoints' => $max_accumulated,
 				'provider'             => $this->map_provider->get_id(),
