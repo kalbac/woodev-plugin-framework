@@ -115,6 +115,9 @@ final class BrowserRestControllerTest extends ErrorReportingTestCase {
 				return true;
 			}
 		);
+		// The rate-limit trait probes function_exists() first, so whether this is defined
+		// depends on which test ran before — stub it, or the result depends on test order.
+		Functions\when( 'wp_using_ext_object_cache' )->justReturn( false );
 		Functions\when( 'add_action' )->justReturn( true );
 		Functions\when( 'wp_next_scheduled' )->justReturn( false );
 		Functions\when( 'wp_schedule_single_event' )->alias(
