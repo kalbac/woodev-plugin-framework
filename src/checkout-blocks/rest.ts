@@ -61,13 +61,24 @@ export async function suggest(
 	return Array.isArray( body.suggestions ) ? body.suggestions : [];
 }
 
+/** How long a chain write may stay unanswered before it is given up — Place Order waits on it. */
+export const WRITE_TIMEOUT_MS = 15000;
+
 async function post( endpoint: string, nonce: string, body?: unknown ): Promise< Response > {
-	return fetch( endpointUrl( endpoint ), {
-		method: 'POST',
-		credentials: 'same-origin',
-		headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-WP-Nonce': nonce },
-		body: body === undefined ? undefined : JSON.stringify( body ),
-	} );
+	const controller = new AbortController();
+	const timer = window.setTimeout( () => controller.abort(), WRITE_TIMEOUT_MS );
+
+	try {
+		return await fetch( endpointUrl( endpoint ), {
+			method: 'POST',
+			credentials: 'same-origin',
+			headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-WP-Nonce': nonce },
+			body: body === undefined ? undefined : JSON.stringify( body ),
+			signal: controller.signal,
+		} );
+	} finally {
+		window.clearTimeout( timer );
+	}
 }
 
 /**
@@ -83,14 +94,21 @@ export async function selectRecord( config: LocationConfig, record: LocationReco
 	try {
 		response = await post( config.endpoints.select, config.nonce, { record } );
 	} catch {
-		return { ok: false, reason: 'failed' };
+		return { ok: false, reason: 'unreachable' };
 	}
 
 	if ( ! response.ok ) {
-		return { ok: false, reason: 'failed' };
+		// A 4xx is the server declining (bad record, expired nonce, rate limit): nothing was written.
+		return { ok: false, reason: response.status >= 500 ? 'unreachable' : 'refused' };
 	}
 
-	const body = ( await response.json() ) as { persisted?: boolean; cancelled?: boolean; message?: string };
+	let body: { persisted?: boolean; cancelled?: boolean; message?: string };
+
+	try {
+		body = ( await response.json() ) as typeof body;
+	} catch {
+		return { ok: false, reason: 'unreachable' };
+	}
 
 	if ( body.cancelled ) {
 		return { ok: false, reason: 'cancelled', message: body.message };
@@ -99,7 +117,7 @@ export async function selectRecord( config: LocationConfig, record: LocationReco
 	return body.persisted === true ? { ok: true, persisted: true } : { ok: false, reason: 'not-persisted' };
 }
 
-/** Erases the customer's saved chain. Best effort: a failure leaves the server where it was. */
+/** Erases the customer's saved chain. `false` when the server did not confirm it. */
 export async function forgetSelection( config: LocationConfig ): Promise< boolean > {
 	try {
 		const response = await post( config.endpoints.forget, config.nonce );

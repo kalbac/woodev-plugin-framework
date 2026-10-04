@@ -883,11 +883,79 @@ class CheckoutConfigTest extends TestCase {
 		$this->assertNull( ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )->build_location_config() );
 	}
 
-	public function test_build_location_config_is_exactly_the_block_build_nests_under_location(): void {
+	public function test_build_location_config_is_the_block_build_nests_under_location_plus_the_selection(): void {
 		$service = new Checkout_Config_Fake_Location_Service( true, [ 'region' => true, 'settlement' => true, 'address' => false ], null, [ 'RU' ] );
 		$config  = new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'NONCE', [ 'RU' ], $service );
 
-		$this->assertSame( $config->build( Checkout_Fields::from_array( [] ) )['location'], $config->build_location_config() );
+		$this->assertSame(
+			$config->build( Checkout_Fields::from_array( [] ) )['location'] + [ 'selection' => null ],
+			$config->build_location_config()
+		);
+		// The classic config must not grow the Blocks-only key.
+		$this->assertArrayNotHasKey( 'selection', $config->build( Checkout_Fields::from_array( [] ) )['location'] );
+	}
+
+	public function test_build_location_config_publishes_the_explicit_settlement_as_a_full_record(): void {
+		// The chooser can only check a saved locality against the native address when it knows the
+		// record's own settlement and country — a bare key says neither (#1087 finding 6).
+		$settlement = Location_Record::from_array(
+			[
+				'key'         => 'dadata:podolsk',
+				'provider_id' => 'dadata',
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'country'     => 'RU',
+				'settlement'  => [ 'name' => 'Подольск', 'type' => 'г' ],
+			]
+		);
+		$address    = Location_Record::from_array(
+			[
+				'key'         => 'dadata:house-1',
+				'provider_id' => 'dadata',
+				'level'       => Location_Record::LEVEL_ADDRESS,
+				'country'     => 'RU',
+			]
+		);
+		$service    = new Checkout_Config_Fake_Location_Service(
+			true,
+			[ 'region' => false, 'settlement' => true, 'address' => true ],
+			[ 'record' => $address, 'implicit' => false, 'saved_at' => 0 ], // "current" is the ADDRESS.
+			[ 'RU' ],
+			Location_Provider_Registry::MODE_TYPEAHEAD,
+			[],
+			'RU',
+			[ Location_Record::LEVEL_SETTLEMENT => $settlement, Location_Record::LEVEL_ADDRESS => $address ]
+		);
+
+		$location = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )->build_location_config();
+
+		$this->assertSame( [ 'record' => $settlement->to_array() ], $location['selection'] );
+		$this->assertSame( 'Подольск', $location['selection']['record']['settlement']['name'] );
+		$this->assertSame( 'RU', $location['selection']['record']['country'] );
+	}
+
+	public function test_build_location_config_never_publishes_an_implicit_record_as_a_selection(): void {
+		$service = new Checkout_Config_Fake_Location_Service( true, [ 'region' => false, 'settlement' => true, 'address' => false ], $this->customer_record( true ), [ 'RU' ] );
+
+		$location = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )->build_location_config();
+
+		$this->assertTrue( $location['implicit'] );
+		$this->assertNull( $location['selection'] );
+	}
+
+	public function test_build_location_config_publishes_no_selection_for_a_region_only_chain(): void {
+		$region  = Location_Record::from_array(
+			[
+				'key'         => 'dadata:mo',
+				'provider_id' => 'dadata',
+				'level'       => Location_Record::LEVEL_REGION,
+				'country'     => 'RU',
+			]
+		);
+		$service = new Checkout_Config_Fake_Location_Service( true, [ 'region' => true, 'settlement' => true, 'address' => false ], [ 'record' => $region, 'implicit' => false, 'saved_at' => 0 ], [ 'RU' ] );
+
+		$location = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )->build_location_config();
+
+		$this->assertNull( $location['selection'] );
 	}
 
 	// -------------------------------------------------------------------------

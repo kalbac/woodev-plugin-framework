@@ -104,7 +104,7 @@ class LocalityBlocksTest extends TestCase {
 	public function test_i18n_strings_carry_every_key_the_bundle_reads_and_are_english_msgids(): void {
 		$strings = Locality_Blocks::i18n_strings();
 
-		foreach ( [ 'label', 'hint', 'searching', 'listLabel', 'clear', 'regionNotSet' ] as $key ) {
+		foreach ( [ 'label', 'hint', 'searching', 'listLabel', 'clear', 'regionNotSet', 'syncFailed', 'retry' ] as $key ) {
 			$this->assertArrayHasKey( $key, $strings );
 			$this->assertSame( 1, preg_match( '/^[\x20-\x7E…—]+$/u', $strings[ $key ] ), "msgid for \"$key\" must be English" );
 		}

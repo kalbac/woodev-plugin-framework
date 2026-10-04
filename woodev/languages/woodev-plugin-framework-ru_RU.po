@@ -2397,6 +2397,10 @@ msgstr "Сбросить выбранный населённый пункт"
 msgid "The region could not be matched — choose it in the address form."
 msgstr "Не удалось подобрать регион — выберите его в форме адреса."
 
+#: shipping-method/checkout/blocks/class-locality-blocks.php:138
+msgid "Your locality could not be updated."
+msgstr "Не удалось обновить населённый пункт."
+
 #: shipping-method/checkout/blocks/shipping-locality/block.json
 msgctxt "block title"
 msgid "Delivery locality"

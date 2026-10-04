@@ -58,6 +58,12 @@ export interface LocationConfig {
 	chain: Record< string, ChainEntry > | ChainEntry[];
 	implicit: boolean;
 	savedCityUnresolved: string | null;
+	/**
+	 * The settlement the customer EXPLICITLY chose and the server still holds (Blocks only —
+	 * `Checkout_Handler::locality_blocks_config()`), as a full record so the client can check it
+	 * against the native address before it claims a selection. `null` for no record or an implicit one.
+	 */
+	selection?: { record: LocationRecord } | null;
 	i18n: Record< string, string >;
 }
 
@@ -82,14 +88,25 @@ export interface WcAddress {
 	[ extra: string ]: string | undefined;
 }
 
-/** The locality the shopper chose and the city text it wrote into the native address. */
+/** The locality the shopper chose and what it wrote into the native address. */
 export interface Selection {
 	key: string;
 	city: string;
 	country: string;
+	/**
+	 * The state code the chooser wrote, or `null` when it wrote none it can vouch for (region field
+	 * removed, no match, or a selection restored from the server) — the state is then not watched.
+	 */
+	state: string | null;
 }
 
-/** What `/location/select` answered, reduced to what the chooser acts on. */
+/**
+ * What `/location/select` answered, reduced to what the chooser acts on.
+ *
+ * The failures are split by what the SERVER now holds: `not-persisted`, `cancelled` and `refused`
+ * are answers — nothing was written; `unreachable` is the absence of one (network error, timeout,
+ * a 5xx) — the write may have landed.
+ */
 export type SelectResult =
 	| { ok: true; persisted: true }
-	| { ok: false; reason: 'not-persisted' | 'cancelled' | 'failed'; message?: string };
+	| { ok: false; reason: 'not-persisted' | 'cancelled' | 'refused' | 'unreachable'; message?: string };

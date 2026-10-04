@@ -150,6 +150,8 @@ if ( ! class_exists( __NAMESPACE__ . '\Locality_Blocks_Integration' ) ) :
 		/**
 		 * The built bundle's directory. A seam: tests point it at a fixture.
 		 *
+		 * @since 2.0.2
+		 *
 		 * @return string
 		 */
 		protected static function build_path(): string {
@@ -157,6 +159,10 @@ if ( ! class_exists( __NAMESPACE__ . '\Locality_Blocks_Integration' ) ) :
 		}
 
 		/**
+		 * The built bundle's URL, without a trailing slash.
+		 *
+		 * @since 2.0.2
+		 *
 		 * @return string
 		 */
 		protected static function build_url(): string {

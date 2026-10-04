@@ -108,7 +108,7 @@ if ( ! class_exists( __NAMESPACE__ . '\Locality_Blocks' ) ) :
 		 *
 		 * @return void
 		 */
-		public static function register_integration( $registry ): void {
+		public static function register_integration( object $registry ): void {
 			if ( null === self::$handler || ! interface_exists( '\Automattic\WooCommerce\Blocks\Integrations\IntegrationInterface' ) || ! is_callable( [ $registry, 'register' ] ) ) {
 				return;
 			}
@@ -135,6 +135,8 @@ if ( ! class_exists( __NAMESPACE__ . '\Locality_Blocks' ) ) :
 				'listLabel'    => __( 'Locality suggestions', 'woodev-plugin-framework' ),
 				'clear'        => __( 'Clear the chosen locality', 'woodev-plugin-framework' ),
 				'regionNotSet' => __( 'The region could not be matched — choose it in the address form.', 'woodev-plugin-framework' ),
+				'syncFailed'   => __( 'Your locality could not be updated.', 'woodev-plugin-framework' ),
+				'retry'        => __( 'Try again', 'woodev-plugin-framework' ),
 			];
 		}
 

@@ -329,6 +329,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 * `location` block {@see self::build()} nests under that key (SP-11 C-1, #1087) without
 		 * paying for the field/policy half of the config.
 		 *
+		 * Plus one Blocks-only key, `selection`: the settlement the customer EXPLICITLY chose, as
+		 * `[ 'record' => Location_Record::to_array() ]`, or `null` when there is none — and for the
+		 * store's own implicit default, which is never a pick. `chain`/`current` carry keys only,
+		 * and a key cannot be checked against an address: the chooser claims a selection only when
+		 * this record's own settlement and country are what the native address names, and clears
+		 * a saved locality the address does not name.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @return array<string, mixed>|null The block, or `null` when no location service was injected or
@@ -340,7 +347,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 				return null;
 			}
 
-			return $this->build_location_block( $this->location_service );
+			$config    = $this->build_location_block( $this->location_service );
+			$customer  = $this->location_service->get_customer_record();
+			$selection = null;
+
+			if ( null !== $customer && ! $customer['implicit'] ) {
+				$settlement = $this->location_service->get_customer_record_at( \Woodev\Framework\Shipping\Location\Location_Record::LEVEL_SETTLEMENT );
+
+				if ( null !== $settlement ) {
+					$selection = [ 'record' => $settlement->to_array() ];
+				}
+			}
+
+			$config['selection'] = $selection;
+
+			return $config;
 		}
 
 		/**

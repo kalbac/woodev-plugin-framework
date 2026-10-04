@@ -2393,6 +2393,10 @@ msgstr ""
 msgid "The region could not be matched — choose it in the address form."
 msgstr ""
 
+#: shipping-method/checkout/blocks/class-locality-blocks.php:138
+msgid "Your locality could not be updated."
+msgstr ""
+
 #: shipping-method/checkout/blocks/shipping-locality/block.json
 msgctxt "block title"
 msgid "Delivery locality"

@@ -2594,5 +2594,165 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			$this->assertSame( 'RU', $service->resolve_default_country() );
 		}
+
+		// ------------------------------------------------------------------
+		// Rule (c) of is_customer_record_stale() — the native shipping city
+		// (SP-11 C-1, #1087). `native_shipping_city()` answers a city only in a
+		// Store API request; the probe below stands in for that request.
+		// ------------------------------------------------------------------
+
+		/**
+		 * A settlement-level fixture record owned by the `svc-fixture` provider.
+		 *
+		 * @param array<string, mixed> $over Overrides (components, level).
+		 */
+		private function named_record( array $over = [] ): Location_Record {
+			return Location_Record::from_array(
+				array_merge(
+					[
+						'key'         => 'svc-fixture:podolsk',
+						'provider_id' => 'svc-fixture',
+						'level'       => Location_Record::LEVEL_SETTLEMENT,
+						'country'     => 'RU',
+						'region'      => [ 'name' => 'Московская область' ],
+						'settlement'  => [ 'name' => 'Подольск', 'type' => 'г' ],
+					],
+					$over
+				)
+			);
+		}
+
+		/**
+		 * A service whose request is a Store API one with `$city` as the native shipping city
+		 * (`null`: not a Store API request, or no city yet).
+		 */
+		private function service_with_native_city( Location_Record $record, ?string $city, bool $implicit = false ): Location_Service {
+			$store    = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
+			$registry = $this->activate_owning_provider( new Location_Service_Fake_Provider( 'svc-fixture', Location_Record::LEVELS, true, [ 'RU' ] ) );
+
+			$store->set( $record, $implicit );
+
+			return new class( $registry, $store, $city ) extends Location_Service {
+				private ?string $city;
+
+				public function __construct( Location_Provider_Registry $registry, Customer_Location_Store $store, ?string $city ) {
+					parent::__construct( $registry, $store );
+					$this->city = $city;
+				}
+
+				protected function native_shipping_city(): ?string {
+					return $this->city;
+				}
+			};
+		}
+
+		public function test_gate_drops_a_settlement_record_the_native_shipping_city_no_longer_names(): void {
+			// The block checkout: the shopper picked Podolsk, then typed Kazan; the `/forget` is late
+			// or lost. The rate request must not be answered for Podolsk.
+			$service = $this->service_with_native_city( $this->named_record(), 'Казань' );
+
+			$this->assertNull( $service->get_customer_record(), 'a record the native city does not name must read as absent' );
+			$this->assertNull( $service->get_customer_record_at( Location_Record::LEVEL_SETTLEMENT ) );
+		}
+
+		/**
+		 * @dataProvider cities_naming_podolsk
+		 */
+		public function test_gate_keeps_a_record_the_native_shipping_city_names( string $city ): void {
+			$service = $this->service_with_native_city( $this->named_record(), $city );
+
+			$this->assertNotNull( $service->get_customer_record() );
+		}
+
+		/**
+		 * @return array<string, array{0: string}>
+		 */
+		public function cities_naming_podolsk(): array {
+			return [
+				'verbatim'         => [ 'Подольск' ],
+				'case and spacing' => [ '  подольск ' ],
+				'type prefix'      => [ 'г. Подольск' ],
+			];
+		}
+
+		public function test_gate_does_not_judge_by_city_outside_a_store_api_request(): void {
+			// Classic checkout: `/location/select` saves the record BEFORE WooCommerce learns the new
+			// city, so the two legitimately differ there — rule (c) must stay off.
+			$service = $this->service_with_native_city( $this->named_record(), null );
+
+			$this->assertNotNull( $service->get_customer_record() );
+		}
+
+		public function test_native_shipping_city_is_null_when_woocommerce_is_not_serving_a_store_api_request(): void {
+			$service = new class( Location_Provider_Registry::instance() ) extends Location_Service {
+				public function probe(): ?string {
+					return $this->native_shipping_city();
+				}
+			};
+
+			// No `WC()` in the unit process — the same answer a non-Store-API request gets.
+			$this->assertNull( $service->probe() );
+		}
+
+		public function test_gate_never_judges_a_region_level_record_by_the_native_city(): void {
+			$region = $this->named_record(
+				[
+					'key'        => 'svc-fixture:mo',
+					'level'      => Location_Record::LEVEL_REGION,
+					'settlement' => null,
+				]
+			);
+
+			$service = $this->service_with_native_city( $region, 'Казань' );
+
+			$this->assertNotNull( $service->get_customer_record(), 'a region names no city and cannot disagree with one' );
+		}
+
+		public function test_gate_reads_a_federal_city_published_without_a_settlement_by_its_region_name(): void {
+			$moscow = $this->named_record(
+				[
+					'key'        => 'svc-fixture:moscow',
+					'region'     => [ 'name' => 'Москва', 'type' => 'г' ],
+					'settlement' => null,
+				]
+			);
+
+			$this->assertNotNull( $this->service_with_native_city( $moscow, 'Москва' )->get_customer_record() );
+
+			Location_Provider_Registry::instance()->reset_for_tests();
+
+			$this->assertNull( $this->service_with_native_city( $moscow, 'Казань' )->get_customer_record() );
+		}
+
+		public function test_customer_provenance_is_the_explicit_record_and_nothing_else(): void {
+			$explicit = $this->service_with_native_city( $this->named_record(), null );
+
+			$this->assertSame( 'svc-fixture:svc-fixture:podolsk', $explicit->get_customer_provenance() );
+
+			Location_Provider_Registry::instance()->reset_for_tests();
+
+			// The store's own default is rated exactly like «no record»: it must not key the cache.
+			$implicit = $this->service_with_native_city( $this->named_record(), null, true );
+
+			$this->assertSame( '', $implicit->get_customer_provenance() );
+
+			$empty = new Location_Service( Location_Provider_Registry::instance(), new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() ) );
+
+			$this->assertSame( '', $empty->get_customer_provenance() );
+		}
+
+		public function test_customer_provenance_leaves_out_a_record_this_request_will_not_rate_by(): void {
+			// A Store API request that ignores the record (rule c) must not share a rate-cache entry
+			// with a classic request that uses it for the same destination.
+			$ignored = $this->service_with_native_city( $this->named_record(), 'Казань' );
+
+			$this->assertSame( '', $ignored->get_customer_provenance() );
+
+			Location_Provider_Registry::instance()->reset_for_tests();
+
+			$named = $this->service_with_native_city( $this->named_record(), 'Подольск' );
+
+			$this->assertSame( 'svc-fixture:svc-fixture:podolsk', $named->get_customer_provenance() );
+		}
 	}
 }

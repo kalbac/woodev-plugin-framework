@@ -221,6 +221,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * per plugin — see {@see Blocks\Locality_Blocks} for why the first registered handler may answer
 		 * for all of them.
 		 *
+		 * Plus one Blocks-only key, `selection` — see {@see Checkout_Config::build_location_config()}.
+		 *
 		 * @internal
 		 *
 		 * @since 2.0.2
@@ -236,6 +238,60 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 				$this->location_service(),
 				null
 			) )->build_location_config();
+		}
+
+		/**
+		 * Adds the customer's chosen locality to every shipping package, so WooCommerce's rate cache
+		 * is keyed by it (SP-11 C-1, #1087).
+		 *
+		 * WooCommerce reuses a package's stored rates while the package hashes the same
+		 * (`WC_Shipping::calculate_shipping_for_package()`: `shipping_for_package_N` /
+		 * `package_hash`), and the hash covers the destination, not the framework's saved record. A
+		 * carrier that rates by the record therefore kept the OLD rates when only the record changed
+		 * — a locality picked for a city the address already named, a selection cleared with the
+		 * address left alone, a `/forget` landing after the address was already rated.
+		 *
+		 * The package hash is used rather than clearing `shipping_for_package_N` on save/forget
+		 * because it is STATELESS: whichever request rates next computes the hash from the chain as
+		 * it stands then, in any order of arrival. A cleared session key is itself session state — a
+		 * concurrent request that loaded the session earlier writes the old rates straight back
+		 * (the session is one last-writer-wins blob).
+		 *
+		 * Static, so N shipping plugins register ONE callback (see {@see self::apply_gateway_coordination()}).
+		 * An implicit record adds nothing — {@see \Woodev\Framework\Shipping\Location\Location_Service::get_customer_provenance()}.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param mixed $packages The cart's shipping packages.
+		 *
+		 * @return mixed
+		 */
+		public static function add_location_provenance_to_packages( $packages ) {
+			if ( ! is_array( $packages ) || [] === $packages || [] === self::$instances ) {
+				return $packages;
+			}
+
+			$service = self::$instances[0]->location_service();
+
+			if ( ! $service->is_active() ) {
+				return $packages;
+			}
+
+			$provenance = $service->get_customer_provenance();
+
+			if ( '' === $provenance ) {
+				return $packages;
+			}
+
+			foreach ( $packages as $key => $package ) {
+				if ( is_array( $package ) ) {
+					$packages[ $key ]['woodev_location'] = $provenance;
+				}
+			}
+
+			return $packages;
 		}
 
 		/**
@@ -322,6 +378,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 *              `woocommerce_store_api_checkout_update_order_from_request` (every
 		 *              supported version), so the block checkout refuses a pickup method
 		 *              without a point (issue #966).
+		 * @since 2.0.2 Also wires {@see self::add_location_provenance_to_packages()} onto
+		 *              `woocommerce_cart_shipping_packages`, so WooCommerce's rate cache is keyed
+		 *              by the customer's chosen locality (SP-11 C-1, #1087).
 		 *
 		 * @return void
 		 */
@@ -356,6 +415,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			// "exactly once" guarantee matters here (gotcha
 			// a-process-static-once-per-request-gate-checks-only-the-first-plugin.md).
 			add_filter( 'woocommerce_available_payment_gateways', [ self::class, 'apply_gateway_coordination' ] );
+
+			// Static for the same reason: one callback however many plugins register (#1087).
+			add_filter( 'woocommerce_cart_shipping_packages', [ self::class, 'add_location_provenance_to_packages' ] );
 
 			$this->guard_native_field_conflicts();
 		}
@@ -722,6 +784,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 *              Location-Provider field's Rule 7b fan-out reaches the browser
 		 *              config under the same id(s)/section(s) it attaches to server-side
 		 *              (issue #458).
+		 * @since 2.0.2 Enqueues nothing on a page that renders only the Checkout block
+		 *              ({@see self::is_block_only_checkout_surface()}); the phone mask follows
+		 *              the same current-page answer instead of the store-wide one (SP-11 C-1, #1087).
 		 *
 		 * @return void
 		 */
@@ -734,11 +799,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 				return;
 			}
 
-			// SP-11 C-1 (#1087): the block checkout has no classic DOM for these scripts to adapt — its
-			// locality chooser is a React inner block (Blocks\Locality_Blocks) — so booting the classic
-			// adapter next to it would only run a DOM scan that finds nothing. Cart (#331) and My Account
-			// (#332) keep their own paths above.
-			if ( class_exists( '\\Woodev_Blocks_Handler' ) && \Woodev_Blocks_Handler::is_checkout_block_in_use() ) {
+			// SP-11 C-1 (#1087): a page that renders ONLY the Checkout block has no classic DOM for these
+			// scripts to adapt — its locality chooser is a React inner block (Blocks\Locality_Blocks).
+			// Decided by what THIS page renders, never by what the store's configured checkout page is:
+			// a classic form on any other page keeps its adapter. Cart (#331) and My Account (#332)
+			// keep their own paths above.
+			if ( $this->is_block_only_checkout_surface() ) {
 				return;
 			}
 
@@ -847,10 +913,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			// `checkout-field-classic.js` already uses. The script is enqueued only when
 			// the merchant turned the option on AND on the classic checkout — «Не
 			// использовать» (the default) and the block checkout both mean zero extra
-			// request, not an inert one.
+			// request, not an inert one (a block-only page returned above).
 			$config['phone_mask'] = $field_settings->get_phone_mask_config();
 
-			if ( 'off' !== $config['phone_mask']['mode'] && ! \Woodev_Blocks_Handler::is_checkout_block_in_use() ) {
+			if ( 'off' !== $config['phone_mask']['mode'] ) {
 				// Card #503 round 2 (the IMask rewrite): IMask (MIT, https://imask.js.org),
 				// VENDORED rather than CDN-loaded — a shop's checkout must not depend on a
 				// third-party host — with no build step at this layer. Its own handle so
@@ -891,6 +957,50 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 				'woodev_checkout_field_config_' . $this->config_object_suffix(),
 				$config
 			);
+		}
+
+		/**
+		 * Whether the page being rendered shows ONLY the Checkout block — no classic checkout form
+		 * (SP-11 C-1, #1087).
+		 *
+		 * Answered for the CURRENT page, from what it actually contains. «The store's configured
+		 * checkout page uses the Checkout block» ({@see \Woodev_Blocks_Handler::is_checkout_block_in_use()})
+		 * says nothing about a second page that carries `[woocommerce_checkout]`, and such a page is
+		 * a checkout too (`is_checkout()` is true for it).
+		 *
+		 * Errs towards the classic adapter: a classic form anywhere on the page — the shortcode, or
+		 * WooCommerce's «classic shortcode» block — keeps it, also next to a Checkout block; and so
+		 * does a page whose content shows neither (a page builder's or a template's own output),
+		 * unless it is the store's checkout page rendered by a block template that holds the block.
+		 * Next to a block the classic adapter only scans a DOM it finds nothing in; without it a
+		 * classic form loses its fields.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		private function is_block_only_checkout_surface(): bool {
+			if ( ! function_exists( 'has_block' ) ) {
+				return false;
+			}
+
+			$post    = get_post();
+			$content = is_object( $post ) && isset( $post->post_content ) ? (string) $post->post_content : '';
+
+			if ( has_shortcode( $content, 'woocommerce_checkout' ) || has_block( 'woocommerce/classic-shortcode', $content ) ) {
+				return false;
+			}
+
+			if ( has_block( 'woocommerce/checkout', $content ) ) {
+				return true;
+			}
+
+			// A block theme may hold the Checkout block in its checkout TEMPLATE instead of the page;
+			// that template renders the store's own checkout page and no other.
+			return function_exists( 'wc_get_page_id' )
+				&& is_page( wc_get_page_id( 'checkout' ) )
+				&& class_exists( '\\Woodev_Blocks_Handler' )
+				&& \Woodev_Blocks_Handler::is_checkout_block_in_use();
 		}
 
 		private function enqueue_cart_assets(): void {
