@@ -1,10 +1,11 @@
 /**
- * Checkout Blocks bundle entry (SP-11 C-1, #1087) — runs the registration; the logic lives in
- * `register.tsx` so it can be tested without executing a module side effect.
+ * Checkout Blocks bundle entry (SP-11 C-1 #1087, C-2b #1089) — runs the registrations; the logic
+ * lives in `register.tsx` so it can be tested without executing a module side effect.
  *
  * @package woodev-plugin-framework
  */
 
-import { registerLocalityBlock } from './register';
+import { registerLocalityBlock, registerPickupBlock } from './register';
 
 registerLocalityBlock();
+registerPickupBlock();

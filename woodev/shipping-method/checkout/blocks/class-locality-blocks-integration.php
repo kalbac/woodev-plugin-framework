@@ -60,6 +60,22 @@ if ( ! class_exists( __NAMESPACE__ . '\Locality_Blocks_Integration' ) ) :
 		/**
 		 * Registers the bundle (and its stylesheet) when it has been built.
 		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		public function initialize(): void {
+			static::register_bundle();
+		}
+
+		/**
+		 * Registers the `checkout-blocks` bundle and its stylesheet under {@see self::SCRIPT_HANDLE}.
+		 *
+		 * Static and public because the bundle is shared: the pickup button
+		 * ({@see Pickup_Blocks_Integration}, SP-11 C-2b #1089) is another block of the same bundle and
+		 * must find the handle registered on a store where this integration is not. Registering a
+		 * handle WordPress already knows is a no-op.
+		 *
 		 * A checkout where the bundle is missing — a source checkout that never ran `npm run build` —
 		 * gets no handle, never a 404 and never a dependency on nothing.
 		 *
@@ -67,7 +83,7 @@ if ( ! class_exists( __NAMESPACE__ . '\Locality_Blocks_Integration' ) ) :
 		 *
 		 * @return void
 		 */
-		public function initialize(): void {
+		public static function register_bundle(): void {
 			$asset_file = static::build_path() . '/index.asset.php';
 
 			if ( ! is_readable( $asset_file ) ) {

@@ -117,6 +117,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 					'readonly' => true,
 					'additionalProperties' => true,
 				],
+				'owner' => [
+					'type' => [ 'object', 'null' ],
+					'readonly' => true,
+					'additionalProperties' => true,
+				],
 			];
 		}
 
@@ -129,6 +134,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 		public static function checkout_schema(): array {
 			$schema = self::schema();
 			$schema['pickup']['readonly'] = false;
+			// The owner is the server's own answer about the cart; a client never sends it.
+			unset( $schema['owner'] );
 			return $schema;
 		}
 
@@ -337,7 +344,44 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 					$pickup[ $plugin_id ][ $field_id ] = $snapshot;
 				}
 			}
-			return [ 'pickup' => $pickup ];
+			return [
+				'pickup' => $pickup,
+				'owner' => self::owner( $context ),
+			];
+		}
+
+		/**
+		 * Names the pickup field that owns the cart's chosen rate, or null for any other rate.
+		 *
+		 * The block checkout shows its «choose a pickup point» button from this answer alone
+		 * (SP-11 C-2b, #1089): ownership is decided here, against the full server rate id, never
+		 * inferred in the browser from a label or a method-id list. `locality` is the key the
+		 * owner's points are addressed by — the same one a confirmation is remembered under —
+		 * and `''` when the customer has not chosen a settlement.
+		 *
+		 * @since 2.0.2
+		 * @param array<string, mixed> $context Server cart context.
+		 * @return array{plugin_id: string, field_id: string, rate_id: string, locality: string}|null
+		 */
+		private static function owner( array $context ): ?array {
+			if ( '' === $context['rate_id'] ) {
+				return null;
+			}
+			foreach ( self::$handlers as $plugin_id => $fields ) {
+				foreach ( $fields as $field_id => $handler ) {
+					if ( ! $handler->owns_store_api_rate( $context['rate_id'] ) ) {
+						continue;
+					}
+					$selected = $handler->get_selected_point_for_method( explode( ':', $context['rate_id'] )[0] );
+					return [
+						'plugin_id' => (string) $plugin_id,
+						'field_id' => (string) $field_id,
+						'rate_id' => $context['rate_id'],
+						'locality' => (string) ( $selected['locality'] ?? '' ),
+					];
+				}
+			}
+			return null;
 		}
 
 		/**

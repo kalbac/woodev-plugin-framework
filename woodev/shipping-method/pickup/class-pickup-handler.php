@@ -1982,6 +1982,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		}
 
 		/**
+		 * What the Checkout block's pickup button needs to find this field (SP-11 C-2b, #1089): the
+		 * two keys the Store API transport addresses it by, and the name of the JS global
+		 * {@see self::enqueue_assets()} localizes its picker config under.
+		 *
+		 * `pluginId` here is {@see self::$plugin_id} — the transport key — and deliberately NOT the
+		 * picker config's own `pluginId`, which names the plugin for the error reporter and may
+		 * differ ({@see self::error_reporting_plugin_id()}).
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array{pluginId: string, fieldId: string, configKey: string}
+		 */
+		public function blocks_descriptor(): array {
+			return [
+				'pluginId'  => $this->plugin_id,
+				'fieldId'   => $this->field_id,
+				'configKey' => 'woodev_pickup_config_' . $this->config_object_suffix(),
+			];
+		}
+
+		/**
 		 * Re-checks a session or persisted retry point without writing or clearing it.
 		 *
 		 * @since 2.0.2
@@ -2181,6 +2204,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			}
 
 			Store_Api_Pickup::add_handler( $this, $this->plugin_id, $this->field_id );
+
+			// SP-11 C-2b (#1089): the Checkout block's pickup button. Fleet-wide and idempotent — one
+			// integration publishes every handler's field (Pickup_Blocks' own docblock).
+			\Woodev\Framework\Shipping\Checkout\Blocks\Pickup_Blocks::add_handler( $this, $this->plugin_id, $this->field_id );
 
 			add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_assets' ] );
 			add_action( 'rest_api_init', [ $this, 'register_rest' ] );
@@ -2438,6 +2465,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * dependencies here rather than relying on enqueue ORDER (WP does not guarantee
 		 * source order matches enqueue-call order; only the `deps` array does).
 		 *
+		 * TWO SURFACES, ONE SESSION (SP-11 C-2b, #1089): the picker session itself is
+		 * `pickup-session.js`, shared by both checkouts. The classic checkout gets the mount on
+		 * top of it, with the config localized onto the mount as before. A page that renders only
+		 * the Checkout block ({@see \Woodev\Framework\Shipping\Checkout\Blocks\Checkout_Surface})
+		 * gets the session WITHOUT the mount — there is no slot for it to fill, and its button is
+		 * a React inner block — with the same config, under the same global name, localized onto
+		 * the session script.
+		 *
 		 * @internal
 		 *
 		 * @since 2.0.2
@@ -2464,6 +2499,37 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				[ 'woodev-pickup-geo' ]
 			);
 
+			// SP-11 C-2b (#1089): the picker session itself — the modal shell, the provider, the panels
+			// and the fetch orchestration — is surface-neutral and shared by both checkouts.
+			$session_enqueued = $this->enqueue_script_if_built(
+				'woodev-pickup-session',
+				'js/frontend/pickup-session.js',
+				[
+					'woodev-modal',
+					'woodev-pickup-datasource',
+					'woodev-pickup-geo',
+					'woodev-pickup-panels',
+					$provider_handle,
+				]
+			);
+
+			// A page that renders ONLY the Checkout block has no slot for the classic mount to fill:
+			// its button is a React inner block (Checkout\Blocks\Pickup_Blocks) that opens the same
+			// session. It reads the same config, so the config rides on the session script there.
+			if ( \Woodev\Framework\Shipping\Checkout\Blocks\Checkout_Surface::is_block_only() ) {
+				$this->enqueue_style_if_built( 'woodev-pickup-styles', 'css/frontend/pickup.css', [ 'woodev-modal' ] );
+
+				if ( $session_enqueued ) {
+					wp_localize_script(
+						'woodev-pickup-session',
+						'woodev_pickup_config_' . $this->config_object_suffix(),
+						$this->get_js_config()
+					);
+				}
+
+				return;
+			}
+
 			// `jquery`: the mount script binds `updated_checkout` through jQuery when it is
 			// present (see pickup-mount.js's own docblock) — declared explicitly here rather
 			// than free-riding on `checkout-field-classic.js` happening to also require it.
@@ -2477,6 +2543,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 					'woodev-pickup-geo',
 					'woodev-pickup-panels',
 					$provider_handle,
+					'woodev-pickup-session',
 				]
 			);
 

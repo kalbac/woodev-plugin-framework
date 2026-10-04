@@ -5927,8 +5927,24 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 					'woodev-pickup-geo',
 					'woodev-pickup-panels',
 					'woodev-pickup-map-provider-yandex',
+					'woodev-pickup-session',
 				],
 				$scripts['woodev-pickup-mount']['deps']
+			);
+
+			// pickup-session.js (SP-11 C-2b, #1089): the surface-neutral picker session the mount
+			// opens — everything the mount used to depend on for it, minus jQuery.
+			$this->assertArrayHasKey( 'woodev-pickup-session', $scripts );
+			$this->assertStringContainsString( 'pickup-session.js', $scripts['woodev-pickup-session']['src'] );
+			$this->assertSame(
+				[
+					'woodev-modal',
+					'woodev-pickup-datasource',
+					'woodev-pickup-geo',
+					'woodev-pickup-panels',
+					'woodev-pickup-map-provider-yandex',
+				],
+				$scripts['woodev-pickup-session']['deps']
 			);
 
 			// pickup.css (SP-5 Task 15) exists on disk — see the method docblock above for
@@ -6017,6 +6033,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 					'woodev-pickup-geo',
 					'woodev-pickup-panels',
 					'woodev-pickup-map-provider-yandex',
+					'woodev-pickup-session',
 				],
 				$scripts['woodev-pickup-mount']['deps']
 			);
@@ -6062,6 +6079,86 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			// `carrier_x` — see Pickup_Handler::config_object_suffix() and issue #142.
 			$this->assertStringStartsWith( 'woodev_pickup_config_carrier_x_', $object_name );
 			$this->assertSame( 'pickup_point', $data['fieldId'] );
+		}
+
+		/**
+		 * SP-11 C-2b (#1089): a page that renders ONLY the Checkout block has no slot for the
+		 * classic mount — its button is a React inner block that opens the same session. The mount
+		 * must not boot there, and the picker config must still reach the page, on the session
+		 * script, under the very global the block's descriptor names.
+		 *
+		 * In its own process: defining `has_block` here would make every later test in this process
+		 * that reaches `Checkout_Surface::is_block_only()` take the block-detection path.
+		 *
+		 * @runInSeparateProcess
+		 * @preserveGlobalState disabled
+		 */
+		public function test_enqueue_assets_on_a_block_only_checkout_loads_the_session_without_the_classic_mount(): void {
+			Functions\when( 'is_checkout' )->justReturn( true );
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+			Functions\when( 'plugins_url' )->alias(
+				static fn( $path, $file ) => 'https://example.test/' . $path
+			);
+			Functions\when( 'get_post' )->justReturn(
+				(object) [ 'post_content' => '<!-- wp:woocommerce/checkout --><div></div><!-- /wp:woocommerce/checkout -->' ]
+			);
+			Functions\when( 'has_shortcode' )->justReturn( false );
+			Functions\when( 'has_block' )->alias(
+				static fn( string $name, $in = null ): bool => is_string( $in ) && false !== strpos( $in, '<!-- wp:' . $name . ' ' )
+			);
+
+			$scripts = [];
+			Functions\when( 'wp_enqueue_script' )->alias(
+				static function ( $handle, $src, $deps ) use ( &$scripts ) {
+					$scripts[ $handle ] = $deps;
+				}
+			);
+			$styles = [];
+			Functions\when( 'wp_enqueue_style' )->alias(
+				static function ( $handle ) use ( &$styles ) {
+					$styles[] = $handle;
+				}
+			);
+			$localized = [];
+			Functions\when( 'wp_localize_script' )->alias(
+				static function ( $handle, $object_name, $data ) use ( &$localized ) {
+					$localized[] = [ $handle, $object_name, $data ];
+				}
+			);
+
+			$handler = new Pickup_Handler_Assets_Built_Probe(
+				'carrier-x',
+				'pickup_point',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location()
+			);
+			$handler->enqueue_assets();
+
+			$this->assertArrayNotHasKey( 'woodev-pickup-mount', $scripts, 'the classic DOM adapter must not boot next to the React block' );
+			$this->assertArrayHasKey( 'woodev-pickup-session', $scripts );
+			$this->assertNotContains( 'jquery', $scripts['woodev-pickup-session'] );
+			$this->assertContains( 'woodev-modal', $scripts['woodev-pickup-session'] );
+			$this->assertSame( [ 'woodev-pickup-styles' ], $styles );
+
+			$this->assertCount( 1, $localized );
+			[ $handle, $object_name, $data ] = $localized[0];
+			$this->assertSame( 'woodev-pickup-session', $handle );
+			$this->assertSame( 'pickup_point', $data['fieldId'] );
+
+			// The block finds the config by the name the handler's own descriptor publishes, and
+			// addresses the Store API by the handler's transport keys.
+			$this->assertSame(
+				[
+					'pluginId'  => 'carrier-x',
+					'fieldId'   => 'pickup_point',
+					'configKey' => $object_name,
+				],
+				$handler->blocks_descriptor()
+			);
 		}
 
 		// -------------------------------------------------------------------------

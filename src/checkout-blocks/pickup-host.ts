@@ -1,0 +1,102 @@
+/**
+ * The Checkout block's host for the storefront pickup-map session (SP-11 C-2b, #1089; operator
+ * decision D-4 A).
+ *
+ * `pickup-session.js` is the picker both checkouts share; what differs is where a surface keeps the
+ * chosen point and how it asks the server. The classic checkout answers from DOM fields and the
+ * `woodev/v1` select route (`pickup-mount.js`: `classicHost()`); this file answers from WooCommerce's
+ * stores and the Store API:
+ *
+ * - CONTEXT is read LIVE, at the moment the session asks — the chosen point from the cart's
+ *   confirmed snapshot, the locality from the native shipping address and the server's own key.
+ * - CONFIRMATION is one `cart/extensions` command, with Place Order blocked while it is in flight.
+ * - ADDRESS-WRITE does nothing here: the confirmed snapshot is already in the cart store when the
+ *   session applies a selection, and the button renders from it. The classic «replace the address
+ *   with the point's» is NOT performed — rewriting the native address changes the destination the
+ *   server confirmed the point for, which drops the confirmation it just made.
+ * - REFRESH is `null`: the confirmation's own reply is the recalculated cart.
+ *
+ * @package woodev-plugin-framework
+ */
+
+import { confirmPoint, currentView } from './pickup-stores';
+import type {
+	PickupConfig,
+	PickupData,
+	PickupFieldDescriptor,
+	PickupPoint,
+	PickupSelectionResult,
+	PickupSessionHost,
+} from './pickup-types';
+import { gateCheckout, readShippingAddress } from './wc-stores';
+
+/**
+ * The live `wp_rest` nonce for the points routes: the refreshable node's when the page has one
+ * (`Pickup_Handler::print_nonce_node()`), the page-load value otherwise.
+ */
+export function liveNonce( config: PickupConfig ): string {
+	const node = config.nonceNodeId ? document.getElementById( config.nonceNodeId ) : null;
+
+	return node?.dataset.woodevPickupNonce || String( config.nonce ?? '' );
+}
+
+export interface HostOptions {
+	data: PickupData;
+	field: PickupFieldDescriptor;
+	config: PickupConfig;
+	/** The button focus returns to when the dialog closes. */
+	trigger: HTMLElement | null;
+	/** The dialog closed after a selection: the caller destroys the session it holds. */
+	onClose: () => void;
+}
+
+export function createHost( { data, field, config, trigger, onClose }: HostOptions ): PickupSessionHost {
+	const namespace = data.namespace ?? '';
+
+	return {
+		returnFocusTo: trigger,
+
+		// Only a point confirmed for THIS field and THIS rate counts as selected.
+		getSelectedId: () => {
+			const view = currentView( data );
+
+			return view.field === field && view.confirmed ? view.confirmed.point_id : '';
+		},
+
+		getLocality: () => readShippingAddress().city,
+
+		// The server's key when the customer has chosen a settlement; the native city otherwise —
+		// the same fallback the classic checkout makes (`pickup-mount.js`: `resolveLocalityKey()`).
+		getLocalityKey: () => {
+			const view = currentView( data );
+			const key = view.field === field ? view.owner?.locality ?? '' : '';
+
+			return key !== '' ? key : readShippingAddress().city;
+		},
+
+		getNonce: () => liveNonce( config ),
+
+		confirmSelection: ( point: PickupPoint ): Promise< PickupSelectionResult > => {
+			const pointId = String( point?.id ?? '' );
+			let outcome: Promise< PickupSelectionResult > | null = null;
+
+			// The gate may run `work` later or not at all (see `gateCheckout()`); the request is
+			// made exactly once either way, and its verdict — or its failure — is what the session
+			// gets, never the gate's own.
+			const send = (): Promise< PickupSelectionResult > => ( outcome ??= confirmPoint( namespace, field, pointId ) );
+
+			return gateCheckout( () =>
+				send().then(
+					() => undefined,
+					() => undefined
+				)
+			).then( send, send );
+		},
+
+		applySelection: () => undefined,
+
+		close: onClose,
+
+		checkoutRefresh: null,
+	};
+}

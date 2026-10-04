@@ -25,6 +25,12 @@ export interface RegisterCheckoutBlockOptions {
 export interface WcRuntime {
 	blocksCheckout?: {
 		registerCheckoutBlock?: ( options: RegisterCheckoutBlockOptions ) => void;
+		/**
+		 * `POST /wc/store/v1/cart/extensions` — runs the namespace's server callback and takes the
+		 * recalculated cart into `wc/store/cart`. Resolves with that cart, rejects with the Store
+		 * API's error object (`wc-cart-checkout-base-frontend.js`: `extensionCartUpdate`).
+		 */
+		extensionCartUpdate?: ( args: { namespace: string; data: unknown } ) => Promise< unknown >;
 	};
 	wcSettings?: {
 		getSetting?: < T >( name: string, fallback?: T ) => T;

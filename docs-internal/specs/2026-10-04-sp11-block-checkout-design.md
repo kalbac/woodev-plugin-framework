@@ -154,6 +154,17 @@ Confirmation shares the classic 15/minute selection quota, so switching transpor
 Other slices must extend this registration owner rather than replace its callback or schema.
 C-1 uses core address synchronization and registers no competing framework Store API namespace.
 
+C-2b client contract (#1089), an extension of that same owner: the cart data gains a sibling key
+`owner` — `{ plugin_id, field_id, rate_id, locality }` for the field that owns the cart's chosen
+rate, `null` for any other rate. It is cart output only (absent from the checkout echo schema).
+The pickup button renders from `owner` and the snapshot alone, and only while both name the rate
+selected in `wc/store/cart` right now; it never infers ownership from a label or a method list.
+`locality` is the key the owner's points are addressed by (`''` → the client falls back to the
+native city). The echo carries the snapshot's identity keys for the owning field and `null` for
+every other field. The storefront map session is `pickup-session.js`, opened with a per-surface
+host; the Blocks host applies no address replacement (it would change the confirmed destination)
+and sends no `clear` command on a rate switch (the snapshot's rate scoping already clears it).
+
 Important existing code, not new work to recreate:
 
 - #949 is **closed**; the REST rate guard has already been fixed. Re-verify rates after address

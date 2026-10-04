@@ -183,6 +183,36 @@ final class StoreApiPickupTest extends TestCase {
 		$this->assertSame( 1, $this->fetches );
 	}
 
+	/**
+	 * SP-11 C-2b (#1089): the block checkout shows its pickup button from the server's answer alone.
+	 */
+	public function test_cart_data_names_the_field_that_owns_the_chosen_rate(): void {
+		$this->assertSame(
+			[ 'plugin_id' => 'carrier', 'field_id' => 'carrier_point', 'rate_id' => 'carrier_pickup:7', 'locality' => 'msk' ],
+			C2a_Adapter::cart_data()['owner']
+		);
+
+		// The owner is about the RATE, not about a point: it is named before anything is confirmed
+		// and follows the customer's settlement as the chain changes.
+		$this->scope->locality = '';
+		$this->assertSame( '', C2a_Adapter::cart_data()['owner']['locality'] );
+	}
+
+	public function test_cart_data_names_no_owner_for_a_foreign_or_missing_rate(): void {
+		$this->session->data['chosen_shipping_methods'] = [ 'flat_rate:9' ];
+		$this->assertNull( C2a_Adapter::cart_data()['owner'] );
+
+		$this->session->data['chosen_shipping_methods'] = [];
+		$this->assertNull( C2a_Adapter::cart_data()['owner'] );
+	}
+
+	public function test_owner_is_cart_output_only_and_never_part_of_the_checkout_echo_schema(): void {
+		$this->assertTrue( Store_Api_Pickup::schema()['owner']['readonly'] );
+		$this->assertContains( 'null', Store_Api_Pickup::schema()['owner']['type'] );
+		$this->assertSame( [ 'pickup' ], array_keys( Store_Api_Pickup::checkout_schema() ) );
+		$this->assertFalse( Store_Api_Pickup::checkout_schema()['pickup']['readonly'] );
+	}
+
 	public function test_domain_denial_is_not_remembered(): void {
 		Filters\expectApplied( 'woodev_shipping_pickup_point_selection' )->andReturn( [ 'allowed' => false, 'reason' => 'Domain refused' ] );
 		$this->expectExceptionMessage( 'Domain refused' );
