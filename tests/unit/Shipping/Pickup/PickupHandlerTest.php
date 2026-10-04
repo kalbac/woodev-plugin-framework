@@ -72,6 +72,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 	use Woodev\Framework\Shipping\Pickup\Selection_Scope;
 	use Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab;
 	use Woodev\Framework\Shipping\Shipping_Plugin;
+	use Woodev\Framework\Error_Reporting\Browser_Event_Builder;
+	use Woodev\Framework\Error_Reporting\Plugin_Scope;
 	use Woodev\Tests\Unit\TestCase;
 
 	require_once dirname( __DIR__, 4 ) . '/woodev/class-plugin-exception.php';
@@ -124,6 +126,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 	require_once dirname( __DIR__, 4 ) . '/woodev/http/trait-rest-rate-limit.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/rest-api/class-pickup-controller.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-pickup-handler.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/error-reporting/class-plugin-scope.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/error-reporting/class-browser-event-builder.php';
 
 	/**
 	 * Minimal `\WC_Session` stand-in — same shape as every other Location Provider layer
@@ -2416,6 +2420,70 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$this->assertSame(
 				'https://example.test/wp-json/woodev/v1/shipping/pickup/carrier/points',
 				$config['restRoot']
+			);
+		}
+
+		public function test_error_reporter_uses_the_owning_plugin_id_when_handler_id_differs(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			$plugin = ( new \ReflectionClass( Pickup_Handler_Location_Fixture_Plugin::class ) )->newInstanceWithoutConstructor();
+			$plugin->fake_id = 'registry-plugin';
+
+			$handler = $this->make_handler(
+				[
+					'plugin_id' => 'handler-route-id',
+					'field_id'  => 'pickup_point',
+					'plugin'    => $plugin,
+				]
+			);
+			$config  = $handler->get_js_config();
+			$declared = $handler->declare_error_reporting_field( [] );
+			$builder = new Browser_Event_Builder(
+				new Plugin_Scope(
+					[
+						[
+							'id'      => 'registry-plugin',
+							'version' => '1.0.0',
+							'dir'     => __DIR__,
+						],
+					]
+				),
+				[
+					'site'              => 'abcdef0123456789',
+					'framework_version' => '2.0.1',
+					'wp_version'        => '6.8',
+					'wc_version'        => '10.0.0',
+					'php_version'       => '8.1.0',
+					'environment'       => 'production',
+				],
+				$declared
+			);
+			$event = $builder->from_payload(
+				[
+					'source'   => Browser_Event_Builder::SOURCE_PICKUP,
+					'pluginId' => $config['pluginId'],
+					'fieldId'  => $config['fieldId'],
+					'code'     => 'map_script',
+				]
+			);
+
+			$this->assertSame( 'registry-plugin', $config['pluginId'] );
+			$this->assertSame( [ 'pickup_point' ], $declared['registry-plugin'] );
+			$this->assertNotNull( $event, 'The reporter should accept the event using the plugin registry id.' );
+
+			$fallback_handler = $this->make_handler(
+				[
+					'plugin_id' => 'handler-route-id',
+					'field_id'  => 'pickup_point',
+				]
+			);
+			$this->assertSame( 'handler-route-id', $fallback_handler->get_js_config()['pluginId'] );
+			$this->assertSame(
+				[ 'pickup_point' ],
+				$fallback_handler->declare_error_reporting_field( [] )['handler-route-id']
 			);
 		}
 
