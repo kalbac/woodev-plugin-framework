@@ -63,6 +63,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 	use Woodev\Framework\Shipping\Location\Location_Service;
 	use Woodev\Framework\Shipping\Map\Map_Provider;
 	use Woodev\Framework\Shipping\Order\Shipping_Order_Handler;
+	use Woodev\Framework\Shipping\Pickup\Constraint_Checker;
 	use Woodev\Framework\Shipping\Pickup\Pickup_Handler;
 	use Woodev\Framework\Shipping\Pickup\Pickup_Map_Settings;
 	use Woodev\Framework\Shipping\Pickup\Pickup_Point;
@@ -707,6 +708,9 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		/** @var mixed */
 		private $session_value;
 
+		/** @var string[] the gateways payment_gateway_available() answers true for (#1089). */
+		public array $available_gateways = [];
+
 		/**
 		 * @param mixed $session_value what wc_session_chosen_payment_method() returns.
 		 */
@@ -724,6 +728,10 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 
 		protected function wc_session_chosen_payment_method() {
 			return $this->session_value;
+		}
+
+		protected function payment_gateway_available( string $gateway_id ): bool {
+			return in_array( $gateway_id, $this->available_gateways, true );
 		}
 	}
 
@@ -4900,6 +4908,93 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			);
 
 			$this->assertSame( '', $handler->rest_payment_method() );
+		}
+
+		/**
+		 * SP-11 C-2b (#1089), the critic's repro: the session still says «cod» from an earlier
+		 * checkout, the block checkout's live gateway is prepaid. The points/detail request
+		 * declares the live gateway, and a point that takes no cash must come back selectable —
+		 * otherwise the picker disables the only control that could confirm it.
+		 */
+		public function test_a_declared_available_gateway_beats_a_stale_session_cod(): void {
+			$_POST = [];
+			$_GET  = [ 'payment_method' => 'bacs' ];
+
+			$handler = new Pickup_Handler_Session_Probe(
+				'p',
+				'f',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				'cod'
+			);
+			$handler->available_gateways = [ 'bacs', 'cod' ];
+			$no_cash                     = $this->point( [ 'accepts_cod' => false ] );
+
+			try {
+				$this->assertSame( 'bacs', $handler->rest_payment_method() );
+				$this->assertTrue( ( new Constraint_Checker() )->check( $no_cash, $handler->rest_payment_method(), 0 )['allowed'] );
+
+				// The stale session alone is what made the point unconfirmable.
+				$_GET = [];
+				$this->assertSame( 'cod', $handler->rest_payment_method() );
+				$this->assertFalse( ( new Constraint_Checker() )->check( $no_cash, $handler->rest_payment_method(), 0 )['allowed'] );
+			} finally {
+				$_GET = [];
+			}
+		}
+
+		/**
+		 * The declared value is VERIFIED, never trusted: a gateway the store does not offer
+		 * (or a registration slug that is no gateway id at all) leaves the session's answer in
+		 * force, so a client cannot talk its way past the COD gate with an invented name.
+		 */
+		public function test_a_declared_gateway_the_store_does_not_offer_is_ignored(): void {
+			$_POST = [];
+
+			$handler = new Pickup_Handler_Session_Probe(
+				'p',
+				'f',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				'cod'
+			);
+			$handler->available_gateways = [ 'cod' ];
+
+			try {
+				foreach ( [ 'bacs', 'prepaid-ui', [ 'bacs' ], '' ] as $declared ) {
+					$_GET = [ 'payment_method' => $declared ];
+					$this->assertSame( 'cod', $handler->rest_payment_method() );
+				}
+			} finally {
+				$_GET = [];
+			}
+		}
+
+		/**
+		 * The classic checkout's order of authority is untouched: its posted value still wins
+		 * over anything a query string declares.
+		 */
+		public function test_the_posted_payment_method_still_wins_over_a_declared_one(): void {
+			$_POST = [ 'payment_method' => 'cod' ];
+			$_GET  = [ 'payment_method' => 'bacs' ];
+
+			$handler = new Pickup_Handler_Session_Probe(
+				'p',
+				'f',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				'cheque'
+			);
+			$handler->available_gateways = [ 'bacs', 'cod', 'cheque' ];
+
+			try {
+				$this->assertSame( 'cod', $handler->rest_payment_method() );
+			} finally {
+				$_GET = [];
+			}
 		}
 
 		/**

@@ -45,7 +45,18 @@ export interface PickupSnapshot {
 	rate_id: string;
 	/** The point's short address, raw text (never HTML). */
 	summary: string;
+	/**
+	 * The native shipping-address fields the server moved to the point's own address with this
+	 * confirmation (`pickup_replace_address`); an empty list when it moved none.
+	 */
+	destination?: PickupDestination | unknown[];
 	selection?: PickupSelectionResult;
+}
+
+/** `Store_Api_Pickup::replace_destination()` — street line and/or postcode, never the city. */
+export interface PickupDestination {
+	address_1?: string;
+	postcode?: string;
 }
 
 /** The field that owns the cart's chosen rate (`Store_Api_Pickup::owner()`). */
@@ -71,6 +82,8 @@ export interface PickupConfig {
 	fieldId: string;
 	nonce?: string;
 	nonceNodeId?: string;
+	/** `billingOnly`: the store ships to the billing address, so the two are one address. */
+	replaceAddress?: { enabled?: boolean; billingOnly?: boolean };
 	i18n?: Record< string, string >;
 	themeButtonClass?: string;
 	accentColor?: string;
@@ -99,6 +112,7 @@ export interface PickupSessionHost {
 	getLocality: () => string;
 	getLocalityKey: () => string;
 	getNonce: () => string;
+	getRequestContext: () => Record< string, string > | null;
 	confirmSelection: ( point: PickupPoint ) => Promise< PickupSelectionResult >;
 	applySelection: ( point: PickupPoint, addressEscaped: boolean ) => void;
 	close: () => void;

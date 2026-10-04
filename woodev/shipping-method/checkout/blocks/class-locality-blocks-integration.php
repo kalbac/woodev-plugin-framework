@@ -30,9 +30,10 @@ if ( ! class_exists( __NAMESPACE__ . '\Locality_Blocks_Integration' ) ) :
 		/**
 		 * WooCommerce script handles the bundle reads off `window.wc` / `wcSettings`. The bundle imports
 		 * none of `@woocommerce/*` (the packages are not a dependency here), so the dependency extraction
-		 * plugin cannot name them — they are declared by hand.
+		 * plugin cannot name them — they are declared by hand. `wc-blocks-registry` is the public payment
+		 * registry the pickup button resolves the active gateway's id through (#1089).
 		 */
-		private const WC_SCRIPT_DEPENDENCIES = [ 'wc-blocks-checkout', 'wc-blocks-data-store', 'wc-settings' ];
+		private const WC_SCRIPT_DEPENDENCIES = [ 'wc-blocks-checkout', 'wc-blocks-data-store', 'wc-blocks-registry', 'wc-settings' ];
 
 		/** @var Checkout_Handler the handler answering for the fleet */
 		private Checkout_Handler $handler;

@@ -22,6 +22,12 @@ export interface RegisterCheckoutBlockOptions {
 	force?: boolean;
 }
 
+/** A registered payment method, as far as this bundle reads it (`wc-blocks-registry.js`). */
+export interface PaymentRegistration {
+	/** The server gateway's id; WooCommerce defaults it to the registration's `name`. */
+	paymentMethodId?: string;
+}
+
 export interface WcRuntime {
 	blocksCheckout?: {
 		registerCheckoutBlock?: ( options: RegisterCheckoutBlockOptions ) => void;
@@ -31,6 +37,11 @@ export interface WcRuntime {
 		 * API's error object (`wc-cart-checkout-base-frontend.js`: `extensionCartUpdate`).
 		 */
 		extensionCartUpdate?: ( args: { namespace: string; data: unknown } ) => Promise< unknown >;
+	};
+	/** The public payment registry, keyed by registration `name` (the `wc-blocks-registry` handle). */
+	wcBlocksRegistry?: {
+		getPaymentMethods?: () => Record< string, PaymentRegistration | undefined >;
+		getExpressPaymentMethods?: () => Record< string, PaymentRegistration | undefined >;
 	};
 	wcSettings?: {
 		getSetting?: < T >( name: string, fallback?: T ) => T;

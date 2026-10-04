@@ -15,11 +15,17 @@ import { useSyncExternalStore as mockUseSyncExternalStore } from 'react';
  * - `disableCheckoutFor( work )` counts a calculation for as long as `work()` is unsettled.
  */
 type Rate = { rate_id: string; selected: boolean };
+type Address = Record< string, string >;
 
 const mockStore = {
 	extensions: {} as Record< string, unknown >,
 	rates: [] as Rate[],
 	payment: 'cod',
+	shipping: {} as Address,
+	billing: {} as Address,
+	useShippingAsBilling: false,
+	/** How many `disableCheckoutFor` calls were unsettled at each address write. */
+	addressWrites: [] as number[],
 	validation: {} as Record< string, { message: string; hidden: boolean } >,
 	/** How many `disableCheckoutFor` calls are unsettled: Place Order is blocked while > 0. */
 	calculating: 0,
@@ -34,15 +40,21 @@ jest.mock( '@wordpress/data', () => {
 		getShippingRates: () => [ { shipping_rates: mockStore.rates } ],
 		getActivePaymentMethod: () => mockStore.payment,
 		getValidationError: ( id: string ) => mockStore.validation[ id ],
-		getCustomerData: () => ( {
-			shippingAddress: { city: 'Москва', state: '', country: 'RU' },
-			billingAddress: { city: 'Москва', state: '', country: 'RU' },
-		} ),
+		getCustomerData: () => ( { shippingAddress: mockStore.shipping, billingAddress: mockStore.billing } ),
+		getUseShippingAsBilling: () => mockStore.useShippingAsBilling,
 	} );
 
 	return {
 		select: selectFn,
 		dispatch: () => ( {
+			setShippingAddress: ( address: Address ) => {
+				mockStore.shipping = address;
+				mockStore.addressWrites.push( mockStore.calculating );
+			},
+			setBillingAddress: ( address: Address ) => {
+				mockStore.billing = address;
+				mockStore.addressWrites.push( mockStore.calculating );
+			},
 			setValidationErrors: ( errors: Record< string, { message: string; hidden: boolean } > ) => {
 				mockStore.validation = { ...mockStore.validation, ...errors };
 				notify();
@@ -183,8 +195,15 @@ const renderPicker = () => render( <PickupPicker data={ data } checkoutExtension
 
 const trigger = (): HTMLElement | null => document.querySelector( '.woodev-pickup-trigger' );
 
+const HOME: Address = { city: 'Москва', state: '', country: 'RU', address_1: 'Ленина, 5', postcode: '123456' };
+const OFFICE: Address = { city: 'Тула', state: '', country: 'RU', address_1: 'Мира, 9', postcode: '300000' };
+
 beforeEach( () => {
 	mockStore.payment = 'cod';
+	mockStore.shipping = { ...HOME };
+	mockStore.billing = { ...HOME };
+	mockStore.useShippingAsBilling = false;
+	mockStore.addressWrites = [];
 	mockStore.validation = {};
 	mockStore.calculating = 0;
 	mockStore.listeners.clear();
@@ -386,6 +405,172 @@ describe( 'PickupPicker — confirmation through the Store API', () => {
 		} );
 
 		expect( mockStore.calculating ).toBe( 0 );
+	} );
+} );
+
+/*
+ * WooCommerce 11.1's public payment registry (`wc-blocks-registry.js`): registrations keyed by NAME,
+ * each carrying the server gateway's `paymentMethodId` (which defaults to the name).
+ */
+const registerPayments = ( regular: Record< string, unknown >, express: Record< string, unknown > = {} ): void => {
+	( window as unknown as { wc: Record< string, unknown > } ).wc.wcBlocksRegistry = {
+		getPaymentMethods: () => regular,
+		getExpressPaymentMethods: () => express,
+	};
+};
+
+describe( 'PickupPicker — the gateway id, not the registration name (#1089)', () => {
+	const sentPayment = async ( session: ReturnType< typeof fakeSession > ): Promise< unknown > => {
+		extensionCartUpdate.mockResolvedValue( { extensions: serverExtension( PICKUP_RATE, snapshot() ) } );
+
+		await act( async () => {
+			await session.host().confirmSelection( { id: 'P1' } );
+		} );
+
+		return extensionCartUpdate.mock.calls[ 0 ][ 0 ].data.pickup.carrier.carrier_point.payment_method;
+	};
+
+	it( 'confirms with the paymentMethodId of an alias registration', async () => {
+		const session = fakeSession();
+
+		// The critic's repro: the payment store names the registration, the server knows the gateway.
+		mockStore.payment = 'prepaid-ui';
+		registerPayments( { 'prepaid-ui': { name: 'prepaid-ui', paymentMethodId: 'bacs' }, cod: { paymentMethodId: 'cod' } } );
+
+		renderPicker();
+		fireEvent.click( trigger() as HTMLElement );
+
+		expect( session.host().getRequestContext() ).toEqual( { payment_method: 'bacs' } );
+		expect( await sentPayment( session ) ).toBe( 'bacs' );
+	} );
+
+	it( 'resolves an express registration too, and lets a regular one of the same name win', async () => {
+		const session = fakeSession();
+
+		mockStore.payment = 'wallet';
+		registerPayments( {}, { wallet: { paymentMethodId: 'wallet_gateway' } } );
+
+		renderPicker();
+		fireEvent.click( trigger() as HTMLElement );
+
+		expect( session.host().getRequestContext() ).toEqual( { payment_method: 'wallet_gateway' } );
+
+		registerPayments( { wallet: { paymentMethodId: 'regular_gateway' } }, { wallet: { paymentMethodId: 'wallet_gateway' } } );
+
+		expect( await sentPayment( session ) ).toBe( 'regular_gateway' );
+	} );
+
+	it( 'sends the name itself when the registry does not know it, or is not there', async () => {
+		const session = fakeSession();
+
+		// `constructor` is on every object's prototype: only an OWN registration may answer.
+		mockStore.payment = 'constructor';
+		registerPayments( { cod: { paymentMethodId: 'cod' } } );
+
+		renderPicker();
+		fireEvent.click( trigger() as HTMLElement );
+
+		expect( session.host().getRequestContext() ).toEqual( { payment_method: 'constructor' } );
+
+		delete ( window as unknown as { wc: Record< string, unknown > } ).wc.wcBlocksRegistry;
+		mockStore.payment = 'cod';
+
+		expect( await sentPayment( session ) ).toBe( 'cod' );
+	} );
+
+	it( 'sends no payment context when nothing is chosen', () => {
+		const session = fakeSession();
+
+		mockStore.payment = '';
+		registerPayments( { cod: { paymentMethodId: 'cod' } } );
+
+		renderPicker();
+		fireEvent.click( trigger() as HTMLElement );
+
+		expect( session.host().getRequestContext() ).toBeNull();
+	} );
+} );
+
+describe( 'PickupPicker — the store’s address-replacement policy (#1089)', () => {
+	const MOVED = { address_1: 'Тверская, 1', postcode: '101000' };
+
+	/** The server confirmed the point and, when `destination` is given, moved the destination to it. */
+	const confirmWith = async ( destination: unknown, over: Record< string, unknown > = {} ): Promise< void > => {
+		const session = fakeSession();
+
+		( window as unknown as Record< string, unknown > ).woodev_pickup_config_carrier = { ...config, ...over };
+		extensionCartUpdate.mockImplementation( async () => {
+			serverAnswers( PICKUP_RATE, snapshot( { destination } as Partial< PickupSnapshot > ) );
+			notify();
+
+			return { extensions: mockStore.extensions };
+		} );
+
+		renderPicker();
+		fireEvent.click( trigger() as HTMLElement );
+
+		await act( async () => {
+			await session.host().confirmSelection( { id: 'P1' } );
+		} );
+	};
+
+	it( 'takes the point’s address into the native shipping address, and keeps the confirmation', async () => {
+		mockStore.billing = { ...OFFICE };
+
+		await confirmWith( MOVED );
+
+		// Street and postcode are the point's; the city and everything else stay the shopper's.
+		expect( mockStore.shipping ).toEqual( { ...HOME, ...MOVED } );
+		// A separate billing address is never touched.
+		expect( mockStore.billing ).toEqual( OFFICE );
+		// Written while Place Order was still held by the confirmation's own gate.
+		expect( mockStore.addressWrites ).toEqual( [ 1 ] );
+		expect( mockStore.calculating ).toBe( 0 );
+
+		// The confirmation survived the move: the point is shown and echoed, nothing blocks the order.
+		expect( screen.getByRole( 'button', { name: 'Choose a different pickup point' } ) ).toBeInTheDocument();
+		expect( ( lastEcho() as { point_id: string } ).point_id ).toBe( 'P1' );
+		expect( mockStore.validation[ ERROR_ID ] ).toBeUndefined();
+	} );
+
+	it( 'moves the billing address with it only where the two are one address', async () => {
+		mockStore.useShippingAsBilling = true;
+
+		await confirmWith( MOVED );
+
+		expect( mockStore.shipping ).toEqual( { ...HOME, ...MOVED } );
+		expect( mockStore.billing ).toEqual( { ...HOME, ...MOVED } );
+	} );
+
+	it( 'moves the billing address in a store that ships to the billing address', async () => {
+		await confirmWith( MOVED, { replaceAddress: { enabled: true, billingOnly: true } } );
+
+		expect( mockStore.billing ).toEqual( { ...HOME, ...MOVED } );
+	} );
+
+	it.each( [
+		{ destination: [] },
+		{ destination: undefined },
+		{ destination: null },
+		{ destination: { address_1: '', postcode: 7 } },
+	] )( 'leaves the native address alone when the server moved nothing (the setting is off): %j', async ( { destination } ) => {
+		mockStore.useShippingAsBilling = true;
+		mockStore.billing = { ...OFFICE };
+
+		await confirmWith( destination );
+
+		expect( mockStore.shipping ).toEqual( HOME );
+		expect( mockStore.billing ).toEqual( OFFICE );
+		expect( mockStore.addressWrites ).toEqual( [] );
+		expect( screen.getByRole( 'button', { name: 'Choose a different pickup point' } ) ).toBeInTheDocument();
+	} );
+
+	it( 'writes nothing when the store already holds the moved address', async () => {
+		mockStore.shipping = { ...HOME, ...MOVED };
+
+		await confirmWith( MOVED );
+
+		expect( mockStore.addressWrites ).toEqual( [] );
 	} );
 } );
 
@@ -712,6 +897,61 @@ describe( 'PickupPicker — with the shared map session', () => {
 		expect( provider?.destroyed ).toBe( true );
 		expect( screen.getByText( 'Тверская, 1' ) ).toBeInTheDocument();
 		expect( mockStore.calculating ).toBe( 0 );
+	} );
+
+	/*
+	 * #1089, the critic's repro: the session still says «cod» from an earlier checkout, the shopper
+	 * has switched the block checkout to a prepaid method. The points routes must be asked with the
+	 * LIVE gateway, or a point that takes no cash comes back not selectable and its CTA is dead.
+	 * (The server half — the declared gateway beats the stale session only when the store offers
+	 * it — is `PickupHandlerTest::test_a_declared_available_gateway_beats_a_stale_session_cod`.)
+	 */
+	it( 'asks for points and details with the live gateway, read per request', async () => {
+		const page = window as unknown as Record< string, unknown >;
+		const factory = jest.fn( ( _options: Record< string, unknown > ) => ( {} ) );
+
+		page.WoodevPickupDataSource = factory;
+		mockStore.payment = 'prepaid-ui';
+		registerPayments( { 'prepaid-ui': { paymentMethodId: 'bacs' }, cod: { paymentMethodId: 'cod' } } );
+
+		renderPicker();
+
+		await act( async () => {
+			fireEvent.click( trigger() as HTMLElement );
+			await Promise.resolve();
+		} );
+
+		const options = factory.mock.calls[ 0 ][ 0 ] as { context: () => unknown };
+
+		expect( options.context() ).toEqual( { payment_method: 'bacs' } );
+
+		// What the session handed over, through the real data source: both routes carry it.
+		// eslint-disable-next-line @typescript-eslint/no-var-requires
+		const createDataSource = require( '../../woodev/shipping-method/assets/js/frontend/pickup-datasource' );
+		const fetchMock = jest.fn( () =>
+			Promise.resolve( { ok: true, status: 200, json: () => Promise.resolve( { points: [] } ) } )
+		);
+		const globals = global as unknown as { fetch?: unknown };
+
+		globals.fetch = fetchMock;
+
+		try {
+			const dataSource = createDataSource( { ...options, debounceMs: 0 } );
+
+			await dataSource.fetchPoints( { locality: 'dadata:msk' } );
+			await dataSource.fetchDetails( 'P1' );
+
+			mockStore.payment = 'cod';
+			await dataSource.fetchDetails( 'P1' );
+		} finally {
+			delete globals.fetch;
+		}
+
+		expect( fetchMock.mock.calls.map( ( call ) => ( call as unknown[] )[ 0 ] ) ).toEqual( [
+			`${ config.restRoot }?locality=dadata%3Amsk&payment_method=bacs`,
+			`${ config.restRoot }/P1?payment_method=bacs`,
+			`${ config.restRoot }/P1?payment_method=cod`,
+		] );
 	} );
 
 	it( 'keeps the dialog open and shows the server’s refusal in it', async () => {

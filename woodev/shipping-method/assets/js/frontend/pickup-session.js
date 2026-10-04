@@ -27,6 +27,12 @@
  *   - `getLocality()`                    CONTEXT: the locality NAME the map provider centres on.
  *   - `getLocalityKey()`                 CONTEXT: the locality the points query is addressed by.
  *   - `getNonce()`                       CONTEXT: the live `wp_rest` nonce for the points routes.
+ *   - `getRequestContext()`              CONTEXT: extra query params for every points and details
+ *                                        request, read per request, or `null` for none. The classic
+ *                                        checkout sends none — the server reads its payment choice
+ *                                        from the session WooCommerce keeps current; the block
+ *                                        checkout names the live gateway (`payment_method`), which
+ *                                        only the browser knows there.
  *   - `confirmSelection( point, dataSource )`
  *                                        CONFIRMATION: asks the server; resolves with the verdict
  *                                        (`{ allowed, reason, point, close, refresh_checkout }`),
@@ -685,6 +691,11 @@
 			restRoot: config.restRoot,
 			nonce: function() {
 				return host.getNonce();
+			},
+			// The surface's own request context — `null` on the classic checkout, which leaves
+			// its URLs exactly as they were (see the file docblock's host contract).
+			context: function() {
+				return host.getRequestContext();
 			},
 		} );
 

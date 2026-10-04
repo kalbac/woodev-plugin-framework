@@ -1377,6 +1377,17 @@ test( 'the datasource nonce reader falls back to config.nonce when the fragment 
 	expect( window.WoodevPickupDataSource.lastOptions.nonce() ).toBe( 'page-load-nonce' );
 } );
 
+// #1089: the block checkout names its live payment gateway on the points routes; the classic
+// checkout must keep sending nothing — the server reads its choice from the WC session.
+test( 'the classic host hands the datasource no extra request context', () => {
+	setConfig( makeConfig() );
+
+	mountAll();
+	clickTrigger();
+
+	expect( window.WoodevPickupDataSource.lastOptions.context() ).toBeNull();
+} );
+
 test( 'the session tags its modal with the documented pickup modalId on every modal event', () => {
 	const opened = [];
 	const closed = [];

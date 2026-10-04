@@ -135,6 +135,42 @@ export function writeNativeLocality( city: string, state: string | null ): void 
 }
 
 /**
+ * Takes the destination the server moved to a pickup point's address — together with the point's
+ * confirmation, in one request (`Store_Api_Pickup::replace_destination()`, #1089) — into the native
+ * shipping address, so the form shows, and the order is placed with, the address the confirmation
+ * is bound to. Written explicitly: WooCommerce keeps the reply's addresses out of the store while it
+ * considers the shopper's own edits unsaved (`wc-blocks-data.js`: `overwriteDirtyCustomerData`).
+ *
+ * Only the named fields move; names, city and phone stay the shopper's. The billing address follows
+ * only where it is the same address — `mirrorBilling`, or core's «use shipping as billing» flag — and
+ * a separate billing address is never touched.
+ */
+export function adoptDestination(
+	destination: Pick< WcAddress, 'address_1' | 'postcode' >,
+	mirrorBilling: boolean
+): void {
+	const actions = dispatch( CART_STORE ) as unknown as CartActions | undefined;
+	const differs = ( address: WcAddress ): boolean =>
+		( [ 'address_1', 'postcode' ] as const ).some(
+			( key ) => destination[ key ] !== undefined && ( address[ key ] ?? '' ) !== destination[ key ]
+		);
+
+	const shipping = readShippingAddress();
+
+	if ( differs( shipping ) ) {
+		actions?.setShippingAddress?.( { ...shipping, ...destination } );
+	}
+
+	if ( mirrorBilling || readUseShippingAsBilling() ) {
+		const billing = readBillingAddress();
+
+		if ( differs( billing ) ) {
+			actions?.setBillingAddress?.( { ...billing, ...destination } );
+		}
+	}
+}
+
+/**
  * Recalculates the cart's shipping rates against the saved chain as it NOW stands, without ever
  * overwriting what the shopper has in the address form.
  *

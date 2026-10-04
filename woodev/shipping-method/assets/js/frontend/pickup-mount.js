@@ -1262,6 +1262,12 @@
 				return currentNonce( config );
 			},
 
+			// Nothing extra: the points routes read the classic checkout's payment choice from
+			// the session, which WooCommerce's `update_order_review` keeps current.
+			getRequestContext: function() {
+				return null;
+			},
+
 			// The `woodev/v1` select route, through the session's own dataSource.
 			confirmSelection: function( point, dataSource ) {
 				return dataSource.selectPoint( {

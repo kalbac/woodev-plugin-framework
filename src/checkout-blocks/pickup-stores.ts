@@ -18,6 +18,7 @@ import { dispatch, select } from '@wordpress/data';
 import type {
 	PickupConfig,
 	PickupData,
+	PickupDestination,
 	PickupEcho,
 	PickupExtension,
 	PickupFailure,
@@ -27,7 +28,7 @@ import type {
 	PickupSessionApi,
 	PickupSnapshot,
 } from './pickup-types';
-import { CART_STORE } from './wc-stores';
+import { adoptDestination, CART_STORE } from './wc-stores';
 import { wcRuntime } from './wc-runtime';
 
 export const PAYMENT_STORE = 'wc/store/payment';
@@ -162,12 +163,34 @@ export function readSessionApi(): PickupSessionApi | null {
 	return api && typeof api.open === 'function' ? api : null;
 }
 
-/** The gateway the shopper has chosen, or `''` — the server checks it against the live registry. */
+/**
+ * The server GATEWAY ID of the payment method the shopper has chosen, or `''`.
+ *
+ * The payment store names the active REGISTRATION, and a registration's name is not the gateway's
+ * id: a payment method may register as `name: 'prepaid-ui', paymentMethodId: 'bacs'`. WooCommerce
+ * resolves the name through its public registry before it posts the order
+ * (`wc-cart-checkout-base-frontend.js`: `{ ...getExpressPaymentMethods(), ...getPaymentMethods() }
+ * [ active ]?.paymentMethodId`, read from 11.1) and so does this — the server checks what it is sent
+ * against its own gateway ids and refuses a registration name it has never heard of.
+ *
+ * A name the registry does not know is sent as it is: it is the gateway id wherever the two were
+ * never told apart, and the server verifies it either way.
+ */
 export function readActivePaymentMethod(): string {
 	const selectors = select( PAYMENT_STORE ) as unknown as PaymentSelectors | undefined;
-	const method = selectors?.getActivePaymentMethod?.();
+	const active = selectors?.getActivePaymentMethod?.();
 
-	return typeof method === 'string' ? method : '';
+	if ( typeof active !== 'string' || active === '' ) {
+		return '';
+	}
+
+	const registry = wcRuntime()?.wcBlocksRegistry;
+	const registrations = { ...registry?.getExpressPaymentMethods?.(), ...registry?.getPaymentMethods?.() };
+	const gatewayId = Object.prototype.hasOwnProperty.call( registrations, active )
+		? registrations[ active ]?.paymentMethodId
+		: undefined;
+
+	return typeof gatewayId === 'string' && gatewayId !== '' ? gatewayId : active;
 }
 
 /**
@@ -229,11 +252,17 @@ function failure( error: unknown ): PickupFailure {
  * Only the point's ID travels: the server re-fetches the point and reads the rate, the
  * destination and the cart weight itself. WooCommerce takes the recalculated cart into its store
  * before this resolves, so the button renders from the returned snapshot without another request.
+ *
+ * Where the store replaces the address with the point's (`pickup_replace_address`), the server has
+ * moved the destination in the same request and the confirmation names the fields it moved; they
+ * are taken into the native address here, before this resolves — so still under the caller's
+ * checkout gate. `billingIsShipping`: the store ships to the billing address.
  */
 export async function confirmPoint(
 	namespace: string,
 	field: PickupFieldDescriptor,
-	pointId: string
+	pointId: string,
+	billingIsShipping = false
 ): Promise< PickupSelectionResult > {
 	const update = wcRuntime()?.blocksCheckout?.extensionCartUpdate;
 
@@ -273,7 +302,34 @@ export async function confirmPoint(
 		throw { status: 0, code: 'woodev_pickup_not_confirmed', message: '' } as PickupFailure;
 	}
 
+	const destination = movedDestination( snapshot );
+
+	if ( destination ) {
+		adoptDestination( destination, billingIsShipping );
+	}
+
 	return { ...snapshot.selection, allowed: true };
+}
+
+/** The address fields a confirmation moved to the point's own, or `null` when it moved none. */
+function movedDestination( snapshot: PickupSnapshot ): PickupDestination | null {
+	const source = snapshot.destination;
+
+	if ( ! isRecord( source ) || Array.isArray( source ) ) {
+		return null;
+	}
+
+	const destination: PickupDestination = {};
+
+	for ( const key of [ 'address_1', 'postcode' ] as const ) {
+		const value = source[ key ];
+
+		if ( typeof value === 'string' && value !== '' ) {
+			destination[ key ] = value;
+		}
+	}
+
+	return Object.keys( destination ).length > 0 ? destination : null;
 }
 
 /** The validation-store id of one field's «choose a pickup point» error. */

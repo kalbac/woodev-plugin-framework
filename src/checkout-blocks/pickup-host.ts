@@ -9,17 +9,21 @@
  *
  * - CONTEXT is read LIVE, at the moment the session asks — the chosen point from the cart's
  *   confirmed snapshot, the locality from the native shipping address and the server's own key.
+ *   The points requests carry the LIVE payment gateway (`getRequestContext()`): the block checkout
+ *   keeps the choice in the browser, and the session's own record may be an earlier checkout's.
  * - CONFIRMATION is one `cart/extensions` command, with Place Order blocked while it is in flight.
  * - ADDRESS-WRITE does nothing here: the confirmed snapshot is already in the cart store when the
- *   session applies a selection, and the button renders from it. The classic «replace the address
- *   with the point's» is NOT performed — rewriting the native address changes the destination the
- *   server confirmed the point for, which drops the confirmation it just made.
+ *   session applies a selection, and the button renders from it. The store's «replace the address
+ *   with the point's» policy is honoured INSIDE the confirmation instead (`confirmPoint()`): the
+ *   server moves the destination and binds the confirmation to it in one request — a browser that
+ *   rewrote the native address afterwards would change the destination the point was confirmed
+ *   for, and drop the confirmation it had just received.
  * - REFRESH is `null`: the confirmation's own reply is the recalculated cart.
  *
  * @package woodev-plugin-framework
  */
 
-import { confirmPoint, currentView } from './pickup-stores';
+import { confirmPoint, currentView, readActivePaymentMethod } from './pickup-stores';
 import type {
 	PickupConfig,
 	PickupData,
@@ -76,14 +80,25 @@ export function createHost( { data, field, config, trigger, onClose }: HostOptio
 
 		getNonce: () => liveNonce( config ),
 
+		// The gateway chosen NOW, for the listing's and the card's «can this point be chosen»
+		// verdict. The server honours it only when it names a gateway the store offers
+		// (`Pickup_Handler::declared_payment_method()`); nothing chosen sends nothing.
+		getRequestContext: () => {
+			const payment = readActivePaymentMethod();
+
+			return payment !== '' ? { payment_method: payment } : null;
+		},
+
 		confirmSelection: ( point: PickupPoint ): Promise< PickupSelectionResult > => {
 			const pointId = String( point?.id ?? '' );
+			const billingIsShipping = config.replaceAddress?.billingOnly === true;
 			let outcome: Promise< PickupSelectionResult > | null = null;
 
 			// The gate may run `work` later or not at all (see `gateCheckout()`); the request is
 			// made exactly once either way, and its verdict — or its failure — is what the session
 			// gets, never the gate's own.
-			const send = (): Promise< PickupSelectionResult > => ( outcome ??= confirmPoint( namespace, field, pointId ) );
+			const send = (): Promise< PickupSelectionResult > =>
+				( outcome ??= confirmPoint( namespace, field, pointId, billingIsShipping ) );
 
 			return gateCheckout( () =>
 				send().then(
