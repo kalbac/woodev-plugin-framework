@@ -42,6 +42,12 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Error_Reporter' ) ) :
 		/** Most events one request may queue. */
 		const MAX_PER_REQUEST = 5;
 
+		/** Bytes held back at install so the shutdown handler still has room after an out-of-memory fatal. */
+		const MEMORY_RESERVE = 262144;
+
+		/** @var string|null Emergency memory buffer: freed first thing in the shutdown handler. */
+		private static ?string $reserve = null;
+
 		/** @var bool Install-once guard. */
 		private static bool $installed = false;
 
@@ -93,6 +99,8 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Error_Reporter' ) ) :
 					return false;
 				}
 
+				// Built with `str_repeat`: a literal would be interned, and freeing it would release nothing.
+				self::$reserve                    = str_repeat( ' ', self::MEMORY_RESERVE );
 				self::$previous_exception_handler = set_exception_handler( [ self::class, 'handle_exception' ] );
 				register_shutdown_function( [ self::class, 'handle_shutdown' ] );
 
@@ -180,6 +188,10 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Error_Reporter' ) ) :
 		 * @return void
 		 */
 		public static function handle_shutdown(): void {
+			// First, before anything allocates: after an «Allowed memory size» fatal the heap is full,
+			// and building the event would die with a SECOND fatal that no catch can intercept.
+			self::$reserve = null;
+
 			if ( self::$busy || ! self::$installed ) {
 				return;
 			}
@@ -231,6 +243,7 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Error_Reporter' ) ) :
 		 * @return void
 		 */
 		public static function reset(): void {
+			self::$reserve                    = null;
 			self::$installed                  = false;
 			self::$busy                       = false;
 			self::$in_handler                 = false;
@@ -287,7 +300,15 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Error_Reporter' ) ) :
 			 */
 			$event = apply_filters( 'woodev_error_reporting_event', $event );
 
-			if ( ! is_array( $event ) || ! Event_Queue::push( $event ) ) {
+			if ( ! is_array( $event ) ) {
+				return false;
+			}
+
+			if ( ! Event_Queue::push( $event ) ) {
+				// An identical event is already waiting; its drain may have been consumed without
+				// sending (lock contention), so make sure one is scheduled.
+				Dispatcher::schedule();
+
 				return false;
 			}
 

@@ -52,13 +52,6 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Dispatcher' ) ) :
 			}
 		}
 
-		/**
-		 * The cron callback: send what is queued.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @return int Reports handed to the receiver.
-		 */
 		public static function run(): int {
 			$sent = 0;
 
@@ -72,15 +65,27 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Dispatcher' ) ) :
 
 				$dsn = Consent::get_dsn();
 
-				if ( null === $dsn || ! self::acquire_lock() ) {
+				if ( null === $dsn ) {
+					return 0;
+				}
+
+				$lock = self::acquire_lock();
+
+				if ( null === $lock ) {
+					// WP-Cron has just consumed the event that brought us here: without a new one,
+					// the queue would sit until an unrelated error happened to schedule a drain.
+					self::schedule_if_queued();
+
 					return 0;
 				}
 
 				try {
-					$sent = self::drain( $dsn );
+					$sent = self::drain( $dsn, $lock );
 				} finally {
-					self::release_lock();
+					self::release_lock( $lock );
 				}
+
+				self::schedule_if_queued();
 			} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- by design: a cron run must not fail loudly.
 				unset( $e );
 			}
@@ -88,52 +93,69 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Dispatcher' ) ) :
 			return $sent;
 		}
 
-		private static function drain( Dsn $dsn ): int {
+		private static function drain( Dsn $dsn, string $lock ): int {
 			$limiter   = new Rate_Limiter();
 			$transport = new Transport();
 			$batch     = Event_Queue::all();
+			$ids       = array_map( static fn( array $event ): string => (string) ( $event['event_id'] ?? '' ), $batch );
+			$done      = [];
 			$sent      = 0;
 
-			foreach ( $batch as $event ) {
+			foreach ( $batch as $index => $event ) {
+				// Before EVERY post: the lock is still ours (a run paused past the TTL may have been
+				// taken over) and the merchant has not withdrawn consent meanwhile.
+				if ( ! self::owns_lock( $lock ) ) {
+					break; // The new owner drains what is left; only what we handled leaves the queue.
+				}
+
+				if ( ! Consent::is_active_fresh() ) {
+					Event_Queue::clear();
+
+					return $sent;
+				}
+
+				$done[] = $ids[ $index ];
+
 				if ( ! $limiter->allow( $limiter->signature( $event ) ) ) {
 					continue;
 				}
 
 				if ( ! $transport->send( $event, $dsn ) ) {
-					break; // The receiver is unreachable: do not queue up one timeout per event.
+					$done = $ids; // The receiver is unreachable: do not queue up one timeout per event.
+
+					break;
 				}
 
 				++$sent;
 			}
 
-			// The whole batch leaves the queue — sent, deduped, over the cap or undeliverable — while
-			// events queued during this run stay for the next one.
-			Event_Queue::remove( array_map( static fn( array $event ): string => (string) ( $event['event_id'] ?? '' ), $batch ) );
+			// What leaves the queue — sent, deduped, over the cap or undeliverable — while events
+			// queued during this run stay for the next one.
+			Event_Queue::remove( $done );
 
 			return $sent;
 		}
 
-		/**
-		 * Takes the drain lock.
-		 *
-		 * @return bool True when this run owns the lock.
-		 */
-		private static function acquire_lock(): bool {
+		private static function acquire_lock(): ?string {
 			global $wpdb;
 
 			$now = time();
+
+			// «<acquired at>|<random token>»: the token makes this run's row distinguishable from a
+			// successor's, so only the run that wrote it can release it or keep sending under it.
+			$value = $now . '|' . bin2hex( random_bytes( 8 ) );
 
 			// phpcs:disable WordPress.DB.DirectDatabaseQuery -- an atomic lock cannot go through the options API.
 			$inserted = $wpdb->query(
 				$wpdb->prepare(
 					"INSERT IGNORE INTO `{$wpdb->options}` ( `option_name`, `option_value`, `autoload` ) VALUES ( %s, %s, 'no' ) /* LOCK */", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 					self::LOCK_OPTION,
-					(string) $now
+					$value
 				)
 			);
 
 			if ( $inserted ) {
-				return true;
+				return $value;
 			}
 
 			$held = (string) $wpdb->get_var(
@@ -141,30 +163,67 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Dispatcher' ) ) :
 			);
 
 			if ( '' === $held || (int) $held > $now - self::LOCK_TTL ) {
-				return false;
+				return null;
 			}
 
 			// Abandoned lock: compare-and-set, so of two runs finding it stale only one wins.
 			$taken = $wpdb->query(
 				$wpdb->prepare(
 					"UPDATE `{$wpdb->options}` SET option_value = %s WHERE option_name = %s AND option_value = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-					(string) $now,
+					$value,
 					self::LOCK_OPTION,
 					$held
 				)
 			);
 			// phpcs:enable WordPress.DB.DirectDatabaseQuery
 
-			return (bool) $taken;
+			return $taken ? $value : null;
+		}
+
+		private static function release_lock( string $lock ): void {
+			global $wpdb;
+
+			// Conditional on the value: a run that was paused past the TTL and lost its lock to a
+			// successor deletes nothing when it wakes up.
+			$wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				$wpdb->prepare(
+					"DELETE FROM `{$wpdb->options}` WHERE option_name = %s AND option_value = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					self::LOCK_OPTION,
+					$lock
+				)
+			);
 		}
 
 		/**
-		 * @return void
+		 * Whether this run still holds the lock it took: the row still carries its token, and the TTL
+		 * has not passed on its own clock (after that another run is entitled to take the lock over).
+		 *
+		 * @param string $lock The value {@see self::acquire_lock()} returned.
+		 * @return bool
 		 */
-		private static function release_lock(): void {
+		private static function owns_lock( string $lock ): bool {
 			global $wpdb;
 
-			$wpdb->delete( $wpdb->options, [ 'option_name' => self::LOCK_OPTION ] ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			if ( (int) $lock <= time() - self::LOCK_TTL ) {
+				return false;
+			}
+
+			$held = $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				$wpdb->prepare( "SELECT option_value FROM `{$wpdb->options}` WHERE option_name = %s", self::LOCK_OPTION ) // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			);
+
+			return $lock === (string) $held;
+		}
+
+		/**
+		 * Schedules a drain when events are waiting and none is scheduled.
+		 *
+		 * @return void
+		 */
+		private static function schedule_if_queued(): void {
+			if ( [] !== Event_Queue::all() ) {
+				self::schedule();
+			}
 		}
 	}
 

@@ -8,6 +8,7 @@
 namespace Woodev\Tests\Unit\ErrorReporting;
 
 use Brain\Monkey\Functions;
+use Woodev\Framework\Error_Reporting\Consent;
 use Woodev\Framework\Error_Reporting\Dispatcher;
 use Woodev\Framework\Error_Reporting\Event_Queue;
 
@@ -43,6 +44,17 @@ final class Fake_Lock_Wpdb {
 	 * @return int Rows affected.
 	 */
 	public function query( array $query ): int {
+		// DELETE … WHERE option_name = %s AND option_value = %s — the ownership-checked release.
+		if ( 0 === strpos( $query['sql'], 'DELETE' ) ) {
+			if ( ( $this->rows[ $query['args'][0] ] ?? null ) !== $query['args'][1] ) {
+				return 0;
+			}
+
+			unset( $this->rows[ $query['args'][0] ] );
+
+			return 1;
+		}
+
 		if ( 0 === strpos( $query['sql'], 'INSERT IGNORE' ) ) {
 			++$this->inserts;
 
@@ -168,6 +180,7 @@ final class DispatcherTest extends ErrorReportingTestCase {
 				return true;
 			}
 		);
+		Functions\when( 'wp_cache_delete' )->justReturn( true );
 		Functions\when( 'wp_json_encode' )->alias(
 			static function ( $data, $flags = 0 ) {
 				return json_encode( $data, $flags );
@@ -217,6 +230,22 @@ final class DispatcherTest extends ErrorReportingTestCase {
 	 */
 	private function enqueue( int $line ): void {
 		Event_Queue::push( $this->make_builder()->from_throwable( $this->make_exception( self::OURS . '/a.php', $line ), 'acme-delivery' ) );
+	}
+
+	/**
+	 * Calls the private release the way a (possibly paused) lock holder would.
+	 *
+	 * @param string $lock The row value that holder believes it wrote.
+	 * @return void
+	 */
+	private function release_lock( string $lock ): void {
+		$release = new \ReflectionMethod( Dispatcher::class, 'release_lock' );
+
+		if ( PHP_VERSION_ID < 80100 ) {
+			$release->setAccessible( true );
+		}
+
+		$release->invoke( null, $lock );
 	}
 
 	public function test_scheduling_adds_one_single_event_only_when_none_waits(): void {
@@ -333,5 +362,143 @@ final class DispatcherTest extends ErrorReportingTestCase {
 
 		$this->assertSame( 0, Dispatcher::run() );
 		$this->assertSame( [], $this->db->rows );
+	}
+
+	public function test_a_lock_denied_run_schedules_another_drain_while_events_wait(): void {
+		$this->enqueue( 1 );
+		$this->db->rows[ Dispatcher::LOCK_OPTION ] = time() . '|someone-else'; // A crashed run's fresh lock.
+
+		$this->assertSame( 0, Dispatcher::run() );
+
+		$this->assertCount( 1, $this->scheduled, 'the cron event that brought us here was consumed: a new one waits for the TTL to pass' );
+		$this->assertSame( Dispatcher::HOOK, $this->scheduled[0][1] );
+
+		Dispatcher::run();
+		$this->assertCount( 1, $this->scheduled, 'not scheduled twice' );
+	}
+
+	public function test_a_lock_denied_run_with_an_empty_queue_schedules_nothing(): void {
+		$this->db->rows[ Dispatcher::LOCK_OPTION ] = time() . '|someone-else';
+
+		Dispatcher::run();
+
+		$this->assertSame( [], $this->scheduled );
+	}
+
+	public function test_the_lock_row_carries_a_random_owner_token_and_only_the_owner_releases_it(): void {
+		$this->enqueue( 1 );
+		$seen = null;
+
+		Functions\when( 'wp_remote_post' )->alias(
+			function () use ( &$seen ) {
+				$seen = $this->db->rows[ Dispatcher::LOCK_OPTION ] ?? null;
+
+				return [];
+			}
+		);
+
+		Dispatcher::run();
+
+		$this->assertMatchesRegularExpression( '/^\d+\|[0-9a-f]{16}$/', (string) $seen );
+
+		$this->db->rows[ Dispatcher::LOCK_OPTION ] = time() . '|successor';
+		$this->release_lock( ( time() - 400 ) . '|original-owner' );
+		$this->assertArrayHasKey( Dispatcher::LOCK_OPTION, $this->db->rows, 'a paused original owner must not delete its successor\'s lock' );
+
+		$this->release_lock( $this->db->rows[ Dispatcher::LOCK_OPTION ] );
+		$this->assertSame( [], $this->db->rows );
+	}
+
+	public function test_a_paused_owner_waking_up_after_a_takeover_cannot_overlap_the_successor(): void {
+		// The critic's interleaving: A paused past the TTL, B took the lock over, A resumes and
+		// releases «its» lock, C enters while B is still draining. Played here from B's side.
+		$this->enqueue( 1 );
+		$this->db->rows[ Dispatcher::LOCK_OPTION ] = ( time() - Dispatcher::LOCK_TTL - 10 ) . '|owner-a';
+		$this->transients[ 'woodev_er_day_' . gmdate( 'Ymd' ) ] = 19;
+
+		$competing = null;
+		$started   = false;
+
+		Functions\when( 'get_transient' )->alias(
+			function ( $key ) use ( &$competing, &$started ) {
+				if ( ! $started && 0 === strpos( $key, 'woodev_er_day_' ) ) {
+					$started = true;
+
+					$this->release_lock( ( time() - Dispatcher::LOCK_TTL - 10 ) . '|owner-a' ); // A wakes up.
+
+					$competing = Dispatcher::run(); // C arrives.
+				}
+
+				return $this->transients[ $key ] ?? false;
+			}
+		);
+
+		$this->assertSame( 1, Dispatcher::run() );
+
+		$this->assertSame( 0, $competing, 'C finds B\'s lock intact' );
+		$this->assertCount( 1, $this->posts, 'one post, not two' );
+		$this->assertSame( 20, $this->transients[ 'woodev_er_day_' . gmdate( 'Ymd' ) ], 'the daily counter moved once' );
+	}
+
+	public function test_a_run_that_lost_its_lock_stops_posting_and_leaves_the_rest_for_the_new_owner(): void {
+		$this->enqueue( 1 );
+		$this->enqueue( 2 );
+		$this->enqueue( 3 );
+
+		Functions\when( 'wp_remote_post' )->alias(
+			function ( $url, $args ) {
+				$this->posts[] = [ $url, $args ];
+				// Taken over while this post is in flight.
+				$this->db->rows[ Dispatcher::LOCK_OPTION ] = time() . '|successor';
+
+				return [];
+			}
+		);
+
+		$this->assertSame( 1, Dispatcher::run() );
+
+		$this->assertCount( 1, $this->posts, 'no second post under a lock we no longer hold' );
+		$this->assertCount( 2, Event_Queue::all(), 'only the handled event left the queue' );
+		$this->assertSame( [ Dispatcher::LOCK_OPTION => $this->db->rows[ Dispatcher::LOCK_OPTION ] ], $this->db->rows );
+		$this->assertStringEndsWith( '|successor', $this->db->rows[ Dispatcher::LOCK_OPTION ], 'the successor\'s lock survives our release' );
+	}
+
+	public function test_consent_withdrawn_during_a_drain_stops_the_remaining_posts_and_drops_them(): void {
+		$this->enqueue( 1 );
+		$this->enqueue( 2 );
+		$this->enqueue( 3 );
+
+		Functions\when( 'wp_remote_post' )->alias(
+			function ( $url, $args ) {
+				$this->posts[] = [ $url, $args ];
+				Consent::set_enabled( false ); // The merchant unticks the box in another request.
+
+				return [];
+			}
+		);
+
+		$this->assertSame( 1, Dispatcher::run() );
+
+		$this->assertCount( 1, $this->posts, 'consent is re-read before EACH post' );
+		$this->assertSame( [], Event_Queue::all() );
+	}
+
+	public function test_consent_is_re_read_past_the_object_cache_before_each_post(): void {
+		$this->enqueue( 1 );
+		$this->enqueue( 2 );
+
+		$deleted = [];
+		Functions\when( 'wp_cache_delete' )->alias(
+			static function ( $key, $group ) use ( &$deleted ) {
+				$deleted[] = $group . ':' . $key;
+
+				return true;
+			}
+		);
+
+		Dispatcher::run();
+
+		$this->assertSame( 2, count( array_keys( $deleted, 'options:alloptions', true ) ), 'the cached option set is dropped once per event' );
+		$this->assertContains( 'options:woodev_error_reporting_enabled', $deleted );
 	}
 }

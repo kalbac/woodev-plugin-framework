@@ -146,7 +146,8 @@ final class EventBuilderTest extends ErrorReportingTestCase {
 		);
 
 		$event = $this->make_builder()->from_throwable( $e );
-		$json  = $this->encode( $event );
+		// Without the random event id and the timestamp: a digit run such as «999» can turn up in them by chance.
+		$json = $this->encode( array_diff_key( $event, [ 'event_id' => true, 'timestamp' => true ] ) );
 
 		foreach ( [ 'Иван', '999', 'Ленина', 'Москва', 'INSERT', 'ivan', 'mail.ru', 'private', 'token', 'SHOP', 'EXAMPLE', 'not found', 'Missing', 'no account', 'failed' ] as $needle ) {
 			$this->assertStringNotContainsString( $needle, $json, "«{$needle}» must not be sent" );

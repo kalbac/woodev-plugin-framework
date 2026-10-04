@@ -81,7 +81,12 @@ final class ErrorReporterProcessTest extends TestCase {
 	}
 
 	public function test_no_exception_text_or_argument_value_reaches_the_queued_event(): void {
-		$json = (string) json_encode( $this->run_scenario( 'ours' )['queue'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES );
+		// Without the random event id and the timestamp: «999» can turn up in them by chance.
+		$queue = array_map(
+			static fn( array $event ): array => array_diff_key( $event, [ 'event_id' => true, 'timestamp' => true ] ),
+			$this->run_scenario( 'ours' )['queue']
+		);
+		$json  = (string) json_encode( $queue, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES );
 
 		foreach ( [ 'Иван', '999', 'Ленина', 'token', 'hunter2-secret', 'shop.example.ru' ] as $needle ) {
 			$this->assertStringNotContainsString( $needle, $json, "«{$needle}» must not be in the payload" );
@@ -144,6 +149,21 @@ final class ErrorReporterProcessTest extends TestCase {
 		$this->assertSame( 255, $run['exit'] );
 		$this->assertCount( 1, $run['queue'] );
 
+		$exception = $run['queue'][0]['exception']['values'][0];
+		$this->assertSame( 'E_ERROR', $exception['type'] );
+		$this->assertStringStartsWith( 'Allowed memory size of', $exception['value'] );
+		$this->assertSame( 'plugins/acme-plugin/boom.php', $exception['stacktrace']['frames'][0]['filename'] );
+	}
+
+	public function test_a_near_full_heap_oom_keeps_the_original_fatal_and_queues_without_a_second_fatal(): void {
+		$run = $this->run_scenario( 'oom_heap' );
+
+		$this->assertSame( 255, $run['exit'] );
+		$this->assertSame( 1, substr_count( $run['out'], 'Fatal error:' ), 'only PHP\'s own fatal: the shutdown handler must not die a second time' );
+		$this->assertStringContainsString( 'Allowed memory size of', $run['out'] );
+		$this->assertStringContainsString( 'boom.php', $run['out'], 'the original fatal names the original file' );
+
+		$this->assertCount( 1, $run['queue'], 'the emergency reserve leaves room to enqueue' );
 		$exception = $run['queue'][0]['exception']['values'][0];
 		$this->assertSame( 'E_ERROR', $exception['type'] );
 		$this->assertStringStartsWith( 'Allowed memory size of', $exception['value'] );

@@ -368,6 +368,23 @@ final class ErrorReporterTest extends ErrorReportingTestCase {
 		$this->assertCount( 1, $this->scheduled, 'one cron event, scheduled once' );
 	}
 
+	public function test_an_identical_failure_re_schedules_the_drain_when_its_cron_event_was_consumed(): void {
+		Error_Reporter::install( $this->registry() );
+		$e = $this->make_exception( self::OTHER . '/lib.php', 5, [], 'carrier 502' );
+
+		$this->assertTrue( Error_Reporter::capture( $e, 'acme-delivery' ) );
+
+		// The +60s cron ran, was refused by a held lock and consumed itself without sending.
+		$this->scheduled = [];
+
+		$this->assertFalse( Error_Reporter::capture( $e, 'acme-delivery' ), 'still coalesced into the pending event' );
+		$this->assertCount( 1, $this->queued() );
+		$this->assertCount( 1, $this->scheduled, 'a queued event always has a cron waiting for it' );
+
+		Error_Reporter::capture( $e, 'acme-delivery' );
+		$this->assertCount( 1, $this->scheduled, 'and an existing cron event is not duplicated' );
+	}
+
 	public function test_the_event_filter_can_drop_an_event_before_it_is_queued(): void {
 		Functions\when( 'apply_filters' )->alias(
 			function ( $tag, $value ) {

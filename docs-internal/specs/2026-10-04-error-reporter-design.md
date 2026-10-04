@@ -92,6 +92,31 @@ line | md5( engine message ) )`, once per `woodev_error_reporting_dedupe_hours` 
 `woodev_er_sig_*`), at most `woodev_error_reporting_daily_cap` per UTC day (default 20, transient
 `woodev_er_day_YYYYMMDD`) — and posts it. Dedupe + cap live only here, serialised by the lock. A failed
 post stops the batch; the whole batch leaves the queue (silent drop). Withdrawing consent also clears it.
+
+**Lock ownership (r3).** The lock row's value is `<unix time>|<random token>`. Only the run that wrote it
+releases it — a conditional `DELETE … WHERE option_value = <its value>` — and before **each** post the run
+verifies that the row still carries its value and that 300 s have not passed on its own clock; if not (a
+paused run whose lock was taken over) it stops and removes from the queue only the events it handled, the
+rest belong to the new owner. **Consent is re-read before each post**, past the object cache
+(`wp_cache_delete` of `alloptions`, `notoptions` and the option itself), so a withdrawal made by another
+request mid-drain stops the batch and clears the queue.
+
+**Cron liveness (r3).** A queued event must always have a cron event waiting. A run refused by a held lock
+has consumed its own cron event, so it schedules another (+60 s, only while the queue is non-empty and none
+waits; the retries stop when the holder finishes or its lock goes stale after 300 s). A run that finishes
+with events still queued does the same, and so does an enqueue of an event identical to one already
+queued (it is coalesced, but the cron is re-checked).
+
+**WP-Cron dependency.** Sending needs a working WP-Cron. With `DISABLE_WP_CRON` and no external scheduler
+hitting `wp-cron.php`, nothing is ever sent: the queue stays at its 20-event bound (oldest dropped) and
+nothing leaves the site. That is accepted as best effort — a merchant who disables WP-Cron has to run
+it from the system scheduler.
+
+**Out of memory (r3).** After an «Allowed memory size» fatal the heap is full, and the shutdown handler
+would die with a second fatal that no `catch` can intercept. `install()` therefore holds a 256 KB string
+(`Error_Reporter::MEMORY_RESERVE`) and the shutdown handler frees it before anything else. The event for
+such a fatal is the ordinary one for an engine message: a single frame, no stack parsing. Covered by a
+subprocess test that fills the heap to under 16 KB before the failing allocation.
 `Transport`: `wp_remote_post` to `<scheme>://<host>[:port][/prefix]/api/<project>/envelope/`, header
 `X-Sentry-Auth: Sentry sentry_version=7, sentry_client=woodev-error-reporter/1.0.0, sentry_key=<key>`,
 `application/x-sentry-envelope`, newline-delimited envelope; **blocking, timeout 3**, no redirects —

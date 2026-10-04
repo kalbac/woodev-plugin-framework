@@ -25,4 +25,22 @@ class Boom {
 
 		return str_repeat( 'x', 64 * 1024 * 1024 );
 	}
+
+	/**
+	 * The realistic out-of-memory: many small allocations until the heap is full — unlike the one
+	 * impossible allocation above, nothing is left over for whoever runs at shutdown.
+	 */
+	public function fill_heap() {
+		ini_set( 'memory_limit', '8M' ); // phpcs:ignore WordPress.PHP.IniSet.memory_limit_Blacklisted -- fixture.
+
+		// Kept in a global: a local would be gone by the time the shutdown handler runs.
+		$GLOBALS['woodev_fixture_hog'] = [];
+
+		// Fill the heap until under 16 KB are left, then ask for more than that.
+		while ( 8 * 1024 * 1024 - memory_get_usage() > 16 * 1024 ) {
+			$GLOBALS['woodev_fixture_hog'][] = str_repeat( 'x', 512 );
+		}
+
+		return str_repeat( 'x', 64 * 1024 );
+	}
 }

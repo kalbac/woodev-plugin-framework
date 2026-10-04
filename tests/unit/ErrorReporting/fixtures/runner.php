@@ -139,6 +139,10 @@ switch ( $scenario ) {
 		( new \Acme_Fixture\Boom() )->exhaust_memory();
 		break;
 
+	case 'oom_heap':
+		( new \Acme_Fixture\Boom() )->fill_heap();
+		break;
+
 	case 'captured':
 		try {
 			( new \Acme_Fixture\Boom() )->start();

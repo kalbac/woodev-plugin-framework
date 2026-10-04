@@ -89,6 +89,36 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Consent' ) ) :
 		}
 
 		/**
+		 * {@see self::is_active()} with the consent read past this request's object cache.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public static function is_active_fresh(): bool {
+			return self::is_available() && self::is_enabled_fresh();
+		}
+
+		/**
+		 * Whether the merchant consents, read past this request's object cache.
+		 *
+		 * A long cron drain holds the options it loaded at its start; a consent withdrawn by another
+		 * request in the meantime lives only in the database. Dropping the cached copies makes the
+		 * next read go there.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public static function is_enabled_fresh(): bool {
+			wp_cache_delete( 'alloptions', 'options' );
+			wp_cache_delete( 'notoptions', 'options' );
+			wp_cache_delete( self::OPTION, 'options' );
+
+			return self::is_enabled();
+		}
+
+		/**
 		 * Whether reports may leave this site right now: receiver configured AND consent given.
 		 *
 		 * @since 2.0.2
