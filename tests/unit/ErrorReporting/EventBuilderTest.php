@@ -172,6 +172,9 @@ final class EventBuilderTest extends ErrorReportingTestCase {
 
 		$string_code = new \PDOException( 'x' );
 		$prop        = new \ReflectionProperty( \Exception::class, 'code' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$prop->setAccessible( true ); // Required below 8.1; a no-op after, and deprecated in 8.5.
+		}
 		$prop->setValue( $string_code, '23000' );
 		$this->assertArrayNotHasKey( 'data', $builder->from_throwable( $string_code, 'acme-delivery' )['exception']['values'][0]['mechanism'] );
 	}

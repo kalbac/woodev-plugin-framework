@@ -137,7 +137,8 @@ final class ErrorReporterProcessTest extends TestCase {
 		$json = (string) json_encode( $run['queue'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES );
 
 		$this->assertCount( 1, $run['queue'] );
-		$this->assertSame( 'RuntimeException@anonymous', $run['queue'][0]['exception']['values'][0]['type'] );
+		// PHP names an anonymous subclass after its parent only from 8.0.x on; older runtimes say «class@anonymous».
+		$this->assertMatchesRegularExpression( '/^(RuntimeException|class)@anonymous$/', $run['queue'][0]['exception']['values'][0]['type'] );
 		$this->assertStringNotContainsString( 'anon secret text', $json );
 		$this->assertStringNotContainsString( '\\u0000', $json );
 		$this->assertStringNotContainsString( dirname( __DIR__, 3 ), $json );
