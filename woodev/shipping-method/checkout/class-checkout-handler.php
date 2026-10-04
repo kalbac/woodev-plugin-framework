@@ -213,6 +213,32 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		}
 
 		/**
+		 * The location block the Checkout Blocks locality chooser reads (SP-11 C-1, #1087), or `null`
+		 * when the location layer is inactive — the chooser then stays hidden.
+		 *
+		 * It is the SAME `location` block the classic checkout localizes ({@see Checkout_Config::build_location_block()}):
+		 * one provider chain, one set of country/level/owner answers, one customer chain. Fleet-wide, not
+		 * per plugin — see {@see Blocks\Locality_Blocks} for why the first registered handler may answer
+		 * for all of them.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<string, mixed>|null
+		 */
+		public function locality_blocks_config(): ?array {
+			return ( new Checkout_Config(
+				$this->plugin_id(),
+				rtrim( rest_url( 'woodev/v1' ), '/' ),
+				wp_create_nonce( 'wp_rest' ),
+				$this->wc_country_codes(),
+				$this->location_service(),
+				null
+			) )->build_location_config();
+		}
+
+		/**
 		 * Gets the field definitions this handler manages.
 		 *
 		 * @since 1.5.0
@@ -705,6 +731,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 				$this->enqueue_cart_assets();
 				$this->enqueue_account_assets();
 
+				return;
+			}
+
+			// SP-11 C-1 (#1087): the block checkout has no classic DOM for these scripts to adapt — its
+			// locality chooser is a React inner block (Blocks\Locality_Blocks) — so booting the classic
+			// adapter next to it would only run a DOM scan that finds nothing. Cart (#331) and My Account
+			// (#332) keep their own paths above.
+			if ( class_exists( '\\Woodev_Blocks_Handler' ) && \Woodev_Blocks_Handler::is_checkout_block_in_use() ) {
 				return;
 			}
 

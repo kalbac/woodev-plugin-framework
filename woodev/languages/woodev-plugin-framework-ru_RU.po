@@ -2373,6 +2373,40 @@ msgstr "Показаны результаты по более широкой о�
 msgid "Select…"
 msgstr "Выберите…"
 
+#: shipping-method/checkout/blocks/class-locality-blocks.php:132
+msgid "Find your locality"
+msgstr "Найдите свой населённый пункт"
+
+#: shipping-method/checkout/blocks/class-locality-blocks.php:133
+msgid "Choose a locality to fill in the city and region."
+msgstr "Выберите населённый пункт — город и регион заполнятся сами."
+
+#: shipping-method/checkout/blocks/class-locality-blocks.php:134
+msgid "Searching…"
+msgstr "Поиск…"
+
+#: shipping-method/checkout/blocks/class-locality-blocks.php:135
+msgid "Locality suggestions"
+msgstr "Подсказки населённых пунктов"
+
+#: shipping-method/checkout/blocks/class-locality-blocks.php:136
+msgid "Clear the chosen locality"
+msgstr "Сбросить выбранный населённый пункт"
+
+#: shipping-method/checkout/blocks/class-locality-blocks.php:137
+msgid "The region could not be matched — choose it in the address form."
+msgstr "Не удалось подобрать регион — выберите его в форме адреса."
+
+#: shipping-method/checkout/blocks/shipping-locality/block.json
+msgctxt "block title"
+msgid "Delivery locality"
+msgstr "Населённый пункт доставки"
+
+#: shipping-method/checkout/blocks/shipping-locality/block.json
+msgctxt "block description"
+msgid "Lets the shopper pick a locality from the location provider and fills in the city and region."
+msgstr "Позволяет выбрать населённый пункт из подсказок провайдера и заполняет город и регион."
+
 #: shipping-method/checkout/class-checkout-config.php:701
 msgid "Start typing a name"
 msgstr "Начните вводить название"

@@ -245,6 +245,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/checkout/class-checkout-fields.php';
 			require_once $path . '/checkout/class-checkout-handler.php';
 
+			// SP-11 C-1 (#1087): the Checkout Blocks locality chooser. Its integration implements
+			// WooCommerce Blocks' own interface, so it is loaded only where that exists — a store
+			// without Blocks simply has no chooser (the registrar degrades the same way).
+			require_once $path . '/checkout/blocks/class-locality-blocks.php';
+			if ( interface_exists( '\\Automattic\\WooCommerce\\Blocks\\Integrations\\IntegrationInterface' ) ) {
+				require_once $path . '/checkout/blocks/class-locality-blocks-integration.php';
+			}
+
 			// order meta handler + abstract shipment/tracking/webhook handlers
 			require_once $path . '/order/class-shipping-order-handler.php';
 			require_once $path . '/order/class-action-result.php';
@@ -368,6 +376,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 				// injected one is kept) so a failing provider is waited on once per render.
 				$checkout_handler->adopt_location_service( $this->get_location_service() );
 				$checkout_handler->register();
+
+				// SP-11 C-1 (#1087): the Checkout Blocks locality chooser. Fleet-wide and idempotent —
+				// the first plugin to get here answers for all of them (Locality_Blocks' own docblock).
+				// Wired here, next to the handler's own registration, rather than inside it: the
+				// chooser is a Blocks-surface adapter, and the handler's hook list is the classic one.
+				\Woodev\Framework\Shipping\Checkout\Blocks\Locality_Blocks::register( $checkout_handler );
 			}
 
 			// inbound carrier webhook REST route

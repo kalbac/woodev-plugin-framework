@@ -870,6 +870,27 @@ class CheckoutConfigTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------------
+	// build_location_config() — the Checkout Blocks locality chooser's slice (SP-11 C-1, #1087)
+	// -------------------------------------------------------------------------
+
+	public function test_build_location_config_is_null_without_a_service_so_the_chooser_stays_hidden(): void {
+		$this->assertNull( ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ] ) )->build_location_config() );
+	}
+
+	public function test_build_location_config_is_null_when_the_layer_is_inactive(): void {
+		$service = new Checkout_Config_Fake_Location_Service( false, [], null, [] );
+
+		$this->assertNull( ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )->build_location_config() );
+	}
+
+	public function test_build_location_config_is_exactly_the_block_build_nests_under_location(): void {
+		$service = new Checkout_Config_Fake_Location_Service( true, [ 'region' => true, 'settlement' => true, 'address' => false ], null, [ 'RU' ] );
+		$config  = new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'NONCE', [ 'RU' ], $service );
+
+		$this->assertSame( $config->build( Checkout_Fields::from_array( [] ) )['location'], $config->build_location_config() );
+	}
+
+	// -------------------------------------------------------------------------
 	// location block — present and shaped when active
 	// -------------------------------------------------------------------------
 

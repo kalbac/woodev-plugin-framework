@@ -323,6 +323,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		}
 
 		/**
+		 * Builds ONLY the location-provider block — what the Checkout Blocks locality chooser reads.
+		 *
+		 * The block checkout has no classic field descriptors to localize, so it takes the same
+		 * `location` block {@see self::build()} nests under that key (SP-11 C-1, #1087) without
+		 * paying for the field/policy half of the config.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<string, mixed>|null The block, or `null` when no location service was injected or
+		 *                                   the layer is inactive (no provider configured) — the chooser
+		 *                                   then stays hidden and the native address fields work alone.
+		 */
+		public function build_location_config(): ?array {
+			if ( null === $this->location_service || ! $this->location_service->is_active() ) {
+				return null;
+			}
+
+			return $this->build_location_block( $this->location_service );
+		}
+
+		/**
 		 * Builds the `field_policy` block (Task 6, issue #362, spec §4.3): the effective
 		 * values of the three settings that stay classic-only/JS-driven
 		 * (`address_field`, `postcode_field`, `country_field` — Task 9 acts on them in
