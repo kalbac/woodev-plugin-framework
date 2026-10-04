@@ -129,4 +129,77 @@ final class RateLimiterTest extends ErrorReportingTestCase {
 		};
 		$this->assertNotSame( $limiter->signature( $fatal( 'Call to undefined function a()' ) ), $limiter->signature( $fatal( 'Call to undefined function b()' ) ) );
 	}
+
+	public function test_browser_events_spend_a_daily_budget_of_their_own(): void {
+		$this->filters['woodev_error_reporting_daily_cap']         = 2;
+		$this->filters['woodev_error_reporting_browser_daily_cap'] = 3;
+		$limiter = new Rate_Limiter();
+
+		// The browser spends its three…
+		$this->assertTrue( $limiter->allow( 'js-1', true ) );
+		$this->assertTrue( $limiter->allow( 'js-2', true ) );
+		$this->assertTrue( $limiter->allow( 'js-3', true ) );
+		$this->assertFalse( $limiter->allow( 'js-4', true ) );
+
+		// …and the PHP budget is untouched.
+		$this->assertTrue( $limiter->allow( 'php-1' ) );
+		$this->assertTrue( $limiter->allow( 'php-2' ) );
+		$this->assertFalse( $limiter->allow( 'php-3' ) );
+
+		$this->assertSame( 3, $this->store[ 'woodev_er_day_js_' . gmdate( 'Ymd' ) ] );
+		$this->assertSame( 2, $this->store[ 'woodev_er_day_' . gmdate( 'Ymd' ) ] );
+	}
+
+	public function test_the_critics_repro_twenty_browser_sends_leave_the_php_budget_alone(): void {
+		$limiter = new Rate_Limiter();
+
+		for ( $i = 1; $i <= 20; ++$i ) {
+			$limiter->allow( 'js-' . $i, true );
+		}
+
+		$this->assertTrue( $limiter->allow( 'a-php-signature' ) );
+	}
+
+	public function test_the_browser_daily_cap_defaults_to_ten_and_zero_sends_none(): void {
+		$limiter = new Rate_Limiter();
+		$sent    = 0;
+
+		for ( $i = 0; $i < 30; $i++ ) {
+			$sent += $limiter->allow( 'js-' . $i, true ) ? 1 : 0;
+		}
+
+		$this->assertSame( 10, $sent );
+
+		$this->store                                                = [];
+		$this->filters['woodev_error_reporting_browser_daily_cap'] = 0;
+
+		$this->assertFalse( ( new Rate_Limiter() )->allow( 'js-x', true ) );
+	}
+
+	public function test_the_site_wide_browser_intake_is_capped_per_hour_and_filterable(): void {
+		$limiter = new Rate_Limiter();
+		$taken   = 0;
+
+		for ( $i = 0; $i < 50; $i++ ) {
+			$taken += $limiter->allow_browser_intake() ? 1 : 0;
+		}
+
+		$this->assertSame( 30, $taken );
+		$this->assertSame( 30, $this->store[ 'woodev_er_js_in_' . gmdate( 'YmdH' ) ] );
+
+		$this->store                                                 = [];
+		$this->filters['woodev_error_reporting_browser_hourly_cap'] = 2;
+		$taken                                                       = 0;
+
+		for ( $i = 0; $i < 5; $i++ ) {
+			$taken += $limiter->allow_browser_intake() ? 1 : 0;
+		}
+
+		$this->assertSame( 2, $taken );
+
+		$this->store                                                 = [];
+		$this->filters['woodev_error_reporting_browser_hourly_cap'] = 0;
+
+		$this->assertFalse( $limiter->allow_browser_intake() );
+	}
 }

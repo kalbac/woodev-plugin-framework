@@ -6,3 +6,5 @@
 namespace Woodev\Framework\Error_Reporting;
 
 class Consent_Rest_Controller {}
+
+class Browser_Rest_Controller {}

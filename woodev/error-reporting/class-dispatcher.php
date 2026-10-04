@@ -118,7 +118,7 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Dispatcher' ) ) :
 
 				$done[] = $ids[ $index ];
 
-				if ( ! $limiter->allow( $limiter->signature( $event ) ) ) {
+				if ( ! $limiter->allow( $limiter->signature( $event ), Event_Queue::is_browser( $event ) ) ) {
 					continue;
 				}
 

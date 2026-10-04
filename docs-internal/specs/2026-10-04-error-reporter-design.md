@@ -2,7 +2,7 @@
 
 > Card #130. The s52 checklist (card body) fixed the idea; the operator's s150 decisions (card
 > comments, 04.10.2026) fixed the receiver, consent, scope and anonymity. This spec turns them into
-> classes. JS half → #1081, receiver server → #1082 (neither is built here).
+> classes. JS half → #1081 (D7 below), receiver server → #1082 (not built here).
 
 ## What this is
 
@@ -131,15 +131,97 @@ subprocess test that fills the heap to under 16 KB before the failing allocation
 legal because it only runs in cron (`blocking=false` does not make cURL asynchronous). A DSN secret is
 parsed away. Queue read-modify-write is not atomic: two simultaneous failures may lose one — accepted.
 
+## D7. The browser half (#1081): JavaScript errors and domain events
+
+**Operator decisions (s151):** the browser POSTs to a public REST route of OUR site, never to the
+receiver (the DSN does not reach the browser); PHP validates, anonymises and puts the event into the
+SAME `Event_Queue`, so consent, anonymity and anti-spam stay in one place (D1, D5, D6). **No
+`error.message` from JS, ever** — same rule as PHP.
+
+- **Script and route.** `woodev/assets/js/frontend/woodev-error-reporter.js` — plain ES5, no build step
+  (Rule 9; the `frontend/` directory is out of the TypeScript scope), enqueued in the `<head>` on
+  `wp_enqueue_scripts` **only when `Consent::is_active()`** (D1; otherwise nothing is enqueued and
+  nothing is hooked). Config global `woodevErrorReporting = { endpoint, nonce, bases }`. Route
+  `POST woodev/v1/error-reporting/browser` — the framework's one namespace, a sibling of the consent
+  route, registered always (so a withdrawn consent answers 403, not 404).
+- **Only OUR scripts.** `bases` = the asset base URL of every registered plugin
+  (`plugins_url( '', <plugin file> )`, the framework vendored inside a plugin is under it), built by
+  `Plugin_Scope` from the same registry as the PHP roots (a single-file plugin is refused for the same
+  reason). The browser listens with `addEventListener( 'error' | 'unhandledrejection' )` — it never
+  replaces `window.onerror` — and keeps only frames whose URL starts with a base (scheme ignored, the
+  authority lowercased on BOTH sides, the path case-sensitive); an event with no such frame is dropped.
+  **The server repeats the check and goes further** (`Plugin_Scope::locate_url()`, see «Trusted identity»
+  below): a frame outside every base, or inside one but not a real script, is dropped; an event left with
+  no frame answers `200 {queued:false}`; the innermost owned frame owns the event.
+- **What leaves.** Exception **type** — one of the standard JS error names (`Error`, `TypeError`,
+  `RangeError`, `ReferenceError`, `SyntaxError`, `EvalError`, `URIError`, `AggregateError`), anything else
+  is exported as `Error` — and frames of OUR scripts: `filename`, `lineno`, `colno`, innermost first,
+  ≤ 30. **No function name** (it is free text and not needed). The raw `stack` string is never sent.
+  Cross-origin «Script error.» carries no URL and is dropped. Event: `platform: javascript`, the same
+  tags/`release`/`server_name` as D5 plus `source: browser`, `mechanism.type` `onerror` |
+  `onunhandledrejection`.
+- **Trusted identity — the binding rule.** *No free text from the browser ever reaches the queue or
+  GlitchTip.* Syntax validation does not prove anonymity (a name or a phone number is a valid token), so
+  every exported value is a **number**, a **constant**, or a value from a **set the server holds**; a
+  value outside its set is replaced by a constant or the whole report is dropped (fail closed):
+  - *frame URL* → accepted only when its path under a registered plugin's base, percent-decoded segment
+    by segment BEFORE any check (an empty, `.`, `..`, separator-carrying or control-character segment
+    refuses it), names an EXISTING `.js` file that `realpath`-resolves inside that plugin's directory;
+    exported is the path the filesystem reports, `plugins/<dir>/<real path>` — never the client's spelling;
+  - *error type* → the closed list above, else `Error`;
+  - *pickup `pluginId`* → a registered plugin; *`fieldId`* → a field id a pickup handler declared for that
+    plugin through the `woodev_error_reporting_pickup_fields` filter (`Pickup_Handler::register()` adds
+    its own), else the report is dropped; *`code`* → `Browser_Event_Builder::PICKUP_CODES`, the codes the
+    pickup providers emit (defined once, in PHP), else `unknown`;
+  - *stack parsing in the browser* fails closed: Chrome's `Name: message` header must be matched against
+    the error's CURRENT name and message and removed whole, a header-less (Firefox/Safari) stack must be
+    frames only — otherwise the stack is not parsed and only the `ErrorEvent` file:line:col is used. The
+    parser is defence in depth, not the guarantee: the server exports a frame only as a verified path plus
+    two numbers.
+- **Domain events.** One list, one rule: a `CustomEvent` on `document.body`, **only the fields named
+  here** are read. First entry: `woodev_pickup_error {fieldId, code, message}` (D-14 of the pickup
+  design) → `fieldId` + `code` + `pluginId` (added to the event detail and to the pickup config by this
+  card — the browser does not know the owner otherwise); `message` is never read. All three must match
+  `^[A-Za-z0-9_.-]{1,64}$` (shape only) and then pass the closed sets of «Trusted identity» above. Event:
+  `exception.type = woodev_pickup_error`, `value = <pluginId>:<fieldId>:<code>` (tokens, so the shared
+  signature of D6 tells plugins and fields apart), no frames.
+- **Guests and the nonce.** The pickup map is on the storefront, so the route is public
+  (`permission_callback` = reporting active + a valid `wp_rest` nonce in `X-WP-Nonce`). `wp_rest` nonces
+  exist for logged-out visitors too (user id 0) and core checks them in `rest_cookie_check_errors()`
+  before any callback. A guest nonce is **not an authentication boundary** — anyone can read it from a
+  page — it only keeps blind cross-site POSTs out; the real protection is the schema, the rate limit, the
+  re-check and the queue bounds. A page served from a full-page cache carries a stale nonce after 12–24 h:
+  core answers 403 and the report is lost — accepted, best effort (D6).
+- **Limits.** Body ≤ 8 KB (413), JSON object only, strict schema checked in the controller (the unit-testable
+  place: known keys only, exact types, `maxLength`, ≤ 30 frames, token patterns; an unknown key — a
+  `message`, say — is refused with 400, not silently stripped), 10 requests per client per minute through the
+  shared `Rest_Rate_Limit_Trait` (the counter key is `md5( ip )` inside a transient or object-cache entry —
+  no raw address is stored; own key prefix, own budget; the trait's forwarding-header handling is used as it
+  stands — a fairness hint bounded by its coarse connection-address bucket, and the caps below bound the
+  rest). The browser itself sends ≤ 5 reports per page view and one per signature. Order: permission (inactive → 403, bad nonce → 403) → rate limit
+  (429) → size (413) → schema (400) → build (200). Dedupe is D6's: `event_id` is assigned on the server
+  when the event is built and travels to the receiver; `Event_Queue::push()` coalesces by the shared
+  signature (type, throw-site frame, md5 of value), the dispatcher's `Rate_Limiter` applies the
+  6 h/daily-cap rules. **Browser events cannot starve PHP events:** (1) in the queue they hold at most
+  `Event_Queue::BROWSER_LIMIT` (10) of the 20 slots and are *refused* — never evict anything — when their
+  share or the queue is full, while a PHP event arriving at a full queue evicts the oldest browser event
+  first; (2) at send time they spend a daily budget of their own (`woodev_er_day_js_*`, default 10,
+  filter `woodev_error_reporting_browser_daily_cap`), the PHP budget is untouched; (3) a site-wide intake
+  cap — 30 browser reports queued per UTC hour, whoever sent them (`Rate_Limiter::allow_browser_intake()`,
+  filter `woodev_error_reporting_browser_hourly_cap`) — is checked before enqueue, counting only reports
+  that are ours. The answer is `200 {queued:bool}` — a foreign or duplicate report is not an error for the browser.
+
 ## Classes (`woodev/error-reporting/`, `Woodev\Framework\Error_Reporting`)
 
 `Error_Reporter` · `Consent` · `Plugin_Scope` · `Event_Builder` · `Event_Queue` · `Dispatcher` ·
-`Rate_Limiter` · `Transport` · `Dsn` · `Consent_Rest_Controller`. Hooks: `woodev_error_reporting_dsn`,
+`Rate_Limiter` · `Transport` · `Dsn` · `Consent_Rest_Controller` · (D7) `Browser_Event_Builder` ·
+`Browser_Rest_Controller` · `Browser_Script`. Hooks: `woodev_error_reporting_dsn`,
 `…_event`, `…_dedupe_hours`, `…_daily_cap`, cron `woodev_error_reporting_dispatch`.
 
 ## What is NOT done
 
-- **JS** (`window.onerror`, `woodev_pickup_error`, the domain-event list) → #1081.
+- **Further domain events** (D7 defines the list's shape; only `woodev_pickup_error` is wired) and
+  admin-side JS (the script is storefront-only).
 - **The receiver**: GlitchTip on the VPS, the DSN, retention → #1082. Until a DSN is defined the
   checkbox is hidden and nothing is queued or sent.
 - Previous exceptions in a chain, breadcrumbs, release health, source maps.

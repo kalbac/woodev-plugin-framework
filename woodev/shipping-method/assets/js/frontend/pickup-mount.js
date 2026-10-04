@@ -3908,6 +3908,7 @@
 				// the file docblock's note on this event).
 				fireDocumentEvent( EVENT_ERROR, {
 					fieldId: config.fieldId,
+					pluginId: config.pluginId,
 					code: reason && reason.code,
 					message: reason && reason.message,
 				} );

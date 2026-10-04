@@ -1552,6 +1552,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 
 			$config = [
 				'fieldId'              => $this->field_id,
+
+				// Names the owning plugin in the `woodev_pickup_error` event, so the error reporter
+				// (#1081) can attribute it; the browser has no other way to know.
+				'pluginId'             => $this->plugin_id,
 				'strategy'             => $this->source->get_strategy(),
 				'maxAccumulatedPoints' => $max_accumulated,
 				'provider'             => $this->map_provider->get_id(),
@@ -1954,6 +1958,34 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			add_filter( 'woocommerce_update_order_review_fragments', [ $this, 'inject_nonce_fragment' ] );
 			add_action( 'woodev_shipping_pickup_point_selected', [ $this, 'remember_selection' ], 10, 2 );
 			add_filter( 'woocommerce_checkout_get_value', [ $this, 'restore_selection' ], 10, 2 );
+
+			// #1081: the error reporter exports a browser-sent field id only when a handler declared it.
+			add_filter( 'woodev_error_reporting_pickup_fields', [ $this, 'declare_error_reporting_field' ] );
+		}
+
+		/**
+		 * Adds this handler's `plugin_id` → `field_id` to the pickup fields the error reporter knows.
+		 *
+		 * The reporter takes a `woodev_pickup_error` from the browser, and a field id the browser sends is
+		 * free text until the server recognises it — so only ids declared here are ever exported.
+		 *
+		 * @internal Filter callback for `woodev_error_reporting_pickup_fields`.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param mixed $fields Field ids declared so far, by plugin id.
+		 * @return array<string,array<int,string>>
+		 */
+		public function declare_error_reporting_field( $fields ): array {
+			$fields = is_array( $fields ) ? $fields : [];
+
+			$declared = isset( $fields[ $this->plugin_id ] ) && is_array( $fields[ $this->plugin_id ] ) ? $fields[ $this->plugin_id ] : [];
+
+			$declared[] = $this->field_id;
+
+			$fields[ $this->plugin_id ] = array_values( array_unique( $declared ) );
+
+			return $fields;
 		}
 
 		/**

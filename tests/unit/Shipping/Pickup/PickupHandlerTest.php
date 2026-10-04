@@ -2467,6 +2467,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$this->assertSame(
 				[
 					'fieldId',
+					'pluginId',
 					'strategy',
 					'maxAccumulatedPoints',
 					'provider',
@@ -5403,7 +5404,47 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				->once()
 				->with( 'woocommerce_checkout_get_value', [ $handler, 'restore_selection' ], 10, 2 );
 
+			// #1081: the error reporter exports a browser-sent field id only when a handler declared it.
+			Functions\expect( 'add_filter' )
+				->once()
+				->with( 'woodev_error_reporting_pickup_fields', [ $handler, 'declare_error_reporting_field' ] );
+
 			$handler->register();
+		}
+
+		public function test_a_handler_declares_its_field_id_to_the_error_reporter_under_its_plugin_id(): void {
+			$one = $this->make_handler(
+				[
+					'plugin_id' => 'acme-delivery',
+					'field_id'  => 'pickup_point',
+				]
+			);
+			$two = $this->make_handler(
+				[
+					'plugin_id' => 'acme-delivery',
+					'field_id'  => 'pickup_point_2',
+				]
+			);
+			$other = $this->make_handler(
+				[
+					'plugin_id' => 'someone-else',
+					'field_id'  => 'pickup_point',
+				]
+			);
+
+			$fields = $other->declare_error_reporting_field( $two->declare_error_reporting_field( $one->declare_error_reporting_field( [] ) ) );
+
+			$this->assertSame(
+				[
+					'acme-delivery' => [ 'pickup_point', 'pickup_point_2' ],
+					'someone-else'  => [ 'pickup_point' ],
+				],
+				$fields
+			);
+
+			// Declaring twice does not list it twice, and junk from another callback does not break the list.
+			$this->assertSame( [ 'acme-delivery' => [ 'pickup_point' ] ], $one->declare_error_reporting_field( $one->declare_error_reporting_field( 'junk' ) ) );
+			$this->assertSame( [ 'acme-delivery' => [ 'pickup_point' ] ], $one->declare_error_reporting_field( [ 'acme-delivery' => 'junk' ] ) );
 		}
 
 		// -------------------------------------------------------------------------
