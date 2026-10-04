@@ -728,7 +728,16 @@ final class BrowserRestControllerTest extends ErrorReportingTestCase {
 			)
 		);
 
-		$json = $this->encode( $this->queued() );
+		// Without the random event ids and the timestamps: a digit run can turn up in them by chance.
+		$strip = static function ( $value ) use ( &$strip ) {
+			if ( ! is_array( $value ) ) {
+				return $value;
+			}
+			unset( $value['event_id'], $value['timestamp'] );
+
+			return array_map( $strip, $value );
+		};
+		$json  = $this->encode( $strip( $this->queued() ) );
 
 		$this->assertStringContainsString( 'acme-delivery:pickup_point:unknown', $json );
 		$this->assertStringNotContainsString( '79001234567', $json );

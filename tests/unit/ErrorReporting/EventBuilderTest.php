@@ -110,7 +110,9 @@ final class EventBuilderTest extends ErrorReportingTestCase {
 			]
 		);
 
-		$json = $this->encode( $this->make_builder()->from_throwable( $e ) );
+		$event = $this->make_builder()->from_throwable( $e );
+		// Without the random event id and the timestamp: a digit run can turn up in them by chance.
+		$json = $this->encode( array_diff_key( $event, [ 'event_id' => true, 'timestamp' => true ] ) );
 
 		$this->assertStringNotContainsString( 'hunter2-secret', $json );
 		$this->assertStringNotContainsString( '4111111111111111', $json );
