@@ -1,7 +1,7 @@
 # `is_checkout()` is FALSE on a page that only carries the Checkout block
 
 **Namespace:** `[woocommerce/blocks]`
-**Discovered:** 2026-10-04 (s152, #1089)
+**Discovered:** 2026-10-04 (s151, #1089)
 
 ## The trap
 

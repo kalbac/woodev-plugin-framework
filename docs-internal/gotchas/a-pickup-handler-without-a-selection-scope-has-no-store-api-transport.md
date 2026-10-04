@@ -1,7 +1,7 @@
 # A `Pickup_Handler` built without a `Selection_Scope` has no Store API transport
 
 **Namespace:** `[shipping/pickup]`
-**Discovered:** 2026-10-04 (s152, #1089)
+**Discovered:** 2026-10-04 (s151, #1089)
 
 ## The trap
 
