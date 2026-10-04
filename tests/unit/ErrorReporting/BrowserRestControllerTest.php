@@ -42,6 +42,12 @@ final class BrowserRestControllerTest extends ErrorReportingTestCase {
 	/** @var array<string,mixed> */
 	private array $calls = [];
 
+	/** @var array<string,array<string>> what the pickup handlers declare */
+	private array $pickup_fields = [];
+
+	/** @var array<string,mixed> filter overrides by tag */
+	private array $filters = [];
+
 	protected function setUp(): void {
 		parent::setUp();
 
@@ -78,9 +84,21 @@ final class BrowserRestControllerTest extends ErrorReportingTestCase {
 				return true;
 			}
 		);
+		$this->pickup_fields = [ 'acme-delivery' => [ 'pickup_point' ] ];
+		$this->filters       = [];
+
 		Functions\when( 'apply_filters' )->alias(
 			function ( $tag, $value ) {
-				return 'woodev_error_reporting_dsn' === $tag ? 'https://k@errors.example.ru/7' : $value;
+				if ( 'woodev_error_reporting_dsn' === $tag ) {
+					return 'https://k@errors.example.ru/7';
+				}
+
+				// What the pickup handlers declare through `Pickup_Handler::register()`.
+				if ( 'woodev_error_reporting_pickup_fields' === $tag ) {
+					return $this->pickup_fields;
+				}
+
+				return $this->filters[ $tag ] ?? $value;
 			}
 		);
 		Functions\when( 'get_transient' )->alias(
@@ -146,7 +164,7 @@ final class BrowserRestControllerTest extends ErrorReportingTestCase {
 				'plugin_name'       => 'Acme',
 				'plugin_version'    => '1.4.0',
 				'framework_version' => '2.0.1',
-				'plugin_file'       => self::OURS . '/acme-delivery.php',
+				'plugin_file'       => $this->plugin_dir . '/acme-delivery.php',
 				'platform'          => Framework_Plugin_Loader_Definition::PLATFORM_WORDPRESS,
 				'download_id'       => 77,
 				'main_class'        => 'Acme_Plugin',
@@ -202,7 +220,6 @@ final class BrowserRestControllerTest extends ErrorReportingTestCase {
 					'url'  => self::SCRIPT . '?ver=3',
 					'line' => 10,
 					'col'  => 20,
-					'fn'   => 'draw',
 				],
 			],
 		];
@@ -388,7 +405,7 @@ final class BrowserRestControllerTest extends ErrorReportingTestCase {
 			'line as string'       => [ array_merge( $ok, [ 'frames' => [ array_merge( $frame, [ 'line' => '1' ] ) ] ] ) ],
 			'negative column'      => [ array_merge( $ok, [ 'frames' => [ array_merge( $frame, [ 'col' => -1 ] ) ] ] ) ],
 			'line over the cap'    => [ array_merge( $ok, [ 'frames' => [ array_merge( $frame, [ 'line' => 10000001 ] ) ] ] ) ],
-			'function too long'    => [ array_merge( $ok, [ 'frames' => [ array_merge( $frame, [ 'fn' => str_repeat( 'f', 101 ) ] ) ] ] ) ],
+			'function name sent'   => [ array_merge( $ok, [ 'frames' => [ array_merge( $frame, [ 'fn' => 'John.Smith' ] ) ] ] ) ],
 			'error with pluginId'  => [ array_merge( $ok, [ 'pluginId' => 'acme-delivery' ] ) ],
 			'pickup with frames'   => [
 				[
@@ -461,10 +478,17 @@ final class BrowserRestControllerTest extends ErrorReportingTestCase {
 
 		$this->assertNotSame( [], $keys );
 
+		$limits = [];
+
 		foreach ( $keys as $key ) {
-			$this->assertStringStartsWith( 'woodev_er_js_rl_', $key, 'own prefix: its own budget' );
 			$this->assertStringNotContainsString( '203.0.113.7', $key );
+
+			if ( 0 === strpos( $key, 'woodev_er_js_rl_' ) ) {
+				$limits[] = $key;
+			}
 		}
+
+		$this->assertNotSame( [], $limits, 'the per-client counter has its own prefix: its own budget' );
 	}
 
 	public function test_report_browser_refuses_when_reporting_was_switched_off_after_the_permission_check(): void {
@@ -558,5 +582,170 @@ final class BrowserRestControllerTest extends ErrorReportingTestCase {
 		Browser_Script::enqueue( new Plugin_Scope( [] ) );
 
 		$this->assertSame( [], $enqueued );
+	}
+
+	/**
+	 * Every REST request is a fresh PHP process: the per-request queue counter starts again.
+	 *
+	 * @return void
+	 */
+	private function next_request(): void {
+		Error_Reporter::reset();
+		$this->install();
+	}
+
+	/**
+	 * @param int $line Makes the signature unique.
+	 * @return array<string,mixed> A valid error report from our script.
+	 */
+	private function error_report_at( int $line ): array {
+		$report                    = $this->error_report();
+		$report['frames'][0]['line'] = $line;
+
+		return $report;
+	}
+
+	public function test_browser_reports_never_evict_a_php_event_from_the_queue(): void {
+		$this->install();
+
+		// The critic's repro: one PHP event waiting, then twenty-five distinct valid browser reports.
+		$this->assertTrue( Event_Queue::push( $this->make_builder()->from_throwable( $this->make_exception( self::OURS . '/a.php', 7 ), 'acme-delivery' ) ) );
+
+		$accepted = 0;
+
+		for ( $line = 1; $line <= 25; ++$line ) {
+			$this->next_request();
+
+			$accepted += Error_Reporter::report_browser( $this->error_report_at( $line ) ) ? 1 : 0;
+		}
+
+		$this->assertSame( Event_Queue::BROWSER_LIMIT, $accepted, 'the browser keeps its own share and is refused beyond it' );
+
+		$sources = array_map(
+			static function ( array $event ): string {
+				return (string) ( $event['tags']['source'] ?? 'php' );
+			},
+			$this->queued()
+		);
+
+		$this->assertCount( 1, array_keys( $sources, 'php', true ), 'the PHP event is still queued' );
+		$this->assertCount( Event_Queue::BROWSER_LIMIT, array_keys( $sources, 'browser', true ) );
+	}
+
+	public function test_a_queue_full_of_php_events_refuses_the_browser_instead_of_evicting(): void {
+		$this->install();
+
+		for ( $line = 1; $line <= Event_Queue::LIMIT; ++$line ) {
+			Event_Queue::push( $this->make_builder()->from_throwable( $this->make_exception( self::OURS . '/a.php', $line ), 'acme-delivery' ) );
+		}
+
+		$before = $this->queued();
+
+		$this->assertFalse( Error_Reporter::report_browser( $this->error_report() ) );
+		$this->assertSame( $before, $this->queued() );
+	}
+
+	public function test_the_whole_site_may_queue_only_so_many_browser_reports_an_hour(): void {
+		$this->filters['woodev_error_reporting_browser_hourly_cap'] = 3;
+
+		$results = [];
+
+		for ( $line = 1; $line <= 5; ++$line ) {
+			$this->next_request(); // Five requests — as many different clients as you like.
+
+			$results[] = Error_Reporter::report_browser( $this->error_report_at( $line ) );
+		}
+
+		$this->assertSame( [ true, true, true, false, false ], $results );
+		$this->assertCount( 3, $this->queued() );
+		$this->assertArrayHasKey( 'woodev_er_js_in_' . gmdate( 'YmdH' ), $this->transients );
+	}
+
+	public function test_a_report_that_is_not_ours_does_not_use_up_the_intake_cap(): void {
+		$this->install();
+
+		$report           = $this->error_report();
+		$report['frames'] = [ [ 'url' => 'https://shop.example.ru/wp-content/plugins/other-plugin/x.js' ] ];
+
+		Error_Reporter::report_browser( $report );
+
+		$this->assertArrayNotHasKey( 'woodev_er_js_in_' . gmdate( 'YmdH' ), $this->transients );
+	}
+
+	public function test_a_frame_url_made_of_customer_text_is_answered_200_and_queues_nothing(): void {
+		$this->install();
+
+		foreach (
+			[
+				self::OUR_URL . '/Иван/Ленина%201/john@example.com.js',
+				self::OUR_URL . '/%D0%98%D0%B2%D0%B0%D0%BD/john%40example.com.js',
+				self::OUR_URL . '/assets/js/John.Smith.js',
+				self::OUR_URL . '/assets%2fjs%2fmap.js',
+			] as $url
+		) {
+			$report                  = $this->error_report();
+			$report['frames'][0]['url'] = $url;
+
+			$this->assertSame( [ 'queued' => false ], ( new Browser_Rest_Controller() )->create_item( $this->request( $report ) ), $url );
+		}
+
+		$this->assertSame( [], $this->queued() );
+	}
+
+	public function test_the_critics_pickup_payload_is_not_queued_and_an_unknown_code_is_replaced(): void {
+		$this->install();
+		$controller = new Browser_Rest_Controller();
+
+		$this->assertSame(
+			[ 'queued' => false ],
+			$controller->create_item(
+				$this->request(
+					[
+						'source'   => 'pickup',
+						'pluginId' => 'acme-delivery',
+						'fieldId'  => 'John.Smith',
+						'code'     => '79001234567',
+					]
+				)
+			)
+		);
+		$this->assertSame( [], $this->queued() );
+
+		$this->assertSame(
+			[ 'queued' => true ],
+			$controller->create_item(
+				$this->request(
+					[
+						'source'   => 'pickup',
+						'pluginId' => 'acme-delivery',
+						'fieldId'  => 'pickup_point',
+						'code'     => '79001234567',
+					]
+				)
+			)
+		);
+
+		$json = $this->encode( $this->queued() );
+
+		$this->assertStringContainsString( 'acme-delivery:pickup_point:unknown', $json );
+		$this->assertStringNotContainsString( '79001234567', $json );
+	}
+
+	public function test_a_pickup_field_that_no_handler_declared_is_not_queued(): void {
+		$this->pickup_fields = [];
+		$this->install();
+
+		$result = ( new Browser_Rest_Controller() )->create_item(
+			$this->request(
+				[
+					'source'   => 'pickup',
+					'pluginId' => 'acme-delivery',
+					'fieldId'  => 'pickup_point',
+					'code'     => 'map_script',
+				]
+			)
+		);
+
+		$this->assertSame( [ 'queued' => false ], $result );
 	}
 }

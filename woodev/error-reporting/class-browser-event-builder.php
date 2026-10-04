@@ -14,11 +14,12 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Browser_Event_Builder' )
 	/**
 	 * Builds the event for a report the BROWSER sent (#1081, D7) — or null when it is not ours.
 	 *
-	 * Nothing the client says is trusted: every field is re-validated against a strict pattern, every
-	 * frame URL is re-checked against the registered plugins' URL roots ({@see Plugin_Scope::locate_url()})
-	 * and rewritten to a relative path, and the only free text that can reach the event is an identifier
-	 * made of the characters the patterns allow. **No `error.message` is read or accepted** — a report
-	 * carries the error type, the frames of OUR scripts, or the three tokens of a domain event.
+	 * **Nothing the client says is exported as text.** Syntax validation does not prove anonymity (a name
+	 * or a phone number is a valid «token»), so every exported value is one of: a number; a constant of
+	 * this class; a value the SERVER knows — the filesystem-verified path of an existing script of a
+	 * registered plugin ({@see Plugin_Scope::locate_url()}), a registered plugin id, a pickup field id the
+	 * pickup handlers declared. A value outside its closed set is replaced by a fixed constant or the
+	 * whole report is dropped; it never passes through. **No `error.message`, no function name** is read.
 	 *
 	 * @since 2.0.2
 	 */
@@ -37,19 +38,53 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Browser_Event_Builder' )
 		/** Largest line / column number kept (a minified bundle is a long single line). */
 		const MAX_POSITION = 10000000;
 
+		/** The standard JS error names; any other `error.name` is exported as {@see self::DEFAULT_ERROR_TYPE}. */
+		const ERROR_TYPES = [ 'Error', 'TypeError', 'RangeError', 'ReferenceError', 'SyntaxError', 'EvalError', 'URIError', 'AggregateError' ];
+
+		/** Exported for an error name outside {@see self::ERROR_TYPES}. */
+		const DEFAULT_ERROR_TYPE = 'Error';
+
+		/**
+		 * The `code`s a `woodev_pickup_error` carries — the ones the pickup map's providers emit
+		 * (`map-provider-yandex.js`, `map-provider-embedded.js`; D-14). The ONE definition: the browser
+		 * sends whatever it holds, a code outside this list is exported as {@see self::UNKNOWN_CODE}.
+		 */
+		const PICKUP_CODES = [
+			'map_script',
+			'woodev_pickup_embed_invalid_payload',
+			'woodev_pickup_embed_adapter_error',
+			'woodev_pickup_embed_invalid_url',
+			'woodev_pickup_embed_load_failed',
+		];
+
+		/** Exported for a pickup `code` outside {@see self::PICKUP_CODES}. */
+		const UNKNOWN_CODE = 'unknown';
+
 		/** @var Plugin_Scope */
 		private Plugin_Scope $scope;
 
 		/** @var array<string,string> */
 		private array $context;
 
+		/** @var array<string,string[]> Pickup field ids the handlers declared, by plugin id. */
+		private array $pickup_fields = [];
+
 		/**
-		 * @param Plugin_Scope         $scope   Which plugins (and URLs) are ours.
-		 * @param array<string,string> $context Emitted: site, framework_version, wp_version, wc_version, php_version, environment.
+		 * @param Plugin_Scope               $scope         Which plugins (and URLs) are ours.
+		 * @param array<string,string>       $context       Emitted: site, framework_version, wp_version, wc_version, php_version, environment.
+		 * @param array<string,array<mixed>> $pickup_fields Field ids the server knows, by plugin id (the `woodev_error_reporting_pickup_fields` filter's answer); anything not a list of strings is ignored.
 		 */
-		public function __construct( Plugin_Scope $scope, array $context ) {
+		public function __construct( Plugin_Scope $scope, array $context, array $pickup_fields = [] ) {
 			$this->scope   = $scope;
 			$this->context = $context;
+
+			foreach ( $pickup_fields as $plugin_id => $fields ) {
+				if ( ! is_string( $plugin_id ) || ! is_array( $fields ) ) {
+					continue;
+				}
+
+				$this->pickup_fields[ $plugin_id ] = array_values( array_filter( $fields, 'is_string' ) );
+			}
 		}
 
 		/**
@@ -93,7 +128,7 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Browser_Event_Builder' )
 		 */
 		private function from_error( array $payload, string $mechanism ): ?array {
 			$type = $payload['type'] ?? '';
-			$type = is_string( $type ) && 1 === preg_match( '/^[A-Za-z_$][\w$]{0,63}$/D', $type ) ? $type : 'Error';
+			$type = is_string( $type ) && in_array( $type, self::ERROR_TYPES, true ) ? $type : self::DEFAULT_ERROR_TYPE;
 
 			$frames = [];
 			$owner  = null;
@@ -134,7 +169,8 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Browser_Event_Builder' )
 		}
 
 		/**
-		 * `woodev_pickup_error`: the three tokens `pluginId`, `fieldId`, `code` — nothing else is read.
+		 * `woodev_pickup_error`: `pluginId`, `fieldId`, `code` — nothing else is read, and each is checked
+		 * against a set the server holds (registered plugins, declared fields, {@see self::PICKUP_CODES}).
 		 *
 		 * @param array<string,mixed> $payload Payload.
 		 * @return array<string,mixed>|null
@@ -150,9 +186,14 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Browser_Event_Builder' )
 
 			$owner = $this->scope->get( $plugin_id );
 
-			if ( null === $owner ) {
+			// A field id is only as good as the server's own knowledge of it: a syntactically valid
+			// «John.Smith» is a name, not a field. Unknown for this plugin → the report is dropped.
+			if ( null === $owner || ! in_array( $field_id, $this->pickup_fields[ $plugin_id ] ?? [], true ) ) {
 				return null;
 			}
+
+			// The code comes from a closed set; anything else (a phone number, a sentence) becomes a constant.
+			$code = in_array( $code, self::PICKUP_CODES, true ) ? $code : self::UNKNOWN_CODE;
 
 			return $this->event(
 				$owner,
@@ -169,9 +210,9 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Browser_Event_Builder' )
 		}
 
 		/**
-		 * One reported frame: its owner and the anonymised entry — or null when it is not ours.
+		 * One reported frame: its owner and the anonymised entry — or null when it is not a real script of ours.
 		 *
-		 * @param array<string,mixed> $frame Client frame: url, line, col, fn.
+		 * @param array<string,mixed> $frame Client frame: url, line, col.
 		 * @return array{owner:array{id:string,version:string},frame:array<string,mixed>}|null
 		 */
 		private function locate( array $frame ): ?array {
@@ -181,23 +222,12 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Browser_Event_Builder' )
 				return null;
 			}
 
+			// The path is the one the filesystem reports for a script that exists; the position is a
+			// number. Nothing else of the frame is read — in particular no function name.
 			$located = $this->scope->locate_url( $url );
 
 			if ( null === $located ) {
 				return null;
-			}
-
-			$entry = [
-				'filename' => $located['path'],
-				'lineno'   => self::position( $frame['line'] ?? 0 ),
-				'colno'    => self::position( $frame['col'] ?? 0 ),
-				'in_app'   => true,
-			];
-
-			$function = $frame['fn'] ?? '';
-
-			if ( is_string( $function ) && 1 === preg_match( '/^[\w$.<>\[\]-]{1,100}$/D', $function ) ) {
-				$entry['function'] = $function;
 			}
 
 			return [
@@ -205,7 +235,12 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Browser_Event_Builder' )
 					'id'      => $located['id'],
 					'version' => $located['version'],
 				],
-				'frame' => $entry,
+				'frame' => [
+					'filename' => $located['path'],
+					'lineno'   => self::position( $frame['line'] ?? 0 ),
+					'colno'    => self::position( $frame['col'] ?? 0 ),
+					'in_app'   => true,
+				],
 			];
 		}
 

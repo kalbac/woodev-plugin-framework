@@ -34,9 +34,10 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Plugin_Scope' ) ) :
 
 		/**
 		 * URL roots (browser side, #1081), longest-first. `root` is scheme-less and slash-terminated,
-		 * `dir` is the plugin's directory name, `base` the original URL the browser is told.
+		 * `dir` is the plugin's directory name, `directory` its absolute path (where a script URL is
+		 * resolved to a real file), `base` the original URL the browser is told.
 		 *
-		 * @var array<int,array{id:string,version:string,root:string,dir:string,base:string}>
+		 * @var array<int,array{id:string,version:string,root:string,dir:string,directory:string,base:string}>
 		 */
 		private array $url_roots = [];
 
@@ -68,11 +69,12 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Plugin_Scope' ) ) :
 				// A URL with no path (a bare host) would claim the whole site: refused.
 				if ( '' !== $url && false !== strpos( substr( $url, 2 ), '/' ) ) {
 					$this->url_roots[] = [
-						'id'      => (string) $plugin['id'],
-						'version' => (string) $plugin['version'],
-						'root'    => $url . '/',
-						'dir'     => basename( rtrim( $root, '/' ) ),
-						'base'    => rtrim( (string) $plugin['url'], '/' ),
+						'id'        => (string) $plugin['id'],
+						'version'   => (string) $plugin['version'],
+						'root'      => $url . '/',
+						'dir'       => basename( rtrim( $root, '/' ) ),
+						'directory' => rtrim( $root, '/' ),
+						'base'      => rtrim( (string) $plugin['url'], '/' ),
 					];
 				}
 			}
@@ -180,12 +182,18 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Plugin_Scope' ) ) :
 		 * Scheme and query/fragment are ignored (the browser's scheme may differ from the one
 		 * `plugins_url()` produced; a query is a cache-buster at best and a leak at worst), the host is
 		 * compared case-insensitively, a `..` or `.` path segment or a backslash refuses the URL.
-		 * The returned path is anonymised like a PHP path (D5): `plugins/<dir>/…`.
+		 *
+		 * Ownership of a URL prefix is not anonymity — the rest of the URL is attacker-chosen text. So the
+		 * path under the plugin's base is percent-decoded and resolved to a file: it is accepted only when it
+		 * names an EXISTING `.js` file that really lies inside that plugin's directory (`realpath`, no
+		 * traversal), and the returned path is the one the filesystem reports, never the client's spelling:
+		 * `plugins/<dir>/<real relative path>` (D5 style). Anything else — an invented name, an encoded
+		 * separator, a file outside the plugin — is not located.
 		 *
 		 * @since 2.0.2
 		 *
 		 * @param string $url Script URL as the browser reported it.
-		 * @return array{id:string,version:string,path:string}|null Null when the URL is not under a registered plugin.
+		 * @return array{id:string,version:string,path:string}|null Null when the URL is not a real script of a registered plugin.
 		 */
 		public function locate_url( string $url ): ?array {
 			$normalized = self::normalize_url( $url );
@@ -195,13 +203,23 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Plugin_Scope' ) ) :
 			}
 
 			foreach ( $this->url_roots as $entry ) {
-				if ( 0 === strpos( $normalized, $entry['root'] ) && strlen( $normalized ) > strlen( $entry['root'] ) ) {
-					return [
-						'id'      => $entry['id'],
-						'version' => $entry['version'],
-						'path'    => 'plugins/' . $entry['dir'] . '/' . substr( $normalized, strlen( $entry['root'] ) ),
-					];
+				if ( 0 !== strpos( $normalized, $entry['root'] ) || strlen( $normalized ) <= strlen( $entry['root'] ) ) {
+					continue;
 				}
+
+				// The first root that claims the URL decides: a URL that is under a plugin's base but is
+				// not one of that plugin's real script files is nobody's.
+				$asset = self::resolve_asset( $entry['directory'], substr( $normalized, strlen( $entry['root'] ) ) );
+
+				if ( null === $asset ) {
+					return null;
+				}
+
+				return [
+					'id'      => $entry['id'],
+					'version' => $entry['version'],
+					'path'    => 'plugins/' . $entry['dir'] . '/' . $asset,
+				];
 			}
 
 			return null;
@@ -250,6 +268,57 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Plugin_Scope' ) ) :
 		 */
 		public static function normalize_path( string $path ): string {
 			return str_replace( '\\', '/', $path );
+		}
+
+		/**
+		 * The real relative path of an existing script file under a plugin directory — or null.
+		 *
+		 * The URL path is percent-decoded segment by segment BEFORE any check, so an encoded character
+		 * cannot make a path «exist» differently from how it was validated: an empty segment, `.`, `..`,
+		 * a separator (also an encoded one), a NUL or any control character refuses the whole path. The
+		 * file must end in `.js`, exist, and resolve (symlinks included) to a place inside the plugin
+		 * directory; the answer is taken from that resolved path.
+		 *
+		 * @param string $directory Absolute plugin directory.
+		 * @param string $encoded   URL path below the plugin's base, as the client spelled it (no leading slash).
+		 * @return string|null Path relative to the plugin directory, forward slashes.
+		 */
+		private static function resolve_asset( string $directory, string $encoded ): ?string {
+			$segments = [];
+
+			foreach ( explode( '/', $encoded ) as $segment ) {
+				$decoded = rawurldecode( $segment );
+
+				if ( '' === $decoded || '.' === $decoded || '..' === $decoded || 1 === preg_match( '#[/\\\\\x00-\x1f\x7f]#', $decoded ) ) {
+					return null;
+				}
+
+				$segments[] = $decoded;
+			}
+
+			$relative = implode( '/', $segments );
+
+			if ( 1 !== preg_match( '/\.js$/D', $relative ) ) {
+				return null;
+			}
+
+			$base = realpath( $directory );
+			$file = realpath( $directory . '/' . $relative );
+
+			if ( false === $base || false === $file || ! is_file( $file ) ) {
+				return null;
+			}
+
+			$base = rtrim( self::normalize_path( $base ), '/' ) . '/';
+			$file = self::normalize_path( $file );
+
+			if ( 0 !== strpos( $file, $base ) ) {
+				return null;
+			}
+
+			$resolved = substr( $file, strlen( $base ) );
+
+			return '' !== $resolved && 1 === preg_match( '/\.js$/D', $resolved ) ? $resolved : null;
 		}
 
 		/**

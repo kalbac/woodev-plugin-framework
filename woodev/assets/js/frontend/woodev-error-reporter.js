@@ -13,9 +13,12 @@
  *   - the `woodev_pickup_error` event: only `pluginId`, `fieldId` and `code`.
  * An error that touches none of our scripts is ignored here and again on the server.
  *
- * WHAT IT NEVER SENDS: `error.message`, the raw `stack` string, a URL's query or fragment, a frame
- * of a foreign script, the page address. The stack is parsed into frames in the browser; Chrome's
- * header line (`Name: message`) is cut off first so that a message can never ride into a frame.
+ * WHAT IT NEVER SENDS: `error.message`, the raw `stack` string, a function name, a URL's query or
+ * fragment, a frame of a foreign script, the page address. The stack is parsed into frames in the
+ * browser; Chrome's header (`Name: message`, possibly several lines) must be matched against the
+ * error's CURRENT name and message and removed whole — if it cannot be, the stack is not parsed at all
+ * (fail closed) and only the `ErrorEvent` location is used. This is defence in depth: the server
+ * exports only a frame URL that is a real script file of a registered plugin, plus numbers.
  *
  * It listens with `addEventListener` and never replaces `window.onerror`, sends at most
  * {@link MAX_REPORTS} reports per page view and one per signature, and swallows its own failures:
@@ -43,7 +46,6 @@
 
 	var TOKEN = /^[A-Za-z0-9_.-]{1,64}$/;
 	var ERROR_NAME = /^[A-Za-z_$][\w$]{0,63}$/;
-	var FUNCTION_NAME = /^[\w$.<>\[\]-]{1,100}$/;
 
 	/** Chrome / V8: `    at fn (url:1:2)` or `    at url:1:2`. */
 	var V8_FRAME = /^\s*at (?:(.+?) \()?(.+?):(\d+):(\d+)\)?\s*$/;
@@ -62,13 +64,18 @@
 	}
 
 	/**
-	 * `//host/path` — scheme-less, no trailing slash, so `http` and `https` spellings of one site compare equal.
+	 * `//host/path` — scheme-less, no trailing slash, the authority lowercased (the path is case-sensitive),
+	 * so `http` and `https` spellings of one site, and `SHOP.example.ru` and `shop.example.ru`, compare equal.
+	 * The server normalises the same way (`Plugin_Scope::normalize_url()`).
 	 *
 	 * @param {*} url
 	 * @returns {string}
 	 */
 	function schemeless( url ) {
-		return stripUrl( url ).replace( /^https?:/i, '' ).replace( /\/+$/, '' );
+		var bare = stripUrl( url ).replace( /^https?:/i, '' ).replace( /\/+$/, '' );
+		var match = /^\/\/([^\/]*)([\s\S]*)$/.exec( bare );
+
+		return match ? '//' + match[ 1 ].toLowerCase() + match[ 2 ] : bare;
 	}
 
 	/**
@@ -96,61 +103,97 @@
 		return false;
 	}
 
+	/** Safari: `fn@[native code]`, or a bare `[native code]`. */
+	var NATIVE_FRAME = /^(?:.*@)?\[native code\]\s*$/;
+
 	/**
-	 * A function name as it may be sent: no `new`/`async` prefix, identifier characters only, else `''`.
+	 * V8's `Error.prototype.toString()` shape: `Name: message`, or just one of them when the other is empty.
 	 *
 	 * @param {string} name
+	 * @param {string} message
 	 * @returns {string}
 	 */
-	function cleanFunctionName( name ) {
-		var cleaned = String( name || '' ).replace( /^(?:async |new )+/, '' );
+	function v8Header( name, message ) {
+		if ( '' === name ) {
+			return message;
+		}
 
-		return FUNCTION_NAME.test( cleaned ) ? cleaned : '';
+		return '' === message ? name : name + ': ' + message;
 	}
 
 	/**
-	 * Parses an `Error.stack` string into frames, innermost first. The message is NEVER part of a frame.
+	 * A frame line's location: group 2 is the URL, 3 the line, 4 the column — the same in both shapes.
+	 *
+	 * @param {string} line
+	 * @param {RegExp} shape
+	 * @returns {?{url: string, line: number, col: number}}
+	 */
+	function frameOf( line, shape ) {
+		var match = shape.exec( line );
+
+		if ( ! match ) {
+			return null;
+		}
+
+		return {
+			url: stripUrl( match[ 2 ] ),
+			line: parseInt( match[ 3 ], 10 ) || 0,
+			col: parseInt( match[ 4 ], 10 ) || 0,
+		};
+	}
+
+	/**
+	 * Parses an `Error.stack` string into frames, innermost first. Fails CLOSED.
+	 *
+	 * A string a script can still change is not evidence of where code ran, so the stack is parsed only
+	 * when its shape proves that no free text is in it:
+	 *   - V8 (Chrome, Edge): the stack must open with `Name: message` built from the error's CURRENT name
+	 *     and message, and that header must end exactly at a line break — it is then removed whole. A message
+	 *     changed or deleted after the stack was captured, a changed name, a header that cannot be matched:
+	 *     nothing is parsed (a multi-line message cannot pose as frames);
+	 *   - Firefox / Safari: there is no header, so EVERY line must be a frame (or Safari's native marker).
+	 * Otherwise `[]` — the caller falls back to the `ErrorEvent` location, or drops the report.
+	 * The function name of a frame is never read.
 	 *
 	 * @param {*}      stack
-	 * @param {Object} [error] The error the stack came from — its name and message are used to cut off Chrome's header.
-	 * @returns {Array.<{url: string, line: number, col: number, fn: string}>}
+	 * @param {Object} error The error the stack came from — its CURRENT name and message are used to find the V8 header.
+	 * @returns {Array.<{url: string, line: number, col: number}>}
 	 */
 	function parseStack( stack, error ) {
-		if ( 'string' !== typeof stack ) {
+		if ( 'string' !== typeof stack || ! error || 'string' !== typeof error.name || 'string' !== typeof error.message ) {
 			return [];
 		}
 
-		var name = error && 'string' === typeof error.name ? error.name : '';
-		var message = error && 'string' === typeof error.message ? error.message : '';
-		var header = name + ': ' + message;
+		var header = v8Header( error.name, error.message );
+		var lines;
+		var gecko = false;
 
-		if ( '' !== message && 0 === stack.indexOf( header ) ) {
-			// Chrome: the stack opens with `Name: message`, and the message may span lines.
-			stack = stack.slice( header.length );
-		} else if ( message.length >= 8 ) {
-			// Name/message changed after the stack was captured: take the message out wherever it is.
-			stack = stack.split( message ).join( '' );
+		if ( '' !== header && 0 === stack.indexOf( header ) ) {
+			var rest = stack.slice( header.length );
+
+			if ( '' !== rest && '\n' !== rest.charAt( 0 ) ) {
+				return []; // The header does not end where the message ends: something else is in there.
+			}
+
+			lines = rest.split( '\n' );
+		} else {
+			gecko = true;
+			lines = stack.split( '\n' );
+
+			for ( var i = 0; i < lines.length; i++ ) {
+				if ( '' !== lines[ i ].trim() && ! GECKO_FRAME.test( lines[ i ] ) && ! NATIVE_FRAME.test( lines[ i ] ) ) {
+					return []; // Neither a V8 stack with our header nor a header-less stack of frames.
+				}
+			}
 		}
 
 		var frames = [];
 
-		stack.split( '\n' ).forEach( function( line ) {
-			var match = V8_FRAME.exec( line );
-			var frame = null;
-
-			if ( match ) {
-				frame = { url: match[ 2 ], line: match[ 3 ], col: match[ 4 ], fn: match[ 1 ] };
-			} else if ( ( match = GECKO_FRAME.exec( line ) ) ) {
-				frame = { url: match[ 2 ], line: match[ 3 ], col: match[ 4 ] || 0, fn: match[ 1 ] };
-			}
+		lines.forEach( function( line ) {
+			var frame = frameOf( line, gecko ? GECKO_FRAME : V8_FRAME );
 
 			if ( frame ) {
-				frames.push( {
-					url: stripUrl( frame.url ),
-					line: parseInt( frame.line, 10 ) || 0,
-					col: parseInt( frame.col, 10 ) || 0,
-					fn: cleanFunctionName( frame.fn ),
-				} );
+				frames.push( frame );
 			}
 		} );
 
@@ -246,13 +289,12 @@
 				var error = event && event.error;
 				var frames = ourFrames( parseStack( error && error.stack, error ), bases );
 
-				// No usable stack (an old engine, a thrown string): fall back to the event's own file:line:col.
+				// No trustworthy stack (a thrown string, an unmatched header, an old engine): use the event's own file:line:col.
 				if ( ! frames.length && event && isOurs( event.filename, bases ) ) {
 					frames = [ {
 						url: stripUrl( event.filename ),
 						line: parseInt( event.lineno, 10 ) || 0,
 						col: parseInt( event.colno, 10 ) || 0,
-						fn: '',
 					} ];
 				}
 

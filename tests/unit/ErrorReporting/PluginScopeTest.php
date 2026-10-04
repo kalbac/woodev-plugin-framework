@@ -229,4 +229,32 @@ final class PluginScopeTest extends ErrorReportingTestCase {
 
 		$this->assertSame( [ 'https://shop.example.ru/wp-content/plugins/a' ], $scope->url_bases() );
 	}
+
+	public function test_a_url_under_a_base_is_located_only_when_it_names_a_real_script_file(): void {
+		$scope = $this->make_browser_scope();
+
+		$this->assertSame( 'plugins/acme-delivery/assets/js/map.js', $scope->locate_url( self::OUR_URL . '/assets/js/map.js' )['path'] );
+		$this->assertSame( 'plugins/acme-delivery/assets/js/my map.js', $scope->locate_url( self::OUR_URL . '/assets/js/my%20map.js' )['path'] );
+
+		$this->assertNull( $scope->locate_url( self::OUR_URL . '/assets/js/does-not-exist.js' ) );
+		$this->assertNull( $scope->locate_url( self::OUR_URL . '/Иван/Ленина%201/john@example.com.js' ) );
+		$this->assertNull( $scope->locate_url( self::OUR_URL . '/readme.txt' ), 'a real file, but not a script' );
+		$this->assertNull( $scope->locate_url( self::OUR_URL . '/assets%2fjs%2fmap.js' ), 'an encoded separator does not become a path' );
+		$this->assertNull( $scope->locate_url( self::OUR_URL . '/assets/js/%2e%2e/js/map.js' ) );
+	}
+
+	public function test_a_plugin_whose_directory_does_not_exist_locates_nothing(): void {
+		$scope = new Plugin_Scope(
+			[
+				[
+					'id'      => 'ghost',
+					'version' => '1',
+					'dir'     => self::OURS,
+					'url'     => self::OUR_URL,
+				],
+			]
+		);
+
+		$this->assertNull( $scope->locate_url( self::OUR_URL . '/assets/js/map.js' ) );
+	}
 }

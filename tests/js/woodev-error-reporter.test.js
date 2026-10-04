@@ -5,8 +5,8 @@
 /**
  * Tests for woodev-error-reporter.js (#1081, spec D7).
  *
- * Covers the script-URL filter (only OUR scripts), the stack parser (Chrome and Firefox shapes,
- * the message never reaching a frame), what a report carries (no message, no query/fragment, no
+ * Covers the script-URL filter (only OUR scripts, authority case-insensitive), the stack parser (Chrome
+ * and Firefox shapes; fails closed when the header cannot be matched, no function names), what a report carries (no message, no query/fragment, no
  * foreign frame), the pickup event reading three tokens only, and the per-page limits.
  *
  * @see woodev/assets/js/frontend/woodev-error-reporter.js
@@ -77,6 +77,13 @@ describe( 'isOurs', () => {
 		expect( reporter.isOurs( 'http://shop.example.ru/wp-content/plugins/acme-delivery/a.js', [ BASE ] ) ).toBe( true );
 	} );
 
+	test( 'compares the authority case-insensitively on both sides, and the path case-sensitively', () => {
+		expect( reporter.isOurs( 'https://SHOP.Example.ru/wp-content/plugins/acme-delivery/a.js', [ BASE ] ) ).toBe( true );
+		expect( reporter.isOurs( OUR, [ 'https://SHOP.example.RU/wp-content/plugins/acme-delivery' ] ) ).toBe( true );
+		expect( reporter.isOurs( 'HTTP://Shop.EXAMPLE.ru/wp-content/plugins/acme-delivery/a.js', [ 'https://SHOP.example.ru/wp-content/plugins/acme-delivery/' ] ) ).toBe( true );
+		expect( reporter.isOurs( 'https://shop.example.ru/wp-content/plugins/Acme-Delivery/a.js', [ BASE ] ) ).toBe( false );
+	} );
+
 	test( 'refuses a foreign script, a sibling directory with the same prefix, the base itself and junk', () => {
 		expect( reporter.isOurs( FOREIGN, [ BASE ] ) ).toBe( false );
 		expect( reporter.isOurs( BASE + '-evil/a.js', [ BASE ] ) ).toBe( false );
@@ -87,7 +94,7 @@ describe( 'isOurs', () => {
 } );
 
 describe( 'parseStack', () => {
-	test( 'parses Chrome frames and cuts the header line, so the message never becomes a frame', () => {
+	test( 'parses Chrome frames and cuts the header, so a multi-line message never becomes a frame', () => {
 		const message = 'Cannot read x\n    at secret (' + OUR + ':9:9)';
 		const error = errorWithStack(
 			'TypeError',
@@ -95,31 +102,107 @@ describe( 'parseStack', () => {
 			'TypeError: ' + message + '\n    at draw (' + OUR + ':10:20)\n    at async run (' + OUR + '?ver=2:30:4)\n    at ' + FOREIGN + ':1:1'
 		);
 
-		const frames = reporter.parseStack( error.stack, error );
-
-		expect( frames ).toEqual( [
-			{ url: OUR, line: 10, col: 20, fn: 'draw' },
-			{ url: OUR, line: 30, col: 4, fn: 'run' },
-			{ url: FOREIGN, line: 1, col: 1, fn: '' },
+		expect( reporter.parseStack( error.stack, error ) ).toEqual( [
+			{ url: OUR, line: 10, col: 20 },
+			{ url: OUR, line: 30, col: 4 },
+			{ url: FOREIGN, line: 1, col: 1 },
 		] );
 	} );
 
-	test( 'parses Firefox / Safari frames', () => {
-		const frames = reporter.parseStack( 'draw@' + OUR + ':10:20\n@' + FOREIGN + ':2:3\n', { name: 'Error', message: 'x' } );
+	test( 'never reads a function name', () => {
+		const error = errorWithStack( 'Error', 'm', 'Error: m\n    at John.Smith (' + OUR + ':1:1)' );
 
-		expect( frames ).toEqual( [
-			{ url: OUR, line: 10, col: 20, fn: 'draw' },
-			{ url: FOREIGN, line: 2, col: 3, fn: '' },
-		] );
+		expect( JSON.stringify( reporter.parseStack( error.stack, error ) ) ).not.toMatch( /John|Smith|fn/ );
 	} );
 
-	test( 'drops a function name that is not an identifier, and strips new/async', () => {
+	test( 'parses a V8 stack whose message is empty (the header is the bare name)', () => {
+		const error = errorWithStack( 'Error', '', 'Error\n    at f (' + OUR + ':3:4)' );
+
+		expect( reporter.parseStack( error.stack, error ) ).toEqual( [ { url: OUR, line: 3, col: 4 } ] );
+	} );
+
+	test( 'parses Firefox / Safari frames: a header-less stack where every line is a frame', () => {
 		const frames = reporter.parseStack(
-			'    at new Widget (' + OUR + ':1:1)\n    at Name with spaces (' + OUR + ':2:2)',
-			{ name: 'Error', message: '' }
+			'draw@' + OUR + ':10:20\n@' + FOREIGN + ':2:3\nforEach@[native code]\n',
+			{ name: 'Error', message: 'x' }
 		);
 
-		expect( frames.map( ( frame ) => frame.fn ) ).toEqual( [ 'Widget', '' ] );
+		expect( frames ).toEqual( [
+			{ url: OUR, line: 10, col: 20 },
+			{ url: FOREIGN, line: 2, col: 3 },
+		] );
+	} );
+
+	describe( 'fails closed when the V8 header cannot be matched and removed whole', () => {
+		// The critic's repro: the original message poses as a frame, then the message is changed.
+		const forged = 'provider failed\n    at John_Smith (' + OUR + ':9:9)';
+
+		function forgedStack( mutate ) {
+			const error = new Error( forged );
+			const stack = 'Error: ' + forged + '\n    at real (' + OUR + ':1:1)';
+
+			error.stack = stack;
+			mutate( error );
+
+			return { stack, error };
+		}
+
+		test( 'the message was changed after the stack was captured', () => {
+			const { stack, error } = forgedStack( ( e ) => {
+				e.message = 'Checkout failed';
+			} );
+
+			expect( reporter.parseStack( stack, error ) ).toEqual( [] );
+		} );
+
+		test( 'the message was deleted', () => {
+			const { stack, error } = forgedStack( ( e ) => {
+				e.message = '';
+			} );
+
+			expect( reporter.parseStack( stack, error ) ).toEqual( [] );
+		} );
+
+		test( 'the name was changed', () => {
+			const { stack, error } = forgedStack( ( e ) => {
+				e.name = 'CheckoutError';
+			} );
+
+			expect( reporter.parseStack( stack, error ) ).toEqual( [] );
+		} );
+
+		test( 'a stack with no header and a line that is not a frame is not parsed', () => {
+			expect( reporter.parseStack( 'free text\n    at f (' + OUR + ':1:1)', { name: 'Error', message: 'm' } ) ).toEqual( [] );
+			expect( reporter.parseStack( 'note\ndraw@' + OUR + ':10:20', { name: 'Error', message: 'm' } ) ).toEqual( [] );
+		} );
+
+		test( 'a thing without a string name and message is not parsed', () => {
+			expect( reporter.parseStack( 'Error: m\n    at f (' + OUR + ':1:1)', {} ) ).toEqual( [] );
+			expect( reporter.parseStack( 'Error: m\n    at f (' + OUR + ':1:1)', null ) ).toEqual( [] );
+		} );
+
+		test( 'end to end: the forged frame is not reported, the ErrorEvent location is', () => {
+			const { error } = forgedStack( ( e ) => {
+				e.message = 'Checkout failed';
+			} );
+
+			fireError( { error, filename: OUR + '?ver=1', lineno: 7, colno: 8 } );
+
+			expect( sentBodies() ).toEqual( [ { source: 'error', type: 'Error', frames: [ { url: OUR, line: 7, col: 8 } ] } ] );
+			expect( requests[ 0 ].body ).not.toMatch( /John|Smith|9:9/ );
+		} );
+
+		test( 'end to end: a rejection with a mutated header is dropped (no location to fall back to)', () => {
+			const { error } = forgedStack( ( e ) => {
+				e.message = 'Checkout failed';
+			} );
+			const event = new Event( 'unhandledrejection' );
+
+			event.reason = error;
+			window.dispatchEvent( event );
+
+			expect( requests ).toHaveLength( 0 );
+		} );
 	} );
 
 	test( 'a non-string stack gives no frames', () => {
@@ -141,7 +224,7 @@ describe( 'window errors', () => {
 		expect( sentBodies()[ 0 ] ).toEqual( {
 			source: 'error',
 			type: 'TypeError',
-			frames: [ { url: OUR, line: 10, col: 20, fn: 'draw' } ],
+			frames: [ { url: OUR, line: 10, col: 20 } ],
 		} );
 	} );
 
@@ -154,7 +237,7 @@ describe( 'window errors', () => {
 	test( 'keeps only the frames of our scripts', () => {
 		fireError( { error: errorWithStack( 'Error', 'm', 'Error: m\n    at a (' + FOREIGN + ':1:1)\n    at b (' + OUR + ':2:2)' ) } );
 
-		expect( sentBodies()[ 0 ].frames ).toEqual( [ { url: OUR, line: 2, col: 2, fn: 'b' } ] );
+		expect( sentBodies()[ 0 ].frames ).toEqual( [ { url: OUR, line: 2, col: 2 } ] );
 	} );
 
 	test( 'ignores an error that touches none of our scripts', () => {
@@ -167,13 +250,14 @@ describe( 'window errors', () => {
 	test( 'falls back to the event file:line:col when there is no usable stack', () => {
 		fireError( { error: 'a thrown string', filename: OUR + '?ver=1', lineno: 7, colno: 8 } );
 
-		expect( sentBodies()[ 0 ] ).toEqual( { source: 'error', type: 'Error', frames: [ { url: OUR, line: 7, col: 8, fn: '' } ] } );
+		expect( sentBodies()[ 0 ] ).toEqual( { source: 'error', type: 'Error', frames: [ { url: OUR, line: 7, col: 8 } ] } );
 	} );
 
 	test( 'a hostile error name is replaced, not sent', () => {
-		fireError( { error: errorWithStack( 'Bad name: secret@example.com', 'm', 'x\n    at f (' + OUR + ':1:1)' ) } );
+		fireError( { error: errorWithStack( 'Bad name: secret@example.com', 'm', 'Bad name: secret@example.com: m\n    at f (' + OUR + ':1:1)' ) } );
 
 		expect( sentBodies()[ 0 ].type ).toBe( 'Error' );
+		expect( requests[ 0 ].body ).not.toMatch( /secret|example\.com/ );
 	} );
 
 	test( 'reports an unhandled rejection whose reason is an error from our script', () => {
@@ -245,7 +329,7 @@ describe( 'limits', () => {
 		fireError( { error: errorWithStack( 'Error', 'm', 'Error: m\n' + lines.join( '\n' ) ) } );
 
 		expect( requests[ 0 ].body.length ).toBeLessThanOrEqual( 7500 );
-		expect( sentBodies()[ 0 ].frames[ 0 ].fn ).toBe( 'f1' );
+		expect( sentBodies()[ 0 ].frames[ 0 ] ).toEqual( { url: long, line: 1, col: 1 } );
 	} );
 
 	test( 'start() refuses an unusable config', () => {

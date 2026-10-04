@@ -148,23 +148,41 @@ SAME `Event_Queue`, so consent, anonymity and anti-spam stay in one place (D1, D
   (`plugins_url( '', <plugin file> )`, the framework vendored inside a plugin is under it), built by
   `Plugin_Scope` from the same registry as the PHP roots (a single-file plugin is refused for the same
   reason). The browser listens with `addEventListener( 'error' | 'unhandledrejection' )` — it never
-  replaces `window.onerror` — and keeps only frames whose URL starts with a base; an event with no such
-  frame is dropped. **The server repeats the check** (`Plugin_Scope::owner_of_url()`): a frame outside
-  every base is dropped, an event left with none answers `200 {queued:false}`; the innermost owned frame
-  owns the event. Nothing from the client is trusted, only re-validated.
-- **What leaves.** Exception **type** (`error.name`, identifier characters only, ≤ 64), and frames of OUR
-  scripts: `filename`, `lineno`, `colno`, function name (identifier characters, ≤ 100), innermost first,
-  ≤ 30. The stack is parsed in the browser (Chrome's header line `Name: message` is cut off first, so a
-  message can never ride into a frame); the raw `stack` string is never sent. Cross-origin
-  «Script error.» carries no URL and is dropped. URLs are anonymised like D5's paths: query and fragment
-  stripped, then the part under the plugin root rewritten to `plugins/<dir>/…`; nothing else of the URL
-  (host, scheme) survives. Event: `platform: javascript`, the same tags/`release`/`server_name` as D5
-  plus `source: browser`, `mechanism.type` `onerror` | `onunhandledrejection`.
+  replaces `window.onerror` — and keeps only frames whose URL starts with a base (scheme ignored, the
+  authority lowercased on BOTH sides, the path case-sensitive); an event with no such frame is dropped.
+  **The server repeats the check and goes further** (`Plugin_Scope::locate_url()`, see «Trusted identity»
+  below): a frame outside every base, or inside one but not a real script, is dropped; an event left with
+  no frame answers `200 {queued:false}`; the innermost owned frame owns the event.
+- **What leaves.** Exception **type** — one of the standard JS error names (`Error`, `TypeError`,
+  `RangeError`, `ReferenceError`, `SyntaxError`, `EvalError`, `URIError`, `AggregateError`), anything else
+  is exported as `Error` — and frames of OUR scripts: `filename`, `lineno`, `colno`, innermost first,
+  ≤ 30. **No function name** (it is free text and not needed). The raw `stack` string is never sent.
+  Cross-origin «Script error.» carries no URL and is dropped. Event: `platform: javascript`, the same
+  tags/`release`/`server_name` as D5 plus `source: browser`, `mechanism.type` `onerror` |
+  `onunhandledrejection`.
+- **Trusted identity — the binding rule.** *No free text from the browser ever reaches the queue or
+  GlitchTip.* Syntax validation does not prove anonymity (a name or a phone number is a valid token), so
+  every exported value is a **number**, a **constant**, or a value from a **set the server holds**; a
+  value outside its set is replaced by a constant or the whole report is dropped (fail closed):
+  - *frame URL* → accepted only when its path under a registered plugin's base, percent-decoded segment
+    by segment BEFORE any check (an empty, `.`, `..`, separator-carrying or control-character segment
+    refuses it), names an EXISTING `.js` file that `realpath`-resolves inside that plugin's directory;
+    exported is the path the filesystem reports, `plugins/<dir>/<real path>` — never the client's spelling;
+  - *error type* → the closed list above, else `Error`;
+  - *pickup `pluginId`* → a registered plugin; *`fieldId`* → a field id a pickup handler declared for that
+    plugin through the `woodev_error_reporting_pickup_fields` filter (`Pickup_Handler::register()` adds
+    its own), else the report is dropped; *`code`* → `Browser_Event_Builder::PICKUP_CODES`, the codes the
+    pickup providers emit (defined once, in PHP), else `unknown`;
+  - *stack parsing in the browser* fails closed: Chrome's `Name: message` header must be matched against
+    the error's CURRENT name and message and removed whole, a header-less (Firefox/Safari) stack must be
+    frames only — otherwise the stack is not parsed and only the `ErrorEvent` file:line:col is used. The
+    parser is defence in depth, not the guarantee: the server exports a frame only as a verified path plus
+    two numbers.
 - **Domain events.** One list, one rule: a `CustomEvent` on `document.body`, **only the fields named
   here** are read. First entry: `woodev_pickup_error {fieldId, code, message}` (D-14 of the pickup
   design) → `fieldId` + `code` + `pluginId` (added to the event detail and to the pickup config by this
   card — the browser does not know the owner otherwise); `message` is never read. All three must match
-  `^[A-Za-z0-9_.-]{1,64}$`; `pluginId` must be a registered plugin or the event is dropped. Event:
+  `^[A-Za-z0-9_.-]{1,64}$` (shape only) and then pass the closed sets of «Trusted identity» above. Event:
   `exception.type = woodev_pickup_error`, `value = <pluginId>:<fieldId>:<code>` (tokens, so the shared
   signature of D6 tells plugins and fields apart), no frames.
 - **Guests and the nonce.** The pickup map is on the storefront, so the route is public
@@ -178,12 +196,20 @@ SAME `Event_Queue`, so consent, anonymity and anti-spam stay in one place (D1, D
   place: known keys only, exact types, `maxLength`, ≤ 30 frames, token patterns; an unknown key — a
   `message`, say — is refused with 400, not silently stripped), 10 requests per client per minute through the
   shared `Rest_Rate_Limit_Trait` (the counter key is `md5( ip )` inside a transient or object-cache entry —
-  no raw address is stored; own key prefix, own budget). The browser itself sends ≤ 5 reports per
-  page view and one per signature. Order: permission (inactive → 403, bad nonce → 403) → rate limit
+  no raw address is stored; own key prefix, own budget; the trait's forwarding-header handling is used as it
+  stands — a fairness hint bounded by its coarse connection-address bucket, and the caps below bound the
+  rest). The browser itself sends ≤ 5 reports per page view and one per signature. Order: permission (inactive → 403, bad nonce → 403) → rate limit
   (429) → size (413) → schema (400) → build (200). Dedupe is D6's: `event_id` is assigned on the server
   when the event is built and travels to the receiver; `Event_Queue::push()` coalesces by the shared
   signature (type, throw-site frame, md5 of value), the dispatcher's `Rate_Limiter` applies the
-  6 h/daily-cap rules. The answer is `200 {queued:bool}` — a foreign or duplicate report is not an error for the browser.
+  6 h/daily-cap rules. **Browser events cannot starve PHP events:** (1) in the queue they hold at most
+  `Event_Queue::BROWSER_LIMIT` (10) of the 20 slots and are *refused* — never evict anything — when their
+  share or the queue is full, while a PHP event arriving at a full queue evicts the oldest browser event
+  first; (2) at send time they spend a daily budget of their own (`woodev_er_day_js_*`, default 10,
+  filter `woodev_error_reporting_browser_daily_cap`), the PHP budget is untouched; (3) a site-wide intake
+  cap — 30 browser reports queued per UTC hour, whoever sent them (`Rate_Limiter::allow_browser_intake()`,
+  filter `woodev_error_reporting_browser_hourly_cap`) — is checked before enqueue, counting only reports
+  that are ours. The answer is `200 {queued:bool}` — a foreign or duplicate report is not an error for the browser.
 
 ## Classes (`woodev/error-reporting/`, `Woodev\Framework\Error_Reporting`)
 

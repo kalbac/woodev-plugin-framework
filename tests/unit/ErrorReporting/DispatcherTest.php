@@ -516,4 +516,39 @@ final class DispatcherTest extends ErrorReportingTestCase {
 		$this->assertSame( 2, count( array_keys( $deleted, 'options:alloptions', true ) ), 'the cached option set is dropped once per event' );
 		$this->assertContains( 'options:woodev_error_reporting_enabled', $deleted );
 	}
+
+	public function test_browser_events_cannot_spend_the_php_events_budget_at_drain_time(): void {
+		$this->filters['woodev_error_reporting_daily_cap']         = 1;
+		$this->filters['woodev_error_reporting_browser_daily_cap'] = 2;
+
+		for ( $line = 1; $line <= 3; ++$line ) {
+			Event_Queue::push( $this->browser_event( $line ) );
+		}
+
+		$this->enqueue( 1 ); // One PHP event, queued AFTER the browser ones.
+
+		// Two browser sends (their budget), then the PHP event still gets its own.
+		$this->assertSame( 3, Dispatcher::run() );
+		$this->assertCount( 3, $this->posts );
+		$this->assertSame( [], Event_Queue::all() );
+	}
+
+	/**
+	 * @param int $line Makes the signature unique.
+	 * @return array<string,mixed>
+	 */
+	private function browser_event( int $line ): array {
+		return (array) $this->make_browser_builder()->from_payload(
+			[
+				'source' => 'error',
+				'type'   => 'Error',
+				'frames' => [
+					[
+						'url'  => self::OUR_URL . '/assets/js/map.js',
+						'line' => $line,
+					],
+				],
+			]
+		);
+	}
 }

@@ -26,6 +26,75 @@ abstract class ErrorReportingTestCase extends TestCase {
 	/** Asset base URL of the registered plugin (browser side, #1081). */
 	protected const OUR_URL = 'https://shop.example.ru/wp-content/plugins/acme-delivery';
 
+	/** Script files that really exist in {@see self::$plugin_dir} (browser side: a frame URL must name one). */
+	protected const SCRIPT_FILES = [
+		'a.js',
+		'assets/js/a.js',
+		'assets/js/map.js',
+		'assets/js/mount.js',
+		'assets/js/my map.js',
+	];
+
+	/** @var string Root of a throw-away directory tree holding the registered plugin's real files. */
+	protected string $fs_root = '';
+
+	/** @var string The registered plugin's directory (`<root>/acme-delivery`), with {@see self::SCRIPT_FILES} in it. */
+	protected string $plugin_dir = '';
+
+	protected function setUp(): void {
+		parent::setUp();
+
+		$this->fs_root    = sys_get_temp_dir() . '/woodev-er-' . bin2hex( random_bytes( 6 ) );
+		$this->plugin_dir = $this->fs_root . '/acme-delivery';
+
+		foreach ( self::SCRIPT_FILES as $file ) {
+			$this->touch_file( $this->plugin_dir . '/' . $file );
+		}
+
+		$this->touch_file( $this->plugin_dir . '/readme.txt' );
+		$this->touch_file( $this->fs_root . '/other-plugin/secret.js' );
+	}
+
+	protected function tearDown(): void {
+		$this->remove_tree( $this->fs_root );
+
+		parent::tearDown();
+	}
+
+	/**
+	 * @param string $path File to create (with its directories).
+	 * @return void
+	 */
+	protected function touch_file( string $path ): void {
+		if ( ! is_dir( dirname( $path ) ) ) {
+			mkdir( dirname( $path ), 0777, true );
+		}
+
+		file_put_contents( $path, '// test' );
+	}
+
+	/**
+	 * @param string $path File or directory (a symlink is unlinked, never followed).
+	 * @return void
+	 */
+	private function remove_tree( string $path ): void {
+		if ( is_link( $path ) || is_file( $path ) ) {
+			unlink( $path );
+
+			return;
+		}
+
+		foreach ( is_dir( $path ) ? (array) scandir( $path ) : [] as $entry ) {
+			if ( '.' !== $entry && '..' !== $entry ) {
+				$this->remove_tree( $path . '/' . $entry );
+			}
+		}
+
+		if ( is_dir( $path ) ) {
+			rmdir( $path );
+		}
+	}
+
 	/**
 	 * A throwable that claims to have been thrown at $file:$line with the given trace.
 	 *
@@ -102,7 +171,7 @@ abstract class ErrorReportingTestCase extends TestCase {
 	}
 
 	/**
-	 * @return Plugin_Scope One registered plugin with a directory AND an asset base URL.
+	 * @return Plugin_Scope One registered plugin with a REAL directory ({@see self::$plugin_dir}) AND an asset base URL.
 	 */
 	protected function make_browser_scope(): Plugin_Scope {
 		return new Plugin_Scope(
@@ -110,7 +179,7 @@ abstract class ErrorReportingTestCase extends TestCase {
 				[
 					'id'      => 'acme-delivery',
 					'version' => '1.4.0',
-					'dir'     => self::OURS,
+					'dir'     => $this->plugin_dir,
 					'url'     => self::OUR_URL,
 				],
 			]
@@ -118,9 +187,10 @@ abstract class ErrorReportingTestCase extends TestCase {
 	}
 
 	/**
+	 * @param array<string,array<string>>|null $pickup_fields Field ids the server knows, by plugin id (default: `acme-delivery` → `pickup_point`).
 	 * @return Browser_Event_Builder Builder over {@see self::make_browser_scope()} with fixed context.
 	 */
-	protected function make_browser_builder(): Browser_Event_Builder {
+	protected function make_browser_builder( ?array $pickup_fields = null ): Browser_Event_Builder {
 		return new Browser_Event_Builder(
 			$this->make_browser_scope(),
 			[
@@ -130,7 +200,8 @@ abstract class ErrorReportingTestCase extends TestCase {
 				'wc_version'        => '10.0.0',
 				'php_version'       => '8.1.0',
 				'environment'       => 'production',
-			]
+			],
+			$pickup_fields ?? [ 'acme-delivery' => [ 'pickup_point' ] ]
 		);
 	}
 }

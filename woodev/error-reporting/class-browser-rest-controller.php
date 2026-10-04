@@ -20,8 +20,17 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Browser_Rest_Controller'
 	 * guarded by, in this order: reporting active (else 403), a valid `wp_rest` nonce (else 403 — core
 	 * rejects a stale one before this class runs), a per-client rate limit (429), a body size cap (413)
 	 * and a strict schema (400). What passes is handed to {@see Error_Reporter::report_browser()}, which
-	 * re-validates it, drops what is not ours and queues the rest next to the PHP events. The answer is
-	 * always `{queued: bool}` — a foreign or duplicate report is not an error for the browser.
+	 * re-validates it against what the server knows, drops what is not ours, applies the site-wide browser
+	 * intake cap and queues the rest in the browser's own share of the queue, next to the PHP events. The
+	 * answer is always `{queued: bool}` — a foreign or duplicate report is not an error for the browser.
+	 *
+	 * The schema checks SHAPE only. Shape is not anonymity: what is exported is decided by
+	 * {@see Browser_Event_Builder} from sets the server holds.
+	 *
+	 * The per-client key is whatever {@see Rest_Rate_Limit_Trait} decides, deliberately and unchanged: the
+	 * forwarding-header hint is a fairness bucket only, bounded by the coarse connection-address bucket
+	 * (10× the budget) — and the site-wide intake cap and the browser's queue share bound what a client
+	 * who rotates headers can achieve.
 	 *
 	 * Registered through {@see \Woodev_REST_V1_Registrar}, like the consent route.
 	 *
@@ -44,7 +53,7 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Browser_Rest_Controller'
 		const KEYS = [ 'source', 'type', 'frames', 'pluginId', 'fieldId', 'code' ];
 
 		/** Keys of one frame; anything else is refused. */
-		const FRAME_KEYS = [ 'url', 'line', 'col', 'fn' ];
+		const FRAME_KEYS = [ 'url', 'line', 'col' ];
 
 		/**
 		 * @internal
@@ -192,7 +201,7 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Browser_Rest_Controller'
 				}
 			}
 
-			return ! isset( $frame['fn'] ) || ( is_string( $frame['fn'] ) && strlen( $frame['fn'] ) <= 100 );
+			return true;
 		}
 
 		/**

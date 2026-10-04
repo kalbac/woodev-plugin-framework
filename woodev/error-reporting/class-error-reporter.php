@@ -144,13 +144,15 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Error_Reporter' ) ) :
 		 * Queues a report the BROWSER sent (D7), after the controller's own gates.
 		 *
 		 * Consent and the receiver are re-checked here, the payload is rebuilt by
-		 * {@see Browser_Event_Builder} (which re-validates everything and drops what is not ours), and the
-		 * event goes through the same filter, queue and cron scheduling as a PHP event.
+		 * {@see Browser_Event_Builder} (which exports only what the server knows and drops what is not
+		 * ours), the site-wide browser intake cap is applied, and the event goes through the same filter,
+		 * queue and cron scheduling as a PHP event — in the browser's own, bounded share of the queue
+		 * ({@see Event_Queue::BROWSER_LIMIT}).
 		 *
 		 * @since 2.0.2
 		 *
 		 * @param array<string,mixed> $payload The decoded JSON body.
-		 * @return bool True when an event was queued; false when it was not ours, a duplicate, or reporting is off.
+		 * @return bool True when an event was queued; false when it was not ours, a duplicate, over a cap, or reporting is off.
 		 */
 		public static function report_browser( array $payload ): bool {
 			if ( ! self::$installed || null === self::$scope ) {
@@ -162,7 +164,13 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Error_Reporter' ) ) :
 					return false;
 				}
 
-				return self::enqueue( ( new Browser_Event_Builder( self::$scope, self::context() ) )->from_payload( $payload ) );
+				$event = ( new Browser_Event_Builder( self::$scope, self::context(), self::pickup_fields() ) )->from_payload( $payload );
+
+				if ( null === $event || ! ( new Rate_Limiter() )->allow_browser_intake() ) {
+					return false;
+				}
+
+				return self::enqueue( $event );
 			} catch ( \Throwable $e ) {
 				unset( $e );
 
@@ -382,6 +390,27 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Error_Reporter' ) ) :
 				'php_version'       => PHP_VERSION,
 				'environment'       => function_exists( 'wp_get_environment_type' ) ? wp_get_environment_type() : 'production',
 			];
+		}
+
+		/**
+		 * The pickup field ids the server knows, by plugin id — what a browser `woodev_pickup_error` is checked against.
+		 *
+		 * @return array<string,array<mixed>>
+		 */
+		private static function pickup_fields(): array {
+			/**
+			 * Collects the pickup field ids of every pickup handler, keyed by the handler's plugin id.
+			 *
+			 * The error reporter exports a browser-sent field id only when it is listed here: a
+			 * syntactically valid id is not an anonymous one. `Pickup_Handler::register()` adds its own.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param array<string,string[]> $fields Field ids by plugin id. Default: none.
+			 */
+			$fields = apply_filters( 'woodev_error_reporting_pickup_fields', [] );
+
+			return is_array( $fields ) ? $fields : [];
 		}
 
 		/**
