@@ -6,7 +6,7 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-04 (s151).** ✅ Merged #1081 (PR #1084, browser error reporter) and the SP-11 draft spec (PR #1085); SP-11 forks wait for the operator in #1086, slices #1087–#1091. Details: `sessions/s151.md`. ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
+**As of 2026-10-04 (s151).** ✅ Merged #1081 (PR #1084), SP-11 spec (PR #1085, DECIDED — #1086), C-2a #1088 (PR #1094), C-1 #1087 (PR #1097, operator-accepted on the rig), #1093 (PR #1095). In progress: C-2b #1089 (Fable, worktree `feat-1089-blocks-pickup`). Details: `sessions/s151.md`. ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
 orders-page slug redirects to the framework page with that carrier preselected, accepted on the rig.
 ✅ **Both machines are live**; routine sync is git ONLY (`wiki/two-machine-setup.md`). The order
 metabox (#856) and the orders table (#870) stay accepted.
@@ -27,7 +27,7 @@ selector matches nothing. One line each under the `[rig/*]` and `[build/*]` topi
 
 ⛔ **The operator reordered the work, 12.09.2026, reconfirmed 13.09** — *«пока у нас не будет готов
 базовый минимум самого фреймворка, мы плагин не пилим»*. **#786 is OUT of the queue** («Заморожено»).
-**«Base minimum» = milestone «v2.0 релиз» (operator, s150):** #1078 (SP-11, forks #1086, slices #1087–#1091), then #247 #285 #567 last; #947 #948 #130 #1081 done. `docs/` after the plugin; #621 behind #639; reporter receiver = GlitchTip (#1082, his).
+**«Base minimum» = milestone «v2.0 релиз» (operator, s150):** #1078 (SP-11: C-1 #1087 and C-2a #1088 done; C-2b #1089 in progress; #1090 #1091 #1096 next), then #247 #285 #567 last; #947 #948 #130 #1081 #1093 done. `docs/` after the plugin; #621 behind #639; reporter receiver = GlitchTip (#1082, his).
 Next: see `next-session-prompt.md`. The «new» scope + badge = unexported ∩ `EXPORTABLE_STATUSES` (#1024, his decision). Codex: default `gpt-6-luna`, hard tasks `gpt-6.1-sol` (operator, 01.10.2026; `CLAUDE.md`). Codex is back in use (operator, 29.09.2026): **1 of 3 usage-limit resets spent** (none spent in s146), recipe in gotcha `starting-codex-under-orca-needs-four-steps-not-one` — on 0.158 the report-FILE path works, `worker_done` never comes.
 
 ✅ **CI first-try reliability is ENFORCED** (#871): `.githooks/pre-push` rebuilds the bundles and
