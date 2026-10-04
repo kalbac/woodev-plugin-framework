@@ -110,7 +110,9 @@ final class EventBuilderTest extends ErrorReportingTestCase {
 			]
 		);
 
-		$json = $this->encode( $this->make_builder()->from_throwable( $e ) );
+		$event = $this->make_builder()->from_throwable( $e );
+		// Without the random event id and the timestamp: a digit run can turn up in them by chance.
+		$json = $this->encode( array_diff_key( $event, [ 'event_id' => true, 'timestamp' => true ] ) );
 
 		$this->assertStringNotContainsString( 'hunter2-secret', $json );
 		$this->assertStringNotContainsString( '4111111111111111', $json );
@@ -275,7 +277,7 @@ final class EventBuilderTest extends ErrorReportingTestCase {
 		$this->assertSame( 'Uncaught Exception', $event['exception']['values'][0]['value'] );
 
 		$json = $this->encode( $event );
-		foreach ( [ 'hunter2-secret', 'Stack trace', 'Иван', '999', 'thrown in' ] as $needle ) {
+		foreach ( [ 'hunter2-secret', 'Stack trace', 'Иван', '123-45-67', 'thrown in' ] as $needle ) {
 			$this->assertStringNotContainsString( $needle, $json );
 		}
 
