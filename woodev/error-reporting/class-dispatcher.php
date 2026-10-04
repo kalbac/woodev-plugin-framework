@@ -83,9 +83,11 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Dispatcher' ) ) :
 					$sent = self::drain( $dsn, $lock );
 				} finally {
 					self::release_lock( $lock );
-				}
 
-				self::schedule_if_queued();
+					// Also when the drain threw (a filter or HTTP hook): WP-Cron has consumed this
+					// event, so anything still queued needs a new one.
+					self::schedule_if_queued();
+				}
 			} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- by design: a cron run must not fail loudly.
 				unset( $e );
 			}

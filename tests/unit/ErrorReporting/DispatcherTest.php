@@ -364,6 +364,21 @@ final class DispatcherTest extends ErrorReportingTestCase {
 		$this->assertSame( [], $this->db->rows );
 	}
 
+	public function test_a_drain_that_throws_still_schedules_a_retry_for_the_retained_event(): void {
+		$this->enqueue( 1 );
+		Functions\when( 'wp_remote_post' )->alias(
+			static function () {
+				throw new \RuntimeException( 'an HTTP hook threw' );
+			}
+		);
+
+		$this->assertSame( 0, Dispatcher::run() );
+
+		$this->assertCount( 1, Event_Queue::all(), 'the event was not removed' );
+		$this->assertCount( 1, $this->scheduled, 'WP-Cron consumed the event that brought us here: the retained one needs a new drain' );
+		$this->assertSame( Dispatcher::HOOK, $this->scheduled[0][1] );
+	}
+
 	public function test_a_lock_denied_run_schedules_another_drain_while_events_wait(): void {
 		$this->enqueue( 1 );
 		$this->db->rows[ Dispatcher::LOCK_OPTION ] = time() . '|someone-else'; // A crashed run's fresh lock.

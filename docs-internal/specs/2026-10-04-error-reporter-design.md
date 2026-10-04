@@ -105,7 +105,15 @@ request mid-drain stops the batch and clears the queue.
 has consumed its own cron event, so it schedules another (+60 s, only while the queue is non-empty and none
 waits; the retries stop when the holder finishes or its lock goes stale after 300 s). A run that finishes
 with events still queued does the same, and so does an enqueue of an event identical to one already
-queued (it is coalesced, but the cron is re-checked).
+queued (it is coalesced, but the cron is re-checked). The re-check sits in the drain's `finally`, so a
+drain that THREW (a filter or HTTP hook) still leaves a cron behind for what it kept.
+
+**A duplicate post is accepted, a duplicate event is not (operator, s150).** The ownership check before
+each post is not a perfect fence: a run paused past the 300 s TTL between that check and the post can
+send an event its successor also sends. Closing that window on the client is not possible; it does not
+need to be — `event_id` is assigned when the event is BUILT (before it is queued) and travels in the
+envelope header and the event, and the Sentry protocol (GlitchTip included) drops a second event with
+the same id. Worst case: one redundant request, never a doubled report.
 
 **WP-Cron dependency.** Sending needs a working WP-Cron. With `DISABLE_WP_CRON` and no external scheduler
 hitting `wp-cron.php`, nothing is ever sent: the queue stays at its 20-event bound (oldest dropped) and
