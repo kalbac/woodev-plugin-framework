@@ -1555,7 +1555,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 
 				// Names the owning plugin in the `woodev_pickup_error` event, so the error reporter
 				// (#1081) can attribute it; the browser has no other way to know.
-				'pluginId'             => $this->plugin_id,
+				'pluginId'             => $this->error_reporting_plugin_id(),
 				'strategy'             => $this->source->get_strategy(),
 				'maxAccumulatedPoints' => $max_accumulated,
 				'provider'             => $this->map_provider->get_id(),
@@ -2212,14 +2212,30 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 */
 		public function declare_error_reporting_field( $fields ): array {
 			$fields = is_array( $fields ) ? $fields : [];
+			$plugin_id = $this->error_reporting_plugin_id();
 
-			$declared = isset( $fields[ $this->plugin_id ] ) && is_array( $fields[ $this->plugin_id ] ) ? $fields[ $this->plugin_id ] : [];
+			$declared = isset( $fields[ $plugin_id ] ) && is_array( $fields[ $plugin_id ] ) ? $fields[ $plugin_id ] : [];
 
 			$declared[] = $this->field_id;
 
-			$fields[ $this->plugin_id ] = array_values( array_unique( $declared ) );
+			$fields[ $plugin_id ] = array_values( array_unique( $declared ) );
 
 			return $fields;
+		}
+
+		/**
+		 * Gets the plugin id the error reporter uses to validate pickup events.
+		 *
+		 * The REST route and JS config global still use {@see self::$plugin_id}. The reporter
+		 * validates `pluginId` against the loader registry, whose id belongs to the owning
+		 * plugin; when no plugin was supplied, retain the handler id for standalone handlers.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		private function error_reporting_plugin_id(): string {
+			return null !== $this->plugin ? $this->plugin->get_id() : $this->plugin_id;
 		}
 
 		/**
