@@ -23,16 +23,18 @@ critical path. It works **without a server**: no DSN means the reporter is off a
 `GET|POST /woodev/v1/error-reporting` (`manage_options`, body `{enabled: bool}`, answer
 `{enabled, available}`). It is rendered **only when `available`** (a DSN is configured): a checkbox
 that changes nothing is not offered. Flip that in `error-reporting-toggle.tsx` if the operator wants
-it always visible. Help text names what leaves the site and says no customer data and no address.
+it always visible. The help text lists exactly what is sent (D5) and says no message texts, no customer data, no address.
 
-## D2. Install exactly once, by the winning copy
+## D2. Install exactly once, by the winning copy, before plugin code
 
-`Framework_Resolver::load_plugins()` ends with `install_error_reporter()` — after the loop (the
-autoloader already points at the winner; every registered plugin is known) and before
-`woodev_plugins_loaded`. `Error_Reporter::install()` sets a static guard first, so any later call is
-a no-op. It always registers the consent route (otherwise the box could never be ticked); it hooks
-`set_exception_handler` and `register_shutdown_function` **only if `is_active()`** — a site that did
-not opt in keeps PHP's handlers untouched. Any failure is swallowed.
+`Framework_Resolver::load_plugins()` calls `install_error_reporter()` in the loop's first pass, right
+after the autoloader is registered against the winner and **before any plugin is invoked** — every
+registered plugin is already known, and an uncaught exception or fatal in a plugin's constructor or
+main-class include is still covered (round 1 installed after the loop and missed exactly that).
+`Error_Reporter::install()` sets a static guard first, so any later call is a no-op. It always
+registers the consent route and the cron callback (a withdrawn consent must still let the cron run
+clear the queue); it hooks `set_exception_handler` and `register_shutdown_function` **only if
+`is_active()`** — a site that did not opt in keeps PHP's handlers untouched. Failures are swallowed.
 
 ## D3. Scope: only OUR errors
 
@@ -40,58 +42,75 @@ not opt in keeps PHP's handlers untouched. Any failure is swallowed.
 `dirname` is a root; `plugin_id` and `plugin_version` come from the same definition. **No
 `/plugins/woodev-*/` pattern** — our plugins are not all so named (`woocommerce-edostavka`), and the
 framework is vendored inside each, so `<plugin>/vendor/woodev/…` is under the plugin root and counts
-as that plugin. An event is built only when ANY frame (throw site or caller) lies under a root; the
-innermost match owns it. A single-file plugin (root = the plugins dir itself) is refused as a root.
-A manual `capture( $e, $plugin_id )` attributes to that registered plugin even with a foreign stack.
+as that plugin. An event is built only when ANY frame of the **full** trace lies under a root (matching
+runs before the 50-frame cut); the innermost match owns it. `capture( $e, $plugin_id )` attributes to
+that registered plugin even with a foreign stack. **Limit:** a single-file plugin (its file sits in
+the plugins dir itself) is refused as a root — it would claim every neighbour — so its errors are dropped.
 
 ## D4. What is caught
 
 | Source | Mechanism |
 |---|---|
 | Fatal | shutdown + `error_get_last()`, types `E_ERROR E_PARSE E_CORE_ERROR E_COMPILE_ERROR E_RECOVERABLE_ERROR` |
-| Uncaught exception | `set_exception_handler`, **chained** to the previous handler; with none, `restore_exception_handler()` and rethrow so PHP's own fatal still happens |
-| Manual | `Error_Reporter::capture( Throwable, ?string $plugin_id ): bool` |
+| Uncaught exception | `set_exception_handler`, **chained** to the previous handler; with none the exception is **thrown again, without `restore_exception_handler()`** |
+| Manual | `Error_Reporter::capture( Throwable, ?string $plugin_id ): bool` — queued or not, never sent inline |
 
-No `set_error_handler` — warnings and notices are never touched. An «Uncaught …» fatal that our own
-handler already reported is skipped at shutdown. A fatal's stack text is parsed for file paths only,
-so the scope filter sees the whole stack.
+The rethrow is safe because PHP clears the user handler while it runs one: the new throw ends the request
+with PHP's own «Uncaught …» fatal and exit 255, handler called once (measured on 8.5.7; the round-1
+`restore_exception_handler()` made PHP call the handler again — stack exhaustion, even for foreign
+errors). A static re-entry guard stays as a belt. An «Uncaught» fatal at the same `file:line` as an
+exception our handler saw is not queued twice; a later handler that replaces ours is still caught
+through the shutdown fatal. No `set_error_handler` — warnings and notices are never touched.
 
-## D5. Anonymity
+## D5. Anonymity — no free text from an exception
 
-The event has **no** `request`, `user`, cookies or arguments (`getTrace()` is read without `args`).
-Site = first 16 hex of `sha256( 'woodev-error-reporter:v1:' . home_url )` as `server_name` and tag
-`site` — pseudonymous, not anonymous: the salt is public and a known address can be hashed to
-compare. Paths: under the plugins dir → `plugins/<dir>/…`, under ABSPATH → relative, else
-`[external]/<basename>`. Message and function names: site address and host → `[site]`, e-mails →
-`[email]`, paths relativised, 500 bytes max. Tags: `plugin`, `plugin_version`, `framework_version`,
-`wp_version`, `wc_version`, `php_version`, `site`; `release` = `<plugin_id>@<plugin_version>`.
-Filter `woodev_error_reporting_event` may edit the event or return `false` to drop it.
+**Operator decision (s150, r2): no exception message ever leaves the site.** Names, phones, addresses,
+SQL values and tokens cannot be scrubbed out of free text, so none is sent. The event carries: exception
+**class**, integer **code** (`mechanism.data.code`), throw-site `file:line`, and the call stack as
+relative paths plus class/function names (anonymous-class names cut at their NUL path; closure names
+reduced to `{closure}`; nothing but identifier characters kept). Fatals from `error_get_last()`: the
+engine's own message is sent as PHP wrote it (it names code, not data) with absolute paths relativised
+and 500 bytes max — **except «Uncaught …» fatals**, cut to `Uncaught <ExceptionClass>`; their textual
+stack is parsed back from the LAST `Stack trace:` marker (a fake marker inside a message cannot inject
+frames) for paths and function names only. No `request`, `user`, cookies or arguments. Site =
+first 16 hex of `sha256( 'woodev-error-reporter:v1:' . home_url )` as `server_name` and tag `site` —
+pseudonymous, not anonymous (public salt). Paths: `plugins/<dir>/…`, ABSPATH-relative, else
+`[external]/<basename>`. Tags: `plugin`, `plugin_version`, `framework_version`, `wp_version`,
+`wc_version`, `php_version`, `site`; `release` = `<plugin_id>@<plugin_version>`. Filter
+`woodev_error_reporting_event` may edit the event or return `false` to drop it (applied at enqueue).
 
-## D6. Rate limit and transport
+## D6. Deferred sending: queue, cron, lock, limits
 
-`Rate_Limiter`: signature = `sha1( type | throw-site file | line | md5( message ) )`; a signature is
-sent at most once per `woodev_error_reporting_dedupe_hours` (default 6, transient
-`woodev_er_sig_*`), and a site at most `woodev_error_reporting_daily_cap` (default 20, transient
-`woodev_er_day_YYYYMMDD`, UTC) per day. `Transport`: `wp_remote_post` to
-`<scheme>://<host>[:port][/prefix]/api/<project>/envelope/`, header `X-Sentry-Auth: Sentry
-sentry_version=7, sentry_client=woodev-error-reporter/1.0.0, sentry_key=<public key>`, content type
-`application/x-sentry-envelope`, body = envelope header, item header (`type`, byte `length`), event
-JSON, newline-delimited. `blocking=false`, timeout 3, no redirects; a failure is a silent `false`.
-A DSN secret is parsed away and never sent.
+The failing request only **enqueues** — no network, ever. `Event_Queue`: option
+`woodev_error_reporting_queue` (autoload **no**), at most 20 events, oldest dropped; an event whose
+signature is already pending is not stored again; one request queues at most 5. Enqueue schedules the
+single cron event `woodev_error_reporting_dispatch` (+60 s) if none waits. `Dispatcher::run()` (the cron
+callback): re-checks consent and DSN **now** (off → clears the queue), takes the lock row
+`woodev_error_reporting_lock` by an atomic `INSERT IGNORE` (stale after 300 s, taken over by
+compare-and-set), then for each event applies `Rate_Limiter` — signature `sha1( type | throw-site file |
+line | md5( engine message ) )`, once per `woodev_error_reporting_dedupe_hours` (default 6, transient
+`woodev_er_sig_*`), at most `woodev_error_reporting_daily_cap` per UTC day (default 20, transient
+`woodev_er_day_YYYYMMDD`) — and posts it. Dedupe + cap live only here, serialised by the lock. A failed
+post stops the batch; the whole batch leaves the queue (silent drop). Withdrawing consent also clears it.
+`Transport`: `wp_remote_post` to `<scheme>://<host>[:port][/prefix]/api/<project>/envelope/`, header
+`X-Sentry-Auth: Sentry sentry_version=7, sentry_client=woodev-error-reporter/1.0.0, sentry_key=<key>`,
+`application/x-sentry-envelope`, newline-delimited envelope; **blocking, timeout 3**, no redirects —
+legal because it only runs in cron (`blocking=false` does not make cURL asynchronous). A DSN secret is
+parsed away. Queue read-modify-write is not atomic: two simultaneous failures may lose one — accepted.
 
 ## Classes (`woodev/error-reporting/`, `Woodev\Framework\Error_Reporting`)
 
-`Error_Reporter` (install / capture / handlers) · `Consent` (option, DSN, state) · `Plugin_Scope` ·
-`Event_Builder` · `Rate_Limiter` · `Transport` · `Dsn` · `Consent_Rest_Controller` (via
-`Woodev_REST_V1_Registrar`). Hooks: `woodev_error_reporting_dsn`, `…_event`, `…_dedupe_hours`,
-`…_daily_cap`.
+`Error_Reporter` · `Consent` · `Plugin_Scope` · `Event_Builder` · `Event_Queue` · `Dispatcher` ·
+`Rate_Limiter` · `Transport` · `Dsn` · `Consent_Rest_Controller`. Hooks: `woodev_error_reporting_dsn`,
+`…_event`, `…_dedupe_hours`, `…_daily_cap`, cron `woodev_error_reporting_dispatch`.
 
 ## What is NOT done
 
-- **JS** (`window.onerror`, `woodev_pickup_error` and the explicit domain-event list) → #1081.
-- **The receiver**: GlitchTip on the VPS, the DSN itself, the retention policy → #1082. Until a DSN
-  is defined the checkbox is hidden and nothing is sent.
+- **JS** (`window.onerror`, `woodev_pickup_error`, the domain-event list) → #1081.
+- **The receiver**: GlitchTip on the VPS, the DSN, retention → #1082. Until a DSN is defined the
+  checkbox is hidden and nothing is queued or sent.
 - Previous exceptions in a chain, breadcrumbs, release health, source maps.
+- Not verified live: WP recovery mode (a drop-in that exits can pre-empt the shutdown handler), real ingest.
 
 ## Related
 

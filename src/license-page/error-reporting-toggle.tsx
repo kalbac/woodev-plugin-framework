@@ -70,7 +70,7 @@ export default function ErrorReportingToggle( { initialState }: ErrorReportingTo
 				<CheckboxControl
 					label={ __( 'Отправлять отчёты об ошибках', 'woodev-plugin-framework' ) }
 					help={ __(
-						'Если в плагине Woodev произойдёт сбой, мы получим версии плагина, WordPress, WooCommerce и PHP, текст ошибки и место в коде плагина. Данные покупателей не передаются, адрес сайта тоже — вместо него только обезличенный код.',
+						'Если в плагине Woodev произойдёт сбой, мы получим версии плагина, WordPress, WooCommerce и PHP, вид ошибки и место в коде плагина: файл, строку и названия функций. Тексты сообщений об ошибках, данные покупателей и адрес сайта не передаются — вместо адреса только обезличенный код.',
 						'woodev-plugin-framework'
 					) }
 					checked={ enabled }
