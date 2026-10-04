@@ -25,6 +25,7 @@
  * @var bool                                                        $is_exported       whether the order has been exported to the carrier
  * @var string                                                      $info_text         shown only when `$is_exported` is false
  * @var array<int, array{label: string, value: string, url: string|null, tone?:string}> $fields non-empty display fields, shown only when `$is_exported` is true
+ * @var bool                                                        $shipment_outdated whether the order changed after it was handed to the carrier (#947); the warning is shown only when `$is_exported` is true
  * @var string                                                      $history_html      pre-rendered delivery-history markup ('' when there is none to show)
  * @var array<int, array{action: string, label: string, title: string, destructive: bool, disabled?: bool}> $actions the row action set {@see \Woodev\Framework\Shipping\Admin\Orders\Order_Actions::for_row()} built for this order; a locked action carries `disabled` and the lock reason as its `title`
  * @var string                                                      $admin_post_action forward-only admin-post action the buttons post to
@@ -42,6 +43,12 @@ defined( 'ABSPATH' ) || exit;
 	<?php if ( ! $is_exported ) : ?>
 		<p><?php echo esc_html( $info_text ); ?></p>
 	<?php else : ?>
+
+		<?php if ( $shipment_outdated ) : ?>
+			<div class="notice notice-warning inline woodev-shipping-order-outdated">
+				<p><?php esc_html_e( 'Заказ изменён после передачи в службу доставки — данные в заявке могут не совпадать. Проверьте заявку в личном кабинете службы доставки.', 'woodev-plugin-framework' ); ?></p>
+			</div>
+		<?php endif; ?>
 
 		<?php if ( [] !== $fields ) : ?>
 			<table class="widefat striped">

@@ -41,6 +41,7 @@ use Woodev\Framework\Shipping\Admin\Orders\Order_Actions;
 use Woodev\Framework\Shipping\Admin\Orders\Order_Row_Builder;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
+use Woodev\Framework\Shipping\Admin\Orders\Shipment_Freshness;
 use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
 use Woodev\Framework\Shipping\Order\Delivery_Status;
 
@@ -64,6 +65,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 
 		/** @var string metabox id. */
 		const METABOX_ID = 'woodev_shipping_order';
+
+		/**
+		 * `add_meta_boxes` priority the metabox registers at (#947).
+		 *
+		 * The box sits in the sidebar's `high` band, directly under WooCommerce's «Order actions»
+		 * (`woocommerce-order-actions`, also `side`/`high`) — within one band the boxes keep their
+		 * REGISTRATION order. On the HPOS screen WC adds its boxes before it fires `add_meta_boxes`,
+		 * so any priority follows them; on the legacy `shop_order` screen WC adds them from its OWN
+		 * `add_meta_boxes` callback at priority 30, so ours has to be later or the box would land
+		 * ABOVE «Order actions». A merchant's saved drag order (`meta-box-order_*` user meta)
+		 * still overrides all of this, as it should.
+		 *
+		 * @var int
+		 */
+		const METABOX_HOOK_PRIORITY = 35;
 
 		/**
 		 * Transient key prefix a flashed action-refusal/failure notice is stored
@@ -191,14 +207,64 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 				},
 				$post_type,
 				'side',
-				'default'
+				'high'
 			);
+
+			if ( isset( $GLOBALS['wp_meta_boxes'][ $post_type ]['side']['high'] ) && is_array( $GLOBALS['wp_meta_boxes'][ $post_type ]['side']['high'] ) ) {
+				$GLOBALS['wp_meta_boxes'][ $post_type ]['side']['high'] = self::move_box_after(
+					$GLOBALS['wp_meta_boxes'][ $post_type ]['side']['high'],
+					self::METABOX_ID,
+					'woocommerce-order-actions'
+				);
+			}
 
 			// This is the exact point at which the metabox becomes real. The registry
 			// sources the already-built shared badge stylesheet from the active
 			// framework copy, so it never loads on an order-edit screen without ours.
 			$this->registry->enqueue_metabox_style();
 			$this->registry->enqueue_metabox_script();
+		}
+
+		/**
+		 * Moves one metabox so it sits immediately after another within a single band.
+		 *
+		 * WordPress renders the boxes of a band (`$wp_meta_boxes[ $screen ][ $context ][ $priority ]`)
+		 * in REGISTRATION order, and WooCommerce registers «Order actions», «Order attribution» and
+		 * «Customer history» as `side`/`high` BEFORE it fires `add_meta_boxes` (HPOS screen) — so no
+		 * hook priority can land a later `add_meta_box()` call directly under «Order actions».
+		 * On the legacy `shop_order` screen WC adds them from its own `add_meta_boxes` callback at
+		 * priority 30 (we run at {@see self::METABOX_HOOK_PRIORITY}), where the order is already right.
+		 * Reordering the registered band is the only way to the position.
+		 *
+		 * Pure array reorder: the relative order of every other box is kept, the input is returned
+		 * unchanged when either box is absent. A merchant's saved drag order (`meta-box-order_*` user
+		 * meta) is applied later by WP and still wins.
+		 *
+		 * @param array<string,mixed> $boxes  the band, keyed by metabox id
+		 * @param string              $moved   id of the box to move
+		 * @param string              $anchor  id of the box it must follow
+		 * @return array<string,mixed>
+		 */
+		private static function move_box_after( array $boxes, string $moved, string $anchor ): array {
+
+			if ( ! array_key_exists( $moved, $boxes ) || ! array_key_exists( $anchor, $boxes ) ) {
+				return $boxes;
+			}
+
+			$value = $boxes[ $moved ];
+			unset( $boxes[ $moved ] );
+
+			$result = [];
+
+			foreach ( $boxes as $id => $box ) {
+				$result[ $id ] = $box;
+
+				if ( (string) $id === $anchor ) {
+					$result[ $moved ] = $value;
+				}
+			}
+
+			return $result;
 		}
 
 		/**
@@ -222,6 +288,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 		 *              all come from {@see Order_Row_Builder}/{@see Order_Actions}
 		 *              instead of a plugin-supplied field map and a hardcoded
 		 *              export/track/cancel trio.
+		 * @since 2.0.2 Card #947: an exported order that changed after the export carries a
+		 *              warning ({@see Shipment_Freshness}).
 		 *
 		 * @param \WC_Order       $order    the order being displayed
 		 * @param Orders_Provider $provider the matched carrier
@@ -255,6 +323,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 			$history_html = $is_exported
 				? $this->resolve_history_html( $order, $provider, $row['tracking']['number'] ?? null )
 				: '';
+
+			// #947: only informs — there is no «send again» behind it.
+			$shipment_outdated = $is_exported && ( new Shipment_Freshness( $this->registry ) )->is_outdated( $order, $provider );
 
 			$admin_post_action = self::ADMIN_POST_ACTION;
 			$nonce_action      = self::ADMIN_POST_ACTION;

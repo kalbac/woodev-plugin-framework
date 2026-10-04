@@ -123,6 +123,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 	use Woodev\Framework\Shipping\Location\Popular_Settlement_Store;
 	use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
 	use Woodev\Framework\Shipping\Order\Shipment_Cancellation;
+		use Woodev\Framework\Shipping\Order\Shipment_Fingerprint;
 	use Woodev\Framework\Shipping\Order\Shipping_Order_Handler;
 	use Woodev\Tests\Unit\TestCase;
 
@@ -593,6 +594,111 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$this->assertTrue( $result->is_success() );
 			$this->assertSame( 'CARRIER-NEW', $this->carrier_ids[55] );
 			$this->assertArrayNotHasKey( self::META, $this->meta[55] ?? [] );
+		}
+
+		// ----- #947: the fingerprint is the request's, not the retry's -----
+
+		/**
+		 * The order as the merchant sees it now — the snapshot taken at a carrier request is a hash of it.
+		 *
+		 * @var string
+		 */
+		private string $order_state = 'A';
+
+		private function snapshot_of( string $state ): string {
+			return 'v1:' . hash( 'sha256', $state );
+		}
+
+		/**
+		 * Wires what the Orders_Registry does on the two framework-wide actions: a snapshot of the order's
+		 * CURRENT state at the request, the REAL promotion at the export.
+		 *
+		 * @return void
+		 */
+		private function wire_fingerprint_listeners(): void {
+			Actions\expectDone( 'woodev_shipping_order_export_requested' )->zeroOrMoreTimes()->whenHappen(
+				function ( \WC_Order $order ): void {
+					$order->update_meta_data( Shipment_Fingerprint::PENDING_META, $this->snapshot_of( $this->order_state ) );
+				}
+			);
+			Actions\expectDone( 'woodev_shipping_order_exported' )->zeroOrMoreTimes()->whenHappen(
+				function ( \WC_Order $order ): void {
+					Shipment_Fingerprint::promote( $order );
+				}
+			);
+		}
+
+		public function test_a_plain_export_stores_the_snapshot_of_the_request_and_consumes_the_pending_value(): void {
+			$this->wire_fingerprint_listeners();
+
+			$this->assertTrue( $this->handler( $this->api() )->export( $this->order() )->is_success() );
+
+			$this->assertSame( $this->snapshot_of( 'A' ), $this->meta[55][ Shipment_Fingerprint::META ] );
+			$this->assertArrayNotHasKey( Shipment_Fingerprint::PENDING_META, $this->meta[55] );
+		}
+
+		public function test_a_timeout_then_an_edit_then_a_found_shipment_stores_the_ORIGINAL_request_not_the_edited_order(): void {
+			$this->wire_fingerprint_listeners();
+			$this->expect_retries( 1 );
+
+			// The request goes out for state A and times out.
+			$first            = $this->handler( $this->api( new \Woodev_API_Transport_Exception( 'cURL error 28: timed out' ) ) );
+			$first->reconcile = true;
+			$this->assertFalse( $first->export( $this->order() )->is_success() );
+
+			$this->assertSame( $this->snapshot_of( 'A' ), $this->meta[55][ Shipment_Fingerprint::PENDING_META ], 'the unknown export keeps its request snapshot' );
+			$this->assertArrayNotHasKey( Shipment_Fingerprint::META, $this->meta[55] );
+
+			// The merchant edits the order; the delayed retry only RECONCILES — no new request.
+			$this->order_state = 'B';
+
+			$retry            = $this->handler( $this->api( null, 0 ) );
+			$retry->reconcile = true;
+			$retry->found     = 'CARRIER-FOUND';
+
+			$this->assertTrue( $retry->export( $this->order() )->is_success() );
+
+			$this->assertSame( $this->snapshot_of( 'A' ), $this->meta[55][ Shipment_Fingerprint::META ], 'what was SENT is stored' );
+			$this->assertNotSame( $this->snapshot_of( 'B' ), $this->meta[55][ Shipment_Fingerprint::META ], 'the retry-time order is never certified' );
+			$this->assertArrayNotHasKey( Shipment_Fingerprint::PENDING_META, $this->meta[55] );
+		}
+
+		public function test_a_reconciled_export_with_no_pending_snapshot_stores_nothing(): void {
+			$this->wire_fingerprint_listeners();
+
+			$this->meta[55][ self::META ] = 1000;
+
+			$handler            = $this->handler( $this->api( null, 0 ) );
+			$handler->reconcile = true;
+			$handler->found     = 'CARRIER-FOUND';
+
+			$this->assertTrue( $handler->export( $this->order() )->is_success() );
+
+			$this->assertArrayNotHasKey( Shipment_Fingerprint::META, $this->meta[55], 'freshness stays «unknown»' );
+			$this->assertArrayNotHasKey( Shipment_Fingerprint::PENDING_META, $this->meta[55] );
+		}
+
+		public function test_a_reconciliation_takes_no_new_snapshot(): void {
+			$this->meta[55][ self::META ] = 1000;
+
+			Actions\expectDone( 'woodev_shipping_order_export_requested' )->never();
+
+			$handler            = $this->handler( $this->api( null, 0 ) );
+			$handler->reconcile = true;
+			$handler->found     = 'CARRIER-FOUND';
+
+			$this->assertTrue( $handler->export( $this->order() )->is_success() );
+		}
+
+		public function test_a_refused_export_discards_its_snapshot(): void {
+			$this->wire_fingerprint_listeners();
+			$this->expect_retries( 0 );
+
+			$result = $this->handler( $this->api( new \Woodev_API_Exception( 'Неверный индекс получателя' ) ) )->export( $this->order() );
+
+			$this->assertFalse( $result->is_success() );
+			$this->assertArrayNotHasKey( Shipment_Fingerprint::PENDING_META, $this->meta[55] ?? [], 'the carrier said no: no shipment, no snapshot' );
+			$this->assertArrayNotHasKey( Shipment_Fingerprint::META, $this->meta[55] ?? [] );
 		}
 
 		// ----- #1037: a new export ends the cancellation -----

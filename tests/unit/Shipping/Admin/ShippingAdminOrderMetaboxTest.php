@@ -210,6 +210,137 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$this->assertSame( 'Информация СДЭК', $captured_title );
 		}
 
+		/**
+		 * #947: the box sits in the sidebar's `high` band, right under WooCommerce's «Order actions»
+		 * (`side`/`high`) instead of at the bottom of the `default` band.
+		 */
+		public function test_add_meta_box_registers_in_the_side_high_band_under_order_actions(): void {
+			$registry = Mockery::mock( Orders_Registry::class );
+			$registry->shouldReceive( 'resolve_provider_for_order' )->once()->andReturn( $this->provider() );
+			$registry->shouldReceive( 'enqueue_metabox_style' )->once();
+			$registry->shouldReceive( 'enqueue_metabox_script' )->once();
+
+			$captured = [];
+			Functions\when( 'add_meta_box' )->alias(
+				static function ( $id, $title, $callback, $screen, $context, $priority ) use ( &$captured ) {
+					$captured = [ $id, $screen, $context, $priority ];
+				}
+			);
+
+			( new Shipping_Admin_Order( $registry ) )->add_meta_box( 'shop_order', $this->make_order() );
+
+			$this->assertSame( [ 'woodev_shipping_order', 'shop_order', 'side', 'high' ], $captured );
+			// WC's legacy `add_meta_boxes` callback adds «Order actions» at priority 30 — ours must be later.
+			$this->assertGreaterThan( 30, Shipping_Admin_Order::METABOX_HOOK_PRIORITY );
+		}
+
+		/**
+		 * @param array<string,mixed> $boxes
+		 * @return array<string,mixed>
+		 */
+		private function move_box_after( array $boxes, string $moved, string $anchor ): array {
+			$method = new \ReflectionMethod( Shipping_Admin_Order::class, 'move_box_after' );
+
+			// The framework supports PHP 7.4, where a private method is only invocable once made accessible.
+			if ( PHP_VERSION_ID < 80100 ) {
+				$method->setAccessible( true );
+			}
+
+			return $method->invoke( null, $boxes, $moved, $anchor );
+		}
+
+		/**
+		 * #947: WC registers «Order actions», «Order attribution» and «Customer history» as side/high
+		 * before `add_meta_boxes` fires, so our box lands behind them — it must be moved right under
+		 * «Order actions», the others keeping their relative order.
+		 */
+		public function test_move_box_after_places_the_box_directly_under_the_anchor_and_keeps_the_rest_in_order(): void {
+			$boxes = [
+				'woocommerce-order-actions'     => [ 'a' ],
+				'woocommerce-order-source-data' => [ 'b' ],
+				'woocommerce-customer-history'  => [ 'c' ],
+				'woodev_shipping_order'         => [ 'ours' ],
+				'woocommerce-order-notes'       => [ 'n' ],
+			];
+
+			$result = $this->move_box_after( $boxes, 'woodev_shipping_order', 'woocommerce-order-actions' );
+
+			$this->assertSame(
+				[
+					'woocommerce-order-actions',
+					'woodev_shipping_order',
+					'woocommerce-order-source-data',
+					'woocommerce-customer-history',
+					'woocommerce-order-notes',
+				],
+				array_keys( $result )
+			);
+			$this->assertSame( [ 'ours' ], $result['woodev_shipping_order'] );
+		}
+
+		public function test_move_box_after_leaves_the_band_alone_when_order_actions_is_absent(): void {
+			$boxes = [
+				'woocommerce-customer-history' => [ 'c' ],
+				'woodev_shipping_order'        => [ 'ours' ],
+			];
+
+			$this->assertSame( $boxes, $this->move_box_after( $boxes, 'woodev_shipping_order', 'woocommerce-order-actions' ) );
+		}
+
+		public function test_move_box_after_leaves_the_band_alone_when_our_box_is_absent(): void {
+			$boxes = [
+				'woocommerce-order-actions'    => [ 'a' ],
+				'woocommerce-customer-history' => [ 'c' ],
+			];
+
+			$this->assertSame( $boxes, $this->move_box_after( $boxes, 'woodev_shipping_order', 'woocommerce-order-actions' ) );
+		}
+
+		public function test_move_box_after_is_a_noop_when_already_directly_under_the_anchor(): void {
+			$boxes = [
+				'woocommerce-order-actions'    => [ 'a' ],
+				'woodev_shipping_order'        => [ 'ours' ],
+				'woocommerce-customer-history' => [ 'c' ],
+			];
+
+			$this->assertSame( $boxes, $this->move_box_after( $boxes, 'woodev_shipping_order', 'woocommerce-order-actions' ) );
+		}
+
+		public function test_add_meta_box_reorders_the_registered_side_high_band_under_order_actions(): void {
+			$registry = Mockery::mock( Orders_Registry::class );
+			$registry->shouldReceive( 'resolve_provider_for_order' )->once()->andReturn( $this->provider() );
+			$registry->shouldReceive( 'enqueue_metabox_style' )->once();
+			$registry->shouldReceive( 'enqueue_metabox_script' )->once();
+
+			$previous = $GLOBALS['wp_meta_boxes'] ?? null;
+
+			// Stand-in for WP: the real add_meta_box() appends to the band, behind WC's three.
+			$GLOBALS['wp_meta_boxes']['shop_order']['side']['high'] = [
+				'woocommerce-order-actions'    => [ 'a' ],
+				'woocommerce-customer-history' => [ 'c' ],
+			];
+			Functions\when( 'add_meta_box' )->alias(
+				static function ( $id, $title, $callback, $screen, $context, $priority ) {
+					$GLOBALS['wp_meta_boxes'][ $screen ][ $context ][ $priority ][ $id ] = [ 'ours' ];
+				}
+			);
+
+			try {
+				( new Shipping_Admin_Order( $registry ) )->add_meta_box( 'shop_order', $this->make_order() );
+
+				$this->assertSame(
+					[ 'woocommerce-order-actions', 'woodev_shipping_order', 'woocommerce-customer-history' ],
+					array_keys( $GLOBALS['wp_meta_boxes']['shop_order']['side']['high'] )
+				);
+			} finally {
+				if ( null === $previous ) {
+					unset( $GLOBALS['wp_meta_boxes'] );
+				} else {
+					$GLOBALS['wp_meta_boxes'] = $previous;
+				}
+			}
+		}
+
 		// -----------------------------------------------------------------------
 		// render_metabox() — two states on the SAME is_exported, KISS field list.
 		// -----------------------------------------------------------------------
@@ -248,6 +379,108 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$this->assertStringNotContainsString( 'Трек-номер', $html, 'a field the carrier did not supply must be absent entirely' );
 			$this->assertStringNotContainsString( 'История доставки', $html, 'no tracking number must quietly omit the history section' );
 			$this->assertStringNotContainsString( '&ndash;', $html, 'KISS: an absent field is omitted, never rendered as a dash' );
+		}
+
+		/**
+		 * The getters the shipment fingerprint reads (#947), on top of what {@see self::make_order()} gives.
+		 *
+		 * @param array<string,mixed> $overrides getter name => value
+		 * @return array<string,mixed>
+		 */
+		private function fingerprint_getters( array $overrides = [] ): array {
+			return array_merge(
+				[
+					'get_items'               => [],
+					'get_total'               => '1300.00',
+					'get_shipping_first_name' => 'Иван',
+					'get_shipping_last_name'  => 'Иванов',
+					'get_billing_first_name'  => 'Иван',
+					'get_billing_last_name'   => 'Иванов',
+					'get_shipping_phone'      => '+79991234567',
+					'get_shipping_country'    => 'RU',
+					'get_shipping_address_2'  => '',
+					'get_billing_country'     => 'RU',
+					'get_billing_address_2'   => '',
+					'get_shipping_city'       => 'Москва',
+					'get_shipping_address_1'  => 'ул. Тверская, 1',
+					'get_shipping_postcode'   => '101000',
+				],
+				$overrides
+			);
+		}
+
+		/** @return string the Russian warning of #947 */
+		private function outdated_warning(): string {
+			return 'Заказ изменён после передачи в службу доставки';
+		}
+
+		public function test_render_metabox_warns_when_the_order_changed_after_the_export(): void {
+			Functions\when( 'wc_get_price_decimals' )->justReturn( 2 );
+			Functions\when( 'wp_json_encode' )->alias( static fn( $data, int $flags = 0 ) => json_encode( $data, $flags ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- test double.
+
+			$provider = $this->provider();
+
+			$this->meta = [
+				'_wc_cdek_order_id'                              => 'CDEK-999',
+				\Woodev\Framework\Shipping\Order\Shipment_Fingerprint::META => \Woodev\Framework\Shipping\Order\Shipment_Fingerprint::for_order( $this->make_order( $this->fingerprint_getters() ) ),
+			];
+
+			ob_start();
+			( new Shipping_Admin_Order( Orders_Registry::instance() ) )->render_metabox( $this->make_order( $this->fingerprint_getters( [ 'get_shipping_city' => 'Тверь' ] ) ), $provider );
+			$html = ob_get_clean();
+
+			$this->assertStringContainsString( $this->outdated_warning(), $html );
+			$this->assertStringContainsString( 'notice-warning', $html, 'the warning reuses the admin notice styling' );
+			$this->assertStringNotContainsString( 'data-woodev-order-action="export"', $html, 'a warning, not a «send again» button' );
+		}
+
+		public function test_render_metabox_does_not_warn_when_the_order_is_as_it_was_exported(): void {
+			Functions\when( 'wc_get_price_decimals' )->justReturn( 2 );
+			Functions\when( 'wp_json_encode' )->alias( static fn( $data, int $flags = 0 ) => json_encode( $data, $flags ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- test double.
+
+			$provider = $this->provider();
+
+			$this->meta = [
+				'_wc_cdek_order_id'                              => 'CDEK-999',
+				\Woodev\Framework\Shipping\Order\Shipment_Fingerprint::META => \Woodev\Framework\Shipping\Order\Shipment_Fingerprint::for_order( $this->make_order( $this->fingerprint_getters() ) ),
+			];
+
+			ob_start();
+			( new Shipping_Admin_Order( Orders_Registry::instance() ) )->render_metabox( $this->make_order( $this->fingerprint_getters() ), $provider );
+			$html = ob_get_clean();
+
+			$this->assertStringContainsString( 'CDEK-999', $html );
+			$this->assertStringNotContainsString( $this->outdated_warning(), $html );
+		}
+
+		public function test_render_metabox_stays_quiet_for_an_order_with_no_fingerprint_or_one_of_another_version(): void {
+			$provider = $this->provider();
+
+			foreach ( [ null, 'v0:' . str_repeat( 'a', 64 ) ] as $stored ) {
+				$this->meta = [ '_wc_cdek_order_id' => 'CDEK-999' ];
+
+				if ( null !== $stored ) {
+					$this->meta[ \Woodev\Framework\Shipping\Order\Shipment_Fingerprint::META ] = $stored;
+				}
+
+				ob_start();
+				( new Shipping_Admin_Order( Orders_Registry::instance() ) )->render_metabox( $this->make_order(), $provider );
+				$html = ob_get_clean();
+
+				$this->assertStringNotContainsString( $this->outdated_warning(), $html, 'nothing to compare with is «unknown», never «changed»' );
+			}
+		}
+
+		public function test_render_metabox_never_warns_about_an_order_that_is_not_exported(): void {
+			$provider = $this->provider();
+
+			$this->meta = [ \Woodev\Framework\Shipping\Order\Shipment_Fingerprint::META => 'v1:' . str_repeat( 'a', 64 ) ];
+
+			ob_start();
+			( new Shipping_Admin_Order( Orders_Registry::instance() ) )->render_metabox( $this->make_order(), $provider );
+			$html = ob_get_clean();
+
+			$this->assertStringNotContainsString( $this->outdated_warning(), $html );
 		}
 
 		public function test_render_metabox_disables_the_button_of_an_order_another_manager_is_editing(): void {

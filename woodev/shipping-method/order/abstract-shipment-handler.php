@@ -281,6 +281,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 				}
 			}
 
+			/**
+			 * Fires just before the create call to the carrier, framework-wide.
+			 *
+			 * The request is about to be built from `$order`: the framework takes the
+			 * order's pending fingerprint here (#947), so what a later successful export — or
+			 * the reconciliation of a timed-out one — certifies is the order as it was SENT.
+			 * Not fired when a timed-out export is reconciled without a new request.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param \WC_Order $order the order the request is built from
+			 */
+			do_action( 'woodev_shipping_order_export_requested', $order );
+
 			try {
 				$response = $this->api->create_order( $order );
 			} catch ( \Woodev_API_Exception $exception ) {
@@ -384,6 +398,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 
 			if ( $transport_failure ) {
 				$this->mark_export_unknown( $fresh );
+			} else {
+				// A refusal created nothing: its snapshot describes no shipment (#947).
+				Shipment_Fingerprint::discard_pending( $order );
 			}
 
 			// A transport failure of a carrier that can reconcile, or a 429 (nothing was created), is worth another attempt.
@@ -739,6 +756,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 *              the carrier's text, a missing stored id carries none.
 		 * @since 2.0.2 Card #1037: records {@see Shipment_Cancellation::CANCELLED_AT_META} on success,
 		 *              so the delivery status reads «Отменено».
+		 * @since 2.0.2 Card #947: also removes {@see Shipment_Fingerprint::META} on success.
 		 *
 		 * @param \WC_Order $order the order whose shipment to cancel
 		 * @return Action_Result success when the carrier accepted the cancellation, a failure otherwise
@@ -775,6 +793,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 
 			$this->order_handler->set( $order, static::CARRIER_ORDER_ID_FIELD, '' );
 			Shipment_Cancellation::mark( $order );
+			// #947: with no live shipment there is nothing for the order to be out of date against.
+			Shipment_Fingerprint::clear( $order, $order );
 
 			/**
 			 * Fires after a shipment is successfully cancelled with the carrier.

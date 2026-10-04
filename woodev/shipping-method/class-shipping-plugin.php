@@ -250,6 +250,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/order/class-export-retry.php';
 			require_once $path . '/order/class-carrier-cancel.php';
 			require_once $path . '/order/class-shipment-cancellation.php';
+			require_once $path . '/order/class-shipment-fingerprint.php';
 			require_once $path . '/order/class-export-queue.php';
 			require_once $path . '/order/class-order-automation.php';
 			require_once $path . '/order/class-carrier-order-line.php';
@@ -275,6 +276,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			// inert until a carrier plugin calls register_provider().
 			require_once $path . '/admin/orders/class-orders-provider.php';
 			require_once $path . '/admin/orders/class-orders-registry.php';
+			require_once $path . '/admin/orders/class-shipment-freshness.php';
 			require_once $path . '/admin/orders/class-export-queue-notice.php';
 			// The carrier marker contract (#967): loaded with the registry it reads providers from.
 			require_once $path . '/order/class-order-marker.php';
