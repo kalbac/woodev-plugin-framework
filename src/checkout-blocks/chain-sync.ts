@@ -66,6 +66,8 @@ interface Job {
 	generation: number;
 	intent: Intent;
 	settle: Settle;
+	/** The select was accepted and its caller applied it to the native address. */
+	applied: boolean;
 }
 
 const wait = ( ms: number ): Promise< void > => new Promise( ( resolve ) => window.setTimeout( resolve, ms ) );
@@ -96,7 +98,7 @@ export class ChainSync {
 		const generation = ++this.generation;
 
 		this.waiting?.settle( { status: 'superseded' } );
-		this.waiting = { generation, intent, settle };
+		this.waiting = { generation, intent, settle, applied: false };
 
 		if ( ! this.draining ) {
 			this.draining = true;
@@ -113,7 +115,10 @@ export class ChainSync {
 	 * there was one.
 	 */
 	public abandon(): boolean {
-		if ( this.flying?.intent.kind !== 'select' && this.waiting?.intent.kind !== 'select' ) {
+		if (
+			( this.flying?.intent.kind !== 'select' || this.flying.applied ) &&
+			this.waiting?.intent.kind !== 'select'
+		) {
 			return false;
 		}
 
@@ -172,7 +177,10 @@ export class ChainSync {
 			this.residue = false;
 
 			// The caller writes the native address here, synchronously with the freshness check above.
-			if ( job.settle( { status: 'applied' } ) === true && this.isCurrent( job ) ) {
+			const refresh = job.settle( { status: 'applied' } ) === true;
+			job.applied = true;
+
+			if ( refresh && this.isCurrent( job ) ) {
 				await this.effects.refresh();
 			}
 
