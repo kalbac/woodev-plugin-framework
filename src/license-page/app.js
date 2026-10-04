@@ -13,16 +13,18 @@
 import { createElement, Fragment } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import LicenseCard from './license-card';
+import ErrorReportingToggle from './error-reporting-toggle';
 
 /**
  * App — renders the intro paragraph and the card grid.
  *
- * @param {Object}   props         Component props.
- * @param {Array}    props.plugins Array of get_state() objects from window.woodevLicenses.plugins.
+ * @param {Object}   props                Component props.
+ * @param {Array}    props.plugins        Array of get_state() objects from window.woodevLicenses.plugins.
+ * @param {Object}   props.errorReporting Site-wide error-reporting consent state (window.woodevLicenses.errorReporting).
  *
  * @return {WPElement} Rendered component.
  */
-export default function App( { plugins } ) {
+export default function App( { plugins, errorReporting } ) {
 	return (
 		<Fragment>
 			<div className="woodev-licenses-intro" role="note">
@@ -51,6 +53,8 @@ export default function App( { plugins } ) {
 					/>
 				) ) }
 			</div>
+
+			<ErrorReportingToggle initialState={ errorReporting } />
 		</Fragment>
 	);
 }
