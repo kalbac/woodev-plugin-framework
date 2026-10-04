@@ -253,6 +253,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 				require_once $path . '/checkout/blocks/class-locality-blocks-integration.php';
 			}
 
+			// SP-11 C-2b (#1089): which checkout surface a page renders (asked by the field layer and
+			// the pickup mount alike), and the Checkout Blocks pickup-point button — its integration
+			// is gated on WooCommerce Blocks' interface the same way.
+			require_once $path . '/checkout/blocks/class-checkout-surface.php';
+			require_once $path . '/checkout/blocks/class-pickup-blocks.php';
+			if ( interface_exists( '\\Automattic\\WooCommerce\\Blocks\\Integrations\\IntegrationInterface' ) ) {
+				require_once $path . '/checkout/blocks/class-pickup-blocks-integration.php';
+			}
+
 			// order meta handler + abstract shipment/tracking/webhook handlers
 			require_once $path . '/order/class-shipping-order-handler.php';
 			require_once $path . '/order/class-action-result.php';

@@ -105,3 +105,25 @@
 		cursor: pointer;
 	}
 }
+
+/**
+ * Checkout Blocks pickup-point button (SP-11 C-2b, #1089).
+ *
+ * The trigger's accent and the chosen-address line are `pickup.css`'s — the very rules the classic
+ * checkout uses; only the block's own spacing and its error line live here.
+ */
+
+.woodev-pickup-block {
+	margin: 1em 0 0;
+
+	&__chosen {
+		margin: 0.6em 0 0;
+		font-size: 0.875em;
+	}
+
+	&__error {
+		margin: 0.4em 0 0;
+		color: #cc1818;
+		font-size: 0.8125em;
+	}
+}

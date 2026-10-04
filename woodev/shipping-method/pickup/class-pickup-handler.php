@@ -1881,11 +1881,60 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 						'locality' => $prepared['locality'],
 						'rate_id' => $prepared['rate_id'],
 						'address_key' => $prepared['address_key'],
+						// The destination fields this confirmation moved to the point's address, if any.
+						'destination' => (array) ( $prepared['destination'] ?? [] ),
 						'summary' => $data['short_address'],
 						'selection' => $prepared['result'],
 					]
 				);
 			}
+		}
+
+		/**
+		 * The destination fields an allowed Store API selection replaces with the point's own
+		 * (SP-11 C-2b, #1089) — the store's `pickup_replace_address` policy, which the classic
+		 * checkout applies in the browser (`pickup-mount.js`: `applyAddressReplacement()`).
+		 *
+		 * Only the STREET LINE and the POSTCODE, and only values the point actually has: a
+		 * point without a postcode must not blank a required field of the native address.
+		 * The city is never replaced here. On the block checkout it is the customer's own
+		 * confirmed locality — the Location layer treats a record the native city no longer
+		 * names as stale ({@see \Woodev\Framework\Shipping\Location\Location_Service}, rule (c)),
+		 * and the selection scope addresses the remembered point by it — so the point's own
+		 * spelling there would drop the very confirmation it belongs to. The classic checkout
+		 * holds the city back under the same guard (issue #961).
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string, mixed> $prepared Server-prepared selection ({@see self::prepare_store_api_selection()}).
+		 *
+		 * @return array<string, string> `address_1` and/or `postcode`; empty when the policy is off.
+		 */
+		public function store_api_replacement_address( array $prepared ): array {
+			if ( ! $prepared['result']['allowed'] || ! $this->replaces_address() ) {
+				return [];
+			}
+
+			return array_filter(
+				[
+					'address_1' => trim( $prepared['point']->get_address() ),
+					'postcode'  => trim( $prepared['point']->get_postal_code() ),
+				],
+				static fn( string $value ): bool => '' !== $value
+			);
+		}
+
+		/**
+		 * The store's `pickup_replace_address` setting. `protected` as a test seam.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		protected function replaces_address(): bool {
+			return (bool) Pickup_Map_Settings::current()->get_value( 'pickup_replace_address' );
 		}
 
 		/**
@@ -1979,6 +2028,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 */
 		public function owns_store_api_rate( string $rate_id ): bool {
 			return null !== $this->selection_pair_for_method( explode( ':', $rate_id )[0] );
+		}
+
+		/**
+		 * What the Checkout block's pickup button needs to find this field (SP-11 C-2b, #1089): the
+		 * two keys the Store API transport addresses it by, and the name of the JS global
+		 * {@see self::enqueue_assets()} localizes its picker config under.
+		 *
+		 * `pluginId` here is {@see self::$plugin_id} — the transport key — and deliberately NOT the
+		 * picker config's own `pluginId`, which names the plugin for the error reporter and may
+		 * differ ({@see self::error_reporting_plugin_id()}).
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array{pluginId: string, fieldId: string, configKey: string}
+		 */
+		public function blocks_descriptor(): array {
+			return [
+				'pluginId'  => $this->plugin_id,
+				'fieldId'   => $this->field_id,
+				'configKey' => 'woodev_pickup_config_' . $this->config_object_suffix(),
+			];
 		}
 
 		/**
@@ -2181,6 +2253,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			}
 
 			Store_Api_Pickup::add_handler( $this, $this->plugin_id, $this->field_id );
+
+			// SP-11 C-2b (#1089): the Checkout block's pickup button. Fleet-wide and idempotent — one
+			// integration publishes every handler's field (Pickup_Blocks' own docblock).
+			\Woodev\Framework\Shipping\Checkout\Blocks\Pickup_Blocks::add_handler( $this, $this->plugin_id, $this->field_id );
 
 			add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_assets' ] );
 			add_action( 'rest_api_init', [ $this, 'register_rest' ] );
@@ -2438,6 +2514,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * dependencies here rather than relying on enqueue ORDER (WP does not guarantee
 		 * source order matches enqueue-call order; only the `deps` array does).
 		 *
+		 * TWO SURFACES, ONE SESSION (SP-11 C-2b, #1089): the picker session itself is
+		 * `pickup-session.js`, shared by both checkouts. The classic checkout gets the mount on
+		 * top of it, with the config localized onto the mount as before. A page that renders only
+		 * the Checkout block ({@see \Woodev\Framework\Shipping\Checkout\Blocks\Checkout_Surface})
+		 * gets the session WITHOUT the mount — there is no slot for it to fill, and its button is
+		 * a React inner block — with the same config, under the same global name, localized onto
+		 * the session script.
+		 *
 		 * @internal
 		 *
 		 * @since 2.0.2
@@ -2445,7 +2529,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * @return void
 		 */
 		public function enqueue_assets(): void {
-			if ( ! function_exists( 'is_checkout' ) || ! is_checkout() ) {
+			// WooCommerce's `is_checkout()` answers for the store's configured checkout page and for a
+			// classic form — NOT for another page that carries the Checkout block (WC 11.1:
+			// `CartCheckoutUtils::is_page_type()` looks for the shortcode and the classic-shortcode
+			// block only). The block renders its pickup button there all the same, and without the
+			// session and the config the button has nothing to open (#1089).
+			$block_only = \Woodev\Framework\Shipping\Checkout\Blocks\Checkout_Surface::is_block_only();
+
+			if ( ! $block_only && ( ! function_exists( 'is_checkout' ) || ! is_checkout() ) ) {
 				return;
 			}
 
@@ -2464,6 +2555,37 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				[ 'woodev-pickup-geo' ]
 			);
 
+			// SP-11 C-2b (#1089): the picker session itself — the modal shell, the provider, the panels
+			// and the fetch orchestration — is surface-neutral and shared by both checkouts.
+			$session_enqueued = $this->enqueue_script_if_built(
+				'woodev-pickup-session',
+				'js/frontend/pickup-session.js',
+				[
+					'woodev-modal',
+					'woodev-pickup-datasource',
+					'woodev-pickup-geo',
+					'woodev-pickup-panels',
+					$provider_handle,
+				]
+			);
+
+			// A page that renders ONLY the Checkout block has no slot for the classic mount to fill:
+			// its button is a React inner block (Checkout\Blocks\Pickup_Blocks) that opens the same
+			// session. It reads the same config, so the config rides on the session script there.
+			if ( $block_only ) {
+				$this->enqueue_style_if_built( 'woodev-pickup-styles', 'css/frontend/pickup.css', [ 'woodev-modal' ] );
+
+				if ( $session_enqueued ) {
+					wp_localize_script(
+						'woodev-pickup-session',
+						'woodev_pickup_config_' . $this->config_object_suffix(),
+						$this->get_js_config()
+					);
+				}
+
+				return;
+			}
+
 			// `jquery`: the mount script binds `updated_checkout` through jQuery when it is
 			// present (see pickup-mount.js's own docblock) — declared explicitly here rather
 			// than free-riding on `checkout-field-classic.js` happening to also require it.
@@ -2477,6 +2599,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 					'woodev-pickup-geo',
 					'woodev-pickup-panels',
 					$provider_handle,
+					'woodev-pickup-session',
 				]
 			);
 
@@ -2678,6 +2801,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * @since 2.0.2
 		 * @since 2.0.2 Bridges the WC context itself before the session fallback, instead of
 		 *              depending on a caller having already done so (issue #174).
+		 * @since 2.0.2 A gateway the request itself declares, when it is one the store offers
+		 *              right now, is read before the session ({@see self::declared_payment_method()},
+		 *              SP-11 C-2b #1089).
 		 *
 		 * @return string sanitized payment method id, or empty string when neither source
 		 *                has one.
@@ -2693,9 +2819,65 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 
 			$this->bridge_wc_context();
 
+			$declared = $this->declared_payment_method();
+
+			if ( '' !== $declared ) {
+				return $declared;
+			}
+
 			$chosen = $this->wc_session_chosen_payment_method();
 
 			return is_scalar( $chosen ) ? wc_clean( (string) $chosen ) : '';
+		}
+
+		/**
+		 * The gateway a points/detail request DECLARES in its own query string
+		 * (`?payment_method=`), or `''` — the block checkout's live choice (SP-11 C-2b, #1089).
+		 *
+		 * The block checkout keeps the chosen gateway in the browser: WooCommerce writes
+		 * `chosen_payment_method` into the session only when the order is placed, so the
+		 * session {@see self::rest_payment_method()} falls back to can still hold the gateway
+		 * of an EARLIER checkout. A stale cash-on-delivery there marks every point that takes
+		 * no cash as not selectable, and the picker then offers no way to confirm it — although
+		 * the confirmation itself ({@see Store_Api_Pickup::update()}) is sent with the live
+		 * gateway and would pass.
+		 *
+		 * VERIFIED, never trusted: the value counts only when it names a gateway the store
+		 * offers right now ({@see self::payment_gateway_available()}) — the same check the
+		 * confirmation makes on the same client-declared value. Anything else is ignored and
+		 * the session answers, as before. The verdict this feeds is advisory either way: the
+		 * confirmation and the pre-payment validation re-check the point against the gateway
+		 * of the request and of the order.
+		 *
+		 * The classic checkout never sends the parameter (`pickup-mount.js`:
+		 * `getRequestContext()` answers `null`), so its requests are read exactly as before.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		protected function declared_payment_method(): string {
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- a public read route; the value is only matched against the live gateway registry.
+			$declared = $_GET['payment_method'] ?? '';
+			$declared = is_scalar( $declared ) ? substr( wc_clean( (string) wp_unslash( $declared ) ), 0, 128 ) : '';
+
+			return '' !== $declared && $this->payment_gateway_available( $declared ) ? $declared : '';
+		}
+
+		/**
+		 * Whether `$gateway_id` is a payment gateway the store offers for the current cart.
+		 *
+		 * `protected` as a test seam, for the reason {@see self::wc_session_chosen_payment_method()}
+		 * documents: `WC()` itself is never mocked.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $gateway_id Gateway id.
+		 *
+		 * @return bool
+		 */
+		protected function payment_gateway_available( string $gateway_id ): bool {
+			return function_exists( 'WC' ) && isset( WC()->payment_gateways()->get_available_payment_gateways()[ $gateway_id ] );
 		}
 
 		/**

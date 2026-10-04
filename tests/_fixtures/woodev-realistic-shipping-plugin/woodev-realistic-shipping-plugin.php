@@ -64,6 +64,9 @@ function woodev_realistic_shipping_plugin_init(): void {
 	// Card #734: this carrier's OWN pickup point source — see that file's header for why a
 	// second fixture carrier exists and why its Краснодар entry holds exactly one point.
 	require_once $plugin_path . '/includes/class-realistic-point-source.php';
+	// #1089: this carrier's pickup-selection scope — what lets the Store API transport, and so
+	// the Checkout block's pickup button, claim this carrier's pickup rate.
+	require_once $plugin_path . '/includes/class-realistic-selection-scope.php';
 	// Rig-only demo orders. Declaring the class costs nothing; `maybe_seed()` is a
 	// no-op unless WOODEV_TEST_SEED_ORDERS_DEMO is truthy AND this version of the
 	// demo set has not been seeded yet — see that file's own docblock.

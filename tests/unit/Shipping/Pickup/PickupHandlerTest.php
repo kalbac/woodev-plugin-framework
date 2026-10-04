@@ -63,6 +63,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 	use Woodev\Framework\Shipping\Location\Location_Service;
 	use Woodev\Framework\Shipping\Map\Map_Provider;
 	use Woodev\Framework\Shipping\Order\Shipping_Order_Handler;
+	use Woodev\Framework\Shipping\Pickup\Constraint_Checker;
 	use Woodev\Framework\Shipping\Pickup\Pickup_Handler;
 	use Woodev\Framework\Shipping\Pickup\Pickup_Map_Settings;
 	use Woodev\Framework\Shipping\Pickup\Pickup_Point;
@@ -707,6 +708,9 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		/** @var mixed */
 		private $session_value;
 
+		/** @var string[] the gateways payment_gateway_available() answers true for (#1089). */
+		public array $available_gateways = [];
+
 		/**
 		 * @param mixed $session_value what wc_session_chosen_payment_method() returns.
 		 */
@@ -724,6 +728,10 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 
 		protected function wc_session_chosen_payment_method() {
 			return $this->session_value;
+		}
+
+		protected function payment_gateway_available( string $gateway_id ): bool {
+			return in_array( $gateway_id, $this->available_gateways, true );
 		}
 	}
 
@@ -4903,6 +4911,93 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		}
 
 		/**
+		 * SP-11 C-2b (#1089), the critic's repro: the session still says «cod» from an earlier
+		 * checkout, the block checkout's live gateway is prepaid. The points/detail request
+		 * declares the live gateway, and a point that takes no cash must come back selectable —
+		 * otherwise the picker disables the only control that could confirm it.
+		 */
+		public function test_a_declared_available_gateway_beats_a_stale_session_cod(): void {
+			$_POST = [];
+			$_GET  = [ 'payment_method' => 'bacs' ];
+
+			$handler = new Pickup_Handler_Session_Probe(
+				'p',
+				'f',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				'cod'
+			);
+			$handler->available_gateways = [ 'bacs', 'cod' ];
+			$no_cash                     = $this->point( [ 'accepts_cod' => false ] );
+
+			try {
+				$this->assertSame( 'bacs', $handler->rest_payment_method() );
+				$this->assertTrue( ( new Constraint_Checker() )->check( $no_cash, $handler->rest_payment_method(), 0 )['allowed'] );
+
+				// The stale session alone is what made the point unconfirmable.
+				$_GET = [];
+				$this->assertSame( 'cod', $handler->rest_payment_method() );
+				$this->assertFalse( ( new Constraint_Checker() )->check( $no_cash, $handler->rest_payment_method(), 0 )['allowed'] );
+			} finally {
+				$_GET = [];
+			}
+		}
+
+		/**
+		 * The declared value is VERIFIED, never trusted: a gateway the store does not offer
+		 * (or a registration slug that is no gateway id at all) leaves the session's answer in
+		 * force, so a client cannot talk its way past the COD gate with an invented name.
+		 */
+		public function test_a_declared_gateway_the_store_does_not_offer_is_ignored(): void {
+			$_POST = [];
+
+			$handler = new Pickup_Handler_Session_Probe(
+				'p',
+				'f',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				'cod'
+			);
+			$handler->available_gateways = [ 'cod' ];
+
+			try {
+				foreach ( [ 'bacs', 'prepaid-ui', [ 'bacs' ], '' ] as $declared ) {
+					$_GET = [ 'payment_method' => $declared ];
+					$this->assertSame( 'cod', $handler->rest_payment_method() );
+				}
+			} finally {
+				$_GET = [];
+			}
+		}
+
+		/**
+		 * The classic checkout's order of authority is untouched: its posted value still wins
+		 * over anything a query string declares.
+		 */
+		public function test_the_posted_payment_method_still_wins_over_a_declared_one(): void {
+			$_POST = [ 'payment_method' => 'cod' ];
+			$_GET  = [ 'payment_method' => 'bacs' ];
+
+			$handler = new Pickup_Handler_Session_Probe(
+				'p',
+				'f',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				'cheque'
+			);
+			$handler->available_gateways = [ 'bacs', 'cod', 'cheque' ];
+
+			try {
+				$this->assertSame( 'cod', $handler->rest_payment_method() );
+			} finally {
+				$_GET = [];
+			}
+		}
+
+		/**
 		 * `wc_session_chosen_payment_method()`'s OWN default body (not the probe) —
 		 * proves the seam itself degrades to `null`, not a fatal, when WC()
 		 * genuinely does not exist in this unit-test process. Mirrors the same
@@ -5927,8 +6022,24 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 					'woodev-pickup-geo',
 					'woodev-pickup-panels',
 					'woodev-pickup-map-provider-yandex',
+					'woodev-pickup-session',
 				],
 				$scripts['woodev-pickup-mount']['deps']
+			);
+
+			// pickup-session.js (SP-11 C-2b, #1089): the surface-neutral picker session the mount
+			// opens — everything the mount used to depend on for it, minus jQuery.
+			$this->assertArrayHasKey( 'woodev-pickup-session', $scripts );
+			$this->assertStringContainsString( 'pickup-session.js', $scripts['woodev-pickup-session']['src'] );
+			$this->assertSame(
+				[
+					'woodev-modal',
+					'woodev-pickup-datasource',
+					'woodev-pickup-geo',
+					'woodev-pickup-panels',
+					'woodev-pickup-map-provider-yandex',
+				],
+				$scripts['woodev-pickup-session']['deps']
 			);
 
 			// pickup.css (SP-5 Task 15) exists on disk — see the method docblock above for
@@ -6017,6 +6128,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 					'woodev-pickup-geo',
 					'woodev-pickup-panels',
 					'woodev-pickup-map-provider-yandex',
+					'woodev-pickup-session',
 				],
 				$scripts['woodev-pickup-mount']['deps']
 			);
@@ -6062,6 +6174,108 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			// `carrier_x` — see Pickup_Handler::config_object_suffix() and issue #142.
 			$this->assertStringStartsWith( 'woodev_pickup_config_carrier_x_', $object_name );
 			$this->assertSame( 'pickup_point', $data['fieldId'] );
+		}
+
+		/**
+		 * SP-11 C-2b (#1089): a page that renders ONLY the Checkout block has no slot for the
+		 * classic mount — its button is a React inner block that opens the same session. The mount
+		 * must not boot there, and the picker config must still reach the page, on the session
+		 * script, under the very global the block's descriptor names.
+		 *
+		 * In its own process: defining `has_block` here would make every later test in this process
+		 * that reaches `Checkout_Surface::is_block_only()` take the block-detection path.
+		 *
+		 * @runInSeparateProcess
+		 * @preserveGlobalState disabled
+		 */
+		public function test_enqueue_assets_on_a_block_only_checkout_loads_the_session_without_the_classic_mount(): void {
+			$this->assert_a_block_only_page_loads_the_session_without_the_classic_mount( true );
+		}
+
+		/**
+		 * #1089, measured on the rig: WooCommerce's `is_checkout()` is FALSE on a page that carries
+		 * the Checkout block but is not the store's configured checkout page (WC 11.1's
+		 * `CartCheckoutUtils::is_page_type()` looks for the shortcode and the classic-shortcode
+		 * block only). The block renders its pickup button there all the same — and with the old
+		 * `is_checkout()` gate the session and the config never reached the page, so the button had
+		 * no config to render from and the shopper could not choose a point at all.
+		 *
+		 * @runInSeparateProcess
+		 * @preserveGlobalState disabled
+		 */
+		public function test_enqueue_assets_follows_the_checkout_block_onto_a_page_woocommerce_does_not_call_a_checkout(): void {
+			$this->assert_a_block_only_page_loads_the_session_without_the_classic_mount( false );
+		}
+
+		/**
+		 * @param bool $is_checkout What WooCommerce's own `is_checkout()` answers for the page.
+		 */
+		private function assert_a_block_only_page_loads_the_session_without_the_classic_mount( bool $is_checkout ): void {
+			Functions\when( 'is_checkout' )->justReturn( $is_checkout );
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+			Functions\when( 'plugins_url' )->alias(
+				static fn( $path, $file ) => 'https://example.test/' . $path
+			);
+			Functions\when( 'get_post' )->justReturn(
+				(object) [ 'post_content' => '<!-- wp:woocommerce/checkout --><div></div><!-- /wp:woocommerce/checkout -->' ]
+			);
+			Functions\when( 'has_shortcode' )->justReturn( false );
+			Functions\when( 'has_block' )->alias(
+				static fn( string $name, $in = null ): bool => is_string( $in ) && false !== strpos( $in, '<!-- wp:' . $name . ' ' )
+			);
+
+			$scripts = [];
+			Functions\when( 'wp_enqueue_script' )->alias(
+				static function ( $handle, $src, $deps ) use ( &$scripts ) {
+					$scripts[ $handle ] = $deps;
+				}
+			);
+			$styles = [];
+			Functions\when( 'wp_enqueue_style' )->alias(
+				static function ( $handle ) use ( &$styles ) {
+					$styles[] = $handle;
+				}
+			);
+			$localized = [];
+			Functions\when( 'wp_localize_script' )->alias(
+				static function ( $handle, $object_name, $data ) use ( &$localized ) {
+					$localized[] = [ $handle, $object_name, $data ];
+				}
+			);
+
+			$handler = new Pickup_Handler_Assets_Built_Probe(
+				'carrier-x',
+				'pickup_point',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location()
+			);
+			$handler->enqueue_assets();
+
+			$this->assertArrayNotHasKey( 'woodev-pickup-mount', $scripts, 'the classic DOM adapter must not boot next to the React block' );
+			$this->assertArrayHasKey( 'woodev-pickup-session', $scripts );
+			$this->assertNotContains( 'jquery', $scripts['woodev-pickup-session'] );
+			$this->assertContains( 'woodev-modal', $scripts['woodev-pickup-session'] );
+			$this->assertSame( [ 'woodev-pickup-styles' ], $styles );
+
+			$this->assertCount( 1, $localized );
+			[ $handle, $object_name, $data ] = $localized[0];
+			$this->assertSame( 'woodev-pickup-session', $handle );
+			$this->assertSame( 'pickup_point', $data['fieldId'] );
+
+			// The block finds the config by the name the handler's own descriptor publishes, and
+			// addresses the Store API by the handler's transport keys.
+			$this->assertSame(
+				[
+					'pluginId'  => 'carrier-x',
+					'fieldId'   => 'pickup_point',
+					'configKey' => $object_name,
+				],
+				$handler->blocks_descriptor()
+			);
 		}
 
 		// -------------------------------------------------------------------------

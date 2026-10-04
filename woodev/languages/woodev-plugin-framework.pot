@@ -2407,6 +2407,16 @@ msgctxt "block description"
 msgid "Lets the shopper pick a locality from the location provider and fills in the city and region."
 msgstr ""
 
+#: shipping-method/checkout/blocks/shipping-pickup/block.json
+msgctxt "block title"
+msgid "Pickup point"
+msgstr ""
+
+#: shipping-method/checkout/blocks/shipping-pickup/block.json
+msgctxt "block description"
+msgid "Lets the shopper choose a pickup point on the map for the selected shipping method."
+msgstr ""
+
 #: shipping-method/checkout/class-checkout-config.php:701
 msgid "Start typing a name"
 msgstr ""

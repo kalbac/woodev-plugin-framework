@@ -117,6 +117,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 					'readonly' => true,
 					'additionalProperties' => true,
 				],
+				'owner' => [
+					'type' => [ 'object', 'null' ],
+					'readonly' => true,
+					'additionalProperties' => true,
+				],
 			];
 		}
 
@@ -129,6 +134,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 		public static function checkout_schema(): array {
 			$schema = self::schema();
 			$schema['pickup']['readonly'] = false;
+			// The owner is the server's own answer about the cart; a client never sends it.
+			unset( $schema['owner'] );
 			return $schema;
 		}
 
@@ -268,6 +275,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 				$prepared[] = [ $handler, $selection ];
 			}
 			// All commands, including carrier verdicts, must pass before any persistence action.
+			foreach ( $prepared as $index => [ $handler, $selection ] ) {
+				if ( null !== $selection ) {
+					// The store's address-replacement policy moves the destination with the confirmation.
+					[ $context, $destination ] = self::replace_destination( $handler, $selection, $context );
+					$prepared[ $index ][1]['address_key'] = $context['address_key'];
+					$prepared[ $index ][1]['destination'] = $destination;
+				}
+			}
 			foreach ( self::$handlers as $fields ) {
 				foreach ( $fields as $handler ) {
 					$handler->reconcile_store_api_selection( $context['rate_id'], $context['address_key'] );
@@ -280,6 +295,88 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 					$handler->persist_store_api_selection( $selection );
 				}
 			}
+		}
+
+		/**
+		 * Moves the destination to the confirmed point's own address when the store asks for it
+		 * (`pickup_replace_address`), and answers the context the confirmation is remembered under.
+		 *
+		 * Destination and confirmation are reconciled in ONE request, here, because they cannot be
+		 * reconciled in two: a confirmation is bound to the destination it was made for, so an
+		 * address the browser rewrote afterwards would drop the confirmation it had just received.
+		 * The point's address comes from the point the server fetched itself — never from the
+		 * client — and the confirmation names the fields it moved, so the address form can follow.
+		 *
+		 * A replacement the chosen rate does not survive is undone: the point stays confirmed for
+		 * the customer's own address rather than the customer losing the rate they chose.
+		 *
+		 * @since 2.0.2
+		 * @param Pickup_Handler       $handler Owning carrier handler.
+		 * @param array<string, mixed> $selection Allowed, server-prepared selection.
+		 * @param array<string, mixed> $context Server cart context the selection was prepared in.
+		 * @return array{0: array<string, mixed>, 1: array<string, string>} The context to remember the
+		 *         confirmation under, and the destination fields that now hold the point's address.
+		 */
+		private static function replace_destination( Pickup_Handler $handler, array $selection, array $context ): array {
+			$fields = $handler->store_api_replacement_address( $selection );
+			if ( [] === $fields ) {
+				return [ $context, [] ];
+			}
+			$previous = static::write_destination( $fields );
+			if ( $previous === $fields ) {
+				return [ $context, $fields ];
+			}
+			$moved = static::context( true );
+			if ( $moved['rate_id'] === $context['rate_id'] && self::rate_available( $moved ) ) {
+				// As the destination now holds them (WooCommerce formats the postcode it is given).
+				$destination = (array) ( $moved['packages'][0]['destination'] ?? [] );
+				foreach ( $fields as $key => $value ) {
+					$fields[ $key ] = (string) ( $destination[ $key ] ?? $value );
+				}
+				return [ $moved, $fields ];
+			}
+			static::write_destination( $previous, $context['chosen'] );
+			return [ static::context( true ), [] ];
+		}
+
+		/**
+		 * Writes street/postcode into the customer's shipping address, as WC's own customer route does.
+		 *
+		 * Billing follows only where the store ships to the billing address and the two are one
+		 * address; a separate billing address is never touched.
+		 *
+		 * @since 2.0.2
+		 * @param array<string, string>   $fields `address_1` and/or `postcode`.
+		 * @param array<int, string>|null $chosen Chosen rates to put back with an undone write.
+		 * @return array<string, string> The values the written fields held before.
+		 */
+		protected static function write_destination( array $fields, ?array $chosen = null ): array {
+			if ( ! function_exists( 'WC' ) || ! WC()->customer || ! WC()->session ) {
+				return $fields;
+			}
+			$customer = WC()->customer;
+			$billing = wc_ship_to_billing_address_only();
+			$previous = [];
+			if ( isset( $fields['address_1'] ) ) {
+				$previous['address_1'] = (string) $customer->get_shipping_address_1();
+				$customer->set_shipping_address_1( $fields['address_1'] );
+				if ( $billing ) {
+					$customer->set_billing_address_1( $fields['address_1'] );
+				}
+			}
+			if ( isset( $fields['postcode'] ) ) {
+				$previous['postcode'] = (string) $customer->get_shipping_postcode();
+				$postcode = wc_format_postcode( $fields['postcode'], (string) $customer->get_shipping_country() );
+				$customer->set_shipping_postcode( $postcode );
+				if ( $billing ) {
+					$customer->set_billing_postcode( $postcode );
+				}
+			}
+			if ( null !== $chosen ) {
+				WC()->session->set( 'chosen_shipping_methods', $chosen );
+			}
+			$customer->save();
+			return $previous;
 		}
 
 		/**
@@ -337,7 +434,44 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 					$pickup[ $plugin_id ][ $field_id ] = $snapshot;
 				}
 			}
-			return [ 'pickup' => $pickup ];
+			return [
+				'pickup' => $pickup,
+				'owner' => self::owner( $context ),
+			];
+		}
+
+		/**
+		 * Names the pickup field that owns the cart's chosen rate, or null for any other rate.
+		 *
+		 * The block checkout shows its «choose a pickup point» button from this answer alone
+		 * (SP-11 C-2b, #1089): ownership is decided here, against the full server rate id, never
+		 * inferred in the browser from a label or a method-id list. `locality` is the key the
+		 * owner's points are addressed by — the same one a confirmation is remembered under —
+		 * and `''` when the customer has not chosen a settlement.
+		 *
+		 * @since 2.0.2
+		 * @param array<string, mixed> $context Server cart context.
+		 * @return array{plugin_id: string, field_id: string, rate_id: string, locality: string}|null
+		 */
+		private static function owner( array $context ): ?array {
+			if ( '' === $context['rate_id'] ) {
+				return null;
+			}
+			foreach ( self::$handlers as $plugin_id => $fields ) {
+				foreach ( $fields as $field_id => $handler ) {
+					if ( ! $handler->owns_store_api_rate( $context['rate_id'] ) ) {
+						continue;
+					}
+					$selected = $handler->get_selected_point_for_method( explode( ':', $context['rate_id'] )[0] );
+					return [
+						'plugin_id' => (string) $plugin_id,
+						'field_id' => (string) $field_id,
+						'rate_id' => $context['rate_id'],
+						'locality' => (string) ( $selected['locality'] ?? '' ),
+					];
+				}
+			}
+			return null;
 		}
 
 		/**

@@ -104,7 +104,7 @@ class LocalityBlocksIntegrationTest extends TestCase {
 			->with(
 				'woodev-checkout-blocks',
 				'https://example.test/build/index.js',
-				[ 'wp-element', 'wp-data', 'wc-blocks-checkout', 'wc-blocks-data-store', 'wc-settings' ],
+				[ 'wp-element', 'wp-data', 'wc-blocks-checkout', 'wc-blocks-data-store', 'wc-blocks-registry', 'wc-settings' ],
 				'abc123',
 				true
 			);

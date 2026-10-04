@@ -187,7 +187,8 @@ final class Woodev_Realistic_Shipping_Plugin extends \Woodev\Framework\Shipping\
 
 		if ( ! class_exists( '\Woodev\Framework\Shipping\Pickup\Pickup_Handler' )
 			|| ! class_exists( '\Woodev\Framework\Shipping\Map\Yandex_Map_Provider' )
-			|| ! class_exists( 'Woodev_Realistic_Point_Source' ) ) {
+			|| ! class_exists( 'Woodev_Realistic_Point_Source' )
+			|| ! class_exists( 'Woodev_Realistic_Selection_Scope' ) ) {
 			return;
 		}
 
@@ -207,6 +208,11 @@ final class Woodev_Realistic_Shipping_Plugin extends \Woodev\Framework\Shipping\
 		// Location Provider layer's namespaced key — exactly the defect issue #746 reports.
 		// This is the framework's SECOND carrier, so the rig now exercises the main,
 		// key-addressed path through BOTH carriers rather than only the first.
+		//
+		// Argument 13 (#1089) is this carrier's pickup-selection scope. Without it the Store API
+		// transport never names this handler the owner of its own pickup rate, and the Checkout
+		// block shows no button for it — see Woodev_Realistic_Selection_Scope's own docblock. Built
+		// with no service: the handler hands it the plugin's ONE Location_Service at register().
 		$this->pickup_handler = new \Woodev\Framework\Shipping\Pickup\Pickup_Handler(
 			'woodev-realistic-shipping',
 			'realistic_pickup_point',
@@ -220,7 +226,7 @@ final class Woodev_Realistic_Shipping_Plugin extends \Woodev\Framework\Shipping\
 			'',
 			true,
 			false,
-			null,
+			new \Woodev_Realistic_Selection_Scope(),
 			$this
 		);
 

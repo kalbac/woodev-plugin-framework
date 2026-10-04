@@ -154,6 +154,34 @@ Confirmation shares the classic 15/minute selection quota, so switching transpor
 Other slices must extend this registration owner rather than replace its callback or schema.
 C-1 uses core address synchronization and registers no competing framework Store API namespace.
 
+C-2b client contract (#1089), an extension of that same owner: the cart data gains a sibling key
+`owner` — `{ plugin_id, field_id, rate_id, locality }` for the field that owns the cart's chosen
+rate, `null` for any other rate. It is cart output only (absent from the checkout echo schema).
+The pickup button renders from `owner` and the snapshot alone, and only while both name the rate
+selected in `wc/store/cart` right now; it never infers ownership from a label or a method list.
+`locality` is the key the owner's points are addressed by (`''` → the client falls back to the
+native city). The echo carries the snapshot's identity keys for the owning field and `null` for
+every other field. The storefront map session is `pickup-session.js`, opened with a per-surface
+host; the Blocks host sends no `clear` command on a rate switch (the snapshot's rate scoping
+already clears it).
+
+Three rules added by the C-2b critic round (#1089):
+
+- **Gateway id.** The command's `payment_method` is the active registration's `paymentMethodId`,
+  resolved through WooCommerce's public payment registry — never the registration's name.
+- **Live payment context.** The Blocks host adds `payment_method` (the same gateway id) to every
+  `/points` and `/points/{id}` request. The server honours it only when it names a gateway the
+  store offers right now, and otherwise answers from the session as before; the classic checkout
+  sends nothing. The verdict stays advisory — confirmation and pre-payment validation re-check.
+- **`pickup_replace_address`.** Honoured on the server, inside the confirmation's own request: the
+  shipping street line and postcode move to the point's (values the point has; billing too only
+  when the store ships to the billing address), rates are recalculated, and the confirmation is
+  remembered under the NEW destination — a browser-side rewrite afterwards would drop it. The
+  snapshot's `destination` names the moved fields and the client takes them into the native
+  address under the same checkout gate, mirroring billing only where it is the same address. A
+  move the chosen rate does not survive is undone. The city is never replaced: it is the
+  customer's confirmed locality, and a record the native city no longer names is stale.
+
 Important existing code, not new work to recreate:
 
 - #949 is **closed**; the REST rate guard has already been fixed. Re-verify rates after address

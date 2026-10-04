@@ -37,6 +37,10 @@
 
 - [woocommerce/store-api] **Store API extension schemas are endpoint-specific.** → [store-api-extension-schema-is-endpoint-specific](../gotchas/store-api-extension-schema-is-endpoint-specific.md) (SP-11 C-2a fix round)
 
+- [woocommerce/blocks] **`is_checkout()` is FALSE on a page that carries the Checkout block but is not the configured checkout page — the block works there, anything gated on `is_checkout()` does not load.** → [is-checkout-is-false-on-a-page-that-only-carries-the-checkout-block](../gotchas/is-checkout-is-false-on-a-page-that-only-carries-the-checkout-block.md) (s151, #1089)
+
+- [woocommerce/blocks] **WC's «inline or unknown script accessed wc.X» is a stack-depth artifact of a read made AFTER script evaluation — capture `window.wc.*` at evaluation; the deps are already declared.** → [wc-dependency-detection-calls-a-late-read-an-inline-script](../gotchas/wc-dependency-detection-calls-a-late-read-an-inline-script.md) (s151, #1089)
+
 ## Related
 
 - [../GOTCHAS.md](../GOTCHAS.md) — the topic map
