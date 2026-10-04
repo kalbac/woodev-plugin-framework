@@ -2090,17 +2090,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			add_action( 'admin_notices', [ $this, 'render_missing_selection_scope_notice' ] );
 		}
 
-		/**
-		 * Prints the merchant-visible half of {@see self::report_missing_selection_scope()}.
-		 *
-		 * @internal
-		 *
-		 * @since 2.0.2
-		 *
-		 * @return void
-		 */
 		public function render_missing_selection_scope_notice(): void {
-			if ( ! current_user_can( 'manage_woocommerce' ) ) {
+			// Only a store that actually runs the block checkout is affected: without a scope the
+			// classic checkout still works (it simply remembers no selection), so a classic-only
+			// store gets the developer signal (_doing_it_wrong) and no merchant alarm.
+			if ( ! current_user_can( 'manage_woocommerce' ) || ! $this->checkout_uses_blocks() ) {
 				return;
 			}
 
@@ -2116,6 +2110,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 					)
 				)
 			);
+		}
+
+		/**
+		 * Whether the store's checkout page renders the Checkout block (issue #1100) — a seam so tests
+		 * need not stand up WooCommerce's block utilities.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		protected function checkout_uses_blocks(): bool {
+			return class_exists( '\\Woodev_Blocks_Handler' ) && \Woodev_Blocks_Handler::is_checkout_block_in_use();
 		}
 
 		/**

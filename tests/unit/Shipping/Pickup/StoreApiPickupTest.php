@@ -77,6 +77,9 @@ final class C2a_Handler extends Pickup_Handler {
 	public Pickup_Selection $fake_selection;
 	public ?C2a_Order $draft = null;
 	public bool $replace_address = false;
+	/** @var bool Whether the store's checkout page runs the Checkout block (#1100). */
+	public bool $block_checkout = true;
+	protected function checkout_uses_blocks(): bool { return $this->block_checkout; }
 	protected function selection(): ?Pickup_Selection { return $this->fake_selection; }
 	protected function replaces_address(): bool { return $this->replace_address; }
 	protected function wc_cart() { return new \stdClass(); }
@@ -800,6 +803,19 @@ final class StoreApiPickupTest extends TestCase {
 		$html = ob_get_clean();
 		$this->assertStringContainsString( 'notice-error', $html );
 		$this->assertStringContainsString( 'noscope', $html );
+	}
+
+	public function test_the_merchant_notice_is_silent_on_a_classic_only_store_but_the_developer_signal_stays(): void {
+		Functions\expect( '_doing_it_wrong' )->once();
+		$handler = $this->unscoped_handler();
+		$handler->block_checkout = false;
+		\Brain\Monkey\Actions\expectAdded( 'admin_notices' )->once();
+		$handler->register();
+		Functions\when( 'current_user_can' )->justReturn( true );
+		Functions\when( 'esc_html' )->returnArg();
+		ob_start();
+		$handler->render_missing_selection_scope_notice();
+		$this->assertSame( '', ob_get_clean() );
 	}
 
 }
