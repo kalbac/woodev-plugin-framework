@@ -4998,3 +4998,11 @@ msgstr ""
 #: shipping-method/pickup/class-store-api-pickup.php
 msgid "Pickup points for multiple shipping packages are not supported. Please choose another shipping method."
 msgstr ""
+
+#: shipping-method/pickup/class-store-api-pickup.php
+msgid "This pickup method is not available at checkout right now. Please choose another delivery method or contact the store."
+msgstr ""
+
+#: shipping-method/pickup/class-pickup-handler.php
+msgid "%s: pickup delivery is not available in the block checkout because the plugin is misconfigured (no pickup selection scope). Customers cannot place an order with this pickup method there. Please contact the plugin developer."
+msgstr ""

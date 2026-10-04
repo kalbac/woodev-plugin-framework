@@ -550,6 +550,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 			$rate_id = $context['rate_id'];
 			$order_method = null !== $line ? (string) $line->get_method_id() : '';
 			$order_instance = null !== $line ? (int) $line->get_instance_id() : 0;
+			if ( self::is_unserved_pickup_method( $order_method ) ) {
+				$errors->add( 'woodev_pickup_unavailable', self::unserved_message() );
+				return;
+			}
 			$payload = self::$echoes[ $order->get_id() ];
 			if ( [] !== $payload && ! is_array( $payload['pickup'] ?? null ) ) {
 				$errors->add( 'woodev_pickup_validation', self::choose_message() );
@@ -712,6 +716,54 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 		 */
 		private static function packages_message(): string {
 			return __( 'Pickup points for multiple shipping packages are not supported. Please choose another shipping method.', 'woodev-plugin-framework' );
+		}
+
+		/**
+		 * Customer-facing refusal for a pickup method no handler can serve (issue #1100).
+		 *
+		 * @since 2.0.2
+		 * @return string
+		 */
+		private static function unserved_message(): string {
+			return __( 'This pickup method is not available at checkout right now. Please choose another delivery method or contact the store.', 'woodev-plugin-framework' );
+		}
+
+		/**
+		 * Whether the order's shipping method is a framework pickup method that no registered handler
+		 * owns while at least one handler was built without a {@see Selection_Scope} (issue #1100).
+		 *
+		 * That combination is the silent dead end: the rate still requires a point, the handler that
+		 * should offer it cannot own any rate, so the block checkout has no button. Foreign pickup
+		 * methods, and an unowned method when every handler is scoped, are not this adapter's concern.
+		 *
+		 * @since 2.0.2
+		 * @param string $method_id Bare shipping-method id of the order's shipping line.
+		 * @return bool
+		 */
+		private static function is_unserved_pickup_method( string $method_id ): bool {
+			if ( '' === $method_id || ! in_array( $method_id, static::pickup_method_ids(), true ) ) {
+				return false;
+			}
+			$unscoped = false;
+			foreach ( self::$handlers as $fields ) {
+				foreach ( $fields as $handler ) {
+					if ( $handler->owns_store_api_rate( $method_id ) ) {
+						return false;
+					}
+					$unscoped = $unscoped || ! $handler->has_selection_scope();
+				}
+			}
+			return $unscoped;
+		}
+
+		/**
+		 * The framework's pickup shipping method ids; a seam so tests need no WooCommerce shipping.
+		 *
+		 * @since 2.0.2
+		 * @return string[]
+		 */
+		protected static function pickup_method_ids(): array {
+			return \Woodev\Framework\Shipping\Checkout\Checkout_Config::pickup_method_ids();
 		}
 
 		/**

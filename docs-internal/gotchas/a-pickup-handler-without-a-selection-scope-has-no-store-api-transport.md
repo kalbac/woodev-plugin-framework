@@ -23,7 +23,8 @@ order that demands a pickup point and no control to choose one. Nothing logs, no
 cart's `extensions['woodev-shipping']` simply says `{"pickup":{…:null},"owner":null}`.
 
 Found on the rig: the second fixture carrier (`woodev-realistic-shipping-plugin`) was built with
-`null` there, and its rate showed no button while the first carrier's did.
+`null` there, and its rate showed no button while the first carrier's did. The fixture has since been
+fixed on `main` (it now passes `Woodev_Realistic_Selection_Scope`), so it no longer reproduces this.
 
 ## Wrong
 
@@ -47,6 +48,23 @@ class My_Selection_Scope extends \Woodev\Framework\Shipping\Pickup\Provider_Sele
 	}
 }
 ```
+
+## What the framework does about it now (#1100)
+
+No default scope: a scope owns the session key (never coined by the framework), the locality meaning
+and the method→type map, and a handler knows only its plugin id and field id — not its carrier's
+method ids. So the fault is made loud instead of repaired:
+
+- `Pickup_Handler::register()` calls `_doing_it_wrong()` once per plugin id and hooks an `admin_notices`
+  error naming the plugin (`render_missing_selection_scope_notice()`);
+- `Store_Api_Pickup::validate_order()` refuses the order with `woodev_pickup_unavailable` when its shipping
+  method is a framework pickup method that NO handler owns while at least one registered handler has no
+  scope — the buyer gets a message instead of a silent dead end.
+
+The merchant notice shows ONLY when the store's checkout page actually uses the Checkout block
+(`Woodev_Blocks_Handler::is_checkout_block_in_use()`, checked at render time). A classic-only store still
+gets the `_doing_it_wrong()` developer signal but no admin alarm — classic pickup works without a scope, it
+just remembers no selection. Wire a scope (below) to clear both.
 
 ## How to see it
 
