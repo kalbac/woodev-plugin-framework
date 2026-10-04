@@ -1,6 +1,22 @@
 # SP-11 — Checkout Blocks location and pickup adapter
 
-**Status:** DRAFT — reconnaissance and recommendations; D-1 through D-7 await the operator.
+**Status:** DECIDED — the operator settled D-1…D-7 on 04.10.2026 (#1086). Implementation follows the slices in
+«Decomposition» (#1087–#1091).
+
+## Operator decisions (04.10.2026, #1086)
+
+| Fork | Decision |
+|---|---|
+| D-1 | **A** — a separate «locality» chooser next to the address form writes native City/State; native fields stay editable. No overlay on the core City input. |
+| D-2 | **A** — forced inner blocks; the merchant does nothing. |
+| D-3 | **B** — shared pickup-selection service; Blocks call it through Store API `cart/extensions`, classic keeps the current REST route unchanged. |
+| D-4 | **A** — extract a neutral map host from the storefront runtime; classic and Blocks share it. |
+| D-5 | **A** — Blocks adapter from WC 9.9, newer hooks feature-detected; classic stays at WC ≥ 7.0. |
+| D-6 | **A** — one delivery chain (package 0); another package needing its own point → clear error, order refused. |
+| D-7 | **A** — pickup selection only inside Checkout Blocks; an express-payment order on a pickup rate without a point is refused server-side with an actionable error; an address change in the Cart block clears the point. |
+| msgid | The Russian storefront msgid «Пункт выдачи не указан.» (pickup REST) becomes an English msgid in C-2a (#1088). |
+
+The option analysis below is kept as the record of why.
 
 **Scope:** #1078, the release minimum in shipping-module decisions §11: city suggestions, region,
 pickup-point selection with a map modal, session and order persistence, and classic checkout parity.
@@ -309,7 +325,7 @@ permission and fallback providers. Do not reopen those settled settings as new d
 renderer cannot represent a configured mode, make that a visible implementation gap and resolve it
 before declaring parity; do not silently force all stores to a different mode.
 
-## Decisions for the operator
+## Decisions for the operator (analysis; settled above)
 
 ### D-1 — Must suggestions attach to the native City input?
 
