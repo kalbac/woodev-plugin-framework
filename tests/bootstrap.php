@@ -182,6 +182,24 @@ if ( 'integration' === $test_suite ) {
 				return $this->params[ $key ] ?? null;
 			}
 
+			/** @var array<string, mixed> route (URL) params, kept apart from body params as in WP. */
+			private $url_params = [];
+
+			/**
+			 * @param array<string, mixed> $params route params.
+			 * @return void
+			 */
+			public function set_url_params( $params ) {
+				$this->url_params = $params;
+			}
+
+			/**
+			 * @return array<string, mixed>
+			 */
+			public function get_url_params() {
+				return $this->url_params;
+			}
+
 			/**
 			 * Whether a param was sent AT ALL, which for the tri-state args
 			 * (`has_tracking`, `has_pickup_point`, `is_exported`) is a different

@@ -485,12 +485,23 @@ final class StoreApiPickupTest extends TestCase {
 
 	public function test_pay_for_order_route_is_skipped_even_when_it_targets_the_session_draft(): void {
 		$request = new \WP_REST_Request( [ 'id' => 123 ] );
+		$request->set_url_params( [ 'id' => 123 ] );
 		$order = new C2a_Order( $this->address );
 		C2a_Adapter::update_order( $order, $request );
 		$errors = new \WP_Error();
 		C2a_Adapter::validate_order( $order, $errors );
 		$this->assertFalse( $errors->has_errors() );
 		$this->assertSame( 0, C2a_Adapter::$context_reads );
+	}
+
+	public function test_an_id_posted_in_the_checkout_body_does_not_skip_the_gate(): void {
+		// get_param() prefers the body; only the /checkout/{id} route param marks pay-for-order.
+		$request = new \WP_REST_Request( [ 'id' => 123, 'extensions' => [ 'woodev-shipping' => [] ] ] );
+		$order   = new C2a_Order( $this->address );
+		C2a_Adapter::update_order( $order, $request );
+		$errors = new \WP_Error();
+		C2a_Adapter::validate_order( $order, $errors );
+		$this->assertTrue( $errors->has_errors() );
 	}
 
 	public function test_clear_after_switching_to_courier_is_a_noop_success(): void {

@@ -360,8 +360,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 		 * @return void
 		 */
 		public static function update_order( \WC_Order $order, \WP_REST_Request $request ): void {
-			// CheckoutOrder fires this hook too; its order must never consult the live cart.
-			if ( (int) $order->get_id() !== static::draft_order_id() || null !== $request->get_param( 'id' ) ) {
+			// CheckoutOrder fires this hook too; its order must never consult the live cart. The route id is
+			// read from the URL only: get_param() prefers the body, so a client could post an `id` to skip the gate.
+			$url_params = $request->get_url_params();
+			if ( (int) $order->get_id() !== static::draft_order_id() || isset( $url_params['id'] ) ) {
 				unset( self::$echoes[ $order->get_id() ] );
 				return;
 			}

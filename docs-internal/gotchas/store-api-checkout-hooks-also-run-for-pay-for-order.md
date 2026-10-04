@@ -22,7 +22,10 @@ pending order is a checkout retry only when it is the session's `store_api_draft
 self::$echoes[ $order->get_id() ] = $payload;
 
 // ✅ Reject the pay-for-order route and orders outside the session draft before reading the cart.
-if ( (int) $order->get_id() !== static::draft_order_id() || null !== $request->get_param( 'id' ) ) {
+// Read the route id from the URL ONLY — get_param() prefers the body, so a client posting `id`
+// to POST/PATCH /checkout would otherwise skip the whole gate (critic round 2, s151).
+$url_params = $request->get_url_params();
+if ( (int) $order->get_id() !== static::draft_order_id() || isset( $url_params['id'] ) ) {
     unset( self::$echoes[ $order->get_id() ] );
     return;
 }
