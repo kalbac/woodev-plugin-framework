@@ -234,6 +234,8 @@ class LicensePageRenderTest extends TestCase {
 		Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/' );
 		Functions\when( 'esc_url_raw' )->returnArg();
 		Functions\when( 'wp_create_nonce' )->justReturn( 'test-nonce-value' );
+		// The error-reporting consent state (#130) reads its option; no receiver DSN → not offered.
+		Functions\when( 'get_option' )->justReturn( 'no' );
 		Functions\when( 'wp_json_encode' )->alias(
 			static function ( $data ) {
 				return json_encode( $data ); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode
@@ -294,6 +296,13 @@ class LicensePageRenderTest extends TestCase {
 		$this->assertArrayHasKey( 'restRoot', $payload );
 		$this->assertArrayHasKey( 'restNonce', $payload );
 		$this->assertArrayHasKey( 'plugins', $payload );
+		$this->assertSame(
+			array(
+				'enabled'   => false,
+				'available' => false,
+			),
+			$payload['errorReporting']
+		);
 
 		// Exact values for root/nonce.
 		$this->assertSame( 'https://example.test/wp-json/', $payload['restRoot'] );
@@ -324,6 +333,7 @@ class LicensePageRenderTest extends TestCase {
 		Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/' );
 		Functions\when( 'esc_url_raw' )->returnArg();
 		Functions\when( 'wp_create_nonce' )->justReturn( 'nonce' );
+		Functions\when( 'get_option' )->justReturn( 'no' );
 		Functions\when( 'wp_json_encode' )->alias( 'json_encode' );
 		Functions\when( 'wp_set_script_translations' )->justReturn( true );
 

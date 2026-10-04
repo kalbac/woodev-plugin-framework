@@ -31,6 +31,9 @@ if ( rootElement && window.woodevLicenses ) {
 	apiFetch.use( apiFetch.createNonceMiddleware( window.woodevLicenses.restNonce ) );
 
 	createRoot( rootElement ).render(
-		<App plugins={ window.woodevLicenses.plugins || [] } />
+		<App
+			plugins={ window.woodevLicenses.plugins || [] }
+			errorReporting={ window.woodevLicenses.errorReporting }
+		/>
 	);
 }

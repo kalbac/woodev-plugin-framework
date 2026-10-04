@@ -4922,3 +4922,19 @@ msgstr ""
 #: assets/build/setup-wizard/index.js:2
 msgid "Не удалось запомнить, что мастер пропущен, — он может открыться снова. Нажмите ссылку ещё раз, чтобы выйти всё равно."
 msgstr ""
+
+#: error-reporting/class-consent-rest-controller.php:73
+msgid "Недостаточно прав для изменения этой настройки."
+msgstr ""
+
+#: assets/build/license-page/index.js:1
+msgid "Не удалось сохранить настройку. Попробуйте ещё раз."
+msgstr ""
+
+#: assets/build/license-page/index.js:1
+msgid "Отправлять отчёты об ошибках"
+msgstr ""
+
+#: assets/build/license-page/index.js:1
+msgid "Если в плагине Woodev произойдёт сбой, мы получим версии плагина, WordPress, WooCommerce и PHP, вид ошибки и место в коде плагина: файл, строку и названия функций. Тексты сообщений об ошибках, данные покупателей и адрес сайта не передаются — вместо адреса только обезличенный код."
+msgstr ""

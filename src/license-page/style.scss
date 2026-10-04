@@ -339,3 +339,11 @@
 	.woodev-skeleton--button { width: 120px; height: 36px; }
 	.woodev-skeleton--toggle { width: 64px; height: 20px; }
 }
+
+// ---------------------------------------------------------------------------
+// Error-reporting consent card (#130) — sits under the card grid.
+// ---------------------------------------------------------------------------
+.woodev-error-reporting {
+	max-width: 720px;
+	margin-top: 24px;
+}

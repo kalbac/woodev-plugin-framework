@@ -166,6 +166,8 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 						'restRoot'   => esc_url_raw( rest_url() ),
 						'restNonce'  => wp_create_nonce( 'wp_rest' ),
 						'plugins'    => array_values( $states ),
+						// Site-wide error-reporting consent (#130): `enabled` + `available` (a receiver DSN is configured).
+						'errorReporting' => \Woodev\Framework\Error_Reporting\Consent::get_state(),
 					]
 				) . ';',
 				'before'

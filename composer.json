@@ -36,6 +36,7 @@
             "woodev/box-packer/interfaces",
             "woodev/compatibility",
             "woodev/competitor",
+            "woodev/error-reporting",
             "woodev/handlers",
             "woodev/http",
             "woodev/licensing",
