@@ -57,6 +57,8 @@ return [
 	'Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order' => 'woodev/shipping-method/admin/class-shipping-admin-order.php',
 	'Woodev\\Framework\\Shipping\\Api\\Abstract_Shipping_API' => 'woodev/shipping-method/api/class-abstract-shipping-api.php',
 	'Woodev\\Framework\\Shipping\\Api\\Shipping_API' => 'woodev/shipping-method/api/interface-shipping-api.php',
+	'Woodev\\Framework\\Shipping\\Checkout\\Blocks\\Locality_Blocks' => 'woodev/shipping-method/checkout/blocks/class-locality-blocks.php',
+	'Woodev\\Framework\\Shipping\\Checkout\\Blocks\\Locality_Blocks_Integration' => 'woodev/shipping-method/checkout/blocks/class-locality-blocks-integration.php',
 	'Woodev\\Framework\\Shipping\\Checkout\\Checkout_Condition' => 'woodev/shipping-method/checkout/class-checkout-condition.php',
 	'Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' => 'woodev/shipping-method/checkout/class-checkout-config.php',
 	'Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Environment' => 'woodev/shipping-method/checkout/class-checkout-field-environment.php',

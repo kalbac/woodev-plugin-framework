@@ -626,6 +626,47 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Record' 
 		}
 
 		/**
+		 * Normalizes a city name for comparing free address text with a record's bare settlement
+		 * name: lower-cased, «ё» folded to «е», whitespace collapsed, and ONE leading
+		 * settlement-type word dropped («г. Москва», «город Москва», «пос Внуково»). The record's
+		 * own `type` is tried first (it is what the provider actually emits — «рп», «аул»), then
+		 * the common Russian types, so WooCommerce's free-text city and the record's bare name
+		 * meet on the same string. A prefix is only dropped when a name remains behind it.
+		 *
+		 * This is the ONE name-comparison contract: the classic cart calculator / My Account
+		 * comparison ({@see \Woodev\Framework\Shipping\Checkout\Checkout_Handler::city_names_record()}),
+		 * rule (c) of {@see Location_Service::is_customer_record_stale()} and the Checkout Blocks
+		 * chooser (`normalizeCityName()` in `src/checkout-blocks/mapping.ts`, the same steps in the
+		 * same order) all go through it, so a city one of them accepts is never dropped by another.
+		 * It deliberately recognizes NOTHING else: a spelling alias or a transliteration
+		 * («Санкт Петербург», «Moscow») is a different string, never guessed to be the same place.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $value The city text.
+		 * @param string $type  The record's own settlement type, or ''.
+		 *
+		 * @return string
+		 */
+		public static function normalize_city_name( string $value, string $type = '' ): string {
+			$value = str_replace( 'ё', 'е', mb_strtolower( trim( $value ) ) );
+			$value = (string) preg_replace( '/\s+/u', ' ', $value );
+
+			$types = [ 'город', 'гор', 'г', 'поселок', 'посёлок', 'пос', 'пгт', 'п', 'село', 'с', 'деревня', 'д', 'станица', 'ст-ца', 'хутор', 'х', 'аул' ];
+
+			if ( '' !== trim( $type ) ) {
+				array_unshift( $types, str_replace( 'ё', 'е', mb_strtolower( trim( $type, " \t." ) ) ) );
+			}
+
+			$alternatives = implode( '|', array_map( static fn( $t ) => preg_quote( str_replace( 'ё', 'е', $t ), '/' ), array_filter( $types ) ) );
+			$stripped     = (string) preg_replace( '/^(?:' . $alternatives . ')(?:\.\s*|\s+)(?=\S)/u', '', $value );
+
+			return '' !== $stripped ? $stripped : $value;
+		}
+
+		/**
 		 * Returns the canonical array representation. `Location_Record::from_array( $r->to_array() )`
 		 * round-trips to an equal record — this is what gets persisted into the customer
 		 * location store, sent to an adapter, and stored in the pickup

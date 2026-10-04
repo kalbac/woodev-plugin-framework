@@ -1,0 +1,107 @@
+/**
+ * Checkout Blocks locality chooser (SP-11 C-1, #1087).
+ *
+ * Deliberately theme-neutral: inherits the storefront's font and colours, with `currentColor` and
+ * a neutral border — the Blocks checkout is themed by the store, not by this framework.
+ */
+
+.woodev-locality-chooser {
+	position: relative;
+	margin: 0 0 1.5em;
+
+	&__label {
+		display: block;
+		margin-bottom: 0.4em;
+		font-size: 0.875em;
+		font-weight: 600;
+	}
+
+	&__field {
+		position: relative;
+	}
+
+	&__input {
+		box-sizing: border-box;
+		width: 100%;
+		min-height: 3em;
+		padding: 0.75em 2.5em 0.75em 0.75em;
+		border: 1px solid rgba(18, 18, 18, 0.55);
+		border-radius: 4px;
+		background: transparent;
+		color: inherit;
+		font: inherit;
+
+		&:focus {
+			outline: 2px solid currentColor;
+			outline-offset: 1px;
+		}
+
+		&[aria-busy="true"] {
+			opacity: 0.75;
+		}
+	}
+
+	&__clear {
+		position: absolute;
+		top: 50%;
+		right: 0.5em;
+		transform: translateY(-50%);
+		padding: 0.25em 0.5em;
+		border: 0;
+		background: transparent;
+		color: inherit;
+		font-size: 1.25em;
+		line-height: 1;
+		cursor: pointer;
+	}
+
+	&__list {
+		position: absolute;
+		z-index: 20;
+		top: 100%;
+		right: 0;
+		left: 0;
+		max-height: 16em;
+		margin: 0.25em 0 0;
+		padding: 0;
+		overflow-y: auto;
+		border: 1px solid rgba(18, 18, 18, 0.55);
+		border-radius: 4px;
+		background: #fff;
+		color: #121212;
+		list-style: none;
+
+		&[hidden] {
+			display: none;
+		}
+	}
+
+	&__option {
+		margin: 0;
+		padding: 0.6em 0.75em;
+		cursor: pointer;
+
+		&[aria-selected="true"],
+		&:hover {
+			background: rgba(18, 18, 18, 0.08);
+		}
+	}
+
+	&__hint {
+		margin: 0.4em 0 0;
+		font-size: 0.8125em;
+		opacity: 0.8;
+	}
+
+	&__retry {
+		margin: 0.25em 0 0;
+		padding: 0;
+		border: 0;
+		background: none;
+		color: inherit;
+		font: inherit;
+		font-size: 0.8125em;
+		text-decoration: underline;
+		cursor: pointer;
+	}
+}

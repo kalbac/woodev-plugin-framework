@@ -323,6 +323,50 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		}
 
 		/**
+		 * Builds ONLY the location-provider block — what the Checkout Blocks locality chooser reads.
+		 *
+		 * The block checkout has no classic field descriptors to localize, so it takes the same
+		 * `location` block {@see self::build()} nests under that key (SP-11 C-1, #1087) without
+		 * paying for the field/policy half of the config.
+		 *
+		 * Plus one Blocks-only key, `selection`: the settlement the customer EXPLICITLY chose, as
+		 * `[ 'record' => Location_Record::to_array() ]`, or `null` when there is none — and for the
+		 * store's own implicit default, which is never a pick. `chain`/`current` carry keys only,
+		 * and a key cannot be checked against an address: the chooser claims a selection only when
+		 * this record's own settlement, region and country are what the native address names, and
+		 * clears a saved locality only when the address names ANOTHER place — the same contract
+		 * as rule (c) of {@see \Woodev\Framework\Shipping\Location\Location_Service::is_customer_record_stale()}.
+		 * An address that names no city yet leaves it alone.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<string, mixed>|null The block, or `null` when no location service was injected or
+		 *                                   the layer is inactive (no provider configured) — the chooser
+		 *                                   then stays hidden and the native address fields work alone.
+		 */
+		public function build_location_config(): ?array {
+			if ( null === $this->location_service || ! $this->location_service->is_active() ) {
+				return null;
+			}
+
+			$config    = $this->build_location_block( $this->location_service );
+			$customer  = $this->location_service->get_customer_record();
+			$selection = null;
+
+			if ( null !== $customer && ! $customer['implicit'] ) {
+				$settlement = $this->location_service->get_customer_record_at( \Woodev\Framework\Shipping\Location\Location_Record::LEVEL_SETTLEMENT );
+
+				if ( null !== $settlement ) {
+					$selection = [ 'record' => $settlement->to_array() ];
+				}
+			}
+
+			$config['selection'] = $selection;
+
+			return $config;
+		}
+
+		/**
 		 * Builds the `field_policy` block (Task 6, issue #362, spec §4.3): the effective
 		 * values of the three settings that stay classic-only/JS-driven
 		 * (`address_field`, `postcode_field`, `country_field` — Task 9 acts on them in

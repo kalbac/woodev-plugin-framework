@@ -2369,6 +2369,44 @@ msgstr ""
 msgid "Select…"
 msgstr ""
 
+#: shipping-method/checkout/blocks/class-locality-blocks.php:132
+msgid "Find your locality"
+msgstr ""
+
+#: shipping-method/checkout/blocks/class-locality-blocks.php:133
+msgid "Choose a locality to fill in the city and region."
+msgstr ""
+
+#: shipping-method/checkout/blocks/class-locality-blocks.php:134
+msgid "Searching…"
+msgstr ""
+
+#: shipping-method/checkout/blocks/class-locality-blocks.php:135
+msgid "Locality suggestions"
+msgstr ""
+
+#: shipping-method/checkout/blocks/class-locality-blocks.php:136
+msgid "Clear the chosen locality"
+msgstr ""
+
+#: shipping-method/checkout/blocks/class-locality-blocks.php:137
+msgid "The region could not be matched — choose it in the address form."
+msgstr ""
+
+#: shipping-method/checkout/blocks/class-locality-blocks.php:138
+msgid "Your locality could not be updated."
+msgstr ""
+
+#: shipping-method/checkout/blocks/shipping-locality/block.json
+msgctxt "block title"
+msgid "Delivery locality"
+msgstr ""
+
+#: shipping-method/checkout/blocks/shipping-locality/block.json
+msgctxt "block description"
+msgid "Lets the shopper pick a locality from the location provider and fills in the city and region."
+msgstr ""
+
 #: shipping-method/checkout/class-checkout-config.php:701
 msgid "Start typing a name"
 msgstr ""
