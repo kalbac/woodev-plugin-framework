@@ -1802,6 +1802,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * @throws \RuntimeException When the point is unavailable or outside the active scope.
 		 */
 		public function confirm_store_api_selection( string $point_id, string $rate_id, string $payment_method, string $address_key ): array {
+			$selection = $this->prepare_store_api_selection( $point_id, $rate_id, $payment_method, $address_key );
+			if ( $selection['result']['allowed'] ) {
+				$this->persist_store_api_selection( $selection );
+			}
+			return $selection['result'];
+		}
+
+		/**
+		 * Evaluates a Store API command without announcing or remembering it.
+		 *
+		 * @since 2.0.2
+		 * @param string $point_id Requested point identity.
+		 * @param string $rate_id Full server rate id.
+		 * @param string $payment_method Available gateway id.
+		 * @param string $address_key Server destination fingerprint.
+		 * @return array<string, mixed> Prepared point, verdict and server context.
+		 * @throws \RuntimeException When the point is unavailable or outside the active scope.
+		 */
+		public function prepare_store_api_selection( string $point_id, string $rate_id, string $payment_method, string $address_key ): array {
 			$pair = $this->selection_pair_for_method( explode( ':', $rate_id )[0] );
 			$point = $this->fetch_point( $point_id, true );
 			if ( null === $point || ! $this->point_matches_pair( $point, $pair ) ) {
@@ -1819,32 +1838,54 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				function ( Pickup_Point $confirmed ) use ( &$effective, $pair ): bool {
 					$effective = $confirmed;
 					return $this->point_matches_pair( $confirmed, $pair );
-				}
+				},
+				false
 			);
-			if ( ! $result['allowed'] ) {
-				return $result;
-			}
+			return [
+				'point' => $effective,
+				'result' => $result,
+				'context' => [
+					'field_id' => $this->field_id,
+					'method_id' => explode( ':', $rate_id )[0],
+					'payment_method' => $payment_method,
+					'cart_weight' => $this->current_cart_weight_grams(),
+				],
+				'rate_id' => $rate_id,
+				'address_key' => $address_key,
+				'locality' => $pair['locality'],
+			];
+		}
 
+		/**
+		 * Announces and remembers a previously allowed Store API command.
+		 *
+		 * @since 2.0.2
+		 * @param array<string, mixed> $prepared Server-prepared selection.
+		 * @return void
+		 */
+		public function persist_store_api_selection( array $prepared ): void {
+			if ( ! $prepared['result']['allowed'] ) {
+				return;
+			}
+			Pickup_Selection_Service::announce( $prepared['point'], $prepared['context'] );
 			$selection = $this->selection();
 			if ( null !== $selection ) {
-				$data = $effective->to_array();
-				// Reuse the existing write, including corrected-point locality and display data.
+				$data = $prepared['point']->to_array();
 				$selection->remember_confirmation(
-					$pair['locality'],
+					$prepared['locality'],
 					$data['type']['code'],
 					[
 						'plugin_id' => $this->plugin_id,
 						'field_id' => $this->field_id,
-						'point_id' => $effective->get_id(),
-						'locality' => $pair['locality'],
-						'rate_id' => $rate_id,
-						'address_key' => $address_key,
+						'point_id' => $prepared['point']->get_id(),
+						'locality' => $prepared['locality'],
+						'rate_id' => $prepared['rate_id'],
+						'address_key' => $prepared['address_key'],
 						'summary' => $data['short_address'],
-						'selection' => $result,
+						'selection' => $prepared['result'],
 					]
 				);
 			}
-			return $result;
 		}
 
 		/**
@@ -1863,10 +1904,30 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			}
 			$snapshot = $selection->recall_confirmation( $selected['locality'], $selected['point_id'] );
 			if ( null !== $snapshot && ( $snapshot['rate_id'] !== $rate_id || $snapshot['address_key'] !== $address_key ) ) {
-				$this->clear_store_api_selection( $rate_id );
 				return null;
 			}
 			return $snapshot;
+		}
+
+		/**
+		 * Invalidates a changed confirmation on checkout mutation paths only.
+		 *
+		 * @since 2.0.2
+		 * @param string         $rate_id Full server rate id.
+		 * @param string         $address_key Server destination fingerprint.
+		 * @param \WC_Order|null $order Session draft, when available.
+		 * @return void
+		 */
+		public function reconcile_store_api_selection( string $rate_id, string $address_key, ?\WC_Order $order = null ): void {
+			$selected = $this->get_selected_point_for_method( explode( ':', $rate_id )[0] );
+			$selection = $this->selection();
+			if ( null === $selected || null === $selection || '' === $selected['point_id'] ) {
+				return;
+			}
+			$snapshot = $selection->recall_confirmation( $selected['locality'], $selected['point_id'] );
+			if ( null !== $snapshot && ( $snapshot['rate_id'] !== $rate_id || $snapshot['address_key'] !== $address_key ) ) {
+				$this->clear_store_api_selection( $rate_id, $order );
+			}
 		}
 
 		/**

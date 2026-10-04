@@ -19,7 +19,7 @@ require_once __DIR__ . '/../Order/order-persistence-fixtures.php';
 require_once __DIR__ . '/../Order/StoreApiOrderPersistenceTest.php';
 
 final class C2a_Session {
-	public array $data = [ 'chosen_shipping_methods' => [ 'carrier_pickup:7' ] ];
+	public array $data = [ 'chosen_shipping_methods' => [ 'carrier_pickup:7' ], 'store_api_draft_order' => 123 ];
 	public function get( $key, $default = null ) { return $this->data[ $key ] ?? $default; }
 	public function set( $key, $value ): void { $this->data[ $key ] = $value; }
 }
@@ -37,13 +37,16 @@ final class C2a_Selection extends Pickup_Selection {
 }
 class C2a_Adapter extends Store_Api_Pickup {
 	public static bool $throttled = false;
+	public static int $context_reads = 0;
+	protected static function draft_order_id(): int { return (int) self::$session->get( 'store_api_draft_order', 0 ); }
 	protected static function selection_rate_limited(): bool { return self::$throttled; }
 	public static array $packages = [];
 	public static array $gateways = [];
 	public static C2a_Session $session;
-	protected static function context(): array {
-		return [ 'rate_id' => self::$session->data['chosen_shipping_methods'][0],
-			'address_key' => self::address_key( self::$packages[0]['destination'] ),
+	protected static function context( bool $refresh = false ): array {
+		++self::$context_reads;
+		return [ 'rate_id' => self::$session->data['chosen_shipping_methods'][0] ?? '',
+			'address_key' => self::address_key( self::$packages[0]['destination'] ?? [] ),
 			'chosen' => self::$session->data['chosen_shipping_methods'], 'packages' => self::$packages ];
 	}
 	protected static function payment_available( string $payment ): bool { return isset( self::$gateways[ $payment ] ); }
@@ -116,12 +119,12 @@ final class StoreApiPickupTest extends TestCase {
 		Functions\when( 'did_action' )->justReturn( 0 );
 		Functions\when( 'get_option' )->returnArg( 2 );
 		Functions\when( 'get_post_meta' )->alias( fn( $id, $key, $single = true ) => $this->meta[ $key ] ?? '' );
-				Functions\when( 'did_action' )->justReturn( 0 );
 		Functions\when( 'wp_cache_delete' )->justReturn( true );
 		Functions\when( 'delete_post_meta' )->alias( function ( $id, $key ) { unset( $this->meta[ $key ] ); return true; } );
 		Functions\when( 'number_format_i18n' )->alias( static fn( $n, $d ) => number_format( $n, $d ) );
 		Functions\when( 'wc_add_notice' )->justReturn( null );
 		C2a_Adapter::$throttled = false;
+		C2a_Adapter::$context_reads = 0;
 		C2a_Adapter::$session = $this->session;
 		C2a_Adapter::$packages =& $this->packages;
 		C2a_Adapter::$gateways =& $this->gateways;
@@ -203,10 +206,18 @@ final class StoreApiPickupTest extends TestCase {
 		$this->assertSame( '', $this->handler->get_selected_point_for_method( 'carrier_pickup' )['point_id'] );
 	}
 
-	public function test_cart_address_change_clears_confirmation_without_checkout_rendering(): void {
+	public function test_cart_address_change_hides_confirmation_without_writing_session_or_order(): void {
 		C2a_Adapter::update( $this->command() );
+		$this->handler->draft = new C2a_Order( $this->address );
+		$this->meta['carrier_point'] = 'P1';
+		$before = $this->session->data;
 		$this->packages[0]['destination']['postcode'] = '999';
 		$this->assertNull( C2a_Adapter::cart_data()['pickup']['carrier']['carrier_point'] );
+		$this->assertSame( $before, $this->session->data );
+		$this->assertSame( 'P1', $this->meta['carrier_point'] );
+		C2a_Adapter::update_draft( $this->request() );
+		$this->assertArrayNotHasKey( 'carrier_point', $this->meta );
+		$this->assertSame( '', $this->handler->get_selected_point_for_method( 'carrier_pickup' )['point_id'] );
 	}
 
 	public function test_rate_instance_change_invalidates_the_snapshot(): void {
@@ -305,9 +316,19 @@ final class StoreApiPickupTest extends TestCase {
 	}
 
 	public function test_existing_pay_for_order_is_outside_the_checkout_adapter(): void {
+		$order = new C2a_Order( $this->address );
+		$order->status = 'pending';
+		$this->meta['carrier_point'] = 'P1';
+		$this->session->data['store_api_draft_order'] = 999;
+		$this->session->data['chosen_shipping_methods'] = [];
+		$this->packages = [];
+		C2a_Adapter::update_order( $order, $this->request( $this->command( [ 'clear' => true ] ) ) );
 		$errors = new \WP_Error();
-		C2a_Adapter::validate_order( new C2a_Order( $this->address ), $errors );
+		C2a_Adapter::validate_order( $order, $errors );
 		$this->assertFalse( $errors->has_errors() );
+		$this->assertSame( 0, C2a_Adapter::$context_reads );
+		$this->assertSame( 0, $this->fetches );
+		$this->assertSame( 'P1', $this->meta['carrier_point'] );
 	}
 
 	public function test_outage_policy_is_shared_with_classic(): void {
@@ -355,14 +376,27 @@ final class StoreApiPickupTest extends TestCase {
 		Functions\expect( 'woocommerce_store_api_register_update_callback' )->once()->with( [
 			'namespace' => 'woodev-shipping', 'callback' => [ Store_Api_Pickup::class, 'update' ],
 		] )->andReturn( true );
-		Functions\expect( 'woocommerce_store_api_register_endpoint_data' )->once()->with( \Mockery::on( static function ( $args ) {
-			return 'cart' === $args['endpoint'] && 'woodev-shipping' === $args['namespace'] && is_callable( $args['data_callback'] );
-		} ) )->andReturn( true );
+		// WC is not loaded in this unit suite: assert both endpoint registrations and
+		// the writable open pickup object WC's recursive sanitizer must retain instead.
+		$registrations = [];
+		Functions\expect( 'woocommerce_store_api_register_endpoint_data' )->twice()->andReturnUsing( static function ( $args ) use ( &$registrations ) {
+			$registrations[ $args['endpoint'] ] = $args;
+			return true;
+		} );
 		\Brain\Monkey\Actions\expectAdded( 'woocommerce_store_api_checkout_update_draft' )->once()->with( [ Store_Api_Pickup::class, 'update_draft' ] );
 		Store_Api_Pickup::register();
 		Store_Api_Pickup::add_handler( $this->handler, 'second_carrier', 'second_field' );
 		Store_Api_Pickup::register();
 		$this->assertArrayHasKey( 'second_carrier', C2a_Adapter::cart_data()['pickup'] );
+		$this->assertSame( [ 'cart', 'checkout' ], array_keys( $registrations ) );
+		foreach ( $registrations as $endpoint => $args ) {
+			$this->assertSame( 'woodev-shipping', $args['namespace'] );
+			$schema = call_user_func( $args['schema_callback'] );
+			$this->assertSame( 'object', $schema['pickup']['type'] );
+			$this->assertTrue( $schema['pickup']['additionalProperties'] );
+			$this->assertSame( 'cart' === $endpoint, $schema['pickup']['readonly'] );
+		}
+		$this->assertTrue( is_callable( $registrations['cart']['data_callback'] ) );
 	}
 
 	public function test_corrected_point_outside_scope_is_not_remembered(): void {
@@ -388,7 +422,7 @@ final class StoreApiPickupTest extends TestCase {
 		require __DIR__ . '/store-api-99-capability.php';
 		defined( 'ARRAY_A' ) || define( 'ARRAY_A', 'ARRAY_A' );
 		Functions\expect( 'woocommerce_store_api_register_update_callback' )->once()->andReturn( true );
-		Functions\expect( 'woocommerce_store_api_register_endpoint_data' )->once()->andReturn( true );
+		Functions\expect( 'woocommerce_store_api_register_endpoint_data' )->twice()->andReturn( true );
 		\Brain\Monkey\Actions\expectAdded( 'woocommerce_store_api_checkout_update_draft' )->never();
 		Store_Api_Pickup::register();
 		$this->assertSame( 'object', Store_Api_Pickup::schema()['pickup']['type'] );
@@ -447,6 +481,88 @@ final class StoreApiPickupTest extends TestCase {
 		$this->assertSame( 'm&sk', $snapshot['locality'] );
 		$this->assertSame( 'A & B', $snapshot['summary'] );
 		$this->assertSame( 'A &amp; B', $snapshot['selection']['point']['short_address'] );
+	}
+
+	public function test_pay_for_order_route_is_skipped_even_when_it_targets_the_session_draft(): void {
+		$request = new \WP_REST_Request( [ 'id' => 123 ] );
+		$order = new C2a_Order( $this->address );
+		C2a_Adapter::update_order( $order, $request );
+		$errors = new \WP_Error();
+		C2a_Adapter::validate_order( $order, $errors );
+		$this->assertFalse( $errors->has_errors() );
+		$this->assertSame( 0, C2a_Adapter::$context_reads );
+	}
+
+	public function test_clear_after_switching_to_courier_is_a_noop_success(): void {
+		C2a_Adapter::update( $this->command() );
+		$this->session->data['chosen_shipping_methods'] = [ 'flat_rate:9' ];
+		$before = $this->session->data;
+		C2a_Adapter::update( $this->command( [ 'clear' => true ] ) );
+		$this->assertSame( $before, $this->session->data );
+		$this->assertSame( 1, $this->fetches );
+	}
+
+	public function test_invalid_later_command_does_not_apply_an_earlier_clear(): void {
+		C2a_Adapter::update( $this->command() );
+		Store_Api_Pickup::add_handler( $this->handler, 'second', 'second_point' );
+		$before = $this->session->data;
+		$data = $this->command( [ 'clear' => true ] );
+		$data['pickup']['second']['second_point'] = [ 'point_id' => '' ];
+		$this->expectException( \Automattic\WooCommerce\StoreApi\Exceptions\RouteException::class );
+		try { C2a_Adapter::update( $data ); }
+		finally { $this->assertSame( $before, $this->session->data ); }
+	}
+
+	public function test_later_carrier_denial_does_not_remember_an_earlier_selection(): void {
+		Store_Api_Pickup::add_handler( $this->handler, 'second', 'second_point' );
+		$count = 0;
+		Filters\expectApplied( 'woodev_shipping_pickup_point_selection' )->twice()->andReturnUsing( static function ( $verdict ) use ( &$count ) {
+			return ++$count === 1 ? $verdict : [ 'allowed' => false, 'reason' => 'Domain refused' ];
+		} );
+		$data = $this->command();
+		$data['pickup']['second']['second_point'] = [ 'point_id' => 'P2' ];
+		$this->expectExceptionMessage( 'Domain refused' );
+		try { C2a_Adapter::update( $data ); }
+		finally { $this->assertArrayNotHasKey( 'installed_carrier_selection', $this->session->data ); }
+	}
+
+	public function test_cart_response_reads_existing_rates_without_calculating_shipping(): void {
+		$cart = \Mockery::mock();
+		$cart->shouldNotReceive( 'calculate_shipping' );
+		$shipping = \Mockery::mock();
+		$shipping->shouldReceive( 'get_packages' )->once()->andReturn( $this->packages );
+		$wc = \Mockery::mock();
+		$wc->cart = $cart;
+		$wc->session = $this->session;
+		$wc->shouldReceive( 'shipping' )->once()->andReturn( $shipping );
+		Functions\when( 'WC' )->justReturn( $wc );
+		$this->assertNull( Store_Api_Pickup::cart_data()['pickup']['carrier']['carrier_point'] );
+	}
+
+	public function test_first_attempt_shared_payment_hooks_return_one_refusal_for_the_carrier(): void {
+		$wc = new \stdClass();
+		$wc->session = $this->session;
+		Functions\when( 'WC' )->justReturn( $wc );
+		$checkout = new \Woodev\Framework\Shipping\Checkout\Checkout_Handler(
+			\Woodev\Framework\Shipping\Checkout\Checkout_Fields::from_array( [
+				\Woodev\Framework\Shipping\Checkout\Field::create( 'carrier_point' )->mark_pickup_slot()->to_array(),
+			] ), 'carrier'
+		);
+		$checkout->set_requires_pickup_methods( [ 'carrier_pickup' ] );
+		$order = new C2a_Order( $this->address );
+		C2a_Adapter::update_order( $order, $this->request() );
+		$errors = new \WP_Error();
+		$checkout->handle_store_api_validate_order( $order, $errors );
+		C2a_Adapter::validate_order( $order, $errors );
+		$this->assertCount( 1, $errors->get_error_messages() );
+		$this->assertStringContainsString( 'checkout page', $errors->get_error_message() );
+	}
+
+	public function test_bundled_copies_can_include_both_pickup_classes_again(): void {
+		require __DIR__ . '/../../../../woodev/shipping-method/pickup/class-store-api-pickup.php';
+		require __DIR__ . '/../../../../woodev/shipping-method/pickup/class-pickup-selection-service.php';
+		$this->assertTrue( class_exists( Store_Api_Pickup::class, false ) );
+		$this->assertTrue( class_exists( \Woodev\Framework\Shipping\Pickup\Pickup_Selection_Service::class, false ) );
 	}
 
 	public function test_store_api_confirmation_cannot_bypass_classic_selection_quota(): void {

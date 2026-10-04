@@ -676,13 +676,14 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 		/**
 		 * `woocommerce_checkout_validate_order_before_payment` also fires for a pay-for-order
 		 * request against an EXISTING order: its point was persisted when it was placed and is
-		 * no longer in the session. Missing persisted points are checked regardless of status.
+		 * no longer in the session. An admin-created order may never have had a point;
+		 * the pay-for-order page has no picker, so this draft-only backstop must stay silent.
 		 */
-		public function test_an_existing_order_without_a_point_is_refused(): void {
+		public function test_an_existing_order_being_paid_for_is_not_refused(): void {
 			$order  = new Store_Api_Fake_Order( [ 'carrier_pickup' ], 'Москва', 'pending' );
 			$plugin = $this->plugin( 'carrier', 'carrier_pickup_point', 'cdek_full_point' );
 
-			$this->assertTrue( $this->fire_store_api_validate_order( [ $plugin ], $order )->has_errors() );
+			$this->assertFalse( $this->fire_store_api_validate_order( [ $plugin ], $order )->has_errors() );
 		}
 
 		/**
@@ -804,13 +805,12 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 		}
 
 		/**
-		 * Non-pickup orders pass; pending pickup orders without a point are refused on legacy WC too.
+		 * Non-pickup and existing pay-for-order orders pass on legacy WC too.
 		 */
 		public function test_a_legacy_wc_post_for_a_non_pickup_or_existing_order_passes(): void {
 			$handler = $this->legacy_wc_handler();
 
 			$handler->handle_store_api_update_order_from_request( new Store_Api_Fake_Order( [ 'free_shipping' ] ), new Store_Api_Request( 'POST' ) );
-			$this->expectException( \Automattic\WooCommerce\StoreApi\Exceptions\RouteException::class );
 			$handler->handle_store_api_update_order_from_request( new Store_Api_Fake_Order( [ 'carrier_pickup' ], 'Москва', 'pending' ), new Store_Api_Request( 'POST' ) );
 
 			$this->addToAssertionCount( 1 );

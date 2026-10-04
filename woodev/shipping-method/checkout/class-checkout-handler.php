@@ -1970,8 +1970,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			);
 		}
 
+		/**
+		 * Refuses blank pickup slots, deferring registered fields to the Store API adapter.
+		 *
+		 * @since 2.0.2
+		 * @param \WC_Order $order Order about to be paid.
+		 * @param \WP_Error $errors Shared payment validation errors.
+		 * @return void
+		 */
 		public function handle_store_api_validate_order( \WC_Order $order, \WP_Error $errors ): void {
-			foreach ( $this->pickup_point_errors( $order ) as $message ) {
+			foreach ( $this->pickup_point_errors( $order, true ) as $message ) {
 				// Every carrier plugin registers its own handler; do not repeat one sentence.
 				if ( ! in_array( $message, $errors->get_error_messages(), true ) ) {
 					$errors->add( 'woodev_shipping_pickup_point_required', $message );
@@ -2050,19 +2058,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * `woodev_shipping_store_api_posted_data` filter (the session's selection map) — the
 		 * same two inputs {@see self::handle_store_api_order_processed()} persists from, so
 		 * "refused here" and "would have been saved there" cannot disagree. Wording is the
-		 * classic per-field message ({@see self::required_message()}), so a plugin-supplied
-		 * override applies on both paths.
+		 * classic per-field message ({@see self::required_message()}) for unregistered slots.
+		 * Registered pickup fields defer to the adapter so one carrier emits one refusal.
 		 *
-		 * Retries are checked regardless of status. Persisted field values cover payment
-		 * retries after completed-processing cleared the session selection.
+		 * This hook also fires for pay-for-order against existing/admin-created orders,
+		 * where no picker is available. Only checkout drafts belong to this backstop;
+		 * the Store API pickup adapter validates retries of the session draft separately.
 		 *
 		 * @since 2.0.2
 		 *
 		 * @param \WC_Order $order the order being placed
+		 * @param bool      $defer_registered Whether to defer registered fields to the pickup adapter.
 		 *
 		 * @return string[]
 		 */
-		private function pickup_point_errors( \WC_Order $order ): array {
+		private function pickup_point_errors( \WC_Order $order, bool $defer_registered = false ): array {
+			if ( ! $order->has_status( 'checkout-draft' ) ) {
+				return [];
+			}
 			$requires_pickup_methods = $this->requires_pickup_methods ?? Checkout_Config::pickup_method_ids();
 
 			if ( [] === $requires_pickup_methods || ! self::chosen_method_matches( self::store_api_chosen_method( $order ), $requires_pickup_methods ) ) {
@@ -2073,6 +2086,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			$messages = [];
 
 			foreach ( $this->pickup_slot_fields() as $pickup_field ) {
+				if ( $defer_registered && \Woodev\Framework\Shipping\Pickup\Store_Api_Pickup::validates_field( $order, $this->plugin_id(), $pickup_field['id'] ) ) {
+					continue;
+				}
 				if ( self::is_blank( $values[ $pickup_field['id'] ] ?? '' ) ) {
 					$messages[] = self::required_message( $pickup_field );
 				}
