@@ -64,6 +64,7 @@ the `init_*` methods to supply their own implementations. `__construct()` is an 
 | `Woodev_Script_Handler` | Script/style enqueueing (abstract, `woodev/handlers/script-handler.php`) |
 | `Woodev_License_Messages` | License admin messages |
 | `Woodev_Notes_Helper` | WC Admin inbox notes |
+| `Woodev\Framework\Error_Reporting\Error_Reporter` | Opt-in, anonymised PHP error reports of OUR plugins to a Sentry-compatible receiver — installed once by the winning copy from `Framework_Resolver::load_plugins()`; spec `specs/2026-10-04-error-reporter-design.md` (#130) |
 
 ## Plugin variants
 
