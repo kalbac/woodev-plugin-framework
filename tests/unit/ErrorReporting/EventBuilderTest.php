@@ -275,7 +275,7 @@ final class EventBuilderTest extends ErrorReportingTestCase {
 		$this->assertSame( 'Uncaught Exception', $event['exception']['values'][0]['value'] );
 
 		$json = $this->encode( $event );
-		foreach ( [ 'hunter2-secret', 'Stack trace', 'Иван', '999', 'thrown in' ] as $needle ) {
+		foreach ( [ 'hunter2-secret', 'Stack trace', 'Иван', '123-45-67', 'thrown in' ] as $needle ) {
 			$this->assertStringNotContainsString( $needle, $json );
 		}
 
