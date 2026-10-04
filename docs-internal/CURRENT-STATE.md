@@ -6,7 +6,7 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-02 (s149, overnight).** ✅ Merged #1057 #1056 #1062 #955 #1060 #1069 #1071 #331. ⏸ PR #1077 (#1075) awaits him; PR #1076 (#332) needs «write on Save». Details: `sessions/s149.md`. ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
+**As of 2026-10-04 (s150).** ✅ Merged #1075 #332 #948 #947 #130 (PRs #1077 #1076 #1079 #1080 #1083); no open PRs. Details: `sessions/s150.md`. ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
 orders-page slug redirects to the framework page with that carrier preselected, accepted on the rig.
 ✅ **Both machines are live**; routine sync is git ONLY (`wiki/two-machine-setup.md`). The order
 metabox (#856) and the orders table (#870) stay accepted.
@@ -16,19 +16,7 @@ the real signed-envelope route. The admin license REST route refuses an ambiguou
 **NOT** an id without a store product — registration retains such an engine, deliberately; the
 divergence is stated in `resolve_license()`'s docblock.
 
-✅ **#928 CLOSED (s140): the orders page resolves its marker scope to ids and passes `post__in`.** The
-wall was never the negation: an OR of `EXISTS` marker clauses joins the meta table once per carrier
-with no key predicate (`~d^N`) — the UNFILTERED page at 4 carriers took **11.7 s / 10 k orders**, and
-sites with 4+ carriers exist (operator, 27.09.2026). `Orders_Id_Resolver` runs one flat id query
-(driver `meta_key IN`, correlated `EXISTS`/`NOT EXISTS`) on every path — page, tabs, all filters,
-badge; main-query joins **0**; 10 k × 4 carriers → 13 ms. Empty list → NO_MATCH (`[]` fails OPEN on
-both datastores). `ShippingOrdersQueryRowSemanticsTest` substitutes the seam and checks the id set
-against its oracle; the universe is single-marker by explicit decision, and a `WP_DEBUG`
-`_doing_it_wrong()` reports a multi-marker order. Follow-ups: **#935** CLOSED by measurement (s141, PR #939 — neither narrowing nor one `GROUP BY` pays;
-the narrow-period variant is frozen as **#940**); **#936** merged in PR #937 (DB-level oracle test on both
-datastores, a DB error is logged). Gotcha
-`an-or-of-exists-meta-clauses-joins-the-meta-table-once-per-key-unpredicated`; evidence
-`research/2026-09-26-928-form-measurement/`.
+✅ **#928 CLOSED (s140): the orders page resolves its marker scope to ids and passes `post__in`** (`Orders_Id_Resolver`; 4 carriers × 10 k orders 11.7 s → 13 ms; empty list → NO_MATCH). Detail: `sessions/s140.md`, gotcha `an-or-of-exists-meta-clauses-joins-the-meta-table-once-per-key-unpredicated`; frozen follow-up #940.
 
 ⚠ **Addressing a `meta_query` part by "has a `relation` key" cannot tell the `AND` wrapper from a single
 unwrapped part** — gotcha `a-relation-key-does-not-tell-the-and-wrapper-from-a-single-meta-query-part`.
@@ -39,6 +27,7 @@ selector matches nothing. One line each under the `[rig/*]` and `[build/*]` topi
 
 ⛔ **The operator reordered the work, 12.09.2026, reconfirmed 13.09** — *«пока у нас не будет готов
 базовый минимум самого фреймворка, мы плагин не пилим»*. **#786 is OUT of the queue** («Заморожено»).
+**«Base minimum» = milestone «v2.0 релиз» (operator, s150):** #1078 (SP-11) + #1081, then #247 #285 #567 last; #947 #948 #130 done. `docs/` after the plugin; #621 behind #639; reporter receiver = GlitchTip (#1082, his).
 Next: see `next-session-prompt.md`. The «new» scope + badge = unexported ∩ `EXPORTABLE_STATUSES` (#1024, his decision). Codex: default `gpt-6-luna`, hard tasks `gpt-6.1-sol` (operator, 01.10.2026; `CLAUDE.md`). Codex is back in use (operator, 29.09.2026): **1 of 3 usage-limit resets spent** (none spent in s146), recipe in gotcha `starting-codex-under-orca-needs-four-steps-not-one` — on 0.158 the report-FILE path works, `worker_done` never comes.
 
 ✅ **CI first-try reliability is ENFORCED** (#871): `.githooks/pre-push` rebuilds the bundles and

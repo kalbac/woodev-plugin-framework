@@ -54,3 +54,4 @@
 
 - [../GOTCHAS.md](../GOTCHAS.md) — the topic map
 - [testing/meta-query-parts] **A `relation` key does NOT tell the `AND` wrapper from a single unwrapped part that carries its own relation — prove a role-based helper against BOTH shapes.** → [a-relation-key-does-not-tell-the-and-wrapper-from-a-single-meta-query-part](../gotchas/a-relation-key-does-not-tell-the-and-wrapper-from-a-single-meta-query-part.md) (s139)
+- [testing/php-versions] **Green on PHP 8.5, red on CI 7.4/8.0: a reflective write needs `setAccessible()` below 8.1 (deprecated in 8.5), and an anonymous subclass is `class@anonymous`.** → [below-php-8-1-reflection-needs-setaccessible-and-anonymous-classes-are-class-at-anonymous](../gotchas/below-php-8-1-reflection-needs-setaccessible-and-anonymous-classes-are-class-at-anonymous.md) (s150)
