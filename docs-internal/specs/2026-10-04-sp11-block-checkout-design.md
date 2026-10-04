@@ -143,6 +143,17 @@ echo that disagrees with the authoritative session or current shipping line; do 
 from an unconfirmed ID. An empty/missing echo can use the existing session path for other clients.
 Explicit clears must be representable and must clear the matching client validation state.
 
+C-2a server transport contract (#1088): `Store_Api_Pickup` owns the single `woodev-shipping`
+cart schema and update callback for every carrier. Both update commands and checkout echoes use
+`pickup[plugin_id][field_id]`. A command contains `point_id` and optional `payment_method`, or
+`clear: true`; only server-resolved rates, destination and cart weight are authoritative.
+The cart snapshot contains `plugin_id`, `field_id`, `point_id`, `locality`, full `rate_id`, `summary`
+and `selection` (the classic verdict/corrected-point/close/refresh advice). The destination fingerprint
+stays server-side inside the existing scoped selection entry. A cleared snapshot is `null`.
+Confirmation shares the classic 15/minute selection quota, so switching transport cannot bypass it.
+Other slices must extend this registration owner rather than replace its callback or schema.
+C-1 uses core address synchronization and registers no competing framework Store API namespace.
+
 Important existing code, not new work to recreate:
 
 - #949 is **closed**; the REST rate guard has already been fixed. Re-verify rates after address

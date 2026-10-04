@@ -143,6 +143,72 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Selection' )
 		}
 
 		/**
+		 * Attaches Store API confirmation to the existing remembered entry.
+		 *
+		 * @since 2.0.2
+		 * @param string               $locality Opaque locality key.
+		 * @param string               $type Point type code.
+		 * @param array<string, mixed> $confirmation Confirmed server context.
+		 * @return void
+		 */
+		public function remember_confirmation( string $locality, string $type, array $confirmation ): void {
+			$session = $this->session();
+			if ( null === $session ) {
+				return;
+			}
+			$map = $this->read_map( $session );
+			if ( isset( $map[ $locality ][ $type ] ) ) {
+				$map[ $locality ][ $type ]['confirmation'] = $confirmation;
+				$session->set( $this->scope->session_key(), $map );
+			}
+		}
+
+		/**
+		 * Reads confirmation for the currently recalled point without another store.
+		 *
+		 * @since 2.0.2
+		 * @param string $locality Opaque locality key.
+		 * @param string $point_id Recalled point id.
+		 * @return array<string, mixed>|null
+		 */
+		public function recall_confirmation( string $locality, string $point_id ): ?array {
+			$session = $this->session();
+			if ( null === $session ) {
+				return null;
+			}
+			$map = $this->read_map( $session );
+			foreach ( $map[ $locality ] ?? [] as $entry ) {
+				if ( ( $entry['id'] ?? '' ) === $point_id && is_array( $entry['confirmation'] ?? null ) ) {
+					return $entry['confirmation'];
+				}
+			}
+			return null;
+		}
+
+		/**
+		 * Clears the active pair, retaining unrelated locality/type memory.
+		 *
+		 * @since 2.0.2
+		 * @param string $locality Opaque locality key.
+		 * @param string $type Type code, or TYPE_ANY to clear this locality.
+		 * @return void
+		 */
+		public function forget( string $locality, string $type ): void {
+			$session = $this->session();
+			if ( null === $session ) {
+				return;
+			}
+			$map = $this->read_map( $session );
+			if ( Selection_Scope::TYPE_ANY === $type ) {
+				unset( $map[ $locality ] );
+			} else {
+				unset( $map[ $locality ][ $type ] );
+			}
+			$session->set( $this->scope->session_key(), $map );
+		}
+
+
+		/**
 		 * Recalls the point id remembered for an exact (locality, type) pair.
 		 *
 		 * @since 2.0.2

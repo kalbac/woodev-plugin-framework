@@ -1739,7 +1739,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * @return bool true when the point is still selectable; false when checkout is blocked.
 		 */
 		public function validate_selected_point( Pickup_Point $point, string $payment_method, int $cart_weight ): bool {
-			$verdict = ( new Constraint_Checker() )->check( $point, $payment_method, $cart_weight );
+			$verdict = Pickup_Selection_Service::check( $point, $payment_method, $cart_weight );
 
 			if ( ! $verdict['allowed'] ) {
 				$reason = null !== $verdict['reason'] ? $verdict['reason'] : self::default_blocked_message();
@@ -1789,6 +1789,177 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 
 			return $this->validate_selected_point( $point, $payment_method, $cart_weight );
 		}
+
+		/**
+		 * Confirms a Store API choice through the classic domain pipeline.
+		 *
+		 * @since 2.0.2
+		 * @param string $point_id Requested point identity, never client point data.
+		 * @param string $rate_id Current full server rate id.
+		 * @param string $payment_method Available server gateway id.
+		 * @param string $address_key Server destination fingerprint.
+		 * @return array<string, mixed> Classic verdict and advice.
+		 * @throws \RuntimeException When the point is unavailable or outside the active scope.
+		 */
+		public function confirm_store_api_selection( string $point_id, string $rate_id, string $payment_method, string $address_key ): array {
+			$pair = $this->selection_pair_for_method( explode( ':', $rate_id )[0] );
+			$point = $this->fetch_point( $point_id, true );
+			if ( null === $point || ! $this->point_matches_pair( $point, $pair ) ) {
+				throw new \RuntimeException( self::point_unavailable_message() );
+			}
+			$effective = $point;
+			$result = Pickup_Selection_Service::confirm(
+				$point,
+				[
+					'field_id' => $this->field_id,
+					'method_id' => explode( ':', $rate_id )[0],
+					'payment_method' => $payment_method,
+					'cart_weight' => $this->current_cart_weight_grams(),
+				],
+				function ( Pickup_Point $confirmed ) use ( &$effective, $pair ): bool {
+					$effective = $confirmed;
+					return $this->point_matches_pair( $confirmed, $pair );
+				}
+			);
+			if ( ! $result['allowed'] ) {
+				return $result;
+			}
+
+			$selection = $this->selection();
+			if ( null !== $selection ) {
+				$data = $effective->to_array();
+				// Reuse the existing write, including corrected-point locality and display data.
+				$selection->remember_confirmation(
+					$pair['locality'],
+					$data['type']['code'],
+					[
+						'plugin_id' => $this->plugin_id,
+						'field_id' => $this->field_id,
+						'point_id' => $effective->get_id(),
+						'locality' => $pair['locality'],
+						'rate_id' => $rate_id,
+						'address_key' => $address_key,
+						'summary' => $data['short_address'],
+						'selection' => $result,
+					]
+				);
+			}
+			return $result;
+		}
+
+		/**
+		 * Reads only a confirmation matching the current rate and destination.
+		 *
+		 * @since 2.0.2
+		 * @param string $rate_id Full server rate id.
+		 * @param string $address_key Server destination fingerprint.
+		 * @return array<string, mixed>|null
+		 */
+		public function store_api_confirmation( string $rate_id, string $address_key ): ?array {
+			$selected = $this->get_selected_point_for_method( explode( ':', $rate_id )[0] );
+			$selection = $this->selection();
+			if ( null === $selected || null === $selection || '' === $selected['point_id'] ) {
+				return null;
+			}
+			$snapshot = $selection->recall_confirmation( $selected['locality'], $selected['point_id'] );
+			if ( null !== $snapshot && ( $snapshot['rate_id'] !== $rate_id || $snapshot['address_key'] !== $address_key ) ) {
+				$this->clear_store_api_selection( $rate_id );
+				return null;
+			}
+			return $snapshot;
+		}
+
+		/**
+		 * Clears this handler's active point, without clearing another carrier's memory.
+		 *
+		 * @since 2.0.2
+		 * @param string         $rate_id Full selected rate id.
+		 * @param \WC_Order|null $order Existing draft on the order-backed reconciliation path.
+		 * @return void
+		 */
+		public function clear_store_api_selection( string $rate_id, ?\WC_Order $order = null ): void {
+			$pair = $this->selection_pair_for_method( explode( ':', $rate_id )[0] );
+			$selection = $this->selection();
+			if ( null !== $pair && null !== $selection ) {
+				$selection->forget( $pair['locality'], $pair['type'] );
+			}
+			// A reused pending/failed draft may still carry the point the existing writer saved.
+			// Clearing must not let a later request resurrect that persisted selection.
+			$order = $order ?? $this->store_api_draft_order();
+			if ( null !== $order && null !== $pair ) {
+				\Woodev_Order_Compatibility::delete_order_meta( $order, $this->field_id );
+				if ( null !== $this->order_handler && null !== $this->point_field_logical ) {
+					$this->order_handler->set( $order, $this->point_field_logical, '' );
+				}
+			}
+		}
+
+		/**
+		 * Reads only the reusable draft belonging to this customer session.
+		 *
+		 * @since 2.0.2
+		 * @return \WC_Order|null
+		 */
+		protected function store_api_draft_order(): ?\WC_Order {
+			if ( ! function_exists( 'WC' ) || ! WC()->session || ! function_exists( 'wc_get_order' ) ) {
+				return null;
+			}
+			$draft_id = (int) WC()->session->get( 'store_api_draft_order', 0 );
+			$draft = $draft_id > 0 ? wc_get_order( $draft_id ) : null;
+			return $draft instanceof \WC_Order ? $draft : null;
+		}
+
+		/**
+		 * Checks ownership without accepting carrier identity supplied by a client.
+		 *
+		 * @since 2.0.2
+		 * @param string $rate_id Full server rate id.
+		 * @return bool
+		 */
+		public function owns_store_api_rate( string $rate_id ): bool {
+			return null !== $this->selection_pair_for_method( explode( ':', $rate_id )[0] );
+		}
+
+		/**
+		 * Re-checks a session or persisted retry point without writing or clearing it.
+		 *
+		 * @since 2.0.2
+		 * @param string $point_id Authoritative session/order point id.
+		 * @param string $rate_id Current full rate id.
+		 * @param string $payment_method Order gateway id.
+		 * @return string[] Customer-safe errors.
+		 */
+		public function store_api_point_errors( string $point_id, string $rate_id, string $payment_method ): array {
+			try {
+				$point = $this->fetch_point( $point_id, true );
+			} catch ( \Throwable $exception ) {
+				// Preserve the existing filtered refinement-outage policy on both transports.
+				return $this->evaluate_recheck_outage( $exception, $point_id ) ? [] : [ self::outage_blocked_message() ];
+			}
+			if ( null === $point || ! $this->point_matches_pair( $point, $this->selection_pair_for_method( explode( ':', $rate_id )[0] ) ) ) {
+				return [ self::point_unavailable_message() ];
+			}
+			$verdict = Pickup_Selection_Service::check( $point, $payment_method, $this->current_cart_weight_grams() );
+			return $verdict['allowed'] ? [] : [ $verdict['reason'] ?? self::default_blocked_message() ];
+		}
+
+		/**
+		 * Checks carrier locality and point type against the active domain scope.
+		 *
+		 * @since 2.0.2
+		 * @param Pickup_Point               $point Authoritative carrier point.
+		 * @param array<string, string>|null $pair Active locality/type pair.
+		 * @return bool
+		 */
+		private function point_matches_pair( Pickup_Point $point, ?array $pair ): bool {
+			if ( null === $pair || null === $this->selection_scope || '' === $pair['locality'] ) {
+				return false;
+			}
+			$data = $point->to_array();
+			return $this->selection_scope->locality_for_point( $point ) === $pair['locality']
+				&& ( Selection_Scope::TYPE_ANY === $pair['type'] || $pair['type'] === $data['type']['code'] );
+		}
+
 
 		/**
 		 * Fetches a point via the {@see Point_Source}, memoized per instance by point id.
@@ -1947,6 +2118,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			if ( null !== $this->plugin && $this->selection_scope instanceof Provider_Selection_Scope ) {
 				$this->selection_scope->adopt_location_service( $this->plugin->get_location_service() );
 			}
+
+			Store_Api_Pickup::add_handler( $this, $this->plugin_id, $this->field_id );
 
 			add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_assets' ] );
 			add_action( 'rest_api_init', [ $this, 'register_rest' ] );

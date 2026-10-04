@@ -2053,9 +2053,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * classic per-field message ({@see self::required_message()}), so a plugin-supplied
 		 * override applies on both paths.
 		 *
-		 * Only a draft order is checked: `woocommerce_checkout_validate_order_before_payment`
-		 * also fires for a pay-for-order request against an EXISTING order, whose point was
-		 * persisted when it was placed and is no longer in the session.
+		 * Retries are checked regardless of status. Persisted field values cover payment
+		 * retries after completed-processing cleared the session selection.
 		 *
 		 * @since 2.0.2
 		 *
@@ -2064,17 +2063,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * @return string[]
 		 */
 		private function pickup_point_errors( \WC_Order $order ): array {
-			if ( ! $order->has_status( 'checkout-draft' ) ) {
-				return [];
-			}
-
 			$requires_pickup_methods = $this->requires_pickup_methods ?? Checkout_Config::pickup_method_ids();
 
 			if ( [] === $requires_pickup_methods || ! self::chosen_method_matches( self::store_api_chosen_method( $order ), $requires_pickup_methods ) ) {
 				return [];
 			}
 
-			$values   = $this->sanitize_posted_data( $this->store_api_posted_data( $order ) );
+			$values   = $this->sanitize_posted_data( array_merge( $this->read_values( $order ), $this->store_api_posted_data( $order ) ) );
 			$messages = [];
 
 			foreach ( $this->pickup_slot_fields() as $pickup_field ) {

@@ -235,6 +235,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/pickup/class-point-query.php';
 			require_once $path . '/pickup/class-constraint-checker.php';
 			require_once $path . '/pickup/class-selection-result.php';
+			require_once $path . '/pickup/class-pickup-selection-service.php';
+			require_once $path . '/pickup/class-store-api-pickup.php';
 			require_once $path . '/pickup/class-pickup-selection.php';
 			require_once $path . '/pickup/class-address-target.php';
 			require_once $path . '/pickup/class-pickup-handler.php';

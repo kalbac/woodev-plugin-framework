@@ -4916,3 +4916,15 @@ msgstr ""
 #: assets/build/license-page/index.js:1
 msgid "Если в плагине Woodev произойдёт сбой, мы получим версии плагина, WordPress, WooCommerce и PHP, вид ошибки и место в коде плагина: файл, строку и названия функций. Тексты сообщений об ошибках, данные покупателей и адрес сайта не передаются — вместо адреса только обезличенный код."
 msgstr ""
+
+#: shipping-method/pickup/class-store-api-pickup.php
+msgid "Please choose a pickup point."
+msgstr "Пункт выдачи не указан."
+
+#: shipping-method/pickup/class-store-api-pickup.php
+msgid "Please choose a pickup point on the checkout page before paying."
+msgstr "Перед оплатой выберите пункт выдачи на странице оформления заказа."
+
+#: shipping-method/pickup/class-store-api-pickup.php
+msgid "Pickup points for multiple shipping packages are not supported. Please choose another shipping method."
+msgstr "Выбор пунктов выдачи для нескольких посылок не поддерживается. Выберите другой способ доставки."
