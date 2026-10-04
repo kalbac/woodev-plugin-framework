@@ -869,6 +869,10 @@ describe( 'LocalityChooser — ordering under a slow network', () => {
 		expect( mockStore.customer.shippingAddress.city ).toBe( 'Подольск' );
 		release();
 		await waitFor( () => expect( mockStore.calculating ).toBe( 0 ) );
+		await act( async () => {
+			await Promise.resolve();
+		} );
+		expect( sent( 'forget' ) ).toHaveLength( 0 );
 	} );
 
 	it( 'an unmount with a pick still queued: the pick is never sent', async () => {
