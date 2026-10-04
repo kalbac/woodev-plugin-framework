@@ -72,6 +72,7 @@
 - [tooling/orca] **A Codex worker under Orca loses its app-server after ~20–30 min ; the dispatch stays `live` and never reports. Resume the SAME session by id — work and lifecycle ids survive.** → [codex-app-server-drops-mid-task-under-orca-resume-by-session-id](../gotchas/codex-app-server-drops-mid-task-under-orca-resume-by-session-id.md) (s142)
 - [tooling/ci] **gitleaks reads WooCommerce md5 cart-item keys in a committed research log as `generic-api-key`; the tree scan then fails EVERY open PR, and a re-run reuses the old merge ref.** → [gitleaks-reads-woocommerce-cart-item-keys-in-a-research-log-as-api-keys](../gotchas/gitleaks-reads-woocommerce-cart-item-keys-in-a-research-log-as-api-keys.md) (s142)
 - [tooling/orca] **Take a dispatch id from the START RECEIPT, never from `worker-list` order — s146 stopped a live worker mid-task thinking it was the Codex critic.** → [take-a-dispatch-id-from-the-start-receipt-never-from-worker-list-order](../gotchas/take-a-dispatch-id-from-the-start-receipt-never-from-worker-list-order.md) (s146)
+- [tooling/gh] **`gh api rate_limit` showed GraphQL 4999/5000 while every GraphQL call was refused (`RATE_LIMIT`); `gh project` surfaces it as «unknown owner type». Probe with a real query; use REST for merges and checks.** → [gh-graphql-rate-limit-reads-full-while-calls-are-refused](../gotchas/gh-graphql-rate-limit-reads-full-while-calls-are-refused.md) (s151)
 
 ## Related
 
