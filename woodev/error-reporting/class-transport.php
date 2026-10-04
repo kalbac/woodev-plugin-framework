@@ -12,8 +12,9 @@ defined( 'ABSPATH' ) || exit;
 if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Transport' ) ) :
 
 	/**
-	 * POSTs one event as a Sentry envelope. Fire-and-forget: non-blocking, never throws,
-	 * and a failure is dropped without a trace — reporting must never break the page.
+	 * POSTs one event as a Sentry envelope. Called only from {@see Dispatcher} in a cron
+	 * request, never from the request that failed — so it waits for the answer (short timeout)
+	 * instead of pretending to be asynchronous. Never throws; a failure is a silent `false`.
 	 *
 	 * @since 2.0.2
 	 */
@@ -28,7 +29,7 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Transport' ) ) :
 		 *
 		 * @param array<string,mixed> $event Event payload.
 		 * @param Dsn                 $dsn   Receiver.
-		 * @return bool True when the request was handed to the HTTP layer.
+		 * @return bool True when the HTTP layer delivered the request without an error.
 		 */
 		public function send( array $event, Dsn $dsn ): bool {
 			$body = $this->build_envelope( $event );
@@ -41,7 +42,7 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Transport' ) ) :
 				$dsn->get_envelope_url(),
 				[
 					'timeout'     => 3,
-					'blocking'    => false,
+					'blocking'    => true,
 					'redirection' => 0,
 					'user-agent'  => self::CLIENT,
 					'headers'     => [

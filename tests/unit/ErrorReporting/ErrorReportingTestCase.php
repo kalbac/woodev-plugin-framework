@@ -93,7 +93,6 @@ abstract class ErrorReportingTestCase extends TestCase {
 			[
 				'abspath'    => '/srv/wp/',
 				'plugin_dir' => '/srv/wp/wp-content/plugins',
-				'home_url'   => self::HOME,
 			]
 		);
 	}

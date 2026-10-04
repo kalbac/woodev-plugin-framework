@@ -1806,6 +1806,63 @@ class FrameworkResolverTest extends TestCase {
 	}
 
 	/**
+	 * #130 round 2: the error reporter must be hooked BEFORE the first plugin's code runs, so a
+	 * plugin whose startup throws is still caught — not after the whole loop, where an uncaught
+	 * exception in a constructor aborts the loop before either handler exists.
+	 */
+	public function test_the_error_reporter_is_installed_before_a_plugin_starts_and_captures_its_failing_init(): void {
+		$resolver = new Resolver_Logging_Framework_Resolver();
+		$options  = [ 'woodev_error_reporting_enabled' => 'yes' ];
+		$seen     = [];
+
+		\Woodev\Framework\Error_Reporting\Error_Reporter::reset();
+		$this->stub_load_environment();
+
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = false ) use ( &$options ) {
+				return $options[ $name ] ?? $default;
+			}
+		);
+		Functions\when( 'update_option' )->alias(
+			static function ( $name, $value ) use ( &$options ) {
+				$options[ $name ] = $value;
+
+				return true;
+			}
+		);
+		Functions\when( 'apply_filters' )->alias(
+			static function ( $tag, $value ) {
+				return 'woodev_error_reporting_dsn' === $tag ? 'https://k@errors.example.ru/7' : $value;
+			}
+		);
+		Functions\when( 'home_url' )->justReturn( 'https://shop.example.ru/' );
+		Functions\when( 'wp_next_scheduled' )->justReturn( false );
+		Functions\when( 'wp_schedule_single_event' )->justReturn( true );
+		Functions\when( 'set_exception_handler' )->justReturn( null );
+		Functions\when( 'register_shutdown_function' )->justReturn( null );
+
+		$resolver->register_loader_definition(
+			$this->get_loader_definition(
+				[
+					'callback' => static function () use ( &$seen ): void {
+						$seen['installed'] = \Woodev\Framework\Error_Reporting\Error_Reporter::is_installed();
+						// What the reporter's handler would do with this plugin's uncaught init failure.
+						$seen['captured'] = \Woodev\Framework\Error_Reporting\Error_Reporter::capture( new \RuntimeException( 'init failed' ), 'test-plugin' );
+					},
+				]
+			)
+		);
+
+		$resolver->load_plugins();
+
+		$this->assertTrue( $seen['installed'] ?? false, 'installed before the plugin callback ran' );
+		$this->assertTrue( $seen['captured'] ?? false );
+		$this->assertCount( 1, $options[ \Woodev\Framework\Error_Reporting\Event_Queue::OPTION ] ?? [] );
+
+		\Woodev\Framework\Error_Reporting\Error_Reporter::reset();
+	}
+
+	/**
 	 * Boots a resolver for a load_plugins() run that needs no WordPress/WooCommerce.
 	 *
 	 * @param bool $is_admin Whether the request is an admin request.

@@ -9,6 +9,7 @@ namespace Woodev\Tests\Unit\ErrorReporting;
 
 use Brain\Monkey\Functions;
 use Woodev\Framework\Error_Reporting\Consent;
+use Woodev\Framework\Error_Reporting\Event_Queue;
 
 /**
  * @covers \Woodev\Framework\Error_Reporting\Consent
@@ -39,6 +40,13 @@ final class ConsentTest extends ErrorReportingTestCase {
 				return true;
 			}
 		);
+		Functions\when( 'delete_option' )->alias(
+			function ( $name ) {
+				unset( $this->options[ $name ] );
+
+				return true;
+			}
+		);
 		Functions\when( 'apply_filters' )->alias(
 			function ( $tag, $value ) {
 				return 'woodev_error_reporting_dsn' === $tag && '' !== $this->dsn ? $this->dsn : $value;
@@ -59,6 +67,16 @@ final class ConsentTest extends ErrorReportingTestCase {
 		Consent::set_enabled( false );
 		$this->assertSame( 'no', $this->options['woodev_error_reporting_enabled'] );
 		$this->assertFalse( Consent::is_enabled() );
+	}
+
+	public function test_withdrawing_consent_deletes_the_pending_reports(): void {
+		$this->options[ Event_Queue::OPTION ] = [ [ 'event_id' => 'x' ] ];
+
+		Consent::set_enabled( true );
+		$this->assertArrayHasKey( Event_Queue::OPTION, $this->options, 'ticking the box keeps the queue' );
+
+		Consent::set_enabled( false );
+		$this->assertArrayNotHasKey( Event_Queue::OPTION, $this->options );
 	}
 
 	public function test_there_is_no_built_in_receiver(): void {

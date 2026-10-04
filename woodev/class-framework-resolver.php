@@ -272,6 +272,11 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 					if ( class_exists( 'Woodev_Framework_Autoloader', false ) ) {
 						\Woodev_Framework_Autoloader::register( $winner_path );
 					}
+
+					// The winner is known and the registry is complete: hook the error reporter NOW,
+					// before the first plugin's constructor or main-class include can throw or
+					// fatal — a startup failure is exactly what it exists to catch (#130).
+					$this->install_error_reporter();
 				}
 
 				$is_base_plugin_loaded = class_exists( '\Woodev_Plugin', false );
@@ -397,18 +402,17 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 				}
 			}
 
-			$this->install_error_reporter();
-
 			do_action( 'woodev_plugins_loaded' );
 		}
 
 		/**
 		 * Installs the PHP error reporter from the winning framework copy, once per request (#130).
 		 *
-		 * Called after the loop above so the autoloader already points at the winner and every
-		 * registered plugin — loaded or refused — is known to the reporter's directory scope. The
-		 * reporter's own static guard makes a second call a no-op; a failure here must never stop
-		 * the plugins from loading.
+		 * Called from the loop's first pass, right after the autoloader is registered against the
+		 * winning copy and BEFORE any plugin code is invoked: every registered plugin — loaded or
+		 * refused — is already known to the reporter's directory scope, and an uncaught exception
+		 * or fatal in a plugin's startup is still covered. The reporter's own static guard makes a
+		 * second call a no-op; a failure here must never stop the plugins from loading.
 		 *
 		 * @since 2.0.2
 		 *

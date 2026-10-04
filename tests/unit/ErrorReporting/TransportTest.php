@@ -84,7 +84,7 @@ final class TransportTest extends ErrorReportingTestCase {
 		$this->assertSame( $event, json_decode( $lines[2], true ) );
 	}
 
-	public function test_send_posts_non_blocking_with_the_auth_header_and_never_throws(): void {
+	public function test_send_posts_with_the_auth_header_a_short_timeout_and_waits_for_the_answer(): void {
 		$event = $this->make_builder()->from_throwable( $this->make_exception( self::OURS . '/a.php', 1 ) );
 		$dsn   = Dsn::parse( 'https://abc123@errors.example.ru/7' );
 
@@ -93,7 +93,7 @@ final class TransportTest extends ErrorReportingTestCase {
 			->andReturnUsing(
 				function ( $url, $args ) {
 					$this->assertSame( 'https://errors.example.ru/api/7/envelope/', $url );
-					$this->assertFalse( $args['blocking'] );
+					$this->assertTrue( $args['blocking'], 'it only runs in cron, where waiting is free — and a non-blocking cURL call would still wait' );
 					$this->assertLessThanOrEqual( 5, $args['timeout'] );
 					$this->assertSame( 0, $args['redirection'] );
 					$this->assertSame( 'application/x-sentry-envelope', $args['headers']['Content-Type'] );

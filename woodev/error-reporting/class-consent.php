@@ -49,6 +49,10 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Consent' ) ) :
 		 */
 		public static function set_enabled( bool $enabled ): void {
 			update_option( self::OPTION, $enabled ? 'yes' : 'no' );
+
+			if ( ! $enabled ) {
+				Event_Queue::clear(); // Withdrawing consent also deletes what was waiting to be sent.
+			}
 		}
 
 		/**

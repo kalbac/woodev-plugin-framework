@@ -12,14 +12,22 @@ defined( 'ABSPATH' ) || exit;
 if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Error_Reporter' ) ) :
 
 	/**
-	 * Sends anonymised reports of OUR plugins' fatal errors and uncaught exceptions to a
+	 * Collects anonymised reports of OUR plugins' fatal errors and uncaught exceptions for a
 	 * Sentry-compatible receiver (self-hosted GlitchTip), when — and only when — the merchant
 	 * consented and a receiver DSN is configured.
 	 *
-	 * Installed exactly once per request by the winning framework copy (see
-	 * {@see \Woodev\Framework\Framework_Resolver::load_plugins()}); the static guard makes a
-	 * second call a no-op. Every public entry point swallows its own failures: reporting must
+	 * The failing request does the cheapest possible thing: build the event and put it in
+	 * {@see Event_Queue}. Nothing here touches the network; {@see Dispatcher} sends from WP-Cron.
+	 *
+	 * Installed exactly once per request by the winning framework copy, before any plugin code
+	 * runs (see {@see \Woodev\Framework\Framework_Resolver::load_plugins()}); the static guard makes
+	 * a second call a no-op. Every public entry point swallows its own failures: reporting must
 	 * never break the page it reports on.
+	 *
+	 * Known limits: a single-file plugin (its file sits directly in the plugins directory) cannot
+	 * be told apart from its neighbours and is not part of the scope; an «Uncaught …» fatal raised
+	 * while a LATER exception handler replaced ours is still caught, but only through the shutdown
+	 * handler, from the engine's own message.
 	 *
 	 * @since 2.0.2
 	 */
@@ -31,14 +39,23 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Error_Reporter' ) ) :
 		/** Not secret, only stable: it makes the site hash differ from a bare hash of the address. */
 		const SITE_SALT = 'woodev-error-reporter:v1:';
 
+		/** Most events one request may queue. */
+		const MAX_PER_REQUEST = 5;
+
 		/** @var bool Install-once guard. */
 		private static bool $installed = false;
 
-		/** @var bool Re-entrancy guard. */
+		/** @var bool Re-entrancy guard for report(). */
 		private static bool $busy = false;
 
-		/** @var bool Whether the exception handler already saw an exception this request. */
-		private static bool $exception_seen = false;
+		/** @var bool Re-entrancy guard for the exception handler. */
+		private static bool $in_handler = false;
+
+		/** @var array<string,bool> Throw sites (`file:line`) of exceptions our handler already saw. */
+		private static array $seen_sites = [];
+
+		/** @var int Events queued by this request. */
+		private static int $queued = 0;
 
 		/** @var callable|null Exception handler that was active before ours. */
 		private static $previous_exception_handler = null;
@@ -49,9 +66,10 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Error_Reporter' ) ) :
 		/**
 		 * Installs the reporter. Safe to call repeatedly; only the first call does anything.
 		 *
-		 * Always registers the consent REST route (so the checkbox can be turned on). The error
-		 * handlers are hooked only when a receiver is configured AND the merchant consented — a
-		 * site that did not opt in keeps PHP's own handlers untouched.
+		 * Always registers the consent REST route (so the checkbox can be turned on) and the cron
+		 * callback that sends the queue. The error handlers are hooked only when a receiver is
+		 * configured AND the merchant consented — a site that did not opt in keeps PHP's own
+		 * handlers untouched.
 		 *
 		 * @since 2.0.2
 		 *
@@ -69,6 +87,7 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Error_Reporter' ) ) :
 				self::$scope = Plugin_Scope::from_registered_plugins( $registered_plugins );
 
 				\Woodev_REST_V1_Registrar::register_controller( new Consent_Rest_Controller() );
+				add_action( Dispatcher::HOOK, [ Dispatcher::class, 'run' ] );
 
 				if ( ! Consent::is_active() ) {
 					return false;
@@ -84,21 +103,38 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Error_Reporter' ) ) :
 		}
 
 		/**
+		 * Whether {@see self::install()} already ran this request.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public static function is_installed(): bool {
+			return self::$installed;
+		}
+
+		/**
 		 * Manual capture for a critical path — a caught Throwable worth knowing about.
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param \Throwable  $e         The throwable.
+		 * @param \Throwable  $e         The throwable. Its class, code and trace are reported; its message is not.
 		 * @param string|null $plugin_id Id of the plugin reporting it; attributes the event even
 		 *                               when its stack never touches the plugin's directory.
-		 * @return bool True when a report was handed to the transport.
+		 * @return bool True when a report was queued for sending.
 		 */
 		public static function capture( \Throwable $e, ?string $plugin_id = null ): bool {
 			return self::report( $e, $plugin_id, true );
 		}
 
 		/**
-		 * Uncaught-exception handler: report, then hand over to whoever was there before us.
+		 * Uncaught-exception handler: queue a report, then hand over to whoever was there before us.
+		 *
+		 * With no previous handler the exception is simply thrown again. PHP clears the user handler
+		 * while it runs one, so the new throw is not delivered to us a second time — it ends the
+		 * request with PHP's own «Uncaught …» fatal and exit status 255, exactly as if we were never
+		 * installed. (Restoring the previous handler first, the obvious alternative, makes PHP call
+		 * us again on the rethrow: the guard below stays as a belt for runtimes that behave so.)
 		 *
 		 * @internal
 		 *
@@ -109,22 +145,28 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Error_Reporter' ) ) :
 		 * @throws \Throwable Re-thrown when no previous handler exists, so PHP's own fatal still happens.
 		 */
 		public static function handle_exception( \Throwable $e ): void {
-			self::$exception_seen = true;
+			if ( self::$in_handler ) {
+				throw $e;
+			}
+
+			self::$in_handler = true;
+			self::$seen_sites[ $e->getFile() . ':' . $e->getLine() ] = true;
 
 			self::report( $e, null, false );
 
 			$previous = self::$previous_exception_handler;
 
 			if ( null !== $previous && is_callable( $previous ) ) {
-				call_user_func( $previous, $e );
+				try {
+					call_user_func( $previous, $e );
+				} finally {
+					self::$in_handler = false;
+				}
 
 				return;
 			}
 
-			// Nothing before us: a registered handler suppresses PHP's «Uncaught …» fatal, so give
-			// the default behaviour back and throw again.
-			restore_exception_handler();
-
+			// The flag stays set on purpose: from here the process is ending.
 			throw $e;
 		}
 
@@ -148,9 +190,9 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Error_Reporter' ) ) :
 				return;
 			}
 
-			// An uncaught exception that our own handler re-threw comes back as an «Uncaught …»
-			// fatal — it was reported once already.
-			if ( self::$exception_seen && 0 === strpos( (string) $error['message'], 'Uncaught ' ) ) {
+			// An uncaught exception our own handler saw and re-threw comes back as an «Uncaught …»
+			// fatal at the same file:line — it was queued once already.
+			if ( isset( self::$seen_sites[ ( $error['file'] ?? '' ) . ':' . ( $error['line'] ?? 0 ) ] ) && 0 === strpos( (string) $error['message'], 'Uncaught ' ) ) {
 				return;
 			}
 
@@ -158,7 +200,7 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Error_Reporter' ) ) :
 
 			try {
 				if ( null !== self::$scope && Consent::is_active() ) {
-					self::submit( self::event_builder()->from_fatal( $error ) );
+					self::enqueue( self::event_builder()->from_fatal( $error ) );
 				}
 			} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- by design: never break the page.
 				unset( $e );
@@ -191,7 +233,9 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Error_Reporter' ) ) :
 		public static function reset(): void {
 			self::$installed                  = false;
 			self::$busy                       = false;
-			self::$exception_seen             = false;
+			self::$in_handler                 = false;
+			self::$seen_sites                 = [];
+			self::$queued                     = 0;
 			self::$previous_exception_handler = null;
 			self::$scope                      = null;
 		}
@@ -208,11 +252,11 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Error_Reporter' ) ) :
 			}
 
 			self::$busy = true;
-			$sent       = false;
+			$queued     = false;
 
 			try {
 				if ( Consent::is_active() ) {
-					$sent = self::submit( self::event_builder()->from_throwable( $e, $plugin_id, $handled ) );
+					$queued = self::enqueue( self::event_builder()->from_throwable( $e, $plugin_id, $handled ) );
 				}
 			} catch ( \Throwable $failure ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- by design: never break the page.
 				unset( $failure );
@@ -220,41 +264,37 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Error_Reporter' ) ) :
 
 			self::$busy = false;
 
-			return $sent;
+			return $queued;
 		}
 
 		/**
-		 * Filter, rate-limit and send one event.
+		 * Filter and queue one event, and make sure a cron run is waiting to send it.
 		 *
 		 * @param array<string,mixed>|null $event Event, or null when the error was not ours.
 		 * @return bool
 		 */
-		private static function submit( ?array $event ): bool {
-			if ( null === $event ) {
+		private static function enqueue( ?array $event ): bool {
+			if ( null === $event || self::$queued >= self::MAX_PER_REQUEST ) {
 				return false;
 			}
 
 			/**
-			 * Filters an event just before it is sent; return false to drop it.
+			 * Filters an event just before it is queued; return false to drop it.
 			 *
 			 * @since 2.0.2
 			 *
 			 * @param array<string,mixed>|false $event The anonymised event.
 			 */
 			$event = apply_filters( 'woodev_error_reporting_event', $event );
-			$dsn   = Consent::get_dsn();
 
-			if ( ! is_array( $event ) || null === $dsn ) {
+			if ( ! is_array( $event ) || ! Event_Queue::push( $event ) ) {
 				return false;
 			}
 
-			$limiter = new Rate_Limiter();
+			++self::$queued;
+			Dispatcher::schedule();
 
-			if ( ! $limiter->allow( $limiter->signature( $event ) ) ) {
-				return false;
-			}
-
-			return ( new Transport() )->send( $event, $dsn );
+			return true;
 		}
 
 		/**
@@ -263,12 +303,10 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Error_Reporter' ) ) :
 		private static function event_builder(): Event_Builder {
 			global $wp_version;
 
-			$home = (string) home_url();
-
 			return new Event_Builder(
 				self::$scope,
 				[
-					'site'              => substr( hash( 'sha256', self::SITE_SALT . untrailingslashit( $home ) ), 0, 16 ),
+					'site'              => substr( hash( 'sha256', self::SITE_SALT . untrailingslashit( (string) home_url() ) ), 0, 16 ),
 					'framework_version' => class_exists( '\Woodev_Plugin', false ) ? \Woodev_Plugin::VERSION : '',
 					'wp_version'        => (string) $wp_version,
 					'wc_version'        => defined( 'WC_VERSION' ) ? (string) WC_VERSION : '',
@@ -278,7 +316,6 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Error_Reporter' ) ) :
 				[
 					'abspath'    => defined( 'ABSPATH' ) ? ABSPATH : '',
 					'plugin_dir' => defined( 'WP_PLUGIN_DIR' ) ? WP_PLUGIN_DIR : '',
-					'home_url'   => $home,
 				]
 			);
 		}

@@ -107,7 +107,7 @@ final class RateLimiterTest extends ErrorReportingTestCase {
 		$this->assertSame( 1, $this->store[ 'woodev_er_day_' . gmdate( 'Ymd' ) ] );
 	}
 
-	public function test_the_signature_is_type_plus_throw_site_plus_message_hash(): void {
+	public function test_the_signature_is_type_plus_throw_site_plus_engine_message_hash(): void {
 		$builder = $this->make_builder();
 		$limiter = new Rate_Limiter();
 		$base    = $builder->from_throwable( $this->make_exception( self::OURS . '/a.php', 10, [], 'same' ) );
@@ -115,6 +115,18 @@ final class RateLimiterTest extends ErrorReportingTestCase {
 		$this->assertSame( $limiter->signature( $base ), $limiter->signature( $builder->from_throwable( $this->make_exception( self::OURS . '/a.php', 10, [], 'same' ) ) ) );
 		$this->assertNotSame( $limiter->signature( $base ), $limiter->signature( $builder->from_throwable( $this->make_exception( self::OURS . '/a.php', 11, [], 'same' ) ) ) );
 		$this->assertNotSame( $limiter->signature( $base ), $limiter->signature( $builder->from_throwable( $this->make_exception( self::OURS . '/b.php', 10, [], 'same' ) ) ) );
-		$this->assertNotSame( $limiter->signature( $base ), $limiter->signature( $builder->from_throwable( $this->make_exception( self::OURS . '/a.php', 10, [], 'other' ) ) ) );
+		$this->assertSame( $limiter->signature( $base ), $limiter->signature( $builder->from_throwable( $this->make_exception( self::OURS . '/a.php', 10, [], 'other' ) ) ), 'an exception message is not sent, so it cannot tell two events apart' );
+
+		$fatal = static function ( string $message ) use ( $builder ): array {
+			return $builder->from_fatal(
+				[
+					'type'    => E_ERROR,
+					'message' => $message,
+					'file'    => self::OURS . '/a.php',
+					'line'    => 10,
+				]
+			);
+		};
+		$this->assertNotSame( $limiter->signature( $fatal( 'Call to undefined function a()' ) ), $limiter->signature( $fatal( 'Call to undefined function b()' ) ) );
 	}
 }

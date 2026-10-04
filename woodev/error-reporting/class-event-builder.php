@@ -15,9 +15,16 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Event_Builder' ) ) :
 	 * Turns a Throwable or a fatal-error array into a Sentry `event` payload — or into null
 	 * when the error is not ours.
 	 *
-	 * What is deliberately NOT in the payload: no `request`, no `user`, no cookies, no
-	 * function arguments (the trace is read without `args`), no absolute paths, no site
-	 * address. The site is one salted hash; every path is relative; the message is scrubbed.
+	 * **No free text from an exception ever leaves the site** (operator decision, s150): an
+	 * exception message routinely carries order data, names, addresses, SQL values or tokens, and
+	 * no scrubber can tell them from the rest. The event carries the exception CLASS, its integer
+	 * code, the throw site `file:line` and the call stack as relative paths plus function and class
+	 * names. For a fatal taken from `error_get_last()` the engine's own message is sent (it names
+	 * code, not data — «Call to undefined function», «Allowed memory size exhausted»), except an
+	 * «Uncaught …» fatal, whose embedded exception message is cut down to the exception class.
+	 *
+	 * Also never in the payload: `request`, `user`, cookies, function arguments (the trace is read
+	 * without `args`), absolute paths, the site address. The site is one salted hash.
 	 *
 	 * @since 2.0.2
 	 */
@@ -26,11 +33,14 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Event_Builder' ) ) :
 		const SDK_NAME    = 'woodev.error-reporter';
 		const SDK_VERSION = '1.0.0';
 
-		/** Longest message / function name that leaves the site. */
+		/** Longest engine message that leaves the site. */
 		const MAX_TEXT = 500;
 
-		/** Frames kept, innermost first. */
+		/** Frames kept, innermost first. Scope matching runs on ALL frames before this cut. */
 		const MAX_FRAMES = 50;
+
+		/** Longest class / function name kept. */
+		const MAX_SYMBOL = 200;
 
 		/** @var Plugin_Scope */
 		private Plugin_Scope $scope;
@@ -39,21 +49,21 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Event_Builder' ) ) :
 		private array $context;
 
 		/** @var array<string,string> */
-		private array $scrub;
+		private array $paths;
 
 		/**
 		 * @param Plugin_Scope         $scope   Which directories are ours.
 		 * @param array<string,string> $context Emitted: site, framework_version, wp_version, wc_version, php_version, environment.
-		 * @param array<string,string> $scrub   Never emitted, only removed from text: abspath, plugin_dir, home_url.
+		 * @param array<string,string> $paths   Never emitted, only used to relativise paths: abspath, plugin_dir.
 		 */
-		public function __construct( Plugin_Scope $scope, array $context, array $scrub ) {
+		public function __construct( Plugin_Scope $scope, array $context, array $paths ) {
 			$this->scope   = $scope;
 			$this->context = $context;
-			$this->scrub   = $scrub;
+			$this->paths   = $paths;
 		}
 
 		/**
-		 * Builds an event for a Throwable.
+		 * Builds an event for a Throwable. The message is NOT read.
 		 *
 		 * @since 2.0.2
 		 *
@@ -86,22 +96,25 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Event_Builder' ) ) :
 				'function' => '',
 			];
 
-			$type = get_class( $e );
-			$nul  = strpos( $type, "\0" );
+			$code = $e->getCode();
 
-			if ( false !== $nul ) {
-				$type = substr( $type, 0, $nul ); // Anonymous class names embed a path after a NUL.
-			}
-
-			return $this->build( $type, $e->getMessage(), $handled ? 'error' : 'fatal', $frames, $plugin_id, $handled );
+			return $this->build(
+				self::symbol( get_class( $e ) ),
+				null,
+				$handled ? 'error' : 'fatal',
+				$frames,
+				$plugin_id,
+				$handled,
+				is_int( $code ) && 0 !== $code ? $code : null
+			);
 		}
 
 		/**
 		 * Builds an event for a fatal error taken from `error_get_last()`.
 		 *
-		 * An «Uncaught …» fatal carries the call stack as text after `Stack trace:`; the file paths
-		 * (and only those — the argument text is dropped) are parsed back out so the scope filter
-		 * sees the whole stack, not just the throw site.
+		 * An «Uncaught …» fatal carries the exception message and a textual call stack: the message
+		 * is dropped (only «Uncaught <Class>» stays) and the stack is parsed back for file paths and
+		 * function names (the argument text is dropped) so the scope filter sees the whole stack.
 		 *
 		 * @since 2.0.2
 		 *
@@ -109,10 +122,8 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Event_Builder' ) ) :
 		 * @return array<string,mixed>|null Null when the error is not ours.
 		 */
 		public function from_fatal( array $error ): ?array {
-			$raw     = (string) ( $error['message'] ?? '' );
-			$marker  = strpos( $raw, "\nStack trace:" );
-			$message = false === $marker ? $raw : substr( $raw, 0, $marker );
-			$frames  = [
+			$raw    = (string) ( $error['message'] ?? '' );
+			$frames = [
 				[
 					'file'     => (string) ( $error['file'] ?? '' ),
 					'line'     => (int) ( $error['line'] ?? 0 ),
@@ -120,17 +131,30 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Event_Builder' ) ) :
 				],
 			];
 
-			if ( false !== $marker && preg_match_all( '/^#\d+\s+(.+?)\((\d+)\):\s*([^\s(]+)/m', substr( $raw, $marker ), $matches, PREG_SET_ORDER ) ) {
-				foreach ( $matches as $match ) {
-					$frames[] = [
-						'file'     => $match[1],
-						'line'     => (int) $match[2],
-						'function' => $match[3],
-					];
-				}
+			if ( 0 === strpos( $raw, 'Uncaught ' ) ) {
+				$value  = self::uncaught_value( $raw );
+				$frames = array_merge( $frames, $this->frames_from_trace_text( $raw ) );
+			} else {
+				$value = $this->engine_message( $raw );
 			}
 
-			return $this->build( self::error_type_name( (int) ( $error['type'] ?? 0 ) ), $message, 'fatal', $frames, null, false );
+			return $this->build( self::error_type_name( (int) ( $error['type'] ?? 0 ) ), $value, 'fatal', $frames, null, false, null );
+		}
+
+		/**
+		 * «Uncaught <Class>» — the exception class out of an «Uncaught …» fatal, nothing else.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $raw The `error_get_last()` message.
+		 * @return string
+		 */
+		public static function uncaught_value( string $raw ): string {
+			if ( 1 === preg_match( '/^Uncaught ([A-Za-z_\\\\\x80-\xff][\w\\\\\x80-\xff]*(?:@anonymous)?)/', $raw, $match ) ) {
+				return 'Uncaught ' . self::symbol( $match[1] );
+			}
+
+			return 'Uncaught exception';
 		}
 
 		/**
@@ -143,59 +167,23 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Event_Builder' ) ) :
 		 * @return string
 		 */
 		public function relative_path( string $file ): string {
-			$file = Plugin_Scope::normalize_path( $file );
+			$file = Plugin_Scope::normalize_path( str_replace( "\0", '', $file ) );
 
 			if ( '' === $file ) {
 				return '[internal]';
 			}
 
-			$plugin_dir = $this->scrub_base( 'plugin_dir' );
+			$plugin_dir = $this->path_base( 'plugin_dir' );
 			if ( '' !== $plugin_dir && 0 === strpos( $file, $plugin_dir . '/' ) ) {
 				return 'plugins/' . substr( $file, strlen( $plugin_dir ) + 1 );
 			}
 
-			$abspath = $this->scrub_base( 'abspath' );
+			$abspath = $this->path_base( 'abspath' );
 			if ( '' !== $abspath && 0 === strpos( $file, $abspath . '/' ) ) {
 				return substr( $file, strlen( $abspath ) + 1 );
 			}
 
 			return '[external]/' . basename( $file );
-		}
-
-		public function scrub_text( string $text ): string {
-			$text = str_replace( "\0", '', $text );
-
-			$home = (string) ( $this->scrub['home_url'] ?? '' );
-			if ( '' !== $home ) {
-				$host = parse_url( $home, PHP_URL_HOST ); // phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url
-				$text = str_replace( rtrim( $home, '/' ), '[site]', $text );
-
-				if ( is_string( $host ) && '' !== $host ) {
-					$text = str_replace( $host, '[site]', $text );
-				}
-			}
-
-			// Paths: the text may spell a directory with either slash, and backslashes in a
-			// message are also namespace separators — so replace each base in both spellings
-			// instead of normalising the whole text.
-			$plugin_dir = $this->scrub_base( 'plugin_dir' );
-			if ( '' !== $plugin_dir ) {
-				$text = str_replace( [ $plugin_dir . '/', str_replace( '/', '\\', $plugin_dir ) . '\\' ], 'plugins/', $text );
-			}
-
-			$abspath = $this->scrub_base( 'abspath' );
-			if ( '' !== $abspath ) {
-				$text = str_replace( [ $abspath . '/', str_replace( '/', '\\', $abspath ) . '\\' ], '', $text );
-			}
-
-			$text = (string) preg_replace( '/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/', '[email]', $text );
-
-			if ( strlen( $text ) <= self::MAX_TEXT ) {
-				return $text;
-			}
-
-			// mb_strcut cuts on a character boundary; a half character would make the JSON invalid.
-			return ( function_exists( 'mb_strcut' ) ? mb_strcut( $text, 0, self::MAX_TEXT, 'UTF-8' ) : substr( $text, 0, self::MAX_TEXT ) ) . '…';
 		}
 
 		/**
@@ -219,17 +207,41 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Event_Builder' ) ) :
 		}
 
 		/**
+		 * A class or function name made safe to send: an anonymous class name embeds a file path
+		 * after a NUL byte, and nothing but identifier characters is kept.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $name Raw class / function name.
+		 * @return string
+		 */
+		public static function symbol( string $name ): string {
+			$nul = strpos( $name, "\0" );
+
+			if ( false !== $nul ) {
+				$name = substr( $name, 0, $nul );
+			}
+
+			// PHP 8.4 puts the declaring file into a closure's name: `{closure:/path/f.php:3}`.
+			$name = (string) preg_replace( '/\{closure:[^}]*\}/', '{closure}', $name );
+			$name = (string) preg_replace( '/[^\w\\\\:>@{}\x80-\xff.-]/', '', $name );
+
+			return substr( $name, 0, self::MAX_SYMBOL );
+		}
+
+		/**
 		 * @param string                                                 $type      Exception class or E_* name.
-		 * @param string                                                 $message   Raw message.
+		 * @param string|null                                            $value     Engine message of a fatal, null for an exception.
 		 * @param string                                                 $level     Sentry level.
-		 * @param array<int,array{file:string,line:int,function:string}> $frames Innermost first.
+		 * @param array<int,array{file:string,line:int,function:string}> $frames    Innermost first, complete.
 		 * @param string|null                                            $plugin_id Explicit owner.
 		 * @param bool                                                   $handled   Whether the code handled it.
+		 * @param int|null                                               $code      Exception code.
 		 * @return array<string,mixed>|null
 		 */
-		private function build( string $type, string $message, string $level, array $frames, ?string $plugin_id, bool $handled ): ?array {
-			$frames = array_slice( $frames, 0, self::MAX_FRAMES );
-			$owner  = null !== $plugin_id ? $this->scope->get( $plugin_id ) : null;
+		private function build( string $type, ?string $value, string $level, array $frames, ?string $plugin_id, bool $handled, ?int $code ): ?array {
+			// Scope runs on the WHOLE trace: an owned frame beyond the kept 50 still owns the event.
+			$owner = null !== $plugin_id ? $this->scope->get( $plugin_id ) : null;
 
 			if ( null === $owner ) {
 				$owner = $this->scope->match( array_column( $frames, 'file' ) );
@@ -242,7 +254,7 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Event_Builder' ) ) :
 			$out = [];
 
 			// Sentry wants the OLDEST frame first.
-			foreach ( array_reverse( $frames ) as $frame ) {
+			foreach ( array_reverse( array_slice( $frames, 0, self::MAX_FRAMES ) ) as $frame ) {
 				$entry = [
 					'filename' => $this->relative_path( $frame['file'] ),
 					'lineno'   => $frame['line'],
@@ -250,7 +262,7 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Event_Builder' ) ) :
 				];
 
 				if ( '' !== $frame['function'] ) {
-					$entry['function'] = $this->scrub_text( $frame['function'] );
+					$entry['function'] = $frame['function'];
 				}
 
 				$out[] = $entry;
@@ -266,10 +278,30 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Event_Builder' ) ) :
 					'php_version'       => $this->context['php_version'] ?? '',
 					'site'              => $this->context['site'] ?? '',
 				],
-				static function ( string $value ): bool {
-					return '' !== $value;
+				static function ( string $tag ): bool {
+					return '' !== $tag;
 				}
 			);
+
+			$mechanism = [
+				'type'    => 'generic',
+				'handled' => $handled,
+			];
+
+			if ( null !== $code ) {
+				$mechanism['data'] = [ 'code' => $code ];
+			}
+
+			$exception = [
+				'type' => $type,
+			];
+
+			if ( null !== $value ) {
+				$exception['value'] = $value;
+			}
+
+			$exception['mechanism']  = $mechanism;
+			$exception['stacktrace'] = [ 'frames' => $out ];
 
 			return [
 				'event_id'    => bin2hex( random_bytes( 16 ) ),
@@ -285,20 +317,63 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Event_Builder' ) ) :
 					'version' => self::SDK_VERSION,
 				],
 				'tags'        => $tags,
-				'exception'   => [
-					'values' => [
-						[
-							'type'       => $type,
-							'value'      => $this->scrub_text( $message ),
-							'mechanism'  => [
-								'type'    => 'generic',
-								'handled' => $handled,
-							],
-							'stacktrace' => [ 'frames' => $out ],
-						],
-					],
-				],
+				'exception'   => [ 'values' => [ $exception ] ],
 			];
+		}
+
+		/**
+		 * Frames parsed out of the textual stack of an «Uncaught …» fatal.
+		 *
+		 * The LAST `Stack trace:` marker is used: an exception message can contain the marker (and
+		 * fake `#0 …` lines), but the real trace always follows the message, so the last marker is
+		 * the real one. A function token that is not a plain identifier is dropped.
+		 *
+		 * @param string $raw The `error_get_last()` message.
+		 * @return array<int,array{file:string,line:int,function:string}>
+		 */
+		private function frames_from_trace_text( string $raw ): array {
+			$marker = strrpos( $raw, "\nStack trace:" );
+
+			if ( false === $marker || ! preg_match_all( '/^#\d+\s+(.+?)\((\d+)\):\s*([^\s(]+)/m', substr( $raw, $marker ), $matches, PREG_SET_ORDER ) ) {
+				return [];
+			}
+
+			$frames = [];
+
+			foreach ( $matches as $match ) {
+				$frames[] = [
+					'file'     => $match[1],
+					'line'     => (int) $match[2],
+					'function' => self::symbol( $match[3] ),
+				];
+			}
+
+			return $frames;
+		}
+
+		/**
+		 * An engine fatal message: sent as PHP wrote it, with absolute paths relativised (a failed
+		 * `require` names its file), NUL bytes removed and the length capped.
+		 *
+		 * @param string $raw The `error_get_last()` message.
+		 * @return string
+		 */
+		private function engine_message( string $raw ): string {
+			$text = str_replace( "\0", '', $raw );
+			$text = (string) preg_replace_callback(
+				'~(?<![\w./])(?:[A-Za-z]:[\\\\/]|/)(?:[^\s\'"()<>:*?|\\\\/]+[\\\\/])*[^\s\'"()<>:*?|\\\\/]+~',
+				function ( array $match ): string {
+					return $this->relative_path( $match[0] );
+				},
+				$text
+			);
+
+			if ( strlen( $text ) <= self::MAX_TEXT ) {
+				return $text;
+			}
+
+			// mb_strcut cuts on a character boundary; a half character would make the JSON invalid.
+			return ( function_exists( 'mb_strcut' ) ? mb_strcut( $text, 0, self::MAX_TEXT, 'UTF-8' ) : substr( $text, 0, self::MAX_TEXT ) ) . '…';
 		}
 
 		/**
@@ -306,17 +381,21 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Event_Builder' ) ) :
 		 * @return string `Class->method`, `Class::method` or `function`.
 		 */
 		private function function_name( array $item ): string {
-			return ( $item['class'] ?? '' ) . ( $item['type'] ?? '' ) . ( $item['function'] ?? '' );
+			$type = isset( $item['class'] ) && in_array( $item['type'] ?? '', [ '->', '::' ], true ) ? $item['type'] : '';
+
+			// Each part on its own: an anonymous class name is cut at its NUL byte, which must not
+			// swallow the method name that follows it.
+			return self::symbol( (string) ( $item['class'] ?? '' ) ) . $type . self::symbol( (string) ( $item['function'] ?? '' ) );
 		}
 
 		/**
-		 * A scrub path normalized without a trailing slash.
+		 * A path base normalized without a trailing slash.
 		 *
 		 * @param string $key `abspath` or `plugin_dir`.
 		 * @return string
 		 */
-		private function scrub_base( string $key ): string {
-			return rtrim( Plugin_Scope::normalize_path( (string) ( $this->scrub[ $key ] ?? '' ) ), '/' );
+		private function path_base( string $key ): string {
+			return rtrim( Plugin_Scope::normalize_path( (string) ( $this->paths[ $key ] ?? '' ) ), '/' );
 		}
 	}
 

@@ -15,6 +15,9 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Rate_Limiter' ) ) :
 	 * Keeps one broken page from hammering the receiver: the same error is sent at most once
 	 * per window, and a site sends at most N reports per UTC day. State lives in transients.
 	 *
+	 * Read-check-write here is not atomic, and does not need to be: the only caller is
+	 * {@see Dispatcher}, which runs under its drain lock, so two senders never interleave.
+	 *
 	 * @since 2.0.2
 	 */
 	final class Rate_Limiter {

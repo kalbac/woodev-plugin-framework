@@ -40,7 +40,10 @@ describe( 'ErrorReportingToggle', () => {
 		render( createElement( ErrorReportingToggle, { initialState: { enabled: false, available: true } } ) );
 
 		expect( screen.getByLabelText( LABEL ) ).not.toBeChecked();
-		expect( screen.getByText( /Данные покупателей не передаются/ ) ).toBeInTheDocument();
+		const help = screen.getByText( /Тексты сообщений об ошибках, данные покупателей и адрес сайта не передаются/ );
+		expect( help ).toBeInTheDocument();
+		expect( help.textContent ).toMatch( /файл, строку и названия функций/ );
+		expect( help.textContent ).not.toMatch( /текст ошибки/ );
 	} );
 
 	it( 'mirrors a stored consent', () => {

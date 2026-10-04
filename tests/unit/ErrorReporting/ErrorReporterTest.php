@@ -1,6 +1,6 @@
 <?php
 /**
- * Error_Reporter — install-once, consent/DSN gating, handler chaining, fatal filtering (#130).
+ * Error_Reporter — install-once, consent/DSN gating, handler chaining, enqueue-only requests (#130).
  *
  * @package Woodev\Tests\Unit\ErrorReporting
  */
@@ -8,7 +8,9 @@
 namespace Woodev\Tests\Unit\ErrorReporting;
 
 use Brain\Monkey\Functions;
+use Woodev\Framework\Error_Reporting\Dispatcher;
 use Woodev\Framework\Error_Reporting\Error_Reporter;
+use Woodev\Framework\Error_Reporting\Event_Queue;
 use Woodev\Framework\Framework_Plugin_Loader_Definition;
 
 /**
@@ -25,8 +27,14 @@ final class ErrorReporterTest extends ErrorReportingTestCase {
 	/** @var string */
 	private string $dsn = 'https://k@errors.example.ru/7';
 
-	/** @var array<int,array{string,array}> wp_remote_post calls */
+	/** @var array<int,array{string,array}> wp_remote_post calls — must stay empty: the request never sends */
 	private array $posts = [];
+
+	/** @var array<int,array{int,string}> wp_schedule_single_event calls */
+	private array $scheduled = [];
+
+	/** @var array<int,array{string,callable}> add_action calls */
+	private array $actions = [];
 
 	/** @var array<int,mixed> set_exception_handler arguments */
 	private array $handlers_set = [];
@@ -55,6 +63,8 @@ final class ErrorReporterTest extends ErrorReportingTestCase {
 		$this->transients       = [];
 		$this->dsn              = 'https://k@errors.example.ru/7';
 		$this->posts            = [];
+		$this->scheduled        = [];
+		$this->actions          = [];
 		$this->handlers_set     = [];
 		$this->shutdowns        = [];
 		$this->restored         = 0;
@@ -83,7 +93,45 @@ final class ErrorReporterTest extends ErrorReportingTestCase {
 				return true;
 			}
 		);
-		Functions\when( 'add_action' )->justReturn( true );
+		Functions\when( 'add_action' )->alias(
+			function ( $hook, $callback ) {
+				$this->actions[] = [ $hook, $callback ];
+
+				return true;
+			}
+		);
+		Functions\when( 'update_option' )->alias(
+			function ( $name, $value ) {
+				$this->options[ $name ] = $value;
+
+				return true;
+			}
+		);
+		Functions\when( 'delete_option' )->alias(
+			function ( $name ) {
+				unset( $this->options[ $name ] );
+
+				return true;
+			}
+		);
+		Functions\when( 'wp_next_scheduled' )->alias(
+			function ( $hook ) {
+				foreach ( $this->scheduled as $entry ) {
+					if ( $entry[1] === $hook ) {
+						return $entry[0];
+					}
+				}
+
+				return false;
+			}
+		);
+		Functions\when( 'wp_schedule_single_event' )->alias(
+			function ( $when, $hook ) {
+				$this->scheduled[] = [ $when, $hook ];
+
+				return true;
+			}
+		);
 		Functions\when( 'home_url' )->justReturn( self::HOME . '/' );
 		Functions\when( 'untrailingslashit' )->alias(
 			static function ( $value ) {
@@ -163,36 +211,55 @@ final class ErrorReporterTest extends ErrorReportingTestCase {
 		return [ $definition->to_legacy_plugin() ];
 	}
 
-	public function test_without_a_receiver_nothing_is_hooked_and_nothing_is_sent(): void {
+	/**
+	 * @return array<int,array<string,mixed>> Events waiting in the queue option.
+	 */
+	private function queued(): array {
+		$queue = $this->options[ Event_Queue::OPTION ] ?? [];
+
+		return is_array( $queue ) ? $queue : [];
+	}
+
+	public function test_without_a_receiver_nothing_is_hooked_and_nothing_is_queued(): void {
 		$this->dsn = '';
 
 		$this->assertFalse( Error_Reporter::install( $this->registry() ) );
 		$this->assertSame( [], $this->handlers_set );
 		$this->assertSame( [], $this->shutdowns );
 		$this->assertFalse( Error_Reporter::capture( $this->make_exception( self::OURS . '/a.php', 1 ), 'acme-delivery' ) );
-		$this->assertSame( [], $this->posts );
+		$this->assertSame( [], $this->queued() );
+		$this->assertSame( [], $this->scheduled );
 	}
 
-	public function test_without_consent_nothing_is_hooked_and_nothing_is_sent(): void {
+	public function test_without_consent_nothing_is_hooked_and_nothing_is_queued(): void {
 		$this->options = [];
 
 		$this->assertFalse( Error_Reporter::install( $this->registry() ) );
 		$this->assertSame( [], $this->handlers_set );
 		$this->assertSame( [], $this->shutdowns );
 		$this->assertFalse( Error_Reporter::capture( $this->make_exception( self::OURS . '/a.php', 1 ) ) );
-		$this->assertSame( [], $this->posts );
+		$this->assertSame( [], $this->queued() );
 	}
 
-	public function test_withdrawing_consent_mid_request_stops_sending(): void {
+	public function test_install_always_wires_the_cron_callback_even_without_consent(): void {
+		$this->options = [];
+
 		Error_Reporter::install( $this->registry() );
-		$this->options = [ 'woodev_error_reporting_enabled' => 'no' ];
+
+		$this->assertContains( [ Dispatcher::HOOK, [ Dispatcher::class, 'run' ] ], $this->actions, 'a withdrawn consent must still let the cron run clear the queue' );
+	}
+
+	public function test_withdrawing_consent_mid_request_stops_queueing(): void {
+		Error_Reporter::install( $this->registry() );
+		$this->options['woodev_error_reporting_enabled'] = 'no';
 
 		$this->assertFalse( Error_Reporter::capture( $this->make_exception( self::OURS . '/a.php', 1 ) ) );
-		$this->assertSame( [], $this->posts );
+		$this->assertSame( [], $this->queued() );
 	}
 
 	public function test_install_hooks_the_handlers_exactly_once_per_request(): void {
 		$this->assertTrue( Error_Reporter::install( $this->registry() ) );
+		$this->assertTrue( Error_Reporter::is_installed() );
 		$this->assertFalse( Error_Reporter::install( $this->registry() ), 'the static guard makes a second call a no-op' );
 		$this->assertFalse( Error_Reporter::install( $this->registry() ) );
 
@@ -200,7 +267,7 @@ final class ErrorReporterTest extends ErrorReportingTestCase {
 		$this->assertSame( [ [ Error_Reporter::class, 'handle_shutdown' ] ], $this->shutdowns );
 	}
 
-	public function test_an_uncaught_exception_of_ours_is_reported_and_then_chained_to_the_previous_handler(): void {
+	public function test_an_uncaught_exception_of_ours_is_queued_without_any_http_and_chained_to_the_previous_handler(): void {
 		$seen                   = [];
 		$this->previous_handler = static function ( \Throwable $e ) use ( &$seen ): void {
 			$seen[] = $e;
@@ -212,15 +279,17 @@ final class ErrorReporterTest extends ErrorReportingTestCase {
 		Error_Reporter::handle_exception( $e );
 
 		$this->assertSame( [ $e ], $seen, 'the previous handler still gets the exception' );
-		$this->assertSame( 0, $this->restored );
-		$this->assertCount( 1, $this->posts );
+		$this->assertSame( 0, $this->restored, 'the handler never restores the exception handler: that re-enters it' );
+		$this->assertSame( [], $this->posts, 'the failing request does no network I/O' );
 
-		$body = (string) $this->posts[0][1]['body'];
-		$this->assertStringContainsString( '"release":"acme-delivery@1.4.0"', $body );
-		$this->assertStringContainsString( '"handled":false', $body );
+		$queued = $this->queued();
+		$this->assertCount( 1, $queued );
+		$this->assertSame( 'acme-delivery@1.4.0', $queued[0]['release'] );
+		$this->assertFalse( $queued[0]['exception']['values'][0]['mechanism']['handled'] );
+		$this->assertSame( [ [ $this->scheduled[0][0], Dispatcher::HOOK ] ], $this->scheduled );
 	}
 
-	public function test_with_no_previous_handler_the_exception_is_rethrown_so_php_still_dies(): void {
+	public function test_with_no_previous_handler_the_exception_is_rethrown_without_restoring(): void {
 		Error_Reporter::install( $this->registry() );
 
 		$e = $this->make_exception( self::OURS . '/a.php', 12 );
@@ -232,11 +301,31 @@ final class ErrorReporterTest extends ErrorReportingTestCase {
 			$this->assertSame( $e, $thrown );
 		}
 
-		$this->assertSame( 1, $this->restored, 'PHP\'s own handler is given back before the rethrow' );
-		$this->assertCount( 1, $this->posts );
+		$this->assertSame( 0, $this->restored );
+		$this->assertCount( 1, $this->queued() );
+		$this->assertSame( [], $this->posts );
 	}
 
-	public function test_a_foreign_uncaught_exception_is_chained_but_not_reported(): void {
+	public function test_a_re_entered_handler_rethrows_at_once_instead_of_reporting_again(): void {
+		Error_Reporter::install( $this->registry() );
+		$e = $this->make_exception( self::OURS . '/a.php', 12 );
+
+		try {
+			Error_Reporter::handle_exception( $e );
+		} catch ( \Throwable $first ) {
+			unset( $first );
+		}
+
+		$this->expectExceptionObject( $e );
+
+		try {
+			Error_Reporter::handle_exception( $e ); // What a recursing PHP would do.
+		} finally {
+			$this->assertCount( 1, $this->queued(), 'no second report from the re-entry' );
+		}
+	}
+
+	public function test_a_foreign_uncaught_exception_is_chained_but_not_queued(): void {
 		$seen                   = 0;
 		$this->previous_handler = static function () use ( &$seen ): void {
 			++$seen;
@@ -246,13 +335,14 @@ final class ErrorReporterTest extends ErrorReportingTestCase {
 		Error_Reporter::handle_exception( $this->make_exception( self::OTHER . '/a.php', 1 ) );
 
 		$this->assertSame( 1, $seen );
-		$this->assertSame( [], $this->posts );
+		$this->assertSame( [], $this->queued() );
+		$this->assertSame( [], $this->scheduled );
 	}
 
-	public function test_a_failing_transport_never_breaks_the_handler(): void {
-		Functions\when( 'wp_remote_post' )->alias(
+	public function test_a_failing_queue_never_breaks_the_handler(): void {
+		Functions\when( 'update_option' )->alias(
 			static function () {
-				throw new \RuntimeException( 'network exploded' );
+				throw new \RuntimeException( 'database exploded' );
 			}
 		);
 		$seen                   = 0;
@@ -266,43 +356,62 @@ final class ErrorReporterTest extends ErrorReportingTestCase {
 		$this->assertSame( 1, $seen );
 	}
 
-	public function test_manual_capture_attributes_by_plugin_id_and_dedupes_the_repeat(): void {
+	public function test_manual_capture_attributes_by_plugin_id_and_the_repeat_is_not_queued_twice(): void {
 		Error_Reporter::install( $this->registry() );
 		$e = $this->make_exception( self::OTHER . '/lib.php', 5, [], 'carrier 502' );
 
 		$this->assertTrue( Error_Reporter::capture( $e, 'acme-delivery' ) );
-		$this->assertFalse( Error_Reporter::capture( $e, 'acme-delivery' ), 'same signature inside the window' );
-		$this->assertCount( 1, $this->posts );
-		$this->assertStringContainsString( '"handled":true', (string) $this->posts[0][1]['body'] );
+		$this->assertFalse( Error_Reporter::capture( $e, 'acme-delivery' ), 'same signature already pending' );
+		$this->assertCount( 1, $this->queued() );
+		$this->assertTrue( $this->queued()[0]['exception']['values'][0]['mechanism']['handled'] );
+		$this->assertSame( [], $this->posts );
+		$this->assertCount( 1, $this->scheduled, 'one cron event, scheduled once' );
 	}
 
-	public function test_manual_capture_of_a_foreign_error_without_a_hint_sends_nothing(): void {
+	public function test_the_event_filter_can_drop_an_event_before_it_is_queued(): void {
+		Functions\when( 'apply_filters' )->alias(
+			function ( $tag, $value ) {
+				if ( 'woodev_error_reporting_event' === $tag ) {
+					return false;
+				}
+
+				return 'woodev_error_reporting_dsn' === $tag ? $this->dsn : $value;
+			}
+		);
+		Error_Reporter::install( $this->registry() );
+
+		$this->assertFalse( Error_Reporter::capture( $this->make_exception( self::OURS . '/a.php', 1 ) ) );
+		$this->assertSame( [], $this->queued() );
+	}
+
+	public function test_manual_capture_of_a_foreign_error_without_a_hint_queues_nothing(): void {
 		Error_Reporter::install( $this->registry() );
 
 		$this->assertFalse( Error_Reporter::capture( $this->make_exception( self::OTHER . '/lib.php', 5 ) ) );
-		$this->assertSame( [], $this->posts );
+		$this->assertSame( [], $this->queued() );
 	}
 
 	public function test_capture_before_install_is_a_quiet_no_op(): void {
 		$this->assertFalse( Error_Reporter::capture( $this->make_exception( self::OURS . '/a.php', 1 ) ) );
-		$this->assertSame( [], $this->posts );
+		$this->assertSame( [], $this->queued() );
 	}
 
-	public function test_the_daily_cap_applies_across_distinct_errors(): void {
+	public function test_one_request_queues_at_most_five_distinct_events(): void {
 		Error_Reporter::install( $this->registry() );
 
-		$sent = 0;
+		$queued = 0;
 		for ( $i = 0; $i < 30; $i++ ) {
-			$sent += Error_Reporter::capture( $this->make_exception( self::OURS . '/a.php', $i + 1, [], 'e' . $i ) ) ? 1 : 0;
+			$queued += Error_Reporter::capture( $this->make_exception( self::OURS . '/a.php', $i + 1, [], 'e' . $i ) ) ? 1 : 0;
 		}
 
-		$this->assertSame( 20, $sent );
+		$this->assertSame( Error_Reporter::MAX_PER_REQUEST, $queued );
+		$this->assertCount( Error_Reporter::MAX_PER_REQUEST, $this->queued() );
 	}
 
 	/**
 	 * @dataProvider fatal_types
 	 */
-	public function test_only_fatal_error_types_are_reported_at_shutdown( int $type, bool $expected ): void {
+	public function test_only_fatal_error_types_are_queued_at_shutdown( int $type, bool $expected ): void {
 		$this->assertSame( $expected, Error_Reporter::is_fatal( $type ) );
 
 		Error_Reporter::install( $this->registry() );
@@ -315,7 +424,8 @@ final class ErrorReporterTest extends ErrorReportingTestCase {
 
 		Error_Reporter::handle_shutdown();
 
-		$this->assertCount( $expected ? 1 : 0, $this->posts );
+		$this->assertCount( $expected ? 1 : 0, $this->queued() );
+		$this->assertSame( [], $this->posts );
 	}
 
 	/**
@@ -336,7 +446,7 @@ final class ErrorReporterTest extends ErrorReportingTestCase {
 		];
 	}
 
-	public function test_a_fatal_in_a_foreign_file_and_no_last_error_send_nothing(): void {
+	public function test_a_fatal_in_a_foreign_file_and_no_last_error_queue_nothing(): void {
 		Error_Reporter::install( $this->registry() );
 
 		Error_Reporter::handle_shutdown();
@@ -348,10 +458,10 @@ final class ErrorReporterTest extends ErrorReportingTestCase {
 		];
 		Error_Reporter::handle_shutdown();
 
-		$this->assertSame( [], $this->posts );
+		$this->assertSame( [], $this->queued() );
 	}
 
-	public function test_an_uncaught_exception_is_not_reported_a_second_time_as_a_fatal(): void {
+	public function test_an_uncaught_exception_is_not_queued_a_second_time_as_a_fatal(): void {
 		Error_Reporter::install( $this->registry() );
 
 		try {
@@ -368,16 +478,38 @@ final class ErrorReporterTest extends ErrorReportingTestCase {
 		];
 		Error_Reporter::handle_shutdown();
 
-		$this->assertCount( 1, $this->posts );
+		$this->assertCount( 1, $this->queued() );
 	}
 
-	public function test_the_posted_event_has_the_site_hash_and_no_site_address(): void {
+	public function test_a_different_uncaught_fatal_after_a_seen_exception_is_still_queued(): void {
+		Error_Reporter::install( $this->registry() );
+
+		try {
+			Error_Reporter::handle_exception( $this->make_exception( self::OURS . '/a.php', 9 ) );
+		} catch ( \Throwable $e ) {
+			unset( $e );
+		}
+
+		// The previous handler threw ANOTHER exception: a different throw site.
+		$this->last_error = [
+			'type'    => E_ERROR,
+			'message' => 'Uncaught LogicException: other in ' . self::OURS . '/b.php:4',
+			'file'    => self::OURS . '/b.php',
+			'line'    => 4,
+		];
+		Error_Reporter::handle_shutdown();
+
+		$this->assertCount( 2, $this->queued() );
+	}
+
+	public function test_the_queued_event_has_the_site_hash_and_no_site_address_and_no_message(): void {
 		Error_Reporter::install( $this->registry() );
 		Error_Reporter::capture( $this->make_exception( self::OURS . '/a.php', 1, [], 'see ' . self::HOME . '/x' ) );
 
-		$body = (string) $this->posts[0][1]['body'];
+		$body = $this->encode( $this->queued()[0] );
 
 		$this->assertStringNotContainsString( 'shop.example.ru', $body );
+		$this->assertStringNotContainsString( 'see ', $body );
 		$expected = substr( hash( 'sha256', Error_Reporter::SITE_SALT . self::HOME ), 0, 16 );
 		$this->assertStringContainsString( '"server_name":"' . $expected . '"', $body );
 		$this->assertStringContainsString( '"wp_version":"6.8"', $body );
