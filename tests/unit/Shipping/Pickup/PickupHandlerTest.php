@@ -5520,6 +5520,12 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				$this->default_location()
 			);
 
+			// #1100: this handler has no Selection_Scope, so registering it reports the wiring fault.
+			Functions\when( '_doing_it_wrong' )->justReturn( null );
+			Functions\expect( 'add_action' )
+				->once()
+				->with( 'admin_notices', [ $handler, 'render_missing_selection_scope_notice' ] );
+
 			Functions\expect( 'add_action' )
 				->once()
 				->with( 'wp_enqueue_scripts', [ $handler, 'enqueue_assets' ] );

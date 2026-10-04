@@ -42,7 +42,10 @@ class C2a_Adapter extends Store_Api_Pickup {
 	protected static function selection_rate_limited(): bool { return self::$throttled; }
 	public static array $packages = [];
 	public static array $gateways = [];
+	/** @var string[] The framework pickup method ids this rig reports (#1100). */
+	public static array $pickup_methods = [];
 	public static C2a_Session $session;
+	protected static function pickup_method_ids(): array { return self::$pickup_methods; }
 	/** @var array<int, array<string, string>> Every destination write, in order (#1089). */
 	public static array $writes = [];
 	/** @var string|null A postcode the carrier does not serve: the destination there has no rates. */
@@ -145,6 +148,7 @@ final class StoreApiPickupTest extends TestCase {
 		C2a_Adapter::$context_reads = 0;
 		C2a_Adapter::$writes = [];
 		C2a_Adapter::$unserved_postcode = null;
+		C2a_Adapter::$pickup_methods = [];
 		C2a_Adapter::$session = $this->session;
 		C2a_Adapter::$packages =& $this->packages;
 		C2a_Adapter::$gateways =& $this->gateways;
@@ -720,6 +724,82 @@ final class StoreApiPickupTest extends TestCase {
 		$this->expectExceptionMessage( 'Too many requests' );
 		try { C2a_Adapter::update( [] ); }
 		finally { $this->assertSame( 0, $this->fetches ); }
+	}
+
+	private function unscoped_handler(): C2a_Handler {
+		$source = \Mockery::mock( Point_Source::class );
+		$handler = new C2a_Handler( 'noscope', 'noscope_point', $source, new Order_Persistence_Test_Map_Provider(), [ 'center' => [ 55, 37 ], 'zoom' => 9 ] );
+		$handler->fake_selection = $this->handler->fake_selection;
+		return $handler;
+	}
+
+	private function noscope_order(): C2a_Order {
+		$order = new C2a_Order( $this->address );
+		$order->lines = [ new C2a_Line( 'noscope_pickup', 3 ) ];
+		return $order;
+	}
+
+	public function test_an_unscoped_handler_never_owns_a_rate_which_is_the_dead_end(): void {
+		$handler = $this->unscoped_handler();
+		$this->assertFalse( $handler->has_selection_scope() );
+		$this->assertFalse( $handler->owns_store_api_rate( 'noscope_pickup:3' ) );
+		$this->assertTrue( $this->handler->has_selection_scope() );
+	}
+
+	public function test_a_pickup_rate_nobody_owns_is_refused_when_a_handler_has_no_scope(): void {
+		Store_Api_Pickup::add_handler( $this->unscoped_handler(), 'noscope', 'noscope_point' );
+		C2a_Adapter::$pickup_methods = [ 'carrier_pickup', 'noscope_pickup' ];
+		$errors = $this->validate( $this->noscope_order() );
+		$this->assertSame( 'woodev_pickup_unavailable', $errors->get_error_code() );
+		$this->assertCount( 1, $errors->get_error_messages() );
+		$this->assertStringContainsString( 'not available at checkout', $errors->get_error_message() );
+	}
+
+	public function test_an_unowned_pickup_rate_is_left_alone_when_every_handler_has_a_scope(): void {
+		C2a_Adapter::$pickup_methods = [ 'carrier_pickup', 'noscope_pickup' ];
+		$this->assertNotSame( 'woodev_pickup_unavailable', $this->validate( $this->noscope_order() )->get_error_code() );
+	}
+
+	public function test_a_foreign_rate_is_left_alone_even_when_a_handler_has_no_scope(): void {
+		Store_Api_Pickup::add_handler( $this->unscoped_handler(), 'noscope', 'noscope_point' );
+		C2a_Adapter::$pickup_methods = [ 'carrier_pickup' ];
+		$this->assertNotSame( 'woodev_pickup_unavailable', $this->validate( $this->noscope_order() )->get_error_code() );
+	}
+
+	public function test_a_scoped_handlers_own_rate_is_never_refused_as_unserved(): void {
+		Store_Api_Pickup::add_handler( $this->unscoped_handler(), 'noscope', 'noscope_point' );
+		C2a_Adapter::$pickup_methods = [ 'carrier_pickup', 'noscope_pickup' ];
+		$this->assertNotSame( 'woodev_pickup_unavailable', $this->validate()->get_error_code() );
+	}
+
+	public function test_registering_an_unscoped_handler_reports_it_once_to_developer_and_merchant(): void {
+		Functions\expect( '_doing_it_wrong' )->once()->with( \Mockery::any(), \Mockery::pattern( '/"noscope".*Selection_Scope/' ), '2.0.2' );
+		\Brain\Monkey\Actions\expectAdded( 'admin_notices' )->once();
+		$handler = $this->unscoped_handler();
+		$handler->register();
+		$handler->register();
+	}
+
+	public function test_registering_a_scoped_handler_reports_nothing(): void {
+		Functions\expect( '_doing_it_wrong' )->never();
+		\Brain\Monkey\Actions\expectAdded( 'admin_notices' )->never();
+		$this->handler->register();
+	}
+
+	public function test_the_merchant_notice_names_the_plugin_and_needs_the_capability(): void {
+		$handler = $this->unscoped_handler();
+		Functions\when( 'current_user_can' )->justReturn( false );
+		ob_start();
+		$handler->render_missing_selection_scope_notice();
+		$this->assertSame( '', ob_get_clean() );
+		Functions\when( 'current_user_can' )->justReturn( true );
+		Functions\when( 'esc_html' )->returnArg();
+		Functions\when( 'wp_kses_post' )->returnArg();
+		ob_start();
+		$handler->render_missing_selection_scope_notice();
+		$html = ob_get_clean();
+		$this->assertStringContainsString( 'notice-error', $html );
+		$this->assertStringContainsString( 'noscope', $html );
 	}
 
 }

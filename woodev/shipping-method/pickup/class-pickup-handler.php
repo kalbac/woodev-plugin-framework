@@ -430,6 +430,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		private static array $location_context_wiring_reconciled = [];
 
 		/**
+		 * Plugin ids already reported for a missing {@see Selection_Scope} (issue #1100).
+		 *
+		 * Keyed by {@see self::$plugin_id}, never a bare bool, for the reason
+		 * {@see self::$location_context_wiring_reconciled} gives.
+		 *
+		 * @since 2.0.2
+		 * @var array<string, true>
+		 */
+		private static array $missing_scope_reported = [];
+
+		/**
 		 * Constructor.
 		 *
 		 * `$order_handler` and `$point_field_logical` are optional and go together: when
@@ -2031,6 +2042,83 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		}
 
 		/**
+		 * Whether this handler was built with a {@see Selection_Scope} — the one thing the Store API
+		 * pickup transport cannot work without (issue #1100).
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public function has_selection_scope(): bool {
+			return null !== $this->selection_scope;
+		}
+
+		/**
+		 * Reports, once per plugin, a handler registered without a {@see Selection_Scope} (issue #1100).
+		 *
+		 * WHY NO DEFAULT SCOPE: a scope owns the session key (an installed-site data contract the
+		 * framework must never coin — gotcha `session-key-vs-order-meta-prefix`), the locality
+		 * meaning and the method→type map, and the handler knows none of them: it holds a plugin id
+		 * and a field id, not its carrier's method ids ({@see Checkout_Config::pickup_method_ids()}
+		 * spans every active plugin). A scope invented here would also start persisting selections
+		 * on a classic checkout that persists nothing today. So the wiring fault is made loud
+		 * instead: `_doing_it_wrong()` for the developer, an admin notice for the merchant, and
+		 * {@see Store_Api_Pickup::validate_order()} refuses the order with a customer-facing message.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		private function report_missing_selection_scope(): void {
+			if ( ! empty( self::$missing_scope_reported[ $this->plugin_id ] ) ) {
+				return;
+			}
+
+			self::$missing_scope_reported[ $this->plugin_id ] = true;
+
+			_doing_it_wrong(
+				'Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler',
+				sprintf(
+					'Pickup_Handler for plugin "%s" was constructed without a Selection_Scope (constructor argument 13, issue #1100). The block checkout cannot offer a pickup point for this carrier: its pickup rate still requires one, so an order cannot be placed there. Pass a Selection_Scope whose type_for_method() names the carrier\'s pickup methods.',
+					$this->plugin_id
+				),
+				'2.0.2'
+			);
+
+			add_action( 'admin_notices', [ $this, 'render_missing_selection_scope_notice' ] );
+		}
+
+		/**
+		 * Prints the merchant-visible half of {@see self::report_missing_selection_scope()}.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		public function render_missing_selection_scope_notice(): void {
+			if ( ! current_user_can( 'manage_woocommerce' ) ) {
+				return;
+			}
+
+			$name = null !== $this->plugin ? (string) $this->plugin->get_plugin_name() : $this->plugin_id;
+
+			printf(
+				'<div class="notice notice-error"><p>%s</p></div>',
+				esc_html(
+					sprintf(
+						/* translators: %s: shipping plugin name */
+						__( '%s: pickup delivery is not available in the block checkout because the plugin is misconfigured (no pickup selection scope). Customers cannot place an order with this pickup method there. Please contact the plugin developer.', 'woodev-plugin-framework' ),
+						$name
+					)
+				)
+			);
+		}
+
+		/**
 		 * What the Checkout block's pickup button needs to find this field (SP-11 C-2b, #1089): the
 		 * two keys the Store API transport addresses it by, and the name of the JS global
 		 * {@see self::enqueue_assets()} localizes its picker config under.
@@ -2250,6 +2338,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			// plugin wired (see self::$plugin) → the scope keeps an instance of its own.
 			if ( null !== $this->plugin && $this->selection_scope instanceof Provider_Selection_Scope ) {
 				$this->selection_scope->adopt_location_service( $this->plugin->get_location_service() );
+			}
+
+			// #1100: without a scope the block checkout has no pickup transport at all — say so
+			// loudly rather than leave the buyer a rate that demands a point and no way to choose one.
+			if ( null === $this->selection_scope ) {
+				$this->report_missing_selection_scope();
 			}
 
 			Store_Api_Pickup::add_handler( $this, $this->plugin_id, $this->field_id );

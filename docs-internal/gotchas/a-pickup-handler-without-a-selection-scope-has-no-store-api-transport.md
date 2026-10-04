@@ -48,6 +48,20 @@ class My_Selection_Scope extends \Woodev\Framework\Shipping\Pickup\Provider_Sele
 }
 ```
 
+## What the framework does about it now (#1100)
+
+No default scope: a scope owns the session key (never coined by the framework), the locality meaning
+and the method→type map, and a handler knows only its plugin id and field id — not its carrier's
+method ids. So the fault is made loud instead of repaired:
+
+- `Pickup_Handler::register()` calls `_doing_it_wrong()` once per plugin id and hooks an `admin_notices`
+  error naming the plugin (`render_missing_selection_scope_notice()`);
+- `Store_Api_Pickup::validate_order()` refuses the order with `woodev_pickup_unavailable` when its shipping
+  method is a framework pickup method that NO handler owns while at least one registered handler has no
+  scope — the buyer gets a message instead of a silent dead end.
+
+A classic-only plugin that never wired a scope gets the notice too; wire a scope (below) to clear it.
+
 ## How to see it
 
 ```php
