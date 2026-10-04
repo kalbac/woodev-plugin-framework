@@ -182,6 +182,44 @@ Three rules added by the C-2b critic round (#1089):
   move the chosen rate does not survive is undone. The city is never replaced: it is the
   customer's confirmed locality, and a record the native city no longer names is stale.
 
+Rules added by C-3 (#1090), from replaying the multi-request flows against WooCommerce 11.1:
+
+- **A retry's point is the order's.** `…_order_processed` fires on every `POST`, retries included,
+  and the first attempt has emptied the session's memory. The pickup handler then contributes the
+  point the order already carries (for the method it owns) instead of leaving the field absent —
+  an absent field is sanitised to `''` and written over the stored id. The full point is not
+  re-fetched or re-written on a retry. (Reached only after the pre-payment validation accepted
+  the retry — next rule.)
+- **«The session's draft» is the order WooCommerce would reuse** (`checkout-draft`, or
+  pending/failed with the cart's hash) — never any order the session still names by id.
+- **A retry is accepted on the confirmation the order was placed with, never on the bare id in its
+  meta** (critic round 1). The final writer keeps that confirmation when it empties the memory —
+  in the session, under the scope's own key with a `_placed` suffix, for the one order the session
+  may retry; no order-meta key is added. A retry passes only while the order still carries that
+  point and the cart still stands on the confirmation's FULL rate id, destination fingerprint and
+  locality. Anything else — a street or postcode edit, another instance of the same method, no
+  kept confirmation at all (an order placed before this rule shipped) — is refused like a missing
+  point.
+- **A reused retry order follows its rate and its destination.** On
+  `…_update_order_from_request` a field drops the point the previous attempt stored once its
+  carrier no longer owns the order's first shipping line, or once the confirmation above no longer
+  matches — for good, as a checkout mutation drops a live confirmation that moved: going back does
+  not restore it, a new confirmation does. A handler without a `Selection_Scope` is exempt. A
+  clear with nothing to clear writes nothing.
+- **Client.** Confirmation commands leave one at a time. A confirmation answering after the shopper
+  left the rate it was asked for (or after the block unmounted) rejects as superseded and moves no
+  address; that is decided from the block's own latch, not the cart store, which the late reply
+  has just overwritten. The same holds on the SAME rate when the reply would move the street line
+  or postcode and those fields are no longer what they were when the point was asked for (the
+  shopper dismissed the dialog and typed their own): the shopper's edit stays, core pushes it, and
+  the server drops the confirmation made for the point's address. An earlier queued confirmation's
+  own move is not an edit.
+- **Client, corrected point.** A reply whose snapshot names another point than the one asked for
+  is this command's confirmation when the verdict carries the corrected point (`selection.point`):
+  it is accepted, its destination is taken by the rules above, and the echo names the corrected id.
+- **Not changed (follow-up card):** after a failed payment the cart snapshot is `null` — the next
+  cart answer (a payment-method switch, a reload) makes the shopper pick the point again.
+
 Important existing code, not new work to recreate:
 
 - #949 is **closed**; the REST rate guard has already been fixed. Re-verify rates after address

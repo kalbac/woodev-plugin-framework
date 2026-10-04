@@ -172,6 +172,17 @@ const serverAnswers = ( rate: string, point: PickupSnapshot | null ): void => {
 const extensionCartUpdate = jest.fn();
 const setExtensionData = jest.fn();
 
+/**
+ * The cart `extensionCartUpdate()` resolves with — taken into the store first, as core does
+ * (`wc-blocks-data.js`: `gi=`), so what the block reads when the answer lands is that answer.
+ */
+const cartAnswer = ( rate: string, point: PickupSnapshot | null ): { extensions: Record< string, unknown > } => {
+	serverAnswers( rate, point );
+	notify();
+
+	return { extensions: mockStore.extensions };
+};
+
 /** The last echo the checkout request would carry for the pickup field. */
 const lastEcho = (): unknown => {
 	const calls = setExtensionData.mock.calls;
@@ -332,7 +343,7 @@ describe( 'PickupPicker — confirmation through the Store API', () => {
 		const session = fakeSession();
 
 		mockStore.payment = '';
-		extensionCartUpdate.mockResolvedValue( { extensions: serverExtension( PICKUP_RATE, snapshot() ) } );
+		extensionCartUpdate.mockImplementation( async () => cartAnswer( PICKUP_RATE, snapshot() ) );
 
 		renderPicker();
 		fireEvent.click( trigger() as HTMLElement );
@@ -382,7 +393,7 @@ describe( 'PickupPicker — confirmation through the Store API', () => {
 		expect( extensionCartUpdate ).toHaveBeenCalledTimes( 1 );
 
 		await act( async () => {
-			answer( { extensions: serverExtension( PICKUP_RATE, snapshot() ) } );
+			answer( cartAnswer( PICKUP_RATE, snapshot() ) );
 			await pending;
 		} );
 
@@ -423,7 +434,7 @@ const registerPayments = ( regular: Record< string, unknown >, express: Record< 
 
 describe( 'PickupPicker — the gateway id, not the registration name (#1089)', () => {
 	const sentPayment = async ( session: ReturnType< typeof fakeSession > ): Promise< unknown > => {
-		extensionCartUpdate.mockResolvedValue( { extensions: serverExtension( PICKUP_RATE, snapshot() ) } );
+		extensionCartUpdate.mockImplementation( async () => cartAnswer( PICKUP_RATE, snapshot() ) );
 
 		await act( async () => {
 			await session.host().confirmSelection( { id: 'P1' } );
@@ -819,6 +830,499 @@ describe( 'PickupPicker — restore and clear', () => {
 } );
 
 /*
+ * SP-11 C-3 (#1090): answers that arrive late, out of order, or after a failed order. Every request
+ * is held open by the test and answered at a moment the test chooses, so the order of events is
+ * the test's own — no timers, no real network.
+ */
+describe( 'PickupPicker — late and repeated answers (#1090)', () => {
+	const MOVED = { address_1: 'Тверская, 1', postcode: '101000' };
+
+	type Held = { resolve: ( cart: unknown ) => void; reject: ( error: unknown ) => void };
+
+	/** Holds every `extensionCartUpdate()` open; `held[ n ]` settles the n-th one. */
+	const holdConfirmations = (): Held[] => {
+		const held: Held[] = [];
+
+		extensionCartUpdate.mockImplementation(
+			() =>
+				new Promise( ( resolve, reject ) => {
+					held.push( { resolve, reject } );
+				} )
+		);
+
+		return held;
+	};
+
+	/** A confirmation's outcome as a value, so a rejection is asserted rather than thrown. */
+	const settle = ( pending: Promise< unknown > ): Promise< unknown > =>
+		pending.then(
+			( verdict ) => ( { verdict } ),
+			( error ) => ( { error } )
+		);
+
+	it( 'moves no address when the confirmation answers after the shopper left the rate', async () => {
+		const session = fakeSession();
+		const held = holdConfirmations();
+		const { container } = renderPicker();
+
+		fireEvent.click( trigger() as HTMLElement );
+
+		let outcome: Promise< unknown > = Promise.resolve();
+
+		await act( async () => {
+			outcome = settle( session.host().confirmSelection( { id: 'P1' } ) );
+			await Promise.resolve();
+		} );
+
+		expect( mockStore.calculating ).toBe( 1 );
+
+		// The rate changes under the open dialog; WooCommerce selects it locally at once.
+		act( () => {
+			chooseRate( COURIER_RATE );
+			notify();
+		} );
+
+		expect( session.destroy ).toHaveBeenCalledTimes( 1 );
+		expect( container ).toBeEmptyDOMElement();
+
+		/*
+		 * The confirmation reached the server first: it confirmed the point and moved the destination
+		 * to it. Its late cart also puts the pickup rate back into the store (`receiveCart()` takes
+		 * the reply's rates) — the block must not read that as the shopper having come back.
+		 */
+		await act( async () => {
+			chooseRate( PICKUP_RATE );
+			held[ 0 ].resolve( cartAnswer( PICKUP_RATE, snapshot( { destination: MOVED } ) ) );
+			await outcome;
+		} );
+
+		expect( await outcome ).toEqual( { error: { status: 0, code: 'woodev_pickup_superseded', message: '' } } );
+		expect( mockStore.shipping ).toEqual( HOME );
+		expect( mockStore.billing ).toEqual( HOME );
+		expect( mockStore.addressWrites ).toEqual( [] );
+		expect( mockStore.calculating ).toBe( 0 );
+
+		// The rate switch's own answer arrives last, and settles what the shopper sees.
+		act( () => {
+			chooseRate( COURIER_RATE );
+			serverAnswers( COURIER_RATE, null );
+			notify();
+		} );
+
+		expect( container ).toBeEmptyDOMElement();
+		expect( lastEcho() ).toBeNull();
+		expect( mockStore.validation[ ERROR_ID ] ).toBeUndefined();
+	} );
+
+	it( 'moves no address when the confirmation answers after the block went away', async () => {
+		const session = fakeSession();
+		const held = holdConfirmations();
+		const { unmount } = renderPicker();
+
+		fireEvent.click( trigger() as HTMLElement );
+
+		let outcome: Promise< unknown > = Promise.resolve();
+
+		await act( async () => {
+			outcome = settle( session.host().confirmSelection( { id: 'P1' } ) );
+			await Promise.resolve();
+		} );
+
+		unmount();
+
+		await act( async () => {
+			held[ 0 ].resolve( cartAnswer( PICKUP_RATE, snapshot( { destination: MOVED } ) ) );
+			await outcome;
+		} );
+
+		expect( await outcome ).toMatchObject( { error: { code: 'woodev_pickup_superseded' } } );
+		expect( mockStore.addressWrites ).toEqual( [] );
+		expect( mockStore.calculating ).toBe( 0 );
+		expect( mockStore.validation[ ERROR_ID ] ).toBeUndefined();
+	} );
+
+	it( 'still takes the answer of a dialog the shopper only dismissed', async () => {
+		const session = fakeSession();
+		const held = holdConfirmations();
+
+		renderPicker();
+		fireEvent.click( trigger() as HTMLElement );
+
+		const first = session.host();
+		let outcome: Promise< unknown > = Promise.resolve();
+
+		await act( async () => {
+			outcome = settle( first.confirmSelection( { id: 'P1' } ) );
+			await Promise.resolve();
+		} );
+
+		// Dismissed and opened again on the SAME rate: the server's confirmation still stands.
+		fireEvent.click( trigger() as HTMLElement );
+
+		await act( async () => {
+			held[ 0 ].resolve( cartAnswer( PICKUP_RATE, snapshot( { destination: MOVED } ) ) );
+			await outcome;
+		} );
+
+		expect( await outcome ).toMatchObject( { verdict: { allowed: true } } );
+		expect( mockStore.shipping ).toEqual( { ...HOME, ...MOVED } );
+		expect( screen.getByText( 'Тверская, 1' ) ).toBeInTheDocument();
+	} );
+
+	it( 'sends two confirmations one at a time, so the last one asked is the one shown', async () => {
+		const session = fakeSession();
+		const held = holdConfirmations();
+
+		renderPicker();
+		fireEvent.click( trigger() as HTMLElement );
+
+		const host = session.host();
+		let first: Promise< unknown > = Promise.resolve();
+		let second: Promise< unknown > = Promise.resolve();
+
+		await act( async () => {
+			first = settle( host.confirmSelection( { id: 'P1' } ) );
+			second = settle( host.confirmSelection( { id: 'P2' } ) );
+			await Promise.resolve();
+		} );
+
+		// The second command waits for the first one's answer: nothing can overtake it.
+		expect( extensionCartUpdate ).toHaveBeenCalledTimes( 1 );
+		expect( mockStore.calculating ).toBe( 2 );
+
+		await act( async () => {
+			held[ 0 ].resolve( cartAnswer( PICKUP_RATE, snapshot() ) );
+			await first;
+		} );
+
+		expect( extensionCartUpdate ).toHaveBeenCalledTimes( 2 );
+		expect( extensionCartUpdate.mock.calls[ 1 ][ 0 ].data.pickup.carrier.carrier_point.point_id ).toBe( 'P2' );
+
+		await act( async () => {
+			held[ 1 ].resolve( cartAnswer( PICKUP_RATE, snapshot( { point_id: 'P2', summary: 'Арбат, 2' } ) ) );
+			await second;
+		} );
+
+		expect( await first ).toMatchObject( { verdict: { allowed: true } } );
+		expect( await second ).toMatchObject( { verdict: { allowed: true } } );
+		expect( screen.getByText( 'Арбат, 2' ) ).toBeInTheDocument();
+		expect( lastEcho() ).toMatchObject( { point_id: 'P2' } );
+		expect( mockStore.calculating ).toBe( 0 );
+	} );
+
+	it( 'sends the next confirmation after a failed one', async () => {
+		const session = fakeSession();
+		const held = holdConfirmations();
+
+		renderPicker();
+		fireEvent.click( trigger() as HTMLElement );
+
+		const host = session.host();
+		let first: Promise< unknown > = Promise.resolve();
+		let second: Promise< unknown > = Promise.resolve();
+
+		await act( async () => {
+			first = settle( host.confirmSelection( { id: 'P1' } ) );
+			second = settle( host.confirmSelection( { id: 'P2' } ) );
+			await Promise.resolve();
+		} );
+
+		await act( async () => {
+			held[ 0 ].reject( new Error( 'offline' ) );
+			await first;
+		} );
+
+		expect( await first ).toMatchObject( { error: { message: 'offline' } } );
+		expect( extensionCartUpdate ).toHaveBeenCalledTimes( 2 );
+
+		await act( async () => {
+			held[ 1 ].resolve( cartAnswer( PICKUP_RATE, snapshot( { point_id: 'P2' } ) ) );
+			await second;
+		} );
+
+		expect( lastEcho() ).toMatchObject( { point_id: 'P2' } );
+		expect( mockStore.calculating ).toBe( 0 );
+	} );
+
+	/*
+	 * The critic's repro (round 1): the shopper dismisses the dialog while «Checking…», stays on
+	 * the rate, and types their own street. The rate latch still says «current» — the address is
+	 * what moved on.
+	 */
+	it( 'leaves a street the shopper typed after asking, when the answer lands on the same rate', async () => {
+		const session = fakeSession();
+		const held = holdConfirmations();
+
+		renderPicker();
+		fireEvent.click( trigger() as HTMLElement );
+
+		let outcome: Promise< unknown > = Promise.resolve();
+
+		await act( async () => {
+			outcome = settle( session.host().confirmSelection( { id: 'P1' } ) );
+			await Promise.resolve();
+		} );
+
+		// Dismissed without leaving the rate; the edit is in the store, core's push is still debounced.
+		session.host().close();
+		mockStore.shipping = { ...HOME, address_1: 'New manual street' };
+
+		await act( async () => {
+			held[ 0 ].resolve( cartAnswer( PICKUP_RATE, snapshot( { destination: MOVED } ) ) );
+			await outcome;
+		} );
+
+		expect( await outcome ).toEqual( { error: { status: 0, code: 'woodev_pickup_superseded', message: '' } } );
+		expect( mockStore.shipping ).toEqual( { ...HOME, address_1: 'New manual street' } );
+		expect( mockStore.addressWrites ).toEqual( [] );
+		expect( mockStore.calculating ).toBe( 0 );
+	} );
+
+	it( 'leaves a postcode edited in a store that ships to the billing address', async () => {
+		const session = fakeSession();
+		const held = holdConfirmations();
+
+		( window as unknown as Record< string, unknown > ).woodev_pickup_config_carrier = {
+			...config,
+			replaceAddress: { enabled: true, billingOnly: true },
+		};
+		renderPicker();
+		fireEvent.click( trigger() as HTMLElement );
+
+		let outcome: Promise< unknown > = Promise.resolve();
+
+		await act( async () => {
+			outcome = settle( session.host().confirmSelection( { id: 'P1' } ) );
+			await Promise.resolve();
+		} );
+
+		// There the form the shopper edits is the billing address.
+		mockStore.billing = { ...HOME, postcode: '654321' };
+
+		await act( async () => {
+			held[ 0 ].resolve( cartAnswer( PICKUP_RATE, snapshot( { destination: MOVED } ) ) );
+			await outcome;
+		} );
+
+		expect( await outcome ).toMatchObject( { error: { code: 'woodev_pickup_superseded' } } );
+		expect( mockStore.billing ).toEqual( { ...HOME, postcode: '654321' } );
+		expect( mockStore.shipping ).toEqual( HOME );
+	} );
+
+	it( 'does not take its own previous move for the shopper’s edit when two confirmations queue', async () => {
+		const session = fakeSession();
+		const held = holdConfirmations();
+
+		renderPicker();
+		fireEvent.click( trigger() as HTMLElement );
+
+		const host = session.host();
+		let first: Promise< unknown > = Promise.resolve();
+		let second: Promise< unknown > = Promise.resolve();
+
+		await act( async () => {
+			first = settle( host.confirmSelection( { id: 'P1' } ) );
+			second = settle( host.confirmSelection( { id: 'P2' } ) );
+			await Promise.resolve();
+		} );
+
+		await act( async () => {
+			held[ 0 ].resolve( cartAnswer( PICKUP_RATE, snapshot( { destination: MOVED } ) ) );
+			await first;
+		} );
+
+		expect( mockStore.shipping ).toEqual( { ...HOME, ...MOVED } );
+
+		const ARBAT = { address_1: 'Арбат, 2', postcode: '119002' };
+
+		await act( async () => {
+			held[ 1 ].resolve( cartAnswer( PICKUP_RATE, snapshot( { point_id: 'P2', destination: ARBAT } ) ) );
+			await second;
+		} );
+
+		expect( await second ).toMatchObject( { verdict: { allowed: true } } );
+		expect( mockStore.shipping ).toEqual( { ...HOME, ...ARBAT } );
+	} );
+
+	it( 'leaves the shopper’s edit to every confirmation asked before it', async () => {
+		const session = fakeSession();
+		const held = holdConfirmations();
+
+		renderPicker();
+		fireEvent.click( trigger() as HTMLElement );
+
+		const host = session.host();
+		let first: Promise< unknown > = Promise.resolve();
+		let second: Promise< unknown > = Promise.resolve();
+
+		await act( async () => {
+			first = settle( host.confirmSelection( { id: 'P1' } ) );
+			second = settle( host.confirmSelection( { id: 'P2' } ) );
+			await Promise.resolve();
+		} );
+
+		// Both were asked for the old street; the second one has not even left yet.
+		mockStore.shipping = { ...HOME, address_1: 'New manual street' };
+
+		await act( async () => {
+			held[ 0 ].resolve( cartAnswer( PICKUP_RATE, snapshot( { destination: MOVED } ) ) );
+			await first;
+		} );
+		await act( async () => {
+			held[ 1 ].resolve( cartAnswer( PICKUP_RATE, snapshot( { point_id: 'P2', destination: MOVED } ) ) );
+			await second;
+		} );
+
+		expect( await first ).toMatchObject( { error: { code: 'woodev_pickup_superseded' } } );
+		expect( await second ).toMatchObject( { error: { code: 'woodev_pickup_superseded' } } );
+		expect( mockStore.addressWrites ).toEqual( [] );
+
+		// A point asked for AFTER the edit replaces the address, as the store's policy says.
+		let third: Promise< unknown > = Promise.resolve();
+
+		await act( async () => {
+			third = settle( host.confirmSelection( { id: 'P1' } ) );
+			await Promise.resolve();
+		} );
+		await act( async () => {
+			held[ 2 ].resolve( cartAnswer( PICKUP_RATE, snapshot( { destination: MOVED } ) ) );
+			await third;
+		} );
+
+		expect( await third ).toMatchObject( { verdict: { allowed: true } } );
+		expect( mockStore.shipping ).toEqual( { ...HOME, ...MOVED } );
+	} );
+
+	/*
+	 * The critic's repro (round 1): the server's selection filter corrects the point — it keeps
+	 * and answers with P1-fixed, and its verdict carries the corrected point. That is the
+	 * confirmation of this command, not a missing one (`StoreApiPickupFlowTest` has the server half).
+	 */
+	it( 'takes the point the server corrected the choice to, with its address and its echo', async () => {
+		const session = fakeSession();
+		const corrected = { id: 'P1-fixed', short_address: 'Тверская, 1 стр. 2' };
+
+		renderPicker();
+		fireEvent.click( trigger() as HTMLElement );
+
+		extensionCartUpdate.mockImplementation( async () =>
+			cartAnswer(
+				PICKUP_RATE,
+				snapshot( {
+					point_id: 'P1-fixed',
+					summary: 'Тверская, 1 стр. 2',
+					destination: MOVED,
+					selection: { allowed: true, reason: null, close: null, refresh_checkout: null, point: corrected },
+				} )
+			)
+		);
+
+		let outcome: unknown;
+
+		await act( async () => {
+			outcome = await settle( session.host().confirmSelection( { id: 'P1' } ) );
+		} );
+
+		// The verdict hands the corrected point to the session, which replaces the one it holds.
+		expect( outcome ).toEqual( {
+			verdict: { allowed: true, reason: null, close: null, refresh_checkout: null, point: corrected },
+		} );
+		expect( mockStore.shipping ).toEqual( { ...HOME, ...MOVED } );
+		expect( screen.getByText( 'Тверская, 1 стр. 2' ) ).toBeInTheDocument();
+		expect( lastEcho() ).toMatchObject( { point_id: 'P1-fixed' } );
+		expect( mockStore.validation[ ERROR_ID ] ).toBeUndefined();
+	} );
+
+	it( 'still rejects a reply whose point is neither the one asked for nor a correction of it', async () => {
+		const session = fakeSession();
+
+		renderPicker();
+		fireEvent.click( trigger() as HTMLElement );
+
+		extensionCartUpdate.mockImplementation( async () =>
+			cartAnswer( PICKUP_RATE, snapshot( { point_id: 'P9', destination: MOVED } ) )
+		);
+
+		let outcome: unknown;
+
+		await act( async () => {
+			outcome = await settle( session.host().confirmSelection( { id: 'P1' } ) );
+		} );
+
+		expect( outcome ).toMatchObject( { error: { code: 'woodev_pickup_not_confirmed' } } );
+		expect( mockStore.addressWrites ).toEqual( [] );
+	} );
+
+	it( 'takes the echo back and blocks the order when a later cart no longer carries the point', () => {
+		serverAnswers( PICKUP_RATE, snapshot() );
+		renderPicker();
+
+		expect( lastEcho() ).toMatchObject( { point_id: 'P1' } );
+
+		// The address push answers: the server holds no confirmation for the new destination.
+		act( () => {
+			serverAnswers( PICKUP_RATE, null );
+			notify();
+		} );
+
+		expect( screen.getByRole( 'button', { name: 'Select a pickup point' } ) ).toBeInTheDocument();
+		expect( screen.queryByText( 'Тверская, 1' ) ).not.toBeInTheDocument();
+		expect( lastEcho() ).toBeNull();
+		expect( mockStore.validation[ ERROR_ID ] ).toEqual( { message: 'Please choose a pickup point.', hidden: true } );
+
+		// A rapid edit back to the first address: the server shows the confirmation it kept for it.
+		act( () => {
+			serverAnswers( PICKUP_RATE, snapshot() );
+			notify();
+		} );
+
+		expect( lastEcho() ).toMatchObject( { point_id: 'P1' } );
+		expect( mockStore.validation[ ERROR_ID ] ).toBeUndefined();
+		expect( extensionCartUpdate ).not.toHaveBeenCalled();
+	} );
+
+	it( 'keeps echoing the point through a failed payment, and asks the server again once the cart forgot it', async () => {
+		const session = fakeSession();
+
+		serverAnswers( PICKUP_RATE, snapshot() );
+		renderPicker();
+
+		/*
+		 * The payment fails: the checkout answers with an error and no cart, so the store — and with
+		 * it the echo the retry sends — is unchanged. The server accepts that echo against the point
+		 * the order already carries (`StoreApiPickupFlowTest`).
+		 */
+		expect( lastEcho() ).toMatchObject( { point_id: 'P1', rate_id: PICKUP_RATE } );
+		expect( mockStore.validation[ ERROR_ID ] ).toBeUndefined();
+
+		// The shopper switches the payment method: the draft update answers with a cart, and the
+		// first attempt has emptied the server's memory of the point.
+		act( () => {
+			serverAnswers( PICKUP_RATE, null );
+			notify();
+		} );
+
+		expect( lastEcho() ).toBeNull();
+		expect( mockStore.validation[ ERROR_ID ] ).toEqual( { message: 'Please choose a pickup point.', hidden: true } );
+
+		// Picking the SAME point again is a real request — the block no longer counts it as chosen.
+		fireEvent.click( trigger() as HTMLElement );
+
+		expect( session.host().getSelectedId() ).toBe( '' );
+
+		extensionCartUpdate.mockImplementation( async () => cartAnswer( PICKUP_RATE, snapshot() ) );
+
+		await act( async () => {
+			await session.host().confirmSelection( { id: 'P1' } );
+		} );
+
+		expect( extensionCartUpdate ).toHaveBeenCalledTimes( 1 );
+		expect( lastEcho() ).toMatchObject( { point_id: 'P1' } );
+		expect( mockStore.validation[ ERROR_ID ] ).toBeUndefined();
+	} );
+} );
+
+/*
  * The REAL map session (`pickup-session.js`) and the REAL dialog (`woodev-modal.js`) under the
  * block's host — the extraction's other consumer. The map provider is a stub that owns the whole
  * dialog body (`ownsChrome`), so no panels and no points fetch are involved.
@@ -956,8 +1460,53 @@ describe( 'PickupPicker — with the shared map session', () => {
 		] );
 	} );
 
+	/*
+	 * The critic's repro (round 1) on the REAL session and dialog: Escape closes the dialog while
+	 * the confirmation is pending, the shopper types a street, the old answer lands.
+	 */
+	it( 'leaves a street typed after Escape closed the pending dialog', async () => {
+		let answer: ( cart: unknown ) => void = () => undefined;
+
+		extensionCartUpdate.mockImplementation(
+			() =>
+				new Promise( ( resolve ) => {
+					answer = resolve;
+				} )
+		);
+
+		renderPicker();
+
+		await act( async () => {
+			fireEvent.click( trigger() as HTMLElement );
+			await Promise.resolve();
+		} );
+		await act( async () => {
+			pick( { id: 'P1' } );
+			await Promise.resolve();
+		} );
+
+		expect( extensionCartUpdate ).toHaveBeenCalledTimes( 1 );
+
+		fireEvent.keyDown( document, { key: 'Escape', keyCode: 27 } );
+
+		expect( document.querySelector( '[role="dialog"]' ) ).not.toBeInTheDocument();
+
+		mockStore.shipping = { ...HOME, address_1: 'New manual street' };
+
+		await act( async () => {
+			answer( cartAnswer( PICKUP_RATE, snapshot( { destination: { address_1: 'Point street', postcode: '101000' } } ) ) );
+			await Promise.resolve();
+			await Promise.resolve();
+			await Promise.resolve();
+		} );
+
+		expect( mockStore.shipping ).toEqual( { ...HOME, address_1: 'New manual street' } );
+		expect( mockStore.addressWrites ).toEqual( [] );
+		expect( mockStore.calculating ).toBe( 0 );
+	} );
+
 	it( 'keeps the dialog open and shows the server’s refusal in it', async () => {
-		const refusal = 'This pickup point does not accept cash on delivery. Choose another point or another payment method.';
+		const refusal ='This pickup point does not accept cash on delivery. Choose another point or another payment method.';
 
 		extensionCartUpdate.mockRejectedValue( { code: 'woodev_pickup_validation', message: refusal, data: { status: 400 } } );
 

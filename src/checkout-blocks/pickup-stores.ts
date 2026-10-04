@@ -28,7 +28,8 @@ import type {
 	PickupSessionApi,
 	PickupSnapshot,
 } from './pickup-types';
-import { adoptDestination, CART_STORE } from './wc-stores';
+import type { WcAddress } from './types';
+import { adoptDestination, CART_STORE, readBillingAddress, readShippingAddress } from './wc-stores';
 import { wcRuntime } from './wc-runtime';
 
 export const PAYMENT_STORE = 'wc/store/payment';
@@ -239,6 +240,46 @@ function failure( error: unknown ): PickupFailure {
 	};
 }
 
+/** Settles when the last confirmation asked for has been answered; `null` while none is in flight. */
+let confirmationInFlight: Promise< void > | null = null;
+
+/**
+ * {@link movableAddress} as the last confirmation's own move left it, while confirmations are in
+ * flight — the one change to those fields between a command being asked and its answer landing
+ * that is not the shopper's. `null` when nothing in flight has moved the address.
+ */
+let addressAsMoved: string | null = null;
+
+/**
+ * The native address fields a confirmation may replace (`adoptDestination()`), as one comparable
+ * value: the shipping address's street line and postcode and, where the store ships to the billing
+ * address, the billing address's — there the billing form is the one the shopper types in.
+ */
+function movableAddress( billingIsShipping: boolean ): string {
+	const fields = ( address: WcAddress ): string[] => [ address.address_1 ?? '', address.postcode ?? '' ];
+
+	return JSON.stringify( [
+		fields( readShippingAddress() ),
+		billingIsShipping ? fields( readBillingAddress() ) : null,
+	] );
+}
+
+/**
+ * Whether the reply's snapshot is the server's confirmation of the command for `pointId`: that
+ * point, or the one the server corrected it to. A domain may correct the point while confirming
+ * (`woodev_shipping_pickup_point_selection`); the server then keeps the CORRECTED point, the
+ * snapshot names it, and the verdict carries it (`selection.point`) for the map session to take in
+ * place of the one it holds. The verdict carrying a point is the test, not that point's id — that
+ * copy is escaped for the browser, the snapshot's is not.
+ */
+function confirmsCommand( snapshot: PickupSnapshot, pointId: string ): boolean {
+	if ( typeof snapshot.point_id !== 'string' || snapshot.point_id === '' ) {
+		return false;
+	}
+
+	return snapshot.point_id === pointId || isRecord( snapshot.selection?.point );
+}
+
 /**
  * Confirms `pointId` for `field` through the Store API (`cart/extensions`, operator decision
  * D-3 B) and answers in the classic confirmation's own shape, which the map session applies.
@@ -247,7 +288,8 @@ function failure( error: unknown ): PickupFailure {
  *   or `{ allowed: false, reason }` when it REFUSED — the reason is the server's own customer-safe
  *   message, shown on the point's card.
  * - REJECTS when there is no verdict: the request failed, the quota was hit (429), or the reply
- *   carries no confirmation for this point.
+ *   carries no confirmation of this command (see `confirmsCommand()` — a point the server
+ *   CORRECTED the choice to is its confirmation, and is taken with its address like any other).
  *
  * Only the point's ID travels: the server re-fetches the point and reads the rate, the
  * destination and the cart weight itself. WooCommerce takes the recalculated cart into its store
@@ -257,12 +299,60 @@ function failure( error: unknown ): PickupFailure {
  * moved the destination in the same request and the confirmation names the fields it moved; they
  * are taken into the native address here, before this resolves — so still under the caller's
  * checkout gate. `billingIsShipping`: the store ships to the billing address.
+ *
+ * THREE GUARDS AGAINST A LATE ANSWER (SP-11 C-3, #1090):
+ *
+ * - Commands leave ONE AT A TIME, in the order they were asked. The cart store takes whichever
+ *   reply arrives last, so two confirmations in flight together could leave the button showing
+ *   the point of the one the server processed first.
+ * - `isCurrent()` is asked when the reply lands: whether the shopper is still on the rate the
+ *   point was asked for. A reply that lands after they left it REJECTS (`…_superseded`) and moves
+ *   no address — the form must not take a pickup point's street for a courier order. The caller
+ *   answers from its own record, never from the cart store: the late reply has just overwritten
+ *   the store's selected rate with the one the server saw (`receiveCart()`).
+ * - The ADDRESS is the shopper's as much as the rate is. A reply that would move the street line
+ *   or the postcode REJECTS (`…_superseded`) and moves nothing when those fields are no longer
+ *   what they were when the point was ASKED for — the shopper dismissed the dialog and typed
+ *   their own, on the same rate. Theirs is the newer word; core pushes it, and the server then
+ *   drops the confirmation it made for the point's address. The fields are read at the click, not
+ *   when the command leaves (it may wait behind another one), and the one change that is not the
+ *   shopper's — an earlier confirmation's own move — is told apart (`addressAsMoved`).
  */
-export async function confirmPoint(
+export function confirmPoint(
 	namespace: string,
 	field: PickupFieldDescriptor,
 	pointId: string,
-	billingIsShipping = false
+	billingIsShipping = false,
+	isCurrent: () => boolean = () => true
+): Promise< PickupSelectionResult > {
+	const asked = movableAddress( billingIsShipping );
+	const send = (): Promise< PickupSelectionResult > =>
+		sendConfirmation( namespace, field, pointId, billingIsShipping, isCurrent, asked );
+	const result = confirmationInFlight ? confirmationInFlight.then( send ) : send();
+	const settled: Promise< void > = result
+		.then(
+			() => undefined,
+			() => undefined
+		)
+		.then( () => {
+			if ( confirmationInFlight === settled ) {
+				confirmationInFlight = null;
+				addressAsMoved = null;
+			}
+		} );
+
+	confirmationInFlight = settled;
+
+	return result;
+}
+
+async function sendConfirmation(
+	namespace: string,
+	field: PickupFieldDescriptor,
+	pointId: string,
+	billingIsShipping: boolean,
+	isCurrent: () => boolean,
+	asked: string
 ): Promise< PickupSelectionResult > {
 	const update = wcRuntime()?.blocksCheckout?.extensionCartUpdate;
 
@@ -298,14 +388,25 @@ export async function confirmPoint(
 	const extension = isRecord( extensions[ namespace ] ) ? ( extensions[ namespace ] as PickupExtension ) : null;
 	const snapshot = extension?.pickup?.[ field.pluginId ]?.[ field.fieldId ] ?? null;
 
-	if ( ! snapshot || snapshot.point_id !== pointId ) {
+	if ( ! snapshot || ! confirmsCommand( snapshot, pointId ) ) {
 		throw { status: 0, code: 'woodev_pickup_not_confirmed', message: '' } as PickupFailure;
+	}
+
+	if ( ! isCurrent() ) {
+		throw { status: 0, code: 'woodev_pickup_superseded', message: '' } as PickupFailure;
 	}
 
 	const destination = movedDestination( snapshot );
 
 	if ( destination ) {
+		const now = movableAddress( billingIsShipping );
+
+		if ( now !== asked && now !== addressAsMoved ) {
+			throw { status: 0, code: 'woodev_pickup_superseded', message: '' } as PickupFailure;
+		}
+
 		adoptDestination( destination, billingIsShipping );
+		addressAsMoved = movableAddress( billingIsShipping );
 	}
 
 	return { ...snapshot.selection, allowed: true };

@@ -374,6 +374,78 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Selection' )
 		}
 
 		/**
+		 * Keeps the Store API confirmation an order was placed with (SP-11 C-3, #1090).
+		 *
+		 * Order processing empties the map ({@see self::forget_all()}), and WooCommerce reuses a
+		 * pending/failed order for a payment retry. The retry has to stand on something: the point
+		 * id on the order says nothing about the full rate and the destination it was confirmed
+		 * for, and the confirmation — which does — has just been forgotten. So it is kept here,
+		 * under the scope's own session key with a `_placed` suffix, for the ONE order this
+		 * session may still retry. Kept outside the map on purpose: the map's top level is
+		 * localities, and `forget_all()` must stay a clear of the whole map.
+		 *
+		 * @since 2.0.2
+		 * @param int                  $order_id Order the confirmation was placed with.
+		 * @param array<string, mixed> $confirmation Confirmation as {@see self::remember_confirmation()} stored it.
+		 * @return void
+		 */
+		public function remember_placed( int $order_id, array $confirmation ): void {
+			$session = $this->session();
+			if ( null === $session || $order_id <= 0 ) {
+				return;
+			}
+			$session->set(
+				$this->placed_key(),
+				[
+					'order_id' => $order_id,
+					'confirmation' => $confirmation,
+				]
+			);
+		}
+
+		/**
+		 * Reads the confirmation `$order_id` was placed with, or null when the session keeps none
+		 * for that order.
+		 *
+		 * @since 2.0.2
+		 * @param int $order_id Order being retried.
+		 * @return array<string, mixed>|null
+		 */
+		public function recall_placed( int $order_id ): ?array {
+			$session = $this->session();
+			$placed = null !== $session ? $session->get( $this->placed_key() ) : null;
+			if ( ! is_array( $placed ) || $order_id <= 0 || (int) ( $placed['order_id'] ?? 0 ) !== $order_id
+				|| ! is_array( $placed['confirmation'] ?? null ) ) {
+				return null;
+			}
+			return $placed['confirmation'];
+		}
+
+		/**
+		 * Forgets the confirmation kept for `$order_id`; another order's is left alone.
+		 *
+		 * @since 2.0.2
+		 * @param int $order_id Order whose point was dropped.
+		 * @return void
+		 */
+		public function forget_placed( int $order_id ): void {
+			$session = $this->session();
+			if ( null !== $session && null !== $this->recall_placed( $order_id ) ) {
+				$session->set( $this->placed_key(), [] );
+			}
+		}
+
+		/**
+		 * Session key of the placed-order confirmation.
+		 *
+		 * @since 2.0.2
+		 * @return string
+		 */
+		private function placed_key(): string {
+			return $this->scope->session_key() . '_placed';
+		}
+
+		/**
 		 * Reads the live `WC()->session`, or `null` when WooCommerce is unavailable or
 		 * no session has been started yet.
 		 *

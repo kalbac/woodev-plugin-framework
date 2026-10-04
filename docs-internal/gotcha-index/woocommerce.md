@@ -37,6 +37,8 @@
 
 - [woocommerce/store-api] **Store API extension schemas are endpoint-specific.** → [store-api-extension-schema-is-endpoint-specific](../gotchas/store-api-extension-schema-is-endpoint-specific.md) (SP-11 C-2a fix round)
 
+- [woocommerce/store-api] **A payment retry runs `…_order_processed` AGAIN with an empty session: an absent field becomes `''` and overwrites the stored value; the session still names a failed order the cart left.** → [a-store-api-payment-retry-runs-order-processed-again-with-an-empty-session](../gotchas/a-store-api-payment-retry-runs-order-processed-again-with-an-empty-session.md) (s152, #1090)
+
 - [woocommerce/blocks] **`is_checkout()` is FALSE on a page that carries the Checkout block but is not the configured checkout page — the block works there, anything gated on `is_checkout()` does not load.** → [is-checkout-is-false-on-a-page-that-only-carries-the-checkout-block](../gotchas/is-checkout-is-false-on-a-page-that-only-carries-the-checkout-block.md) (s151, #1089)
 
 - [woocommerce/blocks] **WC's «inline or unknown script accessed wc.X» is a stack-depth artifact of a read made AFTER script evaluation — capture `window.wc.*` at evaluation; the deps are already declared.** → [wc-dependency-detection-calls-a-late-read-an-inline-script](../gotchas/wc-dependency-detection-calls-a-late-read-an-inline-script.md) (s151, #1089)
