@@ -1,6 +1,6 @@
 # SP-11 — Checkout Blocks location and pickup adapter
 
-**Status:** DRAFT — reconnaissance and recommendations; D-1 through D-6 await the operator.
+**Status:** DRAFT — reconnaissance and recommendations; D-1 through D-7 await the operator.
 
 **Scope:** #1078, the release minimum in shipping-module decisions §11: city suggestions, region,
 pickup-point selection with a map modal, session and order persistence, and classic checkout parity.
@@ -79,6 +79,10 @@ Installed 11.1 details:
 - The guide describes three `search` arguments; the installed Blocks call passes query/country.
   The installed `select` call also passes country. An adapter must tolerate these call-site details
   rather than depend on an address-type argument always being supplied.
+- Provider availability is gated by `woocommerce_address_autocomplete_enabled` (default `no`;
+  `WC:src/Blocks/BlockTypes/Checkout.php:421–438`). Framework code cannot rely on this merchant
+  setting being enabled. A provider-based minimum must either provide its own supported trigger
+  or treat the framework's locality chooser as the reliable path.
 
 **Conclusion:** reusing the provider API alone does not meet City-triggered suggestions. D-1 is a
 real product/API fork. There is no supported per-core-field component replacement found in this
@@ -97,8 +101,9 @@ second competing suggestion owner or silently undo suppression.
 | Live cart mutation | `woocommerce_store_api_register_update_callback()` (`functions.php:42–48`) registers one callback per namespace (`ExtendSchema.php:140–158`). `POST /wc/store/v1/cart/extensions` accepts `{ namespace, data }` (`WC:src/StoreApi/Routes/V1/CartExtensions.php:38–65`). The schema invokes the callback, recalculates totals and returns the full cart (`WC:src/StoreApi/Schemas/V1/CartExtensionsSchema.php:65–89`). It does not automatically save arbitrary values to session. |
 | JS cart refresh | `extensionCartUpdate` is exported by blocks-checkout (`WC:assets/client/blocks/wc-cart-checkout-base-frontend.js:41`). The cart action sends that namespace/data request and receives cart data; dirty address preservation is explicit (`wc-blocks-data.js:5`, `gi=e=>`, `overwriteDirtyCustomerData`). Avoid forcing old server addresses over a user's newer local edits. |
 | Final checkout data | Store action `setExtensionData(namespace, object, replace=false)` merges extension data (`wc-blocks-data.js:5`, `ei=`, checkout reducer). The inner-block helper instead offers `setExtensionData(namespace, key, value)` (`wc-cart-checkout-base-frontend.js:36`, search `setExtensionData:a` and `getExtensionData`). These are different signatures. Checkout processing reads `getExtensionData()` and sends `extensions` with the request (`same file:36`, search `extensionData:t.getExtensionData()` and `extensions:{...v}`). Neither setter is a server/session write. |
-| Request-to-order hook | `woocommerce_store_api_checkout_update_order_from_request($order,$request)` runs after address/payment/additional-field processing and before the order save (`WC:src/StoreApi/Utilities/CheckoutTrait.php:176–253`). Read `$request['extensions'][namespace]` there; schema registration is not a persistence callback. GET/PUT can also update drafts: guard final-only work by method, do not treat every invocation as an order placement. |
-| Payment gate | `woocommerce_checkout_validate_order_before_payment($order,$errors)` gathers `WP_Error` and throws a 400 on errors (`WC:src/StoreApi/Utilities/OrderController.php:190–216`). The completed-processing hook is `woocommerce_store_api_checkout_order_processed($order)` (`WC:src/StoreApi/Routes/V1/Checkout.php:677–690`). Validate before payment, persist through our existing completed-processing writer. |
+| Live checkout interaction | PUT/PATCH can update an existing pending/failed order, or update cart/customer/session state when no draft order exists. WC defers creating a draft until POST/place-order (`WC:src/StoreApi/Routes/V1/Checkout.php:352–460`; retry eligibility is `WC:src/StoreApi/Utilities/DraftOrderTrait.php:53–69`). On the no-order path, `woocommerce_store_api_checkout_update_draft($request)` fires after request validation and live session update; it was added in 10.8.0 (`Checkout.php:437–455`). Feature-detect this hook; use it to reconcile session-bound live state, not to save an order. |
+| Request-to-order hook | On the order-backed PUT/PATCH path and final POST, `woocommerce_store_api_checkout_update_order_from_request($order,$request)` runs after address/payment/additional-field processing and before the order save (`WC:src/StoreApi/Utilities/CheckoutTrait.php:176–253`). Read `$request['extensions'][namespace]` there and persist/reconcile order data; this is distinct from the deferred-draft hook. Do not treat every invocation as order placement. |
+| Payment gate and final writer | `woocommerce_checkout_validate_order_before_payment($order,$errors)` gathers `WP_Error` and throws a 400 on errors (`WC:src/StoreApi/Utilities/OrderController.php:190–216`). The completed-processing hook is `woocommerce_store_api_checkout_order_processed($order)` (`WC:src/StoreApi/Routes/V1/Checkout.php:677–690`). Run final validation before payment, then let the existing completed-processing writer persist full point/order data. |
 | Request authority | Store cart routes check nonce/token authority and issue refreshed headers (`WC:src/StoreApi/Routes/V1/AbstractCartRoute.php:117`, `:156–159`, `:226–305`). Our `woodev/v1` writes use `wp_rest` nonce checks. These are separate mechanisms; never substitute one header for the other. |
 
 `CheckoutSchema.php` above means `WC:src/StoreApi/Schemas/V1/CheckoutSchema.php`;
@@ -143,6 +148,17 @@ Important existing code, not new work to recreate:
   carrier re-fetch; inspect the actual code rather than its higher-level description.
   That writer can log and return on lookup failure (`:3644–3666`). D-3 must not introduce another
   clear or another final writer; retry/payment-failure tests must cover this existing lifecycle.
+- **Named risk — payment retry bypasses the current required-point guard (owner: C-2a server).**
+  `Checkout_Handler::pickup_point_errors()` returns no errors unless the order is `checkout-draft`
+  (`FW:woodev/shipping-method/checkout/class-checkout-handler.php:2066–2068`), while WC permits
+  pending/failed order retries (`WC:src/StoreApi/Utilities/DraftOrderTrait.php:53–69`). The existing
+  Store API writer clears remembered selections before re-fetching the full point
+  (`FW:woodev/shipping-method/pickup/class-pickup-handler.php:3574–3580`). A failed-payment retry can
+  therefore have no session point and bypass the presence guard. The new validator must check the
+  current required point and constraints for retryable orders without keying on `checkout-draft`.
+- The framework's current Store API method reader returns the first shipping line
+  (`FW:woodev/shipping-method/checkout/class-checkout-handler.php:2142–2160`). Multi-package
+  incompatibility therefore needs new server validation; a UI warning alone cannot prevent an order.
 
 ### 4. Rendering pickup UI and the core Local pickup feature
 
@@ -227,12 +243,13 @@ handles actually installed; verify generated `.asset.php` and runtime `window.wc
 assuming an npm package exists. Keep editor handles lightweight; never publish a visitor nonce or
 session selection as cacheable editor data.
 
-**Server callbacks cannot live only in `IntegrationInterface::initialize()`.** WooCommerce 11.1 can
-skip block registration on REST requests; its
-[11.1 registration advisory](https://developer.woocommerce.com/2026/08/31/block-registration-skips-11-1/)
-explicitly separates standard WordPress block registration from internal block lifecycle.
-Register Store API callbacks on `woocommerce_blocks_loaded` / the appropriate server initialization
-independently of rendering. No global opt-in to register every core block on REST is needed.
+**Server callbacks should register independently of rendering.** In WC 11.1, `AbstractBlock::render_callback()`
+skips `register_block_type_assets()` and `enqueue_assets()` during REST requests
+(`WC:src/Blocks/BlockTypes/AbstractBlock.php:97`); this source does not establish that block
+registration itself is skipped. Register Store API callbacks on `woocommerce_blocks_loaded` / the
+appropriate server initialization independently of `IntegrationInterface::initialize()` and render
+callbacks, so REST requests do not depend on frontend asset lifecycle. No global opt-in to register
+every core block on REST is needed.
 Our classic `enqueue_assets()` currently checks `is_checkout()` and still enqueues classic scripts
 there (`FW:woodev/shipping-method/checkout/class-checkout-handler.php:702–732`): implementation needs
 an explicit surface guard so a Blocks checkout does not boot the classic DOM adapter alongside React.
@@ -264,7 +281,7 @@ billing/shipping chooser state must only persist the effective delivery chain; D
 One framework Blocks integration registers three thin frontend surfaces: shipping locality chooser,
 billing locality chooser when effective, and carrier pickup selector. They consume the same PHP
 declarations and location/pickup services as classic. There is no JS implementation in individual
-carrier plugins. Below is the recommended design, conditional on approval of D-1 through D-6.
+carrier plugins. Below is the recommended design, conditional on approval of D-1 through D-7.
 
 1. **Load/hydrate:** publish effective field/source policies and active carrier configs; read WC's
    address/rate state and current framework chain/selection. Prefill only a chain matching the actual
@@ -307,10 +324,19 @@ before declaring parity; do not silently force all stores to a different mode.
   a tightly bounded compatibility layer and per-WC-version browser tests. No supported seam was found.
 - **C — Wait for/contribute a native field-renderer extension to WC.** Clean eventual API, but an
   external dependency delays the release minimum. A WC Address-1 provider alone does not meet it.
+- **D — Address-1 autocomplete provider as the minimum; locality chooser as an enhancement.**
+  This uses WC's supported provider API to fill City/State when a shopper searches Address 1, with
+  our chooser available for direct locality selection. It reuses WC's address synchronization, but
+  does not put suggestions in the City control. WC only publishes providers when
+  `woocommerce_address_autocomplete_enabled` is enabled (`WC:src/Blocks/BlockTypes/Checkout.php:421–438`;
+  default is `no`), so the framework cannot depend on a third-party provider or merchant setting;
+  the framework must register its own provider and still decide whether the chooser is required for
+  guaranteed coverage. This is the smallest supported minimum if the operator accepts Address-1 as
+  the trigger.
 
-If “same City input” is mandatory, A is not an accepted completion path. The operator must choose B
-with its maintenance cost or C with its release consequence. Do not hide core City via locale/CSS to
-simulate replacement: hidden address keys can be cleared by WC (`wc-blocks-data.js:4`, `hs`).
+If “same City input” is mandatory, A and D are not accepted completion paths. The operator must
+choose B with its maintenance cost or C with its release consequence. Do not hide core City via
+locale/CSS to simulate replacement: hidden address keys can be cleared by WC (`wc-blocks-data.js:4`, `hs`).
 
 ### D-2 — Automatic UI or merchant-managed block insertion?
 
@@ -351,16 +377,24 @@ simulate replacement: hidden address keys can be cleared by WC (`wc-blocks-data.
 
 ### D-5 — Blocks compatibility floor
 
-- **A — 11.1 as the initial adapter floor, preserve classic support on older WC (recommended for
-  the first implementation).** Only this version was inspected. Feature-detect interfaces/exports,
-  announce the narrower Blocks support clearly, and do not claim the whole WC ≥7.0 range is proved.
-  Earlier Blocks versions remain an explicit limitation for the operator to accept or reject.
-- **B — Full advertised WC ≥7.0 Blocks coverage in this effort.** Requires source/API comparison and
-  separate browser fixtures, including older validation hooks and forced-inner-block behavior.
-  More work before release; changing the global WC minimum is not implied by this option.
+- **A — 9.9 as the initial adapter floor (recommended).** The framework already feature-detects
+  `woocommerce_checkout_validate_order_before_payment` by checking the actual controller method,
+  documented in its source as available since WC 9.9
+  (`FW:woodev/shipping-method/checkout/class-checkout-handler.php:2032–2043`). Keep classic checkout
+  on the existing advertised WC ≥7.0 range. Feature-detect each Blocks API; specifically,
+  `woocommerce_store_api_checkout_update_draft` is available since 10.8 and must be optional below
+  that version. Verify earlier forced-inner-block behavior before claiming support.
+- **B — Full advertised WC ≥7.0 Blocks coverage in this effort.** The repository advertises WC ≥7.0
+  (`AGENTS.md`, Tech stack); this option preserves that range for Blocks too, but requires source/API
+  comparisons and browser fixtures for older validation hooks, draft semantics, and forced-inner-block
+  behavior. Changing the global minimum is not implied by this option.
+- **C — 11.1 as the initial adapter floor.** Only WC 11.1 was directly inspected for the Blocks
+  renderer, forced children, and provider control. This narrows Blocks support most, while classic
+  checkout remains on the current floor. It reduces compatibility work but excludes supported stores
+  from the new Blocks adapter unless they switch to classic checkout.
 
-If the release promises Blocks at every currently supported WC version, B is required. A cannot be
-quietly treated as universal compatibility, nor should it force an existing store to classic checkout.
+If the release promises Blocks at every currently supported WC version, B is required. A and C need
+an explicit Blocks-only compatibility floor; neither should force an existing store to classic checkout.
 
 ### D-6 — Shipping-package and address-chain scope
 
@@ -377,6 +411,28 @@ Independent billing address text is preserved in either option. The framework lo
 the effective delivery destination; choosing a billing locality must not overwrite a separate shipping
 destination. When shipping follows billing, project that one effective chain into both WC addresses.
 
+### D-7 — Express payments, Cart block shipping calculator, and session ownership
+
+- **A — Keep pickup selection inside Checkout Blocks; block unsupported express paths (recommended
+  for the release minimum).** Express-payment buttons can bypass checkout inner blocks, so server-side
+  validation must reject pickup orders without a confirmed point and provide a clear actionable error.
+  The Cart block shipping calculator is outside this slice; if it changes the address, it must clear
+  or invalidate the existing point before checkout. Bind framework state to the Store API cart/session
+  authority and explicitly test guest, logged-in, and cart-token requests; do not assume the cookie and
+  cart token identify the same session.
+- **B — Add pickup selection and address-change invalidation to express-payment and Cart block flows
+  now.** Provides a complete path across surfaces, but expands the release slice to cart and payment
+  integrations with separate UI and browser acceptance.
+- **C — Defer those surfaces without blocking them.** Keep them usable only when the server guard can
+  prove the selected point and current address/rate are valid; otherwise refuse the order with a
+  surfaced error. This is the narrowest implementation, but leaves an express-payment or Cart change
+  without an in-surface recovery flow.
+
+For guest and headless clients, decide explicitly whether cart-token authority, cookie-backed customer
+session, or their verified linkage owns `woodev_customer_location`; never let a request token silently
+select another shopper's location state. Recommendation: use the server-resolved active Store API
+session as authority, then verify token/cookie parity in the D-7 acceptance matrix.
+
 ## Proposed cards — ordered, independently mergeable vertical slices
 
 No issues are created by this draft; the coordinator owns filing them after decisions.
@@ -385,18 +441,24 @@ but a merged slice must leave both checkout surfaces usable within the declared 
 
 | Order | Proposed card title | Deliverable and acceptance |
 |---|---|---|
-| C-1 | SP-11: город и регион с подсказками в Checkout Blocks | First vertical slice: integration/assets, supported locality UI chosen in D-1/D-2, existing location API persistence, valid core City/State mapping, guest/account hydrate, address-to-rates synchronization and manual-edit invalidation. End-to-end delivery order with changed city/region stores native address and recalculates rates; classic/cart/My Account stay usable. Include region removed, real WC region codes, provider absence, fallback, and same-key federal-city cases. No pickup UI dependency. |
-| C-2 | SP-11: выбор ПВЗ на карте и сохранение заказа из блоков | Reusable storefront session/host under D-4 plus owned-rate button, accessible map modal, confirmation transport under D-3, cart extension snapshot, current method/address/payment/weight validation before payment, and existing final order writer. Reload restores confirmed selection; valid order contains point ID/full point/carrier marker; missing/denied point cannot reach payment. Extraction and transport ship with the consuming UI, not as unused infrastructure. |
-| C-3 | SP-11: смена адреса, тарифа и оплаты без устаревшего ПВЗ | Complete the same flow under rapid updates, COD changes, corrected points/address replacement, method-instance switches, carrier switch, retries and stale responses. Final checkout echo checks and scoped clears; no double persistence/clear, no cross-carrier errors. Both adapters keep filter/close/refresh behavior. Deterministic delayed-response tests plus browser failure/retry coverage. C-2 must already be safe against absence; C-3 broadens consistency cases. |
-| C-4 | SP-11: приёмка блочного чекаута и границы совместимости | Verify D-5/D-6 coverage with actual supported fixtures, customized saved layouts, force deduplication, missing-parent detection, multiple active plugins, core Local pickup, separate billing, virtual carts, mobile/theme/keyboard dialog behavior, and classic regressions. Confirm native address/custom meta/full point/marker and session cleanup; record supported WC surface. Additional version/package implementation belongs here only if B was chosen, otherwise explicitly defer it through the coordinator's board. |
+| C-1 | SP-11: город и регион с подсказками в Checkout Blocks | First vertical slice: integration/assets, supported locality UI chosen in D-1/D-2, existing location API persistence, valid core City/State mapping, guest/account hydrate, **core address store synchronization only** (no framework `/cart/extensions` namespace dependency), and manual-edit invalidation. End-to-end delivery order with changed city/region stores native address and recalculates rates; classic/cart/My Account stay usable. Include region removed, real WC region codes, provider absence, fallback, same-key federal-city cases, and English storefront msgids in the source/catalogue and built-bundle `lint:js-i18n`. No pickup UI dependency. |
+| C-2a | SP-11: серверная проверка ПВЗ для Store API | Server slice: shared selection/validation service, `/cart/extensions` namespace update callback and confirmed cart snapshot; final pre-payment validation for point presence, current rate/address, COD and weight; multi-package guard for unsupported independent package points; failed-payment retry validation that does not key on `checkout-draft`; deferred-draft reconciliation using `woocommerce_store_api_checkout_update_draft` when available, with order-backed echo/persistence through `woocommerce_store_api_checkout_update_order_from_request` and final writer at `woocommerce_store_api_checkout_order_processed`. Acceptance: **fail payment → retry → an order without a point is refused**; COD/weight and unsupported package cases are refused server-side. All user-visible errors use English msgids present in the catalogue and pass `lint:js-i18n` against the built bundle. C-2a is the explicit exception to “ship consuming UI with infrastructure”: it is dormant-safe, registers only its server API, and has no checkout-facing behavior until C-2b consumes it. |
+| C-2b | SP-11: кнопка и модал ПВЗ в Checkout Blocks | Client slice: extract a reusable storefront session/host under D-4, add owned-rate button and accessible React map modal, consume C-2a's extension callback and snapshot, and provide reload restore/clear behavior. Browser acceptance covers successful confirmation, failed confirmation recovery, address/method changes, and English source msgids/catalogue/build `lint:js-i18n`. Keep the classic host usable. |
+| C-3 | SP-11: синхронизация черновика и смена адреса, тарифа и оплаты без устаревшего ПВЗ | Exercise deferred-draft and order-backed PUT/PATCH flows: feature-detect the 10.8 `woocommerce_store_api_checkout_update_draft` hook for no-order live session reconciliation; use `woocommerce_store_api_checkout_update_order_from_request` for an existing order; use `woocommerce_checkout_validate_order_before_payment` before each payment attempt and `woocommerce_store_api_checkout_order_processed` only after order processing. Cover rapid updates, corrected points/address replacement, method-instance/carrier switches, retries and stale responses; final checkout echo checks and scoped clears; no double persistence/clear or cross-carrier errors. Deterministic delayed-response tests plus browser failure/retry coverage, including the C-2a payment retry acceptance. |
+| C-4 | SP-11: приёмка блочного чекаута и границы совместимости | Verify D-5/D-6/D-7 coverage with actual supported fixtures, customized saved layouts, force deduplication, missing-parent detection, multiple active plugins, core Local pickup, separate billing, virtual carts, mobile/theme/keyboard dialog behavior, express-payment and Cart block scope, guest/logged-in/cart-token session ownership, and classic regressions. Include a forced-block matrix: shipping methods parent hidden when `!showShippingMethods` (including core Local pickup), shipping address hidden when `!showShippingFields`, billing address hidden when `!showBillingFields && !useBillingAsShipping`; locality UI is effective for billing exactly when `showBillingFields || useBillingAsShipping`. Confirm native address/custom meta/full point/marker and session cleanup; record supported WC surface. Additional version/package implementation belongs here only if selected in D-5/D-6/D-7, otherwise explicitly defer it through the coordinator's board. |
 
-C-1 and C-2 browser acceptance should accompany their merges; C-4 is the combined compatibility
+C-1 and C-2b browser acceptance should accompany their merges; C-4 is the combined compatibility
 matrix, not permission to merge unverified earlier work. Public docs remain frozen per operator policy.
 
 ## Verification and remaining uncertainties
 
 Implementation gates: `composer check`, `npm run test:js`, typecheck, asset parity, relevant i18n
-checks, and `npm run lint:docs`. Use meaningful unit/Jest tests around new shared confirmation logic,
+checks, and `npm run lint:docs`. New storefront React/TS strings and Store API checkout errors are
+rendered to shoppers: use English msgids, include translations in the catalogue, build the bundles,
+then run `npm run lint:js-i18n` against the built bundle. The classic pickup controller currently
+contains the Russian storefront msgid `Пункт выдачи не указан.`
+(`FW:woodev/shipping-method/rest-api/class-pickup-controller.php:587`); whether C-2a should migrate
+that existing response too remains an open question. Use meaningful unit/Jest tests around new shared confirmation logic,
 store synchronization, request ordering and validation; browser acceptance must exercise real WC stores.
 Schedule Store API integration tests on an isolated rig/database, not concurrent workers' shared DB.
 
@@ -405,10 +467,11 @@ homonymous cities, a country with native state codes, provider outage/manual cit
 logged-in reload, pickup→delivery→pickup, stale lookup responses, payment retry, and a mobile modal.
 Check email/admin/My Account for native address and existing carrier data, not only REST success.
 
-Unresolved by source reading: exact approved City interaction (D-1); forced-block placement in this
-rig's saved layouts; backwards compatibility below 11.1; multi-package behavior outside current scope;
-and runtime payment-context synchronization during pickup confirmation. These need decisions or browser
-measurements, not guessed APIs. Core Local pickup coexistence and policy hiding also need live coverage.
+Unresolved by source reading: exact approved City interaction/provider dependency (D-1); forced-block
+placement in this rig's saved layouts; backwards compatibility below the selected D-5 floor; express
+payment/Cart block scope and cart-token session ownership (D-7); and runtime payment-context
+synchronization during pickup confirmation. These need decisions or browser measurements, not guessed
+APIs. Core Local pickup coexistence and policy hiding also need live coverage.
 
 Historical gotchas can describe fixes as “in flight” after they merged. The source and closed #949
 take precedence. Do not reopen #949/#963/#964/#966 or #332 as missing features from stale prose.
