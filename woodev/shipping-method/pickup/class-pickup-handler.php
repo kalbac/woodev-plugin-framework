@@ -2013,13 +2013,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		}
 
 		/**
-		 * Drops the previous payment attempt's point from the session's reusable order once this
-		 * handler no longer owns the order's rate (SP-11 C-3, #1090).
+		 * Drops the previous payment attempt's point from the session's reusable order once the
+		 * order no longer stands where that point was confirmed (SP-11 C-3, #1090).
 		 *
-		 * WooCommerce reuses a pending/failed order for a retry and rewrites its shipping line from
-		 * the cart. A retry on another carrier's rate, or on a courier rate, would otherwise keep
-		 * the point the first attempt stored: the session's memory is empty by then, so nothing
-		 * else notices it.
+		 * WooCommerce reuses a pending/failed order for a retry and rewrites its shipping line and
+		 * address from the cart. The session's memory is empty by then, so nothing else notices
+		 * that the point the first attempt stored now sits on
+		 *
+		 * - another carrier's rate, or a courier rate — this handler no longer owns the method; or
+		 * - another INSTANCE of this handler's own method, or another destination — the handler
+		 *   still owns the method, and only the confirmation the order was placed with tells
+		 *   ({@see self::store_api_placed_confirmation()}).
+		 *
+		 * Like a live confirmation that a checkout mutation finds moved
+		 * ({@see self::reconcile_store_api_selection()}), the point is dropped for good: going
+		 * back to the first rate or address does not bring it back, a new confirmation does.
 		 *
 		 * A handler without a {@see Selection_Scope} takes no part in the Store API transport — it
 		 * owns no rate at all — so what an order carries for it is not judged here.
@@ -2028,18 +2036,64 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *
 		 * @since 2.0.2
 		 * @param \WC_Order $order The session's draft or retry order, already synced from the cart.
+		 * @param string    $rate_id Full server rate id of the cart the order was synced from.
+		 * @param string    $address_key Server destination fingerprint of that cart.
 		 * @return void
 		 */
-		public function drop_unowned_store_api_point( \WC_Order $order ): void {
-			if ( null === $this->selection_scope || $this->owns_store_api_rate( self::order_shipping_method( $order ) ) ) {
+		public function drop_unowned_store_api_point( \WC_Order $order, string $rate_id, string $address_key ): void {
+			if ( null === $this->selection_scope ) {
+				return;
+			}
+			if ( $this->owns_store_api_rate( self::order_shipping_method( $order ) )
+				&& ( '' === $this->persisted_point_id( $order ) || null !== $this->store_api_placed_confirmation( $order, $rate_id, $address_key ) ) ) {
 				return;
 			}
 			$this->forget_order_point( $order );
 		}
 
 		/**
+		 * The confirmation the session's retry order was placed with — while the order still
+		 * carries that point and still stands on the full rate, the destination and the locality
+		 * it was confirmed for — or null (SP-11 C-3, #1090).
+		 *
+		 * This, never the bare point id on the order, is what a payment retry is accepted on:
+		 * the id survives a street edit and a switch to another instance of the same method,
+		 * and neither is the delivery the customer confirmed the point for.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 * @param \WC_Order $order The session's retry order.
+		 * @param string    $rate_id Full server rate id.
+		 * @param string    $address_key Server destination fingerprint.
+		 * @return array<string, mixed>|null
+		 */
+		public function store_api_placed_confirmation( \WC_Order $order, string $rate_id, string $address_key ): ?array {
+			$selection = $this->selection();
+			$pair      = $this->selection_pair_for_method( explode( ':', $rate_id )[0] );
+			$placed    = null !== $selection ? $selection->recall_placed( (int) $order->get_id() ) : null;
+			$point_id  = $this->persisted_point_id( $order );
+			if ( null === $placed || null === $pair || '' === $point_id ) {
+				return null;
+			}
+			$current = [
+				'point_id' => $point_id,
+				'locality' => $pair['locality'],
+				'rate_id' => $rate_id,
+				'address_key' => $address_key,
+			];
+			foreach ( $current as $key => $value ) {
+				if ( ( $placed[ $key ] ?? null ) !== $value ) {
+					return null;
+				}
+			}
+			return $placed;
+		}
+
+		/**
 		 * Removes the point a previous payment attempt stored on the session's reusable order —
-		 * the field's id and the full point — and writes nothing when the order carries neither.
+		 * the field's id, the full point and the confirmation kept for a retry — and writes
+		 * nothing when the order carries none of them.
 		 *
 		 * @since 2.0.2
 		 * @param \WC_Order $order The session's draft or retry order.
@@ -2052,6 +2106,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			if ( null !== $this->order_handler && null !== $this->point_field_logical
 				&& ! empty( $this->order_handler->get( $order, $this->point_field_logical ) ) ) {
 				$this->order_handler->set( $order, $this->point_field_logical, '' );
+			}
+			$selection = $this->selection();
+			if ( null !== $selection ) {
+				$selection->forget_placed( (int) $order->get_id() );
 			}
 		}
 
@@ -4191,6 +4249,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * {@see self::contribute_store_api_posted_data()} — clearing the map first would
 		 * hand that handler an empty selection.
 		 *
+		 * The CONFIRMATION the point was placed with outlives that clear (SP-11 C-3, #1090): a
+		 * payment retry reuses the order after the map is empty, and has to be checked against
+		 * the full rate and the destination the point was confirmed for — the id on the order
+		 * says neither ({@see self::store_api_placed_confirmation()}). A retry itself remembers
+		 * nothing new, so what the first attempt kept stays as it is.
+		 *
 		 * @internal
 		 *
 		 * @since 2.0.2
@@ -4200,9 +4264,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * @return void
 		 */
 		public function handle_store_api_order_processed( \WC_Order $order ): void {
-			$point_id = $this->remembered_point_id_for_order( $order );
+			$point_id     = $this->remembered_point_id_for_order( $order );
+			$selection    = $this->selection();
+			$pair         = $this->selection_pair_for_method( self::order_shipping_method( $order ) );
+			$confirmation = null !== $selection && null !== $pair && '' !== $point_id
+				? $selection->recall_confirmation( $pair['locality'], $point_id )
+				: null;
 
 			$this->forget_remembered_selections();
+
+			if ( null !== $selection && null !== $confirmation ) {
+				$selection->remember_placed( (int) $order->get_id(), $confirmation );
+			}
 
 			$this->persist_full_point( $order, $point_id, true );
 		}

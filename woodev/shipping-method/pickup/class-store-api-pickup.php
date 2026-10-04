@@ -501,23 +501,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 				unset( self::$echoes[ $order->get_id() ] );
 				return;
 			}
-			self::reconcile( $request, $order );
-			self::drop_unowned_points( $order );
+			self::drop_unowned_points( $order, self::reconcile( $request, $order ) );
 			self::$echoes[ $order->get_id() ] = (array) ( $request->get_param( 'extensions' )[ self::EXTENSION_NAMESPACE ] ?? [] );
 		}
 
 		/**
-		 * Lets every field drop the previous attempt's point once its carrier no longer owns the
-		 * order's rate — {@see Pickup_Handler::drop_unowned_store_api_point()}.
+		 * Lets every field drop the previous attempt's point once the order no longer stands on
+		 * the rate and destination it was confirmed for —
+		 * {@see Pickup_Handler::drop_unowned_store_api_point()}.
 		 *
 		 * @since 2.0.2
-		 * @param \WC_Order $order The session's draft or retry order, already synced from the cart.
+		 * @param \WC_Order            $order The session's draft or retry order, already synced from the cart.
+		 * @param array<string, mixed> $context Server cart context the order was synced from.
 		 * @return void
 		 */
-		private static function drop_unowned_points( \WC_Order $order ): void {
+		private static function drop_unowned_points( \WC_Order $order, array $context ): void {
 			foreach ( self::$handlers as $fields ) {
 				foreach ( $fields as $handler ) {
-					$handler->drop_unowned_store_api_point( $order );
+					$handler->drop_unowned_store_api_point( $order, $context['rate_id'], $context['address_key'] );
 				}
 			}
 		}
@@ -528,9 +529,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 		 * @since 2.0.2
 		 * @param \WP_REST_Request $request Checkout request.
 		 * @param \WC_Order|null   $order Existing draft, when available.
-		 * @return void
+		 * @return array<string, mixed> The refreshed server cart context it reconciled against.
 		 */
-		private static function reconcile( \WP_REST_Request $request, ?\WC_Order $order = null ): void {
+		private static function reconcile( \WP_REST_Request $request, ?\WC_Order $order = null ): array {
 			$context = static::context( true );
 			foreach ( self::$handlers as $plugin_id => $fields ) {
 				foreach ( $fields as $field_id => $handler ) {
@@ -541,6 +542,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 					$handler->reconcile_store_api_selection( $context['rate_id'], $context['address_key'], $order );
 				}
 			}
+			return $context;
 		}
 
 		/**
@@ -606,19 +608,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 					$snapshot = $handler->store_api_confirmation( $context['rate_id'], $context['address_key'] );
 					$selected = $handler->get_selected_point_for_method( explode( ':', $rate_id )[0] );
 					$point_id = $selected['point_id'] ?? '';
-					// Completed-processing clears memory before payment: retries use installed field meta.
+					// Completed processing clears the memory before payment. A retry stands on the
+					// confirmation the order was placed with — never on the bare id in the order's meta,
+					// which survives a street edit and a switch to another instance of the same method
+					// (SP-11 C-3, #1090). The echo of a valid retry is that same confirmation.
 					if ( '' === $point_id ) {
-						$point_id = (string) \Woodev_Order_Compatibility::get_order_meta( $order, $field_id );
-					}
-					// A valid retry may echo the original confirmation after the existing writer cleared memory.
-					if ( null === $snapshot && '' !== $point_id && '' === ( $selected['point_id'] ?? '' ) ) {
-						$snapshot = [
-							'plugin_id' => $plugin_id,
-							'field_id' => $field_id,
-							'point_id' => $point_id,
-							'locality' => $selected['locality'] ?? '',
-							'rate_id' => $rate_id,
-						];
+						$snapshot = $handler->store_api_placed_confirmation( $order, $context['rate_id'], $context['address_key'] );
+						$point_id = (string) ( $snapshot['point_id'] ?? '' );
 					}
 					$echo = self::$echoes[ $order->get_id() ]['pickup'][ $plugin_id ][ $field_id ] ?? [];
 					if ( '' === $point_id || $order_method !== explode( ':', $rate_id )[0]

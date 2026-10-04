@@ -589,6 +589,117 @@ final class StoreApiPickupFlowTest extends TestCase {
 		$this->assertFalse( $this->post( $order, $echo )->has_errors() );
 	}
 
+	/**
+	 * The critic's repro (round 1): same locality, same total — WooCommerce reuses the order — but
+	 * another street and postcode. The point was confirmed for the OLD destination.
+	 */
+	public function test_a_retry_after_an_address_edit_needs_a_new_confirmation(): void {
+		$this->retry_after_an_address_edit( false );
+	}
+
+	public function test_a_draft_update_after_an_address_edit_drops_the_retry_orders_point(): void {
+		$this->retry_after_an_address_edit( true );
+	}
+
+	/** A retry reaches the server as an order-backed draft update first, or as the order itself. */
+	private function retry_after_an_address_edit( bool $draft_update_first ): void {
+		$this->confirm();
+		$echo = $this->echo_of_cart();
+		$order = new C3_Order( 517 );
+		$this->assertFalse( $this->post( $order, $echo )->has_errors() );
+		$order->status = 'failed';
+
+		// Core's address sync pushes the edit (`cart/update-customer` fires no checkout hook).
+		$this->move_to( [ 'address_1' => 'New manual street', 'postcode' => '456' ] );
+		if ( $draft_update_first ) {
+			$this->patch( $order );
+		}
+		$errors = $this->post( $order, $echo );
+
+		$this->assertTrue( $errors->has_errors(), 'a point confirmed for the old destination must not pay for the new one' );
+		$this->assertSame( [ 'Please choose a pickup point on the checkout page before paying.' ], $errors->get_error_messages() );
+		$this->assertArrayNotHasKey( 'carrier_point', $this->meta[517], 'the order no longer names a point confirmed for another destination' );
+		$this->assertSame( '', $this->meta[517]['carrier_full'] );
+		$this->assertCount( 1, $this->fired( 'woodev_shipping_carrier_checkout_processed' ), 'a refused retry is not processed' );
+
+		// Typing the old address back does not bring the dropped point back…
+		$this->packages[0]['destination'] = $this->address;
+		$this->assertTrue( $this->post( $order, $echo )->has_errors() );
+
+		// …a new confirmation does, and the next retry stands on that one.
+		$this->confirm();
+		$echo = $this->echo_of_cart();
+		$this->assertFalse( $this->post( $order, $echo )->has_errors() );
+		$this->assertSame( 'P1', $this->meta[517]['carrier_point'] );
+		$order->status = 'failed';
+		$this->assertFalse( $this->post( $order, $echo )->has_errors() );
+		$this->assertSame( 'P1', $this->meta[517]['carrier_point'] );
+	}
+
+	/**
+	 * The critic's repro (round 1): another INSTANCE of the same pickup method, at the same total.
+	 * The carrier still owns the rate, so only the full rate id tells the two apart.
+	 */
+	public function test_a_retry_on_another_instance_of_the_method_needs_a_new_confirmation(): void {
+		$this->retry_on_another_instance( false );
+	}
+
+	public function test_a_draft_update_on_another_instance_of_the_method_drops_the_retry_orders_point(): void {
+		$this->retry_on_another_instance( true );
+	}
+
+	private function retry_on_another_instance( bool $draft_update_first ): void {
+		$this->confirm();
+		$stale = $this->echo_of_cart();
+		$order = new C3_Order( 518 );
+		$this->assertFalse( $this->post( $order, $stale )->has_errors() );
+		$order->status = 'failed';
+
+		$this->choose_rate( 'carrier_pickup:8' );
+		if ( $draft_update_first ) {
+			$this->patch( $order );
+		}
+
+		// No echo (an express client), and the echo the page still holds: neither inherits the point.
+		$errors = $this->post( $order, [] );
+		$this->assertTrue( $errors->has_errors(), 'another instance of the method must not inherit the point' );
+		$this->assertSame( [ 'Please choose a pickup point on the checkout page before paying.' ], $errors->get_error_messages() );
+		$this->assertTrue( $this->post( $order, $stale )->has_errors() );
+		$this->assertArrayNotHasKey( 'carrier_point', $this->meta[518] );
+		$this->assertSame( '', $this->meta[518]['carrier_full'] );
+
+		// Back on the first instance the dropped point stays dropped.
+		$this->choose_rate( self::RATE );
+		$this->assertTrue( $this->post( $order, $stale )->has_errors() );
+
+		// A point confirmed on instance 8 is the one the order is then placed, and retried, with.
+		$this->choose_rate( 'carrier_pickup:8' );
+		$this->confirm( 'P2' );
+		$echo = $this->echo_of_cart();
+		$this->assertFalse( $this->post( $order, $echo )->has_errors() );
+		$order->status = 'failed';
+		$this->assertFalse( $this->post( $order, $echo )->has_errors() );
+		$this->assertSame( 'P2', $this->meta[518]['carrier_point'] );
+	}
+
+	public function test_a_point_the_order_carries_without_its_confirmation_is_not_a_retrys_point(): void {
+		$this->confirm();
+		$echo = $this->echo_of_cart();
+		$order = new C3_Order( 519 );
+		$this->assertFalse( $this->post( $order, $echo )->has_errors() );
+		$order->status = 'failed';
+
+		// Another order of this session is placed with its own point: the first order's id on its
+		// meta is no longer backed by the confirmation it was placed with.
+		$this->confirm( 'P2' );
+		$other = new C3_Order( 520 );
+		$this->assertFalse( $this->post( $other, $this->echo_of_cart() )->has_errors() );
+
+		$this->assertTrue( $this->post( $order, $echo )->has_errors() );
+		$this->assertArrayNotHasKey( 'carrier_point', $this->meta[519] );
+		$this->assertSame( 'P2', $this->meta[520]['carrier_point'], 'the other order keeps its own' );
+	}
+
 	public function test_a_retry_order_switched_to_another_carrier_drops_the_previous_carriers_point(): void {
 		$this->carrier( 'second', 'second_point', 'second_pickup' );
 		$this->confirm( 'P1' );

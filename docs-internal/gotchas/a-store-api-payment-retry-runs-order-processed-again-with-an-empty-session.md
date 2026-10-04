@@ -25,6 +25,12 @@ Three facts of the retry path, none of them visible from a single request:
    stays in the session until the cart is emptied. Reading «the session's draft» by id alone
    returns an order that is no longer this cart's.
 
+4. **The point id on the retry order is not a confirmation.** WooCommerce rewrites the reused
+   order's shipping line and address from the cart, and the id in its meta survives both. Accepting
+   a retry on that id alone (the first version of this fix did) lets a point confirmed for one
+   street — or for instance 7 of a method — pay for another street, or for instance 8: the handler
+   still «owns» the bare method id, and the session's memory, which held the binding, is empty.
+
 A failed payment does NOT refresh the cart in the browser, so the block keeps echoing the original
 confirmation; the next cart answer (a payment-method switch returns `__experimentalCart`) carries no
 point, because the session forgot it.
@@ -48,6 +54,17 @@ return $draft instanceof \WC_Order ? $draft : null;
 // ✅ Only the order WooCommerce itself would reuse (mirror DraftOrderTrait::is_valid_draft_order()).
 if ( $draft->has_status( 'checkout-draft' ) ) { return $draft; }
 return $cart && $draft->needs_payment() && $draft->has_cart_hash( $cart->get_cart_hash() ) ? $draft : null;
+```
+
+```php
+// ❌ The bare id on the order: says nothing about the rate instance and the destination.
+$point_id = Woodev_Order_Compatibility::get_order_meta( $order, $field_id );
+
+// ✅ The confirmation the order was PLACED with. The writer keeps it when it empties the memory
+//    (Pickup_Selection::remember_placed(), session key `<scope key>_placed`, one order); a retry
+//    is accepted only while point id, FULL rate id, destination fingerprint and locality all
+//    still match, and an order-backed PATCH/POST that finds them moved drops the order's point.
+$snapshot = $handler->store_api_placed_confirmation( $order, $context['rate_id'], $context['address_key'] );
 ```
 
 A retry test must run the WHOLE second `POST`: `update_order` → `validate_order` → BOTH

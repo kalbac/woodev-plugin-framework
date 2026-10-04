@@ -476,24 +476,73 @@ final class StoreApiPickupTest extends TestCase {
 		$this->assertSame( 'P1', $this->meta['carrier_point'] );
 	}
 
-	public function test_outage_policy_is_shared_with_classic(): void {
+	/**
+	 * An earlier request placed the session's order (id 123) with P1, and its processing emptied
+	 * the memory: what a retry stands on is the confirmation kept for that order (#1090).
+	 */
+	private function placed_earlier( array $over = [] ): void {
 		$this->meta['carrier_point'] = 'P1';
+		$this->handler->fake_selection->remember_placed( 123, $over + [
+			'plugin_id' => 'carrier', 'field_id' => 'carrier_point', 'point_id' => 'P1', 'locality' => 'msk',
+			'rate_id' => 'carrier_pickup:7', 'address_key' => Store_Api_Pickup::address_key( $this->address ),
+		] );
+	}
+
+	public function test_outage_policy_is_shared_with_classic(): void {
+		$this->placed_earlier();
 		$this->failure = new \RuntimeException( 'secret carrier text' );
 		$this->assertFalse( $this->validate()->has_errors() );
 		$this->assertSame( [ 'checkout re-check' ], $this->handler->logs );
 	}
 
 	public function test_outage_filter_can_refuse_without_exposing_carrier_text(): void {
-		$this->meta['carrier_point'] = 'P1';
+		$this->placed_earlier();
 		$this->failure = new \RuntimeException( 'secret carrier text' );
 		Filters\expectApplied( 'woodev_shipping_pickup_recheck_outage_allows_checkout' )->andReturn( false );
 		$this->assertStringContainsString( 'Could not verify', $this->validate()->get_error_message() );
 	}
 
 	public function test_unknown_persisted_retry_point_is_refused(): void {
-		$this->meta['carrier_point'] = 'P1';
+		$this->placed_earlier();
 		$this->missing = true;
 		$this->assertStringContainsString( 'no longer available', $this->validate()->get_error_message() );
+	}
+
+	/**
+	 * #1090, critic round 1: the id on a retry order is not a confirmation. Without the one the
+	 * order was placed with — or with one made for another rate instance, destination, locality,
+	 * point or order — the retry is refused before the carrier is asked, and the id is dropped.
+	 *
+	 * @dataProvider unbacked_retry_points
+	 */
+	public function test_a_retry_point_without_its_own_confirmation_is_refused_and_dropped( ?array $placed ): void {
+		$this->meta['carrier_point'] = 'P1';
+		if ( null !== $placed ) {
+			$this->placed_earlier( $placed );
+		}
+		$errors = $this->validate();
+		$this->assertTrue( $errors->has_errors() );
+		$this->assertStringContainsString( 'checkout page', $errors->get_error_message() );
+		$this->assertArrayNotHasKey( 'carrier_point', $this->meta );
+		$this->assertSame( 0, $this->fetches );
+	}
+
+	/** @return array<string, array{0: array<string, mixed>|null}> */
+	public function unbacked_retry_points(): array {
+		return [
+			'no confirmation kept' => [ null ],
+			'another instance of the method' => [ [ 'rate_id' => 'carrier_pickup:8' ] ],
+			'another destination' => [ [ 'address_key' => 'the-fingerprint-of-another-address' ] ],
+			'another locality' => [ [ 'locality' => 'spb' ] ],
+			'another point' => [ [ 'point_id' => 'P2' ] ],
+		];
+	}
+
+	public function test_a_confirmation_kept_for_another_order_backs_no_retry(): void {
+		$this->placed_earlier();
+		$this->handler->fake_selection->remember_placed( 456, [ 'point_id' => 'P1' ] );
+		$this->assertTrue( $this->validate()->has_errors() );
+		$this->assertArrayNotHasKey( 'carrier_point', $this->meta );
 	}
 	public function test_valid_payment_retry_can_echo_the_original_confirmation(): void {
 		C2a_Adapter::update( $this->command() );
