@@ -91,6 +91,8 @@ import { PickupPicker } from '../../src/checkout-blocks/pickup-picker';
 // eslint-disable-next-line import/first
 import { registerPickupBlock } from '../../src/checkout-blocks/register';
 // eslint-disable-next-line import/first
+import { captureWcRuntime, wcRuntime } from '../../src/checkout-blocks/wc-runtime';
+// eslint-disable-next-line import/first
 import type { PickupData, PickupSessionHost, PickupSnapshot } from '../../src/checkout-blocks/pickup-types';
 
 const NAMESPACE = 'woodev-shipping';
@@ -1092,5 +1094,71 @@ describe( 'registerPickupBlock — feature detection', () => {
 		expect( options.metadata.name ).toBe( 'woodev/shipping-pickup' );
 		expect( options.metadata.parent ).toEqual( [ 'woocommerce/checkout-shipping-methods-block' ] );
 		expect( typeof options.component ).toBe( 'function' );
+	} );
+} );
+
+/*
+ * WooCommerce's dependency detection (11.1, SCRIPT_DEBUG) names the script behind every read of
+ * `window.wc.<exported key>`. It can only do that reliably while the script is being evaluated, so
+ * the bundle takes its globals then and never goes back to `window.wc` — a later read was reported
+ * as «an inline or unknown script» although the dependency is declared (#1089, measured on the rig).
+ */
+describe( 'the WooCommerce globals are taken once, at evaluation', () => {
+	const page = window as unknown as { wc?: unknown };
+
+	/** `window.wc` as a proxy that counts reads of the keys WooCommerce watches. */
+	function watchedRuntime( runtime: Record< string, unknown > ): { reads: string[] } {
+		const reads: string[] = [];
+
+		page.wc = new Proxy( runtime, {
+			get( target, key ) {
+				reads.push( String( key ) );
+
+				return Reflect.get( target, key );
+			},
+		} );
+
+		return { reads };
+	}
+
+	afterEach( () => {
+		delete page.wc;
+		captureWcRuntime();
+	} );
+
+	it( 'reads each global once and answers later reads from the capture', () => {
+		const getSetting = jest.fn();
+		const extensionCartUpdate = jest.fn();
+		const getPaymentMethods = jest.fn();
+		const { reads } = watchedRuntime( {
+			blocksCheckout: { extensionCartUpdate },
+			wcBlocksRegistry: { getPaymentMethods },
+			wcSettings: { getSetting },
+			wcBlocksData: {},
+		} );
+
+		captureWcRuntime();
+
+		expect( [ ...reads ].sort() ).toEqual( [ 'blocksCheckout', 'wcBlocksRegistry', 'wcSettings' ] );
+
+		reads.length = 0;
+
+		expect( wcRuntime()?.wcSettings?.getSetting ).toBe( getSetting );
+		expect( wcRuntime()?.blocksCheckout?.extensionCartUpdate ).toBe( extensionCartUpdate );
+		expect( wcRuntime()?.wcBlocksRegistry?.getPaymentMethods ).toBe( getPaymentMethods );
+		expect( reads ).toEqual( [] );
+	} );
+
+	it( 'reads the page live when nothing was captured', () => {
+		delete page.wc;
+		captureWcRuntime();
+
+		expect( wcRuntime() ).toBeUndefined();
+
+		const getSetting = jest.fn();
+
+		page.wc = { wcSettings: { getSetting } };
+
+		expect( wcRuntime()?.wcSettings?.getSetting ).toBe( getSetting );
 	} );
 } );

@@ -6189,7 +6189,29 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		 * @preserveGlobalState disabled
 		 */
 		public function test_enqueue_assets_on_a_block_only_checkout_loads_the_session_without_the_classic_mount(): void {
-			Functions\when( 'is_checkout' )->justReturn( true );
+			$this->assert_a_block_only_page_loads_the_session_without_the_classic_mount( true );
+		}
+
+		/**
+		 * #1089, measured on the rig: WooCommerce's `is_checkout()` is FALSE on a page that carries
+		 * the Checkout block but is not the store's configured checkout page (WC 11.1's
+		 * `CartCheckoutUtils::is_page_type()` looks for the shortcode and the classic-shortcode
+		 * block only). The block renders its pickup button there all the same — and with the old
+		 * `is_checkout()` gate the session and the config never reached the page, so the button had
+		 * no config to render from and the shopper could not choose a point at all.
+		 *
+		 * @runInSeparateProcess
+		 * @preserveGlobalState disabled
+		 */
+		public function test_enqueue_assets_follows_the_checkout_block_onto_a_page_woocommerce_does_not_call_a_checkout(): void {
+			$this->assert_a_block_only_page_loads_the_session_without_the_classic_mount( false );
+		}
+
+		/**
+		 * @param bool $is_checkout What WooCommerce's own `is_checkout()` answers for the page.
+		 */
+		private function assert_a_block_only_page_loads_the_session_without_the_classic_mount( bool $is_checkout ): void {
+			Functions\when( 'is_checkout' )->justReturn( $is_checkout );
 			Functions\when( 'apply_filters' )->returnArg( 2 );
 			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
 			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );

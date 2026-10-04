@@ -2529,7 +2529,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * @return void
 		 */
 		public function enqueue_assets(): void {
-			if ( ! function_exists( 'is_checkout' ) || ! is_checkout() ) {
+			// WooCommerce's `is_checkout()` answers for the store's configured checkout page and for a
+			// classic form — NOT for another page that carries the Checkout block (WC 11.1:
+			// `CartCheckoutUtils::is_page_type()` looks for the shortcode and the classic-shortcode
+			// block only). The block renders its pickup button there all the same, and without the
+			// session and the config the button has nothing to open (#1089).
+			$block_only = \Woodev\Framework\Shipping\Checkout\Blocks\Checkout_Surface::is_block_only();
+
+			if ( ! $block_only && ( ! function_exists( 'is_checkout' ) || ! is_checkout() ) ) {
 				return;
 			}
 
@@ -2565,7 +2572,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			// A page that renders ONLY the Checkout block has no slot for the classic mount to fill:
 			// its button is a React inner block (Checkout\Blocks\Pickup_Blocks) that opens the same
 			// session. It reads the same config, so the config rides on the session script there.
-			if ( \Woodev\Framework\Shipping\Checkout\Blocks\Checkout_Surface::is_block_only() ) {
+			if ( $block_only ) {
 				$this->enqueue_style_if_built( 'woodev-pickup-styles', 'css/frontend/pickup.css', [ 'woodev-modal' ] );
 
 				if ( $session_enqueued ) {

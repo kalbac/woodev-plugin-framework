@@ -29,6 +29,7 @@
 - [shipping/pickup] **A field that never varies cannot be a verdict.** → [a-constant-field-cannot-be-a-verdict](../gotchas/a-constant-field-cannot-be-a-verdict.md) (s58)
 - [shipping/pickup] **A control that changes WHAT a surface is about must emit the same event every other route to that state emits.** → [a-control-that-changes-the-subject-must-announce-it](../gotchas/a-control-that-changes-the-subject-must-announce-it.md) (s58)
 - [shipping/pickup] **A per-viewport cache is unbounded by construction.** → [per-viewport-cache-is-unbounded-by-construction](../gotchas/per-viewport-cache-is-unbounded-by-construction.md) (s58)
+- [shipping/pickup] **A `Pickup_Handler` without a `Selection_Scope` works on the classic checkout and has NO Store API transport: `owner: null`, no pickup button in the Checkout block.** → [a-pickup-handler-without-a-selection-scope-has-no-store-api-transport](../gotchas/a-pickup-handler-without-a-selection-scope-has-no-store-api-transport.md) (s152, #1089)
 
 ## Related
 

@@ -6,6 +6,9 @@
  */
 
 import { registerLocalityBlock, registerPickupBlock } from './register';
+import { captureWcRuntime } from './wc-runtime';
 
+// First: every later read of a WooCommerce global answers from this capture.
+captureWcRuntime();
 registerLocalityBlock();
 registerPickupBlock();
