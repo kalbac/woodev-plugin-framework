@@ -1,6 +1,10 @@
 {
     "redefinable-internals": [
         "function_exists",
-        "error_log"
+        "error_log",
+        "set_exception_handler",
+        "restore_exception_handler",
+        "register_shutdown_function",
+        "error_get_last"
     ]
 }

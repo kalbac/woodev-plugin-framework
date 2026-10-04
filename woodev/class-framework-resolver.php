@@ -397,7 +397,29 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 				}
 			}
 
+			$this->install_error_reporter();
+
 			do_action( 'woodev_plugins_loaded' );
+		}
+
+		/**
+		 * Installs the PHP error reporter from the winning framework copy, once per request (#130).
+		 *
+		 * Called after the loop above so the autoloader already points at the winner and every
+		 * registered plugin — loaded or refused — is known to the reporter's directory scope. The
+		 * reporter's own static guard makes a second call a no-op; a failure here must never stop
+		 * the plugins from loading.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		private function install_error_reporter(): void {
+			try {
+				\Woodev\Framework\Error_Reporting\Error_Reporter::install( $this->registered_plugins );
+			} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- by design: never break plugin loading.
+				unset( $e );
+			}
 		}
 
 		/**
