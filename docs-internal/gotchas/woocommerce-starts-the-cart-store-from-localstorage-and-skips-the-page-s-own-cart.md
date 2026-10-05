@@ -54,6 +54,19 @@ A selector call queues its resolver (`@wordpress/data`, `fulfillSelector()`: `ma
 Core's resolver then reads `/wc/store/v1/cart`, which the Checkout page preloads — **no request** —
 and the store ends on the page's own cart. On a first visit it changes nothing.
 
+**This is how the package is written, not something it promises.** The timer callback does not ask
+again whether the selector got resolved. Read in `@wordpress/data` 10.53.0 (the repository's test
+dependency) and in `wp-includes/js/dist/data.js` of WordPress 6.6 and 7.1 (the rig's); the
+[public resolver documentation](https://developer.wordpress.org/block-editor/reference-guides/packages/packages-data/#resolvers)
+defines fulfilment, not scheduling or cancellation order. `tests/js/checkout-blocks-persisted-cart.test.ts`
+runs on the REAL package: it is the alarm for a version that changes this — keep it on the real
+package, and re-run the rig loop below when WordPress or WooCommerce moves.
+
+**And only for a call made before the window's `load`.** A bundle evaluated after it (a «delay
+JavaScript» optimiser, an `async` loader) finds the selector already marked resolved; the call
+starts nothing and core's behaviour — the stale copy — stays. `resolveCartFromServer()` neither
+detects nor repairs that.
+
 Not chosen, and why:
 
 - **`woocommerce_cart_hash` filter** (mix the chosen rate and the pickup snapshot into the hash) —
@@ -69,6 +82,28 @@ Core paints the persisted copy first. Measured on the rig: the old rate and poin
 5–40 ms, ≈ 250–300 ms at 6× CPU throttle, then replaced. `load` fires before the checkout's first
 render there, so `hasFinishedResolution` is briefly `true` over the persisted copy — do not use it
 as «the server's cart has arrived» inside that window.
+
+## An address edit can precede that cart (s154 round 2)
+
+Between core's `load` shortcut and the resolver's import the checkout may render and take input, and
+the import is `receiveCart()` — the WHOLE cart, addresses included, whatever the shopper has typed:
+only `extensionCartUpdate()` / `updateCustomerData()` look at core's dirty flag (9.9.0
+`data/cart/resolvers.ts` → `thunks.ts` → `reducers.ts`; the same in 11.1). The edit is overwritten,
+core's push then finds nothing changed, and the dirty flag stays set over a form that no longer
+holds the edit.
+
+`keepEditsMadeBeforeTheCart()` (wc-stores.ts) writes what was typed back over the arrived address,
+field by field; core pushes it like any other edit. Two facts it stands on, both measured on the
+rig (WooCommerce 11.1), neither guessable:
+
+- **The import cannot be told by the resolution state.** The resolver's timer has ALREADY fired
+  when `load` marks the selector resolved, so the cart lands on «finished, not resolving». (A
+  harness that calls `finishResolution` before the timer starts sees the opposite order — both
+  happen.) The import is told by being the FIRST reply after the bundle was evaluated.
+- **A complete address is shown as a card, not a form**, so a shopper has to press «Edit» first —
+  the window (5–40 ms, ≈ 250–300 ms at 6× CPU throttle) is narrower in practice than it is in
+  the store. The rig proof therefore dispatches `setShippingAddress` from a `load` listener
+  registered AFTER core's (at `DOMContentLoaded`), not a keystroke.
 
 ## How to reproduce on the rig without placing orders
 

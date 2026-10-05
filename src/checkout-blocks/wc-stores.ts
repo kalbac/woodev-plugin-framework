@@ -12,7 +12,7 @@
  * @package woodev-plugin-framework
  */
 
-import { dispatch, select } from '@wordpress/data';
+import { dispatch, select, subscribe } from '@wordpress/data';
 import type { CountryStates } from './mapping';
 import type { LocalityData, WcAddress } from './types';
 import { wcRuntime } from './wc-runtime';
@@ -76,15 +76,98 @@ export function readLocalityData(): LocalityData | null {
  * confirmed, the server holds neither, and the order is refused.
  *
  * A selector call queues its resolver, and a resolver once queued runs whatever marks the selector
- * resolved in the meantime (`@wordpress/data`, `fulfillSelector()`). Made here — before `load` — it
- * is therefore the page's own cart the store ends up with: core's resolver reads
- * `/wc/store/v1/cart`, which the Checkout page preloads, so this costs no request there. On a first
- * visit it changes nothing: the resolver runs anyway.
+ * resolved in the meantime. Made here — before `load` — it is therefore the page's own cart the
+ * store ends up with: core's resolver reads `/wc/store/v1/cart`, which the Checkout page preloads,
+ * so this costs no request there. On a first visit it changes nothing: the resolver runs anyway.
+ *
+ * WHAT THIS STANDS ON, AND WHERE IT WAS READ. «A queued resolver survives `finishResolution`» is how
+ * `@wordpress/data` is written, not something it promises: `fulfillSelector()` marks the resolver
+ * running and starts it from a `setTimeout( 0 )` that does not ask again whether the selector got
+ * resolved meanwhile. Read in `@wordpress/data` 10.53.0 (this repository's test dependency) and in
+ * `wp-includes/js/dist/data.js` of WordPress 6.6 and 7.1 (the rig's); the public resolver
+ * documentation defines fulfilment, not this ordering. `checkout-blocks-persisted-cart.test.ts` runs
+ * on the real package and is the alarm for a version that changes it. And it holds only for a call
+ * made BEFORE the window's `load`: a bundle evaluated after it (a «delay JavaScript» optimiser)
+ * finds the selector already marked resolved, the call starts nothing, and core's behaviour stays.
  */
 export function resolveCartFromServer(): void {
 	const selectors = select( CART_STORE ) as unknown as CartSelectors | undefined;
 
-	selectors?.getCartData?.();
+	if ( typeof selectors?.getCartData !== 'function' ) {
+		return;
+	}
+
+	const resolved = selectors.hasFinishedResolution?.( 'getCartData' ) === true;
+
+	selectors.getCartData();
+
+	if ( ! resolved ) {
+		keepEditsMadeBeforeTheCart();
+	}
+}
+
+/** The address fields `edited` holds differently from `origin`. */
+function addressEdits( origin: WcAddress, edited: WcAddress ): Partial< WcAddress > {
+	return Object.fromEntries(
+		Object.keys( edited )
+			.filter( ( key ) => edited[ key ] !== origin[ key ] )
+			.map( ( key ) => [ key, edited[ key ] ] )
+	);
+}
+
+/**
+ * Keeps an address edit made BEFORE the cart {@link resolveCartFromServer} asked for arrives.
+ *
+ * With a persisted copy core marks the cart resolved on `load` — the address form may render — while
+ * the queued resolver has not brought the server's cart yet. That cart is taken whole, addresses
+ * included, whatever the shopper has typed since: the resolver's `receiveCart()` does not look at
+ * the dirty flag core keeps for exactly this (9.9.0 `data/cart/resolvers.ts`, `thunks.ts`,
+ * `reducers.ts`; the same in 11.1). The window is a few milliseconds on a desktop and a few hundred
+ * on a slow phone, so nothing is blocked for it; what was typed in it is written back over the
+ * arrived address, field by field, and core pushes it like any other edit.
+ *
+ * Until that first reply no request of the page has answered, so every address change in the store
+ * is the form's. The import cannot be told by the selector's resolution state: on the rig (WooCommerce
+ * 11.1) the resolver is already running when `load` marks it finished, so it reads «resolved, not
+ * resolving» as its cart lands. It is told by being FIRST — and the watch ends, untouched, as soon as
+ * core's own address push is in flight: a reply after that answers the push, not the page load.
+ */
+function keepEditsMadeBeforeTheCart(): void {
+	if ( typeof subscribe !== 'function' ) {
+		return;
+	}
+
+	const read = () => ( { shipping: readShippingAddress(), billing: readBillingAddress() } );
+	const origin = read();
+	const reply = readCartReply();
+	let typed = origin;
+
+	const unsubscribe = subscribe( () => {
+		if ( isCustomerDataUpdating() ) {
+			unsubscribe();
+			return;
+		}
+
+		if ( readCartReply() === reply ) {
+			typed = read();
+			return;
+		}
+
+		unsubscribe();
+
+		const arrived = read();
+		const actions = dispatch( CART_STORE ) as unknown as CartActions | undefined;
+		const restore = ( key: 'shipping' | 'billing', write?: ( address: WcAddress ) => void ): void => {
+			const edits = addressEdits( origin[ key ], typed[ key ] );
+
+			if ( Object.keys( addressEdits( arrived[ key ], { ...arrived[ key ], ...edits } ) ).length > 0 ) {
+				write?.( { ...arrived[ key ], ...edits } );
+			}
+		};
+
+		restore( 'shipping', actions?.setShippingAddress );
+		restore( 'billing', actions?.setBillingAddress );
+	}, CART_STORE );
 }
 
 /** `countryData[ country ].states` — the FINAL `woocommerce_states` list for the country. */
