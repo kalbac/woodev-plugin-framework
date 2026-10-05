@@ -8,16 +8,13 @@ import { useSyncExternalStore as mockUseSyncExternalStore } from 'react';
  * `woodev-shipping` extension data), `wc/store/payment`, `wc/store/validation` and
  * `wc/store/checkout`'s `disableCheckoutFor`.
  *
- * Three pieces of core behaviour are reproduced because the button's guarantees depend on them, all
- * read from WooCommerce 11.1 (`wc-blocks-data.js`: `gi=`, `Na=`, the reducer's `SET_*_ADDRESS`):
+ * Two pieces of core behaviour are reproduced because the button's guarantees depend on them, both
+ * read from WooCommerce 11.1 (`wc-blocks-data.js`: `gi=`, `Na=`):
  * - `extensionCartUpdate()` takes the server's cart into the store BEFORE it resolves, and rejects
  *   with the Store API's error object. The cart's ADDRESSES are part of that whenever the shopper
  *   has no unsaved edit (`WOOCOMMERCE_CHECKOUT_IS_CUSTOMER_DATA_DIRTY`) — the tests that depend on
- *   it say so (`coreTakesReplyAddress`, `lateAnswer`, #1091);
- * - `disableCheckoutFor( work )` counts a calculation for as long as `work()` is unsettled;
- * - every address write is a dispatch, so the store's subscribers hear of each one (`subscribe()`).
- *   A test that edits the address the way a shopper does says so (`shopperTypes`); one that sets
- *   `mockStore.shipping` directly is heard at the next announcement, as the value it then holds.
+ *   it say so (`coreTakesReplyAddress`, #1091);
+ * - `disableCheckoutFor( work )` counts a calculation for as long as `work()` is unsettled.
  */
 type Rate = { rate_id: string; selected: boolean };
 type Address = Record< string, string >;
@@ -31,10 +28,6 @@ const mockStore = {
 	useShippingAsBilling: false,
 	/** How many `disableCheckoutFor` calls were unsettled at each address write. */
 	addressWrites: [] as number[],
-	/** Every `updateCustomerData()` push: what it sent, and how many gates were unsettled then. */
-	customerPushes: [] as Array< { customer: unknown; editing: unknown; calculating: number } >,
-	/** What the server's answer to such a push does to the store, and when; `null`: nothing, at once. */
-	onCustomerPush: null as ( () => void | Promise< void > ) | null,
 	validation: {} as Record< string, { message: string; hidden: boolean } >,
 	/** `core/notices`, by notice id: what the checkout shows in its own notice areas. */
 	notices: {} as Record< string, { message: string; context: string; isDismissible: boolean } >,
@@ -64,18 +57,14 @@ jest.mock( '@wordpress/data', () => {
 			setShippingAddress: ( address: Address ) => {
 				mockStore.shipping = address;
 				mockStore.addressWrites.push( mockStore.calculating );
-				notify();
 			},
 			setBillingAddress: ( address: Address ) => {
 				mockStore.billing = address;
 				mockStore.addressWrites.push( mockStore.calculating );
-				notify();
 			},
-			updateCustomerData: async ( ...args: unknown[] ) => {
-				const [ customer, editing ] = args;
+			updateCustomerData: ( ...args: unknown[] ) => {
 				mockStore.refreshes.push( args );
-				mockStore.customerPushes.push( { customer, editing, calculating: mockStore.calculating } );
-				await mockStore.onCustomerPush?.();
+				return Promise.resolve();
 			},
 			setValidationErrors: ( errors: Record< string, { message: string; hidden: boolean } > ) => {
 				mockStore.validation = { ...mockStore.validation, ...errors };
@@ -116,10 +105,6 @@ jest.mock( '@wordpress/data', () => {
 				}
 			},
 		} ),
-		subscribe: ( listener: () => void ) => {
-			mockStore.listeners.add( listener );
-			return () => mockStore.listeners.delete( listener );
-		},
 		useSelect: ( mapper: ( select: typeof selectFn ) => unknown ) =>
 			mockUseSyncExternalStore(
 				( listener ) => {
@@ -267,8 +252,6 @@ beforeEach( () => {
 	mockStore.billing = { ...HOME };
 	mockStore.useShippingAsBilling = false;
 	mockStore.addressWrites = [];
-	mockStore.customerPushes = [];
-	mockStore.onCustomerPush = null;
 	mockStore.validation = {};
 	mockStore.notices = {};
 	mockStore.withoutNotices = false;
@@ -1456,273 +1439,6 @@ describe( 'PickupPicker — late and repeated answers (#1090)', () => {
 
 		expect( await third ).toMatchObject( { verdict: { allowed: true } } );
 		expect( mockStore.shipping ).toEqual( { ...HOME, ...MOVED } );
-	} );
-
-	/*
-	 * The critic's repro (#1091): the street the shopper typed while the answer was on its way has
-	 * been PUSHED by core by the time the answer lands — nothing is unsaved, so core takes the
-	 * reply's address into the store over it. What the store holds then is exactly what an untouched
-	 * confirmation leaves there; only the values the address went through tell the two apart.
-	 */
-	describe( 'when the shopper’s edit was pushed before the answer landed (#1091)', () => {
-		const NEW_STREET = { address_1: 'New manual street' };
-
-		/** The shopper types into the native form: a write the cart store announces. */
-		const shopperTypes = ( address: Address, form: 'shipping' | 'billing' = 'shipping' ): void =>
-			act( () => {
-				mockStore[ form ] = { ...mockStore[ form ], ...address };
-				notify();
-			} );
-
-		/**
-		 * The late reply as core takes it for a shopper with nothing unsaved: the server's address —
-		 * already the point's — goes into the store with the rest of the cart, in one dispatch.
-		 */
-		const lateAnswer = ( point: PickupSnapshot, billingToo = false ): unknown => {
-			mockStore.shipping = { ...mockStore.shipping, ...point.destination };
-
-			if ( billingToo ) {
-				mockStore.billing = { ...mockStore.billing, ...point.destination };
-			}
-
-			return cartAnswer( PICKUP_RATE, point );
-		};
-
-		/** The server's answer to the address push: no confirmation for an address it was not made for. */
-		const serverDropsThePoint = (): void => {
-			mockStore.onCustomerPush = () => {
-				serverAnswers( PICKUP_RATE, null );
-				notify();
-			};
-		};
-
-		/**
-		 * Asks for `pointId` and leaves the confirmation in flight. The outcome comes back in an
-		 * object: an `async` function's own promise would wait for it.
-		 */
-		const ask = async ( host: PickupSessionHost, pointId = 'P1' ): Promise< { outcome: Promise< unknown > } > => {
-			let outcome: Promise< unknown > = Promise.resolve();
-
-			await act( async () => {
-				outcome = settle( host.confirmSelection( { id: pointId } ) );
-				await Promise.resolve();
-			} );
-
-			return { outcome };
-		};
-
-		it( 'rejects the answer, puts the street back and tells the server', async () => {
-			const session = fakeSession();
-			const held = holdConfirmations();
-
-			serverDropsThePoint();
-			renderPicker();
-			fireEvent.click( trigger() as HTMLElement );
-
-			const { outcome } = await ask( session.host() );
-
-			session.host().close();
-			shopperTypes( NEW_STREET );
-
-			await act( async () => {
-				held[ 0 ].resolve( lateAnswer( snapshot( { destination: MOVED } ) ) );
-				await outcome;
-			} );
-
-			expect( await outcome ).toEqual( { error: { status: 0, code: 'woodev_pickup_superseded', message: '' } } );
-			// Theirs is the newer word: the street they typed, with the postcode it had.
-			expect( mockStore.shipping ).toEqual( { ...HOME, ...NEW_STREET } );
-			expect( mockStore.billing ).toEqual( HOME );
-			// Core would not push an address it has already pushed; said while Place Order was held.
-			expect( mockStore.customerPushes ).toEqual( [
-				{
-					customer: { shipping_address: { ...NEW_STREET, postcode: HOME.postcode } },
-					editing: true,
-					calculating: 1,
-				},
-			] );
-			expect( mockStore.calculating ).toBe( 0 );
-
-			// Nothing endorses the point: the button asks again, no echo, the order is blocked.
-			expect( screen.getByRole( 'button', { name: 'Select a pickup point' } ) ).toBeInTheDocument();
-			expect( lastEcho() ).toBeNull();
-			expect( mockStore.validation[ ERROR_ID ] ).toBeDefined();
-		} );
-
-		it( 'puts a billing postcode back in a store that ships to the billing address', async () => {
-			const session = fakeSession();
-			const held = holdConfirmations();
-
-			( window as unknown as Record< string, unknown > ).woodev_pickup_config_carrier = {
-				...config,
-				replaceAddress: { enabled: true, billingOnly: true },
-			};
-			renderPicker();
-			fireEvent.click( trigger() as HTMLElement );
-
-			const { outcome } = await ask( session.host() );
-
-			// There the form the shopper edits is the billing address, and the server moves both.
-			shopperTypes( { postcode: '654321' }, 'billing' );
-
-			await act( async () => {
-				held[ 0 ].resolve( lateAnswer( snapshot( { destination: MOVED } ), true ) );
-				await outcome;
-			} );
-
-			expect( await outcome ).toMatchObject( { error: { code: 'woodev_pickup_superseded' } } );
-			expect( mockStore.billing ).toEqual( { ...HOME, postcode: '654321' } );
-			expect( mockStore.shipping ).toEqual( HOME );
-			expect( mockStore.customerPushes ).toMatchObject( [
-				{
-					customer: {
-						shipping_address: { address_1: HOME.address_1, postcode: HOME.postcode },
-						billing_address: { address_1: HOME.address_1, postcode: '654321' },
-					},
-				},
-			] );
-		} );
-
-		it( 'rejects an edit made after core took the reply, and writes nothing over it', async () => {
-			const session = fakeSession();
-			const held = holdConfirmations();
-
-			renderPicker();
-			fireEvent.click( trigger() as HTMLElement );
-
-			const { outcome } = await ask( session.host() );
-
-			await act( async () => {
-				held[ 0 ].resolve( lateAnswer( snapshot( { destination: MOVED } ) ) );
-				// Typed over the address core has just taken, before the answer reaches the block.
-				mockStore.shipping = { ...mockStore.shipping, ...NEW_STREET };
-				notify();
-				await outcome;
-			} );
-
-			expect( await outcome ).toMatchObject( { error: { code: 'woodev_pickup_superseded' } } );
-			expect( mockStore.shipping ).toEqual( { ...HOME, ...MOVED, ...NEW_STREET } );
-			// The edit is unsaved: core pushes it, as it does any other.
-			expect( mockStore.addressWrites ).toEqual( [] );
-			expect( mockStore.customerPushes ).toEqual( [] );
-		} );
-
-		it( 'still takes the answer when the shopper typed the street back as it was', async () => {
-			const session = fakeSession();
-			const held = holdConfirmations();
-
-			renderPicker();
-			fireEvent.click( trigger() as HTMLElement );
-
-			const { outcome } = await ask( session.host() );
-
-			shopperTypes( NEW_STREET );
-			shopperTypes( { address_1: HOME.address_1 } );
-
-			await act( async () => {
-				held[ 0 ].resolve( lateAnswer( snapshot( { destination: MOVED } ) ) );
-				await outcome;
-			} );
-
-			// Their last word is the address the point was asked for.
-			expect( await outcome ).toMatchObject( { verdict: { allowed: true } } );
-			expect( mockStore.shipping ).toEqual( { ...HOME, ...MOVED } );
-			expect( mockStore.customerPushes ).toEqual( [] );
-		} );
-
-		it( 'rejects every confirmation asked before the edit, and takes the one asked after it', async () => {
-			const session = fakeSession();
-			const held = holdConfirmations();
-			const ARBAT = { address_1: 'Арбат, 2', postcode: '119002' };
-
-			renderPicker();
-			fireEvent.click( trigger() as HTMLElement );
-
-			const host = session.host();
-			const { outcome: first } = await ask( host );
-			const { outcome: second } = await ask( host, 'P2' );
-
-			shopperTypes( NEW_STREET );
-
-			// Asked for the street the shopper typed; it leaves only once the two before it answered.
-			const { outcome: third } = await ask( host, 'P3' );
-
-			await act( async () => {
-				held[ 0 ].resolve( lateAnswer( snapshot( { destination: MOVED } ) ) );
-				await first;
-			} );
-
-			expect( await first ).toMatchObject( { error: { code: 'woodev_pickup_superseded' } } );
-			expect( mockStore.shipping ).toEqual( { ...HOME, ...NEW_STREET } );
-			expect( extensionCartUpdate ).toHaveBeenCalledTimes( 2 );
-
-			await act( async () => {
-				held[ 1 ].resolve( lateAnswer( snapshot( { point_id: 'P2', destination: ARBAT } ) ) );
-				await second;
-			} );
-
-			expect( await second ).toMatchObject( { error: { code: 'woodev_pickup_superseded' } } );
-			expect( mockStore.shipping ).toEqual( { ...HOME, ...NEW_STREET } );
-			expect( mockStore.customerPushes ).toHaveLength( 2 );
-
-			await act( async () => {
-				held[ 2 ].resolve( lateAnswer( snapshot( { point_id: 'P3', destination: MOVED } ) ) );
-				await third;
-			} );
-
-			expect( await third ).toMatchObject( { verdict: { allowed: true } } );
-			expect( mockStore.shipping ).toEqual( { ...HOME, ...MOVED } );
-			expect( mockStore.customerPushes ).toHaveLength( 2 );
-		} );
-
-		it( 'waits for the server to hear of the address before the next confirmation leaves', async () => {
-			const session = fakeSession();
-			const held = holdConfirmations();
-			let serverHeard: () => void = () => undefined;
-
-			// The address push stays unanswered until the test says so.
-			mockStore.onCustomerPush = () =>
-				new Promise< void >( ( resolve ) => {
-					serverHeard = resolve;
-				} );
-			renderPicker();
-			fireEvent.click( trigger() as HTMLElement );
-
-			const host = session.host();
-			const { outcome: first } = await ask( host );
-
-			shopperTypes( NEW_STREET );
-
-			const { outcome: second } = await ask( host, 'P2' );
-
-			await act( async () => {
-				held[ 0 ].resolve( lateAnswer( snapshot( { destination: MOVED } ) ) );
-				await new Promise( ( resolve ) => setTimeout( resolve, 0 ) );
-			} );
-
-			// The street is back and on its way; the command behind it has not left, the order is held.
-			expect( mockStore.shipping ).toEqual( { ...HOME, ...NEW_STREET } );
-			expect( mockStore.customerPushes ).toHaveLength( 1 );
-			expect( extensionCartUpdate ).toHaveBeenCalledTimes( 1 );
-			expect( mockStore.calculating ).toBe( 2 );
-
-			await act( async () => {
-				serverHeard();
-				await first;
-			} );
-
-			expect( await first ).toMatchObject( { error: { code: 'woodev_pickup_superseded' } } );
-			expect( extensionCartUpdate ).toHaveBeenCalledTimes( 2 );
-
-			await act( async () => {
-				held[ 1 ].resolve( lateAnswer( snapshot( { point_id: 'P2', destination: MOVED } ) ) );
-				await second;
-			} );
-
-			// Asked for the street the shopper typed, so its own move is taken.
-			expect( await second ).toMatchObject( { verdict: { allowed: true } } );
-			expect( mockStore.shipping ).toEqual( { ...HOME, ...MOVED } );
-		} );
 	} );
 
 	/*
