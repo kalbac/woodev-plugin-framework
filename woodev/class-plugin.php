@@ -1351,7 +1351,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			}
 
 			$bootstrap = Woodev_Plugin_Bootstrap::instance();
-
 			if (
 				! method_exists( $bootstrap, 'get_loader_definition_for_class' )
 				|| ! method_exists( $bootstrap, 'get_loader_definition_for_plugin_id' )
@@ -1364,9 +1363,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 				return 0;
 			}
 
-			$definition = $bootstrap->get_loader_definition_for_class( get_class( $this ) )
-				?? $bootstrap->get_loader_definition_for_plugin_id( $this->get_id() )
-				?? $bootstrap->get_loader_definition_for_class_ancestor( get_class( $this ) );
+			$definition = $this->resolve_loader_definition( $this->get_id() );
 
 			if ( ! $definition instanceof \Woodev\Framework\Framework_Plugin_Loader_Definition ) {
 				$this->report_download_id_resolution_failure(
@@ -1377,6 +1374,35 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			}
 
 			return $definition->get_download_id();
+		}
+
+		/**
+		 * Resolves this plugin's loader definition by class, plugin id, then ancestor class.
+		 * Older framework copies that lack the lookup methods safely return null.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $plugin_id Plugin id passed to the constructor.
+		 * @return \Woodev\Framework\Framework_Plugin_Loader_Definition|null
+		 */
+		protected function resolve_loader_definition( string $plugin_id ): ?\Woodev\Framework\Framework_Plugin_Loader_Definition {
+			if ( ! class_exists( 'Woodev_Plugin_Bootstrap', false ) ) {
+				return null;
+			}
+
+			$bootstrap = Woodev_Plugin_Bootstrap::instance();
+			if (
+				! method_exists( $bootstrap, 'get_loader_definition_for_class' )
+				|| ! method_exists( $bootstrap, 'get_loader_definition_for_class_ancestor' )
+			) {
+				return null;
+			}
+
+			$definition = $bootstrap->get_loader_definition_for_class( get_class( $this ) )
+				?? ( method_exists( $bootstrap, 'get_loader_definition_for_plugin_id' ) ? $bootstrap->get_loader_definition_for_plugin_id( $plugin_id ) : null )
+				?? $bootstrap->get_loader_definition_for_class_ancestor( get_class( $this ) );
+
+			return $definition instanceof \Woodev\Framework\Framework_Plugin_Loader_Definition ? $definition : null;
 		}
 
 		/**

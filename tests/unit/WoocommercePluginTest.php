@@ -374,6 +374,138 @@ class WoocommercePluginTest extends TestCase {
 	}
 
 	/**
+	 * The loader definition is authoritative when constructor features disagree.
+	 */
+	public function test_loader_features_win_and_report_disagreeing_constructor_features(): void {
+		$this->mock_wordpress_plugin_construction_functions();
+		Functions\stubs( [ 'add_action', 'add_filter' ] );
+		Functions\expect( '_doing_it_wrong' )->once();
+		$this->register_feature_definition( 'feature-precedence', true );
+
+		$plugin = new Testable_Woocommerce_Plugin();
+		$plugin->initialize( 'feature-precedence', [ 'supported_features' => [ 'blocks' => [ 'cart' => false, 'checkout' => false ] ] ] );
+
+		$this->assertTrue( $plugin->get_supported_features()['blocks']['cart'] );
+		$this->assertTrue( $plugin->get_supported_features()['blocks']['checkout'] );
+	}
+
+	/**
+	 * Matching constructor features do not emit a disagreement notice.
+	 */
+	public function test_matching_constructor_features_do_not_report(): void {
+		$this->mock_wordpress_plugin_construction_functions();
+		Functions\stubs( [ 'add_action', 'add_filter' ] );
+		Functions\expect( '_doing_it_wrong' )->never();
+		$this->register_feature_definition( 'feature-agreement', true );
+
+		$plugin = new Testable_Woocommerce_Plugin();
+		$plugin->initialize( 'feature-agreement', [ 'supported_features' => [ 'hpos' => false, 'blocks' => [ 'cart' => true, 'checkout' => true ] ] ] );
+
+		$this->assertTrue( $plugin->get_supported_features()['blocks']['cart'] );
+	}
+
+	/**
+	 * Unregistered plugins retain constructor features, including explicit false values.
+	 */
+	public function test_unregistered_plugin_honours_constructor_features(): void {
+		$this->mock_wordpress_plugin_construction_functions();
+		Functions\stubs( [ 'add_action', 'add_filter' ] );
+		Functions\expect( '_doing_it_wrong' )->never();
+
+		$plugin = new Testable_Woocommerce_Plugin();
+		$plugin->initialize( 'feature-unregistered', [ 'supported_features' => [ 'hpos' => true, 'blocks' => [ 'cart' => true, 'checkout' => false ] ] ] );
+
+		$this->assertTrue( $plugin->get_supported_features()['hpos'] );
+		$this->assertTrue( $plugin->get_supported_features()['blocks']['cart'] );
+		$this->assertFalse( $plugin->get_supported_features()['blocks']['checkout'] );
+	}
+
+	/**
+	 * WooCommerce plugin construction degrades safely when the bootstrap class is absent.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_constructor_without_bootstrap_keeps_constructor_features(): void {
+		$this->assertFalse( class_exists( 'Woodev_Plugin_Bootstrap', false ) );
+		spl_autoload_register(
+			static function ( string $class ): void {
+				if ( 'Woodev_Plugin_Bootstrap' === $class ) {
+					throw new \Error( 'The bootstrap class is intentionally unavailable in this process.' );
+				}
+			},
+			true,
+			true
+		);
+
+		$this->mock_wordpress_plugin_construction_functions();
+		Functions\stubs( [ 'add_action', 'add_filter' ] );
+
+		$plugin = new Testable_Woocommerce_Plugin();
+		try {
+			$plugin->initialize( 'feature-without-bootstrap', [ 'supported_features' => [ 'blocks' => [ 'cart' => true, 'checkout' => false ] ] ] );
+		} catch ( \Error $error ) {
+			$this->fail( 'Construction should not call a missing bootstrap class: ' . $error->getMessage() );
+		}
+
+		$this->assertTrue( $plugin->get_supported_features()['blocks']['cart'] );
+		$this->assertFalse( $plugin->get_supported_features()['blocks']['checkout'] );
+	}
+
+	/**
+	 * An explicit false in a registered definition survives construction.
+	 */
+	public function test_constructed_plugin_keeps_definition_explicit_false(): void {
+		$this->mock_wordpress_plugin_construction_functions();
+		Functions\stubs( [ 'add_action', 'add_filter' ] );
+		Functions\expect( '_doing_it_wrong' )->never();
+		$this->register_feature_definition( 'feature-explicit-false', true, false );
+
+		$plugin = new Testable_Woocommerce_Plugin();
+		$plugin->initialize( 'feature-explicit-false' );
+
+		$this->assertFalse( $plugin->get_supported_features()['blocks']['cart'] );
+		$this->assertFalse( $plugin->get_supported_features()['blocks']['checkout'] );
+	}
+
+	/**
+	 * Registers a WooCommerce loader definition for feature constructor tests.
+	 *
+	 * @param string $id Plugin id.
+	 * @param bool   $shipping Whether the definition has shipping type.
+	 * @param bool   $blocks_compatible Optional explicit block compatibility.
+	 * @return void
+	 */
+	private function register_feature_definition( string $id, bool $shipping, bool $blocks_compatible = true ): void {
+		$reflection = new \ReflectionClass( \Woodev_Plugin_Bootstrap::class );
+		$instance   = $reflection->getProperty( 'instance' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$instance->setAccessible( true );
+		}
+		$instance->setValue( null, null );
+
+		$definition = [
+			'plugin_id'         => $id,
+			'download_id'       => 9902,
+			'plugin_name'       => $id,
+			'plugin_version'    => '1.0.0',
+			'framework_version' => '2.0.0',
+			'plugin_file'       => __FILE__,
+			'platform'          => \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WOOCOMMERCE,
+			'requirements'      => [ 'php' => '7.4', 'wordpress' => '6.3', 'woocommerce' => '7.0' ],
+			'callback'          => static function (): void {},
+		];
+		if ( $shipping ) {
+			$definition['type'] = 'shipping';
+		}
+		if ( ! $blocks_compatible ) {
+			$definition['supported_features'] = [ 'blocks' => [ 'cart' => false, 'checkout' => false ] ];
+		}
+
+		\Woodev_Plugin_Bootstrap::instance()->register_loader_definition( $definition );
+	}
+
+	/**
 	 * WordPress-only plugins should not initialize WooCommerce runtime state.
 	 */
 	public function test_wordpress_plugin_does_not_register_woocommerce_runtime_hooks(): void {

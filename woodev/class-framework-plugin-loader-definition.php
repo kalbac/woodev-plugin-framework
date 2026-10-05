@@ -24,6 +24,7 @@ if ( ! class_exists( Framework_Plugin_Loader_Definition::class, false ) ) :
 		public const PLATFORM_WORDPRESS   = 'wordpress';
 		public const PLATFORM_WOOCOMMERCE = 'woocommerce';
 		public const PLATFORM_EDD         = 'edd';
+		public const TYPE_SHIPPING        = 'shipping';
 
 		/** @var string Stable internal plugin ID. */
 		protected string $plugin_id;
@@ -67,7 +68,7 @@ if ( ! class_exists( Framework_Plugin_Loader_Definition::class, false ) ) :
 		/**
 		 * Constructor.
 		 *
-		 * @since 2.0.2
+		 * @since 2.0.0
 		 *
 		 * @param array<string,mixed> $definition Raw loader definition.
 		 */
@@ -243,7 +244,7 @@ if ( ! class_exists( Framework_Plugin_Loader_Definition::class, false ) ) :
 		/**
 		 * Gets early WooCommerce compatibility feature flags.
 		 *
-		 * @since 2.0.2
+		 * @since 2.0.0
 		 *
 		 * @return array<string,mixed>
 		 */
@@ -256,11 +257,11 @@ if ( ! class_exists( Framework_Plugin_Loader_Definition::class, false ) ) :
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param array<string,mixed> $definition Raw loader definition.
+		 * @param array<string,mixed> $definition Raw loader definition. A provided `null` type is rejected by validation.
 		 * @return array{hpos: bool, blocks: array{cart: bool, checkout: bool}}
 		 */
 		public static function get_supported_features_for_definition( array $definition ): array {
-			$shipping = 'shipping' === ( $definition['type'] ?? null );
+			$shipping = self::TYPE_SHIPPING === ( $definition['type'] ?? null );
 
 			return array_replace_recursive(
 				[
@@ -279,7 +280,7 @@ if ( ! class_exists( Framework_Plugin_Loader_Definition::class, false ) ) :
 		/**
 		 * Converts this definition to the legacy plugin array used by existing notices.
 		 *
-		 * @since 2.0.2
+		 * @since 2.0.0
 		 *
 		 * @param array $args Additional legacy args to preserve.
 		 * @return array<string,mixed>
@@ -359,7 +360,7 @@ if ( ! class_exists( Framework_Plugin_Loader_Definition::class, false ) ) :
 				$errors[] = 'Loader definition supported_features must be an array.';
 			}
 
-			if ( array_key_exists( 'type', $definition ) && 'shipping' !== $definition['type'] ) {
+			if ( array_key_exists( 'type', $definition ) && self::TYPE_SHIPPING !== $definition['type'] ) {
 				$errors[] = 'Loader definition type must be the string "shipping" when provided.';
 			}
 

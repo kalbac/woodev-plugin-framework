@@ -32,13 +32,6 @@ final class Woodev_Yandex_Pilot_Shipping_Plugin extends \Woodev\Framework\Shippi
 			WOODEV_YANDEX_PILOT_VERSION,
 			[
 				'text_domain'        => 'woodev-yandex-pilot',
-				'supported_features' => [
-					'hpos'   => true,
-					'blocks' => [
-						'cart'     => true,
-						'checkout' => true,
-					],
-				],
 			]
 		);
 	}

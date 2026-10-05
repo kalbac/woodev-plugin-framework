@@ -183,7 +183,7 @@ class BootstrapRegistrationTest extends TestCase {
 					'supported_features' => [
 						'hpos'   => true,
 						'blocks' => [
-							'cart'     => false,
+							'cart'     => true,
 							'checkout' => false,
 						],
 					],
@@ -191,6 +191,20 @@ class BootstrapRegistrationTest extends TestCase {
 			)
 		);
 
+		$bootstrap->register_loader_definition(
+			$this->loader_definition(
+				'wc-feature-plugin-explicit-false',
+				'WC Feature Plugin Explicit False',
+				'2.0.0',
+				[
+					'plugin_file'        => '/path/to/plugin/wc-feature-plugin-explicit-false.php',
+					'type'               => 'shipping',
+					'platform'           => \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WOOCOMMERCE,
+					'requirements'       => [ 'php' => '7.4', 'wordpress' => '6.3', 'woocommerce' => '7.0' ],
+					'supported_features' => [ 'blocks' => [ 'cart' => false, 'checkout' => false ] ],
+				]
+			)
+		);
 		$early_hooks = array_values(
 			array_filter(
 				$registered_hooks,
@@ -200,15 +214,19 @@ class BootstrapRegistrationTest extends TestCase {
 			)
 		);
 
-		$this->assertCount( 1, $early_hooks );
+		$this->assertCount( 2, $early_hooks );
 		$this->assertIsCallable( $early_hooks[0][1] );
 
-		$early_hooks[0][1]();
+		foreach ( $early_hooks as $hook ) {
+			$hook[1]();
+		}
 
 		$this->assertSame(
 			[
 				[ 'custom_order_tables', '/path/to/plugin/wc-feature-plugin.php', true ],
 				[ 'cart_checkout_blocks', '/path/to/plugin/wc-feature-plugin.php', false ],
+				[ 'custom_order_tables', '/path/to/plugin/wc-feature-plugin-explicit-false.php', false ],
+				[ 'cart_checkout_blocks', '/path/to/plugin/wc-feature-plugin-explicit-false.php', false ],
 			],
 			\Automattic\WooCommerce\Utilities\FeaturesUtil::$declared
 		);

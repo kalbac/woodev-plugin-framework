@@ -24,13 +24,6 @@ final class Woodev_Realistic_Shipping_Plugin extends \Woodev\Framework\Shipping\
 			WOODEV_REALISTIC_SHIPPING_VERSION,
 			[
 				'text_domain'        => 'woodev-realistic-shipping',
-				'supported_features' => [
-					'hpos'   => true,
-					'blocks' => [
-						'cart'     => true,
-						'checkout' => true,
-					],
-				],
 			]
 		);
 

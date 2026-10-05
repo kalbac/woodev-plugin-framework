@@ -43,7 +43,7 @@ if ( ! class_exists( Woocommerce_Plugin::class, false ) ) :
 		/**
 		 * Initialize the WooCommerce plugin.
 		 *
-		 * @since 2.0.2
+		 * @since 2.0.0
 		 *
 		 * @param string $id Plugin ID.
 		 * @param string $version Plugin version number.
@@ -58,7 +58,7 @@ if ( ! class_exists( Woocommerce_Plugin::class, false ) ) :
 		 * } $args Plugin arguments.
 		 */
 		public function __construct( string $id, string $version, array $args = [] ) {
-			$loader_definition  = \Woodev_Plugin_Bootstrap::instance()->get_loader_definition_for_plugin_id( $id );
+			$loader_definition  = $this->resolve_loader_definition( $id );
 			$supported_features = null !== $loader_definition
 				? $loader_definition->get_supported_features()
 				: [
@@ -77,6 +77,20 @@ if ( ! class_exists( Woocommerce_Plugin::class, false ) ) :
 			);
 
 			if ( null !== $loader_definition ) {
+				if ( isset( $args['supported_features'] ) ) {
+					$argument_features = \Woodev\Framework\Framework_Plugin_Loader_Definition::get_supported_features_for_definition(
+						[ 'supported_features' => $args['supported_features'] ]
+					);
+
+					if ( $argument_features !== $supported_features ) {
+						_doing_it_wrong(
+							self::class . '::__construct',
+							sprintf( 'Constructor supported_features for plugin "%s" conflicts with its loader definition; the loader definition is authoritative.', esc_html( $id ) ),
+							'2.0.2'
+						);
+					}
+				}
+
 				$args['supported_features'] = $supported_features;
 			}
 

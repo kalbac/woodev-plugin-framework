@@ -155,11 +155,10 @@ final class LoaderDefinitionDownloadIdTest extends TestCase {
 	}
 
 	/**
-	 * Unknown and non-string plugin types fail loader definition validation.
-	 *
+	 * Unknown and non-string plugin types fail validation; an explicitly provided null type is rejected.
 	 */
 	public function test_invalid_plugin_type_is_rejected(): void {
-		foreach ( [ 'payment', 1, null ] as $type ) {
+		foreach ( [ 'payment', 1, null, '', 'Shipping' ] as $type ) {
 			$errors = [];
 			$this->assertNull( Framework_Plugin_Loader_Definition::from_array( $this->get_definition( [ 'type' => $type ] ), $errors ) );
 			$this->assertContains( 'Loader definition type must be the string "shipping" when provided.', $errors );
