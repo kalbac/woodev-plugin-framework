@@ -78,11 +78,30 @@ if ( ! class_exists( Woocommerce_Plugin::class, false ) ) :
 
 			if ( null !== $loader_definition ) {
 				if ( isset( $args['supported_features'] ) ) {
-					$argument_features = \Woodev\Framework\Framework_Plugin_Loader_Definition::get_supported_features_for_definition(
-						[ 'supported_features' => $args['supported_features'] ]
-					);
+					$has_disagreement = false;
+					foreach (
+						[
+							'hpos'           => [ 'hpos' ],
+							'blocks.cart'     => [ 'blocks', 'cart' ],
+							'blocks.checkout' => [ 'blocks', 'checkout' ],
+						] as $feature => $path
+					) {
+						$value = $args['supported_features'];
+						foreach ( $path as $key ) {
+							if ( ! is_array( $value ) || ! array_key_exists( $key, $value ) ) {
+								continue 2;
+							}
+							$value = $value[ $key ];
+						}
 
-					if ( $argument_features !== $supported_features ) {
+						$resolved_value = 'hpos' === $feature ? $supported_features['hpos'] : $supported_features['blocks'][ substr( $feature, 7 ) ];
+						if ( $value !== $resolved_value ) {
+							$has_disagreement = true;
+							break;
+						}
+					}
+
+					if ( $has_disagreement ) {
 						_doing_it_wrong(
 							self::class . '::__construct',
 							sprintf( 'Constructor supported_features for plugin "%s" conflicts with its loader definition; the loader definition is authoritative.', esc_html( $id ) ),

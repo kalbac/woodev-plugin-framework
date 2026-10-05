@@ -300,7 +300,7 @@ class WoocommercePluginTest extends TestCase {
 	private function mock_wordpress_plugin_construction_functions(): void {
 		Functions\when( 'wp_parse_args' )->alias(
 			static function ( array $args, array $defaults ): array {
-				return array_replace_recursive( $defaults, $args );
+				return array_merge( $defaults, $args );
 			}
 		);
 		Functions\when( 'plugin_dir_path' )->alias(
@@ -405,6 +405,54 @@ class WoocommercePluginTest extends TestCase {
 	}
 
 	/**
+	 * Partial constructor features only compare paths explicitly supplied by the caller.
+	 *
+	 * @return void
+	 */
+	public function test_partial_constructor_features_do_not_report_omitted_definition_values(): void {
+		$this->mock_wordpress_plugin_construction_functions();
+		Functions\stubs( [ 'add_action', 'add_filter' ] );
+		Functions\expect( '_doing_it_wrong' )->never();
+		$this->register_feature_definition( 'feature-partial-match', true );
+
+		$plugin = new Testable_Woocommerce_Plugin();
+		$plugin->initialize( 'feature-partial-match', [ 'supported_features' => [ 'hpos' => false ] ] );
+		$this->assertTrue( $plugin->get_supported_features()['blocks']['cart'] );
+	}
+
+	/**
+	 * A partial nested constructor feature matching the definition does not report a mismatch.
+	 *
+	 * @return void
+	 */
+	public function test_partial_block_constructor_feature_matching_definition_does_not_report(): void {
+		$this->mock_wordpress_plugin_construction_functions();
+		Functions\stubs( [ 'add_action', 'add_filter' ] );
+		Functions\expect( '_doing_it_wrong' )->never();
+		$this->register_feature_definition( 'feature-partial-block-match', true );
+
+		$plugin = new Testable_Woocommerce_Plugin();
+		$plugin->initialize( 'feature-partial-block-match', [ 'supported_features' => [ 'blocks' => [ 'cart' => true ] ] ] );
+		$this->assertTrue( $plugin->get_supported_features()['blocks']['cart'] );
+	}
+
+	/**
+	 * A partial nested constructor feature that conflicts with the definition reports once.
+	 *
+	 * @return void
+	 */
+	public function test_partial_block_constructor_feature_disagreement_reports(): void {
+		$this->mock_wordpress_plugin_construction_functions();
+		Functions\stubs( [ 'add_action', 'add_filter' ] );
+		Functions\expect( '_doing_it_wrong' )->once();
+		$this->register_feature_definition( 'feature-partial-block-mismatch', true );
+
+		$plugin = new Testable_Woocommerce_Plugin();
+		$plugin->initialize( 'feature-partial-block-mismatch', [ 'supported_features' => [ 'blocks' => [ 'cart' => false ] ] ] );
+		$this->assertTrue( $plugin->get_supported_features()['blocks']['cart'] );
+	}
+
+	/**
 	 * Unregistered plugins retain constructor features, including explicit false values.
 	 */
 	public function test_unregistered_plugin_honours_constructor_features(): void {
@@ -448,6 +496,27 @@ class WoocommercePluginTest extends TestCase {
 			$this->fail( 'Construction should not call a missing bootstrap class: ' . $error->getMessage() );
 		}
 
+		$this->assertTrue( $plugin->get_supported_features()['blocks']['cart'] );
+		$this->assertFalse( $plugin->get_supported_features()['blocks']['checkout'] );
+	}
+
+	/**
+	 * A bootstrap copy without loader lookup methods returns null and constructor args remain effective.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 * @return void
+	 */
+	public function test_constructor_with_legacy_bootstrap_without_lookup_methods_uses_constructor_args(): void {
+		$this->assertFalse( class_exists( 'Woodev_Plugin_Bootstrap', false ) );
+		eval( 'class Woodev_Plugin_Bootstrap { public static function instance() { return new self(); } }' );
+		$this->mock_wordpress_plugin_construction_functions();
+		Functions\stubs( [ 'add_action', 'add_filter' ] );
+
+		$plugin = new Testable_Woocommerce_Plugin();
+		$plugin->initialize( 'legacy-bootstrap', [ 'supported_features' => [ 'hpos' => true, 'blocks' => [ 'cart' => true, 'checkout' => false ] ] ] );
+
+		$this->assertTrue( $plugin->get_supported_features()['hpos'] );
 		$this->assertTrue( $plugin->get_supported_features()['blocks']['cart'] );
 		$this->assertFalse( $plugin->get_supported_features()['blocks']['checkout'] );
 	}
