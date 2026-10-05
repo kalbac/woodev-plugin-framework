@@ -35,12 +35,9 @@ function woodev_edostavka_pilot_plugin_loader_definition(): array {
 		],
 		'main_class'        => 'Woodev_Edostavka_Pilot_Plugin',
 		'callback'          => 'woodev_edostavka_pilot_plugin_init',
+		'type'              => 'shipping',
 		'supported_features' => [
 			'hpos'   => true,
-			'blocks' => [
-				'cart'     => true,
-				'checkout' => true,
-			],
 		],
 	];
 }

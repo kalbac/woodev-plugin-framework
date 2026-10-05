@@ -122,6 +122,16 @@ if ( ! class_exists( 'Woodev_Download_Id_Match_Test_Plugin', false ) ) {
 		public function get_plugin_name() {
 			return 'Download Id Match Test Plugin';
 		}
+
+		/**
+		 * Exposes the protected loader-definition resolver for focused regression tests.
+		 *
+		 * @param string $plugin_id Plugin id.
+		 * @return \Woodev\Framework\Framework_Plugin_Loader_Definition|null
+		 */
+		public function resolve_definition_for_test( string $plugin_id ): ?\Woodev\Framework\Framework_Plugin_Loader_Definition {
+			return $this->resolve_loader_definition( $plugin_id );
+		}
 	}
 }
 
@@ -397,6 +407,28 @@ class PluginDownloadIdResolutionTest extends TestCase {
 			'sanity check: the ancestor lookup must resolve to the PARENT definition.'
 		);
 		$this->assertSame( 9502, $plugin->get_download_id(), 'The plugin_id match must win over the ancestor match.' );
+	}
+
+	/**
+	 * The plugin-level resolver reaches an ancestor-class definition when exact and id lookups miss.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 * @return void
+	 */
+	public function test_resolve_loader_definition_uses_ancestor_class_lookup(): void {
+		$this->mock_construction_and_resolver_functions();
+		$bootstrap = \Woodev_Plugin_Bootstrap::instance();
+		$bootstrap->register_loader_definition(
+			$this->get_loader_definition( Woodev_Download_Id_Match_Test_Plugin::PLUGIN_ID, Woodev_Download_Id_Match_Test_Plugin::class, 9601 )
+		);
+		$bootstrap->load_plugins();
+
+		$plugin = ( new ReflectionClass( Woodev_Download_Id_Child_Test_Plugin::class ) )->newInstanceWithoutConstructor();
+		$definition = $plugin->resolve_definition_for_test( 'unregistered-child-id' );
+
+		$this->assertInstanceOf( \Woodev\Framework\Framework_Plugin_Loader_Definition::class, $definition );
+		$this->assertSame( 9601, $definition->get_download_id() );
 	}
 
 	/**

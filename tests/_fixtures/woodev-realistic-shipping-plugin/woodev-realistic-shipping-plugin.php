@@ -35,12 +35,9 @@ function woodev_realistic_shipping_plugin_loader_definition(): array {
 		],
 		'main_class'        => 'Woodev_Realistic_Shipping_Plugin',
 		'callback'          => 'woodev_realistic_shipping_plugin_init',
+		'type'              => 'shipping',
 		'supported_features' => [
 			'hpos'   => true,
-			'blocks' => [
-				'cart'     => true,
-				'checkout' => true,
-			],
 		],
 	];
 }

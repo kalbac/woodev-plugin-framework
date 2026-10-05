@@ -26,13 +26,6 @@ final class Woodev_Edostavka_Pilot_Plugin extends \Woodev\Framework\Shipping\Shi
 			WOODEV_EDOSTAVKA_PILOT_VERSION,
 			[
 				'text_domain'        => 'woodev-edostavka-pilot',
-				'supported_features' => [
-					'hpos'   => true,
-					'blocks' => [
-						'cart'     => true,
-						'checkout' => true,
-					],
-				],
 			]
 		);
 	}
