@@ -31,6 +31,8 @@ const mockStore = {
 	validation: {} as Record< string, { message: string; hidden: boolean } >,
 	/** `core/notices`, by notice id: what the checkout shows in its own notice areas. */
 	notices: {} as Record< string, { message: string; context: string; isDismissible: boolean } >,
+	/** `true` simulates a page where the `core/notices` store offers no such actions. */
+	withoutNotices: false,
 	/** How many `disableCheckoutFor` calls are unsettled: Place Order is blocked while > 0. */
 	calculating: 0,
 	listeners: new Set< () => void >(),
@@ -69,14 +71,25 @@ jest.mock( '@wordpress/data', () => {
 				mockStore.validation = rest;
 				notify();
 			},
-			createErrorNotice: ( message: string, options: { id: string; context: string; isDismissible: boolean } ) => {
-				mockStore.notices[ options.id ] = { message, context: options.context, isDismissible: options.isDismissible };
-			},
-			removeNotice: ( id: string, context: string ) => {
-				if ( mockStore.notices[ id ]?.context === context ) {
-					delete mockStore.notices[ id ];
-				}
-			},
+			...( mockStore.withoutNotices
+				? {}
+				: {
+						createErrorNotice: (
+							message: string,
+							options: { id: string; context: string; isDismissible: boolean }
+						) => {
+							mockStore.notices[ options.id ] = {
+								message,
+								context: options.context,
+								isDismissible: options.isDismissible,
+							};
+						},
+						removeNotice: ( id: string, context: string ) => {
+							if ( mockStore.notices[ id ]?.context === context ) {
+								delete mockStore.notices[ id ];
+							}
+						},
+				  } ),
 			disableCheckoutFor: async ( work: () => Promise< unknown > ) => {
 				mockStore.calculating++;
 
@@ -231,6 +244,7 @@ beforeEach( () => {
 	mockStore.addressWrites = [];
 	mockStore.validation = {};
 	mockStore.notices = {};
+	mockStore.withoutNotices = false;
 	mockStore.calculating = 0;
 	mockStore.listeners.clear();
 	chooseRate( PICKUP_RATE );
@@ -856,6 +870,18 @@ describe( 'PickupPicker — a required point blocks the order', () => {
 			unmount();
 
 			expect( mockStore.notices ).toEqual( {} );
+		} );
+
+		it( 'still shows the message under the button where the page has no notices to say it in', () => {
+			mockStore.withoutNotices = true;
+
+			const { unmount } = renderPicker();
+
+			reveal();
+
+			expect( screen.getByRole( 'alert' ) ).toHaveTextContent( 'Please choose a pickup point.' );
+			expect( mockStore.validation[ ERROR_ID ] ).toEqual( REVEALED );
+			expect( () => unmount() ).not.toThrow();
 		} );
 
 		it( 'never touches another notice of the checkout', () => {
