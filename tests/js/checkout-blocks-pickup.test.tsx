@@ -11,7 +11,9 @@ import { useSyncExternalStore as mockUseSyncExternalStore } from 'react';
  * Two pieces of core behaviour are reproduced because the button's guarantees depend on them, both
  * read from WooCommerce 11.1 (`wc-blocks-data.js`: `gi=`, `Na=`):
  * - `extensionCartUpdate()` takes the server's cart into the store BEFORE it resolves, and rejects
- *   with the Store API's error object;
+ *   with the Store API's error object. The cart's ADDRESSES are part of that whenever the shopper
+ *   has no unsaved edit (`WOOCOMMERCE_CHECKOUT_IS_CUSTOMER_DATA_DIRTY`) — the tests that depend on
+ *   it say so (`coreTakesReplyAddress`, #1091);
  * - `disableCheckoutFor( work )` counts a calculation for as long as `work()` is unsettled.
  */
 type Rate = { rate_id: string; selected: boolean };
@@ -584,6 +586,109 @@ describe( 'PickupPicker — the store’s address-replacement policy (#1089)', (
 		await confirmWith( MOVED );
 
 		expect( mockStore.addressWrites ).toEqual( [] );
+	} );
+
+	/*
+	 * #1091, measured in the browser against WooCommerce 11.1: the shopper's street has been pushed
+	 * (nothing unsaved), so core takes the reply's shipping address — already the point's — into the
+	 * cart store BEFORE `extensionCartUpdate()` resolves. That is this confirmation's own move, not
+	 * an edit: the dialog must get the verdict (it showed «Could not confirm your choice» over a
+	 * point the server had kept), and billing must still follow where the two are one address.
+	 */
+	describe( 'when core has already taken the reply’s address into the store (#1091)', () => {
+		/** `extensionCartUpdate()` as core runs it for a shopper with no unsaved edit. */
+		const coreTakesReplyAddress = ( destination: Record< string, string >, over: Partial< PickupSnapshot > = {} ) =>
+			extensionCartUpdate.mockImplementationOnce( async () => {
+				serverAnswers( PICKUP_RATE, snapshot( { destination, ...over } as Partial< PickupSnapshot > ) );
+				mockStore.shipping = { ...mockStore.shipping, ...destination };
+				notify();
+
+				return { extensions: mockStore.extensions };
+			} );
+
+		it( 'answers the dialog with the verdict instead of «superseded»', async () => {
+			const session = fakeSession();
+
+			coreTakesReplyAddress( MOVED );
+			renderPicker();
+			fireEvent.click( trigger() as HTMLElement );
+
+			let verdict: unknown;
+
+			await act( async () => {
+				verdict = await session.host().confirmSelection( { id: 'P1' } );
+			} );
+
+			expect( verdict ).toMatchObject( { allowed: true } );
+			expect( mockStore.shipping ).toEqual( { ...HOME, ...MOVED } );
+			// Core wrote the shipping address; nothing was left for the block to write.
+			expect( mockStore.addressWrites ).toEqual( [] );
+		} );
+
+		it( 'still moves the billing address where the two are one address', async () => {
+			const session = fakeSession();
+
+			mockStore.useShippingAsBilling = true;
+			coreTakesReplyAddress( MOVED );
+			renderPicker();
+			fireEvent.click( trigger() as HTMLElement );
+
+			await act( async () => {
+				await session.host().confirmSelection( { id: 'P1' } );
+			} );
+
+			expect( mockStore.billing ).toEqual( { ...HOME, ...MOVED } );
+		} );
+
+		it( 'takes a second point’s move that names the street only, after the first moved the postcode too', async () => {
+			const session = fakeSession();
+			const ARBAT = { address_1: 'Арбат, 2' };
+
+			coreTakesReplyAddress( MOVED );
+			coreTakesReplyAddress( ARBAT, { point_id: 'P2' } );
+			renderPicker();
+			fireEvent.click( trigger() as HTMLElement );
+
+			const host = session.host();
+			let second: unknown;
+
+			await act( async () => {
+				// Both asked before either answered: the second was asked for the shopper's own address.
+				const first = host.confirmSelection( { id: 'P1' } );
+
+				second = await host.confirmSelection( { id: 'P2' } );
+				await first;
+			} );
+
+			expect( second ).toMatchObject( { allowed: true } );
+			expect( mockStore.shipping ).toEqual( { ...HOME, ...MOVED, ...ARBAT } );
+		} );
+
+		it( 'still leaves a street the shopper typed while the confirmation was in flight', async () => {
+			const session = fakeSession();
+
+			// The edit is unsaved, so core keeps the reply's addresses out of the store.
+			extensionCartUpdate.mockImplementationOnce( async () => {
+				mockStore.shipping = { ...HOME, address_1: 'New manual street' };
+				serverAnswers( PICKUP_RATE, snapshot( { destination: MOVED } as Partial< PickupSnapshot > ) );
+				notify();
+
+				return { extensions: mockStore.extensions };
+			} );
+			renderPicker();
+			fireEvent.click( trigger() as HTMLElement );
+
+			let error: unknown;
+
+			await act( async () => {
+				await session.host().confirmSelection( { id: 'P1' } ).catch( ( reason: unknown ) => {
+					error = reason;
+				} );
+			} );
+
+			expect( error ).toMatchObject( { code: 'woodev_pickup_superseded' } );
+			expect( mockStore.shipping ).toEqual( { ...HOME, address_1: 'New manual street' } );
+		} );
 	} );
 } );
 
