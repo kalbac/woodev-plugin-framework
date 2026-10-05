@@ -715,6 +715,211 @@ describe( 'single-point row keyboard selection (#1109)', () => {
 } );
 
 // -----------------------------------------------------------------------
+// #1109 round 2: opening a card from a list row must MOVE focus to the card and take the covered
+// rows out of the tab order. These run on a container attached to `document.body` with a real
+// `focus()` — a detached container never has a `document.activeElement`, which is exactly how the
+// round-1 tests passed while the workflow was broken in a browser.
+// -----------------------------------------------------------------------
+
+describe( 'focus moves into the card and the covered list is inert (#1109 round 2)', () => {
+	const press = ( el, key ) => el.dispatchEvent(
+		new window.KeyboardEvent( 'keydown', { key, bubbles: true, cancelable: true } )
+	);
+
+	const setup = ( groups, cfg = config ) => {
+		const container = document.createElement( 'div' );
+		document.body.appendChild( container );
+
+		const panels = new Panels( container, cfg );
+		panels.render();
+		panels.setVisible( groups || [ group( 'g1', 55.75, 37.61, 'A' ), group( 'g2', 55.76, 37.61, 'B' ), group( 'g3', 55.77, 37.61, 'C' ) ] );
+
+		return { container, panels, list: container.querySelector( '.woodev-pickup-list' ) };
+	};
+
+	const rows = ( container ) => container.querySelectorAll( '.woodev-pickup-list__item' );
+	const closeButton = ( container ) => container.querySelector( '.woodev-pickup-card__close' );
+
+	const colocated = () => ( {
+		key: 'co', lat: 55.75, lng: 37.61, size: 2,
+		points: [
+			{ id: 'a', name: 'ПВЗ', short_address: 'x' },
+			{ id: 'b', name: 'Постамат', short_address: 'y' },
+		],
+	} );
+
+	it( 'Enter on a focused row moves focus to the card close button', () => {
+		const { container } = setup();
+		const row = rows( container )[ 0 ];
+
+		row.focus();
+		expect( document.activeElement ).toBe( row );
+
+		press( row, 'Enter' );
+
+		expect( document.activeElement ).toBe( closeButton( container ) );
+	} );
+
+	it( 'Space on a focused row moves focus to the card close button', () => {
+		const { container } = setup();
+		const row = rows( container )[ 1 ];
+
+		row.focus();
+		press( row, ' ' );
+
+		expect( document.activeElement ).toBe( closeButton( container ) );
+	} );
+
+	it( 'a click on a row takes the same path, focus included', () => {
+		const { container } = setup();
+
+		rows( container )[ 0 ].click();
+
+		expect( document.activeElement ).toBe( closeButton( container ) );
+	} );
+
+	it( 'a click on a co-located point button moves focus to the card close button', () => {
+		const { container } = setup( [ colocated() ] );
+		const button = container.querySelectorAll( '.woodev-pickup-list__point' )[ 1 ];
+
+		button.focus();
+		button.click();
+
+		expect( document.activeElement ).toBe( closeButton( container ) );
+	} );
+
+	it( 'marks the covered list inert while the card is open and lifts it when the card closes', () => {
+		const { container, panels, list } = setup();
+
+		expect( list.hasAttribute( 'inert' ) ).toBe( false );
+
+		rows( container )[ 0 ].click();
+		expect( list.hasAttribute( 'inert' ) ).toBe( true );
+
+		panels.closeCard();
+		expect( list.hasAttribute( 'inert' ) ).toBe( false );
+	} );
+
+	it( 'a card opened from the map marker covers the list too, but does not steal focus', () => {
+		const { container, panels, list } = setup();
+		const outside = document.createElement( 'button' );
+		document.body.appendChild( outside );
+		outside.focus();
+
+		panels.openCard( panels._groups[ 0 ], 'g1', 'marker' );
+
+		expect( list.hasAttribute( 'inert' ) ).toBe( true );
+		expect( document.activeElement ).toBe( outside );
+		expect( container.querySelector( '.woodev-pickup-stage' ).classList.contains( 'is-card' ) ).toBe( true );
+	} );
+
+	it( 'closing the card from the keyboard returns focus to the row that opened it', () => {
+		const { container } = setup();
+		const row = rows( container )[ 1 ];
+
+		row.focus();
+		press( row, 'Enter' );
+		closeButton( container ).click();
+
+		expect( document.activeElement ).toBe( rows( container )[ 1 ] );
+	} );
+
+	it( 'returns focus to the co-located point button that opened the card', () => {
+		const { container } = setup( [ colocated() ] );
+		const button = container.querySelectorAll( '.woodev-pickup-list__point' )[ 1 ];
+
+		button.click();
+		closeButton( container ).click();
+
+		expect( document.activeElement ).toBe( container.querySelectorAll( '.woodev-pickup-list__point' )[ 1 ] );
+	} );
+
+	it( 'returns focus to the REBUILT row when the selection rebuilt the list under the open card', () => {
+		const { container, panels } = setup();
+		const row = rows( container )[ 2 ];
+
+		row.focus();
+		press( row, 'Enter' );
+		panels.setSelectedId( 'g3' ); // rebuilds every row node while the card is open
+		expect( row.isConnected ).toBe( false );
+
+		closeButton( container ).click();
+
+		expect( document.activeElement ).toBe( rows( container )[ 2 ] );
+		expect( document.activeElement.isConnected ).toBe( true );
+	} );
+
+	it( 'returns focus to the row when closing left focus on the document body', () => {
+		const { container, panels } = setup();
+		const row = rows( container )[ 0 ];
+
+		row.focus();
+		press( row, 'Enter' );
+		document.activeElement.blur(); // e.g. the focused control was a CTA that went disabled
+		expect( document.activeElement ).toBe( document.body );
+
+		panels.closeCard();
+
+		expect( document.activeElement ).toBe( rows( container )[ 0 ] );
+	} );
+
+	it( 'a re-open of the card that is already showing does not pull focus off what the customer is on', () => {
+		const { container, panels } = setup();
+		const row = rows( container )[ 0 ];
+
+		row.focus();
+		press( row, 'Enter' );
+
+		const cta = container.querySelector( '.woodev-pickup-card__cta' );
+		cta.focus();
+		panels.openCard( panels._groups[ 0 ], 'g1', 'list' );
+
+		expect( document.activeElement ).toBe( container.querySelector( '.woodev-pickup-card__cta' ) );
+	} );
+
+	it( 'does not steal focus on close when it was already somewhere else', () => {
+		const { container, panels } = setup();
+		const outside = document.createElement( 'button' );
+		document.body.appendChild( outside );
+
+		rows( container )[ 0 ].click();
+		outside.focus();
+		panels.closeCard();
+
+		expect( document.activeElement ).toBe( outside );
+	} );
+
+	it( 'a sidebar collapse and openList() both lift the inert mark', () => {
+		const { container, panels, list } = setup();
+
+		rows( container )[ 0 ].click();
+		panels.toggleList();
+		expect( list.hasAttribute( 'inert' ) ).toBe( false );
+
+		rows( container )[ 0 ].click();
+		expect( list.hasAttribute( 'inert' ) ).toBe( true );
+		panels.openList();
+		expect( list.hasAttribute( 'inert' ) ).toBe( false );
+	} );
+
+	it( 'in manager mode focus lands on «К списку» and returns to the row from it', () => {
+		const managerConfig = Object.assign( {}, config, {
+			mode: 'manager',
+			i18n: Object.assign( {}, config.i18n, { backToList: 'К списку', close: 'Закрыть', select: 'Выбрать', continueCheckout: 'Далее' } ),
+		} );
+		const { container } = setup( null, managerConfig );
+		const row = rows( container )[ 0 ];
+
+		row.focus();
+		press( row, 'Enter' );
+		expect( document.activeElement ).toBe( container.querySelector( '.woodev-pickup-card__back' ) );
+
+		document.activeElement.click();
+		expect( document.activeElement ).toBe( rows( container )[ 0 ] );
+	} );
+} );
+
+// -----------------------------------------------------------------------
 // Round 2 (D6): `openCard( group, pointId, origin )` — `origin` is what lets the mount tell a
 // marker click (pan only) apart from every other route (zoom in), now that the original V-10
 // "must behave identically" claim has been overruled (see the file docblock's revised
