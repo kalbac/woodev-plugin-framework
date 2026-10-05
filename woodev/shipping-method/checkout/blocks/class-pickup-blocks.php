@@ -147,7 +147,10 @@ if ( ! class_exists( __NAMESPACE__ . '\Pickup_Blocks' ) ) :
 		 */
 		public static function i18n_strings(): array {
 			return [
-				'required' => __( 'Please choose a pickup point.', 'woodev-plugin-framework' ),
+				'required'       => __( 'Please choose a pickup point.', 'woodev-plugin-framework' ),
+				// The hint under the button while the cart holds no resolved locality (#1110); the
+				// same msgid as the server's refusal (`Store_Api_Pickup::locality_message()`).
+				'chooseLocality' => __( 'Choose your locality from the suggestions to see pickup points.', 'woodev-plugin-framework' ),
 			];
 		}
 

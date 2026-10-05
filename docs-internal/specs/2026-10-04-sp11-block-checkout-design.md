@@ -159,8 +159,9 @@ C-2b client contract (#1089), an extension of that same owner: the cart data gai
 rate, `null` for any other rate. It is cart output only (absent from the checkout echo schema).
 The pickup button renders from `owner` and the snapshot alone, and only while both name the rate
 selected in `wc/store/cart` right now; it never infers ownership from a label or a method list.
-`locality` is the key the owner's points are addressed by (`''` → the client falls back to the
-native city). The echo carries the snapshot's identity keys for the owning field and `null` for
+`locality` is the key the owner's points are addressed by AND the one a confirmation is made
+against (`''` → no resolved locality: the client opens no dialog and shows the «choose your locality
+from the suggestions» hint — never the typed city, #1110). The echo carries the snapshot's identity keys for the owning field and `null` for
 every other field. The storefront map session is `pickup-session.js`, opened with a per-surface
 host; the Blocks host sends no `clear` command on a rate switch (the snapshot's rate scoping
 already clears it).
@@ -646,13 +647,18 @@ are ONE session (same point, either can confirm or place); a stranger's token to
 
 **Boundaries — known, not supported in this minimum** (each is a proposed card of the C-4 report):
 
-- **A hand-typed city with no chosen locality cannot get a pickup point.** The points request is not
-  a Store API request, so it lists the points of the store's default locality whatever City says;
-  the confirmation IS one, sees no locality, and refuses every point with the generic message. The
-  order stays impossible (safe), the shopper is not told to use the chooser.
+- **A hand-typed city with no chosen locality cannot get a pickup point — and now says so (#1110).**
+  The points request is not a Store API request, so it lists the points of the store's default
+  locality whatever City says; the confirmation IS one and sees no locality. The block no longer
+  opens a dialog while `owner.locality` is `''`: it shows «Choose your locality from the suggestions
+  to see pickup points.» under the button (also as the order's validation error), the server's
+  confirmation and pre-payment validation refuse with the same words instead of the generic one. An
+  EMPTY city keeps the store's default locality (it arrives as the owner's key).
 - **A locality can only be chosen with the cookie session.** `woodev/v1/location/*` is `wp_rest`
   nonce + cookie; a Cart-Token-only (headless) client cannot choose one, hence cannot confirm a
-  point either.
+  point either. Decided in #1110: not a scenario of this bundle (it runs on the WordPress-rendered
+  checkout page, cookie + `Nonce`); a headless client would also need its own point picker. A
+  Store API locality command is a follow-up, never a loosened REST nonce.
 - **`address_field` / `postcode_field = hide_for_pickup` are classic-only.** On the block checkout a
   pickup order still demands the native Postcode, which a point without one does not supply.
 - **WooCommerce's own persisted cart can show a point the server has dropped.** Core 11.1 keeps the

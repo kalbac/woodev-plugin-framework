@@ -433,6 +433,43 @@ final class StoreApiPickupTest extends TestCase {
 		C2a_Adapter::update( $this->command() );
 	}
 
+	/**
+	 * #1110: a hand-typed city the chooser never resolved leaves the scope with no locality, which
+	 * refuses every point. The customer is told what to do, not handed the generic «choose a point».
+	 */
+	public function test_a_cart_with_no_resolved_locality_is_told_to_choose_the_city(): void {
+		$this->scope->locality = '';
+		$this->expectException( \Automattic\WooCommerce\StoreApi\Exceptions\RouteException::class );
+		$this->expectExceptionMessage( 'Choose your locality from the suggestions to see pickup points.' );
+		try { C2a_Adapter::update( $this->command() ); }
+		finally {
+			// Refused before any carrier round trip: there is no locality to confirm a point against.
+			$this->assertSame( 0, $this->fetches );
+			$this->assertNull( C2a_Adapter::cart_data()['pickup']['carrier']['carrier_point'] );
+		}
+	}
+
+	public function test_a_cart_with_a_resolved_locality_still_confirms_a_point(): void {
+		C2a_Adapter::update( $this->command() );
+		$this->assertSame( 'msk', C2a_Adapter::cart_data()['owner']['locality'] );
+		$this->assertSame( 'P1', C2a_Adapter::cart_data()['pickup']['carrier']['carrier_point']['point_id'] );
+	}
+
+	public function test_placing_an_order_with_no_resolved_locality_names_the_city_as_the_way_out(): void {
+		$this->scope->locality = '';
+		$this->assertSame(
+			[ 'Choose your locality from the suggestions to see pickup points.' ],
+			$this->validate()->get_error_messages()
+		);
+	}
+
+	public function test_placing_an_order_with_a_locality_and_no_point_keeps_the_generic_message(): void {
+		$this->assertSame(
+			[ 'Please choose a pickup point on the checkout page before paying.' ],
+			$this->validate()->get_error_messages()
+		);
+	}
+
 	public function test_different_order_address_cannot_use_cart_confirmation(): void {
 		C2a_Adapter::update( $this->command() );
 		$order = new C2a_Order( $this->address );

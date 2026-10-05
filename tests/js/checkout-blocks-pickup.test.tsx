@@ -117,6 +117,8 @@ jest.mock( '@wordpress/data', () => {
 } );
 
 // eslint-disable-next-line import/first
+import { createHost } from '../../src/checkout-blocks/pickup-host';
+// eslint-disable-next-line import/first
 import { PickupPicker } from '../../src/checkout-blocks/pickup-picker';
 // eslint-disable-next-line import/first
 import { registerPickupBlock } from '../../src/checkout-blocks/register';
@@ -135,7 +137,10 @@ const data: PickupData = {
 	enabled: true,
 	namespace: NAMESPACE,
 	fields: [ { pluginId: 'carrier', fieldId: 'carrier_point', configKey: 'woodev_pickup_config_carrier' } ],
-	i18n: { required: 'Please choose a pickup point.' },
+	i18n: {
+		required: 'Please choose a pickup point.',
+		chooseLocality: 'Choose your locality from the suggestions to see pickup points.',
+	},
 };
 
 const config = {
@@ -411,20 +416,14 @@ describe( 'PickupPicker — confirmation through the Store API', () => {
 		expect( extensionCartUpdate.mock.calls[ 0 ][ 0 ].data.pickup.carrier.carrier_point ).toEqual( { point_id: 'P1' } );
 	} );
 
-	it( 'falls back to the native city when the server holds no locality key', () => {
+	it( 'addresses the points by the locality the cart holds', () => {
 		const session = fakeSession();
-
-		mockStore.extensions = {
-			[ NAMESPACE ]: {
-				pickup: { carrier: { carrier_point: null } },
-				owner: { plugin_id: 'carrier', field_id: 'carrier_point', rate_id: PICKUP_RATE, locality: '' },
-			},
-		};
 
 		renderPicker();
 		fireEvent.click( trigger() as HTMLElement );
 
-		expect( session.host().getLocalityKey() ).toBe( 'Москва' );
+		expect( session.open ).toHaveBeenCalledTimes( 1 );
+		expect( session.host().getLocalityKey() ).toBe( 'dadata:msk' );
 	} );
 
 	it( 'blocks Place Order for as long as a confirmation is in flight', async () => {
@@ -818,6 +817,117 @@ describe( 'PickupPicker — server refusals', () => {
 				code: 'woodev_pickup_transport_missing',
 			} );
 		} );
+	} );
+} );
+
+/*
+ * #1110, from the C-4 browser acceptance: a hand-typed city the chooser never resolved leaves the
+ * cart with no locality. The points route is not a Store API request and listed the store's default
+ * locality's points under whatever City said; the confirmation sees no locality and refused every
+ * one of them with the generic «choose a pickup point». The order was impossible and the shopper was
+ * never told to pick the city from the suggestions.
+ */
+describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
+	const HINT = 'Choose your locality from the suggestions to see pickup points.';
+
+	/** The server's answer for a typed city it never resolved: our rate, no locality key. */
+	const unresolved = (): void => {
+		mockStore.shipping = { ...HOME, city: 'Краснодар' };
+		mockStore.extensions = {
+			[ NAMESPACE ]: {
+				pickup: { carrier: { carrier_point: null } },
+				owner: { plugin_id: 'carrier', field_id: 'carrier_point', rate_id: PICKUP_RATE, locality: '' },
+			},
+		};
+	};
+
+	it( 'opens no dialog and asks for no foreign points — it says to choose the locality', () => {
+		const session = fakeSession();
+
+		unresolved();
+		renderPicker();
+		fireEvent.click( trigger() as HTMLElement );
+
+		expect( session.open ).not.toHaveBeenCalled();
+		expect( extensionCartUpdate ).not.toHaveBeenCalled();
+		expect( screen.getByRole( 'status' ) ).toHaveTextContent( HINT );
+		expect( trigger() ).toHaveAttribute( 'aria-disabled', 'true' );
+		expect( trigger() ).not.toBeDisabled();
+		expect( trigger() ).toHaveAttribute( 'aria-describedby', `${ ERROR_ID }-hint` );
+	} );
+
+	it( 'never addresses the points by the typed city', () => {
+		unresolved();
+
+		const host = createHost( {
+			data,
+			field: data.fields![ 0 ],
+			config,
+			trigger: null,
+			onClose: () => undefined,
+		} );
+
+		// The name the map centres on stays the typed one; the KEY the points are asked by does not.
+		expect( host.getLocality() ).toBe( 'Краснодар' );
+		expect( host.getLocalityKey() ).toBe( '' );
+	} );
+
+	it( 'puts the same words on the order’s validation error instead of «choose a pickup point»', () => {
+		unresolved();
+		renderPicker();
+
+		expect( mockStore.validation[ ERROR_ID ] ).toEqual( { message: HINT, hidden: true } );
+
+		act( () => {
+			mockStore.validation = { [ ERROR_ID ]: { message: HINT, hidden: false } };
+			notify();
+		} );
+
+		// One copy of the words: the revealed error replaces the standing hint.
+		expect( screen.getByRole( 'alert' ) ).toHaveTextContent( HINT );
+		expect( screen.queryByRole( 'status' ) ).not.toBeInTheDocument();
+		expect( trigger() ).toHaveAttribute( 'aria-describedby', `${ ERROR_ID }-error` );
+	} );
+
+	it( 'opens the dialog, on that locality’s points, once the cart holds one', () => {
+		const session = fakeSession();
+
+		unresolved();
+		renderPicker();
+
+		expect( screen.getByRole( 'status' ) ).toHaveTextContent( HINT );
+
+		// The shopper picks «Краснодар» from the suggestions; the cart answers with its key.
+		act( () => {
+			mockStore.extensions = {
+				[ NAMESPACE ]: {
+					pickup: { carrier: { carrier_point: null } },
+					owner: { plugin_id: 'carrier', field_id: 'carrier_point', rate_id: PICKUP_RATE, locality: 'dadata:krd' },
+				},
+			};
+			notify();
+		} );
+
+		expect( screen.queryByRole( 'status' ) ).not.toBeInTheDocument();
+		expect( trigger() ).not.toHaveAttribute( 'aria-disabled' );
+		expect( mockStore.validation[ ERROR_ID ] ).toEqual( { message: 'Please choose a pickup point.', hidden: true } );
+
+		fireEvent.click( trigger() as HTMLElement );
+
+		expect( session.open ).toHaveBeenCalledTimes( 1 );
+		expect( session.host().getLocalityKey() ).toBe( 'dadata:krd' );
+	} );
+
+	it( 'keeps the store’s default locality for an empty city — it arrives as the owner’s key', () => {
+		const session = fakeSession();
+
+		mockStore.shipping = { ...HOME, city: '' };
+		renderPicker();
+		fireEvent.click( trigger() as HTMLElement );
+
+		expect( screen.queryByRole( 'status' ) ).not.toBeInTheDocument();
+		expect( session.open ).toHaveBeenCalledTimes( 1 );
+		expect( session.host().getLocalityKey() ).toBe( 'dadata:msk' );
 	} );
 } );
 

@@ -2208,6 +2208,30 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		}
 
 		/**
+		 * Whether the cart holds a RESOLVED locality for the Store API rate — the one thing a pickup
+		 * confirmation cannot be made without (issue #1110).
+		 *
+		 * {@see self::point_matches_pair()} refuses every point while the scope's locality is `''`,
+		 * and the scope answers `''` whenever the customer has not picked a settlement — a hand-typed
+		 * city the chooser never resolved included, because the Store API gate refuses a saved record
+		 * the native city no longer names ({@see \Woodev\Framework\Shipping\Location\Location_Service::get_customer_record()}).
+		 * A store's default locality is a resolved one: an EMPTY city is served by it, a typed,
+		 * unresolved city is not. The caller uses this to say what to do about it instead of the
+		 * generic «choose a pickup point».
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $rate_id Full server rate id.
+		 *
+		 * @return bool `false` when no scope is wired, the rate carries no pickup type, or the locality is `''`.
+		 */
+		public function has_store_api_locality( string $rate_id ): bool {
+			$pair = $this->selection_pair_for_method( explode( ':', $rate_id )[0] );
+
+			return null !== $pair && '' !== $pair['locality'];
+		}
+
+		/**
 		 * Whether this handler was built with a {@see Selection_Scope} — the one thing the Store API
 		 * pickup transport cannot work without (issue #1100).
 		 *

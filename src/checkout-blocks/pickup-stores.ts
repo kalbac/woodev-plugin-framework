@@ -150,6 +150,21 @@ export function resolveView(
 	return { field, owner, confirmed };
 }
 
+/**
+ * Whether the cart holds no RESOLVED locality for the rate the shopper is on (#1110).
+ *
+ * The server answers `owner.locality` from the same scope its confirmation is made against
+ * (`Store_Api_Pickup::owner()`), and a confirmation is refused for EVERY point while that is `''` —
+ * a hand-typed city the chooser never resolved included. So a dialog opened without one is a dead
+ * end: its points would be someone else's locality (the points route is not a Store API request and
+ * falls back to the store's default), and nothing in it could be confirmed. An empty city is not
+ * this case when the store has a default locality: that default is a resolved one and arrives as the
+ * owner's key.
+ */
+export function localityMissing( view: PickupView ): boolean {
+	return view.field !== null && view.owner !== null && view.owner.locality === '';
+}
+
 /** The view as the stores stand at this instant — for the session's live reads. */
 export function currentView( data: PickupData ): PickupView {
 	const namespace = data.namespace ?? '';

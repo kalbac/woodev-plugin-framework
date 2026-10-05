@@ -28,6 +28,7 @@ import { createHost } from './pickup-host';
 import {
 	announcePoint,
 	buildEcho,
+	localityMissing,
 	readConfig,
 	readExtension,
 	readSelectedRateId,
@@ -167,7 +168,11 @@ export function PickupPicker( { data, checkoutExtensionData }: PickupPickerProps
 	 * the authority, this is the shopper's earlier and nearer notice. Only this field's own error
 	 * is ever set or cleared.
 	 */
-	const required = data.i18n?.required ?? '';
+	// While the cart holds no resolved locality no point can be confirmed, and «choose a point» is
+	// not the way out — the message says what is (#1110). The server refuses the order with the same.
+	const noLocality = localityMissing( view );
+	const localityHint = data.i18n?.chooseLocality ?? '';
+	const required = ( noLocality && localityHint !== '' ? localityHint : data.i18n?.required ) ?? '';
 	const needsPoint = errorId !== '' && config !== null && confirmed === null;
 
 	useEffect( () => {
@@ -234,11 +239,21 @@ export function PickupPicker( { data, checkoutExtensionData }: PickupPickerProps
 	}
 
 	const i18n = config.i18n ?? {};
+	// The revealed validation error says the same thing while the locality is missing; one copy only.
+	const showHint = noLocality && localityHint !== '' && visibleError === '';
+	const hintId = `${ errorId }-hint`;
+	const describedBy = visibleError !== '' ? `${ errorId }-error` : showHint ? hintId : undefined;
 
 	const open = (): void => {
 		const api = readSessionApi();
 
 		closeSession();
+
+		// No resolved locality: the dialog would list another locality's points and could confirm
+		// none. The hint under the button is the answer (#1110).
+		if ( noLocality ) {
+			return;
+		}
 
 		if ( ! api ) {
 			setUnavailable( true );
@@ -269,7 +284,8 @@ export function PickupPicker( { data, checkoutExtensionData }: PickupPickerProps
 				type="button"
 				className={ triggerClassName( config ) }
 				aria-haspopup="dialog"
-				aria-describedby={ visibleError !== '' ? `${ errorId }-error` : undefined }
+				aria-disabled={ noLocality ? true : undefined }
+				aria-describedby={ describedBy }
 				onClick={ open }
 			>
 				{ confirmed ? i18n.triggerChange : i18n.trigger }
@@ -277,6 +293,11 @@ export function PickupPicker( { data, checkoutExtensionData }: PickupPickerProps
 			{ confirmed && confirmed.summary !== '' && (
 				<p className="woodev-pickup-block__chosen woodev-pickup-chosen-address">
 					{ i18n.chosenPointAddress } <strong>{ confirmed.summary }</strong>
+				</p>
+			) }
+			{ showHint && (
+				<p id={ hintId } className="woodev-pickup-block__hint" role="status">
+					{ localityHint }
 				</p>
 			) }
 			{ visibleError !== '' && (
