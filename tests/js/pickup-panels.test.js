@@ -602,6 +602,119 @@ describe( 'setSelectedId does not rebuild the list for an unchanged id (#172)', 
 } );
 
 // -----------------------------------------------------------------------
+// #1109: a single-point row is a `<div>`; it must be reachable and operable from the keyboard
+// exactly like the co-located group's real `<button>`s — role, tab stop, Enter, Space, and the
+// SAME `openCard()` path a click takes.
+// -----------------------------------------------------------------------
+
+describe( 'single-point row keyboard selection (#1109)', () => {
+	const press = ( el, key ) => {
+		const event = new window.KeyboardEvent( 'keydown', { key, bubbles: true, cancelable: true } );
+
+		el.dispatchEvent( event );
+
+		return event;
+	};
+
+	const setup = () => {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, config );
+		const g = group( 'g1', 55.75, 37.61, 'ПВЗ' );
+		const seen = [];
+
+		panels.render();
+		panels.setVisible( [ g ] );
+		panels.on( 'cardOpened', ( payload ) => seen.push( payload ) );
+
+		return { container, panels, g, seen, row: container.querySelector( '.woodev-pickup-list__item' ) };
+	};
+
+	it( 'exposes role="button" and a tab stop', () => {
+		const { row } = setup();
+
+		expect( row.getAttribute( 'role' ) ).toBe( 'button' );
+		expect( row.getAttribute( 'tabindex' ) ).toBe( '0' );
+		expect( row.hasAttribute( 'aria-current' ) ).toBe( false );
+	} );
+
+	it( 'Enter opens the card through the same path as a click', () => {
+		const { row, g, seen } = setup();
+
+		const event = press( row, 'Enter' );
+
+		expect( seen ).toEqual( [ { group: g, pointId: g.points[ 0 ].id, origin: 'list' } ] );
+		expect( event.defaultPrevented ).toBe( true );
+	} );
+
+	it( 'Space opens the card and does not scroll the page', () => {
+		const { row, g, seen } = setup();
+
+		const event = press( row, ' ' );
+
+		expect( seen ).toEqual( [ { group: g, pointId: g.points[ 0 ].id, origin: 'list' } ] );
+		expect( event.defaultPrevented ).toBe( true );
+	} );
+
+	it( 'ignores other keys and leaves them alone', () => {
+		const { row, seen } = setup();
+
+		const event = press( row, 'a' );
+		press( row, 'Tab' );
+
+		expect( seen ).toHaveLength( 0 );
+		expect( event.defaultPrevented ).toBe( false );
+	} );
+
+	it( 'ignores a keydown that bubbles up from a descendant', () => {
+		const { row, seen } = setup();
+
+		press( row.querySelector( '.woodev-pickup-list__address' ), 'Enter' );
+
+		expect( seen ).toHaveLength( 0 );
+	} );
+
+	it( 'a click still opens the card exactly once, unchanged', () => {
+		const { row, g, seen } = setup();
+
+		row.click();
+
+		expect( seen ).toEqual( [ { group: g, pointId: g.points[ 0 ].id, origin: 'list' } ] );
+	} );
+
+	it( 'marks the selected row with aria-current', () => {
+		const panels = new Panels( document.createElement( 'div' ), config );
+		panels.render();
+		panels.setSelectedId( 'p2' );
+		panels.setVisible( [ group( 'p1', 55.75, 37.61, 'ПВЗ 1' ), group( 'p2', 55.76, 37.61, 'ПВЗ 2' ) ] );
+
+		const rows = panels.root.querySelectorAll( '.woodev-pickup-list__item' );
+
+		expect( rows[ 0 ].hasAttribute( 'aria-current' ) ).toBe( false );
+		expect( rows[ 1 ].getAttribute( 'aria-current' ) ).toBe( 'true' );
+	} );
+
+	it( 'marks only the selected point of a co-located group with aria-current', () => {
+		const panels = new Panels( document.createElement( 'div' ), config );
+		panels.render();
+		panels.setSelectedId( 'b' );
+		panels.setVisible( [ {
+			key: 'g1', lat: 55.75, lng: 37.61, size: 2,
+			points: [
+				{ id: 'a', name: 'ПВЗ', short_address: 'x' },
+				{ id: 'b', name: 'Постамат', short_address: 'y' },
+			],
+		} ] );
+
+		const buttons = panels.root.querySelectorAll( '.woodev-pickup-list__point' );
+
+		expect( buttons[ 0 ].hasAttribute( 'aria-current' ) ).toBe( false );
+		expect( buttons[ 1 ].getAttribute( 'aria-current' ) ).toBe( 'true' );
+		// The co-located rows are real buttons: no role/tabindex of ours on the wrapper item.
+		expect( panels.root.querySelector( '.woodev-pickup-list__item' ).hasAttribute( 'role' ) ).toBe( false );
+	} );
+} );
+
+// -----------------------------------------------------------------------
 // Round 2 (D6): `openCard( group, pointId, origin )` — `origin` is what lets the mount tell a
 // marker click (pan only) apart from every other route (zoom in), now that the original V-10
 // "must behave identically" claim has been overruled (see the file docblock's revised

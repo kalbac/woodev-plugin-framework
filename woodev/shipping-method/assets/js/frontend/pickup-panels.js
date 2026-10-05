@@ -1110,6 +1110,9 @@
 				button.className = 'woodev-pickup-list__point'
 					+ ( null !== selectedId && String( point.id ) === selectedId ? ' is-selected' : '' );
 				button.dataset.pointId = String( point.id );
+				if ( null !== selectedId && String( point.id ) === selectedId ) {
+					button.setAttribute( 'aria-current', 'true' );
+				}
 				button.appendChild( buildSinglePointRow( point, anchor, group, self._config ) );
 				button.addEventListener( 'click', function() {
 					self.openCard( group, point.id, 'list' );
@@ -1122,12 +1125,40 @@
 
 		var onlyPoint = points[ 0 ];
 		item.appendChild( buildSinglePointRow( onlyPoint, anchor, group, self._config ) );
-		item.addEventListener( 'click', function() {
+
+		// A single-point row stays a `<div>` (the grid in `pickup.css` and the `:has()` selector
+		// that tells it from a co-located group are written against it), so it is made a button
+		// by hand: `role="button"` + `tabindex="0"` + Enter/Space below. Same pattern as the
+		// co-located group's per-point rows just above, which ARE real `<button>`s — a listbox
+		// would have contradicted them (an `option` cannot contain a button, and this list mixes
+		// both shapes plus a toggle and empty/nothing-nearby states). `openCard` is the ONE
+		// activation path: click and keyboard both call it with the same arguments.
+		var activate = function() {
 			self.openCard( group, onlyPoint.id, 'list' );
+		};
+
+		item.setAttribute( 'role', 'button' );
+		item.setAttribute( 'tabindex', '0' );
+		item.addEventListener( 'click', activate );
+		item.addEventListener( 'keydown', function( event ) {
+			// Only the row's own key presses: a keydown bubbling from a descendant is not ours.
+			if ( event.target !== item ) {
+				return;
+			}
+
+			if ( 'Enter' === event.key ) {
+				event.preventDefault();
+				activate();
+			} else if ( ' ' === event.key || 'Spacebar' === event.key ) {
+				// preventDefault stops the dialog's scroll container from paging down on Space.
+				event.preventDefault();
+				activate();
+			}
 		} );
 
 		if ( null !== selectedId && String( onlyPoint.id ) === selectedId ) {
 			item.classList.add( 'is-selected' );
+			item.setAttribute( 'aria-current', 'true' );
 		}
 
 		return item;
