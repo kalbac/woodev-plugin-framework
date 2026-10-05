@@ -179,6 +179,10 @@ export function writeDeliveryLocality( city: string, state: string | null, billi
 	const patch = state === null ? { city } : { city, state };
 
 	actions?.setBillingAddress?.( { ...readBillingAddress(), ...patch } );
+	// WooCommerce mirrors every billing edit to the shipping store in forced mode. Programmatic
+	// address writes do not run its mount-only synchronization, but framework consumers still read
+	// shippingAddress for locality and pickup context.
+	actions?.setShippingAddress?.( { ...readShippingAddress(), ...patch } );
 }
 
 /**

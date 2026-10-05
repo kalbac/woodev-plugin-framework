@@ -125,16 +125,25 @@ export interface LocalityChooserProps {
 	retryDelayMs?: number;
 }
 
-export function LocalityChooser( {
+export function LocalityChooser( props: LocalityChooserProps ): JSX.Element | null {
+	const coreBillingOnly = wcRuntime()?.wcSettings?.getSetting?.< boolean >( 'forcedBillingAddress', false ) === true;
+	const needsShipping = useSelect( ( registrySelect ) => cartNeedsShipping( registrySelect ), [] );
+	const billingOnly = props.addressTarget === 'billing';
+	// WooCommerce's flag decides which parent is on the page. If server data says billing-only but
+	// core renders shipping fields, the shipping chooser is the safe fallback. If core says billing-only
+	// without matching server publication, there is no server-backed billing chooser to mount.
+	const active = needsShipping && ( billingOnly ? props.config.billingOnly === true && coreBillingOnly : ! coreBillingOnly );
+
+	return active ? <ActiveLocalityChooser { ...props } /> : null;
+}
+
+function ActiveLocalityChooser( {
 	config,
 	addressTarget = 'shipping',
 	retryDelayMs = FORGET_RETRY_DELAY_MS,
 }: LocalityChooserProps ): JSX.Element | null {
 	const billingOnly = addressTarget === 'billing';
-	const getSetting = wcRuntime()?.wcSettings?.getSetting;
-	const coreBillingOnly = typeof getSetting === 'function' && getSetting< boolean >( 'forcedBillingAddress', false ) === true;
 	const address: WcAddress = useSelect( ( registrySelect ) => readDeliveryAddress( billingOnly, registrySelect ), [ billingOnly ] );
-	const needsShipping = useSelect( ( registrySelect ) => cartNeedsShipping( registrySelect ), [] );
 	const authoritative: boolean = useSelect(
 		( registrySelect ) => isDeliveryAddressAuthoritative( billingOnly, registrySelect ),
 		[ billingOnly ]
@@ -163,7 +172,6 @@ export function LocalityChooser( {
 	/** Generation of the pick being saved; 0 when none is. */
 	const [ applying, setApplying ] = useState( 0 );
 	const [ syncFailed, setSyncFailed ] = useState( false );
-	const modeAgrees = config.billingOnly === billingOnly && config.billingOnly === coreBillingOnly;
 
 	const sequence = useRef( 0 );
 	const abort = useRef< AbortController | null >( null );
@@ -427,7 +435,7 @@ export function LocalityChooser( {
 		forget();
 	}, [ commit, forget ] );
 
-	if ( ! modeAgrees || ! needsShipping || ! supported ) {
+	if ( ! supported ) {
 		return null;
 	}
 

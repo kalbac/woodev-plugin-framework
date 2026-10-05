@@ -79,10 +79,16 @@ class LocalityBlocksTest extends TestCase {
 		Locality_Blocks::register_integration( $registry );
 	}
 
-	public function test_register_block_types_registers_the_block_from_its_block_json(): void {
+	public function test_register_block_types_registers_only_the_shipping_block_in_shipping_mode(): void {
+		Functions\when( 'get_option' )->justReturn( 'shipping' );
+		Functions\expect( 'register_block_type' )->once()->with( Mockery::type( 'string' ) );
+
+		Locality_Blocks::register_block_types();
+	}
+
+	public function test_register_block_types_also_registers_billing_block_in_billing_only_mode(): void {
 		Functions\when( 'get_option' )->justReturn( 'billing_only' );
-		Functions\expect( 'register_block_type' )
-			->twice();
+		Functions\expect( 'register_block_type' )->twice();
 
 		Locality_Blocks::register_block_types();
 	}
