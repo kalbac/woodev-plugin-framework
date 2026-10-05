@@ -62,6 +62,31 @@ export function readLocalityData(): LocalityData | null {
 	return data && typeof data === 'object' ? data : null;
 }
 
+/**
+ * Asks the cart store for its cart WHILE THE BUNDLE IS BEING EVALUATED, so the store resolves it
+ * from the server on every page load and never stands on its persisted copy alone (#1111).
+ *
+ * WooCommerce keeps the cart store in `localStorage.storeApiCartData`. When `storeApiCartHash`
+ * equals the `woocommerce_cart_hash` cookie it starts the store from that copy and, on the window's
+ * `load`, marks `getCartData` resolved WITHOUT running its resolver — the cart the page preloaded is
+ * never applied (11.1 `wc-blocks-data.js`: `Wi()` and the `load` listener; 9.9.0
+ * `data/cart/index.ts` and `persistence-layer.ts`). The hash covers the cart's items and total only
+ * (`WC_Cart::get_cart_hash()`), so the copy persisted before an order still matches the same
+ * product added again: the store then shows that order's rate as selected and its pickup point as
+ * confirmed, the server holds neither, and the order is refused.
+ *
+ * A selector call queues its resolver, and a resolver once queued runs whatever marks the selector
+ * resolved in the meantime (`@wordpress/data`, `fulfillSelector()`). Made here — before `load` — it
+ * is therefore the page's own cart the store ends up with: core's resolver reads
+ * `/wc/store/v1/cart`, which the Checkout page preloads, so this costs no request there. On a first
+ * visit it changes nothing: the resolver runs anyway.
+ */
+export function resolveCartFromServer(): void {
+	const selectors = select( CART_STORE ) as unknown as CartSelectors | undefined;
+
+	selectors?.getCartData?.();
+}
+
 /** `countryData[ country ].states` — the FINAL `woocommerce_states` list for the country. */
 export function readCountryStates( country: string ): CountryStates {
 	const getSetting = wcRuntime()?.wcSettings?.getSetting;

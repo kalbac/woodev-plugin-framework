@@ -7,8 +7,15 @@
 
 import { registerLocalityBlock, registerPickupBlock } from './register';
 import { captureWcRuntime } from './wc-runtime';
+import { resolveCartFromServer } from './wc-stores';
 
 // First: every later read of a WooCommerce global answers from this capture.
 captureWcRuntime();
-registerLocalityBlock();
-registerPickupBlock();
+
+const locality = registerLocalityBlock();
+const pickup = registerPickupBlock();
+
+// Both blocks render from the cart store; a checkout neither is on is left to core as it is (#1111).
+if ( locality || pickup ) {
+	resolveCartFromServer();
+}

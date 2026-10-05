@@ -670,15 +670,18 @@ are ONE session (same point, either can confirm or place); a stranger's token to
   Store API locality command is a follow-up, never a loosened REST nonce.
 - **`address_field` / `postcode_field = hide_for_pickup` are classic-only.** On the block checkout a
   pickup order still demands the native Postcode, which a point without one does not supply.
-- **WooCommerce's own persisted cart can show a point the server has dropped.** Core 11.1 keeps the
-  cart in `localStorage.storeApiCartData` and, when `storeApiCartHash` equals the `woocommerce_cart_hash`
-  cookie, starts the cart store from it and finishes `getCartData` WITHOUT applying the page's preload
-  or fetching (`wc-blocks-data.js`, `Wi()` and the `load` listener). The hash covers the cart's
-  contents only. Measured: checkout reloaded with a point chosen → order placed → the same product
-  added again → the block checkout shows the old rate selected and «Chosen pickup point: …», while
-  the server holds the default rate and an emptied selection. The order is refused («…choose a pickup
-  point…») and the page stays in that state until the shopper clicks another rate. The selected RATE
-  is stale by the same mechanism, so this is not ours alone — but our button repeats it.
+- **WooCommerce's own persisted cart is PAINTED before the server's (#1111, fixed s154 — the flash
+  remains).** Core (9.9.0 and 11.1 alike) keeps the cart in `localStorage.storeApiCartData` and, when
+  `storeApiCartHash` equals the `woocommerce_cart_hash` cookie, starts the cart store from it and
+  finishes `getCartData` WITHOUT applying the page's preload or fetching (`wc-blocks-data.js`, `Wi()`
+  and the `load` listener). The hash covers the cart's items and total only, so the copy persisted
+  before an order matches the same product added again: old rate selected, «Chosen pickup point: …»,
+  order refused. The bundle now asks for the cart while it is evaluated (`resolveCartFromServer()`),
+  which queues core's resolver before `load` — the store ends on the page's preloaded cart, with no
+  request. Measured on the rig: 0 of 8 stale loads (4 of 8 without it). What is left is core's own
+  first paint from the persisted copy: the old rate and point are on screen for 5–40 ms (≈ 250–300 ms
+  at 6× CPU throttle) before the server's cart replaces them. A form edit that never reached the
+  server no longer survives a reload, as on any first visit.
 - **A core parent missing from the saved page** renders without our forced children (gotcha
   `a-forced-inner-block-does-not-render-inside-a-parent-woocommerce-forced-in`); no notice yet.
 - **The carrier marker is write-only**: a retry order re-placed on another carrier's rate keeps the
