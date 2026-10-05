@@ -177,6 +177,15 @@ function woodev_test_shipping_method_plugin_loader_definition(): array {
 		],
 		'main_class'        => 'Woodev_Test_Shipping_Method_Plugin',
 		'callback'          => 'woodev_test_shipping_method_plugin_init',
+		// The fixture ships the SP-11 block-checkout surface; without this the bootstrap declares it
+		// incompatible and WooCommerce shows admins a «may not be compatible» notice on the block checkout.
+		'supported_features' => [
+			'hpos'   => true,
+			'blocks' => [
+				'cart'     => true,
+				'checkout' => true,
+			],
+		],
 	];
 }
 
