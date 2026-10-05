@@ -38,6 +38,12 @@ export interface WcRuntime {
 		 */
 		extensionCartUpdate?: ( args: { namespace: string; data: unknown } ) => Promise< unknown >;
 	};
+	/** Public WooCommerce checkout event subscriptions (`wc-blocks-checkout-events.js`). */
+	blocksCheckoutEvents?: {
+		checkoutEvents?: {
+			onCheckoutFail?: ( listener: () => void ) => () => void;
+		};
+	};
 	/** The public payment registry, keyed by registration `name` (the `wc-blocks-registry` handle). */
 	wcBlocksRegistry?: {
 		getPaymentMethods?: () => Record< string, PaymentRegistration | undefined >;
@@ -64,14 +70,19 @@ let captured: WcRuntime | undefined;
  * is never found, and the store's console reports «an inline or unknown script accessed
  * wc.wcSettings without proper dependency declaration» for a dependency that IS declared.
  *
- * The three keys are the handles `Locality_Blocks_Integration` declares, so each is in place by now.
+ * These keys are the handles `Locality_Blocks_Integration` declares, so each is in place by now.
  * Called with no `window.wc` it forgets the capture, and reads are live again.
  */
 export function captureWcRuntime(): void {
 	const wc = ( window as unknown as { wc?: WcRuntime } ).wc;
 
 	captured = wc
-		? { blocksCheckout: wc.blocksCheckout, wcBlocksRegistry: wc.wcBlocksRegistry, wcSettings: wc.wcSettings }
+		? {
+			blocksCheckout: wc.blocksCheckout,
+			blocksCheckoutEvents: wc.blocksCheckoutEvents,
+			wcBlocksRegistry: wc.wcBlocksRegistry,
+			wcSettings: wc.wcSettings,
+		}
 		: undefined;
 }
 

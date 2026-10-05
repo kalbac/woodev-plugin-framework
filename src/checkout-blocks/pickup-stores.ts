@@ -34,6 +34,10 @@ import { wcRuntime } from './wc-runtime';
 
 export const PAYMENT_STORE = 'wc/store/payment';
 export const VALIDATION_STORE = 'wc/store/validation';
+export const NOTICES_STORE = 'core/notices';
+
+/** The notice context the checkout shows at the top of its form (WooCommerce's `noticeContexts.CHECKOUT`). */
+export const CHECKOUT_NOTICES = 'wc/checkout';
 
 /** The Store API error code every pickup refusal carries (`Store_Api_Pickup::refuse()`). */
 export const REFUSAL_CODE = 'woodev_pickup_validation';
@@ -53,6 +57,11 @@ interface PaymentSelectors {
 
 interface ValidationSelectors {
 	getValidationError?: ( id: string ) => { message?: string; hidden?: boolean } | undefined;
+}
+
+interface NoticeActions {
+	createErrorNotice?: ( message: string, options: { id: string; context: string; isDismissible: boolean } ) => void;
+	removeNotice?: ( id: string, context: string ) => void;
 }
 
 interface ValidationActions {
@@ -265,6 +274,27 @@ function movableAddress( billingIsShipping: boolean ): string {
 }
 
 /**
+ * `address` — a {@link movableAddress} value — as a confirmation's own move leaves it: the fields
+ * `destination` names hold the point's, in every address the value covers.
+ *
+ * That is what the store reads when the reply lands and the shopper has no unsaved edit: core takes
+ * the reply's addresses into the cart store BEFORE `extensionCartUpdate()` resolves (WooCommerce
+ * 11.1, `wc-blocks-data.js`: `gi=` — `receiveCart( response )`, addresses included unless
+ * `WOOCOMMERCE_CHECKOUT_IS_CUSTOMER_DATA_DIRTY`), and the server has already moved them.
+ */
+function asMovedTo( address: string | null, destination: PickupDestination ): string | null {
+	if ( address === null ) {
+		return null;
+	}
+
+	const take = ( fields: string[] | null ): string[] | null =>
+		fields && [ destination.address_1 ?? fields[ 0 ], destination.postcode ?? fields[ 1 ] ];
+	const [ shipping, billing ] = JSON.parse( address ) as [ string[], string[] | null ];
+
+	return JSON.stringify( [ take( shipping ), take( billing ) ] );
+}
+
+/**
  * Whether the reply's snapshot is the server's confirmation of the command for `pointId`: that
  * point, or the one the server corrected it to. A domain may correct the point while confirming
  * (`woodev_shipping_pickup_point_selection`); the server then keeps the CORRECTED point, the
@@ -315,8 +345,10 @@ function confirmsCommand( snapshot: PickupSnapshot, pointId: string ): boolean {
  *   what they were when the point was ASKED for — the shopper dismissed the dialog and typed
  *   their own, on the same rate. Theirs is the newer word; core pushes it, and the server then
  *   drops the confirmation it made for the point's address. The fields are read at the click, not
- *   when the command leaves (it may wait behind another one), and the one change that is not the
- *   shopper's — an earlier confirmation's own move — is told apart (`addressAsMoved`).
+ *   when the command leaves (it may wait behind another one), and the changes that are not the
+ *   shopper's are told apart: an earlier confirmation's own move (`addressAsMoved`), and this
+ *   reply's — core takes the reply's addresses into the store before the reply reaches this code
+ *   whenever the shopper has no unsaved edit (`asMovedTo()`, #1091).
  */
 export function confirmPoint(
 	namespace: string,
@@ -400,8 +432,16 @@ async function sendConfirmation(
 
 	if ( destination ) {
 		const now = movableAddress( billingIsShipping );
+		// Untouched since the point was asked for — or changed only by a confirmation's move: an
+		// earlier one's, or this very reply's, which core has already taken into the store.
+		const untouched = [
+			asked,
+			addressAsMoved,
+			asMovedTo( asked, destination ),
+			asMovedTo( addressAsMoved, destination ),
+		];
 
-		if ( now !== asked && now !== addressAsMoved ) {
+		if ( ! untouched.includes( now ) ) {
 			throw { status: 0, code: 'woodev_pickup_superseded', message: '' } as PickupFailure;
 		}
 
@@ -453,6 +493,25 @@ export function releasePoint( id: string ): void {
 	const actions = dispatch( VALIDATION_STORE ) as unknown as ValidationActions | undefined;
 
 	actions?.clearValidationError?.( id );
+}
+
+/**
+ * Says a REVEALED «choose a pickup point» error in the checkout's own notices, at the top of the
+ * form — where WooCommerce scrolls to when it refuses to place the order and none of its own fields
+ * is invalid. Keyed by the error's id, so saying it again replaces it; not dismissible, so it is
+ * there on every further attempt until {@link withdrawPoint}.
+ */
+export function announcePoint( id: string, message: string ): void {
+	const actions = dispatch( NOTICES_STORE ) as unknown as NoticeActions | undefined;
+
+	actions?.createErrorNotice?.( message, { id, context: CHECKOUT_NOTICES, isDismissible: false } );
+}
+
+/** Takes ONE field's own notice back — never another notice of the checkout. */
+export function withdrawPoint( id: string ): void {
+	const actions = dispatch( NOTICES_STORE ) as unknown as NoticeActions | undefined;
+
+	actions?.removeNotice?.( id, CHECKOUT_NOTICES );
 }
 
 /** The message to show for `id`, or `''` while there is no error or it is still hidden. */

@@ -11,7 +11,9 @@ import { useSyncExternalStore as mockUseSyncExternalStore } from 'react';
  * Two pieces of core behaviour are reproduced because the button's guarantees depend on them, both
  * read from WooCommerce 11.1 (`wc-blocks-data.js`: `gi=`, `Na=`):
  * - `extensionCartUpdate()` takes the server's cart into the store BEFORE it resolves, and rejects
- *   with the Store API's error object;
+ *   with the Store API's error object. The cart's ADDRESSES are part of that whenever the shopper
+ *   has no unsaved edit (`WOOCOMMERCE_CHECKOUT_IS_CUSTOMER_DATA_DIRTY`) — the tests that depend on
+ *   it say so (`coreTakesReplyAddress`, #1091);
  * - `disableCheckoutFor( work )` counts a calculation for as long as `work()` is unsettled.
  */
 type Rate = { rate_id: string; selected: boolean };
@@ -27,8 +29,13 @@ const mockStore = {
 	/** How many `disableCheckoutFor` calls were unsettled at each address write. */
 	addressWrites: [] as number[],
 	validation: {} as Record< string, { message: string; hidden: boolean } >,
+	/** `core/notices`, by notice id: what the checkout shows in its own notice areas. */
+	notices: {} as Record< string, { message: string; context: string; isDismissible: boolean } >,
+	/** `true` simulates a page where the `core/notices` store offers no such actions. */
+	withoutNotices: false,
 	/** How many `disableCheckoutFor` calls are unsettled: Place Order is blocked while > 0. */
 	calculating: 0,
+	refreshes: [] as unknown[][],
 	listeners: new Set< () => void >(),
 };
 
@@ -55,6 +62,10 @@ jest.mock( '@wordpress/data', () => {
 				mockStore.billing = address;
 				mockStore.addressWrites.push( mockStore.calculating );
 			},
+			updateCustomerData: ( ...args: unknown[] ) => {
+				mockStore.refreshes.push( args );
+				return Promise.resolve();
+			},
 			setValidationErrors: ( errors: Record< string, { message: string; hidden: boolean } > ) => {
 				mockStore.validation = { ...mockStore.validation, ...errors };
 				notify();
@@ -65,6 +76,25 @@ jest.mock( '@wordpress/data', () => {
 				mockStore.validation = rest;
 				notify();
 			},
+			...( mockStore.withoutNotices
+				? {}
+				: {
+						createErrorNotice: (
+							message: string,
+							options: { id: string; context: string; isDismissible: boolean }
+						) => {
+							mockStore.notices[ options.id ] = {
+								message,
+								context: options.context,
+								isDismissible: options.isDismissible,
+							};
+						},
+						removeNotice: ( id: string, context: string ) => {
+							if ( mockStore.notices[ id ]?.context === context ) {
+								delete mockStore.notices[ id ];
+							}
+						},
+				  } ),
 			disableCheckoutFor: async ( work: () => Promise< unknown > ) => {
 				mockStore.calculating++;
 
@@ -171,6 +201,11 @@ const serverAnswers = ( rate: string, point: PickupSnapshot | null ): void => {
 
 const extensionCartUpdate = jest.fn();
 const setExtensionData = jest.fn();
+const checkoutFailListeners = new Set< () => void | Promise< void > >();
+const subscribeCheckoutFail = jest.fn( ( listener: () => void | Promise< void > ) => {
+	checkoutFailListeners.add( listener );
+	return () => checkoutFailListeners.delete( listener );
+} );
 
 /**
  * The cart `extensionCartUpdate()` resolves with — taken into the store first, as core does
@@ -218,21 +253,42 @@ beforeEach( () => {
 	mockStore.useShippingAsBilling = false;
 	mockStore.addressWrites = [];
 	mockStore.validation = {};
+	mockStore.notices = {};
+	mockStore.withoutNotices = false;
 	mockStore.calculating = 0;
+	mockStore.refreshes = [];
 	mockStore.listeners.clear();
 	chooseRate( PICKUP_RATE );
 	serverAnswers( PICKUP_RATE, null );
 	extensionCartUpdate.mockReset();
 	setExtensionData.mockReset();
+	checkoutFailListeners.clear();
+	subscribeCheckoutFail.mockClear();
 
 	const page = window as unknown as Record< string, unknown >;
 
 	page.woodev_pickup_config_carrier = config;
-	page.wc = { blocksCheckout: { extensionCartUpdate } };
+	page.wc = {
+		blocksCheckout: { extensionCartUpdate },
+		blocksCheckoutEvents: { checkoutEvents: { onCheckoutFail: subscribeCheckoutFail } },
+	};
 	delete page.WoodevPickupSession;
 } );
 
 describe( 'PickupPicker — shown for the framework’s pickup rates only', () => {
+	it( 'refreshes the cart through WooCommerce after a failed checkout attempt', async () => {
+		renderPicker();
+
+		expect( subscribeCheckoutFail ).toHaveBeenCalledTimes( 1 );
+		const onFailure = [ ...checkoutFailListeners ][ 0 ];
+
+		act( () => {
+			expect( onFailure() ).toBeUndefined();
+		} );
+
+		expect( mockStore.refreshes ).toEqual( [ [ { shipping_address: { city: 'Москва', state: '', country: 'RU' } }, true, true ] ] );
+	} );
+
 	it( 'shows the button for a rate the server says one of our fields owns', () => {
 		renderPicker();
 
@@ -585,6 +641,109 @@ describe( 'PickupPicker — the store’s address-replacement policy (#1089)', (
 
 		expect( mockStore.addressWrites ).toEqual( [] );
 	} );
+
+	/*
+	 * #1091, measured in the browser against WooCommerce 11.1: the shopper's street has been pushed
+	 * (nothing unsaved), so core takes the reply's shipping address — already the point's — into the
+	 * cart store BEFORE `extensionCartUpdate()` resolves. That is this confirmation's own move, not
+	 * an edit: the dialog must get the verdict (it showed «Could not confirm your choice» over a
+	 * point the server had kept), and billing must still follow where the two are one address.
+	 */
+	describe( 'when core has already taken the reply’s address into the store (#1091)', () => {
+		/** `extensionCartUpdate()` as core runs it for a shopper with no unsaved edit. */
+		const coreTakesReplyAddress = ( destination: Record< string, string >, over: Partial< PickupSnapshot > = {} ) =>
+			extensionCartUpdate.mockImplementationOnce( async () => {
+				serverAnswers( PICKUP_RATE, snapshot( { destination, ...over } as Partial< PickupSnapshot > ) );
+				mockStore.shipping = { ...mockStore.shipping, ...destination };
+				notify();
+
+				return { extensions: mockStore.extensions };
+			} );
+
+		it( 'answers the dialog with the verdict instead of «superseded»', async () => {
+			const session = fakeSession();
+
+			coreTakesReplyAddress( MOVED );
+			renderPicker();
+			fireEvent.click( trigger() as HTMLElement );
+
+			let verdict: unknown;
+
+			await act( async () => {
+				verdict = await session.host().confirmSelection( { id: 'P1' } );
+			} );
+
+			expect( verdict ).toMatchObject( { allowed: true } );
+			expect( mockStore.shipping ).toEqual( { ...HOME, ...MOVED } );
+			// Core wrote the shipping address; nothing was left for the block to write.
+			expect( mockStore.addressWrites ).toEqual( [] );
+		} );
+
+		it( 'still moves the billing address where the two are one address', async () => {
+			const session = fakeSession();
+
+			mockStore.useShippingAsBilling = true;
+			coreTakesReplyAddress( MOVED );
+			renderPicker();
+			fireEvent.click( trigger() as HTMLElement );
+
+			await act( async () => {
+				await session.host().confirmSelection( { id: 'P1' } );
+			} );
+
+			expect( mockStore.billing ).toEqual( { ...HOME, ...MOVED } );
+		} );
+
+		it( 'takes a second point’s move that names the street only, after the first moved the postcode too', async () => {
+			const session = fakeSession();
+			const ARBAT = { address_1: 'Арбат, 2' };
+
+			coreTakesReplyAddress( MOVED );
+			coreTakesReplyAddress( ARBAT, { point_id: 'P2' } );
+			renderPicker();
+			fireEvent.click( trigger() as HTMLElement );
+
+			const host = session.host();
+			let second: unknown;
+
+			await act( async () => {
+				// Both asked before either answered: the second was asked for the shopper's own address.
+				const first = host.confirmSelection( { id: 'P1' } );
+
+				second = await host.confirmSelection( { id: 'P2' } );
+				await first;
+			} );
+
+			expect( second ).toMatchObject( { allowed: true } );
+			expect( mockStore.shipping ).toEqual( { ...HOME, ...MOVED, ...ARBAT } );
+		} );
+
+		it( 'still leaves a street the shopper typed while the confirmation was in flight', async () => {
+			const session = fakeSession();
+
+			// The edit is unsaved, so core keeps the reply's addresses out of the store.
+			extensionCartUpdate.mockImplementationOnce( async () => {
+				mockStore.shipping = { ...HOME, address_1: 'New manual street' };
+				serverAnswers( PICKUP_RATE, snapshot( { destination: MOVED } as Partial< PickupSnapshot > ) );
+				notify();
+
+				return { extensions: mockStore.extensions };
+			} );
+			renderPicker();
+			fireEvent.click( trigger() as HTMLElement );
+
+			let error: unknown;
+
+			await act( async () => {
+				await session.host().confirmSelection( { id: 'P1' } ).catch( ( reason: unknown ) => {
+					error = reason;
+				} );
+			} );
+
+			expect( error ).toMatchObject( { code: 'woodev_pickup_superseded' } );
+			expect( mockStore.shipping ).toEqual( { ...HOME, address_1: 'New manual street' } );
+		} );
+	} );
 } );
 
 describe( 'PickupPicker — server refusals', () => {
@@ -677,6 +836,95 @@ describe( 'PickupPicker — a required point blocks the order', () => {
 
 		expect( screen.getByRole( 'alert' ) ).toHaveTextContent( 'Please choose a pickup point.' );
 		expect( trigger() ).toHaveAttribute( 'aria-describedby', `${ ERROR_ID }-error` );
+	} );
+
+	/*
+	 * #1091, measured on a phone viewport against WooCommerce 11.1: Place Order was pressed with
+	 * every native field valid and no point chosen. Core then scrolls to the TOP of the checkout —
+	 * it goes to an invalid field only when the field is its own — so the message under the button
+	 * was ~700 px out of view, nothing at the top said anything, and the button looked dead.
+	 */
+	describe( 'when WooCommerce reveals the error (#1091)', () => {
+		const REVEALED = { message: 'Please choose a pickup point.', hidden: false };
+		const NOTICE = { message: 'Please choose a pickup point.', context: 'wc/checkout', isDismissible: false };
+		const reveal = (): void =>
+			act( () => {
+				mockStore.validation = { ...mockStore.validation, [ ERROR_ID ]: REVEALED };
+				notify();
+			} );
+
+		it( 'says it in the checkout’s own notices too, where core scrolls to', () => {
+			renderPicker();
+
+			// A hidden error blocks the order; it is not shown anywhere yet.
+			expect( mockStore.notices ).toEqual( {} );
+
+			reveal();
+
+			expect( mockStore.notices ).toEqual( { [ ERROR_ID ]: NOTICE } );
+			// The message under the button stays, tied to it.
+			expect( screen.getByRole( 'alert' ) ).toHaveTextContent( 'Please choose a pickup point.' );
+		} );
+
+		it( 'takes the notice back once a point is confirmed', () => {
+			renderPicker();
+			reveal();
+
+			act( () => {
+				cartAnswer( PICKUP_RATE, snapshot() );
+			} );
+
+			expect( mockStore.notices ).toEqual( {} );
+		} );
+
+		it( 'takes the notice back when the shopper leaves the rate, and when the block goes away', () => {
+			const { unmount } = renderPicker();
+
+			reveal();
+
+			act( () => {
+				chooseRate( COURIER_RATE );
+				notify();
+			} );
+
+			expect( mockStore.notices ).toEqual( {} );
+
+			act( () => {
+				chooseRate( PICKUP_RATE );
+				notify();
+			} );
+			reveal();
+			expect( mockStore.notices ).toEqual( { [ ERROR_ID ]: NOTICE } );
+
+			unmount();
+
+			expect( mockStore.notices ).toEqual( {} );
+		} );
+
+		it( 'still shows the message under the button where the page has no notices to say it in', () => {
+			mockStore.withoutNotices = true;
+
+			const { unmount } = renderPicker();
+
+			reveal();
+
+			expect( screen.getByRole( 'alert' ) ).toHaveTextContent( 'Please choose a pickup point.' );
+			expect( mockStore.validation[ ERROR_ID ] ).toEqual( REVEALED );
+			expect( () => unmount() ).not.toThrow();
+		} );
+
+		it( 'never touches another notice of the checkout', () => {
+			mockStore.notices.payment = { message: 'Card declined', context: 'wc/checkout', isDismissible: true };
+
+			const { unmount } = renderPicker();
+
+			reveal();
+			unmount();
+
+			expect( mockStore.notices ).toEqual( {
+				payment: { message: 'Card declined', context: 'wc/checkout', isDismissible: true },
+			} );
+		} );
 	} );
 
 	it( 'clears only its own error when the block goes away', () => {
@@ -1688,12 +1936,13 @@ describe( 'the WooCommerce globals are taken once, at evaluation', () => {
 
 		captureWcRuntime();
 
-		expect( [ ...reads ].sort() ).toEqual( [ 'blocksCheckout', 'wcBlocksRegistry', 'wcSettings' ] );
+		expect( [ ...reads ].sort() ).toEqual( [ 'blocksCheckout', 'blocksCheckoutEvents', 'wcBlocksRegistry', 'wcSettings' ] );
 
 		reads.length = 0;
 
 		expect( wcRuntime()?.wcSettings?.getSetting ).toBe( getSetting );
 		expect( wcRuntime()?.blocksCheckout?.extensionCartUpdate ).toBe( extensionCartUpdate );
+		expect( wcRuntime()?.blocksCheckoutEvents?.checkoutEvents?.onCheckoutFail ).toBeUndefined();
 		expect( wcRuntime()?.wcBlocksRegistry?.getPaymentMethods ).toBe( getPaymentMethods );
 		expect( reads ).toEqual( [] );
 	} );
