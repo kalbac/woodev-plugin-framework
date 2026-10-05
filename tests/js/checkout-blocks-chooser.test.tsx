@@ -875,6 +875,39 @@ describe( 'LocalityChooser — ordering under a slow network', () => {
 		expect( sent( 'forget' ) ).toHaveLength( 0 );
 	} );
 
+	it( 'a pick queued behind an applied choice whose rates are recalculating: an unmount keeps the applied one (#1102)', async () => {
+		let release: () => void = () => undefined;
+		mockStore.refreshHold = new Promise< void >( ( resolve ) => ( release = resolve ) );
+
+		const config = baseConfig();
+		const view = render( <LocalityChooser config={ config } /> );
+		await chooseFirstSuggestion();
+		await waitFor( () => expect( mockStore.setShippingAddress ).toHaveBeenCalledTimes( 1 ) );
+		await waitFor( () => expect( mockStore.calculating ).toBe( 1 ) );
+
+		// Kazan is picked while Podolsk's rates are still being recalculated: it waits in the queue.
+		suggestReply = [ kazan ];
+		await chooseFirstSuggestion( 'Каза' );
+		await act( settle );
+		expect( sentRecordKeys() ).toEqual( [ 'dadata:podolsk' ] );
+
+		// The block unmounts and mounts again. Kazan was never sent, so it left no record to erase —
+		// and Podolsk, applied and still in the form, must not be erased with it.
+		view.unmount();
+		render( <LocalityChooser config={ config } /> );
+
+		expect( screen.getByRole( 'combobox' ) ).toHaveValue( 'Подольск' );
+		expect( clearButton() ).toBeInTheDocument();
+
+		release();
+		await waitFor( () => expect( mockStore.calculating ).toBe( 0 ) );
+		await act( settle );
+
+		expect( sentRecordKeys() ).toEqual( [ 'dadata:podolsk' ] );
+		expect( sent( 'forget' ) ).toHaveLength( 0 );
+		expect( mockStore.customer.shippingAddress.city ).toBe( 'Подольск' );
+	} );
+
 	it( 'an unmount with a pick still queued: the pick is never sent', async () => {
 		mockStore.customer.shippingAddress = { ...mockStore.customer.shippingAddress, city: 'Подольск' };
 		holding.add( 'forget' );

@@ -110,21 +110,30 @@ export class ChainSync {
 	}
 
 	/**
-	 * The chooser is going away. A `/select` that is queued or on the wire can no longer be finished
-	 * — nobody is left to write the native address it belongs to — so it is erased. Answers whether
-	 * there was one.
+	 * The chooser is going away. A `/select` that is on the wire and has not been applied can no
+	 * longer be finished — nobody is left to write the native address it belongs to — so it is
+	 * erased. A `/select` that is only WAITING never reached the server and has no record of its own:
+	 * it is dropped, and what an earlier select already applied stays — that choice is still in the
+	 * address form, and a `/forget` would erase it. Answers whether a saved choice was erased.
 	 */
 	public abandon(): boolean {
-		if (
-			( this.flying?.intent.kind !== 'select' || this.flying.applied ) &&
-			this.waiting?.intent.kind !== 'select'
-		) {
-			return false;
+		const flying = this.flying;
+		const unfinished = flying?.intent.kind === 'select' && ! flying.applied;
+
+		if ( unfinished || ( flying?.intent.kind === 'forget' && this.waiting?.intent.kind === 'select' ) ) {
+			// The older job's reply or refresh hinges on staying the newest intent: an erase replaces
+			// the waiting one instead of just dropping it.
+			this.request( { kind: 'forget' }, () => undefined );
+
+			return true;
 		}
 
-		this.request( { kind: 'forget' }, () => undefined );
+		if ( this.waiting?.intent.kind === 'select' ) {
+			this.waiting.settle( { status: 'superseded' } );
+			this.waiting = null;
+		}
 
-		return true;
+		return false;
 	}
 
 	private isCurrent( job: Job ): boolean {
