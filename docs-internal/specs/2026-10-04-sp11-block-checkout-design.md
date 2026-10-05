@@ -203,9 +203,12 @@ Rules added by C-3 (#1090), from replaying the multi-request flows against WooCo
 - **A reused retry order follows its rate and its destination.** On
   `…_update_order_from_request` a field drops the point the previous attempt stored once its
   carrier no longer owns the order's first shipping line, or once the confirmation above no longer
-  matches — for good, as a checkout mutation drops a live confirmation that moved: going back does
-  not restore it, a new confirmation does. A handler without a `Selection_Scope` is exempt. A
-  clear with nothing to clear writes nothing.
+  matches on that checkout mutation — the order's point and placed confirmation are dropped for
+  good, as a checkout mutation drops a live confirmation that moved: going back after this POST does
+  not restore it, a new confirmation does. Before any POST, the #1101 cart snapshot is read-only:
+  changing the rate/address hides it, but returning to the original state restores it because
+  `validate_order` accepts that same state. A handler without a `Selection_Scope` is exempt. A clear
+  with nothing to clear writes nothing.
 - **Client.** Confirmation commands leave one at a time. A confirmation answering after the shopper
   left the rate it was asked for (or after the block unmounted) rejects as superseded and moves no
   address; that is decided from the block's own latch, not the cart store, which the late reply
@@ -232,8 +235,16 @@ Rules added by C-3 (#1090), from replaying the multi-request flows against WooCo
 - **Client, corrected point.** A reply whose snapshot names another point than the one asked for
   is this command's confirmation when the verdict carries the corrected point (`selection.point`):
   it is accepted, its destination is taken by the rules above, and the echo names the corrected id.
-- **Not changed (follow-up card):** after a failed payment the cart snapshot is `null` — the next
-  cart answer (a payment-method switch, a reload) makes the shopper pick the point again.
+- **Retry cart snapshot (#1101):** after a failed payment, Checkout Blocks re-reads cart state on
+  WooCommerce's public `onCheckoutFail` event. With empty session memory, the snapshot falls back to
+  the session's reusable draft/retry order only when its saved point and placed confirmation still
+  match the current full rate id, method instance, locality and shipping destination; the chosen rate
+  must still be available, and another handler-owned pickup rate in an extra package disables this
+  fallback. Otherwise it stays `null` and the shopper chooses again. A live session selection
+  remains authoritative. The restored snapshot re-binds identity only; carrier/payment compatibility
+  is still decided by `validate_order` on Place order. A rate/address change hides the point only
+  while changed: returning to the original values before any checkout POST restores the snapshot,
+  which `validate_order` accepts.
 
 Important existing code, not new work to recreate:
 

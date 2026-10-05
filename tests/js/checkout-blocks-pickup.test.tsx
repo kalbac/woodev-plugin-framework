@@ -42,6 +42,7 @@ const mockStore = {
 	withoutNotices: false,
 	/** How many `disableCheckoutFor` calls are unsettled: Place Order is blocked while > 0. */
 	calculating: 0,
+	refreshes: [] as unknown[][],
 	listeners: new Set< () => void >(),
 };
 
@@ -73,6 +74,10 @@ jest.mock( '@wordpress/data', () => {
 			updateCustomerData: async ( customer: unknown, editing: unknown ) => {
 				mockStore.customerPushes.push( { customer, editing, calculating: mockStore.calculating } );
 				await mockStore.onCustomerPush?.();
+			},
+			updateCustomerData: ( ...args: unknown[] ) => {
+				mockStore.refreshes.push( args );
+				return Promise.resolve();
 			},
 			setValidationErrors: ( errors: Record< string, { message: string; hidden: boolean } > ) => {
 				mockStore.validation = { ...mockStore.validation, ...errors };
@@ -213,6 +218,11 @@ const serverAnswers = ( rate: string, point: PickupSnapshot | null ): void => {
 
 const extensionCartUpdate = jest.fn();
 const setExtensionData = jest.fn();
+const checkoutFailListeners = new Set< () => void | Promise< void > >();
+const subscribeCheckoutFail = jest.fn( ( listener: () => void | Promise< void > ) => {
+	checkoutFailListeners.add( listener );
+	return () => checkoutFailListeners.delete( listener );
+} );
 
 /**
  * The cart `extensionCartUpdate()` resolves with — taken into the store first, as core does
@@ -265,20 +275,39 @@ beforeEach( () => {
 	mockStore.notices = {};
 	mockStore.withoutNotices = false;
 	mockStore.calculating = 0;
+	mockStore.refreshes = [];
 	mockStore.listeners.clear();
 	chooseRate( PICKUP_RATE );
 	serverAnswers( PICKUP_RATE, null );
 	extensionCartUpdate.mockReset();
 	setExtensionData.mockReset();
+	checkoutFailListeners.clear();
+	subscribeCheckoutFail.mockClear();
 
 	const page = window as unknown as Record< string, unknown >;
 
 	page.woodev_pickup_config_carrier = config;
-	page.wc = { blocksCheckout: { extensionCartUpdate } };
+	page.wc = {
+		blocksCheckout: { extensionCartUpdate },
+		blocksCheckoutEvents: { checkoutEvents: { onCheckoutFail: subscribeCheckoutFail } },
+	};
 	delete page.WoodevPickupSession;
 } );
 
 describe( 'PickupPicker — shown for the framework’s pickup rates only', () => {
+	it( 'refreshes the cart through WooCommerce after a failed checkout attempt', async () => {
+		renderPicker();
+
+		expect( subscribeCheckoutFail ).toHaveBeenCalledTimes( 1 );
+		const onFailure = [ ...checkoutFailListeners ][ 0 ];
+
+		act( () => {
+			expect( onFailure() ).toBeUndefined();
+		} );
+
+		expect( mockStore.refreshes ).toEqual( [ [ { shipping_address: { city: 'Москва', state: '', country: 'RU' } }, true, true ] ] );
+	} );
+
 	it( 'shows the button for a rate the server says one of our fields owns', () => {
 		renderPicker();
 
@@ -2193,12 +2222,13 @@ describe( 'the WooCommerce globals are taken once, at evaluation', () => {
 
 		captureWcRuntime();
 
-		expect( [ ...reads ].sort() ).toEqual( [ 'blocksCheckout', 'wcBlocksRegistry', 'wcSettings' ] );
+		expect( [ ...reads ].sort() ).toEqual( [ 'blocksCheckout', 'blocksCheckoutEvents', 'wcBlocksRegistry', 'wcSettings' ] );
 
 		reads.length = 0;
 
 		expect( wcRuntime()?.wcSettings?.getSetting ).toBe( getSetting );
 		expect( wcRuntime()?.blocksCheckout?.extensionCartUpdate ).toBe( extensionCartUpdate );
+		expect( wcRuntime()?.blocksCheckoutEvents?.checkoutEvents?.onCheckoutFail ).toBeUndefined();
 		expect( wcRuntime()?.wcBlocksRegistry?.getPaymentMethods ).toBe( getPaymentMethods );
 		expect( reads ).toEqual( [] );
 	} );

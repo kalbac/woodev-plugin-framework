@@ -244,6 +244,17 @@ export async function refreshRates(): Promise< void > {
 }
 
 /**
+ * Subscribes to WooCommerce's public failed-checkout event. The cart is refreshed only after a
+ * payment attempt fails, when its order now carries the placed pickup point and the server can
+ * return that confirmation in the cart extension snapshot.
+ */
+export function subscribeCheckoutFailure( listener: () => void ): () => void {
+	const subscribe = wcRuntime()?.blocksCheckoutEvents?.checkoutEvents?.onCheckoutFail;
+
+	return typeof subscribe === 'function' ? subscribe( listener ) : () => {};
+}
+
+/**
  * Runs `work` with Place Order blocked, through `wc/store/checkout`'s public `disableCheckoutFor`
  * (WooCommerce 9.9+: `data/checkout/thunks.ts`; 11.1: `wc-blocks-data.js`, `Na=`). Feature-detected:
  * without it `work` simply runs — the server still refuses to rate or place an order against a

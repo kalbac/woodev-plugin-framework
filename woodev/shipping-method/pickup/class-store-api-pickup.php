@@ -427,7 +427,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 			$pickup = [];
 			foreach ( self::$handlers as $plugin_id => $fields ) {
 				foreach ( $fields as $field_id => $handler ) {
-					$snapshot = $handler->store_api_confirmation( $context['rate_id'], $context['address_key'] );
+					$snapshot = $handler->store_api_cart_confirmation(
+						$context['rate_id'],
+						$context['address_key'],
+						self::rate_available( $context ) && ! self::has_unsupported_packages( $context )
+					);
 					if ( null !== $snapshot ) {
 						unset( $snapshot['address_key'] );
 					}
