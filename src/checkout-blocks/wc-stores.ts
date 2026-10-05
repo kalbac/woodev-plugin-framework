@@ -24,6 +24,7 @@ const EMPTY_ADDRESS: WcAddress = { city: '', state: '', country: '' };
 
 interface CartSelectors {
 	getCustomerData?: () => { shippingAddress?: WcAddress; billingAddress?: WcAddress };
+	getNeedsShipping?: () => boolean;
 	hasFinishedResolution?: ( selector: string, args?: unknown[] ) => boolean;
 }
 
@@ -82,6 +83,24 @@ export function readShippingAddress( registrySelect: typeof select = select ): W
 	return selectors?.getCustomerData?.().shippingAddress ?? EMPTY_ADDRESS;
 }
 
+/** The delivery address; billing is the destination when WooCommerce forces billing-only delivery. */
+export function readDeliveryAddress( billingOnly: boolean, registrySelect: typeof select = select ): WcAddress {
+	if ( ! billingOnly ) {
+		return readShippingAddress( registrySelect );
+	}
+
+	const selectors = registrySelect( CART_STORE ) as unknown as CartSelectors | undefined;
+
+	return selectors?.getCustomerData?.().billingAddress ?? EMPTY_ADDRESS;
+}
+
+/** Whether the cart has a delivery address at all (virtual-only carts do not show the chooser). */
+export function cartNeedsShipping( registrySelect: typeof select = select ): boolean {
+	const selectors = registrySelect( CART_STORE ) as unknown as CartSelectors | undefined;
+
+	return selectors?.getNeedsShipping?.() !== false;
+}
+
 /**
  * Whether the address {@link readShippingAddress} answers is the customer's — WooCommerce's cart
  * data has arrived — rather than the store's empty defaults from before it did. The same test core
@@ -101,6 +120,21 @@ export function isShippingAddressAuthoritative( registrySelect: typeof select = 
 	}
 
 	return ( selectors?.getCustomerData?.().shippingAddress?.country ?? '' ) !== '';
+}
+
+/** Whether the active delivery address has arrived from WooCommerce's cart store. */
+export function isDeliveryAddressAuthoritative( billingOnly: boolean, registrySelect: typeof select = select ): boolean {
+	if ( ! billingOnly ) {
+		return isShippingAddressAuthoritative( registrySelect );
+	}
+
+	const selectors = registrySelect( CART_STORE ) as unknown as CartSelectors | undefined;
+
+	if ( typeof selectors?.hasFinishedResolution === 'function' ) {
+		return selectors.hasFinishedResolution( 'getCartData' ) === true;
+	}
+
+	return ( selectors?.getCustomerData?.().billingAddress?.country ?? '' ) !== '';
 }
 
 export function readBillingAddress(): WcAddress {
@@ -132,6 +166,19 @@ export function writeNativeLocality( city: string, state: string | null ): void 
 	if ( readUseShippingAsBilling() ) {
 		actions?.setBillingAddress?.( { ...readBillingAddress(), ...patch } );
 	}
+}
+
+/** Writes locality to the billing delivery address when the store forces delivery there. */
+export function writeDeliveryLocality( city: string, state: string | null, billingOnly: boolean ): void {
+	if ( ! billingOnly ) {
+		writeNativeLocality( city, state );
+		return;
+	}
+
+	const actions = dispatch( CART_STORE ) as unknown as CartActions | undefined;
+	const patch = state === null ? { city } : { city, state };
+
+	actions?.setBillingAddress?.( { ...readBillingAddress(), ...patch } );
 }
 
 /**
@@ -185,14 +232,14 @@ export function adoptDestination(
  * Only country, state and city travel: the server merges a partial address into the one it holds,
  * and a half-typed postcode is core's to validate and push, not ours.
  */
-export async function refreshRates(): Promise< void > {
+export async function refreshRates( billingOnly = false ): Promise< void > {
 	const actions = dispatch( CART_STORE ) as unknown as CartActions | undefined;
 
 	if ( typeof actions?.updateCustomerData !== 'function' ) {
 		return;
 	}
 
-	const { city, state, country } = readShippingAddress();
+	const { city, state, country } = readDeliveryAddress( billingOnly );
 
 	try {
 		await actions.updateCustomerData( { shipping_address: { city, state, country } }, true, true );

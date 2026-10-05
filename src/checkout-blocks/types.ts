@@ -64,6 +64,8 @@ export interface LocationConfig {
 	 * against the native address before it claims a selection. `null` for no record or an implicit one.
 	 */
 	selection?: { record: LocationRecord } | null;
+	/** Server-side delivery mode, checked against WooCommerce's forcedBillingAddress setting. */
+	billingOnly?: boolean;
 	i18n: Record< string, string >;
 }
 
