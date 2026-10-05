@@ -28,6 +28,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 
 		/** @var string Store API extension namespace. */
 		public const EXTENSION_NAMESPACE = 'woodev-shipping';
+		/** @var string Session key of the destination postcode's writer record ({@see self::adopted_postcode()}). */
+		private const ADOPTED_POSTCODE_KEY = 'woodev_store_api_adopted_postcode';
 		/** @var array<string, array<string, Pickup_Handler>> Active carrier field owners. */
 		private static array $handlers = [];
 		/** @var bool Whether initialization hooks were attached. */
@@ -98,6 +100,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 			);
 			add_action( 'woocommerce_store_api_checkout_update_order_from_request', [ self::class, 'update_order' ], 20, 2 );
 			add_action( 'woocommerce_checkout_validate_order_before_payment', [ self::class, 'validate_order' ], 20, 2 );
+			// The server's own sight of a postcode edit: the route the address form is pushed through (#1113).
+			add_action( 'woocommerce_store_api_cart_update_customer_from_request', [ self::class, 'observe_customer' ] );
 			// This method accompanies the deferred-draft hook in WC 10.8; older WC needs no no-order reconciliation.
 			if ( method_exists( '\\Automattic\\WooCommerce\\StoreApi\\Routes\\V1\\Checkout', 'build_draft_route_response' ) ) {
 				add_action( 'woocommerce_store_api_checkout_update_draft', [ self::class, 'update_draft' ] );
@@ -242,10 +246,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 				self::refuse( __( 'Too many requests. Please wait a moment and try again.', 'woodev-plugin-framework' ), 429 );
 			}
 			$context = static::context( true );
+			self::observe_destination( $context );
 			self::require_supported_packages( $context );
 			$prepared = [];
+			$edited   = false;
 			foreach ( self::commands( $data ) as $command ) {
 				[ $handler, $value ] = $command;
+				// The browser's report of a postcode edit no request carried (see adopted_postcode()).
+				$edited = $edited || true === ( $value['postcode_edited'] ?? false );
 				// After a switch to courier, clearing the old picker is a successful no-op.
 				if ( true === ( $value['clear'] ?? false ) ) {
 					$prepared[] = [ $handler, null ];
@@ -279,6 +287,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 				$prepared[] = [ $handler, $selection ];
 			}
 			// All commands, including carrier verdicts, must pass before any persistence action.
+			if ( $edited ) {
+				static::remember_adopted_postcode( '' );
+			}
 			foreach ( $prepared as $index => [ $handler, $selection ] ) {
 				if ( null !== $selection ) {
 					// The store's address-replacement policy moves the destination with the confirmation.
@@ -342,30 +353,121 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 				foreach ( $fields as $key => $value ) {
 					$fields[ $key ] = (string) ( $destination[ $key ] ?? $value );
 				}
+				// A point is the postcode's writer only where it CHANGED it: one the customer had
+				// typed already stays theirs. A cleared postcode has no writer.
+				if ( isset( $fields['postcode'] ) && $fields['postcode'] !== ( $previous['postcode'] ?? '' ) ) {
+					static::remember_adopted_postcode( $fields['postcode'] );
+				}
 				return [ $moved, $fields ];
 			}
 			static::write_destination( $previous, $context['chosen'] );
 			return [ static::context( true ), [] ];
 		}
 
-
 		/**
-		 * Whether the destination's postcode is one a remembered point wrote there — of ANY
-		 * field: the customer may have moved from another carrier's point to this one.
+		 * Whether the destination's postcode is one a pickup point wrote there — any carrier's:
+		 * the customer may have moved from another carrier's point to this one — and nobody has
+		 * been seen to edit since ({@see self::adopted_postcode()}).
 		 *
 		 * @since 2.0.2
 		 * @param array<string, mixed> $context Server cart context, before the new point moves it.
 		 * @return bool
 		 */
 		private static function holds_adopted_postcode( array $context ): bool {
-			foreach ( self::$handlers as $fields ) {
-				foreach ( $fields as $handler ) {
-					if ( '' !== $handler->store_api_adopted_postcode( (string) $context['address_key'] ) ) {
-						return true;
-					}
-				}
+			$adopted = static::adopted_postcode();
+			return '' !== $adopted && isset( $context['packages'][0]['destination'] )
+				&& (string) ( $context['packages'][0]['destination']['postcode'] ?? '' ) === $adopted;
+		}
+
+		/**
+		 * The postcode a pickup point WROTE into the destination, while the postcode there is
+		 * still that point's — or `''` (#1113). The record of the WRITER, kept apart from the
+		 * destination's value: a postcode equal to a point's proves nothing about who typed it.
+		 *
+		 * WRITTEN only by this adapter, from a point the server fetched itself, and only when the
+		 * confirmation changed the postcode ({@see self::replace_destination()}).
+		 *
+		 * VOIDED by any sign of another writer, for good — typing the same digits back does not
+		 * restore it:
+		 *
+		 * - the server sees the destination hold another postcode: in the customer route the
+		 *   address form is pushed through ({@see self::observe_customer()}), and on every
+		 *   mutation path of this adapter ({@see self::observe_destination()});
+		 * - the browser reports an edit with its selection command (`postcode_edited`). That is
+		 *   the one thing the server cannot see for itself: a postcode retyped to the SAME value,
+		 *   or changed and changed back before the form was pushed, reaches it as no change at all.
+		 *
+		 * TRUST. The browser's word can only KEEP a postcode. Nothing a client sends makes the
+		 * server clear one: clearing stands on this record alone, and the record is the server's
+		 * own. A client that reports nothing — a reloaded page, which has seen no edit — leaves
+		 * the decision to what the server saw.
+		 *
+		 * One session key for the whole checkout, not one per carrier: there is one destination.
+		 *
+		 * `protected` as a test seam, as {@see self::draft_order_id()}.
+		 *
+		 * @since 2.0.2
+		 * @return string
+		 */
+		protected static function adopted_postcode(): string {
+			return function_exists( 'WC' ) && WC()->session ? (string) WC()->session->get( self::ADOPTED_POSTCODE_KEY, '' ) : '';
+		}
+
+		/**
+		 * Records `$postcode` as written by a pickup point; `''` voids the record.
+		 *
+		 * @since 2.0.2
+		 * @param string $postcode Postcode as the destination holds it, or `''`.
+		 * @return void
+		 */
+		protected static function remember_adopted_postcode( string $postcode ): void {
+			if ( function_exists( 'WC' ) && WC()->session && static::adopted_postcode() !== $postcode ) {
+				WC()->session->set( self::ADOPTED_POSTCODE_KEY, $postcode );
 			}
-			return false;
+		}
+
+		/**
+		 * Voids the writer record once the destination is seen to hold another postcode.
+		 *
+		 * @since 2.0.2
+		 * @param array<string, mixed> $context Refreshed server cart context.
+		 * @return void
+		 */
+		private static function observe_destination( array $context ): void {
+			// A cart with no package says nothing about the destination.
+			if ( isset( $context['packages'][0]['destination'] ) ) {
+				self::observe_postcode( (string) ( $context['packages'][0]['destination']['postcode'] ?? '' ) );
+			}
+		}
+
+		/**
+		 * Voids the writer record when the customer route leaves another shipping postcode — the
+		 * address form's own push, so the customer's edit ({@see self::adopted_postcode()}).
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 * @param \WC_Customer|mixed $customer Customer as the request left it.
+		 * @return void
+		 */
+		public static function observe_customer( $customer ): void {
+			if ( is_object( $customer ) && is_callable( [ $customer, 'get_shipping_postcode' ] ) ) {
+				self::observe_postcode( (string) $customer->get_shipping_postcode() );
+			}
+		}
+
+		/**
+		 * Voids the writer record unless `$postcode` is the one it names.
+		 *
+		 * @since 2.0.2
+		 * @param string $postcode The destination's postcode, as just seen.
+		 * @return void
+		 */
+		private static function observe_postcode( string $postcode ): void {
+			$adopted = static::adopted_postcode();
+			if ( '' !== $adopted && $adopted !== $postcode ) {
+				static::remember_adopted_postcode( '' );
+			}
 		}
 
 		/**
@@ -566,6 +668,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 		 */
 		private static function reconcile( \WP_REST_Request $request, ?\WC_Order $order = null ): array {
 			$context = static::context( true );
+			self::observe_destination( $context );
 			foreach ( self::$handlers as $plugin_id => $fields ) {
 				foreach ( $fields as $field_id => $handler ) {
 					$value = $request->get_param( 'extensions' )[ self::EXTENSION_NAMESPACE ]['pickup'][ $plugin_id ][ $field_id ] ?? [];

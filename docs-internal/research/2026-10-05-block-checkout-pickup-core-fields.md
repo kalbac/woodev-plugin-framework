@@ -116,10 +116,16 @@ empty core postcode, and the brief explicitly says to stop at design when one ha
 
 **Update, same day (s154):** the operator chose variant A — the postcode stays required on blocks —
 and asked for the tail alone. Shipped: `Store_Api_Pickup::replace_destination()` names an empty
-postcode when a remembered confirmation of ANY field left the current destination with a postcode
-(`Pickup_Selection::recall_moved_destination()`), and `movedDestination()` takes that explicit empty
-string. Measured on the rig: live-carrier point (117279) → static-fixture point → postcode empty on
-both sides; a postcode typed in between is kept and the order places.
+postcode when the destination's postcode is one a pickup point WROTE there, and `movedDestination()`
+takes that explicit empty string. Measured on the rig: live-carrier point (117279) → static-fixture
+point → postcode empty on both sides; a postcode typed in between is kept and the order places.
+
+**Round 2 (critic REJECT, same day):** the first version read «whose postcode» from the VALUE — a
+remembered confirmation whose recorded destination fingerprint equals the current one. That clears
+a postcode the customer retyped to the same digits, or typed away and back on another carrier's
+rate. Replaced by a writer record (`Store_Api_Pickup::adopted_postcode()`) plus the browser's
+`postcode_edited`; the trap and the trust model are in the gotcha
+[a-value-equal-to-the-one-you-wrote-does-not-prove-you-wrote-it](../gotchas/a-value-equal-to-the-one-you-wrote-does-not-prove-you-wrote-it.md).
 
 ## Result and continuation
 

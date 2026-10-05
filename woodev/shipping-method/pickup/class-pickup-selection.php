@@ -185,39 +185,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Selection' )
 			return null;
 		}
 
-
-		/**
-		 * The destination fields a remembered confirmation moved to its point's address, when
-		 * the destination it left behind is `$address_key` — whatever locality, type or rate
-		 * it was made under (#1113).
-		 *
-		 * A confirmation records the destination as it left it, so one that still names the
-		 * current destination proves those fields there are the ones it wrote.
-		 *
-		 * @since 2.0.2
-		 * @param string $address_key Server destination fingerprint.
-		 * @return array<string, string> Empty when no remembered confirmation left that destination.
-		 */
-		public function recall_moved_destination( string $address_key ): array {
-			$session = $this->session();
-			if ( null === $session || '' === $address_key ) {
-				return [];
-			}
-			foreach ( $this->read_map( $session ) as $types ) {
-				foreach ( (array) $types as $entry ) {
-					$confirmation = is_array( $entry ) ? ( $entry['confirmation'] ?? null ) : null;
-					if ( ! is_array( $confirmation ) || ( $confirmation['address_key'] ?? '' ) !== $address_key ) {
-						continue;
-					}
-					$destination = array_map( 'strval', (array) ( $confirmation['destination'] ?? [] ) );
-					if ( [] !== $destination ) {
-						return $destination;
-					}
-				}
-			}
-			return [];
-		}
-
 		/**
 		 * Clears the active pair, retaining unrelated locality/type memory.
 		 *

@@ -815,30 +815,6 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$this->assertSame( [], $selection->recall_all( '' ) );
 		}
 
-		/**
-		 * #1113: whose postcode the destination holds is answered by the confirmation that LEFT
-		 * that destination — under any locality or type, since the customer may have moved on.
-		 */
-		public function test_recall_moved_destination_answers_for_the_destination_a_confirmation_left(): void {
-			$selection = $this->probe( new Pickup_Selection_Fake_Session() );
-
-			$selection->remember( 'msk', 'pvz', 'P1' );
-			$selection->remember_confirmation( 'msk', 'pvz', [ 'address_key' => 'left-by-p1', 'destination' => [ 'address_1' => 'Tverskaya 1', 'postcode' => '101000' ] ] );
-			// A confirmation that moved nothing proves nothing about the destination's fields.
-			$selection->remember( 'spb', 'postamat', 'P2' );
-			$selection->remember_confirmation( 'spb', 'postamat', [ 'address_key' => 'left-by-p2', 'destination' => [] ] );
-
-			$this->assertSame( [ 'address_1' => 'Tverskaya 1', 'postcode' => '101000' ], $selection->recall_moved_destination( 'left-by-p1' ) );
-			$this->assertSame( [], $selection->recall_moved_destination( 'left-by-p2' ) );
-			// The customer typed since: no confirmation left the destination as it now stands.
-			$this->assertSame( [], $selection->recall_moved_destination( 'typed-since' ) );
-			$this->assertSame( [], $selection->recall_moved_destination( '' ) );
-		}
-
-		public function test_recall_moved_destination_is_empty_without_a_session(): void {
-			$this->assertSame( [], $this->probe( null )->recall_moved_destination( 'left-by-p1' ) );
-		}
-
 		private function count_entries( Pickup_Selection_Fake_Session $session, string $key ): int {
 			$map = $session->raw( $key );
 

@@ -673,8 +673,19 @@ are ONE session (same point, either can confirm or place); a stranger's token to
   Operator decision s154 (#1113, variant A): it stays required there — neither 9.9 nor 11.1 has a
   supported way to relax a core field for pickup only. What such a point does do is CLEAR the
   postcode a previous point wrote (of any field — the customer may have come from another carrier's
-  point): the confirmation whose recorded destination is still the current one proves whose postcode
-  it is, and the snapshot then names `postcode: ''`. A postcode the customer typed since is kept.
+  point), and the snapshot then names `postcode: ''`. A postcode the customer typed is kept —
+  **decided by who WROTE it, not by its value**: a value equal to the point's proves nothing (the
+  customer may retype the same digits, or type another postcode and the first one back). The adapter
+  keeps a writer record (`Store_Api_Pickup::adopted_postcode()`, one session key for the one
+  destination), written only when a confirmation CHANGED the postcode and voided for good by any
+  sign of another writer: the destination seen holding another postcode (the customer route,
+  `woocommerce_store_api_cart_update_customer_from_request`, and every mutation path of the adapter),
+  or the browser's `postcode_edited` on the selection command — the bundle watches the cart store,
+  which takes every keystroke, for the edits no request carries. Trust: the browser's word can only
+  KEEP a postcode; clearing stands on the server's record alone, so a silent client (a reloaded
+  page) leaves it to what the server saw. Not covered, and said: a retype of the SAME digits followed
+  by a reload before the next point (the page that saw it is gone), and a paste of identical text
+  (no change event at all).
 - **WooCommerce's own persisted cart is PAINTED before the server's (#1111, fixed s154 — the flash
   remains).** Core (9.9.0 and 11.1 alike) keeps the cart in `localStorage.storeApiCartData` and, when
   `storeApiCartHash` equals the `woocommerce_cart_hash` cookie, starts the cart store from it and

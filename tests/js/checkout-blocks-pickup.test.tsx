@@ -111,6 +111,11 @@ jest.mock( '@wordpress/data', () => {
 				}
 			},
 		} ),
+		// The postcode watch's own subscription (`watchPostcodeEdits()`, #1113).
+		subscribe: ( listener: () => void ) => {
+			mockStore.listeners.add( listener );
+			return () => mockStore.listeners.delete( listener );
+		},
 		useSelect: ( mapper: ( select: typeof selectFn ) => unknown ) =>
 			mockUseSyncExternalStore(
 				( listener ) => {
@@ -128,6 +133,8 @@ import { createHost } from '../../src/checkout-blocks/pickup-host';
 import { ADDRESS_PUSH_WINDOW_MS } from '../../src/checkout-blocks/address-lifecycle';
 // eslint-disable-next-line import/first
 import { PickupPicker } from '../../src/checkout-blocks/pickup-picker';
+// eslint-disable-next-line import/first
+import { watchPostcodeEdits } from '../../src/checkout-blocks/pickup-stores';
 // eslint-disable-next-line import/first
 import { registerPickupBlock } from '../../src/checkout-blocks/register';
 // eslint-disable-next-line import/first
@@ -846,6 +853,200 @@ describe( 'PickupPicker — the store’s address-replacement policy (#1089)', (
 			expect( mockStore.shipping ).toEqual( { ...HOME, ...MOVED, postcode: '654321' } );
 			expect( mockStore.addressWrites ).toEqual( [] );
 		} );
+	} );
+} );
+
+/*
+ * #1113, the critic's two cases. A point without a postcode clears the one a previous point wrote,
+ * never one the shopper typed — and a shopper who retypes the SAME digits, or types another postcode
+ * and the first one back before core pushes the form, leaves the server nothing to see. The browser
+ * saw the keystrokes (core writes each into the cart store) and says so with the next confirmation.
+ */
+describe( 'PickupPicker — whose postcode it is, said with the confirmation (#1113)', () => {
+	const MOVED = { address_1: 'Тверская, 1', postcode: '101000' };
+	const ARBAT = { address_1: 'Арбат, 2' };
+	let stop: () => void;
+
+	beforeEach( () => {
+		stop = watchPostcodeEdits();
+	} );
+
+	afterEach( () => stop() );
+
+	/** The picker with its dialog open; `over` is merged into the field's config. */
+	const openPicker = ( over: Record< string, unknown > = {} ): PickupSessionHost => {
+		const session = fakeSession();
+
+		( window as unknown as Record< string, unknown > ).woodev_pickup_config_carrier = { ...config, ...over };
+		renderPicker();
+		fireEvent.click( trigger() as HTMLElement );
+
+		return session.host();
+	};
+
+	/** Confirms `pointId`; the server moves `destination`. `coreTakesIt`: no unsaved edit, so core applies the reply's address first. */
+	const confirm = async (
+		host: PickupSessionHost,
+		pointId: string,
+		destination: Record< string, string >,
+		coreTakesIt = false
+	): Promise< void > => {
+		extensionCartUpdate.mockImplementationOnce( async () => {
+			serverAnswers( PICKUP_RATE, snapshot( { destination, point_id: pointId } as Partial< PickupSnapshot > ) );
+
+			if ( coreTakesIt ) {
+				mockStore.shipping = { ...mockStore.shipping, ...destination };
+			}
+
+			notify();
+
+			return { extensions: mockStore.extensions };
+		} );
+
+		await act( async () => {
+			await host.confirmSelection( { id: pointId } );
+		} );
+	};
+
+	/** One state of the form as the shopper types: core writes it into the cart store at once. */
+	const type = ( postcode: string, address: 'shipping' | 'billing' = 'shipping' ): void =>
+		act( () => {
+			mockStore[ address ] = { ...mockStore[ address ], postcode };
+			notify();
+		} );
+
+	const lastCommand = (): Record< string, unknown > => {
+		const calls = extensionCartUpdate.mock.calls;
+
+		return calls[ calls.length - 1 ][ 0 ].data.pickup.carrier.carrier_point;
+	};
+
+	it( 'says nothing while the postcode is as the point left it', async () => {
+		const host = openPicker();
+
+		await confirm( host, 'P1', MOVED );
+		await confirm( host, 'P2', ARBAT );
+
+		expect( lastCommand() ).toEqual( { point_id: 'P2', payment_method: 'cod' } );
+	} );
+
+	it( 'reports a postcode the shopper retyped to the very same value', async () => {
+		const host = openPicker();
+
+		await confirm( host, 'P1', MOVED );
+		// Select-all and type it again: the store holds «1», «10», … and then the same digits.
+		type( '1' );
+		type( '101000' );
+		await confirm( host, 'P2', ARBAT );
+
+		expect( lastCommand() ).toEqual( { point_id: 'P2', payment_method: 'cod', postcode_edited: true } );
+		// The server left the postcode unnamed, so it stays.
+		expect( mockStore.shipping.postcode ).toBe( '101000' );
+	} );
+
+	it( 'reports a postcode typed and typed back', async () => {
+		const host = openPicker();
+
+		await confirm( host, 'P1', MOVED );
+		type( '654321' );
+		type( '101000' );
+		await confirm( host, 'P2', ARBAT );
+
+		expect( lastCommand().postcode_edited ).toBe( true );
+	} );
+
+	it( 'reports an edit made before any point was confirmed on this page', async () => {
+		const host = openPicker();
+
+		type( '654321' );
+		type( HOME.postcode );
+		await confirm( host, 'P2', ARBAT );
+
+		expect( lastCommand().postcode_edited ).toBe( true );
+	} );
+
+	it( 'keeps saying it until a confirmation moves the postcode again', async () => {
+		const host = openPicker();
+
+		await confirm( host, 'P1', MOVED );
+		type( '1' );
+		type( '101000' );
+		await confirm( host, 'P2', ARBAT );
+		// A move of the street alone leaves the postcode the shopper's.
+		await confirm( host, 'P3', { address_1: 'Сретенка, 3' } );
+
+		expect( lastCommand().postcode_edited ).toBe( true );
+
+		// This point has a postcode: it writes it, and the postcode is a point's again.
+		await confirm( host, 'P4', { address_1: 'Профсоюзная, 103А', postcode: '117279' } );
+		await confirm( host, 'P5', ARBAT );
+
+		expect( lastCommand() ).toEqual( { point_id: 'P5', payment_method: 'cod' } );
+	} );
+
+	it( 'does not take the confirmation’s own move for an edit when core applied it first', async () => {
+		const host = openPicker();
+
+		await confirm( host, 'P1', MOVED, true );
+		await confirm( host, 'P2', ARBAT );
+
+		expect( lastCommand() ).toEqual( { point_id: 'P2', payment_method: 'cod' } );
+	} );
+
+	it( 'counts the billing postcode only where billing is the destination', async () => {
+		const host = openPicker();
+
+		await confirm( host, 'P1', MOVED );
+		// A separate billing address is the shopper's business, not the destination's.
+		type( '190000', 'billing' );
+		await confirm( host, 'P2', ARBAT );
+
+		expect( lastCommand() ).toEqual( { point_id: 'P2', payment_method: 'cod' } );
+	} );
+
+	it( 'counts the billing postcode in a store that ships to the billing address', async () => {
+		const host = openPicker( { replaceAddress: { enabled: true, billingOnly: true } } );
+
+		await confirm( host, 'P1', MOVED );
+		type( '1', 'billing' );
+		type( '101000', 'billing' );
+		await confirm( host, 'P2', ARBAT );
+
+		expect( lastCommand().postcode_edited ).toBe( true );
+	} );
+
+	it( 'does not take the server’s cart arriving for an edit', async () => {
+		// Before the cart arrived the store holds its empty defaults (no country: not authoritative).
+		stop();
+		mockStore.shipping = { city: '', state: '', country: '' };
+		stop = watchPostcodeEdits();
+		act( () => {
+			mockStore.shipping = { ...HOME };
+			notify();
+		} );
+
+		const host = openPicker();
+
+		await confirm( host, 'P2', ARBAT );
+
+		expect( lastCommand() ).toEqual( { point_id: 'P2', payment_method: 'cod' } );
+
+		// …and from then on a keystroke is an edit.
+		type( '654321' );
+		await confirm( host, 'P3', { address_1: 'Сретенка, 3' } );
+
+		expect( lastCommand().postcode_edited ).toBe( true );
+	} );
+
+	it( 'says nothing on a page that never started the watch', async () => {
+		stop();
+
+		const host = openPicker();
+
+		type( '654321' );
+		await confirm( host, 'P2', ARBAT );
+
+		expect( lastCommand() ).toEqual( { point_id: 'P2', payment_method: 'cod' } );
 	} );
 } );
 

@@ -1908,8 +1908,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *
 		 * Only the STREET LINE and the POSTCODE, and only values the point actually has: a
 		 * point without a postcode must not blank a required field of the native address.
-		 * (The one postcode such a point does clear is a previous point's — decided where
-		 * every field's memory is at hand: {@see Store_Api_Pickup::replace_destination()}, #1113.)
+		 * (The one postcode such a point does clear is a previous point's — decided by the
+		 * adapter, which keeps the record of who wrote it: {@see Store_Api_Pickup::adopted_postcode()}, #1113.)
 		 * The city is never replaced here. On the block checkout it is the customer's own
 		 * confirmed locality — the Location layer treats a record the native city no longer
 		 * names as stale ({@see \Woodev\Framework\Shipping\Location\Location_Service}, rule (c)),
@@ -1937,36 +1937,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				],
 				static fn( string $value ): bool => '' !== $value
 			);
-		}
-
-
-		/**
-		 * The postcode a point this field still remembers wrote into the destination, when the
-		 * destination is still the one that confirmation left — or `''` (#1113).
-		 *
-		 * That postcode is another place's, not the customer's: a next point that has none must
-		 * not leave it beside its own street ({@see Store_Api_Pickup::replace_destination()}).
-		 * A postcode the customer has typed since changes the destination, no remembered
-		 * confirmation names it any more, and it is theirs to keep. Neither the rate nor the
-		 * field is compared — the postcode's origin does not change with the tariff or the
-		 * carrier the customer moves to.
-		 *
-		 * @internal
-		 *
-		 * @since 2.0.2
-		 *
-		 * @param string $address_key Server destination fingerprint.
-		 *
-		 * @return string
-		 */
-		public function store_api_adopted_postcode( string $address_key ): string {
-			$selection = $this->selection();
-
-			if ( null === $selection ) {
-				return '';
-			}
-
-			return $selection->recall_moved_destination( $address_key )['postcode'] ?? '';
 		}
 
 		/**

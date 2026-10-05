@@ -78,6 +78,11 @@ class C2a_Adapter extends Store_Api_Pickup {
 	}
 	protected static function payment_available( string $payment ): bool { return isset( self::$gateways[ $payment ] ); }
 	protected static function chosen_payment_method(): string { return ''; }
+	/** The postcode's writer record, in the fake session (#1113). */
+	protected static function adopted_postcode(): string { return (string) self::$session->get( 'adopted_postcode', '' ); }
+	protected static function remember_adopted_postcode( string $postcode ): void {
+		if ( self::adopted_postcode() !== $postcode ) { self::$session->set( 'adopted_postcode', $postcode ); }
+	}
 }
 final class C2a_Handler extends Pickup_Handler {
 	public int $weight = 2000;
@@ -350,29 +355,21 @@ final class StoreApiPickupTest extends TestCase {
 		$this->assertNull( C2a_Adapter::cart_data()['pickup']['carrier']['carrier_point'] );
 	}
 
-	public function test_a_postcode_the_customer_typed_after_the_previous_point_is_kept(): void {
-		$this->confirm_a_point_with_a_postcode_then_offer_one_without();
-		// Typed into the form after the first point was adopted: the destination is no longer the
-		// one that confirmation left behind.
-		$this->packages[0]['destination']['postcode'] = '654321';
-
-		C2a_Adapter::update( $this->command( [ 'point_id' => 'P2' ] ) );
-
-		$this->assertSame( [ 'address_1' => 'Arbat 2' ], C2a_Adapter::$writes[1] );
-		$this->assertSame( '654321', $this->packages[0]['destination']['postcode'] );
-		$this->assertSame( [ 'address_1' => 'Arbat 2' ], C2a_Adapter::cart_data()['pickup']['carrier']['carrier_point']['destination'] );
+	/**
+	 * The address form's push reaches the server: WooCommerce's customer route hands the adapter
+	 * the customer as the request left it (`woocommerce_store_api_cart_update_customer_from_request`).
+	 */
+	private function customer_pushes_postcode( string $postcode ): void {
+		$this->packages[0]['destination']['postcode'] = $postcode;
+		C2a_Adapter::observe_customer( new class( $postcode ) {
+			private string $postcode;
+			public function __construct( string $postcode ) { $this->postcode = $postcode; }
+			public function get_shipping_postcode(): string { return $this->postcode; }
+		} );
 	}
 
-	/**
-	 * #1113 as it was measured on the rig: the postcode came from ANOTHER carrier's point. The
-	 * customer moves to this carrier's rate and picks a point that has none.
-	 */
-	public function test_a_point_without_a_postcode_clears_the_postcode_another_carriers_point_wrote(): void {
-		$this->handler->replace_address = true;
-		$this->point_data['address'] = 'Tverskaya 1';
-		$this->point_data['postal_code'] = '101000';
-		C2a_Adapter::update( $this->command() );
-
+	/** Registers another carrier's pickup field and moves the customer to its rate (#1113). */
+	private function move_to_another_carriers_rate(): void {
 		$scope = new C2a_Other_Scope();
 		$source = \Mockery::mock( Point_Source::class );
 		$source->shouldReceive( 'fetch_details' )->andReturn( Pickup_Point::from_array( [ 'id' => 'Q1', 'name' => 'Other point', 'lat' => 55.7, 'lng' => 37.6, 'address' => 'Arbat 2', 'locality' => 'msk', 'type' => [ 'code' => 'PVZ', 'label' => 'Pickup' ] ] ) );
@@ -384,11 +381,63 @@ final class StoreApiPickupTest extends TestCase {
 		Store_Api_Pickup::add_handler( $other, 'other', 'other_point' );
 		$this->listening[] = $other;
 
-		// The customer moves to the other carrier's rate; the destination is as the first point left it.
 		$this->session->data['chosen_shipping_methods'] = [ 'other_pickup:9' ];
 		$this->packages[0]['rates']['other_pickup:9'] = new C2a_Line( 'other_pickup', 9 );
+	}
 
-		C2a_Adapter::update( [ 'pickup' => [ 'other' => [ 'other_point' => [ 'point_id' => 'Q1', 'payment_method' => 'bacs' ] ] ] ] );
+	/** The other carrier's point Q1 — it has no postcode — with whatever the browser adds to the command. */
+	private function other_command( array $value = [] ): array {
+		return [ 'pickup' => [ 'other' => [ 'other_point' => $value + [ 'point_id' => 'Q1', 'payment_method' => 'bacs' ] ] ] ];
+	}
+
+	public function test_a_postcode_the_customer_typed_after_the_previous_point_is_kept(): void {
+		$this->confirm_a_point_with_a_postcode_then_offer_one_without();
+		// Typed into the form after the first point was adopted.
+		$this->packages[0]['destination']['postcode'] = '654321';
+
+		C2a_Adapter::update( $this->command( [ 'point_id' => 'P2' ] ) );
+
+		$this->assertSame( [ 'address_1' => 'Arbat 2' ], C2a_Adapter::$writes[1] );
+		$this->assertSame( '654321', $this->packages[0]['destination']['postcode'] );
+		$this->assertSame( [ 'address_1' => 'Arbat 2' ], C2a_Adapter::cart_data()['pickup']['carrier']['carrier_point']['destination'] );
+	}
+
+	/**
+	 * #1113, critic's case (a): the customer retypes the very digits the point wrote. The value
+	 * proves nothing — no request even carries the edit — so the browser, which saw it, says so.
+	 */
+	public function test_a_postcode_the_customer_retyped_to_the_same_value_is_kept(): void {
+		$this->confirm_a_point_with_a_postcode_then_offer_one_without();
+
+		C2a_Adapter::update( $this->command( [ 'point_id' => 'P2', 'postcode_edited' => true ] ) );
+
+		$this->assertSame( [ 'address_1' => 'Arbat 2' ], C2a_Adapter::$writes[1] );
+		$this->assertSame( '101000', $this->packages[0]['destination']['postcode'] );
+		$this->assertSame( [ 'address_1' => 'Arbat 2' ], C2a_Adapter::cart_data()['pickup']['carrier']['carrier_point']['destination'] );
+
+		// It is the customer's for good: a later command that reports nothing — a reloaded page
+		// has seen no edit — keeps it too.
+		$this->point_data['id'] = 'P3';
+		$this->point_data['address'] = 'Sretenka 3';
+		C2a_Adapter::update( $this->command( [ 'point_id' => 'P3' ] ) );
+
+		$this->assertSame( [ 'address_1' => 'Sretenka 3' ], C2a_Adapter::$writes[2] );
+		$this->assertSame( '101000', $this->packages[0]['destination']['postcode'] );
+	}
+
+	/**
+	 * #1113 as it was measured on the rig: the postcode came from ANOTHER carrier's point. The
+	 * customer moves to this carrier's rate and picks a point that has none.
+	 */
+	public function test_a_point_without_a_postcode_clears_the_postcode_another_carriers_point_wrote(): void {
+		$this->handler->replace_address = true;
+		$this->point_data['address'] = 'Tverskaya 1';
+		$this->point_data['postal_code'] = '101000';
+		C2a_Adapter::update( $this->command() );
+		// The destination is as the first point left it.
+		$this->move_to_another_carriers_rate();
+
+		C2a_Adapter::update( $this->other_command() );
 
 		$moved = [ 'address_1' => 'Arbat 2', 'postcode' => '' ];
 		$this->assertSame( $moved, C2a_Adapter::$writes[1] );
@@ -396,6 +445,83 @@ final class StoreApiPickupTest extends TestCase {
 		$snapshot = C2a_Adapter::cart_data()['pickup']['other']['other_point'];
 		$this->assertSame( 'Q1', $snapshot['point_id'] );
 		$this->assertSame( $moved, $snapshot['destination'] );
+	}
+
+	/**
+	 * #1113, critic's case (b): on the other carrier's rate the customer types another postcode
+	 * and then the first one back. The destination is again what the first point left, and still
+	 * the postcode is the customer's: the server saw the edit pass through its customer route.
+	 * Nothing the browser says afterwards gives the postcode back to the point.
+	 */
+	public function test_a_postcode_typed_and_typed_back_on_another_carrier_is_kept(): void {
+		$this->handler->replace_address = true;
+		$this->point_data['address'] = 'Tverskaya 1';
+		$this->point_data['postal_code'] = '101000';
+		C2a_Adapter::update( $this->command() );
+		$this->move_to_another_carriers_rate();
+		$this->customer_pushes_postcode( '654321' );
+		$this->customer_pushes_postcode( '101000' );
+
+		C2a_Adapter::update( $this->other_command( [ 'postcode_edited' => false ] ) );
+
+		$this->assertSame( [ 'address_1' => 'Arbat 2' ], C2a_Adapter::$writes[1] );
+		$this->assertSame( '101000', $this->packages[0]['destination']['postcode'] );
+		$this->assertSame( [ 'address_1' => 'Arbat 2' ], C2a_Adapter::cart_data()['pickup']['other']['other_point']['destination'] );
+	}
+
+	/**
+	 * The same case when both edits fit inside the form's push debounce: the server saw the
+	 * destination change not once, and the browser's word is all there is.
+	 */
+	public function test_a_postcode_typed_back_before_the_form_was_pushed_is_kept_on_the_browsers_word(): void {
+		$this->handler->replace_address = true;
+		$this->point_data['address'] = 'Tverskaya 1';
+		$this->point_data['postal_code'] = '101000';
+		C2a_Adapter::update( $this->command() );
+		$this->move_to_another_carriers_rate();
+
+		C2a_Adapter::update( $this->other_command( [ 'postcode_edited' => true ] ) );
+
+		$this->assertSame( [ 'address_1' => 'Arbat 2' ], C2a_Adapter::$writes[1] );
+		$this->assertSame( '101000', $this->packages[0]['destination']['postcode'] );
+	}
+
+	/** An edit the server meets on the checkout's own path voids the record like any other. */
+	public function test_a_postcode_edit_seen_on_the_checkout_path_is_remembered_after_it_is_typed_back(): void {
+		$this->confirm_a_point_with_a_postcode_then_offer_one_without();
+		$this->packages[0]['destination']['postcode'] = '654321';
+		C2a_Adapter::update_draft( $this->request( [], 'PATCH' ) );
+		$this->packages[0]['destination']['postcode'] = '101000';
+
+		C2a_Adapter::update( $this->command( [ 'point_id' => 'P2' ] ) );
+
+		$this->assertSame( [ 'address_1' => 'Arbat 2' ], C2a_Adapter::$writes[1] );
+		$this->assertSame( '101000', $this->packages[0]['destination']['postcode'] );
+	}
+
+	/**
+	 * A point is the postcode's writer only where it changed it. Here the customer had typed the
+	 * digits themselves; the point that happens to share them moved the street alone.
+	 */
+	public function test_a_postcode_the_customer_typed_is_not_the_points_for_matching_it(): void {
+		$this->packages[0]['destination']['postcode'] = '101000';
+		$this->confirm_a_point_with_a_postcode_then_offer_one_without();
+
+		C2a_Adapter::update( $this->command( [ 'point_id' => 'P2' ] ) );
+
+		$this->assertSame( [ 'address_1' => 'Arbat 2' ], C2a_Adapter::$writes[1] );
+		$this->assertSame( '101000', $this->packages[0]['destination']['postcode'] );
+	}
+
+	/** The record is about the destination, not about the point's memory: dismissing the point keeps it. */
+	public function test_the_previous_points_postcode_is_cleared_after_that_point_was_dismissed(): void {
+		$this->confirm_a_point_with_a_postcode_then_offer_one_without();
+		C2a_Adapter::update( $this->command( [ 'clear' => true ] ) );
+
+		C2a_Adapter::update( $this->command( [ 'point_id' => 'P2' ] ) );
+
+		$this->assertSame( [ 'address_1' => 'Arbat 2', 'postcode' => '' ], C2a_Adapter::$writes[1] );
+		$this->assertSame( '', $this->packages[0]['destination']['postcode'] );
 	}
 
 	public function test_the_previous_points_postcode_is_cleared_on_another_tariff_of_the_same_method(): void {
@@ -752,6 +878,8 @@ final class StoreApiPickupTest extends TestCase {
 			return true;
 		} );
 		\Brain\Monkey\Actions\expectAdded( 'woocommerce_store_api_checkout_update_draft' )->once()->with( [ Store_Api_Pickup::class, 'update_draft' ] );
+		// #1113: the customer route is where the server sees a postcode edit.
+		\Brain\Monkey\Actions\expectAdded( 'woocommerce_store_api_cart_update_customer_from_request' )->once()->with( [ Store_Api_Pickup::class, 'observe_customer' ] );
 		Store_Api_Pickup::register();
 		Store_Api_Pickup::add_handler( $this->handler, 'second_carrier', 'second_field' );
 		Store_Api_Pickup::register();

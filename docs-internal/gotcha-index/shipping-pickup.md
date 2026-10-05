@@ -30,6 +30,7 @@
 - [shipping/pickup] **A control that changes WHAT a surface is about must emit the same event every other route to that state emits.** → [a-control-that-changes-the-subject-must-announce-it](../gotchas/a-control-that-changes-the-subject-must-announce-it.md) (s58)
 - [shipping/pickup] **A per-viewport cache is unbounded by construction.** → [per-viewport-cache-is-unbounded-by-construction](../gotchas/per-viewport-cache-is-unbounded-by-construction.md) (s58)
 - [shipping/pickup] **A `Pickup_Handler` without a `Selection_Scope` works on the classic checkout and has NO Store API transport: `owner: null`, no pickup button in the Checkout block.** → [a-pickup-handler-without-a-selection-scope-has-no-store-api-transport](../gotchas/a-pickup-handler-without-a-selection-scope-has-no-store-api-transport.md) (s151, #1089)
+- [shipping/pickup] **A value equal to what the point wrote does not prove the point wrote it — the customer may retype the same digits, and no request carries that. Keep a WRITER record; the browser reports the unseen edit and can only KEEP.** → [a-value-equal-to-the-one-you-wrote-does-not-prove-you-wrote-it](../gotchas/a-value-equal-to-the-one-you-wrote-does-not-prove-you-wrote-it.md) (s154, #1113)
 
 ## Related
 

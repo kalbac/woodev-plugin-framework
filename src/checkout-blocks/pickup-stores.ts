@@ -14,7 +14,7 @@
  * @package woodev-plugin-framework
  */
 
-import { dispatch, select } from '@wordpress/data';
+import { dispatch, select, subscribe } from '@wordpress/data';
 import type {
 	PickupConfig,
 	PickupData,
@@ -29,7 +29,13 @@ import type {
 	PickupSnapshot,
 } from './pickup-types';
 import type { WcAddress } from './types';
-import { adoptDestination, CART_STORE, readBillingAddress, readShippingAddress } from './wc-stores';
+import {
+	adoptDestination,
+	CART_STORE,
+	isShippingAddressAuthoritative,
+	readBillingAddress,
+	readShippingAddress,
+} from './wc-stores';
 import { wcRuntime } from './wc-runtime';
 
 export const PAYMENT_STORE = 'wc/store/payment';
@@ -309,6 +315,92 @@ function asMovedTo( address: string | null, destination: PickupDestination ): st
 	return JSON.stringify( [ take( shipping ), take( billing ) ] );
 }
 
+/** One address's postcode: the value nobody but a confirmation has changed, and whether anything did. */
+interface PostcodeWatch {
+	/** `null` until the cart store holds the server's cart, and again while it is being re-read. */
+	untouched: string | null;
+	edited: boolean;
+}
+
+/**
+ * WHO WROTE THE POSTCODE (#1113). A point without a postcode clears the one a previous point wrote,
+ * and never one the shopper typed — and the value cannot tell the two apart: a shopper who retypes
+ * the very digits the point wrote, or types another postcode and the first one back before core
+ * pushes the form (its push is debounced), leaves the server with no change to see. The browser sees
+ * every keystroke — core writes each one into the cart store — so it keeps the answer and sends it
+ * with the next confirmation (`postcode_edited`, {@link sendConfirmation}).
+ *
+ * `edited` means: since the last confirmation moved the postcode (or since the server's cart
+ * arrived, when none has), the store held some other postcode at least once. It errs towards «the
+ * shopper's»: the word only ever KEEPS a postcode (`Store_Api_Pickup::adopted_postcode()`).
+ */
+const postcodes: Record< 'shipping' | 'billing', PostcodeWatch > = {
+	shipping: { untouched: null, edited: false },
+	billing: { untouched: null, edited: false },
+};
+
+let stopWatchingPostcodes: ( () => void ) | null = null;
+
+function readPostcodes(): Record< 'shipping' | 'billing', string > {
+	return { shipping: readShippingAddress().postcode ?? '', billing: readBillingAddress().postcode ?? '' };
+}
+
+function notePostcodes(): void {
+	const authoritative = isShippingAddressAuthoritative();
+	const now = readPostcodes();
+
+	for ( const key of [ 'shipping', 'billing' ] as const ) {
+		const watch = postcodes[ key ];
+
+		if ( ! authoritative ) {
+			// The cart is on its way from the server: what it brings is nobody's edit.
+			watch.untouched = null;
+		} else if ( watch.untouched === null ) {
+			watch.untouched = now[ key ];
+		} else if ( watch.untouched !== now[ key ] ) {
+			watch.edited = true;
+		}
+	}
+}
+
+/** A confirmation has just moved the postcode: it is the point's, and untouched, from here. */
+function adoptPostcodes(): void {
+	const now = readPostcodes();
+
+	for ( const key of [ 'shipping', 'billing' ] as const ) {
+		postcodes[ key ] = { untouched: now[ key ], edited: false };
+	}
+}
+
+/** Whether the postcode a confirmation would move has been edited; billing counts where it is the destination. */
+function postcodeEdited( billingIsShipping: boolean ): boolean {
+	return postcodes.shipping.edited || ( billingIsShipping && postcodes.billing.edited );
+}
+
+/**
+ * Starts watching the cart store for postcode edits — once per page, when the bundle is evaluated,
+ * so no edit precedes it. Answers the function that stops it and forgets what it saw.
+ */
+export function watchPostcodeEdits(): () => void {
+	stopWatchingPostcodes?.();
+
+	const unsubscribe = typeof subscribe === 'function' ? subscribe( notePostcodes, CART_STORE ) : () => {};
+	const stop = (): void => {
+		unsubscribe();
+		postcodes.shipping = { untouched: null, edited: false };
+		postcodes.billing = { untouched: null, edited: false };
+
+		if ( stopWatchingPostcodes === stop ) {
+			stopWatchingPostcodes = null;
+		}
+	};
+
+	stopWatchingPostcodes = stop;
+	notePostcodes();
+
+	return stop;
+}
+
 /**
  * Whether the reply's snapshot is the server's confirmation of the command for `pointId`: that
  * point, or the one the server corrected it to. A domain may correct the point while confirming
@@ -407,11 +499,16 @@ async function sendConfirmation(
 		throw { status: 0, code: 'woodev_pickup_transport_missing', message: '' } as PickupFailure;
 	}
 
-	const command: Record< string, string > = { point_id: pointId };
+	const command: Record< string, string | boolean > = { point_id: pointId };
 	const payment = readActivePaymentMethod();
 
 	if ( payment !== '' ) {
 		command.payment_method = payment;
+	}
+
+	// Read as the command leaves: an edit made while it waited behind another one counts.
+	if ( postcodeEdited( billingIsShipping ) ) {
+		command.postcode_edited = true;
 	}
 
 	let cart: unknown;
@@ -462,6 +559,10 @@ async function sendConfirmation(
 
 		adoptDestination( destination, billingIsShipping );
 		addressAsMoved = movableAddress( billingIsShipping );
+
+		if ( destination.postcode !== undefined ) {
+			adoptPostcodes();
+		}
 	}
 
 	return { ...snapshot.selection, allowed: true };
@@ -472,8 +573,8 @@ async function sendConfirmation(
  *
  * An EMPTY postcode is a move too, and the only empty value the server names: the point has no
  * postcode and the one a previous point wrote was cleared with this confirmation
- * (`Pickup_Handler::store_api_replacement_address()`, #1113). A postcode the server left alone is
- * not named at all.
+ * (`Store_Api_Pickup::replace_destination()`, #1113). A postcode the server left alone — the
+ * shopper's own, {@link postcodes} — is not named at all.
  */
 function movedDestination( snapshot: PickupSnapshot ): PickupDestination | null {
 	const source = snapshot.destination;
