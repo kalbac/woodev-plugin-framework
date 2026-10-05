@@ -28,6 +28,7 @@ import { createHost } from './pickup-host';
 import {
 	announcePoint,
 	buildEcho,
+	localityMissing,
 	readConfig,
 	readExtension,
 	readSelectedRateId,
@@ -40,6 +41,7 @@ import {
 	withdrawPoint,
 } from './pickup-stores';
 import type { PickupConfig, PickupData, PickupExtension, PickupFieldDescriptor, PickupSession } from './pickup-types';
+import { useShippingAddressState } from './address-lifecycle';
 import { refreshRates, subscribeCheckoutFailure } from './wc-stores';
 
 /** The inner-block helper WooCommerce hands every Checkout inner block (`checkoutExtensionData`). */
@@ -116,6 +118,12 @@ export function PickupPicker( { data, checkoutExtensionData }: PickupPickerProps
 	const config = field ? readConfig( field ) : null;
 	const errorId = field ? validationId( field ) : '';
 
+	// The owner (and its locality key) is the cart's answer for the address it LAST received. While
+	// the form holds an edit the cart has not answered, the owner is the previous address's — and
+	// stays so when the edit's push failed (#1110).
+	const addressState = useShippingAddressState();
+	const addressPending = addressState === 'pending';
+
 	const visibleError: string = useSelect(
 		( registrySelect ) => ( errorId === '' ? '' : readVisibleError( errorId, registrySelect ) ),
 		[ errorId ]
@@ -167,7 +175,15 @@ export function PickupPicker( { data, checkoutExtensionData }: PickupPickerProps
 	 * the authority, this is the shopper's earlier and nearer notice. Only this field's own error
 	 * is ever set or cleared.
 	 */
-	const required = data.i18n?.required ?? '';
+	// While the cart holds no resolved locality no point can be confirmed, and «choose a point» is
+	// not the way out — the message says what is (#1110). The server refuses the order with the same.
+	// An empty owner while a push is on its way is not an answer yet — the locality may be resolved by
+	// the very reply that is coming — so only a settled address says «choose it». An edit whose push
+	// failed or never went out leaves an owner that is not this address's: the locality is unresolved
+	// for it, whatever the owner says, until a later reply answers.
+	const noLocality = addressState === 'stale' || ( localityMissing( view ) && ! addressPending );
+	const localityHint = data.i18n?.chooseLocality ?? '';
+	const required = ( noLocality && localityHint !== '' ? localityHint : data.i18n?.required ) ?? '';
 	const needsPoint = errorId !== '' && config !== null && confirmed === null;
 
 	useEffect( () => {
@@ -225,6 +241,17 @@ export function PickupPicker( { data, checkoutExtensionData }: PickupPickerProps
 		};
 	}, [ sessionScope, closeSession ] );
 
+	/*
+	 * A session is also bound to the locality its points were loaded for. The cart reporting that
+	 * locality gone — or another one — closes the dialog, a late reply included: its loaded points
+	 * would otherwise stay choosable under a locality the cart no longer holds (#1110). Not part of
+	 * `sessionScope`: that latches `left`, and a confirmation whose own reply moves the locality
+	 * must still be able to take its answer.
+	 */
+	const ownerLocality = view.owner?.locality ?? '';
+
+	useEffect( () => () => closeSession(), [ ownerLocality, closeSession ] );
+
 	useEffect( () => {
 		applyAccent( triggerRef.current, config ?? { fieldId: '' } );
 	} );
@@ -234,11 +261,26 @@ export function PickupPicker( { data, checkoutExtensionData }: PickupPickerProps
 	}
 
 	const i18n = config.i18n ?? {};
+	// The revealed validation error says the same thing while the locality is missing; one copy only.
+	const pendingText = addressPending ? config.i18n?.loading ?? '' : '';
+	const hintText = pendingText !== '' ? pendingText : noLocality ? localityHint : '';
+	const showHint = hintText !== '' && visibleError === '';
+	// Inert while the locality is unknown or still being worked out; never says «choose» for the latter.
+	const blocked = noLocality || addressPending;
+	const hintId = `${ errorId }-hint`;
+	const describedBy = visibleError !== '' ? `${ errorId }-error` : showHint ? hintId : undefined;
 
 	const open = (): void => {
 		const api = readSessionApi();
 
 		closeSession();
+
+		// No resolved locality, or an address edit the cart has not answered: the dialog would list
+		// another locality's points and could confirm none. The hint under the button is the answer
+		// (#1110).
+		if ( blocked ) {
+			return;
+		}
 
 		if ( ! api ) {
 			setUnavailable( true );
@@ -269,7 +311,8 @@ export function PickupPicker( { data, checkoutExtensionData }: PickupPickerProps
 				type="button"
 				className={ triggerClassName( config ) }
 				aria-haspopup="dialog"
-				aria-describedby={ visibleError !== '' ? `${ errorId }-error` : undefined }
+				aria-disabled={ blocked ? true : undefined }
+				aria-describedby={ describedBy }
 				onClick={ open }
 			>
 				{ confirmed ? i18n.triggerChange : i18n.trigger }
@@ -277,6 +320,11 @@ export function PickupPicker( { data, checkoutExtensionData }: PickupPickerProps
 			{ confirmed && confirmed.summary !== '' && (
 				<p className="woodev-pickup-block__chosen woodev-pickup-chosen-address">
 					{ i18n.chosenPointAddress } <strong>{ confirmed.summary }</strong>
+				</p>
+			) }
+			{ showHint && (
+				<p id={ hintId } className="woodev-pickup-block__hint" role="status">
+					{ hintText }
 				</p>
 			) }
 			{ visibleError !== '' && (

@@ -4984,3 +4984,8 @@ msgstr "Этот способ получения сейчас недоступе
 #: shipping-method/pickup/class-pickup-handler.php
 msgid "%s: pickup delivery is not available in the block checkout because the plugin is misconfigured (no pickup selection scope). Customers cannot place an order with this pickup method there. Please contact the plugin developer."
 msgstr "%s: доставка с самовывозом недоступна в блочном оформлении заказа — плагин настроен неверно (не задан контекст выбора пункта выдачи). Покупатели не смогут оформить заказ с этим способом получения. Свяжитесь с разработчиком плагина."
+
+#: shipping-method/pickup/class-store-api-pickup.php
+#: shipping-method/checkout/blocks/class-pickup-blocks.php
+msgid "Choose your locality from the suggestions to see pickup points."
+msgstr "Выберите свой населённый пункт в подсказках — тогда появятся пункты выдачи."

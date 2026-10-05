@@ -64,7 +64,11 @@ export interface PickupOwner {
 	plugin_id: string;
 	field_id: string;
 	rate_id: string;
-	/** The key the owner's points are addressed by; `''` when no settlement is chosen. */
+	/**
+	 * The key the owner's points are addressed by AND a confirmation is made against; `''` when the
+	 * cart holds no resolved settlement — a typed city the chooser never resolved included. The
+	 * client then opens no dialog (`localityMissing()`, #1110).
+	 */
 	locality: string;
 }
 

@@ -254,6 +254,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 				if ( ! $handler->owns_store_api_rate( $context['rate_id'] ) || ! self::rate_available( $context ) ) {
 					self::refuse( self::choose_message() );
 				}
+				// No resolved locality refuses EVERY point; say what to do about it (#1110).
+				if ( ! $handler->has_store_api_locality( $context['rate_id'] ) ) {
+					self::refuse( self::locality_message() );
+				}
 				$point_id = self::clean_id( $value, 'point_id' );
 				if ( '' === $point_id ) {
 					self::refuse( self::choose_message() );
@@ -624,7 +628,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 					if ( '' === $point_id || $order_method !== explode( ':', $rate_id )[0]
 						|| $order_instance !== (int) ( explode( ':', $rate_id )[1] ?? 0 ) || ! self::rate_available( $context )
 						|| self::address_key( $order->get_address( 'shipping' ) ) !== $context['address_key'] ) {
-						$messages[] = self::choose_message();
+						// A cart with no resolved locality cannot have a point: tell the customer the way out (#1110).
+						$messages[] = ( '' === $point_id && ! $handler->has_store_api_locality( $rate_id ) ) ? self::locality_message() : self::choose_message();
 					} elseif ( ! empty( $echo ) && ( null === $snapshot || ! self::echo_matches( $echo, $snapshot ) ) ) {
 						$messages[] = self::choose_message();
 					} else {
@@ -723,6 +728,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 		 */
 		private static function choose_message(): string {
 			return __( 'Please choose a pickup point on the checkout page before paying.', 'woodev-plugin-framework' );
+		}
+
+		/**
+		 * Actionable refusal for a cart with no resolved locality (issue #1110): a hand-typed city the
+		 * customer never picked from the chooser's suggestions confirms no point. Also the block
+		 * checkout's hint under the pickup button ({@see \Woodev\Framework\Shipping\Checkout\Blocks\Pickup_Blocks::i18n_strings()}).
+		 *
+		 * @since 2.0.2
+		 * @return string
+		 */
+		private static function locality_message(): string {
+			return __( 'Choose your locality from the suggestions to see pickup points.', 'woodev-plugin-framework' );
 		}
 
 		/**

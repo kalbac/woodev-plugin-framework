@@ -138,7 +138,10 @@ class PickupBlocksIntegrationTest extends TestCase {
 						'configKey' => 'woodev_pickup_config_carrier',
 					],
 				],
-				'i18n'      => [ 'required' => 'Please choose a pickup point.' ],
+				'i18n'      => [
+					'required'       => 'Please choose a pickup point.',
+					'chooseLocality' => 'Choose your locality from the suggestions to see pickup points.',
+				],
 			],
 			$data
 		);

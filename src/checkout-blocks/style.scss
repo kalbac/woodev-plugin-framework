@@ -110,7 +110,7 @@
  * Checkout Blocks pickup-point button (SP-11 C-2b, #1089).
  *
  * The trigger's accent and the chosen-address line are `pickup.css`'s — the very rules the classic
- * checkout uses; only the block's own spacing and its error line live here.
+ * checkout uses; only the block's own spacing and its error and hint lines live here.
  */
 
 .woodev-pickup-block {
@@ -125,5 +125,17 @@
 		margin: 0.4em 0 0;
 		color: #cc1818;
 		font-size: 0.8125em;
+	}
+
+	// The «choose your locality» hint (#1110): guidance, not an error — the order is not refused yet.
+	&__hint {
+		margin: 0.4em 0 0;
+		font-size: 0.8125em;
+	}
+
+	// A button that has no dialog to open until a locality is chosen (it stays focusable on purpose).
+	&__trigger[aria-disabled='true'] {
+		opacity: 0.6;
+		cursor: not-allowed;
 	}
 }

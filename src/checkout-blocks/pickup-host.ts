@@ -8,7 +8,8 @@
  * stores and the Store API:
  *
  * - CONTEXT is read LIVE, at the moment the session asks — the chosen point from the cart's
- *   confirmed snapshot, the locality from the native shipping address and the server's own key.
+ *   confirmed snapshot, the locality KEY from the server's own answer (never the typed city) and the
+ *   locality NAME the map centres on from the native shipping address.
  *   The points requests carry the LIVE payment gateway (`getRequestContext()`): the block checkout
  *   keeps the choice in the browser, and the session's own record may be an earlier checkout's.
  * - CONFIRMATION is one `cart/extensions` command, with Place Order blocked while it is in flight.
@@ -74,13 +75,16 @@ export function createHost( { data, field, config, trigger, onClose, isCurrent }
 
 		getLocality: () => readShippingAddress().city,
 
-		// The server's key when the customer has chosen a settlement; the native city otherwise —
-		// the same fallback the classic checkout makes (`pickup-mount.js`: `resolveLocalityKey()`).
+		// The server's key — the locality the cart holds, the one a confirmation is made against —
+		// and NOTHING ELSE. The classic checkout falls back to the typed city here, and there the
+		// confirmation reads the same typed address; in the block checkout it reads the cart's
+		// resolved locality, so a typed city the server never resolved would list points no
+		// confirmation can take (#1110). `''` is the «no locality» answer; the picker does not open
+		// a dialog on it (`PickupPicker`).
 		getLocalityKey: () => {
 			const view = currentView( data );
-			const key = view.field === field ? view.owner?.locality ?? '' : '';
 
-			return key !== '' ? key : readShippingAddress().city;
+			return view.field === field ? view.owner?.locality ?? '' : '';
 		},
 
 		getNonce: () => liveNonce( config ),
