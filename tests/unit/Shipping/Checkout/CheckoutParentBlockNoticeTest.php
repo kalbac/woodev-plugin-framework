@@ -20,18 +20,34 @@ class CheckoutParentBlockNoticeTest extends TestCase {
 		Functions\when( 'has_shortcode' )->alias( static fn( string $content, string $tag ): bool => false !== strpos( $content, '[' . $tag ) );
 	}
 
+	/**
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
 	public function test_complete_checkout_parents_do_not_warn(): void {
 		$this->assertFalse( Checkout_Parent_Block_Notice::should_warn( '<!-- wp:woocommerce/checkout -->' . self::PARENTS, true ) );
 	}
 
+	/**
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
 	public function test_missing_parent_blocks_warn_when_pickup_is_available(): void {
 		$this->assertTrue( Checkout_Parent_Block_Notice::should_warn( '<!-- wp:woocommerce/checkout -->', true ) );
 	}
 
+	/**
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
 	public function test_classic_shortcode_page_does_not_warn(): void {
 		$this->assertFalse( Checkout_Parent_Block_Notice::should_warn( '[woocommerce_checkout]', true ) );
 	}
 
+	/**
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
 	public function test_missing_parents_do_not_warn_without_pickup_method(): void {
 		$this->assertFalse( Checkout_Parent_Block_Notice::should_warn( '<!-- wp:woocommerce/checkout -->', false ) );
 	}
