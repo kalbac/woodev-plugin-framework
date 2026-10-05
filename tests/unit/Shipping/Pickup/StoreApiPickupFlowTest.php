@@ -537,6 +537,62 @@ final class StoreApiPickupFlowTest extends TestCase {
 		$this->assertSame( 'P1', $this->meta[508]['carrier_point'] );
 	}
 
+	public function test_cart_snapshot_restores_the_failed_orders_point_when_the_session_selection_is_empty(): void {
+		$this->confirm();
+		$order = new C3_Order( 512 );
+		$this->assertFalse( $this->post( $order, $this->echo_of_cart() )->has_errors() );
+		$order->status = 'failed';
+
+		$this->assertSame( 'P1', $this->snapshot()['point_id'] );
+	}
+
+	public function test_cart_snapshot_does_not_restore_the_failed_orders_point_after_the_address_changes(): void {
+		$this->confirm();
+		$order = new C3_Order( 513 );
+		$this->assertFalse( $this->post( $order, $this->echo_of_cart() )->has_errors() );
+		$order->status = 'failed';
+		$this->assertSame( 'P1', $this->snapshot()['point_id'] );
+		$this->move_to( [ 'address_1' => 'Other street' ] );
+
+		$this->assertNull( $this->snapshot() );
+	}
+
+	public function test_cart_snapshot_does_not_restore_the_failed_orders_point_for_another_rate_instance(): void {
+		$this->confirm();
+		$order = new C3_Order( 514 );
+		$this->assertFalse( $this->post( $order, $this->echo_of_cart() )->has_errors() );
+		$order->status = 'failed';
+		$this->assertSame( 'P1', $this->snapshot()['point_id'] );
+		$this->choose_rate( 'carrier_pickup:8' );
+
+		$this->assertNull( $this->snapshot() );
+	}
+
+	public function test_cart_snapshot_does_not_restore_without_the_reusable_draft_or_its_point(): void {
+		$this->confirm();
+		$order = new C3_Order( 515 );
+		$this->assertFalse( $this->post( $order, $this->echo_of_cart() )->has_errors() );
+		$order->status = 'failed';
+		$this->assertSame( 'P1', $this->snapshot()['point_id'] );
+		$this->session->data['store_api_draft_order'] = 0;
+		$this->assertNull( $this->snapshot() );
+
+		$this->session->data['store_api_draft_order'] = 515;
+		unset( $this->meta[515]['carrier_point'] );
+		$this->assertNull( $this->snapshot() );
+	}
+
+	public function test_the_live_session_confirmation_wins_over_the_failed_orders_saved_point(): void {
+		$this->confirm( 'P1' );
+		$order = new C3_Order( 516 );
+		$this->assertFalse( $this->post( $order, $this->echo_of_cart() )->has_errors() );
+		$order->status = 'failed';
+		$this->assertSame( 'P1', $this->snapshot()['point_id'] );
+		$this->confirm( 'P2' );
+
+		$this->assertSame( 'P2', $this->snapshot()['point_id'] );
+	}
+
 	public function test_a_payment_retry_without_a_point_is_refused(): void {
 		$this->confirm();
 		$order = new C3_Order( 509 );

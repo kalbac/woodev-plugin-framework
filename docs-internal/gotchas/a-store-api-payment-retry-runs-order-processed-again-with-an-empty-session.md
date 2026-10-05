@@ -31,9 +31,12 @@ Three facts of the retry path, none of them visible from a single request:
    street — or for instance 7 of a method — pay for another street, or for instance 8: the handler
    still «owns» the bare method id, and the session's memory, which held the binding, is empty.
 
-A failed payment does NOT refresh the cart in the browser, so the block keeps echoing the original
-confirmation; the next cart answer (a payment-method switch returns `__experimentalCart`) carries no
-point, because the session forgot it.
+A failed payment does not itself refresh the cart. The Checkout Blocks `onCheckoutFail` event now
+uses WooCommerce's customer/rates refresh path, so the next cart answer includes the existing
+`woodev-shipping` snapshot. When session memory is empty, that snapshot is restored from the
+session's reusable retry order only if its saved point, full rate id and shipping destination still
+match the placed confirmation and current cart. The same guarded snapshot also restores on a later
+payment-method refresh or reload.
 
 ## Fix
 
@@ -71,6 +74,14 @@ A retry test must run the WHOLE second `POST`: `update_order` → `validate_orde
 `order_processed` callbacks (priority 10, then 20). A test that stops at validation passes on the
 broken code. Reset the handler's per-request memo between simulated requests, or the carrier-request
 counts are meaningless.
+
+The cart snapshot has a separate retry fallback: it must use the reusable order WooCommerce would
+actually retry (`checkout-draft`, or pending/failed with the current cart hash), and require the
+placed confirmation to match that order's point, full method instance and current shipping address.
+An absent/stale draft, missing point, changed address, changed rate or changed instance returns
+`null`; a live session choice remains authoritative. The client re-reads cart state after the public
+`onCheckoutFail` event using `wc/store/cart`'s existing customer refresh path. Tests cover both this
+cart read and the whole payment retry lifecycle.
 
 ## Related
 

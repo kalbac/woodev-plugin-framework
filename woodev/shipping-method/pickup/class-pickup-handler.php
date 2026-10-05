@@ -1970,6 +1970,47 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		}
 
 		/**
+		 * Reads the active session confirmation, or restores a valid confirmation from this
+		 * session's reusable failed/pending order after WooCommerce clears the selection on payment.
+		 *
+		 * @since 2.0.2
+		 * @param string $rate_id Full server rate id.
+		 * @param string $address_key Server destination fingerprint.
+		 * @param bool   $allow_retry_fallback Whether current cart checks allow an order fallback.
+		 * @return array<string, mixed>|null
+		 */
+		public function store_api_cart_confirmation( string $rate_id, string $address_key, bool $allow_retry_fallback ): ?array {
+			$selected = $this->get_selected_point_for_method( explode( ':', $rate_id )[0] );
+			if ( null !== $selected && '' !== $selected['point_id'] ) {
+				// A present session choice owns the answer, including when it is stale and therefore
+				// hidden. Never replace it with a retry order's older point.
+				return $this->store_api_confirmation( $rate_id, $address_key );
+			}
+			if ( ! $allow_retry_fallback ) {
+				return null;
+			}
+
+			$order = $this->store_api_draft_order();
+			if ( null === $order ) {
+				return null;
+			}
+			/** @var \WC_Order_Item_Shipping[] $lines */
+			$lines = array_values( $order->get_items( 'shipping' ) );
+			/** @var \WC_Order_Item_Shipping|null $line */
+			$line  = $lines[0] ?? null;
+			$parts = explode( ':', $rate_id );
+			if ( null === $line || (string) $line->get_method_id() !== (string) ( $parts[0] ?? '' )
+				|| (int) $line->get_instance_id() !== (int) ( $parts[1] ?? 0 )
+				|| Store_Api_Pickup::address_key( $order->get_address( 'shipping' ) ) !== $address_key ) {
+				return null;
+			}
+
+			// The bare order meta id is not proof: C-3's placed confirmation binds it to the full
+			// rate and destination, and the helper also verifies the point is still on this order.
+			return $this->store_api_placed_confirmation( $order, $rate_id, $address_key );
+		}
+
+		/**
 		 * Invalidates a changed confirmation on checkout mutation paths only.
 		 *
 		 * @since 2.0.2

@@ -38,6 +38,7 @@ import {
 	validationId,
 } from './pickup-stores';
 import type { PickupConfig, PickupData, PickupExtension, PickupFieldDescriptor, PickupSession } from './pickup-types';
+import { refreshRates, subscribeCheckoutFailure } from './wc-stores';
 
 /** The inner-block helper WooCommerce hands every Checkout inner block (`checkoutExtensionData`). */
 export interface CheckoutExtensionData {
@@ -121,6 +122,10 @@ export function PickupPicker( { data, checkoutExtensionData }: PickupPickerProps
 	const triggerRef = useRef< HTMLButtonElement | null >( null );
 	const sessionRef = useRef< PickupSession | null >( null );
 	const [ unavailable, setUnavailable ] = useState( false );
+
+	// A failed payment clears the session choice after the order has kept it. Re-read the cart
+	// through WooCommerce's existing customer/rates refresh so its extension snapshot can restore it.
+	useEffect( () => subscribeCheckoutFailure( refreshRates ), [] );
 
 	const closeSession = useCallback( () => {
 		const session = sessionRef.current;

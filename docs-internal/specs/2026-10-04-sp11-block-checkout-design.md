@@ -217,8 +217,11 @@ Rules added by C-3 (#1090), from replaying the multi-request flows against WooCo
 - **Client, corrected point.** A reply whose snapshot names another point than the one asked for
   is this command's confirmation when the verdict carries the corrected point (`selection.point`):
   it is accepted, its destination is taken by the rules above, and the echo names the corrected id.
-- **Not changed (follow-up card):** after a failed payment the cart snapshot is `null` — the next
-  cart answer (a payment-method switch, a reload) makes the shopper pick the point again.
+- **Retry cart snapshot (#1101):** after a failed payment, Checkout Blocks re-reads cart state on
+  WooCommerce's public `onCheckoutFail` event. With empty session memory, the snapshot falls back to
+  the session's reusable draft/retry order only when its saved point and placed confirmation still
+  match the current full rate id, method instance and shipping destination; otherwise it stays
+  `null` and the shopper chooses again. A live session selection remains authoritative.
 
 Important existing code, not new work to recreate:
 
