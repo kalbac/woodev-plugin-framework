@@ -158,7 +158,6 @@ if ( ! class_exists( __NAMESPACE__ . '\Locality_Blocks_Integration' ) ) :
 
 			$location['i18n'] = array_merge( (array) ( $location['i18n'] ?? [] ), Locality_Blocks::i18n_strings() );
 			$location['billingOnly'] = 'billing_only' === get_option( 'woocommerce_ship_to_destination' );
-			$location['billingOnly'] = 'billing_only' === get_option( 'woocommerce_ship_to_destination' );
 
 			return [
 				'enabled'  => true,
