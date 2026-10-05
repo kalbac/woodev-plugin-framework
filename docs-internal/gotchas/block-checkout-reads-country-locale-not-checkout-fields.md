@@ -57,8 +57,18 @@ add_filter( 'woocommerce_checkout_fields', function ( $fields ) {
 ```
 
 Anything JS-driven on the classic form (hide-for-pickup, CSS-hide of the country row) still does
-not reach the block checkout until the SP-11 adapter exists — those admin options are rendered
-`disabled` with the reason (design S3/D11 of `specs/2026-08-18-shipping-settings-v2-design.md`).
+not reach the block checkout — those admin options are rendered `disabled` with the reason
+(design S3/D11 of `specs/2026-08-18-shipping-settings-v2-design.md`).
+
+**s154 / #1113: a block adapter alone does not supply a reactive core-field policy.** WC 9.9 and
+11.1's `prepare-form-fields.ts` copies the locale into a module-level map. Changing the shipping
+method does not republish that map. A PHP locale contribution conditional on the chosen method
+can therefore affect Store API validation while leaving the browser on its initial rule; it
+can also leave a courier form hidden if the page initially loaded with pickup. The conditional
+Additional Checkout Fields API manages namespaced additional fields, not core `postcode` or
+`address_1`. No supported reactive core-field override was found in the inspected versions;
+the task's explicit fallback was **design only**, with the settings clamp retained. Source
+pointers and rejected alternatives are in the [s154 measurement](../research/2026-10-05-block-checkout-pickup-core-fields.md).
 
 ## Related
 
