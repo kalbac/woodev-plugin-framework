@@ -53,7 +53,10 @@ export interface PickupSnapshot {
 	selection?: PickupSelectionResult;
 }
 
-/** `Store_Api_Pickup::replace_destination()` — street line and/or postcode, never the city. */
+/**
+ * `Store_Api_Pickup::replace_destination()` — street line and/or postcode, never the city. The
+ * postcode is `''` when the point has none and a previous point's was cleared (#1113).
+ */
 export interface PickupDestination {
 	address_1?: string;
 	postcode?: string;

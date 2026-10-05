@@ -670,6 +670,11 @@ are ONE session (same point, either can confirm or place); a stranger's token to
   Store API locality command is a follow-up, never a loosened REST nonce.
 - **`address_field` / `postcode_field = hide_for_pickup` are classic-only.** On the block checkout a
   pickup order still demands the native Postcode, which a point without one does not supply.
+  Operator decision s154 (#1113, variant A): it stays required there — neither 9.9 nor 11.1 has a
+  supported way to relax a core field for pickup only. What such a point does do is CLEAR the
+  postcode a previous point wrote (of any field — the customer may have come from another carrier's
+  point): the confirmation whose recorded destination is still the current one proves whose postcode
+  it is, and the snapshot then names `postcode: ''`. A postcode the customer typed since is kept.
 - **WooCommerce's own persisted cart is PAINTED before the server's (#1111, fixed s154 — the flash
   remains).** Core (9.9.0 and 11.1 alike) keeps the cart in `localStorage.storeApiCartData` and, when
   `storeApiCartHash` equals the `woocommerce_cart_hash` cookie, starts the cart store from it and

@@ -467,7 +467,14 @@ async function sendConfirmation(
 	return { ...snapshot.selection, allowed: true };
 }
 
-/** The address fields a confirmation moved to the point's own, or `null` when it moved none. */
+/**
+ * The address fields a confirmation moved to the point's own, or `null` when it moved none.
+ *
+ * An EMPTY postcode is a move too, and the only empty value the server names: the point has no
+ * postcode and the one a previous point wrote was cleared with this confirmation
+ * (`Pickup_Handler::store_api_replacement_address()`, #1113). A postcode the server left alone is
+ * not named at all.
+ */
 function movedDestination( snapshot: PickupSnapshot ): PickupDestination | null {
 	const source = snapshot.destination;
 
@@ -480,7 +487,7 @@ function movedDestination( snapshot: PickupSnapshot ): PickupDestination | null 
 	for ( const key of [ 'address_1', 'postcode' ] as const ) {
 		const value = source[ key ];
 
-		if ( typeof value === 'string' && value !== '' ) {
+		if ( typeof value === 'string' && ( value !== '' || key === 'postcode' ) ) {
 			destination[ key ] = value;
 		}
 	}

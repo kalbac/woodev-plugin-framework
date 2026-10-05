@@ -114,6 +114,13 @@ Once the field policy has a supported client seam, the tail change needs:
 No tail fix was shipped independently: it would still leave the order blocked by the required
 empty core postcode, and the brief explicitly says to stop at design when one half is unsupported.
 
+**Update, same day (s154):** the operator chose variant A — the postcode stays required on blocks —
+and asked for the tail alone. Shipped: `Store_Api_Pickup::replace_destination()` names an empty
+postcode when a remembered confirmation of ANY field left the current destination with a postcode
+(`Pickup_Selection::recall_moved_destination()`), and `movedDestination()` takes that explicit empty
+string. Measured on the rig: live-carrier point (117279) → static-fixture point → postcode empty on
+both sides; a postcode typed in between is kept and the order places.
+
 ## Result and continuation
 
 No PHP/TS/runtime settings changes, bundles, catalogue entries or visible UI changes. Baseline

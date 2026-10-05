@@ -753,6 +753,100 @@ describe( 'PickupPicker — the store’s address-replacement policy (#1089)', (
 			expect( mockStore.shipping ).toEqual( { ...HOME, address_1: 'New manual street' } );
 		} );
 	} );
+
+	/*
+	 * #1113: a point with no postcode, chosen after one that had it. The server clears the postcode
+	 * the previous point wrote and NAMES it — empty — in the confirmation; a postcode it left alone
+	 * (the shopper's own) is not named at all.
+	 */
+	describe( 'when the point has no postcode and the previous point wrote one (#1113)', () => {
+		const ARBAT = { address_1: 'Арбат, 2', postcode: '' };
+
+		/** `extensionCartUpdate()` answering for the second point; `before` runs as the reply lands. */
+		const secondPointAnswers = ( before: () => void ) =>
+			extensionCartUpdate.mockImplementationOnce( async () => {
+				before();
+				serverAnswers( PICKUP_RATE, snapshot( { destination: ARBAT, point_id: 'P2' } as Partial< PickupSnapshot > ) );
+				notify();
+
+				return { extensions: mockStore.extensions };
+			} );
+
+		beforeEach( () => {
+			// The form as the first point's confirmation left it.
+			mockStore.shipping = { ...HOME, ...MOVED };
+		} );
+
+		it( 'clears the previous point’s postcode with the street, and never a separate billing address', async () => {
+			mockStore.billing = { ...OFFICE };
+
+			await confirmWith( ARBAT );
+
+			expect( mockStore.shipping ).toEqual( { ...HOME, ...ARBAT } );
+			expect( mockStore.billing ).toEqual( OFFICE );
+			expect( mockStore.addressWrites ).toEqual( [ 1 ] );
+			expect( screen.getByRole( 'button', { name: 'Choose a different pickup point' } ) ).toBeInTheDocument();
+		} );
+
+		it( 'clears it in the billing address too where the two are one address', async () => {
+			mockStore.useShippingAsBilling = true;
+			mockStore.billing = { ...HOME, ...MOVED };
+
+			await confirmWith( ARBAT );
+
+			expect( mockStore.billing ).toEqual( { ...HOME, ...ARBAT } );
+		} );
+
+		it( 'leaves the postcode alone when the server does not name it — it is the shopper’s own', async () => {
+			await confirmWith( { address_1: 'Арбат, 2' } );
+
+			expect( mockStore.shipping ).toEqual( { ...HOME, address_1: 'Арбат, 2', postcode: '101000' } );
+		} );
+
+		it( 'answers the dialog with the verdict when core has already taken the cleared postcode', async () => {
+			const session = fakeSession();
+
+			// Nothing unsaved: core takes the reply's shipping address, postcode cleared, first.
+			secondPointAnswers( () => {
+				mockStore.shipping = { ...mockStore.shipping, ...ARBAT };
+			} );
+			renderPicker();
+			fireEvent.click( trigger() as HTMLElement );
+
+			let verdict: unknown;
+
+			await act( async () => {
+				verdict = await session.host().confirmSelection( { id: 'P2' } );
+			} );
+
+			expect( verdict ).toMatchObject( { allowed: true } );
+			expect( mockStore.shipping ).toEqual( { ...HOME, ...ARBAT } );
+			expect( mockStore.addressWrites ).toEqual( [] );
+		} );
+
+		it( 'leaves a postcode the shopper typed while the confirmation was in flight', async () => {
+			const session = fakeSession();
+
+			// The edit is unsaved, so core keeps the reply's addresses out of the store.
+			secondPointAnswers( () => {
+				mockStore.shipping = { ...HOME, ...MOVED, postcode: '654321' };
+			} );
+			renderPicker();
+			fireEvent.click( trigger() as HTMLElement );
+
+			let error: unknown;
+
+			await act( async () => {
+				await session.host().confirmSelection( { id: 'P2' } ).catch( ( reason: unknown ) => {
+					error = reason;
+				} );
+			} );
+
+			expect( error ).toMatchObject( { code: 'woodev_pickup_superseded' } );
+			expect( mockStore.shipping ).toEqual( { ...HOME, ...MOVED, postcode: '654321' } );
+			expect( mockStore.addressWrites ).toEqual( [] );
+		} );
+	} );
 } );
 
 describe( 'PickupPicker — server refusals', () => {

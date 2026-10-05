@@ -326,6 +326,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 			if ( [] === $fields ) {
 				return [ $context, [] ];
 			}
+			// A point without a postcode leaves the customer's own alone — but not the one a
+			// previous point wrote there, which would stay beside this point's street (#1113).
+			if ( ! isset( $fields['postcode'] ) && self::holds_adopted_postcode( $context ) ) {
+				$fields['postcode'] = '';
+			}
 			$previous = static::write_destination( $fields );
 			if ( $previous === $fields ) {
 				return [ $context, $fields ];
@@ -341,6 +346,26 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 			}
 			static::write_destination( $previous, $context['chosen'] );
 			return [ static::context( true ), [] ];
+		}
+
+
+		/**
+		 * Whether the destination's postcode is one a remembered point wrote there — of ANY
+		 * field: the customer may have moved from another carrier's point to this one.
+		 *
+		 * @since 2.0.2
+		 * @param array<string, mixed> $context Server cart context, before the new point moves it.
+		 * @return bool
+		 */
+		private static function holds_adopted_postcode( array $context ): bool {
+			foreach ( self::$handlers as $fields ) {
+				foreach ( $fields as $handler ) {
+					if ( '' !== $handler->store_api_adopted_postcode( (string) $context['address_key'] ) ) {
+						return true;
+					}
+				}
+			}
+			return false;
 		}
 
 		/**
