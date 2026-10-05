@@ -127,6 +127,11 @@ rate. Replaced by a writer record (`Store_Api_Pickup::adopted_postcode()`) plus 
 `postcode_edited`; the trap and the trust model are in the gotcha
 [a-value-equal-to-the-one-you-wrote-does-not-prove-you-wrote-it](../gotchas/a-value-equal-to-the-one-you-wrote-does-not-prove-you-wrote-it.md).
 
+**Round 3 (critic REJECT, same day):** the record had a writer and no end — it outlived its checkout
+(order placed → next cart → the carried postcode cleared) and classic-page edits never voided it.
+`Store_Api_Pickup::forget_adopted_postcode()` now ends it on order placed (both checkouts), cart
+emptied, and any address post from a page the bundle does not watch; same gotcha, «needs an END».
+
 ## Result and continuation
 
 No PHP/TS/runtime settings changes, bundles, catalogue entries or visible UI changes. Baseline

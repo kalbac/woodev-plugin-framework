@@ -683,9 +683,14 @@ are ONE session (same point, either can confirm or place); a stranger's token to
   or the browser's `postcode_edited` on the selection command — the bundle watches the cart store,
   which takes every keystroke, for the edits no request carries. Trust: the browser's word can only
   KEEP a postcode; clearing stands on the server's record alone, so a silent client (a reloaded
-  page) leaves it to what the server saw. Not covered, and said: a retype of the SAME digits followed
-  by a reload before the next point (the page that saw it is gone), and a paste of identical text
-  (no change event at all).
+  page) leaves it to what the server saw. The record is ONE checkout's: it ends with the order placed
+  (either checkout), with the cart emptied, and outright when an address form posts from a page the
+  bundle does not watch — classic order review, cart calculator, My Account
+  (`Store_Api_Pickup::forget_adopted_postcode()`); a postcode carried into the next cart is the
+  customer's. Not covered, and said: a retype of the SAME digits followed by a reload before the
+  next point (the page that saw it is gone), and a paste of identical text (no change event at all).
+  The price of the record's end, also said: after a failed payment, or after a visit to the classic
+  checkout page, a previous point's postcode stays beside the next point's street.
 - **WooCommerce's own persisted cart is PAINTED before the server's (#1111, fixed s154 — the flash
   remains).** Core (9.9.0 and 11.1 alike) keeps the cart in `localStorage.storeApiCartData` and, when
   `storeApiCartHash` equals the `woocommerce_cart_hash` cookie, starts the cart store from it and

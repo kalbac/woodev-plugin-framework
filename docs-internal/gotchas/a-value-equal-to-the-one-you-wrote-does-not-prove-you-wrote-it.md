@@ -49,6 +49,27 @@ good (`Store_Api_Pickup::adopted_postcode()`):
   `wc/store/cart` (core writes every keystroke into it), and sends `postcode_edited: true` with the
   next selection command (`watchPostcodeEdits()`, pickup-stores.ts).
 
+**A writer record needs an END as much as a writer** (round 3, critic REJECT of round 2). The record
+lived in the session and the destination outlives a checkout: the next cart starts from the same
+address, its page has seen no edit to report, and the old record still «matched» — so a point
+without a postcode cleared a postcode the customer had since taken as their own. And an edit on a
+page with no watcher of ours never voided it. `forget_adopted_postcode()` ends the record:
+
+- when its checkout ends — the order placed on either checkout
+  (`woocommerce_store_api_checkout_order_processed`, `woocommerce_checkout_order_processed`) and the
+  cart emptied (`woocommerce_cart_emptied`; a destroyed session empties the cart, then drops the key
+  with its data). All three exist in 9.9.0 and 11.1;
+- when an address form posts from a page nobody watches: the classic checkout's order-review
+  refresh (`woocommerce_checkout_update_order_review`), the cart shortcode's calculator
+  (`woocommerce_calculated_shipping`), My Account (`woocommerce_customer_save_address`). **Ended
+  outright, not compared with the posted postcode** — the classic form posts on page load and 1 s
+  after ANY keystroke, so `654321` typed and `117279` typed back arrive as ONE refresh carrying
+  `117279` (measured). Comparing there repeats this gotcha one level up.
+
+Bound to events, not to the cart: the cart hash is identical for the same product bought again (the
+very case), and the Store API draft order is deferred to POST since WooCommerce 10.8 and never
+exists on the classic checkout.
+
 **Trust model.** The browser's word can only KEEP a postcode. Nothing a client sends makes the
 server clear one — clearing stands on the server's own record — so a forged or missing signal can at
 worst leave a stale postcode in the form, where the customer sees it. A silent client (a reloaded
@@ -66,6 +87,11 @@ models an edit no request carried, and can pass only through the browser's word.
 first fix as the control (`git stash`, same probe): retype-same, typed-and-back (pushed),
 typed-and-back (inside the debounce), typed-and-back then reload → kept, control cleared;
 untouched, and untouched then reload → cleared.
+
+Round 3, control = the round-2 adapter: order placed → the same product again → a point without a
+postcode → kept (control: cleared); on the classic page, postcode typed away and back → block
+checkout → kept (control: cleared). Unit tests fire the hook through the adapter's own registration
+(`has_action`), so on the old source they fail by assertion, not on a missing method.
 
 ## Related
 

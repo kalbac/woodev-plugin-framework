@@ -30,6 +30,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 		public const EXTENSION_NAMESPACE = 'woodev-shipping';
 		/** @var string Session key of the destination postcode's writer record ({@see self::adopted_postcode()}). */
 		private const ADOPTED_POSTCODE_KEY = 'woodev_store_api_adopted_postcode';
+		/**
+		 * @var string[] Where the writer record ends ({@see self::forget_adopted_postcode()}): the
+		 *      order placed on either checkout, the cart emptied, and the three address forms no
+		 *      watcher of ours stands on — classic order review, cart calculator, My Account.
+		 */
+		private const ADOPTION_END_HOOKS = [
+			'woocommerce_store_api_checkout_order_processed',
+			'woocommerce_checkout_order_processed',
+			'woocommerce_cart_emptied',
+			'woocommerce_checkout_update_order_review',
+			'woocommerce_calculated_shipping',
+			'woocommerce_customer_save_address',
+		];
 		/** @var array<string, array<string, Pickup_Handler>> Active carrier field owners. */
 		private static array $handlers = [];
 		/** @var bool Whether initialization hooks were attached. */
@@ -102,6 +115,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 			add_action( 'woocommerce_checkout_validate_order_before_payment', [ self::class, 'validate_order' ], 20, 2 );
 			// The server's own sight of a postcode edit: the route the address form is pushed through (#1113).
 			add_action( 'woocommerce_store_api_cart_update_customer_from_request', [ self::class, 'observe_customer' ] );
+			// The record is one checkout's and no longer: it must not authorize clearing a later one's postcode.
+			foreach ( self::ADOPTION_END_HOOKS as $hook ) {
+				add_action( $hook, [ self::class, 'forget_adopted_postcode' ], 10, 0 );
+			}
 			// This method accompanies the deferred-draft hook in WC 10.8; older WC needs no no-order reconciliation.
 			if ( method_exists( '\\Automattic\\WooCommerce\\StoreApi\\Routes\\V1\\Checkout', 'build_draft_route_response' ) ) {
 				add_action( 'woocommerce_store_api_checkout_update_draft', [ self::class, 'update_draft' ] );
@@ -402,6 +419,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 		 * own. A client that reports nothing — a reloaded page, which has seen no edit — leaves
 		 * the decision to what the server saw.
 		 *
+		 * ENDS with the checkout it was written in ({@see self::forget_adopted_postcode()}). The
+		 * destination outlives a checkout — the next cart starts from the same address — and a
+		 * record that outlived it too would let an old adoption clear a postcode the customer has
+		 * since made their own.
+		 *
 		 * One session key for the whole checkout, not one per carrier: there is one destination.
 		 *
 		 * `protected` as a test seam, as {@see self::draft_order_id()}.
@@ -468,6 +490,38 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 			if ( '' !== $adopted && $adopted !== $postcode ) {
 				static::remember_adopted_postcode( '' );
 			}
+		}
+
+		/**
+		 * Ends the writer record ({@see self::adopted_postcode()}) where the checkout it was written
+		 * in ends, or where the customer met the address on a page this adapter cannot watch.
+		 *
+		 * The record is bound to these EVENTS and to nothing in the cart, because nothing in the
+		 * cart tells two checkouts apart: the cart hash is the same for the same product bought
+		 * again, and the Store API draft order does not exist yet when a point is confirmed
+		 * (WooCommerce defers it) and never exists on the classic checkout.
+		 *
+		 * - An order placed, on either checkout: the customer put their name to that address, so
+		 *   the postcode in it is theirs from then on — also when the payment fails and the same
+		 *   cart is retried.
+		 * - The cart emptied. A destroyed session empties the cart first and then drops this key
+		 *   with the rest of its data (`WC_Session_Handler::forget_session()`).
+		 * - The classic checkout's order-review refresh, the cart's shipping calculator and My
+		 *   Account's address form. Ended outright, never compared with the posted postcode: the
+		 *   classic checkout posts its address on page load and one second after ANY keystroke,
+		 *   so a postcode typed away and back arrives as the value that was there all along, and
+		 *   no browser of ours stands on those pages to say otherwise.
+		 *
+		 * Every one of these errs the same way as the rest of the model: a record ended too early
+		 * leaves a previous point's postcode in the form, where the customer sees it.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 * @return void
+		 */
+		public static function forget_adopted_postcode(): void {
+			static::remember_adopted_postcode( '' );
 		}
 
 		/**

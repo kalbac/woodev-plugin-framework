@@ -524,6 +524,103 @@ final class StoreApiPickupTest extends TestCase {
 		$this->assertSame( '', $this->packages[0]['destination']['postcode'] );
 	}
 
+	/** Registers the adapter as WooCommerce would, so a hook reaches it through its own registration only. */
+	private function register_the_adapter(): void {
+		require_once __DIR__ . '/store-api-capabilities.php';
+		defined( 'ARRAY_A' ) || define( 'ARRAY_A', 'ARRAY_A' );
+		Functions\when( 'woocommerce_store_api_register_update_callback' )->justReturn( true );
+		Functions\when( 'woocommerce_store_api_register_endpoint_data' )->justReturn( true );
+		Store_Api_Pickup::register();
+	}
+
+	/** Fires a WooCommerce hook: what the adapter registered there runs, and nothing runs where it registered nothing. */
+	private function woocommerce_fires( string $hook ): void {
+		if ( false !== has_action( $hook, [ Store_Api_Pickup::class, 'forget_adopted_postcode' ] ) ) {
+			call_user_func( [ C2a_Adapter::class, 'forget_adopted_postcode' ] );
+		}
+	}
+
+	/**
+	 * #1113, round 3 — the critic's first case. A point wrote 101000 and that checkout ended. The
+	 * next cart in the same session starts from the same address and the customer goes on with
+	 * 101000 as their own postcode: the new page has seen no edit it could report, and the old
+	 * checkout's record must not speak for this one.
+	 *
+	 * @dataProvider ends_of_a_checkout
+	 */
+	public function test_a_postcode_carried_into_the_next_cart_is_kept( string $hook ): void {
+		$this->register_the_adapter();
+		$this->confirm_a_point_with_a_postcode_then_offer_one_without();
+
+		$this->woocommerce_fires( $hook );
+
+		// The next cart: the same session, the same destination, a silent browser.
+		C2a_Adapter::update( $this->command( [ 'point_id' => 'P2' ] ) );
+
+		$this->assertSame( [ 'address_1' => 'Arbat 2' ], C2a_Adapter::$writes[1] );
+		$this->assertSame( '101000', $this->packages[0]['destination']['postcode'] );
+		$this->assertSame( [ 'address_1' => 'Arbat 2' ], C2a_Adapter::cart_data()['pickup']['carrier']['carrier_point']['destination'] );
+	}
+
+	public function ends_of_a_checkout(): array {
+		return [
+			'order placed on the block checkout' => [ 'woocommerce_store_api_checkout_order_processed' ],
+			'order placed on the classic checkout' => [ 'woocommerce_checkout_order_processed' ],
+			'cart emptied' => [ 'woocommerce_cart_emptied' ],
+		];
+	}
+
+	/**
+	 * #1113, round 3 — the critic's second case. The postcode is typed away and back on a page
+	 * where no watcher of ours stands, so no `postcode_edited` will ever come, and the Store API
+	 * customer route never sees the form. The classic checkout posts one second after ANY
+	 * keystroke: an edit away and back inside that second arrives once, with the digits that were
+	 * there all along — so the post itself ends the record, whatever it carries.
+	 *
+	 * @dataProvider address_forms_nobody_watches
+	 */
+	public function test_a_postcode_typed_away_and_back_on_a_page_nobody_watches_is_kept( string $hook, array $posted ): void {
+		$this->register_the_adapter();
+		$this->confirm_a_point_with_a_postcode_then_offer_one_without();
+
+		foreach ( $posted as $postcode ) {
+			$this->packages[0]['destination']['postcode'] = $postcode;
+			$this->woocommerce_fires( $hook );
+		}
+
+		C2a_Adapter::update( $this->command( [ 'point_id' => 'P2' ] ) );
+
+		$this->assertSame( [ 'address_1' => 'Arbat 2' ], C2a_Adapter::$writes[1] );
+		$this->assertSame( '101000', $this->packages[0]['destination']['postcode'] );
+	}
+
+	public function address_forms_nobody_watches(): array {
+		return [
+			'classic checkout, each edit posted' => [ 'woocommerce_checkout_update_order_review', [ '654321', '101000' ] ],
+			'classic checkout, both edits inside one refresh' => [ 'woocommerce_checkout_update_order_review', [ '101000' ] ],
+			'cart shipping calculator' => [ 'woocommerce_calculated_shipping', [ '654321', '101000' ] ],
+			'My Account address form' => [ 'woocommerce_customer_save_address', [ '654321', '101000' ] ],
+		];
+	}
+
+	/** The end of one checkout is not the end of the model: the next checkout's point is a writer again. */
+	public function test_the_next_checkouts_own_point_is_a_writer_again(): void {
+		$this->register_the_adapter();
+		$this->confirm_a_point_with_a_postcode_then_offer_one_without();
+		$this->woocommerce_fires( 'woocommerce_store_api_checkout_order_processed' );
+		$this->point_data = array_merge( $this->point_data, [ 'id' => 'P3', 'address' => 'Sretenka 3', 'postal_code' => '107045' ] );
+		C2a_Adapter::update( $this->command( [ 'point_id' => 'P3' ] ) );
+		$this->assertSame( '107045', $this->packages[0]['destination']['postcode'] );
+		$this->point_data['id'] = 'P2';
+		$this->point_data['address'] = 'Arbat 2';
+		unset( $this->point_data['postal_code'] );
+
+		C2a_Adapter::update( $this->command( [ 'point_id' => 'P2' ] ) );
+
+		$this->assertSame( [ 'address_1' => 'Arbat 2', 'postcode' => '' ], C2a_Adapter::$writes[2] );
+		$this->assertSame( '', $this->packages[0]['destination']['postcode'] );
+	}
+
 	public function test_the_previous_points_postcode_is_cleared_on_another_tariff_of_the_same_method(): void {
 		$this->confirm_a_point_with_a_postcode_then_offer_one_without();
 		$this->session->data['chosen_shipping_methods'] = [ 'carrier_pickup:8' ];
@@ -880,6 +977,12 @@ final class StoreApiPickupTest extends TestCase {
 		\Brain\Monkey\Actions\expectAdded( 'woocommerce_store_api_checkout_update_draft' )->once()->with( [ Store_Api_Pickup::class, 'update_draft' ] );
 		// #1113: the customer route is where the server sees a postcode edit.
 		\Brain\Monkey\Actions\expectAdded( 'woocommerce_store_api_cart_update_customer_from_request' )->once()->with( [ Store_Api_Pickup::class, 'observe_customer' ] );
+		// #1113: where the postcode's writer record ends — the checkout's own end, and the address forms nobody watches.
+		foreach ( [ 'woocommerce_store_api_checkout_order_processed', 'woocommerce_checkout_order_processed', 'woocommerce_cart_emptied',
+			'woocommerce_checkout_update_order_review', 'woocommerce_calculated_shipping', 'woocommerce_customer_save_address' ] as $hook ) {
+			// No arguments accepted: the hooks disagree about theirs, and the record needs none.
+			\Brain\Monkey\Actions\expectAdded( $hook )->once()->with( [ Store_Api_Pickup::class, 'forget_adopted_postcode' ], 10, 0 );
+		}
 		Store_Api_Pickup::register();
 		Store_Api_Pickup::add_handler( $this->handler, 'second_carrier', 'second_field' );
 		Store_Api_Pickup::register();
@@ -920,6 +1023,8 @@ final class StoreApiPickupTest extends TestCase {
 		Functions\expect( 'woocommerce_store_api_register_update_callback' )->once()->andReturn( true );
 		Functions\expect( 'woocommerce_store_api_register_endpoint_data' )->twice()->andReturn( true );
 		\Brain\Monkey\Actions\expectAdded( 'woocommerce_store_api_checkout_update_draft' )->never();
+		// The writer record's end hooks all exist in 9.9.0 and are registered there too (#1113).
+		\Brain\Monkey\Actions\expectAdded( 'woocommerce_cart_emptied' )->once()->with( [ Store_Api_Pickup::class, 'forget_adopted_postcode' ], 10, 0 );
 		Store_Api_Pickup::register();
 		$this->assertSame( 'object', Store_Api_Pickup::schema()['pickup']['type'] );
 	}
