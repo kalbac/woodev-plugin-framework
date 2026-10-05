@@ -30,13 +30,15 @@ import type { CountryStates } from './mapping';
 import { forgetSelection, selectRecord, suggest, SuggestUnavailableError } from './rest';
 import type { LocationConfig, Selection, Suggestion, WcAddress } from './types';
 import {
+	cartNeedsShipping,
 	gateCheckout,
-	isShippingAddressAuthoritative,
+	isDeliveryAddressAuthoritative,
+	readDeliveryAddress,
 	readCountryStates,
-	readShippingAddress,
 	refreshRates,
-	writeNativeLocality,
+	writeDeliveryLocality,
 } from './wc-stores';
+import { wcRuntime } from './wc-runtime';
 
 const MIN_QUERY_LENGTH = 2;
 const SEARCH_DELAY_MS = 250;
@@ -117,18 +119,34 @@ export function isCountrySupported( config: LocationConfig, country: string ): b
 
 export interface LocalityChooserProps {
 	config: LocationConfig;
+	/** The checkout address column this chooser serves. */
+	addressTarget?: 'shipping' | 'billing';
 	/** Pause before a failed `/forget` is tried once more. A test seam. */
 	retryDelayMs?: number;
 }
 
-export function LocalityChooser( {
+export function LocalityChooser( props: LocalityChooserProps ): JSX.Element | null {
+	const coreBillingOnly = wcRuntime()?.wcSettings?.getSetting?.< boolean >( 'forcedBillingAddress', false ) === true;
+	const needsShipping = useSelect( ( registrySelect ) => cartNeedsShipping( registrySelect ), [] );
+	const billingOnly = props.addressTarget === 'billing';
+	// WooCommerce's flag decides which parent is on the page. If server data says billing-only but
+	// core renders shipping fields, the shipping chooser is the safe fallback. If core says billing-only
+	// without matching server publication, there is no server-backed billing chooser to mount.
+	const active = needsShipping && ( billingOnly ? props.config.billingOnly === true && coreBillingOnly : ! coreBillingOnly );
+
+	return active ? <ActiveLocalityChooser { ...props } /> : null;
+}
+
+function ActiveLocalityChooser( {
 	config,
+	addressTarget = 'shipping',
 	retryDelayMs = FORGET_RETRY_DELAY_MS,
 }: LocalityChooserProps ): JSX.Element | null {
-	const address: WcAddress = useSelect( ( registrySelect ) => readShippingAddress( registrySelect ), [] );
+	const billingOnly = addressTarget === 'billing';
+	const address: WcAddress = useSelect( ( registrySelect ) => readDeliveryAddress( billingOnly, registrySelect ), [ billingOnly ] );
 	const authoritative: boolean = useSelect(
-		( registrySelect ) => isShippingAddressAuthoritative( registrySelect ),
-		[]
+		( registrySelect ) => isDeliveryAddressAuthoritative( billingOnly, registrySelect ),
+		[ billingOnly ]
 	);
 	const country = address.country.toUpperCase();
 	const supported = isCountrySupported( config, country );
@@ -139,8 +157,8 @@ export function LocalityChooser( {
 	const boot = useRef< InitialSelection | null >( null );
 
 	if ( boot.current === null ) {
-		boot.current = initialSelection( config, readShippingAddress(), {
-			authoritative: isShippingAddressAuthoritative(),
+		boot.current = initialSelection( config, readDeliveryAddress( billingOnly ), {
+			authoritative: isDeliveryAddressAuthoritative( billingOnly ),
 		} );
 	}
 
@@ -176,7 +194,7 @@ export function LocalityChooser( {
 		sync.current = sharedChainSync( {
 			select: ( record ) => selectRecord( config, record ),
 			forget: () => forgetSelection( config ),
-			refresh: refreshRates,
+			refresh: () => refreshRates( billingOnly ),
 			gate: gateCheckout,
 			retryDelayMs,
 		} );
@@ -237,11 +255,11 @@ export function LocalityChooser( {
 			return;
 		}
 
-		const current = readShippingAddress();
+		const current = readDeliveryAddress( billingOnly );
 		const verdict = judgeSavedRecord( record, current, {
 			states: readCountryStates( current.country ),
 			regionFieldRemoved: config.regionFieldRemoved === true,
-			authoritative: isShippingAddressAuthoritative(),
+			authoritative: isDeliveryAddressAuthoritative( billingOnly ),
 		} );
 
 		if ( verdict.status === 'claimed' ) {
@@ -256,7 +274,7 @@ export function LocalityChooser( {
 	useEffect( () => {
 		const current = held.current;
 
-		if ( ! current || ! isSelectionStale( current, readShippingAddress() ) ) {
+		if ( ! current || ! isSelectionStale( current, readDeliveryAddress( billingOnly ) ) ) {
 			return;
 		}
 
@@ -323,7 +341,7 @@ export function LocalityChooser( {
 			const record = suggestion.record;
 			// The native locality as the shopper left it when they picked: the reply is only written
 			// into the form if this is still what the form says.
-			const origin = readShippingAddress();
+			const origin = readDeliveryAddress( billingOnly );
 
 			abort.current?.abort();
 			sequence.current++;
@@ -360,7 +378,7 @@ export function LocalityChooser( {
 						return undefined;
 					}
 
-					const current = readShippingAddress();
+					const current = readDeliveryAddress( billingOnly );
 
 					// No answer (the record may have been saved), or an answer that arrived after the
 					// shopper edited the address: their form stands, and the server must not be left
@@ -397,7 +415,7 @@ export function LocalityChooser( {
 						setMessage( i18n.regionNotSet ?? '' );
 					}
 
-					writeNativeLocality( patch.city, patch.state );
+					writeDeliveryLocality( patch.city, patch.state, billingOnly );
 
 					// Always recalculated before the checkout is let go: core pushes a changed address
 					// only after its debounce (the old rates would stay orderable meanwhile), and an
@@ -446,7 +464,7 @@ export function LocalityChooser( {
 	const showList = open && suggestions.length > 0;
 
 	return (
-		<div className="woodev-locality-chooser" data-address-type="shipping">
+		<div className="woodev-locality-chooser" data-address-type={ addressTarget }>
 			<label className="woodev-locality-chooser__label" htmlFor={ inputId }>
 				{ i18n.label }
 			</label>

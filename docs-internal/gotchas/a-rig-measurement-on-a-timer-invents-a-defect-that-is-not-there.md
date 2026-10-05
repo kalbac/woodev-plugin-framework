@@ -77,6 +77,19 @@ A probe that waits only for the cart store's own flags (`isCustomerDataUpdating(
   snapshot taken while it is `true` shows the PREVIOUS locality — «the second homonymous city did
   not change the region» was exactly that.
 
+- **The dirty flag clears before everything is pushed, and sometimes never clears (s154).** Both
+  make «wait for `…_IS_CUSTOMER_DATA_DIRTY` to clear» the wrong idle test:
+  - After a locality pick the chooser's own `updateCustomerData` (shipping city/state only) answers
+    and core clears the flag — while the BILLING mirror of that pick waits for core's 1.5 s
+    debounced push. A reload inside that half-second leaves the server's billing without a city;
+    after it «use same address for billing» is off, the billing form carries hidden errors, and
+    core's validation gate (`validateDirtyProps`) then blocks EVERY later address push. It read as
+    «the fix does not push the edit» — the control without the fix did not push either. Poll the
+    server for the value you depend on (`billing_address.city`) before the reload.
+  - After a postcode retyped to the SAME value core marks the form dirty and has nothing to push:
+    the flag stays `true` for the rest of the page. A wait on it never ends — wait on
+    `isCustomerDataUpdating()` / `isCalculating()` instead for that step.
+
 ## Known timings on this rig
 
 - `/suggest` for an unknown settlement: **6–10 s** (8.5 s measured in s93 for «Мухосранск»).

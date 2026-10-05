@@ -1908,6 +1908,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *
 		 * Only the STREET LINE and the POSTCODE, and only values the point actually has: a
 		 * point without a postcode must not blank a required field of the native address.
+		 * (The one postcode such a point does clear is a previous point's — decided by the
+		 * adapter, which keeps the record of who wrote it: {@see Store_Api_Pickup::adopted_postcode()}, #1113.)
 		 * The city is never replaced here. On the block checkout it is the customer's own
 		 * confirmed locality — the Location layer treats a record the native city no longer
 		 * names as stale ({@see \Woodev\Framework\Shipping\Location\Location_Service}, rule (c)),
@@ -2205,6 +2207,30 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 */
 		public function owns_store_api_rate( string $rate_id ): bool {
 			return null !== $this->selection_pair_for_method( explode( ':', $rate_id )[0] );
+		}
+
+		/**
+		 * Whether the cart holds a RESOLVED locality for the Store API rate — the one thing a pickup
+		 * confirmation cannot be made without (issue #1110).
+		 *
+		 * {@see self::point_matches_pair()} refuses every point while the scope's locality is `''`,
+		 * and the scope answers `''` whenever the customer has not picked a settlement — a hand-typed
+		 * city the chooser never resolved included, because the Store API gate refuses a saved record
+		 * the native city no longer names ({@see \Woodev\Framework\Shipping\Location\Location_Service::get_customer_record()}).
+		 * A store's default locality is a resolved one: an EMPTY city is served by it, a typed,
+		 * unresolved city is not. The caller uses this to say what to do about it instead of the
+		 * generic «choose a pickup point».
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $rate_id Full server rate id.
+		 *
+		 * @return bool `false` when no scope is wired, the rate carries no pickup type, or the locality is `''`.
+		 */
+		public function has_store_api_locality( string $rate_id ): bool {
+			$pair = $this->selection_pair_for_method( explode( ':', $rate_id )[0] );
+
+			return null !== $pair && '' !== $pair['locality'];
 		}
 
 		/**

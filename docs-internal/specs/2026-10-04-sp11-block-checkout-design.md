@@ -159,8 +159,9 @@ C-2b client contract (#1089), an extension of that same owner: the cart data gai
 rate, `null` for any other rate. It is cart output only (absent from the checkout echo schema).
 The pickup button renders from `owner` and the snapshot alone, and only while both name the rate
 selected in `wc/store/cart` right now; it never infers ownership from a label or a method list.
-`locality` is the key the owner's points are addressed by (`''` → the client falls back to the
-native city). The echo carries the snapshot's identity keys for the owning field and `null` for
+`locality` is the key the owner's points are addressed by AND the one a confirmation is made
+against (`''` → no resolved locality: the client opens no dialog and shows the «choose your locality
+from the suggestions» hint — never the typed city, #1110). The echo carries the snapshot's identity keys for the owning field and `null` for
 every other field. The storefront map session is `pickup-session.js`, opened with a per-surface
 host; the Blocks host sends no `clear` command on a rate switch (the snapshot's rate scoping
 already clears it).
@@ -646,24 +647,62 @@ are ONE session (same point, either can confirm or place); a stranger's token to
 
 **Boundaries — known, not supported in this minimum** (each is a proposed card of the C-4 report):
 
-- **A hand-typed city with no chosen locality cannot get a pickup point.** The points request is not
-  a Store API request, so it lists the points of the store's default locality whatever City says;
-  the confirmation IS one, sees no locality, and refuses every point with the generic message. The
-  order stays impossible (safe), the shopper is not told to use the chooser.
+- **A hand-typed city with no chosen locality cannot get a pickup point — and now says so (#1110).**
+  The points request is not a Store API request, so it lists the points of the store's default
+  locality whatever City says; the confirmation IS one and sees no locality. The block no longer
+  opens a dialog while `owner.locality` is `''`: it shows «Choose your locality from the suggestions
+  to see pickup points.» under the button (also as the order's validation error), the server's
+  confirmation and pre-payment validation refuse with the same words instead of the generic one. An
+  EMPTY city keeps the store's default locality (it arrives as the owner's key).
+  The owner is authoritative only once the cart has answered the address (`address-lifecycle.ts`):
+  core writes a form edit into its store at once and pushes it later, so `getCartData()` never
+  differs from the form and the lifecycle is followed instead. While an edit is unanswered — a push
+  scheduled (a bounded 2.5 s window after the last edit; core's 1.5 s debounce is not observable) or
+  in flight (`isCustomerDataUpdating`) — the button is inert and says «Loading pickup points…».
+  An edit whose push failed, was aborted or never went out leaves the owner stale: the locality then
+  counts as unresolved (the «choose your locality» hint, the order refused with the same words)
+  until a later reply answers. An open dialog is destroyed when `owner.locality` changes or empties
+  — a late reply included.
 - **A locality can only be chosen with the cookie session.** `woodev/v1/location/*` is `wp_rest`
   nonce + cookie; a Cart-Token-only (headless) client cannot choose one, hence cannot confirm a
-  point either.
+  point either. Decided in #1110: not a scenario of this bundle (it runs on the WordPress-rendered
+  checkout page, cookie + `Nonce`); a headless client would also need its own point picker. A
+  Store API locality command is a follow-up, never a loosened REST nonce.
 - **`address_field` / `postcode_field = hide_for_pickup` are classic-only.** On the block checkout a
   pickup order still demands the native Postcode, which a point without one does not supply.
-- **WooCommerce's own persisted cart can show a point the server has dropped.** Core 11.1 keeps the
-  cart in `localStorage.storeApiCartData` and, when `storeApiCartHash` equals the `woocommerce_cart_hash`
-  cookie, starts the cart store from it and finishes `getCartData` WITHOUT applying the page's preload
-  or fetching (`wc-blocks-data.js`, `Wi()` and the `load` listener). The hash covers the cart's
-  contents only. Measured: checkout reloaded with a point chosen → order placed → the same product
-  added again → the block checkout shows the old rate selected and «Chosen pickup point: …», while
-  the server holds the default rate and an emptied selection. The order is refused («…choose a pickup
-  point…») and the page stays in that state until the shopper clicks another rate. The selected RATE
-  is stale by the same mechanism, so this is not ours alone — but our button repeats it.
+  Operator decision s154 (#1113, variant A): it stays required there — neither 9.9 nor 11.1 has a
+  supported way to relax a core field for pickup only. What such a point does do is CLEAR the
+  postcode a previous point wrote (of any field — the customer may have come from another carrier's
+  point), and the snapshot then names `postcode: ''`. A postcode the customer typed is kept —
+  **decided by who WROTE it, not by its value**: a value equal to the point's proves nothing (the
+  customer may retype the same digits, or type another postcode and the first one back). The adapter
+  keeps a writer record (`Store_Api_Pickup::adopted_postcode()`, one session key for the one
+  destination), written only when a confirmation CHANGED the postcode and voided for good by any
+  sign of another writer: the destination seen holding another postcode (the customer route,
+  `woocommerce_store_api_cart_update_customer_from_request`, and every mutation path of the adapter),
+  or the browser's `postcode_edited` on the selection command — the bundle watches the cart store,
+  which takes every keystroke, for the edits no request carries. Trust: the browser's word can only
+  KEEP a postcode; clearing stands on the server's record alone, so a silent client (a reloaded
+  page) leaves it to what the server saw. The record is ONE checkout's: it ends with the order placed
+  (either checkout), with the cart emptied, and outright when an address form posts from a page the
+  bundle does not watch — classic order review, cart calculator, My Account
+  (`Store_Api_Pickup::forget_adopted_postcode()`); a postcode carried into the next cart is the
+  customer's. Not covered, and said: a retype of the SAME digits followed by a reload before the
+  next point (the page that saw it is gone), and a paste of identical text (no change event at all).
+  The price of the record's end, also said: after a failed payment, or after a visit to the classic
+  checkout page, a previous point's postcode stays beside the next point's street.
+- **WooCommerce's own persisted cart is PAINTED before the server's (#1111, fixed s154 — the flash
+  remains).** Core (9.9.0 and 11.1 alike) keeps the cart in `localStorage.storeApiCartData` and, when
+  `storeApiCartHash` equals the `woocommerce_cart_hash` cookie, starts the cart store from it and
+  finishes `getCartData` WITHOUT applying the page's preload or fetching (`wc-blocks-data.js`, `Wi()`
+  and the `load` listener). The hash covers the cart's items and total only, so the copy persisted
+  before an order matches the same product added again: old rate selected, «Chosen pickup point: …»,
+  order refused. The bundle now asks for the cart while it is evaluated (`resolveCartFromServer()`),
+  which queues core's resolver before `load` — the store ends on the page's preloaded cart, with no
+  request. Measured on the rig: 0 of 8 stale loads (4 of 8 without it). What is left is core's own
+  first paint from the persisted copy: the old rate and point are on screen for 5–40 ms (≈ 250–300 ms
+  at 6× CPU throttle) before the server's cart replaces them. A form edit that never reached the
+  server no longer survives a reload, as on any first visit.
 - **A core parent missing from the saved page** renders without our forced children (gotcha
   `a-forced-inner-block-does-not-render-inside-a-parent-woocommerce-forced-in`); no notice yet.
 - **The carrier marker is write-only**: a retry order re-placed on another carrier's rate keeps the

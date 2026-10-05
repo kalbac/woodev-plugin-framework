@@ -40,6 +40,8 @@ if ( ! class_exists( __NAMESPACE__ . '\Locality_Blocks' ) ) :
 
 		/** The forced inner block that carries the chooser under the shipping address. */
 		public const BLOCK_SHIPPING = 'woodev/shipping-locality';
+		/** The forced inner block that carries the chooser under billing when it is the destination. */
+		public const BLOCK_BILLING = 'woodev/shipping-locality-billing';
 
 		/** @var bool whether this request already wired the hooks */
 		private static bool $registered = false;
@@ -86,11 +88,13 @@ if ( ! class_exists( __NAMESPACE__ . '\Locality_Blocks' ) ) :
 				return;
 			}
 
-			if ( class_exists( '\WP_Block_Type_Registry' ) && \WP_Block_Type_Registry::get_instance()->is_registered( self::BLOCK_SHIPPING ) ) {
-				return;
+			if ( ! class_exists( '\WP_Block_Type_Registry' ) || ! \WP_Block_Type_Registry::get_instance()->is_registered( self::BLOCK_SHIPPING ) ) {
+				register_block_type( __DIR__ . '/shipping-locality' );
 			}
 
-			register_block_type( __DIR__ . '/shipping-locality' );
+			if ( 'billing_only' === get_option( 'woocommerce_ship_to_destination', 'shipping' ) && ( ! class_exists( '\WP_Block_Type_Registry' ) || ! \WP_Block_Type_Registry::get_instance()->is_registered( self::BLOCK_BILLING ) ) ) {
+				register_block_type( __DIR__ . '/shipping-locality-billing' );
+			}
 		}
 
 		/**

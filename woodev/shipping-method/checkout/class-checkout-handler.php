@@ -2085,12 +2085,41 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * @return void
 		 */
 		public function handle_store_api_validate_order( \WC_Order $order, \WP_Error $errors ): void {
+			// WooCommerce also fires this payment hook for pay-for-order. Only a current checkout
+			// draft represents the address being validated for this cart; an old order must not
+			// erase the customer's current locality record.
+			if ( 'billing_only' === get_option( 'woocommerce_ship_to_destination', 'shipping' ) && $order->has_status( 'checkout-draft' ) ) {
+				$address = $this->store_api_delivery_address( $order );
+				$this->forget_record_unless_it_names_city( $address['city'], $address['country'] );
+			}
+
 			foreach ( $this->pickup_point_errors( $order, true ) as $message ) {
 				// Every carrier plugin registers its own handler; do not repeat one sentence.
 				if ( ! in_array( $message, $errors->get_error_messages(), true ) ) {
 					$errors->add( 'woodev_shipping_pickup_point_required', $message );
 				}
 			}
+		}
+
+		/**
+		 * The address the Store API order uses for delivery, honoring the store's billing-only mode.
+		 * WooCommerce submits billing as shipping in that mode, but the order's billing fields remain
+		 * the authoritative source and are read explicitly here before validating the saved locality.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param object $order The Store API checkout order.
+		 *
+		 * @return array{city: string, state: string, country: string}
+		 */
+		protected function store_api_delivery_address( object $order ): array {
+			$section = 'billing_only' === get_option( 'woocommerce_ship_to_destination', 'shipping' ) ? 'billing' : 'shipping';
+
+			return [
+				'city'    => (string) call_user_func( [ $order, 'get_' . $section . '_city' ] ),
+				'state'   => (string) call_user_func( [ $order, 'get_' . $section . '_state' ] ),
+				'country' => (string) call_user_func( [ $order, 'get_' . $section . '_country' ] ),
+			];
 		}
 
 		/**
