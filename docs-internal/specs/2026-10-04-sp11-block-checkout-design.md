@@ -220,6 +220,15 @@ Rules added by C-3 (#1090), from replaying the multi-request flows against WooCo
   the reply's destination taken into it — also as an earlier queued confirmation left it. Without
   this every first confirmation in a `pickup_replace_address` store was rejected as superseded
   (gotcha `core-takes-a-cart-extension-reply-s-addresses-into-the-store-before-your-code-sees-it`).
+- **Client, an edit core has already pushed is still an edit (C-4, #1091).** The address read after
+  the reply cannot show it: nothing is unsaved, so core has put the reply's address over the
+  shopper's newer one. The fields are therefore WATCHED from the click (a cart-store subscription),
+  and the confirmation is judged by the shopper's last word — the address as it stood before the
+  reply's own move. When that is not the address the point was asked for, the confirmation rejects
+  as superseded; an overwritten edit is put back into the form and pushed to the server
+  (`updateCustomerData`, awaited before the rejection — core's own sync would not resend an address
+  it has already pushed), which then drops the confirmation made for the point's address. A street
+  typed and typed back is not an edit: the last word is the address as asked.
 - **Client, corrected point.** A reply whose snapshot names another point than the one asked for
   is this command's confirmation when the verdict carries the corrected point (`selection.point`):
   it is accepted, its destination is taken by the rules above, and the echo names the corrected id.

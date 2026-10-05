@@ -31,7 +31,7 @@ interface CartActions {
 	setShippingAddress?: ( address: WcAddress ) => void;
 	setBillingAddress?: ( address: WcAddress ) => void;
 	updateCustomerData?: (
-		customerData: { shipping_address: Pick< WcAddress, 'city' | 'state' | 'country' > },
+		customerData: { shipping_address: Partial< WcAddress >; billing_address?: Partial< WcAddress > },
 		editing?: boolean,
 		haveAddressFieldsForShippingRatesChanged?: boolean
 	) => Promise< unknown >;
@@ -167,6 +167,48 @@ export function adoptDestination(
 		if ( differs( billing ) ) {
 			actions?.setBillingAddress?.( { ...billing, ...destination } );
 		}
+	}
+}
+
+/**
+ * Puts the street line and postcode back as the shopper last had them, where a pickup confirmation's
+ * late reply replaced them in the store (see `confirmPoint()`, #1091), and sends them to the server
+ * — which answered holding the point's address, with the confirmation bound to it. `billing`: the
+ * billing address's own, where the reply replaced that too; `null` leaves it alone.
+ *
+ * SENT, not left to core's address sync, because that pushes what differs from ITS last push
+ * (WooCommerce 11.1, `wc-blocks-data.js`: `Ji=`, the `dirtyProps` diff): an edit it has already
+ * pushed, replaced by a reply and put back, differs in nothing. The server would go on holding the
+ * point's address and its confirmation, and the cart showing a point chosen for an address the form
+ * no longer has. Called with `editing = true`, as {@link refreshRates} is: core takes only the cart
+ * contents from the answer — the confirmation's withdrawal among them — and leaves the store's
+ * addresses alone. The server merges the partial address into the one it holds.
+ */
+export async function restoreDestination(
+	shipping: Pick< WcAddress, 'address_1' | 'postcode' >,
+	billing: Pick< WcAddress, 'address_1' | 'postcode' > | null
+): Promise< void > {
+	const actions = dispatch( CART_STORE ) as unknown as CartActions | undefined;
+
+	actions?.setShippingAddress?.( { ...readShippingAddress(), ...shipping } );
+
+	if ( billing ) {
+		actions?.setBillingAddress?.( { ...readBillingAddress(), ...billing } );
+	}
+
+	if ( typeof actions?.updateCustomerData !== 'function' ) {
+		return;
+	}
+
+	try {
+		await actions.updateCustomerData(
+			{ shipping_address: shipping, ...( billing ? { billing_address: billing } : {} ) },
+			true,
+			true
+		);
+	} catch {
+		// Core has already recorded the error. The order's own gate still holds: the server refuses
+		// the echo of a confirmation made for another address (`Store_Api_Pickup::validate_order()`).
 	}
 }
 

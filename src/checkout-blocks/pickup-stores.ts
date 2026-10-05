@@ -14,7 +14,7 @@
  * @package woodev-plugin-framework
  */
 
-import { dispatch, select } from '@wordpress/data';
+import { dispatch, select, subscribe } from '@wordpress/data';
 import type {
 	PickupConfig,
 	PickupData,
@@ -29,7 +29,13 @@ import type {
 	PickupSnapshot,
 } from './pickup-types';
 import type { WcAddress } from './types';
-import { adoptDestination, CART_STORE, readBillingAddress, readShippingAddress } from './wc-stores';
+import {
+	adoptDestination,
+	CART_STORE,
+	readBillingAddress,
+	readShippingAddress,
+	restoreDestination,
+} from './wc-stores';
 import { wcRuntime } from './wc-runtime';
 
 export const PAYMENT_STORE = 'wc/store/payment';
@@ -277,21 +283,52 @@ function movableAddress( billingIsShipping: boolean ): string {
  * `address` — a {@link movableAddress} value — as a confirmation's own move leaves it: the fields
  * `destination` names hold the point's, in every address the value covers.
  *
- * That is what the store reads when the reply lands and the shopper has no unsaved edit: core takes
+ * That is the change the store goes through when the reply lands and nothing is unsaved: core takes
  * the reply's addresses into the cart store BEFORE `extensionCartUpdate()` resolves (WooCommerce
  * 11.1, `wc-blocks-data.js`: `gi=` — `receiveCart( response )`, addresses included unless
  * `WOOCOMMERCE_CHECKOUT_IS_CUSTOMER_DATA_DIRTY`), and the server has already moved them.
  */
-function asMovedTo( address: string | null, destination: PickupDestination ): string | null {
-	if ( address === null ) {
-		return null;
-	}
-
+function asMovedTo( address: string, destination: PickupDestination ): string {
 	const take = ( fields: string[] | null ): string[] | null =>
 		fields && [ destination.address_1 ?? fields[ 0 ], destination.postcode ?? fields[ 1 ] ];
 	const [ shipping, billing ] = JSON.parse( address ) as [ string[], string[] | null ];
 
 	return JSON.stringify( [ take( shipping ), take( billing ) ] );
+}
+
+/**
+ * Records every value {@link movableAddress} takes from now until `stop()`, oldest first — what a
+ * confirmation's answer is judged against when it lands.
+ *
+ * The value read AFTER the answer cannot say whether the shopper edited the address meanwhile. Core
+ * puts the reply's own address over it whenever nothing is unsaved at that instant, and an edit
+ * core has already pushed is not unsaved: the store then reads exactly as it does after an
+ * untouched confirmation (#1091). The values it went through tell the two apart — every write to
+ * those fields is a dispatch on the cart store (`SET_SHIPPING_ADDRESS` from the form,
+ * `SET_CART_DATA` for a reply), so its subscribers see each value before the next replaces it.
+ */
+function watchAddress( billingIsShipping: boolean ): { seen: string[]; stop: () => void } {
+	const seen = [ movableAddress( billingIsShipping ) ];
+	const stop = subscribe( () => {
+		const now = movableAddress( billingIsShipping );
+
+		if ( now !== seen[ seen.length - 1 ] ) {
+			seen.push( now );
+		}
+	}, CART_STORE );
+
+	return { seen, stop };
+}
+
+/**
+ * The street line and postcode a {@link movableAddress} value holds: the shipping address's, and
+ * the billing address's where the value covers it (`null` where it does not).
+ */
+function addressFields( address: string ): [ PickupDestination, PickupDestination | null ] {
+	const fields = ( [ street, postcode ]: string[] ): PickupDestination => ( { address_1: street, postcode } );
+	const [ shipping, billing ] = JSON.parse( address ) as [ string[], string[] | null ];
+
+	return [ fields( shipping ), billing && fields( billing ) ];
 }
 
 /**
@@ -341,14 +378,19 @@ function confirmsCommand( snapshot: PickupSnapshot, pointId: string ): boolean {
  *   answers from its own record, never from the cart store: the late reply has just overwritten
  *   the store's selected rate with the one the server saw (`receiveCart()`).
  * - The ADDRESS is the shopper's as much as the rate is. A reply that would move the street line
- *   or the postcode REJECTS (`…_superseded`) and moves nothing when those fields are no longer
- *   what they were when the point was ASKED for — the shopper dismissed the dialog and typed
- *   their own, on the same rate. Theirs is the newer word; core pushes it, and the server then
- *   drops the confirmation it made for the point's address. The fields are read at the click, not
- *   when the command leaves (it may wait behind another one), and the changes that are not the
- *   shopper's are told apart: an earlier confirmation's own move (`addressAsMoved`), and this
- *   reply's — core takes the reply's addresses into the store before the reply reaches this code
- *   whenever the shopper has no unsaved edit (`asMovedTo()`, #1091).
+ *   or the postcode REJECTS (`…_superseded`) when the shopper's last word on those fields is no
+ *   longer what they were when the point was ASKED for — the shopper dismissed the dialog and
+ *   typed their own, on the same rate. Theirs is the newer word, and the server drops the
+ *   confirmation it made for the point's address once it hears of it. The fields are watched from
+ *   the click (`watchAddress()`), not from when the command leaves (it may wait behind another
+ *   one), and the changes that are not the shopper's are told apart: an earlier confirmation's
+ *   own move (`addressAsMoved`), and this reply's — core takes the reply's addresses into the
+ *   store before the reply reaches this code whenever nothing is unsaved (`asMovedTo()`, #1091).
+ *   So the shopper's last word is the address as it stood BEFORE that, not the one read now. An
+ *   edit core has not pushed is still in the store, and core pushes it. One it HAS pushed is
+ *   under the reply's address by now: it is put back and sent again before this rejects
+ *   (`restoreDestination()`), so the form keeps what the shopper typed, the cart stops showing
+ *   the point, and a command waiting behind this one reaches a server that has heard of it.
  */
 export function confirmPoint(
 	namespace: string,
@@ -357,9 +399,9 @@ export function confirmPoint(
 	billingIsShipping = false,
 	isCurrent: () => boolean = () => true
 ): Promise< PickupSelectionResult > {
-	const asked = movableAddress( billingIsShipping );
+	const watch = watchAddress( billingIsShipping );
 	const send = (): Promise< PickupSelectionResult > =>
-		sendConfirmation( namespace, field, pointId, billingIsShipping, isCurrent, asked );
+		sendConfirmation( namespace, field, pointId, billingIsShipping, isCurrent, watch.seen );
 	const result = confirmationInFlight ? confirmationInFlight.then( send ) : send();
 	const settled: Promise< void > = result
 		.then(
@@ -367,6 +409,8 @@ export function confirmPoint(
 			() => undefined
 		)
 		.then( () => {
+			watch.stop();
+
 			if ( confirmationInFlight === settled ) {
 				confirmationInFlight = null;
 				addressAsMoved = null;
@@ -384,7 +428,7 @@ async function sendConfirmation(
 	pointId: string,
 	billingIsShipping: boolean,
 	isCurrent: () => boolean,
-	asked: string
+	seen: string[]
 ): Promise< PickupSelectionResult > {
 	const update = wcRuntime()?.blocksCheckout?.extensionCartUpdate;
 
@@ -432,16 +476,23 @@ async function sendConfirmation(
 
 	if ( destination ) {
 		const now = movableAddress( billingIsShipping );
-		// Untouched since the point was asked for — or changed only by a confirmation's move: an
-		// earlier one's, or this very reply's, which core has already taken into the store.
-		const untouched = [
-			asked,
-			addressAsMoved,
-			asMovedTo( asked, destination ),
-			asMovedTo( addressAsMoved, destination ),
-		];
 
-		if ( ! untouched.includes( now ) ) {
+		if ( now !== seen[ seen.length - 1 ] ) {
+			seen.push( now );
+		}
+
+		// The last change is this reply's own move: core has taken its address into the store, over
+		// whatever was there. The shopper's last word is then the address as it stood before.
+		const before = seen.length > 1 ? seen[ seen.length - 2 ] : null;
+		const replaced = before !== null && now === asMovedTo( before, destination );
+		const theirs = replaced ? before : now;
+
+		// Not as asked, and not as an earlier confirmation's own move left it: the shopper edited.
+		if ( theirs !== seen[ 0 ] && theirs !== addressAsMoved ) {
+			if ( replaced ) {
+				await restoreDestination( ...addressFields( theirs ) );
+			}
+
 			throw { status: 0, code: 'woodev_pickup_superseded', message: '' } as PickupFailure;
 		}
 
