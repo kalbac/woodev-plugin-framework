@@ -71,13 +71,11 @@ jest.mock( '@wordpress/data', () => {
 				mockStore.addressWrites.push( mockStore.calculating );
 				notify();
 			},
-			updateCustomerData: async ( customer: unknown, editing: unknown ) => {
+			updateCustomerData: async ( ...args: unknown[] ) => {
+				const [ customer, editing ] = args;
+				mockStore.refreshes.push( args );
 				mockStore.customerPushes.push( { customer, editing, calculating: mockStore.calculating } );
 				await mockStore.onCustomerPush?.();
-			},
-			updateCustomerData: ( ...args: unknown[] ) => {
-				mockStore.refreshes.push( args );
-				return Promise.resolve();
 			},
 			setValidationErrors: ( errors: Record< string, { message: string; hidden: boolean } > ) => {
 				mockStore.validation = { ...mockStore.validation, ...errors };
