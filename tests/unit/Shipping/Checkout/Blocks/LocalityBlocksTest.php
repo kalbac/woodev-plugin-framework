@@ -79,10 +79,16 @@ class LocalityBlocksTest extends TestCase {
 		Locality_Blocks::register_integration( $registry );
 	}
 
-	public function test_register_block_types_registers_the_block_from_its_block_json(): void {
-		Functions\expect( 'register_block_type' )
-			->once()
-			->with( Mockery::on( static fn( $path ): bool => is_string( $path ) && 1 === preg_match( '#/blocks/shipping-locality$#', $path ) && is_file( $path . '/block.json' ) ) );
+	public function test_register_block_types_registers_only_the_shipping_block_in_shipping_mode(): void {
+		Functions\when( 'get_option' )->justReturn( 'shipping' );
+		Functions\expect( 'register_block_type' )->once()->with( Mockery::type( 'string' ) );
+
+		Locality_Blocks::register_block_types();
+	}
+
+	public function test_register_block_types_also_registers_billing_block_in_billing_only_mode(): void {
+		Functions\when( 'get_option' )->justReturn( 'billing_only' );
+		Functions\expect( 'register_block_type' )->twice();
 
 		Locality_Blocks::register_block_types();
 	}
@@ -99,6 +105,13 @@ class LocalityBlocksTest extends TestCase {
 		// `force` defaults to `lock.default.remove` when the client does not say so.
 		$this->assertTrue( $json['attributes']['lock']['default']['remove'] );
 		$this->assertFalse( $json['supports']['inserter'] );
+	}
+
+	public function test_billing_block_json_targets_only_the_billing_address_parent(): void {
+		$json = json_decode( (string) file_get_contents( dirname( __DIR__, 5 ) . '/woodev/shipping-method/checkout/blocks/shipping-locality-billing/block.json' ), true );
+
+		$this->assertSame( Locality_Blocks::BLOCK_BILLING, $json['name'] );
+		$this->assertSame( [ 'woocommerce/checkout-billing-address-block' ], $json['parent'] );
 	}
 
 	public function test_i18n_strings_carry_every_key_the_bundle_reads_and_are_english_msgids(): void {

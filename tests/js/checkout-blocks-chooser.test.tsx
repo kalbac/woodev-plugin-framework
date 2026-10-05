@@ -21,6 +21,8 @@ const mockStore = {
 		shippingAddress: { first_name: 'Анна', address_1: 'Ленина 1', city: '', state: '', country: 'RU' } as Address,
 		billingAddress: { first_name: 'Анна', address_1: 'Ленина 1', city: '', state: '', country: 'RU' } as Address,
 	},
+	needsShipping: true,
+	forcedBillingAddress: false,
 	useShippingAsBilling: false,
 	listeners: new Set< () => void >(),
 	setShippingAddress: jest.fn(),
@@ -46,6 +48,7 @@ const notify = (): void => mockStore.listeners.forEach( ( listener ) => listener
 jest.mock( '@wordpress/data', () => {
 	const selectFn = () => ( {
 		getCustomerData: () => mockStore.customer,
+		getNeedsShipping: () => mockStore.needsShipping,
 		getUseShippingAsBilling: () => mockStore.useShippingAsBilling,
 		...( mockStore.cartLoaded === undefined
 			? {}
@@ -133,6 +136,7 @@ const baseConfig = ( over: Partial< LocationConfig > = {} ): LocationConfig => (
 	implicit: false,
 	savedCityUnresolved: null,
 	selection: null,
+	billingOnly: false,
 	i18n: {
 		label: 'Find your locality',
 		hint: 'Choose a locality to fill in the city and region.',
@@ -272,6 +276,16 @@ function editNative( patch: Address ): void {
 	} );
 }
 
+function editBilling( patch: Address ): void {
+	act( () => {
+		mockStore.customer = {
+			...mockStore.customer,
+			billingAddress: { ...mockStore.customer.billingAddress, ...patch },
+		};
+		notify();
+	} );
+}
+
 async function chooseFirstSuggestion( typed = 'Подол' ): Promise< void > {
 	fireEvent.change( screen.getByRole( 'combobox' ), { target: { value: typed } } );
 	const option = await screen.findByRole( 'option', {}, { timeout: 2000 } );
@@ -295,6 +309,8 @@ beforeEach( () => {
 	mockStore.hasGate = true;
 	mockStore.refreshHold = null;
 	mockStore.cartLoaded = undefined;
+	mockStore.needsShipping = true;
+	mockStore.forcedBillingAddress = false;
 	selectReply = { persisted: true };
 	suggestReply = [ podolsk ];
 	holding = new Set();
@@ -302,7 +318,7 @@ beforeEach( () => {
 	( window as unknown as { wc: unknown } ).wc = {
 		wcSettings: {
 			getSetting: ( name: string, fallback: unknown ) =>
-				( { countryData: { RU: { states: RU_STATES } } } as Record< string, unknown > )[ name ] ?? fallback,
+				( { countryData: { RU: { states: RU_STATES } }, forcedBillingAddress: mockStore.forcedBillingAddress } as Record< string, unknown > )[ name ] ?? fallback,
 		},
 	};
 	mockNetwork();
@@ -330,6 +346,81 @@ describe( 'LocalityChooser — provider absence and fallback', () => {
 		render( <LocalityChooser config={ baseConfig() } /> );
 
 		expect( screen.getByLabelText( 'Find your locality' ) ).toBeInTheDocument();
+	} );
+
+	it( 'defaults a missing server mode flag to the ordinary shipping chooser', () => {
+		const config = baseConfig();
+		delete ( config as Partial< LocationConfig > ).billingOnly;
+		render( <LocalityChooser config={ config } /> );
+		expect( screen.getByLabelText( 'Find your locality' ) ).toBeInTheDocument();
+	} );
+
+	it.each( [ false, true ] )( 'keeps exactly one chooser in shipping for shipping-address checkout (useShippingAsBilling=%s)', ( useShippingAsBilling ) => {
+		mockStore.useShippingAsBilling = useShippingAsBilling;
+		const { container: shipping } = render( <LocalityChooser config={ baseConfig() } /> );
+		const { container: billing } = render( <LocalityChooser config={ baseConfig() } addressTarget="billing" /> );
+
+		expect( shipping.querySelector( '[role="combobox"]' ) ).toBeInTheDocument();
+		expect( billing ).toBeEmptyDOMElement();
+	} );
+
+	it( 'shows the billing-parent chooser only when the server and WC both say billing-only, and targets billing fields', async () => {
+		mockStore.forcedBillingAddress = true;
+		mockStore.customer.shippingAddress = { ...mockStore.customer.shippingAddress, city: 'Wrong column' };
+		const config = baseConfig( { billingOnly: true } );
+		const { container: shipping } = render( <LocalityChooser config={ config } /> );
+		const { container: billing } = render( <LocalityChooser config={ config } addressTarget="billing" /> );
+
+		expect( shipping ).toBeEmptyDOMElement();
+		expect( screen.getByLabelText( 'Find your locality' ) ).toBeInTheDocument();
+		await chooseFirstSuggestion();
+		await waitFor( () => expect( mockStore.setBillingAddress ).toHaveBeenCalledTimes( 1 ) );
+		await waitFor( () => expect( mockStore.setShippingAddress ).toHaveBeenCalledTimes( 1 ) );
+		expect( mockStore.setBillingAddress.mock.calls[ 0 ][ 0 ] ).toMatchObject( { city: 'Подольск', state: 'МОСКОВСКАЯ ОБЛАСТЬ' } );
+		expect( mockStore.updateCustomerData ).toHaveBeenCalledWith( { shipping_address: { city: 'Подольск', state: 'МОСКОВСКАЯ ОБЛАСТЬ', country: 'RU' } }, true, true );
+		expect( billing.querySelector( '[role="combobox"]' ) ).toBeInTheDocument();
+	} );
+
+	it( 'uses shipping as the fallback when server says billing-only but core renders shipping', () => {
+		const config = baseConfig( { billingOnly: true } );
+		const { container: shipping } = render( <LocalityChooser config={ config } /> );
+		const { container: billing } = render( <LocalityChooser config={ config } addressTarget="billing" /> );
+		expect( shipping.querySelector( '[role="combobox"]' ) ).toBeInTheDocument();
+		expect( billing ).toBeEmptyDOMElement();
+	} );
+
+	it( 'does not mount billing when core says billing-only but server did not publish that mode', () => {
+		mockStore.forcedBillingAddress = true;
+		const config = baseConfig();
+		const { container } = render( <LocalityChooser config={ config } addressTarget="billing" /> );
+		expect( container ).toBeEmptyDOMElement();
+	} );
+
+	it( 'renders nowhere for a virtual cart', () => {
+		mockStore.needsShipping = false;
+		const { container } = render( <LocalityChooser config={ baseConfig() } /> );
+
+		expect( container ).toBeEmptyDOMElement();
+	} );
+
+	it( 'does no locality cleanup for the billing block in a virtual billing-only cart', () => {
+		mockStore.forcedBillingAddress = true;
+		mockStore.needsShipping = false;
+		const config = baseConfig( { billingOnly: true, selection: { record: podolsk.record } } );
+		const { container } = render( <LocalityChooser config={ config } addressTarget="billing" /> );
+		expect( container ).toBeEmptyDOMElement();
+		expect( sent( 'forget' ) ).toHaveLength( 0 );
+		expect( mockStore.updateCustomerData ).not.toHaveBeenCalled();
+	} );
+
+	it( 'invalidates a billing selection against the billing city', async () => {
+		mockStore.forcedBillingAddress = true;
+		mockStore.customer.billingAddress = { ...mockStore.customer.billingAddress, city: 'Подольск' };
+		mockStore.customer.shippingAddress = { ...mockStore.customer.shippingAddress, city: 'Подольск' };
+		const config = baseConfig( { billingOnly: true, selection: { record: podolsk.record } } );
+		render( <LocalityChooser config={ config } addressTarget="billing" /> );
+		editBilling( { city: 'Казань' } );
+		await waitFor( () => expect( sent( 'forget' ) ).toHaveLength( 1 ) );
 	} );
 
 	it( 'says so — and writes nothing — when the suggestion service is down', async () => {
@@ -1275,5 +1366,31 @@ describe( 'registerLocalityBlock — feature detection', () => {
 		expect( options.metadata.name ).toBe( 'woodev/shipping-locality' );
 		expect( options.metadata.parent ).toEqual( [ 'woocommerce/checkout-shipping-address-block' ] );
 		expect( typeof options.component ).toBe( 'function' );
+	} );
+
+	it( 'registers the billing-parent block only when both server and core indicate billing-only', () => {
+		const register = jest.fn();
+		const getSetting = ( name: string, fallback: unknown ) => name === 'woodev-shipping-locality_data'
+			? { enabled: true, location: baseConfig( { billingOnly: true } ) }
+			: name === 'forcedBillingAddress' ? true : fallback;
+		( window as unknown as { wc: unknown } ).wc = { blocksCheckout: { registerCheckoutBlock: register }, wcSettings: { getSetting } };
+
+		expect( registerLocalityBlock() ).toBe( true );
+		expect( register ).toHaveBeenCalledTimes( 2 );
+		expect( register.mock.calls[ 1 ][ 0 ].metadata.name ).toBe( 'woodev/shipping-locality-billing' );
+	} );
+
+	it.each( [
+		{ server: true, core: false },
+		{ server: false, core: true },
+	] )( 'registers the shipping fallback once when flags disagree (server=$server, core=$core)', ( flags ) => {
+		const register = jest.fn();
+		const getSetting = ( name: string, fallback: unknown ) => name === 'woodev-shipping-locality_data'
+			? { enabled: true, location: baseConfig( { billingOnly: flags.server } ) }
+			: name === 'forcedBillingAddress' ? flags.core : fallback;
+		( window as unknown as { wc: unknown } ).wc = { blocksCheckout: { registerCheckoutBlock: register }, wcSettings: { getSetting } };
+		expect( registerLocalityBlock() ).toBe( true );
+		expect( register ).toHaveBeenCalledTimes( 1 );
+		expect( register.mock.calls[ 0 ][ 0 ].metadata.name ).toBe( 'woodev/shipping-locality' );
 	} );
 } );

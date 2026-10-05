@@ -144,6 +144,7 @@ class LocalityBlocksIntegrationTest extends TestCase {
 	public function test_script_data_publishes_the_location_block_with_the_chooser_strings_and_enqueues_the_style(): void {
 		Functions\when( 'is_admin' )->justReturn( false );
 		Functions\when( 'wp_style_is' )->justReturn( true );
+		Functions\when( 'get_option' )->justReturn( 'shipping' );
 		Functions\expect( 'wp_enqueue_style' )->once()->with( 'woodev-checkout-blocks' );
 
 		$data = $this->integration( [ 'nonce' => 'N', 'i18n' => [ 'noResults' => 'No results found.' ] ] )->get_script_data();
@@ -153,5 +154,20 @@ class LocalityBlocksIntegrationTest extends TestCase {
 		// The location layer's own strings stay; the chooser's own are merged in beside them.
 		$this->assertSame( 'No results found.', $data['location']['i18n']['noResults'] );
 		$this->assertSame( 'Find your locality', $data['location']['i18n']['label'] );
+		$this->assertFalse( $data['location']['billingOnly'] );
+	}
+
+	/**
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_script_data_publishes_billing_only_mode_from_the_server_option(): void {
+		Functions\when( 'is_admin' )->justReturn( false );
+		Functions\when( 'wp_style_is' )->justReturn( false );
+		Functions\when( 'get_option' )->justReturn( 'billing_only' );
+
+		$data = $this->integration( [ 'nonce' => 'N' ] )->get_script_data();
+
+		$this->assertTrue( $data['location']['billingOnly'] );
 	}
 }

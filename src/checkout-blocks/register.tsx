@@ -16,6 +16,7 @@
  */
 
 import localityMetadata from '../../woodev/shipping-method/checkout/blocks/shipping-locality/block.json';
+import localityBillingMetadata from '../../woodev/shipping-method/checkout/blocks/shipping-locality-billing/block.json';
 import pickupMetadata from '../../woodev/shipping-method/checkout/blocks/shipping-pickup/block.json';
 import { LocalityChooser } from './locality-chooser';
 import { PickupPicker } from './pickup-picker';
@@ -37,9 +38,19 @@ export function registerLocalityBlock(): boolean {
 
 	register( {
 		metadata: localityMetadata as unknown as Record< string, unknown >,
-		component: () => <LocalityChooser config={ config } />,
+		component: () => <LocalityChooser config={ config } addressTarget="shipping" />,
 		force: true,
 	} );
+	const getSetting = wcRuntime()?.wcSettings?.getSetting;
+	const forcedBillingAddress = typeof getSetting === 'function' && getSetting< boolean >( 'forcedBillingAddress', false ) === true;
+
+	if ( config.billingOnly === true && forcedBillingAddress ) {
+		register( {
+			metadata: localityBillingMetadata as unknown as Record< string, unknown >,
+			component: () => <LocalityChooser config={ config } addressTarget="billing" />,
+			force: true,
+		} );
+	}
 
 	return true;
 }
