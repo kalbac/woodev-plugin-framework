@@ -29,6 +29,8 @@ const mockStore = {
 	/** How many `disableCheckoutFor` calls were unsettled at each address write. */
 	addressWrites: [] as number[],
 	validation: {} as Record< string, { message: string; hidden: boolean } >,
+	/** `core/notices`, by notice id: what the checkout shows in its own notice areas. */
+	notices: {} as Record< string, { message: string; context: string; isDismissible: boolean } >,
 	/** How many `disableCheckoutFor` calls are unsettled: Place Order is blocked while > 0. */
 	calculating: 0,
 	listeners: new Set< () => void >(),
@@ -66,6 +68,14 @@ jest.mock( '@wordpress/data', () => {
 
 				mockStore.validation = rest;
 				notify();
+			},
+			createErrorNotice: ( message: string, options: { id: string; context: string; isDismissible: boolean } ) => {
+				mockStore.notices[ options.id ] = { message, context: options.context, isDismissible: options.isDismissible };
+			},
+			removeNotice: ( id: string, context: string ) => {
+				if ( mockStore.notices[ id ]?.context === context ) {
+					delete mockStore.notices[ id ];
+				}
 			},
 			disableCheckoutFor: async ( work: () => Promise< unknown > ) => {
 				mockStore.calculating++;
@@ -220,6 +230,7 @@ beforeEach( () => {
 	mockStore.useShippingAsBilling = false;
 	mockStore.addressWrites = [];
 	mockStore.validation = {};
+	mockStore.notices = {};
 	mockStore.calculating = 0;
 	mockStore.listeners.clear();
 	chooseRate( PICKUP_RATE );
@@ -782,6 +793,83 @@ describe( 'PickupPicker — a required point blocks the order', () => {
 
 		expect( screen.getByRole( 'alert' ) ).toHaveTextContent( 'Please choose a pickup point.' );
 		expect( trigger() ).toHaveAttribute( 'aria-describedby', `${ ERROR_ID }-error` );
+	} );
+
+	/*
+	 * #1091, measured on a phone viewport against WooCommerce 11.1: Place Order was pressed with
+	 * every native field valid and no point chosen. Core then scrolls to the TOP of the checkout —
+	 * it goes to an invalid field only when the field is its own — so the message under the button
+	 * was ~700 px out of view, nothing at the top said anything, and the button looked dead.
+	 */
+	describe( 'when WooCommerce reveals the error (#1091)', () => {
+		const REVEALED = { message: 'Please choose a pickup point.', hidden: false };
+		const NOTICE = { message: 'Please choose a pickup point.', context: 'wc/checkout', isDismissible: false };
+		const reveal = (): void =>
+			act( () => {
+				mockStore.validation = { ...mockStore.validation, [ ERROR_ID ]: REVEALED };
+				notify();
+			} );
+
+		it( 'says it in the checkout’s own notices too, where core scrolls to', () => {
+			renderPicker();
+
+			// A hidden error blocks the order; it is not shown anywhere yet.
+			expect( mockStore.notices ).toEqual( {} );
+
+			reveal();
+
+			expect( mockStore.notices ).toEqual( { [ ERROR_ID ]: NOTICE } );
+			// The message under the button stays, tied to it.
+			expect( screen.getByRole( 'alert' ) ).toHaveTextContent( 'Please choose a pickup point.' );
+		} );
+
+		it( 'takes the notice back once a point is confirmed', () => {
+			renderPicker();
+			reveal();
+
+			act( () => {
+				cartAnswer( PICKUP_RATE, snapshot() );
+			} );
+
+			expect( mockStore.notices ).toEqual( {} );
+		} );
+
+		it( 'takes the notice back when the shopper leaves the rate, and when the block goes away', () => {
+			const { unmount } = renderPicker();
+
+			reveal();
+
+			act( () => {
+				chooseRate( COURIER_RATE );
+				notify();
+			} );
+
+			expect( mockStore.notices ).toEqual( {} );
+
+			act( () => {
+				chooseRate( PICKUP_RATE );
+				notify();
+			} );
+			reveal();
+			expect( mockStore.notices ).toEqual( { [ ERROR_ID ]: NOTICE } );
+
+			unmount();
+
+			expect( mockStore.notices ).toEqual( {} );
+		} );
+
+		it( 'never touches another notice of the checkout', () => {
+			mockStore.notices.payment = { message: 'Card declined', context: 'wc/checkout', isDismissible: true };
+
+			const { unmount } = renderPicker();
+
+			reveal();
+			unmount();
+
+			expect( mockStore.notices ).toEqual( {
+				payment: { message: 'Card declined', context: 'wc/checkout', isDismissible: true },
+			} );
+		} );
 	} );
 
 	it( 'clears only its own error when the block goes away', () => {

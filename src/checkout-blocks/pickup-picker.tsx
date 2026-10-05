@@ -26,6 +26,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from '@wordpress/el
 import { useSelect } from '@wordpress/data';
 import { createHost } from './pickup-host';
 import {
+	announcePoint,
 	buildEcho,
 	readConfig,
 	readExtension,
@@ -36,6 +37,7 @@ import {
 	requirePoint,
 	resolveView,
 	validationId,
+	withdrawPoint,
 } from './pickup-stores';
 import type { PickupConfig, PickupData, PickupExtension, PickupFieldDescriptor, PickupSession } from './pickup-types';
 
@@ -176,6 +178,25 @@ export function PickupPicker( { data, checkoutExtensionData }: PickupPickerProps
 
 		return () => releasePoint( errorId );
 	}, [ errorId, needsPoint, required ] );
+
+	/*
+	 * Place Order pressed with no point. WooCommerce reveals the error and then takes the shopper
+	 * either to the first invalid field OF ITS OWN or — this block is none of those — to the top of
+	 * the checkout, where its notices are (`wc-cart-checkout-base-frontend.js`, read from 11.1:
+	 * `scrollToTop( { focusableSelector: 'input:invalid, .has-error input, .has-error select' } )`).
+	 * The message under the button is then a screen or two away, and on a phone Place Order looks
+	 * dead (#1091). So the revealed error is ALSO said where core has just scrolled to, for as
+	 * long as it stands — the place the server's own refusal of such an order is shown in.
+	 */
+	useEffect( () => {
+		if ( errorId === '' || visibleError === '' ) {
+			return undefined;
+		}
+
+		announcePoint( errorId, visibleError );
+
+		return () => withdrawPoint( errorId );
+	}, [ errorId, visibleError ] );
 
 	/*
 	 * A session belongs to the rate it was opened for. The rate changing under an open dialog — or

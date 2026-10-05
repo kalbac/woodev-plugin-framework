@@ -34,6 +34,10 @@ import { wcRuntime } from './wc-runtime';
 
 export const PAYMENT_STORE = 'wc/store/payment';
 export const VALIDATION_STORE = 'wc/store/validation';
+export const NOTICES_STORE = 'core/notices';
+
+/** The notice context the checkout shows at the top of its form (WooCommerce's `noticeContexts.CHECKOUT`). */
+export const CHECKOUT_NOTICES = 'wc/checkout';
 
 /** The Store API error code every pickup refusal carries (`Store_Api_Pickup::refuse()`). */
 export const REFUSAL_CODE = 'woodev_pickup_validation';
@@ -53,6 +57,11 @@ interface PaymentSelectors {
 
 interface ValidationSelectors {
 	getValidationError?: ( id: string ) => { message?: string; hidden?: boolean } | undefined;
+}
+
+interface NoticeActions {
+	createErrorNotice?: ( message: string, options: { id: string; context: string; isDismissible: boolean } ) => void;
+	removeNotice?: ( id: string, context: string ) => void;
 }
 
 interface ValidationActions {
@@ -484,6 +493,25 @@ export function releasePoint( id: string ): void {
 	const actions = dispatch( VALIDATION_STORE ) as unknown as ValidationActions | undefined;
 
 	actions?.clearValidationError?.( id );
+}
+
+/**
+ * Says a REVEALED «choose a pickup point» error in the checkout's own notices, at the top of the
+ * form — where WooCommerce scrolls to when it refuses to place the order and none of its own fields
+ * is invalid. Keyed by the error's id, so saying it again replaces it; not dismissible, so it is
+ * there on every further attempt until {@link withdrawPoint}.
+ */
+export function announcePoint( id: string, message: string ): void {
+	const actions = dispatch( NOTICES_STORE ) as unknown as NoticeActions | undefined;
+
+	actions?.createErrorNotice?.( message, { id, context: CHECKOUT_NOTICES, isDismissible: false } );
+}
+
+/** Takes ONE field's own notice back — never another notice of the checkout. */
+export function withdrawPoint( id: string ): void {
+	const actions = dispatch( NOTICES_STORE ) as unknown as NoticeActions | undefined;
+
+	actions?.removeNotice?.( id, CHECKOUT_NOTICES );
 }
 
 /** The message to show for `id`, or `''` while there is no error or it is still hidden. */
