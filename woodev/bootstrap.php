@@ -200,7 +200,7 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 			}
 
 			$plugin_file        = (string) $definition['plugin_file'];
-			$supported_features = $this->normalize_supported_features( $definition['supported_features'] ?? [] );
+			$supported_features = \Woodev\Framework\Framework_Plugin_Loader_Definition::get_supported_features_for_definition( $definition );
 
 			add_action(
 				'before_woocommerce_init',
@@ -239,29 +239,6 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 		 */
 		private function requires_woocommerce_feature_compatibility( array $definition ): bool {
 			return \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WOOCOMMERCE === ( $definition['platform'] ?? '' );
-		}
-
-		/**
-		 * Normalizes WooCommerce feature flags to the constructor defaults.
-		 *
-		 * @param mixed $supported_features Raw supported feature flags.
-		 * @return array{hpos: bool, blocks: array{cart: bool, checkout: bool}}
-		 */
-		private function normalize_supported_features( $supported_features ): array {
-			if ( ! is_array( $supported_features ) ) {
-				$supported_features = [];
-			}
-
-			return array_replace_recursive(
-				[
-					'hpos'   => false,
-					'blocks' => [
-						'cart'     => false,
-						'checkout' => false,
-					],
-				],
-				$supported_features
-			);
 		}
 
 		/**

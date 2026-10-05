@@ -173,6 +173,7 @@ class BootstrapRegistrationTest extends TestCase {
 				'2.0.0',
 				[
 					'plugin_file'        => '/path/to/plugin/wc-feature-plugin.php',
+					'type'               => 'shipping',
 					'platform'           => \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WOOCOMMERCE,
 					'requirements'       => [
 						'php'         => '7.4',
@@ -182,7 +183,7 @@ class BootstrapRegistrationTest extends TestCase {
 					'supported_features' => [
 						'hpos'   => true,
 						'blocks' => [
-							'cart'     => true,
+							'cart'     => false,
 							'checkout' => false,
 						],
 					],
@@ -272,6 +273,81 @@ class BootstrapRegistrationTest extends TestCase {
 			[
 				[ 'custom_order_tables', '/path/to/plugin/wc-feature-plugin.php', false ],
 				[ 'cart_checkout_blocks', '/path/to/plugin/wc-feature-plugin.php', true ],
+			],
+			\Automattic\WooCommerce\Utilities\FeaturesUtil::$declared
+		);
+	}
+
+	/**
+	 * Shipping definitions default both block surfaces to compatible, without changing the HPOS default.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_shipping_type_defaults_blocks_compatible_and_hpos_incompatible(): void {
+		$registered_hooks = [];
+		define( 'WC_VERSION', '7.6.0' );
+
+		Functions\when( 'add_action' )->alias(
+			static function ( string $hook, $callback ) use ( &$registered_hooks ): void {
+				$registered_hooks[] = [ $hook, $callback ];
+			}
+		);
+
+		$this->reset_woocommerce_features_util_stub();
+
+		$bootstrap = \Woodev_Plugin_Bootstrap::instance();
+		$bootstrap->register_loader_definition(
+			$this->loader_definition(
+				'shipping-default-plugin',
+				'Shipping Default Plugin',
+				'2.0.0',
+				[
+					'platform'     => \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WOOCOMMERCE,
+					'requirements' => [
+						'php'         => '7.4',
+						'wordpress'   => '6.3',
+						'woocommerce' => '7.0',
+					],
+					'type'         => 'shipping',
+				]
+			)
+		);
+		$bootstrap->register_loader_definition(
+			$this->loader_definition(
+				'plain-woocommerce-plugin',
+				'Plain WooCommerce Plugin',
+				'2.0.0',
+				[
+					'platform'     => \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WOOCOMMERCE,
+					'requirements' => [
+						'php'         => '7.4',
+						'wordpress'   => '6.3',
+						'woocommerce' => '7.0',
+					],
+				]
+			)
+		);
+
+		$early_hooks = array_values(
+			array_filter(
+				$registered_hooks,
+				static function ( array $hook ): bool {
+					return 'before_woocommerce_init' === $hook[0];
+				}
+			)
+		);
+		$this->assertCount( 2, $early_hooks );
+		foreach ( $early_hooks as $hook ) {
+			$hook[1]();
+		}
+
+		$this->assertSame(
+			[
+				[ 'custom_order_tables', '/path/shipping-default-plugin.php', false ],
+				[ 'cart_checkout_blocks', '/path/shipping-default-plugin.php', true ],
+				[ 'custom_order_tables', '/path/plain-woocommerce-plugin.php', false ],
+				[ 'cart_checkout_blocks', '/path/plain-woocommerce-plugin.php', false ],
 			],
 			\Automattic\WooCommerce\Utilities\FeaturesUtil::$declared
 		);

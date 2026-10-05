@@ -39,12 +39,9 @@ function woodev_yandex_pilot_plugin_loader_definition(): array {
 		],
 		'main_class'        => 'Woodev_Yandex_Pilot_Shipping_Plugin',
 		'callback'          => 'woodev_yandex_pilot_plugin_init',
+		'type'              => 'shipping',
 		'supported_features' => [
 			'hpos'   => true,
-			'blocks' => [
-				'cart'     => true,
-				'checkout' => true,
-			],
 		],
 	];
 }

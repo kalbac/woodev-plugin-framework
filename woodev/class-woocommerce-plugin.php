@@ -43,7 +43,7 @@ if ( ! class_exists( Woocommerce_Plugin::class, false ) ) :
 		/**
 		 * Initialize the WooCommerce plugin.
 		 *
-		 * @since 2.0.0
+		 * @since 2.0.2
 		 *
 		 * @param string $id Plugin ID.
 		 * @param string $version Plugin version number.
@@ -58,18 +58,27 @@ if ( ! class_exists( Woocommerce_Plugin::class, false ) ) :
 		 * } $args Plugin arguments.
 		 */
 		public function __construct( string $id, string $version, array $args = [] ) {
+			$loader_definition  = \Woodev_Plugin_Bootstrap::instance()->get_loader_definition_for_plugin_id( $id );
+			$supported_features = null !== $loader_definition
+				? $loader_definition->get_supported_features()
+				: [
+					'hpos'   => false,
+					'blocks' => [
+						'cart'     => false,
+						'checkout' => false,
+					],
+				];
+
 			$args = wp_parse_args(
 				$args,
 				[
-					'supported_features' => [
-						'hpos'   => false,
-						'blocks' => [
-							'cart'     => false,
-							'checkout' => false,
-						],
-					],
+					'supported_features' => $supported_features,
 				]
 			);
+
+			if ( null !== $loader_definition ) {
+				$args['supported_features'] = $supported_features;
+			}
 
 			$this->supported_features = $args['supported_features'];
 
