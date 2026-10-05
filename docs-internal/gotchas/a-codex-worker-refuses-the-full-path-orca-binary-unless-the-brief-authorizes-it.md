@@ -21,6 +21,11 @@ is not, to the model, an authorization to switch.
 If it already stalled: answer the dialog with the digit `2` (keep model), then `terminal send` the same authorization and
 «read <brief> and do it». It resumed at once.
 
+✅ **s153: put the authorization in the `--spec` line itself, not only in the brief FILE.** A Codex worker whose spec
+was «read <file> and do it» tried the bare `orca` FIRST, stalled, and never opened the file that authorized the full
+path. The spec now reads: «… The bare orca on PATH is broken; you are AUTHORIZED to use
+/Applications/Orca.app/Contents/Resources/bin/orca for every Orca call.» — no stall in four later launches.
+
 ## Related
 
 - [starting-codex-under-orca-needs-four-steps-not-one](starting-codex-under-orca-needs-four-steps-not-one.md)
