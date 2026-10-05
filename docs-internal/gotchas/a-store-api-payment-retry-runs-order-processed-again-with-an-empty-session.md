@@ -35,8 +35,11 @@ A failed payment does not itself refresh the cart. The Checkout Blocks `onChecko
 uses WooCommerce's customer/rates refresh path, so the next cart answer includes the existing
 `woodev-shipping` snapshot. When session memory is empty, that snapshot is restored from the
 session's reusable retry order only if its saved point, full rate id and shipping destination still
-match the placed confirmation and current cart. The same guarded snapshot also restores on a later
-payment-method refresh or reload.
+match the placed confirmation and current cart. The restored snapshot re-binds identity only: the
+carrier/payment compatibility verdict still runs in `validate_order` when the shopper places the
+order. If the shopper changes the rate or address and then returns to the original values before
+any checkout POST, the snapshot appears again; `validate_order` accepts that same restored state.
+The same guarded snapshot also restores on a later payment-method refresh or reload.
 
 ## Fix
 
@@ -77,11 +80,15 @@ counts are meaningless.
 
 The cart snapshot has a separate retry fallback: it must use the reusable order WooCommerce would
 actually retry (`checkout-draft`, or pending/failed with the current cart hash), and require the
-placed confirmation to match that order's point, full method instance and current shipping address.
-An absent/stale draft, missing point, changed address, changed rate or changed instance returns
-`null`; a live session choice remains authoritative. The client re-reads cart state after the public
-`onCheckoutFail` event using `wc/store/cart`'s existing customer refresh path. Tests cover both this
-cart read and the whole payment retry lifecycle.
+placed confirmation to match that order's point, full method instance, locality and current shipping
+destination. An absent/stale draft, missing point, unavailable rate, unsupported extra pickup
+package, changed address, changed rate or changed instance returns `null`; a live session choice
+remains authoritative. This snapshot re-binds identity only; carrier/payment compatibility remains
+the `validate_order` verdict at Place order. A rate/address change hides the snapshot while changed,
+but returning to the original values before any checkout POST restores it, which is still the state
+`validate_order` accepts. An explicit clear also removes the retry order's saved point. The client
+re-reads cart state after the public `onCheckoutFail` event using `wc/store/cart`'s existing customer
+refresh path. Tests cover the cart-read guards and the whole payment retry lifecycle.
 
 ## Related
 

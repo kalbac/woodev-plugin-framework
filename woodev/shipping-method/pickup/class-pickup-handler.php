@@ -1989,6 +1989,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			if ( ! $allow_retry_fallback ) {
 				return null;
 			}
+			if ( ! $this->owns_store_api_rate( $rate_id ) ) {
+				return null;
+			}
 
 			$order = $this->store_api_draft_order();
 			if ( null === $order ) {

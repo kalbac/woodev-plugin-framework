@@ -41,7 +41,7 @@ export interface WcRuntime {
 	/** Public WooCommerce checkout event subscriptions (`wc-blocks-checkout-events.js`). */
 	blocksCheckoutEvents?: {
 		checkoutEvents?: {
-			onCheckoutFail?: ( listener: () => void | Promise< void > ) => () => void;
+			onCheckoutFail?: ( listener: () => void ) => () => void;
 		};
 	};
 	/** The public payment registry, keyed by registration `name` (the `wc-blocks-registry` handle). */

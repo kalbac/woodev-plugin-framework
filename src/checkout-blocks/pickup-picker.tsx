@@ -125,7 +125,7 @@ export function PickupPicker( { data, checkoutExtensionData }: PickupPickerProps
 
 	// A failed payment clears the session choice after the order has kept it. Re-read the cart
 	// through WooCommerce's existing customer/rates refresh so its extension snapshot can restore it.
-	useEffect( () => subscribeCheckoutFailure( refreshRates ), [] );
+	useEffect( () => subscribeCheckoutFailure( () => { void refreshRates(); } ), [] );
 
 	const closeSession = useCallback( () => {
 		const session = sessionRef.current;

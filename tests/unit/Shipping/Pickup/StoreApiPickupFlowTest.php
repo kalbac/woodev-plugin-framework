@@ -116,6 +116,7 @@ final class StoreApiPickupFlowTest extends TestCase {
 	private array $hooks = [];
 	/** @var array<int, C3_Order> */
 	private array $orders = [];
+	private int $order_loads = 0;
 	/** @var array<string, array{handler: C3_Handler, checkout: Checkout_Handler, scope: C3_Scope, field: string}> */
 	private array $carriers = [];
 	/** @var array<string, array<string, mixed>> Point data the carriers answer with, by point id. */
@@ -157,7 +158,10 @@ final class StoreApiPickupFlowTest extends TestCase {
 			$this->writes[] = [ 'delete', $id, $key ];
 			return true;
 		} );
-		Functions\when( 'wc_get_order' )->alias( fn( $id ) => $this->orders[ $id ] ?? false );
+		Functions\when( 'wc_get_order' )->alias( function ( $id ) {
+			++$this->order_loads;
+			return $this->orders[ $id ] ?? false;
+		} );
 		$wc = new \stdClass();
 		$wc->session = $this->session;
 		$wc->cart = $this->cart;
@@ -568,6 +572,27 @@ final class StoreApiPickupFlowTest extends TestCase {
 		$this->assertNull( $this->snapshot() );
 	}
 
+	public function test_cart_snapshot_does_not_restore_when_the_rate_is_no_longer_available(): void {
+		$this->confirm();
+		$order = new C3_Order( 518 );
+		$this->assertFalse( $this->post( $order, $this->echo_of_cart() )->has_errors() );
+		$order->status = 'failed';
+		unset( $this->packages[0]['rates'][ self::RATE ] );
+
+		$this->assertNull( $this->snapshot() );
+	}
+
+	public function test_cart_snapshot_does_not_restore_when_another_package_uses_a_handler_rate(): void {
+		$this->carrier( 'second', 'second_point', 'second_pickup' );
+		$this->confirm();
+		$order = new C3_Order( 519 );
+		$this->assertFalse( $this->post( $order, $this->echo_of_cart() )->has_errors() );
+		$order->status = 'failed';
+		$this->session->data['chosen_shipping_methods'] = [ self::RATE, 'second_pickup:3' ];
+
+		$this->assertNull( $this->snapshot() );
+	}
+
 	public function test_cart_snapshot_does_not_restore_without_the_reusable_draft_or_its_point(): void {
 		$this->confirm();
 		$order = new C3_Order( 515 );
@@ -580,6 +605,72 @@ final class StoreApiPickupFlowTest extends TestCase {
 		$this->session->data['store_api_draft_order'] = 515;
 		unset( $this->meta[515]['carrier_point'] );
 		$this->assertNull( $this->snapshot() );
+	}
+
+	public function test_cart_snapshot_does_not_restore_when_the_draft_is_processing(): void {
+		$this->confirm();
+		$order = new C3_Order( 520 );
+		$this->assertFalse( $this->post( $order, $this->echo_of_cart() )->has_errors() );
+		$order->status = 'processing';
+
+		$this->assertNull( $this->snapshot() );
+	}
+
+	public function test_cart_snapshot_does_not_restore_when_the_draft_cart_hash_changed(): void {
+		$this->confirm();
+		$order = new C3_Order( 521 );
+		$this->assertFalse( $this->post( $order, $this->echo_of_cart() )->has_errors() );
+		$order->status = 'failed';
+		$this->cart->hash = 'cart-2';
+
+		$this->assertNull( $this->snapshot() );
+	}
+
+	public function test_cart_snapshot_does_not_restore_after_the_current_locality_changes(): void {
+		$this->confirm();
+		$order = new C3_Order( 522 );
+		$this->assertFalse( $this->post( $order, $this->echo_of_cart() )->has_errors() );
+		$order->status = 'failed';
+		$this->carriers['carrier']['scope']->locality = 'tula';
+
+		$this->assertNull( $this->snapshot() );
+	}
+
+	public function test_cart_snapshot_does_not_restore_after_the_postcode_or_country_changes(): void {
+		$this->confirm();
+		$order = new C3_Order( 523 );
+		$this->assertFalse( $this->post( $order, $this->echo_of_cart() )->has_errors() );
+		$order->status = 'failed';
+
+		foreach ( [ 'postcode' => '999', 'country' => 'BY' ] as $field => $value ) {
+			$this->move_to( [ $field => $value ] );
+			$this->assertNull( $this->snapshot(), 'a changed ' . $field . ' invalidates the placed confirmation' );
+			$this->packages[0]['destination'] = $this->address;
+		}
+	}
+
+	public function test_an_explicit_clear_after_a_restored_snapshot_keeps_it_empty(): void {
+		$this->confirm();
+		$order = new C3_Order( 524 );
+		$this->assertFalse( $this->post( $order, $this->echo_of_cart() )->has_errors() );
+		$order->status = 'failed';
+		$this->assertSame( 'P1', $this->snapshot()['point_id'] );
+
+		$this->confirm( '', 'carrier', [ 'clear' => true ] );
+
+		$this->assertNull( $this->snapshot() );
+	}
+
+	public function test_cart_snapshot_does_not_load_a_draft_for_a_rate_the_handler_does_not_own(): void {
+		$this->confirm();
+		$order = new C3_Order( 525 );
+		$this->assertFalse( $this->post( $order, $this->echo_of_cart() )->has_errors() );
+		$order->status = 'failed';
+		$this->choose_rate( 'flat_rate:9' );
+		$loads = $this->order_loads;
+
+		$this->assertNull( $this->snapshot() );
+		$this->assertSame( $loads, $this->order_loads );
 	}
 
 	public function test_the_live_session_confirmation_wins_over_the_failed_orders_saved_point(): void {

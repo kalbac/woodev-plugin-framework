@@ -206,7 +206,7 @@ export async function refreshRates(): Promise< void > {
  * payment attempt fails, when its order now carries the placed pickup point and the server can
  * return that confirmation in the cart extension snapshot.
  */
-export function subscribeCheckoutFailure( listener: () => void | Promise< void > ): () => void {
+export function subscribeCheckoutFailure( listener: () => void ): () => void {
 	const subscribe = wcRuntime()?.blocksCheckoutEvents?.checkoutEvents?.onCheckoutFail;
 
 	return typeof subscribe === 'function' ? subscribe( listener ) : () => {};

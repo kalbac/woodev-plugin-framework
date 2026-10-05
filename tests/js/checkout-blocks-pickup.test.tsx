@@ -255,8 +255,8 @@ describe( 'PickupPicker — shown for the framework’s pickup rates only', () =
 		expect( subscribeCheckoutFail ).toHaveBeenCalledTimes( 1 );
 		const onFailure = [ ...checkoutFailListeners ][ 0 ];
 
-		await act( async () => {
-			await onFailure();
+		act( () => {
+			expect( onFailure() ).toBeUndefined();
 		} );
 
 		expect( mockStore.refreshes ).toEqual( [ [ { shipping_address: { city: 'Москва', state: '', country: 'RU' } }, true, true ] ] );
