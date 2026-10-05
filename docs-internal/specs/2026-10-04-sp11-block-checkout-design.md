@@ -214,6 +214,12 @@ Rules added by C-3 (#1090), from replaying the multi-request flows against WooCo
   shopper dismissed the dialog and typed their own): the shopper's edit stays, core pushes it, and
   the server drops the confirmation made for the point's address. An earlier queued confirmation's
   own move is not an edit.
+- **Client, the reply's own move is not an edit (C-4, #1091).** Core takes the reply's addresses
+  into the cart store BEFORE `extensionCartUpdate()` resolves whenever the shopper has no unsaved
+  edit, so «the fields are no longer what they were» is judged against the address as asked WITH
+  the reply's destination taken into it — also as an earlier queued confirmation left it. Without
+  this every first confirmation in a `pickup_replace_address` store was rejected as superseded
+  (gotcha `core-takes-a-cart-extension-reply-s-addresses-into-the-store-before-your-code-sees-it`).
 - **Client, corrected point.** A reply whose snapshot names another point than the one asked for
   is this command's confirmation when the verdict carries the corrected point (`selection.point`):
   it is accepted, its destination is taken by the rules above, and the echo names the corrected id.
@@ -570,6 +576,91 @@ Historical gotchas can describe fixes as “in flight” after they merged. The 
 take precedence. Do not reopen #949/#963/#964/#966 or #332 as missing features from stale prose.
 The source-observed cleanup-before-re-fetch lifecycle is recorded here as an acceptance risk; any
 change to its retry behavior belongs on a coordinator-filed card after a reproducible failure.
+
+## Supported WooCommerce surface (C-4 measured)
+
+Measured 05.10.2026 (s153, #1091) in a real browser against the macOS rig: WordPress 7.1,
+WooCommerce **11.1.0**, Storefront, `en_US`, two carrier plugins (one on a live point source, one on
+a static fixture), `pickup_replace_address` on. «Measured» below means a scripted Chromium pass that
+placed real orders; nothing here is inferred from source unless it says so.
+
+**Versions.** The adapter is exercised on 11.1 only. Its floor is **9.9**, by feature detection, and
+below the floor it is dormant rather than broken — source reading plus the unit tests named here,
+since an older WooCommerce cannot be installed on the rig:
+
+| Detected | Since | On 11.1 | Without it |
+|---|---|---|---|
+| `WC_VERSION ≥ 9.9`, `OrderController::perform_custom_order_validation`, `woocommerce_store_api_register_update_callback()` / `…_endpoint_data()` | 9.9 | all present | `Store_Api_Pickup::register()` registers nothing: no `woodev-shipping` cart data, so the bundle renders no button (`test_adapter_is_dormant_without_the_wc_99_payment_gate`; jest «shows nothing when the server published no extension data») |
+| `Routes\V1\Checkout::build_draft_route_response` → `woocommerce_store_api_checkout_update_draft` | 10.8 | present, hooked | not hooked; the order-backed `…_update_order_from_request` reconciles instead (`test_wc_99_registers_without_the_newer_deferred_draft_hook`) |
+| `Blocks\Integrations\IntegrationInterface` | Blocks | present | no chooser, no button; the server still refuses a pickup order without a point (`test_the_integration_is_not_registered_when_woocommerce_blocks_is_absent`, both blocks) |
+| `WooCommerce::is_store_api_request()` | 9.0 | present | rule (c) of the stale-record gate does not apply |
+| client: `registerCheckoutBlock`, `extensionCartUpdate`, `disableCheckoutFor`, `updateCustomerData`, `core/notices` actions | — | all present | no block registered / the confirmation rejects (`…_transport_missing`) / the work runs ungated / no rate refresh / the error stays inline only — each has a jest case |
+
+**Forced-block matrix** (`showShippingFields = !forcedBilling && needsShipping && !prefersCollection`,
+`showShippingMethods = needsShipping && !prefersCollection`, `showBillingFields = !needsShipping ||
+!useShippingAsBilling || prefersCollection`, read from 11.1):
+
+| State | Shipping address + chooser | Shipping methods + pickup button | Billing address |
+|---|---|---|---|
+| default (same address) | shown, 1 chooser | shown; button under an owned rate only | hidden |
+| separate billing address | shown, 1 chooser | as above | shown, no chooser — never written by the chooser or a confirmation |
+| core Local pickup chosen (`prefersCollection`) | unmounted with its chooser | unmounted with the button; the field's error, notice and echo are withdrawn | shown |
+| virtual-only cart | absent | absent; an earlier cart's point does not leak | shown |
+| ship to billing only (`forcedBillingAddress`) | absent — **and so is the chooser** | shown; pickup works, the point's address moves the billing address | shown — it IS the delivery address, with native fields only |
+
+So the locality UI is effective for the SHIPPING address form only. In a ship-to-billing-only store
+the billing form is the delivery address and gets no chooser — the one cell of the matrix that does
+not hold; deferred to a card rather than built here (a second chooser is a UI decision, cf. #1098).
+
+**Also measured, and holding:** two carriers (each button under its own rate, a point of one never
+shown or echoed under the other); pickup → delivery → pickup restores the point for the same rate
+and destination; reload restores it (guest and logged-in, including WooCommerce's collapsed address
+card); a homonymous city in another region moves the native State and the locality key; a hand
+edit of City and the chooser's × both send `/forget`; a country the provider chain does not serve
+shows no chooser and leaves the native fields — native State codes included — alone; orders carry
+the same keys as a classic order of that carrier (the point id under the field id, the carrier
+marker, the native address) and show on the admin order screen (carrier metabox) and in My Account;
+the session's selection is emptied after the order; failed payment → retry keeps the point, and a
+retry after a street edit, a reload or a switch to a courier rate behaves as the C-3 rules say; the
+classic checkout still places a pickup order and `npm run test:e2e` is 7/7.
+
+**D-6, D-7 as measured.** A second package on a framework pickup rate: the confirm command and the
+order are both refused with «Pickup points for multiple shipping packages are not supported…»; the
+same cart with the second package on another rate is placed. An order posted without the block
+(what an express-payment client or a script does) on a pickup rate with no point — or echoing a
+point that was never confirmed, or one confirmed before the Cart block changed the address — is
+refused with «…Please choose a pickup point on the checkout page before paying.»; the Cart block's
+address change empties the snapshot. A Cart-Token client and the cookie session it was issued from
+are ONE session (same point, either can confirm or place); a stranger's token touches nothing.
+
+**Boundaries — known, not supported in this minimum** (each is a proposed card of the C-4 report):
+
+- **A hand-typed city with no chosen locality cannot get a pickup point.** The points request is not
+  a Store API request, so it lists the points of the store's default locality whatever City says;
+  the confirmation IS one, sees no locality, and refuses every point with the generic message. The
+  order stays impossible (safe), the shopper is not told to use the chooser.
+- **A locality can only be chosen with the cookie session.** `woodev/v1/location/*` is `wp_rest`
+  nonce + cookie; a Cart-Token-only (headless) client cannot choose one, hence cannot confirm a
+  point either.
+- **`address_field` / `postcode_field = hide_for_pickup` are classic-only.** On the block checkout a
+  pickup order still demands the native Postcode, which a point without one does not supply.
+- **WooCommerce's own persisted cart can show a point the server has dropped.** Core 11.1 keeps the
+  cart in `localStorage.storeApiCartData` and, when `storeApiCartHash` equals the `woocommerce_cart_hash`
+  cookie, starts the cart store from it and finishes `getCartData` WITHOUT applying the page's preload
+  or fetching (`wc-blocks-data.js`, `Wi()` and the `load` listener). The hash covers the cart's
+  contents only. Measured: checkout reloaded with a point chosen → order placed → the same product
+  added again → the block checkout shows the old rate selected and «Chosen pickup point: …», while
+  the server holds the default rate and an emptied selection. The order is refused («…choose a pickup
+  point…») and the page stays in that state until the shopper clicks another rate. The selected RATE
+  is stale by the same mechanism, so this is not ours alone — but our button repeats it.
+- **A core parent missing from the saved page** renders without our forced children (gotcha
+  `a-forced-inner-block-does-not-render-inside-a-parent-woocommerce-forced-in`); no notice yet.
+- **The carrier marker is write-only**: a retry order re-placed on another carrier's rate keeps the
+  first carrier's marker (the point itself is dropped).
+- **The dialog's list is mouse- and touch-only.** Focus is trapped, Escape returns it to the button,
+  but a list row cannot be reached or chosen from the keyboard — the shared runtime, classic too.
+- Core Local pickup needs the store's checkout page to hold the Checkout block; express payment was
+  exercised as a direct Store API client (the rig has no express gateway).
 
 ## Related
 

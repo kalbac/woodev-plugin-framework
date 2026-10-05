@@ -134,6 +134,14 @@ Anything that must reach the block checkout has to travel through A — the bloc
 JS-driven**: PHP only publishes their effective values (and the pickup method ids) into the checkout
 config, and `checkout-field-classic.js` acts on them.
 
+**The block checkout's own adapter** (SP-11: the locality chooser, the pickup button, the
+`woodev-shipping` Store API namespace) keeps its contracts in
+[the SP-11 spec](../specs/2026-10-04-sp11-block-checkout-design.md) — «C-2a server transport
+contract», «C-2b client contract», the C-3 rules — and what was actually measured to hold, with the
+boundaries that are NOT supported yet, in its «Supported WooCommerce surface (C-4 measured)». Read
+that section before promising a store anything about the block checkout: `hide_for_pickup` above
+is one of the boundaries.
+
 **Third-party field managers:** the late filter runs after everyone else has had their say, so the
 framework can see the FINAL assembled fields, re-assert the settlement field it owns (present +
 required), leave every other field alone, and record a note the tab shows.

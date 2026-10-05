@@ -59,6 +59,24 @@ Two states that differ *in the expected direction* cannot both be a timing artef
 down.** The elegance of the explanation is not evidence. It is the thing that makes a timing
 artefact survive review.
 
+## On the BLOCK checkout «idle» has two more conditions (s153, #1091)
+
+A probe that waits only for the cart store's own flags (`isCustomerDataUpdating()`,
+`isShippingRateBeingSelected()`) reads the block checkout early in two ways, and both produced a
+«defect» during the SP-11 C-4 pass before they were measured:
+
+- **An address write waiting on core's push debounce.** `setShippingAddress()` /
+  `setBillingAddress()` only mark the customer data dirty; the request leaves ~1 s later, or on the
+  next BLUR. A click issued inside that window blurs the focused control, core flushes the push,
+  the rates collapse into a skeleton under the cursor and the `mouseup` lands on another element —
+  the click is lost with no error anywhere. The flag is
+  `localStorage.WOOCOMMERCE_CHECKOUT_IS_CUSTOMER_DATA_DIRTY === 'true'`; wait for it to clear. A
+  shopper is two orders of magnitude slower than a script, so this is a probe artefact, not a bug.
+- **The framework's own gates.** The locality chooser's queue and a pickup confirmation hold Place
+  Order through `disableCheckoutFor()`, which shows as `wc/store/checkout`.`isCalculating()`. A
+  snapshot taken while it is `true` shows the PREVIOUS locality — «the second homonymous city did
+  not change the region» was exactly that.
+
 ## Known timings on this rig
 
 - `/suggest` for an unknown settlement: **6–10 s** (8.5 s measured in s93 for «Мухосранск»).
