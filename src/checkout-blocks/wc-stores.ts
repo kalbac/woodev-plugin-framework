@@ -25,7 +25,9 @@ const EMPTY_ADDRESS: WcAddress = { city: '', state: '', country: '' };
 interface CartSelectors {
 	getCustomerData?: () => { shippingAddress?: WcAddress; billingAddress?: WcAddress };
 	hasFinishedResolution?: ( selector: string, args?: unknown[] ) => boolean;
-	getCartData?: () => { shippingAddress?: WcAddress };
+	getCartData?: () => { extensions?: unknown };
+	isCustomerDataUpdating?: () => boolean;
+	getCartErrors?: () => unknown[];
 }
 
 interface CartActions {
@@ -111,24 +113,42 @@ function localityAddressKey( address: Partial< WcAddress > ): string {
 		.join( '|' );
 }
 
+/** The native shipping address's country/state/city, as the lifecycle compares them (#1110). */
+export function readShippingAddressKey( registrySelect: typeof select = select ): string {
+	return localityAddressKey( readShippingAddress( registrySelect ) );
+}
+
 /**
- * Whether the native shipping address holds an edit of country, state or city the server's cart has
- * not answered yet (#1110): the form's address (`getCustomerData()`) differs from the one the last
- * cart reply carried (`getCartData().shippingAddress`). Until the reply lands, whatever the cart
- * says about the shopper's locality — the owner's key included — belongs to the PREVIOUS address.
- * A store that does not expose the cart's own address is never «pending»: there is nothing to
- * compare, and the settled rules apply.
+ * Whether core's customer-data push is IN FLIGHT (`isCustomerDataUpdating`, a public selector of
+ * `wc/store/cart` — 11.1 `wc-blocks-data.js`, 9.9.0 `data/cart/selectors.ts`). It does NOT cover the
+ * 1.5 s debounce before the push (a module-private timer there), nor tell a failed push from a
+ * successful one — see {@link readCartReply}.
  */
-export function isShippingAddressPending( registrySelect: typeof select = select ): boolean {
+export function isCustomerDataUpdating( registrySelect: typeof select = select ): boolean {
 	const selectors = registrySelect( CART_STORE ) as unknown as CartSelectors | undefined;
-	const local = selectors?.getCustomerData?.().shippingAddress;
-	const server = selectors?.getCartData?.().shippingAddress;
 
-	if ( ! local || ! server ) {
-		return false;
-	}
+	return selectors?.isCustomerDataUpdating?.() === true;
+}
 
-	return localityAddressKey( local ) !== localityAddressKey( server );
+/**
+ * A handle on «the cart answered»: the `extensions` object of the cart data. Every reply core takes
+ * into the store passes through `camelCaseKeys`, so each one leaves a NEW object here; a failed or
+ * aborted request leaves the previous one in place. (The shipping address cannot serve: core writes
+ * the form's own edit into `cartData.shippingAddress` — `getCartData()` and `getCustomerData()`
+ * read the same state — so it never differs from the form.)
+ */
+export function readCartReply( registrySelect: typeof select = select ): unknown {
+	const selectors = registrySelect( CART_STORE ) as unknown as CartSelectors | undefined;
+
+	return selectors?.getCartData?.().extensions;
+}
+
+/** Whether the cart store holds an error — an API refusal of the last request, a refusal's cart included. */
+export function hasCartError( registrySelect: typeof select = select ): boolean {
+	const selectors = registrySelect( CART_STORE ) as unknown as CartSelectors | undefined;
+	const errors = selectors?.getCartErrors?.();
+
+	return Array.isArray( errors ) && errors.length > 0;
 }
 
 export function readBillingAddress(): WcAddress {

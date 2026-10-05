@@ -41,7 +41,8 @@ import {
 	withdrawPoint,
 } from './pickup-stores';
 import type { PickupConfig, PickupData, PickupExtension, PickupFieldDescriptor, PickupSession } from './pickup-types';
-import { isShippingAddressPending, refreshRates, subscribeCheckoutFailure } from './wc-stores';
+import { useShippingAddressState } from './address-lifecycle';
+import { refreshRates, subscribeCheckoutFailure } from './wc-stores';
 
 /** The inner-block helper WooCommerce hands every Checkout inner block (`checkoutExtensionData`). */
 export interface CheckoutExtensionData {
@@ -118,8 +119,10 @@ export function PickupPicker( { data, checkoutExtensionData }: PickupPickerProps
 	const errorId = field ? validationId( field ) : '';
 
 	// The owner (and its locality key) is the cart's answer for the address it LAST received. While
-	// the form holds an edit the cart has not answered, the owner is the previous address's (#1110).
-	const addressPending: boolean = useSelect( ( registrySelect ) => isShippingAddressPending( registrySelect ), [] );
+	// the form holds an edit the cart has not answered, the owner is the previous address's — and
+	// stays so when the edit's push failed (#1110).
+	const addressState = useShippingAddressState();
+	const addressPending = addressState === 'pending';
 
 	const visibleError: string = useSelect(
 		( registrySelect ) => ( errorId === '' ? '' : readVisibleError( errorId, registrySelect ) ),
@@ -174,9 +177,11 @@ export function PickupPicker( { data, checkoutExtensionData }: PickupPickerProps
 	 */
 	// While the cart holds no resolved locality no point can be confirmed, and «choose a point» is
 	// not the way out — the message says what is (#1110). The server refuses the order with the same.
-	// An empty owner during that interval is not an answer yet — the locality may be resolved by the
-	// very reply that is on its way — so only a settled address says «choose it».
-	const noLocality = localityMissing( view ) && ! addressPending;
+	// An empty owner while a push is on its way is not an answer yet — the locality may be resolved by
+	// the very reply that is coming — so only a settled address says «choose it». An edit whose push
+	// failed or never went out leaves an owner that is not this address's: the locality is unresolved
+	// for it, whatever the owner says, until a later reply answers.
+	const noLocality = addressState === 'stale' || ( localityMissing( view ) && ! addressPending );
 	const localityHint = data.i18n?.chooseLocality ?? '';
 	const required = ( noLocality && localityHint !== '' ? localityHint : data.i18n?.required ) ?? '';
 	const needsPoint = errorId !== '' && config !== null && confirmed === null;

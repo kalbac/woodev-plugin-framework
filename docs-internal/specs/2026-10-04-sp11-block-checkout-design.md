@@ -654,10 +654,15 @@ are ONE session (same point, either can confirm or place); a stranger's token to
   to see pickup points.» under the button (also as the order's validation error), the server's
   confirmation and pre-payment validation refuse with the same words instead of the generic one. An
   EMPTY city keeps the store's default locality (it arrives as the owner's key).
-  The owner is authoritative only once the cart has answered the address: while the form's
-  country/state/city differs from the address the last cart reply carried, the button is inert and
-  says «Loading pickup points…» (no dialog opens on the previous address's owner), and an open
-  dialog is destroyed when `owner.locality` changes or empties — a late reply included.
+  The owner is authoritative only once the cart has answered the address (`address-lifecycle.ts`):
+  core writes a form edit into its store at once and pushes it later, so `getCartData()` never
+  differs from the form and the lifecycle is followed instead. While an edit is unanswered — a push
+  scheduled (a bounded 2.5 s window after the last edit; core's 1.5 s debounce is not observable) or
+  in flight (`isCustomerDataUpdating`) — the button is inert and says «Loading pickup points…».
+  An edit whose push failed, was aborted or never went out leaves the owner stale: the locality then
+  counts as unresolved (the «choose your locality» hint, the order refused with the same words)
+  until a later reply answers. An open dialog is destroyed when `owner.locality` changes or empties
+  — a late reply included.
 - **A locality can only be chosen with the cookie session.** `woodev/v1/location/*` is `wp_rest`
   nonce + cookie; a Cart-Token-only (headless) client cannot choose one, hence cannot confirm a
   point either. Decided in #1110: not a scenario of this bundle (it runs on the WordPress-rendered

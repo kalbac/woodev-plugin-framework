@@ -24,8 +24,10 @@ const mockStore = {
 	rates: [] as Rate[],
 	payment: 'cod',
 	shipping: {} as Address,
-	/** The address the server's last cart reply carried; `null`: a store that does not expose it. */
-	cartShipping: null as Address | null,
+	/** `isCustomerDataUpdating`: core's customer-data push is in flight. */
+	updating: false,
+	/** `getCartErrors`: an API refusal sits in the cart store. */
+	cartErrors: [] as unknown[],
 	billing: {} as Address,
 	useShippingAsBilling: false,
 	/** How many `disableCheckoutFor` calls were unsettled at each address write. */
@@ -45,10 +47,9 @@ const notify = (): void => mockStore.listeners.forEach( ( listener ) => listener
 
 jest.mock( '@wordpress/data', () => {
 	const selectFn = () => ( {
-		getCartData: () => ( {
-			extensions: mockStore.extensions,
-			...( mockStore.cartShipping ? { shippingAddress: mockStore.cartShipping } : {} ),
-		} ),
+		getCartData: () => ( { extensions: mockStore.extensions } ),
+		isCustomerDataUpdating: () => mockStore.updating,
+		getCartErrors: () => mockStore.cartErrors,
 		getShippingRates: () => [ { shipping_rates: mockStore.rates } ],
 		getActivePaymentMethod: () => mockStore.payment,
 		getValidationError: ( id: string ) => mockStore.validation[ id ],
@@ -123,6 +124,8 @@ jest.mock( '@wordpress/data', () => {
 
 // eslint-disable-next-line import/first
 import { createHost } from '../../src/checkout-blocks/pickup-host';
+// eslint-disable-next-line import/first
+import { ADDRESS_PUSH_WINDOW_MS } from '../../src/checkout-blocks/address-lifecycle';
 // eslint-disable-next-line import/first
 import { PickupPicker } from '../../src/checkout-blocks/pickup-picker';
 // eslint-disable-next-line import/first
@@ -259,7 +262,8 @@ const OFFICE: Address = { city: 'Тула', state: '', country: 'RU', address_1:
 beforeEach( () => {
 	mockStore.payment = 'cod';
 	mockStore.shipping = { ...HOME };
-	mockStore.cartShipping = null;
+	mockStore.updating = false;
+	mockStore.cartErrors = [];
 	mockStore.billing = { ...HOME };
 	mockStore.useShippingAsBilling = false;
 	mockStore.addressWrites = [];
@@ -938,7 +942,9 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 
 	/*
 	 * The cart answers an address edit later than the form takes it: until it does, the owner is the
-	 * PREVIOUS address's. The critic's transition probes (round 1 of #1110).
+	 * PREVIOUS address's — and stays so when the push fails. WooCommerce writes the edit into its store
+	 * at once, so the form's address never differs from the cart's; the lifecycle is what tells (#1110):
+	 * a push in flight, a reply taken into the store, an API error.
 	 */
 	describe( 'while the cart has not answered an address edit', () => {
 		const PENDING = 'Loading pickup points…';
@@ -948,22 +954,51 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 				owner: { plugin_id: 'carrier', field_id: 'carrier_point', rate_id: PICKUP_RATE, locality },
 			},
 		} );
-		const answer = ( city: string, locality: string ): void =>
-			act( () => {
-				mockStore.cartShipping = { ...HOME, city };
-				mockStore.extensions = owner( locality );
-				notify();
-			} );
 		const edit = ( city: string ): void =>
 			act( () => {
 				mockStore.shipping = { ...HOME, city };
 				notify();
 			} );
+		/** Core's push goes out: the cart store reports the customer data updating. */
+		const push = (): void =>
+			act( () => {
+				mockStore.updating = true;
+				notify();
+			} );
+		/** The push is answered: a new cart reply is taken into the store, then the flag drops. */
+		const reply = ( locality: string ): void => {
+			act( () => {
+				mockStore.extensions = owner( locality );
+				notify();
+			} );
+			act( () => {
+				mockStore.updating = false;
+				notify();
+			} );
+		};
+		/** The push ends with nothing taken into the store (aborted, network error). */
+		const abort = (): void =>
+			act( () => {
+				mockStore.updating = false;
+				notify();
+			} );
+		const lapse = (): void =>
+			act( () => {
+				jest.advanceTimersByTime( ADDRESS_PUSH_WINDOW_MS + 1 );
+			} );
+
+		beforeEach( () => {
+			jest.useFakeTimers();
+			mockStore.extensions = owner( 'dadata:msk' );
+		} );
+
+		afterEach( () => {
+			jest.useRealTimers();
+		} );
 
 		it( 'opens no dialog on the previous address’s owner — it waits for the cart’s answer', () => {
 			const session = fakeSession();
 
-			mockStore.cartShipping = { ...HOME };
 			renderPicker();
 			edit( 'Краснодар' );
 
@@ -973,8 +1008,14 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 			expect( trigger() ).toHaveAttribute( 'aria-disabled', 'true' );
 			expect( screen.getByRole( 'status' ) ).toHaveTextContent( PENDING );
 
+			// The push is in flight: still waiting, however long it takes.
+			push();
+			lapse();
+
+			expect( screen.getByRole( 'status' ) ).toHaveTextContent( PENDING );
+
 			// The cart answers with the new locality: the dialog opens on ITS key, nothing else.
-			answer( 'Краснодар', 'dadata:krd' );
+			reply( 'dadata:krd' );
 			fireEvent.click( trigger() as HTMLElement );
 
 			expect( session.open ).toHaveBeenCalledTimes( 1 );
@@ -984,19 +1025,152 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 		it( 'compares the address without case or stray spaces, so an echoed city is not pending', () => {
 			const session = fakeSession();
 
-			mockStore.cartShipping = { ...HOME, city: 'краснодар' };
-			mockStore.shipping = { ...HOME, city: ' Краснодар ' };
+			mockStore.shipping = { ...HOME, city: 'Краснодар' };
 			renderPicker();
+			edit( ' краснодар ' );
 			fireEvent.click( trigger() as HTMLElement );
 
 			expect( screen.queryByRole( 'status' ) ).not.toBeInTheDocument();
 			expect( session.open ).toHaveBeenCalledTimes( 1 );
 		} );
 
+		it( 'is not pending for an edit that is not the locality — a postcode push leaves the trigger alone', () => {
+			const session = fakeSession();
+
+			renderPicker();
+			act( () => {
+				mockStore.shipping = { ...HOME, postcode: '300000' };
+				mockStore.updating = true;
+				notify();
+			} );
+			fireEvent.click( trigger() as HTMLElement );
+
+			expect( screen.queryByRole( 'status' ) ).not.toBeInTheDocument();
+			expect( session.open ).toHaveBeenCalledTimes( 1 );
+		} );
+
+		it( 'settles at once when the form goes back to the address the cart answered', () => {
+			renderPicker();
+			edit( 'Краснодар' );
+
+			expect( screen.getByRole( 'status' ) ).toHaveTextContent( PENDING );
+
+			edit( HOME.city );
+
+			expect( screen.queryByRole( 'status' ) ).not.toBeInTheDocument();
+			expect( trigger() ).not.toHaveAttribute( 'aria-disabled' );
+		} );
+
+		it( 'leaves «updating» for the choose-locality hint when the push fails — no dialog on the stale owner', () => {
+			const session = fakeSession();
+
+			renderPicker();
+			edit( 'Краснодар' );
+			push();
+			abort();
+
+			expect( screen.getByRole( 'status' ) ).toHaveTextContent( HINT );
+			expect( screen.queryByText( PENDING ) ).not.toBeInTheDocument();
+			expect( trigger() ).toHaveAttribute( 'aria-disabled', 'true' );
+
+			fireEvent.click( trigger() as HTMLElement );
+
+			expect( session.open ).not.toHaveBeenCalled();
+			// The order is refused with the same words as the hint.
+			expect( mockStore.validation[ ERROR_ID ] ).toEqual( { message: HINT, hidden: true } );
+		} );
+
+		it( 'leaves «updating» the same way when the API refuses the push, its cart in the reply included', () => {
+			const session = fakeSession();
+
+			renderPicker();
+			edit( 'Краснодар' );
+			push();
+			act( () => {
+				mockStore.cartErrors = [ { code: 'woocommerce_rest_invalid_address' } ];
+				mockStore.extensions = owner( 'dadata:msk' );
+				notify();
+			} );
+			abort();
+			fireEvent.click( trigger() as HTMLElement );
+
+			expect( screen.getByRole( 'status' ) ).toHaveTextContent( HINT );
+			expect( session.open ).not.toHaveBeenCalled();
+		} );
+
+		it( 'leaves «updating» for the hint when no push ever goes out — the window is bounded', () => {
+			const session = fakeSession();
+
+			renderPicker();
+			edit( 'Краснодар' );
+
+			act( () => {
+				jest.advanceTimersByTime( ADDRESS_PUSH_WINDOW_MS - 100 );
+			} );
+
+			expect( screen.getByRole( 'status' ) ).toHaveTextContent( PENDING );
+
+			lapse();
+
+			expect( screen.getByRole( 'status' ) ).toHaveTextContent( HINT );
+
+			fireEvent.click( trigger() as HTMLElement );
+
+			expect( session.open ).not.toHaveBeenCalled();
+		} );
+
+		it( 'recovers by itself when a later push is answered', () => {
+			const session = fakeSession();
+
+			renderPicker();
+			edit( 'Краснодар' );
+			push();
+			abort();
+
+			expect( screen.getByRole( 'status' ) ).toHaveTextContent( HINT );
+
+			// The shopper edits again (or core retries): the wait begins anew, then the answer lands.
+			edit( 'Краснодар ' + 'край' );
+
+			expect( screen.getByRole( 'status' ) ).toHaveTextContent( PENDING );
+
+			push();
+			reply( 'dadata:krd' );
+			fireEvent.click( trigger() as HTMLElement );
+
+			expect( screen.queryByRole( 'status' ) ).not.toBeInTheDocument();
+			expect( session.open ).toHaveBeenCalledTimes( 1 );
+			expect( session.host().getLocalityKey() ).toBe( 'dadata:krd' );
+		} );
+
+		it( 'recovers when the shopper picks the locality the cart already holds', () => {
+			renderPicker();
+			edit( 'Краснодар' );
+			lapse();
+
+			expect( screen.getByRole( 'status' ) ).toHaveTextContent( HINT );
+
+			edit( HOME.city );
+
+			expect( screen.queryByRole( 'status' ) ).not.toBeInTheDocument();
+			expect( trigger() ).not.toHaveAttribute( 'aria-disabled' );
+		} );
+
+		it( 'does not credit an edit made while the push was in flight to that push’s answer', () => {
+			renderPicker();
+			edit( 'Краснодар' );
+			push();
+			edit( 'Сочи' );
+			reply( 'dadata:krd' );
+
+			// The reply answered «Краснодар»; the form holds «Сочи» — still waiting, not settled.
+			expect( screen.getByRole( 'status' ) ).toHaveTextContent( PENDING );
+			expect( trigger() ).toHaveAttribute( 'aria-disabled', 'true' );
+		} );
+
 		it( 'closes an open dialog when the cart answers that the locality is gone', () => {
 			const session = fakeSession();
 
-			mockStore.cartShipping = { ...HOME };
 			renderPicker();
 			fireEvent.click( trigger() as HTMLElement );
 
@@ -1004,7 +1178,8 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 			expect( session.destroy ).not.toHaveBeenCalled();
 
 			edit( 'Краснодар' );
-			answer( 'Краснодар', '' );
+			push();
+			reply( '' );
 
 			expect( session.destroy ).toHaveBeenCalledTimes( 1 );
 			expect( trigger() ).toHaveAttribute( 'aria-disabled', 'true' );
@@ -1014,28 +1189,27 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 		it( 'closes an open dialog when the cart answers with another locality', () => {
 			const session = fakeSession();
 
-			mockStore.cartShipping = { ...HOME };
 			renderPicker();
 			fireEvent.click( trigger() as HTMLElement );
 
 			edit( 'Краснодар' );
-			answer( 'Краснодар', 'dadata:krd' );
+			push();
+			reply( 'dadata:krd' );
 
 			expect( session.destroy ).toHaveBeenCalledTimes( 1 );
 		} );
 
-		it( 'says «updating», not «choose your locality», while a saved suggestion waits for the cart', () => {
-			mockStore.shipping = { ...HOME, city: 'Краснодар' };
-			mockStore.cartShipping = { ...HOME, city: '' };
-			mockStore.extensions = owner( '' );
+		it( 'says «updating», not «choose your locality», until the cart answers a typed city', () => {
 			renderPicker();
+			edit( 'Краснодар' );
 
 			expect( screen.getByRole( 'status' ) ).toHaveTextContent( PENDING );
 			expect( screen.queryByText( HINT ) ).not.toBeInTheDocument();
 			expect( trigger() ).toHaveAttribute( 'aria-disabled', 'true' );
 
 			// Settled with no locality: now it is the shopper's move.
-			answer( 'Краснодар', '' );
+			push();
+			reply( '' );
 
 			expect( screen.getByRole( 'status' ) ).toHaveTextContent( HINT );
 		} );
