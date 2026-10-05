@@ -654,6 +654,10 @@ are ONE session (same point, either can confirm or place); a stranger's token to
   to see pickup points.» under the button (also as the order's validation error), the server's
   confirmation and pre-payment validation refuse with the same words instead of the generic one. An
   EMPTY city keeps the store's default locality (it arrives as the owner's key).
+  The owner is authoritative only once the cart has answered the address: while the form's
+  country/state/city differs from the address the last cart reply carried, the button is inert and
+  says «Loading pickup points…» (no dialog opens on the previous address's owner), and an open
+  dialog is destroyed when `owner.locality` changes or empties — a late reply included.
 - **A locality can only be chosen with the cookie session.** `woodev/v1/location/*` is `wp_rest`
   nonce + cookie; a Cart-Token-only (headless) client cannot choose one, hence cannot confirm a
   point either. Decided in #1110: not a scenario of this bundle (it runs on the WordPress-rendered

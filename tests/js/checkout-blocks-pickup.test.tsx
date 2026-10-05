@@ -24,6 +24,8 @@ const mockStore = {
 	rates: [] as Rate[],
 	payment: 'cod',
 	shipping: {} as Address,
+	/** The address the server's last cart reply carried; `null`: a store that does not expose it. */
+	cartShipping: null as Address | null,
 	billing: {} as Address,
 	useShippingAsBilling: false,
 	/** How many `disableCheckoutFor` calls were unsettled at each address write. */
@@ -43,7 +45,10 @@ const notify = (): void => mockStore.listeners.forEach( ( listener ) => listener
 
 jest.mock( '@wordpress/data', () => {
 	const selectFn = () => ( {
-		getCartData: () => ( { extensions: mockStore.extensions } ),
+		getCartData: () => ( {
+			extensions: mockStore.extensions,
+			...( mockStore.cartShipping ? { shippingAddress: mockStore.cartShipping } : {} ),
+		} ),
 		getShippingRates: () => [ { shipping_rates: mockStore.rates } ],
 		getActivePaymentMethod: () => mockStore.payment,
 		getValidationError: ( id: string ) => mockStore.validation[ id ],
@@ -254,6 +259,7 @@ const OFFICE: Address = { city: 'Тула', state: '', country: 'RU', address_1:
 beforeEach( () => {
 	mockStore.payment = 'cod';
 	mockStore.shipping = { ...HOME };
+	mockStore.cartShipping = null;
 	mockStore.billing = { ...HOME };
 	mockStore.useShippingAsBilling = false;
 	mockStore.addressWrites = [];
@@ -928,6 +934,111 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 		expect( screen.queryByRole( 'status' ) ).not.toBeInTheDocument();
 		expect( session.open ).toHaveBeenCalledTimes( 1 );
 		expect( session.host().getLocalityKey() ).toBe( 'dadata:msk' );
+	} );
+
+	/*
+	 * The cart answers an address edit later than the form takes it: until it does, the owner is the
+	 * PREVIOUS address's. The critic's transition probes (round 1 of #1110).
+	 */
+	describe( 'while the cart has not answered an address edit', () => {
+		const PENDING = 'Loading pickup points…';
+		const owner = ( locality: string ): Record< string, unknown > => ( {
+			[ NAMESPACE ]: {
+				pickup: { carrier: { carrier_point: null } },
+				owner: { plugin_id: 'carrier', field_id: 'carrier_point', rate_id: PICKUP_RATE, locality },
+			},
+		} );
+		const answer = ( city: string, locality: string ): void =>
+			act( () => {
+				mockStore.cartShipping = { ...HOME, city };
+				mockStore.extensions = owner( locality );
+				notify();
+			} );
+		const edit = ( city: string ): void =>
+			act( () => {
+				mockStore.shipping = { ...HOME, city };
+				notify();
+			} );
+
+		it( 'opens no dialog on the previous address’s owner — it waits for the cart’s answer', () => {
+			const session = fakeSession();
+
+			mockStore.cartShipping = { ...HOME };
+			renderPicker();
+			edit( 'Краснодар' );
+
+			fireEvent.click( trigger() as HTMLElement );
+
+			expect( session.open ).not.toHaveBeenCalled();
+			expect( trigger() ).toHaveAttribute( 'aria-disabled', 'true' );
+			expect( screen.getByRole( 'status' ) ).toHaveTextContent( PENDING );
+
+			// The cart answers with the new locality: the dialog opens on ITS key, nothing else.
+			answer( 'Краснодар', 'dadata:krd' );
+			fireEvent.click( trigger() as HTMLElement );
+
+			expect( session.open ).toHaveBeenCalledTimes( 1 );
+			expect( session.host().getLocalityKey() ).toBe( 'dadata:krd' );
+		} );
+
+		it( 'compares the address without case or stray spaces, so an echoed city is not pending', () => {
+			const session = fakeSession();
+
+			mockStore.cartShipping = { ...HOME, city: 'краснодар' };
+			mockStore.shipping = { ...HOME, city: ' Краснодар ' };
+			renderPicker();
+			fireEvent.click( trigger() as HTMLElement );
+
+			expect( screen.queryByRole( 'status' ) ).not.toBeInTheDocument();
+			expect( session.open ).toHaveBeenCalledTimes( 1 );
+		} );
+
+		it( 'closes an open dialog when the cart answers that the locality is gone', () => {
+			const session = fakeSession();
+
+			mockStore.cartShipping = { ...HOME };
+			renderPicker();
+			fireEvent.click( trigger() as HTMLElement );
+
+			expect( session.open ).toHaveBeenCalledTimes( 1 );
+			expect( session.destroy ).not.toHaveBeenCalled();
+
+			edit( 'Краснодар' );
+			answer( 'Краснодар', '' );
+
+			expect( session.destroy ).toHaveBeenCalledTimes( 1 );
+			expect( trigger() ).toHaveAttribute( 'aria-disabled', 'true' );
+			expect( screen.getByRole( 'status' ) ).toHaveTextContent( HINT );
+		} );
+
+		it( 'closes an open dialog when the cart answers with another locality', () => {
+			const session = fakeSession();
+
+			mockStore.cartShipping = { ...HOME };
+			renderPicker();
+			fireEvent.click( trigger() as HTMLElement );
+
+			edit( 'Краснодар' );
+			answer( 'Краснодар', 'dadata:krd' );
+
+			expect( session.destroy ).toHaveBeenCalledTimes( 1 );
+		} );
+
+		it( 'says «updating», not «choose your locality», while a saved suggestion waits for the cart', () => {
+			mockStore.shipping = { ...HOME, city: 'Краснодар' };
+			mockStore.cartShipping = { ...HOME, city: '' };
+			mockStore.extensions = owner( '' );
+			renderPicker();
+
+			expect( screen.getByRole( 'status' ) ).toHaveTextContent( PENDING );
+			expect( screen.queryByText( HINT ) ).not.toBeInTheDocument();
+			expect( trigger() ).toHaveAttribute( 'aria-disabled', 'true' );
+
+			// Settled with no locality: now it is the shopper's move.
+			answer( 'Краснодар', '' );
+
+			expect( screen.getByRole( 'status' ) ).toHaveTextContent( HINT );
+		} );
 	} );
 } );
 

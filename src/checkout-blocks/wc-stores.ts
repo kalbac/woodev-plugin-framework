@@ -25,6 +25,7 @@ const EMPTY_ADDRESS: WcAddress = { city: '', state: '', country: '' };
 interface CartSelectors {
 	getCustomerData?: () => { shippingAddress?: WcAddress; billingAddress?: WcAddress };
 	hasFinishedResolution?: ( selector: string, args?: unknown[] ) => boolean;
+	getCartData?: () => { shippingAddress?: WcAddress };
 }
 
 interface CartActions {
@@ -101,6 +102,33 @@ export function isShippingAddressAuthoritative( registrySelect: typeof select = 
 	}
 
 	return ( selectors?.getCustomerData?.().shippingAddress?.country ?? '' ) !== '';
+}
+
+/** The fields a locality is resolved from, compared without case or stray spaces. */
+function localityAddressKey( address: Partial< WcAddress > ): string {
+	return [ address.country, address.state, address.city ]
+		.map( ( part ) => String( part ?? '' ).trim().replace( /\s+/g, ' ' ).toLowerCase() )
+		.join( '|' );
+}
+
+/**
+ * Whether the native shipping address holds an edit of country, state or city the server's cart has
+ * not answered yet (#1110): the form's address (`getCustomerData()`) differs from the one the last
+ * cart reply carried (`getCartData().shippingAddress`). Until the reply lands, whatever the cart
+ * says about the shopper's locality — the owner's key included — belongs to the PREVIOUS address.
+ * A store that does not expose the cart's own address is never «pending»: there is nothing to
+ * compare, and the settled rules apply.
+ */
+export function isShippingAddressPending( registrySelect: typeof select = select ): boolean {
+	const selectors = registrySelect( CART_STORE ) as unknown as CartSelectors | undefined;
+	const local = selectors?.getCustomerData?.().shippingAddress;
+	const server = selectors?.getCartData?.().shippingAddress;
+
+	if ( ! local || ! server ) {
+		return false;
+	}
+
+	return localityAddressKey( local ) !== localityAddressKey( server );
 }
 
 export function readBillingAddress(): WcAddress {
