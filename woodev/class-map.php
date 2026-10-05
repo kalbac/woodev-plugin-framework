@@ -69,6 +69,7 @@ return [
 	'Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Settings' => 'woodev/shipping-method/checkout/class-checkout-field-settings.php',
 	'Woodev\\Framework\\Shipping\\Checkout\\Checkout_Fields' => 'woodev/shipping-method/checkout/class-checkout-fields.php',
 	'Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler' => 'woodev/shipping-method/checkout/class-checkout-handler.php',
+	'Woodev\\Framework\\Shipping\\Checkout\\Checkout_Parent_Block_Notice' => 'woodev/shipping-method/checkout/class-checkout-parent-block-notice.php',
 	'Woodev\\Framework\\Shipping\\Checkout\\Field' => 'woodev/shipping-method/checkout/class-field.php',
 	'Woodev\\Framework\\Shipping\\Checkout\\Phone_Mask_Patterns' => 'woodev/shipping-method/checkout/class-phone-mask-patterns.php',
 	'Woodev\\Framework\\Shipping\\Checkout\\Presets\\Dependent_Select' => 'woodev/shipping-method/checkout/presets/class-dependent-select.php',
