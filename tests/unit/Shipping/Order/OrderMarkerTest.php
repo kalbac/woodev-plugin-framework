@@ -135,6 +135,36 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$this->assertSame( [], Order_Marker_Fakes::$db );
 		}
 
+		public function test_it_removes_a_marker_when_the_order_no_longer_carries_the_carriers_rate(): void {
+			$this->register( self::writing( '1' ) );
+			$order = Order_Marker_Fakes::order( [ Order_Marker_Fakes::line( 'test_courier', 3 ) ] );
+			$marker = new Order_Marker();
+			$marker->mark_order( $order );
+
+			$order = Order_Marker_Fakes::order( [ Order_Marker_Fakes::line( 'free_shipping', 1 ) ] );
+			Order_Marker_Fakes::$db[42][ self::KEY ] = '1';
+			$this->assertSame( [], $marker->mark_order( $order ) );
+			$this->assertArrayNotHasKey( self::KEY, Order_Marker_Fakes::$db[42] );
+		}
+
+		public function test_it_keeps_a_marker_when_the_carriers_rate_is_present(): void {
+			$this->register( self::writing( '1' ) );
+			$order = Order_Marker_Fakes::order( [ Order_Marker_Fakes::line( 'test_courier', 3 ) ] );
+			$this->assertSame( [ 'test' ], ( new Order_Marker() )->mark_order( $order ) );
+			$this->assertSame( '1', Order_Marker_Fakes::$db[42][ self::KEY ] );
+		}
+
+		public function test_removing_one_carriers_marker_leaves_another_carriers_marker_untouched(): void {
+			$this->register( self::writing( '1', '_test_marker' ), '_test_marker', [ 'test_courier' ], 'test' );
+			$this->register( self::writing( '1', '_other_marker' ), '_other_marker', [ 'other_courier' ], 'other' );
+			$order = Order_Marker_Fakes::order( [ Order_Marker_Fakes::line( 'other_courier', 1 ) ] );
+			Order_Marker_Fakes::$db[42] = [ '_test_marker' => '1', '_other_marker' => '1' ];
+
+			$this->assertSame( [ 'other' ], ( new Order_Marker() )->mark_order( $order ) );
+			$this->assertArrayNotHasKey( '_test_marker', Order_Marker_Fakes::$db[42] );
+			$this->assertSame( '1', Order_Marker_Fakes::$db[42]['_other_marker'] );
+		}
+
 		public function test_an_order_with_no_shipping_line_is_not_marked(): void {
 			$this->register( self::writing( '1' ) );
 

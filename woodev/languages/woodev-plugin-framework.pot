@@ -4991,9 +4991,6 @@ msgstr ""
 msgid "Please choose a pickup point."
 msgstr ""
 
-#: shipping-method/pickup/class-store-api-pickup.php
-msgid "Please choose a pickup point on the checkout page before paying."
-msgstr ""
 
 #: shipping-method/pickup/class-store-api-pickup.php
 msgid "Pickup points for multiple shipping packages are not supported. Please choose another shipping method."

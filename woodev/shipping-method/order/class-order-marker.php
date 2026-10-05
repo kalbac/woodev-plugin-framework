@@ -129,6 +129,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Order_Marker' ) ) :
 				$line = $this->find_shipping_line( $order, $provider );
 
 				if ( null === $line ) {
+					if ( $this->carries_valid_marker( $order, $provider ) ) {
+						$order->delete_meta_data( $provider->get_marker_meta_key() );
+						if ( $order->get_id() > 0 ) {
+							$order->save_meta_data();
+						}
+					}
+
 					continue;
 				}
 

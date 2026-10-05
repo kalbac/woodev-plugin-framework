@@ -818,7 +818,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 						$messages = $handler->store_api_point_errors( $point_id, $rate_id, (string) $order->get_payment_method() );
 					}
 					foreach ( $messages as $message ) {
-						$errors->add( 'woodev_pickup_validation', $message );
+						if ( ! in_array( $message, $errors->get_error_messages(), true ) ) {
+							$errors->add( 'woodev_pickup_validation', $message );
+						}
 					}
 				}
 			}
@@ -909,7 +911,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 		 * @return string
 		 */
 		private static function choose_message(): string {
-			return __( 'Please choose a pickup point on the checkout page before paying.', 'woodev-plugin-framework' );
+			return __( 'You have not chosen a pickup point.', 'woodev-plugin-framework' );
 		}
 
 		/**

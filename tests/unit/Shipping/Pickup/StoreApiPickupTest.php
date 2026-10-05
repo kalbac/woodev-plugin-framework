@@ -700,7 +700,7 @@ final class StoreApiPickupTest extends TestCase {
 		$this->session->data['installed_carrier_selection']['other'] = [ 'PVZ' => [ 'id' => 'P2', 'seq' => 10 ] ];
 		C2a_Adapter::update( $this->command( [ 'clear' => true ] ) );
 		$this->assertArrayHasKey( 'other', $this->session->data['installed_carrier_selection'] );
-		$this->assertStringContainsString( 'checkout page', $this->validate()->get_error_message() );
+		$this->assertSame( 'You have not chosen a pickup point.', $this->validate()->get_error_message() );
 	}
 
 	public function test_deferred_draft_reconciles_address_and_never_requires_a_point(): void {
@@ -825,7 +825,7 @@ final class StoreApiPickupTest extends TestCase {
 
 	public function test_placing_an_order_with_a_locality_and_no_point_keeps_the_generic_message(): void {
 		$this->assertSame(
-			[ 'Please choose a pickup point on the checkout page before paying.' ],
+			[ 'You have not chosen a pickup point.' ],
 			$this->validate()->get_error_messages()
 		);
 	}
@@ -843,7 +843,7 @@ final class StoreApiPickupTest extends TestCase {
 		$this->assertFalse( $this->validate( $order )->has_errors() );
 		$this->handler->handle_store_api_order_processed( $order );
 		$order->status = 'failed';
-		$this->assertStringContainsString( 'checkout page', $this->validate( $order )->get_error_message() );
+		$this->assertSame( 'You have not chosen a pickup point.', $this->validate( $order )->get_error_message() );
 		$order->status = 'pending';
 		$this->assertTrue( $this->validate( $order )->has_errors() );
 	}
@@ -919,7 +919,7 @@ final class StoreApiPickupTest extends TestCase {
 		}
 		$errors = $this->validate();
 		$this->assertTrue( $errors->has_errors() );
-		$this->assertStringContainsString( 'checkout page', $errors->get_error_message() );
+		$this->assertSame( 'You have not chosen a pickup point.', $errors->get_error_message() );
 		$this->assertArrayNotHasKey( 'carrier_point', $this->meta );
 		$this->assertSame( 0, $this->fetches );
 	}
@@ -1151,23 +1151,18 @@ final class StoreApiPickupTest extends TestCase {
 		$this->assertNull( Store_Api_Pickup::cart_data()['pickup']['carrier']['carrier_point'] );
 	}
 
-	public function test_first_attempt_shared_payment_hooks_return_one_refusal_for_the_carrier(): void {
+	public function test_adapter_does_not_repeat_the_checkout_guard_refusal(): void {
 		$wc = new \stdClass();
 		$wc->session = $this->session;
 		Functions\when( 'WC' )->justReturn( $wc );
-		$checkout = new \Woodev\Framework\Shipping\Checkout\Checkout_Handler(
-			\Woodev\Framework\Shipping\Checkout\Checkout_Fields::from_array( [
-				\Woodev\Framework\Shipping\Checkout\Field::create( 'carrier_point' )->mark_pickup_slot()->to_array(),
-			] ), 'carrier'
-		);
-		$checkout->set_requires_pickup_methods( [ 'carrier_pickup' ] );
 		$order = new C2a_Order( $this->address );
 		C2a_Adapter::update_order( $order, $this->request() );
 		$errors = new \WP_Error();
-		$checkout->handle_store_api_validate_order( $order, $errors );
+		// Simulate the fallback checkout guard firing before the pickup adapter for this order.
+		$errors->add( 'woodev_shipping_pickup_point_required', 'You have not chosen a pickup point.' );
 		C2a_Adapter::validate_order( $order, $errors );
 		$this->assertCount( 1, $errors->get_error_messages() );
-		$this->assertStringContainsString( 'checkout page', $errors->get_error_message() );
+		$this->assertSame( 'You have not chosen a pickup point.', $errors->get_error_message() );
 	}
 
 	public function test_bundled_copies_can_include_both_pickup_classes_again(): void {
