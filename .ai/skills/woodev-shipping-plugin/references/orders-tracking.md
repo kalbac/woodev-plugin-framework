@@ -41,4 +41,4 @@ Implement webhooks by extending `Abstract_Webhook_Handler` and providing `verify
 ## Not available yet
 
 - Framework buyer status emails are not implemented yet (#714, in progress). Do not add plugin-owned buyer status emails.
-- Carrier documents such as waybills and barcode downloads are not implemented yet (#1134). Do not hand-roll a download flow; wait for the shared document source/download seam.
+- Carrier documents use the shared `Order\Document_Source` seam (#1134). Register a source against the carrier's orders-provider id with `Orders_Registry::register_document_source()`, declare `supports_label_printing` on the provider, return supported types from `get_document_types()`, and implement `get_document()` as a short request that returns `Document_Result::binary()`, `url()`, `pending($retry_after)`, or `failed($reason)`. Do not block while a carrier generates a file: return `pending` and let the merchant retry. The framework owns the REST download response, filename, authorization, and download meta flag; document bytes are fetched on demand and are not persisted.

@@ -54,6 +54,7 @@ function woodev_realistic_shipping_plugin_init(): void {
 	// #710 bug 6: the handler that wires «Выгрузить»/«Отменить» AND unblocks the order
 	// wizard's «Редактировать» row action — see that file's own header.
 	require_once $plugin_path . '/includes/class-realistic-shipment-handler.php';
+	require_once $plugin_path . '/includes/class-realistic-document-source.php';
 	require_once $plugin_path . '/includes/class-realistic-shipping-plugin.php';
 	require_once $plugin_path . '/includes/abstract-class-realistic-shipping-method.php';
 	require_once $plugin_path . '/includes/class-realistic-shipping-method.php';

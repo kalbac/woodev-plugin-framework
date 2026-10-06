@@ -8,7 +8,7 @@
  */
 
 import apiFetch from '@wordpress/api-fetch';
-import { fetchOrders, fetchSyncStatus, getExportsInProgress, performOrderAction } from '../../src/shipping-orders-page/rest';
+import { documentDownloadUrl, fetchOrders, fetchSyncStatus, getExportsInProgress, performOrderAction } from '../../src/shipping-orders-page/rest';
 
 jest.mock( '@wordpress/api-fetch' );
 
@@ -71,6 +71,14 @@ describe( 'fetchOrders — the new filter-row params', () => {
 			await fetchOrders( {} );
 			expect( new URL( calledUrl() ).searchParams.has( 'has_tracking' ) ).toBe( false );
 		} );
+	} );
+} );
+
+describe( 'carrier document downloads (#1134)', () => {
+	test( 'builds a nonce-protected download URL for the framework document route', () => {
+		expect( documentDownloadUrl( 42, 'waybill' ) ).toBe(
+			'https://example.test/wp-json/woodev/v1/shipping/orders/42/documents/waybill?_wpnonce=abc'
+		);
 	} );
 } );
 

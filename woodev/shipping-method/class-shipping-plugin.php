@@ -266,6 +266,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 			// order meta handler + abstract shipment/tracking/webhook handlers
 			require_once $path . '/order/class-shipping-order-handler.php';
+			require_once $path . '/order/class-document-result.php';
+			require_once $path . '/order/interface-document-source.php';
 			require_once $path . '/order/class-action-result.php';
 			require_once $path . '/order/class-order-lock.php';
 			require_once $path . '/order/class-export-retry.php';
@@ -320,6 +322,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/rest-api/class-location-controller.php';
 			require_once $path . '/rest-api/class-pickup-controller.php';
 			require_once $path . '/rest-api/class-orders-controller.php';
+			require_once $path . '/rest-api/class-document-controller.php';
 			require_once $path . '/rest-api/class-order-editor-controller.php';
 			require_once $path . '/rest-api/class-rates-controller.php';
 		}

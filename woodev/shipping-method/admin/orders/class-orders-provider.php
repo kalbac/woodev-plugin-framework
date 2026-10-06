@@ -202,6 +202,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		 */
 		private $order_fields;
 
+		/** @var bool whether the carrier permits framework label/barcode downloads. */
+		private $supports_label_printing;
+
 		/**
 		 * Use {@see self::create()} instead.
 		 *
@@ -238,7 +241,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 			?string $legacy_page_slug,
 			?string $cron_hook,
 			?callable $marker_writer = null,
-			?callable $order_fields = null
+			?callable $order_fields = null,
+			bool $supports_label_printing = false
 		) {
 			$this->id                        = $id;
 			$this->label                     = $label;
@@ -255,6 +259,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 			$this->cron_hook                 = $cron_hook;
 			$this->marker_writer             = $marker_writer;
 			$this->order_fields              = $order_fields;
+			$this->supports_label_printing   = $supports_label_printing;
 		}
 
 		/**
@@ -288,6 +293,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		 *                                                           tariff, asked for by the admin order wizard (#973, spec D7). Optional: a
 		 *                                                           carrier without it asks the manager for nothing extra
 		 *                                                           (see {@see self::get_order_fields()}).
+		 *     @type bool                $supports_label_printing   whether carrier documents are available.
 		 * }
 		 * @return self
 		 *
@@ -351,7 +357,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 				$nullable_string( $args, 'legacy_page_slug' ),
 				$nullable_string( $args, 'cron_hook' ),
 				$args['marker_writer'] ?? null,
-				$args['order_fields'] ?? null
+				$args['order_fields'] ?? null,
+				true === ( $args['supports_label_printing'] ?? false )
 			);
 		}
 
@@ -605,6 +612,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		 */
 		public function has_order_fields(): bool {
 			return null !== $this->order_fields;
+		}
+
+		/**
+		 * Whether this carrier supports waybill/barcode printing.
+		 *
+		 * @since 2.0.2
+		 * @return bool
+		 */
+		public function supports_label_printing(): bool {
+			return $this->supports_label_printing;
 		}
 
 		/**

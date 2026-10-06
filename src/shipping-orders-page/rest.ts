@@ -272,6 +272,12 @@ function bootstrap(): Partial<ShippingOrdersBootstrap> {
 	return window.woodevShippingOrders || {};
 }
 
+/** Builds the nonce-protected direct download URL for one carrier document. */
+export function documentDownloadUrl( orderId: number, type: string ): string {
+	const { restRoot = '', nonce = '' } = bootstrap();
+	return `${ restRoot.replace( /\/+$/, '' ) }/${ orderId }/documents/${ encodeURIComponent( type ) }?_wpnonce=${ encodeURIComponent( nonce ) }`;
+}
+
 /**
  * The REST root (`…/woodev/v1`) and nonce the order wizard talks to, plus its reference data.
  *
