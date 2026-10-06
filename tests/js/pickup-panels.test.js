@@ -2576,6 +2576,7 @@ const searchConfig = { lang: 'ru_RU', distanceUnitSystem: 'metric', i18n: {
 
 describe( 'search result rows are keyboard buttons (#1127)', () => {
 	const press = ( el, key, options = {} ) => {
+		el.focus();
 		const event = new window.KeyboardEvent( 'keydown', {
 			key, bubbles: true, cancelable: true, ...options,
 		} );
@@ -2585,17 +2586,19 @@ describe( 'search result rows are keyboard buttons (#1127)', () => {
 		return event;
 	};
 
-	const setup = ( kind ) => {
+	const setup = ( kind, listenForPoint = true ) => {
 		const panels = mount( searchConfig );
 		const layout = panels.buildSearchLayout();
 		const g = { key: 'g1', size: 1, points: [ point() ] };
 		const seen = [];
 
 		document.body.appendChild( layout );
-		panels.on( 'searchPointPicked', ( id ) => {
-			seen.push( [ 'point', id ] );
-			panels.openCard( g, id, 'search' );
-		} );
+		if ( listenForPoint ) {
+			panels.on( 'searchPointPicked', ( id ) => {
+				seen.push( [ 'point', id ] );
+				panels.openCard( g, id, 'search' );
+			} );
+		}
 		panels.on( 'searchAddressPicked', ( index ) => seen.push( [ 'address', index ] ) );
 		panels.renderSearchResults( kind === 'point'
 			? { points: [ point() ], addresses: [] }
@@ -2641,6 +2644,18 @@ describe( 'search result rows are keyboard buttons (#1127)', () => {
 		expect( document.activeElement ).toBe( input );
 	} );
 
+	it( 'does not return to search when a pointer closes a keyboard-opened card', () => {
+		const { panels, row, input } = setup( 'point' );
+		press( row, 'Enter' );
+		const focusSearch = jest.spyOn( input, 'focus' );
+		const close = panels.root.querySelector( '.woodev-pickup-card__close' );
+
+		close.dispatchEvent( new window.MouseEvent( 'click', { bubbles: true, detail: 1 } ) );
+
+		expect( focusSearch ).not.toHaveBeenCalled();
+		expect( document.activeElement ).not.toBe( input );
+	} );
+
 	it( 'returns address-result focus to the persistent search input', () => {
 		const { row, input } = setup( 'address' );
 
@@ -2650,6 +2665,56 @@ describe( 'search result rows are keyboard buttons (#1127)', () => {
 		expect( row.isConnected ).toBe( false );
 	} );
 
+	it( 'does not change focus for a plain pointer click', () => {
+		const { row } = setup( 'address' );
+		const priorFocus = document.createElement( 'button' );
+		document.body.appendChild( priorFocus );
+		priorFocus.focus();
+
+		row.click();
+		const activeElement = document.activeElement;
+		priorFocus.remove();
+
+		// The focus-preservation check alone also describes the old click-only row; keep the new
+		// keyboard-button contract in this test so the regression test fails against that version.
+		expect( row.getAttribute( 'role' ) ).toBe( 'button' );
+		expect( activeElement ).toBe( priorFocus );
+	} );
+
+	it( 'keeps pointer focus without a listener and returns a keyboard point pick to search', () => {
+		const { panels, layout, row, input } = setup( 'point', false );
+		const priorFocus = document.createElement( 'button' );
+		document.body.appendChild( priorFocus );
+		priorFocus.focus();
+
+		row.click();
+		const activeElement = document.activeElement;
+		priorFocus.remove();
+
+		expect( activeElement ).toBe( priorFocus );
+
+		panels.renderSearchResults( { points: [ point() ], addresses: [] } );
+		const keyboardRow = layout.querySelector( '.woodev-pickup-search__item' );
+		press( keyboardRow, 'Enter' );
+
+		expect( document.activeElement ).toBe( input );
+	} );
+
+	it( 'does not move focus into an already shown card or leave a stale opener', () => {
+		const { panels, row, input } = setup( 'point' );
+		const group = { key: 'g1', size: 1, points: [ point() ] };
+
+		panels.openCard( group, 'p1', 'marker' );
+		press( row, 'Enter' );
+
+		expect( document.activeElement ).toBe( input );
+		expect( panels._cardOpener ).toBe( null );
+
+		panels.closeCard();
+
+		expect( document.activeElement ).toBe( input );
+	} );
+
 	it( 'ignores other keys, repeats, modifiers, and bubbled descendant keydowns', () => {
 		const { row, seen } = setup( 'address' );
 		const other = press( row, 'a' );
@@ -2657,7 +2722,8 @@ describe( 'search result rows are keyboard buttons (#1127)', () => {
 		const modified = press( row, 'Enter', { ctrlKey: true } );
 		press( row.querySelector( 'span' ), 'Enter' );
 
-		// This is still a keyboard-button contract test: keep it red against the old click-only row.
+		// Guard that the new keyboard semantics expose a button; activation assertions alone pass
+		// vacuously against the old click-only row.
 		expect( row.getAttribute( 'role' ) ).toBe( 'button' );
 		expect( seen ).toHaveLength( 0 );
 		expect( other.defaultPrevented ).toBe( false );
