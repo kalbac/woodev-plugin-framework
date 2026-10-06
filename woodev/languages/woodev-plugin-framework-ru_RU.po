@@ -2542,6 +2542,7 @@ msgid "This shipping method requires you to choose a pickup point."
 msgstr "Для этого способа доставки нужно выбрать пункт выдачи заказов."
 
 #: shipping-method/checkout/class-checkout-handler.php:2882
+#: shipping-method/pickup/class-store-api-pickup.php:914
 msgid "You have not chosen a pickup point."
 msgstr "Вы не выбрали пункт выдачи заказов."
 
@@ -4968,10 +4969,6 @@ msgstr ""
 #: shipping-method/pickup/class-pickup-controller.php
 msgid "Please choose a pickup point."
 msgstr "Пункт выдачи не указан."
-
-#: shipping-method/pickup/class-store-api-pickup.php
-msgid "Please choose a pickup point on the checkout page before paying."
-msgstr "Перед оплатой выберите пункт выдачи на странице оформления заказа."
 
 #: shipping-method/pickup/class-store-api-pickup.php
 msgid "Pickup points for multiple shipping packages are not supported. Please choose another shipping method."

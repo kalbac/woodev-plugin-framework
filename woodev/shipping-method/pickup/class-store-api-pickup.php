@@ -765,19 +765,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 			}
 			$payload = self::$echoes[ $order->get_id() ];
 			if ( [] !== $payload && ! is_array( $payload['pickup'] ?? null ) ) {
-				$errors->add( 'woodev_pickup_validation', self::choose_message() );
+				self::add_validation_error( $errors, self::choose_message() );
 				return;
 			}
 			foreach ( $payload['pickup'] ?? [] as $plugin_id => $fields ) {
 				if ( ! is_array( $fields ) ) {
-					$errors->add( 'woodev_pickup_validation', self::choose_message() );
+					self::add_validation_error( $errors, self::choose_message() );
 					return;
 				}
 				foreach ( $fields as $field_id => $confirmation ) {
 					$owner = self::$handlers[ $plugin_id ][ $field_id ] ?? null;
 					if ( null === $owner || ( null !== $confirmation && ! is_array( $confirmation ) )
 						|| ( ! empty( $confirmation ) && ! ( $confirmation['clear'] ?? false ) && ! $owner->owns_store_api_rate( $order_method ) ) ) {
-						$errors->add( 'woodev_pickup_validation', self::choose_message() );
+						self::add_validation_error( $errors, self::choose_message() );
 						return;
 					}
 				}
@@ -818,9 +818,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 						$messages = $handler->store_api_point_errors( $point_id, $rate_id, (string) $order->get_payment_method() );
 					}
 					foreach ( $messages as $message ) {
-						$errors->add( 'woodev_pickup_validation', $message );
+						self::add_validation_error( $errors, $message );
 					}
 				}
+			}
+		}
+
+		/**
+		 * Adds a pickup refusal only when the shared Store API errors do not already contain it.
+		 *
+		 * @since 2.0.2
+		 * @param \WP_Error $errors Shared validation errors.
+		 * @param string    $message Refusal message.
+		 * @return void
+		 */
+		private static function add_validation_error( \WP_Error $errors, string $message ): void {
+			if ( ! in_array( $message, $errors->get_error_messages(), true ) ) {
+				$errors->add( 'woodev_pickup_validation', $message );
 			}
 		}
 
@@ -909,7 +923,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 		 * @return string
 		 */
 		private static function choose_message(): string {
-			return __( 'Please choose a pickup point on the checkout page before paying.', 'woodev-plugin-framework' );
+			return __( 'You have not chosen a pickup point.', 'woodev-plugin-framework' );
 		}
 
 		/**

@@ -2322,15 +2322,16 @@
 /* -------------------------------------------------------------------------
  * Focus visibility — the shell traps focus while the dialog is open, so focus is constantly
  * moving inside it; if it is not visible, keyboard use is guesswork. `:focus-visible` keeps the
- * ring off mouse clicks. Only genuinely focusable elements are listed: `.woodev-pickup-list__item`
- * and `.woodev-pickup-search__item` are plain `<div>`s with a click listener, not buttons, so
- * they are not in the tab order at all and have no rule here (a pre-existing gap this stylesheet
- * cannot close — see the session report).
+ * ring off mouse clicks. Only genuinely focusable elements are listed: a single-point
+ * `.woodev-pickup-list__item` is a `<div role="button" tabindex="0">` (#1109) and is listed;
+ * `.woodev-pickup-search__item` is still a plain `<div>` with a click listener, so it is not in
+ * the tab order at all and has no rule here (a pre-existing gap, tracked separately).
  * ---------------------------------------------------------------------- */
 
 .woodev-pickup-list__toggle:focus-visible,
 .woodev-pickup-zoom__button:focus-visible,
 .woodev-pickup-list__point:focus-visible,
+.woodev-pickup-list__item[role="button"]:focus-visible,
 .woodev-pickup-list__show-nearest:focus-visible,
 .woodev-pickup-filter__toggle:focus-visible,
 .woodev-pickup-filter__checkbox:focus-visible,

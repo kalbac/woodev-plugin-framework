@@ -2085,10 +2085,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * @return void
 		 */
 		public function handle_store_api_validate_order( \WC_Order $order, \WP_Error $errors ): void {
-			// WooCommerce also fires this payment hook for pay-for-order. Only a current checkout
-			// draft represents the address being validated for this cart; an old order must not
-			// erase the customer's current locality record.
-			if ( 'billing_only' === get_option( 'woocommerce_ship_to_destination', 'shipping' ) && $order->has_status( 'checkout-draft' ) ) {
+			// WooCommerce reuses the draft's pending/failed order on payment retry. Recheck its
+			// billing locality there too; unrelated and completed orders must not alter the record.
+			if ( 'billing_only' === get_option( 'woocommerce_ship_to_destination', 'shipping' ) && $order->has_status( [ 'checkout-draft', 'pending', 'failed' ] ) ) {
 				$address = $this->store_api_delivery_address( $order );
 				$this->forget_record_unless_it_names_city( $address['city'], $address['country'] );
 			}
@@ -2102,9 +2101,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		}
 
 		/**
-		 * The address the Store API order uses for delivery, honoring the store's billing-only mode.
-		 * WooCommerce submits billing as shipping in that mode, but the order's billing fields remain
-		 * the authoritative source and are read explicitly here before validating the saved locality.
+		 * The billing address used for locality validation in billing-only mode. WooCommerce submits
+		 * billing as shipping there, but the order's billing fields remain the authoritative source.
 		 *
 		 * @since 2.0.2
 		 *
@@ -2113,12 +2111,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * @return array{city: string, state: string, country: string}
 		 */
 		protected function store_api_delivery_address( object $order ): array {
-			$section = 'billing_only' === get_option( 'woocommerce_ship_to_destination', 'shipping' ) ? 'billing' : 'shipping';
-
 			return [
-				'city'    => (string) call_user_func( [ $order, 'get_' . $section . '_city' ] ),
-				'state'   => (string) call_user_func( [ $order, 'get_' . $section . '_state' ] ),
-				'country' => (string) call_user_func( [ $order, 'get_' . $section . '_country' ] ),
+				'city'    => (string) call_user_func( [ $order, 'get_billing_city' ] ),
+				'state'   => (string) call_user_func( [ $order, 'get_billing_state' ] ),
+				'country' => (string) call_user_func( [ $order, 'get_billing_country' ] ),
 			];
 		}
 
