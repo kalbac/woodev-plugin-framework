@@ -27,6 +27,7 @@
 
 import { useEffect, useRef, useState } from '@wordpress/element';
 import { useSelect } from '@wordpress/data';
+import { customerDataReplyVersion } from './customer-data-request';
 import {
 	hasCartError,
 	isCustomerDataUpdating,
@@ -60,6 +61,8 @@ export function useShippingAddressState(): AddressState {
 	const [ expired, setExpired ] = useState< string | null >( null );
 	// The address key the push in flight started with; `null` while none is.
 	const sent = useRef< string | null >( null );
+	// Successful address updates completed after this push began.
+	const sentReplyVersion = useRef< number >( 0 );
 	const lastReply = useRef< unknown >( reply );
 
 	useEffect( () => {
@@ -75,13 +78,14 @@ export function useShippingAddressState(): AddressState {
 
 		if ( updating && sent.current === null ) {
 			sent.current = key;
+			sentReplyVersion.current = customerDataReplyVersion();
 		}
 
 		if ( sent.current === null ) {
 			return;
 		}
 
-		if ( replied && ! failed ) {
+		if ( replied && ! failed && customerDataReplyVersion() > sentReplyVersion.current ) {
 			setAnswered( sent.current );
 			setExpired( null );
 			sent.current = null;

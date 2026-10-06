@@ -1,4 +1,5 @@
 import '@testing-library/jest-dom';
+import apiFetch from '@wordpress/api-fetch';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { useSyncExternalStore as mockUseSyncExternalStore } from 'react';
 
@@ -1261,7 +1262,9 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 				notify();
 			} );
 		/** The push is answered: a new cart reply is taken into the store, then the flag drops. */
-		const reply = ( locality: string ): void => {
+		const reply = async ( locality: string ): Promise< void > => {
+			await apiFetch( { path: '/wc/store/v1/cart/update-customer', method: 'POST' } );
+
 			act( () => {
 				mockStore.extensions = owner( locality );
 				notify();
@@ -1271,6 +1274,12 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 				notify();
 			} );
 		};
+		/** Another cart request answers while the customer-address request is still in flight. */
+		const foreignReply = ( locality: string ): void =>
+			act( () => {
+				mockStore.extensions = owner( locality );
+				notify();
+			} );
 		/** The push ends with nothing taken into the store (aborted, network error). */
 		const abort = (): void =>
 			act( () => {
@@ -1284,6 +1293,7 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 
 		beforeEach( () => {
 			jest.useFakeTimers();
+			apiFetch.setFetchHandler( () => Promise.resolve( {} ) );
 			mockStore.extensions = owner( 'dadata:msk' );
 		} );
 
@@ -1291,7 +1301,7 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 			jest.useRealTimers();
 		} );
 
-		it( 'opens no dialog on the previous address’s owner — it waits for the cart’s answer', () => {
+		it( 'opens no dialog on the previous address’s owner — it waits for the cart’s answer', async () => {
 			const session = fakeSession();
 
 			renderPicker();
@@ -1310,11 +1320,34 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 			expect( screen.getByRole( 'status' ) ).toHaveTextContent( PENDING );
 
 			// The cart answers with the new locality: the dialog opens on ITS key, nothing else.
-			reply( 'dadata:krd' );
+			await reply( 'dadata:krd' );
 			fireEvent.click( trigger() as HTMLElement );
 
 			expect( session.open ).toHaveBeenCalledTimes( 1 );
 			expect( session.host().getLocalityKey() ).toBe( 'dadata:krd' );
+		} );
+
+		it( 'does not count a foreign cart reply as the answer to the address push (#1118)', () => {
+			renderPicker();
+			edit( 'Краснодар' );
+			push();
+
+			// E.g. select-shipping-rate calls receiveCart while update-customer is still pending.
+			foreignReply( 'dadata:msk' );
+
+			expect( screen.getByRole( 'status' ) ).toHaveTextContent( PENDING );
+			expect( trigger() ).toHaveAttribute( 'aria-disabled', 'true' );
+		} );
+
+		it( 'does not reopen the wait for a foreign reply after the address reply', async () => {
+			renderPicker();
+			edit( 'Краснодар' );
+			push();
+			await reply( 'dadata:krd' );
+
+			foreignReply( 'dadata:msk' );
+
+			expect( screen.queryByText( PENDING ) ).not.toBeInTheDocument();
 		} );
 
 		it( 'compares the address without case or stray spaces, so an echoed city is not pending', () => {
@@ -1414,7 +1447,7 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 			expect( session.open ).not.toHaveBeenCalled();
 		} );
 
-		it( 'recovers by itself when a later push is answered', () => {
+		it( 'recovers by itself when a later push is answered', async () => {
 			const session = fakeSession();
 
 			renderPicker();
@@ -1430,7 +1463,7 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 			expect( screen.getByRole( 'status' ) ).toHaveTextContent( PENDING );
 
 			push();
-			reply( 'dadata:krd' );
+			await reply( 'dadata:krd' );
 			fireEvent.click( trigger() as HTMLElement );
 
 			expect( screen.queryByRole( 'status' ) ).not.toBeInTheDocument();
@@ -1451,19 +1484,19 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 			expect( trigger() ).not.toHaveAttribute( 'aria-disabled' );
 		} );
 
-		it( 'does not credit an edit made while the push was in flight to that push’s answer', () => {
+		it( 'does not credit an edit made while the push was in flight to that push’s answer', async () => {
 			renderPicker();
 			edit( 'Краснодар' );
 			push();
 			edit( 'Сочи' );
-			reply( 'dadata:krd' );
+			await reply( 'dadata:krd' );
 
 			// The reply answered «Краснодар»; the form holds «Сочи» — still waiting, not settled.
 			expect( screen.getByRole( 'status' ) ).toHaveTextContent( PENDING );
 			expect( trigger() ).toHaveAttribute( 'aria-disabled', 'true' );
 		} );
 
-		it( 'closes an open dialog when the cart answers that the locality is gone', () => {
+		it( 'closes an open dialog when the cart answers that the locality is gone', async () => {
 			const session = fakeSession();
 
 			renderPicker();
@@ -1474,14 +1507,14 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 
 			edit( 'Краснодар' );
 			push();
-			reply( '' );
+			await reply( '' );
 
 			expect( session.destroy ).toHaveBeenCalledTimes( 1 );
 			expect( trigger() ).toHaveAttribute( 'aria-disabled', 'true' );
 			expect( screen.getByRole( 'status' ) ).toHaveTextContent( HINT );
 		} );
 
-		it( 'closes an open dialog when the cart answers with another locality', () => {
+		it( 'closes an open dialog when the cart answers with another locality', async () => {
 			const session = fakeSession();
 
 			renderPicker();
@@ -1489,12 +1522,12 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 
 			edit( 'Краснодар' );
 			push();
-			reply( 'dadata:krd' );
+			await reply( 'dadata:krd' );
 
 			expect( session.destroy ).toHaveBeenCalledTimes( 1 );
 		} );
 
-		it( 'says «updating», not «choose your locality», until the cart answers a typed city', () => {
+		it( 'says «updating», not «choose your locality», until the cart answers a typed city', async () => {
 			renderPicker();
 			edit( 'Краснодар' );
 
@@ -1504,7 +1537,7 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 
 			// Settled with no locality: now it is the shopper's move.
 			push();
-			reply( '' );
+			await reply( '' );
 
 			expect( screen.getByRole( 'status' ) ).toHaveTextContent( HINT );
 		} );
