@@ -6,7 +6,7 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-06 (s156, overnight).** ✅ PR #1131 (#1108 #1126 #1127) and PR #1132 (#1118 #1130) merged; #1119 has no safe PHP-only fix («Потом»). Details: `sessions/s156.md`. GlitchTip receiver (#1082) is live. ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
+**As of 2026-10-06 (s157).** The NEW CDEK plugin (#786) is being written from scratch in `kalbac/woocommerce-edostavka`, branch `v2` (stage 1 accepted; stages 2–4 coded, partly unreviewed). Framework pool PR #1140 (#1134 documents, #714 buyer emails, #1138 merchant boxes) awaits the operator's rig acceptance. Details: `sessions/s157.md`. GlitchTip receiver (#1082) is live. ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
 orders-page slug redirects to the framework page with that carrier preselected, accepted on the rig.
 ✅ **Both machines are live**; routine sync is git ONLY (`wiki/two-machine-setup.md`). The order
 metabox (#856) and the orders table (#870) stay accepted.
