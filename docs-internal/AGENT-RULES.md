@@ -99,6 +99,17 @@ finished work (gotcha `two-agents-one-file-is-the-orchestrator-s-bug`).
 
 Jest caveat: run `npm run test:js`, never `npx jest` (gotchas `jest-scans-agent-worktrees-inside-the-repo`, `npx-jest-bypasses-wp-scripts-jsdom`). Orca worktrees under `.orca/worktrees/` live inside the repo and are a full checkout, `tests/js/` included; `jest-unit.config.js` scopes `roots` to `<rootDir>/tests/js` so a bare run no longer counts them, but `npx jest` still loses the wp-scripts jsdom environment either way. A fresh Orca worktree needs **no install step**: `orca.yaml` shares `node_modules` and `.worktreeinclude` copies `vendor` (`CLAUDE.md` → Orca, fact 1).
 
+### Rate findings by the real shop
+
+A reviewer's finding — and any "accepted residual" — carries two ratings: **how likely a real live shop
+hits it** and **what visibly breaks when it does** (operator, 06.10.2026). Only a finding a real merchant
+or customer can hit with a visible consequence blocks a merge or becomes a card. A scenario that needs a
+setup no shop runs (both checkout kinds on one site at once), a sub-second window the server already
+guards, or a consequence nobody would notice gets ONE line in the session notes — no card, no worker
+round. His words: «вероятность такого сценария стремится к нулю… а мы это пытаемся починить, тратим
+время и токены». The waste it names: #1119 (closed not planned) and #1118 (3 worker + 3 critic rounds for
+a ~0.35 s window the server rejects). Every critic brief repeats this rule.
+
 ### Conventional Commits (REQUIRED)
 All commits must follow [Conventional Commits](https://www.conventionalcommits.org/) format:
 ```
