@@ -1244,6 +1244,8 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 	 */
 	describe( 'while the cart has not answered an address edit', () => {
 		const PENDING = 'Loading pickup points…';
+		let resolveAddressBatch: ( ( response: unknown ) => void ) | null = null;
+		let addressBatch: Promise< unknown > | null = null;
 		const owner = ( locality: string ): Record< string, unknown > => ( {
 			[ NAMESPACE ]: {
 				pickup: { carrier: { carrier_point: null } },
@@ -1255,15 +1257,29 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 				mockStore.shipping = { ...HOME, city };
 				notify();
 			} );
-		/** Core's push goes out: the cart store reports the customer data updating. */
+		/** Core batches update-customer before the cart store reports customer data updating. */
 		const push = (): void =>
 			act( () => {
+				// WC 9.9.0 shared-controls.ts:129-133,70-74; WC 11.1.x public-api/block-data/shared-controls.ts:129-136.
+				// Both batch POSTs place individual paths in data.requests and return indexed responses.
+				addressBatch = apiFetch( {
+					path: '/?rest_route=/wc/store/v1/batch',
+					method: 'POST',
+					data: {
+						requests: [
+							{ path: '/wc/store/v1/cart/update-customer', method: 'POST', body: { shipping_address: { city: 'Краснодар' } } },
+						],
+					},
+				} );
 				mockStore.updating = true;
 				notify();
 			} );
-		/** The push is answered: a new cart reply is taken into the store, then the flag drops. */
+		/** The matching batch item succeeds: a cart reply is taken into the store, then the flag drops. */
 		const reply = async ( locality: string ): Promise< void > => {
-			await apiFetch( { path: '/wc/store/v1/cart/update-customer', method: 'POST' } );
+			resolveAddressBatch?.( {
+				responses: [ { status: 200, body: {}, headers: {} } ],
+			} );
+			await addressBatch;
 
 			act( () => {
 				mockStore.extensions = owner( locality );
@@ -1283,6 +1299,7 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 		/** The push ends with nothing taken into the store (aborted, network error). */
 		const abort = (): void =>
 			act( () => {
+				resolveAddressBatch?.( { responses: [ { status: 500, body: {}, headers: {} } ] } );
 				mockStore.updating = false;
 				notify();
 			} );
@@ -1293,11 +1310,21 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 
 		beforeEach( () => {
 			jest.useFakeTimers();
-			apiFetch.setFetchHandler( () => Promise.resolve( {} ) );
+			resolveAddressBatch = null;
+			addressBatch = null;
+			apiFetch.setFetchHandler( () => new Promise( ( resolve ) => {
+				resolveAddressBatch = resolve;
+			} ) );
 			mockStore.extensions = owner( 'dadata:msk' );
 		} );
 
-		afterEach( () => {
+		afterEach( async () => {
+			if ( resolveAddressBatch && addressBatch ) {
+				resolveAddressBatch( { responses: [ { status: 200, body: {}, headers: {} } ] } );
+				await addressBatch;
+			}
+
+			apiFetch.setFetchHandler( () => Promise.resolve( {} ) );
 			jest.useRealTimers();
 		} );
 
@@ -1337,6 +1364,89 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 
 			expect( screen.getByRole( 'status' ) ).toHaveTextContent( PENDING );
 			expect( trigger() ).toHaveAttribute( 'aria-disabled', 'true' );
+		} );
+
+		it( 'counts the update-customer item when WC batches it with another cart request', async () => {
+			renderPicker();
+			edit( 'Краснодар' );
+
+			// WC batching can combine unrelated requests; only the matching response index defines our reply.
+			act( () => {
+				addressBatch = apiFetch( {
+					path: '/wc/store/v1/batch',
+					method: 'POST',
+					data: {
+						requests: [
+							{ path: '/wc/store/v1/cart/select-shipping-rate', method: 'POST', body: {} },
+							{ path: '/wc/store/v1/cart/update-customer', method: 'POST', body: {} },
+						],
+					},
+				} );
+				mockStore.updating = true;
+				notify();
+			} );
+
+			resolveAddressBatch?.( {
+				responses: [
+					{ status: 500, body: {}, headers: {} },
+					{ status: 200, body: {}, headers: {} },
+				],
+			} );
+			await addressBatch;
+			foreignReply( 'dadata:krd' );
+			act( () => {
+				mockStore.updating = false;
+				notify();
+			} );
+
+			expect( screen.queryByText( PENDING ) ).not.toBeInTheDocument();
+		} );
+
+		it( 'falls back to any cart reply when no matching apiFetch request was observed', () => {
+			renderPicker();
+			edit( 'Краснодар' );
+			act( () => {
+				mockStore.updating = true;
+				notify();
+			} );
+
+			// An unshared apiFetch instance or absent middleware leaves no tracked request to correlate.
+			// Keep the origin/main behavior: any cart reply answers, avoiding a permanently stale address.
+			foreignReply( 'dadata:krd' );
+
+			expect( screen.queryByText( PENDING ) ).not.toBeInTheDocument();
+		} );
+
+		it( 'still recognizes a direct update-customer request as a secondary transport shape', async () => {
+			renderPicker();
+			edit( 'Краснодар' );
+			act( () => {
+				addressBatch = apiFetch( { path: '/wc/store/v1/cart/update-customer', method: 'POST', data: {} } );
+				mockStore.updating = true;
+				notify();
+			} );
+			resolveAddressBatch?.( {} );
+			await addressBatch;
+
+			foreignReply( 'dadata:krd' );
+			act( () => {
+				mockStore.updating = false;
+				notify();
+			} );
+
+			expect( screen.queryByText( PENDING ) ).not.toBeInTheDocument();
+		} );
+
+		it( 'falls back to any cart reply when a batch response shape is unknown', async () => {
+			renderPicker();
+			edit( 'Краснодар' );
+			push();
+			resolveAddressBatch?.( { unexpected: true } );
+			await addressBatch;
+
+			foreignReply( 'dadata:krd' );
+
+			expect( screen.queryByText( PENDING ) ).not.toBeInTheDocument();
 		} );
 
 		it( 'does not reopen the wait for a foreign reply after the address reply', async () => {
