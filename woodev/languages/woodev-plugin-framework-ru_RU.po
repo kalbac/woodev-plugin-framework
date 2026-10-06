@@ -5351,3 +5351,7 @@ msgstr "Действия"
 #: assets/build/ui-kit-gallery/index.js
 msgid "Добавить упаковку"
 msgstr "Добавить упаковку"
+
+#: assets/build/settings-page/index.js:1
+msgid "Удалить"
+msgstr ""

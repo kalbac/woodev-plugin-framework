@@ -5366,3 +5366,7 @@ msgstr ""
 #: assets/build/ui-kit-gallery/index.js
 msgid "Добавить упаковку"
 msgstr ""
+
+#: assets/build/settings-page/index.js:1
+msgid "Удалить"
+msgstr ""
