@@ -165,6 +165,7 @@ class CheckoutParentBlockNoticeTest extends TestCase {
 	 */
 	public function test_classic_checkout_shortcode_does_not_warn(): void {
 		$this->add_method_to_zone( self::TEST_PICKUP_ID );
+		// Classic checkout is intentionally covered by the earlier guard: it does not require block parents.
 		$this->set_checkout_content( '[woocommerce_checkout]' );
 
 		$this->assertNoNoticeRendered();
@@ -227,13 +228,13 @@ class CheckoutParentBlockNoticeTest extends TestCase {
 	 * @return void
 	 */
 	public function test_pickup_method_from_another_plugin_does_not_qualify_this_plugin(): void {
-		$this->add_method_to_zone( self::REALISTIC_PICKUP_ID );
+		$this->add_method_to_zone( self::TEST_PICKUP_ID );
 		$this->set_checkout_content( '<!-- wp:woocommerce/checkout -->' );
 
 		$output = $this->render_admin_notices();
 
-		$this->assertStringNotContainsString( 'data-plugin-id="woodev-test-shipping-method"', $output );
-		$this->assertStringContainsString( 'data-plugin-id="woodev-realistic-shipping"', $output );
+		$this->assertStringContainsString( 'data-plugin-id="woodev-test-shipping-method"', $output );
+		$this->assertStringNotContainsString( 'data-plugin-id="woodev-realistic-shipping"', $output );
 	}
 
 	/**
@@ -246,12 +247,12 @@ class CheckoutParentBlockNoticeTest extends TestCase {
 		$this->add_method_to_zone( self::TEST_PICKUP_ID );
 		$this->add_method_to_zone( self::REALISTIC_PICKUP_ID );
 		$this->set_checkout_content( '<!-- wp:woocommerce/checkout -->' );
-		woodev_test_shipping_method_plugin()->get_admin_notice_handler()->dismiss_notice( self::NOTICE_ID );
+		woodev_realistic_shipping_plugin()->get_admin_notice_handler()->dismiss_notice( self::NOTICE_ID );
 
 		$output = $this->render_admin_notices();
 
-		$this->assertStringNotContainsString( 'data-plugin-id="woodev-test-shipping-method"', $output );
-		$this->assertStringContainsString( 'data-plugin-id="woodev-realistic-shipping"', $output );
+		$this->assertStringContainsString( 'data-plugin-id="woodev-test-shipping-method"', $output );
+		$this->assertStringNotContainsString( 'data-plugin-id="woodev-realistic-shipping"', $output );
 	}
 
 	/**
