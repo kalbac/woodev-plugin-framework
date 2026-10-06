@@ -29,6 +29,9 @@ class CheckoutParentBlockNoticeTest extends TestCase {
 	/** @var array<string,mixed> Original method settings options to restore. */
 	private array $original_settings_options = [];
 
+	/** @var array<int,string> Original zone method enabled states to restore. */
+	private array $original_zone_method_statuses = [];
+
 	/** @var mixed Original configured checkout page ID. */
 	private $original_checkout_page_id;
 
@@ -56,12 +59,24 @@ class CheckoutParentBlockNoticeTest extends TestCase {
 	 * @return void
 	 */
 	protected function tearDown(): void {
+		global $wpdb;
+
 		foreach ( $this->original_settings_options as $option => $value ) {
 			if ( null === $value ) {
 				delete_option( $option );
 			} else {
 				update_option( $option, $value );
 			}
+		}
+
+		foreach ( $this->original_zone_method_statuses as $instance_id => $enabled ) {
+			$wpdb->update(
+				$wpdb->prefix . 'woocommerce_shipping_zone_methods',
+				[ 'is_enabled' => 'yes' === $enabled ? 1 : 0 ],
+				[ 'instance_id' => $instance_id ],
+				[ '%d' ],
+				[ '%d' ]
+			); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		}
 
 		foreach ( $this->zones as $zone ) {
@@ -262,6 +277,8 @@ class CheckoutParentBlockNoticeTest extends TestCase {
 	 * @return void
 	 */
 	private function disable_method( string $method_id ): void {
+		global $wpdb;
+
 		$zones = [ new \WC_Shipping_Zone( 0 ) ];
 		foreach ( \WC_Shipping_Zones::get_zones() as $zone_data ) {
 			$zones[] = new \WC_Shipping_Zone( (int) $zone_data['zone_id'] );
@@ -273,11 +290,14 @@ class CheckoutParentBlockNoticeTest extends TestCase {
 					continue;
 				}
 
-				$option = 'woocommerce_' . $method_id . '_' . $method->instance_id . '_settings';
-				$this->remember_settings_option( $option );
-				$settings            = (array) get_option( $option, [] );
-				$settings['enabled'] = 'no';
-				update_option( $option, $settings );
+				$this->original_zone_method_statuses[ $method->instance_id ] = $method->enabled;
+				$wpdb->update(
+					$wpdb->prefix . 'woocommerce_shipping_zone_methods',
+					[ 'is_enabled' => 0 ],
+					[ 'instance_id' => $method->instance_id ],
+					[ '%d' ],
+					[ '%d' ]
+				); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			}
 		}
 	}
