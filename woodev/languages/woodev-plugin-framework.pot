@@ -5016,3 +5016,39 @@ msgstr ""
 #: shipping-method/checkout/class-checkout-parent-block-notice.php
 msgid "Открыть страницу оформления заказа"
 msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php
+msgid "Накладная"
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php
+msgid "Штрихкод"
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php
+msgid "Скачать документ перевозчика"
+msgstr ""
+
+#: shipping-method/rest-api/class-document-controller.php
+msgid "У вас нет прав для скачивания документа."
+msgstr ""
+
+#: shipping-method/rest-api/class-document-controller.php
+msgid "Документ недоступен."
+msgstr ""
+
+#: shipping-method/rest-api/class-document-controller.php
+msgid "Не удалось получить документ у перевозчика."
+msgstr ""
+
+#: shipping-method/rest-api/class-document-controller.php
+msgid "Документ ещё готовится. Повторите запрос позже."
+msgstr ""
+
+#: shipping-method/rest-api/class-document-controller.php
+msgid "Ссылка на документ некорректна."
+msgstr ""
+
+#: shipping-method/rest-api/class-document-controller.php
+msgid "Документ пуст или имеет неверный формат."
+msgstr ""

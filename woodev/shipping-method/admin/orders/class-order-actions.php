@@ -259,6 +259,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		public function for_row( \WC_Order $order, ?Orders_Provider $provider ): array {
 			$lock_owner = self::edit_lock_owner( $order );
 			$actions    = $this->carrier_actions( $order, $provider );
+			$actions    = array_merge( $actions, $this->document_actions( $order, $provider ) );
 
 			if ( null !== $lock_owner ) {
 				// #1000: greyed out, not removed — the manager sees what the row would offer and why
@@ -287,6 +288,38 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 				$actions,
 				$edit_action
 			);
+
+			return $actions;
+		}
+
+		/**
+		 * Document downloads are client navigation actions, offered only on rows.
+		 *
+		 * @since 2.0.2
+		 * @param \WC_Order            $order order.
+		 * @param Orders_Provider|null $provider matched carrier.
+		 * @return array<int,array<string,mixed>>
+		 */
+		private function document_actions( \WC_Order $order, ?Orders_Provider $provider ): array {
+			if ( null === $provider || ! self::is_exported( $order, $provider ) || ! $provider->supports_label_printing() ) {
+				return [];
+			}
+
+			$source = $this->registry->get_document_source( $provider->get_id() );
+			if ( null === $source ) {
+				return [];
+			}
+
+			$labels = [
+				'waybill' => __( 'Накладная', 'woodev-plugin-framework' ),
+				'barcode' => __( 'Штрихкод', 'woodev-plugin-framework' ),
+			];
+			$actions = [];
+			foreach ( $source->get_document_types( $order ) as $type ) {
+				if ( isset( $labels[ $type ] ) ) {
+					$actions[] = self::build_action( $type, $labels[ $type ], __( 'Скачать документ перевозчика', 'woodev-plugin-framework' ), false );
+				}
+			}
 
 			return $actions;
 		}

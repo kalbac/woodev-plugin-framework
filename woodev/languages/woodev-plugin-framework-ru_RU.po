@@ -4994,3 +4994,39 @@ msgstr "На странице оформления заказа отсутств
 #: shipping-method/checkout/class-checkout-parent-block-notice.php
 msgid "Открыть страницу оформления заказа"
 msgstr "Открыть страницу оформления заказа"
+
+#: shipping-method/admin/orders/class-order-actions.php
+msgid "Накладная"
+msgstr "Накладная"
+
+#: shipping-method/admin/orders/class-order-actions.php
+msgid "Штрихкод"
+msgstr "Штрихкод"
+
+#: shipping-method/admin/orders/class-order-actions.php
+msgid "Скачать документ перевозчика"
+msgstr "Скачать документ перевозчика"
+
+#: shipping-method/rest-api/class-document-controller.php
+msgid "У вас нет прав для скачивания документа."
+msgstr "У вас нет прав для скачивания документа."
+
+#: shipping-method/rest-api/class-document-controller.php
+msgid "Документ недоступен."
+msgstr "Документ недоступен."
+
+#: shipping-method/rest-api/class-document-controller.php
+msgid "Не удалось получить документ у перевозчика."
+msgstr "Не удалось получить документ у перевозчика."
+
+#: shipping-method/rest-api/class-document-controller.php
+msgid "Документ ещё готовится. Повторите запрос позже."
+msgstr "Документ ещё готовится. Повторите запрос позже."
+
+#: shipping-method/rest-api/class-document-controller.php
+msgid "Ссылка на документ некорректна."
+msgstr "Ссылка на документ некорректна."
+
+#: shipping-method/rest-api/class-document-controller.php
+msgid "Документ пуст или имеет неверный формат."
+msgstr "Документ пуст или имеет неверный формат."

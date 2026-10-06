@@ -55,6 +55,7 @@ import {
 	fetchOrderPreview,
 	fetchOrders,
 	fetchSyncStatus,
+	documentDownloadUrl,
 	getProviders,
 	getReachableDeliveryStatuses,
 	performBulkOrderAction,
@@ -1792,6 +1793,12 @@ export default function OrdersPage() {
 	 * preview after the underlying order changed.
 	 */
 	const performAction = ( row: ActionableOrder, action: OrderRowAction ) => {
+		if ( 'waybill' === action.action || 'barcode' === action.action ) {
+			const type = action.action;
+			window.open( documentDownloadUrl( row.id, type ), '_blank', 'noopener' );
+			return;
+		}
+
 		setActionRowStates( ( current ) => ( {
 			...current,
 			[ row.id ]: { pendingAction: action.action, confirmingAction: null },

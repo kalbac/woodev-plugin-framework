@@ -90,6 +90,7 @@ final class Woodev_Realistic_Shipping_Plugin extends \Woodev\Framework\Shipping\
 				'tracking_url_template'     => 'https://realistic.example.test/track/{tracking}',
 				'pickup_point_meta_key'     => '_woodev_realistic_pickup_point',
 				'carrier_order_id_meta_key' => '_woodev_realistic_carrier_order_id',
+				'supports_label_printing'  => true,
 				// A v1-style orders-page slug nothing registers — its URL redirects to the
 				// framework page with this carrier preselected (SP-10 increment 5, #820).
 				'legacy_page_slug'          => 'wc_realistic_shipping_orders',
@@ -114,6 +115,7 @@ final class Woodev_Realistic_Shipping_Plugin extends \Woodev\Framework\Shipping\
 		);
 
 		\Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::instance()->register_provider( $provider, $this );
+		\Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::instance()->register_document_source( 'realistic', new Woodev_Realistic_Document_Source() );
 		\Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::instance()->register_tracking_handler(
 			'realistic',
 			new Woodev_Realistic_Tracking_Handler()
