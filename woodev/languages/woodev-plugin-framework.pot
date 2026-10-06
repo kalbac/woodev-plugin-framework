@@ -2538,6 +2538,7 @@ msgid "This shipping method requires you to choose a pickup point."
 msgstr ""
 
 #: shipping-method/checkout/class-checkout-handler.php:2882
+#: shipping-method/pickup/class-store-api-pickup.php:914
 msgid "You have not chosen a pickup point."
 msgstr ""
 
@@ -4989,10 +4990,6 @@ msgstr ""
 
 #: shipping-method/pickup/class-store-api-pickup.php
 msgid "Please choose a pickup point."
-msgstr ""
-
-#: shipping-method/pickup/class-store-api-pickup.php
-msgid "Please choose a pickup point on the checkout page before paying."
 msgstr ""
 
 #: shipping-method/pickup/class-store-api-pickup.php

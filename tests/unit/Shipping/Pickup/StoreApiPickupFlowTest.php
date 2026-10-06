@@ -356,7 +356,7 @@ final class StoreApiPickupFlowTest extends TestCase {
 		$order = new C3_Order( 501 );
 		$errors = $this->post( $order, $echo );
 
-		$this->assertSame( [ 'Please choose a pickup point on the checkout page before paying.' ], $errors->get_error_messages() );
+		$this->assertSame( [ 'You have not chosen a pickup point.' ], $errors->get_error_messages() );
 		$this->assertSame( '', $this->remembered() );
 		$this->assertSame( [], $this->writes_of( 501, 'carrier_point' ), 'nothing was persisted for a refused order' );
 		$this->assertSame( [], $this->fired( 'woodev_shipping_carrier_checkout_processed' ) );
@@ -459,7 +459,7 @@ final class StoreApiPickupFlowTest extends TestCase {
 		// No point for the second carrier yet: ONE refusal, and it is the owner's.
 		$order = new C3_Order( 505 );
 		$errors = $this->post( $order, $this->echo_of_cart() );
-		$this->assertSame( [ 'Please choose a pickup point on the checkout page before paying.' ], $errors->get_error_messages() );
+		$this->assertSame( [ 'You have not chosen a pickup point.' ], $errors->get_error_messages() );
 
 		// A late echo of the FIRST carrier's confirmation cannot stand in for the second carrier's point.
 		$this->assertTrue( $this->post( $order, $first_echo )->has_errors() );
@@ -698,7 +698,7 @@ final class StoreApiPickupFlowTest extends TestCase {
 		foreach ( [ 'failed', 'pending' ] as $status ) {
 			$order->status = $status;
 			$errors = $this->post( $order, [] );
-			$this->assertSame( [ 'Please choose a pickup point on the checkout page before paying.' ], $errors->get_error_messages() );
+			$this->assertSame( [ 'You have not chosen a pickup point.' ], $errors->get_error_messages() );
 		}
 		$this->assertCount( 1, $this->fired( 'woodev_shipping_carrier_checkout_processed' ), 'a refused retry is not processed' );
 	}
@@ -764,7 +764,7 @@ final class StoreApiPickupFlowTest extends TestCase {
 		$errors = $this->post( $order, $echo );
 
 		$this->assertTrue( $errors->has_errors(), 'a point confirmed for the old destination must not pay for the new one' );
-		$this->assertSame( [ 'Please choose a pickup point on the checkout page before paying.' ], $errors->get_error_messages() );
+		$this->assertSame( [ 'You have not chosen a pickup point.' ], $errors->get_error_messages() );
 		$this->assertArrayNotHasKey( 'carrier_point', $this->meta[517], 'the order no longer names a point confirmed for another destination' );
 		$this->assertSame( '', $this->meta[517]['carrier_full'] );
 		$this->assertCount( 1, $this->fired( 'woodev_shipping_carrier_checkout_processed' ), 'a refused retry is not processed' );
@@ -810,7 +810,7 @@ final class StoreApiPickupFlowTest extends TestCase {
 		// No echo (an express client), and the echo the page still holds: neither inherits the point.
 		$errors = $this->post( $order, [] );
 		$this->assertTrue( $errors->has_errors(), 'another instance of the method must not inherit the point' );
-		$this->assertSame( [ 'Please choose a pickup point on the checkout page before paying.' ], $errors->get_error_messages() );
+		$this->assertSame( [ 'You have not chosen a pickup point.' ], $errors->get_error_messages() );
 		$this->assertTrue( $this->post( $order, $stale )->has_errors() );
 		$this->assertArrayNotHasKey( 'carrier_point', $this->meta[518] );
 		$this->assertSame( '', $this->meta[518]['carrier_full'] );
