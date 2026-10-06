@@ -8,6 +8,7 @@
  */
 
 import { useState } from '@wordpress/element';
+import { RawHTML } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { Button } from '@wordpress/components';
 import ControlField from '../components/control-field';
@@ -64,7 +65,7 @@ export default function ConnectionBlock( { providerId, section, values, conditio
 	return (
 		<div className="woodev-connection">
 			{ section.description && (
-				<p className="woodev-connection__desc">{ section.description }</p>
+				<div className="woodev-connection__desc"><RawHTML>{ section.description }</RawHTML></div>
 			) }
 			{ Object.keys( section.fields ).map( ( settingId ) => (
 				<ControlField
