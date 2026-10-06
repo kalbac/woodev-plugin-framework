@@ -2,7 +2,7 @@
 /**
  * Woodev Boxes Settings
  *
- * Store-level settings handler owning the «Коробки» section of the «Доставка» tab (#1138): the one
+ * Store-level settings handler owning the «Упаковка» section of the «Доставка» tab (#1138): the one
  * store-wide list of the boxes a merchant packs orders into. It is what the `boxes` packing
  * algorithm ({@see \Woodev_Packer_Dispatcher::ALGORITHM_BOXES}) packs into, through
  * {@see \Woodev_WC_Packer_Dispatcher}. Registered with the `boxes` option namespace (`woodev_boxes_*`).
@@ -11,15 +11,11 @@
  * carrier ships the parcel, and four carriers must not mean four lists to keep. It lives on the framework
  * settings page (`woodev-settings`), so a carrier plugin gets it without writing code.
  *
- * Shape of the control. The settings API has no repeater / list field, so the list is the simplest control that
- * exists — a textarea, ONE BOX PER LINE: `name; length; width; height; max weight; box weight`. The first four
- * are required, the last two optional (empty = no weight limit / the box weighs nothing). Decimal commas
- * are accepted. A repeater is a follow-up; the stored value is the text itself, so a later control can read it
- * unchanged.
- *
- * Units: the merchant types the values in the STORE's units (`woocommerce_dimension_unit` /
- * `woocommerce_weight_unit`) — the same ones a product's own fields are in — and the description says which.
- * {@see \Woodev_WC_Packer_Dispatcher::get_store_boxes()} converts them to the packer's cm / kg.
+ * A React table edits name, inner length/width/height, max weight and box weight. Storage stays
+ * the compatible text format: one line per box, `name; length; width; height; max weight; box weight`.
+ * Saved dimensions/weights remain in STORE units; Field_Schema carries the conversion factors so the
+ * table displays cm/kg and serializes back to store units. Saving validates every row and normalizes
+ * text/numbers. Legacy lists therefore need no migration and retain the same packing results.
  *
  * @since 2.0.2
  */
@@ -33,7 +29,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Boxes_Settings' ) ) :
 
 	/**
-	 * Settings handler for the store's list of boxes («Коробки» section).
+	 * Settings handler for the store's list of boxes («Упаковка» section).
 	 *
 	 * @since 2.0.2
 	 */
@@ -207,7 +203,42 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Boxes_Settings' )
 		private static function to_number( string $text ): ?float {
 			$text = str_replace( ',', '.', $text );
 
-			return is_numeric( $text ) ? (float) $text : null;
+			return is_numeric( $text ) && is_finite( (float) $text ) ? (float) $text : null;
+		}
+
+		/**
+		 * Normalizes a validated list while preserving its established storage shape and units.
+		 *
+		 * @since 2.0.2
+		 * @param string $text validated list.
+		 * @return string canonical semicolon-separated rows, stripped of HTML and decimal commas.
+		 */
+		public static function sanitize_list( string $text ): string {
+			$lines = [];
+			foreach ( self::parse( $text ) as $box ) {
+				unset( $box['id'] );
+				$lines[] = implode( '; ', $box );
+			}
+			return implode( "\n", $lines );
+		}
+
+		/**
+		 * Validates before sanitizing so malformed rows cannot silently disappear on save.
+		 *
+		 * @since 2.0.2
+		 * @param string $setting_id setting id.
+		 * @param mixed  $value submitted list text.
+		 * @return void
+		 * @throws \Woodev_Plugin_Exception for an invalid list.
+		 */
+		public function update_value( $setting_id, $value ): void {
+			if ( self::SETTING_BOXES === $setting_id ) {
+				if ( ! self::is_valid_list( $value ) ) {
+					throw new \Woodev_Plugin_Exception( __( 'Укажите название, размеры больше нуля и веса не меньше нуля для каждой упаковки.', 'woodev-plugin-framework' ), 400 );
+				}
+				$value = self::sanitize_list( $value );
+			}
+			parent::update_value( $setting_id, $value );
 		}
 
 		/**
@@ -223,23 +254,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Boxes_Settings' )
 				self::SETTING_BOXES,
 				\Woodev_Setting::TYPE_STRING,
 				[
-					'name'             => __( 'Список коробок', 'woodev-plugin-framework' ),
+					'name'             => __( 'Упаковка', 'woodev-plugin-framework' ),
 					'default'          => '',
 					'validate'         => [ self::class, 'is_valid_list' ],
-					'validate_message' => __( 'Каждая непустая строка должна быть вида «название; длина; ширина; высота; макс. вес; вес коробки». Размеры — числа больше нуля, веса — числа не меньше нуля.', 'woodev-plugin-framework' ),
+					'validate_message' => __( 'Укажите название, размеры больше нуля и веса не меньше нуля для каждой упаковки.', 'woodev-plugin-framework' ),
 				]
 			);
 			$this->register_control(
 				self::SETTING_BOXES,
-				\Woodev_Control::TYPE_TEXTAREA,
+				\Woodev_Control::TYPE_BOXES_TABLE,
 				[
-					'tooltip'     => sprintf(
-						/* translators: 1: the store's dimension unit, e.g. cm; 2: the store's weight unit, e.g. kg */
-						__( 'По одной коробке в строке: «название; длина; ширина; высота; макс. вес; вес коробки». Размеры (внутренние) — в %1$s, веса — в %2$s. Макс. вес и вес коробки можно не указывать: пусто — без ограничения и коробка ничего не весит. Макс. вес считается вместе с самой коробкой.', 'woodev-plugin-framework' ),
-						Default_Dimensions_Settings::get_dimension_unit(),
-						Default_Dimensions_Settings::get_weight_unit()
-					),
-					'placeholder' => 'Малая; 20; 15; 10; 2; 0.1',
+					'tooltip' => __( 'Внутренние размеры — в сантиметрах, вес — в килограммах. Пустой или нулевой макс. вес означает отсутствие ограничения. Макс. вес включает вес самой упаковки.', 'woodev-plugin-framework' ),
 				]
 			);
 		}

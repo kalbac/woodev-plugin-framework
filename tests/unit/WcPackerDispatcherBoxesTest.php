@@ -214,8 +214,36 @@ namespace Woodev\Tests\Unit {
 
 			$tooltip = Boxes_Settings::current()->get_setting( 'boxes' )->get_control()->get_tooltip();
 
-			$this->assertStringContainsString( 'in,', $tooltip );
-			$this->assertStringContainsString( 'lbs', $tooltip );
+			$this->assertStringContainsString( 'сантиметрах', $tooltip );
+			$this->assertStringContainsString( 'килограммах', $tooltip );
+		}
+
+		public function test_table_control_carries_conversion_factors_and_keeps_legacy_storage(): void {
+			$this->store( 'g', 'mm', 'Small; 200; 150; 100; 2000; 100' );
+			$schema = \Woodev\Framework\Settings\Field_Schema::from_handler( Boxes_Settings::current() )['boxes'];
+			$this->assertSame( 'boxes-table', $schema['controlType'] );
+			$this->assertSame( 0.1, $schema['dimension_factor'] );
+			$this->assertSame( 0.001, $schema['weight_factor'] );
+			$this->assertSame( 'Small; 200; 150; 100; 2000; 100', $schema['value'] );
+		}
+
+		public function test_saving_sanitizes_names_and_normalizes_decimals_without_changing_shape(): void {
+			$this->store( 'kg', 'cm' );
+			Functions\when( 'update_option' )->alias( function ( $key, $value ) { $this->options[ $key ] = $value; return true; } );
+			Boxes_Settings::current()->update_value( 'boxes', " <b>Small</b>; 20,5; 15; 10; 2; 0,1\n\nBig; 40; 30; 20" );
+			$this->assertSame( "Small; 20.5; 15; 10; 2; 0.1\nBig; 40; 30; 20; 0; 0", $this->options['woodev_boxes_boxes'] );
+			$this->assertSame( 'Small', Boxes_Settings::current()->get_boxes()[0]['name'] );
+		}
+
+		public function test_invalid_table_rows_are_rejected_without_writing_anything(): void {
+			$this->store( 'kg', 'cm' );
+			Functions\expect( 'update_option' )->never();
+			$this->expectException( \Woodev_Plugin_Exception::class );
+			Boxes_Settings::current()->update_value( 'boxes', "Good; 20; 15; 10\nBroken; 0; 1; 1" );
+		}
+
+		public function test_overflow_dimensions_are_not_valid_boxes(): void {
+			$this->assertFalse( Boxes_Settings::is_valid_list( 'Box; 1e999; 2; 3' ) );
 		}
 
 		public function test_the_saved_list_is_what_get_boxes_returns(): void {

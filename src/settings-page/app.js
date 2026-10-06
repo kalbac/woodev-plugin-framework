@@ -14,7 +14,7 @@ import { dispatch, useSelect } from '@wordpress/data';
 import { store as noticesStore } from '@wordpress/notices';
 import { Button, Notice, Spinner, Card, CardBody, SnackbarList } from '@wordpress/components';
 import { fetchSchema, saveTab } from './rest';
-import { validateFields, isFieldVisible } from '../components/validate';
+import { validateFields, isFieldVisible, isFieldDisabled } from '../components/validate';
 import { getProviderMismatchError } from '../components/location-picker-field';
 import { ACTIVE_PROVIDER_SETTING_ID } from '../components/control-field';
 import TabsNav from '../components/tabs-nav';
@@ -31,10 +31,11 @@ import SectionView from './section-view';
  * @param {Object} edits  staged edits for this tab (settingId => value).
  * @return {Object} `edits` with any disabled-field keys removed.
  */
-export function buildSavePayload( fields, edits ) {
+export function buildSavePayload( fields, edits, values ) {
+	const effective = values || Object.fromEntries( Object.entries( fields ).map( ( [ id, field ] ) => [ id, edits[ id ] ?? field.value ] ) );
 	const payload = {};
 	Object.keys( edits ).forEach( ( id ) => {
-		if ( fields[ id ] && fields[ id ].disabled ) {
+		if ( fields[ id ] && isFieldDisabled( fields[ id ], effective ) ) {
 			return;
 		}
 		payload[ id ] = edits[ id ];
@@ -57,7 +58,7 @@ export function buildSavePayload( fields, edits ) {
 export function validatableFields( fields, values ) {
 	const out = {};
 	Object.keys( fields ).forEach( ( id ) => {
-		if ( isFieldVisible( fields[ id ], values ) && ! fields[ id ].disabled ) {
+		if ( isFieldVisible( fields[ id ], values ) && ! isFieldDisabled( fields[ id ], values ) ) {
 			out[ id ] = fields[ id ];
 		}
 	} );
@@ -217,7 +218,11 @@ export default function App() {
 			}
 		} );
 
-		let payload = sectionEdits;
+		const effectiveValues = {};
+		( tab.sections || [] ).forEach( ( s ) => {
+			Object.entries( s.fields || {} ).forEach( ( [ id, field ] ) => { effectiveValues[ id ] = providerEdits[ id ] ?? field.value; } );
+		} );
+		let payload = buildSavePayload( sectionFields, sectionEdits, effectiveValues );
 
 		// SP-2: a connection section's credential fields skip client-side field
 		// validation and the provider-mismatch check entirely (unchanged from
@@ -262,7 +267,7 @@ export default function App() {
 				return; // block REST — reveal fresh client errors only
 			}
 
-			payload = buildSavePayload( sectionFields, sectionEdits );
+			payload = buildSavePayload( sectionFields, sectionEdits, merged );
 		}
 
 		setSaving( providerId );

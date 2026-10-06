@@ -121,7 +121,7 @@ if ( ! class_exists( 'Woodev_Packer_Dispatcher' ) ) :
 				self::ALGORITHM_VIRTUAL    => __( 'Virtual box (minimal size)', 'woodev-plugin-framework' ),
 				self::ALGORITHM_SEPARATELY => __( 'Each item in a separate box', 'woodev-plugin-framework' ),
 				self::ALGORITHM_SINGLE     => __( 'Single box (items stacked along one axis)', 'woodev-plugin-framework' ),
-				self::ALGORITHM_BOXES      => __( 'Store boxes (items packed into the boxes set up in the store)', 'woodev-plugin-framework' ),
+				self::ALGORITHM_BOXES      => __( 'Store packaging (items packed into the boxes set up in the store)', 'woodev-plugin-framework' ),
 			];
 		}
 

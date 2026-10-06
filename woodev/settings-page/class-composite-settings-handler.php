@@ -301,6 +301,13 @@ final class Composite_Settings_Handler implements \Woodev_Settings_Connection_Te
 				continue;
 			}
 
+			$control  = $setting->get_control();
+			$disabled = $setting->get_disabled_if_conditions();
+			if ( ( $control && $control->is_disabled() ) || ( ! empty( $disabled ) && \Woodev_Setting::evaluate_conditions( $disabled, $this->effective_condition_values( $disabled, $values ) ) ) ) {
+				$hidden[] = $setting_id;
+				continue;
+			}
+
 			$conditions = $setting->get_show_if_conditions();
 
 			if ( empty( $conditions ) ) {
