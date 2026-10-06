@@ -2574,6 +2574,172 @@ const searchConfig = { lang: 'ru_RU', distanceUnitSystem: 'metric', i18n: {
 	noResults: 'Ничего не найдено',
 } };
 
+describe( 'search result rows are keyboard buttons (#1127)', () => {
+	const press = ( el, key, options = {} ) => {
+		el.focus();
+		const event = new window.KeyboardEvent( 'keydown', {
+			key, bubbles: true, cancelable: true, ...options,
+		} );
+
+		el.dispatchEvent( event );
+
+		return event;
+	};
+
+	const setup = ( kind, listenForPoint = true ) => {
+		const panels = mount( searchConfig );
+		const layout = panels.buildSearchLayout();
+		const g = { key: 'g1', size: 1, points: [ point() ] };
+		const seen = [];
+
+		document.body.appendChild( layout );
+		if ( listenForPoint ) {
+			panels.on( 'searchPointPicked', ( id ) => {
+				seen.push( [ 'point', id ] );
+				panels.openCard( g, id, 'search' );
+			} );
+		}
+		panels.on( 'searchAddressPicked', ( index ) => seen.push( [ 'address', index ] ) );
+		panels.renderSearchResults( kind === 'point'
+			? { points: [ point() ], addresses: [] }
+			: { points: [], addresses: [ { displayName: 'Москва, Ленина 5' } ] }
+		);
+
+		return {
+			panels,
+			layout,
+			seen,
+			input: layout.querySelector( '.woodev-pickup-search__input' ),
+			row: layout.querySelector( '.woodev-pickup-search__item' ),
+		};
+	};
+
+	it.each( [ 'point', 'address' ] )( 'exposes %s results as a button and tab stop', ( kind ) => {
+		const { row } = setup( kind );
+
+		expect( row.getAttribute( 'role' ) ).toBe( 'button' );
+		expect( row.getAttribute( 'tabindex' ) ).toBe( '0' );
+	} );
+
+	it.each( [ [ 'point', 'Enter' ], [ 'address', 'Enter' ], [ 'point', ' ' ], [ 'address', ' ' ] ] )(
+		'%s results activate on %s through the click path', ( kind, key ) => {
+			const { row, seen } = setup( kind );
+			const event = press( row, key );
+
+			expect( seen ).toEqual( [ [ kind, 'point' === kind ? 'p1' : 0 ] ] );
+			expect( event.defaultPrevented ).toBe( true );
+		}
+	);
+
+	it( 'focuses the search card and returns to the surviving input when it closes', () => {
+		const { panels, row, input } = setup( 'point' );
+
+		press( row, 'Enter' );
+
+		expect( document.activeElement ).toBe( panels.root.querySelector( '.woodev-pickup-card__close' ) );
+		expect( row.isConnected ).toBe( false );
+
+		panels.closeCard();
+
+		expect( document.activeElement ).toBe( input );
+	} );
+
+	it( 'does not return to search when a pointer closes a keyboard-opened card', () => {
+		const { panels, row, input } = setup( 'point' );
+		press( row, 'Enter' );
+		const focusSearch = jest.spyOn( input, 'focus' );
+		const close = panels.root.querySelector( '.woodev-pickup-card__close' );
+
+		close.dispatchEvent( new window.MouseEvent( 'click', { bubbles: true, detail: 1 } ) );
+
+		expect( focusSearch ).not.toHaveBeenCalled();
+		expect( document.activeElement ).not.toBe( input );
+	} );
+
+	it( 'returns address-result focus to the persistent search input', () => {
+		const { row, input } = setup( 'address' );
+
+		press( row, ' ' );
+
+		expect( document.activeElement ).toBe( input );
+		expect( row.isConnected ).toBe( false );
+	} );
+
+	it( 'does not change focus for a plain pointer click', () => {
+		const { panels, row, input } = setup( 'address' );
+		const focusSearch = jest.spyOn( input, 'focus' );
+		// Keep the row mounted to isolate focus routing from the expected results dismissal.
+		jest.spyOn( panels, 'hideSearchResults' ).mockImplementation( () => {} );
+		row.focus();
+		row.dispatchEvent( new window.MouseEvent( 'click', { bubbles: true, detail: 1 } ) );
+
+		expect( row.getAttribute( 'role' ) ).toBe( 'button' );
+		expect( document.activeElement ).toBe( row );
+		expect( focusSearch ).not.toHaveBeenCalled();
+	} );
+
+	it( 'keeps pointer focus without a listener and returns a keyboard point pick to search', () => {
+		const { panels, layout, row, input } = setup( 'point', false );
+		const focusSearch = jest.spyOn( input, 'focus' );
+		// Keep the row mounted to isolate focus routing from the expected results dismissal.
+		jest.spyOn( panels, 'hideSearchResults' ).mockImplementation( () => {} );
+		row.focus();
+		row.dispatchEvent( new window.MouseEvent( 'click', { bubbles: true, detail: 1 } ) );
+
+		expect( document.activeElement ).toBe( row );
+		expect( focusSearch ).not.toHaveBeenCalled();
+
+		panels.renderSearchResults( { points: [ point() ], addresses: [] } );
+		const keyboardRow = layout.querySelector( '.woodev-pickup-search__item' );
+		press( keyboardRow, 'Enter' );
+
+		expect( document.activeElement ).toBe( input );
+	} );
+
+	it( 'does not move pointer focus into a newly opened card', () => {
+		const { panels, row, input } = setup( 'point' );
+		const focusSearch = jest.spyOn( input, 'focus' );
+		jest.spyOn( panels, 'hideSearchResults' ).mockImplementation( () => {} );
+		row.focus();
+		row.dispatchEvent( new window.MouseEvent( 'click', { bubbles: true, detail: 1 } ) );
+
+		expect( document.activeElement ).toBe( row );
+		expect( focusSearch ).not.toHaveBeenCalled();
+		expect( panels.root.querySelector( '.woodev-pickup-card__close' ) ).not.toBe( document.activeElement );
+	} );
+
+	it( 'does not move focus into an already shown card or leave a stale opener', () => {
+		const { panels, row, input } = setup( 'point' );
+		const group = { key: 'g1', size: 1, points: [ point() ] };
+
+		panels.openCard( group, 'p1', 'marker' );
+		press( row, 'Enter' );
+
+		expect( document.activeElement ).toBe( input );
+		expect( panels._cardOpener ).toBe( null );
+
+		panels.closeCard();
+
+		expect( document.activeElement ).toBe( input );
+	} );
+
+	it( 'ignores other keys, repeats, modifiers, and bubbled descendant keydowns', () => {
+		const { row, seen } = setup( 'address' );
+		const other = press( row, 'a' );
+		const repeated = press( row, 'Enter', { repeat: true } );
+		const modified = press( row, 'Enter', { ctrlKey: true } );
+		press( row.querySelector( 'span' ), 'Enter' );
+
+		// Guard that the new keyboard semantics expose a button; activation assertions alone pass
+		// vacuously against the old click-only row.
+		expect( row.getAttribute( 'role' ) ).toBe( 'button' );
+		expect( seen ).toHaveLength( 0 );
+		expect( other.defaultPrevented ).toBe( false );
+		expect( repeated.defaultPrevented ).toBe( false );
+		expect( modified.defaultPrevented ).toBe( false );
+	} );
+} );
+
 // Re-pointed (Task 11, spec V-6): `renderSearchResults()` used to fill a `.woodev-pickup-search`
 // div `render()` built directly inside the sidebar list. That div is gone — the results container
 // is now owned by `buildSearchLayout()`'s DETACHED layout (ymaps decides where it lives, Task 12),
