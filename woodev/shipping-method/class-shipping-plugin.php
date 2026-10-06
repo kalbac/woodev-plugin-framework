@@ -262,6 +262,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 				require_once $path . '/checkout/blocks/class-pickup-blocks-integration.php';
 			}
 
+			require_once $path . '/checkout/class-checkout-parent-block-notice.php';
+
 			// order meta handler + abstract shipment/tracking/webhook handlers
 			require_once $path . '/order/class-shipping-order-handler.php';
 			require_once $path . '/order/class-action-result.php';
@@ -328,6 +330,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 * @since 1.5.0
 		 */
 		private function add_hooks(): void {
+
+			Checkout\Checkout_Parent_Block_Notice::register( $this );
 
 			// register shipping methods with WooCommerce
 			add_filter( 'woocommerce_shipping_methods', [ $this, 'register_shipping_methods' ] );
