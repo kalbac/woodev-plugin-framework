@@ -143,6 +143,22 @@ namespace Woodev\Tests\Unit {
 		}
 
 		/**
+		 * A result as its parcels — the sizes, weights and counts, WITHOUT the item allocation: a rate's cart
+		 * keys and an order's item ids name the same lines differently (#1138), the parcels must still agree.
+		 *
+		 * @return array<string, mixed>
+		 */
+		private function parcels( \Woodev_Packer_Result $result ): array {
+			$data = $result->to_array();
+
+			foreach ( $data['packages'] as $index => $package ) {
+				unset( $data['packages'][ $index ]['items'] );
+			}
+
+			return $data;
+		}
+
+		/**
 		 * A product double. Numbers (0 = «not set») rather than '' — the dispatcher treats both as missing.
 		 */
 		private function product( float $length, float $width, float $height, float $weight, bool $virtual = false, ?bool $needs_shipping = null ): \WC_Product {
@@ -241,7 +257,7 @@ namespace Woodev\Tests\Unit {
 
 			$this->assertInstanceOf( \Woodev_Packer_Result::class, $from_order );
 			$this->assertSame( 5.0, $from_order->get_total_weight() );
-			$this->assertEquals( $from_rate->to_array(), $from_order->to_array() );
+			$this->assertEquals( $this->parcels( $from_rate ), $this->parcels( $from_order ) );
 		}
 
 		public function test_a_virtual_line_is_skipped(): void {
@@ -327,7 +343,7 @@ namespace Woodev\Tests\Unit {
 			$from_rate  = $method->pack_cart_package( [ 'contents' => [ 'a' => [ 'data' => $bare, 'quantity' => 2 ] ] ] );
 
 			$this->assertEqualsWithDelta( 0.2, $from_order->get_total_weight(), 0.0001 );
-			$this->assertEquals( $from_rate->to_array(), $from_order->to_array() );
+			$this->assertEquals( $this->parcels( $from_rate ), $this->parcels( $from_order ) );
 		}
 
 		/**
@@ -388,7 +404,7 @@ namespace Woodev\Tests\Unit {
 			);
 
 			$this->assertSame( 5.0, $from_order->get_total_weight() );
-			$this->assertEquals( $from_rate->to_array(), $from_order->to_array() );
+			$this->assertEquals( $this->parcels( $from_rate ), $this->parcels( $from_order ) );
 		}
 
 		/**

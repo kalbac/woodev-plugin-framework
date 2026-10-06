@@ -166,6 +166,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/checkout/class-checkout-field-policy.php';
 			require_once $path . '/pickup/class-pickup-map-settings.php';
 			require_once $path . '/settings/class-default-dimensions-settings.php';
+			require_once $path . '/settings/class-boxes-settings.php';
 			require_once $path . '/settings/class-shipping-settings-tab.php';
 			require_once $path . '/settings/class-export-settings.php';
 
