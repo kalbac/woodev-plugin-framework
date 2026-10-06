@@ -22,6 +22,9 @@ internals (class-map wiring, build/CI, rig) are left out on purpose. Shipping-sp
 
 ## Plugin class and framework wiring (topics `framework`, `framework-wiring`)
 
+- Return a plain, untranslated string from `get_plugin_name()` — the plugin constructor calls it on
+  `plugins_loaded`, before `init`, and a `__()` there logs WordPress's «translation loaded too early» notice
+  on every request. → `docs-internal/gotchas/get-plugin-name-runs-before-init-so-a-translated-name-warns.md`
 - A hook registered as `[ $this, … ]` from an object every plugin builds fires once PER PLUGIN; use a
   static callback for site-wide hooks. →
   `docs-internal/gotchas/a-hook-registered-from-a-per-plugin-object-fires-once-per-plugin.md`
