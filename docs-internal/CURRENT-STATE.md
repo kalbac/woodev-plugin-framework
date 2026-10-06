@@ -25,8 +25,8 @@ unwrapped part** — gotcha `a-relation-key-does-not-tell-the-and-wrapper-from-a
 build that committed no bundles, a row rebuilt after an action (legacy CPT only), a probe whose
 selector matches nothing. One line each under the `[rig/*]` and `[build/*]` topic indexes.
 
-⛔ **The operator reordered the work, 12.09.2026, reconfirmed 13.09** — *«пока у нас не будет готов
-базовый минимум самого фреймворка, мы плагин не пилим»*. **#786 is OUT of the queue** («Заморожено»).
+✅ **Base minimum REACHED (operator, 06.10.2026, s156)** — SP-11 (#1078) closed, so the 12.09 rule *«пока у нас не будет
+готов базовый минимум самого фреймворка, мы плагин не пилим»* is satisfied: **#786 is UNFROZEN** («Следом»), start with an approach brainstorm.
 **«Base minimum» = milestone «v2.0 релиз» (operator, s150):** #1078 (SP-11: C-1 #1087, C-2a #1088, C-2b #1089, C-3 #1090, #1096, #1100, #1102, #1091 C-4, #1101 done; boundaries #1107 #1110 #1111 #1113 merged in PR #1120 (s154), #1109 #1112 #1114 #1123 merged in PR #1129 (s155), #1108 #1126 #1127 in PR #1131 and #1118 #1130 in PR #1132 (s156); only #1119 «Потом» left, #1117 «После v2»), then #247 #285 #567 last; #947 #948 #130 #1081 #1093 done. `docs/` after the plugin; #621 behind #639; reporter receiver = GlitchTip (#1082: deployed s152; DSN baked into each plugin; mail via Yandex SMTP pending on him).
 Next: see `next-session-prompt.md`. The «new» scope + badge = unexported ∩ `EXPORTABLE_STATUSES` (#1024, his decision). Codex: default `gpt-6-luna`, hard tasks `gpt-6.1-sol` (operator, 01.10.2026; `CLAUDE.md`). Codex is back in use (operator, 29.09.2026): **1 of 3 usage-limit resets spent** (none spent in s146), recipe in gotcha `starting-codex-under-orca-needs-four-steps-not-one` — on 0.158 the report-FILE path works, `worker_done` never comes.
 
