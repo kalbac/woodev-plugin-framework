@@ -120,13 +120,31 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Order_Marker' ) ) :
 			}
 
 			$marked = [];
+			$lines = [];
+			$keys_with_lines = [];
+			$keys_to_check = [];
+
+			// Resolve every provider's line before removing metadata: marker keys may be shared.
+			foreach ( $providers as $provider ) {
+				if ( ! $provider->has_marker_writer() ) {
+					continue;
+				}
+
+				$key = $provider->get_marker_meta_key();
+				$keys_to_check[ $key ] = $provider;
+				$lines[ $provider->get_id() ] = $this->find_shipping_line( $order, $provider );
+
+				if ( null !== $lines[ $provider->get_id() ] ) {
+					$keys_with_lines[ $key ] = true;
+				}
+			}
 
 			foreach ( $providers as $provider ) {
 				if ( ! $provider->has_marker_writer() ) {
 					continue;
 				}
 
-				$line = $this->find_shipping_line( $order, $provider );
+				$line = $lines[ $provider->get_id() ] ?? null;
 
 				if ( null === $line ) {
 					continue;
@@ -139,6 +157,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Order_Marker' ) ) :
 
 				if ( $this->write( $order, $provider, $this->build_context( $provider, $line, $context ) ) ) {
 					$marked[] = $provider->get_id();
+				}
+			}
+
+			foreach ( $keys_to_check as $key => $provider ) {
+				if ( isset( $keys_with_lines[ $key ] ) || ! $this->carries_valid_marker( $order, $provider ) ) {
+					continue;
+				}
+
+				$order->delete_meta_data( $key );
+				if ( $order->get_id() > 0 ) {
+					$order->save_meta_data();
 				}
 			}
 

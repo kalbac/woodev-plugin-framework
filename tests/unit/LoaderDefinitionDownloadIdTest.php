@@ -116,4 +116,52 @@ final class LoaderDefinitionDownloadIdTest extends TestCase {
 		$this->assertSame( 4242, $definition->get_download_id() );
 		$this->assertIsInt( $definition->get_download_id() );
 	}
+
+	/**
+	 * Shipping type supplies runtime defaults, while explicit false and HPOS defaults are preserved.
+	 */
+	public function test_shipping_type_feature_defaults_are_passed_to_plugin_args(): void {
+		$errors     = [];
+		$definition = Framework_Plugin_Loader_Definition::from_array(
+			$this->get_definition(
+				[
+					'type' => 'shipping',
+				]
+			),
+			$errors
+		);
+
+		$this->assertNotNull( $definition );
+		$this->assertSame(
+			[
+				'hpos'   => false,
+				'blocks' => [ 'cart' => true, 'checkout' => true ],
+			],
+			$definition->get_supported_features()
+		);
+		$this->assertSame( $definition->get_supported_features(), $definition->to_legacy_plugin()['args']['supported_features'] );
+
+		$overridden = Framework_Plugin_Loader_Definition::from_array(
+			$this->get_definition(
+				[
+					'type'               => 'shipping',
+					'supported_features' => [ 'blocks' => [ 'cart' => false, 'checkout' => false ] ],
+				]
+			),
+			$errors
+		);
+		$this->assertNotNull( $overridden );
+		$this->assertSame( [ 'cart' => false, 'checkout' => false ], $overridden->get_supported_features()['blocks'] );
+	}
+
+	/**
+	 * Unknown and non-string plugin types fail validation; an explicitly provided null type is rejected.
+	 */
+	public function test_invalid_plugin_type_is_rejected(): void {
+		foreach ( [ 'payment', 1, null, '', 'Shipping' ] as $type ) {
+			$errors = [];
+			$this->assertNull( Framework_Plugin_Loader_Definition::from_array( $this->get_definition( [ 'type' => $type ] ), $errors ) );
+			$this->assertContains( 'Loader definition type must be the string "shipping" when provided.', $errors );
+		}
+	}
 }

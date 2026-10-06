@@ -58,18 +58,60 @@ if ( ! class_exists( Woocommerce_Plugin::class, false ) ) :
 		 * } $args Plugin arguments.
 		 */
 		public function __construct( string $id, string $version, array $args = [] ) {
+			$loader_definition  = $this->resolve_loader_definition( $id );
+			$supported_features = null !== $loader_definition
+				? $loader_definition->get_supported_features()
+				: [
+					'hpos'   => false,
+					'blocks' => [
+						'cart'     => false,
+						'checkout' => false,
+					],
+				];
+
 			$args = wp_parse_args(
 				$args,
 				[
-					'supported_features' => [
-						'hpos'   => false,
-						'blocks' => [
-							'cart'     => false,
-							'checkout' => false,
-						],
-					],
+					'supported_features' => $supported_features,
 				]
 			);
+
+			if ( null !== $loader_definition ) {
+				if ( isset( $args['supported_features'] ) ) {
+					$has_disagreement = false;
+					foreach (
+						[
+							'hpos'           => [ 'hpos' ],
+							'blocks.cart'     => [ 'blocks', 'cart' ],
+							'blocks.checkout' => [ 'blocks', 'checkout' ],
+						] as $feature => $path
+					) {
+						$value = $args['supported_features'];
+						foreach ( $path as $key ) {
+							if ( ! is_array( $value ) || ! array_key_exists( $key, $value ) ) {
+								continue 2;
+							}
+							$value = $value[ $key ];
+						}
+
+						$resolved_value = 'hpos' === $feature ? $supported_features['hpos'] : $supported_features['blocks'][ substr( $feature, 7 ) ];
+						if ( $value !== $resolved_value ) {
+							$has_disagreement = true;
+							break;
+						}
+					}
+
+					if ( $has_disagreement ) {
+						_doing_it_wrong(
+							self::class . '::__construct',
+							sprintf( 'Constructor supported_features for plugin "%s" conflicts with its loader definition; the loader definition is authoritative.', esc_html( $id ) ),
+							'2.0.2'
+						);
+					}
+				}
+
+				$args['supported_features'] = $supported_features;
+			}
 
 			$this->supported_features = $args['supported_features'];
 

@@ -68,6 +68,15 @@ closing anything, and never close the coordinator (its handle is in the `run-cre
 This is the same shape as `Stop-Process` reporting `completed, exit 0` for a background task: a
 receipt that reads like the outcome you wanted while describing something else.
 
+## s155: a dispatched Claude critic can come back `retained / user_takeover` with no input from anyone
+
+Orca 1.4.220: three Sonnet critics started by `worker-start --agent claude` and settled by a valid `worker_done` answered
+`worker-release` with `{"state":"retained","reason":"user_takeover"}` although the coordinator never wrote to their
+terminals (one Codex worker that HAD received a `terminal send` nudge did the same, which is the expected case). The
+worktree removal that followed also lagged: `git branch -D` on the critic's branch failed «used by worktree» until the
+terminal was closed. Recovery is the same as above — `terminal close --terminal <handle>`, then `worktree rm` — so read
+`state` on EVERY release, not only after a takeover you know about.
+
 ## Related
 
 - [starting-codex-under-orca-needs-four-steps-not-one](starting-codex-under-orca-needs-four-steps-not-one.md) — the start problem whose fix creates this cleanup problem

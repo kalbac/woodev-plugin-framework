@@ -24,6 +24,7 @@ if ( ! class_exists( Framework_Plugin_Loader_Definition::class, false ) ) :
 		public const PLATFORM_WORDPRESS   = 'wordpress';
 		public const PLATFORM_WOOCOMMERCE = 'woocommerce';
 		public const PLATFORM_EDD         = 'edd';
+		public const TYPE_SHIPPING        = 'shipping';
 
 		/** @var string Stable internal plugin ID. */
 		protected string $plugin_id;
@@ -48,6 +49,9 @@ if ( ! class_exists( Framework_Plugin_Loader_Definition::class, false ) ) :
 
 		/** @var string Platform value. */
 		protected string $platform;
+
+		/** @var string|null Optional plugin type. */
+		protected ?string $type;
 
 		/** @var array<string,string> Requirements map. */
 		protected array $requirements;
@@ -79,12 +83,11 @@ if ( ! class_exists( Framework_Plugin_Loader_Definition::class, false ) ) :
 				: null;
 			$this->plugin_file          = (string) $definition['plugin_file'];
 			$this->platform             = (string) $definition['platform'];
+			$this->type                 = isset( $definition['type'] ) ? $definition['type'] : null;
 			$this->requirements         = $this->normalize_requirements( (array) $definition['requirements'] );
 			$this->main_class           = isset( $definition['main_class'] ) ? (string) $definition['main_class'] : null;
 			$this->callback             = $definition['callback'] ?? null;
-			$this->supported_features   = isset( $definition['supported_features'] ) && is_array( $definition['supported_features'] )
-				? $definition['supported_features']
-				: [];
+			$this->supported_features   = self::get_supported_features_for_definition( $definition );
 		}
 
 		/**
@@ -195,6 +198,17 @@ if ( ! class_exists( Framework_Plugin_Loader_Definition::class, false ) ) :
 		}
 
 		/**
+		 * Gets the optional plugin type.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string|null
+		 */
+		public function get_type(): ?string {
+			return $this->type;
+		}
+
+		/**
 		 * Gets the requirements map.
 		 *
 		 * @since 2.0.0
@@ -239,6 +253,31 @@ if ( ! class_exists( Framework_Plugin_Loader_Definition::class, false ) ) :
 		}
 
 		/**
+		 * Resolves WooCommerce feature flags from a raw loader definition.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string,mixed> $definition Raw loader definition. A provided `null` type is rejected by validation.
+		 * @return array{hpos: bool, blocks: array{cart: bool, checkout: bool}}
+		 */
+		public static function get_supported_features_for_definition( array $definition ): array {
+			$shipping = self::TYPE_SHIPPING === ( $definition['type'] ?? null );
+
+			return array_replace_recursive(
+				[
+					'hpos'   => false,
+					'blocks' => [
+						'cart'     => $shipping,
+						'checkout' => $shipping,
+					],
+				],
+				isset( $definition['supported_features'] ) && is_array( $definition['supported_features'] )
+					? $definition['supported_features']
+					: []
+			);
+		}
+
+		/**
 		 * Converts this definition to the legacy plugin array used by existing notices.
 		 *
 		 * @since 2.0.0
@@ -265,9 +304,7 @@ if ( ! class_exists( Framework_Plugin_Loader_Definition::class, false ) ) :
 				$args['backwards_compatible'] = $this->get_backwards_compatible();
 			}
 
-			if ( [] !== $this->get_supported_features() ) {
-				$args['supported_features'] = $this->get_supported_features();
-			}
+			$args['supported_features'] = $this->get_supported_features();
 
 			return [
 				'version'     => $this->get_framework_version(),
@@ -321,6 +358,10 @@ if ( ! class_exists( Framework_Plugin_Loader_Definition::class, false ) ) :
 
 			if ( array_key_exists( 'supported_features', $definition ) && ! is_array( $definition['supported_features'] ) ) {
 				$errors[] = 'Loader definition supported_features must be an array.';
+			}
+
+			if ( array_key_exists( 'type', $definition ) && self::TYPE_SHIPPING !== $definition['type'] ) {
+				$errors[] = 'Loader definition type must be the string "shipping" when provided.';
 			}
 
 			if ( self::PLATFORM_EDD === $platform ) {

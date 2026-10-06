@@ -132,12 +132,21 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 					$pending[ $key ] = $value;
 				}
 			);
+			$order->shouldReceive( 'delete_meta_data' )->andReturnUsing(
+				static function ( $key ) use ( &$pending ): void {
+					$pending[ $key ] = null;
+				}
+			);
 			$order->shouldReceive( 'save_meta_data' )->andReturnUsing(
 				static function () use ( &$pending, $id ): void {
 					self::$saves[ $id ] = ( self::$saves[ $id ] ?? 0 ) + 1;
 
 					foreach ( $pending as $key => $value ) {
-						self::$db[ $id ][ $key ] = $value;
+						if ( null === $value ) {
+							unset( self::$db[ $id ][ $key ] );
+						} else {
+							self::$db[ $id ][ $key ] = $value;
+						}
 					}
 
 					$pending = [];

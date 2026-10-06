@@ -70,22 +70,13 @@ class CheckoutHandlerStoreApiDeliveryAddressTest extends TestCase {
 		$this->assertSame( [ 'city' => 'Подольск', 'state' => 'МОСКОВСКАЯ ОБЛАСТЬ', 'country' => 'RU' ], $this->handler()->delivery_address( $order ) );
 	}
 
-	public function test_shipping_address_remains_the_order_locality_source_in_normal_mode(): void {
-		Functions\when( 'get_option' )->justReturn( 'shipping' );
-		$order = Mockery::mock( '\\WC_Order' );
-		$order->shouldReceive( 'get_shipping_city' )->once()->andReturn( 'Подольск' );
-		$order->shouldReceive( 'get_shipping_state' )->once()->andReturn( 'МОСКОВСКАЯ ОБЛАСТЬ' );
-		$order->shouldReceive( 'get_shipping_country' )->once()->andReturn( 'RU' );
-
-		$this->assertSame( [ 'city' => 'Подольск', 'state' => 'МОСКОВСКАЯ ОБЛАСТЬ', 'country' => 'RU' ], $this->handler()->delivery_address( $order ) );
-	}
-
-	public function test_store_api_validation_forgets_record_using_billing_city_only_for_checkout_draft(): void {
+	public function test_store_api_validation_checks_billing_city_for_a_checkout_draft(): void {
 		Functions\when( 'get_option' )->justReturn( 'billing_only' );
 		$service = new StoreApiValidationLocationService();
 		$handler = new Checkout_Handler( Checkout_Fields::from_array( [] ), 'carrier', $service );
 		$order = Mockery::mock( '\WC_Order' );
-		$order->shouldReceive( 'has_status' )->twice()->with( 'checkout-draft' )->andReturn( true, false );
+		$order->shouldReceive( 'has_status' )->with( [ 'checkout-draft', 'pending', 'failed' ] )->andReturn( true );
+		$order->shouldReceive( 'has_status' )->with( 'checkout-draft' )->andReturn( true );
 		$order->shouldReceive( 'get_billing_city' )->once()->andReturn( 'Казань' );
 		$order->shouldReceive( 'get_billing_state' )->once()->andReturn( '' );
 		$order->shouldReceive( 'get_billing_country' )->once()->andReturn( 'RU' );
@@ -101,12 +92,29 @@ class CheckoutHandlerStoreApiDeliveryAddressTest extends TestCase {
 		$service = new StoreApiValidationLocationService();
 		$handler = new Checkout_Handler( Checkout_Fields::from_array( [] ), 'carrier', $service );
 		$order = Mockery::mock( '\WC_Order' );
-		$order->shouldReceive( 'has_status' )->twice()->with( 'checkout-draft' )->andReturn( false, false );
+		$order->shouldReceive( 'has_status' )->with( [ 'checkout-draft', 'pending', 'failed' ] )->andReturn( false );
+		$order->shouldReceive( 'has_status' )->with( 'checkout-draft' )->andReturn( false );
 		$errors = new \WP_Error();
 
 		$handler->handle_store_api_validate_order( $order, $errors );
 
 		$this->assertSame( 0, $service->forgetCalls );
+	}
+
+	public function test_store_api_validation_checks_locality_again_on_a_failed_payment_retry(): void {
+		Functions\when( 'get_option' )->justReturn( 'billing_only' );
+		$service = new StoreApiValidationLocationService();
+		$handler = new Checkout_Handler( Checkout_Fields::from_array( [] ), 'carrier', $service );
+		$order = Mockery::mock( '\\WC_Order' );
+		$order->shouldReceive( 'has_status' )->with( [ 'checkout-draft', 'pending', 'failed' ] )->andReturn( true );
+		$order->shouldReceive( 'has_status' )->with( 'checkout-draft' )->andReturn( false );
+		$order->shouldReceive( 'get_billing_city' )->once()->andReturn( 'Казань' );
+		$order->shouldReceive( 'get_billing_state' )->once()->andReturn( '' );
+		$order->shouldReceive( 'get_billing_country' )->once()->andReturn( 'RU' );
+
+		$handler->handle_store_api_validate_order( $order, new \WP_Error() );
+
+		$this->assertSame( 1, $service->forgetCalls );
 	}
 
 	private function handler(): object {
