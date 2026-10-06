@@ -1257,23 +1257,33 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 				mockStore.shipping = { ...HOME, city };
 				notify();
 			} );
-		/** Core batches update-customer before the cart store reports customer data updating. */
-		const push = (): void =>
+		const addressBatchRequest = {
+			path: '/?rest_route=/wc/store/v1/batch',
+			method: 'POST',
+			data: {
+				requests: [
+					{ path: '/wc/store/v1/cart/update-customer', method: 'POST', body: { shipping_address: { city: 'Краснодар' } } },
+				],
+			},
+		};
+		/** WC sets updating before DataLoader emits the batch POST ~300 ms later. */
+		const beginPush = (): void =>
 			act( () => {
-				// WC 9.9.0 shared-controls.ts:129-133,70-74; WC 11.1.x public-api/block-data/shared-controls.ts:129-136.
-				// Both batch POSTs place individual paths in data.requests and return indexed responses.
-				addressBatch = apiFetch( {
-					path: '/?rest_route=/wc/store/v1/batch',
-					method: 'POST',
-					data: {
-						requests: [
-							{ path: '/wc/store/v1/cart/update-customer', method: 'POST', body: { shipping_address: { city: 'Краснодар' } } },
-						],
-					},
-				} );
 				mockStore.updating = true;
 				notify();
 			} );
+		/** WC 9.9.0 shared-controls.ts:129-133,70-74; WC 11.1.x public-api/block-data/shared-controls.ts:129-136.
+		 * Both versions put update-customer in data.requests and return indexed responses.
+		 */
+		const sendAddressBatch = (): void =>
+			act( () => {
+				addressBatch = apiFetch( addressBatchRequest );
+			} );
+		const push = (): void => {
+			beginPush();
+			act( () => jest.advanceTimersByTime( 300 ) );
+			sendAddressBatch();
+		};
 		/** The matching batch item succeeds: a cart reply is taken into the store, then the flag drops. */
 		const reply = async ( locality: string ): Promise< void > => {
 			resolveAddressBatch?.( {
@@ -1366,11 +1376,27 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 			expect( trigger() ).toHaveAttribute( 'aria-disabled', 'true' );
 		} );
 
+		it( 'does not count a foreign reply before WooCommerce starts the delayed address request (#1118)', () => {
+			renderPicker();
+			edit( 'Краснодар' );
+			beginPush();
+
+			foreignReply( 'dadata:msk' );
+
+			expect( screen.getByRole( 'status' ) ).toHaveTextContent( PENDING );
+			expect( trigger() ).toHaveAttribute( 'aria-disabled', 'true' );
+
+			act( () => jest.advanceTimersByTime( 300 ) );
+			sendAddressBatch();
+		} );
+
 		it( 'counts the update-customer item when WC batches it with another cart request', async () => {
 			renderPicker();
 			edit( 'Краснодар' );
 
 			// WC batching can combine unrelated requests; only the matching response index defines our reply.
+			beginPush();
+			act( () => jest.advanceTimersByTime( 300 ) );
 			act( () => {
 				addressBatch = apiFetch( {
 					path: '/wc/store/v1/batch',
@@ -1382,8 +1408,6 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 						],
 					},
 				} );
-				mockStore.updating = true;
-				notify();
 			} );
 
 			resolveAddressBatch?.( {
@@ -1403,6 +1427,8 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 		} );
 
 		it( 'falls back to any cart reply when no matching apiFetch request was observed', () => {
+			const session = fakeSession();
+
 			renderPicker();
 			edit( 'Краснодар' );
 			act( () => {
@@ -1413,8 +1439,15 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 			// An unshared apiFetch instance or absent middleware leaves no tracked request to correlate.
 			// Keep the origin/main behavior: any cart reply answers, avoiding a permanently stale address.
 			foreignReply( 'dadata:krd' );
+			act( () => {
+				mockStore.updating = false;
+				notify();
+			} );
 
 			expect( screen.queryByText( PENDING ) ).not.toBeInTheDocument();
+			fireEvent.click( trigger() as HTMLElement );
+			expect( session.open ).toHaveBeenCalledTimes( 1 );
+			expect( session.host().getLocalityKey() ).toBe( 'dadata:krd' );
 		} );
 
 		it( 'still recognizes a direct update-customer request as a secondary transport shape', async () => {

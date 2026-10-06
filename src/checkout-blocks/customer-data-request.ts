@@ -18,11 +18,13 @@ const BATCH_PATH = '/wc/store/v1/batch';
 const UPDATE_CUSTOMER_PATH = '/wc/store/v1/cart/update-customer';
 
 let replyVersion = 0;
-let pendingRequests = 0;
+let startedRequestCount = 0;
+let lastCompletedRequestId = 0;
 
 export interface CustomerDataRequestSnapshot {
 	replyVersion: number;
-	pending: boolean;
+	startedRequestCount: number;
+	lastCompletedRequestId: number;
 }
 
 type BatchItem = { path?: unknown; url?: unknown };
@@ -81,24 +83,18 @@ const addressUpdateMiddleware: APIFetchMiddleware = ( options, next ) => {
 		return next( options );
 	}
 
-	pendingRequests++;
+	const requestId = ++startedRequestCount;
 
-	return next( options ).then(
-		( response ) => {
-			// A malformed/unknown batch response falls back to treating any cart reply as the answer.
-			// Direct apiFetch resolves only for a successful HTTP response.
-			if ( direct || batchSucceeded( response, batched as number[] ) !== false ) {
-				replyVersion++;
-			}
-
-			return response;
-		},
-		( error: unknown ) => {
-			throw error;
+	return next( options ).then( ( response ) => {
+		// An unreadable response fails open so the hook retains legacy reply behavior.
+		// Direct apiFetch resolves only for a successful HTTP response.
+		if ( direct || batchSucceeded( response, batched as number[] ) !== false ) {
+			replyVersion++;
+			lastCompletedRequestId = Math.max( lastCompletedRequestId, requestId );
 		}
-	).finally( () => {
-			pendingRequests--;
-		} );
+
+		return response;
+	} );
 };
 
 apiFetch.use( addressUpdateMiddleware );
@@ -107,6 +103,7 @@ apiFetch.use( addressUpdateMiddleware );
 export function customerDataRequestSnapshot(): CustomerDataRequestSnapshot {
 	return {
 		replyVersion,
-		pending: pendingRequests > 0,
+		startedRequestCount,
+		lastCompletedRequestId,
 	};
 }
