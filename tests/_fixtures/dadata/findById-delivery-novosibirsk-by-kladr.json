@@ -1,0 +1,32 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://suggestions.dadata.ru/suggestions/api/4_1/rs/findById/delivery",
+    "headers": {
+      "Authorization": "Token <redacted>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "query": "5400000100000"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "suggestions": [
+        {
+          "value": "5400000100000",
+          "unrestricted_value": "8dea00e3-9aab-4d8e-887c-ef2aaa546456",
+          "data": {
+            "kladr_id": "5400000100000",
+            "fias_id": "8dea00e3-9aab-4d8e-887c-ef2aaa546456",
+            "boxberry_id": "7765",
+            "cdek_id": "270",
+            "dpd_id": "49455627"
+          }
+        }
+      ]
+    }
+  },
+  "note": "query = kladr_id of novosibirsk"
+}

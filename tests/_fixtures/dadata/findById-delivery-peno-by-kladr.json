@@ -1,0 +1,32 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://suggestions.dadata.ru/suggestions/api/4_1/rs/findById/delivery",
+    "headers": {
+      "Authorization": "Token <redacted>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "query": "6900001500000"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "suggestions": [
+        {
+          "value": "6900001500000",
+          "unrestricted_value": "2e30ca06-a155-495e-966d-d2f47764c452",
+          "data": {
+            "kladr_id": "6900001500000",
+            "fias_id": "2e30ca06-a155-495e-966d-d2f47764c452",
+            "boxberry_id": null,
+            "cdek_id": "24143",
+            "dpd_id": null
+          }
+        }
+      ]
+    }
+  },
+  "note": "query = kladr_id of peno"
+}

@@ -409,6 +409,63 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		}
 
 		/**
+		 * Carrier city ids for a locality — `POST findById/delivery`.
+		 *
+		 * DaData maps ONE KLADR or FIAS id of a city/settlement to the ids that
+		 * delivery services use for the same place (`cdek_id`, `boxberry_id`,
+		 * `dpd_id`, …). Measured live against the CDEK test contour (#1136): 98.5%
+		 * of the 488 CDEK office cities came back with CDEK's own code.
+		 *
+		 * The id MUST be city/settlement level: a street- or house-level id (an
+		 * address row's own `kladr_id`/`fias_id`) answers an EMPTY suggestion set,
+		 * not an error. The two id kinds are equivalent (0 disagreements over 465
+		 * localities), so the caller passes whichever its record carries.
+		 *
+		 * No `language` field: the answer is ids, not text.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $id A KLADR or FIAS id of a city or settlement.
+		 *
+		 * @return array<string, mixed>|null The first suggestion's `data` object
+		 *                                   (`kladr_id`, `fias_id`, `cdek_id` — a
+		 *                                   STRING —, `boxberry_id`, `dpd_id`, …), or
+		 *                                   null when DaData answered with an EMPTY
+		 *                                   suggestion set, i.e. knows no delivery ids
+		 *                                   for this id.
+		 *
+		 * @throws \Woodev_API_Exception On a network failure, a non-2xx response, or a
+		 *                                successful response whose suggestion set is
+		 *                                non-empty but unreadable.
+		 */
+		public function find_by_id_delivery( string $id ): ?array {
+			$request = $this->get_new_request( 'suggestions' );
+			$request->find_by_id_delivery( [ 'query' => $id ] );
+
+			/** @var Dadata_Api_Response $response */
+			$response = $this->perform_request( $request );
+
+			$suggestions = $response->get_suggestions();
+
+			if ( [] === $suggestions ) {
+				return null;
+			}
+
+			$data = $suggestions[0]['data'] ?? null;
+
+			if ( ! is_array( $suggestions[0] ?? null ) || ! is_array( $data ) ) {
+				throw new \Woodev_API_Exception(
+					sprintf(
+						'DaData findById/delivery returned a non-empty suggestion set without a readable data object (id "%s").',
+						$id
+					)
+				);
+			}
+
+			return $data;
+		}
+
+		/**
 		 * Free-form address normalization ("Clean") — `POST address` on the
 		 * cleaner host. Requires BOTH the token (always sent) and the secret
 		 * (sent only when configured — an empty/missing secret makes DaData

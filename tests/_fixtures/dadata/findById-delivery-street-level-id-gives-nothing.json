@@ -1,0 +1,20 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://suggestions.dadata.ru/suggestions/api/4_1/rs/findById/delivery",
+    "headers": {
+      "Authorization": "Token <redacted>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "query": "77000000000287900"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "suggestions": []
+    }
+  },
+  "note": "query = KLADR id of a STREET-level address (Москва, ул Тверская): no cdek_id; the adapter must use city_kladr_id / settlement_kladr_id, never data.kladr_id of an address row"
+}

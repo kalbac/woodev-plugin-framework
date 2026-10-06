@@ -84,6 +84,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		}
 
 		/**
+		 * Configures a `POST findById/delivery` request.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string, mixed> $body Request body (`query` = a KLADR or FIAS id).
+		 *
+		 * @return void
+		 */
+		public function find_by_id_delivery( array $body ): void {
+			$this->method = 'POST';
+			$this->path   = '/findById/delivery';
+			$this->params = $body;
+		}
+
+		/**
 		 * Configures a `POST address` request against the cleaner host (full URL:
 		 * `https://cleaner.dadata.ru/api/v1/clean/address`).
 		 *

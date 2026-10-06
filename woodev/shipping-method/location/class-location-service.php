@@ -3088,6 +3088,47 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		}
 
 		/**
+		 * Carrier city ids for a location record — the public, token-free way a
+		 * carrier's {@see Location_Adapter} maps a customer's locality to the
+		 * carrier's own city code (#1136).
+		 *
+		 * Today only the bundled DaData provider can answer
+		 * (`POST findById/delivery`): the record must be one DaData produced, and
+		 * DaData must be registered and configured. Everything else — a record
+		 * some other provider produced, DaData unregistered or without a token, no
+		 * city/settlement id in the record, DaData knowing nothing — answers `[]`
+		 * (fail closed, never a throw for "not configured"). The token stays inside
+		 * the provider; see {@see Providers\Dadata_Provider::delivery_ids()} for
+		 * the key choice, the cache and the shape of the answer.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Location_Record $record A location record, typically the one
+		 *                                {@see self::resolve_for()} hands an adapter.
+		 *
+		 * @return array<string, string> Carrier ids keyed by DaData's field name
+		 *                               (`cdek_id`, `boxberry_id`, …), values as
+		 *                               strings. Empty when there is no answer.
+		 *
+		 * @throws Location_Provider_Exception When the DaData request itself fails —
+		 *                                      a transient failure the caller must not
+		 *                                      cache as "no answer".
+		 */
+		public function get_delivery_ids( Location_Record $record ): array {
+			if ( Location_Provider_Registry::DEFAULT_PROVIDER_ID !== $record->provider_id() ) {
+				return [];
+			}
+
+			$provider = $this->get_registered_provider( Location_Provider_Registry::DEFAULT_PROVIDER_ID );
+
+			if ( ! $provider instanceof Providers\Dadata_Provider || ! $provider->is_configured() ) {
+				return [];
+			}
+
+			return $provider->delivery_ids( $record );
+		}
+
+		/**
 		 * Gets the shared {@see Popular_Settlement_Store} instance (#488 slice 3)
 		 * — a thin delegate to {@see Location_Provider_Registry::popular_settlement_store()}
 		 * so {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller} (which
