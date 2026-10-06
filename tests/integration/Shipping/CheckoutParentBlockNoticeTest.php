@@ -139,8 +139,8 @@ class CheckoutParentBlockNoticeTest extends TestCase {
 	 * @return void
 	 */
 	public function test_disabled_pickup_method_in_every_zone_does_not_warn(): void {
-		$this->add_method_to_zone( self::TEST_PICKUP_ID );
-		$this->disable_method( self::TEST_PICKUP_ID );
+		$instance_id = $this->add_method_to_zone( self::TEST_PICKUP_ID );
+		$this->disable_method( $instance_id );
 		$this->set_checkout_content( '<!-- wp:woocommerce/checkout -->' );
 
 		$this->assertNoNoticeRendered();
@@ -165,6 +165,7 @@ class CheckoutParentBlockNoticeTest extends TestCase {
 	 */
 	public function test_classic_checkout_shortcode_does_not_warn(): void {
 		$this->add_method_to_zone( self::TEST_PICKUP_ID );
+		// Classic checkout is intentionally covered by the earlier guard: it does not require block parents.
 		$this->set_checkout_content( '[woocommerce_checkout]' );
 
 		$this->assertNoNoticeRendered();
@@ -221,6 +222,40 @@ class CheckoutParentBlockNoticeTest extends TestCase {
 	}
 
 	/**
+	 * A pickup method owned by another plugin does not qualify this plugin's handler.
+	 *
+	 * @since 2.0.2
+	 * @return void
+	 */
+	public function test_pickup_method_from_another_plugin_does_not_qualify_this_plugin(): void {
+		$this->add_method_to_zone( self::TEST_PICKUP_ID );
+		$this->set_checkout_content( '<!-- wp:woocommerce/checkout -->' );
+
+		$output = $this->render_admin_notices();
+
+		$this->assertStringContainsString( 'data-plugin-id="woodev-test-shipping-method"', $output );
+		$this->assertStringNotContainsString( 'data-plugin-id="woodev-realistic-shipping"', $output );
+	}
+
+	/**
+	 * A dismissed notice from one plugin does not suppress another plugin's notice.
+	 *
+	 * @since 2.0.2
+	 * @return void
+	 */
+	public function test_dismissed_notice_from_one_plugin_does_not_suppress_another_plugin(): void {
+		$this->add_method_to_zone( self::TEST_PICKUP_ID );
+		$this->add_method_to_zone( self::REALISTIC_PICKUP_ID );
+		$this->set_checkout_content( '<!-- wp:woocommerce/checkout -->' );
+		woodev_realistic_shipping_plugin()->get_admin_notice_handler()->dismiss_notice( self::NOTICE_ID );
+
+		$output = $this->render_admin_notices();
+
+		$this->assertStringContainsString( 'data-plugin-id="woodev-test-shipping-method"', $output );
+		$this->assertStringNotContainsString( 'data-plugin-id="woodev-realistic-shipping"', $output );
+	}
+
+	/**
 	 * Creates a real checkout page with the given saved block markup.
 	 *
 	 * @param string $content Saved page content.
@@ -271,12 +306,12 @@ class CheckoutParentBlockNoticeTest extends TestCase {
 	}
 
 	/**
-	 * Disables every zone instance of a method so the test proves the fleet-wide gate.
+	 * Disables only the zone method instance created by the test.
 	 *
-	 * @param string $method_id Method ID.
+	 * @param int $instance_id Zone method instance ID.
 	 * @return void
 	 */
-	private function disable_method( string $method_id ): void {
+	private function disable_method( int $instance_id ): void {
 		global $wpdb;
 
 		$zones = [ new \WC_Shipping_Zone( 0 ) ];
@@ -286,7 +321,7 @@ class CheckoutParentBlockNoticeTest extends TestCase {
 
 		foreach ( $zones as $zone ) {
 			foreach ( $zone->get_shipping_methods( false ) as $method ) {
-				if ( $method_id !== $method->id ) {
+				if ( $instance_id !== (int) $method->instance_id ) {
 					continue;
 				}
 

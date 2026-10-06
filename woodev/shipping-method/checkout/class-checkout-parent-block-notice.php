@@ -39,6 +39,16 @@ if ( ! class_exists( __NAMESPACE__ . '\\Checkout_Parent_Block_Notice' ) ) :
 						return;
 					}
 
+					$notice_id = 'woodev-checkout-shipping-blocks-missing';
+					$notice_params = [
+						'notice_class'            => 'notice-error',
+						'always_show_on_settings' => false,
+					];
+					$handler = $plugin->get_admin_notice_handler();
+					if ( ! $handler->should_display_notice( $notice_id, $notice_params ) ) {
+						return;
+					}
+
 					$page_id = wc_get_page_id( 'checkout' );
 					$url     = get_edit_post_link( $page_id );
 					$message = __( 'На странице оформления заказа отсутствуют блоки «Адрес доставки» или «Способы доставки». Восстановите их в редакторе страницы.', 'woodev-plugin-framework' );
@@ -47,13 +57,10 @@ if ( ! class_exists( __NAMESPACE__ . '\\Checkout_Parent_Block_Notice' ) ) :
 						$message .= ' <a href="' . esc_url( $url ) . '">' . esc_html__( 'Открыть страницу оформления заказа', 'woodev-plugin-framework' ) . '</a>';
 					}
 
-					$plugin->get_admin_notice_handler()->add_admin_notice(
+					$handler->add_admin_notice(
 						$message,
-						'woodev-checkout-shipping-blocks-missing',
-						[
-							'notice_class'            => 'notice-error',
-							'always_show_on_settings' => false,
-						]
+						$notice_id,
+						$notice_params
 					);
 					self::$notice_added = true;
 				}

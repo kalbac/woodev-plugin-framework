@@ -27,6 +27,7 @@
 
 import { useEffect, useRef, useState } from '@wordpress/element';
 import { useSelect } from '@wordpress/data';
+import { customerDataRequestSnapshot } from './customer-data-request';
 import {
 	hasCartError,
 	isCustomerDataUpdating,
@@ -60,6 +61,11 @@ export function useShippingAddressState(): AddressState {
 	const [ expired, setExpired ] = useState< string | null >( null );
 	// The address key the push in flight started with; `null` while none is.
 	const sent = useRef< string | null >( null );
+	// Snapshot request counters when WC raises updating. Core dispatches that state before its
+	// DataLoader sends the batch request (~300 ms later), so the matching request may not exist yet.
+	const sentStartedRequestCount = useRef< number >( 0 );
+	const sentReplyVersion = useRef< number >( 0 );
+	const sentAnyReply = useRef< boolean >( false );
 	const lastReply = useRef< unknown >( reply );
 
 	useEffect( () => {
@@ -75,20 +81,37 @@ export function useShippingAddressState(): AddressState {
 
 		if ( updating && sent.current === null ) {
 			sent.current = key;
+			const snapshot = customerDataRequestSnapshot();
+			sentStartedRequestCount.current = snapshot.startedRequestCount;
+			sentReplyVersion.current = snapshot.replyVersion;
+			sentAnyReply.current = false;
 		}
 
 		if ( sent.current === null ) {
 			return;
 		}
-
 		if ( replied && ! failed ) {
+			sentAnyReply.current = true;
+		}
+
+		const requestSnapshot = customerDataRequestSnapshot();
+		const matchingRequestStarted = requestSnapshot.startedRequestCount > sentStartedRequestCount.current;
+		const requestAnswered = requestSnapshot.lastCompletedRequestId > sentStartedRequestCount.current &&
+			requestSnapshot.replyVersion > sentReplyVersion.current;
+		// If updating ends without any observable matching request, preserve origin/main's fail-safe:
+		// any cart reply counts. While updating, an uncorrelated reply is never enough.
+		const fallbackAnswered = ! updating && ! matchingRequestStarted && sentAnyReply.current;
+
+		if ( ! failed && ( ( replied && requestAnswered ) || fallbackAnswered ) ) {
 			setAnswered( sent.current );
 			setExpired( null );
 			sent.current = null;
+			sentAnyReply.current = false;
 		} else if ( ! updating ) {
 			// Ended with no reply, or with a refusal: nothing answered it.
 			setExpired( sent.current );
 			sent.current = null;
+			sentAnyReply.current = false;
 		}
 	}, [ updating, reply, failed, key ] );
 

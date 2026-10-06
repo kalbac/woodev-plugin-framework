@@ -1,4 +1,5 @@
 import '@testing-library/jest-dom';
+import apiFetch from '@wordpress/api-fetch';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { useSyncExternalStore as mockUseSyncExternalStore } from 'react';
 
@@ -1243,6 +1244,8 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 	 */
 	describe( 'while the cart has not answered an address edit', () => {
 		const PENDING = 'Loading pickup points…';
+		let resolveAddressBatch: ( ( response: unknown ) => void ) | null = null;
+		let addressBatch: Promise< unknown > | null = null;
 		const owner = ( locality: string ): Record< string, unknown > => ( {
 			[ NAMESPACE ]: {
 				pickup: { carrier: { carrier_point: null } },
@@ -1254,14 +1257,40 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 				mockStore.shipping = { ...HOME, city };
 				notify();
 			} );
-		/** Core's push goes out: the cart store reports the customer data updating. */
-		const push = (): void =>
+		const addressBatchRequest = {
+			path: '/?rest_route=/wc/store/v1/batch',
+			method: 'POST',
+			data: {
+				requests: [
+					{ path: '/wc/store/v1/cart/update-customer', method: 'POST', body: { shipping_address: { city: 'Краснодар' } } },
+				],
+			},
+		};
+		/** WC sets updating before DataLoader emits the batch POST ~300 ms later. */
+		const beginPush = (): void =>
 			act( () => {
 				mockStore.updating = true;
 				notify();
 			} );
-		/** The push is answered: a new cart reply is taken into the store, then the flag drops. */
-		const reply = ( locality: string ): void => {
+		/** WC 9.9.0 shared-controls.ts:129-133,70-74; WC 11.1.x public-api/block-data/shared-controls.ts:129-136.
+		 * Both versions put update-customer in data.requests and return indexed responses.
+		 */
+		const sendAddressBatch = (): void =>
+			act( () => {
+				addressBatch = apiFetch( addressBatchRequest );
+			} );
+		const push = (): void => {
+			beginPush();
+			act( () => jest.advanceTimersByTime( 300 ) );
+			sendAddressBatch();
+		};
+		/** The matching batch item succeeds: a cart reply is taken into the store, then the flag drops. */
+		const reply = async ( locality: string ): Promise< void > => {
+			resolveAddressBatch?.( {
+				responses: [ { status: 200, body: {}, headers: {} } ],
+			} );
+			await addressBatch;
+
 			act( () => {
 				mockStore.extensions = owner( locality );
 				notify();
@@ -1271,9 +1300,16 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 				notify();
 			} );
 		};
+		/** Another cart request answers while the customer-address request is still in flight. */
+		const foreignReply = ( locality: string ): void =>
+			act( () => {
+				mockStore.extensions = owner( locality );
+				notify();
+			} );
 		/** The push ends with nothing taken into the store (aborted, network error). */
 		const abort = (): void =>
 			act( () => {
+				resolveAddressBatch?.( { responses: [ { status: 500, body: {}, headers: {} } ] } );
 				mockStore.updating = false;
 				notify();
 			} );
@@ -1284,14 +1320,25 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 
 		beforeEach( () => {
 			jest.useFakeTimers();
+			resolveAddressBatch = null;
+			addressBatch = null;
+			apiFetch.setFetchHandler( () => new Promise( ( resolve ) => {
+				resolveAddressBatch = resolve;
+			} ) );
 			mockStore.extensions = owner( 'dadata:msk' );
 		} );
 
-		afterEach( () => {
+		afterEach( async () => {
+			if ( resolveAddressBatch && addressBatch ) {
+				resolveAddressBatch( { responses: [ { status: 200, body: {}, headers: {} } ] } );
+				await addressBatch;
+			}
+
+			apiFetch.setFetchHandler( () => Promise.resolve( {} ) );
 			jest.useRealTimers();
 		} );
 
-		it( 'opens no dialog on the previous address’s owner — it waits for the cart’s answer', () => {
+		it( 'opens no dialog on the previous address’s owner — it waits for the cart’s answer', async () => {
 			const session = fakeSession();
 
 			renderPicker();
@@ -1310,11 +1357,140 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 			expect( screen.getByRole( 'status' ) ).toHaveTextContent( PENDING );
 
 			// The cart answers with the new locality: the dialog opens on ITS key, nothing else.
-			reply( 'dadata:krd' );
+			await reply( 'dadata:krd' );
 			fireEvent.click( trigger() as HTMLElement );
 
 			expect( session.open ).toHaveBeenCalledTimes( 1 );
 			expect( session.host().getLocalityKey() ).toBe( 'dadata:krd' );
+		} );
+
+		it( 'does not count a foreign cart reply as the answer to the address push (#1118)', () => {
+			renderPicker();
+			edit( 'Краснодар' );
+			push();
+
+			// E.g. select-shipping-rate calls receiveCart while update-customer is still pending.
+			foreignReply( 'dadata:msk' );
+
+			expect( screen.getByRole( 'status' ) ).toHaveTextContent( PENDING );
+			expect( trigger() ).toHaveAttribute( 'aria-disabled', 'true' );
+		} );
+
+		it( 'does not count a foreign reply before WooCommerce starts the delayed address request (#1118)', () => {
+			renderPicker();
+			edit( 'Краснодар' );
+			beginPush();
+
+			foreignReply( 'dadata:msk' );
+
+			expect( screen.getByRole( 'status' ) ).toHaveTextContent( PENDING );
+			expect( trigger() ).toHaveAttribute( 'aria-disabled', 'true' );
+
+			act( () => jest.advanceTimersByTime( 300 ) );
+			sendAddressBatch();
+		} );
+
+		it( 'counts the update-customer item when WC batches it with another cart request', async () => {
+			renderPicker();
+			edit( 'Краснодар' );
+
+			// WC batching can combine unrelated requests; only the matching response index defines our reply.
+			beginPush();
+			act( () => jest.advanceTimersByTime( 300 ) );
+			act( () => {
+				addressBatch = apiFetch( {
+					path: '/wc/store/v1/batch',
+					method: 'POST',
+					data: {
+						requests: [
+							{ path: '/wc/store/v1/cart/select-shipping-rate', method: 'POST', body: {} },
+							{ path: '/wc/store/v1/cart/update-customer', method: 'POST', body: {} },
+						],
+					},
+				} );
+			} );
+
+			resolveAddressBatch?.( {
+				responses: [
+					{ status: 500, body: {}, headers: {} },
+					{ status: 200, body: {}, headers: {} },
+				],
+			} );
+			await addressBatch;
+			foreignReply( 'dadata:krd' );
+			act( () => {
+				mockStore.updating = false;
+				notify();
+			} );
+
+			expect( screen.queryByText( PENDING ) ).not.toBeInTheDocument();
+		} );
+
+		it( 'falls back to any cart reply when no matching apiFetch request was observed', () => {
+			const session = fakeSession();
+
+			renderPicker();
+			edit( 'Краснодар' );
+			act( () => {
+				mockStore.updating = true;
+				notify();
+			} );
+
+			// An unshared apiFetch instance or absent middleware leaves no tracked request to correlate.
+			// Keep the origin/main behavior: any cart reply answers, avoiding a permanently stale address.
+			foreignReply( 'dadata:krd' );
+			act( () => {
+				mockStore.updating = false;
+				notify();
+			} );
+
+			expect( screen.queryByText( PENDING ) ).not.toBeInTheDocument();
+			fireEvent.click( trigger() as HTMLElement );
+			expect( session.open ).toHaveBeenCalledTimes( 1 );
+			expect( session.host().getLocalityKey() ).toBe( 'dadata:krd' );
+		} );
+
+		it( 'still recognizes a direct update-customer request as a secondary transport shape', async () => {
+			renderPicker();
+			edit( 'Краснодар' );
+			act( () => {
+				addressBatch = apiFetch( { path: '/wc/store/v1/cart/update-customer', method: 'POST', data: {} } );
+				mockStore.updating = true;
+				notify();
+			} );
+			resolveAddressBatch?.( {} );
+			await addressBatch;
+
+			foreignReply( 'dadata:krd' );
+			act( () => {
+				mockStore.updating = false;
+				notify();
+			} );
+
+			expect( screen.queryByText( PENDING ) ).not.toBeInTheDocument();
+		} );
+
+		it( 'falls back to any cart reply when a batch response shape is unknown', async () => {
+			renderPicker();
+			edit( 'Краснодар' );
+			push();
+			resolveAddressBatch?.( { unexpected: true } );
+			await addressBatch;
+
+			foreignReply( 'dadata:krd' );
+
+			expect( screen.queryByText( PENDING ) ).not.toBeInTheDocument();
+		} );
+
+		it( 'does not reopen the wait for a foreign reply after the address reply', async () => {
+			renderPicker();
+			edit( 'Краснодар' );
+			push();
+			await reply( 'dadata:krd' );
+
+			foreignReply( 'dadata:msk' );
+
+			expect( screen.queryByText( PENDING ) ).not.toBeInTheDocument();
 		} );
 
 		it( 'compares the address without case or stray spaces, so an echoed city is not pending', () => {
@@ -1414,7 +1590,7 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 			expect( session.open ).not.toHaveBeenCalled();
 		} );
 
-		it( 'recovers by itself when a later push is answered', () => {
+		it( 'recovers by itself when a later push is answered', async () => {
 			const session = fakeSession();
 
 			renderPicker();
@@ -1430,7 +1606,7 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 			expect( screen.getByRole( 'status' ) ).toHaveTextContent( PENDING );
 
 			push();
-			reply( 'dadata:krd' );
+			await reply( 'dadata:krd' );
 			fireEvent.click( trigger() as HTMLElement );
 
 			expect( screen.queryByRole( 'status' ) ).not.toBeInTheDocument();
@@ -1451,19 +1627,19 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 			expect( trigger() ).not.toHaveAttribute( 'aria-disabled' );
 		} );
 
-		it( 'does not credit an edit made while the push was in flight to that push’s answer', () => {
+		it( 'does not credit an edit made while the push was in flight to that push’s answer', async () => {
 			renderPicker();
 			edit( 'Краснодар' );
 			push();
 			edit( 'Сочи' );
-			reply( 'dadata:krd' );
+			await reply( 'dadata:krd' );
 
 			// The reply answered «Краснодар»; the form holds «Сочи» — still waiting, not settled.
 			expect( screen.getByRole( 'status' ) ).toHaveTextContent( PENDING );
 			expect( trigger() ).toHaveAttribute( 'aria-disabled', 'true' );
 		} );
 
-		it( 'closes an open dialog when the cart answers that the locality is gone', () => {
+		it( 'closes an open dialog when the cart answers that the locality is gone', async () => {
 			const session = fakeSession();
 
 			renderPicker();
@@ -1474,14 +1650,14 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 
 			edit( 'Краснодар' );
 			push();
-			reply( '' );
+			await reply( '' );
 
 			expect( session.destroy ).toHaveBeenCalledTimes( 1 );
 			expect( trigger() ).toHaveAttribute( 'aria-disabled', 'true' );
 			expect( screen.getByRole( 'status' ) ).toHaveTextContent( HINT );
 		} );
 
-		it( 'closes an open dialog when the cart answers with another locality', () => {
+		it( 'closes an open dialog when the cart answers with another locality', async () => {
 			const session = fakeSession();
 
 			renderPicker();
@@ -1489,12 +1665,12 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 
 			edit( 'Краснодар' );
 			push();
-			reply( 'dadata:krd' );
+			await reply( 'dadata:krd' );
 
 			expect( session.destroy ).toHaveBeenCalledTimes( 1 );
 		} );
 
-		it( 'says «updating», not «choose your locality», until the cart answers a typed city', () => {
+		it( 'says «updating», not «choose your locality», until the cart answers a typed city', async () => {
 			renderPicker();
 			edit( 'Краснодар' );
 
@@ -1504,7 +1680,7 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 
 			// Settled with no locality: now it is the shopper's move.
 			push();
-			reply( '' );
+			await reply( '' );
 
 			expect( screen.getByRole( 'status' ) ).toHaveTextContent( HINT );
 		} );

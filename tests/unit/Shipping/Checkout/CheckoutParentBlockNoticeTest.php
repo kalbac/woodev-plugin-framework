@@ -16,7 +16,7 @@ class CheckoutParentBlockNoticeTest extends TestCase {
 
 	protected function setUp(): void {
 		parent::setUp();
-		Functions\when( 'has_block' )->alias( static fn( string $block, string $content ): bool => false !== strpos( $content, '<!-- wp:' . $block ) );
+		Functions\when( 'has_block' )->alias( static fn( string $block, string $content ): bool => false !== strpos( $content, '<!-- wp:' . $block . ' ' ) );
 		Functions\when( 'has_shortcode' )->alias( static fn( string $content, string $tag ): bool => false !== strpos( $content, '[' . $tag ) );
 	}
 
@@ -52,6 +52,18 @@ class CheckoutParentBlockNoticeTest extends TestCase {
 	public function test_nested_checkout_parents_are_detected(): void {
 		$content = '<!-- wp:woocommerce/checkout --><!-- wp:woocommerce/checkout-fields-block -->' . self::PARENTS . '<!-- /wp:woocommerce/checkout-fields-block --><!-- /wp:woocommerce/checkout -->';
 		$this->assertFalse( Checkout_Parent_Block_Notice::should_warn( $content, true ) );
+	}
+
+	/**
+	 * A similarly named shipping child block is not the checkout parent block.
+	 *
+	 * @since 2.0.2
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 * @return void
+	 */
+	public function test_block_name_prefix_does_not_match_checkout_parent(): void {
+		$this->assertFalse( Checkout_Parent_Block_Notice::should_warn( '<!-- wp:woocommerce/checkout-shipping-address-block /-->', true ) );
 	}
 
 	/**
