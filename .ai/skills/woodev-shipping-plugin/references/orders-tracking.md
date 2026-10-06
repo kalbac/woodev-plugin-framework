@@ -38,7 +38,13 @@ Implement webhooks by extending `Abstract_Webhook_Handler` and providing `verify
 
 `Delivery_Sync_Status` records the last delivery refresh; it does not schedule polling. The carrier plugin owns its cron or Action Scheduler schedule. Shipment creation state (remote id/tracking) and delivery status remain separate concerns; preserve in-flight order metadata during migration. See `woodev/shipping-method/order/class-delivery-sync-status.php` and `docs-internal/specs/2026-06-25-shipping-module-decisions.md` §12 and §19.
 
-## Not available yet
+## Buyer emails and carrier documents
 
-- Framework buyer status emails are not implemented yet (#714, in progress). Do not add plugin-owned buyer status emails.
+- Buyer status emails are provided by the framework through WooCommerce → Settings → Emails. After
+  persisting a changed raw status, a carrier calls
+  `Delivery_Status_Events::notify( $order, $provider, $previous_canonical_status )`; this resolves
+  the new canonical status and fires `woodev_shipping_delivery_status_changed` once for framework
+  emails and extensions. Do not send carrier-owned buyer status emails. Carrier-specific template
+  values can be added with the `woodev_shipping_delivery_email_placeholders` filter; the base set
+  includes order number, tracking number/URL, carrier name, pickup point and delivery date.
 - Carrier documents use the shared `Order\Document_Source` seam (#1134). Register a source against the carrier's orders-provider id with `Orders_Registry::register_document_source()`, declare `supports_label_printing` on the provider, return supported types from `get_document_types()`, and implement `get_document()` as a short request that returns `Document_Result::binary()`, `url()`, `pending($retry_after)`, or `failed($reason)`. Do not block while a carrier generates a file: return `pending` and let the merchant retry. The framework owns the REST download response, filename, authorization, and download meta flag; document bytes are fetched on demand and are not persisted.
