@@ -1137,24 +1137,8 @@
 			self.openCard( group, onlyPoint.id, 'list' );
 		};
 
-		item.setAttribute( 'role', 'button' );
-		item.setAttribute( 'tabindex', '0' );
+		makeKeyboardButton( item, activate );
 		item.addEventListener( 'click', activate );
-		item.addEventListener( 'keydown', function( event ) {
-			// Only the row's own key presses: a keydown bubbling from a descendant is not ours.
-			if ( event.target !== item ) {
-				return;
-			}
-
-			if ( 'Enter' === event.key ) {
-				event.preventDefault();
-				activate();
-			} else if ( ' ' === event.key || 'Spacebar' === event.key ) {
-				// preventDefault stops the dialog's scroll container from paging down on Space.
-				event.preventDefault();
-				activate();
-			}
-		} );
 
 		if ( null !== selectedId && String( onlyPoint.id ) === selectedId ) {
 			item.classList.add( 'is-selected' );
@@ -1162,6 +1146,32 @@
 		}
 
 		return item;
+	}
+
+	/**
+	 * Gives a non-button row native-button keyboard semantics while keeping its click path shared.
+	 *
+	 * @param {HTMLElement} item
+	 * @param {Function}    activate
+	 * @returns {void}
+	 */
+	function makeKeyboardButton( item, activate ) {
+		item.setAttribute( 'role', 'button' );
+		item.setAttribute( 'tabindex', '0' );
+		item.addEventListener( 'keydown', function( event ) {
+			// Only the row's own, unmodified initial key press is an activation.
+			if ( event.target !== item || event.repeat || event.altKey || event.ctrlKey || event.metaKey
+				|| event.shiftKey
+			) {
+				return;
+			}
+
+			if ( 'Enter' === event.key || ' ' === event.key || 'Spacebar' === event.key ) {
+				// preventDefault stops Space from paging the dialog's scroll container.
+				event.preventDefault();
+				activate();
+			}
+		} );
 	}
 
 	/**
@@ -1239,6 +1249,9 @@
 		var item = document.createElement( 'div' );
 		item.className = 'woodev-pickup-search__item woodev-pickup-search__item--point';
 		item.dataset.pointId = String( point.id );
+		makeKeyboardButton( item, function() {
+			item.click();
+		} );
 
 		// ADDRESS FIRST, NAME SECOND (issue #263, operator decision 11.08.2026). The
 		// old order put the name on top and, because this row read `short_address`
@@ -1288,6 +1301,14 @@
 			// Round 2, D1e: a pick closes the results box — it must not linger over the map once
 			// the customer has already told this file which point they mean.
 			self.hideSearchResults();
+
+			// Search opens the card, so focus follows it; if no listener opened one, keep focus on
+			// the surviving search input instead of the row this method just removed.
+			if ( self._stage.classList.contains( 'is-card' ) ) {
+				focusCardEntry( self );
+			} else if ( self._searchInput ) {
+				self._searchInput.focus();
+			}
 		} );
 
 		return item;
@@ -1315,6 +1336,9 @@
 		var item = document.createElement( 'div' );
 		item.className = 'woodev-pickup-search__item woodev-pickup-search__item--address';
 		item.dataset.index = String( index );
+		makeKeyboardButton( item, function() {
+			item.click();
+		} );
 
 		var nameEl = document.createElement( 'span' );
 		nameEl.className = 'woodev-pickup-search__display-name';
@@ -1328,6 +1352,9 @@
 			// Round 2, D1e: same as a point pick, above — closes the box rather than leaving it
 			// open over the map once the customer has picked one of its suggestions.
 			self.hideSearchResults();
+			if ( self._searchInput ) {
+				self._searchInput.focus();
+			}
 		} );
 
 		return item;
@@ -3704,6 +3731,18 @@
 	}
 
 	/**
+	 * Returns focus to the persistent search input after a search-opened card closes.
+	 *
+	 * @param {Panels} self
+	 * @returns {void}
+	 */
+	function restoreSearchFocus( self ) {
+		if ( self._searchInput ) {
+			self._searchInput.focus();
+		}
+	}
+
+	/**
 	 * Sets `.woodev-pickup-stage`'s `is-open` class to exactly `open`, and emits `listToggle`
 	 * (`{ open, width }`) — but ONLY when this call actually CHANGES the visible open state (round
 	 * 2, coordinator fix — the second half of operator defect 5, plus defect 8). `listToggle` is
@@ -3936,12 +3975,14 @@
 
 		// A card opened from a LIST row (click or keyboard — one funnel): the row is covered the
 		// moment `is-card` lands, so focus moves to the card's first control and the row is
-		// remembered for `closeCard()` to return to (#1109). Any other origin (a marker, a search
-		// result) leaves focus where the customer put it — they never had it on a list row.
+		// remembered for `closeCard()` to return to (#1109). A search result uses the persistent
+		// search input as its return target because the result row is removed when picked.
 		if ( ! cardWasShown ) {
-			this._cardOpener = 'list' === origin ? { groupKey: group.key, pointId: group.points[ index ].id } : null;
+			this._cardOpener = 'list' === origin
+				? { groupKey: group.key, pointId: group.points[ index ].id }
+				: ( 'search' === origin ? { search: true } : null );
 
-			if ( 'list' === origin ) {
+			if ( 'list' === origin || 'search' === origin ) {
 				focusCardEntry( this );
 			}
 		}
@@ -3967,9 +4008,13 @@
 		this._cardFocusIntent = null; // #171 — the card is gone; nothing left to restore focus into.
 
 		// The card (and the control that was focused in it) is hidden now; hand focus back to the
-		// row that opened it so a keyboard customer resumes where they left the list (#1109).
+		// persistent search input or the current list row, never a removed search result (#1109).
 		if ( cardHadFocus ) {
-			restoreListFocus( this );
+			if ( this._cardOpener && this._cardOpener.search ) {
+				restoreSearchFocus( this );
+			} else {
+				restoreListFocus( this );
+			}
 		}
 
 		this._cardOpener = null;
