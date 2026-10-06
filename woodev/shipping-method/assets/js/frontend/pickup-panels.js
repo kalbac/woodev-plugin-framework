@@ -1110,6 +1110,9 @@
 				button.className = 'woodev-pickup-list__point'
 					+ ( null !== selectedId && String( point.id ) === selectedId ? ' is-selected' : '' );
 				button.dataset.pointId = String( point.id );
+				if ( null !== selectedId && String( point.id ) === selectedId ) {
+					button.setAttribute( 'aria-current', 'true' );
+				}
 				button.appendChild( buildSinglePointRow( point, anchor, group, self._config ) );
 				button.addEventListener( 'click', function() {
 					self.openCard( group, point.id, 'list' );
@@ -1122,12 +1125,40 @@
 
 		var onlyPoint = points[ 0 ];
 		item.appendChild( buildSinglePointRow( onlyPoint, anchor, group, self._config ) );
-		item.addEventListener( 'click', function() {
+
+		// A single-point row stays a `<div>` (the grid in `pickup.css` and the `:has()` selector
+		// that tells it from a co-located group are written against it), so it is made a button
+		// by hand: `role="button"` + `tabindex="0"` + Enter/Space below. Same pattern as the
+		// co-located group's per-point rows just above, which ARE real `<button>`s — a listbox
+		// would have contradicted them (an `option` cannot contain a button, and this list mixes
+		// both shapes plus a toggle and empty/nothing-nearby states). `openCard` is the ONE
+		// activation path: click and keyboard both call it with the same arguments.
+		var activate = function() {
 			self.openCard( group, onlyPoint.id, 'list' );
+		};
+
+		item.setAttribute( 'role', 'button' );
+		item.setAttribute( 'tabindex', '0' );
+		item.addEventListener( 'click', activate );
+		item.addEventListener( 'keydown', function( event ) {
+			// Only the row's own key presses: a keydown bubbling from a descendant is not ours.
+			if ( event.target !== item ) {
+				return;
+			}
+
+			if ( 'Enter' === event.key ) {
+				event.preventDefault();
+				activate();
+			} else if ( ' ' === event.key || 'Spacebar' === event.key ) {
+				// preventDefault stops the dialog's scroll container from paging down on Space.
+				event.preventDefault();
+				activate();
+			}
 		} );
 
 		if ( null !== selectedId && String( onlyPoint.id ) === selectedId ) {
 			item.classList.add( 'is-selected' );
+			item.setAttribute( 'aria-current', 'true' );
 		}
 
 		return item;
@@ -1927,7 +1958,7 @@
 				// excluded point or an empty card (see this function's own docblock).
 				self._activeGroup = null;
 				self._cardFocusIntent = null;
-				self._stage.classList.remove( 'is-card' );
+				setCardShown( self, false );
 
 				return;
 			}
@@ -2402,6 +2433,9 @@
 		// `buildSearchLayout()` actually builds a control (null when search is disabled), which is
 		// exactly the signal `setTypes()` uses to decide where the filter attaches.
 		this._controlsEl = null;
+		// #1109 — the list row that opened the card (`{ groupKey, pointId }`), so closing the card can
+		// hand focus back to it. Null whenever the card was opened any other way.
+		this._cardOpener = null;
 		this._filterWrapEl = null;
 		this._filterToggleEl = null;
 		this._filterMenuEl = null;
@@ -3574,6 +3608,102 @@
 	};
 
 	/**
+	 * Shows or hides the card over the list: flips the stage's `is-card` class AND marks the list
+	 * `inert` for exactly as long as the card covers it (#1109). The card sits ABOVE the list at a
+	 * higher `z-index` rather than replacing it, so without `inert` every row stays a tab stop
+	 * behind the card: a keyboard customer tabs through invisible rows (and Space on one re-opens
+	 * the card on a different point) before reaching the card's own controls. `inert` also takes
+	 * the covered rows out of the accessibility tree and out of pointer hit-testing, which is what
+	 * the card already does visually. ONE place owns the class, so no route that dismisses the card
+	 * (`closeCard()`, `openList()`, a sidebar collapse, a filter that empties the group) can leave
+	 * the list stuck inert or the card shown over a live list.
+	 *
+	 * @param {Panels}  self
+	 * @param {boolean} shown
+	 * @returns {void}
+	 */
+	function setCardShown( self, shown ) {
+		self._stage.classList.toggle( 'is-card', shown );
+
+		if ( shown ) {
+			self._listEl.setAttribute( 'inert', '' );
+		} else {
+			self._listEl.removeAttribute( 'inert' );
+		}
+	}
+
+	/**
+	 * Whether keyboard focus is inside the card, or nowhere (`document.body`) — the two states a
+	 * just-dismissed card leaves behind it. Focus on anything else (the map toggle, a control
+	 * outside the sidebar) is the customer's own choice and is never stolen.
+	 *
+	 * @param {Panels} self
+	 * @returns {boolean}
+	 */
+	function cardHoldsFocus( self ) {
+		var active = document.activeElement;
+
+		return !! self._cardEl && ( null === active || document.body === active || self._cardEl.contains( active ) );
+	}
+
+	/**
+	 * Moves focus to the card's first control — the close button, or «← К списку» in manager
+	 * mode. The same convention the modal shell uses on open (`woodev-modal.js` focuses its own
+	 * close button), and the card's first tab stop, so a Tab from here walks the card in reading
+	 * order. Without it the focus stays on the row, which the card now covers (#1109).
+	 *
+	 * @param {Panels} self
+	 * @returns {void}
+	 */
+	function focusCardEntry( self ) {
+		var entry = self._cardEl.querySelector( '.woodev-pickup-card__back, .woodev-pickup-card__close' );
+
+		if ( entry ) {
+			entry.focus();
+		}
+	}
+
+	/**
+	 * Returns focus to the list row that opened the card, looked up fresh in the CURRENT list
+	 * body — the list is rebuilt on every selection change, so a node reference taken at open
+	 * time would be detached by now. A co-located group's opener is its per-point button, a
+	 * single-point group's is the row itself. A row that no longer exists (filtered out meanwhile)
+	 * leaves focus alone.
+	 *
+	 * @param {Panels} self
+	 * @returns {void}
+	 */
+	function restoreListFocus( self ) {
+		var opener = self._cardOpener;
+
+		if ( ! opener || ! self._listBodyEl ) {
+			return;
+		}
+
+		var items = self._listBodyEl.getElementsByClassName( 'woodev-pickup-list__item' );
+
+		for ( var i = 0; i < items.length; i++ ) {
+			if ( items[ i ].dataset.groupKey !== String( opener.groupKey ) ) {
+				continue;
+			}
+
+			var points = items[ i ].getElementsByClassName( 'woodev-pickup-list__point' );
+			var target = items[ i ];
+
+			for ( var j = 0; j < points.length; j++ ) {
+				if ( points[ j ].dataset.pointId === String( opener.pointId ) ) {
+					target = points[ j ];
+					break;
+				}
+			}
+
+			target.focus();
+
+			return;
+		}
+	}
+
+	/**
 	 * Sets `.woodev-pickup-stage`'s `is-open` class to exactly `open`, and emits `listToggle`
 	 * (`{ open, width }`) — but ONLY when this call actually CHANGES the visible open state (round
 	 * 2, coordinator fix — the second half of operator defect 5, plus defect 8). `listToggle` is
@@ -3674,7 +3804,7 @@
 		var nextOpen = ! wasOpen;
 
 		if ( ! nextOpen ) {
-			this._stage.classList.remove( 'is-card' );
+			setCardShown( this, false );
 		}
 
 		setStageOpen( this, nextOpen );
@@ -3720,7 +3850,7 @@
 	 * @returns {void}
 	 */
 	Panels.prototype.openList = function() {
-		this._stage.classList.remove( 'is-card' );
+		setCardShown( this, false );
 		this._activeGroup = null;
 		this._cardFocusIntent = null; // #171 — the card is gone; nothing left to restore focus into.
 
@@ -3781,7 +3911,13 @@
 		// own "ORDERING IS LOAD-BEARING" docblock note above. Do not move this below the
 		// `cardOpened` emit.
 		setStageOpen( this, true );
-		this._stage.classList.add( 'is-card' );
+
+		// Focus and the return-to row are decided on the list → card TRANSITION only: a redraw of a
+		// card that is already showing (a re-open of the same point, a tab switch route) must not
+		// yank focus out of whatever the customer is on inside it (#171).
+		var cardWasShown = this._stage.classList.contains( 'is-card' );
+
+		setCardShown( this, true );
 
 		// EVERY route to a card passes through here — a marker click, a sidebar row, a search
 		// result, "show the nearest" — so this is the one place a listener can learn that a point
@@ -3797,6 +3933,18 @@
 		this._emit( 'cardOpened', { group: group, pointId: group.points[ index ].id, origin: origin } );
 
 		renderCard( this );
+
+		// A card opened from a LIST row (click or keyboard — one funnel): the row is covered the
+		// moment `is-card` lands, so focus moves to the card's first control and the row is
+		// remembered for `closeCard()` to return to (#1109). Any other origin (a marker, a search
+		// result) leaves focus where the customer put it — they never had it on a list row.
+		if ( ! cardWasShown ) {
+			this._cardOpener = 'list' === origin ? { groupKey: group.key, pointId: group.points[ index ].id } : null;
+
+			if ( 'list' === origin ) {
+				focusCardEntry( this );
+			}
+		}
 	};
 
 	/**
@@ -3811,9 +3959,20 @@
 	 */
 	Panels.prototype.closeCard = function() {
 		hideHoursTip();
-		this._stage.classList.remove( 'is-card' );
+
+		var cardHadFocus = cardHoldsFocus( this );
+
+		setCardShown( this, false );
 		this._activeGroup = null;
 		this._cardFocusIntent = null; // #171 — the card is gone; nothing left to restore focus into.
+
+		// The card (and the control that was focused in it) is hidden now; hand focus back to the
+		// row that opened it so a keyboard customer resumes where they left the list (#1109).
+		if ( cardHadFocus ) {
+			restoreListFocus( this );
+		}
+
+		this._cardOpener = null;
 	};
 
 	/**
