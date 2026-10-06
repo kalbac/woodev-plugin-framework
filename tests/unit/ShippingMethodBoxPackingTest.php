@@ -231,6 +231,15 @@ namespace Woodev\Tests\Unit {
 			);
 		}
 
+		public function test_get_packing_algorithm_accepts_the_store_boxes_algorithm(): void {
+			$method = $this->make_method( [ 'packing_algorithm' => \Woodev_Packer_Dispatcher::ALGORITHM_BOXES ] );
+
+			$this->assertSame(
+				\Woodev_Packer_Dispatcher::ALGORITHM_BOXES,
+				$this->invoke( $method, 'get_packing_algorithm' )
+			);
+		}
+
 		public function test_get_packing_algorithm_falls_back_to_virtual_for_unknown_value(): void {
 			$method = $this->make_method( [ 'packing_algorithm' => 'nonexistent_algo_xyz' ] );
 

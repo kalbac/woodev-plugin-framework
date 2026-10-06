@@ -303,6 +303,8 @@ namespace Woodev\Tests\Unit\Shipping {
 			);
 			Functions\when( 'get_woocommerce_currency' )->alias( fn() => $this->currency );
 			Functions\when( 'wp_json_encode' )->alias( 'json_encode' );
+			// the store's boxes (#1138) strip tags from a box's name
+			Functions\when( 'wp_strip_all_tags' )->alias( 'strip_tags' );
 			Functions\when( 'is_admin' )->justReturn( false );
 			Functions\when( 'get_option' )->alias( fn( $name, $default = false ) => $this->options[ $name ] ?? $default );
 			Functions\when( 'wp_unslash' )->returnArg( 1 );
@@ -863,6 +865,32 @@ namespace Woodev\Tests\Unit\Shipping {
 
 			$method->option_values['packing_algorithm'] = \Woodev_Packer_Dispatcher::ALGORITHM_SEPARATELY;
 			$this->assertNotSame( $packing, $this->key( $method, $this->package() ), 'algorithm read through get_option()' );
+		}
+
+		/**
+		 * #1138: the store's boxes are what the `boxes` algorithm packs into — editing the list is a new quote,
+		 * but only for a method that packs into it: the other algorithms ignore the list.
+		 *
+		 * @return void
+		 */
+		public function test_the_store_boxes_are_part_of_the_key_only_for_the_boxes_algorithm(): void {
+			$method             = $this->method();
+			$method->supports[] = Shipping_Method::FEATURE_BOX_PACKING;
+
+			$method->option_values['packing_algorithm'] = \Woodev_Packer_Dispatcher::ALGORITHM_BOXES;
+			$this->options['woodev_boxes_boxes']         = 'Small; 20; 15; 10';
+			\Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab::reset_for_tests();
+			$one_box = $this->key( $method, $this->package() );
+
+			$this->options['woodev_boxes_boxes'] = "Small; 20; 15; 10\nBig; 40; 30; 20";
+			\Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab::reset_for_tests();
+			$this->assertNotSame( $one_box, $this->key( $method, $this->package() ), 'a box added to the list' );
+
+			$method->option_values['packing_algorithm'] = \Woodev_Packer_Dispatcher::ALGORITHM_SEPARATELY;
+			$separately                                 = $this->key( $method, $this->package() );
+			$this->options['woodev_boxes_boxes']         = 'Other; 5; 5; 5';
+			\Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab::reset_for_tests();
+			$this->assertSame( $separately, $this->key( $method, $this->package() ), 'the list is not read by another algorithm' );
 		}
 
 		/** @return void */

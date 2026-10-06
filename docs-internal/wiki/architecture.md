@@ -210,6 +210,14 @@ Self-contained shipping box-packing algorithm. Implement `Woodev_Packer_Item_Int
 `Woodev_Packer_Box_Interface`; use a `Woodev_Abstract_Packer` subclass (`Woodev_Packer_Single_Box`,
 `Woodev_Packer_Separately`, `Woodev_Packer_Virtual_Box`).
 
+`Woodev_Packer_Dispatcher::pack()` routes four algorithms — `virtual`, `separately`, `single` and `boxes`
+(`Woodev_Packer_Boxes`, #1138). `boxes` packs into the **store's list of boxes** («Доставка» → «Коробки»,
+`Boxes_Settings`, option `woodev_boxes_boxes`, in store units); `Woodev_WC_Packer_Dispatcher::pack()` reads
+that list when none is passed. A unit that fits no box is never dropped — it becomes a parcel of its own,
+as under `separately`. Every `Woodev_Packer_Package_Result` reports which input items it holds
+(`get_items()`: cart-item key / order-item id, product id, quantity) and the box it is (`get_box_id()`), for every
+algorithm, so a carrier's multi-parcel export can name the lines of each parcel.
+
 ## Utilities (`woodev/utilities/`)
 
 - `Woodev_Async_Request` — WP async (non-blocking) HTTP requests
