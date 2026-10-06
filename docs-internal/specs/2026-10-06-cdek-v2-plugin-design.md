@@ -213,6 +213,15 @@ Auth/test: inspect includes/class-wc-edostavka-auth-api.php and token cache befo
 4. **Carrier documents** (waybill/barcode) are framework work (#1134), blocking stage 2 only.
 5. Settled earlier and not re-asked: old non-empty default dimensions migrate in the plugin lifecycle (s148).
 
+6. **Developer key (06.10.2026):** order creation (stage 2) sends `developer_key` = constant
+   `WC_CDEK_SHIPPING_DEVELOPER_KEY` defined in the main plugin file (the developer's partner key).
+7. **The old 2.2.5.5 code is not a source of truth** for the CDEK API — it is outdated; the current CDEK docs
+   and live measurements (`docs/cdek-api/contract.md` in the plugin repo) are.
+8. **KLADR is obsolete** — no request or mapping relies on it, in CDEK or DaData; FIAS only.
+9. **City code: the carrier's own ids first.** CDEK's location API is the primary source; DaData's
+   `findById/delivery` (#1136) is a fallback only — RU only, scraped from carriers, possibly stale; any id from it
+   is verified against CDEK.
+
 ## Related
 
 - [Shipping module decisions](2026-06-25-shipping-module-decisions.md) — locked module boundaries for location, checkout, shipment and email.
