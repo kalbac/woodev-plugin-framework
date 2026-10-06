@@ -5092,32 +5092,12 @@ msgstr ""
 msgid "Письмо покупателю после передачи отправления перевозчику."
 msgstr ""
 
-#: shipping-method/email/class-delivery-status-emails.php:53
-msgid "Заказ {order_number} передан в доставку"
-msgstr ""
-
-#: shipping-method/email/class-delivery-status-emails.php:53
-msgid "Заказ передан в доставку"
-msgstr ""
-
-#: shipping-method/email/class-delivery-status-emails.php:53
-msgid "Отправление передано перевозчику. Номер для отслеживания: {tracking_number}. {tracking_url}"
-msgstr ""
-
 #: shipping-method/email/class-delivery-status-emails.php:54
 msgid "Заказ ждёт в пункте выдачи"
 msgstr ""
 
 #: shipping-method/email/class-delivery-status-emails.php:54
 msgid "Письмо покупателю, когда отправление поступило в пункт выдачи."
-msgstr ""
-
-#: shipping-method/email/class-delivery-status-emails.php:54
-msgid "Заказ {order_number} ждёт в пункте выдачи"
-msgstr ""
-
-#: shipping-method/email/class-delivery-status-emails.php:54
-msgid "Заберите заказ {order_number} в пункте выдачи: {pickup_point}."
 msgstr ""
 
 #: shipping-method/email/class-delivery-status-emails.php:55
@@ -5130,18 +5110,6 @@ msgstr ""
 msgid "Письмо покупателю после доставки заказа."
 msgstr ""
 
-#: shipping-method/email/class-delivery-status-emails.php:55
-msgid "Заказ {order_number} доставлен"
-msgstr ""
-
-#: shipping-method/email/class-delivery-status-emails.php:55
-msgid "Заказ доставлен"
-msgstr ""
-
-#: shipping-method/email/class-delivery-status-emails.php:55
-msgid "Заказ {order_number} доставлен."
-msgstr ""
-
 #: shipping-method/email/class-delivery-status-emails.php:56
 msgid "Возврат / не доставлено"
 msgstr ""
@@ -5150,14 +5118,58 @@ msgstr ""
 msgid "Письмо покупателю при возврате или неудачной доставке."
 msgstr ""
 
-#: shipping-method/email/class-delivery-status-emails.php:56
-msgid "Проблема с доставкой заказа {order_number}"
+#: shipping-method/email/class-delivery-status-emails.php
+msgid "Order {order_number} has been handed over for delivery"
 msgstr ""
 
-#: shipping-method/email/class-delivery-status-emails.php:56
-msgid "Проблема с доставкой"
+#: shipping-method/email/class-delivery-status-emails.php
+msgid "Your order has been handed over for delivery"
 msgstr ""
 
-#: shipping-method/email/class-delivery-status-emails.php:56
-msgid "Не удалось доставить заказ {order_number}. Свяжитесь с магазином для уточнения деталей."
+#: shipping-method/email/class-delivery-status-emails.php
+msgid ""
+"Your shipment has been handed over to the carrier. Tracking number: "
+"{tracking_number}. {tracking_url}"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php
+msgid "Order {order_number} is waiting at the pickup point"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php
+msgid "Your order is waiting at the pickup point"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php
+msgid "Pick up order {order_number} at the pickup point: {pickup_point}."
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php
+msgid "Order {order_number} has been delivered"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php
+msgid "Your order has been delivered"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php
+msgid "Order {order_number} has been delivered."
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php
+msgid "There is a problem with the delivery of order {order_number}"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php
+msgid "There is a problem with your delivery"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php
+msgid ""
+"We could not deliver order {order_number}. Please contact the store "
+"for details."
+msgstr ""
+
+#: assets/src/shipping-orders-page/app.tsx
+msgid "Документ ещё готовится. Повторите попытку примерно через %d с."
 msgstr ""

@@ -230,6 +230,59 @@ if ( 'integration' === $test_suite ) {
 		}
 	}
 
+	// Minimal WP_REST_Response stand-in. The public `data` / `status` properties are what the older shipping
+	// tests read; the methods (`get_data()`, `get_status()`, `header()`, `get_headers()`) are what the document
+	// download controller (#1134) uses. Guarded so a real class — or a sibling test's narrower stub that was
+	// declared first in a single-file run — never fights this one.
+	if ( ! class_exists( 'WP_REST_Response', false ) ) {
+		class WP_REST_Response {
+
+			/** @var mixed */
+			public $data;
+
+			/** @var int */
+			public $status;
+
+			/** @var array<string, string> */
+			public $headers = [];
+
+			/**
+			 * @param mixed                 $data    response body.
+			 * @param int                   $status  HTTP status code.
+			 * @param array<string, string> $headers response headers.
+			 */
+			public function __construct( $data = null, int $status = 200, array $headers = [] ) {
+				$this->data    = $data;
+				$this->status  = $status;
+				$this->headers = $headers;
+			}
+
+			/** @return mixed */
+			public function get_data() {
+				return $this->data;
+			}
+
+			/** @return int */
+			public function get_status() {
+				return $this->status;
+			}
+
+			/**
+			 * @param string $key   header name.
+			 * @param string $value header value.
+			 * @return void
+			 */
+			public function header( $key, $value ) {
+				$this->headers[ $key ] = $value;
+			}
+
+			/** @return array<string, string> */
+			public function get_headers() {
+				return $this->headers;
+			}
+		}
+	}
+
 	bootstrap_unit_tests();
 }
 

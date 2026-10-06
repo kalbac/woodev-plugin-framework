@@ -35,6 +35,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 		private ?Orders_Provider $provider = null;
 		/** @var string Current canonical status. */
 		private string $current_status = '';
+		/** @var array<string,string> WooCommerce's own placeholders ({site_title}, …), kept beside ours. */
+		private array $base_placeholders = [];
 
 		/**
 		 * Constructor.
@@ -63,6 +65,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 			$this->template_plain   = 'emails/plain/shipment-status.php';
 			$this->template_base    = dirname( __DIR__ ) . '/templates/';
 			parent::__construct();
+			$this->base_placeholders = is_array( $this->placeholders ) ? $this->placeholders : [];
 		}
 
 		/**
@@ -119,7 +122,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 		 * @return void
 		 */
 		public function maybe_trigger( \WC_Order $order, ?string $previous, string $current, Orders_Provider $provider ): void {
-			if ( ! in_array( $current, $this->statuses, true ) || $current === $previous || 'yes' !== $this->is_enabled() ) {
+			if ( ! in_array( $current, $this->statuses, true ) || $current === $previous || ! $this->is_enabled() ) {
 				return;
 			}
 			$this->provider       = $provider;
@@ -128,7 +131,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 		}
 
 		/**
-		 * Sends the email once per order and triggering status.
+		 * Sends the email once per order (one flag per email, whichever of its statuses came first).
 		 *
 		 * @since 2.0.2
 		 * @param int            $order_id Order id.
@@ -140,8 +143,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 			if ( ! $order instanceof \WC_Order || '' === $order->get_billing_email() || ! in_array( $this->current_status, $this->statuses, true ) ) {
 				return;
 			}
-			$flag = '_woodev_delivery_email_' . sanitize_key( $this->id . '_' . $this->current_status );
-			if ( 'yes' === (string) \Woodev_Order_Compatibility::get_order_meta( $order, $flag ) ) {
+			// One flag per EMAIL, not per status: «Передан в доставку» answers both `created` and `in_transit`,
+			// and a shipment that passes through both must not send it twice.
+			$flag = '_woodev_delivery_email_' . sanitize_key( $this->id );
+			if ( '' !== (string) \Woodev_Order_Compatibility::get_order_meta( $order, $flag ) ) {
 				return;
 			}
 			$this->object = $order;
@@ -150,9 +155,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 				return;
 			}
 			$this->placeholders = $this->get_placeholders( $order, $this->provider );
-			// Claim this order/status before the side effect so a re-delivered webhook cannot
+			// Claim this order/email before the side effect so a re-delivered webhook cannot
 			// pass the deduplication check while this send is in progress.
-			\Woodev_Order_Compatibility::update_order_meta( $order, $flag, 'yes' );
+			// The value names the status that sent it, for diagnostics; any non-empty value means "sent".
+			\Woodev_Order_Compatibility::update_order_meta( $order, $flag, $this->current_status );
 			$this->send( $this->get_recipient(), $this->get_subject(), $this->get_content(), $this->get_headers(), $this->get_attachments() );
 		}
 
@@ -195,7 +201,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 			 * @param Orders_Provider|null $provider     Carrier descriptor.
 			 */
 			$filtered = apply_filters( 'woodev_shipping_delivery_email_placeholders', $placeholders, $order, $provider );
-			return is_array( $filtered ) ? $filtered : $placeholders;
+			return array_merge( $this->base_placeholders, is_array( $filtered ) ? $filtered : $placeholders );
+		}
+
+		/**
+		 * Formats the body for the HTML email: placeholder values are escaped, and a tracking link becomes a link.
+		 *
+		 * Values come from carrier data and order meta; an HTML-looking value must not become markup.
+		 *
+		 * @param string $text Body with placeholders.
+		 * @return string
+		 */
+		private function format_html( string $text ): string {
+			$values = [];
+			foreach ( $this->placeholders as $key => $value ) {
+				$value        = (string) $value;
+				$values[ $key ] = '{tracking_url}' === $key && '' !== $value && '' !== esc_url( $value )
+					? '<a href="' . esc_url( $value ) . '">' . esc_html( $value ) . '</a>'
+					: esc_html( $value );
+			}
+
+			return strtr( $text, $values );
 		}
 
 		/** @return string */
@@ -216,7 +242,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 					'email' => $this,
 					'order' => $this->object,
 					'heading' => $this->get_heading(),
-					'body' => $this->format_string( $this->get_option( 'body', $this->default_body ) ),
+					'body' => $this->format_html( (string) $this->get_option( 'body', $this->default_body ) ),
 				],
 				'',
 				$this->template_base

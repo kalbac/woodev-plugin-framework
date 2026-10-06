@@ -55,7 +55,7 @@ import {
 	fetchOrderPreview,
 	fetchOrders,
 	fetchSyncStatus,
-	documentDownloadUrl,
+	fetchOrderDocument,
 	getProviders,
 	getReachableDeliveryStatuses,
 	performBulkOrderAction,
@@ -1485,7 +1485,7 @@ export default function OrdersPage() {
 	 * dismissible: it reports a single past event, not a condition the table is still in,
 	 * so there is nothing wrong with the merchant clearing it themselves.
 	 */
-	const [ actionNotice, setActionNotice ] = useState<{ status: 'success' | 'error'; text: string } | null>(
+	const [ actionNotice, setActionNotice ] = useState<{ status: 'success' | 'error' | 'info'; text: string } | null>(
 		null
 	);
 	/**
@@ -1792,10 +1792,66 @@ export default function OrdersPage() {
 	 * detailed re-fetch of its own, so closing is what keeps it from showing a now-stale
 	 * preview after the underlying order changed.
 	 */
+	/**
+	 * #1134 — fetches one carrier document and shows the outcome in the page, never as raw JSON in a new tab:
+	 * a PDF is saved, a carrier link opens, «ещё готовится» is a notice telling the merchant when to retry,
+	 * and a failure shows the server's own Russian sentence. The row is busy meanwhile, like any other action.
+	 */
+	const downloadDocument = ( row: ActionableOrder, type: 'waybill' | 'barcode' ) => {
+		setActionRowStates( ( current ) => ( {
+			...current,
+			[ row.id ]: { pendingAction: type, confirmingAction: null },
+		} ) );
+
+		fetchOrderDocument( row.id, type )
+			.then( ( doc ) => {
+				if ( 'pending' === doc.kind ) {
+					const text = sprintf(
+						/* translators: %d: seconds until the carrier document is likely ready. */
+						__( 'Документ ещё готовится. Повторите попытку примерно через %d с.', 'woodev-plugin-framework' ),
+						doc.retryAfter
+					);
+
+					setActionNotice( { status: 'info', text } );
+					dispatch( noticesStore ).createInfoNotice( text, { type: 'snackbar' } );
+					return;
+				}
+
+				if ( 'link' === doc.kind ) {
+					window.open( doc.url, '_blank', 'noopener' );
+					return;
+				}
+
+				const objectUrl = window.URL.createObjectURL( doc.blob );
+				const anchor = document.createElement( 'a' );
+
+				anchor.href = objectUrl;
+				anchor.download = doc.filename;
+				document.body.appendChild( anchor );
+				anchor.click();
+				document.body.removeChild( anchor );
+				window.URL.revokeObjectURL( objectUrl );
+			} )
+			.catch( ( err: { message?: string } ) => {
+				const text =
+					( err && err.message ) ||
+					__( 'Не удалось получить документ у перевозчика.', 'woodev-plugin-framework' );
+
+				setActionNotice( { status: 'error', text } );
+				dispatch( noticesStore ).createErrorNotice( text, { type: 'snackbar' } );
+			} )
+			.finally( () => {
+				setActionRowStates( ( current ) => {
+					const next = { ...current };
+					delete next[ row.id ];
+					return next;
+				} );
+			} );
+	};
+
 	const performAction = ( row: ActionableOrder, action: OrderRowAction ) => {
 		if ( 'waybill' === action.action || 'barcode' === action.action ) {
-			const type = action.action;
-			window.open( documentDownloadUrl( row.id, type ), '_blank', 'noopener' );
+			downloadDocument( row, action.action );
 			return;
 		}
 

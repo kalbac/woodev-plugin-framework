@@ -259,7 +259,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		public function for_row( \WC_Order $order, ?Orders_Provider $provider ): array {
 			$lock_owner = self::edit_lock_owner( $order );
 			$actions    = $this->carrier_actions( $order, $provider );
-			$actions    = array_merge( $actions, $this->document_actions( $order, $provider ) );
 
 			if ( null !== $lock_owner ) {
 				// #1000: greyed out, not removed — the manager sees what the row would offer and why
@@ -268,6 +267,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 					$actions[ $index ] = self::lock_action( $carrier_action, $lock_owner );
 				}
 			}
+
+			// Document downloads only READ from the carrier, so another manager's edit lock does not grey them out.
+			$actions = array_merge( $actions, $this->document_actions( $order, $provider ) );
 
 			if ( ! self::is_editable( $order, $provider ) ) {
 				return $actions;
@@ -293,7 +295,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		}
 
 		/**
-		 * Document downloads are client navigation actions, offered only on rows.
+		 * Document downloads are client-side actions, offered only on rows, for an order that has a carrier order
+		 * ({@see self::is_exported()} — the same precondition the download route enforces).
 		 *
 		 * @since 2.0.2
 		 * @param \WC_Order            $order order.

@@ -20,6 +20,7 @@ import '@testing-library/jest-dom';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import App from '../../src/shipping-orders-page/app';
 import {
+	fetchOrderDocument,
 	fetchOrderPreview,
 	fetchOrders,
 	fetchSyncStatus,
@@ -36,6 +37,9 @@ jest.mock( '../../src/shipping-orders-page/rest', () => ( {
 	// (§2 of the brief): resolve with `{ row, message }`, reject with an object
 	// carrying `message`, exactly as `apiFetch` itself resolves/rejects.
 	performOrderAction: jest.fn(),
+	// #1134 — one carrier document. Resolves with `{ kind: 'file' | 'link' | 'pending', … }`, rejects with an
+	// object carrying the server's `message`, exactly as the real `fetchOrderDocument` does.
+	fetchOrderDocument: jest.fn(),
 	// #874 — the bulk REST call. Encodes the brief's §3 contract: resolve with a
 	// `BulkActionResult` (requested/eligible/skipped/succeeded/failed/rows/messages),
 	// HTTP 200 even on a partial failure — a rejection here means the wire call itself
@@ -2527,6 +2531,117 @@ describe( 'the «Действие» column (#824)', () => {
  * for `style.scss`'s `:has()` rule to reach the ancestor `<tr>` — never how it looks. The
  * coordinator verifies the visual on the rig.
  */
+describe( 'the «Накладная» / «Штрихкод» document actions (#1134)', () => {
+	/** A row of an exported order offering both document actions. */
+	function documentRow() {
+		return makeRow( {
+			actions: [
+				{ action: 'waybill', label: 'Накладная', title: 'Скачать документ перевозчика', destructive: false },
+				{ action: 'barcode', label: 'Штрихкод', title: 'Скачать документ перевозчика', destructive: false },
+			],
+		} );
+	}
+
+	let clickSpy;
+
+	beforeEach( () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( resultOf( [ documentRow() ] ) );
+		fetchOrderDocument.mockReset();
+		performOrderAction.mockReset();
+		window.URL.createObjectURL = jest.fn( () => 'blob:pdf' );
+		window.URL.revokeObjectURL = jest.fn();
+		clickSpy = jest.spyOn( HTMLAnchorElement.prototype, 'click' ).mockImplementation( () => {} );
+		jest.spyOn( window, 'open' ).mockImplementation( () => null );
+	} );
+
+	afterEach( () => {
+		jest.restoreAllMocks();
+	} );
+
+	test( 'a PDF is saved through a download anchor, with the server\'s filename — no new tab, no action route', async () => {
+		const blob = new Blob( [ '%PDF-' ] );
+
+		fetchOrderDocument.mockResolvedValue( { kind: 'file', blob, filename: 'order-42-waybill.pdf' } );
+
+		render( <App /> );
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Накладная' } ) );
+
+		await waitFor( () => expect( clickSpy ).toHaveBeenCalledTimes( 1 ) );
+		expect( fetchOrderDocument ).toHaveBeenCalledWith( 42, 'waybill' );
+		expect( window.URL.createObjectURL ).toHaveBeenCalledWith( blob );
+		expect( window.URL.revokeObjectURL ).toHaveBeenCalledWith( 'blob:pdf' );
+		expect( window.open ).not.toHaveBeenCalled();
+		expect( performOrderAction ).not.toHaveBeenCalled();
+	} );
+
+	test( 'a carrier link opens in a new tab with noopener', async () => {
+		fetchOrderDocument.mockResolvedValue( { kind: 'link', url: 'https://carrier.test/x.pdf' } );
+
+		render( <App /> );
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Штрихкод' } ) );
+
+		await waitFor( () => expect( window.open ).toHaveBeenCalledWith( 'https://carrier.test/x.pdf', '_blank', 'noopener' ) );
+		expect( fetchOrderDocument ).toHaveBeenCalledWith( 42, 'barcode' );
+		expect( clickSpy ).not.toHaveBeenCalled();
+	} );
+
+	test( '«ещё готовится» is a human Russian notice with the retry delay, not raw JSON in a new tab', async () => {
+		fetchOrderDocument.mockResolvedValue( { kind: 'pending', message: 'Документ ещё готовится. Повторите запрос позже.', retryAfter: 7 } );
+
+		render( <App /> );
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Накладная' } ) );
+
+		await waitFor( () =>
+			expect(
+				screen.getAllByText( 'Документ ещё готовится. Повторите попытку примерно через 7 с.' ).length
+			).toBeGreaterThan( 0 )
+		);
+		expect( window.open ).not.toHaveBeenCalled();
+		expect( clickSpy ).not.toHaveBeenCalled();
+	} );
+
+	test( 'a failure shows the server\'s Russian sentence, and a bare rejection a generic one', async () => {
+		fetchOrderDocument.mockRejectedValueOnce( { message: 'Документ недоступен.' } );
+
+		render( <App /> );
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Накладная' } ) );
+
+		await waitFor( () => expect( screen.getAllByText( 'Документ недоступен.' ).length ).toBeGreaterThan( 0 ) );
+
+		fetchOrderDocument.mockRejectedValueOnce( {} );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Штрихкод' } ) );
+
+		await waitFor( () =>
+			expect( screen.getAllByText( 'Не удалось получить документ у перевозчика.' ).length ).toBeGreaterThan( 0 )
+		);
+		expect( window.open ).not.toHaveBeenCalled();
+	} );
+
+	test( 'the row is busy while the document is being fetched, and free again afterwards', async () => {
+		let resolveDocument;
+
+		fetchOrderDocument.mockReturnValue(
+			new Promise( ( resolve ) => {
+				resolveDocument = resolve;
+			} )
+		);
+
+		render( <App /> );
+
+		const button = await screen.findByRole( 'button', { name: 'Накладная' } );
+
+		fireEvent.click( button );
+		await waitFor( () => expect( button ).toBeDisabled() );
+
+		await act( async () => {
+			resolveDocument( { kind: 'pending', message: '', retryAfter: 5 } );
+		} );
+
+		await waitFor( () => expect( button ).not.toBeDisabled() );
+	} );
+} );
+
 describe( 'the busy row (#873)', () => {
 	function busyRow( overrides = {} ) {
 		return makeRow( {

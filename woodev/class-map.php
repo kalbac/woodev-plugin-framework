@@ -111,6 +111,7 @@ return [
 	'Woodev\\Framework\\Shipping\\Order\\Carrier_Order_Lines' => 'woodev/shipping-method/order/class-carrier-order-lines.php',
 	'Woodev\\Framework\\Shipping\\Order\\Delivery_Status' => 'woodev/shipping-method/order/class-delivery-status.php',
 	'Woodev\\Framework\\Shipping\\Order\\Delivery_Status_Events' => 'woodev/shipping-method/order/class-delivery-status-events.php',
+	'Woodev\\Framework\\Shipping\\Order\\Delivery_Status_Watcher' => 'woodev/shipping-method/order/class-delivery-status-watcher.php',
 	'Woodev\\Framework\\Shipping\\Order\\Delivery_Sync_Status' => 'woodev/shipping-method/order/class-delivery-sync-status.php',
 	'Woodev\\Framework\\Shipping\\Order\\Document_Result' => 'woodev/shipping-method/order/class-document-result.php',
 	'Woodev\\Framework\\Shipping\\Order\\Document_Source' => 'woodev/shipping-method/order/interface-document-source.php',

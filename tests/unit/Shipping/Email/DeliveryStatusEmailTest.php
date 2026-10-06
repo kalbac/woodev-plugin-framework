@@ -34,12 +34,15 @@ namespace {
 
 			public function __construct() {
 				$this->init_form_fields();
-				$this->enabled = $this->form_fields['enabled']['default'];
+				$this->enabled      = $this->form_fields['enabled']['default'];
+				// What WC_Email's own constructor merges in, and what a status email must not wipe.
+				$this->placeholders = [ '{site_title}' => 'Мой магазин' ];
 			}
 
 			public function init_form_fields() {}
 			public function get_option( string $key, $default = '' ) { return $this->form_fields[ $key ]['default'] ?? $default; }
-			public function is_enabled(): string { return $this->enabled; }
+			/** Like WooCommerce (class-wc-email.php): a BOOLEAN, `'yes' === $this->enabled`. A stub that answered 'yes'/'no' hid the bug of comparing it with 'yes'. */
+			public function is_enabled() { return 'yes' === $this->enabled; }
 			public function is_valid(): bool { return true; }
 			public function get_recipient(): string { return $this->recipient; }
 			public function get_subject(): string { return $this->format_string( $this->get_option( 'subject', $this->get_default_subject() ) ); }
@@ -100,7 +103,7 @@ final class DeliveryStatusEmailTest extends TestCase {
 
 		$this->assertCount( 1, \WC_Email::$sent );
 		$this->assertSame( 'Заказ 123: TRK 42', \WC_Email::$sent[0][1] );
-		$this->assertSame( 'yes', $this->meta['_woodev_delivery_email_customer_shipment_created_created'] );
+		$this->assertSame( Delivery_Status::CREATED, $this->meta['_woodev_delivery_email_customer_shipment_created'], 'one flag per email; the value names the status that sent it' );
 	}
 
 	public function test_missing_values_become_blank_and_no_buyer_email_sends_nothing(): void {
@@ -115,7 +118,7 @@ final class DeliveryStatusEmailTest extends TestCase {
 
 	public function test_exception_email_is_disabled_by_default(): void {
 		$email = $this->email( [ Delivery_Status::RETURNED, Delivery_Status::FAILED ], false, 'Issue' );
-		$this->assertSame( 'no', $email->is_enabled() );
+		$this->assertFalse( $email->is_enabled() );
 		$email->maybe_trigger( $this->order( 'buyer@example.test' ), null, Delivery_Status::FAILED, Orders_Provider::create( 'test', 'Carrier', '_marker', [ 'test_shipping' ] ) );
 		$this->assertCount( 0, \WC_Email::$sent );
 	}
@@ -128,7 +131,7 @@ final class DeliveryStatusEmailTest extends TestCase {
 		$email->maybe_trigger( $order, null, Delivery_Status::CREATED, $provider );
 		$email->maybe_trigger( $order, null, Delivery_Status::CREATED, $provider );
 		$this->assertCount( 1, \WC_Email::$sent );
-		$this->assertSame( 'yes', $this->meta['_woodev_delivery_email_customer_shipment_created_created'] );
+		$this->assertSame( Delivery_Status::CREATED, $this->meta['_woodev_delivery_email_customer_shipment_created'] );
 	}
 
 	public function test_registered_emails_cover_each_ready_made_status_and_default_toggle(): void {
@@ -147,7 +150,106 @@ final class DeliveryStatusEmailTest extends TestCase {
 		foreach ( $events as [ $email_id, $status ] ) {
 			$emails[ $email_id ]->maybe_trigger( $order, null, $status, $provider );
 		}
-		$this->assertCount( 4, \WC_Email::$sent, 'The four ON states send; returned and failed remain OFF by default.' );
+		$this->assertCount( 3, \WC_Email::$sent, 'created and in_transit are ONE email (sent once), pickup and delivered send; returned and failed stay OFF by default.' );
+	}
+
+	public function test_an_enabled_email_sends_and_a_disabled_one_does_not_with_wc_boolean_semantics(): void {
+		$provider = Orders_Provider::create( 'test', 'Carrier', '_marker', [ 'test_shipping' ] );
+
+		$on = $this->email( [ Delivery_Status::CREATED ], true, 'On {order_number}' );
+		$this->assertTrue( $on->is_enabled(), 'the stub answers like WooCommerce: a bool' );
+		$on->maybe_trigger( $this->order( 'buyer@example.test' ), null, Delivery_Status::CREATED, $provider );
+		$this->assertCount( 1, \WC_Email::$sent );
+
+		\WC_Email::$sent = [];
+		$this->meta       = [];
+		$off              = $this->email( [ Delivery_Status::CREATED ], false, 'Off' );
+		$off->maybe_trigger( $this->order( 'buyer@example.test' ), null, Delivery_Status::CREATED, $provider );
+		$this->assertCount( 0, \WC_Email::$sent );
+	}
+
+	public function test_the_handed_over_email_is_sent_once_across_created_and_in_transit(): void {
+		$provider = Orders_Provider::create( 'test', 'Carrier', '_marker', [ 'test_shipping' ] );
+		$email    = $this->email( [ Delivery_Status::CREATED, Delivery_Status::IN_TRANSIT ], true, 'Order {order_number}' );
+		$order    = $this->order( 'buyer@example.test' );
+
+		$email->maybe_trigger( $order, null, Delivery_Status::CREATED, $provider );
+		$email->maybe_trigger( $order, Delivery_Status::CREATED, Delivery_Status::IN_TRANSIT, $provider );
+		$email->maybe_trigger( $order, Delivery_Status::IN_TRANSIT, Delivery_Status::IN_TRANSIT, $provider );
+
+		$this->assertCount( 1, \WC_Email::$sent, 'a shipment that passes through both statuses is told once' );
+	}
+
+	public function test_returned_then_failed_is_one_exception_email(): void {
+		$provider = Orders_Provider::create( 'test', 'Carrier', '_marker', [ 'test_shipping' ] );
+		$email    = $this->email( [ Delivery_Status::RETURNED, Delivery_Status::FAILED ], true, 'Problem' );
+		$order    = $this->order( 'buyer@example.test' );
+
+		$email->maybe_trigger( $order, Delivery_Status::IN_TRANSIT, Delivery_Status::FAILED, $provider );
+		$email->maybe_trigger( $order, Delivery_Status::FAILED, Delivery_Status::RETURNED, $provider );
+
+		$this->assertCount( 1, \WC_Email::$sent );
+	}
+
+	public function test_two_orders_and_two_emails_are_deduplicated_independently(): void {
+		$provider = Orders_Provider::create( 'test', 'Carrier', '_marker', [ 'test_shipping' ] );
+		$created  = new Delivery_Status_Email( 'email_a', 'A', 'A', [ Delivery_Status::CREATED ], 'A', 'A', 'A', true );
+		$done     = new Delivery_Status_Email( 'email_b', 'B', 'B', [ Delivery_Status::DELIVERED ], 'B', 'B', 'B', true );
+		$order    = $this->order( 'buyer@example.test' );
+
+		$created->maybe_trigger( $order, null, Delivery_Status::CREATED, $provider );
+		$done->maybe_trigger( $order, null, Delivery_Status::DELIVERED, $provider );
+
+		$this->assertCount( 2, \WC_Email::$sent );
+		$this->assertArrayHasKey( '_woodev_delivery_email_email_a', $this->meta );
+		$this->assertArrayHasKey( '_woodev_delivery_email_email_b', $this->meta );
+	}
+
+	public function test_woocommerce_placeholders_survive_beside_ours(): void {
+		$provider = Orders_Provider::create( 'test', 'Carrier', '_marker', [ 'test_shipping' ] );
+		$email    = $this->email( [ Delivery_Status::CREATED ], true, '{site_title}: заказ {order_number}' );
+
+		$email->maybe_trigger( $this->order( 'buyer@example.test' ), null, Delivery_Status::CREATED, $provider );
+
+		$this->assertSame( 'Мой магазин: заказ 123', \WC_Email::$sent[0][1] );
+	}
+
+	public function test_html_body_escapes_placeholder_values_and_links_the_tracking_url(): void {
+		Functions\when( 'esc_url' )->alias( static function ( $url ) { return filter_var( $url, FILTER_VALIDATE_URL ) ? $url : ''; } );
+		Functions\when( 'wc_get_template_html' )->alias( static function ( $template, $args ) { return $args['body']; } );
+		$this->meta['_tracking'] = 'TRK<script>alert(1)</script>';
+		$this->meta['_point']    = [ 'address' => 'ул. <b>Ленина</b>, 1' ];
+		$provider = Orders_Provider::create(
+			'test',
+			'Carrier <i>X</i>',
+			'_marker',
+			[ 'test_shipping' ],
+			[
+				'tracking_meta_key'     => '_tracking',
+				'tracking_url_template' => 'https://track.test/?n={tracking}',
+				'pickup_point_meta_key' => '_point',
+			]
+		);
+		$email = new Delivery_Status_Email( 'customer_shipment_created', 'T', 'D', [ Delivery_Status::CREATED ], 'S', 'H', '{carrier_name} {tracking_number} {pickup_point} {tracking_url}', true );
+
+		$email->maybe_trigger( $this->order( 'buyer@example.test' ), null, Delivery_Status::CREATED, $provider );
+		$html = $email->get_content_html();
+
+		$this->assertStringNotContainsString( '<script>', $html );
+		$this->assertStringNotContainsString( '<b>', $html );
+		$this->assertStringContainsString( '&lt;script&gt;', $html );
+		$this->assertStringContainsString( '<a href="https://track.test/?n=TRK%3Cscript%3Ealert%281%29%3C%2Fscript%3E">', $html, 'the tracking URL is a link' );
+	}
+
+	public function test_one_listener_hands_a_published_status_to_every_email_without_the_mailer_being_built_first(): void {
+		$emails   = Delivery_Status_Emails::instance();
+		$provider = Orders_Provider::create( 'test', 'Carrier', '_marker', [ 'test_shipping' ] );
+
+		$emails->register_emails( [] );
+		$emails->dispatch( $this->order( 'buyer@example.test' ), null, Delivery_Status::READY_FOR_PICKUP, $provider );
+
+		$this->assertCount( 1, \WC_Email::$sent );
+		$this->assertSame( 'Order 123 is waiting at the pickup point', \WC_Email::$sent[0][1], 'the pickup email, in its English msgid (the catalogue translates it)' );
 	}
 
 	private function email( array $statuses, bool $enabled, string $subject ): Delivery_Status_Email {

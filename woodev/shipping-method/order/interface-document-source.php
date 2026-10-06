@@ -12,7 +12,14 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @since 2.0.2
  */
 interface Document_Source {
-	/** @since 2.0.2 @param \WC_Order $order shipment order @return string[] supported document types */
+	/**
+	 * Document types offered for the order. Called once per ROW of the orders page: answer from local data and
+	 * never call the carrier here.
+	 *
+	 * @since 2.0.2
+	 * @param \WC_Order $order shipment order
+	 * @return string[] supported document types
+	 */
 	public function get_document_types( \WC_Order $order ): array;
 
 	/** @since 2.0.2 @param \WC_Order $order shipment order @param string $type document type @return Document_Result */

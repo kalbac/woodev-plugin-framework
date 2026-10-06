@@ -8,7 +8,7 @@
  */
 
 import apiFetch from '@wordpress/api-fetch';
-import { documentDownloadUrl, fetchOrders, fetchSyncStatus, getExportsInProgress, performOrderAction } from '../../src/shipping-orders-page/rest';
+import { fetchOrderDocument, fetchOrders, fetchSyncStatus, getExportsInProgress, performOrderAction } from '../../src/shipping-orders-page/rest';
 
 jest.mock( '@wordpress/api-fetch' );
 
@@ -75,10 +75,94 @@ describe( 'fetchOrders — the new filter-row params', () => {
 } );
 
 describe( 'carrier document downloads (#1134)', () => {
-	test( 'builds a nonce-protected download URL for the framework document route', () => {
-		expect( documentDownloadUrl( 42, 'waybill' ) ).toBe(
-			'https://example.test/wp-json/woodev/v1/shipping/orders/42/documents/waybill?_wpnonce=abc'
+	/** A `Response`-shaped double: what `apiFetch( { parse: false } )` resolves with. */
+	function response( { status = 200, headers = {}, json, blob } = {} ) {
+		const lower = Object.fromEntries( Object.entries( headers ).map( ( [ k, v ] ) => [ k.toLowerCase(), v ] ) );
+
+		return {
+			status,
+			headers: { get: ( name ) => lower[ name.toLowerCase() ] ?? null },
+			json: async () => json,
+			blob: async () => blob,
+		};
+	}
+
+	test( 'asks the route with the nonce in the HEADER, never in the URL, and parse:false', async () => {
+		apiFetch.mockResolvedValue( response( { json: { status: 'url', url: 'https://carrier.test/x.pdf' } } ) );
+
+		await fetchOrderDocument( 42, 'waybill' );
+
+		const call = apiFetch.mock.calls[ 0 ][ 0 ];
+
+		expect( call.url ).toBe( 'https://example.test/wp-json/woodev/v1/shipping/orders/42/documents/waybill?format=json' );
+		expect( call.url ).not.toContain( 'nonce' );
+		expect( call.headers ).toEqual( { 'X-WP-Nonce': 'abc' } );
+		expect( call.method ).toBe( 'GET' );
+		expect( call.parse ).toBe( false );
+	} );
+
+	test( 'a PDF answer becomes a file with the server\'s filename', async () => {
+		const blob = new Blob( [ '%PDF-' ], { type: 'application/pdf' } );
+
+		apiFetch.mockResolvedValue(
+			response( {
+				headers: {
+					'Content-Type': 'application/pdf',
+					'Content-Disposition': 'attachment; filename="order-42-waybill.pdf"',
+				},
+				blob,
+			} )
 		);
+
+		expect( await fetchOrderDocument( 42, 'waybill' ) ).toEqual( { kind: 'file', blob, filename: 'order-42-waybill.pdf' } );
+	} );
+
+	test( 'a PDF answer without a Content-Disposition falls back to a sane filename', async () => {
+		const blob = new Blob( [ '%PDF-' ] );
+
+		apiFetch.mockResolvedValue( response( { headers: { 'Content-Type': 'application/pdf' }, blob } ) );
+
+		expect( ( await fetchOrderDocument( 42, 'barcode' ) ).filename ).toBe( 'order-42-barcode.pdf' );
+	} );
+
+	test( 'a carrier link answer becomes a link', async () => {
+		apiFetch.mockResolvedValue( response( { json: { status: 'url', url: 'https://carrier.test/x.pdf' } } ) );
+
+		expect( await fetchOrderDocument( 42, 'waybill' ) ).toEqual( { kind: 'link', url: 'https://carrier.test/x.pdf' } );
+	} );
+
+	test( '202 is "pending" with the retry delay from the body, else from Retry-After, else 5', async () => {
+		apiFetch.mockResolvedValue( response( { status: 202, json: { status: 'pending', message: 'Документ ещё готовится.', retry_after: 7 } } ) );
+		expect( await fetchOrderDocument( 42, 'waybill' ) ).toEqual( { kind: 'pending', message: 'Документ ещё готовится.', retryAfter: 7 } );
+
+		apiFetch.mockResolvedValue( response( { status: 202, headers: { 'Retry-After': '9' }, json: { status: 'pending' } } ) );
+		expect( ( await fetchOrderDocument( 42, 'waybill' ) ).retryAfter ).toBe( 9 );
+
+		apiFetch.mockResolvedValue( response( { status: 202, json: {} } ) );
+		expect( ( await fetchOrderDocument( 42, 'waybill' ) ).retryAfter ).toBe( 5 );
+	} );
+
+	test( 'a REST error rejects with the server\'s own {code, message}, read from the raw Response', async () => {
+		apiFetch.mockRejectedValue( response( { status: 502, json: { code: 'woodev_document_failed', message: 'Не удалось получить документ у перевозчика.' } } ) );
+
+		await expect( fetchOrderDocument( 42, 'waybill' ) ).rejects.toEqual( {
+			code: 'woodev_document_failed',
+			message: 'Не удалось получить документ у перевозчика.',
+		} );
+	} );
+
+	test( 'a rejection that is already a plain object, or an unreadable Response, still rejects with an object', async () => {
+		apiFetch.mockRejectedValue( { code: 'x', message: 'нет сети' } );
+		await expect( fetchOrderDocument( 42, 'waybill' ) ).rejects.toEqual( { code: 'x', message: 'нет сети' } );
+
+		apiFetch.mockRejectedValue( { json: async () => { throw new Error( 'not json' ); } } );
+		await expect( fetchOrderDocument( 42, 'waybill' ) ).rejects.toEqual( {} );
+	} );
+
+	test( 'an answer that is none of the three rejects instead of resolving with nothing', async () => {
+		apiFetch.mockResolvedValue( response( { json: { status: 'weird' } } ) );
+
+		await expect( fetchOrderDocument( 42, 'waybill' ) ).rejects.toEqual( {} );
 	} );
 } );
 

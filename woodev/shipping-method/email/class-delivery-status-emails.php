@@ -37,6 +37,30 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 		/** @since 2.0.2 */
 		private function __construct() {
 			add_filter( 'woocommerce_email_classes', [ $this, 'register_emails' ] );
+			// ONE listener, added now: the emails exist only once WooCommerce has built its mailer, and a webhook or
+			// cron request that publishes a status may never have asked for it. {@see self::dispatch()} asks.
+			add_action( 'woodev_shipping_delivery_status_changed', [ $this, 'dispatch' ], 10, 4 );
+		}
+
+		/**
+		 * Hands a published status change to every status email.
+		 *
+		 * @since 2.0.2
+		 * @param \WC_Order                                               $order    Shipment order.
+		 * @param string|null                                             $previous Previous canonical state.
+		 * @param string                                                  $current  Current canonical state.
+		 * @param \Woodev\Framework\Shipping\Admin\Orders\Orders_Provider $provider Matched carrier.
+		 * @return void
+		 */
+		public function dispatch( $order, $previous, $current, $provider ): void {
+			if ( function_exists( 'WC' ) && WC() ) {
+				// Building the mailer runs `woocommerce_email_classes`, i.e. self::register_emails().
+				WC()->mailer();
+			}
+
+			foreach ( $this->emails as $email ) {
+				$email->maybe_trigger( $order, $previous, (string) $current, $provider );
+			}
 		}
 
 		/**
@@ -59,36 +83,36 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 					'title'       => __( 'Передан в доставку + трек', 'woodev-plugin-framework' ),
 					'description' => __( 'Письмо покупателю после передачи отправления перевозчику.', 'woodev-plugin-framework' ),
 					'statuses'    => [ Delivery_Status::CREATED, Delivery_Status::IN_TRANSIT ],
-					'subject'     => __( 'Заказ {order_number} передан в доставку', 'woodev-plugin-framework' ),
-					'heading'     => __( 'Заказ передан в доставку', 'woodev-plugin-framework' ),
-					'body'        => __( 'Отправление передано перевозчику. Номер для отслеживания: {tracking_number}. {tracking_url}', 'woodev-plugin-framework' ),
+					'subject'     => __( 'Order {order_number} has been handed over for delivery', 'woodev-plugin-framework' ),
+					'heading'     => __( 'Your order has been handed over for delivery', 'woodev-plugin-framework' ),
+					'body'        => __( 'Your shipment has been handed over to the carrier. Tracking number: {tracking_number}. {tracking_url}', 'woodev-plugin-framework' ),
 					'enabled'     => true,
 				],
 				'customer_shipment_pickup' => [
 					'title'       => __( 'Заказ ждёт в пункте выдачи', 'woodev-plugin-framework' ),
 					'description' => __( 'Письмо покупателю, когда отправление поступило в пункт выдачи.', 'woodev-plugin-framework' ),
 					'statuses'    => [ Delivery_Status::READY_FOR_PICKUP ],
-					'subject'     => __( 'Заказ {order_number} ждёт в пункте выдачи', 'woodev-plugin-framework' ),
-					'heading'     => __( 'Заказ ждёт в пункте выдачи', 'woodev-plugin-framework' ),
-					'body'        => __( 'Заберите заказ {order_number} в пункте выдачи: {pickup_point}.', 'woodev-plugin-framework' ),
+					'subject'     => __( 'Order {order_number} is waiting at the pickup point', 'woodev-plugin-framework' ),
+					'heading'     => __( 'Your order is waiting at the pickup point', 'woodev-plugin-framework' ),
+					'body'        => __( 'Pick up order {order_number} at the pickup point: {pickup_point}.', 'woodev-plugin-framework' ),
 					'enabled'     => true,
 				],
 				'customer_shipment_delivered' => [
 					'title'       => __( 'Доставлено', 'woodev-plugin-framework' ),
 					'description' => __( 'Письмо покупателю после доставки заказа.', 'woodev-plugin-framework' ),
 					'statuses'    => [ Delivery_Status::DELIVERED ],
-					'subject'     => __( 'Заказ {order_number} доставлен', 'woodev-plugin-framework' ),
-					'heading'     => __( 'Заказ доставлен', 'woodev-plugin-framework' ),
-					'body'        => __( 'Заказ {order_number} доставлен.', 'woodev-plugin-framework' ),
+					'subject'     => __( 'Order {order_number} has been delivered', 'woodev-plugin-framework' ),
+					'heading'     => __( 'Your order has been delivered', 'woodev-plugin-framework' ),
+					'body'        => __( 'Order {order_number} has been delivered.', 'woodev-plugin-framework' ),
 					'enabled'     => true,
 				],
 				'customer_shipment_exception' => [
 					'title'       => __( 'Возврат / не доставлено', 'woodev-plugin-framework' ),
 					'description' => __( 'Письмо покупателю при возврате или неудачной доставке.', 'woodev-plugin-framework' ),
 					'statuses'    => [ Delivery_Status::RETURNED, Delivery_Status::FAILED ],
-					'subject'     => __( 'Проблема с доставкой заказа {order_number}', 'woodev-plugin-framework' ),
-					'heading'     => __( 'Проблема с доставкой', 'woodev-plugin-framework' ),
-					'body'        => __( 'Не удалось доставить заказ {order_number}. Свяжитесь с магазином для уточнения деталей.', 'woodev-plugin-framework' ),
+					'subject'     => __( 'There is a problem with the delivery of order {order_number}', 'woodev-plugin-framework' ),
+					'heading'     => __( 'There is a problem with your delivery', 'woodev-plugin-framework' ),
+					'body'        => __( 'We could not deliver order {order_number}. Please contact the store for details.', 'woodev-plugin-framework' ),
 					'enabled'     => false,
 				],
 			];
@@ -104,7 +128,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 					$definition['enabled']
 				);
 				$this->emails[ $email->id ] = $email;
-				add_action( 'woodev_shipping_delivery_status_changed', [ $email, 'maybe_trigger' ], 10, 4 );
 			}
 			return array_merge( $emails, $this->emails );
 		}

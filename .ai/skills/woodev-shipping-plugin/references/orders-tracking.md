@@ -40,11 +40,17 @@ Implement webhooks by extending `Abstract_Webhook_Handler` and providing `verify
 
 ## Buyer emails and carrier documents
 
-- Buyer status emails are provided by the framework through WooCommerce → Settings → Emails. After
-  persisting a changed raw status, a carrier calls
-  `Delivery_Status_Events::notify( $order, $provider, $previous_canonical_status )`; this resolves
-  the new canonical status and fires `woodev_shipping_delivery_status_changed` once for framework
-  emails and extensions. Do not send carrier-owned buyer status emails. Carrier-specific template
-  values can be added with the `woodev_shipping_delivery_email_placeholders` filter; the base set
-  includes order number, tracking number/URL, carrier name, pickup point and delivery date.
-- Carrier documents use the shared `Order\Document_Source` seam (#1134). Register a source against the carrier's orders-provider id with `Orders_Registry::register_document_source()`, declare `supports_label_printing` on the provider, return supported types from `get_document_types()`, and implement `get_document()` as a short request that returns `Document_Result::binary()`, `url()`, `pending($retry_after)`, or `failed($reason)`. Do not block while a carrier generates a file: return `pending` and let the merchant retry. The framework owns the REST download response, filename, authorization, and download meta flag; document bytes are fetched on demand and are not persisted.
+- Buyer status emails are provided by the framework through WooCommerce → Settings → Emails. **A carrier does
+  nothing to get them**: the framework watches the order meta the provider declares as `status_meta_key` (and its own
+  cancellation marker), and after the request's writes are in (`shutdown`) publishes
+  `woodev_shipping_delivery_status_changed( $order, $previous, $current, $provider )` once per REAL change of the
+  canonical state, whichever path wrote it — webhook handler, tracking sync, cron re-poll, manual edit. Declare
+  `status_meta_key` and `status_map` on the provider and write the raw status with the order's meta API. Shipments
+  already in flight when the framework starts watching are adopted silently (no email for an old status).
+  `Delivery_Status_Events::notify( $order, $provider )` stays public for a carrier that keeps its status somewhere
+  the watcher cannot see; it publishes nothing when the canonical state did not change. Each ready-made email is sent
+  once per shipment (one flag per email, so «Передан в доставку» is not repeated across `created` → `in_transit`).
+  Do not send carrier-owned buyer status emails. Carrier-specific template values can be added with the
+  `woodev_shipping_delivery_email_placeholders` filter; the base set includes order number, tracking number/URL,
+  carrier name, pickup point and delivery date (values are escaped in the HTML email).
+- Carrier documents use the shared `Order\Document_Source` seam (#1134). Register a source against the carrier's orders-provider id with `Orders_Registry::register_document_source()`, declare `supports_label_printing` on the provider, return supported types from `get_document_types()`, and implement `get_document()` as a short request that returns `Document_Result::binary()`, `url()`, `pending($retry_after)`, or `failed($reason)`. Do not block while a carrier generates a file: return `pending` and let the merchant retry. The framework owns the REST download response, filename, authorization (capability + `X-WP-Nonce`), the in-page admin outcome («ещё готовится» / failure notices; a carrier link opens in a new tab) and the download meta flag; document bytes are fetched on demand and are not persisted.

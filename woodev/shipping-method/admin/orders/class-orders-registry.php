@@ -254,6 +254,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 
 			$this->providers[ $provider->get_id() ] = $provider;
 
+			// The delivery-status watcher caches which meta keys decide a canonical status.
+			if ( class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Delivery_Status_Watcher', false ) ) {
+				\Woodev\Framework\Shipping\Order\Delivery_Status_Watcher::flush();
+			}
+
 			if ( $is_replacement ) {
 				unset( $this->shipment_handlers[ $provider->get_id() ] );
 				unset( $this->tracking_handlers[ $provider->get_id() ] );
@@ -2141,6 +2146,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			$this->providers         = [];
 			$this->shipment_handlers = [];
 			$this->tracking_handlers = [];
+			$this->document_sources  = [];
 			$this->provider_plugins  = [];
 			$this->admin_order       = null;
 			$this->automation        = null;
