@@ -18,7 +18,7 @@ Use this skill for a carrier plugin that consumes Woodev Framework v2. Also load
 
 - Use the settings ownership map in [settings and migration](references/settings-migration.md): plugin-global sections are supplied by `get_tab_settings_providers()`, while tariffs and per-method fields belong to the WooCommerce shipping-method instance. The framework adds shared sections, including `Выгрузка` when orders are registered; use `woodev-settings` by default and take a concrete Integrations-tab exception to the operator.
 - Use the shared locality fields and map, shipment/order handlers, canonical delivery statuses, tracking handler, and webhook base. See [model, rates, location, and pickup](references/model-rates-location-pickup.md) and [orders and tracking](references/orders-tracking.md).
-- Buyer status emails are not in the framework yet (#714, in progress): plugin authors must not implement their own. Carrier documents/waybill download is not in the framework yet (#1134): wait for its shared seam rather than hand-rolling it.
+- Buyer status emails and carrier documents (waybill/barcode download) are FRAMEWORK features: never write carrier-owned buyer emails or a download flow. Notify status changes through `Delivery_Status_Events::notify()` and implement a `Document_Source` — see [orders and tracking](references/orders-tracking.md).
 - For a v1 rewrite, preserve installed-site contracts byte-for-byte and make an explicit migration checklist from `docs-internal/migration/*`; run `npm run probe:signature` and follow `docs-internal/migration/signature-probe.md`.
 
 ## Use fixtures as worked examples
