@@ -40,8 +40,34 @@ class CheckoutParentBlockNoticeTest extends TestCase {
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
 	 */
+	public function test_either_missing_parent_warns_independently(): void {
+		$this->assertTrue( Checkout_Parent_Block_Notice::should_warn( '<!-- wp:woocommerce/checkout --><!-- wp:woocommerce/checkout-shipping-address-block /-->', true ) );
+		$this->assertTrue( Checkout_Parent_Block_Notice::should_warn( '<!-- wp:woocommerce/checkout --><!-- wp:woocommerce/checkout-shipping-methods-block /-->', true ) );
+	}
+
+	/**
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_nested_checkout_parents_are_detected(): void {
+		$content = '<!-- wp:woocommerce/checkout --><!-- wp:woocommerce/checkout-fields-block -->' . self::PARENTS . '<!-- /wp:woocommerce/checkout-fields-block --><!-- /wp:woocommerce/checkout -->';
+		$this->assertFalse( Checkout_Parent_Block_Notice::should_warn( $content, true ) );
+	}
+
+	/**
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
 	public function test_classic_shortcode_page_does_not_warn(): void {
 		$this->assertFalse( Checkout_Parent_Block_Notice::should_warn( '[woocommerce_checkout]', true ) );
+	}
+
+	/**
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_shortcode_inside_block_checkout_does_not_warn(): void {
+		$this->assertFalse( Checkout_Parent_Block_Notice::should_warn( '<!-- wp:woocommerce/checkout -->[woocommerce_checkout]', true ) );
 	}
 
 	/**

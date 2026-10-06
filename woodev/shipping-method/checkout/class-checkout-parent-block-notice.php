@@ -21,6 +21,9 @@ if ( ! class_exists( __NAMESPACE__ . '\\Checkout_Parent_Block_Notice' ) ) :
 		/** @var array<int,bool> Request-local page result cache. */
 		private static array $page_results = [];
 
+		/** @var bool Whether this site's notice was added during this request. */
+		private static bool $notice_added = false;
+
 		/**
 		 * Registers the admin notice for a carrier plugin.
 		 *
@@ -32,7 +35,7 @@ if ( ! class_exists( __NAMESPACE__ . '\\Checkout_Parent_Block_Notice' ) ) :
 			add_action(
 				'admin_notices',
 				static function () use ( $plugin ): void {
-					if ( ! is_admin() || ! self::has_active_pickup_method( $plugin ) || ! self::missing_parent_blocks() ) {
+					if ( self::$notice_added || ! is_admin() || ! self::missing_parent_blocks() || ! self::has_active_pickup_method( $plugin ) ) {
 						return;
 					}
 
@@ -46,12 +49,13 @@ if ( ! class_exists( __NAMESPACE__ . '\\Checkout_Parent_Block_Notice' ) ) :
 
 					$plugin->get_admin_notice_handler()->add_admin_notice(
 						$message,
-						$plugin->get_id_dasherized() . '-checkout-shipping-blocks-missing',
+						'woodev-checkout-shipping-blocks-missing',
 						[
 							'notice_class'            => 'notice-error',
 							'always_show_on_settings' => false,
 						]
 					);
+					self::$notice_added = true;
 				}
 			);
 		}
@@ -73,7 +77,7 @@ if ( ! class_exists( __NAMESPACE__ . '\\Checkout_Parent_Block_Notice' ) ) :
 			}
 
 			return ! has_block( 'woocommerce/checkout-shipping-address-block', $content )
-				|| ! has_block( 'woocommerce/checkout-shipping-methods-block', $content );
+				&& ! has_block( 'woocommerce/checkout-shipping-methods-block', $content );
 		}
 
 		/**
@@ -90,8 +94,30 @@ if ( ! class_exists( __NAMESPACE__ . '\\Checkout_Parent_Block_Notice' ) ) :
 
 		/** @param \Woodev\Framework\Shipping\Shipping_Plugin $plugin Shipping plugin. */
 		private static function has_active_pickup_method( \Woodev\Framework\Shipping\Shipping_Plugin $plugin ): bool {
+			if ( ! class_exists( '\WC_Shipping_Zones' ) || ! class_exists( '\WC_Shipping_Zone' ) ) {
+				return false;
+			}
+
+			$plugin_methods = [];
 			foreach ( $plugin->get_shipping_methods() as $method ) {
-				if ( $method->is_pickup_shipping() && 'yes' === $method->enabled ) {
+				$plugin_methods[ $method->id ] = true;
+			}
+
+			$zones = \WC_Shipping_Zones::get_zones();
+			foreach ( $zones as $zone_data ) {
+				$zone = new \WC_Shipping_Zone( (int) $zone_data['zone_id'] );
+				if ( self::zone_has_pickup_method( $zone, $plugin_methods ) ) {
+					return true;
+				}
+			}
+
+			return self::zone_has_pickup_method( new \WC_Shipping_Zone( 0 ), $plugin_methods );
+		}
+
+		/** @param \WC_Shipping_Zone $zone Zone to inspect. @param array<string,bool> $plugin_methods Plugin method ids. */
+		private static function zone_has_pickup_method( \WC_Shipping_Zone $zone, array $plugin_methods ): bool {
+			foreach ( $zone->get_shipping_methods( true ) as $method ) {
+				if ( $method instanceof \Woodev\Framework\Shipping\Shipping_Method && isset( $plugin_methods[ $method->id ] ) && $method->is_pickup_shipping() ) {
 					return true;
 				}
 			}
@@ -106,9 +132,12 @@ if ( ! class_exists( __NAMESPACE__ . '\\Checkout_Parent_Block_Notice' ) ) :
 			}
 
 			if ( ! array_key_exists( $page_id, self::$page_results ) ) {
-				$page                     = get_post( $page_id );
-				$content                  = is_object( $page ) ? (string) $page->post_content : '';
-				self::$page_results[ $page_id ] = self::is_missing_parent_blocks( $content );
+				$page = get_post( $page_id );
+				if ( ! is_object( $page ) || ! in_array( $page->post_status ?? '', [ 'publish', 'private' ], true ) ) {
+					self::$page_results[ $page_id ] = false;
+				} else {
+					self::$page_results[ $page_id ] = self::is_missing_parent_blocks( (string) $page->post_content );
+				}
 			}
 
 			return self::$page_results[ $page_id ];
