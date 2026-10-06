@@ -84,12 +84,48 @@ final class DeliveryStatusEmailTest extends TestCase {
 		$this->meta = [];
 		OrderUtil::$hpos_enabled = false;
 		\WC_Email::$sent = [];
+		$property = new \ReflectionProperty( Delivery_Status_Emails::class, 'emails' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$property->setAccessible( true );
+		}
+		$property->setValue( Delivery_Status_Emails::instance(), [] );
 		Functions\when( 'apply_filters' )->returnArg( 2 );
 		Functions\when( 'add_action' )->justReturn( null );
 		Functions\when( 'get_post_meta' )->alias( function ( int $id, string $key ) { return $this->meta[ $key ] ?? ''; } );
 		Functions\when( 'update_post_meta' )->alias( function ( int $id, string $key, $value ) { $this->meta[ $key ] = $value; return true; } );
 		Functions\when( 'sanitize_key' )->alias( static function ( string $key ): string { return strtolower( preg_replace( '/[^a-z0-9_\\-]/', '', $key ) ); } );
 		Functions\when( 'is_email' )->alias( static function ( string $email ) { return filter_var( $email, FILTER_VALIDATE_EMAIL ) ? $email : false; } );
+	}
+
+	public function test_russian_catalogue_supplies_short_titles_and_the_sent_body_uses_the_carrier_seam(): void {
+		$catalogue = file_get_contents( dirname( __DIR__, 4 ) . '/woodev/languages/woodev-plugin-framework-ru_RU.po' );
+		preg_match_all( '/^msgid "(.*)"\nmsgstr "(.*)"/m', $catalogue, $matches, PREG_SET_ORDER );
+		$translations = [];
+		foreach ( $matches as $match ) {
+			$translations[ stripcslashes( $match[1] ) ] = stripcslashes( $match[2] );
+		}
+		Functions\when( '__' )->alias( static fn( $msgid, $domain = '' ) => $translations[ $msgid ] ?? $msgid );
+		$emails = Delivery_Status_Emails::instance()->register_emails( [] );
+		$this->assertSame( [ 'Доставка: Передан в доставку', 'Доставка: Ожидает в ПВЗ', 'Доставка: Доставлено', 'Доставка: Возврат' ], array_map( static fn( $email ) => $email->title, array_values( $emails ) ) );
+		$provider = Orders_Provider::create( 'test', 'CDEK WooCommerce Shipping Method', '_marker', [ 'test_shipping' ] );
+		$plugin = Mockery::mock( \Woodev\Framework\Shipping\Shipping_Plugin::class );
+		$plugin->shouldReceive( 'get_carrier_name' )->once()->andReturn( 'СДЭК' );
+		$registry = \Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::instance();
+		$registry->register_provider( $provider, $plugin );
+		try {
+			$emails['customer_shipment_created']->maybe_trigger( $this->order( 'buyer@example.test' ), null, Delivery_Status::CREATED, $provider );
+			$this->assertStringContainsString( 'Ваше отправление передано в СДЭК.', \WC_Email::$sent[0][2] );
+			$this->assertStringNotContainsString( '{carrier_name}', \WC_Email::$sent[0][2] );
+		} finally {
+			$registry->reset_for_tests();
+		}
+	}
+
+	public function test_placeholder_hints_use_wc_tooltips_on_subject_and_body(): void {
+		$email = $this->email( [ Delivery_Status::CREATED ], true, 'Subject' );
+		$this->assertTrue( $email->form_fields['subject']['desc_tip'] );
+		$this->assertTrue( $email->form_fields['body']['desc_tip'] );
+		$this->assertStringContainsString( '{carrier_name}', $email->form_fields['subject']['description'] );
 	}
 
 	public function test_status_triggers_once_and_resolves_available_placeholders(): void {

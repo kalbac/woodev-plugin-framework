@@ -69,7 +69,7 @@ final class CarrierSettingsTabTest extends TestCase {
 	private function carrier( string $id = 'cdek', array $contribution = [] ) {
 		$plugin = Mockery::mock( Shipping_Plugin::class )->makePartial()->shouldAllowMockingProtectedMethods();
 		$plugin->shouldReceive( 'get_id' )->andReturn( $id );
-		$plugin->shouldReceive( 'get_plugin_name' )->andReturn( 'СДЭК' );
+		$plugin->shouldReceive( 'get_plugin_name' )->andReturn( 'CDEK WooCommerce Shipping Method' );
 		$plugin->shouldReceive( 'get_export_settings' )->andReturnUsing( static fn() => new Export_Settings( $id ) );
 		$plugin->shouldReceive( 'get_tab_settings_providers' )->andReturn( $contribution );
 
@@ -130,6 +130,19 @@ final class CarrierSettingsTabTest extends TestCase {
 		return array_map( static fn( Settings_Section $section ) => $section->get_id(), $provider->get_sections() );
 	}
 
+	public function test_the_accepted_contribution_label_is_the_short_name_for_tab_and_emails(): void {
+		$descriptor = $this->credentials();
+		$carrier = $this->carrier( 'cdek', [ Settings_Provider::create_with_sections( 'cdek', 'СДЭК', $descriptor->get_handler(), [], ...$descriptor->get_sections() ) ] );
+		$carrier->shouldReceive( 'get_plugin_name' )->andReturn( 'CDEK WooCommerce Shipping Method' );
+		$this->assertSame( 'СДЭК', $carrier->get_settings_providers()[0]->get_label() );
+		$this->assertSame( 'СДЭК', $carrier->get_carrier_name() );
+	}
+
+	public function test_a_later_contribution_cannot_replace_the_short_carrier_name(): void {
+		$carrier = $this->carrier( 'cdek', [ $this->credentials(), $this->credentials( [], 'second_key', 'other' ) ] );
+		$this->assertSame( 'Подключение', $carrier->get_carrier_name() );
+	}
+
 	// ----- one tab per carrier -----
 
 	public function test_an_exporting_carrier_gets_one_tab_with_the_export_section(): void {
@@ -140,7 +153,7 @@ final class CarrierSettingsTabTest extends TestCase {
 
 		$this->assertCount( 1, $providers );
 		$this->assertSame( 'cdek', $providers[0]->get_id(), 'the tab id is the plugin id' );
-		$this->assertSame( 'СДЭК', $providers[0]->get_label() );
+		$this->assertSame( 'CDEK WooCommerce Shipping Method', $providers[0]->get_label(), 'no contribution: plugin-name fallback' );
 		$this->assertSame( [ Export_Settings::SECTION_ID ], $this->section_ids( $providers[0] ) );
 		$this->assertInstanceOf( Composite_Settings_Handler::class, $providers[0]->get_handler() );
 		$this->assertSame(
@@ -456,7 +469,7 @@ final class CarrierSettingsTabTest extends TestCase {
 			->once()
 			->with(
 				Mockery::pattern( '/Settings_Page_Registry::build_tabs$/' ),
-				Mockery::on( static fn( string $message ): bool => str_contains( $message, '"cdek"' ) && str_contains( $message, 'Подключение' ) && str_contains( $message, 'СДЭК' ) ),
+				Mockery::on( static fn( string $message ): bool => str_contains( $message, '"cdek"' ) && str_contains( $message, 'Подключение' ) && str_contains( $message, 'CDEK WooCommerce Shipping Method' ) ),
 				'2.0.2'
 			);
 
@@ -469,7 +482,7 @@ final class CarrierSettingsTabTest extends TestCase {
 		);
 
 		$this->assertCount( 1, $tabs );
-		$this->assertSame( 'СДЭК', $tabs[0]['label'], 'the first provider is kept' );
+		$this->assertSame( 'CDEK WooCommerce Shipping Method', $tabs[0]['label'], 'the first provider is kept' );
 		$this->assertSame( [ 'export' ], array_column( $tabs[0]['sections'], 'id' ) );
 	}
 }
