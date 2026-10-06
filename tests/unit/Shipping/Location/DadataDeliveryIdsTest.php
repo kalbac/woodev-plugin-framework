@@ -171,13 +171,13 @@ final class DadataDeliveryIdsTest extends TestCase {
 	/**
 	 * @param mixed $raw The record's raw payload.
 	 */
-	private static function dadata_record( $raw, string $provider = 'dadata' ): Location_Record {
+	private static function dadata_record( $raw, string $provider = 'dadata', string $country = 'RU' ): Location_Record {
 		return Location_Record::from_array(
 			[
 				'key'         => $provider . ':2e30ca06-a155-495e-966d-d2f47764c452',
 				'provider_id' => $provider,
 				'level'       => Location_Record::LEVEL_SETTLEMENT,
-				'country'     => 'RU',
+				'country'     => $country,
 				'label'       => 'Тест',
 				'raw'         => $raw,
 			]
@@ -226,14 +226,14 @@ final class DadataDeliveryIdsTest extends TestCase {
 	// -------------------------------------------------------------------------
 
 	public function test_client_posts_the_id_to_find_by_id_delivery_and_returns_the_data_object(): void {
-		$this->stub_fixture_response( 'findById-delivery-novosibirsk-by-kladr' );
+		$this->stub_fixture_response( 'findById-delivery-novosibirsk-by-fias' );
 
-		$data = self::client( 'my-token' )->find_by_id_delivery( '5400000100000' );
+		$data = self::client( 'my-token' )->find_by_id_delivery( '8dea00e3-9aab-4d8e-887c-ef2aaa546456' );
 
 		$this->assertSame( 'https://suggestions.dadata.ru/suggestions/api/4_1/rs/findById/delivery', $this->last_request['url'] );
 		$this->assertSame( 'POST', $this->last_request['args']['method'] );
 		$this->assertSame( 'Token my-token', $this->last_request['args']['headers']['Authorization'] );
-		$this->assertSame( [ 'query' => '5400000100000' ], json_decode( (string) $this->last_request['args']['body'], true ) );
+		$this->assertSame( [ 'query' => '8dea00e3-9aab-4d8e-887c-ef2aaa546456' ], json_decode( (string) $this->last_request['args']['body'], true ) );
 		$this->assertSame( '270', $data['cdek_id'], 'cdek_id is a STRING on the wire' );
 		$this->assertSame( '7765', $data['boxberry_id'] );
 	}
@@ -241,21 +241,21 @@ final class DadataDeliveryIdsTest extends TestCase {
 	public function test_client_returns_null_for_an_empty_suggestion_set(): void {
 		$this->stub_fixture_response( 'findById-delivery-street-level-id-gives-nothing' );
 
-		$this->assertNull( self::client()->find_by_id_delivery( '77000000000287900' ) );
+		$this->assertNull( self::client()->find_by_id_delivery( '0c5b2444-70a0-4932-980c-b4dc0d3f02b5' ) );
 	}
 
 	public function test_client_throws_for_a_non_empty_set_without_a_readable_data_object(): void {
 		$this->stub_http_response( 200, '{"suggestions":[{"value":"x"}]}' );
 
 		$this->expectException( \Woodev_API_Exception::class );
-		self::client()->find_by_id_delivery( '5400000100000' );
+		self::client()->find_by_id_delivery( '8dea00e3-9aab-4d8e-887c-ef2aaa546456' );
 	}
 
 	public function test_client_throws_on_an_http_error(): void {
 		$this->stub_http_response( 500, '' );
 
 		$this->expectException( \Woodev_API_Exception::class );
-		self::client()->find_by_id_delivery( '5400000100000' );
+		self::client()->find_by_id_delivery( '8dea00e3-9aab-4d8e-887c-ef2aaa546456' );
 	}
 
 	// -------------------------------------------------------------------------
@@ -263,8 +263,8 @@ final class DadataDeliveryIdsTest extends TestCase {
 	// -------------------------------------------------------------------------
 
 	public function test_delivery_ids_returns_the_carrier_ids_and_drops_the_echoed_identity_fields(): void {
-		$this->stub_fixture_response( 'findById-delivery-novosibirsk-by-kladr' );
-		$record = self::dadata_record( [ 'city_kladr_id' => '5400000100000', 'kladr_id' => '54000001000000100' ] );
+		$this->stub_fixture_response( 'findById-delivery-novosibirsk-by-fias' );
+		$record = self::dadata_record( [ 'city_fias_id' => '8dea00e3-9aab-4d8e-887c-ef2aaa546456', 'fias_id' => '0aa1c1c2-0000-4000-8000-000000000001', 'city_fias_id' => '5400000100000' ] );
 
 		$ids = self::provider()->delivery_ids( $record );
 
@@ -280,58 +280,68 @@ final class DadataDeliveryIdsTest extends TestCase {
 	}
 
 	public function test_delivery_ids_omits_carriers_dadata_sent_as_null(): void {
-		$this->stub_fixture_response( 'findById-delivery-peno-by-kladr' );
+		$this->stub_fixture_response( 'findById-delivery-peno-by-fias' );
 
 		$ids = self::provider()->delivery_ids( self::record_from_suggest_fixture( 'suggest-address-peno' ) );
 
 		$this->assertSame( [ 'cdek_id' => '24143' ], $ids );
 	}
 
-	public function test_delivery_ids_queries_the_settlement_id_before_the_city_id_and_never_the_street_kladr_id(): void {
-		$this->stub_fixture_response( 'findById-delivery-peno-by-kladr' );
+	public function test_delivery_ids_queries_the_settlement_fias_id_before_the_city_fias_id(): void {
+		$this->stub_fixture_response( 'findById-delivery-peno-by-fias' );
 		$record = self::dadata_record(
 			[
-				'kladr_id'            => '69000015016000100',
-				'settlement_kladr_id' => '6900001501600',
-				'city_kladr_id'       => '6900001500000',
+				'fias_id'            => '11111111-1111-4111-8111-111111111111',
+				'settlement_fias_id' => '22222222-2222-4222-8222-222222222222',
+				'city_fias_id'       => '33333333-3333-4333-8333-333333333333',
 			]
 		);
 
 		self::provider()->delivery_ids( $record );
 
-		$this->assertSame( [ 'query' => '6900001501600' ], json_decode( (string) $this->last_request['args']['body'], true ) );
+		$this->assertSame( [ 'query' => '22222222-2222-4222-8222-222222222222' ], json_decode( (string) $this->last_request['args']['body'], true ) );
 	}
 
-	public function test_delivery_ids_uses_the_city_id_of_an_address_level_record_not_its_street_id(): void {
-		$this->stub_fixture_response( 'findById-delivery-moscow-by-kladr' );
+	public function test_delivery_ids_uses_the_city_fias_id_of_an_address_level_record_not_its_street_id(): void {
+		$this->stub_fixture_response( 'findById-delivery-moscow-by-fias' );
 		$record = self::record_from_suggest_fixture( 'suggest-address-street-level-row' );
 		$raw    = $record->raw();
 
-		$this->assertNotSame( $raw['city_kladr_id'], $raw['kladr_id'], 'sanity: the fixture row is a street-level one' );
+		$this->assertNotSame( $raw['city_fias_id'], $raw['fias_id'], 'sanity: the fixture row is a street-level one' );
 
 		self::provider()->delivery_ids( $record );
 
-		$this->assertSame( [ 'query' => $raw['city_kladr_id'] ], json_decode( (string) $this->last_request['args']['body'], true ) );
+		$this->assertSame( [ 'query' => $raw['city_fias_id'] ], json_decode( (string) $this->last_request['args']['body'], true ) );
 	}
 
-	public function test_delivery_ids_falls_back_to_the_fias_id_when_the_record_carries_no_kladr_id(): void {
-		$this->stub_fixture_response( 'findById-delivery-peno-by-kladr' );
-		$record = self::dadata_record( [ 'settlement_fias_id' => null, 'city_fias_id' => '2e30ca06-a155-495e-966d-d2f47764c452' ] );
-
-		self::provider()->delivery_ids( $record );
-
-		$this->assertSame(
-			[ 'query' => '2e30ca06-a155-495e-966d-d2f47764c452' ],
-			json_decode( (string) $this->last_request['args']['body'], true )
-		);
-	}
-
-	public function test_delivery_ids_is_empty_when_the_record_carries_no_city_or_settlement_id(): void {
+	public function test_delivery_ids_never_asks_by_kladr_even_when_the_record_carries_only_kladr_ids(): void {
 		Functions\expect( 'wp_safe_remote_request' )->never();
 
-		$region_only = self::dadata_record( [ 'region_kladr_id' => '7700000000000', 'kladr_id' => '7700000000000' ] );
+		$record = self::dadata_record(
+			[
+				'kladr_id'            => '6900001500000',
+				'city_kladr_id'       => '6900001500000',
+				'settlement_kladr_id' => '6900001501600',
+			]
+		);
+
+		$this->assertSame( [], self::provider()->delivery_ids( $record ) );
+	}
+
+	public function test_delivery_ids_is_empty_without_a_request_when_the_record_carries_no_city_or_settlement_fias_id(): void {
+		Functions\expect( 'wp_safe_remote_request' )->never();
+
+		$region_only = self::dadata_record( [ 'region_fias_id' => '0c5b2444-70a0-4932-980c-b4dc0d3f02b5', 'city_fias_id' => null, 'settlement_fias_id' => '' ] );
 
 		$this->assertSame( [], self::provider()->delivery_ids( $region_only ) );
+	}
+
+	public function test_delivery_ids_is_empty_without_a_request_for_a_non_russian_record(): void {
+		Functions\expect( 'wp_safe_remote_request' )->never();
+
+		$record = self::dadata_record( [ 'city_fias_id' => 'relation:1746396' ], 'dadata', 'AM' );
+
+		$this->assertSame( [], self::provider()->delivery_ids( $record ) );
 	}
 
 	public function test_delivery_ids_is_empty_for_a_record_without_an_array_payload(): void {
@@ -343,7 +353,7 @@ final class DadataDeliveryIdsTest extends TestCase {
 	public function test_delivery_ids_is_empty_for_a_record_another_provider_produced(): void {
 		Functions\expect( 'wp_safe_remote_request' )->never();
 
-		$record = self::dadata_record( [ 'city_kladr_id' => '5400000100000' ], 'cdek' );
+		$record = self::dadata_record( [ 'city_fias_id' => '8dea00e3-9aab-4d8e-887c-ef2aaa546456' ], 'cdek' );
 
 		$this->assertSame( [], self::provider()->delivery_ids( $record ) );
 	}
@@ -352,12 +362,12 @@ final class DadataDeliveryIdsTest extends TestCase {
 		$this->set_token( '' );
 		Functions\expect( 'wp_safe_remote_request' )->never();
 
-		$this->assertSame( [], self::provider()->delivery_ids( self::dadata_record( [ 'city_kladr_id' => '5400000100000' ] ) ) );
+		$this->assertSame( [], self::provider()->delivery_ids( self::dadata_record( [ 'city_fias_id' => '8dea00e3-9aab-4d8e-887c-ef2aaa546456' ] ) ) );
 	}
 
 	public function test_delivery_ids_is_empty_when_dadata_answers_an_empty_set_and_the_miss_is_cached_for_a_day(): void {
 		$this->stub_fixture_response( 'findById-delivery-street-level-id-gives-nothing' );
-		$record = self::dadata_record( [ 'city_kladr_id' => '77000000000287900' ] );
+		$record = self::dadata_record( [ 'city_fias_id' => '0c5b2444-70a0-4932-980c-b4dc0d3f02b5' ] );
 
 		$this->assertSame( [], self::provider()->delivery_ids( $record ) );
 		$this->assertSame( [ DAY_IN_SECONDS ], array_values( $this->transient_ttls ) );
@@ -368,8 +378,8 @@ final class DadataDeliveryIdsTest extends TestCase {
 	}
 
 	public function test_delivery_ids_caches_an_answer_for_a_week_and_serves_the_second_call_from_the_cache(): void {
-		$this->stub_fixture_response( 'findById-delivery-novosibirsk-by-kladr' );
-		$record = self::dadata_record( [ 'city_kladr_id' => '5400000100000' ] );
+		$this->stub_fixture_response( 'findById-delivery-novosibirsk-by-fias' );
+		$record = self::dadata_record( [ 'city_fias_id' => '8dea00e3-9aab-4d8e-887c-ef2aaa546456' ] );
 
 		$first = self::provider()->delivery_ids( $record );
 
@@ -383,10 +393,10 @@ final class DadataDeliveryIdsTest extends TestCase {
 	}
 
 	public function test_delivery_ids_cache_is_keyed_by_the_queried_id(): void {
-		$this->stub_fixture_response( 'findById-delivery-novosibirsk-by-kladr' );
+		$this->stub_fixture_response( 'findById-delivery-novosibirsk-by-fias' );
 
-		self::provider()->delivery_ids( self::dadata_record( [ 'city_kladr_id' => '5400000100000' ] ) );
-		self::provider()->delivery_ids( self::dadata_record( [ 'city_kladr_id' => '6600000100000' ] ) );
+		self::provider()->delivery_ids( self::dadata_record( [ 'city_fias_id' => '8dea00e3-9aab-4d8e-887c-ef2aaa546456' ] ) );
+		self::provider()->delivery_ids( self::dadata_record( [ 'city_fias_id' => '2763c110-cb8b-416a-9dac-ad28a55b4402' ] ) );
 
 		$this->assertSame( 2, $this->http_calls );
 		$this->assertCount( 2, $this->transients );
@@ -394,7 +404,7 @@ final class DadataDeliveryIdsTest extends TestCase {
 
 	public function test_delivery_ids_throws_a_provider_exception_on_an_http_failure_and_does_not_cache_it(): void {
 		$this->stub_http_response( 500, '' );
-		$record = self::dadata_record( [ 'city_kladr_id' => '5400000100000' ] );
+		$record = self::dadata_record( [ 'city_fias_id' => '8dea00e3-9aab-4d8e-887c-ef2aaa546456' ] );
 
 		try {
 			self::provider()->delivery_ids( $record );
@@ -411,7 +421,7 @@ final class DadataDeliveryIdsTest extends TestCase {
 		$this->stub_http_response( 200, '{"suggestions":[{"value":"x"}]}' );
 
 		$this->expectException( Location_Provider_Exception::class );
-		self::provider()->delivery_ids( self::dadata_record( [ 'city_kladr_id' => '5400000100000' ] ) );
+		self::provider()->delivery_ids( self::dadata_record( [ 'city_fias_id' => '8dea00e3-9aab-4d8e-887c-ef2aaa546456' ] ) );
 	}
 
 	// -------------------------------------------------------------------------
@@ -447,7 +457,7 @@ final class DadataDeliveryIdsTest extends TestCase {
 	}
 
 	public function test_service_hands_the_record_to_the_registered_dadata_provider(): void {
-		$record = self::dadata_record( [ 'city_kladr_id' => '5400000100000' ] );
+		$record = self::dadata_record( [ 'city_fias_id' => '8dea00e3-9aab-4d8e-887c-ef2aaa546456' ] );
 
 		$provider = Mockery::mock( Dadata_Provider::class );
 		$provider->shouldReceive( 'is_configured' )->andReturn( true );
@@ -463,14 +473,14 @@ final class DadataDeliveryIdsTest extends TestCase {
 
 		$this->assertSame(
 			[],
-			$this->service( [ 'dadata' => $provider ] )->get_delivery_ids( self::dadata_record( [ 'city_kladr_id' => '5400000100000' ] ) )
+			$this->service( [ 'dadata' => $provider ] )->get_delivery_ids( self::dadata_record( [ 'city_fias_id' => '8dea00e3-9aab-4d8e-887c-ef2aaa546456' ] ) )
 		);
 	}
 
 	public function test_service_is_empty_when_dadata_is_not_registered(): void {
 		$this->assertSame(
 			[],
-			$this->service( [] )->get_delivery_ids( self::dadata_record( [ 'city_kladr_id' => '5400000100000' ] ) )
+			$this->service( [] )->get_delivery_ids( self::dadata_record( [ 'city_fias_id' => '8dea00e3-9aab-4d8e-887c-ef2aaa546456' ] ) )
 		);
 	}
 
@@ -481,12 +491,23 @@ final class DadataDeliveryIdsTest extends TestCase {
 
 		$this->assertSame(
 			[],
-			$this->service( [ 'dadata' => $provider ] )->get_delivery_ids( self::dadata_record( [ 'city_kladr_id' => '5400000100000' ], 'cdek' ) )
+			$this->service( [ 'dadata' => $provider ] )->get_delivery_ids( self::dadata_record( [ 'city_fias_id' => '8dea00e3-9aab-4d8e-887c-ef2aaa546456' ], 'cdek' ) )
 		);
 	}
 
+	public function test_service_never_reaches_dadata_for_a_non_russian_record(): void {
+		$provider = Mockery::mock( Dadata_Provider::class )->makePartial();
+		$provider->shouldReceive( 'is_configured' )->andReturn( true );
+
+		Functions\expect( 'wp_safe_remote_request' )->never();
+
+		$record = self::dadata_record( [ 'city_fias_id' => 'relation:1746396' ], 'dadata', 'KZ' );
+
+		$this->assertSame( [], $this->service( [ 'dadata' => $provider ] )->get_delivery_ids( $record ) );
+	}
+
 	public function test_service_lets_a_transport_failure_through(): void {
-		$record = self::dadata_record( [ 'city_kladr_id' => '5400000100000' ] );
+		$record = self::dadata_record( [ 'city_fias_id' => '8dea00e3-9aab-4d8e-887c-ef2aaa546456' ] );
 
 		$provider = Mockery::mock( Dadata_Provider::class );
 		$provider->shouldReceive( 'is_configured' )->andReturn( true );

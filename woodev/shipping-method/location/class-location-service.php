@@ -3089,17 +3089,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 
 		/**
 		 * Carrier city ids for a location record — the public, token-free way a
-		 * carrier's {@see Location_Adapter} maps a customer's locality to the
-		 * carrier's own city code (#1136).
+		 * carrier's {@see Location_Adapter} can get the carrier's own city code
+		 * for a customer's locality (#1136).
 		 *
-		 * Today only the bundled DaData provider can answer
-		 * (`POST findById/delivery`): the record must be one DaData produced, and
-		 * DaData must be registered and configured. Everything else — a record
-		 * some other provider produced, DaData unregistered or without a token, no
-		 * city/settlement id in the record, DaData knowing nothing — answers `[]`
-		 * (fail closed, never a throw for "not configured"). The token stays inside
-		 * the provider; see {@see Providers\Dadata_Provider::delivery_ids()} for
-		 * the key choice, the cache and the shape of the answer.
+		 * **SECONDARY, RU-only source — a FALLBACK.** Only the bundled DaData
+		 * provider can answer (`POST findById/delivery`), only for Russian
+		 * settlements, and DaData scrapes these ids from the carriers, so they can
+		 * be STALE. A carrier adapter must resolve through its own carrier lookup
+		 * FIRST, use this only when that finds nothing, and verify any id it gets
+		 * here against the carrier before trusting it.
+		 *
+		 * The record must be one DaData produced and DaData must be registered and
+		 * configured. Everything else — a record some other provider produced, a
+		 * non-RU record, DaData unregistered or without a token, no city/settlement
+		 * FIAS id in the record, DaData knowing nothing — answers `[]` (fail
+		 * closed, never a throw for "not configured"). The token stays inside the
+		 * provider; see {@see Providers\Dadata_Provider::delivery_ids()} for the key
+		 * choice, the cache and the shape of the answer.
 		 *
 		 * @since 2.0.2
 		 *

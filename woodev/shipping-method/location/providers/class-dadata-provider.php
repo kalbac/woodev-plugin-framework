@@ -642,24 +642,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		 * (#1136), answered here so a carrier plugin never touches the DaData
 		 * token: it hands over a {@see Location_Record} and gets ids back.
 		 *
+		 * **SECONDARY, RU-only source — a fallback, never the first choice.** The
+		 * service covers Russian settlements only, and DaData scrapes these ids
+		 * from the carriers, so they can be STALE. A carrier adapter must prefer
+		 * its own carrier lookup, use this only as a fallback, and verify any id
+		 * it gets here against the carrier before trusting it. A record whose
+		 * country is not `RU` answers `[]` WITHOUT a request.
+		 *
 		 * The key is read from the record's opaque `raw()` payload, which for a
 		 * record this provider produced IS DaData's `data` object:
-		 * `settlement_kladr_id ?: city_kladr_id` — NEVER `kladr_id`, which on an
-		 * address-level record is the street/house id and answers nothing. When
-		 * the payload carries no KLADR id, the FIAS equivalent
-		 * (`settlement_fias_id ?: city_fias_id`) is used; DaData answers both
-		 * kinds identically.
+		 * `settlement_fias_id ?: city_fias_id` — FIAS only; KLADR is obsolete and
+		 * is relied on nowhere. The record's own `fias_id` is never used: on an
+		 * address-level record it is the street/house id, which answers nothing.
 		 *
-		 * The answer is stable, so it is cached in a site-wide transient keyed by
-		 * the queried id (a hit for a week, a miss for a day —
+		 * The answer is cached in a site-wide transient keyed by the queried id
+		 * (a hit for a week, a miss for a day —
 		 * {@see self::FILTER_DELIVERY_IDS_CACHE_TTL}). A THROWN failure is never
 		 * cached: it retries on the next call.
 		 *
 		 * Fails CLOSED with `[]` — never a throw — for every "nothing to ask"
-		 * outcome: a record some other provider produced, no readable `raw`, a
-		 * region-only record (no city/settlement id), DaData knowing no ids for it,
-		 * or this provider not being configured. Only a real transport/mapping
-		 * failure throws.
+		 * outcome: a record some other provider produced, a non-RU record, no
+		 * readable `raw`, no city/settlement FIAS id in it (a region-only record),
+		 * DaData knowing no ids for it, or this provider not being configured.
+		 * Only a real transport/mapping failure throws.
 		 *
 		 * @since 2.0.2
 		 *
@@ -675,7 +680,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		 *                                      answer cannot be read.
 		 */
 		public function delivery_ids( Location_Record $record ): array {
-			if ( self::PROVIDER_ID !== $record->provider_id() || ! $this->is_configured() ) {
+			if ( self::PROVIDER_ID !== $record->provider_id() || 'RU' !== $record->country() || ! $this->is_configured() ) {
 				return [];
 			}
 
@@ -731,7 +736,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 				return '';
 			}
 
-			foreach ( [ 'settlement_kladr_id', 'city_kladr_id', 'settlement_fias_id', 'city_fias_id' ] as $field ) {
+			foreach ( [ 'settlement_fias_id', 'city_fias_id' ] as $field ) {
 				if ( isset( $raw[ $field ] ) && is_string( $raw[ $field ] ) && '' !== $raw[ $field ] ) {
 					return $raw[ $field ];
 				}

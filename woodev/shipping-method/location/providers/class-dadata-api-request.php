@@ -88,7 +88,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param array<string, mixed> $body Request body (`query` = a KLADR or FIAS id).
+		 * @param array<string, mixed> $body Request body (`query` = a FIAS id).
 		 *
 		 * @return void
 		 */

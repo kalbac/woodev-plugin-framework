@@ -7,7 +7,7 @@
       "Content-Type": "application/json"
     },
     "body": {
-      "query": "77000000000287900"
+      "query": "94d0cf51-2820-4409-bbd7-4a7d36f2922b"
     }
   },
   "response": {
@@ -16,5 +16,5 @@
       "suggestions": []
     }
   },
-  "note": "query = KLADR id of a STREET-level address (Москва, ул Тверская): no cdek_id; the adapter must use city_kladr_id / settlement_kladr_id, never data.kladr_id of an address row"
+  "note": "query = FIAS id of a STREET-level address (Москва, ул 1-я Тверская-Ямская): empty suggestion set, no cdek_id; the adapter must use city_fias_id / settlement_fias_id, never data.fias_id of an address row. Response recorded live (06.10.2026) for the street's KLADR id; the plugin measurement (dadata-delivery.md §1) found KLADR and FIAS paths identical, and this request body is the FIAS equivalent."
 }

@@ -7,7 +7,7 @@
       "Content-Type": "application/json"
     },
     "body": {
-      "query": "6900001500000"
+      "query": "2e30ca06-a155-495e-966d-d2f47764c452"
     }
   },
   "response": {
@@ -28,5 +28,5 @@
       ]
     }
   },
-  "note": "query = kladr_id of peno"
+  "note": "query = fias_id of peno"
 }

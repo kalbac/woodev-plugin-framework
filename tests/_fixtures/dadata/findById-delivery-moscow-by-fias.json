@@ -7,7 +7,7 @@
       "Content-Type": "application/json"
     },
     "body": {
-      "query": "5400000100000"
+      "query": "0c5b2444-70a0-4932-980c-b4dc0d3f02b5"
     }
   },
   "response": {
@@ -15,18 +15,18 @@
     "body": {
       "suggestions": [
         {
-          "value": "5400000100000",
-          "unrestricted_value": "8dea00e3-9aab-4d8e-887c-ef2aaa546456",
+          "value": "7700000000000",
+          "unrestricted_value": "0c5b2444-70a0-4932-980c-b4dc0d3f02b5",
           "data": {
-            "kladr_id": "5400000100000",
-            "fias_id": "8dea00e3-9aab-4d8e-887c-ef2aaa546456",
-            "boxberry_id": "7765",
-            "cdek_id": "270",
-            "dpd_id": "49455627"
+            "kladr_id": "7700000000000",
+            "fias_id": "0c5b2444-70a0-4932-980c-b4dc0d3f02b5",
+            "boxberry_id": "77213",
+            "cdek_id": "44",
+            "dpd_id": "49694102"
           }
         }
       ]
     }
   },
-  "note": "query = kladr_id of novosibirsk"
+  "note": "query = fias_id of moscow"
 }

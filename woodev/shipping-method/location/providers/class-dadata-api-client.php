@@ -411,24 +411,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		/**
 		 * Carrier city ids for a locality — `POST findById/delivery`.
 		 *
-		 * DaData maps ONE KLADR or FIAS id of a city/settlement to the ids that
+		 * DaData maps the FIAS id of a Russian city/settlement to the ids that
 		 * delivery services use for the same place (`cdek_id`, `boxberry_id`,
-		 * `dpd_id`, …). Measured live against the CDEK test contour (#1136): 98.5%
-		 * of the 488 CDEK office cities came back with CDEK's own code.
+		 * `dpd_id`, …).
 		 *
-		 * The id MUST be city/settlement level: a street- or house-level id (an
-		 * address row's own `kladr_id`/`fias_id`) answers an EMPTY suggestion set,
-		 * not an error. The two id kinds are equivalent (0 disagreements over 465
-		 * localities), so the caller passes whichever its record carries.
+		 * **SECONDARY, RU-only source.** The service covers Russian settlements
+		 * only, and DaData scrapes these ids from the carriers, so they can be
+		 * STALE. A caller must prefer the carrier's own lookup, use this only as a
+		 * fallback, and verify any id against the carrier. Measured live against
+		 * the CDEK test contour (#1136): 98.5% of the 488 CDEK office cities came
+		 * back with CDEK's own code — a measurement, not a guarantee.
+		 *
+		 * The id MUST be city/settlement level: a street- or house-level FIAS id
+		 * (an address row's own `fias_id`) answers an EMPTY suggestion set, not an
+		 * error. KLADR is obsolete and is not used.
 		 *
 		 * No `language` field: the answer is ids, not text.
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param string $id A KLADR or FIAS id of a city or settlement.
+		 * @param string $id The FIAS id of a Russian city or settlement.
 		 *
 		 * @return array<string, mixed>|null The first suggestion's `data` object
-		 *                                   (`kladr_id`, `fias_id`, `cdek_id` — a
+		 *                                   (`fias_id`, `cdek_id` — a
 		 *                                   STRING —, `boxberry_id`, `dpd_id`, …), or
 		 *                                   null when DaData answered with an EMPTY
 		 *                                   suggestion set, i.e. knows no delivery ids
