@@ -101,6 +101,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		public const FILTER_COUNTRIES = 'woodev_location_provider_countries';
 
 		/**
+		 * Filter tag: the cache TTL, in seconds, of {@see self::delivery_ids()} (#1136).
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		public const FILTER_DELIVERY_IDS_CACHE_TTL = 'woodev_location_dadata_delivery_ids_cache_ttl';
+
+		/**
+		 * Transient key prefix of {@see self::delivery_ids()}'s cache — site-wide,
+		 * because a locality's carrier ids are a fact about the place, identical
+		 * for every customer.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		private const DELIVERY_IDS_CACHE_PREFIX = 'woodev_location_dadata_delivery_';
+
+		/**
 		 * The nine countries served by default (before {@see self::FILTER_COUNTRIES}
 		 * runs) — the store operator's market-scope decision, not a limit of the
 		 * DaData API; see {@see self::get_countries()}'s own docblock for the
@@ -617,6 +635,142 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 			}
 
 			return $record;
+		}
+
+		/**
+		 * Carrier city ids for a location record — `POST findById/delivery`
+		 * (#1136), answered here so a carrier plugin never touches the DaData
+		 * token: it hands over a {@see Location_Record} and gets ids back.
+		 *
+		 * **SECONDARY, RU-only source — a fallback, never the first choice.** The
+		 * service covers Russian settlements only, and DaData scrapes these ids
+		 * from the carriers, so they can be STALE. A carrier adapter must prefer
+		 * its own carrier lookup, use this only as a fallback, and verify any id
+		 * it gets here against the carrier before trusting it. A record whose
+		 * country is not `RU` answers `[]` WITHOUT a request.
+		 *
+		 * The key is read from the record's opaque `raw()` payload, which for a
+		 * record this provider produced IS DaData's `data` object:
+		 * `settlement_fias_id ?: city_fias_id` — FIAS only; KLADR is obsolete and
+		 * is relied on nowhere. The record's own `fias_id` is never used: on an
+		 * address-level record it is the street/house id, which answers nothing.
+		 *
+		 * The answer is cached in a site-wide transient keyed by the queried id
+		 * (a hit for a week, a miss for a day —
+		 * {@see self::FILTER_DELIVERY_IDS_CACHE_TTL}). A THROWN failure is never
+		 * cached: it retries on the next call.
+		 *
+		 * Fails CLOSED with `[]` — never a throw — for every "nothing to ask"
+		 * outcome: a record some other provider produced, a non-RU record, no
+		 * readable `raw`, no city/settlement FIAS id in it (a region-only record),
+		 * DaData knowing no ids for it, or this provider not being configured.
+		 * Only a real transport/mapping failure throws.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Location_Record $record A location record.
+		 *
+		 * @return array<string, string> Carrier ids keyed by DaData's field name
+		 *                               (`cdek_id`, `boxberry_id`, `dpd_id`, …), the
+		 *                               values as DaData sends them (STRINGS — a
+		 *                               carrier casts its own). Absent carriers are
+		 *                               absent keys. Empty when there is no answer.
+		 *
+		 * @throws Location_Provider_Exception When the DaData request fails or its
+		 *                                      answer cannot be read.
+		 */
+		public function delivery_ids( Location_Record $record ): array {
+			if ( self::PROVIDER_ID !== $record->provider_id() || 'RU' !== $record->country() || ! $this->is_configured() ) {
+				return [];
+			}
+
+			$id = self::delivery_query_id( $record->raw() );
+
+			if ( '' === $id ) {
+				return [];
+			}
+
+			$cache_key = self::DELIVERY_IDS_CACHE_PREFIX . md5( $id );
+			$cached    = get_transient( $cache_key );
+
+			if ( is_array( $cached ) ) {
+				return $cached;
+			}
+
+			try {
+				$data = $this->client()->find_by_id_delivery( $id );
+			} catch ( \Throwable $exception ) {
+				$this->log_failure( 'delivery_ids', $exception );
+
+				throw new Location_Provider_Exception( 'DaData delivery_ids request failed.', 0, $exception );
+			}
+
+			$ids = null === $data ? [] : self::carrier_ids_from( $data );
+
+			/**
+			 * Filters how long {@see Dadata_Provider::delivery_ids()} caches an answer, in seconds (#1136).
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param int  $ttl  `WEEK_IN_SECONDS` for an answer carrying ids, `DAY_IN_SECONDS` for an empty one.
+			 * @param bool $found Whether DaData returned at least one carrier id.
+			 */
+			$ttl = (int) apply_filters( self::FILTER_DELIVERY_IDS_CACHE_TTL, [] === $ids ? DAY_IN_SECONDS : WEEK_IN_SECONDS, [] !== $ids );
+
+			set_transient( $cache_key, $ids, max( 0, $ttl ) );
+
+			return $ids;
+		}
+
+		/**
+		 * The id to ask `findById/delivery` about, from a record's raw payload.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param mixed $raw {@see Location_Record::raw()}.
+		 *
+		 * @return string The id, or `''` when the payload carries no city/settlement id.
+		 */
+		private static function delivery_query_id( $raw ): string {
+			if ( ! is_array( $raw ) ) {
+				return '';
+			}
+
+			foreach ( [ 'settlement_fias_id', 'city_fias_id' ] as $field ) {
+				if ( isset( $raw[ $field ] ) && is_string( $raw[ $field ] ) && '' !== $raw[ $field ] ) {
+					return $raw[ $field ];
+				}
+			}
+
+			return '';
+		}
+
+		/**
+		 * The carrier ids out of a `findById/delivery` `data` object — every
+		 * non-empty scalar `*_id` field except the two identity ones echoed back.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string, mixed> $data The suggestion's `data` object.
+		 *
+		 * @return array<string, string>
+		 */
+		private static function carrier_ids_from( array $data ): array {
+			$ids = [];
+
+			foreach ( $data as $field => $value ) {
+				if (
+					is_string( $field )
+					&& '_id' === substr( $field, -3 )
+					&& ! in_array( $field, [ 'kladr_id', 'fias_id' ], true )
+					&& is_scalar( $value )
+					&& '' !== (string) $value
+				) {
+					$ids[ $field ] = (string) $value;
+				}
+			}
+
+			return $ids;
 		}
 
 		/**
