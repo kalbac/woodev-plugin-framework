@@ -17,6 +17,7 @@ use Woodev\Framework\Shipping\Order\Delivery_Status;
 use Woodev\Framework\Shipping\Order\Carrier_Cancel;
 use Woodev\Framework\Shipping\Order\Export_Retry;
 use Woodev\Framework\Shipping\Order\Order_Automation;
+use Woodev\Framework\Shipping\Rest_Api\Document_Controller;
 use Woodev\Framework\Shipping\Rest_Api\Order_Editor_Controller;
 use Woodev\Framework\Shipping\Rest_Api\Orders_Controller;
 use Woodev\Framework\Shipping\Rest_Api\Rates_Controller;
@@ -112,6 +113,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 * @var array<string, Abstract_Tracking_Handler>
 		 */
 		private $tracking_handlers = [];
+
+		/** @var array<string, \Woodev\Framework\Shipping\Order\Document_Source> document sources keyed by provider id. */
+		private $document_sources = [];
 
 		/**
 		 * The framework-built order-edit metabox (card #856). Lazily created so a
@@ -250,6 +254,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 
 			$this->providers[ $provider->get_id() ] = $provider;
 
+			// The delivery-status watcher caches which meta keys decide a canonical status.
+			if ( class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Delivery_Status_Watcher', false ) ) {
+				\Woodev\Framework\Shipping\Order\Delivery_Status_Watcher::flush();
+			}
+
 			if ( $is_replacement ) {
 				unset( $this->shipment_handlers[ $provider->get_id() ] );
 				unset( $this->tracking_handlers[ $provider->get_id() ] );
@@ -337,6 +346,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 */
 		public function get_tracking_handler( string $provider_id ): ?Abstract_Tracking_Handler {
 			return $this->tracking_handlers[ $provider_id ] ?? null;
+		}
+
+		/**
+		 * Registers a carrier document source.
+		 *
+		 * @since 2.0.2
+		 * @param string                                           $provider_id carrier id.
+		 * @param \Woodev\Framework\Shipping\Order\Document_Source $source source implementation.
+		 * @return void
+		 */
+		public function register_document_source( string $provider_id, \Woodev\Framework\Shipping\Order\Document_Source $source ): void {
+			$this->document_sources[ $provider_id ] = $source;
+		}
+
+		/**
+		 * Returns a carrier's document source.
+		 *
+		 * @since 2.0.2
+		 * @param string $provider_id carrier id.
+		 * @return \Woodev\Framework\Shipping\Order\Document_Source|null
+		 */
+		public function get_document_source( string $provider_id ): ?\Woodev\Framework\Shipping\Order\Document_Source {
+			return $this->document_sources[ $provider_id ] ?? null;
 		}
 
 		/**
@@ -2017,6 +2049,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 */
 		public function register_rest(): void {
 			\Woodev_REST_V1_Registrar::register_controller( new Orders_Controller( $this ) );
+			\Woodev_REST_V1_Registrar::register_controller( new Document_Controller( $this ) );
 			\Woodev_REST_V1_Registrar::register_controller( new Order_Editor_Controller( $this ) );
 			\Woodev_REST_V1_Registrar::register_controller( new Rates_Controller( $this ) );
 		}
@@ -2113,6 +2146,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			$this->providers         = [];
 			$this->shipment_handlers = [];
 			$this->tracking_handlers = [];
+			$this->document_sources  = [];
 			$this->provider_plugins  = [];
 			$this->admin_order       = null;
 			$this->automation        = null;

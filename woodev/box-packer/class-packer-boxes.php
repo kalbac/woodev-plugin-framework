@@ -18,7 +18,8 @@ if ( ! class_exists( 'Woodev_Packer_Boxes' ) ) :
 			}
 
 			$this->packages = [];
-			$this->boxes    = $this->order_boxes_by_volume( $this->boxes );
+			// no add_box() call leaves `$boxes` null — every item then fits no box (below), it is not an error
+			$this->boxes = $this->order_boxes_by_volume( $this->boxes ?: [] );
 
 			if ( ! $this->boxes ) {
 				$this->items_cannot_pack = $this->items;

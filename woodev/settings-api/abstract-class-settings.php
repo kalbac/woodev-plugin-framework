@@ -95,6 +95,7 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 						'validate'         => null,
 						'validate_message' => '',
 						'show_if'          => [],
+						'disabled_if'      => [],
 					]
 				);
 
@@ -110,6 +111,7 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 				}
 
 				$setting->set_show_if( $args['show_if'] );
+				$setting->set_disabled_if( $args['disabled_if'] );
 
 				if ( is_array( $args['options'] ) ) {
 					$setting->set_options( $args['options'] );
@@ -220,8 +222,16 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 					$control->set_country( (string) $args['country'] );
 				}
 
-				if ( ! empty( $args['disabled'] ) ) {
-					$control->set_disabled( true, (string) ( $args['disabled_reason'] ?? '' ) );
+				if ( isset( $args['disabled'] ) || isset( $args['disabled_reason'] ) ) {
+					$control->set_disabled( ! empty( $args['disabled'] ), (string) ( $args['disabled_reason'] ?? '' ) );
+				}
+
+				if ( Woodev_Control::TYPE_SEARCH_SELECT === $type ) {
+					if ( $setting->is_is_multi() || ! in_array( $setting->get_type(), [ Woodev_Setting::TYPE_STRING, Woodev_Setting::TYPE_INTEGER ], true )
+						|| ! is_callable( $args['search_callback'] ?? null ) || ! is_callable( $args['label_callback'] ?? null ) ) {
+						throw new InvalidArgumentException( 'A search-select needs a scalar string/integer setting and both callbacks' );
+					}
+					$control->set_search_callbacks( $args['search_callback'], $args['label_callback'] );
 				}
 
 				$setting->set_control( $control );
@@ -420,6 +430,13 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 				$setting = $this->get_setting( (string) $setting_id );
 
 				if ( ! $setting ) {
+					continue;
+				}
+
+				$control  = $setting->get_control();
+				$disabled = $setting->get_disabled_if_conditions();
+				if ( ( $control && $control->is_disabled() ) || ( ! empty( $disabled ) && Woodev_Setting::evaluate_conditions( $disabled, $this->effective_condition_values( $disabled, $values ) ) ) ) {
+					$hidden[] = $setting_id;
 					continue;
 				}
 
@@ -696,6 +713,8 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 				Woodev_Control::TYPE_CHECKBOX,
 				Woodev_Control::TYPE_RADIO,
 				Woodev_Control::TYPE_SELECT,
+				Woodev_Control::TYPE_SEARCH_SELECT,
+				Woodev_Control::TYPE_BOXES_TABLE,
 				Woodev_Control::TYPE_FILE,
 				Woodev_Control::TYPE_COLOR,
 				Woodev_Control::TYPE_RANGE,

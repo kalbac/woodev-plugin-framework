@@ -84,6 +84,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 		/** @var Default_Dimensions_Settings|null lazily built so tests (and the packer) can read it without the tab registered. */
 		private $default_dimensions_settings = null;
 
+		/** @var Boxes_Settings|null lazily built so tests (and the packer) can read it without the tab registered. */
+		private $boxes_settings = null;
+
 		/** @var bool whether the `init` registration hook has already been added. */
 		private $hooked = false;
 
@@ -275,6 +278,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 			return $this->default_dimensions_settings;
 		}
 
+		/**
+		 * The «Упаковка» handler (#1138). Lazily built, never `null`, so the packer can read it on a
+		 * request where the tab itself was never registered.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return Boxes_Settings
+		 */
+		public function get_boxes_settings(): Boxes_Settings {
+			if ( null === $this->boxes_settings ) {
+				$this->boxes_settings = new Boxes_Settings();
+			}
+
+			return $this->boxes_settings;
+		}
+
 		public function build_sections(): array {
 			if ( ! $this->shipping_plugin_declared ) {
 				return [];
@@ -361,6 +380,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 				__( 'Эти значения подставляются, только если у товара не указаны вес или габариты. Для точного расчёта стоимости доставки укажите вес и габариты в карточке каждого товара.', 'woodev-plugin-framework' )
 			);
 
+			// «Упаковка» (#1138): the store's own boxes the `boxes` packing algorithm packs into — store-wide too.
+			$sections[] = Settings_Section::create(
+				Boxes_Settings::SECTION_ID,
+				__( 'Упаковка', 'woodev-plugin-framework' ),
+				$this->get_boxes_settings()->get_owned_setting_ids(),
+				__( 'Упаковка магазина, в которую упаковываются заказы. Товар, который не помещается ни в одну коробку, едет в отдельной посылке.', 'woodev-plugin-framework' )
+			);
+
 			// «Инструменты» (#505) is always LAST, and exists only when at least one
 			// tool is registered — an empty section is worse than no section.
 			$tools = Shipping_Tools_Registry::instance()->get_tools();
@@ -430,6 +457,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 					$this->get_field_settings(),
 					$this->map_needed ? $this->get_map_settings() : null,
 					$this->get_default_dimensions_settings(),
+					$this->get_boxes_settings(),
 				]
 			);
 

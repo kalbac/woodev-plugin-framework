@@ -211,8 +211,10 @@ final class Settings_Page_Registry {
 			$entry       = [
 				'id'          => $section->get_id(),
 				'label'       => $section->get_label(),
-				'description' => $section->get_description(),
-				'fields'      => empty( $setting_ids ) ? [] : Field_Schema::from_handler( $handler, $setting_ids ),
+				// Descriptions are rendered as markup by RawHTML so links work; constrain
+				// that markup at the schema boundary just like other HTML descriptions.
+				'description' => wp_kses_post( $section->get_description() ),
+				'fields'      => empty( $setting_ids ) ? [] : Field_Schema::from_handler( $handler, $setting_ids, $provider->get_id() ),
 			];
 
 			if ( $section->is_tools() ) {

@@ -20,6 +20,11 @@ require_once dirname( __DIR__, 2 ) . '/woodev/shipping-method/settings/class-too
 
 class SettingsPageRegistryTest extends TestCase {
 
+	protected function setUp(): void {
+		parent::setUp();
+		Functions\when( 'wp_kses_post' )->returnArg();
+	}
+
 	// ----- capability resolution (4 rules) -----
 
 	public function test_capability_defaults_to_manage_options(): void {
@@ -51,7 +56,7 @@ class SettingsPageRegistryTest extends TestCase {
 
 	// ----- tab aggregation -----
 
-	private function provider( string $id, string $label, ?string $cap = null ): Settings_Provider {
+	private function provider( string $id, string $label, ?string $cap = null, string $description = '' ): Settings_Provider {
 		$setting = Mockery::mock();
 		$setting->shouldReceive( 'get_id' )->andReturn( 'api_key' );
 		$setting->shouldReceive( 'get_type' )->andReturn( 'string' );
@@ -65,6 +70,7 @@ class SettingsPageRegistryTest extends TestCase {
 		$setting->shouldReceive( 'is_required' )->andReturn( false );
 		$setting->shouldReceive( 'get_validate' )->andReturn( null );
 		$setting->shouldReceive( 'get_show_if_conditions' )->andReturn( [] );
+		$setting->shouldReceive( 'get_disabled_if_conditions' )->andReturn( [] );
 
 		$handler = Mockery::mock();
 		$handler->shouldReceive( 'get_id' )->andReturn( $id );
@@ -75,9 +81,25 @@ class SettingsPageRegistryTest extends TestCase {
 			$id,
 			$label,
 			$handler,
-			[ Settings_Section::create( 'general', 'Общие', [ 'api_key' ] ) ],
+			[ Settings_Section::create( 'general', 'Общие', [ 'api_key' ], $description ) ],
 			null === $cap ? [] : [ 'capability' => $cap ]
 		);
+	}
+
+	public function test_build_sections_sanitizes_section_description_with_wp_kses_post(): void {
+		$description = '<a href="https://example.com">help</a><script>alert(1)</script>';
+		Functions\when( 'wp_kses_post' )->alias(
+			static function ( string $html ): string {
+				return preg_replace( '/<script>.*?<\/script>/s', '', $html );
+			}
+		);
+
+		$tabs = Settings_Page_Registry::instance()->build_tabs(
+			[ [ 'provider' => $this->provider( 'safe', 'Safe', null, $description ), 'is_woocommerce' => false ] ],
+			static function (): bool { return true; }
+		);
+
+		$this->assertSame( '<a href="https://example.com">help</a>', $tabs[0]['sections'][0]['description'] );
 	}
 
 	public function test_build_tabs_dedupes_by_id_keeping_first_and_preserves_order(): void {
@@ -117,6 +139,7 @@ class SettingsPageRegistryTest extends TestCase {
 		$setting->shouldReceive( 'is_required' )->andReturn( false );
 		$setting->shouldReceive( 'get_validate' )->andReturn( null );
 		$setting->shouldReceive( 'get_show_if_conditions' )->andReturn( [] );
+		$setting->shouldReceive( 'get_disabled_if_conditions' )->andReturn( [] );
 
 		$handler = Mockery::mock();
 		$handler->shouldReceive( 'get_id' )->andReturn( 'cdek' );
@@ -401,6 +424,7 @@ class SettingsPageRegistryTest extends TestCase {
 		$setting->shouldReceive( 'is_required' )->andReturn( false );
 		$setting->shouldReceive( 'get_validate' )->andReturn( null );
 		$setting->shouldReceive( 'get_show_if_conditions' )->andReturn( [] );
+		$setting->shouldReceive( 'get_disabled_if_conditions' )->andReturn( [] );
 
 		return $setting;
 	}

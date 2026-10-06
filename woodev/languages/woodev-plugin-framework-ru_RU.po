@@ -150,6 +150,10 @@ msgstr "Каждый товар в отдельной коробке"
 msgid "Single box (items stacked along one axis)"
 msgstr "Одна коробка (товары укладываются в один ряд)"
 
+#: box-packer/class-packer-dispatcher.php:124
+msgid "Store boxes (items packed into the boxes set up in the store)"
+msgstr "Коробки магазина (товары упаковываются в коробки, заданные в магазине)"
+
 #. translators: Placeholders: %1$s - the plugin that was refused, %2$s - the plugin already holding the same license identifier
 #: class-framework-resolver.php:556
 #, php-format
@@ -1800,6 +1804,10 @@ msgstr ""
 msgid "Обязательное поле."
 msgstr ""
 
+#: assets/build/setup-wizard/index.js
+#: assets/build/settings-page/index.js
+#: assets/build/shipping-orders-page/index.js
+#: assets/build/ui-kit-gallery/index.js
 #: settings-api/class-setting.php:615
 msgid "Неверное значение."
 msgstr ""
@@ -3724,6 +3732,28 @@ msgstr ""
 msgid "Эти значения подставляются, только если у товара не указаны вес или габариты. Для точного расчёта стоимости доставки укажите вес и габариты в карточке каждого товара."
 msgstr ""
 
+#: shipping-method/settings/class-shipping-settings-tab.php:386
+msgid "Коробки"
+msgstr ""
+
+#: shipping-method/settings/class-shipping-settings-tab.php:388
+msgid "Коробки магазина, в которые упаковываются заказы у способов доставки с алгоритмом упаковки «Коробки магазина». Товар, который не помещается ни в одну коробку, едет в отдельной посылке — он не теряется."
+msgstr ""
+
+#: shipping-method/settings/class-boxes-settings.php:226
+msgid "Список коробок"
+msgstr ""
+
+#: shipping-method/settings/class-boxes-settings.php:229
+msgid "Каждая непустая строка должна быть вида «название; длина; ширина; высота; макс. вес; вес коробки». Размеры — числа больше нуля, веса — числа не меньше нуля."
+msgstr ""
+
+#. translators: 1: the store's dimension unit, e.g. cm; 2: the store's weight unit, e.g. kg
+#: shipping-method/settings/class-boxes-settings.php:238
+#, php-format
+msgid "По одной коробке в строке: «название; длина; ширина; высота; макс. вес; вес коробки». Размеры (внутренние) — в %1$s, веса — в %2$s. Макс. вес и вес коробки можно не указывать: пусто — без ограничения и коробка ничего не весит. Макс. вес считается вместе с самой коробкой."
+msgstr ""
+
 #: shipping-method/settings/class-shipping-settings-tab.php:344
 msgid "Инструменты"
 msgstr ""
@@ -4994,3 +5024,334 @@ msgstr "На странице оформления заказа отсутств
 #: shipping-method/checkout/class-checkout-parent-block-notice.php
 msgid "Открыть страницу оформления заказа"
 msgstr "Открыть страницу оформления заказа"
+
+#: shipping-method/admin/orders/class-order-actions.php
+msgid "Накладная"
+msgstr "Накладная"
+
+#: shipping-method/admin/orders/class-order-actions.php
+msgid "Штрихкод"
+msgstr "Штрихкод"
+
+#: shipping-method/admin/orders/class-order-actions.php
+msgid "Скачать документ перевозчика"
+msgstr "Скачать документ перевозчика"
+
+#: shipping-method/rest-api/class-document-controller.php
+msgid "У вас нет прав для скачивания документа."
+msgstr "У вас нет прав для скачивания документа."
+
+#: shipping-method/rest-api/class-document-controller.php
+msgid "Документ недоступен."
+msgstr "Документ недоступен."
+
+#: shipping-method/rest-api/class-document-controller.php
+msgid "Не удалось получить документ у перевозчика."
+msgstr "Не удалось получить документ у перевозчика."
+
+#: shipping-method/rest-api/class-document-controller.php
+msgid "Документ ещё готовится. Повторите запрос позже."
+msgstr "Документ ещё готовится. Повторите запрос позже."
+
+#: shipping-method/rest-api/class-document-controller.php
+msgid "Ссылка на документ некорректна."
+msgstr "Ссылка на документ некорректна."
+
+#: shipping-method/rest-api/class-document-controller.php
+msgid "Документ пуст или имеет неверный формат."
+msgstr "Документ пуст или имеет неверный формат."
+
+#: shipping-method/email/class-delivery-status-email.php:77
+msgid "Включить"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-email.php:79
+msgid "Отправлять это письмо покупателю"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-email.php:83
+msgid "Тема"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-email.php:85
+msgid ""
+"Доступны переменные: {order_number}, {tracking_number}, {tracking_url}, "
+"{carrier_name}, {pickup_point}, {delivery_date}."
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-email.php:90
+msgid "Заголовок"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-email.php:95
+msgid "Формат письма"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-email.php:102
+msgid "Текст письма"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-email.php:106
+msgid "Переменные можно вставлять в фигурных скобках."
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php:53
+msgid "Передан в доставку + трек"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php:53
+msgid "Письмо покупателю после передачи отправления перевозчику."
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php:54
+msgid "Заказ ждёт в пункте выдачи"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php:54
+msgid "Письмо покупателю, когда отправление поступило в пункт выдачи."
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php:55
+#: shipping-method/order/class-delivery-status.php:95
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Доставлено"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php:55
+msgid "Письмо покупателю после доставки заказа."
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php:56
+msgid "Возврат / не доставлено"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php:56
+msgid "Письмо покупателю при возврате или неудачной доставке."
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php
+msgid "Order {order_number} has been handed over for delivery"
+msgstr "Заказ {order_number} передан в доставку"
+
+#: shipping-method/email/class-delivery-status-emails.php
+msgid "Your order has been handed over for delivery"
+msgstr "Ваш заказ передан в доставку"
+
+#: shipping-method/email/class-delivery-status-emails.php
+msgid ""
+"Your shipment has been handed over to the carrier. Tracking number: "
+"{tracking_number}. {tracking_url}"
+msgstr ""
+"Отправление передано перевозчику. Номер для отслеживания: "
+"{tracking_number}. {tracking_url}"
+
+#: shipping-method/email/class-delivery-status-emails.php
+msgid "Order {order_number} is waiting at the pickup point"
+msgstr "Заказ {order_number} ждёт в пункте выдачи"
+
+#: shipping-method/email/class-delivery-status-emails.php
+msgid "Your order is waiting at the pickup point"
+msgstr "Ваш заказ ждёт в пункте выдачи"
+
+#: shipping-method/email/class-delivery-status-emails.php
+msgid "Pick up order {order_number} at the pickup point: {pickup_point}."
+msgstr "Заберите заказ {order_number} в пункте выдачи: {pickup_point}."
+
+#: shipping-method/email/class-delivery-status-emails.php
+msgid "Order {order_number} has been delivered"
+msgstr "Заказ {order_number} доставлен"
+
+#: shipping-method/email/class-delivery-status-emails.php
+msgid "Your order has been delivered"
+msgstr "Ваш заказ доставлен"
+
+#: shipping-method/email/class-delivery-status-emails.php
+msgid "Order {order_number} has been delivered."
+msgstr "Заказ {order_number} доставлен."
+
+#: shipping-method/email/class-delivery-status-emails.php
+msgid "There is a problem with the delivery of order {order_number}"
+msgstr "Проблема с доставкой заказа {order_number}"
+
+#: shipping-method/email/class-delivery-status-emails.php
+msgid "There is a problem with your delivery"
+msgstr "Проблема с доставкой"
+
+#: shipping-method/email/class-delivery-status-emails.php
+msgid ""
+"We could not deliver order {order_number}. Please contact the store "
+"for details."
+msgstr ""
+"Не удалось доставить заказ {order_number}. Свяжитесь с магазином для "
+"уточнения деталей."
+
+#: assets/src/shipping-orders-page/app.tsx
+msgid "Документ ещё готовится. Повторите попытку примерно через %d с."
+msgstr "Документ ещё готовится. Повторите попытку примерно через %d с."
+
+msgid "Delivery: Handed over"
+msgstr "Доставка: Передан в доставку"
+
+msgid "Delivery: Ready for pickup"
+msgstr "Доставка: Ожидает в ПВЗ"
+
+msgid "Delivery: Delivered"
+msgstr "Доставка: Доставлено"
+
+msgid "Delivery: Returned"
+msgstr "Доставка: Возврат"
+
+msgid "Sent to the customer when a shipment is handed over to the carrier."
+msgstr "Письмо покупателю после передачи отправления перевозчику."
+
+msgid "Sent to the customer when a shipment is ready for pickup."
+msgstr "Письмо покупателю, когда отправление поступило в пункт выдачи."
+
+msgid "Sent to the customer after delivery."
+msgstr "Письмо покупателю после доставки заказа."
+
+msgid "Sent to the customer after a return or failed delivery."
+msgstr "Письмо покупателю при возврате или неудачной доставке."
+
+msgid "Your shipment has been handed over to {carrier_name}. Tracking number: {tracking_number}. {tracking_url}"
+msgstr "Ваше отправление передано в {carrier_name}. Номер отслеживания: {tracking_number}. {tracking_url}"
+
+msgid "Available placeholders: {order_number}, {tracking_number}, {tracking_url}, {carrier_name}, {pickup_point}, {delivery_date}."
+msgstr "Доступны переменные: {order_number}, {tracking_number}, {tracking_url}, {carrier_name}, {pickup_point}, {delivery_date}."
+
+msgid "Placeholders can be inserted in curly braces."
+msgstr "Переменные можно вставлять в фигурных скобках."
+
+msgid "Enabled"
+msgstr "Отправка"
+
+msgid "Send this email to the customer"
+msgstr "Отправлять это письмо покупателю"
+
+msgid "Subject"
+msgstr "Тема"
+
+msgid "Heading"
+msgstr "Заголовок"
+
+msgid "Email type"
+msgstr "Формат письма"
+
+msgid "Email body"
+msgstr "Текст письма"
+
+msgid "Ключ API Яндекс Карт"
+msgstr "Ключ API Яндекс Карт"
+
+msgid "Один ключ для карт всех способов доставки в этом магазине. Если он не указан, используется ключ плагина: его общая квота расходуется всеми магазинами и может закончиться. Рекомендуем указать собственный ключ."
+msgstr "Один ключ для карт всех способов доставки в этом магазине. Если он не указан, используется ключ плагина: его общая квота расходуется всеми магазинами и может закончиться. Рекомендуем указать собственный ключ."
+
+msgid "Упаковка"
+msgstr "Упаковка"
+
+msgid "Упаковка магазина, в которую упаковываются заказы. Товар, который не помещается ни в одну коробку, едет в отдельной посылке."
+msgstr "Упаковка магазина, в которую упаковываются заказы. Товар, который не помещается ни в одну коробку, едет в отдельной посылке."
+
+msgid "Укажите название, размеры больше нуля и веса не меньше нуля для каждой упаковки."
+msgstr "Укажите название, размеры больше нуля и веса не меньше нуля для каждой упаковки."
+
+msgid "Внутренние размеры — в сантиметрах, вес — в килограммах. Пустой или нулевой макс. вес означает отсутствие ограничения. Макс. вес включает вес самой упаковки."
+msgstr "Внутренние размеры — в сантиметрах, вес — в килограммах. Пустой или нулевой макс. вес означает отсутствие ограничения. Макс. вес включает вес самой упаковки."
+
+#: assets/build/setup-wizard/index.js
+#: assets/build/settings-page/index.js
+#: assets/build/shipping-orders-page/index.js
+#: assets/build/ui-kit-gallery/index.js
+msgid "Введите не менее двух символов"
+msgstr "Введите не менее двух символов"
+
+#: assets/build/setup-wizard/index.js
+#: assets/build/settings-page/index.js
+#: assets/build/shipping-orders-page/index.js
+#: assets/build/ui-kit-gallery/index.js
+msgid "Не удалось загрузить список."
+msgstr "Не удалось загрузить список."
+
+#: assets/build/setup-wizard/index.js
+#: assets/build/settings-page/index.js
+#: assets/build/shipping-orders-page/index.js
+#: assets/build/ui-kit-gallery/index.js
+msgid "Укажите название без точки с запятой и переноса строки."
+msgstr "Укажите название без точки с запятой и переноса строки."
+
+#: assets/build/setup-wizard/index.js
+#: assets/build/settings-page/index.js
+#: assets/build/shipping-orders-page/index.js
+#: assets/build/ui-kit-gallery/index.js
+msgid "Размеры должны быть числами больше нуля."
+msgstr "Размеры должны быть числами больше нуля."
+
+#: assets/build/setup-wizard/index.js
+#: assets/build/settings-page/index.js
+#: assets/build/shipping-orders-page/index.js
+#: assets/build/ui-kit-gallery/index.js
+msgid "Вес должен быть числом не меньше нуля."
+msgstr "Вес должен быть числом не меньше нуля."
+
+#: assets/build/setup-wizard/index.js
+#: assets/build/settings-page/index.js
+#: assets/build/shipping-orders-page/index.js
+#: assets/build/ui-kit-gallery/index.js
+msgid "Название"
+msgstr "Название"
+
+msgid "Store packaging (items packed into the boxes set up in the store)"
+msgstr "Упаковка магазина (товары укладываются в указанную упаковку)"
+
+#: assets/build/setup-wizard/index.js
+#: assets/build/settings-page/index.js
+#: assets/build/shipping-orders-page/index.js
+#: assets/build/ui-kit-gallery/index.js
+msgid "Длина, см"
+msgstr "Длина, см"
+
+#: assets/build/setup-wizard/index.js
+#: assets/build/settings-page/index.js
+#: assets/build/shipping-orders-page/index.js
+#: assets/build/ui-kit-gallery/index.js
+msgid "Ширина, см"
+msgstr "Ширина, см"
+
+#: assets/build/setup-wizard/index.js
+#: assets/build/settings-page/index.js
+#: assets/build/shipping-orders-page/index.js
+#: assets/build/ui-kit-gallery/index.js
+msgid "Высота, см"
+msgstr "Высота, см"
+
+#: assets/build/setup-wizard/index.js
+#: assets/build/settings-page/index.js
+#: assets/build/shipping-orders-page/index.js
+#: assets/build/ui-kit-gallery/index.js
+msgid "Макс. вес, кг"
+msgstr "Макс. вес, кг"
+
+#: assets/build/setup-wizard/index.js
+#: assets/build/settings-page/index.js
+#: assets/build/shipping-orders-page/index.js
+#: assets/build/ui-kit-gallery/index.js
+msgid "Вес упаковки, кг"
+msgstr "Вес упаковки, кг"
+
+#: assets/build/setup-wizard/index.js
+#: assets/build/settings-page/index.js
+#: assets/build/shipping-orders-page/index.js
+#: assets/build/ui-kit-gallery/index.js
+msgid "Действия"
+msgstr "Действия"
+
+#: assets/build/setup-wizard/index.js
+#: assets/build/settings-page/index.js
+#: assets/build/shipping-orders-page/index.js
+#: assets/build/ui-kit-gallery/index.js
+msgid "Добавить упаковку"
+msgstr "Добавить упаковку"
+
+#: assets/build/settings-page/index.js:1
+msgid "Удалить"
+msgstr ""

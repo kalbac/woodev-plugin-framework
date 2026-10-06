@@ -31,6 +31,28 @@ final class Woodev_Realistic_Shipping_Plugin extends \Woodev\Framework\Shipping\
 	}
 
 	/**
+	 * Changes the fixture shipment status and notifies the framework email seam.
+	 *
+	 * Intended for rig probes and unit tests; production carriers call the same event
+	 * after persisting their carrier-specific status value.
+	 *
+	 * @since 2.0.2
+	 * @param \WC_Order $order      Shipment order.
+	 * @param string     $raw_status Fixture carrier status.
+	 * @return string Canonical status after the change.
+	 */
+	public function set_fixture_delivery_status( \WC_Order $order, string $raw_status ): string {
+		$provider = \Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::instance()->get_provider( 'realistic' );
+		if ( null === $provider ) {
+			return \Woodev\Framework\Shipping\Order\Delivery_Status::UNKNOWN;
+		}
+		$previous_status = \Woodev\Framework\Shipping\Admin\Orders\Order_Actions::resolve_canonical_status( $order, $provider );
+		\Woodev_Order_Compatibility::update_order_meta( $order, '_woodev_realistic_status', $raw_status );
+		$order->save();
+		return \Woodev\Framework\Shipping\Order\Delivery_Status_Events::notify( $order, $provider, $previous_status );
+	}
+
+	/**
 	 * Registers this fixture's `Orders_Provider` with the framework-owned «Заказы
 	 * доставки» page (SP-10 #820, round 2 defect 2: nothing registered a provider,
 	 * so the page did not exist on the rig at all — the submenu is correctly
@@ -90,6 +112,7 @@ final class Woodev_Realistic_Shipping_Plugin extends \Woodev\Framework\Shipping\
 				'tracking_url_template'     => 'https://realistic.example.test/track/{tracking}',
 				'pickup_point_meta_key'     => '_woodev_realistic_pickup_point',
 				'carrier_order_id_meta_key' => '_woodev_realistic_carrier_order_id',
+				'supports_label_printing'  => true,
 				// A v1-style orders-page slug nothing registers — its URL redirects to the
 				// framework page with this carrier preselected (SP-10 increment 5, #820).
 				'legacy_page_slug'          => 'wc_realistic_shipping_orders',
@@ -114,6 +137,7 @@ final class Woodev_Realistic_Shipping_Plugin extends \Woodev\Framework\Shipping\
 		);
 
 		\Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::instance()->register_provider( $provider, $this );
+		\Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::instance()->register_document_source( 'realistic', new Woodev_Realistic_Document_Source() );
 		\Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::instance()->register_tracking_handler(
 			'realistic',
 			new Woodev_Realistic_Tracking_Handler()

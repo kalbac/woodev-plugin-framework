@@ -272,6 +272,90 @@ function bootstrap(): Partial<ShippingOrdersBootstrap> {
 	return window.woodevShippingOrders || {};
 }
 
+/** What `GET /shipping/orders/<id>/documents/<type>` can hand back (#1134). */
+export type OrderDocument =
+	/** The carrier's PDF bytes, already fetched. */
+	| { kind: 'file'; blob: Blob; filename: string }
+	/** A direct carrier link to open. */
+	| { kind: 'link'; url: string }
+	/** The carrier is still preparing the document; try again after `retryAfter` seconds. */
+	| { kind: 'pending'; message: string; retryAfter: number };
+
+/** The `{ code, message }` a REST error carries, whichever way `apiFetch` surfaced it. */
+interface DocumentError {
+	message?: string;
+	code?: string;
+}
+
+/** `apiFetch` with `parse: false` rejects with the raw `Response`; turn it into its JSON error body. */
+async function documentError( error: unknown ): Promise<DocumentError> {
+	if ( error && 'function' === typeof ( error as Response ).json ) {
+		try {
+			return ( await ( error as Response ).json() ) as DocumentError;
+		} catch {
+			return {};
+		}
+	}
+
+	return ( error || {} ) as DocumentError;
+}
+
+/**
+ * Fetches one carrier document for an order (#1134).
+ *
+ * Same `bootstrap()`/`apiFetch` wiring as every other call here — the nonce travels in the
+ * `X-WP-Nonce` header, never in the URL. `format=json` asks the route to answer a carrier LINK as
+ * JSON instead of a cross-origin 302 the browser would not let a script read.
+ *
+ * Resolves with the three things a merchant can be told: a file to save, a link to open, or
+ * «ещё готовится». A rejection carries the server's own Russian `message`.
+ */
+export async function fetchOrderDocument( orderId: number, type: string ): Promise<OrderDocument> {
+	const { restRoot = '', nonce = '' } = bootstrap();
+
+	let response: Response;
+
+	try {
+		response = ( await apiFetch( {
+			url: `${ restRoot.replace( /\/+$/, '' ) }/${ orderId }/documents/${ encodeURIComponent( type ) }?format=json`,
+			method: 'GET',
+			headers: { 'X-WP-Nonce': nonce },
+			parse: false,
+		} ) ) as unknown as Response;
+	} catch ( error ) {
+		throw await documentError( error );
+	}
+
+	if ( 202 === response.status ) {
+		const body = ( await response.json() ) as { message?: string; retry_after?: number };
+
+		return {
+			kind: 'pending',
+			message: body.message || '',
+			retryAfter: Number( body.retry_after ) || Number( response.headers.get( 'Retry-After' ) ) || 5,
+		};
+	}
+
+	if ( ( response.headers.get( 'Content-Type' ) || '' ).includes( 'application/pdf' ) ) {
+		const disposition = response.headers.get( 'Content-Disposition' ) || '';
+		const match = /filename="?([^";]+)"?/i.exec( disposition );
+
+		return {
+			kind: 'file',
+			blob: await response.blob(),
+			filename: match ? match[ 1 ] : `order-${ orderId }-${ type }.pdf`,
+		};
+	}
+
+	const body = ( await response.json() ) as { status?: string; url?: string };
+
+	if ( 'url' === body.status && 'string' === typeof body.url && '' !== body.url ) {
+		return { kind: 'link', url: body.url };
+	}
+
+	throw {} as DocumentError;
+}
+
 /**
  * The REST root (`…/woodev/v1`) and nonce the order wizard talks to, plus its reference data.
  *

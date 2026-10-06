@@ -1243,6 +1243,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 				'enabled'   => $this->supports_box_packing(),
 				'algorithm' => $this->supports_box_packing() ? $this->get_packing_algorithm() : '',
 			];
+
+			// the boxes are what the `boxes` algorithm packs into: a changed list is a different parcel, so a different quote (#1138)
+			if ( \Woodev_Packer_Dispatcher::ALGORITHM_BOXES === $context['packing']['algorithm'] ) {
+				$context['packing']['boxes'] = Shipping_Rate_Cache::boxes_context();
+			}
 			$context['payment']  = $this->chosen_payment_method();
 
 			$handler = $this->get_plugin()->get_pickup_handler();

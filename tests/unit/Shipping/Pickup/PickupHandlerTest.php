@@ -3938,7 +3938,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 
 			$fields = $handler->get_settings_fields();
 
-			$this->assertArrayHasKey( 'map_api_key', $fields );
+			$this->assertSame( [], $fields, 'the Yandex key is on the shared map section' );
 			$this->assertSame(
 				$provider->get_settings_fields(),
 				$fields,

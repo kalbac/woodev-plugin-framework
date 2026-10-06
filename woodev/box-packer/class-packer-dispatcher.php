@@ -45,12 +45,28 @@ if ( ! class_exists( 'Woodev_Packer_Dispatcher' ) ) :
 		const ALGORITHM_SINGLE = 'single';
 
 		/**
+		 * Items packed into the merchant's own boxes ({@see Woodev_Packer_Boxes}), the smallest set of boxes
+		 * that holds them. A unit that fits NO box — too big in one dimension, or heavier than any box allows —
+		 * is never dropped: it travels in a parcel of its own, sized by the item itself, exactly as with
+		 * {@see self::ALGORITHM_SEPARATELY}. With no boxes defined every unit is such a parcel.
+		 *
+		 * @since 2.0.2
+		 */
+		const ALGORITHM_BOXES = 'boxes';
+
+		/**
 		 * Run the named algorithm against the supplied items.
 		 *
 		 * @since  1.4.1
 		 *
+		 * @since  2.0.2 Optional `$boxes`, the box set of {@see self::ALGORITHM_BOXES} (#1138).
+		 *
 		 * @param  string                        $algorithm_id One of the ALGORITHM_* constants.
 		 * @param  Woodev_Packer_Packable_Item[] $items        Item data. Must not be empty.
+		 * @param  Woodev_Box_Packer_Box[]|null  $boxes        The boxes {@see self::ALGORITHM_BOXES} packs into, in
+		 *                                                     the packer's cm / kg; any other algorithm ignores them.
+		 *                                                     Null is no boxes — {@see Woodev_WC_Packer_Dispatcher::pack()}
+		 *                                                     reads the store's own list when it is null.
 		 *
 		 * @return Woodev_Packer_Result
 		 *
@@ -66,10 +82,13 @@ if ( ! class_exists( 'Woodev_Packer_Dispatcher' ) ) :
 		 *                                 SAME thing — `class-packer-virtual-box.php` used to say
 		 *                                 it in Russian alone (#567).
 		 */
-		public static function pack( string $algorithm_id, array $items ): Woodev_Packer_Result {
+		public static function pack( string $algorithm_id, array $items, ?array $boxes = null ): Woodev_Packer_Result {
 			if ( empty( $items ) ) {
 				throw new Woodev_Packer_Exception( 'No items to pack!' );
 			}
+
+			// the item's position is what a package reports for an item that carries no key of its own
+			$items = array_values( $items );
 
 			switch ( $algorithm_id ) {
 				case self::ALGORITHM_VIRTUAL:
@@ -80,6 +99,9 @@ if ( ! class_exists( 'Woodev_Packer_Dispatcher' ) ) :
 
 				case self::ALGORITHM_SINGLE:
 					return self::pack_single( $items );
+
+				case self::ALGORITHM_BOXES:
+					return self::pack_boxes( $items, (array) $boxes );
 
 				default:
 					throw new Woodev_Packer_Exception(
@@ -99,6 +121,7 @@ if ( ! class_exists( 'Woodev_Packer_Dispatcher' ) ) :
 				self::ALGORITHM_VIRTUAL    => __( 'Virtual box (minimal size)', 'woodev-plugin-framework' ),
 				self::ALGORITHM_SEPARATELY => __( 'Each item in a separate box', 'woodev-plugin-framework' ),
 				self::ALGORITHM_SINGLE     => __( 'Single box (items stacked along one axis)', 'woodev-plugin-framework' ),
+				self::ALGORITHM_BOXES      => __( 'Store packaging (items packed into the boxes set up in the store)', 'woodev-plugin-framework' ),
 			];
 		}
 
@@ -134,7 +157,8 @@ if ( ! class_exists( 'Woodev_Packer_Dispatcher' ) ) :
 					$box->get_width(),
 					$box->get_height(),
 					$total_weight,
-					count( $units )
+					count( $units ),
+					self::allocate( $units, $items )
 				);
 			}
 
@@ -150,26 +174,8 @@ if ( ! class_exists( 'Woodev_Packer_Dispatcher' ) ) :
 		private static function pack_separately( array $items ): Woodev_Packer_Result {
 			$packages = [];
 
-			foreach ( $items as $input ) {
-				// Pass through Item_Implementation so dimensions are normalised (length >= width >= height).
-				$unit = new Woodev_Packer_Item_Implementation(
-					$input->get_length(),
-					$input->get_width(),
-					$input->get_height(),
-					$input->get_weight()
-				);
-
-				$quantity = $input->get_quantity();
-
-				for ( $q = 0; $q < $quantity; $q++ ) {
-					$packages[] = new Woodev_Packer_Package_Result(
-						$unit->get_length(),
-						$unit->get_width(),
-						$unit->get_height(),
-						$unit->get_weight(),
-						1
-					);
-				}
+			foreach ( self::expand_to_units( $items ) as $unit ) {
+				$packages[] = self::unit_package( $unit, $items );
 			}
 
 			return new Woodev_Packer_Result( self::ALGORITHM_SEPARATELY, $packages );
@@ -203,7 +209,8 @@ if ( ! class_exists( 'Woodev_Packer_Dispatcher' ) ) :
 					$box->get_width(),
 					$box->get_height(),
 					$total_weight,
-					count( $units )
+					count( $units ),
+					self::allocate( $units, $items )
 				);
 			}
 
@@ -211,7 +218,123 @@ if ( ! class_exists( 'Woodev_Packer_Dispatcher' ) ) :
 		}
 
 		/**
+		 * Items packed into the merchant's boxes; what fits no box travels separately.
+		 *
+		 * The packed boxes come first, in the order {@see Woodev_Packer_Boxes} fills them, then one parcel per
+		 * unit that fitted none. A box's package carries the box's own inner size and the weight of its items
+		 * PLUS the box's own weight — what the carrier weighs; a box's max weight counts that gross figure too.
+		 *
+		 * @param  Woodev_Packer_Packable_Item[] $items
+		 * @param  array                         $boxes anything that is not a Woodev_Box_Packer_Box is ignored
+		 * @return Woodev_Packer_Result
+		 */
+		private static function pack_boxes( array $items, array $boxes ): Woodev_Packer_Result {
+			$boxes    = array_values(
+				array_filter(
+					$boxes,
+					static function ( $box ): bool {
+						return $box instanceof Woodev_Box_Packer_Box;
+					}
+				)
+			);
+			$units    = self::expand_to_units( $items );
+			$loose    = $units;
+			$packages = [];
+
+			if ( [] !== $boxes ) {
+				$packer = new Woodev_Packer_Boxes();
+
+				foreach ( $boxes as $box ) {
+					$packer->add_box( $box );
+				}
+
+				foreach ( $units as $unit ) {
+					$packer->add_item( $unit );
+				}
+
+				$packer->pack();
+
+				foreach ( $packer->get_packages() as $packed_box ) {
+					$box    = $packed_box->get_box();
+					$packed = $packed_box->get_packed_items();
+
+					$packages[] = new Woodev_Packer_Package_Result(
+						$box->get_length(),
+						$box->get_width(),
+						$box->get_height(),
+						$packed_box->get_packed_weight(),
+						count( $packed ),
+						self::allocate( $packed, $items ),
+						(string) $box->get_unique_id(),
+						(string) $box->get_name()
+					);
+				}
+
+				$loose = $packer->get_items_cannot_pack();
+			}
+
+			foreach ( $loose as $unit ) {
+				$packages[] = self::unit_package( $unit, $items );
+			}
+
+			return new Woodev_Packer_Result( self::ALGORITHM_BOXES, $packages );
+		}
+
+		/**
+		 * One unit in a parcel of its own, sized by the unit itself.
+		 *
+		 * @param  Woodev_Packer_Item_Implementation $unit
+		 * @param  Woodev_Packer_Packable_Item[]     $items the input list the unit came from
+		 * @return Woodev_Packer_Package_Result
+		 */
+		private static function unit_package( Woodev_Packer_Item_Implementation $unit, array $items ): Woodev_Packer_Package_Result {
+			return new Woodev_Packer_Package_Result(
+				$unit->get_length(),
+				$unit->get_width(),
+				$unit->get_height(),
+				$unit->get_weight(),
+				1,
+				self::allocate( [ $unit ], $items )
+			);
+		}
+
+		/**
+		 * Tells which input items a set of units came from: one entry per input item, with the number of
+		 * its units in the set. The unit carries its source's position in `$items` as its internal data
+		 * ({@see self::expand_to_units()}).
+		 *
+		 * @param  Woodev_Box_Packer_Item[]      $units
+		 * @param  Woodev_Packer_Packable_Item[] $items the input list (re-indexed from 0)
+		 * @return array<int, array{key: string, product_id: int, quantity: int}>
+		 */
+		private static function allocate( array $units, array $items ): array {
+			$quantities = [];
+
+			foreach ( $units as $unit ) {
+				$index                = (int) $unit->get_internal_data();
+				$quantities[ $index ] = ( $quantities[ $index ] ?? 0 ) + 1;
+			}
+
+			$allocation = [];
+
+			foreach ( $quantities as $index => $quantity ) {
+				$input = $items[ $index ] ?? null;
+
+				$allocation[] = [
+					'key'        => $input instanceof Woodev_Packer_Input_Item && '' !== $input->get_key() ? $input->get_key() : (string) $index,
+					'product_id' => $input instanceof Woodev_Packer_Input_Item ? $input->get_product_id() : 0,
+					'quantity'   => $quantity,
+				];
+			}
+
+			return $allocation;
+		}
+
+		/**
 		 * Expands input items by quantity into individual Woodev_Packer_Item_Implementation instances.
+		 *
+		 * Each unit's internal data is the position of the input item it came from — what
+		 * {@see self::allocate()} reads back.
 		 *
 		 * @param  Woodev_Packer_Packable_Item[] $items
 		 * @return Woodev_Packer_Item_Implementation[]
@@ -219,15 +342,18 @@ if ( ! class_exists( 'Woodev_Packer_Dispatcher' ) ) :
 		private static function expand_to_units( array $items ): array {
 			$units = [];
 
-			foreach ( $items as $input ) {
+			foreach ( $items as $index => $input ) {
 				$quantity = $input->get_quantity();
 
 				for ( $q = 0; $q < $quantity; $q++ ) {
+					// Item_Implementation normalises the dimensions (length >= width >= height).
 					$units[] = new Woodev_Packer_Item_Implementation(
 						$input->get_length(),
 						$input->get_width(),
 						$input->get_height(),
-						$input->get_weight()
+						$input->get_weight(),
+						0.0,
+						$index
 					);
 				}
 			}

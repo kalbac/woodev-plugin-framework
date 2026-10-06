@@ -18,6 +18,10 @@ if ( ! class_exists( 'Woodev_WC_Packer_Dispatcher' ) ) :
 	 *     $result = Woodev_WC_Packer_Dispatcher::pack( 'virtual', $items );
 	 *     $data   = $result->to_array();
 	 *
+	 * The `boxes` algorithm packs into the store's own boxes — the list a merchant keeps in «Доставка» →
+	 * «Коробки» ({@see \Woodev\Framework\Shipping\Settings\Boxes_Settings}) — read here, in the store's units,
+	 * and handed to the packer in its cm / kg.
+	 *
 	 * @since 1.4.1
 	 */
 	final class Woodev_WC_Packer_Dispatcher extends Woodev_Packer_Dispatcher {
@@ -37,7 +41,7 @@ if ( ! class_exists( 'Woodev_WC_Packer_Dispatcher' ) ) :
 		public static function from_cart_items( array $cart_contents ): array {
 			$items = [];
 
-			foreach ( $cart_contents as $cart_item ) {
+			foreach ( $cart_contents as $cart_key => $cart_item ) {
 				/** @var \WC_Product|false $product */
 				$product = $cart_item['data'] ?? false;
 
@@ -47,10 +51,70 @@ if ( ! class_exists( 'Woodev_WC_Packer_Dispatcher' ) ) :
 
 				$qty = isset( $cart_item['quantity'] ) ? max( 1, (int) $cart_item['quantity'] ) : 1;
 
-				$items[] = self::to_input_item( $product, $qty );
+				// the line's own key, which the packed result reports back as the item it packed (#1138)
+				$key        = (string) ( $cart_item['key'] ?? $cart_key );
+				$product_id = (int) ( $cart_item['variation_id'] ?? 0 ) ?: (int) ( $cart_item['product_id'] ?? 0 );
+
+				$items[] = self::to_input_item( $product, $qty, $key, $product_id );
 			}
 
 			return $items;
+		}
+
+		/**
+		 * Packs items with the named algorithm — `boxes` into the STORE's list of boxes unless `$boxes` is given.
+		 *
+		 * @since  2.0.2
+		 *
+		 * @param  string                        $algorithm_id One of the ALGORITHM_* constants.
+		 * @param  Woodev_Packer_Packable_Item[] $items        Item data. Must not be empty.
+		 * @param  Woodev_Box_Packer_Box[]|null  $boxes        Overrides the store's boxes for `boxes`; null reads
+		 *                                                     {@see self::get_store_boxes()}.
+		 * @return Woodev_Packer_Result
+		 *
+		 * @throws Woodev_Packer_Exception If `$items` is empty or `$algorithm_id` is not registered.
+		 */
+		public static function pack( string $algorithm_id, array $items, ?array $boxes = null ): Woodev_Packer_Result {
+
+			if ( self::ALGORITHM_BOXES === $algorithm_id && null === $boxes ) {
+				$boxes = self::get_store_boxes();
+			}
+
+			return parent::pack( $algorithm_id, $items, $boxes );
+		}
+
+		/**
+		 * The store's boxes as packer boxes, converted from the store's units to the packer's cm / kg.
+		 *
+		 * The list is the store-wide one of {@see \Woodev\Framework\Shipping\Settings\Boxes_Settings}; outside the
+		 * shipping framework (that class is not loaded) there is none and the result is empty. A box's
+		 * `max_weight` is null — no limit — when the merchant left it empty or 0.
+		 *
+		 * @since  2.0.2
+		 *
+		 * @return Woodev_Packer_Box_Implementation[]
+		 */
+		public static function get_store_boxes(): array {
+
+			if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Boxes_Settings' ) ) {
+				return [];
+			}
+
+			$boxes = [];
+
+			foreach ( \Woodev\Framework\Shipping\Settings\Boxes_Settings::current()->get_boxes() as $box ) {
+				$boxes[] = new Woodev_Packer_Box_Implementation(
+					(float) wc_get_dimension( $box['length'], 'cm' ),
+					(float) wc_get_dimension( $box['width'], 'cm' ),
+					(float) wc_get_dimension( $box['height'], 'cm' ),
+					(float) wc_get_weight( $box['box_weight'], 'kg' ),
+					$box['max_weight'] > 0 ? (float) wc_get_weight( $box['max_weight'], 'kg' ) : null,
+					$box['id'],
+					$box['name']
+				);
+			}
+
+			return $boxes;
 		}
 
 		/**
@@ -132,11 +196,15 @@ if ( ! class_exists( 'Woodev_WC_Packer_Dispatcher' ) ) :
 		 *
 		 * @since  2.0.2
 		 *
+		 * @since  2.0.2 Carries the line's key and product id (#1138).
+		 *
 		 * @param  \WC_Product $product
 		 * @param  int         $quantity
+		 * @param  string      $key        the cart line's key, or the order item's id
+		 * @param  int         $product_id the product's id, the variation's when there is one
 		 * @return Woodev_Packer_Input_Item
 		 */
-		private static function to_input_item( \WC_Product $product, int $quantity ): Woodev_Packer_Input_Item {
+		private static function to_input_item( \WC_Product $product, int $quantity, string $key = '', int $product_id = 0 ): Woodev_Packer_Input_Item {
 			$values = self::get_effective_values( $product );
 
 			return new Woodev_Packer_Input_Item(
@@ -144,7 +212,9 @@ if ( ! class_exists( 'Woodev_WC_Packer_Dispatcher' ) ) :
 				(float) wc_get_dimension( $values['width'], 'cm' ),
 				(float) wc_get_dimension( $values['height'], 'cm' ),
 				(float) wc_get_weight( $values['weight'], 'kg' ),
-				$quantity
+				$quantity,
+				$key,
+				$product_id
 			);
 		}
 

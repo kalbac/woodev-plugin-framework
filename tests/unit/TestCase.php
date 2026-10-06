@@ -27,6 +27,8 @@ abstract class TestCase extends PHPUnitTestCase {
 		// Мокаем самые частые WP функции чтобы они не падали
 		Monkey\Functions\stubTranslationFunctions();
 		Monkey\Functions\stubEscapeFunctions();
+		// Settings schema descriptions are sanitized before being sent to React.
+		Monkey\Functions\when( 'wp_kses_post' )->returnArg();
 	}
 
 	/**

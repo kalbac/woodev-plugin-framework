@@ -236,6 +236,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Rate_Cache' ) ) :
 		}
 
 		/**
+		 * The store's boxes, as the `boxes` packing algorithm packs into them — the cache key's share of a
+		 * method that uses it, so editing the list is a new key (#1138). In the store's units, which
+		 * {@see self::package_context()} keys on as well.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<int, array<string, mixed>>
+		 */
+		public static function boxes_context(): array {
+			return \Woodev\Framework\Shipping\Settings\Boxes_Settings::current()->get_boxes();
+		}
+
+		/**
 		 * The part of {@see Shipping_Method::get_rate_cache_context()} that comes from the package:
 		 * lines (cart-order independent), contents cost, destination down to the street, the store
 		 * currency and the dimension/weight units the packer converts with.

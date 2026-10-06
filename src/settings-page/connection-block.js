@@ -8,12 +8,13 @@
  */
 
 import { useState } from '@wordpress/element';
+import { RawHTML } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { Button } from '@wordpress/components';
 import ControlField from '../components/control-field';
 import { testConnection } from './rest';
 
-export default function ConnectionBlock( { providerId, section, values, onFieldChange, onFieldRevert } ) {
+export default function ConnectionBlock( { providerId, section, values, conditionValues, onFieldChange, onFieldRevert } ) {
 	const [ busy, setBusy ] = useState( false );
 	const [ result, setResult ] = useState( section.status || null );
 
@@ -64,12 +65,13 @@ export default function ConnectionBlock( { providerId, section, values, onFieldC
 	return (
 		<div className="woodev-connection">
 			{ section.description && (
-				<p className="woodev-connection__desc">{ section.description }</p>
+				<div className="woodev-connection__desc"><RawHTML>{ section.description }</RawHTML></div>
 			) }
 			{ Object.keys( section.fields ).map( ( settingId ) => (
 				<ControlField
 					key={ settingId }
 					schema={ section.fields[ settingId ] }
+					conditionValues={ conditionValues || values }
 					value={ values[ settingId ] ?? section.fields[ settingId ].value }
 					onChange={ ( next ) => handleFieldChange( settingId, next ) }
 					hasEdit={ Object.prototype.hasOwnProperty.call( values, settingId ) }

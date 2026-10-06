@@ -35,6 +35,9 @@ final class MapProviderRegistryTest extends TestCase {
 
 	protected function setUp(): void {
 		parent::setUp();
+		\Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab::reset_for_tests();
+		Functions\when( 'get_option' )->alias( static fn( $name, $default = false ) => $default );
+		Functions\when( 'wp_parse_args' )->alias( static fn( $args, $defaults = [] ) => array_merge( (array) $defaults, (array) $args ) );
 
 		// Faithful stand-in for WordPress's REAL add_query_arg(): it does NOT encode
 		// values (WP's own docs say callers must urlencode()/rawurlencode() themselves) —
@@ -203,56 +206,8 @@ final class MapProviderRegistryTest extends TestCase {
 	// Yandex_Map_Provider — settings fields: optional, present, NOT sensitive
 	// -------------------------------------------------------------------------
 
-	public function test_yandex_declares_an_optional_api_key_field_that_is_not_sensitive(): void {
-		Functions\when( '__' )->returnArg( 1 );
-
-		$fields = ( new Yandex_Map_Provider( '' ) )->get_settings_fields();
-
-		$this->assertArrayHasKey( 'map_api_key', $fields );
-		$this->assertArrayHasKey( 'sensitive', $fields['map_api_key'] );
-		$this->assertFalse(
-			$fields['map_api_key']['sensitive'],
-			'a JS map key ships to the browser inside the script URL regardless — marking it '
-			. 'sensitive would mask it without hiding anything, and stop the merchant seeing '
-			. 'what they pasted'
-		);
-	}
-
-	/**
-	 * Optionality currently exists only as Russian prose in the field's description — pin
-	 * `required` explicitly so a mutant flipping it to `true` cannot survive silently.
-	 */
-	public function test_yandex_api_key_field_is_not_required(): void {
-		Functions\when( '__' )->returnArg( 1 );
-
-		$fields = ( new Yandex_Map_Provider( '' ) )->get_settings_fields();
-
-		$this->assertArrayHasKey( 'required', $fields['map_api_key'] );
-		$this->assertFalse( $fields['map_api_key']['required'] );
-	}
-
-	/**
-	 * The descriptor is in the Woodev settings-API `register_setting()` args shape (`name`,
-	 * `type`, …) — see `woodev/settings-api/abstract-class-settings.php` — not the
-	 * WooCommerce `form_fields` shape (`title`, `desc_tip`, …); the two vocabularies must
-	 * never be mixed, since only one is actually consumed by `register_setting()`.
-	 */
-	public function test_yandex_api_key_field_uses_the_woodev_settings_api_shape(): void {
-		Functions\when( '__' )->returnArg( 1 );
-
-		$field = ( new Yandex_Map_Provider( '' ) )->get_settings_fields()['map_api_key'];
-
-		$this->assertArrayHasKey( 'name', $field );
-		$this->assertArrayNotHasKey( 'title', $field, 'WC form_fields key, not the Woodev settings-API shape' );
-		$this->assertArrayNotHasKey( 'desc_tip', $field, 'WC form_fields key, not the Woodev settings-API shape' );
-	}
-
-	public function test_yandex_api_key_field_type_is_the_woodev_string_setting_type(): void {
-		Functions\when( '__' )->returnArg( 1 );
-
-		$fields = ( new Yandex_Map_Provider( '' ) )->get_settings_fields();
-
-		$this->assertSame( \Woodev_Setting::TYPE_STRING, $fields['map_api_key']['type'] );
+	public function test_yandex_no_longer_contributes_a_per_carrier_key_field(): void {
+		$this->assertSame( [], ( new Yandex_Map_Provider( '' ) )->get_settings_fields() );
 	}
 
 	public function test_embedded_declares_no_settings_fields_at_all(): void {
@@ -266,30 +221,11 @@ final class MapProviderRegistryTest extends TestCase {
 	// Yandex_Map_Provider — settings-field description: shared-key warning + docs link
 	// -------------------------------------------------------------------------
 
-	public function test_settings_field_description_warns_about_the_shared_fallback_key(): void {
-		Functions\when( '__' )->returnArg( 1 );
-
-		$description = ( new Yandex_Map_Provider( '' ) )->get_settings_fields()['map_api_key']['description'];
-
-		$this->assertStringContainsString( 'общий ключ', $description );
-		$this->assertStringContainsString( 'собственный ключ', $description );
-	}
-
-	public function test_settings_field_description_renders_without_a_docs_link_by_default(): void {
-		Functions\when( '__' )->returnArg( 1 );
-
-		$description = ( new Yandex_Map_Provider( '' ) )->get_settings_fields()['map_api_key']['description'];
-
-		$this->assertStringNotContainsString( 'Инструкция', $description );
-	}
-
-	public function test_settings_field_description_includes_the_docs_link_when_supplied(): void {
-		Functions\when( '__' )->returnArg( 1 );
-
-		$description = ( new Yandex_Map_Provider( '', '', 'https://example.test/docs' ) )
-			->get_settings_fields()['map_api_key']['description'];
-
-		$this->assertStringContainsString( 'https://example.test/docs', $description );
+	public function test_the_shared_store_key_wins_over_legacy_and_fallback_keys(): void {
+		Functions\when( 'get_option' )->alias( static fn( $name, $default = false ) => 'woodev_pickup_map_yandex_api_key' === $name ? 'store-key' : $default );
+		Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
+		$provider = new Yandex_Map_Provider( 'fallback', 'legacy-key' );
+		$this->assertSame( 'store-key', $this->query_params_of( $provider->get_js_config( [] )['scriptUrl'] )['apikey'] );
 	}
 
 	// -------------------------------------------------------------------------

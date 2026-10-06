@@ -285,3 +285,9 @@ $settings-label-col: 200px;
 
 	&-note { color: wd.$muted; }
 }
+
+// The packaging editor uses the available card width; ordinary settings retain their control column.
+.woodev-settings .woodev-boxes-field .woodev-field {
+	grid-template-columns: $settings-label-col minmax( 0, 1fr );
+	@media ( max-width: 782px ) { grid-template-columns: 1fr; }
+}

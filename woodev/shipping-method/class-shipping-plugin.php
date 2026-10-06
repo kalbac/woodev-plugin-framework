@@ -166,6 +166,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/checkout/class-checkout-field-policy.php';
 			require_once $path . '/pickup/class-pickup-map-settings.php';
 			require_once $path . '/settings/class-default-dimensions-settings.php';
+			require_once $path . '/settings/class-boxes-settings.php';
 			require_once $path . '/settings/class-shipping-settings-tab.php';
 			require_once $path . '/settings/class-export-settings.php';
 
@@ -266,6 +267,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 			// order meta handler + abstract shipment/tracking/webhook handlers
 			require_once $path . '/order/class-shipping-order-handler.php';
+			require_once $path . '/order/class-document-result.php';
+			require_once $path . '/order/interface-document-source.php';
 			require_once $path . '/order/class-action-result.php';
 			require_once $path . '/order/class-order-lock.php';
 			require_once $path . '/order/class-export-retry.php';
@@ -282,6 +285,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 			// canonical delivery-status enum (SP-10 increment 2, spec D4)
 			require_once $path . '/order/class-delivery-status.php';
+			require_once $path . '/order/class-delivery-status-events.php';
+			require_once $path . '/order/class-delivery-status-watcher.php';
+
+			// Status-driven customer notifications use WooCommerce's own Email settings registry.
+			require_once $path . '/email/class-delivery-status-emails.php';
+			if ( class_exists( '\\WC_Email' ) ) {
+				require_once $path . '/email/class-delivery-status-email.php';
+			}
+			Email\Delivery_Status_Emails::instance();
+			// Publishes `woodev_shipping_delivery_status_changed` when a carrier's status meta (or the framework's
+			// cancellation marker) changes, so carriers need no notify code of their own.
+			Order\Delivery_Status_Watcher::instance()->register();
 
 			// delivery-status sync freshness — the last-updated/next-update seam (SP-10
 			// spec D9, #828)
@@ -320,6 +335,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/rest-api/class-location-controller.php';
 			require_once $path . '/rest-api/class-pickup-controller.php';
 			require_once $path . '/rest-api/class-orders-controller.php';
+			require_once $path . '/rest-api/class-document-controller.php';
 			require_once $path . '/rest-api/class-order-editor-controller.php';
 			require_once $path . '/rest-api/class-rates-controller.php';
 		}
@@ -906,6 +922,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		public function get_settings_providers(): array {
 
 			$providers = parent::get_settings_providers();
+			$tab_label = $this->get_plugin_name();
+			$has_carrier_label = false;
 			$export    = Admin\Orders\Orders_Registry::instance()->plugin_exports_orders( $this ) ? $this->get_export_settings() : null;
 			$handlers    = [];
 			$sections    = [];
@@ -991,6 +1009,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 				}
 
 				$handlers[] = $contribution->get_handler();
+				if ( ! $has_carrier_label && '' !== trim( $contribution->get_label() ) ) {
+					$tab_label = $contribution->get_label();
+					$has_carrier_label = true;
+				}
 				$sections   = array_merge( $sections, $contribution->get_sections() );
 
 				// a connection block is tested by the handler that CONTRIBUTED it — not derived from its setting ids,
@@ -1034,13 +1056,28 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 			$providers[] = \Woodev\Framework\Settings\Settings_Provider::create_with_sections(
 				$this->get_id(),
-				$this->get_plugin_name(),
+				$tab_label,
 				new \Woodev\Framework\Settings\Composite_Settings_Handler( $this->get_id(), $handlers, $connections ),
 				$args,
 				...$sections
 			);
 
 			return $providers;
+		}
+
+		/**
+		 * Gets the short carrier name supplied by the first accepted settings contribution.
+		 *
+		 * The label of Settings_Provider::create_with_sections() is the authoring seam;
+		 * the composite tab and delivery emails read this same resolved name. A carrier
+		 * without a labelled contribution falls back to its plugin name.
+		 *
+		 * @since 2.0.2
+		 * @return string
+		 */
+		public function get_carrier_name(): string {
+			$providers = $this->get_settings_providers();
+			return [] !== $providers ? $providers[0]->get_label() : $this->get_plugin_name();
 		}
 
 		/**
@@ -1051,8 +1088,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 * (`Settings_Provider::create_with_sections( $id, $label, $handler, $args, ...$sections )`).
 		 * The framework does not register them as tabs: it takes each one's HANDLER and SECTIONS and
 		 * merges them into the carrier's single tab, in the order returned and ahead of the framework's
-		 * «Выгрузка» section. The descriptor's id and label are not used (the tab is named after the
-		 * plugin); the first declared `capability`, `legacy_option_key` and `legacy_page` become the
+		 * «Выгрузка» section. The descriptor's id is not used. The FIRST accepted contribution's non-empty label is
+		 * the carrier's SHORT display name (e.g. «СДЭК»), used for the tab and shipment emails through
+		 * get_carrier_name(); no contribution with a label falls back to get_plugin_name(). The first declared `capability`, `legacy_option_key` and `legacy_page` become the
 		 * tab's. A descriptor's `supports` flags are DROPPED: the tab carries none. Handlers keep their own
 		 * option namespaces — no key moves — but two handlers of one tab must not share a setting id, and
 		 * the ids of «Выгрузка» are taken too: a clashing contribution is reported with `_doing_it_wrong()`

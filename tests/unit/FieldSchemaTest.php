@@ -26,6 +26,7 @@ class FieldSchemaTest extends TestCase {
 		$setting->shouldReceive( 'is_required' )->andReturn( false )->byDefault();
 		$setting->shouldReceive( 'get_validate' )->andReturn( null )->byDefault();
 		$setting->shouldReceive( 'get_show_if_conditions' )->andReturn( [] )->byDefault();
+		$setting->shouldReceive( 'get_disabled_if_conditions' )->andReturn( [] );
 
 		return $setting;
 	}
