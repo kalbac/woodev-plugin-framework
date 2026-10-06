@@ -77,7 +77,7 @@ if ( ! class_exists( __NAMESPACE__ . '\\Checkout_Parent_Block_Notice' ) ) :
 			}
 
 			return ! has_block( 'woocommerce/checkout-shipping-address-block', $content )
-				&& ! has_block( 'woocommerce/checkout-shipping-methods-block', $content );
+				|| ! has_block( 'woocommerce/checkout-shipping-methods-block', $content );
 		}
 
 		/**
