@@ -165,6 +165,44 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$this->assertSame( '1', Order_Marker_Fakes::$db[42]['_other_marker'] );
 		}
 
+		/**
+		 * Shared marker keys survive when either registered provider still has a shipping line.
+		 *
+		 * @dataProvider shared_marker_provider_orders
+		 */
+		public function test_shared_marker_key_is_kept_for_either_registration_order( array $ids ): void {
+			foreach ( $ids as $id ) {
+				$this->register( self::writing( '1' ), self::KEY, [ $id . '_method' ], $id );
+			}
+			$order = Order_Marker_Fakes::order( [ Order_Marker_Fakes::line( 'first_method', 1 ) ] );
+			Order_Marker_Fakes::$db[42] = [ self::KEY => '1', '_unrelated' => 'keep' ];
+
+			$this->assertSame( [ 'first' ], ( new Order_Marker() )->mark_order( $order ) );
+			$this->assertSame( '1', Order_Marker_Fakes::$db[42][ self::KEY ] );
+			$this->assertSame( 'keep', Order_Marker_Fakes::$db[42]['_unrelated'] );
+		}
+
+		/**
+		 * @return array<string, array<int, string[]>>
+		 */
+		public function shared_marker_provider_orders(): array {
+			return [
+				'first then second' => [ [ 'first', 'second' ] ],
+				'second then first' => [ [ 'second', 'first' ] ],
+			];
+		}
+
+		public function test_shared_marker_key_is_removed_when_no_provider_has_a_line(): void {
+			$this->register( self::writing( '1' ), self::KEY, [ 'first_method' ], 'first' );
+			$this->register( self::writing( '1' ), self::KEY, [ 'second_method' ], 'second' );
+			$order = Order_Marker_Fakes::order( [ Order_Marker_Fakes::line( 'free_shipping', 1 ) ] );
+			Order_Marker_Fakes::$db[42] = [ self::KEY => '1', '_unrelated' => 'keep' ];
+
+			$this->assertSame( [], ( new Order_Marker() )->mark_order( $order ) );
+			$this->assertArrayNotHasKey( self::KEY, Order_Marker_Fakes::$db[42] );
+			$this->assertSame( 'keep', Order_Marker_Fakes::$db[42]['_unrelated'] );
+		}
+
 		public function test_an_order_with_no_shipping_line_is_not_marked(): void {
 			$this->register( self::writing( '1' ) );
 

@@ -1165,6 +1165,20 @@ final class StoreApiPickupTest extends TestCase {
 		$this->assertSame( 'You have not chosen a pickup point.', $errors->get_error_message() );
 	}
 
+	public function test_adapter_does_not_repeat_the_guard_refusal_on_an_invalid_early_payload(): void {
+		$wc = new \stdClass();
+		$wc->session = $this->session;
+		Functions\when( 'WC' )->justReturn( $wc );
+		$order = new C2a_Order( $this->address );
+		C2a_Adapter::update_order( $order, $this->request( [ 'pickup' => 'invalid' ] ) );
+		$errors = new \WP_Error();
+		$errors->add( 'woodev_shipping_pickup_point_required', 'You have not chosen a pickup point.' );
+
+		C2a_Adapter::validate_order( $order, $errors );
+
+		$this->assertSame( [ 'You have not chosen a pickup point.' ], $errors->get_error_messages() );
+	}
+
 	public function test_bundled_copies_can_include_both_pickup_classes_again(): void {
 		require __DIR__ . '/../../../../woodev/shipping-method/pickup/class-store-api-pickup.php';
 		require __DIR__ . '/../../../../woodev/shipping-method/pickup/class-pickup-selection-service.php';
