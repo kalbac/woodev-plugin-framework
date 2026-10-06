@@ -40,6 +40,25 @@ d=json.load(sys.stdin); print('\n'.join(d['result']['terminal']['tail'][-8:]))" 
 
 Prove a watchdog on a known stalled screen once before trusting its silence — an empty log is not evidence.
 
+## s155: two more stall texts, and a watchdog loop that never ran
+
+Two further ways an agent stops with no `worker_done`, both seen on macOS, Orca 1.4.220, 06.10.2026:
+
+- **Codex: `■ Selected model is at capacity. Please try a different model.`** — the turn ends mid-gate-run and the
+  composer comes back. A `terminal send … "Continue the same task …" --enter` resumed it in the SAME dispatch (it had not
+  sent `worker_done`, so this is not the settled-worker trap).
+- **Claude: `Please run /login · API Error: 403 Request not allowed`.** Transient: the account limits were fine. A first
+  nudge made the CLI open its OAuth login prompt (send ESC to cancel it — never complete a login on the operator's behalf);
+  a second plain «Continue» resumed the review.
+
+Add both to the pattern list: `hit your usage limit|API Error|Connection lost|at capacity|403 Request not allowed|Please run /login`,
+plus the dialog texts (`Update available`, `Hooks need review`).
+
+**And the loop itself:** watching N terminals with `for h …; do watch $h & done; wait -n` does NOT work here — zsh rejects
+`wait -n` and macOS `/bin/bash` is **3.2** (`wait: -n: invalid option`); the wrapper exits at once while the children keep
+running with nobody listening. Use ONE loop that iterates over all handles and exits on the first alert. Note it also
+fires on a terminal YOU closed (`status=exited`) — restart it with the new handle set after every release.
+
 ## Related
 
 - [codex-app-server-drops-mid-task-under-orca-resume-by-session-id](codex-app-server-drops-mid-task-under-orca-resume-by-session-id.md) — the Codex equivalent

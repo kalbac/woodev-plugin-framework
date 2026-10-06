@@ -6,7 +6,7 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-06 (s154).** ✅ SP-11 tails #1107 #1110 #1111 #1113 merged (PR #1120, `8c3ccec8`, accepted by the operator on the rig). #1113 settled as variant A (postcode stays required on blocks). Accepted residuals: #1118, #1119. Next: #1121 (blocks compatibility by default for shipping plugins). Earlier: #1102 #1091 #1101 (s153), #1096 #1100 #1090 (s152). Details: `sessions/s154.md`. GlitchTip receiver (#1082) is live. ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
+**As of 2026-10-06 (s155).** ✅ #1121 merged (PR #1125, `42d40649`): a loader definition with `'type' => 'shipping'` defaults `supported_features.blocks` to `true`; the definition is authoritative over constructor args. ✅ SP-11 wave 2 merged (PR #1129, `d7b0914a`): #1112 #1114 #1123 #1109 (#1109 accepted by the operator on the rig). ⏸ #1108 parked on `kalbac/s155-w-d` — notice text approved, zone/page/dedup tests missing. Rig baseline `woocommerce_ship_to_destination = shipping` restored (it was left `billing_only` after #1107). Earlier: #1107 #1110 #1111 #1113 (s154). Details: `sessions/s155.md`. GlitchTip receiver (#1082) is live. ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
 orders-page slug redirects to the framework page with that carrier preselected, accepted on the rig.
 ✅ **Both machines are live**; routine sync is git ONLY (`wiki/two-machine-setup.md`). The order
 metabox (#856) and the orders table (#870) stay accepted.
@@ -27,7 +27,7 @@ selector matches nothing. One line each under the `[rig/*]` and `[build/*]` topi
 
 ⛔ **The operator reordered the work, 12.09.2026, reconfirmed 13.09** — *«пока у нас не будет готов
 базовый минимум самого фреймворка, мы плагин не пилим»*. **#786 is OUT of the queue** («Заморожено»).
-**«Base minimum» = milestone «v2.0 релиз» (operator, s150):** #1078 (SP-11: C-1 #1087, C-2a #1088, C-2b #1089, C-3 #1090, #1096, #1100, #1102, #1091 C-4, #1101 done; boundaries #1107 #1110 #1111 #1113 merged in PR #1120 (s154), #1108 #1109 #1112 #1114 on the board), then #247 #285 #567 last; #947 #948 #130 #1081 #1093 done. `docs/` after the plugin; #621 behind #639; reporter receiver = GlitchTip (#1082: deployed s152; DSN baked into each plugin; mail via Yandex SMTP pending on him).
+**«Base minimum» = milestone «v2.0 релиз» (operator, s150):** #1078 (SP-11: C-1 #1087, C-2a #1088, C-2b #1089, C-3 #1090, #1096, #1100, #1102, #1091 C-4, #1101 done; boundaries #1107 #1110 #1111 #1113 merged in PR #1120 (s154), #1109 #1112 #1114 #1123 merged in PR #1129 (s155), #1108 parked (tests); accepted residuals #1118 #1119), then #247 #285 #567 last; #947 #948 #130 #1081 #1093 done. `docs/` after the plugin; #621 behind #639; reporter receiver = GlitchTip (#1082: deployed s152; DSN baked into each plugin; mail via Yandex SMTP pending on him).
 Next: see `next-session-prompt.md`. The «new» scope + badge = unexported ∩ `EXPORTABLE_STATUSES` (#1024, his decision). Codex: default `gpt-6-luna`, hard tasks `gpt-6.1-sol` (operator, 01.10.2026; `CLAUDE.md`). Codex is back in use (operator, 29.09.2026): **1 of 3 usage-limit resets spent** (none spent in s146), recipe in gotcha `starting-codex-under-orca-needs-four-steps-not-one` — on 0.158 the report-FILE path works, `worker_done` never comes.
 
 ✅ **CI first-try reliability is ENFORCED** (#871): `.githooks/pre-push` rebuilds the bundles and
