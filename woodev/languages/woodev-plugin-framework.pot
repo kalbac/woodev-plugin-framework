@@ -5008,3 +5008,11 @@ msgstr ""
 #: shipping-method/checkout/blocks/class-pickup-blocks.php
 msgid "Choose your locality from the suggestions to see pickup points."
 msgstr ""
+
+#: shipping-method/checkout/class-checkout-parent-block-notice.php
+msgid "На странице оформления заказа отсутствуют блоки «Адрес доставки» или «Способы доставки». Восстановите их в редакторе страницы."
+msgstr ""
+
+#: shipping-method/checkout/class-checkout-parent-block-notice.php
+msgid "Открыть страницу оформления заказа"
+msgstr ""

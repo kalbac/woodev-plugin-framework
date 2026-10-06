@@ -469,6 +469,81 @@ class WoocommercePluginTest extends TestCase {
 	}
 
 	/**
+	 * Unregistered plugins retain default feature keys when constructor features are partial.
+	 *
+	 * @return void
+	 */
+	public function test_unregistered_plugin_partial_constructor_features_keep_default_blocks(): void {
+		$this->mock_wordpress_plugin_construction_functions();
+		Functions\stubs( [ 'add_action', 'add_filter' ] );
+		Functions\expect( '_doing_it_wrong' )->never();
+
+		$plugin = new Testable_Woocommerce_Plugin();
+		$plugin->initialize( 'feature-unregistered-partial', [ 'supported_features' => [ 'hpos' => true ] ] );
+
+		$this->assertSame(
+			[
+				'hpos'   => true,
+				'blocks' => [
+					'cart'     => false,
+					'checkout' => false,
+				],
+			],
+			$plugin->get_supported_features()
+		);
+	}
+
+	/**
+	 * Unregistered plugins retain omitted nested block keys when constructor features are partial.
+	 *
+	 * @return void
+	 */
+	public function test_unregistered_plugin_partial_nested_features_keep_default_block_key(): void {
+		$this->mock_wordpress_plugin_construction_functions();
+		Functions\stubs( [ 'add_action', 'add_filter' ] );
+		Functions\expect( '_doing_it_wrong' )->never();
+
+		$plugin = new Testable_Woocommerce_Plugin();
+		$plugin->initialize( 'feature-unregistered-partial-blocks', [ 'supported_features' => [ 'blocks' => [ 'cart' => true ] ] ] );
+
+		$this->assertSame(
+			[
+				'hpos'   => false,
+				'blocks' => [
+					'cart'     => true,
+					'checkout' => false,
+				],
+			],
+			$plugin->get_supported_features()
+		);
+	}
+
+	/**
+	 * Explicit false constructor feature values survive normalization with defaults.
+	 *
+	 * @return void
+	 */
+	public function test_unregistered_plugin_partial_constructor_features_preserve_explicit_false(): void {
+		$this->mock_wordpress_plugin_construction_functions();
+		Functions\stubs( [ 'add_action', 'add_filter' ] );
+		Functions\expect( '_doing_it_wrong' )->never();
+
+		$plugin = new Testable_Woocommerce_Plugin();
+		$plugin->initialize( 'feature-unregistered-explicit-false', [ 'supported_features' => [ 'hpos' => false, 'blocks' => [ 'cart' => true ] ] ] );
+
+		$this->assertSame(
+			[
+				'hpos'   => false,
+				'blocks' => [
+					'cart'     => true,
+					'checkout' => false,
+				],
+			],
+			$plugin->get_supported_features()
+		);
+	}
+
+	/**
 	 * WooCommerce plugin construction degrades safely when the bootstrap class is absent.
 	 *
 	 * @runInSeparateProcess
