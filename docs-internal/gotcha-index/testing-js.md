@@ -11,6 +11,7 @@
 - [testing/js] **`jest.resetModules()` gives a fresh module, not a fresh `document.body` — zombie listeners keep answering.** → [jest-resetmodules-leaves-listeners-on-the-surviving-body](../gotchas/jest-resetmodules-leaves-listeners-on-the-surviving-body.md) (s70)
 - [testing/js] **A test that advances the WHOLE interval does not pin the delay — it passes for 0 too.** → [advancing-the-whole-interval-does-not-pin-a-delay](../gotchas/advancing-the-whole-interval-does-not-pin-a-delay.md) (s64)
 - [testing/js] **`toEqual( [] )` against a "was not called" recorder can pass while the call happened.** → [jest-toequal-empty-array-ignores-undefined](../gotchas/jest-toequal-empty-array-ignores-undefined.md) (s52)
+- [testing/js] **jsdom's `element.click()` skips the mousedown focus a real pointer gives a `tabindex="0"` element — `activeElement` cannot tell keyboard from tap. Pass an explicit keyboard flag.** → [jsdom-click-skips-the-mousedown-focus-a-real-pointer-gives](../gotchas/jsdom-click-skips-the-mousedown-focus-a-real-pointer-gives.md) (s156)
 
 ## Related
 

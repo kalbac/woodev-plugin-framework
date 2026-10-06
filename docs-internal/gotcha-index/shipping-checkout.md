@@ -22,6 +22,7 @@
 - [shipping/checkout] **A `private static` "once per request" gate in a class each plugin builds its own copy of checks only the FIRST plugin — silently, with no failure to see.** → [a-process-static-once-per-request-gate-checks-only-the-first-plugin](../gotchas/a-process-static-once-per-request-gate-checks-only-the-first-plugin.md) (s113)
 - [shipping/checkout] **The block checkout is a REST request: the shipping guard blocks its rates, and a block-checkout order fires none of the classic checkout hooks.** → [the-block-checkout-is-a-rest-request-and-fires-none-of-the-classic-checkout-hooks](../gotchas/the-block-checkout-is-a-rest-request-and-fires-none-of-the-classic-checkout-hooks.md) (s142)
 - [shipping/checkout] **The wizard's address policy replays `woocommerce_default_address_fields`, not `woocommerce_checkout_fields` relaxations.** → [the-wizard-address-policy-replays-default-address-field-filters-but-not-checkout-field-filters](../gotchas/the-wizard-address-policy-replays-default-address-field-filters-but-not-checkout-field-filters.md) (s144)
+- [shipping/checkout] **WC sends `update-customer` inside `/wc/store/v1/batch`, ~300 ms AFTER `isCustomerDataUpdating()` turns true — a route-matching middleware never fires; a snapshot at `updating=true` is inert. Both passed jest.** → [wc-store-api-batches-update-customer-300ms-after-updating-flips](../gotchas/wc-store-api-batches-update-customer-300ms-after-updating-flips.md) (s156)
 
 ## Related
 
