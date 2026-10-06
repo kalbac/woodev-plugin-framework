@@ -76,6 +76,14 @@ if ( ! class_exists( Woocommerce_Plugin::class, false ) ) :
 				]
 			);
 
+			if ( null === $loader_definition ) {
+				$args['supported_features'] = Framework_Plugin_Loader_Definition::get_supported_features_for_definition(
+					[
+						'supported_features' => $args['supported_features'],
+					]
+				);
+			}
+
 			if ( null !== $loader_definition ) {
 				if ( isset( $args['supported_features'] ) ) {
 					$has_disagreement = false;
