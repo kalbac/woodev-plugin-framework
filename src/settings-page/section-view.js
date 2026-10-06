@@ -11,6 +11,7 @@ import ControlField from '../components/control-field';
 import ConnectionBlock from './connection-block';
 import ToolsBlock from './tools-block';
 import { isFieldVisible } from '../components/validate';
+import { RawHTML } from '@wordpress/element';
 
 export default function SectionView( { providerId, section, tabFields, values, conditionValues, onFieldChange, onFieldRevert, showErrors, serverErrors } ) {
 	if ( ! section ) {
@@ -37,7 +38,7 @@ export default function SectionView( { providerId, section, tabFields, values, c
 	return (
 		<div className="woodev-settings__section">
 			{ section.description && (
-				<p className="woodev-settings__section-desc">{ section.description }</p>
+				<div className="woodev-settings__section-desc"><RawHTML>{ section.description }</RawHTML></div>
 			) }
 			{ Object.keys( section.fields )
 				.filter( ( settingId ) =>
