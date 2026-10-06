@@ -2666,38 +2666,46 @@ describe( 'search result rows are keyboard buttons (#1127)', () => {
 	} );
 
 	it( 'does not change focus for a plain pointer click', () => {
-		const { row } = setup( 'address' );
-		const priorFocus = document.createElement( 'button' );
-		document.body.appendChild( priorFocus );
-		priorFocus.focus();
+		const { panels, row, input } = setup( 'address' );
+		const focusSearch = jest.spyOn( input, 'focus' );
+		// Keep the row mounted to isolate focus routing from the expected results dismissal.
+		jest.spyOn( panels, 'hideSearchResults' ).mockImplementation( () => {} );
+		row.focus();
+		row.dispatchEvent( new window.MouseEvent( 'click', { bubbles: true, detail: 1 } ) );
 
-		row.click();
-		const activeElement = document.activeElement;
-		priorFocus.remove();
-
-		// The focus-preservation check alone also describes the old click-only row; keep the new
-		// keyboard-button contract in this test so the regression test fails against that version.
 		expect( row.getAttribute( 'role' ) ).toBe( 'button' );
-		expect( activeElement ).toBe( priorFocus );
+		expect( document.activeElement ).toBe( row );
+		expect( focusSearch ).not.toHaveBeenCalled();
 	} );
 
 	it( 'keeps pointer focus without a listener and returns a keyboard point pick to search', () => {
 		const { panels, layout, row, input } = setup( 'point', false );
-		const priorFocus = document.createElement( 'button' );
-		document.body.appendChild( priorFocus );
-		priorFocus.focus();
+		const focusSearch = jest.spyOn( input, 'focus' );
+		// Keep the row mounted to isolate focus routing from the expected results dismissal.
+		jest.spyOn( panels, 'hideSearchResults' ).mockImplementation( () => {} );
+		row.focus();
+		row.dispatchEvent( new window.MouseEvent( 'click', { bubbles: true, detail: 1 } ) );
 
-		row.click();
-		const activeElement = document.activeElement;
-		priorFocus.remove();
-
-		expect( activeElement ).toBe( priorFocus );
+		expect( document.activeElement ).toBe( row );
+		expect( focusSearch ).not.toHaveBeenCalled();
 
 		panels.renderSearchResults( { points: [ point() ], addresses: [] } );
 		const keyboardRow = layout.querySelector( '.woodev-pickup-search__item' );
 		press( keyboardRow, 'Enter' );
 
 		expect( document.activeElement ).toBe( input );
+	} );
+
+	it( 'does not move pointer focus into a newly opened card', () => {
+		const { panels, row, input } = setup( 'point' );
+		const focusSearch = jest.spyOn( input, 'focus' );
+		jest.spyOn( panels, 'hideSearchResults' ).mockImplementation( () => {} );
+		row.focus();
+		row.dispatchEvent( new window.MouseEvent( 'click', { bubbles: true, detail: 1 } ) );
+
+		expect( document.activeElement ).toBe( row );
+		expect( focusSearch ).not.toHaveBeenCalled();
+		expect( panels.root.querySelector( '.woodev-pickup-card__close' ) ).not.toBe( document.activeElement );
 	} );
 
 	it( 'does not move focus into an already shown card or leave a stale opener', () => {

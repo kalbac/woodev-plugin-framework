@@ -1247,8 +1247,14 @@
 		var item = document.createElement( 'div' );
 		item.className = 'woodev-pickup-search__item woodev-pickup-search__item--point';
 		item.dataset.pointId = String( point.id );
+		var keyboardActivation = false;
 		makeKeyboardButton( item, function() {
-			item.click();
+			keyboardActivation = true;
+			try {
+				item.click();
+			} finally {
+				keyboardActivation = false;
+			}
 		} );
 
 		// ADDRESS FIRST, NAME SECOND (issue #263, operator decision 11.08.2026). The
@@ -1294,14 +1300,17 @@
 		item.appendChild( nameEl );
 
 		item.addEventListener( 'click', function() {
-			var rowHadFocus = item === document.activeElement;
+			var viaKeyboard = keyboardActivation;
 			var cardWasShown = self._stage.classList.contains( 'is-card' );
 
-			// openCard() is called synchronously by the searchPointPicked listener. Pass through
-			// whether focus belonged to this row so pointer picks never pull focus into the card.
-			self._searchPickHadFocus = rowHadFocus;
-			self._emit( 'searchPointPicked', point.id );
-			self._searchPickHadFocus = false;
+			// Browsers focus tabindex rows on pointer down; carry the activation source explicitly.
+			// openCard() reads this synchronously so only keyboard picks move focus into the card.
+			self._searchPickViaKeyboard = viaKeyboard;
+			try {
+				self._emit( 'searchPointPicked', point.id );
+			} finally {
+				self._searchPickViaKeyboard = false;
+			}
 
 			// Round 2, D1e: a pick closes the results box — it must not linger over the map once
 			// the customer has already told this file which point they mean.
@@ -1310,7 +1319,7 @@
 			// The activated row is removed above. Return a keyboard pick to the surviving input
 			// when it re-points an already open card or no listener opened one. A newly opened card
 			// has already received focus in openCard().
-			if ( rowHadFocus && ( cardWasShown || ! self._stage.classList.contains( 'is-card' ) ) ) {
+			if ( viaKeyboard && ( cardWasShown || ! self._stage.classList.contains( 'is-card' ) ) ) {
 				restoreSearchFocus( self );
 			}
 		} );
@@ -1340,8 +1349,14 @@
 		var item = document.createElement( 'div' );
 		item.className = 'woodev-pickup-search__item woodev-pickup-search__item--address';
 		item.dataset.index = String( index );
+		var keyboardActivation = false;
 		makeKeyboardButton( item, function() {
-			item.click();
+			keyboardActivation = true;
+			try {
+				item.click();
+			} finally {
+				keyboardActivation = false;
+			}
 		} );
 
 		var nameEl = document.createElement( 'span' );
@@ -1351,14 +1366,14 @@
 		item.appendChild( nameEl );
 
 		item.addEventListener( 'click', function() {
-			var rowHadFocus = item === document.activeElement;
+			var viaKeyboard = keyboardActivation;
 
 			self._emit( 'searchAddressPicked', index );
 
 			// Round 2, D1e: same as a point pick, above — closes the box rather than leaving it
 			// open over the map once the customer has picked one of its suggestions.
 			self.hideSearchResults();
-			if ( rowHadFocus ) {
+			if ( viaKeyboard ) {
 				restoreSearchFocus( self );
 			}
 		} );
@@ -3986,9 +4001,9 @@
 		if ( ! cardWasShown ) {
 			this._cardOpener = 'list' === origin
 				? { groupKey: group.key, pointId: group.points[ index ].id }
-				: ( 'search' === origin && this._searchPickHadFocus ? { search: true } : null );
+				: ( 'search' === origin && this._searchPickViaKeyboard ? { search: true } : null );
 
-			if ( 'list' === origin || ( 'search' === origin && this._searchPickHadFocus ) ) {
+			if ( 'list' === origin || ( 'search' === origin && this._searchPickViaKeyboard ) ) {
 				focusCardEntry( this );
 			}
 		}
@@ -4002,13 +4017,13 @@
 	 * was underneath the card the whole time) stays visible rather than
 	 * closing the whole sidebar as a side effect of dismissing the card.
 	 *
-	 * @param {boolean} [restoreFocus] Whether this activation came from the keyboard.
+	 * @param {boolean} [restoreFocus] Whether to return focus to a search input opened by keyboard.
 	 * @returns {void}
 	 */
 	Panels.prototype.closeCard = function( restoreFocus ) {
 		hideHoursTip();
 
-		var cardHadFocus = false !== restoreFocus && cardHoldsFocus( this );
+		var cardHadFocus = cardHoldsFocus( this );
 
 		setCardShown( this, false );
 		this._activeGroup = null;
@@ -4018,7 +4033,9 @@
 		// persistent search input or the current list row, never a removed search result (#1109).
 		if ( cardHadFocus ) {
 			if ( this._cardOpener && this._cardOpener.search ) {
-				restoreSearchFocus( this );
+				if ( false !== restoreFocus ) {
+					restoreSearchFocus( this );
+				}
 			} else {
 				restoreListFocus( this );
 			}
