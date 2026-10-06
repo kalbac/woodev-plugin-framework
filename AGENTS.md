@@ -345,6 +345,17 @@ Run review before committing when changes touch:
 
 **Skip for:** docs-only, config-only, tests-only, small isolated single-file fix.
 
+### Rate every finding by the real shop, not by the rig (operator, 06.10.2026)
+
+A reviewer's finding — and any "accepted residual" — carries two ratings: **how likely a real live shop
+hits it** and **what visibly breaks when it does**. Only a finding a real merchant or customer can hit
+with a visible consequence blocks a merge or becomes a card. A scenario that needs an unusual setup no
+shop runs (both checkout kinds on one site at once), a sub-second window the server already guards, or
+a consequence nobody would notice gets ONE line in the session notes — no card, no worker round.
+His words: «вероятность такого сценария стремится к нулю… а мы это пытаемся починить, тратим время и
+токены». Worked examples of the waste: #1119 (closed not planned) and #1118 (3 worker + 3 critic
+rounds for a ~0.35 s window the server rejects). **Every critic brief repeats this rule.**
+
 ---
 
 ## 🧠 Gotcha recording rule
