@@ -27,6 +27,7 @@
 
 import { useEffect, useRef, useState } from '@wordpress/element';
 import { useSelect } from '@wordpress/data';
+import { customerDataRequestSnapshot } from './customer-data-request';
 import {
 	hasCartError,
 	isCustomerDataUpdating,
@@ -60,6 +61,9 @@ export function useShippingAddressState(): AddressState {
 	const [ expired, setExpired ] = useState< string | null >( null );
 	// The address key the push in flight started with; `null` while none is.
 	const sent = useRef< string | null >( null );
+	// Track a request only when apiFetch observed it; otherwise retain the legacy any-reply behavior.
+	const sentRequestTracked = useRef< boolean >( false );
+	const sentReplyVersion = useRef< number >( 0 );
 	const lastReply = useRef< unknown >( reply );
 
 	useEffect( () => {
@@ -75,20 +79,29 @@ export function useShippingAddressState(): AddressState {
 
 		if ( updating && sent.current === null ) {
 			sent.current = key;
+			const snapshot = customerDataRequestSnapshot();
+			sentRequestTracked.current = snapshot.pending;
+			sentReplyVersion.current = snapshot.replyVersion;
 		}
 
 		if ( sent.current === null ) {
 			return;
 		}
 
-		if ( replied && ! failed ) {
+		const requestAnswered = sentRequestTracked.current
+			? customerDataRequestSnapshot().replyVersion > sentReplyVersion.current
+			: true;
+
+		if ( replied && ! failed && requestAnswered ) {
 			setAnswered( sent.current );
 			setExpired( null );
 			sent.current = null;
+			sentRequestTracked.current = false;
 		} else if ( ! updating ) {
 			// Ended with no reply, or with a refusal: nothing answered it.
 			setExpired( sent.current );
 			sent.current = null;
+			sentRequestTracked.current = false;
 		}
 	}, [ updating, reply, failed, key ] );
 
