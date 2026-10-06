@@ -282,6 +282,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 			// canonical delivery-status enum (SP-10 increment 2, spec D4)
 			require_once $path . '/order/class-delivery-status.php';
+			require_once $path . '/order/class-delivery-status-events.php';
+
+			// Status-driven customer notifications use WooCommerce's own Email settings registry.
+			require_once $path . '/email/class-delivery-status-emails.php';
+			if ( class_exists( '\\WC_Email' ) ) {
+				require_once $path . '/email/class-delivery-status-email.php';
+			}
+			Email\Delivery_Status_Emails::instance();
 
 			// delivery-status sync freshness — the last-updated/next-update seam (SP-10
 			// spec D9, #828)

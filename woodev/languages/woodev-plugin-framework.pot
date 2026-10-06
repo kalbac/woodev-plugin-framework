@@ -5016,3 +5016,113 @@ msgstr ""
 #: shipping-method/checkout/class-checkout-parent-block-notice.php
 msgid "Открыть страницу оформления заказа"
 msgstr ""
+
+#: shipping-method/email/class-delivery-status-email.php:77
+msgid "Включить"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-email.php:79
+msgid "Отправлять это письмо покупателю"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-email.php:83
+msgid "Тема"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-email.php:85
+msgid "Доступны переменные: {order_number}, {tracking_number}, {tracking_url}, {carrier_name}, {pickup_point}, {delivery_date}."
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-email.php:90
+msgid "Заголовок"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-email.php:95
+msgid "Формат письма"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-email.php:102
+msgid "Текст письма"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-email.php:106
+msgid "Переменные можно вставлять в фигурных скобках."
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php:53
+msgid "Передан в доставку + трек"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php:53
+msgid "Письмо покупателю после передачи отправления перевозчику."
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php:53
+msgid "Заказ {order_number} передан в доставку"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php:53
+msgid "Заказ передан в доставку"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php:53
+msgid "Отправление передано перевозчику. Номер для отслеживания: {tracking_number}. {tracking_url}"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php:54
+msgid "Заказ ждёт в пункте выдачи"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php:54
+msgid "Письмо покупателю, когда отправление поступило в пункт выдачи."
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php:54
+msgid "Заказ {order_number} ждёт в пункте выдачи"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php:54
+msgid "Заберите заказ {order_number} в пункте выдачи: {pickup_point}."
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php:55
+#: shipping-method/order/class-delivery-status.php:95
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Доставлено"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php:55
+msgid "Письмо покупателю после доставки заказа."
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php:55
+msgid "Заказ {order_number} доставлен"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php:55
+msgid "Заказ доставлен"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php:55
+msgid "Заказ {order_number} доставлен."
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php:56
+msgid "Возврат / не доставлено"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php:56
+msgid "Письмо покупателю при возврате или неудачной доставке."
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php:56
+msgid "Проблема с доставкой заказа {order_number}"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php:56
+msgid "Проблема с доставкой"
+msgstr ""
+
+#: shipping-method/email/class-delivery-status-emails.php:56
+msgid "Не удалось доставить заказ {order_number}. Свяжитесь с магазином для уточнения деталей."
+msgstr ""

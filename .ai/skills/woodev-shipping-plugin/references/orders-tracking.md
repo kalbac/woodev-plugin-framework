@@ -40,5 +40,11 @@ Implement webhooks by extending `Abstract_Webhook_Handler` and providing `verify
 
 ## Not available yet
 
-- Framework buyer status emails are not implemented yet (#714, in progress). Do not add plugin-owned buyer status emails.
+- Buyer status emails are provided by the framework through WooCommerce → Settings → Emails. After
+  persisting a changed raw status, a carrier calls
+  `Delivery_Status_Events::notify( $order, $provider, $previous_canonical_status )`; this resolves
+  the new canonical status and fires `woodev_shipping_delivery_status_changed` once for framework
+  emails and extensions. Do not send carrier-owned buyer status emails. Carrier-specific template
+  values can be added with the `woodev_shipping_delivery_email_placeholders` filter; the base set
+  includes order number, tracking number/URL, carrier name, pickup point and delivery date.
 - Carrier documents such as waybills and barcode downloads are not implemented yet (#1134). Do not hand-roll a download flow; wait for the shared document source/download seam.
