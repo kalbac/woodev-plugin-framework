@@ -279,7 +279,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 		}
 
 		/**
-		 * The «Коробки» handler (#1138). Lazily built, never `null`, so the packer can read it on a
+		 * The «Упаковка» handler (#1138). Lazily built, never `null`, so the packer can read it on a
 		 * request where the tab itself was never registered.
 		 *
 		 * @since 2.0.2
@@ -380,12 +380,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 				__( 'Эти значения подставляются, только если у товара не указаны вес или габариты. Для точного расчёта стоимости доставки укажите вес и габариты в карточке каждого товара.', 'woodev-plugin-framework' )
 			);
 
-			// «Коробки» (#1138): the store's own boxes the `boxes` packing algorithm packs into — store-wide too.
+			// «Упаковка» (#1138): the store's own boxes the `boxes` packing algorithm packs into — store-wide too.
 			$sections[] = Settings_Section::create(
 				Boxes_Settings::SECTION_ID,
-				__( 'Коробки', 'woodev-plugin-framework' ),
+				__( 'Упаковка', 'woodev-plugin-framework' ),
 				$this->get_boxes_settings()->get_owned_setting_ids(),
-				__( 'Коробки магазина, в которые упаковываются заказы у способов доставки с алгоритмом упаковки «Коробки магазина». Товар, который не помещается ни в одну коробку, едет в отдельной посылке — он не теряется.', 'woodev-plugin-framework' )
+				__( 'Упаковка магазина, в которую упаковываются заказы. Товар, который не помещается ни в одну коробку, едет в отдельной посылке.', 'woodev-plugin-framework' )
 			);
 
 			// «Инструменты» (#505) is always LAST, and exists only when at least one

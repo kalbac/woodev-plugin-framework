@@ -1,3 +1,5 @@
+import { validateBoxesText } from './boxes-table';
+
 /**
  * UI-kit — client-side field validation (mirror of the PHP server validator).
  *
@@ -126,6 +128,7 @@ function resolveKind( schema ) {
  */
 export function validateField( schema, value, isTouched ) {
 	const kind = resolveKind( schema );
+	if ( kind === 'boxes-table' ) { return validateBoxesText( value ); }
 
 	if ( schema.required && isRequirable( kind ) && isEmpty( kind, value ) ) {
 		if ( schema.sensitive && schema.is_set && ! isTouched ) {
@@ -333,4 +336,10 @@ export function isFieldVisible( schema, values ) {
 		return true;
 	}
 	return evaluateConditions( schema.show_if, values );
+}
+
+/** Same evaluator as show_if, applied to live unsaved values. Empty = no disablement. */
+export function isFieldDisabled( schema, values ) {
+	return !! schema.disabled || ( schema.disabled_if && Object.keys( schema.disabled_if ).length > 0
+		? evaluateConditions( schema.disabled_if, values ) : false );
 }

@@ -45,6 +45,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Map_Settings
 		 */
 		public const SETTING_ACCENT_COLOR = 'pickup_accent_color';
 
+		/** @var string store-wide Yandex Maps API key, shared by every carrier. */
+		public const SETTING_YANDEX_API_KEY = 'yandex_api_key';
+
 		/**
 		 * Constructor.
 		 *
@@ -78,6 +81,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Map_Settings
 		}
 
 		/**
+		 * Reads the shared Yandex key without constructing the admin settings controls.
+		 *
+		 * @since 2.0.2
+		 * @return string
+		 */
+		public static function get_yandex_api_key(): string {
+			$value = get_option( 'woodev_pickup_map_' . self::SETTING_YANDEX_API_KEY, '' );
+			return is_string( $value ) ? $value : '';
+		}
+
+		/**
 		 * Gets the settings ids this handler owns, in registration order. Used by
 		 * {@see \Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab} to build the
 		 * `Settings_Section` without duplicating this handler's own field list.
@@ -92,6 +106,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Map_Settings
 				'pickup_replace_address',
 				'pickup_close_on_select',
 				self::SETTING_ACCENT_COLOR,
+				self::SETTING_YANDEX_API_KEY,
 			];
 		}
 
@@ -115,6 +130,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Map_Settings
 		}
 
 		protected function register_settings() {
+
+			$this->register_setting(
+				self::SETTING_YANDEX_API_KEY,
+				\Woodev_Setting::TYPE_STRING,
+				[
+					'name'    => __( 'Ключ API Яндекс Карт', 'woodev-plugin-framework' ),
+					'default' => '',
+				]
+			);
+			$this->register_control(
+				self::SETTING_YANDEX_API_KEY,
+				\Woodev_Control::TYPE_TEXT,
+				[ 'tooltip' => __( 'Один ключ для карт всех способов доставки в этом магазине. Если он не указан, используется ключ плагина: его общая квота расходуется всеми магазинами и может закончиться. Рекомендуем указать собственный ключ.', 'woodev-plugin-framework' ) ]
+			);
 
 			$this->register_setting(
 				'pickup_button_placement',

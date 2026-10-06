@@ -80,17 +80,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 			}
 			$definitions = [
 				'customer_shipment_created' => [
-					'title'       => __( 'Передан в доставку + трек', 'woodev-plugin-framework' ),
-					'description' => __( 'Письмо покупателю после передачи отправления перевозчику.', 'woodev-plugin-framework' ),
+					'title'       => __( 'Delivery: Handed over', 'woodev-plugin-framework' ),
+					'description' => __( 'Sent to the customer when a shipment is handed over to the carrier.', 'woodev-plugin-framework' ),
 					'statuses'    => [ Delivery_Status::CREATED, Delivery_Status::IN_TRANSIT ],
 					'subject'     => __( 'Order {order_number} has been handed over for delivery', 'woodev-plugin-framework' ),
 					'heading'     => __( 'Your order has been handed over for delivery', 'woodev-plugin-framework' ),
-					'body'        => __( 'Your shipment has been handed over to the carrier. Tracking number: {tracking_number}. {tracking_url}', 'woodev-plugin-framework' ),
+					'body'        => __( 'Your shipment has been handed over to {carrier_name}. Tracking number: {tracking_number}. {tracking_url}', 'woodev-plugin-framework' ),
 					'enabled'     => true,
 				],
 				'customer_shipment_pickup' => [
-					'title'       => __( 'Заказ ждёт в пункте выдачи', 'woodev-plugin-framework' ),
-					'description' => __( 'Письмо покупателю, когда отправление поступило в пункт выдачи.', 'woodev-plugin-framework' ),
+					'title'       => __( 'Delivery: Ready for pickup', 'woodev-plugin-framework' ),
+					'description' => __( 'Sent to the customer when a shipment is ready for pickup.', 'woodev-plugin-framework' ),
 					'statuses'    => [ Delivery_Status::READY_FOR_PICKUP ],
 					'subject'     => __( 'Order {order_number} is waiting at the pickup point', 'woodev-plugin-framework' ),
 					'heading'     => __( 'Your order is waiting at the pickup point', 'woodev-plugin-framework' ),
@@ -98,8 +98,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 					'enabled'     => true,
 				],
 				'customer_shipment_delivered' => [
-					'title'       => __( 'Доставлено', 'woodev-plugin-framework' ),
-					'description' => __( 'Письмо покупателю после доставки заказа.', 'woodev-plugin-framework' ),
+					'title'       => __( 'Delivery: Delivered', 'woodev-plugin-framework' ),
+					'description' => __( 'Sent to the customer after delivery.', 'woodev-plugin-framework' ),
 					'statuses'    => [ Delivery_Status::DELIVERED ],
 					'subject'     => __( 'Order {order_number} has been delivered', 'woodev-plugin-framework' ),
 					'heading'     => __( 'Your order has been delivered', 'woodev-plugin-framework' ),
@@ -107,8 +107,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 					'enabled'     => true,
 				],
 				'customer_shipment_exception' => [
-					'title'       => __( 'Возврат / не доставлено', 'woodev-plugin-framework' ),
-					'description' => __( 'Письмо покупателю при возврате или неудачной доставке.', 'woodev-plugin-framework' ),
+					'title'       => __( 'Delivery: Returned', 'woodev-plugin-framework' ),
+					'description' => __( 'Sent to the customer after a return or failed delivery.', 'woodev-plugin-framework' ),
 					'statuses'    => [ Delivery_Status::RETURNED, Delivery_Status::FAILED ],
 					'subject'     => __( 'There is a problem with the delivery of order {order_number}', 'woodev-plugin-framework' ),
 					'heading'     => __( 'There is a problem with your delivery', 'woodev-plugin-framework' ),

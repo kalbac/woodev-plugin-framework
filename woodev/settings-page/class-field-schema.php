@@ -27,9 +27,10 @@ final class Field_Schema {
 	 *
 	 * @param \Woodev_Abstract_Settings $handler     settings handler.
 	 * @param string[]                  $setting_ids optional subset of setting ids; empty = all.
+	 * @param string                    $provider_id exposed tab id for search routes; blank = handler id.
 	 * @return array<string,array<string,mixed>> schema keyed by setting id.
 	 */
-	public static function from_handler( $handler, array $setting_ids = [] ): array {
+	public static function from_handler( $handler, array $setting_ids = [], string $provider_id = '' ): array {
 		$schema = [];
 
 		foreach ( $handler->get_settings( $setting_ids ) as $setting ) {
@@ -99,6 +100,20 @@ final class Field_Schema {
 				$entry['server_validated'] = true;
 			}
 
+			if ( $control && \Woodev_Control::TYPE_SEARCH_SELECT === $control->get_type() ) {
+				$entry['value_label'] = $is_secret ? '' : $control->get_value_label( $stored );
+				$entry['search_url']  = rest_url( 'woodev/v1/settings/' . rawurlencode( '' !== $provider_id ? $provider_id : $handler->get_id() ) . '/control/' . rawurlencode( $setting->get_id() ) . '/search' );
+			}
+			if ( $control && \Woodev_Control::TYPE_BOXES_TABLE === $control->get_type() ) {
+				$entry['dimension_factor'] = (float) wc_get_dimension( 1, 'cm' );
+				$entry['weight_factor']    = (float) wc_get_weight( 1, 'kg' );
+			}
+
+			$disabled_if = $setting->get_disabled_if_conditions();
+			if ( ! empty( $disabled_if ) ) {
+				$entry['disabled_if'] = $disabled_if;
+			}
+
 			$show_if = $setting->get_show_if_conditions();
 			if ( ! empty( $show_if ) ) {
 				$entry['show_if'] = $show_if;
@@ -108,8 +123,8 @@ final class Field_Schema {
 			// authored `description`. Both are legitimate at once: the description
 			// explains what the option does, the reason explains why it is
 			// currently unavailable. The React client renders both distinctly.
-			if ( $control && $control->is_disabled() ) {
-				$entry['disabled']        = true;
+			if ( $control && ( $control->is_disabled() || ! empty( $disabled_if ) ) ) {
+				$entry['disabled']        = $control->is_disabled();
 				$entry['disabled_reason'] = $control->get_disabled_reason();
 			}
 

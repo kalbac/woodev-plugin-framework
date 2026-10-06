@@ -647,3 +647,16 @@
 .woodev-select__trigger.is-broken {
 	border-color: wd.$warn;
 }
+
+// Packing rows reuse WP inputs/buttons and the settings field error treatment.
+.woodev-boxes {
+	width: 100%;
+	&__scroll { overflow-x: auto; margin-bottom: 12px; }
+	&__table {
+		min-width: 760px;
+		th { white-space: nowrap; }
+		td { vertical-align: top; }
+		td:first-child { min-width: 160px; }
+		.components-base-control { min-width: 72px; }
+	}
+}

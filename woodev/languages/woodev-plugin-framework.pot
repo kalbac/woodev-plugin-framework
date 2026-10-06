@@ -1798,6 +1798,10 @@ msgstr ""
 msgid "Обязательное поле."
 msgstr ""
 
+#: assets/build/setup-wizard/index.js
+#: assets/build/settings-page/index.js
+#: assets/build/shipping-orders-page/index.js
+#: assets/build/ui-kit-gallery/index.js
 #: settings-api/class-setting.php:615
 msgid "Неверное значение."
 msgstr ""
@@ -5198,4 +5202,167 @@ msgstr ""
 
 #: assets/src/shipping-orders-page/app.tsx
 msgid "Документ ещё готовится. Повторите попытку примерно через %d с."
+msgstr ""
+
+msgid "Delivery: Handed over"
+msgstr ""
+
+msgid "Delivery: Ready for pickup"
+msgstr ""
+
+msgid "Delivery: Delivered"
+msgstr ""
+
+msgid "Delivery: Returned"
+msgstr ""
+
+msgid "Sent to the customer when a shipment is handed over to the carrier."
+msgstr ""
+
+msgid "Sent to the customer when a shipment is ready for pickup."
+msgstr ""
+
+msgid "Sent to the customer after delivery."
+msgstr ""
+
+msgid "Sent to the customer after a return or failed delivery."
+msgstr ""
+
+msgid "Your shipment has been handed over to {carrier_name}. Tracking number: {tracking_number}. {tracking_url}"
+msgstr ""
+
+msgid "Available placeholders: {order_number}, {tracking_number}, {tracking_url}, {carrier_name}, {pickup_point}, {delivery_date}."
+msgstr ""
+
+msgid "Placeholders can be inserted in curly braces."
+msgstr ""
+
+msgid "Enabled"
+msgstr ""
+
+msgid "Send this email to the customer"
+msgstr ""
+
+msgid "Subject"
+msgstr ""
+
+msgid "Heading"
+msgstr ""
+
+msgid "Email type"
+msgstr ""
+
+msgid "Email body"
+msgstr ""
+
+msgid "Ключ API Яндекс Карт"
+msgstr ""
+
+msgid "Один ключ для карт всех способов доставки в этом магазине. Если он не указан, используется ключ плагина: его общая квота расходуется всеми магазинами и может закончиться. Рекомендуем указать собственный ключ."
+msgstr ""
+
+msgid "Упаковка"
+msgstr ""
+
+msgid "Упаковка магазина, в которую упаковываются заказы. Товар, который не помещается ни в одну коробку, едет в отдельной посылке."
+msgstr ""
+
+msgid "Укажите название, размеры больше нуля и веса не меньше нуля для каждой упаковки."
+msgstr ""
+
+msgid "Внутренние размеры — в сантиметрах, вес — в килограммах. Пустой или нулевой макс. вес означает отсутствие ограничения. Макс. вес включает вес самой упаковки."
+msgstr ""
+
+#: assets/build/setup-wizard/index.js
+#: assets/build/settings-page/index.js
+#: assets/build/shipping-orders-page/index.js
+#: assets/build/ui-kit-gallery/index.js
+msgid "Введите не менее двух символов"
+msgstr ""
+
+#: assets/build/setup-wizard/index.js
+#: assets/build/settings-page/index.js
+#: assets/build/shipping-orders-page/index.js
+#: assets/build/ui-kit-gallery/index.js
+msgid "Не удалось загрузить список."
+msgstr ""
+
+#: assets/build/setup-wizard/index.js
+#: assets/build/settings-page/index.js
+#: assets/build/shipping-orders-page/index.js
+#: assets/build/ui-kit-gallery/index.js
+msgid "Укажите название без точки с запятой и переноса строки."
+msgstr ""
+
+#: assets/build/setup-wizard/index.js
+#: assets/build/settings-page/index.js
+#: assets/build/shipping-orders-page/index.js
+#: assets/build/ui-kit-gallery/index.js
+msgid "Размеры должны быть числами больше нуля."
+msgstr ""
+
+#: assets/build/setup-wizard/index.js
+#: assets/build/settings-page/index.js
+#: assets/build/shipping-orders-page/index.js
+#: assets/build/ui-kit-gallery/index.js
+msgid "Вес должен быть числом не меньше нуля."
+msgstr ""
+
+#: assets/build/setup-wizard/index.js
+#: assets/build/settings-page/index.js
+#: assets/build/shipping-orders-page/index.js
+#: assets/build/ui-kit-gallery/index.js
+msgid "Название"
+msgstr ""
+
+msgid "Store packaging (items packed into the boxes set up in the store)"
+msgstr ""
+
+#: assets/build/setup-wizard/index.js
+#: assets/build/settings-page/index.js
+#: assets/build/shipping-orders-page/index.js
+#: assets/build/ui-kit-gallery/index.js
+msgid "Длина, см"
+msgstr ""
+
+#: assets/build/setup-wizard/index.js
+#: assets/build/settings-page/index.js
+#: assets/build/shipping-orders-page/index.js
+#: assets/build/ui-kit-gallery/index.js
+msgid "Ширина, см"
+msgstr ""
+
+#: assets/build/setup-wizard/index.js
+#: assets/build/settings-page/index.js
+#: assets/build/shipping-orders-page/index.js
+#: assets/build/ui-kit-gallery/index.js
+msgid "Высота, см"
+msgstr ""
+
+#: assets/build/setup-wizard/index.js
+#: assets/build/settings-page/index.js
+#: assets/build/shipping-orders-page/index.js
+#: assets/build/ui-kit-gallery/index.js
+msgid "Макс. вес, кг"
+msgstr ""
+
+#: assets/build/setup-wizard/index.js
+#: assets/build/settings-page/index.js
+#: assets/build/shipping-orders-page/index.js
+#: assets/build/ui-kit-gallery/index.js
+msgid "Вес упаковки, кг"
+msgstr ""
+
+#: assets/build/setup-wizard/index.js
+#: assets/build/settings-page/index.js
+#: assets/build/shipping-orders-page/index.js
+#: assets/build/ui-kit-gallery/index.js
+msgid "Действия"
+msgstr ""
+
+#: assets/build/setup-wizard/index.js
+#: assets/build/settings-page/index.js
+#: assets/build/shipping-orders-page/index.js
+#: assets/build/ui-kit-gallery/index.js
+msgid "Добавить упаковку"
 msgstr ""

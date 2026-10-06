@@ -13,7 +13,7 @@ import { Button } from '@wordpress/components';
 import ControlField from '../components/control-field';
 import { testConnection } from './rest';
 
-export default function ConnectionBlock( { providerId, section, values, onFieldChange, onFieldRevert } ) {
+export default function ConnectionBlock( { providerId, section, values, conditionValues, onFieldChange, onFieldRevert } ) {
 	const [ busy, setBusy ] = useState( false );
 	const [ result, setResult ] = useState( section.status || null );
 
@@ -70,6 +70,7 @@ export default function ConnectionBlock( { providerId, section, values, onFieldC
 				<ControlField
 					key={ settingId }
 					schema={ section.fields[ settingId ] }
+					conditionValues={ conditionValues || values }
 					value={ values[ settingId ] ?? section.fields[ settingId ].value }
 					onChange={ ( next ) => handleFieldChange( settingId, next ) }
 					hasEdit={ Object.prototype.hasOwnProperty.call( values, settingId ) }

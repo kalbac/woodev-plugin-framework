@@ -13,7 +13,7 @@
 
 import { createElement, useState, Fragment, RawHTML } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
-import { validateField, isRequirable } from './validate';
+import { validateField, isRequirable, isFieldDisabled } from './validate';
 import {
 	TextControl,
 	TextareaControl,
@@ -24,6 +24,8 @@ import {
 import FieldRow from './field-row';
 import FieldTip from './field-tip';
 import SelectField from './select-field';
+import SearchSelectField from './search-select-field';
+import BoxesTable from './boxes-table';
 import LocationPickerField, { getProviderMismatchError } from './location-picker-field';
 import WizardRichText from './richtext';
 
@@ -369,7 +371,8 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 	// silently ignoring input — its reason already reached us as `schema.disabled_reason`
 	// (withAnatomy renders it separately from `schema.description`).
 	// Computed before the sensitive branch below so SecretControl gets it too.
-	const disabled = !! schema.disabled;
+	const disabled = isFieldDisabled( schema, conditionValues || {} );
+	schema = { ...schema, disabled };
 
 	// A sensitive value is masked: empty input + "saved" placeholder; typing a new
 	// value replaces it on save (an untouched empty field is never sent). A stored
@@ -449,6 +452,19 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 					onChange,
 				} )
 			);
+
+		case 'boxes-table':
+			return createElement( 'div', { className: 'woodev-boxes-field' }, withAnatomy( schema, createElement( BoxesTable, {
+				value: value ?? schema.value ?? '', onChange, disabled,
+				dimensionFactor: schema.dimension_factor, weightFactor: schema.weight_factor,
+			} ), error ) );
+
+		case 'search-select':
+			return withAnatomy( schema, createElement( SearchSelectField, {
+				value: value ?? schema.value ?? '', savedValue: schema.value, valueLabel: schema.value_label,
+				searchUrl: schema.search_url, nonce: ( window.woodevSettings || {} ).nonce, disabled,
+				onChange: ( next ) => { setTouched( true ); onChange( next ); },
+			} ), error );
 
 		case 'select':
 			// WC-style dropdown with search (zam.6): trigger button + popover list.

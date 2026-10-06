@@ -9,8 +9,8 @@
  * **The fallback key is a plugin obligation, not a framework one.** The framework ships no
  * Yandex Maps key and cannot even construct this class without one — the fallback key is a
  * REQUIRED constructor argument (see {@see self::__construct()}), not an optional one an
- * author could forget to pass. Resolution order is: the merchant's own `map_api_key` setting
- * ({@see self::$api_key}) first, then the PLUGIN's fallback
+ * author could forget to pass. Resolution order is: the shared store Yandex key first, then the legacy plugin
+ * `map_api_key` argument ({@see self::$api_key}), then the PLUGIN's fallback
  * ({@see self::get_fallback_map_key()}), then nothing. A site-level
  * `woodev_shipping_map_fallback_api_key` filter can still override the plugin's fallback —
  * see {@see self::resolve_api_key()}.
@@ -231,73 +231,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Map\\Yandex_Map_Provider' )
 		}
 
 		/**
-		 * Gets the yandex provider settings fields.
-		 *
-		 * Returned in the Woodev settings-API `register_setting()` args shape (see
-		 * `woodev/settings-api/abstract-class-settings.php`) — the framework's own settings
-		 * surface, with real masking, validation, and the React settings page behind it.
-		 * Contributes ONE optional field: the merchant's own Yandex.Maps API key.
-		 *
-		 * This descriptor does not register itself anywhere on its own. {@see
-		 * \Woodev\Framework\Shipping\Pickup\Pickup_Handler::get_settings_fields()} exposes
-		 * it as a pure pass-through, and the PLUGIN that owns the shipping integration must
-		 * call that and merge the result into its own settings registration — otherwise the
-		 * `map_api_key` field this method describes never reaches a merchant. See that
-		 * method's docblock and spec §10.8 for the full obligation.
-		 *
-		 * Deliberately NOT marked `sensitive`. The framework's `sensitive` flag keeps a
-		 * `Woodev_Setting` value server-side (masked in the settings UI, stripped from REST
-		 * responses) — appropriate for a value that is genuinely secret. A JS map API key is
-		 * not that: {@see self::get_js_config()} embeds it directly in the ymaps script URL
-		 * the browser loads, in plain view of anyone who opens devtools. Marking it
-		 * `sensitive` would be security theatre (it does not actually hide anything
-		 * reachable) while ALSO stopping the merchant seeing what they pasted when they come
-		 * back to check it — a strictly worse outcome than leaving it visible.
+		 * The Yandex key is owned by «Доставка» → «Карта», never a carrier tab.
 		 *
 		 * @since 2.0.2
-		 *
 		 * @return array<string, array<string, mixed>>
 		 */
 		public function get_settings_fields(): array {
-			return [
-				'map_api_key' => [
-					'name'        => __( 'Ключ API Яндекс.Карт', 'woodev-plugin-framework' ),
-					'type'        => \Woodev_Setting::TYPE_STRING,
-					'description' => $this->build_field_description(),
-					'default'     => '',
-					'required'    => false,
-					// Deliberately not sensitive/masked — see method docblock.
-					'sensitive'   => false,
-				],
-			];
-		}
-
-		/**
-		 * Builds the settings-field description, warning the merchant about the shared
-		 * fallback key and pointing at instructions for obtaining their own — only when
-		 * {@see self::$key_docs_url} was actually supplied (see the TODO on that property).
-		 *
-		 * @since 2.0.2
-		 *
-		 * @return string
-		 */
-		private function build_field_description(): string {
-			$description = __(
-				'Если не указан, используется общий ключ поставщика плагина. Общий ключ '
-				. 'расходует одну квоту на все магазины и может быть заблокирован. '
-				. 'Рекомендуем указать собственный ключ.',
-				'woodev-plugin-framework'
-			);
-
-			if ( '' === $this->key_docs_url ) {
-				return $description;
-			}
-
-			return $description . ' ' . sprintf(
-				/* translators: %s: URL to instructions for obtaining a Yandex Maps API key. */
-				__( 'Инструкция по получению ключа: %s.', 'woodev-plugin-framework' ),
-				$this->key_docs_url
-			);
+			return [];
 		}
 
 		/**
@@ -468,7 +408,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Map\\Yandex_Map_Provider' )
 		 * @return string
 		 */
 		private function resolve_api_key(): string {
-			if ( '' !== $this->api_key ) {
+			$shared = \Woodev\Framework\Shipping\Pickup\Pickup_Map_Settings::get_yandex_api_key();
+			if ( '' !== trim( $shared ) ) {
+				return $shared;
+			}
+			if ( '' !== trim( $this->api_key ) ) {
 				return $this->api_key;
 			}
 

@@ -1707,14 +1707,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * only register a second, unread copy. A provider field named `pickup_accent_color` is
 		 * therefore dropped here for the same reason: the store setting is the one the handler reads.
 		 *
-		 * This is NOT automatic. Nothing on the framework side calls this method — the
-		 * plugin that owns the shipping integration MUST call it itself and merge the
-		 * result into its own settings registration for the merchant-facing
-		 * `map_api_key` field to exist at all. Spec §10.8 amends §4.7's "auto-registers"
-		 * wording; the framework cannot register a field into a plugin's own settings
-		 * provider without owning it, the same boundary §10.6 already drew for the fallback
-		 * key. Skip the call and every install of the plugin stays pinned to the plugin's
-		 * shared fallback key — exactly the quota risk §4.7 flagged as a watch item.
+		 * Yandex's API key is likewise owned by Pickup_Map_Settings on the shared «Карта»
+		 * section. A plugin need not register or merge a map_api_key field. Other providers
+		 * may still contribute their own fields through this method.
 		 *
 		 * The provider's own descriptors are passed through UNMODIFIED — in the Woodev
 		 * settings-API `register_setting()` args shape (`name`, `type`, `default`,

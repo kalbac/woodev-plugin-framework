@@ -42,6 +42,12 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 		/** @var string the select control type */
 		const TYPE_SELECT = 'select';
 
+		/** @var string scalar selection with server-side search and saved-label hydration. */
+		const TYPE_SEARCH_SELECT = 'search-select';
+
+		/** @var string inline table over the store's compatible box-list text. */
+		const TYPE_BOXES_TABLE = 'boxes-table';
+
 		/** @var string the file control type */
 		const TYPE_FILE = 'file';
 
@@ -124,6 +130,12 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 		 * @var string
 		 */
 		protected $country = '';
+
+		/** @var callable|null fn(string $term): array<int,array{value:int|string,label:string}> */
+		private $search_callback;
+
+		/** @var callable|null fn(int|string $value): string (unknown value = ''). */
+		private $label_callback;
 
 		/**
 		 * The setting ID to which this control belongs.
@@ -443,16 +455,65 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 		 *
 		 * @since 2.0.2
 		 * @param bool   $disabled whether the control is disabled.
-		 * @param string $reason   why — required when disabling, ignored otherwise.
+		 * @param string $reason   why — kept for a conditional disabled_if rule even while statically enabled.
 		 * @return void
 		 */
 		public function set_disabled( bool $disabled, string $reason = '' ): void {
 			$this->disabled        = $disabled;
-			$this->disabled_reason = $disabled ? $reason : '';
+			$this->disabled_reason = $reason;
 		}
 
 		/**
-		 * The reason a disabled control cannot be used; `''` when enabled.
+		 * Configures a scalar search-select. Callbacks remain server-side.
+		 *
+		 * @since 2.0.2
+		 * @param callable $search_callback search term to value/label pairs.
+		 * @param callable $label_callback saved scalar to label; unknown = ''.
+		 * @return void
+		 */
+		public function set_search_callbacks( callable $search_callback, callable $label_callback ): void {
+			$this->search_callback = $search_callback;
+			$this->label_callback  = $label_callback;
+		}
+
+		/**
+		 * Searches options, dropping malformed results without coercing their scalar ids.
+		 *
+		 * @since 2.0.2
+		 * @param string $term search term (the REST transport enforces the two-character minimum).
+		 * @return array<int,array{value:int|string,label:string}>
+		 */
+		public function search( string $term ): array {
+			$results = null !== $this->search_callback ? call_user_func( $this->search_callback, $term ) : [];
+			$options = [];
+			foreach ( is_array( $results ) ? $results : [] as $result ) {
+				if ( is_array( $result ) && isset( $result['value'], $result['label'] )
+					&& ( is_int( $result['value'] ) || is_string( $result['value'] ) ) && is_string( $result['label'] ) ) {
+					$options[] = [
+						'value' => $result['value'],
+						'label' => $result['label'],
+					];
+				}
+			}
+			return $options;
+		}
+
+		/**
+		 * Hydrates the saved scalar's label, without exposing the callback in JSON.
+		 *
+		 * @since 2.0.2
+		 * @param int|string $value saved scalar (PHP 7.4 has no union type syntax).
+		 * @return string
+		 */
+		public function get_value_label( $value ): string {
+			if ( null === $this->label_callback || ( ! is_int( $value ) && ! is_string( $value ) ) ) {
+				return '';
+			}
+			return (string) call_user_func( $this->label_callback, $value );
+		}
+
+		/**
+		 * The reason for disablement (also kept for the live disabled_if rule).
 		 *
 		 * @since 2.0.2
 		 * @return string

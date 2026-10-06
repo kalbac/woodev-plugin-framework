@@ -70,6 +70,9 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		/** @var array|callable show_if condition group, or a callback returning one. Default [] = always visible. */
 		private $show_if = [];
 
+		/** @var array|callable conditional read-only rule; same shape as show_if. */
+		private $disabled_if = [];
+
 		/**
 		 * Gets the setting ID.
 		 *
@@ -296,6 +299,28 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 			}
 
 			return is_array( $this->show_if ) ? $this->show_if : [];
+		}
+
+		/**
+		 * Sets conditional disablement, with the same group/callback contract as show_if.
+		 *
+		 * @since 2.0.2
+		 * @param array|callable $disabled_if condition group or fn(string $field_id): array.
+		 * @return void
+		 */
+		public function set_disabled_if( $disabled_if ): void {
+			$this->disabled_if = ( is_array( $disabled_if ) || is_callable( $disabled_if ) ) ? $disabled_if : [];
+		}
+
+		/**
+		 * Resolves the conditional disablement rule for the field schema and save gate.
+		 *
+		 * @since 2.0.2
+		 * @return array<string,mixed> empty = no conditional disablement.
+		 */
+		public function get_disabled_if_conditions(): array {
+			$resolved = is_callable( $this->disabled_if ) ? call_user_func( $this->disabled_if, $this->id ) : $this->disabled_if;
+			return is_array( $resolved ) ? $resolved : [];
 		}
 
 		/**

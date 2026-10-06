@@ -77,36 +77,37 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 		public function init_form_fields() {
 			$this->form_fields = [
 				'enabled'    => [
-					'title' => __( 'Включить', 'woodev-plugin-framework' ),
+					'title' => __( 'Enabled', 'woodev-plugin-framework' ),
 					'type' => 'checkbox',
-					'label' => __( 'Отправлять это письмо покупателю', 'woodev-plugin-framework' ),
+					'label' => __( 'Send this email to the customer', 'woodev-plugin-framework' ),
 					'default' => $this->default_enabled ? 'yes' : 'no',
 				],
 				'subject'    => [
-					'title' => __( 'Тема', 'woodev-plugin-framework' ),
+					'title' => __( 'Subject', 'woodev-plugin-framework' ),
 					'type' => 'text',
-					'description' => __( 'Доступны переменные: {order_number}, {tracking_number}, {tracking_url}, {carrier_name}, {pickup_point}, {delivery_date}.', 'woodev-plugin-framework' ),
+					'description' => __( 'Available placeholders: {order_number}, {tracking_number}, {tracking_url}, {carrier_name}, {pickup_point}, {delivery_date}.', 'woodev-plugin-framework' ),
 					'default' => $this->default_subject,
 					'desc_tip' => true,
 				],
 				'heading'    => [
-					'title' => __( 'Заголовок', 'woodev-plugin-framework' ),
+					'title' => __( 'Heading', 'woodev-plugin-framework' ),
 					'type' => 'text',
 					'default' => $this->default_heading,
 				],
 				'email_type' => [
-					'title' => __( 'Формат письма', 'woodev-plugin-framework' ),
+					'title' => __( 'Email type', 'woodev-plugin-framework' ),
 					'type' => 'select',
 					'class' => 'email_type wc-enhanced-select',
 					'options' => $this->get_email_type_options(),
 					'default' => 'html',
 				],
 				'body'       => [
-					'title' => __( 'Текст письма', 'woodev-plugin-framework' ),
+					'title' => __( 'Email body', 'woodev-plugin-framework' ),
 					'type' => 'textarea',
 					'css' => 'width: 400px; height: 100px;',
 					'default' => $this->default_body,
-					'description' => __( 'Переменные можно вставлять в фигурных скобках.', 'woodev-plugin-framework' ),
+					'description' => __( 'Placeholders can be inserted in curly braces.', 'woodev-plugin-framework' ),
+					'desc_tip' => true,
 				],
 			];
 		}
@@ -175,6 +176,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 			$url      = '';
 			$pickup   = '';
 			$carrier  = null !== $provider ? $provider->get_label() : '';
+			if ( null !== $provider ) {
+				$plugin = \Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::instance()->get_provider_plugin( $provider->get_id() );
+				if ( null !== $plugin ) {
+					$carrier = $plugin->get_carrier_name();
+				}
+			}
 			if ( null !== $provider && null !== $provider->get_tracking_meta_key() ) {
 				$tracking = (string) \Woodev_Order_Compatibility::get_order_meta( $order, $provider->get_tracking_meta_key() );
 				$template = $provider->get_tracking_url_template();

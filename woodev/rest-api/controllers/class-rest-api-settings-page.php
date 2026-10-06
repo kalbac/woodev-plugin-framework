@@ -75,6 +75,23 @@ if ( ! class_exists( 'Woodev_REST_API_Settings_Page' ) ) :
 				]
 			);
 
+			// Each control is addressed under its owning tab and declared setting id.
+			register_rest_route(
+				$base,
+				'/settings/(?P<provider_id>[\w-]+)/control/(?P<setting_id>[\w-]+)/search',
+				[
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => [ $this, 'search_control' ],
+					'permission_callback' => [ $this, 'search_permissions_check' ],
+					'args'                => [
+						'term' => [
+							'type' => 'string',
+							'required' => true,
+						],
+					],
+				]
+			);
+
 			register_rest_route(
 				$base,
 				'/settings/(?P<provider_id>[\w-]+)/connection/(?P<connection_id>[\w-]+)/test',
@@ -123,6 +140,51 @@ if ( ! class_exists( 'Woodev_REST_API_Settings_Page' ) ) :
 			}
 
 			return current_user_can( $capability );
+		}
+
+		/**
+		 * Search requires the WooCommerce manager capability, the tab gate and a REST nonce.
+		 *
+		 * @since 2.0.2
+		 * @param \WP_REST_Request $request request.
+		 * @return bool
+		 */
+		public function search_permissions_check( \WP_REST_Request $request ): bool {
+			return current_user_can( 'manage_woocommerce' ) && $this->save_permissions_check( $request )
+				&& (bool) wp_verify_nonce( $request->get_header( 'X-WP-Nonce' ), 'wp_rest' );
+		}
+
+		/**
+		 * Runs only the search callback of an exposed search-select control.
+		 *
+		 * @since 2.0.2
+		 * @param \WP_REST_Request $request request.
+		 * @return \WP_REST_Response|\WP_Error|array<string,mixed>
+		 */
+		public function search_control( \WP_REST_Request $request ) {
+			$provider   = $this->registry->get_provider( (string) $request->get_param( 'provider_id' ) );
+			$setting_id = (string) $request->get_param( 'setting_id' );
+			$allowed    = [];
+			if ( null !== $provider ) {
+				foreach ( $provider->get_sections() as $section ) {
+					$allowed = array_merge( $allowed, $section->get_setting_ids() );
+				}
+			}
+			$setting = null !== $provider && in_array( $setting_id, $allowed, true ) ? $provider->get_handler()->get_setting( $setting_id ) : null;
+			$control = null !== $setting ? $setting->get_control() : null;
+			if ( null === $control || Woodev_Control::TYPE_SEARCH_SELECT !== $control->get_type() ) {
+				return new WP_Error( 'woodev_settings_unknown_control', __( 'Неверное значение.', 'woodev-plugin-framework' ), [ 'status' => 404 ] );
+			}
+			$raw  = $request->get_param( 'term' );
+			$term = is_string( $raw ) ? trim( sanitize_text_field( $raw ) ) : '';
+			if ( mb_strlen( $term ) < 2 ) {
+				return rest_ensure_response( [ 'options' => [] ] );
+			}
+			try {
+				return rest_ensure_response( [ 'options' => $control->search( $term ) ] );
+			} catch ( \Throwable $e ) {
+				return new WP_Error( 'woodev_settings_search_error', __( 'Внутренняя ошибка сервера. Попробуйте ещё раз.', 'woodev-plugin-framework' ), [ 'status' => 500 ] );
+			}
 		}
 
 		/**

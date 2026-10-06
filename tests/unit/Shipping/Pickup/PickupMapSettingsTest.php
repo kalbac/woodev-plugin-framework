@@ -63,9 +63,28 @@ final class PickupMapSettingsTest extends TestCase {
 		$s = new Pickup_Map_Settings();
 
 		$this->assertSame(
-			[ 'pickup_button_placement', 'pickup_replace_address', 'pickup_close_on_select', 'pickup_accent_color' ],
+			[ 'pickup_button_placement', 'pickup_replace_address', 'pickup_close_on_select', 'pickup_accent_color', 'yandex_api_key' ],
 			$s->get_owned_setting_ids()
 		);
+	}
+
+	public function test_the_shared_yandex_key_is_visible_only_in_the_map_section(): void {
+		$tab = Shipping_Settings_Tab::instance();
+		$tab->declare_shipping_plugin();
+		$tab->declare_map_needed();
+		$homes = [];
+		foreach ( $tab->build_sections() as $section ) {
+			if ( in_array( Pickup_Map_Settings::SETTING_YANDEX_API_KEY, $section->get_setting_ids(), true ) ) {
+				$homes[] = $section->get_id();
+			}
+		}
+		$this->assertSame( [ 'map' ], $homes );
+		$setting = Pickup_Map_Settings::current()->get_setting( Pickup_Map_Settings::SETTING_YANDEX_API_KEY );
+		$this->assertSame( 'Ключ API Яндекс Карт', $setting->get_name() );
+		$this->assertFalse( $setting->is_sensitive() );
+		$this->assertFalse( $setting->is_required() );
+		$this->assertSame( '', $setting->get_description(), 'no invented docs URL or inline quota explanation' );
+		$this->assertStringContainsString( 'общая квота', $setting->get_control()->get_tooltip() );
 	}
 
 	public function test_defaults_when_nothing_is_stored(): void {
