@@ -642,13 +642,14 @@ namespace Woodev\Tests\Integration\Shipping {
 			);
 
 			$this->assertCount( 1, $tabs );
-			$this->assertSame( [ 'export' ], array_column( $tabs[0]['sections'], 'id' ) );
-			$this->assertSame( 'Выгрузка', $tabs[0]['sections'][0]['label'] );
+			$this->assertSame( [ 'export', 'advanced' ], array_column( $tabs[0]['sections'], 'id' ), 'the export section, then «Дополнительно» which every carrier has' );
+			$this->assertSame( 'Выгрузка заказов', $tabs[0]['sections'][0]['label'] );
 
 			$fields = $tabs[0]['sections'][0]['fields'];
 
-			$this->assertSame( [ 'auto_export_orders', 'export_statuses' ], array_keys( $fields ) );
+			$this->assertSame( [ 'auto_export_orders', 'export_statuses', 'status_delivered' ], array_keys( $fields ) );
 			$this->assertFalse( $fields['auto_export_orders']['value'], 'default OFF' );
+			$this->assertSame( 'wc-completed', $fields['status_delivered']['value'], 'a delivered parcel completes the order unless the merchant says otherwise' );
 			$this->assertSame( [ 'wc-processing' ], $fields['export_statuses']['value'] );
 			$this->assertSame( [ 'wc-pending', 'wc-on-hold', 'wc-processing' ], array_keys( $fields['export_statuses']['options'] ), 'only statuses the export gate accepts' );
 			$this->assertSame(
@@ -658,14 +659,27 @@ namespace Woodev\Tests\Integration\Shipping {
 			);
 		}
 
-		public function test_a_carrier_that_does_not_export_gets_no_export_tab(): void {
+		public function test_a_carrier_that_does_not_export_gets_no_export_section(): void {
 			$plugin = \woodev_test_shipping_method_plugin();
 
 			// rates-only: the plugin registered no Orders_Provider / shipment handler of its own (#1014)
 			Orders_Registry::instance()->reset_for_tests();
 
 			$this->assertFalse( Orders_Registry::instance()->plugin_exports_orders( $plugin ) );
-			$this->assertSame( [], $plugin->get_settings_providers() );
+
+			// Every carrier has a tab now («Дополнительно»: logging, hide on cart), so a rates-only
+			// carrier is no longer tab-less — what it must not get is the «Выгрузка заказов» section.
+			$providers = $plugin->get_settings_providers();
+			$this->assertCount( 1, $providers );
+
+			$tabs = Settings_Page_Registry::instance()->build_tabs(
+				array_map( static fn( $provider ) => [ 'provider' => $provider, 'is_woocommerce' => true ], $providers ),
+				static fn( string $capability ): bool => true
+			);
+
+			$this->assertCount( 1, $tabs );
+			$this->assertSame( [ 'advanced' ], array_column( $tabs[0]['sections'], 'id' ), 'no export section for a carrier that does not export' );
+			$this->assertSame( [ 'enable_debug', 'disable_methods_on_cart' ], array_keys( $tabs[0]['sections'][0]['fields'] ) );
 		}
 
 		public function test_the_export_settings_are_no_longer_on_the_woocommerce_integration(): void {
