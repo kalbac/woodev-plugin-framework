@@ -127,8 +127,7 @@ Serena: «Serena нет, PHP через shell — разрешено прави�
   `a-stored-field-mode-outlives-the-chooser-and-a-guard-keyed-on-it-blocks-checkout`.
 - Смена способа оплаты ничего не пересчитывает ни в одной форме → готча
   `payment-method-change-recalculates-nothing-in-either-checkout`.
-- `.serena/` в ФРЕЙМВОРКЕ отслеживается git'ом (не удалять перед `worktree rm`), в ПЛАГИНЕ — игнорируется.
-- На риге нет методов СДЭК: ставить из дампа; `wp wc shipping_zone_method delete <zone> <instance>` — порядок аргументов.
+- `.serena/` в фреймворке отслеживается git'ом, в плагине — нет; на риге нет методов СДЭК (ставить из дампа).
 
 # Состояние на входе
 
