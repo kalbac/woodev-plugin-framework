@@ -142,7 +142,8 @@ class Add_Support_Before_Construct_Probe extends Shipping_Method {
 	 * @param int             $instance_id shipping method instance ID.
 	 */
 	public function __construct( Shipping_Plugin $plugin, int $instance_id = 0 ) {
-		$this->plugin = $plugin;
+		$this->plugin       = $plugin;
+		$this->method_title = 'Add support before construct probe';
 
 		// The order the card exists to catch (#815): get_id() is still '' here, one full
 		// line above the assignment that gives it a value.
@@ -197,7 +198,8 @@ class Add_Support_After_Construct_Probe extends Shipping_Method {
 	 * @param int             $instance_id shipping method instance ID.
 	 */
 	public function __construct( Shipping_Plugin $plugin, int $instance_id = 0 ) {
-		$this->plugin = $plugin;
+		$this->plugin       = $plugin;
+		$this->method_title = 'Add support after construct probe';
 
 		parent::__construct( $instance_id );
 	}
