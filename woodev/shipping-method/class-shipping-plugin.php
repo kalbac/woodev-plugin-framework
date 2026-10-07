@@ -981,18 +981,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			return $this->packaging_settings;
 		}
 
-		/**
-		 * Conditional packing controls on WooCommerce shipping-zone forms and modals.
-		 *
-		 * @since 2.0.2
-		 * @return void
-		 */
 		public function enqueue_packing_settings_script(): void {
 			if ( ! isset( $_GET['page'], $_GET['tab'] ) || 'wc-settings' !== $_GET['page'] || 'shipping' !== $_GET['tab'] ) {
 				return;
 			}
+			// Several carrier plugins share this handle: the first one enqueues it and adds the inline script, the rest stop here.
+			if ( wp_script_is( 'woodev-packing-settings', 'enqueued' ) ) {
+				return;
+			}
 			$path = __DIR__ . '/assets/js/admin/packing-settings.js';
 			wp_enqueue_script( 'woodev-packing-settings', plugins_url( basename( $path ), $path ), [ 'jquery' ], (string) filemtime( $path ), true );
+			// WooCommerce initialises .wc-product-search / .wc-enhanced-select on page load and on this event only; a method's
+			// settings open later in a WCBackboneModal whose wc_backbone_modal_loaded handler never fires it, so the selects stay plain.
+			wp_add_inline_script(
+				'woodev-packing-settings',
+				"jQuery( document.body ).on( 'wc_backbone_modal_loaded', function () { jQuery( document.body ).trigger( 'wc-enhanced-select-init' ); } );"
+			);
 		}
 
 		/**

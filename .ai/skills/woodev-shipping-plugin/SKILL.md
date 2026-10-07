@@ -73,6 +73,8 @@ including legacy `virtual`; `default` means the carrier setting. `unpacked_algor
 inheritance, with `separately`/`single`. Use the inherited `get_rate_cache_context()` when extending
 cache identity: it includes box declarations, toggles, costs, effective leftovers, and line values.
 
+On the WooCommerce shipping-zone screen the framework re-fires `wc-enhanced-select-init` when a method's settings modal opens, so a `.wc-product-search` / `.wc-enhanced-select` field in your method's `form_fields` works with no JS of yours.
+
 Packed parcels retain `get_items()` (source key, product id, quantity). `get_box_id()` and
 `get_box_origin()` identify their chosen box; origin is `store`, `carrier`, or empty for unboxed
 parcels. Box selection maximises packed units to reduce parcel count; on equal fill, store boxes
