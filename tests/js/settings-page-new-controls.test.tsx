@@ -48,8 +48,8 @@ test( 'invalid packaging cells show errors and block field validation', () => {
 
 test( 'the table displays cm/kg and serializes back to store units', () => {
 	const rows = parseBoxRows( 'Small; 200; 150; 100; 2000; 100', 0.1, 0.001 );
-	expect( rows[ 0 ] ).toEqual( [ 'Small', '20', '15', '10', '2', '0.1' ] );
-	expect( serializeBoxRows( rows, 0.1, 0.001 ) ).toBe( 'Small; 200; 150; 100; 2000; 100' );
+	expect( rows[ 0 ] ).toEqual( [ 'Small', '20', '15', '10', '2', '0.1', '', 'yes' ] );
+	expect( serializeBoxRows( rows, 0.1, 0.001 ) ).toBe( 'Small; 200; 150; 100; 2000; 100; ; yes' );
 } );
 
 test( 'a disabled packaging table disables cells and row actions', () => {
@@ -123,4 +123,29 @@ test( 'a disabled search-select cannot open and an unknown saved value has no in
 	render( <SearchSelectField value={ 999 } savedValue={ 999 } valueLabel="" searchUrl="https://example.test/search" disabled onChange={ jest.fn() } /> );
 	expect( screen.getByRole( 'button', { name: 'Выберите…' } ) ).toBeDisabled();
 	expect( fetchMock ).not.toHaveBeenCalled();
+} );
+
+
+test( 'store table preserves free enabled legacy boxes and edits monetary cost and enabled', () => {
+	render( <BoxesForm initial="Old; 10; 10; 10; 0; 0" /> );
+	expect( screen.getByRole( 'checkbox', { name: 'Использовать, 1' } ) ).toBeChecked();
+	fireEvent.change( screen.getByRole( 'textbox', { name: 'Стоимость, 1' } ), { target: { value: '2%' } } );
+	fireEvent.click( screen.getByRole( 'checkbox', { name: 'Использовать, 1' } ) );
+	expect( screen.getByTestId( 'saved' ) ).toHaveTextContent( 'Old; 10; 10; 10; 0; 0; 2%; no' );
+	expect( validateBoxesText( 'Old; 10; 10; 10; 0; 0; -1; yes' ) ).toBeTruthy();
+	expect( validateBoxesText( 'Old; 10; 10; 10; 0; 0; 2%; no' ) ).toBeNull();
+} );
+
+test( 'carrier preset block renders enabled, carrier charge, fixed read-only and merchant cost controls', () => {
+	const fields = [
+		{ name: 'Коробка M', type: 'boolean', controlType: 'toggle', value: false },
+		{ name: 'Учитывать стоимость', type: 'boolean', controlType: 'toggle', value: true },
+		{ name: 'Стоимость M', type: 'string', controlType: 'text', value: '7', disabled: true },
+		{ name: 'Стоимость L', type: 'string', controlType: 'text', value: '2%' },
+	];
+	render( <section aria-label="Упаковка">{ fields.map( ( schema ) => <ControlField key={ schema.name } schema={ schema } value={ schema.value } onChange={ jest.fn() } /> ) }</section> );
+	expect( screen.getAllByRole( 'checkbox' )[ 0 ] ).not.toBeChecked();
+	expect( screen.getAllByRole( 'checkbox' )[ 1 ] ).toBeChecked();
+	expect( screen.getAllByRole( 'textbox' )[ 0 ] ).toBeDisabled();
+	expect( screen.getAllByRole( 'textbox' )[ 1 ] ).toBeEnabled();
 } );

@@ -12,10 +12,10 @@
  * settings page (`woodev-settings`), so a carrier plugin gets it without writing code.
  *
  * A React table edits name, inner length/width/height, max weight and box weight. Storage stays
- * the compatible text format: one line per box, `name; length; width; height; max weight; box weight`.
+ * the compatible text format: one line per box, `name; length; width; height; max weight; box weight[; cost; enabled]`.
  * Saved dimensions/weights remain in STORE units; Field_Schema carries the conversion factors so the
  * table displays cm/kg and serializes back to store units. Saving validates every row and normalizes
- * text/numbers. Legacy lists therefore need no migration and retain the same packing results.
+ * text/numbers. Legacy lists need no migration: omitted cost is empty and omitted enabled is yes.
  *
  * @since 2.0.2
  */
@@ -82,7 +82,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Boxes_Settings' )
 		 *
 		 * @since 2.0.2
 		 *
-		 * @return array<int, array{id: string, name: string, length: float, width: float, height: float, max_weight: float, box_weight: float}>
+		 * @return array<int, array{id: string, name: string, length: float, width: float, height: float, max_weight: float, box_weight: float, cost: string, enabled: bool}>
 		 */
 		public function get_boxes(): array {
 			return self::parse( (string) $this->get_value( self::SETTING_BOXES ) );
@@ -96,7 +96,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Boxes_Settings' )
 		 * @since 2.0.2
 		 *
 		 * @param string $text one box per line.
-		 * @return array<int, array{id: string, name: string, length: float, width: float, height: float, max_weight: float, box_weight: float}>
+		 * @return array<int, array{id: string, name: string, length: float, width: float, height: float, max_weight: float, box_weight: float, cost: string, enabled: bool}>
 		 */
 		public static function parse( string $text ): array {
 			$boxes = [];
@@ -115,18 +115,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Boxes_Settings' )
 		/**
 		 * Parses one line: `name; length; width; height[; max weight[; box weight]]`.
 		 *
-		 * Null for a line that is no box: no name, fewer than four or more than six fields, a dimension that is
+		 * Null for a line that is no box: no name, fewer than four or more than eight fields, a dimension that is
 		 * not a number above zero, or a weight that is neither empty nor a number of zero or more.
 		 *
 		 * @since 2.0.2
 		 *
 		 * @param string $line one line of the list.
-		 * @return array{name: string, length: float, width: float, height: float, max_weight: float, box_weight: float}|null
+		 * @return array{name: string, length: float, width: float, height: float, max_weight: float, box_weight: float, cost: string, enabled: bool}|null
 		 */
 		public static function parse_line( string $line ): ?array {
 			$fields = array_map( 'trim', explode( self::FIELD_SEPARATOR, $line ) );
 
-			if ( count( $fields ) < 4 || count( $fields ) > 6 ) {
+			if ( count( $fields ) < 4 || count( $fields ) > 8 ) {
 				return null;
 			}
 
@@ -161,6 +161,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Boxes_Settings' )
 				$weights[] = $value;
 			}
 
+			$cost = $fields[6] ?? '';
+			if ( ! self::is_valid_cost( $cost ) || ( isset( $fields[7] ) && ! in_array( $fields[7], [ 'yes', 'no' ], true ) ) ) {
+				return null;
+			}
+
 			return [
 				'name'       => $name,
 				'length'     => $size[0],
@@ -168,7 +173,28 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Boxes_Settings' )
 				'height'     => $size[2],
 				'max_weight' => $weights[0],
 				'box_weight' => $weights[1],
+				'cost'       => str_replace( ',', '.', $cost ),
+				'enabled'    => ! isset( $fields[7] ) || 'yes' === $fields[7],
 			];
+		}
+
+		/**
+		 * Validates a monetary amount or a percentage of a parcel's contents value.
+		 *
+		 * @since 2.0.2
+		 * @param mixed $value submitted cost.
+		 * @return bool
+		 */
+		public static function is_valid_cost( $value ): bool {
+			if ( ! is_string( $value ) ) {
+				return false;
+			}
+			$value = trim( $value );
+			if ( '' === $value ) {
+				return true;
+			}
+			$number = self::to_number( '%' === substr( $value, -1 ) ? substr( $value, 0, -1 ) : $value );
+			return null !== $number && $number >= 0;
 		}
 
 		/**
@@ -217,6 +243,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Boxes_Settings' )
 			$lines = [];
 			foreach ( self::parse( $text ) as $box ) {
 				unset( $box['id'] );
+				$box['enabled'] = $box['enabled'] ? 'yes' : 'no';
 				$lines[] = implode( '; ', $box );
 			}
 			return implode( "\n", $lines );

@@ -70,17 +70,18 @@ if ( ! class_exists( 'Woodev_WC_Packer_Dispatcher' ) ) :
 		 * @param  Woodev_Packer_Packable_Item[] $items        Item data. Must not be empty.
 		 * @param  Woodev_Box_Packer_Box[]|null  $boxes        Overrides the store's boxes for `boxes`; null reads
 		 *                                                     {@see self::get_store_boxes()}.
+		 * @param string                        $leftovers Single or separately for units that fit no box.
 		 * @return Woodev_Packer_Result
 		 *
 		 * @throws Woodev_Packer_Exception If `$items` is empty or `$algorithm_id` is not registered.
 		 */
-		public static function pack( string $algorithm_id, array $items, ?array $boxes = null ): Woodev_Packer_Result {
+		public static function pack( string $algorithm_id, array $items, ?array $boxes = null, string $leftovers = self::ALGORITHM_SEPARATELY ): Woodev_Packer_Result {
 
 			if ( self::ALGORITHM_BOXES === $algorithm_id && null === $boxes ) {
 				$boxes = self::get_store_boxes();
 			}
 
-			return parent::pack( $algorithm_id, $items, $boxes );
+			return parent::pack( $algorithm_id, $items, $boxes, $leftovers );
 		}
 
 		/**
@@ -103,6 +104,9 @@ if ( ! class_exists( 'Woodev_WC_Packer_Dispatcher' ) ) :
 			$boxes = [];
 
 			foreach ( \Woodev\Framework\Shipping\Settings\Boxes_Settings::current()->get_boxes() as $box ) {
+				if ( ! $box['enabled'] ) {
+					continue;
+				}
 				$boxes[] = new Woodev_Packer_Box_Implementation(
 					(float) wc_get_dimension( $box['length'], 'cm' ),
 					(float) wc_get_dimension( $box['width'], 'cm' ),
@@ -110,7 +114,12 @@ if ( ! class_exists( 'Woodev_WC_Packer_Dispatcher' ) ) :
 					(float) wc_get_weight( $box['box_weight'], 'kg' ),
 					$box['max_weight'] > 0 ? (float) wc_get_weight( $box['max_weight'], 'kg' ) : null,
 					$box['id'],
-					$box['name']
+					$box['name'],
+					[
+						'origin' => 'store',
+						'cost_mode' => 'merchant',
+						'cost' => $box['cost'],
+					]
 				);
 			}
 

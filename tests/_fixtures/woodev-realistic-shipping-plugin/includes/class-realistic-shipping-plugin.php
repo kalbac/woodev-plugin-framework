@@ -426,6 +426,19 @@ final class Woodev_Realistic_Shipping_Plugin extends \Woodev\Framework\Shipping\
 	}
 
 	/**
+	 * Exercises both carrier-priced and merchant-priced preset declarations.
+	 *
+	 * @since 2.0.2
+	 * @return array
+	 */
+	public function get_box_presets(): array {
+		return [
+			[ 'id' => 'CARTON_M', 'name' => 'Коробка M', 'length' => 30, 'width' => 20, 'height' => 15, 'cost_mode' => 'carrier' ],
+			[ 'id' => 'CARTON_L', 'name' => 'Коробка L', 'length' => 40, 'width' => 30, 'height' => 20, 'cost_mode' => 'merchant' ],
+		];
+	}
+
+	/**
 	 * Gets the plugin name.
 	 *
 	 * @return string

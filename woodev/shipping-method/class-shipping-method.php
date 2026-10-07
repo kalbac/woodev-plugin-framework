@@ -272,12 +272,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			if ( $this->supports_box_packing() ) {
 
 				$this->instance_form_fields['packing_algorithm'] = [
-					'title'    => esc_html__( 'Packing algorithm', 'woodev-plugin-framework' ),
+					'title'    => esc_html__( 'Способ упаковки', 'woodev-plugin-framework' ),
 					'type'     => 'select',
 					'class'    => 'wc-enhanced-select',
-					'default'  => \Woodev_Packer_Dispatcher::ALGORITHM_VIRTUAL,
-					'options'  => \Woodev_Packer_Dispatcher::get_algorithms(),
+					'default'  => 'default',
+					'options'  => [ 'default' => __( 'Как в настройках плагина', 'woodev-plugin-framework' ) ] + Settings\Packaging_Settings::packing_options(),
 					'desc_tip' => esc_html__( 'How cart items are combined into parcels before rate calculation.', 'woodev-plugin-framework' ),
+				];
+				$this->instance_form_fields['unpacked_algorithm'] = [
+					'title' => __( 'Непоместившиеся товары', 'woodev-plugin-framework' ),
+					'type' => 'select',
+					'default' => 'default',
+					'options' => [ 'default' => __( 'Как в настройках плагина', 'woodev-plugin-framework' ) ] + Settings\Packaging_Settings::leftover_options(),
+					'desc_tip' => __( 'Как упаковывать товары, которые не поместились в коробки?', 'woodev-plugin-framework' ),
+					'show_if' => [
+						'setting' => 'packing_algorithm',
+						'value' => 'boxes',
+					],
 				];
 			}
 
@@ -706,7 +717,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 						? $this->pack_package( $package )
 						: null;
 
-					return $this->rate_package( $package, $packed );
+					$rate = $this->rate_package( $package, $packed );
+					if ( null !== $rate && null !== $packed ) {
+						$extra = Packaging::get_cost( $packed, (array) ( $package['contents'] ?? [] ) );
+						if ( $extra > 0 ) {
+							$cost = $rate->get_cost();
+							if ( is_array( $cost ) ) {
+								$cost['woodev_packaging'] = ( $cost['woodev_packaging'] ?? 0 ) + $extra;
+							} else {
+								$cost = (float) $cost + $extra;
+							}
+							$rate = $rate->with_cost( $cost );
+						}
+					}
+					return $rate;
 				}
 			);
 		}
@@ -843,7 +867,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 				return null;
 			}
 
-			return \Woodev_WC_Packer_Dispatcher::pack( $this->get_packing_algorithm(), $items );
+			$algorithm = $this->get_packing_algorithm();
+			if ( \Woodev_Packer_Dispatcher::ALGORITHM_BOXES !== $algorithm ) {
+				return \Woodev_WC_Packer_Dispatcher::pack( $algorithm, $items );
+			}
+			$boxes = array_merge( \Woodev_WC_Packer_Dispatcher::get_store_boxes(), Packaging::to_boxes( $this->get_plugin()->get_packaging_settings()->get_boxes() ) );
+			return \Woodev_WC_Packer_Dispatcher::pack( $algorithm, $items, $boxes, $this->get_unpacked_algorithm() );
 		}
 
 		/**
@@ -915,11 +944,46 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 */
 		protected function get_packing_algorithm(): string {
 
-			$algorithm = (string) $this->get_option( 'packing_algorithm', \Woodev_Packer_Dispatcher::ALGORITHM_VIRTUAL );
+			$algorithm = (string) $this->get_option( 'packing_algorithm', 'default' );
+			if ( '' === $algorithm || 'default' === $algorithm ) {
+				$algorithm = $this->get_plugin()->get_packaging_settings()->get_default_algorithm( 'packing_algorithm' );
+			}
 
 			return array_key_exists( $algorithm, \Woodev_Packer_Dispatcher::get_algorithms() )
 				? $algorithm
 				: \Woodev_Packer_Dispatcher::ALGORITHM_VIRTUAL;
+		}
+
+		/**
+		 * Effective handling for items fitting no enabled box.
+		 *
+		 * @since 2.0.2
+		 * @return string
+		 */
+		protected function get_unpacked_algorithm(): string {
+			$value = (string) $this->get_option( 'unpacked_algorithm', 'default' );
+			if ( '' === $value || 'default' === $value ) {
+				$value = $this->get_plugin()->get_packaging_settings()->get_default_algorithm( 'unpacked_algorithm' );
+			}
+			return 'single' === $value ? 'single' : 'separately';
+		}
+
+		/**
+		 * Adds the effective carrier default to the conditional leftovers control in WC zone forms.
+		 *
+		 * @since 2.0.2
+		 * @param string $key field key.
+		 * @param array  $data field definition.
+		 * @return string
+		 */
+		public function generate_select_html( $key, $data = [] ): string {
+			if ( 'packing_algorithm' === $key && 'virtual' === $this->get_option( 'packing_algorithm', 'default' ) ) {
+				$data['options']['virtual'] = __( 'Минимальная коробка', 'woodev-plugin-framework' );
+			}
+			if ( 'unpacked_algorithm' === $key ) {
+				$data['custom_attributes']['data-woodev-packing-default'] = $this->get_plugin()->get_packaging_settings()->get_default_algorithm( 'packing_algorithm' );
+			}
+			return parent::generate_select_html( $key, $data );
 		}
 
 		/**
@@ -1247,6 +1311,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			// the boxes are what the `boxes` algorithm packs into: a changed list is a different parcel, so a different quote (#1138)
 			if ( \Woodev_Packer_Dispatcher::ALGORITHM_BOXES === $context['packing']['algorithm'] ) {
 				$context['packing']['boxes'] = Shipping_Rate_Cache::boxes_context();
+				$context['packing']['carrier_boxes'] = $this->get_plugin()->get_packaging_settings()->get_boxes();
+				$context['packing']['leftovers'] = $this->get_unpacked_algorithm();
+				$context['packing']['values'] = Packaging::get_value_context( (array) ( $package['contents'] ?? [] ) );
 			}
 			$context['payment']  = $this->chosen_payment_method();
 

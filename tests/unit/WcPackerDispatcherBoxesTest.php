@@ -134,6 +134,8 @@ namespace Woodev\Tests\Unit {
 					'height'     => 10.0,
 					'max_weight' => 2.0,
 					'box_weight' => 0.1,
+					'cost' => '',
+					'enabled' => true,
 				],
 				Boxes_Settings::parse_line( 'Small; 20; 15; 10; 2; 0.1' )
 			);
@@ -161,7 +163,7 @@ namespace Woodev\Tests\Unit {
 			return [
 				'no fields'        => [ 'Small' ],
 				'three fields'     => [ 'Small; 20; 15' ],
-				'seven fields'     => [ 'Small; 20; 15; 10; 2; 0.1; 9' ],
+				'nine fields'     => [ 'Small; 20; 15; 10; 2; 0.1; 9; yes; extra' ],
 				'no name'          => [ ' ; 20; 15; 10' ],
 				'a tag for a name' => [ '<b></b>; 20; 15; 10' ],
 				'zero length'      => [ 'Small; 0; 15; 10' ],
@@ -231,7 +233,7 @@ namespace Woodev\Tests\Unit {
 			$this->store( 'kg', 'cm' );
 			Functions\when( 'update_option' )->alias( function ( $key, $value ) { $this->options[ $key ] = $value; return true; } );
 			Boxes_Settings::current()->update_value( 'boxes', " <b>Small</b>; 20,5; 15; 10; 2; 0,1\n\nBig; 40; 30; 20" );
-			$this->assertSame( "Small; 20.5; 15; 10; 2; 0.1\nBig; 40; 30; 20; 0; 0", $this->options['woodev_boxes_boxes'] );
+			$this->assertSame( "Small; 20.5; 15; 10; 2; 0.1; ; yes\nBig; 40; 30; 20; 0; 0; ; yes", $this->options['woodev_boxes_boxes'] );
 			$this->assertSame( 'Small', Boxes_Settings::current()->get_boxes()[0]['name'] );
 		}
 

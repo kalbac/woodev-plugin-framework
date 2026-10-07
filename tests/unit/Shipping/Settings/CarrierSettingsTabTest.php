@@ -485,4 +485,19 @@ final class CarrierSettingsTabTest extends TestCase {
 		$this->assertSame( 'CDEK WooCommerce Shipping Method', $tabs[0]['label'], 'the first provider is kept' );
 		$this->assertSame( [ 'export' ], array_column( $tabs[0]['sections'], 'id' ) );
 	}
+	public function test_declared_boxes_add_packaging_to_this_carriers_own_tab(): void {
+		Functions\when( 'wc_get_dimension' )->returnArg( 1 );
+		$plugin = $this->carrier();
+		$plugin->shouldReceive( 'get_box_presets' )->andReturn( [
+			[ 'id' => 'M', 'name' => 'Medium', 'length' => 10, 'width' => 10, 'height' => 10, 'cost_mode' => 'carrier' ],
+			[ 'id' => 'L', 'name' => 'Large', 'length' => 20, 'width' => 20, 'height' => 20, 'cost_mode' => 'merchant' ],
+		] );
+		$providers = $plugin->get_settings_providers();
+		$this->assertCount( 1, $providers );
+		$this->assertSame( 'cdek', $providers[0]->get_id() );
+		$this->assertSame( [ 'packaging' ], array_map( static fn( $section ) => $section->get_id(), $providers[0]->get_sections() ) );
+		$this->assertNotNull( $providers[0]->get_handler()->get_setting( 'box_M_charge' ) );
+		$this->assertNotNull( $providers[0]->get_handler()->get_setting( 'box_L_cost' ) );
+	}
+
 }

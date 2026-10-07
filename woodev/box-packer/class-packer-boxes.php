@@ -51,6 +51,15 @@ if ( ! class_exists( 'Woodev_Packer_Boxes' ) ) :
 			foreach ( $this->boxes as $box ) {
 				$packages[] = new Woodev_Box_Packer_Packed_Box( $box, $this->items );
 			}
+			// A store box that fits any remaining unit wins over every carrier box.
+			$store_packages = array_filter(
+				$packages,
+				static function ( Woodev_Box_Packer_Packed_Box $package ): bool {
+					$data = $package->get_box()->get_internal_data();
+					return ( ! is_array( $data ) || 'carrier' !== ( $data['origin'] ?? '' ) ) && $package->get_success_percent() > 0;
+				}
+			);
+			$packages = $store_packages ?: $packages;
 			// Find the best success rate
 			$best_percent = 0;
 			$best_package = null;
