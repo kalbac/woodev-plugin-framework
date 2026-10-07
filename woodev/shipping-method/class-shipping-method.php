@@ -835,6 +835,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 						: null;
 
 					$rate = $this->rate_package( $package, $packed );
+
+					// «free» is the carrier's decision (a free-from threshold, a coupon), so it is read from the rate
+					// BEFORE the box cost is added: a 0 rate with a 25 box surcharge is still a free rate
+					$carrier_free = null !== $rate && $this->supports_cost_limits() && self::rate_cost_total( $rate ) <= 0;
+
 					if ( null !== $rate && null !== $packed ) {
 						$extra = Packaging::get_cost( $packed, (array) ( $package['contents'] ?? [] ) );
 						if ( $extra > 0 ) {
@@ -849,9 +854,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 					}
 
 					// last: the limits bound what the customer pays, so they come after the fee (inside rate_package())
-					// and the packaging cost; a free (0) rate is left alone
+					// and the packaging cost; a rate the carrier made free is never raised to the minimum
 					if ( null !== $rate && $this->supports_cost_limits() ) {
-						$rate = $this->limit_rate_cost( $rate );
+						$rate = $this->limit_rate_cost( $rate, $carrier_free );
 					}
 
 					return $rate;
@@ -1556,41 +1561,61 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		}
 
 		/**
-		 * Applies {@see self::apply_cost_limits()} to a rate, whatever shape its cost has.
-		 *
-		 * A per-item cost array (WooCommerce taxes each entry by its own class) is scaled proportionally to
-		 * the limited total, so the mix of the entries — and the tax on them — is kept.
+		 * The total cost of a rate, whatever shape its cost has (a number, or a per-item cost array).
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param Shipping_Rate $rate calculated rate.
-		 * @return Shipping_Rate
+		 * @param Shipping_Rate $rate rate.
+		 * @return float `0.0` for a cost that is not numeric.
 		 */
-		private function limit_rate_cost( Shipping_Rate $rate ): Shipping_Rate {
+		private static function rate_cost_total( Shipping_Rate $rate ): float {
 
 			$cost = $rate->get_cost();
 
-			if ( ! is_array( $cost ) ) {
-
-				if ( ! is_numeric( $cost ) ) {
-					return $rate;
-				}
-
-				$limited = $this->apply_cost_limits( (float) $cost );
-
-				return $limited === (float) $cost ? $rate : $rate->with_cost( $limited );
+			if ( is_array( $cost ) ) {
+				return (float) array_sum( array_filter( $cost, 'is_numeric' ) );
 			}
 
-			$total = (float) array_sum( array_filter( $cost, 'is_numeric' ) );
+			return is_numeric( $cost ) ? (float) $cost : 0.0;
+		}
 
-			if ( $total <= 0 ) {
+		/**
+		 * Applies the cost limits to a rate, whatever shape its cost has.
+		 *
+		 * **What is clamped.** The FINAL price: the carrier's price, its fee and the box-packing cost together
+		 * (the number the customer sees), so «minimum = maximum» is exactly the price paid. **What «free» means.**
+		 * Whether the rate is free is decided from the carrier's own price, BEFORE packaging is added: a carrier
+		 * price of 0 (a «free from» threshold, a free-shipping coupon) is never raised to the minimum, even when a
+		 * box cost makes the final price positive; the box cost stays as the only charge. The maximum still bounds
+		 * a free rate's final price. A rate the carrier priced above 0 is held to both limits.
+		 *
+		 * A per-item cost array (WooCommerce taxes each entry by its own class) is scaled proportionally to
+		 * the limited total, so the mix of the entries is kept. The limits are on the rate cost BEFORE tax; an
+		 * explicit `taxes` array a carrier passed in the rate args is not recomputed.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Shipping_Rate $rate         calculated rate (carrier price + fee + box cost).
+		 * @param bool          $carrier_free whether the carrier priced the rate at 0 before packaging was added.
+		 * @return Shipping_Rate
+		 */
+		private function limit_rate_cost( Shipping_Rate $rate, bool $carrier_free = false ): Shipping_Rate {
+
+			$cost  = $rate->get_cost();
+			$total = self::rate_cost_total( $rate );
+
+			if ( ! is_array( $cost ) && ! is_numeric( $cost ) ) {
 				return $rate;
 			}
 
-			$limited = $this->apply_cost_limits( $total );
+			$limited = Shipping_Helper::limit_cost( $total, $carrier_free ? null : $this->get_min_cost(), $this->get_max_cost() );
 
 			if ( $limited === $total ) {
 				return $rate;
+			}
+
+			if ( ! is_array( $cost ) ) {
+				return $rate->with_cost( $limited );
 			}
 
 			$factor = $limited / $total;
@@ -1605,49 +1630,123 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		}
 
 		/**
-		 * Validates the `min_cost` field: empty, or a number not below zero.
+		 * Validates the `min_cost` field: empty, a number not below zero, and not above the maximum.
 		 *
-		 * WooCommerce calls `validate_{key}_field()` before the type's validator. An invalid value is refused
-		 * with a merchant-facing error and the previously saved value stays.
+		 * **The pair is validated together.** WooCommerce saves the fields one by one and keeps the earlier
+		 * ones when a later one throws, so refusing only the maximum would still store the new minimum and
+		 * leave a pair the merchant was told is forbidden. A contradicting pair is therefore refused HERE, the
+		 * first field of the pair (one clear error), and {@see self::validate_max_cost_field()} then keeps the
+		 * saved maximum too: neither is changed. The maximum compared against is the one that will be stored
+		 * (the posted one, or the saved one when the posted one is itself invalid).
 		 *
 		 * @since 2.0.2
 		 *
 		 * @param string $key   field key.
 		 * @param mixed  $value posted value.
 		 * @return string
-		 * @throws \Exception When the value is not a non-negative number.
+		 * @throws \Exception When the value is not a non-negative number, or is above the maximum.
 		 */
 		public function validate_min_cost_field( $key, $value ) {
-			return $this->validate_cost_limit_value( $value, __( 'Минимальная стоимость доставки должна быть числом не меньше нуля.', 'woodev-plugin-framework' ) );
+
+			$min = $this->validate_cost_limit_value( $value, __( 'Минимальная стоимость доставки должна быть числом не меньше нуля.', 'woodev-plugin-framework' ) );
+			$max = $this->get_effective_cost_limit( self::OPTION_MAX_COST );
+
+			if ( '' !== $min && null !== $max && (float) $min > $max ) {
+				throw new \Exception( __( 'Минимальная стоимость доставки не может быть больше максимальной. Значения не сохранены.', 'woodev-plugin-framework' ) );
+			}
+
+			return $min;
 		}
 
 		/**
-		 * Validates the `max_cost` field: empty, a number not below zero, and not below the minimum posted
-		 * with it.
+		 * Validates the `max_cost` field: empty, a number not below zero, and not below the minimum.
 		 *
-		 * The maximum is the one refused when the two contradict each other (and only it, so the merchant
-		 * sees one error pointing at one field); the saved value stays.
+		 * See {@see self::validate_min_cost_field()}: a contradicting pair is reported once, by the minimum, and
+		 * here the SAVED maximum is kept without a second error, so neither of the two changes. When the
+		 * posted minimum is itself invalid (and so is not stored), the maximum is compared with the saved
+		 * minimum and refused here with its own error.
 		 *
 		 * @since 2.0.2
 		 *
 		 * @param string $key   field key.
 		 * @param mixed  $value posted value.
 		 * @return string
-		 * @throws \Exception When the value is not a non-negative number, or is below the posted minimum.
+		 * @throws \Exception When the value is not a non-negative number, or is below the minimum that stays in force.
 		 */
 		public function validate_max_cost_field( $key, $value ) {
 
 			$max = $this->validate_cost_limit_value( $value, __( 'Максимальная стоимость доставки должна быть числом не меньше нуля.', 'woodev-plugin-framework' ) );
+			$min = $this->get_effective_cost_limit( self::OPTION_MIN_COST );
 
-			$post_data = (array) $this->get_post_data();
-			$posted    = $post_data[ $this->get_field_key( self::OPTION_MIN_COST ) ] ?? '';
-			$min       = Shipping_Helper::normalize_cost_limit( is_scalar( $posted ) ? wc_format_decimal( trim( stripslashes( (string) $posted ) ) ) : '' );
-
-			if ( '' !== $max && null !== $min && (float) $max < $min ) {
-				throw new \Exception( __( 'Максимальная стоимость доставки не может быть меньше минимальной.', 'woodev-plugin-framework' ) );
+			if ( '' === $max || null === $min || (float) $max >= $min ) {
+				return $max;
 			}
 
-			return $max;
+			if ( null !== $this->get_posted_cost_limit( self::OPTION_MIN_COST ) ) {
+				// the minimum validator already refused the pair with its error; keep the saved maximum
+				return $this->normalize_saved_cost_limit( self::OPTION_MAX_COST );
+			}
+
+			throw new \Exception( __( 'Максимальная стоимость доставки не может быть меньше минимальной.', 'woodev-plugin-framework' ) );
+		}
+
+		/**
+		 * The valid value a limit field was posted with, or `null` when it was left empty or is invalid.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $option `min_cost` or `max_cost`.
+		 * @return float|null
+		 */
+		private function get_posted_cost_limit( string $option ): ?float {
+
+			$post_data = (array) $this->get_post_data();
+			$posted    = $post_data[ $this->get_field_key( $option ) ] ?? '';
+
+			if ( ! is_scalar( $posted ) ) {
+				return null;
+			}
+
+			return Shipping_Helper::normalize_cost_limit( wc_format_decimal( trim( stripslashes( (string) $posted ) ) ) );
+		}
+
+		/**
+		 * The limit that will be in force after the form is saved: the posted one when it is valid, an empty
+		 * posted one meaning «no limit», and the saved one when the posted one is invalid (then it is refused
+		 * and the saved value stays).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $option `min_cost` or `max_cost`.
+		 * @return float|null `null` for «no limit».
+		 */
+		private function get_effective_cost_limit( string $option ): ?float {
+
+			$post_data = (array) $this->get_post_data();
+			$posted    = $post_data[ $this->get_field_key( $option ) ] ?? '';
+
+			if ( null === $posted || ( is_scalar( $posted ) && '' === trim( (string) $posted ) ) ) {
+				return null;
+			}
+
+			$limit = $this->get_posted_cost_limit( $option );
+
+			return null !== $limit ? $limit : Shipping_Helper::normalize_cost_limit( $this->get_option( $option, '' ) );
+		}
+
+		/**
+		 * The saved value of a limit as a decimal string, `''` when none or unusable.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $option `min_cost` or `max_cost`.
+		 * @return string
+		 */
+		private function normalize_saved_cost_limit( string $option ): string {
+
+			$limit = Shipping_Helper::normalize_cost_limit( $this->get_option( $option, '' ) );
+
+			return null === $limit ? '' : wc_format_decimal( (string) $limit );
 		}
 
 		/**

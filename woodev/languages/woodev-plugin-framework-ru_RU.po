@@ -5541,14 +5541,18 @@ msgstr ""
 msgid "Если стоимость, рассчитанная перевозчиком, окажется выше этого значения, покупатель заплатит указанную сумму. Оставьте поле пустым, чтобы не ограничивать стоимость."
 msgstr ""
 
-#: shipping-method/class-shipping-method.php:1621
+#: shipping-method/class-shipping-method.php:1651
 msgid "Минимальная стоимость доставки должна быть числом не меньше нуля."
 msgstr ""
 
-#: shipping-method/class-shipping-method.php:1640
+#: shipping-method/class-shipping-method.php:1678
 msgid "Максимальная стоимость доставки должна быть числом не меньше нуля."
 msgstr ""
 
-#: shipping-method/class-shipping-method.php:1647
+#: shipping-method/class-shipping-method.php:1690
 msgid "Максимальная стоимость доставки не может быть меньше минимальной."
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:1655
+msgid "Минимальная стоимость доставки не может быть больше максимальной. Значения не сохранены."
 msgstr ""
