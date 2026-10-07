@@ -1008,7 +1008,112 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 * Convenience method to add delayed admin notices, which may depend upon
 		 * some setting being saved prior to determining whether to render
 		 */
-		public function add_delayed_admin_notices() {}
+		public function add_delayed_admin_notices() {
+
+			// every Woodev plugin, whatever its type, warns while it is not configured
+			$this->add_not_configured_notice();
+		}
+
+		/**
+		 * Whether the plugin has everything it needs to work — the one "not configured" contract of every
+		 * Woodev plugin.
+		 *
+		 * While this answers `false` the plugin shows a warning admin notice that links to its settings
+		 * ({@see self::get_not_configured_notice_url()}), whether or not the merchant has enabled or
+		 * added anything yet, so a fresh install is told what to do. The default is `true`: a plugin that
+		 * needs no setup never warns. A plugin that does override this — one line, answering from its own
+		 * settings (`return $this->get_settings_handler()->is_configured();`).
+		 *
+		 * The answer is read on `admin_footer`, after a settings save of the same request, and the notice is
+		 * not dismissible, so it disappears by itself the moment this turns `true`. Keep it cheap and free of
+		 * remote calls: it runs on every wp-admin page.
+		 *
+		 * {@see \Woodev\Framework\Shipping\Shipping_Plugin} derives it from the carrier's declared credentials.
+		 * A payment gateway plugin keeps its richer per-gateway notice instead and leaves this at `true`.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public function is_configured(): bool {
+			return true;
+		}
+
+		/**
+		 * Where the "not configured" notice sends the merchant: the plugin's settings page.
+		 *
+		 * Defaults to {@see self::get_settings_url()}; a plugin whose settings live elsewhere than that
+		 * (the carrier's tab on the Woodev settings page) overrides this, not `get_settings_url()`.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		protected function get_not_configured_notice_url(): string {
+			return (string) $this->get_settings_url();
+		}
+
+		/**
+		 * Computes the "not configured" notice — message and a stable id — or `null` when nothing should show.
+		 *
+		 * A pure decision over {@see self::is_configured()}, public so it can be unit-tested without a notice
+		 * handler. The copy is merchant-facing: short, names the plugin, no jargon.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array{message: string, notice_id: string}|null
+		 */
+		public function not_configured_notice(): ?array {
+
+			if ( $this->is_configured() ) {
+				return null;
+			}
+
+			$url = $this->get_not_configured_notice_url();
+
+			$message = sprintf(
+				/* translators: %1$s - plugin name, %2$s - opening <a> tag, %3$s - closing </a> tag */
+				__( '%1$s не настроен. %2$sПерейдите в настройки%3$s, чтобы плагин начал работать.', 'woodev-plugin-framework' ),
+				$this->get_plugin_name(),
+				'' !== $url ? '<a href="' . esc_url( $url ) . '">' : '',
+				'' !== $url ? ' &raquo;</a>' : ''
+			);
+
+			return [
+				'message'   => $message,
+				'notice_id' => $this->get_id_dasherized() . '-not-configured',
+			];
+		}
+
+		/**
+		 * Adds the "not configured" warning to the admin notices.
+		 *
+		 * NOT dismissible: the condition is read live ({@see self::is_configured()}), so the notice clears by
+		 * itself once the merchant configures the plugin, while a dismiss flag would only let them hide a
+		 * problem that is still true. It shows on every screen the notice handler renders on, the plugin's own
+		 * settings page included (where it vanishes after the save that fixes it).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		protected function add_not_configured_notice(): void {
+
+			$notice = $this->not_configured_notice();
+
+			if ( null === $notice || null === $this->get_admin_notice_handler() ) {
+				return;
+			}
+
+			$this->get_admin_notice_handler()->add_admin_notice(
+				$notice['message'],
+				$notice['notice_id'],
+				[
+					'dismissible'  => false,
+					'notice_class' => 'notice-warning',
+				]
+			);
+		}
 
 		/**
 		 * Return the plugin action links.  This will only be called if the plugin is active.

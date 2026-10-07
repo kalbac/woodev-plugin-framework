@@ -30,6 +30,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		/** Postal delivery type */
 		const TYPE_POSTAL = 'postal';
 
+		/**
+		 * Method classes already reported by {@see self::ensure_method_title()}.
+		 *
+		 * @var array<string, true>
+		 */
+		private static $method_title_reported = [];
+
 		const SHIPPING_CLASS_NONE = 'none';
 
 		const SHIPPING_CLASS_ANY = 'any';
@@ -214,10 +221,57 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			 */
 			$this->title = (string) $this->get_option( 'title', $this->get_title_fallback() );
 
+			$this->ensure_method_title();
+
 			// admin only
 			if ( is_admin() ) {
 				add_action( 'woocommerce_update_options_shipping_' . $this->id, [ $this, 'process_admin_options' ] );
 			}
+		}
+
+		/**
+		 * Guarantees a non-empty `$method_title`.
+		 *
+		 * WooCommerce shows `$method_title` (the admin-facing name) in the «Create shipping method» modal and
+		 * in the zone's method list; empty, the card is blank and the merchant cannot tell what they are adding.
+		 * A carrier must set it (and `$method_description`), like `$this->supports`, BEFORE calling the parent
+		 * constructor. When it did not, this falls back to the method's default title for its delivery type
+		 * ({@see self::get_default_title()}), then to the capitalised method id — and reports a
+		 * `_doing_it_wrong()` (visible with WP_DEBUG) once per class so the carrier author notices.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		protected function ensure_method_title(): void {
+
+			if ( '' !== trim( (string) $this->method_title ) ) {
+				return;
+			}
+
+			$fallback = $this->get_default_title();
+
+			if ( '' === $fallback ) {
+				$fallback = ucfirst( (string) $this->id );
+			}
+
+			$this->method_title = $fallback;
+
+			if ( isset( self::$method_title_reported[ static::class ] ) ) {
+				return;
+			}
+
+			self::$method_title_reported[ static::class ] = true;
+
+			_doing_it_wrong(
+				static::class . '::$method_title',
+				sprintf(
+					'The shipping method "%1$s" did not set $method_title, so WooCommerce would show it nameless. Set $this->method_title (and $this->method_description) before calling parent::__construct(); "%2$s" is used for now.',
+					esc_html( (string) $this->id ),
+					esc_html( $fallback )
+				),
+				'2.0.2'
+			);
 		}
 
 		/**
