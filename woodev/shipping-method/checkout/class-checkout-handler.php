@@ -1780,7 +1780,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 *              passes it to `validate()` so conditional-required specs (A2) can be
 		 *              resolved at validation time.
 		 * @since 2.0.2 Also runs {@see self::guard_custom_settlement()} — the server-side
-		 *              backstop for the #528 custom-settlement opt-in (issue #531).
+		 *              backstop for the #528 custom-settlement opt-in (issue #531), fed the
+		 *              country of the active section ({@see self::posted_country_for_section()}).
 		 *
 		 * @return void
 		 */
@@ -1793,11 +1794,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			$values = $this->sanitize_posted_data( $this->get_posted_data() );
 
 			$this->validate( $values, $state );
-			$this->guard_custom_settlement(
-				$values,
-				$country,
-				\Woodev\Framework\Shipping\Pickup\Address_Target::resolve( $this->posted_ship_to_different_address() )
-			);
+
+			// The guard is scoped to the section whose field it guards — the client chooser
+			// reads `#shipping_country` for a shipping-section node, never billing's value.
+			$section = \Woodev\Framework\Shipping\Pickup\Address_Target::resolve( $this->posted_ship_to_different_address() );
+
+			$this->guard_custom_settlement( $values, $this->posted_country_for_section( $section ), $section );
 		}
 
 		/**
@@ -1841,6 +1843,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * `location-cascade.js`, so comparing it would not be testing what #531 is
 		 * about.
 		 *
+		 * STANDS DOWN when the chooser cannot operate for the posted country
+		 * ({@see \Woodev\Framework\Shipping\Location\Location_Service::is_level_chooser_available()}:
+		 * layer inactive, e.g. no provider token, or the provider does not serve the
+		 * settlement level there). The stored `ajax-select2` mode outlives both, but
+		 * the buyer then has plain inputs and no way to pick a record, so demanding
+		 * one would block the whole checkout — whichever carrier was chosen.
+		 *
 		 * A blank posted value is not this method's concern — that is required-field
 		 * territory, already {@see self::validate()}'s job (mirrors
 		 * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::handle_checkout_process()}'s
@@ -1850,8 +1859,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 *
 		 * @param array<string, mixed> $values         clean values keyed by field id, as
 		 *     returned by {@see self::sanitize_posted_data()}
-		 * @param string               $country        the posted billing country
-		 *     ({@see self::posted_country()})
+		 * @param string               $country        the posted country of `$active_section`
+		 *     ({@see self::posted_country_for_section()}) — the country the client chooser for
+		 *     that section's field is scoped to, so availability and the record lookup agree
+		 *     with what the buyer actually sees
 		 * @param string               $active_section `billing` or `shipping` — the column
 		 *     {@see \Woodev\Framework\Shipping\Pickup\Address_Target::resolve()} currently
 		 *     resolves to
@@ -1866,6 +1877,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			}
 
 			if ( \Woodev\Framework\Shipping\Location\Location_Provider_Registry::MODE_AJAX_SELECT2 !== $service->get_field_mode_settlement() ) {
+				return true;
+			}
+
+			// The stored mode survives a removed provider token or a country the provider
+			// does not cover, but then the buyer has plain inputs and no way to pick a
+			// record — demanding one would block every checkout, whatever the carrier.
+			if ( ! $service->is_level_chooser_available( \Woodev\Framework\Shipping\Location\Location_Record::LEVEL_SETTLEMENT, $country ) ) {
 				return true;
 			}
 
@@ -3955,6 +3973,30 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		private function posted_country(): string {
 			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- WooCommerce verifies the checkout nonce before its checkout hooks fire; values are cleaned in sanitize_posted_data().
 			return wc_clean( (string) wp_unslash( $_POST['billing_country'] ?? '' ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotValidated
+		}
+
+		/**
+		 * Returns the posted country of one address section.
+		 *
+		 * `location-cascade.js` scopes a shipping-section node to `#shipping_country` and
+		 * every other node to `#billing_country`, never arbitrating one against the other,
+		 * so the server must read the same field for the section it is judging. A blank
+		 * shipping country is NOT replaced by billing's, for the same isolation reason; the
+		 * location predicates treat blank as country-blind.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $section `billing` or `shipping`
+		 *
+		 * @return string sanitized ISO 2-letter country code, or empty string
+		 */
+		private function posted_country_for_section( string $section ): string {
+			if ( 'shipping' !== $section ) {
+				return $this->posted_country();
+			}
+
+			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- WooCommerce verifies the checkout nonce before its checkout hooks fire; values are cleaned in sanitize_posted_data().
+			return wc_clean( (string) wp_unslash( $_POST['shipping_country'] ?? '' ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotValidated
 		}
 
 		/**
