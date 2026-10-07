@@ -19,6 +19,11 @@ export default function CarrierBoxesTable( { fields, values, onFieldChange, serv
 	if ( ! rows.size ) { return null; }
 	const value = ( id: string ) => values[ id ] ?? fields[ id ].value;
 	const enabledLabel = __( 'Использовать', 'woodev-plugin-framework' );
+	const costTips = Array.from( new Set(
+		Array.from( rows.values() )
+			.map( ( { cells } ) => fields[ ( cells.charge || cells.cost )! ].tooltip )
+			.filter( Boolean )
+	) ).join( ' ' );
 	const costLabel = __( 'Стоимость', 'woodev-plugin-framework' );
 	return <div className="woodev-boxes woodev-boxes--carrier">
 		<div className="woodev-boxes__scroll">
@@ -29,14 +34,14 @@ export default function CarrierBoxesTable( { fields, values, onFieldChange, serv
 					<th scope="col">{ __( 'Макс. вес, кг', 'woodev-plugin-framework' ) }</th>
 					<th scope="col">{ __( 'Вес упаковки, кг', 'woodev-plugin-framework' ) }</th>
 					<th scope="col">{ __( 'Вкл', 'woodev-plugin-framework' ) }</th>
-					<th scope="col">{ costLabel }</th>
+					<th scope="col">{ costLabel }<FieldTip text={ costTips } /></th>
 				</tr></thead>
 				<tbody>{ Array.from( rows.values() ).map( ( { preset, cells } ) => {
 					const enabledId = cells.enabled!;
 					const costId = ( cells.charge || cells.cost )!;
 					const error = serverErrors[ costId ] || ( preset.cost_mode === 'merchant' ? validateBoxCost( value( costId ) ) : null );
 					return <tr key={ preset.id }>
-						<th scope="row">{ preset.name }<FieldTip text={ fields[ enabledId ].tooltip } /></th>
+						<th scope="row">{ preset.name }</th>
 						<td>{ preset.length } × { preset.width } × { preset.height }</td>
 						<td>{ preset.max_weight || '—' }</td><td>{ preset.box_weight }</td>
 						<td><ToggleControl __nextHasNoMarginBottom label="" aria-label={ `${ enabledLabel }, ${ preset.name }` } checked={ !! value( enabledId ) } disabled={ !! fields[ enabledId ].disabled } onChange={ ( checked ) => onFieldChange( enabledId, checked ) } /></td>
@@ -44,7 +49,6 @@ export default function CarrierBoxesTable( { fields, values, onFieldChange, serv
 							{ preset.cost_mode === 'carrier'
 								? <ToggleControl __nextHasNoMarginBottom label="" aria-label={ `${ __( 'Учитывать стоимость', 'woodev-plugin-framework' ) }, ${ preset.name }` } checked={ !! value( costId ) } disabled={ !! fields[ costId ].disabled } onChange={ ( checked ) => onFieldChange( costId, checked ) } />
 								: <TextControl __nextHasNoMarginBottom __next40pxDefaultSize hideLabelFromVision label={ `${ costLabel }, ${ preset.name }` } value={ String( value( costId ) ) } readOnly={ preset.cost_mode === 'fixed' } disabled={ !! fields[ costId ].disabled } onChange={ ( next ) => onFieldChange( costId, next ) } /> }
-							<FieldTip text={ fields[ costId ].tooltip } />
 							{ error && <div className="woodev-field__error" role="alert">{ error }</div> }
 						</td>
 					</tr>;

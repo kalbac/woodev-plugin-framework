@@ -36,6 +36,13 @@ export default function SectionView( { providerId, section, tabFields, values, c
 		return <ToolsBlock providerId={ providerId } section={ section } />;
 	}
 
+	const effectiveValues = conditionValues || Object.fromEntries(
+		Object.entries( section.fields ).map( ( [ id, field ] ) => [ id, values[ id ] ?? field.value ] )
+	);
+	const visibleBoxFields = Object.fromEntries(
+		Object.entries( section.fields ).filter( ( [ , field ] ) => field.box_preset && isFieldVisible( field, effectiveValues ) )
+	);
+
 	return (
 		<div className="woodev-settings__section">
 			{ section.description && (
@@ -59,7 +66,7 @@ export default function SectionView( { providerId, section, tabFields, values, c
 						showErrors={ showErrors }
 					/>
 				) ) }
-			<CarrierBoxesTable fields={ section.fields } values={ values } onFieldChange={ onFieldChange } serverErrors={ serverErrors } />
+			<CarrierBoxesTable fields={ visibleBoxFields } values={ values } onFieldChange={ onFieldChange } serverErrors={ serverErrors } />
 			{ /* Buttons under the fields (Settings_Section::with_actions()) — «Обновить статусы сейчас» and alike. */ }
 			{ section.actions && section.actions.length > 0 && (
 				<ToolsBlock providerId={ providerId } section={ { tools: section.actions } } />

@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom';
 import { useState } from '@wordpress/element';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import apiFetch from '@wordpress/api-fetch';
 import BoxesTable, { parseBoxRows, serializeBoxRows, validateBoxesText } from '../../src/components/boxes-table';
 import SearchSelectField from '../../src/components/search-select-field';
@@ -138,14 +138,19 @@ test( 'store table preserves free enabled legacy boxes and edits monetary cost a
 } );
 
 
-test( 'carrier presets render one named table, preserve scalar keys and expose each cost mode', () => {
-	const fields: Record<string, any> = { packing_algorithm: { name: 'Способ упаковки', controlType: 'select', type: 'string', value: 'boxes', options: { boxes: 'Коробки' } } };
+function carrierFields() {
+	const fields: Record<string, any> = { packing_algorithm: { name: 'Способ упаковки', controlType: 'select', type: 'string', value: 'boxes', options: { separately: 'Каждый товар отдельно', single: 'Всё в одну коробку', boxes: 'Упаковывать в коробки', virtual: 'Минимальная коробка' } } };
 	for ( const [ id, name, mode ] of [ [ 'M', 'Коробка M', 'carrier' ], [ 'F', 'Коробка F', 'fixed' ], [ 'L', 'Коробка L', 'merchant' ] ] ) {
 		const preset = { id, name, cost_mode: mode, length: 30, width: 20, height: 15, max_weight: 20, box_weight: 0.2 };
-		fields[ 'box_' + id + '_enabled' ] = { name, value: false, controlType: 'toggle', box_preset: { ...preset, field: 'enabled' } };
+		fields[ 'box_' + id + '_enabled' ] = { name, value: false, controlType: 'toggle', show_if: { setting: 'packing_algorithm', value: 'boxes' }, tooltip: 'Размеры коробки', box_preset: { ...preset, field: 'enabled' } };
 		const role = mode === 'carrier' ? 'charge' : 'cost';
-		fields[ 'box_' + id + '_' + role ] = { name: 'Стоимость', value: mode === 'carrier' ? true : mode === 'fixed' ? '7' : '2%', controlType: mode === 'carrier' ? 'toggle' : 'text', disabled: mode === 'fixed', box_preset: { ...preset, field: role } };
+		fields[ 'box_' + id + '_' + role ] = { name: 'Стоимость', show_if: { setting: 'packing_algorithm', value: 'boxes' }, tooltip: mode === 'carrier' ? 'Перевозчик включит стоимость этой упаковки в расчёт доставки.' : 'Сумма за одну коробку или процент от стоимости товаров в ней, например 2%.', value: mode === 'carrier' ? true : mode === 'fixed' ? '7' : '2%', controlType: mode === 'carrier' ? 'toggle' : 'text', disabled: mode === 'fixed', box_preset: { ...preset, field: role } };
 	}
+	return fields;
+}
+
+test( 'carrier presets render one named table, preserve scalar keys and expose each cost mode', () => {
+	const fields = carrierFields();
 	const changed = jest.fn();
 	function Form() {
 		const [ values, setValues ] = useState<Record<string, string | boolean>>( {} );
@@ -180,4 +185,65 @@ test( 'store cost syntax hint is visible and row toggle labels are only accessib
 	expect( screen.getByRole( 'checkbox', { name: 'Использовать, Old' } ) ).toBeChecked();
 	expect( screen.queryByText( 'Использовать, Old' ) ).toBeNull();
 	expect( screen.getByText( 'Стоимость: число или N%, например 2%.' ) ).toBeInTheDocument();
+	expect( screen.getByRole( 'table' ).querySelectorAll( 'tbody .woodev-field__tip' ) ).toHaveLength( 0 );
+} );
+
+
+test.each( [ 'separately', 'single', 'virtual' ] )( 'carrier boxes follow unsaved packing mode %s and retain edits', ( mode ) => {
+	const fields = carrierFields();
+	function Form() {
+		const [ values, setValues ] = useState<Record<string, string | boolean>>( {} );
+		return <SectionView section={ { fields } } values={ values } onFieldChange={ ( id, value ) => setValues( ( prev ) => ( { ...prev, [ id ]: value } ) ) } />;
+	}
+	render( <Form /> );
+	fireEvent.click( screen.getByRole( 'checkbox', { name: 'Использовать, Коробка M' } ) );
+	fireEvent.click( screen.getByRole( 'checkbox', { name: 'Учитывать стоимость, Коробка M' } ) );
+	fireEvent.change( screen.getByRole( 'textbox', { name: 'Стоимость, Коробка L' } ), { target: { value: '5%' } } );
+	fireEvent.click( screen.getByRole( 'button', { name: 'Упаковывать в коробки' } ) );
+	fireEvent.click( screen.getByRole( 'option', { name: fields.packing_algorithm.options[ mode ] } ) );
+	expect( screen.queryByRole( 'table' ) ).toBeNull();
+	expect( validatableFields( fields, { packing_algorithm: mode } ) ).toEqual( { packing_algorithm: fields.packing_algorithm } );
+	fireEvent.click( screen.getByRole( 'button', { name: fields.packing_algorithm.options[ mode ] } ) );
+	fireEvent.click( screen.getByRole( 'option', { name: 'Упаковывать в коробки' } ) );
+	expect( screen.getByRole( 'checkbox', { name: 'Использовать, Коробка M' } ) ).toBeChecked();
+	expect( screen.getByRole( 'checkbox', { name: 'Учитывать стоимость, Коробка M' } ) ).not.toBeChecked();
+	expect( screen.getByRole( 'textbox', { name: 'Стоимость, Коробка L' } ) ).toHaveValue( '5%' );
+} );
+
+test( 'carrier boxes use saved packing mode and the tab-wide condition values', () => {
+	const fields = carrierFields();
+	fields.packing_algorithm.value = 'separately';
+	const props = { section: { fields }, values: {}, onFieldChange: jest.fn() };
+	const view = render( <SectionView { ...props } /> );
+	expect( screen.queryByRole( 'table' ) ).toBeNull();
+	view.rerender( <SectionView { ...props } conditionValues={ { packing_algorithm: 'boxes' } } /> );
+	expect( screen.getByRole( 'table' ) ).toBeInTheDocument();
+} );
+
+test( 'carrier box help appears once on the cost header without name or row tooltips', () => {
+	render( <SectionView section={ { fields: carrierFields() } } values={ {} } onFieldChange={ jest.fn() } /> );
+	const header = screen.getByRole( 'columnheader', { name: /^Стоимость/ } );
+	const tip = within( header ).getByRole( 'img' );
+	expect( tip ).toHaveAccessibleName( 'Перевозчик включит стоимость этой упаковки в расчёт доставки. Сумма за одну коробку или процент от стоимости товаров в ней, например 2%.' );
+	expect( screen.getAllByRole( 'img' ) ).toHaveLength( 1 );
+	within( screen.getByRole( 'table' ).querySelector( 'tbody' )! ).getAllByRole( 'row' ).forEach( ( row ) => expect( within( row ).queryByRole( 'img' ) ).toBeNull() );
+	expect( screen.getByRole( 'checkbox', { name: 'Учитывать стоимость, Коробка M' } ) ).toBeInTheDocument();
+	expect( screen.getByRole( 'textbox', { name: 'Стоимость, Коробка L' } ) ).toBeInTheDocument();
+} );
+
+
+test( 'textarea row count is optional and leaves text editing and the default unchanged', () => {
+	const schema = { name: 'Адрес', type: 'string', controlType: 'textarea', value: 'Saved address' };
+	const onChange = jest.fn();
+	const props = { schema, value: 'Saved address', onChange };
+	const view = render( <ControlField { ...props } /> );
+	const textarea = screen.getByRole( 'textbox' );
+	expect( textarea ).toHaveAttribute( 'rows', '4' );
+	view.rerender( <ControlField { ...props } schema={ { ...schema, rows: 3 } } /> );
+	expect( textarea ).toHaveAttribute( 'rows', '3' );
+	expect( textarea ).toHaveValue( 'Saved address' );
+	fireEvent.change( textarea, { target: { value: 'Line one\nLine two' } } );
+	expect( onChange ).toHaveBeenCalledWith( 'Line one\nLine two' );
+	view.rerender( <ControlField { ...props } /> );
+	expect( textarea ).toHaveAttribute( 'rows', '4' );
 } );

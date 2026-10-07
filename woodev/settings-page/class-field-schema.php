@@ -61,6 +61,10 @@ final class Field_Schema {
 				'required'    => $setting->is_required(),
 			];
 
+			if ( $control && \Woodev_Control::TYPE_TEXTAREA === $control->get_type() && null !== $control->get_rows() ) {
+				$entry['rows'] = $control->get_rows();
+			}
+
 			// A toggle's ON-only line travels only when one was declared.
 			if ( $control && '' !== $control->get_description_on() ) {
 				$entry['description_on'] = $control->get_description_on();

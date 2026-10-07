@@ -77,6 +77,16 @@ WooCommerce — logging through the WC logger, HPOS declaration, Blocks handler 
 6. Tests: unit with Brain Monkey/Mockery, one integration test that boots the REAL entry path.
    See [layout-and-testing.md](layout-and-testing.md).
 
+## Settings controls
+
+Textarea height is an optional `register_control()` argument: use
+`$this->register_control( 'address', \Woodev_Control::TYPE_TEXTAREA, [ 'rows' => 3 ] );`
+for a three-line address field. `rows` is a positive integer, applies only to textarea controls,
+and travels through `Field_Schema` to the React settings page and wizard. Omit it to keep the
+existing renderer default; nonpositive values also use that default. The separate classic helper
+accepts the row count as its third argument: `textarea( $id, $classes, 3 )`, with 10 rows when omitted.
+For the rest of the settings API, read [settings.md](settings.md).
+
 ## Hard rules (each one cost a session)
 
 - **A loader definition holds literals only.** No framework class constant (not even

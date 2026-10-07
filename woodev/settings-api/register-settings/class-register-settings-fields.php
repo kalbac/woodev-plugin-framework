@@ -87,9 +87,16 @@ if ( ! class_exists( 'Woodev_Register_Settings_Fields' ) ) :
 		}
 
 		/**
-		 * Function to output textarea inputs
+		 * Function to output textarea inputs.
+		 *
+		 * @since 1.0.0
+		 * @since 2.0.2 Added the optional row count.
+		 * @param string      $id setting ID.
+		 * @param string|null $classes optional CSS classes.
+		 * @param int         $rows positive row count; defaults to the existing 10 rows.
+		 * @return void
 		 */
-		public function textarea( $id, $classes = null ) {
+		public function textarea( string $id, ?string $classes = null, int $rows = 10 ): void {
 			if ( null !== $this->get_setting_value( $id ) ) {
 				$value = $this->get_setting_value( $id );
 			} else {
@@ -101,8 +108,8 @@ if ( ! class_exists( 'Woodev_Register_Settings_Fields' ) ) :
 				$classes = 'large-text';
 			}
 
-			// Ignoring size at the moment.
-			$html = '<textarea class="' . esc_attr( $classes ) . '" cols="50" rows="10" id="' . esc_attr( $this->get_setting_id( $id ) ) . '" ' .
+			$rows = $rows > 0 ? $rows : 10;
+			$html = '<textarea class="' . esc_attr( $classes ) . '" cols="50" rows="' . esc_attr( (string) $rows ) . '" id="' . esc_attr( $this->get_setting_id( $id ) ) . '" ' .
 					'name="' . esc_attr( $this->get_setting_id( $id ) ) . '">' . esc_textarea( $value ) . '</textarea>';
 
 			echo $html;
