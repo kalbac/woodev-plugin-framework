@@ -16,8 +16,10 @@ Three independent facts (WooCommerce 11.1.2):
    `payment_method_selected`; it never triggers `update_checkout`, and `update_totals_on_change` is not on the gateway
    radios. `WC_AJAX::update_order_review()` (`includes/class-wc-ajax.php:420`) copies `$_POST['payment_method']` into
    `chosen_payment_method` — but only when something else triggered the update.
-3. **Blocks:** the session's `chosen_payment_method` is written only by the checkout POST
-   (`StoreApi/Utilities/CheckoutTrait.php:182`, `Routes/V1/Checkout.php:472`), never when the shopper changes gateway.
+3. **Blocks:** switching the gateway in the client sends nothing that recalculates shipping. The session's
+   `chosen_payment_method` is written by the checkout routes (`Routes/V1/Checkout.php:472` via
+   `update_session_from_request()`, also on the update/PATCH path at `:382`/`:404`; the order itself at
+   `StoreApi/Utilities/CheckoutTrait.php:182`), never by the gateway change on its own.
 
 ## Fix
 

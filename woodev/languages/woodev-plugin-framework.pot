@@ -5523,3 +5523,15 @@ msgstr ""
 #: shipping-method/settings/class-status-sync-tool.php:134
 msgid "Статусы обновлены."
 msgstr ""
+
+#: shipping-method/class-shipping-method.php:310
+msgid "Оплата с наценкой"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:316
+msgid "Наценка на доставку применяется только если покупатель выбрал один из этих способов оплаты. Оставьте поле пустым, чтобы наценка применялась всегда."
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:318
+msgid "Любой способ оплаты"
+msgstr ""

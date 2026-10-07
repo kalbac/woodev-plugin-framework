@@ -262,8 +262,9 @@ if ( ! class_exists( __NAMESPACE__ . '\Fee_Payments' ) ) :
 		/**
 		 * Block checkout: the Store API command that tells the server which payment method is chosen.
 		 *
-		 * The blocks only send the method with the order POST, and the server's session would hold
-		 * whatever the last classic order form or order left there. `extensionCartUpdate()` runs this
+		 * Switching the gateway in the blocks sends nothing that recalculates shipping (the checkout
+		 * routes write the method to the session, never the gateway change on its own), so the server's
+		 * session can hold whatever an earlier request left there. `extensionCartUpdate()` runs this
 		 * callback and WooCommerce then recalculates the cart — shipping included — before it replies.
 		 *
 		 * @internal Hooked on `woocommerce_blocks_loaded`.

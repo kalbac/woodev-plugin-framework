@@ -3,8 +3,8 @@
  * recalculated (#1144).
  *
  * WooCommerce's Checkout block keeps the active payment method in the client's `wc/store/payment`
- * and sends it to the server only with the order POST — the server's session, which prices the cart,
- * still holds whatever an earlier visit left there. `extensionCartUpdate()` is the supported way to
+ * and switching it sends nothing that recalculates shipping — the server's session, which prices the
+ * cart, can still hold whatever an earlier request left there. `extensionCartUpdate()` is the supported way to
  * hand the server a value mid-checkout: it runs the namespace's `woocommerce_store_api_register_update_callback`
  * callback (`Fee_Payments::update_cart()`), and WooCommerce then recalculates the cart — shipping
  * included — and replaces the cart store with the reply (`CartExtensionsSchema::get_item_response()`).
