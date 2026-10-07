@@ -5423,3 +5423,15 @@ msgstr "Стоимость"
 #: src/components/boxes-table.tsx
 msgid "Использовать"
 msgstr "Использовать"
+
+#: src/components/carrier-boxes-table.tsx
+msgid "Размеры, см"
+msgstr "Размеры, см"
+
+#: src/components/carrier-boxes-table.tsx
+msgid "Вкл"
+msgstr "Вкл"
+
+#: src/components/boxes-table.tsx src/components/carrier-boxes-table.tsx
+msgid "Стоимость: число или N%, например 2%."
+msgstr "Стоимость: число или N%, например 2%."

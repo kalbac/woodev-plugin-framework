@@ -109,6 +109,10 @@ final class Field_Schema {
 				$entry['weight_factor']    = (float) wc_get_weight( 1, 'kg' );
 			}
 
+			if ( $control && [] !== $control->get_box_preset() ) {
+				$entry['box_preset'] = $control->get_box_preset();
+			}
+
 			$disabled_if = $setting->get_disabled_if_conditions();
 			if ( ! empty( $disabled_if ) ) {
 				$entry['disabled_if'] = $disabled_if;

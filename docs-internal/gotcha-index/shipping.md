@@ -12,6 +12,8 @@
 
 - [shipping/rate-cache] **Percentage box costs require per-line merchandise values in cache identity; an unchanged package total does not guarantee an unchanged parcel surcharge.** → [percentage-box-cost-cache-needs-line-values](../gotchas/percentage-box-cost-cache-needs-line-values.md) (s158)
 
+- [shipping/packaging] **Carrier presets use fixed cm/kg; converting them as store units silently changes carton dimensions on mm/g stores.** → [carrier-box-presets-need-fixed-units](../gotchas/carrier-box-presets-need-fixed-units.md) (s158)
+
 ## Related
 
 - [../GOTCHAS.md](../GOTCHAS.md) — the topic map

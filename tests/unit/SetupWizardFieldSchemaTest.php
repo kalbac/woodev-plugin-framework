@@ -86,6 +86,7 @@ class SetupWizardFieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'get_step' )->andReturn( 1.0 );
 		$control->shouldReceive( 'is_disabled' )->andReturn( false )->byDefault();
 		$control->shouldReceive( 'get_country' )->andReturn( '' )->byDefault();
+		$control->shouldReceive( 'get_box_preset' )->andReturn( [] )->byDefault();
 		$control->shouldReceive( 'is_native_bounds' )->andReturn( false )->byDefault();
 
 		// Build the setting mock.
@@ -157,6 +158,7 @@ class SetupWizardFieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'get_step' )->andReturn( null );
 		$control->shouldReceive( 'is_disabled' )->andReturn( false )->byDefault();
 		$control->shouldReceive( 'get_country' )->andReturn( '' )->byDefault();
+		$control->shouldReceive( 'get_box_preset' )->andReturn( [] )->byDefault();
 		$control->shouldReceive( 'is_native_bounds' )->andReturn( false )->byDefault();
 
 		$setting = Mockery::mock( 'Woodev_Setting' );

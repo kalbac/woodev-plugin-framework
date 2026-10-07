@@ -5438,3 +5438,15 @@ msgstr ""
 #: src/components/boxes-table.tsx
 msgid "Использовать"
 msgstr ""
+
+#: src/components/carrier-boxes-table.tsx
+msgid "Размеры, см"
+msgstr ""
+
+#: src/components/carrier-boxes-table.tsx
+msgid "Вкл"
+msgstr ""
+
+#: src/components/boxes-table.tsx src/components/carrier-boxes-table.tsx
+msgid "Стоимость: число или N%, например 2%."
+msgstr ""

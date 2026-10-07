@@ -213,15 +213,17 @@ Self-contained shipping box-packing algorithm. Implement `Woodev_Packer_Item_Int
 `Woodev_Packer_Dispatcher::pack()` routes four algorithms — `virtual`, `separately`, `single` and `boxes`
 (`Woodev_Packer_Boxes`, #1138). Shipping methods combine enabled **store boxes** («Доставка» →
 «Упаковка», `Boxes_Settings`, option `woodev_boxes_boxes`, in store units) with enabled presets of
-only their own carrier (`Shipping_Plugin::get_box_presets()`, `Packaging_Settings`). Store boxes
-win whenever they fit a remaining item. The WC dispatcher alone reads the store list when none
-is passed. Its optional fourth argument chooses `single` or `separately` for leftovers.
+only their own carrier (`Shipping_Plugin::get_box_presets()`, `Packaging_Settings`). Carrier presets
+use fixed cm/kg units. Selection maximises packed units to reduce parcels; store boxes win on equal
+fill, followed by the existing smallest-volume tie-break. The WC dispatcher alone reads the store
+list when none is passed. Its optional fourth argument chooses `single` or `separately` for leftovers.
 Every `Woodev_Packer_Package_Result` reports source item allocation (`get_items()`: cart-item key /
 order-item id, product id, quantity), box id, and origin (`store`, `carrier`, or empty). Export
 retains the same item-allocation contract.
 
-`Packaging` converts carrier declarations to packer cm/kg, computes per-parcel amount/percentage
-costs, and exposes carrier-priced packed boxes as id/count pairs for the carrier's quote request.
+`Packaging` converts store box rows to packer cm/kg and preserves carrier cm/kg declarations. It
+computes per-parcel amount/percentage costs and exposes carrier-priced packed boxes as id/count
+pairs for the carrier's quote request.
 `Shipping_Method::calculate_rate()` adds store/fixed/merchant box surcharges once after the quote;
 carrier-priced presets are never charged again there. Carrier defaults and instance overrides
 cover `packing_algorithm` and `unpacked_algorithm`; stored legacy algorithms remain readable.

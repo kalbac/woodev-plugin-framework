@@ -7,6 +7,7 @@
  * @package woodev-plugin-framework
  */
 
+import CarrierBoxesTable from '../components/carrier-boxes-table';
 import ControlField from '../components/control-field';
 import ConnectionBlock from './connection-block';
 import ToolsBlock from './tools-block';
@@ -42,7 +43,7 @@ export default function SectionView( { providerId, section, tabFields, values, c
 			) }
 			{ Object.keys( section.fields )
 				.filter( ( settingId ) =>
-					isFieldVisible( section.fields[ settingId ], conditionValues || values )
+					! section.fields[ settingId ].box_preset && isFieldVisible( section.fields[ settingId ], conditionValues || values )
 				)
 				.map( ( settingId ) => (
 					<ControlField
@@ -58,6 +59,7 @@ export default function SectionView( { providerId, section, tabFields, values, c
 						showErrors={ showErrors }
 					/>
 				) ) }
+			<CarrierBoxesTable fields={ section.fields } values={ values } onFieldChange={ onFieldChange } serverErrors={ serverErrors } />
 		</div>
 	);
 }

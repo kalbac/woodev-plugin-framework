@@ -31,7 +31,8 @@ Use this skill for a carrier plugin that consumes Woodev Framework v2. Also load
 
 The store keeps its common boxes in «Доставка» → «Упаковка» (`woodev_boxes_boxes`). Never duplicate
 that list inside a carrier. In `Shipping_Plugin`, override `get_box_presets()` to declare preset
-boxes in **store units**, with stable string `id`, `name`, positive `length`/`width`/`height`, optional
+boxes in **fixed centimetres (cm) and kilograms (kg)**, with stable string `id`, `name`, positive
+`length`/`width`/`height`, optional
 `max_weight`/`box_weight` (zero means unlimited/no own weight), and `cost_mode`:
 
 - `carrier`: the merchant can toggle «Учитывать стоимость»; pass the packed id/count list to your
@@ -42,7 +43,8 @@ boxes in **store units**, with stable string `id`, `name`, positive `length`/`wi
 
 `uses_boxes()` defaults to true when presets are declared. Override it to true if the carrier
 uses only store boxes and still needs carrier packing defaults. A carrier declaring neither gets
-no packaging section. Each `Shipping_Method` that packs must also declare `FEATURE_BOX_PACKING`
+no packaging section; its method instances offer explicit packing choices without
+«Как в настройках плагина». Each `Shipping_Method` that packs must also declare `FEATURE_BOX_PACKING`
 in its constructor before the parent constructor; the realistic courier fixture shows this.
 
 ```php
@@ -58,6 +60,10 @@ $boxes = \Woodev\Framework\Shipping\Packaging::get_carrier_boxes( $packed );
 // Return the carrier quote; the framework adds store/fixed/merchant box costs once.
 ```
 
+Store/fixed/merchant box surcharges also apply when the carrier makes the delivery rate free.
+Carrier dimensions and weights are independent of the store units; the framework converts store
+box rows and product measurements to cm/kg for packing. Packed parcel getters also return cm/kg.
+
 Carrier settings live in `woodev_{underscored plugin id}_packaging_*`: `packing_algorithm`,
 `unpacked_algorithm`, and `box_{stable id}_{enabled|charge|cost}`. Preset boxes start disabled.
 `fixed` dimensions and costs always come from the carrier declaration. Settings are appended to
@@ -69,6 +75,7 @@ cache identity: it includes box declarations, toggles, costs, effective leftover
 
 Packed parcels retain `get_items()` (source key, product id, quantity). `get_box_id()` and
 `get_box_origin()` identify their chosen box; origin is `store`, `carrier`, or empty for unboxed
-parcels. Enabled store boxes win whenever they fit a remaining item, independently of cost.
+parcels. Box selection maximises packed units to reduce parcel count; on equal fill, store boxes
+win over carrier boxes, independently of cost.
 Leftovers use the existing single-box or separate-item mechanism. `pack_order()` uses the same
 policy as checkout; carrier order export should continue consuming those allocations.

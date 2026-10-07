@@ -870,7 +870,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		}
 
 		/**
-		 * Declares carrier presets in store units. Override to supply stable ids and cost modes.
+		 * Declares carrier presets in centimetres and kilograms. Override to supply stable ids and cost modes.
 		 *
 		 * @since 2.0.2
 		 * @return array<int,array>

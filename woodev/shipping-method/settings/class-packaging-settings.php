@@ -23,7 +23,7 @@ class Packaging_Settings extends \Woodev_Abstract_Settings {
 	/**
 	 * @since 2.0.2
 	 * @param string $plugin_id carrier id.
-	 * @param array  $presets preset declarations in store units.
+	 * @param array  $presets preset declarations in centimetres and kilograms.
 	 */
 	public function __construct( string $plugin_id, array $presets ) {
 		$this->plugin_id = $plugin_id;
@@ -202,12 +202,13 @@ class Packaging_Settings extends \Woodev_Abstract_Settings {
 				$prefix . '_enabled',
 				\Woodev_Control::TYPE_TOGGLE,
 				[
+					'box_preset' => $preset + [ 'field' => 'enabled' ],
 					'tooltip' => sprintf(
 					/* translators: 1: length, 2: width, 3: height in cm */
 						__( 'Размеры: %1$s × %2$s × %3$s см. Использовать, если подходящей упаковки магазина нет.', 'woodev-plugin-framework' ),
-						wc_get_dimension( $preset['length'], 'cm' ),
-						wc_get_dimension( $preset['width'], 'cm' ),
-						wc_get_dimension( $preset['height'], 'cm' )
+						$preset['length'],
+						$preset['width'],
+						$preset['height']
 					),
 				]
 			);
@@ -220,7 +221,14 @@ class Packaging_Settings extends \Woodev_Abstract_Settings {
 						'default' => true,
 					]
 				);
-				$this->register_control( $prefix . '_charge', \Woodev_Control::TYPE_TOGGLE, [ 'tooltip' => __( 'Перевозчик включит стоимость этой упаковки в расчёт доставки.', 'woodev-plugin-framework' ) ] );
+				$this->register_control(
+					$prefix . '_charge',
+					\Woodev_Control::TYPE_TOGGLE,
+					[
+						'box_preset' => $preset + [ 'field' => 'charge' ],
+						'tooltip' => __( 'Перевозчик включит стоимость этой упаковки в расчёт доставки.', 'woodev-plugin-framework' ),
+					]
+				);
 			} else {
 				$this->register_setting(
 					$prefix . '_cost',
@@ -235,6 +243,7 @@ class Packaging_Settings extends \Woodev_Abstract_Settings {
 					$prefix . '_cost',
 					\Woodev_Control::TYPE_TEXT,
 					[
+						'box_preset' => $preset + [ 'field' => 'cost' ],
 						'disabled' => 'fixed' === $preset['cost_mode'],
 						'tooltip' => __( 'Сумма за одну коробку или процент от стоимости товаров в ней, например 2%.', 'woodev-plugin-framework' ),
 					]

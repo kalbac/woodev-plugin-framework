@@ -36,12 +36,17 @@ export function validateBoxRow( row: BoxRow ): string | null {
 	if ( row.slice( 4, 6 ).some( ( cell ) => cell.trim() && ( ! Number.isFinite( number( cell ) ) || number( cell ) < 0 ) ) ) {
 		return __( 'Вес должен быть числом не меньше нуля.', 'woodev-plugin-framework' );
 	}
-	const cost = row[ 6 ].trim().replace( /%$/, '' );
-	if ( row[ 6 ].trim() && ( ! cost || ! Number.isFinite( number( cost ) ) || number( cost ) < 0 ) ) {
-		return __( 'Стоимость должна быть суммой не меньше нуля или процентом, например 2%.', 'woodev-plugin-framework' );
-	}
+	const costError = validateBoxCost( row[ 6 ] );
+	if ( costError ) { return costError; }
 	if ( ! [ 'yes', 'no' ].includes( row[ 7 ] ) ) { return __( 'Неверное значение.', 'woodev-plugin-framework' ); }
 	return null;
+}
+
+export function validateBoxCost( value: unknown ): string | null {
+	if ( typeof value !== 'string' ) { return __( 'Неверное значение.', 'woodev-plugin-framework' ); }
+	const cost = value.trim().replace( /%$/, '' );
+	return value.trim() && ( ! cost || ! Number.isFinite( number( cost ) ) || number( cost ) < 0 )
+		? __( 'Стоимость должна быть суммой не меньше нуля или процентом, например 2%.', 'woodev-plugin-framework' ) : null;
 }
 
 export function validateBoxesText( value: unknown ): string | null {
@@ -83,7 +88,7 @@ export default function BoxesTable( { value, onChange, disabled = false, dimensi
 					<tbody>{ rows.map( ( row, index ) => (
 						<tr key={ index }>{ row.map( ( cell, column ) => (
 							<td key={ column }>
-								{ column === 7 ? <ToggleControl __nextHasNoMarginBottom label={ `${ headers[ column ] }, ${ index + 1 }` } checked={ cell === 'yes' } disabled={ disabled } onChange={ ( checked ) => { const updated = rows.map( ( r ) => [ ...r ] as BoxRow ); updated[ index ][ column ] = checked ? 'yes' : 'no'; change( updated ); } } /> : <TextControl __nextHasNoMarginBottom __next40pxDefaultSize hideLabelFromVision
+								{ column === 7 ? <ToggleControl __nextHasNoMarginBottom label="" aria-label={ `${ headers[ column ] }, ${ row[ 0 ] || index + 1 }` } checked={ cell === 'yes' } disabled={ disabled } onChange={ ( checked ) => { const updated = rows.map( ( r ) => [ ...r ] as BoxRow ); updated[ index ][ column ] = checked ? 'yes' : 'no'; change( updated ); } } /> : <TextControl __nextHasNoMarginBottom __next40pxDefaultSize hideLabelFromVision
 									label={ `${ headers[ column ] }, ${ index + 1 }` } value={ cell } disabled={ disabled }
 									onChange={ ( next ) => { const updated = rows.map( ( r ) => [ ...r ] as BoxRow ); updated[ index ][ column ] = next; change( updated ); } } /> }
 								{ column === 0 && validateBoxRow( row ) && <div className="woodev-field__error" role="alert">{ validateBoxRow( row ) }</div> }
@@ -92,6 +97,7 @@ export default function BoxesTable( { value, onChange, disabled = false, dimensi
 					) ) }</tbody>
 				</table>
 			</div>
+			<p>{ __( 'Стоимость: число или N%, например 2%.', 'woodev-plugin-framework' ) }</p>
 			<Button variant="secondary" disabled={ disabled } onClick={ () => change( [ ...rows, emptyRow() ] ) }>{ __( 'Добавить упаковку', 'woodev-plugin-framework' ) }</Button>
 		</div>
 	);

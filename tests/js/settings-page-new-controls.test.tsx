@@ -6,7 +6,8 @@ import BoxesTable, { parseBoxRows, serializeBoxRows, validateBoxesText } from '.
 import SearchSelectField from '../../src/components/search-select-field';
 import ControlField from '../../src/components/control-field';
 import { buildSavePayload, validatableFields } from '../../src/settings-page/app';
-import { evaluateConditions, isFieldDisabled } from '../../src/components/validate';
+import SectionView from '../../src/settings-page/section-view';
+import { evaluateConditions, isFieldDisabled, validateField } from '../../src/components/validate';
 
 jest.mock( '@wordpress/api-fetch', () => ( { __esModule: true, default: jest.fn() } ) );
 const fetchMock = apiFetch as jest.Mock;
@@ -128,24 +129,55 @@ test( 'a disabled search-select cannot open and an unknown saved value has no in
 
 test( 'store table preserves free enabled legacy boxes and edits monetary cost and enabled', () => {
 	render( <BoxesForm initial="Old; 10; 10; 10; 0; 0" /> );
-	expect( screen.getByRole( 'checkbox', { name: 'Использовать, 1' } ) ).toBeChecked();
+	expect( screen.getByRole( 'checkbox', { name: 'Использовать, Old' } ) ).toBeChecked();
 	fireEvent.change( screen.getByRole( 'textbox', { name: 'Стоимость, 1' } ), { target: { value: '2%' } } );
-	fireEvent.click( screen.getByRole( 'checkbox', { name: 'Использовать, 1' } ) );
+	fireEvent.click( screen.getByRole( 'checkbox', { name: 'Использовать, Old' } ) );
 	expect( screen.getByTestId( 'saved' ) ).toHaveTextContent( 'Old; 10; 10; 10; 0; 0; 2%; no' );
 	expect( validateBoxesText( 'Old; 10; 10; 10; 0; 0; -1; yes' ) ).toBeTruthy();
 	expect( validateBoxesText( 'Old; 10; 10; 10; 0; 0; 2%; no' ) ).toBeNull();
 } );
 
-test( 'carrier preset block renders enabled, carrier charge, fixed read-only and merchant cost controls', () => {
-	const fields = [
-		{ name: 'Коробка M', type: 'boolean', controlType: 'toggle', value: false },
-		{ name: 'Учитывать стоимость', type: 'boolean', controlType: 'toggle', value: true },
-		{ name: 'Стоимость M', type: 'string', controlType: 'text', value: '7', disabled: true },
-		{ name: 'Стоимость L', type: 'string', controlType: 'text', value: '2%' },
-	];
-	render( <section aria-label="Упаковка">{ fields.map( ( schema ) => <ControlField key={ schema.name } schema={ schema } value={ schema.value } onChange={ jest.fn() } /> ) }</section> );
-	expect( screen.getAllByRole( 'checkbox' )[ 0 ] ).not.toBeChecked();
-	expect( screen.getAllByRole( 'checkbox' )[ 1 ] ).toBeChecked();
-	expect( screen.getAllByRole( 'textbox' )[ 0 ] ).toBeDisabled();
-	expect( screen.getAllByRole( 'textbox' )[ 1 ] ).toBeEnabled();
+
+test( 'carrier presets render one named table, preserve scalar keys and expose each cost mode', () => {
+	const fields: Record<string, any> = { packing_algorithm: { name: 'Способ упаковки', controlType: 'select', type: 'string', value: 'boxes', options: { boxes: 'Коробки' } } };
+	for ( const [ id, name, mode ] of [ [ 'M', 'Коробка M', 'carrier' ], [ 'F', 'Коробка F', 'fixed' ], [ 'L', 'Коробка L', 'merchant' ] ] ) {
+		const preset = { id, name, cost_mode: mode, length: 30, width: 20, height: 15, max_weight: 20, box_weight: 0.2 };
+		fields[ 'box_' + id + '_enabled' ] = { name, value: false, controlType: 'toggle', box_preset: { ...preset, field: 'enabled' } };
+		const role = mode === 'carrier' ? 'charge' : 'cost';
+		fields[ 'box_' + id + '_' + role ] = { name: 'Стоимость', value: mode === 'carrier' ? true : mode === 'fixed' ? '7' : '2%', controlType: mode === 'carrier' ? 'toggle' : 'text', disabled: mode === 'fixed', box_preset: { ...preset, field: role } };
+	}
+	const changed = jest.fn();
+	function Form() {
+		const [ values, setValues ] = useState<Record<string, string | boolean>>( {} );
+		return <SectionView section={ { fields } } values={ values } onFieldChange={ ( id, value ) => { changed( id, value ); setValues( ( prev ) => ( { ...prev, [ id ]: value } ) ); } } />;
+	}
+	render( <Form /> );
+	expect( screen.getAllByRole( 'table' ) ).toHaveLength( 1 );
+	expect( screen.getByRole( 'columnheader', { name: 'Размеры, см' } ) ).toBeInTheDocument();
+	expect( screen.getByRole( 'columnheader', { name: 'Вкл' } ) ).toBeInTheDocument();
+	expect( screen.getAllByRole( 'rowheader' ) ).toHaveLength( 3 );
+	expect( screen.getAllByText( '30 × 20 × 15' ) ).toHaveLength( 3 );
+	expect( screen.getByRole( 'textbox', { name: 'Стоимость, Коробка F' } ) ).toHaveValue( '7' );
+	expect( screen.getByRole( 'textbox', { name: 'Стоимость, Коробка F' } ) ).toBeDisabled();
+	expect( screen.getByRole( 'textbox', { name: 'Стоимость, Коробка F' } ) ).toHaveAttribute( 'readonly' );
+	fireEvent.click( screen.getByRole( 'checkbox', { name: 'Использовать, Коробка M' } ) );
+	expect( changed ).toHaveBeenLastCalledWith( 'box_M_enabled', true );
+	fireEvent.click( screen.getByRole( 'checkbox', { name: 'Учитывать стоимость, Коробка M' } ) );
+	expect( changed ).toHaveBeenLastCalledWith( 'box_M_charge', false );
+	fireEvent.change( screen.getByRole( 'textbox', { name: 'Стоимость, Коробка L' } ), { target: { value: '5%' } } );
+	expect( changed ).toHaveBeenLastCalledWith( 'box_L_cost', '5%' );
+	expect( screen.getByText( 'Стоимость: число или N%, например 2%.' ) ).toBeInTheDocument();
+	expect( screen.queryByText( 'Учитывать стоимость, Коробка M' ) ).toBeNull();
+	fireEvent.change( screen.getByRole( 'textbox', { name: 'Стоимость, Коробка L' } ), { target: { value: '-1' } } );
+	expect( screen.getByRole( 'alert' ) ).toHaveTextContent( 'Стоимость должна быть' );
+	expect( validateField( fields.box_L_cost, '-1', true ) ).toBeTruthy();
+	expect( validateField( fields.box_L_cost, '5%', true ) ).toBeNull();
+	expect( buildSavePayload( fields, { box_M_enabled: true, box_M_charge: false, box_L_cost: '5%', box_F_cost: '999' } ) ).toEqual( { box_M_enabled: true, box_M_charge: false, box_L_cost: '5%' } );
+} );
+
+test( 'store cost syntax hint is visible and row toggle labels are only accessible', () => {
+	render( <BoxesForm initial="Old; 10; 10; 10; 0; 0" /> );
+	expect( screen.getByRole( 'checkbox', { name: 'Использовать, Old' } ) ).toBeChecked();
+	expect( screen.queryByText( 'Использовать, Old' ) ).toBeNull();
+	expect( screen.getByText( 'Стоимость: число или N%, например 2%.' ) ).toBeInTheDocument();
 } );

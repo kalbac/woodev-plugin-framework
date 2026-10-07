@@ -17,7 +17,7 @@ final class Packaging {
 
 	/**
 	 * @since 2.0.2
-	 * @param array $declarations box rows in store units.
+	 * @param array $declarations store rows in store units; carrier presets in cm/kg.
 	 * @return \Woodev_Packer_Box_Implementation[]
 	 */
 	public static function to_boxes( array $declarations ): array {
@@ -26,12 +26,13 @@ final class Packaging {
 			if ( ! $box['enabled'] ) {
 				continue;
 			}
+			$is_carrier = 'carrier' === ( $box['origin'] ?? '' );
 			$boxes[] = new \Woodev_Packer_Box_Implementation(
-				(float) wc_get_dimension( $box['length'], 'cm' ),
-				(float) wc_get_dimension( $box['width'], 'cm' ),
-				(float) wc_get_dimension( $box['height'], 'cm' ),
-				(float) wc_get_weight( $box['box_weight'], 'kg' ),
-				$box['max_weight'] > 0 ? (float) wc_get_weight( $box['max_weight'], 'kg' ) : null,
+				(float) ( $is_carrier ? $box['length'] : wc_get_dimension( $box['length'], 'cm' ) ),
+				(float) ( $is_carrier ? $box['width'] : wc_get_dimension( $box['width'], 'cm' ) ),
+				(float) ( $is_carrier ? $box['height'] : wc_get_dimension( $box['height'], 'cm' ) ),
+				(float) ( $is_carrier ? $box['box_weight'] : wc_get_weight( $box['box_weight'], 'kg' ) ),
+				$box['max_weight'] > 0 ? (float) ( $is_carrier ? $box['max_weight'] : wc_get_weight( $box['max_weight'], 'kg' ) ) : null,
 				$box['id'],
 				$box['name'],
 				[

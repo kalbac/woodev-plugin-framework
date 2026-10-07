@@ -15,6 +15,7 @@ require_once __DIR__ . '/ShippingMethodBoxPackingTest.php';
 
 class Packaging_Test_Method extends \ShippingMethodBoxPackingTest_Method {
 	public Shipping_Plugin $owner;
+	public array $instance_form_fields = [];
 	public ?Shipping_Rate $quote = null;
 	protected function get_plugin(): Shipping_Plugin { return $this->owner; }
 	public function get_id(): string { return 'packaging_test'; }
@@ -45,10 +46,11 @@ final class PackagingTest extends TestCase {
 	private function preset( string $mode = 'carrier', string $cost = '' ): array {
 		return [ 'id' => 'CARTON_M', 'name' => 'M', 'length' => 10, 'width' => 10, 'height' => 10, 'max_weight' => 1, 'box_weight' => 0, 'cost_mode' => $mode, 'cost' => $cost ];
 	}
-	private function method( array $presets = [] ): Packaging_Test_Method {
+	private function method( array $presets = [], bool $uses_boxes = true ): Packaging_Test_Method {
 		$settings = new Packaging_Settings( 'carrier', $presets );
 		$plugin = Mockery::mock( Shipping_Plugin::class );
 		$plugin->shouldReceive( 'get_packaging_settings' )->andReturn( $settings );
+		$plugin->shouldReceive( 'uses_boxes' )->andReturn( $uses_boxes );
 		$plugin->shouldReceive( 'get_pickup_handler' )->andReturnNull();
 		$method = ( new \ReflectionClass( Packaging_Test_Method::class ) )->newInstanceWithoutConstructor();
 		$method->owner = $plugin;
@@ -79,12 +81,41 @@ final class PackagingTest extends TestCase {
 		$this->assertSame( 2, $result->get_package_count() );
 		$this->assertSame( '', $result->get_packages()[0]->get_box_origin() );
 	}
-	public function test_store_box_wins_even_when_carrier_box_packs_more_and_costs_less(): void {
+	public function test_carrier_box_packing_the_whole_cart_beats_two_store_parcels(): void {
 		$carrier = Packaging::to_boxes( [ array_merge( $this->preset( 'fixed', '1' ), [ 'max_weight' => 10 ] ) + [ 'enabled' => true, 'origin' => 'carrier' ] ] )[0];
 		$store = new \Woodev_Packer_Box_Implementation( 5, 5, 5, 0, 1, 'store', 'Store', [ 'origin' => 'store', 'cost' => '100' ] );
 		$result = \Woodev_Packer_Dispatcher::pack( 'boxes', [ $this->item() ], [ $carrier, $store ] );
-		$this->assertSame( [ 'store', 'store' ], array_map( static fn( $p ) => $p->get_box_origin(), $result->get_packages() ) );
-		$this->assertSame( 200.0, Packaging::get_cost( $result, [] ) );
+		$this->assertSame( 1, $result->get_package_count() );
+		$this->assertSame( 'carrier', $result->get_packages()[0]->get_box_origin() );
+		$this->assertSame( 1.0, Packaging::get_cost( $result, [] ) );
+	}
+
+	public function test_equal_fill_prefers_store_box_even_when_carrier_is_smaller_and_cheaper(): void {
+		$carrier = new \Woodev_Packer_Box_Implementation( 5, 5, 5, 0, 1, 'carrier', 'Carrier', [ 'origin' => 'carrier', 'cost' => '1' ] );
+		$store = new \Woodev_Packer_Box_Implementation( 10, 10, 10, 0, 1, 'store', 'Store', [ 'origin' => 'store', 'cost' => '100' ] );
+		foreach ( [ [ $carrier, $store ], [ $store, $carrier ] ] as $boxes ) {
+			$result = \Woodev_Packer_Dispatcher::pack( 'boxes', [ $this->item( 1 ) ], $boxes );
+			$this->assertSame( 1, $result->get_package_count() );
+			$this->assertSame( 'store', $result->get_packages()[0]->get_box_origin() );
+		}
+	}
+
+	public function test_carrier_cm_kg_are_fixed_while_store_rows_convert_from_mm_g(): void {
+		Functions\when( 'wc_get_dimension' )->alias( static fn( $value, $to ) => 'cm' === $to ? $value / 10 : $value * 10 );
+		Functions\when( 'wc_get_weight' )->alias( static fn( $value, $to ) => 'kg' === $to ? $value / 1000 : $value * 1000 );
+		$carrier = $this->preset() + [ 'enabled' => true, 'origin' => 'carrier' ];
+		$carrier['box_weight'] = 0.2;
+		$store = array_merge( $carrier, [ 'origin' => 'store', 'length' => 100, 'width' => 100, 'height' => 100, 'max_weight' => 1000, 'box_weight' => 200 ] );
+		foreach ( [ $carrier, $store ] as $row ) {
+			$box = Packaging::to_boxes( [ $row ] )[0];
+			$this->assertSame( 10.0, $box->get_length() );
+			$this->assertSame( 10.0, $box->get_width() );
+			$this->assertSame( 10.0, $box->get_height() );
+			$this->assertSame( 1.0, $box->get_max_weight() );
+			$this->assertSame( 0.2, $box->get_weight() );
+		}
+		$settings = new Packaging_Settings( 'carrier', [ $carrier ] );
+		$this->assertStringContainsString( '10 × 10 × 10 см', $settings->get_setting( 'box_CARTON_M_enabled' )->get_control()->get_tooltip() );
 	}
 	public function test_leftovers_single_preserves_allocations_and_separately_is_default(): void {
 		$items = [ $this->item( 2, 50 ), new \Woodev_Packer_Input_Item( 60, 5, 5, 2, 1, 'other', 6 ) ];
@@ -204,6 +235,30 @@ final class PackagingTest extends TestCase {
 		$this->assertArrayHasKey( 'virtual', $settings->get_setting( 'packing_algorithm' )->get_options() );
 	}
 
+
+	public function test_instance_without_plugin_packaging_section_offers_explicit_defaults(): void {
+		$method = $this->method( [], false );
+		$method->init_form_fields();
+		foreach ( [ 'packing_algorithm', 'unpacked_algorithm' ] as $key ) {
+			$this->assertArrayNotHasKey( 'default', $method->instance_form_fields[ $key ]['options'] );
+			$this->assertSame( 'separately', $method->instance_form_fields[ $key ]['default'] );
+		}
+		$this->assertSame( 'separately', $this->invoke( $method, 'get_packing_algorithm' ) );
+		$method->stored_options['packing_algorithm'] = 'virtual';
+		$this->assertSame( 'virtual', $this->invoke( $method, 'get_packing_algorithm' ) );
+	}
+
+	public function test_preset_metadata_survives_the_field_schema_without_changing_setting_keys(): void {
+		$presets = [ $this->preset( 'fixed', '7' ), array_merge( $this->preset(), [ 'id' => 'SECOND', 'name' => 'Second' ] ) ];
+		$settings = new Packaging_Settings( 'carrier', $presets );
+		$composite = new \Woodev\Framework\Settings\Composite_Settings_Handler( 'carrier', [ $settings ] );
+		$schema = \Woodev\Framework\Settings\Field_Schema::from_handler( $composite );
+		$this->assertSame( 'enabled', $schema['box_CARTON_M_enabled']['box_preset']['field'] );
+		$this->assertSame( 'fixed', $schema['box_CARTON_M_cost']['box_preset']['cost_mode'] );
+		$this->assertTrue( $schema['box_CARTON_M_cost']['disabled'] );
+		$this->assertSame( 'Second', $schema['box_SECOND_charge']['box_preset']['name'] );
+		$this->assertArrayNotHasKey( 'box_preset', $schema['packing_algorithm'] );
+	}
 	/**
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled

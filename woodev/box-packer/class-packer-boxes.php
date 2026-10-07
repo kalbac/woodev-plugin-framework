@@ -51,23 +51,19 @@ if ( ! class_exists( 'Woodev_Packer_Boxes' ) ) :
 			foreach ( $this->boxes as $box ) {
 				$packages[] = new Woodev_Box_Packer_Packed_Box( $box, $this->items );
 			}
-			// A store box that fits any remaining unit wins over every carrier box.
-			$store_packages = array_filter(
-				$packages,
-				static function ( Woodev_Box_Packer_Packed_Box $package ): bool {
-					$data = $package->get_box()->get_internal_data();
-					return ( ! is_array( $data ) || 'carrier' !== ( $data['origin'] ?? '' ) ) && $package->get_success_percent() > 0;
-				}
-			);
-			$packages = $store_packages ?: $packages;
-			// Find the best success rate
-			$best_percent = 0;
+			// Maximise packed units first; on equal fill prefer store boxes, then the smallest volume.
+			$best_percent = -1;
 			$best_package = null;
+			$best_is_carrier = false;
 			/** @var Woodev_Box_Packer_Packed_Box $package */
 			foreach ( $packages as $package ) {
-				if ( $package->get_success_percent() >= $best_percent ) {
-					$best_percent = $package->get_success_percent();
+				$data = $package->get_box()->get_internal_data();
+				$is_carrier = is_array( $data ) && 'carrier' === ( $data['origin'] ?? '' );
+				$percent = $package->get_success_percent();
+				if ( $percent > $best_percent || ( $percent === $best_percent && ( $best_is_carrier || ! $is_carrier ) ) ) {
+					$best_percent = $percent;
 					$best_package = $package;
+					$best_is_carrier = $is_carrier;
 				}
 			}
 

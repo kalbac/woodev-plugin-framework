@@ -271,19 +271,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 
 			if ( $this->supports_box_packing() ) {
 
+				$inherits_packing = $this->get_plugin()->uses_boxes();
+				$packing_default = $inherits_packing ? 'default' : 'separately';
+				$inherited_option = $inherits_packing ? [ 'default' => __( 'Как в настройках плагина', 'woodev-plugin-framework' ) ] : [];
 				$this->instance_form_fields['packing_algorithm'] = [
 					'title'    => esc_html__( 'Способ упаковки', 'woodev-plugin-framework' ),
 					'type'     => 'select',
 					'class'    => 'wc-enhanced-select',
-					'default'  => 'default',
-					'options'  => [ 'default' => __( 'Как в настройках плагина', 'woodev-plugin-framework' ) ] + Settings\Packaging_Settings::packing_options(),
+					'default'  => $packing_default,
+					'options'  => $inherited_option + Settings\Packaging_Settings::packing_options(),
 					'desc_tip' => esc_html__( 'How cart items are combined into parcels before rate calculation.', 'woodev-plugin-framework' ),
 				];
 				$this->instance_form_fields['unpacked_algorithm'] = [
 					'title' => __( 'Непоместившиеся товары', 'woodev-plugin-framework' ),
 					'type' => 'select',
-					'default' => 'default',
-					'options' => [ 'default' => __( 'Как в настройках плагина', 'woodev-plugin-framework' ) ] + Settings\Packaging_Settings::leftover_options(),
+					'default' => $packing_default,
+					'options' => $inherited_option + Settings\Packaging_Settings::leftover_options(),
 					'desc_tip' => __( 'Как упаковывать товары, которые не поместились в коробки?', 'woodev-plugin-framework' ),
 					'show_if' => [
 						'setting' => 'packing_algorithm',
