@@ -111,6 +111,16 @@ namespace Woodev\Tests\Unit\Shipping {
 
 			$this->reported = [];
 
+			// The once-per-class memo is static: forget it, or any test that built the same class first
+			// (reverse order in CI) leaves nothing to report here.
+			\Closure::bind(
+				static function (): void {
+					self::$method_title_reported = [];
+				},
+				null,
+				Shipping_Method::class
+			)();
+
 			Functions\when( '_doing_it_wrong' )->alias(
 				function ( $function, $message ) {
 					$this->reported[] = (string) $function . ' | ' . (string) $message;
