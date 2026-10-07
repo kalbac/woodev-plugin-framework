@@ -61,7 +61,7 @@ FIXTURES**; the shipping plugin is written later, from scratch, own repo, versio
 
 ✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — no quota consumed; the exhaustion symptom is gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`.
 
-**`main` after s159 (`4b7296e3`, macOS, 07.10.2026):** unit **6253 / 33200** (1 skipped), jest **2963** in **66** suites; integration local **510 / 6576**.
+**`main` after s159 (`c0cd2f02`, macOS, 08.10.2026):** unit **6313 / 33321** (1 skipped), jest **2963** in **66** suites; integration local **510 / 6576**.
 
 **Baselines — macOS laptop, 27.09.2026 (s140)** (the two machines matched to the digit in s136, so
 these are not platform-dependent): unit **4132 / 14586**, 1 skipped, sodium ON; jest **1975** in
