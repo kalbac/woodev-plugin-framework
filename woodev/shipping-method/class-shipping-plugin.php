@@ -1511,8 +1511,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			// add notices about enabled debug logging
 			$this->add_debug_setting_notices();
 
-			// add notices about gateways not being configured
-			$this->add_not_configured_notices();
+			// the "carrier not configured" warning is the base plugin's own (Woodev_Plugin::add_delayed_admin_notices())
 
 			// add a notice when the active Location Provider is not configured
 			// (#375/#377)
@@ -1632,41 +1631,85 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 
 		/**
-		 * Adds notices about plugin not being configured.
+		 * Whether the carrier is configured — the override point for "not configured".
 		 *
-		 * @since 1.5.0
+		 * Default: the carrier integration's own answer
+		 * ({@see Settings\Shipping_Integration::is_configured()}, derived from the credentials it declares);
+		 * a carrier without an integration handler needs no keys and reports `true`. A carrier whose
+		 * settings live elsewhere, or whose rule is richer (a test mode that counts as configured), overrides
+		 * this one method, e.g. `return $this->get_cdek_settings()->is_configured();`.
+		 *
+		 * While it is `false` the base plugin shows its warning notice
+		 * ({@see \Woodev_Plugin::add_not_configured_notice()}) — even with no shipping method added to any
+		 * zone yet, since the carrier's credentials are carrier-level, not per method.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
 		 */
-		protected function add_not_configured_notices() {
+		public function is_configured(): bool {
 
-			if ( ! $this->get_shipping_methods() ) {
-				return;
+			$handler = $this->get_integration_handler();
+
+			return null === $handler || $handler->is_configured();
+		}
+
+		/**
+		 * Whether the carrier's credentials live in its WooCommerce integration rather than in the carrier tab:
+		 * it has an integration handler (the source {@see self::is_configured()} reads by default) and contributes
+		 * nothing to the composite tab through {@see self::get_tab_settings_providers()}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		protected function is_configuration_integration_backed(): bool {
+			return null !== $this->get_integration_handler() && [] === $this->get_tab_settings_providers();
+		}
+
+		/**
+		 * The "not configured" notice links to where the credentials it checks are edited: the carrier's own tab on
+		 * the Woodev settings page (tab id = the plugin id, see {@see self::get_settings_providers()}) when the
+		 * carrier contributes its settings there — the normal case — and the integration's own settings page while
+		 * the configuration is still integration-backed ({@see self::is_configuration_integration_backed()}).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		protected function get_not_configured_notice_url(): string {
+
+			if ( $this->is_configuration_integration_backed() ) {
+				return (string) $this->get_settings_url();
 			}
 
-			foreach ( $this->get_shipping_methods() as $method ) {
+			return admin_url( 'admin.php?page=woodev-settings&tab=' . rawurlencode( $this->get_id() ) );
+		}
 
-				if ( ! $method->is_enabled() ) {
-					continue;
-				}
+		/**
+		 * The capability of the carrier's tab: the first one declared by a contribution of
+		 * {@see self::get_tab_settings_providers()} (that is how the composite tab takes it, see
+		 * {@see self::get_settings_providers()}), else `manage_woocommerce` — a carrier is a WooCommerce plugin.
+		 *
+		 * Read from the contributions, not from the composite tab itself, so this notice check does not build the
+		 * whole tab on every wp-admin page.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		protected function get_not_configured_notice_capability(): string {
 
-				if ( method_exists( $method, 'is_configured' ) && ! $method->is_configured() ) {
+			$declared = null;
 
-					$message = sprintf(
-						/* translators: %1$s - shipping method title, %2$s - opening <a> tag, %3$s - closing </a> tag */
-						__( '%1$s не настроен. Пожалуйста, %2$sзавершите настройку%3$s для начала работы.', 'woodev-plugin-framework' ),
-						$method->get_method_title(),
-						'<a href="' . esc_url( $this->get_settings_url() ) . '">',
-						' &raquo;</a>'
-					);
-
-					$this->get_admin_notice_handler()->add_admin_notice(
-						$message,
-						$method->id . '-not-configured',
-						[
-							'notice_class' => 'notice-warning',
-						]
-					);
+			foreach ( $this->get_tab_settings_providers() as $contribution ) {
+				if ( $contribution instanceof \Woodev\Framework\Settings\Settings_Provider && null !== $contribution->get_declared_capability() ) {
+					$declared = $contribution->get_declared_capability();
+					break;
 				}
 			}
+
+			return \Woodev\Framework\Settings\Settings_Page_Registry::resolve_capability( $declared, true );
 		}
 
 		/**
@@ -1692,16 +1735,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 * Fires only when THIS plugin opted into the Location Provider layer
 		 * ({@see self::needs_location_provider()}) AND an active provider is
 		 * resolved AND that provider's own {@see \Woodev\Framework\Shipping\Location\Location_Provider::is_configured()}
-		 * answers `false` — precedent {@see self::add_not_configured_notices()}
-		 * (`"%1$s не настроен..."`). A provider with ZERO declared fields that
+		 * answers `false` — sibling of the carrier-level {@see self::is_configured()} notice. A provider with ZERO declared fields that
 		 * honestly reports `is_configured() === true` (the plan's `test-list`
 		 * case) never reaches this far — see
 		 * {@see \Woodev\Framework\Shipping\Location\Abstract_Location_Provider::is_configured()}'s
 		 * own docblock for why zero declared fields defaults to `true`.
 		 *
 		 * Deliberately does NOT check {@see self::get_active_method_instances()}
-		 * or `is_enabled()` the way {@see self::add_not_configured_notices()}
-		 * does for a shipping METHOD — the Location Provider layer is a single,
+		 * or `is_enabled()` — the Location Provider layer is a single,
 		 * fleet-wide, STORE-level concern (one active provider per store, per
 		 * {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry}'s
 		 * own class docblock), not a per-method one, so there is no per-instance
@@ -1744,10 +1785,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		/**
 		 * Adds an admin notice when the active Location Provider is not
 		 * configured (#375/#377) — the Location Provider layer's counterpart to
-		 * {@see self::add_not_configured_notices()}'s per-shipping-method notice.
+		 * {@see \Woodev_Plugin::add_not_configured_notice()}'s carrier-level notice.
 		 *
-		 * Dismissible (matching {@see self::add_not_configured_notices()}'s own
-		 * default): an operator who has SEEN the warning and is deliberately
+		 * Dismissible (unlike the carrier-level notice, which clears itself): an operator who has SEEN the warning and is deliberately
 		 * postponing configuration should not be renagged on every admin page
 		 * load — {@see \Woodev_Admin_Notice_Handler::should_display_notice()}
 		 * still forces it back on THIS plugin's own settings page regardless

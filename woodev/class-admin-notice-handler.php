@@ -62,6 +62,9 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 		 *     @type bool $always_show_on_settings If the notice should be forced to display on the
 		 *                                         plugin settings page, regardless of `$dismissible`.
 		 *     @type string $notice_class          Additional classes for the notice.
+		 *     @type string $capability            Capability a user needs to see the notice; defaults to
+		 *                                         `manage_woocommerce`. A notice that belongs to a plugin whose
+		 *                                         settings need another capability passes that one.
 		 * }
 		 * @return void
 		 */
@@ -99,23 +102,25 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 		 *     @type bool $dismissible             If the notice should be dismissible
 		 *     @type bool $always_show_on_settings If the notice should be forced to display on the
 		 *                                         plugin settings page, regardless of `$dismissible`.
+		 *     @type string $capability            Capability the user needs; defaults to `manage_woocommerce`.
 		 * }
 		 * @return bool
 		 */
 		public function should_display_notice( string $message_id, array $params = [] ): bool {
-
-			// bail out if user is not a shop manager
-			if ( ! current_user_can( 'manage_woocommerce' ) ) {
-				return false;
-			}
 
 			$params = wp_parse_args(
 				$params,
 				[
 					'dismissible'             => true,
 					'always_show_on_settings' => true,
+					'capability'              => 'manage_woocommerce',
 				]
 			);
+
+			// bail out if user lacks the capability (a shop manager, unless the notice names another)
+			if ( ! current_user_can( (string) $params['capability'] ) ) {
+				return false;
+			}
 
 			// if the notice is always shown on the settings page, and we're on the settings page
 			if ( $params['always_show_on_settings'] && $this->get_plugin()->is_plugin_settings() ) {

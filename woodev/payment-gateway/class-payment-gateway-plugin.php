@@ -546,6 +546,12 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 
 		/**
 		 * Adds notices about gateways not being configured.
+		 *
+		 * This is the gateway plugin's "not configured" notice, and it deliberately stays instead of the base
+		 * plugin's {@see Woodev_Plugin::is_configured()} notice (which a gateway plugin leaves at its default
+		 * `true`, so the merchant never sees two): it names the exact gateway, links to THAT gateway's settings,
+		 * fires only once the merchant has enabled it (a gateway is off by default and must not nag), skips a
+		 * gateway that inherits another's settings, and also feeds the WooCommerce admin inbox.
 		 */
 		protected function add_gateway_not_configured_notices() {
 

@@ -2,7 +2,7 @@
 /**
  * Unit tests for Shipping_Plugin::location_provider_not_configured_message()
  * decision — the location-provider counterpart to
- * {@see \Woodev\Framework\Shipping\Shipping_Plugin::add_not_configured_notices()}'s
+ * {@see \Woodev\Framework\Shipping\Shipping_Plugin::is_configured()}'s
  * per-shipping-method notice (issue #375/#377).
  *
  * `location_provider_not_configured_notice()` is a PUBLIC, PURE decision
