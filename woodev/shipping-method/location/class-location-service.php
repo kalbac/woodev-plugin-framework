@@ -2876,6 +2876,42 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 			return $levels;
 		}
 
+
+		/**
+		 * Whether the locality CHOOSER can actually operate for one suggest level in
+		 * one country — the single predicate every server-side check that demands a
+		 * chooser pick must ask before it demands one.
+		 *
+		 * The chooser reaches the buyer only when {@see Checkout_Config::build()} /
+		 * {@see Checkout_Config::build_location_config()} emit the `location` block,
+		 * which they do only when {@see self::is_active()} holds, and the client then
+		 * enables a level only where {@see self::get_levels_for_country()} reports
+		 * it (the very same {@see self::provider_for_level()} answer used here). A
+		 * stored field mode (`ajax-select2`) says nothing about either: it survives
+		 * a removed token or a country the provider does not cover, leaving the
+		 * buyer with plain inputs and NO way to select a record. A guard that
+		 * keyed on the stored mode alone would then refuse a city nobody can pick —
+		 * and, running on every checkout submit, block the whole checkout.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string      $level   One of {@see Location_Record::LEVELS}.
+		 * @param string|null $country ISO-3166 alpha-2 country code, or `null`/`''`
+		 *                             for the country-blind answer.
+		 *
+		 * @return bool
+		 *
+		 * @throws \InvalidArgumentException When `$level` is not one of
+		 *                                    {@see Location_Record::LEVELS}.
+		 */
+		public function is_level_chooser_available( string $level, ?string $country = null ): bool {
+			if ( '' === trim( (string) $country ) ) {
+				$country = null;
+			}
+
+			return $this->is_active() && null !== $this->provider_for_level( $level, $country );
+		}
+
 		/**
 		 * Which PROVIDER owns each suggest LEVEL for ONE specific country —
 		 * `region`/`settlement`/`address` => the id of the provider the D15

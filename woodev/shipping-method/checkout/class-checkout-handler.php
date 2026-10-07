@@ -1841,6 +1841,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * `location-cascade.js`, so comparing it would not be testing what #531 is
 		 * about.
 		 *
+		 * STANDS DOWN when the chooser cannot operate for the posted country
+		 * ({@see \Woodev\Framework\Shipping\Location\Location_Service::is_level_chooser_available()}:
+		 * layer inactive, e.g. no provider token, or the provider does not serve the
+		 * settlement level there). The stored `ajax-select2` mode outlives both, but
+		 * the buyer then has plain inputs and no way to pick a record, so demanding
+		 * one would block the whole checkout — whichever carrier was chosen.
+		 *
 		 * A blank posted value is not this method's concern — that is required-field
 		 * territory, already {@see self::validate()}'s job (mirrors
 		 * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::handle_checkout_process()}'s
@@ -1866,6 +1873,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			}
 
 			if ( \Woodev\Framework\Shipping\Location\Location_Provider_Registry::MODE_AJAX_SELECT2 !== $service->get_field_mode_settlement() ) {
+				return true;
+			}
+
+			// The stored mode survives a removed provider token or a country the provider
+			// does not cover, but then the buyer has plain inputs and no way to pick a
+			// record — demanding one would block every checkout, whatever the carrier.
+			if ( ! $service->is_level_chooser_available( \Woodev\Framework\Shipping\Location\Location_Record::LEVEL_SETTLEMENT, $country ) ) {
 				return true;
 			}
 
