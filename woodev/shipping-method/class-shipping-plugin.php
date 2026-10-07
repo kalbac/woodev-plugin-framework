@@ -42,6 +42,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 		/** @var Settings\Export_Settings|null lazily-built «Выгрузка» settings of this carrier (#1007) */
 		private ?Settings\Export_Settings $export_settings = null;
+		/** @var Settings\Packaging_Settings|null carrier packing choices */
+		private ?Settings\Packaging_Settings $packaging_settings = null;
 
 		/**
 		 * Initializes the shipping plugin.
@@ -167,6 +169,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/pickup/class-pickup-map-settings.php';
 			require_once $path . '/settings/class-default-dimensions-settings.php';
 			require_once $path . '/settings/class-boxes-settings.php';
+			require_once $path . '/settings/class-packaging-settings.php';
+			require_once $path . '/class-packaging.php';
 			require_once $path . '/settings/class-shipping-settings-tab.php';
 			require_once $path . '/settings/class-export-settings.php';
 
@@ -362,6 +366,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			// …and the card styling for it. Every shipping plugin of the process hooks this
 			// with the same handle, so WordPress prints the one stylesheet once.
 			add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_additional_info_styles' ] );
+			add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_packing_settings_script' ] );
 
 			// register WC_Integration if configured
 			if ( $this->get_integration_handler() instanceof Settings\Shipping_Integration ) {
@@ -865,6 +870,53 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		}
 
 		/**
+		 * Declares carrier presets in centimetres and kilograms. Override to supply stable ids and cost modes.
+		 *
+		 * @since 2.0.2
+		 * @return array<int,array>
+		 */
+		public function get_box_presets(): array {
+			return [];
+		}
+
+		/**
+		 * Declares packing defaults even when a carrier has no preset boxes.
+		 *
+		 * @since 2.0.2
+		 * @return bool
+		 */
+		public function uses_boxes(): bool {
+			return [] !== $this->get_box_presets();
+		}
+
+		/**
+		 * This carrier's packing defaults and preset choices.
+		 *
+		 * @since 2.0.2
+		 * @return Settings\Packaging_Settings
+		 */
+		public function get_packaging_settings(): Settings\Packaging_Settings {
+			if ( null === $this->packaging_settings ) {
+				$this->packaging_settings = new Settings\Packaging_Settings( $this->get_id_underscored(), $this->get_box_presets() );
+			}
+			return $this->packaging_settings;
+		}
+
+		/**
+		 * Conditional packing controls on WooCommerce shipping-zone forms and modals.
+		 *
+		 * @since 2.0.2
+		 * @return void
+		 */
+		public function enqueue_packing_settings_script(): void {
+			if ( ! isset( $_GET['page'], $_GET['tab'] ) || 'wc-settings' !== $_GET['page'] || 'shipping' !== $_GET['tab'] ) {
+				return;
+			}
+			$path = __DIR__ . '/assets/js/admin/packing-settings.js';
+			wp_enqueue_script( 'woodev-packing-settings', plugins_url( basename( $path ), $path ), [ 'jquery' ], (string) filemtime( $path ), true );
+		}
+
+		/**
 		 * The «Выгрузка» settings of this carrier (#1007): auto-export on / off and the statuses it fires
 		 * on. Stored per plugin, edited on the plugin's own tab of the framework settings page
 		 * (`woodev-settings`), and read by {@see Order\Order_Automation}.
@@ -925,13 +977,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			$tab_label = $this->get_plugin_name();
 			$has_carrier_label = false;
 			$export    = Admin\Orders\Orders_Registry::instance()->plugin_exports_orders( $this ) ? $this->get_export_settings() : null;
-			$handlers    = [];
-			$sections    = [];
+			$packaging = $this->uses_boxes() ? $this->get_packaging_settings() : null;
+			$handlers    = null === $packaging ? [] : [ $packaging ];
+			$sections    = null === $packaging ? [] : [ \Woodev\Framework\Settings\Settings_Section::create( 'packaging', __( 'Упаковка', 'woodev-plugin-framework' ), $packaging->get_owned_setting_ids() ) ];
 			$args        = [];
 			$connections = [];
 			// every accepted SECTION id (not only connection ones): «Выгрузка» is added last but always survives,
 			// so its id is taken from the start
 			$section_ids = null === $export ? [] : [ Settings\Export_Settings::SECTION_ID => true ];
+			if ( null !== $packaging ) {
+				$section_ids['packaging'] = true;
+			}
 
 			foreach ( $this->get_tab_settings_providers() as $index => $contribution ) {
 

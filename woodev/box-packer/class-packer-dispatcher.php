@@ -68,6 +68,7 @@ if ( ! class_exists( 'Woodev_Packer_Dispatcher' ) ) :
 		 *                                                     Null is no boxes — {@see Woodev_WC_Packer_Dispatcher::pack()}
 		 *                                                     reads the store's own list when it is null.
 		 *
+		 * @param string                        $leftovers Single or separately for units that fit no box.
 		 * @return Woodev_Packer_Result
 		 *
 		 * @throws Woodev_Packer_Exception If $items is empty or $algorithm_id is not registered.
@@ -82,7 +83,7 @@ if ( ! class_exists( 'Woodev_Packer_Dispatcher' ) ) :
 		 *                                 SAME thing — `class-packer-virtual-box.php` used to say
 		 *                                 it in Russian alone (#567).
 		 */
-		public static function pack( string $algorithm_id, array $items, ?array $boxes = null ): Woodev_Packer_Result {
+		public static function pack( string $algorithm_id, array $items, ?array $boxes = null, string $leftovers = self::ALGORITHM_SEPARATELY ): Woodev_Packer_Result {
 			if ( empty( $items ) ) {
 				throw new Woodev_Packer_Exception( 'No items to pack!' );
 			}
@@ -101,7 +102,7 @@ if ( ! class_exists( 'Woodev_Packer_Dispatcher' ) ) :
 					return self::pack_single( $items );
 
 				case self::ALGORITHM_BOXES:
-					return self::pack_boxes( $items, (array) $boxes );
+					return self::pack_boxes( $items, (array) $boxes, $leftovers );
 
 				default:
 					throw new Woodev_Packer_Exception(
@@ -226,9 +227,10 @@ if ( ! class_exists( 'Woodev_Packer_Dispatcher' ) ) :
 		 *
 		 * @param  Woodev_Packer_Packable_Item[] $items
 		 * @param  array                         $boxes anything that is not a Woodev_Box_Packer_Box is ignored
+		 * @param string                        $leftovers Single or separately.
 		 * @return Woodev_Packer_Result
 		 */
-		private static function pack_boxes( array $items, array $boxes ): Woodev_Packer_Result {
+		private static function pack_boxes( array $items, array $boxes, string $leftovers ): Woodev_Packer_Result {
 			$boxes    = array_values(
 				array_filter(
 					$boxes,
@@ -266,11 +268,30 @@ if ( ! class_exists( 'Woodev_Packer_Dispatcher' ) ) :
 						count( $packed ),
 						self::allocate( $packed, $items ),
 						(string) $box->get_unique_id(),
-						(string) $box->get_name()
+						(string) $box->get_name(),
+						is_array( $box->get_internal_data() ) ? $box->get_internal_data() : []
 					);
 				}
 
 				$loose = $packer->get_items_cannot_pack();
+			}
+
+			if ( self::ALGORITHM_SINGLE === $leftovers && [] !== $loose ) {
+				$packer = new Woodev_Packer_Single_Box( 'package' );
+				foreach ( $loose as $unit ) {
+					$packer->add_item( $unit );
+				}
+				$packer->pack();
+				$box = $packer->get_packages()[0]->get_box();
+				$packages[] = new Woodev_Packer_Package_Result(
+					$box->get_length(),
+					$box->get_width(),
+					$box->get_height(),
+					(float) array_sum( array_map( static fn( $unit ) => $unit->get_weight(), $loose ) ),
+					count( $loose ),
+					self::allocate( $loose, $items )
+				);
+				$loose = [];
 			}
 
 			foreach ( $loose as $unit ) {

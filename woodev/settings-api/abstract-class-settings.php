@@ -218,6 +218,10 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 					$control->set_placeholder( (string) $args['placeholder'] );
 				}
 
+				if ( isset( $args['box_preset'] ) && is_array( $args['box_preset'] ) ) {
+					$control->set_box_preset( $args['box_preset'] );
+				}
+
 				if ( isset( $args['country'] ) ) {
 					$control->set_country( (string) $args['country'] );
 				}

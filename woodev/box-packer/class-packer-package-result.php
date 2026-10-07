@@ -27,6 +27,8 @@ if ( ! class_exists( 'Woodev_Packer_Package_Result' ) ) :
 		private $box_id;
 		/** @var string */
 		private $box_name;
+		/** @var array box origin and charging policy */
+		private array $box_details;
 
 		/**
 		 * @since  1.4.1
@@ -39,6 +41,7 @@ if ( ! class_exists( 'Woodev_Packer_Package_Result' ) ) :
 		 * @param  int                                                            $item_count Number of item units in this package.
 		 * @param  array<int, array{key: string, product_id: int, quantity: int}> $items      Which input items went into this package, see {@see self::get_items()}.
 		 * @param  string                                                         $box_id     Id of the merchant's box this package is, '' when it is not a box of the store's list.
+		 * @param  array                                                          $box_details Origin and charging policy.
 		 * @param  string                                                         $box_name   Name of that box, '' when there is none.
 		 */
 		public function __construct(
@@ -49,7 +52,8 @@ if ( ! class_exists( 'Woodev_Packer_Package_Result' ) ) :
 			int $item_count,
 			array $items = [],
 			string $box_id = '',
-			string $box_name = ''
+			string $box_name = '',
+			array $box_details = []
 		) {
 			$this->length     = $length;
 			$this->width      = $width;
@@ -59,6 +63,7 @@ if ( ! class_exists( 'Woodev_Packer_Package_Result' ) ) :
 			$this->items      = $items;
 			$this->box_id     = $box_id;
 			$this->box_name   = $box_name;
+			$this->box_details = $box_details;
 		}
 
 		/**
@@ -140,6 +145,26 @@ if ( ! class_exists( 'Woodev_Packer_Package_Result' ) ) :
 		}
 
 		/**
+		 * Box origin: store, carrier, or empty for an unboxed parcel.
+		 *
+		 * @since 2.0.2
+		 * @return string
+		 */
+		public function get_box_origin(): string {
+			return (string) ( $this->box_details['origin'] ?? ( '' !== $this->box_id ? 'store' : '' ) );
+		}
+
+		/**
+		 * Charging policy carried from the chosen box.
+		 *
+		 * @since 2.0.2
+		 * @return array
+		 */
+		public function get_box_details(): array {
+			return $this->box_details;
+		}
+
+		/**
 		 * @since  1.4.1
 		 * @return float
 		 */
@@ -152,7 +177,7 @@ if ( ! class_exists( 'Woodev_Packer_Package_Result' ) ) :
 		 *
 		 * @since  1.4.1
 		 * @since  2.0.2 Adds `items`, `box_id` and `box_name`.
-		 * @return array{length: float, width: float, height: float, weight: float, volume: float, item_count: int, items: array, box_id: string, box_name: string}
+		 * @return array{length: float, width: float, height: float, weight: float, volume: float, item_count: int, items: array, box_id: string, box_name: string, box_origin: string, box_details: array}
 		 */
 		public function to_array(): array {
 			return [
@@ -165,6 +190,8 @@ if ( ! class_exists( 'Woodev_Packer_Package_Result' ) ) :
 				'items'      => $this->items,
 				'box_id'     => $this->box_id,
 				'box_name'   => $this->box_name,
+				'box_origin' => $this->get_box_origin(),
+				'box_details' => $this->box_details,
 			];
 		}
 	}

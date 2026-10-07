@@ -1,10 +1,10 @@
 /** Editable packing rows over the compatible semicolon-separated saved box list. */
 import { useEffect, useRef, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
-import { Button, TextControl } from '@wordpress/components';
+import { Button, TextControl, ToggleControl } from '@wordpress/components';
 
-export type BoxRow = [ string, string, string, string, string, string ];
-const emptyRow = (): BoxRow => [ '', '', '', '', '', '' ];
+export type BoxRow = [ string, string, string, string, string, string, string, string ];
+const emptyRow = (): BoxRow => [ '', '', '', '', '', '', '', 'yes' ];
 const number = ( text: string ): number => {
 	const normalized = text.trim().replace( /,/g, '.' );
 	return /^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:e[+-]?[0-9]+)?$/i.test( normalized ) ? Number( normalized ) : NaN;
@@ -16,14 +16,14 @@ export function parseBoxRows( value: string, dimensionFactor = 1, weightFactor =
 	return String( value || '' ).split( /\r\n|[\n\r\u0085\u2028\u2029]/ ).filter( ( line ) => line.trim() ).map( ( line ) => {
 		const cells = line.split( ';' ).map( ( cell ) => cell.trim() );
 		// Retain a malformed line visibly; validation requires the merchant to repair it.
-		const row = emptyRow().map( ( _, i ) => cells[ i ] || '' ) as BoxRow;
-		if ( cells.length > 6 ) { row[ 0 ] = cells[ 0 ] + ';' + cells.slice( 6 ).join( ';' ); }
-		return row.map( ( cell, i ) => i === 0 ? cell : scale( cell, i < 4 ? dimensionFactor : weightFactor ) ) as BoxRow;
+		const row = emptyRow().map( ( _, i ) => cells[ i ] ?? ( i === 7 ? 'yes' : '' ) ) as BoxRow;
+		if ( cells.length > 8 ) { row[ 0 ] = cells[ 0 ] + ';' + cells.slice( 8 ).join( ';' ); }
+		return row.map( ( cell, i ) => i === 0 || i > 5 ? cell : scale( cell, i < 4 ? dimensionFactor : weightFactor ) ) as BoxRow;
 	} );
 }
 
 export function serializeBoxRows( rows: BoxRow[], dimensionFactor = 1, weightFactor = 1 ): string {
-	return rows.map( ( row ) => row.map( ( cell, i ) => i === 0 ? cell : scale( cell, 1 / ( i < 4 ? dimensionFactor : weightFactor ) ) ).join( '; ' ) ).join( '\n' );
+	return rows.map( ( row ) => row.map( ( cell, i ) => i === 0 || i > 5 ? cell : scale( cell, 1 / ( i < 4 ? dimensionFactor : weightFactor ) ) ).join( '; ' ) ).join( '\n' );
 }
 
 export function validateBoxRow( row: BoxRow ): string | null {
@@ -33,10 +33,20 @@ export function validateBoxRow( row: BoxRow ): string | null {
 	if ( row.slice( 1, 4 ).some( ( cell ) => ! cell.trim() || ! Number.isFinite( number( cell ) ) || number( cell ) <= 0 ) ) {
 		return __( 'Размеры должны быть числами больше нуля.', 'woodev-plugin-framework' );
 	}
-	if ( row.slice( 4 ).some( ( cell ) => cell.trim() && ( ! Number.isFinite( number( cell ) ) || number( cell ) < 0 ) ) ) {
+	if ( row.slice( 4, 6 ).some( ( cell ) => cell.trim() && ( ! Number.isFinite( number( cell ) ) || number( cell ) < 0 ) ) ) {
 		return __( 'Вес должен быть числом не меньше нуля.', 'woodev-plugin-framework' );
 	}
+	const costError = validateBoxCost( row[ 6 ] );
+	if ( costError ) { return costError; }
+	if ( ! [ 'yes', 'no' ].includes( row[ 7 ] ) ) { return __( 'Неверное значение.', 'woodev-plugin-framework' ); }
 	return null;
+}
+
+export function validateBoxCost( value: unknown ): string | null {
+	if ( typeof value !== 'string' ) { return __( 'Неверное значение.', 'woodev-plugin-framework' ); }
+	const cost = value.trim().replace( /%$/, '' );
+	return value.trim() && ( ! cost || ! Number.isFinite( number( cost ) ) || number( cost ) < 0 )
+		? __( 'Стоимость должна быть суммой не меньше нуля или процентом, например 2%.', 'woodev-plugin-framework' ) : null;
 }
 
 export function validateBoxesText( value: unknown ): string | null {
@@ -67,6 +77,8 @@ export default function BoxesTable( { value, onChange, disabled = false, dimensi
 		__( 'Высота, см', 'woodev-plugin-framework' ),
 		__( 'Макс. вес, кг', 'woodev-plugin-framework' ),
 		__( 'Вес упаковки, кг', 'woodev-plugin-framework' ),
+		__( 'Стоимость', 'woodev-plugin-framework' ),
+		__( 'Использовать', 'woodev-plugin-framework' ),
 	];
 	return (
 		<div className="woodev-boxes">
@@ -76,15 +88,16 @@ export default function BoxesTable( { value, onChange, disabled = false, dimensi
 					<tbody>{ rows.map( ( row, index ) => (
 						<tr key={ index }>{ row.map( ( cell, column ) => (
 							<td key={ column }>
-								<TextControl __nextHasNoMarginBottom __next40pxDefaultSize hideLabelFromVision
+								{ column === 7 ? <ToggleControl __nextHasNoMarginBottom label="" aria-label={ `${ headers[ column ] }, ${ row[ 0 ] || index + 1 }` } checked={ cell === 'yes' } disabled={ disabled } onChange={ ( checked ) => { const updated = rows.map( ( r ) => [ ...r ] as BoxRow ); updated[ index ][ column ] = checked ? 'yes' : 'no'; change( updated ); } } /> : <TextControl __nextHasNoMarginBottom __next40pxDefaultSize hideLabelFromVision
 									label={ `${ headers[ column ] }, ${ index + 1 }` } value={ cell } disabled={ disabled }
-									onChange={ ( next ) => { const updated = rows.map( ( r ) => [ ...r ] as BoxRow ); updated[ index ][ column ] = next; change( updated ); } } />
+									onChange={ ( next ) => { const updated = rows.map( ( r ) => [ ...r ] as BoxRow ); updated[ index ][ column ] = next; change( updated ); } } /> }
 								{ column === 0 && validateBoxRow( row ) && <div className="woodev-field__error" role="alert">{ validateBoxRow( row ) }</div> }
 							</td>
 						) ) }<td><Button variant="tertiary" isDestructive disabled={ disabled } onClick={ () => change( rows.filter( ( _, i ) => i !== index ) ) }>{ __( 'Удалить', 'woodev-plugin-framework' ) }</Button></td></tr>
 					) ) }</tbody>
 				</table>
 			</div>
+			<p>{ __( 'Стоимость: число или N%, например 2%.', 'woodev-plugin-framework' ) }</p>
 			<Button variant="secondary" disabled={ disabled } onClick={ () => change( [ ...rows, emptyRow() ] ) }>{ __( 'Добавить упаковку', 'woodev-plugin-framework' ) }</Button>
 		</div>
 	);

@@ -1,4 +1,4 @@
-import { validateBoxesText } from './boxes-table';
+import { validateBoxesText, validateBoxCost } from './boxes-table';
 
 /**
  * UI-kit — client-side field validation (mirror of the PHP server validator).
@@ -128,6 +128,7 @@ function resolveKind( schema ) {
  */
 export function validateField( schema, value, isTouched ) {
 	const kind = resolveKind( schema );
+	if ( schema.box_preset?.field === 'cost' && schema.box_preset.cost_mode === 'merchant' ) { return validateBoxCost( value ); }
 	if ( kind === 'boxes-table' ) { return validateBoxesText( value ); }
 
 	if ( schema.required && isRequirable( kind ) && isEmpty( kind, value ) ) {

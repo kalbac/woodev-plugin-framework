@@ -112,6 +112,9 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 		/** @var string the placeholder text for the control */
 		protected $placeholder = '';
 
+		/** @var array carrier preset metadata for a table cell; empty for ordinary controls. */
+		private array $box_preset = [];
+
 		/** @var bool whether the control is rendered disabled (D11: blocked controls are explained). */
 		protected $disabled = false;
 
@@ -412,6 +415,27 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 		 */
 		public function set_placeholder( string $value ): void {
 			$this->placeholder = $value;
+		}
+
+		/**
+		 * Carrier preset metadata, shared across its enabled and cost table cells.
+		 *
+		 * @since 2.0.2
+		 * @return array
+		 */
+		public function get_box_preset(): array {
+			return $this->box_preset;
+		}
+
+		/**
+		 * Attaches immutable carrier preset metadata to this table cell.
+		 *
+		 * @since 2.0.2
+		 * @param array $preset declaration and cell role.
+		 * @return void
+		 */
+		public function set_box_preset( array $preset ): void {
+			$this->box_preset = $preset;
 		}
 
 		/**

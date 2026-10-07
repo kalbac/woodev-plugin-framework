@@ -652,8 +652,9 @@
 .woodev-boxes {
 	width: 100%;
 	&__scroll { overflow-x: auto; margin-bottom: 12px; }
+	&--carrier &__table { min-width: 680px; }
 	&__table {
-		min-width: 760px;
+		min-width: 960px;
 		th { white-space: nowrap; }
 		td { vertical-align: top; }
 		td:first-child { min-width: 160px; }
