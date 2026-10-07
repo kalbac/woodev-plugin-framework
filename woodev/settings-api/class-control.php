@@ -91,6 +91,15 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 		/** @var string the control description */
 		protected $description = '';
 
+		/**
+		 * A second line shown under a toggle/checkbox ONLY while it is switched on — plain developer-authored text,
+		 * the same trust level as {@see self::$description}.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		protected $description_on = '';
+
 		/** @var array the control options, as $option => $label */
 		protected $options = [];
 
@@ -111,6 +120,9 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 
 		/** @var string the placeholder text for the control */
 		protected $placeholder = '';
+
+		/** @var array carrier preset metadata for a table cell; empty for ordinary controls. */
+		private array $box_preset = [];
 
 		/** @var bool whether the control is rendered disabled (D11: blocked controls are explained). */
 		protected $disabled = false;
@@ -255,6 +267,31 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 			}
 
 			$this->description = $value;
+		}
+
+		/**
+		 * The line shown under a toggle/checkbox only while it is on.
+		 *
+		 * @since 2.0.2
+		 * @return string
+		 */
+		public function get_description_on(): string {
+			return $this->description_on;
+		}
+
+		/**
+		 * Sets the line shown under a toggle/checkbox only while it is switched on — one explanatory
+		 * sentence that belongs to the ON state alone (e.g. «в тестовом режиме используются встроенные
+		 * ключи»). Ignored by every other control type.
+		 *
+		 * ⚠️ Rendered as raw HTML like `description`: a developer-authored `__()` string, never runtime data.
+		 *
+		 * @since 2.0.2
+		 * @param string $value the text.
+		 * @return void
+		 */
+		public function set_description_on( string $value ): void {
+			$this->description_on = $value;
 		}
 
 		/**
@@ -412,6 +449,27 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 		 */
 		public function set_placeholder( string $value ): void {
 			$this->placeholder = $value;
+		}
+
+		/**
+		 * Carrier preset metadata, shared across its enabled and cost table cells.
+		 *
+		 * @since 2.0.2
+		 * @return array
+		 */
+		public function get_box_preset(): array {
+			return $this->box_preset;
+		}
+
+		/**
+		 * Attaches immutable carrier preset metadata to this table cell.
+		 *
+		 * @since 2.0.2
+		 * @param array $preset declaration and cell role.
+		 * @return void
+		 */
+		public function set_box_preset( array $preset ): void {
+			$this->box_preset = $preset;
 		}
 
 		/**

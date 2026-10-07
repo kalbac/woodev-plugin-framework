@@ -90,6 +90,7 @@ final class OrderAutomationTest extends TestCase {
 		Functions\when( 'update_option' )->justReturn( true );
 		Functions\when( 'wp_parse_args' )->alias( static fn( $args, $defaults = [] ) => array_merge( (array) $defaults, (array) $args ) );
 		Functions\when( 'wc_get_order_status_name' )->alias( static fn( string $status ) => $status );
+		Functions\when( 'wc_get_order_statuses' )->justReturn( [ 'wc-pending' => 'Pending', 'wc-processing' => 'Processing', 'wc-on-hold' => 'On hold', 'wc-completed' => 'Completed', 'wc-cancelled' => 'Cancelled' ] );
 		Functions\when( 'get_post_meta' )->alias(
 			function ( int $post_id, string $key, bool $single ) {
 				return $this->meta[ $key ] ?? '';

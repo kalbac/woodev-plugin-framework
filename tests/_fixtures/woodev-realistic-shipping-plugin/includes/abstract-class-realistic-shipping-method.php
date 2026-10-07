@@ -46,7 +46,9 @@ abstract class Abstract_Woodev_Realistic_Shipping_Method extends Shipping_Method
 			$this->id,
 			$this->get_rate_id(),
 			$this->method_title,
-			'0'
+			'0',
+			null,
+			[ 'carrier_boxes' => \Woodev\Framework\Shipping\Packaging::get_carrier_boxes( $packed ) ]
 		);
 	}
 }

@@ -79,6 +79,7 @@ final class ExportSettingsTest extends TestCase {
 			}
 		);
 		Functions\when( 'wc_get_order_status_name' )->alias( static fn( string $status ) => 'Status ' . $status );
+		Functions\when( 'wc_get_order_statuses' )->justReturn( [ 'wc-pending' => 'Pending', 'wc-processing' => 'Processing', 'wc-on-hold' => 'On hold', 'wc-completed' => 'Completed', 'wc-cancelled' => 'Cancelled' ] );
 		Functions\when( 'sanitize_text_field' )->returnArg();
 	}
 
@@ -88,8 +89,8 @@ final class ExportSettingsTest extends TestCase {
 
 	// ----- the settings themselves -----
 
-	public function test_the_section_owns_the_two_v1_keys_in_order(): void {
-		$this->assertSame( [ 'auto_export_orders', 'export_statuses' ], $this->settings()->get_owned_setting_ids() );
+	public function test_the_section_owns_the_three_v1_keys_in_order(): void {
+		$this->assertSame( [ 'auto_export_orders', 'export_statuses', 'status_delivered' ], $this->settings()->get_owned_setting_ids() );
 	}
 
 	public function test_nothing_stored_means_auto_export_off_and_processing_picked(): void {
@@ -396,5 +397,87 @@ final class ExportSettingsTest extends TestCase {
 
 		$this->assertSame( $legacy, $this->options[ self::LEGACY_OPTION ] );
 		$this->assertNotContains( self::LEGACY_OPTION, $this->writes );
+	}
+
+	// ----- «Статус доставленного заказа» (s158) -----
+
+	private const DELIVERED_OPTION = 'woodev_cdek_shipping_export_status_delivered';
+
+	public function test_the_delivered_status_defaults_to_completed(): void {
+		$settings = $this->settings();
+
+		$this->assertSame( 'completed', $settings->get_delivered_status() );
+		$this->assertSame( 'wc-completed', $settings->get_setting( 'status_delivered' )->get_default() );
+	}
+
+	public function test_the_delivered_status_offers_dont_change_and_every_woocommerce_status(): void {
+		$options = $this->settings()->get_setting( 'status_delivered' )->get_options();
+
+		$this->assertSame( 'Не менять', $options['none'] );
+		$this->assertArrayHasKey( 'wc-completed', $options );
+		$this->assertArrayHasKey( 'wc-processing', $options );
+	}
+
+	public function test_dont_change_means_no_delivered_status(): void {
+		$settings = $this->settings();
+		$settings->update_value( 'status_delivered', 'none' );
+
+		$this->assertSame( 'none', $this->options[ self::DELIVERED_OPTION ] );
+		$this->assertNull( $this->settings()->get_delivered_status() );
+	}
+
+	public function test_a_chosen_delivered_status_is_stored_with_the_prefix_and_read_without_it(): void {
+		$this->settings()->update_value( 'status_delivered', 'wc-on-hold' );
+
+		$this->assertSame( 'wc-on-hold', $this->options[ self::DELIVERED_OPTION ] );
+		$this->assertSame( 'on-hold', $this->settings()->get_delivered_status() );
+	}
+
+	public function test_a_status_outside_the_list_is_refused_for_the_delivered_status(): void {
+		$this->expectException( \Woodev_Plugin_Exception::class );
+
+		$this->settings()->update_value( 'status_delivered', 'wc-not-a-status' );
+	}
+
+	/**
+	 * @return array<string,array{0:mixed,1:?string}> the v1 `status_delivered` value => what is stored (null: nothing written)
+	 */
+	public function v1_delivered_status_provider(): array {
+		return [
+			'v1 default'        => [ 'wc-completed', 'wc-completed' ],
+			'another status'    => [ 'wc-on-hold', 'wc-on-hold' ],
+			'v1 «Не использовать»' => [ 'none', 'none' ],
+			'no prefix'         => [ 'completed', 'wc-completed' ],
+			'empty string'      => [ '', null ],
+			'int (not v1)'      => [ 5, null ],
+			'array (not v1)'    => [ [ 'wc-completed' ], null ],
+		];
+	}
+
+	/**
+	 * @dataProvider v1_delivered_status_provider
+	 *
+	 * @param mixed   $stored   what the v1 option held under `status_delivered`
+	 * @param ?string $expected the value written to the new option, or null when nothing is
+	 */
+	public function test_the_v1_status_delivered_is_carried_over_with_its_own_spelling( $stored, ?string $expected ): void {
+		$this->options[ self::LEGACY_OPTION ] = [ 'status_delivered' => $stored ];
+
+		$this->settings();
+
+		if ( null === $expected ) {
+			$this->assertArrayNotHasKey( self::DELIVERED_OPTION, $this->options );
+		} else {
+			$this->assertSame( $expected, $this->options[ self::DELIVERED_OPTION ] );
+		}
+
+		$this->assertSame( 'yes', $this->options[ self::FLAG_OPTION ] );
+	}
+
+	public function test_a_delivered_status_already_saved_on_the_new_page_is_not_overwritten_by_v1(): void {
+		$this->options[ self::LEGACY_OPTION ]    = [ 'status_delivered' => 'none' ];
+		$this->options[ self::DELIVERED_OPTION ] = 'wc-processing';
+
+		$this->assertSame( 'processing', $this->settings()->get_delivered_status() );
 	}
 }

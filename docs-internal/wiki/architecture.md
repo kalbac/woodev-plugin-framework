@@ -211,12 +211,23 @@ Self-contained shipping box-packing algorithm. Implement `Woodev_Packer_Item_Int
 `Woodev_Packer_Separately`, `Woodev_Packer_Virtual_Box`).
 
 `Woodev_Packer_Dispatcher::pack()` routes four algorithms — `virtual`, `separately`, `single` and `boxes`
-(`Woodev_Packer_Boxes`, #1138). `boxes` packs into the **store's list of boxes** («Доставка» → «Коробки»,
-`Boxes_Settings`, option `woodev_boxes_boxes`, in store units); `Woodev_WC_Packer_Dispatcher::pack()` reads
-that list when none is passed. A unit that fits no box is never dropped — it becomes a parcel of its own,
-as under `separately`. Every `Woodev_Packer_Package_Result` reports which input items it holds
-(`get_items()`: cart-item key / order-item id, product id, quantity) and the box it is (`get_box_id()`), for every
-algorithm, so a carrier's multi-parcel export can name the lines of each parcel.
+(`Woodev_Packer_Boxes`, #1138). Shipping methods combine enabled **store boxes** («Доставка» →
+«Упаковка», `Boxes_Settings`, option `woodev_boxes_boxes`, in store units) with enabled presets of
+only their own carrier (`Shipping_Plugin::get_box_presets()`, `Packaging_Settings`). Carrier presets
+use fixed cm/kg units. Selection maximises packed units to reduce parcels; store boxes win on equal
+fill, followed by the existing smallest-volume tie-break. The WC dispatcher alone reads the store
+list when none is passed. Its optional fourth argument chooses `single` or `separately` for leftovers.
+Every `Woodev_Packer_Package_Result` reports source item allocation (`get_items()`: cart-item key /
+order-item id, product id, quantity), box id, and origin (`store`, `carrier`, or empty). Export
+retains the same item-allocation contract.
+
+`Packaging` converts store box rows to packer cm/kg and preserves carrier cm/kg declarations. It
+computes per-parcel amount/percentage costs and exposes carrier-priced packed boxes as id/count
+pairs for the carrier's quote request.
+`Shipping_Method::calculate_rate()` adds store/fixed/merchant box surcharges once after the quote;
+carrier-priced presets are never charged again there. Carrier defaults and instance overrides
+cover `packing_algorithm` and `unpacked_algorithm`; stored legacy algorithms remain readable.
+The rate-cache context includes box settings, leftovers and per-line contents values.
 
 ## Utilities (`woodev/utilities/`)
 
@@ -350,20 +361,20 @@ Moved here from `CURRENT-STATE.md` in s139: they are reference, true regardless 
   IPN/webhook (`payment_complete()` on the storefront), REST, WP-Cron. Register on `init` /
   `plugins_loaded` and pass the `Shipping_Plugin` to `register_provider()`; a provider without it has
   no auto-export (`_doing_it_wrong()` from the admin menu under `WP_DEBUG`). Registered only in admin, auto-export, retry and
-  auto-cancel silently do nothing off the manager's screen. The same rule decides the «Выгрузка» settings
+  auto-cancel silently do nothing off the manager's screen. The same rule decides the «Выгрузка заказов» settings
   (#1014): `Orders_Registry::plugin_exports_orders()` is evaluated per request and the React settings page
   reads its schema over REST (not `is_admin()`), so a carrier registered only under `is_admin()` loses
-  the «Выгрузка» section from the UI.
-- **The auto-export settings («Выгрузка») live on the carrier's ONE tab of `woodev-settings`, not on the
+  the «Выгрузка заказов» section from the UI.
+- **The auto-export settings («Выгрузка заказов») live on the carrier's ONE tab of `woodev-settings`, not on the
   WooCommerce Integrations tab (#1007, #1010 round 3, #1014).** `Shipping_Plugin::get_settings_providers()`
   returns a single composite provider (`Composite_Settings_Handler`, tab id = the plugin id). A carrier does
   NOT override it and does not register a second provider under its plugin id (`Settings_Page_Registry::
   build_tabs()` keeps the first and reports the duplicate with `_doing_it_wrong()`): its own sections come
   from `get_tab_settings_providers()` (handler + sections of each returned `Settings_Provider`, merged ahead
-  of «Выгрузка»; a setting-id clash is reported and the contribution left out; a connection section — handshake ones with no
-  setting ids included — is served by the contributing handler). «Выгрузка» (`Export_Settings`, options `woodev_{plugin id}_export_*`) is added
+  of the framework's sections — the order on a carrier tab is the carrier's own, «Упаковка» (`Packaging_Settings`, only when `uses_boxes()`), «Выгрузка заказов», «Дополнительно» (`Advanced_Settings`, always last); a setting-id clash is reported and the contribution left out; a connection section — handshake ones with no
+  setting ids included — is served by the contributing handler). «Выгрузка заказов» (`Export_Settings`, options `woodev_{plugin id}_export_*`) is added
   only when `Orders_Registry::plugin_exports_orders()` — the plugin owns an `Orders_Provider` AND a shipment
-  handler in that request — and a rates-only carrier with no sections of its own gets no tab. The v1 keys
+  handler in that request — and a rates-only carrier still gets a tab, because «Дополнительно» is always there. The v1 keys
   (`auto_export_orders`, `export_statuses` in `woocommerce_{id}_settings`) are carried over once, on the
   first construction of the handler, and left in place.
 

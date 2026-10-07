@@ -188,4 +188,33 @@ class ShippingToolsRegistryTest extends TestCase {
 
 		$this->assertFalse( Shipping_Tools_Registry::instance()->has_tools() );
 	}
+
+	public function test_execute_runs_a_tool_the_caller_holds_without_registering_it(): void {
+		$seen = null;
+		$tool = $this->tool(
+			'section_action',
+			static function ( array $args ) use ( &$seen ): Tool_Result {
+				$seen = $args;
+
+				return Tool_Result::success( 'ok' );
+			},
+			false,
+			[ 'name' => 'mode', 'options' => [] ]
+		);
+
+		$result = Shipping_Tools_Registry::instance()->execute( $tool, [ 'mode' => 'a', 'evil' => 'x' ] );
+
+		$this->assertTrue( $result->is_success() );
+		$this->assertSame( [ 'mode' => 'a' ], $seen, 'only the declared selector name reaches the callback' );
+		$this->assertFalse( Shipping_Tools_Registry::instance()->has_tools(), 'it was never registered' );
+	}
+
+	public function test_execute_refuses_a_disabled_tool_with_its_status_text(): void {
+		$tool = Shipping_Tool::create( 'd', 'd', '', 'Btn', static fn( array $args ): Tool_Result => Tool_Result::success(), true, 'Недоступно' );
+
+		$result = Shipping_Tools_Registry::instance()->execute( $tool, [] );
+
+		$this->assertFalse( $result->is_success() );
+		$this->assertSame( 'Недоступно', $result->get_message() );
+	}
 }

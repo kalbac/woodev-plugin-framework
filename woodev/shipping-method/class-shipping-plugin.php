@@ -19,6 +19,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 	abstract class Shipping_Plugin extends \Woodev\Framework\Woocommerce_Plugin {
 
+		/** @var string shipping-package key listing the plugin ids hiding their carriers on the cart page (part of the rate-cache hash) */
+		private const CART_PAGE_PACKAGE_KEY = 'woodev_hidden_on_cart';
+
 		/** @var array optional associative array of shipping method id */
 		private array $methods = [];
 
@@ -40,8 +43,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		/** @var Location\Location_Service|null lazily-built location service façade */
 		private ?Location\Location_Service $location_service = null;
 
-		/** @var Settings\Export_Settings|null lazily-built «Выгрузка» settings of this carrier (#1007) */
+		/** @var Settings\Export_Settings|null lazily-built «Выгрузка заказов» settings of this carrier (#1007) */
 		private ?Settings\Export_Settings $export_settings = null;
+		/** @var Settings\Packaging_Settings|null carrier packing choices */
+		private ?Settings\Packaging_Settings $packaging_settings = null;
+
+		/** @var Settings\Advanced_Settings|null lazily-built «Дополнительно» settings of this carrier: logging, hide on cart */
+		private ?Settings\Advanced_Settings $advanced_settings = null;
 
 		/**
 		 * Initializes the shipping plugin.
@@ -167,8 +175,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/pickup/class-pickup-map-settings.php';
 			require_once $path . '/settings/class-default-dimensions-settings.php';
 			require_once $path . '/settings/class-boxes-settings.php';
+			require_once $path . '/settings/class-packaging-settings.php';
+			require_once $path . '/class-packaging.php';
 			require_once $path . '/settings/class-shipping-settings-tab.php';
 			require_once $path . '/settings/class-export-settings.php';
+			require_once $path . '/settings/class-advanced-settings.php';
+			require_once $path . '/settings/class-status-sync-tool.php';
 
 			// checkout field definitions + presets
 			require_once $path . '/checkout/class-field.php';
@@ -298,6 +310,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			// cancellation marker) changes, so carriers need no notify code of their own.
 			Order\Delivery_Status_Watcher::instance()->register();
 
+			// The merchant's «Статус доставленного заказа»: set once the canonical state becomes «delivered».
+			require_once $path . '/order/class-delivered-order-status.php';
+			Order\Delivered_Order_Status::register();
+
 			// delivery-status sync freshness — the last-updated/next-update seam (SP-10
 			// spec D9, #828)
 			require_once $path . '/order/class-delivery-sync-status.php';
@@ -352,6 +368,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			// register shipping methods with WooCommerce
 			add_filter( 'woocommerce_shipping_methods', [ $this, 'register_shipping_methods' ] );
 
+			// «Не показывать на странице корзины»: the cart page's packages are marked, and a marked package's rates lose
+			// this carrier's own — see hide_rates_on_cart_page() for why the mark is what makes it cache-safe.
+			add_filter( 'woocommerce_cart_shipping_packages', [ $this, 'mark_cart_page_packages' ] );
+			add_filter( 'woocommerce_package_rates', [ $this, 'hide_rates_on_cart_page' ], 10, 2 );
+
 			// render the method description (and whatever a plugin adds via the filter)
 			// under the rate on the order form. This is the CLASSIC form's only seam for
 			// it — WooCommerce's own template prints the label and nothing else. The
@@ -362,6 +383,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			// …and the card styling for it. Every shipping plugin of the process hooks this
 			// with the same handle, so WordPress prints the one stylesheet once.
 			add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_additional_info_styles' ] );
+			add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_packing_settings_script' ] );
 
 			// register WC_Integration if configured
 			if ( $this->get_integration_handler() instanceof Settings\Shipping_Integration ) {
@@ -831,6 +853,118 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		}
 
 		/**
+		 * «Не показывать на странице корзины» (`disable_methods_on_cart` of {@see Settings\Advanced_Settings}), step 1:
+		 * while the cart page is shown, marks the cart's shipping packages with this plugin's id.
+		 *
+		 * The mark is what keeps WooCommerce's shipping cache honest. `WC_Shipping::calculate_shipping_for_package()`
+		 * runs `woocommerce_package_rates` only when it RECALCULATES — it stores the already-filtered rates in the
+		 * session under the package's hash and, on a hash hit, returns the stored rates without running the filter
+		 * (WooCommerce's own «shipping debug mode» is the one thing that bypasses it). A filter that hid the carrier
+		 * on the cart page alone would therefore poison the cache both ways: the cart's filtered rates would be
+		 * served at checkout, and checkout's full rates would be served on the cart. The mark is part of the
+		 * package, so it is part of the hash: the cart page and checkout never share a cache entry, and each
+		 * recalculates (and calls the carrier API) once when the shopper moves between them.
+		 *
+		 * Only a plugin whose option is ON marks anything, so a shop that never turns it on keeps its hashes — and
+		 * its cache hits — exactly as they were. The decision rests on that option and the request context ALONE,
+		 * never on the registered-method map: on a cold request WooCommerce collects the cart's packages BEFORE
+		 * `woocommerce_shipping_methods` registers the methods (and a cache hit never loads them at all), so a map
+		 * check would leave both pages sharing one unmarked hash. The same detection serves the classic cart (`is_cart()`) and the
+		 * block cart's Store API requests ({@see self::is_cart_page_request()}).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @internal Hooked on `woocommerce_cart_shipping_packages`; not for direct calls.
+		 *
+		 * @param mixed $packages the cart's shipping packages.
+		 * @return mixed the packages, each with this plugin's id in `woodev_hidden_on_cart` while on the cart page.
+		 */
+		public function mark_cart_page_packages( $packages ) {
+
+			if ( ! is_array( $packages ) || [] === $packages || ! $this->is_cart_page_request() || ! $this->get_advanced_settings()->is_hidden_on_cart() ) {
+				return $packages;
+			}
+
+			foreach ( $packages as $key => $package ) {
+				if ( is_array( $package ) ) {
+					$marked   = isset( $package[ self::CART_PAGE_PACKAGE_KEY ] ) && is_array( $package[ self::CART_PAGE_PACKAGE_KEY ] ) ? $package[ self::CART_PAGE_PACKAGE_KEY ] : [];
+					$marked[] = $this->get_id();
+
+					$packages[ $key ][ self::CART_PAGE_PACKAGE_KEY ] = array_values( array_unique( $marked ) );
+				}
+			}
+
+			return $packages;
+		}
+
+		/**
+		 * «Не показывать на странице корзины», step 2: removes this carrier's rates from a package that
+		 * {@see self::mark_cart_page_packages()} marked for this plugin. At checkout the package carries no mark, so
+		 * the carrier is offered as usual.
+		 *
+		 * Decided by the MARK on the package, not by re-detecting the page: the filter runs only on a recalculation
+		 * (see step 1), and the mark is what tells a cart-page package from a checkout one and gives each its own
+		 * cache entry. Skipping the carrier in `calculate_shipping()` instead would be wrong for the same reason.
+		 *
+		 * The v1 plugin showed its option (and honoured it) only while WooCommerce's shipping calculator on the cart
+		 * was off. That condition is dropped: the option is an explicit choice, whatever the calculator does.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @internal Hooked on `woocommerce_package_rates`; not for direct calls.
+		 *
+		 * @param mixed $rates   the package's rates, keyed by rate id.
+		 * @param mixed $package the package the rates were calculated for.
+		 * @return mixed the rates without this carrier's own for a package marked for the cart page.
+		 */
+		public function hide_rates_on_cart_page( $rates, $package = [] ) {
+
+			if ( ! is_array( $rates ) || [] === $this->methods || ! is_array( $package ) || ! isset( $package[ self::CART_PAGE_PACKAGE_KEY ] ) || ! in_array( $this->get_id(), (array) $package[ self::CART_PAGE_PACKAGE_KEY ], true ) ) {
+				return $rates;
+			}
+
+			foreach ( $rates as $rate_id => $rate ) {
+				if ( $rate instanceof \WC_Shipping_Rate && array_key_exists( $rate->get_method_id(), $this->methods ) ) {
+					unset( $rates[ $rate_id ] );
+				}
+			}
+
+			return $rates;
+		}
+
+		/**
+		 * Whether the rates are being calculated for the CART page: the classic cart (`is_cart()`), or a Store API
+		 * request made from the cart page — the block cart prices shipping over the Store API, where `is_cart()` is
+		 * false and the only trace of the page is the request's referer.
+		 *
+		 * @return bool
+		 */
+		private function is_cart_page_request(): bool {
+
+			if ( ! function_exists( 'is_cart' ) ) {
+				return false;
+			}
+
+			if ( is_cart() ) {
+				return true;
+			}
+
+			$woocommerce = function_exists( 'WC' ) ? WC() : null;
+
+			// `is_store_api_request()` exists from WooCommerce 9.0; the block cart's shipping adapter needs 9.9.
+			if ( ! function_exists( 'wc_get_cart_url' ) || ! is_object( $woocommerce ) || ! method_exists( $woocommerce, 'is_store_api_request' ) || ! $woocommerce->is_store_api_request() ) {
+				return false;
+			}
+
+			// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.MissingUnslash, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+			$referer = isset( $_SERVER['HTTP_REFERER'] ) && is_string( $_SERVER['HTTP_REFERER'] ) ? wp_unslash( $_SERVER['HTTP_REFERER'] ) : '';
+			$from    = '' !== $referer ? wp_parse_url( $referer, PHP_URL_PATH ) : null;
+			$cart    = wp_parse_url( wc_get_cart_url(), PHP_URL_PATH );
+
+			return is_string( $from ) && is_string( $cart ) && untrailingslashit( $from ) === untrailingslashit( $cart );
+		}
+
+		/**
 		 * Gets the integration handler instance.
 		 *
 		 * @since 1.5.0
@@ -865,9 +999,61 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		}
 
 		/**
-		 * The «Выгрузка» settings of this carrier (#1007): auto-export on / off and the statuses it fires
-		 * on. Stored per plugin, edited on the plugin's own tab of the framework settings page
-		 * (`woodev-settings`), and read by {@see Order\Order_Automation}.
+		 * Declares carrier presets in centimetres and kilograms. Override to supply stable ids and cost modes.
+		 *
+		 * @since 2.0.2
+		 * @return array<int,array>
+		 */
+		public function get_box_presets(): array {
+			return [];
+		}
+
+		/**
+		 * Declares packing defaults even when a carrier has no preset boxes.
+		 *
+		 * @since 2.0.2
+		 * @return bool
+		 */
+		public function uses_boxes(): bool {
+			return [] !== $this->get_box_presets();
+		}
+
+		/**
+		 * This carrier's packing defaults and preset choices.
+		 *
+		 * @since 2.0.2
+		 * @return Settings\Packaging_Settings
+		 */
+		public function get_packaging_settings(): Settings\Packaging_Settings {
+			if ( null === $this->packaging_settings ) {
+				$this->packaging_settings = new Settings\Packaging_Settings( $this->get_id_underscored(), $this->get_box_presets() );
+			}
+			return $this->packaging_settings;
+		}
+
+		public function enqueue_packing_settings_script(): void {
+			if ( ! isset( $_GET['page'], $_GET['tab'] ) || 'wc-settings' !== $_GET['page'] || 'shipping' !== $_GET['tab'] ) {
+				return;
+			}
+			// Several carrier plugins share this handle: the first one enqueues it and adds the inline script, the rest stop here.
+			if ( wp_script_is( 'woodev-packing-settings', 'enqueued' ) ) {
+				return;
+			}
+			$path = __DIR__ . '/assets/js/admin/packing-settings.js';
+			wp_enqueue_script( 'woodev-packing-settings', plugins_url( basename( $path ), $path ), [ 'jquery' ], (string) filemtime( $path ), true );
+			// WooCommerce initialises .wc-product-search / .wc-enhanced-select on page load and on this event only; a method's
+			// settings open later in a WCBackboneModal whose wc_backbone_modal_loaded handler never fires it, so the selects stay plain.
+			wp_add_inline_script(
+				'woodev-packing-settings',
+				"jQuery( document.body ).on( 'wc_backbone_modal_loaded', function () { jQuery( document.body ).trigger( 'wc-enhanced-select-init' ); } );"
+			);
+		}
+
+		/**
+		 * The «Выгрузка заказов» settings of this carrier (#1007): auto-export on / off, the statuses it fires
+		 * on, and the status a delivered order gets. Stored per plugin, edited on the plugin's own tab of the
+		 * framework settings page (`woodev-settings`), and read by {@see Order\Order_Automation} and
+		 * {@see Order\Delivered_Order_Status}.
 		 *
 		 * The first call carries the v1 values over from the WooCommerce integration option, once
 		 * ({@see Settings\Export_Settings::migrate_from_integration()}).
@@ -894,14 +1080,42 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		}
 
 		/**
+		 * The «Дополнительно» settings of this carrier: logging (`enable_debug`) and «Не показывать на странице
+		 * корзины» (`disable_methods_on_cart`). Stored per plugin as `woodev_{plugin id}_advanced_{key}`, edited
+		 * on the plugin's own tab of the framework settings page.
+		 *
+		 * The first call carries the v1 values over from the WooCommerce integration option, once
+		 * ({@see Settings\Advanced_Settings::migrate_from_integration()}).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return Settings\Advanced_Settings
+		 */
+		public function get_advanced_settings(): Settings\Advanced_Settings {
+
+			if ( null === $this->advanced_settings ) {
+				$this->advanced_settings = new Settings\Advanced_Settings(
+					$this->get_id_underscored(),
+					function (): ?string {
+						$handler = $this->get_integration_handler();
+
+						return $handler ? $handler->get_option_key() : null;
+					}
+				);
+			}
+
+			return $this->advanced_settings;
+		}
+
+		/**
 		 * This carrier's ONE tab on the framework settings page (`woodev-settings`), id = the plugin id.
 		 *
 		 * The tab is a {@see \Woodev\Framework\Settings\Composite_Settings_Handler} — the way the
 		 * «Доставка» tab composes several handlers — over the carrier's own contribution
-		 * ({@see self::get_tab_settings_providers()}) plus the framework's «Выгрузка» section (#1007),
+		 * ({@see self::get_tab_settings_providers()}) plus the framework's «Выгрузка заказов» section (#1007),
 		 * which is added only when the carrier exports orders
-		 * ({@see Admin\Orders\Orders_Registry::plugin_exports_orders()}). A rates-only carrier with no
-		 * contribution of its own gets no tab at all.
+		 * ({@see Admin\Orders\Orders_Registry::plugin_exports_orders()}), and the «Дополнительно» section
+		 * (logging, hide on cart), which every carrier has — so every carrier has a tab.
 		 *
 		 * A carrier does NOT override this method: a second provider under the plugin id would be a
 		 * duplicate tab, and `Settings_Page_Registry::build_tabs()` keeps only the first. It overrides
@@ -909,13 +1123,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 *
 		 * This runs on the read path of every wp-admin page (the settings page collects its tabs on
 		 * `admin_menu`), so a carrier's mistake must not fatal it: a contribution whose setting ids collide
-		 * with «Выгрузка» or with an earlier contribution — or whose section ids do (a connection id is the
+		 * with «Выгрузка заказов» or with an earlier contribution — or whose section ids do (a connection id is the
 		 * key of the connection-owner map) — is reported with `_doing_it_wrong()` and left out of the tab,
-		 * and the framework's «Выгрузка» stays.
+		 * and the framework's «Выгрузка заказов» stays.
 		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 One composite tab per carrier, with an extension point for the carrier's own
-		 *              sections (#1014); «Выгрузка» only for a carrier that exports.
+		 *              sections (#1014); «Выгрузка заказов» only for a carrier that exports.
 		 *
 		 * @return \Woodev\Framework\Settings\Settings_Provider[]
 		 */
@@ -925,13 +1139,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			$tab_label = $this->get_plugin_name();
 			$has_carrier_label = false;
 			$export    = Admin\Orders\Orders_Registry::instance()->plugin_exports_orders( $this ) ? $this->get_export_settings() : null;
+			$packaging = $this->uses_boxes() ? $this->get_packaging_settings() : null;
+			$advanced  = $this->get_advanced_settings();
 			$handlers    = [];
 			$sections    = [];
 			$args        = [];
 			$connections = [];
-			// every accepted SECTION id (not only connection ones): «Выгрузка» is added last but always survives,
-			// so its id is taken from the start
-			$section_ids = null === $export ? [] : [ Settings\Export_Settings::SECTION_ID => true ];
+			// every accepted SECTION id (not only connection ones): «Упаковка», «Выгрузка заказов» and «Дополнительно» are
+			// added after the carrier's own but always survive, so their ids are taken from the start
+			$section_ids = [ Settings\Advanced_Settings::SECTION_ID => true ];
+
+			if ( null !== $packaging ) {
+				$section_ids['packaging'] = true;
+			}
+
+			if ( null !== $export ) {
+				$section_ids[ Settings\Export_Settings::SECTION_ID ] = true;
+			}
 
 			foreach ( $this->get_tab_settings_providers() as $index => $contribution ) {
 
@@ -962,12 +1186,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 					continue;
 				}
 
-				// «Выгрузка» is validated first, so it is the carrier's contribution that gives way to a clash.
+				// The framework's own handlers are validated first, so it is the carrier's contribution that gives way to a clash.
 				// A throwaway composite per contribution is O(n^2) in handlers — fine at one to three contributions.
 				try {
 					new \Woodev\Framework\Settings\Composite_Settings_Handler(
 						$this->get_id(),
-						array_merge( $handlers, null === $export ? [] : [ $export ], [ $contribution->get_handler() ] )
+						array_merge( $handlers, null === $packaging ? [] : [ $packaging ], null === $export ? [] : [ $export ], [ $advanced, $contribution->get_handler() ] )
 					);
 				} catch ( \InvalidArgumentException $e ) {
 					_doing_it_wrong(
@@ -983,7 +1207,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 					continue;
 				}
 
-				// a section id taken by «Выгрузка» or an earlier contribution would silently replace the connection
+				// a section id taken by a framework section or an earlier contribution would silently replace the connection
 				// owner (or render two sections under one id) — same policy as the setting-id clash: left out whole
 				// null is the "no clash" sentinel: '' is a valid section id, so it cannot be one
 				$colliding = null;
@@ -1039,20 +1263,43 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 				}
 			}
 
+			// «Упаковка» follows the carrier's own sections, only for a carrier that packs into boxes
+			if ( null !== $packaging ) {
+				$handlers[] = $packaging;
+				$sections[] = \Woodev\Framework\Settings\Settings_Section::create( 'packaging', __( 'Упаковка', 'woodev-plugin-framework' ), $packaging->get_owned_setting_ids() );
+			}
+
 			if ( null !== $export ) {
 
+				// the carrier's own fields for this section, resolved against ITS handlers (before «Выгрузка заказов» joins them)
+				$extra_ids  = $this->resolve_export_section_setting_ids( $handlers, $export );
 				$handlers[] = $export;
-				$sections[] = \Woodev\Framework\Settings\Settings_Section::create(
+
+				$export_section = \Woodev\Framework\Settings\Settings_Section::create(
 					Settings\Export_Settings::SECTION_ID,
-					__( 'Выгрузка', 'woodev-plugin-framework' ),
-					$export->get_owned_setting_ids(),
+					__( 'Выгрузка заказов', 'woodev-plugin-framework' ),
+					array_merge( $export->get_owned_setting_ids(), $extra_ids ),
 					$export->get_section_description()
 				);
+
+				// «Обновить статусы сейчас»: only for a carrier that declared a cron hook to refresh statuses with
+				$sync = Settings\Status_Sync_Tool::create(
+					Admin\Orders\Orders_Registry::instance()->get_plugin_providers( $this ),
+					function ( string $message ): void {
+						$this->log_error( $message );
+					}
+				);
+
+				$sections[] = null === $sync ? $export_section : $export_section->with_actions( [ $sync ] );
 			}
 
-			if ( [] === $handlers ) {
-				return $providers;
-			}
+			// «Дополнительно» is always LAST
+			$handlers[] = $advanced;
+			$sections[] = \Woodev\Framework\Settings\Settings_Section::create(
+				Settings\Advanced_Settings::SECTION_ID,
+				__( 'Дополнительно', 'woodev-plugin-framework' ),
+				$advanced->get_owned_setting_ids()
+			);
 
 			$providers[] = \Woodev\Framework\Settings\Settings_Provider::create_with_sections(
 				$this->get_id(),
@@ -1063,6 +1310,71 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			);
 
 			return $providers;
+		}
+
+		/**
+		 * The setting ids of the carrier's OWN contribution that belong in the framework's «Выгрузка заказов»
+		 * section, after the framework's own fields — the seam for a carrier's export-process options (CDEK's
+		 * «Формат этикеток», say).
+		 *
+		 * Register the setting in a handler returned by {@see self::get_tab_settings_providers()} as usual, leave
+		 * it out of that contribution's own sections, and return its id here. The section is shown only for a
+		 * carrier that exports orders; an id that no contributed handler owns, or one the framework section
+		 * already owns, is reported with `_doing_it_wrong()` and skipped.
+		 *
+		 * Default: none.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string[]
+		 */
+		protected function get_export_section_setting_ids(): array {
+			return [];
+		}
+
+		/**
+		 * Keeps the ids of {@see self::get_export_section_setting_ids()} that can really be shown.
+		 *
+		 * @param \Woodev_Abstract_Settings[] $handlers the accepted contributed handlers.
+		 * @param Settings\Export_Settings    $export   the framework's export handler.
+		 * @return string[]
+		 */
+		private function resolve_export_section_setting_ids( array $handlers, Settings\Export_Settings $export ): array {
+
+			$resolved = [];
+
+			foreach ( $this->get_export_section_setting_ids() as $setting_id ) {
+
+				$owned = is_string( $setting_id ) && '' !== $setting_id && ! in_array( $setting_id, $export->get_owned_setting_ids(), true );
+
+				if ( $owned ) {
+					$owned = false;
+
+					foreach ( $handlers as $handler ) {
+						if ( null !== $handler->get_setting( $setting_id ) ) {
+							$owned = true;
+							break;
+						}
+					}
+				}
+
+				if ( ! $owned ) {
+					_doing_it_wrong(
+						__METHOD__,
+						sprintf(
+							'Carrier "%1$s": get_export_section_setting_ids() entry "%2$s" is not a setting of a get_tab_settings_providers() handler (or is one of the framework\'s own export settings); it was ignored.',
+							esc_html( $this->get_id() ),
+							esc_html( is_string( $setting_id ) ? $setting_id : gettype( $setting_id ) )
+						),
+						'2.0.2'
+					);
+					continue;
+				}
+
+				$resolved[] = $setting_id;
+			}
+
+			return array_values( array_unique( $resolved ) );
 		}
 
 		/**
@@ -1088,12 +1400,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 * (`Settings_Provider::create_with_sections( $id, $label, $handler, $args, ...$sections )`).
 		 * The framework does not register them as tabs: it takes each one's HANDLER and SECTIONS and
 		 * merges them into the carrier's single tab, in the order returned and ahead of the framework's
-		 * «Выгрузка» section. The descriptor's id is not used. The FIRST accepted contribution's non-empty label is
+		 * «Выгрузка заказов» section. The descriptor's id is not used. The FIRST accepted contribution's non-empty label is
 		 * the carrier's SHORT display name (e.g. «СДЭК»), used for the tab and shipment emails through
 		 * get_carrier_name(); no contribution with a label falls back to get_plugin_name(). The first declared `capability`, `legacy_option_key` and `legacy_page` become the
 		 * tab's. A descriptor's `supports` flags are DROPPED: the tab carries none. Handlers keep their own
 		 * option namespaces — no key moves — but two handlers of one tab must not share a setting id, and
-		 * the ids of «Выгрузка» are taken too: a clashing contribution is reported with `_doing_it_wrong()`
+		 * the ids of «Выгрузка заказов» and «Дополнительно» are taken too: a clashing contribution is reported with `_doing_it_wrong()`
 		 * and left out of the tab.
 		 *
 		 * A connection section (`Settings_Section::create_connection()`) works here, a handshake one (no
@@ -2055,16 +2367,91 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 * @return string
 		 */
 		public function get_assets_version(): string {
-			return $this->is_debug_enabled() ? time() : parent::get_assets_version();
+			return $this->is_debug_enabled() || ( defined( 'WP_DEBUG' ) && WP_DEBUG ) ? time() : parent::get_assets_version();
 		}
 
 		/**
-		 * Determines if debug mode is enabled.
+		 * Whether the merchant switched «Логирование» on (`enable_debug` of {@see Settings\Advanced_Settings}).
 		 *
-		 * @return bool True if debug mode is enabled, false otherwise.
+		 * Off (the default): only errors reach the log. On: also the debug lines ({@see self::log_debug()}) and the
+		 * carrier API requests and responses ({@see self::log_api_request()}). `WP_DEBUG` does not switch it on.
+		 * There is ONE stored key, `enable_debug` — the old `debug_mode` of the integration option is gone.
+		 *
+		 * @since 1.5.0
+		 * @since 2.0.2 Reads the «Дополнительно» setting instead of the integration option's `debug_mode`, and no
+		 *              longer falls back to `WP_DEBUG`.
+		 *
+		 * @return bool True if debug logging is enabled, false otherwise.
 		 */
 		public function is_debug_enabled(): bool {
-			return $this->get_integration_option( 'debug_mode' ) ? wc_string_to_bool( $this->get_integration_option( 'debug_mode' ) ) : ( defined( 'WP_DEBUG' ) && WP_DEBUG );
+			return $this->get_advanced_settings()->is_logging_enabled();
+		}
+
+		/**
+		 * Writes a debug line at the DEBUG level — to the log only while «Логирование» is on. A failure goes to
+		 * {@see self::log_error()}, which always writes.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string      $message The line.
+		 * @param string|null $log_id  Optional log id to segment the files by, defaults to the plugin id.
+		 * @return void
+		 */
+		public function log_debug( $message, $log_id = null ): void {
+			if ( $this->is_debug_enabled() ) {
+				$this->log_at_level( 'debug', (string) $message, $log_id );
+			}
+		}
+
+		/**
+		 * Writes a failure at the ERROR level, whatever «Логирование» says.
+		 *
+		 * The inherited {@see self::log()} writes at WooCommerce's default NOTICE severity, which a shop that
+		 * raised the logging threshold to «Error» silently drops — so a failure belongs here, not there.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string      $message What failed. Foreign text (an exception message) must be redacted first.
+		 * @param string|null $log_id  Optional log id to segment the files by, defaults to the plugin id.
+		 * @return void
+		 */
+		public function log_error( $message, $log_id = null ): void {
+			$this->log_at_level( 'error', (string) $message, $log_id );
+		}
+
+		/**
+		 * Writes a line to the WooCommerce log at an explicit severity, keeping the log source id.
+		 *
+		 * @param string      $level   A `WC_Log_Levels` level: `error`, `debug`, …
+		 * @param string      $message The line.
+		 * @param string|null $log_id  Log source id, defaults to the plugin id.
+		 * @return void
+		 */
+		private function log_at_level( string $level, string $message, $log_id ): void {
+			$this->logger()->log( $level, $message, [ 'source' => is_string( $log_id ) && '' !== $log_id ? $log_id : $this->get_id() ] );
+		}
+
+		/**
+		 * Logs a carrier API request and its response at the DEBUG level — only while «Логирование» is on.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array       $request  Request data.
+		 * @param array       $response Response data.
+		 * @param string|null $log_id   Log to write the data to.
+		 * @return void
+		 */
+		public function log_api_request( $request, $response, $log_id = null ) {
+
+			if ( ! $this->is_debug_enabled() ) {
+				return;
+			}
+
+			$this->log_debug( "Запрос\n" . $this->get_api_log_message( $request ), $log_id );
+
+			if ( ! empty( $response ) ) {
+				$this->log_debug( "Ответ\n" . $this->get_api_log_message( $response ), $log_id );
+			}
 		}
 
 		// ---- Paths ----

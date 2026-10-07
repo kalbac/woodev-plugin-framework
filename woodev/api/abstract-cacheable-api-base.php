@@ -244,7 +244,7 @@ if ( ! class_exists( 'Woodev_Cacheable_API_Base' ) ) :
 
 			self::$oversized_response_logged[ $key ] = true;
 
-			$this->get_plugin()->log(
+			$this->get_plugin()->log_debug(
 				sprintf(
 					'API response not cached: %1$d bytes exceeds the %2$d byte cache limit (request key %3$s).',
 					$size,

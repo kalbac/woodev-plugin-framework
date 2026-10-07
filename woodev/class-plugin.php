@@ -1117,6 +1117,23 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		public function log( $message, $log_id = null ) {}
 
 		/**
+		 * Saves an informational diagnostic line — one a plugin may gate behind its own «Логирование» switch.
+		 *
+		 * The default writes it through {@see self::log()} exactly as before, so a plugin that does not gate its
+		 * diagnostics behaves as it always did; the shipping plugin overrides this to write at the DEBUG level
+		 * and only while its logging switch is on.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string      $message Diagnostic line to save to log.
+		 * @param string|null $log_id  Optional log id to segment the files by.
+		 * @return void
+		 */
+		public function log_debug( $message, $log_id = null ) {
+			$this->log( $message, $log_id );
+		}
+
+		/**
 		 * @param mixed $assertion
 		 *
 		 * @since 1.4.0

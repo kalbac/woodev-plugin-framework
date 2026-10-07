@@ -720,4 +720,40 @@ class SettingsRestControllerTest extends TestCase {
 		$this->assertTrue( $ran );
 		$this->assertTrue( $response['success'] );
 	}
+
+	public function test_run_tool_runs_an_ordinary_sections_action_button_that_is_not_in_the_registry(): void {
+		Functions\when( 'rest_ensure_response' )->returnArg( 1 );
+		Functions\when( 'apply_filters' )->alias( static fn( string $tag, $default = null ) => $default );
+
+		$ran  = false;
+		$tool = Shipping_Tool::create(
+			'sync_delivery_statuses',
+			'Статусы',
+			'',
+			'Обновить статусы сейчас',
+			static function ( array $args ) use ( &$ran ): Tool_Result {
+				$ran = true;
+
+				return Tool_Result::success( 'Статусы обновлены.' );
+			}
+		);
+
+		$section = Mockery::mock();
+		$section->shouldReceive( 'is_tools' )->andReturn( false );
+		$section->shouldReceive( 'get_actions' )->andReturn( [ $tool ] );
+
+		$provider = Mockery::mock();
+		$provider->shouldReceive( 'get_sections' )->andReturn( [ $section ] );
+
+		$registry = Mockery::mock();
+		$registry->shouldReceive( 'get_provider' )->with( 'cdek' )->andReturn( $provider );
+
+		$response = ( new \Woodev_REST_API_Settings_Page( $registry ) )->run_tool(
+			$this->request( [ 'provider_id' => 'cdek', 'tool_id' => 'sync_delivery_statuses', 'args' => [] ] )
+		);
+
+		$this->assertTrue( $ran );
+		$this->assertTrue( $response['success'] );
+		$this->assertSame( 'Статусы обновлены.', $response['message'] );
+	}
 }

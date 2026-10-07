@@ -148,24 +148,35 @@ class RealisticShippingFixtureBehaviourTest extends TestCase {
 	}
 
 	/**
-	 * Neither method declares a form-shaping feature, so neither gets those controls.
+	 * Only the courier declares a form-shaping feature, and only the one it declares.
 	 *
 	 * The negative half of #811/#813, on the fixture that models the production shape: the
-	 * controls appear when a method asks for them and not otherwise. If this ever starts
-	 * failing, a feature was declared somewhere without anyone deciding to.
+	 * controls appear when a method asks for them and not otherwise. FW-A (s158) deliberately
+	 * made the COURIER opt into `FEATURE_BOX_PACKING` so the carrier box-preset seam is
+	 * exercised end to end, so the courier now gets the packing controls; the PICKUP method
+	 * declares nothing and keeps the negative half. Neither declares shipping classes. If this
+	 * ever starts failing, a feature was declared somewhere without anyone deciding to.
 	 *
 	 * @since 2.0.2
 	 *
 	 * @return void
 	 */
-	public function test_neither_method_declares_a_form_shaping_feature(): void {
+	public function test_only_the_courier_declares_box_packing_and_neither_declares_shipping_classes(): void {
 
-		foreach ( [ new \Woodev_Realistic_Shipping_Method( self::INSTANCE_ID ), new \Woodev_Realistic_Pickup_Shipping_Method( self::INSTANCE_ID ) ] as $method ) {
+		$courier = new \Woodev_Realistic_Shipping_Method( self::INSTANCE_ID );
+		$pickup  = new \Woodev_Realistic_Pickup_Shipping_Method( self::INSTANCE_ID );
 
-			$this->assertFalse( $method->supports_box_packing(), $method->get_method_id() );
+		$this->assertTrue( $courier->supports_box_packing(), 'the courier opts into packing to exercise the carrier preset boxes' );
+		$this->assertArrayHasKey( 'packing_algorithm', $courier->instance_form_fields );
+		$this->assertArrayHasKey( 'unpacked_algorithm', $courier->instance_form_fields );
+		$this->assertArrayHasKey( 'default', $courier->instance_form_fields['packing_algorithm']['options'], 'the plugin declares presets, so an instance may inherit the carrier setting' );
+
+		$this->assertFalse( $pickup->supports_box_packing(), $pickup->get_method_id() );
+		$this->assertArrayNotHasKey( 'packing_algorithm', $pickup->instance_form_fields );
+		$this->assertArrayNotHasKey( 'unpacked_algorithm', $pickup->instance_form_fields );
+
+		foreach ( [ $courier, $pickup ] as $method ) {
 			$this->assertFalse( $method->supports_shipping_classes(), $method->get_method_id() );
-
-			$this->assertArrayNotHasKey( 'packing_algorithm', $method->instance_form_fields );
 			$this->assertArrayNotHasKey( 'shipping_class_id', $method->instance_form_fields );
 		}
 	}

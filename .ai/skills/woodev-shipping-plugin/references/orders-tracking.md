@@ -28,7 +28,7 @@ Extend `Abstract_Shipment_Handler` for export/cancel. Its constructor takes `Shi
 
 ## Export settings and automation
 
-The framework adds its `Выгрузка` section to the carrier tab when `Orders_Registry::plugin_exports_orders()` is true for a provider and shipment handler registered in this request. `get_export_settings()` is a getter, not an extension point; do not add a second export settings handler. Merchants control `Export_Settings` (`auto_export_orders`, `export_statuses`), including values migrated from the old integration option. `Order_Automation::auto_export_statuses()` reads those settings. See `Shipping_Plugin::get_settings_providers()`, `get_export_settings()`, and `woodev/shipping-method/order/class-order-automation.php`.
+The framework adds its `Выгрузка заказов` section to the carrier tab when `Orders_Registry::plugin_exports_orders()` is true for a provider and shipment handler registered in this request. `get_export_settings()` is a getter, not an extension point; do not add a second export settings handler. Merchants control `Export_Settings` (`auto_export_orders`, `export_statuses`, `status_delivered`), including values migrated from the old integration option. `Order_Automation::auto_export_statuses()` reads those settings. The section also carries «Обновить статусы сейчас» (fires the provider's `cron_hook`) and your own fields via `get_export_section_setting_ids()` — see [settings and migration](settings-migration.md#framework-sections-of-the-carrier-tab). See `Shipping_Plugin::get_settings_providers()`, `get_export_settings()`, and `woodev/shipping-method/order/class-order-automation.php`.
 
 ## Delivery statuses and tracking
 

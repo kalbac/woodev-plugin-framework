@@ -68,6 +68,46 @@
 		}
 	}
 
+	// Disabled look (s158): a field blocked by `disabled` / `disabled_if` must READ as blocked — the control
+	// carries the native `disabled` state already, this paints it the WordPress way (grey fill, soft border,
+	// muted text) instead of leaving it indistinguishable from an enabled one. Label and the control's own
+	// helper text stay readable (muted, not faded out), so the reason beside it can still be understood.
+	&--disabled {
+		.woodev-field__label {
+			color: wd.$disabled-ink;
+		}
+
+		.components-input-control__container,
+		.components-text-control__input,
+		.components-textarea-control__input,
+		.woodev-select__trigger,
+		.woodev-field__richtext {
+			background: wd.$disabled-bg;
+			border-color: wd.$disabled-line;
+			color: wd.$disabled-ink;
+			cursor: not-allowed;
+		}
+
+		.components-input-control__input,
+		.components-textarea-control__input {
+			color: wd.$disabled-ink;
+			-webkit-text-fill-color: wd.$disabled-ink;
+			cursor: not-allowed;
+		}
+
+		.components-input-control__backdrop {
+			border-color: wd.$disabled-line;
+		}
+
+		// Controls with no field of their own to grey — fade them as a whole.
+		.woodev-field__option-group,
+		.components-range-control,
+		.woodev-field__color,
+		.woodev-boxes-field {
+			opacity: 0.6;
+		}
+	}
+
 	&__desc {
 		font-size: 13px;
 		line-height: 1.55;
@@ -247,6 +287,18 @@
 		color: wd.$ink-muted;
 		margin-top: 3px;
 		line-height: 1.5;
+	}
+
+	// A disabled toggle: muted label, faded pill.
+	&__toggle-row.is-disabled {
+		.woodev-field__toggle-label {
+			color: wd.$disabled-ink;
+		}
+
+		.components-form-toggle {
+			opacity: 0.5;
+			cursor: not-allowed;
+		}
 	}
 
 	// Toggle rows render &__disabled-reason inline (same meta column as the
@@ -526,11 +578,14 @@
 		// D11: a disabled control is rendered read-only, never hidden.
 		&:disabled,
 		&.is-disabled {
-			opacity: 0.6;
-			cursor: default;
+			background: wd.$disabled-bg;
+			border-color: wd.$disabled-line;
+			color: wd.$disabled-ink;
+			box-shadow: none;
+			cursor: not-allowed;
 
 			&:hover {
-				border-color: wd.$line;
+				border-color: wd.$disabled-line;
 			}
 		}
 	}
@@ -652,8 +707,9 @@
 .woodev-boxes {
 	width: 100%;
 	&__scroll { overflow-x: auto; margin-bottom: 12px; }
+	&--carrier &__table { min-width: 680px; }
 	&__table {
-		min-width: 760px;
+		min-width: 960px;
 		th { white-space: nowrap; }
 		td { vertical-align: top; }
 		td:first-child { min-width: 160px; }

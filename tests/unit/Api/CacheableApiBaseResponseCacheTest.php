@@ -49,6 +49,10 @@ class Testable_Cacheable_Api_Base extends \Woodev_Cacheable_API_Base {
 			public function log( $message ) {
 				$this->logged[] = $message;
 			}
+
+			public function log_debug( $message ) {
+				$this->log( $message );
+			}
 		};
 	}
 

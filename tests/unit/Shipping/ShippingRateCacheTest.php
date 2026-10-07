@@ -118,6 +118,13 @@ namespace Woodev\Tests\Unit\Shipping {
 		 * @return void
 		 */
 		public function log( $message, $log_id = null ) {}
+
+		/**
+		 * @param string      $message log line.
+		 * @param string|null $log_id  log id.
+		 * @return void
+		 */
+		public function log_error( $message, $log_id = null ): void {}
 	}
 
 	/** Minimal Shipping_Method double that counts carrier calls. */
@@ -863,7 +870,7 @@ namespace Woodev\Tests\Unit\Shipping {
 			$packing            = $this->key( $method, $this->package() );
 			$this->assertNotSame( $base, $packing, 'box packing declared' );
 
-			$method->option_values['packing_algorithm'] = \Woodev_Packer_Dispatcher::ALGORITHM_SEPARATELY;
+			$method->option_values['packing_algorithm'] = \Woodev_Packer_Dispatcher::ALGORITHM_SINGLE;
 			$this->assertNotSame( $packing, $this->key( $method, $this->package() ), 'algorithm read through get_option()' );
 		}
 

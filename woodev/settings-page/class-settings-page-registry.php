@@ -243,6 +243,18 @@ final class Settings_Page_Registry {
 				}
 			}
 
+			// Buttons under an ordinary section's fields (Settings_Section::with_actions()); the tool descriptor
+			// never carries its callback.
+			$actions = $section->get_actions();
+			if ( [] !== $actions ) {
+				$entry['actions'] = array_map(
+					static function ( $action ): array {
+						return $action->to_array();
+					},
+					$actions
+				);
+			}
+
 			if ( $section->is_connection() ) {
 				$entry['is_connection'] = true;
 				$entry['action_label']  = $section->get_action_label();

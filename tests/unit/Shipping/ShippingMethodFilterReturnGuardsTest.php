@@ -132,6 +132,15 @@ namespace Woodev\Tests\Unit\Shipping {
 			$this->logged[] = [ $message, $log_id ];
 		}
 
+		/**
+		 * @param string      $message log line.
+		 * @param string|null $log_id  log id.
+		 * @return void
+		 */
+		public function log_error( $message, $log_id = null ): void {
+			$this->log( $message, $log_id );
+		}
+
 		/** @return array */
 		protected function get_shipping_method_classes(): array {
 			return [];

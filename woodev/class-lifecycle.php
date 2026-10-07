@@ -261,11 +261,11 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 					]
 				) ) {
 
-					$this->get_plugin()->log( "Starting upgrade to v{$upgrade_version}" );
+					$this->get_plugin()->log_debug( "Starting upgrade to v{$upgrade_version}" );
 
 					$this->$upgrade_method( $installed_version );
 
-					$this->get_plugin()->log( "Upgrade to v{$upgrade_version} complete" );
+					$this->get_plugin()->log_debug( "Upgrade to v{$upgrade_version} complete" );
 				}
 			}
 		}

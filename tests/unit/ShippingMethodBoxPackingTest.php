@@ -38,6 +38,10 @@ namespace {
 			public function supports( $feature ): bool {
 				return in_array( $feature, $this->supports, true );
 			}
+
+			public function generate_select_html( $key, $data = [] ): string {
+				return json_encode( $data );
+			}
 		}
 		class_alias( ShippingMethodBoxPackingTest_WC_Shipping_Method_Stub::class, 'WC_Shipping_Method' );
 	}
@@ -140,7 +144,9 @@ namespace {
 		}
 
 		protected function get_plugin(): \Woodev\Framework\Shipping\Shipping_Plugin {
-			throw new \LogicException( 'not needed for box-packing seam tests' );
+			$plugin = \Mockery::mock( \Woodev\Framework\Shipping\Shipping_Plugin::class );
+			$plugin->shouldReceive( 'get_packaging_settings' )->andReturn( new \Woodev\Framework\Shipping\Settings\Packaging_Settings( 'packing_test', [] ) );
+			return $plugin;
 		}
 
 		/**
@@ -249,11 +255,11 @@ namespace Woodev\Tests\Unit {
 			);
 		}
 
-		public function test_get_packing_algorithm_defaults_to_virtual_when_unset(): void {
+		public function test_get_packing_algorithm_defaults_to_carrier_default_when_unset(): void {
 			$method = $this->make_method();
 
 			$this->assertSame(
-				\Woodev_Packer_Dispatcher::ALGORITHM_VIRTUAL,
+				\Woodev_Packer_Dispatcher::ALGORITHM_SEPARATELY,
 				$this->invoke( $method, 'get_packing_algorithm' )
 			);
 		}

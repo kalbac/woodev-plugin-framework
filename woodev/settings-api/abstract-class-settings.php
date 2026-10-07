@@ -214,8 +214,16 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 					$control->set_tooltip( (string) $args['tooltip'] );
 				}
 
+				if ( isset( $args['description_on'] ) ) {
+					$control->set_description_on( (string) $args['description_on'] );
+				}
+
 				if ( isset( $args['placeholder'] ) ) {
 					$control->set_placeholder( (string) $args['placeholder'] );
+				}
+
+				if ( isset( $args['box_preset'] ) && is_array( $args['box_preset'] ) ) {
+					$control->set_box_preset( $args['box_preset'] );
 				}
 
 				if ( isset( $args['country'] ) ) {

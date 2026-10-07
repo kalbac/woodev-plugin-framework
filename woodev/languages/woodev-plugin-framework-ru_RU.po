@@ -5355,3 +5355,156 @@ msgstr "Добавить упаковку"
 #: assets/build/settings-page/index.js:1
 msgid "Удалить"
 msgstr ""
+
+#: shipping-method/settings/class-packaging-settings.php
+msgid "Упаковывать в коробки"
+msgstr "Упаковывать в коробки"
+
+#: shipping-method/settings/class-packaging-settings.php
+msgid "Каждый товар отдельно"
+msgstr "Каждый товар отдельно"
+
+#: shipping-method/settings/class-packaging-settings.php
+msgid "Всё в одну коробку"
+msgstr "Всё в одну коробку"
+
+#: shipping-method/class-shipping-method.php
+msgid "Способ упаковки"
+msgstr "Способ упаковки"
+
+#: shipping-method/class-shipping-method.php
+msgid "Минимальная коробка"
+msgstr "Минимальная коробка"
+
+#: shipping-method/settings/class-packaging-settings.php
+msgid "Как объединять товары в посылки. Настройки способа доставки могут переопределить этот выбор."
+msgstr "Как объединять товары в посылки. Настройки способа доставки могут переопределить этот выбор."
+
+#: shipping-method/class-shipping-method.php
+msgid "Непоместившиеся товары"
+msgstr "Непоместившиеся товары"
+
+#: shipping-method/class-shipping-method.php
+msgid "Как упаковывать товары, которые не поместились в коробки?"
+msgstr "Как упаковывать товары, которые не поместились в коробки?"
+
+#: shipping-method/settings/class-packaging-settings.php
+msgid "Размеры: %1$s × %2$s × %3$s см. Использовать, если подходящей упаковки магазина нет."
+msgstr "Размеры: %1$s × %2$s × %3$s см. Использовать, если подходящей упаковки магазина нет."
+
+#: shipping-method/settings/class-packaging-settings.php
+msgid "Учитывать стоимость"
+msgstr "Учитывать стоимость"
+
+#: shipping-method/settings/class-packaging-settings.php
+msgid "Перевозчик включит стоимость этой упаковки в расчёт доставки."
+msgstr "Перевозчик включит стоимость этой упаковки в расчёт доставки."
+
+#: shipping-method/settings/class-packaging-settings.php
+msgid "Стоимость упаковки"
+msgstr "Стоимость упаковки"
+
+#: shipping-method/settings/class-packaging-settings.php
+msgid "Сумма за одну коробку или процент от стоимости товаров в ней, например 2%."
+msgstr "Сумма за одну коробку или процент от стоимости товаров в ней, например 2%."
+
+#: shipping-method/class-shipping-method.php
+msgid "Как в настройках плагина"
+msgstr "Как в настройках плагина"
+
+#: src/components/boxes-table.tsx
+msgid "Стоимость должна быть суммой не меньше нуля или процентом, например 2%."
+msgstr "Стоимость должна быть суммой не меньше нуля или процентом, например 2%."
+
+#: src/components/boxes-table.tsx
+msgid "Стоимость"
+msgstr "Стоимость"
+
+#: src/components/boxes-table.tsx
+msgid "Использовать"
+msgstr "Использовать"
+
+#: src/components/carrier-boxes-table.tsx
+msgid "Размеры, см"
+msgstr "Размеры, см"
+
+#: src/components/carrier-boxes-table.tsx
+msgid "Вкл"
+msgstr "Вкл"
+
+#: src/components/boxes-table.tsx src/components/carrier-boxes-table.tsx
+msgid "Стоимость: число или N%, например 2%."
+msgstr "Стоимость: число или N%, например 2%."
+
+#: shipping-method/class-shipping-plugin.php:1226
+msgid "Выгрузка заказов"
+msgstr ""
+
+#: shipping-method/class-shipping-plugin.php:1246
+msgid "Дополнительно"
+msgstr ""
+
+#: shipping-method/order/class-delivered-order-status.php:102
+msgid "Перевозчик сообщил, что заказ доставлен."
+msgstr ""
+
+#: shipping-method/settings/class-advanced-settings.php:124
+msgid "Логирование"
+msgstr ""
+
+#: shipping-method/settings/class-advanced-settings.php:132
+msgid "Выключено — в лог попадают только ошибки. Включено — ещё и подробные записи, в том числе запросы к перевозчику и его ответы."
+msgstr ""
+
+#: shipping-method/settings/class-advanced-settings.php:134
+msgid "Не включайте без необходимости: в лог записывается много данных"
+msgstr ""
+
+#: shipping-method/settings/class-advanced-settings.php:142
+msgid "Не показывать на странице корзины"
+msgstr ""
+
+#: shipping-method/settings/class-advanced-settings.php:150
+msgid "Способы доставки этого перевозчика не предлагаются в корзине — только при оформлении заказа."
+msgstr ""
+
+#: shipping-method/settings/class-export-settings.php:256
+msgid "Статус доставленного заказа"
+msgstr ""
+
+#: shipping-method/settings/class-export-settings.php:258
+msgid "Не менять"
+msgstr ""
+
+#: shipping-method/settings/class-export-settings.php:268
+msgid "Этот статус получит заказ один раз — когда перевозчик сообщит, что посылка вручена покупателю. Отменённый, возвращённый или неоплаченный заказ не меняется. «Не менять» — статус заказа остаётся прежним."
+msgstr ""
+
+#: shipping-method/settings/class-status-sync-tool.php:79
+msgid "Статусы доставки"
+msgstr ""
+
+#: shipping-method/settings/class-status-sync-tool.php:80
+msgid "Статусы заказов обновляются сами по расписанию. Нажмите, чтобы получить их у перевозчика прямо сейчас."
+msgstr ""
+
+#: shipping-method/settings/class-status-sync-tool.php:81
+msgid "Обновить статусы сейчас"
+msgstr ""
+
+#: shipping-method/settings/class-status-sync-tool.php:86
+msgid "Плагин не поддерживает обновление статусов вручную."
+msgstr ""
+
+#: shipping-method/settings/class-status-sync-tool.php:118
+msgid "Не удалось обновить статусы. Подробности записаны в лог."
+msgstr ""
+
+#: shipping-method/settings/class-status-sync-tool.php:128
+#, php-format
+msgid "Статусы обновлены. Последнее обновление: %s."
+msgstr ""
+
+#: shipping-method/settings/class-status-sync-tool.php:134
+msgid "Статусы обновлены."
+msgstr ""

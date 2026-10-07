@@ -81,11 +81,13 @@ class SetupWizardFieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'get_description' )->andReturn( 'Speed description' );
 		$control->shouldReceive( 'get_tooltip' )->andReturn( 'Hover tip' );
 		$control->shouldReceive( 'get_placeholder' )->andReturn( '' )->byDefault();
+		$control->shouldReceive( 'get_description_on' )->andReturn( '' )->byDefault();
 		$control->shouldReceive( 'get_min' )->andReturn( 0.0 );
 		$control->shouldReceive( 'get_max' )->andReturn( 100.0 );
 		$control->shouldReceive( 'get_step' )->andReturn( 1.0 );
 		$control->shouldReceive( 'is_disabled' )->andReturn( false )->byDefault();
 		$control->shouldReceive( 'get_country' )->andReturn( '' )->byDefault();
+		$control->shouldReceive( 'get_box_preset' )->andReturn( [] )->byDefault();
 		$control->shouldReceive( 'is_native_bounds' )->andReturn( false )->byDefault();
 
 		// Build the setting mock.
@@ -152,11 +154,13 @@ class SetupWizardFieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'get_description' )->andReturn( '' );
 		$control->shouldReceive( 'get_tooltip' )->andReturn( '' );
 		$control->shouldReceive( 'get_placeholder' )->andReturn( '' )->byDefault();
+		$control->shouldReceive( 'get_description_on' )->andReturn( '' )->byDefault();
 		$control->shouldReceive( 'get_min' )->andReturn( null );
 		$control->shouldReceive( 'get_max' )->andReturn( null );
 		$control->shouldReceive( 'get_step' )->andReturn( null );
 		$control->shouldReceive( 'is_disabled' )->andReturn( false )->byDefault();
 		$control->shouldReceive( 'get_country' )->andReturn( '' )->byDefault();
+		$control->shouldReceive( 'get_box_preset' )->andReturn( [] )->byDefault();
 		$control->shouldReceive( 'is_native_bounds' )->andReturn( false )->byDefault();
 
 		$setting = Mockery::mock( 'Woodev_Setting' );
