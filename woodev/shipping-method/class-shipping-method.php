@@ -63,9 +63,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		const FEATURE_RATE_CACHE = 'rate-cache';
 
 		/**
+		 * Fee-by-payment-method feature: the instance gets a `fee_payments` control, and the carrier asks
+		 * {@see self::fee_applies_for_package()} (or calls {@see self::apply_fee_for_package()}) before it
+		 * adds its fee. OFF unless declared (#1144).
+		 */
+		const FEATURE_FEE_PAYMENTS = 'fee-payments';
+
+		/**
 		 * The features whose declaration changes what {@see self::init_form_fields()} builds.
 		 *
-		 * Exactly these two gate a control there. The rest — the two framework features and the
+		 * Exactly these three gate a control there. The rest — the two framework features and the
 		 * three capability flags read by the host plugin — declare intent and shape no form, so
 		 * {@see self::add_support()} must not pay for a rebuild on their account.
 		 *
@@ -74,6 +81,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		private const FORM_SHAPING_FEATURES = [
 			self::FEATURE_SHIPPING_CLASSES,
 			self::FEATURE_BOX_PACKING,
+			self::FEATURE_FEE_PAYMENTS,
 		];
 
 		/**
@@ -295,6 +303,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 				];
 			}
 
+			if ( $this->supports_fee_payments() ) {
+
+				// the options are filled in when the control is rendered — see generate_multiselect_html()
+				$this->instance_form_fields[ Fee_Payments::OPTION_KEY ] = [
+					'title'             => __( 'Оплата с наценкой', 'woodev-plugin-framework' ),
+					'type'              => 'multiselect',
+					'class'             => 'wc-enhanced-select',
+					'css'               => 'width: 400px;',
+					'default'           => [],
+					'options'           => [],
+					'desc_tip'          => __( 'Наценка на доставку применяется только если покупатель выбрал один из этих способов оплаты. Оставьте поле пустым, чтобы наценка применялась всегда.', 'woodev-plugin-framework' ),
+					'custom_attributes' => [
+						'data-placeholder' => __( 'Любой способ оплаты', 'woodev-plugin-framework' ),
+					],
+				];
+			}
+
 			/**
 			 * Shipping Method Instance Form Fields Filter.
 			 *
@@ -339,7 +364,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			 *
 			 * This terminates. The second pass runs with the feature already in `supports`, so
 			 * a callback that declares it again is a no-op in `add_support()` and sets nothing
-			 * pending; and only two features shape the form at all, which bounds even a
+			 * pending; and only three features shape the form at all, which bounds even a
 			 * pathological callback that declares a different one each time.
 			 */
 			if ( $this->pending_form_rebuild ) {
@@ -990,6 +1015,32 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		}
 
 		/**
+		 * Fills the `fee_payments` control with the store's enabled payment gateways when it is rendered.
+		 *
+		 * Done at render time, not when the form is built: the form is built on every request that
+		 * constructs the method, and loading every gateway there would be paid by the storefront for
+		 * a control only the settings screen shows. A gateway that is already chosen stays in the list
+		 * even if it has since been switched off, so saving the screen does not drop it silently.
+		 *
+		 * @since 2.0.2
+		 *
+		 * No return type, like WooCommerce's own method: the v1 carrier plugins override this one untyped, and
+		 * the signature probe's frozen acceptance figures (#767) count a typed base as a new fatal.
+		 *
+		 * @param string $key  field key.
+		 * @param array  $data field definition.
+		 * @return string
+		 */
+		public function generate_multiselect_html( $key, $data = [] ) {
+
+			if ( Fee_Payments::OPTION_KEY === $key ) {
+				$data['options'] = Fee_Payments::gateway_options( $this->get_fee_payments() );
+			}
+
+			return parent::generate_multiselect_html( $key, $data );
+		}
+
+		/**
 		 * Gets the plugin instance that owns this shipping method.
 		 *
 		 * @since 1.5.0
@@ -1272,6 +1323,83 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		}
 
 		/**
+		 * Determines whether this method restricts its fee to chosen payment methods (#1144).
+		 *
+		 * Named predicate over {@see self::FEATURE_FEE_PAYMENTS}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public function supports_fee_payments(): bool {
+			return $this->supports( self::FEATURE_FEE_PAYMENTS );
+		}
+
+		/**
+		 * The payment gateway ids the merchant limited the fee to; empty means «every payment method».
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string[]
+		 */
+		public function get_fee_payments(): array {
+			return Fee_Payments::normalize( $this->get_option( Fee_Payments::OPTION_KEY, [] ) );
+		}
+
+		/**
+		 * Whether the fee applies to `$package`, given the payment method the customer chose.
+		 *
+		 * The rule is the v1 CDEK plugin's (2.2.5.5, `class-wc-edostavka-shipping-method.php:883`):
+		 *
+		 * - a method that did not declare {@see self::FEATURE_FEE_PAYMENTS}, or an empty list → the fee
+		 *   applies, always;
+		 * - a list → the fee applies only when the chosen payment method is in it, so while NO method is
+		 *   chosen yet (the cart page, a first visit to the order form before WooCommerce saved one) it
+		 *   does not.
+		 *
+		 * The chosen method is read from the package, where {@see Fee_Payments} puts it, and from the
+		 * session when the package carries none — the same two places, in the same order, that key the
+		 * rate cache ({@see self::get_rate_cache_context()}), so a cached rate and the fee in it agree.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array $package WooCommerce shipping package.
+		 * @return bool
+		 */
+		public function fee_applies_for_package( array $package ): bool {
+
+			if ( ! $this->supports_fee_payments() ) {
+				return true;
+			}
+
+			$allowed = $this->get_fee_payments();
+
+			if ( [] === $allowed ) {
+				return true;
+			}
+
+			$chosen = $this->payment_method_for_package( $package );
+
+			return '' !== $chosen && in_array( $chosen, $allowed, true );
+		}
+
+		/**
+		 * {@see Shipping_Helper::apply_fee()} behind {@see self::fee_applies_for_package()}: the cost
+		 * comes back untouched when the chosen payment method is outside the merchant's list.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param float  $cost             base shipping cost.
+		 * @param string $fee              fee value (e.g. `250` or `5%`).
+		 * @param float  $base_for_percent base amount for a percentage fee.
+		 * @param array  $package          WooCommerce shipping package.
+		 * @return float
+		 */
+		protected function apply_fee_for_package( float $cost, string $fee, float $base_for_percent, array $package ): float {
+			return $this->fee_applies_for_package( $package ) ? Shipping_Helper::apply_fee( $cost, $fee, $base_for_percent ) : $cost;
+		}
+
+		/**
 		 * Everything the rate of this method depends on, as plain data — the identity of a cached rate.
 		 *
 		 * Two calculations with an equal context MUST produce the same rate; the rate cache serves
@@ -1318,7 +1446,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 				$context['packing']['leftovers'] = $this->get_unpacked_algorithm();
 				$context['packing']['values'] = Packaging::get_value_context( (array) ( $package['contents'] ?? [] ) );
 			}
-			$context['payment']  = $this->chosen_payment_method();
+			$context['payment']  = $this->payment_method_for_package( $package );
 
 			$handler = $this->get_plugin()->get_pickup_handler();
 
@@ -1354,6 +1482,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			$chosen = $session->get( 'chosen_payment_method' );
 
 			return is_scalar( $chosen ) ? (string) $chosen : '';
+		}
+
+		/**
+		 * The payment method this rate is calculated for: the one on the package
+		 * ({@see Fee_Payments::add_chosen_payment_to_packages()}), else the session's.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array $package WooCommerce shipping package.
+		 * @return string `''` when none is chosen yet.
+		 */
+		private function payment_method_for_package( array $package ): string {
+
+			$on_package = $package[ Fee_Payments::PACKAGE_KEY ] ?? '';
+
+			return is_string( $on_package ) && '' !== $on_package ? $on_package : $this->chosen_payment_method();
 		}
 
 

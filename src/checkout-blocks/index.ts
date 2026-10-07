@@ -6,6 +6,7 @@
  */
 
 import { watchPostcodeEdits } from './pickup-stores';
+import { readFeePaymentsNamespace, watchPaymentMethod } from './payment-recalc';
 import { registerLocalityBlock, registerPickupBlock } from './register';
 import { captureWcRuntime } from './wc-runtime';
 import { resolveCartFromServer } from './wc-stores';
@@ -24,4 +25,11 @@ if ( locality || pickup ) {
 // From before the form can be typed in: whose postcode it is, is asked at the next point (#1113).
 if ( pickup ) {
 	watchPostcodeEdits();
+}
+
+// A fee limited to chosen payment methods needs the server to know the chosen one (#1144); off unless the server says so.
+const feePaymentsNamespace = readFeePaymentsNamespace();
+
+if ( feePaymentsNamespace !== null ) {
+	watchPaymentMethod( feePaymentsNamespace );
 }
