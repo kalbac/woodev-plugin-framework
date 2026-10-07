@@ -1,0 +1,53 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://suggestions.dadata.ru/suggestions/api/4_1/rs/suggest/address",
+    "headers": {
+      "Authorization": "Token <redacted>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "query": "Химки",
+      "count": 1,
+      "language": "en"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "suggestions": [
+        {
+          "value": "Russia, oblast Moskovskaya, gorod Khimki",
+          "unrestricted_value": "141402, Russia, oblast Moskovskaya, gorod Khimki",
+          "data": {
+            "postal_code": "141402",
+            "country": "Russia",
+            "country_iso_code": "RU",
+            "region_fias_id": "29251dcf-00a1-4e34-98d4-5c47484a36d4",
+            "region_kladr_id": "5000000000000",
+            "region_with_type": "oblast Moskovskaya",
+            "region_type": "oblast",
+            "region_type_full": "oblast",
+            "region": "Moskovskaya",
+            "area_fias_id": null,
+            "area": null,
+            "city_fias_id": "d76255c8-3173-4db5-a39b-badd3ebdf851",
+            "city_kladr_id": "5000003000000",
+            "city_with_type": "gorod Khimki",
+            "city_type": "gorod",
+            "city_type_full": "gorod",
+            "city": "Khimki",
+            "settlement_fias_id": null,
+            "settlement": null,
+            "fias_id": "d76255c8-3173-4db5-a39b-badd3ebdf851",
+            "fias_level": "4",
+            "kladr_id": "5000003000000",
+            "geo_lat": "55.888755",
+            "geo_lon": "37.430337"
+          }
+        }
+      ]
+    }
+  },
+  "note": "NOT a raw capture: reconstructed from the measured values in the s159 R1152 report (07.10.2026, rig, live DaData) — identity fields byte-identical across languages, only the name text differs; unused fields omitted. The English (transliterated) settlement-level row a customer under an en locale gets for «Химки»."
+}

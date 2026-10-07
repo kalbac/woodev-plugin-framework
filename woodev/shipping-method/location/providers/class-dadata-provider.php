@@ -119,6 +119,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		private const DELIVERY_IDS_CACHE_PREFIX = 'woodev_location_dadata_delivery_';
 
 		/**
+		 * Filter tag: the cache TTL, in seconds, of {@see self::record_in_language()} (#1152).
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		public const FILTER_RECORD_IN_LANGUAGE_CACHE_TTL = 'woodev_location_dadata_record_in_language_cache_ttl';
+
+		/**
+		 * Transient key prefix of {@see self::record_in_language()}'s cache — site-wide,
+		 * a locality spelled in a language is a fact about the place, identical for
+		 * every customer.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		private const RECORD_IN_LANGUAGE_CACHE_PREFIX = 'woodev_location_dadata_lang_';
+
+		/**
 		 * The nine countries served by default (before {@see self::FILTER_COUNTRIES}
 		 * runs) — the store operator's market-scope decision, not a limit of the
 		 * DaData API; see {@see self::get_countries()}'s own docblock for the
@@ -723,6 +741,104 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		}
 
 		/**
+		 * The same locality, spelled in another language — `POST findById/address`
+		 * for the record's own FIAS id with an EXPLICIT `language` (#1152), so a
+		 * carrier adapter can match against the carrier's Russian dictionary while
+		 * the customer keeps reading English.
+		 *
+		 * DaData's identity fields (`fias_id`, KLADR, coordinates, carrier ids) are
+		 * byte-identical in both languages — measured s159 — so the answer is the
+		 * SAME locality (same key); only the human text (`label`, the `region` /
+		 * `district` / `settlement` names, the `raw` name fields) differs. The
+		 * level is the one DaData reports for the id, which for a record this
+		 * provider produced is the record's own.
+		 *
+		 * The id queried is the record's own key (`dadata:{fias_id}`) — the same one
+		 * {@see self::resolve_key()} asks about — never the city/settlement id
+		 * {@see self::delivery_ids()} uses, because the answer must be the record
+		 * itself, not its parent locality.
+		 *
+		 * The answer is cached in a site-wide transient keyed by `(language, id)` —
+		 * a hit for a week, a genuine «DaData does not know this id» for a day
+		 * ({@see self::FILTER_RECORD_IN_LANGUAGE_CACHE_TTL}). A THROWN failure is
+		 * never cached: it retries on the next call.
+		 *
+		 * Answers `null` — never a throw — for every «cannot do it» outcome: a
+		 * record some other provider produced, a DERIVED key (no real FIAS id to
+		 * ask about), a language other than `ru` / `en`, this provider not being
+		 * configured, or DaData knowing nothing for the id. Only a real
+		 * transport/mapping failure throws.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Location_Record $record   A record this provider produced.
+		 * @param string          $language `ru` or `en`.
+		 *
+		 * @return Location_Record|null The record in `$language`, or null when it cannot be had.
+		 *
+		 * @throws Location_Provider_Exception When the DaData request fails or its answer cannot be mapped.
+		 */
+		public function record_in_language( Location_Record $record, string $language ): ?Location_Record {
+			if (
+				self::PROVIDER_ID !== $record->provider_id()
+				|| ! in_array( $language, [ 'ru', 'en' ], true )
+				|| Locality_Key::is_derived( $record->key() )
+				|| ! $this->is_configured()
+			) {
+				return null;
+			}
+
+			[ , $native_id ] = Locality_Key::parse( $record->key() );
+
+			$cache_key = self::RECORD_IN_LANGUAGE_CACHE_PREFIX . md5( $language . '|' . $native_id );
+			$cached    = get_transient( $cache_key );
+
+			if ( is_array( $cached ) ) {
+				return [] === $cached ? null : Location_Record::from_array( $cached );
+			}
+
+			try {
+				$raw = $this->client()->find_by_id_address( $native_id, $language );
+			} catch ( \Throwable $exception ) {
+				$this->log_failure( 'record_in_language', $exception );
+
+				throw new Location_Provider_Exception( 'DaData record_in_language request failed.', 0, $exception );
+			}
+
+			$translated = null;
+
+			if ( null !== $raw ) {
+				$data = (array) ( $raw['data'] ?? [] );
+
+				if ( [] !== $data ) {
+					$translated = $this->record_from_dadata_fields( $data, self::level_from_dadata_fields( $data ), (string) ( $raw['value'] ?? '' ), '' );
+				}
+
+				if ( null === $translated ) {
+					// A 200 we cannot read is OUR mapping failing, not DaData saying
+					// «unknown» — retryable, so it must not be cached as a miss.
+					throw new Location_Provider_Exception(
+						sprintf( 'DaData record_in_language(): response for key "%s" could not be mapped to a valid record.', $record->key() )
+					);
+				}
+			}
+
+			/**
+			 * Filters how long {@see Dadata_Provider::record_in_language()} caches an answer, in seconds (#1152).
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param int  $ttl   `WEEK_IN_SECONDS` for a found record, `DAY_IN_SECONDS` for «DaData does not know the id».
+			 * @param bool $found Whether DaData returned the record.
+			 */
+			$ttl = (int) apply_filters( self::FILTER_RECORD_IN_LANGUAGE_CACHE_TTL, null === $translated ? DAY_IN_SECONDS : WEEK_IN_SECONDS, null !== $translated );
+
+			set_transient( $cache_key, null === $translated ? [] : $translated->to_array(), max( 0, $ttl ) );
+
+			return $translated;
+		}
+
+		/**
 		 * The id to ask `findById/delivery` about, from a record's raw payload.
 		 *
 		 * @since 2.0.2
@@ -1260,7 +1376,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param string     $operation One of `suggest`, `locate`, `normalize`, `map`.
+		 * @param string     $operation One of `suggest`, `locate`, `normalize`, `map`, `resolve_key`, `delivery_ids`, `record_in_language`.
 		 * @param \Throwable $exception The caught failure.
 		 *
 		 * @return void
