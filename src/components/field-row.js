@@ -39,12 +39,14 @@ import FieldTip from './field-tip';
  *                                            as a separate, visually distinguishable note from
  *                                            `description` (a state note, not documentation).
  * @param {string}    [props.error]          validation error message (red, under control).
+ * @param {boolean}   [props.disabled]       whether the control is disabled — the row gets `woodev-field--disabled`,
+ *                                            which greys the label and the control (the WordPress disabled look).
  * @param {*}         props.children         the control element(s).
  * @return {JSX.Element} the field row.
  */
-export default function FieldRow( { label, required, tooltip, description, disabledReason, error, children } ) {
+export default function FieldRow( { label, required, tooltip, description, disabledReason, error, disabled, children } ) {
 	return (
-		<div className={ `woodev-field${ error ? ' woodev-field--error' : '' }` }>
+		<div className={ `woodev-field${ error ? ' woodev-field--error' : '' }${ disabled ? ' woodev-field--disabled' : '' }` }>
 			{ label && (
 				<div className="woodev-field__label">
 					{ label }

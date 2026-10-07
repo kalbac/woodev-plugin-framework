@@ -414,16 +414,15 @@ if ( ! class_exists( 'Woodev_REST_API_Settings_Page' ) ) :
 				);
 			}
 
-			// Find the tools section and the tool itself, by id.
-			$tool = null;
+			// Find the tool itself, by id: in a tools section (a registry tool) or among an ordinary section's
+			// action buttons (which belong to this tab and are not in the registry).
+			$tool      = null;
+			$is_action = false;
 			foreach ( $provider->get_sections() as $section ) {
-				if ( ! $section->is_tools() ) {
-					continue;
-				}
-
-				foreach ( $section->get_tools() as $candidate ) {
+				foreach ( $section->is_tools() ? $section->get_tools() : $section->get_actions() as $candidate ) {
 					if ( $candidate->get_id() === $tool_id ) {
-						$tool = $candidate;
+						$tool      = $candidate;
+						$is_action = ! $section->is_tools();
 						break 2;
 					}
 				}
@@ -444,7 +443,8 @@ if ( ! class_exists( 'Woodev_REST_API_Settings_Page' ) ) :
 			);
 
 			try {
-				$result = \Woodev\Framework\Shipping\Settings\Shipping_Tools_Registry::instance()->run( $tool_id, $args );
+				$registry = \Woodev\Framework\Shipping\Settings\Shipping_Tools_Registry::instance();
+				$result   = $is_action ? $registry->execute( $tool, $args ) : $registry->run( $tool_id, $args );
 			} catch ( \Throwable $e ) {
 				error_log( sprintf( '[woodev] shipping tool run failed for %s/%s: %s', $provider_id, $tool_id, \Woodev_API_Base::redact_secret_log_text( $e->getMessage() ) ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic for an unexpected callback failure.
 				return new WP_Error(

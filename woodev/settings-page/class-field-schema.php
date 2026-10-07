@@ -61,6 +61,11 @@ final class Field_Schema {
 				'required'    => $setting->is_required(),
 			];
 
+			// A toggle's ON-only line travels only when one was declared.
+			if ( $control && '' !== $control->get_description_on() ) {
+				$entry['description_on'] = $control->get_description_on();
+			}
+
 			// Only `TYPE_LOCATION_PICKER` controls carry a resolved store country
 			// (issue #376) — every other control's `Woodev_Control::$country`
 			// stays '', so this key is omitted rather than shipping a meaningless

@@ -660,4 +660,29 @@ class SettingsPageRegistryTest extends TestCase {
 
 		$this->assertTrue( $this->call_private_static( 'query_matches', [ $request, [] ] ) );
 	}
+
+	public function test_build_sections_serializes_an_ordinary_sections_actions_without_callback(): void {
+		$tool     = Shipping_Tool::create( 'sync', 'Статусы', 'Описание', 'Обновить статусы сейчас', static fn( array $args ): Tool_Result => Tool_Result::success() );
+		$provider = Settings_Provider::create(
+			'cdek',
+			'СДЭК',
+			$this->make_connection_handler(),
+			[ Settings_Section::create( 'export', 'Выгрузка заказов', [ 'token' ] )->with_actions( [ $tool ] ) ]
+		);
+
+		$sections = $this->call_private( Settings_Page_Registry::instance(), 'build_sections', [ $provider ] );
+
+		$this->assertArrayNotHasKey( 'is_tools', $sections[0], 'still an ordinary section' );
+		$this->assertSame( 'sync', $sections[0]['actions'][0]['id'] );
+		$this->assertSame( 'Обновить статусы сейчас', $sections[0]['actions'][0]['button'] );
+		$this->assertArrayNotHasKey( 'callback', $sections[0]['actions'][0] );
+	}
+
+	public function test_build_sections_omits_the_actions_key_when_there_are_none(): void {
+		$provider = Settings_Provider::create( 'cdek', 'СДЭК', $this->make_connection_handler(), [ Settings_Section::create( 'general', 'Общие', [ 'token' ] ) ] );
+
+		$sections = $this->call_private( Settings_Page_Registry::instance(), 'build_sections', [ $provider ] );
+
+		$this->assertArrayNotHasKey( 'actions', $sections[0] );
+	}
 }

@@ -38,6 +38,11 @@ $ink:       #1d2327;
 $ink-muted: #757575;
 $muted:     #646970;
 $surface:   #fff;
+
+// Disabled controls (s158): WordPress's own «unavailable» look — grey fill, soft border, muted text.
+$disabled-bg:   #f0f0f1;
+$disabled-line: #dcdcde;
+$disabled-ink:  #8c8f94;
 $radius:    12px;
 $radius-sm: 8px;
 

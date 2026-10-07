@@ -88,6 +88,7 @@ class FieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'get_description' )->andReturn( 'control desc' );
 		$control->shouldReceive( 'get_tooltip' )->andReturn( 'tip' );
 		$control->shouldReceive( 'get_placeholder' )->andReturn( '' )->byDefault();
+		$control->shouldReceive( 'get_description_on' )->andReturn( '' )->byDefault();
 		$control->shouldReceive( 'get_min' )->andReturn( 1.0 );
 		$control->shouldReceive( 'get_max' )->andReturn( 10.0 );
 		$control->shouldReceive( 'get_step' )->andReturn( 0.5 );
@@ -120,6 +121,7 @@ class FieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'get_description' )->andReturn( '' );
 		$control->shouldReceive( 'get_tooltip' )->andReturn( '' );
 		$control->shouldReceive( 'get_placeholder' )->andReturn( '' )->byDefault();
+		$control->shouldReceive( 'get_description_on' )->andReturn( '' )->byDefault();
 		$control->shouldReceive( 'get_min' )->andReturn( null );
 		$control->shouldReceive( 'get_max' )->andReturn( null );
 		$control->shouldReceive( 'get_step' )->andReturn( null );
@@ -235,6 +237,7 @@ class FieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'get_description' )->andReturn( '' );
 		$control->shouldReceive( 'get_tooltip' )->andReturn( '' );
 		$control->shouldReceive( 'get_placeholder' )->andReturn( '' )->byDefault();
+		$control->shouldReceive( 'get_description_on' )->andReturn( '' )->byDefault();
 		$control->shouldReceive( 'get_min' )->andReturn( null );
 		$control->shouldReceive( 'get_max' )->andReturn( null );
 		$control->shouldReceive( 'get_step' )->andReturn( null );
@@ -301,6 +304,7 @@ class FieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'get_description' )->andReturn( '' );
 		$control->shouldReceive( 'get_tooltip' )->andReturn( '' );
 		$control->shouldReceive( 'get_placeholder' )->andReturn( 'enter value' );
+		$control->shouldReceive( 'get_description_on' )->andReturn( '' )->byDefault();
 		$control->shouldReceive( 'get_min' )->andReturn( null );
 		$control->shouldReceive( 'get_max' )->andReturn( null );
 		$control->shouldReceive( 'get_step' )->andReturn( null );
@@ -335,6 +339,7 @@ class FieldSchemaTest extends TestCase {
 		$picker_control->shouldReceive( 'get_description' )->andReturn( '' );
 		$picker_control->shouldReceive( 'get_tooltip' )->andReturn( '' );
 		$picker_control->shouldReceive( 'get_placeholder' )->andReturn( '' );
+		$picker_control->shouldReceive( 'get_description_on' )->andReturn( '' )->byDefault();
 		$picker_control->shouldReceive( 'get_min' )->andReturn( null );
 		$picker_control->shouldReceive( 'get_max' )->andReturn( null );
 		$picker_control->shouldReceive( 'get_step' )->andReturn( null );
@@ -348,6 +353,7 @@ class FieldSchemaTest extends TestCase {
 		$plain_control->shouldReceive( 'get_description' )->andReturn( '' );
 		$plain_control->shouldReceive( 'get_tooltip' )->andReturn( '' );
 		$plain_control->shouldReceive( 'get_placeholder' )->andReturn( '' );
+		$plain_control->shouldReceive( 'get_description_on' )->andReturn( '' )->byDefault();
 		$plain_control->shouldReceive( 'get_min' )->andReturn( null );
 		$plain_control->shouldReceive( 'get_max' )->andReturn( null );
 		$plain_control->shouldReceive( 'get_step' )->andReturn( null );
@@ -416,6 +422,7 @@ class FieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'get_description' )->andReturn( 'Скрывает адрес получателя из письма.' );
 		$control->shouldReceive( 'get_tooltip' )->andReturn( '' );
 		$control->shouldReceive( 'get_placeholder' )->andReturn( '' );
+		$control->shouldReceive( 'get_description_on' )->andReturn( '' )->byDefault();
 		$control->shouldReceive( 'get_min' )->andReturn( null );
 		$control->shouldReceive( 'get_max' )->andReturn( null );
 		$control->shouldReceive( 'get_step' )->andReturn( null );
@@ -446,7 +453,7 @@ class FieldSchemaTest extends TestCase {
 	 */
 	public function test_enabled_control_emits_no_disabled_key(): void {
 		$control = Mockery::mock( \Woodev_Control::class );
-		foreach ( [ 'get_type' => 'text', 'get_description' => 'd', 'get_tooltip' => '', 'get_placeholder' => '', 'get_min' => null, 'get_max' => null, 'get_step' => null, 'is_disabled' => false, 'get_disabled_reason' => '', 'get_country' => '', 'get_box_preset' => [], 'is_native_bounds' => false ] as $m => $r ) {
+		foreach ( [ 'get_type' => 'text', 'get_description' => 'd', 'get_tooltip' => '', 'get_placeholder' => '', 'get_description_on' => '', 'get_min' => null, 'get_max' => null, 'get_step' => null, 'is_disabled' => false, 'get_disabled_reason' => '', 'get_country' => '', 'get_box_preset' => [], 'is_native_bounds' => false ] as $m => $r ) {
 			$control->shouldReceive( $m )->andReturn( $r );
 		}
 		$setting = $this->make_setting( 'y', 'string', $control );
@@ -458,5 +465,31 @@ class FieldSchemaTest extends TestCase {
 
 		$this->assertArrayNotHasKey( 'disabled', $schema['y'] );
 		$this->assertSame( 'd', $schema['y']['description'] );
+	}
+
+	/**
+	 * A toggle's ON-only line travels as `description_on`, and only when one was declared.
+	 *
+	 * @return void
+	 */
+	public function test_description_on_is_emitted_only_when_declared(): void {
+		foreach ( [ 'В тестовом режиме используются встроенные ключи.' => true, '' => false ] as $text => $emitted ) {
+			$control = Mockery::mock( \Woodev_Control::class );
+			foreach ( [ 'get_type' => 'toggle', 'get_description' => '', 'get_tooltip' => '', 'get_placeholder' => '', 'get_description_on' => (string) $text, 'get_min' => null, 'get_max' => null, 'get_step' => null, 'is_disabled' => false, 'get_disabled_reason' => '', 'get_country' => '', 'is_native_bounds' => false ] as $m => $r ) {
+				$control->shouldReceive( $m )->andReturn( $r );
+			}
+			$setting = $this->make_setting( 'test_mode', 'boolean', $control );
+			$handler = Mockery::mock();
+			$handler->shouldReceive( 'get_settings' )->andReturn( [ $setting ] );
+			$handler->shouldReceive( 'get_value' )->andReturn( false );
+
+			$schema = Field_Schema::from_handler( $handler, [ 'test_mode' ] );
+
+			if ( $emitted ) {
+				$this->assertSame( $text, $schema['test_mode']['description_on'] );
+			} else {
+				$this->assertArrayNotHasKey( 'description_on', $schema['test_mode'] );
+			}
+		}
 	}
 }

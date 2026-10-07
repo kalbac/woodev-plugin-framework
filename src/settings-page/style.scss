@@ -106,6 +106,28 @@ $settings-label-col: 200px;
 
 		.woodev-field__toggle-meta {
 			padding: 0;
+			// The meta block is dissolved into the grid so the label keeps the label column while the toggle's
+			// own notes (`description`, the ON-only `description_on`, the disabled reason) go UNDER THE PILL in
+			// the control column — they are sentences, and a 200px label column wraps one into a tall sliver.
+			display: contents;
+		}
+
+		.woodev-field__toggle-label {
+			grid-column: 1;
+			grid-row: 1;
+			padding-top: 0;
+		}
+
+		// the pill (the row's only child besides the meta block)
+		> :not( .woodev-field__toggle-meta ) {
+			grid-column: 2;
+			grid-row: 1;
+		}
+
+		.woodev-field__toggle-desc,
+		.woodev-field__disabled-reason {
+			grid-column: 2;
+			margin-top: 0;
 		}
 
 		// Same trick `.woodev-field__label` uses: the label is a flex box the width of

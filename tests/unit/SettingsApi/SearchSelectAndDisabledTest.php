@@ -150,4 +150,25 @@ final class SearchSelectAndDisabledTest extends TestCase {
 		$handler->register_setting( 'multi', \Woodev_Setting::TYPE_STRING, [ 'is_multi' => true ] );
 		$this->assertFalse( $handler->register_control( 'multi', 'search-select', [ 'search_callback' => static fn( $term ) => [], 'label_callback' => static fn( $value ) => '' ] ) );
 	}
+
+	public function test_register_control_accepts_a_description_on_line_for_a_toggle(): void {
+		$handler = new class() extends \Woodev_Abstract_Settings {
+			public function __construct() { parent::__construct( 'on_line_test' ); }
+			protected function register_settings() {
+				$this->register_setting( 'test_mode', \Woodev_Setting::TYPE_BOOLEAN, [ 'default' => false ] );
+				$this->register_control( 'test_mode', \Woodev_Control::TYPE_TOGGLE, [ 'description_on' => 'Только пока включено.' ] );
+				$this->register_setting( 'plain', \Woodev_Setting::TYPE_BOOLEAN, [ 'default' => false ] );
+				$this->register_control( 'plain', \Woodev_Control::TYPE_TOGGLE );
+			}
+		};
+
+		$this->assertSame( 'Только пока включено.', $handler->get_setting( 'test_mode' )->get_control()->get_description_on() );
+		$this->assertSame( '', $handler->get_setting( 'plain' )->get_control()->get_description_on() );
+
+		Functions\when( 'rest_url' )->alias( static fn( $path ) => 'https://example.test/wp-json/' . $path );
+		$schema = Field_Schema::from_handler( $handler, [ 'test_mode', 'plain' ] );
+
+		$this->assertSame( 'Только пока включено.', $schema['test_mode']['description_on'] );
+		$this->assertArrayNotHasKey( 'description_on', $schema['plain'] );
+	}
 }
