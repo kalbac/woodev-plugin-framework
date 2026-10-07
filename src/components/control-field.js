@@ -555,6 +555,7 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 					__nextHasNoMarginBottom: true,
 					__next40pxDefaultSize: true,
 					value: value ?? '',
+					rows: schema.rows ?? undefined,
 					placeholder: schema.placeholder || '',
 					disabled,
 					onChange,

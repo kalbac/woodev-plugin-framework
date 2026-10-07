@@ -92,7 +92,7 @@ names are an installed-site data contract the moment you ship: choose setting id
 `text`, `textarea`, `number`, `email`, `tel`, `url`, `password`, `date`, `checkbox`, `radio`, `select`,
 `file`, `color`, `range`, `toggle`, `richtext`, `multiselect`, and `location-picker` (read the constant's
 docblock before using it). Args: `name`, `description`, `options`, `min`, `max`, `step`, `native_bounds`,
-`tooltip`, `placeholder`, `country`, `disabled` + `disabled_reason`. A control type that does not fit
+`tooltip`, `placeholder`, `rows` (textarea only), `country`, `disabled` + `disabled_reason`. A control type that does not fit
 the setting's type is rejected with `_doing_it_wrong()`; `toggle`/`checkbox` fit a scalar boolean only.
 
 Rules that bit us:

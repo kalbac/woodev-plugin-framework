@@ -230,3 +230,20 @@ test( 'carrier box help appears once on the cost header without name or row tool
 	expect( screen.getByRole( 'checkbox', { name: 'Учитывать стоимость, Коробка M' } ) ).toBeInTheDocument();
 	expect( screen.getByRole( 'textbox', { name: 'Стоимость, Коробка L' } ) ).toBeInTheDocument();
 } );
+
+
+test( 'textarea row count is optional and leaves text editing and the default unchanged', () => {
+	const schema = { name: 'Адрес', type: 'string', controlType: 'textarea', value: 'Saved address' };
+	const onChange = jest.fn();
+	const props = { schema, value: 'Saved address', onChange };
+	const view = render( <ControlField { ...props } /> );
+	const textarea = screen.getByRole( 'textbox' );
+	expect( textarea ).toHaveAttribute( 'rows', '4' );
+	view.rerender( <ControlField { ...props } schema={ { ...schema, rows: 3 } } /> );
+	expect( textarea ).toHaveAttribute( 'rows', '3' );
+	expect( textarea ).toHaveValue( 'Saved address' );
+	fireEvent.change( textarea, { target: { value: 'Line one\nLine two' } } );
+	expect( onChange ).toHaveBeenCalledWith( 'Line one\nLine two' );
+	view.rerender( <ControlField { ...props } /> );
+	expect( textarea ).toHaveAttribute( 'rows', '4' );
+} );

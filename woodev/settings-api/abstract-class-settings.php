@@ -218,6 +218,10 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 					$control->set_description_on( (string) $args['description_on'] );
 				}
 
+				if ( Woodev_Control::TYPE_TEXTAREA === $type && isset( $args['rows'] ) ) {
+					$control->set_rows( (int) $args['rows'] );
+				}
+
 				if ( isset( $args['placeholder'] ) ) {
 					$control->set_placeholder( (string) $args['placeholder'] );
 				}

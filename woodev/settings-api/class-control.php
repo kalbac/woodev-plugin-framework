@@ -121,6 +121,9 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 		/** @var string the placeholder text for the control */
 		protected $placeholder = '';
 
+		/** @var int|null optional textarea row count; null keeps the renderer default. */
+		private ?int $rows = null;
+
 		/** @var array carrier preset metadata for a table cell; empty for ordinary controls. */
 		private array $box_preset = [];
 
@@ -428,6 +431,27 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 		 */
 		public function set_tooltip( string $value ): void {
 			$this->tooltip = $value;
+		}
+
+		/**
+		 * Gets the optional textarea row count.
+		 *
+		 * @since 2.0.2
+		 * @return int|null positive row count, or null for the renderer default.
+		 */
+		public function get_rows(): ?int {
+			return $this->rows;
+		}
+
+		/**
+		 * Sets the textarea row count; nonpositive values retain the renderer default.
+		 *
+		 * @since 2.0.2
+		 * @param int $value requested row count.
+		 * @return void
+		 */
+		public function set_rows( int $value ): void {
+			$this->rows = $value > 0 ? $value : null;
 		}
 
 		/**
