@@ -246,7 +246,7 @@ namespace Woodev\Tests\Unit\Shipping {
 			$notice = $plugin->handler->notices[0];
 
 			$this->assertSame( 'acme-carrier-not-configured', $notice['id'] );
-			$this->assertStringContainsString( 'Acme Carrier не настроен.', $notice['message'] );
+			$this->assertStringContainsString( 'Плагин <strong>Acme Carrier</strong> не настроен.', $notice['message'] );
 			$this->assertStringContainsString(
 				'href="https://shop.test/wp-admin/admin.php?page=woodev-settings&tab=acme-carrier"',
 				$notice['message']

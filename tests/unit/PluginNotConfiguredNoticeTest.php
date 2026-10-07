@@ -49,6 +49,8 @@ class Not_Configured_Plugin_Fixture extends \Woodev_Plugin {
 
 	public string $settings_url = 'https://shop.test/wp-admin/admin.php?page=wc-settings&tab=integration&section=acme';
 
+	public string $name = 'Acme';
+
 	/** @var Not_Configured_Recording_Handler|\Woodev_Admin_Notice_Handler|null */
 	public $handler = null;
 
@@ -61,7 +63,7 @@ class Not_Configured_Plugin_Fixture extends \Woodev_Plugin {
 	}
 
 	public function get_plugin_name() {
-		return 'Acme';
+		return $this->name;
 	}
 
 	public function get_settings_url( $plugin_id = null ) {
@@ -222,9 +224,20 @@ final class PluginNotConfiguredNoticeTest extends TestCase {
 		$notice = $plugin->handler->notices[0];
 
 		$this->assertSame( 'acme-plugin-not-configured', $notice['id'] );
-		$this->assertStringContainsString( 'Acme не настроен.', $notice['message'] );
+		$this->assertStringContainsString( 'Плагин <strong>Acme</strong> не настроен.', $notice['message'] );
 		$this->assertStringContainsString( 'href="' . $plugin->settings_url . '"', $notice['message'] );
 		$this->assertSame( 'notice-warning', $notice['params']['notice_class'] );
+	}
+
+	public function test_the_plugin_name_is_bold_and_escaped(): void {
+		$plugin       = $this->plugin( false );
+		$plugin->name = 'Acme <script>alert(1)</script> & Co';
+
+		$notice = $plugin->not_configured_notice();
+
+		$this->assertIsArray( $notice );
+		$this->assertStringStartsWith( 'Плагин <strong>Acme &lt;script&gt;alert(1)&lt;/script&gt; &amp; Co</strong> не настроен.', $notice['message'] );
+		$this->assertStringNotContainsString( '<script', $notice['message'] );
 	}
 
 	public function test_the_notice_is_not_dismissible_because_it_clears_itself(): void {
@@ -251,7 +264,7 @@ final class PluginNotConfiguredNoticeTest extends TestCase {
 
 		$this->assertIsArray( $notice );
 		$this->assertStringNotContainsString( '<a ', $notice['message'] );
-		$this->assertStringContainsString( 'Acme не настроен.', $notice['message'] );
+		$this->assertStringContainsString( 'Плагин <strong>Acme</strong> не настроен.', $notice['message'] );
 	}
 
 	public function test_a_plugin_whose_notice_handler_is_absent_does_not_fatal(): void {
