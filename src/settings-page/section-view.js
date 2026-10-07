@@ -58,6 +58,10 @@ export default function SectionView( { providerId, section, tabFields, values, c
 						showErrors={ showErrors }
 					/>
 				) ) }
+			{ /* Buttons under the fields (Settings_Section::with_actions()) — «Обновить статусы сейчас» and alike. */ }
+			{ section.actions && section.actions.length > 0 && (
+				<ToolsBlock providerId={ providerId } section={ { tools: section.actions } } />
+			) }
 		</div>
 	);
 }

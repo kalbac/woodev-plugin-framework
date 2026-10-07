@@ -424,6 +424,28 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		}
 
 		/**
+		 * The providers one carrier plugin registered itself as the owner of.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Shipping_Plugin $plugin the carrier plugin.
+		 * @return Orders_Provider[] in registration order; empty when it registered none.
+		 */
+		public function get_plugin_providers( Shipping_Plugin $plugin ): array {
+			$providers = [];
+
+			foreach ( $this->provider_plugins as $provider_id => $owner ) {
+				$provider = $this->get_provider( (string) $provider_id );
+
+				if ( $owner === $plugin && null !== $provider ) {
+					$providers[] = $provider;
+				}
+			}
+
+			return $providers;
+		}
+
+		/**
 		 * Whether a carrier plugin exports orders: it registered an {@see Orders_Provider} WITH itself as the
 		 * owning plugin AND a shipment handler for it (#1014).
 		 *

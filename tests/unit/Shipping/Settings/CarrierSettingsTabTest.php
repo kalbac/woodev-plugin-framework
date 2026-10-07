@@ -20,6 +20,7 @@ use Woodev\Framework\Settings\Settings_Section;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
 use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
+use Woodev\Framework\Shipping\Settings\Advanced_Settings;
 use Woodev\Framework\Shipping\Settings\Export_Settings;
 use Woodev\Framework\Shipping\Shipping_Plugin;
 use Woodev\Tests\Unit\TestCase;
@@ -31,6 +32,7 @@ require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-control.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-setting.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/abstract-class-settings.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/settings/class-export-settings.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/settings/class-advanced-settings.php';
 
 /**
  * @covers \Woodev\Framework\Shipping\Shipping_Plugin::get_settings_providers
@@ -48,6 +50,7 @@ final class CarrierSettingsTabTest extends TestCase {
 		Functions\when( 'update_option' )->justReturn( true );
 		Functions\when( 'wp_parse_args' )->alias( static fn( $args, $defaults = [] ) => array_merge( (array) $defaults, (array) $args ) );
 		Functions\when( 'wc_get_order_status_name' )->alias( static fn( string $status ) => $status );
+		Functions\when( 'wc_get_order_statuses' )->justReturn( [ 'wc-pending' => 'Pending', 'wc-processing' => 'Processing', 'wc-on-hold' => 'On hold', 'wc-completed' => 'Completed', 'wc-cancelled' => 'Cancelled' ] );
 		Functions\when( 'wc_string_to_bool' )->alias( static fn( $value ) => in_array( strtolower( (string) $value ), [ 'yes', 'true', '1' ], true ) );
 
 		Orders_Registry::instance()->reset_for_tests();
@@ -71,6 +74,7 @@ final class CarrierSettingsTabTest extends TestCase {
 		$plugin->shouldReceive( 'get_id' )->andReturn( $id );
 		$plugin->shouldReceive( 'get_plugin_name' )->andReturn( 'CDEK WooCommerce Shipping Method' );
 		$plugin->shouldReceive( 'get_export_settings' )->andReturnUsing( static fn() => new Export_Settings( $id ) );
+		$plugin->shouldReceive( 'get_advanced_settings' )->andReturnUsing( static fn() => new Advanced_Settings( $id ) );
 		$plugin->shouldReceive( 'get_tab_settings_providers' )->andReturn( $contribution );
 
 		return $plugin;
@@ -94,6 +98,7 @@ final class CarrierSettingsTabTest extends TestCase {
 		$handler = Mockery::mock( \Woodev_Abstract_Settings::class );
 		$handler->shouldReceive( 'get_settings' )->andReturn( [ $setting_id => $setting ] );
 		$handler->shouldReceive( 'get_id' )->andReturn( 'cdek' );
+		$handler->shouldReceive( 'get_setting' )->andReturnUsing( static fn( $id ) => $id === $setting_id ? $setting : null );
 
 		return Settings_Provider::create_with_sections(
 			'cdek',
@@ -125,9 +130,19 @@ final class CarrierSettingsTabTest extends TestCase {
 		);
 	}
 
-	/** @return string[] */
+	/**
+	 * The ids of the sections before the framework's trailing «Дополнительно» (every carrier has it; its own
+	 * tests are below).
+	 *
+	 * @return string[]
+	 */
 	private function section_ids( Settings_Provider $provider ): array {
-		return array_map( static fn( Settings_Section $section ) => $section->get_id(), $provider->get_sections() );
+		return array_values(
+			array_filter(
+				array_map( static fn( Settings_Section $section ) => $section->get_id(), $provider->get_sections() ),
+				static fn( string $id ): bool => Advanced_Settings::SECTION_ID !== $id
+			)
+		);
 	}
 
 	public function test_the_accepted_contribution_label_is_the_short_name_for_tab_and_emails(): void {
@@ -189,23 +204,25 @@ final class CarrierSettingsTabTest extends TestCase {
 
 		$this->assertCount( 1, $tabs );
 		$this->assertSame( 'cdek', $tabs[0]['id'] );
-		$this->assertSame( [ 'export' ], array_column( $tabs[0]['sections'], 'id' ) );
-		$this->assertSame( [ 'auto_export_orders', 'export_statuses' ], array_keys( $tabs[0]['sections'][0]['fields'] ) );
+		$this->assertSame( [ 'export', 'advanced' ], array_column( $tabs[0]['sections'], 'id' ) );
+		$this->assertSame( [ 'auto_export_orders', 'export_statuses', 'status_delivered' ], array_keys( $tabs[0]['sections'][0]['fields'] ) );
+		$this->assertSame( [ 'enable_debug', 'disable_methods_on_cart' ], array_keys( $tabs[0]['sections'][1]['fields'] ) );
 	}
 
 	// ----- a carrier that does not export orders -----
 
-	public function test_a_rates_only_carrier_gets_no_tab_at_all(): void {
-		$plugin = $this->carrier();
+	public function test_a_rates_only_carrier_gets_a_tab_with_only_the_additional_section(): void {
+		$providers = $this->carrier()->get_settings_providers();
 
-		$this->assertSame( [], $plugin->get_settings_providers() );
+		$this->assertCount( 1, $providers, 'logging and hide-on-cart are every carrier\'s' );
+		$this->assertSame( [ Advanced_Settings::SECTION_ID ], array_map( static fn( Settings_Section $s ) => $s->get_id(), $providers[0]->get_sections() ) );
 	}
 
 	public function test_a_carrier_with_a_provider_but_no_shipment_handler_does_not_export(): void {
 		$plugin = $this->carrier();
 		$this->make_it_export( $plugin, false );
 
-		$this->assertSame( [], $plugin->get_settings_providers(), 'nothing to export without a handler' );
+		$this->assertSame( [], $this->section_ids( $plugin->get_settings_providers()[0] ), 'nothing to export without a handler' );
 	}
 
 	public function test_a_rates_only_carrier_keeps_its_own_sections_but_gets_no_export_section(): void {
@@ -221,7 +238,7 @@ final class CarrierSettingsTabTest extends TestCase {
 		$other = $this->carrier( 'boxberry' );
 		$this->make_it_export( $other );
 
-		$this->assertSame( [], $this->carrier( 'cdek' )->get_settings_providers() );
+		$this->assertSame( [], $this->section_ids( $this->carrier( 'cdek' )->get_settings_providers()[0] ) );
 		$this->assertTrue( Orders_Registry::instance()->plugin_exports_orders( $other ) );
 	}
 
@@ -483,6 +500,125 @@ final class CarrierSettingsTabTest extends TestCase {
 
 		$this->assertCount( 1, $tabs );
 		$this->assertSame( 'CDEK WooCommerce Shipping Method', $tabs[0]['label'], 'the first provider is kept' );
-		$this->assertSame( [ 'export' ], array_column( $tabs[0]['sections'], 'id' ) );
+		$this->assertSame( [ 'export', 'advanced' ], array_column( $tabs[0]['sections'], 'id' ) );
+	}
+
+	// ----- «Выгрузка заказов», «Дополнительно» (s158) -----
+
+	public function test_the_export_section_is_titled_vygruzka_zakazov_and_the_additional_one_is_last(): void {
+		$plugin = $this->carrier( 'cdek', [ $this->credentials() ] );
+		$this->make_it_export( $plugin );
+
+		$sections = $plugin->get_settings_providers()[0]->get_sections();
+
+		$this->assertSame( [ 'credentials', 'export', 'advanced' ], array_map( static fn( Settings_Section $s ) => $s->get_id(), $sections ) );
+		$this->assertSame( 'Выгрузка заказов', $sections[1]->get_label() );
+		$this->assertSame( 'Дополнительно', $sections[2]->get_label() );
+		$this->assertSame( [ 'enable_debug', 'disable_methods_on_cart' ], $sections[2]->get_setting_ids() );
+	}
+
+	public function test_a_contribution_reusing_a_logging_setting_id_is_left_out_while_the_additional_section_stays(): void {
+		$plugin = $this->carrier( 'cdek', [ $this->credentials( [], 'enable_debug' ) ] );
+
+		Functions\expect( '_doing_it_wrong' )
+			->once()
+			->with( Mockery::type( 'string' ), Mockery::on( static fn( string $m ): bool => str_contains( $m, 'enable_debug' ) ), '2.0.2' );
+
+		$provider = $plugin->get_settings_providers()[0];
+
+		$this->assertSame( [], $this->section_ids( $provider ) );
+		$this->assertSame( [ Advanced_Settings::SECTION_ID ], array_map( static fn( Settings_Section $s ) => $s->get_id(), $provider->get_sections() ) );
+	}
+
+	public function test_a_section_id_advanced_in_a_contribution_is_left_out(): void {
+		$plugin = $this->carrier( 'cdek', [ $this->connection( Advanced_Settings::SECTION_ID, 'token', true ) ] );
+
+		Functions\expect( '_doing_it_wrong' )
+			->once()
+			->with( Mockery::type( 'string' ), Mockery::pattern( '/"cdek".*entry 0.*"advanced"/' ), '2.0.2' );
+
+		$provider = $plugin->get_settings_providers()[0];
+
+		$this->assertSame( [], $this->section_ids( $provider ) );
+	}
+
+	// ----- the carrier's own fields inside «Выгрузка заказов» -----
+
+	public function test_a_carrier_can_append_its_own_setting_to_the_export_section(): void {
+		$plugin = $this->carrier( 'cdek', [ $this->credentials( [], 'label_format', 'labels' ) ] );
+		$plugin->shouldReceive( 'get_export_section_setting_ids' )->andReturn( [ 'label_format' ] );
+		$this->make_it_export( $plugin );
+
+		$sections = $plugin->get_settings_providers()[0]->get_sections();
+		$export   = $sections[1];
+
+		$this->assertSame( 'export', $export->get_id() );
+		$this->assertSame( [ 'auto_export_orders', 'export_statuses', 'status_delivered', 'label_format' ], $export->get_setting_ids(), 'after the framework\'s own fields' );
+	}
+
+	public function test_an_export_section_id_nobody_owns_is_reported_and_skipped(): void {
+		$plugin = $this->carrier( 'cdek', [ $this->credentials() ] );
+		$plugin->shouldReceive( 'get_export_section_setting_ids' )->andReturn( [ 'nobody_owns_this', 'status_delivered', 7 ] );
+		$this->make_it_export( $plugin );
+
+		Functions\expect( '_doing_it_wrong' )->times( 3 );
+
+		$export = $plugin->get_settings_providers()[0]->get_sections()[1];
+
+		$this->assertSame( [ 'auto_export_orders', 'export_statuses', 'status_delivered' ], $export->get_setting_ids(), 'a framework id is not added twice' );
+	}
+
+	public function test_a_carrier_that_does_not_export_ignores_the_export_section_seam_silently(): void {
+		$plugin = $this->carrier( 'cdek', [ $this->credentials( [], 'label_format' ) ] );
+		$plugin->shouldReceive( 'get_export_section_setting_ids' )->andReturn( [ 'label_format' ] );
+
+		Functions\expect( '_doing_it_wrong' )->never();
+
+		$this->assertSame( [ 'credentials' ], $this->section_ids( $plugin->get_settings_providers()[0] ) );
+	}
+
+	// ----- «Обновить статусы сейчас» -----
+
+	private function export_with_cron_hook( Shipping_Plugin $plugin, ?string $hook ): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider(
+			Orders_Provider::create( $plugin->get_id(), 'СДЭК', '_cdek_marker', [ $plugin->get_id() ], null === $hook ? [] : [ 'cron_hook' => $hook ] ),
+			$plugin
+		);
+		$registry->register_shipment_handler( $plugin->get_id(), Mockery::mock( Abstract_Shipment_Handler::class ) );
+	}
+
+	public function test_a_carrier_with_a_cron_hook_gets_the_refresh_button_under_the_export_fields(): void {
+		Functions\when( 'has_action' )->justReturn( 10 );
+
+		$plugin = $this->carrier();
+		$this->export_with_cron_hook( $plugin, 'cdek_update_orders' );
+
+		$export  = $plugin->get_settings_providers()[0]->get_sections()[0];
+		$actions = $export->get_actions();
+
+		$this->assertCount( 1, $actions );
+		$this->assertSame( 'sync_delivery_statuses', $actions[0]->get_id() );
+		$this->assertSame( 'Обновить статусы сейчас', $actions[0]->to_array()['button'] );
+		$this->assertFalse( $actions[0]->is_disabled() );
+	}
+
+	public function test_a_webhook_only_carrier_with_no_cron_hook_gets_no_button(): void {
+		$plugin = $this->carrier();
+		$this->export_with_cron_hook( $plugin, null );
+
+		$this->assertSame( [], $plugin->get_settings_providers()[0]->get_sections()[0]->get_actions() );
+	}
+
+	public function test_a_cron_hook_nobody_listens_to_gives_a_disabled_button(): void {
+		Functions\when( 'has_action' )->justReturn( false );
+
+		$plugin = $this->carrier();
+		$this->export_with_cron_hook( $plugin, 'cdek_update_orders' );
+
+		$action = $plugin->get_settings_providers()[0]->get_sections()[0]->get_actions()[0];
+
+		$this->assertTrue( $action->is_disabled() );
+		$this->assertNotSame( '', $action->get_status_text() );
 	}
 }

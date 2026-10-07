@@ -177,4 +177,34 @@ class SettingsSectionTest extends TestCase {
 			static fn( array $args ): Tool_Result => Tool_Result::success()
 		);
 	}
+
+	public function test_with_actions_returns_a_copy_carrying_the_buttons_and_leaves_the_original_alone(): void {
+		$tool     = $this->make_tool( 'sync' );
+		$section  = Settings_Section::create( 'export', 'Выгрузка заказов', [ 'a' ] );
+		$with     = $section->with_actions( [ $tool ] );
+
+		$this->assertSame( [], $section->get_actions(), 'immutable: the original has none' );
+		$this->assertSame( [ $tool ], $with->get_actions() );
+		$this->assertSame( [ 'a' ], $with->get_setting_ids(), 'the fields stay' );
+		$this->assertFalse( $with->is_tools(), 'still an ordinary section' );
+	}
+
+	public function test_with_actions_drops_a_non_conforming_entry_with_a_notice(): void {
+		Functions\expect( '_doing_it_wrong' )->once();
+
+		$tool = $this->make_tool( 'sync' );
+		$with = Settings_Section::create( 'export', 'X', [] )->with_actions( [ 'nope', $tool ] );
+
+		$this->assertSame( [ $tool ], $with->get_actions() );
+	}
+
+	public function test_a_connection_or_tools_section_refuses_actions(): void {
+		Functions\expect( '_doing_it_wrong' )->twice();
+
+		$connection = Settings_Section::create_connection( 'api', 'API', [ 't' ], 'Проверить' );
+		$tools      = Settings_Section::create_tools( 'tools', 'Инструменты', [] );
+
+		$this->assertSame( [], $connection->with_actions( [ $this->make_tool( 'x' ) ] )->get_actions() );
+		$this->assertSame( [], $tools->with_actions( [ $this->make_tool( 'x' ) ] )->get_actions() );
+	}
 }

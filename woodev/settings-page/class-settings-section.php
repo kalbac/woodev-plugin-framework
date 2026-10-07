@@ -54,6 +54,14 @@ final class Settings_Section {
 	private array $tools = [];
 
 	/**
+	 * Buttons rendered UNDER an ordinary section's fields — see {@see self::with_actions()}. Always empty
+	 * for a connection or tools block.
+	 *
+	 * @var array<int, \Woodev\Framework\Shipping\Settings\Shipping_Tool>
+	 */
+	private array $actions = [];
+
+	/**
 	 * Use one of the named constructors instead — {@see self::create()},
 	 * {@see self::create_connection()} or {@see self::create_tools()}. Private so that a call
 	 * site has to NAME the kind it is building rather than spell it out in positional
@@ -178,6 +186,61 @@ final class Settings_Section {
 		}
 
 		return new self( $id, $label, [], $description, false, '', true, $conforming );
+	}
+
+	/**
+	 * A copy of this ORDINARY section with action buttons under its fields — «Обновить статусы сейчас»
+	 * beside the export settings, say. Each action is a {@see \Woodev\Framework\Shipping\Settings\Shipping_Tool},
+	 * run through the same REST route and result shape as an «Инструменты» tool, but scoped to this tab: its
+	 * id need not be unique across carriers.
+	 *
+	 * A connection or tools block takes none (its own React branch would drop them silently): the call is
+	 * reported and the section returned unchanged. An entry that is not a `Shipping_Tool` is dropped with a
+	 * notice, like {@see self::create_tools()}.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param array<int, \Woodev\Framework\Shipping\Settings\Shipping_Tool> $actions the action tools.
+	 * @return self
+	 */
+	public function with_actions( array $actions ): self {
+		if ( $this->is_connection || $this->is_tools ) {
+			_doing_it_wrong( __METHOD__, 'Only an ordinary Settings_Section can carry actions; the call was ignored.', '2.0.2' );
+
+			return $this;
+		}
+
+		$copy          = clone $this;
+		$copy->actions = [];
+
+		foreach ( $actions as $action ) {
+			if ( ! $action instanceof \Woodev\Framework\Shipping\Settings\Shipping_Tool ) {
+				_doing_it_wrong( __METHOD__, 'A Settings_Section action does not implement Shipping_Tool; it was ignored.', '2.0.2' );
+				continue;
+			}
+
+			$copy->actions[] = $action;
+		}
+
+		return $copy;
+	}
+
+	/**
+	 * The action buttons of an ordinary section, filtered to `Shipping_Tool` on read like {@see self::get_tools()}.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return array<int, \Woodev\Framework\Shipping\Settings\Shipping_Tool>
+	 */
+	public function get_actions(): array {
+		return array_values(
+			array_filter(
+				$this->actions,
+				static function ( $action ): bool {
+					return $action instanceof \Woodev\Framework\Shipping\Settings\Shipping_Tool;
+				}
+			)
+		);
 	}
 
 	/**

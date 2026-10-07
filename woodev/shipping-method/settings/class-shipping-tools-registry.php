@@ -236,7 +236,26 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Tools_Re
 				return Tool_Result::failure( __( 'Инструмент не найден.', 'woodev-plugin-framework' ) );
 			}
 
-			$tool = $this->tools[ $tool_id ];
+			return $this->execute( $this->tools[ $tool_id ], $args );
+		}
+
+		/**
+		 * Runs one tool the caller already holds — a registered one (via {@see self::run()}) or an action
+		 * button of a settings section ({@see \Woodev\Framework\Settings\Settings_Section::with_actions()}),
+		 * which lives on its tab rather than in this registry. Same server-side re-checks as {@see self::run()}:
+		 * the tool must not be disabled and only its own declared selector names reach its callback.
+		 *
+		 * Does NOT catch exceptions the callback throws.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Shipping_Tool       $tool the tool.
+		 * @param array<string,mixed> $args selector values keyed by selector name.
+		 *
+		 * @return Tool_Result
+		 */
+		public function execute( Shipping_Tool $tool, array $args ): Tool_Result {
+			$tool_id = $tool->get_id();
 
 			if ( $tool->is_disabled() ) {
 				$message = '' !== $tool->get_status_text()

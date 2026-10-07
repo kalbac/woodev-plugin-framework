@@ -309,6 +309,7 @@ function withAnatomy( schema, control, error ) {
 			tooltip: schema.tooltip,
 			description: schema.description,
 			disabledReason: schema.disabled ? schema.disabled_reason : null,
+			disabled: !! schema.disabled,
 			error,
 		},
 		control
@@ -421,7 +422,7 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 			// so a boolean setting gets the same affordances as any other control.
 			return createElement(
 				'div',
-				{ className: 'woodev-field__toggle-row' },
+				{ className: 'woodev-field__toggle-row' + ( disabled ? ' is-disabled' : '' ) },
 				createElement(
 					'div',
 					{ className: 'woodev-field__toggle-meta' },
@@ -441,6 +442,14 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 							'div',
 							{ className: 'woodev-field__toggle-desc' },
 							createElement( RawHTML, null, schema.description )
+						),
+					// A line that belongs to the ON state alone (`description_on`): shown only while the toggle is on,
+					// so it is said once under the toggle instead of under every field the toggle affects.
+					value && schema.description_on &&
+						createElement(
+							'div',
+							{ className: 'woodev-field__toggle-desc woodev-field__toggle-desc--on' },
+							createElement( RawHTML, null, schema.description_on )
 						),
 					disabled && schema.disabled_reason &&
 						createElement( 'div', { className: 'woodev-field__disabled-reason' }, schema.disabled_reason )

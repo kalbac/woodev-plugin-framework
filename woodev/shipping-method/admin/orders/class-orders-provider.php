@@ -172,8 +172,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		 * The carrier's own cron hook that refreshes delivery statuses, or null when this
 		 * carrier has no cron concept — e.g. a webhook-only carrier (SP-10 spec D9, #828).
 		 * The framework does not know this hook name and must not guess it: it schedules
-		 * nothing and never fires it, it only reads its next run via
-		 * {@see \Woodev\Framework\Shipping\Order\Delivery_Sync_Status::get_next_update()}.
+		 * nothing, it reads its next run via
+		 * {@see \Woodev\Framework\Shipping\Order\Delivery_Sync_Status::get_next_update()}, and it fires the
+		 * action itself ONLY when the merchant presses «Обновить статусы сейчас» in the «Выгрузка заказов»
+		 * settings ({@see \Woodev\Framework\Shipping\Settings\Status_Sync_Tool}) — so the carrier's refresh
+		 * callback must be attached to this action and safe to run outside WP-Cron.
 		 *
 		 * @since 2.0.2
 		 *

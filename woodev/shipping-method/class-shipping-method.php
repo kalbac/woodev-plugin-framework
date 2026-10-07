@@ -751,7 +751,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 
 					$is_available = false;
 
-					$this->get_plugin()->log(
+					$this->get_plugin()->log_debug(
 						sprintf( 'The shipping method %s is not available for country %s', $this->get_title(), $country_code ),
 						sprintf( '%s_%s', $this->get_plugin()->get_id(), $this->get_id() )
 					);
@@ -762,7 +762,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 
 				$is_available = false;
 
-				$this->get_plugin()->log(
+				$this->get_plugin()->log_debug(
 					sprintf( 'Shipping cost calculation for the "%s" method was stopped because the cart contains items that do not match the selected shipping class.', $this->get_title() ),
 					sprintf( '%s_%s', $this->get_plugin()->get_id(), $this->get_id() )
 				);

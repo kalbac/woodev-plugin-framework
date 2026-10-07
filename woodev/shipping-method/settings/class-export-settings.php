@@ -2,8 +2,9 @@
 /**
  * Woodev Export Settings
  *
- * The «Выгрузка» settings of ONE carrier plugin (#1007): whether its orders are exported to the carrier
- * on their own, and on which WooCommerce statuses. They live on the plugin's own tab of the framework
+ * The «Выгрузка заказов» settings of ONE carrier plugin (#1007): whether its orders are exported to the carrier
+ * on their own, on which WooCommerce statuses, and which status an order gets once the carrier delivered it.
+ * They live on the plugin's own tab of the framework
  * settings page (`wp-admin/admin.php?page=woodev-settings`), not on WooCommerce → Settings →
  * Integrations: every Woodev plugin keeps its settings on `woodev-settings`
  * ({@see \Woodev\Framework\Settings\Settings_Page_Registry}), and the framework hands this tab to every
@@ -27,13 +28,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Export_Settings' ) ) :
 
 	/**
-	 * Settings handler of one carrier plugin's «Выгрузка» section.
+	 * Settings handler of one carrier plugin's «Выгрузка заказов» section.
 	 *
 	 * Storage is the framework settings API's: one option per setting, `woodev_{plugin id}_export_{key}`.
-	 * The two keys are the ones the shipped v1 carrier plugins stored inside their WooCommerce integration
-	 * option (`woocommerce_{plugin id}_settings`, see {@see Order_Automation::SETTING_AUTO_EXPORT}); a
-	 * site that upgrades keeps what it had chosen — {@see self::migrate_from_integration()} carries the
-	 * two values over, once.
+	 * The three keys are the ones the shipped v1 carrier plugins stored inside their WooCommerce integration
+	 * option (`woocommerce_{plugin id}_settings`, see {@see Order_Automation::SETTING_AUTO_EXPORT} and
+	 * {@see self::SETTING_STATUS_DELIVERED}); a site that upgrades keeps what it had chosen —
+	 * {@see self::migrate_from_integration()} carries the values over, once.
 	 *
 	 * @since 2.0.2
 	 */
@@ -41,6 +42,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Export_Settings' 
 
 		/** @var string the section id on the plugin's tab */
 		public const SECTION_ID = 'export';
+
+		/**
+		 * @var string the setting id (and the v1 integration-option key — byte for byte) of the status an order
+		 *             gets once the carrier delivered it. Stored as `woodev_{plugin id}_export_status_delivered`:
+		 *             `wc-completed` (the default), another `wc-…` status, or {@see self::STATUS_DELIVERED_NONE}.
+		 */
+		public const SETTING_STATUS_DELIVERED = 'status_delivered';
+
+		/** @var string the stored value of «Не менять» — v1's own spelling (its «Не использовать»), so a v1 value is carried verbatim */
+		public const STATUS_DELIVERED_NONE = 'none';
 
 		/** @var string the suffix of the handler id (the option namespace) after the plugin id */
 		private const HANDLER_ID_SUFFIX = '_export';
@@ -84,7 +95,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Export_Settings' 
 		 * @return string[]
 		 */
 		public function get_owned_setting_ids(): array {
-			return [ Order_Automation::SETTING_AUTO_EXPORT, Order_Automation::SETTING_EXPORT_STATUSES ];
+			return [ Order_Automation::SETTING_AUTO_EXPORT, Order_Automation::SETTING_EXPORT_STATUSES, self::SETTING_STATUS_DELIVERED ];
+		}
+
+		/**
+		 * The WooCommerce status an order is moved to once the carrier delivered it, or null for «Не менять».
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string|null a status slug without the `wc-` prefix; null when the merchant chose to leave the status alone.
+		 */
+		public function get_delivered_status(): ?string {
+
+			$value = $this->get_value( self::SETTING_STATUS_DELIVERED );
+
+			if ( ! is_string( $value ) || '' === $value || self::STATUS_DELIVERED_NONE === $value ) {
+				return null;
+			}
+
+			$status = self::unprefix( $value );
+
+			return '' !== $status ? $status : null;
 		}
 
 		/**
@@ -176,7 +207,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Export_Settings' 
 		}
 
 		/**
-		 * Registers the two settings.
+		 * Registers the three settings.
 		 *
 		 * @since 2.0.2
 		 *
@@ -215,6 +246,26 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Export_Settings' 
 				\Woodev_Control::TYPE_MULTISELECT,
 				[
 					'tooltip' => __( 'Заказ выгружается в тот момент, когда переходит в один из этих статусов. Здесь только статусы, в которых заказ ещё можно отправить перевозчику.', 'woodev-plugin-framework' ),
+				]
+			);
+
+			$this->register_setting(
+				self::SETTING_STATUS_DELIVERED,
+				\Woodev_Setting::TYPE_STRING,
+				[
+					'name'    => __( 'Статус доставленного заказа', 'woodev-plugin-framework' ),
+					'options' => array_merge(
+						[ self::STATUS_DELIVERED_NONE => __( 'Не менять', 'woodev-plugin-framework' ) ],
+						wc_get_order_statuses()
+					),
+					'default' => 'wc-completed',
+				]
+			);
+			$this->register_control(
+				self::SETTING_STATUS_DELIVERED,
+				\Woodev_Control::TYPE_SELECT,
+				[
+					'tooltip' => __( 'Этот статус получит заказ один раз — когда перевозчик сообщит, что посылка вручена покупателю. Отменённый, возвращённый или неоплаченный заказ не меняется. «Не менять» — статус заказа остаётся прежним.', 'woodev-plugin-framework' ),
 				]
 			);
 		}
@@ -272,7 +323,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Export_Settings' 
 		}
 
 		/**
-		 * One-time carry-over (#1007) of the two values the v1 carrier plugins kept inside their
+		 * One-time carry-over (#1007) of the three values the v1 carrier plugins kept inside their
 		 * WooCommerce integration option (`woocommerce_{plugin id}_settings` — an installed-site data
 		 * contract), so a merchant who had auto-export on in v1 keeps it.
 		 *
@@ -342,6 +393,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Export_Settings' 
 				}
 
 				update_option( $prefix . $statuses, array_values( array_unique( $carried ) ) );
+			}
+
+			$delivered = self::SETTING_STATUS_DELIVERED;
+
+			// v1 stored the status the way WooCommerce lists it («wc-completed»), or «none» for «Не использовать».
+			if ( array_key_exists( $delivered, $legacy ) && null === get_option( $prefix . $delivered, null ) && is_string( $legacy[ $delivered ] ) && '' !== $legacy[ $delivered ] ) {
+
+				$status = $legacy[ $delivered ];
+
+				if ( self::STATUS_DELIVERED_NONE !== $status ) {
+					$status = 'wc-' . self::unprefix( $status );
+				}
+
+				update_option( $prefix . $delivered, $status );
 			}
 
 			update_option( $flag, 'yes' );

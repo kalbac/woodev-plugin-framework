@@ -2,7 +2,7 @@
 /**
  * The issue #758 regression: `Shipping_Plugin::add_delayed_admin_notices()` ->
  * `add_debug_setting_notices()` must not fatal when `is_debug_enabled()` is true (the
- * rig's own condition — `debug_mode` unset, `WP_DEBUG` true) and the subclass no-opped
+ * merchant switched «Логирование» on; until s158 the rig hit it through `WP_DEBUG`) and the subclass no-opped
  * `init_admin_notice_handler()` — exactly the stack the card's fatal reports:
  *
  *   Call to a member function add_admin_notice() on null
@@ -212,13 +212,17 @@ class ShippingPluginAdminNoticeHandlerRegressionTest extends TestCase {
 	 */
 	public function test_add_delayed_admin_notices_does_not_fatal_when_debug_is_on_and_the_handler_was_noopped(): void {
 		$this->mock_construction_functions();
-		define( 'WP_DEBUG', true );
+		// «Логирование» is on: the one stored key `enable_debug` of the plugin's «Дополнительно» settings.
+		Functions\when( 'get_option' )->alias(
+			static fn( string $name, $default = false ) => 'woodev_notice_regression_advanced_enable_debug' === $name ? 'yes' : $default
+		);
+		Functions\when( 'wc_string_to_bool' )->alias( static fn( $value ) => in_array( strtolower( (string) $value ), [ 'yes', 'true', '1' ], true ) );
 
 		$plugin = new Regression_Shipping_Plugin_Fixture( 'notice-regression', '1.0.0' );
 
 		$this->assertTrue(
 			$plugin->is_debug_enabled(),
-			'precondition: the rig-observed WP_DEBUG fallback (no debug_mode integration option) must be in effect'
+			'precondition: the logging switch must be on'
 		);
 
 		// Pre-fix, this fatals: "Call to a member function add_admin_notice() on null".
