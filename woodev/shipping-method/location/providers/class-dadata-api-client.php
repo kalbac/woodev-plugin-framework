@@ -365,7 +365,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param string $fias_id A DaData FIAS id (`data.fias_id` from an earlier suggestion).
+		 * @param string      $fias_id  A DaData FIAS id (`data.fias_id` from an earlier suggestion).
+		 * @param string|null $language Optional explicit `ru` / `en` answer language (#1152).
+		 *                              Null (the default) leaves the choice to {@see self::with_language()},
+		 *                              i.e. the current locale. {@see self::with_language()} never
+		 *                              overrides a body that already carries `language`, so an explicit
+		 *                              value also bypasses the `woodev_location_dadata_language` filter.
 		 *
 		 * `null` means ONE thing and nothing else: DaData answered with an EMPTY
 		 * suggestion set, i.e. it does not know this id. That is the only answer
@@ -383,9 +388,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		 *                                successful response whose suggestion set is
 		 *                                non-empty but unreadable.
 		 */
-		public function find_by_id_address( string $fias_id ): ?array {
+		public function find_by_id_address( string $fias_id, ?string $language = null ): ?array {
+			$body = [ 'query' => $fias_id ];
+
+			if ( null !== $language ) {
+				$body['language'] = $language;
+			}
+
 			$request = $this->get_new_request( 'suggestions' );
-			$request->find_by_id_address( $this->with_language( [ 'query' => $fias_id ] ) );
+			$request->find_by_id_address( $this->with_language( $body ) );
 
 			/** @var Dadata_Api_Response $response */
 			$response = $this->perform_request( $request );

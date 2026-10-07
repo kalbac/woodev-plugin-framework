@@ -580,6 +580,24 @@ final class DadataApiClientTest extends TestCase {
 		$this->assertSame( 'en', $body['language'] );
 	}
 
+	public function test_find_by_id_explicit_language_beats_the_locale(): void {
+		$this->stub_http_response( 200, '{"suggestions":[{"value":"x","data":{}}]}' );
+
+		self::client_in_locale( 'en_US' )->find_by_id_address( 'fias-1', 'ru' );
+
+		$body = json_decode( (string) $this->last_request['args']['body'], true );
+		$this->assertSame( [ 'query' => 'fias-1', 'language' => 'ru' ], $body );
+	}
+
+	public function test_find_by_id_explicit_language_is_sent_even_when_no_locale_resolves(): void {
+		$this->stub_http_response( 200, '{"suggestions":[{"value":"x","data":{}}]}' );
+
+		( self::client( 'tok' ) )->find_by_id_address( 'fias-1', 'ru' );
+
+		$body = json_decode( (string) $this->last_request['args']['body'], true );
+		$this->assertSame( 'ru', $body['language'] );
+	}
+
 	public function test_iplocate_carries_the_language_in_its_query_string(): void {
 		$this->stub_http_response( 200, '{"location":{"value":"x","data":{}}}' );
 

@@ -3171,6 +3171,58 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		}
 
 		/**
+		 * The same locality a record describes, spelled in `$language` — the public,
+		 * token-free way a carrier's {@see Location_Adapter} can get the Russian
+		 * spelling (the language a Russian carrier's dictionary is in) of a record a
+		 * customer picked in another language (#1152).
+		 *
+		 * The identity is unchanged — the answer has the same key, FIAS id and
+		 * coordinates; only the human text (label, region / settlement names)
+		 * differs. A provider's `en` answer is a transliteration, which cannot be
+		 * matched against a Cyrillic dictionary; this gets the Cyrillic one instead
+		 * of guessing it back.
+		 *
+		 * **A provider that cannot do it answers `null`**, and a caller MUST be able
+		 * to carry on without — fall back to the record it already has. Today only
+		 * the bundled DaData provider can answer (`POST findById/address` with an
+		 * explicit `language`). `null` is the answer for everything else too: a
+		 * record some other provider produced, DaData unregistered or without a
+		 * token, a derived key, a language other than `ru` / `en`, DaData knowing
+		 * nothing for the id. Never a throw for «not configured» or «unsupported».
+		 *
+		 * The answer is cached per `(language, id)` — a week for a found record, a
+		 * day for «unknown id» — see
+		 * {@see Providers\Dadata_Provider::record_in_language()}. The token stays
+		 * inside the provider.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Location_Record $record   A location record, typically the one
+		 *                                  {@see self::resolve_for()} hands an adapter.
+		 * @param string          $language `ru` (the default) or `en`.
+		 *
+		 * @return Location_Record|null The record in `$language`, or null when this
+		 *                              provider cannot supply it.
+		 *
+		 * @throws Location_Provider_Exception When the provider's request itself fails — a
+		 *                                      transient failure the caller must not cache
+		 *                                      as «cannot do it».
+		 */
+		public function get_record_in_language( Location_Record $record, string $language = 'ru' ): ?Location_Record {
+			if ( Location_Provider_Registry::DEFAULT_PROVIDER_ID !== $record->provider_id() ) {
+				return null;
+			}
+
+			$provider = $this->get_registered_provider( Location_Provider_Registry::DEFAULT_PROVIDER_ID );
+
+			if ( ! $provider instanceof Providers\Dadata_Provider || ! $provider->is_configured() ) {
+				return null;
+			}
+
+			return $provider->record_in_language( $record, $language );
+		}
+
+		/**
 		 * Gets the shared {@see Popular_Settlement_Store} instance (#488 slice 3)
 		 * — a thin delegate to {@see Location_Provider_Registry::popular_settlement_store()}
 		 * so {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller} (which
