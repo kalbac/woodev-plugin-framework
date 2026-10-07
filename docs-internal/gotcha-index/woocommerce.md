@@ -51,3 +51,5 @@
 
 - [../GOTCHAS.md](../GOTCHAS.md) — the topic map
 - [woocommerce/hooks] **`woocommerce_customer_save_address` passes `$customer` only since WC 9.8 (before: `$user_id, $load_address`), and `WC()->customer` there is a pre-save copy — read `new WC_Customer( $user_id )`.** → [woocommerce-customer-save-address-passes-the-customer-only-since-9-8](../gotchas/woocommerce-customer-save-address-passes-the-customer-only-since-9-8.md) (s149)
+- [woocommerce/shipping-cache] **Cart and checkout share one cached (already filtered) rate set per package hash — a cart-only `woocommerce_package_rates` filter leaks both ways; partition the package by context.** → [cart-and-checkout-share-one-shipping-rate-cache-entry](../gotchas/cart-and-checkout-share-one-shipping-rate-cache-entry.md) (s158)
+- [woocommerce/admin-js] **`wc-enhanced-select` is not re-initialised when a shipping-method form opens in the zone modal — trigger `wc-enhanced-select-init` on `wc_backbone_modal_loaded`.** → [wc-enhanced-select-is-not-initialised-in-the-shipping-method-modal](../gotchas/wc-enhanced-select-is-not-initialised-in-the-shipping-method-modal.md) (s158)

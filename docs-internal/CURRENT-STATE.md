@@ -6,7 +6,7 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-07 (s157).** 🚧 CDEK v2 (#786) in `kalbac/woocommerce-edostavka` `v2`; its framework seams merged in PR #1140 (`3b2b60db`); rig accepted as «much better», follow-ups in s158. Details: `sessions/s157.md`. GlitchTip receiver (#1082) is live. ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
+**As of 2026-10-07 (s158).** 🚧 CDEK v2 (#786) in `kalbac/woocommerce-edostavka` `v2`: the operator reviewed the rig, every critic finding on export/tracking/migration is fixed and accepted; framework PR #1141 (`a35b42e4`) adds carrier packaging (store boxes with cost, carrier preset boxes, packing method + leftovers) and carrier settings (delivered status, «Дополнительно», «Выгрузка заказов»). Open for him: Belarus COD delivery charge. Details: `sessions/s158.md`. GlitchTip receiver (#1082) is live. ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
 orders-page slug redirects to the framework page with that carrier preselected, accepted on the rig.
 ✅ **Both machines are live**; routine sync is git ONLY (`wiki/two-machine-setup.md`). The order
 metabox (#856) and the orders table (#870) stay accepted.
