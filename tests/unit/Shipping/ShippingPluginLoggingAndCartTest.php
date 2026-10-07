@@ -53,9 +53,10 @@ final class ShippingPluginLoggingAndCartTest extends TestCase {
 	/**
 	 * @param bool $logging  «Логирование»
 	 * @param bool $on_cart  «Не показывать на странице корзины»
+	 * @param bool $methods_registered whether `woocommerce_shipping_methods` has already filled the plugin's method map
 	 * @return Shipping_Plugin&\Mockery\MockInterface
 	 */
-	private function plugin( bool $logging = false, bool $on_cart = false ) {
+	private function plugin( bool $logging = false, bool $on_cart = false, bool $methods_registered = true ) {
 		$this->options['woodev_cdek_advanced_enable_debug']           = $logging ? 'yes' : 'no';
 		$this->options['woodev_cdek_advanced_disable_methods_on_cart'] = $on_cart ? 'yes' : 'no';
 
@@ -67,7 +68,7 @@ final class ShippingPluginLoggingAndCartTest extends TestCase {
 		if ( PHP_VERSION_ID < 80100 ) {
 			$property->setAccessible( true );
 		}
-		$property->setValue( $plugin, [ 'cdek_courier' => 'Courier_Class' ] );
+		$property->setValue( $plugin, $methods_registered ? [ 'cdek_courier' => 'Courier_Class' ] : [] );
 
 		return $plugin;
 	}
@@ -236,6 +237,35 @@ final class ShippingPluginLoggingAndCartTest extends TestCase {
 		$this->assertSame( $this->packages(), $this->plugin( false, true )->mark_cart_page_packages( $this->packages() ) );
 
 		unset( $_SERVER['HTTP_REFERER'] );
+	}
+
+	/**
+	 * Runs isolated: it defines `is_cart()` / `WC()` as real functions, and a later test's `function_exists()` must not see them.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_the_cart_page_packages_are_marked_while_the_method_map_is_still_empty(): void {
+		Functions\when( 'is_cart' )->justReturn( true );
+
+		$marked = $this->plugin( false, true, false )->mark_cart_page_packages( $this->packages() );
+
+		$this->assertSame( [ 'cdek' ], $marked[0]['woodev_hidden_on_cart'], 'WooCommerce collects the packages before the methods register' );
+	}
+
+	/**
+	 * Runs isolated: it defines `is_cart()` / `WC()` as real functions, and a later test's `function_exists()` must not see them.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_an_empty_method_map_changes_nothing_at_checkout_or_with_the_option_off(): void {
+		Functions\when( 'is_cart' )->justReturn( true );
+		$this->assertSame( $this->packages(), $this->plugin( false, false, false )->mark_cart_page_packages( $this->packages() ) );
+
+		Functions\when( 'is_cart' )->justReturn( false );
+		Functions\when( 'WC' )->justReturn( new \stdClass() );
+		$this->assertSame( $this->packages(), $this->plugin( false, true, false )->mark_cart_page_packages( $this->packages() ) );
 	}
 
 	public function test_foreign_filter_values_are_returned_untouched_when_marking(): void {

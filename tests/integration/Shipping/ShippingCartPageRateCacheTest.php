@@ -213,6 +213,21 @@ namespace Woodev\Tests\Integration\Shipping {
 			return array_keys( $package['rates'] );
 		}
 
+		/**
+		 * A NEW request's starting point: the plugin object is fresh, so its `$methods` map is EMPTY until
+		 * WooCommerce fires `woocommerce_shipping_methods` — which, in the real flow, happens inside the rate
+		 * calculation, AFTER the cart's packages were collected. Nothing here pre-registers the methods.
+		 */
+		private function start_a_cold_request(): void {
+			$property = new \ReflectionProperty( \Woodev\Framework\Shipping\Shipping_Plugin::class, 'methods' );
+			if ( PHP_VERSION_ID < 80100 ) {
+				$property->setAccessible( true );
+			}
+			$property->setValue( $this->plugin(), [] );
+
+			$this->assertSame( [], $property->getValue( $this->plugin() ), 'the method map is empty when the packages are collected' );
+		}
+
 		/** @return array<string,array{0:string,1:string}> */
 		public function cart_and_checkout_pairs(): array {
 			return [
@@ -254,6 +269,58 @@ namespace Woodev\Tests\Integration\Shipping {
 				"the other page must not be served the first page's cached rates ($second)"
 			);
 			$this->assertSame( 2, $this->recalculations, 'each context calculates once — they do not share a cache entry' );
+		}
+
+		/**
+		 * F1 of the round-2 review: the marker used to give up while the method map was empty, but on a COLD request
+		 * the packages are collected before the methods register — so cart and checkout shared one unmarked hash.
+		 * Every ask below starts from an empty map, with shipping debug mode off, through the real `WC_Shipping` cache.
+		 *
+		 * @dataProvider cart_and_checkout_pairs
+		 *
+		 * @param string $first  the context asked first.
+		 * @param string $second the context asked second, for the SAME package.
+		 */
+		public function test_on_a_cold_request_the_packages_are_marked_before_the_methods_register( string $first, string $second ): void {
+
+			$is_cart = static fn( string $context ): bool => false !== strpos( $context, 'cart' );
+
+			$this->$first();
+			$this->start_a_cold_request();
+			$first_ids = $this->rate_ids();
+
+			$this->$second();
+			$this->start_a_cold_request();
+			$second_ids = $this->rate_ids();
+
+			$this->assertSame(
+				$is_cart( $first ) ? [ self::OTHER_RATE_ID ] : [ self::CARRIER_RATE_ID, self::OTHER_RATE_ID ],
+				$first_ids,
+				"the carrier is hidden on the cart page and offered everywhere else, cold ($first)"
+			);
+			$this->assertSame(
+				$is_cart( $second ) ? [ self::OTHER_RATE_ID ] : [ self::CARRIER_RATE_ID, self::OTHER_RATE_ID ],
+				$second_ids,
+				"the other page must not be served the first page's cached rates, cold ($second)"
+			);
+			$this->assertSame( 2, $this->recalculations, 'each context calculates once — they do not share a cache entry' );
+		}
+
+		public function test_on_a_cold_request_with_the_option_off_nothing_is_marked_and_the_pages_share_one_cache_entry(): void {
+
+			$this->set_hide_on_cart( false );
+
+			$this->classic_cart();
+			$this->start_a_cold_request();
+			$cart = $this->rate_ids();
+
+			$this->classic_checkout();
+			$this->start_a_cold_request();
+			$checkout = $this->rate_ids();
+
+			$this->assertSame( [ self::CARRIER_RATE_ID, self::OTHER_RATE_ID ], $cart );
+			$this->assertSame( $cart, $checkout );
+			$this->assertSame( 1, $this->recalculations, 'a shop that never turns the option on keeps its hashes — and its cache hits' );
 		}
 
 		public function test_asking_again_in_the_same_context_is_still_served_from_the_cache(): void {

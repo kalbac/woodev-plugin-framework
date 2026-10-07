@@ -866,7 +866,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 * recalculates (and calls the carrier API) once when the shopper moves between them.
 		 *
 		 * Only a plugin whose option is ON marks anything, so a shop that never turns it on keeps its hashes — and
-		 * its cache hits — exactly as they were. The same detection serves the classic cart (`is_cart()`) and the
+		 * its cache hits — exactly as they were. The decision rests on that option and the request context ALONE,
+		 * never on the registered-method map: on a cold request WooCommerce collects the cart's packages BEFORE
+		 * `woocommerce_shipping_methods` registers the methods (and a cache hit never loads them at all), so a map
+		 * check would leave both pages sharing one unmarked hash. The same detection serves the classic cart (`is_cart()`) and the
 		 * block cart's Store API requests ({@see self::is_cart_page_request()}).
 		 *
 		 * @since 2.0.2
@@ -878,7 +881,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 */
 		public function mark_cart_page_packages( $packages ) {
 
-			if ( ! is_array( $packages ) || [] === $packages || [] === $this->methods || ! $this->is_cart_page_request() || ! $this->get_advanced_settings()->is_hidden_on_cart() ) {
+			if ( ! is_array( $packages ) || [] === $packages || ! $this->is_cart_page_request() || ! $this->get_advanced_settings()->is_hidden_on_cart() ) {
 				return $packages;
 			}
 
