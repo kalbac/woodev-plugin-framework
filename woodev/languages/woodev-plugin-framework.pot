@@ -2671,16 +2671,16 @@ msgid_plural "%1$s поддерживает доставку в одну из с
 msgstr[0] ""
 msgstr[1] ""
 
-#. translators: %1$s - plugin name, %2$s - opening <a> tag, %3$s - closing </a> tag
+#. translators: %1$s - plugin name in <strong> tags, %2$s - opening <a> tag, %3$s - closing </a> tag
 #: shipping-method/class-shipping-plugin.php:935
 #, php-format
 msgid "Внимание! %1$s работает в режиме отладки и записывает данные в лог. Если у вас нет проблем с доставкой, рекомендуем %2$sотключить режим отладки%3$s."
 msgstr ""
 
-#. translators: %1$s - plugin name, %2$s - opening <a> tag, %3$s - closing </a> tag
+#. translators: %1$s - plugin name in <strong> tags, %2$s - opening <a> tag, %3$s - closing </a> tag
 #: class-plugin.php:1076
 #, php-format
-msgid "%1$s не настроен. %2$sПерейдите в настройки%3$s, чтобы плагин начал работать."
+msgid "Плагин %1$s не настроен. %2$sПерейдите в настройки%3$s, чтобы плагин начал работать."
 msgstr ""
 
 #. translators: %1$s - location provider name, %2$s - opening <a> tag, %3$s - closing </a> tag
@@ -5534,4 +5534,36 @@ msgstr ""
 
 #: shipping-method/class-shipping-method.php:318
 msgid "Любой способ оплаты"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:396
+msgid "Минимальная стоимость доставки"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:404
+msgid "Максимальная стоимость доставки"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:399 shipping-method/class-shipping-method.php:407
+msgid "Не ограничено"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:400
+msgid "Если стоимость, рассчитанная перевозчиком, окажется ниже этого значения, покупатель заплатит указанную сумму. Если указать одинаковые минимум и максимум, стоимость доставки будет фиксированной. Бесплатная доставка остаётся бесплатной."
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:408
+msgid "Если стоимость, рассчитанная перевозчиком, окажется выше этого значения, покупатель заплатит указанную сумму. Оставьте поле пустым, чтобы не ограничивать стоимость."
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:1621
+msgid "Минимальная стоимость доставки должна быть числом не меньше нуля."
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:1640
+msgid "Максимальная стоимость доставки должна быть числом не меньше нуля."
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:1647
+msgid "Максимальная стоимость доставки не может быть меньше минимальной."
 msgstr ""

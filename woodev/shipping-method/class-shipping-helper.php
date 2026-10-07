@@ -212,6 +212,65 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Helper' ) ) :
 		}
 
 		/**
+		 * Reads a stored cost limit: a non-negative number, or `null` for «no limit».
+		 *
+		 * An empty value, anything that is not a number and a negative number are all «no limit» — an
+		 * option edited by hand or by an older plugin must never turn into a surprise price. `0` IS a limit
+		 * (a maximum of 0 makes every priced rate free).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param mixed $raw the stored option value (`'250'`, `'250,5'`, `''`, `null`).
+		 * @return float|null
+		 */
+		public static function normalize_cost_limit( $raw ): ?float {
+
+			if ( ! is_scalar( $raw ) || is_bool( $raw ) ) {
+				return null;
+			}
+
+			$raw = str_replace( ',', '.', trim( (string) $raw ) );
+
+			if ( '' === $raw || ! is_numeric( $raw ) || ! is_finite( (float) $raw ) || (float) $raw < 0 ) {
+				return null;
+			}
+
+			return (float) $raw;
+		}
+
+		/**
+		 * Limits a calculated shipping cost to `[ $min, $max ]`.
+		 *
+		 * A limit that is `null` is not applied. When the limits contradict each other (`$min > $max`) the
+		 * maximum wins, because the merchant's ceiling is the safer side to be wrong on. A cost of `0` or
+		 * below is returned untouched: a free rate (a «free from» rule, a free-shipping coupon) stays free
+		 * whatever the minimum says.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param float      $cost calculated cost.
+		 * @param float|null $min  lowest cost the customer may pay, or `null`.
+		 * @param float|null $max  highest cost the customer may pay, or `null`.
+		 * @return float
+		 */
+		public static function limit_cost( float $cost, ?float $min, ?float $max ): float {
+
+			if ( $cost <= 0 ) {
+				return $cost;
+			}
+
+			if ( null !== $min && $cost < $min ) {
+				$cost = $min;
+			}
+
+			if ( null !== $max && $cost > $max ) {
+				$cost = $max;
+			}
+
+			return $cost;
+		}
+
+		/**
 		 * Formats delivery time for display.
 		 *
 		 * @since 1.5.0

@@ -1111,9 +1111,9 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			$url = $this->get_not_configured_notice_url();
 
 			$message = sprintf(
-				/* translators: %1$s - plugin name, %2$s - opening <a> tag, %3$s - closing </a> tag */
-				__( '%1$s не настроен. %2$sПерейдите в настройки%3$s, чтобы плагин начал работать.', 'woodev-plugin-framework' ),
-				$this->get_plugin_name(),
+				/* translators: %1$s - plugin name in <strong> tags, %2$s - opening <a> tag, %3$s - closing </a> tag */
+				__( 'Плагин %1$s не настроен. %2$sПерейдите в настройки%3$s, чтобы плагин начал работать.', 'woodev-plugin-framework' ),
+				'<strong>' . esc_html( $this->get_plugin_name() ) . '</strong>',
 				'' !== $url ? '<a href="' . esc_url( $url ) . '">' : '',
 				'' !== $url ? ' &raquo;</a>' : ''
 			);
