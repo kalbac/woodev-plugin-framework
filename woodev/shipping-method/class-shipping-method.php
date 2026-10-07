@@ -1024,14 +1024,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 *
 		 * @since 2.0.2
 		 *
-		 * No return type, like WooCommerce's own method: the v1 carrier plugins override this one untyped, and
-		 * the signature probe's frozen acceptance figures (#767) count a typed base as a new fatal.
+		 * Exactly WooCommerce's signature — `( $key, $data )`, no return type, no default: a carrier that
+		 * overrides this method copying WooCommerce's signature must stay compatible. A default on `$data`
+		 * made the CDEK override `( $key, $data ): string` a fatal (s159); a return type would do the same to
+		 * the untyped v1 carrier overrides counted by the signature probe (#767).
 		 *
 		 * @param string $key  field key.
 		 * @param array  $data field definition.
 		 * @return string
 		 */
-		public function generate_multiselect_html( $key, $data = [] ) {
+		public function generate_multiselect_html( $key, $data ) {
 
 			if ( Fee_Payments::OPTION_KEY === $key ) {
 				$data['options'] = Fee_Payments::gateway_options( $this->get_fee_payments() );
