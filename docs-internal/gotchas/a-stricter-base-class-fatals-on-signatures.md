@@ -88,6 +88,26 @@ fatal — the shadowed-base-private case above. Usage and the counting argument:
 ✅ And load it once on a real stand. A `wp eval` that just prints `get_parent_class()` is enough —
 the fatal happens at declaration, so merely loading WordPress surfaces it.
 
+## s159: a DEFAULT added to a base parameter is a stricter base too
+
+PR #1150 gave `Shipping_Method::generate_multiselect_html( $key, $data = [] )` a default that
+WooCommerce's own `WC_Settings_API::generate_multiselect_html( $key, $data )` does not have. The CDEK v2
+trait overrides it with WooCommerce's signature plus a return type, `( $key, $data ): string` — and
+the rig went down at declaration:
+
+```text
+Fatal error: Declaration of …Cdek_Rate_Method::generate_multiselect_html($key, $data): string must be
+compatible with Woodev\Framework\Shipping\Shipping_Method::generate_multiselect_html($key, $data = [])
+```
+
+A child must accept every call the parent accepts; a parent that may be called with one argument
+forbids a child that requires two. Every unit suite stayed green on both sides (each mocks the other),
+and `npm run probe:signature` counts only the v1 carriers, so it could not see a v2 plugin.
+
+❌ `public function generate_multiselect_html( $key, $data = [] )` — "harmless" convenience default.
+✅ When the framework overrides a WooCommerce method, copy WooCommerce's signature EXACTLY — no added
+default, no added return type — because carriers override the same method copying WooCommerce.
+
 ## Related
 
 - [mockery-mock-new-method-full-suite](mockery-mock-new-method-full-suite.md) — the neighbouring mock trap: renaming a method that a mock names as a STRING (`shouldReceive( 'get_api' )`) is invisible to a grep for `->get_api()`

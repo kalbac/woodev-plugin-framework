@@ -148,6 +148,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			// base shipping method and specializations
 			require_once $path . '/class-shipping-rate.php';
 			require_once $path . '/class-shipping-rate-cache.php';
+			// «fee only for chosen payment methods» (#1144): the method's feature reads it, so it loads first
+			require_once $path . '/class-fee-payments.php';
 			require_once $path . '/class-shipping-method.php';
 			require_once $path . '/class-shipping-method-courier.php';
 			require_once $path . '/class-shipping-method-pickup.php';
@@ -277,6 +279,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 			require_once $path . '/checkout/class-checkout-parent-block-notice.php';
 
+			// #1144: the Checkout block's «payment method changed» trigger; gated on Blocks' interface like the two above
+			if ( interface_exists( '\\Automattic\\WooCommerce\\Blocks\\Integrations\\IntegrationInterface' ) ) {
+				require_once $path . '/checkout/blocks/class-fee-payments-blocks-integration.php';
+			}
+
 			// order meta handler + abstract shipment/tracking/webhook handlers
 			require_once $path . '/order/class-shipping-order-handler.php';
 			require_once $path . '/order/class-document-result.php';
@@ -364,6 +371,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		private function add_hooks(): void {
 
 			Checkout\Checkout_Parent_Block_Notice::register( $this );
+
+			// «fee only for chosen payment methods» (#1144): one fleet-wide wiring, inert until a method instance uses it
+			Fee_Payments::register();
 
 			// register shipping methods with WooCommerce
 			add_filter( 'woocommerce_shipping_methods', [ $this, 'register_shipping_methods' ] );
