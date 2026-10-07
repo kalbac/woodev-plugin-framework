@@ -6,7 +6,7 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-07 (s158).** 🚧 CDEK v2 (#786) in `kalbac/woocommerce-edostavka` `v2`: rig reviewed (visual), critic findings fixed; framework PRs #1141 (`a35b42e4`) and #1142 (`9de93746`) add carrier packaging (store boxes with cost, carrier preset boxes, packing method + leftovers) and carrier settings (delivered status, «Дополнительно», «Выгрузка заказов»). Next: #1143. Details: `sessions/s158.md`. GlitchTip receiver (#1082) is live. ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
+**As of 2026-10-07 (s159).** 🚧 CDEK v2 (#786), plugin `v2` `41b516a`: #1143 #1144 (PR #1150) #1148 (PR #1151) #1149 #1152 (PR #1153) merged, rig PASS. Next: `next-session-prompt.md`. Details: `sessions/s159.md`. GlitchTip receiver (#1082) is live. ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
 orders-page slug redirects to the framework page with that carrier preselected, accepted on the rig.
 ✅ **Both machines are live**; routine sync is git ONLY (`wiki/two-machine-setup.md`). The order
 metabox (#856) and the orders table (#870) stay accepted.
@@ -61,7 +61,7 @@ FIXTURES**; the shipping plugin is written later, from scratch, own repo, versio
 
 ✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — no quota consumed; the exhaustion symptom is gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`.
 
-**`main` after s149 (`ef7a5ea1`, macOS, 03.10.2026):** unit **5241 / 29902** (1 skipped), jest **2540** in **53** suites; integration local **475 / 6432**.
+**`main` after s159 (`e61fac58`, macOS, 07.10.2026):** unit **6226 / 33131** (1 skipped), jest **2963** in **66** suites; integration local **510 / 6576**.
 
 **Baselines — macOS laptop, 27.09.2026 (s140)** (the two machines matched to the digit in s136, so
 these are not platform-dependent): unit **4132 / 14586**, 1 skipped, sodium ON; jest **1975** in
