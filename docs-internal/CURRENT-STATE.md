@@ -6,7 +6,7 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-07 (s159).** 🚧 CDEK v2 (#786), plugin `v2` `41b516a`: #1143 #1144 (PR #1150) #1148 (PR #1151) #1149 #1152 (PR #1153) merged, rig PASS. Next: `next-session-prompt.md`. Details: `sessions/s159.md`. GlitchTip receiver (#1082) is live. ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
+**As of 2026-10-07 (s159).** 🚧 CDEK v2 (#786), plugin `v2` `41b516a`: #1143 #1144 (PR #1150) #1148 (PR #1151) #1149 #1152 (PR #1153) merged, rig PASS; evening: not-configured notice for every plugin (PR #1154), cost limits (PR #1159), CDEK method-settings UX. Next: `next-session-prompt.md`. Details: `sessions/s159.md`. GlitchTip receiver (#1082) is live. ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
 orders-page slug redirects to the framework page with that carrier preselected, accepted on the rig.
 ✅ **Both machines are live**; routine sync is git ONLY (`wiki/two-machine-setup.md`). The order
 metabox (#856) and the orders table (#870) stay accepted.
