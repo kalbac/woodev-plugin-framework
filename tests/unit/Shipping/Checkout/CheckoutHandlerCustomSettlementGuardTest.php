@@ -92,7 +92,55 @@ final class Checkout_Handler_Custom_Settlement_Fake_Location_Service extends Loc
 }
 
 /**
+ * A {@see Location_Service} whose chooser is operable for a fixed list of countries only
+ * and which records every country it was asked about — the cross-country shape (#1148
+ * fix round 1): billing and shipping countries differ, and only one is served.
+ */
+final class Checkout_Handler_Custom_Settlement_Country_Fake_Location_Service extends Location_Service {
+
+	/** @var string[] */
+	private array $served;
+	private ?Location_Record $record;
+
+	/** @var array<int, string> */
+	public array $availability_countries = [];
+
+	/** @var array<int, string> */
+	public array $record_countries = [];
+
+	/**
+	 * @param string[] $served countries whose settlement chooser operates
+	 */
+	public function __construct( array $served, ?Location_Record $record = null ) {
+		$this->served = $served;
+		$this->record = $record;
+	}
+
+	public function is_level_chooser_available( string $level, ?string $country = null ): bool {
+		$this->availability_countries[] = (string) $country;
+
+		return in_array( (string) $country, $this->served, true );
+	}
+
+	public function is_custom_settlement_allowed(): bool {
+		return false;
+	}
+
+	public function get_field_mode_settlement(): string {
+		return Location_Provider_Registry::MODE_AJAX_SELECT2;
+	}
+
+	public function get_customer_record_at( string $level, ?string $for_country = null ): ?Location_Record {
+		$this->record_countries[] = (string) $for_country;
+
+		return $this->record;
+	}
+}
+
+/**
  * @covers \Woodev\Framework\Shipping\Checkout\Checkout_Handler::guard_custom_settlement
+ * @covers \Woodev\Framework\Shipping\Checkout\Checkout_Handler::handle_checkout_process
+ * @covers \Woodev\Framework\Shipping\Checkout\Checkout_Handler::posted_country_for_section
  * @covers \Woodev\Framework\Shipping\Checkout\Checkout_Handler::settlement_field_id_for_section
  * @covers \Woodev\Framework\Shipping\Checkout\Checkout_Handler::settlement_record_value
  * @covers \Woodev\Framework\Shipping\Checkout\Checkout_Handler::normalize_for_settlement_match
@@ -428,6 +476,90 @@ class CheckoutHandlerCustomSettlementGuardTest extends TestCase {
 		$this->assertFalse(
 			$handler->guard_custom_settlement( [ 'shipping_city' => 'Москва' ], 'RU', 'shipping' )
 		);
+	}
+
+	// -----------------------------------------------------------------------
+	// Section-scoped country (#1148 fix round 1): the guard judges the section whose
+	// field it guards, with THAT section's country — billing and shipping may differ.
+	// -----------------------------------------------------------------------
+
+	/**
+	 * Drives the real `handle_checkout_process()` entry point with a crafted `$_POST`.
+	 *
+	 * @param array<string, string> $post
+	 */
+	private function run_checkout_process( Location_Service $service, array $post ): void {
+		Functions\when( 'wp_unslash' )->returnArg();
+		Functions\when( 'wc_clean' )->returnArg();
+
+		$_POST = $post;
+
+		try {
+			( new Checkout_Handler( self::fields_with_settlement(), 'carrier', $service ) )->handle_checkout_process();
+		} finally {
+			$_POST = [];
+		}
+	}
+
+	public function test_shipping_section_stands_down_when_only_the_billing_country_is_served(): void {
+		Functions\expect( 'wc_add_notice' )->never();
+
+		$service = new Checkout_Handler_Custom_Settlement_Country_Fake_Location_Service( [ 'RU' ] );
+
+		$this->run_checkout_process( $service, [
+			'billing_country'           => 'RU',
+			'shipping_country'          => 'KZ',
+			'ship_to_different_address' => '1',
+			'shipping_city'             => 'Алматы',
+		] );
+
+		$this->assertSame( [ 'KZ' ], $service->availability_countries );
+	}
+
+	public function test_shipping_section_still_blocks_when_only_the_shipping_country_is_served(): void {
+		Functions\expect( 'wc_add_notice' )->once()->with( self::EXPECTED_MESSAGE, 'error' );
+
+		$service = new Checkout_Handler_Custom_Settlement_Country_Fake_Location_Service( [ 'KZ' ] );
+
+		$this->run_checkout_process( $service, [
+			'billing_country'           => 'RU',
+			'shipping_country'          => 'KZ',
+			'ship_to_different_address' => '1',
+			'shipping_city'             => 'Алматы',
+		] );
+
+		$this->assertSame( [ 'KZ' ], $service->availability_countries );
+		$this->assertSame( [ 'KZ' ], $service->record_countries, 'the record lookup uses the same section country' );
+	}
+
+	public function test_billing_section_uses_the_billing_country_when_shipping_is_not_ticked(): void {
+		Functions\expect( 'wc_add_notice' )->once()->with( self::EXPECTED_MESSAGE, 'error' );
+
+		$service = new Checkout_Handler_Custom_Settlement_Country_Fake_Location_Service( [ 'RU' ] );
+
+		$this->run_checkout_process( $service, [
+			'billing_country'  => 'RU',
+			'shipping_country' => 'KZ',
+			'billing_city'     => 'Москва',
+		] );
+
+		$this->assertSame( [ 'RU' ], $service->availability_countries );
+	}
+
+	public function test_force_billing_store_ignores_the_shipping_country(): void {
+		Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( true );
+		Functions\expect( 'wc_add_notice' )->once()->with( self::EXPECTED_MESSAGE, 'error' );
+
+		$service = new Checkout_Handler_Custom_Settlement_Country_Fake_Location_Service( [ 'RU' ] );
+
+		$this->run_checkout_process( $service, [
+			'billing_country'           => 'RU',
+			'shipping_country'          => 'KZ',
+			'ship_to_different_address' => '1',
+			'billing_city'              => 'Москва',
+		] );
+
+		$this->assertSame( [ 'RU' ], $service->availability_countries );
 	}
 
 	/**

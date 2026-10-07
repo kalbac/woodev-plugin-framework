@@ -23,6 +23,8 @@ if ( ! $service->is_level_chooser_available( Location_Record::LEVEL_SETTLEMENT, 
 
 Any new server-side check that requires a chooser pick must go through that predicate.
 
+The country fed to that predicate is the country of the SECTION whose field is guarded (`shipping_country` for a shipping field when "ship to a different address" is ticked, `billing_country` otherwise and for force-billing stores) — the same field `location-cascade.js` scopes the node to. Feeding billing's country for a shipping field lets the guard disagree with the chooser the buyer sees (#1148, round 1).
+
 ## Related
 - [a-level-served-can-come-from-the-fallback-not-the-active-provider](a-level-served-can-come-from-the-fallback-not-the-active-provider.md) — a level's availability is per provider chain and country, not per stored setting
 - [the-three-location-field-modes-and-their-russian-labels](the-three-location-field-modes-and-their-russian-labels.md) — what `ajax-select2` is
