@@ -1156,7 +1156,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 */
 		private function handle_rate_calculation_failure( \Woodev_Plugin_Exception $exception, array $package ): void {
 
-			$this->get_plugin()->log(
+			$this->get_plugin()->log_error(
 				sprintf(
 					'Rate calculation failed for the "%s" method, the method is hidden (%s): %s',
 					$this->get_title(),

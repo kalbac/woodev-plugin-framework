@@ -19,6 +19,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 	abstract class Shipping_Plugin extends \Woodev\Framework\Woocommerce_Plugin {
 
+		/** @var string shipping-package key listing the plugin ids hiding their carriers on the cart page (part of the rate-cache hash) */
+		private const CART_PAGE_PACKAGE_KEY = 'woodev_hidden_on_cart';
+
 		/** @var array optional associative array of shipping method id */
 		private array $methods = [];
 
@@ -365,8 +368,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			// register shipping methods with WooCommerce
 			add_filter( 'woocommerce_shipping_methods', [ $this, 'register_shipping_methods' ] );
 
-			// «Не показывать на странице корзины»
-			add_filter( 'woocommerce_package_rates', [ $this, 'hide_rates_on_cart_page' ] );
+			// «Не показывать на странице корзины»: the cart page's packages are marked, and a marked package's rates lose
+			// this carrier's own — see hide_rates_on_cart_page() for why the mark is what makes it cache-safe.
+			add_filter( 'woocommerce_cart_shipping_packages', [ $this, 'mark_cart_page_packages' ] );
+			add_filter( 'woocommerce_package_rates', [ $this, 'hide_rates_on_cart_page' ], 10, 2 );
 
 			// render the method description (and whatever a plugin adds via the filter)
 			// under the rate on the order form. This is the CLASSIC form's only seam for
@@ -848,14 +853,55 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		}
 
 		/**
-		 * «Не показывать на странице корзины» (`disable_methods_on_cart` of {@see Settings\Advanced_Settings}):
-		 * removes this carrier's rates from the packages' rates while the cart page is being shown. They are still
-		 * offered at checkout.
+		 * «Не показывать на странице корзины» (`disable_methods_on_cart` of {@see Settings\Advanced_Settings}), step 1:
+		 * while the cart page is shown, marks the cart's shipping packages with this plugin's id.
 		 *
-		 * Done on `woocommerce_package_rates`, which WooCommerce applies to freshly calculated AND session-cached
-		 * rates alike. Skipping the carrier in `calculate_shipping()` would be wrong: WooCommerce keeps the rates it
-		 * calculated for the cart page in the session and reuses them at checkout for the same package, so a method
-		 * left out on the cart would be missing at checkout too.
+		 * The mark is what keeps WooCommerce's shipping cache honest. `WC_Shipping::calculate_shipping_for_package()`
+		 * runs `woocommerce_package_rates` only when it RECALCULATES — it stores the already-filtered rates in the
+		 * session under the package's hash and, on a hash hit, returns the stored rates without running the filter
+		 * (WooCommerce's own «shipping debug mode» is the one thing that bypasses it). A filter that hid the carrier
+		 * on the cart page alone would therefore poison the cache both ways: the cart's filtered rates would be
+		 * served at checkout, and checkout's full rates would be served on the cart. The mark is part of the
+		 * package, so it is part of the hash: the cart page and checkout never share a cache entry, and each
+		 * recalculates (and calls the carrier API) once when the shopper moves between them.
+		 *
+		 * Only a plugin whose option is ON marks anything, so a shop that never turns it on keeps its hashes — and
+		 * its cache hits — exactly as they were. The same detection serves the classic cart (`is_cart()`) and the
+		 * block cart's Store API requests ({@see self::is_cart_page_request()}).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @internal Hooked on `woocommerce_cart_shipping_packages`; not for direct calls.
+		 *
+		 * @param mixed $packages the cart's shipping packages.
+		 * @return mixed the packages, each with this plugin's id in `woodev_hidden_on_cart` while on the cart page.
+		 */
+		public function mark_cart_page_packages( $packages ) {
+
+			if ( ! is_array( $packages ) || [] === $packages || [] === $this->methods || ! $this->is_cart_page_request() || ! $this->get_advanced_settings()->is_hidden_on_cart() ) {
+				return $packages;
+			}
+
+			foreach ( $packages as $key => $package ) {
+				if ( is_array( $package ) ) {
+					$marked   = isset( $package[ self::CART_PAGE_PACKAGE_KEY ] ) && is_array( $package[ self::CART_PAGE_PACKAGE_KEY ] ) ? $package[ self::CART_PAGE_PACKAGE_KEY ] : [];
+					$marked[] = $this->get_id();
+
+					$packages[ $key ][ self::CART_PAGE_PACKAGE_KEY ] = array_values( array_unique( $marked ) );
+				}
+			}
+
+			return $packages;
+		}
+
+		/**
+		 * «Не показывать на странице корзины», step 2: removes this carrier's rates from a package that
+		 * {@see self::mark_cart_page_packages()} marked for this plugin. At checkout the package carries no mark, so
+		 * the carrier is offered as usual.
+		 *
+		 * Decided by the MARK on the package, not by re-detecting the page: the filter runs only on a recalculation
+		 * (see step 1), and the mark is what tells a cart-page package from a checkout one and gives each its own
+		 * cache entry. Skipping the carrier in `calculate_shipping()` instead would be wrong for the same reason.
 		 *
 		 * The v1 plugin showed its option (and honoured it) only while WooCommerce's shipping calculator on the cart
 		 * was off. That condition is dropped: the option is an explicit choice, whatever the calculator does.
@@ -864,12 +910,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 *
 		 * @internal Hooked on `woocommerce_package_rates`; not for direct calls.
 		 *
-		 * @param mixed $rates the package's rates, keyed by rate id.
-		 * @return mixed the rates without this carrier's own while on the cart page.
+		 * @param mixed $rates   the package's rates, keyed by rate id.
+		 * @param mixed $package the package the rates were calculated for.
+		 * @return mixed the rates without this carrier's own for a package marked for the cart page.
 		 */
-		public function hide_rates_on_cart_page( $rates ) {
+		public function hide_rates_on_cart_page( $rates, $package = [] ) {
 
-			if ( ! is_array( $rates ) || [] === $this->methods || ! $this->is_cart_page_request() || ! $this->get_advanced_settings()->is_hidden_on_cart() ) {
+			if ( ! is_array( $rates ) || [] === $this->methods || ! is_array( $package ) || ! isset( $package[ self::CART_PAGE_PACKAGE_KEY ] ) || ! in_array( $this->get_id(), (array) $package[ self::CART_PAGE_PACKAGE_KEY ], true ) ) {
 				return $rates;
 			}
 
@@ -1236,7 +1283,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 				$sync = Settings\Status_Sync_Tool::create(
 					Admin\Orders\Orders_Registry::instance()->get_plugin_providers( $this ),
 					function ( string $message ): void {
-						$this->log( $message );
+						$this->log_error( $message );
 					}
 				);
 
@@ -2338,8 +2385,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		}
 
 		/**
-		 * Writes a debug line — to the log only while «Логирование» is on. An error goes to {@see self::log()},
-		 * which always writes.
+		 * Writes a debug line at the DEBUG level — to the log only while «Логирование» is on. A failure goes to
+		 * {@see self::log_error()}, which always writes.
 		 *
 		 * @since 2.0.2
 		 *
@@ -2349,12 +2396,40 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 */
 		public function log_debug( $message, $log_id = null ): void {
 			if ( $this->is_debug_enabled() ) {
-				$this->log( $message, $log_id );
+				$this->log_at_level( 'debug', (string) $message, $log_id );
 			}
 		}
 
 		/**
-		 * Logs a carrier API request and its response — only while «Логирование» is on.
+		 * Writes a failure at the ERROR level, whatever «Логирование» says.
+		 *
+		 * The inherited {@see self::log()} writes at WooCommerce's default NOTICE severity, which a shop that
+		 * raised the logging threshold to «Error» silently drops — so a failure belongs here, not there.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string      $message What failed. Foreign text (an exception message) must be redacted first.
+		 * @param string|null $log_id  Optional log id to segment the files by, defaults to the plugin id.
+		 * @return void
+		 */
+		public function log_error( $message, $log_id = null ): void {
+			$this->log_at_level( 'error', (string) $message, $log_id );
+		}
+
+		/**
+		 * Writes a line to the WooCommerce log at an explicit severity, keeping the log source id.
+		 *
+		 * @param string      $level   A `WC_Log_Levels` level: `error`, `debug`, …
+		 * @param string      $message The line.
+		 * @param string|null $log_id  Log source id, defaults to the plugin id.
+		 * @return void
+		 */
+		private function log_at_level( string $level, string $message, $log_id ): void {
+			$this->logger()->log( $level, $message, [ 'source' => is_string( $log_id ) && '' !== $log_id ? $log_id : $this->get_id() ] );
+		}
+
+		/**
+		 * Logs a carrier API request and its response at the DEBUG level — only while «Логирование» is on.
 		 *
 		 * @since 2.0.2
 		 *
@@ -2364,8 +2439,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 * @return void
 		 */
 		public function log_api_request( $request, $response, $log_id = null ) {
-			if ( $this->is_debug_enabled() ) {
-				parent::log_api_request( $request, $response, $log_id );
+
+			if ( ! $this->is_debug_enabled() ) {
+				return;
+			}
+
+			$this->log_debug( "Запрос\n" . $this->get_api_log_message( $request ), $log_id );
+
+			if ( ! empty( $response ) ) {
+				$this->log_debug( "Ответ\n" . $this->get_api_log_message( $response ), $log_id );
 			}
 		}
 

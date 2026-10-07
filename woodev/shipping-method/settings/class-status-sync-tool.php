@@ -109,7 +109,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Status_Sync_Tool'
 					$failed = true;
 
 					if ( null !== $logger ) {
-						$logger( sprintf( 'manual delivery-status refresh (%1$s) threw %2$s: %3$s', $hook, get_class( $error ), $error->getMessage() ) );
+						$logger( sprintf( 'manual delivery-status refresh (%1$s) threw %2$s: %3$s', $hook, get_class( $error ), \Woodev_API_Base::redact_secret_log_text( $error->getMessage() ) ) );
 					}
 				}
 			}

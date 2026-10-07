@@ -113,4 +113,30 @@ final class StatusSyncToolTest extends TestCase {
 		$this->assertCount( 1, $logged );
 		$this->assertStringContainsString( 'carrier down', $logged[0] );
 	}
+
+	public function test_a_token_in_the_exception_text_reaches_neither_the_log_line_nor_the_response(): void {
+		Functions\when( 'has_action' )->justReturn( 10 );
+
+		Actions\expectDone( 'broken_update' )->once()->whenHappen(
+			static function (): void {
+				throw new \RuntimeException( 'API failed at https://example.test/?access_token=C8_SYNTHETIC_TOKEN' );
+			}
+		);
+
+		$logged = [];
+		$tool   = Status_Sync_Tool::create(
+			[ $this->provider( 'a', 'broken_update' ) ],
+			static function ( string $message ) use ( &$logged ): void {
+				$logged[] = $message;
+			}
+		);
+
+		$result = call_user_func( $tool->get_callback(), [] );
+
+		$this->assertFalse( $result->is_success() );
+		$this->assertStringNotContainsString( 'C8_SYNTHETIC_TOKEN', $result->get_message() );
+		$this->assertCount( 1, $logged, 'the failure is still logged' );
+		$this->assertStringNotContainsString( 'C8_SYNTHETIC_TOKEN', $logged[0] );
+		$this->assertStringContainsString( 'access_token=[REDACTED]', $logged[0] );
+	}
 }

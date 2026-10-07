@@ -118,6 +118,13 @@ namespace Woodev\Tests\Unit\Shipping {
 		 * @return void
 		 */
 		public function log( $message, $log_id = null ) {}
+
+		/**
+		 * @param string      $message log line.
+		 * @param string|null $log_id  log id.
+		 * @return void
+		 */
+		public function log_error( $message, $log_id = null ): void {}
 	}
 
 	/** Minimal Shipping_Method double that counts carrier calls. */
