@@ -1054,6 +1054,45 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		}
 
 		/**
+		 * The capability a user needs to be shown the "not configured" notice: the one that lets them open THIS
+		 * plugin's settings, resolved by the same rule the settings page applies to its tabs.
+		 *
+		 * Each settings provider's declared capability wins; otherwise `manage_woocommerce` for a WooCommerce
+		 * plugin and `manage_options` for a neutral one ({@see \Woodev\Framework\Settings\Settings_Page_Registry::resolve_capability()}).
+		 * With several tabs of different capabilities, the page's broadest-reach rule applies, so anyone who can
+		 * open the page is told.
+		 * A plugin with no settings provider falls back to the same default.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		protected function get_not_configured_notice_capability(): string {
+
+			$is_woocommerce = $this instanceof \Woodev\Framework\Woocommerce_Plugin;
+			$capabilities   = [];
+
+			foreach ( (array) $this->get_settings_providers() as $provider ) {
+				if ( $provider instanceof \Woodev\Framework\Settings\Settings_Provider ) {
+					$capabilities[] = \Woodev\Framework\Settings\Settings_Page_Registry::resolve_capability( $provider->get_declared_capability(), $is_woocommerce );
+				}
+			}
+
+			if ( [] === $capabilities ) {
+				return \Woodev\Framework\Settings\Settings_Page_Registry::resolve_capability( null, $is_woocommerce );
+			}
+
+			$capabilities = array_values( array_unique( $capabilities ) );
+
+			// one tab (the usual case): exactly its capability, a custom one included
+			if ( 1 === count( $capabilities ) ) {
+				return $capabilities[0];
+			}
+
+			return \Woodev\Framework\Settings\Settings_Page_Registry::resolve_page_capability( $capabilities );
+		}
+
+		/**
 		 * Computes the "not configured" notice — message and a stable id — or `null` when nothing should show.
 		 *
 		 * A pure decision over {@see self::is_configured()}, public so it can be unit-tested without a notice
@@ -1090,7 +1129,8 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 *
 		 * NOT dismissible: the condition is read live ({@see self::is_configured()}), so the notice clears by
 		 * itself once the merchant configures the plugin, while a dismiss flag would only let them hide a
-		 * problem that is still true. It shows on every screen the notice handler renders on, the plugin's own
+		 * problem that is still true. Only users who can manage THIS plugin's settings see it
+		 * ({@see self::get_not_configured_notice_capability()}). It shows on every screen the notice handler renders on, the plugin's own
 		 * settings page included (where it vanishes after the save that fixes it).
 		 *
 		 * @since 2.0.2
@@ -1111,6 +1151,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 				[
 					'dismissible'  => false,
 					'notice_class' => 'notice-warning',
+					'capability'   => $this->get_not_configured_notice_capability(),
 				]
 			);
 		}

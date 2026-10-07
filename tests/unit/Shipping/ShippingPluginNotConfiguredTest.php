@@ -42,6 +42,7 @@ namespace Woodev\Tests\Unit\Shipping {
 
 	require_once dirname( __DIR__, 3 ) . '/woodev/class-plugin-exception.php';
 	require_once dirname( __DIR__, 3 ) . '/woodev/class-plugin.php';
+	require_once dirname( __DIR__, 3 ) . '/woodev/class-admin-notice-handler.php';
 	require_once dirname( __DIR__, 3 ) . '/woodev/class-woocommerce-plugin.php';
 	require_once dirname( __DIR__, 3 ) . '/woodev/settings-api/class-control.php';
 	require_once dirname( __DIR__, 3 ) . '/woodev/settings-api/class-setting.php';
@@ -79,7 +80,8 @@ namespace Woodev\Tests\Unit\Shipping {
 
 		public ?Shipping_Integration $integration = null;
 
-		public ?Shipping_Not_Configured_Recording_Handler $handler = null;
+		/** @var Shipping_Not_Configured_Recording_Handler|\Woodev_Admin_Notice_Handler|null */
+		public $handler = null;
 
 		public function get_id() {
 			return 'acme-carrier';
@@ -132,8 +134,56 @@ namespace Woodev\Tests\Unit\Shipping {
 	}
 
 	/**
+	 * A carrier whose credentials live on the composite `woodev-settings` tab (the normal v2 case).
+	 */
+	class Shipping_Not_Configured_Tab_Fixture extends Shipping_Not_Configured_Plugin_Fixture {
+
+		/** @var string|null capability the tab contribution declares */
+		public ?string $tab_capability = null;
+
+		protected function get_tab_settings_providers(): array {
+			return [
+				\Woodev\Framework\Settings\Settings_Provider::create(
+					'acme-carrier',
+					'Acme',
+					\Mockery::mock( \Woodev_Abstract_Settings::class ),
+					[],
+					null === $this->tab_capability ? [] : [ 'capability' => $this->tab_capability ]
+				),
+			];
+		}
+	}
+
+	/**
+	 * The REAL notice handler without WordPress hook registration, so its own capability gate runs.
+	 */
+	class Shipping_Not_Configured_Real_Notice_Handler extends \Woodev_Admin_Notice_Handler {
+
+		public function __construct( $plugin ) {
+			$property = new \ReflectionProperty( \Woodev_Admin_Notice_Handler::class, 'plugin' );
+			if ( PHP_VERSION_ID < 80100 ) {
+				$property->setAccessible( true );
+			}
+			$property->setValue( $this, $plugin );
+		}
+
+		/**
+		 * @return string[] ids of the notices the handler decided to display.
+		 */
+		public function queued_notice_ids(): array {
+			$property = new \ReflectionProperty( \Woodev_Admin_Notice_Handler::class, 'admin_notices' );
+			if ( PHP_VERSION_ID < 80100 ) {
+				$property->setAccessible( true );
+			}
+
+			return array_keys( $property->getValue( $this ) );
+		}
+	}
+
+	/**
 	 * @covers \Woodev\Framework\Shipping\Shipping_Plugin::is_configured
 	 * @covers \Woodev\Framework\Shipping\Shipping_Plugin::get_not_configured_notice_url
+	 * @covers \Woodev\Framework\Shipping\Shipping_Plugin::get_not_configured_notice_capability
 	 */
 	final class ShippingPluginNotConfiguredTest extends TestCase {
 
@@ -143,6 +193,16 @@ namespace Woodev\Tests\Unit\Shipping {
 			Functions\when( 'admin_url' )->alias(
 				static function ( $path = '' ) {
 					return 'https://shop.test/wp-admin/' . $path;
+				}
+			);
+			Functions\when( 'add_query_arg' )->alias(
+				static function ( $args, $url ) {
+					return $url . '?' . http_build_query( $args );
+				}
+			);
+			Functions\when( 'wp_parse_args' )->alias(
+				static function ( $args, $defaults ) {
+					return array_merge( $defaults, (array) $args );
 				}
 			);
 		}
@@ -175,7 +235,9 @@ namespace Woodev\Tests\Unit\Shipping {
 		}
 
 		public function test_fresh_install_without_any_method_is_warned_with_a_link_to_the_carrier_tab(): void {
-			$plugin = $this->plugin( false );
+
+			/** @var Shipping_Not_Configured_Tab_Fixture $plugin */
+			$plugin = $this->plugin( false, Shipping_Not_Configured_Tab_Fixture::class );
 
 			$plugin->publish_not_configured_notice();
 
@@ -191,6 +253,73 @@ namespace Woodev\Tests\Unit\Shipping {
 			);
 			$this->assertSame( 'notice-warning', $notice['params']['notice_class'] );
 			$this->assertFalse( $notice['params']['dismissible'] );
+		}
+
+		public function test_an_integration_backed_carrier_links_to_the_integration_settings_not_to_an_empty_tab(): void {
+
+			// an integration, no composite-tab contribution: the credentials are edited on the integration page
+			$plugin = $this->plugin( false );
+
+			$plugin->publish_not_configured_notice();
+
+			$message = $plugin->handler->notices[0]['message'];
+
+			$this->assertStringContainsString( 'href="' . $plugin->get_settings_url() . '"', $message );
+			$this->assertStringContainsString( 'page=wc-settings&tab=integration&section=acme-carrier', $message );
+			$this->assertStringNotContainsString( 'woodev-settings', $message );
+		}
+
+		public function test_a_tab_backed_carrier_links_to_the_composite_tab_even_with_an_integration_handler(): void {
+
+			/** @var Shipping_Not_Configured_Tab_Fixture $plugin */
+			$plugin = $this->plugin( false, Shipping_Not_Configured_Tab_Fixture::class );
+
+			$this->assertNotNull( $plugin->get_integration_handler() );
+
+			$plugin->publish_not_configured_notice();
+
+			$this->assertStringContainsString( 'page=woodev-settings&tab=acme-carrier', $plugin->handler->notices[0]['message'] );
+			$this->assertStringNotContainsString( 'wc-settings', $plugin->handler->notices[0]['message'] );
+		}
+
+		public function test_the_shipping_notice_asks_for_the_carrier_tab_capability(): void {
+
+			/** @var Shipping_Not_Configured_Tab_Fixture $plugin */
+			$plugin = $this->plugin( false, Shipping_Not_Configured_Tab_Fixture::class );
+
+			$plugin->publish_not_configured_notice();
+			$this->assertSame( 'manage_woocommerce', $plugin->handler->notices[0]['params']['capability'], 'a carrier is a WooCommerce plugin' );
+
+			$plugin                 = $this->plugin( false, Shipping_Not_Configured_Tab_Fixture::class );
+			$plugin->tab_capability = 'manage_options';
+			$plugin->publish_not_configured_notice();
+			$this->assertSame( 'manage_options', $plugin->handler->notices[0]['params']['capability'], 'a capability the tab declares wins' );
+		}
+
+		public function test_the_real_handler_shows_the_shipping_notice_to_a_shop_manager_only(): void {
+
+			/** @var Shipping_Not_Configured_Tab_Fixture $plugin */
+			$plugin          = $this->plugin( false, Shipping_Not_Configured_Tab_Fixture::class );
+			$plugin->handler = new Shipping_Not_Configured_Real_Notice_Handler( $plugin );
+
+			Functions\when( 'current_user_can' )->alias(
+				static function ( $capability ): bool {
+					return 'manage_woocommerce' === $capability;
+				}
+			);
+			$plugin->publish_not_configured_notice();
+			$this->assertSame( [ 'acme-carrier-not-configured' ], $plugin->handler->queued_notice_ids(), 'shop manager' );
+
+			$plugin          = $this->plugin( false, Shipping_Not_Configured_Tab_Fixture::class );
+			$plugin->handler = new Shipping_Not_Configured_Real_Notice_Handler( $plugin );
+
+			Functions\when( 'current_user_can' )->alias(
+				static function ( $capability ): bool {
+					return 'manage_options' === $capability;
+				}
+			);
+			$plugin->publish_not_configured_notice();
+			$this->assertSame( [], $plugin->handler->queued_notice_ids(), 'a manage_options-only admin cannot open the WooCommerce tab' );
 		}
 
 		public function test_a_configured_carrier_shows_no_notice(): void {

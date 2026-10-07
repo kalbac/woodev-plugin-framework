@@ -1655,15 +1655,61 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		}
 
 		/**
-		 * The "not configured" notice links to the carrier's own tab on the Woodev settings page
-		 * (tab id = the plugin id, see {@see self::get_settings_providers()}), where its credentials live.
+		 * Whether the carrier's credentials live in its WooCommerce integration rather than in the carrier tab:
+		 * it has an integration handler (the source {@see self::is_configured()} reads by default) and contributes
+		 * nothing to the composite tab through {@see self::get_tab_settings_providers()}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		protected function is_configuration_integration_backed(): bool {
+			return null !== $this->get_integration_handler() && [] === $this->get_tab_settings_providers();
+		}
+
+		/**
+		 * The "not configured" notice links to where the credentials it checks are edited: the carrier's own tab on
+		 * the Woodev settings page (tab id = the plugin id, see {@see self::get_settings_providers()}) when the
+		 * carrier contributes its settings there — the normal case — and the integration's own settings page while
+		 * the configuration is still integration-backed ({@see self::is_configuration_integration_backed()}).
 		 *
 		 * @since 2.0.2
 		 *
 		 * @return string
 		 */
 		protected function get_not_configured_notice_url(): string {
+
+			if ( $this->is_configuration_integration_backed() ) {
+				return (string) $this->get_settings_url();
+			}
+
 			return admin_url( 'admin.php?page=woodev-settings&tab=' . rawurlencode( $this->get_id() ) );
+		}
+
+		/**
+		 * The capability of the carrier's tab: the first one declared by a contribution of
+		 * {@see self::get_tab_settings_providers()} (that is how the composite tab takes it, see
+		 * {@see self::get_settings_providers()}), else `manage_woocommerce` — a carrier is a WooCommerce plugin.
+		 *
+		 * Read from the contributions, not from the composite tab itself, so this notice check does not build the
+		 * whole tab on every wp-admin page.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		protected function get_not_configured_notice_capability(): string {
+
+			$declared = null;
+
+			foreach ( $this->get_tab_settings_providers() as $contribution ) {
+				if ( $contribution instanceof \Woodev\Framework\Settings\Settings_Provider && null !== $contribution->get_declared_capability() ) {
+					$declared = $contribution->get_declared_capability();
+					break;
+				}
+			}
+
+			return \Woodev\Framework\Settings\Settings_Page_Registry::resolve_capability( $declared, true );
 		}
 
 		/**

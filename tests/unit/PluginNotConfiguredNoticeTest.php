@@ -17,6 +17,8 @@ use Brain\Monkey\Functions;
 
 require_once dirname( __DIR__, 2 ) . '/woodev/class-plugin-exception.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/class-plugin.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/class-woocommerce-plugin.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/class-admin-notice-handler.php';
 
 /**
  * Records the notice registrations made by the plugin's own handler.
@@ -47,7 +49,8 @@ class Not_Configured_Plugin_Fixture extends \Woodev_Plugin {
 
 	public string $settings_url = 'https://shop.test/wp-admin/admin.php?page=wc-settings&tab=integration&section=acme';
 
-	public ?Not_Configured_Recording_Handler $handler = null;
+	/** @var Not_Configured_Recording_Handler|\Woodev_Admin_Notice_Handler|null */
+	public $handler = null;
 
 	public function is_configured(): bool {
 		return $this->configured;
@@ -85,12 +88,99 @@ class Not_Configured_Default_Plugin_Fixture extends Not_Configured_Plugin_Fixtur
 }
 
 /**
+ * A neutral plugin whose settings tab declares a capability of its own.
+ */
+class Not_Configured_Declared_Capability_Plugin_Fixture extends Not_Configured_Plugin_Fixture {
+
+	public string $declared = 'edit_others_posts';
+
+	public function get_settings_providers(): array {
+		return [
+			\Woodev\Framework\Settings\Settings_Provider::create(
+				'acme_plugin',
+				'Acme',
+				\Mockery::mock( \Woodev_Abstract_Settings::class ),
+				[],
+				[ 'capability' => $this->declared ]
+			),
+		];
+	}
+}
+
+/**
+ * A WooCommerce-dependent plugin (its settings need `manage_woocommerce`).
+ */
+class Not_Configured_Woocommerce_Plugin_Fixture extends \Woodev\Framework\Woocommerce_Plugin {
+
+	public bool $configured = false;
+
+	/** @var \Woodev_Admin_Notice_Handler|null */
+	public $handler = null;
+
+	public function is_configured(): bool {
+		return $this->configured;
+	}
+
+	public function get_id() {
+		return 'acme_wc_plugin';
+	}
+
+	public function get_plugin_name() {
+		return 'Acme WC';
+	}
+
+	public function get_admin_notice_handler() {
+		return $this->handler;
+	}
+
+	protected function get_file() {
+		return __FILE__;
+	}
+}
+
+/**
+ * The REAL notice handler, built without WordPress hook registration — so its own capability gate runs.
+ */
+class Not_Configured_Real_Notice_Handler extends \Woodev_Admin_Notice_Handler {
+
+	public function __construct( $plugin ) {
+		$property = new \ReflectionProperty( \Woodev_Admin_Notice_Handler::class, 'plugin' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$property->setAccessible( true );
+		}
+		$property->setValue( $this, $plugin );
+	}
+
+	/**
+	 * @return string[] ids of the notices the handler decided to display.
+	 */
+	public function queued_notice_ids(): array {
+		$property = new \ReflectionProperty( \Woodev_Admin_Notice_Handler::class, 'admin_notices' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$property->setAccessible( true );
+		}
+
+		return array_keys( $property->getValue( $this ) );
+	}
+}
+
+/**
  * @covers \Woodev_Plugin::is_configured
  * @covers \Woodev_Plugin::not_configured_notice
  * @covers \Woodev_Plugin::add_not_configured_notice
  * @covers \Woodev_Plugin::add_delayed_admin_notices
  */
 final class PluginNotConfiguredNoticeTest extends TestCase {
+
+	protected function setUp(): void {
+		parent::setUp();
+
+		Functions\when( 'wp_parse_args' )->alias(
+			static function ( $args, $defaults ) {
+				return array_merge( $defaults, (array) $args );
+			}
+		);
+	}
 
 	private function plugin( bool $configured, string $class = Not_Configured_Plugin_Fixture::class ): Not_Configured_Plugin_Fixture {
 
@@ -171,5 +261,80 @@ final class PluginNotConfiguredNoticeTest extends TestCase {
 		$plugin->add_delayed_admin_notices();
 
 		$this->addToAssertionCount( 1 );
+	}
+	/**
+	 * Stubs the current user: only the listed capabilities are granted.
+	 *
+	 * @param string[] $granted Capabilities the user holds.
+	 */
+	private function user_with( array $granted ): void {
+		Functions\when( 'current_user_can' )->alias(
+			static function ( $capability ) use ( $granted ): bool {
+				return in_array( $capability, $granted, true );
+			}
+		);
+	}
+
+	/**
+	 * Registers the plugin's notice through the REAL handler and reports whether it was queued.
+	 */
+	private function is_notice_shown( $plugin ): bool {
+		$handler         = new Not_Configured_Real_Notice_Handler( $plugin );
+		$plugin->handler = $handler;
+		$plugin->add_delayed_admin_notices();
+
+		return in_array( $plugin->get_id_dasherized() . '-not-configured', $handler->queued_notice_ids(), true );
+	}
+
+	public function test_a_neutral_plugin_notice_asks_for_manage_options(): void {
+		$plugin = $this->plugin( false );
+
+		$plugin->add_delayed_admin_notices();
+
+		$this->assertSame( 'manage_options', $plugin->handler->notices[0]['params']['capability'] );
+	}
+
+	public function test_a_neutral_plugin_notice_reaches_a_manage_options_only_admin_through_the_real_handler(): void {
+		$this->user_with( [ 'manage_options' ] );
+
+		$this->assertTrue( $this->is_notice_shown( $this->plugin( false, Not_Configured_Plugin_Fixture::class ) ) );
+	}
+
+	public function test_a_neutral_plugin_notice_is_hidden_from_a_shop_manager_who_cannot_open_its_settings(): void {
+		$this->user_with( [ 'manage_woocommerce' ] );
+
+		$this->assertFalse( $this->is_notice_shown( $this->plugin( false, Not_Configured_Plugin_Fixture::class ) ) );
+	}
+
+	public function test_a_declared_settings_capability_is_the_notice_capability(): void {
+		$plugin = $this->plugin( false, Not_Configured_Declared_Capability_Plugin_Fixture::class );
+
+		$plugin->add_delayed_admin_notices();
+
+		$this->assertSame( 'edit_others_posts', $plugin->handler->notices[0]['params']['capability'] );
+	}
+
+	public function test_other_notices_keep_the_shop_manager_gate(): void {
+		$this->user_with( [ 'manage_woocommerce' ] );
+
+		$handler = new Not_Configured_Real_Notice_Handler( $this->plugin( true ) );
+
+		$this->assertTrue( $handler->should_display_notice( 'some-other-notice', [ 'dismissible' => false ] ) );
+
+		$this->user_with( [ 'manage_options' ] );
+
+		$this->assertFalse( $handler->should_display_notice( 'some-other-notice', [ 'dismissible' => false ] ) );
+	}
+
+	public function test_a_woocommerce_plugin_notice_reaches_a_shop_manager_but_not_a_manage_options_only_admin(): void {
+
+		/** @var Not_Configured_Woocommerce_Plugin_Fixture $plugin */
+		$plugin = ( new \ReflectionClass( Not_Configured_Woocommerce_Plugin_Fixture::class ) )->newInstanceWithoutConstructor();
+
+		$this->user_with( [ 'manage_woocommerce' ] );
+		$this->assertTrue( $this->is_notice_shown( $plugin ) );
+
+		$this->user_with( [ 'manage_options' ] );
+		$this->assertFalse( $this->is_notice_shown( $plugin ) );
 	}
 }
