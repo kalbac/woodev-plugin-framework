@@ -144,14 +144,28 @@ namespace Woodev\Tests\Integration\Shipping {
 
 		/**
 		 * WooCommerce remembers `is_cart()`'s block-based answer in a static for the rest of the PROCESS (one request
-		 * in real life, the whole suite here), so a test that moves between pages must clear it.
+		 * in real life, the whole suite here), so a test that moves between pages must clear it. The static belongs to
+		 * newer WooCommerce only — older releases (the supported range starts at 7.0) have no such memory to clear.
 		 */
 		private function forget_the_remembered_page_type(): void {
-			$property = new \ReflectionProperty( \Automattic\WooCommerce\Blocks\Utils\CartCheckoutUtils::class, 'is_cart_page' );
+			$class = '\\Automattic\\WooCommerce\\Blocks\\Utils\\CartCheckoutUtils';
+
+			if ( ! class_exists( $class ) || ! property_exists( $class, 'is_cart_page' ) ) {
+				return;
+			}
+
+			$property = new \ReflectionProperty( $class, 'is_cart_page' );
 			if ( PHP_VERSION_ID < 80100 ) {
 				$property->setAccessible( true );
 			}
 			$property->setValue( null, null );
+		}
+
+		/** Store API contexts need `WC()->is_store_api_request()`, which older WooCommerce does not have. */
+		private function require_store_api_detection(): void {
+			if ( ! method_exists( WC(), 'is_store_api_request' ) ) {
+				$this->markTestSkipped( 'This WooCommerce has no WC()->is_store_api_request(); the plugin does not mark block-cart requests there.' );
+			}
 		}
 
 		/** The classic cart page. */
@@ -169,6 +183,7 @@ namespace Woodev\Tests\Integration\Shipping {
 
 		/** A block cart's Store API request: `is_cart()` is false, the referer is the cart. */
 		private function block_cart(): void {
+			$this->require_store_api_detection();
 			$this->go_to_a_page_that_is_not_the_cart( '/' );
 			$_SERVER['REQUEST_URI']  = '/wp-json/wc/store/v1/cart';
 			$_SERVER['HTTP_REFERER'] = get_permalink( $this->cart_page_id );
@@ -176,6 +191,7 @@ namespace Woodev\Tests\Integration\Shipping {
 
 		/** A block checkout's Store API request: the referer is not the cart. */
 		private function block_checkout(): void {
+			$this->require_store_api_detection();
 			$this->go_to_a_page_that_is_not_the_cart( '/' );
 			$_SERVER['REQUEST_URI']  = '/wp-json/wc/store/v1/batch';
 			$_SERVER['HTTP_REFERER'] = home_url( '/checkout/' );

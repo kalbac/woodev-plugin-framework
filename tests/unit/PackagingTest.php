@@ -37,6 +37,8 @@ final class PackagingTest extends TestCase {
 		Functions\when( 'wc_get_dimension' )->returnArg( 1 );
 		Functions\when( 'wc_get_weight' )->returnArg( 1 );
 		Functions\when( 'wc_string_to_bool' )->alias( static fn( $value ) => in_array( $value, [ true, 'yes', '1' ], true ) );
+		// the rate-cache identity reads the shop currency; once another test has defined the function the guard no longer skips it
+		Functions\when( 'get_woocommerce_currency' )->justReturn( 'RUB' );
 		Shipping_Settings_Tab::reset_for_tests();
 	}
 	protected function tearDown(): void {
