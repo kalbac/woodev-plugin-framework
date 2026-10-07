@@ -475,7 +475,7 @@ class FieldSchemaTest extends TestCase {
 	public function test_description_on_is_emitted_only_when_declared(): void {
 		foreach ( [ 'В тестовом режиме используются встроенные ключи.' => true, '' => false ] as $text => $emitted ) {
 			$control = Mockery::mock( \Woodev_Control::class );
-			foreach ( [ 'get_type' => 'toggle', 'get_description' => '', 'get_tooltip' => '', 'get_placeholder' => '', 'get_description_on' => (string) $text, 'get_min' => null, 'get_max' => null, 'get_step' => null, 'is_disabled' => false, 'get_disabled_reason' => '', 'get_country' => '', 'is_native_bounds' => false ] as $m => $r ) {
+			foreach ( [ 'get_type' => 'toggle', 'get_description' => '', 'get_tooltip' => '', 'get_placeholder' => '', 'get_description_on' => (string) $text, 'get_min' => null, 'get_max' => null, 'get_step' => null, 'is_disabled' => false, 'get_disabled_reason' => '', 'get_country' => '', 'get_box_preset' => [], 'is_native_bounds' => false ] as $m => $r ) {
 				$control->shouldReceive( $m )->andReturn( $r );
 			}
 			$setting = $this->make_setting( 'test_mode', 'boolean', $control );
