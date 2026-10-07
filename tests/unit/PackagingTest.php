@@ -117,7 +117,11 @@ final class PackagingTest extends TestCase {
 			$this->assertSame( 0.2, $box->get_weight() );
 		}
 		$settings = new Packaging_Settings( 'carrier', [ $carrier ] );
-		$this->assertStringContainsString( '10 × 10 × 10 см', $settings->get_setting( 'box_CARTON_M_enabled' )->get_control()->get_tooltip() );
+		$control = $settings->get_setting( 'box_CARTON_M_enabled' )->get_control();
+		$this->assertSame( '', $control->get_tooltip() );
+		foreach ( [ 'length', 'width', 'height' ] as $dimension ) {
+			$this->assertSame( 10, $control->get_box_preset()[ $dimension ] );
+		}
 	}
 	public function test_leftovers_single_preserves_allocations_and_separately_is_default(): void {
 		$items = [ $this->item( 2, 50 ), new \Woodev_Packer_Input_Item( 60, 5, 5, 2, 1, 'other', 6 ) ];
@@ -180,6 +184,22 @@ final class PackagingTest extends TestCase {
 		$this->assertTrue( $settings->get_setting( 'box_CARTON_M_cost' )->get_control()->is_disabled() );
 		$this->assertFalse( $settings->get_setting( 'box_SECOND_cost' )->get_control()->is_disabled() );
 		$this->assertSame( [ 'setting' => 'packing_algorithm', 'value' => 'boxes' ], $settings->get_setting( 'unpacked_algorithm' )->get_show_if_conditions() );
+	}
+	public function test_hidden_preset_values_are_excluded_from_saves_and_preserved(): void {
+		$this->options['woodev_carrier_packaging_box_CARTON_M_enabled'] = 'yes';
+		$this->options['woodev_carrier_packaging_box_CARTON_M_charge'] = 'no';
+		$settings = new Packaging_Settings( 'carrier', [ $this->preset(), array_merge( $this->preset( 'merchant', '5%' ), [ 'id' => 'SECOND' ] ) ] );
+		foreach ( [ 'box_CARTON_M_enabled', 'box_CARTON_M_charge', 'box_SECOND_enabled', 'box_SECOND_cost' ] as $id ) {
+			$this->assertSame( [ 'setting' => 'packing_algorithm', 'value' => 'boxes' ], $settings->get_setting( $id )->get_show_if_conditions() );
+		}
+		$edits = [ 'box_CARTON_M_enabled' => false, 'box_CARTON_M_charge' => true, 'box_SECOND_cost' => '7%' ];
+		foreach ( [ 'separately', 'single', 'virtual' ] as $mode ) {
+			$this->assertSame( [ 'packing_algorithm' => $mode ], $settings->filter_visible_values( [ 'packing_algorithm' => $mode ] + $edits ) );
+		}
+		$this->assertTrue( $settings->get_value( 'box_CARTON_M_enabled' ) );
+		$this->assertFalse( $settings->get_value( 'box_CARTON_M_charge' ) );
+		$this->assertSame( '5%', $settings->get_value( 'box_SECOND_cost' ) );
+		$this->assertSame( [ 'packing_algorithm' => 'boxes' ] + $edits, $settings->filter_visible_values( [ 'packing_algorithm' => 'boxes' ] + $edits ) );
 	}
 	public function test_rate_template_adds_the_store_box_cost_once(): void {
 		$this->options['woodev_boxes_boxes'] = 'Small; 5; 5; 5; 1; 0; 3; yes';

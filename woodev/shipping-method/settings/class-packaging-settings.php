@@ -196,6 +196,10 @@ class Packaging_Settings extends \Woodev_Abstract_Settings {
 				[
 					'name' => $preset['name'],
 					'default' => false,
+					'show_if' => [
+						'setting' => 'packing_algorithm',
+						'value' => 'boxes',
+					],
 				]
 			);
 			$this->register_control(
@@ -203,13 +207,6 @@ class Packaging_Settings extends \Woodev_Abstract_Settings {
 				\Woodev_Control::TYPE_TOGGLE,
 				[
 					'box_preset' => $preset + [ 'field' => 'enabled' ],
-					'tooltip' => sprintf(
-					/* translators: 1: length, 2: width, 3: height in cm */
-						__( 'Размеры: %1$s × %2$s × %3$s см. Использовать, если подходящей упаковки магазина нет.', 'woodev-plugin-framework' ),
-						$preset['length'],
-						$preset['width'],
-						$preset['height']
-					),
 				]
 			);
 			if ( 'carrier' === $preset['cost_mode'] ) {
@@ -219,6 +216,10 @@ class Packaging_Settings extends \Woodev_Abstract_Settings {
 					[
 						'name' => __( 'Учитывать стоимость', 'woodev-plugin-framework' ),
 						'default' => true,
+						'show_if' => [
+							'setting' => 'packing_algorithm',
+							'value' => 'boxes',
+						],
 					]
 				);
 				$this->register_control(
@@ -236,6 +237,10 @@ class Packaging_Settings extends \Woodev_Abstract_Settings {
 					[
 						'name' => __( 'Стоимость упаковки', 'woodev-plugin-framework' ),
 						'default' => (string) $preset['cost'],
+						'show_if' => [
+							'setting' => 'packing_algorithm',
+							'value' => 'boxes',
+						],
 						'validate' => [ Boxes_Settings::class, 'is_valid_cost' ],
 					]
 				);
