@@ -335,6 +335,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 
 			if ( null !== $this->location_handler ) {
 				$field_ids[] = Location_Provider_Registry::SETTING_ADDRESS_SUGGESTIONS;
+				// s160: the street + postcode clearing option sits with the address field
+				// settings it acts on.
+				$field_ids[] = Location_Provider_Registry::SETTING_CLEAR_ADDRESS_ON_CHANGE;
 			}
 
 			$field_ids[] = 'postcode_field';

@@ -305,17 +305,23 @@ export function readUseShippingAsBilling(): boolean {
 	return selectors?.getUseShippingAsBilling?.() ?? false;
 }
 
+/** The fields a change of settlement empties when the merchant asked for it: street line and postcode. */
+const CLEARED_ADDRESS = { address_1: '', postcode: '' } as const;
+
 /**
  * Writes the city (and, when `state` is not `null`, the state) into the native shipping address —
  * merged into the CURRENT full address so names, street and phone survive — and mirrors it into the
  * billing address when the core «use shipping as billing» flag says the two are one.
  *
+ * `clearAddress` also empties the street line and the postcode of the same address(es) — the
+ * merchant option «clear the address when the settlement changes» (`shouldClearAddress()`).
+ *
  * Core's own address sync pushes a changed address only after its 1.5 s debounce, and an unchanged
  * one never — so the caller always follows this with {@link refreshRates}, under the checkout gate.
  */
-export function writeNativeLocality( city: string, state: string | null ): void {
+export function writeNativeLocality( city: string, state: string | null, clearAddress = false ): void {
 	const actions = dispatch( CART_STORE ) as unknown as CartActions | undefined;
-	const patch = state === null ? { city } : { city, state };
+	const patch = { city, ...( state === null ? {} : { state } ), ...( clearAddress ? CLEARED_ADDRESS : {} ) };
 
 	actions?.setShippingAddress?.( { ...readShippingAddress(), ...patch } );
 
@@ -325,14 +331,19 @@ export function writeNativeLocality( city: string, state: string | null ): void 
 }
 
 /** Writes locality to the billing delivery address when the store forces delivery there. */
-export function writeDeliveryLocality( city: string, state: string | null, billingOnly: boolean ): void {
+export function writeDeliveryLocality(
+	city: string,
+	state: string | null,
+	billingOnly: boolean,
+	clearAddress = false
+): void {
 	if ( ! billingOnly ) {
-		writeNativeLocality( city, state );
+		writeNativeLocality( city, state, clearAddress );
 		return;
 	}
 
 	const actions = dispatch( CART_STORE ) as unknown as CartActions | undefined;
-	const patch = state === null ? { city } : { city, state };
+	const patch = { city, ...( state === null ? {} : { state } ), ...( clearAddress ? CLEARED_ADDRESS : {} ) };
 
 	actions?.setBillingAddress?.( { ...readBillingAddress(), ...patch } );
 	// WooCommerce mirrors every billing edit to the shipping store in forced mode. Programmatic

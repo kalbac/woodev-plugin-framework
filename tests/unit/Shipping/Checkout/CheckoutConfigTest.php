@@ -116,6 +116,9 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 	/** @var bool Issue #1069: is_region_field_removed() return value (set directly by a test). */
 	public bool $region_field_removed = false;
 
+	/** @var bool s160: is_clear_address_on_change_enabled() return value (set directly by a test). */
+	public bool $clear_address_on_change = true;
+
 	/** @var bool Issue #528: is_custom_settlement_allowed() return value. */
 	private bool $allow_custom_settlement;
 
@@ -272,6 +275,10 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 
 	public function is_region_field_removed(): bool {
 		return $this->region_field_removed;
+	}
+
+	public function is_clear_address_on_change_enabled(): bool {
+		return $this->clear_address_on_change;
 	}
 
 	public function owns_region_states( string $country, array $final_states ): bool {
@@ -2065,6 +2072,22 @@ class CheckoutConfigTest extends TestCase {
 			->build( Checkout_Fields::from_array( [] ) );
 
 		$this->assertTrue( $config['location']['allowCustomSettlement'] );
+	}
+
+	// s160 — `clearAddressOnChange` publishes the merchant's «clear the street and postcode when
+	// the settlement changes» option to both checkouts' JS.
+	public function test_clear_address_on_change_defaults_to_true_and_follows_the_location_service(): void {
+		$service = new Checkout_Config_Fake_Location_Service( true, [ 'region' => true ], null, [ 'RU' ] );
+		$config  = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )
+			->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertTrue( $config['location']['clearAddressOnChange'] );
+
+		$service->clear_address_on_change = false;
+		$config                           = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )
+			->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertFalse( $config['location']['clearAddressOnChange'] );
 	}
 
 	// Issue #1069 — `regionFieldRemoved` tells the client a region it cannot see must not scope

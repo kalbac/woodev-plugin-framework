@@ -22,7 +22,7 @@
 
 import { matchState, namesCity, normalizeCity, recordCityComponent } from './mapping';
 import type { CountryStates } from './mapping';
-import type { LocationRecord, Selection } from './types';
+import type { LocationConfig, LocationRecord, Selection } from './types';
 
 /** The part of a native address a chosen locality answers for. */
 export interface NativeLocality {
@@ -117,4 +117,34 @@ export function hasLocalityMoved( before: NativeLocality, after: NativeLocality 
 		before.state !== after.state ||
 		normalizeCity( before.city ) !== normalizeCity( after.city )
 	);
+}
+
+/**
+ * Whether picking `next` must clear the street and postcode of the address it is written into — the
+ * merchant option `clearAddressOnChange`, applied to a REAL change of settlement only:
+ *
+ * - option off (or not published): never;
+ * - the shopper already had a chosen locality (`previous`): clear when `next` is another record —
+ *   re-picking the same one changes nothing;
+ * - no chosen locality: judge the native City instead — a blank one is the initial fill (the street
+ *   typed first stays), a City that already names `next` is the same place; only a City naming
+ *   ANOTHER place means the street belongs to the previous city.
+ *
+ * Read BEFORE the pick is committed: `previous` is the selection the pick replaces.
+ */
+export function shouldClearAddress(
+	config: Pick< LocationConfig, 'clearAddressOnChange' >,
+	previous: Selection | null,
+	address: NativeLocality,
+	next: { key: string; city: string; cityType: string }
+): boolean {
+	if ( config.clearAddressOnChange !== true ) {
+		return false;
+	}
+
+	if ( previous ) {
+		return previous.key !== next.key;
+	}
+
+	return address.city.trim() !== '' && ! namesCity( next.city, next.cityType, address.city );
 }

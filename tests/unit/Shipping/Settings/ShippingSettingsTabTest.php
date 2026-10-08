@@ -165,6 +165,33 @@ class ShippingSettingsTabTest extends TestCase {
 	}
 
 	/**
+	 * s160: `clear_address_on_change` sits with the address-field settings, directly
+	 * after `address_suggestions`, and is absent without a location handler.
+	 */
+	public function test_fields_section_places_clear_address_on_change_right_after_address_suggestions(): void {
+		$tab = Shipping_Settings_Tab::instance();
+
+		$tab->declare_shipping_plugin();
+
+		$without = current( array_filter( $tab->build_sections(), static fn( $s ) => 'checkout' === $s->get_id() ) );
+		$this->assertNotContains(
+			\Woodev\Framework\Shipping\Location\Location_Provider_Registry::SETTING_CLEAR_ADDRESS_ON_CHANGE,
+			$without->get_setting_ids()
+		);
+
+		$tab->set_location_section( $this->location_handler_stub(), [ 'active_provider' ] );
+
+		$with = current( array_filter( $tab->build_sections(), static fn( $s ) => 'checkout' === $s->get_id() ) );
+		$ids  = $with->get_setting_ids();
+
+		$suggestions_index = array_search( \Woodev\Framework\Shipping\Location\Location_Provider_Registry::SETTING_ADDRESS_SUGGESTIONS, $ids, true );
+		$clear_index       = array_search( \Woodev\Framework\Shipping\Location\Location_Provider_Registry::SETTING_CLEAR_ADDRESS_ON_CHANGE, $ids, true );
+
+		$this->assertNotFalse( $suggestions_index );
+		$this->assertSame( $suggestions_index + 1, $clear_index );
+	}
+
+	/**
 	 * Without a location handler declared, none of the location-owned field
 	 * ids — including the new #528 opt-in — should appear at all.
 	 */

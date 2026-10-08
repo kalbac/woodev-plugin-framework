@@ -235,6 +235,10 @@ function buildConfig( opts ) {
 			// convention — "no `defaultLocality` key at all" (an older server) is exercised
 			// as its own real case by every other test in this file.
 			...( o.defaultLocality !== undefined ? { defaultLocality: o.defaultLocality } : {} ),
+			// s160: the merchant option «clear the street and postcode when the settlement
+			// changes» — omitted unless a test opts in (an older server never sends it, which
+			// reads as the option's own default, on).
+			...( o.clearAddressOnChange !== undefined ? { clearAddressOnChange: o.clearAddressOnChange } : {} ),
 			// Issue #1075: the saved city text when it has no record — omitted unless a test opts in.
 			...( o.savedCityUnresolved !== undefined ? { savedCityUnresolved: o.savedCityUnresolved } : {} ),
 			// Issue #296: steps 2+3 of the checkout-field -> WC-store-setting -> RU chain,
@@ -2181,6 +2185,84 @@ describe( 'dependent clearing (downward only, remembered-parent gate)', () => {
 		expect( document.getElementById( 'billing_city' ).value ).toBe( '' );
 		expect( document.getElementById( 'billing_address_1' ).value ).toBe( '' );
 		expect( document.getElementById( 'billing_postcode' ).value ).toBe( '' );
+	} );
+
+	describe( 'clear_address_on_change option (s160)', () => {
+		function changeSettlement( value ) {
+			document.getElementById( 'billing_city' ).value = value;
+			document.getElementById( 'billing_city' ).dispatchEvent( new Event( 'change', { bubbles: true } ) );
+		}
+
+		function bootFilledWith( clearAddressOnChange ) {
+			// The city is in the markup at boot, so it is the REMEMBERED value a change is judged against.
+			boot( { region: true, settlement: true, address: true, settlementValue: 'Москва', clearAddressOnChange } );
+
+			document.getElementById( 'billing_address_1' ).value = 'Тверская 1';
+			document.getElementById( 'billing_postcode' ).value = '101000';
+		}
+
+		it( 'a different settlement clears the street and the postcode when the option is on', () => {
+			bootFilledWith( true );
+			changeSettlement( 'Казань' );
+
+			expect( document.getElementById( 'billing_address_1' ).value ).toBe( '' );
+			expect( document.getElementById( 'billing_postcode' ).value ).toBe( '' );
+		} );
+
+		it( 'a configuration that never mentions the option keeps clearing (its default is on)', () => {
+			bootFilledWith( undefined );
+			changeSettlement( 'Казань' );
+
+			expect( document.getElementById( 'billing_address_1' ).value ).toBe( '' );
+			expect( document.getElementById( 'billing_postcode' ).value ).toBe( '' );
+		} );
+
+		it( 'a different settlement leaves the street and the postcode alone when the option is off', () => {
+			bootFilledWith( false );
+			changeSettlement( 'Казань' );
+
+			expect( document.getElementById( 'billing_city' ).value ).toBe( 'Казань' );
+			expect( document.getElementById( 'billing_address_1' ).value ).toBe( 'Тверская 1' );
+			expect( document.getElementById( 'billing_postcode' ).value ).toBe( '101000' );
+		} );
+
+		it( 'a re-selection of the same settlement clears nothing, option on or off', () => {
+			bootFilledWith( true );
+			changeSettlement( 'Москва' );
+
+			expect( document.getElementById( 'billing_address_1' ).value ).toBe( 'Тверская 1' );
+			expect( document.getElementById( 'billing_postcode' ).value ).toBe( '101000' );
+		} );
+
+		it( 'a region change still clears the whole chain below it when the option is off', () => {
+			bootFilledWith( false );
+
+			document.getElementById( 'billing_state' ).value = 'г Санкт-Петербург';
+			document.getElementById( 'billing_state' ).dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+			expect( document.getElementById( 'billing_city' ).value ).toBe( '' );
+			expect( document.getElementById( 'billing_address_1' ).value ).toBe( '' );
+			expect( document.getElementById( 'billing_postcode' ).value ).toBe( '' );
+		} );
+
+		it( 'the shipping section is cleared on its own settlement change and billing is untouched', () => {
+			boot( { settlement: true, address: true, section: 'shipping', clearAddressOnChange: true } );
+			document.body.insertAdjacentHTML(
+				'beforeend',
+				'<input type="text" id="billing_address_1" value="Билл 1" /><input type="text" id="billing_postcode" value="111111" />'
+			);
+			document.getElementById( 'shipping_city' ).value = 'Москва';
+			document.getElementById( 'shipping_address_1' ).value = 'Тверская 1';
+			document.getElementById( 'shipping_postcode' ).value = '101000';
+
+			document.getElementById( 'shipping_city' ).value = 'Казань';
+			document.getElementById( 'shipping_city' ).dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+			expect( document.getElementById( 'shipping_address_1' ).value ).toBe( '' );
+			expect( document.getElementById( 'shipping_postcode' ).value ).toBe( '' );
+			expect( document.getElementById( 'billing_address_1' ).value ).toBe( 'Билл 1' );
+			expect( document.getElementById( 'billing_postcode' ).value ).toBe( '111111' );
+		} );
 	} );
 
 	it( 'clears only postcode when address genuinely changes', () => {

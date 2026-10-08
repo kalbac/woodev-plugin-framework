@@ -4515,6 +4515,19 @@
 	}
 
 	/**
+	 * Whether a change of settlement clears the street and postcode below it — the merchant option
+	 * `clear_address_on_change` (`entry.location.clearAddressOnChange`). Only an explicit `false`
+	 * switches it off: a configuration that never mentions it keeps the clearing this module always
+	 * did (the option's own default is on).
+	 *
+	 * @param {Object} entry
+	 * @returns {boolean}
+	 */
+	function clearsAddressOnChange( entry ) {
+		return ! ( entry.location && false === entry.location.clearAddressOnChange );
+	}
+
+	/**
 	 * Clears every node STRICTLY AFTER `fromIndex` — DOM value, store value, the remembered-
 	 * value gate, and (for a chain level) its own confirmed record. Never dispatches events
 	 * (mirrors `checkout-field-classic.js`'s own `cascadeChild()` — a destructive clear must
@@ -4546,9 +4559,19 @@
 		var editedNode = entry.allNodes[ fromIndex ];
 		var editedLevel = editedNode ? editedNode.level : null;
 		var snapshot = editedLevel ? {} : null;
+		var keepAddress = 'settlement' === editedLevel && ! clearsAddressOnChange( entry );
 
 		for ( var i = fromIndex + 1; i < entry.allNodes.length; i++ ) {
 			var node = entry.allNodes[ i ];
+
+			// The merchant switched «clear the address when the settlement changes» off: a settlement
+			// edit leaves the street (`address` level) and the postcode (the level-less node) alone.
+			// A region or country change still clears everything below it — the settlement itself is
+			// gone then, and a street with no city is meaningless.
+			if ( keepAddress && ( 'address' === node.level || null === node.level ) ) {
+				continue;
+			}
+
 			var el = document.getElementById( node.fieldId );
 
 			if ( snapshot ) {
