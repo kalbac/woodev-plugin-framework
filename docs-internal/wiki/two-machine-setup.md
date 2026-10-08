@@ -14,7 +14,7 @@ turn a Windows fact into a macOS one — each fact says which machine it is abou
 | What | Path | Why |
 |---|---|---|
 | Code, docs, scripts, hooks, `phpstan.neon`, `.worktreeinclude`, `orca.yaml` | **git** (push on one, pull on the other) | the normal path; the only one that carries history |
-| Rig database, container-only `mu-plugins/`, `WOODEV_*` constants in the container's `wp-config.php`, `.wp-env.override.json`, `composer.lock`, `plugins-reference/` | **`.machine-transfer/`** (gitignored), written by `scripts/machine/rig-state-export.sh`, read by `rig-state-import.sh` | not in git on purpose: secrets and personal data, and **the repository is public** |
+| Rig database, container-only `mu-plugins/` (only `zz-rig-yandex-key.php` — the pickup mu-plugin was retired in s113, so the pickup e2e needs nothing container-only; #1173), `WOODEV_*` constants in the container's `wp-config.php`, `.wp-env.override.json`, `composer.lock`, `plugins-reference/` | **`.machine-transfer/`** (gitignored), written by `scripts/machine/rig-state-export.sh`, read by `rig-state-import.sh` | not in git on purpose: secrets and personal data, and **the repository is public** |
 | `node_modules/`, `vendor/`, Playwright browsers | **reinstalled** on each machine | native binaries are per platform (win32-x64 vs darwin-arm64) |
 | `~/.claude/`, `~/.codex/`, Orca settings, `gh` login | **per machine, never copied over** | they belong to the user's account on that machine; the laptop already has its own |
 

@@ -23,6 +23,7 @@
 - [rig/browser] **On Storefront every select2 on the checkout is 28px next to 46px inputs — that is WooCommerce's `select2.css` default, identical with every `woodev-*` sheet disabled; the framework does not restyle WP/WC defaults.** → [short-select2-fields-on-storefront-are-woocommerce-s-not-ours](../gotchas/short-select2-fields-on-storefront-are-woocommerce-s-not-ours.md) (s147)
 - [rig/browser] **Core «Local pickup» exists only when the STORE'S checkout page holds the Checkout block — on the rig that page is the classic one, so enabling it shows nothing.** → [core-local-pickup-exists-only-when-the-store-s-checkout-page-holds-the-checkout-block](../gotchas/core-local-pickup-exists-only-when-the-store-s-checkout-page-holds-the-checkout-block.md) (s153)
 - [rig/probes] **`wp eval-file` exits 0 with EMPTY stdout for a probe carrying one very long line (~5 KB inline payload): its `__FILE__` regex returns null and nothing is evaluated — split the payload into short lines or pass `--use-include`.** → [wp-eval-file-prints-nothing-for-a-probe-with-one-very-long-line](../gotchas/wp-eval-file-prints-nothing-for-a-probe-with-one-very-long-line.md) (s153)
+- [rig/loader] **A fixture whose `framework_version` is below the winner's `backwards_compatible` floor is silently dropped — "active", nothing registered; bump it to 2.0.0.** → [a-fixture-plugin-below-the-winners-backwards-compatible-floor-is-silently-dropped](../gotchas/a-fixture-plugin-below-the-winners-backwards-compatible-floor-is-silently-dropped.md) (s161)
 
 ## Related
 

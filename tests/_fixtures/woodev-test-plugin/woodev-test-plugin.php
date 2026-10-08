@@ -52,7 +52,7 @@ function woodev_test_plugin_loader_definition(): array {
 		'download_id'       => 9001,
 		'plugin_name'       => 'Woodev Test Plugin',
 		'plugin_version'    => '1.0.0',
-		'framework_version' => '1.4.0',
+		'framework_version' => '2.0.0',
 		'plugin_file'       => __FILE__,
 		'platform'          => 'wordpress',
 		'requirements'      => [

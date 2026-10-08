@@ -51,7 +51,7 @@ function woodev_test_payment_gateway_plugin_loader_definition(): array {
 		'download_id'       => 9002,
 		'plugin_name'       => 'Woodev Test Payment Gateway Plugin',
 		'plugin_version'    => '1.0.0',
-		'framework_version' => '1.4.0',
+		'framework_version' => '2.0.0',
 		'plugin_file'       => __FILE__,
 		'platform'          => 'woocommerce',
 		'requirements'      => [

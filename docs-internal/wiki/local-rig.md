@@ -9,7 +9,34 @@ why each of these fixtures exists and what breaks if it is removed.
 
 ## The pickup-type shipping method, and why it lives outside the repo
 
-- **There IS a pickup-type shipping method on the rig now (s81), and it lives OUTSIDE the repo.** Until s81 the only active method was `Woodev Test Shipping`, whose `delivery_type` is `courier` — so `Checkout_Config::pickup_method_ids()` resolved to `[]` and the entire `hide_for_pickup` branch of the checkout-field policy was physically unreachable on the rig. Fixed with a container-only mu-plugin, `wp-content/mu-plugins/zz-rig-test-pickup-shipping.php` (that directory is NOT bind-mounted from the repo — `zz-rig-yandex-key.php` was already there as precedent), registering `woodev_test_pickup_shipping` (`Woodev Test Pickup`) whose `get_delivery_type()` is `pickup`. It is enabled in zone 1 «Russia» as instance 4, alongside `free_shipping` and `woodev_test_shipping`, so a checkout session can switch between a pickup rate and a courier rate. ⛔ **REMOVED in s113 (#737, operator 03.09.2026) — this paragraph is history.** The second real carrier (`woodev_realistic_pickup_shipping`) covers those scenarios properly, while the mu-method was a half-declared carrier whose chosen point never survived a reload. `mu-plugins/` now holds ONLY `zz-rig-yandex-key.php`. The file is not tracked by git; a copy is kept outside the repo, and restoring it means dropping it back into `mu-plugins/`. Verified after removal: the method is gone from the checkout, both real carriers still work, and the #736 reconciliation stays silent.
+- **There IS a pickup-type shipping method on the rig now (s81), and it lives OUTSIDE the repo.** Until s81 the only active method was `Woodev Test Shipping`, whose `delivery_type` is `courier` — so `Checkout_Config::pickup_method_ids()` resolved to `[]` and the entire `hide_for_pickup` branch of the checkout-field policy was physically unreachable on the rig. Fixed with a container-only mu-plugin, `wp-content/mu-plugins/zz-rig-test-pickup-shipping.php` (that directory is NOT bind-mounted from the repo — `zz-rig-yandex-key.php` was already there as precedent), registering `woodev_test_pickup_shipping` (`Woodev Test Pickup`) whose `get_delivery_type()` is `pickup`. It is enabled in zone 1 «Russia» as instance 4, alongside `free_shipping` and `woodev_test_shipping`, so a checkout session can switch between a pickup rate and a courier rate. ⛔ **REMOVED in s113 (#737, operator 03.09.2026) — this paragraph is history, and s161 (#1173) confirms it stays removed.** The second real carrier (`woodev_realistic_pickup_shipping`) covers those scenarios properly, while the mu-method was a half-declared carrier whose chosen point never survived a reload. `mu-plugins/` now holds ONLY `zz-rig-yandex-key.php`. The file is not tracked by git; a copy is kept outside the repo, and restoring it means dropping it back into `mu-plugins/`. Verified after removal: the method is gone from the checkout, both real carriers still work, and the #736 reconciliation stays silent.
+
+### s161 (#1173): no mu-plugin is needed, and the e2e suite no longer pins an instance id
+
+⚠ **Do NOT recreate the mu-plugin.** Card #1173 was filed on the premise that
+`tests/e2e/checkout-pickup.spec.js` needs `zz-rig-test-pickup-shipping.php`. It does not: the spec
+exercises `woodev_test_shipping` — the in-repo fixture, a pickup method since #709 — and the
+mu-plugin's own method (`woodev_test_pickup_shipping`) was retired in s113 (#737) on purpose. The
+only container-only file on the rig is, and stays, `zz-rig-yandex-key.php`. Nothing about the
+pickup method travels between machines: **it is all in git** (the fixture plugin) plus one zone
+instance in the rig database.
+
+What actually made the three pickup tests fail on the MacBook was the loader, not a missing file:
+the fixture declared `framework_version 1.4.0`, and with `woocommerce-edostavka` active (`2.0.1`,
+`backwards_compatible 2.0.0`) the framework resolver silently drops every plugin below that floor —
+the plugin read "active", the zone held its instance, and the method was never offered. Fixed by
+declaring `2.0.0` in the fixture; diagnosis and the one-call check are in gotcha
+`a-fixture-plugin-below-the-winners-backwards-compatible-floor-is-silently-dropped`.
+
+The spec also stopped hard-coding the instance id (`woodev_test_shipping:3` → the method id, matched
+as `value^="woodev_test_shipping:"`): instance ids are auto-increment rows, so they differ per rig.
+The one thing a rebuilt rig still needs by hand is an enabled `woodev_test_shipping` instance in zone
+1 «Russia»:
+
+```bash
+C="$(scripts/machine/rig-container.sh cli)"
+docker exec "$C" wp wc shipping_zone_method create 1 --method_id=woodev_test_shipping --user=1
+```
 
 ### s110 (01.09.2026): the method is now declared in ALL the places the framework asks
 

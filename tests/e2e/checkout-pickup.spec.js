@@ -25,11 +25,14 @@ const { test, expect } = require( '@playwright/test' );
 const PRODUCT_ID = 12;
 
 /**
- * Shipping method ids as WooCommerce renders their radio VALUES (`instance_id` suffixed).
- * `woodev_test_shipping` became a pickup method in #709.
+ * Shipping METHOD ids. WooCommerce renders the radio VALUE as `<method id>:<instance id>`, and the
+ * instance id is an auto-increment row in the zone table — it differs between rigs (it was `3` on
+ * the desktop, something else on a rebuilt rig), so the tests match on the method id and let the
+ * instance id be whatever the zone holds (#1173). `woodev_test_shipping` became a pickup method
+ * in #709.
  */
-const METHOD_FREE   = 'free_shipping:1';
-const METHOD_PICKUP = 'woodev_test_shipping:3';
+const METHOD_FREE   = 'free_shipping';
+const METHOD_PICKUP = 'woodev_test_shipping';
 
 /**
  * Fills the cart and lands on the classic checkout.
@@ -65,18 +68,20 @@ async function settle( page ) {
 }
 
 /**
- * Selects a shipping method by its radio value and waits for the checkout to settle.
+ * Selects a shipping method by its method id and waits for the checkout to settle.
  *
  * @param {import('@playwright/test').Page} page
- * @param {string}                          value
+ * @param {string}                          methodId Method id without the instance suffix.
  */
-async function chooseShipping( page, value ) {
-	const radio = page.locator( `input[name^="shipping_method"][value="${ value }"]` );
+async function chooseShipping( page, methodId ) {
+	const radio = page.locator( `input[name^="shipping_method"][value^="${ methodId }:"]` );
 
 	await expect(
 		radio,
-		`Shipping method "${ value }" is not offered on the rig. The fixture plugin and the ` +
-		'zz-rig-test-pickup-shipping mu-plugin must both be active.'
+		`Shipping method "${ methodId }" is not offered on the rig. It needs an instance in the ` +
+		'Russia zone and its fixture plugin active; a fixture whose loader definition declares a ' +
+		'framework_version below the one the winning plugin sets as backwards_compatible is silently ' +
+		'refused by the loader (#1173).'
 	).toHaveCount( 1 );
 
 	await radio.check();
