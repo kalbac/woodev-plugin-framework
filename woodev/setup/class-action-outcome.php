@@ -36,6 +36,9 @@ final class Action_Outcome {
 	/** @var array<string,mixed> */
 	private array $data;
 
+	/** @var true|string[]|null edits of the step the client must drop (see discarding_edits()). */
+	private $discard_edits = null;
+
 	/**
 	 * Use the named constructors instead.
 	 *
@@ -75,6 +78,29 @@ final class Action_Outcome {
 	 */
 	public static function error( string $message, array $data = [] ): self {
 		return new self( self::STATUS_ERROR, $message, $data );
+	}
+
+	/**
+	 * Tells the client the action has superseded what the merchant typed on the step.
+	 *
+	 * A reset («Начать с чистого листа») writes its own values; without this the form keeps
+	 * showing the merchant's earlier, still-unsaved edits, and the next Continue would save them
+	 * back over the reset. A read-only action (a key check) must NOT call this: the merchant's
+	 * typing is exactly what it checked. Edits the merchant makes after pressing the button
+	 * are kept either way. A field whose SAVED value changed on the server is dropped
+	 * automatically; this is for the case where the action's result equals the old saved value.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param true|string[] $fields true = every edit on this step; or a list of setting ids.
+	 * @return self a copy carrying the instruction.
+	 */
+	public function discarding_edits( $fields = true ): self {
+		$copy = clone $this;
+
+		$copy->discard_edits = true === $fields ? true : array_values( array_map( 'strval', (array) $fields ) );
+
+		return $copy;
 	}
 
 	/**
@@ -118,10 +144,16 @@ final class Action_Outcome {
 	 * @return array<string,mixed>
 	 */
 	public function to_array(): array {
-		return [
+		$out = [
 			'status'  => $this->status,
 			'message' => $this->message,
 			'data'    => $this->data,
 		];
+
+		if ( null !== $this->discard_edits ) {
+			$out['discard_edits'] = $this->discard_edits;
+		}
+
+		return $out;
 	}
 }

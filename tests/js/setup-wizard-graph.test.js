@@ -510,3 +510,280 @@ describe( 'an honest finish (audit #5)', () => {
 		expect( screen.getByText( /готов к работе/ ) ).toBeInTheDocument();
 	} );
 } );
+
+/*
+ * Critic round 1 on part B: the graph refresh must reconcile edits, navigate by order, and ignore
+ * obsolete responses.
+ */
+describe( 'edits superseded by the server (critic 109b #1)', () => {
+	const modeField = ( value ) => ( { mode: { id: 'mode', type: 'string', name: 'Режим', value } } );
+
+	function modeGraph( mode ) {
+		const list = graph( { mappingVisible: 'keep' === mode } );
+		list[ 0 ] = { ...list[ 0 ], fields: modeField( mode ) };
+		return list;
+	}
+
+	const modeInput = () => document.querySelector( '.woodev-setup__fields input' );
+
+	/** A stateful server: the saved mode, the graph for it, and what each call does to it. */
+	function statefulServer( { initial, reset } ) {
+		const server = { mode: initial };
+		runAction.mockImplementation( () => {
+			server.mode = reset;
+			return Promise.resolve( { status: 'success', message: 'Готово.', data: {}, graph: modeGraph( server.mode ), ...server.answerExtra } );
+		} );
+		saveStep.mockImplementation( ( id, edits ) => {
+			if ( undefined !== edits.mode ) {
+				server.mode = edits.mode;
+			}
+			return Promise.resolve( { saved: true, step: id, graph: modeGraph( server.mode ) } );
+		} );
+		return server;
+	}
+
+	test( 'edit → reset (action says so) → Continue: the reset is not undone', async () => {
+		install( modeGraph( 'scratch' ) );
+		const server = statefulServer( { initial: 'scratch', reset: 'scratch' } );
+		server.answerExtra = { discard_edits: true }; // saved value is unchanged by the reset, so the action must say it
+		render( createElement( App ) );
+
+		fireEvent.change( modeInput(), { target: { value: 'keep' } } );
+		await click( screen.getByRole( 'button', { name: 'Начать с чистого листа' } ) );
+
+		expect( modeInput() ).toHaveValue( 'scratch' ); // the form agrees with the success message
+		expect( stepperLabels() ).not.toContain( 'Сопоставление' );
+
+		await click( primary() );
+
+		expect( server.mode ).toBe( 'scratch' );
+		expect( saveStep.mock.calls[ 0 ][ 1 ] ).toEqual( {} ); // no stale edit travels
+		expect( title() ).toHaveTextContent( 'Итог' );
+	} );
+
+	test( 'a field whose SAVED value the action changed loses its edit even without the flag', async () => {
+		install( modeGraph( 'keep' ) );
+		statefulServer( { initial: 'keep', reset: 'scratch' } );
+		render( createElement( App ) );
+
+		fireEvent.change( modeInput(), { target: { value: 'other' } } );
+		await click( screen.getByRole( 'button', { name: 'Начать с чистого листа' } ) );
+
+		expect( modeInput() ).toHaveValue( 'scratch' );
+	} );
+
+	test( 'control: a read-only action keeps what the merchant typed', async () => {
+		install( modeGraph( 'scratch' ) );
+		runAction.mockImplementation( () =>
+			Promise.resolve( { status: 'success', message: 'Ключ подходит.', data: {}, graph: modeGraph( 'scratch' ) } )
+		);
+		render( createElement( App ) );
+
+		fireEvent.change( modeInput(), { target: { value: 'typed-key' } } );
+		await click( screen.getByRole( 'button', { name: 'Начать с чистого листа' } ) );
+
+		expect( modeInput() ).toHaveValue( 'typed-key' );
+	} );
+
+	test( 'an edit made after the action started survives the discard', async () => {
+		install( modeGraph( 'scratch' ) );
+		let release;
+		runAction.mockImplementation( () => new Promise( ( resolve ) => {
+			release = resolve;
+		} ) );
+		render( createElement( App ) );
+
+		fireEvent.change( modeInput(), { target: { value: 'first' } } );
+		await click( screen.getByRole( 'button', { name: 'Начать с чистого листа' } ) );
+		fireEvent.change( modeInput(), { target: { value: 'typed-after' } } );
+		await act( async () => {
+			release( { status: 'success', message: 'Готово.', data: {}, discard_edits: true, graph: modeGraph( 'scratch' ) } );
+		} );
+
+		expect( modeInput() ).toHaveValue( 'typed-after' );
+	} );
+
+	test( 'a save that normalises a field shows the saved value, not the typed one', async () => {
+		install( modeGraph( 'scratch' ) );
+		saveStep.mockImplementation( () => Promise.resolve( { saved: true, graph: modeGraph( 'scratch' ).map( ( s ) => ( 'start' === s.id ? { ...s, fields: modeField( 'NORMALISED' ) } : s ) ) } ) );
+		render( createElement( App ) );
+
+		fireEvent.change( modeInput(), { target: { value: 'typed' } } );
+		await click( primary() );
+		await click( document.querySelector( '.woodev-setup__back' ) );
+
+		expect( modeInput() ).toHaveValue( 'NORMALISED' );
+	} );
+} );
+
+describe( 'navigation follows the graph order (critic 109b #2)', () => {
+	const review = () => entry( 'done', 'Итог', { skippable: false } );
+
+	test( 'a save that hides the current step AND an earlier one lands on the real successor, not on finish', async () => {
+		install( [ entry( 'start', 'Начало' ), entry( 'mapping', 'Сопоставление' ), review(), finish ] );
+		render( createElement( App ) );
+		await click( primary() );
+		expect( title() ).toHaveTextContent( 'Сопоставление' );
+		saveStep.mockImplementation( () =>
+			Promise.resolve( { saved: true, step: 'mapping', graph: [ { id: 'start', visible: false }, { id: 'mapping', visible: false }, review(), finish ] } )
+		);
+
+		await click( primary() );
+
+		expect( title() ).toHaveTextContent( 'Итог' );
+		expect( complete ).not.toHaveBeenCalled();
+	} );
+
+	test( 'the same with a permanent step in front (the index shifts the other way)', async () => {
+		const welcome = entry( 'welcome', 'Приветствие', { type: 'content' } );
+		install( [ welcome, entry( 'start', 'Начало' ), entry( 'mapping', 'Сопоставление' ), review(), finish ] );
+		render( createElement( App ) );
+		await click( primary() );
+		await click( primary() );
+		expect( title() ).toHaveTextContent( 'Сопоставление' );
+		saveStep.mockImplementation( () =>
+			Promise.resolve( { saved: true, graph: [ welcome, { id: 'start', visible: false }, { id: 'mapping', visible: false }, review(), finish ] } )
+		);
+
+		await click( primary() );
+
+		expect( title() ).toHaveTextContent( 'Итог' );
+		expect( complete ).not.toHaveBeenCalled();
+	} );
+
+	test( 'when the last visible step hides itself the wizard does reach finish', async () => {
+		install( [ entry( 'start', 'Начало' ), entry( 'mapping', 'Сопоставление' ), finish ] );
+		render( createElement( App ) );
+		await click( primary() );
+		saveStep.mockImplementation( () =>
+			Promise.resolve( { saved: true, graph: [ entry( 'start', 'Начало' ), { id: 'mapping', visible: false }, finish ] } )
+		);
+
+		await click( primary() );
+
+		expect( document.querySelector( '.woodev-setup__finish-title' ) ).toBeInTheDocument();
+	} );
+
+	test( 'an action that hides the current step moves to the nearest visible step, never to finish', async () => {
+		const withAction = ( id, label, extra = {} ) =>
+			entry( id, label, { actions: [ { id: 'hide', label: 'Скрыть шаг', destructive: false, confirm: '' } ], ...extra } );
+		install( [ entry( 'start', 'Начало' ), withAction( 'mapping', 'Сопоставление' ), finish ] );
+		render( createElement( App ) );
+		await click( primary() );
+		runAction.mockImplementation( () =>
+			Promise.resolve( { status: 'success', message: 'Скрыто.', data: {}, graph: [ entry( 'start', 'Начало' ), { id: 'mapping', visible: false }, finish ] } )
+		);
+
+		await click( screen.getByRole( 'button', { name: 'Скрыть шаг' } ) );
+
+		expect( title() ).toHaveTextContent( 'Начало' );
+		expect( complete ).not.toHaveBeenCalled();
+	} );
+
+	test( 'the stepper boundary follows the step, not its old position', async () => {
+		install( [ entry( 'start', 'Начало' ), entry( 'mapping', 'Сопоставление' ), review(), finish ] );
+		render( createElement( App ) );
+		await click( primary() );
+		saveStep.mockImplementation( () =>
+			Promise.resolve( { saved: true, graph: [ { id: 'start', visible: false }, entry( 'mapping', 'Сопоставление' ), review(), finish ] } )
+		);
+		await click( primary() ); // → «Итог», «Начало» is gone
+
+		// «Сопоставление» was visited and is still reachable; «Итог» is current; finish stays locked.
+		expect( screen.getByRole( 'button', { name: 'Сопоставление' } ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'button', { name: 'Готово' } ) ).not.toBeInTheDocument();
+	} );
+} );
+
+describe( 'an obsolete response cannot bring back a hidden branch (critic 109b #3)', () => {
+	test( 'action → Back → newer save → the old action resolves: the branch stays hidden', async () => {
+		const initial = graph();
+		initial[ 1 ] = { ...initial[ 1 ], actions: [ { id: 'preview', label: 'Предпросмотр', destructive: false, confirm: '' } ] };
+		install( initial );
+		render( createElement( App ) );
+		await click( primary() );
+		let release;
+		runAction.mockImplementation( () => new Promise( ( resolve ) => {
+			release = resolve;
+		} ) );
+		await click( screen.getByRole( 'button', { name: 'Предпросмотр' } ) );
+		await click( document.querySelector( '.woodev-setup__back' ) );
+		saveStep.mockImplementation( () => Promise.resolve( { saved: true, step: 'start', graph: graph( { mappingVisible: false } ) } ) );
+		await click( primary() );
+		expect( title() ).toHaveTextContent( 'Итог' );
+		expect( stepperLabels() ).not.toContain( 'Сопоставление' );
+
+		await act( async () => {
+			release( { status: 'success', message: 'Старый ответ.', data: {}, graph: initial } );
+		} );
+
+		expect( stepperLabels() ).not.toContain( 'Сопоставление' );
+		expect( title() ).toHaveTextContent( 'Итог' );
+	} );
+
+	test( 'control: a lone slow action that the merchant left behind still applies its graph', async () => {
+		const initial = graph();
+		initial[ 1 ] = { ...initial[ 1 ], actions: [ { id: 'preview', label: 'Предпросмотр', destructive: false, confirm: '' } ] };
+		install( initial );
+		render( createElement( App ) );
+		await click( primary() );
+		let release;
+		runAction.mockImplementation( () => new Promise( ( resolve ) => {
+			release = resolve;
+		} ) );
+		await click( screen.getByRole( 'button', { name: 'Предпросмотр' } ) );
+		await click( document.querySelector( '.woodev-setup__back' ) );
+
+		await act( async () => {
+			release( { status: 'success', message: 'Ответ.', data: {}, graph: graph( { mappingVisible: false } ) } );
+		} );
+
+		expect( stepperLabels() ).not.toContain( 'Сопоставление' );
+		expect( title() ).toHaveTextContent( 'Начало' );
+	} );
+} );
+
+describe( 'component skip() honours skippable (critic 109b)', () => {
+	function withSkippable( skippable ) {
+		let props;
+		install( [
+			entry( 'start', 'Начало' ),
+			entry( 'review', 'Проверка', { type: 'content', skippable, component: { handle: 'acme-review', export: 'ReviewStep' } } ),
+			entry( 'after', 'Дальше', { type: 'content' } ),
+			finish,
+		] );
+		window.woodevSetupWizardComponents = {
+			'acme-review': {
+				ReviewStep: ( p ) => {
+					props = p;
+					return createElement( 'span' );
+				},
+			},
+		};
+		return () => props;
+	}
+
+	test( 'a non-skippable step ignores skip()', async () => {
+		const get = withSkippable( false );
+		render( createElement( App ) );
+		await click( primary() );
+
+		await act( async () => {
+			get().skip();
+		} );
+
+		expect( title() ).toHaveTextContent( 'Проверка' );
+	} );
+
+	test( 'a skippable step moves on', async () => {
+		const get = withSkippable( true );
+		render( createElement( App ) );
+		await click( primary() );
+
+		await act( async () => {
+			get().skip();
+		} );
+
+		expect( title() ).toHaveTextContent( 'Дальше' );
+	} );
+} );

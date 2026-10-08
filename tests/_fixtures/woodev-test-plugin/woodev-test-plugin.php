@@ -217,7 +217,8 @@ function woodev_test_plugin_init() {
 					static function () use ( $plugin ): \Woodev\Framework\Setup\Action_Outcome {
 						$plugin->get_settings_handler()->update_value( 'mode', 'test' );
 
-						return \Woodev\Framework\Setup\Action_Outcome::success( 'Режим сброшен на «Тест».' );
+						// A reset overwrites what the merchant may have typed in the form.
+						return \Woodev\Framework\Setup\Action_Outcome::success( 'Режим сброшен на «Тест».' )->discarding_edits();
 					},
 					true,
 					'Режим вернётся к «Тест», шаг «Подключение» пропадёт. Продолжить?'

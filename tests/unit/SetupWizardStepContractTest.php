@@ -565,6 +565,31 @@ class SetupWizardStepContractTest extends TestCase {
 	}
 
 	// -----------------------------------------------------------------------
+	// An action can say it superseded the merchant's edits (critic 109b #1)
+	// -----------------------------------------------------------------------
+
+	public function test_an_outcome_carries_no_discard_instruction_unless_asked(): void {
+		$this->assertArrayNotHasKey( 'discard_edits', Action_Outcome::success( 'ok' )->to_array() );
+	}
+
+	public function test_an_outcome_can_discard_all_or_named_edits_and_stays_immutable(): void {
+		$plain = Action_Outcome::success( 'ok' );
+
+		$this->assertTrue( $plain->discarding_edits()->to_array()['discard_edits'] );
+		$this->assertSame( [ 'mode', 'rate' ], $plain->discarding_edits( [ 'mode', 'rate' ] )->to_array()['discard_edits'] );
+		$this->assertArrayNotHasKey( 'discard_edits', $plain->to_array() ); // the original is untouched.
+	}
+
+	public function test_the_action_answer_carries_the_discard_instruction_to_the_client(): void {
+		Functions\when( 'rest_ensure_response' )->returnArg( 1 );
+
+		$step   = $this->action_step( static fn() => Action_Outcome::success( 'Сброшено.' )->discarding_edits() );
+		$result = $this->controller_for( $step )->run_action( $this->request( 'connection', [], [ 'action_id' => 'act' ] ) );
+
+		$this->assertTrue( $result['discard_edits'] );
+	}
+
+	// -----------------------------------------------------------------------
 	// REST — actions
 	// -----------------------------------------------------------------------
 

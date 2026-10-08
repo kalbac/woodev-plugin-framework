@@ -114,6 +114,41 @@ function visibleSteps( graph ) {
 }
 
 /**
+ * First visible entry that comes AFTER `id` in the full, ordered graph (hidden entries included).
+ *
+ * @param {Array}  full the whole graph, visible and hidden entries in server order.
+ * @param {string} id   a step id.
+ * @return {Object|null} the entry, or null when `id` is last / not in the graph.
+ */
+function visibleAfter( full, id ) {
+	const at = full.findIndex( ( s ) => s.id === id );
+	return at < 0 ? null : full.slice( at + 1 ).find( ( s ) => false !== s.visible ) || null;
+}
+
+/**
+ * Last visible entry that comes BEFORE `id` in the full, ordered graph.
+ *
+ * @param {Array}  full the whole graph.
+ * @param {string} id   a step id.
+ * @return {Object|null} the entry, or null.
+ */
+function visibleBefore( full, id ) {
+	const at = full.findIndex( ( s ) => s.id === id );
+	return at < 0 ? null : full.slice( 0, at ).reverse().find( ( s ) => false !== s.visible ) || null;
+}
+
+/**
+ * Structural equality for field values (scalars, arrays, plain objects).
+ *
+ * @param {*} a first value.
+ * @param {*} b second value.
+ * @return {boolean} true when equal.
+ */
+function sameValue( a, b ) {
+	return JSON.stringify( a ) === JSON.stringify( b );
+}
+
+/**
  * Wizard root.
  *
  * @return {Object} React element.
@@ -176,6 +211,10 @@ export default function App() {
 	const [ pendingConfirm, setPendingConfirm ] = useState( null );
 	const [ actionResult, setActionResult ] = useState( null );
 	const actionGenRef = useRef( 0 );
+	// Generation of the latest request that can return a step graph (a save or an action). A
+	// response applies its graph only while it is still the latest: an older one describes a state
+	// that a newer request has already replaced.
+	const graphReqRef = useRef( 0 );
 	// A custom component's pending destructive action: settled when the merchant answers the confirmation.
 	const componentResolveRef = useRef( null );
 	// The finish step's «completed» write: 'pending' → 'done' | 'failed' (only 'done' may show the
@@ -368,32 +407,112 @@ export default function App() {
 	/**
 	 * Re-renders from a step graph the server returned after a save or action (D3).
 	 *
-	 * Keeps the merchant on the same step (found by id) and keeps the visited boundary on the same
-	 * step too, whatever positions the hidden/shown steps shifted. Works from refs, so a response
-	 * that lands after the render that started the request still sees the current list.
+	 * - Applied only if `requestGen` is still the latest graph-bearing request (an obsolete response
+	 *   must not bring back a branch a newer save hid).
+	 * - Navigation is by step ORDER and id, never by the old numeric index: after an `advanceFrom`
+	 *   save the merchant lands on the first visible step that follows it in the full graph (hidden
+	 *   entries keep their place), so hiding the current step and earlier ones cannot jump past a
+	 *   visible step. If the current step vanished otherwise (an action hid it), the nearest
+	 *   visible neighbour is used and the wizard never slides into «finish» from there.
+	 * - The visited boundary moves to the last visible step at or before the old boundary.
+	 * - Edits that the server's answer has superseded are dropped: a field whose SAVED value changed
+	 *   (an action reset it, on_save normalised it) and, when the action says so, the whole step's
+	 *   edits. An edit made after the request began is kept.
 	 *
-	 * @param {Array} graph the graph from the response (ignored when absent or malformed).
+	 * @param {Array}  graph                the graph from the response (ignored when absent or malformed).
+	 * @param {Object} options
+	 * @param {string} options.advanceFrom  step id the merchant is leaving after a successful save.
+	 * @param {number} options.requestGen   generation of the request this response answers.
+	 * @param {Object} options.startValues  the edits as they were when the request started.
+	 * @param {string} options.stepId       step the request belonged to.
+	 * @param {true|string[]|undefined} options.discard the action's `discard_edits` answer.
 	 * @return {Array|null} the new visible list, or null when nothing was applied.
 	 */
-	function applyGraph( graph ) {
-		const next = Array.isArray( graph ) ? visibleSteps( graph ) : [];
+	function applyGraph( graph, options = {} ) {
+		const { advanceFrom = null, requestGen = null, startValues = null, stepId = null, discard = null } = options;
+
+		if ( null !== requestGen && requestGen !== graphReqRef.current ) {
+			return null;
+		}
+
+		const full = Array.isArray( graph ) ? graph : [];
+		const next = visibleSteps( full );
 		// A usable graph always ends with the terminal finish step.
 		if ( ! next.length || 'finish' !== next[ next.length - 1 ].type ) {
 			return null;
 		}
 
 		const old = stepsRef.current;
-		const currentId = old[ indexRef.current ] && old[ indexRef.current ].id;
-		const furthestId = old[ maxVisitedRef.current ] && old[ maxVisitedRef.current ].id;
-		const current = next.findIndex( ( s ) => s.id === currentId );
-		const furthest = next.findIndex( ( s ) => s.id === furthestId );
-		const newIndex = current >= 0 ? current : Math.min( indexRef.current, next.length - 1 );
+		const oldCurrentId = old[ indexRef.current ] && old[ indexRef.current ].id;
+		const oldFurthestId = old[ maxVisitedRef.current ] && old[ maxVisitedRef.current ].id;
+		const indexOf = ( id ) => next.findIndex( ( s ) => s.id === id );
+		const inGraph = ( id ) => full.some( ( s ) => s.id === id );
+
+		let target = -1;
+		if ( advanceFrom && inGraph( advanceFrom ) ) {
+			const successor = visibleAfter( full, advanceFrom );
+			target = successor ? indexOf( successor.id ) : -1;
+		} else if ( indexOf( oldCurrentId ) >= 0 ) {
+			target = indexOf( oldCurrentId );
+		} else if ( inGraph( oldCurrentId ) ) {
+			const successor = visibleAfter( full, oldCurrentId );
+			const predecessor = visibleBefore( full, oldCurrentId );
+			const pick = successor && 'finish' !== successor.type ? successor : predecessor || successor;
+			target = pick ? indexOf( pick.id ) : -1;
+		}
+		if ( target < 0 ) {
+			target = Math.min( indexRef.current + ( advanceFrom ? 1 : 0 ), next.length - 1 );
+		}
+
+		let furthest = 0;
+		const furthestAt = full.findIndex( ( s ) => s.id === oldFurthestId );
+		for ( let i = 0; i <= furthestAt; i++ ) {
+			if ( false !== full[ i ].visible && indexOf( full[ i ].id ) >= 0 ) {
+				furthest = indexOf( full[ i ].id );
+			}
+		}
+
+		// Edits the answer supersedes.
+		const drops = [];
+		old.forEach( ( o ) => {
+			const n = next.find( ( s ) => s.id === o.id );
+			if ( ! n ) {
+				return;
+			}
+			Object.keys( n.fields || {} ).forEach( ( f ) => {
+				const before = o.fields && o.fields[ f ] ? o.fields[ f ].value : undefined;
+				if ( ! sameValue( before, n.fields[ f ].value ) ) {
+					drops.push( [ o.id, f ] );
+				}
+			} );
+		} );
+		if ( stepId && startValues && discard ) {
+			( true === discard ? Object.keys( startValues[ stepId ] || {} ) : [].concat( discard ) ).forEach( ( f ) => {
+				drops.push( [ stepId, f ] );
+			} );
+		}
+		if ( drops.length && startValues ) {
+			setValues( ( current ) => {
+				const out = { ...current };
+				drops.forEach( ( [ sid, f ] ) => {
+					const edits = out[ sid ];
+					const started = startValues[ sid ];
+					// Only an edit the merchant has not touched since the request began.
+					if ( edits && f in edits && started && f in started && sameValue( edits[ f ], started[ f ] ) ) {
+						const copy = { ...edits };
+						delete copy[ f ];
+						out[ sid ] = copy;
+					}
+				} );
+				return out;
+			} );
+		}
 
 		stepsRef.current = next;
-		indexRef.current = newIndex;
-		maxVisitedRef.current = Math.min( Math.max( furthest >= 0 ? furthest : 0, newIndex ), next.length - 1 );
+		indexRef.current = target;
+		maxVisitedRef.current = Math.min( Math.max( furthest, target ), next.length - 1 );
 		setSteps( next );
-		setIndex( newIndex );
+		setIndex( target );
 
 		return next;
 	}
@@ -422,14 +541,23 @@ export default function App() {
 		// bumps the ref, and whatever this request resolves with afterwards is dropped.
 		const generation = ++actionGenRef.current;
 		const isCurrent = () => generation === actionGenRef.current;
+		const requestGen = ++graphReqRef.current;
+		const startValues = values;
+		const stepId = step.id;
 		let result;
 		try {
 			// Only the merchant's edits travel; the server lays them over the stored values
 			// (a masked secret the merchant did not retype must not arrive as '').
-			const answer = await runAction( step.id, action.id, values[ step.id ] || {}, confirmed );
+			const answer = await runAction( stepId, action.id, values[ stepId ] || {}, confirmed );
 			// The action may have persisted something that changes the graph — apply it even when
-			// the answer itself is stale (the server state is what it is).
-			applyGraph( answer && answer.graph );
+			// the answer itself is stale for display (the server state is what it is), but not when
+			// a newer save or action has superseded this request.
+			applyGraph( answer && answer.graph, {
+				requestGen,
+				startValues,
+				stepId,
+				discard: answer && answer.discard_edits,
+			} );
 			result = {
 				status: answer && 'error' === answer.status ? 'error' : 'success',
 				message: ( answer && answer.message ) || '',
@@ -494,24 +622,27 @@ export default function App() {
 		setBusy( true );
 		try {
 			let response = null;
+			let requestGen = null;
+			const startValues = values;
 			if ( force || isSettings || step.validates ) {
+				requestGen = ++graphReqRef.current;
 				response = await saveStep( step.id, values[ step.id ] || {} );
 			}
 			setShowErrors( false );
 			setFieldErrors( {} );
 
-			const list = response ? applyGraph( response.graph ) : null;
-			if ( advance ) {
-				if ( list ) {
-					// Next visible step after this one in the NEW graph; if the save hid this very
-					// step, the step now at its position is the one after it.
-					const at = list.findIndex( ( s ) => s.id === step.id );
-					const target = at >= 0 ? at + 1 : Math.min( indexRef.current, list.length - 1 );
-					indexRef.current = target;
-					setIndex( target );
-				} else {
-					setIndex( ( prev ) => prev + 1 );
-				}
+			// The graph decides where «next» is: the first visible step after this one in the full
+			// ordered graph (applyGraph moves the index). Without a usable graph, plain +1.
+			const applied = response
+				? applyGraph( response.graph, {
+					advanceFrom: advance ? step.id : null,
+					requestGen,
+					startValues,
+					stepId: step.id,
+				} )
+				: null;
+			if ( advance && ! applied ) {
+				setIndex( ( prev ) => prev + 1 );
 			}
 
 			return true;
@@ -769,7 +900,12 @@ export default function App() {
 				save: () => submitStep( { advance: false, force: true } ),
 				next: goNext,
 				back: () => goTo( index - 1 ),
-				skip: skipStep,
+				// The type says «only when step.skippable»: enforce it here, not in every component.
+				skip: () => {
+					if ( false !== step.skippable ) {
+						skipStep();
+					}
+				},
 				runAction: ( actionId ) =>
 					new Promise( ( resolve ) => {
 						const action = ( step.actions || [] ).find( ( a ) => a.id === actionId );

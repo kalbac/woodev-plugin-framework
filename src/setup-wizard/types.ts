@@ -65,6 +65,8 @@ export interface SetupWizardActionAnswer {
 	status: 'success' | 'error' | 'cancelled';
 	message: string;
 	data: Record<string, unknown>;
+	/** The action superseded the merchant's edits: `true` = all on this step, or the field ids. */
+	discard_edits?: true | string[];
 }
 
 /** The props the framework passes to a custom step component. */
@@ -94,7 +96,7 @@ export interface SetupWizardStepComponentProps {
 	next: () => Promise<boolean>;
 	/** Go to the previous step. */
 	back: () => void;
-	/** Skip the step without saving (only when `step.skippable`). */
+	/** Skip the step without saving. A no-op when `step.skippable` is false — the framework enforces it. */
 	skip: () => void;
 	/**
 	 * Run one of the step's actions on the server. A destructive action first shows the

@@ -16,7 +16,9 @@ defined( 'ABSPATH' ) || exit;
  * The callback receives the step's *submitted, unsaved* values (only fields declared on the
  * step) and the REST request: `fn( array $values, \WP_REST_Request $request ): Action_Outcome`.
  * An action never persists step values by itself — if its callback should write something,
- * the callback does it. A destructive action declares so and the client asks the merchant
+ * the callback does it. A callback that RESETS values the merchant may have typed returns
+ * `Action_Outcome::success( … )->discarding_edits()` so the form drops those edits; a read-only one
+ * (a key check) must not. A destructive action declares so and the client asks the merchant
  * to confirm before it runs; the server refuses an unconfirmed destructive run as well.
  *
  * @since 2.0.2
