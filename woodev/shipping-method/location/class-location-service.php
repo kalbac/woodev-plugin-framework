@@ -1507,6 +1507,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		}
 
 		/**
+		 * The WooCommerce state code `$record`'s region stands for — {@see self::record_state_code()} for callers
+		 * outside this class (the city limit asks it to tell whether a stored city lies in a shipping zone's regions).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Location_Record $record Stored record.
+		 *
+		 * @return string|null `null` when it cannot be told.
+		 */
+		public function wc_state_code_for_record( Location_Record $record ): ?string {
+			return $this->record_state_code( $record );
+		}
+
+		/**
 		 * Case-folded, `ё`→`е`, punctuation-free form of a region name, optionally with the
 		 * administrative type words dropped — `foldRegionName()` / `normalizeRegionName()` of
 		 * `src/checkout-blocks/mapping.ts`, token for token.
@@ -2178,6 +2192,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 			// can answer with a provider that does not cover the record's country at all;
 			// the fixed default was then measured as current against a provider that could
 			// never resolve it.
+			return $this->reresolve_stranded_record( $stored );
+		}
+
+		/**
+		 * Gives back `$stored` as it is when the D15 chain still resolves the provider it names, otherwise
+		 * re-resolves it THROUGH the provider the chain resolves now (by name, unambiguous match only — see
+		 * {@see self::reresolve_fixed_default()}). The one routine behind the `fixed` default and behind every
+		 * other record a merchant stored, e.g. the cities of a method's city limit.
+		 *
+		 * PURE READ: writes nothing. The caller decides what to keep.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Location_Record $stored A record a merchant stored earlier.
+		 *
+		 * @return Location_Record|null The record to use now, or `null` when no provider serves its level or
+		 *                              the name does not match exactly one place.
+		 */
+		public function reresolve_stranded_record( Location_Record $stored ): ?Location_Record {
 			$current_provider = $this->provider_for_level( $stored->level(), $stored->country() );
 
 			if ( null !== $current_provider && $current_provider->get_id() === $stored->provider_id() ) {
@@ -2227,7 +2260,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 			}
 
 			try {
-				$records = $provider->suggest( $query, self::scope_for_reresolution( $stored ) );
+				// Stamped for THIS provider call: a provider reports its narrowing on the scope, and an unstamped
+				// one raises `_doing_it_wrong()` — printed into an AJAX reply when display_errors is on.
+				$records = $provider->suggest( $query, self::scope_for_reresolution( $stored )->for_provider( $provider->get_id() ) );
 			} catch ( \Throwable $exception ) {
 				return null;
 			}

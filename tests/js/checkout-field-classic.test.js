@@ -808,8 +808,8 @@ describe( 'field policy — hide-for-pickup / country-hide (#362 §4.3)', () => 
 	 *   configured at all) passes `[]` explicitly.
 	 * @returns {Object}
 	 */
-	function buildFieldPolicyConfig( policy, pickupIds ) {
-		return {
+	function buildFieldPolicyConfig( policy, pickupIds, hidingIds ) {
+		const config = {
 			endpoint:          ENDPOINT,
 			nonce:             'test-nonce',
 			i18n:              { placeholder: 'Выберите…' },
@@ -818,6 +818,14 @@ describe( 'field policy — hide-for-pickup / country-hide (#362 §4.3)', () => 
 			field_policy:      policy,
 			pickup_method_ids: pickupIds || [ 'test_pickup' ],
 		};
+
+		// #1176: the list that hides the rows also names WooCommerce's own pickup. A page whose PHP
+		// predates it simply does not carry the key (the fallback test below).
+		if ( hidingIds ) {
+			config.field_policy_pickup_method_ids = hidingIds;
+		}
+
+		return config;
 	}
 
 	/**
@@ -836,7 +844,7 @@ describe( 'field policy — hide-for-pickup / country-hide (#362 §4.3)', () => 
 		window.WoodevCheckoutFieldStore = require(
 			'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
 		);
-		window[ CONFIG_GLOBAL ] = buildFieldPolicyConfig( policy, markup && markup.pickupIds );
+		window[ CONFIG_GLOBAL ] = buildFieldPolicyConfig( policy, markup && markup.pickupIds, markup && markup.hidingIds );
 
 		ajaxCalls = stubAjax();
 
@@ -1137,6 +1145,58 @@ describe( 'field policy — hide-for-pickup / country-hide (#362 §4.3)', () => 
 		expect( document.getElementById( 'shipping_postcode_field' ).classList
 			.contains( 'woodev-field--hidden-for-pickup' ) ).toBe( false );
 		expect( document.getElementById( 'shipping_postcode' ).required ).toBe( true );
+	} );
+
+	/**
+	 * #1176 — WooCommerce's own «Самовывоз» (`local_pickup`) is no Woodev method, so it is not in
+	 * `pickup_method_ids` (that list also means «a pickup POINT must be chosen»). The list that
+	 * hides the rows is a separate one, `field_policy_pickup_method_ids`, and it names core pickup.
+	 */
+	it( 'hides the address rows for WooCommerce\'s own pickup via field_policy_pickup_method_ids', () => {
+		bootFieldPolicy(
+			{ address: 'hide_for_pickup', postcode: 'hide_for_pickup', country: 'show' },
+			'local_pickup:262',
+			{ pickupIds: [ 'test_pickup' ], hidingIds: [ 'test_pickup', 'legacy_local_pickup', 'local_pickup' ] }
+		);
+
+		expect( document.getElementById( 'shipping_address_1_field' ).classList
+			.contains( 'woodev-field--hidden-for-pickup' ) ).toBe( true );
+		expect( document.getElementById( 'shipping_address_1' ).required ).toBe( false );
+		expect( document.getElementById( 'shipping_postcode_field' ).classList
+			.contains( 'woodev-field--hidden-for-pickup' ) ).toBe( true );
+
+		// …and switching to a courier brings them back, with the original `required`.
+		const radio = document.querySelector( 'input[name^="shipping_method"]' );
+		radio.value = 'flat_rate:261';
+		global.jQuery( radio ).trigger( 'change' );
+
+		expect( document.getElementById( 'shipping_address_1_field' ).classList
+			.contains( 'woodev-field--hidden-for-pickup' ) ).toBe( false );
+		expect( document.getElementById( 'shipping_address_1' ).required ).toBe( true );
+	} );
+
+	it( 'does not treat WooCommerce\'s pickup as one when the page\'s PHP does not publish the new list', () => {
+		bootFieldPolicy(
+			{ address: 'hide_for_pickup', postcode: 'hide_for_pickup', country: 'show' },
+			'local_pickup:262',
+			{ pickupIds: [ 'test_pickup' ] }
+		);
+
+		// an older config: the plugin pickup list is all there is, so core pickup keeps its address
+		expect( document.getElementById( 'shipping_address_1_field' ).classList
+			.contains( 'woodev-field--hidden-for-pickup' ) ).toBe( false );
+		expect( document.getElementById( 'shipping_address_1' ).required ).toBe( true );
+	} );
+
+	it( 'never matches a method id that only starts like a pickup one', () => {
+		bootFieldPolicy(
+			{ address: 'hide_for_pickup', postcode: 'hide_for_pickup', country: 'show' },
+			'local_pickup_plus:1',
+			{ pickupIds: [], hidingIds: [ 'local_pickup' ] }
+		);
+
+		expect( document.getElementById( 'shipping_address_1_field' ).classList
+			.contains( 'woodev-field--hidden-for-pickup' ) ).toBe( false );
 	} );
 } );
 

@@ -419,7 +419,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Po
 				return false;
 			}
 
-			return self::any_pickup_method_chosen( $chosen_shipping_methods, Checkout_Config::pickup_method_ids() );
+			// The field-hiding list, not `pickup_method_ids()`: it also names WooCommerce's own pickup, whose choice
+			// hides the same rows (and relaxes the same `required`) as ours. See Checkout_Config::field_policy_pickup_method_ids().
+			return self::any_pickup_method_chosen( $chosen_shipping_methods, Checkout_Config::field_policy_pickup_method_ids() );
 		}
 
 		/**

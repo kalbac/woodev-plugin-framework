@@ -3532,4 +3532,94 @@ final class LocationControllerTest extends TestCase {
 
 		$this->assertSame( [ 8 ], $seen );
 	}
+
+	// -------------------------------------------------------------------
+	// /city-limit/suggest (#1176) — the admin search behind a method's city limit
+	// -------------------------------------------------------------------
+
+	private function city_limit_request( array $params = [] ): WP_REST_Request {
+		return new WP_REST_Request( array_merge( [ 'q' => 'Пуш', 'instance_id' => 262, 'country' => 'RU' ], $params ) );
+	}
+
+	public function test_city_limit_suggest_returns_the_shaped_settlements(): void {
+		Functions\when( 'absint' )->alias( static fn( $value ) => abs( (int) $value ) );
+
+		$provider = new Location_Controller_Fake_Provider(
+			fn() => [ $this->record( 'dadata:fias-1' ), $this->record( 'dadata:fias-1' ), $this->record( 'dadata:region-1', Location_Record::LEVEL_REGION ) ]
+		);
+		$ctrl     = new Location_Controller_Probe( new Location_Controller_Fake_Service( true, $provider ) );
+
+		$result = $ctrl->handle_city_limit_suggest_request( $this->city_limit_request() );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( [ 'dadata:fias-1' ], array_column( $result['suggestions'], 'key' ), 'one settlement: a repeat and a region are dropped' );
+		$this->assertSame( [ 'suggestions' ], array_keys( $result ) );
+	}
+
+	public function test_city_limit_suggest_searches_the_whole_country_when_the_zone_has_no_regions(): void {
+		Functions\when( 'absint' )->alias( static fn( $value ) => abs( (int) $value ) );
+
+		$provider = new Location_Controller_Fake_Provider( static fn() => [] );
+		$ctrl     = new Location_Controller_Probe( new Location_Controller_Fake_Service( true, $provider ) );
+
+		$ctrl->handle_city_limit_suggest_request( $this->city_limit_request() );
+
+		$this->assertCount( 1, $provider->suggest_calls );
+
+		[ $query, $scope ] = $provider->suggest_calls[0];
+
+		$this->assertSame( 'Пуш', $query );
+		$this->assertSame( 'RU', $scope->country() );
+		$this->assertSame( Location_Record::LEVEL_SETTLEMENT, $scope->level() );
+		$this->assertFalse( $scope->has_parent(), 'DaData / a whole-country zone: no region to narrow by' );
+	}
+
+	public function test_city_limit_suggest_rejects_a_query_that_is_too_short(): void {
+		Functions\when( 'absint' )->alias( static fn( $value ) => abs( (int) $value ) );
+
+		$ctrl   = new Location_Controller_Probe( new Location_Controller_Fake_Service( true, new Location_Controller_Fake_Provider( static fn() => [] ) ) );
+		$result = $ctrl->handle_city_limit_suggest_request( $this->city_limit_request( [ 'q' => 'П' ] ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 400, $result->get_error_data()['status'] );
+	}
+
+	public function test_city_limit_suggest_rejects_a_malformed_country(): void {
+		Functions\when( 'absint' )->alias( static fn( $value ) => abs( (int) $value ) );
+
+		$ctrl   = new Location_Controller_Probe( new Location_Controller_Fake_Service( true, new Location_Controller_Fake_Provider( static fn() => [] ) ) );
+		$result = $ctrl->handle_city_limit_suggest_request( $this->city_limit_request( [ 'country' => 'R1' ] ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'woodev_location_invalid_country', $result->get_error_code() );
+	}
+
+	public function test_city_limit_suggest_degrades_to_nothing_without_a_provider_or_for_an_unserved_country(): void {
+		Functions\when( 'absint' )->alias( static fn( $value ) => abs( (int) $value ) );
+
+		$none = new Location_Controller_Probe( new Location_Controller_Fake_Service( true, null ) );
+		$this->assertSame( [ 'suggestions' => [] ], $none->handle_city_limit_suggest_request( $this->city_limit_request() ) );
+
+		$provider = new Location_Controller_Fake_Provider( static fn() => [ $this->record() ] );
+		$unserved = new Location_Controller_Probe( new Location_Controller_Fake_Service( true, $provider, null, true, false ) );
+		$this->assertSame( [ 'suggestions' => [] ], $unserved->handle_city_limit_suggest_request( $this->city_limit_request() ) );
+		$this->assertCount( 0, $provider->suggest_calls, 'a country the provider does not cover costs no upstream call' );
+	}
+
+	public function test_city_limit_suggest_turns_a_failing_provider_into_the_upstream_error(): void {
+		Functions\when( 'absint' )->alias( static fn( $value ) => abs( (int) $value ) );
+		Functions\when( 'error_log' )->justReturn( true );
+
+		$provider = new Location_Controller_Fake_Provider(
+			static function () {
+				throw new \RuntimeException( 'upstream boom' );
+			}
+		);
+		$ctrl     = new Location_Controller_Probe( new Location_Controller_Fake_Service( true, $provider ) );
+
+		$result = $ctrl->handle_city_limit_suggest_request( $this->city_limit_request() );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 502, $result->get_error_data()['status'] );
+	}
 }

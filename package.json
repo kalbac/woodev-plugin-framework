@@ -7,10 +7,11 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "wp-scripts build ./src/license-page/index.js --output-path=woodev/assets/build/license-page && wp-scripts build ./src/plugins-page/index.js --output-path=woodev/assets/build/plugins-page && wp-scripts build ./src/setup-wizard/index.js --output-path=woodev/assets/build/setup-wizard && wp-scripts build ./src/settings-page/index.js --output-path=woodev/assets/build/settings-page && wp-scripts build \"index=./src/shipping-orders-page/index.tsx\" --output-path=woodev/assets/build/shipping-orders-page && wp-scripts build \"index=./src/checkout-blocks/index.ts\" --output-path=woodev/assets/build/checkout-blocks && wp-scripts build ./src/ui-kit-gallery/index.js --output-path=woodev/assets/build/ui-kit-gallery",
+    "build": "wp-scripts build ./src/license-page/index.js --output-path=woodev/assets/build/license-page && wp-scripts build ./src/plugins-page/index.js --output-path=woodev/assets/build/plugins-page && wp-scripts build ./src/setup-wizard/index.js --output-path=woodev/assets/build/setup-wizard && wp-scripts build ./src/settings-page/index.js --output-path=woodev/assets/build/settings-page && wp-scripts build \"index=./src/shipping-orders-page/index.tsx\" --output-path=woodev/assets/build/shipping-orders-page && wp-scripts build \"index=./src/checkout-blocks/index.ts\" --output-path=woodev/assets/build/checkout-blocks && wp-scripts build \"index=./src/shipping-zone-city-limit/index.tsx\" --output-path=woodev/assets/build/shipping-zone-city-limit && wp-scripts build ./src/ui-kit-gallery/index.js --output-path=woodev/assets/build/ui-kit-gallery",
     "build:setup": "wp-scripts build ./src/setup-wizard/index.js --output-path=woodev/assets/build/setup-wizard",
     "build:settings": "wp-scripts build ./src/settings-page/index.js --output-path=woodev/assets/build/settings-page",
     "build:orders": "wp-scripts build \"index=./src/shipping-orders-page/index.tsx\" --output-path=woodev/assets/build/shipping-orders-page",
+    "build:city-limit": "wp-scripts build \"index=./src/shipping-zone-city-limit/index.tsx\" --output-path=woodev/assets/build/shipping-zone-city-limit",
     "build:checkout-blocks": "wp-scripts build \"index=./src/checkout-blocks/index.ts\" --output-path=woodev/assets/build/checkout-blocks",
     "start": "wp-scripts start ./src/license-page/index.js --output-path=woodev/assets/build/license-page",
     "start:plugins": "wp-scripts start ./src/plugins-page/index.js --output-path=woodev/assets/build/plugins-page",

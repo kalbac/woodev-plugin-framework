@@ -38,6 +38,8 @@ class ShippingPluginEnhancedSelectModalTest extends TestCase {
 
 		Functions\when( 'wp_script_is' )->justReturn( false );
 		Functions\when( 'plugins_url' )->justReturn( 'https://example.com/instance-field-conditions.js' );
+		// the city limit's own bundle (#1176) looks for its build next to the framework copy; there is none here, so it enqueues nothing
+		Functions\when( 'plugin_dir_path' )->justReturn( '/nonexistent-framework-copy/' );
 		Functions\expect( 'wp_enqueue_script' )->once()->with( 'woodev-instance-field-conditions', Mockery::any(), [ 'jquery' ], Mockery::any(), true );
 
 		$captured = null;

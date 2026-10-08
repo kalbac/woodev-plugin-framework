@@ -692,6 +692,53 @@ class CheckoutConfigTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------------
+	// field_policy_pickup_method_ids — #1176: core «Самовывоз» hides the address rows too
+	// -------------------------------------------------------------------------
+
+	public function test_core_pickup_joins_the_field_hiding_list_but_never_the_pickup_point_list(): void {
+		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ] ) )->build( Checkout_Fields::from_array( [] ) );
+
+		// The list that also means «a pickup POINT must be chosen» (the backstop, the `is_pickup_method` condition)
+		// stays the plugins' own; WooCommerce's pickup has no point to choose.
+		$this->assertSame( [], $config['pickup_method_ids'] );
+		$this->assertSame( [], Checkout_Config::pickup_method_ids() );
+
+		$this->assertSame( [ 'legacy_local_pickup', 'local_pickup' ], $config['field_policy_pickup_method_ids'] );
+		$this->assertSame( $config['field_policy_pickup_method_ids'], Checkout_Config::field_policy_pickup_method_ids() );
+	}
+
+	public function test_the_core_pickup_list_is_woocommerces_own_including_what_blocks_add(): void {
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $tag, $value = null ) {
+				return 'woocommerce_local_pickup_methods' === $tag ? array_merge( (array) $value, [ 'pickup_location' ] ) : $value;
+			}
+		);
+
+		$this->assertSame( [ 'legacy_local_pickup', 'local_pickup', 'pickup_location' ], Checkout_Config::core_pickup_method_ids() );
+		$this->assertContains( 'pickup_location', Checkout_Config::field_policy_pickup_method_ids() );
+	}
+
+	public function test_a_merchant_can_take_core_pickup_out_of_the_field_hiding_list(): void {
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $tag, $value = null ) {
+				return 'woodev_shipping_field_policy_pickup_method_ids' === $tag ? array_values( array_diff( (array) $value, [ 'local_pickup' ] ) ) : $value;
+			}
+		);
+
+		$this->assertSame( [ 'legacy_local_pickup' ], Checkout_Config::field_policy_pickup_method_ids() );
+	}
+
+	public function test_a_broken_filter_answer_keeps_the_list(): void {
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $tag, $value = null ) {
+				return 'woodev_shipping_field_policy_pickup_method_ids' === $tag ? 'not a list' : $value;
+			}
+		);
+
+		$this->assertSame( [ 'legacy_local_pickup', 'local_pickup' ], Checkout_Config::field_policy_pickup_method_ids() );
+	}
+
+	// -------------------------------------------------------------------------
 	// block_place_order (issue #725) — client-side-only place-order gate flag
 	// -------------------------------------------------------------------------
 

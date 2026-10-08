@@ -358,6 +358,17 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 	 * @covers \Woodev\Framework\Shipping\Location\Location_Service
 	 * @covers \Woodev\Framework\Shipping\Location\Location_Provider_Registry
 	 */
+	/** A service whose WooCommerce state list (code => label) a test chooses — the seam `native_states()` exists for. */
+	final class Default_Test_State_Service extends Location_Service {
+
+		/** @var array<string, string> */
+		public array $states = [];
+
+		protected function native_states( string $country ): array {
+			return $this->states;
+		}
+	}
+
 	final class LocationServiceDefaultTest extends TestCase {
 
 		protected function setUp(): void {
@@ -1315,6 +1326,88 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$still_stale = $registry->get_default_locality_record();
 			$this->assertNotNull( $still_stale );
 			$this->assertSame( 'prov-a:old-city', $still_stale->key(), 'a customer-facing getter must never REPLACE the merchant\'s stored default' );
+		}
+
+		// -------------------------------------------------------------------
+		// reresolve_stranded_record() — the one routine behind the `fixed` default AND the city limit (#1176)
+		// -------------------------------------------------------------------
+
+		public function test_a_record_its_provider_still_owns_is_given_back_untouched(): void {
+			$provider = new Default_Test_Fake_Provider( 'prov-a', static fn() => [] );
+			$this->stub_default_locality_options( 'prov-a' );
+			$service = $this->service( $this->activate( [ $provider ] ) );
+
+			$stored = $this->record( 'prov-a:city' );
+
+			$this->assertSame( $stored, $service->reresolve_stranded_record( $stored ) );
+			$this->assertCount( 0, $provider->suggest_calls, 'nothing to re-resolve, nothing asked' );
+		}
+
+		public function test_a_stranded_record_is_re_resolved_by_name_through_a_scope_stamped_for_the_new_provider(): void {
+			$narrowing = null;
+			$new       = new Default_Test_Fake_Provider(
+				'prov-b',
+				function ( string $query, Location_Scope $scope ) use ( &$narrowing ) {
+					// a provider reports how it narrowed on the scope it was handed; an unstamped scope refuses that
+					$scope->report_narrowing( \Woodev\Framework\Shipping\Location\Location_Provider::NARROWING_EXACT );
+					$narrowing = $scope->narrowing();
+
+					return [ $this->record( 'prov-b:new-city' ) ];
+				}
+			);
+			$this->stub_default_locality_options( 'prov-b' );
+			$service = $this->service( $this->activate( [ new Default_Test_Fake_Provider( 'prov-a', static fn() => [] ), $new ] ) );
+
+			$stored = $this->record( 'prov-a:old-city', Location_Record::LEVEL_SETTLEMENT, [ 'region' => [ 'name' => 'Московская область', 'type' => 'обл' ] ] );
+			$result = $service->reresolve_stranded_record( $stored );
+
+			$this->assertNotNull( $result );
+			$this->assertSame( 'prov-b:new-city', $result->key() );
+			$this->assertSame( \Woodev\Framework\Shipping\Location\Location_Provider::NARROWING_EXACT, $narrowing, 'the scope was stamped for prov-b' );
+		}
+
+		public function test_a_stranded_record_nobody_serves_any_more_is_null(): void {
+			$this->stub_default_locality_options( 'prov-b' );
+			$service = $this->service( $this->activate( [] ) );
+
+			$this->assertNull( $service->reresolve_stranded_record( $this->record( 'prov-a:old-city', Location_Record::LEVEL_SETTLEMENT, [ 'region' => [ 'name' => 'Московская область', 'type' => 'обл' ] ] ) ) );
+		}
+
+		public function test_a_name_that_matches_two_places_is_not_guessed(): void {
+			$new = new Default_Test_Fake_Provider(
+				'prov-b',
+				fn() => [ $this->record( 'prov-b:one' ), $this->record( 'prov-b:two' ) ]
+			);
+			$this->stub_default_locality_options( 'prov-b' );
+			$service = $this->service( $this->activate( [ new Default_Test_Fake_Provider( 'prov-a', static fn() => [] ), $new ] ) );
+
+			$this->assertNull( $service->reresolve_stranded_record( $this->record( 'prov-a:old-city', Location_Record::LEVEL_SETTLEMENT, [ 'region' => [ 'name' => 'Московская область', 'type' => 'обл' ] ] ) ) );
+		}
+
+		// -------------------------------------------------------------------
+		// wc_state_code_for_record() — which WooCommerce state a stored city sits in (#1176)
+		// -------------------------------------------------------------------
+
+		public function test_a_records_region_maps_to_the_woocommerce_state_the_chooser_would_write(): void {
+			$this->stub_default_locality_options( 'prov-a' );
+			$registry = $this->activate( [ new Default_Test_Fake_Provider( 'prov-a', static fn() => [] ) ] );
+			$service  = new Default_Test_State_Service( $registry, new Default_Test_Customer_Store_Probe( new Default_Test_Fake_Session() ) );
+
+			$service->states = [
+				'САНКТ-ПЕТЕРБУРГ' => 'Санкт-Петербург',
+				'ОМСКАЯ ОБЛАСТЬ'  => 'Омская область',
+			];
+
+			$spb  = $this->record( 'prov-a:spb', Location_Record::LEVEL_SETTLEMENT, [ 'region' => [ 'name' => 'Санкт-Петербург', 'type' => '' ] ] );
+			$omsk = $this->record( 'prov-a:omsk', Location_Record::LEVEL_SETTLEMENT, [ 'region' => [ 'name' => 'Омская', 'type' => 'обл' ] ] );
+			$none = $this->record( 'prov-a:nowhere', Location_Record::LEVEL_SETTLEMENT, [ 'region' => [ 'name' => 'Атлантида', 'type' => '' ] ] );
+
+			$this->assertSame( 'САНКТ-ПЕТЕРБУРГ', $service->wc_state_code_for_record( $spb ) );
+			$this->assertSame( 'ОМСКАЯ ОБЛАСТЬ', $service->wc_state_code_for_record( $omsk ) );
+			$this->assertNull( $service->wc_state_code_for_record( $none ), 'cannot be told' );
+
+			$service->states = [];
+			$this->assertNull( $service->wc_state_code_for_record( $spb ), 'a country with no WooCommerce states (DaData on RU)' );
 		}
 
 		/**

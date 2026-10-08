@@ -61,6 +61,7 @@
 namespace Woodev\Framework\Shipping\Rest_Api;
 
 use Woodev\Framework\Http\Rest_Rate_Limit_Trait;
+use Woodev\Framework\Shipping\Location\City_Limit;
 use Woodev\Framework\Shipping\Location\Customer_Location_Store;
 use Woodev\Framework\Shipping\Location\Location_Provider;
 use Woodev\Framework\Shipping\Location\Location_Record;
@@ -534,6 +535,37 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 					],
 				]
 			);
+
+			// #1176: the city limit's search. Admin-only, like the two routes above: the merchant picking the cities of a
+			// method's limit. Unlike /default-locality/suggest it takes the method INSTANCE, so the search stays inside the
+			// regions of that method's shipping zone — a scope an admin request cannot build from a customer chain.
+			register_rest_route(
+				'woodev/v1',
+				'/location/city-limit/suggest',
+				[
+					[
+						'methods'             => 'GET',
+						'callback'            => [ $this, 'handle_city_limit_suggest_request' ],
+						'permission_callback' => [ $this, 'check_admin_permission' ],
+						'args'                => [
+							'q'           => [
+								'type'              => 'string',
+								'required'          => true,
+								'validate_callback' => 'rest_validate_request_arg',
+							],
+							'instance_id' => [
+								'type'              => 'integer',
+								'default'           => 0,
+								'validate_callback' => 'rest_validate_request_arg',
+							],
+							'country'     => [
+								'type'              => 'string',
+								'validate_callback' => 'rest_validate_request_arg',
+							],
+						],
+					],
+				]
+			);
 		}
 
 		/**
@@ -747,6 +779,114 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 				'woodev_location_admin_sug_rl_',
 				'' === $provider_override ? null : $provider_override
 			);
+		}
+
+		/**
+		 * Handles the city limit's search (#1176): settlements matching `q`, inside the regions of the shipping zone the
+		 * method instance sits in.
+		 *
+		 * The zone's regions come from WooCommerce ({@see City_Limit::zone_scope()}); a zone that covers a whole country,
+		 * the «rest of the world» zone, an unknown instance, and a store whose provider injects no regions (DaData: no
+		 * Russian states in WooCommerce) all search the whole country. A zone with up to
+		 * {@see City_Limit::MAX_SEARCH_REGIONS} regions is searched region by region; a bigger one country-wide — and
+		 * either way the answer is filtered to the zone's regions, so the merchant is never offered a city the method
+		 * could never reach.
+		 *
+		 * Degrades like {@see self::perform_suggest()}: no provider for the level, or a country it does not cover, is a
+		 * `200` with no suggestions; a provider that throws is the same upstream error.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WP_REST_Request $request request object.
+		 *
+		 * @return \WP_REST_Response|\WP_Error|array{suggestions: array<int, array<string, mixed>>}
+		 */
+		public function handle_city_limit_suggest_request( \WP_REST_Request $request ) {
+			if ( $this->is_rate_limited( 'woodev_location_city_limit_rl_', self::SUGGEST_RATE_LIMIT_MAX ) ) {
+				return $this->rate_limited_error();
+			}
+
+			$query        = $this->normalize_param( $request->get_param( 'q' ) );
+			$query_length = $this->mb_length( $query );
+
+			if ( $query_length < self::MIN_QUERY_LENGTH || $query_length > self::MAX_PARAM_LENGTH ) {
+				return new \WP_Error(
+					'woodev_location_invalid_query',
+					__( 'Слишком короткий или слишком длинный поисковый запрос.', 'woodev-plugin-framework' ),
+					[ 'status' => 400 ]
+				);
+			}
+
+			$scope   = City_Limit::zone_scope( absint( $request->get_param( 'instance_id' ) ) );
+			$country = '' !== $scope['country'] ? $scope['country'] : strtoupper( $this->normalize_param( $request->get_param( 'country' ) ) );
+
+			if ( '' === $country ) {
+				$country = $this->service->resolve_default_country();
+			}
+
+			if ( ! $this->is_valid_country_format( $country ) ) {
+				return new \WP_Error(
+					'woodev_location_invalid_country',
+					__( 'Некорректный код страны.', 'woodev-plugin-framework' ),
+					[ 'status' => 400 ]
+				);
+			}
+
+			$level    = Location_Record::LEVEL_SETTLEMENT;
+			$provider = $this->service->provider_for_level( $level, $country );
+
+			if ( null === $provider || ! $this->service->is_country_supported( $country, $level ) ) {
+				return rest_ensure_response( [ 'suggestions' => [] ] );
+			}
+
+			$codes  = $scope['states'][ $country ] ?? [];
+			$labels = [] !== $codes && count( $codes ) <= City_Limit::MAX_SEARCH_REGIONS ? array_values( City_Limit::state_labels( $country, $codes ) ) : [];
+
+			try {
+				$found = [];
+
+				if ( [] === $labels ) {
+					$found[] = $provider->suggest( $query, Location_Scope::for_country( $country, $level )->for_provider( $provider->get_id() ) );
+				}
+
+				foreach ( $labels as $label ) {
+					$found[] = $provider->suggest(
+						$query,
+						Location_Scope::within_components(
+							$country,
+							$level,
+							[
+								'region' => [
+									'name' => $label,
+									'type' => '',
+								],
+							]
+						)->for_provider( $provider->get_id() )
+					);
+				}
+			} catch ( \Throwable $exception ) {
+				$this->log_failure( $provider->get_id(), 'suggest', $exception );
+
+				return $this->upstream_error();
+			}
+
+			$records = [];
+
+			foreach ( $found as $batch ) {
+				foreach ( $batch as $record ) {
+					if ( $record instanceof Location_Record
+						&& $level === $record->level()
+						&& ! isset( $records[ $record->key() ] )
+						&& City_Limit::in_zone( $record, $scope['states'], $this->service )
+					) {
+						$records[ $record->key() ] = $record;
+					}
+				}
+			}
+
+			return rest_ensure_response( [ 'suggestions' => $this->to_response_records( array_slice( array_values( $records ), 0, 20 ) ) ] );
 		}
 
 		/**

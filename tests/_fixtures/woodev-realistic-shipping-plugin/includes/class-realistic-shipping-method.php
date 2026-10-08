@@ -25,7 +25,7 @@ final class Woodev_Realistic_Shipping_Method extends Abstract_Woodev_Realistic_S
 		$this->instance_id        = absint( $instance_id );
 		$this->method_title       = 'Woodev Realistic Shipping';
 		$this->method_description = 'Realistic courier method for Platform v2 fixture testing.';
-		$this->supports           = [ 'shipping-zones', 'instance-settings', self::FEATURE_BOX_PACKING ];
+		$this->supports           = [ 'shipping-zones', 'instance-settings', self::FEATURE_BOX_PACKING, self::FEATURE_CITY_LIMIT ];
 
 		parent::__construct( $instance_id );
 	}

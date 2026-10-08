@@ -5648,4 +5648,67 @@ msgstr ""
 
 #: assets/build/shipping-orders-page/index.js
 msgid "Укажите время начала и окончания."
+
+#: shipping-method/location/class-city-limit.php:68
+msgid "Без ограничений"
+msgstr ""
+
+#: shipping-method/location/class-city-limit.php:69
+msgid "Доступен только в городах"
+msgstr ""
+
+#: shipping-method/location/class-city-limit.php:70
+msgid "Недоступен в городах"
+msgstr ""
+
+#: shipping-method/location/class-city-limit-form.php:114
+msgid "Ограничение по городам"
+msgstr ""
+
+#: shipping-method/location/class-city-limit-form.php:119
+msgid "Город определяется по тому, что покупатель выбрал при оформлении заказа. Пока город не выбран, способ доставки доступен."
+msgstr ""
+
+#: shipping-method/location/class-city-limit-form.php:123
+msgid "Города"
+msgstr ""
+
+#: shipping-method/location/class-city-limit-form.php:126
+msgid "Начните вводить название и выберите город из списка. Если в зоне доставки указаны регионы, поиск идёт только по ним."
+msgstr ""
+
+#: shipping-method/location/class-city-limit-form.php:251
+msgid "Часть городов не удалось сопоставить с текущим сервисом определения местоположения — они не учитываются. Удалите их и выберите заново."
+msgstr ""
+
+#: shipping-method/location/class-city-limit-form.php:255
+msgid "Сервис определения местоположения сменился: города подобраны заново по названию. Сохраните настройки, чтобы запомнить их."
+msgstr ""
+
+#: shipping-method/location/class-city-limit-form.php:259
+msgid "Регионы зоны доставки изменились: часть городов в них больше не входит и не учитывается."
+msgstr ""
+
+#: shipping-method/location/class-city-limit-form.php:263
+msgid "В зоне доставки указаны регионы, а поле региона убрано из формы оформления заказа — зона не сработает, пока покупатель не выберет регион."
+msgstr ""
+
+#: shipping-method/location/class-city-limit-form.php:269
+msgid "Поиск городов недоступен: настройте определение местоположения в настройках доставки."
+msgstr ""
+
+#: assets/build/shipping-zone-city-limit/index.js:1
+msgid "Не учитывается: город выбран для другого сервиса определения местоположения"
+msgstr ""
+
+#: assets/build/shipping-zone-city-limit/index.js:1
+msgid "Не учитывается: город не входит в регионы зоны доставки"
+msgstr ""
+
+#: assets/build/shipping-zone-city-limit/index.js:1
+msgid "Удалить город"
+msgstr ""
+
+#: assets/build/shipping-zone-city-limit/index.js:1
+msgid "Добавить город…"
 msgstr ""

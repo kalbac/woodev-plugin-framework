@@ -316,6 +316,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 				'field_policy'      => $this->build_field_policy(),
 				'block_place_order' => $this->resolve_block_place_order(),
 				'pickup_method_ids' => self::pickup_method_ids(),
+				// What `checkout-field-classic.js` matches the chosen method against to hide the address rows —
+				// the pickup methods PLUS WooCommerce's own pickup (see field_policy_pickup_method_ids()).
+				'field_policy_pickup_method_ids' => self::field_policy_pickup_method_ids(),
 			];
 
 			if ( null !== $this->location_service && $this->location_service->is_active() ) {
@@ -474,6 +477,51 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 			}
 
 			return array_values( array_unique( $ids ) );
+		}
+
+		/**
+		 * The method ids of WooCommerce's OWN pickup — the legacy «Самовывоз» (`local_pickup`) and, on a store whose
+		 * checkout page is the Checkout block, the block's `pickup_location`. WooCommerce keeps the list itself
+		 * (`woocommerce_local_pickup_methods`); this reads it, so a pickup method another extension adds there counts too.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string[]
+		 */
+		public static function core_pickup_method_ids(): array {
+			$ids = apply_filters( 'woocommerce_local_pickup_methods', [ 'legacy_local_pickup', 'local_pickup' ] );
+
+			return is_array( $ids ) ? array_values( array_unique( array_filter( array_map( 'strval', $ids ) ) ) ) : [];
+		}
+
+		/**
+		 * The method ids whose choice hides the address and postcode rows (`address_field` / `postcode_field` =
+		 * `hide_for_pickup`): the framework's own pickup methods PLUS WooCommerce's core pickup.
+		 *
+		 * A SEPARATE list from {@see self::pickup_method_ids()} on purpose. That one also answers «this method needs a
+		 * pickup POINT chosen» (the backstop in `Checkout_Handler`, the `is_pickup_method` condition, the Store API
+		 * adapter); core pickup has no point to choose, so adding it there would block its orders. This list answers
+		 * only «is the delivery address pointless now», which is as true of core pickup as of ours.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string[]
+		 */
+		public static function field_policy_pickup_method_ids(): array {
+			$ids = array_values( array_unique( array_merge( self::pickup_method_ids(), self::core_pickup_method_ids() ) ) );
+
+			/**
+			 * Filters the shipping method ids whose choice hides the address fields under «Скрывать для методов ПВЗ».
+			 *
+			 * Return the list without `local_pickup` to keep the address on WooCommerce's own «Самовывоз».
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param string[] $ids Method ids (no zone-instance suffix).
+			 */
+			$filtered = apply_filters( 'woodev_shipping_field_policy_pickup_method_ids', $ids );
+
+			return is_array( $filtered ) ? array_values( array_unique( array_map( 'strval', $filtered ) ) ) : $ids;
 		}
 
 		/**

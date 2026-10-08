@@ -25,7 +25,7 @@ final class Woodev_Realistic_Pickup_Shipping_Method extends Abstract_Woodev_Real
 		$this->instance_id        = absint( $instance_id );
 		$this->method_title       = 'Woodev Realistic Pickup Shipping';
 		$this->method_description = 'Realistic pickup method for Platform v2 fixture testing.';
-		$this->supports           = [ 'shipping-zones', 'instance-settings' ];
+		$this->supports           = [ 'shipping-zones', 'instance-settings', self::FEATURE_CITY_LIMIT ];
 
 		parent::__construct( $instance_id );
 	}
