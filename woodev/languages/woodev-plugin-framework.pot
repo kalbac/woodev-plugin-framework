@@ -4724,6 +4724,22 @@ msgstr ""
 msgid "Нет"
 msgstr ""
 
+#: shipping-method/class-shipping-method.php
+msgid "Учитывать страховку"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php
+msgid "Всегда"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php
+msgid "Только при оплате при получении"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php
+msgid "Включать страховку в стоимость доставки. Объявленная стоимость — стоимость товаров в этой посылке после скидок, без налогов и стоимости доставки."
+msgstr ""
+
 #: assets/build/shipping-orders-page/index.js:9
 #: assets/build/shipping-orders-page/index.js:14
 #: assets/build/shipping-orders-page/index.js:16

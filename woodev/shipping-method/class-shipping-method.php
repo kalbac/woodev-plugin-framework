@@ -55,8 +55,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		/** COD (cash-on-delivery) payment support feature. */
 		const FEATURE_COD = 'cod';
 
-		/** Insurance support feature. */
+		/** Insurance feature: adds the instance mode and the shared quote/order resolver. */
 		const FEATURE_INSURANCE = 'insurance';
+
+		/** Yandex's installed-site setting key and values, preserved for migration. */
+		const OPTION_INSURANCE = 'include_insurance';
+		const INSURANCE_NONE = 'none';
+		const INSURANCE_ALWAYS = 'always';
+		const INSURANCE_DELIVERY_PAYMENT = 'delivery_payment';
 
 		/** Declared-value support feature. */
 		const FEATURE_DECLARED_VALUE = 'declared-value';
@@ -94,8 +100,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		/**
 		 * The features whose declaration changes what {@see self::init_form_fields()} builds.
 		 *
-		 * Exactly these four gate a control there. The rest — the two framework features and the
-		 * three capability flags read by the host plugin — declare intent and shape no form, so
+		 * Exactly these five gate a control there. The rest declare intent and shape no form, so
 		 * {@see self::add_support()} must not pay for a rebuild on their account.
 		 *
 		 * @since 2.0.2
@@ -105,6 +110,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			self::FEATURE_BOX_PACKING,
 			self::FEATURE_FEE_PAYMENTS,
 			self::FEATURE_COST_LIMITS,
+			self::FEATURE_INSURANCE,
 		];
 
 		/**
@@ -390,6 +396,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 				];
 			}
 
+			if ( $this->supports_insurance() ) {
+
+				$this->instance_form_fields[ self::OPTION_INSURANCE ] = [
+					'title'    => __( 'Учитывать страховку', 'woodev-plugin-framework' ),
+					'type'     => 'select',
+					'class'    => 'wc-enhanced-select',
+					'default'  => $this->get_default_insurance_mode(),
+					'options'  => [
+						self::INSURANCE_NONE             => __( 'Нет', 'woodev-plugin-framework' ),
+						self::INSURANCE_ALWAYS           => __( 'Всегда', 'woodev-plugin-framework' ),
+						self::INSURANCE_DELIVERY_PAYMENT => __( 'Только при оплате при получении', 'woodev-plugin-framework' ),
+					],
+					'desc_tip' => __( 'Включать страховку в стоимость доставки. Объявленная стоимость — стоимость товаров в этой посылке после скидок, без налогов и стоимости доставки.', 'woodev-plugin-framework' ),
+				];
+			}
+
 			if ( $this->supports_cost_limits() ) {
 
 				$this->instance_form_fields[ self::OPTION_MIN_COST ] = [
@@ -453,7 +475,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			 *
 			 * This terminates. The second pass runs with the feature already in `supports`, so
 			 * a callback that declares it again is a no-op in `add_support()` and sets nothing
-			 * pending; and only four features shape the form at all, which bounds even a
+			 * pending; and only five features shape the form at all, which bounds even a
 			 * pathological callback that declares a different one each time.
 			 */
 			if ( $this->pending_form_rebuild ) {
@@ -1827,7 +1849,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 				$context['packing']['leftovers'] = $this->get_unpacked_algorithm();
 				$context['packing']['values'] = Packaging::get_value_context( (array) ( $package['contents'] ?? [] ) );
 			}
-			$context['payment']  = $this->payment_method_for_package( $package );
+			$context['payment'] = $this->payment_method_for_package( $package );
+
+			if ( $this->supports_insurance() ) {
+				$context['insurance'] = $this->resolve_insurance_for_package( $package );
+			}
 
 			$handler = $this->get_plugin()->get_pickup_handler();
 
@@ -1908,9 +1934,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		/**
 		 * Determines whether this method has declared support for shipment insurance.
 		 *
-		 * Named predicate over {@see self::FEATURE_INSURANCE}. Same backward-safety rule as
-		 * {@see self::supports_cod()}: declares intent only, never gates or removes framework
-		 * behaviour by itself, and a method that never opts in returns `false` unchanged.
+		 * Named predicate over {@see self::FEATURE_INSURANCE}. An opted-in method gets the
+		 * insurance mode control; an undeclared method's resolver always disables insurance.
 		 *
 		 * @since 2.0.2
 		 *
@@ -1918,6 +1943,124 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 */
 		public function supports_insurance(): bool {
 			return $this->supports( self::FEATURE_INSURANCE );
+		}
+
+		/**
+		 * Carrier-defined default for an unsaved instance; override with INSURANCE_ALWAYS for CDEK.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string One of the INSURANCE_* mode constants.
+		 */
+		protected function get_default_insurance_mode(): string {
+			return self::INSURANCE_NONE;
+		}
+
+		/**
+		 * Saved insurance mode, or the carrier's default before the first save.
+		 *
+		 * An invalid saved value disables insurance rather than accidentally adding a charge.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string One of the INSURANCE_* mode constants.
+		 */
+		public function get_insurance_mode(): string {
+			$mode = $this->get_option( self::OPTION_INSURANCE, $this->get_default_insurance_mode() );
+
+			return in_array( $mode, [ self::INSURANCE_NONE, self::INSURANCE_ALWAYS, self::INSURANCE_DELIVERY_PAYMENT ], true ) ? $mode : self::INSURANCE_NONE;
+		}
+
+		/**
+		 * Resolves insurance for a quote, using the same payment source as fee restrictions.
+		 *
+		 * No payment chosen yet disables the conditional mode, just like a restricted fee (#1144).
+		 * Goods are valued after discounts and excluding tax, shipping and fees: the package's
+		 * line_total values (already quantity-inclusive), or contents_cost for an aggregate package.
+		 * The amount is in the store currency; the carrier owns any API currency conversion.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array $package WooCommerce shipping package.
+		 * @return array{enabled: bool, declared_value: float} Zero declared value when disabled.
+		 */
+		public function resolve_insurance_for_package( array $package ): array {
+			if ( ! $this->supports_insurance() ) {
+				return $this->resolve_insurance( '', 0.0 );
+			}
+
+			return $this->resolve_insurance( $this->payment_method_for_package( $package ), Shipping_Helper::get_package_declared_value( $package ) );
+		}
+
+		/**
+		 * Resolves insurance for order creation through the same rule as the quote.
+		 *
+		 * Pass only this shipment's product lines for a split order; null means all shippable lines.
+		 * Reads the order's payment method directly, never the current shopper's session. Line totals
+		 * exclude tax and include discounts, matching the cart's line_total and CDEK's item cost.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order                     $order Order being shipped.
+		 * @param \WC_Order_Item_Product[]|null $items Shipment lines, or null for all shippable lines.
+		 * @return array{enabled: bool, declared_value: float} Zero declared value when disabled.
+		 */
+		public function resolve_insurance_for_order( \WC_Order $order, ?array $items = null ): array {
+			if ( ! $this->supports_insurance() ) {
+				return $this->resolve_insurance( '', 0.0 );
+			}
+
+			$contents = [];
+
+			foreach ( null === $items ? $order->get_items( 'line_item' ) : $items as $item ) {
+				if ( ! $item instanceof \WC_Order_Item_Product ) {
+					continue;
+				}
+
+				$product = $item->get_product();
+
+				if ( null === $items && ( ! $product || ! $product->needs_shipping() ) ) {
+					continue;
+				}
+
+				$contents[] = [ 'line_total' => $item->get_total() ];
+			}
+
+			return $this->resolve_insurance( (string) $order->get_payment_method(), Shipping_Helper::get_package_declared_value( [ 'contents' => $contents ] ) );
+		}
+
+		/**
+		 * Shared quote/order decision. The existing COD convention is `cod`; stores may add gateways.
+		 *
+		 * @param string $payment        Payment gateway id, or empty when not chosen.
+		 * @param float  $declared_value Goods value in store currency.
+		 * @return array{enabled: bool, declared_value: float}
+		 */
+		private function resolve_insurance( string $payment, float $declared_value ): array {
+			$enabled = false;
+
+			if ( $this->supports_insurance() ) {
+				$mode = $this->get_insurance_mode();
+				$enabled = self::INSURANCE_ALWAYS === $mode;
+
+				if ( self::INSURANCE_DELIVERY_PAYMENT === $mode && '' !== $payment ) {
+					/**
+					 * Payment gateway ids treated as payment on receipt for shipment insurance.
+					 *
+					 * @since 2.0.2
+					 *
+					 * @param string[]        $gateways COD gateway ids (default: cod).
+					 * @param Shipping_Method $method   Shipping method instance.
+					 */
+					$gateways = apply_filters( 'woodev_shipping_insurance_cod_gateways', [ 'cod' ], $this );
+					$enabled = in_array( $payment, Fee_Payments::normalize( $gateways ), true );
+				}
+			}
+
+			return [
+				'enabled' => $enabled,
+				'declared_value' => $enabled ? $declared_value : 0.0,
+			];
 		}
 
 		/**

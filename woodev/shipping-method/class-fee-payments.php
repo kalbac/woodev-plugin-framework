@@ -27,9 +27,10 @@ if ( ! class_exists( __NAMESPACE__ . '\Fee_Payments' ) ) :
 	 * 2. **A change of method recalculates.** The classic order form does not do it on its own and the
 	 *    block checkout only tells the server at the order POST; each gets a trigger — a small script
 	 *    (`fee-payments-classic.js`) and the `woodev-shipping-fee-payments` Store API update callback.
-	 * 3. **Only where somebody uses it.** A shop where no method restricts its fee keeps its package
+	 * 3. **Only where somebody uses it.** A shop where no method restricts its fee or uses insurance
+	 *    only for payment on receipt keeps its package
 	 *    hashes, its cache hits and its page weight exactly as they were: all three pieces above stay
-	 *    off until a saved instance carries a non-empty list.
+	 *    off until a saved instance carries a non-empty list or conditional insurance mode.
 	 *
 	 * «Somebody uses it» is a registry option, kept up to date from the option hooks, not a scan of
 	 * the registered methods: on a cold request WooCommerce collects the cart's packages BEFORE
@@ -56,7 +57,7 @@ if ( ! class_exists( __NAMESPACE__ . '\Fee_Payments' ) ) :
 		/** WooCommerce Blocks integration name; the data key WooCommerce publishes is `{name}_data`. */
 		public const INTEGRATION_NAME = 'woodev-shipping-fee-payments';
 
-		/** The registry: names of instance-settings options whose list is not empty. */
+		/** The registry: instance-settings options with a restricted fee or payment-dependent insurance. */
 		public const REGISTRY_OPTION = 'woodev_shipping_fee_payment_instances';
 
 		/** @var bool whether this request already wired the hooks */
@@ -148,7 +149,7 @@ if ( ! class_exists( __NAMESPACE__ . '\Fee_Payments' ) ) :
 		}
 
 		/**
-		 * Whether any saved shipping method instance limits its fee to payment methods.
+		 * Whether any saved instance needs payment-dependent fees or insurance.
 		 *
 		 * @since 2.0.2
 		 *
@@ -390,7 +391,10 @@ if ( ! class_exists( __NAMESPACE__ . '\Fee_Payments' ) ) :
 			}
 
 			$registry = self::registry();
-			$uses     = is_array( $value ) && [] !== self::normalize( $value[ self::OPTION_KEY ] ?? [] );
+			$uses     = is_array( $value ) && (
+				[] !== self::normalize( $value[ self::OPTION_KEY ] ?? [] ) ||
+				Shipping_Method::INSURANCE_DELIVERY_PAYMENT === ( $value[ Shipping_Method::OPTION_INSURANCE ] ?? '' )
+			);
 
 			if ( $uses === isset( $registry[ $option ] ) ) {
 				return;
