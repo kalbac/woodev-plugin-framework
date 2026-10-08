@@ -150,6 +150,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/class-shipping-rate-cache.php';
 			// «fee only for chosen payment methods» (#1144): the method's feature reads it, so it loads first
 			require_once $path . '/class-fee-payments.php';
+			require_once $path . '/class-instance-field-conditions.php';
 			require_once $path . '/class-shipping-method.php';
 			require_once $path . '/class-shipping-method-courier.php';
 			require_once $path . '/class-shipping-method-pickup.php';
@@ -393,7 +394,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			// …and the card styling for it. Every shipping plugin of the process hooks this
 			// with the same handle, so WordPress prints the one stylesheet once.
 			add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_additional_info_styles' ] );
-			add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_packing_settings_script' ] );
+			add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_instance_form_script' ] );
 
 			// register WC_Integration if configured
 			if ( $this->get_integration_handler() instanceof Settings\Shipping_Integration ) {
@@ -1041,20 +1042,30 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			return $this->packaging_settings;
 		}
 
-		public function enqueue_packing_settings_script(): void {
+		/**
+		 * Loads the script behind a Woodev method's instance form: `show_if` visibility
+		 * ({@see Instance_Field_Conditions}) and the enhanced-select fix for the zone modal.
+		 *
+		 * Enqueued on the shipping settings screen only — the one place a method's form renders, both as
+		 * the method's own page and as the modal WooCommerce opens from the zone screen.
+		 *
+		 * @since 2.0.2
+		 * @return void
+		 */
+		public function enqueue_instance_form_script(): void {
 			if ( ! isset( $_GET['page'], $_GET['tab'] ) || 'wc-settings' !== $_GET['page'] || 'shipping' !== $_GET['tab'] ) {
 				return;
 			}
 			// Several carrier plugins share this handle: the first one enqueues it and adds the inline script, the rest stop here.
-			if ( wp_script_is( 'woodev-packing-settings', 'enqueued' ) ) {
+			if ( wp_script_is( 'woodev-instance-field-conditions', 'enqueued' ) ) {
 				return;
 			}
-			$path = __DIR__ . '/assets/js/admin/packing-settings.js';
-			wp_enqueue_script( 'woodev-packing-settings', plugins_url( basename( $path ), $path ), [ 'jquery' ], (string) filemtime( $path ), true );
+			$path = __DIR__ . '/assets/js/admin/instance-field-conditions.js';
+			wp_enqueue_script( 'woodev-instance-field-conditions', plugins_url( basename( $path ), $path ), [ 'jquery' ], (string) filemtime( $path ), true );
 			// WooCommerce initialises .wc-product-search / .wc-enhanced-select on page load and on this event only; a method's
 			// settings open later in a WCBackboneModal whose wc_backbone_modal_loaded handler never fires it, so the selects stay plain.
 			wp_add_inline_script(
-				'woodev-packing-settings',
+				'woodev-instance-field-conditions',
 				"jQuery( document.body ).on( 'wc_backbone_modal_loaded', function () { jQuery( document.body ).trigger( 'wc-enhanced-select-init' ); } );"
 			);
 		}

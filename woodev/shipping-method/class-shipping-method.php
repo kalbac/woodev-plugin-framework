@@ -366,10 +366,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 					'default' => $packing_default,
 					'options' => $inherited_option + Settings\Packaging_Settings::leftover_options(),
 					'desc_tip' => __( 'Как упаковывать товары, которые не поместились в коробки?', 'woodev-plugin-framework' ),
-					'show_if' => [
-						'setting' => 'packing_algorithm',
-						'value' => 'boxes',
-					],
+					// «as in the plugin's settings» leaves the choice to the carrier default, which is read when the form is built
+					'show_if' => function (): array {
+						return $this->get_leftovers_show_if();
+					},
 				];
 			}
 
@@ -1098,7 +1098,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		}
 
 		/**
-		 * Adds the effective carrier default to the conditional leftovers control in WC zone forms.
+		 * Keeps the legacy «virtual» packing choice selectable while it is the stored one.
 		 *
 		 * @since 2.0.2
 		 * @param string $key field key.
@@ -1109,10 +1109,38 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			if ( 'packing_algorithm' === $key && 'virtual' === $this->get_option( 'packing_algorithm', 'default' ) ) {
 				$data['options']['virtual'] = __( 'Минимальная коробка', 'woodev-plugin-framework' );
 			}
-			if ( 'unpacked_algorithm' === $key ) {
-				$data['custom_attributes']['data-woodev-packing-default'] = $this->get_plugin()->get_packaging_settings()->get_default_algorithm( 'packing_algorithm' );
-			}
 			return parent::generate_select_html( $key, $data );
+		}
+
+		/**
+		 * The instance form fields, with each `show_if` declaration turned into the data attribute
+		 * `instance-field-conditions.js` reads ({@see Instance_Field_Conditions}).
+		 *
+		 * @since 2.0.2
+		 * @return array<string,array<string,mixed>>
+		 */
+		public function get_instance_form_fields() {
+			return Instance_Field_Conditions::apply( (array) parent::get_instance_form_fields(), [ $this, 'get_field_key' ] );
+		}
+
+		/**
+		 * When the «unpacked items» control is shown: only when boxes decide the packing. «As in the
+		 * plugin's settings» (or an empty value) defers to the carrier default, so it counts as boxes
+		 * exactly when that default is boxes.
+		 *
+		 * @since 2.0.2
+		 * @return array<string,mixed>
+		 */
+		protected function get_leftovers_show_if(): array {
+			$modes = [ 'boxes' ];
+			if ( 'boxes' === $this->get_plugin()->get_packaging_settings()->get_default_algorithm( 'packing_algorithm' ) ) {
+				$modes = [ 'boxes', 'default', '' ];
+			}
+			return [
+				'setting'  => 'packing_algorithm',
+				'operator' => 'in',
+				'value'    => $modes,
+			];
 		}
 
 		/**
