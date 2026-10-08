@@ -22,6 +22,7 @@ const HANDLES = [
 	'woodev-setup-wizard',
 	'woodev-settings-page',
 	'woodev-shipping-orders-page',
+	'woodev-city-limit',
 	'woodev-ui-kit-gallery',
 ];
 

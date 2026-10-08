@@ -1056,9 +1056,11 @@
 	// легитимное состояние (флот со старым PHP), а не ошибка: applyFieldPolicy()
 	// ниже трактует `null` как «политики нет» и не действует ни на одно поле.
 	var fieldPolicy       = fieldPolicyConfig ? fieldPolicyConfig.field_policy : null
-	var pickupMethodIds   = fieldPolicyConfig && Array.isArray( fieldPolicyConfig.pickup_method_ids )
-		? fieldPolicyConfig.pickup_method_ids
-		: []
+	// Id-ы, выбор которых прячет адрес/индекс: методы-ПВЗ плагинов И самовывоз самого WooCommerce
+	// (`field_policy_pickup_method_ids`). Конфиг старого PHP его не публикует — тогда прежний список ПВЗ.
+	var pickupMethodIds   = fieldPolicyConfig && Array.isArray( fieldPolicyConfig.field_policy_pickup_method_ids )
+		? fieldPolicyConfig.field_policy_pickup_method_ids
+		: ( fieldPolicyConfig && Array.isArray( fieldPolicyConfig.pickup_method_ids ) ? fieldPolicyConfig.pickup_method_ids : [] )
 
 	/**
 	 * Проверяет, соответствует ли выбранный метод доставки одному из pickup-id.

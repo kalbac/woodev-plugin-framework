@@ -10,6 +10,8 @@
 
 namespace Woodev\Framework\Shipping;
 
+use Woodev\Framework\Shipping\Location\City_Limit;
+use Woodev\Framework\Shipping\Location\City_Limit_Form;
 use Woodev\Framework\Shipping\Location\Location_Record;
 use Woodev\Framework\Shipping\Pickup\Point_Source;
 
@@ -98,9 +100,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		const OPTION_MAX_COST = 'max_cost';
 
 		/**
+		 * City-limit feature: the instance gets a mode («Доступен только в городах» / «Недоступен в городах») and
+		 * a list of cities, and the framework hides the method from a customer whose city the limit excludes
+		 * ({@see City_Limit}). OFF unless declared; a method with no customer-chosen city (a postal one that
+		 * ships anywhere) has no use for it. Needs the location layer to search cities.
+		 */
+		const FEATURE_CITY_LIMIT = 'city-limit';
+
+		/**
 		 * The features whose declaration changes what {@see self::init_form_fields()} builds.
 		 *
-		 * Exactly these five gate a control there. The rest declare intent and shape no form, so
+		 * Exactly these six gate a control there. The rest declare intent and shape no form, so
 		 * {@see self::add_support()} must not pay for a rebuild on their account.
 		 *
 		 * @since 2.0.2
@@ -111,6 +121,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			self::FEATURE_FEE_PAYMENTS,
 			self::FEATURE_COST_LIMITS,
 			self::FEATURE_INSURANCE,
+			self::FEATURE_CITY_LIMIT,
 		];
 
 		/**
@@ -429,6 +440,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 					'placeholder' => __( 'Не ограничено', 'woodev-plugin-framework' ),
 					'desc_tip'    => __( 'Если стоимость, рассчитанная перевозчиком, окажется выше этого значения, покупатель заплатит указанную сумму. Оставьте поле пустым, чтобы не ограничивать стоимость.', 'woodev-plugin-framework' ),
 				];
+			}
+
+			if ( $this->supports_city_limit() ) {
+
+				// the cities control is a custom field type; its renderer is hooked once for every method that uses it
+				City_Limit_Form::register();
+
+				$this->instance_form_fields = array_merge( $this->instance_form_fields, City_Limit_Form::fields() );
 			}
 
 			/**
@@ -941,6 +960,26 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 					sprintf( 'Shipping cost calculation for the "%s" method was stopped because the cart contains items that do not match the selected shipping class.', $this->get_title() ),
 					sprintf( '%s_%s', $this->get_plugin()->get_id(), $this->get_id() )
 				);
+			}
+
+			// A method with no limit set (the common case) never touches the location layer.
+			if ( $is_available && $this->supports_city_limit() && City_Limit::MODE_OFF !== City_Limit::normalize_mode( $this->get_option( City_Limit::OPTION_MODE, '' ) ) ) {
+
+				$is_available = City_Limit::permits(
+					$this->get_option( City_Limit::OPTION_MODE, '' ),
+					$this->get_option( City_Limit::OPTION_CITIES, '' ),
+					$this->get_plugin()->get_location_service(),
+					Shipping_Helper::get_package_country( $package ),
+					City_Limit::zone_scope( (int) $this->instance_id )
+				);
+
+				if ( ! $is_available ) {
+
+					$this->get_plugin()->log_debug(
+						sprintf( 'The shipping method %s is not available in the customer\'s city (city limit).', $this->get_title() ),
+						sprintf( '%s_%s', $this->get_plugin()->get_id(), $this->get_id() )
+					);
+				}
 			}
 
 			/**
@@ -1563,6 +1602,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 */
 		public function supports_cost_limits(): bool {
 			return $this->supports( self::FEATURE_COST_LIMITS );
+		}
+
+		/**
+		 * Determines whether this method can be limited to (or kept out of) cities.
+		 *
+		 * Named predicate over {@see self::FEATURE_CITY_LIMIT}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public function supports_city_limit(): bool {
+			return $this->supports( self::FEATURE_CITY_LIMIT );
 		}
 
 		/**

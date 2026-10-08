@@ -220,6 +220,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/location/class-location-resolution-cache.php';
 			require_once $path . '/location/class-location-service.php';
 
+			// #1176: the city limit of a method (and of WooCommerce's own «Самовывоз»). The decision, the instance-form
+			// control, and the store-wide hooks on core's method. Loaded unconditionally; inert until a method asks.
+			require_once $path . '/location/class-city-limit.php';
+			require_once $path . '/location/class-city-limit-form.php';
+			require_once $path . '/location/class-core-pickup-city-limit.php';
+
 			// popular settlements (default-locality suggestion + staleness verification)
 			require_once $path . '/location/class-popular-settlement-entry.php';
 			require_once $path . '/location/class-popular-settlement-store.php';
@@ -411,6 +417,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			// as the Location Provider declaration immediately below (it must run before
 			// Shipping_Settings_Tab's own `init` priority 25 registration hook fires).
 			Settings\Shipping_Settings_Tab::instance()->declare_shipping_plugin();
+
+			// #1176: the city limit on WooCommerce's own «Самовывоз». Store-wide and idempotent — the first shipping
+			// plugin to get here hooks it, the rest are a no-op; no plugin has to opt in.
+			Location\Core_Pickup_City_Limit::instance()->register();
 
 			// Location Provider layer (Task 3): declare need with the shared registry
 			// singleton so its activation gate opens and its store setting appears.
@@ -1058,6 +1068,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			if ( ! isset( $_GET['page'], $_GET['tab'] ) || 'wc-settings' !== $_GET['page'] || 'shipping' !== $_GET['tab'] ) {
 				return;
 			}
+			// The cities list of the city limit (#1176) — its own handle, so it is not held back by the guard below.
+			Location\City_Limit_Form::enqueue( $this );
 			// Several carrier plugins share this handle: the first one enqueues it and adds the inline script, the rest stop here.
 			if ( wp_script_is( 'woodev-instance-field-conditions', 'enqueued' ) ) {
 				return;

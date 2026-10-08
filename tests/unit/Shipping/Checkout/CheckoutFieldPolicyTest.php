@@ -578,6 +578,85 @@ final class CheckoutFieldPolicyTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------------
+	// WooCommerce's own «Самовывоз» hides the address rows too (#1176)
+	// -------------------------------------------------------------------------
+
+	/**
+	 * End to end through the real `pickup_method_chosen()`: the session holds `local_pickup:262`, no framework pickup
+	 * method exists, and `address_field` is `hide_for_pickup` — the row the browser hides must stop being required, or
+	 * the order is refused on a field nobody can see (gotcha `js-hidden-checkout-field-is-still-required-server-side`).
+	 *
+	 * Isolated in its own process: a mocked `WC()` outlives the test otherwise (see the sibling tests above).
+	 *
+	 * @dataProvider chosen_methods
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 *
+	 * @param string $chosen        The chosen shipping method (rate id).
+	 * @param bool   $address_stays Whether the address stays required.
+	 */
+	public function test_choosing_core_local_pickup_relaxes_the_address_requirement( string $chosen, bool $address_stays ): void {
+		Functions\when( 'add_filter' )->justReturn( true );
+		Functions\when( 'WC' )->justReturn(
+			new class( $chosen ) {
+				public $session;
+				public $countries;
+				private $chosen;
+
+				public function __construct( string $chosen ) {
+					$this->chosen    = $chosen;
+					$this->session   = new class( $chosen ) {
+						private $chosen;
+
+						public function __construct( string $chosen ) {
+							$this->chosen = $chosen;
+						}
+
+						public function get( $key ) {
+							return 'chosen_shipping_methods' === $key ? [ $this->chosen ] : null;
+						}
+					};
+					$this->countries = new class() {
+						public function get_default_address_fields(): array {
+							return [];
+						}
+					};
+				}
+
+				public function shipping() {
+					return new class() {
+						public function get_shipping_methods(): array {
+							return [];
+						}
+					};
+				}
+			}
+		);
+
+		$policy = Checkout_Field_Policy::instance();
+		$policy->register( $this->settings_handler( [ 'address_field' => 'hide_for_pickup' ] ) );
+
+		$out = $policy->filter_checkout_fields(
+			[
+				'billing'  => [ 'billing_address_1' => [ 'required' => true ] ],
+				'shipping' => [ 'shipping_address_1' => [ 'required' => true ] ],
+			]
+		);
+
+		$this->assertSame( $address_stays, $out['shipping']['shipping_address_1']['required'] );
+		$this->assertSame( $address_stays, $out['billing']['billing_address_1']['required'] );
+	}
+
+	/** @return array<string, array{0: string, 1: bool}> */
+	public function chosen_methods(): array {
+		return [
+			'core local pickup'  => [ 'local_pickup:262', false ],
+			'a courier rate'     => [ 'flat_rate:261', true ],
+			'a lookalike prefix' => [ 'local_pickup_plus:1', true ],
+		];
+	}
+
+	// -------------------------------------------------------------------------
 	// filter_checkout_fields() end-to-end — restoration is persisted (S8)
 	// -------------------------------------------------------------------------
 
