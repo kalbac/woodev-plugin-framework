@@ -293,8 +293,8 @@ abstract class Setup_Wizard {
 	public function complete_setup( string $state = 'completed' ): string {
 		$value = 'skipped' === $state ? 'skipped' : 'completed';
 
-		// Read the stored value, not the per-request cache: the guard must see what
-		// another request may have written meanwhile.
+		// Read the option, not this wizard's `$state` cache (WordPress's own option cache still
+		// applies). Not atomic: two overlapping requests can race, which D1 tolerates.
 		if ( 'skipped' === $value && 'completed' === (string) get_option( $this->get_complete_option_name(), '' ) ) {
 			$this->state = 'completed';
 
