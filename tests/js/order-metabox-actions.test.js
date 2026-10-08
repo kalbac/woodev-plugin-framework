@@ -288,6 +288,63 @@ describe( 'order-metabox-actions — an action with input fields', () => {
 		expect( submitSpy ).not.toHaveBeenCalled();
 	} );
 
+	/**
+	 * The real thing: the labels include `range`, the submit button is CLICKED (so the browser's own validation runs
+	 * first and refuses a submit while a custom error stands), the window is in bounds but reversed.
+	 */
+	it( 'lets a corrected window through: the custom error is recomputed as the times are edited', () => {
+		const button = renderWithFields();
+		const labels = { ...LABELS, range: 'Время окончания должно быть позже времени начала.' };
+
+		button.setAttribute( 'data-labels', JSON.stringify( labels ) );
+		button.click();
+
+		const from = dialog().querySelector( '[name="payload[window][from]"]' );
+		const to = dialog().querySelector( '[name="payload[window][to]"]' );
+		const submit = dialog().querySelector( 'button[type="submit"]' );
+		const edit = ( input, value ) => {
+			input.value = value;
+			input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+		};
+
+		edit( from, '18:00' );
+		edit( to, '10:00' );
+		submit.click();
+
+		expect( submitSpy ).not.toHaveBeenCalled();
+		expect( to.validationMessage ).toBe( labels.range );
+
+		edit( to, '20:00' );
+
+		expect( to.validity.customError ).toBe( false );
+
+		submit.click();
+
+		expect( submitSpy ).toHaveBeenCalledTimes( 1 );
+		expect( fields( submitSpy.mock.instances[ 0 ] ) ).toMatchObject( {
+			'payload[window][from]': '18:00',
+			'payload[window][to]': '20:00',
+		} );
+
+		submit.click();
+
+		expect( submitSpy ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'a reversed window is flagged as soon as it is typed, before any submit', () => {
+		const button = renderWithFields();
+
+		button.setAttribute( 'data-labels', JSON.stringify( { ...LABELS, range: 'Конец должен быть позже начала.' } ) );
+		button.click();
+
+		const to = dialog().querySelector( '[name="payload[window][to]"]' );
+
+		to.value = '09:00'; // equals the default start: not later than it
+		to.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+
+		expect( to.validationMessage ).toBe( 'Конец должен быть позже начала.' );
+	} );
+
 	it( 'closes on cancel without posting', () => {
 		renderWithFields().click();
 

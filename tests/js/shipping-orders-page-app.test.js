@@ -3844,6 +3844,52 @@ describe( 'an action with input fields (#1180)', () => {
 		expect( performOrderAction ).not.toHaveBeenCalled();
 	} );
 
+	/**
+	 * A request may only close the dialog it OWNS. While order 42's plain «Обновить» is pending, the merchant opens
+	 * and fills in the courier dialog of order 43; 42's answer — success or failure — must leave it alone.
+	 */
+	describe.each( [
+		[ 'resolves', ( reject, resolve ) => resolve( { row: makeRow( { id: 42, actions: [] } ), message: 'Обновлено.' } ) ],
+		[ 'fails', ( reject ) => reject( { message: 'СДЭК недоступен.' } ) ],
+	] )( 'a plain action on another order that %s', ( _name, settle ) => {
+		test( 'leaves an open, edited input dialog and its values alone', async () => {
+			fetchOrders.mockResolvedValue(
+				resultOf( [
+					makeRow( { id: 42, actions: [ { action: 'update', label: 'Обновить', title: '', destructive: false } ] } ),
+					courierRow( { id: 43, order_number: '43' } ),
+				] )
+			);
+
+			let resolveA;
+			let rejectA;
+
+			performOrderAction.mockReturnValue(
+				new Promise( ( resolve, reject ) => {
+					resolveA = resolve;
+					rejectA = reject;
+				} )
+			);
+
+			render( <App /> );
+			fireEvent.click( await screen.findByRole( 'button', { name: 'Обновить' } ) );
+			expect( performOrderAction ).toHaveBeenCalledWith( 42, 'update' );
+
+			fireEvent.click( screen.getByRole( 'button', { name: 'Вызвать курьера' } ) );
+
+			const dialog = await screen.findByRole( 'dialog' );
+
+			fireEvent.change( within( dialog ).getByLabelText( 'Комментарий курьеру' ), { target: { value: 'Позвонить за час' } } );
+
+			await act( async () => {
+				settle( rejectA, resolveA );
+			} );
+
+			expect( screen.getByRole( 'dialog' ) ).toBeInTheDocument();
+			expect( within( screen.getByRole( 'dialog' ) ).getByLabelText( 'Комментарий курьеру' ) ).toHaveValue( 'Позвонить за час' );
+			expect( performOrderAction ).toHaveBeenCalledTimes( 1 );
+		} );
+	} );
+
 	test( 'the preview lists the extra lines a plugin added', async () => {
 		fetchOrderPreview.mockResolvedValue( {
 			id: 42,

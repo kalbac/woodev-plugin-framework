@@ -190,6 +190,13 @@
 
 				inputs.to.setCustomValidity( message );
 			};
+
+			// Recomputed as either end is edited, not only on submit: the browser refuses a submit while a custom error
+			// stands and fires no submit event then, so a check that ran only there could never clear its own error.
+			[ inputs.from, inputs.to ].forEach( function ( input ) {
+				input.addEventListener( 'input', checks );
+				input.addEventListener( 'change', checks );
+			} );
 		} else {
 			control = el( 'input', 'woodev-action-form__control' );
 			control.type = 'date';

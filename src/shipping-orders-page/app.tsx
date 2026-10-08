@@ -1877,6 +1877,15 @@ export default function OrdersPage() {
 			} );
 	};
 
+	/**
+	 * A request may only close the input dialog it owns (#1180): the one opened for THIS order and action. A slow
+	 * «Обновить» on order A settling while the merchant fills in the courier dialog of order B must not take B's values.
+	 */
+	const closeActionInputOf = ( row: ActionableOrder, action: OrderRowAction ) =>
+		setActionInput( ( current ) =>
+			current && current.row.id === row.id && current.action.action === action.action ? null : current
+		);
+
 	const performAction = ( row: ActionableOrder, action: OrderRowAction, payload?: OrderActionPayload ) => {
 		if ( 'waybill' === action.action || 'barcode' === action.action ) {
 			downloadDocument( row, action.action );
@@ -1897,8 +1906,8 @@ export default function OrdersPage() {
 			? performOrderAction( row.id, action.action, payload )
 			: performOrderAction( row.id, action.action ) )
 			.then( ( res ) => {
-				// #1180: the dialog of an action with fields closes with the action.
-				setActionInput( null );
+				// #1180: the dialog of an action with fields closes with the action — THIS action's dialog only.
+				closeActionInputOf( row, action );
 				setActionNotice( { status: 'success', text: res.message } );
 				dispatch( noticesStore ).createSuccessNotice( res.message, { type: 'snackbar' } );
 
@@ -1950,7 +1959,7 @@ export default function OrdersPage() {
 				if ( payload && 'woodev_shipping_order_locked' !== err?.code ) {
 					setActionInputMessage( text );
 				} else {
-					setActionInput( null );
+					closeActionInputOf( row, action );
 				}
 				setActionRowStates( ( current ) => {
 					const next = { ...current };
