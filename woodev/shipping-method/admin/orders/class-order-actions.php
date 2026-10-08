@@ -157,6 +157,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		 *     'label'       => string,  // button text, Russian.
 		 *     'title'       => string,  // tooltip; '' when none.
 		 *     'destructive' => bool,    // true => the client confirms first.
+		 *     'fields'      => array,   // optional (#1180): the input the action asks for, {@see Order_Action_Fields}.
 		 * ]
 		 */
 		public function for_order( \WC_Order $order, ?Orders_Provider $provider ): array {
@@ -350,6 +351,56 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		}
 
 		/**
+		 * The input fields one action of an already computed action set declares ({@see Order_Action_Fields}).
+		 *
+		 * Takes the set the caller has just gated on rather than asking {@see self::for_order()} again:
+		 * the `woodev_shipping_order_actions` filter runs on every call, and the declaration that is
+		 * validated against must be the one that was offered.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<int,array<string,mixed>> $offered the set {@see self::for_order()} returned.
+		 * @param string                         $action  the action id.
+		 * @return array<int,array<string,mixed>> the sanitised field list; `[]` when the action declares none or is not in the set.
+		 */
+		public static function fields_of( array $offered, string $action ): array {
+			foreach ( $offered as $entry ) {
+				if ( ( $entry['action'] ?? null ) === $action ) {
+					return $entry['fields'] ?? [];
+				}
+			}
+
+			return [];
+		}
+
+		/**
+		 * Checks a posted payload against the fields the offered action declares — the ONE place the
+		 * REST route and the metabox turn what a merchant typed into what {@see self::perform()} takes.
+		 *
+		 * An action that declares no fields yields an empty payload whatever was posted: nothing
+		 * undeclared is forwarded to a handler.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<int,array<string,mixed>> $offered the set {@see self::for_order()} returned.
+		 * @param string                         $action  the action id.
+		 * @param mixed                          $raw     the posted payload, of unknown shape.
+		 * @return array{values: array<string,mixed>, errors: array<int,array{field:string,code:string,message:string}>}
+		 */
+		public static function resolve_payload( array $offered, string $action, $raw ): array {
+			$fields = self::fields_of( $offered, $action );
+
+			if ( [] === $fields ) {
+				return [
+					'values' => [],
+					'errors' => [],
+				];
+			}
+
+			return Order_Action_Fields::validate( $fields, $raw );
+		}
+
+		/**
 		 * Whether «Отменить» is on offer for the order's state — the gate of the button, without the
 		 * native edit lock that {@see self::for_order()} also applies (#1007).
 		 *
@@ -397,14 +448,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		 * @since 2.0.2 Card #872: returns an {@see Action_Result}; the filter's value is an
 		 *              `Action_Result` too, and anything else a callback returns is treated as a failure.
 		 * @since 2.0.2 Card #974: moved here from `Orders_Controller::dispatch_action()`, unchanged.
+		 * @since 2.0.2 Card #1180: takes the action's validated `$payload`, passed on to the filter below.
 		 *
 		 * @param Abstract_Shipment_Handler $handler  handler resolved for the order's carrier.
 		 * @param \WC_Order                 $order    the order.
 		 * @param string                    $action   one of this class's action ids, or a carrier extra.
 		 * @param Orders_Provider           $provider the matched carrier descriptor.
+		 * @param array<string,mixed>       $payload  the values the action's declared `fields` collected, ALREADY validated by
+		 *                                            the caller against that declaration ({@see self::resolve_payload()}); `[]`
+		 *                                            for an action that declares none. Reaches a carrier's own action through the
+		 *                                            `woodev_shipping_perform_order_action` filter; the framework's three verbs
+		 *                                            take no input and ignore it.
 		 * @return Action_Result
 		 */
-		public function perform( Abstract_Shipment_Handler $handler, \WC_Order $order, string $action, Orders_Provider $provider ): Action_Result {
+		public function perform( Abstract_Shipment_Handler $handler, \WC_Order $order, string $action, Orders_Provider $provider, array $payload = [] ): Action_Result {
 			switch ( $action ) {
 				case self::EXPORT:
 					[ $settlement, $settlement_provider ] = $this->resolve_popular_settlement_context( $order );
@@ -436,13 +493,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 					 *
 					 * @since 2.0.2
 					 * @since 2.0.2 Card #872: the value is an {@see Action_Result}, not a bool.
+					 * @since 2.0.2 Card #1180: the fifth argument, `$payload` — what the action's declared `fields` collected.
 					 *
-					 * @param Action_Result   $result   the outcome so far; default a failure with no text.
-					 * @param string          $action   the action id, as declared by the carrier's filter.
-					 * @param \WC_Order       $order    the order the action was requested for.
-					 * @param Orders_Provider $provider the matched carrier descriptor.
+					 * @param Action_Result       $result   the outcome so far; default a failure with no text.
+					 * @param string              $action   the action id, as declared by the carrier's filter.
+					 * @param \WC_Order           $order    the order the action was requested for.
+					 * @param Orders_Provider     $provider the matched carrier descriptor.
+					 * @param array<string,mixed> $payload  the validated values, keyed by field id: a `date` is `'Y-m-d'`, a
+					 *                                      `select` an option value, a `time_range` `[ 'from' => 'H:i', 'to' => 'H:i' ]`,
+					 *                                      a `textarea` a string; an empty optional field is `''` (a time range with
+					 *                                      empty `from` and `to`). `[]` for an action that declares no fields.
 					 */
-					$result = apply_filters( 'woodev_shipping_perform_order_action', Action_Result::failure(), $action, $order, $provider );
+					$result = apply_filters( 'woodev_shipping_perform_order_action', Action_Result::failure(), $action, $order, $provider, $payload );
 
 					return $result instanceof Action_Result ? $result : Action_Result::failure();
 			}
@@ -859,6 +921,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 
 				if ( isset( $action['lock_owner'] ) && is_string( $action['lock_owner'] ) ) {
 					$sanitized[ count( $sanitized ) - 1 ]['lock_owner'] = $action['lock_owner'];
+				}
+
+				// #1180: an action that needs input declares it; an action with none keeps exactly the shape it always had.
+				$fields = Order_Action_Fields::sanitize( $action['fields'] ?? null );
+
+				if ( [] !== $fields ) {
+					$sanitized[ count( $sanitized ) - 1 ]['fields'] = $fields;
 				}
 			}
 

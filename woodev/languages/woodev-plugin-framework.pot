@@ -5595,3 +5595,57 @@ msgstr ""
 #: shipping-method/class-shipping-method.php:1655
 msgid "Минимальная стоимость доставки не может быть больше максимальной. Значения не сохранены."
 msgstr ""
+
+#: shipping-method/admin/class-shipping-admin-order.php
+msgid "Действие не выполнено — проверьте заполнение полей."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-action-fields.php
+msgid "Заполните это поле."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-action-fields.php
+msgid "Значение вне допустимых пределов."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-action-fields.php
+msgid "Выберите значение из списка."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-action-fields.php
+msgid "Время окончания должно быть позже времени начала."
+msgstr ""
+
+#. translators: %d: the longest the text may be, in characters.
+#: shipping-method/admin/orders/class-order-action-fields.php
+#, php-format
+msgid "Не больше %d символов."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-action-fields.php
+msgid "Проверьте значение."
+msgstr ""
+
+#: shipping-method/admin/views/html-admin-order-metabox.php
+msgid "с"
+msgstr ""
+
+#: shipping-method/admin/views/html-admin-order-metabox.php
+msgid "до"
+msgstr ""
+
+#: shipping-method/admin/views/html-admin-order-metabox.php
+msgid "— не выбрано —"
+msgstr ""
+
+#: shipping-method/admin/views/html-admin-order-metabox.php
+msgid "обязательное поле"
+msgstr ""
+
+#: shipping-method/rest-api/class-orders-controller.php
+msgid "Проверьте заполнение полей."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js
+msgid "Укажите время начала и окончания."
+msgstr ""

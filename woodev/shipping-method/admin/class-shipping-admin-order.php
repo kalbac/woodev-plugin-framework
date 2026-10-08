@@ -401,7 +401,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 				];
 			}
 
-			return $fields;
+			/**
+			 * Filters the lines the order-edit metabox lists for an EXPORTED order (#1180) — the way a carrier
+			 * plugin shows what only it knows next to «Статус доставки», e.g. «Заявка на курьера: № … (статус)».
+			 *
+			 * Each line is `[ 'label' => string, 'value' => string, 'url' => string|null (optional, makes the
+			 * value a link), 'tone' => string (optional, shows the value as a status badge) ]`. A malformed line,
+			 * or one with an empty label or value, is dropped. A plugin serving several carriers checks
+			 * `$provider->get_id()` first.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param array<int,array{label:string,value:string,url:string|null,tone?:string}> $fields   the lines the framework built.
+			 * @param \WC_Order                                                                 $order    the order.
+			 * @param Orders_Provider                                                           $provider the matched carrier.
+			 */
+			$filtered = apply_filters( 'woodev_shipping_order_metabox_fields', $fields, $order, $provider );
+
+			return is_array( $filtered ) ? Order_Row_Builder::sanitize_display_fields( $filtered ) : $fields;
 		}
 
 		/**
@@ -526,6 +543,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 
 			$order_id = isset( $_POST['order_id'] ) ? absint( wp_unslash( $_POST['order_id'] ) ) : 0;
 			$action   = isset( $_POST['woodev_shipping_order_action'] ) ? sanitize_key( wp_unslash( $_POST['woodev_shipping_order_action'] ) ) : '';
+			// #1180: the values of an action's declared fields — `payload[<id>]`, a time range `payload[<id>][from|to]`.
+			// Unslashed here and checked field by field against the declaration in perform_action(); an undeclared key is dropped there.
+			$payload  = isset( $_POST['payload'] ) && is_array( $_POST['payload'] ) ? wp_unslash( $_POST['payload'] ) : []; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- validated per declared field by Order_Action_Fields.
 			$order    = wc_get_order( $order_id );
 			$provider = $order instanceof \WC_Order ? $this->registry->resolve_provider_for_order( $order ) : null;
 
@@ -534,7 +554,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 				$handler = $this->registry->get_shipment_handler( $provider->get_id() );
 
 				if ( null !== $handler ) {
-					$this->perform_action( $handler, $order, $action, $provider );
+					$this->perform_action( $handler, $order, $action, $provider, $payload );
 				}
 			}
 
@@ -573,20 +593,32 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 		 * @param \WC_Order                 $order    the order.
 		 * @param string                    $action   one of {@see Order_Actions}' action ids.
 		 * @param Orders_Provider           $provider the matched carrier descriptor.
+		 * @param array<string,mixed>       $payload  the posted values of the action's declared fields (#1180), unvalidated.
 		 * @return void
 		 */
-		private function perform_action( Abstract_Shipment_Handler $handler, \WC_Order $order, string $action, Orders_Provider $provider ): void {
+		private function perform_action( Abstract_Shipment_Handler $handler, \WC_Order $order, string $action, Orders_Provider $provider, array $payload = [] ): void {
 
 			$order_actions = $this->order_actions();
+			$offered       = $order_actions->for_order( $order, $provider );
 
-			if ( ! $order_actions->is_offered( $order, $provider, $action ) ) {
+			if ( ! in_array( $action, array_column( $offered, 'action' ), true ) ) {
 				$this->flash_notice( $order_actions->unavailable_reason( $order, $provider, $action ) );
 
 				return;
 			}
 
+			// #1180: the same check as the REST route. The metabox dialog stops an empty required field in the
+			// browser, so a miss here is a stale page or a hand-made post — one notice naming each field.
+			$resolved = Order_Actions::resolve_payload( $offered, $action, $payload );
+
+			if ( [] !== $resolved['errors'] ) {
+				$this->flash_notice( self::payload_errors_message( $resolved['errors'], Order_Actions::fields_of( $offered, $action ) ) );
+
+				return;
+			}
+
 			try {
-				$result = $order_actions->perform( $handler, $order, $action, $provider );
+				$result = $order_actions->perform( $handler, $order, $action, $provider, $resolved['values'] );
 			} catch ( \Throwable $exception ) {
 				self::log_action_failure( $provider->get_id(), $action, $exception );
 
@@ -600,6 +632,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 				// (#872, #608/#610). No text from the carrier → the generic sentence.
 				$this->flash_notice( $result->merchant_message( $provider->get_label(), self::action_failure_message( $action ) ) );
 			}
+		}
+
+		/**
+		 * One notice for a payload that failed validation — each wrong field by its label, the reason after it.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<int,array{field:string,code:string,message:string}> $errors the per-field errors.
+		 * @param array<int,array<string,mixed>>                            $fields the action's declared fields, for the labels.
+		 * @return string
+		 */
+		private static function payload_errors_message( array $errors, array $fields ): string {
+			$labels = array_column( $fields, 'label', 'id' );
+			$lines  = [];
+
+			foreach ( $errors as $error ) {
+				// Punctuation only — nothing to translate around the two sentences.
+				$lines[] = '«' . ( $labels[ $error['field'] ] ?? $error['field'] ) . '»: ' . $error['message'];
+			}
+
+			return __( 'Действие не выполнено — проверьте заполнение полей.', 'woodev-plugin-framework' ) . ' ' . implode( ' ', $lines );
 		}
 
 		/**

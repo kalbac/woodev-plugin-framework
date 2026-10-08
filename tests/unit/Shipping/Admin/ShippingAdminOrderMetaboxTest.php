@@ -762,13 +762,13 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 		 * Invokes the private perform_action() — see the class docblock for why
 		 * this is reflection rather than a call through handle_order_action().
 		 */
-		private function invoke_perform_action( Shipping_Admin_Order $admin_order, Abstract_Shipment_Handler $handler, \WC_Order $order, string $action, Orders_Provider $provider ): void {
+		private function invoke_perform_action( Shipping_Admin_Order $admin_order, Abstract_Shipment_Handler $handler, \WC_Order $order, string $action, Orders_Provider $provider, array $payload = [] ): void {
 			$method = new \ReflectionMethod( Shipping_Admin_Order::class, 'perform_action' );
 			if ( PHP_VERSION_ID < 80100 ) {
 				$method->setAccessible( true );
 			}
 
-			$method->invoke( $admin_order, $handler, $order, $action, $provider );
+			$method->invoke( $admin_order, $handler, $order, $action, $provider, $payload );
 		}
 
 		/**
@@ -949,7 +949,7 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$order                            = $this->make_order( [ 'get_status' => 'processing' ] );
 
 			$performer = Mockery::mock( Order_Actions::class, [ Orders_Registry::instance() ] )->makePartial();
-			$performer->shouldReceive( 'perform' )->once()->with( $handler, $order, Order_Actions::CANCEL, $provider )->andReturn( Action_Result::success() );
+			$performer->shouldReceive( 'perform' )->once()->with( $handler, $order, Order_Actions::CANCEL, $provider, [] )->andReturn( Action_Result::success() );
 
 			$admin    = new Shipping_Admin_Order( Orders_Registry::instance() );
 			$property = new \ReflectionProperty( Shipping_Admin_Order::class, 'order_actions' );
@@ -964,6 +964,219 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$this->invoke_perform_action( $admin, $handler, $order, Order_Actions::CANCEL, $provider );
 
 			$this->assertSame( [], $this->flashed_notices, 'the performer\'s success is the whole outcome — nothing is flashed' );
+		}
+
+		// -----------------------------------------------------------------------
+		// #1180 — an action with input fields, and the lines a plugin adds to the box.
+		// -----------------------------------------------------------------------
+
+		/** The courier call: a day and an optional comment, declared through the real `woodev_shipping_order_actions` seam. */
+		private function declare_courier_action( ?callable $extra = null ): void {
+			Functions\when( 'sanitize_textarea_field' )->alias(
+				static function ( string $text ): string {
+					return strip_tags( $text );
+				}
+			);
+			Functions\when( 'apply_filters' )->alias(
+				static function ( string $hook, $value, ...$args ) use ( $extra ) {
+					if ( 'woodev_shipping_order_actions' === $hook ) {
+						$value[] = [
+							'action'      => 'call_courier',
+							'label'       => 'Вызвать курьера',
+							'title'       => '',
+							'destructive' => false,
+							'fields'      => [
+								[
+									'id'       => 'day',
+									'type'     => 'date',
+									'label'    => 'День',
+									'required' => true,
+									'min'      => '2026-10-12',
+								],
+								[
+									'id'        => 'comment',
+									'type'      => 'textarea',
+									'label'     => 'Комментарий',
+									'maxlength' => 20,
+								],
+							],
+						];
+					}
+
+					return null !== $extra ? $extra( $hook, $value, ...$args ) : $value;
+				}
+			);
+		}
+
+		public function test_perform_action_hands_the_validated_payload_to_the_dispatcher(): void {
+			$provider = $this->provider();
+			$handler  = $this->register_handler();
+
+			$this->meta['_wc_cdek_order_id'] = 'CARRIER-1';
+			$order                            = $this->make_order( [ 'get_status' => 'processing' ] );
+			$this->declare_courier_action();
+
+			$performer = Mockery::mock( Order_Actions::class, [ Orders_Registry::instance() ] )->makePartial();
+			$performer->shouldReceive( 'perform' )->once()->with(
+				$handler,
+				$order,
+				'call_courier',
+				$provider,
+				[
+					'day'     => '2026-10-13',
+					'comment' => '',
+				]
+			)->andReturn( Action_Result::success() );
+
+			$admin    = new Shipping_Admin_Order( Orders_Registry::instance() );
+			$property = new \ReflectionProperty( Shipping_Admin_Order::class, 'order_actions' );
+			if ( PHP_VERSION_ID < 80100 ) {
+				$property->setAccessible( true );
+			}
+			$property->setValue( $admin, $performer );
+
+			$this->capture_flashed_notices();
+
+			$this->invoke_perform_action(
+				$admin,
+				$handler,
+				$order,
+				'call_courier',
+				$provider,
+				[
+					'day'      => '2026-10-13',
+					'injected' => 'not declared, so not forwarded',
+				]
+			);
+
+			$this->assertSame( [], $this->flashed_notices );
+		}
+
+		public function test_perform_action_refuses_a_payload_that_misses_its_declaration_and_names_the_field(): void {
+			$provider = $this->provider();
+			$handler  = $this->register_handler();
+
+			$this->meta['_wc_cdek_order_id'] = 'CARRIER-1';
+			$order                            = $this->make_order( [ 'get_status' => 'processing' ] );
+			$this->declare_courier_action(
+				static function ( string $hook, $value ) {
+					if ( 'woodev_shipping_perform_order_action' === $hook ) {
+						throw new \LogicException( 'the carrier must not be reached with values that do not fit' );
+					}
+
+					return $value;
+				}
+			);
+
+			$this->capture_flashed_notices();
+
+			$this->invoke_perform_action(
+				new Shipping_Admin_Order( Orders_Registry::instance() ),
+				$handler,
+				$order,
+				'call_courier',
+				$provider,
+				[ 'day' => '2026-10-01' ]
+			);
+
+			$this->assertCount( 1, $this->flashed_notices );
+			$this->assertStringContainsString( '«День»', $this->flashed_notices[0] );
+			$this->assertStringContainsString( 'вне допустимых пределов', $this->flashed_notices[0] );
+		}
+
+		public function test_an_action_without_fields_takes_an_empty_payload_whatever_was_posted(): void {
+			$provider = $this->provider();
+			$handler  = $this->register_handler();
+			$handler->shouldReceive( 'cancel' )->once()->andReturn( Action_Result::success() );
+
+			$this->meta['_wc_cdek_order_id'] = 'CARRIER-1';
+			$order                            = $this->make_order( [ 'get_status' => 'processing' ] );
+
+			Functions\expect( 'set_transient' )->never();
+
+			$this->invoke_perform_action( new Shipping_Admin_Order( Orders_Registry::instance() ), $handler, $order, Order_Actions::CANCEL, $provider, [ 'day' => 'x' ] );
+		}
+
+		public function test_render_metabox_button_of_an_action_with_fields_carries_them_as_json(): void {
+			$provider = $this->provider();
+			$order    = $this->make_order();
+
+			$this->meta['_wc_cdek_order_id'] = 'CARRIER-1';
+			$this->register_handler();
+			$this->declare_courier_action();
+			Functions\when( 'wp_json_encode' )->alias( static fn( $value ) => json_encode( $value, JSON_UNESCAPED_UNICODE ) );
+
+			ob_start();
+			( new Shipping_Admin_Order( Orders_Registry::instance() ) )->render_metabox( $order, $provider );
+			$html = ob_get_clean();
+
+			$this->assertSame( 1, preg_match( '/<button[^>]*data-woodev-order-action="call_courier"[^>]*>/s', $html, $m ) );
+			$this->assertSame( 1, preg_match( '/data-fields="([^"]*)"/', $m[0], $f ) );
+
+			$fields = json_decode( html_entity_decode( $f[1] ), true );
+
+			$this->assertSame( [ 'day', 'comment' ], array_column( $fields, 'id' ) );
+			$this->assertSame( 1, preg_match( '/data-labels="([^"]*)"/', $m[0], $l ), 'the dialog\'s own sentences travel with the button' );
+			$this->assertSame( 'Отмена', json_decode( html_entity_decode( $l[1] ), true )['cancel'] );
+
+			$this->assertSame( 1, preg_match( '/<button[^>]*data-woodev-order-action="cancel"[^>]*>/s', $html, $plain ) );
+			$this->assertStringNotContainsString( 'data-fields', $plain[0], 'an action without fields is exactly as before' );
+		}
+
+		public function test_the_metabox_fields_filter_adds_lines_next_to_the_framework_ones(): void {
+			$provider = $this->provider();
+			$order    = $this->make_order();
+
+			$this->meta['_wc_cdek_order_id'] = 'CDEK-999';
+			Functions\when( 'apply_filters' )->alias(
+				static function ( string $hook, $value ) {
+					if ( 'woodev_shipping_order_metabox_fields' !== $hook ) {
+						return $value;
+					}
+
+					$value[] = [
+						'label' => 'Заявка на курьера',
+						'value' => '№ 77 (принята)',
+					];
+					// All of these are dropped: no value, no label, not an array.
+					$value[] = [
+						'label' => 'Пустое',
+						'value' => '',
+					];
+					$value[] = [ 'value' => 'без подписи' ];
+					$value[] = 'строка';
+
+					return $value;
+				}
+			);
+
+			ob_start();
+			( new Shipping_Admin_Order( Orders_Registry::instance() ) )->render_metabox( $order, $provider );
+			$html = ob_get_clean();
+
+			$this->assertStringContainsString( 'CDEK-999', $html, 'the framework\'s own lines stay' );
+			$this->assertStringContainsString( 'Заявка на курьера', $html );
+			$this->assertStringContainsString( '№ 77 (принята)', $html );
+			$this->assertStringNotContainsString( 'Пустое', $html );
+			$this->assertStringNotContainsString( 'без подписи', $html );
+		}
+
+		public function test_the_metabox_fields_filter_returning_a_non_array_keeps_the_framework_lines(): void {
+			$provider = $this->provider();
+			$order    = $this->make_order();
+
+			$this->meta['_wc_cdek_order_id'] = 'CDEK-999';
+			Functions\when( 'apply_filters' )->alias(
+				static function ( string $hook, $value ) {
+					return 'woodev_shipping_order_metabox_fields' === $hook ? null : $value;
+				}
+			);
+
+			ob_start();
+			( new Shipping_Admin_Order( Orders_Registry::instance() ) )->render_metabox( $order, $provider );
+			$html = ob_get_clean();
+
+			$this->assertStringContainsString( 'CDEK-999', $html );
 		}
 
 		/**

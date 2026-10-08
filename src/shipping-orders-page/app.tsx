@@ -61,8 +61,11 @@ import {
 	performBulkOrderAction,
 	performOrderAction,
 } from './rest';
+import { ActionInputModal } from './action-input-modal';
 import type {
 	BulkActionResult,
+	OrderActionFieldError,
+	OrderActionPayload,
 	OrderPreview,
 	OrderRow,
 	OrderRowAction,
@@ -955,6 +958,23 @@ function OrderPreviewModal( {
 							) }
 						</p>
 					) }
+					{ /* #1180 — lines a carrier plugin adds (`woodev_shipping_orders_preview_fields`). */ }
+					{ ( preview.extra_fields ?? [] ).map( ( field, index ) => (
+						<p key={ index } className="woodev-orders-preview__tracking">
+							<span className="woodev-orders-preview__label">{ field.label }</span>
+							{ field.url ? (
+								<a href={ field.url } target="_blank" rel="noreferrer">
+									{ field.value }
+								</a>
+							) : field.tone ? (
+								<span className={ `woodev-orders-status woodev-orders-status--${ field.tone }` }>
+									{ field.value }
+								</span>
+							) : (
+								<span>{ field.value }</span>
+							) }
+						</p>
+					) ) }
 				</section>
 			</div>
 
@@ -1479,6 +1499,14 @@ export default function OrdersPage() {
 	 * through `setState`, the same way every other piece of state on this page is.
 	 */
 	const [ actionRowStates, setActionRowStates ] = useState<Record<number, RowActionState>>( {} );
+
+	/**
+	 * #1180 — the action whose input dialog is open, with the server's answer to the last submit: per-field
+	 * errors (a 422) and, for a failure that is not about one field, a sentence.
+	 */
+	const [ actionInput, setActionInput ] = useState<{ row: ActionableOrder; action: OrderRowAction } | null>( null );
+	const [ actionInputErrors, setActionInputErrors ] = useState<OrderActionFieldError[]>( [] );
+	const [ actionInputMessage, setActionInputMessage ] = useState( '' );
 	/**
 	 * #824 — the last row action's outcome, shown in the SAME `Notice` slot the fetch
 	 * error above already uses rather than a second mechanism. Unlike `error`, this is
@@ -1849,7 +1877,16 @@ export default function OrdersPage() {
 			} );
 	};
 
-	const performAction = ( row: ActionableOrder, action: OrderRowAction ) => {
+	/**
+	 * A request may only close the input dialog it owns (#1180): the one opened for THIS order and action. A slow
+	 * «Обновить» on order A settling while the merchant fills in the courier dialog of order B must not take B's values.
+	 */
+	const closeActionInputOf = ( row: ActionableOrder, action: OrderRowAction ) =>
+		setActionInput( ( current ) =>
+			current && current.row.id === row.id && current.action.action === action.action ? null : current
+		);
+
+	const performAction = ( row: ActionableOrder, action: OrderRowAction, payload?: OrderActionPayload ) => {
 		if ( 'waybill' === action.action || 'barcode' === action.action ) {
 			downloadDocument( row, action.action );
 			return;
@@ -1865,8 +1902,12 @@ export default function OrdersPage() {
 		// switched scope/filter/page while the action was in flight) is detected.
 		const generation = fetchGeneration.current;
 
-		performOrderAction( row.id, action.action )
+		( payload
+			? performOrderAction( row.id, action.action, payload )
+			: performOrderAction( row.id, action.action ) )
 			.then( ( res ) => {
+				// #1180: the dialog of an action with fields closes with the action — THIS action's dialog only.
+				closeActionInputOf( row, action );
 				setActionNotice( { status: 'success', text: res.message } );
 				dispatch( noticesStore ).createSuccessNotice( res.message, { type: 'snackbar' } );
 
@@ -1893,13 +1934,33 @@ export default function OrdersPage() {
 					return next;
 				} );
 			} )
-			.catch( ( err: { message?: string; code?: string } ) => {
+			.catch( ( err: { message?: string; code?: string; data?: { errors?: OrderActionFieldError[] } } ) => {
+				// #1180: the server refused the VALUES, not the action — nothing ran. The dialog stays open
+				// with each message under its field; no toast, the merchant is looking at the form.
+				if ( payload && err && 'woodev_shipping_orders_invalid_payload' === err.code ) {
+					setActionInputErrors( err.data?.errors ?? [] );
+					setActionInputMessage( '' );
+					setActionRowStates( ( current ) => {
+						const next = { ...current };
+						delete next[ row.id ];
+						return next;
+					} );
+					return;
+				}
+
 				const text =
 					( err && err.message ) ||
 					__( 'Не удалось выполнить действие.', 'woodev-plugin-framework' );
 
 				setActionNotice( { status: 'error', text } );
 				dispatch( noticesStore ).createErrorNotice( text, { type: 'snackbar' } );
+				// #1180: a refusal that is not about one field (the carrier said no) is also shown IN the dialog,
+				// which stays open — the values are worth keeping for a second try.
+				if ( payload && 'woodev_shipping_order_locked' !== err?.code ) {
+					setActionInputMessage( text );
+				} else {
+					closeActionInputOf( row, action );
+				}
 				setActionRowStates( ( current ) => {
 					const next = { ...current };
 					delete next[ row.id ];
@@ -2027,6 +2088,17 @@ export default function OrdersPage() {
 		if ( EDIT_ACTION === action.action ) {
 			setPreviewOrderId( null );
 			setWizard( { orderId: row.id } );
+			return;
+		}
+
+		// #1180 — an action that declares fields asks for them first, in a dialog; its submit is what runs it.
+		// The dialog IS the confirmation, so a destructive one does not ask twice. A preview it was clicked in
+		// closes first, like the wizard above: two modals stacked leave a stale preview underneath.
+		if ( action.fields && action.fields.length > 0 ) {
+			setPreviewOrderId( null );
+			setActionInputErrors( [] );
+			setActionInputMessage( '' );
+			setActionInput( { row, action } );
 			return;
 		}
 
@@ -2504,6 +2576,16 @@ export default function OrdersPage() {
 					onActionClick={ onActionClick }
 					onCancelConfirm={ onCancelConfirm }
 					onClose={ () => setPreviewOrderId( null ) }
+				/>
+			) }
+			{ null !== actionInput && actionInput.action.fields && (
+				<ActionInputModal
+					action={ { ...actionInput.action, fields: actionInput.action.fields } }
+					errors={ actionInputErrors }
+					message={ actionInputMessage }
+					busy={ actionRowStates[ actionInput.row.id ]?.pendingAction === actionInput.action.action }
+					onSubmit={ ( payload ) => performAction( actionInput.row, actionInput.action, payload ) }
+					onClose={ () => setActionInput( null ) }
 				/>
 			) }
 			{ null !== wizard && (

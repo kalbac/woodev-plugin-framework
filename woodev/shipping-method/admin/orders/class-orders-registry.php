@@ -1748,13 +1748,54 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 				return;
 			}
 
+			// #1180: an action that declares input fields asks for it in the framework's modal shell. The shell's
+			// handles are registered on the STOREFRONT hook (`Woodev_Plugin::frontend_enqueue_scripts()`), so on an
+			// admin screen they are registered here — once, whoever gets here first.
+			$this->enqueue_modal_shell();
+
 			wp_enqueue_script(
 				'woodev-shipping-order-metabox-actions',
 				plugins_url( basename( $path ), $path ),
-				[],
+				[ 'woodev-modal' ],
 				(string) filemtime( $path ),
 				true
 			);
+		}
+
+		/**
+		 * Registers (when nothing has) and enqueues the generic modal shell — script and chrome stylesheet — for
+		 * an admin screen (#1180).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		private function enqueue_modal_shell(): void {
+			$plugin = $this->get_asset_plugin();
+
+			if ( $plugin ) {
+				if ( ! wp_script_is( 'woodev-modal', 'registered' ) ) {
+					wp_register_script(
+						'woodev-modal',
+						$plugin->get_framework_assets_url() . '/js/frontend/woodev-modal.js',
+						[],
+						$plugin->get_assets_version()
+					);
+				}
+
+				if ( ! wp_style_is( 'woodev-modal', 'registered' ) ) {
+					$style_path = $plugin->get_framework_path() . '/assets/css/frontend/woodev-modal.css';
+
+					wp_register_style(
+						'woodev-modal',
+						$plugin->get_framework_assets_url() . '/css/frontend/woodev-modal.css',
+						[],
+						file_exists( $style_path ) ? (string) filemtime( $style_path ) : $plugin->get_version()
+					);
+				}
+			}
+
+			wp_enqueue_style( 'woodev-modal' );
 		}
 
 		/**

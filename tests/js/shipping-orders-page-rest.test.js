@@ -180,6 +180,23 @@ describe( 'fetchSyncStatus (#828 increment 8)', () => {
 		expect( call.headers ).toEqual( { 'X-WP-Nonce': 'abc' } );
 	} );
 
+	test( 'sends no body for an action without fields — the request is exactly as it was', async () => {
+		apiFetch.mockResolvedValue( { row: {}, message: '' } );
+
+		await performOrderAction( 42, 'export' );
+
+		expect( apiFetch.mock.calls[ 0 ][ 0 ] ).not.toHaveProperty( 'data' );
+	} );
+
+	test( 'sends the values of an action\'s fields as a `payload` object (#1180)', async () => {
+		apiFetch.mockResolvedValue( { row: {}, message: '' } );
+		const payload = { day: '2026-10-13', window: { from: '09:00', to: '18:00' }, comment: '' };
+
+		await performOrderAction( 42, 'call_courier', payload );
+
+		expect( apiFetch.mock.calls[ 0 ][ 0 ].data ).toEqual( { payload } );
+	} );
+
 	test( 'strips a trailing slash from restRoot before appending the sub-path', async () => {
 		window.woodevShippingOrders = {
 			restRoot: 'https://example.test/wp-json/woodev/v1/shipping/orders/',

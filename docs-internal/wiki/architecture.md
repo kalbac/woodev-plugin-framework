@@ -321,6 +321,22 @@ Moved here from `CURRENT-STATE.md` in s139: they are reference, true regardless 
   the date parameter, never a value (gotcha `wc-date-throws-on-a-half-filled-custom-range`).
 - **The action set is declared ONCE** (`Order_Actions::for_order()`) and serves TWO surfaces — the
   table column and the metabox; a label or tooltip is edited only there.
+- **An extra action may declare INPUT FIELDS (#1180)** — a `fields` list on its `woodev_shipping_order_actions`
+  entry, sanitised by `Order_Action_Fields::sanitize()` (four types only: `date`, `select`, `time_range`,
+  `textarea`; deliberately no form engine). The values travel as `payload` — a REST body object on
+  `/shipping/orders/{id}/actions/{action}`, `payload[<id>]` on the metabox's admin-post — and
+  `Order_Actions::resolve_payload()` validates them against the declaration BEFORE the handler runs: the REST route
+  answers **422** `woodev_shipping_orders_invalid_payload` with `data.errors = [ { field, code, message } ]`, the
+  metabox flashes one notice. The handler gets the cleaned values as `array $payload` — the last argument of
+  `Order_Actions::perform()` and the fifth of `woodev_shipping_perform_order_action`; only declared ids come out,
+  every one present. Bulk skips an action with fields (no values to run with). The UI: the orders page opens a
+  `@wordpress/components` `Modal` (`action-input-modal.tsx`), the metabox the vanilla `WoodevModal` shell
+  (`order-metabox-actions.js`, fields as JSON in `data-fields`) — gotcha
+  `the-modal-shell-handles-are-registered-on-the-storefront-hook-only`.
+- **Extra display lines (#1180):** `woodev_shipping_order_metabox_fields( $fields, $order, $provider )` extends the
+  metabox list and `woodev_shipping_orders_preview_fields( $fields, $order, $provider )` the order preview opened from
+  a row (`extra_fields` in the preview response). One line shape for both —
+  `Order_Row_Builder::sanitize_display_fields()`: `label`, `value`, optional `url` (http/https), optional `tone`.
 - **«New» is `is_exported=false`, derived from a NON-EMPTY `carrier_order_id`** (#860, settled and
   shipped). Every witness — the REST arg, the «Все / Новые» links, the carrier counts, the badge — reads
   it through the SAME `Orders_Query`, which is why their numbers agree by construction rather than by

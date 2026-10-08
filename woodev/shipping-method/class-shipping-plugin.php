@@ -343,6 +343,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/admin/orders/class-orders-query.php';
 			require_once $path . '/admin/orders/class-orders-id-resolver.php';
 			require_once $path . '/admin/orders/class-order-edit-lock.php';
+			// the typed input an extra order action may declare (#1180): read by Order_Actions
+			require_once $path . '/admin/orders/class-order-action-fields.php';
 			require_once $path . '/admin/orders/class-order-actions.php';
 			require_once $path . '/admin/orders/class-order-row-builder.php';
 

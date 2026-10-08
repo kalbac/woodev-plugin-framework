@@ -161,6 +161,143 @@ final class Woodev_Realistic_Shipping_Plugin extends \Woodev\Framework\Shipping\
 				'realistic'
 			)
 		);
+
+		$this->init_realistic_courier_call();
+	}
+
+	/** @var string Order meta the «Вызвать курьера» fixture action stores its payload in (#1180). */
+	public const COURIER_CALL_META = '_woodev_realistic_courier_call';
+
+	/**
+	 * Registers the extra order action WITH INPUT FIELDS (#1180) — the rig's and the tests' stand-in for a
+	 * carrier's «Вызвать курьера»: a day, a time window, a delivery class and a comment, asked for in a dialog
+	 * before the action runs, and the result shown next to «Статус доставки» in the metabox and the preview.
+	 *
+	 * @return void
+	 */
+	private function init_realistic_courier_call(): void {
+		add_filter( 'woodev_shipping_order_actions', [ $this, 'declare_courier_call_action' ], 10, 3 );
+		add_filter( 'woodev_shipping_perform_order_action', [ $this, 'perform_courier_call_action' ], 10, 5 );
+		add_filter( 'woodev_shipping_order_metabox_fields', [ $this, 'add_courier_call_fields' ], 10, 3 );
+		add_filter( 'woodev_shipping_orders_preview_fields', [ $this, 'add_courier_call_fields' ], 10, 3 );
+	}
+
+	/**
+	 * Offers «Вызвать курьера» on this carrier's exported orders.
+	 *
+	 * @param array<int,array<string,mixed>>                          $actions  actions so far.
+	 * @param \WC_Order                                               $order    the order.
+	 * @param \Woodev\Framework\Shipping\Admin\Orders\Orders_Provider|null $provider the matched carrier.
+	 * @return array<int,array<string,mixed>>
+	 */
+	public function declare_courier_call_action( $actions, $order, $provider ) {
+		if ( ! is_array( $actions ) || null === $provider || 'realistic' !== $provider->get_id()
+			|| ! \Woodev\Framework\Shipping\Admin\Orders\Order_Actions::is_exported( $order, $provider ) ) {
+			return $actions;
+		}
+
+		$actions[] = [
+			'action'      => 'call_courier',
+			'label'       => 'Вызвать курьера',
+			'title'       => 'Вызвать курьера за посылкой',
+			'destructive' => false,
+			'fields'      => [
+				[
+					'id'       => 'day',
+					'type'     => 'date',
+					'label'    => 'День',
+					'required' => true,
+					'default'  => wp_date( 'Y-m-d', strtotime( '+1 day' ) ),
+					'min'      => wp_date( 'Y-m-d', strtotime( '+1 day' ) ),
+					'max'      => wp_date( 'Y-m-d', strtotime( '+14 days' ) ),
+				],
+				[
+					'id'       => 'window',
+					'type'     => 'time_range',
+					'label'    => 'Время',
+					'required' => true,
+					'default'  => [
+						'from' => '09:00',
+						'to'   => '18:00',
+					],
+					'min'      => '09:00',
+					'max'      => '21:00',
+				],
+				[
+					'id'      => 'service',
+					'type'    => 'select',
+					'label'   => 'Забор',
+					'default' => 'standard',
+					'options' => [
+						[
+							'value' => 'standard',
+							'label' => 'Обычный',
+						],
+						[
+							'value' => 'express',
+							'label' => 'Срочный',
+						],
+					],
+				],
+				[
+					'id'        => 'comment',
+					'type'      => 'textarea',
+					'label'     => 'Комментарий курьеру',
+					'maxlength' => 200,
+				],
+			],
+		];
+
+		return $actions;
+	}
+
+	/**
+	 * Performs «Вызвать курьера»: stores the validated payload on the order, as a real carrier would send it.
+	 *
+	 * @param mixed                                                        $result   outcome so far.
+	 * @param string                                                       $action   action id.
+	 * @param \WC_Order                                                    $order    the order.
+	 * @param \Woodev\Framework\Shipping\Admin\Orders\Orders_Provider      $provider the carrier.
+	 * @param array<string,mixed>                                          $payload  the validated field values.
+	 * @return mixed
+	 */
+	public function perform_courier_call_action( $result, $action, $order, $provider, $payload = [] ) {
+		if ( 'call_courier' !== $action || 'realistic' !== $provider->get_id() ) {
+			return $result;
+		}
+
+		$order->update_meta_data( self::COURIER_CALL_META, wp_json_encode( $payload ) );
+		$order->save();
+
+		return \Woodev\Framework\Shipping\Order\Action_Result::success( '', 'Курьер вызван.' );
+	}
+
+	/**
+	 * Shows the stored courier call next to «Статус доставки».
+	 *
+	 * @param mixed                                                        $fields   lines so far.
+	 * @param \WC_Order                                                    $order    the order.
+	 * @param \Woodev\Framework\Shipping\Admin\Orders\Orders_Provider|null $provider the carrier.
+	 * @return mixed
+	 */
+	public function add_courier_call_fields( $fields, $order, $provider ) {
+		if ( ! is_array( $fields ) || null === $provider || 'realistic' !== $provider->get_id() ) {
+			return $fields;
+		}
+
+		$stored = json_decode( (string) $order->get_meta( self::COURIER_CALL_META ), true );
+
+		if ( ! is_array( $stored ) || empty( $stored['day'] ) ) {
+			return $fields;
+		}
+
+		$fields[] = [
+			'label' => 'Заявка на курьера',
+			'value' => sprintf( '%s, %s–%s', $stored['day'], $stored['window']['from'] ?? '', $stored['window']['to'] ?? '' ),
+			'tone'  => 'info',
+		];
+
+		return $fields;
 	}
 
 	/**

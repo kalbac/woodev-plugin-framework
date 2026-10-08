@@ -27,7 +27,7 @@
  * @var array<int, array{label: string, value: string, url: string|null, tone?:string}> $fields non-empty display fields, shown only when `$is_exported` is true
  * @var bool                                                        $shipment_outdated whether the order changed after it was handed to the carrier (#947); the warning is shown only when `$is_exported` is true
  * @var string                                                      $history_html      pre-rendered delivery-history markup ('' when there is none to show)
- * @var array<int, array{action: string, label: string, title: string, destructive: bool, disabled?: bool}> $actions the row action set {@see \Woodev\Framework\Shipping\Admin\Orders\Order_Actions::for_row()} built for this order; a locked action carries `disabled` and the lock reason as its `title`
+ * @var array<int, array{action: string, label: string, title: string, destructive: bool, disabled?: bool, fields?: array<int, array<string, mixed>>}> $actions the row action set {@see \Woodev\Framework\Shipping\Admin\Orders\Order_Actions::for_row()} built for this order; a locked action carries `disabled` and the lock reason as its `title`
  * @var string                                                      $admin_post_action forward-only admin-post action the buttons post to
  * @var string                                                      $nonce_action      nonce action protecting the buttons' post
  * @var int                                                         $order_id          the order being edited
@@ -83,6 +83,19 @@ defined( 'ABSPATH' ) || exit;
 
 	<?php endif; ?>
 
+	<?php
+	// The sentences the input dialog of an action with fields (#1180) shows — the script knows none (Rule 9).
+	$field_dialog_labels = [
+		'cancel'   => __( 'Отмена', 'woodev-plugin-framework' ),
+		'close'    => __( 'Закрыть', 'woodev-plugin-framework' ),
+		'from'     => __( 'с', 'woodev-plugin-framework' ),
+		'to'       => __( 'до', 'woodev-plugin-framework' ),
+		'none'     => __( '— не выбрано —', 'woodev-plugin-framework' ),
+		'required' => __( 'обязательное поле', 'woodev-plugin-framework' ),
+		'range'    => __( 'Время окончания должно быть позже времени начала.', 'woodev-plugin-framework' ),
+	];
+	?>
+
 	<?php if ( [] !== $actions ) : ?>
 		<p class="woodev-shipping-order-actions-buttons">
 			<?php foreach ( $actions as $action ) : ?>
@@ -96,6 +109,10 @@ defined( 'ABSPATH' ) || exit;
 					data-order-id="<?php echo esc_attr( (string) $order_id ); ?>"
 					data-nonce="<?php echo esc_attr( wp_create_nonce( $nonce_action ) ); ?>"
 					<?php echo ! empty( $action['destructive'] ) ? 'data-confirm="' . esc_attr( __( 'Вы уверены?', 'woodev-plugin-framework' ) ) . '"' : ''; ?>
+					<?php if ( ! empty( $action['fields'] ) ) : ?>
+						data-fields="<?php echo esc_attr( (string) wp_json_encode( $action['fields'] ) ); ?>"
+						data-labels="<?php echo esc_attr( (string) wp_json_encode( $field_dialog_labels ) ); ?>"
+					<?php endif; ?>
 					<?php disabled( ! empty( $action['disabled'] ) ); ?>
 				>
 					<?php echo esc_html( $action['label'] ); ?>

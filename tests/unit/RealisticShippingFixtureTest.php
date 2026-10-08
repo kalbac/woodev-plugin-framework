@@ -87,6 +87,26 @@ class RealisticShippingFixtureTest extends TestCase {
 			$this->assertSame( 'Отправление вручено получателю', $tracking_handler->get_history( 'RL200100004' )[3]['description'] );
 			$this->assertSame( [], $tracking_handler->get_history( '' ) );
 
+			// #1180: the fixture's «Вызвать курьера» is the rig's and the tests' action WITH input fields — it must
+			// survive the framework's own re-validation whole (all four types), and only an exported order is offered it.
+			Functions\when( 'wp_date' )->alias( static fn( string $format, ?int $timestamp = null ): string => gmdate( $format, $timestamp ?? time() ) );
+
+			$exported = \Mockery::mock( '\WC_Order' );
+			$exported->shouldReceive( 'get_id' )->andReturn( 5 );
+			$fresh = \Mockery::mock( '\WC_Order' );
+			$fresh->shouldReceive( 'get_id' )->andReturn( 6 );
+			Functions\when( 'get_post_meta' )->alias( static fn( int $id ): string => 5 === $id ? 'RL-1' : '' );
+
+			$offered = $plugin->declare_courier_call_action( [], $exported, $provider );
+
+			$this->assertSame( 'call_courier', $offered[0]['action'] );
+			$this->assertSame(
+				[ 'date', 'time_range', 'select', 'textarea' ],
+				array_column( \Woodev\Framework\Shipping\Admin\Orders\Order_Action_Fields::sanitize( $offered[0]['fields'] ), 'type' ),
+				'nothing the fixture declares is dropped by the sanitiser'
+			);
+			$this->assertSame( [], $plugin->declare_courier_call_action( [], $fresh, $provider ), 'not offered before the export' );
+
 			// Reset so this process-wide registration does not leak into any other
 			// unit test that asserts on a CLEAN Orders_Registry singleton.
 			// remove_action()/remove_filter() are not among mock_wordpress_runtime_functions()'s

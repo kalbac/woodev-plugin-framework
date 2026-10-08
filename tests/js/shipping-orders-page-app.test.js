@@ -3659,3 +3659,267 @@ describe( 'a row another manager is editing (#1000)', () => {
 		expect( screen.getAllByText( 'Экспортировано 1 из 1' ).length ).toBeGreaterThan( 0 );
 	} );
 } );
+
+/**
+ * An action that declares input fields (#1180) — «Вызвать курьера»: a day, a time window, a delivery class and an
+ * optional comment, asked for in a dialog BEFORE the action runs. The page's contract: a click opens the dialog and
+ * sends nothing; the submit sends the values as `payload`; a 422 puts each message under its field and keeps the
+ * dialog open; an action without fields is exactly as it was.
+ */
+describe( 'an action with input fields (#1180)', () => {
+	const FIELDS = [
+		{ id: 'day', type: 'date', label: 'День', required: true, default: '2026-10-13', min: '2026-10-12', max: '2026-10-26' },
+		{ id: 'window', type: 'time_range', label: 'Время', required: true, default: { from: '09:00', to: '18:00' }, min: '09:00', max: '21:00' },
+		{
+			id: 'service',
+			type: 'select',
+			label: 'Забор',
+			required: false,
+			default: 'standard',
+			options: [
+				{ value: 'standard', label: 'Обычный' },
+				{ value: 'express', label: 'Срочный' },
+			],
+		},
+		{ id: 'comment', type: 'textarea', label: 'Комментарий курьеру', required: false, default: '', maxlength: 200 },
+	];
+
+	function courierRow( overrides = {} ) {
+		return makeRow( {
+			actions: [
+				{ action: 'export', label: 'Выгрузить', title: '', destructive: false },
+				{ action: 'call_courier', label: 'Вызвать курьера', title: '', destructive: false, fields: FIELDS },
+			],
+			...overrides,
+		} );
+	}
+
+	beforeEach( () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( resultOf( [ courierRow() ] ) );
+	} );
+
+	async function openDialog() {
+		render( <App /> );
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Вызвать курьера' } ) );
+
+		return screen.findByRole( 'dialog' );
+	}
+
+	test( 'a click opens the dialog with the declared defaults and sends nothing', async () => {
+		const dialog = await openDialog();
+
+		expect( performOrderAction ).not.toHaveBeenCalled();
+		expect( within( dialog ).getByLabelText( 'День *' ) ).toHaveValue( '2026-10-13' );
+		expect( within( dialog ).getByLabelText( 'с' ) ).toHaveValue( '09:00' );
+		expect( within( dialog ).getByLabelText( 'до' ) ).toHaveValue( '18:00' );
+		expect( within( dialog ).getByLabelText( 'Забор' ) ).toHaveValue( 'standard' );
+		expect( within( dialog ).getByLabelText( 'Комментарий курьеру' ) ).toHaveValue( '' );
+	} );
+
+	test( 'an action without fields still runs on the first click, with no payload', async () => {
+		performOrderAction.mockResolvedValue( { row: courierRow(), message: 'Заказ выгружен.' } );
+
+		render( <App /> );
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Выгрузить' } ) );
+
+		expect( screen.queryByRole( 'dialog' ) ).toBeNull();
+		expect( performOrderAction ).toHaveBeenCalledWith( 42, 'export' );
+		// Let the settled call finish inside the test, not after it.
+		await waitFor( () => expect( screen.getAllByText( 'Заказ выгружен.' ).length ).toBeGreaterThan( 0 ) );
+	} );
+
+	test( 'the submit sends what was typed as the payload', async () => {
+		performOrderAction.mockResolvedValue( { row: courierRow( { order_number: '99' } ), message: 'Курьер вызван.' } );
+
+		const dialog = await openDialog();
+
+		fireEvent.change( within( dialog ).getByLabelText( 'День *' ), { target: { value: '2026-10-15' } } );
+		fireEvent.change( within( dialog ).getByLabelText( 'с' ), { target: { value: '10:00' } } );
+		fireEvent.change( within( dialog ).getByLabelText( 'Забор' ), { target: { value: 'express' } } );
+		fireEvent.change( within( dialog ).getByLabelText( 'Комментарий курьеру' ), { target: { value: 'Позвонить' } } );
+		fireEvent.click( within( dialog ).getByRole( 'button', { name: 'Вызвать курьера' } ) );
+
+		expect( performOrderAction ).toHaveBeenCalledWith( 42, 'call_courier', {
+			day: '2026-10-15',
+			window: { from: '10:00', to: '18:00' },
+			service: 'express',
+			comment: 'Позвонить',
+		} );
+		await waitFor( () => expect( screen.getAllByText( 'Курьер вызван.' ).length ).toBeGreaterThan( 0 ) );
+	} );
+
+	test( 'a settled action closes the dialog and swaps the row', async () => {
+		performOrderAction.mockResolvedValue( { row: courierRow( { order_number: '99' } ), message: 'Курьер вызван.' } );
+
+		const dialog = await openDialog();
+
+		fireEvent.click( within( dialog ).getByRole( 'button', { name: 'Вызвать курьера' } ) );
+
+		await waitFor( () => expect( screen.queryByRole( 'dialog' ) ).toBeNull() );
+		expect( screen.getByText( 'Заказ 99' ) ).toBeInTheDocument();
+		await waitFor( () => expect( screen.getAllByText( 'Курьер вызван.' ).length ).toBeGreaterThan( 0 ) );
+	} );
+
+	test( 'a required field left empty is caught in the browser, under the field, with no request', async () => {
+		const dialog = await openDialog();
+
+		fireEvent.change( within( dialog ).getByLabelText( 'День *' ), { target: { value: '' } } );
+		fireEvent.click( within( dialog ).getByRole( 'button', { name: 'Вызвать курьера' } ) );
+
+		expect( await within( dialog ).findByText( 'Заполните это поле.' ) ).toBeInTheDocument();
+		expect( performOrderAction ).not.toHaveBeenCalled();
+	} );
+
+	test( 'a window that ends before it starts is caught in the browser', async () => {
+		const dialog = await openDialog();
+
+		fireEvent.change( within( dialog ).getByLabelText( 'до' ), { target: { value: '08:00' } } );
+		fireEvent.click( within( dialog ).getByRole( 'button', { name: 'Вызвать курьера' } ) );
+
+		expect( await within( dialog ).findByText( 'Время окончания должно быть позже времени начала.' ) ).toBeInTheDocument();
+		expect( performOrderAction ).not.toHaveBeenCalled();
+	} );
+
+	test( 'the server\'s 422 puts each message under its own field and keeps the dialog open', async () => {
+		performOrderAction.mockRejectedValue( {
+			code: 'woodev_shipping_orders_invalid_payload',
+			message: 'Проверьте заполнение полей.',
+			data: {
+				status: 422,
+				errors: [
+					{ field: 'day', code: 'out_of_range', message: 'Эта дата недоступна.' },
+					{ field: 'comment', code: 'too_long', message: 'Не больше 200 символов.' },
+				],
+			},
+		} );
+
+		const dialog = await openDialog();
+
+		fireEvent.click( within( dialog ).getByRole( 'button', { name: 'Вызвать курьера' } ) );
+
+		expect( await within( dialog ).findByText( 'Эта дата недоступна.' ) ).toBeInTheDocument();
+		expect( within( dialog ).getByText( 'Не больше 200 символов.' ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'dialog' ) ).toBeInTheDocument();
+		// Not a toast: the merchant is looking at the form, and nothing ran.
+		expect( screen.queryAllByText( 'Проверьте заполнение полей.' ) ).toHaveLength( 0 );
+		// The submit is usable again for a second try.
+		expect( within( dialog ).getByRole( 'button', { name: 'Вызвать курьера' } ) ).not.toBeDisabled();
+	} );
+
+	test( 'editing a field takes its stale server error away', async () => {
+		performOrderAction.mockRejectedValue( {
+			code: 'woodev_shipping_orders_invalid_payload',
+			message: 'Проверьте заполнение полей.',
+			data: { status: 422, errors: [ { field: 'day', code: 'out_of_range', message: 'Эта дата недоступна.' } ] },
+		} );
+
+		const dialog = await openDialog();
+
+		fireEvent.click( within( dialog ).getByRole( 'button', { name: 'Вызвать курьера' } ) );
+		await within( dialog ).findByText( 'Эта дата недоступна.' );
+
+		fireEvent.change( within( dialog ).getByLabelText( 'День *' ), { target: { value: '2026-10-14' } } );
+
+		expect( within( dialog ).queryByText( 'Эта дата недоступна.' ) ).toBeNull();
+	} );
+
+	test( 'a refusal that is not about one field is shown in the dialog, which stays open for a second try', async () => {
+		performOrderAction.mockRejectedValue( { code: 'woodev_shipping_orders_action_failed', message: 'СДЭК: на эту дату курьеров нет.' } );
+
+		const dialog = await openDialog();
+
+		fireEvent.click( within( dialog ).getByRole( 'button', { name: 'Вызвать курьера' } ) );
+
+		await waitFor( () => expect( within( dialog ).getAllByText( 'СДЭК: на эту дату курьеров нет.' ).length ).toBeGreaterThan( 0 ) );
+		expect( screen.getByRole( 'dialog' ) ).toBeInTheDocument();
+	} );
+
+	test( 'cancel closes the dialog without sending anything', async () => {
+		const dialog = await openDialog();
+
+		fireEvent.click( within( dialog ).getByRole( 'button', { name: 'Отмена' } ) );
+
+		await waitFor( () => expect( screen.queryByRole( 'dialog' ) ).toBeNull() );
+		expect( performOrderAction ).not.toHaveBeenCalled();
+	} );
+
+	/**
+	 * A request may only close the dialog it OWNS. While order 42's plain «Обновить» is pending, the merchant opens
+	 * and fills in the courier dialog of order 43; 42's answer — success or failure — must leave it alone.
+	 */
+	describe.each( [
+		[ 'resolves', ( reject, resolve ) => resolve( { row: makeRow( { id: 42, actions: [] } ), message: 'Обновлено.' } ) ],
+		[ 'fails', ( reject ) => reject( { message: 'СДЭК недоступен.' } ) ],
+	] )( 'a plain action on another order that %s', ( _name, settle ) => {
+		test( 'leaves an open, edited input dialog and its values alone', async () => {
+			fetchOrders.mockResolvedValue(
+				resultOf( [
+					makeRow( { id: 42, actions: [ { action: 'update', label: 'Обновить', title: '', destructive: false } ] } ),
+					courierRow( { id: 43, order_number: '43' } ),
+				] )
+			);
+
+			let resolveA;
+			let rejectA;
+
+			performOrderAction.mockReturnValue(
+				new Promise( ( resolve, reject ) => {
+					resolveA = resolve;
+					rejectA = reject;
+				} )
+			);
+
+			render( <App /> );
+			fireEvent.click( await screen.findByRole( 'button', { name: 'Обновить' } ) );
+			expect( performOrderAction ).toHaveBeenCalledWith( 42, 'update' );
+
+			fireEvent.click( screen.getByRole( 'button', { name: 'Вызвать курьера' } ) );
+
+			const dialog = await screen.findByRole( 'dialog' );
+
+			fireEvent.change( within( dialog ).getByLabelText( 'Комментарий курьеру' ), { target: { value: 'Позвонить за час' } } );
+
+			await act( async () => {
+				settle( rejectA, resolveA );
+			} );
+
+			expect( screen.getByRole( 'dialog' ) ).toBeInTheDocument();
+			expect( within( screen.getByRole( 'dialog' ) ).getByLabelText( 'Комментарий курьеру' ) ).toHaveValue( 'Позвонить за час' );
+			expect( performOrderAction ).toHaveBeenCalledTimes( 1 );
+		} );
+	} );
+
+	test( 'the preview lists the extra lines a plugin added', async () => {
+		fetchOrderPreview.mockResolvedValue( {
+			id: 42,
+			order_number: '42',
+			edit_url: 'https://example.test/wp-admin/post.php?post=42&action=edit',
+			date_created: new Date().toISOString(),
+			status: { slug: 'processing', label: 'Processing' },
+			carrier: { id: 'cdek', label: 'СДЭК' },
+			customer: { name: 'Иван Петров', email: '', phone: '', user_id: 0, user_edit_url: null },
+			billing: { name: 'Иван Петров', email: '', phone: '', address: '' },
+			shipping: { address: '', method_title: '', destination_kind: 'pickup', destination_text: 'ул. Ленина, 1' },
+			payment: { method_title: 'Картой', formatted_total: '2 400 ₽', needs_payment: false },
+			delivery_status: { canonical: 'in_transit', canonical_label: 'В пути', raw: '', raw_label: '' },
+			tracking: { number: null, url: null },
+			items: [],
+			customer_note: '',
+			actions: [],
+			extra_fields: [
+				{ label: 'Заявка на курьера', value: '2026-10-13, 09:00–18:00', url: null, tone: 'info' },
+				{ label: 'Накладная курьера', value: '№ 77', url: 'https://cdek.example/77' },
+			],
+		} );
+
+		render( <App /> );
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Просмотреть заказ 42' } ) );
+
+		const dialog = await screen.findByRole( 'dialog' );
+
+		expect( await within( dialog ).findByText( 'Заявка на курьера' ) ).toBeInTheDocument();
+		expect( within( dialog ).getByText( '2026-10-13, 09:00–18:00' ) ).toHaveClass( 'woodev-orders-status--info' );
+		expect( within( dialog ).getByRole( 'link', { name: '№ 77' } ) ).toHaveAttribute( 'href', 'https://cdek.example/77' );
+	} );
+} );
