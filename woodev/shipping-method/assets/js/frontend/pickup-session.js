@@ -26,6 +26,9 @@
  *   - `getSelectedId()`                  CONTEXT: the point id the surface currently holds, `''` for none.
  *   - `getLocality()`                    CONTEXT: the locality NAME the map provider centres on.
  *   - `getLocalityKey()`                 CONTEXT: the locality the points query is addressed by.
+ *   - `getContextKey()` (optional)       CONTEXT: a fingerprint of what the checkout is about (shipping
+ *                                        method, locality); a dismissed dialog's late answer is applied
+ *                                        only while it is unchanged.
  *   - `getNonce()`                       CONTEXT: the live `wp_rest` nonce for the points routes.
  *   - `getRequestContext()`              CONTEXT: extra query params for every points and details
  *                                        request, read per request, or `null` for none. The classic
@@ -896,6 +899,13 @@
 		 *  refusal or a failure is dropped silently, there being nobody to tell. Cleared with
 		 *  the token it belongs to. */
 		var pendingSelectionDismissed = false;
+
+		/** @type {string} the host's {@see contextKey} read when the pending confirmation left. A
+		 *  dismissed dialog's answer is applied ONLY while this still equals the live read: once
+		 *  the customer switched shipping method or edited the locality, the session is still
+		 *  registered (a closed dialog is skipped by the cart-change refresh) and the answer
+		 *  would write a point into a checkout that has moved on (#1171, review round 2). */
+		var pendingSelectionContext = '';
 
 		/** @type {number|null} the pending {@see SELECTION_BUSY_DELAY_MS} timer that will raise the
 		 *  dialog's busy overlay under `ownsChrome`, or null when none is waiting. Lives beside the
@@ -2019,6 +2029,16 @@
 		}
 
 		/**
+		 * The host's fingerprint of what the checkout is currently ABOUT (shipping method,
+		 * locality). Empty for a host that has none — then a dismissed answer is always applied.
+		 *
+		 * @returns {string}
+		 */
+		function contextKey() {
+			return 'function' === typeof host.getContextKey ? String( host.getContextKey() ) : '';
+		}
+
+		/**
 		 * Drops whatever confirmation the staleness guard currently holds, releasing the card lock
 		 * that came with it — the single entry point for every path that makes an in-flight
 		 * confirmation stop being about anything current (spec D-9): the card moving to another
@@ -2042,6 +2062,25 @@
 			pendingSelectionDismissed = false;
 
 			releaseSelectionBusy();
+		}
+
+		/**
+		 * Ends the pending confirmation without applying it when its dialog is gone AND the
+		 * checkout moved on (another shipping method, another locality) while it was out: the
+		 * answer belongs to a context the customer left, so it must not write the old point into
+		 * the field nor refresh the checkout (#1171, review round 2). The server's copy is keyed
+		 * by context and comes back with the next checkout refresh.
+		 *
+		 * @returns {boolean} whether the answer was dropped.
+		 */
+		function dropMovedAnswer() {
+			if ( ! pendingSelectionDismissed || contextKey() === pendingSelectionContext ) {
+				return false;
+			}
+
+			invalidateSelection();
+
+			return true;
 		}
 
 		/**
@@ -2085,6 +2124,7 @@
 			pendingSelectionToken = token;
 			pendingSelectionPointId = pointId;
 			pendingSelectionDismissed = false;
+			pendingSelectionContext = contextKey();
 
 			acquireSelectionBusy();
 
@@ -2158,6 +2198,13 @@
 				return;
 			}
 
+			// BEFORE `_resolved` goes out: a plugin listening to it writes the point's address into
+			// the checkout fields (D-14), which is exactly what must not happen for a context the
+			// customer has left.
+			if ( dropMovedAnswer() ) {
+				return;
+			}
+
 			fireDocumentEvent( EVENT_SELECT_RESOLVED, {
 				fieldId: config.fieldId,
 				point: point,
@@ -2174,6 +2221,11 @@
 			// Read before the token is cleared: a dialog dismissed while the request was out
 			// (#1171) leaves the answer to be applied with nobody on screen to be told about it.
 			var dismissed = pendingSelectionDismissed;
+
+			// Again, for a `_resolved` listener that dismissed the dialog and moved the context.
+			if ( dropMovedAnswer() ) {
+				return;
+			}
 
 			pendingSelectionToken = 0;
 			pendingSelectionPointId = null;

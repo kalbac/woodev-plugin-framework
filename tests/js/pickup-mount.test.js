@@ -5315,6 +5315,40 @@ describe( 'selection confirmation', () => {
 		expect( jq.triggered ).toContain( 'update_checkout' );
 	} );
 
+	// Review round 2: the closed session stays registered (a closed dialog is skipped by the
+	// cart-change refresh), so a late answer would otherwise write the OLD point into a
+	// checkout the customer has already moved on from.
+	const contextChanges = [
+		[ 'switches the shipping method', () => {
+			document.body.insertAdjacentHTML( 'beforeend',
+				'<input type="radio" name="shipping_method[0]" value="pickup:1" checked>' +
+				'<input type="radio" name="shipping_method[0]" value="flat_rate:2">' );
+		}, () => {
+			document.querySelector( 'input[value="flat_rate:2"]' ).checked = true;
+		} ],
+		[ 'edits the locality', () => {}, () => setCitySelectValue( 'billing_city', 'Казань' ) ],
+	];
+
+	it.each( contextChanges )( 'drops the answer of a dismissed dialog when the customer %s meanwhile (#1171)', async ( _label, prepare, change ) => {
+		prepare();
+
+		const { emitSelect, resolveSelect, field, jq } = openPicker( {
+			selection: { close: true, refreshCheckout: true },
+		} );
+		const resolved = [];
+		document.body.addEventListener( 'woodev_pickup_point_select_resolved', () => resolved.push( 1 ) );
+
+		emitSelect( { id: 'P1' } );
+		document.querySelector( '.woodev-modal__close' ).click();
+		change();
+
+		await resolveSelect( { allowed: true, reason: null, close: null, refresh_checkout: null } );
+
+		expect( field.value ).toBe( '' );
+		expect( jq.triggered ).not.toContain( 'update_checkout' );
+		expect( resolved ).toHaveLength( 0 );
+	} );
+
 	it.each( dismissals )( 'drops a REFUSAL for a dialog %s had already dismissed — nobody is left to tell (#1171)', async ( _label, dismiss ) => {
 		const { emitSelect, resolveSelect, panels, field } = openPicker( {} );
 
