@@ -46,6 +46,15 @@ final class Step {
 	/** @var callable|null visibility predicate. */
 	private $visibility_callback;
 
+	/** @var bool whether the merchant may move past the step without saving it. */
+	private bool $skippable = true;
+
+	/** @var callable|null server-side validation, run before anything is persisted. */
+	private $validation_callback;
+
+	/** @var array<string,Step_Action> actions bound to the step, keyed by id. */
+	private array $actions = [];
+
 	/**
 	 * Use the named constructors instead.
 	 *
@@ -59,6 +68,7 @@ final class Step {
 		$this->content = null;
 		$this->on_save = null;
 		$this->visibility_callback = null;
+		$this->validation_callback = null;
 	}
 
 	/**
@@ -204,6 +214,113 @@ final class Step {
 			return true;
 		}
 
-		return (bool) call_user_func( $this->visibility_callback );
+		try {
+			return (bool) call_user_func( $this->visibility_callback );
+		} catch ( \Throwable $e ) {
+			// The predicate is the plugin's own code and runs while the wizard is being
+			// built — an Error here must not take the admin down. A step whose predicate
+			// cannot answer is hidden (never saved, never shown) and the failure is logged.
+			Callback_Failure::log( sprintf( 'visibility check failed for step "%s"', $this->id ), $e );
+
+			return false;
+		}
+	}
+
+	/**
+	 * Marks the step as mandatory (or optional again) — fluent.
+	 *
+	 * A non-skippable step has no «Пропустить» control in the client. The wizard keeps no
+	 * per-step progress on the server, so this is a client-side contract: it removes the
+	 * control, it does not make the server refuse a hand-crafted request.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param bool $skippable whether the merchant may skip the step (default true).
+	 * @return self
+	 */
+	public function set_skippable( bool $skippable = true ): self {
+		$this->skippable = $skippable;
+
+		return $this;
+	}
+
+	/**
+	 * Whether the merchant may skip the step. Defaults to true.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return bool
+	 */
+	public function is_skippable(): bool {
+		return $this->skippable;
+	}
+
+	/**
+	 * Sets the server-side validation callback (fluent).
+	 *
+	 * Signature: `fn( array $values, \WP_REST_Request $request ): array|bool|null`. It runs
+	 * BEFORE anything of the step is persisted, with the submitted values of the fields
+	 * declared on the step. Return a map of `field id => message` to refuse the save (nothing
+	 * is persisted, `on_save` does not run, the client shows each message on its field), or
+	 * `false` to refuse with a generic message; `null`, `true` or an empty array mean valid.
+	 * A throw is an unexpected failure: logged, answered with a generic message, nothing persisted.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param callable $callback the validator.
+	 * @return self
+	 */
+	public function set_validation_callback( callable $callback ): self {
+		$this->validation_callback = $callback;
+
+		return $this;
+	}
+
+	/**
+	 * Returns the validation callback.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return callable|null
+	 */
+	public function get_validation_callback(): ?callable {
+		return $this->validation_callback;
+	}
+
+	/**
+	 * Binds an action to the step (fluent). A second action with the same id replaces the first.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param Step_Action $action the action.
+	 * @return self
+	 */
+	public function add_action( Step_Action $action ): self {
+		$this->actions[ $action->get_id() ] = $action;
+
+		return $this;
+	}
+
+	/**
+	 * Returns the step's actions keyed by id.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return array<string,Step_Action>
+	 */
+	public function get_actions(): array {
+		return $this->actions;
+	}
+
+	/**
+	 * Returns one action by id.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param string $action_id action id.
+	 * @return Step_Action|null
+	 */
+	public function get_action( string $action_id ): ?Step_Action {
+		return $this->actions[ $action_id ] ?? null;
 	}
 }

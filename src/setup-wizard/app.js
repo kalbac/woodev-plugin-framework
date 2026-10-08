@@ -9,7 +9,11 @@
  *
  * - "Продолжить" / "Начать настройку" saves the current settings step (advance on
  *   success only) and advances; on a content/welcome step it just advances.
- * - "Пропустить" skips THIS step (advance WITHOUT saving) — never exits.
+ * - "Пропустить" skips THIS step (advance WITHOUT saving) — never exits. A step declared
+ *   `skippable: false` by PHP has no such control.
+ * - Step actions (D2): buttons for the step's server-side operations («Проверить ключ»…). An
+ *   action sends the step's current UNSAVED values and shows the structured answer; a
+ *   `destructive` one first asks the merchant to confirm, and is sent with `confirmed: true`.
  * - The stepper is back-free but forward-gated (#110): a step label is a button only for
  *   a step already VISITED in this session (index <= the furthest one reached) and never
  *   for the terminal finish step, which is reachable only through the primary button of
@@ -36,7 +40,7 @@ import { Button } from '@wordpress/components';
 import Stepper from '../components/stepper';
 import StepView from './step-view';
 import { CheckFilledIcon, GearIcon, StarIcon } from '../components/icons';
-import { saveStep, complete } from './rest';
+import { saveStep, complete, runAction } from './rest';
 import { validateFields, isFieldVisible } from '../components/validate';
 
 /**
@@ -146,6 +150,10 @@ export default function App() {
 	const [ showErrors, setShowErrors ] = useState( false );
 	const [ fieldErrors, setFieldErrors ] = useState( {} );
 	const [ errorRevealGen, setErrorRevealGen ] = useState( 0 );
+	// Step actions: the one running, the destructive one awaiting confirmation, the last answer.
+	const [ actionBusy, setActionBusy ] = useState( null );
+	const [ pendingConfirm, setPendingConfirm ] = useState( null );
+	const [ actionResult, setActionResult ] = useState( null );
 	// The finish step's «completed» write failed / the footer exit's «skipped» write failed.
 	const [ completeFailed, setCompleteFailed ] = useState( false );
 	const [ completeRetrying, setCompleteRetrying ] = useState( false );
@@ -244,6 +252,13 @@ export default function App() {
 		}
 	}, [ isFinish ] );
 
+	// An action's answer and a pending confirmation belong to the step they were raised on.
+	useEffect( () => {
+		setActionBusy( null );
+		setPendingConfirm( null );
+		setActionResult( null );
+	}, [ index ] );
+
 	// Move focus to the new step's heading after every step change, so a keyboard / screen
 	// reader user lands on the new content instead of on a button that no longer exists.
 	// Skipped on the first render: loading the page must not steal focus (#1047).
@@ -287,6 +302,55 @@ export default function App() {
 	}
 
 	/**
+	 * The current step's field values: what the merchant typed, else the schema default.
+	 *
+	 * @return {Object} field id => value.
+	 */
+	function collectStepValues() {
+		const stepValues = {};
+		Object.keys( step.fields || {} ).forEach( ( id ) => {
+			stepValues[ id ] = ( values[ step.id ] || {} )[ id ] ?? step.fields[ id ].value;
+		} );
+		return stepValues;
+	}
+
+	/**
+	 * Runs a step action. A destructive one first raises the confirmation; the confirmed
+	 * call is the one that reaches the server (`confirmed: true`).
+	 *
+	 * @param {Object}  action    action descriptor from the bootstrap (id, label, destructive, confirm).
+	 * @param {boolean} confirmed whether the merchant already confirmed.
+	 */
+	async function runStepAction( action, confirmed = false ) {
+		setError( null );
+		setActionResult( null );
+
+		if ( action.destructive && ! confirmed ) {
+			setPendingConfirm( action.id );
+			return;
+		}
+
+		setPendingConfirm( null );
+		setActionBusy( action.id );
+		try {
+			const answer = await runAction( step.id, action.id, collectStepValues(), confirmed );
+			setActionResult( {
+				actionId: action.id,
+				status: answer && 'error' === answer.status ? 'error' : 'success',
+				message: ( answer && answer.message ) || '',
+			} );
+		} catch ( e ) {
+			setActionResult( {
+				actionId: action.id,
+				status: 'error',
+				message: e.message || __( 'Что-то пошло не так. Попробуйте ещё раз.', 'woodev-plugin-framework' ),
+			} );
+		} finally {
+			setActionBusy( null );
+		}
+	}
+
+	/**
 	 * Advances to the next step, saving the current settings step first.
 	 *
 	 * For settings steps, client-side validation runs before the save request.
@@ -300,10 +364,7 @@ export default function App() {
 		setExitFailed( false );
 
 		if ( isSettings ) {
-			const stepValues = {};
-			Object.keys( step.fields || {} ).forEach( ( id ) => {
-				stepValues[ id ] = ( values[ step.id ] || {} )[ id ] ?? step.fields[ id ].value;
-			} );
+			const stepValues = collectStepValues();
 
 			const visibleFields = {};
 			Object.keys( step.fields || {} ).forEach( ( id ) => {
@@ -337,7 +398,16 @@ export default function App() {
 				setShowErrors( true );
 				setErrorRevealGen( ( g ) => g + 1 );
 			}
-			setError( e.message || __( 'Что-то пошло не так. Попробуйте ещё раз.', 'woodev-plugin-framework' ) );
+			// An error the validator put on a key that is not a rendered field has nowhere
+			// to show but the banner.
+			const fieldIds = Object.keys( step.fields || {} );
+			const base = e.message || __( 'Что-то пошло не так. Попробуйте ещё раз.', 'woodev-plugin-framework' );
+			const extra = map
+				? Object.keys( map )
+					.filter( ( key ) => ! fieldIds.includes( key ) && map[ key ] !== base )
+					.map( ( key ) => map[ key ] )
+				: [];
+			setError( [ base, ...extra ].join( ' ' ) );
 		} finally {
 			setBusy( false );
 		}
@@ -377,6 +447,84 @@ export default function App() {
 			}
 		}
 		window.location.href = adminUrl();
+	}
+
+	/**
+	 * The step's action buttons, the pending confirmation and the last answer.
+	 *
+	 * @return {Object|null} React element, or null when the step has no actions.
+	 */
+	function renderStepActions() {
+		const actions = step.actions || [];
+		if ( 0 === actions.length ) {
+			return null;
+		}
+
+		const pending = actions.find( ( a ) => a.id === pendingConfirm );
+
+		return createElement(
+			'div',
+			{ className: 'woodev-setup__step-actions' },
+			createElement(
+				'div',
+				{ className: 'woodev-setup__step-actions-row' },
+				actions.map( ( action ) =>
+					createElement(
+						Button,
+						{
+							key: action.id,
+							variant: 'secondary',
+							isDestructive: !! action.destructive,
+							isBusy: actionBusy === action.id,
+							disabled: busy || null !== actionBusy,
+							onClick: () => runStepAction( action ),
+							className: 'woodev-setup__step-action',
+						},
+						action.label
+					)
+				)
+			),
+			pending &&
+				createElement(
+					'div',
+					{ className: 'woodev-setup__confirm', role: 'alert' },
+					createElement(
+						'p',
+						null,
+						pending.confirm || __( 'Это действие нельзя отменить. Выполнить?', 'woodev-plugin-framework' )
+					),
+					createElement(
+						Button,
+						{
+							variant: 'secondary',
+							isDestructive: true,
+							onClick: () => runStepAction( pending, true ),
+							className: 'woodev-setup__confirm-yes',
+						},
+						__( 'Да, выполнить', 'woodev-plugin-framework' )
+					),
+					' ',
+					createElement(
+						Button,
+						{
+							variant: 'tertiary',
+							onClick: () => setPendingConfirm( null ),
+							className: 'woodev-setup__confirm-no',
+						},
+						__( 'Отмена', 'woodev-plugin-framework' )
+					)
+				),
+			actionResult &&
+				actionResult.message &&
+				createElement(
+					'div',
+					{
+						className: `woodev-setup__action-result woodev-setup__action-result--${ actionResult.status }`,
+						role: 'error' === actionResult.status ? 'alert' : 'status',
+					},
+					actionResult.message
+				)
+		);
 	}
 
 	const primaryLabel = isWelcome
@@ -473,6 +621,7 @@ export default function App() {
 						showErrors,
 						serverErrors: fieldErrors,
 					} ),
+					renderStepActions(),
 					createElement(
 						'div',
 						{ className: 'woodev-setup__actions' },
@@ -499,7 +648,7 @@ export default function App() {
 									Button,
 									{
 										variant: 'link',
-										disabled: busy,
+										disabled: busy || null !== actionBusy,
 										onClick: skipStep,
 										className: 'woodev-setup__skip',
 									},
@@ -510,7 +659,7 @@ export default function App() {
 								{
 									variant: 'primary',
 									isBusy: busy,
-									disabled: busy,
+									disabled: busy || null !== actionBusy,
 									onClick: goNext,
 									className: 'woodev-setup__primary',
 								},

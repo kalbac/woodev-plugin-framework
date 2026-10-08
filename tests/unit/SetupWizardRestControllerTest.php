@@ -7,6 +7,9 @@ use Woodev\Framework\Setup\Step;
 
 require_once dirname( __DIR__, 2 ) . '/woodev/api/class-api-base.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/setup/class-step.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/setup/class-step-action.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/setup/class-action-outcome.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/setup/class-callback-failure.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/setup/class-setup-wizard.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/rest-api/controllers/class-rest-api-setup.php';
 
@@ -24,7 +27,7 @@ class SetupWizardRestControllerTest extends TestCase {
 
 	public function test_complete_sets_state_and_returns_ok(): void {
 		$wizard = Mockery::mock( '\Woodev\Framework\Setup\Setup_Wizard' );
-		$wizard->shouldReceive( 'complete_setup' )->once()->with( 'completed' );
+		$wizard->shouldReceive( 'complete_setup' )->once()->with( 'completed' )->andReturn( 'completed' );
 
 		Functions\when( 'rest_ensure_response' )->returnArg( 1 );
 

@@ -115,10 +115,13 @@ abstract class Setup_Wizard {
 	 * @param string[]      $setting_ids referenced setting ids.
 	 * @param callable|null $on_save     optional idempotent save side-effect.
 	 * @param string        $description optional step description shown in the wizard UI.
-	 * @return void
+	 * @return Step the registered step, for fluent configuration (`set_skippable()`,
+	 *              `set_validation_callback()`, `add_action()`).
 	 */
-	protected function register_step( string $id, string $label, array $setting_ids, ?callable $on_save = null, string $description = '' ): void {
+	protected function register_step( string $id, string $label, array $setting_ids, ?callable $on_save = null, string $description = '' ): Step {
 		$this->steps[ $id ] = Step::settings( $id, $label, $setting_ids, $on_save, $description );
+
+		return $this->steps[ $id ];
 	}
 
 	/**
@@ -130,10 +133,12 @@ abstract class Setup_Wizard {
 	 * @param string          $label       step label.
 	 * @param callable|string $content     content callback or markup.
 	 * @param string          $description optional step description shown in the wizard UI.
-	 * @return void
+	 * @return Step the registered step, for fluent configuration (`set_skippable()`, `add_action()`).
 	 */
-	protected function register_content_step( string $id, string $label, $content, string $description = '' ): void {
+	protected function register_content_step( string $id, string $label, $content, string $description = '' ): Step {
 		$this->steps[ $id ] = Step::content( $id, $label, $content, $description );
+
+		return $this->steps[ $id ];
 	}
 
 	/**
@@ -275,15 +280,31 @@ abstract class Setup_Wizard {
 	/**
 	 * Persists completion state (server-side authority, not a client flag).
 	 *
+	 * The state only moves forward (D1): `completed` means "the merchant reached the end"
+	 * and is never overwritten by `skipped`; `skipped` («Настрою позже») may later become
+	 * `completed`. A refused downgrade is not an error — nothing is written and the
+	 * unchanged state is returned. It says nothing about the plugin being ready.
+	 *
 	 * @since 2.0.2
 	 *
 	 * @param string $state 'completed' (default) or 'skipped'; any other value normalises to 'completed'.
-	 * @return void
+	 * @return string the state in force afterwards ('completed' | 'skipped').
 	 */
-	public function complete_setup( string $state = 'completed' ): void {
+	public function complete_setup( string $state = 'completed' ): string {
 		$value = 'skipped' === $state ? 'skipped' : 'completed';
+
+		// Read the stored value, not the per-request cache: the guard must see what
+		// another request may have written meanwhile.
+		if ( 'skipped' === $value && 'completed' === (string) get_option( $this->get_complete_option_name(), '' ) ) {
+			$this->state = 'completed';
+
+			return 'completed';
+		}
+
 		update_option( $this->get_complete_option_name(), $value );
 		$this->state = $value;
+
+		return $value;
 	}
 
 	/**
@@ -577,7 +598,13 @@ abstract class Setup_Wizard {
 
 			$content = $step->get_content();
 			if ( is_callable( $content ) ) {
-				$content = (string) call_user_func( $content );
+				try {
+					$content = (string) call_user_func( $content );
+				} catch ( \Throwable $e ) {
+					// The content callback is the plugin's; a throw must not blank the whole wizard.
+					Callback_Failure::log( sprintf( 'content failed for step "%s"', $step->get_id() ), $e );
+					$content = '';
+				}
 			}
 
 			$steps[] = [
@@ -587,6 +614,15 @@ abstract class Setup_Wizard {
 				'description' => $step->get_description(),
 				'fields'      => $fields,
 				'content'     => is_string( $content ) ? $content : '',
+				'skippable'   => $step->is_skippable(),
+				'actions'     => array_values(
+					array_map(
+						static function ( Step_Action $action ): array {
+							return $action->to_client_array();
+						},
+						$step->get_actions()
+					)
+				),
 			];
 		}
 
@@ -597,6 +633,8 @@ abstract class Setup_Wizard {
 			'description' => '',
 			'fields'      => [],
 			'content'     => '',
+			'skippable'   => false,
+			'actions'     => [],
 		];
 
 		return [
@@ -718,7 +756,9 @@ abstract class Setup_Wizard {
 			return;
 		}
 
-		if ( $this->is_finished() ) {
+		// Shown until the merchant REACHED THE END: «Настрою позже» (skipped) keeps the
+		// notice, so the wizard stays reachable (D1).
+		if ( $this->is_complete() ) {
 			return;
 		}
 
@@ -753,7 +793,7 @@ abstract class Setup_Wizard {
 	 * @return string[]
 	 */
 	public function add_action_link( array $links ): array {
-		if ( ! $this->is_finished() ) {
+		if ( ! $this->is_complete() ) {
 			$links[] = sprintf( '<a href="%s">%s</a>', esc_url( $this->get_setup_url() ), esc_html__( 'Настройка', 'woodev-plugin-framework' ) );
 		}
 

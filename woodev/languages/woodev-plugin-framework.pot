@@ -1788,6 +1788,14 @@ msgstr ""
 msgid "Неизвестный шаг."
 msgstr ""
 
+#: rest-api/controllers/class-rest-api-setup.php:353
+msgid "Неизвестное действие."
+msgstr ""
+
+#: rest-api/controllers/class-rest-api-setup.php:361
+msgid "Это действие нужно подтвердить."
+msgstr ""
+
 #: rest-api/controllers/class-rest-api-setup.php:209
 msgid "Не удалось сохранить статус настройки. Попробуйте ещё раз."
 msgstr ""
@@ -4225,6 +4233,14 @@ msgstr ""
 
 #: assets/build/setup-wizard/index.js:2
 msgid "Пропустить"
+msgstr ""
+
+#: assets/build/setup-wizard/index.js:2
+msgid "Да, выполнить"
+msgstr ""
+
+#: assets/build/setup-wizard/index.js:2
+msgid "Это действие нельзя отменить. Выполнить?"
 msgstr ""
 
 #: assets/build/setup-wizard/index.js:2

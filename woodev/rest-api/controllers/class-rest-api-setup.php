@@ -5,12 +5,16 @@
  * @package Woodev\Framework\REST
  */
 
+use Woodev\Framework\Setup\Action_Outcome;
+use Woodev\Framework\Setup\Callback_Failure;
+use Woodev\Framework\Setup\Step;
+
 defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( 'Woodev_REST_API_Setup' ) ) :
 
 	/**
-	 * Serves the wizard bootstrap, persists per-step values, and finalizes setup.
+	 * Serves the wizard bootstrap, persists per-step values, runs step actions and finalizes setup.
 	 *
 	 * Registered through Woodev_REST_V1_Registrar (neutral woodev/v1 namespace).
 	 *
@@ -53,10 +57,22 @@ if ( ! class_exists( 'Woodev_REST_API_Setup' ) ) :
 
 			register_rest_route(
 				$base,
-				"/{$id}/setup/steps/(?P<step_id>[\w-]+)",
+				"/{$id}/setup/steps/(?P<step_id>[\\w-]+)",
 				[
 					'methods'             => WP_REST_Server::EDITABLE,
 					'callback'            => [ $this, 'save_step' ],
+					'permission_callback' => [ $this, 'permissions_check' ],
+				]
+			);
+
+			// A step action: a server-side operation bound to a step (D2). A new route next to
+			// the shipped ones — the save and complete routes above and below are installed-site contracts.
+			register_rest_route(
+				$base,
+				"/{$id}/setup/steps/(?P<step_id>[\\w-]+)/actions/(?P<action_id>[\\w-]+)",
+				[
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => [ $this, 'run_action' ],
 					'permission_callback' => [ $this, 'permissions_check' ],
 				]
 			);
@@ -84,40 +100,19 @@ if ( ! class_exists( 'Woodev_REST_API_Setup' ) ) :
 		}
 
 		/**
-		 * Validates + persists one step's values, then runs the optional on_save.
+		 * Resolves the step a request addresses.
 		 *
-		 * Each setting is persisted as it passes validation: if setting N fails,
-		 * settings 0..N-1 are already saved. This is intentional and idempotent —
-		 * re-submitting the step overwrites any already-saved values. Settings are
-		 * persisted BEFORE on_save; a thrown on_save reports an error while settings
-		 * are already saved (on_save must therefore be idempotent too).
-		 *
-		 * Failure contract (#1048). Anything the plugin's on_save callback throws —
-		 * an Exception or an Error, any \Throwable — is caught, logged through
-		 * error_log() with secrets masked by Woodev_API_Base::redact_secret_log_text(),
-		 * and answered with a WP_Error `woodev_setup_step_failed` (HTTP 500, generic
-		 * translated message). The exception's own message never reaches the browser.
-		 * What the caller can rely on after that error:
-		 *
-		 * - every setting of the step that was submitted and valid IS persisted
-		 *   (the step's values are written before on_save runs, and are not rolled back);
-		 * - on_save may have done part of its own work — the framework cannot know
-		 *   how far it got and does not undo it;
-		 * - a retry is safe exactly when on_save is idempotent, which register_step()
-		 *   already requires of it: the retry re-writes the same settings and re-runs
-		 *   the callback from the top. A callback with a non-repeatable side effect
-		 *   (creates a remote account, sends a message) is NOT made safe by this catch.
-		 *
-		 * A validation failure of a setting (Woodev_Plugin_Exception from the settings
-		 * handler) is a different path: it carries the field-keyed `errors` map and the
-		 * handler's own message, and on_save does not run.
+		 * The single choke point for "may this request touch this step": today a step must
+		 * be registered and visible at wizard build time; the server-side step-graph
+		 * recompute (D3) refuses a step hidden in the CURRENT graph here, for the save and
+		 * the action route alike.
 		 *
 		 * @since 2.0.2
 		 *
 		 * @param \WP_REST_Request $request request.
-		 * @return \WP_REST_Response|\WP_Error|array<string,mixed>
+		 * @return Step|\WP_Error
 		 */
-		public function save_step( $request ) {
+		private function resolve_step( $request ) {
 			$step_id = (string) $request->get_param( 'step_id' );
 			$step    = $this->wizard->get_steps()[ $step_id ] ?? null;
 
@@ -129,12 +124,142 @@ if ( ! class_exists( 'Woodev_REST_API_Setup' ) ) :
 				);
 			}
 
-			$handler = $this->wizard->get_plugin()->get_settings_handler();
+			return $step;
+		}
+
+		/**
+		 * The submitted values of one step: hidden fields dropped (their show_if is false),
+		 * and — for what a plugin callback may see — only fields declared on the step.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WP_REST_Request $request request.
+		 * @return array<string,mixed>
+		 */
+		private function get_submitted_values( $request ): array {
 			$values  = (array) $request->get_param( 'values' );
+			$handler = $this->wizard->get_plugin()->get_settings_handler();
 
 			// Drop fields hidden by their show_if conditions — never validated, never persisted.
 			if ( $handler ) {
 				$values = $handler->filter_visible_values( $values );
+			}
+
+			return $values;
+		}
+
+		/**
+		 * The generic 500 the browser gets for any unexpected failure.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $code error code.
+		 * @return \WP_Error
+		 */
+		private function server_error( string $code ): \WP_Error {
+			return new WP_Error(
+				$code,
+				__( 'Внутренняя ошибка сервера. Попробуйте ещё раз.', 'woodev-plugin-framework' ),
+				[ 'status' => 500 ]
+			);
+		}
+
+		/**
+		 * Normalises what a step validation callback returned.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param mixed $result callback return.
+		 * @return array<string,string>|null null when the values are valid; otherwise the
+		 *                                   (possibly empty) field id => message map of a refusal.
+		 */
+		private function normalise_validation_result( $result ): ?array {
+			if ( false === $result ) {
+				return [];
+			}
+
+			if ( ! is_array( $result ) || [] === $result ) {
+				return null;
+			}
+
+			$errors = [];
+			foreach ( $result as $field => $message ) {
+				if ( is_scalar( $message ) && '' !== (string) $message ) {
+					$errors[ (string) $field ] = (string) $message;
+				}
+			}
+
+			return $errors;
+		}
+
+		/**
+		 * Validates + persists one step's values, then runs the optional on_save.
+		 *
+		 * Order: the step's validation callback (if any) runs FIRST, before anything is
+		 * persisted. When it refuses, nothing is saved and on_save does not run; the answer is
+		 * a WP_Error `woodev_setup_invalid` (HTTP 400) whose data carries `errors`, a map of
+		 * field id => message. Then each setting is persisted as it passes the settings
+		 * handler's validation: if setting N fails, settings 0..N-1 are already saved. This is
+		 * intentional and idempotent — re-submitting the step overwrites any already-saved
+		 * values. Settings are persisted BEFORE on_save; a thrown on_save reports an error
+		 * while settings are already saved (on_save must therefore be idempotent too).
+		 *
+		 * Failure contract (#1048, audit #6). Anything the plugin's callbacks throw — an
+		 * Exception or an Error, any \Throwable — is caught, logged through error_log() with
+		 * secrets masked by Woodev_API_Base::redact_secret_log_text(), and answered with a
+		 * generic translated HTTP 500 WP_Error; the throwable's own message never reaches the
+		 * browser. A throwing validation callback persists nothing. After a throwing on_save:
+		 *
+		 * - every setting of the step that was submitted and valid IS persisted
+		 *   (the step's values are written before on_save runs, and are not rolled back);
+		 * - on_save may have done part of its own work — the framework cannot know
+		 *   how far it got and does not undo it;
+		 * - a retry is safe exactly when on_save is idempotent, which register_step()
+		 *   already requires of it: the retry re-writes the same settings and re-runs
+		 *   the callback from the top. A callback with a non-repeatable side effect
+		 *   (creates a remote account, sends a message) is NOT made safe by this catch.
+		 *
+		 * A validation failure of a setting (Woodev_Plugin_Exception from the settings
+		 * handler) is a different path: it carries a one-entry `errors` map (the first failing
+		 * setting) and the handler's own message, and on_save does not run.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WP_REST_Request $request request.
+		 * @return \WP_REST_Response|\WP_Error|array<string,mixed>
+		 */
+		public function save_step( $request ) {
+			$step = $this->resolve_step( $request );
+
+			if ( $step instanceof WP_Error ) {
+				return $step;
+			}
+
+			$step_id = $step->get_id();
+			$handler = $this->wizard->get_plugin()->get_settings_handler();
+			$values  = $this->get_submitted_values( $request );
+
+			$validate = $step->get_validation_callback();
+			if ( null !== $validate ) {
+				$step_values = array_intersect_key( $values, array_flip( $step->get_setting_ids() ) );
+				try {
+					$errors = $this->normalise_validation_result( call_user_func( $validate, $step_values, $request ) );
+				} catch ( \Throwable $e ) {
+					Callback_Failure::log( sprintf( 'validation failed for step "%s"', $step_id ), $e );
+
+					return $this->server_error( 'woodev_setup_step_failed' );
+				}
+
+				if ( null !== $errors ) {
+					return new WP_Error(
+						'woodev_setup_invalid',
+						__( 'Проверьте правильность заполнения полей на этом шаге.', 'woodev-plugin-framework' ),
+						[
+							'status' => 400,
+							'errors' => $errors,
+						]
+					);
+				}
 			}
 
 			if ( $handler ) {
@@ -144,25 +269,11 @@ if ( ! class_exists( 'Woodev_REST_API_Setup' ) ) :
 							// update_value() validates (throws Woodev_Plugin_Exception) AND persists.
 							$handler->update_value( $sid, $values[ $sid ] );
 						} catch ( \Woodev_Plugin_Exception $e ) {
-							// Issue #397: `errors`, a MAP of setting id => message — not
-							// `field`, a bare id. The client has always read
-							// `err.data.errors` (`src/setup-wizard/app.js`'s `goNext()`),
-							// so under the old key the map was `null` on every response and
-							// `setFieldErrors()` was never called from the server side at
-							// all. Every layer below it was already wired and working:
-							// `app.js` passes `serverErrors` to `StepView`, which puts each
-							// message on `schema.serverError` for its field. The mechanism
-							// was dead on one key.
-							//
-							// `errors` is also what this framework's OTHER settings surface
-							// returns (`Woodev_REST_API_Settings_Page::save()`'s
-							// `woodev_settings_invalid` carries the same shape), so the
-							// wizard was the outlier rather than the client.
-							//
-							// Still ONE entry: this returns on the first failing setting, so
-							// only one can be known. Collecting every failure would change
-							// what gets persisted before the refusal — the loop persists as
-							// it goes — and that is a separate decision.
+							// Issue #397: `errors`, a MAP of setting id => message — the shape the
+							// client reads (`err.data.errors`) and this framework's other settings
+							// surface returns. One entry: the loop returns on the first failing
+							// setting, and collecting every failure would change what is persisted
+							// before the refusal.
 							return new WP_Error(
 								'woodev_setup_invalid',
 								$e->getMessage(),
@@ -174,12 +285,9 @@ if ( ! class_exists( 'Woodev_REST_API_Setup' ) ) :
 						} catch ( \Throwable $e ) {
 							// Unexpected failure (e.g. a third-party hook on update_option threw):
 							// log for traceability and return a generic 500 — never leak internals.
-							error_log( sprintf( '[woodev] setup wizard save_step failed on "%s": %s', $sid, \Woodev_API_Base::redact_secret_log_text( $e->getMessage() ) ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic for an unexpected persistence failure.
-							return new WP_Error(
-								'woodev_setup_server_error',
-								__( 'Внутренняя ошибка сервера. Попробуйте ещё раз.', 'woodev-plugin-framework' ),
-								[ 'status' => 500 ]
-							);
+							Callback_Failure::log( sprintf( 'save_step failed on "%s"', $sid ), $e );
+
+							return $this->server_error( 'woodev_setup_server_error' );
 						}
 					}
 				}
@@ -195,15 +303,12 @@ if ( ! class_exists( 'Woodev_REST_API_Setup' ) ) :
 				} catch ( \Throwable $e ) {
 					// on_save is the plugin's own (untrusted) callback and may throw an Error
 					// (TypeError, ArgumentCountError…) as readily as an Exception. Log the
-					// secret-redacted detail for the operator and hand the browser only a
-					// generic message — a raw message can carry a credential or an internal
-					// path. Settings are already persisted at this point (see the docblock).
-					error_log( sprintf( '[woodev] setup wizard on_save failed for step "%s": %s', $step_id, \Woodev_API_Base::redact_secret_log_text( $e->getMessage() ) ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic for an on_save failure.
-					return new WP_Error(
-						'woodev_setup_step_failed',
-						__( 'Внутренняя ошибка сервера. Попробуйте ещё раз.', 'woodev-plugin-framework' ),
-						[ 'status' => 500 ]
-					);
+					// secret-redacted detail and hand the browser only a generic message — a
+					// raw message can carry a credential or an internal path. Settings are
+					// already persisted at this point (see the docblock).
+					Callback_Failure::log( sprintf( 'on_save failed for step "%s"', $step_id ), $e );
+
+					return $this->server_error( 'woodev_setup_step_failed' );
 				}
 			}
 
@@ -216,7 +321,70 @@ if ( ! class_exists( 'Woodev_REST_API_Setup' ) ) :
 		}
 
 		/**
+		 * Runs one step action and answers its structured result.
+		 *
+		 * The callback gets the step's submitted, UNSAVED values (declared fields only) and
+		 * the request; nothing is persisted unless the callback persists it itself. A callback
+		 * returns an Action_Outcome — `success` or `error` + message + optional data — and that
+		 * (HTTP 200) is the whole answer for a business outcome, positive or negative. A
+		 * throw, or a return of anything else, is an unexpected failure: logged (secrets
+		 * masked), answered with a generic HTTP 500 WP_Error.
+		 *
+		 * A destructive action runs only when the request says `confirmed: true` — the client
+		 * sets it after the merchant confirmed; an unconfirmed run is refused with HTTP 400.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WP_REST_Request $request request.
+		 * @return \WP_REST_Response|\WP_Error|array<string,mixed>
+		 */
+		public function run_action( $request ) {
+			$step = $this->resolve_step( $request );
+
+			if ( $step instanceof WP_Error ) {
+				return $step;
+			}
+
+			$action = $step->get_action( (string) $request->get_param( 'action_id' ) );
+
+			if ( null === $action ) {
+				return new WP_Error(
+					'woodev_setup_unknown_action',
+					__( 'Неизвестное действие.', 'woodev-plugin-framework' ),
+					[ 'status' => 404 ]
+				);
+			}
+
+			if ( $action->is_destructive() && ! filter_var( $request->get_param( 'confirmed' ), FILTER_VALIDATE_BOOLEAN ) ) {
+				return new WP_Error(
+					'woodev_setup_confirmation_required',
+					__( 'Это действие нужно подтвердить.', 'woodev-plugin-framework' ),
+					[ 'status' => 400 ]
+				);
+			}
+
+			$values = array_intersect_key( $this->get_submitted_values( $request ), array_flip( $step->get_setting_ids() ) );
+
+			try {
+				$result = call_user_func( $action->get_callback(), $values, $request );
+
+				if ( ! $result instanceof Action_Outcome ) {
+					throw new \UnexpectedValueException( 'A setup wizard action must return a Woodev\Framework\Setup\Action_Outcome.' );
+				}
+			} catch ( \Throwable $e ) {
+				Callback_Failure::log( sprintf( 'action "%s" failed for step "%s"', $action->get_id(), $step->get_id() ), $e );
+
+				return $this->server_error( 'woodev_setup_action_failed' );
+			}
+
+			return rest_ensure_response( $result->to_array() );
+		}
+
+		/**
 		 * Finalizes the wizard (server-side authority).
+		 *
+		 * The state only moves forward (D1): a `skipped` request after `completed` is not an
+		 * error and changes nothing; the answer carries the state actually in force.
 		 *
 		 * @since 2.0.2
 		 *
@@ -224,13 +392,14 @@ if ( ! class_exists( 'Woodev_REST_API_Setup' ) ) :
 		 * @return \WP_REST_Response|\WP_Error|array<string,mixed>
 		 */
 		public function complete( $request ) {
-			$state = 'skipped' === $request->get_param( 'state' ) ? 'skipped' : 'completed';
+			$requested = 'skipped' === $request->get_param( 'state' ) ? 'skipped' : 'completed';
 
 			try {
-				$this->wizard->complete_setup( $state );
+				$state = $this->wizard->complete_setup( $requested );
 			} catch ( \Throwable $e ) {
 				// Never report success if the completion option was not persisted.
-				error_log( sprintf( '[woodev] setup wizard complete failed: %s', \Woodev_API_Base::redact_secret_log_text( $e->getMessage() ) ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic for a completion persistence failure.
+				Callback_Failure::log( 'complete failed', $e );
+
 				return new WP_Error(
 					'woodev_setup_complete_failed',
 					__( 'Не удалось сохранить статус настройки. Попробуйте ещё раз.', 'woodev-plugin-framework' ),
