@@ -6,7 +6,7 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-08 (s160).** 🚧 CDEK v2 (#786), plugin `v2` `78db4e1` (CI pinned to framework `adccd286`): overnight s160 closed #1157 #1158 #1160 #1161 #1162 #1164 (framework PR #1165), rig acceptance PASS; a Cyrillic plugin name in the User-Agent made CDEK answer HTTP 400 — fixed (UA falls back to the plugin id). Next: `next-session-prompt.md`. Details: `sessions/s160.md`. GlitchTip receiver (#1082) is live. ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
+**As of 2026-10-08 (s161).** 🚧 CDEK v2 (#786), plugin `v2` `0440b90` (CI pinned to framework `10b73b59`). ✅ **The functional gate is the agent's CDEK acceptance harness** (#1169, operator 08.10.2026): plugin `tests/acceptance/README.md` → «End-to-end acceptance», ~6 min, last run 58 PASS / 0 FAIL / 5 UNVERIFIABLE — re-run after every large block. #1170 (classic postcode) fixed in PR #1172; plugin #7 #8 #9 on `v2`. Next: `next-session-prompt.md`. Details: `sessions/s161.md`. GlitchTip receiver (#1082) is live. ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
 orders-page slug redirects to the framework page with that carrier preselected, accepted on the rig.
 ✅ **Both machines are live**; routine sync is git ONLY (`wiki/two-machine-setup.md`). The order
 metabox (#856) and the orders table (#870) stay accepted.
