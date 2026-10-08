@@ -4547,12 +4547,57 @@
 		return ! ( entry.location && false === entry.location.clearAddressOnChange );
 	}
 
+	/** @type {string[]} The settlement-type words a name comparison drops (the framework's `CITY_TYPE_WORDS`). */
+	var CITY_TYPE_WORDS = [
+		'город', 'гор', 'г', 'поселок', 'посёлок', 'пос', 'пгт', 'п', 'село', 'с', 'деревня', 'д',
+		'станица', 'ст-ца', 'хутор', 'х', 'аул',
+	];
+
+	/**
+	 * A settlement name reduced to what identifies it (s160) — the client half of the framework's
+	 * ONE name-comparison contract (`Location_Record::normalize_city_name()`, `normalizeCityName()`
+	 * in the Blocks bundle, which the classic scripts cannot import): lower-cased, «ё» folded to
+	 * «е», whitespace collapsed, and ONE leading settlement-type word dropped («г.», «город»,
+	 * «пос.», «с.», «д.», «пгт», …) — the record's own `type` tried first. A prefix is dropped only
+	 * when a name remains behind it, so «Село» stays «село». Nothing else is guessed: «Новое Село»
+	 * and «Село» are different names.
+	 *
+	 * @param {string} value
+	 * @param {string} [type] The record's own type word («г», «рп», «аул»).
+	 * @returns {string}
+	 */
+	function normalizeSettlementName( value, type ) {
+		var fold = function( text ) {
+			return String( text ).toLowerCase().replace( /ё/g, 'е' );
+		};
+		var folded = fold( value ).replace( /\s+/g, ' ' ).trim();
+		var words = CITY_TYPE_WORDS.slice();
+		var ownType = fold( type || '' ).replace( /^[ \t.]+|[ \t.]+$/g, '' );
+
+		if ( '' !== ownType ) {
+			words.unshift( ownType );
+		}
+
+		var alternatives = words
+			.filter( function( word ) {
+				return '' !== word && '0' !== word;
+			} )
+			.map( function( word ) {
+				return fold( word ).replace( /[.*+?^${}()|[\]\\]/g, '\\$&' );
+			} )
+			.join( '|' );
+		var stripped = folded.replace( new RegExp( '^(?:' + alternatives + ')(?:\\.\\s*|\\s+)(?=\\S)' ), '' );
+
+		return '' !== stripped ? stripped : folded;
+	}
+
 	/**
 	 * Whether a pick of `record` is the SAME settlement the field held before the edit that led to
 	 * it (s160) — decided by identity, not by spelling: «г. Подольск» → «Подольск» under one
 	 * record key is not a change of settlement. With a known previous key the keys decide; with
-	 * none (the city was typed, or restored without a record) the bare names are compared, either
-	 * containing the other after lower-casing — «г. Подольск» names «Подольск».
+	 * none (the city was typed, or restored without a record) the normalized names
+	 * ({@see normalizeSettlementName}) must be EQUAL — never one inside the other, or «Новое Село»
+	 * and «Село» would pass for one place.
 	 *
 	 * @param {{key: string, text: string}} before What the field held before: its record key, if any, and its text.
 	 * @param {Object} record The picked record.
@@ -4563,11 +4608,17 @@
 			return before.key === record.key;
 		}
 
-		var name = record.settlement && record.settlement.name ? String( record.settlement.name ) : '';
-		var was = before.text.trim().toLowerCase();
-		var now = name.trim().toLowerCase();
+		var component = record.settlement || {};
+		var name = component.name ? String( component.name ) : '';
 
-		return '' !== was && '' !== now && ( -1 !== was.indexOf( now ) || -1 !== now.indexOf( was ) );
+		if ( '' === name ) {
+			return false;
+		}
+
+		var type = 'string' === typeof component.type ? component.type : '';
+		var was = normalizeSettlementName( before.text, type );
+
+		return '' !== was && was === normalizeSettlementName( name, type );
 	}
 
 	/**

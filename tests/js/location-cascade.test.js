@@ -2341,6 +2341,34 @@ describe( 'dependent clearing (downward only, remembered-parent gate)', () => {
 			expect( document.getElementById( 'billing_postcode' ).value ).toBe( '' );
 		} );
 
+		it( 'without a previous record a name INSIDE another is a different place: «Новое Село» -> a pick of «Село» clears', () => {
+			boot( { settlement: true, address: true, settlementValue: 'Новое Село', clearAddressOnChange: true } );
+			document.getElementById( 'billing_address_1' ).value = 'Ленина 1';
+			document.getElementById( 'billing_postcode' ).value = '142100';
+
+			selectViaFake( callFor( 'billing_city' ), {
+				key: 'dadata:selo', label: 'Село', level: 'settlement',
+				record: { key: 'dadata:selo', provider_id: 'dadata', level: 'settlement', country: 'RU', settlement: { name: 'Село', type: 'с' }, label: 'Село' },
+			} );
+
+			expect( document.getElementById( 'billing_address_1' ).value ).toBe( '' );
+			expect( document.getElementById( 'billing_postcode' ).value ).toBe( '' );
+		} );
+
+		it( 'without a previous record the type words and «ё» do not make a different place: «пос. Орёл» -> a pick of «Орел» keeps', () => {
+			boot( { settlement: true, address: true, settlementValue: 'пос. Орёл', clearAddressOnChange: true } );
+			document.getElementById( 'billing_address_1' ).value = 'Ленина 1';
+			document.getElementById( 'billing_postcode' ).value = '142100';
+
+			selectViaFake( callFor( 'billing_city' ), {
+				key: 'dadata:orel', label: 'Орел', level: 'settlement',
+				record: { key: 'dadata:orel', provider_id: 'dadata', level: 'settlement', country: 'RU', settlement: { name: 'Орел', type: 'п' }, label: 'Орел' },
+			} );
+
+			expect( document.getElementById( 'billing_address_1' ).value ).toBe( 'Ленина 1' );
+			expect( document.getElementById( 'billing_postcode' ).value ).toBe( '142100' );
+		} );
+
 		it( 'the shipping section is cleared on its own settlement change and billing is untouched', () => {
 			boot( { settlement: true, address: true, section: 'shipping', settlementValue: 'Москва', clearAddressOnChange: true } );
 			document.body.insertAdjacentHTML(
