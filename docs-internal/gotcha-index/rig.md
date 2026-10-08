@@ -30,3 +30,4 @@
 
 - [../GOTCHAS.md](../GOTCHAS.md) — the topic map
 - [rig/session] **A logged-in customer's WC session (server-side, `session_key` = user id) outranks the profile and holds our record too — a probe that edits only user meta reads stale data. Reset the session row with the meta.** → [a-logged-in-customer-s-wc-session-outranks-the-profile](../gotchas/a-logged-in-customer-s-wc-session-outranks-the-profile.md) (s149)
+- [rig/plugin] **The rig runs the CDEK plugin's own gitignored `woodev/` copy, not the framework checkout — run the plugin's `sync-framework.sh` before any plugin rig measurement and prove it on the page, not by `docker inspect`.** → [the-rig-runs-the-cdek-plugins-own-woodev-copy-not-the-framework-checkout](../gotchas/the-rig-runs-the-cdek-plugins-own-woodev-copy-not-the-framework-checkout.md) (s162)

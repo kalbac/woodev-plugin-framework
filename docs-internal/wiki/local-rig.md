@@ -226,6 +226,14 @@ What actually happened, so the next person knows what is normal:
   `docker exec … -tests-cli-1` integration command still works. Check this before assuming a broken
   command is a broken environment.
 
+## The CDEK plugin on the rig runs its OWN framework copy (s162)
+
+`woocommerce-edostavka` on `:8973` loads the framework from the plugin checkout's gitignored `woodev/` directory, which shadows the
+framework checkout's bind mount. A framework change reaches the plugin on the rig only after
+`WOODEV_FRAMEWORK_DIR=/Users/maksimmartirosov/Projects/woodev-plugin-framework bash scripts/sync-framework.sh` in the plugin
+checkout. The framework's own fixtures and e2e DO run from the framework checkout. Gotcha
+`the-rig-runs-the-cdek-plugins-own-woodev-copy-not-the-framework-checkout`.
+
 ## Operating the rig — the reference tables
 
 > Moved out of `CURRENT-STATE.md` in s119 (#778), which had grown to 3 bytes under its 28 KB gate.

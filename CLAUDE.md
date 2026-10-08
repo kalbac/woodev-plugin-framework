@@ -69,6 +69,7 @@ agents.* A paid resource left idle is a loss, not a saving.
 
 | | |
 |---|---|
+| bounded work with a DETAILED brief — acceptance/test runs, research tables, small scoped fixes, docs | **Haiku 5.5** (`claude-haiku-5-5`) — operator 08.10.2026: cheap, between luna and Sonnet; replaces the local qwen. Never a critic of Claude-written work (same lineage) |
 | routine, well-bounded work against a plan | a **Sonnet 5.5** subagent (`claude-sonnet-5-5`, not the bare `sonnet` alias) |
 | a second pair of hands, independent implementation, criticism | **Codex** |
 | a genuinely hard problem that wants the best head | **Fable 5** — propose it yourself; do not default to Opus for everything hard (operator, 29.08.2026) |

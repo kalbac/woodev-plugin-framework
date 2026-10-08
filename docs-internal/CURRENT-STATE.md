@@ -6,7 +6,7 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-08 (s161).** 🚧 CDEK v2 (#786), plugin `v2` `0440b90` (CI pinned to framework `10b73b59`). ✅ **The functional gate is the agent's CDEK acceptance harness** (#1169, operator 08.10.2026): plugin `tests/acceptance/README.md` → «End-to-end acceptance», ~6 min, last run 58 PASS / 0 FAIL / 5 UNVERIFIABLE — re-run after every large block. #1170 (classic postcode) fixed in PR #1172; plugin #7 #8 #9 on `v2`. Next: `next-session-prompt.md`. Details: `sessions/s161.md`. GlitchTip receiver (#1082) is live. ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
+**As of 2026-10-08 (s162).** 🚧 **v2 release = TWO carrier plugins on v2, tested and compatible** (#1179); block-checkout gaps do not block it. Pre-release: #109 → #1177, #1176, edostavka#11. Plugin `v2` `698d131` (pin `908e89a3`), acceptance 58/0/5. ⚠ Sync the plugin's own `woodev/` before plugin rig runs (`wiki/local-rig.md`). Details: `sessions/s162.md`. GlitchTip receiver (#1082) is live. ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
 orders-page slug redirects to the framework page with that carrier preselected, accepted on the rig.
 ✅ **Both machines are live**; routine sync is git ONLY (`wiki/two-machine-setup.md`). The order
 metabox (#856) and the orders table (#870) stay accepted.
@@ -102,7 +102,7 @@ its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and
 exactly that trap, and a naive reader reports a milestone-carrying card as empty. **PRIORITY LIVES ON
 THE BOARD, not in this file** (operator, 04.09.2026, #644 part 3); its field and option ids are in
 `AGENTS.md` → Backlog rule, and every open card carries one.
-**`V2 готов` = #786 works** (operator, 07.09.2026) — the gate #247/#285 wait on; #567 was moved
+**`V2 готов` = two carrier plugins on v2, tested and compatible** (operator, 08.10.2026, #1179; superseded «#786 works» of 07.09.2026) — the gate #247/#285 wait on; #567 was moved
 AHEAD of the plugin by that same decision. **Read the board, never a card list retyped here** — a
 retyped list is what went stale and got #644 filed.
 
