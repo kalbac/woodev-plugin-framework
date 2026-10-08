@@ -5,20 +5,15 @@
  */
 
 let settlementKey: string | null = null;
-let initialized = false;
 const listeners = new Set< ( key: string | null ) => void >();
 
 export function publishSettlementScope( key: string | null ): void {
-	initialized = true;
+	if ( key === settlementKey ) {
+		return;
+	}
+
 	settlementKey = key;
 	listeners.forEach( ( listener ) => listener( key ) );
-}
-
-export function initializeSettlementScope( key: string | null ): void {
-	if ( ! initialized ) {
-		settlementKey = key;
-		initialized = true;
-	}
 }
 
 export function readSettlementScope(): string | null {
@@ -32,6 +27,5 @@ export function subscribeSettlementScope( listener: ( key: string | null ) => vo
 
 export function resetSettlementScope(): void {
 	settlementKey = null;
-	initialized = false;
 	listeners.clear();
 }

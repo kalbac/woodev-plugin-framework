@@ -230,6 +230,7 @@ function ActiveLocalityChooser( {
 		// An undecided locality stays unremembered: a remount judges the server's record again.
 		if ( ! undecided.current ) {
 			remembered = held.current;
+			publishSettlementScope( held.current?.key ?? null );
 		}
 
 		// The server holds a locality the native address does not name: clear that provenance.

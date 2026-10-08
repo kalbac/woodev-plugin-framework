@@ -5,7 +5,7 @@
  */
 
 import { dispatch, subscribe } from '@wordpress/data';
-import { initializeSettlementScope, readSettlementScope, subscribeSettlementScope } from './address-scope';
+import { readSettlementScope, subscribeSettlementScope } from './address-scope';
 import { forgetSelection, selectRecord, SuggestUnavailableError } from './rest';
 import { sharedChainSync } from './chain-sync';
 import { CART_STORE, gateCheckout, readDeliveryAddress, readLocalityData, refreshRates } from './wc-stores';
@@ -138,13 +138,10 @@ export function watchBlockAddressSuggestions( root: ParentNode = document ): () 
 	if ( ! config || typeof attach !== 'function' ) {
 		return () => {};
 	}
-	initializeSettlementScope( config.selection?.record.key ?? null );
-
 	let input: HTMLInputElement | null = null;
 	let inputCountry = '';
 	let widget: TypeaheadApi | null = null;
 	let stopped = false;
-	let selectionVersion = 0;
 	const target = addressTarget( config );
 	const readAddress = () => readDeliveryAddress( target === 'billing' );
 	const sync = sharedChainSync( {
@@ -168,8 +165,9 @@ export function watchBlockAddressSuggestions( root: ParentNode = document ): () 
 		}
 		const address = readAddress();
 		const supported = config.levels[ address.country.toUpperCase() ]?.address === true;
+		const hasSettlement = readSettlementScope() !== null;
 		const id = target === 'billing' ? 'billing-address_1' : 'shipping-address_1';
-		const next = supported ? root.querySelector< HTMLInputElement >( `#${ id }` ) : null;
+		const next = supported && hasSettlement ? root.querySelector< HTMLInputElement >( `#${ id }` ) : null;
 		if ( next === input && widget && address.country === inputCountry ) {
 			return;
 		}
@@ -182,32 +180,21 @@ export function watchBlockAddressSuggestions( root: ParentNode = document ): () 
 		widget = attach( next, {
 			fetch: ( query, signal ) => suggestAddress( config, query, address.country, signal ),
 			onSelect: ( suggestion ) => {
-				const chosenInput = next;
-				const selectedValue = suggestion.value;
-				const currentAtPick = readAddress();
-				const version = ++selectionVersion;
-				sync.request( { kind: 'select', record: suggestion.record }, ( outcome ) => {
-					if ( outcome.status !== 'applied' || version !== selectionVersion || ! chosenInput.isConnected || chosenInput.value !== selectedValue ) {
-						return outcome.status === 'applied';
-					}
-					const latest = readAddress();
-					const patch = patchAddress( suggestion.record );
-					// A pickup point can replace postcode while /select is in flight; keep the newer value.
-					if ( ( latest.postcode ?? '' ) !== ( currentAtPick.postcode ?? '' ) ) {
-						patch.postcode = latest.postcode;
-					}
-					writeAddress( target, { ...latest, ...patch } );
-					return true;
-				} );
+				const current = readAddress();
+				const patch = patchAddress( suggestion.record );
+				writeAddress( target, { ...current, ...patch } );
+
+				// The street belongs to the shopper's pick even if the server cannot persist its chain.
+				sync.request( { kind: 'select', record: suggestion.record }, ( outcome ) => outcome.status === 'applied', true );
 			},
 		} );
 	};
 
 	const observer = new MutationObserver( refresh );
-	observer.observe( root === document ? document.documentElement : root, { childList: true, subtree: true } );
+	const checkoutRoot = root.querySelector( '.wc-block-checkout__form' ) ?? ( root === document ? document.documentElement : root );
+	observer.observe( checkoutRoot, { childList: true, subtree: true } );
 	const unsubscribeStore = subscribe( refresh, CART_STORE );
 	const unsubscribeScope = subscribeSettlementScope( () => {
-		selectionVersion++;
 		detach();
 		refresh();
 	} );
