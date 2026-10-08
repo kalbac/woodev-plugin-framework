@@ -1356,12 +1356,74 @@ describe( 'PickupPicker — a cart with no resolved locality (#1110)', () => {
 
 			expect( screen.getByRole( 'status' ) ).toHaveTextContent( PENDING );
 
-			// The cart answers with the new locality: the dialog opens on ITS key, nothing else.
+			// The cart answers with the new locality: the dialog opens on ITS key, nothing else —
+			// for the click that waited, without a second one (#1171).
 			await reply( 'dadata:krd' );
-			fireEvent.click( trigger() as HTMLElement );
 
 			expect( session.open ).toHaveBeenCalledTimes( 1 );
 			expect( session.host().getLocalityKey() ).toBe( 'dadata:krd' );
+		} );
+
+		it( 'carries out the click that waited — the first click after a recalculation is not lost (#1171)', async () => {
+			const session = fakeSession();
+
+			renderPicker();
+			edit( 'Краснодар' );
+			push();
+
+			// The shopper clicks while the cart is still answering: nothing opens yet…
+			fireEvent.click( trigger() as HTMLElement );
+
+			expect( session.open ).not.toHaveBeenCalled();
+
+			// …and the answer opens it, once, with no further click.
+			await reply( 'dadata:krd' );
+
+			expect( session.open ).toHaveBeenCalledTimes( 1 );
+			expect( session.host().getLocalityKey() ).toBe( 'dadata:krd' );
+		} );
+
+		it( 'opens nothing by itself when no click waited for the answer', async () => {
+			const session = fakeSession();
+
+			renderPicker();
+			edit( 'Краснодар' );
+			push();
+			await reply( 'dadata:krd' );
+
+			expect( session.open ).not.toHaveBeenCalled();
+		} );
+
+		it( 'does not open the waiting click’s dialog when the answer leaves no locality', async () => {
+			const session = fakeSession();
+
+			renderPicker();
+			edit( 'Краснодар' );
+			push();
+			fireEvent.click( trigger() as HTMLElement );
+
+			await reply( '' );
+
+			expect( session.open ).not.toHaveBeenCalled();
+			expect( screen.getByRole( 'status' ) ).toHaveTextContent( 'Choose your locality' );
+		} );
+
+		it( 'drops the waiting click when the shopper leaves the rate before the answer', async () => {
+			const session = fakeSession();
+
+			renderPicker();
+			edit( 'Краснодар' );
+			push();
+			fireEvent.click( trigger() as HTMLElement );
+
+			act( () => {
+				chooseRate( COURIER_RATE );
+				serverAnswers( COURIER_RATE, null );
+				notify();
+			} );
+			await reply( 'dadata:krd' );
+
+			expect( session.open ).not.toHaveBeenCalled();
 		} );
 
 		it( 'does not count a foreign cart reply as the answer to the address push (#1118)', () => {

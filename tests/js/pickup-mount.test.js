@@ -5277,13 +5277,21 @@ describe( 'selection confirmation', () => {
 	// because the thing under test is that each of them reaches the guard at all — a test that
 	// called `close()` itself would pass even if the modal's own Escape/backdrop bindings had
 	// been the ones to go missing.
-	it.each( [
+	//
+	// #1171: a dismissal no longer THROWS THE ANSWER AWAY. The customer pressed the choose button,
+	// the server holds the point (D-10), and a dropped answer left the §8 field empty — the order
+	// gated — until a later checkout refresh brought the server's copy back.
+	const dismissals = [
 		[ 'Escape', () => document.dispatchEvent( new KeyboardEvent( 'keydown', { key: 'Escape' } ) ) ],
 		[ 'the backdrop', () => document.querySelector( '[role="dialog"]' ).parentNode
 			.dispatchEvent( new MouseEvent( 'click', { bubbles: true } ) ) ],
 		[ 'the close button', () => document.querySelector( '.woodev-modal__close' ).click() ],
-	] )( 'discards an answer for a dialog %s had already dismissed', async ( _label, dismiss ) => {
-		const { emitSelect, resolveSelect, panels, field } = openPicker( {} );
+	];
+
+	it.each( dismissals )( 'still applies an answer for a dialog %s had already dismissed (#1171)', async ( _label, dismiss ) => {
+		const { emitSelect, resolveSelect, panels, field, jq } = openPicker( {
+			selection: { close: true, refreshCheckout: true },
+		} );
 		const requested = [];
 		const resolved = [];
 		document.body.addEventListener( 'woodev_pickup_point_select_requested', () => requested.push( 1 ) );
@@ -5292,21 +5300,31 @@ describe( 'selection confirmation', () => {
 		emitSelect( { id: 'P1' } );
 		dismiss();
 
+		// Dismissed with the request still out: the field is not written ahead of the server.
+		expect( field.value ).toBe( '' );
+
 		await resolveSelect( { allowed: true, reason: null, close: null, refresh_checkout: null } );
 
-		// Nothing is applied to a picker the customer has already walked away from — not the
-		// field, and not the point's stored verdict. The server may well hold P1 by now; D-10
-		// accepts that divergence explicitly and still says to ignore the answer.
+		// The choice lands on the page the moment the server confirms it — no later refresh needed.
+		expect( field.value ).toBe( 'P1' );
+		expect( panels.setPointVerdict ).not.toHaveBeenCalled();
+		expect( requested ).toHaveLength( 1 );
+		expect( resolved ).toHaveLength( 1 );
+
+		// And the checkout recalculates for it, as it does after any choice.
+		expect( jq.triggered ).toContain( 'update_checkout' );
+	} );
+
+	it.each( dismissals )( 'drops a REFUSAL for a dialog %s had already dismissed — nobody is left to tell (#1171)', async ( _label, dismiss ) => {
+		const { emitSelect, resolveSelect, panels, field } = openPicker( {} );
+
+		emitSelect( { id: 'P1' } );
+		dismiss();
+
+		await resolveSelect( { allowed: false, reason: 'Not here' } );
+
 		expect( field.value ).toBe( '' );
 		expect( panels.setPointVerdict ).not.toHaveBeenCalled();
-
-		// The discarded outcome is SILENT, and the two confirmation events are therefore not
-		// always paired: `_requested` went out, `_resolved` never follows. Pinned here because
-		// a plugin listening to `_resolved` writes the point's address into the checkout fields
-		// (D-14) — firing it for a point we just threw away would leave the customer with the
-		// address of somewhere they are not collecting from.
-		expect( requested ).toHaveLength( 1 );
-		expect( resolved ).toHaveLength( 0 );
 	} );
 
 	it( 'unbinds its updated_checkout waiter when the session dies before WooCommerce answers', async () => {
@@ -5546,7 +5564,7 @@ describe( 'a checkout refresh that never answers', () => {
 // -------------------------------------------------------------------------
 
 describe( 'a synchronous listener on the confirmation events', () => {
-	it( 'still has its answer discarded when a `_requested` listener dismisses the dialog', async () => {
+	it( 'still applies the answer when a `_requested` listener dismisses the dialog (#1171)', async () => {
 		const { emitSelect, resolveSelect, dataSource, panels, field } = openPicker( {} );
 		const dismiss = () => document.querySelector( '.woodev-modal__close' ).click();
 
@@ -5555,17 +5573,17 @@ describe( 'a synchronous listener on the confirmation events', () => {
 		document.body.removeEventListener( 'woodev_pickup_point_select_requested', dismiss );
 
 		// The request still leaves — `_requested` is observational and grants no veto (the veto
-		// path is `woodev_modal_before_close`). It is the ANSWER that must be thrown away.
+		// path is `woodev_modal_before_close`). A dismissed dialog no longer costs the answer.
 		expect( dataSource.selectPoint ).toHaveBeenCalledTimes( 1 );
 
 		await resolveSelect( { allowed: true, reason: null, close: null, refresh_checkout: null } );
 
-		expect( field.value ).toBe( '' );
+		expect( field.value ).toBe( 'P1' );
 		expect( panels.setPointVerdict ).not.toHaveBeenCalled();
 	} );
 
-	it( 'applies nothing when a `_resolved` listener dismisses the dialog', async () => {
-		const { emitSelect, resolveSelect, panels, field, jq } = openPicker( {
+	it( 'applies the answer, with no dialog to hold, when a `_resolved` listener dismisses the dialog (#1171)', async () => {
+		const { emitSelect, resolveSelect, field, jq } = openPicker( {
 			selection: { close: false, refreshCheckout: true },
 		} );
 		const dismiss = () => document.querySelector( '.woodev-modal__close' ).click();
@@ -5577,11 +5595,10 @@ describe( 'a synchronous listener on the confirmation events', () => {
 
 		document.body.removeEventListener( 'woodev_pickup_point_select_resolved', dismiss );
 
-		// The guard is re-run AFTER the event, not only before it: a dialog the customer is no
-		// longer looking at gets neither the field write nor the checkout refresh behind it.
-		expect( field.value ).toBe( '' );
-		expect( panels.lastSelectedId ).toBeUndefined();
-		expect( jq.triggered ).not.toContain( 'update_checkout' );
+		// The customer chose it and the server confirmed it: the page follows, and the checkout
+		// recalculates behind the closed dialog.
+		expect( field.value ).toBe( 'P1' );
+		expect( jq.triggered ).toContain( 'update_checkout' );
 	} );
 
 	it( 'applies nothing when a `_resolved` listener destroys the session', async () => {

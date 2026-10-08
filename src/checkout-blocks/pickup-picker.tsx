@@ -132,6 +132,10 @@ export function PickupPicker( { data, checkoutExtensionData }: PickupPickerProps
 	const triggerRef = useRef< HTMLButtonElement | null >( null );
 	const sessionRef = useRef< PickupSession | null >( null );
 	const [ unavailable, setUnavailable ] = useState( false );
+	// A click that landed while the cart was still answering an address edit: the dialog opens the
+	// moment the answer is in, instead of the click being lost (#1171).
+	const [ openWhenReady, setOpenWhenReady ] = useState( false );
+	const openRef = useRef< ( () => void ) | null >( null );
 
 	// A failed payment clears the session choice after the order has kept it. Re-read the cart
 	// through WooCommerce's existing customer/rates refresh so its extension snapshot can restore it.
@@ -237,6 +241,7 @@ export function PickupPicker( { data, checkoutExtensionData }: PickupPickerProps
 
 		return () => {
 			scope.left = true;
+			setOpenWhenReady( false );
 			closeSession();
 		};
 	}, [ sessionScope, closeSession ] );
@@ -255,6 +260,21 @@ export function PickupPicker( { data, checkoutExtensionData }: PickupPickerProps
 	useEffect( () => {
 		applyAccent( triggerRef.current, config ?? { fieldId: '' } );
 	} );
+
+	/*
+	 * The cart answered (or gave up): the click that waited for it is carried out now, on whatever
+	 * the answer says — a settled locality opens the dialog, a missing one shows the hint as before.
+	 */
+	useEffect( () => {
+		if ( ! openWhenReady || addressPending ) {
+			return;
+		}
+
+		setOpenWhenReady( false );
+		openRef.current?.();
+	}, [ openWhenReady, addressPending ] );
+
+	openRef.current = null;
 
 	if ( ! field || ! config ) {
 		return null;
@@ -275,9 +295,19 @@ export function PickupPicker( { data, checkoutExtensionData }: PickupPickerProps
 
 		closeSession();
 
-		// No resolved locality, or an address edit the cart has not answered: the dialog would list
-		// another locality's points and could confirm none. The hint under the button is the answer
-		// (#1110).
+		// An address edit the cart has not answered yet: the dialog would list the previous
+		// address's points. The click is not lost — it is carried out when the answer lands, which
+		// is the moment the shopper was waiting for (#1171). The hint under the button says so.
+		if ( addressPending ) {
+			setOpenWhenReady( true );
+
+			return;
+		}
+
+		setOpenWhenReady( false );
+
+		// No resolved locality: the dialog would list another locality's points and could confirm
+		// none. The hint under the button is the answer (#1110).
 		if ( blocked ) {
 			return;
 		}
@@ -303,6 +333,8 @@ export function PickupPicker( { data, checkoutExtensionData }: PickupPickerProps
 			} )
 		);
 	};
+
+	openRef.current = open;
 
 	return (
 		<div className="woodev-pickup-block" data-field-id={ field.fieldId }>
