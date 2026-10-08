@@ -12,7 +12,6 @@ import { captureWcRuntime } from './wc-runtime';
 import { resolveCartFromServer } from './wc-stores';
 import { watchBlockAddressSuggestions } from './address-suggestions';
 import '../../woodev/shipping-method/assets/js/frontend/location-typeahead.js';
-import '../../woodev/shipping-method/assets/css/frontend/location.css';
 
 // First: every later read of a WooCommerce global answers from this capture.
 captureWcRuntime();
