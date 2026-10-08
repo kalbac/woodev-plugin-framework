@@ -26,6 +26,9 @@
  *   - `getSelectedId()`                  CONTEXT: the point id the surface currently holds, `''` for none.
  *   - `getLocality()`                    CONTEXT: the locality NAME the map provider centres on.
  *   - `getLocalityKey()`                 CONTEXT: the locality the points query is addressed by.
+ *   - `getContextKey()` (optional)       CONTEXT: a fingerprint of what the checkout is about (shipping
+ *                                        method, locality); a dismissed dialog's late answer is applied
+ *                                        only while it is unchanged.
  *   - `getNonce()`                       CONTEXT: the live `wp_rest` nonce for the points routes.
  *   - `getRequestContext()`              CONTEXT: extra query params for every points and details
  *                                        request, read per request, or `null` for none. The classic
@@ -885,6 +888,24 @@
 		 *  ONLY by the `cardOpened` listener, to tell "the card moved onto another point" from
 		 *  "the card re-rendered on the same one". Never the guard's identity; see above. */
 		var pendingSelectionPointId = null;
+
+		/** @type {boolean} whether the dialog was dismissed (Escape, backdrop, close button) while
+		 *  `pendingSelectionToken`'s confirmation was still in flight (#1171). The answer is NOT
+		 *  dropped then: the customer pressed the choose button, the server is already writing
+		 *  the point into the WC session (spec D-10), and discarding the answer left the
+		 *  client's field empty — and the order button gated — until some later checkout refresh
+		 *  happened to bring the server's copy back. The answer is applied to the host (the
+		 *  point, the trigger label, the checkout refresh) with no dialog left to talk to: a
+		 *  refusal or a failure is dropped silently, there being nobody to tell. Cleared with
+		 *  the token it belongs to. */
+		var pendingSelectionDismissed = false;
+
+		/** @type {string} the host's {@see contextKey} read when the pending confirmation left. A
+		 *  dismissed dialog's answer is applied ONLY while this still equals the live read: once
+		 *  the customer switched shipping method or edited the locality, the session is still
+		 *  registered (a closed dialog is skipped by the cart-change refresh) and the answer
+		 *  would write a point into a checkout that has moved on (#1171, review round 2). */
+		var pendingSelectionContext = '';
 
 		/** @type {number|null} the pending {@see SELECTION_BUSY_DELAY_MS} timer that will raise the
 		 *  dialog's busy overlay under `ownsChrome`, or null when none is waiting. Lives beside the
@@ -2008,6 +2029,16 @@
 		}
 
 		/**
+		 * The host's fingerprint of what the checkout is currently ABOUT (shipping method,
+		 * locality). Empty for a host that has none — then a dismissed answer is always applied.
+		 *
+		 * @returns {string}
+		 */
+		function contextKey() {
+			return 'function' === typeof host.getContextKey ? String( host.getContextKey() ) : '';
+		}
+
+		/**
 		 * Drops whatever confirmation the staleness guard currently holds, releasing the card lock
 		 * that came with it — the single entry point for every path that makes an in-flight
 		 * confirmation stop being about anything current (spec D-9): the card moving to another
@@ -2028,8 +2059,28 @@
 
 			pendingSelectionToken = 0;
 			pendingSelectionPointId = null;
+			pendingSelectionDismissed = false;
 
 			releaseSelectionBusy();
+		}
+
+		/**
+		 * Ends the pending confirmation without applying it when its dialog is gone AND the
+		 * checkout moved on (another shipping method, another locality) while it was out: the
+		 * answer belongs to a context the customer left, so it must not write the old point into
+		 * the field nor refresh the checkout (#1171, review round 2). The server's copy is keyed
+		 * by context and comes back with the next checkout refresh.
+		 *
+		 * @returns {boolean} whether the answer was dropped.
+		 */
+		function dropMovedAnswer() {
+			if ( ! pendingSelectionDismissed || contextKey() === pendingSelectionContext ) {
+				return false;
+			}
+
+			invalidateSelection();
+
+			return true;
 		}
 
 		/**
@@ -2072,6 +2123,8 @@
 			 */
 			pendingSelectionToken = token;
 			pendingSelectionPointId = pointId;
+			pendingSelectionDismissed = false;
+			pendingSelectionContext = contextKey();
 
 			acquireSelectionBusy();
 
@@ -2145,6 +2198,13 @@
 				return;
 			}
 
+			// BEFORE `_resolved` goes out: a plugin listening to it writes the point's address into
+			// the checkout fields (D-14), which is exactly what must not happen for a context the
+			// customer has left.
+			if ( dropMovedAnswer() ) {
+				return;
+			}
+
 			fireDocumentEvent( EVENT_SELECT_RESOLVED, {
 				fieldId: config.fieldId,
 				point: point,
@@ -2158,12 +2218,26 @@
 				return;
 			}
 
+			// Read before the token is cleared: a dialog dismissed while the request was out
+			// (#1171) leaves the answer to be applied with nobody on screen to be told about it.
+			var dismissed = pendingSelectionDismissed;
+
+			// Again, for a `_resolved` listener that dismissed the dialog and moved the context.
+			if ( dropMovedAnswer() ) {
+				return;
+			}
+
 			pendingSelectionToken = 0;
 			pendingSelectionPointId = null;
+			pendingSelectionDismissed = false;
 
 			releaseSelectionBusy();
 
 			if ( ! result ) {
+				if ( dismissed ) {
+					return;
+				}
+
 				// Transport failure: nothing about the point was refused, so nothing is
 				// remembered and the CTA stays alive (spec D-6/D-7).
 				if ( panels ) {
@@ -2184,6 +2258,10 @@
 			}
 
 			if ( ! result.allowed ) {
+				if ( dismissed ) {
+					return;
+				}
+
 				if ( panels ) {
 					panels.setPointVerdict( pointId, {
 						allowed: false,
@@ -2239,7 +2317,12 @@
 			// the host's `close()` must not run against a modal that is still open.
 			var closed = false;
 
-			if ( resolveFlag( result.close, defaults.close ) ) {
+			if ( dismissed ) {
+				// The dialog is already gone (#1171): nothing to close, only the session the host
+				// still tracks to drop — the same teardown a close by selection ends with.
+				closed = true;
+				host.close();
+			} else if ( resolveFlag( result.close, defaults.close ) ) {
 				closed = modal.close( 'select' );
 
 				if ( closed ) {
@@ -2385,9 +2468,12 @@
 		}
 
 		/**
-		 * The staleness guard's last three paths (spec D-9 names four: a card moved onto
-		 * another point — handled by the `cardOpened` listener below — plus Escape, the
-		 * backdrop and the close button, all three of which land HERE).
+		 * The last three paths spec D-9 names (a card moved onto another point is handled by
+		 * the `cardOpened` listener below): Escape, the backdrop and the close button, all
+		 * three of which land HERE. They no longer DROP the answer (#1171) — a confirmation
+		 * in flight keeps going and is applied when it lands, see
+		 * {@see pendingSelectionDismissed}; D-9's «discard» was the wrong half for these three,
+		 * since the customer's choice was made and the server holds it (D-10).
 		 *
 		 * None of them is a click inside the card, so the lock cannot intercept any of them,
 		 * and none of them tells this file anything on its own: `closeSession()` is NOT called
@@ -2400,7 +2486,7 @@
 		 * fired it. Two pickup dialogs open at once is not a reachable state (the dialog is
 		 * modal, with a backdrop over the trigger that would open the second), and were it ever
 		 * to become one, the failure direction is the safe one: another pickup dialog closing
-		 * would discard THIS confirmation's answer, never apply a wrong one.
+		 * would end THIS confirmation's dialog early, never apply an answer to a wrong point.
 		 *
 		 * Our own successful close reaches this too — harmlessly: {@see finishSelection} clears
 		 * the pending token before it ever asks the modal to close.
@@ -2413,7 +2499,14 @@
 				return;
 			}
 
-			invalidateSelection();
+			// A dismissal does not make the answer stale (#1171): the choice was made and the
+			// server holds it (D-10). Only the dialog-bound state is released now — the answer
+			// itself is applied when it lands, see {@see pendingSelectionDismissed}.
+			if ( 0 !== pendingSelectionToken ) {
+				pendingSelectionDismissed = true;
+
+				releaseSelectionBusy();
+			}
 		}
 
 		// The ONE `document.body` listener this file's sessions register — see the file

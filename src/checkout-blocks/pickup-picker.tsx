@@ -22,6 +22,7 @@
  * @package woodev-plugin-framework
  */
 
+import type { MouseEvent } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from '@wordpress/element';
 import { useSelect } from '@wordpress/data';
 import { createHost } from './pickup-host';
@@ -100,6 +101,22 @@ function applyAccent( button: HTMLElement | null, config: PickupConfig ): void {
 	}
 }
 
+/**
+ * A mouse press on the button must not take focus from where it is (#1171).
+ *
+ * Right after a rate is chosen core still holds a debounced customer-data push, and it goes out the
+ * moment the rate radio loses focus. The shipping step then swaps its rate list for a skeleton, the
+ * whole block above the button collapses, and the button slides up from under the pointer between
+ * `mousedown` and `mouseup` — the browser then delivers the click to their common ancestor, not to
+ * the button: the shopper's first click opens nothing. Keeping focus where it is lets the click
+ * land; keyboard activation is untouched and the dialog moves focus itself once it opens.
+ */
+function keepFocusInPlace( event: MouseEvent< HTMLButtonElement > ): void {
+	if ( event.button === 0 ) {
+		event.preventDefault();
+	}
+}
+
 export function PickupPicker( { data, checkoutExtensionData }: PickupPickerProps ) {
 	const namespace = data.namespace ?? '';
 	const fields = data.fields ?? NO_FIELDS;
@@ -132,6 +149,10 @@ export function PickupPicker( { data, checkoutExtensionData }: PickupPickerProps
 	const triggerRef = useRef< HTMLButtonElement | null >( null );
 	const sessionRef = useRef< PickupSession | null >( null );
 	const [ unavailable, setUnavailable ] = useState( false );
+	// A click that landed while the cart was still answering an address edit: the dialog opens the
+	// moment the answer is in, instead of the click being lost (#1171).
+	const [ openWhenReady, setOpenWhenReady ] = useState( false );
+	const openRef = useRef< ( () => void ) | null >( null );
 
 	// A failed payment clears the session choice after the order has kept it. Re-read the cart
 	// through WooCommerce's existing customer/rates refresh so its extension snapshot can restore it.
@@ -237,6 +258,7 @@ export function PickupPicker( { data, checkoutExtensionData }: PickupPickerProps
 
 		return () => {
 			scope.left = true;
+			setOpenWhenReady( false );
 			closeSession();
 		};
 	}, [ sessionScope, closeSession ] );
@@ -255,6 +277,21 @@ export function PickupPicker( { data, checkoutExtensionData }: PickupPickerProps
 	useEffect( () => {
 		applyAccent( triggerRef.current, config ?? { fieldId: '' } );
 	} );
+
+	/*
+	 * The cart answered (or gave up): the click that waited for it is carried out now, on whatever
+	 * the answer says — a settled locality opens the dialog, a missing one shows the hint as before.
+	 */
+	useEffect( () => {
+		if ( ! openWhenReady || addressPending ) {
+			return;
+		}
+
+		setOpenWhenReady( false );
+		openRef.current?.();
+	}, [ openWhenReady, addressPending ] );
+
+	openRef.current = null;
 
 	if ( ! field || ! config ) {
 		return null;
@@ -275,9 +312,19 @@ export function PickupPicker( { data, checkoutExtensionData }: PickupPickerProps
 
 		closeSession();
 
-		// No resolved locality, or an address edit the cart has not answered: the dialog would list
-		// another locality's points and could confirm none. The hint under the button is the answer
-		// (#1110).
+		// An address edit the cart has not answered yet: the dialog would list the previous
+		// address's points. The click is not lost — it is carried out when the answer lands, which
+		// is the moment the shopper was waiting for (#1171). The hint under the button says so.
+		if ( addressPending ) {
+			setOpenWhenReady( true );
+
+			return;
+		}
+
+		setOpenWhenReady( false );
+
+		// No resolved locality: the dialog would list another locality's points and could confirm
+		// none. The hint under the button is the answer (#1110).
 		if ( blocked ) {
 			return;
 		}
@@ -304,6 +351,8 @@ export function PickupPicker( { data, checkoutExtensionData }: PickupPickerProps
 		);
 	};
 
+	openRef.current = open;
+
 	return (
 		<div className="woodev-pickup-block" data-field-id={ field.fieldId }>
 			<button
@@ -314,6 +363,7 @@ export function PickupPicker( { data, checkoutExtensionData }: PickupPickerProps
 				aria-disabled={ blocked ? true : undefined }
 				aria-describedby={ describedBy }
 				onClick={ open }
+				onMouseDown={ keepFocusInPlace }
 			>
 				{ confirmed ? i18n.triggerChange : i18n.trigger }
 			</button>

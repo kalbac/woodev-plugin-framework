@@ -1258,6 +1258,20 @@
 				return resolveLocalityKey( config );
 			},
 
+			// What the checkout is about right now — the chosen shipping method and the
+			// locality. A dismissed dialog's late answer is applied only while it is unchanged
+			// (pickup-session.js `pendingSelectionContext`, #1171).
+			getContextKey: function() {
+				var method = document.querySelector( 'input[name^="shipping_method"]:checked' ) ||
+					document.querySelector( 'input[type="hidden"][name^="shipping_method"]' );
+
+				return JSON.stringify( [
+					method ? method.value : '',
+					resolveLocality( config ),
+					resolveLocalityKey( config ),
+				] );
+			},
+
 			getNonce: function() {
 				return currentNonce( config );
 			},

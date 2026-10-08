@@ -172,6 +172,11 @@ These solve different problems and both are required:
   open* (`pickup-mount.js:15-27`), Esc, the backdrop, the close button. The request records
   which point it was sent for; on arrival, an answer for a point the card no longer shows is
   discarded silently.
+- **Amended by #1171 (s162):** Esc, the backdrop and the close button are NOT «the card no longer
+  shows that point» — the customer chose it and the server holds it (D-10). A dismissal releases the
+  dialog's lock but keeps the confirmation alive; the answer is applied when it lands (field, trigger
+  label, checkout refresh) with no dialog to report to, and a refusal or a failure is dropped
+  silently. Only the card moving to another point and the session being destroyed still discard.
 
 **D-10 — No `AbortController`.**
 The request has server-side side effects — the domain may have already written the point into
