@@ -3768,6 +3768,58 @@ final class LocationProviderRegistryTest extends TestCase {
 		$this->assertTrue( $registry->is_custom_settlement_allowed() );
 	}
 
+	// -------------------------------------------------------------------------
+	// s160 — `clear_address_on_change`: the merchant option «clear the street and
+	// postcode when the settlement changes». Default ON (v1 `clean_address_field`).
+	// -------------------------------------------------------------------------
+
+	public function test_clear_address_on_change_setting_is_a_boolean_checkbox_defaulting_to_true(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [] );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$setting = $registry->get_settings_handler()->get_setting( Location_Provider_Registry::SETTING_CLEAR_ADDRESS_ON_CHANGE );
+
+		$this->assertSame( 'clear_address_on_change', Location_Provider_Registry::SETTING_CLEAR_ADDRESS_ON_CHANGE );
+		$this->assertNotNull( $setting );
+		$this->assertSame( \Woodev_Setting::TYPE_BOOLEAN, $setting->get_type() );
+		$this->assertTrue( $setting->get_default() );
+		$this->assertSame( \Woodev_Control::TYPE_CHECKBOX, $setting->get_control()->get_type() );
+		$this->assertSame( 'Очищать адрес', $setting->get_name() );
+		$this->assertNotSame( '', $setting->get_control()->get_tooltip() );
+		$this->assertSame( [], $setting->get_show_if_conditions() );
+	}
+
+	public function test_is_clear_address_on_change_enabled_is_true_before_settings_handler_exists(): void {
+		$this->assertTrue( Location_Provider_Registry::instance()->is_clear_address_on_change_enabled() );
+	}
+
+	public function test_is_clear_address_on_change_enabled_is_true_when_nothing_stored(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [] );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$this->assertTrue( $registry->is_clear_address_on_change_enabled() );
+	}
+
+	public function test_is_clear_address_on_change_enabled_reads_the_stored_value(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [] );
+		$this->stub_options_store( [ 'woodev_location_clear_address_on_change' => false ] );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$this->assertFalse( $registry->is_clear_address_on_change_enabled() );
+	}
+
 	public function test_is_custom_settlement_allowed_stays_false_when_nothing_stored(): void {
 		Functions\when( 'add_action' )->justReturn( true );
 		$this->stub_providers_filter( [] );

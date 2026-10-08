@@ -410,6 +410,31 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 			);
 
 			/*
+			 * `clear_address_on_change` (s160; operator decision 08.10.2026): a
+			 * plain site-wide boolean, default ON — v1 parity with the retired
+			 * CDEK plugin's `clean_address_field` (default `yes`). Stored as the
+			 * site option `woodev_location_clear_address_on_change`, so a plugin
+			 * migration is a plain `yes`/`no` -> bool copy. Displays on the
+			 * «Поля» section next to `address_suggestions`
+			 * ({@see \Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab::build_sections()}).
+			 */
+			$this->register_setting(
+				Location_Provider_Registry::SETTING_CLEAR_ADDRESS_ON_CHANGE,
+				\Woodev_Setting::TYPE_BOOLEAN,
+				[
+					'name'    => __( 'Очищать адрес', 'woodev-plugin-framework' ),
+					'default' => true,
+				]
+			);
+			$this->register_control(
+				Location_Provider_Registry::SETTING_CLEAR_ADDRESS_ON_CHANGE,
+				\Woodev_Control::TYPE_CHECKBOX,
+				[
+					'tooltip' => __( 'Когда покупатель выбирает другой населённый пункт, поля «Адрес» и «Почтовый индекс» очищаются, чтобы улица из прежнего города не осталась в заказе. Выключите, если хотите сохранять введённый адрес.', 'woodev-plugin-framework' ),
+				]
+			);
+
+			/*
 			 * `default_locality_policy`'s own `description` is left EMPTY here on
 			 * purpose (issue #373 does not add one) — {@see Location_Provider_Registry::apply_default_locality_status_note()}
 			 * writes a LIVE status note directly into this same `Woodev_Setting`'s

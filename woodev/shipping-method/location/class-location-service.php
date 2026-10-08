@@ -3654,6 +3654,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		}
 
 		/**
+		 * Whether the checkout clears an address section's street and postcode
+		 * fields when the customer changes that section's settlement (s160) —
+		 * thin pass-through to {@see Location_Provider_Registry::is_clear_address_on_change_enabled()}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public function is_clear_address_on_change_enabled(): bool {
+			return $this->registry->is_clear_address_on_change_enabled();
+		}
+
+		/**
 		 * Whether the merchant removed the checkout's region field (issue #1069) — thin
 		 * pass-through to {@see Location_Provider_Registry::is_region_field_removed()}.
 		 *

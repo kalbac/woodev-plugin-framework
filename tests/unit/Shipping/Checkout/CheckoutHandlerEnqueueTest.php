@@ -98,6 +98,10 @@ final class Checkout_Handler_Fake_Location_Service extends Location_Service {
 		return false;
 	}
 
+	public function is_clear_address_on_change_enabled(): bool {
+		return true;
+	}
+
 	public function owns_region_states( string $country, array $final_states ): bool {
 		return false;
 	}

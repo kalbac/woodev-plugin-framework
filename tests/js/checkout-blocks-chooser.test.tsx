@@ -113,6 +113,8 @@ import { LocalityChooser, resetLocalityMemory } from '../../src/checkout-blocks/
 // eslint-disable-next-line import/first
 import { registerLocalityBlock } from '../../src/checkout-blocks/register';
 // eslint-disable-next-line import/first
+import { adoptDestination } from '../../src/checkout-blocks/wc-stores';
+// eslint-disable-next-line import/first
 import type { LocationConfig } from '../../src/checkout-blocks/types';
 
 const RU_STATES = { 'МОСКОВСКАЯ ОБЛАСТЬ': 'Московская область', 'МОСКВА': 'Москва', 'ТАТАРСТАН': 'Республика Татарстан' };
@@ -525,6 +527,139 @@ describe( 'LocalityChooser — choosing a locality', () => {
 		await waitFor( () => expect( mockStore.setShippingAddress ).toHaveBeenCalledTimes( 1 ) );
 		expect( mockStore.setShippingAddress ).toHaveBeenCalledWith( expect.objectContaining( { city: 'Подольск', state: '' } ) );
 		expect( await screen.findByText( 'The region could not be matched.' ) ).toBeInTheDocument();
+	} );
+} );
+
+describe( 'LocalityChooser — clearing the address when the settlement changes (clearAddressOnChange)', () => {
+	/** The shopper's form before any pick: a street and a postcode in some other city. */
+	const fillMoscow = (): void => {
+		mockStore.customer.shippingAddress = {
+			...mockStore.customer.shippingAddress,
+			city: 'Москва',
+			address_1: 'Тверская 1',
+			postcode: '101000',
+		};
+	};
+	const lastShippingWrite = (): Address => {
+		const calls = mockStore.setShippingAddress.mock.calls;
+
+		return calls[ calls.length - 1 ][ 0 ] as Address;
+	};
+
+	it( 'a pick of another settlement clears the street and the postcode of that address, and nothing else', async () => {
+		fillMoscow();
+
+		render( <LocalityChooser config={ baseConfig( { clearAddressOnChange: true } ) } /> );
+		await chooseFirstSuggestion();
+		await waitFor( () => expect( mockStore.setShippingAddress ).toHaveBeenCalledTimes( 1 ) );
+
+		expect( lastShippingWrite() ).toEqual( {
+			first_name: 'Анна',
+			address_1: '',
+			postcode: '',
+			city: 'Подольск',
+			state: 'МОСКОВСКАЯ ОБЛАСТЬ',
+			country: 'RU',
+		} );
+		// The billing address is a different section: untouched.
+		expect( mockStore.setBillingAddress ).not.toHaveBeenCalled();
+	} );
+
+	it( 'leaves the street and the postcode when the option is off', async () => {
+		fillMoscow();
+
+		render( <LocalityChooser config={ baseConfig( { clearAddressOnChange: false } ) } /> );
+		await chooseFirstSuggestion();
+		await waitFor( () => expect( mockStore.setShippingAddress ).toHaveBeenCalledTimes( 1 ) );
+
+		expect( lastShippingWrite() ).toMatchObject( { city: 'Подольск', address_1: 'Тверская 1', postcode: '101000' } );
+	} );
+
+	it( 'leaves them when the server published no option at all (an older publication)', async () => {
+		fillMoscow();
+
+		render( <LocalityChooser config={ baseConfig() } /> );
+		await chooseFirstSuggestion();
+		await waitFor( () => expect( mockStore.setShippingAddress ).toHaveBeenCalledTimes( 1 ) );
+
+		expect( lastShippingWrite() ).toMatchObject( { address_1: 'Тверская 1', postcode: '101000' } );
+	} );
+
+	it( 'the initial fill (a blank City) keeps a street the shopper typed first', async () => {
+		mockStore.customer.shippingAddress = { ...mockStore.customer.shippingAddress, address_1: 'Ленина 1', postcode: '142100' };
+
+		render( <LocalityChooser config={ baseConfig( { clearAddressOnChange: true } ) } /> );
+		await chooseFirstSuggestion();
+		await waitFor( () => expect( mockStore.setShippingAddress ).toHaveBeenCalledTimes( 1 ) );
+
+		expect( lastShippingWrite() ).toMatchObject( { city: 'Подольск', address_1: 'Ленина 1', postcode: '142100' } );
+	} );
+
+	it( 'picking the settlement the City already names clears nothing', async () => {
+		mockStore.customer.shippingAddress = { ...mockStore.customer.shippingAddress, city: 'Подольск', address_1: 'Ленина 1', postcode: '142100' };
+
+		render( <LocalityChooser config={ baseConfig( { clearAddressOnChange: true } ) } /> );
+		await chooseFirstSuggestion();
+		await waitFor( () => expect( mockStore.setShippingAddress ).toHaveBeenCalledTimes( 1 ) );
+
+		expect( lastShippingWrite() ).toMatchObject( { address_1: 'Ленина 1', postcode: '142100' } );
+	} );
+
+	it( 're-picking the SAME chosen settlement keeps the street typed since; picking ANOTHER one clears it', async () => {
+		render( <LocalityChooser config={ baseConfig( { clearAddressOnChange: true } ) } /> );
+		await chooseFirstSuggestion();
+		await waitFor( () => expect( mockStore.setShippingAddress ).toHaveBeenCalledTimes( 1 ) );
+		expect( await screen.findByRole( 'button', { name: 'Clear the chosen locality' } ) ).toBeInTheDocument();
+
+		editNative( { address_1: 'Новая 5', postcode: '142100' } );
+		await chooseFirstSuggestion();
+		await waitFor( () => expect( mockStore.setShippingAddress ).toHaveBeenCalledTimes( 2 ) );
+		expect( lastShippingWrite() ).toMatchObject( { city: 'Подольск', address_1: 'Новая 5', postcode: '142100' } );
+
+		suggestReply = [ kazan ];
+		await chooseFirstSuggestion( 'Каза' );
+		await waitFor( () => expect( mockStore.setShippingAddress ).toHaveBeenCalledTimes( 3 ) );
+		expect( lastShippingWrite() ).toMatchObject( { city: 'Казань', address_1: '', postcode: '' } );
+	} );
+
+	it( 'a pickup point confirmed after the change wins over the clearing', async () => {
+		fillMoscow();
+
+		render( <LocalityChooser config={ baseConfig( { clearAddressOnChange: true } ) } /> );
+		await chooseFirstSuggestion();
+		await waitFor( () => expect( mockStore.setShippingAddress ).toHaveBeenCalledTimes( 1 ) );
+		expect( lastShippingWrite() ).toMatchObject( { address_1: '', postcode: '' } );
+
+		act( () => adoptDestination( { address_1: 'ПВЗ Лесная 3', postcode: '142101' }, false ) );
+
+		expect( mockStore.customer.shippingAddress ).toMatchObject( {
+			city: 'Подольск',
+			address_1: 'ПВЗ Лесная 3',
+			postcode: '142101',
+		} );
+	} );
+
+	it( 'mirrors the clearing into billing only where billing is the same address', async () => {
+		fillMoscow();
+		mockStore.useShippingAsBilling = true;
+
+		render( <LocalityChooser config={ baseConfig( { clearAddressOnChange: true } ) } /> );
+		await chooseFirstSuggestion();
+		await waitFor( () => expect( mockStore.setBillingAddress ).toHaveBeenCalledTimes( 1 ) );
+
+		expect( mockStore.setBillingAddress.mock.calls[ 0 ][ 0 ] ).toMatchObject( { city: 'Подольск', address_1: '', postcode: '' } );
+	} );
+
+	it( 'on the billing-parent chooser it clears the billing street and postcode', async () => {
+		mockStore.forcedBillingAddress = true;
+		mockStore.customer.billingAddress = { ...mockStore.customer.billingAddress, city: 'Москва', address_1: 'Тверская 1', postcode: '101000' };
+		mockStore.customer.shippingAddress = { ...mockStore.customer.shippingAddress, city: 'Москва', address_1: 'Тверская 1', postcode: '101000' };
+
+		render( <LocalityChooser config={ baseConfig( { billingOnly: true, clearAddressOnChange: true } ) } addressTarget="billing" /> );
+		await chooseFirstSuggestion();
+		await waitFor( () => expect( mockStore.setBillingAddress ).toHaveBeenCalledTimes( 1 ) );
+
+		expect( mockStore.setBillingAddress.mock.calls[ 0 ][ 0 ] ).toMatchObject( { city: 'Подольск', address_1: '', postcode: '' } );
 	} );
 } );
 

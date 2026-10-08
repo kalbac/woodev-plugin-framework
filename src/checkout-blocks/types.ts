@@ -54,6 +54,12 @@ export interface LocationConfig {
 	countries: string[];
 	levels: Record< string, LevelSupport >;
 	regionFieldRemoved: boolean;
+	/**
+	 * The merchant option «clear the street and postcode when the settlement changes»
+	 * (`Location_Provider_Registry::SETTING_CLEAR_ADDRESS_ON_CHANGE`, default on). Absent — an older
+	 * publication — means off: nothing is cleared unless the server said so.
+	 */
+	clearAddressOnChange?: boolean;
 	current: ChainEntry | null;
 	chain: Record< string, ChainEntry > | ChainEntry[];
 	implicit: boolean;

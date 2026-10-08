@@ -82,6 +82,10 @@ final class Checkout_Handler_Custom_Settlement_Fake_Location_Service extends Loc
 		return $this->allowed;
 	}
 
+	public function is_clear_address_on_change_enabled(): bool {
+		return true;
+	}
+
 	public function get_field_mode_settlement(): string {
 		return $this->mode;
 	}
@@ -124,6 +128,10 @@ final class Checkout_Handler_Custom_Settlement_Country_Fake_Location_Service ext
 
 	public function is_custom_settlement_allowed(): bool {
 		return false;
+	}
+
+	public function is_clear_address_on_change_enabled(): bool {
+		return true;
 	}
 
 	public function get_field_mode_settlement(): string {
@@ -428,6 +436,10 @@ class CheckoutHandlerCustomSettlementGuardTest extends TestCase {
 
 			public function is_custom_settlement_allowed(): bool {
 				return false;
+			}
+
+			public function is_clear_address_on_change_enabled(): bool {
+				return true;
 			}
 
 			public function get_field_mode_settlement(): string {

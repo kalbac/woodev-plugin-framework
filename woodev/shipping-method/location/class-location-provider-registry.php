@@ -175,6 +175,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		public const SETTING_ALLOW_CUSTOM_SETTLEMENT = 'allow_custom_settlement';
 
 		/**
+		 * The store setting id holding the `clear_address_on_change` switch (s160):
+		 * whether the checkout clears the «Адрес» and «Почтовый индекс» fields of an
+		 * address section when the customer CHANGES that section's settlement. A plain
+		 * boolean stored as the site option `woodev_location_clear_address_on_change`,
+		 * default ON — the same default the retired CDEK plugin's `clean_address_field`
+		 * setting had, which a plugin migration can copy over as a plain `yes`/`no`.
+		 * See {@see self::is_clear_address_on_change_enabled()}.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		public const SETTING_CLEAR_ADDRESS_ON_CHANGE = 'clear_address_on_change';
+
+		/**
 		 * The store setting id holding the `address_suggestions` switch (Task 10;
 		 * issue #362; design S3/§3.1/§3.2/§4.2/§7): whether the location layer
 		 * serves the `address` suggest level AT ALL. Registered right after
@@ -1636,6 +1650,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 			}
 
 			return (bool) $this->settings_handler->get_value( self::SETTING_ALLOW_CUSTOM_SETTLEMENT );
+		}
+
+		/**
+		 * Whether the checkout clears an address section's «Адрес» and «Почтовый
+		 * индекс» fields when the customer changes that section's settlement
+		 * (s160) — the `clear_address_on_change` setting. Defaults to `true`,
+		 * both for the setting itself and for the "no settings handler yet" case
+		 * (unlike {@see self::is_custom_settlement_allowed()}, whose default is
+		 * `false`), so a store that never touched the option behaves the way the
+		 * retired CDEK plugin's `clean_address_field` (default `yes`) did.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public function is_clear_address_on_change_enabled(): bool {
+			if ( null === $this->settings_handler ) {
+				return true;
+			}
+
+			return (bool) $this->settings_handler->get_value( self::SETTING_CLEAR_ADDRESS_ON_CHANGE );
 		}
 
 		/**
