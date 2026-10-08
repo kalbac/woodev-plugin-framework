@@ -415,7 +415,7 @@ if ( ! class_exists( __NAMESPACE__ . '\City_Limit_Form' ) ) :
 				true
 			);
 
-			\Woodev\Framework\Handlers\Script_Translations::register( $plugin, self::SCRIPT_HANDLE );
+			\Woodev\Framework\Handlers\Script_Translations::register( $plugin, 'woodev-city-limit' );
 		}
 	}
 

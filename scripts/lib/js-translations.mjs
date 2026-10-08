@@ -25,6 +25,7 @@ export const BUNDLE_HANDLES = {
 	'setup-wizard': 'woodev-setup-wizard',
 	'settings-page': 'woodev-settings-page',
 	'shipping-orders-page': 'woodev-shipping-orders-page',
+	'shipping-zone-city-limit': 'woodev-city-limit',
 	'ui-kit-gallery': 'woodev-ui-kit-gallery',
 };
 
