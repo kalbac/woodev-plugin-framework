@@ -19,7 +19,7 @@ carriers currently open as a page, so the modal path is latent.
 
 ✅ The framework adds, once, on `page=wc-settings&tab=shipping`, an inline script:
 `jQuery( document.body ).on( 'wc_backbone_modal_loaded', () => jQuery( document.body ).trigger( 'wc-enhanced-select-init' ) );`
-(`Shipping_Plugin::enqueue_packing_settings_script()`). Do not write per-plugin JS for it.
+(`Shipping_Plugin::enqueue_instance_form_script()`, renamed from `enqueue_packing_settings_script()` in s160). Do not write per-plugin JS for it.
 
 ## Related
 
