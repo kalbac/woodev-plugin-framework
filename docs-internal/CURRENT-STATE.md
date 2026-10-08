@@ -6,7 +6,7 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-07 (s159).** 🚧 CDEK v2 (#786), plugin `v2` `41b516a`: #1143 #1144 (PR #1150) #1148 (PR #1151) #1149 #1152 (PR #1153) merged, rig PASS; evening: not-configured notice for every plugin (PR #1154), cost limits (PR #1159), CDEK method-settings UX. Next: `next-session-prompt.md`. Details: `sessions/s159.md`. GlitchTip receiver (#1082) is live. ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
+**As of 2026-10-08 (s160).** 🚧 CDEK v2 (#786), plugin `v2` `78db4e1` (CI pinned to framework `adccd286`): overnight s160 closed #1157 #1158 #1160 #1161 #1162 #1164 (framework PR #1165), rig acceptance PASS; a Cyrillic plugin name in the User-Agent made CDEK answer HTTP 400 — fixed (UA falls back to the plugin id). Next: `next-session-prompt.md`. Details: `sessions/s160.md`. GlitchTip receiver (#1082) is live. ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
 orders-page slug redirects to the framework page with that carrier preselected, accepted on the rig.
 ✅ **Both machines are live**; routine sync is git ONLY (`wiki/two-machine-setup.md`). The order
 metabox (#856) and the orders table (#870) stay accepted.
@@ -61,7 +61,7 @@ FIXTURES**; the shipping plugin is written later, from scratch, own repo, versio
 
 ✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — no quota consumed; the exhaustion symptom is gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`.
 
-**`main` after s159 (`c0cd2f02`, macOS, 08.10.2026):** unit **6313 / 33321** (1 skipped), jest **2963** in **66** suites; integration local **510 / 6576**.
+**`main` after s160 (`adccd286`, macOS, 08.10.2026):** unit **6361 / 33424** (1 skipped), jest **3014** in **68** suites; integration local **510 / 6576**.
 
 **Baselines — macOS laptop, 27.09.2026 (s140)** (the two machines matched to the digit in s136, so
 these are not platform-dependent): unit **4132 / 14586**, 1 skipped, sodium ON; jest **1975** in

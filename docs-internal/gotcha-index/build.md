@@ -22,6 +22,7 @@
 - [build/css-enqueue-version] **enqueue the wp-scripts `style-index.css` with its OWN filemtime, not the JS bundle's asset-hash version.** → [wp-scripts-css-enqueue-version-by-mtime](../gotchas/wp-scripts-css-enqueue-version-by-mtime.md) (s31)
 - [build/stacked-pr] **`gh pr edit --base main` is an `edited` event — the `pull_request` workflows do not run; close + reopen the PR to get the full matrix.** → [retargeting-a-pr-base-to-main-does-not-run-ci](../gotchas/retargeting-a-pr-base-to-main-does-not-run-ci.md) (s145)
 - [build/ci] **Five jobs red at exactly 15m1s with ZERO steps and no runner is GitHub never acquiring a hosted runner, not code — the annotation says so, the log is empty; `gh run rerun --failed`.** → [a-hosted-runner-that-is-never-acquired-fails-the-job-at-fifteen-minutes](../gotchas/a-hosted-runner-that-is-never-acquired-fails-the-job-at-fifteen-minutes.md) (s154)
+- [build/wp-scripts] **Only an imported `style.(s)css` lands in `style-index.css`; any other imported stylesheet goes to `index.css`, which the Blocks integration never registers.** → [a-plain-css-import-in-the-blocks-bundle-lands-in-index-css-which-nothing-loads](../gotchas/a-plain-css-import-in-the-blocks-bundle-lands-in-index-css-which-nothing-loads.md) (s160)
 
 ## Related
 

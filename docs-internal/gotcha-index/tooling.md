@@ -74,6 +74,7 @@
 - [tooling/orca] **Take a dispatch id from the START RECEIPT, never from `worker-list` order — s146 stopped a live worker mid-task thinking it was the Codex critic.** → [take-a-dispatch-id-from-the-start-receipt-never-from-worker-list-order](../gotchas/take-a-dispatch-id-from-the-start-receipt-never-from-worker-list-order.md) (s146)
 - [tooling/gh] **`gh api rate_limit` showed GraphQL 4999/5000 while every GraphQL call was refused (`RATE_LIMIT`); `gh project` surfaces it as «unknown owner type». Probe with a real query; use REST for merges and checks.** → [gh-graphql-rate-limit-reads-full-while-calls-are-refused](../gotchas/gh-graphql-rate-limit-reads-full-while-calls-are-refused.md) (s151)
 - [tooling/orca] **A `terminal send` to a Codex worker about to send `worker_done` becomes a NEW prompt: it codes outside any dispatch and the next `worker-start --terminal` times out. Answer escalations with `reply`.** → [a-terminal-send-to-a-settled-codex-worker-starts-new-unsupervised-work](../gotchas/a-terminal-send-to-a-settled-codex-worker-starts-new-unsupervised-work.md) (s154)
+- [tooling/worktrees] **A fresh CDEK-plugin worktree has no `vendor/` and no `woodev/` — copy vendor, run `scripts/sync-framework.sh`.** → [a-fresh-cdek-plugin-worktree-has-no-vendor-and-no-woodev](../gotchas/a-fresh-cdek-plugin-worktree-has-no-vendor-and-no-woodev.md) (s160)
 
 ## Related
 

@@ -7,6 +7,7 @@
 - [api/http-headers] **A WordPress response header can be an ARRAY, and `Set-Cookie` usually is.** → [wp-http-duplicate-headers-arrive-as-arrays](../gotchas/wp-http-duplicate-headers-arrive-as-arrays.md) (s72)
 - [api/rest-not-for-browser-auth] **A REST endpoint can't back a browser-facing screen that relies on cookie login.** → [rest-endpoint-not-for-browser-cookie-auth](../gotchas/rest-endpoint-not-for-browser-cookie-auth.md) (s24)
 - [api/catalog-fetch-timeout] **«Плагины» catalog fetch uses the default 5s timeout — cold cache fails on a slow issuer.** → [extensions-catalog-fetch-5s-timeout](../gotchas/extensions-catalog-fetch-5s-timeout.md) (s25; fixed s26)
+- [api/http-headers] **A plugin name outside ASCII in the User-Agent gets HTTP 400 from CDEK on every call but OAuth; the product token falls back to the plugin id.** → [a-non-ascii-plugin-name-in-the-user-agent-gets-http-400-from-cdek](../gotchas/a-non-ascii-plugin-name-in-the-user-agent-gets-http-400-from-cdek.md) (s160)
 
 ## Related
 
