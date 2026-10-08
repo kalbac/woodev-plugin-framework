@@ -105,14 +105,19 @@ test.describe( 'classic checkout — WooCommerce core pickup (#1176)', () => {
 	test( 'city limit: core pickup is offered in a listed city and not elsewhere', async ( { page } ) => {
 		test.skip( ! process.env.WOODEV_E2E_CITY_LIMIT, 'Needs the rig prepared as the file header says; set WOODEV_E2E_CITY_LIMIT=1.' );
 
-		await openCheckout( page );
-
 		const corePickup = page.locator( `input[name^="shipping_method"][value^="${ METHOD_CORE_PICKUP }:"]` );
 
-		/** Picks a settlement in the framework's city select. */
+		/**
+		 * Picks a settlement in the framework's city select. The select2 offers options only after a search,
+		 * so the name is typed first; and a pick narrows later searches to its region, so every pick starts
+		 * from a fresh session (the customer's chosen locality lives in the WooCommerce session).
+		 */
 		async function pickCity( name ) {
+			await page.context().clearCookies();
+			await openCheckout( page );
 			await page.click( '#shipping_city_field .select2-selection' );
-			await page.click( `.select2-results__option:has-text("${ name }")` );
+			await page.locator( 'input.select2-search__field' ).fill( name );
+			await page.click( `.select2-results__option:has-text("${ name }")`, { timeout: 40_000 } );
 			await settle( page );
 		}
 
