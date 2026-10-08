@@ -2461,16 +2461,40 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 
 		protected function get_request_user_agent() {
 
-			$plugin_name    = $this->get_plugin()->get_plugin_name();
+			$product        = static::get_user_agent_product( (string) $this->get_plugin()->get_plugin_name(), (string) $this->get_plugin()->get_id_dasherized() );
 			$plugin_version = $this->get_plugin()->get_version();
 			$wc_version     = Woodev_Helper::get_wc_version();
 			$wp_version     = $GLOBALS['wp_version'];
 
 			if ( ! is_null( $wc_version ) ) {
-				return sprintf( '%s/%s (WooCommerce/%s; WordPress/%s)', str_replace( ' ', '-', $plugin_name ), $plugin_version, $wc_version, $wp_version );
+				return sprintf( '%s/%s (WooCommerce/%s; WordPress/%s)', $product, $plugin_version, $wc_version, $wp_version );
 			}
 
-			return sprintf( '%s/%s (WordPress/%s)', str_replace( ' ', '-', $plugin_name ), $plugin_version, $wp_version );
+			return sprintf( '%s/%s (WordPress/%s)', $product, $plugin_version, $wp_version );
+		}
+
+		/**
+		 * The product token of the User-Agent: the plugin name with spaces dasherized when that is a valid HTTP
+		 * token, the plugin id otherwise.
+		 *
+		 * A header value outside ASCII is not valid HTTP, and a carrier may refuse it outright: with the plugin
+		 * named «СДЭК для WooCommerce» CDEK answered every request except the token one with HTTP 400 (s160).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $plugin_name The merchant-facing plugin name.
+		 * @param string $plugin_id   The dasherized plugin id, the fallback.
+		 * @return string
+		 */
+		protected static function get_user_agent_product( string $plugin_name, string $plugin_id ): string {
+
+			$product = str_replace( ' ', '-', trim( $plugin_name ) );
+
+			if ( '' !== $product && 1 === preg_match( "/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/D", $product ) ) {
+				return $product;
+			}
+
+			return '' !== $plugin_id ? $plugin_id : 'woodev-plugin';
 		}
 
 		protected function get_request_duration() {
