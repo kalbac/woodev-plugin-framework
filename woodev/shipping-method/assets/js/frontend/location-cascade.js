@@ -1243,6 +1243,8 @@
 			// Per-field remembered value the field is currently CONSISTENT with — gates
 			// destructive clearing exactly like `checkout-field-classic.js`'s own `resolved`.
 			resolved: {},
+			// A postcode the customer just changed belongs to the address edit that follows it.
+			postcodeEditPending: false,
 			// Issue #331 (cart only): the `<select>` VALUE each field last held, so a rebuilt
 			// state list is judged by region identity (WooCommerce's code), not by label alone.
 			seenValues: {},
@@ -3870,6 +3872,9 @@
 			pickedSettlement: 'settlement' === node.level ? function() {
 				return customerPickFor( entry, node.level );
 			} : null,
+			// An address suggestion can be broader than the typed street (DaData can return the
+			// street without the house number). Keep the buyer's text unless they explicitly pick.
+			autoSelectFirstOnBlur: 'address' !== node.level,
 			onSelect: onSelectFor( entry, node ),
 			// Issue #350: OPTIONAL for the widget (a mode-specific Task 13 renderer is free to
 			// ignore it, same as every other primitive here) — see {@see onAbandonFor}'s own
@@ -4647,10 +4652,11 @@
 	 *
 	 * @param {Object} entry
 	 * @param {number} fromIndex
-	 * @param {boolean} [keepAddress] Leave the `address` level and the postcode node alone (s160).
+	 * @param {boolean} [keepAddress] Leave the `address` level and postcode node alone (s160).
+	 * @param {boolean} [keepPostcode] Leave only the postcode node alone.
 	 * @returns {void}
 	 */
-	function clearDescendants( entry, fromIndex, keepAddress ) {
+	function clearDescendants( entry, fromIndex, keepAddress, keepPostcode ) {
 		var editedNode = entry.allNodes[ fromIndex ];
 		var editedLevel = editedNode ? editedNode.level : null;
 		var snapshot = editedLevel ? {} : null;
@@ -4664,6 +4670,12 @@
 			// (the level-less node) alone. A region or country change still clears everything below
 			// it — the settlement itself is gone then, and a street with no city is meaningless.
 			if ( keepAddress && ( 'address' === node.level || null === node.level ) ) {
+				continue;
+			}
+
+			// The customer explicitly changed postcode before this street edit, so the postcode
+			// is part of the address they are entering and must survive this cascade clear.
+			if ( keepPostcode && null === node.level ) {
 				continue;
 			}
 
@@ -4958,6 +4970,14 @@
 			return;
 		}
 
+		// Postcode is a derived, level-less field, but a customer can enter it before the
+		// street. Remember that explicit edit so the following street change does not erase it.
+		entries.forEach( function( entry ) {
+			if ( entry.postcodeFieldId === id ) {
+				entry.postcodeEditPending = true;
+			}
+		} );
+
 		entries.forEach( function( entry ) {
 			var info = nodeInfo( entry, id );
 
@@ -4969,6 +4989,12 @@
 
 			if ( entry.resolved[ id ] === newValue ) {
 				return; // no real transition — WC-style no-op churn OR a duplicate delivery.
+			}
+
+			var keepPostcode = 'address' === info.level && entry.postcodeEditPending;
+
+			if ( 'address' === info.level ) {
+				entry.postcodeEditPending = false;
 			}
 
 			// Issue #331: the calculator's WooCommerce scripts rebuild the state `<select>` from
@@ -5025,7 +5051,8 @@
 			clearDescendants(
 				entry,
 				info.index,
-				'settlement' === info.level && ( ! clearsAddressOnChange( entry ) || '' === previousText.trim() )
+				'settlement' === info.level && ( ! clearsAddressOnChange( entry ) || '' === previousText.trim() ),
+				keepPostcode
 			);
 		} );
 
@@ -5037,6 +5064,26 @@
 
 		// Issue #332: a real edit nulled the field's record — the hidden copy must follow.
 		entries.forEach( clearAccountRecordField );
+	}
+
+	/**
+	 * Remembers an explicit postcode edit, including a re-entry of the value already present.
+	 *
+	 * @param {Event} event Native input event.
+	 * @returns {void}
+	 */
+	function handlePostcodeInput( event ) {
+		var target = event && event.target;
+
+		if ( ! target || ! target.id ) {
+			return;
+		}
+
+		entries.forEach( function( entry ) {
+			if ( entry.postcodeFieldId === target.id ) {
+				entry.postcodeEditPending = true;
+			}
+		} );
 	}
 
 	/**
@@ -5082,6 +5129,7 @@
 		if ( ! changeWorldsBound.native ) {
 			changeWorldsBound.native = true;
 			document.body.addEventListener( 'change', handleFieldChanged );
+			document.body.addEventListener( 'input', handlePostcodeInput );
 		}
 
 		if ( changeWorldsBound.jquery || ! window.jQuery ) {

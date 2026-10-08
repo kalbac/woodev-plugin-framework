@@ -1063,6 +1063,31 @@ describe( 'ABANDON — adopt or report on blur (issue #350)', () => {
 		expect( listboxOf().hidden ).toBe( true );
 	} );
 
+	test( 'autoSelectFirstOnBlur false keeps typed text when address suggestions are broader matches', async () => {
+		jest.useFakeTimers();
+		const onSelect = jest.fn();
+		const onAbandon = jest.fn();
+		const fetchMock = jest.fn( () => Promise.resolve( [
+			{ label: 'ulitsa 1-ya Tverskaya-Yamskaya', record: { postcode: '' } },
+			{ label: 'ulitsa Tverskaya, dom 1', record: { postcode: '101000' } },
+		] ) );
+
+		attachTypeahead( input, { fetch: fetchMock, onSelect, onAbandon, autoSelectFirstOnBlur: false } );
+
+		input.value = 'ул. Тверская, 1';
+		input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+		jest.advanceTimersByTime( 250 );
+		await flushMicrotasks();
+
+		input.dispatchEvent( new Event( 'blur', { bubbles: true } ) );
+		await flushMicrotasks();
+
+		expect( input.value ).toBe( 'ул. Тверская, 1' );
+		expect( onSelect ).not.toHaveBeenCalled();
+		expect( onAbandon ).not.toHaveBeenCalled();
+		expect( listboxOf().hidden ).toBe( true );
+	} );
+
 	test( 'blur with 0 results calls onAbandon, never onSelect, and leaves the typed text alone', async () => {
 		jest.useFakeTimers();
 		const onSelect = jest.fn();

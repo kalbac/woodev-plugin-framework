@@ -109,10 +109,10 @@
  * such a town will never produce a suggestion to click. The operator's fix (17.08.2026) is
  * `options.onAbandon`, an OPTIONAL third callback alongside `fetch`/`onSelect`:
  *
- * - a blur that leaves the query resolved to >= 1 suggestion ADOPTS the first one — the same
- *   `selectItem()` a click or Enter would run, never a hand-rolled write/dispatch/close/onSelect
- *   sequence of its own (the ordering in {@see selectItem} is load-bearing — see its own
- *   docblock);
+ * - a blur that leaves the query resolved to >= 1 suggestion ADOPTS the first one by default —
+ *   the same `selectItem()` a click or Enter would run, never a hand-rolled write/dispatch/
+ *   close/onSelect sequence of its own (the ordering in {@see selectItem} is load-bearing — see
+ *   its own docblock); `autoSelectFirstOnBlur: false` leaves the customer's text in place;
  * - a blur that leaves the query resolved to exactly ZERO suggestions calls
  *   `onAbandon({ query, resolved: true })` instead, so the caller can decide what "the provider
  *   has nothing for this text" means for ITS OWN fields (`location-cascade.js` uses this to stop
@@ -1004,6 +1004,15 @@
 				}
 
 				if ( lastCompletedItems.length >= 1 ) {
+					// Address suggestions may be broader than the customer's typed street (for example,
+					// a street-only match when the query also contains a house number). Do not silently
+					// replace that text with the first candidate when its owner opts out.
+					if ( false === opts.autoSelectFirstOnBlur ) {
+						closeListbox();
+
+						return;
+					}
+
 					selectItem( lastCompletedItems[ 0 ] ); // closes the listbox itself.
 
 					return;
