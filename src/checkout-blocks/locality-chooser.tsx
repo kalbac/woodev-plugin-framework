@@ -24,6 +24,7 @@ import { useSelect } from '@wordpress/data';
 import type { KeyboardEvent } from 'react';
 import { resetSharedChainSync, sharedChainSync } from './chain-sync';
 import type { ChainSync } from './chain-sync';
+import { publishSettlementScope } from './address-scope';
 import { hasLocalityMoved, isSelectionStale, judgeSavedRecord } from './invalidation';
 import { recordCity, recordCityComponent, resolveNativeAddress } from './mapping';
 import type { CountryStates } from './mapping';
@@ -206,6 +207,7 @@ function ActiveLocalityChooser( {
 		held.current = next;
 		remembered = next;
 		undecided.current = false;
+		publishSettlementScope( next?.key ?? null );
 
 		if ( mounted.current ) {
 			setSelection( next );
@@ -228,6 +230,7 @@ function ActiveLocalityChooser( {
 		// An undecided locality stays unremembered: a remount judges the server's record again.
 		if ( ! undecided.current ) {
 			remembered = held.current;
+			publishSettlementScope( held.current?.key ?? null );
 		}
 
 		// The server holds a locality the native address does not name: clear that provenance.
