@@ -21,6 +21,11 @@
  *   no per-step completion state, so the visited boundary lives in the tab's
  *   sessionStorage (per plugin): a reload resumes at the hash step but never beyond the
  *   furthest step reached, so a deep link cannot skip the steps in between.
+ * - The step list is the server's step GRAPH (D3): steps the server-side predicates hide are
+ *   not shown, and every successful save or action returns the recomputed graph, which the
+ *   client re-renders from (no reaction to unsaved form values). The current step is kept by id.
+ * - A step may declare a plugin component (D4), rendered inside the standard frame with the
+ *   plumbing in `types.ts` (values, onChange, save, next, runAction, errors, busy…).
  * - Footer link EXITS the wizard: marks it skipped (non-finish) and redirects to
  *   the admin dashboard.
  * - Finish step: marks the wizard completed once, then shows the success screen. When that
@@ -39,6 +44,8 @@ import { __, sprintf } from '@wordpress/i18n';
 import { Button } from '@wordpress/components';
 import Stepper from '../components/stepper';
 import StepView from './step-view';
+import StepComponentBoundary from './step-component-boundary';
+import { resolveStepComponent } from './component-registry';
 import { CheckFilledIcon, GearIcon, StarIcon } from '../components/icons';
 import { saveStep, complete, runAction } from './rest';
 import { validateFields, isFieldVisible } from '../components/validate';
@@ -97,19 +104,31 @@ function writeVisited( pluginId, stepId ) {
 }
 
 /**
+ * The steps to show: the graph minus the ones the server hides now.
+ *
+ * @param {Array} graph the step graph (bootstrap `steps` or a REST response's `graph`).
+ * @return {Array} visible step descriptors, in order.
+ */
+function visibleSteps( graph ) {
+	return ( graph || [] ).filter( ( s ) => false !== s.visible );
+}
+
+/**
  * Wizard root.
  *
  * @return {Object} React element.
  */
 export default function App() {
 	const {
-		steps,
 		finishActions,
 		finishSecondaryActions,
 		pluginName,
 		headerLogoUrl,
 		pluginId,
 	} = window.woodevSetupWizard;
+
+	// The visible part of the step graph; replaced whenever a save or action returns a new graph.
+	const [ steps, setSteps ] = useState( () => visibleSteps( window.woodevSetupWizard.steps ) );
 
 	/**
 	 * Resolves the initial step index from the URL hash (`#{id}-step`), falling
@@ -141,8 +160,10 @@ export default function App() {
 		maxVisitedRef.current = Math.max( index, readVisited( pluginId, steps ) );
 	}
 	const indexRef = useRef( index );
+	const stepsRef = useRef( steps );
 	maxVisitedRef.current = Math.max( maxVisitedRef.current, index );
 	indexRef.current = index;
+	stepsRef.current = steps;
 	const maxVisited = maxVisitedRef.current;
 	const [ values, setValues ] = useState( {} );
 	const [ error, setError ] = useState( null );
@@ -155,9 +176,11 @@ export default function App() {
 	const [ pendingConfirm, setPendingConfirm ] = useState( null );
 	const [ actionResult, setActionResult ] = useState( null );
 	const actionGenRef = useRef( 0 );
-	// The finish step's «completed» write failed / the footer exit's «skipped» write failed.
-	const [ completeFailed, setCompleteFailed ] = useState( false );
-	const [ completeRetrying, setCompleteRetrying ] = useState( false );
+	// A custom component's pending destructive action: settled when the merchant answers the confirmation.
+	const componentResolveRef = useRef( null );
+	// The finish step's «completed» write: 'pending' → 'done' | 'failed' (only 'done' may show the
+	// success screen); the footer exit's «skipped» write may also fail.
+	const [ completeStatus, setCompleteStatus ] = useState( 'pending' );
 	const [ exitFailed, setExitFailed ] = useState( false );
 	// The footer exit's «skipped» write is in flight (a ref, so a second click in the same
 	// tick is already refused; the state mirrors it into `aria-disabled`).
@@ -166,7 +189,8 @@ export default function App() {
 	const rootRef = useRef( null );
 	const firstRenderRef = useRef( true );
 
-	const step = steps[ index ];
+	// `|| last` guards the instant between a graph arriving and the index following it.
+	const step = steps[ index ] || steps[ steps.length - 1 ];
 	const isFinish = 'finish' === step.type;
 	const isWelcome = 'content' === step.type && 0 === index;
 	const isSettings = 'settings' === step.type;
@@ -230,20 +254,19 @@ export default function App() {
 	}
 
 	/**
-	 * Records the wizard as completed; on failure raises `completeFailed` so the finish
-	 * screen says so instead of showing an unqualified success (#1047).
+	 * Records the wizard as completed. The success screen is shown only once the write
+	 * succeeded; a failure turns the finish step into an honest error with a retry (#1047, audit #5).
 	 */
 	function markCompleted() {
-		setCompleteRetrying( true );
+		setCompleteStatus( 'pending' );
 		return complete( 'completed' )
-			.then( () => setCompleteFailed( false ) )
+			.then( () => setCompleteStatus( 'done' ) )
 			.catch( ( e ) => {
-				setCompleteFailed( true );
+				setCompleteStatus( 'failed' );
 				if ( window.console ) {
 					window.console.warn( 'woodev setup: complete() failed', e );
 				}
-			} )
-			.then( () => setCompleteRetrying( false ) );
+			} );
 	}
 
 	// Mark the wizard complete once when the finish step becomes active.
@@ -253,13 +276,26 @@ export default function App() {
 		}
 	}, [ isFinish ] );
 
-	// An action's answer and a pending confirmation belong to the step they were raised on.
+	// The finish heading is replaced when the «completed» write settles (neutral → success or
+	// error), so focus follows it to the new element.
+	useEffect( () => {
+		if ( isFinish && 'pending' !== completeStatus ) {
+			const heading = rootRef.current && rootRef.current.querySelector( '.woodev-setup__finish-title' );
+			if ( heading ) {
+				heading.focus();
+			}
+		}
+	}, [ isFinish, completeStatus ] );
+
+	// An action's answer and a pending confirmation belong to the step they were raised on
+	// (keyed by the step's id, not its position: a graph change can move the same step).
 	useEffect( () => {
 		actionGenRef.current += 1; // a request still in flight belongs to the step we just left.
+		settleComponentAction( { status: 'cancelled', message: '', data: {} } );
 		setActionBusy( null );
 		setPendingConfirm( null );
 		setActionResult( null );
-	}, [ index ] );
+	}, [ step.id ] );
 
 	// Move focus to the new step's heading after every step change, so a keyboard / screen
 	// reader user lands on the new content instead of on a button that no longer exists.
@@ -273,7 +309,7 @@ export default function App() {
 		if ( heading ) {
 			heading.focus();
 		}
-	}, [ index ] );
+	}, [ step.id ] );
 
 	// Scroll to the first invalid field and focus its control whenever validation
 	// errors are revealed (client-side block or server-side 400 reject).
@@ -317,11 +353,59 @@ export default function App() {
 	}
 
 	/**
+	 * Settles the promise a custom component is waiting on for a destructive action.
+	 *
+	 * @param {Object} answer the action's answer, or `{ status: 'cancelled' }`.
+	 */
+	function settleComponentAction( answer ) {
+		const resolve = componentResolveRef.current;
+		componentResolveRef.current = null;
+		if ( resolve ) {
+			resolve( answer );
+		}
+	}
+
+	/**
+	 * Re-renders from a step graph the server returned after a save or action (D3).
+	 *
+	 * Keeps the merchant on the same step (found by id) and keeps the visited boundary on the same
+	 * step too, whatever positions the hidden/shown steps shifted. Works from refs, so a response
+	 * that lands after the render that started the request still sees the current list.
+	 *
+	 * @param {Array} graph the graph from the response (ignored when absent or malformed).
+	 * @return {Array|null} the new visible list, or null when nothing was applied.
+	 */
+	function applyGraph( graph ) {
+		const next = Array.isArray( graph ) ? visibleSteps( graph ) : [];
+		// A usable graph always ends with the terminal finish step.
+		if ( ! next.length || 'finish' !== next[ next.length - 1 ].type ) {
+			return null;
+		}
+
+		const old = stepsRef.current;
+		const currentId = old[ indexRef.current ] && old[ indexRef.current ].id;
+		const furthestId = old[ maxVisitedRef.current ] && old[ maxVisitedRef.current ].id;
+		const current = next.findIndex( ( s ) => s.id === currentId );
+		const furthest = next.findIndex( ( s ) => s.id === furthestId );
+		const newIndex = current >= 0 ? current : Math.min( indexRef.current, next.length - 1 );
+
+		stepsRef.current = next;
+		indexRef.current = newIndex;
+		maxVisitedRef.current = Math.min( Math.max( furthest >= 0 ? furthest : 0, newIndex ), next.length - 1 );
+		setSteps( next );
+		setIndex( newIndex );
+
+		return next;
+	}
+
+	/**
 	 * Runs a step action. A destructive one first raises the confirmation; the confirmed
 	 * call is the one that reaches the server (`confirmed: true`).
 	 *
 	 * @param {Object}  action    action descriptor from the bootstrap (id, label, destructive, confirm).
 	 * @param {boolean} confirmed whether the merchant already confirmed.
+	 * @return {Promise<Object|null>} the action's answer `{ status, message, data }`; null when it
+	 *                                only raised the confirmation.
 	 */
 	async function runStepAction( action, confirmed = false ) {
 		setError( null );
@@ -329,7 +413,7 @@ export default function App() {
 
 		if ( action.destructive && ! confirmed ) {
 			setPendingConfirm( action.id );
-			return;
+			return null;
 		}
 
 		setPendingConfirm( null );
@@ -338,44 +422,52 @@ export default function App() {
 		// bumps the ref, and whatever this request resolves with afterwards is dropped.
 		const generation = ++actionGenRef.current;
 		const isCurrent = () => generation === actionGenRef.current;
+		let result;
 		try {
 			// Only the merchant's edits travel; the server lays them over the stored values
 			// (a masked secret the merchant did not retype must not arrive as '').
 			const answer = await runAction( step.id, action.id, values[ step.id ] || {}, confirmed );
-			if ( ! isCurrent() ) {
-				return;
-			}
-			setActionResult( {
-				actionId: action.id,
+			// The action may have persisted something that changes the graph — apply it even when
+			// the answer itself is stale (the server state is what it is).
+			applyGraph( answer && answer.graph );
+			result = {
 				status: answer && 'error' === answer.status ? 'error' : 'success',
 				message: ( answer && answer.message ) || '',
-			} );
+				data: ( answer && answer.data ) || {},
+			};
 		} catch ( e ) {
-			if ( ! isCurrent() ) {
-				return;
-			}
-			setActionResult( {
-				actionId: action.id,
+			result = {
 				status: 'error',
 				message: e.message || __( 'Что-то пошло не так. Попробуйте ещё раз.', 'woodev-plugin-framework' ),
-			} );
-		} finally {
-			if ( isCurrent() ) {
-				setActionBusy( null );
-			}
+				data: {},
+			};
 		}
+
+		if ( isCurrent() ) {
+			setActionResult( { actionId: action.id, ...result } );
+			setActionBusy( null );
+		}
+
+		return result;
 	}
 
 	/**
-	 * Advances to the next step, saving the current settings step first.
+	 * Saves the current step on the server and, with `advance`, moves on.
 	 *
-	 * For settings steps, client-side validation runs before the save request.
-	 * If any field is invalid the reveal state is set and the advance is blocked.
-	 * On a server 400, `err.data.errors` is mapped to per-field error state.
+	 * For settings steps, client-side validation runs before the request; invalid fields reveal
+	 * their errors and block. A settings step always asks the server (validate → persist the edited
+	 * fields → on_save); a content step only when PHP says it validates, or when `force`d (a custom
+	 * component's own `save()`). On a server refusal `err.data.errors` is mapped to per-field
+	 * errors. A success returns the recomputed step graph, which replaces the list (D3).
 	 *
 	 * @since 2.0.2
+	 *
+	 * @param {Object}  options
+	 * @param {boolean} options.advance move to the next visible step after a success.
+	 * @param {boolean} options.force   ask the server even for a content step without a validator.
+	 * @return {Promise<boolean>} true when the step was accepted.
 	 */
-	async function goNext() {
+	async function submitStep( { advance = true, force = false } = {} ) {
 		setError( null );
 		setExitFailed( false );
 
@@ -395,21 +487,34 @@ export default function App() {
 				setFieldErrors( {} ); // clear stale server errors before revealing fresh client errors
 				setError( __( 'Проверьте правильность заполнения полей на этом шаге.', 'woodev-plugin-framework' ) );
 				setErrorRevealGen( ( g ) => g + 1 );
-				return; // block advance — reveal fresh client errors + summary
+				return false; // block advance — reveal fresh client errors + summary
 			}
 		}
 
 		setBusy( true );
 		try {
-			// A settings step always goes through the server (validate → persist the edited
-			// fields → on_save); a content step only when PHP says it validates. Advance on
-			// success only.
-			if ( isSettings || step.validates ) {
-				await saveStep( step.id, values[ step.id ] || {} );
+			let response = null;
+			if ( force || isSettings || step.validates ) {
+				response = await saveStep( step.id, values[ step.id ] || {} );
 			}
 			setShowErrors( false );
 			setFieldErrors( {} );
-			setIndex( ( prev ) => prev + 1 );
+
+			const list = response ? applyGraph( response.graph ) : null;
+			if ( advance ) {
+				if ( list ) {
+					// Next visible step after this one in the NEW graph; if the save hid this very
+					// step, the step now at its position is the one after it.
+					const at = list.findIndex( ( s ) => s.id === step.id );
+					const target = at >= 0 ? at + 1 : Math.min( indexRef.current, list.length - 1 );
+					indexRef.current = target;
+					setIndex( target );
+				} else {
+					setIndex( ( prev ) => prev + 1 );
+				}
+			}
+
+			return true;
 		} catch ( e ) {
 			const map = e && e.data && e.data.errors ? e.data.errors : null;
 			if ( map ) {
@@ -420,16 +525,24 @@ export default function App() {
 			// An error the validator put on a key that is not a rendered field has nowhere
 			// to show but the banner.
 			const fieldIds = Object.keys( step.fields || {} );
-			const base = e.message || __( 'Что-то пошло не так. Попробуйте ещё раз.', 'woodev-plugin-framework' );
+			const base = ( e && e.message ) || __( 'Что-то пошло не так. Попробуйте ещё раз.', 'woodev-plugin-framework' );
 			const extra = map
 				? Object.keys( map )
 					.filter( ( key ) => ! fieldIds.includes( key ) && map[ key ] !== base )
 					.map( ( key ) => map[ key ] )
 				: [];
 			setError( [ base, ...extra ].join( ' ' ) );
+			return false;
 		} finally {
 			setBusy( false );
 		}
+	}
+
+	/**
+	 * Continue / «Начать настройку»: save when the step needs it, then advance.
+	 */
+	function goNext() {
+		return submitStep( { advance: true } );
 	}
 
 	/**
@@ -484,7 +597,10 @@ export default function App() {
 		return createElement(
 			'div',
 			{ className: 'woodev-setup__step-actions' },
-			createElement(
+			// A custom component owns its own controls and starts actions through `runAction`; the
+			// framework still shows the confirmation and the answer below.
+			! step.component &&
+				createElement(
 				'div',
 				{ className: 'woodev-setup__step-actions-row' },
 				actions.map( ( action ) =>
@@ -517,7 +633,7 @@ export default function App() {
 						{
 							variant: 'secondary',
 							isDestructive: true,
-							onClick: () => runStepAction( pending, true ),
+							onClick: () => runStepAction( pending, true ).then( settleComponentAction ),
 							className: 'woodev-setup__confirm-yes',
 						},
 						__( 'Да, выполнить', 'woodev-plugin-framework' )
@@ -527,7 +643,10 @@ export default function App() {
 						Button,
 						{
 							variant: 'tertiary',
-							onClick: () => setPendingConfirm( null ),
+							onClick: () => {
+								setPendingConfirm( null );
+								settleComponentAction( { status: 'cancelled', message: '', data: {} } );
+							},
 							className: 'woodev-setup__confirm-no',
 						},
 						__( 'Отмена', 'woodev-plugin-framework' )
@@ -544,6 +663,143 @@ export default function App() {
 					actionResult.message
 				)
 		);
+	}
+
+	/**
+	 * The terminal step. The success screen appears only after «completed» was persisted: while
+	 * the write is in flight the heading is neutral, and a failure shows an error with a retry
+	 * instead of «ready» (audit #5).
+	 *
+	 * @return {Object} React element.
+	 */
+	function renderFinishStep() {
+		if ( 'done' === completeStatus ) {
+			return createElement(
+				Fragment,
+				null,
+				renderFinish( pluginName, finishActions, finishSecondaryActions ),
+				createElement(
+					'div',
+					{ className: 'woodev-setup__finish-done' },
+					createElement(
+						Button,
+						{
+							variant: 'primary',
+							className: 'woodev-setup__primary',
+							onClick: () => {
+								window.location.href = adminUrl();
+							},
+						},
+						__( 'Готово', 'woodev-plugin-framework' )
+					)
+				)
+			);
+		}
+
+		const failed = 'failed' === completeStatus;
+
+		return createElement(
+			'div',
+			{ className: 'woodev-setup__card' },
+			failed &&
+				createElement(
+					'div',
+					{ className: 'woodev-setup__error woodev-setup__error--finish', role: 'alert' },
+					createElement(
+						'span',
+						null,
+						__( 'Настройки сохранены, но отметить мастер завершённым не удалось — при следующем визите он может открыться снова.', 'woodev-plugin-framework' )
+					),
+					' ',
+					createElement(
+						Button,
+						{
+							variant: 'link',
+							onClick: markCompleted,
+							className: 'woodev-setup__retry',
+						},
+						__( 'Повторить', 'woodev-plugin-framework' )
+					)
+				),
+			createElement(
+				'h1',
+				{ className: 'woodev-setup__step-title woodev-setup__finish-title', tabIndex: -1 },
+				failed
+					? __( 'Мастер ещё не завершён', 'woodev-plugin-framework' )
+					: __( 'Завершаем настройку…', 'woodev-plugin-framework' )
+			),
+			! failed &&
+				createElement( 'p', { className: 'woodev-setup__finish-intro', role: 'status' }, __( 'Сохраняем отметку о завершении.', 'woodev-plugin-framework' ) )
+		);
+	}
+
+	/**
+	 * The body of a step that declares a plugin component (D4), or an honest error state when the
+	 * component is not there.
+	 *
+	 * @return {Object} React element.
+	 */
+	function renderComponentBody() {
+		const Resolved = resolveStepComponent( step.component );
+		const failure = createElement(
+			'div',
+			{ className: 'woodev-setup__error woodev-setup__component-error', role: 'alert' },
+			__( 'Не удалось загрузить содержимое этого шага. Обновите страницу; если ошибка повторится, обратитесь к разработчику плагина.', 'woodev-plugin-framework' )
+		);
+
+		if ( ! Resolved ) {
+			if ( window.console ) {
+				window.console.error(
+					`woodev setup: step "${ step.id }" component "${ step.component.export }" of script "${ step.component.handle }" is not published`
+				);
+			}
+			return failure;
+		}
+
+		return createElement(
+			StepComponentBoundary,
+			{ fallback: failure },
+			createElement( Resolved, {
+				step,
+				values: values[ step.id ] || {},
+				onChange: onStepChange,
+				errors: fieldErrors,
+				showErrors,
+				busy: busy || null !== actionBusy,
+				save: () => submitStep( { advance: false, force: true } ),
+				next: goNext,
+				back: () => goTo( index - 1 ),
+				skip: skipStep,
+				runAction: ( actionId ) =>
+					new Promise( ( resolve ) => {
+						const action = ( step.actions || [] ).find( ( a ) => a.id === actionId );
+						if ( ! action ) {
+							resolve( { status: 'error', message: __( 'Неизвестное действие.', 'woodev-plugin-framework' ), data: {} } );
+							return;
+						}
+						if ( action.destructive ) {
+							// Settled by the confirmation panel (yes → the answer, no → 'cancelled').
+							settleComponentAction( { status: 'cancelled', message: '', data: {} } );
+							componentResolveRef.current = resolve;
+							runStepAction( action );
+							return;
+						}
+						runStepAction( action ).then( resolve );
+					} ),
+			} )
+		);
+	}
+
+	/**
+	 * The step's edits changed (the same handler for built-in fields and custom components).
+	 *
+	 * @param {Object} v field id => value for the current step.
+	 */
+	function onStepChange( v ) {
+		if ( Object.keys( fieldErrors ).length > 0 ) {
+			setFieldErrors( {} );
+		}
+		setValues( { ...values, [ step.id ]: v } );
 	}
 
 	const primaryLabel = isWelcome
@@ -566,47 +822,7 @@ export default function App() {
 			canNavigate: ( i ) => canReach( i, maxVisited ),
 		} ),
 		isFinish
-			? createElement(
-				Fragment,
-				null,
-				completeFailed &&
-					createElement(
-						'div',
-						{ className: 'woodev-setup__error woodev-setup__error--finish', role: 'alert' },
-						createElement(
-							'span',
-							null,
-							__( 'Настройки сохранены, но отметить мастер завершённым не удалось — при следующем визите он может открыться снова.', 'woodev-plugin-framework' )
-						),
-						' ',
-						createElement(
-							Button,
-							{
-								variant: 'link',
-								disabled: completeRetrying,
-								onClick: markCompleted,
-								className: 'woodev-setup__retry',
-							},
-							__( 'Повторить', 'woodev-plugin-framework' )
-						)
-					),
-				renderFinish( pluginName, finishActions, finishSecondaryActions ),
-				createElement(
-					'div',
-					{ className: 'woodev-setup__finish-done' },
-					createElement(
-						Button,
-						{
-							variant: 'primary',
-							className: 'woodev-setup__primary',
-							onClick: () => {
-								window.location.href = adminUrl();
-							},
-						},
-						__( 'Готово', 'woodev-plugin-framework' )
-					)
-				)
-			)
+			? renderFinishStep()
 			: createElement(
 				Fragment,
 				null,
@@ -631,14 +847,10 @@ export default function App() {
 						key: step.id,
 						step,
 						values: values[ step.id ] || {},
-						onChange: ( v ) => {
-							if ( Object.keys( fieldErrors ).length > 0 ) {
-								setFieldErrors( {} );
-							}
-							setValues( { ...values, [ step.id ]: v } );
-						},
+													onChange: onStepChange,
 						showErrors,
 						serverErrors: fieldErrors,
+						body: step.component ? renderComponentBody() : null,
 					} ),
 					renderStepActions(),
 					createElement(

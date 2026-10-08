@@ -102,10 +102,11 @@ if ( ! class_exists( 'Woodev_REST_API_Setup' ) ) :
 		/**
 		 * Resolves the step a request addresses.
 		 *
-		 * The single choke point for "may this request touch this step": today a step must
-		 * be registered and visible at wizard build time; the server-side step-graph
-		 * recompute (D3) refuses a step hidden in the CURRENT graph here, for the save and
-		 * the action route alike.
+		 * The single choke point for "may this request touch this step", shared by the save and
+		 * the action route (D3): the step must be registered AND visible in the CURRENT step
+		 * graph — the visibility predicates are evaluated now, over the state saved so far. A
+		 * step the merchant's earlier choice hid is refused (HTTP 409, nothing runs, nothing
+		 * is saved); an id nobody registered is a 404.
 		 *
 		 * @since 2.0.2
 		 *
@@ -116,15 +117,44 @@ if ( ! class_exists( 'Woodev_REST_API_Setup' ) ) :
 			$step_id = (string) $request->get_param( 'step_id' );
 			$step    = $this->wizard->get_steps()[ $step_id ] ?? null;
 
-			if ( null === $step ) {
+			if ( null !== $step ) {
+				return $step;
+			}
+
+			if ( null !== $this->wizard->get_registered_step( $step_id ) ) {
 				return new WP_Error(
-					'woodev_setup_unknown_step',
-					__( 'Неизвестный шаг.', 'woodev-plugin-framework' ),
-					[ 'status' => 404 ]
+					'woodev_setup_step_hidden',
+					__( 'Этот шаг сейчас недоступен: он зависит от выбора на другом шаге.', 'woodev-plugin-framework' ),
+					[ 'status' => 409 ]
 				);
 			}
 
-			return $step;
+			return new WP_Error(
+				'woodev_setup_unknown_step',
+				__( 'Неизвестный шаг.', 'woodev-plugin-framework' ),
+				[ 'status' => 404 ]
+			);
+		}
+
+		/**
+		 * The step graph as it stands after this request, for the response (D3).
+		 *
+		 * Recomputed from the state saved so far; the client re-renders from it. Failing to
+		 * build it must not turn a save that already happened into an error: the failure is
+		 * logged and the response simply carries no graph (the client keeps the one it has).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array{graph?: array<int,array<string,mixed>>}
+		 */
+		private function graph_payload(): array {
+			try {
+				return [ 'graph' => $this->wizard->get_step_graph() ];
+			} catch ( \Throwable $e ) {
+				Callback_Failure::log( 'step graph failed', $e );
+
+				return [];
+			}
 		}
 
 		/**
@@ -356,8 +386,8 @@ if ( ! class_exists( 'Woodev_REST_API_Setup' ) ) :
 			return rest_ensure_response(
 				[
 					'saved' => true,
-					'step' => $step_id,
-				]
+					'step'  => $step_id,
+				] + $this->graph_payload()
 			);
 		}
 
@@ -418,7 +448,9 @@ if ( ! class_exists( 'Woodev_REST_API_Setup' ) ) :
 				return $this->server_error( 'woodev_setup_action_failed' );
 			}
 
-			return rest_ensure_response( $result->to_array() );
+			// An action may have persisted something that changes which steps are visible, so its
+			// answer carries the graph as well; the client applies it when it differs.
+			return rest_ensure_response( $result->to_array() + $this->graph_payload() );
 		}
 
 		/**

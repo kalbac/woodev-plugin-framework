@@ -117,10 +117,14 @@ function renderFields( step, values, onChange, showErrors, serverErrors ) {
  * @param {Function} props.onChange     step values change handler.
  * @param {boolean}  props.showErrors   whether to reveal validation errors.
  * @param {Object}   props.serverErrors map of fieldId → server error string.
+ * @param {Object}   props.body         optional element rendered INSTEAD of the fields / content —
+ *                                      a plugin-supplied step component (D4), inside the same frame.
  * @return {Object} React element.
  */
-export default function StepView( { step, values, onChange, showErrors, serverErrors } ) {
-	const body = 'settings' === step.type
+export default function StepView( { step, values, onChange, showErrors, serverErrors, body: customBody } ) {
+	const body = customBody
+		? customBody
+		: 'settings' === step.type
 		? createElement(
 			'div',
 			{ className: 'woodev-setup__fields' },

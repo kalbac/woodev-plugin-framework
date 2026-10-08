@@ -211,6 +211,8 @@ class SetupWizardStepContractTest extends TestCase {
 		$plugin->shouldReceive( 'get_settings_handler' )->andReturn( $handler );
 
 		$wizard = Mockery::mock( '\Woodev\Framework\Setup\Setup_Wizard' );
+		$wizard->shouldReceive( 'get_step_graph' )->andReturn( [] )->byDefault();
+		$wizard->shouldReceive( 'get_registered_step' )->andReturn( null )->byDefault();
 		$wizard->shouldReceive( 'get_steps' )->andReturn( [ $step->get_id() => $step ] );
 		$wizard->shouldReceive( 'get_plugin' )->andReturn( $plugin );
 
@@ -259,7 +261,7 @@ class SetupWizardStepContractTest extends TestCase {
 
 		$result = $this->controller_for( $step, $handler )->save_step( $this->request( 'connection', [ 'api_key' => 'K' ] ) );
 
-		$this->assertSame( [ 'saved' => true, 'step' => 'connection' ], $result );
+		$this->assertSame( [ 'saved' => true, 'step' => 'connection', 'graph' => [] ], $result );
 	}
 
 	public function test_validation_receives_only_declared_fields(): void {
@@ -342,7 +344,7 @@ class SetupWizardStepContractTest extends TestCase {
 		$result = $this->controller_for( $step, $handler, [ 'api_key' => 'STORED_KEY' ] )->save_step( $this->request( 'connection', [] ) );
 
 		$this->assertSame( [ 'api_key' => 'STORED_KEY' ], $seen );
-		$this->assertSame( [ 'saved' => true, 'step' => 'connection' ], $result );
+		$this->assertSame( [ 'saved' => true, 'step' => 'connection', 'graph' => [] ], $result );
 	}
 
 	public function test_a_cross_field_validator_sees_the_edited_and_the_stored_field_and_only_the_edit_is_persisted(): void {
@@ -390,6 +392,8 @@ class SetupWizardStepContractTest extends TestCase {
 		$plugin = Mockery::mock( '\Woodev_Plugin' );
 		$plugin->shouldReceive( 'get_settings_handler' )->andReturn( $handler );
 		$wizard = Mockery::mock( '\Woodev\Framework\Setup\Setup_Wizard' );
+		$wizard->shouldReceive( 'get_step_graph' )->andReturn( [] )->byDefault();
+		$wizard->shouldReceive( 'get_registered_step' )->andReturn( null )->byDefault();
 		$wizard->shouldReceive( 'get_steps' )->andReturn( [ 'connection' => $step ] );
 		$wizard->shouldReceive( 'get_plugin' )->andReturn( $plugin );
 
@@ -424,6 +428,8 @@ class SetupWizardStepContractTest extends TestCase {
 		$plugin = Mockery::mock( '\Woodev_Plugin' );
 		$plugin->shouldReceive( 'get_settings_handler' )->andReturn( $handler );
 		$wizard = Mockery::mock( '\Woodev\Framework\Setup\Setup_Wizard' );
+		$wizard->shouldReceive( 'get_step_graph' )->andReturn( [] )->byDefault();
+		$wizard->shouldReceive( 'get_registered_step' )->andReturn( null )->byDefault();
 		$wizard->shouldReceive( 'get_steps' )->andReturn( [ 'connection' => $step ] );
 		$wizard->shouldReceive( 'get_plugin' )->andReturn( $plugin );
 
@@ -446,6 +452,8 @@ class SetupWizardStepContractTest extends TestCase {
 		$plugin = Mockery::mock( '\Woodev_Plugin' );
 		$plugin->shouldReceive( 'get_settings_handler' )->andReturn( null );
 		$wizard = Mockery::mock( '\Woodev\Framework\Setup\Setup_Wizard' );
+		$wizard->shouldReceive( 'get_step_graph' )->andReturn( [] )->byDefault();
+		$wizard->shouldReceive( 'get_registered_step' )->andReturn( null )->byDefault();
 		$wizard->shouldReceive( 'get_steps' )->andReturn( [ 'connection' => $step ] );
 		$wizard->shouldReceive( 'get_plugin' )->andReturn( $plugin );
 
@@ -498,7 +506,7 @@ class SetupWizardStepContractTest extends TestCase {
 		$step   = Step::content( 'migrate', 'M', '<p>x</p>' )->set_validation_callback( static fn() => null );
 		$result = $this->controller_for( $step )->save_step( $this->request( 'migrate', [] ) );
 
-		$this->assertSame( [ 'saved' => true, 'step' => 'migrate' ], $result );
+		$this->assertSame( [ 'saved' => true, 'step' => 'migrate', 'graph' => [] ], $result );
 	}
 
 	public function test_the_bootstrap_tells_the_client_which_steps_validate(): void {
@@ -530,6 +538,8 @@ class SetupWizardStepContractTest extends TestCase {
 		);
 
 		$wizard = Mockery::mock( '\Woodev\Framework\Setup\Setup_Wizard' );
+		$wizard->shouldReceive( 'get_step_graph' )->andReturn( [] )->byDefault();
+		$wizard->shouldReceive( 'get_registered_step' )->andReturn( null )->byDefault();
 		$wizard->shouldReceive( 'get_id' )->andReturn( 'acme' );
 
 		$controller = new \Woodev_REST_API_Setup( $wizard );
@@ -581,7 +591,7 @@ class SetupWizardStepContractTest extends TestCase {
 		);
 
 		$this->assertSame(
-			[ 'status' => 'success', 'message' => 'Ключ подходит.', 'data' => [ 'account' => 'ACME' ] ],
+			[ 'status' => 'success', 'message' => 'Ключ подходит.', 'data' => [ 'account' => 'ACME' ], 'graph' => [] ],
 			$result
 		);
 		$this->assertSame( [ 'api_key' => 'K' ], $seen );
@@ -594,7 +604,7 @@ class SetupWizardStepContractTest extends TestCase {
 
 		$result = $this->controller_for( $step )->run_action( $this->request( 'connection', [], [ 'action_id' => 'act' ] ) );
 
-		$this->assertSame( [ 'status' => 'error', 'message' => 'Ключ не подходит.', 'data' => [] ], $result );
+		$this->assertSame( [ 'status' => 'error', 'message' => 'Ключ не подходит.', 'data' => [], 'graph' => [] ], $result );
 	}
 
 	public function test_an_unknown_action_and_an_unknown_step_are_404(): void {
@@ -685,6 +695,8 @@ class SetupWizardStepContractTest extends TestCase {
 		Functions\when( 'rest_ensure_response' )->returnArg( 1 );
 
 		$wizard = Mockery::mock( '\Woodev\Framework\Setup\Setup_Wizard' );
+		$wizard->shouldReceive( 'get_step_graph' )->andReturn( [] )->byDefault();
+		$wizard->shouldReceive( 'get_registered_step' )->andReturn( null )->byDefault();
 		$wizard->shouldReceive( 'complete_setup' )->once()->with( 'skipped' )->andReturn( 'completed' );
 
 		$request = Mockery::mock( '\WP_REST_Request' );

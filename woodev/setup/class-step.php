@@ -55,6 +55,9 @@ final class Step {
 	/** @var array<string,Step_Action> actions bound to the step, keyed by id. */
 	private array $actions = [];
 
+	/** @var array{handle: string, export: string}|null plugin-supplied React component for the step body. */
+	private ?array $component = null;
+
 	/**
 	 * Use the named constructors instead.
 	 *
@@ -113,6 +116,13 @@ final class Step {
 
 	/**
 	 * Sets the visibility predicate (fluent).
+	 *
+	 * The predicate is evaluated on the SERVER, over SAVED state (it takes no argument —
+	 * read the plugin's settings or options), every time the wizard needs the step graph:
+	 * at bootstrap and after every successful save or action (D3). The client never
+	 * evaluates it and never reacts to unsaved form values. A step the predicate hides is
+	 * refused by the REST save and action routes. A predicate that throws hides the step
+	 * (logged) rather than failing the request.
 	 *
 	 * @since 2.0.2
 	 *
@@ -224,6 +234,50 @@ final class Step {
 
 			return false;
 		}
+	}
+
+	/**
+	 * Declares a plugin-supplied React component as the step's body (fluent, D4).
+	 *
+	 * The framework enqueues `$handle` (a script the plugin registered with `wp_register_script()`
+	 * before the wizard renders; it is made a dependency of the wizard bundle so it loads first)
+	 * and renders the component `$export` of that script inside the standard step frame — title,
+	 * description, error banner, Back / Skip / Continue. The script publishes its components with
+	 * `window.woodevSetupWizardComponents[ handle ] = { ExportName: Component }` and the component
+	 * receives the props documented in `src/setup-wizard/types.ts` (values, onChange, save, next,
+	 * runAction, per-field errors, busy…). A handle that is not registered, or an export the
+	 * script does not publish, shows an error in the step instead of a blank screen.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param string $handle registered script handle.
+	 * @param string $export exported component name.
+	 * @return self
+	 *
+	 * @throws \InvalidArgumentException When the handle or the export name is empty or malformed.
+	 */
+	public function set_component( string $handle, string $export ): self {
+		if ( 1 !== preg_match( '/^[\w.-]+$/', $handle ) || 1 !== preg_match( '/^[A-Za-z_$][\w$]*$/', $export ) ) {
+			throw new \InvalidArgumentException( 'A setup wizard step component needs a script handle and a valid export name.' );
+		}
+
+		$this->component = [
+			'handle' => $handle,
+			'export' => $export,
+		];
+
+		return $this;
+	}
+
+	/**
+	 * Returns the custom component descriptor, if the step declares one.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return array{handle: string, export: string}|null
+	 */
+	public function get_component(): ?array {
+		return $this->component;
 	}
 
 	/**
