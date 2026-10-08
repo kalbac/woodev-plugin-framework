@@ -75,8 +75,8 @@ async function chooseShipping( page, methodId ) {
 
 	await expect(
 		radio,
-			`Shipping method "${ methodId }" is not offered on the rig. It needs an instance in the ` +
-			'Russia zone and its fixture plugin active.'
+		`Shipping method "${ methodId }" is not offered on the rig. It needs an instance in the ` +
+		'Russia zone and its fixture plugin active.'
 	).toHaveCount( 1 );
 
 	await radio.check();
