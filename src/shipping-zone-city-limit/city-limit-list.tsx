@@ -28,6 +28,8 @@ export interface CityLimitConfig {
 	inputId: string;
 	instanceId: number;
 	country: string;
+	/** The countries the zone reaches; more than one adds a country choice above the search. */
+	countries?: Array<{ code: string; name: string }>;
 	active: boolean;
 	restRoot: string;
 	nonce: string;
@@ -112,6 +114,8 @@ interface CityLimitListProps {
  */
 export default function CityLimitList( { config, onChange }: CityLimitListProps ) {
 	const [ items, setItems ] = useState<CityItem[]>( config.items );
+	const countries = config.countries && config.countries.length > 1 ? config.countries : [];
+	const [ country, setCountry ] = useState<string>( config.country );
 
 	const update = ( next: CityItem[] ) => {
 		setItems( next );
@@ -147,10 +151,23 @@ export default function CityLimitList( { config, onChange }: CityLimitListProps 
 					) ) }
 				</ul>
 			) }
+			{ countries.length > 0 && (
+				<select
+					className="woodev-city-limit__country"
+					aria-label={ __( 'Страна', 'woodev-plugin-framework' ) }
+					value={ country }
+					onChange={ ( event ) => setCountry( event.target.value ) }
+				>
+					{ countries.map( ( option ) => (
+						<option key={ option.code } value={ option.code }>{ option.name }</option>
+					) ) }
+				</select>
+			) }
 			<LocationPicker
+				key={ country }
 				value={ null }
 				level="settlement"
-				country={ config.country }
+				country={ country }
 				restRoot={ config.restRoot }
 				nonce={ config.nonce }
 				endpoint={ SEARCH_ENDPOINT }

@@ -61,6 +61,7 @@ final class CityLimitMethodTest extends TestCase {
 		parent::setUp();
 
 		Woodev_Test_City_Limit_Plugin::$service = new City_Limit_Test_Service();
+		City_Limit::use_zone_pairs_for_tests( null );
 
 		Functions\when( 'get_transient' )->justReturn( false );
 		Functions\when( 'set_transient' )->justReturn( true );
@@ -71,6 +72,13 @@ final class CityLimitMethodTest extends TestCase {
 		Functions\when( 'apply_filters' )->alias( static fn( $tag, $value = null ) => $value );
 		Functions\when( 'do_action' )->justReturn( null );
 		Functions\when( 'wp_parse_args' )->alias( static fn( $args, $defaults = [] ) => array_merge( (array) $defaults, (array) $args ) );
+	}
+
+	/** @return void */
+	protected function tearDown(): void {
+		City_Limit::use_zone_pairs_for_tests( null );
+
+		parent::tearDown();
 	}
 
 	/**
@@ -209,6 +217,42 @@ final class CityLimitMethodTest extends TestCase {
 
 		Woodev_Test_City_Limit_Plugin::$service->customer = $this->city( 'test-cdek:44', 'Москва' );
 		$this->assertTrue( $this->rates( $this->method( [ City_Limit::OPTION_MODE => '' ] ) ) );
+	}
+
+	/** @return void */
+	public function test_a_zone_edited_after_the_list_was_made_no_longer_keeps_the_method_from_the_new_region(): void {
+		$service             = Woodev_Test_City_Limit_Plugin::$service;
+		$service->customer   = $this->city( 'test-cdek:600', 'Омск' );
+		$service->state_code = 'САНКТ-ПЕТЕРБУРГ';
+
+		$options = [
+			City_Limit::OPTION_MODE   => 'include',
+			City_Limit::OPTION_CITIES => City_Limit::encode( [ $this->city( 'test-cdek:394', 'Пушкин' ) ] ),
+		];
+
+		City_Limit::use_zone_pairs_for_tests( static fn() => [ [ 'state', 'RU:САНКТ-ПЕТЕРБУРГ' ] ] );
+		$this->assertFalse( $this->rates( $this->method( $options ) ) );
+
+		City_Limit::use_zone_pairs_for_tests( static fn() => [ [ 'state', 'RU:ОМСКАЯ ОБЛАСТЬ' ] ] );
+		$this->assertTrue( $this->rates( $this->method( $options ) ), 'checkout agrees with the form: the city outside the zone is ignored' );
+	}
+
+	/** @return void */
+	public function test_the_stores_guessed_default_city_does_not_hide_the_method(): void {
+		$service           = Woodev_Test_City_Limit_Plugin::$service;
+		$service->customer = $this->city( 'test-cdek:44', 'Москва' );
+		$service->implicit = true;
+
+		$this->assertTrue(
+			$this->rates(
+				$this->method(
+					[
+						City_Limit::OPTION_MODE   => 'include',
+						City_Limit::OPTION_CITIES => City_Limit::encode( [ $this->city( 'test-cdek:394', 'Пушкин' ) ] ),
+					]
+				)
+			)
+		);
 	}
 
 	/** @return void */

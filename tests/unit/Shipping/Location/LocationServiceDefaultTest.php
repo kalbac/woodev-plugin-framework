@@ -17,6 +17,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 	use Brain\Monkey\Functions;
 	use Woodev\Framework\Shipping\Location\Abstract_Location_Provider;
+	use Woodev\Framework\Shipping\Location\City_Limit;
 	use Woodev\Framework\Shipping\Location\Customer_Location_Store;
 	use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
 	use Woodev\Framework\Shipping\Location\Location_Record;
@@ -41,6 +42,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-customer-location-store.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-resolution-cache.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-service.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-city-limit.php';
 
 	// The `geoip` policy reads WC_Geolocation::get_ip_address() — the same
 	// minimal double LocationControllerTest already uses (see that stub
@@ -1382,6 +1384,64 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$service = $this->service( $this->activate( [ new Default_Test_Fake_Provider( 'prov-a', static fn() => [] ), $new ] ) );
 
 			$this->assertNull( $service->reresolve_stranded_record( $this->record( 'prov-a:old-city', Location_Record::LEVEL_SETTLEMENT, [ 'region' => [ 'name' => 'Московская область', 'type' => 'обл' ] ] ) ) );
+		}
+
+		// -------------------------------------------------------------------
+		// City_Limit::permits() against the REAL service accessors (#1176 fix round 1) — the chain, the implicit flag
+		// and the WooCommerce state mapping are the service's own, not an overridden getter.
+		// -------------------------------------------------------------------
+
+		public function test_the_fixed_default_locality_is_not_read_as_the_customers_city_and_a_pick_is(): void {
+			$provider = new Default_Test_Fake_Provider( 'prov-a', static fn() => [] );
+			$moscow   = $this->record( 'prov-a:moscow', Location_Record::LEVEL_SETTLEMENT, [ 'label' => 'Москва' ] );
+			$pushkin  = $this->record( 'prov-a:pushkin', Location_Record::LEVEL_SETTLEMENT, [ 'label' => 'Пушкин' ] );
+
+			$this->stub_default_locality_options(
+				'prov-a',
+				Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED,
+				wp_json_encode( $moscow->to_array() )
+			);
+			$service = $this->service( $this->activate( [ $provider ] ) );
+
+			$only_pushkin = City_Limit::encode( [ $pushkin ] );
+			$not_moscow   = City_Limit::encode( [ $moscow ] );
+
+			// a fresh customer: the chain holds only the store's guess (Moscow), flagged implicit
+			$this->assertTrue( $service->get_customer_chain()['implicit'], 'precondition: the chain really is the implicit default' );
+			$this->assertTrue( City_Limit::permits( 'include', $only_pushkin, $service, 'RU' ), 'D1: nothing picked yet, the method stays available' );
+			$this->assertTrue( City_Limit::permits( 'exclude', $not_moscow, $service, 'RU' ), 'D1: the default is not a pick, so «not in Moscow» does not apply yet' );
+
+			// the customer picks Moscow himself: now it counts, both ways
+			$service->set_customer_record( $moscow, false );
+
+			$this->assertFalse( $service->get_customer_chain()['implicit'] );
+			$this->assertFalse( City_Limit::permits( 'include', $only_pushkin, $service, 'RU' ) );
+			$this->assertFalse( City_Limit::permits( 'exclude', $not_moscow, $service, 'RU' ) );
+			$this->assertTrue( City_Limit::permits( 'include', $not_moscow, $service, 'RU' ) );
+		}
+
+		public function test_a_zone_edited_after_the_list_was_made_drops_the_old_cities_at_checkout_through_the_real_state_mapping(): void {
+			$provider = new Default_Test_Fake_Provider( 'prov-a', static fn() => [] );
+			$this->stub_default_locality_options( 'prov-a' );
+			$registry = $this->activate( [ $provider ] );
+			$service  = new Default_Test_State_Service( $registry, new Default_Test_Customer_Store_Probe( new Default_Test_Fake_Session() ) );
+
+			$service->states = [
+				'САНКТ-ПЕТЕРБУРГ' => 'Санкт-Петербург',
+				'ОМСКАЯ ОБЛАСТЬ'  => 'Омская область',
+			];
+
+			$pushkin = $this->record( 'prov-a:pushkin', Location_Record::LEVEL_SETTLEMENT, [ 'label' => 'Пушкин', 'region' => [ 'name' => 'Санкт-Петербург', 'type' => '' ] ] );
+			$omsk    = $this->record( 'prov-a:omsk', Location_Record::LEVEL_SETTLEMENT, [ 'label' => 'Омск', 'region' => [ 'name' => 'Омская', 'type' => 'обл' ] ] );
+
+			$service->set_customer_record( $omsk, false );
+
+			$stored   = City_Limit::encode( [ $pushkin ] );
+			$spb_zone = City_Limit::scope_from_locations( [ [ 'state', 'RU:САНКТ-ПЕТЕРБУРГ' ] ] );
+			$omsk_zone = City_Limit::scope_from_locations( [ [ 'state', 'RU:ОМСКАЯ ОБЛАСТЬ' ] ] );
+
+			$this->assertFalse( City_Limit::permits( 'include', $stored, $service, 'RU', $spb_zone ), 'in the zone it was made for, an Omsk buyer is not on the list' );
+			$this->assertTrue( City_Limit::permits( 'include', $stored, $service, 'RU', $omsk_zone ), 'the zone moved to Omsk: Pushkin is outside it, ignored — the form says so, checkout agrees' );
 		}
 
 		// -------------------------------------------------------------------

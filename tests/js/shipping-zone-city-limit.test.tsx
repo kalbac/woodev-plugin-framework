@@ -172,6 +172,42 @@ test( 'a city picked in the search is added, searching the zone through the meth
 	jest.useRealTimers();
 } );
 
+test( 'a zone reaching several countries offers a country choice and searches the chosen one', async () => {
+	jest.useFakeTimers();
+
+	fetchMock.mockResolvedValue( { suggestions: [] } );
+
+	render(
+		<CityLimitList
+			config={ config( [], { countries: [ { code: 'RU', name: 'Россия' }, { code: 'BY', name: 'Беларусь' } ] } ) }
+			onChange={ jest.fn() }
+		/>
+	);
+
+	const select = screen.getByRole( 'combobox', { name: 'Страна' } ) as HTMLSelectElement;
+
+	expect( select.value ).toBe( 'RU' );
+	expect( Array.from( select.options ).map( ( option ) => option.value ) ).toEqual( [ 'RU', 'BY' ] );
+
+	fireEvent.change( select, { target: { value: 'BY' } } );
+	fireEvent.click( screen.getByRole( 'button', { name: 'Добавить город…' } ) );
+	fireEvent.change( await screen.findByPlaceholderText( 'Начните вводить название…' ), { target: { value: 'Мин' } } );
+	await act( async () => {
+		jest.advanceTimersByTime( 400 );
+	} );
+
+	await waitFor( () => expect( fetchMock ).toHaveBeenCalled() );
+	expect( new URL( fetchMock.mock.calls[ 0 ][ 0 ].url ).searchParams.get( 'country' ) ).toBe( 'BY' );
+
+	jest.useRealTimers();
+} );
+
+test( 'one country needs no country choice', () => {
+	render( <CityLimitList config={ config( [], { countries: [ { code: 'RU', name: 'Россия' } ] } ) } onChange={ jest.fn() } /> );
+
+	expect( screen.queryByRole( 'combobox', { name: 'Страна' } ) ).toBeNull();
+} );
+
 test( 'with the location layer unusable the picker is disabled rather than silent', () => {
 	render( <CityLimitList config={ config( [], { active: false } ) } onChange={ jest.fn() } /> );
 

@@ -167,7 +167,7 @@ if ( ! class_exists( __NAMESPACE__ . '\Core_Pickup_City_Limit' ) ) :
 				$this->service = new Location_Service();
 			}
 
-			return City_Limit::permits( $mode, $method->get_option( City_Limit::OPTION_CITIES, '' ), $this->service, $country );
+			return City_Limit::permits( $mode, $method->get_option( City_Limit::OPTION_CITIES, '' ), $this->service, $country, City_Limit::zone_scope( (int) $method->instance_id ) );
 		}
 	}
 

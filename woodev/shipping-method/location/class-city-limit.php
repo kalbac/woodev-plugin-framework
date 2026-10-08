@@ -229,6 +229,14 @@ if ( ! class_exists( __NAMESPACE__ . '\City_Limit' ) ) :
 		/**
 		 * Whether a method with this stored limit is available to the customer at checkout right now.
 		 *
+		 * Only a city the CUSTOMER chose counts. The store's guessed default locality (the `fixed` / GeoIP policies) is a
+		 * prefill, not an answer — {@see Checkout_Config} refuses it as a selection for the same reason — so an absent
+		 * chain and an implicit one both follow D1: available.
+		 *
+		 * Cities outside the zone's current regions are dropped before the empty-list check, exactly as the settings form
+		 * says they are (`$zone`, {@see self::zone_scope()}): a zone edited after the list was made must not leave the
+		 * old cities blocking the new region's buyers.
+		 *
 		 * Never throws: a location layer that fails here answers «available» — shipping must not vanish
 		 * because a provider is down.
 		 *
@@ -238,10 +246,11 @@ if ( ! class_exists( __NAMESPACE__ . '\City_Limit' ) ) :
 		 * @param mixed            $cities  Stored cities.
 		 * @param Location_Service $service Location service.
 		 * @param string           $country ISO country of the package destination ('' when unknown).
+		 * @param array            $zone    {@see self::zone_scope()} of the method's zone; `[]` for «no zone restriction».
 		 *
 		 * @return bool
 		 */
-		public static function permits( $mode, $cities, Location_Service $service, string $country = '' ): bool {
+		public static function permits( $mode, $cities, Location_Service $service, string $country = '', array $zone = [] ): bool {
 			$mode = self::normalize_mode( $mode );
 
 			if ( self::MODE_OFF === $mode ) {
@@ -251,14 +260,29 @@ if ( ! class_exists( __NAMESPACE__ . '\City_Limit' ) ) :
 			try {
 				$counted = self::partition( self::decode( $cities ), $service )['current'];
 
+				if ( [] !== $zone ) {
+					$counted = array_values(
+						array_filter(
+							$counted,
+							static function ( Location_Record $record ) use ( $zone, $service ): bool {
+								return self::in_zone( $record, (array) ( $zone['states'] ?? [] ), $service, (array) ( $zone['countries'] ?? [] ) );
+							}
+						)
+					);
+				}
+
 				if ( [] === $counted ) {
 					return true;
 				}
 
-				$country  = strtoupper( trim( $country ) );
-				$customer = $service->get_customer_record_at( Location_Record::LEVEL_SETTLEMENT, '' === $country ? null : $country );
+				$country = strtoupper( trim( $country ) );
+				$chain   = $service->get_customer_chain( '' === $country ? null : $country );
 
-				return self::allows( $mode, $counted, $customer );
+				if ( null === $chain || ! empty( $chain['implicit'] ) ) {
+					return true;
+				}
+
+				return self::allows( $mode, $counted, $chain['records'][ Location_Record::LEVEL_SETTLEMENT ] ?? null );
 			} catch ( \Throwable $exception ) {
 				return true;
 			}
@@ -268,18 +292,20 @@ if ( ! class_exists( __NAMESPACE__ . '\City_Limit' ) ) :
 		 * What a shipping zone says about regions, from its raw locations (pure — `type` and `code` pairs as
 		 * WooCommerce stores them: `country` => `RU`, `state` => `RU:MOW`).
 		 *
-		 * A country the zone lists WHOLE wins over states of the same country (WooCommerce matches either, so the
-		 * zone is not restricted there). The result is what the city search must stay inside:
-		 * `states` = country => state codes, empty when the zone has no region restriction.
+		 * `countries` are the countries the zone can reach by name (a listed country, or one with listed states), in
+		 * zone order; `country` is the first. A country the zone lists WHOLE wins over states of the same country
+		 * (WooCommerce matches either, so the zone is not restricted there). `states` = country => state codes, only for
+		 * a country the zone restricts to regions; empty when no country is.
 		 *
 		 * @since 2.0.2
 		 *
 		 * @param array<int, array{0: string, 1: string}> $locations `[ type, code ]` pairs.
 		 *
-		 * @return array{country: string, states: array<string, string[]>}
+		 * @return array{country: string, countries: string[], states: array<string, string[]>}
 		 */
 		public static function scope_from_locations( array $locations ): array {
 			$countries = [];
+			$whole     = [];
 			$states    = [];
 
 			foreach ( $locations as $location ) {
@@ -287,7 +313,10 @@ if ( ! class_exists( __NAMESPACE__ . '\City_Limit' ) ) :
 				$code = (string) ( $location[1] ?? '' );
 
 				if ( 'country' === $type && '' !== $code ) {
-					$countries[] = strtoupper( $code );
+					$country = strtoupper( $code );
+
+					$whole[]     = $country;
+					$countries[] = $country;
 				} elseif ( 'state' === $type && false !== strpos( $code, ':' ) ) {
 					[ $country, $state ] = explode( ':', $code, 2 );
 
@@ -295,43 +324,50 @@ if ( ! class_exists( __NAMESPACE__ . '\City_Limit' ) ) :
 
 					if ( '' !== $country && '' !== $state ) {
 						$states[ $country ][] = $state;
+						$countries[]          = $country;
 					}
 				}
 			}
 
 			foreach ( array_keys( $states ) as $country ) {
-				if ( in_array( $country, $countries, true ) ) {
+				if ( in_array( $country, $whole, true ) ) {
 					unset( $states[ $country ] );
 				}
 			}
 
-			$first = array_key_first( $states );
+			$countries = array_values( array_unique( $countries ) );
 
 			return [
-				'country' => null !== $first ? (string) $first : ( $countries[0] ?? '' ),
-				'states'  => $states,
+				'country'   => $countries[0] ?? '',
+				'countries' => $countries,
+				'states'    => $states,
 			];
 		}
 
 		/**
 		 * The region scope of the zone a method instance belongs to.
 		 *
-		 * Empty (`states` = []) for a zone that covers a whole country, for the «rest of the world» zone, for an
-		 * unknown instance, and for a store whose location provider injects no regions (DaData: WooCommerce has
-		 * no Russian states) — in all of them the city search is country-wide and nothing is checked against
+		 * Empty for the «rest of the world» zone, for an unknown instance, and without WooCommerce. A zone that covers
+		 * a whole country, or a store whose location provider injects no regions (DaData: WooCommerce has no Russian
+		 * states), has countries but no `states` — the city search is then country-wide and nothing is checked against
 		 * regions.
 		 *
 		 * @since 2.0.2
 		 *
 		 * @param int $instance_id Shipping method instance id.
 		 *
-		 * @return array{country: string, states: array<string, string[]>}
+		 * @return array{country: string, countries: string[], states: array<string, string[]>}
 		 */
 		public static function zone_scope( int $instance_id ): array {
 			$empty = [
-				'country' => '',
-				'states'  => [],
+				'country'   => '',
+				'countries' => [],
+				'states'    => [],
 			];
+
+			if ( null !== self::$zone_pairs_for_tests ) {
+				return self::scope_from_locations( (array) call_user_func( self::$zone_pairs_for_tests, $instance_id ) );
+			}
 
 			if ( $instance_id <= 0 || ! class_exists( '\WC_Shipping_Zones' ) ) {
 				return $empty;
@@ -351,6 +387,50 @@ if ( ! class_exists( __NAMESPACE__ . '\City_Limit' ) ) :
 			}
 
 			return self::scope_from_locations( $pairs );
+		}
+
+		/**
+		 * @var callable|null A test's stand-in for the zone's raw locations (`instance id` => `[ type, code ]` pairs).
+		 */
+		private static $zone_pairs_for_tests = null;
+
+		/**
+		 * Test-only: replaces the WooCommerce zone lookup (`null` puts the real one back).
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param callable|null $pairs Called with the instance id, answers `[ type, code ]` pairs.
+		 *
+		 * @return void
+		 */
+		public static function use_zone_pairs_for_tests( ?callable $pairs ): void {
+			self::$zone_pairs_for_tests = $pairs;
+		}
+
+		/**
+		 * The countries a zone reaches, as a picker offers them.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string[] $codes ISO country codes.
+		 *
+		 * @return array<int, array{code: string, name: string}> Name falls back to the code without WooCommerce.
+		 */
+		public static function country_options( array $codes ): array {
+			$names = function_exists( 'WC' ) && ! empty( WC()->countries ) ? WC()->countries->get_countries() : [];
+			$names = is_array( $names ) ? $names : [];
+			$out   = [];
+
+			foreach ( $codes as $code ) {
+				$out[] = [
+					'code' => (string) $code,
+					'name' => (string) ( $names[ $code ] ?? $code ),
+				];
+			}
+
+			return $out;
 		}
 
 		/**
@@ -385,20 +465,22 @@ if ( ! class_exists( __NAMESPACE__ . '\City_Limit' ) ) :
 		}
 
 		/**
-		 * Whether a stored city lies in the zone's regions. `true` whenever that cannot be told
-		 * (no region restriction, no WooCommerce state for the record) — a doubt never drops a city.
+		 * Whether a stored city lies in the zone: in one of its countries, and — for a country the zone restricts to
+		 * regions — in one of those regions. `true` whenever that cannot be told (no restriction, no WooCommerce state
+		 * for the record) — a doubt never drops a city.
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param Location_Record         $record  City.
-		 * @param array<string, string[]> $states  {@see self::scope_from_locations()} `states`.
-		 * @param Location_Service        $service Location service.
+		 * @param Location_Record         $record    City.
+		 * @param array<string, string[]> $states    {@see self::scope_from_locations()} `states`.
+		 * @param Location_Service        $service   Location service.
+		 * @param string[]                $countries {@see self::scope_from_locations()} `countries`; `[]` = any.
 		 *
 		 * @return bool
 		 */
-		public static function in_zone( Location_Record $record, array $states, Location_Service $service ): bool {
-			if ( [] === $states ) {
-				return true;
+		public static function in_zone( Location_Record $record, array $states, Location_Service $service, array $countries = [] ): bool {
+			if ( [] !== $countries && ! in_array( $record->country(), $countries, true ) ) {
+				return false;
 			}
 
 			$wanted = $states[ $record->country() ] ?? null;

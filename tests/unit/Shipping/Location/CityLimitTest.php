@@ -70,6 +70,9 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		/** @var bool */
 		public bool $throws = false;
 
+		/** @var bool whether the customer's chain is the store's guessed default rather than a pick */
+		public bool $implicit = false;
+
 		/** @var string|null the country the customer record was asked for. */
 		public ?string $asked_country = null;
 
@@ -91,14 +94,23 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			return null === $this->owner ? null : new City_Limit_Test_Provider( $this->owner );
 		}
 
-		public function get_customer_record_at( string $level, ?string $for_country = null ): ?Location_Record {
+		public function get_customer_chain( ?string $for_country = null ): ?array {
 			if ( $this->throws ) {
 				throw new \RuntimeException( 'provider down' );
 			}
 
 			$this->asked_country = $for_country;
 
-			return $this->customer;
+			if ( null === $this->customer ) {
+				return null;
+			}
+
+			return [
+				'records'  => [ Location_Record::LEVEL_SETTLEMENT => $this->customer ],
+				'current'  => Location_Record::LEVEL_SETTLEMENT,
+				'implicit' => $this->implicit,
+				'saved_at' => 0,
+			];
 		}
 
 		public function reresolve_stranded_record( Location_Record $stored ): ?Location_Record {
@@ -355,11 +367,49 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertTrue( City_Limit::permits( 'include', City_Limit::encode( [ $this->city( 'test-cdek:1' ) ] ), $service ) );
 		}
 
+		public function test_the_stores_guessed_default_locality_is_not_the_customers_city(): void {
+			$service           = new City_Limit_Test_Service();
+			$service->customer = $this->city( 'test-cdek:44', 'Москва' );
+			$service->implicit = true;
+
+			$pushkin = City_Limit::encode( [ $this->city( 'test-cdek:394', 'Пушкин' ) ] );
+			$moscow  = City_Limit::encode( [ $this->city( 'test-cdek:44', 'Москва' ) ] );
+
+			$this->assertTrue( City_Limit::permits( 'include', $pushkin, $service ), 'only-Pushkin must not hide the method from a default that nobody picked' );
+			$this->assertTrue( City_Limit::permits( 'exclude', $moscow, $service ), 'not-in-Moscow must not hide it either' );
+
+			$service->implicit = false;
+			$this->assertFalse( City_Limit::permits( 'include', $pushkin, $service ), 'the same record, once the customer picked it, counts' );
+			$this->assertFalse( City_Limit::permits( 'exclude', $moscow, $service ) );
+		}
+
+		public function test_cities_outside_the_zone_are_ignored_at_checkout_exactly_as_the_form_says(): void {
+			$service             = new City_Limit_Test_Service();
+			$service->customer   = $this->city( 'test-cdek:600', 'Омск' );
+			$service->state_code = 'САНКТ-ПЕТЕРБУРГ';
+			$stored              = City_Limit::encode( [ $this->city( 'test-cdek:394', 'Пушкин' ) ] );
+
+			$was = City_Limit::scope_from_locations( [ [ 'state', 'RU:САНКТ-ПЕТЕРБУРГ' ] ] );
+			$now = City_Limit::scope_from_locations( [ [ 'state', 'RU:ОМСКАЯ ОБЛАСТЬ' ] ] );
+
+			$this->assertFalse( City_Limit::permits( 'include', $stored, $service, 'RU', $was ), 'in the zone it was made for, Omsk is not on the list' );
+			$this->assertTrue( City_Limit::permits( 'include', $stored, $service, 'RU', $now ), 'the zone moved to Omsk: Pushkin no longer counts, the list is empty, the method is available' );
+		}
+
+		public function test_a_city_of_a_country_the_zone_does_not_reach_is_ignored(): void {
+			$service           = new City_Limit_Test_Service();
+			$service->customer = $this->city( 'test-cdek:44', 'Москва' );
+			$by                = City_Limit::encode( [ $this->city( 'test-cdek:9', 'Минск', [ 'country' => 'BY' ] ) ] );
+
+			$this->assertTrue( City_Limit::permits( 'include', $by, $service, 'RU', City_Limit::scope_from_locations( [ [ 'country', 'RU' ] ] ) ) );
+			$this->assertFalse( City_Limit::permits( 'include', $by, $service, 'RU', [] ), 'no zone scope given: nothing is dropped' );
+		}
+
 		// ---- the zone's regions -----------------------------------------------------------------------------
 
 		public function test_a_zone_listing_only_a_country_has_no_region_restriction(): void {
 			$this->assertSame(
-				[ 'country' => 'RU', 'states' => [] ],
+				[ 'country' => 'RU', 'countries' => [ 'RU' ], 'states' => [] ],
 				City_Limit::scope_from_locations( [ [ 'country', 'RU' ] ] )
 			);
 		}
@@ -367,8 +417,9 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		public function test_a_zone_listing_states_restricts_to_them(): void {
 			$this->assertSame(
 				[
-					'country' => 'RU',
-					'states'  => [ 'RU' => [ 'ОМСКАЯ ОБЛАСТЬ', 'САНКТ-ПЕТЕРБУРГ' ] ],
+					'country'   => 'RU',
+					'countries' => [ 'RU' ],
+					'states'    => [ 'RU' => [ 'ОМСКАЯ ОБЛАСТЬ', 'САНКТ-ПЕТЕРБУРГ' ] ],
 				],
 				City_Limit::scope_from_locations(
 					[ [ 'state', 'RU:ОМСКАЯ ОБЛАСТЬ' ], [ 'state', 'RU:САНКТ-ПЕТЕРБУРГ' ] ]
@@ -380,19 +431,27 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$scope = City_Limit::scope_from_locations( [ [ 'country', 'RU' ], [ 'state', 'RU:ОМСКАЯ ОБЛАСТЬ' ], [ 'state', 'KZ:ALM' ] ] );
 
 			$this->assertSame( [ 'KZ' => [ 'ALM' ] ], $scope['states'] );
-			$this->assertSame( 'KZ', $scope['country'] );
+			$this->assertSame( [ 'RU', 'KZ' ], $scope['countries'], 'RU stays reachable: the zone lists it whole' );
+			$this->assertSame( 'RU', $scope['country'], 'the first of the zone, in zone order' );
+		}
+
+		public function test_a_zone_reaching_several_countries_keeps_every_one_of_them(): void {
+			$scope = City_Limit::scope_from_locations( [ [ 'country', 'RU' ], [ 'country', 'BY' ], [ 'state', 'KZ:ALM' ], [ 'state', 'KZ:AST' ], [ 'country', 'ru' ] ] );
+
+			$this->assertSame( [ 'RU', 'BY', 'KZ' ], $scope['countries'] );
+			$this->assertSame( [ 'KZ' => [ 'ALM', 'AST' ] ], $scope['states'] );
 		}
 
 		public function test_the_rest_of_the_world_zone_and_junk_have_no_scope(): void {
-			$empty = [ 'country' => '', 'states' => [] ];
+			$empty = [ 'country' => '', 'countries' => [], 'states' => [] ];
 
 			$this->assertSame( $empty, City_Limit::scope_from_locations( [] ) );
 			$this->assertSame( $empty, City_Limit::scope_from_locations( [ [ 'continent', 'EU' ], [ 'postcode', '1000...2000' ], [ 'state', 'broken' ], [ 'state', 'RU:' ] ] ) );
 		}
 
 		public function test_without_woocommerce_the_zone_scope_is_empty(): void {
-			$this->assertSame( [ 'country' => '', 'states' => [] ], City_Limit::zone_scope( 262 ) );
-			$this->assertSame( [ 'country' => '', 'states' => [] ], City_Limit::zone_scope( 0 ) );
+			$this->assertSame( [ 'country' => '', 'countries' => [], 'states' => [] ], City_Limit::zone_scope( 262 ) );
+			$this->assertSame( [ 'country' => '', 'countries' => [], 'states' => [] ], City_Limit::zone_scope( 0 ) );
 		}
 
 		public function test_a_record_in_a_zones_regions_is_kept_and_one_outside_is_not(): void {
@@ -402,6 +461,14 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			$this->assertTrue( City_Limit::in_zone( $record, [ 'RU' => [ 'САНКТ-ПЕТЕРБУРГ' ] ], $service ) );
 			$this->assertFalse( City_Limit::in_zone( $record, [ 'RU' => [ 'ОМСКАЯ ОБЛАСТЬ' ] ], $service ) );
+		}
+
+		public function test_a_city_of_a_country_outside_the_zones_countries_is_not_in_the_zone(): void {
+			$service = new City_Limit_Test_Service();
+
+			$this->assertFalse( City_Limit::in_zone( $this->city( 'test-cdek:9', 'Минск', [ 'country' => 'BY' ] ), [], $service, [ 'RU' ] ) );
+			$this->assertTrue( City_Limit::in_zone( $this->city( 'test-cdek:9', 'Минск', [ 'country' => 'BY' ] ), [], $service, [ 'RU', 'BY' ] ) );
+			$this->assertTrue( City_Limit::in_zone( $this->city( 'test-cdek:9', 'Минск', [ 'country' => 'BY' ] ), [], $service, [] ) );
 		}
 
 		public function test_a_doubt_never_drops_a_city(): void {

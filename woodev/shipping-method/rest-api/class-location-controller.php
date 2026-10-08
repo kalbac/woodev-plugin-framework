@@ -792,6 +792,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 * either way the answer is filtered to the zone's regions, so the merchant is never offered a city the method
 		 * could never reach.
 		 *
+		 * A zone that reaches several countries is searched in the requested one (`country`); a country the zone does not reach
+		 * answers nothing.
+		 *
 		 * Degrades like {@see self::perform_suggest()}: no provider for the level, or a country it does not cover, is a
 		 * `200` with no suggestions; a provider that throws is the same upstream error.
 		 *
@@ -819,8 +822,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 				);
 			}
 
-			$scope   = City_Limit::zone_scope( absint( $request->get_param( 'instance_id' ) ) );
-			$country = '' !== $scope['country'] ? $scope['country'] : strtoupper( $this->normalize_param( $request->get_param( 'country' ) ) );
+			$scope     = City_Limit::zone_scope( absint( $request->get_param( 'instance_id' ) ) );
+			$requested = strtoupper( $this->normalize_param( $request->get_param( 'country' ) ) );
+
+			// The zone decides which countries may be searched; the request picks one of them (a zone can reach several).
+			// A country the zone does not reach is not searched at all, and none requested means the zone's first.
+			if ( [] !== $scope['countries'] && '' !== $requested && ! in_array( $requested, $scope['countries'], true ) ) {
+				return rest_ensure_response( [ 'suggestions' => [] ] );
+			}
+
+			$country = '' !== $requested ? $requested : $scope['country'];
 
 			if ( '' === $country ) {
 				$country = $this->service->resolve_default_country();
@@ -879,7 +890,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 					if ( $record instanceof Location_Record
 						&& $level === $record->level()
 						&& ! isset( $records[ $record->key() ] )
-						&& City_Limit::in_zone( $record, $scope['states'], $this->service )
+						&& City_Limit::in_zone( $record, $scope['states'], $this->service, $scope['countries'] )
 					) {
 						$records[ $record->key() ] = $record;
 					}

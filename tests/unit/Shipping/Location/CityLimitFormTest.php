@@ -82,6 +82,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 		protected function tearDown(): void {
 			City_Limit_Form::reset_for_tests();
+			City_Limit::use_zone_pairs_for_tests( null );
 			unset( $_REQUEST['instance_id'] );
 
 			parent::tearDown();
@@ -182,6 +183,35 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertSame( '[]', City_Limit_Form::sanitize_cities( 'garbage' ) );
 		}
 
+		public function test_saving_drops_a_city_of_a_country_the_zone_does_not_reach_and_keeps_the_rest(): void {
+			City_Limit::use_zone_pairs_for_tests( static fn() => [ [ 'country', 'RU' ] ] );
+			$_REQUEST['instance_id'] = '262';
+			City_Limit_Form::use_service_for_tests( $this->service() );
+
+			$posted = json_encode(
+				[
+					$this->city( 'test-cdek:394', 'Пушкин' )->to_array(),
+					array_merge( $this->city( 'test-cdek:9', 'Минск' )->to_array(), [ 'country' => 'BY' ] ),
+				],
+				JSON_UNESCAPED_UNICODE
+			);
+
+			$this->assertSame( [ 'test-cdek:394' ], array_map( static fn( $c ) => $c->key(), City_Limit::decode( City_Limit_Form::sanitize_cities( $posted ) ) ) );
+		}
+
+		public function test_saving_drops_a_city_outside_the_zones_regions_the_same_way_checkout_ignores_it(): void {
+			City_Limit::use_zone_pairs_for_tests( static fn() => [ [ 'state', 'RU:ОМСКАЯ ОБЛАСТЬ' ] ] );
+			$_REQUEST['instance_id'] = '262';
+
+			$service             = $this->service();
+			$service->state_code = 'САНКТ-ПЕТЕРБУРГ';
+			City_Limit_Form::use_service_for_tests( $service );
+
+			$saved = City_Limit_Form::sanitize_cities( City_Limit::encode( [ $this->city( 'test-cdek:394', 'Пушкин' ) ] ) );
+
+			$this->assertSame( [], City_Limit::decode( $saved ) );
+		}
+
 		// ---- the view ---------------------------------------------------------------------------------------
 
 		public function test_a_clean_list_has_no_notes_and_keeps_its_cities(): void {
@@ -279,7 +309,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			);
 
 			$this->assertSame( 'outside', $view['items'][0]['state'] );
-			$this->assertStringContainsString( 'Регионы зоны доставки изменились', implode( ' ', $view['notes'] ) );
+			$this->assertStringContainsString( 'Зона доставки изменилась', implode( ' ', $view['notes'] ) );
 		}
 
 		public function test_a_region_zone_with_the_region_field_removed_is_warned_about_in_one_line(): void {
@@ -297,6 +327,40 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			$service->region_removed = false;
 			$this->assertSame( [], City_Limit_Form::build_view( '[]', $zone, $service, true )['notes'] );
+		}
+
+		public function test_a_zone_reaching_several_countries_offers_each_of_them_to_the_picker(): void {
+			$zone = City_Limit::scope_from_locations( [ [ 'country', 'RU' ], [ 'country', 'BY' ] ] );
+			$view = City_Limit_Form::build_view( '[]', $zone, $this->service(), true );
+
+			$this->assertSame( 'RU', $view['country'] );
+			$this->assertSame( [ 'RU', 'BY' ], array_column( $view['countries'], 'code' ) );
+			$this->assertSame( 'BY', $view['countries'][1]['name'], 'without WooCommerce the code stands in for the name' );
+
+			$one = City_Limit_Form::build_view( '[]', [ 'country' => '', 'states' => [] ], $this->service(), true );
+			$this->assertSame( [ 'RU' ], array_column( $one['countries'], 'code' ), 'no zone countries: the store default alone' );
+		}
+
+		public function test_a_stored_city_of_a_country_the_zone_no_longer_reaches_is_marked_outside(): void {
+			$minsk = Location_Record::from_array(
+				[
+					'key'         => 'test-cdek:9',
+					'provider_id' => 'test-cdek',
+					'level'       => 'settlement',
+					'country'     => 'BY',
+					'label'       => 'Минск',
+				]
+			);
+
+			$view = City_Limit_Form::build_view(
+				City_Limit::encode( [ $minsk, $this->city( 'test-cdek:394', 'Пушкин' ) ] ),
+				City_Limit::scope_from_locations( [ [ 'country', 'RU' ] ] ),
+				$this->service(),
+				true
+			);
+
+			$this->assertSame( [ 'outside', 'ok' ], array_column( $view['items'], 'state' ) );
+			$this->assertStringContainsString( 'Зона доставки изменилась', implode( ' ', $view['notes'] ) );
 		}
 
 		public function test_an_inactive_location_layer_says_why_the_search_is_silent(): void {

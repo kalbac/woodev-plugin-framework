@@ -41,6 +41,9 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		/** @var string whichever WooCommerce stub loaded first may or may not declare it */
 		public $id = 'local_pickup';
 
+		/** @var int */
+		public $instance_id = 262;
+
 		/** @var array<string, mixed> */
 		public array $options = [];
 
@@ -70,6 +73,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 		protected function tearDown(): void {
 			Core_Pickup_City_Limit::reset_for_tests();
+			City_Limit::use_zone_pairs_for_tests( null );
 			Location_Provider_Registry::instance()->reset_for_tests();
 
 			parent::tearDown();
@@ -219,6 +223,42 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			);
 
 			$this->assertTrue( Core_Pickup_City_Limit::instance()->filter_is_available( true, [], $method ), 'D1' );
+		}
+
+		public function test_core_pickup_follows_the_zone_it_sits_in_when_the_zone_is_edited(): void {
+			$service             = new City_Limit_Test_Service();
+			$service->customer   = $this->city( 'test-cdek:600', 'Омск' );
+			$service->state_code = 'САНКТ-ПЕТЕРБУРГ';
+			$this->with_service( $service );
+
+			$method = new Core_Pickup_Test_Method(
+				[
+					'city_limit_mode'   => 'include',
+					'city_limit_cities' => City_Limit::encode( [ $this->city( 'test-cdek:394', 'Пушкин' ) ] ),
+				]
+			);
+
+			City_Limit::use_zone_pairs_for_tests( static fn() => [ [ 'state', 'RU:САНКТ-ПЕТЕРБУРГ' ] ] );
+			$this->assertFalse( Core_Pickup_City_Limit::instance()->filter_is_available( true, [], $method ), 'zone as configured: Omsk is not on the list' );
+
+			City_Limit::use_zone_pairs_for_tests( static fn() => [ [ 'state', 'RU:ОМСКАЯ ОБЛАСТЬ' ] ] );
+			$this->assertTrue( Core_Pickup_City_Limit::instance()->filter_is_available( true, [], $method ), 'zone moved to Omsk: the old city no longer counts' );
+		}
+
+		public function test_core_pickup_ignores_the_stores_guessed_default_city(): void {
+			$service           = new City_Limit_Test_Service();
+			$service->customer = $this->city( 'test-cdek:44', 'Москва' );
+			$service->implicit = true;
+			$this->with_service( $service );
+
+			$method = new Core_Pickup_Test_Method(
+				[
+					'city_limit_mode'   => 'include',
+					'city_limit_cities' => City_Limit::encode( [ $this->city( 'test-cdek:394', 'Пушкин' ) ] ),
+				]
+			);
+
+			$this->assertTrue( Core_Pickup_City_Limit::instance()->filter_is_available( true, [], $method ) );
 		}
 	}
 }

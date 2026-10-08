@@ -5671,7 +5671,7 @@ msgid "Сервис определения местоположения смен
 msgstr ""
 
 #: shipping-method/location/class-city-limit-form.php:259
-msgid "Регионы зоны доставки изменились: часть городов в них больше не входит и не учитывается."
+msgid "Зона доставки изменилась: часть городов в неё больше не входит и не учитывается."
 msgstr ""
 
 #: shipping-method/location/class-city-limit-form.php:263

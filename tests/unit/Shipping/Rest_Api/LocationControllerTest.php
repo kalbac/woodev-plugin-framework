@@ -20,6 +20,7 @@ namespace Woodev\Tests\Unit\Shipping\Rest_Api;
 use WP_REST_Request;
 use Brain\Monkey\Functions;
 use Woodev\Framework\Shipping\Location\Abstract_Location_Provider;
+use Woodev\Framework\Shipping\Location\City_Limit;
 use Woodev\Framework\Shipping\Location\Location_Provider;
 use Woodev\Framework\Shipping\Location\Location_Record;
 use Woodev\Framework\Shipping\Location\Location_Scope;
@@ -35,6 +36,7 @@ require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-loc
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/interface-location-provider.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/abstract-location-provider.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-service.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-city-limit.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-popular-settlement-entry.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-popular-settlement-store.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-popular-settlement-verification.php';
@@ -3621,5 +3623,81 @@ final class LocationControllerTest extends TestCase {
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 502, $result->get_error_data()['status'] );
+	}
+
+	// ---- a zone that reaches several countries (fix round 1) ------------------------------------------------
+
+	/**
+	 * Runs `$test` with the shipping zone of the method answering `$locations` (WooCommerce's zone classes are absent
+	 * from the unit process, so the lookup is replaced at its one seam), and always puts the real lookup back.
+	 *
+	 * @param array<int, array{0: string, 1: string}> $locations Zone `[ type, code ]` pairs.
+	 * @param callable                                $test      The test body.
+	 */
+	private function with_zone( array $locations, callable $test ): void {
+		City_Limit::use_zone_pairs_for_tests( static fn() => $locations );
+
+		try {
+			$test();
+		} finally {
+			City_Limit::use_zone_pairs_for_tests( null );
+		}
+	}
+
+	public function test_city_limit_suggest_searches_the_requested_country_of_a_multi_country_zone(): void {
+		Functions\when( 'absint' )->alias( static fn( $value ) => abs( (int) $value ) );
+
+		$this->with_zone(
+			[ [ 'country', 'RU' ], [ 'country', 'BY' ] ],
+			function () {
+				$provider = new Location_Controller_Fake_Provider( static fn() => [] );
+				$ctrl     = new Location_Controller_Probe( new Location_Controller_Fake_Service( true, $provider ) );
+
+				$ctrl->handle_city_limit_suggest_request( $this->city_limit_request( [ 'country' => 'BY' ] ) );
+				$ctrl->handle_city_limit_suggest_request( $this->city_limit_request( [ 'country' => 'RU' ] ) );
+				$ctrl->handle_city_limit_suggest_request( $this->city_limit_request( [ 'country' => '' ] ) );
+
+				$this->assertSame(
+					[ 'BY', 'RU', 'RU' ],
+					array_map( static fn( $call ) => $call[1]->country(), $provider->suggest_calls ),
+					'each requested country is searched; none requested means the zone\'s first'
+				);
+			}
+		);
+	}
+
+	public function test_city_limit_suggest_does_not_search_a_country_the_zone_does_not_reach(): void {
+		Functions\when( 'absint' )->alias( static fn( $value ) => abs( (int) $value ) );
+
+		$this->with_zone(
+			[ [ 'country', 'RU' ], [ 'country', 'BY' ] ],
+			function () {
+				$provider = new Location_Controller_Fake_Provider( static fn() => [ $this->record() ] );
+				$ctrl     = new Location_Controller_Probe( new Location_Controller_Fake_Service( true, $provider ) );
+
+				$result = $ctrl->handle_city_limit_suggest_request( $this->city_limit_request( [ 'country' => 'KZ' ] ) );
+
+				$this->assertSame( [ 'suggestions' => [] ], $result );
+				$this->assertCount( 0, $provider->suggest_calls );
+			}
+		);
+	}
+
+	public function test_city_limit_suggest_keeps_a_whole_country_searchable_next_to_a_regional_one(): void {
+		Functions\when( 'absint' )->alias( static fn( $value ) => abs( (int) $value ) );
+
+		// RU listed whole, KZ by region: the first used to hide the second's whole-country neighbour
+		$this->with_zone(
+			[ [ 'country', 'RU' ], [ 'state', 'KZ:ALM' ] ],
+			function () {
+				$provider = new Location_Controller_Fake_Provider( static fn() => [] );
+				$ctrl     = new Location_Controller_Probe( new Location_Controller_Fake_Service( true, $provider ) );
+
+				$ctrl->handle_city_limit_suggest_request( $this->city_limit_request( [ 'country' => 'RU' ] ) );
+
+				$this->assertSame( 'RU', $provider->suggest_calls[0][1]->country() );
+				$this->assertFalse( $provider->suggest_calls[0][1]->has_parent() );
+			}
+		);
 	}
 }

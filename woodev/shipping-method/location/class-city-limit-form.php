@@ -170,15 +170,15 @@ if ( ! class_exists( __NAMESPACE__ . '\City_Limit_Form' ) ) :
 
 			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- WooCommerce verified the request before it called this field.
 			$instance_id = isset( $_REQUEST['instance_id'] ) ? absint( wp_unslash( $_REQUEST['instance_id'] ) ) : 0;
-			$states      = City_Limit::zone_scope( $instance_id )['states'];
+			$zone        = City_Limit::zone_scope( $instance_id );
 
-			if ( [] !== $states ) {
+			if ( [] !== $zone['states'] || [] !== $zone['countries'] ) {
 				$service = self::service();
 				$records = array_values(
 					array_filter(
 						$records,
-						static function ( Location_Record $record ) use ( $states, $service ): bool {
-							return City_Limit::in_zone( $record, $states, $service );
+						static function ( Location_Record $record ) use ( $zone, $service ): bool {
+							return City_Limit::in_zone( $record, $zone['states'], $service, $zone['countries'] );
 						}
 					)
 				);
@@ -201,7 +201,7 @@ if ( ! class_exists( __NAMESPACE__ . '\City_Limit_Form' ) ) :
 		 * @param Location_Service $service Location service.
 		 * @param bool             $resolve Whether to try re-resolving stale cities (needs a working provider).
 		 *
-		 * @return array{value: string, items: array<int, array{record: array<string, mixed>, state: string}>, notes: string[], country: string, active: bool}
+		 * @return array{value: string, items: array<int, array{record: array<string, mixed>, state: string}>, notes: string[], country: string, countries: array<int, array{code: string, name: string}>, active: bool}
 		 */
 		public static function build_view( $stored, array $scope, Location_Service $service, bool $resolve ): array {
 			$parts    = City_Limit::partition( City_Limit::decode( $stored ), $service );
@@ -233,7 +233,7 @@ if ( ! class_exists( __NAMESPACE__ . '\City_Limit_Form' ) ) :
 			foreach ( $kept as $pair ) {
 				[ $record, $state ] = $pair;
 
-				if ( 'ok' === $state && ! City_Limit::in_zone( $record, $states, $service ) ) {
+				if ( 'ok' === $state && ! City_Limit::in_zone( $record, $states, $service, (array) ( $scope['countries'] ?? [] ) ) ) {
 					$state = 'outside';
 					++$outside;
 				}
@@ -256,7 +256,7 @@ if ( ! class_exists( __NAMESPACE__ . '\City_Limit_Form' ) ) :
 			}
 
 			if ( $outside > 0 ) {
-				$notes[] = __( 'Регионы зоны доставки изменились: часть городов в них больше не входит и не учитывается.', 'woodev-plugin-framework' );
+				$notes[] = __( 'Зона доставки изменилась: часть городов в неё больше не входит и не учитывается.', 'woodev-plugin-framework' );
 			}
 
 			if ( [] !== $states && $service->is_region_field_removed() ) {
@@ -269,12 +269,17 @@ if ( ! class_exists( __NAMESPACE__ . '\City_Limit_Form' ) ) :
 				$notes[] = __( 'Поиск городов недоступен: настройте определение местоположения в настройках доставки.', 'woodev-plugin-framework' );
 			}
 
+			$country = '' !== $scope['country'] ? $scope['country'] : $service->resolve_default_country();
+			$zone_countries = (array) ( $scope['countries'] ?? [] );
+
 			return [
-				'value'   => City_Limit::encode( $records ),
-				'items'   => $items,
-				'notes'   => $notes,
-				'country' => '' !== $scope['country'] ? $scope['country'] : $service->resolve_default_country(),
-				'active'  => $active,
+				'value'     => City_Limit::encode( $records ),
+				'items'     => $items,
+				'notes'     => $notes,
+				'country'   => $country,
+				// More than one when the zone reaches several countries: the list offers a choice, each searched on its own.
+				'countries' => City_Limit::country_options( [] !== $zone_countries ? $zone_countries : [ $country ] ),
+				'active'    => $active,
 			];
 		}
 
@@ -333,6 +338,7 @@ if ( ! class_exists( __NAMESPACE__ . '\City_Limit_Form' ) ) :
 				'inputId'    => $field_key,
 				'instanceId' => $instance_id,
 				'country'    => $view['country'],
+				'countries'  => $view['countries'],
 				'active'     => $view['active'],
 				'restRoot'   => esc_url_raw( rest_url( 'woodev/v1' ) ),
 				'nonce'      => wp_create_nonce( 'wp_rest' ),

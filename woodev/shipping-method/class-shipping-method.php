@@ -969,7 +969,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 					$this->get_option( City_Limit::OPTION_MODE, '' ),
 					$this->get_option( City_Limit::OPTION_CITIES, '' ),
 					$this->get_plugin()->get_location_service(),
-					Shipping_Helper::get_package_country( $package )
+					Shipping_Helper::get_package_country( $package ),
+					City_Limit::zone_scope( (int) $this->instance_id )
 				);
 
 				if ( ! $is_available ) {
