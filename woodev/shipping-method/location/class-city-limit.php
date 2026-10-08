@@ -290,12 +290,17 @@ if ( ! class_exists( __NAMESPACE__ . '\City_Limit' ) ) :
 
 		/**
 		 * What a shipping zone says about regions, from its raw locations (pure — `type` and `code` pairs as
-		 * WooCommerce stores them: `country` => `RU`, `state` => `RU:MOW`).
+		 * WooCommerce stores them: `country` => `RU`, `state` => `RU:MOW`, `continent` => `EU`).
 		 *
-		 * `countries` are the countries the zone can reach by name (a listed country, or one with listed states), in
-		 * zone order; `country` is the first. A country the zone lists WHOLE wins over states of the same country
-		 * (WooCommerce matches either, so the zone is not restricted there). `states` = country => state codes, only for
-		 * a country the zone restricts to regions; empty when no country is.
+		 * WooCommerce matches a package against country, state and continent rows with OR, so all three count. A
+		 * continent is expanded to its countries through WooCommerce's own table ({@see self::continent_countries()}), and —
+		 * like a country listed whole — it overrides a narrower state row of any country it covers.
+		 *
+		 * `countries` are the countries the zone reaches by name, in zone order; `country` is the first. `states` =
+		 * country => state codes, only for a country the zone restricts to regions.
+		 *
+		 * If a continent cannot be expanded the country list would be partial, so it is never offered as exhaustive: the
+		 * result is the empty scope (no country or region restriction), the same as for a zone that names no country.
 		 *
 		 * @since 2.0.2
 		 *
@@ -317,6 +322,21 @@ if ( ! class_exists( __NAMESPACE__ . '\City_Limit' ) ) :
 
 					$whole[]     = $country;
 					$countries[] = $country;
+				} elseif ( 'continent' === $type && '' !== $code ) {
+					$covered = self::continent_countries( $code );
+
+					if ( null === $covered ) {
+						return [
+							'country'   => '',
+							'countries' => [],
+							'states'    => [],
+						];
+					}
+
+					foreach ( $covered as $country ) {
+						$whole[]     = $country;
+						$countries[] = $country;
+					}
 				} elseif ( 'state' === $type && false !== strpos( $code, ':' ) ) {
 					[ $country, $state ] = explode( ':', $code, 2 );
 
@@ -342,6 +362,52 @@ if ( ! class_exists( __NAMESPACE__ . '\City_Limit' ) ) :
 				'countries' => $countries,
 				'states'    => $states,
 			];
+		}
+
+		/**
+		 * @var array<string, string[]>|null A test's stand-in for WooCommerce's continent table.
+		 */
+		private static $continents_for_tests = null;
+
+		/**
+		 * Test-only: replaces WooCommerce's continent table (`null` puts the real one back).
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string, string[]>|null $continents Continent code => country codes.
+		 *
+		 * @return void
+		 */
+		public static function use_continents_for_tests( ?array $continents ): void {
+			self::$continents_for_tests = $continents;
+		}
+
+		/**
+		 * The countries of a continent, from WooCommerce's own table (`WC()->countries->get_continents()`, the data
+		 * its zone matching uses) — nothing is hardcoded here.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $continent Continent code (`EU`).
+		 *
+		 * @return string[]|null Upper-case country codes, or `null` when WooCommerce cannot say.
+		 */
+		public static function continent_countries( string $continent ): ?array {
+			if ( null !== self::$continents_for_tests ) {
+				$list = self::$continents_for_tests[ $continent ] ?? null;
+			} elseif ( function_exists( 'WC' ) && ! empty( WC()->countries ) && method_exists( WC()->countries, 'get_continents' ) ) {
+				$list = WC()->countries->get_continents()[ $continent ]['countries'] ?? null;
+			} else {
+				$list = null;
+			}
+
+			if ( ! is_array( $list ) || [] === $list ) {
+				return null;
+			}
+
+			return array_values( array_unique( array_map( 'strtoupper', array_map( 'strval', $list ) ) ) );
 		}
 
 		/**

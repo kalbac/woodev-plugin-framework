@@ -77,6 +77,7 @@ final class CityLimitMethodTest extends TestCase {
 	/** @return void */
 	protected function tearDown(): void {
 		City_Limit::use_zone_pairs_for_tests( null );
+		City_Limit::use_continents_for_tests( null );
 
 		parent::tearDown();
 	}
@@ -235,6 +236,44 @@ final class CityLimitMethodTest extends TestCase {
 
 		City_Limit::use_zone_pairs_for_tests( static fn() => [ [ 'state', 'RU:ОМСКАЯ ОБЛАСТЬ' ] ] );
 		$this->assertTrue( $this->rates( $this->method( $options ) ), 'checkout agrees with the form: the city outside the zone is ignored' );
+	}
+
+	/** @return void */
+	public function test_a_zone_of_a_continent_and_a_country_still_limits_by_the_continents_cities(): void {
+		City_Limit::use_continents_for_tests( [ 'EU' => [ 'BY', 'DE' ] ] );
+		City_Limit::use_zone_pairs_for_tests( static fn() => [ [ 'continent', 'EU' ], [ 'country', 'KZ' ] ] );
+
+		Woodev_Test_City_Limit_Plugin::$service->customer = Location_Record::from_array(
+			[
+				'key'         => 'test-cdek:700',
+				'provider_id' => 'test-cdek',
+				'level'       => 'settlement',
+				'country'     => 'KZ',
+				'label'       => 'Алматы',
+			]
+		);
+
+		$minsk = Location_Record::from_array(
+			[
+				'key'         => 'test-cdek:9',
+				'provider_id' => 'test-cdek',
+				'level'       => 'settlement',
+				'country'     => 'BY',
+				'label'       => 'Минск',
+			]
+		);
+
+		$this->assertFalse(
+			$this->rates(
+				$this->method(
+					[
+						City_Limit::OPTION_MODE   => 'include',
+						City_Limit::OPTION_CITIES => City_Limit::encode( [ $minsk ] ),
+					]
+				)
+			),
+			'Minsk is in the zone through Europe: an Almaty buyer is not on the list. Dropping it as «outside» would empty the list and show the method.'
+		);
 	}
 
 	/** @return void */

@@ -83,6 +83,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		protected function tearDown(): void {
 			City_Limit_Form::reset_for_tests();
 			City_Limit::use_zone_pairs_for_tests( null );
+			City_Limit::use_continents_for_tests( null );
 			unset( $_REQUEST['instance_id'] );
 
 			parent::tearDown();
@@ -327,6 +328,33 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			$service->region_removed = false;
 			$this->assertSame( [], City_Limit_Form::build_view( '[]', $zone, $service, true )['notes'] );
+		}
+
+		private function minsk(): Location_Record {
+			return Location_Record::from_array(
+				[
+					'key'         => 'test-cdek:9',
+					'provider_id' => 'test-cdek',
+					'level'       => 'settlement',
+					'country'     => 'BY',
+					'label'       => 'Минск',
+				]
+			);
+		}
+
+		public function test_a_saved_city_reached_through_a_continent_is_kept_by_the_view_and_by_saving(): void {
+			City_Limit::use_continents_for_tests( [ 'EU' => [ 'BY', 'DE' ] ] );
+			City_Limit::use_zone_pairs_for_tests( static fn() => [ [ 'continent', 'EU' ], [ 'country', 'KZ' ] ] );
+			$_REQUEST['instance_id'] = '262';
+			City_Limit_Form::use_service_for_tests( $this->service() );
+
+			$zone = City_Limit::zone_scope( 262 );
+			$view = City_Limit_Form::build_view( City_Limit::encode( [ $this->minsk() ] ), $zone, $this->service(), true );
+
+			$this->assertSame( 'ok', $view['items'][0]['state'], 'not «outside»: Belarus is in Europe' );
+			$this->assertSame( [ 'BY', 'DE', 'KZ' ], array_column( $view['countries'], 'code' ), 'every country of the zone is offered' );
+
+			$this->assertSame( [ 'test-cdek:9' ], array_map( static fn( $c ) => $c->key(), City_Limit::decode( City_Limit_Form::sanitize_cities( City_Limit::encode( [ $this->minsk() ] ) ) ) ) );
 		}
 
 		public function test_a_zone_reaching_several_countries_offers_each_of_them_to_the_picker(): void {

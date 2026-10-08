@@ -3700,4 +3700,27 @@ final class LocationControllerTest extends TestCase {
 			}
 		);
 	}
+
+	public function test_city_limit_suggest_searches_a_country_the_zone_reaches_through_a_continent(): void {
+		Functions\when( 'absint' )->alias( static fn( $value ) => abs( (int) $value ) );
+		City_Limit::use_continents_for_tests( [ 'EU' => [ 'BY', 'DE' ] ] );
+
+		try {
+			$this->with_zone(
+				[ [ 'continent', 'EU' ], [ 'country', 'KZ' ] ],
+				function () {
+					$provider = new Location_Controller_Fake_Provider( static fn() => [] );
+					$ctrl     = new Location_Controller_Probe( new Location_Controller_Fake_Service( true, $provider ) );
+
+					$ctrl->handle_city_limit_suggest_request( $this->city_limit_request( [ 'country' => 'BY' ] ) );
+					$refused = $ctrl->handle_city_limit_suggest_request( $this->city_limit_request( [ 'country' => 'US' ] ) );
+
+					$this->assertSame( [ 'BY' ], array_map( static fn( $call ) => $call[1]->country(), $provider->suggest_calls ), 'Belarus is reached through Europe' );
+					$this->assertSame( [ 'suggestions' => [] ], $refused, 'the United States are in neither row' );
+				}
+			);
+		} finally {
+			City_Limit::use_continents_for_tests( null );
+		}
+	}
 }

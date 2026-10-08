@@ -139,6 +139,12 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 	 */
 	final class CityLimitTest extends TestCase {
 
+		protected function tearDown(): void {
+			City_Limit::use_continents_for_tests( null );
+
+			parent::tearDown();
+		}
+
 		protected function setUp(): void {
 			parent::setUp();
 
@@ -440,6 +446,71 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			$this->assertSame( [ 'RU', 'BY', 'KZ' ], $scope['countries'] );
 			$this->assertSame( [ 'KZ' => [ 'ALM', 'AST' ] ], $scope['states'] );
+		}
+
+		// ---- continents (fix round 2) -----------------------------------------------------------------------
+
+		/** A stand-in for WooCommerce's continent table, so the expansion is the production code's own. */
+		private function europe(): void {
+			City_Limit::use_continents_for_tests( [ 'EU' => [ 'BY', 'DE', 'FR' ] ] );
+		}
+
+		public function test_a_continent_next_to_a_country_reaches_every_country_of_both(): void {
+			$this->europe();
+
+			$scope = City_Limit::scope_from_locations( [ [ 'continent', 'EU' ], [ 'country', 'KZ' ] ] );
+
+			$this->assertSame( [ 'BY', 'DE', 'FR', 'KZ' ], $scope['countries'], 'WooCommerce matches continent OR country: Belarus is reached through Europe' );
+			$this->assertSame( 'BY', $scope['country'] );
+			$this->assertSame( [], $scope['states'] );
+		}
+
+		public function test_a_continent_overrides_a_narrower_state_row_of_a_country_it_covers(): void {
+			$this->europe();
+
+			$scope = City_Limit::scope_from_locations( [ [ 'state', 'BY:MI' ], [ 'continent', 'EU' ], [ 'state', 'KZ:ALM' ] ] );
+
+			$this->assertSame( [ 'KZ' => [ 'ALM' ] ], $scope['states'], 'BY is covered whole by Europe, whatever its state row says; KZ is not' );
+			$this->assertSame( [ 'BY', 'DE', 'FR', 'KZ' ], $scope['countries'] );
+		}
+
+		public function test_a_continent_that_cannot_be_expanded_never_leaves_a_partial_country_list(): void {
+			// no WooCommerce in the unit process and no table put in place: the continent is unknown
+			$this->assertNull( City_Limit::continent_countries( 'EU' ) );
+
+			$scope = City_Limit::scope_from_locations( [ [ 'continent', 'EU' ], [ 'country', 'KZ' ], [ 'state', 'RU:MOW' ] ] );
+
+			$this->assertSame( [ 'country' => '', 'countries' => [], 'states' => [] ], $scope, 'KZ alone would read as «the zone is KZ only»' );
+
+			City_Limit::use_continents_for_tests( [ 'XX' => [ 'DE' ] ] );
+			$this->assertSame( [ 'country' => '', 'countries' => [], 'states' => [] ], City_Limit::scope_from_locations( [ [ 'continent', 'EU' ], [ 'country', 'KZ' ] ] ), 'a continent the table does not know' );
+		}
+
+		public function test_a_city_reached_through_a_continent_is_in_a_mixed_zone(): void {
+			$this->europe();
+
+			$scope = City_Limit::scope_from_locations( [ [ 'continent', 'EU' ], [ 'country', 'KZ' ] ] );
+			$minsk = $this->city( 'test-cdek:9', 'Минск', [ 'country' => 'BY' ] );
+
+			$this->assertTrue( City_Limit::in_zone( $minsk, $scope['states'], new City_Limit_Test_Service(), $scope['countries'] ) );
+		}
+
+		public function test_a_listed_city_in_a_continent_country_keeps_limiting_a_buyer_in_the_country_row(): void {
+			$this->europe();
+
+			$service           = new City_Limit_Test_Service();
+			$service->customer = $this->city( 'test-cdek:700', 'Алматы', [ 'country' => 'KZ' ] );
+			$stored            = City_Limit::encode( [ $this->city( 'test-cdek:9', 'Минск', [ 'country' => 'BY' ] ) ] );
+
+			$mixed = City_Limit::scope_from_locations( [ [ 'continent', 'EU' ], [ 'country', 'KZ' ] ] );
+
+			// Minsk is reached through Europe, so it still counts: an Almaty buyer is not on an include-only Minsk list
+			$this->assertFalse( City_Limit::permits( 'include', $stored, $service, 'KZ', $mixed ) );
+
+			// …and when Europe cannot be expanded nothing is narrowed either
+			City_Limit::use_continents_for_tests( null );
+			$unknown = City_Limit::scope_from_locations( [ [ 'continent', 'EU' ], [ 'country', 'KZ' ] ] );
+			$this->assertFalse( City_Limit::permits( 'include', $stored, $service, 'KZ', $unknown ) );
 		}
 
 		public function test_the_rest_of_the_world_zone_and_junk_have_no_scope(): void {
