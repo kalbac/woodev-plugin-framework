@@ -1,6 +1,6 @@
 <?php
 /**
- * Unit: Shipping_Plugin::enqueue_packing_settings_script() also re-fires WooCommerce's
+ * Unit: Shipping_Plugin::enqueue_instance_form_script() also re-fires WooCommerce's
  * `wc-enhanced-select-init` when a shipping-method modal opens (s158 FW-E), so AJAX-searchable
  * selects in a carrier method's form become usable. The script is added on the shipping-settings
  * screen only, and once even with several carrier plugins active.
@@ -37,8 +37,8 @@ class ShippingPluginEnhancedSelectModalTest extends TestCase {
 		];
 
 		Functions\when( 'wp_script_is' )->justReturn( false );
-		Functions\when( 'plugins_url' )->justReturn( 'https://example.com/packing-settings.js' );
-		Functions\expect( 'wp_enqueue_script' )->once()->with( 'woodev-packing-settings', Mockery::any(), [ 'jquery' ], Mockery::any(), true );
+		Functions\when( 'plugins_url' )->justReturn( 'https://example.com/instance-field-conditions.js' );
+		Functions\expect( 'wp_enqueue_script' )->once()->with( 'woodev-instance-field-conditions', Mockery::any(), [ 'jquery' ], Mockery::any(), true );
 
 		$captured = null;
 		Functions\expect( 'wp_add_inline_script' )
@@ -50,10 +50,10 @@ class ShippingPluginEnhancedSelectModalTest extends TestCase {
 				}
 			);
 
-		$this->plugin()->enqueue_packing_settings_script();
+		$this->plugin()->enqueue_instance_form_script();
 
 		$this->assertNotNull( $captured );
-		$this->assertSame( 'woodev-packing-settings', $captured[0] );
+		$this->assertSame( 'woodev-instance-field-conditions', $captured[0] );
 		$this->assertStringContainsString( 'wc_backbone_modal_loaded', $captured[1] );
 		$this->assertStringContainsString( 'wc-enhanced-select-init', $captured[1] );
 	}
@@ -68,7 +68,7 @@ class ShippingPluginEnhancedSelectModalTest extends TestCase {
 		Functions\expect( 'wp_enqueue_script' )->never();
 		Functions\expect( 'wp_add_inline_script' )->never();
 
-		$this->plugin()->enqueue_packing_settings_script();
+		$this->plugin()->enqueue_instance_form_script();
 
 		$this->addToAssertionCount( 1 );
 	}
@@ -84,7 +84,7 @@ class ShippingPluginEnhancedSelectModalTest extends TestCase {
 		Functions\expect( 'wp_enqueue_script' )->never();
 		Functions\expect( 'wp_add_inline_script' )->never();
 
-		$this->plugin()->enqueue_packing_settings_script();
+		$this->plugin()->enqueue_instance_form_script();
 
 		$this->addToAssertionCount( 1 );
 	}

@@ -285,14 +285,24 @@ final class PackagingTest extends TestCase {
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
 	 */
-	public function test_zone_control_retains_stored_virtual_and_resolves_default_for_leftovers(): void {
+	public function test_zone_control_retains_stored_virtual(): void {
 		$method = $this->method();
 		$method->stored_options['packing_algorithm'] = 'virtual';
 		$field = json_decode( $method->generate_select_html( 'packing_algorithm', [ 'options' => [ 'default' => 'Default' ] + Packaging_Settings::packing_options() ] ), true );
 		$this->assertArrayHasKey( 'virtual', $field['options'] );
 		$this->assertArrayHasKey( 'boxes', $field['options'] );
-		$leftovers = json_decode( $method->generate_select_html( 'unpacked_algorithm', [] ), true );
-		$this->assertSame( 'separately', $leftovers['custom_attributes']['data-woodev-packing-default'] );
+	}
+
+	public function test_leftovers_are_shown_for_boxes_and_for_the_default_only_when_the_default_is_boxes(): void {
+		$method = $this->method();
+		$method->init_form_fields();
+		$show_if = $method->instance_form_fields['unpacked_algorithm']['show_if'];
+		$this->assertInstanceOf( \Closure::class, $show_if );
+		$this->assertSame( [ 'setting' => 'packing_algorithm', 'operator' => 'in', 'value' => [ 'boxes' ] ], $show_if() );
+		$this->options['woodev_carrier_packaging_packing_algorithm'] = 'boxes';
+		$method = $this->method();
+		$method->init_form_fields();
+		$this->assertSame( [ 'boxes', 'default', '' ], $method->instance_form_fields['unpacked_algorithm']['show_if']()['value'] );
 	}
 
 }

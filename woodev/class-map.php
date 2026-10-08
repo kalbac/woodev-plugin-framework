@@ -79,6 +79,7 @@ return [
 	'Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emails' => 'woodev/shipping-method/email/class-delivery-status-emails.php',
 	'Woodev\\Framework\\Shipping\\Exceptions\\Shipping_Exception' => 'woodev/shipping-method/exceptions/class-shipping-exception.php',
 	'Woodev\\Framework\\Shipping\\Fee_Payments' => 'woodev/shipping-method/class-fee-payments.php',
+	'Woodev\\Framework\\Shipping\\Instance_Field_Conditions' => 'woodev/shipping-method/class-instance-field-conditions.php',
 	'Woodev\\Framework\\Shipping\\Location\\Abstract_Location_Provider' => 'woodev/shipping-method/location/abstract-location-provider.php',
 	'Woodev\\Framework\\Shipping\\Location\\Customer_Location_Store' => 'woodev/shipping-method/location/class-customer-location-store.php',
 	'Woodev\\Framework\\Shipping\\Location\\Locality_Key' => 'woodev/shipping-method/location/class-locality-key.php',
