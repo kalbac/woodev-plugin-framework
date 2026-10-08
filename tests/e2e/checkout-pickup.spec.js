@@ -25,11 +25,11 @@ const { test, expect } = require( '@playwright/test' );
 const PRODUCT_ID = 12;
 
 /**
- * Shipping method ids as WooCommerce renders their radio VALUES (`instance_id` suffixed).
- * `woodev_test_shipping` became a pickup method in #709.
+ * Shipping method ids. WooCommerce renders the radio VALUE as `<method id>:<instance id>`;
+ * instance ids are auto-incremented zone rows, so match by the stable method id (#1173).
  */
-const METHOD_FREE   = 'free_shipping:1';
-const METHOD_PICKUP = 'woodev_test_shipping:3';
+const METHOD_FREE   = 'free_shipping';
+const METHOD_PICKUP = 'woodev_realistic_pickup_shipping';
 
 /**
  * Fills the cart and lands on the classic checkout.
@@ -65,18 +65,18 @@ async function settle( page ) {
 }
 
 /**
- * Selects a shipping method by its radio value and waits for the checkout to settle.
+ * Selects a shipping method by its method id and waits for the checkout to settle.
  *
  * @param {import('@playwright/test').Page} page
- * @param {string}                          value
+ * @param {string}                          methodId Method id without the instance suffix.
  */
-async function chooseShipping( page, value ) {
-	const radio = page.locator( `input[name^="shipping_method"][value="${ value }"]` );
+async function chooseShipping( page, methodId ) {
+	const radio = page.locator( `input[name^="shipping_method"][value^="${ methodId }:"]` );
 
 	await expect(
 		radio,
-		`Shipping method "${ value }" is not offered on the rig. The fixture plugin and the ` +
-		'zz-rig-test-pickup-shipping mu-plugin must both be active.'
+			`Shipping method "${ methodId }" is not offered on the rig. It needs an instance in the ` +
+			'Russia zone and its fixture plugin active.'
 	).toHaveCount( 1 );
 
 	await radio.check();
@@ -103,9 +103,11 @@ function row( page, id ) {
  * assertion with a strict-mode violation rather than a useful message. The slot container is
  * keyed by the carrier's checkout FIELD id, which is what makes the two distinguishable.
  *
- * This walkthrough is about `woodev_test_shipping`, whose field is `carrier_pickup_point`.
+ * This walkthrough uses `woodev_realistic_pickup_shipping`, whose field is
+ * `realistic_pickup_point`. The legacy test fixture is below the loader's compatibility floor
+ * whenever the CDEK plugin is active, so this spec uses the already-compatible realistic fixture.
  */
-const PICKUP_TRIGGER = '#woodev-pickup-slot-carrier_pickup_point-review button.woodev-pickup-trigger';
+const PICKUP_TRIGGER = '#woodev-pickup-slot-realistic_pickup_point-review button.woodev-pickup-trigger';
 
 test.describe( 'classic checkout — pickup walkthrough (#723)', () => {
 
@@ -121,7 +123,7 @@ test.describe( 'classic checkout — pickup walkthrough (#723)', () => {
 		expect(
 			configured,
 			'No woodev_checkout_field_config_* global on the page — the framework checkout ' +
-			'handler did not enqueue. Is the test shipping-method fixture plugin active?'
+			'handler did not enqueue. Is the realistic shipping fixture plugin active?'
 		).toBe( true );
 
 		await expect( page.locator( 'input[name^="shipping_method"]' ).first() ).toBeAttached();
@@ -170,7 +172,7 @@ test.describe( 'classic checkout — pickup walkthrough (#723)', () => {
 			await expect( row( page, id ), `${ id } row must not be visible` ).toBeHidden();
 		}
 
-		// #709: this method is a pickup method in every declaration now, so the control exists.
+		// The realistic fixture declares this method as pickup, so its control exists.
 		await expect( page.locator( PICKUP_TRIGGER ) ).toBeVisible();
 	} );
 

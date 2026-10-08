@@ -265,7 +265,8 @@ through the SECOND carrier.
 
 ⚠ Rig state this arrangement required, and which git does not track: `npx wp-env start` (new
 mapping), `wp plugin activate woodev-realistic-shipping-plugin`, and the method added to zone 1 as
-instance **5**.
+instance **5**. The pickup e2e spec uses `woodev_realistic_pickup_shipping` from this fixture;
+it matches the method id and does not depend on the current auto-incremented instance number.
 
 ### The standard option values
 
