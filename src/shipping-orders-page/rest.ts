@@ -151,6 +151,43 @@ export interface OrderRowAction {
 	disabled?: boolean;
 	/** Display name of that other manager, present only with `disabled`. */
 	lock_owner?: string;
+	/**
+	 * #1180: the input the action asks for before it runs. Absent for an action that needs none —
+	 * which then behaves exactly as it always did: one click, straight to the server.
+	 */
+	fields?: OrderActionField[];
+}
+
+/** The `payload` an action with fields sends: field id → value (a time range is `{ from, to }`). */
+export type OrderActionPayload = Record< string, string | OrderActionTimeRange >;
+
+export interface OrderActionTimeRange {
+	from: string;
+	to: string;
+}
+
+/** What every declared field carries (#1180, `Order_Action_Fields::sanitize()`). */
+interface OrderActionFieldBase {
+	id: string;
+	label: string;
+	required: boolean;
+}
+
+/**
+ * One input an action declares — a small closed set, not a form engine. The server sends every key of
+ * its type (an absent `min` / `max` means no bound), and checks the same bounds again on submit.
+ */
+export type OrderActionField =
+	| ( OrderActionFieldBase & { type: 'date'; default: string; min?: string; max?: string } )
+	| ( OrderActionFieldBase & { type: 'select'; default: string; options: { value: string; label: string }[] } )
+	| ( OrderActionFieldBase & { type: 'time_range'; default: OrderActionTimeRange; min?: string; max?: string } )
+	| ( OrderActionFieldBase & { type: 'textarea'; default: string; maxlength: number } );
+
+/** One error of a rejected payload (`data.errors` of the route's 422), the shape the wizard's routes use. */
+export interface OrderActionFieldError {
+	field: string;
+	code: string;
+	message: string;
 }
 
 /** The full response envelope `Orders_Controller::get_items()` returns. */
@@ -564,14 +601,23 @@ export interface OrderActionResult {
  * A rejection carries the server's own Russian `message` (`apiFetch` rejects with
  * `{ message?: string, code?: string }` on a REST error) — the caller must show it, never
  * swallow it.
+ *
+ * `payload` (#1180) is the values of the action's declared `fields`; omit it for an action that has none.
  */
-export function performOrderAction( orderId: number, action: string ): Promise<OrderActionResult> {
+export function performOrderAction(
+	orderId: number,
+	action: string,
+	payload?: OrderActionPayload
+): Promise<OrderActionResult> {
 	const { restRoot = '', nonce = '' } = bootstrap();
 
 	return apiFetch<OrderActionResult>( {
 		url: `${ restRoot.replace( /\/+$/, '' ) }/${ orderId }/actions/${ action }`,
 		method: 'POST',
 		headers: { 'X-WP-Nonce': nonce },
+		// #1180: only an action with fields has a body. A rejected payload answers 422 with
+		// `data.errors` — {@link OrderActionFieldError}[] — and the action did not run.
+		...( payload ? { data: { payload } } : {} ),
 	} );
 }
 
@@ -674,6 +720,19 @@ export interface OrderPreview {
 	/** `''` when the order carries no note — never rendered as a dash or "null". */
 	customer_note: string;
 	actions: OrderRowAction[];
+	/**
+	 * #1180: lines a carrier plugin adds through `woodev_shipping_orders_preview_fields`. Optional —
+	 * an older server sends none, and «not stated» renders nothing.
+	 */
+	extra_fields?: OrderPreviewExtraField[];
+}
+
+/** One extra line of the preview: a label and a value, optionally a link or a status badge. */
+export interface OrderPreviewExtraField {
+	label: string;
+	value: string;
+	url: string | null;
+	tone?: string;
 }
 
 /**

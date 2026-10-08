@@ -43,6 +43,7 @@ return [
 	'Woodev\\Framework\\Shipping\\Admin\\Orders\\Admin_Rate_Calculator' => 'woodev/shipping-method/admin/orders/class-admin-rate-calculator.php',
 	'Woodev\\Framework\\Shipping\\Admin\\Orders\\Carrier_Field_Set' => 'woodev/shipping-method/admin/orders/class-carrier-field-set.php',
 	'Woodev\\Framework\\Shipping\\Admin\\Orders\\Export_Queue_Notice' => 'woodev/shipping-method/admin/orders/class-export-queue-notice.php',
+	'Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action_Fields' => 'woodev/shipping-method/admin/orders/class-order-action-fields.php',
 	'Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Actions' => 'woodev/shipping-method/admin/orders/class-order-actions.php',
 	'Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Edit_Lock' => 'woodev/shipping-method/admin/orders/class-order-edit-lock.php',
 	'Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor' => 'woodev/shipping-method/admin/orders/class-order-editor.php',

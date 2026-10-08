@@ -229,6 +229,72 @@ final class OrdersControllerPreviewTest extends TestCase {
 		$this->assertIsArray( $result['actions'] );
 	}
 
+	// ----- #1180: extra lines a plugin adds -----
+
+	public function test_the_preview_has_no_extra_fields_unless_a_plugin_adds_some(): void {
+		$this->register_provider();
+		$this->order();
+
+		$result = $this->controller()->get_preview( $this->request( 239 ) );
+
+		$this->assertSame( [], $result['extra_fields'] );
+	}
+
+	public function test_a_plugin_adds_lines_through_the_preview_fields_filter_and_malformed_ones_are_dropped(): void {
+		$this->register_provider();
+		$this->order();
+
+		$seen = null;
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $hook, $value, ...$args ) use ( &$seen ) {
+				if ( 'woodev_shipping_orders_preview_fields' !== $hook ) {
+					return $value;
+				}
+
+				$seen = [ $value, $args[0]->get_id(), $args[1]->get_id() ];
+
+				return [
+					[
+						'label' => 'Заявка на курьера',
+						'value' => '№ 77 (принята)',
+						'tone'  => 'info',
+						'url'   => 'https://cdek.example/77',
+					],
+					[
+						'label' => 'Ссылка не http',
+						'value' => 'x',
+						'url'   => 'javascript:alert(1)',
+					],
+					[
+						'label' => 'Пустое',
+						'value' => '',
+					],
+					'строка',
+				];
+			}
+		);
+
+		$result = $this->controller()->get_preview( $this->request( 239 ) );
+
+		$this->assertSame( [ [], 239, 'cdek' ], $seen, 'starts empty and gets the order and the carrier' );
+		$this->assertSame(
+			[
+				[
+					'label' => 'Заявка на курьера',
+					'value' => '№ 77 (принята)',
+					'url'   => 'https://cdek.example/77',
+					'tone'  => 'info',
+				],
+				[
+					'label' => 'Ссылка не http',
+					'value' => 'x',
+					'url'   => null,
+				],
+			],
+			$result['extra_fields']
+		);
+	}
+
 	// ----- absence rules -----
 
 	public function test_a_missing_sku_is_null_not_a_placeholder_string(): void {

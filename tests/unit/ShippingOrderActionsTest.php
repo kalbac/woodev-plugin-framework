@@ -474,4 +474,130 @@ class ShippingOrderActionsTest extends TestCase {
 	public function test_is_offered_is_false_when_provider_is_null(): void {
 		$this->assertFalse( $this->actions()->is_offered( $this->order(), null, Order_Actions::EXPORT ) );
 	}
+
+	// ----- #1180: fields, payload -----
+
+	public function test_a_declared_field_list_is_sanitised_and_kept_on_the_action(): void {
+		$this->register_handler();
+
+		Functions\when( 'apply_filters' )->alias(
+			static function ( $hook, $actions ) {
+				return [
+					[
+						'action' => 'call_courier',
+						'label'  => 'Вызвать курьера',
+						'fields' => [
+							[
+								'id'       => 'day',
+								'type'     => 'date',
+								'label'    => 'День',
+								'required' => true,
+							],
+							[
+								'id'    => 'broken',
+								'type'  => 'no-such-type',
+								'label' => 'Dropped',
+							],
+						],
+					],
+					[
+						'action' => 'plain',
+						'label'  => 'No fields',
+						'fields' => [ 'garbage' ],
+					],
+				];
+			}
+		);
+
+		$actions = $this->actions()->for_order( $this->order( 'completed' ), $this->provider() );
+
+		$this->assertSame( [ 'day' ], array_column( $actions[0]['fields'], 'id' ) );
+		$this->assertArrayNotHasKey( 'fields', $actions[1], 'an action whose fields are all unusable keeps the shape it always had' );
+	}
+
+	public function test_fields_of_reads_the_declaration_of_one_action_of_an_offered_set(): void {
+		$offered = [
+			[
+				'action' => 'a',
+				'label'  => 'A',
+			],
+			[
+				'action' => 'b',
+				'label'  => 'B',
+				'fields' => [
+					[
+						'id'       => 'x',
+						'type'     => 'textarea',
+						'label'    => 'X',
+						'required' => false,
+					],
+				],
+			],
+		];
+
+		$this->assertSame( [], Order_Actions::fields_of( $offered, 'a' ) );
+		$this->assertSame( [ 'x' ], array_column( Order_Actions::fields_of( $offered, 'b' ), 'id' ) );
+		$this->assertSame( [], Order_Actions::fields_of( $offered, 'missing' ) );
+	}
+
+	public function test_resolve_payload_of_an_action_without_fields_is_empty_whatever_was_posted(): void {
+		$resolved = Order_Actions::resolve_payload(
+			[
+				[
+					'action' => 'a',
+					'label'  => 'A',
+				],
+			],
+			'a',
+			[ 'day' => 'x' ]
+		);
+
+		$this->assertSame(
+			[
+				'values' => [],
+				'errors' => [],
+			],
+			$resolved
+		);
+	}
+
+	public function test_perform_gives_the_payload_to_the_performing_filter_of_a_carrier_extra(): void {
+		$captured = null;
+
+		Functions\when( 'apply_filters' )->alias(
+			static function ( $hook, $value, ...$args ) use ( &$captured ) {
+				if ( 'woodev_shipping_perform_order_action' === $hook ) {
+					$captured = $args;
+				}
+
+				return $value;
+			}
+		);
+
+		$handler = Mockery::mock( Abstract_Shipment_Handler::class );
+		$order   = $this->order();
+
+		$this->actions()->perform( $handler, $order, 'call_courier', $this->provider(), [ 'day' => '2026-10-13' ] );
+
+		$this->assertSame( 'call_courier', $captured[0] );
+		$this->assertSame( [ 'day' => '2026-10-13' ], $captured[3] );
+	}
+
+	public function test_perform_without_a_payload_passes_an_empty_one(): void {
+		$captured = null;
+
+		Functions\when( 'apply_filters' )->alias(
+			static function ( $hook, $value, ...$args ) use ( &$captured ) {
+				if ( 'woodev_shipping_perform_order_action' === $hook ) {
+					$captured = $args;
+				}
+
+				return $value;
+			}
+		);
+
+		$this->actions()->perform( Mockery::mock( Abstract_Shipment_Handler::class ), $this->order(), 'call_courier', $this->provider() );
+
+		$this->assertSame( [], $captured[3] );
+	}
 }

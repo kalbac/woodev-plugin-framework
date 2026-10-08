@@ -150,12 +150,12 @@ final class OrdersControllerPerformActionTest extends TestCase {
 		return $order;
 	}
 
-	private function request( int $id, string $action ): \WP_REST_Request {
+	private function request( int $id, string $action, ?array $payload = null ): \WP_REST_Request {
 		return new \WP_REST_Request(
 			[
 				'id'     => $id,
 				'action' => $action,
-			]
+			] + ( null !== $payload ? [ 'payload' => $payload ] : [] )
 		);
 	}
 
@@ -512,5 +512,184 @@ final class OrdersControllerPerformActionTest extends TestCase {
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 502, $result->get_error_data()['status'] );
 		$this->assertSame( 'Действие не выполнено.', $result->get_error_message() );
+	}
+
+	// ----- #1180: an action with input fields -----
+
+	/**
+	 * Installs the `call_courier` extra with a required day and an optional comment, records what the
+	 * performing filter receives, and answers success.
+	 *
+	 * @param array<int,array<string,mixed>>|null $received set to the filter's arguments on the call.
+	 */
+	private function stub_courier_action( ?array &$received ): void {
+		Functions\when( 'sanitize_textarea_field' )->alias( static fn( string $text ): string => strip_tags( $text ) );
+		Functions\when( 'apply_filters' )->alias(
+			static function ( $hook, $value, ...$args ) use ( &$received ) {
+				if ( 'woodev_shipping_order_actions' === $hook ) {
+					$value[] = [
+						'action'      => 'call_courier',
+						'label'       => 'Вызвать курьера',
+						'title'       => '',
+						'destructive' => false,
+						'fields'      => [
+							[
+								'id'       => 'day',
+								'type'     => 'date',
+								'label'    => 'День',
+								'required' => true,
+								'min'      => '2026-10-12',
+								'max'      => '2026-10-26',
+							],
+							[
+								'id'        => 'comment',
+								'type'      => 'textarea',
+								'label'     => 'Комментарий',
+								'maxlength' => 20,
+							],
+						],
+					];
+
+					return $value;
+				}
+
+				if ( 'woodev_shipping_perform_order_action' === $hook ) {
+					$received = $args;
+
+					return Action_Result::success();
+				}
+
+				return $value;
+			}
+		);
+	}
+
+	public function test_the_row_carries_the_fields_an_action_declares(): void {
+		$this->register_provider();
+		$this->register_handler();
+		$received = null;
+		$this->stub_courier_action( $received );
+		$order = $this->order( 'completed' );
+
+		$actions = ( new Order_Actions( Orders_Registry::instance() ) )->for_order( $order, Orders_Registry::instance()->get_provider( 'cdek' ) );
+
+		$this->assertSame( [ 'call_courier' ], array_column( $actions, 'action' ) );
+		$this->assertSame( [ 'day', 'comment' ], array_column( $actions[0]['fields'], 'id' ) );
+	}
+
+	public function test_a_valid_payload_reaches_the_performing_filter_as_the_fifth_argument(): void {
+		$this->register_provider();
+		$this->register_handler();
+		$received = null;
+		$this->stub_courier_action( $received );
+		$this->order( 'completed' );
+
+		$result = $this->controller()->perform_action(
+			$this->request(
+				123,
+				'call_courier',
+				[
+					'day'      => '2026-10-13',
+					'comment'  => '<b>Позвонить</b>',
+					'injected' => 'dropped',
+				]
+			)
+		);
+
+		$this->assertIsArray( $result, 'the action ran and the row came back' );
+		$this->assertSame( 'call_courier', $received[0] );
+		$this->assertSame(
+			[
+				'day'     => '2026-10-13',
+				'comment' => 'Позвонить',
+			],
+			$received[3],
+			'only declared ids, cleaned'
+		);
+	}
+
+	public function test_an_invalid_payload_is_a_422_with_one_error_per_field_and_never_reaches_the_carrier(): void {
+		$this->register_provider();
+		$this->register_handler();
+		$received = null;
+		$this->stub_courier_action( $received );
+		$this->order( 'completed' );
+
+		$result = $this->controller()->perform_action(
+			$this->request(
+				123,
+				'call_courier',
+				[
+					'day'     => '2026-11-30',
+					'comment' => str_repeat( 'a', 21 ),
+				]
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'woodev_shipping_orders_invalid_payload', $result->get_error_code() );
+		$this->assertSame( 422, $result->get_error_data()['status'] );
+		$this->assertSame(
+			[
+				[
+					'field'   => 'day',
+					'code'    => 'out_of_range',
+					'message' => 'Значение вне допустимых пределов.',
+				],
+				[
+					'field'   => 'comment',
+					'code'    => 'too_long',
+					'message' => 'Не больше 20 символов.',
+				],
+			],
+			$result->get_error_data()['errors']
+		);
+		$this->assertNull( $received, 'the carrier was not called' );
+	}
+
+	public function test_a_missing_payload_misses_the_required_fields(): void {
+		$this->register_provider();
+		$this->register_handler();
+		$received = null;
+		$this->stub_courier_action( $received );
+		$this->order( 'completed' );
+
+		$result = $this->controller()->perform_action( $this->request( 123, 'call_courier' ) );
+
+		$this->assertSame( 422, $result->get_error_data()['status'] );
+		$this->assertSame( [ 'day' ], array_column( $result->get_error_data()['errors'], 'field' ) );
+		$this->assertNull( $received );
+	}
+
+	public function test_an_action_without_fields_gets_an_empty_payload_even_if_one_is_posted(): void {
+		$this->register_provider();
+		$this->register_handler();
+		$received = null;
+		Functions\when( 'apply_filters' )->alias(
+			static function ( $hook, $value, ...$args ) use ( &$received ) {
+				if ( 'woodev_shipping_order_actions' === $hook ) {
+					$value[] = [
+						'action'      => 'print_label',
+						'label'       => 'Печать этикетки',
+						'title'       => '',
+						'destructive' => false,
+					];
+				}
+
+				if ( 'woodev_shipping_perform_order_action' === $hook ) {
+					$received = $args;
+
+					return Action_Result::success();
+				}
+
+				return $value;
+			}
+		);
+		$this->order( 'completed' );
+
+		$result = $this->controller()->perform_action( $this->request( 123, 'print_label', [ 'day' => '2026-10-13' ] ) );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( [], $received[3] );
 	}
 }

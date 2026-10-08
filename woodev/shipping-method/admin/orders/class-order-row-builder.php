@@ -183,6 +183,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Bu
 				'items'           => $this->build_preview_items( $order ),
 				'customer_note'   => (string) $order->get_customer_note(),
 				'actions'         => $this->order_actions->for_row( $order, $provider ),
+				'extra_fields'    => $this->build_extra_fields( $order, $provider ),
 			];
 
 			/**
@@ -197,6 +198,88 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Bu
 			$filtered = apply_filters( 'woodev_shipping_orders_preview', $preview, $order, $provider );
 
 			return is_array( $filtered ) ? $filtered : $preview;
+		}
+
+		/**
+		 * The extra lines a carrier plugin adds to the order's detail on the orders page — the panel a row's
+		 * eye button opens (#1180). The framework adds none itself.
+		 *
+		 * The order's own metabox has the same seam, `woodev_shipping_order_metabox_fields`; they are two
+		 * hooks because the two surfaces show different sets (the metabox lists the shipment, this panel
+		 * the whole order) and a plugin decides per surface.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order            $order    the order the preview is built for.
+		 * @param Orders_Provider|null $provider the matched carrier, or null when it could not be resolved.
+		 * @return array<int,array{label:string,value:string,url:string|null,tone?:string}> see {@see self::sanitize_display_fields()}.
+		 */
+		private function build_extra_fields( \WC_Order $order, ?Orders_Provider $provider ): array {
+			/**
+			 * Filters the extra lines the orders page's order preview shows — e.g. «Заявка на курьера: № … (статус)».
+			 *
+			 * Each line is `[ 'label' => string, 'value' => string, 'url' => string|null (optional, makes the value
+			 * a link), 'tone' => string (optional, one of {@see \Woodev\Framework\Shipping\Order\Delivery_Status::tone()}'s
+			 * values, shows the value as a status badge) ]`. A malformed line, or one with an empty label or value,
+			 * is dropped.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param array<int,array<string,mixed>> $fields   the lines so far; `[]`.
+			 * @param \WC_Order                      $order    the order.
+			 * @param Orders_Provider|null           $provider the matched carrier, or null.
+			 */
+			$filtered = apply_filters( 'woodev_shipping_orders_preview_fields', [], $order, $provider );
+
+			return self::sanitize_display_fields( $filtered );
+		}
+
+		/**
+		 * Re-validates a filtered list of display lines — `label` and `value` non-empty strings, an optional `url`
+		 * (`http(s)` only) and an optional `tone` — dropping what does not fit rather than shipping it to a page.
+		 *
+		 * Shared by the orders page preview and the order metabox, so a plugin writes one line shape for both.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param mixed $fields the filtered value, of unknown shape.
+		 * @return array<int,array{label:string,value:string,url:string|null,tone?:string}>
+		 */
+		public static function sanitize_display_fields( $fields ): array {
+			if ( ! is_array( $fields ) ) {
+				return [];
+			}
+
+			$clean = [];
+
+			foreach ( $fields as $field ) {
+				if ( ! is_array( $field ) ) {
+					continue;
+				}
+
+				$label = isset( $field['label'] ) && is_scalar( $field['label'] ) ? trim( (string) $field['label'] ) : '';
+				$value = isset( $field['value'] ) && is_scalar( $field['value'] ) ? trim( (string) $field['value'] ) : '';
+
+				if ( '' === $label || '' === $value ) {
+					continue;
+				}
+
+				$url = isset( $field['url'] ) && is_string( $field['url'] ) && 1 === preg_match( '#^https?://#i', $field['url'] ) ? $field['url'] : null;
+
+				$line = [
+					'label' => $label,
+					'value' => $value,
+					'url'   => $url,
+				];
+
+				if ( isset( $field['tone'] ) && is_string( $field['tone'] ) && '' !== $field['tone'] ) {
+					$line['tone'] = $field['tone'];
+				}
+
+				$clean[] = $line;
+			}
+
+			return $clean;
 		}
 
 		/**

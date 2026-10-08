@@ -556,4 +556,44 @@ final class OrdersControllerBulkActionTest extends TestCase {
 			'5 orders — many'     => [ 5, 'Не удалось экспортировать 5 заказов из 5' ],
 		];
 	}
+
+	/**
+	 * #1180: an action that asks for input has no values to run with in a batch — it is skipped like an action the
+	 * order does not offer, and the carrier is never reached.
+	 */
+	public function test_an_action_with_input_fields_is_skipped_in_a_batch(): void {
+		$this->register_provider( 'cdek', 'СДЭК', '_cdek_marker' );
+		$this->register_handler( 'cdek' );
+		$this->order( 1, 'pending', '_cdek_marker' );
+
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $hook, $value ) {
+				if ( 'woodev_shipping_perform_order_action' === $hook ) {
+					throw new \LogicException( 'a skipped action must not reach the carrier' );
+				}
+
+				if ( 'woodev_shipping_order_actions' === $hook ) {
+					$value[] = [
+						'action' => 'call_courier',
+						'label'  => 'Вызвать курьера',
+						'fields' => [
+							[
+								'id'    => 'day',
+								'type'  => 'date',
+								'label' => 'День',
+							],
+						],
+					];
+				}
+
+				return $value;
+			}
+		);
+
+		$result = $this->controller()->perform_bulk_action( $this->request( 'call_courier', [ 1 ] ) );
+
+		$this->assertSame( 1, $result['requested'] );
+		$this->assertSame( 0, $result['eligible'] );
+		$this->assertSame( 1, $result['skipped'] );
+	}
 }

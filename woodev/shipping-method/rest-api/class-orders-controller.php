@@ -734,7 +734,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param \WP_REST_Request $request request; `id` and `action` come from the route.
+		 * @since 2.0.2 Card #1180: an action that declares `fields` takes their values as a `payload` object in the
+		 *              body; they are validated against the declaration and a miss answers 422 with `data.errors`
+		 *              (`[ { field, code, message } ]`) before the carrier is called.
+		 *
+		 * @param \WP_REST_Request $request request; `id` and `action` come from the route, `payload` from the body.
 		 * @return \WP_REST_Response|\WP_Error
 		 */
 		public function perform_action( $request ) {
@@ -769,7 +773,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 				return new \WP_Error( 'woodev_shipping_order_locked', $locked_reason, [ 'status' => 409 ] );
 			}
 
-			$available = array_column( $this->order_actions->for_order( $order, $provider ), 'action' );
+			$offered   = $this->order_actions->for_order( $order, $provider );
+			$available = array_column( $offered, 'action' );
 
 			if ( ! in_array( $action, $available, true ) ) {
 				// ⚠ Say WHY, not just "no". The gate that refused was computed one line
@@ -798,8 +803,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 				);
 			}
 
+			// #1180: what the merchant typed is checked against what the action DECLARED, before the
+			// carrier is called — a handler only ever sees values that fit. The answer carries one error
+			// per field, in the shape the wizard's routes use, so the client shows each beside its input.
+			$resolved = Order_Actions::resolve_payload( $offered, $action, $request->get_param( 'payload' ) );
+
+			if ( [] !== $resolved['errors'] ) {
+				return new \WP_Error(
+					'woodev_shipping_orders_invalid_payload',
+					__( 'Проверьте заполнение полей.', 'woodev-plugin-framework' ),
+					[
+						'status' => 422,
+						'errors' => $resolved['errors'],
+					]
+				);
+			}
+
 			try {
-				$result = $this->order_actions->perform( $handler, $order, $action, $provider );
+				$result = $this->order_actions->perform( $handler, $order, $action, $provider, $resolved['values'] );
 			} catch ( \Throwable $exception ) {
 				$this->log_action_failure( $provider->get_id(), $action, $exception );
 
@@ -893,9 +914,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 					continue;
 				}
 
-				$available = array_column( $this->order_actions->for_order( $order, $provider ), 'action' );
+				$offered   = $this->order_actions->for_order( $order, $provider );
+				$available = array_column( $offered, 'action' );
 
-				if ( ! in_array( $action, $available, true ) ) {
+				// #1180: an action that asks for input has no values to run with here — one dialog per
+				// order, not per batch — so it is skipped like any action the order does not offer.
+				if ( ! in_array( $action, $available, true ) || [] !== Order_Actions::fields_of( $offered, $action ) ) {
 					continue;
 				}
 

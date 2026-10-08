@@ -680,9 +680,20 @@ class ShippingOrdersRegistryTest extends TestCase {
 		$registry->enqueue_metabox_style();
 	}
 
-	/** #1012: the metabox's action buttons are driven by one raw script, enqueued in the footer, no deps. */
+	/**
+	 * #1012: the metabox's action buttons are driven by one raw script, enqueued in the footer. #1180: it depends on
+	 * the framework's modal shell (the dialog of an action with fields), which is enqueued — with its stylesheet —
+	 * because the storefront hook that registers it never runs in wp-admin.
+	 */
 	public function test_enqueue_metabox_script_enqueues_the_button_script_in_the_footer(): void {
 		$captured = [];
+		$styles   = [];
+
+		Functions\when( 'wp_enqueue_style' )->alias(
+			static function ( string $handle ) use ( &$styles ): void {
+				$styles[] = $handle;
+			}
+		);
 
 		Functions\when( 'plugins_url' )->alias(
 			static function ( string $path, string $plugin ): string {
@@ -701,7 +712,8 @@ class ShippingOrdersRegistryTest extends TestCase {
 
 		$this->assertSame( 'woodev-shipping-order-metabox-actions', $captured[0] );
 		$this->assertSame( 'https://example.test/plugins/order-metabox-actions.js', $captured[1] );
-		$this->assertSame( [], $captured[2], 'plain JS, no script dependency' );
+		$this->assertSame( [ 'woodev-modal' ], $captured[2], 'plain JS, the modal shell is its only dependency' );
+		$this->assertSame( [ 'woodev-modal' ], $styles, 'the shell\'s chrome stylesheet is enqueued too' );
 		$this->assertTrue( $captured[4], 'printed in the footer' );
 	}
 
