@@ -1264,6 +1264,12 @@
 			// level ({@see onSelectFor}) so a stale snapshot from BEFORE the pick can never be
 			// restored against some later, unrelated abandon.
 			clearedByEdit: {},
+			// s160: what the SETTLEMENT field held just before its latest real text transition —
+			// `{ settlement: { key: string, text: string }|null }` — so a pick that follows the same
+			// native `change` can tell «the same settlement under another spelling» from a different
+			// one ({@see onSelectFor}, {@see isSameSettlement}). Written by {@see handleFieldChanged},
+			// consumed by {@see onSelectFor}, dropped by {@see onAbandonFor}.
+			editedFrom: {},
 			// fieldId -> { el, api } for every CURRENTLY attached widget (typeahead OR one of
 			// Task 13's mode-specific renderers — see attachOne()/resolveModeRenderer()).
 			widgets: {},
@@ -3413,6 +3419,19 @@
 			// see {@see onAbandonFor}'s own docblock for what this flag means and why it must not
 			// survive past the pick that disproves it.
 			entry.unresolved[ node.level ] = null;
+			// s160: the same native `change` also cleared the street and the postcode (option on).
+			// Picking the SAME settlement the field held — a spelling change, a re-selection —
+			// is not a change of settlement: put the text back before the snapshot is discarded.
+			if ( 'settlement' === node.level ) {
+				var before = entry.editedFrom.settlement;
+
+				entry.editedFrom.settlement = null;
+
+				if ( before && clearsAddressOnChange( entry ) && isSameSettlement( before, record ) ) {
+					restoreClearedDescendants( entry, node.level );
+				}
+			}
+
 			// Issue #350 follow-up: the SAME native `change` that just ran ahead of this callback
 			// already had {@see clearDescendants} snapshot whatever it wiped below this level, in
 			// case an abandon needed to restore it. A real pick is not an abandon — the address
@@ -3589,6 +3608,7 @@
 	function onAbandonFor( entry, node ) {
 		return function( detail ) {
 			entry.unresolved[ node.level ] = detail && 'string' === typeof detail.query ? detail.query : '';
+			entry.editedFrom[ node.level ] = null;
 
 			// Issue #350 follow-up (operator decision 17.08.2026): the customer keeps their
 			// DOWNSTREAM TEXT — only the identity clearDescendants() already dropped for this
@@ -4528,6 +4548,29 @@
 	}
 
 	/**
+	 * Whether a pick of `record` is the SAME settlement the field held before the edit that led to
+	 * it (s160) — decided by identity, not by spelling: «г. Подольск» → «Подольск» under one
+	 * record key is not a change of settlement. With a known previous key the keys decide; with
+	 * none (the city was typed, or restored without a record) the bare names are compared, either
+	 * containing the other after lower-casing — «г. Подольск» names «Подольск».
+	 *
+	 * @param {{key: string, text: string}} before What the field held before: its record key, if any, and its text.
+	 * @param {Object} record The picked record.
+	 * @returns {boolean}
+	 */
+	function isSameSettlement( before, record ) {
+		if ( before.key ) {
+			return before.key === record.key;
+		}
+
+		var name = record.settlement && record.settlement.name ? String( record.settlement.name ) : '';
+		var was = before.text.trim().toLowerCase();
+		var now = name.trim().toLowerCase();
+
+		return '' !== was && '' !== now && ( -1 !== was.indexOf( now ) || -1 !== now.indexOf( was ) );
+	}
+
+	/**
 	 * Clears every node STRICTLY AFTER `fromIndex` — DOM value, store value, the remembered-
 	 * value gate, and (for a chain level) its own confirmed record. Never dispatches events
 	 * (mirrors `checkout-field-classic.js`'s own `cascadeChild()` — a destructive clear must
@@ -4553,21 +4596,22 @@
 	 *
 	 * @param {Object} entry
 	 * @param {number} fromIndex
+	 * @param {boolean} [keepAddress] Leave the `address` level and the postcode node alone (s160).
 	 * @returns {void}
 	 */
-	function clearDescendants( entry, fromIndex ) {
+	function clearDescendants( entry, fromIndex, keepAddress ) {
 		var editedNode = entry.allNodes[ fromIndex ];
 		var editedLevel = editedNode ? editedNode.level : null;
 		var snapshot = editedLevel ? {} : null;
-		var keepAddress = 'settlement' === editedLevel && ! clearsAddressOnChange( entry );
 
 		for ( var i = fromIndex + 1; i < entry.allNodes.length; i++ ) {
 			var node = entry.allNodes[ i ];
 
-			// The merchant switched «clear the address when the settlement changes» off: a settlement
-			// edit leaves the street (`address` level) and the postcode (the level-less node) alone.
-			// A region or country change still clears everything below it — the settlement itself is
-			// gone then, and a street with no city is meaningless.
+			// `keepAddress` (settlement edits only, decided by the caller): the merchant switched
+			// «clear the address when the settlement changes» off, OR this is the FIRST fill of the
+			// city — a settlement edit then leaves the street (`address` level) and the postcode
+			// (the level-less node) alone. A region or country change still clears everything below
+			// it — the settlement itself is gone then, and a street with no city is meaningless.
 			if ( keepAddress && ( 'address' === node.level || null === node.level ) ) {
 				continue;
 			}
@@ -4892,9 +4936,16 @@
 				return;
 			}
 
+			var previousText = cascadeKey( entry.resolved[ id ] );
+			var previousRecord = info.level ? entry.records[ info.level ] : null;
+
 			entry.seenValues[ id ] = newValue;
 			entry.resolved[ id ] = newValue;
 			entry.store.setValue( id, target.value );
+
+			if ( 'settlement' === info.level ) {
+				entry.editedFrom.settlement = { key: previousRecord && previousRecord.key ? String( previousRecord.key ) : '', text: previousText };
+			}
 
 			if ( info.level ) {
 				entry.records[ info.level ] = null; // the field's own record no longer matches its text.
@@ -4918,7 +4969,13 @@
 				} );
 			}
 
-			clearDescendants( entry, info.index );
+			// s160: a settlement edit keeps the street and the postcode when the option is off, and on
+			// the FIRST fill of the city ('' -> city): nothing was there to belong to a previous city.
+			clearDescendants(
+				entry,
+				info.index,
+				'settlement' === info.level && ( ! clearsAddressOnChange( entry ) || '' === previousText.trim() )
+			);
 		} );
 
 		// Issue #337. Fired for EVERY entry, not only those that matched a node above: a

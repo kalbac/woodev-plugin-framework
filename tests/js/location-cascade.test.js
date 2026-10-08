@@ -2245,13 +2245,108 @@ describe( 'dependent clearing (downward only, remembered-parent gate)', () => {
 			expect( document.getElementById( 'billing_postcode' ).value ).toBe( '' );
 		} );
 
+		const podolskItem = ( label ) => ( {
+			key: 'dadata:podolsk', label, level: 'settlement',
+			record: { key: 'dadata:podolsk', provider_id: 'dadata', level: 'settlement', country: 'RU', settlement: { name: 'Подольск', type: 'г' }, label },
+		} );
+		const kazanItem = {
+			key: 'dadata:kazan', label: 'Казань', level: 'settlement',
+			record: { key: 'dadata:kazan', provider_id: 'dadata', level: 'settlement', country: 'RU', settlement: { name: 'Казань', type: 'г' }, label: 'Казань' },
+		};
+
+		/** The saved «г. Подольск» with its confirmed record, and a street + postcode already in the form. */
+		function bootSavedPodolsk( clearAddressOnChange ) {
+			boot( {
+				settlement: true, address: true, settlementValue: 'г. Подольск', clearAddressOnChange,
+				current: { key: 'dadata:podolsk', level: 'settlement' },
+				chain: { settlement: { key: 'dadata:podolsk', level: 'settlement' } },
+			} );
+			document.getElementById( 'billing_address_1' ).value = 'Ленина 1';
+			document.getElementById( 'billing_postcode' ).value = '142100';
+		}
+
+		function bootBlankCity() {
+			boot( { settlement: true, address: true, clearAddressOnChange: true } );
+			document.getElementById( 'billing_address_1' ).value = 'Ленина 1';
+			document.getElementById( 'billing_postcode' ).value = '142100';
+		}
+
+		it( 'the FIRST fill of the city, typed, keeps a street and a postcode entered before it', () => {
+			bootBlankCity();
+			changeSettlement( 'Подольск' );
+
+			expect( document.getElementById( 'billing_address_1' ).value ).toBe( 'Ленина 1' );
+			expect( document.getElementById( 'billing_postcode' ).value ).toBe( '142100' );
+		} );
+
+		it( 'the FIRST fill of the city, picked, keeps a street and a postcode entered before it', () => {
+			bootBlankCity();
+			selectViaFake( callFor( 'billing_city' ), podolskItem( 'Подольск' ) );
+
+			expect( document.getElementById( 'billing_address_1' ).value ).toBe( 'Ленина 1' );
+			expect( document.getElementById( 'billing_postcode' ).value ).toBe( '142100' );
+		} );
+
+		it( 'the SAME settlement picked under another spelling (same record key) keeps the street and the postcode', () => {
+			bootSavedPodolsk( true );
+
+			selectViaFake( callFor( 'billing_city' ), podolskItem( 'Подольск' ) );
+
+			expect( document.getElementById( 'billing_city' ).value ).toBe( 'Подольск' );
+			expect( document.getElementById( 'billing_address_1' ).value ).toBe( 'Ленина 1' );
+			expect( document.getElementById( 'billing_postcode' ).value ).toBe( '142100' );
+		} );
+
+		it( 'a pick of a DIFFERENT settlement over a confirmed one clears the street and the postcode', () => {
+			bootSavedPodolsk( true );
+
+			selectViaFake( callFor( 'billing_city' ), kazanItem );
+
+			expect( document.getElementById( 'billing_address_1' ).value ).toBe( '' );
+			expect( document.getElementById( 'billing_postcode' ).value ).toBe( '' );
+		} );
+
+		it( 'with the option OFF neither a same-key nor a different pick clears anything', () => {
+			bootSavedPodolsk( false );
+			selectViaFake( callFor( 'billing_city' ), podolskItem( 'Подольск' ) );
+
+			expect( document.getElementById( 'billing_address_1' ).value ).toBe( 'Ленина 1' );
+			expect( document.getElementById( 'billing_postcode' ).value ).toBe( '142100' );
+
+			selectViaFake( callFor( 'billing_city' ), kazanItem );
+
+			expect( document.getElementById( 'billing_address_1' ).value ).toBe( 'Ленина 1' );
+			expect( document.getElementById( 'billing_postcode' ).value ).toBe( '142100' );
+		} );
+
+		function bootTextOnlyPodolsk() {
+			boot( { settlement: true, address: true, settlementValue: 'г. Подольск', clearAddressOnChange: true } );
+			document.getElementById( 'billing_address_1' ).value = 'Ленина 1';
+			document.getElementById( 'billing_postcode' ).value = '142100';
+		}
+
+		it( 'without a previous record the bare names decide: «г. Подольск» -> a pick of «Подольск» keeps the street', () => {
+			bootTextOnlyPodolsk();
+			selectViaFake( callFor( 'billing_city' ), podolskItem( 'Подольск' ) );
+
+			expect( document.getElementById( 'billing_address_1' ).value ).toBe( 'Ленина 1' );
+			expect( document.getElementById( 'billing_postcode' ).value ).toBe( '142100' );
+		} );
+
+		it( 'without a previous record the bare names decide: «г. Подольск» -> a pick of «Казань» clears', () => {
+			bootTextOnlyPodolsk();
+			selectViaFake( callFor( 'billing_city' ), kazanItem );
+
+			expect( document.getElementById( 'billing_address_1' ).value ).toBe( '' );
+			expect( document.getElementById( 'billing_postcode' ).value ).toBe( '' );
+		} );
+
 		it( 'the shipping section is cleared on its own settlement change and billing is untouched', () => {
-			boot( { settlement: true, address: true, section: 'shipping', clearAddressOnChange: true } );
+			boot( { settlement: true, address: true, section: 'shipping', settlementValue: 'Москва', clearAddressOnChange: true } );
 			document.body.insertAdjacentHTML(
 				'beforeend',
 				'<input type="text" id="billing_address_1" value="Билл 1" /><input type="text" id="billing_postcode" value="111111" />'
 			);
-			document.getElementById( 'shipping_city' ).value = 'Москва';
 			document.getElementById( 'shipping_address_1' ).value = 'Тверская 1';
 			document.getElementById( 'shipping_postcode' ).value = '101000';
 
@@ -3686,11 +3781,11 @@ describe( 'D15 — a level no configured provider serves stays native', () => {
 		boot( {
 			region: true, settlement: true, address: true,
 			levels: { RU: { region: true, settlement: true, address: false } },
+			settlementValue: 'Москва',
 		} );
 
 		expect( attachCalls.map( ( c ) => c.el.id ).sort() ).toEqual( [ 'billing_city', 'billing_state' ].sort() );
 
-		document.getElementById( 'billing_city' ).value = 'Москва';
 		document.getElementById( 'billing_address_1' ).value = 'Тверская 1';
 		document.getElementById( 'billing_postcode' ).value = '101000';
 
