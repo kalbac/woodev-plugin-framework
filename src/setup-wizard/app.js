@@ -12,7 +12,7 @@
  * - "Пропустить" skips THIS step (advance WITHOUT saving) — never exits. A step declared
  *   `skippable: false` by PHP has no such control.
  * - Step actions (D2): buttons for the step's server-side operations («Проверить ключ»…). An
- *   action sends the step's current UNSAVED values and shows the structured answer; a
+ *   action sends the merchant's unsaved edits (the server adds the stored values) and shows the answer; a
  *   `destructive` one first asks the merchant to confirm, and is sent with `confirmed: true`.
  * - The stepper is back-free but forward-gated (#110): a step label is a button only for
  *   a step already VISITED in this session (index <= the furthest one reached) and never
@@ -154,6 +154,7 @@ export default function App() {
 	const [ actionBusy, setActionBusy ] = useState( null );
 	const [ pendingConfirm, setPendingConfirm ] = useState( null );
 	const [ actionResult, setActionResult ] = useState( null );
+	const actionGenRef = useRef( 0 );
 	// The finish step's «completed» write failed / the footer exit's «skipped» write failed.
 	const [ completeFailed, setCompleteFailed ] = useState( false );
 	const [ completeRetrying, setCompleteRetrying ] = useState( false );
@@ -254,6 +255,7 @@ export default function App() {
 
 	// An action's answer and a pending confirmation belong to the step they were raised on.
 	useEffect( () => {
+		actionGenRef.current += 1; // a request still in flight belongs to the step we just left.
 		setActionBusy( null );
 		setPendingConfirm( null );
 		setActionResult( null );
@@ -332,21 +334,35 @@ export default function App() {
 
 		setPendingConfirm( null );
 		setActionBusy( action.id );
+		// This request's generation: navigating to another step or starting a newer action
+		// bumps the ref, and whatever this request resolves with afterwards is dropped.
+		const generation = ++actionGenRef.current;
+		const isCurrent = () => generation === actionGenRef.current;
 		try {
-			const answer = await runAction( step.id, action.id, collectStepValues(), confirmed );
+			// Only the merchant's edits travel; the server lays them over the stored values
+			// (a masked secret the merchant did not retype must not arrive as '').
+			const answer = await runAction( step.id, action.id, values[ step.id ] || {}, confirmed );
+			if ( ! isCurrent() ) {
+				return;
+			}
 			setActionResult( {
 				actionId: action.id,
 				status: answer && 'error' === answer.status ? 'error' : 'success',
 				message: ( answer && answer.message ) || '',
 			} );
 		} catch ( e ) {
+			if ( ! isCurrent() ) {
+				return;
+			}
 			setActionResult( {
 				actionId: action.id,
 				status: 'error',
 				message: e.message || __( 'Что-то пошло не так. Попробуйте ещё раз.', 'woodev-plugin-framework' ),
 			} );
 		} finally {
-			setActionBusy( null );
+			if ( isCurrent() ) {
+				setActionBusy( null );
+			}
 		}
 	}
 
@@ -385,7 +401,10 @@ export default function App() {
 
 		setBusy( true );
 		try {
-			if ( isSettings ) {
+			// A settings step always goes through the server (validate → persist the edited
+			// fields → on_save); a content step only when PHP says it validates. Advance on
+			// success only.
+			if ( isSettings || step.validates ) {
 				await saveStep( step.id, values[ step.id ] || {} );
 			}
 			setShowErrors( false );

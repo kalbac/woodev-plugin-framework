@@ -65,7 +65,7 @@ export function complete( state = 'completed' ) {
  *
  * @param {string}  stepId    step id.
  * @param {string}  actionId  action id.
- * @param {Object}  values    the step's current, unsaved field values.
+ * @param {Object}  values    the merchant's edits to the step's fields (the server overlays them on the stored values).
  * @param {boolean} confirmed whether the merchant confirmed a destructive action.
  * @return {Promise} REST promise.
  */

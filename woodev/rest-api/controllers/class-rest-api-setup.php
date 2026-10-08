@@ -128,24 +128,64 @@ if ( ! class_exists( 'Woodev_REST_API_Setup' ) ) :
 		}
 
 		/**
-		 * The submitted values of one step: hidden fields dropped (their show_if is false),
-		 * and — for what a plugin callback may see — only fields declared on the step.
+		 * The values of one step as the server must see them.
+		 *
+		 * - `submitted`: what the client sent (the fields the merchant changed), minus fields
+		 *   hidden by their show_if conditions and minus anything not declared on the step. This
+		 *   is what gets PERSISTED (dirty-only: an untouched field is never rewritten).
+		 * - `effective`: the same, overlaid on the STORED (else default) value of every other
+		 *   declared field — what the merchant actually sees on the step. This is what a
+		 *   validation callback and an action work on, so a stored API key the merchant did not
+		 *   retype still counts and a cross-field rule sees both fields. Hidden fields are
+		 *   dropped from it against the effective controlling values (the same rule the client
+		 *   applies).
 		 *
 		 * @since 2.0.2
 		 *
 		 * @param \WP_REST_Request $request request.
-		 * @return array<string,mixed>
+		 * @param Step             $step    the addressed step.
+		 * @return array{submitted: array<string,mixed>, effective: array<string,mixed>}
 		 */
-		private function get_submitted_values( $request ): array {
-			$values  = (array) $request->get_param( 'values' );
-			$handler = $this->wizard->get_plugin()->get_settings_handler();
+		private function get_step_values( $request, Step $step ): array {
+			$declared  = array_flip( $step->get_setting_ids() );
+			$submitted = array_intersect_key( (array) $request->get_param( 'values' ), $declared );
+			$handler   = $this->wizard->get_plugin()->get_settings_handler();
 
-			// Drop fields hidden by their show_if conditions — never validated, never persisted.
-			if ( $handler ) {
-				$values = $handler->filter_visible_values( $values );
+			if ( ! $handler ) {
+				return [
+					'submitted' => $submitted,
+					'effective' => $submitted,
+				];
 			}
 
-			return $values;
+			$stored = [];
+			foreach ( array_keys( $declared ) as $sid ) {
+				if ( ! array_key_exists( $sid, $submitted ) ) {
+					try {
+						$stored[ $sid ] = $handler->get_value( $sid );
+					} catch ( \Woodev_Plugin_Exception $e ) {
+						// A declared id the handler does not know: nothing stored to overlay.
+						continue;
+					}
+				}
+			}
+
+			// Drop fields hidden by their show_if conditions — never validated, never persisted.
+			$merged = [];
+			foreach ( array_keys( $declared ) as $sid ) {
+				if ( array_key_exists( $sid, $submitted ) ) {
+					$merged[ $sid ] = $submitted[ $sid ];
+				} elseif ( array_key_exists( $sid, $stored ) ) {
+					$merged[ $sid ] = $stored[ $sid ];
+				}
+			}
+
+			$effective = $handler->filter_visible_values( $merged );
+
+			return [
+				'submitted' => array_intersect_key( $effective, $submitted ),
+				'effective' => $effective,
+			];
 		}
 
 		/**
@@ -196,7 +236,8 @@ if ( ! class_exists( 'Woodev_REST_API_Setup' ) ) :
 		 * Validates + persists one step's values, then runs the optional on_save.
 		 *
 		 * Order: the step's validation callback (if any) runs FIRST, before anything is
-		 * persisted. When it refuses, nothing is saved and on_save does not run; the answer is
+		 * persisted, on the step's EFFECTIVE values (the edits over the stored values — see
+		 * get_step_values()); only the edited fields are then persisted. When it refuses, nothing is saved and on_save does not run; the answer is
 		 * a WP_Error `woodev_setup_invalid` (HTTP 400) whose data carries `errors`, a map of
 		 * field id => message. Then each setting is persisted as it passes the settings
 		 * handler's validation: if setting N fails, settings 0..N-1 are already saved. This is
@@ -235,15 +276,15 @@ if ( ! class_exists( 'Woodev_REST_API_Setup' ) ) :
 				return $step;
 			}
 
-			$step_id = $step->get_id();
-			$handler = $this->wizard->get_plugin()->get_settings_handler();
-			$values  = $this->get_submitted_values( $request );
+			$step_id   = $step->get_id();
+			$handler   = $this->wizard->get_plugin()->get_settings_handler();
+			$step_vals = $this->get_step_values( $request, $step );
+			$values    = $step_vals['submitted'];
 
 			$validate = $step->get_validation_callback();
 			if ( null !== $validate ) {
-				$step_values = array_intersect_key( $values, array_flip( $step->get_setting_ids() ) );
 				try {
-					$errors = $this->normalise_validation_result( call_user_func( $validate, $step_values, $request ) );
+					$errors = $this->normalise_validation_result( call_user_func( $validate, $step_vals['effective'], $request ) );
 				} catch ( \Throwable $e ) {
 					Callback_Failure::log( sprintf( 'validation failed for step "%s"', $step_id ), $e );
 
@@ -323,8 +364,8 @@ if ( ! class_exists( 'Woodev_REST_API_Setup' ) ) :
 		/**
 		 * Runs one step action and answers its structured result.
 		 *
-		 * The callback gets the step's submitted, UNSAVED values (declared fields only) and
-		 * the request; nothing is persisted unless the callback persists it itself. A callback
+		 * The callback gets the step's EFFECTIVE values (the submitted, unsaved edits over the
+		 * stored values — declared fields only, see get_step_values()) and the request; nothing is persisted unless the callback persists it itself. A callback
 		 * returns an Action_Outcome — `success` or `error` + message + optional data — and that
 		 * (HTTP 200) is the whole answer for a business outcome, positive or negative. A
 		 * throw, or a return of anything else, is an unexpected failure: logged (secrets
@@ -363,7 +404,7 @@ if ( ! class_exists( 'Woodev_REST_API_Setup' ) ) :
 				);
 			}
 
-			$values = array_intersect_key( $this->get_submitted_values( $request ), array_flip( $step->get_setting_ids() ) );
+			$values = $this->get_step_values( $request, $step )['effective'];
 
 			try {
 				$result = call_user_func( $action->get_callback(), $values, $request );

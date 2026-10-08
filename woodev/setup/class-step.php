@@ -259,8 +259,11 @@ final class Step {
 	 * Sets the server-side validation callback (fluent).
 	 *
 	 * Signature: `fn( array $values, \WP_REST_Request $request ): array|bool|null`. It runs
-	 * BEFORE anything of the step is persisted, with the submitted values of the fields
-	 * declared on the step. Return a map of `field id => message` to refuse the save (nothing
+	 * BEFORE anything of the step is persisted, with the EFFECTIVE values of the fields
+	 * declared on the step — the merchant's edits over the stored (else default) values, i.e.
+	 * what the step shows, minus fields hidden by their show_if (only edited fields are
+	 * persisted afterwards). A content step may have one too: it gets an empty map and
+	 * decides from the plugin's own state; Continue is refused until it passes. Return a map of `field id => message` to refuse the save (nothing
 	 * is persisted, `on_save` does not run, the client shows each message on its field), or
 	 * `false` to refuse with a generic message; `null`, `true` or an empty array mean valid.
 	 * A throw is an unexpected failure: logged, answered with a generic message, nothing persisted.

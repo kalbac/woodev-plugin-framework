@@ -132,7 +132,7 @@ describe( 'step actions', () => {
 	const checkKey = { id: 'check-key', label: 'Проверить ключ', destructive: false, confirm: '' };
 	const wipe = { id: 'wipe', label: 'Очистить старые данные', destructive: true, confirm: 'Удалить старые данные?' };
 
-	test( 'a non-destructive action runs at once with the current, unsaved values and shows its answer', async () => {
+	test( 'a non-destructive action runs at once with the merchant\'s unsaved edits and shows its answer', async () => {
 		window.woodevSetupWizard = bootstrap( { actions: [ checkKey ] } );
 		runAction.mockImplementation( () =>
 			Promise.resolve( { status: 'success', message: 'Ключ подходит.', data: {} } )
@@ -143,7 +143,8 @@ describe( 'step actions', () => {
 		await click( screen.getByRole( 'button', { name: 'Проверить ключ' } ) );
 
 		expect( runAction ).toHaveBeenCalledTimes( 1 );
-		expect( runAction ).toHaveBeenCalledWith( 'connection', 'check-key', { api_key: 'DEFAULT', token: '' }, false );
+		// Only the merchant's edits travel; the server lays them over the stored values.
+		expect( runAction ).toHaveBeenCalledWith( 'connection', 'check-key', {}, false );
 		expect( saveStep ).not.toHaveBeenCalled(); // an action never saves the step.
 		expect( screen.getByRole( 'status' ) ).toHaveTextContent( 'Ключ подходит.' );
 	} );
@@ -156,7 +157,7 @@ describe( 'step actions', () => {
 		fireEvent.change( document.querySelector( '.woodev-setup__fields input' ), { target: { value: 'TYPED' } } );
 		await click( screen.getByRole( 'button', { name: 'Проверить ключ' } ) );
 
-		expect( runAction.mock.calls[ 0 ][ 2 ] ).toEqual( { api_key: 'TYPED', token: '' } );
+		expect( runAction.mock.calls[ 0 ][ 2 ] ).toEqual( { api_key: 'TYPED' } );
 	} );
 
 	test( 'a structured error answer is shown as an alert, not as a success', async () => {
@@ -237,5 +238,190 @@ describe( 'step actions', () => {
 		await click( screen.getByRole( 'button', { name: 'Очистить старые данные' } ) );
 
 		expect( screen.getByRole( 'alert' ) ).toHaveTextContent( 'Это действие нельзя отменить' );
+	} );
+} );
+
+describe( 'Continue and the validation contract', () => {
+	const contentStep = ( extra = {} ) => ( {
+		id: 'migrate',
+		label: 'Перенос',
+		type: 'content',
+		content: '<p>Перенесите данные.</p>',
+		skippable: false,
+		actions: [],
+		...extra,
+	} );
+
+	function withContentStep( extra ) {
+		const data = bootstrap();
+		data.steps.splice( 1, 0, contentStep( extra ) );
+		return data;
+	}
+
+	test( 'only the fields the merchant edited are sent for saving', async () => {
+		window.woodevSetupWizard = bootstrap();
+		render( createElement( App ) );
+		await openConnection();
+
+		fireEvent.change( document.querySelector( '.woodev-setup__fields input' ), { target: { value: 'NEW' } } );
+		await click( document.querySelector( '.woodev-setup__primary' ) );
+
+		expect( saveStep ).toHaveBeenCalledWith( 'connection', { api_key: 'NEW' } );
+	} );
+
+	test( 'an untouched settings step still asks the server (it validates the stored values)', async () => {
+		window.woodevSetupWizard = bootstrap();
+		render( createElement( App ) );
+		await openConnection();
+
+		await click( document.querySelector( '.woodev-setup__primary' ) );
+
+		expect( saveStep ).toHaveBeenCalledWith( 'connection', {} );
+	} );
+
+	test( 'a content step that validates is refused on Continue and does not advance', async () => {
+		window.woodevSetupWizard = withContentStep( { validates: true } );
+		saveStep.mockImplementation( () =>
+			Promise.reject( {
+				code: 'woodev_setup_invalid',
+				message: 'Проверьте правильность заполнения полей на этом шаге.',
+				data: { status: 400, errors: { _step: 'Сначала выполните перенос.' } },
+			} )
+		);
+		render( createElement( App ) );
+		await openConnection(); // welcome → the content step «Перенос»
+		expect( document.querySelector( '.woodev-setup__step-title' ) ).toHaveTextContent( 'Перенос' );
+		saveStep.mockClear();
+
+		await click( document.querySelector( '.woodev-setup__primary' ) );
+
+		expect( saveStep ).toHaveBeenCalledWith( 'migrate', {} );
+		expect( document.querySelector( '.woodev-setup__step-title' ) ).toHaveTextContent( 'Перенос' );
+		expect( document.querySelector( '.woodev-setup__error' ) ).toHaveTextContent( 'Сначала выполните перенос.' );
+	} );
+
+	test( 'a content step that validates advances once the server accepts it', async () => {
+		window.woodevSetupWizard = withContentStep( { validates: true } );
+		render( createElement( App ) );
+		await openConnection();
+		saveStep.mockClear();
+
+		await click( document.querySelector( '.woodev-setup__primary' ) );
+
+		expect( saveStep ).toHaveBeenCalledWith( 'migrate', {} );
+		expect( document.querySelector( '.woodev-setup__step-title' ) ).toHaveTextContent( 'Подключение' );
+	} );
+
+	test( 'a plain content step advances without a request', async () => {
+		window.woodevSetupWizard = withContentStep( { validates: false } );
+		render( createElement( App ) );
+		await openConnection();
+		saveStep.mockClear();
+
+		await click( document.querySelector( '.woodev-setup__primary' ) );
+
+		expect( saveStep ).not.toHaveBeenCalled();
+		expect( document.querySelector( '.woodev-setup__step-title' ) ).toHaveTextContent( 'Подключение' );
+	} );
+} );
+
+describe( 'an action answer belongs to the step it was started on', () => {
+	const slow = { id: 'slow', label: 'Медленная проверка', destructive: false, confirm: '' };
+	const other = { id: 'other', label: 'Другая проверка', destructive: false, confirm: '' };
+
+	function deferred() {
+		const d = {};
+		d.promise = new Promise( ( resolve, reject ) => {
+			d.resolve = resolve;
+			d.reject = reject;
+		} );
+		return d;
+	}
+
+	function twoStepsWithActions() {
+		const data = bootstrap( { actions: [ slow ] } );
+		data.steps[ 0 ] = { ...data.steps[ 0 ], actions: [ other ], skippable: true };
+		return data;
+	}
+
+	async function clickBack() {
+		await click( document.querySelector( '.woodev-setup__back' ) );
+	}
+
+	test( 'a result that arrives after Back is not shown on the step we went back to', async () => {
+		window.woodevSetupWizard = twoStepsWithActions();
+		const pending = deferred();
+		runAction.mockImplementation( () => pending.promise );
+		render( createElement( App ) );
+		await openConnection();
+
+		await click( screen.getByRole( 'button', { name: 'Медленная проверка' } ) );
+		await clickBack(); // «Приветствие» has its own actions
+
+		await act( async () => {
+			pending.resolve( { status: 'success', message: 'Ключ подходит.', data: {} } );
+		} );
+
+		expect( document.querySelector( '.woodev-setup__step-title' ) ).toHaveTextContent( 'Приветствие' );
+		expect( document.querySelector( '.woodev-setup__action-result' ) ).not.toBeInTheDocument();
+	} );
+
+	test( 'a failure that arrives after Back is dropped as well', async () => {
+		window.woodevSetupWizard = twoStepsWithActions();
+		const pending = deferred();
+		runAction.mockImplementation( () => pending.promise );
+		render( createElement( App ) );
+		await openConnection();
+
+		await click( screen.getByRole( 'button', { name: 'Медленная проверка' } ) );
+		await clickBack();
+		await act( async () => {
+			pending.reject( { message: 'Сервер недоступен.' } );
+		} );
+
+		expect( document.querySelector( '.woodev-setup__action-result' ) ).not.toBeInTheDocument();
+	} );
+
+	test( 'an old request finishing does not re-enable the controls of a newer one', async () => {
+		window.woodevSetupWizard = twoStepsWithActions();
+		const first = deferred();
+		const second = deferred();
+		runAction.mockImplementationOnce( () => first.promise ).mockImplementationOnce( () => second.promise );
+		render( createElement( App ) );
+		await openConnection();
+
+		await click( screen.getByRole( 'button', { name: 'Медленная проверка' } ) ); // request 1, on «Подключение»
+		await clickBack();
+		await click( screen.getByRole( 'button', { name: 'Другая проверка' } ) ); // request 2, on «Приветствие»
+
+		await act( async () => {
+			first.resolve( { status: 'success', message: 'Старый ответ.', data: {} } );
+		} );
+
+		// Request 2 is still running: its button stays busy and disabled, and nothing from request 1 shows.
+		expect( screen.getByRole( 'button', { name: 'Другая проверка' } ) ).toBeDisabled();
+		expect( document.querySelector( '.woodev-setup__action-result' ) ).not.toBeInTheDocument();
+
+		await act( async () => {
+			second.resolve( { status: 'success', message: 'Новый ответ.', data: {} } );
+		} );
+
+		expect( screen.getByRole( 'status' ) ).toHaveTextContent( 'Новый ответ.' );
+		expect( screen.getByRole( 'button', { name: 'Другая проверка' } ) ).not.toBeDisabled();
+	} );
+
+	test( 'control: an answer for the step still on screen is shown', async () => {
+		window.woodevSetupWizard = twoStepsWithActions();
+		const pending = deferred();
+		runAction.mockImplementation( () => pending.promise );
+		render( createElement( App ) );
+		await openConnection();
+
+		await click( screen.getByRole( 'button', { name: 'Медленная проверка' } ) );
+		await act( async () => {
+			pending.resolve( { status: 'success', message: 'Ключ подходит.', data: {} } );
+		} );
+
+		expect( screen.getByRole( 'status' ) ).toHaveTextContent( 'Ключ подходит.' );
 	} );
 } );

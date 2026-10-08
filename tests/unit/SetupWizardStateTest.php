@@ -22,6 +22,15 @@ class State_Test_Wizard extends Setup_Wizard {
 }
 
 /**
+ * Wizard with an injected plugin, for the notice.
+ */
+class Notice_Test_Wizard extends Setup_Wizard {
+	public function __construct( $plugin ) { $this->plugin = $plugin; }
+	protected function register_steps(): void {}
+	public function get_id(): string { return 'acme'; }
+}
+
+/**
  * Tests for Setup_Wizard completion-state tracking.
  *
  * @covers \Woodev\Framework\Setup\Setup_Wizard
@@ -111,5 +120,38 @@ class SetupWizardStateTest extends TestCase {
 		$wizard = new State_Test_Wizard();
 
 		$this->assertSame( [], $wizard->add_action_link( [] ) );
+	}
+
+	private function render_notice_for_state( string $state ): string {
+		Functions\when( 'get_option' )->justReturn( $state );
+		Functions\when( 'current_user_can' )->justReturn( true );
+		Functions\when( '__' )->returnArg( 1 );
+		Functions\when( 'esc_html' )->returnArg( 1 );
+		Functions\when( 'esc_html__' )->returnArg( 1 );
+		Functions\when( 'esc_url' )->returnArg( 1 );
+		Functions\when( 'esc_url_raw' )->returnArg( 1 );
+		Functions\when( 'admin_url' )->returnArg( 1 );
+
+		$plugin = \Mockery::mock( '\Woodev_Plugin' );
+		$plugin->shouldReceive( 'get_plugin_name' )->andReturn( 'Acme' );
+
+		ob_start();
+		( new Notice_Test_Wizard( $plugin ) )->maybe_render_notice();
+
+		return (string) ob_get_clean();
+	}
+
+	public function test_a_skipped_wizard_keeps_its_admin_notice(): void {
+		$html = $this->render_notice_for_state( 'skipped' );
+
+		$this->assertStringContainsString( 'woodev-acme-setup', $html );
+	}
+
+	public function test_a_fresh_wizard_shows_its_admin_notice(): void {
+		$this->assertStringContainsString( 'woodev-acme-setup', $this->render_notice_for_state( '' ) );
+	}
+
+	public function test_a_completed_wizard_has_no_admin_notice(): void {
+		$this->assertSame( '', $this->render_notice_for_state( 'completed' ) );
 	}
 }

@@ -615,6 +615,9 @@ abstract class Setup_Wizard {
 				'fields'      => $fields,
 				'content'     => is_string( $content ) ? $content : '',
 				'skippable'   => $step->is_skippable(),
+				// Whether Continue must ask the server (validation callback) before advancing.
+				// Settings steps always do (they persist); a content step only when it validates.
+				'validates'   => null !== $step->get_validation_callback(),
 				'actions'     => array_values(
 					array_map(
 						static function ( Step_Action $action ): array {
@@ -634,6 +637,7 @@ abstract class Setup_Wizard {
 			'fields'      => [],
 			'content'     => '',
 			'skippable'   => false,
+			'validates'   => false,
 			'actions'     => [],
 		];
 

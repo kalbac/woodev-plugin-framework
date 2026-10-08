@@ -128,6 +128,7 @@ class SetupWizardRestControllerTest extends TestCase {
 	private function make_rejecting_controller( string $failing_id, string $message ): \Woodev_REST_API_Setup {
 		$handler = Mockery::mock( '\Woodev_Abstract_Settings' );
 		$handler->shouldReceive( 'filter_visible_values' )->andReturnUsing( static fn( $values ) => $values );
+		$handler->shouldReceive( 'get_value' )->andReturn( '' ); // the stored value of a field the request leaves out.
 		$handler->shouldReceive( 'update_value' )->andReturnUsing(
 			static function ( $id ) use ( $failing_id, $message ): void {
 				if ( $id === $failing_id ) {

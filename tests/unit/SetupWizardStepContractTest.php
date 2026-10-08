@@ -20,6 +20,8 @@ require_once dirname( __DIR__, 2 ) . '/woodev/setup/class-step-action.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/setup/class-action-outcome.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/setup/class-callback-failure.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/setup/class-setup-wizard.php';
+require_once __DIR__ . '/Shipping/Rest_Api/wp-rest-controller-stub.php'; // WP_REST_Server constants.
+require_once dirname( __DIR__, 2 ) . '/woodev/rest-api/class-rest-v1-registrar.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/rest-api/controllers/class-rest-api-setup.php';
 
 /**
@@ -197,11 +199,13 @@ class SetupWizardStepContractTest extends TestCase {
 	/**
 	 * @param Step     $step    the step under test.
 	 * @param Mockery\MockInterface|null $handler optional settings handler.
+	 * @param array<string,mixed>        $stored  stored value per setting id (default '').
 	 * @return \Woodev_REST_API_Setup
 	 */
-	private function controller_for( Step $step, $handler = null ): \Woodev_REST_API_Setup {
+	private function controller_for( Step $step, $handler = null, array $stored = [] ): \Woodev_REST_API_Setup {
 		$handler = $handler ?? Mockery::mock( '\Woodev_Abstract_Settings' );
 		$handler->shouldReceive( 'filter_visible_values' )->andReturnUsing( static fn( $values ) => $values );
+		$handler->shouldReceive( 'get_value' )->andReturnUsing( static fn( $id ) => $stored[ $id ] ?? '' );
 
 		$plugin = Mockery::mock( '\Woodev_Plugin' );
 		$plugin->shouldReceive( 'get_settings_handler' )->andReturn( $handler );
@@ -315,6 +319,239 @@ class SetupWizardStepContractTest extends TestCase {
 			'[woodev] setup wizard validation failed for step "connection": bad call, api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK,
 			$captured
 		);
+	}
+
+	// -----------------------------------------------------------------------
+	// REST — the validator and the actions work on the EFFECTIVE values (critic 109a #1)
+	// -----------------------------------------------------------------------
+
+	public function test_an_untouched_stored_value_reaches_the_validator_and_is_not_rewritten(): void {
+		Functions\when( 'rest_ensure_response' )->returnArg( 1 );
+
+		$seen = null;
+		$step = Step::settings( 'connection', 'C', [ 'api_key' ] )->set_validation_callback(
+			static function ( array $values ) use ( &$seen ) {
+				$seen = $values;
+				return empty( $values['api_key'] ) ? [ 'api_key' => 'Укажите ключ.' ] : null;
+			}
+		);
+		$handler = Mockery::mock( '\Woodev_Abstract_Settings' );
+		$handler->shouldReceive( 'update_value' )->never(); // dirty-only persistence: nothing was edited.
+
+		// The merchant reopened the step, sees the stored key and presses Continue: nothing is sent.
+		$result = $this->controller_for( $step, $handler, [ 'api_key' => 'STORED_KEY' ] )->save_step( $this->request( 'connection', [] ) );
+
+		$this->assertSame( [ 'api_key' => 'STORED_KEY' ], $seen );
+		$this->assertSame( [ 'saved' => true, 'step' => 'connection' ], $result );
+	}
+
+	public function test_a_cross_field_validator_sees_the_edited_and_the_stored_field_and_only_the_edit_is_persisted(): void {
+		Functions\when( 'rest_ensure_response' )->returnArg( 1 );
+
+		$seen = null;
+		$step = Step::settings( 'connection', 'C', [ 'api_key', 'token' ] )->set_validation_callback(
+			static function ( array $values ) use ( &$seen ) {
+				$seen = $values;
+				return null;
+			}
+		);
+		$handler = Mockery::mock( '\Woodev_Abstract_Settings' );
+		$handler->shouldReceive( 'update_value' )->once()->with( 'api_key', 'NEW' );
+
+		$this->controller_for( $step, $handler, [ 'api_key' => 'OLD', 'token' => 'STORED_TOKEN' ] )
+			->save_step( $this->request( 'connection', [ 'api_key' => 'NEW' ] ) );
+
+		$this->assertSame( [ 'api_key' => 'NEW', 'token' => 'STORED_TOKEN' ], $seen );
+	}
+
+	public function test_visibility_is_resolved_on_the_merged_map_and_hidden_fields_leave_the_effective_values(): void {
+		Functions\when( 'rest_ensure_response' )->returnArg( 1 );
+
+		$filtered_input = null;
+		$seen           = null;
+		$step           = Step::settings( 'connection', 'C', [ 'mode', 'secret_extra' ] )->set_validation_callback(
+			static function ( array $values ) use ( &$seen ) {
+				$seen = $values;
+				return null;
+			}
+		);
+
+		$handler = Mockery::mock( '\Woodev_Abstract_Settings' );
+		$handler->shouldReceive( 'get_value' )->andReturnUsing( static fn( $id ) => [ 'mode' => 'simple', 'secret_extra' => 'X' ][ $id ] );
+		$handler->shouldReceive( 'filter_visible_values' )->andReturnUsing(
+			static function ( array $values ) use ( &$filtered_input ) {
+				$filtered_input = $values;
+				unset( $values['secret_extra'] ); // show_if: only in `advanced` mode.
+				return $values;
+			}
+		);
+		$handler->shouldReceive( 'update_value' )->never();
+
+		$plugin = Mockery::mock( '\Woodev_Plugin' );
+		$plugin->shouldReceive( 'get_settings_handler' )->andReturn( $handler );
+		$wizard = Mockery::mock( '\Woodev\Framework\Setup\Setup_Wizard' );
+		$wizard->shouldReceive( 'get_steps' )->andReturn( [ 'connection' => $step ] );
+		$wizard->shouldReceive( 'get_plugin' )->andReturn( $plugin );
+
+		( new \Woodev_REST_API_Setup( $wizard ) )->save_step( $this->request( 'connection', [] ) );
+
+		$this->assertSame( [ 'mode' => 'simple', 'secret_extra' => 'X' ], $filtered_input ); // visibility sees the stored controller.
+		$this->assertSame( [ 'mode' => 'simple' ], $seen );
+	}
+
+	public function test_a_declared_id_the_handler_does_not_know_is_skipped_not_fatal(): void {
+		Functions\when( 'rest_ensure_response' )->returnArg( 1 );
+
+		$seen = null;
+		$step = Step::settings( 'connection', 'C', [ 'api_key', 'ghost' ] )->set_validation_callback(
+			static function ( array $values ) use ( &$seen ) {
+				$seen = $values;
+				return null;
+			}
+		);
+
+		$handler = Mockery::mock( '\Woodev_Abstract_Settings' );
+		$handler->shouldReceive( 'get_value' )->andReturnUsing(
+			static function ( $id ) {
+				if ( 'ghost' === $id ) {
+					throw new \Woodev_Plugin_Exception( 'Setting ghost does not exist' );
+				}
+				return 'K';
+			}
+		);
+		$handler->shouldReceive( 'filter_visible_values' )->andReturnUsing( static fn( $values ) => $values );
+
+		$plugin = Mockery::mock( '\Woodev_Plugin' );
+		$plugin->shouldReceive( 'get_settings_handler' )->andReturn( $handler );
+		$wizard = Mockery::mock( '\Woodev\Framework\Setup\Setup_Wizard' );
+		$wizard->shouldReceive( 'get_steps' )->andReturn( [ 'connection' => $step ] );
+		$wizard->shouldReceive( 'get_plugin' )->andReturn( $plugin );
+
+		( new \Woodev_REST_API_Setup( $wizard ) )->save_step( $this->request( 'connection', [] ) );
+
+		$this->assertSame( [ 'api_key' => 'K' ], $seen );
+	}
+
+	public function test_without_a_settings_handler_the_validator_gets_the_declared_submitted_fields(): void {
+		Functions\when( 'rest_ensure_response' )->returnArg( 1 );
+
+		$seen = null;
+		$step = Step::settings( 'connection', 'C', [ 'api_key' ] )->set_validation_callback(
+			static function ( array $values ) use ( &$seen ) {
+				$seen = $values;
+				return null;
+			}
+		);
+
+		$plugin = Mockery::mock( '\Woodev_Plugin' );
+		$plugin->shouldReceive( 'get_settings_handler' )->andReturn( null );
+		$wizard = Mockery::mock( '\Woodev\Framework\Setup\Setup_Wizard' );
+		$wizard->shouldReceive( 'get_steps' )->andReturn( [ 'connection' => $step ] );
+		$wizard->shouldReceive( 'get_plugin' )->andReturn( $plugin );
+
+		( new \Woodev_REST_API_Setup( $wizard ) )->save_step( $this->request( 'connection', [ 'api_key' => 'K', 'evil' => 'X' ] ) );
+
+		$this->assertSame( [ 'api_key' => 'K' ], $seen );
+	}
+
+	public function test_an_action_receives_the_edits_over_the_stored_values(): void {
+		Functions\when( 'rest_ensure_response' )->returnArg( 1 );
+
+		$seen = null;
+		$step = Step::settings( 'connection', 'C', [ 'api_key', 'token' ] )->add_action(
+			Step_Action::create(
+				'act',
+				'Do',
+				static function ( array $values ) use ( &$seen ): Action_Outcome {
+					$seen = $values;
+					return Action_Outcome::success();
+				}
+			)
+		);
+
+		// Only `token` was edited; the stored key is what the check must run on.
+		$this->controller_for( $step, null, [ 'api_key' => 'STORED_KEY' ] )
+			->run_action( $this->request( 'connection', [ 'token' => 'T2' ], [ 'action_id' => 'act' ] ) );
+
+		$this->assertSame( [ 'api_key' => 'STORED_KEY', 'token' => 'T2' ], $seen );
+	}
+
+	// -----------------------------------------------------------------------
+	// Content steps validate too (critic 109a #2)
+	// -----------------------------------------------------------------------
+
+	public function test_a_content_step_validator_can_refuse_the_save_with_a_step_level_error(): void {
+		$step = Step::content( 'migrate', 'M', '<p>x</p>' )
+			->set_skippable( false )
+			->set_validation_callback( static fn( array $values ) => [ '_step' => 'Сначала выполните перенос.' ] );
+
+		$result = $this->controller_for( $step )->save_step( $this->request( 'migrate', [] ) );
+
+		$this->assertInstanceOf( 'WP_Error', $result );
+		$this->assertSame( 'woodev_setup_invalid', $result->get_error_code() );
+		$this->assertSame( [ '_step' => 'Сначала выполните перенос.' ], $result->get_error_data()['errors'] );
+	}
+
+	public function test_a_content_step_validator_that_passes_lets_the_save_succeed(): void {
+		Functions\when( 'rest_ensure_response' )->returnArg( 1 );
+
+		$step   = Step::content( 'migrate', 'M', '<p>x</p>' )->set_validation_callback( static fn() => null );
+		$result = $this->controller_for( $step )->save_step( $this->request( 'migrate', [] ) );
+
+		$this->assertSame( [ 'saved' => true, 'step' => 'migrate' ], $result );
+	}
+
+	public function test_the_bootstrap_tells_the_client_which_steps_validate(): void {
+		$data  = $this->bootstrap_for(
+			[
+				Step::content( 'welcome', 'W', '<p>hi</p>' ),
+				Step::content( 'migrate', 'M', '<p>x</p>' )->set_validation_callback( static fn() => null ),
+				Step::settings( 'connection', 'C', [ 'api_key' ] ),
+			]
+		);
+		$by_id = array_column( $data['steps'], null, 'id' );
+
+		$this->assertFalse( $by_id['welcome']['validates'] );
+		$this->assertTrue( $by_id['migrate']['validates'] );
+		$this->assertFalse( $by_id['connection']['validates'] ); // settings steps always hit the server; the flag is for content steps.
+		$this->assertFalse( $by_id['finish']['validates'] );
+	}
+
+	// -----------------------------------------------------------------------
+	// Route registration
+	// -----------------------------------------------------------------------
+
+	public function test_the_routes_are_registered_with_the_capability_callback_and_the_action_route_is_new(): void {
+		$routes = [];
+		Functions\when( 'register_rest_route' )->alias(
+			static function ( $namespace, $route, $args ) use ( &$routes ): void {
+				$routes[ $route ] = [ $namespace, $args ];
+			}
+		);
+
+		$wizard = Mockery::mock( '\Woodev\Framework\Setup\Setup_Wizard' );
+		$wizard->shouldReceive( 'get_id' )->andReturn( 'acme' );
+
+		$controller = new \Woodev_REST_API_Setup( $wizard );
+		$controller->register_routes();
+
+		$this->assertSame(
+			[
+				'/acme/setup/steps/(?P<step_id>[\w-]+)',
+				'/acme/setup/steps/(?P<step_id>[\w-]+)/actions/(?P<action_id>[\w-]+)',
+				'/acme/setup/complete',
+			],
+			array_keys( $routes )
+		);
+
+		foreach ( $routes as [ $namespace, $args ] ) {
+			$this->assertSame( \Woodev_REST_V1_Registrar::ROUTE_NAMESPACE, $namespace );
+			$this->assertSame( [ $controller, 'permissions_check' ], $args['permission_callback'] );
+		}
+
+		$action = $routes['/acme/setup/steps/(?P<step_id>[\w-]+)/actions/(?P<action_id>[\w-]+)'][1];
+		$this->assertSame( [ $controller, 'run_action' ], $action['callback'] );
+		$this->assertSame( \WP_REST_Server::CREATABLE, $action['methods'] );
 	}
 
 	// -----------------------------------------------------------------------
