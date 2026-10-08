@@ -446,6 +446,8 @@ describe( 'chain assembly from present fields only', () => {
 		expect( attachCalls.map( ( c ) => c.el.id ).sort() ).toEqual(
 			[ 'billing_address_1', 'billing_city', 'billing_state' ].sort()
 		);
+		expect( callFor( 'billing_address_1' ).opts.autoSelectFirstOnBlur ).toBe( false );
+		expect( callFor( 'billing_city' ).opts.autoSelectFirstOnBlur ).toBe( true );
 	} );
 
 	it( 'attaches settlement+address only when there is no region field', () => {
@@ -2395,6 +2397,24 @@ describe( 'dependent clearing (downward only, remembered-parent gate)', () => {
 		document.getElementById( 'billing_address_1' ).dispatchEvent( new Event( 'change', { bubbles: true } ) );
 
 		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Москва' ); // untouched: not a descendant
+		expect( document.getElementById( 'billing_postcode' ).value ).toBe( '' );
+	} );
+
+	it( 'keeps a postcode edited before the street, then clears it on a later street edit', () => {
+		boot( { region: true, settlement: true, address: true } );
+		const postcode = document.getElementById( 'billing_postcode' );
+		postcode.value = '101000';
+		postcode.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+
+		const address = document.getElementById( 'billing_address_1' );
+		address.value = 'ул. Тверская, 1';
+		address.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		expect( document.getElementById( 'billing_postcode' ).value ).toBe( '101000' );
+
+		address.value = 'Новый Арбат 5';
+		address.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
 		expect( document.getElementById( 'billing_postcode' ).value ).toBe( '' );
 	} );
 
