@@ -362,6 +362,73 @@ describe( 'PickupPicker — shown for the framework’s pickup rates only', () =
 	} );
 } );
 
+describe( 'PickupPicker — the first mouse click right after a rate is chosen (#1171)', () => {
+	/*
+	 * Measured on the rig (CDEK acceptance, block checkout): within ~1.5 s of choosing a rate core
+	 * still holds a debounced customer-data push that goes out when the rate radio loses focus. The
+	 * shipping step then swaps its rate list for a skeleton, the button slides up 211 px from under
+	 * the pointer between `mousedown` and `mouseup`, and the browser delivers the click to the
+	 * common ancestor — the button never sees it.
+	 *
+	 * jsdom has no layout or default actions, so the browser is modelled: a `mousedown` that was not
+	 * default-prevented moves focus (blurring the radio, which shifts the layout); a shifted press
+	 * ends — `mouseup`, `click` — on the form that holds both, a steady one on the button.
+	 */
+	const press = ( button: HTMLElement, radio: HTMLElement, form: HTMLElement ): void => {
+		const takesFocus = fireEvent.mouseDown( button );
+		const shifted = takesFocus && document.activeElement === radio;
+
+		if ( takesFocus ) {
+			button.focus();
+		}
+
+		const target = shifted ? form : button;
+
+		fireEvent.mouseUp( target );
+		fireEvent.click( target );
+	};
+
+	const withRateRadio = () => {
+		const form = document.createElement( 'form' );
+		const radio = document.createElement( 'input' );
+
+		radio.type = 'radio';
+		form.appendChild( radio );
+		document.body.appendChild( form );
+
+		const { container } = renderPicker();
+
+		form.appendChild( container );
+		radio.focus();
+
+		return { form, radio, cleanup: () => form.remove() };
+	};
+
+	it( 'opens the dialog on the one click, without taking focus from the rate radio', () => {
+		const session = fakeSession();
+		const { form, radio, cleanup } = withRateRadio();
+
+		press( trigger() as HTMLElement, radio, form );
+
+		expect( session.open ).toHaveBeenCalledTimes( 1 );
+		expect( document.activeElement ).toBe( radio );
+
+		cleanup();
+	} );
+
+	it( 'leaves the other mouse buttons and the keyboard alone', () => {
+		const session = fakeSession();
+
+		renderPicker();
+
+		expect( fireEvent.mouseDown( trigger() as HTMLElement, { button: 2 } ) ).toBe( true );
+
+		fireEvent.click( trigger() as HTMLElement, { detail: 0 } );
+
+		expect( session.open ).toHaveBeenCalledTimes( 1 );
+	} );
+} );
+
 describe( 'PickupPicker — confirmation through the Store API', () => {
 	it( 'sends the C-2a command and renders the point from the returned snapshot', async () => {
 		const session = fakeSession();

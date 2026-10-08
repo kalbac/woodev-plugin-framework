@@ -22,6 +22,7 @@
  * @package woodev-plugin-framework
  */
 
+import type { MouseEvent } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from '@wordpress/element';
 import { useSelect } from '@wordpress/data';
 import { createHost } from './pickup-host';
@@ -97,6 +98,22 @@ function applyAccent( button: HTMLElement | null, config: PickupConfig ): void {
 		if ( typeof colour === 'string' && SAFE_COLOR.test( colour ) ) {
 			button.style.setProperty( property, colour );
 		}
+	}
+}
+
+/**
+ * A mouse press on the button must not take focus from where it is (#1171).
+ *
+ * Right after a rate is chosen core still holds a debounced customer-data push, and it goes out the
+ * moment the rate radio loses focus. The shipping step then swaps its rate list for a skeleton, the
+ * whole block above the button collapses, and the button slides up from under the pointer between
+ * `mousedown` and `mouseup` — the browser then delivers the click to their common ancestor, not to
+ * the button: the shopper's first click opens nothing. Keeping focus where it is lets the click
+ * land; keyboard activation is untouched and the dialog moves focus itself once it opens.
+ */
+function keepFocusInPlace( event: MouseEvent< HTMLButtonElement > ): void {
+	if ( event.button === 0 ) {
+		event.preventDefault();
 	}
 }
 
@@ -346,6 +363,7 @@ export function PickupPicker( { data, checkoutExtensionData }: PickupPickerProps
 				aria-disabled={ blocked ? true : undefined }
 				aria-describedby={ describedBy }
 				onClick={ open }
+				onMouseDown={ keepFocusInPlace }
 			>
 				{ confirmed ? i18n.triggerChange : i18n.trigger }
 			</button>
