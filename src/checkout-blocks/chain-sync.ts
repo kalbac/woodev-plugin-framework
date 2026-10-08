@@ -66,7 +66,7 @@ interface Job {
 	generation: number;
 	intent: Intent;
 	settle: Settle;
-	/** The select was accepted and its caller applied it to the native address. */
+	/** The select's native address was written before or when it settled. */
 	applied: boolean;
 }
 
@@ -93,12 +93,15 @@ export class ChainSync {
 		this.effects = effects;
 	}
 
-	/** Queues `intent` as the shopper's latest word and returns its generation. */
-	public request( intent: Intent, settle: Settle ): number {
+	/**
+	 * Queues `intent` as the shopper's latest word and returns its generation.
+	 * `appliedImmediately` tells abandonment that a select's native address is already in the cart store.
+	 */
+	public request( intent: Intent, settle: Settle, appliedImmediately = false ): number {
 		const generation = ++this.generation;
 
 		this.waiting?.settle( { status: 'superseded' } );
-		this.waiting = { generation, intent, settle, applied: false };
+		this.waiting = { generation, intent, settle, applied: intent.kind === 'select' && appliedImmediately };
 
 		if ( ! this.draining ) {
 			this.draining = true;

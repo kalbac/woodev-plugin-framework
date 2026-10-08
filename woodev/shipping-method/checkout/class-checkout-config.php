@@ -75,6 +75,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 	 *     // list" opt-in — meaningful only while 'mode.settlement' is
 	 *     // 'ajax-select2'; see Location_Provider_Registry::SETTING_ALLOW_CUSTOM_SETTLEMENT.
 	 *     'allowCustomSettlement' => bool,
+	 *     // s160: clear the street + postcode of a section when its settlement changes;
+	 *     // see Location_Provider_Registry::SETTING_CLEAR_ADDRESS_ON_CHANGE.
+	 *     'clearAddressOnChange' => bool,
 	 *     'levels'    => [ country_code => [ 'region' => bool, 'settlement' => bool, 'address' => bool ] ],
 	 *     // Issue #530: the shop's ranked popular-settlements list per country (#488's
 	 *     // customer-facing half) -- same wire shape as a /suggest or /list entry,
@@ -1267,6 +1270,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 				// settlement the active provider does not carry — see
 				// Location_Provider_Registry::SETTING_ALLOW_CUSTOM_SETTLEMENT.
 				'allowCustomSettlement' => $service->is_custom_settlement_allowed(),
+				// s160: the merchant option «clear the street and postcode when the
+				// customer picks a different settlement» — see
+				// Location_Provider_Registry::SETTING_CLEAR_ADDRESS_ON_CHANGE. Read by
+				// both checkouts (classic location-cascade.js, blocks locality chooser).
+				'clearAddressOnChange'  => $service->is_clear_address_on_change_enabled(),
 				// Issue #1069: with the region field removed the customer cannot change the
 				// region, so the client must not let one derived from the default (or from a
 				// pick) scope the settlement search / popular list.

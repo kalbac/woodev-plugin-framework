@@ -10,12 +10,15 @@ import { readFeePaymentsNamespace, watchPaymentMethod } from './payment-recalc';
 import { registerLocalityBlock, registerPickupBlock } from './register';
 import { captureWcRuntime } from './wc-runtime';
 import { resolveCartFromServer } from './wc-stores';
+import { watchBlockAddressSuggestions } from './address-suggestions';
+import '../../woodev/shipping-method/assets/js/frontend/location-typeahead.js';
 
 // First: every later read of a WooCommerce global answers from this capture.
 captureWcRuntime();
 
 const locality = registerLocalityBlock();
 const pickup = registerPickupBlock();
+watchBlockAddressSuggestions();
 
 // Both blocks render from the cart store; a checkout neither is on is left to core as it is (#1111).
 if ( locality || pickup ) {

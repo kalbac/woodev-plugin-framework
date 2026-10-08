@@ -332,6 +332,21 @@ final class FeePaymentsTest extends TestCase {
 		$this->assertFalse( Fee_Payments::is_used() );
 	}
 
+	/** @return void */
+	public function test_conditional_insurance_activates_the_existing_classic_payment_trigger(): void {
+		Functions\when( 'is_checkout' )->justReturn( true );
+		Functions\when( 'plugins_url' )->justReturn( 'https://example.test/fee-payments-classic.js' );
+		Functions\expect( 'wp_enqueue_script' )->once()->with(
+			'woodev-fee-payments-classic',
+			'https://example.test/fee-payments-classic.js',
+			[ 'jquery', 'wc-checkout' ],
+			\Mockery::type( 'string' ),
+			true
+		);
+		Fee_Payments::on_option_added( 'woocommerce_cdek_7_settings', [ 'include_insurance' => 'delivery_payment' ] );
+		Fee_Payments::enqueue_classic_script();
+	}
+
 	/** @return array<string, array{0: string}> */
 	public function foreign_options(): array {
 		return [
@@ -385,6 +400,26 @@ final class FeePaymentsTest extends TestCase {
 			[ [ 'contents_cost' => 100, 'chosen_payment_method' => 'cod' ], [ 'chosen_payment_method' => 'cod' ] ],
 			Fee_Payments::add_chosen_payment_to_packages( [ [ 'contents_cost' => 100 ], [] ] )
 		);
+	}
+
+	/** @return void */
+	public function test_conditional_insurance_reuses_the_payment_registry_and_package_hash(): void {
+		$this->session['chosen_payment_method'] = 'cod';
+		Fee_Payments::on_option_added( 'woocommerce_cdek_7_settings', [ 'include_insurance' => 'delivery_payment' ] );
+		$this->assertTrue( Fee_Payments::is_used() );
+		$cod = Fee_Payments::add_chosen_payment_to_packages( [ [ 'contents_cost' => 100 ] ] );
+		$this->assertSame( 'cod', $cod[0]['chosen_payment_method'] );
+		$this->session['chosen_payment_method'] = 'bacs';
+		$prepaid = Fee_Payments::add_chosen_payment_to_packages( [ [ 'contents_cost' => 100 ] ] );
+		$this->assertNotSame( json_encode( $cod ), json_encode( $prepaid ), 'WooCommerce hashes the package including the chosen gateway' );
+
+		Fee_Payments::on_option_updated( 'woocommerce_cdek_7_settings', [], [ 'include_insurance' => 'always' ] );
+		$this->assertFalse( Fee_Payments::is_used() );
+		Fee_Payments::on_option_updated( 'woocommerce_cdek_7_settings', [], [ 'include_insurance' => 'delivery_payment', 'fee_payments' => [ 'cod' ] ] );
+		Fee_Payments::on_option_updated( 'woocommerce_cdek_7_settings', [], [ 'include_insurance' => 'none', 'fee_payments' => [ 'cod' ] ] );
+		$this->assertTrue( Fee_Payments::is_used(), 'disabling insurance must retain an existing fee dependency' );
+		Fee_Payments::on_option_deleted( 'woocommerce_cdek_7_settings' );
+		$this->assertFalse( Fee_Payments::is_used() );
 	}
 
 	/** @return void */

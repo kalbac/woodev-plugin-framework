@@ -5,6 +5,11 @@
  * a neutral border — the Blocks checkout is themed by the store, not by this framework.
  */
 
+// The typeahead's own stylesheet, shared with the classic checkout (s160, block address suggestions).
+// Pulled in HERE, without the extension so Sass inlines it: only `style.scss` lands in
+// `style-index.css`, the one stylesheet the integration registers.
+@import "../../woodev/shipping-method/assets/css/frontend/location";
+
 .woodev-locality-chooser {
 	position: relative;
 	margin: 0 0 1.5em;

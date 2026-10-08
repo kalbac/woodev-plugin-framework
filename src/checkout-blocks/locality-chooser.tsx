@@ -24,7 +24,8 @@ import { useSelect } from '@wordpress/data';
 import type { KeyboardEvent } from 'react';
 import { resetSharedChainSync, sharedChainSync } from './chain-sync';
 import type { ChainSync } from './chain-sync';
-import { hasLocalityMoved, isSelectionStale, judgeSavedRecord } from './invalidation';
+import { publishSettlementScope } from './address-scope';
+import { hasLocalityMoved, isSelectionStale, judgeSavedRecord, shouldClearAddress } from './invalidation';
 import { recordCity, recordCityComponent, resolveNativeAddress } from './mapping';
 import type { CountryStates } from './mapping';
 import { forgetSelection, selectRecord, suggest, SuggestUnavailableError } from './rest';
@@ -206,6 +207,7 @@ function ActiveLocalityChooser( {
 		held.current = next;
 		remembered = next;
 		undecided.current = false;
+		publishSettlementScope( next?.key ?? null );
 
 		if ( mounted.current ) {
 			setSelection( next );
@@ -228,6 +230,7 @@ function ActiveLocalityChooser( {
 		// An undecided locality stays unremembered: a remount judges the server's record again.
 		if ( ! undecided.current ) {
 			remembered = held.current;
+			publishSettlementScope( held.current?.key ?? null );
 		}
 
 		// The server holds a locality the native address does not name: clear that provenance.
@@ -400,12 +403,20 @@ function ActiveLocalityChooser( {
 						regionFieldRemoved: config.regionFieldRemoved,
 					} );
 
+					const cityType = recordCityComponent( record ).type;
+					// Judged against the selection this pick REPLACES, so before it is committed.
+					const clearAddress = shouldClearAddress( config, held.current, current, {
+						key: suggestion.key,
+						city: patch.city,
+						cityType,
+					} );
+
 					// The selection is recorded BEFORE the address changes, so the write below is never
 					// mistaken for a hand edit.
 					commit( {
 						key: suggestion.key,
 						city: patch.city,
-						cityType: recordCityComponent( record ).type,
+						cityType,
 						country: current.country.toUpperCase(),
 						state: patch.state ? patch.state : null,
 					} );
@@ -415,7 +426,7 @@ function ActiveLocalityChooser( {
 						setMessage( i18n.regionNotSet ?? '' );
 					}
 
-					writeDeliveryLocality( patch.city, patch.state, billingOnly );
+					writeDeliveryLocality( patch.city, patch.state, billingOnly, clearAddress );
 
 					// Always recalculated before the checkout is let go: core pushes a changed address
 					// only after its debounce (the old rates would stay orderable meanwhile), and an

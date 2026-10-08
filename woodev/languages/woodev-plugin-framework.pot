@@ -2848,6 +2848,14 @@ msgstr ""
 msgid "Показывать подсказки при вводе улицы и дома в форме оформления заказа. Работает только пока подключённый провайдер умеет отдавать адреса — если нет, поле становится недоступным, и причина написана под ним."
 msgstr ""
 
+#: shipping-method/location/class-location-settings.php:425
+msgid "Очищать адрес"
+msgstr ""
+
+#: shipping-method/location/class-location-settings.php:433
+msgid "Когда покупатель выбирает другой населённый пункт, поля «Адрес» и «Почтовый индекс» очищаются, чтобы улица из прежнего города не осталась в заказе. Выключите, если хотите сохранять введённый адрес."
+msgstr ""
+
 #: shipping-method/location/class-location-settings.php:429
 msgid "Локация по умолчанию"
 msgstr ""
@@ -4722,6 +4730,22 @@ msgstr ""
 #: assets/build/shipping-orders-page/index.js:14
 #: assets/build/shipping-orders-page/index.js:16
 msgid "Нет"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php
+msgid "Учитывать страховку"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php
+msgid "Всегда"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php
+msgid "Только при оплате при получении"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php
+msgid "Включать страховку в стоимость доставки. Объявленная стоимость — стоимость товаров в этой посылке после скидок, без налогов и стоимости доставки."
 msgstr ""
 
 #: assets/build/shipping-orders-page/index.js:9

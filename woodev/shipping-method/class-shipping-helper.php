@@ -18,6 +18,39 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Helper' ) ) :
 	class Shipping_Helper {
 
 		/**
+		 * Package goods value after discounts, excluding taxes, shipping and fees.
+		 *
+		 * Uses quantity-inclusive line_total values, shared by cart and order adapters. An aggregate
+		 * package without contents may supply contents_cost. Negative or non-finite amounts are zero.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array $package WooCommerce package or an order adapter's equivalent.
+		 * @return float Goods value in store currency.
+		 */
+		public static function get_package_declared_value( array $package ): float {
+			$values = [];
+
+			if ( isset( $package['contents'] ) && is_array( $package['contents'] ) ) {
+				foreach ( $package['contents'] as $line ) {
+					$values[] = is_array( $line ) ? ( $line['line_total'] ?? 0 ) : 0;
+				}
+			} else {
+				$values[] = $package['contents_cost'] ?? 0;
+			}
+
+			$total = 0.0;
+
+			foreach ( $values as $value ) {
+				if ( is_numeric( $value ) && is_finite( (float) $value ) ) {
+					$total += max( 0.0, (float) $value );
+				}
+			}
+
+			return is_finite( $total ) ? $total : 0.0;
+		}
+
+		/**
 		 * Converts weight to grams.
 		 *
 		 * @since 1.5.0
