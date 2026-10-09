@@ -115,15 +115,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		private static array $pickup_declarations_reconciled = [];
 
 		/**
-		 * Registry of native WC field ids claimed by a plugin_id.
+		 * Registry of native WC field ids claimed by each plugin_id.
 		 *
 		 * Used by {@see guard_native_field_conflicts()} to detect multi-plugin
-		 * conflicts at registration time. Keyed by field id, value is the
-		 * plugin_id string of the first handler that registered that field.
+		 * conflicts at registration time. Keyed by field id, then by plugin_id; the value
+		 * is that plugin's claim signature for the id (see {@see self::native_claim_signature()}).
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Holds every plugin's claim, not only the last: a third plugin
+		 *              must be checked against ALL earlier claims.
 		 *
-		 * @var array<string, string>
+		 * @var array<string, array<string, string>>
 		 */
 		private static array $native_field_registry = [];
 
@@ -1660,38 +1662,80 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		}
 
 		/**
-		 * Warns when two handlers try to enhance the same native WC field.
+		 * Warns when two handlers try to enhance the same native WC field in incompatible ways.
 		 *
-		 * Maintains a static registry of native-field-id → plugin_id claims.
-		 * If a field id that belongs to the WooCommerce billing/shipping address
-		 * namespace (see {@see is_native_wc_field()}) is already registered by a
-		 * different handler, fires `_doing_it_wrong` so the developer sees the conflict
-		 * immediately. Last registration wins — the warning is advisory only.
+		 * Maintains a static registry of native-field-id → plugin_id → claim signature
+		 * (see {@see self::native_claim_signature()}). If a field id that belongs to the
+		 * WooCommerce billing/shipping address namespace (see {@see is_native_wc_field()})
+		 * is already claimed by a different handler with a DIFFERENT signature — or by a
+		 * second DIRECT declaration — fires `_doing_it_wrong` so the developer sees the
+		 * conflict immediately. Advisory only: the last registration wins.
+		 *
+		 * Several carrier plugins declaring the SAME Location-Provider level
+		 * ({@see Field::source_location()}) for a native id are NOT a conflict: the field is
+		 * owned by the store-level location layer (one provider chain, one cascade), not by
+		 * any plugin, so N carriers on one site each asking for `city` is the supported normal
+		 * case. Only a genuinely contested id (two direct declarations, a direct declaration
+		 * against a location field, or two different location levels on one id) is reported.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Location-Provider claims of the same level no longer conflict.
 		 *
 		 * @return void
 		 */
 		protected function guard_native_field_conflicts(): void {
 
-			foreach ( array_keys( $this->effective_fields() ) as $id ) {
+			$plugin_id = $this->plugin_id();
+
+			foreach ( $this->effective_fields() as $id => $field ) {
 				if ( ! $this->is_native_wc_field( $id ) ) {
 					continue;
 				}
 
-				if ( isset( self::$native_field_registry[ $id ] ) && self::$native_field_registry[ $id ] !== $this->plugin_id() ) {
-					_doing_it_wrong(
-						__METHOD__,
-						sprintf(
-							"checkout field '%s' is enhanced by more than one shipping plugin; last registration wins",
-							$id
-						),
-						'2.0.2'
-					);
+				$signature = self::native_claim_signature( $field );
+
+				foreach ( self::$native_field_registry[ $id ] ?? [] as $other_plugin => $other_signature ) {
+					if ( $other_plugin === $plugin_id ) {
+						continue;
+					}
+
+					if ( 'direct' === $signature || $other_signature !== $signature ) {
+						_doing_it_wrong(
+							__METHOD__,
+							sprintf(
+								"checkout field '%s' is enhanced by more than one shipping plugin; last registration wins",
+								$id
+							),
+							'2.0.2'
+						);
+
+						break;
+					}
 				}
 
-				self::$native_field_registry[ $id ] = $this->plugin_id();
+				self::$native_field_registry[ $id ][ $plugin_id ] = $signature;
 			}
+		}
+
+		/**
+		 * The claim a field descriptor makes on its native WooCommerce id, for the conflict guard.
+		 *
+		 * `location:<level>` for a Location-Provider field (its fan-out variants included), so
+		 * two plugins asking for the same level compare equal; `direct` for everything else,
+		 * which never compares equal to another plugin's claim.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string, mixed> $field a descriptor from {@see self::effective_fields()}.
+		 *
+		 * @return string
+		 */
+		private static function native_claim_signature( array $field ): string {
+			if ( 'location' === ( $field['source_kind'] ?? null ) ) {
+				return 'location:' . (string) ( $field['location_level'] ?? '' );
+			}
+
+			return 'direct';
 		}
 
 		/**
