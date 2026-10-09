@@ -64,6 +64,8 @@ class Graph_Test_Wizard extends Setup_Wizard {
 		return [
 			'mode' => [ 'type' => 'string', 'value' => 'keep' ],
 			'map'  => [ 'type' => 'string', 'value' => '' ],
+			'ctrl' => [ 'type' => 'string', 'value' => 'live' ],
+			'dep'  => [ 'type' => 'string', 'value' => '', 'show_if' => [ 'setting' => 'ctrl', 'value' => 'live' ] ],
 		];
 	}
 
@@ -242,6 +244,110 @@ class SetupWizardStepGraphTest extends TestCase {
 
 		$this->assertSame( 'success', $response['status'] );
 		$this->assertFalse( $this->visibility( $response['graph'] )['mapping'] );
+	}
+
+	// -----------------------------------------------------------------------
+	// show_if across steps follows the context the client can see
+	// -----------------------------------------------------------------------
+
+	/**
+	 * Boots the wizard over a REAL settings handler: `ctrl` (owned by the `gate` step) controls the
+	 * visibility of `dep` (owned by the `detail` step). `ctrl` is STORED as `live`.
+	 *
+	 * @param bool $gate_visible whether the `gate` step is visible.
+	 * @param array<string,mixed> $written receives what the handler was asked to persist.
+	 */
+	private function boot_cross_step( bool $gate_visible, array &$written ): void {
+		require_once dirname( __DIR__, 2 ) . '/woodev/settings-api/register-settings/class-register-settings.php';
+		require_once dirname( __DIR__, 2 ) . '/woodev/settings-api/abstract-class-settings.php';
+
+		Functions\when( 'get_option' )->justReturn( null );
+		Functions\when( 'wp_parse_args' )->alias(
+			static function ( $args, $defaults = [] ) {
+				return array_merge( (array) $defaults, (array) $args );
+			}
+		);
+
+		$handler = new class( $written ) extends \Woodev_Abstract_Settings {
+			/** @var array */
+			public $written;
+			public function __construct( array &$written ) {
+				$this->written = &$written;
+				parent::__construct( 'cross_step' );
+			}
+			protected function register_settings() {
+				$this->register_setting( 'ctrl', \Woodev_Setting::TYPE_STRING, [ 'default' => 'test' ] );
+				$this->register_setting( 'dep', \Woodev_Setting::TYPE_STRING, [ 'default' => '', 'show_if' => [ 'setting' => 'ctrl', 'value' => 'live' ] ] );
+			}
+			public function get_value( $setting_id, $with_default = true ) {
+				return 'ctrl' === $setting_id ? 'live' : '';
+			}
+			public function update_value( $setting_id, $value ) {
+				$this->written[ $setting_id ] = $value;
+			}
+			public function save( $setting_id = '' ) {}
+		};
+
+		$plugin = Mockery::mock( '\Woodev_Plugin' );
+		$plugin->shouldReceive( 'get_settings_handler' )->andReturn( $handler );
+		$plugin->shouldReceive( 'get_plugin_name' )->andReturn( 'Acme' );
+		$plugin->shouldReceive( 'get_documentation_url' )->andReturn( '' );
+		$plugin->shouldReceive( 'get_settings_url' )->andReturn( '' );
+		$plugin->shouldReceive( 'get_reviews_url' )->andReturn( '' );
+
+		$wizard           = new Graph_Test_Wizard( $plugin );
+		$wizard->injected = [
+			Step::settings( 'gate', 'Режим', [ 'ctrl' ] )->set_visibility_callback( static fn(): bool => $gate_visible ),
+			Step::settings( 'detail', 'Детали', [ 'dep' ] )->set_validation_callback(
+				// A plugin rule on the values the merchant sees: a PRESENT, empty `dep` is refused.
+				static fn( array $values ): array => array_key_exists( 'dep', $values ) && '' === $values['dep'] ? [ 'dep' => 'Заполните поле.' ] : []
+			),
+		];
+
+		$this->wizard     = $wizard->build();
+		$this->controller = new \Woodev_REST_API_Setup( $this->wizard );
+	}
+
+	public function test_a_controller_owned_by_a_hidden_step_counts_as_absent_so_the_dependent_field_is_hidden(): void {
+		$written = [];
+		$this->boot_cross_step( false, $written );
+
+		// The graph does not carry the hidden step's value (nor any field of it).
+		$this->assertSame( [ 'id' => 'gate', 'visible' => false ], $this->wizard->get_step_graph()[0] );
+
+		// `ctrl` is stored as `live`, but the client cannot see it: `dep` is hidden there, so the
+		// server must not validate it (no error the merchant cannot fix) and must not persist it.
+		$response = $this->controller->save_step( $this->request( 'detail', [ 'dep' => 'typed' ] ) );
+
+		$this->assertIsArray( $response );
+		$this->assertTrue( $response['saved'] );
+		$this->assertSame( [], $written );
+	}
+
+	public function test_an_unsent_dependent_field_is_not_validated_when_its_controller_step_is_hidden(): void {
+		$written = [];
+		$this->boot_cross_step( false, $written );
+
+		// Nothing submitted: the stored `dep` ('') would be validated if it counted as visible.
+		$response = $this->controller->save_step( $this->request( 'detail', [] ) );
+
+		$this->assertIsArray( $response );
+		$this->assertTrue( $response['saved'] );
+	}
+
+	public function test_a_controller_owned_by_a_visible_step_still_resolves_from_its_stored_value(): void {
+		$written = [];
+		$this->boot_cross_step( true, $written );
+
+		// Control: the gate step is visible, `ctrl` = live is stored → `dep` is visible, so an
+		// empty one is validated, and a typed one persisted.
+		$refused = $this->controller->save_step( $this->request( 'detail', [ 'dep' => '' ] ) );
+		$this->assertInstanceOf( \WP_Error::class, $refused );
+		$this->assertSame( 'woodev_setup_invalid', $refused->get_error_code() );
+
+		$saved = $this->controller->save_step( $this->request( 'detail', [ 'dep' => 'typed' ] ) );
+		$this->assertTrue( $saved['saved'] );
+		$this->assertSame( [ 'dep' => 'typed' ], $written );
 	}
 
 	// -----------------------------------------------------------------------

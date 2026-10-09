@@ -426,11 +426,18 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 		 * the client (which merges edits over stored/default values). Unknown ids and
 		 * unconditional fields pass through unchanged.
 		 *
+		 * `$available`, when given, lists the only controlling ids whose value the caller's UI can
+		 * see (the setup wizard: settings owned by the steps visible in the current graph). Any
+		 * other controller resolves as the empty string — even when a value is stored — so the
+		 * server decides visibility from exactly the context the client rendered with. Null (the
+		 * default) means every controller is available.
+		 *
 		 * @since 2.0.2
-		 * @param array<string,mixed> $values submitted setting_id => value.
+		 * @param array<string,mixed> $values    submitted setting_id => value.
+		 * @param string[]|null       $available controlling setting ids the UI can see, or null for all.
 		 * @return array<string,mixed> the submitted map with hidden fields removed.
 		 */
-		public function filter_visible_values( array $values ): array {
+		public function filter_visible_values( array $values, ?array $available = null ): array {
 
 			// Resolve every field's visibility against the ORIGINAL submitted map first,
 			// then strip — so a chained dependency (a controller that is itself hidden)
@@ -447,7 +454,7 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 
 				$control  = $setting->get_control();
 				$disabled = $setting->get_disabled_if_conditions();
-				if ( ( $control && $control->is_disabled() ) || ( ! empty( $disabled ) && Woodev_Setting::evaluate_conditions( $disabled, $this->effective_condition_values( $disabled, $values ) ) ) ) {
+				if ( ( $control && $control->is_disabled() ) || ( ! empty( $disabled ) && Woodev_Setting::evaluate_conditions( $disabled, $this->effective_condition_values( $disabled, $values, $available ) ) ) ) {
 					$hidden[] = $setting_id;
 					continue;
 				}
@@ -458,7 +465,7 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 					continue;
 				}
 
-				if ( ! Woodev_Setting::evaluate_conditions( $conditions, $this->effective_condition_values( $conditions, $values ) ) ) {
+				if ( ! Woodev_Setting::evaluate_conditions( $conditions, $this->effective_condition_values( $conditions, $values, $available ) ) ) {
 					$hidden[] = $setting_id;
 				}
 			}
@@ -476,10 +483,11 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 		 *
 		 * @since 2.0.2
 		 * @param array<string,mixed> $conditions the condition group.
-		 * @param array<string,mixed> $submitted  the submitted values map.
+		 * @param array<string,mixed> $submitted the submitted values map.
+		 * @param string[]|null       $available controlling ids visible to the UI (others resolve as absent), null for all.
 		 * @return array<string,mixed> controlling setting_id => effective value.
 		 */
-		private function effective_condition_values( array $conditions, array $submitted ): array {
+		private function effective_condition_values( array $conditions, array $submitted, ?array $available = null ): array {
 
 			$group  = isset( $conditions['setting'] ) ? [ $conditions ] : $conditions;
 			$result = [];
@@ -493,7 +501,13 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 				// An unregistered controller (typo'd or cross-handler id) has no stored
 				// value and get_value() would throw on it — treat it as the empty string,
 				// matching the "unset controlling value = empty string" contract.
-				$id            = (string) $condition['setting'];
+				$id = (string) $condition['setting'];
+
+				if ( null !== $available && ! in_array( $id, $available, true ) ) {
+					$result[ $id ] = '';
+					continue;
+				}
+
 				$result[ $id ] = array_key_exists( $id, $submitted )
 					? $submitted[ $id ]
 					: ( $this->get_setting( $id ) ? $this->get_value( $id ) : '' );

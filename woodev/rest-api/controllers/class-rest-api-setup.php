@@ -137,6 +137,26 @@ if ( ! class_exists( 'Woodev_REST_API_Setup' ) ) :
 		}
 
 		/**
+		 * The setting ids whose values the client can see: those declared by the steps visible in
+		 * the current graph. A hidden step's values are never sent to the client (its graph entry
+		 * is a bare `{ id, visible: false }`), so a `show_if` that names one must resolve the same
+		 * way here — as absent — or the server would validate a field the client never rendered.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string[]
+		 */
+		private function get_available_setting_ids(): array {
+			$ids = [];
+
+			foreach ( $this->wizard->get_steps() as $visible_step ) {
+				$ids = array_merge( $ids, $visible_step->get_setting_ids() );
+			}
+
+			return array_values( array_unique( $ids ) );
+		}
+
+		/**
 		 * The step graph as it stands after this request, for the response (D3).
 		 *
 		 * Recomputed from the state saved so far; the client re-renders from it. Failing to
@@ -168,7 +188,9 @@ if ( ! class_exists( 'Woodev_REST_API_Setup' ) ) :
 		 *   validation callback and an action work on, so a stored API key the merchant did not
 		 *   retype still counts and a cross-field rule sees both fields. Hidden fields are
 		 *   dropped from it against the effective controlling values (the same rule the client
-		 *   applies).
+		 *   applies): a controller on another step resolves from its stored value only when that
+		 *   step is visible in the current graph — the client never receives a hidden step's
+		 *   values, so for it (and therefore here) they are absent.
 		 *
 		 * @since 2.0.2
 		 *
@@ -210,7 +232,7 @@ if ( ! class_exists( 'Woodev_REST_API_Setup' ) ) :
 				}
 			}
 
-			$effective = $handler->filter_visible_values( $merged );
+			$effective = $handler->filter_visible_values( $merged, $this->get_available_setting_ids() );
 
 			return [
 				'submitted' => array_intersect_key( $effective, $submitted ),

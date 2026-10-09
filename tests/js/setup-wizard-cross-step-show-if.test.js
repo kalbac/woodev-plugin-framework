@@ -136,6 +136,23 @@ describe( 'show_if across steps', () => {
 		expect( saveStep ).toHaveBeenCalledWith( 'connection', {} );
 	} );
 
+	test( 'a controller owned by a server-hidden step is absent: the dependent field stays hidden and Continue does not validate it', async () => {
+		const data = bootstrap( 'live' );
+		// The server sends a hidden step as a bare entry — no fields, so no saved value either.
+		data.steps[ 0 ] = { id: 'start', visible: false };
+		data.steps[ 1 ].fields.api_key.required = true;
+		window.woodevSetupWizard = data;
+		render( createElement( App ) );
+
+		expect( document.querySelector( '.woodev-setup__step-title' ) ).toHaveTextContent( 'Подключение' );
+		expect( keyInput() ).not.toBeInTheDocument();
+
+		await goToConnection();
+
+		// Nothing to fix on screen, so nothing is refused on the client either.
+		expect( saveStep ).toHaveBeenCalledWith( 'connection', {} );
+	} );
+
 	test( 'typing into the field on the later step is what Continue sends', async () => {
 		window.woodevSetupWizard = bootstrap( 'live' );
 		render( createElement( App ) );
