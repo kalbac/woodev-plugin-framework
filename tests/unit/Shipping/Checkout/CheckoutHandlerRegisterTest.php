@@ -394,4 +394,132 @@ class CheckoutHandlerRegisterTest extends TestCase {
 		( new Checkout_Handler( Checkout_Fields::from_array( [ $field ] ), 'plugin_a' ) )->register();
 		( new Checkout_Handler( Checkout_Fields::from_array( [ $field ] ), 'plugin_b' ) )->register();
 	}
+
+	/**
+	 * Registers one handler per entry of `$plugins` (plugin id => list of Field defs) with the
+	 * hook plumbing stubbed, so a test only has to state who claims what.
+	 *
+	 * @param array<string, array<int, array<string, mixed>>> $plugins
+	 */
+	private function register_plugins( array $plugins ): void {
+		Functions\when( 'add_filter' )->justReturn( true );
+		Functions\when( 'add_action' )->justReturn( true );
+		Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+		foreach ( $plugins as $plugin_id => $fields ) {
+			( new Checkout_Handler( Checkout_Fields::from_array( $fields ), $plugin_id ) )->register();
+		}
+	}
+
+	/**
+	 * The v2 release scenario (#1179): several carrier plugins each declare the SAME
+	 * Location-Provider levels. The location layer owns those native ids, so N carriers on
+	 * one site is the supported normal case, not a conflict.
+	 */
+	public function test_guard_stays_silent_when_carriers_share_the_same_location_levels(): void {
+
+		Functions\expect( '_doing_it_wrong' )->never();
+
+		$levels = static fn(): array => [
+			Field::create( 'shipping_state' )->set_type( 'text' )->source_location( 'region' )->to_array(),
+			Field::create( 'shipping_city' )->set_type( 'text' )->source_location( 'settlement' )->to_array(),
+			Field::create( 'shipping_address_1' )->set_type( 'text' )->source_location( 'address' )->to_array(),
+		];
+
+		$this->register_plugins( [
+			'carrier_a' => $levels(),
+			'carrier_b' => $levels(),
+			'carrier_c' => $levels(),
+			'carrier_d' => $levels(),
+		] );
+	}
+
+	/**
+	 * A direct takeover of a native id against another plugin's location field IS contested:
+	 * one plugin renders its own control, the other attaches the location cascade.
+	 */
+	public function test_guard_fires_when_a_direct_declaration_meets_a_location_field(): void {
+
+		Functions\expect( '_doing_it_wrong' )
+			->once()
+			->with( \Mockery::type( 'string' ), \Mockery::pattern( '/billing_city/' ), '2.0.2' );
+
+		$this->register_plugins( [
+			'carrier_a' => [ Field::create( 'shipping_city' )->set_type( 'text' )->source_location( 'settlement' )->to_array() ],
+			'carrier_b' => [ Field::create( 'billing_city' )->set_type( 'text' )->set_section( 'billing' )->to_array() ],
+		] );
+	}
+
+	/**
+	 * Two different location levels on one native id cannot both be right.
+	 */
+	public function test_guard_fires_when_two_plugins_put_different_location_levels_on_one_id(): void {
+
+		Functions\expect( '_doing_it_wrong' )
+			->times( 2 )
+			->with( \Mockery::type( 'string' ), \Mockery::pattern( '/(billing|shipping)_city/' ), '2.0.2' );
+
+		$this->register_plugins( [
+			'carrier_a' => [ Field::create( 'shipping_city' )->set_type( 'text' )->source_location( 'settlement' )->to_array() ],
+			'carrier_b' => [ Field::create( 'shipping_city' )->set_type( 'text' )->source_location( 'region' )->to_array() ],
+		] );
+	}
+
+	/**
+	 * The registry keeps EVERY plugin's claim: a third plugin's direct declaration is checked
+	 * against the location claims of both earlier ones, not only the last registrant's.
+	 */
+	public function test_guard_checks_a_late_direct_declaration_against_every_earlier_claim(): void {
+
+		Functions\expect( '_doing_it_wrong' )
+			->once()
+			->with( \Mockery::type( 'string' ), \Mockery::pattern( '/billing_city/' ), '2.0.2' );
+
+		$location = [ Field::create( 'shipping_city' )->set_type( 'text' )->source_location( 'settlement' )->to_array() ];
+
+		$this->register_plugins( [
+			'carrier_a' => $location,
+			'carrier_b' => $location,
+			'carrier_c' => [ Field::create( 'billing_city' )->set_type( 'text' )->set_section( 'billing' )->to_array() ],
+		] );
+	}
+
+	/**
+	 * @return array<string, array{0: bool}>
+	 */
+	public static function registration_order_provider(): array {
+		return [
+			'full carrier first'    => [ true ],
+			'partial carrier first' => [ false ],
+		];
+	}
+
+	/**
+	 * Equal levels on the overlapping ids are not enough: carrier A (region + settlement +
+	 * address) and carrier B (region + settlement) get separate cascade record stores in the
+	 * classic checkout, so after a city pick the address A owns stays locked. That is a real
+	 * runtime conflict — reported in BOTH registration orders, on the 4 overlapping ids
+	 * (billing/shipping x state/city) and not on the address ids only one of them declares.
+	 *
+	 * @dataProvider registration_order_provider
+	 */
+	public function test_guard_fires_when_the_location_level_sets_differ_in_either_order( bool $full_first ): void {
+
+		Functions\expect( '_doing_it_wrong' )
+			->times( 4 )
+			->with( \Mockery::type( 'string' ), \Mockery::pattern( '/(billing|shipping)_(state|city)\'/' ), '2.0.2' );
+
+		$full    = [
+			Field::create( 'shipping_state' )->set_type( 'text' )->source_location( 'region' )->to_array(),
+			Field::create( 'shipping_city' )->set_type( 'text' )->source_location( 'settlement' )->to_array(),
+			Field::create( 'shipping_address_1' )->set_type( 'text' )->source_location( 'address' )->to_array(),
+		];
+		$partial = array_slice( $full, 0, 2 );
+
+		$this->register_plugins(
+			$full_first
+				? [ 'carrier_full' => $full, 'carrier_partial' => $partial ]
+				: [ 'carrier_partial' => $partial, 'carrier_full' => $full ]
+		);
+	}
 }

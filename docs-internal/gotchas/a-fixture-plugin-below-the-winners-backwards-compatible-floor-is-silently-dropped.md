@@ -33,18 +33,31 @@ docker exec "$C" wp eval '$b = Woodev_Plugin_Bootstrap::instance(); $r = new Ref
 
 `incompatible_framework_plugins` above 0 is the symptom.
 
+## The floor moves with the winner — the reverse trap (s163)
+
+The floor belongs to whoever WINS, so changing the winner changes who is dropped. `3eb5bad8` (#1186)
+raised `woodev-test-plugin` to `2.0.2`; it now outranks CDEK (`2.0.1`) and declares no
+`backwards_compatible`, so **nothing** is dropped any more (rig: `registered 4, incompatible 0`) and
+the `1.4.0` `woodev-test-shipping-method` boots next to CDEK. Both declare the same Location-Provider
+levels (`source_location` region/settlement/address), which `guard_native_field_conflicts()` used to
+report as a conflict on every page — `WP_DEBUG_DISPLAY` printed it before headers, wp-login set no
+cookie, `npm run test:e2e` failed 10/11.
+
+That was a FRAMEWORK defect, not a fixture artefact: several carriers sharing the location layer is the
+supported case (v2 release, #1179). The guard now compares claim signatures and stays silent only when the
+overlapping plugins declare the IDENTICAL set of location levels (e.g. both region + settlement + address).
+Equal levels on the overlapping ids are NOT enough: A (region + settlement + address) with B (region +
+settlement) keeps one cascade record store per plugin in the classic checkout, so after a city pick the
+address A owns stays disabled (jsdom probe, s163 critic) — that differing set stays reported until the
+cascade is shared (separate card). A direct takeover against a location field, two direct takeovers and two
+different levels on one id are reported too.
+
 ## Fix
 
-⚠ **Not merged — bumping the version alone breaks the rig (measured s161).** Branch
-`kalbac/s161-1173-rig-pickup` (`ca66c4ee`) set `'framework_version' => '2.0.0'` on the three 1.4.0
-fixtures; unit and jest stayed green, but on the rig all 8 classic-checkout e2e tests failed: once the
-fixtures load, three shipping plugins enhance the same native checkout fields,
-`Checkout_Handler::guard_native_field_conflicts()` prints `_doing_it_wrong` notices into the page
-(`WP_DEBUG_DISPLAY`), and `form.checkout` never renders. The way forward is on card #1173 (move the
-pickup spec to the realistic fixture, or switch CDEK off for that e2e).
-
-❌ "bump the fixture to 2.0.0 and it works". ✅ Diagnose with the call above; a NEW fixture declares
-`2.0.0` from the start AND must not enhance the same native fields as an active carrier.
+❌ "bump the fixture to 2.0.0 and it works" (s161: it printed the notice into the page). ✅ Diagnose with
+the call above; a NEW fixture declares `2.0.0` from the start. Since s163 two carriers declaring the
+identical set of location levels no longer trip the guard, so a fixture MAY share the full location set with an
+active carrier — it still must not take a native id over directly.
 
 ## Related
 
