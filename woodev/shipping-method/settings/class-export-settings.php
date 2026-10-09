@@ -219,17 +219,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Export_Settings' 
 				Order_Automation::SETTING_AUTO_EXPORT,
 				\Woodev_Setting::TYPE_BOOLEAN,
 				[
-					'name'    => __( 'Автоэкспорт', 'woodev-plugin-framework' ),
+					'name'    => __( 'Включить автоэкспорт', 'woodev-plugin-framework' ),
 					'default' => false,
 				]
 			);
-			$this->register_control(
-				Order_Automation::SETTING_AUTO_EXPORT,
-				\Woodev_Control::TYPE_TOGGLE,
-				[
-					'description' => __( 'Когда заказ получает один из выбранных ниже статусов, он сам отправляется перевозчику — в фоне, покупатель ничего не ждёт. Вручную заказ можно выгрузить всегда.', 'woodev-plugin-framework' ),
-				]
-			);
+			// the explanation is the «Автоэкспорт» card's description (Shipping_Plugin::build_export_section())
+			$this->register_control( Order_Automation::SETTING_AUTO_EXPORT, \Woodev_Control::TYPE_TOGGLE );
 
 			$this->register_setting(
 				Order_Automation::SETTING_EXPORT_STATUSES,

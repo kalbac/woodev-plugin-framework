@@ -131,12 +131,23 @@ Settings_Section::create( 'export', 'Отправка', [ 'token', 'mode', 'othe
 - **Save button.** `sectionHasSaveButton()` (`app.js`): no «Сохранить» for a tools block or an ordinary section with
   no fields (an actions-only section used to show a dead one); a connection block keeps it as before.
 - UI Kit gallery (`src/ui-kit-gallery`) shows a grouped-fields card and a grouped-actions card.
-- **A carrier adds to «Дополнительно» (s165).** That section is the framework's own (logging, hide-on-cart) and its id
-  is taken, so a contributed section cannot extend it. `Shipping_Plugin::get_advanced_section_extension()` (protected,
+- **«Выгрузка заказов» is laid out as cards (s165).** `Shipping_Plugin::build_export_section()` gives EVERY exporting
+  carrier the same cards, in order: **«Автоэкспорт»** (`auto_export_orders` toggle + `export_statuses`; the card
+  description is the former toggle subtitle), **«Этикетки»** (the carrier's own fields of
+  `get_export_section_setting_ids()`, e.g. CDEK's «Формат этикеток»), **«Статусы доставки»** (`status_delivered` — moved
+  here from auto-export — and, for a carrier with a cron hook, the «Обновить статусы сейчас» button), then the carrier's
+  own cards. Card ids `auto-export` / `labels` / `delivery-status`. A card with no member is not drawn («Этикетки» is
+  absent for a carrier without label fields). The section lists its fields card by card (auto-export, carrier fields,
+  delivered status), because a card renders where its FIRST field is declared. One «Сохранить» sits under all cards.
+  «Дополнительно» is the framework's own bare section again (logging, hide-on-cart): no cards, no carrier extension.
+- **A carrier adds to «Выгрузка заказов» (s165).** `Shipping_Plugin::get_export_section_extension()` (protected,
   default `[]`) returns `['actions' => Shipping_Tool[], 'groups' => Settings_Group[], 'description' => string]`; the
-  framework applies it with `with_actions()` / `with_groups()`. Wrong keys / types / elements are dropped with
-  `_doing_it_wrong()`. An empty extension leaves the section byte-identical; with at least one group the section's own
-  two fields move into a «Журнал и корзина» group (id `logging-and-cart`) so no field sits outside a card.
+  framework appends the groups after its own cards, the actions after the refresh button, and the description after the
+  section description. Wrong keys / types / elements are dropped with `_doing_it_wrong()`; a group id equal to a
+  framework card id or an earlier group, and an action id already used on the tab (another section, the framework's
+  refresh button, an earlier entry), is dropped the same way. The REST `run_tool` route still answers 409
+  `woodev_settings_ambiguous_tool` if an id ever repeats across the tab's sections. The seam is skipped silently for a
+  carrier that does not export orders. (It replaced `get_advanced_section_extension()` in the same PR — v2 clean break.)
 
 ## Shipping settings — the «Доставка» tab (`woodev/shipping-method/settings/`)
 

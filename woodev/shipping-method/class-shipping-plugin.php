@@ -22,8 +22,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		/** @var string shipping-package key listing the plugin ids hiding their carriers on the cart page (part of the rate-cache hash) */
 		private const CART_PAGE_PACKAGE_KEY = 'woodev_hidden_on_cart';
 
-		/** @var string id of the framework's own field card in the «Дополнительно» section — a carrier group may not reuse it */
-		private const ADVANCED_OWN_GROUP_ID = 'logging-and-cart';
+		/** @var string id of the «Автоэкспорт» card of the «Выгрузка заказов» section — a carrier group may not reuse it */
+		private const EXPORT_AUTO_GROUP_ID = 'auto-export';
+
+		/** @var string id of the «Этикетки» card (the carrier's {@see self::get_export_section_setting_ids()} fields) */
+		private const EXPORT_LABELS_GROUP_ID = 'labels';
+
+		/** @var string id of the «Статусы доставки» card */
+		private const EXPORT_DELIVERY_GROUP_ID = 'delivery-status';
 
 		/** @var array optional associative array of shipping method id */
 		private array $methods = [];
@@ -1321,13 +1327,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 				$extra_ids  = $this->resolve_export_section_setting_ids( $handlers, $export );
 				$handlers[] = $export;
 
-				$export_section = \Woodev\Framework\Settings\Settings_Section::create(
-					Settings\Export_Settings::SECTION_ID,
-					__( 'Выгрузка заказов', 'woodev-plugin-framework' ),
-					array_merge( $export->get_owned_setting_ids(), $extra_ids ),
-					$export->get_section_description()
-				);
-
 				// «Обновить статусы сейчас»: only for a carrier that declared a cron hook to refresh statuses with
 				$sync = Settings\Status_Sync_Tool::create(
 					Admin\Orders\Orders_Registry::instance()->get_plugin_providers( $this ),
@@ -1336,12 +1335,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 					}
 				);
 
-				$sections[] = null === $sync ? $export_section : $export_section->with_actions( [ $sync ] );
+				$sections[] = $this->build_export_section( $export, $extra_ids, $sync, $this->collect_section_action_ids( $sections ) );
 			}
 
 			// «Дополнительно» is always LAST
 			$handlers[] = $advanced;
-			$sections[] = $this->build_advanced_section( $advanced, $this->collect_section_action_ids( $sections ) );
+			$sections[] = \Woodev\Framework\Settings\Settings_Section::create(
+				Settings\Advanced_Settings::SECTION_ID,
+				__( 'Дополнительно', 'woodev-plugin-framework' ),
+				$advanced->get_owned_setting_ids()
+			);
 
 			$providers[] = \Woodev\Framework\Settings\Settings_Provider::create_with_sections(
 				$this->get_id(),
@@ -1355,33 +1358,33 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		}
 
 		/**
-		 * What the carrier adds to the framework's «Дополнительно» section: action buttons, titled groups and a
-		 * description under the section title. The section is the framework's own (logging, «Не показывать на
-		 * странице корзины»), so a carrier cannot contribute a section under its id — this is the seam for the few
-		 * things that belong there anyway (CDEK's «Мгновенные уведомления», say).
+		 * What the carrier adds to the framework's «Выгрузка заказов» section: action buttons, titled cards and a
+		 * sentence after the section description. The section is the framework's own, so a carrier cannot contribute a
+		 * section under its id — this is the seam for the few things that belong there (CDEK's «Мгновенные
+		 * уведомления», say). The carrier's cards follow the framework's «Автоэкспорт», «Этикетки» and «Статусы
+		 * доставки» cards.
 		 *
-		 * Return an array with any of these keys; the default is none, and an empty array leaves the section exactly as
-		 * the framework builds it:
+		 * Return an array with any of these keys; the default is none:
 		 *
 		 * - `actions`     `Shipping_Tool[]`  the buttons, run through the tool REST route of the carrier's tab;
 		 * - `groups`      `Settings_Group[]` cards that NAME actions by id ({@see \Woodev\Framework\Settings\Settings_Group});
-		 * - `description` `string`           HTML under the section title (constrained at the schema boundary).
+		 * - `description` `string`           text added after the section description (constrained at the schema boundary).
 		 *
 		 * A key of another name, a value of the wrong type, or an element that is not a `Shipping_Tool` /
-		 * `Settings_Group` is reported with `_doing_it_wrong()` and dropped, the rest is kept. While at least one group
-		 * is returned, the section's own two fields sit in a group of their own, «Журнал и корзина», so every field
-		 * of the section is in a card.
+		 * `Settings_Group` is reported with `_doing_it_wrong()` and dropped, the rest is kept. A group whose id is one
+		 * of the framework's cards or repeats an earlier one, and an action whose id the tab already uses, is dropped
+		 * the same way. Like the rest of the section, it exists only for a carrier that exports orders.
 		 *
 		 * @since 2.0.2
 		 *
 		 * @return array{actions?: \Woodev\Framework\Shipping\Settings\Shipping_Tool[], groups?: \Woodev\Framework\Settings\Settings_Group[], description?: string}
 		 */
-		protected function get_advanced_section_extension(): array {
+		protected function get_export_section_extension(): array {
 			return [];
 		}
 
 		/**
-		 * The ids of every action and tool the given sections already carry — what a carrier's «Дополнительно» action
+		 * The ids of every action and tool the given sections already carry — what a carrier's «Выгрузка заказов» action
 		 * must not reuse, because the REST route finds an action by id across the whole tab.
 		 *
 		 * @param \Woodev\Framework\Settings\Settings_Section[] $sections the tab's sections built so far.
@@ -1401,25 +1404,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		}
 
 		/**
-		 * The validated {@see self::get_advanced_section_extension()}: every key present, wrong shapes dropped.
+		 * The validated {@see self::get_export_section_extension()}: every key present, wrong shapes dropped.
 		 * A group whose id is the framework's own or repeats an earlier entry, and an action whose id the tab already
 		 * uses, is dropped with a notice: ids are the key a card is rendered and an action is run by.
 		 *
-		 * @param string[] $reserved_action_ids ids of the actions the tab's other sections already carry.
+		 * @param string[] $reserved_action_ids ids of the actions the tab's other sections (and the framework's own button) already carry.
 		 * @return array{actions: \Woodev\Framework\Shipping\Settings\Shipping_Tool[], groups: \Woodev\Framework\Settings\Settings_Group[], description: string}
 		 */
-		private function resolve_advanced_section_extension( array $reserved_action_ids = [] ): array {
+		private function resolve_export_section_extension( array $reserved_action_ids ): array {
 
 			$resolved  = [
 				'actions'     => [],
 				'groups'      => [],
 				'description' => '',
 			];
-			$extension = $this->get_advanced_section_extension();
+			$extension = $this->get_export_section_extension();
 			$report    = function ( string $what ): void {
 				_doing_it_wrong(
-					__CLASS__ . '::get_advanced_section_extension',
-					sprintf( 'Carrier "%1$s": get_advanced_section_extension() %2$s; it was ignored.', esc_html( $this->get_id() ), esc_html( $what ) ),
+					__CLASS__ . '::get_export_section_extension',
+					sprintf( 'Carrier "%1$s": get_export_section_extension() %2$s; it was ignored.', esc_html( $this->get_id() ), esc_html( $what ) ),
 					'2.0.2'
 				);
 			};
@@ -1450,7 +1453,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 					continue;
 				}
 
-				$taken = 'groups' === $key ? [ self::ADVANCED_OWN_GROUP_ID ] : $reserved_action_ids;
+				$taken = 'groups' === $key
+					? [ self::EXPORT_AUTO_GROUP_ID, self::EXPORT_LABELS_GROUP_ID, self::EXPORT_DELIVERY_GROUP_ID ]
+					: $reserved_action_ids;
 
 				foreach ( $value as $item ) {
 					if ( ! $item instanceof $class ) {
@@ -1472,36 +1477,73 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		}
 
 		/**
-		 * The framework's «Дополнительно» section, plus whatever the carrier added through
-		 * {@see self::get_advanced_section_extension()}. Without an extension it is the plain section over the handler's
-		 * own setting ids.
+		 * The framework's «Выгрузка заказов» section: cards «Автоэкспорт», «Этикетки» (the carrier's own fields of
+		 * {@see self::get_export_section_setting_ids()}) and «Статусы доставки» (the delivered status and the refresh
+		 * button), then the carrier's {@see self::get_export_section_extension()} cards. A card with no member is
+		 * left out (the settings page registry omits it), so a carrier without label fields shows no «Этикетки» and one
+		 * without status sync shows «Статусы доставки» without the button.
 		 *
-		 * @param Settings\Advanced_Settings $advanced            the handler.
-		 * @param string[]                   $reserved_action_ids ids of the actions the tab's other sections carry.
+		 * The section lists its fields card by card (auto-export, the carrier's fields, delivered status), because a
+		 * card renders where its first field is declared.
+		 *
+		 * @param Settings\Export_Settings                               $export              the framework's export handler.
+		 * @param string[]                                               $extra_ids           the carrier's accepted fields.
+		 * @param \Woodev\Framework\Shipping\Settings\Shipping_Tool|null $sync                the status-refresh button, or null when the carrier has no cron hook.
+		 * @param string[]                                               $reserved_action_ids ids of the actions the tab's other sections carry.
 		 * @return \Woodev\Framework\Settings\Settings_Section
 		 */
-		private function build_advanced_section( Settings\Advanced_Settings $advanced, array $reserved_action_ids = [] ): \Woodev\Framework\Settings\Settings_Section {
+		private function build_export_section( Settings\Export_Settings $export, array $extra_ids, ?\Woodev\Framework\Shipping\Settings\Shipping_Tool $sync, array $reserved_action_ids ): \Woodev\Framework\Settings\Settings_Section {
 
-			$extension = $this->resolve_advanced_section_extension( $reserved_action_ids );
-			$section   = \Woodev\Framework\Settings\Settings_Section::create(
-				Settings\Advanced_Settings::SECTION_ID,
-				__( 'Дополнительно', 'woodev-plugin-framework' ),
-				$advanced->get_owned_setting_ids(),
-				$extension['description']
+			$extension = $this->resolve_export_section_extension( null === $sync ? $reserved_action_ids : array_merge( $reserved_action_ids, [ $sync->get_id() ] ) );
+			$delivered = Settings\Export_Settings::SETTING_STATUS_DELIVERED;
+			$auto_ids  = array_values( array_diff( $export->get_owned_setting_ids(), [ $delivered ] ) );
+			$has_sync  = null !== $sync;
+			$cards     = [];
+
+			$cards[] = \Woodev\Framework\Settings\Settings_Group::create(
+				self::EXPORT_AUTO_GROUP_ID,
+				__( 'Автоэкспорт', 'woodev-plugin-framework' ),
+				__( 'Когда заказ получает один из выбранных ниже статусов, он сам отправляется перевозчику — в фоне, покупатель ничего не ждёт. Вручную заказ можно выгрузить всегда.', 'woodev-plugin-framework' )
+			)->with_fields( $auto_ids );
+
+			if ( [] !== $extra_ids ) {
+				$cards[] = \Woodev\Framework\Settings\Settings_Group::create(
+					self::EXPORT_LABELS_GROUP_ID,
+					__( 'Этикетки', 'woodev-plugin-framework' ),
+					__( 'Как выглядят этикетки, которые вы печатаете из заказа.', 'woodev-plugin-framework' )
+				)->with_fields( $extra_ids );
+			}
+
+			$delivery = \Woodev\Framework\Settings\Settings_Group::create(
+				self::EXPORT_DELIVERY_GROUP_ID,
+				__( 'Статусы доставки', 'woodev-plugin-framework' ),
+				$has_sync
+					? __( 'Какой статус получит заказ, когда покупателю вручат посылку. Новые статусы можно запросить у перевозчика сразу, не дожидаясь расписания.', 'woodev-plugin-framework' )
+					: __( 'Какой статус получит заказ, когда покупателю вручат посылку.', 'woodev-plugin-framework' )
+			)->with_fields( [ $delivered ] );
+
+			$cards[] = $has_sync ? $delivery->with_actions( [ $sync->get_id() ] ) : $delivery;
+
+			$description = $export->get_section_description();
+
+			if ( '' !== $extension['description'] ) {
+				$description .= ' ' . $extension['description'];
+			}
+
+			$section = \Woodev\Framework\Settings\Settings_Section::create(
+				Settings\Export_Settings::SECTION_ID,
+				__( 'Выгрузка заказов', 'woodev-plugin-framework' ),
+				array_merge( $auto_ids, $extra_ids, [ $delivered ] ),
+				$description
 			);
 
-			if ( [] !== $extension['actions'] ) {
-				$section = $section->with_actions( $extension['actions'] );
+			$actions = array_merge( $has_sync ? [ $sync ] : [], $extension['actions'] );
+
+			if ( [] !== $actions ) {
+				$section = $section->with_actions( $actions );
 			}
 
-			if ( [] !== $extension['groups'] ) {
-				$own_fields = \Woodev\Framework\Settings\Settings_Group::create( self::ADVANCED_OWN_GROUP_ID, __( 'Журнал и корзина', 'woodev-plugin-framework' ) )
-					->with_fields( $advanced->get_owned_setting_ids() );
-
-				$section = $section->with_groups( array_merge( [ $own_fields ], $extension['groups'] ) );
-			}
-
-			return $section;
+			return $section->with_groups( array_merge( $cards, $extension['groups'] ) );
 		}
 
 		/**

@@ -5520,8 +5520,24 @@ msgstr ""
 msgid "Дополнительно"
 msgstr ""
 
-#: shipping-method/class-shipping-plugin.php:1462
-msgid "Журнал и корзина"
+#: shipping-method/settings/class-export-settings.php:222
+msgid "Включить автоэкспорт"
+msgstr ""
+
+#: shipping-method/class-shipping-plugin.php:1512
+msgid "Этикетки"
+msgstr ""
+
+#: shipping-method/class-shipping-plugin.php:1513
+msgid "Как выглядят этикетки, которые вы печатаете из заказа."
+msgstr ""
+
+#: shipping-method/class-shipping-plugin.php:1521
+msgid "Какой статус получит заказ, когда покупателю вручат посылку. Новые статусы можно запросить у перевозчика сразу, не дожидаясь расписания."
+msgstr ""
+
+#: shipping-method/class-shipping-plugin.php:1522
+msgid "Какой статус получит заказ, когда покупателю вручат посылку."
 msgstr ""
 
 #: shipping-method/order/class-delivered-order-status.php:102
