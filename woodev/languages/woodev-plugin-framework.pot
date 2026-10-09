@@ -5824,8 +5824,13 @@ msgstr ""
 msgid "За один раз можно выбрать не более %d заказов."
 msgstr ""
 
-#: shipping-method/admin/orders/class-toolbar-actions.php:263
+#: assets/src/shipping-orders-page/action-input.ts
+#: shipping-method/admin/orders/class-toolbar-actions.php:266
 msgid "Выберите хотя бы один заказ."
+msgstr ""
+
+#: shipping-method/admin/orders/class-toolbar-actions.php:364
+msgid "Это действие относится к другому перевозчику и недоступно для этого заказа."
 msgstr ""
 
 #: shipping-method/rest-api/class-toolbar-controller.php:255

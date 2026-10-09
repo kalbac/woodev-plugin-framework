@@ -63,6 +63,11 @@ export function ToolbarDialog( { button, onClose, onChanged }: ToolbarDialogProp
 	const [ busyRow, setBusyRow ] = useState( '' );
 	const [ listError, setListError ] = useState( '' );
 	const mounted = useRef( true );
+	// ONE mutation at a time across the form and the list tabs: a second request would race the first on the same
+	// address, and whichever answer arrived last would replace the dialog with an older snapshot. The ref closes the
+	// gap between a click and the re-render that disables the controls.
+	const inFlight = useRef( false );
+	const locked = busy || '' !== busyRow;
 
 	const form = dialog ? ( dialog.tabs.find( ( tab ) => 'form' === tab.type ) as ToolbarFormTab | undefined ) : undefined;
 	const fields = form ? form.fields : [];
@@ -74,7 +79,7 @@ export function ToolbarDialog( { button, onClose, onChanged }: ToolbarDialogProp
 		fetchToolbarDialog( button.id )
 			.then( ( res ) => {
 				if ( mounted.current ) {
-					applyDialog( res.dialog, true );
+					applyDialog( res.dialog, 'open' );
 				}
 			} )
 			.catch( ( err: RestError ) => {
@@ -90,8 +95,15 @@ export function ToolbarDialog( { button, onClose, onChanged }: ToolbarDialogProp
 	}, [ button.id ] );
 
 	/** Takes a (re)fetched dialog in; the typed values survive, the offered orders are reconciled. */
-	const applyDialog = ( next: ToolbarDialogData | null, first = false ) => {
+	const applyDialog = ( next: ToolbarDialogData | null, source: 'open' | 'run' | 'row' ) => {
 		if ( ! next ) {
+			// Nothing left to offer. After a run the merchant still gets to read what it did, so the dialog stays
+			// open on the per-order summary (with its Close button) instead of vanishing with the results.
+			if ( 'run' === source ) {
+				setDialog( null );
+				return;
+			}
+
 			onClose();
 			return;
 		}
@@ -99,22 +111,26 @@ export function ToolbarDialog( { button, onClose, onChanged }: ToolbarDialogProp
 		const nextForm = next.tabs.find( ( tab ) => 'form' === tab.type ) as ToolbarFormTab | undefined;
 
 		setDialog( next );
-		setValues( ( current ) => reconcileValues( nextForm ? nextForm.fields : [], first ? {} : current ) );
+		setValues( ( current ) => reconcileValues( nextForm ? nextForm.fields : [], 'open' === source ? {} : current ) );
 	};
 
 	const submit = ( event: { preventDefault: () => void } ) => {
 		event.preventDefault();
 
-		if ( ! form || busy || ! check() ) {
+		if ( ! form || inFlight.current || locked || ! check() ) {
 			return;
 		}
 
+		inFlight.current = true;
 		setBusy( true );
 		setMessage( '' );
 		setServerErrors( [] );
+		setRun( null );
 
 		submitToolbarAction( button.id, toPayload( fields, values ) )
 			.then( ( res ) => {
+				inFlight.current = false;
+
 				if ( ! mounted.current ) {
 					return;
 				}
@@ -130,15 +146,13 @@ export function ToolbarDialog( { button, onClose, onChanged }: ToolbarDialogProp
 					dispatch( noticesStore ).createErrorNotice( res.messages.error, { type: 'snackbar' } );
 				}
 
-				// Everything went through: nothing left to correct here.
-				if ( 0 === res.failed ) {
-					onClose();
-					return;
-				}
-
-				applyDialog( res.dialog );
+				// The dialog stays open on every outcome: the per-order summary (a carrier's «Заявка № …» notes
+				// included) is the merchant's receipt, and closing it with the dialog would throw it away.
+				applyDialog( res.dialog, 'run' );
 			} )
 			.catch( ( err: RestError ) => {
+				inFlight.current = false;
+
 				if ( ! mounted.current ) {
 					return;
 				}
@@ -156,20 +170,28 @@ export function ToolbarDialog( { button, onClose, onChanged }: ToolbarDialogProp
 
 	const runRowAction = ( tab: ToolbarListTab, rowId: string, action: ToolbarRowAction ) => {
 		setConfirming( null );
+
+		if ( inFlight.current || locked ) {
+			return;
+		}
+
+		inFlight.current = true;
 		setListError( '' );
 		setBusyRow( `${ rowId }:${ action.action }` );
 
 		performToolbarRowAction( button.id, tab.id, rowId, action.action )
 			.then( ( res ) => {
+				inFlight.current = false;
 				dispatch( noticesStore ).createSuccessNotice( res.message, { type: 'snackbar' } );
 				onChanged();
 
 				if ( mounted.current ) {
 					setBusyRow( '' );
-					applyDialog( res.dialog );
+					applyDialog( res.dialog, 'row' );
 				}
 			} )
 			.catch( ( err: RestError ) => {
+				inFlight.current = false;
 				const text = ( err && err.message ) || __( 'Не удалось выполнить действие.', 'woodev-plugin-framework' );
 
 				dispatch( noticesStore ).createErrorNotice( text, { type: 'snackbar' } );
@@ -182,6 +204,10 @@ export function ToolbarDialog( { button, onClose, onChanged }: ToolbarDialogProp
 	};
 
 	const onRowAction = ( tab: ToolbarListTab, rowId: string, action: ToolbarRowAction ) => {
+		if ( locked ) {
+			return;
+		}
+
 		if ( action.destructive ) {
 			setConfirming( { tab, rowId, action } );
 			return;
@@ -193,14 +219,13 @@ export function ToolbarDialog( { button, onClose, onChanged }: ToolbarDialogProp
 	const renderForm = ( tab: ToolbarFormTab ) => (
 		<form className="woodev-action-form woodev-toolbar-dialog__form" onSubmit={ submit } noValidate>
 			{ tab.description && <p className="woodev-toolbar-dialog__description">{ tab.description }</p> }
-			{ run && run.failed > 0 && <RunSummary run={ run } /> }
 			{ tab.fields.map( ( field ) => (
 				<FieldControl
 					key={ field.id }
 					field={ field }
 					value={ values[ field.id ] }
 					error={ shown[ field.id ] }
-					disabled={ busy }
+					disabled={ locked }
 					onChange={ ( value ) => change( field.id, value ) }
 				/>
 			) ) }
@@ -210,10 +235,10 @@ export function ToolbarDialog( { button, onClose, onChanged }: ToolbarDialogProp
 				</Notice>
 			) }
 			<div className="woodev-action-form__buttons">
-				<Button variant="tertiary" onClick={ onClose } disabled={ busy }>
+				<Button variant="tertiary" onClick={ onClose } disabled={ locked }>
 					{ __( 'Отмена', 'woodev-plugin-framework' ) }
 				</Button>
-				<Button variant="primary" type="submit" isBusy={ busy } disabled={ busy }>
+				<Button variant="primary" type="submit" isBusy={ busy } disabled={ locked }>
 					{ tab.submit_label || ( dialog ? dialog.title : button.label ) }
 				</Button>
 			</div>
@@ -260,7 +285,7 @@ export function ToolbarDialog( { button, onClose, onChanged }: ToolbarDialogProp
 											isDestructive={ action.destructive }
 											label={ action.title || undefined }
 											isBusy={ busyRow === `${ row.id }:${ action.action }` }
-											disabled={ '' !== busyRow }
+											disabled={ locked }
 											onClick={ () => onRowAction( tab, row.id, action ) }
 										>
 											{ action.label }
@@ -289,7 +314,7 @@ export function ToolbarDialog( { button, onClose, onChanged }: ToolbarDialogProp
 		<>
 			<Modal
 				title={ dialog ? dialog.title : button.label }
-				onRequestClose={ busy ? () => undefined : onClose }
+				onRequestClose={ locked ? () => undefined : onClose }
 				className="woodev-toolbar-dialog"
 				size="medium"
 			>
@@ -305,12 +330,13 @@ export function ToolbarDialog( { button, onClose, onChanged }: ToolbarDialogProp
 						</div>
 					</>
 				) }
-				{ ! loadError && ! dialog && (
+				{ ! loadError && ! dialog && ! run && (
 					<div className="woodev-orders__loading">
 						<Spinner />
 					</div>
 				) }
 				{ dialog && dialog.description && <p className="woodev-toolbar-dialog__description">{ dialog.description }</p> }
+				{ run && <RunSummary run={ run } onClose={ onClose } disabled={ locked } /> }
 				{ dialog && 1 === dialog.tabs.length && renderTab( dialog.tabs[ 0 ].id ) }
 				{ dialog && dialog.tabs.length > 1 && (
 					<TabPanel
@@ -347,8 +373,8 @@ export function ToolbarDialog( { button, onClose, onChanged }: ToolbarDialogProp
 	);
 }
 
-/** What the last run did, per order — shown only while some orders still need attention. */
-export function RunSummary( { run }: { run: ToolbarSubmitResult } ) {
+/** What the last run did, per order — for every outcome, a full success included — with an explicit way out. */
+export function RunSummary( { run, onClose, disabled = false }: { run: ToolbarSubmitResult; onClose?: () => void; disabled?: boolean } ) {
 	return (
 		<div className="woodev-toolbar-dialog__summary">
 			{ run.messages.success && (
@@ -369,6 +395,13 @@ export function RunSummary( { run }: { run: ToolbarSubmitResult } ) {
 					</li>
 				) ) }
 			</ul>
+			{ onClose && (
+				<div className="woodev-toolbar-dialog__summary-close">
+					<Button variant="secondary" onClick={ onClose } disabled={ disabled }>
+						{ __( 'Закрыть', 'woodev-plugin-framework' ) }
+					</Button>
+				</div>
+			) }
 		</div>
 	);
 }

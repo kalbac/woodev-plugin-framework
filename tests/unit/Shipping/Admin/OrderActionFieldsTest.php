@@ -588,6 +588,29 @@ final class OrderActionFieldsTest extends TestCase {
 		$this->assertSame( [], $this->orders_field( [ 'options' => [] ] ) );
 	}
 
+	public function test_only_positive_decimal_order_ids_survive_as_options(): void {
+		$bad = [ '0', '-5', '12abc', '1e3', '007', ' 12', '1.5', 'abc', '' ];
+		$options = [];
+
+		foreach ( $bad as $value ) {
+			$options[] = [
+				'value' => $value,
+				'label' => 'bad ' . $value,
+			];
+		}
+
+		$options[] = [
+			'value' => '1047',
+			'label' => '#1047',
+		];
+
+		$field = $this->orders_field( [ 'options' => $options ] );
+
+		$this->assertSame( [ '1047' ], array_column( $field[0]['options'], 'value' ) );
+		$this->assertSame( [ '1047' ], $field[0]['default'] );
+		$this->assertSame( [], $this->orders_field( [ 'options' => array_slice( $options, 0, -1 ) ] ), 'no usable option => the field is dropped' );
+	}
+
 	public function test_more_options_than_the_ceiling_are_cut(): void {
 		$options = [];
 

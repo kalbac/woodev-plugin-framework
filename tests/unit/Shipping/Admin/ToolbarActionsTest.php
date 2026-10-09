@@ -58,12 +58,20 @@ final class ToolbarActionsTest extends TestCase {
 	 *
 	 * @param int[] $known      order ids that exist.
 	 * @param int[] $no_carrier order ids whose carrier cannot be resolved.
+	 * @param int[] $foreign    order ids that resolve to ANOTHER carrier («yandex»).
 	 */
-	private function toolbar( array $known = [ 1047, 1050, 1051 ], array $no_carrier = [] ): Toolbar_Actions {
+	private function toolbar( array $known = [ 1047, 1050, 1051 ], array $no_carrier = [], array $foreign = [] ): Toolbar_Actions {
 		$provider = $this->provider();
+		$other    = Orders_Provider::create( 'yandex', 'Яндекс', '_yandex_marker', [ 'yandex' ] );
 		$registry = Mockery::mock( Orders_Registry::class );
 		$registry->shouldReceive( 'resolve_provider_for_order' )->andReturnUsing(
-			static fn( $order ) => in_array( $order->get_id(), $no_carrier, true ) ? null : $provider
+			static function ( $order ) use ( $no_carrier, $foreign, $provider, $other ) {
+				if ( in_array( $order->get_id(), $no_carrier, true ) ) {
+					return null;
+				}
+
+				return in_array( $order->get_id(), $foreign, true ) ? $other : $provider;
+			}
 		);
 
 		Functions\when( 'wc_get_order' )->alias(
@@ -87,10 +95,11 @@ final class ToolbarActionsTest extends TestCase {
 	private function declare_courier( ?callable $dialog = null, ?callable $perform = null ): void {
 		$this->hooks['woodev_shipping_orders_toolbar_actions'] = static function ( $value ) {
 			$value[] = [
-				'id'    => 'call_courier',
-				'label' => 'Вызвать курьера',
-				'icon'  => 'car',
-				'count' => 3,
+				'id'       => 'call_courier',
+				'provider' => 'cdek',
+				'label'    => 'Вызвать курьера',
+				'icon'     => 'car',
+				'count'    => 3,
 			];
 
 			return $value;
@@ -205,44 +214,80 @@ final class ToolbarActionsTest extends TestCase {
 
 	// ----- the buttons -----
 
-	public function test_a_button_needs_a_usable_unique_id_and_a_label(): void {
+	public function test_a_button_needs_a_usable_unique_id_a_label_and_an_owning_carrier(): void {
 		$this->hooks['woodev_shipping_orders_toolbar_actions'] = static fn() => [
 			'text',
-			[ 'label' => 'No id' ],
 			[
-				'id'    => 'Bad Id',
-				'label' => 'Upper case and a space',
-			],
-			[ 'id' => 'nolabel' ],
-			[
-				'id'    => 'call_courier',
-				'label' => 'Вызвать курьера',
+				'label'    => 'No id',
+				'provider' => 'cdek',
 			],
 			[
-				'id'    => 'call_courier',
-				'label' => 'Same id again',
+				'id'       => 'Bad Id',
+				'label'    => 'Upper case and a space',
+				'provider' => 'cdek',
+			],
+			[
+				'id'       => 'nolabel',
+				'provider' => 'cdek',
+			],
+			[
+				'id'    => 'noowner',
+				'label' => 'No carrier claims it',
+			],
+			[
+				'id'       => 'blankowner',
+				'label'    => 'Blank carrier',
+				'provider' => '  ',
+			],
+			[
+				'id'       => 'arrayowner',
+				'label'    => 'Not a string',
+				'provider' => [ 'cdek' ],
+			],
+			[
+				'id'       => 'call_courier',
+				'label'    => 'Вызвать курьера',
+				'provider' => 'cdek',
+			],
+			[
+				'id'       => 'call_courier',
+				'label'    => 'Same id again',
+				'provider' => 'cdek',
 			],
 		];
 
 		$this->assertSame( [ 'call_courier' ], array_column( $this->toolbar()->declared(), 'id' ) );
 		$this->assertSame( 'Вызвать курьера', $this->toolbar()->declared()[0]['label'], 'the first of two buttons with one id wins' );
+		$this->assertSame( 'cdek', $this->toolbar()->declared()[0]['provider'] );
+	}
+
+	public function test_the_owning_carrier_is_the_servers_business_and_not_sent_to_the_page(): void {
+		$this->declare_courier();
+
+		$shown = $this->toolbar()->for_page();
+
+		$this->assertSame( [ 'call_courier' ], array_column( $shown, 'id' ) );
+		$this->assertArrayNotHasKey( 'provider', $shown[0] );
 	}
 
 	public function test_a_button_is_shown_unless_its_count_is_zero(): void {
 		$this->hooks['woodev_shipping_orders_toolbar_actions'] = static fn() => [
 			[
-				'id'    => 'a',
-				'label' => 'A',
-				'count' => 4,
+				'id'       => 'a',
+				'provider' => 'cdek',
+				'label'    => 'A',
+				'count'    => 4,
 			],
 			[
-				'id'    => 'b',
-				'label' => 'B',
-				'count' => 0,
+				'id'       => 'b',
+				'provider' => 'cdek',
+				'label'    => 'B',
+				'count'    => 0,
 			],
 			[
-				'id'    => 'c',
-				'label' => 'C',
+				'id'       => 'c',
+				'provider' => 'cdek',
+				'label'    => 'C',
 			],
 		];
 
@@ -257,16 +302,18 @@ final class ToolbarActionsTest extends TestCase {
 	public function test_an_explicit_visible_overrides_the_count(): void {
 		$this->hooks['woodev_shipping_orders_toolbar_actions'] = static fn() => [
 			[
-				'id'      => 'a',
-				'label'   => 'A',
-				'count'   => 0,
-				'visible' => true,
+				'id'       => 'a',
+				'provider' => 'cdek',
+				'label'    => 'A',
+				'count'    => 0,
+				'visible'  => true,
 			],
 			[
-				'id'      => 'b',
-				'label'   => 'B',
-				'count'   => 5,
-				'visible' => false,
+				'id'       => 'b',
+				'provider' => 'cdek',
+				'label'    => 'B',
+				'count'    => 5,
+				'visible'  => false,
 			],
 		];
 
@@ -276,9 +323,10 @@ final class ToolbarActionsTest extends TestCase {
 	public function test_a_hidden_button_can_still_be_found_for_its_dialog(): void {
 		$this->hooks['woodev_shipping_orders_toolbar_actions'] = static fn() => [
 			[
-				'id'    => 'a',
-				'label' => 'A',
-				'count' => 0,
+				'id'       => 'a',
+				'provider' => 'cdek',
+				'label'    => 'A',
+				'count'    => 0,
 			],
 		];
 
@@ -295,16 +343,18 @@ final class ToolbarActionsTest extends TestCase {
 	public function test_a_button_carries_a_clean_icon_and_a_non_negative_count(): void {
 		$this->hooks['woodev_shipping_orders_toolbar_actions'] = static fn() => [
 			[
-				'id'    => 'a',
-				'label' => 'A',
-				'icon'  => 'car',
-				'count' => -3,
-				'title' => '<b>Курьер</b>',
+				'id'       => 'a',
+				'provider' => 'cdek',
+				'label'    => 'A',
+				'icon'     => 'car',
+				'count'    => -3,
+				'title'    => '<b>Курьер</b>',
 			],
 			[
-				'id'    => 'b',
-				'label' => 'B',
-				'icon'  => 'Not A Slug!',
+				'id'       => 'b',
+				'provider' => 'cdek',
+				'label'    => 'B',
+				'icon'     => 'Not A Slug!',
 			],
 		];
 
@@ -405,13 +455,23 @@ final class ToolbarActionsTest extends TestCase {
 								'id'      => 'one',
 								'type'    => 'orders',
 								'label'   => 'Первые',
-								'options' => [ '1' ],
+								'options' => [
+									[
+										'value' => '1',
+										'label' => '#1',
+									],
+								],
 							],
 							[
 								'id'      => 'two',
 								'type'    => 'orders',
 								'label'   => 'Вторые',
-								'options' => [ '2' ],
+								'options' => [
+									[
+										'value' => '2',
+										'label' => '#2',
+									],
+								],
 							],
 						],
 					],
@@ -761,6 +821,43 @@ final class ToolbarActionsTest extends TestCase {
 
 		$this->assertSame( [], $this->performed );
 		$this->assertSame( [ 'Заказ не найден.', 'Не удалось определить перевозчика для этого заказа.' ], array_column( $result['results'], 'message' ) );
+	}
+
+	public function test_an_order_of_another_carrier_is_refused_and_the_handler_never_sees_it(): void {
+		$this->declare_courier( null, $this->recording_handler( static fn() => Action_Result::success( '', 'Заявка № 1' ) ) );
+
+		// 1050 is offered by the dialog but resolves to Yandex (an over-broad eligibility query, or a reassignment).
+		$result = $this->toolbar( [ 1047, 1050, 1051 ], [], [ 1050 ] )->submit( 'call_courier', $this->payload( [ 'orders' => [ '1047', '1050', '1051' ] ] ) );
+
+		$this->assertSame( [ 1047, 1051 ], array_column( $this->performed, 1 ), 'the foreign order is never forwarded' );
+		$this->assertSame( [ 'cdek', 'cdek' ], array_column( $this->performed, 2 ) );
+		$this->assertSame( 2, $result['succeeded'] );
+		$this->assertSame( 1, $result['failed'] );
+		$this->assertFalse( $result['results'][1]['ok'] );
+		$this->assertSame( 1050, $result['results'][1]['id'] );
+		$this->assertSame( 'Это действие относится к другому перевозчику и недоступно для этого заказа.', $result['results'][1]['message'] );
+	}
+
+	public function test_two_carriers_each_own_their_actions_and_neither_reaches_the_others_orders(): void {
+		$this->hooks['woodev_shipping_orders_toolbar_actions'] = static fn() => [
+			[
+				'id'       => 'call_courier',
+				'provider' => 'cdek',
+				'label'    => 'СДЭК',
+			],
+			[
+				'id'       => 'call_yandex',
+				'provider' => 'yandex',
+				'label'    => 'Яндекс',
+			],
+		];
+		$this->hooks['woodev_shipping_orders_toolbar_dialog']  = fn( $value ) => $this->courier_dialog();
+		$this->hooks['woodev_shipping_perform_toolbar_action'] = $this->recording_handler( static fn() => Action_Result::success() );
+
+		$toolbar = $this->toolbar( [ 1047, 1050, 1051 ], [], [ 1050 ] );
+		$toolbar->submit( 'call_yandex', $this->payload( [ 'orders' => [ '1047', '1050' ] ] ) );
+
+		$this->assertSame( [ [ 'call_yandex', 1050, 'yandex' ] ], array_map( static fn( $call ) => array_slice( $call, 0, 3 ), $this->performed ), 'only the Yandex order reaches the Yandex action' );
 	}
 
 	// ----- the list tab's buttons -----

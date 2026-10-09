@@ -4617,6 +4617,56 @@ describe( 'carrier seams (s164)', () => {
 			await waitFor( () => expect( document.querySelector( '.components-snackbar' ) ).toBeNull() );
 		} );
 
+		test( 'stays up while another download is still waiting, and goes with the LAST one', async () => {
+			jest.useFakeTimers();
+			window.URL.createObjectURL = jest.fn( () => 'blob:pdf' );
+			window.URL.revokeObjectURL = jest.fn();
+			jest.spyOn( HTMLAnchorElement.prototype, 'click' ).mockImplementation( () => undefined );
+
+			const action = { action: 'waybill', label: 'Накладная', title: '', destructive: false };
+
+			fetchOrders.mockResolvedValue(
+				resultOf( [
+					makeRow( { id: 42, order_number: '42', actions: [ action ] } ),
+					makeRow( { id: 43, order_number: '43', actions: [ action ] } ),
+				] )
+			);
+			// Order 42 is ready on its second look (3 s); order 43 only on its third (3 s + 3 s).
+			const looks = { 42: 0, 43: 0 };
+
+			fetchOrderDocument.mockImplementation( ( id ) => {
+				looks[ id ] += 1;
+
+				const ready = 42 === id ? looks[ id ] >= 2 : looks[ id ] >= 3;
+
+				return Promise.resolve(
+					ready ? { kind: 'file', blob: new Blob( [ '%PDF-' ] ), filename: `${ id }.pdf` } : { kind: 'pending', message: '', retryAfter: 3 }
+				);
+			} );
+
+			render( <App /> );
+
+			const buttons = await screen.findAllByRole( 'button', { name: 'Накладная' } );
+
+			fireEvent.click( buttons[ 0 ] );
+			fireEvent.click( buttons[ 1 ] );
+			await waitFor( () => expect( document.querySelector( '.components-snackbar' ) ).not.toBeNull() );
+
+			// 42 is done, 43 is still polling: the shared toast must still be telling the truth.
+			await act( async () => {
+				await jest.advanceTimersByTimeAsync( 3000 );
+			} );
+			await waitFor( () => expect( window.URL.createObjectURL ).toHaveBeenCalledTimes( 1 ) );
+			expect( document.querySelector( '.components-snackbar' ) ).toHaveTextContent( 'Документ формируется…' );
+
+			// 43 finishes: now nothing is waiting.
+			await act( async () => {
+				await jest.advanceTimersByTimeAsync( 3000 );
+			} );
+			await waitFor( () => expect( window.URL.createObjectURL ).toHaveBeenCalledTimes( 2 ) );
+			await waitFor( () => expect( document.querySelector( '.components-snackbar' ) ).toBeNull() );
+		} );
+
 		test( 'is taken down when the wait fails too, leaving only the failure', async () => {
 			jest.useFakeTimers();
 			fetchOrders.mockResolvedValue(

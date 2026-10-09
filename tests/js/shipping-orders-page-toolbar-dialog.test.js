@@ -188,27 +188,79 @@ describe( 'submitting the form', () => {
 		expect( submitToolbarAction ).not.toHaveBeenCalled();
 	} );
 
-	test( 'every order through: the dialog closes, the page is told, and the merchant sees the sentence', async () => {
-		submitToolbarAction.mockResolvedValue( {
+	describe( 'every order through', () => {
+		const success = {
 			action: 'call_courier',
 			requested: 3,
 			succeeded: 3,
 			failed: 0,
-			results: [],
+			results: [
+				{ id: 1047, order_number: '1047', ok: true, message: 'СДЭК: Заявка № 13312784' },
+				{ id: 1050, order_number: '1050', ok: true, message: 'СДЭК: Заявка № 13312784' },
+				{ id: 1051, order_number: '1051', ok: true, message: '' },
+			],
 			messages: { success: 'Выполнено 3 из 3' },
 			dialog: dialogOf(),
+		};
+
+		test( 'the dialog stays open with the per-order notes, the page is told and the sentence is announced', async () => {
+			submitToolbarAction.mockResolvedValue( success );
+
+			const { onClose, onChanged } = setup();
+
+			fireEvent.click( await submitButton() );
+
+			const dialog = await screen.findByRole( 'dialog' );
+
+			expect( await within( dialog ).findAllByText( /СДЭК: Заявка № 13312784/ ) ).toHaveLength( 2 );
+			expect( within( dialog ).getByText( /Заказ 1051/ ) ).toBeInTheDocument();
+			expect( onChanged ).toHaveBeenCalled();
+			expect( onClose ).not.toHaveBeenCalled();
+
+			const { select } = require( '@wordpress/data' );
+			const { store } = require( '@wordpress/notices' );
+
+			expect( select( store ).getNotices().map( ( notice ) => [ notice.status, notice.content ] ) ).toEqual( [ [ 'success', 'Выполнено 3 из 3' ] ] );
 		} );
 
-		const { onClose, onChanged } = setup();
+		test( 'an explicit «Закрыть» closes it', async () => {
+			submitToolbarAction.mockResolvedValue( success );
 
-		fireEvent.click( await submitButton() );
+			const { onClose } = setup();
 
-		await waitFor( () => expect( onClose ).toHaveBeenCalled() );
-		expect( onChanged ).toHaveBeenCalled();
-		const { select } = require( '@wordpress/data' );
-		const { store } = require( '@wordpress/notices' );
+			fireEvent.click( await submitButton() );
+			fireEvent.click( await screen.findByRole( 'button', { name: 'Закрыть' } ) );
 
-		expect( select( store ).getNotices().map( ( notice ) => [ notice.status, notice.content ] ) ).toEqual( [ [ 'success', 'Выполнено 3 из 3' ] ] );
+			expect( onClose ).toHaveBeenCalledTimes( 1 );
+		} );
+
+		test( 'a refreshed dialog with no form left still shows the summary, and so does a refreshed null one', async () => {
+			submitToolbarAction.mockResolvedValue( { ...success, dialog: dialogOf( [ LIST_TAB ] ) } );
+
+			const { onClose } = setup();
+
+			fireEvent.click( await submitButton() );
+
+			expect( await screen.findAllByText( /СДЭК: Заявка № 13312784/ ) ).toHaveLength( 2 );
+			expect( screen.queryByRole( 'button', { name: 'Вызвать' } ) ).not.toBeInTheDocument();
+			expect( onClose ).not.toHaveBeenCalled();
+		} );
+
+		test( 'a null dialog after the run keeps the summary on screen until it is closed', async () => {
+			submitToolbarAction.mockResolvedValue( { ...success, dialog: null } );
+
+			const { onClose } = setup();
+
+			fireEvent.click( await submitButton() );
+
+			expect( await screen.findAllByText( /СДЭК: Заявка № 13312784/ ) ).toHaveLength( 2 );
+			expect( screen.queryByRole( 'tab' ) ).not.toBeInTheDocument();
+			expect( onClose ).not.toHaveBeenCalled();
+
+			fireEvent.click( screen.getByRole( 'button', { name: 'Закрыть' } ) );
+
+			expect( onClose ).toHaveBeenCalledTimes( 1 );
+		} );
 	} );
 
 	describe( 'some orders failed', () => {
@@ -382,6 +434,99 @@ describe( 'the list tab', () => {
 		fireEvent.click( screen.getByRole( 'button', { name: 'Обновить' } ) );
 
 		await waitFor( () => expect( onClose ).toHaveBeenCalled() );
+	} );
+} );
+
+describe( 'one mutation at a time across the tabs', () => {
+	/** A promise the test settles by hand. */
+	const deferred = () => {
+		let resolve;
+		let reject;
+		const promise = new Promise( ( res, rej ) => {
+			resolve = res;
+			reject = rej;
+		} );
+
+		return { promise, resolve, reject };
+	};
+
+	test( 'while the form is submitting, the list buttons do nothing and the dialog cannot be closed', async () => {
+		const run = deferred();
+		submitToolbarAction.mockReturnValue( run.promise );
+
+		const { onClose } = setup();
+
+		fireEvent.click( await submitButton() );
+		await waitFor( () => expect( submitToolbarAction ).toHaveBeenCalledTimes( 1 ) );
+
+		// The tab stays readable, but nothing in it can start a second request.
+		fireEvent.click( screen.getByRole( 'tab', { name: 'Заявки' } ) );
+
+		const cancel = await screen.findByRole( 'button', { name: 'Отменить' } );
+		const refresh = screen.getByRole( 'button', { name: 'Обновить' } );
+
+		expect( cancel ).toBeDisabled();
+		expect( refresh ).toBeDisabled();
+
+		fireEvent.click( cancel );
+		fireEvent.click( refresh );
+		fireEvent.keyDown( screen.getByRole( 'dialog' ), { key: 'Escape', code: 'Escape' } );
+
+		expect( screen.queryByText( 'После отмены СДЭК может не принять новый вызов.' ) ).not.toBeInTheDocument();
+		expect( performToolbarRowAction ).not.toHaveBeenCalled();
+		expect( onClose ).not.toHaveBeenCalled();
+
+		run.resolve( { action: 'call_courier', requested: 1, succeeded: 1, failed: 0, results: [], messages: {}, dialog: dialogOf() } );
+
+		await waitFor( () => expect( screen.getByRole( 'button', { name: 'Обновить' } ) ).not.toBeDisabled() );
+	} );
+
+	test( 'while a row button is running, the form cannot be submitted, edited or cancelled', async () => {
+		const row = deferred();
+		performToolbarRowAction.mockReturnValue( row.promise );
+
+		const { onClose } = setup();
+
+		fireEvent.click( await screen.findByRole( 'tab', { name: 'Заявки' } ) );
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Обновить' } ) );
+		await waitFor( () => expect( performToolbarRowAction ).toHaveBeenCalledTimes( 1 ) );
+
+		// Back on the form: everything is locked until the row answers.
+		fireEvent.click( screen.getByRole( 'tab', { name: 'Вызов' } ) );
+
+		const send = await submitButton();
+
+		expect( send ).toBeDisabled();
+		expect( screen.getByLabelText( /Комментарий/ ) ).toBeDisabled();
+		expect( screen.getByRole( 'button', { name: 'Отмена' } ) ).toBeDisabled();
+
+		fireEvent.click( send );
+		fireEvent.submit( send.closest( 'form' ) );
+		fireEvent.keyDown( screen.getByRole( 'dialog' ), { key: 'Escape', code: 'Escape' } );
+
+		expect( submitToolbarAction ).not.toHaveBeenCalled();
+		expect( onClose ).not.toHaveBeenCalled();
+
+		row.resolve( { message: 'Обновлено', dialog: dialogOf() } );
+
+		await waitFor( () => expect( screen.getByRole( 'button', { name: 'Вызвать' } ) ).not.toBeDisabled() );
+	} );
+
+	test( 'after the lock lifts the refreshed state is what the dialog shows', async () => {
+		const row = deferred();
+		performToolbarRowAction.mockReturnValue( row.promise );
+
+		setup();
+
+		fireEvent.click( await screen.findByRole( 'tab', { name: 'Заявки' } ) );
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Обновить' } ) );
+		await waitFor( () => expect( performToolbarRowAction ).toHaveBeenCalledTimes( 1 ) );
+
+		row.resolve( { message: 'Обновлено', dialog: dialogOf( [ FORM_TAB, { ...LIST_TAB, rows: [ LIST_TAB.rows[ 0 ] ] } ] ) } );
+
+		await waitFor( () => expect( screen.queryByText( '13312784' ) ).not.toBeInTheDocument() );
+		expect( screen.getByText( '13312783' ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'button', { name: 'Отменить' } ) ).not.toBeDisabled();
 	} );
 } );
 

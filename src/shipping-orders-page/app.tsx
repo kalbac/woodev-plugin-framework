@@ -2054,8 +2054,13 @@ export default function OrdersPage() {
 			} )
 			.finally( () => {
 				documentPolls.current.delete( controller );
-				// The wait is over, however it ended: the «формируется» toast has nothing left to say.
-				dispatch( noticesStore ).removeNotice( DOCUMENT_PENDING_NOTICE );
+
+				// The wait is over, however it ended: the «формируется» toast has nothing left to say — once the
+				// LAST wait is over. The notice is shared by every download, and one finishing must not take it
+				// down while another is still polling.
+				if ( 0 === documentPolls.current.size ) {
+					dispatch( noticesStore ).removeNotice( DOCUMENT_PENDING_NOTICE );
+				}
 			} );
 	};
 

@@ -73,14 +73,16 @@ final class ToolbarControllerTest extends TestCase {
 			$value,
 			[
 				[
-					'id'    => 'call_courier',
-					'label' => 'Вызвать курьера',
-					'count' => 2,
+					'id'       => 'call_courier',
+					'provider' => 'cdek',
+					'label'    => 'Вызвать курьера',
+					'count'    => 2,
 				],
 				[
-					'id'    => 'hidden_one',
-					'label' => 'Скрытое',
-					'count' => 0,
+					'id'       => 'hidden_one',
+					'provider' => 'cdek',
+					'label'    => 'Скрытое',
+					'count'    => 0,
 				],
 			]
 		);

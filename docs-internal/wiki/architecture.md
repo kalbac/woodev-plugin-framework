@@ -362,9 +362,9 @@ Moved here from `CURRENT-STATE.md` in s139: they are reference, true regardless 
 
   | filter | answers | shape |
   |---|---|---|
-  | `woodev_shipping_orders_toolbar_actions( array $actions )` | which buttons exist | `[ 'id' (a-z0-9_-), 'label', 'title'?, 'icon'? (Dashicons slug), 'count'? (int), 'visible'? (bool) ]` — hidden when `count` is `0`, unless `visible => true` (keeps a «Заявки» tab reachable); **cheap**, runs on every page load and after every action |
+  | `woodev_shipping_orders_toolbar_actions( array $actions )` | which buttons exist | `[ 'id' (a-z0-9_-), 'provider' (**required**: the owning carrier's id — an entry without it is dropped), 'label', 'title'?, 'icon'? (Dashicons slug), 'count'? (int), 'visible'? (bool) ]` — hidden when `count` is `0`, unless `visible => true` (keeps a «Заявки» tab reachable); **cheap**, runs on every page load and after every action |
   | `woodev_shipping_orders_toolbar_dialog( ?array $dialog, string $action_id )` | the dialog, asked for when it opens and again after every run | `[ 'title'?, 'description'?, 'tabs' => [ form tab, list tab, … ] ]` (≤ 4 tabs, **one** form tab) |
-  | `woodev_shipping_perform_toolbar_action( Action_Result $result, string $action_id, \WC_Order $order, Orders_Provider $provider, array $payload )` | run the submitted form for ONE order, once per chosen order | `Action_Result::success( '', 'note'? )` / `::failure( 'reason' )`; `$payload` is the validated shared values WITHOUT the orders field |
+  | `woodev_shipping_perform_toolbar_action( Action_Result $result, string $action_id, \WC_Order $order, Orders_Provider $provider, array $payload )` | run the submitted form for ONE order, once per chosen order — only for orders of the action's `provider`: the framework compares the order's resolved carrier id first and answers a per-order failure on a mismatch, the handler is never called | `Action_Result::success( '', 'note'? )` / `::failure( 'reason' )`; `$payload` is the validated shared values WITHOUT the orders field |
   | `woodev_shipping_perform_toolbar_row_action( Action_Result $result, string $action_id, string $tab_id, string $row_id, string $row_action )` | a button of a list row | same `Action_Result`; the framework has already checked the button is on that row of the CURRENT dialog |
 
   A **form tab** is `[ 'id', 'type' => 'form', 'label', 'submit_label'?, 'description'?, 'fields' => [ … ] ]` — the
@@ -381,6 +381,9 @@ Moved here from `CURRENT-STATE.md` in s139: they are reference, true regardless 
   valid, **422** `woodev_shipping_orders_invalid_payload` with `data.errors = [ { field, code, message } ]` otherwise
   (`edit_shop_orders`); `POST /{id}/rows` body `{ tab, row, action }` → `{ message, dialog }`, 400 when the CURRENT dialog does
   not offer that button, 502 with the carrier's reason on a failure. An unknown action or a carrier with no dialog is a 404.
+  The `orders` option values must be positive decimal ids (`/^[1-9][0-9]*$/`); any other option is dropped. The dialog
+  keeps ONE mutation in flight across its tabs (submit and row buttons, fields, close are all locked while one runs) and
+  keeps the per-order summary on screen after EVERY run — a full success included — until the merchant closes it.
   Orders run **sequentially** inside one request (a carrier call each), so ten orders cost ten calls. The client multi-select
   is `@wordpress/components`' `FormTokenField` (`orders-select.tsx`; the token is the order's label, so typing a city finds it),
   not WooCommerce's `selectWoo`, which is a jQuery plugin bound to PHP-rendered `<select>` markup.

@@ -114,13 +114,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Toolbar_Acti
 		 *
 		 * @since 2.0.2
 		 *
-		 * @return array<int,array{id:string,label:string,title:string,icon:string,count:int|null,visible:bool}>
+		 * @return array<int,array{id:string,provider:string,label:string,title:string,icon:string,count:int|null,visible:bool}>
 		 */
 		public function declared(): array {
 			/**
 			 * Declares the buttons above the orders table, one per page-level action.
 			 *
-			 * Each entry: `[ 'id' => string (lowercase letters, digits, `_`, `-`; unique), 'label' => string,
+			 * Each entry: `[ 'id' => string (lowercase letters, digits, `_`, `-`; unique), 'provider' => string
+			 * (REQUIRED: the id of the carrier that owns the action — an entry without it is dropped, and the
+			 * per-order handler is never called for an order another carrier ships), 'label' => string,
 			 * 'title' => string (optional tooltip), 'icon' => string (optional Dashicons slug without the
 			 * `dashicons-` prefix), 'count' => int (optional: how many orders the action is for now — drawn on the
 			 * button, and the button is hidden at 0), 'visible' => bool (optional: overrides that default, e.g.
@@ -152,7 +154,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Toolbar_Acti
 					continue;
 				}
 
-				unset( $action['visible'] );
+				unset( $action['visible'], $action['provider'] );
 				$shown[] = $action;
 			}
 
@@ -166,7 +168,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Toolbar_Acti
 		 * @since 2.0.2
 		 *
 		 * @param string $id the action id.
-		 * @return array{id:string,label:string,title:string,icon:string,count:int|null,visible:bool}|null
+		 * @return array{id:string,provider:string,label:string,title:string,icon:string,count:int|null,visible:bool}|null
 		 */
 		public function find( string $id ): ?array {
 			foreach ( $this->declared() as $action ) {
@@ -237,10 +239,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Toolbar_Acti
 		 * @return array{errors:array<int,array{field:string,code:string,message:string}>}|array{requested:int,succeeded:int,failed:int,results:array<int,array{id:int,order_number:string,ok:bool,message:string}>,messages:array{success?:string,error?:string}}|null null when the action or its form is unavailable.
 		 */
 		public function submit( string $id, $raw_payload ): ?array {
-			$dialog = $this->dialog( $id );
+			$action = $this->find( $id );
+			$dialog = null === $action ? null : $this->dialog( $id );
 			$form   = null === $dialog ? null : self::first_tab( $dialog, self::TAB_FORM );
 
-			if ( null === $form ) {
+			if ( null === $action || null === $form ) {
 				return null;
 			}
 
@@ -272,7 +275,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Toolbar_Acti
 			$ok      = 0;
 
 			foreach ( $order_ids as $order_id ) {
-				$result    = $this->run_for_order( $id, $order_id, $payload );
+				$result    = $this->run_for_order( $id, $action['provider'], $order_id, $payload );
 				$results[] = $result;
 				$ok       += $result['ok'] ? 1 : 0;
 			}
@@ -335,12 +338,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Toolbar_Acti
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param string              $action_id the toolbar action id.
-		 * @param int                 $order_id  the order id.
-		 * @param array<string,mixed> $payload   the validated shared values, without the orders field.
+		 * @param string              $action_id   the toolbar action id.
+		 * @param string              $provider_id the carrier that owns the action: an order of any other carrier is refused.
+		 * @param int                 $order_id    the order id.
+		 * @param array<string,mixed> $payload     the validated shared values, without the orders field.
 		 * @return array{id:int,order_number:string,ok:bool,message:string}
 		 */
-		private function run_for_order( string $action_id, int $order_id, array $payload ): array {
+		private function run_for_order( string $action_id, string $provider_id, int $order_id, array $payload ): array {
 			$order = wc_get_order( $order_id );
 
 			if ( ! $order instanceof \WC_Order ) {
@@ -354,10 +358,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Toolbar_Acti
 				return self::order_result( $order_id, $number, false, __( 'Не удалось определить перевозчика для этого заказа.', 'woodev-plugin-framework' ) );
 			}
 
+			// The action belongs to ONE carrier: an order that resolves to another one (an over-broad eligibility query,
+			// or a reassignment while earlier orders ran) is a per-order failure and the handler never sees it.
+			if ( $provider->get_id() !== $provider_id ) {
+				return self::order_result( $order_id, $number, false, __( 'Это действие относится к другому перевозчику и недоступно для этого заказа.', 'woodev-plugin-framework' ) );
+			}
+
 			try {
 				/**
 				 * Runs a toolbar action's submitted form for ONE order — called once per chosen order, in the order
 				 * the merchant's list gave them.
+				 *
+				 * Only orders of the action's owning carrier (`provider` of the declaration) reach this filter: an
+				 * order that resolves to another carrier fails on its own, with this filter never called.
 				 *
 				 * Return {@see Action_Result::success()} (its message is shown beside the order) or
 				 * {@see Action_Result::failure()} with the carrier's reason — shown to the merchant, prefixed with the
@@ -555,7 +568,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Toolbar_Acti
 		 * @since 2.0.2
 		 *
 		 * @param mixed $actions the filtered value, of unknown shape.
-		 * @return array<int,array{id:string,label:string,title:string,icon:string,count:int|null,visible:bool}>
+		 * @return array<int,array{id:string,provider:string,label:string,title:string,icon:string,count:int|null,visible:bool}>
 		 */
 		public static function sanitize_declared( $actions ): array {
 			if ( ! is_array( $actions ) ) {
@@ -577,17 +590,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Toolbar_Acti
 					continue;
 				}
 
+				// The owning carrier is mandatory: an action no carrier claims could be forwarded to any carrier's order.
+				$provider = isset( $action['provider'] ) && is_string( $action['provider'] ) ? trim( $action['provider'] ) : '';
+
+				if ( '' === $provider || strlen( $provider ) > 191 ) {
+					continue;
+				}
+
 				$count = isset( $action['count'] ) && is_numeric( $action['count'] ) ? max( 0, (int) $action['count'] ) : null;
 
 				$seen[ $id ] = true;
 				$clean[]     = [
-					'id'      => $id,
-					'label'   => $label,
-					'title'   => Order_Action_Fields::sanitize_help( $action['title'] ?? null ),
-					'icon'    => Order_Actions::sanitize_icon( $action['icon'] ?? null ),
-					'count'   => $count,
+					'id'       => $id,
+					'provider' => $provider,
+					'label'    => $label,
+					'title'    => Order_Action_Fields::sanitize_help( $action['title'] ?? null ),
+					'icon'     => Order_Actions::sanitize_icon( $action['icon'] ?? null ),
+					'count'    => $count,
 					// An explicit `visible` wins; otherwise a count of 0 hides the button and no count shows it.
-					'visible' => isset( $action['visible'] ) ? (bool) $action['visible'] : ( null === $count || $count > 0 ),
+					'visible'  => isset( $action['visible'] ) ? (bool) $action['visible'] : ( null === $count || $count > 0 ),
 				];
 			}
 

@@ -192,7 +192,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 							continue 2;
 						}
 
-						$options = array_slice( self::sanitize_options( $field['options'] ?? null ), 0, self::MAX_ORDERS );
+						// An option IS an order id: only a positive decimal one stays (`absint()` later would turn `12abc`
+						// or `1e3` into an order the merchant never saw offered).
+						$options = array_values(
+							array_filter(
+								self::sanitize_options( $field['options'] ?? null ),
+								static fn( array $option ): bool => 1 === preg_match( '/^[1-9][0-9]*$/', (string) $option['value'] )
+							)
+						);
+						$options = array_slice( $options, 0, self::MAX_ORDERS );
 
 						if ( [] === $options ) {
 							continue 2;
