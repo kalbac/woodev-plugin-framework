@@ -353,8 +353,9 @@ Moved here from `CURRENT-STATE.md` in s139: they are reference, true regardless 
   order's metabox. A carrier fills them through `woodev_shipping_order_row_flags( array $flags, \WC_Order $order,
   ?Orders_Provider $provider )` (starts `[]`); each flag is `[ 'label' => string, 'tone' => 'ok'|'warn'|'error'|'info'|'muted',
   'title' => string (tooltip, optional), 'icon' => string (Dashicons slug, optional) ]`. A flag WITH an `icon` is drawn
-  icon-only: the dashicon in its tone's colour (`warn` = the `$warn` design token) right after the tracking number on the
-  same line, the label as its accessible name and its tooltip (`title` when given, else the label); the metabox does the
+  icon-only: the glyph in its tone's colour (`warn` = the `$warn` design token) right after the tracking number in one
+  nowrap line (`.woodev-orders-tracking-line`); the slug `warning` is drawn as the triangle-with-«!» SVG of
+  `@wordpress/icons` (`error`, 18 px, `currentColor`), any other slug as the Dashicon of that name, the label as its accessible name and its tooltip (`title` when given, else the label); the metabox does the
   same beside its «Трек-номер» line, and falls back to an icon-only list item when the order has no tracking line. A flag
   without an icon stays a badge under the number. `Order_Row_Flags::sanitize()` drops malformed / empty / repeated labels,
   cuts a label at 60 characters, keeps at most 3 and runs `icon` through `Order_Actions::sanitize_icon()` (the same slug rule

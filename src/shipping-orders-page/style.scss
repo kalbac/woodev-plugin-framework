@@ -1396,14 +1396,29 @@
 }
 
 /**
- * An icon-only row flag (s164) — a Dashicon in its tone's colour on the tracking number's own line (orders page) or
- * beside the tracking line (order metabox). `warn` is the framework's warning token, not a hex of its own.
+ * The tracking number and its icon-only flags (s164) — one nowrap line, so the icons never drop under the number
+ * (orders-page cell and order metabox alike).
+ */
+.woodev-orders-tracking-line {
+	align-items: center;
+	display: inline-flex;
+	flex-wrap: nowrap;
+	gap: wd.$gap-xs;
+	max-width: 100%;
+	white-space: nowrap;
+}
+
+/**
+ * An icon-only row flag (s164) — a glyph in its tone's colour beside the tracking number. `warn` is the framework's
+ * warning token, not a hex of its own. The `warning` flag icon is the triangle-with-«!» SVG of `@wordpress/icons`
+ * (`error`); any other slug is the Dashicon of that name.
  */
 .woodev-orders-flag-icon {
+	align-items: center;
 	cursor: help;
+	display: inline-flex;
+	flex: none;
 	line-height: 1;
-	margin-left: wd.$gap-xs;
-	vertical-align: middle;
 
 	&--ok { color: wd.$ok; }
 	&--warn { color: wd.$warn; }
@@ -1417,6 +1432,18 @@
 	font-size: 16px;
 	height: 16px;
 	width: 16px;
+}
+
+.woodev-orders-flag-icon--svg {
+	height: 18px;
+	width: 18px;
+
+	svg {
+		display: block;
+		fill: currentColor;
+		height: 18px;
+		width: 18px;
+	}
 }
 
 .woodev-orders-flag-item {

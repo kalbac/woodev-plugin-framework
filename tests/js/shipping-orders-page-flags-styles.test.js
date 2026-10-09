@@ -38,6 +38,17 @@ describe( 'row flag tones', () => {
 		expect( styled.find( ( m ) => 'warn' === m[ 1 ] )[ 2 ] ).toBe( 'wd.$warn' );
 	} );
 
+	test( 'the tracking number and its icon flags share one nowrap flex line', () => {
+		const scss = read( 'src/shipping-orders-page/style.scss' );
+		const start = scss.indexOf( '.woodev-orders-tracking-line {' );
+		const block = scss.slice( start, scss.indexOf( '\n}\n', start ) );
+
+		expect( start ).toBeGreaterThan( -1 );
+		expect( block ).toMatch( /display:\s*inline-flex/ );
+		expect( block ).toMatch( /flex-wrap:\s*nowrap/ );
+		expect( block ).toMatch( /align-items:\s*center/ );
+	} );
+
 	test( 'the TypeScript type names the same tones', () => {
 		const rest = read( 'src/shipping-orders-page/rest.ts' );
 		const type = /export type OrderRowFlagTone = ([^;]+);/.exec( rest )[ 1 ];

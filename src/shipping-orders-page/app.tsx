@@ -344,27 +344,52 @@ function TrackingCell( { tracking, flags = [] }: { tracking: OrderRowTracking; f
 
 	return (
 		<>
-			{ number }
-			{ iconFlags.map( ( flag ) => (
-				<FlagIcon key={ flag.label } flag={ flag } />
-			) ) }
+			{ iconFlags.length > 0 ? (
+				<span className="woodev-orders-tracking-line">
+					{ number }
+					{ iconFlags.map( ( flag ) => (
+						<FlagIcon key={ flag.label } flag={ flag } />
+					) ) }
+				</span>
+			) : (
+				number
+			) }
 			{ badgeFlags.length > 0 && <RowFlags flags={ badgeFlags } /> }
 		</>
 	);
 }
 
 /**
- * A flag that declares an `icon` (s164): just the Dashicon in its tone's colour, on the tracking number's line. The
- * label is its accessible name, the tooltip is `title` when the carrier gave one, else the label.
+ * The triangle-with-«!» glyph of `@wordpress/icons` (`error`), inlined: the package is only a transitive dependency
+ * here, and one path is not worth declaring it.
+ */
+const WARNING_TRIANGLE_PATH =
+	'M12.218 5.377a.25.25 0 0 0-.436 0l-7.29 12.96a.25.25 0 0 0 .218.373h14.58a.25.25 0 0 0 .218-.372l-7.29-12.96Zm-1.743-.735c.669-1.19 2.381-1.19 3.05 0l7.29 12.96a1.75 1.75 0 0 1-1.525 2.608H4.71a1.75 1.75 0 0 1-1.525-2.608l7.29-12.96ZM12.75 17.46h-1.5v-1.5h1.5v1.5Zm-1.5-3h1.5v-5h-1.5v5Z';
+
+/**
+ * A flag that declares an `icon` (s164): just the glyph in its tone's colour, on the tracking number's line. The
+ * label is its accessible name, the tooltip is `title` when the carrier gave one, else the label. The `warning` icon
+ * is a triangle with «!» (SVG); any other slug is the Dashicon of that name.
  */
 export function FlagIcon( { flag }: { flag: OrderRowFlag } ) {
+	const triangle = 'warning' === flag.icon;
+
 	return (
 		<span
-			className={ `woodev-orders-flag-icon woodev-orders-flag-icon--${ flag.tone } dashicons dashicons-${ flag.icon }` }
+			className={
+				`woodev-orders-flag-icon woodev-orders-flag-icon--${ flag.tone } ` +
+				( triangle ? 'woodev-orders-flag-icon--svg' : `dashicons dashicons-${ flag.icon }` )
+			}
 			role="img"
 			aria-label={ flag.label }
 			title={ flag.title || flag.label }
-		/>
+		>
+			{ triangle && (
+				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+					<path fillRule="evenodd" clipRule="evenodd" d={ WARNING_TRIANGLE_PATH } />
+				</svg>
+			) }
+		</span>
 	);
 }
 

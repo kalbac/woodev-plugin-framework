@@ -679,7 +679,10 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			( new Shipping_Admin_Order( Orders_Registry::instance() ) )->render_metabox( $order, $provider );
 			$html = ob_get_clean();
 
-			$this->assertStringContainsString( 'woodev-orders-flag-icon woodev-orders-flag-icon--warn dashicons dashicons-warning', $html );
+			// `warning` is the triangle-with-«!» SVG (not the circular Dashicon), tone-coloured through currentColor.
+			$this->assertStringContainsString( 'woodev-orders-flag-icon woodev-orders-flag-icon--warn woodev-orders-flag-icon--svg', $html );
+			$this->assertStringNotContainsString( 'dashicons-warning', $html );
+			$this->assertStringContainsString( '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true" focusable="false"><path fill-rule="evenodd" clip-rule="evenodd" d="M12.218 5.377', $html );
 			$this->assertStringContainsString( 'role="img" title="Нужно вызвать курьера" aria-label="Нужно вызвать курьера"', $html );
 			// Icon-only: the label is not a visible badge, the other flag still is.
 			$this->assertStringNotContainsString( '>Нужно вызвать курьера</li>', $html );
@@ -687,8 +690,11 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 
 			// On the tracking line: after the tracking number's own text, inside the same cell.
 			$this->assertSame( 1, preg_match( '#<td>(?:(?!</td>).)*Нужно вызвать курьера(?:(?!</td>).)*</td>#su', $html, $cell ) );
-			$this->assertStringContainsString( 'dashicons-warning', $cell[0] );
-			$this->assertLessThan( strpos( $cell[0], 'dashicons-warning' ), strpos( $cell[0], 'TRACK-1' ) );
+			$this->assertStringContainsString( 'woodev-orders-flag-icon--svg', $cell[0] );
+			$this->assertLessThan( strpos( $cell[0], 'woodev-orders-flag-icon--svg' ), strpos( $cell[0], 'TRACK-1' ) );
+
+			// Same line: the number and its icon share one nowrap wrapper.
+			$this->assertSame( 1, preg_match( '#<span class="woodev-orders-tracking-line">(?:(?!</td>).)*TRACK-1(?:(?!</td>).)*woodev-orders-flag-icon--svg(?:(?!</td>).)*</span>\s*</td>#su', $cell[0] ) );
 		}
 
 		public function test_render_metabox_draws_no_flag_list_when_a_row_carries_none(): void {

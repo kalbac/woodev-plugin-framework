@@ -4447,10 +4447,15 @@ describe( 'carrier seams (s164)', () => {
 
 			const icon = await screen.findByRole( 'img', { name: 'Нужно вызвать курьера' } );
 
-			expect( icon ).toHaveClass( 'woodev-orders-flag-icon', 'woodev-orders-flag-icon--warn', 'dashicons', 'dashicons-warning' );
+			// `warning` is the triangle-with-«!» SVG, not the circular Dashicon.
+			expect( icon ).toHaveClass( 'woodev-orders-flag-icon', 'woodev-orders-flag-icon--warn', 'woodev-orders-flag-icon--svg' );
+			expect( icon ).not.toHaveClass( 'dashicons' );
+			const svg = icon.querySelector( 'svg' );
+			expect( svg ).toHaveAttribute( 'aria-hidden', 'true' );
+			expect( svg.querySelector( 'path' ).getAttribute( 'd' ) ).toMatch( /^M12\.218 5\.377/ );
 			// No explicit title → the label is the tooltip; there is no visible text.
 			expect( icon ).toHaveAttribute( 'title', 'Нужно вызвать курьера' );
-			expect( icon ).toBeEmptyDOMElement();
+			expect( icon ).toHaveTextContent( '' );
 			expect( screen.queryByText( 'Нужно вызвать курьера' ) ).toBeNull();
 
 			// Same line: a direct sibling after the tracking link, not inside the badge list.
@@ -4459,10 +4464,26 @@ describe( 'carrier seams (s164)', () => {
 
 			expect( icon.previousElementSibling ).toBe( link );
 			expect( icon.closest( '.woodev-orders-flags' ) ).toBeNull();
+			// … and the pair shares one nowrap wrapper, so the icon never drops under the number.
+			expect( icon.parentElement ).toHaveClass( 'woodev-orders-tracking-line' );
+			expect( link.parentElement ).toBe( icon.parentElement );
 
 			// The flag without an icon is still a badge under the number.
 			expect( screen.getByText( 'Курьер вызван на 12.10' ) ).toHaveClass( 'woodev-orders-flag--info' );
 			expect( container.querySelectorAll( '.woodev-orders-flag' ) ).toHaveLength( 1 );
+		} );
+
+		test( 'an icon other than `warning` stays a Dashicon of that name', async () => {
+			fetchOrders.mockResolvedValue(
+				resultOf( [ makeRow( { flags: [ { label: 'Нужна проверка', tone: 'info', icon: 'clock' } ] } ) ] )
+			);
+
+			render( <App /> );
+
+			const icon = await screen.findByRole( 'img', { name: 'Нужна проверка' } );
+
+			expect( icon ).toHaveClass( 'woodev-orders-flag-icon--info', 'dashicons', 'dashicons-clock' );
+			expect( icon.querySelector( 'svg' ) ).toBeNull();
 		} );
 
 		test( 'an icon flag\'s own title wins as the tooltip, and a row with only icon flags draws no badge list', async () => {
