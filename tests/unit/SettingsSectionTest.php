@@ -2,6 +2,7 @@
 namespace Woodev\Tests\Unit;
 
 use Brain\Monkey\Functions;
+use Woodev\Framework\Settings\Settings_Group;
 use Woodev\Framework\Settings\Settings_Section;
 use Woodev\Framework\Shipping\Settings\Shipping_Tool;
 use Woodev\Framework\Shipping\Settings\Tool_Result;
@@ -176,6 +177,52 @@ class SettingsSectionTest extends TestCase {
 			'Проверить',
 			static fn( array $args ): Tool_Result => Tool_Result::success()
 		);
+	}
+
+	public function test_a_section_has_no_groups_by_default(): void {
+		$this->assertSame( [], Settings_Section::create( 'export', 'Выгрузка', [ 'a' ] )->get_groups() );
+	}
+
+	public function test_with_groups_returns_a_copy_carrying_the_groups_and_leaves_the_original_alone(): void {
+		$group   = Settings_Group::create( 'send', 'Отправка' )->with_fields( [ 'a' ] );
+		$section = Settings_Section::create( 'export', 'Выгрузка', [ 'a' ] );
+		$with    = $section->with_groups( [ $group ] );
+
+		$this->assertSame( [], $section->get_groups(), 'immutable: the original has none' );
+		$this->assertSame( [ $group ], $with->get_groups() );
+		$this->assertSame( [ 'a' ], $with->get_setting_ids(), 'the fields stay' );
+	}
+
+	public function test_with_groups_drops_a_non_group_and_a_repeated_id_with_a_notice(): void {
+		Functions\expect( '_doing_it_wrong' )->twice();
+
+		$first = Settings_Group::create( 'send', 'Отправка' );
+		$with  = Settings_Section::create( 'export', 'X', [] )->with_groups( [ 'nope', $first, Settings_Group::create( 'send', 'Дубль' ) ] );
+
+		$this->assertSame( [ $first ], $with->get_groups() );
+	}
+
+	public function test_a_connection_or_tools_section_refuses_groups(): void {
+		Functions\expect( '_doing_it_wrong' )->twice();
+
+		$group      = Settings_Group::create( 'g', 'G' );
+		$connection = Settings_Section::create_connection( 'api', 'API', [], 'Проверить' );
+		$tools      = Settings_Section::create_tools( 'tools', 'Инструменты', [] );
+
+		$this->assertSame( [], $connection->with_groups( [ $group ] )->get_groups() );
+		$this->assertSame( [], $tools->with_groups( [ $group ] )->get_groups() );
+	}
+
+	public function test_a_group_is_immutable_and_deduplicates_its_members(): void {
+		$empty = Settings_Group::create( 'send', 'Отправка', 'Описание' );
+		$full  = $empty->with_fields( [ 'a', 'b', 'a' ] )->with_actions( [ 'x', 'x' ] )->with_notice( 'Только локально' );
+
+		$this->assertSame( [], $empty->get_setting_ids() );
+		$this->assertSame( [ 'a', 'b' ], $full->get_setting_ids() );
+		$this->assertSame( [ 'x' ], $full->get_action_ids() );
+		$this->assertSame( 'Только локально', $full->get_notice() );
+		$this->assertSame( 'Описание', $full->get_description() );
+		$this->assertSame( 'Отправка', $full->get_title() );
 	}
 
 	public function test_with_actions_returns_a_copy_carrying_the_buttons_and_leaves_the_original_alone(): void {

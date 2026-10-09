@@ -14,6 +14,7 @@ namespace Woodev\Tests\Unit\Shipping\Settings;
 use Brain\Monkey\Functions;
 use Mockery;
 use Woodev\Framework\Settings\Composite_Settings_Handler;
+use Woodev\Framework\Settings\Settings_Group;
 use Woodev\Framework\Settings\Settings_Page_Registry;
 use Woodev\Framework\Settings\Settings_Provider;
 use Woodev\Framework\Settings\Settings_Section;
@@ -22,6 +23,7 @@ use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
 use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
 use Woodev\Framework\Shipping\Settings\Advanced_Settings;
 use Woodev\Framework\Shipping\Settings\Export_Settings;
+use Woodev\Framework\Shipping\Settings\Shipping_Tool;
 use Woodev\Framework\Shipping\Shipping_Plugin;
 use Woodev\Tests\Unit\TestCase;
 
@@ -543,6 +545,234 @@ final class CarrierSettingsTabTest extends TestCase {
 		$this->assertSame( [], $this->section_ids( $provider ) );
 	}
 
+	// ----- «Дополнительно» stays the framework's own, bare (s165) -----
+
+	private function advanced_of( $plugin ): Settings_Section {
+		$sections = $plugin->get_settings_providers()[0]->get_sections();
+
+		return $sections[ count( $sections ) - 1 ];
+	}
+
+	private function export_of( $plugin ): Settings_Section {
+		foreach ( $plugin->get_settings_providers()[0]->get_sections() as $section ) {
+			if ( 'export' === $section->get_id() ) {
+				return $section;
+			}
+		}
+
+		$this->fail( 'the carrier has no export section' );
+	}
+
+	private function tool( string $id ): Shipping_Tool {
+		return Shipping_Tool::create( $id, 'Заголовок', 'Описание', 'Кнопка', static fn() => null );
+	}
+
+	/** @return string[] */
+	private function group_ids( Settings_Section $section ): array {
+		return array_map( static fn( Settings_Group $g ) => $g->get_id(), $section->get_groups() );
+	}
+
+	public function test_the_additional_section_has_no_cards_actions_or_description(): void {
+		$plugin = $this->carrier();
+		$this->make_it_export( $plugin );
+
+		$advanced = $this->advanced_of( $plugin );
+
+		$this->assertSame( 'advanced', $advanced->get_id() );
+		$this->assertSame( [ 'enable_debug', 'disable_methods_on_cart' ], $advanced->get_setting_ids() );
+		$this->assertSame( [], $advanced->get_groups() );
+		$this->assertSame( [], $advanced->get_actions() );
+		$this->assertSame( '', $advanced->get_description() );
+	}
+
+	// ----- «Выгрузка заказов» is laid out as cards (s165) -----
+
+	public function test_the_export_section_is_four_cards_in_order_for_a_carrier_with_labels_and_status_sync(): void {
+		Functions\when( 'has_action' )->justReturn( 10 );
+
+		$plugin = $this->carrier( 'cdek', [ $this->credentials( [], 'label_format', 'labels' ) ] );
+		$plugin->shouldReceive( 'get_export_section_setting_ids' )->andReturn( [ 'label_format' ] );
+		$plugin->shouldReceive( 'get_export_section_extension' )->andReturn(
+			[
+				'actions' => [ $this->tool( 'hooks_on' ) ],
+				'groups'  => [ Settings_Group::create( 'webhooks', 'Вебхуки' )->with_actions( [ 'hooks_on' ] ) ],
+			]
+		);
+		$this->export_with_cron_hook( $plugin, 'cdek_update_orders' );
+
+		$export = $this->export_of( $plugin );
+		$groups = $export->get_groups();
+
+		$this->assertSame( [ 'auto-export', 'labels', 'delivery-status', 'webhooks' ], $this->group_ids( $export ) );
+		$this->assertSame( [ 'Автоэкспорт', 'Этикетки', 'Статусы доставки', 'Вебхуки' ], array_map( static fn( Settings_Group $g ) => $g->get_title(), $groups ) );
+		$this->assertSame( [ 'auto_export_orders', 'export_statuses' ], $groups[0]->get_setting_ids() );
+		$this->assertSame( [ 'label_format' ], $groups[1]->get_setting_ids() );
+		$this->assertSame( [ 'status_delivered' ], $groups[2]->get_setting_ids() );
+		$this->assertSame( [ 'sync_delivery_statuses' ], $groups[2]->get_action_ids() );
+		$this->assertSame( [ 'hooks_on' ], $groups[3]->get_action_ids() );
+		$this->assertSame( [ 'sync_delivery_statuses', 'hooks_on' ], array_map( static fn( Shipping_Tool $t ) => $t->get_id(), $export->get_actions() ) );
+	}
+
+	public function test_every_framework_card_has_a_description(): void {
+		Functions\when( 'has_action' )->justReturn( 10 );
+
+		$plugin = $this->carrier( 'cdek', [ $this->credentials( [], 'label_format', 'labels' ) ] );
+		$plugin->shouldReceive( 'get_export_section_setting_ids' )->andReturn( [ 'label_format' ] );
+		$this->export_with_cron_hook( $plugin, 'cdek_update_orders' );
+
+		foreach ( $this->export_of( $plugin )->get_groups() as $group ) {
+			$this->assertNotSame( '', $group->get_description(), $group->get_id() );
+		}
+	}
+
+	public function test_the_section_lists_its_fields_card_by_card_so_the_cards_render_in_order(): void {
+		$plugin = $this->carrier( 'cdek', [ $this->credentials( [], 'label_format', 'labels' ) ] );
+		$plugin->shouldReceive( 'get_export_section_setting_ids' )->andReturn( [ 'label_format' ] );
+		$this->make_it_export( $plugin );
+
+		$this->assertSame(
+			[ 'auto_export_orders', 'export_statuses', 'label_format', 'status_delivered' ],
+			$this->export_of( $plugin )->get_setting_ids()
+		);
+	}
+
+	public function test_a_carrier_without_label_fields_gets_no_labels_card(): void {
+		$plugin = $this->carrier();
+		$this->make_it_export( $plugin );
+
+		$this->assertSame( [ 'auto-export', 'delivery-status' ], $this->group_ids( $this->export_of( $plugin ) ) );
+	}
+
+	public function test_a_carrier_without_status_sync_keeps_the_delivered_status_card_without_a_button(): void {
+		$plugin = $this->carrier();
+		$this->export_with_cron_hook( $plugin, null );
+
+		$export   = $this->export_of( $plugin );
+		$delivery = $export->get_groups()[1];
+
+		$this->assertSame( 'delivery-status', $delivery->get_id() );
+		$this->assertSame( [ 'status_delivered' ], $delivery->get_setting_ids() );
+		$this->assertSame( [], $delivery->get_action_ids() );
+		$this->assertSame( [], $export->get_actions() );
+	}
+
+	public function test_the_delivered_status_moved_out_of_the_auto_export_card(): void {
+		$plugin = $this->carrier();
+		$this->make_it_export( $plugin );
+
+		$groups = $this->export_of( $plugin )->get_groups();
+
+		$this->assertNotContains( 'status_delivered', $groups[0]->get_setting_ids() );
+		$this->assertContains( 'status_delivered', $groups[1]->get_setting_ids() );
+	}
+
+	public function test_the_section_description_stays_the_frameworks_own_without_an_extension(): void {
+		$plugin = $this->carrier();
+		$this->make_it_export( $plugin );
+
+		$this->assertStringStartsWith( 'Когда заказ сам отправляется перевозчику.', $this->export_of( $plugin )->get_description() );
+	}
+
+	public function test_a_carrier_description_follows_the_sections_own(): void {
+		$plugin = $this->carrier();
+		$plugin->shouldReceive( 'get_export_section_extension' )->andReturn( [ 'description' => 'Ещё одно предложение.' ] );
+		$this->make_it_export( $plugin );
+
+		$description = $this->export_of( $plugin )->get_description();
+
+		$this->assertStringStartsWith( 'Когда заказ сам отправляется перевозчику.', $description );
+		$this->assertStringEndsWith( ' Ещё одно предложение.', $description );
+	}
+
+	public function test_an_empty_extension_leaves_the_export_section_as_the_framework_builds_it(): void {
+		$plain = $this->carrier();
+		$this->make_it_export( $plain );
+		$plain_export = $this->export_of( $plain );
+
+		// the registry keys a carrier by id, so the second carrier replaces the first one
+		$with_empty_extension = $this->carrier();
+		$with_empty_extension->shouldReceive( 'get_export_section_extension' )->andReturn( [ 'actions' => [], 'groups' => [], 'description' => '' ] );
+		$this->make_it_export( $with_empty_extension );
+
+		$this->assertEquals( $plain_export, $this->export_of( $with_empty_extension ) );
+	}
+
+	public function test_a_carrier_that_does_not_export_gets_no_export_extension_and_no_notice(): void {
+		$plugin = $this->carrier( 'cdek', [ $this->credentials() ] );
+		$plugin->shouldReceive( 'get_export_section_extension' )->andReturn( [ 'groups' => 'not an array' ] );
+
+		Functions\expect( '_doing_it_wrong' )->never();
+
+		$this->assertSame( [ 'credentials' ], $this->section_ids( $plugin->get_settings_providers()[0] ) );
+	}
+
+	public function test_a_wrong_shaped_extension_is_reported_and_the_valid_part_kept(): void {
+		$plugin = $this->carrier();
+		$this->make_it_export( $plugin );
+		$plugin->shouldReceive( 'get_export_section_extension' )->andReturn(
+			[
+				'actions'     => [ $this->tool( 'on' ), 'not a tool' ],
+				'groups'      => 'not an array',
+				'description' => 42,
+				'colour'      => 'red',
+			]
+		);
+
+		Functions\expect( '_doing_it_wrong' )->times( 4 );
+
+		$export = $this->export_of( $plugin );
+
+		$this->assertSame( [ 'on' ], array_map( static fn( Shipping_Tool $t ) => $t->get_id(), $export->get_actions() ) );
+		$this->assertSame( [ 'auto-export', 'delivery-status' ], $this->group_ids( $export ) );
+		$this->assertStringNotContainsString( '42', $export->get_description() );
+	}
+
+	public function test_a_carrier_group_reusing_a_framework_card_id_is_dropped_and_named(): void {
+		$plugin = $this->carrier();
+		$this->make_it_export( $plugin );
+		$plugin->shouldReceive( 'get_export_section_extension' )->andReturn(
+			[
+				'groups' => [
+					Settings_Group::create( 'auto-export', 'Подмена' ),
+					Settings_Group::create( 'labels', 'Подмена' ),
+					Settings_Group::create( 'delivery-status', 'Подмена' ),
+					Settings_Group::create( 'hooks', 'Вебхуки' ),
+					Settings_Group::create( 'hooks', 'Вебхуки ещё раз' ),
+				],
+			]
+		);
+
+		Functions\expect( '_doing_it_wrong' )->times( 4 )->with( Mockery::type( 'string' ), Mockery::pattern( '/groups.*whose id.*(auto-export|labels|delivery-status|hooks)/' ), '2.0.2' );
+
+		$export = $this->export_of( $plugin );
+
+		$this->assertSame( [ 'auto-export', 'delivery-status', 'hooks' ], $this->group_ids( $export ), 'the framework\'s cards survive, the first "hooks" is kept' );
+		$this->assertSame( 'Автоэкспорт', $export->get_groups()[0]->get_title() );
+		$this->assertSame( 'Вебхуки', $export->get_groups()[2]->get_title() );
+	}
+
+	public function test_a_carrier_action_reusing_an_id_of_another_section_the_refresh_button_or_an_entry_is_dropped_and_named(): void {
+		Functions\when( 'has_action' )->justReturn( 10 );
+
+		$descriptor = $this->credentials();
+		$handler    = $descriptor->get_handler();
+		$taken      = Settings_Section::create( 'credentials', 'Доступ', [ 'api_key' ] )->with_actions( [ $this->tool( 'sync' ) ] );
+
+		$plugin = $this->carrier( 'cdek', [ Settings_Provider::create_with_sections( 'cdek', 'СДЭК', $handler, [], $taken ) ] );
+		$plugin->shouldReceive( 'get_export_section_extension' )->andReturn(
+			[ 'actions' => [ $this->tool( 'sync' ), $this->tool( 'sync_delivery_statuses' ), $this->tool( 'on' ), $this->tool( 'on' ) ] ]
+		);
+		$this->export_with_cron_hook( $plugin, 'cdek_update_orders' );
+
+		Functions\expect( '_doing_it_wrong' )->times( 3 )->with( Mockery::type( 'string' ), Mockery::pattern( '/actions.*whose id.*(sync|sync_delivery_statuses|on)/' ), '2.0.2' );
+
+		$this->assertSame(
+			[ 'sync_delivery_statuses', 'on' ],
+			array_map( static fn( Shipping_Tool $t ) => $t->get_id(), $this->export_of( $plugin )->get_actions() ),
+			'the framework\'s own refresh button is the one that stays'
+		);
+	}
+
 	// ----- the carrier's own fields inside «Выгрузка заказов» -----
 
 	public function test_a_carrier_can_append_its_own_setting_to_the_export_section(): void {
@@ -554,7 +784,7 @@ final class CarrierSettingsTabTest extends TestCase {
 		$export   = $sections[1];
 
 		$this->assertSame( 'export', $export->get_id() );
-		$this->assertSame( [ 'auto_export_orders', 'export_statuses', 'status_delivered', 'label_format' ], $export->get_setting_ids(), 'after the framework\'s own fields' );
+		$this->assertSame( [ 'auto_export_orders', 'export_statuses', 'label_format', 'status_delivered' ], $export->get_setting_ids(), 'between the auto-export fields and the delivered status, so its card sits in order' );
 	}
 
 	public function test_an_export_section_id_nobody_owns_is_reported_and_skipped(): void {

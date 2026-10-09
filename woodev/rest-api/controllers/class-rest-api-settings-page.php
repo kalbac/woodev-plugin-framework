@@ -415,17 +415,29 @@ if ( ! class_exists( 'Woodev_REST_API_Settings_Page' ) ) :
 			}
 
 			// Find the tool itself, by id: in a tools section (a registry tool) or among an ordinary section's
-			// action buttons (which belong to this tab and are not in the registry).
+			// action buttons (which belong to this tab and are not in the registry). The route names no section, so
+			// an id declared twice is ambiguous: refuse it rather than run whichever section comes first.
 			$tool      = null;
 			$is_action = false;
+			$matches   = 0;
 			foreach ( $provider->get_sections() as $section ) {
 				foreach ( $section->is_tools() ? $section->get_tools() : $section->get_actions() as $candidate ) {
 					if ( $candidate->get_id() === $tool_id ) {
-						$tool      = $candidate;
-						$is_action = ! $section->is_tools();
-						break 2;
+						++$matches;
+						if ( null === $tool ) {
+							$tool      = $candidate;
+							$is_action = ! $section->is_tools();
+						}
 					}
 				}
+			}
+
+			if ( $matches > 1 ) {
+				return new WP_Error(
+					'woodev_settings_ambiguous_tool',
+					__( 'Идентификатор инструмента встречается в нескольких разделах.', 'woodev-plugin-framework' ),
+					[ 'status' => 409 ]
+				);
 			}
 
 			if ( null === $tool ) {

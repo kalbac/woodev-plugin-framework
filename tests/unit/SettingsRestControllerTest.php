@@ -3,6 +3,7 @@ namespace Woodev\Tests\Unit;
 
 use Brain\Monkey\Functions;
 use Mockery;
+use Woodev\Framework\Settings\Settings_Section;
 use Woodev\Framework\Shipping\Settings\Shipping_Tool;
 use Woodev\Framework\Shipping\Settings\Shipping_Tools_Registry;
 use Woodev\Framework\Shipping\Settings\Tool_Result;
@@ -442,6 +443,42 @@ class SettingsRestControllerTest extends TestCase {
 
 		$this->assertInstanceOf( 'WP_Error', $result );
 		$this->assertSame( 'woodev_settings_unknown_tool', $result->get_error_code() );
+	}
+
+	public function test_run_tool_refuses_an_action_id_declared_in_two_sections(): void {
+		$ran    = false;
+		$action = static function () use ( &$ran ): Shipping_Tool {
+			return Shipping_Tool::create(
+				'sync',
+				'Синхронизировать',
+				'',
+				'Запустить',
+				static function () use ( &$ran ): Tool_Result {
+					$ran = true;
+
+					return Tool_Result::success( 'Готово' );
+				}
+			);
+		};
+
+		$provider = Mockery::mock();
+		$provider->shouldReceive( 'get_sections' )->andReturn(
+			[
+				Settings_Section::create( 'export', 'Выгрузка', [] )->with_actions( [ $action() ] ),
+				Settings_Section::create( 'advanced', 'Дополнительно', [] )->with_actions( [ $action() ] ),
+			]
+		);
+
+		$registry = Mockery::mock();
+		$registry->shouldReceive( 'get_provider' )->with( 'shipping' )->andReturn( $provider );
+
+		$controller = new \Woodev_REST_API_Settings_Page( $registry );
+		$result     = $controller->run_tool( $this->request( [ 'provider_id' => 'shipping', 'tool_id' => 'sync', 'args' => [] ] ) );
+
+		$this->assertInstanceOf( 'WP_Error', $result );
+		$this->assertSame( 'woodev_settings_ambiguous_tool', $result->get_error_code() );
+		$this->assertSame( 409, $result->get_error_data()['status'] );
+		$this->assertFalse( $ran, 'neither section\'s action may run' );
 	}
 
 	public function test_run_tool_scopes_args_and_returns_the_result_payload(): void {

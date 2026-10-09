@@ -11,6 +11,7 @@
 @use '../components/field';
 @use '../components/tabs';
 @use '../components/location-picker';
+@use '../components/group';
 
 // The settings surface's own label-column width. Wider than the shared
 // `$label-col` token (182px) because the operator set it by eye on the rig,

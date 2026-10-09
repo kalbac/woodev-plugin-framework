@@ -90,6 +90,65 @@ automatically via the `woodev_{plugin_id}_api_request_performed` action.
 Note: `Woodev_Setting::get_value()` returns a **cached** property — an `update_option()` mid-request
 is invisible to it (gotcha `woodev-setting-get-value-is-cached-not-a-live-option-read`).
 
+## Settings page — sections, actions and groups (`woodev/settings-page/`)
+
+A `Settings_Provider` returns `Settings_Section`s; the registry serialises each into the schema the React
+page (`src/settings-page/`) renders. An ORDINARY section is a list of setting ids plus, optionally,
+`with_actions( Shipping_Tool[] )` (buttons under the fields, run through the tool REST route scoped to the tab).
+
+**Groups (`Settings_Group`, `Settings_Section::with_groups()`, s165).** Related fields and actions can sit in ONE
+titled card:
+
+```php
+Settings_Section::create( 'export', 'Отправка', [ 'token', 'mode', 'other' ] )
+	->with_actions( [ $sync, $hooks_on, $hooks_off ] )
+	->with_groups( [
+		Settings_Group::create( 'hooks', 'Вебхуки', 'Уведомления о статусах.' )
+			->with_fields( [ 'token', 'mode' ] )
+			->with_actions( [ 'hooks_on', 'hooks_off' ] )   // ids of actions declared on the section
+			->with_notice( 'Сайт доступен только локально — вебхуки не придут.' ),
+	] );
+```
+
+- A group only NAMES members by id. Fields stay in the section's field map (values, validation, `show_if`,
+  tooltips, Save are untouched) and actions stay in the section's flat action list (the REST run route is
+  unchanged). Ids the section does not declare are ignored; an id an earlier group already took is not reused; a
+  group left with no member is omitted (`Settings_Page_Registry::build_groups()`).
+- Payload: the entry gains `groups: [ { id, title, description (kses), notice, fields: string[], actions: string[] } ]`
+  — only when at least one group resolves. `fields` / `actions` stay complete and unchanged, so an ungrouped
+  section serialises byte-for-byte as before.
+- **Rendering.** Order is the section's field order: a group sits where its FIRST VISIBLE field is declared (a group
+  with no visible field comes after every field; one whose members are all hidden by `show_if` renders nothing).
+  A card shows title, description, its fields, then its actions as buttons in ONE row, then the notice (plus the
+  distinct `status_text` of disabled actions, each once), then ONE result line — the last clicked button's.
+  A selector-backed action (`Shipping_Tool::selector`) keeps its select inside the card — shared `ToolSelector` /
+  `toolArgs()` from `tools-block.js`, so the run sends the same named arg as a `ToolCard` — and a changed selection
+  clears the shared result. Box presets (`box_preset` fields) named by a group render as ONE table inside that
+  group's card, after its ordinary fields (scalar save keys and complete rows preserved); ungrouped presets stay in the
+  shared table below the fields.
+  Ungrouped fields/actions render as before (`ToolsBlock` cards, below the fields). `GroupCard` is
+  `src/settings-page/group-card.tsx`; not to be confused with `.woodev-field__option-group`, the inner card of ONE toggle.
+- **Save button.** `sectionHasSaveButton()` (`app.js`): no «Сохранить» for a tools block or an ordinary section with
+  no fields (an actions-only section used to show a dead one); a connection block keeps it as before.
+- UI Kit gallery (`src/ui-kit-gallery`) shows a grouped-fields card and a grouped-actions card.
+- **«Выгрузка заказов» is laid out as cards (s165).** `Shipping_Plugin::build_export_section()` gives EVERY exporting
+  carrier the same cards, in order: **«Автоэкспорт»** (`auto_export_orders` toggle + `export_statuses`; the card
+  description is the former toggle subtitle), **«Этикетки»** (the carrier's own fields of
+  `get_export_section_setting_ids()`, e.g. CDEK's «Формат этикеток»), **«Статусы доставки»** (`status_delivered` — moved
+  here from auto-export — and, for a carrier with a cron hook, the «Обновить статусы сейчас» button), then the carrier's
+  own cards. Card ids `auto-export` / `labels` / `delivery-status`. A card with no member is not drawn («Этикетки» is
+  absent for a carrier without label fields). The section lists its fields card by card (auto-export, carrier fields,
+  delivered status), because a card renders where its FIRST field is declared. One «Сохранить» sits under all cards.
+  «Дополнительно» is the framework's own bare section again (logging, hide-on-cart): no cards, no carrier extension.
+- **A carrier adds to «Выгрузка заказов» (s165).** `Shipping_Plugin::get_export_section_extension()` (protected,
+  default `[]`) returns `['actions' => Shipping_Tool[], 'groups' => Settings_Group[], 'description' => string]`; the
+  framework appends the groups after its own cards, the actions after the refresh button, and the description after the
+  section description. Wrong keys / types / elements are dropped with `_doing_it_wrong()`; a group id equal to a
+  framework card id or an earlier group, and an action id already used on the tab (another section, the framework's
+  refresh button, an earlier entry), is dropped the same way. The REST `run_tool` route still answers 409
+  `woodev_settings_ambiguous_tool` if an id ever repeats across the tab's sections. The seam is skipped silently for a
+  carrier that does not export orders. (It replaced `get_advanced_section_extension()` in the same PR — v2 clean break.)
+
 ## Shipping settings — the «Доставка» tab (`woodev/shipping-method/settings/`)
 
 One tab on `Woodev → Настройки`, registered by `Shipping\Settings\Shipping_Settings_Tab`, holding

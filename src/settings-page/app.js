@@ -107,6 +107,24 @@ export function hasBlockingProviderMismatch( fields, values ) {
 	return Object.keys( getBlockingProviderMismatchErrors( fields, values ) ).length > 0;
 }
 
+/**
+ * Whether a section shows «Сохранить»: only when it owns something to save. A tools block and a section made of
+ * nothing but actions (a grouped «Подключить вебхуки» card, say) have no field, so the button would be dead weight.
+ * A connection block keeps its button as before — its credential fields are saved through it, and a block with
+ * none is unchanged by this rule.
+ *
+ * @since 2.0.2
+ * @param {Object} section the section schema.
+ * @return {boolean} whether the Save button renders.
+ */
+export function sectionHasSaveButton( section ) {
+	if ( section.is_tools ) {
+		return false;
+	}
+
+	return !! section.is_connection || Object.keys( section.fields || {} ).length > 0;
+}
+
 export default function App() {
 	const [ tabs, setTabs ] = useState( null );
 	const [ loadError, setLoadError ] = useState( '' );
@@ -376,7 +394,7 @@ export default function App() {
 						showErrors={ !! showErrors[ tab.id ] }
 						serverErrors={ fieldErrors[ tab.id ] || {} }
 					/>
-					{ ! section.is_tools && (
+					{ sectionHasSaveButton( section ) && (
 						<div className="woodev-settings__actions">
 							<Button
 								variant="primary"
