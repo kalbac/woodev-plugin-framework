@@ -11,6 +11,7 @@ import { useState } from '@wordpress/element';
 import { Card, CardBody, Tooltip, Button } from '@wordpress/components';
 import ControlField from '../components/control-field';
 import TabsNav from '../components/tabs-nav';
+import GroupCard from '../settings-page/group-card';
 
 const FIELD_SPECS = [
 	{ id: 'text', name: 'Текстовое поле', controlType: 'text', description: 'Обычный однострочный ввод.', tooltip: 'Это длинная подсказка, которая раньше обрезалась за краем экрана; теперь она в портале и переносится корректно.', value: 'Карьер №1' },
@@ -32,6 +33,25 @@ const TOGGLE_SPECS = [
 ];
 
 const RADIO_SPEC = { id: 'r1', name: 'Тип расчёта', controlType: 'radio', description: 'Сгруппированные опции.', options: { fixed: 'Фиксированная ставка', dynamic: 'По тарифу перевозчика' }, value: 'dynamic' };
+
+const GROUP_FIELD_SPECS = [
+	{ id: 'g_site', name: 'Адрес сайта', controlType: 'text', description: 'Куда перевозчик пришлёт уведомление.', value: 'https://shop.example.ru' },
+	{ id: 'g_secret', name: 'Секрет', controlType: 'password', value: 'secret-token' },
+];
+
+const GROUP_FIELDS_DEMO = { id: 'fields', title: 'Адрес уведомлений', description: 'Перевозчик сообщает о статусах заказов по этому адресу.', notice: '', fields: [ 'g_site', 'g_secret' ], actions: [] };
+
+const GROUP_ACTIONS_DEMO = { id: 'hooks', title: 'Вебхуки', description: 'Подключите уведомления, чтобы статусы обновлялись сами.', notice: 'Сайт доступен только локально — вебхуки не придут.', fields: [], actions: [ 'on', 'off' ] };
+
+const GROUP_ACTIONS = [
+	{ id: 'on', button: 'Подключить вебхуки', disabled: false, status_text: '' },
+	{ id: 'off', button: 'Отключить вебхуки', disabled: false, status_text: '' },
+];
+
+// Stub for the REST tool route: the gallery has no server behind it.
+const demoRun = ( id ) => new Promise( ( resolve ) => {
+	setTimeout( () => resolve( { success: 'on' === id, message: 'on' === id ? 'Вебхуки подключены.' : 'Не удалось отключить: демо-ответ с ошибкой.' } ), 600 );
+} );
 
 const DEMO_TABS = [
 	{ id: 'quarry', label: 'Карьер', sections: [ { id: 'auth', label: 'Авторизация' }, { id: 'order', label: 'Форма заказа' } ] },
@@ -90,6 +110,18 @@ export default function App() {
 					) ) }
 				</div>
 				<Field spec={ RADIO_SPEC } values={ values } setValues={ setValues } />
+			</Section>
+
+			<Section title="Группа полей — одна карточка с заголовком (Settings_Group)">
+				<GroupCard providerId="demo" group={ GROUP_FIELDS_DEMO } actions={ [] }>
+					{ GROUP_FIELD_SPECS.map( ( spec ) => (
+						<Field key={ spec.id } spec={ spec } values={ values } setValues={ setValues } />
+					) ) }
+				</GroupCard>
+			</Section>
+
+			<Section title="Группа действий — кнопки в одном ряду, один результат">
+				<GroupCard providerId="demo" group={ GROUP_ACTIONS_DEMO } actions={ GROUP_ACTIONS } onRun={ demoRun } />
 			</Section>
 
 			<Section title="Оверлеи и действия">

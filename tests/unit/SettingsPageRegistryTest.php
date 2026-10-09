@@ -3,6 +3,7 @@ namespace Woodev\Tests\Unit;
 
 use Brain\Monkey\Functions;
 use Mockery;
+use Woodev\Framework\Settings\Settings_Group;
 use Woodev\Framework\Settings\Settings_Page_Registry;
 use Woodev\Framework\Settings\Settings_Provider;
 use Woodev\Framework\Settings\Settings_Section;
@@ -684,5 +685,65 @@ class SettingsPageRegistryTest extends TestCase {
 		$sections = $this->call_private( Settings_Page_Registry::instance(), 'build_sections', [ $provider ] );
 
 		$this->assertArrayNotHasKey( 'actions', $sections[0] );
+	}
+
+	public function test_build_sections_omits_the_groups_key_when_none_are_declared(): void {
+		$tool     = Shipping_Tool::create( 'sync', 'Статусы', '', 'Обновить', static fn( array $args ): Tool_Result => Tool_Result::success() );
+		$provider = Settings_Provider::create( 'cdek', 'СДЭК', $this->make_connection_handler(), [ Settings_Section::create( 'general', 'Общие', [ 'token' ] )->with_actions( [ $tool ] ) ] );
+
+		$sections = $this->call_private( Settings_Page_Registry::instance(), 'build_sections', [ $provider ] );
+
+		$this->assertArrayNotHasKey( 'groups', $sections[0], 'an ungrouped section serialises exactly as before' );
+		$this->assertSame( [ 'id', 'label', 'description', 'fields', 'actions' ], array_keys( $sections[0] ) );
+	}
+
+	public function test_build_sections_serialises_groups_with_their_members_in_section_order(): void {
+		$sync  = Shipping_Tool::create( 'sync', 'Статусы', '', 'Обновить', static fn( array $args ): Tool_Result => Tool_Result::success() );
+		$on    = Shipping_Tool::create( 'hooks_on', 'Вебхуки', '', 'Подключить', static fn( array $args ): Tool_Result => Tool_Result::success() );
+		$off   = Shipping_Tool::create( 'hooks_off', 'Вебхуки', '', 'Отключить', static fn( array $args ): Tool_Result => Tool_Result::success() );
+		$group = Settings_Group::create( 'hooks', 'Вебхуки', 'Описание' )->with_actions( [ 'hooks_off', 'hooks_on' ] )->with_notice( 'Только локально' );
+
+		$provider = Settings_Provider::create(
+			'cdek',
+			'СДЭК',
+			$this->make_connection_handler(),
+			[ Settings_Section::create( 'export', 'Выгрузка', [ 'token' ] )->with_actions( [ $sync, $on, $off ] )->with_groups( [ $group ] ) ]
+		);
+
+		$sections = $this->call_private( Settings_Page_Registry::instance(), 'build_sections', [ $provider ] );
+
+		$this->assertSame(
+			[
+				[
+					'id'          => 'hooks',
+					'title'       => 'Вебхуки',
+					'description' => 'Описание',
+					'notice'      => 'Только локально',
+					'fields'      => [],
+					'actions'     => [ 'hooks_on', 'hooks_off' ],
+				],
+			],
+			$sections[0]['groups'],
+			'members come out in the SECTION\'s order; the ungrouped action stays out'
+		);
+		$this->assertCount( 3, $sections[0]['actions'], 'the flat action list is unchanged' );
+	}
+
+	public function test_build_sections_gives_a_field_to_the_first_group_that_names_it_and_drops_unknown_ids_and_empty_groups(): void {
+		$first  = Settings_Group::create( 'a', 'A' )->with_fields( [ 'token', 'ghost' ] );
+		$second = Settings_Group::create( 'b', 'B' )->with_fields( [ 'token' ] )->with_actions( [ 'missing' ] );
+
+		$provider = Settings_Provider::create(
+			'cdek',
+			'СДЭК',
+			$this->make_connection_handler(),
+			[ Settings_Section::create( 'export', 'Выгрузка', [ 'token' ] )->with_groups( [ $first, $second ] ) ]
+		);
+
+		$sections = $this->call_private( Settings_Page_Registry::instance(), 'build_sections', [ $provider ] );
+
+		$this->assertCount( 1, $sections[0]['groups'], 'the second group has nothing left, so it is omitted' );
+		$this->assertSame( 'a', $sections[0]['groups'][0]['id'] );
+		$this->assertSame( [ 'token' ], $sections[0]['groups'][0]['fields'], 'the unknown "ghost" id is ignored' );
 	}
 }

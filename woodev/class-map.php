@@ -34,6 +34,7 @@ return [
 	'Woodev\\Framework\\Http\\Rest_Rate_Limit_Trait' => 'woodev/http/trait-rest-rate-limit.php',
 	'Woodev\\Framework\\Settings\\Composite_Settings_Handler' => 'woodev/settings-page/class-composite-settings-handler.php',
 	'Woodev\\Framework\\Settings\\Field_Schema' => 'woodev/settings-page/class-field-schema.php',
+	'Woodev\\Framework\\Settings\\Settings_Group' => 'woodev/settings-page/class-settings-group.php',
 	'Woodev\\Framework\\Settings\\Settings_Page_Registry' => 'woodev/settings-page/class-settings-page-registry.php',
 	'Woodev\\Framework\\Settings\\Settings_Provider' => 'woodev/settings-page/class-settings-provider.php',
 	'Woodev\\Framework\\Settings\\Settings_Section' => 'woodev/settings-page/class-settings-section.php',

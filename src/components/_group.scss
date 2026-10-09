@@ -1,0 +1,63 @@
+/**
+ * Settings group card (Settings_Group) — a titled card gathering related fields and action buttons.
+ * Shared by the settings page and the UI-kit gallery.
+ *
+ * @package woodev-plugin-framework
+ */
+
+@use './tokens' as wd;
+
+// A titled card gathering related fields and action buttons of one section (Settings_Group). Looks like
+// `.woodev-tool`; NOT `.woodev-field__option-group`, which is the inner card of ONE toggle field.
+.woodev-group {
+	border: 1px solid wd.$border;
+	border-radius: wd.$radius;
+	padding: wd.$gap-lg;
+	background: wd.$surface;
+	margin-bottom: wd.$gap-lg;
+
+	&__title {
+		margin: 0 0 wd.$gap-xs;
+		font-size: 14px;
+		font-weight: 600;
+	}
+
+	&__desc {
+		margin: 0 0 wd.$gap;
+		color: wd.$muted;
+	}
+
+	// All the group's buttons in ONE row.
+	&__actions {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: wd.$gap-sm;
+		margin-top: wd.$gap;
+	}
+
+	&__notice {
+		margin: wd.$gap-xs 0 0;
+		color: wd.$muted;
+		font-size: 13px;
+	}
+
+	// One result line for the whole row — the last clicked button's. Same tints as `.woodev-tool__result`.
+	&__result {
+		margin-top: wd.$gap;
+		padding: wd.$gap-sm wd.$gap;
+		border-radius: wd.$radius-sm;
+		font-size: 13px;
+		line-height: 1.5;
+
+		&.is-ok {
+			color: wd.$ok-text;
+			background: rgba( 0, 163, 42, 0.12 );
+		}
+
+		&.is-error {
+			color: wd.$error-text;
+			background: rgba( 214, 54, 56, 0.12 );
+		}
+	}
+}

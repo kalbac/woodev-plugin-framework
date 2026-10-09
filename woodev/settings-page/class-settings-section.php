@@ -62,6 +62,14 @@ final class Settings_Section {
 	private array $actions = [];
 
 	/**
+	 * Titled cards that gather some of this section's fields and actions — see {@see self::with_groups()}.
+	 * Always empty for a connection or tools block.
+	 *
+	 * @var array<int, Settings_Group>
+	 */
+	private array $groups = [];
+
+	/**
 	 * Use one of the named constructors instead — {@see self::create()},
 	 * {@see self::create_connection()} or {@see self::create_tools()}. Private so that a call
 	 * site has to NAME the kind it is building rather than spell it out in positional
@@ -238,6 +246,72 @@ final class Settings_Section {
 				$this->actions,
 				static function ( $action ): bool {
 					return $action instanceof \Woodev\Framework\Shipping\Settings\Shipping_Tool;
+				}
+			)
+		);
+	}
+
+	/**
+	 * A copy of this ORDINARY section whose related fields and actions are gathered into titled cards.
+	 *
+	 * Each {@see Settings_Group} names the section's fields ({@see Settings_Group::with_fields()}) and actions
+	 * ({@see Settings_Group::with_actions()}) by id; ids the section does not declare are ignored when the
+	 * schema is built, so this may be called before or after {@see self::with_actions()}. Whatever no group
+	 * names renders exactly as it did without groups. A group renders where its first field is declared (a
+	 * group with no field after every field), so declaration order of the section's own setting ids sets the
+	 * order of the cards.
+	 *
+	 * A connection or tools block takes none (its own React branch would drop them silently): the call is
+	 * reported and the section returned unchanged. An entry that is not a `Settings_Group`, or reuses an
+	 * earlier group's id, is dropped with a notice.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param array<int, Settings_Group> $groups the groups, in declaration order.
+	 * @return self
+	 */
+	public function with_groups( array $groups ): self {
+		if ( $this->is_connection || $this->is_tools ) {
+			_doing_it_wrong( __METHOD__, 'Only an ordinary Settings_Section can carry groups; the call was ignored.', '2.0.2' );
+
+			return $this;
+		}
+
+		$copy         = clone $this;
+		$copy->groups = [];
+		$seen         = [];
+
+		foreach ( $groups as $group ) {
+			if ( ! $group instanceof Settings_Group ) {
+				_doing_it_wrong( __METHOD__, 'A Settings_Section group is not a Settings_Group; it was ignored.', '2.0.2' );
+				continue;
+			}
+
+			if ( isset( $seen[ $group->get_id() ] ) ) {
+				_doing_it_wrong( __METHOD__, sprintf( 'Settings_Section group id "%s" is declared twice; the second was ignored.', $group->get_id() ), '2.0.2' );
+				continue;
+			}
+
+			$seen[ $group->get_id() ] = true;
+			$copy->groups[]           = $group;
+		}
+
+		return $copy;
+	}
+
+	/**
+	 * The groups of an ordinary section, filtered to `Settings_Group` on read like {@see self::get_actions()}.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return array<int, Settings_Group>
+	 */
+	public function get_groups(): array {
+		return array_values(
+			array_filter(
+				$this->groups,
+				static function ( $group ): bool {
+					return $group instanceof Settings_Group;
 				}
 			)
 		);

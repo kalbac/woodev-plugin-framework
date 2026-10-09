@@ -11,6 +11,7 @@ import CarrierBoxesTable from '../components/carrier-boxes-table';
 import ControlField from '../components/control-field';
 import ConnectionBlock from './connection-block';
 import ToolsBlock from './tools-block';
+import GroupCard, { arrangeFields } from './group-card';
 import { isFieldVisible } from '../components/validate';
 import { RawHTML } from '@wordpress/element';
 
@@ -43,33 +44,54 @@ export default function SectionView( { providerId, section, tabFields, values, c
 		Object.entries( section.fields ).filter( ( [ , field ] ) => field.box_preset && isFieldVisible( field, effectiveValues ) )
 	);
 
+	const groups = section.groups || [];
+	const actions = section.actions || [];
+	const visibleIds = Object.keys( section.fields ).filter( ( settingId ) =>
+		! section.fields[ settingId ].box_preset && isFieldVisible( section.fields[ settingId ], conditionValues || values )
+	);
+
+	const renderField = ( settingId ) => (
+		<ControlField
+			key={ settingId }
+			settingId={ settingId }
+			schema={ { ...section.fields[ settingId ], serverError: ( serverErrors || {} )[ settingId ] } }
+			value={ values[ settingId ] ?? section.fields[ settingId ].value }
+			conditionValues={ conditionValues || values }
+			providerMismatchBaseline={ tabFields && tabFields.active_provider && tabFields.active_provider.value }
+			onChange={ ( next ) => onFieldChange( settingId, next ) }
+			hasEdit={ Object.prototype.hasOwnProperty.call( values, settingId ) }
+			onRevert={ () => onFieldRevert( settingId ) }
+			showErrors={ showErrors }
+		/>
+	);
+
+	// A group's actions are rendered inside its card; whatever no group took stays in the shared block below.
+	const groupedActionIds = new Set( groups.flatMap( ( group ) => group.actions ) );
+	const ungroupedActions = actions.filter( ( action ) => ! groupedActionIds.has( action.id ) );
+
 	return (
 		<div className="woodev-settings__section">
 			{ section.description && (
 				<div className="woodev-settings__section-desc"><RawHTML>{ section.description }</RawHTML></div>
 			) }
-			{ Object.keys( section.fields )
-				.filter( ( settingId ) =>
-					! section.fields[ settingId ].box_preset && isFieldVisible( section.fields[ settingId ], conditionValues || values )
-				)
-				.map( ( settingId ) => (
-					<ControlField
-						key={ settingId }
-						settingId={ settingId }
-						schema={ { ...section.fields[ settingId ], serverError: ( serverErrors || {} )[ settingId ] } }
-						value={ values[ settingId ] ?? section.fields[ settingId ].value }
-						conditionValues={ conditionValues || values }
-						providerMismatchBaseline={ tabFields && tabFields.active_provider && tabFields.active_provider.value }
-						onChange={ ( next ) => onFieldChange( settingId, next ) }
-						hasEdit={ Object.prototype.hasOwnProperty.call( values, settingId ) }
-						onRevert={ () => onFieldRevert( settingId ) }
-						showErrors={ showErrors }
-					/>
-				) ) }
+			{ arrangeFields( visibleIds, groups ).map( ( item ) => {
+				if ( 'field' === item.kind ) {
+					return renderField( item.id );
+				}
+				const groupActions = actions.filter( ( action ) => item.group.actions.includes( action.id ) );
+				if ( 0 === item.fieldIds.length && 0 === groupActions.length ) {
+					return null; // every member is hidden by show_if — no empty card.
+				}
+				return (
+					<GroupCard key={ `group:${ item.group.id }` } providerId={ providerId } group={ item.group } actions={ groupActions }>
+						{ item.fieldIds.map( renderField ) }
+					</GroupCard>
+				);
+			} ) }
 			<CarrierBoxesTable fields={ visibleBoxFields } values={ values } onFieldChange={ onFieldChange } serverErrors={ serverErrors } />
 			{ /* Buttons under the fields (Settings_Section::with_actions()) — «Обновить статусы сейчас» and alike. */ }
-			{ section.actions && section.actions.length > 0 && (
-				<ToolsBlock providerId={ providerId } section={ { tools: section.actions } } />
+			{ ungroupedActions.length > 0 && (
+				<ToolsBlock providerId={ providerId } section={ { tools: ungroupedActions } } />
 			) }
 		</div>
 	);

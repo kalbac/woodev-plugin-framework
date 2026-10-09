@@ -255,6 +255,12 @@ final class Settings_Page_Registry {
 				);
 			}
 
+			// Titled cards gathering some of those fields and actions (Settings_Section::with_groups()).
+			$groups = self::build_groups( $section, array_keys( $entry['fields'] ), array_column( $entry['actions'] ?? [], 'id' ) );
+			if ( [] !== $groups ) {
+				$entry['groups'] = $groups;
+			}
+
 			if ( $section->is_connection() ) {
 				$entry['is_connection'] = true;
 				$entry['action_label']  = $section->get_action_label();
@@ -276,6 +282,49 @@ final class Settings_Page_Registry {
 		}
 
 		return $sections;
+	}
+
+	/**
+	 * Resolves a section's groups against what the section really declares.
+	 *
+	 * A group names its members by id; an id the section does not carry (a field the handler dropped, an
+	 * action never registered) is ignored, and so is an id an earlier group already took — a field or action
+	 * lives in ONE card. Members come out in the SECTION's order, not the order the group named them in, so
+	 * the card reads like the ungrouped form would. A group left with no member is omitted.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param Settings_Section $section    the section.
+	 * @param string[]         $field_ids  ids of the section's fields in declaration order.
+	 * @param string[]         $action_ids ids of the section's actions in declaration order.
+	 * @return array<int,array{id:string,title:string,description:string,notice:string,fields:string[],actions:string[]}>
+	 */
+	private static function build_groups( Settings_Section $section, array $field_ids, array $action_ids ): array {
+		$taken_fields  = [];
+		$taken_actions = [];
+		$resolved      = [];
+
+		foreach ( $section->get_groups() as $group ) {
+			$fields  = array_values( array_diff( array_intersect( $field_ids, $group->get_setting_ids() ), $taken_fields ) );
+			$actions = array_values( array_diff( array_intersect( $action_ids, $group->get_action_ids() ), $taken_actions ) );
+
+			if ( [] === $fields && [] === $actions ) {
+				continue;
+			}
+
+			$taken_fields  = array_merge( $taken_fields, $fields );
+			$taken_actions = array_merge( $taken_actions, $actions );
+			$resolved[]    = [
+				'id'          => $group->get_id(),
+				'title'       => $group->get_title(),
+				'description' => wp_kses_post( $group->get_description() ),
+				'notice'      => $group->get_notice(),
+				'fields'      => $fields,
+				'actions'     => $actions,
+			];
+		}
+
+		return $resolved;
 	}
 
 	/**

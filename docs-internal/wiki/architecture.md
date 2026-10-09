@@ -90,6 +90,43 @@ automatically via the `woodev_{plugin_id}_api_request_performed` action.
 Note: `Woodev_Setting::get_value()` returns a **cached** property — an `update_option()` mid-request
 is invisible to it (gotcha `woodev-setting-get-value-is-cached-not-a-live-option-read`).
 
+## Settings page — sections, actions and groups (`woodev/settings-page/`)
+
+A `Settings_Provider` returns `Settings_Section`s; the registry serialises each into the schema the React
+page (`src/settings-page/`) renders. An ORDINARY section is a list of setting ids plus, optionally,
+`with_actions( Shipping_Tool[] )` (buttons under the fields, run through the tool REST route scoped to the tab).
+
+**Groups (`Settings_Group`, `Settings_Section::with_groups()`, s165).** Related fields and actions can sit in ONE
+titled card:
+
+```php
+Settings_Section::create( 'export', 'Отправка', [ 'token', 'mode', 'other' ] )
+	->with_actions( [ $sync, $hooks_on, $hooks_off ] )
+	->with_groups( [
+		Settings_Group::create( 'hooks', 'Вебхуки', 'Уведомления о статусах.' )
+			->with_fields( [ 'token', 'mode' ] )
+			->with_actions( [ 'hooks_on', 'hooks_off' ] )   // ids of actions declared on the section
+			->with_notice( 'Сайт доступен только локально — вебхуки не придут.' ),
+	] );
+```
+
+- A group only NAMES members by id. Fields stay in the section's field map (values, validation, `show_if`,
+  tooltips, Save are untouched) and actions stay in the section's flat action list (the REST run route is
+  unchanged). Ids the section does not declare are ignored; an id an earlier group already took is not reused; a
+  group left with no member is omitted (`Settings_Page_Registry::build_groups()`).
+- Payload: the entry gains `groups: [ { id, title, description (kses), notice, fields: string[], actions: string[] } ]`
+  — only when at least one group resolves. `fields` / `actions` stay complete and unchanged, so an ungrouped
+  section serialises byte-for-byte as before.
+- **Rendering.** Order is the section's field order: a group sits where its FIRST VISIBLE field is declared (a group
+  with no visible field comes after every field; one whose members are all hidden by `show_if` renders nothing).
+  A card shows title, description, its fields, then its actions as buttons in ONE row, then the notice (plus the
+  distinct `status_text` of disabled actions, each once), then ONE result line — the last clicked button's.
+  Ungrouped fields/actions render as before (`ToolsBlock` cards, below the fields). `GroupCard` is
+  `src/settings-page/group-card.tsx`; not to be confused with `.woodev-field__option-group`, the inner card of ONE toggle.
+- **Save button.** `sectionHasSaveButton()` (`app.js`): no «Сохранить» for a tools block or an ordinary section with
+  no fields (an actions-only section used to show a dead one); a connection block keeps it as before.
+- UI Kit gallery (`src/ui-kit-gallery`) shows a grouped-fields card and a grouped-actions card.
+
 ## Shipping settings — the «Доставка» tab (`woodev/shipping-method/settings/`)
 
 One tab on `Woodev → Настройки`, registered by `Shipping\Settings\Shipping_Settings_Tab`, holding
