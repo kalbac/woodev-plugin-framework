@@ -3923,3 +3923,62 @@ describe( 'an action with input fields (#1180)', () => {
 		expect( within( dialog ).getByRole( 'link', { name: '№ 77' } ) ).toHaveAttribute( 'href', 'https://cdek.example/77' );
 	} );
 } );
+
+describe( 'the «Действия» column icons and red (s164)', () => {
+	const row = ( actions ) => makeRow( { actions } );
+	const button = async ( name ) => ( await screen.findByRole( 'button', { name } ) );
+	const glyph = ( node ) => node.querySelector( '.dashicons' );
+
+	test( 'an action draws the icon the server declared, and waybill / barcode differ', async () => {
+		fetchOrders.mockResolvedValue(
+			resultOf( [
+				row( [
+					{ action: 'waybill', label: 'Накладная', title: '', destructive: false, icon: 'media-document' },
+					{ action: 'barcode', label: 'Штрихкод', title: '', destructive: false, icon: 'tag' },
+					{ action: 'carrier_call', label: 'Вызвать', title: '', destructive: false, icon: 'calendar-alt' },
+				] ),
+			] )
+		);
+
+		render( <App /> );
+
+		expect( glyph( await button( 'Накладная' ) ).className ).toContain( 'dashicons-media-document' );
+		expect( glyph( await button( 'Штрихкод' ) ).className ).toContain( 'dashicons-tag' );
+		expect( glyph( await button( 'Вызвать' ) ).className ).toContain( 'dashicons-calendar-alt' );
+	} );
+
+	test( 'an extra action with no declared icon gets the neutral glyph, never the gear', async () => {
+		fetchOrders.mockResolvedValue( resultOf( [ row( [ { action: 'carrier_call', label: 'Вызвать', title: '', destructive: false } ] ) ] ) );
+
+		render( <App /> );
+
+		const icon = glyph( await button( 'Вызвать' ) ).className;
+
+		expect( icon ).toContain( 'dashicons-controls-play' );
+		expect( icon ).not.toContain( 'admin-generic' );
+	} );
+
+	test( 'an icon that is not a plain slug is ignored, not echoed into a class', async () => {
+		fetchOrders.mockResolvedValue( resultOf( [ row( [ { action: 'carrier_call', label: 'Вызвать', title: '', destructive: false, icon: 'x" onload="y' } ] ) ] ) );
+
+		render( <App /> );
+
+		expect( glyph( await button( 'Вызвать' ) ).className ).toBe( 'dashicons dashicons-controls-play' );
+	} );
+
+	test( 'a destructive action is red whatever its id; a plain one is not', async () => {
+		fetchOrders.mockResolvedValue(
+			resultOf( [
+				row( [
+					{ action: 'carrier_cancel_call', label: 'Отменить вызов', title: '', destructive: true },
+					{ action: 'carrier_call', label: 'Вызвать', title: '', destructive: false },
+				] ),
+			] )
+		);
+
+		render( <App /> );
+
+		expect( ( await button( 'Отменить вызов' ) ).className ).toContain( 'woodev-orders-actions__button--stop' );
+		expect( ( await button( 'Вызвать' ) ).className ).not.toContain( 'woodev-orders-actions__button--stop' );
+	} );
+} );

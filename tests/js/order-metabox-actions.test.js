@@ -231,6 +231,36 @@ describe( 'order-metabox-actions — an action with input fields', () => {
 		expect( dialog().querySelector( '[name="payload[comment]"]' ).maxLength ).toBe( 200 );
 	} );
 
+	it( 'an ICON-ONLY button (no text) still titles the dialog and labels its submit from data-label', () => {
+		const button = renderWithFields();
+
+		button.textContent = '';
+		button.innerHTML = '<span class="dashicons dashicons-calendar-alt" aria-hidden="true"></span>';
+		button.setAttribute( 'aria-label', 'Вызвать курьера' );
+		button.setAttribute( 'data-label', 'Вызвать курьера' );
+		button.click();
+
+		expect( dialog().querySelector( '.woodev-modal__title' ).textContent ).toBe( 'Вызвать курьера' );
+		expect( dialog().querySelector( 'button[type="submit"]' ).textContent ).toBe( 'Вызвать курьера' );
+	} );
+
+	it( 'falls back to aria-label when data-label is absent', () => {
+		const button = renderWithFields();
+
+		button.textContent = '';
+		button.setAttribute( 'aria-label', 'Вызвать курьера' );
+		button.click();
+
+		expect( dialog().querySelector( '.woodev-modal__title' ).textContent ).toBe( 'Вызвать курьера' );
+		expect( dialog().querySelector( 'button[type="submit"]' ).textContent ).toBe( 'Вызвать курьера' );
+	} );
+
+	it( 'a TEXT button keeps titling the dialog from its visible text', () => {
+		renderWithFields().click();
+
+		expect( dialog().querySelector( 'button[type="submit"]' ).textContent ).toBe( 'Вызвать курьера' );
+	} );
+
 	it( 'puts the declared bounds on the inputs', () => {
 		renderWithFields().click();
 
@@ -374,5 +404,99 @@ describe( 'order-metabox-actions — an action with input fields', () => {
 
 		expect( submitSpy ).toHaveBeenCalledTimes( 1 );
 		expect( dialog() ).toBeNull();
+	} );
+} );
+
+describe( 'a carrier document (s164)', () => {
+	// The metabox used to POST `waybill` / `barcode` to the action handler, which refused both («Это действие недоступно
+	// для данного заказа.») because a document is not a carrier action. They are fetched from the documents REST route,
+	// exactly as the orders page does.
+	const DOC_URL = 'https://example.test/wp-json/woodev/v1/shipping/orders/123/documents/waybill?format=json';
+	const LABELS = { pending: 'Документ ещё готовится. Повторите попытку примерно через %d с.', failed: 'Не удалось получить документ у перевозчика.' };
+
+	function renderDocument() {
+		document.body.innerHTML = `
+			<form id="order" method="post" action="post.php">
+				<div class="woodev-shipping-order-metabox">
+					<div role="group" data-document-labels='${ JSON.stringify( LABELS ) }'>
+						<button type="button" class="button woodev-shipping-order-action"
+							data-woodev-order-action="waybill"
+							data-document-url="${ DOC_URL }"
+							data-rest-nonce="rest-nonce">Накладная</button>
+					</div>
+					<p class="woodev-shipping-order-doc-notice" role="status" hidden></p>
+				</div>
+			</form>`;
+
+		return document.querySelector( 'button[data-woodev-order-action]' );
+	}
+
+	function response( { status = 200, headers = {}, json = null, blob = null } ) {
+		return {
+			ok: status >= 200 && status < 300,
+			status,
+			headers: { get: ( name ) => headers[ name ] ?? null },
+			json: () => Promise.resolve( json ),
+			blob: () => Promise.resolve( blob ),
+		};
+	}
+
+	const notice = () => document.querySelector( '.woodev-shipping-order-doc-notice' );
+
+	beforeEach( () => {
+		window.fetch = jest.fn();
+		window.URL.createObjectURL = jest.fn( () => 'blob:x' );
+		window.URL.revokeObjectURL = jest.fn();
+		jest.spyOn( window, 'open' ).mockImplementation( () => null );
+		jest.spyOn( HTMLAnchorElement.prototype, 'click' ).mockImplementation( () => {} );
+	} );
+
+	afterEach( () => {
+		delete window.fetch;
+	} );
+
+	it( 'never posts a form: it fetches the REST route with the REST nonce', async () => {
+		window.fetch.mockResolvedValue( response( { status: 200, headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="waybill-123.pdf"' }, blob: new Blob( [ 'x' ] ) } ) );
+
+		const button = renderDocument();
+
+		button.click();
+		await new Promise( ( resolve ) => setTimeout( resolve, 0 ) );
+
+		expect( submitSpy ).not.toHaveBeenCalled();
+		expect( document.querySelectorAll( 'form:not( #order )' ) ).toHaveLength( 0 );
+		expect( window.fetch ).toHaveBeenCalledWith( DOC_URL, expect.objectContaining( { headers: { 'X-WP-Nonce': 'rest-nonce' } } ) );
+		expect( window.URL.createObjectURL ).toHaveBeenCalled();
+		expect( button.disabled ).toBe( false );
+		expect( notice().hidden ).toBe( true );
+	} );
+
+	it( 'opens a carrier link in a new tab', async () => {
+		window.fetch.mockResolvedValue( response( { json: { status: 'url', url: 'https://cdek.example/doc.pdf' } } ) );
+
+		await mod.downloadDocument( renderDocument() );
+
+		expect( window.open ).toHaveBeenCalledWith( 'https://cdek.example/doc.pdf', '_blank', 'noopener' );
+	} );
+
+	it( 'says «ещё готовится» with the retry delay on a 202', async () => {
+		window.fetch.mockResolvedValue( response( { status: 202, json: { status: 'pending', retry_after: 7 } } ) );
+
+		await mod.downloadDocument( renderDocument() );
+
+		expect( notice().hidden ).toBe( false );
+		expect( notice().textContent ).toBe( 'Документ ещё готовится. Повторите попытку примерно через 7 с.' );
+		expect( notice().classList.contains( 'is-error' ) ).toBe( false );
+	} );
+
+	it( 'shows the server\'s own sentence on a failure, and the generic one when there is none', async () => {
+		window.fetch.mockResolvedValueOnce( response( { status: 404, json: { message: 'Документ недоступен.' } } ) );
+		await mod.downloadDocument( renderDocument() );
+		expect( notice().textContent ).toBe( 'Документ недоступен.' );
+		expect( notice().classList.contains( 'is-error' ) ).toBe( true );
+
+		window.fetch.mockRejectedValueOnce( new Error( 'offline' ) );
+		await mod.downloadDocument( renderDocument() );
+		expect( notice().textContent ).toBe( LABELS.failed );
 	} );
 } );

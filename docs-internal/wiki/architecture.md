@@ -333,6 +333,20 @@ Moved here from `CURRENT-STATE.md` in s139: they are reference, true regardless 
   `@wordpress/components` `Modal` (`action-input-modal.tsx`), the metabox the vanilla `WoodevModal` shell
   (`order-metabox-actions.js`, fields as JSON in `data-fields`) — gotcha
   `the-modal-shell-handles-are-registered-on-the-storefront-hook-only`.
+- **An action may declare its own ICON (s164)** — an `icon` string on the same `woodev_shipping_order_actions` entry,
+  next to `fields`: a **Dashicons slug without the `dashicons-` prefix** (`'calendar-alt'`), validated by
+  `Order_Actions::sanitize_icon()` (`^[a-z][a-z0-9-]*$`, anything else is dropped). Both surfaces draw
+  `<span class="dashicons dashicons-{slug}">` — the orders page in the «Действия» column, the metabox from its PHP view —
+  so one slug gives one glyph everywhere (`@wordpress/components`' `Dashicon` knows only a fraction of the set, which is
+  why it is not used). No `icon` → the neutral `Order_Actions::FALLBACK_ICON` (`controls-play`), **never a gear**. The
+  framework's own: export `upload`, update `update`, cancel `remove`, edit `edit`, waybill `media-document`,
+  barcode `tag`. `destructive => true` additionally draws the button light red (`rgba( $error, 0.12 )`, `$error-text`,
+  UI-kit tokens) on both surfaces.
+- **The metabox's buttons are ONE group in ONE row (s164):** with more than two actions they are icon-only (tooltip
+  + `aria-label` carry the label), with one or two they carry their text. A carrier DOCUMENT (`Order_Actions::DOCUMENTS`:
+  `waybill`, `barcode`) is never posted to admin-post — it is not in `for_order()`, so the gate refuses it; the button
+  carries `data-document-url` (the documents REST route) + `data-rest-nonce` and `order-metabox-actions.js` fetches it
+  like the orders page does. Gotcha `woodev-modal-css-resets-display-so-a-single-class-form-loses-to-it`.
 - **Extra display lines (#1180):** `woodev_shipping_order_metabox_fields( $fields, $order, $provider )` extends the
   metabox list and `woodev_shipping_orders_preview_fields( $fields, $order, $provider )` the order preview opened from
   a row (`extra_fields` in the preview response). One line shape for both —

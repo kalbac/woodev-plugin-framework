@@ -31,6 +31,8 @@
  * @var string                                                      $admin_post_action forward-only admin-post action the buttons post to
  * @var string                                                      $nonce_action      nonce action protecting the buttons' post
  * @var int                                                         $order_id          the order being edited
+ * @var string                                                      $documents_route_base REST route (no host) of the order's carrier documents; a document action appends its id
+ * @var string                                                      $rest_nonce        `wp_rest` nonce a document download sends
  *
  * @since 1.5.0
  */
@@ -97,17 +99,44 @@ defined( 'ABSPATH' ) || exit;
 	?>
 
 	<?php if ( [] !== $actions ) : ?>
-		<p class="woodev-shipping-order-actions-buttons">
+		<?php
+		// ONE button group in a single row, however many actions there are. Past two they become icon-only — the sidebar
+		// is ~250px wide, so three labelled buttons would wrap; the label then travels in the tooltip and `aria-label`.
+		$icon_only = count( $actions ) > 2;
+		$doc_label = [
+			// The sentences a document download shows — the script knows none (Rule 9). `%d` = seconds to retry.
+			'pending' => __( 'Документ ещё готовится. Повторите попытку примерно через %d с.', 'woodev-plugin-framework' ),
+			'failed'  => __( 'Не удалось получить документ у перевозчика.', 'woodev-plugin-framework' ),
+		];
+		?>
+		<div
+			class="woodev-shipping-order-actions-buttons<?php echo $icon_only ? ' woodev-shipping-order-actions-buttons--icons' : ''; ?>"
+			role="group"
+			data-document-labels="<?php echo esc_attr( (string) wp_json_encode( $doc_label ) ); ?>"
+		>
 			<?php foreach ( $actions as $action ) : ?>
+				<?php
+				$is_document = \Woodev\Framework\Shipping\Admin\Orders\Order_Actions::is_document( (string) $action['action'] );
+				$icon        = \Woodev\Framework\Shipping\Admin\Orders\Order_Actions::sanitize_icon( $action['icon'] ?? '' );
+				$hint        = (string) ( $action['title'] ?? '' );
+				$tooltip     = $icon_only ? trim( $action['label'] . ( '' !== $hint && $hint !== $action['label'] ? ' — ' . $hint : '' ) ) : $hint;
+				?>
 				<button
 					type="button"
-					class="button woodev-shipping-order-action<?php echo ! empty( $action['destructive'] ) ? ' button-link-delete' : ''; ?>"
-					title="<?php echo esc_attr( (string) ( $action['title'] ?? '' ) ); ?>"
+					class="button woodev-shipping-order-action<?php echo ! empty( $action['destructive'] ) ? ' woodev-shipping-order-action--destructive' : ''; ?>"
+					title="<?php echo esc_attr( $tooltip ); ?>"
+					data-label="<?php echo esc_attr( (string) $action['label'] ); ?>"
+					<?php echo $icon_only ? 'aria-label="' . esc_attr( (string) $action['label'] ) . '"' : ''; ?>
 					data-woodev-order-action="<?php echo esc_attr( $action['action'] ); ?>"
-					data-post-url="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"
-					data-post-action="<?php echo esc_attr( $admin_post_action ); ?>"
-					data-order-id="<?php echo esc_attr( (string) $order_id ); ?>"
-					data-nonce="<?php echo esc_attr( wp_create_nonce( $nonce_action ) ); ?>"
+					<?php if ( $is_document ) : ?>
+						data-document-url="<?php echo esc_url( add_query_arg( 'format', 'json', rest_url( $documents_route_base . rawurlencode( (string) $action['action'] ) ) ) ); ?>"
+						data-rest-nonce="<?php echo esc_attr( $rest_nonce ); ?>"
+					<?php else : ?>
+						data-post-url="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"
+						data-post-action="<?php echo esc_attr( $admin_post_action ); ?>"
+						data-order-id="<?php echo esc_attr( (string) $order_id ); ?>"
+						data-nonce="<?php echo esc_attr( wp_create_nonce( $nonce_action ) ); ?>"
+					<?php endif; ?>
 					<?php echo ! empty( $action['destructive'] ) ? 'data-confirm="' . esc_attr( __( 'Вы уверены?', 'woodev-plugin-framework' ) ) . '"' : ''; ?>
 					<?php if ( ! empty( $action['fields'] ) ) : ?>
 						data-fields="<?php echo esc_attr( (string) wp_json_encode( $action['fields'] ) ); ?>"
@@ -115,10 +144,15 @@ defined( 'ABSPATH' ) || exit;
 					<?php endif; ?>
 					<?php disabled( ! empty( $action['disabled'] ) ); ?>
 				>
-					<?php echo esc_html( $action['label'] ); ?>
+					<?php if ( $icon_only ) : ?>
+						<span class="dashicons dashicons-<?php echo esc_attr( '' !== $icon ? $icon : \Woodev\Framework\Shipping\Admin\Orders\Order_Actions::FALLBACK_ICON ); ?>" aria-hidden="true"></span>
+					<?php else : ?>
+						<?php echo esc_html( $action['label'] ); ?>
+					<?php endif; ?>
 				</button>
 			<?php endforeach; ?>
-		</p>
+		</div>
+		<p class="woodev-shipping-order-doc-notice" role="status" hidden></p>
 	<?php endif; ?>
 
 </div>

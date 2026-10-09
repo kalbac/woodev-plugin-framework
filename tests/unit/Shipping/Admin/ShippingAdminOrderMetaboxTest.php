@@ -89,6 +89,12 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			// Metabox-specific WP surface.
 			Functions\when( 'add_meta_box' )->justReturn( null );
 			Functions\when( 'wp_create_nonce' )->justReturn( 'nonce-123' );
+			Functions\when( 'rest_url' )->alias( static function ( string $path = '' ): string {
+				return 'https://example.test/wp-json/' . $path;
+			} );
+			Functions\when( 'add_query_arg' )->alias( static function ( string $key, string $value, string $url ): string {
+				return $url . ( false === strpos( $url, '?' ) ? '?' : '&' ) . rawurlencode( $key ) . '=' . rawurlencode( $value );
+			} );
 			Functions\when( 'admin_url' )->alias( static function ( string $path = '' ): string {
 				return 'https://example.test/wp-admin/' . $path;
 			} );
@@ -1121,6 +1127,162 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 
 			$this->assertSame( 1, preg_match( '/<button[^>]*data-woodev-order-action="cancel"[^>]*>/s', $html, $plain ) );
 			$this->assertStringNotContainsString( 'data-fields', $plain[0], 'an action without fields is exactly as before' );
+		}
+
+		// -----------------------------------------------------------------------
+		// s164 — documents go through the REST route; one button group; icons vs text; destructive red.
+		// -----------------------------------------------------------------------
+
+		/** Renders the box of an exported order with the given extra actions (and a document source when `$documents`). */
+		private function render_exported( array $extra_actions = [], bool $documents = false ): string {
+			$provider = $this->provider( [ 'supports_label_printing' => $documents ] );
+			$order    = $this->make_order();
+
+			$this->meta['_wc_cdek_order_id'] = 'CARRIER-1';
+			$this->register_handler( true );
+
+			if ( $documents ) {
+				Orders_Registry::instance()->register_document_source(
+					'cdek',
+					new class() implements \Woodev\Framework\Shipping\Order\Document_Source {
+						public function get_document_types( \WC_Order $order ): array {
+							return [ 'waybill', 'barcode' ];
+						}
+
+						public function get_document( \WC_Order $order, string $type ): \Woodev\Framework\Shipping\Order\Document_Result {
+							return \Woodev\Framework\Shipping\Order\Document_Result::pending();
+						}
+					}
+				);
+			}
+
+			Functions\when( 'wp_json_encode' )->alias( static fn( $value ) => json_encode( $value, JSON_UNESCAPED_UNICODE ) );
+			Functions\when( 'apply_filters' )->alias(
+				static function ( string $hook, $value ) use ( $extra_actions ) {
+					return 'woodev_shipping_order_actions' === $hook ? array_merge( $value, $extra_actions ) : $value;
+				}
+			);
+
+			ob_start();
+			( new Shipping_Admin_Order( Orders_Registry::instance() ) )->render_metabox( $order, $provider );
+
+			return (string) ob_get_clean();
+		}
+
+		/**
+		 * Root cause of «Накладная» / «Штрихкод» failing in the metabox: the buttons POSTed `waybill` to the action
+		 * handler, whose gate ({@see Order_Actions::for_order()}) has never offered a document. A document button now
+		 * carries the REST route and nonce and NO post payload.
+		 */
+		public function test_a_document_button_points_at_the_documents_route_and_posts_nothing(): void {
+			$html = $this->render_exported( [], true );
+
+			$this->assertSame( 1, preg_match( '/<button[^>]*data-woodev-order-action="waybill"[^>]*>/s', $html, $m ) );
+			$this->assertStringContainsString( 'data-document-url="https://example.test/wp-json/woodev/v1/shipping/orders/123/documents/waybill?format=json"', $m[0] );
+			$this->assertStringContainsString( 'data-rest-nonce="nonce-123"', $m[0] );
+			$this->assertStringNotContainsString( 'data-post-url', $m[0] );
+			$this->assertStringNotContainsString( 'data-nonce', $m[0] );
+
+			$this->assertSame( 1, preg_match( '/<button[^>]*data-woodev-order-action="barcode"[^>]*>/s', $html, $b ) );
+			$this->assertStringContainsString( '/documents/barcode?format=json', $b[0] );
+
+			$this->assertSame( 1, preg_match( '/<button[^>]*data-woodev-order-action="update"[^>]*>/s', $html, $update ) );
+			$this->assertStringContainsString( 'data-post-url', $update[0], 'a carrier action still posts' );
+			$this->assertStringNotContainsString( 'data-document-url', $update[0] );
+		}
+
+		/** On plain permalinks `rest_url()` already holds `?rest_route=`; `format` must be its own parameter. */
+		public function test_a_document_url_keeps_format_out_of_the_rest_route_on_plain_permalinks(): void {
+			Functions\when( 'rest_url' )->alias( static function ( string $path = '' ): string {
+				return 'https://example.test/index.php?rest_route=/' . $path;
+			} );
+
+			$html = $this->render_exported( [], true );
+
+			$this->assertSame( 1, preg_match( '/<button[^>]*data-woodev-order-action="waybill"[^>]*data-document-url="([^"]+)"/s', $html, $m ) );
+
+			$query = [];
+			parse_str( (string) parse_url( html_entity_decode( $m[1] ), PHP_URL_QUERY ), $query );
+
+			$this->assertSame( '/woodev/v1/shipping/orders/123/documents/waybill', $query['rest_route'] );
+			$this->assertSame( 'json', $query['format'] );
+		}
+
+		public function test_an_action_button_always_carries_its_label_for_the_field_dialog(): void {
+			$extra = [ [ 'action' => 'call_courier', 'label' => 'Вызвать курьера', 'title' => '', 'destructive' => false, 'fields' => [ [ 'id' => 'day', 'type' => 'date', 'label' => 'День' ] ] ] ];
+			$html  = $this->render_exported( $extra, false );
+
+			$this->assertSame( 1, preg_match( '/<button[^>]*data-woodev-order-action="call_courier"[^>]*>/s', $html, $m ) );
+			$this->assertStringContainsString( 'data-label="Вызвать курьера"', $m[0] );
+		}
+
+		public function test_the_actions_are_one_group_in_one_row_and_the_group_carries_the_document_sentences(): void {
+			$html = $this->render_exported( [], true );
+
+			$this->assertSame( 1, substr_count( $html, 'class="woodev-shipping-order-actions-buttons' ) );
+			$this->assertSame( 1, preg_match( '/<div\s[^>]*class="woodev-shipping-order-actions-buttons[^"]*"[^>]*role="group"[^>]*data-document-labels="([^"]*)"/s', $html, $g ) );
+			$this->assertSame( 'Не удалось получить документ у перевозчика.', json_decode( html_entity_decode( $g[1] ), true )['failed'] );
+			$this->assertStringContainsString( 'woodev-shipping-order-doc-notice', $html );
+		}
+
+		public function test_past_two_actions_the_buttons_are_icon_only_with_the_label_in_aria_label_and_tooltip(): void {
+			$html = $this->render_exported( [], true ); // update, cancel, waybill, barcode.
+
+			$this->assertStringContainsString( 'woodev-shipping-order-actions-buttons--icons', $html );
+			$this->assertSame( 1, preg_match( '/<button[^>]*data-woodev-order-action="waybill"[^>]*>(.*?)<\/button>/s', $html, $m ) );
+			$this->assertStringContainsString( 'aria-label="Накладная"', $m[0] );
+			$this->assertStringContainsString( 'title="Накладная — Скачать документ перевозчика"', $m[0] );
+			$this->assertStringContainsString( 'dashicons-media-document', $m[1] );
+			$this->assertStringNotContainsString( '>Накладная<', $m[0], 'no visible text in an icon-only button' );
+
+			$this->assertSame( 1, preg_match( '/<button[^>]*data-woodev-order-action="barcode"[^>]*>(.*?)<\/button>/s', $html, $b ) );
+			$this->assertStringContainsString( 'dashicons-tag', $b[1], 'waybill and barcode do not share a glyph' );
+		}
+
+		public function test_with_one_or_two_actions_the_buttons_carry_their_text(): void {
+			$html = $this->render_exported(); // update, cancel.
+
+			$this->assertStringNotContainsString( '--icons', $html );
+			$this->assertStringNotContainsString( 'aria-label', $html );
+			$this->assertStringNotContainsString( 'dashicons', $html );
+			$this->assertSame( 1, preg_match( '/<button[^>]*data-woodev-order-action="cancel"[^>]*>(.*?)<\/button>/s', $html, $m ) );
+			$this->assertSame( 'Отменить', trim( $m[1] ) );
+		}
+
+		public function test_an_extra_action_without_an_icon_gets_the_neutral_glyph_never_the_gear(): void {
+			$html = $this->render_exported(
+				[
+					[
+						'action'      => 'call_courier',
+						'label'       => 'Вызвать курьера',
+						'title'       => '',
+						'destructive' => false,
+					],
+					[
+						'action'      => 'send_sms',
+						'label'       => 'SMS',
+						'title'       => '',
+						'destructive' => false,
+						'icon'        => 'email',
+					],
+				]
+			);
+
+			$this->assertSame( 1, preg_match( '/<button[^>]*data-woodev-order-action="call_courier"[^>]*>(.*?)<\/button>/s', $html, $m ) );
+			$this->assertStringContainsString( 'dashicons-' . Order_Actions::FALLBACK_ICON, $m[1] );
+			$this->assertStringNotContainsString( 'admin-generic', $html );
+
+			$this->assertSame( 1, preg_match( '/<button[^>]*data-woodev-order-action="send_sms"[^>]*>(.*?)<\/button>/s', $html, $s ) );
+			$this->assertStringContainsString( 'dashicons-email', $s[1], 'a declared icon wins' );
+		}
+
+		public function test_a_destructive_action_wears_the_destructive_class(): void {
+			$html = $this->render_exported();
+
+			$this->assertSame( 1, preg_match( '/<button[^>]*data-woodev-order-action="cancel"[^>]*>/s', $html, $m ) );
+			$this->assertStringContainsString( 'woodev-shipping-order-action--destructive', $m[0] );
+			$this->assertSame( 1, preg_match( '/<button[^>]*data-woodev-order-action="update"[^>]*>/s', $html, $u ) );
+			$this->assertStringNotContainsString( '--destructive', $u[0] );
 		}
 
 		public function test_the_metabox_fields_filter_adds_lines_next_to_the_framework_ones(): void {
