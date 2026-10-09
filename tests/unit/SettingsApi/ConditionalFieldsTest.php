@@ -188,6 +188,25 @@ class ConditionalFieldsTest extends TestCase {
 		$this->assertArrayHasKey( 'live_key', $result );
 	}
 
+	public function test_filter_treats_a_controller_outside_the_available_ids_as_absent(): void {
+		// mode=live is STORED, but the caller's UI cannot see `mode` → it resolves as '' → hidden.
+		$handler = $this->make_handler( [ 'mode' => 'live' ] );
+
+		$this->assertSame( [], $handler->filter_visible_values( [ 'live_key' => 'abc' ], [ 'live_key' ] ) );
+	}
+
+	public function test_filter_keeps_the_field_when_the_controller_is_among_the_available_ids(): void {
+		$handler = $this->make_handler( [ 'mode' => 'live' ] );
+
+		$this->assertSame( [ 'live_key' => 'abc' ], $handler->filter_visible_values( [ 'live_key' => 'abc' ], [ 'live_key', 'mode' ] ) );
+	}
+
+	public function test_filter_available_ids_default_to_every_controller(): void {
+		$handler = $this->make_handler( [ 'mode' => 'live' ] );
+
+		$this->assertSame( [ 'live_key' => 'abc' ], $handler->filter_visible_values( [ 'live_key' => 'abc' ], null ) );
+	}
+
 	public function test_filter_passes_through_unconditional_fields(): void {
 		$handler = $this->make_handler( [ 'mode' => 'test' ] );
 		$result  = $handler->filter_visible_values( [ 'mode' => 'test' ] );

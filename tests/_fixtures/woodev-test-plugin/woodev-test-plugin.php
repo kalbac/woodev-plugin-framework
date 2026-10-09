@@ -52,7 +52,7 @@ function woodev_test_plugin_loader_definition(): array {
 		'download_id'       => 9001,
 		'plugin_name'       => 'Woodev Test Plugin',
 		'plugin_version'    => '1.0.0',
-		'framework_version' => '1.4.0',
+		'framework_version' => '2.0.2',
 		'plugin_file'       => __FILE__,
 		'platform'          => 'wordpress',
 		'requirements'      => [
@@ -168,8 +168,19 @@ $woodev_test_plugin_bootstrap->register_loader_definition( woodev_test_plugin_lo
 function woodev_test_plugin_init() {
 
 	/**
-	 * Minimal setup wizard — one content step plus one SETTINGS step, so the
-	 * woodev/v1 setup routes register AND the save/validate path is reachable.
+	 * Reference setup wizard — the minimal AUTHOR EXAMPLE of the step contract (#109):
+	 *
+	 *   welcome → start → connection → contacts → review → finish
+	 *
+	 * - `start` saves the `mode`; its destructive action «Начать с чистого листа» resets it.
+	 * - `connection` is a BRANCH: a server-side predicate over the SAVED mode shows it only in
+	 *   `live` mode. Saving `start` returns the recomputed step graph, so choosing `test` removes
+	 *   it from the stepper without a reload. It also carries a VALIDATOR that runs before
+	 *   anything is saved, and an ACTION that checks the key without saving it.
+	 * - `contacts` is the original settings step (server-only phone rule, #397).
+	 * - `review` is a CUSTOM COMPONENT step (assets/wizard-review-step.js), not skippable.
+	 *
+	 * The save/validate path is reachable, and the woodev/v1 setup routes register.
 	 */
 	class Woodev_Test_Setup_Wizard extends \Woodev\Framework\Setup\Setup_Wizard {
 
@@ -185,6 +196,66 @@ function woodev_test_plugin_init() {
 				static function (): string {
 					return '<p>Welcome</p>';
 				}
+			);
+
+			// Resolved lazily inside the callbacks: the wizard is built early in the plugin's boot.
+			$plugin = $this->plugin;
+
+			// A CHOICE the later steps branch on, saved like any settings step. The action resets
+			// it — destructive, so the wizard asks the merchant to confirm first — and, like any
+			// action, answers with the recomputed step graph.
+			$this->register_step(
+				'start',
+				'Режим',
+				[ 'mode' ],
+				null,
+				'Выберите режим работы. В тестовом режиме шаг «Подключение» не нужен.'
+			)->add_action(
+				\Woodev\Framework\Setup\Step_Action::create(
+					'reset-mode',
+					'Начать с чистого листа',
+					static function () use ( $plugin ): \Woodev\Framework\Setup\Action_Outcome {
+						$plugin->get_settings_handler()->update_value( 'mode', 'test' );
+
+						// A reset overwrites what the merchant may have typed in the form.
+						return \Woodev\Framework\Setup\Action_Outcome::success( 'Режим сброшен на «Тест».' )->discarding_edits();
+					},
+					true,
+					'Режим вернётся к «Тест», шаг «Подключение» пропадёт. Продолжить?'
+				)
+			);
+
+			// A BRANCH: visible only while the SAVED mode is `live` (evaluated on the server,
+			// after every save). A VALIDATOR runs before anything is persisted, on the values the
+			// merchant sees; an ACTION checks the key WITHOUT saving it.
+			$this->register_step(
+				'connection',
+				'Подключение',
+				[ 'api_key' ],
+				null,
+				'Ключ боевого режима начинается с live_.'
+			)->set_visibility_callback(
+				static function () use ( $plugin ): bool {
+					return 'live' === $plugin->get_settings_handler()->get_value( 'mode' );
+				}
+			)->set_validation_callback(
+				static function ( array $values ): array {
+					$key = (string) ( $values['api_key'] ?? '' );
+
+					return 0 === strpos( $key, 'live_' ) ? [] : [ 'api_key' => 'Ключ боевого режима начинается с live_.' ];
+				}
+			)->add_action(
+				\Woodev\Framework\Setup\Step_Action::create(
+					'check-key',
+					'Проверить ключ',
+					static function ( array $values ): \Woodev\Framework\Setup\Action_Outcome {
+						$key = (string) ( $values['api_key'] ?? '' );
+
+						return 0 === strpos( $key, 'live_' )
+							? \Woodev\Framework\Setup\Action_Outcome::success( 'Ключ подходит.' )
+							: \Woodev\Framework\Setup\Action_Outcome::error( 'Ключ не подходит: он должен начинаться с live_.' );
+					}
+				)
 			);
 
 			// A SETTINGS step, so the wizard's save/validate path is exercisable at all —
@@ -205,6 +276,41 @@ function woodev_test_plugin_init() {
 				[ 'manager_email', 'support_phone' ],
 				null,
 				'Проверка полей: e-mail валидируется на клиенте, телефон — только на сервере.'
+			);
+
+			// A CUSTOM COMPONENT step: the body is a React component this plugin ships
+			// (assets/wizard-review-step.js, no build step), rendered inside the standard
+			// frame. Not skippable: the merchant has to press Continue.
+			$this->register_content_step( 'review', 'Проверка', '', 'Свой компонент шага: кнопка вызывает действие на сервере.' )
+				->set_skippable( false )
+				->set_component( 'woodev-test-wizard-review', 'ReviewStep' )
+				->add_action(
+					\Woodev\Framework\Setup\Step_Action::create(
+						'ping',
+						'Проверить связь',
+						static function (): \Woodev\Framework\Setup\Action_Outcome {
+							return \Woodev\Framework\Setup\Action_Outcome::success( 'Связь с перевозчиком в порядке (демо).' );
+						}
+					)
+				);
+
+			// The script must be registered before the wizard enqueues its bundle; the wizard
+			// does that on admin_init, so register just before.
+			add_action( 'admin_init', [ $this, 'register_component_script' ], 5 );
+		}
+
+		/**
+		 * Registers the custom step component's script.
+		 *
+		 * @return void
+		 */
+		public function register_component_script(): void {
+			wp_register_script(
+				'woodev-test-wizard-review',
+				$this->plugin->get_plugin_url() . '/assets/wizard-review-step.js',
+				[ 'wp-element', 'wp-components' ],
+				$this->plugin->get_version(),
+				true
 			);
 		}
 	}
@@ -361,15 +467,6 @@ function woodev_test_plugin_init() {
 		 */
 		public static function instance(): Woodev_Test_Plugin {
 			return self::$instance ??= new self();
-		}
-
-		/**
-		 * Возвращает URL до папки плагина.
-		 *
-		 * @return string
-		 */
-		public function get_plugin_url(): string {
-			return plugin_dir_url( $this->get_plugin_path() );
 		}
 
 		protected function get_file(): string {

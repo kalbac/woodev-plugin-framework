@@ -46,6 +46,18 @@ final class Step {
 	/** @var callable|null visibility predicate. */
 	private $visibility_callback;
 
+	/** @var bool whether the merchant may move past the step without saving it. */
+	private bool $skippable = true;
+
+	/** @var callable|null server-side validation, run before anything is persisted. */
+	private $validation_callback;
+
+	/** @var array<string,Step_Action> actions bound to the step, keyed by id. */
+	private array $actions = [];
+
+	/** @var array{handle: string, export: string}|null plugin-supplied React component for the step body. */
+	private ?array $component = null;
+
 	/**
 	 * Use the named constructors instead.
 	 *
@@ -59,6 +71,7 @@ final class Step {
 		$this->content = null;
 		$this->on_save = null;
 		$this->visibility_callback = null;
+		$this->validation_callback = null;
 	}
 
 	/**
@@ -103,6 +116,13 @@ final class Step {
 
 	/**
 	 * Sets the visibility predicate (fluent).
+	 *
+	 * The predicate is evaluated on the SERVER, over SAVED state (it takes no argument —
+	 * read the plugin's settings or options), every time the wizard needs the step graph:
+	 * at bootstrap and after every successful save or action (D3). The client never
+	 * evaluates it and never reacts to unsaved form values. A step the predicate hides is
+	 * refused by the REST save and action routes. A predicate that throws hides the step
+	 * (logged) rather than failing the request.
 	 *
 	 * @since 2.0.2
 	 *
@@ -204,6 +224,160 @@ final class Step {
 			return true;
 		}
 
-		return (bool) call_user_func( $this->visibility_callback );
+		try {
+			return (bool) call_user_func( $this->visibility_callback );
+		} catch ( \Throwable $e ) {
+			// The predicate is the plugin's own code and runs while the wizard is being
+			// built — an Error here must not take the admin down. A step whose predicate
+			// cannot answer is hidden (never saved, never shown) and the failure is logged.
+			Callback_Failure::log( sprintf( 'visibility check failed for step "%s"', $this->id ), $e );
+
+			return false;
+		}
+	}
+
+	/**
+	 * Declares a plugin-supplied React component as the step's body (fluent, D4).
+	 *
+	 * The framework enqueues `$handle` (a script the plugin registered with `wp_register_script()`
+	 * before the wizard renders; it is made a dependency of the wizard bundle so it loads first)
+	 * and renders the component `$export` of that script inside the standard step frame — title,
+	 * description, error banner, Back / Skip / Continue. The script publishes its components with
+	 * `window.woodevSetupWizardComponents[ handle ] = { ExportName: Component }` and the component
+	 * receives the props documented in `src/setup-wizard/types.ts` (values, onChange, save, next,
+	 * runAction, per-field errors, busy…). A handle that is not registered, or an export the
+	 * script does not publish, shows an error in the step instead of a blank screen.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param string $handle registered script handle.
+	 * @param string $export exported component name.
+	 * @return self
+	 *
+	 * @throws \InvalidArgumentException When the handle or the export name is empty or malformed.
+	 */
+	public function set_component( string $handle, string $export ): self {
+		if ( 1 !== preg_match( '/^[\w.-]+$/', $handle ) || 1 !== preg_match( '/^[A-Za-z_$][\w$]*$/', $export ) ) {
+			throw new \InvalidArgumentException( 'A setup wizard step component needs a script handle and a valid export name.' );
+		}
+
+		$this->component = [
+			'handle' => $handle,
+			'export' => $export,
+		];
+
+		return $this;
+	}
+
+	/**
+	 * Returns the custom component descriptor, if the step declares one.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return array{handle: string, export: string}|null
+	 */
+	public function get_component(): ?array {
+		return $this->component;
+	}
+
+	/**
+	 * Marks the step as mandatory (or optional again) — fluent.
+	 *
+	 * A non-skippable step has no «Пропустить» control in the client. The wizard keeps no
+	 * per-step progress on the server, so this is a client-side contract: it removes the
+	 * control, it does not make the server refuse a hand-crafted request.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param bool $skippable whether the merchant may skip the step (default true).
+	 * @return self
+	 */
+	public function set_skippable( bool $skippable = true ): self {
+		$this->skippable = $skippable;
+
+		return $this;
+	}
+
+	/**
+	 * Whether the merchant may skip the step. Defaults to true.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return bool
+	 */
+	public function is_skippable(): bool {
+		return $this->skippable;
+	}
+
+	/**
+	 * Sets the server-side validation callback (fluent).
+	 *
+	 * Signature: `fn( array $values, \WP_REST_Request $request ): array|bool|null`. It runs
+	 * BEFORE anything of the step is persisted, with the EFFECTIVE values of the fields
+	 * declared on the step — the merchant's edits over the stored (else default) values, i.e.
+	 * what the step shows, minus fields hidden by their show_if (only edited fields are
+	 * persisted afterwards). A content step may have one too: it gets an empty map and
+	 * decides from the plugin's own state; Continue is refused until it passes. Return a map of `field id => message` to refuse the save (nothing
+	 * is persisted, `on_save` does not run, the client shows each message on its field), or
+	 * `false` to refuse with a generic message; `null`, `true` or an empty array mean valid.
+	 * A throw is an unexpected failure: logged, answered with a generic message, nothing persisted.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param callable $callback the validator.
+	 * @return self
+	 */
+	public function set_validation_callback( callable $callback ): self {
+		$this->validation_callback = $callback;
+
+		return $this;
+	}
+
+	/**
+	 * Returns the validation callback.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return callable|null
+	 */
+	public function get_validation_callback(): ?callable {
+		return $this->validation_callback;
+	}
+
+	/**
+	 * Binds an action to the step (fluent). A second action with the same id replaces the first.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param Step_Action $action the action.
+	 * @return self
+	 */
+	public function add_action( Step_Action $action ): self {
+		$this->actions[ $action->get_id() ] = $action;
+
+		return $this;
+	}
+
+	/**
+	 * Returns the step's actions keyed by id.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return array<string,Step_Action>
+	 */
+	public function get_actions(): array {
+		return $this->actions;
+	}
+
+	/**
+	 * Returns one action by id.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param string $action_id action id.
+	 * @return Step_Action|null
+	 */
+	public function get_action( string $action_id ): ?Step_Action {
+		return $this->actions[ $action_id ] ?? null;
 	}
 }

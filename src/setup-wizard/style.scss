@@ -189,6 +189,46 @@ body.woodev-setup-wizard {
 		vertical-align: baseline;
 	}
 
+	// ---- Step actions (D2) -------------------------------------------------
+	&__step-actions {
+		margin: 24px 0 0;
+	}
+
+	&__step-actions-row {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 10px;
+	}
+
+	&__confirm,
+	&__action-result {
+		margin: 14px 0 0;
+		padding: 11px 14px;
+		border-radius: 2px;
+		color: $wd-text;
+		font-size: 13px;
+		line-height: 1.5;
+
+		p {
+			margin: 0 0 10px;
+		}
+	}
+
+	&__confirm {
+		background: #fcf9e8;
+		border-left: 4px solid #dba617;
+	}
+
+	&__action-result--success {
+		background: #edfaef;
+		border-left: 4px solid #00a32a;
+	}
+
+	&__action-result--error {
+		background: #fcf0f1;
+		border-left: 4px solid #d63638;
+	}
+
 	// ---- Actions -----------------------------------------------------------
 	&__actions {
 		margin: 34px 0 0;

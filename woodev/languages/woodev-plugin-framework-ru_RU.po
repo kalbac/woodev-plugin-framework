@@ -1795,6 +1795,18 @@ msgstr ""
 msgid "Неизвестный шаг."
 msgstr ""
 
+#: rest-api/controllers/class-rest-api-setup.php:353
+msgid "Неизвестное действие."
+msgstr ""
+
+#: rest-api/controllers/class-rest-api-setup.php:239
+msgid "Этот шаг сейчас недоступен: он зависит от выбора на другом шаге."
+msgstr ""
+
+#: rest-api/controllers/class-rest-api-setup.php:361
+msgid "Это действие нужно подтвердить."
+msgstr ""
+
 #: rest-api/controllers/class-rest-api-setup.php:209
 msgid "Не удалось сохранить статус настройки. Попробуйте ещё раз."
 msgstr ""
@@ -4218,6 +4230,30 @@ msgstr ""
 
 #: assets/build/setup-wizard/index.js:2
 msgid "Пропустить"
+msgstr ""
+
+#: assets/build/setup-wizard/index.js:2
+msgid "Да, выполнить"
+msgstr ""
+
+#: assets/build/setup-wizard/index.js:2
+msgid "Не удалось загрузить содержимое этого шага. Обновите страницу; если ошибка повторится, обратитесь к разработчику плагина."
+msgstr ""
+
+#: assets/build/setup-wizard/index.js:2
+msgid "Мастер ещё не завершён"
+msgstr ""
+
+#: assets/build/setup-wizard/index.js:2
+msgid "Завершаем настройку…"
+msgstr ""
+
+#: assets/build/setup-wizard/index.js:2
+msgid "Сохраняем отметку о завершении."
+msgstr ""
+
+#: assets/build/setup-wizard/index.js:2
+msgid "Это действие нельзя отменить. Выполнить?"
 msgstr ""
 
 #: assets/build/setup-wizard/index.js:2

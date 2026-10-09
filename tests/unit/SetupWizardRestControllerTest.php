@@ -7,6 +7,9 @@ use Woodev\Framework\Setup\Step;
 
 require_once dirname( __DIR__, 2 ) . '/woodev/api/class-api-base.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/setup/class-step.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/setup/class-step-action.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/setup/class-action-outcome.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/setup/class-callback-failure.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/setup/class-setup-wizard.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/rest-api/controllers/class-rest-api-setup.php';
 
@@ -16,6 +19,8 @@ class SetupWizardRestControllerTest extends TestCase {
 		Functions\expect( 'current_user_can' )->once()->with( 'manage_options' )->andReturn( false );
 
 		$wizard = Mockery::mock( '\Woodev\Framework\Setup\Setup_Wizard' );
+		$wizard->shouldReceive( 'get_step_graph' )->andReturn( [] )->byDefault();
+		$wizard->shouldReceive( 'get_registered_step' )->andReturn( null )->byDefault();
 		$wizard->shouldReceive( 'get_required_capability' )->andReturn( 'manage_options' );
 
 		$controller = new \Woodev_REST_API_Setup( $wizard );
@@ -24,7 +29,9 @@ class SetupWizardRestControllerTest extends TestCase {
 
 	public function test_complete_sets_state_and_returns_ok(): void {
 		$wizard = Mockery::mock( '\Woodev\Framework\Setup\Setup_Wizard' );
-		$wizard->shouldReceive( 'complete_setup' )->once()->with( 'completed' );
+		$wizard->shouldReceive( 'get_step_graph' )->andReturn( [] )->byDefault();
+		$wizard->shouldReceive( 'get_registered_step' )->andReturn( null )->byDefault();
+		$wizard->shouldReceive( 'complete_setup' )->once()->with( 'completed' )->andReturn( 'completed' );
 
 		Functions\when( 'rest_ensure_response' )->returnArg( 1 );
 
@@ -48,6 +55,8 @@ class SetupWizardRestControllerTest extends TestCase {
 		$plugin->shouldReceive( 'get_settings_handler' )->andReturn( $handler );
 
 		$wizard = Mockery::mock( '\Woodev\Framework\Setup\Setup_Wizard' );
+		$wizard->shouldReceive( 'get_step_graph' )->andReturn( [] )->byDefault();
+		$wizard->shouldReceive( 'get_registered_step' )->andReturn( null )->byDefault();
 		$wizard->shouldReceive( 'get_steps' )->andReturn(
 			[ 'connection' => Step::settings( 'connection', 'C', [ 'api_key' ] ) ]
 		);
@@ -60,7 +69,7 @@ class SetupWizardRestControllerTest extends TestCase {
 		$controller = new \Woodev_REST_API_Setup( $wizard );
 		$response   = $controller->save_step( $request );
 
-		$this->assertSame( [ 'saved' => true, 'step' => 'connection' ], $response );
+		$this->assertSame( [ 'saved' => true, 'step' => 'connection', 'graph' => [] ], $response );
 	}
 
 	public function test_save_step_passes_only_step_fields_to_on_save(): void {
@@ -80,6 +89,8 @@ class SetupWizardRestControllerTest extends TestCase {
 		$plugin->shouldReceive( 'get_settings_handler' )->andReturn( $handler );
 
 		$wizard = Mockery::mock( '\Woodev\Framework\Setup\Setup_Wizard' );
+		$wizard->shouldReceive( 'get_step_graph' )->andReturn( [] )->byDefault();
+		$wizard->shouldReceive( 'get_registered_step' )->andReturn( null )->byDefault();
 		$wizard->shouldReceive( 'get_steps' )->andReturn(
 			[ 'connection' => Step::settings( 'connection', 'C', [ 'api_key' ], $on_save ) ]
 		);
@@ -125,6 +136,7 @@ class SetupWizardRestControllerTest extends TestCase {
 	private function make_rejecting_controller( string $failing_id, string $message ): \Woodev_REST_API_Setup {
 		$handler = Mockery::mock( '\Woodev_Abstract_Settings' );
 		$handler->shouldReceive( 'filter_visible_values' )->andReturnUsing( static fn( $values ) => $values );
+		$handler->shouldReceive( 'get_value' )->andReturn( '' ); // the stored value of a field the request leaves out.
 		$handler->shouldReceive( 'update_value' )->andReturnUsing(
 			static function ( $id ) use ( $failing_id, $message ): void {
 				if ( $id === $failing_id ) {
@@ -137,6 +149,8 @@ class SetupWizardRestControllerTest extends TestCase {
 		$plugin->shouldReceive( 'get_settings_handler' )->andReturn( $handler );
 
 		$wizard = Mockery::mock( '\Woodev\Framework\Setup\Setup_Wizard' );
+		$wizard->shouldReceive( 'get_step_graph' )->andReturn( [] )->byDefault();
+		$wizard->shouldReceive( 'get_registered_step' )->andReturn( null )->byDefault();
 		$wizard->shouldReceive( 'get_steps' )->andReturn(
 			[ 'connection' => Step::settings( 'connection', 'C', [ 'api_key', 'token' ] ) ]
 		);
@@ -205,7 +219,7 @@ class SetupWizardRestControllerTest extends TestCase {
 		$controller = $this->make_rejecting_controller( 'nothing-fails', 'unused' );
 		$response   = $controller->save_step( $this->make_request( [ 'api_key' => 'K', 'token' => 'good' ] ) );
 
-		$this->assertSame( [ 'saved' => true, 'step' => 'connection' ], $response );
+		$this->assertSame( [ 'saved' => true, 'step' => 'connection', 'graph' => [] ], $response );
 	}
 
 	// -----------------------------------------------------------------------
@@ -259,6 +273,8 @@ class SetupWizardRestControllerTest extends TestCase {
 		$plugin->shouldReceive( 'get_settings_handler' )->andReturn( $handler );
 
 		$wizard = Mockery::mock( '\Woodev\Framework\Setup\Setup_Wizard' );
+		$wizard->shouldReceive( 'get_step_graph' )->andReturn( [] )->byDefault();
+		$wizard->shouldReceive( 'get_registered_step' )->andReturn( null )->byDefault();
 		$wizard->shouldReceive( 'get_steps' )->andReturn(
 			[ 'connection' => Step::settings( 'connection', 'C', [ 'api_key' ] ) ]
 		);
@@ -295,6 +311,8 @@ class SetupWizardRestControllerTest extends TestCase {
 		$plugin->shouldReceive( 'get_settings_handler' )->andReturn( $handler );
 
 		$wizard = Mockery::mock( '\Woodev\Framework\Setup\Setup_Wizard' );
+		$wizard->shouldReceive( 'get_step_graph' )->andReturn( [] )->byDefault();
+		$wizard->shouldReceive( 'get_registered_step' )->andReturn( null )->byDefault();
 		$wizard->shouldReceive( 'get_steps' )->andReturn(
 			[ 'connection' => Step::settings( 'connection', 'C', [ 'api_key' ] ) ]
 		);
@@ -334,6 +352,8 @@ class SetupWizardRestControllerTest extends TestCase {
 		$plugin->shouldReceive( 'get_settings_handler' )->andReturn( $handler );
 
 		$wizard = Mockery::mock( '\Woodev\Framework\Setup\Setup_Wizard' );
+		$wizard->shouldReceive( 'get_step_graph' )->andReturn( [] )->byDefault();
+		$wizard->shouldReceive( 'get_registered_step' )->andReturn( null )->byDefault();
 		$wizard->shouldReceive( 'get_steps' )->andReturn(
 			[ 'connection' => Step::settings( 'connection', 'C', [ 'api_key' ], $on_save ) ]
 		);
@@ -370,6 +390,8 @@ class SetupWizardRestControllerTest extends TestCase {
 		$plugin->shouldReceive( 'get_settings_handler' )->andReturn( $handler );
 
 		$wizard = Mockery::mock( '\Woodev\Framework\Setup\Setup_Wizard' );
+		$wizard->shouldReceive( 'get_step_graph' )->andReturn( [] )->byDefault();
+		$wizard->shouldReceive( 'get_registered_step' )->andReturn( null )->byDefault();
 		$wizard->shouldReceive( 'get_steps' )->andReturn(
 			[ 'connection' => Step::settings( 'connection', 'C', [ 'api_key' ], $on_save ) ]
 		);
@@ -449,6 +471,8 @@ class SetupWizardRestControllerTest extends TestCase {
 		$plugin->shouldReceive( 'get_settings_handler' )->andReturn( $handler );
 
 		$wizard = Mockery::mock( '\Woodev\Framework\Setup\Setup_Wizard' );
+		$wizard->shouldReceive( 'get_step_graph' )->andReturn( [] )->byDefault();
+		$wizard->shouldReceive( 'get_registered_step' )->andReturn( null )->byDefault();
 		$wizard->shouldReceive( 'get_steps' )->andReturn(
 			[ 'connection' => Step::settings( 'connection', 'C', [ 'api_key' ], $on_save ) ]
 		);
@@ -472,6 +496,8 @@ class SetupWizardRestControllerTest extends TestCase {
 		Functions\when( 'apply_filters' )->returnArg( 2 );
 
 		$wizard = Mockery::mock( '\Woodev\Framework\Setup\Setup_Wizard' );
+		$wizard->shouldReceive( 'get_step_graph' )->andReturn( [] )->byDefault();
+		$wizard->shouldReceive( 'get_registered_step' )->andReturn( null )->byDefault();
 		$wizard->shouldReceive( 'complete_setup' )->once()->with( 'completed' )->andThrow(
 			new \Exception( 'carrier rejected api_key=LIVESECRET' )
 		);
@@ -500,6 +526,8 @@ class SetupWizardRestControllerTest extends TestCase {
 		Functions\when( 'apply_filters' )->returnArg( 2 );
 
 		$wizard = Mockery::mock( '\Woodev\Framework\Setup\Setup_Wizard' );
+		$wizard->shouldReceive( 'get_step_graph' )->andReturn( [] )->byDefault();
+		$wizard->shouldReceive( 'get_registered_step' )->andReturn( null )->byDefault();
 		$wizard->shouldReceive( 'complete_setup' )->once()->with( 'completed' )->andThrow(
 			new \Exception( 'option table write failed' )
 		);

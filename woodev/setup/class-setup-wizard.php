@@ -25,7 +25,7 @@ abstract class Setup_Wizard {
 	/** @var string required capability (neutral default). */
 	protected string $required_capability = 'manage_options';
 
-	/** @var Step[] registered steps keyed by id (visible only, after build). */
+	/** @var Step[] every registered step keyed by id (visible or not — see get_steps()). */
 	protected array $steps = [];
 
 	/**
@@ -63,7 +63,10 @@ abstract class Setup_Wizard {
 	abstract protected function register_steps(): void;
 
 	/**
-	 * Builds and filters the step list (visible steps only).
+	 * Builds the step list: every registered step, after the plugin filter.
+	 *
+	 * Visibility is NOT decided here: it is a server-side predicate over saved state that
+	 * changes as the merchant saves steps, so it is evaluated on demand ({@see self::get_steps()}).
 	 *
 	 * @since 2.0.2
 	 *
@@ -94,7 +97,7 @@ abstract class Setup_Wizard {
 		$this->steps = array_filter(
 			$steps,
 			static function ( $step ): bool {
-				return $step instanceof Step && $step->is_visible();
+				return $step instanceof Step;
 			}
 		);
 	}
@@ -115,10 +118,13 @@ abstract class Setup_Wizard {
 	 * @param string[]      $setting_ids referenced setting ids.
 	 * @param callable|null $on_save     optional idempotent save side-effect.
 	 * @param string        $description optional step description shown in the wizard UI.
-	 * @return void
+	 * @return Step the registered step, for fluent configuration (`set_skippable()`,
+	 *              `set_validation_callback()`, `add_action()`).
 	 */
-	protected function register_step( string $id, string $label, array $setting_ids, ?callable $on_save = null, string $description = '' ): void {
+	protected function register_step( string $id, string $label, array $setting_ids, ?callable $on_save = null, string $description = '' ): Step {
 		$this->steps[ $id ] = Step::settings( $id, $label, $setting_ids, $on_save, $description );
+
+		return $this->steps[ $id ];
 	}
 
 	/**
@@ -130,10 +136,12 @@ abstract class Setup_Wizard {
 	 * @param string          $label       step label.
 	 * @param callable|string $content     content callback or markup.
 	 * @param string          $description optional step description shown in the wizard UI.
-	 * @return void
+	 * @return Step the registered step, for fluent configuration (`set_skippable()`, `add_action()`).
 	 */
-	protected function register_content_step( string $id, string $label, $content, string $description = '' ): void {
+	protected function register_content_step( string $id, string $label, $content, string $description = '' ): Step {
 		$this->steps[ $id ] = Step::content( $id, $label, $content, $description );
+
+		return $this->steps[ $id ];
 	}
 
 	/**
@@ -181,18 +189,43 @@ abstract class Setup_Wizard {
 	}
 
 	/**
-	 * Returns the registered (visible) steps keyed by id.
+	 * Returns the steps that are visible RIGHT NOW, keyed by id.
+	 *
+	 * The visibility predicates are evaluated on every call, over the saved state — so after a
+	 * save the answer can differ from the one before it (D3).
 	 *
 	 * @since 2.0.2
 	 *
 	 * @return Step[]
 	 */
 	public function get_steps(): array {
-		return $this->steps;
+		return array_filter(
+			$this->steps,
+			static function ( Step $step ): bool {
+				return $step->is_visible();
+			}
+		);
 	}
 
 	/**
-	 * Whether the wizard has any visible steps.
+	 * Returns a registered step by id whether or not it is visible now.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param string $step_id step id.
+	 * @return Step|null
+	 */
+	public function get_registered_step( string $step_id ): ?Step {
+		return $this->steps[ $step_id ] ?? null;
+	}
+
+	/**
+	 * Whether the wizard has any registered step.
+	 *
+	 * Deliberately not "any VISIBLE step": it decides whether the hooks are wired, which happens
+	 * while the plugin boots, and running the plugins' visibility predicates that early (over
+	 * settings that may not be ready) is exactly what the graph avoids. A wizard whose steps are
+	 * all hidden shows just its finish step.
 	 *
 	 * @since 2.0.2
 	 *
@@ -275,15 +308,31 @@ abstract class Setup_Wizard {
 	/**
 	 * Persists completion state (server-side authority, not a client flag).
 	 *
+	 * The state only moves forward (D1): `completed` means "the merchant reached the end"
+	 * and is never overwritten by `skipped`; `skipped` («Настрою позже») may later become
+	 * `completed`. A refused downgrade is not an error — nothing is written and the
+	 * unchanged state is returned. It says nothing about the plugin being ready.
+	 *
 	 * @since 2.0.2
 	 *
 	 * @param string $state 'completed' (default) or 'skipped'; any other value normalises to 'completed'.
-	 * @return void
+	 * @return string the state in force afterwards ('completed' | 'skipped').
 	 */
-	public function complete_setup( string $state = 'completed' ): void {
+	public function complete_setup( string $state = 'completed' ): string {
 		$value = 'skipped' === $state ? 'skipped' : 'completed';
+
+		// Read the option, not this wizard's `$state` cache (WordPress's own option cache still
+		// applies). Not atomic: two overlapping requests can race, which D1 tolerates.
+		if ( 'skipped' === $value && 'completed' === (string) get_option( $this->get_complete_option_name(), '' ) ) {
+			$this->state = 'completed';
+
+			return 'completed';
+		}
+
 		update_option( $this->get_complete_option_name(), $value );
 		$this->state = $value;
+
+		return $value;
 	}
 
 	/**
@@ -534,7 +583,10 @@ abstract class Setup_Wizard {
 
 		wp_enqueue_style( 'wp-components' );
 		wp_enqueue_style( 'woodev-setup-wizard', $build_url . '/style-index.css', [ 'wp-components' ], $style_version );
-		wp_enqueue_script( 'woodev-setup-wizard', $build_url . '/index.js', $asset['dependencies'], $asset['version'], true );
+		// Plugin-supplied step components (D4): their scripts must be loaded before the wizard
+		// bundle runs, so they are its dependencies.
+		$dependencies = array_values( array_unique( array_merge( $asset['dependencies'], $this->get_component_handles() ) ) );
+		wp_enqueue_script( 'woodev-setup-wizard', $build_url . '/index.js', $dependencies, $asset['version'], true );
 		\Woodev\Framework\Handlers\Script_Translations::register( $this->plugin, 'woodev-setup-wizard' );
 
 		wp_add_inline_script(
@@ -545,17 +597,64 @@ abstract class Setup_Wizard {
 	}
 
 	/**
-	 * Builds the PHP-driven bootstrap payload for the React shell.
+	 * Script handles of the custom step components that are registered with WordPress.
+	 *
+	 * Every registered step counts, visible or not — a hidden step can become visible after a
+	 * save, and its script must already be on the page. A handle nobody registered is logged
+	 * and left out; the client then shows the step's error state.
 	 *
 	 * @since 2.0.2
 	 *
-	 * @return array<string,mixed>
+	 * @return string[]
 	 */
-	protected function get_bootstrap_data(): array {
+	protected function get_component_handles(): array {
+		$handles = [];
+
+		foreach ( $this->steps as $step ) {
+			$component = $step->get_component();
+			if ( null === $component ) {
+				continue;
+			}
+
+			if ( ! wp_script_is( $component['handle'], 'registered' ) ) {
+				error_log( sprintf( '[woodev] setup wizard step "%s" names the script "%s", which is not registered', $step->get_id(), $component['handle'] ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic for a plugin misconfiguration.
+				continue;
+			}
+
+			$handles[] = $component['handle'];
+		}
+
+		return $handles;
+	}
+
+	/**
+	 * The current step graph: every registered step in order, then the terminal «finish» step.
+	 *
+	 * This is the one structure the client renders from, both at bootstrap and after every
+	 * successful save or action (D3). A VISIBLE step carries its full descriptor (`visible: true`,
+	 * `fields` with the current saved values, `content`, `skippable`, `validates`, `actions`,
+	 * `component`); a step the server-side predicate hides carries only `id` and `visible: false`,
+	 * so the client knows it exists, in which position, and that it must not show it. There is no
+	 * per-step progress on the server (the spec rejects it), so "status" is the visibility.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	public function get_step_graph(): array {
 		$schema = $this->get_field_schema();
 		$steps  = [];
 
 		foreach ( $this->steps as $step ) {
+			// Evaluated once per step per graph, over the state saved so far.
+			if ( ! $step->is_visible() ) {
+				$steps[] = [
+					'id'      => $step->get_id(),
+					'visible' => false,
+				];
+				continue;
+			}
+
 			$fields = [];
 			foreach ( $step->get_setting_ids() as $sid ) {
 				if ( isset( $schema[ $sid ] ) ) {
@@ -577,27 +676,65 @@ abstract class Setup_Wizard {
 
 			$content = $step->get_content();
 			if ( is_callable( $content ) ) {
-				$content = (string) call_user_func( $content );
+				try {
+					$content = (string) call_user_func( $content );
+				} catch ( \Throwable $e ) {
+					// The content callback is the plugin's; a throw must not blank the whole wizard.
+					Callback_Failure::log( sprintf( 'content failed for step "%s"', $step->get_id() ), $e );
+					$content = '';
+				}
 			}
 
 			$steps[] = [
 				'id'          => $step->get_id(),
+				'visible'     => true,
 				'label'       => $step->get_label(),
 				'type'        => $step->get_type(),
 				'description' => $step->get_description(),
 				'fields'      => $fields,
 				'content'     => is_string( $content ) ? $content : '',
+				'skippable'   => $step->is_skippable(),
+				// Whether Continue must ask the server (validation callback) before advancing.
+				// Settings steps always do (they persist); a content step only when it validates.
+				'validates'   => null !== $step->get_validation_callback(),
+				'component'   => $step->get_component(),
+				'actions'     => array_values(
+					array_map(
+						static function ( Step_Action $action ): array {
+							return $action->to_client_array();
+						},
+						$step->get_actions()
+					)
+				),
 			];
 		}
 
 		$steps[] = [
 			'id'          => 'finish',
+			'visible'     => true,
 			'label'       => \__( 'Готово', 'woodev-plugin-framework' ),
 			'type'        => 'finish',
 			'description' => '',
 			'fields'      => [],
 			'content'     => '',
+			'skippable'   => false,
+			'validates'   => false,
+			'component'   => null,
+			'actions'     => [],
 		];
+
+		return $steps;
+	}
+
+	/**
+	 * Builds the PHP-driven bootstrap payload for the React shell.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return array<string,mixed>
+	 */
+	protected function get_bootstrap_data(): array {
+		$steps = $this->get_step_graph();
 
 		return [
 			'pluginId'              => $this->get_id(),
@@ -718,7 +855,9 @@ abstract class Setup_Wizard {
 			return;
 		}
 
-		if ( $this->is_finished() ) {
+		// Shown until the merchant REACHED THE END: «Настрою позже» (skipped) keeps the
+		// notice, so the wizard stays reachable (D1).
+		if ( $this->is_complete() ) {
 			return;
 		}
 
@@ -753,7 +892,7 @@ abstract class Setup_Wizard {
 	 * @return string[]
 	 */
 	public function add_action_link( array $links ): array {
-		if ( ! $this->is_finished() ) {
+		if ( ! $this->is_complete() ) {
 			$links[] = sprintf( '<a href="%s">%s</a>', esc_url( $this->get_setup_url() ), esc_html__( 'Настройка', 'woodev-plugin-framework' ) );
 		}
 

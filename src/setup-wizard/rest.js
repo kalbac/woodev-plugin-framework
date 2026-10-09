@@ -54,3 +54,28 @@ export function complete( state = 'completed' ) {
 		data: { state },
 	} );
 }
+
+/**
+ * Runs one step action (a server-side operation bound to a step).
+ *
+ * Resolves with the action's structured answer `{ status: 'success'|'error', message, data }` —
+ * a negative business outcome ("the key is not valid") is a resolved `status: 'error'`, not a
+ * rejection; only an unexpected failure rejects. A destructive action carries `confirmed: true`,
+ * set by the caller after the merchant confirmed it.
+ *
+ * @param {string}  stepId    step id.
+ * @param {string}  actionId  action id.
+ * @param {Object}  values    the merchant's edits to the step's fields (the server overlays them on the stored values).
+ * @param {boolean} confirmed whether the merchant confirmed a destructive action.
+ * @return {Promise} REST promise.
+ */
+export function runAction( stepId, actionId, values = {}, confirmed = false ) {
+	const { restRoot, nonce } = bootstrap();
+
+	return apiFetch( {
+		url: `${ restRoot }/steps/${ stepId }/actions/${ actionId }`,
+		method: 'POST',
+		headers: { 'X-WP-Nonce': nonce },
+		data: confirmed ? { values, confirmed: true } : { values },
+	} );
+}

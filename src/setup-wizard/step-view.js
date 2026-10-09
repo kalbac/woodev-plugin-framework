@@ -47,10 +47,11 @@ function controlKind( schema ) {
  * @param {Function} onChange     step values change handler.
  * @param {boolean}  showErrors   whether to reveal validation errors.
  * @param {Object}   serverErrors map of fieldId → server error string.
+ * @param {Object}   context      saved values of fields on OTHER steps, so a show_if may depend on them.
  * @return {Array} list of React elements.
  */
-function renderFields( step, values, onChange, showErrors, serverErrors ) {
-	const stepValues = {};
+function renderFields( step, values, onChange, showErrors, serverErrors, context ) {
+	const stepValues = { ...( context || {} ) };
 	Object.keys( step.fields || {} ).forEach( ( id ) => {
 		stepValues[ id ] = values[ id ] ?? step.fields[ id ].value;
 	} );
@@ -117,14 +118,20 @@ function renderFields( step, values, onChange, showErrors, serverErrors ) {
  * @param {Function} props.onChange     step values change handler.
  * @param {boolean}  props.showErrors   whether to reveal validation errors.
  * @param {Object}   props.serverErrors map of fieldId → server error string.
+ * @param {Object}   props.conditionValues values a show_if is evaluated against: the saved values of
+ *                                      every step overlaid with this step's edits.
+ * @param {Object}   props.body         optional element rendered INSTEAD of the fields / content —
+ *                                      a plugin-supplied step component (D4), inside the same frame.
  * @return {Object} React element.
  */
-export default function StepView( { step, values, onChange, showErrors, serverErrors } ) {
-	const body = 'settings' === step.type
+export default function StepView( { step, values, onChange, showErrors, serverErrors, conditionValues, body: customBody } ) {
+	const body = customBody
+		? customBody
+		: 'settings' === step.type
 		? createElement(
 			'div',
 			{ className: 'woodev-setup__fields' },
-			renderFields( step, values, onChange, showErrors, serverErrors )
+			renderFields( step, values, onChange, showErrors, serverErrors, conditionValues )
 		)
 		: createElement( 'div', {
 			className: 'woodev-setup__content',
