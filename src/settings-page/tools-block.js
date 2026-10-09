@@ -13,9 +13,57 @@ import { Button } from '@wordpress/components';
 import SelectField from '../components/select-field';
 import { runTool } from './rest';
 
+/**
+ * The selector's starting value (its `default`, else empty).
+ *
+ * @param {?{ default?: string }|undefined} selector `Shipping_Tool::to_array()['selector']`.
+ * @return {string} initial value.
+ */
+export function selectorDefault( selector ) {
+	return selector ? ( selector.default ?? '' ) : '';
+}
+
+/**
+ * The args one run sends: the selector's named value, or nothing for a tool without a selector.
+ * Shared by the tool card and the group card so both send the same payload.
+ *
+ * @param {?{ name: string }|undefined} selector the tool's selector.
+ * @param {string}                      value    the selected value.
+ * @return {Object<string, string>} args for `runTool()`.
+ */
+export function toolArgs( selector, value ) {
+	return selector ? { [ selector.name ]: value } : {};
+}
+
+/**
+ * A tool's provider selector: optional label above a select. Shared by the tool card and the group card.
+ *
+ * @param {Object}   props
+ * @param {*}        props.selector `Shipping_Tool::to_array()['selector']`.
+ * @param {string}   props.value    selected value.
+ * @param {Function} props.onChange receives the next value.
+ * @param {boolean}  props.disabled whether the select is disabled.
+ */
+export function ToolSelector( { selector, value, onChange, disabled } ) {
+	return (
+		<div className="woodev-tool__selector">
+			{ selector.description && (
+				<span className="woodev-tool__selector-label">{ selector.description }</span>
+			) }
+			<SelectField
+				value={ value }
+				options={ selector.options }
+				onChange={ onChange }
+				placeholder={ selector.placeholder }
+				disabled={ disabled }
+			/>
+		</div>
+	);
+}
+
 function ToolCard( { providerId, tool } ) {
 	const selector = tool.selector || null;
-	const [ value, setValue ] = useState( selector ? ( selector.default ?? '' ) : '' );
+	const [ value, setValue ] = useState( selectorDefault( selector ) );
 	const [ busy, setBusy ] = useState( false );
 	const [ result, setResult ] = useState( null );
 
@@ -26,9 +74,7 @@ function ToolCard( { providerId, tool } ) {
 		setBusy( true );
 		setResult( null );
 
-		const args = selector ? { [ selector.name ]: value } : {};
-
-		runTool( providerId, tool.id, args )
+		runTool( providerId, tool.id, toolArgs( selector, value ) )
 			.then( ( res ) => setResult( res ) )
 			.catch( ( err ) =>
 				setResult( {
@@ -54,18 +100,12 @@ function ToolCard( { providerId, tool } ) {
 			{ tool.desc && <p className="woodev-tool__desc">{ tool.desc }</p> }
 
 			{ selector && (
-				<div className="woodev-tool__selector">
-					{ selector.description && (
-						<span className="woodev-tool__selector-label">{ selector.description }</span>
-					) }
-					<SelectField
-						value={ value }
-						options={ selector.options }
-						onChange={ handleSelectorChange }
-						placeholder={ selector.placeholder }
-						disabled={ tool.disabled || busy }
-					/>
-				</div>
+				<ToolSelector
+					selector={ selector }
+					value={ value }
+					onChange={ handleSelectorChange }
+					disabled={ tool.disabled || busy }
+				/>
 			) }
 
 			<div className="woodev-tool__action">

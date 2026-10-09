@@ -121,6 +121,11 @@ Settings_Section::create( 'export', 'Отправка', [ 'token', 'mode', 'othe
   with no visible field comes after every field; one whose members are all hidden by `show_if` renders nothing).
   A card shows title, description, its fields, then its actions as buttons in ONE row, then the notice (plus the
   distinct `status_text` of disabled actions, each once), then ONE result line — the last clicked button's.
+  A selector-backed action (`Shipping_Tool::selector`) keeps its select inside the card — shared `ToolSelector` /
+  `toolArgs()` from `tools-block.js`, so the run sends the same named arg as a `ToolCard` — and a changed selection
+  clears the shared result. Box presets (`box_preset` fields) named by a group render as ONE table inside that
+  group's card, after its ordinary fields (scalar save keys and complete rows preserved); ungrouped presets stay in the
+  shared table below the fields.
   Ungrouped fields/actions render as before (`ToolsBlock` cards, below the fields). `GroupCard` is
   `src/settings-page/group-card.tsx`; not to be confused with `.woodev-field__option-group`, the inner card of ONE toggle.
 - **Save button.** `sectionHasSaveButton()` (`app.js`): no «Сохранить» for a tools block or an ordinary section with

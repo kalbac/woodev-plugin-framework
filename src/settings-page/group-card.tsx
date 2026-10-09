@@ -16,6 +16,7 @@ import { RawHTML, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { Button } from '@wordpress/components';
 import { runTool } from './rest';
+import { ToolSelector, selectorDefault, toolArgs } from './tools-block';
 
 /** A group as the registry serialises it (`Settings_Page_Registry::build_groups()`). */
 export interface GroupSchema {
@@ -27,12 +28,22 @@ export interface GroupSchema {
 	actions: string[];
 }
 
+/** `Shipping_Tool::to_array()['selector']` — the input a selector-backed action runs with. */
+export interface ActionSelector {
+	name: string;
+	description?: string;
+	placeholder?: string;
+	default?: string;
+	options: unknown;
+}
+
 /** The slice of `Shipping_Tool::to_array()` a group button needs. */
 export interface ActionSchema {
 	id: string;
 	button: string;
 	disabled: boolean;
 	status_text: string;
+	selector?: ActionSelector | null;
 }
 
 interface ToolResult {
@@ -111,20 +122,32 @@ interface GroupCardProps {
 	/** The group's rendered fields. */
 	children?: ReactNode;
 	/** Runs one action; defaults to the REST tool route. The UI-kit gallery passes a stub. */
-	onRun?: ( actionId: string ) => Promise< unknown >;
+	onRun?: ( actionId: string, args: Record< string, string > ) => Promise< unknown >;
 }
 
 export default function GroupCard( { providerId, group, actions, children, onRun }: GroupCardProps ) {
 	const [ busyId, setBusyId ] = useState< string >( '' );
 	const [ result, setResult ] = useState< ToolResult | null >( null );
+	// Each selector-backed action keeps its own selected value, like a ToolCard does.
+	const [ selected, setSelected ] = useState< Record< string, string > >( {} );
 	const notices = groupNotices( group, actions );
+	const selectedOf = ( action: ActionSchema ): string =>
+		action.id in selected ? selected[ action.id ] : selectorDefault( action.selector );
+
+	// The result line is shared, so a changed selection drops it — it would read as a claim about the new one.
+	const selectFor = ( action: ActionSchema, next: string ) => {
+		setResult( null );
+		setSelected( ( prev ) => ( { ...prev, [ action.id ]: next } ) );
+	};
 
 	const run = ( action: ActionSchema ) => {
+		const args = toolArgs( action.selector, selectedOf( action ) );
+
 		// Busy + result-clear happen before the request starts, like ToolCard — a live call takes seconds.
 		setBusyId( action.id );
 		setResult( null );
 
-		( onRun ? onRun( action.id ) : runTool( providerId, action.id, {} ) )
+		( onRun ? onRun( action.id, args ) : runTool( providerId, action.id, args ) )
 			.then( ( res: unknown ) => setResult( res as ToolResult ) )
 			.catch( ( err: { message?: string } ) =>
 				setResult( {
@@ -142,6 +165,15 @@ export default function GroupCard( { providerId, group, actions, children, onRun
 				<div className="woodev-group__desc"><RawHTML>{ group.description }</RawHTML></div>
 			) }
 			{ children }
+			{ actions.filter( ( action ) => action.selector ).map( ( action ) => (
+				<ToolSelector
+					key={ `selector:${ action.id }` }
+					selector={ action.selector }
+					value={ selectedOf( action ) }
+					onChange={ ( next: string ) => selectFor( action, next ) }
+					disabled={ action.disabled || '' !== busyId }
+				/>
+			) ) }
 			{ actions.length > 0 && (
 				<div className="woodev-group__actions">
 					{ actions.map( ( action ) => (

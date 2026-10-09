@@ -40,17 +40,27 @@ export default function SectionView( { providerId, section, tabFields, values, c
 	const effectiveValues = conditionValues || Object.fromEntries(
 		Object.entries( section.fields ).map( ( [ id, field ] ) => [ id, values[ id ] ?? field.value ] )
 	);
-	const visibleBoxFields = Object.fromEntries(
-		Object.entries( section.fields ).filter( ( [ , field ] ) => field.box_preset && isFieldVisible( field, effectiveValues ) )
-	);
-
 	const groups = section.groups || [];
 	const actions = section.actions || [];
+	const groupedFieldIds = new Set( groups.flatMap( ( group ) => group.fields ) );
+	const isVisible = ( settingId ) => isFieldVisible(
+		section.fields[ settingId ],
+		section.fields[ settingId ].box_preset ? effectiveValues : ( conditionValues || values )
+	);
+	// A preset belongs to its group's card when a group names it; an ungrouped preset stays in the shared
+	// table below the fields, exactly as before.
 	const visibleIds = Object.keys( section.fields ).filter( ( settingId ) =>
-		! section.fields[ settingId ].box_preset && isFieldVisible( section.fields[ settingId ], conditionValues || values )
+		( ! section.fields[ settingId ].box_preset || groupedFieldIds.has( settingId ) ) && isVisible( settingId )
+	);
+	const pickPresets = ( ids ) => Object.fromEntries(
+		ids.filter( ( settingId ) => section.fields[ settingId ].box_preset ).map( ( settingId ) => [ settingId, section.fields[ settingId ] ] )
+	);
+	const visibleBoxFields = pickPresets( Object.keys( section.fields ).filter( ( settingId ) => ! groupedFieldIds.has( settingId ) && isVisible( settingId ) ) );
+	const renderBoxTable = ( boxFields ) => (
+		<CarrierBoxesTable fields={ boxFields } values={ values } onFieldChange={ onFieldChange } serverErrors={ serverErrors } />
 	);
 
-	const renderField = ( settingId ) => (
+	const renderField = ( settingId ) => section.fields[ settingId ].box_preset ? null : (
 		<ControlField
 			key={ settingId }
 			settingId={ settingId }
@@ -85,10 +95,11 @@ export default function SectionView( { providerId, section, tabFields, values, c
 				return (
 					<GroupCard key={ `group:${ item.group.id }` } providerId={ providerId } group={ item.group } actions={ groupActions }>
 						{ item.fieldIds.map( renderField ) }
+						{ renderBoxTable( pickPresets( item.fieldIds ) ) }
 					</GroupCard>
 				);
 			} ) }
-			<CarrierBoxesTable fields={ visibleBoxFields } values={ values } onFieldChange={ onFieldChange } serverErrors={ serverErrors } />
+			{ renderBoxTable( visibleBoxFields ) }
 			{ /* Buttons under the fields (Settings_Section::with_actions()) — «Обновить статусы сейчас» and alike. */ }
 			{ ungroupedActions.length > 0 && (
 				<ToolsBlock providerId={ providerId } section={ { tools: ungroupedActions } } />
