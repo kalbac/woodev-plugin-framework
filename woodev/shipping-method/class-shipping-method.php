@@ -2390,6 +2390,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 * `code`/`name`/`parameter` shape as {@see self::resolve_services_for_package()}; an empty array is a real
 		 * answer — «nothing was quoted».
 		 *
+		 * KNOWN LIMITATION — the FIRST matching line. An order holding several shipping lines of this method (a
+		 * multi-package checkout) is read from the first one only: the framework keeps no link between a
+		 * shipment/export and the order shipping line it belongs to (no line id, no package index — the export
+		 * receives product lines, see {@see self::resolve_services_for_order()}), and every other per-line datum
+		 * ({@see Shipping_Helper::get_order_shipping_item()}) takes the first line too. A carrier whose custom
+		 * service parameters differ per package must therefore not rely on this snapshot for the second and later
+		 * packages. Orders created by the admin order wizard hold exactly one shipping line, so they are not affected.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @param \WC_Order $order The order.

@@ -589,6 +589,37 @@ final class CarrierServicesTest extends TestCase {
 		$this->assertSame( [ 'SMS_NOTICE' ], array_column( $method->resolve_services_for_order( $requoted ), 'code' ), 're-quoted: the new one' );
 	}
 
+	/**
+	 * Pins the documented limitation (#1145 round 3): the framework has no shipment ↔ shipping-line link, so an order
+	 * with several lines of one method is exported from the FIRST line's snapshot, like every other per-line datum.
+	 *
+	 * @return void
+	 */
+	public function test_an_order_with_several_lines_of_one_method_exports_the_first_lines_snapshot(): void {
+		$method = new Woodev_Test_Quoting_Services_Method();
+		$method->option_values[ Shipping_Method::OPTION_SERVICES ] = [ 'INSURANCE' ];
+		$first_snapshot = $this->quoted_snapshot( $method );
+
+		$method->option_values[ Shipping_Method::OPTION_SERVICES ] = [ 'SMS_NOTICE' ];
+		$second_snapshot = $this->quoted_snapshot( $method );
+
+		$lines = [];
+
+		foreach ( [ $first_snapshot, $second_snapshot ] as $snapshot ) {
+			$shipping = Mockery::mock( 'WC_Order_Item_Shipping' );
+			$shipping->shouldReceive( 'get_method_id' )->andReturn( 'rate-cache-method' );
+			$shipping->shouldReceive( 'get_meta' )->with( Shipping_Method::META_QUOTED_SERVICES, true )->andReturn( $snapshot );
+			$lines[] = $shipping;
+		}
+
+		$order = Mockery::mock( 'WC_Order' );
+		$order->shouldReceive( 'get_items' )->with( 'line_item' )->andReturn( [ $this->line( 'a', '80.50' ) ] );
+		$order->shouldReceive( 'get_shipping_methods' )->andReturn( $lines );
+
+		$this->assertSame( [ 'INSURANCE' ], array_column( $method->get_quoted_services( $order ), 'code' ), 'the first matching line is read' );
+		$this->assertSame( [ 'INSURANCE' ], array_column( $method->resolve_services_for_order( $order ), 'code' ), 'and the export follows it' );
+	}
+
 	/** @return void */
 	public function test_a_split_shipment_keeps_the_quoted_codes_and_values_a_declared_value_from_its_own_lines(): void {
 		$method = new Woodev_Test_Quoting_Services_Method();

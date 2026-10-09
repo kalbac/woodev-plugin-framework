@@ -257,7 +257,13 @@ nor its parameters. Policy: a quote of «no service» is stored as an EMPTY list
 an order with no usable snapshot (placed before #1145, unknown `version`, bad JSON) falls back to resolving
 from the current settings; the snapshot is refreshed only when the shipping line is replaced by a new
 quote (admin re-quote) — nothing else rewrites it; a split shipment keeps the snapshot's codes and frozen
-parameters but values a `declared_value` service from its own lines. A carrier's custom
+parameters but values a `declared_value` service from its own lines. **Known limitation — first line only:**
+an order with several shipping lines of one method (multi-package checkout) is read from the FIRST matching
+line (`Shipping_Helper::get_order_shipping_item()`); the framework has no association between a shipment /
+export and its shipping line (no line id, no package index — the export is handed product lines), and every
+other per-line datum takes the first line too, so per-package custom service parameters of the second and
+later packages are exported from the first quote. The admin order wizard writes exactly one line, so it is not
+affected; closing the gap needs a framework-wide line↔shipment link, not a local fix. A carrier's custom
 `resolve_service_parameter()` that reads anything beyond the package, the instance settings and the
 packing settings must add it to the cache key through its `get_rate_cache_context()` override.
 
