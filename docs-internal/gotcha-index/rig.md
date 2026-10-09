@@ -25,6 +25,7 @@
 - [rig/probes] **`wp eval-file` exits 0 with EMPTY stdout for a probe carrying one very long line (~5 KB inline payload): its `__FILE__` regex returns null and nothing is evaluated — split the payload into short lines or pass `--use-include`.** → [wp-eval-file-prints-nothing-for-a-probe-with-one-very-long-line](../gotchas/wp-eval-file-prints-nothing-for-a-probe-with-one-very-long-line.md) (s153)
 
 - [rig/loader] **A fixture below the winner's `backwards_compatible` floor is silently dropped (nothing registered); the floor moves with the winner, so raising one fixture un-drops others (s163).** → [a-fixture-plugin-below-the-winners-backwards-compatible-floor-is-silently-dropped](../gotchas/a-fixture-plugin-below-the-winners-backwards-compatible-floor-is-silently-dropped.md) (s161, s163)
+- [rig/probes] **`wp wc shipping_zone_method delete <zone> <instance>` deletes instance `<zone>` — it took Free shipping twice. Delete via REST after a GET that proves the row; never put that CLI line in a brief.** → [wp-wc-shipping-zone-method-delete-takes-the-first-number-as-the-instance](../gotchas/wp-wc-shipping-zone-method-delete-takes-the-first-number-as-the-instance.md) (s165)
 
 ## Related
 
