@@ -296,7 +296,7 @@ Full details + code examples in `docs-internal/gotchas/`. Open your topic from t
 
 **Docs:**
 - Public docs (`docs/`) use `%%FRAMEWORK_VERSION%%` placeholder — never hardcode version
-- Internal docs (`docs-internal/`) — agent prose in English; quoted operator words, domain data and msgids keep their language (`DOCS-SCHEMA.md` → Language Rule)
+- Internal docs and all agent work, dispatched agents' reasoning and reports included (operator, 09.10.2026) — English; quoted operator words, domain data and msgids keep their language (`DOCS-SCHEMA.md` → Language Rule)
 - Gotchas go in `docs-internal/gotchas/`, NOT in `docs/`
 
 ---
@@ -305,7 +305,6 @@ Full details + code examples in `docs-internal/gotchas/`. Open your topic from t
 
 | Area | Rule |
 |------|------|
-| Documentation language | English (for AI agents) — see `docs-internal/DOCS-SCHEMA.md` |
 | Translatable strings | **Four rules, by WHO READS the string** (operator, 29.08.2026, #567). **Storefront → the msgid is ENGLISH** and the Russian arrives from the catalogue: a shop's frontend may run an English locale even though its admin never does. **Admin → Russian msgid is fine and stays** (do not spend effort anglicising it); an admin string that IS in English must be translated in the catalogue. **Logs, exception texts and anything else that never reaches a screen → either language, and it need not be wrapped in `__()`/`_e()` at all — a plain string is correct.** Text domain, wherever a wrapper IS used: `woodev-plugin-framework` (pinned by `TextDomainConsistencyTest`). Classify by the RENDER PATH, never by the file's directory — gotcha `classify-an-i18n-string-by-its-render-path-not-its-file-path`. |
 | PHP style | WordPress Coding Standards (tabs, snake_case, PHPDoc) |
 | Classes | `Snake_Case`. **New code is authored directly in namespaces** (`Woodev\Framework\*` PSR-4, e.g. `Woodev\Framework\Shipping\Shipping_Plugin`) — do NOT write new code under the legacy global `Woodev_*` shape. Legacy `Woodev_*` exists only in not-yet-migrated files. |

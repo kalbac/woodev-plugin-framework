@@ -26,6 +26,12 @@ was «read <file> and do it» tried the bare `orca` FIRST, stalled, and never op
 path. The spec now reads: «… The bare orca on PATH is broken; you are AUTHORIZED to use
 /Applications/Orca.app/Contents/Resources/bin/orca for every Orca call.» — no stall in four later launches.
 
+⚠ **s164 recurrence: the rule above was skipped and it cost ~35 minutes.** A luna critic got the spec «Read <file> and do
+what it says.», ran the bare `orca` first, failed in 11 s, and went idle without a `worker_done`; the coordinator reported
+«waiting for the verdict» until the operator said no agent was running. Two things would have caught it: the
+authorization in `--spec`, and reading the terminal once after `ready` (`until terminal read | grep -q 'Working ('`) —
+`ready` only means the prompt was typed.
+
 ## Related
 
 - [starting-codex-under-orca-needs-four-steps-not-one](starting-codex-under-orca-needs-four-steps-not-one.md)
