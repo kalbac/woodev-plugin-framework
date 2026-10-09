@@ -14,6 +14,7 @@ namespace Woodev\Tests\Unit\Shipping\Settings;
 use Brain\Monkey\Functions;
 use Mockery;
 use Woodev\Framework\Settings\Composite_Settings_Handler;
+use Woodev\Framework\Settings\Settings_Group;
 use Woodev\Framework\Settings\Settings_Page_Registry;
 use Woodev\Framework\Settings\Settings_Provider;
 use Woodev\Framework\Settings\Settings_Section;
@@ -22,6 +23,7 @@ use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
 use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
 use Woodev\Framework\Shipping\Settings\Advanced_Settings;
 use Woodev\Framework\Shipping\Settings\Export_Settings;
+use Woodev\Framework\Shipping\Settings\Shipping_Tool;
 use Woodev\Framework\Shipping\Shipping_Plugin;
 use Woodev\Tests\Unit\TestCase;
 
@@ -541,6 +543,81 @@ final class CarrierSettingsTabTest extends TestCase {
 		$provider = $plugin->get_settings_providers()[0];
 
 		$this->assertSame( [], $this->section_ids( $provider ) );
+	}
+
+	// ----- what a carrier adds to «Дополнительно» (s165) -----
+
+	private function advanced_of( $plugin ): Settings_Section {
+		$sections = $plugin->get_settings_providers()[0]->get_sections();
+
+		return $sections[ count( $sections ) - 1 ];
+	}
+
+	private function tool( string $id ): Shipping_Tool {
+		return Shipping_Tool::create( $id, 'Заголовок', 'Описание', 'Кнопка', static fn() => null );
+	}
+
+	public function test_an_empty_extension_leaves_the_additional_section_exactly_as_the_framework_builds_it(): void {
+		$plain = $this->carrier();
+
+		$with_empty_extension = $this->carrier();
+		$with_empty_extension->shouldReceive( 'get_advanced_section_extension' )->andReturn( [ 'actions' => [], 'groups' => [], 'description' => '' ] );
+
+		$this->assertEquals( $this->advanced_of( $plain ), $this->advanced_of( $with_empty_extension ) );
+		$this->assertSame( [], $this->advanced_of( $plain )->get_groups() );
+		$this->assertSame( [], $this->advanced_of( $plain )->get_actions() );
+		$this->assertSame( '', $this->advanced_of( $plain )->get_description() );
+	}
+
+	public function test_a_carrier_extends_the_additional_section_with_actions_a_group_and_a_description(): void {
+		$plugin = $this->carrier();
+		$plugin->shouldReceive( 'get_advanced_section_extension' )->andReturn(
+			[
+				'description' => '<p>Текст</p>',
+				'actions'     => [ $this->tool( 'on' ), $this->tool( 'off' ) ],
+				'groups'      => [ Settings_Group::create( 'hooks', 'Вебхуки' )->with_actions( [ 'on', 'off' ] ) ],
+			]
+		);
+
+		$section = $this->advanced_of( $plugin );
+
+		$this->assertSame( 'advanced', $section->get_id() );
+		$this->assertSame( [ 'enable_debug', 'disable_methods_on_cart' ], $section->get_setting_ids() );
+		$this->assertSame( '<p>Текст</p>', $section->get_description() );
+		$this->assertSame( [ 'on', 'off' ], array_map( static fn( Shipping_Tool $t ) => $t->get_id(), $section->get_actions() ) );
+		$this->assertSame( [ 'logging-and-cart', 'hooks' ], array_map( static fn( Settings_Group $g ) => $g->get_id(), $section->get_groups() ) );
+		$this->assertSame( [ 'enable_debug', 'disable_methods_on_cart' ], $section->get_groups()[0]->get_setting_ids() );
+		$this->assertSame( 'Журнал и корзина', $section->get_groups()[0]->get_title() );
+	}
+
+	public function test_actions_alone_do_not_group_the_sections_own_fields(): void {
+		$plugin = $this->carrier();
+		$plugin->shouldReceive( 'get_advanced_section_extension' )->andReturn( [ 'actions' => [ $this->tool( 'on' ) ] ] );
+
+		$section = $this->advanced_of( $plugin );
+
+		$this->assertCount( 1, $section->get_actions() );
+		$this->assertSame( [], $section->get_groups() );
+	}
+
+	public function test_a_wrong_shaped_extension_is_reported_and_the_valid_part_kept(): void {
+		$plugin = $this->carrier();
+		$plugin->shouldReceive( 'get_advanced_section_extension' )->andReturn(
+			[
+				'actions'     => [ $this->tool( 'on' ), 'not a tool' ],
+				'groups'      => 'not an array',
+				'description' => 42,
+				'colour'      => 'red',
+			]
+		);
+
+		Functions\expect( '_doing_it_wrong' )->times( 4 );
+
+		$section = $this->advanced_of( $plugin );
+
+		$this->assertSame( [ 'on' ], array_map( static fn( Shipping_Tool $t ) => $t->get_id(), $section->get_actions() ) );
+		$this->assertSame( [], $section->get_groups() );
+		$this->assertSame( '', $section->get_description() );
 	}
 
 	// ----- the carrier's own fields inside «Выгрузка заказов» -----

@@ -126,6 +126,12 @@ Settings_Section::create( 'export', 'Отправка', [ 'token', 'mode', 'othe
 - **Save button.** `sectionHasSaveButton()` (`app.js`): no «Сохранить» for a tools block or an ordinary section with
   no fields (an actions-only section used to show a dead one); a connection block keeps it as before.
 - UI Kit gallery (`src/ui-kit-gallery`) shows a grouped-fields card and a grouped-actions card.
+- **A carrier adds to «Дополнительно» (s165).** That section is the framework's own (logging, hide-on-cart) and its id
+  is taken, so a contributed section cannot extend it. `Shipping_Plugin::get_advanced_section_extension()` (protected,
+  default `[]`) returns `['actions' => Shipping_Tool[], 'groups' => Settings_Group[], 'description' => string]`; the
+  framework applies it with `with_actions()` / `with_groups()`. Wrong keys / types / elements are dropped with
+  `_doing_it_wrong()`. An empty extension leaves the section byte-identical; with at least one group the section's own
+  two fields move into a «Журнал и корзина» group (id `logging-and-cart`) so no field sits outside a card.
 
 ## Shipping settings — the «Доставка» tab (`woodev/shipping-method/settings/`)
 

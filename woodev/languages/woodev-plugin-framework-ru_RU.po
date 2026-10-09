@@ -5516,6 +5516,10 @@ msgstr ""
 msgid "Дополнительно"
 msgstr ""
 
+#: shipping-method/class-shipping-plugin.php:1462
+msgid "Журнал и корзина"
+msgstr ""
+
 #: shipping-method/order/class-delivered-order-status.php:102
 msgid "Перевозчик сообщил, что заказ доставлен."
 msgstr ""

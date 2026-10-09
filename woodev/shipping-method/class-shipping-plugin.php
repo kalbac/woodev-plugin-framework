@@ -1338,11 +1338,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 			// «Дополнительно» is always LAST
 			$handlers[] = $advanced;
-			$sections[] = \Woodev\Framework\Settings\Settings_Section::create(
-				Settings\Advanced_Settings::SECTION_ID,
-				__( 'Дополнительно', 'woodev-plugin-framework' ),
-				$advanced->get_owned_setting_ids()
-			);
+			$sections[] = $this->build_advanced_section( $advanced );
 
 			$providers[] = \Woodev\Framework\Settings\Settings_Provider::create_with_sections(
 				$this->get_id(),
@@ -1353,6 +1349,123 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			);
 
 			return $providers;
+		}
+
+		/**
+		 * What the carrier adds to the framework's «Дополнительно» section: action buttons, titled groups and a
+		 * description under the section title. The section is the framework's own (logging, «Не показывать на
+		 * странице корзины»), so a carrier cannot contribute a section under its id — this is the seam for the few
+		 * things that belong there anyway (CDEK's «Мгновенные уведомления», say).
+		 *
+		 * Return an array with any of these keys; the default is none, and an empty array leaves the section exactly as
+		 * the framework builds it:
+		 *
+		 * - `actions`     `Shipping_Tool[]`  the buttons, run through the tool REST route of the carrier's tab;
+		 * - `groups`      `Settings_Group[]` cards that NAME actions by id ({@see \Woodev\Framework\Settings\Settings_Group});
+		 * - `description` `string`           HTML under the section title (constrained at the schema boundary).
+		 *
+		 * A key of another name, a value of the wrong type, or an element that is not a `Shipping_Tool` /
+		 * `Settings_Group` is reported with `_doing_it_wrong()` and dropped, the rest is kept. While at least one group
+		 * is returned, the section's own two fields sit in a group of their own, «Журнал и корзина», so every field
+		 * of the section is in a card.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array{actions?: \Woodev\Framework\Shipping\Settings\Shipping_Tool[], groups?: \Woodev\Framework\Settings\Settings_Group[], description?: string}
+		 */
+		protected function get_advanced_section_extension(): array {
+			return [];
+		}
+
+		/**
+		 * The validated {@see self::get_advanced_section_extension()}: every key present, wrong shapes dropped.
+		 *
+		 * @return array{actions: \Woodev\Framework\Shipping\Settings\Shipping_Tool[], groups: \Woodev\Framework\Settings\Settings_Group[], description: string}
+		 */
+		private function resolve_advanced_section_extension(): array {
+
+			$resolved  = [
+				'actions'     => [],
+				'groups'      => [],
+				'description' => '',
+			];
+			$extension = $this->get_advanced_section_extension();
+			$report    = function ( string $what ): void {
+				_doing_it_wrong(
+					__CLASS__ . '::get_advanced_section_extension',
+					sprintf( 'Carrier "%1$s": get_advanced_section_extension() %2$s; it was ignored.', esc_html( $this->get_id() ), esc_html( $what ) ),
+					'2.0.2'
+				);
+			};
+
+			foreach ( $extension as $key => $value ) {
+
+				if ( 'description' === $key ) {
+					if ( is_string( $value ) ) {
+						$resolved['description'] = $value;
+					} else {
+						$report( 'description is not a string' );
+					}
+					continue;
+				}
+
+				$class = [
+					'actions' => \Woodev\Framework\Shipping\Settings\Shipping_Tool::class,
+					'groups'  => \Woodev\Framework\Settings\Settings_Group::class,
+				][ $key ] ?? null;
+
+				if ( null === $class ) {
+					$report( sprintf( 'has an unknown key "%s"', is_scalar( $key ) ? (string) $key : gettype( $key ) ) );
+					continue;
+				}
+
+				if ( ! is_array( $value ) ) {
+					$report( sprintf( '"%s" is not an array', $key ) );
+					continue;
+				}
+
+				foreach ( $value as $item ) {
+					if ( $item instanceof $class ) {
+						$resolved[ $key ][] = $item;
+					} else {
+						$report( sprintf( 'has a "%1$s" entry that is not a %2$s', $key, $class ) );
+					}
+				}
+			}
+
+			return $resolved;
+		}
+
+		/**
+		 * The framework's «Дополнительно» section, plus whatever the carrier added through
+		 * {@see self::get_advanced_section_extension()}. Without an extension it is the plain section over the handler's
+		 * own setting ids.
+		 *
+		 * @param Settings\Advanced_Settings $advanced the handler.
+		 * @return \Woodev\Framework\Settings\Settings_Section
+		 */
+		private function build_advanced_section( Settings\Advanced_Settings $advanced ): \Woodev\Framework\Settings\Settings_Section {
+
+			$extension = $this->resolve_advanced_section_extension();
+			$section   = \Woodev\Framework\Settings\Settings_Section::create(
+				Settings\Advanced_Settings::SECTION_ID,
+				__( 'Дополнительно', 'woodev-plugin-framework' ),
+				$advanced->get_owned_setting_ids(),
+				$extension['description']
+			);
+
+			if ( [] !== $extension['actions'] ) {
+				$section = $section->with_actions( $extension['actions'] );
+			}
+
+			if ( [] !== $extension['groups'] ) {
+				$own_fields = \Woodev\Framework\Settings\Settings_Group::create( 'logging-and-cart', __( 'Журнал и корзина', 'woodev-plugin-framework' ) )
+					->with_fields( $advanced->get_owned_setting_ids() );
+
+				$section = $section->with_groups( array_merge( [ $own_fields ], $extension['groups'] ) );
+			}
+
+			return $section;
 		}
 
 		/**
