@@ -52,7 +52,7 @@ function woodev_test_plugin_loader_definition(): array {
 		'download_id'       => 9001,
 		'plugin_name'       => 'Woodev Test Plugin',
 		'plugin_version'    => '1.0.0',
-		'framework_version' => '1.4.0',
+		'framework_version' => '2.0.2',
 		'plugin_file'       => __FILE__,
 		'platform'          => 'wordpress',
 		'requirements'      => [
@@ -467,15 +467,6 @@ function woodev_test_plugin_init() {
 		 */
 		public static function instance(): Woodev_Test_Plugin {
 			return self::$instance ??= new self();
-		}
-
-		/**
-		 * Возвращает URL до папки плагина.
-		 *
-		 * @return string
-		 */
-		public function get_plugin_url(): string {
-			return plugin_dir_url( $this->get_plugin_path() );
 		}
 
 		protected function get_file(): string {
