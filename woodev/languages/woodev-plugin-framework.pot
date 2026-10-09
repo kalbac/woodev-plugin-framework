@@ -1780,6 +1780,10 @@ msgstr ""
 msgid "Неизвестный инструмент."
 msgstr ""
 
+#: rest-api/controllers/class-rest-api-settings-page.php:438
+msgid "Идентификатор инструмента встречается в нескольких разделах."
+msgstr ""
+
 #: rest-api/controllers/class-rest-api-settings-page.php:381
 msgid "Ошибка при выполнении инструмента."
 msgstr ""

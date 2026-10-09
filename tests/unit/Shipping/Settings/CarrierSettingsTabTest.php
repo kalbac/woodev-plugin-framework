@@ -620,6 +620,37 @@ final class CarrierSettingsTabTest extends TestCase {
 		$this->assertSame( '', $section->get_description() );
 	}
 
+	public function test_a_carrier_group_reusing_the_frameworks_own_group_id_is_dropped_and_named(): void {
+		$plugin = $this->carrier();
+		$plugin->shouldReceive( 'get_advanced_section_extension' )->andReturn(
+			[
+				'groups' => [ Settings_Group::create( 'logging-and-cart', 'Подмена' ), Settings_Group::create( 'hooks', 'Вебхуки' ) ],
+			]
+		);
+
+		Functions\expect( '_doing_it_wrong' )->once()->with( Mockery::type( 'string' ), Mockery::pattern( '/groups.*whose id.*logging-and-cart/' ), '2.0.2' );
+
+		$groups = $this->advanced_of( $plugin )->get_groups();
+
+		$this->assertSame( [ 'logging-and-cart', 'hooks' ], array_map( static fn( Settings_Group $g ) => $g->get_id(), $groups ) );
+		$this->assertSame( 'Журнал и корзина', $groups[0]->get_title(), 'the framework\'s card survives' );
+	}
+
+	public function test_a_carrier_action_reusing_an_id_of_another_section_or_entry_is_dropped_and_named(): void {
+		$descriptor = $this->credentials();
+		$handler    = $descriptor->get_handler();
+		$taken      = Settings_Section::create( 'credentials', 'Доступ', [ 'api_key' ] )->with_actions( [ $this->tool( 'sync' ) ] );
+
+		$plugin = $this->carrier( 'cdek', [ Settings_Provider::create_with_sections( 'cdek', 'СДЭК', $handler, [], $taken ) ] );
+		$plugin->shouldReceive( 'get_advanced_section_extension' )->andReturn(
+			[ 'actions' => [ $this->tool( 'sync' ), $this->tool( 'on' ), $this->tool( 'on' ) ] ]
+		);
+
+		Functions\expect( '_doing_it_wrong' )->twice()->with( Mockery::type( 'string' ), Mockery::pattern( '/actions.*whose id.*(sync|on)/' ), '2.0.2' );
+
+		$this->assertSame( [ 'on' ], array_map( static fn( Shipping_Tool $t ) => $t->get_id(), $this->advanced_of( $plugin )->get_actions() ) );
+	}
+
 	// ----- the carrier's own fields inside «Выгрузка заказов» -----
 
 	public function test_a_carrier_can_append_its_own_setting_to_the_export_section(): void {

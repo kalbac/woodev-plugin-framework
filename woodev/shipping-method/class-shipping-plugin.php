@@ -22,6 +22,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		/** @var string shipping-package key listing the plugin ids hiding their carriers on the cart page (part of the rate-cache hash) */
 		private const CART_PAGE_PACKAGE_KEY = 'woodev_hidden_on_cart';
 
+		/** @var string id of the framework's own field card in the «Дополнительно» section — a carrier group may not reuse it */
+		private const ADVANCED_OWN_GROUP_ID = 'logging-and-cart';
+
 		/** @var array optional associative array of shipping method id */
 		private array $methods = [];
 
@@ -1338,7 +1341,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 			// «Дополнительно» is always LAST
 			$handlers[] = $advanced;
-			$sections[] = $this->build_advanced_section( $advanced );
+			$sections[] = $this->build_advanced_section( $advanced, $this->collect_section_action_ids( $sections ) );
 
 			$providers[] = \Woodev\Framework\Settings\Settings_Provider::create_with_sections(
 				$this->get_id(),
@@ -1378,11 +1381,34 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		}
 
 		/**
-		 * The validated {@see self::get_advanced_section_extension()}: every key present, wrong shapes dropped.
+		 * The ids of every action and tool the given sections already carry — what a carrier's «Дополнительно» action
+		 * must not reuse, because the REST route finds an action by id across the whole tab.
 		 *
+		 * @param \Woodev\Framework\Settings\Settings_Section[] $sections the tab's sections built so far.
+		 * @return string[]
+		 */
+		private function collect_section_action_ids( array $sections ): array {
+
+			$ids = [];
+
+			foreach ( $sections as $section ) {
+				foreach ( $section->is_tools() ? $section->get_tools() : $section->get_actions() as $action ) {
+					$ids[] = $action->get_id();
+				}
+			}
+
+			return $ids;
+		}
+
+		/**
+		 * The validated {@see self::get_advanced_section_extension()}: every key present, wrong shapes dropped.
+		 * A group whose id is the framework's own or repeats an earlier entry, and an action whose id the tab already
+		 * uses, is dropped with a notice: ids are the key a card is rendered and an action is run by.
+		 *
+		 * @param string[] $reserved_action_ids ids of the actions the tab's other sections already carry.
 		 * @return array{actions: \Woodev\Framework\Shipping\Settings\Shipping_Tool[], groups: \Woodev\Framework\Settings\Settings_Group[], description: string}
 		 */
-		private function resolve_advanced_section_extension(): array {
+		private function resolve_advanced_section_extension( array $reserved_action_ids = [] ): array {
 
 			$resolved  = [
 				'actions'     => [],
@@ -1424,12 +1450,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 					continue;
 				}
 
+				$taken = 'groups' === $key ? [ self::ADVANCED_OWN_GROUP_ID ] : $reserved_action_ids;
+
 				foreach ( $value as $item ) {
-					if ( $item instanceof $class ) {
-						$resolved[ $key ][] = $item;
-					} else {
+					if ( ! $item instanceof $class ) {
 						$report( sprintf( 'has a "%1$s" entry that is not a %2$s', $key, $class ) );
+						continue;
 					}
+
+					if ( in_array( $item->get_id(), $taken, true ) ) {
+						$report( sprintf( 'has a "%1$s" entry whose id "%2$s" is already used by the framework or another entry', $key, $item->get_id() ) );
+						continue;
+					}
+
+					$taken[]            = $item->get_id();
+					$resolved[ $key ][] = $item;
 				}
 			}
 
@@ -1441,12 +1476,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 * {@see self::get_advanced_section_extension()}. Without an extension it is the plain section over the handler's
 		 * own setting ids.
 		 *
-		 * @param Settings\Advanced_Settings $advanced the handler.
+		 * @param Settings\Advanced_Settings $advanced            the handler.
+		 * @param string[]                   $reserved_action_ids ids of the actions the tab's other sections carry.
 		 * @return \Woodev\Framework\Settings\Settings_Section
 		 */
-		private function build_advanced_section( Settings\Advanced_Settings $advanced ): \Woodev\Framework\Settings\Settings_Section {
+		private function build_advanced_section( Settings\Advanced_Settings $advanced, array $reserved_action_ids = [] ): \Woodev\Framework\Settings\Settings_Section {
 
-			$extension = $this->resolve_advanced_section_extension();
+			$extension = $this->resolve_advanced_section_extension( $reserved_action_ids );
 			$section   = \Woodev\Framework\Settings\Settings_Section::create(
 				Settings\Advanced_Settings::SECTION_ID,
 				__( 'Дополнительно', 'woodev-plugin-framework' ),
@@ -1459,7 +1495,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			}
 
 			if ( [] !== $extension['groups'] ) {
-				$own_fields = \Woodev\Framework\Settings\Settings_Group::create( 'logging-and-cart', __( 'Журнал и корзина', 'woodev-plugin-framework' ) )
+				$own_fields = \Woodev\Framework\Settings\Settings_Group::create( self::ADVANCED_OWN_GROUP_ID, __( 'Журнал и корзина', 'woodev-plugin-framework' ) )
 					->with_fields( $advanced->get_owned_setting_ids() );
 
 				$section = $section->with_groups( array_merge( [ $own_fields ], $extension['groups'] ) );
