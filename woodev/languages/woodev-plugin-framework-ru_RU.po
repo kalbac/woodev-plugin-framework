@@ -4758,6 +4758,18 @@ msgid "Учитывать страховку"
 msgstr ""
 
 #: shipping-method/class-shipping-method.php
+msgid "Дополнительные услуги"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php
+msgid "Выбранные услуги учитываются в стоимости доставки и передаются перевозчику вместе с заказом."
+msgstr ""
+
+#: shipping-method/class-shipping-method.php
+msgid "Без дополнительных услуг"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php
 msgid "Всегда"
 msgstr ""
 

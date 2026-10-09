@@ -150,6 +150,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/class-shipping-rate-cache.php';
 			// «fee only for chosen payment methods» (#1144): the method's feature reads it, so it loads first
 			require_once $path . '/class-fee-payments.php';
+			// additional carrier services (#1145): the method's declaration seam builds them
+			require_once $path . '/class-carrier-service.php';
 			require_once $path . '/class-instance-field-conditions.php';
 			require_once $path . '/class-shipping-method.php';
 			require_once $path . '/class-shipping-method-courier.php';

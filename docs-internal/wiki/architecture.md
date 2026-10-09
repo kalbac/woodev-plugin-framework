@@ -229,6 +229,44 @@ carrier-priced presets are never charged again there. Carrier defaults and insta
 cover `packing_algorithm` and `unpacked_algorithm`; stored legacy algorithms remain readable.
 The rate-cache context includes box settings, leftovers and per-line contents values.
 
+## Additional carrier services (`Carrier_Service`, #1145)
+
+A carrier declares its «Дополнительные услуги» by overriding `Shipping_Method::declare_services()` and
+returning `Carrier_Service` objects (code, merchant-facing name, optional parameter name + source
+`declared_value` / `custom`, optional `selectable = false` for a service the carrier adds by itself).
+Declaring the list IS declaring support: nothing declared means no control, no resolver output and an
+unchanged rate-cache identity. The instance option `services` (v1 CDEK's key) is a `multiselect` rendered
+only when a selectable service exists; its stored shape is a plain list of codes — parameters are
+computed, never stored. The carrier reads the SAME resolver on both ends, the way insurance does:
+`resolve_services_for_package( $package, $packed )` for the rate request and
+`resolve_services_for_order( $order, $items, $packed )` for the export, each returning
+`[ code, name, parameter ]` entries. A parameter that needs the carrier's own arithmetic (the number of
+`CARTON_BOX_*` boxes from the packed parcels) goes through `resolve_service_parameter()`; the filter
+`woodev_shipping_resolved_services` can add or drop entries. `get_rate_cache_context()` keys the resolved
+list (codes AND computed values) for a method that declared services.
+
+**What was quoted is what gets billed — the quote snapshot.** `calculate_rate()` adds the resolved services
+to the rate as flat rate meta under `Shipping_Method::META_QUOTED_SERVICES` (`_woodev_quoted_services`, a
+NEW data contract — never renamed), a JSON string
+`{"version":1,"services":[{"code","name","parameter"}, …]}`. It rides the existing rate-meta →
+order-shipping-line path (WooCommerce's checkout copies `meta_data` onto the line; the admin order wizard's
+`apply_shipping_line()` does the same on a re-quote) and is cached with the rate. `resolve_services_for_order()`
+reads it from the order's shipping line of this method (`get_quoted_services()`): the snapshot WINS over the
+current instance settings, so editing the zone method after an order was placed changes neither its codes
+nor its parameters. Policy: a quote of «no service» is stored as an EMPTY list (an answer, not an absence);
+an order with no usable snapshot (placed before #1145, unknown `version`, bad JSON) falls back to resolving
+from the current settings; the snapshot is refreshed only when the shipping line is replaced by a new
+quote (admin re-quote) — nothing else rewrites it; a split shipment keeps the snapshot's codes and frozen
+parameters but values a `declared_value` service from its own lines. **Known limitation — first line only:**
+an order with several shipping lines of one method (multi-package checkout) is read from the FIRST matching
+line (`Shipping_Helper::get_order_shipping_item()`); the framework has no association between a shipment /
+export and its shipping line (no line id, no package index — the export is handed product lines), and every
+other per-line datum takes the first line too, so per-package custom service parameters of the second and
+later packages are exported from the first quote. The admin order wizard writes exactly one line, so it is not
+affected; closing the gap needs a framework-wide line↔shipment link, not a local fix. A carrier's custom
+`resolve_service_parameter()` that reads anything beyond the package, the instance settings and the
+packing settings must add it to the cache key through its `get_rate_cache_context()` override.
+
 ## Utilities (`woodev/utilities/`)
 
 - `Woodev_Async_Request` — WP async (non-blocking) HTTP requests
