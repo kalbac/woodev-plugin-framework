@@ -45,6 +45,14 @@ false )` prints «Скрыть пароль»; under `en_US` it prints nothing a
 three `msgstr[n]` now reaches `_n()` through the JSON; the existing Russian-msgid plural in
 `src/shipping-orders-page/app.tsx` still has empty `msgstr`s and so still uses the binary rule.
 
+## A new bundle needs three registrations, and the handle must be a LITERAL (s163, #1176)
+
+Adding a bundle (`src/shipping-zone-city-limit` → `woodev-city-limit`) failed `build:js-i18n`/`lint:js-i18n` until all three
+existed: the row in `scripts/lib/js-translations.mjs` (bundle dir → handle), a `Script_Translations::register( $plugin, '<handle>' )`
+call, and the handle in `HANDLES` of `tests/js/lint-js-i18n.test.js`. The gate finds the PHP call with a regex over a quoted
+string — `register( $plugin, self::SCRIPT_HANDLE )` reads as «no PHP file registers it». Pass the handle as a literal.
+A failed `build:js-i18n` run also DELETES a sibling handle's JSON; `git checkout` it before re-running.
+
 ## Related
 
 - [the-mo-is-reproducible-from-the-po](the-mo-is-reproducible-from-the-po.md) — the PHP-side artefact; this is its JS twin.

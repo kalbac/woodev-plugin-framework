@@ -6,9 +6,7 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-08 (s162).** 🚧 **v2 release = TWO carrier plugins on v2, tested and compatible** (#1179); block-checkout gaps do not block it. Pre-release: #109 → #1177, #1176, edostavka#11. Plugin `v2` `698d131` (pin `908e89a3`), acceptance 58/0/5. ⚠ Sync the plugin's own `woodev/` before plugin rig runs (`wiki/local-rig.md`). Details: `sessions/s162.md`. GlitchTip receiver (#1082) is live. ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
-orders-page slug redirects to the framework page with that carrier preselected, accepted on the rig.
-✅ **Both machines are live**; routine sync is git ONLY (`wiki/two-machine-setup.md`). The order
+**As of 2026-10-09 (s163).** 🚧 **v2 release = TWO carrier plugins on v2, tested and compatible** (#1179); block-checkout gaps do not block it. s163 merged #1180, #1176, #109, edostavka#11; #1177 = draft edostavka#14 awaiting his step decisions. Release blocker: #1187. Plugin `v2` `639ae4c`, acceptance 58/0/5. ⚠ Sync the plugin's own `woodev/` before plugin rig runs (`wiki/local-rig.md`). Details: `sessions/s163.md`. GlitchTip receiver (#1082) is live. ✅ **Both machines are live**; routine sync is git ONLY (`wiki/two-machine-setup.md`). The order
 metabox (#856) and the orders table (#870) stay accepted.
 
 ✅ **Fixtures carry real download ids `9001`-`9005`** (#910), so `LicenseCommandEndpointTest` drives
@@ -61,7 +59,7 @@ FIXTURES**; the shipping plugin is written later, from scratch, own repo, versio
 
 ✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — no quota consumed; the exhaustion symptom is gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`.
 
-**`main` after s160 (`adccd286`, macOS, 08.10.2026):** unit **6361 / 33424** (1 skipped), jest **3014** in **68** suites; integration local **510 / 6576**.
+**`main` after s163 (#1186 `3eb5bad8`, macOS, 09.10.2026):** unit **6578 / 33968** (1 skipped), jest **3147** in **73** suites; e2e on the rig **9/1 skipped/1 fail** (`checkout-core-pickup` precondition). Integration: CI only.
 
 **Baselines — macOS laptop, 27.09.2026 (s140)** (the two machines matched to the digit in s136, so
 these are not platform-dependent): unit **4132 / 14586**, 1 skipped, sodium ON; jest **1975** in
