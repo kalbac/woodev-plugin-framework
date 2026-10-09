@@ -647,9 +647,10 @@ namespace Woodev\Tests\Integration\Shipping {
 
 			$fields = $tabs[0]['sections'][0]['fields'];
 
-			$this->assertSame( [ 'auto_export_orders', 'export_statuses', 'status_delivered' ], array_keys( $fields ) );
+			$this->assertSame( [ 'auto_export_orders', 'export_statuses', 'status_delivered', 'status_cancelled' ], array_keys( $fields ) );
 			$this->assertFalse( $fields['auto_export_orders']['value'], 'default OFF' );
 			$this->assertSame( 'wc-completed', $fields['status_delivered']['value'], 'a delivered parcel completes the order unless the merchant says otherwise' );
+			$this->assertSame( 'wc-cancelled', $fields['status_cancelled']['value'], 'a shipment the carrier cancelled cancels the order unless the merchant says otherwise' );
 			$this->assertSame( [ 'wc-processing' ], $fields['export_statuses']['value'] );
 			$this->assertSame( [ 'wc-pending', 'wc-on-hold', 'wc-processing' ], array_keys( $fields['export_statuses']['options'] ), 'only statuses the export gate accepts' );
 			$this->assertSame(
