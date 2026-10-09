@@ -59,6 +59,28 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		public const EDIT = 'edit';
 
 		/**
+		 * The carrier documents a row offers, by action id. CLIENT-side like {@see self::EDIT}: the click
+		 * downloads the file through the documents REST route and never reaches the action routes, so none
+		 * of them is part of {@see self::for_order()} — the metabox downloads them the same way the orders
+		 * page does ({@see self::is_document()}).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var string[]
+		 */
+		public const DOCUMENTS = [ 'waybill', 'barcode' ];
+
+		/**
+		 * The icon of an action that is not offered with one of its own: the neutral «run» glyph, never the
+		 * settings gear. Used by both surfaces when an extra action declares no `icon`.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var string
+		 */
+		public const FALLBACK_ICON = 'controls-play';
+
+		/**
 		 * WC order statuses «Выгрузить» is offered on: still early enough in the
 		 * order's own lifecycle to be worth shipping (mirrors the shipped v1
 		 * plugins' own gate, see class docblock of
@@ -156,8 +178,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		 *     'action'      => string,  // one of the three ids above, or a carrier extra.
 		 *     'label'       => string,  // button text, Russian.
 		 *     'title'       => string,  // tooltip; '' when none.
-		 *     'destructive' => bool,    // true => the client confirms first.
+		 *     'destructive' => bool,    // true => the client confirms first AND draws the button red.
 		 *     'fields'      => array,   // optional (#1180): the input the action asks for, {@see Order_Action_Fields}.
+		 *     'icon'        => string,  // optional: a Dashicons slug without the `dashicons-` prefix, e.g. 'upload'. None => the neutral {@see self::FALLBACK_ICON}, never a gear.
 		 * ]
 		 */
 		public function for_order( \WC_Order $order, ?Orders_Provider $provider ): array {
@@ -198,7 +221,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 					self::EXPORT,
 					__( 'Экспорт', 'woodev-plugin-framework' ),
 					__( 'Выгрузить заказ в систему перевозчика', 'woodev-plugin-framework' ),
-					false
+					false,
+					'upload'
 				);
 			}
 
@@ -207,7 +231,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 					self::UPDATE,
 					__( 'Обновить', 'woodev-plugin-framework' ),
 					__( 'Запросить у перевозчика текущий статус заказа', 'woodev-plugin-framework' ),
-					false
+					false,
+					'update'
 				);
 			}
 
@@ -216,7 +241,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 					self::CANCEL,
 					__( 'Отменить', 'woodev-plugin-framework' ),
 					__( 'Отменить заказ у перевозчика', 'woodev-plugin-framework' ),
-					true
+					true,
+					'remove'
 				);
 			}
 
@@ -280,7 +306,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 				self::EDIT,
 				__( 'Редактировать', 'woodev-plugin-framework' ),
 				__( 'Изменить заказ, пока он не выгружен перевозчику', 'woodev-plugin-framework' ),
-				false
+				false,
+				'edit'
 			);
 
 			if ( null !== $lock_owner ) {
@@ -318,10 +345,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 				'waybill' => __( 'Накладная', 'woodev-plugin-framework' ),
 				'barcode' => __( 'Штрихкод', 'woodev-plugin-framework' ),
 			];
+			// Two different glyphs: a waybill is a page, a barcode is the label stuck on the parcel.
+			$icons = [
+				'waybill' => 'media-document',
+				'barcode' => 'tag',
+			];
 			$actions = [];
 			foreach ( $source->get_document_types( $order ) as $type ) {
 				if ( isset( $labels[ $type ] ) ) {
-					$actions[] = self::build_action( $type, $labels[ $type ], __( 'Скачать документ перевозчика', 'woodev-plugin-framework' ), false );
+					$actions[] = self::build_action( $type, $labels[ $type ], __( 'Скачать документ перевозчика', 'woodev-plugin-framework' ), false, $icons[ $type ] );
 				}
 			}
 
@@ -871,16 +903,53 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		 * @param string $action      one of the action ids.
 		 * @param string $label       button text.
 		 * @param string $title       tooltip; '' when none.
-		 * @param bool   $destructive true => the client confirms first.
+		 * @param bool   $destructive true => the client confirms first and draws the button red.
+		 * @param string $icon        Dashicons slug (no `dashicons-` prefix); '' => the entry carries none.
 		 * @return array<string,mixed>
 		 */
-		private static function build_action( string $action, string $label, string $title, bool $destructive ): array {
-			return [
+		private static function build_action( string $action, string $label, string $title, bool $destructive, string $icon = '' ): array {
+			$built = [
 				'action'      => $action,
 				'label'       => $label,
 				'title'       => $title,
 				'destructive' => $destructive,
 			];
+
+			if ( '' !== $icon ) {
+				$built['icon'] = $icon;
+			}
+
+			return $built;
+		}
+
+		/**
+		 * Whether `$action` is a carrier document download ({@see self::DOCUMENTS}) — a client-side action that
+		 * is fetched through the documents REST route and never posted to an action route.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $action the action id.
+		 * @return bool
+		 */
+		public static function is_document( string $action ): bool {
+			return in_array( $action, self::DOCUMENTS, true );
+		}
+
+		/**
+		 * The icon slug an action declares, or '' when it declares none (or an unusable one).
+		 *
+		 * A slug is a Dashicons name without the `dashicons-` prefix — lowercase letters, digits and dashes —
+		 * because both surfaces draw it as `dashicons-{slug}`: the orders page next to the REST row, the
+		 * order-edit metabox from the PHP view. Anything else is dropped rather than echoed into a class
+		 * attribute.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param mixed $icon the declared value, of unknown shape.
+		 * @return string
+		 */
+		public static function sanitize_icon( $icon ): string {
+			return is_string( $icon ) && 1 === preg_match( '/^[a-z][a-z0-9-]{0,63}$/', $icon ) ? $icon : '';
 		}
 
 		/**
@@ -928,6 +997,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 
 				if ( [] !== $fields ) {
 					$sanitized[ count( $sanitized ) - 1 ]['fields'] = $fields;
+				}
+
+				// An action may declare its own icon (a Dashicons slug); one without it gets the neutral fallback on the client.
+				$icon = self::sanitize_icon( $action['icon'] ?? null );
+
+				if ( '' !== $icon ) {
+					$sanitized[ count( $sanitized ) - 1 ]['icon'] = $icon;
 				}
 			}
 

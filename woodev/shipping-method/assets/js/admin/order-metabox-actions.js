@@ -20,6 +20,11 @@
  * usual fields. The browser checks `required` / `min` / `max` / `maxlength` while typing; the server checks
  * them again against the same declaration and flashes a notice on a miss.
  *
+ * A CARRIER DOCUMENT (waybill, barcode) is not posted at all: its button carries `data-document-url` (the documents
+ * REST route, `?format=json`) and `data-rest-nonce`, and a click fetches it exactly as the orders page does — a PDF is
+ * saved, a carrier link opens, «ещё готовится» and a failure are said in the line under the buttons. One contract for
+ * both surfaces: posting `waybill` to the action handler could only ever be refused, it is not a carrier action.
+ *
  * The form is built on `document.body`, OUTSIDE the order form, so submitting it never touches the
  * order form's own fields. A disabled button (an order another manager is editing, #1000) is never
  * submitted, and a second click while the first POST is in flight is ignored.
@@ -302,6 +307,91 @@
 	}
 
 	/**
+	 * Says something about a document download in the line under the button group.
+	 *
+	 * @param {HTMLButtonElement} button  the clicked document button.
+	 * @param {string}            text    the sentence; '' clears the line.
+	 * @param {boolean}           isError whether it is a failure.
+	 * @return {void}
+	 */
+	function showDocumentNotice( button, text, isError ) {
+		var box = button.closest ? button.closest( '.woodev-shipping-order-metabox' ) : null;
+		var notice = box ? box.querySelector( '.woodev-shipping-order-doc-notice' ) : null;
+
+		if ( ! notice ) {
+			return;
+		}
+
+		notice.textContent = text;
+		notice.hidden = '' === text;
+		notice.className = 'woodev-shipping-order-doc-notice' + ( isError ? ' is-error' : '' );
+	}
+
+	/**
+	 * Fetches one carrier document through the documents REST route — the same route, nonce and outcomes the
+	 * orders page uses: a PDF is saved, a carrier link opens in a new tab, «ещё готовится» (202) and a failure
+	 * (the server's own Russian `message`) are shown under the buttons. The button is disabled while it runs.
+	 *
+	 * @param {HTMLButtonElement} button the clicked document button.
+	 * @return {Promise<void>} settles when the outcome has been shown.
+	 */
+	function downloadDocument( button ) {
+		var group = button.closest( '[data-document-labels]' );
+		var labels = parseJson( group && group.getAttribute( 'data-document-labels' ) ) || {};
+		var failed = labels.failed || '';
+
+		button.disabled = true;
+		showDocumentNotice( button, '', false );
+
+		return window.fetch( button.getAttribute( 'data-document-url' ) || '', {
+			method: 'GET',
+			credentials: 'same-origin',
+			headers: { 'X-WP-Nonce': button.getAttribute( 'data-rest-nonce' ) || '' },
+		} ).then( function ( response ) {
+			var contentType = response.headers.get( 'Content-Type' ) || '';
+
+			if ( response.ok && contentType.indexOf( 'application/pdf' ) !== -1 ) {
+				var match = /filename="?([^";]+)"?/i.exec( response.headers.get( 'Content-Disposition' ) || '' );
+				var filename = match ? match[ 1 ] : 'document.pdf';
+
+				return response.blob().then( function ( blob ) {
+					var objectUrl = window.URL.createObjectURL( blob );
+					var anchor = document.createElement( 'a' );
+
+					anchor.href = objectUrl;
+					anchor.download = filename;
+					document.body.appendChild( anchor );
+					anchor.click();
+					document.body.removeChild( anchor );
+					window.URL.revokeObjectURL( objectUrl );
+				} );
+			}
+
+			return response.json().then( function ( body ) {
+				body = body || {};
+
+				if ( 202 === response.status ) {
+					var seconds = Number( body.retry_after ) || Number( response.headers.get( 'Retry-After' ) ) || 5;
+
+					showDocumentNotice( button, ( labels.pending || '' ).replace( '%d', String( seconds ) ), false );
+					return;
+				}
+
+				if ( response.ok && 'url' === body.status && 'string' === typeof body.url && '' !== body.url ) {
+					window.open( body.url, '_blank', 'noopener' );
+					return;
+				}
+
+				showDocumentNotice( button, ( ! response.ok && body.message ) || failed, true );
+			} );
+		} ).catch( function () {
+			showDocumentNotice( button, failed, true );
+		} ).then( function () {
+			button.disabled = false;
+		} );
+	}
+
+	/**
 	 * Handles a click anywhere in the document; acts only on an action button.
 	 *
 	 * @param {MouseEvent} event the click.
@@ -312,6 +402,12 @@
 		var button = target && target.closest ? target.closest( SELECTOR ) : null;
 
 		if ( ! button || button.disabled || submitting ) {
+			return;
+		}
+
+		if ( button.getAttribute( 'data-document-url' ) ) {
+			event.preventDefault();
+			downloadDocument( button );
 			return;
 		}
 
@@ -344,6 +440,7 @@
 		module.exports = {
 			buildForm: buildForm,
 			buildField: buildField,
+			downloadDocument: downloadDocument,
 			onClick: onClick,
 		};
 	}

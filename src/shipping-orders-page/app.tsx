@@ -50,7 +50,6 @@ import {
 } from '@wordpress/components';
 import { dispatch, useSelect } from '@wordpress/data';
 import { store as noticesStore } from '@wordpress/notices';
-import type { ComponentProps } from 'react';
 import {
 	fetchOrderPreview,
 	fetchOrders,
@@ -356,54 +355,27 @@ interface ActionableOrder {
 }
 
 /**
- * Dashicon per action id — the SAME glyphs the shipped plugins use, read out of their
- * own stylesheets rather than chosen here (operator, rig rejection of the text buttons:
- * *«см. как у меня в референсных плагинах, там иконки вместо текста с тултипами»*).
+ * The icon of an action: the Dashicons slug the SERVER declared on the entry (`icon`, no `dashicons-` prefix), drawn
+ * from the Dashicons font — the same vocabulary the order-edit metabox draws from its PHP view, so both surfaces show
+ * one glyph per action. The built-in ones are declared in `Order_Actions` (export `upload`, update `update`,
+ * cancel `remove`, edit `edit`, waybill `media-document`, barcode `tag` — the first three read out of the reference
+ * plugins' own `orders-table.css`: `317`/`463`/`14f`); a carrier extra picks its own.
  *
- * `woocommerce-edostavka/assets/css/admin/orders-table.css` and
- * `woodev-russian-post/assets/css/admin/orders-table.css` agree glyph for glyph, which is
- * what makes this a common set rather than one carrier's taste:
- *
- * | action | reference CSS      | codepoint | Dashicon           |
- * |--------|--------------------|-----------|--------------------|
- * | export | `*-export::after`  | `317`   | `dashicons-upload` |
- * | update | `*-update::after`  | `463`   | `dashicons-update` |
- * | cancel | `*-cancel::after`  | `14f`   | `dashicons-remove` |
- *
- * The codepoint → name mapping is from WordPress's own `wp-includes/css/dashicons.css`,
- * not from memory. A carrier extra the server declares through
- * `woodev_shipping_order_actions` has no entry here and falls back to a neutral glyph —
- * it renders rather than vanishing.
+ * ⚠ An action that declares none gets {@see FALLBACK_ACTION_ICON} — a neutral «run» glyph, never the settings gear
+ * (operator, s164: *«шестерёнка — это настройки, а не действие»*). A locked «Редактировать» keeps its lock.
  */
-type DashiconName = ComponentProps< typeof Dashicon >[ 'icon' ];
+const FALLBACK_ACTION_ICON = 'controls-play';
 
-/**
- * Dashicon per action id — the SAME glyphs the shipped plugins use, read out of their own
- * stylesheets rather than chosen here. `woocommerce-edostavka` and `woodev-russian-post`
- * agree glyph for glyph, which is what makes this a common set rather than one carrier's
- * taste:
- *
- * | action | reference CSS     | codepoint | Dashicon           |
- * |--------|-------------------|-----------|--------------------|
- * | export | `*-export::after` | `317`   | `dashicons-upload` |
- * | update | `*-update::after` | `463`   | `dashicons-update` |
- * | cancel | `*-cancel::after` | `14f`   | `dashicons-remove` |
- *
- * Codepoint → name from WordPress's own `wp-includes/css/dashicons.css`, not from memory.
- * A carrier extra declared through `woodev_shipping_order_actions` has no entry and falls
- * back to a neutral glyph — it renders rather than vanishing.
- */
-const ACTION_ICONS: Record< string, DashiconName > = {
-	// #972 — «Редактировать» has no counterpart in the reference plugins: the WordPress pencil.
-	edit: 'edit',
-	export: 'upload',
-	update: 'update',
-	cancel: 'remove',
-	waybill: 'media-document',
-	barcode: 'media-document',
-};
+/** The Dashicons slug of an action's button; a slug the server did not send as a plain word is ignored. */
+function actionIconSlug( action: OrderRowAction ): string {
+	if ( action.disabled && EDIT_ACTION === action.action ) {
+		return 'lock';
+	}
 
-const FALLBACK_ACTION_ICON: DashiconName = 'admin-generic';
+	return 'string' === typeof action.icon && /^[a-z][a-z0-9-]*$/.test( action.icon )
+		? action.icon
+		: FALLBACK_ACTION_ICON;
+}
 
 /**
  * Associative background per action (operator, rig round 2): *«экспортировать — зелёная,
@@ -420,16 +392,24 @@ const FALLBACK_ACTION_ICON: DashiconName = 'admin-generic';
  */
 type ActionTone = 'go' | 'stop' | 'warn' | 'neutral';
 
+/**
+ * `cancel` is not listed: red is not a property of an action's NAME but of its `destructive` flag, so «Отменить»,
+ * «Отменить вызов» and any carrier extra that declares `destructive` are drawn alike ({@see actionTone()}).
+ */
 const ACTION_TONES: Record< string, ActionTone > = {
 	edit: 'neutral',
 	export: 'go',
-	cancel: 'stop',
 	update: 'warn',
 	waybill: 'neutral',
 	barcode: 'neutral',
 };
 
 const FALLBACK_ACTION_TONE: ActionTone = 'neutral';
+
+/** A destructive action is always red; the rest keep the associative colour of their id. */
+function actionTone( action: OrderRowAction ): ActionTone {
+	return action.destructive ? 'stop' : ACTION_TONES[ action.action ] || FALLBACK_ACTION_TONE;
+}
 
 /**
  * Renders the «Действие» cell (#824) as a BUTTON GROUP, not a row of bare icons
@@ -486,13 +466,13 @@ function ActionsCell( {
 				}
 			>
 				{ actions.map( ( action ) => {
-					const tone = ACTION_TONES[ action.action ] || FALLBACK_ACTION_TONE;
+					const tone = actionTone( action );
 					const locked = Boolean( action.disabled );
 
 					return (
 						<Tooltip key={ action.action } text={ action.title || action.label }>
 							<Button
-								icon={ <Dashicon icon={ locked && EDIT_ACTION === action.action ? 'lock' : ACTION_ICONS[ action.action ] || FALLBACK_ACTION_ICON } /> }
+								icon={ <span className={ `dashicons dashicons-${ actionIconSlug( action ) }` } aria-hidden="true" /> }
 								label={ action.label }
 								showTooltip={ false }
 								className={ `woodev-orders-actions__button woodev-orders-actions__button--${ tone }` }

@@ -433,43 +433,130 @@
 }
 
 /**
- * The order-edit metabox's action buttons (#1018, #947) — ONE ROW, wrapping only when the sidebar
- * truly cannot fit them.
+ * The order-edit metabox (#1018, #947; the fit and the group, s164) — sized for a ~250px sidebar column.
  *
- * Before #1012 each button sat in its own block-level `<form>`, so they stacked in a column (#1018
- * restored that with a column flexbox once the nested forms were gone). The operator, on the rig
- * (#947): «Обновить» and «Отменить» belong side by side — a row flexbox with `flex-wrap`, so a
- * narrow sidebar drops the second button to the next line instead of overflowing. Scoped to the
- * metabox's own wrapper, so no WP/WC selector is touched.
+ * FIT: the details table is `table-layout: fixed` and every cell may break anywhere. A carrier's order uuid is one
+ * unbroken 36-character word and `.woodev-orders-status` is `nowrap`, so on the default auto-layout table both set
+ * the column's minimum width and ran past the metabox edge (the uuid and «№ 13312781 (Отменена)» on the rig).
  *
- * The destructive action («Отменить» cancels the shipment AT THE CARRIER) keeps the `.button`
- * outline look and turns it red: WP admin's own destructive red `#d63638` (hover/active `#b32d2e`
- * on `#fcf0f1`, the shades core uses for delete links). A disabled one is left to WP's greyed-out
- * `.button:disabled`, hence `:not( :disabled )`.
+ * BUTTONS: ALWAYS one group in a single row, however many actions there are — flush against each other, rounded at
+ * the OUTER ends only, never wrapping. With one or two actions the buttons carry their text; with more than two the
+ * view renders them icon-only (`--icons`) so three, four, five still fit — the label then lives in the tooltip and
+ * `aria-label`. Scoped to the metabox's own wrapper, so no WP/WC selector is touched.
+ *
+ * DESTRUCTIVE: «Отменить» cancels the shipment AT THE CARRIER. Light-red fill from the UI-kit status tokens
+ * (`$error` at the 12% tint `tokens.scss` documents for tinted panels, `$error-text` for the glyph/text and
+ * `$error` for the frame), the same red the orders page draws a destructive button in.
  */
+.woodev-shipping-order-metabox {
+	table.widefat {
+		table-layout: fixed;
+		width: 100%;
+
+		th {
+			width: 38%;
+		}
+
+		th,
+		td {
+			min-width: 0;
+			overflow-wrap: anywhere;
+			word-break: break-word;
+		}
+	}
+
+	// The badge wraps inside its cell instead of widening it; a long value keeps its colour box.
+	.woodev-orders-status {
+		display: inline-block;
+		line-height: 1.5;
+		margin: 0;
+		max-width: 100%;
+		overflow-wrap: anywhere;
+		padding: 2px 10px;
+		white-space: normal;
+	}
+}
+
 .woodev-shipping-order-actions-buttons {
+	align-items: stretch;
 	display: flex;
 	flex-direction: row;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 4px;
+	flex-wrap: nowrap;
+	margin: wd.$gap 0 0;
+	max-width: 100%;
 
-	.button-link-delete:not( :disabled ) {
-		border-color: #d63638;
-		color: #d63638;
+	.button.woodev-shipping-order-action {
+		align-items: center;
+		border-radius: 0;
+		display: inline-flex;
+		flex: 1 1 auto;
+		justify-content: center;
+		margin: 0;
+		min-height: 30px;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+
+		// One shared hairline between neighbours, rounded only at the group's ends.
+		& + .button.woodev-shipping-order-action {
+			margin-left: -1px;
+		}
+
+		&:first-child {
+			border-bottom-left-radius: 3px;
+			border-top-left-radius: 3px;
+		}
+
+		&:last-child {
+			border-bottom-right-radius: 3px;
+			border-top-right-radius: 3px;
+		}
 
 		&:hover,
-		&:active {
-			background: #fcf0f1;
-			border-color: #b32d2e;
-			color: #b32d2e;
+		&:focus {
+			position: relative;
+			z-index: 1;
+		}
+
+		.dashicons {
+			font-size: 18px;
+			height: 18px;
+			line-height: 1;
+			width: 18px;
+		}
+	}
+
+	&--icons .button.woodev-shipping-order-action {
+		flex: 1 1 32px;
+		padding: 0 4px;
+	}
+
+	.button.woodev-shipping-order-action--destructive:not( :disabled ) {
+		background: rgba( wd.$error, 0.12 );
+		border-color: wd.$error;
+		color: wd.$error-text;
+
+		&:hover,
+		&:active,
+		&:focus {
+			background: rgba( wd.$error, 0.2 );
+			border-color: wd.$error-text;
+			color: wd.$error-text;
 		}
 
 		&:focus {
-			border-color: #d63638;
-			box-shadow: 0 0 0 1px #d63638;
-			color: #d63638;
+			box-shadow: 0 0 0 1px wd.$error-text;
 		}
+	}
+}
+
+// What a document download says in the metabox (`order-metabox-actions.js`): «ещё готовится» / the server's own sentence.
+.woodev-shipping-order-doc-notice {
+	margin: wd.$gap-sm 0 0;
+
+	&.is-error {
+		color: wd.$error-text;
 	}
 }
 
@@ -546,10 +633,9 @@
 	}
 
 	/**
-	 * Associative colours, per the operator: export green, cancel red, update orange,
-	 * document/default grey. The four are the SAME WooCommerce colours the status badges
-	 * use (`columns.ts` documents where they were measured), so the column reads as one
-	 * palette instead of two.
+	 * Associative colours, per the operator: export green, destructive red, update orange,
+	 * document/default grey. Green, orange and grey are the SAME WooCommerce colours the status badges
+	 * use (`columns.ts` documents where they were measured); red is the UI-kit error token.
 	 */
 	&__button.components-button.has-icon {
 		&.woodev-orders-actions__button--go {
@@ -557,9 +643,11 @@
 			color: #2c4700;
 		}
 
+		// A `destructive` action (s164): the UI-kit error token at its documented 12% tint, the glyph in `$error-text` —
+		// the same red the order-edit metabox draws it in.
 		&.woodev-orders-actions__button--stop {
-			background: #eba3a3;
-			color: #570000;
+			background: rgba( wd.$error, 0.12 );
+			color: wd.$error-text;
 		}
 
 		&.woodev-orders-actions__button--warn {
@@ -604,7 +692,13 @@
  * metabox's are wp-admin's own `input` / `select` / `textarea`; this only stacks them and places the buttons
  * and the error line, the way `.woodev-orders-actions__confirm` places its buttons.
  */
-.woodev-action-form {
+.woodev-action-form,
+// ⚠ The second selector is load-bearing (s164). Inside the framework's `WoodevModal` shell, `woodev-modal.css` resets every
+// `div` / `form` / `p` to `display: block` through `.woodev-modal :where( … )` — specificity (0,1,0), the same as a single
+// class, and that stylesheet loads AFTER this one — so on the order-edit screen the flex column, the gaps and the button row
+// below all lost and the dialog rendered with labels glued to their fields. `.woodev-modal .woodev-action-form…` is (0,2,0):
+// it wins whatever the load order. The orders page's own `Modal` has no `.woodev-modal` ancestor and uses the plain selector.
+.woodev-modal .woodev-action-form {
 	display: flex;
 	flex-direction: column;
 	gap: wd.$gap;
@@ -671,6 +765,11 @@
 		justify-content: flex-end;
 		margin-top: wd.$gap-xs;
 	}
+}
+
+// The shell's body carries no padding of its own (the pickup map wants the full bleed), so the form brings its own.
+.woodev-modal .woodev-action-form {
+	padding: wd.$gap-lg;
 }
 
 .woodev-orders-badge {

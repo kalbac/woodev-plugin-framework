@@ -156,6 +156,11 @@ export interface OrderRowAction {
 	 * which then behaves exactly as it always did: one click, straight to the server.
 	 */
 	fields?: OrderActionField[];
+	/**
+	 * The action's own icon: a Dashicons slug without the `dashicons-` prefix (`'upload'`, `'media-document'`).
+	 * Absent => the neutral fallback glyph, never a gear.
+	 */
+	icon?: string;
 }
 
 /** The `payload` an action with fields sends: field id → value (a time range is `{ from, to }`). */

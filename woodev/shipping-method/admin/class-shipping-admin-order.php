@@ -331,6 +331,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 			$nonce_action      = self::ADMIN_POST_ACTION;
 			$order_id          = $order->get_id();
 
+			// A carrier document is NOT an admin-post action: the orders page fetches it from the documents REST route
+			// and so does this metabox (`order-metabox-actions.js`) — one contract, one gate (`Document_Controller`).
+			$documents_url_base = esc_url_raw( rest_url( \Woodev_REST_V1_Registrar::ROUTE_NAMESPACE . '/shipping/orders/' . $order_id . '/documents/' ) );
+			$rest_nonce         = wp_create_nonce( 'wp_rest' );
+
 			include __DIR__ . '/views/html-admin-order-metabox.php';
 		}
 

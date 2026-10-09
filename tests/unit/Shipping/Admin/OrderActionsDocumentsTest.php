@@ -165,4 +165,52 @@ final class OrderActionsDocumentsTest extends TestCase {
 			}
 		}
 	}
+
+	public function test_the_two_documents_declare_different_icons(): void {
+		$row   = $this->actions( $this->source( [ 'waybill', 'barcode' ] ) )->for_row( $this->order(), $this->provider() );
+		$icons = array_column( $row, 'icon', 'action' );
+
+		$this->assertSame( 'media-document', $icons['waybill'] );
+		$this->assertSame( 'tag', $icons['barcode'] );
+		$this->assertNotSame( $icons['waybill'], $icons['barcode'] );
+	}
+
+	public function test_the_built_in_carrier_actions_declare_their_icons_and_cancel_is_destructive(): void {
+		$row = $this->actions( null )->for_row( $this->order(), $this->provider() );
+
+		$this->assertSame( [ 'update', 'remove' ], array_column( $row, 'icon' ) );
+		$this->assertSame( [ false, true ], array_column( $row, 'destructive' ) );
+	}
+
+	public function test_is_document_knows_the_two_client_side_downloads_only(): void {
+		$this->assertTrue( Order_Actions::is_document( 'waybill' ) );
+		$this->assertTrue( Order_Actions::is_document( 'barcode' ) );
+		$this->assertFalse( Order_Actions::is_document( Order_Actions::CANCEL ) );
+		$this->assertFalse( Order_Actions::is_document( 'call_courier' ) );
+	}
+
+	public function test_a_declared_icon_survives_the_filter_and_an_unusable_one_is_dropped(): void {
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $hook, $value ) {
+				if ( 'woodev_shipping_order_actions' !== $hook ) {
+					return $value;
+				}
+
+				$value[] = [ 'action' => 'a', 'label' => 'A', 'icon' => 'calendar-alt' ];
+				$value[] = [ 'action' => 'b', 'label' => 'B' ];
+				$value[] = [ 'action' => 'c', 'label' => 'C', 'icon' => 'x" onload="y' ];
+				$value[] = [ 'action' => 'd', 'label' => 'D', 'icon' => [ 'svg' ] ];
+
+				return $value;
+			}
+		);
+
+		$row = $this->actions( null )->for_order( $this->order(), $this->provider() );
+		$by  = array_column( $row, null, 'action' );
+
+		$this->assertSame( 'calendar-alt', $by['a']['icon'] );
+		$this->assertArrayNotHasKey( 'icon', $by['b'], 'none declared => none sent; the client draws the neutral glyph' );
+		$this->assertArrayNotHasKey( 'icon', $by['c'] );
+		$this->assertArrayNotHasKey( 'icon', $by['d'] );
+	}
 }
