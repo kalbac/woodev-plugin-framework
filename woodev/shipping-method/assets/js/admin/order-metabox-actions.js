@@ -349,11 +349,11 @@
 	}
 
 	/**
-	 * Waits `ms`, or less when the poll is cancelled meanwhile.
+	 * Waits `ms`, or less when the poll is stopped meanwhile.
 	 *
 	 * @param {number} ms   milliseconds.
-	 * @param {Object} poll the wait's handle (`cancelled`, `timer`, `wake`).
-	 * @return {Promise<void>} resolves after `ms` or at once on cancel.
+	 * @param {Object} poll the wait's handle (see `newPoll`).
+	 * @return {Promise<void>} resolves after `ms` or at once on stop.
 	 */
 	function sleep( ms, poll ) {
 		return new Promise( function ( resolve ) {
@@ -362,17 +362,56 @@
 		} );
 	}
 
-	/** Stops every document wait still running (the page is being left). @return {void} */
-	function cancelPolls() {
-		polls.forEach( function ( poll ) {
-			poll.cancelled = true;
+	/**
+	 * A document wait's handle. `stop()` ends it from outside: it clears the timers, aborts the request in flight and
+	 * wakes whatever the wait is blocked on, so nothing keeps the button busy.
+	 *
+	 * @return {Object} `{cancelled, timedOut, timer, wake, release, deadline, controller, stop}`.
+	 */
+	function newPoll() {
+		var poll = {
+			cancelled: false,
+			timedOut: false,
+			timer: null,
+			wake: null,
+			release: null,
+			deadline: null,
+			controller: window.AbortController ? new window.AbortController() : null,
+		};
+
+		poll.stop = function ( timedOut ) {
+			if ( poll.cancelled || poll.timedOut ) {
+				return;
+			}
+
+			poll.cancelled = ! timedOut;
+			poll.timedOut = !! timedOut;
 			clearTimeout( poll.timer );
+
+			if ( poll.controller ) {
+				poll.controller.abort();
+			}
 
 			if ( poll.wake ) {
 				poll.wake();
 			}
-		} );
+
+			if ( poll.release ) {
+				poll.release();
+			}
+		};
+
+		return poll;
+	}
+
+	/** Stops every document wait still running (the page is being left). @return {void} */
+	function cancelPolls() {
+		var running = polls;
+
 		polls = [];
+		running.forEach( function ( poll ) {
+			poll.stop( false );
+		} );
 	}
 
 	/**
@@ -380,13 +419,15 @@
 	 *
 	 * @param {HTMLButtonElement} button the clicked document button.
 	 * @param {string}            failed the generic failure sentence.
+	 * @param {AbortSignal|null}  signal aborts the request in flight.
 	 * @return {Promise<Object>} `{kind:'file',blob,filename}`, `{kind:'link',url}`, `{kind:'pending',retryAfter}` or `{kind:'error',message}`.
 	 */
-	function requestDocument( button, failed ) {
+	function requestDocument( button, failed, signal ) {
 		return window.fetch( button.getAttribute( 'data-document-url' ) || '', {
 			method: 'GET',
 			credentials: 'same-origin',
 			headers: { 'X-WP-Nonce': button.getAttribute( 'data-rest-nonce' ) || '' },
+			signal: signal || undefined,
 		} ).then( function ( response ) {
 			var contentType = response.headers.get( 'Content-Type' ) || '';
 
@@ -430,22 +471,48 @@
 		var group = button.closest( '[data-document-labels]' );
 		var labels = parseJson( group && group.getAttribute( 'data-document-labels' ) ) || {};
 		var failed = labels.failed || '';
-		var poll = { cancelled: false, timer: null, wake: null };
+		var poll = newPoll();
 		var started = Date.now();
 		var announced = false;
 
 		polls.push( poll );
+		// The cap is absolute: it ends the wait even while a request is still in flight.
+		poll.deadline = setTimeout( function () {
+			poll.stop( true );
+		}, POLL_MAX_WAIT_MS );
 		button.disabled = true;
 		button.setAttribute( 'aria-busy', 'true' );
 		showDocumentNotice( button, '', false );
 
+		/** Whether the wait is over from outside; a cap running out says so (once), a cancel is silent. */
+		function stopped() {
+			if ( poll.timedOut ) {
+				showDocumentNotice( button, labels.timeout || failed, true );
+				return true;
+			}
+
+			return poll.cancelled;
+		}
+
+		/** The request, or `{kind:'stopped'}` the moment the wait is stopped — a late answer is dropped. */
+		function request() {
+			return new Promise( function ( resolve ) {
+				poll.release = function () {
+					resolve( { kind: 'stopped' } );
+				};
+				requestDocument( button, failed, poll.controller ? poll.controller.signal : null ).then( resolve );
+			} );
+		}
+
 		function step() {
-			if ( poll.cancelled ) {
+			if ( stopped() ) {
 				return Promise.resolve();
 			}
 
-			return requestDocument( button, failed ).then( function ( outcome ) {
-				if ( poll.cancelled ) {
+			return request().then( function ( outcome ) {
+				poll.release = null;
+
+				if ( stopped() ) {
 					return null;
 				}
 
@@ -488,6 +555,8 @@
 		}
 
 		function finish() {
+			clearTimeout( poll.deadline );
+			clearTimeout( poll.timer );
 			polls = polls.filter( function ( item ) {
 				return item !== poll;
 			} );

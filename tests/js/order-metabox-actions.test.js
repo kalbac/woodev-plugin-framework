@@ -575,6 +575,92 @@ describe( 'a carrier document (s164)', () => {
 			expect( jest.getTimerCount() ).toBe( 0 );
 		} );
 
+		it( 'a request that hangs is given up at the 30 s cap: sentence shown, button freed, the transport aborted (fix round 1)', async () => {
+			let signal;
+
+			window.fetch.mockImplementation( ( url, options ) => {
+				signal = options.signal;
+				return new Promise( () => {} );
+			} );
+
+			const button = renderDocument();
+			const done = mod.downloadDocument( button );
+
+			await jest.advanceTimersByTimeAsync( 29999 );
+			expect( button.disabled ).toBe( true );
+			await jest.advanceTimersByTimeAsync( 1 );
+			await done;
+
+			expect( notice().textContent ).toBe( LABELS.timeout );
+			expect( notice().classList.contains( 'is-error' ) ).toBe( true );
+			expect( button.disabled ).toBe( false );
+			expect( signal.aborted ).toBe( true );
+			expect( jest.getTimerCount() ).toBe( 0 );
+		} );
+
+		it( 'a document that arrives after the cap is not saved (fix round 1)', async () => {
+			let arrive;
+
+			window.fetch.mockImplementation( () => new Promise( ( resolve ) => {
+				arrive = resolve;
+			} ) );
+
+			const done = mod.downloadDocument( renderDocument() );
+
+			await jest.advanceTimersByTimeAsync( 30000 );
+			await done;
+			arrive( PDF() );
+			await jest.advanceTimersByTimeAsync( 0 );
+
+			expect( window.URL.createObjectURL ).not.toHaveBeenCalled();
+			expect( notice().textContent ).toBe( LABELS.timeout );
+		} );
+
+		it( 'a late poll that starts near the deadline and hangs is cut at the cap, not 30 s after it (fix round 1)', async () => {
+			window.fetch
+				.mockResolvedValueOnce( PENDING( 10 ) )
+				.mockResolvedValueOnce( PENDING( 10 ) )
+				.mockImplementationOnce( () => new Promise( () => {} ) );
+
+			const button = renderDocument();
+			const done = mod.downloadDocument( button );
+
+			await jest.advanceTimersByTimeAsync( 20000 );
+			expect( window.fetch ).toHaveBeenCalledTimes( 3 );
+			expect( button.disabled ).toBe( true );
+			await jest.advanceTimersByTimeAsync( 10000 );
+			await done;
+
+			expect( button.disabled ).toBe( false );
+			expect( notice().textContent ).toBe( LABELS.timeout );
+		} );
+
+		it( 'pagehide while a request is in flight frees the button at once and drops the late answer (fix round 1)', async () => {
+			let arrive;
+			let signal;
+
+			window.fetch.mockImplementation( ( url, options ) => {
+				signal = options.signal;
+				return new Promise( ( resolve ) => {
+					arrive = resolve;
+				} );
+			} );
+
+			const button = renderDocument();
+			const done = mod.downloadDocument( button );
+
+			await jest.advanceTimersByTimeAsync( 1000 );
+			window.dispatchEvent( new Event( 'pagehide' ) );
+			await done;
+
+			expect( button.disabled ).toBe( false );
+			expect( signal.aborted ).toBe( true );
+			arrive( PDF() );
+			await jest.advanceTimersByTimeAsync( 0 );
+			expect( window.URL.createObjectURL ).not.toHaveBeenCalled();
+			expect( jest.getTimerCount() ).toBe( 0 );
+		} );
+
 		it( 'a failure while waiting stops the loop with the server\'s own sentence', async () => {
 			window.fetch.mockResolvedValueOnce( PENDING( 3 ) ).mockResolvedValueOnce( response( { status: 502, json: { message: 'Документ недоступен.' } } ) );
 

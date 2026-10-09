@@ -2571,7 +2571,7 @@ describe( 'the «Накладная» / «Штрихкод» document actions (#
 		fireEvent.click( await screen.findByRole( 'button', { name: 'Накладная' } ) );
 
 		await waitFor( () => expect( clickSpy ).toHaveBeenCalledTimes( 1 ) );
-		expect( fetchOrderDocument ).toHaveBeenCalledWith( 42, 'waybill' );
+		expect( fetchOrderDocument ).toHaveBeenCalledWith( 42, 'waybill', expect.anything() );
 		expect( window.URL.createObjectURL ).toHaveBeenCalledWith( blob );
 		expect( window.URL.revokeObjectURL ).toHaveBeenCalledWith( 'blob:pdf' );
 		expect( window.open ).not.toHaveBeenCalled();
@@ -2585,7 +2585,7 @@ describe( 'the «Накладная» / «Штрихкод» document actions (#
 		fireEvent.click( await screen.findByRole( 'button', { name: 'Штрихкод' } ) );
 
 		await waitFor( () => expect( window.open ).toHaveBeenCalledWith( 'https://carrier.test/x.pdf', '_blank', 'noopener' ) );
-		expect( fetchOrderDocument ).toHaveBeenCalledWith( 42, 'barcode' );
+		expect( fetchOrderDocument ).toHaveBeenCalledWith( 42, 'barcode', expect.anything() );
 		expect( clickSpy ).not.toHaveBeenCalled();
 	} );
 
@@ -2682,6 +2682,85 @@ describe( 'the «Накладная» / «Штрихкод» document actions (#
 
 		expect( fetchOrderDocument ).toHaveBeenCalledTimes( 1 );
 		expect( clickSpy ).not.toHaveBeenCalled();
+
+		jest.useRealTimers();
+	} );
+
+	test( 'pagehide cancels the wait: nothing more is asked, a late document is never saved and the row is free (#1191 fix 1)', async () => {
+		jest.useFakeTimers();
+		fetchOrderDocument.mockResolvedValue( { kind: 'pending', message: '', retryAfter: 3 } );
+
+		render( <App /> );
+
+		const button = await screen.findByRole( 'button', { name: 'Накладная' } );
+
+		fireEvent.click( button );
+		await waitFor( () => expect( fetchOrderDocument ).toHaveBeenCalledTimes( 1 ) );
+
+		await act( async () => {
+			window.dispatchEvent( new Event( 'pagehide' ) );
+		} );
+		fetchOrderDocument.mockResolvedValue( { kind: 'file', blob: new Blob( [ 'x' ] ), filename: 'late.pdf' } );
+
+		await act( async () => {
+			await jest.advanceTimersByTimeAsync( 20000 );
+		} );
+
+		expect( fetchOrderDocument ).toHaveBeenCalledTimes( 1 );
+		expect( clickSpy ).not.toHaveBeenCalled();
+		await waitFor( () => expect( button ).not.toBeDisabled() );
+		// Silent: no error, and the «формируется» line went with the wait.
+		expect( document.querySelector( '.components-notice.is-info' ) ).toBeNull();
+		expect( document.querySelector( '.components-notice.is-error' ) ).toBeNull();
+
+		jest.useRealTimers();
+	} );
+
+	test( 'moving to another page of orders while a document is being prepared cancels it: no download lands in the new view (#1191 fix 1)', async () => {
+		jest.useFakeTimers();
+		fetchOrders.mockResolvedValue( resultOf( [ documentRow() ] ) );
+		fetchOrderDocument.mockResolvedValue( { kind: 'pending', message: '', retryAfter: 3 } );
+
+		render( <App /> );
+
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Накладная' } ) );
+		await waitFor( () => expect( fetchOrderDocument ).toHaveBeenCalledTimes( 1 ) );
+
+		fireEvent.click( screen.getByText( 'Следующая страница' ) );
+		await waitFor( () => expect( fetchOrders ).toHaveBeenCalledTimes( 2 ) );
+
+		fetchOrderDocument.mockResolvedValue( { kind: 'file', blob: new Blob( [ 'x' ] ), filename: 'old-view.pdf' } );
+		await act( async () => {
+			await jest.advanceTimersByTimeAsync( 20000 );
+		} );
+
+		expect( fetchOrderDocument ).toHaveBeenCalledTimes( 1 );
+		expect( clickSpy ).not.toHaveBeenCalled();
+		expect( window.URL.createObjectURL ).not.toHaveBeenCalled();
+
+		jest.useRealTimers();
+	} );
+
+	test( 'a request that hangs is given up at the 30 s cap and the row is freed (#1191 fix 1)', async () => {
+		jest.useFakeTimers();
+		fetchOrderDocument.mockImplementation( () => new Promise( () => {} ) );
+
+		render( <App /> );
+
+		const button = await screen.findByRole( 'button', { name: 'Накладная' } );
+
+		fireEvent.click( button );
+		await waitFor( () => expect( button ).toBeDisabled() );
+
+		await act( async () => {
+			await jest.advanceTimersByTimeAsync( 30000 );
+		} );
+
+		await waitFor( () =>
+			expect( screen.getAllByText( 'Документ всё ещё формируется. Попробуйте ещё раз через минуту.' ).length ).toBeGreaterThan( 0 )
+		);
+		await waitFor( () => expect( button ).not.toBeDisabled() );
+		expect( fetchOrderDocument.mock.calls[ 0 ][ 2 ].aborted ).toBe( true );
 
 		jest.useRealTimers();
 	} );
@@ -2791,7 +2870,7 @@ describe( 'bulk print for the selected orders (#1192)', () => {
 		fireEvent.change( picker(), { target: { value: 'print:waybill' } } );
 		fireEvent.click( screen.getByRole( 'button', { name: 'Применить действие' } ) );
 
-		await waitFor( () => expect( fetchBulkDocument ).toHaveBeenCalledWith( [ 1, 3 ], 'waybill' ) );
+		await waitFor( () => expect( fetchBulkDocument ).toHaveBeenCalledWith( [ 1, 3 ], 'waybill', expect.anything() ) );
 		await waitFor( () => expect( window.URL.createObjectURL ).toHaveBeenCalledWith( blob ) );
 		expect( fetchBulkDocument ).toHaveBeenCalledTimes( 1 );
 		expect( screen.getAllByText( 'Документ готов. Заказов в файле: 2.' ).length ).toBeGreaterThan( 0 );
@@ -2825,6 +2904,98 @@ describe( 'bulk print for the selected orders (#1192)', () => {
 		expect( fetchBulkDocument ).toHaveBeenCalledTimes( 2 );
 		expect( window.URL.createObjectURL ).toHaveBeenCalledTimes( 1 );
 		await waitFor( () => expect( document.querySelectorAll( '.woodev-orders-row-busy' ) ).toHaveLength( 0 ) );
+	} );
+
+	test( 'while a bulk document is being prepared «Применить действие» is disabled: a second click starts no second wait (#1192 fix 1)', async () => {
+		let resolveDocument;
+
+		fetchOrders.mockResolvedValue( resultOf( [ bulkRow( 1 ), bulkRow( 2 ) ] ) );
+		fetchBulkDocument.mockReturnValue(
+			new Promise( ( resolve ) => {
+				resolveDocument = resolve;
+			} )
+		);
+
+		render( <App /> );
+
+		fireEvent.click( await screen.findByRole( 'checkbox', { name: 'Выбрать заказ N1' } ) );
+		fireEvent.change( picker(), { target: { value: 'print:waybill' } } );
+
+		const apply = screen.getByRole( 'button', { name: 'Применить действие' } );
+
+		fireEvent.click( apply );
+		fireEvent.click( apply );
+		fireEvent.click( apply );
+
+		await waitFor( () => expect( apply ).toBeDisabled() );
+		expect( fetchBulkDocument ).toHaveBeenCalledTimes( 1 );
+
+		await act( async () => {
+			resolveDocument( { kind: 'file', blob: new Blob( [ 'x' ] ), filename: 'orders-waybill.pdf' } );
+		} );
+
+		await waitFor( () => expect( apply ).not.toBeDisabled() );
+		expect( fetchBulkDocument ).toHaveBeenCalledTimes( 1 );
+		expect( window.URL.createObjectURL ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	test( 'a bulk document over rows that are still busy with a single document is refused, and the single one keeps its busy marker (#1192 fix 1)', async () => {
+		let resolveSingle;
+
+		fetchOrders.mockResolvedValue( resultOf( [ bulkRow( 1 ), bulkRow( 2 ) ] ) );
+		fetchOrderDocument.mockReturnValue(
+			new Promise( ( resolve ) => {
+				resolveSingle = resolve;
+			} )
+		);
+
+		render( <App /> );
+
+		// Row 1 starts its own waybill and stays busy.
+		fireEvent.click( ( await screen.findAllByRole( 'button', { name: 'Накладная' } ) )[ 0 ] );
+		await waitFor( () => expect( document.querySelectorAll( '.woodev-orders-row-busy' ) ).toHaveLength( 1 ) );
+
+		fireEvent.click( screen.getByRole( 'checkbox', { name: 'Выбрать все заказы на странице' } ) );
+		fireEvent.change( picker(), { target: { value: 'print:waybill' } } );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Применить действие' } ) );
+
+		expect( fetchBulkDocument ).not.toHaveBeenCalled();
+		expect( document.querySelectorAll( '.woodev-orders-row-busy' ) ).toHaveLength( 1 );
+
+		await act( async () => {
+			resolveSingle( { kind: 'link', url: 'https://carrier.test/x.pdf' } );
+		} );
+		await waitFor( () => expect( document.querySelectorAll( '.woodev-orders-row-busy' ) ).toHaveLength( 0 ) );
+	} );
+
+	test( 'pagehide cancels a bulk wait: no further request, no saved file, the button and rows are free (#1192 fix 1)', async () => {
+		jest.useFakeTimers();
+		fetchOrders.mockResolvedValue( resultOf( [ bulkRow( 1 ) ] ) );
+		fetchBulkDocument.mockResolvedValue( { kind: 'pending', message: '', retryAfter: 3 } );
+
+		render( <App /> );
+
+		fireEvent.click( await screen.findByRole( 'checkbox', { name: 'Выбрать заказ N1' } ) );
+		fireEvent.change( picker(), { target: { value: 'print:waybill' } } );
+
+		const apply = screen.getByRole( 'button', { name: 'Применить действие' } );
+
+		fireEvent.click( apply );
+		await waitFor( () => expect( fetchBulkDocument ).toHaveBeenCalledTimes( 1 ) );
+		await waitFor( () => expect( apply ).toBeDisabled() );
+
+		await act( async () => {
+			window.dispatchEvent( new Event( 'pagehide' ) );
+		} );
+		fetchBulkDocument.mockResolvedValue( { kind: 'file', blob: new Blob( [ 'x' ] ), filename: 'late.pdf' } );
+		await act( async () => {
+			await jest.advanceTimersByTimeAsync( 20000 );
+		} );
+
+		expect( fetchBulkDocument ).toHaveBeenCalledTimes( 1 );
+		expect( window.URL.createObjectURL ).not.toHaveBeenCalled();
+		await waitFor( () => expect( apply ).not.toBeDisabled() );
+		expect( document.querySelectorAll( '.woodev-orders-row-busy' ) ).toHaveLength( 0 );
 	} );
 
 	test( 'the orders left out of the file are named with their reasons, by the numbers the merchant sees', async () => {

@@ -426,7 +426,7 @@ async function readDocumentResponse( response: Response, fallbackFilename: strin
 }
 
 /** One GET to a documents route; a rejected request carries the server's own `{ code, message }`. */
-async function getDocument( url: string, fallbackFilename: string ): Promise<OrderDocument> {
+async function getDocument( url: string, fallbackFilename: string, signal?: AbortSignal ): Promise<OrderDocument> {
 	const { nonce = '' } = bootstrap();
 
 	let response: Response;
@@ -437,6 +437,7 @@ async function getDocument( url: string, fallbackFilename: string ): Promise<Ord
 			method: 'GET',
 			headers: { 'X-WP-Nonce': nonce },
 			parse: false,
+			...( signal ? { signal } : {} ),
 		} ) ) as unknown as Response;
 	} catch ( error ) {
 		throw await documentError( error );
@@ -455,12 +456,13 @@ async function getDocument( url: string, fallbackFilename: string ): Promise<Ord
  * Resolves with the three things a merchant can be told: a file to save, a link to open, or
  * «ещё готовится» (ask again — see `pollUntilReady`). A rejection carries the server's own Russian `message`.
  */
-export function fetchOrderDocument( orderId: number, type: string ): Promise<OrderDocument> {
+export function fetchOrderDocument( orderId: number, type: string, signal?: AbortSignal ): Promise<OrderDocument> {
 	const { restRoot = '' } = bootstrap();
 
 	return getDocument(
 		`${ restRoot.replace( /\/+$/, '' ) }/${ orderId }/documents/${ encodeURIComponent( type ) }`,
-		`order-${ orderId }-${ type }.pdf`
+		`order-${ orderId }-${ type }.pdf`,
+		signal
 	);
 }
 
@@ -468,12 +470,13 @@ export function fetchOrderDocument( orderId: number, type: string ): Promise<Ord
  * Fetches ONE document covering several orders (#1192) — `GET …/shipping/orders/documents/<type>?ids=1,2,3`. Same
  * outcomes as {@link fetchOrderDocument}; a file or link also names the orders it leaves out in `skipped`.
  */
-export function fetchBulkDocument( ids: number[], type: string ): Promise<OrderDocument> {
+export function fetchBulkDocument( ids: number[], type: string, signal?: AbortSignal ): Promise<OrderDocument> {
 	const { restRoot = '' } = bootstrap();
 
 	return getDocument(
 		withQuery( `${ restRoot.replace( /\/+$/, '' ) }/documents/${ encodeURIComponent( type ) }`, `ids=${ ids.join( ',' ) }` ),
-		`orders-${ type }.pdf`
+		`orders-${ type }.pdf`,
+		signal
 	);
 }
 

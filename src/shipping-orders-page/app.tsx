@@ -762,6 +762,7 @@ function bulkConfirmQuestion( action: BulkAction, count: number ): string {
 function BulkActionsBar( {
 	actions,
 	selectedCount,
+	busy,
 	value,
 	onChange,
 	onApply,
@@ -771,6 +772,8 @@ function BulkActionsBar( {
 }: {
 	actions: BulkAction[];
 	selectedCount: number;
+	/** A bulk document is being prepared: applying again would start a second wait for the same orders. */
+	busy: boolean;
 	value: string;
 	onChange: ( action: string ) => void;
 	onApply: () => void;
@@ -797,7 +800,7 @@ function BulkActionsBar( {
 			<Button
 				className="woodev-orders-bulk__apply"
 				variant="secondary"
-				disabled={ ! value || 0 === selectedCount }
+				disabled={ ! value || 0 === selectedCount || busy }
 				onClick={ onApply }
 			>
 				{ /*
@@ -1631,13 +1634,60 @@ export default function OrdersPage() {
 	// #1191: every document wait in flight, so leaving the page cancels them all.
 	const documentPolls = useRef<Set<AbortController>>( new Set() );
 
-	useEffect(
-		() => () => {
-			documentPolls.current.forEach( ( controller ) => controller.abort() );
-			documentPolls.current.clear();
-		},
-		[]
-	);
+	/** Stops every document wait: the merchant left the page or moved to another view of the orders. */
+	const cancelDocumentPolls = () => {
+		const waits = Array.from( documentPolls.current );
+
+		documentPolls.current.clear();
+		waits.forEach( ( controller ) => controller.abort() );
+	};
+
+	// Unmount, and `pagehide` — a page parked in the back/forward cache keeps its timers and would resume the wait.
+	useEffect( () => {
+		window.addEventListener( 'pagehide', cancelDocumentPolls );
+
+		return () => {
+			window.removeEventListener( 'pagehide', cancelDocumentPolls );
+			cancelDocumentPolls();
+		};
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [] );
+
+	// Who holds each busy row: an operation may only free the rows it still owns, so a late settle of an old
+	// operation never clears the busy state of a newer one on the same order.
+	const rowOwners = useRef<Map<number, object>>( new Map() );
+	// The bulk document being prepared (#1192) — keeps «Применить действие» disabled and blocks a second click
+	// before React re-renders.
+	const bulkDocumentOwner = useRef<object | null>( null );
+	const [ bulkDocumentBusy, setBulkDocumentBusy ] = useState( false );
+
+	/** Marks `ids` busy with `pendingAction` for a new operation; returns its token for {@link releaseRows}. */
+	const claimRows = ( ids: number[], pendingAction: string ): object => {
+		const token = {};
+
+		ids.forEach( ( id ) => rowOwners.current.set( id, token ) );
+		setActionRowStates( ( current ) => {
+			const next = { ...current };
+			ids.forEach( ( id ) => {
+				next[ id ] = { pendingAction, confirmingAction: null };
+			} );
+			return next;
+		} );
+
+		return token;
+	};
+
+	/** Frees the rows `token` still owns. */
+	const releaseRows = ( ids: number[], token: object ) => {
+		const owned = ids.filter( ( id ) => rowOwners.current.get( id ) === token );
+
+		owned.forEach( ( id ) => rowOwners.current.delete( id ) );
+		setActionRowStates( ( current ) => {
+			const next = { ...current };
+			owned.forEach( ( id ) => delete next[ id ] );
+			return next;
+		} );
+	};
 
 	// Every control in the filter row — both `FilterPicker`s, `DateRangeFilterPicker`,
 	// `AdvancedFilters` — changes the URL by NAVIGATING rather than calling back with a
@@ -1730,6 +1780,9 @@ export default function OrdersPage() {
 		let cancelled = false;
 
 		fetchGeneration.current += 1;
+		// A new view of the orders (page, filter, search, carrier): a document still being prepared for the old one
+		// must not turn up as a download in this one.
+		cancelDocumentPolls();
 
 		setError( '' );
 		setRows( null );
@@ -1897,7 +1950,9 @@ export default function OrdersPage() {
 	 *
 	 * @return the saved document, or `null` when it failed or was cancelled.
 	 */
-	const fetchAndSaveDocument = ( fetchOnce: () => Promise<OrderDocument> ): Promise<OrderDocument | null> => {
+	const fetchAndSaveDocument = (
+		fetchOnce: ( signal: AbortSignal ) => Promise<OrderDocument>
+	): Promise<OrderDocument | null> => {
 		const controller = new AbortController();
 
 		documentPolls.current.add( controller );
@@ -1922,8 +1977,10 @@ export default function OrdersPage() {
 				return doc;
 			} )
 			.catch( ( err: { message?: string } ) => {
-				// Leaving the page is not a failure: say nothing.
-				if ( ! isPollCancelled( err ) ) {
+				// Leaving the page is not a failure: say nothing — and take the «формируется» line down with the wait.
+				if ( isPollCancelled( err ) ) {
+					setActionNotice( ( current ) => ( current && 'info' === current.status ? null : current ) );
+				} else {
 					const text =
 						( err && err.message ) ||
 						__( 'Не удалось получить документ у перевозчика.', 'woodev-plugin-framework' );
@@ -1944,17 +2001,10 @@ export default function OrdersPage() {
 	 * until the file is saved.
 	 */
 	const downloadDocument = ( row: ActionableOrder, type: 'waybill' | 'barcode' ) => {
-		setActionRowStates( ( current ) => ( {
-			...current,
-			[ row.id ]: { pendingAction: type, confirmingAction: null },
-		} ) );
+		const token = claimRows( [ row.id ], type );
 
-		fetchAndSaveDocument( () => fetchOrderDocument( row.id, type ) ).finally( () => {
-			setActionRowStates( ( current ) => {
-				const next = { ...current };
-				delete next[ row.id ];
-				return next;
-			} );
+		fetchAndSaveDocument( ( signal ) => fetchOrderDocument( row.id, type, signal ) ).finally( () => {
+			releaseRows( [ row.id ], token );
 		} );
 	};
 
@@ -1963,13 +2013,15 @@ export default function OrdersPage() {
 	 * selection stays, since nothing changed. The orders the carrier or the framework left out are named in a warning.
 	 */
 	const printBulkDocument = ( type: 'waybill' | 'barcode', ids: number[] ) => {
-		setActionRowStates( ( current ) => {
-			const next = { ...current };
-			ids.forEach( ( id ) => {
-				next[ id ] = { pendingAction: `print:${ type }`, confirmingAction: null };
-			} );
-			return next;
-		} );
+		// One bulk document at a time, and never over rows another operation is still busy with.
+		if ( bulkDocumentOwner.current || ids.some( ( id ) => rowOwners.current.has( id ) ) ) {
+			return;
+		}
+
+		const token = claimRows( ids, `print:${ type }` );
+
+		bulkDocumentOwner.current = token;
+		setBulkDocumentBusy( true );
 
 		const numberOf = ( id: number ): string => {
 			const found = ( rows || [] ).find( ( r ) => r.id === id );
@@ -1977,7 +2029,7 @@ export default function OrdersPage() {
 			return found ? String( found.order_number ) : String( id );
 		};
 
-		fetchAndSaveDocument( () => fetchBulkDocument( ids, type ) )
+		fetchAndSaveDocument( ( signal ) => fetchBulkDocument( ids, type, signal ) )
 			.then( ( doc ) => {
 				if ( ! doc || 'pending' === doc.kind ) {
 					return;
@@ -2003,11 +2055,12 @@ export default function OrdersPage() {
 				setBulkNotice( messages );
 			} )
 			.finally( () => {
-				setActionRowStates( ( current ) => {
-					const next = { ...current };
-					ids.forEach( ( id ) => delete next[ id ] );
-					return next;
-				} );
+				releaseRows( ids, token );
+
+				if ( bulkDocumentOwner.current === token ) {
+					bulkDocumentOwner.current = null;
+					setBulkDocumentBusy( false );
+				}
 			} );
 	};
 
@@ -2130,23 +2183,11 @@ export default function OrdersPage() {
 	 * skipped or failed id stays selected, since nothing happened to it.
 	 */
 	const performBulkAction = ( action: string, ids: number[] ) => {
-		setActionRowStates( ( current ) => {
-			const next = { ...current };
-			ids.forEach( ( id ) => {
-				next[ id ] = { pendingAction: action, confirmingAction: null };
-			} );
-			return next;
-		} );
+		const token = claimRows( ids, action );
 
 		const generation = fetchGeneration.current;
 
-		const clearBusy = () => {
-			setActionRowStates( ( current ) => {
-				const next = { ...current };
-				ids.forEach( ( id ) => delete next[ id ] );
-				return next;
-			} );
-		};
+		const clearBusy = () => releaseRows( ids, token );
 
 		performBulkOrderAction( action, ids )
 			.then( ( res: BulkActionResult ) => {
@@ -2300,7 +2341,7 @@ export default function OrdersPage() {
 	const onBulkApply = () => {
 		const chosen = bulkActions.find( ( a ) => a.action === bulkAction );
 
-		if ( ! chosen || 0 === selectedIds.size ) {
+		if ( ! chosen || 0 === selectedIds.size || bulkDocumentOwner.current ) {
 			return;
 		}
 
@@ -2367,6 +2408,7 @@ export default function OrdersPage() {
 			<BulkActionsBar
 				actions={ bulkActions }
 				selectedCount={ selectedIds.size }
+				busy={ bulkDocumentBusy }
 				value={ bulkAction }
 				onChange={ setBulkAction }
 				onApply={ onBulkApply }

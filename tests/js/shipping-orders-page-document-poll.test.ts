@@ -84,8 +84,8 @@ describe( 'pollUntilReady', () => {
 
 		expect( error.code ).toBe( POLL_TIMEOUT_CODE );
 		expect( error.message ).toBe( 'Документ всё ещё формируется. Попробуйте ещё раз через минуту.' );
-		// Attempts at 0, 10, 20 and 30 s; the wait after the fourth would end at 40 s, past the 30 s cap.
-		expect( fetchOnce ).toHaveBeenCalledTimes( 4 );
+		// Attempts at 0, 10 and 20 s; the deadline is absolute, so nothing is asked at 30 s or after.
+		expect( fetchOnce ).toHaveBeenCalledTimes( 3 );
 	} );
 
 	test( 'a rejection of the request itself is passed through untouched (the server\'s own message)', async () => {
@@ -149,5 +149,85 @@ describe( 'cancelling the wait', () => {
 		expect( isPollCancelled( { code: POLL_TIMEOUT_CODE } ) ).toBe( false );
 		expect( isPollCancelled( null ) ).toBe( false );
 		expect( isPollCancelled( {} ) ).toBe( false );
+	} );
+} );
+
+describe( 'the cap bounds a request in flight (#1191 fix round 1)', () => {
+	test( 'a request that never answers is given up at the cap: the promise settles with the timeout and nothing lingers', async () => {
+		let signalSeen: AbortSignal | undefined;
+		const fetchOnce = jest.fn(
+			( signal: AbortSignal ) =>
+				new Promise<Answer>( () => {
+					signalSeen = signal;
+				} )
+		);
+		const settled = pollUntilReady( fetchOnce ).catch( ( error ) => error );
+		let done = false;
+
+		settled.then( () => {
+			done = true;
+		} );
+
+		await jest.advanceTimersByTimeAsync( POLL_MAX_WAIT_MS - 1 );
+		expect( done ).toBe( false );
+		await jest.advanceTimersByTimeAsync( 1 );
+
+		const error = await settled;
+
+		expect( error.code ).toBe( POLL_TIMEOUT_CODE );
+		// The transport was told to stop, and no timer is left behind.
+		expect( signalSeen?.aborted ).toBe( true );
+		expect( jest.getTimerCount() ).toBe( 0 );
+	} );
+
+	test( 'a document that arrives after the cap is dropped, not returned', async () => {
+		let arrive: ( answer: Answer ) => void = () => {};
+		const fetchOnce = jest.fn(
+			() =>
+				new Promise<Answer>( ( resolve ) => {
+					arrive = resolve;
+				} )
+		);
+		const settled = pollUntilReady( fetchOnce ).catch( ( error ) => error );
+
+		await jest.advanceTimersByTimeAsync( POLL_MAX_WAIT_MS + 60000 );
+		arrive( file );
+
+		expect( ( await settled ).code ).toBe( POLL_TIMEOUT_CODE );
+	} );
+
+	test( 'a late poll that starts near the deadline and hangs is cut at the deadline, not 30 s later', async () => {
+		const fetchOnce = jest
+			.fn()
+			.mockResolvedValueOnce( pending( 10 ) )
+			.mockResolvedValueOnce( pending( 10 ) )
+			.mockImplementationOnce( () => new Promise<Answer>( () => {} ) );
+		const settled = pollUntilReady( fetchOnce ).catch( ( error ) => error );
+
+		// Third request goes out at 20 s and hangs; the cap is still 30 s from the START.
+		await jest.advanceTimersByTimeAsync( 20000 );
+		expect( fetchOnce ).toHaveBeenCalledTimes( 3 );
+		await jest.advanceTimersByTimeAsync( 10000 );
+
+		expect( ( await settled ).code ).toBe( POLL_TIMEOUT_CODE );
+	} );
+
+	test( 'the request is handed a signal that aborts when the caller cancels, and the cancel settles at once', async () => {
+		const controller = new AbortController();
+		let signalSeen: AbortSignal | undefined;
+		const fetchOnce = jest.fn(
+			( signal: AbortSignal ) =>
+				new Promise<Answer>( () => {
+					signalSeen = signal;
+				} )
+		);
+		const settled = pollUntilReady( fetchOnce, { signal: controller.signal } ).catch( ( error ) => error );
+
+		await jest.advanceTimersByTimeAsync( 1000 );
+		controller.abort();
+
+		expect( isPollCancelled( await settled ) ).toBe( true );
+		expect( signalSeen?.aborted ).toBe( true );
+		expect( jest.getTimerCount() ).toBe( 0 );
 	} );
 } );
