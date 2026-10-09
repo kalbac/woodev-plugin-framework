@@ -34,11 +34,14 @@
  * for every `window.woodev_checkout_field_config_*` global — including the SAME config object
  * this file also discovers. Calling `createStore()` again here would silently build a SECOND,
  * diverging store for the same fields. This file therefore reaches for the EXISTING instance
- * via `WoodevCheckoutFieldStore.getStoreForField()` first (the store-registry lookup that
+ * via `WoodevCheckoutFieldStore.getStoresForField()` first (the store-registry lookup that
  * factory function's own docblock previews for exactly this cross-file consumption shape),
  * and only falls back to `createStore()` when no existing store owns any of this config's own
  * fields yet — keeping this module usable in isolation too (e.g. under test, or for a plugin
- * whose location fields carry no OTHER §8 semantics of their own).
+ * whose location fields carry no OTHER §8 semantics of their own). When SEVERAL registered
+ * stores declare the entry's fields (the shared cascade below), the entry writes through all of
+ * them ({@see sharedStore}) — the adapter's gate reads every store, so no single one can hold the
+ * value on its behalf.
  *
  * SHARED CASCADE (issue #1187): configs that declare at least one native field id in common
  * are folded into ONE entry before anything is built ({@see mergeOverlappingConfigs}) — the
@@ -52,7 +55,9 @@
  * address, {@see isAddressLocked} kept the street disabled for good (measured: full carrier
  * registered first, partial second — `tests/js/location-cascade-shared.test.js`). Two
  * declarations with NO field in common (a billing-only and a shipping-only one) stay two
- * entries, as they always were.
+ * entries, as they always were. The classic adapter still keeps one STORE per plugin and gates
+ * on all of them, so the merged entry writes through every owner ({@see sharedStore}) — one
+ * chain, one widget, one record, every store told.
  *
  * CHAIN ASSEMBLY IS LEVEL-DRIVEN, NOT `depends_on`-DRIVEN: unlike a generic §8 options/suggest
  * cascade (which reads `depends_on` off each field descriptor), a location-kind field carries
@@ -1212,59 +1217,81 @@
 	}
 
 	/**
-	 * Resolves the store instance for `config` — an EXISTING one via `getStoreForField()` when
-	 * `checkout-field-classic.js` (or an earlier boot pass) already created it for one of these
-	 * SAME fields, else a fresh one. See the file docblock's STORE SHARING section.
+	 * Builds the entry's store over EVERY registered store that declares one of its fields
+	 * (issue #1187, round 2). The cascade only ever calls `setValue()`/`getValue()` on a store,
+	 * so the shared shape is exactly those two: a write fans out to every owner, a read comes
+	 * from the first owner declaring the field (else the first owner — a postcode id no
+	 * declaration carries lands the same way a single store took it).
+	 *
+	 * Why fan-out and not "the best owner": `checkout-field-classic.js` keeps one store per
+	 * plugin and its `refreshGate()` evaluates ALL of them, while this module's silent writes
+	 * ({@see writeSilently} — backwards fill, address-column carries, clears) dispatch no native
+	 * `change`, so the adapter's own handler never carries them. A fill that reaches one store
+	 * leaves the other's required region empty and «Оформить заказ» disabled although every
+	 * visible field is filled — measured in both registration orders (s165 critic probe;
+	 * `tests/js/location-cascade-shared.test.js`, the round-2 block). Each owner keeps its own
+	 * descriptors, so each carrier's required conditions are still judged by its own store.
+	 *
+	 * @param {Object[]} owners Registered stores, creation order, at least two.
+	 * @returns {{ setValue: Function, getValue: Function }}
+	 */
+	function sharedStore( owners ) {
+		function ownerFor( fieldId ) {
+			for ( var i = 0; i < owners.length; i++ ) {
+				if ( owners[ i ].getField( fieldId ) ) {
+					return owners[ i ];
+				}
+			}
+
+			return owners[ 0 ];
+		}
+
+		return {
+			setValue: function( fieldId, value ) {
+				owners.forEach( function( owner ) {
+					owner.setValue( fieldId, value );
+				} );
+			},
+			getValue: function( fieldId ) {
+				return ownerFor( fieldId ).getValue( fieldId );
+			},
+		};
+	}
+
+	/**
+	 * Resolves the store for `config` — the EXISTING instance(s) via `getStoresForField()` when
+	 * `checkout-field-classic.js` (or an earlier boot pass) already created them for these SAME
+	 * fields, else a fresh one. See the file docblock's STORE SHARING section.
+	 *
+	 * One owner (the usual single-plugin page) is returned as is. Several owners — a merged
+	 * entry whose fields are declared by more than one plugin's store ({@see mergeOverlappingConfigs})
+	 * — are wrapped by {@see sharedStore}, in creation order, so every one of them sees every
+	 * write this module makes. The earlier "owner of the most fields" ranking is gone: it
+	 * measured `getStoreForField()`'s newest-first tie-break, not declarations, and no single
+	 * owner could ever be right when the adapter's gate reads all of them.
 	 *
 	 * @param {Object}   config
 	 * @param {string[]} fieldIds
 	 * @returns {Object}
 	 */
 	function resolveStore( config, fieldIds ) {
-		if ( 'function' === typeof factory.getStoreForField ) {
-			// Issue #1187: a merged entry (see the file docblock's SHARED CASCADE section) spans
-			// fields that several plugins' stores declare between them. `getStoreForField()`
-			// answers per field, newest registration first; the entry takes the store that owns
-			// the MOST of its fields — the carrier whose declaration covers the chain — so the
-			// `updated_checkout` restore reads back from the store `checkout-field-classic.js`
-			// serves for the same ids. A single-config entry resolves exactly as before.
-			var candidates = [];
-			var best = null;
+		var owners = [];
 
-			for ( var i = 0; i < fieldIds.length; i++ ) {
-				var existing = factory.getStoreForField( fieldIds[ i ] );
-
-				if ( ! existing ) {
-					continue;
-				}
-
-				var candidate = null;
-
-				for ( var j = 0; j < candidates.length; j++ ) {
-					if ( candidates[ j ].store === existing ) {
-						candidate = candidates[ j ];
-						break;
+		if ( 'function' === typeof factory.getStoresForField ) {
+			fieldIds.forEach( function( fieldId ) {
+				factory.getStoresForField( fieldId ).forEach( function( store ) {
+					if ( owners.indexOf( store ) === -1 ) {
+						owners.push( store );
 					}
-				}
-
-				if ( ! candidate ) {
-					candidate = { store: existing, owned: 0 };
-					candidates.push( candidate );
-				}
-
-				candidate.owned += 1;
-
-				if ( ! best || candidate.owned > best.owned ) {
-					best = candidate;
-				}
-			}
-
-			if ( best ) {
-				return best.store;
-			}
+				} );
+			} );
 		}
 
-		return factory.createStore( config );
+		if ( ! owners.length ) {
+			return factory.createStore( config );
+		}
+
+		return 1 === owners.length ? owners[ 0 ] : sharedStore( owners );
 	}
 
 	/**

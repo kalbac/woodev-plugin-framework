@@ -51,7 +51,7 @@ async function flushMicrotasks() {
 	}
 }
 
-function locationField( level ) {
+function locationField( level, required = false ) {
 	return {
 		id: null,
 		type: 'text',
@@ -59,7 +59,7 @@ function locationField( level ) {
 		source_kind: 'location',
 		location_level: level,
 		depends_on: null,
-		required: false,
+		required,
 		is_pickup_slot: false,
 	};
 }
@@ -87,14 +87,16 @@ function locationBlock() {
  * One plugin's `woodev_checkout_field_config_*` global, declaring the given levels on the billing ids.
  *
  * @param {string[]} levels
+ * @param {Object}   [options]
+ * @param {boolean}  [options.required=false] Every declared field is required (round 2, the gate case).
  * @returns {Object}
  */
-function carrierConfig( levels ) {
+function carrierConfig( levels, options = {} ) {
 	const ids = { region: 'billing_state', settlement: 'billing_city', address: 'billing_address_1' };
 	const fields = {};
 
 	levels.forEach( ( level ) => {
-		fields[ ids[ level ] ] = locationField( level );
+		fields[ ids[ level ] ] = locationField( level, !! options.required );
 	} );
 
 	return {
@@ -102,6 +104,8 @@ function carrierConfig( levels ) {
 		endpoint: 'https://example.test/wp-json/woodev/v1/carrier/field-source',
 		nonce: 'test-nonce',
 		takeover: {},
+		// The store setting's default — `checkout-field-classic.js` treats an absent key as ON too.
+		block_place_order: true,
 		location: locationBlock(),
 	};
 }
@@ -116,6 +120,8 @@ function installMarkup() {
 			<input type="text" id="billing_city" name="billing_city" value="" />
 			<input type="text" id="billing_address_1" name="billing_address_1" value="" />
 			<input type="text" id="billing_postcode" name="billing_postcode" value="" />
+			<div id="shipping_method"></div>
+			<button type="submit" id="place_order"></button>
 		</form>
 	`;
 	document.getElementById( 'billing_country' ).value = 'RU';
@@ -165,6 +171,69 @@ function boot( plugins ) {
 	} );
 
 	require( '../../woodev/shipping-method/assets/js/frontend/location-cascade.js' );
+}
+
+/**
+ * Round 2 (critic P2): boots the REAL classic adapter too — `checkout-field-classic.js` creates one
+ * store PER PLUGIN config at its top-level scan and its `refreshGate()` evaluates every one of them,
+ * so a shared-field value that reaches only one store disables «Оформить заказ» for good. Production
+ * enqueue order (`Checkout_Handler::enqueue_assets()`): store → classic adapter → typeahead → cascade.
+ *
+ * `required: true` on every declared field and `block_place_order: true` (the store setting's
+ * default) — the configuration the round-1 fixture avoided and the critic's probe measured.
+ *
+ * @param {Array<{ id: string, levels: string[] }>} plugins
+ * @returns {Object[]} every store the adapter created, in registration order.
+ */
+function bootWithClassicAdapter( plugins ) {
+	installMarkup();
+
+	global.jQuery = require( 'jquery' );
+	global.$ = global.jQuery;
+	window.jQuery = global.jQuery;
+	// The adapter's suggest/options sources never fire for a location field; stubbed so a
+	// surprise request fails loudly instead of reaching the network.
+	global.jQuery.ajax = jest.fn( () => {
+		throw new Error( 'unexpected $.ajax' );
+	} );
+
+	window.WoodevCheckoutFieldStore = require( '../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js' );
+
+	const stores = [];
+	const createStore = window.WoodevCheckoutFieldStore.createStore;
+
+	window.WoodevCheckoutFieldStore.createStore = ( config ) => {
+		const store = createStore( config );
+
+		stores.push( store );
+
+		return store;
+	};
+
+	mockFetch();
+
+	registeredGlobals = [];
+	plugins.forEach( ( plugin ) => {
+		const name = PREFIX + plugin.id;
+
+		window[ name ] = carrierConfig( plugin.levels, { required: true } );
+		registeredGlobals.push( name );
+	} );
+
+	require( '../../woodev/shipping-method/assets/js/frontend/checkout-field-classic.js' );
+	require( '../../woodev/shipping-method/assets/js/frontend/location-typeahead.js' );
+	require( '../../woodev/shipping-method/assets/js/frontend/location-cascade.js' );
+
+	// jQuery schedules `ready` on a timer when the document is already complete, fires the
+	// callback on a second one, and the adapter's takeover tick is a third — see
+	// `checkout-field-classic.test.js`'s own boot for why this is `runAllTimers`.
+	jest.runAllTimers();
+
+	return stores;
+}
+
+function placeOrder() {
+	return document.getElementById( 'place_order' );
 }
 
 function address() {
@@ -287,5 +356,62 @@ describe( 'issue #1187: declarations that overlap without one containing the oth
 		expect( address().disabled ).toBe( false );
 		// Backwards fill reached the region through the SAME chain the pick landed in.
 		expect( document.getElementById( 'billing_state' ).value ).toBe( 'Татарстан' );
+	} );
+} );
+
+describe.each( [
+	[ 'the full carrier registered first', [ { id: 'carrier_full', levels: [ 'region', 'settlement', 'address' ] }, { id: 'carrier_partial', levels: [ 'region', 'settlement' ] } ] ],
+	[ 'the partial carrier registered first', [ { id: 'carrier_partial', levels: [ 'region', 'settlement' ] }, { id: 'carrier_full', levels: [ 'region', 'settlement', 'address' ] } ] ],
+] )( 'issue #1187 round 2: required shared fields with the REAL classic adapter, %s', ( _label, plugins ) => {
+	it( 'a city pick back-fills the region into EVERY declaring store, so «Оформить заказ» unlocks once the street is typed', async () => {
+		const stores = bootWithClassicAdapter( plugins );
+
+		expect( stores ).toHaveLength( 2 ); // one per plugin — the adapter's own shape, not merged
+		expect( placeOrder().disabled ).toBe( true ); // nothing filled yet
+
+		await pickKazan();
+
+		expect( document.getElementById( 'billing_state' ).value ).toBe( 'Татарстан' ); // silent backwards fill
+		expect( city().value ).toBe( 'Казань' );
+		expect( address().disabled ).toBe( false );
+
+		address().value = 'ул Баумана, 1';
+		address().dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		window.jQuery( document.body ).trigger( 'updated_checkout' );
+
+		// The silent fill never dispatches a native `change`, so the adapter's own handler cannot
+		// carry it — the cascade has to write the region into each store itself.
+		stores.forEach( ( store ) => {
+			expect( store.getValue( 'billing_state' ) ).toBe( 'Татарстан' );
+			expect( store.getValue( 'billing_city' ) ).toBe( 'Казань' );
+		} );
+
+		expect( placeOrder().disabled ).toBe( false );
+
+		const serialized = serializedAddress();
+
+		expect( serialized.billing_state ).toBe( 'Татарстан' );
+		expect( serialized.billing_city ).toBe( 'Казань' );
+		expect( serialized.billing_address_1 ).toBe( 'ул Баумана, 1' );
+	} );
+
+	it( 'clearing the city after the pick empties the dependants in EVERY store and the gate closes again', async () => {
+		const stores = bootWithClassicAdapter( plugins );
+
+		await pickKazan();
+		address().value = 'ул Баумана, 1';
+		address().dispatchEvent( new Event( 'change', { bubbles: true } ) );
+		expect( placeOrder().disabled ).toBe( false );
+
+		city().value = '';
+		city().dispatchEvent( new Event( 'input', { bubbles: true } ) );
+		city().dispatchEvent( new Event( 'change', { bubbles: true } ) );
+		jest.runOnlyPendingTimers();
+
+		stores.forEach( ( store ) => {
+			expect( store.getValue( 'billing_city' ) ).toBe( '' );
+		} );
+		expect( placeOrder().disabled ).toBe( true );
 	} );
 } );

@@ -183,6 +183,28 @@
 	}
 
 	/**
+	 * Every registered store that declares the given field id, in creation order.
+	 *
+	 * The plural of {@see getStoreForField} for the one supported collision (issue #1187):
+	 * two carrier plugins asking the store-level location layer for the SAME native field
+	 * (`billing_city` on both). `checkout-field-classic.js` builds one store per plugin and
+	 * its gate evaluates every one of them, so a consumer that writes a shared field has to
+	 * reach ALL of its owners, not the newest — a value that lands in one store leaves the
+	 * other's required field empty and «Оформить заказ» disabled for good.
+	 *
+	 * Creation order rather than newest-first: a consumer that reads back picks the first
+	 * owner — the first of the entries `entriesForField()` in the classic adapter writes through.
+	 *
+	 * @param {string} fieldId
+	 * @returns {Object[]} the owning stores — empty when none declares this field.
+	 */
+	function getStoresForField( fieldId ) {
+		return _registry.filter( function( store ) {
+			return !! store.getField( fieldId );
+		} );
+	}
+
+	/**
 	 * Create a checkout field store bound to the given config.
 	 *
 	 * Every instance this factory builds is registered (see _registry above) the
@@ -383,7 +405,7 @@
 	// UMD-ish dual export
 	// -------------------------------------------------------------------------
 
-	var api = { createStore: createStore, getStoreForField: getStoreForField };
+	var api = { createStore: createStore, getStoreForField: getStoreForField, getStoresForField: getStoresForField };
 
 	// Browser global
 	if ( typeof window !== 'undefined' ) {
