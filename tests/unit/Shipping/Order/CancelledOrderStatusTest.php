@@ -82,7 +82,7 @@ final class CancelledOrderStatusTest extends TestCase {
 
 		Cancelled_Order_Status::apply( $order, Delivery_Status::IN_TRANSIT, Delivery_Status::CANCELLED, $this->provider() );
 
-		$this->assertFalse( Cancelled_Order_Status::is_applying(), 'the flag is only up while the status is being set' );
+		$this->assertFalse( Cancelled_Order_Status::is_applying( 55 ), 'the flag is only up while the status is being set' );
 	}
 
 	public function test_the_default_choice_cancels_the_order_once(): void {
@@ -194,7 +194,7 @@ final class CancelledOrderStatusTest extends TestCase {
 		$order = $this->order();
 		$order->shouldReceive( 'update_status' )->once()->andReturnUsing(
 			static function () use ( &$seen ) {
-				$seen = Cancelled_Order_Status::is_applying();
+				$seen = Cancelled_Order_Status::is_applying( 55 );
 
 				throw new \RuntimeException( 'a status hook blew up' );
 			}
@@ -205,7 +205,7 @@ final class CancelledOrderStatusTest extends TestCase {
 			$this->fail( 'the exception should propagate' );
 		} catch ( \RuntimeException $e ) {
 			$this->assertTrue( $seen );
-			$this->assertFalse( Cancelled_Order_Status::is_applying(), 'a failure must not leave the guard up for the rest of the request' );
+			$this->assertFalse( Cancelled_Order_Status::is_applying( 55 ), 'a failure must not leave the guard up for the rest of the request' );
 		}
 	}
 

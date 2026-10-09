@@ -23,8 +23,10 @@ event says who asked for the change.
 
 ❌ Set the status and hope the cancel gate (`Order_Actions::can_cancel()`) refuses it later.
 
-✅ `Cancelled_Order_Status::apply()` raises a request-local flag around `update_status()` (try/finally);
-`Order_Automation::handle_status_change()` returns early while `is_applying()`. And `apply()` returns
+✅ `Cancelled_Order_Status::apply()` raises a request-local guard keyed by ORDER ID around `update_status()`
+(try/finally, restoring what it found so calls nest); `Order_Automation::handle_status_change()` returns
+early only while `is_applying( $order_id )` for that order — a single global flag would also swallow the
+cancel of an unrelated order that a third-party callback cancels inside the same status change. And `apply()` returns
 when `Shipment_Cancellation::is_cancelled( $order )` — that cancellation is the merchant's, not news.
 
 ## Related

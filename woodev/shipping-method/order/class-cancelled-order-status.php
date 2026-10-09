@@ -40,8 +40,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Cancelled_Order_Stat
 	 *
 	 * **No cancel loop.** A shop-side cancel makes {@see Order_Automation} cancel the shipment at the carrier. The
 	 * status change made here is the carrier's news, not the merchant's decision, so while it is applied
-	 * {@see self::is_applying()} is true and {@see Order_Automation::handle_status_change()} stands aside —
-	 * nothing is queued for the carrier.
+	 * {@see self::is_applying()} is true for THAT order and {@see Order_Automation::handle_status_change()} stands
+	 * aside for it — nothing is queued for the carrier. The guard is per order (and nests): another order cancelled
+	 * inside the same status change still has its shipment cancelled.
 	 *
 	 * @since 2.0.2
 	 */
@@ -54,11 +55,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Cancelled_Order_Stat
 		public const PROTECTED_STATUSES = [ 'cancelled', 'completed', 'refunded', 'failed', 'trash' ];
 
 		/**
-		 * Whether this class is changing an order's status right now.
+		 * The orders this class is moving to the chosen status right now, by order id.
 		 *
-		 * @var bool
+		 * Scoped per order on purpose: a third-party callback that cancels ANOTHER order synchronously
+		 * inside the same status change is the merchant's side of the shop, and its shipment must still be
+		 * cancelled at the carrier.
+		 *
+		 * @var array<int,true>
 		 */
-		private static bool $applying = false;
+		private static array $applying = [];
 
 		/**
 		 * Starts listening. Idempotent: WordPress de-duplicates the same static callback.
@@ -71,14 +76,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Cancelled_Order_Stat
 		}
 
 		/**
-		 * Whether the status change in progress is the one this class makes for a carrier-cancelled shipment.
-		 * {@see Order_Automation::handle_status_change()} asks it so that change is not sent back to the carrier.
+		 * Whether this class is moving THIS order to the chosen status right now — the status change in progress
+		 * is the one it makes for a carrier-cancelled shipment. {@see Order_Automation::handle_status_change()}
+		 * asks it so that change is not sent back to the carrier. Any other order is not affected.
 		 *
 		 * @since 2.0.2
+		 * @param int $order_id The order.
 		 * @return bool
 		 */
-		public static function is_applying(): bool {
-			return self::$applying;
+		public static function is_applying( int $order_id ): bool {
+			return isset( self::$applying[ $order_id ] );
 		}
 
 		/**
@@ -113,7 +120,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Cancelled_Order_Stat
 				return;
 			}
 
-			self::$applying = true;
+			// Remember whether an outer call already guards this very order, so a nested call restores what it found.
+			$order_id = (int) $order->get_id();
+			$was      = self::is_applying( $order_id );
+
+			self::$applying[ $order_id ] = true;
 
 			try {
 				$order->update_status(
@@ -121,7 +132,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Cancelled_Order_Stat
 					__( 'Перевозчик сообщил, что отправление отменено.', 'woodev-plugin-framework' )
 				);
 			} finally {
-				self::$applying = false;
+				if ( ! $was ) {
+					unset( self::$applying[ $order_id ] );
+				}
 			}
 		}
 	}
