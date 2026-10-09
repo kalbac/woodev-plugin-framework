@@ -89,8 +89,8 @@ final class ExportSettingsTest extends TestCase {
 
 	// ----- the settings themselves -----
 
-	public function test_the_section_owns_the_three_v1_keys_in_order(): void {
-		$this->assertSame( [ 'auto_export_orders', 'export_statuses', 'status_delivered' ], $this->settings()->get_owned_setting_ids() );
+	public function test_the_section_owns_the_three_v1_keys_then_the_cancelled_status_in_order(): void {
+		$this->assertSame( [ 'auto_export_orders', 'export_statuses', 'status_delivered', 'status_cancelled' ], $this->settings()->get_owned_setting_ids() );
 	}
 
 	public function test_nothing_stored_means_auto_export_off_and_processing_picked(): void {
@@ -437,6 +437,47 @@ final class ExportSettingsTest extends TestCase {
 		$this->expectException( \Woodev_Plugin_Exception::class );
 
 		$this->settings()->update_value( 'status_delivered', 'wc-not-a-status' );
+	}
+
+	// ----- «Статус отменённого заказа» (#1203) -----
+
+	private const CANCELLED_OPTION = 'woodev_cdek_shipping_export_status_cancelled';
+
+	public function test_the_cancelled_status_defaults_to_cancelled(): void {
+		$settings = $this->settings();
+
+		$this->assertSame( 'cancelled', $settings->get_cancelled_status() );
+		$this->assertSame( 'wc-cancelled', $settings->get_setting( 'status_cancelled' )->get_default() );
+		$this->assertSame( 'Статус отменённого заказа', $settings->get_setting( 'status_cancelled' )->get_name() );
+	}
+
+	public function test_the_cancelled_status_offers_dont_change_and_every_woocommerce_status(): void {
+		$options = $this->settings()->get_setting( 'status_cancelled' )->get_options();
+
+		$this->assertSame( 'Не менять', $options['none'] );
+		$this->assertArrayHasKey( 'wc-cancelled', $options );
+		$this->assertArrayHasKey( 'wc-on-hold', $options );
+	}
+
+	public function test_dont_change_means_no_cancelled_status(): void {
+		$this->settings()->update_value( 'status_cancelled', 'none' );
+
+		$this->assertSame( 'none', $this->options[ self::CANCELLED_OPTION ] );
+		$this->assertNull( $this->settings()->get_cancelled_status() );
+		$this->assertSame( 'completed', $this->settings()->get_delivered_status(), 'the delivered status is a separate choice' );
+	}
+
+	public function test_a_chosen_cancelled_status_is_stored_with_the_prefix_and_read_without_it(): void {
+		$this->settings()->update_value( 'status_cancelled', 'wc-on-hold' );
+
+		$this->assertSame( 'wc-on-hold', $this->options[ self::CANCELLED_OPTION ] );
+		$this->assertSame( 'on-hold', $this->settings()->get_cancelled_status() );
+	}
+
+	public function test_a_status_outside_the_list_is_refused_for_the_cancelled_status(): void {
+		$this->expectException( \Woodev_Plugin_Exception::class );
+
+		$this->settings()->update_value( 'status_cancelled', 'wc-not-a-status' );
 	}
 
 	/**

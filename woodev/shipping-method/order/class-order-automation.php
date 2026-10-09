@@ -98,6 +98,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Order_Automation' ) 
 		 */
 		public function handle_status_change( $order_id, $from = '', $to = '', $order = null ): void {
 
+			// The carrier itself reported the shipment cancelled and the order follows it (#1203): telling the
+			// carrier to cancel what it just cancelled would loop, and a status picked by the merchant's settings
+			// is no reason to export either.
+			if ( Cancelled_Order_Status::is_applying() ) {
+				return;
+			}
+
 			$order = $order instanceof \WC_Order ? $order : wc_get_order( absint( $order_id ) );
 
 			if ( ! $order instanceof \WC_Order ) {

@@ -53,6 +53,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Export_Settings' 
 		/** @var string the stored value of «Не менять» — v1's own spelling (its «Не использовать»), so a v1 value is carried verbatim */
 		public const STATUS_DELIVERED_NONE = 'none';
 
+		/**
+		 * @var string the setting id of the status an order gets once the carrier cancelled its shipment (#1203).
+		 *             Stored as `woodev_{plugin id}_export_status_cancelled`: `wc-cancelled` (the default), another
+		 *             `wc-…` status, or {@see self::STATUS_CANCELLED_NONE}. New in v2 — v1 had no such option.
+		 */
+		public const SETTING_STATUS_CANCELLED = 'status_cancelled';
+
+		/** @var string the stored value of «Не менять» for the cancelled status — the same spelling as {@see self::STATUS_DELIVERED_NONE} */
+		public const STATUS_CANCELLED_NONE = 'none';
+
 		/** @var string the suffix of the handler id (the option namespace) after the plugin id */
 		private const HANDLER_ID_SUFFIX = '_export';
 
@@ -95,7 +105,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Export_Settings' 
 		 * @return string[]
 		 */
 		public function get_owned_setting_ids(): array {
-			return [ Order_Automation::SETTING_AUTO_EXPORT, Order_Automation::SETTING_EXPORT_STATUSES, self::SETTING_STATUS_DELIVERED ];
+			return [ Order_Automation::SETTING_AUTO_EXPORT, Order_Automation::SETTING_EXPORT_STATUSES, self::SETTING_STATUS_DELIVERED, self::SETTING_STATUS_CANCELLED ];
 		}
 
 		/**
@@ -106,10 +116,32 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Export_Settings' 
 		 * @return string|null a status slug without the `wc-` prefix; null when the merchant chose to leave the status alone.
 		 */
 		public function get_delivered_status(): ?string {
+			return $this->get_chosen_status( self::SETTING_STATUS_DELIVERED, self::STATUS_DELIVERED_NONE );
+		}
 
-			$value = $this->get_value( self::SETTING_STATUS_DELIVERED );
+		/**
+		 * The WooCommerce status an order is moved to once the carrier cancelled its shipment, or null for «Не менять».
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string|null a status slug without the `wc-` prefix; null when the merchant chose to leave the status alone.
+		 */
+		public function get_cancelled_status(): ?string {
+			return $this->get_chosen_status( self::SETTING_STATUS_CANCELLED, self::STATUS_CANCELLED_NONE );
+		}
 
-			if ( ! is_string( $value ) || '' === $value || self::STATUS_DELIVERED_NONE === $value ) {
+		/**
+		 * One of the «status for a delivery outcome» selects, as a bare slug.
+		 *
+		 * @param string $setting_id the select's setting id.
+		 * @param string $none_value the stored value of its «Не менять» choice.
+		 * @return string|null null for «Не менять», an empty value or a bare `wc-`.
+		 */
+		private function get_chosen_status( string $setting_id, string $none_value ): ?string {
+
+			$value = $this->get_value( $setting_id );
+
+			if ( ! is_string( $value ) || '' === $value || $none_value === $value ) {
 				return null;
 			}
 
@@ -207,7 +239,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Export_Settings' 
 		}
 
 		/**
-		 * Registers the three settings.
+		 * Registers the four settings.
 		 *
 		 * @since 2.0.2
 		 *
@@ -261,6 +293,26 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Export_Settings' 
 				\Woodev_Control::TYPE_SELECT,
 				[
 					'tooltip' => __( 'Этот статус получит заказ один раз — когда перевозчик сообщит, что посылка вручена покупателю. Отменённый, возвращённый или неоплаченный заказ не меняется. «Не менять» — статус заказа остаётся прежним.', 'woodev-plugin-framework' ),
+				]
+			);
+
+			$this->register_setting(
+				self::SETTING_STATUS_CANCELLED,
+				\Woodev_Setting::TYPE_STRING,
+				[
+					'name'    => __( 'Статус отменённого заказа', 'woodev-plugin-framework' ),
+					'options' => array_merge(
+						[ self::STATUS_CANCELLED_NONE => __( 'Не менять', 'woodev-plugin-framework' ) ],
+						wc_get_order_statuses()
+					),
+					'default' => 'wc-cancelled',
+				]
+			);
+			$this->register_control(
+				self::SETTING_STATUS_CANCELLED,
+				\Woodev_Control::TYPE_SELECT,
+				[
+					'tooltip' => __( 'Этот статус получит заказ, когда перевозчик сообщит, что отправление отменено. Заказ, который уже отменён, возвращён, выполнен или не оплачен, не меняется. Отмена заявки в самом магазине здесь ни при чём. «Не менять» — статус заказа остаётся прежним.', 'woodev-plugin-framework' ),
 				]
 			);
 		}
