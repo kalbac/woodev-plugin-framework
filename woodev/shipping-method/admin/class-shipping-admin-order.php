@@ -333,7 +333,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 
 			// A carrier document is NOT an admin-post action: the orders page fetches it from the documents REST route
 			// and so does this metabox (`order-metabox-actions.js`) — one contract, one gate (`Document_Controller`).
-			$documents_url_base = esc_url_raw( rest_url( \Woodev_REST_V1_Registrar::ROUTE_NAMESPACE . '/shipping/orders/' . $order_id . '/documents/' ) );
+			// The ROUTE, not a URL: `rest_url()` is called per document with the whole path, because on plain permalinks it
+			// already holds `?rest_route=` and anything appended after it (a `?format=json`) lands inside the route.
+			$documents_route_base = \Woodev_REST_V1_Registrar::ROUTE_NAMESPACE . '/shipping/orders/' . $order_id . '/documents/';
 			$rest_nonce         = wp_create_nonce( 'wp_rest' );
 
 			include __DIR__ . '/views/html-admin-order-metabox.php';

@@ -236,7 +236,13 @@
 	 */
 	function openFieldsDialog( button, fields ) {
 		var labels = parseJson( button.getAttribute( 'data-labels' ) ) || {};
-		var title = ( button.textContent || '' ).trim();
+		// An icon-only button has no text: the label travels in `data-label` (then `aria-label`), text is the last resort.
+		var title = (
+			button.getAttribute( 'data-label' ) ||
+			button.getAttribute( 'aria-label' ) ||
+			button.textContent ||
+			''
+		).trim();
 
 		if ( button._woodevFieldsModal ) {
 			button._woodevFieldsModal.destroy();

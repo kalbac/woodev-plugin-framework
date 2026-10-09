@@ -31,7 +31,7 @@
  * @var string                                                      $admin_post_action forward-only admin-post action the buttons post to
  * @var string                                                      $nonce_action      nonce action protecting the buttons' post
  * @var int                                                         $order_id          the order being edited
- * @var string                                                      $documents_url_base REST base of the order's carrier documents; a document action appends its id
+ * @var string                                                      $documents_route_base REST route (no host) of the order's carrier documents; a document action appends its id
  * @var string                                                      $rest_nonce        `wp_rest` nonce a document download sends
  *
  * @since 1.5.0
@@ -125,10 +125,11 @@ defined( 'ABSPATH' ) || exit;
 					type="button"
 					class="button woodev-shipping-order-action<?php echo ! empty( $action['destructive'] ) ? ' woodev-shipping-order-action--destructive' : ''; ?>"
 					title="<?php echo esc_attr( $tooltip ); ?>"
+					data-label="<?php echo esc_attr( (string) $action['label'] ); ?>"
 					<?php echo $icon_only ? 'aria-label="' . esc_attr( (string) $action['label'] ) . '"' : ''; ?>
 					data-woodev-order-action="<?php echo esc_attr( $action['action'] ); ?>"
 					<?php if ( $is_document ) : ?>
-						data-document-url="<?php echo esc_url( $documents_url_base . rawurlencode( (string) $action['action'] ) . '?format=json' ); ?>"
+						data-document-url="<?php echo esc_url( add_query_arg( 'format', 'json', rest_url( $documents_route_base . rawurlencode( (string) $action['action'] ) ) ) ); ?>"
 						data-rest-nonce="<?php echo esc_attr( $rest_nonce ); ?>"
 					<?php else : ?>
 						data-post-url="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"

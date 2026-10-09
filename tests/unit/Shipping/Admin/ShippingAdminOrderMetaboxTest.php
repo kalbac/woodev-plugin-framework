@@ -92,6 +92,9 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			Functions\when( 'rest_url' )->alias( static function ( string $path = '' ): string {
 				return 'https://example.test/wp-json/' . $path;
 			} );
+			Functions\when( 'add_query_arg' )->alias( static function ( string $key, string $value, string $url ): string {
+				return $url . ( false === strpos( $url, '?' ) ? '?' : '&' ) . rawurlencode( $key ) . '=' . rawurlencode( $value );
+			} );
 			Functions\when( 'admin_url' )->alias( static function ( string $path = '' ): string {
 				return 'https://example.test/wp-admin/' . $path;
 			} );
@@ -1186,6 +1189,31 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$this->assertSame( 1, preg_match( '/<button[^>]*data-woodev-order-action="update"[^>]*>/s', $html, $update ) );
 			$this->assertStringContainsString( 'data-post-url', $update[0], 'a carrier action still posts' );
 			$this->assertStringNotContainsString( 'data-document-url', $update[0] );
+		}
+
+		/** On plain permalinks `rest_url()` already holds `?rest_route=`; `format` must be its own parameter. */
+		public function test_a_document_url_keeps_format_out_of_the_rest_route_on_plain_permalinks(): void {
+			Functions\when( 'rest_url' )->alias( static function ( string $path = '' ): string {
+				return 'https://example.test/index.php?rest_route=/' . $path;
+			} );
+
+			$html = $this->render_exported( [], true );
+
+			$this->assertSame( 1, preg_match( '/<button[^>]*data-woodev-order-action="waybill"[^>]*data-document-url="([^"]+)"/s', $html, $m ) );
+
+			$query = [];
+			parse_str( (string) parse_url( html_entity_decode( $m[1] ), PHP_URL_QUERY ), $query );
+
+			$this->assertSame( '/woodev/v1/shipping/orders/123/documents/waybill', $query['rest_route'] );
+			$this->assertSame( 'json', $query['format'] );
+		}
+
+		public function test_an_action_button_always_carries_its_label_for_the_field_dialog(): void {
+			$extra = [ [ 'action' => 'call_courier', 'label' => 'Вызвать курьера', 'title' => '', 'destructive' => false, 'fields' => [ [ 'id' => 'day', 'type' => 'date', 'label' => 'День' ] ] ] ];
+			$html  = $this->render_exported( $extra, false );
+
+			$this->assertSame( 1, preg_match( '/<button[^>]*data-woodev-order-action="call_courier"[^>]*>/s', $html, $m ) );
+			$this->assertStringContainsString( 'data-label="Вызвать курьера"', $m[0] );
 		}
 
 		public function test_the_actions_are_one_group_in_one_row_and_the_group_carries_the_document_sentences(): void {

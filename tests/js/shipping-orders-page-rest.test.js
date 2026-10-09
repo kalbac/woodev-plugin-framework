@@ -101,6 +101,29 @@ describe( 'carrier document downloads (#1134)', () => {
 		expect( call.parse ).toBe( false );
 	} );
 
+	test( 'on PLAIN permalinks (restRoot already holds ?rest_route=) format=json is a separate parameter, not part of the route', async () => {
+		window.woodevShippingOrders = { restRoot: 'https://example.test/index.php?rest_route=/woodev/v1/shipping/orders', nonce: 'abc' };
+		apiFetch.mockResolvedValue( response( { json: { status: 'url', url: 'https://carrier.test/x.pdf' } } ) );
+
+		await fetchOrderDocument( 42, 'waybill' );
+
+		const url = new URL( apiFetch.mock.calls[ 0 ][ 0 ].url );
+
+		expect( url.searchParams.get( 'rest_route' ) ).toBe( '/woodev/v1/shipping/orders/42/documents/waybill' );
+		expect( url.searchParams.get( 'format' ) ).toBe( 'json' );
+	} );
+
+	test( 'the orders list on plain permalinks keeps its filters out of the rest_route value too', async () => {
+		window.woodevShippingOrders = { restRoot: 'https://example.test/index.php?rest_route=/woodev/v1/shipping/orders', nonce: 'abc' };
+
+		await fetchOrders( { carrier: 'cdek', page: 2 } );
+
+		const url = new URL( calledUrl() );
+
+		expect( url.searchParams.get( 'rest_route' ) ).toBe( '/woodev/v1/shipping/orders' );
+		expect( url.searchParams.get( 'page' ) ).toBe( '2' );
+	} );
+
 	test( 'a PDF answer becomes a file with the server\'s filename', async () => {
 		const blob = new Blob( [ '%PDF-' ], { type: 'application/pdf' } );
 

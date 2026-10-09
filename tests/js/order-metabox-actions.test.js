@@ -231,6 +231,36 @@ describe( 'order-metabox-actions — an action with input fields', () => {
 		expect( dialog().querySelector( '[name="payload[comment]"]' ).maxLength ).toBe( 200 );
 	} );
 
+	it( 'an ICON-ONLY button (no text) still titles the dialog and labels its submit from data-label', () => {
+		const button = renderWithFields();
+
+		button.textContent = '';
+		button.innerHTML = '<span class="dashicons dashicons-calendar-alt" aria-hidden="true"></span>';
+		button.setAttribute( 'aria-label', 'Вызвать курьера' );
+		button.setAttribute( 'data-label', 'Вызвать курьера' );
+		button.click();
+
+		expect( dialog().querySelector( '.woodev-modal__title' ).textContent ).toBe( 'Вызвать курьера' );
+		expect( dialog().querySelector( 'button[type="submit"]' ).textContent ).toBe( 'Вызвать курьера' );
+	} );
+
+	it( 'falls back to aria-label when data-label is absent', () => {
+		const button = renderWithFields();
+
+		button.textContent = '';
+		button.setAttribute( 'aria-label', 'Вызвать курьера' );
+		button.click();
+
+		expect( dialog().querySelector( '.woodev-modal__title' ).textContent ).toBe( 'Вызвать курьера' );
+		expect( dialog().querySelector( 'button[type="submit"]' ).textContent ).toBe( 'Вызвать курьера' );
+	} );
+
+	it( 'a TEXT button keeps titling the dialog from its visible text', () => {
+		renderWithFields().click();
+
+		expect( dialog().querySelector( 'button[type="submit"]' ).textContent ).toBe( 'Вызвать курьера' );
+	} );
+
 	it( 'puts the declared bounds on the inputs', () => {
 		renderWithFields().click();
 

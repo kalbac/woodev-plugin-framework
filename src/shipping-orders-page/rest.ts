@@ -343,6 +343,16 @@ async function documentError( error: unknown ): Promise<DocumentError> {
 }
 
 /**
+ * Appends a query string to a REST URL that may already hold one.
+ *
+ * On plain permalinks `rest_url()` is `…/index.php?rest_route=/woodev/v1/…`; a second `?` would end up INSIDE the
+ * `rest_route` value and the route would not match, so the separator is `&` when a query is already there.
+ */
+function withQuery( url: string, query: string ): string {
+	return `${ url }${ url.includes( '?' ) ? '&' : '?' }${ query }`;
+}
+
+/**
  * Fetches one carrier document for an order (#1134).
  *
  * Same `bootstrap()`/`apiFetch` wiring as every other call here — the nonce travels in the
@@ -359,7 +369,7 @@ export async function fetchOrderDocument( orderId: number, type: string ): Promi
 
 	try {
 		response = ( await apiFetch( {
-			url: `${ restRoot.replace( /\/+$/, '' ) }/${ orderId }/documents/${ encodeURIComponent( type ) }?format=json`,
+			url: withQuery( `${ restRoot.replace( /\/+$/, '' ) }/${ orderId }/documents/${ encodeURIComponent( type ) }`, 'format=json' ),
 			method: 'GET',
 			headers: { 'X-WP-Nonce': nonce },
 			parse: false,
@@ -584,7 +594,7 @@ export function fetchOrders( {
 	}
 
 	return apiFetch<OrdersResponse>( {
-		url: `${ restRoot }?${ params.toString() }`,
+		url: withQuery( restRoot, params.toString() ),
 		method: 'GET',
 		headers: { 'X-WP-Nonce': nonce },
 	} );
