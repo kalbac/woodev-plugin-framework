@@ -40,6 +40,20 @@
  * fields yet — keeping this module usable in isolation too (e.g. under test, or for a plugin
  * whose location fields carry no OTHER §8 semantics of their own).
  *
+ * SHARED CASCADE (issue #1187): configs that declare at least one native field id in common
+ * are folded into ONE entry before anything is built ({@see mergeOverlappingConfigs}) — the
+ * chain is the union of their fields, the records, widgets and `/select` queue are one. Two
+ * carrier plugins on one site (#1179) both ask the store-level location layer for the same
+ * `billing_city`; carrier A may also declare the address, carrier B may not. One entry per
+ * CONFIG gave each its own records and its own widget on the same input, and the real widget
+ * keeps a single instance per input (`location-typeahead.js`'s own attach detaches the
+ * previous one) — so the pick landed in whichever entry attached last, the other entry's
+ * records never learned the settlement, and when that other entry was the one owning the
+ * address, {@see isAddressLocked} kept the street disabled for good (measured: full carrier
+ * registered first, partial second — `tests/js/location-cascade-shared.test.js`). Two
+ * declarations with NO field in common (a billing-only and a shipping-only one) stay two
+ * entries, as they always were.
+ *
  * CHAIN ASSEMBLY IS LEVEL-DRIVEN, NOT `depends_on`-DRIVEN: unlike a generic §8 options/suggest
  * cascade (which reads `depends_on` off each field descriptor), a location-kind field carries
  * no `depends_on` at all (see `class-field.php::source_location()` and
@@ -1208,16 +1222,135 @@
 	 */
 	function resolveStore( config, fieldIds ) {
 		if ( 'function' === typeof factory.getStoreForField ) {
+			// Issue #1187: a merged entry (see the file docblock's SHARED CASCADE section) spans
+			// fields that several plugins' stores declare between them. `getStoreForField()`
+			// answers per field, newest registration first; the entry takes the store that owns
+			// the MOST of its fields — the carrier whose declaration covers the chain — so the
+			// `updated_checkout` restore reads back from the store `checkout-field-classic.js`
+			// serves for the same ids. A single-config entry resolves exactly as before.
+			var candidates = [];
+			var best = null;
+
 			for ( var i = 0; i < fieldIds.length; i++ ) {
 				var existing = factory.getStoreForField( fieldIds[ i ] );
 
-				if ( existing ) {
-					return existing;
+				if ( ! existing ) {
+					continue;
 				}
+
+				var candidate = null;
+
+				for ( var j = 0; j < candidates.length; j++ ) {
+					if ( candidates[ j ].store === existing ) {
+						candidate = candidates[ j ];
+						break;
+					}
+				}
+
+				if ( ! candidate ) {
+					candidate = { store: existing, owned: 0 };
+					candidates.push( candidate );
+				}
+
+				candidate.owned += 1;
+
+				if ( ! best || candidate.owned > best.owned ) {
+					best = candidate;
+				}
+			}
+
+			if ( best ) {
+				return best.store;
 			}
 		}
 
 		return factory.createStore( config );
+	}
+
+	/**
+	 * Copies every own property of `source` onto a new object (ES5 — no `Object.assign()`,
+	 * matching {@see withAdoptedKey}).
+	 *
+	 * @param {Object} source
+	 * @returns {Object}
+	 */
+	function shallowCopy( source ) {
+		var copy = {};
+		var prop;
+
+		for ( prop in source ) {
+			if ( Object.prototype.hasOwnProperty.call( source, prop ) ) {
+				copy[ prop ] = source[ prop ];
+			}
+		}
+
+		return copy;
+	}
+
+	/**
+	 * Folds configs that declare at least one native field id in common into ONE config each
+	 * (issue #1187) — see the file docblock's SHARED CASCADE section for why one cascade per
+	 * set of fields is the only shape that can work.
+	 *
+	 * The merged config is the FIRST member's config with `fields` replaced by the union of
+	 * every member's fields. A field id two members both declare keeps the first member's
+	 * descriptor: the server-side guard ({@see Checkout_Handler::guard_native_field_conflicts()})
+	 * already reports two different levels on one id as a developer error, so for a
+	 * well-formed site the descriptors agree and the choice is immaterial. The `location`
+	 * block is taken from the first member too — it is store-level by construction
+	 * (`Checkout_Config::build_location_block()`: fleet-wide endpoints, one nonce, one provider
+	 * chain, one customer record), identical across plugins.
+	 *
+	 * Overlap is transitive: A ∩ B and B ∩ C non-empty put all three in one group, in
+	 * registration order. Configs with no field in common stay separate — a billing-only and
+	 * a shipping-only declaration are two chains, exactly as before.
+	 *
+	 * @param {Object[]} configs Every discovered config global, in `window` key order.
+	 * @returns {Object[]} One config per group, in order of each group's first member.
+	 */
+	function mergeOverlappingConfigs( configs ) {
+		var groups = [];
+
+		configs.forEach( function( config ) {
+			var ids = Object.keys( config.fields );
+			var overlapping = groups.filter( function( group ) {
+				return ids.some( function( id ) {
+					return Object.prototype.hasOwnProperty.call( group.fields, id );
+				} );
+			} );
+
+			if ( ! overlapping.length ) {
+				groups.push( { base: config, fields: shallowCopy( config.fields ) } );
+				return;
+			}
+
+			var target = overlapping[ 0 ];
+
+			// This config bridges several earlier groups: fold the later ones into the first.
+			overlapping.slice( 1 ).forEach( function( group ) {
+				Object.keys( group.fields ).forEach( function( id ) {
+					if ( ! Object.prototype.hasOwnProperty.call( target.fields, id ) ) {
+						target.fields[ id ] = group.fields[ id ];
+					}
+				} );
+
+				groups.splice( groups.indexOf( group ), 1 );
+			} );
+
+			ids.forEach( function( id ) {
+				if ( ! Object.prototype.hasOwnProperty.call( target.fields, id ) ) {
+					target.fields[ id ] = config.fields[ id ];
+				}
+			} );
+		} );
+
+		return groups.map( function( group ) {
+			var merged = shallowCopy( group.base );
+
+			merged.fields = group.fields;
+
+			return merged;
+		} );
 	}
 
 	/**
@@ -1297,7 +1430,10 @@
 		return window[ key ];
 	} ).filter( function( config ) {
 		return config && config.fields && config.location;
-	} ).map( buildEntry );
+	} );
+
+	// Issue #1187: one entry per set of native fields, not per plugin config.
+	entries = mergeOverlappingConfigs( entries ).map( buildEntry );
 
 	if ( ! entries.length ) {
 		return;
