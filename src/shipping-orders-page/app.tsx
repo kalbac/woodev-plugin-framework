@@ -53,6 +53,7 @@ import { store as noticesStore } from '@wordpress/notices';
 import {
 	fetchOrderPreview,
 	fetchOrders,
+	fetchToolbarActions,
 	fetchSyncStatus,
 	fetchBulkDocument,
 	fetchOrderDocument,
@@ -62,6 +63,7 @@ import {
 	performOrderAction,
 } from './rest';
 import { ActionInputModal } from './action-input-modal';
+import { ToolbarDialog } from './toolbar-dialog';
 import { isPollCancelled, pollUntilReady } from './document-poll';
 import type {
 	BulkActionResult,
@@ -74,11 +76,13 @@ import type {
 	OrderRowCarrier,
 	OrderRowCustomer,
 	OrderRowDeliveryStatus,
+	OrderRowFlag,
 	OrderRowPayment,
 	OrderRowTracking,
 	OrdersScopeCounts,
 	SkippedOrder,
 	SyncStatusResponse,
+	ToolbarActionButton,
 } from './rest';
 import {
 	DELIVERY_STATUS_LABELS,
@@ -127,6 +131,12 @@ import type { WcFilterPickerConfig, WcTableHeader, WcTableRowCell } from './wc-g
 
 /** Rows per page — increment 1's REST default. */
 const DEFAULT_PER_PAGE = 20;
+
+/**
+ * The id of the «Документ формируется…» snackbar. Given a fixed id so the page can TAKE IT DOWN the moment the wait
+ * ends — it used to stay on screen beside «Документ готов» (rig, 09.10.2026).
+ */
+const DOCUMENT_PENDING_NOTICE = 'woodev-document-pending';
 
 /**
  * The date-range and `AdvancedFilters` query keys — every filter-row key that
@@ -313,17 +323,93 @@ function PaymentCell( { payment }: { payment: OrderRowPayment } ) {
  * an em dash otherwise — the dash is this component's own display choice,
  * never something the row payload carries.
  */
-function TrackingCell( { tracking }: { tracking: OrderRowTracking } ) {
-	if ( ! hasTrackingNumber( tracking ) ) {
-		return <span className="woodev-orders-cell__meta">—</span>;
-	}
-
-	return tracking.url ? (
+function TrackingCell( { tracking, flags = [] }: { tracking: OrderRowTracking; flags?: OrderRowFlag[] } ) {
+	const number = ! hasTrackingNumber( tracking ) ? (
+		<span className="woodev-orders-cell__meta">—</span>
+	) : tracking.url ? (
 		<a href={ tracking.url } target="_blank" rel="noopener noreferrer">
 			{ tracking.number }
 		</a>
 	) : (
 		<span>{ tracking.number }</span>
+	);
+
+	if ( 0 === flags.length ) {
+		return number;
+	}
+
+	// An icon flag sits on the number's own line; the rest hang below it as badges.
+	const iconFlags = flags.filter( ( flag ) => flag.icon );
+	const badgeFlags = flags.filter( ( flag ) => ! flag.icon );
+
+	return (
+		<>
+			{ iconFlags.length > 0 ? (
+				<span className="woodev-orders-tracking-line">
+					{ number }
+					{ iconFlags.map( ( flag ) => (
+						<FlagIcon key={ flag.label } flag={ flag } />
+					) ) }
+				</span>
+			) : (
+				number
+			) }
+			{ badgeFlags.length > 0 && <RowFlags flags={ badgeFlags } /> }
+		</>
+	);
+}
+
+/**
+ * The triangle-with-«!» glyph of `@wordpress/icons` (`error`), inlined: the package is only a transitive dependency
+ * here, and one path is not worth declaring it.
+ */
+const WARNING_TRIANGLE_PATH =
+	'M12.218 5.377a.25.25 0 0 0-.436 0l-7.29 12.96a.25.25 0 0 0 .218.373h14.58a.25.25 0 0 0 .218-.372l-7.29-12.96Zm-1.743-.735c.669-1.19 2.381-1.19 3.05 0l7.29 12.96a1.75 1.75 0 0 1-1.525 2.608H4.71a1.75 1.75 0 0 1-1.525-2.608l7.29-12.96ZM12.75 17.46h-1.5v-1.5h1.5v1.5Zm-1.5-3h1.5v-5h-1.5v5Z';
+
+/**
+ * A flag that declares an `icon` (s164): just the glyph in its tone's colour, on the tracking number's line. The
+ * label is its accessible name, the tooltip is `title` when the carrier gave one, else the label. The `warning` icon
+ * is a triangle with «!» (SVG); any other slug is the Dashicon of that name.
+ */
+export function FlagIcon( { flag }: { flag: OrderRowFlag } ) {
+	const triangle = 'warning' === flag.icon;
+
+	return (
+		<span
+			className={
+				`woodev-orders-flag-icon woodev-orders-flag-icon--${ flag.tone } ` +
+				( triangle ? 'woodev-orders-flag-icon--svg' : `dashicons dashicons-${ flag.icon }` )
+			}
+			role="img"
+			aria-label={ flag.label }
+			title={ flag.title || flag.label }
+		>
+			{ triangle && (
+				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+					<path fillRule="evenodd" clipRule="evenodd" d={ WARNING_TRIANGLE_PATH } />
+				</svg>
+			) }
+		</span>
+	);
+}
+
+/**
+ * The badges a carrier plugin hangs under the tracking number (s164, `woodev_shipping_order_row_flags`) — small,
+ * one per line, in the delivery badge's own tones. The server sends them sanitised and capped; `title` is a tooltip.
+ */
+export function RowFlags( { flags }: { flags: OrderRowFlag[] } ) {
+	return (
+		<ul className="woodev-orders-flags">
+			{ flags.map( ( flag ) => (
+				<li
+					key={ flag.label }
+					className={ `woodev-orders-flag woodev-orders-flag--${ flag.tone }` }
+					title={ flag.title || undefined }
+				>
+					{ flag.label }
+				</li>
+			) ) }
+		</ul>
 	);
 }
 
@@ -531,6 +617,11 @@ function ActionsCell( {
  */
 function confirmQuestion( action: OrderRowAction, row: ActionableOrder ): string {
 	const carrier = row.carrier ? row.carrier.label : '';
+
+	// s164: a destructive action that worded its own question (the carrier knows what cancelling costs) asks that one.
+	if ( action.confirm ) {
+		return action.confirm;
+	}
 
 	if ( 'cancel' === action.action ) {
 		return carrier
@@ -1222,7 +1313,7 @@ function buildRow( row: OrderRow, actions: OrderActionsCallbacks ): WcTableRowCe
 		{ display: <CustomerCell customer={ row.customer } />, value: row.customer.name },
 		{ display: <ShippingCell row={ row } />, value: row.shipping.destination_text },
 		{ display: <PaymentCell payment={ row.payment } />, value: row.payment.formatted_total },
-		{ display: <TrackingCell tracking={ row.tracking } />, value: row.tracking.number || '' },
+		{ display: <TrackingCell tracking={ row.tracking } flags={ row.flags } />, value: row.tracking.number || '' },
 		{
 			display: (
 				<ActionsCell
@@ -1585,6 +1676,23 @@ export default function OrdersPage() {
 	 * must each refetch.
 	 */
 	const [ reloadKey, setReloadKey ] = useState( 0 );
+	/**
+	 * s164 — the carrier-declared buttons above the table (`GET /shipping/orders/toolbar-actions`) and the one whose
+	 * dialog is open. Fetched on mount and again whenever something may have changed what they count: a row action,
+	 * a bulk action, the wizard, or the dialog itself. A failed fetch leaves the buttons as they were — a missing
+	 * button is better than an error banner over a table that works.
+	 */
+	const [ toolbarActions, setToolbarActions ] = useState<ToolbarActionButton[]>( [] );
+	const [ toolbarDialog, setToolbarDialog ] = useState<ToolbarActionButton | null>( null );
+	const refreshToolbarActions = () => {
+		fetchToolbarActions()
+			.then( ( res ) => setToolbarActions( ( res && res.actions ) || [] ) )
+			.catch( () => undefined );
+	};
+	useEffect( () => {
+		refreshToolbarActions();
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [ reloadKey ] );
 	/** #875 — which order's preview `Modal` is open, or `null` for closed. */
 	const [ previewOrderId, setPreviewOrderId ] = useState<number | null>( null );
 	/**
@@ -1967,7 +2075,7 @@ export default function OrdersPage() {
 				const text = __( 'Документ формируется…', 'woodev-plugin-framework' );
 
 				setActionNotice( { status: 'info', text } );
-				dispatch( noticesStore ).createInfoNotice( text, { type: 'snackbar' } );
+				dispatch( noticesStore ).createInfoNotice( text, { type: 'snackbar', id: DOCUMENT_PENDING_NOTICE } );
 			},
 		} )
 			.then( ( doc ) => {
@@ -1993,6 +2101,13 @@ export default function OrdersPage() {
 			} )
 			.finally( () => {
 				documentPolls.current.delete( controller );
+
+				// The wait is over, however it ended: the «формируется» toast has nothing left to say — once the
+				// LAST wait is over. The notice is shared by every download, and one finishing must not take it
+				// down while another is still polling.
+				if ( 0 === documentPolls.current.size ) {
+					dispatch( noticesStore ).removeNotice( DOCUMENT_PENDING_NOTICE );
+				}
 			} );
 	};
 
@@ -2095,6 +2210,8 @@ export default function OrdersPage() {
 			.then( ( res ) => {
 				// #1180: the dialog of an action with fields closes with the action — THIS action's dialog only.
 				closeActionInputOf( row, action );
+				// A single order's action may change what a toolbar button counts («Нужно вызвать курьера»).
+				refreshToolbarActions();
 				setActionNotice( { status: 'success', text: res.message } );
 				dispatch( noticesStore ).createSuccessNotice( res.message, { type: 'snackbar' } );
 
@@ -2204,6 +2321,8 @@ export default function OrdersPage() {
 				}
 
 				const changedIds = new Set( res.rows.map( ( r ) => r.id ) );
+
+				refreshToolbarActions();
 
 				// Same reason as the single-action path: a cached preview of an order this
 				// bulk run changed is now stale, and the cache would serve it instantly.
@@ -2535,6 +2654,20 @@ export default function OrdersPage() {
 				<Button variant="primary" onClick={ () => setWizard( { orderId: null } ) }>
 					{ __( 'Создать заказ', 'woodev-plugin-framework' ) }
 				</Button>
+				{ /* s164 — what a carrier declares as a page-level action («Вызвать курьера»): the server decides whether it shows. */ }
+				{ toolbarActions.map( ( button ) => (
+					<Button
+						key={ button.id }
+						variant="secondary"
+						className="woodev-orders__toolbar-button"
+						icon={ <span className={ `dashicons dashicons-${ button.icon || 'controls-play' }` } aria-hidden="true" /> }
+						title={ button.title || undefined }
+						onClick={ () => setToolbarDialog( button ) }
+					>
+						{ button.label }
+						{ null !== button.count && <span className="woodev-orders__toolbar-count">{ button.count }</span> }
+					</Button>
+				) ) }
 			</div>
 			{ /*
 			 * #837 defect 5: a rejected query parameter used to return this
@@ -2771,6 +2904,13 @@ export default function OrdersPage() {
 					busy={ actionRowStates[ actionInput.row.id ]?.pendingAction === actionInput.action.action }
 					onSubmit={ ( payload ) => performAction( actionInput.row, actionInput.action, payload ) }
 					onClose={ () => setActionInput( null ) }
+				/>
+			) }
+			{ null !== toolbarDialog && (
+				<ToolbarDialog
+					button={ toolbarDialog }
+					onClose={ () => setToolbarDialog( null ) }
+					onChanged={ () => setReloadKey( ( key ) => key + 1 ) }
 				/>
 			) }
 			{ null !== wizard && (

@@ -224,6 +224,11 @@
 
 		wrap.appendChild( control );
 
+		// s164: a field's `help` — one plain sentence under the input (textContent, never markup).
+		if ( field.help ) {
+			wrap.appendChild( el( 'p', 'woodev-action-form__help', field.help ) );
+		}
+
 		return { wrap: wrap, checks: checks };
 	}
 

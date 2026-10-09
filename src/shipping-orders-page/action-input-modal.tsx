@@ -22,6 +22,7 @@ import {
 } from '@wordpress/components';
 import { initialValues, toPayload, validateInput } from './action-input';
 import type { ActionInputValues } from './action-input';
+import { OrdersSelect } from './orders-select';
 import type {
 	OrderActionField,
 	OrderActionFieldError,
@@ -42,8 +43,15 @@ interface ActionInputModalProps {
 	onClose: () => void;
 }
 
-export function ActionInputModal( { action, errors, message, busy, onSubmit, onClose }: ActionInputModalProps ) {
-	const fields = action.fields;
+/**
+ * The state of a form of declared fields: the values as typed, the errors that apply to them, and the check that runs
+ * before a submit. The server's per-field errors win until the merchant touches that field again; the browser's own
+ * are shown at once. Shared by this dialog and the toolbar dialog's form tab (`./toolbar-dialog`).
+ *
+ * @param fields       the declared fields.
+ * @param serverErrors the 422's `data.errors` from the last submit; `[]` before the first.
+ */
+export function useFieldValues( fields: OrderActionField[], serverErrors: OrderActionFieldError[] ) {
 	const [ values, setValues ] = useState<ActionInputValues>( () => initialValues( fields ) );
 	const [ clientErrors, setClientErrors ] = useState<OrderActionFieldError[]>( [] );
 	// Fields touched since the server last spoke — their old server error is stale.
@@ -51,11 +59,11 @@ export function ActionInputModal( { action, errors, message, busy, onSubmit, onC
 
 	useEffect( () => {
 		setTouched( new Set() );
-	}, [ errors ] );
+	}, [ serverErrors ] );
 
 	const shown: Record<string, string> = {};
 
-	errors.forEach( ( error ) => {
+	serverErrors.forEach( ( error ) => {
 		if ( ! touched.has( error.field ) ) {
 			shown[ error.field ] = error.message;
 		}
@@ -70,14 +78,26 @@ export function ActionInputModal( { action, errors, message, busy, onSubmit, onC
 		setClientErrors( ( current ) => current.filter( ( error ) => error.field !== id ) );
 	};
 
-	const submit = ( event: { preventDefault: () => void } ) => {
-		event.preventDefault();
-
+	/** Runs the checks the browser can make alone; `true` when the form may be sent. */
+	const check = (): boolean => {
 		const found = validateInput( fields, values );
 
 		setClientErrors( found );
 
-		if ( found.length > 0 ) {
+		return 0 === found.length;
+	};
+
+	return { values, setValues, shown, change, check };
+}
+
+export function ActionInputModal( { action, errors, message, busy, onSubmit, onClose }: ActionInputModalProps ) {
+	const fields = action.fields;
+	const { values, shown, change, check } = useFieldValues( fields, errors );
+
+	const submit = ( event: { preventDefault: () => void } ) => {
+		event.preventDefault();
+
+		if ( ! check() ) {
 			return;
 		}
 
@@ -128,13 +148,26 @@ interface FieldControlProps {
 	onChange: ( value: ActionInputValues[ string ] ) => void;
 }
 
-/** One declared field, drawn with the page's own WordPress controls. */
-function FieldControl( { field, value, error, disabled, onChange }: FieldControlProps ) {
+/**
+ * One declared field, drawn with the page's own WordPress controls. Shared with the toolbar dialog's form tab
+ * (`./toolbar-dialog`), which is why it is exported. A field's `help` is one plain sentence under the input.
+ */
+export function FieldControl( { field, value, error, disabled, onChange }: FieldControlProps ) {
 	const label = field.required ? `${ field.label } *` : field.label;
 	const text = 'string' === typeof value ? value : '';
 	let control;
 
-	if ( 'select' === field.type ) {
+	if ( 'orders' === field.type ) {
+		control = (
+			<OrdersSelect
+				label={ label }
+				options={ field.options }
+				value={ Array.isArray( value ) ? value : [] }
+				disabled={ disabled }
+				onChange={ onChange }
+			/>
+		);
+	} else if ( 'select' === field.type ) {
 		const options = field.required && field.default
 			? field.options
 			: [ { value: '', label: __( '— не выбрано —', 'woodev-plugin-framework' ) }, ...field.options ];
@@ -163,7 +196,7 @@ function FieldControl( { field, value, error, disabled, onChange }: FieldControl
 			/>
 		);
 	} else if ( 'time_range' === field.type ) {
-		const range = ( 'object' === typeof value && value ) || { from: '', to: '' };
+		const range = ( 'object' === typeof value && ! Array.isArray( value ) && value ) || { from: '', to: '' };
 
 		control = (
 			<fieldset className="woodev-action-form__range">
@@ -211,6 +244,7 @@ function FieldControl( { field, value, error, disabled, onChange }: FieldControl
 	return (
 		<div className={ `woodev-action-form__field woodev-action-form__field--${ field.type }` }>
 			{ control }
+			{ field.help && <p className="woodev-action-form__help">{ field.help }</p> }
 			{ error && (
 				<p className="woodev-action-form__error" role="alert">
 					{ error }

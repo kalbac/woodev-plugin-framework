@@ -399,6 +399,22 @@ describe( 'order-metabox-actions — an action with input fields', () => {
 		expect( dialog().textContent ).toContain( 'Отмена' );
 	} );
 
+	it( 'draws a field\'s help as plain text under its input, and nothing for a field without one (s164)', () => {
+		const button = renderWithFields();
+		const declared = JSON.parse( button.getAttribute( 'data-fields' ) );
+
+		declared[ 0 ].help = 'На один адрес — один вызов в день. <b>x</b>';
+		button.setAttribute( 'data-fields', JSON.stringify( declared ) );
+		button.click();
+
+		const helps = dialog().querySelectorAll( '.woodev-action-form__help' );
+
+		expect( helps ).toHaveLength( 1 );
+		expect( helps[ 0 ].textContent ).toBe( 'На один адрес — один вызов в день. <b>x</b>' );
+		expect( helps[ 0 ].querySelector( 'b' ) ).toBeNull();
+		expect( helps[ 0 ].previousElementSibling.name ).toBe( 'payload[day]', 'it sits directly under the input it explains' );
+	} );
+
 	it( 'an action WITHOUT fields still posts at once, even with the shell loaded', () => {
 		renderScreen().click();
 

@@ -26,8 +26,10 @@
  * @var string                                                      $info_text         shown only when `$is_exported` is false
  * @var array<int, array{label: string, value: string, url: string|null, tone?:string}> $fields non-empty display fields, shown only when `$is_exported` is true
  * @var bool                                                        $shipment_outdated whether the order changed after it was handed to the carrier (#947); the warning is shown only when `$is_exported` is true
+ * @var int|null                                                   $tracking_field_index index in `$fields` of the tracking-number line an icon-only flag is drawn beside; null when the order has none
+ * @var array<int, array{label: string, tone: string, title?: string, icon?: string}> $flags the row's flags {@see \Woodev\Framework\Shipping\Admin\Orders\Order_Row_Flags}; badges are drawn under the details of an exported order, a flag with an `icon` icon-only beside the tracking number
  * @var string                                                      $history_html      pre-rendered delivery-history markup ('' when there is none to show)
- * @var array<int, array{action: string, label: string, title: string, destructive: bool, disabled?: bool, fields?: array<int, array<string, mixed>>}> $actions the row action set {@see \Woodev\Framework\Shipping\Admin\Orders\Order_Actions::for_row()} built for this order; a locked action carries `disabled` and the lock reason as its `title`
+ * @var array<int, array{action: string, label: string, title: string, destructive: bool, disabled?: bool, fields?: array<int, array<string, mixed>>, icon?: string, confirm?: string}> $actions the row action set {@see \Woodev\Framework\Shipping\Admin\Orders\Order_Actions::for_row()} built for this order; a locked action carries `disabled` and the lock reason as its `title`
  * @var string                                                      $admin_post_action forward-only admin-post action the buttons post to
  * @var string                                                      $nonce_action      nonce action protecting the buttons' post
  * @var int                                                         $order_id          the order being edited
@@ -52,13 +54,46 @@ defined( 'ABSPATH' ) || exit;
 			</div>
 		<?php endif; ?>
 
+		<?php
+		// s164: a flag with an icon is drawn icon-only, right after the tracking number; the rest stay badges under
+		// the table. With no tracking line to sit beside, an icon flag falls back to the list as an icon-only item.
+		$icon_flags  = [];
+		$badge_flags = [];
+
+		foreach ( $flags as $flag ) {
+			if ( null !== $tracking_field_index && ! empty( $flag['icon'] ) ) {
+				$icon_flags[] = $flag;
+			} else {
+				$badge_flags[] = $flag;
+			}
+		}
+
+		// An icon flag's glyph: the `warning` icon is the triangle-with-«!» SVG of `@wordpress/icons` (`error`), any
+		// other slug the Dashicon of that name. The wrapper carries the name and the tooltip.
+		$render_icon_flag = static function ( array $flag ): void {
+			$flag_tip = ! empty( $flag['title'] ) ? (string) $flag['title'] : (string) $flag['label'];
+			$triangle = 'warning' === $flag['icon'];
+			?>
+			<span class="woodev-orders-flag-icon woodev-orders-flag-icon--<?php echo esc_attr( (string) $flag['tone'] ); ?> <?php echo $triangle ? 'woodev-orders-flag-icon--svg' : 'dashicons dashicons-' . esc_attr( (string) $flag['icon'] ); ?>" role="img" title="<?php echo esc_attr( $flag_tip ); ?>" aria-label="<?php echo esc_attr( (string) $flag['label'] ); ?>">
+			<?php
+			if ( $triangle ) :
+				?>
+				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true" focusable="false"><path fill-rule="evenodd" clip-rule="evenodd" d="M12.218 5.377a.25.25 0 0 0-.436 0l-7.29 12.96a.25.25 0 0 0 .218.373h14.58a.25.25 0 0 0 .218-.372l-7.29-12.96Zm-1.743-.735c.669-1.19 2.381-1.19 3.05 0l7.29 12.96a1.75 1.75 0 0 1-1.525 2.608H4.71a1.75 1.75 0 0 1-1.525-2.608l7.29-12.96ZM12.75 17.46h-1.5v-1.5h1.5v1.5Zm-1.5-3h1.5v-5h-1.5v5Z"/></svg><?php endif; ?></span>
+			<?php
+		};
+	?>
+
 		<?php if ( [] !== $fields ) : ?>
 			<table class="widefat striped">
 				<tbody>
-				<?php foreach ( $fields as $field ) : ?>
+				<?php foreach ( $fields as $field_index => $field ) : ?>
 					<tr>
 						<th scope="row"><?php echo esc_html( $field['label'] ); ?></th>
 						<td>
+							<?php $with_icons = $field_index === $tracking_field_index && [] !== $icon_flags; ?>
+							<?php if ( $with_icons ) : ?>
+								<span class="woodev-orders-tracking-line">
+							<?php endif; ?>
 							<?php if ( null !== $field['url'] && '' !== $field['url'] ) : ?>
 								<a href="<?php echo esc_url( $field['url'] ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( $field['value'] ); ?></a>
 							<?php elseif ( isset( $field['tone'] ) ) : ?>
@@ -66,11 +101,29 @@ defined( 'ABSPATH' ) || exit;
 							<?php else : ?>
 								<?php echo esc_html( $field['value'] ); ?>
 							<?php endif; ?>
+							<?php if ( $with_icons ) : ?>
+								<?php foreach ( $icon_flags as $flag ) : ?>
+									<?php $render_icon_flag( $flag ); ?>
+								<?php endforeach; ?>
+								</span>
+							<?php endif; ?>
 						</td>
 					</tr>
 				<?php endforeach; ?>
 				</tbody>
 			</table>
+		<?php endif; ?>
+
+		<?php if ( [] !== $badge_flags ) : ?>
+			<ul class="woodev-orders-flags woodev-shipping-order-flags">
+				<?php foreach ( $badge_flags as $flag ) : ?>
+					<?php if ( ! empty( $flag['icon'] ) ) : ?>
+						<li class="woodev-orders-flag-item"><?php $render_icon_flag( $flag ); ?></li>
+					<?php else : ?>
+						<li class="woodev-orders-flag woodev-orders-flag--<?php echo esc_attr( (string) $flag['tone'] ); ?>"<?php echo ! empty( $flag['title'] ) ? ' title="' . esc_attr( (string) $flag['title'] ) . '"' : ''; ?>><?php echo esc_html( (string) $flag['label'] ); ?></li>
+					<?php endif; ?>
+				<?php endforeach; ?>
+			</ul>
 		<?php endif; ?>
 
 		<?php if ( '' !== $history_html ) : ?>
@@ -139,7 +192,7 @@ defined( 'ABSPATH' ) || exit;
 						data-order-id="<?php echo esc_attr( (string) $order_id ); ?>"
 						data-nonce="<?php echo esc_attr( wp_create_nonce( $nonce_action ) ); ?>"
 					<?php endif; ?>
-					<?php echo ! empty( $action['destructive'] ) ? 'data-confirm="' . esc_attr( __( 'Вы уверены?', 'woodev-plugin-framework' ) ) . '"' : ''; ?>
+					<?php echo ! empty( $action['destructive'] ) ? 'data-confirm="' . esc_attr( ! empty( $action['confirm'] ) ? (string) $action['confirm'] : __( 'Вы уверены?', 'woodev-plugin-framework' ) ) . '"' : ''; ?>
 					<?php if ( ! empty( $action['fields'] ) ) : ?>
 						data-fields="<?php echo esc_attr( (string) wp_json_encode( $action['fields'] ) ); ?>"
 						data-labels="<?php echo esc_attr( (string) wp_json_encode( $field_dialog_labels ) ); ?>"

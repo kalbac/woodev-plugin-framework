@@ -5817,3 +5817,58 @@ msgstr ""
 #: assets/src/shipping-orders-page/app.tsx
 msgid "Документ готов. Заказов в файле: %d."
 msgstr ""
+
+#. translators: %d: the most orders that may be chosen at once.
+#: shipping-method/admin/orders/class-order-action-fields.php:492
+#, php-format
+msgid "За один раз можно выбрать не более %d заказов."
+msgstr ""
+
+#: assets/src/shipping-orders-page/action-input.ts
+#: shipping-method/admin/orders/class-toolbar-actions.php:266
+msgid "Выберите хотя бы один заказ."
+msgstr ""
+
+#: shipping-method/admin/orders/class-toolbar-actions.php:364
+msgid "Это действие относится к другому перевозчику и недоступно для этого заказа."
+msgstr ""
+
+#: shipping-method/rest-api/class-toolbar-controller.php:255
+msgid "Это действие сейчас недоступно для выбранной строки."
+msgstr ""
+
+#: shipping-method/rest-api/class-toolbar-controller.php:286
+msgid "Это действие сейчас недоступно."
+msgstr ""
+
+#. translators: %s: button label, e.g. "Отменить".
+#: assets/src/shipping-orders-page/toolbar-dialog.tsx
+#, php-format
+msgid "Вы уверены, что хотите выполнить «%s»?"
+msgstr ""
+
+#: assets/src/shipping-orders-page/toolbar-dialog.tsx
+msgid "Не удалось открыть окно."
+msgstr ""
+
+#: assets/src/shipping-orders-page/toolbar-dialog.tsx
+msgid "Пока ничего нет."
+msgstr ""
+
+#: assets/src/shipping-orders-page/orders-select.tsx
+msgid "Найти заказ по номеру или городу"
+msgstr ""
+
+#. translators: 1: number of orders chosen, 2: number of orders offered.
+#: assets/src/shipping-orders-page/orders-select.tsx
+#, php-format
+msgid "Выбрано заказов: %1$d из %2$d"
+msgstr ""
+
+#: assets/src/shipping-orders-page/orders-select.tsx
+msgid "Выбрать все"
+msgstr ""
+
+#: assets/src/shipping-orders-page/orders-select.tsx
+msgid "Снять все"
+msgstr ""

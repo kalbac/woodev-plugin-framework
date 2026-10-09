@@ -25,9 +25,12 @@ import {
 	fetchOrderPreview,
 	fetchOrders,
 	fetchSyncStatus,
+	fetchToolbarActions,
+	fetchToolbarDialog,
 	getProviders,
 	performBulkOrderAction,
 	performOrderAction,
+	submitToolbarAction,
 } from '../../src/shipping-orders-page/rest';
 
 jest.mock( '../../src/shipping-orders-page/rest', () => ( {
@@ -51,6 +54,12 @@ jest.mock( '../../src/shipping-orders-page/rest', () => ( {
 	// #875 — the preview REST call. Resolves with an `OrderPreview`, rejects with an
 	// object carrying `message`, same shape as every other route on this page.
 	fetchOrderPreview: jest.fn(),
+	// s164 — the carrier-declared buttons above the table and the dialog behind one. Defaults to «none declared»
+	// (see `beforeEach`), which is what every carrier without a page-level action answers.
+	fetchToolbarActions: jest.fn(),
+	fetchToolbarDialog: jest.fn(),
+	submitToolbarAction: jest.fn(),
+	performToolbarRowAction: jest.fn(),
 	// #837 defect 4: the reachable-status list. Defaults to [] — the same
 	// «bootstrap did not say» answer the real accessor gives, which makes the
 	// filter offer every canonical state, so these tests keep asserting what
@@ -509,6 +518,7 @@ beforeEach( () => {
 	// data-status panel — default it to "no carriers registered", which is the
 	// one case the panel is required to render as nothing at all (#828).
 	fetchSyncStatus.mockResolvedValue( { last_updated: null, carriers: [] } );
+	fetchToolbarActions.mockResolvedValue( { actions: [] } );
 	mockWizardProps = null;
 } );
 
@@ -4376,5 +4386,378 @@ describe( 'the «Действия» column icons and red (s164)', () => {
 
 		expect( ( await button( 'Отменить вызов' ) ).className ).toContain( 'woodev-orders-actions__button--stop' );
 		expect( ( await button( 'Вызвать' ) ).className ).not.toContain( 'woodev-orders-actions__button--stop' );
+	} );
+} );
+
+/**
+ * s164 — what a carrier plugin adds to the page: row flags, a destructive action's own confirmation sentence, and
+ * the page-level buttons above the table. The dialog behind a button has its own suite
+ * (`shipping-orders-page-toolbar-dialog.test.js`); here it is only OPENED.
+ */
+describe( 'carrier seams (s164)', () => {
+	beforeEach( () => {
+		getProviders.mockReturnValue( oneProvider() );
+	} );
+
+	describe( 'row flags', () => {
+		test( 'are drawn under the tracking number, in their tone, with their tooltip', async () => {
+			fetchOrders.mockResolvedValue(
+				resultOf( [
+					makeRow( {
+						flags: [
+							{ label: 'Нужно вызвать курьера', tone: 'warn', title: 'Курьер ещё не вызван' },
+							{ label: 'Курьер вызван на 12.10', tone: 'info' },
+						],
+					} ),
+				] )
+			);
+
+			const { container } = render( <App /> );
+
+			const flag = await screen.findByText( 'Нужно вызвать курьера' );
+
+			expect( flag ).toHaveClass( 'woodev-orders-flag', 'woodev-orders-flag--warn' );
+			expect( flag ).toHaveAttribute( 'title', 'Курьер ещё не вызван' );
+			expect( screen.getByText( 'Курьер вызван на 12.10' ) ).toHaveClass( 'woodev-orders-flag--info' );
+			expect( screen.getByText( 'Курьер вызван на 12.10' ) ).not.toHaveAttribute( 'title' );
+
+			// Same cell as the tracking number, number first.
+			const cell = flag.closest( 'td' );
+
+			expect( within( cell ).getByRole( 'link', { name: '10012345' } ) ).toBeInTheDocument();
+			expect( cell.querySelector( 'a' ).compareDocumentPosition( cell.querySelector( '.woodev-orders-flags' ) ) ).toBe(
+				Node.DOCUMENT_POSITION_FOLLOWING
+			);
+			expect( container.querySelectorAll( '.woodev-orders-flag' ) ).toHaveLength( 2 );
+		} );
+
+		test( 'a flag with an icon is icon-only, in its tone, on the tracking number\'s own line', async () => {
+			fetchOrders.mockResolvedValue(
+				resultOf( [
+					makeRow( {
+						flags: [
+							{ label: 'Нужно вызвать курьера', tone: 'warn', icon: 'warning' },
+							{ label: 'Курьер вызван на 12.10', tone: 'info' },
+						],
+					} ),
+				] )
+			);
+
+			const { container } = render( <App /> );
+
+			const icon = await screen.findByRole( 'img', { name: 'Нужно вызвать курьера' } );
+
+			// `warning` is the triangle-with-«!» SVG, not the circular Dashicon.
+			expect( icon ).toHaveClass( 'woodev-orders-flag-icon', 'woodev-orders-flag-icon--warn', 'woodev-orders-flag-icon--svg' );
+			expect( icon ).not.toHaveClass( 'dashicons' );
+			const svg = icon.querySelector( 'svg' );
+			expect( svg ).toHaveAttribute( 'aria-hidden', 'true' );
+			expect( svg.querySelector( 'path' ).getAttribute( 'd' ) ).toMatch( /^M12\.218 5\.377/ );
+			// No explicit title → the label is the tooltip; there is no visible text.
+			expect( icon ).toHaveAttribute( 'title', 'Нужно вызвать курьера' );
+			expect( icon ).toHaveTextContent( '' );
+			expect( screen.queryByText( 'Нужно вызвать курьера' ) ).toBeNull();
+
+			// Same line: a direct sibling after the tracking link, not inside the badge list.
+			const cell = icon.closest( 'td' );
+			const link = within( cell ).getByRole( 'link', { name: '10012345' } );
+
+			expect( icon.previousElementSibling ).toBe( link );
+			expect( icon.closest( '.woodev-orders-flags' ) ).toBeNull();
+			// … and the pair shares one nowrap wrapper, so the icon never drops under the number.
+			expect( icon.parentElement ).toHaveClass( 'woodev-orders-tracking-line' );
+			expect( link.parentElement ).toBe( icon.parentElement );
+
+			// The flag without an icon is still a badge under the number.
+			expect( screen.getByText( 'Курьер вызван на 12.10' ) ).toHaveClass( 'woodev-orders-flag--info' );
+			expect( container.querySelectorAll( '.woodev-orders-flag' ) ).toHaveLength( 1 );
+		} );
+
+		test( 'an icon other than `warning` stays a Dashicon of that name', async () => {
+			fetchOrders.mockResolvedValue(
+				resultOf( [ makeRow( { flags: [ { label: 'Нужна проверка', tone: 'info', icon: 'clock' } ] } ) ] )
+			);
+
+			render( <App /> );
+
+			const icon = await screen.findByRole( 'img', { name: 'Нужна проверка' } );
+
+			expect( icon ).toHaveClass( 'woodev-orders-flag-icon--info', 'dashicons', 'dashicons-clock' );
+			expect( icon.querySelector( 'svg' ) ).toBeNull();
+		} );
+
+		test( 'an icon flag\'s own title wins as the tooltip, and a row with only icon flags draws no badge list', async () => {
+			fetchOrders.mockResolvedValue(
+				resultOf( [
+					makeRow( {
+						flags: [ { label: 'Нужно вызвать курьера', tone: 'warn', icon: 'warning', title: 'Курьер ещё не вызван' } ],
+					} ),
+				] )
+			);
+
+			const { container } = render( <App /> );
+
+			const icon = await screen.findByRole( 'img', { name: 'Нужно вызвать курьера' } );
+
+			expect( icon ).toHaveAttribute( 'title', 'Курьер ещё не вызван' );
+			expect( container.querySelector( '.woodev-orders-flags' ) ).toBeNull();
+		} );
+
+		test( 'an order with no tracking number still shows its flags next to the dash', async () => {
+			fetchOrders.mockResolvedValue(
+				resultOf( [ makeRow( { tracking: { number: null, url: null }, flags: [ { label: 'Нужно вызвать курьера', tone: 'warn' } ] } ) ] )
+			);
+
+			render( <App /> );
+
+			const flag = await screen.findByText( 'Нужно вызвать курьера' );
+
+			expect( within( flag.closest( 'td' ) ).getByText( '—' ) ).toBeInTheDocument();
+		} );
+
+		test( 'a row without flags — or from an older server that sends none — draws no list', async () => {
+			fetchOrders.mockResolvedValue( resultOf( [ makeRow( { flags: [] } ), makeRow( { id: 43 } ) ] ) );
+
+			const { container } = render( <App /> );
+
+			await screen.findAllByRole( 'link', { name: '10012345' } );
+
+			expect( container.querySelector( '.woodev-orders-flags' ) ).toBeNull();
+		} );
+	} );
+
+	describe( 'a destructive action\'s own confirmation', () => {
+		const withConfirm = ( confirm ) =>
+			makeRow( {
+				actions: [
+					{
+						action: 'cancel_intake',
+						label: 'Отменить вызов',
+						title: '',
+						destructive: true,
+						...( undefined === confirm ? {} : { confirm } ),
+					},
+				],
+			} );
+
+		test( 'asks the sentence the carrier worded, not the generic one', async () => {
+			fetchOrders.mockResolvedValue( resultOf( [ withConfirm( 'После отмены СДЭК может не принять новый вызов.' ) ] ) );
+
+			render( <App /> );
+			fireEvent.click( await screen.findByRole( 'button', { name: 'Отменить вызов' } ) );
+
+			expect( await screen.findByText( 'После отмены СДЭК может не принять новый вызов.' ) ).toBeInTheDocument();
+			expect( screen.queryByText( /Вы уверены, что хотите выполнить/ ) ).not.toBeInTheDocument();
+			expect( performOrderAction ).not.toHaveBeenCalled();
+		} );
+
+		test( 'without one it asks the generic question, as before', async () => {
+			fetchOrders.mockResolvedValue( resultOf( [ withConfirm() ] ) );
+
+			render( <App /> );
+			fireEvent.click( await screen.findByRole( 'button', { name: 'Отменить вызов' } ) );
+
+			expect(
+				await screen.findByText( 'Вы уверены, что хотите выполнить «Отменить вызов» для этого заказа в «СДЭК»?' )
+			).toBeInTheDocument();
+		} );
+	} );
+
+	describe( 'toolbar buttons', () => {
+		const courier = { id: 'call_courier', label: 'Вызвать курьера', title: 'Заказать забор', icon: 'car', count: 3 };
+
+		test( 'none declared draws nothing beyond «Создать заказ»', async () => {
+			fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+			const { container } = render( <App /> );
+
+			await waitFor( () => expect( fetchToolbarActions ).toHaveBeenCalled() );
+			await screen.findByRole( 'link', { name: '10012345' } );
+
+			expect( container.querySelector( '.woodev-orders__toolbar-button' ) ).toBeNull();
+			expect( screen.getByRole( 'button', { name: 'Создать заказ' } ) ).toBeInTheDocument();
+		} );
+
+		test( 'a declared button sits beside «Создать заказ» with its icon and its count', async () => {
+			fetchToolbarActions.mockResolvedValue( { actions: [ courier ] } );
+			fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+			const { container } = render( <App /> );
+
+			const button = await screen.findByRole( 'button', { name: /Вызвать курьера/ } );
+
+			expect( button.querySelector( '.dashicons-car' ) ).not.toBeNull();
+			expect( button.querySelector( '.woodev-orders__toolbar-count' ) ).toHaveTextContent( '3' );
+			expect( container.querySelector( '.woodev-orders__create-row' ) ).toContainElement( button );
+		} );
+
+		test( 'a button with no declared count draws no pill, and one with no icon a neutral glyph', async () => {
+			fetchToolbarActions.mockResolvedValue( { actions: [ { ...courier, count: null, icon: '' } ] } );
+			fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+			render( <App /> );
+
+			const button = await screen.findByRole( 'button', { name: /Вызвать курьера/ } );
+
+			expect( button.querySelector( '.woodev-orders__toolbar-count' ) ).toBeNull();
+			expect( button.querySelector( '.dashicons-controls-play' ) ).not.toBeNull();
+		} );
+
+		test( 'clicking it opens the dialog of THAT action', async () => {
+			fetchToolbarActions.mockResolvedValue( { actions: [ courier ] } );
+			fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+			fetchToolbarDialog.mockReturnValue( new Promise( () => undefined ) );
+
+			render( <App /> );
+			fireEvent.click( await screen.findByRole( 'button', { name: /Вызвать курьера/ } ) );
+
+			await waitFor( () => expect( fetchToolbarDialog ).toHaveBeenCalledWith( 'call_courier' ) );
+			expect( await screen.findByRole( 'dialog' ) ).toBeInTheDocument();
+		} );
+
+		test( 'a failed fetch leaves no button and no error banner over a table that works', async () => {
+			fetchToolbarActions.mockRejectedValue( { message: 'nope' } );
+			fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+			render( <App /> );
+
+			await screen.findByRole( 'link', { name: '10012345' } );
+
+			expect( screen.queryByText( 'nope' ) ).not.toBeInTheDocument();
+			expect( screen.queryByRole( 'button', { name: /Вызвать курьера/ } ) ).not.toBeInTheDocument();
+		} );
+
+		test( 'a row action that went through asks the server for the buttons again — the count may have dropped', async () => {
+			fetchToolbarActions.mockResolvedValue( { actions: [ courier ] } );
+			fetchOrders.mockResolvedValue(
+				resultOf( [ makeRow( { actions: [ { action: 'update', label: 'Обновить', title: '', destructive: false } ] } ) ] )
+			);
+			performOrderAction.mockResolvedValue( { row: makeRow(), message: 'Готово.' } );
+
+			render( <App /> );
+
+			fireEvent.click( await screen.findByRole( 'button', { name: 'Обновить' } ) );
+			await waitFor( () => expect( performOrderAction ).toHaveBeenCalled() );
+
+			fetchToolbarActions.mockResolvedValue( { actions: [ { ...courier, count: 2 } ] } );
+			await waitFor( () => expect( fetchToolbarActions.mock.calls.length ).toBeGreaterThanOrEqual( 2 ) );
+			expect( ( await screen.findByRole( 'button', { name: /Вызвать курьера/ } ) ).querySelector( '.woodev-orders__toolbar-count' ) ).toBeInTheDocument();
+		} );
+	} );
+
+	describe( 'the «Документ формируется…» toast', () => {
+		beforeEach( () => {
+			// The notices store is a module singleton: toasts of the tests before this one are still in it.
+			const { dispatch, select } = require( '@wordpress/data' );
+			const { store } = require( '@wordpress/notices' );
+
+			select( store )
+				.getNotices()
+				.forEach( ( notice ) => dispatch( store ).removeNotice( notice.id ) );
+		} );
+
+		afterEach( () => {
+			jest.useRealTimers();
+			jest.restoreAllMocks();
+		} );
+
+		test( 'is taken down once the document is ready, instead of lingering beside the result', async () => {
+			jest.useFakeTimers();
+			window.URL.createObjectURL = jest.fn( () => 'blob:pdf' );
+			window.URL.revokeObjectURL = jest.fn();
+			jest.spyOn( HTMLAnchorElement.prototype, 'click' ).mockImplementation( () => undefined );
+
+			fetchOrders.mockResolvedValue(
+				resultOf( [ makeRow( { actions: [ { action: 'waybill', label: 'Накладная', title: '', destructive: false } ] } ) ] )
+			);
+			fetchOrderDocument
+				.mockResolvedValueOnce( { kind: 'pending', message: '', retryAfter: 3 } )
+				.mockResolvedValueOnce( { kind: 'file', blob: new Blob( [ '%PDF-' ] ), filename: 'w.pdf' } );
+
+			render( <App /> );
+			fireEvent.click( await screen.findByRole( 'button', { name: 'Накладная' } ) );
+
+			// The toast is a SNACKBAR (the inline line is `.components-notice`): wait for it to be on screen…
+			await waitFor( () => expect( document.querySelector( '.components-snackbar' ) ).not.toBeNull() );
+			expect( document.querySelector( '.components-snackbar' ) ).toHaveTextContent( 'Документ формируется…' );
+
+			await act( async () => {
+				await jest.advanceTimersByTimeAsync( 3000 );
+			} );
+
+			// …and gone once the file is saved.
+			await waitFor( () => expect( document.querySelector( '.components-snackbar' ) ).toBeNull() );
+		} );
+
+		test( 'stays up while another download is still waiting, and goes with the LAST one', async () => {
+			jest.useFakeTimers();
+			window.URL.createObjectURL = jest.fn( () => 'blob:pdf' );
+			window.URL.revokeObjectURL = jest.fn();
+			jest.spyOn( HTMLAnchorElement.prototype, 'click' ).mockImplementation( () => undefined );
+
+			const action = { action: 'waybill', label: 'Накладная', title: '', destructive: false };
+
+			fetchOrders.mockResolvedValue(
+				resultOf( [
+					makeRow( { id: 42, order_number: '42', actions: [ action ] } ),
+					makeRow( { id: 43, order_number: '43', actions: [ action ] } ),
+				] )
+			);
+			// Order 42 is ready on its second look (3 s); order 43 only on its third (3 s + 3 s).
+			const looks = { 42: 0, 43: 0 };
+
+			fetchOrderDocument.mockImplementation( ( id ) => {
+				looks[ id ] += 1;
+
+				const ready = 42 === id ? looks[ id ] >= 2 : looks[ id ] >= 3;
+
+				return Promise.resolve(
+					ready ? { kind: 'file', blob: new Blob( [ '%PDF-' ] ), filename: `${ id }.pdf` } : { kind: 'pending', message: '', retryAfter: 3 }
+				);
+			} );
+
+			render( <App /> );
+
+			const buttons = await screen.findAllByRole( 'button', { name: 'Накладная' } );
+
+			fireEvent.click( buttons[ 0 ] );
+			fireEvent.click( buttons[ 1 ] );
+			await waitFor( () => expect( document.querySelector( '.components-snackbar' ) ).not.toBeNull() );
+
+			// 42 is done, 43 is still polling: the shared toast must still be telling the truth.
+			await act( async () => {
+				await jest.advanceTimersByTimeAsync( 3000 );
+			} );
+			await waitFor( () => expect( window.URL.createObjectURL ).toHaveBeenCalledTimes( 1 ) );
+			expect( document.querySelector( '.components-snackbar' ) ).toHaveTextContent( 'Документ формируется…' );
+
+			// 43 finishes: now nothing is waiting.
+			await act( async () => {
+				await jest.advanceTimersByTimeAsync( 3000 );
+			} );
+			await waitFor( () => expect( window.URL.createObjectURL ).toHaveBeenCalledTimes( 2 ) );
+			await waitFor( () => expect( document.querySelector( '.components-snackbar' ) ).toBeNull() );
+		} );
+
+		test( 'is taken down when the wait fails too, leaving only the failure', async () => {
+			jest.useFakeTimers();
+			fetchOrders.mockResolvedValue(
+				resultOf( [ makeRow( { actions: [ { action: 'waybill', label: 'Накладная', title: '', destructive: false } ] } ) ] )
+			);
+			fetchOrderDocument
+				.mockResolvedValueOnce( { kind: 'pending', message: '', retryAfter: 3 } )
+				.mockRejectedValueOnce( { message: 'Перевозчик недоступен' } );
+
+			render( <App /> );
+			fireEvent.click( await screen.findByRole( 'button', { name: 'Накладная' } ) );
+			await waitFor( () => expect( document.querySelector( '.components-snackbar' ) ).not.toBeNull() );
+
+			await act( async () => {
+				await jest.advanceTimersByTimeAsync( 3000 );
+			} );
+
+			await waitFor( () => expect( screen.getAllByText( 'Перевозчик недоступен' ).length ).toBeGreaterThan( 0 ) );
+			expect( document.querySelector( '.components-snackbar' ).textContent ).not.toContain( 'формируется' );
+		} );
 	} );
 } );

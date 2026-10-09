@@ -182,6 +182,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		 *     'destructive' => bool,    // true => the client confirms first AND draws the button red.
 		 *     'fields'      => array,   // optional (#1180): the input the action asks for, {@see Order_Action_Fields}.
 		 *     'icon'        => string,  // optional: a Dashicons slug without the `dashicons-` prefix, e.g. 'upload'. None => the neutral {@see self::FALLBACK_ICON}, never a gear.
+		 *     'confirm'     => string,  // optional (s164), `destructive` actions only: the sentence the confirmation asks. None => each surface's generic question.
 		 * ]
 		 */
 		public function for_order( \WC_Order $order, ?Orders_Provider $provider ): array {
@@ -1012,6 +1013,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 
 				if ( '' !== $icon ) {
 					$sanitized[ count( $sanitized ) - 1 ]['icon'] = $icon;
+				}
+
+				// s164: a destructive action may word its own confirmation; without it both surfaces ask their generic question.
+				$confirm = $sanitized[ count( $sanitized ) - 1 ]['destructive'] ? Order_Action_Fields::sanitize_help( $action['confirm'] ?? null ) : '';
+
+				if ( '' !== $confirm ) {
+					$sanitized[ count( $sanitized ) - 1 ]['confirm'] = $confirm;
 				}
 			}
 

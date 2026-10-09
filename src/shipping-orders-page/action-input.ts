@@ -17,19 +17,59 @@ import type {
 	OrderActionTimeRange,
 } from './rest';
 
-/** What the dialog holds while the merchant types: text for every field, a pair for a time range. */
-export type ActionInputValues = Record< string, string | OrderActionTimeRange >;
+/** What the dialog holds while the merchant types: text for every field, a pair for a time range, a list of ids for orders. */
+export type ActionInputValues = Record< string, string | OrderActionTimeRange | string[] >;
 
 /** The declared defaults, the way the server sent them — what the dialog opens with. */
 export function initialValues( fields: OrderActionField[] ): ActionInputValues {
 	const values: ActionInputValues = {};
 
 	fields.forEach( ( field ) => {
-		values[ field.id ] =
-			'time_range' === field.type ? { ...field.default } : field.default;
+		if ( 'time_range' === field.type ) {
+			values[ field.id ] = { ...field.default };
+		} else if ( 'orders' === field.type ) {
+			values[ field.id ] = [ ...field.default ];
+		} else {
+			values[ field.id ] = field.default;
+		}
 	} );
 
 	return values;
+}
+
+/**
+ * What a form keeps when the carrier hands it a refreshed declaration (a toolbar dialog after a run, s164): the
+ * merchant's day, window and comment stay as typed; the chosen orders stay chosen only while the server still offers
+ * them — so after a partial failure the orders that failed are still selected and the ones that went through are gone;
+ * a select whose option vanished falls back to its default. A field new to the form opens with its default.
+ */
+export function reconcileValues( fields: OrderActionField[], previous: ActionInputValues ): ActionInputValues {
+	const fresh = initialValues( fields );
+
+	fields.forEach( ( field ) => {
+		const before = previous[ field.id ];
+
+		if ( undefined === before ) {
+			return;
+		}
+
+		if ( 'orders' === field.type ) {
+			const offered = new Set( field.options.map( ( option ) => option.value ) );
+
+			fresh[ field.id ] = Array.isArray( before ) ? before.filter( ( id ) => offered.has( id ) ) : fresh[ field.id ];
+		} else if ( 'select' === field.type ) {
+			fresh[ field.id ] =
+				'string' === typeof before && field.options.some( ( option ) => option.value === before )
+					? before
+					: fresh[ field.id ];
+		} else if ( 'time_range' === field.type ) {
+			fresh[ field.id ] = 'object' === typeof before && ! Array.isArray( before ) ? before : fresh[ field.id ];
+		} else {
+			fresh[ field.id ] = 'string' === typeof before ? before : fresh[ field.id ];
+		}
+	} );
+
+	return fresh;
 }
 
 /** The request body: every declared field, an empty one as `''` (a time range with empty ends). */
@@ -39,8 +79,13 @@ export function toPayload( fields: OrderActionField[], values: ActionInputValues
 	fields.forEach( ( field ) => {
 		const value = values[ field.id ];
 
+		if ( 'orders' === field.type ) {
+			payload[ field.id ] = Array.isArray( value ) ? [ ...value ] : [];
+			return;
+		}
+
 		if ( 'time_range' === field.type ) {
-			const range = ( 'object' === typeof value && value ) || { from: '', to: '' };
+			const range = ( 'object' === typeof value && ! Array.isArray( value ) && value ) || { from: '', to: '' };
 
 			payload[ field.id ] = { from: range.from, to: range.to };
 			return;
@@ -66,8 +111,16 @@ export function validateInput( fields: OrderActionField[], values: ActionInputVa
 	fields.forEach( ( field ) => {
 		const value = values[ field.id ];
 
+		if ( 'orders' === field.type ) {
+			// A run for no order is no run: the server refuses it whether or not the field is `required`.
+			if ( ! Array.isArray( value ) || 0 === value.length ) {
+				add( field, 'required', __( 'Выберите хотя бы один заказ.', 'woodev-plugin-framework' ) );
+			}
+			return;
+		}
+
 		if ( 'time_range' === field.type ) {
-			const { from, to } = ( 'object' === typeof value && value ) || { from: '', to: '' };
+			const { from, to } = ( 'object' === typeof value && ! Array.isArray( value ) && value ) || { from: '', to: '' };
 
 			if ( ! from && ! to ) {
 				if ( field.required ) {

@@ -584,6 +584,133 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$this->assertStringNotContainsString( 'onclick', $html, 'no inline handler — the script owns the click' );
 		}
 
+		/** s164: a destructive action may word its own question; the metabox button carries THAT one. */
+		public function test_render_metabox_destructive_button_carries_the_actions_own_confirm_text(): void {
+			$provider = $this->provider();
+			$order    = $this->make_order();
+
+			$this->meta['_wc_cdek_order_id'] = 'CARRIER-1';
+			$this->register_handler();
+			Functions\when( 'apply_filters' )->alias(
+				static function ( $hook, $value, ...$args ) {
+					if ( 'woodev_shipping_order_actions' === $hook ) {
+						$value[] = [
+							'action'      => 'cancel_intake',
+							'label'       => 'Отменить вызов',
+							'title'       => '',
+							'destructive' => true,
+							'confirm'     => 'После отмены СДЭК может не принять новый вызов.',
+						];
+					}
+
+					return $value;
+				}
+			);
+
+			ob_start();
+			( new Shipping_Admin_Order( Orders_Registry::instance() ) )->render_metabox( $order, $provider );
+			$html = ob_get_clean();
+
+			$this->assertSame( 1, preg_match( '/<button[^>]*data-woodev-order-action="cancel_intake"[^>]*>/s', $html, $m ) );
+			$this->assertStringContainsString( 'data-confirm="После отмены СДЭК может не принять новый вызов."', $m[0] );
+			$this->assertSame( 1, preg_match( '/<button[^>]*data-woodev-order-action="cancel"[^>]*>/s', $html, $c ) );
+			$this->assertStringContainsString( 'data-confirm="Вы уверены?"', $c[0], 'an action without its own text keeps the generic question' );
+		}
+
+		/** s164: the row's badges are drawn under the details of an exported order. */
+		public function test_render_metabox_draws_the_row_flags(): void {
+			$provider = $this->provider();
+			$order    = $this->make_order();
+
+			$this->meta['_wc_cdek_order_id'] = 'CARRIER-1';
+			$this->register_handler();
+			Functions\when( 'apply_filters' )->alias(
+				static function ( $hook, $value, ...$args ) {
+					if ( 'woodev_shipping_order_row_flags' === $hook ) {
+						return [
+							[
+								'label' => 'Курьер вызван на 12.10',
+								'tone'  => 'info',
+								'title' => 'Заявка № 13312783',
+							],
+						];
+					}
+
+					return $value;
+				}
+			);
+
+			ob_start();
+			( new Shipping_Admin_Order( Orders_Registry::instance() ) )->render_metabox( $order, $provider );
+			$html = ob_get_clean();
+
+			$this->assertStringContainsString( '<li class="woodev-orders-flag woodev-orders-flag--info" title="Заявка № 13312783">Курьер вызван на 12.10</li>', $html );
+		}
+
+		/** s164: a flag with an icon is icon-only, on the tracking number's line; its tooltip is the title, else the label. */
+		public function test_render_metabox_draws_an_icon_flag_beside_the_tracking_number(): void {
+			$provider = $this->provider();
+			$order    = $this->make_order();
+
+			$this->meta['_wc_cdek_order_id'] = 'CARRIER-1';
+			$this->meta['_wc_cdek_tracking'] = 'TRACK-1';
+			$this->register_handler();
+			Functions\when( 'apply_filters' )->alias(
+				static function ( $hook, $value, ...$args ) {
+					if ( 'woodev_shipping_order_row_flags' === $hook ) {
+						return [
+							[
+								'label' => 'Нужно вызвать курьера',
+								'tone'  => 'warn',
+								'icon'  => 'warning',
+							],
+							[
+								'label' => 'Курьер вызван на 12.10',
+								'tone'  => 'info',
+							],
+						];
+					}
+
+					return $value;
+				}
+			);
+
+			ob_start();
+			( new Shipping_Admin_Order( Orders_Registry::instance() ) )->render_metabox( $order, $provider );
+			$html = ob_get_clean();
+
+			// `warning` is the triangle-with-«!» SVG (not the circular Dashicon), tone-coloured through currentColor.
+			$this->assertStringContainsString( 'woodev-orders-flag-icon woodev-orders-flag-icon--warn woodev-orders-flag-icon--svg', $html );
+			$this->assertStringNotContainsString( 'dashicons-warning', $html );
+			$this->assertStringContainsString( '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true" focusable="false"><path fill-rule="evenodd" clip-rule="evenodd" d="M12.218 5.377', $html );
+			$this->assertStringContainsString( 'role="img" title="Нужно вызвать курьера" aria-label="Нужно вызвать курьера"', $html );
+			// Icon-only: the label is not a visible badge, the other flag still is.
+			$this->assertStringNotContainsString( '>Нужно вызвать курьера</li>', $html );
+			$this->assertStringContainsString( '>Курьер вызван на 12.10</li>', $html );
+
+			// On the tracking line: after the tracking number's own text, inside the same cell.
+			$this->assertSame( 1, preg_match( '#<td>(?:(?!</td>).)*Нужно вызвать курьера(?:(?!</td>).)*</td>#su', $html, $cell ) );
+			$this->assertStringContainsString( 'woodev-orders-flag-icon--svg', $cell[0] );
+			$this->assertLessThan( strpos( $cell[0], 'woodev-orders-flag-icon--svg' ), strpos( $cell[0], 'TRACK-1' ) );
+
+			// Same line: the number and its icon share one nowrap wrapper.
+			$this->assertSame( 1, preg_match( '#<span class="woodev-orders-tracking-line">(?:(?!</td>).)*TRACK-1(?:(?!</td>).)*woodev-orders-flag-icon--svg(?:(?!</td>).)*</span>\s*</td>#su', $cell[0] ) );
+		}
+
+		public function test_render_metabox_draws_no_flag_list_when_a_row_carries_none(): void {
+			$provider = $this->provider();
+			$order    = $this->make_order();
+
+			$this->meta['_wc_cdek_order_id'] = 'CARRIER-1';
+			$this->register_handler();
+
+			ob_start();
+			( new Shipping_Admin_Order( Orders_Registry::instance() ) )->render_metabox( $order, $provider );
+			$html = ob_get_clean();
+
+			$this->assertStringNotContainsString( 'woodev-orders-flags', $html );
+		}
+
 		public function test_render_metabox_never_draws_a_button_for_the_edit_row_action(): void {
 			$provider = $this->provider();
 			$order    = $this->make_order();

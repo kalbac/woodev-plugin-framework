@@ -5,7 +5,7 @@
  * @see src/shipping-orders-page/action-input.ts
  */
 
-import { initialValues, toPayload, validateInput } from '../../src/shipping-orders-page/action-input';
+import { initialValues, reconcileValues, toPayload, validateInput } from '../../src/shipping-orders-page/action-input';
 import type { OrderActionField } from '../../src/shipping-orders-page/rest';
 
 const FIELDS: OrderActionField[] = [
@@ -104,5 +104,105 @@ describe( 'validateInput', () => {
 
 	it( 'says it in Russian', () => {
 		expect( validateInput( FIELDS, { ...valid(), day: '' } )[ 0 ].message ).toBe( 'Заполните это поле.' );
+	} );
+} );
+
+// ----- s164: the orders multi-select of a toolbar dialog -----
+
+const ORDERS_FIELD: OrderActionField = {
+	id: 'orders',
+	type: 'orders',
+	label: 'Заказы',
+	required: true,
+	default: [ '1047', '1050', '1051' ],
+	options: [
+		{ value: '1047', label: '#1047 · Екатеринбург' },
+		{ value: '1050', label: '#1050 · Москва' },
+		{ value: '1051', label: '#1051 · Казань' },
+	],
+};
+
+describe( 'an orders field', () => {
+	const fields: OrderActionField[] = [ ORDERS_FIELD, FIELDS[ 0 ] ];
+
+	it( 'opens with every declared order selected, as its own copy', () => {
+		const values = initialValues( fields );
+
+		expect( values.orders ).toEqual( [ '1047', '1050', '1051' ] );
+
+		( values.orders as string[] ).pop();
+
+		expect( ( ORDERS_FIELD as { default: string[] } ).default ).toHaveLength( 3 );
+	} );
+
+	it( 'travels as a list of ids, whatever the dialog holds', () => {
+		expect( toPayload( fields, { orders: [ '1050' ], day: '2026-10-13' } ).orders ).toEqual( [ '1050' ] );
+		expect( toPayload( fields, { orders: '1050', day: '2026-10-13' } ).orders ).toEqual( [] );
+	} );
+
+	it( 'is invalid with no order chosen — even though the field is not marked required', () => {
+		const optional: OrderActionField[] = [ { ...ORDERS_FIELD, required: false } as OrderActionField ];
+
+		expect( validateInput( optional, { orders: [] } ).map( ( e ) => e.code ) ).toEqual( [ 'required' ] );
+		expect( validateInput( optional, { orders: [] } )[ 0 ].message ).toBe( 'Выберите хотя бы один заказ.' );
+		expect( validateInput( optional, { orders: [ '1047' ] } ) ).toEqual( [] );
+	} );
+} );
+
+describe( 'reconcileValues — a refreshed declaration keeps what the merchant typed', () => {
+	const fields: OrderActionField[] = [ ORDERS_FIELD, FIELDS[ 0 ], FIELDS[ 1 ], FIELDS[ 2 ], FIELDS[ 3 ] ];
+
+	it( 'keeps typed text, day and window; drops chosen orders the server no longer offers; new ones start with the default', () => {
+		const refreshed: OrderActionField[] = [
+			{
+				...ORDERS_FIELD,
+				// 1047 went through and is gone; 1099 is new.
+				options: [
+					{ value: '1050', label: '#1050' },
+					{ value: '1099', label: '#1099' },
+				],
+				default: [ '1050', '1099' ],
+			} as OrderActionField,
+			...fields.slice( 1 ),
+		];
+
+		const values = reconcileValues( refreshed, {
+			orders: [ '1047', '1050' ],
+			day: '2026-10-20',
+			window: { from: '10:00', to: '12:00' },
+			service: 'standard',
+			comment: 'Позвонить',
+		} );
+
+		expect( values.orders ).toEqual( [ '1050' ] );
+		expect( values.day ).toBe( '2026-10-20' );
+		expect( values.window ).toEqual( { from: '10:00', to: '12:00' } );
+		expect( values.comment ).toBe( 'Позвонить' );
+	} );
+
+	it( 'a select whose chosen option is gone falls back to its default', () => {
+		const values = reconcileValues( fields, { service: 'express' } );
+
+		expect( values.service ).toBe( '' );
+	} );
+
+	it( 'nothing typed before means the declared defaults', () => {
+		expect( reconcileValues( fields, {} ) ).toEqual( initialValues( fields ) );
+	} );
+
+	it( 'a value of the wrong shape is replaced by the default rather than trusted', () => {
+		const values = reconcileValues( fields, { orders: 'x', day: [ 'y' ], window: 'z' } as never );
+
+		expect( values.orders ).toEqual( [ '1047', '1050', '1051' ] );
+		expect( values.day ).toBe( '2026-10-13' );
+		expect( values.window ).toEqual( { from: '09:00', to: '18:00' } );
+	} );
+
+	it( 'the result is its own copy of the defaults', () => {
+		const values = reconcileValues( fields, {} );
+
+		( values.orders as string[] ).pop();
+
+		expect( ORDERS_FIELD.default ).toHaveLength( 3 );
 	} );
 } );

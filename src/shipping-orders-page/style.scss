@@ -694,6 +694,27 @@
 	}
 }
 
+/**
+ * FIT (s164, operator's rig 09.10.2026): at a 1400 px window the «Действие» column with four icon buttons ran past the
+ * card and the fourth was cut off. WooCommerce's table pads every cell 24 px a side (measured: `padding: 16px 24px`),
+ * nine columns' worth; the text columns wrap, so the padding is what decides whether the table fits. 12 px a side
+ * hands back ~110 px — measured on the rig with this SCSS compiled and injected through Playwright, 1400 px window:
+ *
+ * | window  | padding | table / card | right edge of the widest group |
+ * |---------|---------|--------------|--------------------------------|
+ * | 1400 px | 24 px   | 1234 / 1160  | 1410 (card ends 1360) — cut    |
+ * | 1400 px | 12 px   | 1160 / 1160  | 1348 with FIVE icons — fits    |
+ *
+ * Below ~1300 px a five-icon group still outgrows the card; the card then scrolls like any WooCommerce table.
+ */
+.woodev-orders .woocommerce-table__table {
+	th,
+	td {
+		padding-left: 12px;
+		padding-right: 12px;
+	}
+}
+
 .woodev-orders-actions__confirm {
 	.woodev-orders-actions__confirm-buttons {
 		display: flex;
@@ -774,6 +795,14 @@
 
 	&__error {
 		color: #d63638;
+		margin: 0;
+	}
+
+	// A field's `help` (s164): one muted sentence under the input, on both surfaces.
+	&__help {
+		color: wd.$muted;
+		font-size: 12px;
+		line-height: 1.5;
 		margin: 0;
 	}
 
@@ -1300,9 +1329,209 @@
  * end of an unrelated row.
  */
 .woodev-orders__create-row {
+	align-items: center;
 	display: flex;
+	flex-wrap: wrap;
+	gap: wd.$gap-sm;
 	justify-content: flex-start;
 	margin-bottom: wd.$gap-sm;
+}
+
+/**
+ * A carrier's page-level button (s164) — «Вызвать курьера» beside «Создать заказ». The count is a small pill: how many
+ * orders the action is for right now.
+ */
+.woodev-orders__toolbar-button.components-button {
+	gap: wd.$gap-xs;
+
+	.dashicons {
+		font-size: 18px;
+		height: 18px;
+		width: 18px;
+	}
+}
+
+.woodev-orders__toolbar-count {
+	background: rgba( 0, 0, 0, 0.1 );
+	border-radius: 999px;
+	font-size: 11px;
+	font-weight: 600;
+	line-height: 1;
+	margin-left: wd.$gap-xs;
+	min-width: 18px;
+	padding: 3px 6px;
+	text-align: center;
+}
+
+/**
+ * The row flags (s164, `Order_Row_Flags`) — small badges under the tracking number on the orders page and under the
+ * details table of the order's metabox. Same five tones as the delivery badge, in the same WooCommerce colours, but
+ * smaller and allowed to wrap: they are a hint beside the number, not a column of their own.
+ */
+.woodev-orders-flags {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 2px;
+	list-style: none;
+	margin: 4px 0 0;
+	padding: 0;
+}
+
+.woodev-orders-flag {
+	border-radius: 4px;
+	font-size: 11px;
+	font-weight: 500;
+	line-height: 1.5;
+	margin: 0;
+	max-width: 100%;
+	overflow-wrap: anywhere;
+	padding: 1px 8px;
+
+	&--ok { background: #c8d7e1; color: #003d66; }
+	&--warn { background: #f8dda7; color: #573b00; }
+	&--error { background: #eba3a3; color: #570000; }
+	&--info { background: #c6e1c6; color: #2c4700; }
+	&--muted { background: #e5e5e5; color: #454545; }
+}
+
+/**
+ * The tracking number and its icon-only flags (s164) — one nowrap line, so the icons never drop under the number
+ * (orders-page cell and order metabox alike).
+ */
+.woodev-orders-tracking-line {
+	align-items: center;
+	display: inline-flex;
+	flex-wrap: nowrap;
+	gap: wd.$gap-xs;
+	max-width: 100%;
+	white-space: nowrap;
+}
+
+/**
+ * An icon-only row flag (s164) — a glyph in its tone's colour beside the tracking number. `warn` is the framework's
+ * warning token, not a hex of its own. The `warning` flag icon is the triangle-with-«!» SVG of `@wordpress/icons`
+ * (`error`); any other slug is the Dashicon of that name.
+ */
+.woodev-orders-flag-icon {
+	align-items: center;
+	cursor: help;
+	display: inline-flex;
+	flex: none;
+	line-height: 1;
+
+	&--ok { color: wd.$ok; }
+	&--warn { color: wd.$warn; }
+	&--error { color: wd.$error; }
+	&--info { color: wd.$accent; }
+	&--muted { color: wd.$muted; }
+}
+
+// WordPress sets the dashicon's own size on `.dashicons`; the flag icon is a notch smaller.
+.woodev-orders-flag-icon.dashicons {
+	font-size: 16px;
+	height: 16px;
+	width: 16px;
+}
+
+.woodev-orders-flag-icon--svg {
+	height: 18px;
+	width: 18px;
+
+	svg {
+		display: block;
+		fill: currentColor;
+		height: 18px;
+		width: 18px;
+	}
+}
+
+.woodev-orders-flag-item {
+	margin: 0;
+}
+
+/**
+ * The orders multi-select (s164) — a `FormTokenField`: the chosen orders are chips in an area capped in height, so a
+ * long selection scrolls instead of pushing the dialog off the screen; the counter and «Выбрать все» / «Снять все»
+ * sit beneath it.
+ */
+.woodev-orders-select {
+	.components-form-token-field__input-container {
+		max-height: 132px;
+		overflow-y: auto;
+	}
+
+	&__summary {
+		align-items: center;
+		color: wd.$muted;
+		display: flex;
+		flex-wrap: wrap;
+		font-size: 12px;
+		gap: wd.$gap-sm;
+		margin-top: wd.$gap-xs;
+	}
+}
+
+/**
+ * The dialog behind a carrier's toolbar button (s164): a form tab and list tabs.
+ */
+.woodev-toolbar-dialog {
+	width: min( 720px, 100% );
+
+	&__description {
+		color: wd.$muted;
+		margin: 0 0 wd.$gap;
+	}
+
+	&__form {
+		padding-top: wd.$gap;
+	}
+
+	&__list {
+		padding-top: wd.$gap;
+	}
+
+	&__empty {
+		color: wd.$muted;
+		margin: 0;
+	}
+
+	&__table {
+		border-collapse: collapse;
+		width: 100%;
+
+		th,
+		td {
+			border-bottom: 1px solid wd.$border;
+			padding: wd.$gap-xs wd.$gap-sm;
+			text-align: left;
+			vertical-align: middle;
+		}
+
+		th {
+			font-weight: 600;
+		}
+	}
+
+	&__row-actions {
+		text-align: right;
+		white-space: nowrap;
+	}
+
+	&__summary {
+		display: flex;
+		flex-direction: column;
+		gap: wd.$gap-xs;
+	}
+
+	&__results {
+		margin: 0;
+		padding-left: 1.2em;
+
+		li.is-failed {
+			color: wd.$error-text;
+		}
+	}
 }
 
 /**

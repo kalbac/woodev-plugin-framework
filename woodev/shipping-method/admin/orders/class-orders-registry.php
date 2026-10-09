@@ -21,6 +21,7 @@ use Woodev\Framework\Shipping\Rest_Api\Document_Controller;
 use Woodev\Framework\Shipping\Rest_Api\Order_Editor_Controller;
 use Woodev\Framework\Shipping\Rest_Api\Orders_Controller;
 use Woodev\Framework\Shipping\Rest_Api\Rates_Controller;
+use Woodev\Framework\Shipping\Rest_Api\Toolbar_Controller;
 use Woodev\Framework\Shipping\Shipping_Plugin;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -2113,6 +2114,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		public function register_rest(): void {
 			\Woodev_REST_V1_Registrar::register_controller( new Orders_Controller( $this ) );
 			\Woodev_REST_V1_Registrar::register_controller( new Document_Controller( $this ) );
+			\Woodev_REST_V1_Registrar::register_controller( new Toolbar_Controller( $this ) );
 			\Woodev_REST_V1_Registrar::register_controller( new Order_Editor_Controller( $this ) );
 			\Woodev_REST_V1_Registrar::register_controller( new Rates_Controller( $this ) );
 		}

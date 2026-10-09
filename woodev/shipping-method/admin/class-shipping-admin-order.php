@@ -302,6 +302,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 			$is_exported = ! empty( $row['is_exported'] );
 			$fields      = $is_exported ? $this->build_fields( $order, $provider, $row ) : [];
 			$actions     = is_array( $row['actions'] ?? null ) ? $row['actions'] : [];
+			// s164: the same badges the orders page draws under the tracking number.
+			$flags = is_array( $row['flags'] ?? null ) ? $row['flags'] : [];
+
+			// The «Трек-номер» line an icon-only flag sits beside. The fields come back from a shared sanitiser that
+			// keeps no marker, so the line is found by its label and value; null when the order has no tracking number.
+			$tracking_number     = (string) ( $row['tracking']['number'] ?? '' );
+			$tracking_field_index = null;
+
+			if ( '' !== $tracking_number ) {
+				foreach ( $fields as $index => $field ) {
+					if ( $tracking_number === $field['value'] && __( 'Трек-номер', 'woodev-plugin-framework' ) === $field['label'] ) {
+						$tracking_field_index = $index;
+						break;
+					}
+				}
+			}
 
 			// «Редактировать» opens the wizard of the orders PAGE; there is nothing behind it on the order
 			// screen, and a button posting `edit` would only be refused (#972).

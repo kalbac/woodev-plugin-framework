@@ -353,7 +353,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			// the typed input an extra order action may declare (#1180): read by Order_Actions
 			require_once $path . '/admin/orders/class-order-action-fields.php';
 			require_once $path . '/admin/orders/class-order-actions.php';
+			// the badges a carrier hangs under a row's tracking number (s164): read by Order_Row_Builder
+			require_once $path . '/admin/orders/class-order-row-flags.php';
 			require_once $path . '/admin/orders/class-order-row-builder.php';
+			// the page-level actions above the orders table and their dialogs (s164)
+			require_once $path . '/admin/orders/class-toolbar-actions.php';
 
 			// admin order wizard (#710): the create / update / load service and its payload check (#968)
 			require_once $path . '/admin/orders/class-carrier-field-set.php';
@@ -369,6 +373,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/rest-api/class-pickup-controller.php';
 			require_once $path . '/rest-api/class-orders-controller.php';
 			require_once $path . '/rest-api/class-document-controller.php';
+			require_once $path . '/rest-api/class-toolbar-controller.php';
 			require_once $path . '/rest-api/class-order-editor-controller.php';
 			require_once $path . '/rest-api/class-rates-controller.php';
 		}

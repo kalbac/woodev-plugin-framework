@@ -342,6 +342,57 @@ Moved here from `CURRENT-STATE.md` in s139: they are reference, true regardless 
   framework's own: export `upload`, update `update`, cancel `remove`, edit `edit`, waybill `media-document`,
   barcode `tag`. `destructive => true` additionally draws the button light red (`rgba( $error, 0.12 )`, `$error-text`,
   UI-kit tokens) on both surfaces.
+- **Three small additions to the field / action contract (s164).** A field of ANY type may carry `help` — one plain
+  sentence (tags stripped, whitespace collapsed, cut at `Order_Action_Fields::MAX_HELP_LENGTH` = 500), drawn under the input
+  on both surfaces (`.woodev-action-form__help`); absent when none was declared, so a field keeps the shape it had. A
+  **destructive** action may carry `confirm` — the sentence its confirmation asks («После отмены СДЭК может не принять
+  новый вызов»); `Order_Actions::sanitize_actions()` keeps it for a destructive action only. The orders page
+  (`confirmQuestion()`) and the metabox (`data-confirm`) ask it; without one they ask their generic question as before.
+  The fifth field type, `orders`, is NOT part of a per-order action's vocabulary — see the toolbar bullet.
+- **Row flags (s164)** — small badges under the tracking number on the orders page and under the details table of the
+  order's metabox. A carrier fills them through `woodev_shipping_order_row_flags( array $flags, \WC_Order $order,
+  ?Orders_Provider $provider )` (starts `[]`); each flag is `[ 'label' => string, 'tone' => 'ok'|'warn'|'error'|'info'|'muted',
+  'title' => string (tooltip, optional), 'icon' => string (Dashicons slug, optional) ]`. A flag WITH an `icon` is drawn
+  icon-only: the glyph in its tone's colour (`warn` = the `$warn` design token) right after the tracking number in one
+  nowrap line (`.woodev-orders-tracking-line`); the slug `warning` is drawn as the triangle-with-«!» SVG of
+  `@wordpress/icons` (`error`, 18 px, `currentColor`), any other slug as the Dashicon of that name, the label as its accessible name and its tooltip (`title` when given, else the label); the metabox does the
+  same beside its «Трек-номер» line, and falls back to an icon-only list item when the order has no tracking line. A flag
+  without an icon stays a badge under the number. `Order_Row_Flags::sanitize()` drops malformed / empty / repeated labels,
+  cuts a label at 60 characters, keeps at most 3 and runs `icon` through `Order_Actions::sanitize_icon()` (the same slug rule
+  as action icons); the row carries them as `flags` (always present, `[]` when none). ⚠ The filter
+  runs for EVERY row of every page and for every row rebuilt after an action — a callback reads meta and options only, never
+  the carrier's API. Tones are the delivery badge's own five (a jest test pins server list = TS type = SCSS rules).
+- **Toolbar actions (s164)** — a page-level button above the orders table that opens a dialog and runs ONE thing for SEVERAL
+  orders («Вызвать курьера»: one intake per chosen order). `Toolbar_Actions` sanitises and performs; `Toolbar_Controller`
+  maps it to HTTP. A carrier supplies four filters:
+
+  | filter | answers | shape |
+  |---|---|---|
+  | `woodev_shipping_orders_toolbar_actions( array $actions )` | which buttons exist | `[ 'id' (a-z0-9_-), 'provider' (**required**: the owning carrier's id — an entry without it is dropped), 'label', 'title'?, 'icon'? (Dashicons slug), 'count'? (int), 'visible'? (bool) ]` — hidden when `count` is `0`, unless `visible => true` (keeps a «Заявки» tab reachable); **cheap**, runs on every page load and after every action |
+  | `woodev_shipping_orders_toolbar_dialog( ?array $dialog, string $action_id )` | the dialog, asked for when it opens and again after every run | `[ 'title'?, 'description'?, 'tabs' => [ form tab, list tab, … ] ]` (≤ 4 tabs, **one** form tab) |
+  | `woodev_shipping_perform_toolbar_action( Action_Result $result, string $action_id, \WC_Order $order, Orders_Provider $provider, array $payload )` | run the submitted form for ONE order, once per chosen order — only for orders of the action's `provider`: the framework compares the order's resolved carrier id first and answers a per-order failure on a mismatch, the handler is never called | `Action_Result::success( '', 'note'? )` / `::failure( 'reason' )`; `$payload` is the validated shared values WITHOUT the orders field |
+  | `woodev_shipping_perform_toolbar_row_action( Action_Result $result, string $action_id, string $tab_id, string $row_id, string $row_action )` | a button of a list row | same `Action_Result`; the framework has already checked the button is on that row of the CURRENT dialog |
+
+  A **form tab** is `[ 'id', 'type' => 'form', 'label', 'submit_label'?, 'description'?, 'fields' => [ … ] ]` — the
+  #1180 field types plus **exactly one** `orders` field: `options` = `[ [ 'value' => order id, 'label' => '#1047 · Екатеринбург' ], … ]`
+  (≤ 100), every option preselected unless a `default` list says otherwise; its payload value is a list of option values.
+  A server-side value outside the options is refused whole (`invalid_option`), an empty selection is `required` whether or
+  not the field says so. A **list tab** is `[ 'id', 'type' => 'list', 'label', 'columns' => [ [ 'id', 'label' ], … ],
+  'rows' => [ [ 'id', 'cells' => [ column id => text ], 'actions' => [ [ 'action', 'label', 'title'?, 'destructive'?,
+  'confirm'?, 'icon'? ], … ] ], … ], 'empty'? ]` (≤ 200 rows; a missing cell is `''`).
+
+  Routes (all under `woodev/v1/shipping/orders/toolbar-actions`, `X-WP-Nonce`): `GET` → `{ actions }` (page capability);
+  `GET /{id}` → `{ id, dialog }` (page capability); `POST /{id}` body `{ payload }` → `{ action, requested, succeeded, failed,
+  results: [ { id, order_number, ok, message } ], messages: { success?, error? }, dialog }` — always 200 once the payload is
+  valid, **422** `woodev_shipping_orders_invalid_payload` with `data.errors = [ { field, code, message } ]` otherwise
+  (`edit_shop_orders`); `POST /{id}/rows` body `{ tab, row, action }` → `{ message, dialog }`, 400 when the CURRENT dialog does
+  not offer that button, 502 with the carrier's reason on a failure. An unknown action or a carrier with no dialog is a 404.
+  The `orders` option values must be positive decimal ids (`/^[1-9][0-9]*$/`); any other option is dropped. The dialog
+  keeps ONE mutation in flight across its tabs (submit and row buttons, fields, close are all locked while one runs) and
+  keeps the per-order summary on screen after EVERY run — a full success included — until the merchant closes it.
+  Orders run **sequentially** inside one request (a carrier call each), so ten orders cost ten calls. The client multi-select
+  is `@wordpress/components`' `FormTokenField` (`orders-select.tsx`; the token is the order's label, so typing a city finds it),
+  not WooCommerce's `selectWoo`, which is a jQuery plugin bound to PHP-rendered `<select>` markup.
 - **The metabox's buttons are ONE group in ONE row (s164):** with more than two actions they are icon-only (tooltip
   + `aria-label` carry the label), with one or two they carry their text. A carrier DOCUMENT (`Order_Actions::DOCUMENTS`:
   `waybill`, `barcode`) is never posted to admin-post — it is not in `for_order()`, so the gate refuses it; the button
