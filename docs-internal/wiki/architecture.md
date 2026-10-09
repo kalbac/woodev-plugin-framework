@@ -352,8 +352,13 @@ Moved here from `CURRENT-STATE.md` in s139: they are reference, true regardless 
 - **Row flags (s164)** — small badges under the tracking number on the orders page and under the details table of the
   order's metabox. A carrier fills them through `woodev_shipping_order_row_flags( array $flags, \WC_Order $order,
   ?Orders_Provider $provider )` (starts `[]`); each flag is `[ 'label' => string, 'tone' => 'ok'|'warn'|'error'|'info'|'muted',
-  'title' => string (tooltip, optional) ]`. `Order_Row_Flags::sanitize()` drops malformed / empty / repeated labels, cuts a
-  label at 60 characters and keeps at most 3; the row carries them as `flags` (always present, `[]` when none). ⚠ The filter
+  'title' => string (tooltip, optional), 'icon' => string (Dashicons slug, optional) ]`. A flag WITH an `icon` is drawn
+  icon-only: the dashicon in its tone's colour (`warn` = the `$warn` design token) right after the tracking number on the
+  same line, the label as its accessible name and its tooltip (`title` when given, else the label); the metabox does the
+  same beside its «Трек-номер» line, and falls back to an icon-only list item when the order has no tracking line. A flag
+  without an icon stays a badge under the number. `Order_Row_Flags::sanitize()` drops malformed / empty / repeated labels,
+  cuts a label at 60 characters, keeps at most 3 and runs `icon` through `Order_Actions::sanitize_icon()` (the same slug rule
+  as action icons); the row carries them as `flags` (always present, `[]` when none). ⚠ The filter
   runs for EVERY row of every page and for every row rebuilt after an action — a callback reads meta and options only, never
   the carrier's API. Tones are the delivery badge's own five (a jest test pins server list = TS type = SCSS rules).
 - **Toolbar actions (s164)** — a page-level button above the orders table that opens a dialog and runs ONE thing for SEVERAL

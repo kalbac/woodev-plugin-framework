@@ -27,6 +27,17 @@ describe( 'row flag tones', () => {
 		expect( styled ).toEqual( serverTones() );
 	} );
 
+	test( 'the icon-only form has a colour rule for every tone, from design tokens rather than hex values', () => {
+		const scss = read( 'src/shipping-orders-page/style.scss' );
+		const start = scss.indexOf( '.woodev-orders-flag-icon {' );
+		const block = scss.slice( start, scss.indexOf( '\n}\n', start ) );
+		const styled = [ ...block.matchAll( /&--([a-z]+)\s*\{\s*color:\s*([^;]+);/g ) ];
+
+		expect( styled.map( ( m ) => m[ 1 ] ).sort() ).toEqual( serverTones() );
+		styled.forEach( ( m ) => expect( m[ 2 ] ).toMatch( /^wd\.\$[a-z-]+$/ ) );
+		expect( styled.find( ( m ) => 'warn' === m[ 1 ] )[ 2 ] ).toBe( 'wd.$warn' );
+	} );
+
 	test( 'the TypeScript type names the same tones', () => {
 		const rest = read( 'src/shipping-orders-page/rest.ts' );
 		const type = /export type OrderRowFlagTone = ([^;]+);/.exec( rest )[ 1 ];

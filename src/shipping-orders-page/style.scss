@@ -1396,6 +1396,34 @@
 }
 
 /**
+ * An icon-only row flag (s164) — a Dashicon in its tone's colour on the tracking number's own line (orders page) or
+ * beside the tracking line (order metabox). `warn` is the framework's warning token, not a hex of its own.
+ */
+.woodev-orders-flag-icon {
+	cursor: help;
+	line-height: 1;
+	margin-left: wd.$gap-xs;
+	vertical-align: middle;
+
+	&--ok { color: wd.$ok; }
+	&--warn { color: wd.$warn; }
+	&--error { color: wd.$error; }
+	&--info { color: wd.$accent; }
+	&--muted { color: wd.$muted; }
+}
+
+// WordPress sets the dashicon's own size on `.dashicons`; the flag icon is a notch smaller.
+.woodev-orders-flag-icon.dashicons {
+	font-size: 16px;
+	height: 16px;
+	width: 16px;
+}
+
+.woodev-orders-flag-item {
+	margin: 0;
+}
+
+/**
  * The orders multi-select (s164) — a `FormTokenField`: the chosen orders are chips in an area capped in height, so a
  * long selection scrolls instead of pushing the dialog off the screen; the counter and «Выбрать все» / «Снять все»
  * sit beneath it.

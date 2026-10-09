@@ -54,6 +54,37 @@ final class OrderRowFlagsTest extends TestCase {
 		);
 	}
 
+	public function test_a_flag_keeps_a_usable_dashicons_slug_as_its_icon(): void {
+		$flags = Order_Row_Flags::sanitize(
+			[
+				[
+					'label' => 'Нужно вызвать курьера',
+					'tone'  => 'warn',
+					'icon'  => 'warning',
+				],
+			]
+		);
+
+		$this->assertSame(
+			[
+				[
+					'label' => 'Нужно вызвать курьера',
+					'tone'  => 'warn',
+					'icon'  => 'warning',
+				],
+			],
+			$flags
+		);
+	}
+
+	public function test_an_unusable_icon_is_dropped_and_the_flag_stays_a_badge(): void {
+		foreach ( [ 'Warning', 'dashicons dashicons-x"', '', '9lives', 12, [ 'warning' ], null ] as $icon ) {
+			$flags = Order_Row_Flags::sanitize( [ [ 'label' => 'Нужно вызвать курьера', 'tone' => 'warn', 'icon' => $icon ] ] );
+
+			$this->assertArrayNotHasKey( 'icon', $flags[0], 'icon ' . var_export( $icon, true ) );
+		}
+	}
+
 	public function test_a_flag_without_a_title_carries_no_title_key(): void {
 		$this->assertSame(
 			[

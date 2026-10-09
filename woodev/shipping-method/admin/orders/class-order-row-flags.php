@@ -81,15 +81,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Fl
 		 *
 		 * @param \WC_Order            $order    the order.
 		 * @param Orders_Provider|null $provider the matched carrier, or null when it could not be resolved.
-		 * @return array<int,array{label:string,tone:string,title?:string}> see {@see self::sanitize()}.
+		 * @return array<int,array{label:string,tone:string,title?:string,icon?:string}> see {@see self::sanitize()}.
 		 */
 		public static function for_order( \WC_Order $order, ?Orders_Provider $provider ): array {
 			/**
 			 * Filters the badges shown under an order's tracking number (orders page and order metabox).
 			 *
 			 * Each flag is `[ 'label' => string (required, short), 'tone' => 'ok'|'warn'|'error'|'info'|'muted'
-			 * (optional, default `muted`), 'title' => string (optional tooltip) ]`. A malformed flag, a repeated
-			 * label, and anything past {@see Order_Row_Flags::MAX_FLAGS} is dropped.
+			 * (optional, default `muted`), 'title' => string (optional tooltip), 'icon' => string (optional
+			 * Dashicons slug, e.g. `warning`) ]`. A flag with an icon is drawn icon-only — coloured by its tone,
+			 * right after the tracking number, its tooltip the `title` (else the label); one without stays a
+			 * badge under the number. A malformed flag, a repeated label, and anything past
+			 * {@see Order_Row_Flags::MAX_FLAGS} is dropped.
 			 *
 			 * ⚠ Runs for every row of every page: keep the callback CHEAP — meta and options only, never a
 			 * request to the carrier. A plugin serving several carriers checks `$provider->get_id()` first.
@@ -109,7 +112,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Fl
 		 * @since 2.0.2
 		 *
 		 * @param mixed $flags the filtered value, of unknown shape.
-		 * @return array<int,array{label:string,tone:string,title?:string}> each flag has `label` and `tone`, and `title` only when one was declared.
+		 * @return array<int,array{label:string,tone:string,title?:string,icon?:string}> each flag has `label` and `tone`; `title` and `icon` only when declared (a usable Dashicons slug).
 		 */
 		public static function sanitize( $flags ): array {
 			if ( ! is_array( $flags ) ) {
@@ -148,6 +151,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Fl
 
 				if ( '' !== $title ) {
 					$entry['title'] = $title;
+				}
+
+				$icon = Order_Actions::sanitize_icon( $flag['icon'] ?? null );
+
+				if ( '' !== $icon ) {
+					$entry['icon'] = $icon;
 				}
 
 				$clean[] = $entry;

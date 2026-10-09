@@ -338,11 +338,33 @@ function TrackingCell( { tracking, flags = [] }: { tracking: OrderRowTracking; f
 		return number;
 	}
 
+	// An icon flag sits on the number's own line; the rest hang below it as badges.
+	const iconFlags = flags.filter( ( flag ) => flag.icon );
+	const badgeFlags = flags.filter( ( flag ) => ! flag.icon );
+
 	return (
 		<>
 			{ number }
-			<RowFlags flags={ flags } />
+			{ iconFlags.map( ( flag ) => (
+				<FlagIcon key={ flag.label } flag={ flag } />
+			) ) }
+			{ badgeFlags.length > 0 && <RowFlags flags={ badgeFlags } /> }
 		</>
+	);
+}
+
+/**
+ * A flag that declares an `icon` (s164): just the Dashicon in its tone's colour, on the tracking number's line. The
+ * label is its accessible name, the tooltip is `title` when the carrier gave one, else the label.
+ */
+export function FlagIcon( { flag }: { flag: OrderRowFlag } ) {
+	return (
+		<span
+			className={ `woodev-orders-flag-icon woodev-orders-flag-icon--${ flag.tone } dashicons dashicons-${ flag.icon }` }
+			role="img"
+			aria-label={ flag.label }
+			title={ flag.title || flag.label }
+		/>
 	);
 }
 

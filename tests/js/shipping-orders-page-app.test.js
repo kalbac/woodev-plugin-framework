@@ -4431,6 +4431,57 @@ describe( 'carrier seams (s164)', () => {
 			expect( container.querySelectorAll( '.woodev-orders-flag' ) ).toHaveLength( 2 );
 		} );
 
+		test( 'a flag with an icon is icon-only, in its tone, on the tracking number\'s own line', async () => {
+			fetchOrders.mockResolvedValue(
+				resultOf( [
+					makeRow( {
+						flags: [
+							{ label: 'Нужно вызвать курьера', tone: 'warn', icon: 'warning' },
+							{ label: 'Курьер вызван на 12.10', tone: 'info' },
+						],
+					} ),
+				] )
+			);
+
+			const { container } = render( <App /> );
+
+			const icon = await screen.findByRole( 'img', { name: 'Нужно вызвать курьера' } );
+
+			expect( icon ).toHaveClass( 'woodev-orders-flag-icon', 'woodev-orders-flag-icon--warn', 'dashicons', 'dashicons-warning' );
+			// No explicit title → the label is the tooltip; there is no visible text.
+			expect( icon ).toHaveAttribute( 'title', 'Нужно вызвать курьера' );
+			expect( icon ).toBeEmptyDOMElement();
+			expect( screen.queryByText( 'Нужно вызвать курьера' ) ).toBeNull();
+
+			// Same line: a direct sibling after the tracking link, not inside the badge list.
+			const cell = icon.closest( 'td' );
+			const link = within( cell ).getByRole( 'link', { name: '10012345' } );
+
+			expect( icon.previousElementSibling ).toBe( link );
+			expect( icon.closest( '.woodev-orders-flags' ) ).toBeNull();
+
+			// The flag without an icon is still a badge under the number.
+			expect( screen.getByText( 'Курьер вызван на 12.10' ) ).toHaveClass( 'woodev-orders-flag--info' );
+			expect( container.querySelectorAll( '.woodev-orders-flag' ) ).toHaveLength( 1 );
+		} );
+
+		test( 'an icon flag\'s own title wins as the tooltip, and a row with only icon flags draws no badge list', async () => {
+			fetchOrders.mockResolvedValue(
+				resultOf( [
+					makeRow( {
+						flags: [ { label: 'Нужно вызвать курьера', tone: 'warn', icon: 'warning', title: 'Курьер ещё не вызван' } ],
+					} ),
+				] )
+			);
+
+			const { container } = render( <App /> );
+
+			const icon = await screen.findByRole( 'img', { name: 'Нужно вызвать курьера' } );
+
+			expect( icon ).toHaveAttribute( 'title', 'Курьер ещё не вызван' );
+			expect( container.querySelector( '.woodev-orders-flags' ) ).toBeNull();
+		} );
+
 		test( 'an order with no tracking number still shows its flags next to the dash', async () => {
 			fetchOrders.mockResolvedValue(
 				resultOf( [ makeRow( { tracking: { number: null, url: null }, flags: [ { label: 'Нужно вызвать курьера', tone: 'warn' } ] } ) ] )

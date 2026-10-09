@@ -26,7 +26,8 @@
  * @var string                                                      $info_text         shown only when `$is_exported` is false
  * @var array<int, array{label: string, value: string, url: string|null, tone?:string}> $fields non-empty display fields, shown only when `$is_exported` is true
  * @var bool                                                        $shipment_outdated whether the order changed after it was handed to the carrier (#947); the warning is shown only when `$is_exported` is true
- * @var array<int, array{label: string, tone: string, title?: string}> $flags the row's badges {@see \Woodev\Framework\Shipping\Admin\Orders\Order_Row_Flags}; drawn under the details of an exported order
+ * @var int|null                                                   $tracking_field_index index in `$fields` of the tracking-number line an icon-only flag is drawn beside; null when the order has none
+ * @var array<int, array{label: string, tone: string, title?: string, icon?: string}> $flags the row's flags {@see \Woodev\Framework\Shipping\Admin\Orders\Order_Row_Flags}; badges are drawn under the details of an exported order, a flag with an `icon` icon-only beside the tracking number
  * @var string                                                      $history_html      pre-rendered delivery-history markup ('' when there is none to show)
  * @var array<int, array{action: string, label: string, title: string, destructive: bool, disabled?: bool, fields?: array<int, array<string, mixed>>, icon?: string, confirm?: string}> $actions the row action set {@see \Woodev\Framework\Shipping\Admin\Orders\Order_Actions::for_row()} built for this order; a locked action carries `disabled` and the lock reason as its `title`
  * @var string                                                      $admin_post_action forward-only admin-post action the buttons post to
@@ -53,10 +54,25 @@ defined( 'ABSPATH' ) || exit;
 			</div>
 		<?php endif; ?>
 
+		<?php
+		// s164: a flag with an icon is drawn icon-only, right after the tracking number; the rest stay badges under
+		// the table. With no tracking line to sit beside, an icon flag falls back to the list as an icon-only item.
+		$icon_flags  = [];
+		$badge_flags = [];
+
+		foreach ( $flags as $flag ) {
+			if ( null !== $tracking_field_index && ! empty( $flag['icon'] ) ) {
+				$icon_flags[] = $flag;
+			} else {
+				$badge_flags[] = $flag;
+			}
+		}
+		?>
+
 		<?php if ( [] !== $fields ) : ?>
 			<table class="widefat striped">
 				<tbody>
-				<?php foreach ( $fields as $field ) : ?>
+				<?php foreach ( $fields as $field_index => $field ) : ?>
 					<tr>
 						<th scope="row"><?php echo esc_html( $field['label'] ); ?></th>
 						<td>
@@ -67,6 +83,14 @@ defined( 'ABSPATH' ) || exit;
 							<?php else : ?>
 								<?php echo esc_html( $field['value'] ); ?>
 							<?php endif; ?>
+							<?php if ( $field_index === $tracking_field_index ) : ?>
+								<?php foreach ( $icon_flags as $flag ) : ?>
+									<?php
+									$flag_tip = ! empty( $flag['title'] ) ? (string) $flag['title'] : (string) $flag['label'];
+									?>
+									<span class="woodev-orders-flag-icon woodev-orders-flag-icon--<?php echo esc_attr( (string) $flag['tone'] ); ?> dashicons dashicons-<?php echo esc_attr( (string) $flag['icon'] ); ?>" role="img" title="<?php echo esc_attr( $flag_tip ); ?>" aria-label="<?php echo esc_attr( (string) $flag['label'] ); ?>"></span>
+								<?php endforeach; ?>
+							<?php endif; ?>
 						</td>
 					</tr>
 				<?php endforeach; ?>
@@ -74,10 +98,15 @@ defined( 'ABSPATH' ) || exit;
 			</table>
 		<?php endif; ?>
 
-		<?php if ( [] !== $flags ) : ?>
+		<?php if ( [] !== $badge_flags ) : ?>
 			<ul class="woodev-orders-flags woodev-shipping-order-flags">
-				<?php foreach ( $flags as $flag ) : ?>
-					<li class="woodev-orders-flag woodev-orders-flag--<?php echo esc_attr( (string) $flag['tone'] ); ?>"<?php echo ! empty( $flag['title'] ) ? ' title="' . esc_attr( (string) $flag['title'] ) . '"' : ''; ?>><?php echo esc_html( (string) $flag['label'] ); ?></li>
+				<?php foreach ( $badge_flags as $flag ) : ?>
+					<?php if ( ! empty( $flag['icon'] ) ) : ?>
+						<?php $flag_tip = ! empty( $flag['title'] ) ? (string) $flag['title'] : (string) $flag['label']; ?>
+						<li class="woodev-orders-flag-item"><span class="woodev-orders-flag-icon woodev-orders-flag-icon--<?php echo esc_attr( (string) $flag['tone'] ); ?> dashicons dashicons-<?php echo esc_attr( (string) $flag['icon'] ); ?>" role="img" title="<?php echo esc_attr( $flag_tip ); ?>" aria-label="<?php echo esc_attr( (string) $flag['label'] ); ?>"></span></li>
+					<?php else : ?>
+						<li class="woodev-orders-flag woodev-orders-flag--<?php echo esc_attr( (string) $flag['tone'] ); ?>"<?php echo ! empty( $flag['title'] ) ? ' title="' . esc_attr( (string) $flag['title'] ) . '"' : ''; ?>><?php echo esc_html( (string) $flag['label'] ); ?></li>
+					<?php endif; ?>
 				<?php endforeach; ?>
 			</ul>
 		<?php endif; ?>

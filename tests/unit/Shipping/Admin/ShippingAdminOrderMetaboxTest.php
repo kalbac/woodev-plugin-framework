@@ -647,6 +647,50 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$this->assertStringContainsString( '<li class="woodev-orders-flag woodev-orders-flag--info" title="Заявка № 13312783">Курьер вызван на 12.10</li>', $html );
 		}
 
+		/** s164: a flag with an icon is icon-only, on the tracking number's line; its tooltip is the title, else the label. */
+		public function test_render_metabox_draws_an_icon_flag_beside_the_tracking_number(): void {
+			$provider = $this->provider();
+			$order    = $this->make_order();
+
+			$this->meta['_wc_cdek_order_id'] = 'CARRIER-1';
+			$this->meta['_wc_cdek_tracking'] = 'TRACK-1';
+			$this->register_handler();
+			Functions\when( 'apply_filters' )->alias(
+				static function ( $hook, $value, ...$args ) {
+					if ( 'woodev_shipping_order_row_flags' === $hook ) {
+						return [
+							[
+								'label' => 'Нужно вызвать курьера',
+								'tone'  => 'warn',
+								'icon'  => 'warning',
+							],
+							[
+								'label' => 'Курьер вызван на 12.10',
+								'tone'  => 'info',
+							],
+						];
+					}
+
+					return $value;
+				}
+			);
+
+			ob_start();
+			( new Shipping_Admin_Order( Orders_Registry::instance() ) )->render_metabox( $order, $provider );
+			$html = ob_get_clean();
+
+			$this->assertStringContainsString( 'woodev-orders-flag-icon woodev-orders-flag-icon--warn dashicons dashicons-warning', $html );
+			$this->assertStringContainsString( 'role="img" title="Нужно вызвать курьера" aria-label="Нужно вызвать курьера"', $html );
+			// Icon-only: the label is not a visible badge, the other flag still is.
+			$this->assertStringNotContainsString( '>Нужно вызвать курьера</li>', $html );
+			$this->assertStringContainsString( '>Курьер вызван на 12.10</li>', $html );
+
+			// On the tracking line: after the tracking number's own text, inside the same cell.
+			$this->assertSame( 1, preg_match( '#<td>(?:(?!</td>).)*Нужно вызвать курьера(?:(?!</td>).)*</td>#su', $html, $cell ) );
+			$this->assertStringContainsString( 'dashicons-warning', $cell[0] );
+			$this->assertLessThan( strpos( $cell[0], 'dashicons-warning' ), strpos( $cell[0], 'TRACK-1' ) );
+		}
+
 		public function test_render_metabox_draws_no_flag_list_when_a_row_carries_none(): void {
 			$provider = $this->provider();
 			$order    = $this->make_order();

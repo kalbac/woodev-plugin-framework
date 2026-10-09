@@ -84,13 +84,15 @@ export type OrderRowFlagTone = 'ok' | 'warn' | 'error' | 'info' | 'muted';
 /**
  * One small badge a carrier plugin hangs under a row's tracking number («Нужно вызвать курьера»,
  * `woodev_shipping_order_row_flags`, s164). The server sends it sanitised: a non-empty `label`, a known `tone`, and
- * a `title` only when one was declared.
+ * a `title` and an `icon` only when declared.
  */
 export interface OrderRowFlag {
 	label: string;
 	tone: OrderRowFlagTone;
 	/** Tooltip; absent when none was declared. */
 	title?: string;
+	/** A Dashicons slug (`warning`); when present the flag is drawn icon-only beside the tracking number. */
+	icon?: string;
 }
 
 /** One row of `GET woodev/v1/shipping/orders`, exactly as `Order_Row_Builder::build()` returns it. */
