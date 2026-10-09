@@ -392,6 +392,27 @@ export default function App() {
 	}
 
 	/**
+	 * The values a `show_if` condition is evaluated against: the SAVED value of every field on
+	 * every step of the graph, overlaid with the current step's own edits. A condition may depend
+	 * on a field another step owns (a key shown only for the mode picked earlier), and the server
+	 * resolves it the same way — the submitted value when present, else the stored one.
+	 *
+	 * @return {Object} field id => value.
+	 */
+	function collectConditionValues() {
+		const context = {};
+		steps.forEach( ( s ) => {
+			if ( s.id === step.id ) {
+				return;
+			}
+			Object.keys( s.fields || {} ).forEach( ( id ) => {
+				context[ id ] = s.fields[ id ].value;
+			} );
+		} );
+		return { ...context, ...collectStepValues() };
+	}
+
+	/**
 	 * Settles the promise a custom component is waiting on for a destructive action.
 	 *
 	 * @param {Object} answer the action's answer, or `{ status: 'cancelled' }`.
@@ -601,10 +622,11 @@ export default function App() {
 
 		if ( isSettings ) {
 			const stepValues = collectStepValues();
+			const conditionValues = collectConditionValues();
 
 			const visibleFields = {};
 			Object.keys( step.fields || {} ).forEach( ( id ) => {
-				if ( isFieldVisible( step.fields[ id ], stepValues ) ) {
+				if ( isFieldVisible( step.fields[ id ], conditionValues ) ) {
 					visibleFields[ id ] = step.fields[ id ];
 				}
 			} );
@@ -983,6 +1005,7 @@ export default function App() {
 						key: step.id,
 						step,
 						values: values[ step.id ] || {},
+						conditionValues: collectConditionValues(),
 													onChange: onStepChange,
 						showErrors,
 						serverErrors: fieldErrors,
