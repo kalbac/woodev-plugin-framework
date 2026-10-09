@@ -36,7 +36,7 @@
 | [`box-packer/*`](gotcha-index/box-packer.md) | 2 | Box-packer algorithm (S2) |
 | [`shipping/checkout`](gotcha-index/shipping-checkout.md) | 21 | Checkout field layer (§8) |
 | [`shipping/pickup`](gotcha-index/shipping-pickup.md) | 28 | Pickup point picker / ymaps |
-| [`shipping/*`](gotcha-index/shipping.md) | 8 | Shipping module (S1) |
+| [`shipping/*`](gotcha-index/shipping.md) | 9 | Shipping module (S1) |
 | [`perf/*`](gotcha-index/perf.md) | 3 | Payload size and wire cost |
 | [`i18n/*`](gotcha-index/i18n.md) | 10 | Localization |
 | [`autodev/*`](gotcha-index/autodev.md) | 5 | Adversarial dev loop tooling |
