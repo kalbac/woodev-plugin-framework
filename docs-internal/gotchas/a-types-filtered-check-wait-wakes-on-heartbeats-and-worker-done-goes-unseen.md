@@ -46,6 +46,10 @@ done
 The exiting background task notifies the coordinator; it then reads the delivery with a plain `check`, processes it, acks it,
 and starts the loop again. After this was in place (s163, second half) no `worker_done` was missed.
 
+⚠ Stopping the loop with `pkill -f <script>` kills the shell but NOT its running `orca … check --wait` child. That orphan keeps
+the run's single waiter slot, so every new loop's `check` returns an error object without `result` (s163 follow-up: 200
+iterations of `KeyError: 'result'` in seconds). Kill the orphan too: `pgrep -fl "orchestration check"`.
+
 ## Related
 
 - [a-backgrounded-orca-check-wait-starves-every-later-waiter](a-backgrounded-orca-check-wait-starves-every-later-waiter.md) — run only ONE waiter per run
