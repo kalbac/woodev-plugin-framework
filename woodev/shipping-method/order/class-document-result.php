@@ -6,11 +6,6 @@ namespace Woodev\Framework\Shipping\Order;
 if ( ! defined( 'ABSPATH' ) ) {
 	exit; }
 
-/**
- * Result returned by a carrier document source.
- *
- * @since 2.0.2
- */
 final class Document_Result {
 	public const READY_BINARY = 'ready_binary';
 	public const READY_URL    = 'ready_url';
@@ -20,6 +15,9 @@ final class Document_Result {
 	private string $state;
 	private string $value;
 	private int $retry_after;
+
+	/** @var int[] orders the carrier left out of a bulk document. */
+	private array $skipped = [];
 
 	private function __construct( string $state, string $value = '', int $retry_after = 0 ) {
 		$this->state       = $state;
@@ -54,4 +52,39 @@ final class Document_Result {
 	/** @since 2.0.2 @return int */
 	public function get_retry_after(): int {
 		return $this->retry_after; }
+
+	/**
+	 * A copy that names the orders the carrier left out of a bulk document (#1192): an order it did not know, or
+	 * one it refused to print. The merchant is told who is missing from the file.
+	 *
+	 * @since 2.0.2
+	 * @param int[] $order_ids WooCommerce order ids missing from the document.
+	 * @return self
+	 */
+	public function with_skipped( array $order_ids ): self {
+		$copy          = clone $this;
+		$copy->skipped = array_values(
+			array_unique(
+				array_filter(
+					array_map(
+						static function ( $id ): int {
+							return abs( (int) $id );
+						},
+						$order_ids
+					)
+				)
+			)
+		);
+
+		return $copy;
+	}
+
+	/**
+	 * Orders the carrier left out of a bulk document; `[]` for a single-order document or a complete bulk one.
+	 *
+	 * @since 2.0.2
+	 * @return int[]
+	 */
+	public function get_skipped_order_ids(): array {
+		return $this->skipped; }
 }

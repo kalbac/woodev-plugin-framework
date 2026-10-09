@@ -12,6 +12,7 @@
 - [admin-ui/wp-nonce-url-esc-html] **`wp_nonce_url()` HTML-encodes `&` → breaks a URL consumed by JS/JSON.** → [wp-nonce-url-esc-html-breaks-js-urls](../gotchas/wp-nonce-url-esc-html-breaks-js-urls.md) (s24)
 - [admin-ui/filters] **WooCommerce gives `FilterPicker` a FIXED 430px, so two of them eat an 860px row exactly and a third control wraps. Our stylesheet sets no width — the cause is invisible from it. Bound it inside your own container.** → [woocommerce-gives-its-filter-picker-a-fixed-430px](../gotchas/woocommerce-gives-its-filter-picker-a-fixed-430px.md) (s128)
 - [admin-ui/metabox] **A metabox band renders in REGISTRATION order and WC registers its `side`/`high` order boxes before `add_meta_boxes` — no priority lands ours under Order actions; re-key the band.** → [wp-renders-a-metabox-band-in-registration-order-and-wc-registers-first](../gotchas/wp-renders-a-metabox-band-in-registration-order-and-wc-registers-first.md) (s150)
+- [admin-ui/button-group] **A group clipping with `overflow: hidden` cuts its button's frame: our grey divider replaced the enabled button's own blue left side, square corners and WP's outside focus ring were clipped.** → [a-clipping-button-group-cuts-the-frame-the-button-draws-on-its-own-sides](../gotchas/a-clipping-button-group-cuts-the-frame-the-button-draws-on-its-own-sides.md) (s164)
 
 ## Related
 

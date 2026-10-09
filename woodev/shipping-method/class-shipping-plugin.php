@@ -295,6 +295,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/order/class-shipping-order-handler.php';
 			require_once $path . '/order/class-document-result.php';
 			require_once $path . '/order/interface-document-source.php';
+			require_once $path . '/order/interface-bulk-document-source.php';
 			require_once $path . '/order/class-action-result.php';
 			require_once $path . '/order/class-order-lock.php';
 			require_once $path . '/order/class-export-retry.php';

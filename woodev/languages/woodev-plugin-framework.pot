@@ -5748,3 +5748,72 @@ msgstr ""
 #: assets/build/shipping-zone-city-limit/index.js:1
 msgid "Добавить город…"
 msgstr ""
+
+#: shipping-method/admin/views/html-admin-order-metabox.php
+#: assets/src/shipping-orders-page/app.tsx
+msgid "Документ формируется…"
+msgstr ""
+
+#: shipping-method/admin/views/html-admin-order-metabox.php
+#: assets/src/shipping-orders-page/app.tsx
+msgid "Документ всё ещё формируется. Попробуйте ещё раз через минуту."
+msgstr ""
+
+#: shipping-method/rest-api/class-document-controller.php
+msgid "Для выбранных заказов нет документов, которые можно напечатать. Документ доступен только после выгрузки заказа перевозчику."
+msgstr ""
+
+#: shipping-method/rest-api/class-document-controller.php
+msgid "Выбраны заказы разных перевозчиков, а у каждого перевозчика свои документы. Выберите заказы одного перевозчика."
+msgstr ""
+
+#: shipping-method/rest-api/class-document-controller.php
+msgid "Массовая печать этого документа для выбранного перевозчика недоступна."
+msgstr ""
+
+#. translators: %d: the most orders the carrier prints in one document.
+#: shipping-method/rest-api/class-document-controller.php
+msgid "За один раз можно напечатать не более %d заказов. Выберите меньше заказов."
+msgstr ""
+
+#: shipping-method/rest-api/class-document-controller.php
+msgid "Не выбрано ни одного заказа."
+msgstr ""
+
+#: assets/src/shipping-orders-page/app.tsx
+msgid "Печать накладных"
+msgstr ""
+
+#: assets/src/shipping-orders-page/app.tsx
+msgid "Печать штрихкодов"
+msgstr ""
+
+#: assets/src/shipping-orders-page/app.tsx
+msgid "заказ не найден"
+msgstr ""
+
+#: assets/src/shipping-orders-page/app.tsx
+msgid "у заказа нет документов перевозчика"
+msgstr ""
+
+#: assets/src/shipping-orders-page/app.tsx
+msgid "ещё не выгружен перевозчику"
+msgstr ""
+
+#: assets/src/shipping-orders-page/app.tsx
+msgid "перевозчик не печатает этот документ для заказа"
+msgstr ""
+
+#: assets/src/shipping-orders-page/app.tsx
+msgid "перевозчик не включил заказ в файл"
+msgstr ""
+
+#. translators: %s: list like «№12 — ещё не выгружен перевозчику; №15 — …».
+#: assets/src/shipping-orders-page/app.tsx
+msgid "В файл не вошли заказы: %s."
+msgstr ""
+
+#. translators: %d: number of orders in the downloaded file.
+#: assets/src/shipping-orders-page/app.tsx
+msgid "Документ готов. Заказов в файле: %d."
+msgstr ""

@@ -22,7 +22,7 @@
  *
  * A CARRIER DOCUMENT (waybill, barcode) is not posted at all: its button carries `data-document-url` (the documents
  * REST route, `?format=json`) and `data-rest-nonce`, and a click fetches it exactly as the orders page does — a PDF is
- * saved, a carrier link opens, «ещё готовится» and a failure are said in the line under the buttons. One contract for
+ * saved, a carrier link opens, «формируется» (while it keeps asking by itself, #1191) and a failure are said in the line under the buttons. One contract for
  * both surfaces: posting `waybill` to the action handler could only ever be refused, it is not a carrier action.
  *
  * The form is built on `document.body`, OUTSIDE the order form, so submitting it never touches the
@@ -333,43 +333,109 @@
 		notice.className = 'woodev-shipping-order-doc-notice' + ( isError ? ' is-error' : '' );
 	}
 
+	/** Total time a document is awaited before the merchant is told to come back; mirrors `document-poll.ts`. */
+	var POLL_MAX_WAIT_MS = 30000;
+	var POLL_MIN_DELAY_MS = 1000;
+	var POLL_MAX_DELAY_MS = 10000;
+
+	/** The document waits in flight; leaving the page cancels them all. */
+	var polls = [];
+
+	/** @param {number} retryAfter seconds the server asked for. @return {number} milliseconds to wait, kept in a sane window. */
+	function delayFor( retryAfter ) {
+		var asked = Number( retryAfter ) > 0 ? Number( retryAfter ) * 1000 : POLL_MIN_DELAY_MS;
+
+		return Math.min( POLL_MAX_DELAY_MS, Math.max( POLL_MIN_DELAY_MS, asked ) );
+	}
+
 	/**
-	 * Fetches one carrier document through the documents REST route — the same route, nonce and outcomes the
-	 * orders page uses: a PDF is saved, a carrier link opens in a new tab, «ещё готовится» (202) and a failure
-	 * (the server's own Russian `message`) are shown under the buttons. The button is disabled while it runs.
+	 * Waits `ms`, or less when the poll is stopped meanwhile.
+	 *
+	 * @param {number} ms   milliseconds.
+	 * @param {Object} poll the wait's handle (see `newPoll`).
+	 * @return {Promise<void>} resolves after `ms` or at once on stop.
+	 */
+	function sleep( ms, poll ) {
+		return new Promise( function ( resolve ) {
+			poll.wake = resolve;
+			poll.timer = setTimeout( resolve, ms );
+		} );
+	}
+
+	/**
+	 * A document wait's handle. `stop()` ends it from outside: it clears the timers, aborts the request in flight and
+	 * wakes whatever the wait is blocked on, so nothing keeps the button busy.
+	 *
+	 * @return {Object} `{cancelled, timedOut, timer, wake, release, deadline, controller, stop}`.
+	 */
+	function newPoll() {
+		var poll = {
+			cancelled: false,
+			timedOut: false,
+			timer: null,
+			wake: null,
+			release: null,
+			deadline: null,
+			controller: window.AbortController ? new window.AbortController() : null,
+		};
+
+		poll.stop = function ( timedOut ) {
+			if ( poll.cancelled || poll.timedOut ) {
+				return;
+			}
+
+			poll.cancelled = ! timedOut;
+			poll.timedOut = !! timedOut;
+			clearTimeout( poll.timer );
+
+			if ( poll.controller ) {
+				poll.controller.abort();
+			}
+
+			if ( poll.wake ) {
+				poll.wake();
+			}
+
+			if ( poll.release ) {
+				poll.release();
+			}
+		};
+
+		return poll;
+	}
+
+	/** Stops every document wait still running (the page is being left). @return {void} */
+	function cancelPolls() {
+		var running = polls;
+
+		polls = [];
+		running.forEach( function ( poll ) {
+			poll.stop( false );
+		} );
+	}
+
+	/**
+	 * Asks the documents REST route ONCE.
 	 *
 	 * @param {HTMLButtonElement} button the clicked document button.
-	 * @return {Promise<void>} settles when the outcome has been shown.
+	 * @param {string}            failed the generic failure sentence.
+	 * @param {AbortSignal|null}  signal aborts the request in flight.
+	 * @return {Promise<Object>} `{kind:'file',blob,filename}`, `{kind:'link',url}`, `{kind:'pending',retryAfter}` or `{kind:'error',message}`.
 	 */
-	function downloadDocument( button ) {
-		var group = button.closest( '[data-document-labels]' );
-		var labels = parseJson( group && group.getAttribute( 'data-document-labels' ) ) || {};
-		var failed = labels.failed || '';
-
-		button.disabled = true;
-		showDocumentNotice( button, '', false );
-
+	function requestDocument( button, failed, signal ) {
 		return window.fetch( button.getAttribute( 'data-document-url' ) || '', {
 			method: 'GET',
 			credentials: 'same-origin',
 			headers: { 'X-WP-Nonce': button.getAttribute( 'data-rest-nonce' ) || '' },
+			signal: signal || undefined,
 		} ).then( function ( response ) {
 			var contentType = response.headers.get( 'Content-Type' ) || '';
 
 			if ( response.ok && contentType.indexOf( 'application/pdf' ) !== -1 ) {
 				var match = /filename="?([^";]+)"?/i.exec( response.headers.get( 'Content-Disposition' ) || '' );
-				var filename = match ? match[ 1 ] : 'document.pdf';
 
 				return response.blob().then( function ( blob ) {
-					var objectUrl = window.URL.createObjectURL( blob );
-					var anchor = document.createElement( 'a' );
-
-					anchor.href = objectUrl;
-					anchor.download = filename;
-					document.body.appendChild( anchor );
-					anchor.click();
-					document.body.removeChild( anchor );
-					window.URL.revokeObjectURL( objectUrl );
+					return { kind: 'file', blob: blob, filename: match ? match[ 1 ] : 'document.pdf' };
 				} );
 			}
 
@@ -377,24 +443,128 @@
 				body = body || {};
 
 				if ( 202 === response.status ) {
-					var seconds = Number( body.retry_after ) || Number( response.headers.get( 'Retry-After' ) ) || 5;
-
-					showDocumentNotice( button, ( labels.pending || '' ).replace( '%d', String( seconds ) ), false );
-					return;
+					return { kind: 'pending', retryAfter: Number( body.retry_after ) || Number( response.headers.get( 'Retry-After' ) ) || 5 };
 				}
 
 				if ( response.ok && 'url' === body.status && 'string' === typeof body.url && '' !== body.url ) {
-					window.open( body.url, '_blank', 'noopener' );
-					return;
+					return { kind: 'link', url: body.url };
 				}
 
-				showDocumentNotice( button, ( ! response.ok && body.message ) || failed, true );
+				return { kind: 'error', message: ( ! response.ok && body.message ) || failed };
 			} );
 		} ).catch( function () {
-			showDocumentNotice( button, failed, true );
-		} ).then( function () {
-			button.disabled = false;
+			return { kind: 'error', message: failed };
 		} );
+	}
+
+	/**
+	 * Fetches one carrier document through the documents REST route — the same route, nonce and outcomes the orders
+	 * page uses — and waits for it BY ITSELF (#1191): while the route answers 202 «pending» the script asks again after
+	 * the server's `retry_after`, up to ~30 s, then says so. A PDF is saved the moment it is ready, a carrier link
+	 * opens in a new tab, a failure (the server's own Russian `message`) is shown under the buttons. The button stays
+	 * disabled for the whole wait; leaving the page cancels it.
+	 *
+	 * @param {HTMLButtonElement} button the clicked document button.
+	 * @return {Promise<void>} settles when the outcome has been shown (or the wait was cancelled).
+	 */
+	function downloadDocument( button ) {
+		var group = button.closest( '[data-document-labels]' );
+		var labels = parseJson( group && group.getAttribute( 'data-document-labels' ) ) || {};
+		var failed = labels.failed || '';
+		var poll = newPoll();
+		var started = Date.now();
+		var announced = false;
+
+		polls.push( poll );
+		// The cap is absolute: it ends the wait even while a request is still in flight.
+		poll.deadline = setTimeout( function () {
+			poll.stop( true );
+		}, POLL_MAX_WAIT_MS );
+		button.disabled = true;
+		button.setAttribute( 'aria-busy', 'true' );
+		showDocumentNotice( button, '', false );
+
+		/** Whether the wait is over from outside; a cap running out says so (once), a cancel is silent. */
+		function stopped() {
+			if ( poll.timedOut ) {
+				showDocumentNotice( button, labels.timeout || failed, true );
+				return true;
+			}
+
+			return poll.cancelled;
+		}
+
+		/** The request, or `{kind:'stopped'}` the moment the wait is stopped — a late answer is dropped. */
+		function request() {
+			return new Promise( function ( resolve ) {
+				poll.release = function () {
+					resolve( { kind: 'stopped' } );
+				};
+				requestDocument( button, failed, poll.controller ? poll.controller.signal : null ).then( resolve );
+			} );
+		}
+
+		function step() {
+			if ( stopped() ) {
+				return Promise.resolve();
+			}
+
+			return request().then( function ( outcome ) {
+				poll.release = null;
+
+				if ( stopped() ) {
+					return null;
+				}
+
+				if ( 'pending' === outcome.kind ) {
+					var delay = delayFor( outcome.retryAfter );
+
+					if ( ! announced ) {
+						announced = true;
+						showDocumentNotice( button, labels.working || '', false );
+					}
+
+					if ( Date.now() - started + delay > POLL_MAX_WAIT_MS ) {
+						showDocumentNotice( button, labels.timeout || failed, true );
+						return null;
+					}
+
+					return sleep( delay, poll ).then( step );
+				}
+
+				showDocumentNotice( button, '', false );
+
+				if ( 'file' === outcome.kind ) {
+					var objectUrl = window.URL.createObjectURL( outcome.blob );
+					var anchor = document.createElement( 'a' );
+
+					anchor.href = objectUrl;
+					anchor.download = outcome.filename;
+					document.body.appendChild( anchor );
+					anchor.click();
+					document.body.removeChild( anchor );
+					window.URL.revokeObjectURL( objectUrl );
+				} else if ( 'link' === outcome.kind ) {
+					window.open( outcome.url, '_blank', 'noopener' );
+				} else {
+					showDocumentNotice( button, outcome.message, true );
+				}
+
+				return null;
+			} );
+		}
+
+		function finish() {
+			clearTimeout( poll.deadline );
+			clearTimeout( poll.timer );
+			polls = polls.filter( function ( item ) {
+				return item !== poll;
+			} );
+			button.disabled = false;
+			button.removeAttribute( 'aria-busy' );
+		}
+
+		return step().then( finish, finish );
 	}
 
 	/**
@@ -437,6 +607,8 @@
 	}
 
 	document.addEventListener( 'click', onClick );
+	// The page is being left: stop asking the carrier (#1191).
+	window.addEventListener( 'pagehide', cancelPolls );
 
 	// -------------------------------------------------------------------------
 	// CommonJS (jest) — the pieces, for direct unit testing.
@@ -447,6 +619,7 @@
 			buildForm: buildForm,
 			buildField: buildField,
 			downloadDocument: downloadDocument,
+			cancelPolls: cancelPolls,
 			onClick: onClick,
 		};
 	}

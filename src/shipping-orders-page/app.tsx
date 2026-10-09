@@ -54,6 +54,7 @@ import {
 	fetchOrderPreview,
 	fetchOrders,
 	fetchSyncStatus,
+	fetchBulkDocument,
 	fetchOrderDocument,
 	getProviders,
 	getReachableDeliveryStatuses,
@@ -61,10 +62,12 @@ import {
 	performOrderAction,
 } from './rest';
 import { ActionInputModal } from './action-input-modal';
+import { isPollCancelled, pollUntilReady } from './document-poll';
 import type {
 	BulkActionResult,
 	OrderActionFieldError,
 	OrderActionPayload,
+	OrderDocument,
 	OrderPreview,
 	OrderRow,
 	OrderRowAction,
@@ -74,6 +77,7 @@ import type {
 	OrderRowPayment,
 	OrderRowTracking,
 	OrdersScopeCounts,
+	SkippedOrder,
 	SyncStatusResponse,
 } from './rest';
 import {
@@ -651,6 +655,8 @@ interface BulkAction {
 	action: string;
 	label: string;
 	destructive: boolean;
+	/** #1192: set on a bulk PRINT entry — the document type it fetches as one file. It never reaches the bulk action route. */
+	document?: 'waybill' | 'barcode';
 }
 
 const BULK_ACTIONS: BulkAction[] = [
@@ -658,6 +664,56 @@ const BULK_ACTIONS: BulkAction[] = [
 	{ action: 'update', label: __( 'Обновить', 'woodev-plugin-framework' ), destructive: false },
 	{ action: 'cancel', label: __( 'Отменить', 'woodev-plugin-framework' ), destructive: true },
 ];
+
+/**
+ * #1192 — the bulk print entries. Offered only while a row on the page carries the matching document action marked
+ * `bulk` (the carrier's source implements `Bulk_Document_Source`), so a carrier that cannot print several orders in
+ * one file never gets the entry.
+ */
+const BULK_DOCUMENT_ACTIONS: BulkAction[] = [
+	{ action: 'print:waybill', label: __( 'Печать накладных', 'woodev-plugin-framework' ), destructive: false, document: 'waybill' },
+	{ action: 'print:barcode', label: __( 'Печать штрихкодов', 'woodev-plugin-framework' ), destructive: false, document: 'barcode' },
+];
+
+/** The bulk picker's entries for the rows on screen. */
+function bulkActionsFor( rows: OrderRow[] | null ): BulkAction[] {
+	const printable = new Set<string>();
+
+	( rows || [] ).forEach( ( row ) =>
+		( row.actions || [] ).forEach( ( action ) => {
+			if ( action.bulk ) {
+				printable.add( action.action );
+			}
+		} )
+	);
+
+	return [ ...BULK_ACTIONS, ...BULK_DOCUMENT_ACTIONS.filter( ( a ) => a.document && printable.has( a.document ) ) ];
+}
+
+/** Why an order is missing from a bulk document, in the merchant's words (codes: `Document_Controller::SKIP_CODES`). */
+function skippedReason( code: string ): string {
+	switch ( code ) {
+		case 'not_found':
+			return __( 'заказ не найден', 'woodev-plugin-framework' );
+		case 'not_shipping':
+			return __( 'у заказа нет документов перевозчика', 'woodev-plugin-framework' );
+		case 'not_exported':
+			return __( 'ещё не выгружен перевозчику', 'woodev-plugin-framework' );
+		case 'unsupported':
+			return __( 'перевозчик не печатает этот документ для заказа', 'woodev-plugin-framework' );
+		default:
+			return __( 'перевозчик не включил заказ в файл', 'woodev-plugin-framework' );
+	}
+}
+
+/** «В файл не вошли заказы: №12 — …; №15 — …» for the orders a bulk document leaves out. */
+function skippedSentence( skipped: SkippedOrder[], numberOf: ( id: number ) => string ): string {
+	return sprintf(
+		/* translators: %s: list like «№12 — ещё не выгружен перевозчику; №15 — …». */
+		__( 'В файл не вошли заказы: %s.', 'woodev-plugin-framework' ),
+		skipped.map( ( entry ) => `№${ numberOf( entry.id ) } — ${ skippedReason( entry.code ) }` ).join( '; ' )
+	);
+}
 
 /**
  * The bulk confirm question — the same shape {@link confirmQuestion} builds for a single
@@ -704,7 +760,9 @@ function bulkConfirmQuestion( action: BulkAction, count: number ): string {
  * it will touch rather than any one of them — `onApply` decides whether to confirm first.
  */
 function BulkActionsBar( {
+	actions,
 	selectedCount,
+	busy,
 	value,
 	onChange,
 	onApply,
@@ -712,7 +770,10 @@ function BulkActionsBar( {
 	onConfirm,
 	onCancelConfirm,
 }: {
+	actions: BulkAction[];
 	selectedCount: number;
+	/** A bulk document is being prepared: applying again would start a second wait for the same orders. */
+	busy: boolean;
 	value: string;
 	onChange: ( action: string ) => void;
 	onApply: () => void;
@@ -732,14 +793,14 @@ function BulkActionsBar( {
 					// The operator's own sketch labels the empty state «Выберите действие» —
 					// an instruction, not a repeat of the control's name.
 					{ label: __( 'Выберите действие', 'woodev-plugin-framework' ), value: '' },
-					...BULK_ACTIONS.map( ( a ) => ( { label: a.label, value: a.action } ) ),
+					...actions.map( ( a ) => ( { label: a.label, value: a.action } ) ),
 				] }
 				onChange={ onChange }
 			/>
 			<Button
 				className="woodev-orders-bulk__apply"
 				variant="secondary"
-				disabled={ ! value || 0 === selectedCount }
+				disabled={ ! value || 0 === selectedCount || busy }
 				onClick={ onApply }
 			>
 				{ /*
@@ -1570,6 +1631,64 @@ export default function OrdersPage() {
 	 */
 	const fetchGeneration = useRef( 0 );
 
+	// #1191: every document wait in flight, so leaving the page cancels them all.
+	const documentPolls = useRef<Set<AbortController>>( new Set() );
+
+	/** Stops every document wait: the merchant left the page or moved to another view of the orders. */
+	const cancelDocumentPolls = () => {
+		const waits = Array.from( documentPolls.current );
+
+		documentPolls.current.clear();
+		waits.forEach( ( controller ) => controller.abort() );
+	};
+
+	// Unmount, and `pagehide` — a page parked in the back/forward cache keeps its timers and would resume the wait.
+	useEffect( () => {
+		window.addEventListener( 'pagehide', cancelDocumentPolls );
+
+		return () => {
+			window.removeEventListener( 'pagehide', cancelDocumentPolls );
+			cancelDocumentPolls();
+		};
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [] );
+
+	// Who holds each busy row: an operation may only free the rows it still owns, so a late settle of an old
+	// operation never clears the busy state of a newer one on the same order.
+	const rowOwners = useRef<Map<number, object>>( new Map() );
+	// The bulk document being prepared (#1192) — keeps «Применить действие» disabled and blocks a second click
+	// before React re-renders.
+	const bulkDocumentOwner = useRef<object | null>( null );
+	const [ bulkDocumentBusy, setBulkDocumentBusy ] = useState( false );
+
+	/** Marks `ids` busy with `pendingAction` for a new operation; returns its token for {@link releaseRows}. */
+	const claimRows = ( ids: number[], pendingAction: string ): object => {
+		const token = {};
+
+		ids.forEach( ( id ) => rowOwners.current.set( id, token ) );
+		setActionRowStates( ( current ) => {
+			const next = { ...current };
+			ids.forEach( ( id ) => {
+				next[ id ] = { pendingAction, confirmingAction: null };
+			} );
+			return next;
+		} );
+
+		return token;
+	};
+
+	/** Frees the rows `token` still owns. */
+	const releaseRows = ( ids: number[], token: object ) => {
+		const owned = ids.filter( ( id ) => rowOwners.current.get( id ) === token );
+
+		owned.forEach( ( id ) => rowOwners.current.delete( id ) );
+		setActionRowStates( ( current ) => {
+			const next = { ...current };
+			owned.forEach( ( id ) => delete next[ id ] );
+			return next;
+		} );
+	};
+
 	// Every control in the filter row — both `FilterPicker`s, `DateRangeFilterPicker`,
 	// `AdvancedFilters` — changes the URL by NAVIGATING rather than calling back with a
 	// value, so the only way to learn about a pick, or about the browser's back button,
@@ -1661,6 +1780,9 @@ export default function OrdersPage() {
 		let cancelled = false;
 
 		fetchGeneration.current += 1;
+		// A new view of the orders (page, filter, search, carrier): a document still being prepared for the old one
+		// must not turn up as a download in this one.
+		cancelDocumentPolls();
 
 		setError( '' );
 		setRows( null );
@@ -1801,59 +1923,144 @@ export default function OrdersPage() {
 	 * preview after the underlying order changed.
 	 */
 	/**
-	 * #1134 — fetches one carrier document and shows the outcome in the page, never as raw JSON in a new tab:
-	 * a PDF is saved, a carrier link opens, «ещё готовится» is a notice telling the merchant when to retry,
-	 * and a failure shows the server's own Russian sentence. The row is busy meanwhile, like any other action.
+	 * Saves a ready document: a carrier link opens in a new tab, PDF bytes are handed to the browser as a download.
 	 */
-	const downloadDocument = ( row: ActionableOrder, type: 'waybill' | 'barcode' ) => {
-		setActionRowStates( ( current ) => ( {
-			...current,
-			[ row.id ]: { pendingAction: type, confirmingAction: null },
-		} ) );
+	const saveDocument = ( doc: Exclude<OrderDocument, { kind: 'pending' }> ) => {
+		if ( 'link' === doc.kind ) {
+			window.open( doc.url, '_blank', 'noopener' );
+			return;
+		}
 
-		fetchOrderDocument( row.id, type )
+		const objectUrl = window.URL.createObjectURL( doc.blob );
+		const anchor = document.createElement( 'a' );
+
+		anchor.href = objectUrl;
+		anchor.download = doc.filename;
+		document.body.appendChild( anchor );
+		anchor.click();
+		document.body.removeChild( anchor );
+		window.URL.revokeObjectURL( objectUrl );
+	};
+
+	/**
+	 * #1191 — runs `fetchOnce` until the document is ready and saves it by itself: the merchant clicks ONCE. The first
+	 * «ещё готовится» answer says «Документ формируется…» (one toast, however many polls follow); the caller's busy
+	 * marker stays up the whole time. The wait is cancelled when the page unmounts, and a failure — or the cap
+	 * running out — is said once, in the page.
+	 *
+	 * @return the saved document, or `null` when it failed or was cancelled.
+	 */
+	const fetchAndSaveDocument = (
+		fetchOnce: ( signal: AbortSignal ) => Promise<OrderDocument>
+	): Promise<OrderDocument | null> => {
+		const controller = new AbortController();
+
+		documentPolls.current.add( controller );
+
+		return pollUntilReady( fetchOnce, {
+			signal: controller.signal,
+			onPending: ( attempt ) => {
+				if ( 1 !== attempt ) {
+					return;
+				}
+
+				const text = __( 'Документ формируется…', 'woodev-plugin-framework' );
+
+				setActionNotice( { status: 'info', text } );
+				dispatch( noticesStore ).createInfoNotice( text, { type: 'snackbar' } );
+			},
+		} )
 			.then( ( doc ) => {
-				if ( 'pending' === doc.kind ) {
-					const text = sprintf(
-						/* translators: %d: seconds until the carrier document is likely ready. */
-						__( 'Документ ещё готовится. Повторите попытку примерно через %d с.', 'woodev-plugin-framework' ),
-						doc.retryAfter
-					);
-
-					setActionNotice( { status: 'info', text } );
-					dispatch( noticesStore ).createInfoNotice( text, { type: 'snackbar' } );
-					return;
-				}
-
-				if ( 'link' === doc.kind ) {
-					window.open( doc.url, '_blank', 'noopener' );
-					return;
-				}
-
-				const objectUrl = window.URL.createObjectURL( doc.blob );
-				const anchor = document.createElement( 'a' );
-
-				anchor.href = objectUrl;
-				anchor.download = doc.filename;
-				document.body.appendChild( anchor );
-				anchor.click();
-				document.body.removeChild( anchor );
-				window.URL.revokeObjectURL( objectUrl );
+				// The inline «формируется» line has done its job; leaving it up beside a finished download would lie.
+				setActionNotice( ( current ) => ( current && 'info' === current.status ? null : current ) );
+				saveDocument( doc );
+				return doc;
 			} )
 			.catch( ( err: { message?: string } ) => {
-				const text =
-					( err && err.message ) ||
-					__( 'Не удалось получить документ у перевозчика.', 'woodev-plugin-framework' );
+				// Leaving the page is not a failure: say nothing — and take the «формируется» line down with the wait.
+				if ( isPollCancelled( err ) ) {
+					setActionNotice( ( current ) => ( current && 'info' === current.status ? null : current ) );
+				} else {
+					const text =
+						( err && err.message ) ||
+						__( 'Не удалось получить документ у перевозчика.', 'woodev-plugin-framework' );
 
-				setActionNotice( { status: 'error', text } );
-				dispatch( noticesStore ).createErrorNotice( text, { type: 'snackbar' } );
+					setActionNotice( { status: 'error', text } );
+					dispatch( noticesStore ).createErrorNotice( text, { type: 'snackbar' } );
+				}
+
+				return null;
 			} )
 			.finally( () => {
-				setActionRowStates( ( current ) => {
-					const next = { ...current };
-					delete next[ row.id ];
-					return next;
-				} );
+				documentPolls.current.delete( controller );
+			} );
+	};
+
+	/**
+	 * #1134 / #1191 — one carrier document for one order: the row is busy (button disabled, busy bar) from the click
+	 * until the file is saved.
+	 */
+	const downloadDocument = ( row: ActionableOrder, type: 'waybill' | 'barcode' ) => {
+		const token = claimRows( [ row.id ], type );
+
+		fetchAndSaveDocument( ( signal ) => fetchOrderDocument( row.id, type, signal ) ).finally( () => {
+			releaseRows( [ row.id ], token );
+		} );
+	};
+
+	/**
+	 * #1192 — ONE file (waybills, barcodes) for the selected orders. Every selected row is busy meanwhile; the
+	 * selection stays, since nothing changed. The orders the carrier or the framework left out are named in a warning.
+	 */
+	const printBulkDocument = ( type: 'waybill' | 'barcode', ids: number[] ) => {
+		// One bulk document at a time, and never over rows another operation is still busy with.
+		if ( bulkDocumentOwner.current || ids.some( ( id ) => rowOwners.current.has( id ) ) ) {
+			return;
+		}
+
+		const token = claimRows( ids, `print:${ type }` );
+
+		bulkDocumentOwner.current = token;
+		setBulkDocumentBusy( true );
+
+		const numberOf = ( id: number ): string => {
+			const found = ( rows || [] ).find( ( r ) => r.id === id );
+
+			return found ? String( found.order_number ) : String( id );
+		};
+
+		fetchAndSaveDocument( ( signal ) => fetchBulkDocument( ids, type, signal ) )
+			.then( ( doc ) => {
+				if ( ! doc || 'pending' === doc.kind ) {
+					return;
+				}
+
+				const skipped = doc.skipped || [];
+				const printed = ids.length - skipped.length;
+				const messages: BulkActionResult[ 'messages' ] = {
+					success: sprintf(
+						/* translators: %d: number of orders in the downloaded file. */
+						__( 'Документ готов. Заказов в файле: %d.', 'woodev-plugin-framework' ),
+						printed
+					),
+				};
+
+				dispatch( noticesStore ).createSuccessNotice( messages.success as string, { type: 'snackbar' } );
+
+				if ( skipped.length > 0 ) {
+					messages.warning = skippedSentence( skipped, numberOf );
+					dispatch( noticesStore ).createWarningNotice( messages.warning, { type: 'snackbar' } );
+				}
+
+				setBulkNotice( messages );
+			} )
+			.finally( () => {
+				releaseRows( ids, token );
+
+				if ( bulkDocumentOwner.current === token ) {
+					bulkDocumentOwner.current = null;
+					setBulkDocumentBusy( false );
+				}
 			} );
 	};
 
@@ -1976,23 +2183,11 @@ export default function OrdersPage() {
 	 * skipped or failed id stays selected, since nothing happened to it.
 	 */
 	const performBulkAction = ( action: string, ids: number[] ) => {
-		setActionRowStates( ( current ) => {
-			const next = { ...current };
-			ids.forEach( ( id ) => {
-				next[ id ] = { pendingAction: action, confirmingAction: null };
-			} );
-			return next;
-		} );
+		const token = claimRows( ids, action );
 
 		const generation = fetchGeneration.current;
 
-		const clearBusy = () => {
-			setActionRowStates( ( current ) => {
-				const next = { ...current };
-				ids.forEach( ( id ) => delete next[ id ] );
-				return next;
-			} );
-		};
+		const clearBusy = () => releaseRows( ids, token );
 
 		performBulkOrderAction( action, ids )
 			.then( ( res: BulkActionResult ) => {
@@ -2124,6 +2319,9 @@ export default function OrdersPage() {
 	const selectAllChecked =
 		checkableIds.length > 0 && checkableIds.every( ( id ) => selectedIds.has( id ) );
 
+	// #1192: the picker's entries — the print ones only while a row on screen can print in bulk.
+	const bulkActions = bulkActionsFor( rows );
+
 	/** The header `cb`'s select-all — sets the underlying selection directly, busy rows included. */
 	const onSelectAll = ( checked: boolean ) => {
 		setSelectedIds( ( current ) => {
@@ -2141,9 +2339,14 @@ export default function OrdersPage() {
 
 	/** #874 — the bulk picker's «Применить»: a destructive pick confirms first, same as a row action. */
 	const onBulkApply = () => {
-		const chosen = BULK_ACTIONS.find( ( a ) => a.action === bulkAction );
+		const chosen = bulkActions.find( ( a ) => a.action === bulkAction );
 
-		if ( ! chosen || 0 === selectedIds.size ) {
+		if ( ! chosen || 0 === selectedIds.size || bulkDocumentOwner.current ) {
+			return;
+		}
+
+		if ( chosen.document ) {
+			printBulkDocument( chosen.document, Array.from( selectedIds ) );
 			return;
 		}
 
@@ -2203,7 +2406,9 @@ export default function OrdersPage() {
 	const actions = [
 		<div className="woodev-orders__toolbar-row" key="toolbar">
 			<BulkActionsBar
+				actions={ bulkActions }
 				selectedCount={ selectedIds.size }
+				busy={ bulkDocumentBusy }
 				value={ bulkAction }
 				onChange={ setBulkAction }
 				onApply={ onBulkApply }
