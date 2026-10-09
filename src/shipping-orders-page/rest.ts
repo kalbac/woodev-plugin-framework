@@ -78,6 +78,21 @@ export interface OrderRowDeliveryStatus {
 	raw_label: string | null;
 }
 
+/** The tones a row flag may use — the delivery badge's own five (`Order_Row_Flags::TONES`). */
+export type OrderRowFlagTone = 'ok' | 'warn' | 'error' | 'info' | 'muted';
+
+/**
+ * One small badge a carrier plugin hangs under a row's tracking number («Нужно вызвать курьера»,
+ * `woodev_shipping_order_row_flags`, s164). The server sends it sanitised: a non-empty `label`, a known `tone`, and
+ * a `title` only when one was declared.
+ */
+export interface OrderRowFlag {
+	label: string;
+	tone: OrderRowFlagTone;
+	/** Tooltip; absent when none was declared. */
+	title?: string;
+}
+
 /** One row of `GET woodev/v1/shipping/orders`, exactly as `Order_Row_Builder::build()` returns it. */
 export interface OrderRow {
 	id: number;
@@ -110,6 +125,11 @@ export interface OrderRow {
 	 * sends no such field, and «not stated» must not be rendered as a failure.
 	 */
 	cancel_failed?: boolean;
+	/**
+	 * s164: the badges a carrier plugin adds under the tracking number, at most three. Optional like the fields above —
+	 * an older server sends none, and «not stated» renders nothing.
+	 */
+	flags?: OrderRowFlag[];
 }
 
 /**
@@ -147,6 +167,11 @@ export interface OrderRowAction {
 	title: string;
 	/** `true` => confirm before sending. */
 	destructive: boolean;
+	/**
+	 * s164: a destructive action's own confirmation sentence (the carrier words it, e.g. «После отмены СДЭК может не
+	 * принять новый вызов»). Absent => the page's generic question. Never sent for a harmless action.
+	 */
+	confirm?: string;
 	/** `true` when another manager holds the order's live WooCommerce edit lock. */
 	disabled?: boolean;
 	/** Display name of that other manager, present only with `disabled`. */
@@ -168,8 +193,8 @@ export interface OrderRowAction {
 	bulk?: boolean;
 }
 
-/** The `payload` an action with fields sends: field id → value (a time range is `{ from, to }`). */
-export type OrderActionPayload = Record< string, string | OrderActionTimeRange >;
+/** The `payload` an action with fields sends: field id → value (a time range is `{ from, to }`, an orders field a list of ids). */
+export type OrderActionPayload = Record< string, string | OrderActionTimeRange | string[] >;
 
 export interface OrderActionTimeRange {
 	from: string;
@@ -181,6 +206,8 @@ interface OrderActionFieldBase {
 	id: string;
 	label: string;
 	required: boolean;
+	/** s164: one plain sentence drawn under the input. Absent when none was declared. */
+	help?: string;
 }
 
 /**
@@ -191,7 +218,9 @@ export type OrderActionField =
 	| ( OrderActionFieldBase & { type: 'date'; default: string; min?: string; max?: string } )
 	| ( OrderActionFieldBase & { type: 'select'; default: string; options: { value: string; label: string }[] } )
 	| ( OrderActionFieldBase & { type: 'time_range'; default: OrderActionTimeRange; min?: string; max?: string } )
-	| ( OrderActionFieldBase & { type: 'textarea'; default: string; maxlength: number } );
+	| ( OrderActionFieldBase & { type: 'textarea'; default: string; maxlength: number } )
+	/** s164: a toolbar dialog's multi-select of orders; `default` is the ids preselected (all of them unless declared). */
+	| ( OrderActionFieldBase & { type: 'orders'; default: string[]; options: { value: string; label: string }[] } );
 
 /** One error of a rejected payload (`data.errors` of the route's 422), the shape the wizard's routes use. */
 export interface OrderActionFieldError {
@@ -870,5 +899,159 @@ export function fetchSyncStatus(): Promise<SyncStatusResponse> {
 		url: `${ restRoot.replace( /\/+$/, '' ) }/sync-status`,
 		method: 'GET',
 		headers: { 'X-WP-Nonce': nonce },
+	} );
+}
+
+/**
+ * One carrier-declared button above the table (`GET /shipping/orders/toolbar-actions`, s164,
+ * `Toolbar_Actions::for_page()`). Only the visible ones are sent; `count` is the number of orders the action is for
+ * now, or `null` when the carrier declared none.
+ */
+export interface ToolbarActionButton {
+	id: string;
+	label: string;
+	/** Tooltip; `''` when none. */
+	title: string;
+	/** A Dashicons slug without the `dashicons-` prefix; `''` => the neutral fallback glyph. */
+	icon: string;
+	count: number | null;
+}
+
+/** A button of one row of a list tab («Отменить»). */
+export interface ToolbarRowAction {
+	action: string;
+	label: string;
+	title: string;
+	destructive: boolean;
+	icon: string;
+	/** The confirmation's sentence — only for a destructive button that declared one. */
+	confirm?: string;
+}
+
+export interface ToolbarListRow {
+	id: string;
+	/** Column id → text. Every column has a cell. */
+	cells: Record< string, string >;
+	actions: ToolbarRowAction[];
+}
+
+/** A form tab: fields (exactly one of type `orders`) and a submit. */
+export interface ToolbarFormTab {
+	id: string;
+	type: 'form';
+	label: string;
+	/** `''` => the dialog's title. */
+	submit_label: string;
+	description?: string;
+	fields: OrderActionField[];
+}
+
+/** A list tab: rows the carrier supplies. */
+export interface ToolbarListTab {
+	id: string;
+	type: 'list';
+	label: string;
+	columns: { id: string; label: string }[];
+	rows: ToolbarListRow[];
+	/** Shown with no rows; `''` => the page's own sentence. */
+	empty: string;
+}
+
+export type ToolbarTab = ToolbarFormTab | ToolbarListTab;
+
+/** The dialog of one toolbar action, as the carrier declares it now (`Toolbar_Actions::dialog()`). */
+export interface ToolbarDialog {
+	title: string;
+	description?: string;
+	tabs: ToolbarTab[];
+}
+
+/** One order's line of a submit's answer. */
+export interface ToolbarOrderResult {
+	id: number;
+	order_number: string;
+	ok: boolean;
+	/** The carrier's note or the reason it failed; `''` for a plain success. */
+	message: string;
+}
+
+/**
+ * `POST /shipping/orders/toolbar-actions/<id>`'s success envelope — a 200 even when every order failed. `dialog` is
+ * the refreshed dialog (the list tab shows what the run just changed); `null` when the carrier no longer supplies one.
+ */
+export interface ToolbarSubmitResult {
+	action: string;
+	requested: number;
+	succeeded: number;
+	failed: number;
+	results: ToolbarOrderResult[];
+	/** Built server-side, shown verbatim. Either may be absent. */
+	messages: { success?: string; error?: string };
+	dialog: ToolbarDialog | null;
+}
+
+/** `POST …/toolbar-actions/<id>/rows`'s success envelope. */
+export interface ToolbarRowActionResult {
+	message: string;
+	dialog: ToolbarDialog | null;
+}
+
+function toolbarRoot(): string {
+	const { restRoot = '' } = bootstrap();
+
+	return `${ restRoot.replace( /\/+$/, '' ) }/toolbar-actions`;
+}
+
+/** The buttons to draw above the table (`GET /shipping/orders/toolbar-actions`). */
+export function fetchToolbarActions(): Promise<{ actions: ToolbarActionButton[] }> {
+	const { nonce = '' } = bootstrap();
+
+	return apiFetch<{ actions: ToolbarActionButton[] }>( {
+		url: toolbarRoot(),
+		method: 'GET',
+		headers: { 'X-WP-Nonce': nonce },
+	} );
+}
+
+/** One action's dialog, fetched when the merchant opens it so the orders offered and the list are current. */
+export function fetchToolbarDialog( id: string ): Promise<{ id: string; dialog: ToolbarDialog }> {
+	const { nonce = '' } = bootstrap();
+
+	return apiFetch<{ id: string; dialog: ToolbarDialog }>( {
+		url: `${ toolbarRoot() }/${ encodeURIComponent( id ) }`,
+		method: 'GET',
+		headers: { 'X-WP-Nonce': nonce },
+	} );
+}
+
+/**
+ * Submits the dialog's form: the server validates the payload (a bad one rejects with a 422 whose `data.errors` is an
+ * {@link OrderActionFieldError}[]), then runs the carrier's handler for every chosen order.
+ */
+export function submitToolbarAction( id: string, payload: OrderActionPayload ): Promise<ToolbarSubmitResult> {
+	const { nonce = '' } = bootstrap();
+
+	return apiFetch<ToolbarSubmitResult>( {
+		url: `${ toolbarRoot() }/${ encodeURIComponent( id ) }`,
+		method: 'POST',
+		headers: { 'X-WP-Nonce': nonce },
+		data: { payload },
+	} );
+}
+
+/** Runs a button of a row of a list tab (`POST …/toolbar-actions/<id>/rows`). */
+export function performToolbarRowAction(
+	id: string,
+	tab: string,
+	row: string,
+	action: string
+): Promise<ToolbarRowActionResult> {
+	const { nonce = '' } = bootstrap();
+
+	return apiFetch<ToolbarRowActionResult>( {
+		url: `${ toolbarRoot() }/${ encodeURIComponent( id ) }/rows`,
+		method: 'POST',
+		headers: { 'X-WP-Nonce': nonce },
+		data: { tab, row, action },
 	} );
 }

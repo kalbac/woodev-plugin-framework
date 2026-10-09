@@ -584,6 +584,83 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$this->assertStringNotContainsString( 'onclick', $html, 'no inline handler — the script owns the click' );
 		}
 
+		/** s164: a destructive action may word its own question; the metabox button carries THAT one. */
+		public function test_render_metabox_destructive_button_carries_the_actions_own_confirm_text(): void {
+			$provider = $this->provider();
+			$order    = $this->make_order();
+
+			$this->meta['_wc_cdek_order_id'] = 'CARRIER-1';
+			$this->register_handler();
+			Functions\when( 'apply_filters' )->alias(
+				static function ( $hook, $value, ...$args ) {
+					if ( 'woodev_shipping_order_actions' === $hook ) {
+						$value[] = [
+							'action'      => 'cancel_intake',
+							'label'       => 'Отменить вызов',
+							'title'       => '',
+							'destructive' => true,
+							'confirm'     => 'После отмены СДЭК может не принять новый вызов.',
+						];
+					}
+
+					return $value;
+				}
+			);
+
+			ob_start();
+			( new Shipping_Admin_Order( Orders_Registry::instance() ) )->render_metabox( $order, $provider );
+			$html = ob_get_clean();
+
+			$this->assertSame( 1, preg_match( '/<button[^>]*data-woodev-order-action="cancel_intake"[^>]*>/s', $html, $m ) );
+			$this->assertStringContainsString( 'data-confirm="После отмены СДЭК может не принять новый вызов."', $m[0] );
+			$this->assertSame( 1, preg_match( '/<button[^>]*data-woodev-order-action="cancel"[^>]*>/s', $html, $c ) );
+			$this->assertStringContainsString( 'data-confirm="Вы уверены?"', $c[0], 'an action without its own text keeps the generic question' );
+		}
+
+		/** s164: the row's badges are drawn under the details of an exported order. */
+		public function test_render_metabox_draws_the_row_flags(): void {
+			$provider = $this->provider();
+			$order    = $this->make_order();
+
+			$this->meta['_wc_cdek_order_id'] = 'CARRIER-1';
+			$this->register_handler();
+			Functions\when( 'apply_filters' )->alias(
+				static function ( $hook, $value, ...$args ) {
+					if ( 'woodev_shipping_order_row_flags' === $hook ) {
+						return [
+							[
+								'label' => 'Курьер вызван на 12.10',
+								'tone'  => 'info',
+								'title' => 'Заявка № 13312783',
+							],
+						];
+					}
+
+					return $value;
+				}
+			);
+
+			ob_start();
+			( new Shipping_Admin_Order( Orders_Registry::instance() ) )->render_metabox( $order, $provider );
+			$html = ob_get_clean();
+
+			$this->assertStringContainsString( '<li class="woodev-orders-flag woodev-orders-flag--info" title="Заявка № 13312783">Курьер вызван на 12.10</li>', $html );
+		}
+
+		public function test_render_metabox_draws_no_flag_list_when_a_row_carries_none(): void {
+			$provider = $this->provider();
+			$order    = $this->make_order();
+
+			$this->meta['_wc_cdek_order_id'] = 'CARRIER-1';
+			$this->register_handler();
+
+			ob_start();
+			( new Shipping_Admin_Order( Orders_Registry::instance() ) )->render_metabox( $order, $provider );
+			$html = ob_get_clean();
+
+			$this->assertStringNotContainsString( 'woodev-orders-flags', $html );
+		}
+
 		public function test_render_metabox_never_draws_a_button_for_the_edit_row_action(): void {
 			$provider = $this->provider();
 			$order    = $this->make_order();

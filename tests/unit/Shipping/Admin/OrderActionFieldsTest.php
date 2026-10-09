@@ -452,4 +452,186 @@ final class OrderActionFieldsTest extends TestCase {
 
 		$this->assertSame( [ 'day', 'window', 'service', 'comment' ], array_column( $result['errors'], 'field' ) );
 	}
+
+	// ----- help (s164) -----
+
+	public function test_a_help_is_kept_as_one_plain_sentence_on_every_type(): void {
+		Functions\when( 'wp_strip_all_tags' )->alias(
+			static function ( string $text ): string {
+				return strip_tags( $text );
+			}
+		);
+
+		$fields = Order_Action_Fields::sanitize(
+			[
+				[
+					'id'    => 'day',
+					'type'  => 'date',
+					'label' => 'День',
+					'help'  => "  На один адрес — <b>один</b> вызов\n  в день.  ",
+				],
+				[
+					'id'      => 'service',
+					'type'    => 'select',
+					'label'   => 'Забор',
+					'options' => [ 'a' ],
+					'help'    => 'Подсказка',
+				],
+				[
+					'id'    => 'note',
+					'type'  => 'textarea',
+					'label' => 'Комментарий',
+				],
+			]
+		);
+
+		$this->assertSame( 'На один адрес — один вызов в день.', $fields[0]['help'] );
+		$this->assertSame( 'Подсказка', $fields[1]['help'] );
+		$this->assertArrayNotHasKey( 'help', $fields[2], 'no help declared => no key, so a field keeps exactly the shape it had' );
+	}
+
+	public function test_a_help_that_is_not_text_is_dropped_and_a_long_one_is_cut(): void {
+		Functions\when( 'wp_strip_all_tags' )->alias(
+			static function ( string $text ): string {
+				return strip_tags( $text );
+			}
+		);
+
+		$fields = Order_Action_Fields::sanitize(
+			[
+				[
+					'id'    => 'a',
+					'type'  => 'date',
+					'label' => 'A',
+					'help'  => [ 'not text' ],
+				],
+				[
+					'id'    => 'b',
+					'type'  => 'date',
+					'label' => 'B',
+					'help'  => '   ',
+				],
+				[
+					'id'    => 'c',
+					'type'  => 'date',
+					'label' => 'C',
+					'help'  => str_repeat( 'я', 900 ),
+				],
+			]
+		);
+
+		$this->assertArrayNotHasKey( 'help', $fields[0] );
+		$this->assertArrayNotHasKey( 'help', $fields[1] );
+		$this->assertSame( Order_Action_Fields::MAX_HELP_LENGTH, mb_strlen( $fields[2]['help'] ) );
+	}
+
+	// ----- orders (s164) -----
+
+	/** @return array<int,array<string,mixed>> */
+	private function orders_options(): array {
+		return [
+			[
+				'value' => '1047',
+				'label' => '#1047 · Екатеринбург',
+			],
+			[
+				'value' => '1050',
+				'label' => '#1050 · Москва',
+			],
+			[
+				'value' => '1051',
+				'label' => '#1051 · Казань',
+			],
+		];
+	}
+
+	/** @return array<int,array<string,mixed>> */
+	private function orders_field( array $extra = [] ): array {
+		return Order_Action_Fields::sanitize(
+			[
+				array_merge(
+					[
+						'id'       => 'orders',
+						'type'     => 'orders',
+						'label'    => 'Заказы',
+						'required' => true,
+						'options'  => $this->orders_options(),
+					],
+					$extra
+				),
+			],
+			true
+		);
+	}
+
+	public function test_the_orders_type_exists_only_where_it_is_allowed(): void {
+		$declared = [
+			[
+				'id'      => 'orders',
+				'type'    => 'orders',
+				'label'   => 'Заказы',
+				'options' => $this->orders_options(),
+			],
+		];
+
+		$this->assertSame( [], Order_Action_Fields::sanitize( $declared ), 'a per-order action never carries the order picker' );
+		$this->assertSame( [ 'orders' ], array_column( Order_Action_Fields::sanitize( $declared, true ), 'id' ) );
+	}
+
+	public function test_every_order_is_preselected_unless_the_declaration_names_the_ones_to_start_with(): void {
+		$this->assertSame( [ '1047', '1050', '1051' ], $this->orders_field()[0]['default'] );
+		$this->assertSame( [ '1050' ], $this->orders_field( [ 'default' => [ 1050, '9999' ] ] )[0]['default'], 'a default outside the options is dropped' );
+		$this->assertSame( [], $this->orders_field( [ 'default' => [] ] )[0]['default'], 'an explicit empty default preselects nothing' );
+	}
+
+	public function test_an_orders_field_without_a_single_usable_option_is_dropped(): void {
+		$this->assertSame( [], $this->orders_field( [ 'options' => [] ] ) );
+	}
+
+	public function test_more_options_than_the_ceiling_are_cut(): void {
+		$options = [];
+
+		for ( $i = 1; $i <= Order_Action_Fields::MAX_ORDERS + 20; $i++ ) {
+			$options[] = [
+				'value' => (string) $i,
+				'label' => '#' . $i,
+			];
+		}
+
+		$this->assertCount( Order_Action_Fields::MAX_ORDERS, $this->orders_field( [ 'options' => $options ] )[0]['options'] );
+	}
+
+	public function test_chosen_orders_come_back_as_a_unique_list_of_option_values(): void {
+		$result = Order_Action_Fields::validate( $this->orders_field(), [ 'orders' => [ '1050', 1047, '1050' ] ] );
+
+		$this->assertSame( [], $result['errors'] );
+		$this->assertSame( [ '1050', '1047' ], $result['values']['orders'] );
+	}
+
+	public function test_an_order_the_dialog_never_offered_refuses_the_whole_field(): void {
+		$result = Order_Action_Fields::validate( $this->orders_field(), [ 'orders' => [ '1047', '777' ] ] );
+
+		$this->assertSame( 'invalid_option', $result['errors'][0]['code'] );
+		$this->assertSame( 'orders', $result['errors'][0]['field'] );
+		$this->assertSame( [], $result['values']['orders'], 'nothing is forwarded from a refused field' );
+	}
+
+	public function test_a_required_orders_field_left_empty_is_missing_and_a_non_list_is_empty(): void {
+		foreach ( [ [], null, 'x' ] as $posted ) {
+			$result = Order_Action_Fields::validate( $this->orders_field(), [ 'orders' => $posted ] );
+
+			$this->assertSame( 'required', $result['errors'][0]['code'] );
+		}
+
+		$optional = Order_Action_Fields::validate( $this->orders_field( [ 'required' => false ] ), [] );
+
+		$this->assertSame( [], $optional['errors'] );
+		$this->assertSame( [], $optional['values']['orders'] );
+	}
+
+	public function test_a_list_item_that_is_not_a_scalar_is_an_invalid_option(): void {
+		$result = Order_Action_Fields::validate( $this->orders_field(), [ 'orders' => [ [ '1047' ] ] ] );
+
+		$this->assertSame( 'invalid_option', $result['errors'][0]['code'] );
+	}
 }

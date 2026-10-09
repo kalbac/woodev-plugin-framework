@@ -8,7 +8,18 @@
  */
 
 import apiFetch from '@wordpress/api-fetch';
-import { fetchBulkDocument, fetchOrderDocument, fetchOrders, fetchSyncStatus, getExportsInProgress, performOrderAction } from '../../src/shipping-orders-page/rest';
+import {
+	fetchBulkDocument,
+	fetchOrderDocument,
+	fetchOrders,
+	fetchSyncStatus,
+	fetchToolbarActions,
+	fetchToolbarDialog,
+	getExportsInProgress,
+	performOrderAction,
+	performToolbarRowAction,
+	submitToolbarAction,
+} from '../../src/shipping-orders-page/rest';
 
 jest.mock( '@wordpress/api-fetch' );
 
@@ -462,5 +473,62 @@ describe( 'fetchBulkDocument — one file for several orders (#1192)', () => {
 			code: 'woodev_document_mixed_carriers',
 			message: 'Выбраны заказы разных перевозчиков.',
 		} );
+	} );
+} );
+
+/**
+ * The toolbar routes (s164, `Toolbar_Controller`): a carrier's page-level buttons, the dialog behind one, its submit
+ * and the buttons of a list row. Same root as the rest of the page, same nonce header.
+ */
+describe( 'toolbar actions (s164)', () => {
+	const ROOT = 'https://example.test/wp-json/woodev/v1/shipping/orders/toolbar-actions';
+
+	function lastCall() {
+		return apiFetch.mock.calls[ apiFetch.mock.calls.length - 1 ][ 0 ];
+	}
+
+	test( 'the buttons are a GET of the collection', async () => {
+		await fetchToolbarActions();
+
+		expect( lastCall() ).toMatchObject( { url: ROOT, method: 'GET', headers: { 'X-WP-Nonce': 'abc' } } );
+	} );
+
+	test( 'a dialog is a GET of that action — its id travels escaped', async () => {
+		await fetchToolbarDialog( 'call_courier' );
+		expect( lastCall() ).toMatchObject( { url: `${ ROOT }/call_courier`, method: 'GET' } );
+
+		await fetchToolbarDialog( 'a/b?c' );
+		expect( lastCall().url ).toBe( `${ ROOT }/a%2Fb%3Fc` );
+	} );
+
+	test( 'a submit POSTs the payload under `payload`, like a single-order action', async () => {
+		const payload = { orders: [ '1047', '1050' ], day: '2026-10-12', window: { from: '10:00', to: '17:00' }, comment: '' };
+
+		await submitToolbarAction( 'call_courier', payload );
+
+		expect( lastCall() ).toMatchObject( {
+			url: `${ ROOT }/call_courier`,
+			method: 'POST',
+			headers: { 'X-WP-Nonce': 'abc' },
+			data: { payload },
+		} );
+	} );
+
+	test( 'a row button POSTs the tab, the row and the button to the rows route', async () => {
+		await performToolbarRowAction( 'call_courier', 'intakes', 'uuid-1', 'cancel' );
+
+		expect( lastCall() ).toMatchObject( {
+			url: `${ ROOT }/call_courier/rows`,
+			method: 'POST',
+			data: { tab: 'intakes', row: 'uuid-1', action: 'cancel' },
+		} );
+	} );
+
+	test( 'a rejection reaches the caller untouched — the 422 `data.errors` included', async () => {
+		const rejection = { code: 'woodev_shipping_orders_invalid_payload', message: 'Проверьте заполнение полей.', data: { status: 422, errors: [] } };
+
+		apiFetch.mockRejectedValueOnce( rejection );
+
+		await expect( submitToolbarAction( 'call_courier', {} ) ).rejects.toBe( rejection );
 	} );
 } );

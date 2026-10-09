@@ -721,6 +721,53 @@ class OrderRowBuilderTest extends TestCase {
 		$this->assertFalse( ( new Order_Row_Builder() )->build( $this->make_order(), $provider )['cancel_failed'] );
 	}
 
+	/** s164: the row always states its badges — `[]` when no carrier plugin hung any. */
+	public function test_flags_is_an_empty_list_when_nothing_hooks_the_filter(): void {
+		$row = ( new Order_Row_Builder() )->build( $this->make_order(), $this->provider() );
+
+		$this->assertArrayHasKey( 'flags', $row );
+		$this->assertSame( [], $row['flags'] );
+	}
+
+	/** s164: what a carrier plugin adds through `woodev_shipping_order_row_flags` rides on the row, sanitised. */
+	public function test_flags_carries_the_sanitised_filter_answer_for_this_order_and_provider(): void {
+		$order    = $this->make_order();
+		$provider = $this->provider();
+		$seen     = null;
+
+		Functions\when( 'wp_strip_all_tags' )->alias( static fn( string $text ): string => strip_tags( $text ) );
+		Functions\when( 'apply_filters' )->alias(
+			static function ( $hook, $value, ...$args ) use ( &$seen ) {
+				if ( 'woodev_shipping_order_row_flags' === $hook ) {
+					$seen = $args;
+
+					return [
+						[
+							'label' => 'Нужно вызвать курьера',
+							'tone'  => 'warn',
+						],
+						[ 'label' => '' ],
+					];
+				}
+
+				return $value;
+			}
+		);
+
+		$row = ( new Order_Row_Builder() )->build( $order, $provider );
+
+		$this->assertSame( [ $order, $provider ], $seen );
+		$this->assertSame(
+			[
+				[
+					'label' => 'Нужно вызвать курьера',
+					'tone'  => 'warn',
+				],
+			],
+			$row['flags']
+		);
+	}
+
 	public function test_actions_is_empty_when_provider_is_null(): void {
 		$row = ( new Order_Row_Builder() )->build( $this->make_order(), null );
 

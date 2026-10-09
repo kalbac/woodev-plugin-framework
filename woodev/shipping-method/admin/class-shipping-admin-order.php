@@ -302,6 +302,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 			$is_exported = ! empty( $row['is_exported'] );
 			$fields      = $is_exported ? $this->build_fields( $order, $provider, $row ) : [];
 			$actions     = is_array( $row['actions'] ?? null ) ? $row['actions'] : [];
+			// s164: the same badges the orders page draws under the tracking number.
+			$flags = is_array( $row['flags'] ?? null ) ? $row['flags'] : [];
 
 			// «Редактировать» opens the wizard of the orders PAGE; there is nothing behind it on the order
 			// screen, and a button posting `edit` would only be refused (#972).

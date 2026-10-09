@@ -82,6 +82,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Bu
 		 * @since 2.0.2
 		 * @since 2.0.2 Added `is_exported` and `actions` (card #824).
 		 * @since 2.0.2 Added `cancel_failed` (card #1007).
+		 * @since 2.0.2 Added `flags` (s164) — {@see Order_Row_Flags}.
 		 *
 		 * @param \WC_Order            $order    matched order.
 		 * @param Orders_Provider|null $provider the carrier this row belongs to, or null
@@ -120,6 +121,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Bu
 				'is_exported'     => self::is_exported( $order, $provider ),
 				// #1007: cancelled in WooCommerce, but the carrier refused to cancel its shipment.
 				'cancel_failed'   => null !== $provider && Carrier_Cancel::has_failed( $order, Order_Automation::carrier_order_id( $order, $provider ) ),
+				// s164: the badges a carrier plugin hangs under the tracking number — `[]` when none.
+				'flags'           => Order_Row_Flags::for_order( $order, $provider ),
 				'actions'         => $this->order_actions->for_row( $order, $provider ),
 			];
 

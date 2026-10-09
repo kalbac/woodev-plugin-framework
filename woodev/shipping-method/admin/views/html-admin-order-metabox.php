@@ -26,8 +26,9 @@
  * @var string                                                      $info_text         shown only when `$is_exported` is false
  * @var array<int, array{label: string, value: string, url: string|null, tone?:string}> $fields non-empty display fields, shown only when `$is_exported` is true
  * @var bool                                                        $shipment_outdated whether the order changed after it was handed to the carrier (#947); the warning is shown only when `$is_exported` is true
+ * @var array<int, array{label: string, tone: string, title?: string}> $flags the row's badges {@see \Woodev\Framework\Shipping\Admin\Orders\Order_Row_Flags}; drawn under the details of an exported order
  * @var string                                                      $history_html      pre-rendered delivery-history markup ('' when there is none to show)
- * @var array<int, array{action: string, label: string, title: string, destructive: bool, disabled?: bool, fields?: array<int, array<string, mixed>>}> $actions the row action set {@see \Woodev\Framework\Shipping\Admin\Orders\Order_Actions::for_row()} built for this order; a locked action carries `disabled` and the lock reason as its `title`
+ * @var array<int, array{action: string, label: string, title: string, destructive: bool, disabled?: bool, fields?: array<int, array<string, mixed>>, icon?: string, confirm?: string}> $actions the row action set {@see \Woodev\Framework\Shipping\Admin\Orders\Order_Actions::for_row()} built for this order; a locked action carries `disabled` and the lock reason as its `title`
  * @var string                                                      $admin_post_action forward-only admin-post action the buttons post to
  * @var string                                                      $nonce_action      nonce action protecting the buttons' post
  * @var int                                                         $order_id          the order being edited
@@ -71,6 +72,14 @@ defined( 'ABSPATH' ) || exit;
 				<?php endforeach; ?>
 				</tbody>
 			</table>
+		<?php endif; ?>
+
+		<?php if ( [] !== $flags ) : ?>
+			<ul class="woodev-orders-flags woodev-shipping-order-flags">
+				<?php foreach ( $flags as $flag ) : ?>
+					<li class="woodev-orders-flag woodev-orders-flag--<?php echo esc_attr( (string) $flag['tone'] ); ?>"<?php echo ! empty( $flag['title'] ) ? ' title="' . esc_attr( (string) $flag['title'] ) . '"' : ''; ?>><?php echo esc_html( (string) $flag['label'] ); ?></li>
+				<?php endforeach; ?>
+			</ul>
 		<?php endif; ?>
 
 		<?php if ( '' !== $history_html ) : ?>
@@ -139,7 +148,7 @@ defined( 'ABSPATH' ) || exit;
 						data-order-id="<?php echo esc_attr( (string) $order_id ); ?>"
 						data-nonce="<?php echo esc_attr( wp_create_nonce( $nonce_action ) ); ?>"
 					<?php endif; ?>
-					<?php echo ! empty( $action['destructive'] ) ? 'data-confirm="' . esc_attr( __( 'Вы уверены?', 'woodev-plugin-framework' ) ) . '"' : ''; ?>
+					<?php echo ! empty( $action['destructive'] ) ? 'data-confirm="' . esc_attr( ! empty( $action['confirm'] ) ? (string) $action['confirm'] : __( 'Вы уверены?', 'woodev-plugin-framework' ) ) . '"' : ''; ?>
 					<?php if ( ! empty( $action['fields'] ) ) : ?>
 						data-fields="<?php echo esc_attr( (string) wp_json_encode( $action['fields'] ) ); ?>"
 						data-labels="<?php echo esc_attr( (string) wp_json_encode( $field_dialog_labels ) ); ?>"

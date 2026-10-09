@@ -218,7 +218,8 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 		 * Structural pin: `Action_Result` is a MERCHANT-surface type. Only the handler that
 		 * builds it, the REST orders route that shows it and `Order_Actions` — the admin-only
 		 * performer the orders page, the order-edit metabox (#1016) and the order wizard's
-		 * immediate export (#974) all go through — may name it; a storefront / checkout / email /
+		 * immediate export (#974) all go through — and `Toolbar_Actions` (s164), the admin-only performer of a page-level
+		 * action, may name it; a storefront / checkout / email /
 		 * tracking file that starts to would be a path for the carrier's text to a buyer. The
 		 * metabox receives the result from `Order_Actions::perform()` and only calls methods on
 		 * it, so it does not name the type — and must not grow a dispatcher that builds one.
@@ -234,6 +235,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 				'shipping-method/order/abstract-shipment-handler.php',
 				'shipping-method/rest-api/class-orders-controller.php',
 				'shipping-method/admin/orders/class-order-actions.php',
+				'shipping-method/admin/orders/class-toolbar-actions.php',
 				'shipping-method/order/class-order-automation.php',
 			];
 
