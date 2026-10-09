@@ -1671,28 +1671,33 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * second DIRECT declaration — fires `_doing_it_wrong` so the developer sees the
 		 * conflict immediately. Advisory only: the last registration wins.
 		 *
-		 * Several carrier plugins declaring the SAME Location-Provider level
-		 * ({@see Field::source_location()}) for a native id are NOT a conflict: the field is
-		 * owned by the store-level location layer (one provider chain, one cascade), not by
-		 * any plugin, so N carriers on one site each asking for `city` is the supported normal
-		 * case. Only a genuinely contested id (two direct declarations, a direct declaration
-		 * against a location field, or two different location levels on one id) is reported.
+		 * Carrier plugins that declare the IDENTICAL set of Location-Provider levels
+		 * ({@see Field::source_location()}) — e.g. both region + settlement + address — are NOT
+		 * reported: they ask the store-level location layer for the same chain. A DIFFERING
+		 * set is reported even when the overlapping ids carry the same level (A: region +
+		 * settlement + address, B: region + settlement): classic checkout keeps one cascade
+		 * record store per plugin config, so after a city pick in B's widget A's address node
+		 * stays locked and the buyer cannot type the street. Until the cascade is shared across
+		 * plugins that is a real runtime conflict. Also reported: two direct declarations, a
+		 * direct declaration against a location field, and two different levels on one id.
 		 *
 		 * @since 2.0.2
-		 * @since 2.0.2 Location-Provider claims of the same level no longer conflict.
+		 * @since 2.0.2 Plugins declaring the identical set of location levels no longer conflict.
 		 *
 		 * @return void
 		 */
 		protected function guard_native_field_conflicts(): void {
 
 			$plugin_id = $this->plugin_id();
+			$fields    = array_filter(
+				$this->effective_fields(),
+				fn( $field, $id ): bool => $this->is_native_wc_field( (string) $id ),
+				ARRAY_FILTER_USE_BOTH
+			);
+			$profile   = self::location_profile( $fields );
 
-			foreach ( $this->effective_fields() as $id => $field ) {
-				if ( ! $this->is_native_wc_field( $id ) ) {
-					continue;
-				}
-
-				$signature = self::native_claim_signature( $field );
+			foreach ( $fields as $id => $field ) {
+				$signature = self::native_claim_signature( $field, $profile );
 
 				foreach ( self::$native_field_registry[ $id ] ?? [] as $other_plugin => $other_signature ) {
 					if ( $other_plugin === $plugin_id ) {
@@ -1720,22 +1725,48 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		/**
 		 * The claim a field descriptor makes on its native WooCommerce id, for the conflict guard.
 		 *
-		 * `location:<level>` for a Location-Provider field (its fan-out variants included), so
-		 * two plugins asking for the same level compare equal; `direct` for everything else,
-		 * which never compares equal to another plugin's claim.
+		 * `location:<level>@<profile>` for a Location-Provider field (its fan-out variants
+		 * included): two plugins compare equal only when they ask for the same level AND declare
+		 * the identical set of location levels overall ({@see self::location_profile()}).
+		 * `direct` for everything else, which never compares equal to another plugin's claim.
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param array<string, mixed> $field a descriptor from {@see self::effective_fields()}.
+		 * @param array<string, mixed> $field   a descriptor from {@see self::effective_fields()}.
+		 * @param string               $profile the declaring plugin's {@see self::location_profile()}.
 		 *
 		 * @return string
 		 */
-		private static function native_claim_signature( array $field ): string {
+		private static function native_claim_signature( array $field, string $profile ): string {
 			if ( 'location' === ( $field['source_kind'] ?? null ) ) {
-				return 'location:' . (string) ( $field['location_level'] ?? '' );
+				return 'location:' . (string) ( $field['location_level'] ?? '' ) . '@' . $profile;
 			}
 
 			return 'direct';
+		}
+
+		/**
+		 * The set of location levels one plugin declares, as a canonical string (`id=level`
+		 * pairs, sorted), for {@see self::native_claim_signature()}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string, array<string, mixed>> $fields the plugin's native descriptors from {@see self::effective_fields()}.
+		 *
+		 * @return string
+		 */
+		private static function location_profile( array $fields ): string {
+			$pairs = [];
+
+			foreach ( $fields as $id => $field ) {
+				if ( 'location' === ( $field['source_kind'] ?? null ) ) {
+					$pairs[] = $id . '=' . (string) ( $field['location_level'] ?? '' );
+				}
+			}
+
+			sort( $pairs );
+
+			return implode( ',', $pairs );
 		}
 
 		/**

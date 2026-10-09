@@ -483,4 +483,43 @@ class CheckoutHandlerRegisterTest extends TestCase {
 			'carrier_c' => [ Field::create( 'billing_city' )->set_type( 'text' )->set_section( 'billing' )->to_array() ],
 		] );
 	}
+
+	/**
+	 * @return array<string, array{0: bool}>
+	 */
+	public static function registration_order_provider(): array {
+		return [
+			'full carrier first'    => [ true ],
+			'partial carrier first' => [ false ],
+		];
+	}
+
+	/**
+	 * Equal levels on the overlapping ids are not enough: carrier A (region + settlement +
+	 * address) and carrier B (region + settlement) get separate cascade record stores in the
+	 * classic checkout, so after a city pick the address A owns stays locked. That is a real
+	 * runtime conflict — reported in BOTH registration orders, on the 4 overlapping ids
+	 * (billing/shipping x state/city) and not on the address ids only one of them declares.
+	 *
+	 * @dataProvider registration_order_provider
+	 */
+	public function test_guard_fires_when_the_location_level_sets_differ_in_either_order( bool $full_first ): void {
+
+		Functions\expect( '_doing_it_wrong' )
+			->times( 4 )
+			->with( \Mockery::type( 'string' ), \Mockery::pattern( '/(billing|shipping)_(state|city)\'/' ), '2.0.2' );
+
+		$full    = [
+			Field::create( 'shipping_state' )->set_type( 'text' )->source_location( 'region' )->to_array(),
+			Field::create( 'shipping_city' )->set_type( 'text' )->source_location( 'settlement' )->to_array(),
+			Field::create( 'shipping_address_1' )->set_type( 'text' )->source_location( 'address' )->to_array(),
+		];
+		$partial = array_slice( $full, 0, 2 );
+
+		$this->register_plugins(
+			$full_first
+				? [ 'carrier_full' => $full, 'carrier_partial' => $partial ]
+				: [ 'carrier_partial' => $partial, 'carrier_full' => $full ]
+		);
+	}
 }
