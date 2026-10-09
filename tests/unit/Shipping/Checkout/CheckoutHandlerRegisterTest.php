@@ -495,19 +495,17 @@ class CheckoutHandlerRegisterTest extends TestCase {
 	}
 
 	/**
-	 * Equal levels on the overlapping ids are not enough: carrier A (region + settlement +
-	 * address) and carrier B (region + settlement) get separate cascade record stores in the
-	 * classic checkout, so after a city pick the address A owns stays locked. That is a real
-	 * runtime conflict — reported in BOTH registration orders, on the 4 overlapping ids
-	 * (billing/shipping x state/city) and not on the address ids only one of them declares.
+	 * Issue #1187: carrier A (region + settlement + address) next to carrier B (region +
+	 * settlement) is the supported multi-carrier case, in EITHER registration order. The classic
+	 * checkout folds both declarations into one cascade (`location-cascade.js`, SHARED CASCADE)
+	 * and the block checkout renders one fleet-wide chooser, so the overlapping ids carrying the
+	 * SAME level is all the guard needs — the rest of each plugin's level set is not a conflict.
 	 *
 	 * @dataProvider registration_order_provider
 	 */
-	public function test_guard_fires_when_the_location_level_sets_differ_in_either_order( bool $full_first ): void {
+	public function test_guard_stays_silent_when_the_location_level_sets_differ_in_either_order( bool $full_first ): void {
 
-		Functions\expect( '_doing_it_wrong' )
-			->times( 4 )
-			->with( \Mockery::type( 'string' ), \Mockery::pattern( '/(billing|shipping)_(state|city)\'/' ), '2.0.2' );
+		Functions\expect( '_doing_it_wrong' )->never();
 
 		$full    = [
 			Field::create( 'shipping_state' )->set_type( 'text' )->source_location( 'region' )->to_array(),
@@ -521,5 +519,49 @@ class CheckoutHandlerRegisterTest extends TestCase {
 				? [ 'carrier_full' => $full, 'carrier_partial' => $partial ]
 				: [ 'carrier_partial' => $partial, 'carrier_full' => $full ]
 		);
+	}
+
+	/**
+	 * Issue #1187: two level sets that overlap without one containing the other — A (region +
+	 * settlement), B (settlement + address) — share one id at the same level and are one chain
+	 * client-side, so nothing is reported either.
+	 */
+	public function test_guard_stays_silent_when_the_level_sets_overlap_without_containment(): void {
+
+		Functions\expect( '_doing_it_wrong' )->never();
+
+		$this->register_plugins( [
+			'carrier_upper' => [
+				Field::create( 'shipping_state' )->set_type( 'text' )->source_location( 'region' )->to_array(),
+				Field::create( 'shipping_city' )->set_type( 'text' )->source_location( 'settlement' )->to_array(),
+			],
+			'carrier_lower' => [
+				Field::create( 'shipping_city' )->set_type( 'text' )->source_location( 'settlement' )->to_array(),
+				Field::create( 'shipping_address_1' )->set_type( 'text' )->source_location( 'address' )->to_array(),
+			],
+		] );
+	}
+
+	/**
+	 * Issue #1187 narrows the exemption to the LEVEL on the shared id, nothing wider: a plugin
+	 * putting a different level on an id another plugin already claims is still reported, even
+	 * when the rest of its declaration matches the other plugin's exactly.
+	 */
+	public function test_guard_still_fires_when_a_shared_id_carries_a_different_level_inside_matching_sets(): void {
+
+		Functions\expect( '_doing_it_wrong' )
+			->times( 2 )
+			->with( \Mockery::type( 'string' ), \Mockery::pattern( '/(billing|shipping)_city/' ), '2.0.2' );
+
+		$this->register_plugins( [
+			'carrier_a' => [
+				Field::create( 'shipping_state' )->set_type( 'text' )->source_location( 'region' )->to_array(),
+				Field::create( 'shipping_city' )->set_type( 'text' )->source_location( 'settlement' )->to_array(),
+			],
+			'carrier_b' => [
+				Field::create( 'shipping_state' )->set_type( 'text' )->source_location( 'region' )->to_array(),
+				Field::create( 'shipping_city' )->set_type( 'text' )->source_location( 'address' )->to_array(),
+			],
+		] );
 	}
 }

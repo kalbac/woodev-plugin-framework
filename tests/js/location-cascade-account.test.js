@@ -354,24 +354,38 @@ describe.each( [ 'billing', 'shipping' ] )( 'My Account %s address form (issue #
 	} );
 } );
 
-describe( 'My Account address form with two plugin entries on one form (issue #332)', () => {
-	const pickThroughFirst = async ( section ) => {
+describe( 'My Account address form with two plugin configs on one form (issues #332, #1187)', () => {
+	/**
+	 * Two carriers declare the SAME native ids. Before #1187 each config built its own cascade
+	 * entry — two widgets on one `<input>`, two record owners — and #332 had to arbitrate which
+	 * entry's record the hidden field carried. The shared cascade folds both configs into ONE
+	 * entry ({@see mergeOverlappingConfigs} in the module under test), so there is one widget,
+	 * one record and nothing left to arbitrate.
+	 */
+	const pickThroughShared = async ( section ) => {
 		boot( section, { configs: 2 } );
 
 		const city = document.getElementById( section + '_city' );
 		const calls = window.WoodevLocationTypeahead.mock.calls.filter( ( c ) => c[ 0 ] === city );
 
-		expect( calls ).toHaveLength( 2 );
+		expect( calls ).toHaveLength( 1 );
 
 		city.value = 'Внуково';
 		calls[ 0 ][ 1 ].onSelect( { key: VNUKOVO.key, label: VNUKOVO.label, level: 'settlement', record: VNUKOVO } );
 		await flushMicrotasks();
 
-		return { city, hidden: () => city.form.querySelector( '[name="woodev_location_record"]' ) };
+		return { city, widget: calls[ 0 ][ 1 ], hidden: () => city.form.querySelector( '[name="woodev_location_record"]' ) };
 	};
 
-	it( 'keeps the first entry\'s record when an unrelated postcode field changes', async () => {
-		const { city, hidden } = await pickThroughFirst( 'billing' );
+	it( 'attaches ONE widget to the shared city field, not one per plugin config', async () => {
+		const { city } = await pickThroughShared( 'billing' );
+
+		expect( window.WoodevLocationTypeahead ).toHaveBeenCalledTimes( 1 );
+		expect( window.WoodevLocationTypeahead.mock.calls[ 0 ][ 0 ] ).toBe( city );
+	} );
+
+	it( 'keeps the record when an unrelated postcode field changes', async () => {
+		const { city, hidden } = await pickThroughShared( 'billing' );
 		const postcode = document.getElementById( 'billing_postcode' );
 
 		postcode.value = '108800';
@@ -382,8 +396,8 @@ describe( 'My Account address form with two plugin entries on one form (issue #3
 		expect( city.value ).toBe( 'Внуково' );
 	} );
 
-	it( 'keeps the first entry\'s record on a same-value state churn', async () => {
-		const { hidden } = await pickThroughFirst( 'shipping' );
+	it( 'keeps the record on a same-value state churn', async () => {
+		const { hidden } = await pickThroughShared( 'shipping' );
 
 		wcRebuildState( 'shipping' );
 		await flushMicrotasks();
@@ -391,8 +405,8 @@ describe( 'My Account address form with two plugin entries on one form (issue #3
 		expect( JSON.parse( hidden().value ).key ).toBe( VNUKOVO.key );
 	} );
 
-	it( 'empties the record when the city is edited through the entry that picked it', async () => {
-		const { city, hidden } = await pickThroughFirst( 'billing' );
+	it( 'empties the record when the city is edited', async () => {
+		const { city, hidden } = await pickThroughShared( 'billing' );
 
 		city.value = 'Внуково-2';
 		city.dispatchEvent( new window.Event( 'change', { bubbles: true } ) );
@@ -401,12 +415,11 @@ describe( 'My Account address form with two plugin entries on one form (issue #3
 		expect( hidden().value ).toBe( '' );
 	} );
 
-	it( 'lets the entry that picked LAST own the record', async () => {
-		const { city, hidden } = await pickThroughFirst( 'billing' );
-		const second = window.WoodevLocationTypeahead.mock.calls.filter( ( c ) => c[ 0 ] === city )[ 1 ];
+	it( 'a later pick through the same widget replaces the record', async () => {
+		const { widget, hidden } = await pickThroughShared( 'billing' );
 		const other = { ...VNUKOVO, key: 'dadata:vn2', label: 'Внуково-2, Москва' };
 
-		second[ 1 ].onSelect( { key: other.key, label: other.label, level: 'settlement', record: other } );
+		widget.onSelect( { key: other.key, label: other.label, level: 'settlement', record: other } );
 		await flushMicrotasks();
 
 		expect( JSON.parse( hidden().value ).key ).toBe( 'dadata:vn2' );

@@ -13,6 +13,7 @@
 const {
 	createStore,
 	getStoreForField,
+	getStoresForField,
 } = require( '../../woodev/shipping-method/assets/js/frontend/checkout-field-store' );
 
 const config = {
@@ -107,4 +108,16 @@ test( 'getStoreForField() pins the newest-first tie-break when two stores collid
 
 	expect( getStoreForField( 'registry_collision_field' ) ).toBe( second );
 	expect( getStoreForField( 'registry_collision_field' ) ).not.toBe( first );
+} );
+
+test( 'getStoresForField() returns EVERY declaring store in creation order, and nothing else (#1187)', () => {
+	// The one supported collision: two carrier plugins declaring the same native location id.
+	// A writer has to reach both owners — the classic adapter gates on every store.
+	const first = createStore( { fields: { registry_shared_field: { id: 'registry_shared_field' } } } );
+	const other = createStore( { fields: { registry_unrelated_field: { id: 'registry_unrelated_field' } } } );
+	const second = createStore( { fields: { registry_shared_field: { id: 'registry_shared_field' } } } );
+
+	expect( getStoresForField( 'registry_shared_field' ) ).toEqual( [ first, second ] );
+	expect( getStoresForField( 'registry_unrelated_field' ) ).toEqual( [ other ] );
+	expect( getStoresForField( 'registry_nobody_declares_this' ) ).toEqual( [] );
 } );

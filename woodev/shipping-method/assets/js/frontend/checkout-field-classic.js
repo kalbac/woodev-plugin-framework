@@ -1203,19 +1203,21 @@
 	}
 
 	/**
-	 * Возвращает запись стора, которому принадлежит поле с данным id.
+	 * Возвращает ВСЕ записи сторов, объявляющих поле с данным id.
+	 *
+	 * Issue #1187 (round 2): два перевозчика на одном сайте (#1179) объявляют один и тот же
+	 * нативный id (`billing_city`), у каждого — свой стор, а {@see refreshGate} проверяет
+	 * каждый. Значение, записанное только в ПЕРВЫЙ стор, оставляет обязательное поле второго
+	 * пустым, и «Оформить заказ» не включается, хотя на экране всё заполнено. Поэтому — список,
+	 * а не первая находка.
 	 *
 	 * @param {string} fieldId
-	 * @returns {Object|null}
+	 * @returns {Object[]}
 	 */
-	function entryForField( fieldId ) {
-		for( var i = 0; i < stores.length; i++ ) {
-			if( stores[ i ].store.getField( fieldId ) ) {
-				return stores[ i ]
-			}
-		}
-
-		return null
+	function entriesForField( fieldId ) {
+		return stores.filter( function( entry ) {
+			return !! entry.store.getField( fieldId )
+		} )
 	}
 
 	/**
@@ -1264,9 +1266,9 @@
 
 		// 2. Делегированное отслеживание изменений управляемых полей.
 		$( document.body ).on( 'change', function( event ) {
-			var id    = event.target && event.target.id ? event.target.id : ''
-			var entry = id ? entryForField( id ) : null
-			var value = id ? $( event.target ).val() : ''
+			var id      = event.target && event.target.id ? event.target.id : ''
+			var entries = id ? entriesForField( id ) : []
+			var value   = id ? $( event.target ).val() : ''
 
 			// WooCommerce re-renders address fields on `update_checkout` and fires PROGRAMMATIC
 			// changes on them (jQuery .trigger, so no originalEvent): an empty value, or the
@@ -1277,9 +1279,11 @@
 			var meaningful = '*' !== value
 				&& ( !! event.originalEvent || ( value !== '' && value !== null && value !== undefined ) )
 
-			if( entry ) {
+			if( entries.length ) {
 				if( meaningful ) {
-					entry.store.setValue( id, value )
+					entries.forEach( function( entry ) {
+						entry.store.setValue( id, value )
+					} )
 				}
 
 				refreshGate()

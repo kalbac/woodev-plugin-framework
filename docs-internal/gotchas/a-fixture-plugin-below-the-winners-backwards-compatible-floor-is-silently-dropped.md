@@ -44,20 +44,20 @@ report as a conflict on every page — `WP_DEBUG_DISPLAY` printed it before head
 cookie, `npm run test:e2e` failed 10/11.
 
 That was a FRAMEWORK defect, not a fixture artefact: several carriers sharing the location layer is the
-supported case (v2 release, #1179). The guard now compares claim signatures and stays silent only when the
-overlapping plugins declare the IDENTICAL set of location levels (e.g. both region + settlement + address).
-Equal levels on the overlapping ids are NOT enough: A (region + settlement + address) with B (region +
-settlement) keeps one cascade record store per plugin in the classic checkout, so after a city pick the
-address A owns stays disabled (jsdom probe, s163 critic) — that differing set stays reported until the
-cascade is shared (separate card). A direct takeover against a location field, two direct takeovers and two
-different levels on one id are reported too.
+supported case (v2 release, #1179). The guard now compares claim signatures and stays silent when the
+overlapping plugins ask for the SAME level on the shared id. Until s165 the exemption was narrower — the
+IDENTICAL set of levels — because A (region + settlement + address) with B (region + settlement) kept one
+cascade record store per plugin in the classic checkout, so after a city pick the address A owns stayed
+disabled (jsdom probe, s163 critic; card #1187). Since #1187 `location-cascade.js` folds every declaration
+sharing a native id into ONE cascade, so a differing set is no longer reported. A direct takeover against a
+location field, two direct takeovers and two different levels on one id are reported too.
 
 ## Fix
 
 ❌ "bump the fixture to 2.0.0 and it works" (s161: it printed the notice into the page). ✅ Diagnose with
-the call above; a NEW fixture declares `2.0.0` from the start. Since s163 two carriers declaring the
-identical set of location levels no longer trip the guard, so a fixture MAY share the full location set with an
-active carrier — it still must not take a native id over directly.
+the call above; a NEW fixture declares `2.0.0` from the start. Since s163 (same levels) and s165 (any
+overlapping levels, #1187) two carriers sharing location levels no longer trip the guard, so a fixture MAY
+share the location set with an active carrier — it still must not take a native id over directly.
 
 ## Related
 
