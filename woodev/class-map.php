@@ -63,6 +63,7 @@ return [
 	'Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order' => 'woodev/shipping-method/admin/class-shipping-admin-order.php',
 	'Woodev\\Framework\\Shipping\\Api\\Abstract_Shipping_API' => 'woodev/shipping-method/api/class-abstract-shipping-api.php',
 	'Woodev\\Framework\\Shipping\\Api\\Shipping_API' => 'woodev/shipping-method/api/interface-shipping-api.php',
+	'Woodev\\Framework\\Shipping\\Carrier_Service' => 'woodev/shipping-method/class-carrier-service.php',
 	'Woodev\\Framework\\Shipping\\Checkout\\Blocks\\Checkout_Surface' => 'woodev/shipping-method/checkout/blocks/class-checkout-surface.php',
 	'Woodev\\Framework\\Shipping\\Checkout\\Blocks\\Fee_Payments_Blocks_Integration' => 'woodev/shipping-method/checkout/blocks/class-fee-payments-blocks-integration.php',
 	'Woodev\\Framework\\Shipping\\Checkout\\Blocks\\Locality_Blocks' => 'woodev/shipping-method/checkout/blocks/class-locality-blocks.php',

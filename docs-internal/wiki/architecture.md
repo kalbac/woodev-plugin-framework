@@ -229,6 +229,22 @@ carrier-priced presets are never charged again there. Carrier defaults and insta
 cover `packing_algorithm` and `unpacked_algorithm`; stored legacy algorithms remain readable.
 The rate-cache context includes box settings, leftovers and per-line contents values.
 
+## Additional carrier services (`Carrier_Service`, #1145)
+
+A carrier declares its «Дополнительные услуги» by overriding `Shipping_Method::declare_services()` and
+returning `Carrier_Service` objects (code, merchant-facing name, optional parameter name + source
+`declared_value` / `custom`, optional `selectable = false` for a service the carrier adds by itself).
+Declaring the list IS declaring support: nothing declared means no control, no resolver output and an
+unchanged rate-cache identity. The instance option `services` (v1 CDEK's key) is a `multiselect` rendered
+only when a selectable service exists; its stored shape is a plain list of codes — parameters are
+computed, never stored. The carrier reads the SAME resolver on both ends, the way insurance does:
+`resolve_services_for_package( $package, $packed )` for the rate request and
+`resolve_services_for_order( $order, $items, $packed )` for the export, each returning
+`[ code, name, parameter ]` entries. A parameter that needs the carrier's own arithmetic (the number of
+`CARTON_BOX_*` boxes from the packed parcels) goes through `resolve_service_parameter()`; the filter
+`woodev_shipping_resolved_services` can add or drop entries. `get_rate_cache_context()` keys the resolved
+list (codes AND computed values) for a method that declared services.
+
 ## Utilities (`woodev/utilities/`)
 
 - `Woodev_Async_Request` — WP async (non-blocking) HTTP requests

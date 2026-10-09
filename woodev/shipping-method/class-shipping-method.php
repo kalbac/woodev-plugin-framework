@@ -108,6 +108,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		const FEATURE_CITY_LIMIT = 'city-limit';
 
 		/**
+		 * Instance setting holding the codes of the chosen additional services — a plain list of strings, the
+		 * v1 CDEK plugin's key and shape (`services`), so a migration carries it 1:1 (#1145). Only the codes
+		 * are stored; a service's parameter is computed, never typed.
+		 */
+		const OPTION_SERVICES = 'services';
+
+		/**
 		 * The features whose declaration changes what {@see self::init_form_fields()} builds.
 		 *
 		 * Exactly these six gate a control there. The rest declare intent and shape no form, so
@@ -420,6 +427,30 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 						self::INSURANCE_DELIVERY_PAYMENT => __( 'Только при оплате при получении', 'woodev-plugin-framework' ),
 					],
 					'desc_tip' => __( 'Включать страховку в стоимость доставки. Объявленная стоимость — стоимость товаров в этой посылке после скидок, без налогов и стоимости доставки.', 'woodev-plugin-framework' ),
+				];
+			}
+
+			// rendered only when the carrier declared a service the merchant can pick (#1145)
+			$selectable_services = $this->get_selectable_services();
+
+			if ( [] !== $selectable_services ) {
+
+				$this->instance_form_fields[ self::OPTION_SERVICES ] = [
+					'title'             => __( 'Дополнительные услуги', 'woodev-plugin-framework' ),
+					'type'              => 'multiselect',
+					'class'             => 'wc-enhanced-select',
+					'css'               => 'width: 400px;',
+					'default'           => [],
+					'options'           => array_map(
+						static function ( Carrier_Service $service ): string {
+							return $service->get_name();
+						},
+						$selectable_services
+					),
+					'desc_tip'          => __( 'Выбранные услуги учитываются в стоимости доставки и передаются перевозчику вместе с заказом.', 'woodev-plugin-framework' ),
+					'custom_attributes' => [
+						'data-placeholder' => __( 'Без дополнительных услуг', 'woodev-plugin-framework' ),
+					],
 				];
 			}
 
@@ -1935,6 +1966,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 				$context['insurance'] = $this->resolve_insurance_for_package( $package );
 			}
 
+			// the chosen services AND their computed parameters (a declared value moves with the cart; the
+			// instance settings above only hold the codes) — a method that declared none adds nothing, so
+			// its cache identity is exactly what it was before services existed (#1145)
+			if ( $this->supports_services() ) {
+				$context['services'] = $this->resolve_services_for_package( $package );
+			}
+
 			$handler = $this->get_plugin()->get_pickup_handler();
 
 			// `null` for a method that carries no pickup type; `point_id` is '' while nothing is chosen.
@@ -2090,6 +2128,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 				return $this->resolve_insurance( '', 0.0 );
 			}
 
+			return $this->resolve_insurance( (string) $order->get_payment_method(), Shipping_Helper::get_package_declared_value( [ 'contents' => self::order_contents( $order, $items ) ] ) );
+		}
+
+		/**
+		 * The order's lines as the `contents` of a package, for the value rules that read a package.
+		 *
+		 * @param \WC_Order                     $order Order being shipped.
+		 * @param \WC_Order_Item_Product[]|null $items Shipment lines, or null for all shippable lines.
+		 * @return array<int, array{line_total: mixed}>
+		 */
+		private static function order_contents( \WC_Order $order, ?array $items ): array {
 			$contents = [];
 
 			foreach ( null === $items ? $order->get_items( 'line_item' ) : $items as $item ) {
@@ -2106,7 +2155,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 				$contents[] = [ 'line_total' => $item->get_total() ];
 			}
 
-			return $this->resolve_insurance( (string) $order->get_payment_method(), Shipping_Helper::get_package_declared_value( [ 'contents' => $contents ] ) );
+			return $contents;
 		}
 
 		/**
@@ -2141,6 +2190,257 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 				'enabled' => $enabled,
 				'declared_value' => $enabled ? $declared_value : 0.0,
 			];
+		}
+
+		/**
+		 * The additional services this carrier offers — the carrier's declaration (#1145).
+		 *
+		 * Override it and return {@see Carrier_Service} objects (or the arrays {@see Carrier_Service::from_array()}
+		 * reads). Declaring the list IS declaring support: a method that returns nothing (the default) has no
+		 * «Дополнительные услуги» control, adds nothing to the quote or the export and leaves its rate-cache
+		 * identity as it was.
+		 *
+		 * Called while the settings form is built, from the constructor — so the list must not depend on
+		 * state that is set after `parent::__construct()`.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<int, Carrier_Service|array<string,mixed>>
+		 */
+		protected function declare_services(): array {
+			return [];
+		}
+
+		/**
+		 * The declared services, validated and keyed by code.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<string, Carrier_Service>
+		 */
+		public function get_services(): array {
+			return Carrier_Service::normalize_list( $this->declare_services() );
+		}
+
+		/**
+		 * Whether the carrier declared any additional service.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public function supports_services(): bool {
+			return [] !== $this->get_services();
+		}
+
+		/**
+		 * The services the merchant can pick in the method's settings (the declared ones that are not automatic).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<string, Carrier_Service>
+		 */
+		public function get_selectable_services(): array {
+			return array_filter(
+				$this->get_services(),
+				static function ( Carrier_Service $service ): bool {
+					return $service->is_selectable();
+				}
+			);
+		}
+
+		/**
+		 * The codes the merchant ticked: the saved `services` list, cut down to the services that are still
+		 * declared and selectable, in the carrier's declaration order. A code the carrier no longer offers, a
+		 * value that is not a list and a duplicate all disappear — nothing is billed for what is not offered.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string[]
+		 */
+		public function get_selected_service_codes(): array {
+			$saved = Fee_Payments::normalize( $this->get_option( self::OPTION_SERVICES, [] ) );
+
+			// array keys turn a numeric code into an int
+			return array_map( 'strval', array_values( array_intersect( array_keys( $this->get_selectable_services() ), $saved ) ) );
+		}
+
+		/**
+		 * The value of a service's parameter for a quote or an order; `null` when there is none to give.
+		 *
+		 * The default answers {@see Carrier_Service::SOURCE_DECLARED_VALUE} from `$subject['declared_value']`
+		 * and nothing for {@see Carrier_Service::SOURCE_CUSTOM}: a carrier overrides this and computes its own
+		 * (the number of boxes of a kind from `$subject['packed']`, say). For a selectable service `null` leaves
+		 * the service out — a service that needs a value is never sent without one; for an automatic service
+		 * `null` means «does not apply here».
+		 *
+		 * `$subject` holds: `context` (`package` or `order`), `package` (the package, or the order lines as
+		 * the `contents` of one), `order` (the {@see \WC_Order}, or `null` for a quote), `items` (the shipment
+		 * lines of a split order, or `null`), `packed` (the parcels, or `null`) and `declared_value` (float).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Carrier_Service     $service The service.
+		 * @param array<string,mixed> $subject What is being priced or exported (see above).
+		 * @return int|float|string|null
+		 */
+		protected function resolve_service_parameter( Carrier_Service $service, array $subject ) {
+			return Carrier_Service::SOURCE_DECLARED_VALUE === $service->get_parameter_source() ? (float) ( $subject['declared_value'] ?? 0.0 ) : null;
+		}
+
+		/**
+		 * The services of a quote, ready for the carrier's rate request.
+		 *
+		 * The ticked services plus the automatic ones that apply, each as `code`, `name` and `parameter`
+		 * (`null` for a service without one). Pass `$packed` — the parcels {@see self::rate_package()} received —
+		 * when a service's parameter reads them. {@see self::resolve_services_for_order()} applies the same
+		 * rule to an order, so what was quoted is what the export asks for.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array                      $package WooCommerce shipping package.
+		 * @param \Woodev_Packer_Result|null $packed  The packed parcels, or null.
+		 * @return array<int, array{code: string, name: string, parameter: int|float|string|null}> Empty when nothing is chosen.
+		 */
+		public function resolve_services_for_package( array $package, ?\Woodev_Packer_Result $packed = null ): array {
+			return $this->resolve_services(
+				[
+					'context'        => 'package',
+					'package'        => $package,
+					'order'          => null,
+					'items'          => null,
+					'packed'         => $packed,
+					'declared_value' => Shipping_Helper::get_package_declared_value( $package ),
+				]
+			);
+		}
+
+		/**
+		 * The services of an order, ready for the carrier's order export — the same rule as the quote.
+		 *
+		 * Pass only this shipment's product lines for a split order; null means all shippable lines.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order                     $order  Order being shipped.
+		 * @param \WC_Order_Item_Product[]|null $items  Shipment lines, or null for all shippable lines.
+		 * @param \Woodev_Packer_Result|null    $packed The packed parcels, or null.
+		 * @return array<int, array{code: string, name: string, parameter: int|float|string|null}> Empty when nothing is chosen.
+		 */
+		public function resolve_services_for_order( \WC_Order $order, ?array $items = null, ?\Woodev_Packer_Result $packed = null ): array {
+
+			if ( ! $this->supports_services() ) {
+				return [];
+			}
+
+			$package = [ 'contents' => self::order_contents( $order, $items ) ];
+
+			return $this->resolve_services(
+				[
+					'context'        => 'order',
+					'package'        => $package,
+					'order'          => $order,
+					'items'          => $items,
+					'packed'         => $packed,
+					'declared_value' => Shipping_Helper::get_package_declared_value( $package ),
+				]
+			);
+		}
+
+		/**
+		 * Shared quote/order decision for the additional services.
+		 *
+		 * @param array<string,mixed> $subject See {@see self::resolve_service_parameter()}.
+		 * @return array<int, array{code: string, name: string, parameter: int|float|string|null}>
+		 */
+		private function resolve_services( array $subject ): array {
+
+			$services = $this->get_services();
+
+			if ( [] === $services ) {
+				return [];
+			}
+
+			$selected = $this->get_selected_service_codes();
+			$resolved = [];
+
+			foreach ( $services as $service ) {
+
+				// the array key of a numeric code is an int, so the code is read off the service
+				$code = $service->get_code();
+
+				if ( $service->is_selectable() ? ! in_array( $code, $selected, true ) : ! $service->has_parameter() ) {
+					continue;
+				}
+
+				$parameter = null;
+
+				if ( $service->has_parameter() ) {
+
+					$parameter = self::scalar_parameter( $this->resolve_service_parameter( $service, $subject ) );
+
+					if ( null === $parameter ) {
+						continue;
+					}
+				}
+
+				$resolved[] = [
+					'code'      => $code,
+					'name'      => $service->get_name(),
+					'parameter' => $parameter,
+				];
+			}
+
+			/**
+			 * The additional services of a quote or an order, before they reach the carrier.
+			 *
+			 * Lets a plugin add or drop an entry — a service whose presence only the plugin can tell. An entry
+			 * is `[ 'code' => string, 'name' => string, 'parameter' => int|float|string|null ]`; an entry
+			 * without a code is discarded and a return that is not an array keeps the list as built.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param array<int, array<string,mixed>> $resolved The services.
+			 * @param Shipping_Method                 $method   Shipping method instance.
+			 * @param array<string,mixed>             $subject  What is being priced or exported — see {@see self::resolve_service_parameter()}.
+			 */
+			$filtered = apply_filters( 'woodev_shipping_resolved_services', $resolved, $this, $subject );
+
+			if ( ! is_array( $filtered ) ) {
+				return $resolved;
+			}
+
+			$clean = [];
+
+			foreach ( $filtered as $entry ) {
+
+				if ( ! is_array( $entry ) || ! is_string( $entry['code'] ?? null ) || '' === trim( $entry['code'] ) ) {
+					continue;
+				}
+
+				$clean[] = [
+					'code'      => trim( $entry['code'] ),
+					'name'      => is_string( $entry['name'] ?? null ) ? $entry['name'] : trim( $entry['code'] ),
+					'parameter' => self::scalar_parameter( $entry['parameter'] ?? null ),
+				];
+			}
+
+			return $clean;
+		}
+
+		/**
+		 * A service parameter that can travel: an int, a finite float, a non-empty string — anything else is `null`.
+		 *
+		 * @param mixed $value The computed value.
+		 * @return int|float|string|null
+		 */
+		private static function scalar_parameter( $value ) {
+
+			if ( is_int( $value ) || ( is_float( $value ) && is_finite( $value ) ) ) {
+				return $value;
+			}
+
+			return is_string( $value ) && '' !== trim( $value ) ? trim( $value ) : null;
 		}
 
 		/**
