@@ -161,6 +161,11 @@ export interface OrderRowAction {
 	 * Absent => the neutral fallback glyph, never a gear.
 	 */
 	icon?: string;
+	/**
+	 * #1192: on a document action (`waybill`, `barcode`) — the carrier can print it for SEVERAL orders as one file,
+	 * so the bulk picker offers the matching «Печать …» entry. Absent => single-order only.
+	 */
+	bulk?: boolean;
 }
 
 /** The `payload` an action with fields sends: field id → value (a time range is `{ from, to }`). */
@@ -314,12 +319,21 @@ function bootstrap(): Partial<ShippingOrdersBootstrap> {
 	return window.woodevShippingOrders || {};
 }
 
-/** What `GET /shipping/orders/<id>/documents/<type>` can hand back (#1134). */
+/**
+ * An order a bulk document leaves out (#1192): `code` is one of the server's `Document_Controller::SKIP_CODES`
+ * (`not_found`, `not_shipping`, `not_exported`, `unsupported`, `carrier_skipped`).
+ */
+export interface SkippedOrder {
+	id: number;
+	code: string;
+}
+
+/** What `GET /shipping/orders/<id>/documents/<type>` can hand back (#1134). `skipped` is set by the bulk route only. */
 export type OrderDocument =
 	/** The carrier's PDF bytes, already fetched. */
-	| { kind: 'file'; blob: Blob; filename: string }
+	| { kind: 'file'; blob: Blob; filename: string; skipped?: SkippedOrder[] }
 	/** A direct carrier link to open. */
-	| { kind: 'link'; url: string }
+	| { kind: 'link'; url: string; skipped?: SkippedOrder[] }
 	/** The carrier is still preparing the document; try again after `retryAfter` seconds. */
 	| { kind: 'pending'; message: string; retryAfter: number };
 
@@ -352,32 +366,29 @@ function withQuery( url: string, query: string ): string {
 	return `${ url }${ url.includes( '?' ) ? '&' : '?' }${ query }`;
 }
 
-/**
- * Fetches one carrier document for an order (#1134).
- *
- * Same `bootstrap()`/`apiFetch` wiring as every other call here — the nonce travels in the
- * `X-WP-Nonce` header, never in the URL. `format=json` asks the route to answer a carrier LINK as
- * JSON instead of a cross-origin 302 the browser would not let a script read.
- *
- * Resolves with the three things a merchant can be told: a file to save, a link to open, or
- * «ещё готовится». A rejection carries the server's own Russian `message`.
- */
-export async function fetchOrderDocument( orderId: number, type: string ): Promise<OrderDocument> {
-	const { restRoot = '', nonce = '' } = bootstrap();
+/** Response header the bulk route names the orders left out in: `id:code,id:code`. */
+const SKIPPED_HEADER = 'X-Woodev-Skipped';
 
-	let response: Response;
-
-	try {
-		response = ( await apiFetch( {
-			url: withQuery( `${ restRoot.replace( /\/+$/, '' ) }/${ orderId }/documents/${ encodeURIComponent( type ) }`, 'format=json' ),
-			method: 'GET',
-			headers: { 'X-WP-Nonce': nonce },
-			parse: false,
-		} ) ) as unknown as Response;
-	} catch ( error ) {
-		throw await documentError( error );
+function parseSkippedHeader( value: string | null ): SkippedOrder[] {
+	if ( ! value ) {
+		return [];
 	}
 
+	return value
+		.split( ',' )
+		.map( ( part ) => {
+			const [ id, code ] = part.split( ':' );
+
+			return { id: Number( id ), code: ( code || '' ).trim() };
+		} )
+		.filter( ( entry ) => entry.id > 0 );
+}
+
+/**
+ * Reads what a documents route answered — one shape for the single and the bulk route: 202 «pending», a PDF, or a
+ * carrier link as JSON.
+ */
+async function readDocumentResponse( response: Response, fallbackFilename: string ): Promise<OrderDocument> {
 	if ( 202 === response.status ) {
 		const body = ( await response.json() ) as { message?: string; retry_after?: number };
 
@@ -391,21 +402,79 @@ export async function fetchOrderDocument( orderId: number, type: string ): Promi
 	if ( ( response.headers.get( 'Content-Type' ) || '' ).includes( 'application/pdf' ) ) {
 		const disposition = response.headers.get( 'Content-Disposition' ) || '';
 		const match = /filename="?([^";]+)"?/i.exec( disposition );
+		const skipped = parseSkippedHeader( response.headers.get( SKIPPED_HEADER ) );
 
 		return {
 			kind: 'file',
 			blob: await response.blob(),
-			filename: match ? match[ 1 ] : `order-${ orderId }-${ type }.pdf`,
+			filename: match ? match[ 1 ] : fallbackFilename,
+			...( skipped.length > 0 ? { skipped } : {} ),
 		};
 	}
 
-	const body = ( await response.json() ) as { status?: string; url?: string };
+	const body = ( await response.json() ) as { status?: string; url?: string; skipped?: SkippedOrder[] };
 
 	if ( 'url' === body.status && 'string' === typeof body.url && '' !== body.url ) {
-		return { kind: 'link', url: body.url };
+		return {
+			kind: 'link',
+			url: body.url,
+			...( Array.isArray( body.skipped ) && body.skipped.length > 0 ? { skipped: body.skipped } : {} ),
+		};
 	}
 
 	throw {} as DocumentError;
+}
+
+/** One GET to a documents route; a rejected request carries the server's own `{ code, message }`. */
+async function getDocument( url: string, fallbackFilename: string ): Promise<OrderDocument> {
+	const { nonce = '' } = bootstrap();
+
+	let response: Response;
+
+	try {
+		response = ( await apiFetch( {
+			url: withQuery( url, 'format=json' ),
+			method: 'GET',
+			headers: { 'X-WP-Nonce': nonce },
+			parse: false,
+		} ) ) as unknown as Response;
+	} catch ( error ) {
+		throw await documentError( error );
+	}
+
+	return readDocumentResponse( response, fallbackFilename );
+}
+
+/**
+ * Fetches one carrier document for an order (#1134).
+ *
+ * Same `bootstrap()`/`apiFetch` wiring as every other call here — the nonce travels in the
+ * `X-WP-Nonce` header, never in the URL. `format=json` asks the route to answer a carrier LINK as
+ * JSON instead of a cross-origin 302 the browser would not let a script read.
+ *
+ * Resolves with the three things a merchant can be told: a file to save, a link to open, or
+ * «ещё готовится» (ask again — see `pollUntilReady`). A rejection carries the server's own Russian `message`.
+ */
+export function fetchOrderDocument( orderId: number, type: string ): Promise<OrderDocument> {
+	const { restRoot = '' } = bootstrap();
+
+	return getDocument(
+		`${ restRoot.replace( /\/+$/, '' ) }/${ orderId }/documents/${ encodeURIComponent( type ) }`,
+		`order-${ orderId }-${ type }.pdf`
+	);
+}
+
+/**
+ * Fetches ONE document covering several orders (#1192) — `GET …/shipping/orders/documents/<type>?ids=1,2,3`. Same
+ * outcomes as {@link fetchOrderDocument}; a file or link also names the orders it leaves out in `skipped`.
+ */
+export function fetchBulkDocument( ids: number[], type: string ): Promise<OrderDocument> {
+	const { restRoot = '' } = bootstrap();
+
+	return getDocument(
+		withQuery( `${ restRoot.replace( /\/+$/, '' ) }/documents/${ encodeURIComponent( type ) }`, `ids=${ ids.join( ',' ) }` ),
+		`orders-${ type }.pdf`
+	);
 }
 
 /**

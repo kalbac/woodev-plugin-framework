@@ -412,7 +412,11 @@ describe( 'a carrier document (s164)', () => {
 	// для данного заказа.») because a document is not a carrier action. They are fetched from the documents REST route,
 	// exactly as the orders page does.
 	const DOC_URL = 'https://example.test/wp-json/woodev/v1/shipping/orders/123/documents/waybill?format=json';
-	const LABELS = { pending: 'Документ ещё готовится. Повторите попытку примерно через %d с.', failed: 'Не удалось получить документ у перевозчика.' };
+	const LABELS = {
+		working: 'Документ формируется…',
+		timeout: 'Документ всё ещё формируется. Попробуйте ещё раз через минуту.',
+		failed: 'Не удалось получить документ у перевозчика.',
+	};
 
 	function renderDocument() {
 		document.body.innerHTML = `
@@ -479,14 +483,109 @@ describe( 'a carrier document (s164)', () => {
 		expect( window.open ).toHaveBeenCalledWith( 'https://cdek.example/doc.pdf', '_blank', 'noopener' );
 	} );
 
-	it( 'says «ещё готовится» with the retry delay on a 202', async () => {
-		window.fetch.mockResolvedValue( response( { status: 202, json: { status: 'pending', retry_after: 7 } } ) );
+	describe( 'a document that is not ready yet (#1191)', () => {
+		const PDF = () => response( { status: 200, headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="order-123-waybill.pdf"' }, blob: new Blob( [ 'x' ] ) } );
+		const PENDING = ( seconds = 3 ) => response( { status: 202, json: { status: 'pending', retry_after: seconds } } );
 
-		await mod.downloadDocument( renderDocument() );
+		beforeEach( () => {
+			jest.useFakeTimers();
+		} );
 
-		expect( notice().hidden ).toBe( false );
-		expect( notice().textContent ).toBe( 'Документ ещё готовится. Повторите попытку примерно через 7 с.' );
-		expect( notice().classList.contains( 'is-error' ) ).toBe( false );
+		afterEach( () => {
+			mod.cancelPolls();
+			jest.useRealTimers();
+		} );
+
+		it( 'keeps the button disabled, says «формируется» and downloads by itself once ready', async () => {
+			window.fetch.mockResolvedValueOnce( PENDING( 3 ) ).mockResolvedValueOnce( PENDING( 3 ) ).mockResolvedValueOnce( PDF() );
+
+			const button = renderDocument();
+			const done = mod.downloadDocument( button );
+
+			await jest.advanceTimersByTimeAsync( 0 );
+			expect( button.disabled ).toBe( true );
+			expect( notice().hidden ).toBe( false );
+			expect( notice().textContent ).toBe( 'Документ формируется…' );
+			expect( notice().classList.contains( 'is-error' ) ).toBe( false );
+			expect( window.fetch ).toHaveBeenCalledTimes( 1 );
+			expect( window.URL.createObjectURL ).not.toHaveBeenCalled();
+
+			await jest.advanceTimersByTimeAsync( 3000 );
+			expect( window.fetch ).toHaveBeenCalledTimes( 2 );
+			expect( button.disabled ).toBe( true );
+
+			await jest.advanceTimersByTimeAsync( 3000 );
+			await done;
+
+			expect( window.fetch ).toHaveBeenCalledTimes( 3 );
+			expect( window.URL.createObjectURL ).toHaveBeenCalledTimes( 1 );
+			expect( button.disabled ).toBe( false );
+			expect( notice().hidden ).toBe( true );
+			expect( submitSpy ).not.toHaveBeenCalled();
+		} );
+
+		it( 'respects retry_after: no request before the server\'s delay has passed', async () => {
+			window.fetch.mockResolvedValueOnce( PENDING( 7 ) ).mockResolvedValueOnce( PDF() );
+
+			const done = mod.downloadDocument( renderDocument() );
+
+			await jest.advanceTimersByTimeAsync( 6999 );
+			expect( window.fetch ).toHaveBeenCalledTimes( 1 );
+			await jest.advanceTimersByTimeAsync( 1 );
+			await done;
+			expect( window.fetch ).toHaveBeenCalledTimes( 2 );
+		} );
+
+		it( 'gives up after ~30 s with a sentence, frees the button and stops asking', async () => {
+			window.fetch.mockResolvedValue( PENDING( 10 ) );
+
+			const button = renderDocument();
+			const done = mod.downloadDocument( button );
+
+			await jest.advanceTimersByTimeAsync( 40000 );
+			await done;
+
+			expect( notice().textContent ).toBe( LABELS.timeout );
+			expect( notice().classList.contains( 'is-error' ) ).toBe( true );
+			expect( button.disabled ).toBe( false );
+
+			const calls = window.fetch.mock.calls.length;
+
+			await jest.advanceTimersByTimeAsync( 60000 );
+			expect( window.fetch ).toHaveBeenCalledTimes( calls );
+			expect( window.URL.createObjectURL ).not.toHaveBeenCalled();
+		} );
+
+		it( 'leaving the page cancels the wait: nothing more is asked and a late document is not saved', async () => {
+			window.fetch.mockResolvedValue( PENDING( 3 ) );
+
+			const button = renderDocument();
+			const done = mod.downloadDocument( button );
+
+			await jest.advanceTimersByTimeAsync( 1000 );
+			window.dispatchEvent( new Event( 'pagehide' ) );
+			await done;
+
+			window.fetch.mockResolvedValue( PDF() );
+			await jest.advanceTimersByTimeAsync( 30000 );
+
+			expect( window.fetch ).toHaveBeenCalledTimes( 1 );
+			expect( window.URL.createObjectURL ).not.toHaveBeenCalled();
+			expect( button.disabled ).toBe( false );
+			expect( jest.getTimerCount() ).toBe( 0 );
+		} );
+
+		it( 'a failure while waiting stops the loop with the server\'s own sentence', async () => {
+			window.fetch.mockResolvedValueOnce( PENDING( 3 ) ).mockResolvedValueOnce( response( { status: 502, json: { message: 'Документ недоступен.' } } ) );
+
+			const done = mod.downloadDocument( renderDocument() );
+
+			await jest.advanceTimersByTimeAsync( 3000 );
+			await done;
+
+			expect( notice().textContent ).toBe( 'Документ недоступен.' );
+			expect( window.fetch ).toHaveBeenCalledTimes( 2 );
+		} );
 	} );
 
 	it( 'shows the server\'s own sentence on a failure, and the generic one when there is none', async () => {

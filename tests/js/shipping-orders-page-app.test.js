@@ -20,6 +20,7 @@ import '@testing-library/jest-dom';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import App from '../../src/shipping-orders-page/app';
 import {
+	fetchBulkDocument,
 	fetchOrderDocument,
 	fetchOrderPreview,
 	fetchOrders,
@@ -40,6 +41,8 @@ jest.mock( '../../src/shipping-orders-page/rest', () => ( {
 	// #1134 — one carrier document. Resolves with `{ kind: 'file' | 'link' | 'pending', … }`, rejects with an
 	// object carrying the server's `message`, exactly as the real `fetchOrderDocument` does.
 	fetchOrderDocument: jest.fn(),
+	// #1192 — the same outcomes for ONE file covering several orders, plus `skipped` on a file or link.
+	fetchBulkDocument: jest.fn(),
 	// #874 — the bulk REST call. Encodes the brief's §3 contract: resolve with a
 	// `BulkActionResult` (requested/eligible/skipped/succeeded/failed/rows/messages),
 	// HTTP 200 even on a partial failure — a rejection here means the wire call itself
@@ -2586,19 +2589,101 @@ describe( 'the «Накладная» / «Штрихкод» document actions (#
 		expect( clickSpy ).not.toHaveBeenCalled();
 	} );
 
-	test( '«ещё готовится» is a human Russian notice with the retry delay, not raw JSON in a new tab', async () => {
-		fetchOrderDocument.mockResolvedValue( { kind: 'pending', message: 'Документ ещё готовится. Повторите запрос позже.', retryAfter: 7 } );
+	test( '«ещё готовится» is asked again by itself and the download starts as soon as the document is ready (#1191)', async () => {
+		jest.useFakeTimers();
+
+		const blob = new Blob( [ '%PDF-' ] );
+
+		fetchOrderDocument
+			.mockResolvedValueOnce( { kind: 'pending', message: '', retryAfter: 3 } )
+			.mockResolvedValueOnce( { kind: 'pending', message: '', retryAfter: 3 } )
+			.mockResolvedValueOnce( { kind: 'file', blob, filename: 'order-42-waybill.pdf' } );
 
 		render( <App /> );
-		fireEvent.click( await screen.findByRole( 'button', { name: 'Накладная' } ) );
+
+		const button = await screen.findByRole( 'button', { name: 'Накладная' } );
+
+		fireEvent.click( button );
+
+		// One click: the button is disabled and «Документ формируется…» is said ONCE, however many polls follow.
+		await waitFor( () => expect( screen.getAllByText( 'Документ формируется…' ).length ).toBeGreaterThan( 0 ) );
+		expect( button ).toBeDisabled();
+		expect( fetchOrderDocument ).toHaveBeenCalledTimes( 1 );
+		expect( clickSpy ).not.toHaveBeenCalled();
+
+		await act( async () => {
+			await jest.advanceTimersByTimeAsync( 3000 );
+		} );
+		expect( fetchOrderDocument ).toHaveBeenCalledTimes( 2 );
+		expect( clickSpy ).not.toHaveBeenCalled();
+		expect( button ).toBeDisabled();
+
+		await act( async () => {
+			await jest.advanceTimersByTimeAsync( 3000 );
+		} );
+
+		expect( fetchOrderDocument ).toHaveBeenCalledTimes( 3 );
+		expect( clickSpy ).toHaveBeenCalledTimes( 1 );
+		expect( window.URL.createObjectURL ).toHaveBeenCalledWith( blob );
+		await waitFor( () => expect( button ).not.toBeDisabled() );
+		// The inline «формируется» line is gone once the file is saved.
+		expect( document.querySelector( '.components-notice.is-info' ) ).toBeNull();
+
+		jest.useRealTimers();
+	} );
+
+	test( 'after ~30 s of «ещё готовится» the merchant is told to come back, and the row is free again (#1191)', async () => {
+		jest.useFakeTimers();
+		fetchOrderDocument.mockResolvedValue( { kind: 'pending', message: '', retryAfter: 5 } );
+
+		render( <App /> );
+
+		const button = await screen.findByRole( 'button', { name: 'Накладная' } );
+
+		fireEvent.click( button );
+		await waitFor( () => expect( button ).toBeDisabled() );
+
+		await act( async () => {
+			await jest.advanceTimersByTimeAsync( 40000 );
+		} );
 
 		await waitFor( () =>
-			expect(
-				screen.getAllByText( 'Документ ещё готовится. Повторите попытку примерно через 7 с.' ).length
-			).toBeGreaterThan( 0 )
+			expect( screen.getAllByText( 'Документ всё ещё формируется. Попробуйте ещё раз через минуту.' ).length ).toBeGreaterThan( 0 )
 		);
-		expect( window.open ).not.toHaveBeenCalled();
 		expect( clickSpy ).not.toHaveBeenCalled();
+		await waitFor( () => expect( button ).not.toBeDisabled() );
+
+		// It stopped asking: no further request after the cap.
+		const calls = fetchOrderDocument.mock.calls.length;
+
+		await act( async () => {
+			await jest.advanceTimersByTimeAsync( 60000 );
+		} );
+		expect( fetchOrderDocument ).toHaveBeenCalledTimes( calls );
+
+		jest.useRealTimers();
+	} );
+
+	test( 'leaving the page cancels the wait: nothing more is asked and a late document is never saved (#1191)', async () => {
+		jest.useFakeTimers();
+		fetchOrderDocument.mockResolvedValue( { kind: 'pending', message: '', retryAfter: 3 } );
+
+		const { unmount } = render( <App /> );
+
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Накладная' } ) );
+		await waitFor( () => expect( fetchOrderDocument ).toHaveBeenCalledTimes( 1 ) );
+
+		unmount();
+		fetchOrderDocument.mockResolvedValue( { kind: 'file', blob: new Blob( [ 'x' ] ), filename: 'late.pdf' } );
+
+		await act( async () => {
+			await jest.advanceTimersByTimeAsync( 20000 );
+		} );
+
+		expect( fetchOrderDocument ).toHaveBeenCalledTimes( 1 );
+		expect( clickSpy ).not.toHaveBeenCalled();
+
+		jest.useRealTimers();
 	} );
 
 	test( 'a failure shows the server\'s Russian sentence, and a bare rejection a generic one', async () => {
@@ -2635,10 +2720,150 @@ describe( 'the «Накладная» / «Штрихкод» document actions (#
 		await waitFor( () => expect( button ).toBeDisabled() );
 
 		await act( async () => {
-			resolveDocument( { kind: 'pending', message: '', retryAfter: 5 } );
+			resolveDocument( { kind: 'link', url: 'https://carrier.test/x.pdf' } );
 		} );
 
 		await waitFor( () => expect( button ).not.toBeDisabled() );
+	} );
+} );
+
+describe( 'bulk print for the selected orders (#1192)', () => {
+	/** An exported row of a carrier that CAN print several orders in one file. */
+	function bulkRow( id, overrides = {} ) {
+		return makeRow( {
+			id,
+			order_number: `N${ id }`,
+			actions: [
+				{ action: 'waybill', label: 'Накладная', title: '', destructive: false, bulk: true },
+				{ action: 'barcode', label: 'Штрихкод', title: '', destructive: false, bulk: true },
+			],
+			...overrides,
+		} );
+	}
+
+	const picker = () => screen.getByLabelText( 'Массовые действия' );
+	const optionLabels = () => Array.from( picker().querySelectorAll( 'option' ) ).map( ( option ) => option.textContent );
+
+	beforeEach( () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchBulkDocument.mockReset();
+		fetchOrderDocument.mockReset();
+		window.URL.createObjectURL = jest.fn( () => 'blob:pdf' );
+		window.URL.revokeObjectURL = jest.fn();
+		jest.spyOn( HTMLAnchorElement.prototype, 'click' ).mockImplementation( () => {} );
+		jest.spyOn( window, 'open' ).mockImplementation( () => null );
+	} );
+
+	afterEach( () => {
+		jest.restoreAllMocks();
+		jest.useRealTimers();
+	} );
+
+	test( 'the print entries are offered only where a row can print in bulk', async () => {
+		fetchOrders.mockResolvedValue(
+			resultOf( [ makeRow( { id: 1, actions: [ { action: 'waybill', label: 'Накладная', title: '', destructive: false } ] } ) ] )
+		);
+
+		const { unmount } = render( <App /> );
+
+		await waitFor( () => expect( fetchOrders ).toHaveBeenCalled() );
+		await waitFor( () => expect( screen.getByLabelText( 'Массовые действия' ) ).toBeInTheDocument() );
+		expect( optionLabels() ).not.toContain( 'Печать накладных' );
+		unmount();
+
+		fetchOrders.mockResolvedValue( resultOf( [ bulkRow( 1 ) ] ) );
+		render( <App /> );
+
+		await screen.findByRole( 'checkbox', { name: 'Выбрать заказ N1' } );
+		expect( optionLabels() ).toEqual( expect.arrayContaining( [ 'Печать накладных', 'Печать штрихкодов' ] ) );
+	} );
+
+	test( 'one request carries every selected id and the file is saved by itself', async () => {
+		const blob = new Blob( [ '%PDF-' ] );
+
+		fetchOrders.mockResolvedValue( resultOf( [ bulkRow( 1 ), bulkRow( 2 ), bulkRow( 3 ) ] ) );
+		fetchBulkDocument.mockResolvedValue( { kind: 'file', blob, filename: 'orders-waybill.pdf' } );
+
+		render( <App /> );
+
+		fireEvent.click( await screen.findByRole( 'checkbox', { name: 'Выбрать заказ N1' } ) );
+		fireEvent.click( screen.getByRole( 'checkbox', { name: 'Выбрать заказ N3' } ) );
+		fireEvent.change( picker(), { target: { value: 'print:waybill' } } );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Применить действие' } ) );
+
+		await waitFor( () => expect( fetchBulkDocument ).toHaveBeenCalledWith( [ 1, 3 ], 'waybill' ) );
+		await waitFor( () => expect( window.URL.createObjectURL ).toHaveBeenCalledWith( blob ) );
+		expect( fetchBulkDocument ).toHaveBeenCalledTimes( 1 );
+		expect( screen.getAllByText( 'Документ готов. Заказов в файле: 2.' ).length ).toBeGreaterThan( 0 );
+		// Nothing changed on the orders: the selection stays, and the bulk action route is never used.
+		expect( performBulkOrderAction ).not.toHaveBeenCalled();
+		expect( screen.getByRole( 'checkbox', { name: 'Выбрать заказ N1' } ) ).toBeChecked();
+	} );
+
+	test( 'a bulk document that is not ready is asked again by itself, with every selected row busy meanwhile', async () => {
+		jest.useFakeTimers();
+		fetchOrders.mockResolvedValue( resultOf( [ bulkRow( 1 ), bulkRow( 2 ) ] ) );
+		fetchBulkDocument
+			.mockResolvedValueOnce( { kind: 'pending', message: '', retryAfter: 3 } )
+			.mockResolvedValueOnce( { kind: 'file', blob: new Blob( [ 'x' ] ), filename: 'orders-barcode.pdf' } );
+
+		render( <App /> );
+
+		fireEvent.click( await screen.findByRole( 'checkbox', { name: 'Выбрать заказ N1' } ) );
+		fireEvent.click( screen.getByRole( 'checkbox', { name: 'Выбрать заказ N2' } ) );
+		fireEvent.change( picker(), { target: { value: 'print:barcode' } } );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Применить действие' } ) );
+
+		await waitFor( () => expect( screen.getAllByText( 'Документ формируется…' ).length ).toBeGreaterThan( 0 ) );
+		expect( document.querySelectorAll( '.woodev-orders-row-busy' ) ).toHaveLength( 2 );
+		expect( window.URL.createObjectURL ).not.toHaveBeenCalled();
+
+		await act( async () => {
+			await jest.advanceTimersByTimeAsync( 3000 );
+		} );
+
+		expect( fetchBulkDocument ).toHaveBeenCalledTimes( 2 );
+		expect( window.URL.createObjectURL ).toHaveBeenCalledTimes( 1 );
+		await waitFor( () => expect( document.querySelectorAll( '.woodev-orders-row-busy' ) ).toHaveLength( 0 ) );
+	} );
+
+	test( 'the orders left out of the file are named with their reasons, by the numbers the merchant sees', async () => {
+		fetchOrders.mockResolvedValue( resultOf( [ bulkRow( 1 ), bulkRow( 2 ), bulkRow( 3 ) ] ) );
+		fetchBulkDocument.mockResolvedValue( {
+			kind: 'file',
+			blob: new Blob( [ 'x' ] ),
+			filename: 'orders-waybill.pdf',
+			skipped: [
+				{ id: 2, code: 'not_exported' },
+				{ id: 3, code: 'carrier_skipped' },
+			],
+		} );
+
+		render( <App /> );
+
+		fireEvent.click( await screen.findByRole( 'checkbox', { name: 'Выбрать все заказы на странице' } ) );
+		fireEvent.change( picker(), { target: { value: 'print:waybill' } } );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Применить действие' } ) );
+
+		const sentence = 'В файл не вошли заказы: №N2 — ещё не выгружен перевозчику; №N3 — перевозчик не включил заказ в файл.';
+
+		await waitFor( () => expect( screen.getAllByText( sentence ).length ).toBeGreaterThan( 0 ) );
+		expect( screen.getAllByText( 'Документ готов. Заказов в файле: 1.' ).length ).toBeGreaterThan( 0 );
+	} );
+
+	test( 'a refusal (several carriers, too many orders) is shown as the server worded it, and the rows are free again', async () => {
+		fetchOrders.mockResolvedValue( resultOf( [ bulkRow( 1 ) ] ) );
+		fetchBulkDocument.mockRejectedValue( { message: 'Выбраны заказы разных перевозчиков.' } );
+
+		render( <App /> );
+
+		fireEvent.click( await screen.findByRole( 'checkbox', { name: 'Выбрать заказ N1' } ) );
+		fireEvent.change( picker(), { target: { value: 'print:waybill' } } );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Применить действие' } ) );
+
+		await waitFor( () => expect( screen.getAllByText( 'Выбраны заказы разных перевозчиков.' ).length ).toBeGreaterThan( 0 ) );
+		await waitFor( () => expect( document.querySelectorAll( '.woodev-orders-row-busy' ) ).toHaveLength( 0 ) );
+		expect( window.URL.createObjectURL ).not.toHaveBeenCalled();
 	} );
 } );
 

@@ -116,6 +116,7 @@ return [
 	'Woodev\\Framework\\Shipping\\Order\\Abstract_Tracking_Handler' => 'woodev/shipping-method/order/abstract-tracking-handler.php',
 	'Woodev\\Framework\\Shipping\\Order\\Abstract_Webhook_Handler' => 'woodev/shipping-method/order/abstract-webhook-handler.php',
 	'Woodev\\Framework\\Shipping\\Order\\Action_Result' => 'woodev/shipping-method/order/class-action-result.php',
+	'Woodev\\Framework\\Shipping\\Order\\Bulk_Document_Source' => 'woodev/shipping-method/order/interface-bulk-document-source.php',
 	'Woodev\\Framework\\Shipping\\Order\\Carrier_Cancel' => 'woodev/shipping-method/order/class-carrier-cancel.php',
 	'Woodev\\Framework\\Shipping\\Order\\Carrier_Order_Line' => 'woodev/shipping-method/order/class-carrier-order-line.php',
 	'Woodev\\Framework\\Shipping\\Order\\Carrier_Order_Lines' => 'woodev/shipping-method/order/class-carrier-order-lines.php',

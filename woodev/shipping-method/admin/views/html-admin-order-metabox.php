@@ -104,8 +104,10 @@ defined( 'ABSPATH' ) || exit;
 		// is ~250px wide, so three labelled buttons would wrap; the label then travels in the tooltip and `aria-label`.
 		$icon_only = count( $actions ) > 2;
 		$doc_label = [
-			// The sentences a document download shows — the script knows none (Rule 9). `%d` = seconds to retry.
-			'pending' => __( 'Документ ещё готовится. Повторите попытку примерно через %d с.', 'woodev-plugin-framework' ),
+			// The sentences a document download shows — the script knows none (Rule 9). `working` is said while the script
+			// keeps asking by itself (#1191); `timeout` when the carrier is still not ready after ~30 s.
+			'working' => __( 'Документ формируется…', 'woodev-plugin-framework' ),
+			'timeout' => __( 'Документ всё ещё формируется. Попробуйте ещё раз через минуту.', 'woodev-plugin-framework' ),
 			'failed'  => __( 'Не удалось получить документ у перевозчика.', 'woodev-plugin-framework' ),
 		];
 		?>

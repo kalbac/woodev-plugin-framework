@@ -13,6 +13,7 @@ use Woodev\Framework\Shipping\Admin\Orders\Order_Actions;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
 use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
+use Woodev\Framework\Shipping\Order\Bulk_Document_Source;
 use Woodev\Framework\Shipping\Order\Document_Result;
 use Woodev\Framework\Shipping\Order\Document_Source;
 use Woodev\Tests\Unit\TestCase;
@@ -21,6 +22,7 @@ require_once dirname( __DIR__, 4 ) . '/woodev/compatibility/class-plugin-compati
 require_once dirname( __DIR__, 4 ) . '/woodev/compatibility/class-order-compatibility.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/order/class-document-result.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/order/interface-document-source.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/order/interface-bulk-document-source.php';
 require_once __DIR__ . '/order-edit-lock-fixtures.php';
 require_once __DIR__ . '/order-edit-lock-cpt-fixtures.php';
 
@@ -121,6 +123,43 @@ final class OrderActionsDocumentsTest extends TestCase {
 		$this->assertSame( 'Накладная', $row[2]['label'] );
 		$this->assertSame( 'Штрихкод', $row[3]['label'] );
 		$this->assertFalse( $row[2]['destructive'], 'a download needs no «Да / Нет»' );
+	}
+
+	/** #1192: only a bulk-capable source marks the documents it can print for several orders. */
+	public function test_the_bulk_flag_is_set_only_for_types_a_bulk_source_prints_in_bulk(): void {
+		$source = new class() implements Bulk_Document_Source {
+			public function get_document_types( \WC_Order $order ): array {
+				return [ 'waybill', 'barcode' ];
+			}
+
+			public function get_document( \WC_Order $order, string $type ): Document_Result {
+				return Document_Result::pending();
+			}
+
+			public function get_bulk_document_types(): array {
+				return [ 'waybill' ];
+			}
+
+			public function get_bulk_document_limit(): int {
+				return 100;
+			}
+
+			public function get_bulk_document( array $orders, string $type ): Document_Result {
+				return Document_Result::pending();
+			}
+		};
+
+		$row = array_column( $this->actions( $source )->for_row( $this->order(), $this->provider() ), null, 'action' );
+
+		$this->assertTrue( $row['waybill']['bulk'] );
+		$this->assertArrayNotHasKey( 'bulk', $row['barcode'] );
+	}
+
+	public function test_a_plain_source_never_carries_the_bulk_flag(): void {
+		$row = array_column( $this->actions( $this->source( [ 'waybill', 'barcode' ] ) )->for_row( $this->order(), $this->provider() ), null, 'action' );
+
+		$this->assertArrayNotHasKey( 'bulk', $row['waybill'] );
+		$this->assertArrayNotHasKey( 'bulk', $row['barcode'] );
 	}
 
 	public function test_they_are_never_part_of_the_executable_set(): void {

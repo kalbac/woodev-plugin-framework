@@ -14,6 +14,7 @@ use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
 use Woodev\Framework\Shipping\Location\Location_Record;
 use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
 use Woodev\Framework\Shipping\Order\Action_Result;
+use Woodev\Framework\Shipping\Order\Bulk_Document_Source;
 use Woodev\Framework\Shipping\Order\Delivery_Status;
 use Woodev\Framework\Shipping\Order\Shipment_Cancellation;
 
@@ -350,10 +351,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 				'waybill' => 'media-document',
 				'barcode' => 'tag',
 			];
-			$actions = [];
+			// #1192: a carrier that can print this document for SEVERAL orders says so on the row, so the orders page
+			// offers «Печать накладных» / «Печать штрихкодов» only where it will work. Absent => single-order only.
+			$bulk_types = $source instanceof Bulk_Document_Source ? $source->get_bulk_document_types() : [];
+			$actions    = [];
 			foreach ( $source->get_document_types( $order ) as $type ) {
 				if ( isset( $labels[ $type ] ) ) {
-					$actions[] = self::build_action( $type, $labels[ $type ], __( 'Скачать документ перевозчика', 'woodev-plugin-framework' ), false, $icons[ $type ] );
+					$action = self::build_action( $type, $labels[ $type ], __( 'Скачать документ перевозчика', 'woodev-plugin-framework' ), false, $icons[ $type ] );
+					if ( in_array( $type, $bulk_types, true ) ) {
+						$action['bulk'] = true;
+					}
+					$actions[] = $action;
 				}
 			}
 

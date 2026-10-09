@@ -8,7 +8,7 @@
  */
 
 import apiFetch from '@wordpress/api-fetch';
-import { fetchOrderDocument, fetchOrders, fetchSyncStatus, getExportsInProgress, performOrderAction } from '../../src/shipping-orders-page/rest';
+import { fetchBulkDocument, fetchOrderDocument, fetchOrders, fetchSyncStatus, getExportsInProgress, performOrderAction } from '../../src/shipping-orders-page/rest';
 
 jest.mock( '@wordpress/api-fetch' );
 
@@ -369,5 +369,98 @@ describe( 'getExportsInProgress (#1007)', () => {
 		window.woodevShippingOrders.exportsInProgress = value;
 
 		expect( getExportsInProgress() ).toBeNull();
+	} );
+} );
+
+describe( 'fetchBulkDocument — one file for several orders (#1192)', () => {
+	function response( { status = 200, headers = {}, json = null, blob = null } ) {
+		return {
+			ok: status >= 200 && status < 300,
+			status,
+			headers: { get: ( name ) => headers[ name ] ?? null },
+			json: () => Promise.resolve( json ),
+			blob: () => Promise.resolve( blob ),
+		};
+	}
+
+	test( 'asks the bulk route with the ids as one comma list, the nonce in the header and parse:false', async () => {
+		apiFetch.mockResolvedValue( response( { json: { status: 'url', url: 'https://carrier.test/all.pdf' } } ) );
+
+		await fetchBulkDocument( [ 5, 7, 9 ], 'waybill' );
+
+		const call = apiFetch.mock.calls[ 0 ][ 0 ];
+
+		expect( call.url ).toBe( 'https://example.test/wp-json/woodev/v1/shipping/orders/documents/waybill?ids=5,7,9&format=json' );
+		expect( call.headers ).toEqual( { 'X-WP-Nonce': 'abc' } );
+		expect( call.method ).toBe( 'GET' );
+		expect( call.parse ).toBe( false );
+	} );
+
+	test( 'on PLAIN permalinks the ids and format stay out of the rest_route value', async () => {
+		window.woodevShippingOrders = { restRoot: 'https://example.test/index.php?rest_route=/woodev/v1/shipping/orders', nonce: 'abc' };
+		apiFetch.mockResolvedValue( response( { json: { status: 'url', url: 'https://carrier.test/all.pdf' } } ) );
+
+		await fetchBulkDocument( [ 5, 7 ], 'barcode' );
+
+		const url = new URL( apiFetch.mock.calls[ 0 ][ 0 ].url );
+
+		expect( url.searchParams.get( 'rest_route' ) ).toBe( '/woodev/v1/shipping/orders/documents/barcode' );
+		expect( url.searchParams.get( 'ids' ) ).toBe( '5,7' );
+		expect( url.searchParams.get( 'format' ) ).toBe( 'json' );
+	} );
+
+	test( 'a PDF names the orders it leaves out from the X-Woodev-Skipped header', async () => {
+		const blob = new Blob( [ '%PDF-' ] );
+
+		apiFetch.mockResolvedValue(
+			response( {
+				headers: {
+					'Content-Type': 'application/pdf',
+					'Content-Disposition': 'attachment; filename="orders-waybill-20261009.pdf"',
+					'X-Woodev-Skipped': '124:not_exported,999:not_found',
+				},
+				blob,
+			} )
+		);
+
+		expect( await fetchBulkDocument( [ 123, 124, 999 ], 'waybill' ) ).toEqual( {
+			kind: 'file',
+			blob,
+			filename: 'orders-waybill-20261009.pdf',
+			skipped: [
+				{ id: 124, code: 'not_exported' },
+				{ id: 999, code: 'not_found' },
+			],
+		} );
+	} );
+
+	test( 'a complete PDF carries no skipped key, and the fallback filename is the bulk one', async () => {
+		apiFetch.mockResolvedValue( response( { headers: { 'Content-Type': 'application/pdf' }, blob: new Blob( [ 'x' ] ) } ) );
+
+		const doc = await fetchBulkDocument( [ 1, 2 ], 'barcode' );
+
+		expect( doc.filename ).toBe( 'orders-barcode.pdf' );
+		expect( doc ).not.toHaveProperty( 'skipped' );
+	} );
+
+	test( 'a link answer keeps the skipped list; 202 is pending with the retry delay', async () => {
+		apiFetch.mockResolvedValue( response( { json: { status: 'url', url: 'https://carrier.test/all.pdf', skipped: [ { id: 3, code: 'carrier_skipped' } ] } } ) );
+		expect( await fetchBulkDocument( [ 3, 4 ], 'waybill' ) ).toEqual( {
+			kind: 'link',
+			url: 'https://carrier.test/all.pdf',
+			skipped: [ { id: 3, code: 'carrier_skipped' } ],
+		} );
+
+		apiFetch.mockResolvedValue( response( { status: 202, json: { status: 'pending', retry_after: 4 } } ) );
+		expect( await fetchBulkDocument( [ 3, 4 ], 'waybill' ) ).toEqual( { kind: 'pending', message: '', retryAfter: 4 } );
+	} );
+
+	test( 'a refusal rejects with the server\'s own {code, message}', async () => {
+		apiFetch.mockRejectedValue( response( { status: 422, json: { code: 'woodev_document_mixed_carriers', message: 'Выбраны заказы разных перевозчиков.' } } ) );
+
+		await expect( fetchBulkDocument( [ 1, 2 ], 'waybill' ) ).rejects.toEqual( {
+			code: 'woodev_document_mixed_carriers',
+			message: 'Выбраны заказы разных перевозчиков.',
+		} );
 	} );
 } );
