@@ -14,6 +14,7 @@ use Woodev\Framework\Shipping\Carrier_Service;
 use Woodev\Framework\Shipping\Packaging;
 use Woodev\Framework\Shipping\Settings\Packaging_Settings;
 use Woodev\Framework\Shipping\Shipping_Method;
+use Woodev\Framework\Shipping\Shipping_Rate;
 use Woodev\Framework\Shipping\Shipping_Rate_Cache;
 use Woodev\Tests\Unit\TestCase;
 
@@ -28,6 +29,29 @@ class Woodev_Test_Services_Method extends Woodev_Test_Shipping_Method_For_Rate_C
 			new Carrier_Service( 'INSURANCE', 'Страхование', 'sum' ),
 			new Carrier_Service( 'SMS_NOTICE', 'SMS-уведомление' ),
 		];
+	}
+}
+
+/** The two-service carrier, with the quote step opened and the rates it adds recorded. */
+class Woodev_Test_Quoting_Services_Method extends Woodev_Test_Services_Method {
+
+	/** @var array<int, array<string,mixed>> the arguments of every rate handed to WooCommerce. */
+	public array $rates_added = [];
+
+	/**
+	 * @param array $args rate args.
+	 * @return void
+	 */
+	public function add_rate( $args = [] ) {
+		$this->rates_added[] = $args;
+	}
+
+	/**
+	 * @param array $package package.
+	 * @return Shipping_Rate|null
+	 */
+	public function quote( array $package ): ?Shipping_Rate {
+		return $this->calculate_rate( $package );
 	}
 }
 
@@ -305,6 +329,7 @@ final class CarrierServicesTest extends TestCase {
 
 		$order = Mockery::mock( 'WC_Order' );
 		$order->shouldReceive( 'get_items' )->with( 'line_item' )->andReturn( [ $kept, $other, $virtual ] );
+		$order->shouldReceive( 'get_shipping_methods' )->andReturn( [] );
 
 		$quote = $method->resolve_services_for_package( $this->package() );
 
@@ -333,6 +358,7 @@ final class CarrierServicesTest extends TestCase {
 		$line  = $this->line( 'a', 40 );
 		$order = Mockery::mock( 'WC_Order' );
 		$order->shouldReceive( 'get_items' )->andReturn( [ $line ] );
+		$order->shouldReceive( 'get_shipping_methods' )->andReturn( [] );
 
 		$method->resolve_services_for_order( $order, [ $line ] );
 		$method->resolve_services_for_package( $this->package() );
@@ -399,5 +425,205 @@ final class CarrierServicesTest extends TestCase {
 		$method->option_values = [];
 		$pack['contents'][1]['line_total'] = 20;
 		$this->assertSame( $none, $cache->build_key( $method, $pack ), 'nothing chosen again: the first quote is served' );
+	}
+
+	// ---- the quote snapshot (the shipping line records what was quoted) ----------------------------------
+
+	/**
+	 * @param Woodev_Test_Quoting_Services_Method $method the carrier.
+	 * @param array|null                          $package the package, or null for the default one.
+	 * @return mixed the snapshot the quote carries as rate meta.
+	 */
+	private function quoted_snapshot( Woodev_Test_Quoting_Services_Method $method, ?array $package = null ) {
+		$method->next_rate = new Shipping_Rate( 'rate-cache-method', 'rate-cache-method:1', 'Courier', 350 );
+
+		return $method->quote( $package ?? $this->package() )->get_meta_data()[ Shipping_Method::META_QUOTED_SERVICES ] ?? null;
+	}
+
+	/**
+	 * An order whose shipping line holds `$snapshot` (null = no such meta) and two product lines.
+	 *
+	 * @param mixed $snapshot the shipping line meta value.
+	 * @return array{0: \Mockery\MockInterface, 1: \Mockery\MockInterface} the order and its first product line.
+	 */
+	private function order_with_snapshot( $snapshot ): array {
+		$kept  = $this->line( 'a', '80.50' );
+		$other = $this->line( 'b', 20 );
+
+		$shipping = Mockery::mock( 'WC_Order_Item_Shipping' );
+		$shipping->shouldReceive( 'get_method_id' )->andReturn( 'rate-cache-method' );
+		$shipping->shouldReceive( 'get_meta' )->with( Shipping_Method::META_QUOTED_SERVICES, true )->andReturn( null === $snapshot ? '' : $snapshot );
+
+		$order = Mockery::mock( 'WC_Order' );
+		$order->shouldReceive( 'get_items' )->with( 'line_item' )->andReturn( [ $kept, $other ] );
+		$order->shouldReceive( 'get_shipping_methods' )->andReturn( [ $shipping ] );
+
+		return [ $order, $kept ];
+	}
+
+	/** @return void */
+	public function test_the_quote_carries_its_services_as_rate_meta(): void {
+		$method = new Woodev_Test_Quoting_Services_Method();
+		$method->option_values[ Shipping_Method::OPTION_SERVICES ] = [ 'INSURANCE' ];
+
+		$snapshot = $this->quoted_snapshot( $method );
+
+		$this->assertIsString( $snapshot, 'a scalar, so it survives the admin wizard\'s meta round trip' );
+		$this->assertSame(
+			[ 'version' => 1, 'services' => [ [ 'code' => 'INSURANCE', 'name' => 'Страхование', 'parameter' => 100.5 ] ] ],
+			json_decode( $snapshot, true )
+		);
+		$this->assertSame( '_woodev_quoted_services', Shipping_Method::META_QUOTED_SERVICES );
+	}
+
+	/** @return void */
+	public function test_a_quote_of_nothing_is_recorded_as_an_empty_list(): void {
+		$method = new Woodev_Test_Quoting_Services_Method();
+
+		$this->assertSame( [ 'version' => 1, 'services' => [] ], json_decode( (string) $this->quoted_snapshot( $method ), true ) );
+	}
+
+	/** @return void */
+	public function test_a_method_that_declared_no_service_writes_no_snapshot(): void {
+		$method = new class() extends Woodev_Test_Quoting_Services_Method {
+			/** @return array */
+			protected function declare_services(): array {
+				return [];
+			}
+		};
+
+		$this->assertNull( $this->quoted_snapshot( $method ) );
+	}
+
+	/** @return void */
+	public function test_the_snapshot_reaches_the_rate_added_at_checkout_and_survives_the_rate_cache(): void {
+		$store = [];
+		Functions\when( 'get_transient' )->alias(
+			static function ( $key ) use ( &$store ) {
+				return $store[ $key ] ?? false;
+			}
+		);
+		Functions\when( 'set_transient' )->alias(
+			static function ( $key, $value ) use ( &$store ) {
+				$store[ $key ] = $value;
+				return true;
+			}
+		);
+
+		$method = new Woodev_Test_Quoting_Services_Method();
+		$method->option_values[ Shipping_Method::OPTION_SERVICES ] = [ 'INSURANCE' ];
+		$method->next_rate = new Shipping_Rate( 'rate-cache-method', 'rate-cache-method:1', 'Courier', 350 );
+
+		$method->calculate_shipping( $this->package() );
+		$method->calculate_shipping( $this->package() );
+
+		$this->assertSame( 1, $method->carrier_calls, 'the second quote is the cached one' );
+		$this->assertCount( 2, $method->rates_added );
+
+		foreach ( $method->rates_added as $args ) {
+			$this->assertSame( 'INSURANCE', json_decode( $args['meta_data'][ Shipping_Method::META_QUOTED_SERVICES ], true )['services'][0]['code'] );
+		}
+	}
+
+	/** @return void */
+	public function test_an_unchanged_order_exports_the_quoted_services_not_the_current_settings(): void {
+		$method = new Woodev_Test_Quoting_Services_Method();
+		$method->option_values[ Shipping_Method::OPTION_SERVICES ] = [ 'INSURANCE' ];
+
+		[ $order ] = $this->order_with_snapshot( $this->quoted_snapshot( $method ) );
+
+		// the merchant edits the zone method after the order was placed
+		$method->option_values[ Shipping_Method::OPTION_SERVICES ] = [ 'SMS_NOTICE' ];
+
+		$this->assertSame(
+			[ [ 'code' => 'INSURANCE', 'name' => 'Страхование', 'parameter' => 100.5 ] ],
+			$method->resolve_services_for_order( $order ),
+			'what was quoted is what gets billed'
+		);
+
+		// ...and dropping the option altogether, or adding one, changes nothing either
+		$method->option_values = [];
+		$this->assertSame( [ 'INSURANCE' ], array_column( $method->resolve_services_for_order( $order ), 'code' ) );
+		$method->option_values[ Shipping_Method::OPTION_SERVICES ] = [ 'INSURANCE', 'SMS_NOTICE' ];
+		$this->assertSame( [ 'INSURANCE' ], array_column( $method->resolve_services_for_order( $order ), 'code' ) );
+	}
+
+	/** @return void */
+	public function test_an_order_quoted_without_services_does_not_gain_one_later(): void {
+		$method = new Woodev_Test_Quoting_Services_Method();
+		[ $order ] = $this->order_with_snapshot( $this->quoted_snapshot( $method ) );
+
+		$method->option_values[ Shipping_Method::OPTION_SERVICES ] = [ 'SMS_NOTICE' ];
+
+		$this->assertSame( [], $method->resolve_services_for_order( $order ), 'an empty snapshot is an answer, not a missing one' );
+	}
+
+	/** @return void */
+	public function test_an_order_without_a_snapshot_is_resolved_from_the_settings_as_before(): void {
+		$method = new Woodev_Test_Quoting_Services_Method();
+		$method->option_values[ Shipping_Method::OPTION_SERVICES ] = [ 'SMS_NOTICE' ];
+
+		foreach ( [ null, 'not json', '{"version":2,"services":[]}', '{"version":1}', '[]' ] as $stored ) {
+			[ $order ] = $this->order_with_snapshot( $stored );
+			$this->assertSame( [ 'SMS_NOTICE' ], array_column( $method->resolve_services_for_order( $order ), 'code' ), 'stored: ' . var_export( $stored, true ) );
+		}
+
+		// no shipping line of this method at all
+		$order = Mockery::mock( 'WC_Order' );
+		$order->shouldReceive( 'get_items' )->andReturn( [] );
+		$order->shouldReceive( 'get_shipping_methods' )->andReturn( [] );
+		$this->assertSame( [ 'SMS_NOTICE' ], array_column( $method->resolve_services_for_order( $order ), 'code' ) );
+	}
+
+	/** @return void */
+	public function test_requoting_the_order_refreshes_the_snapshot(): void {
+		$method = new Woodev_Test_Quoting_Services_Method();
+		$method->option_values[ Shipping_Method::OPTION_SERVICES ] = [ 'INSURANCE' ];
+		[ $first ] = $this->order_with_snapshot( $this->quoted_snapshot( $method ) );
+
+		// the merchant changes the method; the admin wizard re-quotes the order, which writes a new line with the new rate's meta
+		$method->option_values[ Shipping_Method::OPTION_SERVICES ] = [ 'SMS_NOTICE' ];
+		[ $requoted ] = $this->order_with_snapshot( $this->quoted_snapshot( $method ) );
+
+		$this->assertSame( [ 'INSURANCE' ], array_column( $method->resolve_services_for_order( $first ), 'code' ), 'untouched: the old snapshot' );
+		$this->assertSame( [ 'SMS_NOTICE' ], array_column( $method->resolve_services_for_order( $requoted ), 'code' ), 're-quoted: the new one' );
+	}
+
+	/** @return void */
+	public function test_a_split_shipment_keeps_the_quoted_codes_and_values_a_declared_value_from_its_own_lines(): void {
+		$method = new Woodev_Test_Quoting_Services_Method();
+		$method->option_values[ Shipping_Method::OPTION_SERVICES ] = [ 'INSURANCE', 'SMS_NOTICE' ];
+		[ $order, $kept ] = $this->order_with_snapshot( $this->quoted_snapshot( $method ) );
+
+		$method->option_values = [];
+
+		$this->assertSame(
+			[
+				[ 'code' => 'INSURANCE', 'name' => 'Страхование', 'parameter' => 80.5 ],
+				[ 'code' => 'SMS_NOTICE', 'name' => 'SMS-уведомление', 'parameter' => null ],
+			],
+			$method->resolve_services_for_order( $order, [ $kept ] )
+		);
+	}
+
+	/** @return void */
+	public function test_a_computed_parameter_is_frozen_in_the_snapshot(): void {
+		$method = new class() extends Woodev_Test_Custom_Services_Method {
+			/**
+			 * @param array $package package.
+			 * @return Shipping_Rate|null
+			 */
+			public function quote( array $package ): ?Shipping_Rate {
+				$this->next_rate = new Shipping_Rate( 'rate-cache-method', 'rate-cache-method:1', 'Courier', 350 );
+				return $this->calculate_rate( $package );
+			}
+		};
+		$method->option_values[ Shipping_Method::OPTION_SERVICES ] = [ 'TRY_ON' ];
+
+		[ $order ] = $this->order_with_snapshot( $method->quote( [] )->get_meta_data()[ Shipping_Method::META_QUOTED_SERVICES ] );
+
+		$method->try_on = 9;
+
+		$this->assertSame( 2, $method->resolve_services_for_order( $order )[0]['parameter'], 'the quoted value, not today\'s' );
 	}
 }
