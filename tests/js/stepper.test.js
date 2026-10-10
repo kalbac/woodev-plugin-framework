@@ -117,4 +117,49 @@ describe( 'Stepper', () => {
 		expect( items[ 1 ] ).toHaveClass( 'is-done' );
 		expect( items[ 2 ] ).toHaveClass( 'is-active' );
 	} );
+
+	describe( 'shortLabel', () => {
+		const LONG = [
+			{ id: 'a', label: 'Подключение к сервису доставки', shortLabel: 'Связь' },
+			{ id: 'b', label: 'Сопоставление статусов заказов', shortLabel: 'Статусы' },
+			{ id: 'c', label: 'Итог' },
+		];
+
+		test( 'shows the short label when present and the full label otherwise', () => {
+			const { container } = render( createElement( Stepper, { steps: LONG, index: 1 } ) );
+
+			const visible = Array.from( container.querySelectorAll( '.woodev-stepper__label' ) )
+				.map( ( el ) => el.querySelector( '[aria-hidden="true"]' )?.textContent ?? el.textContent );
+
+			expect( visible ).toEqual( [ 'Связь', 'Статусы', 'Итог' ] );
+		} );
+
+		test( 'the full label stays the accessible name and the hover title of a button', () => {
+			render( createElement( Stepper, { steps: LONG, index: 1 } ) );
+
+			const button = screen.getByRole( 'button', { name: 'Подключение к сервису доставки' } );
+
+			expect( button ).toHaveAttribute( 'title', 'Подключение к сервису доставки' );
+			// The status marker is still a sibling, not part of the name.
+			expect( button.parentElement.querySelector( '.woodev-stepper__status' ) ).not.toBeNull();
+			expect( screen.queryByRole( 'button', { name: 'Связь' } ) ).toBeNull();
+		} );
+
+		test( 'a plain (non-button) step carries the full label as title and screen-reader text', () => {
+			const { container } = render( createElement( Stepper, { steps: LONG, index: 1 } ) );
+
+			const span = container.querySelectorAll( 'li' )[ 1 ].querySelector( 'span.woodev-stepper__label' );
+
+			expect( span ).toHaveAttribute( 'title', 'Сопоставление статусов заказов' );
+			expect( span.querySelector( '.screen-reader-text' ) ).toHaveTextContent( 'Сопоставление статусов заказов' );
+		} );
+
+		test( 'a step without a short label gets no title; one equal to the label is not doubled', () => {
+			const steps = [ { id: 'a', label: 'Итог' }, { id: 'b', label: 'Готово', shortLabel: 'Готово' } ];
+			const { container } = render( createElement( Stepper, { steps, index: 0 } ) );
+
+			expect( container.querySelectorAll( '[title]' ) ).toHaveLength( 0 );
+			expect( container.querySelector( '.screen-reader-text' ) ).toBeNull();
+		} );
+	} );
 } );

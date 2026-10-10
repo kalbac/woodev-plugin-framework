@@ -787,3 +787,21 @@ describe( 'component skip() honours skippable (critic 109b)', () => {
 		expect( title() ).toHaveTextContent( 'Дальше' );
 	} );
 } );
+
+describe( 'short step label', () => {
+	test( 'the stepper shows short_label, the card heading keeps the full label', () => {
+		install( [
+			entry( 'start', 'Подключение к сервису доставки', { short_label: 'Связь' } ),
+			entry( 'done', 'Итог', { type: 'content', content: '<p>ok</p>' } ),
+			finish,
+		] );
+		render( createElement( App ) );
+
+		const visible = Array.from( document.querySelectorAll( 'ol.woodev-stepper > li' ) )
+			.map( ( li ) => li.querySelector( '.woodev-stepper__label [aria-hidden="true"]' )?.textContent ?? li.querySelector( '.woodev-stepper__label' ).textContent );
+
+		expect( visible ).toEqual( [ 'Связь', 'Итог', 'Готово' ] );
+		expect( title().textContent ).toBe( 'Подключение к сервису доставки' );
+		expect( document.querySelector( '.woodev-stepper__label' ) ).toHaveAttribute( 'title', 'Подключение к сервису доставки' );
+	} );
+} );

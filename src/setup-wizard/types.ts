@@ -48,6 +48,8 @@ export interface SetupWizardStep {
 	/** False for a step the server-side predicate hides now (then only `id` is present). */
 	visible?: boolean;
 	label: string;
+	/** Optional shorter label for the stepper (`Step::set_short_label()`); absent when not set. */
+	short_label?: string;
 	type: 'settings' | 'content' | 'finish';
 	description: string;
 	fields: Record<string, SetupWizardField>;

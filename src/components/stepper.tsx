@@ -7,7 +7,7 @@
  * active index; a step before the active one reads as done, one after as upcoming.
  *
  * Shared by the setup wizard and the shipping orders page's order wizard (#710),
- * so it knows nothing about either: steps are `{ id, label }`, navigation is a
+ * so it knows nothing about either: steps are `{ id, label, shortLabel? }`, navigation is a
  * callback. The dot's hollow centre takes the surface it sits on from the
  * `--woodev-stepper-dot-bg` custom property (see `_stepper.scss`).
  *
@@ -20,8 +20,10 @@ import { __ } from '@wordpress/i18n';
 export interface StepperStep {
 	/** Stable key — never the index, so a re-ordered list keeps its elements. */
 	id: string | number;
-	/** Visible label. */
+	/** Full label — the accessible name and the hover title whenever `shortLabel` is shown instead. */
 	label: string;
+	/** Optional shorter text shown in the line in place of `label` (a long step list cannot fit full titles). */
+	shortLabel?: string;
 }
 
 export interface StepperProps {
@@ -59,18 +61,32 @@ export default function Stepper( { steps, index, onNavigate, disabled, canNaviga
 						? __( 'Текущий шаг', 'woodev-plugin-framework' )
 						: __( 'Шаг ещё не пройден', 'woodev-plugin-framework' ) );
 
+				// A short label replaces the visible text only: the full label stays the
+				// accessible name (screen-reader text) and the hover title.
+				const hasShort = !! step.shortLabel && step.shortLabel !== step.label;
+				const text = hasShort
+					? (
+						<>
+							<span aria-hidden="true">{ step.shortLabel }</span>
+							<span className="screen-reader-text">{ step.label }</span>
+						</>
+					)
+					: step.label;
+				const title = hasShort ? step.label : undefined;
+
 				// The current step — and any step `canNavigate` refuses — is a plain
 				// (non-clickable) label; any other step is a button that navigates to it.
 				const label = i === index || ( canNavigate && ! canNavigate( i ) )
-					? <span className="woodev-stepper__label">{ step.label }</span>
+					? <span className="woodev-stepper__label" title={ title }>{ text }</span>
 					: (
 						<button
 							type="button"
 							className="woodev-stepper__label"
+							title={ title }
 							disabled={ !! disabled }
 							onClick={ () => onNavigate && onNavigate( i ) }
 						>
-							{ step.label }
+							{ text }
 						</button>
 					);
 
