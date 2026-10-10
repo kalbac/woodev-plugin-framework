@@ -129,29 +129,32 @@ describe( 'Stepper', () => {
 			const { container } = render( createElement( Stepper, { steps: LONG, index: 1 } ) );
 
 			const visible = Array.from( container.querySelectorAll( '.woodev-stepper__label' ) )
-				.map( ( el ) => el.querySelector( '[aria-hidden="true"]' )?.textContent ?? el.textContent );
+				.map( ( el ) => el.textContent );
 
 			expect( visible ).toEqual( [ 'Связь', 'Статусы', 'Итог' ] );
 		} );
 
-		test( 'the full label stays the accessible name and the hover title of a button', () => {
+		test( 'a button is named by the short label and described once by the full one', () => {
 			render( createElement( Stepper, { steps: LONG, index: 1 } ) );
 
-			const button = screen.getByRole( 'button', { name: 'Подключение к сервису доставки' } );
+			const button = screen.getByRole( 'button', { name: 'Связь' } );
 
 			expect( button ).toHaveAttribute( 'title', 'Подключение к сервису доставки' );
+			expect( button ).toHaveAccessibleDescription( 'Подключение к сервису доставки' );
+			// The full label is not ALSO hidden text: name and description would repeat it.
+			expect( button.querySelector( '.screen-reader-text' ) ).toBeNull();
 			// The status marker is still a sibling, not part of the name.
 			expect( button.parentElement.querySelector( '.woodev-stepper__status' ) ).not.toBeNull();
-			expect( screen.queryByRole( 'button', { name: 'Связь' } ) ).toBeNull();
 		} );
 
-		test( 'a plain (non-button) step carries the full label as title and screen-reader text', () => {
+		test( 'a plain (non-button) step carries the full label as its title only', () => {
 			const { container } = render( createElement( Stepper, { steps: LONG, index: 1 } ) );
 
 			const span = container.querySelectorAll( 'li' )[ 1 ].querySelector( 'span.woodev-stepper__label' );
 
+			expect( span ).toHaveTextContent( /^Статусы$/ );
 			expect( span ).toHaveAttribute( 'title', 'Сопоставление статусов заказов' );
-			expect( span.querySelector( '.screen-reader-text' ) ).toHaveTextContent( 'Сопоставление статусов заказов' );
+			expect( span.querySelector( '.screen-reader-text' ) ).toBeNull();
 		} );
 
 		test( 'a step without a short label gets no title; one equal to the label is not doubled', () => {

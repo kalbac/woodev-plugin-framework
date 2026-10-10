@@ -20,7 +20,7 @@ import { __ } from '@wordpress/i18n';
 export interface StepperStep {
 	/** Stable key — never the index, so a re-ordered list keeps its elements. */
 	id: string | number;
-	/** Full label — the accessible name and the hover title whenever `shortLabel` is shown instead. */
+	/** Full label — shown, or the hover title and accessible description when `shortLabel` is shown instead. */
 	label: string;
 	/** Optional shorter text shown in the line in place of `label` (a long step list cannot fit full titles). */
 	shortLabel?: string;
@@ -61,17 +61,12 @@ export default function Stepper( { steps, index, onNavigate, disabled, canNaviga
 						? __( 'Текущий шаг', 'woodev-plugin-framework' )
 						: __( 'Шаг ещё не пройден', 'woodev-plugin-framework' ) );
 
-				// A short label replaces the visible text only: the full label stays the
-				// accessible name (screen-reader text) and the hover title.
+				// A short label is the visible text and the accessible name; the full label is
+				// the `title` only — the hover tooltip and, once, the accessible description.
+				// Not also screen-reader text: a name and a description saying the same thing
+				// are announced twice (#1210 review).
 				const hasShort = !! step.shortLabel && step.shortLabel !== step.label;
-				const text = hasShort
-					? (
-						<>
-							<span aria-hidden="true">{ step.shortLabel }</span>
-							<span className="screen-reader-text">{ step.label }</span>
-						</>
-					)
-					: step.label;
+				const text = hasShort ? step.shortLabel : step.label;
 				const title = hasShort ? step.label : undefined;
 
 				// The current step — and any step `canNavigate` refuses — is a plain
