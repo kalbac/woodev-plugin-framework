@@ -900,6 +900,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 * warns before a manager sets such an order to «Отменён» (the status is the manager's call and is never
 		 * blocked).
 		 *
+		 * This is the SIMPLE path, a list of canonical states. A carrier whose canonical state is too coarse to tell a
+		 * deletable shipment from one already refused (CDEK's `created`) overrides {@see self::is_handed_over()} instead —
+		 * it sees the order, and the framework asks only that method.
+		 *
 		 * Answer from this class's own constants — it is read while an order page is drawn, so it must not call the
 		 * carrier. An end state ({@see \Woodev\Framework\Shipping\Admin\Orders\Order_Actions::CANCEL_RETIRED_STATUSES})
 		 * named here is ignored: a delivered or cancelled shipment is not «in transit».
@@ -910,6 +914,44 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 */
 		public function get_handed_over_statuses(): array {
 			return [];
+		}
+
+		/**
+		 * Whether THIS order's parcel is «handed to delivery» (#1204): the carrier no longer lets a merchant delete or
+		 * cancel its shipment. The ORDER-aware decision behind the background cancellation and the order-edit warning.
+		 *
+		 * By default the canonical state the framework resolved for the order decides
+		 * ({@see self::get_handed_over_statuses()}). A carrier whose canonical state is too coarse overrides this and
+		 * reads the order's own data — CDEK's `created` covers a deletable «Создан» as well as an order already received
+		 * at the shipment warehouse, which cannot be told apart by the canonical state alone; its raw status meta can.
+		 *
+		 * Called only for an exported order that is not in an end state, and while an order page is drawn: answer from
+		 * the order's stored data, never from the carrier's API.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order     the order.
+		 * @param string    $canonical the order's canonical delivery state ({@see Delivery_Status}) the framework resolved.
+		 * @return bool
+		 */
+		public function is_handed_over( \WC_Order $order, string $canonical ): bool {
+			return in_array( $canonical, $this->get_handed_over_statuses(), true );
+		}
+
+		/**
+		 * Whether «Оформить отказ» may be offered for THIS order (#1204) — the order-aware twin of
+		 * {@see self::get_refusable_statuses()}, with the same default (the canonical state decides) and the same
+		 * reason to override (a raw status the canonical one cannot express). The framework still checks
+		 * {@see self::supports_refusal()}, the end states and its own «refusal already accepted» record first.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order     the order.
+		 * @param string    $canonical the order's canonical delivery state the framework resolved.
+		 * @return bool
+		 */
+		public function is_refusable( \WC_Order $order, string $canonical ): bool {
+			return in_array( $canonical, $this->get_refusable_statuses(), true );
 		}
 
 		/**

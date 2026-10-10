@@ -313,6 +313,7 @@ final class OrdersControllerBulkActionTest extends TestCase {
 		$handler->shouldReceive( 'supports_update' )->andReturn( false );
 		$handler->shouldReceive( 'supports_refusal' )->andReturn( true );
 		$handler->shouldReceive( 'get_refusable_statuses' )->andReturn( [ \Woodev\Framework\Shipping\Order\Delivery_Status::IN_TRANSIT ] );
+		$handler->shouldReceive( 'is_refusable' )->andReturnUsing( static fn( $o, $c ) => in_array( $c, [ \Woodev\Framework\Shipping\Order\Delivery_Status::IN_TRANSIT ], true ) );
 		$handler->shouldNotReceive( 'refuse' );
 
 		$this->order( 1, 'processing', '_cdek_marker' );

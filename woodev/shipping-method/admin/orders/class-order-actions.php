@@ -511,7 +511,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		/**
 		 * Whether the order's parcel is already «handed to delivery» (#1204): exported, not in an end state, and in
 		 * a delivery state its carrier declares deletion impossible from
-		 * ({@see Abstract_Shipment_Handler::get_handed_over_statuses()}).
+		 * ({@see Abstract_Shipment_Handler::is_handed_over()}, by default the list of
+		 * {@see Abstract_Shipment_Handler::get_handed_over_statuses()}).
 		 *
 		 * The ONE answer behind the background cancellation (no doomed request, a clear note instead) and the
 		 * order-edit screen's warning before a manager sets such an order to «Отменён». A carrier that declares
@@ -538,7 +539,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 			$canonical = self::resolve_canonical_status( $order, $provider );
 
 			return ! in_array( $canonical, self::CANCEL_RETIRED_STATUSES, true )
-				&& in_array( $canonical, $handler->get_handed_over_statuses(), true );
+				&& $handler->is_handed_over( $order, $canonical );
 		}
 
 		/**
@@ -565,7 +566,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 			$canonical = self::resolve_canonical_status( $order, $provider );
 
 			return ! in_array( $canonical, self::CANCEL_RETIRED_STATUSES, true )
-				&& in_array( $canonical, $handler->get_refusable_statuses(), true );
+				&& $handler->is_refusable( $order, $canonical );
 		}
 
 		/**

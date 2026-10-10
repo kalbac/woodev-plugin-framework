@@ -467,7 +467,10 @@ Moved here from `CURRENT-STATE.md` in s139: they are reference, true regardless 
   matches the stored carrier id the action is no longer offered — a retry with a stale local status cannot reach the
   carrier twice — and the row carries `refusal_requested` («Отказ оформлен, ждём возврата»). Re-exporting changes the
   carrier id, so the record lapses by itself; a failure writes nothing, so a retry works. The adapter's `refuse()` keeps
-  no bookkeeping of this.
+  no bookkeeping of this. **Order-aware decision:** the framework asks `Abstract_Shipment_Handler::is_handed_over( $order,
+  $canonical )` / `is_refusable( $order, $canonical )` (defaults delegate to the two canonical lists); a carrier whose
+  canonical state is too coarse (CDEK's `created` also covers an order already at the warehouse) overrides them and reads
+  its raw status meta.
 - **Row flags (s164)** — small badges under the tracking number on the orders page and under the details table of the
   order's metabox. A carrier fills them through `woodev_shipping_order_row_flags( array $flags, \WC_Order $order,
   ?Orders_Provider $provider )` (starts `[]`); each flag is `[ 'label' => string, 'tone' => 'ok'|'warn'|'error'|'info'|'muted',

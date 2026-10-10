@@ -98,6 +98,8 @@ final class OrdersControllerPerformActionTest extends TestCase {
 		$handler->shouldReceive( 'supports_refusal' )->andReturn( false )->byDefault();
 		$handler->shouldReceive( 'get_handed_over_statuses' )->andReturn( [] )->byDefault();
 		$handler->shouldReceive( 'get_refusable_statuses' )->andReturn( [] )->byDefault();
+		$handler->shouldReceive( 'is_handed_over' )->andReturn( false )->byDefault();
+		$handler->shouldReceive( 'is_refusable' )->andReturn( false )->byDefault();
 
 		Orders_Registry::instance()->register_shipment_handler( 'cdek', $handler );
 
@@ -299,6 +301,7 @@ final class OrdersControllerPerformActionTest extends TestCase {
 		$handler = $this->register_handler();
 		$handler->shouldReceive( 'supports_refusal' )->andReturn( true );
 		$handler->shouldReceive( 'get_refusable_statuses' )->andReturn( [ \Woodev\Framework\Shipping\Order\Delivery_Status::IN_TRANSIT ] );
+		$handler->shouldReceive( 'is_refusable' )->andReturnUsing( static fn( $o, $c ) => in_array( $c, [ \Woodev\Framework\Shipping\Order\Delivery_Status::IN_TRANSIT ], true ) );
 
 		return $handler;
 	}

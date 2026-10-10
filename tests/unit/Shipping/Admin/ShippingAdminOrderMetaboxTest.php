@@ -235,6 +235,7 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 		private function registry_with_handed_over_states( Orders_Provider $provider, array $states ) {
 			$handler = Mockery::mock( Abstract_Shipment_Handler::class );
 			$handler->shouldReceive( 'get_handed_over_statuses' )->andReturn( $states );
+			$handler->shouldReceive( 'is_handed_over' )->andReturnUsing( static fn( $o, $c ) => in_array( $c, $states, true ) );
 
 			$registry = Mockery::mock( Orders_Registry::class );
 			$registry->shouldReceive( 'resolve_provider_for_order' )->andReturn( $provider );
@@ -954,6 +955,8 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$handler->shouldReceive( 'supports_refusal' )->andReturn( false )->byDefault();
 			$handler->shouldReceive( 'get_handed_over_statuses' )->andReturn( [] )->byDefault();
 			$handler->shouldReceive( 'get_refusable_statuses' )->andReturn( [] )->byDefault();
+			$handler->shouldReceive( 'is_handed_over' )->andReturn( false )->byDefault();
+			$handler->shouldReceive( 'is_refusable' )->andReturn( false )->byDefault();
 
 			Orders_Registry::instance()->register_shipment_handler( 'cdek', $handler );
 
@@ -1000,6 +1003,7 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$handler  = $this->register_handler();
 			$handler->shouldReceive( 'supports_refusal' )->andReturn( true );
 			$handler->shouldReceive( 'get_refusable_statuses' )->andReturn( [ \Woodev\Framework\Shipping\Order\Delivery_Status::IN_TRANSIT ] );
+			$handler->shouldReceive( 'is_refusable' )->andReturnUsing( static fn( $o, $c ) => in_array( $c, [ \Woodev\Framework\Shipping\Order\Delivery_Status::IN_TRANSIT ], true ) );
 
 			$order = $this->make_order( [ 'get_status' => 'processing' ] );
 			$order->shouldReceive( 'get_meta' )->andReturn( '' );

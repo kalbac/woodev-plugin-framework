@@ -158,6 +158,8 @@ final class OrderAutomationTest extends TestCase {
 		$handler->shouldReceive( 'get_handed_over_statuses' )->andReturn( [] )->byDefault();
 		$handler->shouldReceive( 'supports_refusal' )->andReturn( false )->byDefault();
 		$handler->shouldReceive( 'get_refusable_statuses' )->andReturn( [] )->byDefault();
+		$handler->shouldReceive( 'is_handed_over' )->andReturn( false )->byDefault();
+		$handler->shouldReceive( 'is_refusable' )->andReturn( false )->byDefault();
 
 		Orders_Registry::instance()->register_shipment_handler( 'cdek', $handler );
 
@@ -626,8 +628,10 @@ final class OrderAutomationTest extends TestCase {
 		$this->register_carrier( $this->in_transit_carrier_options() );
 		$handler = $this->register_handler();
 		$handler->shouldReceive( 'get_handed_over_statuses' )->andReturn( [ Delivery_Status::IN_TRANSIT ] );
+		$handler->shouldReceive( 'is_handed_over' )->andReturnUsing( static fn( $o, $c ) => in_array( $c, [ Delivery_Status::IN_TRANSIT ], true ) );
 		$handler->shouldReceive( 'supports_refusal' )->andReturn( true );
 		$handler->shouldReceive( 'get_refusable_statuses' )->andReturn( [ Delivery_Status::IN_TRANSIT ] );
+		$handler->shouldReceive( 'is_refusable' )->andReturnUsing( static fn( $o, $c ) => in_array( $c, [ Delivery_Status::IN_TRANSIT ], true ) );
 		$this->meta['_cdek_carrier_order_id'] = 'CARRIER-1';
 		$this->meta['_cdek_status']           = 'ON_WAY';
 		$order                                = $this->order( 'cancelled' );
@@ -648,6 +652,7 @@ final class OrderAutomationTest extends TestCase {
 		$this->register_carrier( $this->in_transit_carrier_options() );
 		$handler = $this->register_handler();
 		$handler->shouldReceive( 'get_handed_over_statuses' )->andReturn( [ Delivery_Status::IN_TRANSIT ] );
+		$handler->shouldReceive( 'is_handed_over' )->andReturnUsing( static fn( $o, $c ) => in_array( $c, [ Delivery_Status::IN_TRANSIT ], true ) );
 		$this->meta['_cdek_carrier_order_id'] = 'CARRIER-1';
 		$this->meta['_cdek_status']           = 'ON_WAY';
 		$order                                = $this->order( 'cancelled' );
@@ -662,10 +667,33 @@ final class OrderAutomationTest extends TestCase {
 		$this->addToAssertionCount( 1 );
 	}
 
+	public function test_a_carrier_that_reads_the_order_skips_the_request_for_a_canonical_created_parcel_it_calls_handed_over(): void {
+		$this->register_carrier( $this->in_transit_carrier_options() );
+		$handler = $this->register_handler();
+		// The canonical list names nothing; the carrier's own order-aware decision says «handed over» for a `created` order.
+		$handler->shouldReceive( 'is_handed_over' )->andReturnUsing( static fn( $o, $c ) => Delivery_Status::CREATED === $c );
+		$handler->shouldReceive( 'supports_refusal' )->andReturn( true );
+		$handler->shouldReceive( 'is_refusable' )->andReturnUsing( static fn( $o, $c ) => Delivery_Status::CREATED === $c );
+		$this->meta['_cdek_carrier_order_id'] = 'CARRIER-1';
+		$this->meta['_cdek_status']           = 'NEW';
+		$order                                = $this->order( 'cancelled' );
+
+		$handler->shouldNotReceive( 'cancel_under_lock' );
+		$handler->shouldNotReceive( 'refuse' );
+		$order->shouldReceive( 'update_meta_data' )->once()->with( Carrier_Cancel::FAILED_META, 'CARRIER-1' );
+		$order->shouldReceive( 'save_meta_data' )->once();
+		$order->shouldReceive( 'add_order_note' )->once()->with( 'Посылка уже в пути, удалить её у перевозчика нельзя. Можно оформить отказ (возврат) — кнопка «Оформить отказ» в заказе.' );
+
+		Orders_Registry::instance()->run_cancel_at_carrier( 123 );
+
+		$this->addToAssertionCount( 1 );
+	}
+
 	public function test_a_shipment_not_yet_handed_over_is_still_cancelled_at_the_carrier(): void {
 		$this->register_carrier( $this->in_transit_carrier_options() );
 		$handler = $this->register_handler();
 		$handler->shouldReceive( 'get_handed_over_statuses' )->andReturn( [ Delivery_Status::IN_TRANSIT ] );
+		$handler->shouldReceive( 'is_handed_over' )->andReturnUsing( static fn( $o, $c ) => in_array( $c, [ Delivery_Status::IN_TRANSIT ], true ) );
 		$this->meta['_cdek_carrier_order_id'] = 'CARRIER-1';
 		$this->meta['_cdek_status']           = 'NEW';
 		$order                                = $this->order( 'cancelled' );
@@ -706,6 +734,7 @@ final class OrderAutomationTest extends TestCase {
 		);
 		$handler = $this->register_handler();
 		$handler->shouldReceive( 'get_handed_over_statuses' )->andReturn( [ Delivery_Status::DELIVERED ] );
+		$handler->shouldReceive( 'is_handed_over' )->andReturnUsing( static fn( $o, $c ) => in_array( $c, [ Delivery_Status::DELIVERED ], true ) );
 		$this->meta['_cdek_carrier_order_id'] = 'CARRIER-1';
 		$this->meta['_cdek_status']           = 'DELIVERED';
 		$order                                = $this->order( 'cancelled' );

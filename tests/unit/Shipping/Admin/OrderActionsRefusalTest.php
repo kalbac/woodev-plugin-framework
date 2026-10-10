@@ -72,6 +72,7 @@ final class OrderActionsRefusalTest extends TestCase {
 				'status_meta_key'           => '_cdek_status',
 				'status_map'                => [
 					'NEW'       => Delivery_Status::CREATED,
+					'RECEIVED_AT_WAREHOUSE' => Delivery_Status::CREATED,
 					'ON_WAY'    => Delivery_Status::IN_TRANSIT,
 					'DELIVERED' => Delivery_Status::DELIVERED,
 				],
@@ -97,8 +98,10 @@ final class OrderActionsRefusalTest extends TestCase {
 		$handler = Mockery::mock( Abstract_Shipment_Handler::class );
 		$handler->shouldReceive( 'supports_update' )->andReturn( false );
 		$handler->shouldReceive( 'get_handed_over_statuses' )->andReturn( $handed_over );
+		$handler->shouldReceive( 'is_handed_over' )->andReturnUsing( static fn( $o, $c ) => in_array( $c, $handed_over, true ) )->byDefault();
 		$handler->shouldReceive( 'supports_refusal' )->andReturn( $refusal );
 		$handler->shouldReceive( 'get_refusable_statuses' )->andReturn( $refusable ?? $handed_over );
+		$handler->shouldReceive( 'is_refusable' )->andReturnUsing( static fn( $o, $c ) => in_array( $c, $refusable ?? $handed_over, true ) )->byDefault();
 		Orders_Registry::instance()->register_shipment_handler( 'cdek', $handler );
 
 		return $handler;
@@ -129,6 +132,35 @@ final class OrderActionsRefusalTest extends TestCase {
 		$handler->shouldReceive( 'get_handed_over_statuses' )->andReturn( [ Delivery_Status::IN_TRANSIT, Delivery_Status::RETURNING ] );
 
 		$this->assertSame( [ Delivery_Status::IN_TRANSIT, Delivery_Status::RETURNING ], $handler->get_refusable_statuses() );
+	}
+
+	public function test_the_order_aware_decisions_default_to_the_canonical_lists(): void {
+		$handler = Mockery::mock( Abstract_Shipment_Handler::class )->makePartial();
+		$handler->shouldReceive( 'get_handed_over_statuses' )->andReturn( [ Delivery_Status::IN_TRANSIT ] );
+		$handler->shouldReceive( 'get_refusable_statuses' )->andReturn( [ Delivery_Status::READY_FOR_PICKUP ] );
+		$order = $this->order();
+
+		$this->assertTrue( $handler->is_handed_over( $order, Delivery_Status::IN_TRANSIT ) );
+		$this->assertFalse( $handler->is_handed_over( $order, Delivery_Status::CREATED ) );
+		$this->assertTrue( $handler->is_refusable( $order, Delivery_Status::READY_FOR_PICKUP ) );
+		$this->assertFalse( $handler->is_refusable( $order, Delivery_Status::IN_TRANSIT ) );
+	}
+
+	public function test_a_carrier_that_reads_the_order_can_hand_over_a_canonical_created_parcel(): void {
+		// CDEK's canonical `created` also covers an order already received at the warehouse: only its raw status tells.
+		$this->meta['_cdek_status'] = 'NEW';
+		$handler                    = $this->handler( [], true );
+		$handler->shouldReceive( 'is_handed_over' )->andReturnUsing( fn( $o, $c ) => Delivery_Status::CREATED === $c && 'RECEIVED_AT_WAREHOUSE' === $this->meta['_cdek_status'] );
+		$handler->shouldReceive( 'is_refusable' )->andReturnUsing( fn( $o, $c ) => Delivery_Status::CREATED === $c && 'RECEIVED_AT_WAREHOUSE' === $this->meta['_cdek_status'] );
+
+		// Still deletable.
+		$this->assertFalse( $this->actions()->is_handed_over( $this->order(), $this->provider() ) );
+		$this->assertNotContains( Order_Actions::REFUSE, $this->offered( $this->order() ) );
+
+		// Received at the warehouse: the same canonical state, but delete is refused — the refusal is on offer.
+		$this->meta['_cdek_status'] = 'RECEIVED_AT_WAREHOUSE';
+		$this->assertTrue( $this->actions()->is_handed_over( $this->order(), $this->provider() ) );
+		$this->assertContains( Order_Actions::REFUSE, $this->offered( $this->order() ) );
 	}
 
 	// ----- is_handed_over -----
