@@ -107,6 +107,21 @@ class RealisticShippingFixtureTest extends TestCase {
 			);
 			$this->assertSame( [], $plugin->declare_courier_call_action( [], $fresh, $provider ), 'not offered before the export' );
 
+			// #1205: the fixture carrier hands the framework's shipment-facts seam something to chew on, step by step —
+			// a baseline that states «no courier, no issues», then a moved cost and date and a courier, then an issue.
+			Functions\when( 'sanitize_text_field' )->returnArg();
+			$baseline = $plugin->get_fixture_shipment_facts( $exported, 0 );
+			$moved    = $plugin->get_fixture_shipment_facts( $exported, 1 );
+			$troubled = $plugin->get_fixture_shipment_facts( $exported, 2 );
+
+			$this->assertTrue( $baseline->reports_courier() && null === $baseline->get_courier() && [] === $baseline->get_issues() );
+			$this->assertNotNull( $baseline->get_cost() );
+			$this->assertGreaterThan( $baseline->get_cost()['amount'], $moved->get_cost()['amount'] );
+			$this->assertNotSame( $baseline->get_delivery_date()['date'], $moved->get_delivery_date()['date'] );
+			$this->assertNotNull( $moved->get_courier() );
+			$this->assertSame( [], $moved->get_issues() );
+			$this->assertSame( '13', $troubled->get_issues()[0]['code'] );
+
 			// Reset so this process-wide registration does not leak into any other
 			// unit test that asserts on a CLEAN Orders_Registry singleton.
 			// remove_action()/remove_filter() are not among mock_wordpress_runtime_functions()'s

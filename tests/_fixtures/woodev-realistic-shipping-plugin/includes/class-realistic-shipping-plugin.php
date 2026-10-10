@@ -53,6 +53,47 @@ final class Woodev_Realistic_Shipping_Plugin extends \Woodev\Framework\Shipping\
 	}
 
 	/**
+	 * The shipment facts this fixture's carrier "reads from its API" for an order at a given step.
+	 *
+	 * Deterministic from the order id and `$step`, so a rig probe can walk an order through the seam: step 0 is the
+	 * baseline (cost and date, «no courier», «no issues» stated), step 1 moves the cost and the date and assigns a
+	 * courier, step 2 adds a delivery issue.
+	 *
+	 * @since 2.0.2
+	 * @param \WC_Order $order Shipment order.
+	 * @param int       $step  How far along the shipment is: 0, 1, 2.
+	 * @return \Woodev\Framework\Shipping\Order\Shipment_Facts
+	 */
+	public function get_fixture_shipment_facts( \WC_Order $order, int $step = 0 ): \Woodev\Framework\Shipping\Order\Shipment_Facts {
+		$id    = max( 1, (int) $order->get_id() );
+		$facts = \Woodev\Framework\Shipping\Order\Shipment_Facts::create()
+			->with_cost( 300 + ( $id % 7 ) * 10 + $step * 45.5, 'RUB' )
+			->with_delivery_date( gmdate( 'Y-m-d', 1793664000 + ( ( $id % 10 ) + $step ) * DAY_IN_SECONDS ), 'planned', 1 <= $step ? [ 'from' => '10:00', 'to' => '14:00' ] : null )
+			->with_courier( 1 <= $step ? [ 'name' => 'Иван Петров', 'phone' => '+7 900 000-00-' . sprintf( '%02d', $id % 100 ), 'vehicle' => 'Lada Largus', 'plate' => 'А123ВС36' ] : null );
+
+		return $facts->with_issues(
+			2 <= $step ? [ [ 'code' => '13', 'label' => 'Контактное лицо отсутствует', 'at' => gmdate( 'Y-m-d\TH:i:sO', 1793700000 ) ] ] : []
+		);
+	}
+
+	/**
+	 * Hands the fixture shipment facts of {@see self::get_fixture_shipment_facts()} to the framework, the way a
+	 * carrier does after it re-read a shipment from its API. For rig probes and unit tests.
+	 *
+	 * @since 2.0.2
+	 * @param \WC_Order $order Shipment order.
+	 * @param int       $step  See {@see self::get_fixture_shipment_facts()}.
+	 * @return bool Whether the framework applied the facts.
+	 */
+	public function sync_fixture_shipment_facts( \WC_Order $order, int $step = 0 ): bool {
+		$provider = \Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::instance()->get_provider( 'realistic' );
+		if ( null === $provider ) {
+			return false;
+		}
+		return \Woodev\Framework\Shipping\Order\Shipment_Facts_Events::record( $order, $provider, $this->get_fixture_shipment_facts( $order, $step ) );
+	}
+
+	/**
 	 * Registers this fixture's `Orders_Provider` with the framework-owned «Заказы
 	 * доставки» page (SP-10 #820, round 2 defect 2: nothing registered a provider,
 	 * so the page did not exist on the rig at all — the submenu is correctly
