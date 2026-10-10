@@ -6,7 +6,7 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-10 (s166).** 🚧 **v2 release = TWO carrier plugins on v2, tested and compatible** (#1179); block-checkout gaps do not block it. s166: edostavka#27 steps 2+4, #1203, #1205 merged (only `OFFICE_AVAILABILITY` left); PARKED for his eye: #1204 (PR #1207 + edostavka#34), edostavka#30 (PR #32). Open: #1177, #1179. ⚠ Sync the plugin's own `woodev/` before plugin rig runs (`wiki/local-rig.md`). Details: `sessions/s166.md`. GlitchTip receiver (#1082) is live. ✅ **Both machines are live**; routine sync is git ONLY (`wiki/two-machine-setup.md`). The order
+**As of 2026-10-10 (s166).** 🚧 **v2 release = TWO carrier plugins on v2, tested and compatible** (#1179); block-checkout gaps do not block it. s166: edostavka#27 steps 2+4, #1203, #1205, #1204 (PR #1207 + edostavka#34), edostavka#30 (PR #32) merged — only `OFFICE_AVAILABILITY` left. Open: #1177, #1179. ⚠ Sync the plugin's own `woodev/` before plugin rig runs (`wiki/local-rig.md`). Details: `sessions/s166.md`. GlitchTip receiver (#1082) is live. ✅ **Both machines are live**; routine sync is git ONLY (`wiki/two-machine-setup.md`). The order
 metabox (#856) and the orders table (#870) stay accepted.
 
 ✅ **Fixtures carry real download ids `9001`-`9005`** (#910), so `LicenseCommandEndpointTest` drives
