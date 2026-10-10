@@ -326,6 +326,26 @@ affected; closing the gap needs a framework-wide line↔shipment link, not a loc
 `resolve_service_parameter()` that reads anything beyond the package, the instance settings and the
 packing settings must add it to the cache key through its `get_rate_cache_context()` override.
 
+## Shipment facts — carrier-neutral cost / date / issue / courier (`order/class-shipment-facts*.php`, #1205)
+
+Beside `Delivery_Status_Events` (the delivery STATUS) sits the seam for the facts that are not a status. A carrier
+fills a `Shipment_Facts` value object from its own API read (never from a webhook body) and hands it over with ONE
+call: `Shipment_Facts_Events::record( $order, $provider, $facts )`. Every fact is optional and has three states —
+not reported (baseline untouched), reported as none (`with_delivery_date( null )`, `with_courier( null )`,
+`with_issues( [] )`: stored explicitly) and reported with a value. The framework compares each fact with its own
+baseline (`_woodev_shipment_fact_{cost|date|issues|courier}_{provider id}`): no baseline = silent initialisation,
+known-empty then a value = a change, the same value again = nothing, an empty report never overwrites a known
+value. Per order the apply step runs under `Order_Lock` (scope `facts`, 5 s wait), re-reads the order meta once the
+lock is held, saves the meta and RELEASES the lock before the notes and hooks, so a request that comes second finds
+the baseline already moved. Per change: one order note (generic wording with the provider's label, filter
+`woodev_shipping_shipment_fact_note`, empty = none) and one neutral action — `woodev_shipping_carrier_cost_changed`,
+`woodev_shipping_delivery_date_changed`, `woodev_shipping_delivery_issue`, `woodev_shipping_courier_assigned`, each
+ending with the `Orders_Provider`. A cost change or an issue also leaves `_woodev_shipment_fact_attention_{id}`, read
+by `Shipment_Facts_Flag` (registered by `Shipping_Plugin`) into ONE row flag: an issue («Проблема доставки», `error`)
+outranks a cost change («Стоимость изменена перевозчиком», `warn`); the issue clears on a final canonical status
+(delivered / returned / cancelled), the cost change stays. WooCommerce totals and shipping lines are never touched.
+A carrier that never calls the seam sees nothing happen.
+
 ## Utilities (`woodev/utilities/`)
 
 - `Woodev_Async_Request` — WP async (non-blocking) HTTP requests

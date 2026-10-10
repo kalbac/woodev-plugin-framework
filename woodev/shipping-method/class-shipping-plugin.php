@@ -336,6 +336,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			// cancellation marker) changes, so carriers need no notify code of their own.
 			Order\Delivery_Status_Watcher::instance()->register();
 
+			// Carrier-neutral shipment facts (cost, delivery date, delivery issue, courier): a carrier hands them to
+			// Shipment_Facts_Events::record(); the «attention» row flag below reads what a real change left on the order (#1205).
+			require_once $path . '/order/class-shipment-facts.php';
+			require_once $path . '/order/class-shipment-facts-events.php';
+			require_once $path . '/order/class-shipment-facts-flag.php';
+			Order\Shipment_Facts_Flag::register();
+
 			// The merchant's «Статус доставленного заказа»: set once the canonical state becomes «delivered».
 			require_once $path . '/order/class-delivered-order-status.php';
 			Order\Delivered_Order_Status::register();

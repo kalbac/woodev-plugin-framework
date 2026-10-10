@@ -5588,6 +5588,74 @@ msgstr ""
 msgid "Перевозчик сообщил, что отправление отменено."
 msgstr ""
 
+#. translators: 1: carrier name, 2: previous delivery cost, 3: new delivery cost, 4: currency sign.
+#: shipping-method/order/class-shipment-facts-events.php
+#, php-format
+msgid "%1$s изменил стоимость доставки: %2$s → %3$s %4$s. Это данные перевозчика: чья это стоимость — по договору или для получателя — он может не уточнять. Сумма заказа и доставка в магазине не менялись."
+msgstr ""
+
+#. translators: 1: carrier name, 2: the delivery problem, e.g. «Телефон неверный».
+#: shipping-method/order/class-shipment-facts-events.php
+#, php-format
+msgid "%1$s: проблема доставки — %2$s"
+msgstr ""
+
+#. translators: 1: carrier name, 2: the courier's details (name, phone, vehicle, plate).
+#: shipping-method/order/class-shipment-facts-events.php
+#, php-format
+msgid "%1$s назначил курьера: %2$s."
+msgstr ""
+
+#. translators: 1: carrier name, 2: agreed delivery date and time window.
+#: shipping-method/order/class-shipment-facts-events.php
+#, php-format
+msgid "%1$s согласовал дату доставки: %2$s."
+msgstr ""
+
+#. translators: 1: carrier name, 2: planned delivery date and time window.
+#: shipping-method/order/class-shipment-facts-events.php
+#, php-format
+msgid "%1$s назначил плановую дату доставки: %2$s."
+msgstr ""
+
+#. translators: 1: carrier name, 2: previous planned delivery date, 3: new planned delivery date and time window.
+#: shipping-method/order/class-shipment-facts-events.php
+#, php-format
+msgid "%1$s изменил плановую дату доставки: %2$s → %3$s."
+msgstr ""
+
+#. translators: %s: the carrier's delivery problem code that has no wording.
+#: shipping-method/order/class-shipment-facts-events.php
+#, php-format
+msgid "Проблема доставки (код %s)"
+msgstr ""
+
+#. translators: %s: the courier's phone number.
+#: shipping-method/order/class-shipment-facts-events.php
+#, php-format
+msgid "тел. %s"
+msgstr ""
+
+#. translators: %s: the courier's vehicle, e.g. «Lada Largus».
+#: shipping-method/order/class-shipment-facts-events.php
+#, php-format
+msgid "транспорт: %s"
+msgstr ""
+
+#. translators: %s: the courier vehicle's plate number.
+#: shipping-method/order/class-shipment-facts-events.php
+#, php-format
+msgid "госномер: %s"
+msgstr ""
+
+#: shipping-method/order/class-shipment-facts-flag.php
+msgid "Проблема доставки"
+msgstr ""
+
+#: shipping-method/order/class-shipment-facts-flag.php
+msgid "Стоимость изменена перевозчиком"
+msgstr ""
+
 #: shipping-method/settings/class-status-sync-tool.php:79
 msgid "Статусы доставки"
 msgstr ""
