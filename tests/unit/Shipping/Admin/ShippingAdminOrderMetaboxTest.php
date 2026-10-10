@@ -217,6 +217,71 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 		}
 
 		/**
+		 * #1204: the order-edit screen warns before «Отменён» only for an order whose parcel the carrier says is handed
+		 * to delivery — the flag is computed here, on the server, from the order's own state.
+		 */
+		private function in_transit_provider(): Orders_Provider {
+			return $this->provider(
+				[
+					'status_meta_key' => '_wc_cdek_status',
+					'status_map'      => [
+						'ON_WAY' => \Woodev\Framework\Shipping\Order\Delivery_Status::IN_TRANSIT,
+						'NEW'    => \Woodev\Framework\Shipping\Order\Delivery_Status::CREATED,
+					],
+				]
+			);
+		}
+
+		private function registry_with_handed_over_states( Orders_Provider $provider, array $states ) {
+			$handler = Mockery::mock( Abstract_Shipment_Handler::class );
+			$handler->shouldReceive( 'get_handed_over_statuses' )->andReturn( $states );
+
+			$registry = Mockery::mock( Orders_Registry::class );
+			$registry->shouldReceive( 'resolve_provider_for_order' )->andReturn( $provider );
+			$registry->shouldReceive( 'get_shipment_handler' )->andReturn( $handler );
+			$registry->shouldReceive( 'enqueue_metabox_style' );
+			$registry->shouldReceive( 'enqueue_metabox_script' );
+
+			return $registry;
+		}
+
+		public function test_add_meta_box_enqueues_the_in_transit_warning_for_a_parcel_handed_to_delivery(): void {
+			$this->meta['_wc_cdek_order_id'] = 'CARRIER-1';
+			$this->meta['_wc_cdek_status']   = 'ON_WAY';
+
+			$registry = $this->registry_with_handed_over_states( $this->in_transit_provider(), [ \Woodev\Framework\Shipping\Order\Delivery_Status::IN_TRANSIT ] );
+			$registry->shouldReceive( 'enqueue_in_transit_warning' )->once();
+
+			( new Shipping_Admin_Order( $registry ) )->add_meta_box( 'shop_order', $this->make_order() );
+
+			$this->addToAssertionCount( 1 );
+		}
+
+		public function test_add_meta_box_does_not_enqueue_the_warning_for_a_parcel_not_yet_handed_over(): void {
+			$this->meta['_wc_cdek_order_id'] = 'CARRIER-1';
+			$this->meta['_wc_cdek_status']   = 'NEW';
+
+			$registry = $this->registry_with_handed_over_states( $this->in_transit_provider(), [ \Woodev\Framework\Shipping\Order\Delivery_Status::IN_TRANSIT ] );
+			$registry->shouldReceive( 'enqueue_in_transit_warning' )->never();
+
+			( new Shipping_Admin_Order( $registry ) )->add_meta_box( 'shop_order', $this->make_order() );
+
+			$this->addToAssertionCount( 1 );
+		}
+
+		public function test_add_meta_box_does_not_enqueue_the_warning_for_a_carrier_that_declares_nothing(): void {
+			$this->meta['_wc_cdek_order_id'] = 'CARRIER-1';
+			$this->meta['_wc_cdek_status']   = 'ON_WAY';
+
+			$registry = $this->registry_with_handed_over_states( $this->in_transit_provider(), [] );
+			$registry->shouldReceive( 'enqueue_in_transit_warning' )->never();
+
+			( new Shipping_Admin_Order( $registry ) )->add_meta_box( 'shop_order', $this->make_order() );
+
+			$this->addToAssertionCount( 1 );
+		}
+
+		/**
 		 * #947: the box sits in the sidebar's `high` band, right under WooCommerce's «Order actions»
 		 * (`side`/`high`) instead of at the bottom of the `default` band.
 		 */
@@ -885,6 +950,10 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 		private function register_handler( bool $supports_update = false ): Abstract_Shipment_Handler {
 			$handler = Mockery::mock( Abstract_Shipment_Handler::class );
 			$handler->shouldReceive( 'supports_update' )->andReturn( $supports_update );
+			// #1204: a carrier that declares nothing keeps today's behaviour.
+			$handler->shouldReceive( 'supports_refusal' )->andReturn( false )->byDefault();
+			$handler->shouldReceive( 'get_handed_over_statuses' )->andReturn( [] )->byDefault();
+			$handler->shouldReceive( 'get_refusable_statuses' )->andReturn( [] )->byDefault();
 
 			Orders_Registry::instance()->register_shipment_handler( 'cdek', $handler );
 

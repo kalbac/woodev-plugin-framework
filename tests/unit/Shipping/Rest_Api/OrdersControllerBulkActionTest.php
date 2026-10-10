@@ -295,6 +295,41 @@ final class OrdersControllerBulkActionTest extends TestCase {
 		$this->assertSame( [], $result['failures'] );
 	}
 
+	// ----- #1204: a refusal is paid, so it is never a batch -----
+
+	/** An order that OFFERS «Оформить отказ» is still skipped by the bulk route: the carrier is never asked. */
+	public function test_a_refusal_is_never_run_in_bulk_even_for_orders_that_offer_it(): void {
+		$this->register_provider(
+			'cdek',
+			'СДЭК',
+			'_cdek_marker',
+			[
+				'carrier_order_id_meta_key' => '_cdek_carrier_order_id',
+				'status_meta_key'           => '_cdek_status',
+				'status_map'                => [ 'ON_WAY' => \Woodev\Framework\Shipping\Order\Delivery_Status::IN_TRANSIT ],
+			]
+		);
+		$handler = $this->register_handler( 'cdek' );
+		$handler->shouldReceive( 'supports_update' )->andReturn( false );
+		$handler->shouldReceive( 'supports_refusal' )->andReturn( true );
+		$handler->shouldReceive( 'get_refusable_statuses' )->andReturn( [ \Woodev\Framework\Shipping\Order\Delivery_Status::IN_TRANSIT ] );
+		$handler->shouldNotReceive( 'refuse' );
+
+		$this->order( 1, 'processing', '_cdek_marker' );
+		$this->meta[1]['_cdek_carrier_order_id'] = 'CARRIER-1';
+		$this->meta[1]['_cdek_status']           = 'ON_WAY';
+
+		$offered = array_column( ( new Order_Actions( Orders_Registry::instance() ) )->for_order( $this->orders[1], Orders_Registry::instance()->get_provider( 'cdek' ) ), 'action' );
+		$this->assertContains( Order_Actions::REFUSE, $offered, 'the premise: the order offers the refusal' );
+
+		$result = $this->controller()->perform_bulk_action( $this->request( Order_Actions::REFUSE, [ 1 ] ) );
+
+		$this->assertSame( 1, $result['requested'] );
+		$this->assertSame( 0, $result['eligible'] );
+		$this->assertSame( 1, $result['skipped'] );
+		$this->assertSame( 0, $result['succeeded'] );
+	}
+
 	// ----- mixed-carrier aggregate batch (TWO providers registered) -----
 
 	/** Each order dispatches through ITS OWN carrier's handler, never the other one's. */

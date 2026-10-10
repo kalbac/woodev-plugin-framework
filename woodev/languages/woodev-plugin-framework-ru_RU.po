@@ -2001,6 +2001,11 @@ msgstr ""
 msgid "Сервис перевозчика временно недоступен. Попробуйте повторить действие позже."
 msgstr ""
 
+#: shipping-method/admin/class-shipping-admin-order.php:754
+#: shipping-method/rest-api/class-orders-controller.php:1233
+msgid "Не удалось оформить отказ от посылки."
+msgstr ""
+
 #: shipping-method/admin/orders/class-order-actions.php:197
 msgid "Экспорт"
 msgstr ""
@@ -2097,6 +2102,40 @@ msgstr ""
 
 #: shipping-method/admin/orders/class-order-actions.php:656
 msgid "Это действие недоступно для данного заказа."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:270
+msgid "Оформить отказ"
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:673
+msgid "Не удалось оформить отказ от посылки: сервис перевозчика недоступен"
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:680
+msgid "Оформлен отказ от посылки: она вернётся к вам, возврат платный"
+msgstr ""
+
+#. translators: %s: the carrier's reason for refusing the refusal
+#: shipping-method/admin/orders/class-order-actions.php:688
+#, php-format
+msgid "Не удалось оформить отказ от посылки: %s"
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:940
+msgid "Заказ ещё не выгружен перевозчику — отказываться не от чего."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:271
+msgid "Отказаться от посылки, которая уже в пути: она вернётся к вам"
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:275
+msgid "Получатель откажется от посылки, она вернётся к вам. Возврат платный — перевозчик начислит стоимость обратной доставки."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:943
+msgid "Отказ можно оформить только для посылки, которая уже в пути, и только если перевозчик это умеет."
 msgstr ""
 
 #: shipping-method/admin/orders/class-order-editor.php:218
@@ -2288,6 +2327,10 @@ msgstr ""
 
 #: shipping-method/admin/orders/class-orders-registry.php:1708
 msgid "Все перевозчики"
+msgstr ""
+
+#: shipping-method/admin/orders/class-orders-registry.php:1802
+msgid "Посылка уже в пути, отмена в магазине её не остановит."
 msgstr ""
 
 #: shipping-method/admin/views/html-admin-order-metabox.php:68
@@ -3124,6 +3167,14 @@ msgstr ""
 msgid "Не удалось отменить заявку у перевозчика: заказ слишком долго выгружается. Проверьте заявку в личном кабинете перевозчика."
 msgstr ""
 
+#: shipping-method/order/class-order-automation.php:232
+msgid "Посылка уже в пути, удалить её у перевозчика нельзя. Можно оформить отказ (возврат) — кнопка «Оформить отказ» в заказе."
+msgstr ""
+
+#: shipping-method/order/class-order-automation.php:233
+msgid "Посылка уже в пути, удалить её у перевозчика нельзя. Свяжитесь с перевозчиком."
+msgstr ""
+
 #. translators: 1: cart weight in kg, 2: point weight limit in kg
 #: shipping-method/pickup/class-constraint-checker.php:100
 #, php-format
@@ -3602,6 +3653,10 @@ msgstr ""
 
 #: shipping-method/rest-api/class-orders-controller.php:1178
 msgid "Готово."
+msgstr ""
+
+#: shipping-method/rest-api/class-orders-controller.php:1206
+msgid "Отказ от посылки оформлен."
 msgstr ""
 
 #: shipping-method/rest-api/class-pickup-controller.php:587

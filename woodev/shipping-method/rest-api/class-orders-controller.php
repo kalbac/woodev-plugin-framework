@@ -884,6 +884,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 			$failures  = [];
 			$locked    = [];
 
+			// #1204: a refusal is paid and one order's decision — each goes through its own confirmation, never a batch.
+			$requested = count( $ids );
+
+			if ( Order_Actions::REFUSE === $action ) {
+				$ids = [];
+			}
+
 			foreach ( $ids as $id ) {
 				$order = wc_get_order( absint( $id ) );
 
@@ -960,9 +967,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 			return rest_ensure_response(
 				[
 					'action'    => $action,
-					'requested' => count( $ids ),
+					'requested' => $requested,
 					'eligible'  => $eligible,
-					'skipped'   => count( $ids ) - $eligible,
+					'skipped'   => $requested - $eligible,
 					'succeeded' => $succeeded,
 					'failed'    => $failed,
 					'rows'      => $rows,
@@ -1195,6 +1202,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 				case Order_Actions::CANCEL:
 					return __( 'Отправление отменено.', 'woodev-plugin-framework' );
 
+				case Order_Actions::REFUSE:
+					return __( 'Отказ от посылки оформлен.', 'woodev-plugin-framework' );
+
 				case Order_Actions::UPDATE:
 					return __( 'Информация по заказу обновлена.', 'woodev-plugin-framework' );
 
@@ -1218,6 +1228,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 
 				case Order_Actions::CANCEL:
 					return __( 'Не удалось отменить отправление.', 'woodev-plugin-framework' );
+
+				case Order_Actions::REFUSE:
+					return __( 'Не удалось оформить отказ от посылки.', 'woodev-plugin-framework' );
 
 				case Order_Actions::UPDATE:
 					return __( 'Не удалось обновить информацию по заказу.', 'woodev-plugin-framework' );

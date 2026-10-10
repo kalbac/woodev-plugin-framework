@@ -1764,6 +1764,49 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		}
 
 		/**
+		 * Enqueues the order-edit screen's «the parcel is already on its way» warning (#1204).
+		 *
+		 * Called by {@see Shipping_Admin_Order::add_meta_box()} only for an order whose parcel is handed to delivery
+		 * ({@see Order_Actions::is_handed_over()}) — the server-side flag is the whole gate, so the script is not
+		 * even loaded for any other order. It serves the legacy and the HPOS screen alike: both draw the status
+		 * select as `#order_status`. The sentence and the status to watch travel in an inline object (no JS-side
+		 * text, no build step). The warning is non-blocking by design: setting the order to «Отменён» stays the
+		 * manager's decision.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		public function enqueue_in_transit_warning(): void {
+			$path = dirname( __DIR__, 2 ) . '/assets/js/admin/order-in-transit-warning.js';
+
+			if ( ! file_exists( $path ) ) {
+				return;
+			}
+
+			wp_enqueue_script(
+				'woodev-shipping-order-in-transit-warning',
+				plugins_url( basename( $path ), $path ),
+				[ 'jquery' ],
+				(string) filemtime( $path ),
+				true
+			);
+
+			wp_add_inline_script(
+				'woodev-shipping-order-in-transit-warning',
+				'window.woodevShippingInTransit = ' . wp_json_encode(
+					[
+						'status'  => 'wc-cancelled',
+						'message' => __( 'Посылка уже в пути, отмена в магазине её не остановит.', 'woodev-plugin-framework' ),
+					]
+				) . ';',
+				'before'
+			);
+		}
+
+		/**
 		 * Registers (when nothing has) and enqueues the generic modal shell — script and chrome stylesheet — for
 		 * an admin screen (#1180).
 		 *

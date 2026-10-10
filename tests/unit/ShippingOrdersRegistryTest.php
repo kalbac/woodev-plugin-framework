@@ -718,6 +718,48 @@ class ShippingOrdersRegistryTest extends TestCase {
 	}
 
 	/**
+	 * #1204: the order-edit screen's «parcel already on its way» warning is a plain script that depends only on jQuery and
+	 * gets its sentence and the status to watch from PHP — nothing in the file knows a word of text.
+	 */
+	public function test_enqueue_in_transit_warning_hands_the_sentence_and_the_status_to_a_jquery_script(): void {
+		$captured = [];
+		$inline   = [];
+
+		Functions\when( 'plugins_url' )->alias(
+			static function ( string $path, string $plugin ): string {
+				return 'https://example.test/plugins/' . $path;
+			}
+		);
+		Functions\when( 'wp_json_encode' )->alias( static fn( $value ) => json_encode( $value, JSON_UNESCAPED_UNICODE ) );
+		Functions\expect( 'wp_enqueue_script' )
+			->once()
+			->andReturnUsing(
+				static function ( ...$args ) use ( &$captured ): void {
+					$captured = $args;
+				}
+			);
+		Functions\expect( 'wp_add_inline_script' )
+			->once()
+			->andReturnUsing(
+				static function ( ...$args ) use ( &$inline ): bool {
+					$inline = $args;
+
+					return true;
+				}
+			);
+
+		Orders_Registry::instance()->enqueue_in_transit_warning();
+
+		$this->assertSame( 'woodev-shipping-order-in-transit-warning', $captured[0] );
+		$this->assertSame( 'https://example.test/plugins/order-in-transit-warning.js', $captured[1] );
+		$this->assertSame( [ 'jquery' ], $captured[2] );
+		$this->assertSame( 'woodev-shipping-order-in-transit-warning', $inline[0] );
+		$this->assertStringContainsString( '"status":"wc-cancelled"', $inline[1] );
+		$this->assertStringContainsString( 'Посылка уже в пути, отмена в магазине её не остановит.', $inline[1] );
+		$this->assertSame( 'before', $inline[2], 'the data exists before the script runs' );
+	}
+
+	/**
 	 * A non-`Woodev_Plugin` second argument (a caller mistake) must be ignored
 	 * rather than accepted and blown up on later — `enqueue_assets()` still finds
 	 * no usable plugin and no-ops, exactly like passing none at all.

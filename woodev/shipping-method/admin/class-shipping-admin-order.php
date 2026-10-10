@@ -223,6 +223,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 			// framework copy, so it never loads on an order-edit screen without ours.
 			$this->registry->enqueue_metabox_style();
 			$this->registry->enqueue_metabox_script();
+
+			// #1204: setting this order to «Отменён» would not stop a parcel the carrier already moves — warn before the
+			// save. Decided here, on the server, from the order's own state; the screen never blocks the save.
+			if ( $this->order_actions()->is_handed_over( $order, $provider ) ) {
+				$this->registry->enqueue_in_transit_warning();
+			}
 		}
 
 		/**
@@ -743,6 +749,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 
 				case Order_Actions::CANCEL:
 					return __( 'Не удалось отменить отправление.', 'woodev-plugin-framework' );
+
+				case Order_Actions::REFUSE:
+					return __( 'Не удалось оформить отказ от посылки.', 'woodev-plugin-framework' );
 
 				case Order_Actions::UPDATE:
 					return __( 'Не удалось обновить информацию по заказу.', 'woodev-plugin-framework' );

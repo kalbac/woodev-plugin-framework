@@ -93,6 +93,10 @@ final class OrderActionsForRowTest extends TestCase {
 	private function register_handler( bool $supports_update = true ): void {
 		$handler = Mockery::mock( Abstract_Shipment_Handler::class );
 		$handler->shouldReceive( 'supports_update' )->andReturn( $supports_update );
+		// #1204: a carrier that declares nothing keeps today's behaviour.
+		$handler->shouldReceive( 'supports_refusal' )->andReturn( false )->byDefault();
+		$handler->shouldReceive( 'get_handed_over_statuses' )->andReturn( [] )->byDefault();
+		$handler->shouldReceive( 'get_refusable_statuses' )->andReturn( [] )->byDefault();
 
 		Orders_Registry::instance()->register_shipment_handler( 'cdek', $handler );
 	}

@@ -15,6 +15,7 @@ use Woodev\Framework\Shipping\Location\Location_Record;
 use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
 use Woodev\Framework\Shipping\Order\Action_Result;
 use Woodev\Framework\Shipping\Order\Bulk_Document_Source;
+use Woodev\Framework\Shipping\Order\Carrier_Cancel;
 use Woodev\Framework\Shipping\Order\Delivery_Status;
 use Woodev\Framework\Shipping\Order\Shipment_Cancellation;
 
@@ -47,6 +48,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 
 		/** @var string */
 		public const CANCEL = 'cancel';
+
+		/**
+		 * «Оформить отказ» (#1204) — the recipient refuses a parcel already on its way and it returns to the
+		 * sender, normally for a fee. Offered only where the carrier supports it
+		 * ({@see Abstract_Shipment_Handler::supports_refusal()}) and the shipment is in a state the carrier
+		 * declares refusable; always behind a confirmation that names the cost. A person's click only: the
+		 * background cancellation never refuses, and the bulk route skips it.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var string
+		 */
+		public const REFUSE = 'refuse';
 
 		/**
 		 * «Редактировать» — opens the order wizard (#710, card #972). A CLIENT-side action: it appears on
@@ -245,6 +259,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 					__( 'Отменить заказ у перевозчика', 'woodev-plugin-framework' ),
 					true,
 					'remove'
+				);
+			}
+
+			// #1204: never automatic and never bulk — the merchant's own click, behind a confirmation that names the cost.
+			if ( $is_exported && self::refusal_is_open( $handler, $order, $provider ) ) {
+				$actions[] = array_merge(
+					self::build_action(
+						self::REFUSE,
+						__( 'Оформить отказ', 'woodev-plugin-framework' ),
+						__( 'Отказаться от посылки, которая уже в пути: она вернётся к вам', 'woodev-plugin-framework' ),
+						true,
+						'undo'
+					),
+					[ 'confirm' => __( 'Получатель откажется от посылки, она вернётся к вам. Возврат платный — перевозчик начислит стоимость обратной доставки.', 'woodev-plugin-framework' ) ]
 				);
 			}
 
@@ -463,6 +491,77 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		}
 
 		/**
+		 * Whether «Оформить отказ» is on offer for the order's state — the gate of the button, without the native
+		 * edit lock (the same relation to {@see self::for_order()} as {@see self::can_cancel()}, #1204).
+		 *
+		 * The background cancellation asks it only to word its order note: it points to the button when the
+		 * button exists. It never performs the refusal.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order            $order    the order.
+		 * @param Orders_Provider|null $provider the matched carrier, or null.
+		 * @return bool
+		 */
+		public function can_refuse( \WC_Order $order, ?Orders_Provider $provider ): bool {
+			return in_array( self::REFUSE, array_column( $this->carrier_actions( $order, $provider ), 'action' ), true );
+		}
+
+		/**
+		 * Whether the order's parcel is already «handed to delivery» (#1204): exported, not in an end state, and in
+		 * a delivery state its carrier declares deletion impossible from
+		 * ({@see Abstract_Shipment_Handler::get_handed_over_statuses()}).
+		 *
+		 * The ONE answer behind the background cancellation (no doomed request, a clear note instead) and the
+		 * order-edit screen's warning before a manager sets such an order to «Отменён». A carrier that declares
+		 * nothing — the default — is never «handed over», so its behaviour is the one it always had. Reads local
+		 * data only: safe while an order page is drawn.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order            $order    the order.
+		 * @param Orders_Provider|null $provider the matched carrier, or null.
+		 * @return bool
+		 */
+		public function is_handed_over( \WC_Order $order, ?Orders_Provider $provider ): bool {
+			if ( null === $provider || ! self::is_exported( $order, $provider ) ) {
+				return false;
+			}
+
+			$handler = $this->registry->get_shipment_handler( $provider->get_id() );
+
+			if ( null === $handler ) {
+				return false;
+			}
+
+			$canonical = self::resolve_canonical_status( $order, $provider );
+
+			return ! in_array( $canonical, self::CANCEL_RETIRED_STATUSES, true )
+				&& in_array( $canonical, $handler->get_handed_over_statuses(), true );
+		}
+
+		/**
+		 * Whether the carrier supports a refusal and the shipment is in a state it declares refusable.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Abstract_Shipment_Handler $handler  the carrier's handler.
+		 * @param \WC_Order                 $order    the order.
+		 * @param Orders_Provider           $provider the matched carrier.
+		 * @return bool
+		 */
+		private static function refusal_is_open( Abstract_Shipment_Handler $handler, \WC_Order $order, Orders_Provider $provider ): bool {
+			if ( ! $handler->supports_refusal() ) {
+				return false;
+			}
+
+			$canonical = self::resolve_canonical_status( $order, $provider );
+
+			return ! in_array( $canonical, self::CANCEL_RETIRED_STATUSES, true )
+				&& in_array( $canonical, $handler->get_refusable_statuses(), true );
+		}
+
+		/**
 		 * Performs one action against the carrier's shipment handler — the ONE place an action id
 		 * becomes a carrier call, shared by the row / bulk routes ({@see \Woodev\Framework\Shipping\Rest_Api\Orders_Controller})
 		 * the order-edit metabox ({@see \Woodev\Framework\Shipping\Admin\Shipping_Admin_Order}, #1016) and the
@@ -512,6 +611,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 				case self::CANCEL:
 					return $handler->cancel( $order );
 
+				case self::REFUSE:
+					return $this->refuse( $handler, $order );
+
 				case self::UPDATE:
 					// A carrier overrides update(), so the framework marks the call from outside: it gets the «export» timeout (#954).
 					return \Woodev_API_Request_Purpose::run( \Woodev_API_Request_Purpose::EXPORT, fn() => $handler->update( $order ) );
@@ -549,6 +651,46 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 
 					return $result instanceof Action_Result ? $result : Action_Result::failure();
 			}
+		}
+
+		/**
+		 * Refuses the order's shipment at the carrier and says what happened on the order (#1204): a private note
+		 * for the outcome either way. The one place the note is written, so the orders page and the order-edit
+		 * metabox leave the same trail. A success also clears the «не отменён у перевозчика» marker — the
+		 * merchant has dealt with the live shipment the failed cancellation left.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Abstract_Shipment_Handler $handler the carrier's handler.
+		 * @param \WC_Order                 $order   the order.
+		 * @return Action_Result
+		 * @throws \Throwable Whatever the carrier call throws, after the note is written.
+		 */
+		private function refuse( Abstract_Shipment_Handler $handler, \WC_Order $order ): Action_Result {
+			try {
+				$result = $handler->refuse( $order );
+			} catch ( \Throwable $exception ) {
+				$order->add_order_note( __( 'Не удалось оформить отказ от посылки: сервис перевозчика недоступен', 'woodev-plugin-framework' ) );
+
+				throw $exception;
+			}
+
+			if ( $result->is_success() ) {
+				Carrier_Cancel::clear_failed( $order );
+				$order->add_order_note( __( 'Оформлен отказ от посылки: она вернётся к вам, возврат платный', 'woodev-plugin-framework' ) );
+
+				return $result;
+			}
+
+			$order->add_order_note(
+				sprintf(
+					/* translators: %s: the carrier's reason for refusing the refusal */
+					__( 'Не удалось оформить отказ от посылки: %s', 'woodev-plugin-framework' ),
+					'' !== $result->get_message() ? $result->get_message() : __( 'перевозчик не назвал причину', 'woodev-plugin-framework' )
+				)
+			);
+
+			return $result;
 		}
 
 		/**
@@ -792,6 +934,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 						__( 'Отправление уже в конечном статусе «%s» — отменить его нельзя.', 'woodev-plugin-framework' ),
 						Delivery_Status::label( self::resolve_canonical_status( $order, $provider ) )
 					);
+
+				case self::REFUSE:
+					if ( ! $is_exported ) {
+						return __( 'Заказ ещё не выгружен перевозчику — отказываться не от чего.', 'woodev-plugin-framework' );
+					}
+
+					return __( 'Отказ можно оформить только для посылки, которая уже в пути, и только если перевозчик это умеет.', 'woodev-plugin-framework' );
 			}
 
 			return __( 'Это действие недоступно для данного заказа.', 'woodev-plugin-framework' );

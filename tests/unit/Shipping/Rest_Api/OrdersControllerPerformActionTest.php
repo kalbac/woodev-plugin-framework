@@ -94,6 +94,10 @@ final class OrdersControllerPerformActionTest extends TestCase {
 	private function register_handler( bool $supports_update = false ): Abstract_Shipment_Handler {
 		$handler = Mockery::mock( Abstract_Shipment_Handler::class );
 		$handler->shouldReceive( 'supports_update' )->andReturn( $supports_update );
+		// #1204: a carrier that declares nothing keeps today's behaviour.
+		$handler->shouldReceive( 'supports_refusal' )->andReturn( false )->byDefault();
+		$handler->shouldReceive( 'get_handed_over_statuses' )->andReturn( [] )->byDefault();
+		$handler->shouldReceive( 'get_refusable_statuses' )->andReturn( [] )->byDefault();
 
 		Orders_Registry::instance()->register_shipment_handler( 'cdek', $handler );
 
@@ -274,6 +278,67 @@ final class OrdersControllerPerformActionTest extends TestCase {
 
 		$this->assertIsArray( $result );
 		$this->assertTrue( $result['row']['is_exported'] );
+	}
+
+	// ----- #1204: «Оформить отказ» -----
+
+	/** A provider whose raw `ON_WAY` is the canonical in-transit state, and a handler that can refuse from it. */
+	private function refusing_carrier( string $raw_status ): Abstract_Shipment_Handler {
+		$this->meta['_cdek_carrier_order_id'] = 'CARRIER-1';
+		$this->meta['_cdek_status']           = $raw_status;
+		$this->register_provider(
+			[
+				'carrier_order_id_meta_key' => '_cdek_carrier_order_id',
+				'status_meta_key'           => '_cdek_status',
+				'status_map'                => [
+					'ON_WAY' => \Woodev\Framework\Shipping\Order\Delivery_Status::IN_TRANSIT,
+					'NEW'    => \Woodev\Framework\Shipping\Order\Delivery_Status::CREATED,
+				],
+			]
+		);
+		$handler = $this->register_handler();
+		$handler->shouldReceive( 'supports_refusal' )->andReturn( true );
+		$handler->shouldReceive( 'get_refusable_statuses' )->andReturn( [ \Woodev\Framework\Shipping\Order\Delivery_Status::IN_TRANSIT ] );
+
+		return $handler;
+	}
+
+	public function test_a_refusal_is_performed_noted_and_confirmed_to_the_merchant(): void {
+		$handler = $this->refusing_carrier( 'ON_WAY' );
+		$handler->shouldReceive( 'refuse' )->once()->andReturn( Action_Result::success() );
+		$order = $this->order( 'processing' );
+		$order->shouldReceive( 'get_meta' )->andReturn( '' );
+		$order->shouldReceive( 'add_order_note' )->once()->with( 'Оформлен отказ от посылки: она вернётся к вам, возврат платный' );
+
+		$result = $this->controller()->perform_action( $this->request( 123, Order_Actions::REFUSE ) );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'Отказ от посылки оформлен.', $result['message'] );
+	}
+
+	public function test_a_refused_refusal_is_a_502_with_the_carriers_reason_and_a_note(): void {
+		$handler = $this->refusing_carrier( 'ON_WAY' );
+		$handler->shouldReceive( 'refuse' )->once()->andReturn( Action_Result::failure( 'Заказ уже вручён' ) );
+		$order = $this->order( 'processing' );
+		$order->shouldReceive( 'add_order_note' )->once()->with( 'Не удалось оформить отказ от посылки: Заказ уже вручён' );
+
+		$result = $this->controller()->perform_action( $this->request( 123, Order_Actions::REFUSE ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 502, $result->get_error_data()['status'] );
+		$this->assertSame( 'СДЭК: Заказ уже вручён', $result->get_error_message() );
+	}
+
+	public function test_a_refusal_is_refused_for_a_shipment_that_is_not_in_a_refusable_state(): void {
+		$handler = $this->refusing_carrier( 'NEW' );
+		$handler->shouldNotReceive( 'refuse' );
+		$this->order( 'processing' );
+
+		$result = $this->controller()->perform_action( $this->request( 123, Order_Actions::REFUSE ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'woodev_shipping_orders_action_not_available', $result->get_error_code() );
+		$this->assertSame( 400, $result->get_error_data()['status'] );
 	}
 
 	/**

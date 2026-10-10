@@ -101,6 +101,10 @@ final class OrderActionsDocumentsTest extends TestCase {
 	private function actions( ?Document_Source $source = null ): Order_Actions {
 		$handler = Mockery::mock( Abstract_Shipment_Handler::class );
 		$handler->shouldReceive( 'supports_update' )->andReturn( true );
+		// #1204: a carrier that declares nothing keeps today's behaviour.
+		$handler->shouldReceive( 'supports_refusal' )->andReturn( false )->byDefault();
+		$handler->shouldReceive( 'get_handed_over_statuses' )->andReturn( [] )->byDefault();
+		$handler->shouldReceive( 'get_refusable_statuses' )->andReturn( [] )->byDefault();
 		Orders_Registry::instance()->register_shipment_handler( 'cdek', $handler );
 
 		if ( null !== $source ) {
