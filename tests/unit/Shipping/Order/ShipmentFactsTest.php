@@ -62,6 +62,29 @@ final class ShipmentFactsTest extends TestCase {
 		$this->assertTrue( Shipment_Facts::create()->with_cost( $amount )->is_empty() );
 	}
 
+	public function test_cost_components_are_independent_and_none_is_not_zero(): void {
+		$facts = Shipment_Facts::create()->with_cost( 100.0 )->with_cost( 120.0, 'RUB', ' TOTAL ' )->with_cost( null, 'RUB', 'insurance' )->with_cost( 0.0, 'RUB', 'fee' );
+
+		$this->assertFalse( $facts->is_empty() );
+		$this->assertSame(
+			[
+				'delivery'  => [ 'amount' => 100.0, 'currency' => 'RUB' ],
+				'total'     => [ 'amount' => 120.0, 'currency' => 'RUB' ],
+				'insurance' => null,
+				'fee'       => [ 'amount' => 0.0, 'currency' => 'RUB' ],
+			],
+			$facts->get_costs()
+		);
+		$this->assertSame( [ 'amount' => 120.0, 'currency' => 'RUB' ], $facts->get_cost( 'total' ) );
+		$this->assertNull( $facts->get_cost( 'insurance' ) );
+		$this->assertFalse( Shipment_Facts::create()->with_cost( null )->is_empty(), '«none» is a report' );
+	}
+
+	public function test_an_unusable_component_key_is_ignored(): void {
+		$this->assertTrue( Shipment_Facts::create()->with_cost( 10.0, 'RUB', 'bad key!' )->is_empty() );
+		$this->assertTrue( Shipment_Facts::create()->with_cost( 10.0, 'RUB', '' )->is_empty() );
+	}
+
 	public function test_a_date_keeps_its_day_kind_and_window(): void {
 		$facts = Shipment_Facts::create()->with_delivery_date( '2026-11-03T10:00:00+0300', 'agreed', [ 'from' => '10:00', 'to' => '14:00' ] );
 

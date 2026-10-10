@@ -5588,10 +5588,30 @@ msgstr ""
 msgid "Перевозчик сообщил, что отправление отменено."
 msgstr ""
 
-#. translators: 1: carrier name, 2: previous delivery cost, 3: new delivery cost, 4: currency sign.
+#. translators: 1: carrier name, 2: the cost component («стоимость доставки»), 3: previous figure, 4: new figure, 5: currency sign.
 #: shipping-method/order/class-shipment-facts-events.php
 #, php-format
-msgid "%1$s изменил стоимость доставки: %2$s → %3$s %4$s. Это данные перевозчика: чья это стоимость — по договору или для получателя — он может не уточнять. Сумма заказа и доставка в магазине не менялись."
+msgid "%1$s: %2$s изменилась — %3$s → %4$s %5$s. Это данные перевозчика: чья это стоимость — по договору или для получателя — он может не уточнять. Сумма заказа и доставка в магазине не менялись."
+msgstr ""
+
+#. translators: 1: carrier name, 2: the cost component («стоимость доставки»), 3: the figure, 4: currency sign.
+#: shipping-method/order/class-shipment-facts-events.php
+#, php-format
+msgid "%1$s: указана %2$s — %3$s %4$s. Это данные перевозчика: чья это стоимость — по договору или для получателя — он может не уточнять. Сумма заказа и доставка в магазине не менялись."
+msgstr ""
+
+#: shipping-method/order/class-shipment-facts-events.php
+msgid "стоимость доставки"
+msgstr ""
+
+#: shipping-method/order/class-shipment-facts-events.php
+msgid "итоговая стоимость"
+msgstr ""
+
+#. translators: %s: the key of a cost component the carrier reports, e.g. «insurance».
+#: shipping-method/order/class-shipment-facts-events.php
+#, php-format
+msgid "стоимость (%s)"
 msgstr ""
 
 #. translators: 1: carrier name, 2: the delivery problem, e.g. «Телефон неверный».

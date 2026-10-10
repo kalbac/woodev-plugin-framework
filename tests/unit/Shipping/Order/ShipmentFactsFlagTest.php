@@ -103,7 +103,7 @@ final class ShipmentFactsFlagTest extends TestCase {
 
 		$this->assertSame( 'Стоимость изменена перевозчиком', $flag['label'] );
 		$this->assertSame( 'warn', $flag['tone'] );
-		$this->assertSame( "465 → 520 \u{20BD}", $flag['title'] );
+		$this->assertSame( "стоимость доставки: 465 → 520 \u{20BD}", $flag['title'] );
 	}
 
 	public function test_an_issue_outranks_a_cost_change_and_the_row_gets_one_flag(): void {
@@ -140,6 +140,52 @@ final class ShipmentFactsFlagTest extends TestCase {
 	}
 
 	public function test_a_failed_delivery_attempt_is_not_final(): void {
+		$this->attend( [ 'issue' => self::ISSUE ] );
+		$this->meta['_test_status'] = 'LOST';
+
+		$this->assertSame( 'Проблема доставки', Shipment_Facts_Flag::build( $this->order(), $this->provider() )['label'] );
+	}
+
+	public function test_the_cost_badge_names_the_component_and_a_first_figure_has_no_previous_one(): void {
+		$this->attend( [ 'cost' => [ 'from' => 120.0, 'to' => 140.0, 'currency' => 'RUB', 'component' => 'total' ] ] );
+		$this->assertSame( "итоговая стоимость: 120 → 140 \u{20BD}", Shipment_Facts_Flag::build( $this->order(), $this->provider() )['title'] );
+
+		$this->attend( [ 'cost' => [ 'from' => null, 'to' => 300.0, 'currency' => 'RUB', 'component' => 'delivery' ] ] );
+		$this->assertSame( "стоимость доставки: 300 \u{20BD}", Shipment_Facts_Flag::build( $this->order(), $this->provider() )['title'] );
+	}
+
+	public function test_the_default_final_states_are_delivered_returned_and_cancelled(): void {
+		$this->assertSame(
+			[ Delivery_Status::DELIVERED, Delivery_Status::RETURNED, Delivery_Status::CANCELLED ],
+			\Woodev\Framework\Shipping\Order\Shipment_Facts_Events::get_final_states( $this->provider() )
+		);
+	}
+
+	public function test_a_carrier_that_declares_failed_final_clears_the_issue_on_it(): void {
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $tag, $value, $provider = null ) {
+				return 'woodev_shipping_shipment_fact_final_states' === $tag && 'test' === $provider->get_id()
+					? array_merge( $value, [ Delivery_Status::FAILED ] )
+					: $value;
+			}
+		);
+		$this->attend( [ 'issue' => self::ISSUE, 'cost' => self::COST ] );
+		$this->meta['_test_status'] = 'LOST';
+
+		$flag = Shipment_Facts_Flag::build( $this->order(), $this->provider() );
+
+		$this->assertSame( 'Стоимость изменена перевозчиком', $flag['label'], 'the issue is settled by the carrier\'s terminal failure, the cost change stays' );
+	}
+
+	public function test_a_carrier_that_does_not_declare_failed_final_keeps_the_issue_flagged(): void {
+		// Another carrier declares failed final; this one (id «test») does not.
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $tag, $value, $provider = null ) {
+				return 'woodev_shipping_shipment_fact_final_states' === $tag && 'other' === $provider->get_id()
+					? array_merge( $value, [ Delivery_Status::FAILED ] )
+					: $value;
+			}
+		);
 		$this->attend( [ 'issue' => self::ISSUE ] );
 		$this->meta['_test_status'] = 'LOST';
 

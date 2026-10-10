@@ -24,7 +24,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Shipment_Facts_Flag'
 	 * Which badge, in order:
 	 *
 	 * 1. «Проблема доставки» (tone `error`) while a delivery issue stands — it is settled once the canonical delivery
-	 *    status is final ({@see Shipment_Facts_Events::FINAL_STATES}).
+	 *    status is one the CARRIER declares final ({@see Shipment_Facts_Events::get_final_states()}: delivered /
+	 *    returned / cancelled by default, a carrier adds `failed` if its failure is terminal).
 	 * 2. «Стоимость изменена перевозчиком» (tone `warn`) after a cost change. It stays: a changed price still wants
 	 *    the merchant's review, even after the shipment is delivered.
 	 *
@@ -96,9 +97,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Shipment_Facts_Flag'
 				return [
 					'label' => __( 'Стоимость изменена перевозчиком', 'woodev-plugin-framework' ),
 					'tone'  => 'warn',
-					'title' => Shipment_Facts_Events::format_money( (float) ( $attention['cost']['from'] ?? 0 ) )
-						. ' → ' . Shipment_Facts_Events::format_money( (float) ( $attention['cost']['to'] ?? 0 ) )
-						. ' ' . Shipment_Facts_Events::format_currency( (string) ( $attention['cost']['currency'] ?? Shipment_Facts::DEFAULT_CURRENCY ) ),
+					'title' => self::cost_title( $attention['cost'] ),
 				];
 			}
 
@@ -113,7 +112,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Shipment_Facts_Flag'
 		 * @return bool
 		 */
 		private static function is_final( \WC_Order $order, Orders_Provider $provider ): bool {
-			return in_array( Order_Actions::resolve_canonical_status( $order, $provider ), Shipment_Facts_Events::FINAL_STATES, true );
+			return in_array( Order_Actions::resolve_canonical_status( $order, $provider ), Shipment_Facts_Events::get_final_states( $provider ), true );
+		}
+
+		/**
+		 * The tooltip of the cost badge: which figure moved and from what to what.
+		 *
+		 * @param array<string,mixed> $cost The attention's cost entry.
+		 * @return string «стоимость доставки: 465 → 520 ₽»; «стоимость доставки: 520 ₽» when the carrier had reported none.
+		 */
+		private static function cost_title( array $cost ): string {
+			$currency = Shipment_Facts_Events::format_currency( (string) ( $cost['currency'] ?? Shipment_Facts::DEFAULT_CURRENCY ) );
+			$to       = Shipment_Facts_Events::format_money( (float) ( $cost['to'] ?? 0 ) );
+			$figures  = isset( $cost['from'] ) && is_numeric( $cost['from'] )
+				? Shipment_Facts_Events::format_money( (float) $cost['from'] ) . ' → ' . $to . ' ' . $currency
+				: $to . ' ' . $currency;
+
+			return Shipment_Facts_Events::cost_label( (string) ( $cost['component'] ?? Shipment_Facts::COST_DELIVERY ) ) . ': ' . $figures;
 		}
 	}
 endif;

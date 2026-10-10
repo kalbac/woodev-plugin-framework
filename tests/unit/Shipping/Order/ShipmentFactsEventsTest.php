@@ -161,7 +161,7 @@ final class ShipmentFactsEventsTest extends TestCase {
 		$this->assertTrue( Shipment_Facts_Events::record( $this->load_order(), $this->provider(), $facts ) );
 
 		$this->assertSame( [], $this->notes, 'the first read of an order is its baseline, not news' );
-		$this->assertSame( [ 'amount' => '465.00', 'currency' => 'RUB' ], $this->db[55]['_woodev_shipment_fact_cost_test'] );
+		$this->assertSame( [ 'delivery' => [ 'amount' => '465.00', 'currency' => 'RUB' ] ], $this->db[55]['_woodev_shipment_fact_cost_test'] );
 		$this->assertSame( '2026-11-03', $this->db[55]['_woodev_shipment_fact_date_test']['date'] );
 		$this->assertCount( 1, $this->db[55]['_woodev_shipment_fact_issues_test'] );
 		$this->assertSame( 'Иван', $this->db[55]['_woodev_shipment_fact_courier_test']['name'] );
@@ -216,15 +216,15 @@ final class ShipmentFactsEventsTest extends TestCase {
 	public function test_a_cost_change_fires_one_action_and_one_note_naming_the_carrier(): void {
 		Shipment_Facts_Events::record( $this->load_order(), $this->provider(), $this->everything() );
 
-		Actions\expectDone( 'woodev_shipping_carrier_cost_changed' )->once()->with( Mockery::type( '\WC_Order' ), 465.0, 1234.5, 'RUB', Mockery::type( Orders_Provider::class ) );
+		Actions\expectDone( 'woodev_shipping_carrier_cost_changed' )->once()->with( Mockery::type( '\WC_Order' ), 465.0, 1234.5, 'RUB', Mockery::type( Orders_Provider::class ), 'delivery' );
 
 		Shipment_Facts_Events::record( $this->load_order(), $this->provider(), $this->everything( '2026-11-03', 1234.5 ) );
 
 		$this->assertCount( 1, $this->notes );
-		$this->assertStringContainsString( 'Тестовая доставка изменил стоимость доставки: 465 → 1' . "\u{00A0}" . '234,5 ₽', $this->notes[0] );
+		$this->assertStringContainsString( 'Тестовая доставка: стоимость доставки изменилась — 465 → 1' . "\u{00A0}" . '234,5 ₽', $this->notes[0] );
 		$this->assertStringContainsString( 'Сумма заказа и доставка в магазине не менялись', $this->notes[0] );
 		$this->assertStringNotContainsString( 'СДЭК', $this->notes[0], 'the carrier name comes from the plugin, never from the framework' );
-		$this->assertSame( '1234.50', $this->db[55]['_woodev_shipment_fact_cost_test']['amount'] );
+		$this->assertSame( '1234.50', $this->db[55]['_woodev_shipment_fact_cost_test']['delivery']['amount'] );
 	}
 
 	public function test_the_same_facts_again_announce_nothing(): void {
@@ -250,7 +250,7 @@ final class ShipmentFactsEventsTest extends TestCase {
 		Shipment_Facts_Events::record( $this->load_order(), $this->provider(), Shipment_Facts::create()->with_cost( 100.0, 'KZT' ) );
 
 		$this->assertSame( [], $this->notes );
-		$this->assertSame( 'KZT', $this->db[55]['_woodev_shipment_fact_cost_test']['currency'] );
+		$this->assertSame( 'KZT', $this->db[55]['_woodev_shipment_fact_cost_test']['delivery']['currency'] );
 	}
 
 	public function test_a_moved_date_a_new_kind_or_a_window_is_one_change_with_the_previous_date(): void {
@@ -450,7 +450,7 @@ final class ShipmentFactsEventsTest extends TestCase {
 		$attention = $this->db[55]['_woodev_shipment_fact_attention_test'];
 
 		$this->assertSame( [ 'code' => '13', 'label' => 'Контактное лицо отсутствует', 'at' => '2026-11-02T10:00:00+0300' ], $attention['issue'] );
-		$this->assertSame( [ 'from' => 465.0, 'to' => 520.0, 'currency' => 'RUB' ], $attention['cost'] );
+		$this->assertSame( [ 'from' => 465.0, 'to' => 520.0, 'currency' => 'RUB', 'component' => 'delivery' ], $attention['cost'] );
 	}
 
 	public function test_the_flag_can_be_switched_off_per_kind(): void {
@@ -507,7 +507,150 @@ final class ShipmentFactsEventsTest extends TestCase {
 
 		$this->assertSame( [], $this->notes );
 		$this->assertArrayHasKey( '_woodev_shipment_fact_cost_other', $this->db[55] );
-		$this->assertSame( '100.00', $this->db[55]['_woodev_shipment_fact_cost_test']['amount'] );
+		$this->assertSame( '100.00', $this->db[55]['_woodev_shipment_fact_cost_test']['delivery']['amount'] );
+	}
+
+	/**
+	 * @param float|null $delivery Delivery component; null = «none».
+	 * @param float|null $total    Total component; null = «none».
+	 */
+	private function components( ?float $delivery, ?float $total ): Shipment_Facts {
+		return Shipment_Facts::create()->with_cost( $delivery, 'RUB', 'delivery' )->with_cost( $total, 'RUB', 'total' );
+	}
+
+	/**
+	 * The reviewer's sequence: baseline (delivery 100, total 120) → total-only change → replay → delivery-only change.
+	 */
+	public function test_cost_components_are_compared_each_against_its_own_baseline(): void {
+		$seen = [];
+		Actions\expectDone( 'woodev_shipping_carrier_cost_changed' )->times( 2 )->whenHappen(
+			static function ( $order, $old, $new, $currency, $provider, $component ) use ( &$seen ): void {
+				$seen[] = [ $component, $old, $new ];
+			}
+		);
+
+		$this->assertTrue( Shipment_Facts_Events::record( $this->load_order(), $this->provider(), $this->components( 100.0, 120.0 ) ) );
+		$this->assertSame( [], $this->notes, 'the baseline of both components is silent' );
+		$this->assertSame(
+			[
+				'delivery' => [ 'amount' => '100.00', 'currency' => 'RUB' ],
+				'total'    => [ 'amount' => '120.00', 'currency' => 'RUB' ],
+			],
+			$this->db[55]['_woodev_shipment_fact_cost_test']
+		);
+
+		// Only the total moved: delivery is the same figure again.
+		Shipment_Facts_Events::record( $this->load_order(), $this->provider(), $this->components( 100.0, 140.0 ) );
+		$this->assertSame( [ [ 'total', 120.0, 140.0 ] ], $seen, 'the total moves 120 → 140, not 100 → 140' );
+		$this->assertCount( 1, $this->notes );
+		$this->assertStringContainsString( 'итоговая стоимость изменилась — 120 → 140 ₽', $this->notes[0] );
+
+		// The very same read again: no false reversal back to the delivery figure.
+		Shipment_Facts_Events::record( $this->load_order(), $this->provider(), $this->components( 100.0, 140.0 ) );
+		$this->assertCount( 1, $this->notes, 'a replay announces nothing' );
+
+		// Only the delivery moved.
+		Shipment_Facts_Events::record( $this->load_order(), $this->provider(), $this->components( 110.0, 140.0 ) );
+		$this->assertSame( [ [ 'total', 120.0, 140.0 ], [ 'delivery', 100.0, 110.0 ] ], $seen );
+		$this->assertCount( 2, $this->notes );
+		$this->assertStringContainsString( 'стоимость доставки изменилась — 100 → 110 ₽', $this->notes[1] );
+		$this->assertSame( 'delivery', $this->db[55]['_woodev_shipment_fact_attention_test']['cost']['component'], 'any component raises the cost attention' );
+	}
+
+	public function test_two_components_moving_together_are_two_changes_and_two_notes(): void {
+		Shipment_Facts_Events::record( $this->load_order(), $this->provider(), $this->components( 100.0, 120.0 ) );
+
+		Actions\expectDone( 'woodev_shipping_carrier_cost_changed' )->twice();
+
+		Shipment_Facts_Events::record( $this->load_order(), $this->provider(), $this->components( 150.0, 190.0 ) );
+
+		$this->assertCount( 2, $this->notes );
+	}
+
+	public function test_an_unknown_component_gets_a_generic_label_and_the_labels_can_be_filtered(): void {
+		Shipment_Facts_Events::record( $this->load_order(), $this->provider(), Shipment_Facts::create()->with_cost( 10.0, 'RUB', 'insurance' ) );
+		Shipment_Facts_Events::record( $this->load_order(), $this->provider(), Shipment_Facts::create()->with_cost( 15.0, 'RUB', 'insurance' ) );
+
+		$this->assertStringContainsString( 'стоимость (insurance) изменилась — 10 → 15 ₽', $this->notes[0] );
+
+		$this->filters['woodev_shipping_shipment_fact_cost_labels'] = static fn( $labels ) => $labels + [ 'insurance' => 'страховка' ];
+		Shipment_Facts_Events::record( $this->load_order(), $this->provider(), Shipment_Facts::create()->with_cost( 20.0, 'RUB', 'insurance' ) );
+
+		$this->assertStringContainsString( 'страховка изменилась — 15 → 20 ₽', $this->notes[1] );
+	}
+
+	public function test_a_cost_not_reported_leaves_no_baseline_and_the_first_amount_is_initial(): void {
+		Actions\expectDone( 'woodev_shipping_carrier_cost_changed' )->never();
+
+		Shipment_Facts_Events::record( $this->load_order(), $this->provider(), Shipment_Facts::create()->with_delivery_date( '2026-11-03' ) );
+		$this->assertArrayNotHasKey( '_woodev_shipment_fact_cost_test', $this->db[55], 'not reported = nothing stored' );
+
+		Shipment_Facts_Events::record( $this->load_order(), $this->provider(), Shipment_Facts::create()->with_cost( 300.0 ) );
+
+		$this->assertSame( [], $this->notes, 'no explicit «none» was recorded, so the first amount is only the baseline' );
+	}
+
+	public function test_a_cost_reported_as_none_is_stored_and_the_first_amount_after_it_is_a_change(): void {
+		Actions\expectDone( 'woodev_shipping_carrier_cost_changed' )->once()->with( Mockery::type( '\WC_Order' ), null, 300.0, 'RUB', Mockery::type( Orders_Provider::class ), 'delivery' );
+
+		Shipment_Facts_Events::record( $this->load_order(), $this->provider(), Shipment_Facts::create()->with_cost( null ) );
+		$this->assertSame( [ 'delivery' => [] ], $this->db[55]['_woodev_shipment_fact_cost_test'], '«none» is stored explicitly' );
+		$this->assertSame( [], $this->notes );
+
+		// «none» again is nothing.
+		Shipment_Facts_Events::record( $this->load_order(), $this->provider(), Shipment_Facts::create()->with_cost( null ) );
+		$this->assertSame( [], $this->notes );
+
+		Shipment_Facts_Events::record( $this->load_order(), $this->provider(), Shipment_Facts::create()->with_cost( 300.0 ) );
+
+		$this->assertCount( 1, $this->notes );
+		$this->assertStringContainsString( 'Тестовая доставка: указана стоимость доставки — 300 ₽', $this->notes[0] );
+		$this->assertSame( '300.00', $this->db[55]['_woodev_shipment_fact_cost_test']['delivery']['amount'] );
+		$this->assertNull( $this->db[55]['_woodev_shipment_fact_attention_test']['cost']['from'], 'the attention knows there was no previous figure' );
+
+		// Replay.
+		Shipment_Facts_Events::record( $this->load_order(), $this->provider(), Shipment_Facts::create()->with_cost( 300.0 ) );
+		$this->assertCount( 1, $this->notes, 'a replay announces nothing' );
+	}
+
+	public function test_a_zero_cost_is_a_real_value_not_none(): void {
+		Shipment_Facts_Events::record( $this->load_order(), $this->provider(), Shipment_Facts::create()->with_cost( 0.0 ) );
+		$this->assertSame( [ 'delivery' => [ 'amount' => '0.00', 'currency' => 'RUB' ] ], $this->db[55]['_woodev_shipment_fact_cost_test'] );
+
+		// A «none» does not erase a known zero …
+		Shipment_Facts_Events::record( $this->load_order(), $this->provider(), Shipment_Facts::create()->with_cost( null ) );
+		$this->assertSame( '0.00', $this->db[55]['_woodev_shipment_fact_cost_test']['delivery']['amount'] );
+		$this->assertSame( [], $this->notes );
+
+		// … and the first non-zero figure is a change FROM zero (previous 0, not null).
+		Actions\expectDone( 'woodev_shipping_carrier_cost_changed' )->once()->with( Mockery::type( '\WC_Order' ), 0.0, 50.0, 'RUB', Mockery::type( Orders_Provider::class ), 'delivery' );
+		Shipment_Facts_Events::record( $this->load_order(), $this->provider(), Shipment_Facts::create()->with_cost( 50.0 ) );
+
+		$this->assertStringContainsString( 'стоимость доставки изменилась — 0 → 50 ₽', $this->notes[0] );
+	}
+
+	public function test_a_single_figure_baseline_written_before_components_is_read_as_the_delivery_cost(): void {
+		$this->db[55]['_woodev_shipment_fact_cost_test'] = [ 'amount' => '100.00', 'currency' => 'RUB' ];
+
+		Actions\expectDone( 'woodev_shipping_carrier_cost_changed' )->once()->with( Mockery::type( '\WC_Order' ), 100.0, 130.0, 'RUB', Mockery::type( Orders_Provider::class ), 'delivery' );
+
+		Shipment_Facts_Events::record( $this->load_order(), $this->provider(), $this->components( 130.0, 150.0 ) );
+
+		$this->assertCount( 1, $this->notes, 'the total has no baseline yet: silent' );
+		$this->assertSame( [ 'delivery', 'total' ], array_keys( $this->db[55]['_woodev_shipment_fact_cost_test'] ) );
+	}
+
+	public function test_a_failed_lock_is_reported_to_the_caller_so_it_can_retry(): void {
+		$this->wpdb->grant = false;
+		$order             = Mockery::mock( '\WC_Order' );
+		$order->shouldReceive( 'get_id' )->andReturn( 55 );
+
+		$this->assertFalse( Shipment_Facts_Events::record( $order, $this->provider(), $this->components( 100.0, 120.0 ) ) );
+
+		// The caller retries on its next pass: now the lock is granted, and the same read is applied.
+		$this->wpdb->grant = true;
+		$this->assertTrue( Shipment_Facts_Events::record( $this->load_order(), $this->provider(), $this->components( 100.0, 120.0 ) ) );
+		$this->assertArrayHasKey( '_woodev_shipment_fact_cost_test', $this->db[55] );
 	}
 
 	public function test_a_carrier_that_never_calls_the_seam_leaves_no_trace(): void {

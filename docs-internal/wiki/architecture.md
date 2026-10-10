@@ -331,19 +331,31 @@ packing settings must add it to the cache key through its `get_rate_cache_contex
 Beside `Delivery_Status_Events` (the delivery STATUS) sits the seam for the facts that are not a status. A carrier
 fills a `Shipment_Facts` value object from its own API read (never from a webhook body) and hands it over with ONE
 call: `Shipment_Facts_Events::record( $order, $provider, $facts )`. Every fact is optional and has three states —
-not reported (baseline untouched), reported as none (`with_delivery_date( null )`, `with_courier( null )`,
-`with_issues( [] )`: stored explicitly) and reported with a value. The framework compares each fact with its own
+not reported (baseline untouched), reported as none (`with_cost( null )`, `with_delivery_date( null )`,
+`with_courier( null )`, `with_issues( [] )`: stored explicitly) and reported with a value (a cost of `0.0` is a value,
+not «none»). The cost has COMPONENTS: `with_cost( ?float $amount, string $currency = 'RUB', string $component =
+'delivery' )`, one call per figure the carrier reports (CDEK: `delivery` and `total`); each component keeps its own
+baseline inside `_woodev_shipment_fact_cost_{id}` (`{component: {amount, currency}|[]}`), diffs independently and
+announces its own old → new (`old` is null for the first amount after a reported none), so one figure moving never
+disturbs another. The framework compares each fact with its own
 baseline (`_woodev_shipment_fact_{cost|date|issues|courier}_{provider id}`): no baseline = silent initialisation,
 known-empty then a value = a change, the same value again = nothing, an empty report never overwrites a known
 value. Per order the apply step runs under `Order_Lock` (scope `facts`, 5 s wait), re-reads the order meta once the
 lock is held, saves the meta and RELEASES the lock before the notes and hooks, so a request that comes second finds
-the baseline already moved. Per change: one order note (generic wording with the provider's label, filter
+the baseline already moved. **That lock covers only `record()`**: a carrier keeps its OWN per-order serialisation
+around «API read → carrier-only staging (status, delivery mode, …) → `record()`» (CDEK keeps its synchronizer
+claim), and a `false` result of `record()` (lock not granted — nothing applied) must be propagated so the caller
+retries on its next pass. Per change: one order note (generic wording with the provider's label, a cost note names
+its component through the `woodev_shipping_shipment_fact_cost_labels` filter, filter
 `woodev_shipping_shipment_fact_note`, empty = none) and one neutral action — `woodev_shipping_carrier_cost_changed`,
 `woodev_shipping_delivery_date_changed`, `woodev_shipping_delivery_issue`, `woodev_shipping_courier_assigned`, each
-ending with the `Orders_Provider`. A cost change or an issue also leaves `_woodev_shipment_fact_attention_{id}`, read
+ending with the `Orders_Provider` (the cost action also takes the component, after the provider). A cost change
+(of any component) or an issue also leaves `_woodev_shipment_fact_attention_{id}`, read
 by `Shipment_Facts_Flag` (registered by `Shipping_Plugin`) into ONE row flag: an issue («Проблема доставки», `error`)
-outranks a cost change («Стоимость изменена перевозчиком», `warn`); the issue clears on a final canonical status
-(delivered / returned / cancelled), the cost change stays. WooCommerce totals and shipping lines are never touched.
+outranks a cost change («Стоимость изменена перевозчиком», `warn`); the issue clears on a canonical status the
+CARRIER declares final — delivered / returned / cancelled by default, a carrier adds `failed` through the
+`woodev_shipping_shipment_fact_final_states` filter (meta-free; CDEK will, for NOT_DELIVERED / INVALID) — the cost
+change stays. WooCommerce totals and shipping lines are never touched.
 A carrier that never calls the seam sees nothing happen.
 
 ## Utilities (`woodev/utilities/`)

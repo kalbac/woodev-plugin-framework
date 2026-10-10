@@ -58,11 +58,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Shipment_Facts' ) ) 
 		public const DEFAULT_CURRENCY = 'RUB';
 
 		/**
-		 * The carrier's cost of the delivery, or null.
+		 * The component {@see self::with_cost()} stands for when the carrier names none.
 		 *
-		 * @var array{amount:float,currency:string}|null
+		 * @var string
 		 */
-		private ?array $cost = null;
+		public const COST_DELIVERY = 'delivery';
+
+		/**
+		 * The cost components the carrier reported, by component; a null entry is «reported as none».
+		 *
+		 * @var array<string,array{amount:float,currency:string}|null>
+		 */
+		private array $costs = [];
 
 		/**
 		 * Whether the carrier reported the delivery date (a value or «none»).
@@ -110,24 +117,45 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Shipment_Facts' ) ) 
 		}
 
 		/**
-		 * The carrier's cost of the delivery. WooCommerce totals and shipping lines are never changed by it.
+		 * One cost figure of the carrier. WooCommerce totals and shipping lines are never changed by it.
 		 *
-		 * An amount that is not a finite, non-negative number is ignored (the fact stays «not reported»).
+		 * A carrier may report SEVERAL components, each compared with its own baseline (CDEK: `delivery` and `total`);
+		 * call this once per component. A component is never derived from another one — which figure the carrier
+		 * reports when only one of them moved is the carrier plugin's business.
+		 *
+		 * `null` states «the carrier has no figure (yet)»: it is stored explicitly, so the first amount that follows
+		 * is a change (with a previous figure of null). An amount that is not a finite, non-negative number is
+		 * ignored (the component stays «not reported»); `0.0` is a real value.
 		 *
 		 * @since 2.0.2
-		 * @param float  $amount   Amount.
-		 * @param string $currency ISO 4217 code; anything else falls back to {@see self::DEFAULT_CURRENCY}.
+		 * @param float|null $amount    Amount; null = «none».
+		 * @param string     $currency  ISO 4217 code; anything else falls back to {@see self::DEFAULT_CURRENCY}.
+		 * @param string     $component Component key (lowercase letters, digits, `_`), {@see self::COST_DELIVERY} by default; an
+		 *                              unusable key is ignored.
 		 * @return self
 		 */
-		public function with_cost( float $amount, string $currency = self::DEFAULT_CURRENCY ): self {
+		public function with_cost( ?float $amount, string $currency = self::DEFAULT_CURRENCY, string $component = self::COST_DELIVERY ): self {
+			$component = strtolower( trim( $component ) );
+
+			if ( 1 !== preg_match( '/^[a-z0-9_]{1,32}$/', $component ) ) {
+				return $this;
+			}
+
+			$copy = clone $this;
+
+			if ( null === $amount ) {
+				$copy->costs[ $component ] = null;
+
+				return $copy;
+			}
+
 			if ( ! is_finite( $amount ) || $amount < 0 ) {
 				return $this;
 			}
 
 			$currency = strtoupper( trim( $currency ) );
-			$copy     = clone $this;
 
-			$copy->cost = [
+			$copy->costs[ $component ] = [
 				'amount'   => round( $amount, 2 ),
 				'currency' => 1 === preg_match( '/^[A-Z]{3}$/', $currency ) ? $currency : self::DEFAULT_CURRENCY,
 			];
@@ -234,13 +262,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Shipment_Facts' ) ) 
 		}
 
 		/**
-		 * The reported cost.
+		 * The reported cost components.
 		 *
 		 * @since 2.0.2
-		 * @return array{amount:float,currency:string}|null Null when not reported.
+		 * @return array<string,array{amount:float,currency:string}|null> By component; null = reported as none.
 		 */
-		public function get_cost(): ?array {
-			return $this->cost;
+		public function get_costs(): array {
+			return $this->costs;
+		}
+
+		/**
+		 * One reported cost component.
+		 *
+		 * @since 2.0.2
+		 * @param string $component Component key.
+		 * @return array{amount:float,currency:string}|null Null for «none» and for «not reported».
+		 */
+		public function get_cost( string $component = self::COST_DELIVERY ): ?array {
+			return $this->costs[ $component ] ?? null;
 		}
 
 		/**
@@ -300,7 +339,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Shipment_Facts' ) ) 
 		 * @return bool
 		 */
 		public function is_empty(): bool {
-			return null === $this->cost && ! $this->date_reported && null === $this->issues && ! $this->courier_reported;
+			return [] === $this->costs && ! $this->date_reported && null === $this->issues && ! $this->courier_reported;
 		}
 
 		/**

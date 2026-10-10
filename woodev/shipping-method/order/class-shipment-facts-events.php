@@ -36,6 +36,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Shipment_Facts_Event
 	 * - **One record at a time per order.** Two requests that carry the same news (a webhook and a poll) are
 	 *   serialised by a short-lived named lock, and the order's meta is re-read once the lock is held, so the
 	 *   request that comes second finds the baseline already moved and announces nothing.
+	 * - **Cost has components.** A carrier may report several figures (CDEK: `delivery` and `total`); each has its
+	 *   own baseline and its own event, and the cost is «none» only when the carrier says so
+	 *   ({@see Shipment_Facts::with_cost()}).
+	 *
+	 * **The lock covers only this call.** It serialises the compare-and-store of the FACTS and nothing the
+	 * carrier does around it. A carrier plugin must keep its OWN per-order serialisation around the whole
+	 * operation «read the carrier's API → stage the carrier-only data (status, mode, …) → record()» — CDEK keeps
+	 * its synchronizer claim — because the facts lock cannot stop two overlapping reads from being applied in the
+	 * wrong order, nor two requests from staging the same carrier-only change twice.
 	 *
 	 * **WooCommerce totals and shipping lines are never changed** — the carrier's cost is the carrier's figure,
 	 * and what the merchant does with it is the merchant's call (an action hook is there for exactly that).
@@ -48,7 +57,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Shipment_Facts_Event
 	 */
 	final class Shipment_Facts_Events {
 		/**
-		 * Prefix of the meta that remembers the carrier's last cost: `array{amount:string,currency:string}`.
+		 * Prefix of the meta that remembers the carrier's last cost figures, by component:
+		 * `array<string,array{amount:string,currency:string}>`; a component that is `[]` is known to be none.
 		 *
 		 * @var string
 		 */
@@ -85,7 +95,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Shipment_Facts_Event
 		public const ATTENTION_META_PREFIX = '_woodev_shipment_fact_attention_';
 
 		/**
-		 * The canonical delivery states that settle a delivery issue: the shipment has reached its end.
+		 * The canonical delivery states that settle a delivery issue by default: the shipment has reached its end.
+		 * A carrier whose other states are final too (CDEK: `failed`) says so with the
+		 * `woodev_shipping_shipment_fact_final_states` filter, see {@see self::get_final_states()}.
 		 *
 		 * @var string[]
 		 */
@@ -118,6 +130,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Shipment_Facts_Event
 		 * ⚠ The order's meta is re-read once the lock is held, so persist the order's own pending meta changes
 		 * (`$order->save()`) BEFORE calling.
 		 *
+		 * ⚠ Serialisation contract: this method serialises ONLY the facts it is handed (the compare-and-store of
+		 * the baselines, under {@see Order_Lock}). The carrier must keep its own per-order serialisation around
+		 * its API read and its carrier-only staging, and call this inside it. A `false` result means the facts were
+		 * NOT applied (the lock was not granted) — propagate it, so the caller does not acknowledge that read as done
+		 * and retries on its next pass.
+		 *
 		 * Fires, once per change and after the new baseline is saved (a failed save never leaves a note that the
 		 * next call would write again): `woodev_shipping_carrier_cost_changed`,
 		 * `woodev_shipping_delivery_date_changed`, `woodev_shipping_delivery_issue`,
@@ -127,8 +145,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Shipment_Facts_Event
 		 * @param \WC_Order       $order    Shipment order.
 		 * @param Orders_Provider $provider Carrier descriptor.
 		 * @param Shipment_Facts  $facts    What the carrier's API says now.
-		 * @return bool False when nothing was applied — the order cannot be locked, or has no id; true otherwise,
-		 *              also when nothing changed.
+		 * @return bool False when nothing was applied — the order cannot be locked, or has no id — and the caller
+		 *              must retry; true otherwise, also when nothing changed.
 		 */
 		public static function record( \WC_Order $order, Orders_Provider $provider, Shipment_Facts $facts ): bool {
 			$order_id = (int) $order->get_id();
@@ -183,6 +201,67 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Shipment_Facts_Event
 		}
 
 		/**
+		 * The canonical delivery states the CARRIER declares final for attention: once the order reaches one, its delivery
+		 * issue no longer stands. Meta-free — it only answers from the provider and a filter, because the row flag
+		 * calls it for every row.
+		 *
+		 * @since 2.0.2
+		 * @param Orders_Provider $provider Carrier descriptor.
+		 * @return string[] Canonical {@see Delivery_Status} states.
+		 */
+		public static function get_final_states( Orders_Provider $provider ): array {
+			/**
+			 * Filters the canonical delivery states that settle a delivery issue for a carrier.
+			 *
+			 * The default is delivered / returned / cancelled. A carrier whose `failed` state is terminal (its shipment
+			 * will not be attempted again — CDEK's NOT_DELIVERED / INVALID) adds it here; a carrier that does not
+			 * keeps the issue flagged while the shipment is failed but recoverable. Tell carriers apart with
+			 * `$provider->get_id()`. Read nothing but the arguments: this runs for every row of the orders page.
+			 *
+			 * @since 2.0.2
+			 * @param string[]        $states   Canonical states; {@see self::FINAL_STATES}.
+			 * @param Orders_Provider $provider Carrier descriptor.
+			 */
+			$states = apply_filters( 'woodev_shipping_shipment_fact_final_states', self::FINAL_STATES, $provider );
+
+			return is_array( $states ) ? array_values( array_filter( $states, 'is_string' ) ) : self::FINAL_STATES;
+		}
+
+		/**
+		 * What the merchant reads for a cost component: «стоимость доставки», «итоговая стоимость», or a generic wording
+		 * for a component the framework does not know.
+		 *
+		 * @since 2.0.2
+		 * @param string $component Component key.
+		 * @return string A feminine noun phrase in the nominative.
+		 */
+		public static function cost_label( string $component ): string {
+			$labels = [
+				Shipment_Facts::COST_DELIVERY => __( 'стоимость доставки', 'woodev-plugin-framework' ),
+				'total'                       => __( 'итоговая стоимость', 'woodev-plugin-framework' ),
+			];
+
+			/**
+			 * Filters the wording of the cost components in notes and the attention flag.
+			 *
+			 * @since 2.0.2
+			 * @param array<string,string> $labels Wording by component key; a feminine noun phrase in the nominative («стоимость доставки»),
+			 *                                     which the notes inflect («… изменилась», «указана …»).
+			 */
+			$labels = apply_filters( 'woodev_shipping_shipment_fact_cost_labels', $labels );
+
+			if ( is_array( $labels ) && isset( $labels[ $component ] ) && is_string( $labels[ $component ] ) && '' !== $labels[ $component ] ) {
+				return $labels[ $component ];
+			}
+
+			return sprintf(
+				/* translators: %s: the key of a cost component the carrier reports, e.g. «insurance». */
+				__( 'стоимость (%s)', 'woodev-plugin-framework' ),
+				$component
+			);
+		}
+
+		/**
 		 * A money amount as the merchant reads it: no needless zeros, non-breaking thousands space.
 		 *
 		 * @since 2.0.2
@@ -216,9 +295,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Shipment_Facts_Event
 			$events  = [];
 			$changed = false;
 
-			$cost = $facts->get_cost();
-			if ( null !== $cost ) {
-				$changed = self::stage_cost( $order, $provider, $cost, $events ) || $changed;
+			$costs = $facts->get_costs();
+			if ( [] !== $costs ) {
+				$changed = self::stage_cost( $order, $provider, $costs, $events ) || $changed;
 			}
 
 			if ( $facts->reports_delivery_date() ) {
@@ -245,45 +324,98 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Shipment_Facts_Event
 		}
 
 		/**
-		 * The carrier's cost: a change is a different amount; a currency alone moving is recorded silently.
+		 * The carrier's cost, component by component: a change is a different amount; a currency alone moving is
+		 * recorded silently. Every component has its own baseline, so one moving never disturbs another.
 		 *
-		 * @param \WC_Order                           $order    Order.
-		 * @param Orders_Provider                     $provider Carrier.
-		 * @param array{amount:float,currency:string} $cost     The reported cost.
-		 * @param array<int,array<string,mixed>>      $events   Events so far; appended to.
+		 * - never recorded (or unreadable) = silent initialisation, a «none» stored as `[]`;
+		 * - recorded «none» then an amount = a change from null;
+		 * - a «none» over a known amount never overwrites it.
+		 *
+		 * @param \WC_Order                                              $order    Order.
+		 * @param Orders_Provider                                        $provider Carrier.
+		 * @param array<string,array{amount:float,currency:string}|null> $costs    The reported components.
+		 * @param array<int,array<string,mixed>>                         $events   Events so far; appended to.
 		 * @return bool Whether the order's meta changed.
 		 */
-		private static function stage_cost( \WC_Order $order, Orders_Provider $provider, array $cost, array &$events ): bool {
+		private static function stage_cost( \WC_Order $order, Orders_Provider $provider, array $costs, array &$events ): bool {
 			$key    = self::meta_key( self::COST_META_PREFIX, $provider );
-			$stored = $order->meta_exists( $key ) ? $order->get_meta( $key, true ) : null;
-			$write  = [
-				'amount'   => number_format( $cost['amount'], 2, '.', '' ),
-				'currency' => $cost['currency'],
-			];
+			$stored = self::stored_costs( $order, $key );
+			$next   = $stored;
 
-			if ( ! is_array( $stored ) || ! isset( $stored['amount'] ) || ! is_numeric( $stored['amount'] ) ) {
-				// Never recorded (or unreadable): this is the initial value, not a change.
-				$order->update_meta_data( $key, $write );
+			foreach ( $costs as $component => $cost ) {
+				$component = (string) $component;
 
-				return true;
+				if ( ! array_key_exists( $component, $stored ) ) {
+					// Never recorded: this is the initial value (or the initial «none»), not a change.
+					$next[ $component ] = null === $cost ? [] : self::cost_record( $cost );
+
+					continue;
+				}
+
+				if ( null === $cost ) {
+					continue;
+				}
+
+				$known = $stored[ $component ];
+				$old   = isset( $known['amount'] ) && is_numeric( $known['amount'] ) ? round( (float) $known['amount'], 2 ) : null;
+
+				if ( null === $old || abs( $old - $cost['amount'] ) >= 0.005 ) {
+					$events[] = [
+						'kind'      => 'cost',
+						'component' => $component,
+						'old'       => $old,
+						'new'       => $cost['amount'],
+						'currency'  => $cost['currency'],
+					];
+				} elseif ( ( $known['currency'] ?? '' ) === $cost['currency'] ) {
+					continue;
+				}
+
+				$next[ $component ] = self::cost_record( $cost );
 			}
 
-			$old = round( (float) $stored['amount'], 2 );
-
-			if ( abs( $old - $cost['amount'] ) >= 0.005 ) {
-				$events[] = [
-					'kind'     => 'cost',
-					'old'      => $old,
-					'new'      => $cost['amount'],
-					'currency' => $cost['currency'],
-				];
-			} elseif ( ( $stored['currency'] ?? '' ) === $cost['currency'] ) {
+			if ( $next === $stored ) {
 				return false;
 			}
 
-			$order->update_meta_data( $key, $write );
+			$order->update_meta_data( $key, $next );
 
 			return true;
+		}
+
+		/**
+		 * The cost baselines stored for a carrier, by component.
+		 *
+		 * @param \WC_Order $order Order.
+		 * @param string    $key   Cost meta key.
+		 * @return array<string,array<string,mixed>> Empty when the order has none or it is unreadable.
+		 */
+		private static function stored_costs( \WC_Order $order, string $key ): array {
+			$stored = $order->meta_exists( $key ) ? $order->get_meta( $key, true ) : [];
+
+			if ( ! is_array( $stored ) ) {
+				return [];
+			}
+
+			// The single-figure shape written before components existed: it was the delivery cost.
+			if ( isset( $stored['amount'] ) ) {
+				return [ Shipment_Facts::COST_DELIVERY => $stored ];
+			}
+
+			return array_filter( $stored, 'is_array' );
+		}
+
+		/**
+		 * A cost as it is stored.
+		 *
+		 * @param array{amount:float,currency:string} $cost Cost.
+		 * @return array{amount:string,currency:string}
+		 */
+		private static function cost_record( array $cost ): array {
+			return [
+				'amount'   => number_format( $cost['amount'], 2, '.', '' ),
+				'currency' => $cost['currency'],
+			];
 		}
 
 		/**
@@ -429,7 +561,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Shipment_Facts_Event
 		}
 
 		/**
-		 * Remembers the latest issue and cost change for the row flag, unless the merchant switched that off.
+		 * Remembers the latest issue and cost change for the row flag, unless the merchant switched that off. A change of
+		 * ANY cost component raises the cost attention.
 		 *
 		 * @param \WC_Order                      $order    Order.
 		 * @param Orders_Provider                $provider Carrier.
@@ -468,9 +601,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Shipment_Facts_Event
 					];
 				} else {
 					$attention['cost'] = [
-						'from'     => $event['old'],
-						'to'       => $event['new'],
-						'currency' => $event['currency'],
+						'from'      => $event['old'],
+						'to'        => $event['new'],
+						'currency'  => $event['currency'],
+						'component' => $event['component'],
 					];
 				}
 
@@ -505,12 +639,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Shipment_Facts_Event
 						 *
 						 * @since 2.0.2
 						 * @param \WC_Order       $order    Shipment order.
-						 * @param float           $old      Previous figure.
-						 * @param float           $new      The carrier's current figure. Whose cost it is (contract or recipient) is the carrier's business.
-						 * @param string          $currency ISO currency code.
-						 * @param Orders_Provider $provider Carrier descriptor; `$provider->get_id()` tells carriers apart.
+						 * @param float|null      $old       Previous figure of this component; null when the carrier had reported none.
+						 * @param float           $new       The carrier's current figure. Whose cost it is (contract or recipient) is the carrier's business.
+						 * @param string          $currency  ISO currency code.
+						 * @param Orders_Provider $provider  Carrier descriptor; `$provider->get_id()` tells carriers apart.
+						 * @param string          $component Which figure moved: `delivery`, `total`, … ({@see Shipment_Facts::with_cost()}); each is compared on its own.
 						 */
-						do_action( 'woodev_shipping_carrier_cost_changed', $order, (float) $event['old'], (float) $event['new'], (string) $event['currency'], $provider );
+						do_action( 'woodev_shipping_carrier_cost_changed', $order, null === $event['old'] ? null : (float) $event['old'], (float) $event['new'], (string) $event['currency'], $provider, (string) $event['component'] );
 						break;
 
 					case 'date':
@@ -603,14 +738,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Shipment_Facts_Event
 
 			switch ( $event['kind'] ) {
 				case 'cost':
-					return sprintf(
-						/* translators: 1: carrier name, 2: previous delivery cost, 3: new delivery cost, 4: currency sign. */
-						__( '%1$s изменил стоимость доставки: %2$s → %3$s %4$s. Это данные перевозчика: чья это стоимость — по договору или для получателя — он может не уточнять. Сумма заказа и доставка в магазине не менялись.', 'woodev-plugin-framework' ),
-						$carrier,
-						self::format_money( (float) $event['old'] ),
-						self::format_money( (float) $event['new'] ),
-						self::format_currency( (string) $event['currency'] )
-					);
+					return self::cost_note( $carrier, $event );
 
 				case 'date':
 					return self::date_note( $carrier, $event );
@@ -631,6 +759,39 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Shipment_Facts_Event
 						self::courier_details( $event['courier'] )
 					);
 			}
+		}
+
+		/**
+		 * The cost note of one component: its change, or its first figure after the carrier reported none.
+		 *
+		 * @param string              $carrier Carrier name.
+		 * @param array<string,mixed> $event   Cost event.
+		 * @return string
+		 */
+		private static function cost_note( string $carrier, array $event ): string {
+			$label    = self::cost_label( (string) $event['component'] );
+			$currency = self::format_currency( (string) $event['currency'] );
+
+			if ( null === $event['old'] ) {
+				return sprintf(
+					/* translators: 1: carrier name, 2: the cost component («стоимость доставки»), 3: the figure, 4: currency sign. */
+					__( '%1$s: указана %2$s — %3$s %4$s. Это данные перевозчика: чья это стоимость — по договору или для получателя — он может не уточнять. Сумма заказа и доставка в магазине не менялись.', 'woodev-plugin-framework' ),
+					$carrier,
+					$label,
+					self::format_money( (float) $event['new'] ),
+					$currency
+				);
+			}
+
+			return sprintf(
+				/* translators: 1: carrier name, 2: the cost component («стоимость доставки»), 3: previous figure, 4: new figure, 5: currency sign. */
+				__( '%1$s: %2$s изменилась — %3$s → %4$s %5$s. Это данные перевозчика: чья это стоимость — по договору или для получателя — он может не уточнять. Сумма заказа и доставка в магазине не менялись.', 'woodev-plugin-framework' ),
+				$carrier,
+				$label,
+				self::format_money( (float) $event['old'] ),
+				self::format_money( (float) $event['new'] ),
+				$currency
+			);
 		}
 
 		/**
