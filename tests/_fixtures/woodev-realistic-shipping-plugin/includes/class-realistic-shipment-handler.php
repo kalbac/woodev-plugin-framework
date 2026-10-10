@@ -175,5 +175,37 @@ if ( ! class_exists( 'Woodev_Realistic_Shipment_Handler' ) ) {
 
 			return (string) $response->get( 'order_id' );
 		}
+
+		/**
+		 * #1204: like a real carrier that deletes an order only before it moves, this fixture declares the states
+		 * the parcel is «handed to delivery» in — the background cancel of such an order sends no request.
+		 *
+		 * @inheritDoc
+		 */
+		public function get_handed_over_statuses(): array {
+			return [
+				\Woodev\Framework\Shipping\Order\Delivery_Status::IN_TRANSIT,
+				\Woodev\Framework\Shipping\Order\Delivery_Status::READY_FOR_PICKUP,
+				\Woodev\Framework\Shipping\Order\Delivery_Status::RETURNING,
+			];
+		}
+
+		/** @inheritDoc */
+		public function supports_refusal(): bool {
+			return true;
+		}
+
+		/**
+		 * Offline refusal: the parcel is simply recorded as returned (raw `RETURNED`), so the rig shows the whole
+		 * path — the button, the paid-return confirmation, the order note and the status change.
+		 *
+		 * @inheritDoc
+		 */
+		public function refuse( \WC_Order $order ): \Woodev\Framework\Shipping\Order\Action_Result {
+			\Woodev_Order_Compatibility::update_order_meta( $order, '_woodev_realistic_status', 'RETURNED' );
+			$order->save();
+
+			return \Woodev\Framework\Shipping\Order\Action_Result::success();
+		}
 	}
 }

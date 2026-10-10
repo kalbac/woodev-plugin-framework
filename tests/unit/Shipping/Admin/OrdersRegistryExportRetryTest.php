@@ -73,6 +73,12 @@ final class OrdersRegistryExportRetryTest extends TestCase {
 	private function register_handler(): Abstract_Shipment_Handler {
 		$handler = Mockery::mock( Abstract_Shipment_Handler::class );
 		$handler->shouldReceive( 'supports_update' )->andReturn( false );
+		// #1204: a carrier that declares nothing keeps today's behaviour.
+		$handler->shouldReceive( 'supports_refusal' )->andReturn( false )->byDefault();
+		$handler->shouldReceive( 'get_handed_over_statuses' )->andReturn( [] )->byDefault();
+		$handler->shouldReceive( 'get_refusable_statuses' )->andReturn( [] )->byDefault();
+		$handler->shouldReceive( 'is_handed_over' )->andReturn( false )->byDefault();
+		$handler->shouldReceive( 'is_refusable' )->andReturn( false )->byDefault();
 
 		Orders_Registry::instance()->register_shipment_handler( 'cdek', $handler );
 

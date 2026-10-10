@@ -125,6 +125,18 @@ describe( 'order-metabox-actions', () => {
 		expect( fields( submitSpy.mock.instances[ 0 ] ).woodev_shipping_order_action ).toBe( 'cancel' );
 	} );
 
+	it( 'posts the merchant\'s yes (#1204) with a confirmed destructive action', () => {
+		renderScreen( { destructive: true } ).click();
+
+		expect( fields( submitSpy.mock.instances[ 0 ] ).confirmed ).toBe( '1' );
+	} );
+
+	it( 'posts no confirmation for an action that asked nothing', () => {
+		renderScreen().click();
+
+		expect( fields( submitSpy.mock.instances[ 0 ] ) ).not.toHaveProperty( 'confirmed' );
+	} );
+
 	it( 'submits nothing when the merchant cancels the confirm', () => {
 		confirmSpy.mockReturnValue( false );
 

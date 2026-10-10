@@ -78,6 +78,7 @@ final class OrderAutomationTest extends TestCase {
 		Functions\stubs( [ 'remove_action', 'add_filter', 'remove_filter', 'wp_cache_delete' ] );
 		Functions\when( 'apply_filters' )->returnArg( 2 );
 		Functions\when( 'wc_is_order_status' )->alias( static fn( string $status ) => in_array( $status, [ 'wc-cancelled', 'wc-on-hold', 'wc-processing' ], true ) );
+		Functions\when( 'wp_strip_all_tags' )->alias( static fn( $text ) => strip_tags( (string) $text ) );
 		Functions\when( 'absint' )->alias( static fn( $value ) => abs( (int) $value ) );
 		Functions\when( 'wc_string_to_bool' )->alias( static fn( $value ) => in_array( strtolower( (string) $value ), [ 'yes', 'true', '1' ], true ) );
 		// The carrier's «Выгрузка» settings are real `Export_Settings` over the options table, so the read
@@ -153,6 +154,12 @@ final class OrderAutomationTest extends TestCase {
 	private function register_handler(): Abstract_Shipment_Handler {
 		$handler = Mockery::mock( Abstract_Shipment_Handler::class );
 		$handler->shouldReceive( 'supports_update' )->andReturn( false );
+		// #1204: a carrier that declares nothing keeps today's behaviour; a test overrides these (`byDefault`).
+		$handler->shouldReceive( 'get_handed_over_statuses' )->andReturn( [] )->byDefault();
+		$handler->shouldReceive( 'supports_refusal' )->andReturn( false )->byDefault();
+		$handler->shouldReceive( 'get_refusable_statuses' )->andReturn( [] )->byDefault();
+		$handler->shouldReceive( 'is_handed_over' )->andReturn( false )->byDefault();
+		$handler->shouldReceive( 'is_refusable' )->andReturn( false )->byDefault();
 
 		Orders_Registry::instance()->register_shipment_handler( 'cdek', $handler );
 
@@ -598,6 +605,144 @@ final class OrderAutomationTest extends TestCase {
 			sprintf( 'Отменить заявку у перевозчика нельзя (статус «%s») — свяжитесь с перевозчиком', Delivery_Status::label( Delivery_Status::DELIVERED ) )
 		);
 		$order->shouldNotReceive( 'update_meta_data' );
+
+		Orders_Registry::instance()->run_cancel_at_carrier( 123 );
+
+		$this->addToAssertionCount( 1 );
+	}
+
+	// ----- #1204: a parcel already on its way is not asked to cancel -----
+
+	/** @return array<string,mixed> provider options whose raw status `ON_WAY` is the canonical in-transit state. */
+	private function in_transit_carrier_options(): array {
+		return [
+			'status_meta_key' => '_cdek_status',
+			'status_map'      => [
+				'ON_WAY' => Delivery_Status::IN_TRANSIT,
+				'NEW'    => Delivery_Status::CREATED,
+			],
+		];
+	}
+
+	public function test_a_parcel_already_in_transit_gets_no_cancel_request_and_a_note_pointing_to_the_refusal(): void {
+		$this->register_carrier( $this->in_transit_carrier_options() );
+		$handler = $this->register_handler();
+		$handler->shouldReceive( 'get_handed_over_statuses' )->andReturn( [ Delivery_Status::IN_TRANSIT ] );
+		$handler->shouldReceive( 'is_handed_over' )->andReturnUsing( static fn( $o, $c ) => in_array( $c, [ Delivery_Status::IN_TRANSIT ], true ) );
+		$handler->shouldReceive( 'supports_refusal' )->andReturn( true );
+		$handler->shouldReceive( 'get_refusable_statuses' )->andReturn( [ Delivery_Status::IN_TRANSIT ] );
+		$handler->shouldReceive( 'is_refusable' )->andReturnUsing( static fn( $o, $c ) => in_array( $c, [ Delivery_Status::IN_TRANSIT ], true ) );
+		$this->meta['_cdek_carrier_order_id'] = 'CARRIER-1';
+		$this->meta['_cdek_status']           = 'ON_WAY';
+		$order                                = $this->order( 'cancelled' );
+
+		$handler->shouldNotReceive( 'cancel_under_lock' );
+		$handler->shouldNotReceive( 'cancel' );
+		$handler->shouldNotReceive( 'refuse' ); // the refusal is paid: only ever a person's click.
+		$order->shouldReceive( 'update_meta_data' )->once()->with( Carrier_Cancel::FAILED_META, 'CARRIER-1' );
+		$order->shouldReceive( 'save_meta_data' )->once();
+		$order->shouldReceive( 'add_order_note' )->once()->with( 'Посылка уже в пути, удалить её у перевозчика нельзя. Можно оформить отказ (возврат) — кнопка «Оформить отказ» в заказе.' );
+
+		Orders_Registry::instance()->run_cancel_at_carrier( 123 );
+
+		$this->addToAssertionCount( 1 );
+	}
+
+	public function test_a_parcel_in_transit_at_a_carrier_without_a_refusal_does_not_promise_the_button(): void {
+		$this->register_carrier( $this->in_transit_carrier_options() );
+		$handler = $this->register_handler();
+		$handler->shouldReceive( 'get_handed_over_statuses' )->andReturn( [ Delivery_Status::IN_TRANSIT ] );
+		$handler->shouldReceive( 'is_handed_over' )->andReturnUsing( static fn( $o, $c ) => in_array( $c, [ Delivery_Status::IN_TRANSIT ], true ) );
+		$this->meta['_cdek_carrier_order_id'] = 'CARRIER-1';
+		$this->meta['_cdek_status']           = 'ON_WAY';
+		$order                                = $this->order( 'cancelled' );
+
+		$handler->shouldNotReceive( 'cancel_under_lock' );
+		$order->shouldReceive( 'update_meta_data' )->once();
+		$order->shouldReceive( 'save_meta_data' )->once();
+		$order->shouldReceive( 'add_order_note' )->once()->with( 'Посылка уже в пути, удалить её у перевозчика нельзя. Свяжитесь с перевозчиком.' );
+
+		Orders_Registry::instance()->run_cancel_at_carrier( 123 );
+
+		$this->addToAssertionCount( 1 );
+	}
+
+	public function test_a_carrier_that_reads_the_order_skips_the_request_for_a_canonical_created_parcel_it_calls_handed_over(): void {
+		$this->register_carrier( $this->in_transit_carrier_options() );
+		$handler = $this->register_handler();
+		// The canonical list names nothing; the carrier's own order-aware decision says «handed over» for a `created` order.
+		$handler->shouldReceive( 'is_handed_over' )->andReturnUsing( static fn( $o, $c ) => Delivery_Status::CREATED === $c );
+		$handler->shouldReceive( 'supports_refusal' )->andReturn( true );
+		$handler->shouldReceive( 'is_refusable' )->andReturnUsing( static fn( $o, $c ) => Delivery_Status::CREATED === $c );
+		$this->meta['_cdek_carrier_order_id'] = 'CARRIER-1';
+		$this->meta['_cdek_status']           = 'NEW';
+		$order                                = $this->order( 'cancelled' );
+
+		$handler->shouldNotReceive( 'cancel_under_lock' );
+		$handler->shouldNotReceive( 'refuse' );
+		$order->shouldReceive( 'update_meta_data' )->once()->with( Carrier_Cancel::FAILED_META, 'CARRIER-1' );
+		$order->shouldReceive( 'save_meta_data' )->once();
+		$order->shouldReceive( 'add_order_note' )->once()->with( 'Посылка уже в пути, удалить её у перевозчика нельзя. Можно оформить отказ (возврат) — кнопка «Оформить отказ» в заказе.' );
+
+		Orders_Registry::instance()->run_cancel_at_carrier( 123 );
+
+		$this->addToAssertionCount( 1 );
+	}
+
+	public function test_a_shipment_not_yet_handed_over_is_still_cancelled_at_the_carrier(): void {
+		$this->register_carrier( $this->in_transit_carrier_options() );
+		$handler = $this->register_handler();
+		$handler->shouldReceive( 'get_handed_over_statuses' )->andReturn( [ Delivery_Status::IN_TRANSIT ] );
+		$handler->shouldReceive( 'is_handed_over' )->andReturnUsing( static fn( $o, $c ) => in_array( $c, [ Delivery_Status::IN_TRANSIT ], true ) );
+		$this->meta['_cdek_carrier_order_id'] = 'CARRIER-1';
+		$this->meta['_cdek_status']           = 'NEW';
+		$order                                = $this->order( 'cancelled' );
+
+		$handler->shouldReceive( 'cancel_under_lock' )->once()->with( $order )->andReturn( Action_Result::success() );
+		$order->shouldReceive( 'read_meta_data' );
+		$order->shouldReceive( 'add_order_note' )->once()->with( 'Заявка отменена у перевозчика' );
+
+		Orders_Registry::instance()->run_cancel_at_carrier( 123 );
+
+		$this->addToAssertionCount( 1 );
+	}
+
+	public function test_a_carrier_that_declares_nothing_is_asked_to_cancel_an_in_transit_parcel_as_before(): void {
+		$this->register_carrier( $this->in_transit_carrier_options() );
+		$handler = $this->register_handler(); // get_handed_over_statuses() => [] by default.
+		$this->meta['_cdek_carrier_order_id'] = 'CARRIER-1';
+		$this->meta['_cdek_status']           = 'ON_WAY';
+		$order                                = $this->order( 'cancelled' );
+
+		$handler->shouldReceive( 'cancel_under_lock' )->once()->with( $order )->andReturn( Action_Result::failure( 'Заказ уже передан курьеру' ) );
+		$order->shouldReceive( 'read_meta_data' );
+		$order->shouldReceive( 'update_meta_data' )->once()->with( Carrier_Cancel::FAILED_META, 'CARRIER-1' );
+		$order->shouldReceive( 'save_meta_data' )->once();
+		$order->shouldReceive( 'add_order_note' )->once()->with( 'Не удалось отменить заявку у перевозчика: Заказ уже передан курьеру' );
+
+		Orders_Registry::instance()->run_cancel_at_carrier( 123 );
+
+		$this->addToAssertionCount( 1 );
+	}
+
+	public function test_an_end_state_named_as_handed_over_is_still_the_delivered_note(): void {
+		$this->register_carrier(
+			[
+				'status_meta_key' => '_cdek_status',
+				'status_map'      => [ 'DELIVERED' => Delivery_Status::DELIVERED ],
+			]
+		);
+		$handler = $this->register_handler();
+		$handler->shouldReceive( 'get_handed_over_statuses' )->andReturn( [ Delivery_Status::DELIVERED ] );
+		$handler->shouldReceive( 'is_handed_over' )->andReturnUsing( static fn( $o, $c ) => in_array( $c, [ Delivery_Status::DELIVERED ], true ) );
+		$this->meta['_cdek_carrier_order_id'] = 'CARRIER-1';
+		$this->meta['_cdek_status']           = 'DELIVERED';
+		$order                                = $this->order( 'cancelled' );
+
+		$handler->shouldNotReceive( 'cancel_under_lock' );
+		$order->shouldReceive( 'add_order_note' )->once()->with(
+			sprintf( 'Отменить заявку у перевозчика нельзя (статус «%s») — свяжитесь с перевозчиком', Delivery_Status::label( Delivery_Status::DELIVERED ) )
+		);
 
 		Orders_Registry::instance()->run_cancel_at_carrier( 123 );
 

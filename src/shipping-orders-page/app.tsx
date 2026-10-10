@@ -208,7 +208,15 @@ const TYPE_LABELS: Record<string, string> = {
  * dressed up as a real state (it already carries its own canonical_label
  * from the server, so no special-casing is needed here).
  */
-export function StatusCell( { deliveryStatus, cancelFailed = false }: { deliveryStatus: OrderRowDeliveryStatus; cancelFailed?: boolean } ) {
+export function StatusCell( {
+	deliveryStatus,
+	cancelFailed = false,
+	refusalRequested = false,
+}: {
+	deliveryStatus: OrderRowDeliveryStatus;
+	cancelFailed?: boolean;
+	refusalRequested?: boolean;
+} ) {
 	const tone = getStatusTone( deliveryStatus.canonical );
 	const badge = (
 		<span className={ `woodev-orders-status woodev-orders-status--${ tone }` }>
@@ -222,6 +230,20 @@ export function StatusCell( { deliveryStatus, cancelFailed = false }: { delivery
 	// tooltip at all when there is nothing to say, per the card: an empty
 	// `raw_label` renders no `Tooltip`, never an empty one.
 	const status = deliveryStatus.raw_label ? <Tooltip text={ deliveryStatus.raw_label }>{ badge }</Tooltip> : badge;
+
+	// #1204: the carrier accepted the refusal — the parcel is coming back. Said under the status, not offered again.
+	if ( refusalRequested ) {
+		return (
+			<>
+				{ status }
+				<span className="woodev-orders-cell__meta">
+					<span className="woodev-orders-badge">
+						{ __( 'Отказ оформлен, ждём возврата', 'woodev-plugin-framework' ) }
+					</span>
+				</span>
+			</>
+		);
+	}
 
 	if ( ! cancelFailed ) {
 		return status;
@@ -1309,7 +1331,7 @@ function buildRow( row: OrderRow, actions: OrderActionsCallbacks ): WcTableRowCe
 			value: row.id,
 		},
 		{ display: <span title={ date.title }>{ date.text }</span>, value: row.date_created || '' },
-		{ display: <StatusCell deliveryStatus={ row.delivery_status } cancelFailed={ true === row.cancel_failed } />, value: row.delivery_status.canonical },
+		{ display: <StatusCell deliveryStatus={ row.delivery_status } cancelFailed={ true === row.cancel_failed } refusalRequested={ true === row.refusal_requested } />, value: row.delivery_status.canonical },
 		{ display: <CustomerCell customer={ row.customer } />, value: row.customer.name },
 		{ display: <ShippingCell row={ row } />, value: row.shipping.destination_text },
 		{ display: <PaymentCell payment={ row.payment } />, value: row.payment.formatted_total },
@@ -2188,7 +2210,7 @@ export default function OrdersPage() {
 			current && current.row.id === row.id && current.action.action === action.action ? null : current
 		);
 
-	const performAction = ( row: ActionableOrder, action: OrderRowAction, payload?: OrderActionPayload ) => {
+	const performAction = ( row: ActionableOrder, action: OrderRowAction, payload?: OrderActionPayload, confirmed = false ) => {
 		if ( 'waybill' === action.action || 'barcode' === action.action ) {
 			downloadDocument( row, action.action );
 			return;
@@ -2206,6 +2228,8 @@ export default function OrdersPage() {
 
 		( payload
 			? performOrderAction( row.id, action.action, payload )
+			: confirmed
+			? performOrderAction( row.id, action.action, undefined, true )
 			: performOrderAction( row.id, action.action ) )
 			.then( ( res ) => {
 				// #1180: the dialog of an action with fields closes with the action — THIS action's dialog only.
@@ -2404,7 +2428,8 @@ export default function OrdersPage() {
 			return;
 		}
 
-		performAction( row, action );
+		// #1204: reaching here for a destructive action means the merchant said «Да» — the server requires it for a paid one.
+		performAction( row, action, undefined, true === action.destructive );
 	};
 
 	/** «Нет» on the inline confirm — drops the row back to its normal, un-confirming state. */

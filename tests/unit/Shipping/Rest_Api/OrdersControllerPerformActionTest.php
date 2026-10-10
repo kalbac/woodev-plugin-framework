@@ -94,6 +94,12 @@ final class OrdersControllerPerformActionTest extends TestCase {
 	private function register_handler( bool $supports_update = false ): Abstract_Shipment_Handler {
 		$handler = Mockery::mock( Abstract_Shipment_Handler::class );
 		$handler->shouldReceive( 'supports_update' )->andReturn( $supports_update );
+		// #1204: a carrier that declares nothing keeps today's behaviour.
+		$handler->shouldReceive( 'supports_refusal' )->andReturn( false )->byDefault();
+		$handler->shouldReceive( 'get_handed_over_statuses' )->andReturn( [] )->byDefault();
+		$handler->shouldReceive( 'get_refusable_statuses' )->andReturn( [] )->byDefault();
+		$handler->shouldReceive( 'is_handed_over' )->andReturn( false )->byDefault();
+		$handler->shouldReceive( 'is_refusable' )->andReturn( false )->byDefault();
 
 		Orders_Registry::instance()->register_shipment_handler( 'cdek', $handler );
 
@@ -150,12 +156,12 @@ final class OrdersControllerPerformActionTest extends TestCase {
 		return $order;
 	}
 
-	private function request( int $id, string $action, ?array $payload = null ): \WP_REST_Request {
+	private function request( int $id, string $action, ?array $payload = null, $confirmed = null ): \WP_REST_Request {
 		return new \WP_REST_Request(
 			[
 				'id'     => $id,
 				'action' => $action,
-			] + ( null !== $payload ? [ 'payload' => $payload ] : [] )
+			] + ( null !== $payload ? [ 'payload' => $payload ] : [] ) + ( null !== $confirmed ? [ 'confirmed' => $confirmed ] : [] )
 		);
 	}
 
@@ -274,6 +280,136 @@ final class OrdersControllerPerformActionTest extends TestCase {
 
 		$this->assertIsArray( $result );
 		$this->assertTrue( $result['row']['is_exported'] );
+	}
+
+	// ----- #1204: «Оформить отказ» -----
+
+	/** A provider whose raw `ON_WAY` is the canonical in-transit state, and a handler that can refuse from it. */
+	private function refusing_carrier( string $raw_status ): Abstract_Shipment_Handler {
+		$this->meta['_cdek_carrier_order_id'] = 'CARRIER-1';
+		$this->meta['_cdek_status']           = $raw_status;
+		$this->register_provider(
+			[
+				'carrier_order_id_meta_key' => '_cdek_carrier_order_id',
+				'status_meta_key'           => '_cdek_status',
+				'status_map'                => [
+					'ON_WAY' => \Woodev\Framework\Shipping\Order\Delivery_Status::IN_TRANSIT,
+					'NEW'    => \Woodev\Framework\Shipping\Order\Delivery_Status::CREATED,
+				],
+			]
+		);
+		$handler = $this->register_handler();
+		$handler->shouldReceive( 'supports_refusal' )->andReturn( true );
+		$handler->shouldReceive( 'get_refusable_statuses' )->andReturn( [ \Woodev\Framework\Shipping\Order\Delivery_Status::IN_TRANSIT ] );
+		$handler->shouldReceive( 'is_refusable' )->andReturnUsing( static fn( $o, $c ) => in_array( $c, [ \Woodev\Framework\Shipping\Order\Delivery_Status::IN_TRANSIT ], true ) );
+
+		return $handler;
+	}
+
+	public function test_a_refusal_is_performed_noted_and_confirmed_to_the_merchant(): void {
+		$handler = $this->refusing_carrier( 'ON_WAY' );
+		$handler->shouldReceive( 'refuse' )->once()->andReturn( Action_Result::success() );
+		$order = $this->order( 'processing' );
+		$order->shouldReceive( 'get_meta' )->andReturn( '' );
+		$order->shouldReceive( 'update_meta_data' )->twice();
+		$order->shouldReceive( 'save_meta_data' )->once();
+		$order->shouldReceive( 'add_order_note' )->once()->with( 'Оформлен отказ от посылки: она вернётся к вам, возврат платный' );
+
+		$result = $this->controller()->perform_action( $this->request( 123, Order_Actions::REFUSE, null, true ) );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'Отказ от посылки оформлен.', $result['message'] );
+	}
+
+	public function test_an_unconfirmed_refusal_is_a_400_and_the_carrier_is_not_called(): void {
+		$handler = $this->refusing_carrier( 'ON_WAY' );
+		$handler->shouldNotReceive( 'refuse' );
+		$order = $this->order( 'processing' );
+		$order->shouldNotReceive( 'add_order_note' );
+
+		foreach ( [ null, false, '', '0', 0 ] as $unconfirmed ) {
+			$result = $this->controller()->perform_action( $this->request( 123, Order_Actions::REFUSE, null, $unconfirmed ) );
+
+			$this->assertInstanceOf( \WP_Error::class, $result );
+			$this->assertSame( 'woodev_shipping_orders_confirmation_required', $result->get_error_code() );
+			$this->assertSame( 400, $result->get_error_data()['status'] );
+			$this->assertSame( 'Подтвердите отказ: возврат платный.', $result->get_error_message() );
+		}
+	}
+
+	public function test_a_refusal_confirmed_the_way_the_orders_page_sends_it_reaches_the_carrier_once(): void {
+		$handler = $this->refusing_carrier( 'ON_WAY' );
+		$handler->shouldReceive( 'refuse' )->once()->andReturn( Action_Result::success() );
+		$order = $this->order( 'processing' );
+		$order->shouldReceive( 'get_meta' )->andReturn( '' );
+		$order->shouldReceive( 'update_meta_data' )->twice();
+		$order->shouldReceive( 'save_meta_data' )->once();
+		$order->shouldReceive( 'add_order_note' )->once();
+
+		// A JSON body carries a real boolean; the metabox's form post carries '1'.
+		$this->assertIsArray( $this->controller()->perform_action( $this->request( 123, Order_Actions::REFUSE, null, true ) ) );
+	}
+
+	public function test_a_retry_of_an_accepted_refusal_is_stopped_even_while_the_stored_status_is_stale(): void {
+		$carrier_calls = 0;
+		$notes         = [];
+		$handler       = $this->refusing_carrier( 'ON_WAY' );
+		// The carrier accepts but leaves its stored status as it was — the next webhook has not arrived.
+		$handler->shouldReceive( 'refuse' )->andReturnUsing(
+			static function () use ( &$carrier_calls ) {
+				++$carrier_calls;
+
+				return Action_Result::success();
+			}
+		);
+		$order = $this->order( 'processing' );
+		$order->shouldReceive( 'get_meta' )->andReturn( '' );
+		$order->shouldReceive( 'update_meta_data' )->andReturnUsing(
+			function ( $key, $value ) {
+				$this->meta[ $key ] = $value;
+			}
+		);
+		$order->shouldReceive( 'save_meta_data' );
+		$order->shouldReceive( 'add_order_note' )->andReturnUsing(
+			static function ( $note ) use ( &$notes ) {
+				$notes[] = $note;
+			}
+		);
+
+		$first  = $this->controller()->perform_action( $this->request( 123, Order_Actions::REFUSE, null, true ) );
+		$second = $this->controller()->perform_action( $this->request( 123, Order_Actions::REFUSE, null, true ) );
+
+		$this->assertIsArray( $first );
+		$this->assertInstanceOf( \WP_Error::class, $second );
+		$this->assertSame( 'woodev_shipping_orders_action_not_available', $second->get_error_code() );
+		$this->assertStringContainsString( 'уже оформлен', $second->get_error_message() );
+		$this->assertSame( 1, $carrier_calls );
+		$this->assertSame( [ 'Оформлен отказ от посылки: она вернётся к вам, возврат платный' ], $notes );
+	}
+
+	public function test_a_refused_refusal_is_a_502_with_the_carriers_reason_and_a_note(): void {
+		$handler = $this->refusing_carrier( 'ON_WAY' );
+		$handler->shouldReceive( 'refuse' )->once()->andReturn( Action_Result::failure( 'Заказ уже вручён' ) );
+		$order = $this->order( 'processing' );
+		$order->shouldReceive( 'add_order_note' )->once()->with( 'Не удалось оформить отказ от посылки: Заказ уже вручён' );
+
+		$result = $this->controller()->perform_action( $this->request( 123, Order_Actions::REFUSE, null, true ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 502, $result->get_error_data()['status'] );
+		$this->assertSame( 'СДЭК: Заказ уже вручён', $result->get_error_message() );
+	}
+
+	public function test_a_refusal_is_refused_for_a_shipment_that_is_not_in_a_refusable_state(): void {
+		$handler = $this->refusing_carrier( 'NEW' );
+		$handler->shouldNotReceive( 'refuse' );
+		$this->order( 'processing' );
+
+		$result = $this->controller()->perform_action( $this->request( 123, Order_Actions::REFUSE ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'woodev_shipping_orders_action_not_available', $result->get_error_code() );
+		$this->assertSame( 400, $result->get_error_data()['status'] );
 	}
 
 	/**

@@ -179,7 +179,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Order_Automation' ) 
 		 *
 		 * The WooCommerce order stays cancelled in every case. The gate is the «Отменить» button's own
 		 * ({@see Order_Actions::can_cancel()}): a shipment already delivered, returned, cancelled or failed
-		 * is not asked to cancel, and the merchant is told to settle it with the carrier.
+		 * is not asked to cancel, and the merchant is told to settle it with the carrier. A parcel already on its way
+		 * ({@see Order_Actions::is_handed_over()}, #1204) is not asked either: the carrier would only refuse, so the
+		 * order gets a note — pointing to «Оформить отказ» when the carrier has it — and the «не отменён у перевозчика»
+		 * marker. The refusal is paid and never performed from here.
 		 *
 		 * @since 2.0.2
 		 *
@@ -219,7 +222,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Order_Automation' ) 
 				return;
 			}
 
-			if ( $exported && ! ( new Order_Actions( $this->registry ) )->can_cancel( $order, $provider ) ) {
+			$order_actions = new Order_Actions( $this->registry );
+
+			// #1204: the parcel is already on its way and the carrier no longer deletes it — a request would only be
+			// refused. Say so, point to the refusal when the carrier has one, and mark the shipment as still alive. The
+			// refusal itself is paid and is the merchant's decision: it is never performed from here.
+			if ( $exported && $order_actions->is_handed_over( $order, $provider ) ) {
+				Carrier_Cancel::forget_deferrals( $order );
+				Carrier_Cancel::mark_failed( $order, self::carrier_order_id( $order, $provider ) );
+				$order->add_order_note(
+					$order_actions->can_refuse( $order, $provider )
+						? __( 'Посылка уже в пути, удалить её у перевозчика нельзя. Можно оформить отказ (возврат) — кнопка «Оформить отказ» в заказе.', 'woodev-plugin-framework' )
+						: __( 'Посылка уже в пути, удалить её у перевозчика нельзя. Свяжитесь с перевозчиком.', 'woodev-plugin-framework' )
+				);
+
+				return;
+			}
+
+			if ( $exported && ! $order_actions->can_cancel( $order, $provider ) ) {
 				Carrier_Cancel::forget_deferrals( $order );
 				$order->add_order_note(
 					sprintf(

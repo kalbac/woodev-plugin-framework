@@ -217,6 +217,72 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 		}
 
 		/**
+		 * #1204: the order-edit screen warns before «Отменён» only for an order whose parcel the carrier says is handed
+		 * to delivery — the flag is computed here, on the server, from the order's own state.
+		 */
+		private function in_transit_provider(): Orders_Provider {
+			return $this->provider(
+				[
+					'status_meta_key' => '_wc_cdek_status',
+					'status_map'      => [
+						'ON_WAY' => \Woodev\Framework\Shipping\Order\Delivery_Status::IN_TRANSIT,
+						'NEW'    => \Woodev\Framework\Shipping\Order\Delivery_Status::CREATED,
+					],
+				]
+			);
+		}
+
+		private function registry_with_handed_over_states( Orders_Provider $provider, array $states ) {
+			$handler = Mockery::mock( Abstract_Shipment_Handler::class );
+			$handler->shouldReceive( 'get_handed_over_statuses' )->andReturn( $states );
+			$handler->shouldReceive( 'is_handed_over' )->andReturnUsing( static fn( $o, $c ) => in_array( $c, $states, true ) );
+
+			$registry = Mockery::mock( Orders_Registry::class );
+			$registry->shouldReceive( 'resolve_provider_for_order' )->andReturn( $provider );
+			$registry->shouldReceive( 'get_shipment_handler' )->andReturn( $handler );
+			$registry->shouldReceive( 'enqueue_metabox_style' );
+			$registry->shouldReceive( 'enqueue_metabox_script' );
+
+			return $registry;
+		}
+
+		public function test_add_meta_box_enqueues_the_in_transit_warning_for_a_parcel_handed_to_delivery(): void {
+			$this->meta['_wc_cdek_order_id'] = 'CARRIER-1';
+			$this->meta['_wc_cdek_status']   = 'ON_WAY';
+
+			$registry = $this->registry_with_handed_over_states( $this->in_transit_provider(), [ \Woodev\Framework\Shipping\Order\Delivery_Status::IN_TRANSIT ] );
+			$registry->shouldReceive( 'enqueue_in_transit_warning' )->once();
+
+			( new Shipping_Admin_Order( $registry ) )->add_meta_box( 'shop_order', $this->make_order() );
+
+			$this->addToAssertionCount( 1 );
+		}
+
+		public function test_add_meta_box_does_not_enqueue_the_warning_for_a_parcel_not_yet_handed_over(): void {
+			$this->meta['_wc_cdek_order_id'] = 'CARRIER-1';
+			$this->meta['_wc_cdek_status']   = 'NEW';
+
+			$registry = $this->registry_with_handed_over_states( $this->in_transit_provider(), [ \Woodev\Framework\Shipping\Order\Delivery_Status::IN_TRANSIT ] );
+			$registry->shouldReceive( 'enqueue_in_transit_warning' )->never();
+
+			( new Shipping_Admin_Order( $registry ) )->add_meta_box( 'shop_order', $this->make_order() );
+
+			$this->addToAssertionCount( 1 );
+		}
+
+		public function test_add_meta_box_does_not_enqueue_the_warning_for_a_carrier_that_declares_nothing(): void {
+			$this->meta['_wc_cdek_order_id'] = 'CARRIER-1';
+			$this->meta['_wc_cdek_status']   = 'ON_WAY';
+
+			$registry = $this->registry_with_handed_over_states( $this->in_transit_provider(), [] );
+			$registry->shouldReceive( 'enqueue_in_transit_warning' )->never();
+
+			( new Shipping_Admin_Order( $registry ) )->add_meta_box( 'shop_order', $this->make_order() );
+
+			$this->addToAssertionCount( 1 );
+		}
+
+		/**
 		 * #947: the box sits in the sidebar's `high` band, right under WooCommerce's «Order actions»
 		 * (`side`/`high`) instead of at the bottom of the `default` band.
 		 */
@@ -885,6 +951,12 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 		private function register_handler( bool $supports_update = false ): Abstract_Shipment_Handler {
 			$handler = Mockery::mock( Abstract_Shipment_Handler::class );
 			$handler->shouldReceive( 'supports_update' )->andReturn( $supports_update );
+			// #1204: a carrier that declares nothing keeps today's behaviour.
+			$handler->shouldReceive( 'supports_refusal' )->andReturn( false )->byDefault();
+			$handler->shouldReceive( 'get_handed_over_statuses' )->andReturn( [] )->byDefault();
+			$handler->shouldReceive( 'get_refusable_statuses' )->andReturn( [] )->byDefault();
+			$handler->shouldReceive( 'is_handed_over' )->andReturn( false )->byDefault();
+			$handler->shouldReceive( 'is_refusable' )->andReturn( false )->byDefault();
 
 			Orders_Registry::instance()->register_shipment_handler( 'cdek', $handler );
 
@@ -895,13 +967,13 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 		 * Invokes the private perform_action() — see the class docblock for why
 		 * this is reflection rather than a call through handle_order_action().
 		 */
-		private function invoke_perform_action( Shipping_Admin_Order $admin_order, Abstract_Shipment_Handler $handler, \WC_Order $order, string $action, Orders_Provider $provider, array $payload = [] ): void {
+		private function invoke_perform_action( Shipping_Admin_Order $admin_order, Abstract_Shipment_Handler $handler, \WC_Order $order, string $action, Orders_Provider $provider, array $payload = [], string $confirmed = '' ): void {
 			$method = new \ReflectionMethod( Shipping_Admin_Order::class, 'perform_action' );
 			if ( PHP_VERSION_ID < 80100 ) {
 				$method->setAccessible( true );
 			}
 
-			$method->invoke( $admin_order, $handler, $order, $action, $provider, $payload );
+			$method->invoke( $admin_order, $handler, $order, $action, $provider, $payload, $confirmed );
 		}
 
 		/**
@@ -920,6 +992,47 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 					return true;
 				}
 			);
+		}
+
+		/** A carrier that refuses from «in transit», with the order in that state (#1204). */
+		private function refusing_setup(): array {
+			$this->meta['_wc_cdek_order_id'] = 'CARRIER-1';
+			$this->meta['_wc_cdek_status']   = 'ON_WAY';
+
+			$provider = $this->in_transit_provider();
+			$handler  = $this->register_handler();
+			$handler->shouldReceive( 'supports_refusal' )->andReturn( true );
+			$handler->shouldReceive( 'get_refusable_statuses' )->andReturn( [ \Woodev\Framework\Shipping\Order\Delivery_Status::IN_TRANSIT ] );
+			$handler->shouldReceive( 'is_refusable' )->andReturnUsing( static fn( $o, $c ) => in_array( $c, [ \Woodev\Framework\Shipping\Order\Delivery_Status::IN_TRANSIT ], true ) );
+
+			$order = $this->make_order( [ 'get_status' => 'processing' ] );
+			$order->shouldReceive( 'get_meta' )->andReturn( '' );
+
+			$this->capture_flashed_notices();
+
+			return [ $provider, $handler, $order ];
+		}
+
+		public function test_perform_action_does_not_refuse_without_the_merchants_confirmation(): void {
+			[ $provider, $handler, $order ] = $this->refusing_setup();
+			$handler->shouldNotReceive( 'refuse' );
+			$order->shouldNotReceive( 'add_order_note' );
+
+			$this->invoke_perform_action( new Shipping_Admin_Order( Orders_Registry::instance() ), $handler, $order, Order_Actions::REFUSE, $provider );
+
+			$this->assertSame( [ 'Подтвердите отказ: возврат платный.' ], $this->flashed_notices );
+		}
+
+		public function test_perform_action_refuses_once_the_metabox_dialog_confirmed_it(): void {
+			[ $provider, $handler, $order ] = $this->refusing_setup();
+			$handler->shouldReceive( 'refuse' )->once()->andReturn( Action_Result::success() );
+			$order->shouldReceive( 'update_meta_data' )->twice();
+			$order->shouldReceive( 'save_meta_data' )->once();
+			$order->shouldReceive( 'add_order_note' )->once();
+
+			$this->invoke_perform_action( new Shipping_Admin_Order( Orders_Registry::instance() ), $handler, $order, Order_Actions::REFUSE, $provider, [], '1' );
+
+			$this->assertSame( [], $this->flashed_notices );
 		}
 
 		public function test_perform_action_refuses_an_action_the_shared_gate_does_not_offer(): void {

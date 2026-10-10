@@ -608,7 +608,8 @@
 
 		event.preventDefault();
 		submitting = true;
-		buildForm( button ).submit();
+		// #1204: a paid action («Оформить отказ») runs only with the merchant's yes — the server checks this flag.
+		buildForm( button, question ? [ [ 'confirmed', '1' ] ] : undefined ).submit();
 	}
 
 	document.addEventListener( 'click', onClick );

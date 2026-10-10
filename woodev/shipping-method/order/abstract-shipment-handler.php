@@ -888,6 +888,121 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		}
 
 		/**
+		 * The canonical delivery states ({@see Delivery_Status}) from which the carrier no longer lets a merchant
+		 * delete or cancel the shipment — the parcel is «handed to delivery» (#1204).
+		 *
+		 * `[]` by default: nothing is declared, so every non-final shipment is cancelled at the carrier as
+		 * before. A carrier that answers «cancel» with a certain refusal once the parcel moved (CDEK deletes an
+		 * order only in the «Создан» state) returns the states it moved to — `Delivery_Status::IN_TRANSIT`,
+		 * `READY_FOR_PICKUP`, `RETURNING`. For such an order the background cancellation of a cancelled
+		 * WooCommerce order sends NO request: it writes an order note that says the parcel is on its way and, when
+		 * the carrier supports it, points to «Оформить отказ» ({@see self::supports_refusal()}). The order screen
+		 * warns before a manager sets such an order to «Отменён» (the status is the manager's call and is never
+		 * blocked).
+		 *
+		 * This is the SIMPLE path, a list of canonical states. A carrier whose canonical state is too coarse to tell a
+		 * deletable shipment from one already refused (CDEK's `created`) overrides {@see self::is_handed_over()} instead —
+		 * it sees the order, and the framework asks only that method.
+		 *
+		 * Answer from this class's own constants — it is read while an order page is drawn, so it must not call the
+		 * carrier. An end state ({@see \Woodev\Framework\Shipping\Admin\Orders\Order_Actions::CANCEL_RETIRED_STATUSES})
+		 * named here is ignored: a delivered or cancelled shipment is not «in transit».
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string[] canonical states, e.g. `[ Delivery_Status::IN_TRANSIT, Delivery_Status::READY_FOR_PICKUP ]`.
+		 */
+		public function get_handed_over_statuses(): array {
+			return [];
+		}
+
+		/**
+		 * Whether THIS order's parcel is «handed to delivery» (#1204): the carrier no longer lets a merchant delete or
+		 * cancel its shipment. The ORDER-aware decision behind the background cancellation and the order-edit warning.
+		 *
+		 * By default the canonical state the framework resolved for the order decides
+		 * ({@see self::get_handed_over_statuses()}). A carrier whose canonical state is too coarse overrides this and
+		 * reads the order's own data — CDEK's `created` covers a deletable «Создан» as well as an order already received
+		 * at the shipment warehouse, which cannot be told apart by the canonical state alone; its raw status meta can.
+		 *
+		 * Called only for an exported order that is not in an end state, and while an order page is drawn: answer from
+		 * the order's stored data, never from the carrier's API.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order     the order.
+		 * @param string    $canonical the order's canonical delivery state ({@see Delivery_Status}) the framework resolved.
+		 * @return bool
+		 */
+		public function is_handed_over( \WC_Order $order, string $canonical ): bool {
+			return in_array( $canonical, $this->get_handed_over_statuses(), true );
+		}
+
+		/**
+		 * Whether «Оформить отказ» may be offered for THIS order (#1204) — the order-aware twin of
+		 * {@see self::get_refusable_statuses()}, with the same default (the canonical state decides) and the same
+		 * reason to override (a raw status the canonical one cannot express). The framework still checks
+		 * {@see self::supports_refusal()}, the end states and its own «refusal already accepted» record first.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order     the order.
+		 * @param string    $canonical the order's canonical delivery state the framework resolved.
+		 * @return bool
+		 */
+		public function is_refusable( \WC_Order $order, string $canonical ): bool {
+			return in_array( $canonical, $this->get_refusable_statuses(), true );
+		}
+
+		/**
+		 * Whether this carrier can REFUSE a shipment that is already on its way (#1204): the recipient «refuses» the
+		 * parcel and it returns to the sender. Usually PAID — the carrier charges the return delivery.
+		 *
+		 * `false` by default. A carrier overriding this to `true` must also override {@see self::refuse()}; until
+		 * it does, «Оформить отказ» is not offered at all rather than offered and dead. The action exists only as
+		 * an explicit button with a confirmation that names the cost — the framework never refuses a shipment by
+		 * itself, whatever happens to the WooCommerce order. Mirrors {@see self::supports_update()}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public function supports_refusal(): bool {
+			return false;
+		}
+
+		/**
+		 * The canonical delivery states ({@see Delivery_Status}) «Оформить отказ» is offered in. By default the
+		 * handed-over states ({@see self::get_handed_over_statuses()}): a shipment still deletable is cancelled,
+		 * not refused. Override only when the carrier refuses in a different set. Read while an order page is
+		 * drawn — answer from constants.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string[] canonical states.
+		 */
+		public function get_refusable_statuses(): array {
+			return $this->get_handed_over_statuses();
+		}
+
+		/**
+		 * Refuses the order's shipment at the carrier: the parcel will be returned to the sender, normally for a
+		 * fee. Called only after the merchant confirmed it in the dialog that says the return is paid.
+		 *
+		 * Inert by default — see {@see self::supports_refusal()}. An overriding carrier does its OWN bookkeeping
+		 * (status refresh, its hooks); the framework writes the order note and clears the «не отменён у
+		 * перевозчика» marker on success ({@see \Woodev\Framework\Shipping\Admin\Orders\Order_Actions::perform()}).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order the order whose shipment is refused.
+		 * @return Action_Result success when the carrier accepted the refusal, a failure carrying its reason otherwise.
+		 */
+		public function refuse( \WC_Order $order ): Action_Result {
+			return Action_Result::failure();
+		}
+
+		/**
 		 * Maps a carrier create-order response to the carrier-assigned order id.
 		 *
 		 * Each carrier returns the id in a different place in its response, so the

@@ -664,6 +664,22 @@ class OrderRowBuilderTest extends TestCase {
 		$this->assertTrue( $row['is_exported'] );
 	}
 
+	// ----- refusal_requested (card #1204) -----
+
+	public function test_refusal_requested_follows_the_shipment_the_refusal_was_accepted_for(): void {
+		$provider = $this->provider( [ 'carrier_order_id_meta_key' => '_wc_edostavka_carrier_order_id' ] );
+
+		$this->meta['_wc_edostavka_carrier_order_id'] = 'CARRIER-1';
+		$this->assertFalse( ( new Order_Row_Builder() )->build( $this->make_order(), $provider )['refusal_requested'] );
+
+		$this->meta[ Carrier_Cancel::REFUSAL_META ] = 'CARRIER-1';
+		$this->assertTrue( ( new Order_Row_Builder() )->build( $this->make_order(), $provider )['refusal_requested'] );
+
+		$this->meta['_wc_edostavka_carrier_order_id'] = 'CARRIER-2'; // exported again.
+		$this->assertFalse( ( new Order_Row_Builder() )->build( $this->make_order(), $provider )['refusal_requested'] );
+		$this->assertFalse( ( new Order_Row_Builder() )->build( $this->make_order(), null )['refusal_requested'] );
+	}
+
 	// ----- cancel_failed (card #1007) -----
 
 	public function test_cancel_failed_is_false_for_an_ordinary_row(): void {

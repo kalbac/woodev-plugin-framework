@@ -478,6 +478,31 @@ Moved here from `CURRENT-STATE.md` in s139: they are reference, true regardless 
   новый вызов»); `Order_Actions::sanitize_actions()` keeps it for a destructive action only. The orders page
   (`confirmQuestion()`) and the metabox (`data-confirm`) ask it; without one they ask their generic question as before.
   The fifth field type, `orders`, is NOT part of a per-order action's vocabulary — see the toolbar bullet.
+- **A parcel «handed to delivery» and «Оформить отказ» (#1204)** — two optional declarations on the carrier's
+  `Abstract_Shipment_Handler`, no registration beyond the handler it already has:
+  `get_handed_over_statuses(): string[]` (canonical `Delivery_Status` states from which the carrier no longer
+  deletes the shipment; default `[]` = today's behaviour) and `supports_refusal(): bool` + `refuse( WC_Order ): Action_Result`
+  (+ optional `get_refusable_statuses()`, defaulting to the handed-over set). `Order_Actions::is_handed_over()` is the
+  one answer (exported, not in `CANCEL_RETIRED_STATUSES`, state declared): `Order_Automation::run_cancel()` sends NO
+  request for such an order and writes a note («Посылка уже в пути…», pointing to the button only when
+  `Order_Actions::can_refuse()`), and the order-edit screen enqueues `order-in-transit-warning.js` (plain script, text
+  and watched status `wc-cancelled` from PHP) so picking «Отменён» shows a non-blocking inline warning. The action
+  `Order_Actions::REFUSE` is `destructive` with a `confirm` that names the paid return, runs only from a click (the
+  bulk route skips it, `run_cancel()` never calls `refuse()`), and `Order_Actions::perform()` writes the order note
+  and clears the «не отменён у перевозчика» marker on success. «Отменить» stays on offer — a manual cancel is the
+  merchant's call.
+  **Two server-side guards on the refusal (round 1):** the request must carry the merchant's explicit yes —
+  `Order_Actions::unconfirmed_reason()` is checked by BOTH entry points (REST `…/actions/refuse` sends `confirmed: true`
+  → else 400 `woodev_shipping_orders_confirmation_required`; the metabox's admin-post form posts `confirmed=1` after its
+  `data-confirm`), and a success is recorded by the framework in order meta `_woodev_shipment_refusal_requested`
+  (value = the carrier order id, plus `…_at` = Unix time; `Carrier_Cancel::mark_refusal_requested()`). While the record
+  matches the stored carrier id the action is no longer offered — a retry with a stale local status cannot reach the
+  carrier twice — and the row carries `refusal_requested` («Отказ оформлен, ждём возврата»). Re-exporting changes the
+  carrier id, so the record lapses by itself; a failure writes nothing, so a retry works. The adapter's `refuse()` keeps
+  no bookkeeping of this. **Order-aware decision:** the framework asks `Abstract_Shipment_Handler::is_handed_over( $order,
+  $canonical )` / `is_refusable( $order, $canonical )` (defaults delegate to the two canonical lists); a carrier whose
+  canonical state is too coarse (CDEK's `created` also covers an order already at the warehouse) overrides them and reads
+  its raw status meta.
 - **Row flags (s164)** — small badges under the tracking number on the orders page and under the details table of the
   order's metabox. A carrier fills them through `woodev_shipping_order_row_flags( array $flags, \WC_Order $order,
   ?Orders_Provider $provider )` (starts `[]`); each flag is `[ 'label' => string, 'tone' => 'ok'|'warn'|'error'|'info'|'muted',
