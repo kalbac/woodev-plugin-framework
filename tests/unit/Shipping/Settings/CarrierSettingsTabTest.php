@@ -208,7 +208,7 @@ final class CarrierSettingsTabTest extends TestCase {
 		$this->assertCount( 1, $tabs );
 		$this->assertSame( 'cdek', $tabs[0]['id'] );
 		$this->assertSame( [ 'export', 'advanced' ], array_column( $tabs[0]['sections'], 'id' ) );
-		$this->assertSame( [ 'auto_export_orders', 'export_statuses', 'status_delivered' ], array_keys( $tabs[0]['sections'][0]['fields'] ) );
+		$this->assertSame( [ 'auto_export_orders', 'export_statuses', 'status_delivered', 'status_cancelled' ], array_keys( $tabs[0]['sections'][0]['fields'] ) );
 		$this->assertSame( [ 'enable_debug', 'disable_methods_on_cart' ], array_keys( $tabs[0]['sections'][1]['fields'] ) );
 	}
 
@@ -604,10 +604,10 @@ final class CarrierSettingsTabTest extends TestCase {
 		$groups = $export->get_groups();
 
 		$this->assertSame( [ 'auto-export', 'labels', 'delivery-status', 'webhooks' ], $this->group_ids( $export ) );
-		$this->assertSame( [ 'Автоэкспорт', 'Этикетки', 'Статусы доставки', 'Вебхуки' ], array_map( static fn( Settings_Group $g ) => $g->get_title(), $groups ) );
+		$this->assertSame( [ 'Автоэкспорт', 'Документы для печати', 'Статусы доставки', 'Вебхуки' ], array_map( static fn( Settings_Group $g ) => $g->get_title(), $groups ) );
 		$this->assertSame( [ 'auto_export_orders', 'export_statuses' ], $groups[0]->get_setting_ids() );
 		$this->assertSame( [ 'label_format' ], $groups[1]->get_setting_ids() );
-		$this->assertSame( [ 'status_delivered' ], $groups[2]->get_setting_ids() );
+		$this->assertSame( [ 'status_delivered', 'status_cancelled' ], $groups[2]->get_setting_ids() );
 		$this->assertSame( [ 'sync_delivery_statuses' ], $groups[2]->get_action_ids() );
 		$this->assertSame( [ 'hooks_on' ], $groups[3]->get_action_ids() );
 		$this->assertSame( [ 'sync_delivery_statuses', 'hooks_on' ], array_map( static fn( Shipping_Tool $t ) => $t->get_id(), $export->get_actions() ) );
@@ -631,7 +631,7 @@ final class CarrierSettingsTabTest extends TestCase {
 		$this->make_it_export( $plugin );
 
 		$this->assertSame(
-			[ 'auto_export_orders', 'export_statuses', 'label_format', 'status_delivered' ],
+			[ 'auto_export_orders', 'export_statuses', 'label_format', 'status_delivered', 'status_cancelled' ],
 			$this->export_of( $plugin )->get_setting_ids()
 		);
 	}
@@ -651,7 +651,7 @@ final class CarrierSettingsTabTest extends TestCase {
 		$delivery = $export->get_groups()[1];
 
 		$this->assertSame( 'delivery-status', $delivery->get_id() );
-		$this->assertSame( [ 'status_delivered' ], $delivery->get_setting_ids() );
+		$this->assertSame( [ 'status_delivered', 'status_cancelled' ], $delivery->get_setting_ids() );
 		$this->assertSame( [], $delivery->get_action_ids() );
 		$this->assertSame( [], $export->get_actions() );
 	}
@@ -663,7 +663,9 @@ final class CarrierSettingsTabTest extends TestCase {
 		$groups = $this->export_of( $plugin )->get_groups();
 
 		$this->assertNotContains( 'status_delivered', $groups[0]->get_setting_ids() );
+		$this->assertNotContains( 'status_cancelled', $groups[0]->get_setting_ids() );
 		$this->assertContains( 'status_delivered', $groups[1]->get_setting_ids() );
+		$this->assertSame( [ 'status_delivered', 'status_cancelled' ], $groups[1]->get_setting_ids(), 'the cancelled status sits right after the delivered one' );
 	}
 
 	public function test_the_section_description_stays_the_frameworks_own_without_an_extension(): void {
@@ -784,7 +786,7 @@ final class CarrierSettingsTabTest extends TestCase {
 		$export   = $sections[1];
 
 		$this->assertSame( 'export', $export->get_id() );
-		$this->assertSame( [ 'auto_export_orders', 'export_statuses', 'label_format', 'status_delivered' ], $export->get_setting_ids(), 'between the auto-export fields and the delivered status, so its card sits in order' );
+		$this->assertSame( [ 'auto_export_orders', 'export_statuses', 'label_format', 'status_delivered', 'status_cancelled' ], $export->get_setting_ids(), 'between the auto-export fields and the delivered status, so its card sits in order' );
 	}
 
 	public function test_an_export_section_id_nobody_owns_is_reported_and_skipped(): void {
@@ -796,7 +798,7 @@ final class CarrierSettingsTabTest extends TestCase {
 
 		$export = $plugin->get_settings_providers()[0]->get_sections()[1];
 
-		$this->assertSame( [ 'auto_export_orders', 'export_statuses', 'status_delivered' ], $export->get_setting_ids(), 'a framework id is not added twice' );
+		$this->assertSame( [ 'auto_export_orders', 'export_statuses', 'status_delivered', 'status_cancelled' ], $export->get_setting_ids(), 'a framework id is not added twice' );
 	}
 
 	public function test_a_carrier_that_does_not_export_ignores_the_export_section_seam_silently(): void {

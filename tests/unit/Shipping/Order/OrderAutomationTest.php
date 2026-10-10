@@ -19,6 +19,7 @@ use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
 use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
 use Woodev\Framework\Shipping\Order\Action_Result;
+use Woodev\Framework\Shipping\Order\Cancelled_Order_Status;
 use Woodev\Framework\Shipping\Order\Carrier_Cancel;
 use Woodev\Framework\Shipping\Order\Delivery_Status;
 use Woodev\Framework\Shipping\Order\Export_Retry;
@@ -34,10 +35,12 @@ require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-control.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-setting.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/abstract-class-settings.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/settings/class-export-settings.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/order/class-cancelled-order-status.php';
 
 /**
  * @covers \Woodev\Framework\Shipping\Order\Order_Automation
  * @covers \Woodev\Framework\Shipping\Order\Carrier_Cancel
+ * @covers \Woodev\Framework\Shipping\Order\Cancelled_Order_Status
  */
 final class OrderAutomationTest extends TestCase {
 
@@ -74,6 +77,7 @@ final class OrderAutomationTest extends TestCase {
 
 		Functions\stubs( [ 'remove_action', 'add_filter', 'remove_filter', 'wp_cache_delete' ] );
 		Functions\when( 'apply_filters' )->returnArg( 2 );
+		Functions\when( 'wc_is_order_status' )->alias( static fn( string $status ) => in_array( $status, [ 'wc-cancelled', 'wc-on-hold', 'wc-processing' ], true ) );
 		Functions\when( 'absint' )->alias( static fn( $value ) => abs( (int) $value ) );
 		Functions\when( 'wc_string_to_bool' )->alias( static fn( $value ) => in_array( strtolower( (string) $value ), [ 'yes', 'true', '1' ], true ) );
 		// The carrier's «Выгрузка» settings are real `Export_Settings` over the options table, so the read
@@ -360,6 +364,149 @@ final class OrderAutomationTest extends TestCase {
 		Orders_Registry::instance()->handle_order_status_changed( 123, 'processing', 'cancelled', $order );
 
 		$this->assertSame( [], $this->scheduled );
+	}
+
+	// ----- cancellation: no loop between the carrier's «cancelled» and the shop's cancel (#1203) -----
+
+	/**
+	 * An exported order in `processing` whose `update_status()` does what WooCommerce does: fires
+	 * `woocommerce_order_status_changed` (here, the registry's handler) inside the call.
+	 *
+	 * @return \WC_Order
+	 */
+	private function exported_order_that_fires_the_status_hook() {
+		$this->meta['_cdek_carrier_order_id'] = 'CARRIER-1';
+		$order                                = $this->order( 'processing' );
+		$order->shouldReceive( 'update_status' )->once()->andReturnUsing(
+			function ( string $to ) use ( $order ) {
+				Orders_Registry::instance()->handle_order_status_changed( 123, 'processing', $to, $order );
+
+				return true;
+			}
+		);
+
+		return $order;
+	}
+
+	public function test_an_order_cancelled_because_the_carrier_cancelled_is_not_sent_back_to_the_carrier(): void {
+		$this->register_carrier();
+		$handler = $this->register_handler();
+		$handler->shouldNotReceive( 'cancel' );
+		$handler->shouldNotReceive( 'cancel_under_lock' );
+		$order = $this->exported_order_that_fires_the_status_hook();
+
+		Cancelled_Order_Status::apply( $order, Delivery_Status::IN_TRANSIT, Delivery_Status::CANCELLED, Orders_Registry::instance()->get_provider( 'cdek' ) );
+
+		$this->assertSame( [], $this->scheduled_of( Carrier_Cancel::HOOK ), 'no cancellation is queued for the carrier' );
+		$this->assertSame( [], $this->scheduled, 'and nothing else is queued either' );
+		$this->assertSame( [], $this->unscheduled );
+		$this->assertFalse( Cancelled_Order_Status::is_applying( 123 ) );
+	}
+
+	public function test_a_merchants_own_cancel_still_cancels_the_shipment_at_the_carrier(): void {
+		$this->register_carrier();
+		$this->register_handler();
+		$order = $this->exported_order_that_fires_the_status_hook();
+
+		// the merchant (not the carrier) cancels: the very same hook, with the guard down.
+		$order->update_status( 'cancelled', '' );
+
+		$cancels = $this->scheduled_of( Carrier_Cancel::HOOK );
+		$this->assertCount( 1, $cancels );
+		$this->assertSame( [ 123 ], $cancels[0][2] );
+	}
+
+	public function test_a_merchants_cancel_after_the_carriers_one_is_not_swallowed_by_the_guard(): void {
+		$this->register_carrier();
+		$this->register_handler();
+		$this->meta['_cdek_carrier_order_id'] = 'CARRIER-1';
+		$order                                = $this->order( 'processing' );
+		$order->shouldReceive( 'update_status' )->once()->andReturnNull();
+
+		Cancelled_Order_Status::apply( $order, null, Delivery_Status::CANCELLED, Orders_Registry::instance()->get_provider( 'cdek' ) );
+		Orders_Registry::instance()->handle_order_status_changed( 123, 'processing', 'cancelled', $order );
+
+		$this->assertCount( 1, $this->scheduled_of( Carrier_Cancel::HOOK ), 'the guard is only up while the carrier-driven change is applied' );
+	}
+
+	public function test_an_unrelated_order_cancelled_inside_the_status_hook_still_has_its_shipment_cancelled(): void {
+		$this->register_carrier();
+		$this->register_handler();
+		$this->meta['_cdek_carrier_order_id'] = 'CARRIER-1';
+		$primary                              = $this->order( 'processing' );
+		$related                              = Mockery::mock( '\WC_Order' );
+		$related->shouldReceive( 'get_id' )->andReturn( 456 );
+		$related->shouldReceive( 'get_status' )->andReturn( 'cancelled' );
+		$related->shouldReceive( 'get_meta' )->andReturnUsing( fn( $key ) => $this->meta[ $key ] ?? '' );
+		$primary->shouldReceive( 'update_status' )->once()->andReturnUsing(
+			function ( string $to ) use ( $primary, $related ) {
+				// a split-order extension cancels a related order synchronously on the parent's status hook.
+				Orders_Registry::instance()->handle_order_status_changed( 456, 'processing', 'cancelled', $related );
+				Orders_Registry::instance()->handle_order_status_changed( 123, 'processing', $to, $primary );
+
+				return true;
+			}
+		);
+
+		Cancelled_Order_Status::apply( $primary, Delivery_Status::IN_TRANSIT, Delivery_Status::CANCELLED, Orders_Registry::instance()->get_provider( 'cdek' ) );
+
+		$this->assertSame( [ [ 456 ] ], array_column( $this->scheduled_of( Carrier_Cancel::HOOK ), 2 ), 'only the carrier-driven order is suppressed; the related live shipment is cancelled' );
+		$this->assertFalse( Cancelled_Order_Status::is_applying( 123 ) );
+		$this->assertFalse( Cancelled_Order_Status::is_applying( 456 ) );
+	}
+
+	public function test_a_nested_carrier_driven_change_does_not_lift_the_outer_orders_guard(): void {
+		$this->register_carrier();
+		$this->register_handler();
+		$this->meta['_cdek_carrier_order_id'] = 'CARRIER-1';
+		$primary                              = $this->order( 'processing' );
+		$nested                               = Mockery::mock( '\WC_Order' );
+		$nested->shouldReceive( 'get_id' )->andReturn( 456 );
+		$nested->shouldReceive( 'get_status' )->andReturn( 'processing' );
+		$nested->shouldReceive( 'update_status' )->once()->andReturnUsing(
+			function ( string $to ) use ( $nested ) {
+				Orders_Registry::instance()->handle_order_status_changed( 456, 'processing', $to, $nested );
+
+				return true;
+			}
+		);
+		$primary->shouldReceive( 'update_status' )->once()->andReturnUsing(
+			function ( string $to ) use ( $primary, $nested ) {
+				Cancelled_Order_Status::apply( $nested, Delivery_Status::IN_TRANSIT, Delivery_Status::CANCELLED, Orders_Registry::instance()->get_provider( 'cdek' ) );
+				$this->assertTrue( Cancelled_Order_Status::is_applying( 123 ), 'the nested call left the outer guard up' );
+				Orders_Registry::instance()->handle_order_status_changed( 123, 'processing', $to, $primary );
+
+				return true;
+			}
+		);
+
+		Cancelled_Order_Status::apply( $primary, Delivery_Status::IN_TRANSIT, Delivery_Status::CANCELLED, Orders_Registry::instance()->get_provider( 'cdek' ) );
+
+		$this->assertSame( [], $this->scheduled_of( Carrier_Cancel::HOOK ), 'both carrier-driven transitions stay guarded' );
+		$this->assertFalse( Cancelled_Order_Status::is_applying( 123 ) );
+		$this->assertFalse( Cancelled_Order_Status::is_applying( 456 ) );
+	}
+
+	public function test_a_nested_apply_for_the_same_order_restores_the_outer_guard(): void {
+		$this->register_carrier();
+		$this->register_handler();
+		$this->meta['_cdek_carrier_order_id'] = 'CARRIER-1';
+		$order                                = $this->order( 'processing' );
+		$calls                                = 0;
+		$order->shouldReceive( 'update_status' )->twice()->andReturnUsing(
+			function ( string $to ) use ( $order, &$calls ) {
+				if ( 1 === ++$calls ) {
+					Cancelled_Order_Status::apply( $order, Delivery_Status::IN_TRANSIT, Delivery_Status::CANCELLED, Orders_Registry::instance()->get_provider( 'cdek' ) );
+					$this->assertTrue( Cancelled_Order_Status::is_applying( 123 ), 'the inner call must hand the guard back as it found it' );
+				}
+
+				return true;
+			}
+		);
+
+		Cancelled_Order_Status::apply( $order, Delivery_Status::IN_TRANSIT, Delivery_Status::CANCELLED, Orders_Registry::instance()->get_provider( 'cdek' ) );
+
+		$this->assertFalse( Cancelled_Order_Status::is_applying( 123 ) );
 	}
 
 	// ----- cancellation: the runner -----

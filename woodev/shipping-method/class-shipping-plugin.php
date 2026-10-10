@@ -25,7 +25,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		/** @var string id of the «Автоэкспорт» card of the «Выгрузка заказов» section — a carrier group may not reuse it */
 		private const EXPORT_AUTO_GROUP_ID = 'auto-export';
 
-		/** @var string id of the «Этикетки» card (the carrier's {@see self::get_export_section_setting_ids()} fields) */
+		/** @var string id of the «Документы для печати» card (the carrier's {@see self::get_export_section_setting_ids()} fields; the id stays `labels` — it is the card's key on the page, not a title) */
 		private const EXPORT_LABELS_GROUP_ID = 'labels';
 
 		/** @var string id of the «Статусы доставки» card */
@@ -339,6 +339,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			// The merchant's «Статус доставленного заказа»: set once the canonical state becomes «delivered».
 			require_once $path . '/order/class-delivered-order-status.php';
 			Order\Delivered_Order_Status::register();
+
+			// The merchant's «Статус отменённого заказа»: set once the carrier reports the shipment cancelled (#1203).
+			require_once $path . '/order/class-cancelled-order-status.php';
+			Order\Cancelled_Order_Status::register();
 
 			// delivery-status sync freshness — the last-updated/next-update seam (SP-10
 			// spec D9, #828)
@@ -1361,7 +1365,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 * What the carrier adds to the framework's «Выгрузка заказов» section: action buttons, titled cards and a
 		 * sentence after the section description. The section is the framework's own, so a carrier cannot contribute a
 		 * section under its id — this is the seam for the few things that belong there (CDEK's «Мгновенные
-		 * уведомления», say). The carrier's cards follow the framework's «Автоэкспорт», «Этикетки» and «Статусы
+		 * уведомления», say). The carrier's cards follow the framework's «Автоэкспорт», «Документы для печати» and «Статусы
 		 * доставки» cards.
 		 *
 		 * Return an array with any of these keys; the default is none:
@@ -1477,13 +1481,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		}
 
 		/**
-		 * The framework's «Выгрузка заказов» section: cards «Автоэкспорт», «Этикетки» (the carrier's own fields of
-		 * {@see self::get_export_section_setting_ids()}) and «Статусы доставки» (the delivered status and the refresh
-		 * button), then the carrier's {@see self::get_export_section_extension()} cards. A card with no member is
-		 * left out (the settings page registry omits it), so a carrier without label fields shows no «Этикетки» and one
+		 * The framework's «Выгрузка заказов» section: cards «Автоэкспорт», «Документы для печати» (the carrier's own fields of
+		 * {@see self::get_export_section_setting_ids()} — label format, number of copies) and «Статусы доставки» (the delivered
+		 * and cancelled statuses and the refresh button), then the carrier's {@see self::get_export_section_extension()} cards. A card with no member is
+		 * left out (the settings page registry omits it), so a carrier without print fields shows no «Документы для печати» and one
 		 * without status sync shows «Статусы доставки» without the button.
 		 *
-		 * The section lists its fields card by card (auto-export, the carrier's fields, delivered status), because a
+		 * The section lists its fields card by card (auto-export, the carrier's fields, delivered and cancelled statuses), because a
 		 * card renders where its first field is declared.
 		 *
 		 * @param Settings\Export_Settings                               $export              the framework's export handler.
@@ -1496,7 +1500,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 			$extension = $this->resolve_export_section_extension( null === $sync ? $reserved_action_ids : array_merge( $reserved_action_ids, [ $sync->get_id() ] ) );
 			$delivered = Settings\Export_Settings::SETTING_STATUS_DELIVERED;
-			$auto_ids  = array_values( array_diff( $export->get_owned_setting_ids(), [ $delivered ] ) );
+			$cancelled = Settings\Export_Settings::SETTING_STATUS_CANCELLED;
+			$auto_ids  = array_values( array_diff( $export->get_owned_setting_ids(), [ $delivered, $cancelled ] ) );
 			$has_sync  = null !== $sync;
 			$cards     = [];
 
@@ -1509,8 +1514,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			if ( [] !== $extra_ids ) {
 				$cards[] = \Woodev\Framework\Settings\Settings_Group::create(
 					self::EXPORT_LABELS_GROUP_ID,
-					__( 'Этикетки', 'woodev-plugin-framework' ),
-					__( 'Как выглядят этикетки, которые вы печатаете из заказа.', 'woodev-plugin-framework' )
+					__( 'Документы для печати', 'woodev-plugin-framework' ),
+					__( 'Настройки печати документов перевозчика, которые вы печатаете из заказа: формат этикетки, количество копий.', 'woodev-plugin-framework' )
 				)->with_fields( $extra_ids );
 			}
 
@@ -1518,9 +1523,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 				self::EXPORT_DELIVERY_GROUP_ID,
 				__( 'Статусы доставки', 'woodev-plugin-framework' ),
 				$has_sync
-					? __( 'Какой статус получит заказ, когда покупателю вручат посылку. Новые статусы можно запросить у перевозчика сразу, не дожидаясь расписания.', 'woodev-plugin-framework' )
-					: __( 'Какой статус получит заказ, когда покупателю вручат посылку.', 'woodev-plugin-framework' )
-			)->with_fields( [ $delivered ] );
+					? __( 'Какой статус получит заказ, когда покупателю вручат посылку или перевозчик отменит отправление. Новые статусы можно запросить у перевозчика сразу, не дожидаясь расписания.', 'woodev-plugin-framework' )
+					: __( 'Какой статус получит заказ, когда покупателю вручат посылку или перевозчик отменит отправление.', 'woodev-plugin-framework' )
+			)->with_fields( [ $delivered, $cancelled ] );
 
 			$cards[] = $has_sync ? $delivery->with_actions( [ $sync->get_id() ] ) : $delivery;
 
@@ -1533,7 +1538,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			$section = \Woodev\Framework\Settings\Settings_Section::create(
 				Settings\Export_Settings::SECTION_ID,
 				__( 'Выгрузка заказов', 'woodev-plugin-framework' ),
-				array_merge( $auto_ids, $extra_ids, [ $delivered ] ),
+				array_merge( $auto_ids, $extra_ids, [ $delivered, $cancelled ] ),
 				$description
 			);
 
