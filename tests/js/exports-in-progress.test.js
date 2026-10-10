@@ -196,6 +196,13 @@ describe( 'StatusCell «cancel failed» badge', () => {
 		expect( screen.getByText( 'Отменён' ) ).toBeInTheDocument();
 	} );
 
+	test( 'says the refusal was accepted when refusalRequested is true (#1204)', () => {
+		render( <StatusCell deliveryStatus={ STATUS } refusalRequested /> );
+
+		expect( screen.getByText( 'Отказ оформлен, ждём возврата' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Отменён' ) ).toBeInTheDocument();
+	} );
+
 	test.each( [ [ 'false', false ], [ 'absent', undefined ] ] )( 'shows no badge when cancelFailed is %s', ( label, cancelFailed ) => {
 		render( <StatusCell deliveryStatus={ STATUS } cancelFailed={ cancelFailed } /> );
 

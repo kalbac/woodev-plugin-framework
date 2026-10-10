@@ -285,6 +285,16 @@ describe( 'performOrderAction (#824)', () => {
 		expect( call.headers ).toEqual( { 'X-WP-Nonce': 'abc' } );
 	} );
 
+	test( 'sends the merchant\'s confirmation (#1204) only when it was given', async () => {
+		apiFetch.mockResolvedValue( { row: {}, message: 'Отказ от посылки оформлен.' } );
+
+		await performOrderAction( 42, 'refuse', undefined, true );
+		await performOrderAction( 42, 'cancel' );
+
+		expect( apiFetch.mock.calls[ 0 ][ 0 ].data ).toEqual( { confirmed: true } );
+		expect( apiFetch.mock.calls[ 1 ][ 0 ] ).not.toHaveProperty( 'data' );
+	} );
+
 	test( 'strips a trailing slash from restRoot before appending the sub-path', async () => {
 		window.woodevShippingOrders = {
 			restRoot: 'https://example.test/wp-json/woodev/v1/shipping/orders/',

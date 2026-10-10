@@ -964,13 +964,13 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 		 * Invokes the private perform_action() — see the class docblock for why
 		 * this is reflection rather than a call through handle_order_action().
 		 */
-		private function invoke_perform_action( Shipping_Admin_Order $admin_order, Abstract_Shipment_Handler $handler, \WC_Order $order, string $action, Orders_Provider $provider, array $payload = [] ): void {
+		private function invoke_perform_action( Shipping_Admin_Order $admin_order, Abstract_Shipment_Handler $handler, \WC_Order $order, string $action, Orders_Provider $provider, array $payload = [], string $confirmed = '' ): void {
 			$method = new \ReflectionMethod( Shipping_Admin_Order::class, 'perform_action' );
 			if ( PHP_VERSION_ID < 80100 ) {
 				$method->setAccessible( true );
 			}
 
-			$method->invoke( $admin_order, $handler, $order, $action, $provider, $payload );
+			$method->invoke( $admin_order, $handler, $order, $action, $provider, $payload, $confirmed );
 		}
 
 		/**
@@ -989,6 +989,46 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 					return true;
 				}
 			);
+		}
+
+		/** A carrier that refuses from «in transit», with the order in that state (#1204). */
+		private function refusing_setup(): array {
+			$this->meta['_wc_cdek_order_id'] = 'CARRIER-1';
+			$this->meta['_wc_cdek_status']   = 'ON_WAY';
+
+			$provider = $this->in_transit_provider();
+			$handler  = $this->register_handler();
+			$handler->shouldReceive( 'supports_refusal' )->andReturn( true );
+			$handler->shouldReceive( 'get_refusable_statuses' )->andReturn( [ \Woodev\Framework\Shipping\Order\Delivery_Status::IN_TRANSIT ] );
+
+			$order = $this->make_order( [ 'get_status' => 'processing' ] );
+			$order->shouldReceive( 'get_meta' )->andReturn( '' );
+
+			$this->capture_flashed_notices();
+
+			return [ $provider, $handler, $order ];
+		}
+
+		public function test_perform_action_does_not_refuse_without_the_merchants_confirmation(): void {
+			[ $provider, $handler, $order ] = $this->refusing_setup();
+			$handler->shouldNotReceive( 'refuse' );
+			$order->shouldNotReceive( 'add_order_note' );
+
+			$this->invoke_perform_action( new Shipping_Admin_Order( Orders_Registry::instance() ), $handler, $order, Order_Actions::REFUSE, $provider );
+
+			$this->assertSame( [ 'Подтвердите отказ: возврат платный.' ], $this->flashed_notices );
+		}
+
+		public function test_perform_action_refuses_once_the_metabox_dialog_confirmed_it(): void {
+			[ $provider, $handler, $order ] = $this->refusing_setup();
+			$handler->shouldReceive( 'refuse' )->once()->andReturn( Action_Result::success() );
+			$order->shouldReceive( 'update_meta_data' )->twice();
+			$order->shouldReceive( 'save_meta_data' )->once();
+			$order->shouldReceive( 'add_order_note' )->once();
+
+			$this->invoke_perform_action( new Shipping_Admin_Order( Orders_Registry::instance() ), $handler, $order, Order_Actions::REFUSE, $provider, [], '1' );
+
+			$this->assertSame( [], $this->flashed_notices );
 		}
 
 		public function test_perform_action_refuses_an_action_the_shared_gate_does_not_offer(): void {

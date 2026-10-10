@@ -57,6 +57,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Carrier_Cancel' ) ) 
 		 */
 		public const DEFERRALS_META = '_woodev_shipment_cancel_deferrals';
 
+		/**
+		 * The order meta that says «a refusal («Оформить отказ», #1204) of this order's parcel was accepted by the
+		 * carrier». Its value is the carrier order id the refusal was made for, so the record is read only while
+		 * that very id is still stored ({@see self::has_refusal_requested()}) — the same binding as
+		 * {@see self::FAILED_META}: an order exported again carries a new id and the record is ignored without
+		 * anyone clearing it. While it holds, the refusal is no longer offered: a retry after a lost response, a
+		 * stale page or another client cannot ask the carrier twice. Additive; written only on a success.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var string
+		 */
+		public const REFUSAL_META = '_woodev_shipment_refusal_requested';
+
+		/**
+		 * The order meta holding the Unix time {@see self::REFUSAL_META} was written at.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var string
+		 */
+		public const REFUSAL_AT_META = '_woodev_shipment_refusal_requested_at';
+
 		/** @var int how many times one cancellation may be put back before the busy order is reported as a failure */
 		public const MAX_DEFERRALS = 12;
 
@@ -175,6 +198,45 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Carrier_Cancel' ) ) 
 
 			$order->delete_meta_data( self::FAILED_META );
 			$order->save_meta_data();
+		}
+
+		/**
+		 * Records that the carrier accepted a refusal of the order's parcel (#1204).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order            the order.
+		 * @param string    $carrier_order_id the carrier order id the refusal was made for; '' records nothing.
+		 * @return void
+		 */
+		public static function mark_refusal_requested( \WC_Order $order, string $carrier_order_id ): void {
+
+			if ( '' === $carrier_order_id ) {
+				return;
+			}
+
+			$order->update_meta_data( self::REFUSAL_META, $carrier_order_id );
+			$order->update_meta_data( self::REFUSAL_AT_META, (string) time() );
+			$order->save_meta_data();
+		}
+
+		/**
+		 * Whether a refusal was accepted for the order's CURRENT carrier shipment (#1204). A record left by an
+		 * earlier shipment of the same order — the order was exported again — is ignored.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order                   the order.
+		 * @param string    $current_carrier_order_id the carrier order id the order stores now; '' when it has none.
+		 * @return bool
+		 */
+		public static function has_refusal_requested( \WC_Order $order, string $current_carrier_order_id ): bool {
+
+			if ( '' === $current_carrier_order_id ) {
+				return false;
+			}
+
+			return $current_carrier_order_id === (string) \Woodev_Order_Compatibility::get_order_meta( $order, self::REFUSAL_META );
 		}
 
 		/**

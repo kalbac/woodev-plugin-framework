@@ -2006,6 +2006,14 @@ msgstr ""
 msgid "Не удалось оформить отказ от посылки."
 msgstr ""
 
+#: shipping-method/admin/orders/class-order-actions.php
+msgid "Подтвердите отказ: возврат платный."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php
+msgid "Отказ от этой посылки уже оформлен — ждём её возврата."
+msgstr ""
+
 #: shipping-method/admin/orders/class-order-actions.php:197
 msgid "Экспорт"
 msgstr ""
@@ -4799,6 +4807,10 @@ msgstr ""
 
 #: assets/build/shipping-orders-page/index.js:9
 msgid "Не отменена у перевозчика"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:9
+msgid "Отказ оформлен, ждём возврата"
 msgstr ""
 
 #: assets/build/shipping-orders-page/index.js:9

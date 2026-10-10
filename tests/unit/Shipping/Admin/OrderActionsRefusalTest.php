@@ -259,12 +259,46 @@ final class OrderActionsRefusalTest extends TestCase {
 
 		$handler->shouldReceive( 'refuse' )->once()->with( $order )->andReturn( Action_Result::success() );
 		$order->shouldReceive( 'delete_meta_data' )->once()->with( Carrier_Cancel::FAILED_META );
-		$order->shouldReceive( 'save_meta_data' )->once();
+		$order->shouldReceive( 'update_meta_data' )->once()->with( Carrier_Cancel::REFUSAL_META, 'CARRIER-1' );
+		$order->shouldReceive( 'update_meta_data' )->once()->with( Carrier_Cancel::REFUSAL_AT_META, Mockery::type( 'string' ) );
+		$order->shouldReceive( 'save_meta_data' )->twice();
 		$order->shouldReceive( 'add_order_note' )->once()->with( 'Оформлен отказ от посылки: она вернётся к вам, возврат платный' );
 
 		$result = $this->actions()->perform( $handler, $order, Order_Actions::REFUSE, $this->provider() );
 
 		$this->assertTrue( $result->is_success() );
+	}
+
+	public function test_a_successful_refusal_closes_the_action_for_that_shipment(): void {
+		$this->handler( [ Delivery_Status::IN_TRANSIT ], true );
+
+		$this->assertContains( Order_Actions::REFUSE, $this->offered( $this->order() ) );
+
+		// The carrier's stored status still says «in transit» — the record alone closes it.
+		$this->meta[ Carrier_Cancel::REFUSAL_META ] = 'CARRIER-1';
+
+		$this->assertNotContains( Order_Actions::REFUSE, $this->offered( $this->order() ) );
+		$this->assertStringContainsString( 'уже оформлен', $this->actions()->unavailable_reason( $this->order(), $this->provider(), Order_Actions::REFUSE ) );
+	}
+
+	public function test_a_refusal_record_of_an_earlier_shipment_is_ignored_after_a_re_export(): void {
+		$this->handler( [ Delivery_Status::IN_TRANSIT ], true );
+		$this->meta[ Carrier_Cancel::REFUSAL_META ] = 'CARRIER-OLD';
+
+		$this->assertContains( Order_Actions::REFUSE, $this->offered( $this->order() ) );
+	}
+
+	public function test_only_the_refusal_requires_the_merchants_confirmation(): void {
+		$this->assertTrue( Order_Actions::requires_confirmation( Order_Actions::REFUSE ) );
+		$this->assertFalse( Order_Actions::requires_confirmation( Order_Actions::CANCEL ) );
+		$this->assertFalse( Order_Actions::requires_confirmation( Order_Actions::UPDATE ) );
+
+		$this->assertSame( 'Подтвердите отказ: возврат платный.', Order_Actions::unconfirmed_reason( Order_Actions::REFUSE, null ) );
+		$this->assertSame( 'Подтвердите отказ: возврат платный.', Order_Actions::unconfirmed_reason( Order_Actions::REFUSE, '' ) );
+		$this->assertSame( 'Подтвердите отказ: возврат платный.', Order_Actions::unconfirmed_reason( Order_Actions::REFUSE, '0' ) );
+		$this->assertSame( '', Order_Actions::unconfirmed_reason( Order_Actions::REFUSE, true ) );
+		$this->assertSame( '', Order_Actions::unconfirmed_reason( Order_Actions::REFUSE, '1' ) );
+		$this->assertSame( '', Order_Actions::unconfirmed_reason( Order_Actions::CANCEL, null ) );
 	}
 
 	public function test_a_refused_refusal_is_noted_with_the_carriers_reason_and_leaves_the_marker(): void {
@@ -274,6 +308,8 @@ final class OrderActionsRefusalTest extends TestCase {
 
 		$handler->shouldReceive( 'refuse' )->once()->andReturn( Action_Result::failure( 'Заказ уже вручён' ) );
 		$order->shouldNotReceive( 'delete_meta_data' );
+		// A genuine failure leaves no record, so a retry works.
+		$order->shouldNotReceive( 'update_meta_data' );
 		$order->shouldReceive( 'add_order_note' )->once()->with( 'Не удалось оформить отказ от посылки: Заказ уже вручён' );
 
 		$result = $this->actions()->perform( $handler, $order, Order_Actions::REFUSE, $this->provider() );

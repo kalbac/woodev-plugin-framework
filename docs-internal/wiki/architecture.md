@@ -459,6 +459,15 @@ Moved here from `CURRENT-STATE.md` in s139: they are reference, true regardless 
   bulk route skips it, `run_cancel()` never calls `refuse()`), and `Order_Actions::perform()` writes the order note
   and clears the «не отменён у перевозчика» marker on success. «Отменить» stays on offer — a manual cancel is the
   merchant's call.
+  **Two server-side guards on the refusal (round 1):** the request must carry the merchant's explicit yes —
+  `Order_Actions::unconfirmed_reason()` is checked by BOTH entry points (REST `…/actions/refuse` sends `confirmed: true`
+  → else 400 `woodev_shipping_orders_confirmation_required`; the metabox's admin-post form posts `confirmed=1` after its
+  `data-confirm`), and a success is recorded by the framework in order meta `_woodev_shipment_refusal_requested`
+  (value = the carrier order id, plus `…_at` = Unix time; `Carrier_Cancel::mark_refusal_requested()`). While the record
+  matches the stored carrier id the action is no longer offered — a retry with a stale local status cannot reach the
+  carrier twice — and the row carries `refusal_requested` («Отказ оформлен, ждём возврата»). Re-exporting changes the
+  carrier id, so the record lapses by itself; a failure writes nothing, so a retry works. The adapter's `refuse()` keeps
+  no bookkeeping of this.
 - **Row flags (s164)** — small badges under the tracking number on the orders page and under the details table of the
   order's metabox. A carrier fills them through `woodev_shipping_order_row_flags( array $flags, \WC_Order $order,
   ?Orders_Provider $provider )` (starts `[]`); each flag is `[ 'label' => string, 'tone' => 'ok'|'warn'|'error'|'info'|'muted',

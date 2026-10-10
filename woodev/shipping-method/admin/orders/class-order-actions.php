@@ -17,6 +17,7 @@ use Woodev\Framework\Shipping\Order\Action_Result;
 use Woodev\Framework\Shipping\Order\Bulk_Document_Source;
 use Woodev\Framework\Shipping\Order\Carrier_Cancel;
 use Woodev\Framework\Shipping\Order\Delivery_Status;
+use Woodev\Framework\Shipping\Order\Order_Automation;
 use Woodev\Framework\Shipping\Order\Shipment_Cancellation;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -555,10 +556,53 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 				return false;
 			}
 
+			// Accepted once for this very shipment: not offered again, whatever the stored delivery state still says (the
+			// carrier's status may lag behind its own answer).
+			if ( Carrier_Cancel::has_refusal_requested( $order, Order_Automation::carrier_order_id( $order, $provider ) ) ) {
+				return false;
+			}
+
 			$canonical = self::resolve_canonical_status( $order, $provider );
 
 			return ! in_array( $canonical, self::CANCEL_RETIRED_STATUSES, true )
 				&& in_array( $canonical, $handler->get_refusable_statuses(), true );
+		}
+
+		/**
+		 * Whether the merchant's explicit confirmation must travel with the action's request (#1204): the paid
+		 * refusal. The confirmation dialog of the orders page and of the order-edit metabox sends it once the
+		 * merchant said yes; a request without it — a hand-made REST call, a stale page — is refused by the
+		 * server before the carrier is called. Every other action is unaffected.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $action the action id.
+		 * @return bool
+		 */
+		public static function requires_confirmation( string $action ): bool {
+			return self::REFUSE === $action;
+		}
+
+		/**
+		 * The reason a request must be stopped for want of the merchant's confirmation, or '' when it may go on —
+		 * the ONE check the REST route and the metabox's admin-post route share (#1204).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $action    the action id.
+		 * @param mixed  $confirmed the posted `confirmed` value, of unknown shape (`true`, `1`, `'1'`, `'true'` confirm).
+		 * @return string
+		 */
+		public static function unconfirmed_reason( string $action, $confirmed ): string {
+			if ( ! self::requires_confirmation( $action ) ) {
+				return '';
+			}
+
+			if ( true === $confirmed || 1 === $confirmed || '1' === $confirmed || 'true' === $confirmed ) {
+				return '';
+			}
+
+			return __( 'Подтвердите отказ: возврат платный.', 'woodev-plugin-framework' );
 		}
 
 		/**
@@ -612,7 +656,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 					return $handler->cancel( $order );
 
 				case self::REFUSE:
-					return $this->refuse( $handler, $order );
+					return $this->refuse( $handler, $order, $provider );
 
 				case self::UPDATE:
 					// A carrier overrides update(), so the framework marks the call from outside: it gets the «export» timeout (#954).
@@ -663,10 +707,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		 *
 		 * @param Abstract_Shipment_Handler $handler the carrier's handler.
 		 * @param \WC_Order                 $order   the order.
+		 * @param Orders_Provider           $provider the matched carrier.
 		 * @return Action_Result
 		 * @throws \Throwable Whatever the carrier call throws, after the note is written.
 		 */
-		private function refuse( Abstract_Shipment_Handler $handler, \WC_Order $order ): Action_Result {
+		private function refuse( Abstract_Shipment_Handler $handler, \WC_Order $order, Orders_Provider $provider ): Action_Result {
 			try {
 				$result = $handler->refuse( $order );
 			} catch ( \Throwable $exception ) {
@@ -677,6 +722,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 
 			if ( $result->is_success() ) {
 				Carrier_Cancel::clear_failed( $order );
+				// The framework's own idempotency record (the carrier keeps no bookkeeping of it): bound to this shipment's
+				// carrier id, so a retry finds the refusal closed, and a re-export (a new id) opens it afresh.
+				Carrier_Cancel::mark_refusal_requested( $order, Order_Automation::carrier_order_id( $order, $provider ) );
 				$order->add_order_note( __( 'Оформлен отказ от посылки: она вернётся к вам, возврат платный', 'woodev-plugin-framework' ) );
 
 				return $result;
@@ -938,6 +986,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 				case self::REFUSE:
 					if ( ! $is_exported ) {
 						return __( 'Заказ ещё не выгружен перевозчику — отказываться не от чего.', 'woodev-plugin-framework' );
+					}
+
+					if ( Carrier_Cancel::has_refusal_requested( $order, Order_Automation::carrier_order_id( $order, $provider ) ) ) {
+						return __( 'Отказ от этой посылки уже оформлен — ждём её возврата.', 'woodev-plugin-framework' );
 					}
 
 					return __( 'Отказ можно оформить только для посылки, которая уже в пути, и только если перевозчик это умеет.', 'woodev-plugin-framework' );

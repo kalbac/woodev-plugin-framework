@@ -737,8 +737,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 		 * @since 2.0.2 Card #1180: an action that declares `fields` takes their values as a `payload` object in the
 		 *              body; they are validated against the declaration and a miss answers 422 with `data.errors`
 		 *              (`[ { field, code, message } ]`) before the carrier is called.
+		 * @since 2.0.2 Card #1204: a paid action ({@see Order_Actions::requires_confirmation()}) needs `confirmed: true` in the
+		 *              body, or it answers 400 `woodev_shipping_orders_confirmation_required` and the carrier is not called.
 		 *
-		 * @param \WP_REST_Request $request request; `id` and `action` come from the route, `payload` from the body.
+		 * @param \WP_REST_Request $request request; `id` and `action` come from the route, `payload` and `confirmed` from the body.
 		 * @return \WP_REST_Response|\WP_Error
 		 */
 		public function perform_action( $request ) {
@@ -788,6 +790,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 					$this->order_actions->unavailable_reason( $order, $provider, $action ),
 					[ 'status' => 400 ]
 				);
+			}
+
+			// #1204: the paid refusal needs the merchant's explicit yes in the request — the confirmation dialog sends it.
+			$unconfirmed = Order_Actions::unconfirmed_reason( $action, $request->get_param( 'confirmed' ) );
+
+			if ( '' !== $unconfirmed ) {
+				return new \WP_Error( 'woodev_shipping_orders_confirmation_required', $unconfirmed, [ 'status' => 400 ] );
 			}
 
 			$handler = $this->registry->get_shipment_handler( $provider->get_id() );

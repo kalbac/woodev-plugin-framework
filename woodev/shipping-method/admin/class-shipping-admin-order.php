@@ -575,15 +575,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 			// #1180: the values of an action's declared fields — `payload[<id>]`, a time range `payload[<id>][from|to]`.
 			// Unslashed here and checked field by field against the declaration in perform_action(); an undeclared key is dropped there.
 			$payload  = isset( $_POST['payload'] ) && is_array( $_POST['payload'] ) ? wp_unslash( $_POST['payload'] ) : []; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- validated per declared field by Order_Action_Fields.
-			$order    = wc_get_order( $order_id );
-			$provider = $order instanceof \WC_Order ? $this->registry->resolve_provider_for_order( $order ) : null;
+			// #1204: the metabox sends `confirmed` once the merchant said yes to a paid action's dialog.
+			$confirmed = isset( $_POST['confirmed'] ) ? sanitize_text_field( wp_unslash( $_POST['confirmed'] ) ) : '';
+			$order     = wc_get_order( $order_id );
+			$provider  = $order instanceof \WC_Order ? $this->registry->resolve_provider_for_order( $order ) : null;
 
 			if ( $order instanceof \WC_Order && null !== $provider ) {
 
 				$handler = $this->registry->get_shipment_handler( $provider->get_id() );
 
 				if ( null !== $handler ) {
-					$this->perform_action( $handler, $order, $action, $provider, $payload );
+					$this->perform_action( $handler, $order, $action, $provider, $payload, $confirmed );
 				}
 			}
 
@@ -623,15 +625,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 		 * @param string                    $action   one of {@see Order_Actions}' action ids.
 		 * @param Orders_Provider           $provider the matched carrier descriptor.
 		 * @param array<string,mixed>       $payload  the posted values of the action's declared fields (#1180), unvalidated.
+		 * @param string                    $confirmed the posted `confirmed` flag (#1204) — required by a paid action, see {@see Order_Actions::unconfirmed_reason()}.
 		 * @return void
 		 */
-		private function perform_action( Abstract_Shipment_Handler $handler, \WC_Order $order, string $action, Orders_Provider $provider, array $payload = [] ): void {
+		private function perform_action( Abstract_Shipment_Handler $handler, \WC_Order $order, string $action, Orders_Provider $provider, array $payload = [], string $confirmed = '' ): void {
 
 			$order_actions = $this->order_actions();
 			$offered       = $order_actions->for_order( $order, $provider );
 
 			if ( ! in_array( $action, array_column( $offered, 'action' ), true ) ) {
 				$this->flash_notice( $order_actions->unavailable_reason( $order, $provider, $action ) );
+
+				return;
+			}
+
+			// #1204: the same check as the REST route — a paid action runs only with the merchant's explicit yes.
+			$unconfirmed = Order_Actions::unconfirmed_reason( $action, $confirmed );
+
+			if ( '' !== $unconfirmed ) {
+				$this->flash_notice( $unconfirmed );
 
 				return;
 			}

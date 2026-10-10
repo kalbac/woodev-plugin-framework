@@ -128,6 +128,11 @@ export interface OrderRow {
 	 */
 	cancel_failed?: boolean;
 	/**
+	 * #1204: the carrier accepted a refusal («Оформить отказ») of this parcel — it is on its way back. Optional like
+	 * the fields above: an older server sends none, and «not stated» renders nothing.
+	 */
+	refusal_requested?: boolean;
+	/**
 	 * s164: the badges a carrier plugin adds under the tracking number, at most three. Optional like the fields above —
 	 * an older server sends none, and «not stated» renders nothing.
 	 */
@@ -721,11 +726,13 @@ export interface OrderActionResult {
  * swallow it.
  *
  * `payload` (#1180) is the values of the action's declared `fields`; omit it for an action that has none.
+ * `confirmed` (#1204) is sent as `true` once the merchant confirmed a destructive action in its dialog.
  */
 export function performOrderAction(
 	orderId: number,
 	action: string,
-	payload?: OrderActionPayload
+	payload?: OrderActionPayload,
+	confirmed?: boolean
 ): Promise<OrderActionResult> {
 	const { restRoot = '', nonce = '' } = bootstrap();
 
@@ -735,7 +742,9 @@ export function performOrderAction(
 		headers: { 'X-WP-Nonce': nonce },
 		// #1180: only an action with fields has a body. A rejected payload answers 422 with
 		// `data.errors` — {@link OrderActionFieldError}[] — and the action did not run.
-		...( payload ? { data: { payload } } : {} ),
+		// #1204: `confirmed` is the merchant's yes to a destructive action's confirmation — a paid action (the refusal)
+		// is refused by the server without it.
+		...( payload || confirmed ? { data: { ...( payload ? { payload } : {} ), ...( confirmed ? { confirmed: true } : {} ) } } : {} ),
 	} );
 }
 

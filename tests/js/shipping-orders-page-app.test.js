@@ -2510,7 +2510,8 @@ describe( 'the «Действие» column (#824)', () => {
 
 			fireEvent.click( confirmButton );
 
-			expect( performOrderAction ).toHaveBeenCalledWith( 42, 'cancel' );
+			// #1204: «Да» is the merchant's confirmation — it travels with the request (the paid refusal needs it).
+			expect( performOrderAction ).toHaveBeenCalledWith( 42, 'cancel', undefined, true );
 			await waitFor( () =>
 				expect( screen.getAllByText( 'Заказ отменён.' ).length ).toBeGreaterThan( 0 )
 			);
