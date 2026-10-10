@@ -275,7 +275,11 @@ Self-contained shipping box-packing algorithm. Implement `Woodev_Packer_Item_Int
 only their own carrier (`Shipping_Plugin::get_box_presets()`, `Packaging_Settings`). Carrier presets
 use fixed cm/kg units. Selection maximises packed units to reduce parcels; store boxes win on equal
 fill, followed by the existing smallest-volume tie-break. The WC dispatcher alone reads the store
-list when none is passed. Its optional fourth argument chooses `single` or `separately` for leftovers.
+list when none is passed. Its optional fourth argument chooses `virtual` (all leftovers together in one virtual box) or
+`separately` for leftovers. `single` (items stacked along one axis) is no longer offered (#1212): it
+built a very long parcel from many mixed items. The constant, `pack('single')` and
+`Woodev_Packer_Single_Box` remain in code; a stored `single` — packing or leftovers — is read as
+`virtual` (`Woodev_Packer_Dispatcher::normalize_stored_algorithm()`).
 Every `Woodev_Packer_Package_Result` reports source item allocation (`get_items()`: cart-item key /
 order-item id, product id, quantity), box id, and origin (`store`, `carrier`, or empty). Export
 retains the same item-allocation contract.
@@ -285,7 +289,8 @@ computes per-parcel amount/percentage costs and exposes carrier-priced packed bo
 pairs for the carrier's quote request.
 `Shipping_Method::calculate_rate()` adds store/fixed/merchant box surcharges once after the quote;
 carrier-priced presets are never charged again there. Carrier defaults and instance overrides
-cover `packing_algorithm` and `unpacked_algorithm`; stored legacy algorithms remain readable.
+cover `packing_algorithm` and `unpacked_algorithm`; stored legacy algorithms (`single`, read as
+`virtual`) remain readable.
 The rate-cache context includes box settings, leftovers and per-line contents values.
 
 ## Additional carrier services (`Carrier_Service`, #1145)

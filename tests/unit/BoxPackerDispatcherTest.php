@@ -309,12 +309,84 @@ namespace Woodev\Tests\Unit {
 		// Dispatcher — get_algorithms()
 		// -------------------------------------------------------------------
 
-		public function test_get_algorithms_returns_all_algorithm_ids() {
+		public function test_get_algorithms_returns_the_offered_algorithm_ids_without_single() {
 			$algos = \Woodev_Packer_Dispatcher::get_algorithms();
 
 			$this->assertArrayHasKey( \Woodev_Packer_Dispatcher::ALGORITHM_VIRTUAL, $algos );
 			$this->assertArrayHasKey( \Woodev_Packer_Dispatcher::ALGORITHM_SEPARATELY, $algos );
-			$this->assertArrayHasKey( \Woodev_Packer_Dispatcher::ALGORITHM_SINGLE, $algos );
+			$this->assertArrayHasKey( \Woodev_Packer_Dispatcher::ALGORITHM_BOXES, $algos );
+			$this->assertArrayNotHasKey( \Woodev_Packer_Dispatcher::ALGORITHM_SINGLE, $algos, 'single is retired from the choice (#1212)' );
+		}
+
+		public function test_a_stored_single_is_read_as_virtual_and_everything_else_is_untouched() {
+			$this->assertSame( 'virtual', \Woodev_Packer_Dispatcher::normalize_stored_algorithm( 'single' ) );
+
+			foreach ( [ 'virtual', 'separately', 'boxes', 'default', '', 'nonsense' ] as $value ) {
+				$this->assertSame( $value, \Woodev_Packer_Dispatcher::normalize_stored_algorithm( $value ) );
+			}
+		}
+
+		// -------------------------------------------------------------------
+		// #1212 measurement: why `single` left the choice
+		// -------------------------------------------------------------------
+
+		/**
+		 * 16 units of clearly different sizes — a bag, a book, a shoe box, a lamp, a long tube …
+		 *
+		 * @return \Woodev_Packer_Input_Item[]
+		 */
+		private function many_mixed_items(): array {
+			return [
+				new \Woodev_Packer_Input_Item( 12, 8, 3, 0.2, 2, 'a' ),    // phone case
+				new \Woodev_Packer_Input_Item( 24, 17, 4, 0.6, 3, 'b' ),   // book
+				new \Woodev_Packer_Input_Item( 33, 20, 12, 1.1, 2, 'c' ),  // shoe box
+				new \Woodev_Packer_Input_Item( 60, 8, 8, 0.9, 1, 'd' ),    // long tube
+				new \Woodev_Packer_Input_Item( 40, 30, 25, 3.0, 1, 'e' ),  // lamp
+				new \Woodev_Packer_Input_Item( 15, 15, 15, 0.7, 2, 'f' ),  // cube
+				new \Woodev_Packer_Input_Item( 28, 22, 6, 0.5, 3, 'g' ),   // folder
+				new \Woodev_Packer_Input_Item( 9, 9, 20, 0.4, 2, 'h' ),    // bottle
+			];
+		}
+
+		/**
+		 * @param  \Woodev_Packer_Packable_Item[] $items
+		 * @return float[] the largest size of the items on each of the three axes, longest first
+		 */
+		private function largest_item_per_axis( array $items ): array {
+			$axes = [ [], [], [] ];
+
+			foreach ( $items as $item ) {
+				$sides = [ $item->get_length(), $item->get_width(), $item->get_height() ];
+				rsort( $sides );
+				foreach ( $sides as $i => $side ) {
+					$axes[ $i ][] = $side;
+				}
+			}
+
+			return array_map( 'max', $axes );
+		}
+
+		public function test_virtual_is_far_shorter_than_single_on_many_mixed_items() {
+			$items = $this->many_mixed_items();
+
+			$single  = \Woodev_Packer_Dispatcher::pack( \Woodev_Packer_Dispatcher::ALGORITHM_SINGLE, $items )->get_packages()[0];
+			$virtual = \Woodev_Packer_Dispatcher::pack( \Woodev_Packer_Dispatcher::ALGORITHM_VIRTUAL, $items )->get_packages()[0];
+
+			$single_sides  = [ $single->get_length(), $single->get_width(), $single->get_height() ];
+			$virtual_sides = [ $virtual->get_length(), $virtual->get_width(), $virtual->get_height() ];
+
+			$this->assertSame( 16, $virtual->get_item_count() );
+			$this->assertLessThanOrEqual( max( $single_sides ), max( $virtual_sides ), 'virtual never has a longer side than single' );
+			// measured (#1212): single 141 x 60 x 30, virtual 88 x 74 x 60 — the longest side falls by over a third
+			$this->assertLessThan( 0.75 * max( $single_sides ), max( $virtual_sides ), 'and on many mixed items it is much shorter — no sausage' );
+
+			// every side of the virtual box is at least the largest item on that axis (the sorted sides, longest first)
+			sort( $virtual_sides );
+			$virtual_sides = array_reverse( $virtual_sides );
+			foreach ( $this->largest_item_per_axis( $items ) as $axis => $largest ) {
+				$this->assertGreaterThanOrEqual( $largest, $virtual_sides[ $axis ], 'axis ' . $axis );
+			}
+
 		}
 
 		// -------------------------------------------------------------------

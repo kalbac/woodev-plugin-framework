@@ -265,6 +265,44 @@ namespace Woodev\Tests\Unit {
 			}
 		}
 
+		/**
+		 * #1212: what fits no box and is packed «together» goes into the virtual box, never the single-axis one.
+		 */
+		public function test_leftovers_together_are_packed_in_the_virtual_box_not_the_single_one(): void {
+			// none of these fits the boxes below (the longest side is 70 / 60 / 90 cm), so all of them are leftovers
+			$items = [
+				new \Woodev_Packer_Input_Item( 70, 10, 10, 2.0, 2, 'line-a', 11 ),
+				new \Woodev_Packer_Input_Item( 60, 30, 20, 1.0, 1, 'line-b', 12 ),
+				new \Woodev_Packer_Input_Item( 90, 5, 5, 0.5, 1, 'line-c', 13 ),
+			];
+			$boxes = [ $this->small_box(), $this->big_box() ];
+
+			$virtual = \Woodev_Packer_Dispatcher::pack( 'virtual', $items )->get_packages()[0];
+			$single  = \Woodev_Packer_Dispatcher::pack( 'single', $items )->get_packages()[0];
+			$this->assertNotEquals(
+				[ $single->get_length(), $single->get_width(), $single->get_height() ],
+				[ $virtual->get_length(), $virtual->get_width(), $virtual->get_height() ],
+				'the fixture tells the two algorithms apart'
+			);
+
+			// the retired `single` still means the same thing for a caller that passes it
+			foreach ( [ 'virtual', 'single' ] as $leftovers ) {
+				$result = \Woodev_Packer_Dispatcher::pack( 'boxes', $items, $boxes, $leftovers );
+
+				$this->assertSame( 1, $result->get_package_count(), $leftovers );
+				$package = $result->get_packages()[0];
+				$this->assertEqualsWithDelta(
+					[ $virtual->get_length(), $virtual->get_width(), $virtual->get_height() ],
+					[ $package->get_length(), $package->get_width(), $package->get_height() ],
+					0.0001,
+					$leftovers
+				);
+				$this->assertSame( 4, $package->get_item_count() );
+				$this->assertEqualsWithDelta( 5.5, $package->get_weight(), 0.0001 );
+				$this->assertSame( [ 'line-a' => 2, 'line-b' => 1, 'line-c' => 1 ], $this->units_by_key( $result ) );
+			}
+		}
+
 		public function test_virtual_reports_every_item_in_its_single_package(): void {
 			$items  = [
 				new \Woodev_Packer_Input_Item( 10, 8, 5, 0.3, 2, 'line-a', 11 ),

@@ -77,6 +77,7 @@ class Packaging_Settings extends \Woodev_Abstract_Settings {
 	 */
 	public function get_default_algorithm( string $key ): string {
 		$value = $this->get_value( $key );
+		$value = is_string( $value ) ? \Woodev_Packer_Dispatcher::normalize_stored_algorithm( $value ) : $value;
 		$allowed = 'packing_algorithm' === $key ? \Woodev_Packer_Dispatcher::get_algorithms() : self::leftover_options();
 		return is_string( $value ) && isset( $allowed[ $value ] ) ? $value : \Woodev_Packer_Dispatcher::ALGORITHM_SEPARATELY;
 	}
@@ -100,15 +101,16 @@ class Packaging_Settings extends \Woodev_Abstract_Settings {
 		}
 		foreach ( [ 'packing_algorithm', 'unpacked_algorithm' ] as $key ) {
 			$allowed = 'packing_algorithm' === $key ? \Woodev_Packer_Dispatcher::get_algorithms() : self::leftover_options();
-			if ( null === get_option( 'woodev_' . $this->plugin_id . '_packaging_' . $key, null ) && isset( $legacy[ $key ] ) && is_string( $legacy[ $key ] ) && isset( $allowed[ $legacy[ $key ] ] ) ) {
-				$this->get_setting( $key )->set_value( $legacy[ $key ] );
+			$legacy_value = isset( $legacy[ $key ] ) && is_string( $legacy[ $key ] ) ? \Woodev_Packer_Dispatcher::normalize_stored_algorithm( $legacy[ $key ] ) : null;
+			if ( null === get_option( 'woodev_' . $this->plugin_id . '_packaging_' . $key, null ) && null !== $legacy_value && isset( $allowed[ $legacy_value ] ) ) {
+				$this->get_setting( $key )->set_value( $legacy_value );
+			}
+			// the retired `single` (#1212) is shown as `virtual`, so the select never lands on an unknown value
+			$stored = $this->get_setting( $key )->get_value();
+			if ( \Woodev_Packer_Dispatcher::ALGORITHM_SINGLE === $stored ) {
+				$this->get_setting( $key )->set_value( \Woodev_Packer_Dispatcher::normalize_stored_algorithm( $stored ) );
 			}
 		}
-		$options = self::packing_options();
-		if ( 'virtual' === $this->get_value( 'packing_algorithm' ) ) {
-			$options['virtual'] = __( 'Минимальная коробка', 'woodev-plugin-framework' );
-		}
-		$this->get_setting( 'packing_algorithm' )->set_options( $options );
 	}
 
 	/**
@@ -132,9 +134,11 @@ class Packaging_Settings extends \Woodev_Abstract_Settings {
 	}
 
 	/**
-	 * Merchant packing choices; virtual remains readable but is not offered for new choices.
+	 * Merchant packing choices: each item separately, everything in one (virtual) box, or the store's boxes.
 	 *
 	 * @since 2.0.2
+	 * @since 2.0.2 (#1212) «Всё в одну коробку» is `virtual`; the retired `single` is not offered, and a store
+	 *              that saved it reads as `virtual` ({@see \Woodev_Packer_Dispatcher::normalize_stored_algorithm()}).
 	 * @return array<string,string>
 	 */
 	public static function packing_options(): array {
@@ -142,13 +146,16 @@ class Packaging_Settings extends \Woodev_Abstract_Settings {
 	}
 
 	/**
+	 * What may happen to the items that fit no box: each separately, or all together in one virtual box.
+	 * The stored value of the second is `virtual` since #1212 (it was `single`, which is still read).
+	 *
 	 * @since 2.0.2
 	 * @return array<string,string>
 	 */
 	public static function leftover_options(): array {
 		return [
 			'separately' => __( 'Каждый товар отдельно', 'woodev-plugin-framework' ),
-			'single' => __( 'Всё в одну коробку', 'woodev-plugin-framework' ),
+			'virtual' => __( 'Всё в одну коробку', 'woodev-plugin-framework' ),
 		];
 	}
 
@@ -163,7 +170,7 @@ class Packaging_Settings extends \Woodev_Abstract_Settings {
 			[
 				'name' => __( 'Способ упаковки', 'woodev-plugin-framework' ),
 				'default' => 'separately',
-				'options' => self::packing_options() + [ 'virtual' => __( 'Минимальная коробка', 'woodev-plugin-framework' ) ],
+				'options' => self::packing_options(),
 			]
 		);
 		$this->register_control(

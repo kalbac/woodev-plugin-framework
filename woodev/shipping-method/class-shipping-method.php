@@ -1189,6 +1189,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 				$algorithm = $this->get_plugin()->get_packaging_settings()->get_default_algorithm( 'packing_algorithm' );
 			}
 
+			// a stored `single` (retired, #1212) packs as `virtual`
+			$algorithm = \Woodev_Packer_Dispatcher::normalize_stored_algorithm( $algorithm );
+
 			return array_key_exists( $algorithm, \Woodev_Packer_Dispatcher::get_algorithms() )
 				? $algorithm
 				: \Woodev_Packer_Dispatcher::ALGORITHM_VIRTUAL;
@@ -1205,22 +1208,33 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			if ( '' === $value || 'default' === $value ) {
 				$value = $this->get_plugin()->get_packaging_settings()->get_default_algorithm( 'unpacked_algorithm' );
 			}
-			return 'single' === $value ? 'single' : 'separately';
+			// the retired `single` (#1212) is read as `virtual`: leftovers together go into one virtual box
+			return \Woodev_Packer_Dispatcher::ALGORITHM_VIRTUAL === \Woodev_Packer_Dispatcher::normalize_stored_algorithm( $value )
+				? \Woodev_Packer_Dispatcher::ALGORITHM_VIRTUAL
+				: \Woodev_Packer_Dispatcher::ALGORITHM_SEPARATELY;
 		}
 
 		/**
-		 * Keeps the legacy «virtual» packing choice selectable while it is the stored one.
+		 * Reads an instance option; a stored `single` in the two packing choices comes back as `virtual`.
+		 *
+		 * `single` (#1212) is no longer one of the select's options, so the settings screen — which renders
+		 * whatever this returns as the current value — would otherwise land on an unknown value and show the
+		 * first option. The stored row is left alone until the merchant saves the screen.
 		 *
 		 * @since 2.0.2
-		 * @param string $key field key.
-		 * @param array  $data field definition.
-		 * @return string
+		 *
+		 * @param string $key         option key.
+		 * @param mixed  $empty_value value returned when the option is not set.
+		 * @return mixed
 		 */
-		public function generate_select_html( $key, $data = [] ): string {
-			if ( 'packing_algorithm' === $key && 'virtual' === $this->get_option( 'packing_algorithm', 'default' ) ) {
-				$data['options']['virtual'] = __( 'Минимальная коробка', 'woodev-plugin-framework' );
+		public function get_option( $key, $empty_value = null ) {
+			$value = parent::get_option( $key, $empty_value );
+
+			if ( in_array( $key, [ 'packing_algorithm', 'unpacked_algorithm' ], true ) && is_string( $value ) ) {
+				return \Woodev_Packer_Dispatcher::normalize_stored_algorithm( $value );
 			}
-			return parent::generate_select_html( $key, $data );
+
+			return $value;
 		}
 
 		/**

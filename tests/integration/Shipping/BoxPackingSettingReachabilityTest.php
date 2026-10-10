@@ -129,17 +129,17 @@ class BoxPackingSettingReachabilityTest extends TestCase {
 		$this->assertSame(
 			[
 				'separately' => 'Каждый товар отдельно',
-				'single'     => 'Всё в одну коробку',
+				'virtual'    => 'Всё в одну коробку',
 				'boxes'      => 'Упаковывать в коробки',
 			],
 			$field['options'],
-			'the three packing methods the operator settled on (07.10.2026) must reach the screen — they are three more strings of the same pass'
+			'the three packing methods the operator settled on (07.10.2026) must reach the screen — they are three more strings of the same pass; «all in one box» is the virtual box since #1212'
 		);
 
 		$this->assertArrayNotHasKey(
-			\Woodev_Packer_Dispatcher::ALGORITHM_VIRTUAL,
+			\Woodev_Packer_Dispatcher::ALGORITHM_SINGLE,
 			$field['options'],
-			'`virtual` is not offered as a NEW choice; it stays readable only for a method that already stores it'
+			'`single` (items stacked along one axis) is retired and never offered (#1212)'
 		);
 
 		$this->assertArrayHasKey(
@@ -150,37 +150,32 @@ class BoxPackingSettingReachabilityTest extends TestCase {
 	}
 
 	/**
-	 * Dropping `virtual` from the new choices must not break a site that already stores it.
+	 * A site that stored the retired `single` (#1212) keeps working and keeps a valid select.
 	 *
-	 * The select keeps showing the stored value (otherwise the zone form would silently render
-	 * another method as selected and the next save would overwrite it), and the packer still
-	 * receives the virtual algorithm rather than the fallback for an unknown value.
+	 * The packer runs `virtual`, and the select shows `virtual` as the current value — not an
+	 * unknown one, which would render the first option as selected and let the next save
+	 * overwrite the merchant's intent silently.
 	 *
 	 * @since 2.0.2
 	 *
 	 * @return void
 	 */
-	public function test_a_stored_virtual_packing_algorithm_is_still_honoured(): void {
+	public function test_a_stored_single_packing_algorithm_reads_as_virtual(): void {
 
 		// A zone-form save writes the instance's own option row; build the method after it exists.
 		$stored = new \Woodev_Test_Shipping_Method( self::INSTANCE_ID );
-		update_option( $stored->get_instance_option_key(), [ 'packing_algorithm' => 'virtual' ] );
+		update_option( $stored->get_instance_option_key(), [ 'packing_algorithm' => 'single' ] );
 
 		$method = new \Woodev_Test_Shipping_Method( self::INSTANCE_ID );
 
 		$algorithm = new \ReflectionMethod( $method, 'get_packing_algorithm' );
 		$algorithm->setAccessible( true );
 
-		$this->assertSame( \Woodev_Packer_Dispatcher::ALGORITHM_VIRTUAL, $algorithm->invoke( $method ), 'the stored virtual algorithm is still what the packer runs' );
+		$this->assertSame( \Woodev_Packer_Dispatcher::ALGORITHM_VIRTUAL, $algorithm->invoke( $method ), 'the stored single packs as virtual' );
+		$this->assertSame( 'virtual', $method->get_option( 'packing_algorithm' ), 'the screen is fed the valid value' );
 
 		$html = $method->generate_select_html( 'packing_algorithm', $method->instance_form_fields['packing_algorithm'] );
-		$this->assertStringContainsString( 'value="virtual"', $html, 'the stored value stays visible in the select' );
-
-		$fresh = new \Woodev_Test_Shipping_Method( self::INSTANCE_ID + 1 );
-		$this->assertStringNotContainsString(
-			'value="virtual"',
-			$fresh->generate_select_html( 'packing_algorithm', $fresh->instance_form_fields['packing_algorithm'] ),
-			'a method that never stored it is not offered it'
-		);
+		$this->assertStringContainsString( 'value="virtual"', $html );
+		$this->assertStringNotContainsString( 'value="single"', $html );
 	}
 }

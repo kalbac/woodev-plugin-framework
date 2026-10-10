@@ -139,7 +139,7 @@ test( 'store table preserves free enabled legacy boxes and edits monetary cost a
 
 
 function carrierFields() {
-	const fields: Record<string, any> = { packing_algorithm: { name: 'Способ упаковки', controlType: 'select', type: 'string', value: 'boxes', options: { separately: 'Каждый товар отдельно', single: 'Всё в одну коробку', boxes: 'Упаковывать в коробки', virtual: 'Минимальная коробка' } } };
+	const fields: Record<string, any> = { packing_algorithm: { name: 'Способ упаковки', controlType: 'select', type: 'string', value: 'boxes', options: { separately: 'Каждый товар отдельно', virtual: 'Всё в одну коробку', boxes: 'Упаковывать в коробки' } } };
 	for ( const [ id, name, mode ] of [ [ 'M', 'Коробка M', 'carrier' ], [ 'F', 'Коробка F', 'fixed' ], [ 'L', 'Коробка L', 'merchant' ] ] ) {
 		const preset = { id, name, cost_mode: mode, length: 30, width: 20, height: 15, max_weight: 20, box_weight: 0.2 };
 		fields[ 'box_' + id + '_enabled' ] = { name, value: false, controlType: 'toggle', show_if: { setting: 'packing_algorithm', value: 'boxes' }, tooltip: 'Размеры коробки', box_preset: { ...preset, field: 'enabled' } };
@@ -189,7 +189,7 @@ test( 'store cost syntax hint is visible and row toggle labels are only accessib
 } );
 
 
-test.each( [ 'separately', 'single', 'virtual' ] )( 'carrier boxes follow unsaved packing mode %s and retain edits', ( mode ) => {
+test.each( [ 'separately', 'virtual' ] )( 'carrier boxes follow unsaved packing mode %s and retain edits', ( mode ) => {
 	const fields = carrierFields();
 	function Form() {
 		const [ values, setValues ] = useState<Record<string, string | boolean>>( {} );
