@@ -6,15 +6,13 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-10 (s166).** 🚧 **v2 release = TWO carrier plugins on v2, tested and compatible** (#1179); block-checkout gaps do not block it. s166: edostavka#27 steps 2+4, #1203, #1205, #1204 (PR #1207 + edostavka#34), edostavka#30 (PR #32) merged — only `OFFICE_AVAILABILITY` left. Open: #1177, #1179. ⚠ Sync the plugin's own `woodev/` before plugin rig runs (`wiki/local-rig.md`). Details: `sessions/s166.md`. GlitchTip receiver (#1082) is live. ✅ **Both machines are live**; routine sync is git ONLY (`wiki/two-machine-setup.md`). The order
+**As of 2026-10-10 (s167).** 🚧 **v2 release = TWO carrier plugins on v2, tested and compatible** (#1179: Yandex, AFTER CDEK is done, skill sync #1209 first); block-checkout gaps do not block it. s167: all CDEK webhook types done (edostavka#27 closed), services + city limit (edostavka#42), v1→v2 migration stand (edostavka#43, real 2.2.5.5 = `dd5c76f`, `:8990`) + its findings (#44), non-HPOS order queries (#47). Open: the migration wizard (draft edostavka#14) PARKED for the operator's look on the stand; production-only CDEK checks before release. ⚠ Sync the plugin's own `woodev/` before plugin rig runs (`wiki/local-rig.md`). ⚠ On posts storage `wc_get_orders()` drops `meta_query` — the CDEK plugin hit it in 3 places. Details: `sessions/s167.md`. GlitchTip receiver (#1082) is live. ✅ **Both machines are live**; routine sync is git ONLY (`wiki/two-machine-setup.md`). The order
 metabox (#856) and the orders table (#870) stay accepted.
 
 ✅ **Fixtures carry real download ids `9001`-`9005`** (#910), so `LicenseCommandEndpointTest` drives
 the real signed-envelope route. The admin license REST route refuses an ambiguous id (#907) but
 **NOT** an id without a store product — registration retains such an engine, deliberately; the
 divergence is stated in `resolve_license()`'s docblock.
-
-✅ **#928 CLOSED (s140): the orders page resolves its marker scope to ids and passes `post__in`** (`Orders_Id_Resolver`; 4 carriers × 10 k orders 11.7 s → 13 ms; empty list → NO_MATCH). Detail: `sessions/s140.md`, gotcha `an-or-of-exists-meta-clauses-joins-the-meta-table-once-per-key-unpredicated`; frozen follow-up #940.
 
 ⚠ **Addressing a `meta_query` part by "has a `relation` key" cannot tell the `AND` wrapper from a single
 unwrapped part** — gotcha `a-relation-key-does-not-tell-the-and-wrapper-from-a-single-meta-query-part`.
