@@ -28,6 +28,9 @@ final class Step {
 	/** @var string step label. */
 	private string $label;
 
+	/** @var string|null optional short label for the stepper (null = the full label is used). */
+	private ?string $short_label = null;
+
 	/** @var string step type. */
 	private string $type;
 
@@ -166,6 +169,38 @@ final class Step {
 	 */
 	public function get_label(): string {
 		return $this->label;
+	}
+
+	/**
+	 * Sets the short label the stepper shows instead of the full one (fluent).
+	 *
+	 * A wizard with many steps cannot fit full titles in the progress line. The short label
+	 * is the stepper's only: the step card heading keeps the full label, and the stepper
+	 * still exposes the full label to assistive tech and on hover. An empty or
+	 * whitespace-only string clears it.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param string $label short label for the stepper.
+	 * @return self
+	 */
+	public function set_short_label( string $label ): self {
+		$label = trim( $label );
+
+		$this->short_label = '' === $label ? null : $label;
+
+		return $this;
+	}
+
+	/**
+	 * Returns the short stepper label, or null when none is set.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return string|null
+	 */
+	public function get_short_label(): ?string {
+		return $this->short_label;
 	}
 
 	/**

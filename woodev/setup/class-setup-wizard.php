@@ -685,7 +685,7 @@ abstract class Setup_Wizard {
 				}
 			}
 
-			$steps[] = [
+			$entry = [
 				'id'          => $step->get_id(),
 				'visible'     => true,
 				'label'       => $step->get_label(),
@@ -707,6 +707,13 @@ abstract class Setup_Wizard {
 					)
 				),
 			];
+
+			// Optional: emitted only when the plugin set one, so a step without it keeps the old shape.
+			if ( null !== $step->get_short_label() ) {
+				$entry['short_label'] = $step->get_short_label();
+			}
+
+			$steps[] = $entry;
 		}
 
 		$steps[] = [

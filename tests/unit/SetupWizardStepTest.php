@@ -42,4 +42,35 @@ class SetupWizardStepTest extends TestCase {
 		$this->assertSame( Step::TYPE_CONTENT, $step->get_type() );
 		$this->assertSame( '<p>Привет</p>', $step->get_content() );
 	}
+
+	public function test_short_label_is_null_until_set_and_the_setter_is_fluent(): void {
+		$step = Step::settings( 'connection', 'Подключение к сервису', [ 'api_key' ] );
+
+		$this->assertNull( $step->get_short_label() );
+		$this->assertSame( $step, $step->set_short_label( 'Связь' ) );
+		$this->assertSame( 'Связь', $step->get_short_label() );
+		$this->assertSame( 'Подключение к сервису', $step->get_label() );
+	}
+
+	/**
+	 * @dataProvider provide_blank_short_labels
+	 */
+	public function test_a_blank_short_label_means_not_set( string $blank ): void {
+		$step = Step::content( 'info', 'Информация', '' )->set_short_label( 'Инфо' )->set_short_label( $blank );
+
+		$this->assertNull( $step->get_short_label() );
+	}
+
+	/** @return array<string,array{string}> */
+	public function provide_blank_short_labels(): array {
+		return [
+			'empty'      => [ '' ],
+			'spaces'     => [ '   ' ],
+			'whitespace' => [ " \t\n" ],
+		];
+	}
+
+	public function test_the_short_label_is_trimmed(): void {
+		$this->assertSame( 'Связь', Step::content( 'info', 'Информация', '' )->set_short_label( "  Связь \n" )->get_short_label() );
+	}
 }

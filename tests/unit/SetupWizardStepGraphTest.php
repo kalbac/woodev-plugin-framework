@@ -482,6 +482,25 @@ class SetupWizardStepGraphTest extends TestCase {
 		$this->assertSame( [ 'handle' => 'acme-wizard-review', 'export' => 'ReviewStep' ], $by_id['review']['component'] );
 	}
 
+	public function test_the_bootstrap_emits_the_short_label_only_for_a_step_that_sets_one(): void {
+		$this->boot(
+			[
+				Step::content( 'welcome', 'Добро пожаловать', '<p>x</p>' ),
+				Step::content( 'review', 'Проверка настроек перед запуском', '' )->set_short_label( 'Проверка' ),
+				Step::content( 'blank', 'Пустое короткое', '' )->set_short_label( '  ' ),
+			]
+		);
+
+		$by_id = array_column( $this->wizard->data()['steps'], null, 'id' );
+
+		$this->assertArrayNotHasKey( 'short_label', $by_id['welcome'] );
+		$this->assertArrayNotHasKey( 'short_label', $by_id['blank'] );
+		$this->assertArrayNotHasKey( 'short_label', $by_id['finish'] );
+		$this->assertSame( 'Проверка', $by_id['review']['short_label'] );
+		// The full label is untouched: it is still the card heading.
+		$this->assertSame( 'Проверка настроек перед запуском', $by_id['review']['label'] );
+	}
+
 	/**
 	 * @dataProvider provide_bad_components
 	 */

@@ -973,7 +973,8 @@ export default function App() {
 		{ className: 'woodev-setup', ref: rootRef },
 		renderHeader( pluginName, headerLogoUrl ),
 		createElement( Stepper, {
-			steps,
+			// The graph's optional `short_label` is the line's text; the card heading keeps `label`.
+			steps: steps.map( ( s ) => ( { id: s.id, label: s.label, shortLabel: s.short_label } ) ),
 			index,
 			onNavigate: goTo,
 			disabled: busy,
