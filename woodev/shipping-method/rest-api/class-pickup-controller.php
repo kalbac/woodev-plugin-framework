@@ -756,7 +756,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 				'instance_id' => [
 					'type'              => 'integer',
 					'minimum'           => 1,
-					'default'           => 0,
+					// No default: WordPress validates a default like a sent value, and 0 is below the minimum,
+					// so a default here rejected every admin points request that carried no instance.
 					'validate_callback' => 'rest_validate_request_arg',
 				],
 				// Order weight in GRAMS (the checker's unit); 0 = unknown, which passes every limit.

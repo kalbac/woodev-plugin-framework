@@ -249,6 +249,38 @@ final class PickupControllerAdminRoutesTest extends TestCase {
 
 	// ---- route declaration ----
 
+	/**
+	 * WordPress validates a declared default exactly like a sent value, so a default outside an
+	 * argument's own bounds rejects every request that omits the argument (rig s170: `instance_id`
+	 * defaulted to 0 under `minimum: 1` and every admin points request returned 400).
+	 */
+	public function test_no_admin_route_argument_defaults_outside_its_own_bounds(): void {
+		$routes = $this->admin_routes( $this->controller( new Pickup_Admin_Test_Source( static fn() => [], static fn() => null ) ) );
+
+		foreach ( $routes as $route => $declaration ) {
+			$endpoints = isset( $declaration['endpoints']['args'] ) ? [ $declaration['endpoints'] ] : $declaration['endpoints'];
+
+			foreach ( $endpoints as $endpoint ) {
+				foreach ( $endpoint['args'] ?? [] as $name => $arg ) {
+					if ( ! array_key_exists( 'default', $arg ) || ! is_numeric( $arg['default'] ) ) {
+						continue;
+					}
+
+					if ( isset( $arg['minimum'] ) ) {
+						$this->assertGreaterThanOrEqual( $arg['minimum'], $arg['default'], "{$route} {$name}" );
+					}
+
+					if ( isset( $arg['maximum'] ) ) {
+						$this->assertLessThanOrEqual( $arg['maximum'], $arg['default'], "{$route} {$name}" );
+					}
+				}
+			}
+		}
+
+		$this->assertNotEmpty( $routes );
+	}
+
+
 	public function test_register_admin_routes_declares_the_list_and_detail_routes_under_the_orders_path(): void {
 		$routes = $this->admin_routes( $this->controller( new Pickup_Admin_Test_Source( static fn() => [], static fn() => null ) ) );
 
