@@ -191,30 +191,9 @@ abstract class Woodev_Packer implements Woodev_Packer_Interface {
 }
 ```
 
-### Virtual Box Packer
-
-`Woodev_Packer_Virtual_Box` packs every item into ONE box and sizes that box from a real placement:
-candidate bases are built from the items' own sides, the items are placed largest-first into the
-deepest free space that holds them (rotations allowed, small items go into the gaps between big
-ones), and the smallest-volume result wins — within 10 % of it, the one with the shortest longest
-side. The work is bounded by counts (never by time, so the same items always give the same box);
-above 120 units the cheap arithmetic grid box is returned instead. `get_placement()` returns the
-frame and every unit's corners, so the fit can be verified.
-
-```php
-<?php
-$packer = new Woodev_Packer_Virtual_Box();
-$packer->add_item( new Woodev_Packer_Item_Implementation( 40, 30, 25, 3.0 ) );
-$packer->add_item( new Woodev_Packer_Item_Implementation( 10, 8, 5, 0.2 ) );
-$packer->pack();
-
-$box = $packer->get_packages()[0]->get_box(); // 40 x 30 x 25 — the small item sits in a gap
-```
-
 ### Single Box Packer
 
-Packs all items into one box sized by summing one axis and taking the maximum of the other two
-(retired from the settings choice in favour of the virtual box, but still available in code):
+Packs all items into one virtual box:
 
 ```php
 <?php

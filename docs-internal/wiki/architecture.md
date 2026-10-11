@@ -286,7 +286,7 @@ space over a set of maximal free boxes (any rotation; small items land in the ga
 volume wins and, within 10 % of it, the shortest longest side. The work is bounded by counts, never
 by the clock (determinism — the rate cache keys on the box): at most 48 footprints, fewer as the
 unit count grows, none above 120 units, where the old arithmetic grid box is returned; the grid is
-also the floor the placed box never exceeds. `get_placement()` exposes the frame and every unit's
+also the volume ceiling the placed box never exceeds (and the fallback when no placement fits under it). `get_placement()` exposes the frame and every unit's
 corners for verification. Note `Woodev_Box_Packer_Packed_Box` itself does NOT place anything: it
 checks per-item fit and summed volume only, so `Woodev_Packer_Boxes` is a volume packer, not a 3-D one.
 Every `Woodev_Packer_Package_Result` reports source item allocation (`get_items()`: cart-item key /

@@ -21,9 +21,10 @@ if ( ! class_exists( 'Woodev_Packer_Virtual_Box' ) ) :
 	 *    boxes within {@see self::VOLUME_BAND} of the smallest, the one with the shortest longest side wins:
 	 *    a slightly larger but much shorter parcel is the better shipment (no «sausage»).
 	 *
-	 * The work is bounded ({@see self::MAX_ATTEMPTS}, {@see self::TIME_BUDGET}); the previous arithmetic
-	 * grid box ({@see self::grid_dimensions()}) is the floor the result never falls under and the fallback
-	 * when the budget allows no placement at all. The result is deterministic for the same items.
+	 * The work is bounded by counts ({@see self::MAX_ATTEMPTS}, {@see self::MAX_PLACEMENTS}, {@see self::MAX_UNITS}); the
+	 * previous arithmetic grid box ({@see self::grid_dimensions()}) is the volume CEILING the result never
+	 * exceeds and the fallback when no placement fits under it or the cart is over MAX_UNITS. The result is
+	 * deterministic for the same items.
 	 */
 	class Woodev_Packer_Virtual_Box extends Woodev_Packer {
 
@@ -46,6 +47,9 @@ if ( ! class_exists( 'Woodev_Packer_Virtual_Box' ) ) :
 		const MIN_ATTEMPTS = 3;
 		const MAX_PLACEMENTS = 400;
 		const MAX_UNITS = 120;
+
+		/** The most the shortest side may grow, relatively, to settle a rounding error ({@see self::settled_box()}). */
+		const SETTLE_LIMIT = 1e-7;
 
 		/** How many distinct item sides feed the footprint candidates (the largest ones). */
 		const MAX_DISTINCT_SIDES = 12;
@@ -75,20 +79,55 @@ if ( ! class_exists( 'Woodev_Packer_Virtual_Box' ) ) :
 			$this->items    = $this->order_items_by_volume_desc( $this->items );
 
 			$dimensions = $this->calculate_virtual_box_dimensions( $this->items );
-
-			$virtual_box = new Woodev_Packer_Box_Implementation(
-				$dimensions['length'],
-				$dimensions['width'],
-				$dimensions['height'],
-				0,
-				null,
-				'virtual_box',
-				'Виртуальная коробка'
-			);
+			$virtual_box = $this->settled_box( $dimensions, $this->items );
 
 			// every item fits by construction — the box is sized from a real placement of these items
 			$this->packages[] = new Woodev_Box_Packer_Packed_Box( $virtual_box, $this->items );
 			$this->items      = [];
+		}
+
+		/**
+		 * The box object for the sides, nudged just enough that the packed-box view ({@see Woodev_Box_Packer_Packed_Box},
+		 * which compares every item with the box strictly: each side, then the running volume) reports EVERY
+		 * placed unit. The sides come from sums and a placement made with {@see self::EPSILON} tolerance, so the
+		 * box's volume can land a rounding error under the summed item volume (3 × 10.5 × 7.3 × 2.1 cm did) and
+		 * the last unit would be reported as not fitting, with its weight lost. Only the shortest side grows,
+		 * by a relative step doubling from one rounding unit and capped at {@see self::SETTLE_LIMIT} — far below
+		 * a micrometre on a parcel side, and no change at all when the box already satisfies the view.
+		 *
+		 * @param  array{length: float, width: float, height: float} $dimensions sides, longest first
+		 * @param  Woodev_Box_Packer_Item[]                          $items      in the order the packed box walks them
+		 * @return Woodev_Packer_Box_Implementation
+		 */
+		private function settled_box( array $dimensions, array $items ): Woodev_Packer_Box_Implementation {
+			$sides  = [ $dimensions['length'], $dimensions['width'], $dimensions['height'] ];
+			$needed = 0.0;
+			$axes   = [ 0.0, 0.0, 0.0 ];
+
+			foreach ( $items as $item ) {
+				$needed += $item->get_volume();
+				$axes    = [ max( $axes[0], $item->get_length() ), max( $axes[1], $item->get_width() ), max( $axes[2], $item->get_height() ) ];
+			}
+
+			// the items' sides are sorted longest first, the box's are too: compare them axis by axis
+			foreach ( $sides as $i => $side ) {
+				$sides[ $i ] = max( $side, $axes[ $i ] );
+			}
+
+			$step = 2.3e-16;
+
+			do {
+				$box = new Woodev_Packer_Box_Implementation( $sides[0], $sides[1], $sides[2], 0, null, 'virtual_box', 'Виртуальная коробка' );
+
+				if ( $box->get_volume() >= $needed || $step > self::SETTLE_LIMIT ) {
+					break;
+				}
+
+				$sides[2] *= 1 + $step;
+				$step     *= 2;
+			} while ( true );
+
+			return $box;
 		}
 
 		/**
@@ -480,7 +519,7 @@ if ( ! class_exists( 'Woodev_Packer_Virtual_Box' ) ) :
 		/**
 		 * The arithmetic grid box (the pre-#1212 algorithm): the items in an a × b × c grid of the per-axis
 		 * largest sizes, the arrangement with the shortest longest side and then the smallest volume. Cheap,
-		 * always holds the items, and often far too big: the floor and the fallback for the placed box.
+		 * always holds the items, and often far too big: the volume ceiling and the fallback for the placed box.
 		 *
 		 * @param  Woodev_Box_Packer_Item[] $items
 		 * @return array{0: float, 1: float, 2: float} sides, longest first

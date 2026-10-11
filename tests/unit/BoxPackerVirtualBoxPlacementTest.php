@@ -378,5 +378,55 @@ namespace Woodev\Tests\Unit {
 
 			$this->assertEqualsWithDelta( [ 10.0, 10.0, 8.0 ], $result['sides'], self::EPS, 'the two real items, one on the other' );
 		}
+
+		/**
+		 * Decimal sizes: the box volume computed from the placement can land a rounding error below the summed
+		 * item volume, and the packed-box view compares them strictly. The view must still report every unit
+		 * and the full weight (critic of #1213).
+		 *
+		 * @return array<string, array{0: float, 1: float, 2: float, 3: int}>
+		 */
+		public static function decimal_cases(): array {
+			return [
+				'three 10.5 x 7.3 x 2.1' => [ 10.5, 7.3, 2.1, 3 ],
+				'twenty 10.5 x 7.3 x 2.1' => [ 10.5, 7.3, 2.1, 20 ],
+				'twenty 12.7 x 8.9 x 3.3' => [ 12.7, 8.9, 3.3, 20 ],
+			];
+		}
+
+		/**
+		 * @dataProvider decimal_cases
+		 */
+		public function test_the_packed_box_reports_every_placed_decimal_unit( float $length, float $width, float $height, int $quantity ) {
+			$units = [];
+
+			for ( $i = 0; $i < $quantity; $i++ ) {
+				$units[] = new \Woodev_Packer_Item_Implementation( $length, $width, $height, 1.0 );
+			}
+
+			$result = self::pack( $units );
+			$packed = $result['packer']->get_packages()[0];
+
+			$this->assertCount( $quantity, $packed->get_packed_items() );
+			$this->assertSame( [], $packed->get_nofit_items() );
+			$this->assertEqualsWithDelta( (float) $quantity, $packed->get_packed_weight(), 1e-9 );
+		}
+
+		/**
+		 * The three-unit case of the critic is a real placement (not the grid fallback), so the settling is
+		 * what makes the packed view complete — and it moves no side visibly.
+		 */
+		public function test_the_decimal_placed_box_keeps_its_measured_sides() {
+			$units = [];
+
+			for ( $i = 0; $i < 3; $i++ ) {
+				$units[] = new \Woodev_Packer_Item_Implementation( 10.5, 7.3, 2.1, 1.0 );
+			}
+
+			$result = self::pack( $units );
+
+			$this->assertNotSame( [], $result['packer']->get_placement() );
+			$this->assertEqualsWithDelta( [ 10.5, 7.3, 6.3 ], $result['sides'], 1e-6 );
+		}
 	}
 }
