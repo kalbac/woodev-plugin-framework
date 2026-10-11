@@ -38,7 +38,13 @@ if ( ! class_exists( 'Woodev_Packer_Dispatcher' ) ) :
 
 		/**
 		 * All items packed into one box, sized by summing one axis and taking the max of the other two.
-		 * Best for small orders where items stack along a single dimension.
+		 *
+		 * NOT OFFERED any more (#1212): with many items of different sizes the parcel became a very long
+		 * "sausage" and shoppers complained. {@see self::ALGORITHM_VIRTUAL} is the "everything in one box"
+		 * choice. The constant, {@see self::pack()} on it and {@see Woodev_Packer_Single_Box} stay in the code
+		 * so the algorithm can come back on demand; {@see self::get_algorithms()} does not list it.
+		 *
+		 * A stored `single` is read as `virtual` ({@see self::normalize_stored_algorithm()}).
 		 *
 		 * @since 1.4.1
 		 */
@@ -68,7 +74,9 @@ if ( ! class_exists( 'Woodev_Packer_Dispatcher' ) ) :
 		 *                                                     Null is no boxes — {@see Woodev_WC_Packer_Dispatcher::pack()}
 		 *                                                     reads the store's own list when it is null.
 		 *
-		 * @param string                        $leftovers Single or separately for units that fit no box.
+		 * @param string                        $leftovers `virtual` — together in one virtual box — or `separately`,
+		 *                                                 for the units that fit no box. The legacy `single` is
+		 *                                                 read as `virtual` (#1212).
 		 * @return Woodev_Packer_Result
 		 *
 		 * @throws Woodev_Packer_Exception If $items is empty or $algorithm_id is not registered.
@@ -114,16 +122,37 @@ if ( ! class_exists( 'Woodev_Packer_Dispatcher' ) ) :
 		/**
 		 * Returns algorithm IDs mapped to localised labels for use in settings dropdowns.
 		 *
+		 * {@see self::ALGORITHM_SINGLE} is deliberately absent (#1212) — it is not a choice any more. A store
+		 * that saved it earlier must not break: run the stored value through
+		 * {@see self::normalize_stored_algorithm()} before looking it up here.
+		 *
 		 * @since  1.4.1
+		 * @since  2.0.2 No longer lists `single` (#1212).
 		 * @return array<string, string>
 		 */
 		public static function get_algorithms(): array {
 			return [
 				self::ALGORITHM_VIRTUAL    => __( 'Virtual box (minimal size)', 'woodev-plugin-framework' ),
 				self::ALGORITHM_SEPARATELY => __( 'Each item in a separate box', 'woodev-plugin-framework' ),
-				self::ALGORITHM_SINGLE     => __( 'Single box (items stacked along one axis)', 'woodev-plugin-framework' ),
 				self::ALGORITHM_BOXES      => __( 'Store packaging (items packed into the boxes set up in the store)', 'woodev-plugin-framework' ),
 			];
+		}
+
+		/**
+		 * Reads a STORED algorithm choice (a packing algorithm or the leftovers mode) as a current one.
+		 *
+		 * The decision (#1212): a store that saved the retired `single` — "everything in one box", the
+		 * longest-possible-parcel algorithm — gets `virtual`, the same intent done properly. Packing never
+		 * breaks and the admin select always has a valid current value. Every other value passes unchanged,
+		 * so an unknown one is still the caller's to reject.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param  string $algorithm A value read from settings.
+		 * @return string
+		 */
+		public static function normalize_stored_algorithm( string $algorithm ): string {
+			return self::ALGORITHM_SINGLE === $algorithm ? self::ALGORITHM_VIRTUAL : $algorithm;
 		}
 
 		// -----------------------------------------------------------------------
@@ -137,12 +166,24 @@ if ( ! class_exists( 'Woodev_Packer_Dispatcher' ) ) :
 		 * @return Woodev_Packer_Result
 		 */
 		private static function pack_virtual( array $items ): Woodev_Packer_Result {
-			$packer = new Woodev_Packer_Virtual_Box();
-			$units  = self::expand_to_units( $items );
-
-			$total_weight = (float) array_sum(
-				array_map( fn( Woodev_Packer_Item_Implementation $u ) => $u->get_weight(), $units )
+			return new Woodev_Packer_Result(
+				self::ALGORITHM_VIRTUAL,
+				[ self::virtual_package( self::expand_to_units( $items ), $items ) ]
 			);
+		}
+
+		/**
+		 * One package for the given units: the minimal virtual box that holds them all.
+		 *
+		 * Shared by {@see self::pack_virtual()} and the leftovers of {@see self::pack_boxes()}, so "together"
+		 * means the same box in both.
+		 *
+		 * @param  Woodev_Box_Packer_Item[]      $units Units to pack, at least one.
+		 * @param  Woodev_Packer_Packable_Item[] $items The input lines the units came from.
+		 * @return Woodev_Packer_Package_Result
+		 */
+		private static function virtual_package( array $units, array $items ): Woodev_Packer_Package_Result {
+			$packer = new Woodev_Packer_Virtual_Box();
 
 			foreach ( $units as $unit ) {
 				$packer->add_item( $unit );
@@ -150,20 +191,16 @@ if ( ! class_exists( 'Woodev_Packer_Dispatcher' ) ) :
 
 			$packer->pack();
 
-			$packages = [];
-			foreach ( $packer->get_packages() as $packed_box ) {
-				$box        = $packed_box->get_box();
-				$packages[] = new Woodev_Packer_Package_Result(
-					$box->get_length(),
-					$box->get_width(),
-					$box->get_height(),
-					$total_weight,
-					count( $units ),
-					self::allocate( $units, $items )
-				);
-			}
+			$box = $packer->get_packages()[0]->get_box();
 
-			return new Woodev_Packer_Result( self::ALGORITHM_VIRTUAL, $packages );
+			return new Woodev_Packer_Package_Result(
+				$box->get_length(),
+				$box->get_width(),
+				$box->get_height(),
+				(float) array_sum( array_map( static fn( $unit ) => $unit->get_weight(), $units ) ),
+				count( $units ),
+				self::allocate( $units, $items )
+			);
 		}
 
 		/**
@@ -227,7 +264,9 @@ if ( ! class_exists( 'Woodev_Packer_Dispatcher' ) ) :
 		 *
 		 * @param  Woodev_Packer_Packable_Item[] $items
 		 * @param  array                         $boxes anything that is not a Woodev_Box_Packer_Box is ignored
-		 * @param string                        $leftovers Single or separately.
+		 * @param  string                        $leftovers `virtual` (legacy `single` too) packs the units that fit no
+		 *                                               box together in a virtual box, as {@see self::pack_virtual()}
+		 *                                               does; anything else sends each of them separately.
 		 * @return Woodev_Packer_Result
 		 */
 		private static function pack_boxes( array $items, array $boxes, string $leftovers ): Woodev_Packer_Result {
@@ -276,22 +315,10 @@ if ( ! class_exists( 'Woodev_Packer_Dispatcher' ) ) :
 				$loose = $packer->get_items_cannot_pack();
 			}
 
-			if ( self::ALGORITHM_SINGLE === $leftovers && [] !== $loose ) {
-				$packer = new Woodev_Packer_Single_Box( 'package' );
-				foreach ( $loose as $unit ) {
-					$packer->add_item( $unit );
-				}
-				$packer->pack();
-				$box = $packer->get_packages()[0]->get_box();
-				$packages[] = new Woodev_Packer_Package_Result(
-					$box->get_length(),
-					$box->get_width(),
-					$box->get_height(),
-					(float) array_sum( array_map( static fn( $unit ) => $unit->get_weight(), $loose ) ),
-					count( $loose ),
-					self::allocate( $loose, $items )
-				);
-				$loose = [];
+			// the retired `single` is read as `virtual` (#1212): leftovers together go into ONE virtual box
+			if ( self::ALGORITHM_VIRTUAL === self::normalize_stored_algorithm( $leftovers ) && [] !== $loose ) {
+				$packages[] = self::virtual_package( $loose, $items );
+				$loose      = [];
 			}
 
 			foreach ( $loose as $unit ) {

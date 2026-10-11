@@ -123,9 +123,9 @@ final class PackagingTest extends TestCase {
 			$this->assertSame( 10, $control->get_box_preset()[ $dimension ] );
 		}
 	}
-	public function test_leftovers_single_preserves_allocations_and_separately_is_default(): void {
+	public function test_leftovers_together_preserve_allocations_and_separately_is_default(): void {
 		$items = [ $this->item( 2, 50 ), new \Woodev_Packer_Input_Item( 60, 5, 5, 2, 1, 'other', 6 ) ];
-		$single = \Woodev_Packer_Dispatcher::pack( 'boxes', $items, [], 'single' );
+		$single = \Woodev_Packer_Dispatcher::pack( 'boxes', $items, [], 'virtual' );
 		$separate = \Woodev_Packer_Dispatcher::pack( 'boxes', $items, [] );
 		$this->assertSame( 1, $single->get_package_count() );
 		$this->assertSame( 3, $separate->get_package_count() );
@@ -152,17 +152,17 @@ final class PackagingTest extends TestCase {
 	}
 	public function test_carrier_defaults_and_instance_overrides_and_legacy_virtual_work(): void {
 		$this->options['woodev_carrier_packaging_packing_algorithm'] = 'boxes';
-		$this->options['woodev_carrier_packaging_unpacked_algorithm'] = 'single';
+		$this->options['woodev_carrier_packaging_unpacked_algorithm'] = 'virtual';
 		$method = $this->method();
 		$this->assertSame( 'boxes', $this->invoke( $method, 'get_packing_algorithm' ) );
-		$this->assertSame( 'single', $this->invoke( $method, 'get_unpacked_algorithm' ) );
+		$this->assertSame( 'virtual', $this->invoke( $method, 'get_unpacked_algorithm' ) );
 		$method->stored_options = [ 'packing_algorithm' => 'virtual', 'unpacked_algorithm' => 'separately' ];
 		$this->assertSame( 'virtual', $this->invoke( $method, 'get_packing_algorithm' ) );
 		$this->assertSame( 'separately', $this->invoke( $method, 'get_unpacked_algorithm' ) );
 	}
 	public function test_integration_default_is_read_until_new_default_is_saved(): void {
 		$this->options['woocommerce_carrier_settings'] = [ 'packing_algorithm' => 'single' ];
-		$this->assertSame( 'single', ( new Packaging_Settings( 'carrier', [] ) )->get_default_algorithm( 'packing_algorithm' ) );
+		$this->assertSame( 'virtual', ( new Packaging_Settings( 'carrier', [] ) )->get_default_algorithm( 'packing_algorithm' ), 'the retired single is read as virtual' );
 		$this->options['woodev_carrier_packaging_packing_algorithm'] = 'boxes';
 		$this->assertSame( 'boxes', ( new Packaging_Settings( 'carrier', [] ) )->get_default_algorithm( 'packing_algorithm' ) );
 	}
@@ -173,10 +173,10 @@ final class PackagingTest extends TestCase {
 		$settings = $method->owner->get_packaging_settings();
 		$settings->get_setting( 'box_CARTON_M_enabled' )->set_value( true );
 		$settings->get_setting( 'box_CARTON_M_cost' )->set_value( '5%' );
-		$method->stored_options['unpacked_algorithm'] = 'single';
+		$method->stored_options['unpacked_algorithm'] = 'virtual';
 		$after = $method->get_rate_cache_context( [] );
 		$this->assertNotSame( $before, $after );
-		$this->assertSame( 'single', $after['packing']['leftovers'] );
+		$this->assertSame( 'virtual', $after['packing']['leftovers'] );
 		$this->assertSame( '5%', $after['packing']['carrier_boxes'][0]['cost'] );
 	}
 	public function test_preset_controls_match_modes_and_leftovers_have_show_if(): void {
@@ -193,7 +193,7 @@ final class PackagingTest extends TestCase {
 			$this->assertSame( [ 'setting' => 'packing_algorithm', 'value' => 'boxes' ], $settings->get_setting( $id )->get_show_if_conditions() );
 		}
 		$edits = [ 'box_CARTON_M_enabled' => false, 'box_CARTON_M_charge' => true, 'box_SECOND_cost' => '7%' ];
-		foreach ( [ 'separately', 'single', 'virtual' ] as $mode ) {
+		foreach ( [ 'separately', 'virtual' ] as $mode ) {
 			$this->assertSame( [ 'packing_algorithm' => $mode ], $settings->filter_visible_values( [ 'packing_algorithm' => $mode ] + $edits ) );
 		}
 		$this->assertTrue( $settings->get_value( 'box_CARTON_M_enabled' ) );
@@ -249,12 +249,32 @@ final class PackagingTest extends TestCase {
 		$this->assertSame( [ [ 'id' => 'CARTON_M', 'count' => 2 ] ], Packaging::get_carrier_boxes( $method->received_packed ) );
 	}
 
-	public function test_new_defaults_offer_three_choices_but_saved_virtual_remains_visible(): void {
-		$this->assertSame( [ 'separately', 'single', 'boxes' ], array_keys( ( new Packaging_Settings( 'carrier', [] ) )->get_setting( 'packing_algorithm' )->get_options() ) );
-		$this->options['woocommerce_carrier_settings'] = [ 'packing_algorithm' => 'virtual' ];
-		$settings = new Packaging_Settings( 'carrier', [] );
-		$this->assertSame( 'virtual', $settings->get_default_algorithm( 'packing_algorithm' ) );
-		$this->assertArrayHasKey( 'virtual', $settings->get_setting( 'packing_algorithm' )->get_options() );
+	public function test_three_choices_are_offered_and_a_saved_single_is_shown_as_virtual(): void {
+		$this->assertSame( [ 'separately', 'virtual', 'boxes' ], array_keys( ( new Packaging_Settings( 'carrier', [] ) )->get_setting( 'packing_algorithm' )->get_options() ) );
+		$this->assertSame( [ 'separately', 'virtual' ], array_keys( Packaging_Settings::leftover_options() ) );
+		foreach ( [ 'woodev_carrier_packaging_', 'legacy' ] as $source ) {
+			$this->options = [];
+			if ( 'legacy' === $source ) {
+				$this->options['woocommerce_carrier_settings'] = [ 'packing_algorithm' => 'single', 'unpacked_algorithm' => 'single' ];
+			} else {
+				$this->options['woodev_carrier_packaging_packing_algorithm'] = 'single';
+				$this->options['woodev_carrier_packaging_unpacked_algorithm'] = 'single';
+			}
+			$settings = new Packaging_Settings( 'carrier', [] );
+			$this->assertSame( 'virtual', $settings->get_default_algorithm( 'packing_algorithm' ), $source );
+			$this->assertSame( 'virtual', $settings->get_default_algorithm( 'unpacked_algorithm' ), $source );
+			$this->assertSame( 'virtual', $settings->get_value( 'packing_algorithm' ), 'the control shows a valid value: ' . $source );
+			$this->assertSame( 'virtual', $settings->get_value( 'unpacked_algorithm' ), 'the control shows a valid value: ' . $source );
+		}
+	}
+
+	public function test_a_stored_single_on_a_shipping_method_packs_as_virtual_and_leftovers_together(): void {
+		$method = $this->method();
+		$method->stored_options = [ 'packing_algorithm' => 'single', 'unpacked_algorithm' => 'single' ];
+		$this->assertSame( 'virtual', $this->invoke( $method, 'get_packing_algorithm' ) );
+		$this->assertSame( 'virtual', $this->invoke( $method, 'get_unpacked_algorithm' ) );
+		$method->stored_options = [ 'unpacked_algorithm' => 'nonsense' ];
+		$this->assertSame( 'separately', $this->invoke( $method, 'get_unpacked_algorithm' ) );
 	}
 
 

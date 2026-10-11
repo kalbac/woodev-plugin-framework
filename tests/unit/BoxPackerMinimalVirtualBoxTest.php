@@ -70,7 +70,9 @@ namespace Woodev\Tests\Unit {
 		}
 
 		/**
-		 * P2: PLANS.md 3.5.1 worked example — stacking along height wins.
+		 * P2: PLANS.md 3.5.1 worked example. The grid stacked the small item on the big one (20 x 15 x 15 =
+		 * 4 500); the real placement (#1212) stands it on edge in the 5 cm strip beside the big one instead
+		 * (20 x 20 x 10 = 4 000). Assert the bound, not the grid's exact answer.
 		 */
 		public function test_two_items_plans_md_example() {
 			$box = $this->pack_virtual(
@@ -81,9 +83,8 @@ namespace Woodev\Tests\Unit {
 			);
 
 			$this->assertEqualsWithDelta( 20.0, $box->get_length(), 0.001 );
-			$this->assertEqualsWithDelta( 15.0, $box->get_width(), 0.001 );
-			$this->assertEqualsWithDelta( 15.0, $box->get_height(), 0.001 );
-			$this->assertLessThanOrEqual( 4500.0, $box->get_volume() );
+			$this->assertGreaterThanOrEqual( 3500.0, $box->get_volume(), 'never below the items (500 + 3000)' );
+			$this->assertLessThanOrEqual( 4500.0, $box->get_volume(), 'never above the grid' );
 		}
 
 		/**
@@ -107,9 +108,10 @@ namespace Woodev\Tests\Unit {
 		}
 
 		/**
-		 * P2: ten flat identical items — grid search produces a cube-like result.
+		 * P2: ten flat identical items — no sausage.
 		 * Old linear stacking: 10×10×50 (sausage, max_dim=50).
-		 * Grid search: 20×20×15 (cube-like, max_dim=20).
+		 * Grid search: 20×20×15 (cube-like, max_dim=20, a fifth of air).
+		 * Real placement (#1212): 25×20×10 — exact, no air; the longest side may be 25 for that.
 		 */
 		public function test_ten_identical_items_physically_possible() {
 			$items = array();
@@ -122,9 +124,9 @@ namespace Woodev\Tests\Unit {
 			// Must hold all 10 items — volume >= sum of item volumes (10 × 500).
 			$this->assertGreaterThanOrEqual( 5000.0, $box->get_volume() );
 
-			// Must be cube-like: no single dimension should be a sausage (old result: 50).
+			// Must be compact: no single dimension should be a sausage (old result: 50).
 			$max_dim = max( $box->get_length(), $box->get_width(), $box->get_height() );
-			$this->assertLessThanOrEqual( 20.0, $max_dim );
+			$this->assertLessThanOrEqual( 25.0, $max_dim );
 		}
 
 		/**

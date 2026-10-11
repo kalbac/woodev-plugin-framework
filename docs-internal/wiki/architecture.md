@@ -275,7 +275,20 @@ Self-contained shipping box-packing algorithm. Implement `Woodev_Packer_Item_Int
 only their own carrier (`Shipping_Plugin::get_box_presets()`, `Packaging_Settings`). Carrier presets
 use fixed cm/kg units. Selection maximises packed units to reduce parcels; store boxes win on equal
 fill, followed by the existing smallest-volume tie-break. The WC dispatcher alone reads the store
-list when none is passed. Its optional fourth argument chooses `single` or `separately` for leftovers.
+list when none is passed. Its optional fourth argument chooses `virtual` (all leftovers together in one virtual box) or
+`separately` for leftovers. `single` (items stacked along one axis) is no longer offered (#1212): it
+built a very long parcel from many mixed items. The constant, `pack('single')` and
+`Woodev_Packer_Single_Box` remain in code; a stored `single` — packing or leftovers — is read as
+`virtual` (`Woodev_Packer_Dispatcher::normalize_stored_algorithm()`).
+`Woodev_Packer_Virtual_Box` sizes its one box from a REAL placement (#1212): candidate footprints
+built from the items' own sides, the items placed largest-first into the deepest-bottom-left free
+space over a set of maximal free boxes (any rotation; small items land in the gaps), the smallest
+volume wins and, within 10 % of it, the shortest longest side. The work is bounded by counts, never
+by the clock (determinism — the rate cache keys on the box): at most 48 footprints, fewer as the
+unit count grows, none above 120 units, where the old arithmetic grid box is returned; the grid is
+also the volume ceiling the placed box never exceeds (and the fallback when no placement fits under it). `get_placement()` exposes the frame and every unit's
+corners for verification. Note `Woodev_Box_Packer_Packed_Box` itself does NOT place anything: it
+checks per-item fit and summed volume only, so `Woodev_Packer_Boxes` is a volume packer, not a 3-D one.
 Every `Woodev_Packer_Package_Result` reports source item allocation (`get_items()`: cart-item key /
 order-item id, product id, quantity), box id, and origin (`store`, `carrier`, or empty). Export
 retains the same item-allocation contract.
@@ -285,7 +298,8 @@ computes per-parcel amount/percentage costs and exposes carrier-priced packed bo
 pairs for the carrier's quote request.
 `Shipping_Method::calculate_rate()` adds store/fixed/merchant box surcharges once after the quote;
 carrier-priced presets are never charged again there. Carrier defaults and instance overrides
-cover `packing_algorithm` and `unpacked_algorithm`; stored legacy algorithms remain readable.
+cover `packing_algorithm` and `unpacked_algorithm`; stored legacy algorithms (`single`, read as
+`virtual`) remain readable.
 The rate-cache context includes box settings, leftovers and per-line contents values.
 
 ## Additional carrier services (`Carrier_Service`, #1145)
