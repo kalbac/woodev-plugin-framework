@@ -357,8 +357,13 @@ export function pickedPointId( rest: WizardRest ): string {
  * record. Empty values are left out — an absent key reads as absent server-side.
  */
 export function pickupContext( data: WizardData, weightGrams: number ): Record<string, unknown> {
+	const line = data.rest.shipping_line;
+
 	return {
 		weight: weightGrams,
+		...( line && 'string' === typeof line.method_id && Number( line.instance_id ) > 0
+			? { method_id: line.method_id, instance_id: Number( line.instance_id ) }
+			: {} ),
 		...( data.rest.payment_method ? { payment_method: data.rest.payment_method } : {} ),
 		...( data.settlementRecord ? { location: data.settlementRecord } : {} ),
 	};

@@ -343,6 +343,18 @@ final class PointQueryTest extends TestCase {
 		$this->assertNull( $query->get_resolved_identity() );
 	}
 
+	public function test_method_context_is_immutable_and_available_to_admin_point_sources(): void {
+		$original = Point_Query::from_request( [ 'locality' => 'dadata:fias-1' ] );
+		$this->assertNotNull( $original );
+
+		$contextual = $original->with_method_context( 'carrier_pickup', 17 );
+
+		$this->assertSame( 'carrier_pickup', $contextual->get_method_id() );
+		$this->assertSame( 17, $contextual->get_instance_id() );
+		$this->assertNull( $original->get_method_id() );
+		$this->assertNull( $original->get_instance_id() );
+	}
+
 	public function test_with_location_attaches_record_and_resolved_identity(): void {
 		$original = Point_Query::from_request( [ 'locality' => 'dadata:fias-1' ] );
 		$this->assertNotNull( $original );

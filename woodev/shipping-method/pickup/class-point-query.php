@@ -129,6 +129,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Point_Query' ) ) :
 		 */
 		private $resolved_identity;
 
+		/** @var string|null Explicit shipping method context for admin queries. */
+		private ?string $method_id;
+
+		/** @var int|null Explicit shipping method instance for admin queries. */
+		private ?int $instance_id;
+
 		/**
 		 * Constructor. Use {@see from_request()} — it validates.
 		 *
@@ -147,6 +153,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Point_Query' ) ) :
 			$this->types             = $types;
 			$this->record            = null;
 			$this->resolved_identity = null;
+			$this->method_id         = null;
+			$this->instance_id       = null;
 		}
 
 		/**
@@ -384,6 +392,42 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Point_Query' ) ) :
 			$clone->resolved_identity = $resolved_identity;
 
 			return $clone;
+		}
+
+		/**
+		 * Adds the selected shipping method context used by admin point sources.
+		 *
+		 * @since 2.0.2
+		 * @param string $method_id   Shipping method id.
+		 * @param int    $instance_id Shipping method instance id.
+		 * @return self
+		 */
+		public function with_method_context( string $method_id, int $instance_id ): self {
+			$query               = clone $this;
+			$query->method_id    = $method_id;
+			$query->instance_id  = $instance_id;
+
+			return $query;
+		}
+
+		/**
+		 * Gets the explicit shipping method id.
+		 *
+		 * @since 2.0.2
+		 * @return string|null Method id, or null.
+		 */
+		public function get_method_id(): ?string {
+			return $this->method_id;
+		}
+
+		/**
+		 * Gets the explicit shipping method instance id.
+		 *
+		 * @since 2.0.2
+		 * @return int|null Instance id, or null.
+		 */
+		public function get_instance_id(): ?int {
+			return $this->instance_id;
 		}
 
 		/**

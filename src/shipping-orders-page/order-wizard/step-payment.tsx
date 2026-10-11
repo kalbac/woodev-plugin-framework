@@ -108,7 +108,7 @@ export default function StepPayment( { data, setData, errors, mode, order, basel
 	// What the check is made of. `null` = there is nothing to ask (a courier tariff, no method yet, a carrier without a picker).
 	const checkKey =
 		rest.rate_is_pickup && '' !== pointId && '' !== rest.payment_method && check && pointsRoot
-			? JSON.stringify( [ pointsRoot, pointId, check.weight, rest.payment_method, data.settlementRecord ] )
+			? JSON.stringify( [ pointsRoot, pointId, check.weight, rest.payment_method, data.settlementRecord, rest.shipping_line?.method_id, rest.shipping_line?.instance_id ] )
 			: null;
 	// The answer that came back, tagged with the question it answers — an older question's answer is no answer.
 	// A `null` verdict is a check that FAILED or said nothing: it is over, and it never blocks.
@@ -127,7 +127,15 @@ export default function StepPayment( { data, setData, errors, mode, order, basel
 
 		let cancelled = false;
 
-		checkPickupPoint( pointsRoot, pointId, check.weight, rest.payment_method, data.settlementRecord ).then( ( result ) => {
+		checkPickupPoint(
+			pointsRoot,
+			pointId,
+			check.weight,
+			rest.payment_method,
+			data.settlementRecord,
+			String( rest.shipping_line?.method_id ?? '' ),
+			Number( rest.shipping_line?.instance_id ) || 0
+		).then( ( result ) => {
 			if ( ! cancelled ) {
 				setAnswer( { key: checkKey, verdict: result } );
 			}

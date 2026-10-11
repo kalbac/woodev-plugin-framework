@@ -149,6 +149,11 @@ final class PickupControllerAdminRoutesTest extends TestCase {
 		parent::setUp();
 
 		Functions\when( 'wp_unslash' )->returnArg();
+		Functions\when( 'sanitize_key' )->alias(
+			static function ( $key ) {
+				return preg_replace( '/[^a-z0-9_\-]/', '', strtolower( (string) $key ) );
+			}
+		);
 		Functions\when( 'wc_clean' )->alias(
 			static function ( $value ) {
 				return is_string( $value ) ? trim( $value ) : $value;
@@ -244,6 +249,38 @@ final class PickupControllerAdminRoutesTest extends TestCase {
 
 	// ---- route declaration ----
 
+	/**
+	 * WordPress validates a declared default exactly like a sent value, so a default outside an
+	 * argument's own bounds rejects every request that omits the argument (rig s170: `instance_id`
+	 * defaulted to 0 under `minimum: 1` and every admin points request returned 400).
+	 */
+	public function test_no_admin_route_argument_defaults_outside_its_own_bounds(): void {
+		$routes = $this->admin_routes( $this->controller( new Pickup_Admin_Test_Source( static fn() => [], static fn() => null ) ) );
+
+		foreach ( $routes as $route => $declaration ) {
+			$endpoints = isset( $declaration['endpoints']['args'] ) ? [ $declaration['endpoints'] ] : $declaration['endpoints'];
+
+			foreach ( $endpoints as $endpoint ) {
+				foreach ( $endpoint['args'] ?? [] as $name => $arg ) {
+					if ( ! array_key_exists( 'default', $arg ) || ! is_numeric( $arg['default'] ) ) {
+						continue;
+					}
+
+					if ( isset( $arg['minimum'] ) ) {
+						$this->assertGreaterThanOrEqual( $arg['minimum'], $arg['default'], "{$route} {$name}" );
+					}
+
+					if ( isset( $arg['maximum'] ) ) {
+						$this->assertLessThanOrEqual( $arg['maximum'], $arg['default'], "{$route} {$name}" );
+					}
+				}
+			}
+		}
+
+		$this->assertNotEmpty( $routes );
+	}
+
+
 	public function test_register_admin_routes_declares_the_list_and_detail_routes_under_the_orders_path(): void {
 		$routes = $this->admin_routes( $this->controller( new Pickup_Admin_Test_Source( static fn() => [], static fn() => null ) ) );
 
@@ -289,7 +326,7 @@ final class PickupControllerAdminRoutesTest extends TestCase {
 		foreach ( $routes as $route => $declared ) {
 			$args = $declared['endpoints'][0]['args'];
 
-			foreach ( [ 'weight', 'payment_method' ] as $context_arg ) {
+			foreach ( [ 'weight', 'payment_method', 'method_id', 'instance_id' ] as $context_arg ) {
 				$this->assertArrayHasKey( $context_arg, $args, "$route must take $context_arg explicitly" );
 			}
 
@@ -305,6 +342,58 @@ final class PickupControllerAdminRoutesTest extends TestCase {
 		$detail_args = $routes['/shipping/orders/pickup/test-plugin/points/(?P<id>[^/]+)']['endpoints'][0]['args'];
 		$this->assertArrayHasKey( 'location', $detail_args, 'spec D3: the detail takes the explicit record too' );
 		$this->assertSame( $list_args['location'], $detail_args['location'], 'one schema for both routes' );
+	}
+
+	public function test_the_admin_list_passes_selected_method_context_to_the_point_source(): void {
+		$seen       = null;
+		$controller = $this->controller(
+			new Pickup_Admin_Test_Source(
+				static function ( Point_Query $query ) use ( &$seen ): array {
+					$seen = [ $query->get_method_id(), $query->get_instance_id() ];
+					return [];
+				},
+				static fn() => null
+			)
+		);
+
+		$controller->handle_admin_points_request(
+			new WP_REST_Request(
+				[
+					'locality'    => 'dadata:fias-1',
+					'method_id'   => 'carrier_pickup',
+					'instance_id' => 17,
+				]
+			)
+		);
+
+		$this->assertSame( [ 'carrier_pickup', 17 ], $seen );
+	}
+
+	public function test_the_admin_selection_verdict_receives_the_selected_method_context(): void {
+		$seen       = null;
+		$point      = $this->point( [ 'id' => 'P1' ] );
+		$controller = $this->controller( new Pickup_Admin_Test_Source( static fn() => [ $point ], static fn() => $point ) );
+		// apply_filters is stubbed in setUp(), so capture the verdict filter's context through the stub itself.
+		Functions\when( 'apply_filters' )->alias(
+			static function ( $tag, $value = null, ...$args ) use ( &$seen ) {
+				if ( 'woodev_shipping_pickup_point_selectable' === $tag ) {
+					$seen = $args[3] ?? null;
+				}
+				return $value;
+			}
+		);
+
+		$controller->handle_admin_point_request(
+			new WP_REST_Request(
+				[
+					'id'          => 'P1',
+					'method_id'   => 'carrier_postamat',
+					'instance_id' => 22,
+				]
+			)
+		);
+
+		$this->assertSame( [ 'method_id' => 'carrier_postamat', 'instance_id' => 22 ], $seen );
 	}
 
 	// ---- the explicit context reaches the verdict; the public callables are never read ----
