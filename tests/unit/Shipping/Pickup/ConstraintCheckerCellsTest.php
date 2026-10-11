@@ -246,4 +246,56 @@ final class ConstraintCheckerCellsTest extends TestCase {
 
 		$this->assertSame( [], $this->locker( $cells )->get_cells() );
 	}
+
+	public function test_two_items_that_each_fit_and_whose_volumes_fit_but_cannot_be_placed_are_refused(): void {
+		// two 6 cm cubes: each fits a 10 cm cell, 432 cm3 < 1000 cm3, yet no axis has room for the pair
+		$verdict = $this->verdict( $this->locker( [ $this->cell( 10, 10, 10 ) ] ), [ $this->line( 6, 6, 6, 2 ) ] );
+
+		$this->assertFalse( $verdict['allowed'] );
+	}
+
+	/** The checker's cache of geometric answers, keyed by the cell's sorted sides. */
+	private function placements( Constraint_Checker $checker ): array {
+		return \Closure::bind( fn() => $this->placements, $checker, Constraint_Checker::class )();
+	}
+
+	public function test_cells_of_the_same_shape_in_any_axis_order_share_one_placement(): void {
+		$checker = $this->checker( [ $this->line( 20, 10, 5, 3 ), $this->line( 8, 8, 8 ) ] );
+
+		$first  = $checker->check( $this->locker( [ $this->cell( 30, 20, 25 ) ], [ 'id' => 'A' ] ), 'bacs', 0 );
+		$second = $checker->check( $this->locker( [ $this->cell( 25, 30, 20 ) ], [ 'id' => 'B' ] ), 'bacs', 0 );
+		$third  = $checker->check( $this->locker( [ $this->cell( 20, 25, 30 ) ], [ 'id' => 'C' ] ), 'bacs', 0 );
+
+		$this->assertTrue( $first['allowed'] );
+		$this->assertSame( $first, $second );
+		$this->assertSame( $first, $third );
+		$this->assertCount( 1, $this->placements( $checker ) );
+	}
+
+	public function test_a_refusal_is_cached_per_shape_too_and_other_shapes_are_computed_on_their_own(): void {
+		$checker = $this->checker( [ $this->line( 6, 6, 6, 2 ) ] );
+
+		$small = $this->locker( [ $this->cell( 10, 10, 10 ) ] );
+		$large = $this->locker( [ $this->cell( 20, 10, 10 ) ] );
+
+		for ( $i = 0; $i < 3; $i++ ) {
+			$this->assertFalse( $checker->check( $small, 'bacs', 0 )['allowed'] );
+			$this->assertTrue( $checker->check( $large, 'bacs', 0 )['allowed'] );
+		}
+
+		$this->assertCount( 2, $this->placements( $checker ) );
+	}
+
+	public function test_the_same_shape_with_different_weight_limits_still_differs(): void {
+		$checker = $this->checker( [ $this->line( 30, 30, 30 ) ] );
+
+		$weak   = $this->locker( [ $this->cell( 40, 40, 40, 5000 ) ], [ 'id' => 'W' ] );
+		$strong = $this->locker( [ $this->cell( 40, 40, 40, 30000 ) ], [ 'id' => 'S' ] );
+
+		// 6 kg: the weak cell is out by its own limit, the strong one — same shape, same cached placement — takes it
+		$this->assertFalse( $checker->check( $weak, 'bacs', 6000 )['allowed'] );
+		$this->assertTrue( $checker->check( $strong, 'bacs', 6000 )['allowed'] );
+		$this->assertTrue( $checker->check( $weak, 'bacs', 4000 )['allowed'] );
+		$this->assertCount( 1, $this->placements( $checker ) );
+	}
 }

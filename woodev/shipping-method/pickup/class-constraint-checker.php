@@ -53,6 +53,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Constraint_Checker'
 		private ?array $parcel = null;
 
 		/**
+		 * Whether the prepared order fits a cell of a given shape, by the cell's sorted sides — placement is the
+		 * costly part of the check, and the order is fixed for the checker, so one answer serves every point (and
+		 * every cell of a point) of that shape. The cell's weight limit is not part of the key: it is compared
+		 * on its own in {@see self::fits_a_cell()}.
+		 *
+		 * @var array<string, bool>
+		 */
+		private array $placements = [];
+
+		/**
 		 * Constructor.
 		 *
 		 * @since 2.0.2
@@ -267,6 +277,26 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Constraint_Checker'
 		private function cell_holds( array $sides, array $parcel ): bool {
 			rsort( $sides );
 
+			$shape = implode( '|', $sides );
+
+			if ( ! isset( $this->placements[ $shape ] ) ) {
+				$this->placements[ $shape ] = $this->place_in( $sides, $parcel );
+			}
+
+			return $this->placements[ $shape ];
+		}
+
+		/**
+		 * The geometric half of {@see self::cell_holds()}, run once per distinct cell shape.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param float[] $sides  The cell's three sides, longest first.
+		 * @param array   $parcel The order from {@see self::parcel()}.
+		 *
+		 * @return bool
+		 */
+		private function place_in( array $sides, array $parcel ): bool {
 			$eps = \Woodev_Packer_Free_Space::EPSILON;
 
 			// every item fits the cell on its own (sorted sides against sorted sides), and the volumes add up
@@ -407,7 +437,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Constraint_Checker'
 
 		/**
 		 * The default supplier of the order's items: the live WooCommerce cart, sizes converted to cm. Empty
-		 * when WooCommerce or its cart is not there — which gives no size verdict.
+		 * when WooCommerce or its cart is not there, or when a physical product has no size of its own (the
+		 * store's default size used for shipping rates is not evidence here) — which gives no size verdict.
 		 *
 		 * @since 2.0.2
 		 *
@@ -420,7 +451,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Constraint_Checker'
 
 			$cart = WC()->cart ?? null;
 
-			return $cart ? \Woodev_WC_Packer_Dispatcher::from_cart_items( $cart->get_cart() ) : [];
+			if ( ! $cart ) {
+				return [];
+			}
+
+			$contents = $cart->get_cart();
+
+			// the packer dispatcher fills a product's missing size with the store's default for RATES; a size the
+			// merchant never entered is unknown here, and an unknown size can never prove a parcel too big
+			foreach ( $contents as $line ) {
+				$product = $line['data'] ?? false;
+
+				if ( ! $product instanceof \WC_Product || $product->is_virtual() ) {
+					continue;
+				}
+
+				foreach ( [ $product->get_length(), $product->get_width(), $product->get_height() ] as $side ) {
+					if ( ! is_numeric( $side ) || ! is_finite( (float) $side ) || (float) $side <= 0.0 ) {
+						return [];
+					}
+				}
+			}
+
+			return \Woodev_WC_Packer_Dispatcher::from_cart_items( $contents );
 		}
 
 		/**
