@@ -41,22 +41,17 @@ if ( ! class_exists( 'Woodev_Packer_Boxes' ) ) :
 			}
 		}
 
-		/**
-		 * Pack all items to all boxes and try to find one best success package
-		 *
-		 * @return Woodev_Box_Packer_Packed_Box Best packed package possible
-		 */
 		private function find_best_packed_box(): ?Woodev_Box_Packer_Packed_Box {
-			$packages = [];
-			foreach ( $this->boxes as $box ) {
-				$packages[] = new Woodev_Box_Packer_Packed_Box( $box, $this->items );
-			}
 			// Maximise packed units first; on equal fill prefer store boxes, then the smallest volume.
 			$best_percent = -1;
 			$best_package = null;
 			$best_is_carrier = false;
-			/** @var Woodev_Box_Packer_Packed_Box $package */
-			foreach ( $packages as $package ) {
+			foreach ( $this->boxes as $box ) {
+				$package = new Woodev_Box_Packer_Packed_Box( $box, $this->items, true );
+				// a box that provably cannot reach the best fill so far cannot win: it is given up early
+				if ( $best_percent >= 0 && ! $package->try_to_beat( (float) $best_percent ) ) {
+					continue;
+				}
 				$data = $package->get_box()->get_internal_data();
 				$is_carrier = is_array( $data ) && 'carrier' === ( $data['origin'] ?? '' );
 				$percent = $package->get_success_percent();

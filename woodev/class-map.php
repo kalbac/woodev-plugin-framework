@@ -245,6 +245,7 @@ return [
 	'Woodev_Packer_Boxes' => 'woodev/box-packer/class-packer-boxes.php',
 	'Woodev_Packer_Dispatcher' => 'woodev/box-packer/class-packer-dispatcher.php',
 	'Woodev_Packer_Exception' => 'woodev/box-packer/class-packer-exception.php',
+	'Woodev_Packer_Free_Space' => 'woodev/box-packer/class-packer-free-space.php',
 	'Woodev_Packer_Input_Item' => 'woodev/box-packer/class-packer-input-item.php',
 	'Woodev_Packer_Interface' => 'woodev/box-packer/interfaces/interface-packer.php',
 	'Woodev_Packer_Item_Implementation' => 'woodev/box-packer/class-item-implementation.php',

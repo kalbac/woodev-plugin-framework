@@ -23,6 +23,7 @@ namespace {
 	require_once dirname( __DIR__, 2 ) . '/woodev/box-packer/interfaces/interface-packer-box.php';
 	require_once dirname( __DIR__, 2 ) . '/woodev/box-packer/class-box-implementation.php';
 	require_once dirname( __DIR__, 2 ) . '/woodev/box-packer/class-item-implementation.php';
+	require_once dirname( __DIR__, 2 ) . '/woodev/box-packer/class-packer-free-space.php';
 	require_once dirname( __DIR__, 2 ) . '/woodev/box-packer/class-packed-box.php';
 	require_once dirname( __DIR__, 2 ) . '/woodev/box-packer/class-packer-exception.php';
 	require_once dirname( __DIR__, 2 ) . '/woodev/box-packer/abstract-class-packer.php';

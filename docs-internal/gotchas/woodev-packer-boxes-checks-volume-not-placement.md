@@ -1,7 +1,15 @@
-# Gotcha: [box-packer/boxes] — `Woodev_Packer_Boxes` checks volume, it places nothing
-> Tags: box-packer, merchant-boxes, cdek | Session: s168
+# Gotcha: [box-packer/boxes] — `Woodev_Packer_Boxes` checked volume, it placed nothing (FIXED in #1214)
+> Tags: box-packer, merchant-boxes, cdek | Session: s168 (fixed s169)
 
 ## What happens
+
+> **Fixed (#1214, s169):** `Woodev_Packer_Boxes` now builds its packed boxes with `Woodev_Box_Packer_Packed_Box( $box, $items, true )`,
+> which also places every item with `Woodev_Packer_Free_Space` (the #1212 placement, fixed container) and refuses one that has no
+> real position. Each box is tried in every order of its axes (one greedy pass split ordinary rectangular loads, round 2) and the
+> best result is kept; a parcel tries at most `Woodev_Packer_Free_Space::MAX_UNITS` (120) placements and the rest of the cart waits
+> for a later parcel — a set is never accepted without a placement. Other
+> packers still use the default `false`. The text below is the history. **The plate example was wrong:** three 29×29×10 plates
+> DO fit a 30×30×30 box (they stack to exactly 30); a real counter-example is two 29×29×16 plates or three 20×20×20 cubes.
 
 The merchant-boxes mode (`Woodev_Packer_Dispatcher::ALGORITHM_BOXES` → `Woodev_Packer_Boxes`) looks like a 3-D
 packer and is not one. It can report as packed a set that does not physically fit: three 29×29×10 plates «fit» a
