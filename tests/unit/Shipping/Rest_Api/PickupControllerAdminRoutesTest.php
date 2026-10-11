@@ -149,6 +149,11 @@ final class PickupControllerAdminRoutesTest extends TestCase {
 		parent::setUp();
 
 		Functions\when( 'wp_unslash' )->returnArg();
+		Functions\when( 'sanitize_key' )->alias(
+			static function ( $key ) {
+				return preg_replace( '/[^a-z0-9_\-]/', '', strtolower( (string) $key ) );
+			}
+		);
 		Functions\when( 'wc_clean' )->alias(
 			static function ( $value ) {
 				return is_string( $value ) ? trim( $value ) : $value;
@@ -336,12 +341,16 @@ final class PickupControllerAdminRoutesTest extends TestCase {
 		$seen       = null;
 		$point      = $this->point( [ 'id' => 'P1' ] );
 		$controller = $this->controller( new Pickup_Admin_Test_Source( static fn() => [ $point ], static fn() => $point ) );
-		$filter     = static function ( $verdict, $candidate, $payment_method, $weight, $context ) use ( &$seen ) {
-			$seen = $context;
-			return $verdict;
-		};
+		// apply_filters is stubbed in setUp(), so capture the verdict filter's context through the stub itself.
+		Functions\when( 'apply_filters' )->alias(
+			static function ( $tag, $value = null, ...$args ) use ( &$seen ) {
+				if ( 'woodev_shipping_pickup_point_selectable' === $tag ) {
+					$seen = $args[3] ?? null;
+				}
+				return $value;
+			}
+		);
 
-		add_filter( 'woodev_shipping_pickup_point_selectable', $filter, 20, 5 );
 		$controller->handle_admin_point_request(
 			new WP_REST_Request(
 				[
@@ -351,7 +360,6 @@ final class PickupControllerAdminRoutesTest extends TestCase {
 				]
 			)
 		);
-		remove_filter( 'woodev_shipping_pickup_point_selectable', $filter, 20 );
 
 		$this->assertSame( [ 'method_id' => 'carrier_postamat', 'instance_id' => 22 ], $seen );
 	}
