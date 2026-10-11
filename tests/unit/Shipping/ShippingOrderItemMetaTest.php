@@ -124,6 +124,7 @@ final class ShippingOrderItemMetaTest extends TestCase {
 
 	public function test_filter_registration_is_once_for_the_process(): void {
 		$register = new ReflectionMethod( Shipping_Plugin::class, 'register_order_item_meta_filters' );
+		$register->setAccessible( true );
 		$register->invoke( null, [ Shipping_Order_Item_Meta_Method_Fixture::class ] );
 		$register->invoke( null, [] );
 
@@ -135,12 +136,14 @@ final class ShippingOrderItemMetaTest extends TestCase {
 
 	private function register_fixture_method(): void {
 		$register = new ReflectionMethod( Shipping_Plugin::class, 'register_order_item_meta_filters' );
+		$register->setAccessible( true );
 		$register->invoke( null, [ Shipping_Order_Item_Meta_Method_Fixture::class ] );
 	}
 
 	private function reset_filter_state(): void {
 		foreach ( [ 'order_item_meta_filters_registered' => false, 'hidden_order_item_meta_keys' => [], 'hidden_order_item_meta_keys_by_method' => [] ] as $name => $value ) {
 			$property = new ReflectionProperty( Shipping_Plugin::class, $name );
+			$property->setAccessible( true );
 			$property->setValue( null, $value );
 		}
 	}
