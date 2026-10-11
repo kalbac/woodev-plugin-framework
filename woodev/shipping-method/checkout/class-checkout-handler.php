@@ -50,6 +50,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 */
 		public const ACCOUNT_RECORD_FIELD = 'woodev_location_record';
 
+		/** Order meta holding the checkout's selected settlement record for the admin editor. */
+		public const ORDER_LOCATION_META_KEY = '_woodev_shipping_checkout_location';
+
 		/** @var Checkout_Fields the field definitions this handler manages */
 		private Checkout_Fields $fields;
 
@@ -3596,6 +3599,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			$persisted_values = $this->drop_stale_pickup_values( $values, $chosen_shipping_method );
 
 			$this->save( $order, $persisted_values, $chosen_shipping_method );
+			$this->remember_checkout_location( $order, $chosen_shipping_method );
 
 			/**
 			 * Fires after posted checkout data is sanitized, validated and saved.
@@ -3606,6 +3610,90 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			 * @param array<string, mixed> $values the saved values keyed by field id
 			 */
 			do_action( $this->hook( 'checkout_processed' ), $order, $persisted_values );
+		}
+
+		/**
+		 * Stores the selected settlement on framework shipping orders for the admin editor.
+		 *
+		 * The order's city and country gate the customer record, so stale locality state can
+		 * never be attached to a different delivery address. The opaque provider payload is
+		 * dropped: rates and adapters need the normalized Location_Record contract, and order
+		 * meta must not retain provider secrets or unrelated raw response fields.
+		 *
+		 * @since 2.0.2
+		 * @param \WC_Order|int $order The order being placed.
+		 * @param string        $chosen_shipping_method Chosen method id, with optional instance.
+		 * @return void
+		 */
+		protected function remember_checkout_location( $order, string $chosen_shipping_method ): void {
+			if ( ! $order instanceof \WC_Order ) {
+				return;
+			}
+
+			$method_id = self::normalize_method_id( $chosen_shipping_method );
+
+			if ( ! $this->is_framework_shipping_method( $method_id ) ) {
+				return;
+			}
+
+			$shipping_city    = trim( (string) $order->get_shipping_city() );
+			$shipping_country = strtoupper( (string) $order->get_shipping_country() );
+
+			if ( '' === $shipping_city ) {
+				$shipping_city    = trim( (string) $order->get_billing_city() );
+				$shipping_country = strtoupper( (string) $order->get_billing_country() );
+			}
+
+			if ( '' === $shipping_city || '' === $shipping_country || ! $this->location_service()->is_active() ) {
+				return;
+			}
+
+			$record = $this->location_service()->get_customer_record_at( 'settlement', $shipping_country );
+
+			if ( null === $record || ! self::record_names_city( $record, $shipping_city ) ) {
+				return;
+			}
+
+			$data        = $record->to_array();
+			$data['raw'] = null;
+
+			\Woodev_Order_Compatibility::update_order_meta( $order, self::ORDER_LOCATION_META_KEY, $data );
+		}
+
+		/**
+		 * Whether a bare method id resolves to a framework shipping method.
+		 *
+		 * @since 2.0.2
+		 * @param string $method_id Bare shipping method id.
+		 * @return bool
+		 */
+		protected function is_framework_shipping_method( string $method_id ): bool {
+			return null !== self::resolve_chosen_shipping_method_instance( $method_id );
+		}
+
+		/**
+		 * Whether a settlement record names the order's saved city.
+		 *
+		 * @since 2.0.2
+		 * @param \Woodev\Framework\Shipping\Location\Location_Record $record The settlement record.
+		 * @param string                                              $city The order's delivery city.
+		 * @return bool
+		 */
+		private static function record_names_city( \Woodev\Framework\Shipping\Location\Location_Record $record, string $city ): bool {
+			if ( \Woodev\Framework\Shipping\Location\Location_Record::LEVEL_SETTLEMENT !== $record->level() ) {
+				return false;
+			}
+
+			$settlement = $record->settlement();
+			$name       = null !== $settlement ? trim( (string) $settlement['name'] ) : '';
+
+			if ( '' === $name ) {
+				return false;
+			}
+
+			$type = (string) ( $settlement['type'] ?? '' );
+
+			return \Woodev\Framework\Shipping\Location\Location_Record::normalize_city_name( $name, $type ) === \Woodev\Framework\Shipping\Location\Location_Record::normalize_city_name( $city, $type );
 		}
 
 		/**
