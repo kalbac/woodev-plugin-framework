@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Topic map.** 407 atomic gotchas across 31 topics. At session start read THIS file, then open
+> **Topic map.** 409 atomic gotchas across 31 topics. At session start read THIS file, then open
 > the topic indexes your task touches — each holds one line per gotcha, linking the detail file.
 > `[tooling/*]`, `[testing/*]` and `[rig/*]` apply to almost every session.
 > **Adding one:** create `gotchas/{slug}.md`, then add ONE line to the right `gotcha-index/{topic}.md`
@@ -22,7 +22,7 @@
 | [`framework/*`](gotcha-index/framework.md) | 6 | Framework internals |
 | [`framework/contracts`](gotcha-index/framework-contracts.md) | 3 | What the framework guarantees to its consumers |
 | [`shipping/location`](gotcha-index/shipping-location.md) | 15 | Location provider layer |
-| [`rig/*`](gotcha-index/rig.md) | 25 | Local verification rig |
+| [`rig/*`](gotcha-index/rig.md) | 26 | Local verification rig |
 | [`framework/wiring`](gotcha-index/framework-wiring.md) | 4 | Responsibilities that moved |
 | [`testing/*`](gotcha-index/testing.md) | 49 | Testing patterns |
 | [`js/*`](gotcha-index/js.md) | 9 | JavaScript language traps |
@@ -33,7 +33,7 @@
 | [`admin-ui/*`](gotcha-index/admin-ui.md) | 10 | Admin pages / React UI |
 | [`admin-ui/modal`](gotcha-index/admin-ui-modal.md) | 5 | Framework modal shell |
 | [`admin-ui/react-state`](gotcha-index/admin-ui-react-state.md) | 2 | React component state |
-| [`box-packer/*`](gotcha-index/box-packer.md) | 2 | Box-packer algorithm (S2) |
+| [`box-packer/*`](gotcha-index/box-packer.md) | 3 | Box-packer algorithm (S2) |
 | [`shipping/checkout`](gotcha-index/shipping-checkout.md) | 21 | Checkout field layer (§8) |
 | [`shipping/pickup`](gotcha-index/shipping-pickup.md) | 28 | Pickup point picker / ymaps |
 | [`shipping/*`](gotcha-index/shipping.md) | 9 | Shipping module (S1) |
