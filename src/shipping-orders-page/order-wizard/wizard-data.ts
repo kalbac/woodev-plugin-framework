@@ -79,6 +79,7 @@ export function emptyWizardData( defaultCountry = '' ): WizardData {
 			pickup_check: null,
 		},
 		settlementKey: '',
+		settlementSelectionRequired: false,
 		settlementRecord: null,
 	};
 }
@@ -155,6 +156,7 @@ export function prefillToData( prefill: OrderPrefill ): WizardData {
 			pickup_check: null,
 		},
 		settlementKey: '',
+		settlementSelectionRequired: !! prefill.requires_settlement_selection,
 		settlementRecord: null,
 	};
 }
@@ -222,6 +224,7 @@ export function applyCustomer( data: WizardData, record: WcCustomerRecord ): Wiz
 		},
 		billingFollowsShipping: true,
 		settlementKey: '',
+		settlementSelectionRequired: false,
 		settlementRecord: null,
 	};
 }

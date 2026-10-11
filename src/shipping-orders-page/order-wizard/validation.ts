@@ -150,6 +150,10 @@ export function validateAddress(
 
 	const messages = requiredAddressMessages();
 
+	if ( data.settlementSelectionRequired && ! data.settlementRecord ) {
+		add( errors, 'shipping.settlement_record', __( 'Выберите населённый пункт через поиск, чтобы получить тарифы доставки.', 'woodev-plugin-framework' ) );
+	}
+
 	for ( const key of Object.keys( messages ) as AddressFieldKey[] ) {
 		const rule = ruleOf( policy, key );
 

@@ -26,6 +26,7 @@
  */
 
 import { __ } from '@wordpress/i18n';
+import { Notice } from '@wordpress/components';
 import LocationPicker from '../../components/location-picker';
 import type { LocationFill, LocationSuggestion } from '../../components/location-picker';
 import { getWizardContext } from '../rest';
@@ -93,6 +94,7 @@ export default function StepAddress( { data, setData, errors, addressPolicy }: S
 				settlementKey: 'settlement' === suggestion.level ? suggestion.record.key : d.settlementKey,
 				// Kept whole for step ④: the rates and pickup routes take the settlement's own record.
 				settlementRecord: 'settlement' === suggestion.level ? ( suggestion.record as unknown as Record<string, unknown> ) : d.settlementRecord,
+				settlementSelectionRequired: d.settlementSelectionRequired,
 			};
 		} );
 	};
@@ -102,6 +104,11 @@ export default function StepAddress( { data, setData, errors, addressPolicy }: S
 	return (
 		<div className="woodev-order-wizard__step">
 			<h3 className="woodev-order-wizard__step-title">{ __( 'Куда доставить', 'woodev-plugin-framework' ) }</h3>
+			{ data.settlementSelectionRequired && ! data.settlementRecord && (
+				<Notice status="warning" isDismissible={ false }>
+					{ __( 'Выберите населённый пункт через поиск, чтобы получить тарифы доставки.', 'woodev-plugin-framework' ) }
+				</Notice>
+			) }
 
 			<div className="woodev-order-wizard__grid">
 				{ countryOptions ? (
@@ -160,7 +167,7 @@ export default function StepAddress( { data, setData, errors, addressPolicy }: S
 					label={ __( 'Город или населённый пункт', 'woodev-plugin-framework' ) }
 					value={ shipping.city }
 					required={ rules.city.required }
-					errors={ errorsFor( errors, 'shipping.city', 'billing.city' ) }
+					errors={ errorsFor( errors, 'shipping.city', 'billing.city', 'shipping.settlement_record' ) }
 					onChange={ ( city ) =>
 						setData( ( d ) => ( { ...d, shipping: { ...d.shipping, city }, settlementKey: '', settlementRecord: null } ) )
 					}

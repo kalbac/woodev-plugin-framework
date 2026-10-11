@@ -6060,3 +6060,8 @@ msgstr ""
 #: assets/src/shipping-orders-page/orders-select.tsx
 msgid "Снять все"
 msgstr ""
+
+#: src/shipping-orders-page/order-wizard/step-address.tsx
+#: src/shipping-orders-page/order-wizard/validation.ts
+msgid "Выберите населённый пункт через поиск, чтобы получить тарифы доставки."
+msgstr "Выберите населённый пункт через поиск, чтобы получить тарифы доставки."

@@ -122,6 +122,8 @@ export interface WizardData {
 	rest: WizardRest;
 	/** The settlement the address search was scoped to (`within` for the street search); UI only. */
 	settlementKey: string;
+	/** An edit with no order-scoped locality record must pick one before asking carriers for rates. */
+	settlementSelectionRequired: boolean;
 	/**
 	 * The location record of the settlement the manager PICKED in step ②, whole and untouched
 	 * (`Location_Record::to_array()` shape), or `null` when the city was typed by hand or the
@@ -175,6 +177,8 @@ export interface OrderPrefill {
 	carrier_fields: Record<string, unknown>;
 	payment_method: string;
 	status: string;
+	/** The order has no stored locality record; its city text cannot identify one safely. */
+	requires_settlement_selection?: boolean;
 }
 
 /**

@@ -63,6 +63,11 @@ final class OrderEditorPersistTest extends TestCase {
 				return array_merge( (array) $defaults, (array) $args );
 			}
 		);
+		Functions\when( 'wc_get_order_status_name' )->alias(
+			static function ( string $status ): string {
+				return $status;
+			}
+		);
 		Functions\when( 'delete_post_meta' )->alias(
 			function ( int $post_id, string $key ) {
 				$this->deleted[] = $post_id . ':' . $key;
@@ -192,6 +197,53 @@ final class OrderEditorPersistTest extends TestCase {
 		}
 
 		return $method->invoke( new Order_Editor( Orders_Registry::instance() ), $this->order(), $data, $is_update, $previous_fields );
+	}
+
+	/**
+	 * Runs the load prefill builder against a small order double.
+	 *
+	 * @param string $shipping_city the order's own shipping city.
+	 * @param string $billing_city  the billing city used when no shipping place exists.
+	 * @return array<string,mixed>
+	 */
+	private function prefill( string $shipping_city, string $billing_city ): array {
+		Orders_Registry::instance()->reset_for_tests();
+		$provider = $this->register( null, null );
+		$order    = Mockery::mock( '\\WC_Order' );
+
+		$order->shouldReceive( 'get_id' )->andReturn( 42 );
+		$order->shouldReceive( 'get_order_number' )->andReturn( '42' );
+		$order->shouldReceive( 'get_status' )->andReturn( 'processing' );
+		$order->shouldReceive( 'is_paid' )->andReturn( true );
+		$order->shouldReceive( 'get_total' )->andReturn( '10.00' );
+		$order->shouldReceive( 'get_currency' )->andReturn( 'RUB' );
+		$order->shouldReceive( 'get_customer_id' )->andReturn( 0 );
+		$order->shouldReceive( 'get_billing_email' )->andReturn( '' );
+		$order->shouldReceive( 'get_payment_method' )->andReturn( '' );
+		$order->shouldReceive( 'get_items' )->andReturn( [] );
+		$order->shouldReceive( 'get_shipping_methods' )->andReturn( [] );
+		$order->shouldReceive( 'get_meta' )->andReturn( '' );
+
+		foreach ( [ 'first_name', 'last_name', 'company', 'address_1', 'address_2', 'state', 'postcode', 'country', 'phone' ] as $key ) {
+			$order->shouldReceive( 'get_shipping_' . $key )->andReturn( '' );
+			$order->shouldReceive( 'get_billing_' . $key )->andReturn( '' );
+		}
+
+		$order->shouldReceive( 'get_shipping_city' )->andReturn( $shipping_city );
+		$order->shouldReceive( 'get_billing_city' )->andReturn( $billing_city );
+
+		$builder = new \ReflectionMethod( Order_Editor::class, 'build_prefill' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$builder->setAccessible( true );
+		}
+
+		return $builder->invoke( new Order_Editor( Orders_Registry::instance() ), $order, $provider );
+	}
+
+	public function test_prefill_requires_a_settlement_for_the_saved_shipping_city_or_its_billing_fallback(): void {
+		$this->assertTrue( $this->prefill( 'Москва', 'Тверь' )['requires_settlement_selection'] );
+		$this->assertTrue( $this->prefill( '', 'Тверь' )['requires_settlement_selection'] );
+		$this->assertFalse( $this->prefill( '', '' )['requires_settlement_selection'] );
 	}
 
 	public function test_the_point_is_put_under_every_pickup_slot_and_handed_to_the_persistence_core(): void {

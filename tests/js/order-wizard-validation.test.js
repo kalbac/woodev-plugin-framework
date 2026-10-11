@@ -32,6 +32,7 @@ describe( 'stepOfField', () => {
 		[ 'billing.city', 'address' ],
 		[ 'shipping.state', 'address' ],
 		[ 'shipping.postcode', 'address' ],
+		[ 'shipping.settlement_record', 'address' ],
 		[ 'items', 'items' ],
 		[ 'items.2.quantity', 'items' ],
 		[ 'shipping_line', 'delivery' ],
@@ -103,6 +104,17 @@ describe( 'validateAddress', () => {
 
 	test( 'a country and a city are enough', () => {
 		expect( validateAddress( address( {} ), COUNTRIES, STATES ) ).toEqual( {} );
+	} );
+
+	test( 'an edit that needs a locality pick cannot advance until one is selected', () => {
+		const data = address( {} );
+		data.settlementSelectionRequired = true;
+		expect( validateAddress( data, COUNTRIES, STATES )[ 'shipping.settlement_record' ] ).toEqual( [
+			'Выберите населённый пункт через поиск, чтобы получить тарифы доставки.',
+		] );
+
+		data.settlementRecord = { key: 'provider:city-1', level: 'settlement' };
+		expect( validateAddress( data, COUNTRIES, STATES ) ).toEqual( {} );
 	} );
 
 	test( 'a missing country and a missing city are reported on their own fields', () => {

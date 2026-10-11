@@ -113,6 +113,7 @@ describe( 'prefillToData', () => {
 		carrier_fields: {},
 		payment_method: 'cod',
 		status: 'processing',
+		requires_settlement_selection: true,
 		...overrides,
 	} );
 
@@ -126,6 +127,15 @@ describe( 'prefillToData', () => {
 		expect( data.rest.payment_method ).toBe( 'cod' );
 		expect( data.rest.status ).toBe( 'processing' );
 		expect( data.rest.fields ).toEqual( { a: 'b' } );
+		expect( data.settlementSelectionRequired ).toBe( true );
+	} );
+
+	test( 'an edit keeps requiring a fresh record after its city changes', () => {
+		const data = prefillToData( prefill() );
+		data.settlementRecord = { key: 'provider:city-1', level: 'settlement' };
+
+		expect( data.settlementRecord ).toMatchObject( { key: 'provider:city-1' } );
+		expect( data.settlementSelectionRequired ).toBe( true );
 	} );
 
 	test( 'an order with no shipping address of its own delivers to its billing one', () => {

@@ -1192,6 +1192,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 			$plugin  = $this->registry->get_provider_plugin( $provider->get_id() );
 			$handler = null !== $plugin ? $plugin->get_checkout_handler() : null;
 			$fields  = null !== $handler ? $handler->read_values( $order ) : [];
+			$shipping_address = $this->read_address( $order, 'shipping' );
+			$billing_address  = $this->read_address( $order, 'billing' );
+			$has_shipping_place = false;
+
+			foreach ( [ 'address_1', 'address_2', 'city', 'state', 'postcode', 'country' ] as $place_key ) {
+				if ( '' !== trim( $shipping_address[ $place_key ] ) ) {
+					$has_shipping_place = true;
+
+					break;
+				}
+			}
+
+			$delivery_city = $has_shipping_place ? $shipping_address['city'] : $billing_address['city'];
 
 			$items = [];
 
@@ -1252,11 +1265,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 					'id'             => (int) $order->get_customer_id(),
 					'create_account' => false,
 				],
-				'billing'        => $this->read_address( $order, 'billing' ) + [ 'email' => (string) $order->get_billing_email() ],
-				'shipping'       => $this->read_address( $order, 'shipping' ),
+				'billing'        => $billing_address + [ 'email' => (string) $order->get_billing_email() ],
+				'shipping'       => $shipping_address,
 				'items'          => $items,
 				'shipping_line'  => $shipping_line,
 				'pickup_point'   => $this->read_pickup_point( $order, $provider, $handler, $fields ),
+				// Checkout location records live in the visitor's location store, not order meta.
+				// Do not infer a provider identity from the address text: the wizard will ask the
+				// manager to pick the settlement again before requesting rates.
+				'requires_settlement_selection' => '' !== trim( $delivery_city ),
 				'fields'         => $fields,
 				// The carrier's own export fields (spec D7), read back from the meta keys the carrier declared.
 				'carrier_fields' => null === $shipping_line
