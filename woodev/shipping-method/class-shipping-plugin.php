@@ -567,11 +567,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param string[] $hidden_meta_keys Meta keys hidden by WooCommerce and other extensions.
+		 * @param string[]|mixed $hidden_meta_keys Meta keys hidden by WooCommerce and other extensions (another filter may break the type).
 		 * @return string[]
 		 */
-		public static function hide_order_item_meta_from_admin( array $hidden_meta_keys ): array {
-			return array_values( array_unique( array_merge( $hidden_meta_keys, self::$hidden_order_item_meta_keys ) ) );
+		public static function hide_order_item_meta_from_admin( $hidden_meta_keys ): array {
+			return array_values( array_unique( array_merge( (array) $hidden_meta_keys, self::$hidden_order_item_meta_keys ) ) );
 		}
 
 		/**
@@ -582,13 +582,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param array  $formatted_meta Formatted metadata, indexed by metadata id.
-		 * @param object $item Order item being formatted.
-		 * @return array
+		 * @param array|mixed $formatted_meta Formatted metadata, indexed by metadata id (another filter may break the type).
+		 * @param mixed       $item Order item being formatted.
+		 * @return array|mixed
 		 */
-		public static function hide_order_item_meta_from_formatted_display( array $formatted_meta, object $item ): array {
+		public static function hide_order_item_meta_from_formatted_display( $formatted_meta, $item ) {
 
-			if ( ! method_exists( $item, 'get_method_id' ) ) {
+			if ( ! is_array( $formatted_meta ) || ! is_object( $item ) || ! method_exists( $item, 'get_method_id' ) ) {
 				return $formatted_meta;
 			}
 
