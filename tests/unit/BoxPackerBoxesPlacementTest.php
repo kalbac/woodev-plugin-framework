@@ -302,6 +302,106 @@ namespace Woodev\Tests\Unit {
 			}
 		}
 
+		public function test_the_early_stops_leave_the_packages_exactly_as_the_full_search_made_them(): void {
+			// 24 seeded carts of 7-61 units through six boxes; the digest was taken from 2384b22b, before the
+			// passes and boxes that cannot win were given up early (#1214, round 3) — any change of a package,
+			// of its items or of the leftovers changes it
+			mt_srand( 1214 );
+
+			$boxes  = [ [ 26, 17, 10 ], [ 30, 30, 30 ], [ 45, 30, 25 ], [ 60, 40, 40 ], [ 80, 60, 40 ], [ 100, 60, 50 ] ];
+			$digest = [];
+
+			for ( $c = 0; $c < 24; $c++ ) {
+				$packer = new \Woodev_Packer_Boxes();
+
+				foreach ( $boxes as $i => [ $length, $width, $height ] ) {
+					$packer->add_box( new \Woodev_Packer_Box_Implementation( $length, $width, $height, 0.1, null, 'box-' . $i ) );
+				}
+
+				$index = [];
+				$units = [ 7, 19, 34, 58, 61 ][ $c % 5 ];
+
+				for ( $left = $units; $left > 0; ) {
+					$quantity = min( $left, mt_rand( 1, 6 ) );
+					$length   = mt_rand( 1, 45 );
+					$width    = mt_rand( 1, 35 );
+					$height   = mt_rand( 1, 25 );
+
+					for ( $i = 0; $i < $quantity; $i++ ) {
+						$item                            = new \Woodev_Packer_Item_Implementation( $length, $width, $height, 0.2 );
+						$index[ spl_object_id( $item ) ] = count( $index );
+						$packer->add_item( $item );
+					}
+
+					$left -= $quantity;
+				}
+
+				$packer->pack();
+
+				$ids = static fn( array $items ) => array_map( static fn( $item ) => $index[ spl_object_id( $item ) ], $items );
+				$out = [];
+
+				foreach ( $packer->get_packages() as $package ) {
+					$box   = $package->get_box();
+					$out[] = [ [ $box->get_length(), $box->get_width(), $box->get_height() ], $ids( $package->get_packed_items() ), $ids( $package->get_nofit_items() ) ];
+				}
+
+				$out[]    = $ids( $packer->get_items_cannot_pack() );
+				$digest[] = sha1( json_encode( $out ) );
+			}
+
+			$this->assertSame( 'f86c73850f5f970268f0a55b56fafc271af71b7e', sha1( implode( ',', $digest ) ) );
+		}
+
+		private static function packed_box( array $kinds, array $box ): \Woodev_Box_Packer_Packed_Box {
+			return new \Woodev_Box_Packer_Packed_Box(
+				new \Woodev_Packer_Box_Implementation( $box[0], $box[1], $box[2], 0.1, null, 'box' ),
+				self::units( $kinds ),
+				true
+			);
+		}
+
+		public function test_a_box_that_cannot_reach_the_floor_is_given_up_but_still_packs_in_full_when_asked(): void {
+			$kinds = [ [ 20, 20, 20, 3 ], [ 9, 9, 9, 10 ] ];
+			$box   = [ 30, 30, 30 ];
+
+			$full    = self::packed_box( $kinds, $box );
+			$percent = $full->get_success_percent();
+
+			$this->assertGreaterThan( 0.0, $percent );
+			$this->assertLessThan( 100.0, $percent );
+
+			$given_up = self::packed_box( $kinds, $box );
+
+			$this->assertFalse( $given_up->try_to_beat( 100.0 ) );
+
+			// asked for its real packing afterwards, it is the same one: nothing partial leaks out
+			$this->assertSame( $percent, $given_up->get_success_percent() );
+			$this->assertSame( count( $full->get_packed_items() ), count( $given_up->get_packed_items() ) );
+			$this->assertSame( count( $full->get_nofit_items() ), count( $given_up->get_nofit_items() ) );
+		}
+
+		public function test_a_box_that_can_reach_the_floor_is_not_given_up_and_a_tie_counts(): void {
+			$kinds = [ [ 20, 20, 20, 3 ], [ 9, 9, 9, 10 ] ];
+			$box   = [ 30, 30, 30 ];
+
+			$percent = self::packed_box( $kinds, $box )->get_success_percent();
+
+			$this->assertTrue( self::packed_box( $kinds, $box )->try_to_beat( \Woodev_Box_Packer_Packed_Box::NO_FLOOR ) );
+			$this->assertTrue( self::packed_box( $kinds, $box )->try_to_beat( 0.0 ) );
+			$this->assertTrue( self::packed_box( $kinds, $box )->try_to_beat( $percent ) );
+			$this->assertFalse( self::packed_box( $kinds, $box )->try_to_beat( $percent + 0.01 ) );
+		}
+
+		public function test_a_box_is_packed_once_however_often_it_is_asked(): void {
+			$package = self::packed_box( [ [ 20, 20, 20, 3 ], [ 9, 9, 9, 10 ] ], [ 30, 30, 30 ] );
+
+			$first = $package->get_packed_items();
+
+			$this->assertSame( $first, $package->get_packed_items() );
+			$this->assertSame( $package->get_success_percent(), $package->get_success_percent() );
+		}
+
 		// -------------------------------------------------------------------
 		// Woodev_Packer_Free_Space itself
 		// -------------------------------------------------------------------
