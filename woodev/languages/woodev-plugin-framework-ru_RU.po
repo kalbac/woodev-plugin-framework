@@ -6065,3 +6065,15 @@ msgstr ""
 #: src/shipping-orders-page/order-wizard/validation.ts
 msgid "Выберите населённый пункт через поиск, чтобы получить тарифы доставки."
 msgstr "Выберите населённый пункт через поиск, чтобы получить тарифы доставки."
+
+#: shipping-method/admin/orders/class-order-payload-validator.php:217
+msgid "Выберите населённый пункт доставки ещё раз."
+msgstr "Выберите населённый пункт доставки ещё раз."
+
+#: shipping-method/admin/orders/class-order-payload-validator.php:239
+msgid "Населённый пункт не совпадает с адресом доставки. Выберите его ещё раз."
+msgstr "Населённый пункт не совпадает с адресом доставки. Выберите его ещё раз."
+
+#: shipping-method/admin/orders/class-order-payload-validator.php:250
+msgid "Источник населённого пункта изменился. Выберите его ещё раз."
+msgstr "Источник населённого пункта изменился. Выберите его ещё раз."
