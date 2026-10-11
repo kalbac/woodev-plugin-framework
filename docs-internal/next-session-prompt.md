@@ -111,8 +111,7 @@
 - `Woodev_Packer_Boxes` проверяет только объём — готча `woodev-packer-boxes-checks-volume-not-placement`.
 - Строка FAIL «cleanup restores the rig» с опциями `woodev_<md5>` — это кеш обновлений, повторить прогон — готча
   `the-licence-updater-cache-options-change-by-themselves-during-a-rig-run`.
-- Хук pre-push в ворктри отказывает без бандлов: воркер останавливается, бандлы собирает координатор в основном checkout
-  (`git switch --detach <коммит воркера>`, `npm run build`, коммит, `git push origin HEAD:refs/heads/<ветка>`, вернуть `main`).
+- Хук pre-push в ворктри отказывает без бандлов → бандлы собирает координатор в основном checkout (detach на коммит воркера, build, push в ветку).
 
 # Состояние на входе
 
