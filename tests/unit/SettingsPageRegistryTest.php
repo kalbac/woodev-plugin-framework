@@ -77,6 +77,7 @@ class SettingsPageRegistryTest extends TestCase {
 		$handler->shouldReceive( 'get_id' )->andReturn( $id );
 		$handler->shouldReceive( 'get_settings' )->andReturn( [ 'api_key' => $setting ] );
 		$handler->shouldReceive( 'get_value' )->andReturn( 'v' );
+		$handler->shouldReceive( 'get_display_value' )->andReturn( 'v' );
 
 		return Settings_Provider::create(
 			$id,
@@ -146,6 +147,7 @@ class SettingsPageRegistryTest extends TestCase {
 		$handler->shouldReceive( 'get_id' )->andReturn( 'cdek' );
 		$handler->shouldReceive( 'get_settings' )->andReturn( [ 'api_key' => $setting ] );
 		$handler->shouldReceive( 'get_value' )->andReturn( 'v' );
+		$handler->shouldReceive( 'get_display_value' )->andReturn( 'v' );
 
 		$provider = Settings_Provider::create(
 			'cdek',
@@ -379,6 +381,7 @@ class SettingsPageRegistryTest extends TestCase {
 		$handler->shouldReceive( 'get_id' )->andReturn( 'carrier' );
 		$handler->shouldReceive( 'get_settings' )->with( [ 'token' ] )->andReturn( [ 'token' => $this->token_setting() ] );
 		$handler->shouldReceive( 'get_value' )->andReturn( '' );
+		$handler->shouldReceive( 'get_display_value' )->andReturn( '' );
 
 		$provider = Settings_Provider::create(
 			'carrier',
@@ -438,6 +441,7 @@ class SettingsPageRegistryTest extends TestCase {
 		$handler->shouldReceive( 'get_id' )->andReturn( 'carrier' );
 		$handler->shouldReceive( 'get_settings' )->andReturn( [ 'token' => $this->token_setting() ] );
 		$handler->shouldReceive( 'get_value' )->andReturn( '' );
+		$handler->shouldReceive( 'get_display_value' )->andReturn( '' );
 
 		return $handler;
 	}
@@ -450,6 +454,7 @@ class SettingsPageRegistryTest extends TestCase {
 		$handler->shouldReceive( 'get_id' )->andReturn( 'carrier' );
 		$handler->shouldReceive( 'get_settings' )->andReturn( [ 'token' => $this->token_setting() ] );
 		$handler->shouldReceive( 'get_value' )->andReturn( '' );
+		$handler->shouldReceive( 'get_display_value' )->andReturn( '' );
 		$handler->shouldReceive( 'get_connection_status' )->andReturn( \Woodev_Connection_Result::success( 'Подключено' ) );
 
 		return $handler;

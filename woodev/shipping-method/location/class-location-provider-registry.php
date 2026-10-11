@@ -1549,10 +1549,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 				return self::MODE_TYPEAHEAD;
 			}
 
-			$stored  = (string) $this->settings_handler->get_value( self::SETTING_FIELD_MODE_REGION );
-			$offered = $this->get_offered_field_modes();
-
-			return in_array( $stored, $offered, true ) ? $stored : self::MODE_TYPEAHEAD;
+			return $this->clamp_region_mode_to_offered( (string) $this->settings_handler->get_value( self::SETTING_FIELD_MODE_REGION ) );
 		}
 
 		/**
@@ -1591,7 +1588,73 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 				return self::MODE_TYPEAHEAD;
 			}
 
-			$stored  = (string) $this->settings_handler->get_value( self::SETTING_FIELD_MODE_SETTLEMENT );
+			return $this->clamp_settlement_mode_to_offered( (string) $this->settings_handler->get_value( self::SETTING_FIELD_MODE_SETTLEMENT ) );
+		}
+
+		/**
+		 * The mode the ADMIN form shows for a field-mode axis — what is actually
+		 * in effect, not the raw stored value (kalbac/woocommerce-edostavka#49).
+		 *
+		 * A store can hold `related-list` on the region axis while the active
+		 * provider lacks {@see Location_Provider::CAPABILITY_LIST} (the CDEK v1→v2
+		 * migration copies the v1 mode over before any list-capable provider
+		 * exists), and `related-list` on the settlement axis under ANY provider.
+		 * The checkout already degrades both on read
+		 * ({@see self::get_field_mode_region()} / {@see self::get_field_mode_settlement()});
+		 * the admin select used to show the raw value, one that is not even among
+		 * its options. This applies the SAME capability clamp — the two share the
+		 * private helpers, so there is one rule, not two.
+		 *
+		 * Deliberately WITHOUT {@see self::get_field_mode_region()}'s
+		 * `region_field=remove` clamp: the region control is hidden while that
+		 * field is removed and reappears, unsaved, the moment the merchant turns
+		 * it back on — it must then show the mode that will be in effect, not the
+		 * `typeahead` a removed field forces. The stored value is never rewritten
+		 * here; a save writes whatever the form displays.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $setting_id Either {@see self::SETTING_FIELD_MODE_REGION} or
+		 *                           {@see self::SETTING_FIELD_MODE_SETTLEMENT}.
+		 * @param string $stored     The raw stored mode.
+		 *
+		 * @return string The stored mode unchanged for any other setting id.
+		 */
+		public function get_field_mode_for_display( string $setting_id, string $stored ): string {
+			if ( self::SETTING_FIELD_MODE_REGION === $setting_id ) {
+				return $this->clamp_region_mode_to_offered( $stored );
+			}
+
+			if ( self::SETTING_FIELD_MODE_SETTLEMENT === $setting_id ) {
+				return $this->clamp_settlement_mode_to_offered( $stored );
+			}
+
+			return $stored;
+		}
+
+		/**
+		 * Clamps a stored REGION-axis mode to what the active provider offers.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $stored The raw stored mode.
+		 *
+		 * @return string `$stored` when offered, else {@see self::MODE_TYPEAHEAD}.
+		 */
+		private function clamp_region_mode_to_offered( string $stored ): string {
+			return in_array( $stored, $this->get_offered_field_modes(), true ) ? $stored : self::MODE_TYPEAHEAD;
+		}
+
+		/**
+		 * Clamps a stored SETTLEMENT-axis mode to what the active provider offers.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $stored The raw stored mode.
+		 *
+		 * @return string The mode in effect.
+		 */
+		private function clamp_settlement_mode_to_offered( string $stored ): string {
 			$offered = self::offered_field_modes_for( $this->get_active_provider(), true );
 
 			// A store that saved `related-list` before the settlement axis stopped
@@ -2423,7 +2486,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 					$provider = $this->resolve_active_provider_for_id( $id );
 
 					return null !== $provider ? $provider->get_id() : '';
-				}
+				},
+				// kalbac/woocommerce-edostavka#49: the admin shows the mode IN EFFECT
+				// for the two field-mode axes, via the very clamp the checkout reads.
+				fn( string $setting_id, string $stored ): string => $this->get_field_mode_for_display( $setting_id, $stored )
 			);
 
 			$this->apply_default_locality_status_note();

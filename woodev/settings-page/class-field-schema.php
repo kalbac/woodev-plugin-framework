@@ -47,12 +47,15 @@ final class Field_Schema {
 			$is_secret        = $setting->is_sensitive() || $has_constant;
 			$stored           = $handler->get_value( $setting->get_id() );
 			$is_set           = '' !== (string) ( is_array( $stored ) ? implode( '', $stored ) : $stored );
+			// What the form SHOWS may differ from what is stored (a mode the runtime
+			// clamps on read); a save posts the shown value. Secrets never get here.
+			$shown = $is_secret ? $stored : $handler->get_display_value( $setting->get_id() );
 
 			$entry = [
 				'type'        => $setting->get_type(),
 				'name'        => $setting->get_name(),
 				'options'     => $setting->get_options(),
-				'value'       => $is_secret ? '' : $stored,
+				'value'       => $is_secret ? '' : $shown,
 				'is_multi'    => $setting->is_is_multi(),
 				'controlType' => $control ? $control->get_type() : null,
 				'description' => $control && $control->get_description() ? $control->get_description() : $setting->get_description(),
@@ -110,7 +113,7 @@ final class Field_Schema {
 			}
 
 			if ( $control && \Woodev_Control::TYPE_SEARCH_SELECT === $control->get_type() ) {
-				$entry['value_label'] = $is_secret ? '' : $control->get_value_label( $stored );
+				$entry['value_label'] = $is_secret ? '' : $control->get_value_label( $shown );
 				$entry['search_url']  = rest_url( 'woodev/v1/settings/' . rawurlencode( '' !== $provider_id ? $provider_id : $handler->get_id() ) . '/control/' . rawurlencode( $setting->get_id() ) . '/search' );
 			}
 			if ( $control && \Woodev_Control::TYPE_BOXES_TABLE === $control->get_type() ) {

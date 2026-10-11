@@ -110,6 +110,7 @@ class SetupWizardFieldSchemaTest extends TestCase {
 		$handler = Mockery::mock( 'Woodev_Abstract_Settings' );
 		$handler->shouldReceive( 'get_settings' )->andReturn( [ $setting ] );
 		$handler->shouldReceive( 'get_value' )->with( 'speed' )->andReturn( 50 );
+		$handler->shouldReceive( 'get_display_value' )->with( 'speed' )->andReturn( 50 );
 
 		$plugin = Mockery::mock( 'Woodev_Plugin' );
 		$plugin->shouldReceive( 'get_settings_handler' )->andReturn( $handler );
@@ -181,6 +182,7 @@ class SetupWizardFieldSchemaTest extends TestCase {
 		$handler = Mockery::mock( 'Woodev_Abstract_Settings' );
 		$handler->shouldReceive( 'get_settings' )->andReturn( [ $setting ] );
 		$handler->shouldReceive( 'get_value' )->with( 'api_key' )->andReturn( 'abc' );
+		$handler->shouldReceive( 'get_display_value' )->with( 'api_key' )->andReturn( 'abc' );
 
 		$plugin = Mockery::mock( 'Woodev_Plugin' );
 		$plugin->shouldReceive( 'get_settings_handler' )->andReturn( $handler );
@@ -218,6 +220,7 @@ class SetupWizardFieldSchemaTest extends TestCase {
 		$handler = Mockery::mock( 'Woodev_Abstract_Settings' );
 		$handler->shouldReceive( 'get_settings' )->andReturn( [ $setting ] );
 		$handler->shouldReceive( 'get_value' )->with( 'label' )->andReturn( '' );
+		$handler->shouldReceive( 'get_display_value' )->with( 'label' )->andReturn( '' );
 
 		$plugin = Mockery::mock( 'Woodev_Plugin' );
 		$plugin->shouldReceive( 'get_settings_handler' )->andReturn( $handler );
@@ -256,6 +259,7 @@ class SetupWizardFieldSchemaTest extends TestCase {
 		$handler = Mockery::mock( 'Woodev_Abstract_Settings' );
 		$handler->shouldReceive( 'get_settings' )->andReturn( [ $setting ] );
 		$handler->shouldReceive( 'get_value' )->with( 'methods' )->andReturn( [] );
+		$handler->shouldReceive( 'get_display_value' )->with( 'methods' )->andReturn( [] );
 
 		$plugin = Mockery::mock( 'Woodev_Plugin' );
 		$plugin->shouldReceive( 'get_settings_handler' )->andReturn( $handler );
