@@ -350,7 +350,11 @@ namespace Woodev\Tests\Unit {
 				$digest[] = sha1( json_encode( $out ) );
 			}
 
-			$this->assertSame( 'f86c73850f5f970268f0a55b56fafc271af71b7e', sha1( implode( ',', $digest ) ) );
+			// Two digests, both taken from 2384b22b: PHP 7.4's usort() is not stable, so items that compare equal come out
+			// in another order than on PHP 8 and land in other (equally valid) packages.
+			$expected = PHP_VERSION_ID < 80000 ? '01045aac59320855684a4db5e5dc6ba025c38377' : 'f86c73850f5f970268f0a55b56fafc271af71b7e';
+
+			$this->assertSame( $expected, sha1( implode( ',', $digest ) ) );
 		}
 
 		private static function packed_box( array $kinds, array $box ): \Woodev_Box_Packer_Packed_Box {
