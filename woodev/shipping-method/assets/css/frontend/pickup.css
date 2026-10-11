@@ -1173,6 +1173,18 @@
 
 /* Native search inputs draw their own "×" clear icon in WebKit — ours (`__reset`) already covers
    that job, so the browser's duplicate is switched off rather than showing two clear affordances. */
+/* Rig s170: Storefront styles `input[type="search"]` (one element plus one attribute selector)
+   with a grey background, inset shadow and padding, and that specificity beats the plain class
+   rule above, so the map search drew a grey box inside the white bar. The wrapper class lifts
+   this rule above any theme's element+attribute selector; the bar itself stays the white surface. */
+.woodev-pickup-search .woodev-pickup-search__input {
+	padding: 0;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+}
+
 .woodev-pickup-search__input::-webkit-search-cancel-button {
 	display: none;
 }
