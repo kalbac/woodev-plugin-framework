@@ -5,7 +5,7 @@
 
 - [box-packer/virtual-box-rsort-axis-alignment] **`rsort()` on the axis-assignment result destroys axis-name alignment for non-normalized items — Option A `[1,10,1]` after rsort → `[10,1,1]` →….** → [virtual-box-rsort-axis-alignment](../gotchas/virtual-box-rsort-axis-alignment.md)
 - [box-packer/virtual-box-null-best-inf-overflow] **`$best=null;.** → [virtual-box-null-best-inf-overflow](../gotchas/virtual-box-null-best-inf-overflow.md)
-- [box-packer/boxes] **`Woodev_Packer_Boxes` checks per-item sides + summed volume only — it places nothing, so three 29×29×10 plates «fit» a 30×30×30 box. Use the virtual box's real placement for «does it fit».** → [woodev-packer-boxes-checks-volume-not-placement](../gotchas/woodev-packer-boxes-checks-volume-not-placement.md) (s168)
+- [box-packer/boxes] **`Woodev_Packer_Boxes` checked sides + summed volume only, placed nothing — FIXED #1214: it now places items with `Woodev_Packer_Free_Space` (volume rule only above 120 units). The «three plates» example was wrong.** → [woodev-packer-boxes-checks-volume-not-placement](../gotchas/woodev-packer-boxes-checks-volume-not-placement.md) (s168, fixed s169)
 
 ## Related
 

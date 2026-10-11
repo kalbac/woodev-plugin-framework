@@ -23,13 +23,23 @@ if ( ! class_exists( 'Woodev_Box_Packer_Packed_Box' ) ) :
 		/** @var float */
 		private $success_percent = 0.0;
 
+		/** @var bool */
+		private $check_placement;
+
 		/**
 		 * @param Woodev_Box_Packer_Box    $box
 		 * @param Woodev_Box_Packer_Item[] $items
+		 * @param bool                     $check_placement Take an item only when it can really be placed
+		 *                                                  into the box next to those already taken (#1214),
+		 *                                                  not just when the sides and the summed volume
+		 *                                                  allow it. Over {@see Woodev_Packer_Free_Space::MAX_UNITS}
+		 *                                                  items the check is skipped and the sides + volume
+		 *                                                  rule decides alone. @since 2.0.2
 		 */
-		public function __construct( Woodev_Box_Packer_Box $box, array $items ) {
-			$this->box           = $box;
-			$this->items_to_pack = $items;
+		public function __construct( Woodev_Box_Packer_Box $box, array $items, bool $check_placement = false ) {
+			$this->box             = $box;
+			$this->items_to_pack   = $items;
+			$this->check_placement = $check_placement;
 		}
 
 		/**
@@ -102,10 +112,11 @@ if ( ! class_exists( 'Woodev_Box_Packer_Packed_Box' ) ) :
 			$packed_weight = $this->box->get_weight();
 			$packed_volume = 0;
 			$packed_value  = 0;
+			$space         = $this->free_space();
 
 			foreach ( $this->items_to_pack as $item ) {
 
-				if ( $this->can_be_packed( $item, $packed_weight, $packed_volume ) ) {
+				if ( $this->can_be_packed( $item, $packed_weight, $packed_volume ) && ( null === $space || null !== $space->place( [ $item->get_length(), $item->get_width(), $item->get_height() ] ) ) ) {
 					$packed[]       = $item;
 					$packed_volume += $item->get_volume();
 					$packed_weight += $item->get_weight();
@@ -121,6 +132,26 @@ if ( ! class_exists( 'Woodev_Box_Packer_Packed_Box' ) ) :
 			$this->packed_volume = $packed_volume;
 			$this->packed_value  = $packed_value;
 			$this->calculate_packing_success_rate();
+		}
+
+		/**
+		 * The empty box as a place to put items into one by one, or null when the placement is not checked:
+		 * the check is off, or there are more items than {@see Woodev_Packer_Free_Space::MAX_UNITS}.
+		 *
+		 * @return Woodev_Packer_Free_Space|null
+		 */
+		private function free_space(): ?Woodev_Packer_Free_Space {
+			if ( ! $this->check_placement || count( $this->items_to_pack ) > Woodev_Packer_Free_Space::MAX_UNITS ) {
+				return null;
+			}
+
+			$min_side = PHP_FLOAT_MAX;
+
+			foreach ( $this->items_to_pack as $item ) {
+				$min_side = min( $min_side, $item->get_length(), $item->get_width(), $item->get_height() );
+			}
+
+			return new Woodev_Packer_Free_Space( (float) $this->box->get_length(), (float) $this->box->get_width(), (float) $this->box->get_height(), (float) $min_side );
 		}
 
 		/**

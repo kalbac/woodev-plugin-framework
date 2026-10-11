@@ -46,7 +46,7 @@ if ( ! class_exists( 'Woodev_Packer_Virtual_Box' ) ) :
 		const MAX_ATTEMPTS = 48;
 		const MIN_ATTEMPTS = 3;
 		const MAX_PLACEMENTS = 400;
-		const MAX_UNITS = 120;
+		const MAX_UNITS = Woodev_Packer_Free_Space::MAX_UNITS;
 
 		/** The most the shortest side may grow, relatively, to settle a rounding error ({@see self::settled_box()}). */
 		const SETTLE_LIMIT = 1e-7;
@@ -328,12 +328,9 @@ if ( ! class_exists( 'Woodev_Packer_Virtual_Box' ) ) :
 		/**
 		 * Places the units into an open-top box with the given base and tells how high the stack gets.
 		 *
-		 * First-fit decreasing over MAXIMAL free spaces: for each unit (largest first) the free spaces are
-		 * walked deepest-bottom-left first and the unit takes the first one it fits, rotated so it lies as
-		 * flat as possible. Every free space the unit now overlaps is cut into the pieces left of, right of,
-		 * in front of, behind, below and above it, so the gaps around it stay available to smaller units.
-		 *
-		 * A free space is a 6-tuple [x0, y0, z0, x1, y1, z1] — its near and far corners.
+		 * First-fit decreasing over MAXIMAL free spaces ({@see Woodev_Packer_Free_Space}): for each unit
+		 * (largest first) the free spaces are walked deepest-bottom-left first and the unit takes the first one
+		 * it fits, rotated so it lies as flat as possible; the gaps around it stay available to smaller units.
 		 *
 		 * @param  array<int, array{0: float, 1: float, 2: float}> $units    sorted largest first
 		 * @param  float                                           $length   base length
@@ -345,23 +342,12 @@ if ( ! class_exists( 'Woodev_Packer_Virtual_Box' ) ) :
 		 *                 where each unit went; null if a unit found no place (cannot happen within $cap)
 		 */
 		private function fit( array $units, float $length, float $width, float $cap, float $min_side ): ?array {
-			$eps      = self::EPSILON;
-			$spaces   = [ [ 0.0, 0.0, 0.0, $length, $width, $cap ] ];
-			$top      = 0.0;
+			$container = new Woodev_Packer_Free_Space( $length, $width, $cap, $min_side );
+			$top       = 0.0;
 			$placement = [];
 
 			foreach ( $units as $unit ) {
-				$placed = null;
-				$sizes  = $this->orientations( $unit );
-
-				foreach ( $spaces as $space ) {
-					foreach ( $sizes as $size ) {
-						if ( $space[0] + $size[0] <= $space[3] + $eps && $space[1] + $size[1] <= $space[4] + $eps && $space[2] + $size[2] <= $space[5] + $eps ) {
-							$placed = [ $space[0], $space[1], $space[2], $space[0] + $size[0], $space[1] + $size[1], $space[2] + $size[2] ];
-							break 2;
-						}
-					}
-				}
+				$placed = $container->place( $unit );
 
 				if ( null === $placed ) {
 					return null;
@@ -369,119 +355,12 @@ if ( ! class_exists( 'Woodev_Packer_Virtual_Box' ) ) :
 
 				$top         = max( $top, $placed[5] );
 				$placement[] = $placed;
-				$spaces      = $this->cut_spaces( $spaces, $placed, $min_side );
 			}
 
 			return [
 				'height'    => $top,
 				'placement' => $placement,
 			];
-		}
-
-		/**
-		 * The distinct rotations of a unit, flattest first (smallest height, then the longest side along x).
-		 *
-		 * @param  array{0: float, 1: float, 2: float} $unit
-		 * @return array<int, array{0: float, 1: float, 2: float}> [dx, dy, dz]
-		 */
-		private function orientations( array $unit ): array {
-			[ $a, $b, $c ] = $unit;
-
-			$all = [ [ $a, $b, $c ], [ $b, $a, $c ], [ $a, $c, $b ], [ $c, $a, $b ], [ $b, $c, $a ], [ $c, $b, $a ] ];
-
-			$distinct = [];
-
-			foreach ( $all as $size ) {
-				$distinct[ implode( '|', $size ) ] = $size;
-			}
-
-			return array_values( $distinct );
-		}
-
-		/**
-		 * The free spaces after a unit is placed: those it overlaps are cut around it, pieces thinner than
-		 * the smallest unit and pieces inside another space are dropped, and the rest is ordered
-		 * deepest-bottom-left first for the next unit.
-		 *
-		 * This is the hot loop of the whole algorithm — hence the inlined overlap and containment tests.
-		 *
-		 * @param  array<int, array<int, float>> $spaces   [x0, y0, z0, x1, y1, z1] each
-		 * @param  array<int, float>             $placed   [x0, y0, z0, x1, y1, z1] of the unit
-		 * @param  float                         $min_side
-		 * @return array<int, array<int, float>>
-		 */
-		private function cut_spaces( array $spaces, array $placed, float $min_side ): array {
-			$eps    = self::EPSILON;
-			$thin   = max( $min_side - $eps, $eps ); // a piece has to be at least this big on every axis
-			$kept   = [];
-			$pieces = [];
-
-			foreach ( $spaces as $s ) {
-				if (
-					$placed[0] >= $s[3] - $eps || $placed[3] <= $s[0] + $eps
-					|| $placed[1] >= $s[4] - $eps || $placed[4] <= $s[1] + $eps
-					|| $placed[2] >= $s[5] - $eps || $placed[5] <= $s[2] + $eps
-				) {
-					$kept[] = $s;
-					continue;
-				}
-
-				$cuts = [
-					[ $s[0], $s[1], $s[2], $placed[0], $s[4], $s[5] ], // left of the unit
-					[ $placed[3], $s[1], $s[2], $s[3], $s[4], $s[5] ], // right of it
-					[ $s[0], $s[1], $s[2], $s[3], $placed[1], $s[5] ], // in front of it
-					[ $s[0], $placed[4], $s[2], $s[3], $s[4], $s[5] ], // behind it
-					[ $s[0], $s[1], $s[2], $s[3], $s[4], $placed[2] ], // below it
-					[ $s[0], $s[1], $placed[5], $s[3], $s[4], $s[5] ], // above it
-				];
-
-				foreach ( $cuts as $p ) {
-					if ( $p[3] - $p[0] >= $thin && $p[4] - $p[1] >= $thin && $p[5] - $p[2] >= $thin ) {
-						$pieces[] = $p;
-					}
-				}
-			}
-
-			// a new piece inside a kept space or inside another new piece adds nothing; a kept space can
-			// never lie inside a new piece, because the piece is part of a space the kept one was not in
-			$result = $kept;
-			$count  = count( $pieces );
-
-			foreach ( $pieces as $i => $a ) {
-				foreach ( $kept as $b ) {
-					if ( $a[0] >= $b[0] - $eps && $a[1] >= $b[1] - $eps && $a[2] >= $b[2] - $eps && $a[3] <= $b[3] + $eps && $a[4] <= $b[4] + $eps && $a[5] <= $b[5] + $eps ) {
-						continue 2;
-					}
-				}
-
-				for ( $j = 0; $j < $count; $j++ ) {
-					if ( $i === $j ) {
-						continue;
-					}
-
-					$b = $pieces[ $j ];
-
-					if ( $a[0] >= $b[0] - $eps && $a[1] >= $b[1] - $eps && $a[2] >= $b[2] - $eps && $a[3] <= $b[3] + $eps && $a[4] <= $b[4] + $eps && $a[5] <= $b[5] + $eps ) {
-						// of two equal pieces the first one stays
-						if ( $j < $i || $b[0] < $a[0] - $eps || $b[1] < $a[1] - $eps || $b[2] < $a[2] - $eps || $b[3] > $a[3] + $eps || $b[4] > $a[4] + $eps || $b[5] > $a[5] + $eps ) {
-							continue 2;
-						}
-					}
-				}
-
-				$result[] = $a;
-			}
-
-			// deepest-bottom-left first: z, then y, then x; the far corner breaks the remaining ties
-			$z0 = array_column( $result, 2 );
-			$y0 = array_column( $result, 1 );
-			$x0 = array_column( $result, 0 );
-			$x1 = array_column( $result, 3 );
-			$y1 = array_column( $result, 4 );
-			$z1 = array_column( $result, 5 );
-			array_multisort( $z0, SORT_ASC, SORT_NUMERIC, $y0, SORT_ASC, SORT_NUMERIC, $x0, SORT_ASC, SORT_NUMERIC, $x1, SORT_ASC, SORT_NUMERIC, $y1, SORT_ASC, SORT_NUMERIC, $z1, SORT_ASC, SORT_NUMERIC, $result );
-
-			return $result;
 		}
 
 		/**

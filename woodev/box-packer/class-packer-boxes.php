@@ -49,7 +49,7 @@ if ( ! class_exists( 'Woodev_Packer_Boxes' ) ) :
 		private function find_best_packed_box(): ?Woodev_Box_Packer_Packed_Box {
 			$packages = [];
 			foreach ( $this->boxes as $box ) {
-				$packages[] = new Woodev_Box_Packer_Packed_Box( $box, $this->items );
+				$packages[] = new Woodev_Box_Packer_Packed_Box( $box, $this->items, true );
 			}
 			// Maximise packed units first; on equal fill prefer store boxes, then the smallest volume.
 			$best_percent = -1;

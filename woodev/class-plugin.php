@@ -785,6 +785,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			require_once $framework_path . '/box-packer/abstract-class-packer.php';
 			require_once $framework_path . '/box-packer/class-item-implementation.php';
 			require_once $framework_path . '/box-packer/class-box-implementation.php';
+			require_once $framework_path . '/box-packer/class-packer-free-space.php';
 			require_once $framework_path . '/box-packer/class-packed-box.php';
 			require_once $framework_path . '/box-packer/class-packer-boxes.php';
 			require_once $framework_path . '/box-packer/class-packages-weight.php';
