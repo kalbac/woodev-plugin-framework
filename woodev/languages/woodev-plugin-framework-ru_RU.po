@@ -313,7 +313,7 @@ msgstr "Поздравляем"
 #: class-lifecycle.php:370
 #, php-format
 msgid "Are you having a great experience with %1$s so far? Please consider %2$sleaving a review%3$s! If things aren't going quite as expected, we're happy to help -- please %4$sreach out to our support team%5$s."
-msgstr "У вас уже есть хороший опыт в использовании плагина  %1$s? Если вас не затруднит %2$sоставьте отзыв%3$s! Если что-то пойдет не так, как ожидалось, мы будем рады помочь — %4$sобратитесь в нашу службу поддержки%5$s."
+msgstr "У вас уже есть хороший опыт в использовании плагина %1$s? Если вас не затруднит %2$sоставьте отзыв%3$s! Если что-то пойдет не так, как ожидалось, мы будем рады помочь — %4$sобратитесь в нашу службу поддержки%5$s."
 
 #: class-plugin.php:728
 msgid "Указать лицензию"
