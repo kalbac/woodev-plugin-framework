@@ -60,6 +60,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		/** @var Settings\Advanced_Settings|null lazily-built «Дополнительно» settings of this carrier: logging, hide on cart */
 		private ?Settings\Advanced_Settings $advanced_settings = null;
 
+		/** @var bool whether the fleet-wide order-item meta filters have been registered */
+		private static bool $order_item_meta_filters_registered = false;
+
+		/** @var array<string,string[]> carrier method id => item-meta keys hidden by that method */
+		private static array $hidden_order_item_meta_keys_by_method = [];
+
+		/** @var string[] order-item meta keys hidden by any registered carrier method */
+		private static array $hidden_order_item_meta_keys = [];
+
 		/**
 		 * Initializes the shipping plugin.
 		 *
@@ -407,6 +416,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 */
 		private function add_hooks(): void {
 
+			self::register_order_item_meta_filters( $this->get_valid_shipping_method_classes() );
+
 			Checkout\Checkout_Parent_Block_Notice::register( $this );
 
 			// «fee only for chosen payment methods» (#1144): one fleet-wide wiring, inert until a method instance uses it
@@ -519,6 +530,77 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			// NOTE: the REST API handler is already initialized by the base lifecycle
 			// (Woodev_Plugin::__construct() -> init_rest_api_handler()), so it is not
 			// re-wired here.
+		}
+
+		/**
+		 * Registers the shared order-item meta filters once for the whole carrier fleet.
+		 *
+		 * @since 2.0.2
+		 */
+		private static function register_order_item_meta_filters( array $method_classes ): void {
+
+			foreach ( $method_classes as $method_class ) {
+				$method_id = $method_class::get_method_id();
+				$keys      = array_merge( Shipping_Method::get_hidden_order_item_meta_keys(), $method_class::get_hidden_order_item_meta_keys() );
+
+				self::$hidden_order_item_meta_keys_by_method[ $method_id ] = array_values(
+					array_unique(
+						array_merge( self::$hidden_order_item_meta_keys_by_method[ $method_id ] ?? [], $keys )
+					)
+				);
+				self::$hidden_order_item_meta_keys = array_values( array_unique( array_merge( self::$hidden_order_item_meta_keys, $keys ) ) );
+			}
+
+			if ( self::$order_item_meta_filters_registered ) {
+				return;
+			}
+
+			self::$order_item_meta_filters_registered = true;
+			add_filter( 'woocommerce_hidden_order_itemmeta', [ self::class, 'hide_order_item_meta_from_admin' ] );
+			add_filter( 'woocommerce_order_item_get_formatted_meta_data', [ self::class, 'hide_order_item_meta_from_formatted_display' ], 10, 2 );
+		}
+
+		/**
+		 * Adds framework and carrier-declared order-item keys to WooCommerce's admin hidden list.
+		 *
+		 * WooCommerce's admin item-meta view applies this filter to keys with and without a leading underscore.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string[] $hidden_meta_keys Meta keys hidden by WooCommerce and other extensions.
+		 * @return string[]
+		 */
+		public static function hide_order_item_meta_from_admin( array $hidden_meta_keys ): array {
+			return array_values( array_unique( array_merge( $hidden_meta_keys, self::$hidden_order_item_meta_keys ) ) );
+		}
+
+		/**
+		 * Removes carrier-declared keys from WooCommerce's formatted order-item meta output.
+		 *
+		 * WooCommerce's normal formatter hides underscore-prefixed keys by default; this filter also hides any
+		 * carrier-declared keys that do not use that convention when the formatted meta is rendered.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array  $formatted_meta Formatted metadata, indexed by metadata id.
+		 * @param object $item Order item being formatted.
+		 * @return array
+		 */
+		public static function hide_order_item_meta_from_formatted_display( array $formatted_meta, object $item ): array {
+
+			if ( ! method_exists( $item, 'get_method_id' ) ) {
+				return $formatted_meta;
+			}
+
+			$hidden_meta_keys = self::$hidden_order_item_meta_keys_by_method[ $item->get_method_id() ] ?? [];
+
+			foreach ( $formatted_meta as $meta_id => $meta ) {
+				if ( isset( $meta->key ) && in_array( $meta->key, $hidden_meta_keys, true ) ) {
+					unset( $formatted_meta[ $meta_id ] );
+				}
+			}
+
+			return $formatted_meta;
 		}
 
 		/**
