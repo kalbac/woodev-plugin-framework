@@ -19,11 +19,26 @@ use Woodev\Framework\Shipping\Admin\Orders\Order_Editor;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
 use Woodev\Framework\Shipping\Checkout\Checkout_Handler;
+use Woodev\Framework\Shipping\Location\Location_Record;
+use Woodev\Framework\Shipping\Location\Location_Provider;
+use Woodev\Framework\Shipping\Location\Location_Service;
 use Woodev\Framework\Shipping\Pickup\Pickup_Handler;
 use Woodev\Framework\Shipping\Shipping_Plugin;
 use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__ ) . '/Order/order-persistence-fixtures.php';
+
+final class Order_Editor_Location_Fake_Service extends Location_Service {
+	private ?Location_Provider $provider;
+
+	public function __construct( ?Location_Provider $provider ) {
+		$this->provider = $provider;
+	}
+
+	public function provider_for_level( string $level, ?string $country = null ): ?Location_Provider {
+		return $this->provider;
+	}
+}
 
 /**
  * @covers \Woodev\Framework\Shipping\Admin\Orders\Order_Editor::persist
@@ -104,7 +119,7 @@ final class OrderEditorPersistTest extends TestCase {
 	 * @param array<string,mixed>   $extra_args more `Orders_Provider::create()` arguments.
 	 * @return Orders_Provider
 	 */
-	private function register( $checkout, $pickup, array $method_ids = [ 'cdek_courier', 'cdek_pickup' ], string $id = 'cdek', string $marker = '_cdek_marker', array $extra_args = [] ): Orders_Provider {
+	private function register( $checkout, $pickup, array $method_ids = [ 'cdek_courier', 'cdek_pickup' ], string $id = 'cdek', string $marker = '_cdek_marker', array $extra_args = [], ?Location_Service $location_service = null ): Orders_Provider {
 		$provider = Orders_Provider::create(
 			$id,
 			'СДЭК',
@@ -120,6 +135,9 @@ final class OrderEditorPersistTest extends TestCase {
 		$plugin = Mockery::mock( Shipping_Plugin::class );
 		$plugin->shouldReceive( 'get_checkout_handler' )->andReturn( $checkout );
 		$plugin->shouldReceive( 'get_pickup_handler' )->andReturn( $pickup );
+		if ( null !== $location_service ) {
+			$plugin->shouldReceive( 'get_location_service' )->andReturn( $location_service );
+		}
 
 		Orders_Registry::instance()->register_provider( $provider, $plugin );
 
@@ -179,7 +197,21 @@ final class OrderEditorPersistTest extends TestCase {
 			'pickup_point'   => $point,
 			'fields'         => [ 'carrier_comment' => 'позвонить' ],
 			'carrier_fields' => [ 'declared_value' => 100 ],
+			'location'       => null,
 		];
+	}
+
+	private function location_record(): Location_Record {
+		return Location_Record::from_array(
+			[
+				'key'         => 'cdek:moscow',
+				'provider_id' => 'cdek',
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'country'     => 'RU',
+				'settlement'  => [ 'name' => 'Москва', 'type' => 'г' ],
+				'raw'         => [ 'token' => 'must not persist' ],
+			]
+		);
 	}
 
 	/**
@@ -206,9 +238,9 @@ final class OrderEditorPersistTest extends TestCase {
 	 * @param string $billing_city  the billing city used when no shipping place exists.
 	 * @return array<string,mixed>
 	 */
-	private function prefill( string $shipping_city, string $billing_city ): array {
+	private function prefill( string $shipping_city, string $billing_city, ?array $stored_location = null, ?Location_Service $location_service = null ): array {
 		Orders_Registry::instance()->reset_for_tests();
-		$provider = $this->register( null, null );
+		$provider = $this->register( null, null, [ 'cdek_courier', 'cdek_pickup' ], 'cdek', '_cdek_marker', [], $location_service );
 		$order    = Mockery::mock( '\\WC_Order' );
 
 		$order->shouldReceive( 'get_id' )->andReturn( 42 );
@@ -223,10 +255,13 @@ final class OrderEditorPersistTest extends TestCase {
 		$order->shouldReceive( 'get_items' )->andReturn( [] );
 		$order->shouldReceive( 'get_shipping_methods' )->andReturn( [] );
 		$order->shouldReceive( 'get_meta' )->andReturn( '' );
+		if ( null !== $stored_location ) {
+			$this->meta[42][Checkout_Handler::ORDER_LOCATION_META_KEY] = $stored_location;
+		}
 
 		foreach ( [ 'first_name', 'last_name', 'company', 'address_1', 'address_2', 'state', 'postcode', 'country', 'phone' ] as $key ) {
-			$order->shouldReceive( 'get_shipping_' . $key )->andReturn( '' );
-			$order->shouldReceive( 'get_billing_' . $key )->andReturn( '' );
+			$order->shouldReceive( 'get_shipping_' . $key )->andReturn( 'country' === $key && '' !== $shipping_city ? 'RU' : '' );
+			$order->shouldReceive( 'get_billing_' . $key )->andReturn( 'country' === $key && '' !== $billing_city ? 'RU' : '' );
 		}
 
 		$order->shouldReceive( 'get_shipping_city' )->andReturn( $shipping_city );
@@ -246,6 +281,30 @@ final class OrderEditorPersistTest extends TestCase {
 		$this->assertFalse( $this->prefill( '', '' )['requires_settlement_selection'] );
 	}
 
+	private function active_location_service( string $provider_id ): Location_Service {
+		$provider = Mockery::mock( Location_Provider::class );
+		$provider->shouldReceive( 'get_id' )->andReturn( $provider_id );
+
+		return new Order_Editor_Location_Fake_Service( $provider );
+	}
+
+	public function test_prefill_reuses_a_saved_settlement_only_when_provider_and_city_still_match(): void {
+		$stored = $this->location_record()->to_array();
+		$match  = $this->prefill( 'Москва', '', $stored, $this->active_location_service( 'cdek' ) );
+
+		$this->assertSame( 'cdek:moscow', $match['location']['key'] );
+		$this->assertNull( $match['location']['raw'] );
+		$this->assertFalse( $match['requires_settlement_selection'] );
+
+		$provider_changed = $this->prefill( 'Москва', '', $stored, $this->active_location_service( 'dadata' ) );
+		$this->assertNull( $provider_changed['location'] );
+		$this->assertTrue( $provider_changed['requires_settlement_selection'] );
+
+		$city_changed = $this->prefill( 'Тверь', '', $stored, $this->active_location_service( 'cdek' ) );
+		$this->assertNull( $city_changed['location'] );
+		$this->assertTrue( $city_changed['requires_settlement_selection'] );
+	}
+
 	public function test_the_point_is_put_under_every_pickup_slot_and_handed_to_the_persistence_core(): void {
 		$calls    = [];
 		$provider = $this->register( $this->checkout_handler( $calls ), null );
@@ -258,6 +317,19 @@ final class OrderEditorPersistTest extends TestCase {
 		$this->assertSame( 'позвонить', $calls[0]['values']['carrier_comment'] );
 		$this->assertSame( 'cdek_pickup:3', $calls[0]['chosen'], 'the chosen method is method:instance, as checkout posts it' );
 		$this->assertNull( $calls[0]['after'], 'the per-field checkout hook is checkout-only' );
+	}
+
+	public function test_an_edited_order_saves_the_new_settlement_record_without_raw_provider_data(): void {
+		$calls    = [];
+		$provider = $this->register( $this->checkout_handler( $calls ), null );
+		$data     = $this->data( $provider, null );
+		$data['location'] = $this->location_record();
+
+		$this->persist( $data, true );
+
+		$stored = $this->meta[42][Checkout_Handler::ORDER_LOCATION_META_KEY];
+		$this->assertSame( 'cdek:moscow', $stored['key'] );
+		$this->assertNull( $stored['raw'] );
 	}
 
 	public function test_the_marker_context_carries_the_rate_the_point_and_the_carrier_fields(): void {

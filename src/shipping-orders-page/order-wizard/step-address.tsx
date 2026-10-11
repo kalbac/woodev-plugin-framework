@@ -94,7 +94,7 @@ export default function StepAddress( { data, setData, errors, addressPolicy }: S
 				settlementKey: 'settlement' === suggestion.level ? suggestion.record.key : d.settlementKey,
 				// Kept whole for step ④: the rates and pickup routes take the settlement's own record.
 				settlementRecord: 'settlement' === suggestion.level ? ( suggestion.record as unknown as Record<string, unknown> ) : d.settlementRecord,
-				settlementSelectionRequired: d.settlementSelectionRequired,
+				settlementSelectionRequired: false,
 			};
 		} );
 	};
@@ -125,6 +125,7 @@ export default function StepAddress( { data, setData, errors, addressPolicy }: S
 								// A settlement belongs to its country: another country starts the search over.
 								settlementKey: '',
 								settlementRecord: null,
+								settlementSelectionRequired: d.settlementSelectionRequired || ( d.isOrderEdit && null !== d.settlementRecord ),
 							} ) )
 						}
 					/>
@@ -134,7 +135,15 @@ export default function StepAddress( { data, setData, errors, addressPolicy }: S
 						value={ shipping.country }
 						required
 						errors={ errorsFor( errors, 'shipping.country', 'billing.country' ) }
-						onChange={ ( country ) => setShipping( { country: country.toUpperCase() } ) }
+						onChange={ ( country ) =>
+							setData( ( d ) => ( {
+								...d,
+								shipping: { ...d.shipping, country: country.toUpperCase(), state: '' },
+								settlementKey: '',
+								settlementRecord: null,
+								settlementSelectionRequired: d.settlementSelectionRequired || ( d.isOrderEdit && null !== d.settlementRecord ),
+							} ) )
+						}
 					/>
 				) }
 
@@ -169,7 +178,7 @@ export default function StepAddress( { data, setData, errors, addressPolicy }: S
 					required={ rules.city.required }
 					errors={ errorsFor( errors, 'shipping.city', 'billing.city', 'shipping.settlement_record' ) }
 					onChange={ ( city ) =>
-						setData( ( d ) => ( { ...d, shipping: { ...d.shipping, city }, settlementKey: '', settlementRecord: null } ) )
+						setData( ( d ) => ( { ...d, shipping: { ...d.shipping, city }, settlementKey: '', settlementRecord: null, settlementSelectionRequired: d.settlementSelectionRequired || ( d.isOrderEdit && null !== d.settlementRecord ) } ) )
 					}
 				/>
 				<LocationPicker

@@ -132,6 +132,8 @@ export interface WizardData {
 	 * cannot name one. Sent as `location`, never as part of the order payload.
 	 */
 	settlementRecord: Record<string, unknown> | null;
+	/** True when this wizard is editing an existing order rather than creating one. */
+	isOrderEdit: boolean;
 }
 
 /** One problem the server reports — `data.errors` of a 422 (`Order_Editor::validation_error()`). */
@@ -179,6 +181,8 @@ export interface OrderPrefill {
 	status: string;
 	/** The order has no stored locality record; its city text cannot identify one safely. */
 	requires_settlement_selection?: boolean;
+	/** Stored checkout locality, returned only when it still matches the order and active provider. */
+	location?: Record<string, unknown> | null;
 }
 
 /**

@@ -12,6 +12,8 @@ namespace Woodev\Framework\Shipping\Admin\Orders;
 use Woodev\Framework\Shipping\Checkout\Checkout_Config;
 use Woodev\Framework\Shipping\Checkout\Checkout_Field_Policy;
 use Woodev\Framework\Shipping\Checkout\Checkout_Handler;
+use Woodev\Framework\Shipping\Location\Location_Record;
+use Woodev\Framework\Shipping\Location\Location_Service;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -166,6 +168,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Payloa
 			$shipping_line = $this->check_shipping_line( $payload['shipping_line'] ?? null, $errors );
 			$pickup_point  = $this->check_pickup_point( $payload['pickup_point'] ?? null, $shipping_line, $errors );
 			$carrier_data  = $this->check_carrier_fields( $payload['carrier_fields'] ?? [], $shipping_line, $errors );
+			$location      = $this->check_location( $payload['location'] ?? null, $shipping, $shipping_line, $errors );
 
 			$address_rules = $this->apply_address_policy( $billing, $shipping, $shipping_filled ? 'shipping' : 'billing', $this->is_pickup_line( $shipping_line ), $errors );
 			$state_hidden  = ! empty( $address_rules['state']['hidden'] ) || ! empty( $address_rules['state']['removed'] );
@@ -185,6 +188,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Payloa
 				'pickup_point'   => $pickup_point,
 				'fields'         => self::scalar_map( $payload['fields'] ?? [] ),
 				'carrier_fields' => $carrier_data,
+				'location'       => $location,
 				'payment_method' => $this->check_payment_method( $payload['payment_method'] ?? '', $errors ),
 				'status'         => $this->check_status( $payload['status'] ?? null, $is_update, $errors ),
 			];
@@ -193,6 +197,65 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Payloa
 				'data'   => $data,
 				'errors' => $errors,
 			];
+		}
+
+		/**
+		 * Validates the optional selected settlement record carried by the editor.
+		 *
+		 * @since 2.0.2
+		 * @param mixed                             $raw The serialized location record.
+		 * @param array<string, string>             $shipping Normalized delivery address.
+		 * @param array<int, array<string, string>> $errors Collected problems.
+		 * @return Location_Record|null
+		 */
+		private function check_location( $raw, array $shipping, ?array $shipping_line, array &$errors ): ?Location_Record {
+			if ( null === $raw || [] === $raw || '' === $raw ) {
+				return null;
+			}
+
+			if ( ! is_array( $raw ) ) {
+				self::add_error( $errors, 'location', 'invalid_location', __( 'Выберите населённый пункт доставки ещё раз.', 'woodev-plugin-framework' ) );
+
+				return null;
+			}
+
+			try {
+				$record = Location_Record::from_array( $raw );
+			} catch ( \InvalidArgumentException $exception ) {
+				self::add_error( $errors, 'location', 'invalid_location', __( 'Выберите населённый пункт доставки ещё раз.', 'woodev-plugin-framework' ) );
+
+				return null;
+			}
+
+			$settlement = $record->settlement();
+			$name       = null !== $settlement ? trim( (string) $settlement['name'] ) : '';
+			$type       = null !== $settlement ? (string) ( $settlement['type'] ?? '' ) : '';
+
+			if ( Location_Record::LEVEL_SETTLEMENT !== $record->level()
+				|| $record->country() !== $shipping['country']
+				|| '' === $name
+				|| Location_Record::normalize_city_name( $name, $type ) !== Location_Record::normalize_city_name( $shipping['city'], $type )
+			) {
+				self::add_error( $errors, 'location', 'location_address_mismatch', __( 'Населённый пункт не совпадает с адресом доставки. Выберите его ещё раз.', 'woodev-plugin-framework' ) );
+
+				return null;
+			}
+
+			$carrier  = null !== $shipping_line ? ( $shipping_line['provider'] ?? null ) : null;
+			$plugin   = null !== $carrier ? $this->registry->get_provider_plugin( $carrier->get_id() ) : null;
+			$service  = null !== $plugin ? $plugin->get_location_service() : new Location_Service();
+			$provider = $service->provider_for_level( Location_Record::LEVEL_SETTLEMENT, $shipping['country'] );
+
+			if ( null === $provider || $provider->get_id() !== $record->provider_id() ) {
+				self::add_error( $errors, 'location', 'location_provider_mismatch', __( 'Источник населённого пункта изменился. Выберите его ещё раз.', 'woodev-plugin-framework' ) );
+
+				return null;
+			}
+
+			$data        = $record->to_array();
+			$data['raw'] = null;
+
+			return Location_Record::from_array( $data );
 		}
 
 		/**
