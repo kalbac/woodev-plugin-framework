@@ -3182,6 +3182,10 @@ msgstr ""
 msgid "The order weight of %1$s kg exceeds the pickup point limit of %2$s kg."
 msgstr ""
 
+#: shipping-method/pickup/class-constraint-checker.php:145
+msgid "The order does not fit the cells of this parcel locker"
+msgstr ""
+
 #: shipping-method/pickup/class-constraint-checker.php:120
 msgid "This pickup point does not accept cash on delivery. Choose another point or another payment method."
 msgstr ""

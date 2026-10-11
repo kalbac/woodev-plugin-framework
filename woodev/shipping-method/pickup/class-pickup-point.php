@@ -48,6 +48,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 		private const MAX_SAFE_INTEGER = 9007199254740991;
 
 		/**
+		 * The most DISTINCT storage cells a point keeps (issue #1215). A parcel locker has a handful of sizes;
+		 * the order is placed into each cell in turn, so the work is bounded by this count.
+		 *
+		 * @since 2.0.2
+		 * @var int
+		 */
+		public const MAX_CELLS = 32;
+
+		/**
 		 * Every code point this boundary treats as blank, written out one by one so it cannot
 		 * drift from the JS half.
 		 *
@@ -352,8 +361,95 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 					'accepts_cod'      => isset( $payload['accepts_cod'] ) ? (bool) $payload['accepts_cod'] : null,
 					'max_weight'       => isset( $payload['max_weight'] ) ? (int) $payload['max_weight'] : null,
 					'icons'            => self::sanitize_icons( $payload['icons'] ?? null ),
+					'cells'            => self::sanitize_cells( $payload['cells'] ?? null ),
 				]
 			);
+		}
+
+		/**
+		 * Sanitizes the point's optional storage cells (issue #1215): the sizes of the compartments a parcel locker
+		 * can hold a parcel in, which {@see Constraint_Checker} places the order into.
+		 *
+		 * Each cell is `[ 'length' => cm, 'width' => cm, 'height' => cm, 'max_weight' => grams|null ]`. The three
+		 * sides are an UNORDERED box — a carrier does not say which one is the long axis, and the check rotates
+		 * the order's items in every way — so which side a plugin calls `length` makes no difference.
+		 * `max_weight` is the cell's own limit in GRAMS, `null` (or absent, zero, negative) for none.
+		 *
+		 * All or nothing: when ANY cell is malformed (not an array, a side that is not a positive finite number)
+		 * the whole list degrades to `[]` — "this carrier did not say" — and never to the cells that happened to be
+		 * well-formed. A dropped cell could be the one the order fits, and a locker hidden for a size it can hold
+		 * is the failure this check must not cause; a point with no cells is simply not size-checked. The same
+		 * goes for a list longer than {@see self::MAX_CELLS} distinct cells: no real locker has that many sizes,
+		 * and the check's work is bounded by their count.
+		 *
+		 * Identical cells are kept once (a locker with fifty equal boxes is one size), the order of first
+		 * appearance is kept. Cells are server-side data: {@see self::to_browser_array()} does not send them.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param mixed $cells Raw `cells` payload value.
+		 *
+		 * @return array<int, array{length: float, width: float, height: float, max_weight: int|null}>
+		 */
+		private static function sanitize_cells( $cells ): array {
+			if ( ! is_array( $cells ) || [] === $cells ) {
+				return [];
+			}
+
+			$result = [];
+
+			foreach ( $cells as $cell ) {
+				if ( ! is_array( $cell ) ) {
+					return [];
+				}
+
+				$sides = [];
+
+				foreach ( [ 'length', 'width', 'height' ] as $key ) {
+					$side = self::positive_number( $cell[ $key ] ?? null );
+
+					if ( null === $side ) {
+						return [];
+					}
+
+					$sides[ $key ] = $side;
+				}
+
+				$weight = self::positive_number( $cell['max_weight'] ?? null );
+				$weight = null === $weight ? null : (int) $weight;
+
+				// identical cells are one size; the key is the sorted sides, since the axes carry no order
+				$sorted = array_values( $sides );
+				rsort( $sorted );
+
+				$key = implode( '|', $sorted ) . '|' . (string) $weight;
+
+				if ( ! isset( $result[ $key ] ) ) {
+					$result[ $key ] = $sides + [ 'max_weight' => $weight ];
+				}
+			}
+
+			return count( $result ) > self::MAX_CELLS ? [] : array_values( $result );
+		}
+
+		/**
+		 * A finite number above zero as a float — from an int, a float or a numeric string — or null for
+		 * anything else (a bool, an array, `"n/a"`, NAN, INF, zero, a negative).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param mixed $value Raw value.
+		 *
+		 * @return float|null
+		 */
+		private static function positive_number( $value ): ?float {
+			if ( ! is_int( $value ) && ! is_float( $value ) && ! ( is_string( $value ) && is_numeric( $value ) ) ) {
+				return null;
+			}
+
+			$number = (float) $value;
+
+			return is_finite( $number ) && $number > 0.0 ? $number : null;
 		}
 
 		/**
@@ -570,6 +666,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 		}
 
 		/**
+		 * The storage cells of a parcel locker, or `[]` when the carrier did not publish them — a point with no
+		 * cells is never size-checked. Sides in cm (an unordered box), `max_weight` in GRAMS or null.
+		 * See {@see self::sanitize_cells()}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<int, array{length: float, width: float, height: float, max_weight: int|null}>
+		 */
+		public function get_cells(): array {
+			return $this->data['cells'];
+		}
+
+		/**
 		 * Returns the canonical, unescaped normalized representation.
 		 *
 		 * This is what gets persisted: {@see \Woodev\Framework\Shipping\Order\Shipping_Order_Handler}
@@ -601,6 +710,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 		 */
 		public function to_browser_array(): array {
 			$out = $this->to_array();
+
+			// The cells are for the server-side size check only; the browser gets the verdict, never the
+			// sizes — a locker can carry dozens, and the points payload is sent on every map pan (#1215).
+			unset( $out['cells'] );
 
 			$escaped_keys = [
 				'name',
