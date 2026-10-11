@@ -1,7 +1,7 @@
 # Optional method features
 
 Every feature below is OFF until the method declares it (set `$this->supports` before `parent::__construct()`, like the
-packing feature). Each one stores a plain instance option whose key is the v1 CDEK/Yandex key, so a v1 value migrates 1:1.
+packing feature). Each one stores a plain instance option. The option IDs for the named examples are stable: `include_insurance`, `min_cost` and `max_cost` are Yandex's v1 keys, kept so Yandex's migration carries them over (`class-shipping-method.php:64`, `97`, `100`). The framework does not migrate arbitrary v1 settings, though: each plugin verifies and maps its own released keys and values explicitly ([settings and migration](settings-migration.md#migrating-a-v1-plugin)).
 Source: constants in `woodev/shipping-method/class-shipping-method.php` (`FEATURE_*`).
 
 | Feature / seam | What the carrier does | Rules that cost time |
