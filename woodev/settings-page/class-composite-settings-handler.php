@@ -197,6 +197,21 @@ final class Composite_Settings_Handler implements \Woodev_Settings_Connection_Te
 	}
 
 	/**
+	 * The value the admin form shows — the owning child's, which may differ from the stored one.
+	 *
+	 * @since 2.0.2
+	 * @param string $id setting id.
+	 * @return mixed
+	 * @throws \Woodev_Plugin_Exception when no child registered this id.
+	 */
+	public function get_display_value( string $id ) {
+		if ( ! isset( $this->owner_by_id[ $id ] ) ) {
+			throw new \Woodev_Plugin_Exception( "Setting {$id} does not exist" );
+		}
+		return $this->owner_by_id[ $id ]->get_display_value( $id );
+	}
+
+	/**
 	 * @since 2.0.2
 	 * @param string $id    setting id.
 	 * @param mixed  $value new value.

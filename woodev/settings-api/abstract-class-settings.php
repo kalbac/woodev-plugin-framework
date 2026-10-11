@@ -331,6 +331,24 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 		}
 
 		/**
+		 * Gets the value the admin UI should SHOW for a setting.
+		 *
+		 * Defaults to {@see self::get_value()}. A handler overrides it when the value in
+		 * effect differs from the stored one — e.g. a stored mode the runtime clamps on read —
+		 * so the form displays the truth and a save writes it. Display only: nothing here
+		 * rewrites the stored option, and server-side reads keep using `get_value()`.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $setting_id setting ID
+		 * @return mixed
+		 * @throws Woodev_Plugin_Exception
+		 */
+		public function get_display_value( $setting_id ) {
+			return $this->get_value( $setting_id );
+		}
+
+		/**
 		 * Updates the stored value for a setting.
 		 *
 		 * @param string $setting_id setting ID

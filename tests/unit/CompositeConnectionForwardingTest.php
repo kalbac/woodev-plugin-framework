@@ -50,6 +50,7 @@ final class CompositeConnectionForwardingTest extends TestCase {
 		$child = Mockery::mock( '\Woodev_Abstract_Settings' . ( '' === $interfaces ? '' : ', ' . $interfaces ) );
 		$child->shouldReceive( 'get_settings' )->andReturn( [ $setting_id => $this->setting( $setting_id ) ] );
 		$child->shouldReceive( 'get_value' )->andReturn( '' );
+		$child->shouldReceive( 'get_display_value' )->andReturn( '' );
 
 		return $child;
 	}

@@ -148,6 +148,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 		private \Closure $resolve_active_provider_id;
 
 		/**
+		 * Maps a field-mode axis's raw stored value to the mode actually in
+		 * effect — `(setting id, stored value) => mode`. Handed in by the caller
+		 * ({@see Location_Provider_Registry::get_field_mode_for_display()}) like
+		 * {@see self::$resolve_active_provider_id} is: this handler stays
+		 * data-only and does not know the capability gate itself.
+		 *
+		 * @since 2.0.2
+		 * @var \Closure(string, string): string
+		 */
+		private \Closure $resolve_displayed_field_mode;
+
+		/**
 		 * Constructor.
 		 *
 		 * @since 2.0.2
@@ -164,33 +176,41 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 		 *              (including the {@see Location_Provider_Registry::FILTER_ACTIVE_PROVIDER}
 		 *              filter) a stored one already did, not a raw string
 		 *              compare.
+		 * @since 2.0.2 Added the `$resolve_displayed_field_mode` parameter
+		 *              (kalbac/woocommerce-edostavka#49) — the admin shows the
+		 *              mode in effect, not the raw stored one.
 		 *
-		 * @param string                              $id                              settings id (the option-name namespace).
-		 * @param array<string, string>               $provider_options                registered provider `id => name` pairs.
-		 * @param array<string, array<string, mixed>> $provider_fields                 EVERY registered provider's declared
-		 *                                                                               settings fields, each already carrying
-		 *                                                                               a `show_if` condition (#375/#377),
-		 *                                                                               resolved by the caller.
-		 * @param array<string, string>               $field_mode_region_options       offered `field_mode_region` select
-		 *                                                                               options (`id => label`), already
-		 *                                                                               gated by the active provider's
-		 *                                                                               capabilities.
-		 * @param array<string, string>               $field_mode_settlement_options   offered `field_mode_settlement`
-		 *                                                                               select options (`id => label`),
-		 *                                                                               already gated by the active
-		 *                                                                               provider's capabilities AND the
-		 *                                                                               region axis's own effective mode
-		 *                                                                               (issue #404).
-		 * @param array<string, string>               $default_locality_policy_options offered `default_locality_policy`
-		 *                                                                               select options (`id => label`),
-		 *                                                                               already gated by the active
-		 *                                                                               provider's `locate` capability.
-		 * @param \Closure(string): string|null       $resolve_active_provider_id      resolves a raw id to the
-		 *                                                                              RUNTIME-effective one — see
-		 *                                                                              {@see self::$resolve_active_provider_id}.
-		 *                                                                              `null` (the default) is the
-		 *                                                                              identity function — returns
-		 *                                                                              the raw id unchanged.
+		 * @param string                                $id                              settings id (the option-name namespace).
+		 * @param array<string, string>                 $provider_options                registered provider `id => name` pairs.
+		 * @param array<string, array<string, mixed>>   $provider_fields                 EVERY registered provider's declared
+		 *                                                                                 settings fields, each already carrying
+		 *                                                                                 a `show_if` condition (#375/#377),
+		 *                                                                                 resolved by the caller.
+		 * @param array<string, string>                 $field_mode_region_options       offered `field_mode_region` select
+		 *                                                                                 options (`id => label`), already
+		 *                                                                                 gated by the active provider's
+		 *                                                                                 capabilities.
+		 * @param array<string, string>                 $field_mode_settlement_options   offered `field_mode_settlement`
+		 *                                                                                 select options (`id => label`),
+		 *                                                                                 already gated by the active
+		 *                                                                                 provider's capabilities AND the
+		 *                                                                                 region axis's own effective mode
+		 *                                                                                 (issue #404).
+		 * @param array<string, string>                 $default_locality_policy_options offered `default_locality_policy`
+		 *                                                                                 select options (`id => label`),
+		 *                                                                                 already gated by the active
+		 *                                                                                 provider's `locate` capability.
+		 * @param \Closure(string): string|null         $resolve_active_provider_id      resolves a raw id to the
+		 *                                                                                RUNTIME-effective one — see
+		 *                                                                                {@see self::$resolve_active_provider_id}.
+		 *                                                                                `null` (the default) is the
+		 *                                                                                identity function — returns
+		 *                                                                                the raw id unchanged.
+		 * @param \Closure(string, string): string|null $resolve_displayed_field_mode maps a field-mode axis's raw stored
+		 *                                                                              value to the mode in effect — see
+		 *                                                                              {@see self::$resolve_displayed_field_mode}.
+		 *                                                                              `null` (the default) shows the raw
+		 *                                                                              stored value unchanged.
 		 */
 		public function __construct(
 			string $id,
@@ -199,7 +219,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 			array $field_mode_region_options = [],
 			array $field_mode_settlement_options = [],
 			array $default_locality_policy_options = [],
-			?\Closure $resolve_active_provider_id = null
+			?\Closure $resolve_active_provider_id = null,
+			?\Closure $resolve_displayed_field_mode = null
 		) {
 			$this->provider_options                = $provider_options;
 			$this->provider_fields                 = $provider_fields;
@@ -207,8 +228,37 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 			$this->field_mode_settlement_options   = $field_mode_settlement_options;
 			$this->default_locality_policy_options = $default_locality_policy_options;
 			$this->resolve_active_provider_id      = $resolve_active_provider_id ?? static fn( string $id ): string => $id;
+			$this->resolve_displayed_field_mode    = $resolve_displayed_field_mode ?? static fn( string $setting_id, string $stored ): string => $stored;
 
 			parent::__construct( $id );
+		}
+
+		/**
+		 * Gets the value the admin form shows — for the two field-mode axes the
+		 * mode actually IN EFFECT, not the raw stored one
+		 * (kalbac/woocommerce-edostavka#49).
+		 *
+		 * A stored `related-list` that the active provider cannot back (no
+		 * {@see Location_Provider::CAPABILITY_LIST}; the settlement axis never
+		 * offers it) is not among the select's options, so showing it would
+		 * display a value the merchant cannot choose and the checkout does not
+		 * honour. The stored option is not touched; a save writes what the form
+		 * displays.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $setting_id Setting ID.
+		 *
+		 * @return mixed
+		 */
+		public function get_display_value( $setting_id ) {
+			$value = parent::get_display_value( $setting_id );
+
+			if ( in_array( $setting_id, [ Location_Provider_Registry::SETTING_FIELD_MODE_REGION, Location_Provider_Registry::SETTING_FIELD_MODE_SETTLEMENT ], true ) ) {
+				return ( $this->resolve_displayed_field_mode )( $setting_id, (string) $value );
+			}
+
+			return $value;
 		}
 
 		/**

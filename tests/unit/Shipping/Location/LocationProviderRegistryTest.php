@@ -2005,6 +2005,149 @@ final class LocationProviderRegistryTest extends TestCase {
 	}
 
 	/**
+	 * Boots a registry whose stored options are `$options` (option name => value), with
+	 * `$providers` registered, and returns it.
+	 *
+	 * @param array<string, string>                    $options   stored options.
+	 * @param array<int, Abstract_Location_Provider>   $providers registered providers.
+	 */
+	private function registry_with_options( array $options, array $providers ): Location_Provider_Registry {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( $providers );
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = null ) use ( $options ) {
+				return array_key_exists( $name, $options ) ? $options[ $name ] : $default;
+			}
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		return $registry;
+	}
+
+	/**
+	 * kalbac/woocommerce-edostavka#49: the CDEK v1→v2 migration stores `related-list`
+	 * while the active provider has no `list` capability. The checkout clamps it; the
+	 * ADMIN must show that same effective mode instead of a value its own select does
+	 * not offer — and must not rewrite the stored option to do it.
+	 */
+	public function test_admin_display_value_is_the_effective_mode_when_the_provider_lacks_list(): void {
+		Functions\expect( 'update_option' )->never();
+
+		$registry = $this->registry_with_options(
+			[
+				'woodev_location_field_mode_region'     => Location_Provider_Registry::MODE_RELATED_LIST,
+				'woodev_location_field_mode_settlement' => Location_Provider_Registry::MODE_RELATED_LIST,
+			],
+			[]
+		);
+		$handler  = $registry->get_settings_handler();
+
+		$this->assertSame( $registry->get_field_mode_region(), $handler->get_display_value( Location_Provider_Registry::SETTING_FIELD_MODE_REGION ) );
+		$this->assertSame( Location_Provider_Registry::MODE_TYPEAHEAD, $handler->get_display_value( Location_Provider_Registry::SETTING_FIELD_MODE_REGION ) );
+		$this->assertSame( $registry->get_field_mode_settlement(), $handler->get_display_value( Location_Provider_Registry::SETTING_FIELD_MODE_SETTLEMENT ) );
+		$this->assertSame( Location_Provider_Registry::MODE_AJAX_SELECT2, $handler->get_display_value( Location_Provider_Registry::SETTING_FIELD_MODE_SETTLEMENT ) );
+
+		// The stored value is untouched: only the DISPLAY is clamped.
+		$this->assertSame( Location_Provider_Registry::MODE_RELATED_LIST, $handler->get_value( Location_Provider_Registry::SETTING_FIELD_MODE_REGION ) );
+		$this->assertSame( Location_Provider_Registry::MODE_RELATED_LIST, $handler->get_value( Location_Provider_Registry::SETTING_FIELD_MODE_SETTLEMENT ) );
+	}
+
+	/**
+	 * With a `list`-capable provider the region axis really offers `related-list`, so
+	 * the admin shows it unchanged. The settlement axis never offers it (24.08.2026),
+	 * so a stored settlement `related-list` is displayed as its successor, and a stored
+	 * `ajax-select2` stays as-is.
+	 */
+	public function test_admin_display_value_keeps_related_list_for_a_list_capable_provider(): void {
+		Functions\expect( 'update_option' )->never();
+
+		$registry = $this->registry_with_options(
+			[
+				'woodev_location_active_provider'       => 'list-fixture',
+				'woodev_location_field_mode_region'     => Location_Provider_Registry::MODE_RELATED_LIST,
+				'woodev_location_field_mode_settlement' => Location_Provider_Registry::MODE_RELATED_LIST,
+			],
+			[ new Fake_List_Location_Provider( 'list-fixture', 'List Fixture', [ 'RU' ] ) ]
+		);
+		$handler  = $registry->get_settings_handler();
+
+		$this->assertSame( Location_Provider_Registry::MODE_RELATED_LIST, $handler->get_display_value( Location_Provider_Registry::SETTING_FIELD_MODE_REGION ) );
+		$this->assertSame( Location_Provider_Registry::MODE_AJAX_SELECT2, $handler->get_display_value( Location_Provider_Registry::SETTING_FIELD_MODE_SETTLEMENT ) );
+	}
+
+	public function test_admin_display_value_keeps_an_offered_mode_on_both_axes(): void {
+		$registry = $this->registry_with_options(
+			[
+				'woodev_location_field_mode_region'     => Location_Provider_Registry::MODE_AJAX_SELECT2,
+				'woodev_location_field_mode_settlement' => Location_Provider_Registry::MODE_TYPEAHEAD,
+			],
+			[]
+		);
+		$handler  = $registry->get_settings_handler();
+
+		$this->assertSame( Location_Provider_Registry::MODE_AJAX_SELECT2, $handler->get_display_value( Location_Provider_Registry::SETTING_FIELD_MODE_REGION ) );
+		$this->assertSame( Location_Provider_Registry::MODE_TYPEAHEAD, $handler->get_display_value( Location_Provider_Registry::SETTING_FIELD_MODE_SETTLEMENT ) );
+	}
+
+	/**
+	 * The region control is hidden while `region_field=remove` and returns, unsaved, once
+	 * the merchant turns it back on. It must then show the mode that WILL be in effect, so
+	 * the display does not inherit the `typeahead` the checkout forces for a removed field.
+	 */
+	public function test_admin_display_value_ignores_the_region_field_remove_clamp(): void {
+		$registry = $this->registry_with_options(
+			[
+				'woodev_location_active_provider'     => 'list-fixture',
+				'woodev_location_field_mode_region'   => Location_Provider_Registry::MODE_RELATED_LIST,
+				'woodev_checkout_fields_region_field' => 'remove',
+			],
+			[ new Fake_List_Location_Provider( 'list-fixture', 'List Fixture', [ 'RU' ] ) ]
+		);
+
+		$this->assertSame( Location_Provider_Registry::MODE_TYPEAHEAD, $registry->get_field_mode_region() );
+		$this->assertSame(
+			Location_Provider_Registry::MODE_RELATED_LIST,
+			$registry->get_settings_handler()->get_display_value( Location_Provider_Registry::SETTING_FIELD_MODE_REGION )
+		);
+	}
+
+	/** Every other setting displays its stored value, as before. */
+	public function test_admin_display_value_is_the_stored_value_for_any_other_setting(): void {
+		$registry = $this->registry_with_options( [ 'woodev_location_address_suggestions' => false ], [] );
+		$handler  = $registry->get_settings_handler();
+
+		$this->assertSame(
+			$handler->get_value( Location_Provider_Registry::SETTING_ADDRESS_SUGGESTIONS ),
+			$handler->get_display_value( Location_Provider_Registry::SETTING_ADDRESS_SUGGESTIONS )
+		);
+	}
+
+	/** The schema the settings page and the wizard render carries the effective mode as `value`. */
+	public function test_field_schema_value_is_the_effective_mode(): void {
+		$registry = $this->registry_with_options(
+			[
+				'woodev_location_field_mode_region'     => Location_Provider_Registry::MODE_RELATED_LIST,
+				'woodev_location_field_mode_settlement' => Location_Provider_Registry::MODE_RELATED_LIST,
+			],
+			[]
+		);
+
+		$schema = \Woodev\Framework\Settings\Field_Schema::from_handler(
+			$registry->get_settings_handler(),
+			[ Location_Provider_Registry::SETTING_FIELD_MODE_REGION, Location_Provider_Registry::SETTING_FIELD_MODE_SETTLEMENT ]
+		);
+
+		$this->assertSame( Location_Provider_Registry::MODE_TYPEAHEAD, $schema[ Location_Provider_Registry::SETTING_FIELD_MODE_REGION ]['value'] );
+		$this->assertSame( Location_Provider_Registry::MODE_AJAX_SELECT2, $schema[ Location_Provider_Registry::SETTING_FIELD_MODE_SETTLEMENT ]['value'] );
+		foreach ( $schema as $entry ) {
+			$this->assertArrayHasKey( $entry['value'], $entry['options'], 'the shown value is one of the options the select offers' );
+		}
+	}
+
+	/**
 	 * Issue #369 closure: with `region_field = remove`, the region axis
 	 * clamps to typeahead REGARDLESS of what is stored — the derived
 	 * "предустановленный список" overlay this axis drives can therefore never

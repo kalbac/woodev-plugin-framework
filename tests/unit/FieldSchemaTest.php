@@ -102,6 +102,7 @@ class FieldSchemaTest extends TestCase {
 		$handler = Mockery::mock();
 		$handler->shouldReceive( 'get_settings' )->with( [ 'weight' ] )->andReturn( [ 'weight' => $setting ] );
 		$handler->shouldReceive( 'get_value' )->with( 'weight' )->andReturn( 5 );
+		$handler->shouldReceive( 'get_display_value' )->with( 'weight' )->andReturn( 5 );
 
 		$schema = Field_Schema::from_handler( $handler, [ 'weight' ] );
 
@@ -135,6 +136,7 @@ class FieldSchemaTest extends TestCase {
 		$handler = Mockery::mock();
 		$handler->shouldReceive( 'get_settings' )->with( [] )->andReturn( [ 'api_key' => $setting ] );
 		$handler->shouldReceive( 'get_value' )->with( 'api_key' )->andReturn( 'k' );
+		$handler->shouldReceive( 'get_display_value' )->with( 'api_key' )->andReturn( 'k' );
 
 		$schema = Field_Schema::from_handler( $handler );
 
@@ -151,11 +153,26 @@ class FieldSchemaTest extends TestCase {
 		$handler = Mockery::mock();
 		$handler->shouldReceive( 'get_settings' )->with( [] )->andReturn( [ 'plain' => $setting ] );
 		$handler->shouldReceive( 'get_value' )->with( 'plain' )->andReturn( 'v' );
+		$handler->shouldReceive( 'get_display_value' )->with( 'plain' )->andReturn( 'v' );
 
 		$schema = Field_Schema::from_handler( $handler );
 
 		$this->assertNull( $schema['plain']['controlType'] );
 		$this->assertSame( 'desc plain', $schema['plain']['description'] );
+	}
+
+	/** The schema `value` is what the handler says the form should SHOW, not the raw stored value. */
+	public function test_value_is_the_handlers_display_value_not_the_stored_one(): void {
+		$setting = $this->make_setting( 'mode', 'string', null );
+
+		$handler = Mockery::mock();
+		$handler->shouldReceive( 'get_settings' )->with( [] )->andReturn( [ 'mode' => $setting ] );
+		$handler->shouldReceive( 'get_value' )->with( 'mode' )->andReturn( 'related-list' );
+		$handler->shouldReceive( 'get_display_value' )->with( 'mode' )->andReturn( 'typeahead' );
+
+		$schema = Field_Schema::from_handler( $handler );
+
+		$this->assertSame( 'typeahead', $schema['mode']['value'] );
 	}
 
 	/**
@@ -257,7 +274,9 @@ class FieldSchemaTest extends TestCase {
 			'notes' => $optional_setting,
 		] );
 		$handler->shouldReceive( 'get_value' )->with( 'phone' )->andReturn( '' );
+		$handler->shouldReceive( 'get_display_value' )->with( 'phone' )->andReturn( '' );
 		$handler->shouldReceive( 'get_value' )->with( 'notes' )->andReturn( '' );
+		$handler->shouldReceive( 'get_display_value' )->with( 'notes' )->andReturn( '' );
 
 		$schema = Field_Schema::from_handler( $handler );
 
@@ -284,7 +303,9 @@ class FieldSchemaTest extends TestCase {
 			'notes' => $plain_setting,
 		] );
 		$handler->shouldReceive( 'get_value' )->with( 'phone' )->andReturn( '' );
+		$handler->shouldReceive( 'get_display_value' )->with( 'phone' )->andReturn( '' );
 		$handler->shouldReceive( 'get_value' )->with( 'notes' )->andReturn( '' );
+		$handler->shouldReceive( 'get_display_value' )->with( 'notes' )->andReturn( '' );
 
 		$schema = Field_Schema::from_handler( $handler );
 
@@ -318,6 +339,7 @@ class FieldSchemaTest extends TestCase {
 		$handler = Mockery::mock();
 		$handler->shouldReceive( 'get_settings' )->with( [] )->andReturn( [ 'city' => $setting ] );
 		$handler->shouldReceive( 'get_value' )->with( 'city' )->andReturn( '' );
+		$handler->shouldReceive( 'get_display_value' )->with( 'city' )->andReturn( '' );
 
 		$schema = Field_Schema::from_handler( $handler );
 
@@ -371,7 +393,9 @@ class FieldSchemaTest extends TestCase {
 			'city'                    => $plain_setting,
 		] );
 		$handler->shouldReceive( 'get_value' )->with( 'default_locality_record' )->andReturn( '' );
+		$handler->shouldReceive( 'get_display_value' )->with( 'default_locality_record' )->andReturn( '' );
 		$handler->shouldReceive( 'get_value' )->with( 'city' )->andReturn( '' );
+		$handler->shouldReceive( 'get_display_value' )->with( 'city' )->andReturn( '' );
 
 		$schema = Field_Schema::from_handler( $handler );
 
@@ -436,6 +460,7 @@ class FieldSchemaTest extends TestCase {
 		$handler = Mockery::mock();
 		$handler->shouldReceive( 'get_settings' )->with( [ 'x' ] )->andReturn( [ $setting ] );
 		$handler->shouldReceive( 'get_value' )->with( 'x' )->andReturn( true );
+		$handler->shouldReceive( 'get_display_value' )->with( 'x' )->andReturn( true );
 
 		$schema = Field_Schema::from_handler( $handler, [ 'x' ] );
 
@@ -460,6 +485,7 @@ class FieldSchemaTest extends TestCase {
 		$handler = Mockery::mock();
 		$handler->shouldReceive( 'get_settings' )->andReturn( [ $setting ] );
 		$handler->shouldReceive( 'get_value' )->andReturn( '' );
+		$handler->shouldReceive( 'get_display_value' )->andReturn( '' );
 
 		$schema = Field_Schema::from_handler( $handler, [ 'y' ] );
 
@@ -482,6 +508,7 @@ class FieldSchemaTest extends TestCase {
 			$handler = Mockery::mock();
 			$handler->shouldReceive( 'get_settings' )->andReturn( [ $setting ] );
 			$handler->shouldReceive( 'get_value' )->andReturn( false );
+			$handler->shouldReceive( 'get_display_value' )->andReturn( false );
 
 			$schema = Field_Schema::from_handler( $handler, [ 'test_mode' ] );
 
