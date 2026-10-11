@@ -1177,12 +1177,14 @@
    with a grey background, inset shadow and padding, and that specificity beats the plain class
    rule above, so the map search drew a grey box inside the white bar. The wrapper class lifts
    this rule above any theme's element+attribute selector; the bar itself stays the white surface. */
-.woodev-pickup-search .woodev-pickup-search__input {
+.woodev-pickup-search .woodev-pickup-search__input,
+.woodev-pickup-search .woodev-pickup-search__input:focus {
 	padding: 0;
 	border: 0;
 	border-radius: 0;
 	background: transparent;
 	box-shadow: none;
+	outline: none; /* The theme's :focus outline drew a box inside the bar; the caret marks focus. */
 }
 
 .woodev-pickup-search__input::-webkit-search-cancel-button {
