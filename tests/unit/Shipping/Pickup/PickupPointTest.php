@@ -914,4 +914,12 @@ final class PickupPointTest extends TestCase {
 
 		$this->assertArrayNotHasKey( 'schedule_rows', $array, 'display rows are a browser-boundary view, never persisted' );
 	}
+
+	public function test_storage_cells_stay_in_the_canonical_array_and_out_of_the_browser_payload(): void {
+		$point = $this->make_point( [ 'cells' => [ [ 'length' => 64, 'width' => 36, 'height' => 40, 'max_weight' => 30000 ] ] ] );
+
+		$this->assertSame( 64.0, $point->to_array()['cells'][0]['length'] );
+		$this->assertArrayNotHasKey( 'cells', $point->to_browser_array(), 'the cells are for the server-side size check only (#1215)' );
+		$this->assertSame( [], $this->make_point( [] )->get_cells() );
+	}
 }
