@@ -4,8 +4,9 @@
  * can really be PLACED into it — Woodev_Packer_Free_Space, the placement machinery of the virtual box (#1212)
  * with a fixed container — not merely when each item's sides fit and the summed volume stays under the box's.
  *
- * Above Woodev_Packer_Free_Space::MAX_UNITS items the placement is skipped and the old sides + volume rule
- * decides alone, so the work stays bounded.
+ * Each box is tried in every order of its axes and the best result is kept; the work per parcel is bounded by
+ * Woodev_Packer_Free_Space::MAX_UNITS placement attempts, and items past that wait for a later parcel — a set is
+ * never taken without a placement.
  *
  * No WooCommerce or WordPress required.
  *
@@ -79,6 +80,32 @@ namespace Woodev\Tests\Unit {
 			$packer->pack();
 
 			return $packer;
+		}
+
+		/**
+		 * The package's items placed one by one into a fresh container of its box, the box turned every way.
+		 */
+		private static function placeable( \Woodev_Box_Packer_Packed_Box $package ): bool {
+			$box = $package->get_box();
+			$d   = [ $box->get_length(), $box->get_width(), $box->get_height() ];
+
+			foreach ( [ [ 0, 1, 2 ], [ 1, 0, 2 ], [ 0, 2, 1 ], [ 2, 0, 1 ], [ 1, 2, 0 ], [ 2, 1, 0 ] ] as [ $x, $y, $z ] ) {
+				$space = new \Woodev_Packer_Free_Space( $d[ $x ], $d[ $y ], $d[ $z ], 1.0 );
+				$ok    = true;
+
+				foreach ( $package->get_packed_items() as $item ) {
+					if ( null === $space->place( [ $item->get_length(), $item->get_width(), $item->get_height() ] ) ) {
+						$ok = false;
+						break;
+					}
+				}
+
+				if ( $ok ) {
+					return true;
+				}
+			}
+
+			return false;
 		}
 
 		/**
@@ -179,20 +206,68 @@ namespace Woodev\Tests\Unit {
 		}
 
 		// -------------------------------------------------------------------
-		// Bounded work: above the threshold the old rule decides
+		// Rectangular loads that tile the box in another orientation (round 2, P1)
 		// -------------------------------------------------------------------
 
-		public function test_above_the_unit_threshold_the_sides_and_volume_rule_decides(): void {
-			// seven cubes of 51 cm: 928557 of 1000000 cm3, but only ONE fits a 100 cube (51 + 51 > 100)
-			$limit = \Woodev_Packer_Free_Space::MAX_UNITS;
+		public function test_four_items_that_tile_the_box_turned_share_one_package(): void {
+			// 4 x 40x25x10 in 50x40x20: each turned to 25x40x10, laid 2 x 1 x 2
+			$packer = self::pack( [ [ 40, 25, 10, 4 ] ], [ [ 50, 40, 20 ] ] );
 
-			$at    = self::pack( [ [ 51, 51, 51, 7 ], [ 1, 1, 1, $limit - 7 ] ], [ [ 100, 100, 100 ] ] );
-			$above = self::pack( [ [ 51, 51, 51, 7 ], [ 1, 1, 1, $limit - 6 ] ], [ [ 100, 100, 100 ] ] );
+			$this->assertSame( [ 4 ], self::counts( $packer ) );
+		}
 
-			// at the threshold the placement runs: one big cube per package
-			$this->assertGreaterThanOrEqual( 7, count( $at->get_packages() ) );
-			// one unit above, no placement: the volume rule packs everything into one box
-			$this->assertSame( [ $limit + 1 ], self::counts( $above ) );
+		public function test_nine_items_in_a_three_by_three_grid_share_one_package(): void {
+			// 9 x 25x20x15 in 60x50x25: a 3 x 3 x 1 grid of 20x15x25
+			$packer = self::pack( [ [ 25, 20, 15, 9 ] ], [ [ 60, 50, 25 ] ] );
+
+			$this->assertSame( [ 9 ], self::counts( $packer ) );
+		}
+
+		public function test_the_axes_of_the_box_as_given_do_not_decide_the_result(): void {
+			foreach ( [ [ 50, 40, 20 ], [ 20, 40, 50 ], [ 40, 20, 50 ] ] as $box ) {
+				$this->assertSame( [ 4 ], self::counts( self::pack( [ [ 40, 25, 10, 4 ] ], [ $box ] ) ) );
+			}
+		}
+
+		// -------------------------------------------------------------------
+		// Bounded work counts the placements a parcel attempts (round 2, P2)
+		// -------------------------------------------------------------------
+
+		public function test_unrelated_oversized_items_do_not_change_the_parcels_of_the_rest(): void {
+			// three 20 cubes cannot share a 30 box; neither can they when 117 or 118 oversized items ride along
+			foreach ( [ 117, 118 ] as $oversized ) {
+				$packer = self::pack( [ [ 20, 20, 20, 3 ], [ 40, 40, 40, $oversized ] ], [ [ 30, 30, 30 ] ] );
+
+				$this->assertSame( [ 1, 1, 1 ], self::counts( $packer ), $oversized . ' oversized items' );
+				$this->assertCount( $oversized, $packer->get_items_cannot_pack() );
+			}
+		}
+
+		public function test_a_long_cart_of_small_items_never_puts_two_big_ones_into_one_box(): void {
+			// 3 x 20 cubes + 118 one-centimetre cubes (121 units): no 30 box holds two 20 cubes
+			$packer = self::pack( [ [ 20, 20, 20, 3 ], [ 1, 1, 1, 118 ] ], [ [ 30, 30, 30 ] ] );
+
+			$this->assertSame( 121, array_sum( self::counts( $packer ) ) + count( $packer->get_items_cannot_pack() ) );
+
+			foreach ( $packer->get_packages() as $package ) {
+				$big = array_filter( $package->get_packed_items(), static fn( $item ) => $item->get_length() > 10 );
+
+				$this->assertLessThanOrEqual( 1, count( $big ) );
+				$this->assertTrue( self::placeable( $package ) );
+			}
+		}
+
+		public function test_a_cart_past_the_placement_budget_is_split_into_parcels_that_all_fit(): void {
+			// 200 cubes of 10 cm in a 100 cm cube: the volume allows all, but a parcel tries at most MAX_UNITS placements
+			$packer = self::pack( [ [ 10, 10, 10, 200 ] ], [ [ 100, 100, 100 ] ] );
+
+			$this->assertSame( 200, array_sum( self::counts( $packer ) ) );
+			$this->assertGreaterThanOrEqual( 2, count( $packer->get_packages() ) );
+
+			foreach ( $packer->get_packages() as $package ) {
+				$this->assertLessThanOrEqual( \Woodev_Packer_Free_Space::MAX_UNITS, count( $package->get_packed_items() ) );
+				$this->assertTrue( self::placeable( $package ) );
+			}
 		}
 
 		public function test_a_cart_at_the_threshold_packs_within_a_checkout_sized_time(): void {

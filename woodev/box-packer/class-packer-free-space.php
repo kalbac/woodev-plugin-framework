@@ -27,7 +27,8 @@ if ( ! class_exists( 'Woodev_Packer_Free_Space' ) ) :
 		/**
 		 * The most units a caller places one by one: the work grows with the units AND the free spaces, and it is
 		 * bounded by counts, never by the clock, so the same cart gives the same answer on a slow server and a
-		 * fast one. Above it the callers fall back to the arithmetic they had before the placement (#1212, #1214).
+		 * fast one. The virtual box falls back to a grid above it (#1212); a merchant's box counts only the
+		 * placements it really attempts and leaves the rest of the cart for later parcels (#1214).
 		 */
 		const MAX_UNITS = 120;
 
