@@ -746,6 +746,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 			$base = '/shipping/orders/pickup/' . $this->route_plugin_segment() . '/points';
 
 			$context_args = [
+				// The chosen delivery rate; passed to the carrier source and verdict filter.
+				'method_id' => [
+					'type'              => 'string',
+					'default'           => '',
+					'validate_callback' => 'rest_validate_request_arg',
+					'sanitize_callback' => 'sanitize_key',
+				],
+				'instance_id' => [
+					'type'              => 'integer',
+					'minimum'           => 1,
+					'default'           => 0,
+					'validate_callback' => 'rest_validate_request_arg',
+				],
 				// Order weight in GRAMS (the checker's unit); 0 = unknown, which passes every limit.
 				'weight'         => [
 					'type'              => 'integer',
@@ -885,7 +898,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 					$params,
 					$this->explicit_weight( $request ),
 					$this->explicit_payment_method( $request ),
-					$record
+					$record,
+					$this->explicit_shipping_method_context( $request )
 				);
 			} catch ( \Woodev_API_Exception $e ) {
 				$this->log_carrier_failure( $e, 'admin points fetch' );
@@ -927,7 +941,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 					$id,
 					$this->explicit_weight( $request ),
 					$this->explicit_payment_method( $request ),
-					$record
+					$record,
+					$this->explicit_shipping_method_context( $request )
 				);
 			} catch ( \Woodev_API_Exception $e ) {
 				$this->log_carrier_failure( $e, 'admin point details fetch' );
@@ -980,6 +995,26 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 			}
 
 			return $this->cap_length( (string) wc_clean( wp_unslash( $method ) ), self::MAX_PARAM_LENGTH );
+		}
+
+		/**
+		 * Reads the selected shipping method context from an admin pickup request.
+		 *
+		 * @param \WP_REST_Request $request Request.
+		 * @return array{method_id: string, instance_id: int}|array{}
+		 */
+		private function explicit_shipping_method_context( \WP_REST_Request $request ): array {
+			$method_id   = $request->get_param( 'method_id' );
+			$instance_id = $request->get_param( 'instance_id' );
+
+			if ( ! is_string( $method_id ) || '' === $method_id || ! is_numeric( $instance_id ) || (int) $instance_id < 1 ) {
+				return [];
+			}
+
+			return [
+				'method_id' => sanitize_key( $method_id ),
+				'instance_id' => (int) $instance_id,
+			];
 		}
 
 		/**
@@ -1075,16 +1110,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param Point_Query $query          the built, strategy-validated query.
-		 * @param int         $cart_weight    order weight in grams.
-		 * @param string      $payment_method chosen gateway id; `''` when unknown.
-		 * @param bool        $at_checkout    `true` for the public (checkout picker) list, `false` for the admin one (#1017).
+		 * @param Point_Query          $query          the built, strategy-validated query.
+		 * @param int                  $cart_weight    order weight in grams.
+		 * @param string               $payment_method chosen gateway id; `''` when unknown.
+		 * @param bool                 $at_checkout    `true` for the public (checkout picker) list, `false` for the admin one (#1017).
+		 * @param array<string, mixed> $method_context Selected admin shipping method context, or empty.
 		 *
 		 * @return array{points: array<int, array<string, mixed>>}
 		 *
 		 * @throws \Woodev_API_Exception on a carrier transport, auth, or API failure.
 		 */
-		private function collect_points( Point_Query $query, int $cart_weight, string $payment_method, bool $at_checkout ): array {
+		private function collect_points( Point_Query $query, int $cart_weight, string $payment_method, bool $at_checkout, array $method_context = [] ): array {
 
 			$points = [];
 
@@ -1094,7 +1130,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 					continue; // Defensive: a misbehaving source returning junk must not break the map.
 				}
 
-				$points[] = $this->to_response_point( $point, $cart_weight, $payment_method );
+				$points[] = $this->to_response_point( $point, $cart_weight, $payment_method, $method_context );
 			}
 
 			// array_values(): a dropped/sparse-keyed entry above must not leave gaps — a
@@ -1119,12 +1155,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 		 * @param string               $payment_method chosen gateway id, `''` when not chosen yet —
 		 *                                             then no point is refused on cash-on-delivery.
 		 * @param Location_Record|null $record         destination record, or `null` when there is none.
+		 * @param array<string, mixed> $method_context selected shipping method context, or empty.
 		 *
 		 * @return array{points: array<int, array<string, mixed>>}
 		 *
 		 * @throws \Woodev_API_Exception on a carrier transport, auth, or API failure.
 		 */
-		public function get_points_data_for( array $params, int $cart_weight, string $payment_method, ?Location_Record $record ): array {
+		public function get_points_data_for( array $params, int $cart_weight, string $payment_method, ?Location_Record $record, array $method_context = [] ): array {
 
 			$query = Point_Query::from_request( $params );
 
@@ -1133,8 +1170,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 			}
 
 			$query = $this->attach_explicit_location( $query, $record );
+			$query = $this->attach_method_context( $query, $method_context );
 
-			return $this->collect_points( $query, $cart_weight, $payment_method, false );
+			return $this->collect_points( $query, $cart_weight, $payment_method, false, $method_context );
 		}
 
 		/**
@@ -1159,12 +1197,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 		 * @param int                  $cart_weight    order weight in grams.
 		 * @param string               $payment_method chosen gateway id, `''` when not chosen yet.
 		 * @param Location_Record|null $record         destination record, or `null` when there is none.
+		 * @param array<string, mixed> $method_context selected shipping method context, or empty.
 		 *
 		 * @return array<string, mixed>|null the escaped point payload, or null when unknown.
 		 *
 		 * @throws \Woodev_API_Exception on a carrier transport, auth, or API failure.
 		 */
-		public function get_point_data_for( string $id, int $cart_weight, string $payment_method, ?Location_Record $record ): ?array {
+		public function get_point_data_for( string $id, int $cart_weight, string $payment_method, ?Location_Record $record, array $method_context = [] ): ?array {
 
 			$context = $this->resolve_explicit_context( $record );
 
@@ -1178,7 +1217,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 				return null;
 			}
 
-			return $this->to_response_point( $point, $cart_weight, $payment_method );
+			return $this->to_response_point( $point, $cart_weight, $payment_method, $method_context );
 		}
 
 		/**
@@ -1230,6 +1269,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 			}
 
 			return $this->apply_location_context( $query, ( $this->location_resolver )( $record ) );
+		}
+
+		/**
+		 * Attaches a validated admin shipping method context to the point query.
+		 *
+		 * @param Point_Query          $query   Point query.
+		 * @param array<string, mixed> $context Validated context.
+		 * @return Point_Query
+		 */
+		private function attach_method_context( Point_Query $query, array $context ): Point_Query {
+			if ( empty( $context['method_id'] ) || empty( $context['instance_id'] ) ) {
+				return $query;
+			}
+
+			return $query->with_method_context( (string) $context['method_id'], (int) $context['instance_id'] );
 		}
 
 		/**
@@ -1323,16 +1377,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param Pickup_Point $point          point to serialize.
-		 * @param int          $cart_weight    current cart weight in grams.
-		 * @param string       $payment_method chosen gateway id.
+		 * @param Pickup_Point         $point          point to serialize.
+		 * @param int                  $cart_weight    current cart weight in grams.
+		 * @param string               $payment_method chosen gateway id.
+		 * @param array<string, mixed> $method_context Selected admin method context, or empty.
 		 *
 		 * @return array<string, mixed>
 		 */
-		private function to_response_point( Pickup_Point $point, int $cart_weight, string $payment_method ): array {
+		private function to_response_point( Pickup_Point $point, int $cart_weight, string $payment_method, array $method_context = [] ): array {
 
 			$data               = $point->to_browser_array();
-			$data['selectable'] = $this->checker->check( $point, $payment_method, $cart_weight );
+			$data['selectable'] = $this->checker->check( $point, $payment_method, $cart_weight, $method_context );
 
 			return $data;
 		}

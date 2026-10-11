@@ -289,7 +289,7 @@ final class PickupControllerAdminRoutesTest extends TestCase {
 		foreach ( $routes as $route => $declared ) {
 			$args = $declared['endpoints'][0]['args'];
 
-			foreach ( [ 'weight', 'payment_method' ] as $context_arg ) {
+			foreach ( [ 'weight', 'payment_method', 'method_id', 'instance_id' ] as $context_arg ) {
 				$this->assertArrayHasKey( $context_arg, $args, "$route must take $context_arg explicitly" );
 			}
 
@@ -305,6 +305,55 @@ final class PickupControllerAdminRoutesTest extends TestCase {
 		$detail_args = $routes['/shipping/orders/pickup/test-plugin/points/(?P<id>[^/]+)']['endpoints'][0]['args'];
 		$this->assertArrayHasKey( 'location', $detail_args, 'spec D3: the detail takes the explicit record too' );
 		$this->assertSame( $list_args['location'], $detail_args['location'], 'one schema for both routes' );
+	}
+
+	public function test_the_admin_list_passes_selected_method_context_to_the_point_source(): void {
+		$seen       = null;
+		$controller = $this->controller(
+			new Pickup_Admin_Test_Source(
+				static function ( Point_Query $query ) use ( &$seen ): array {
+					$seen = [ $query->get_method_id(), $query->get_instance_id() ];
+					return [];
+				},
+				static fn() => null
+			)
+		);
+
+		$controller->handle_admin_points_request(
+			new WP_REST_Request(
+				[
+					'locality'    => 'dadata:fias-1',
+					'method_id'   => 'carrier_pickup',
+					'instance_id' => 17,
+				]
+			)
+		);
+
+		$this->assertSame( [ 'carrier_pickup', 17 ], $seen );
+	}
+
+	public function test_the_admin_selection_verdict_receives_the_selected_method_context(): void {
+		$seen       = null;
+		$point      = $this->point( [ 'id' => 'P1' ] );
+		$controller = $this->controller( new Pickup_Admin_Test_Source( static fn() => [ $point ], static fn() => $point ) );
+		$filter     = static function ( $verdict, $candidate, $payment_method, $weight, $context ) use ( &$seen ) {
+			$seen = $context;
+			return $verdict;
+		};
+
+		add_filter( 'woodev_shipping_pickup_point_selectable', $filter, 20, 5 );
+		$controller->handle_admin_point_request(
+			new WP_REST_Request(
+				[
+					'id'          => 'P1',
+					'method_id'   => 'carrier_postamat',
+					'instance_id' => 22,
+				]
+			)
+		);
+		remove_filter( 'woodev_shipping_pickup_point_selectable', $filter, 20 );
+
+		$this->assertSame( [ 'method_id' => 'carrier_postamat', 'instance_id' => 22 ], $seen );
 	}
 
 	// ---- the explicit context reaches the verdict; the public callables are never read ----
