@@ -117,7 +117,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		/**
 		 * Shipping-line meta key holding the QUOTED additional services (#1145) — a JSON string
 		 * `{"version":1,"services":[{"code","name","parameter"}, …]}`, the resolved list of the quote the
-		 * customer paid for. The leading underscore hides it on the order screen and in e-mails.
+		 * customer paid for. The leading underscore hides it in WooCommerce's customer-facing formatted item meta;
+		 * the admin order screen uses its separate `woocommerce_hidden_order_itemmeta` list.
 		 *
 		 * Written as rate meta ({@see Shipping_Rate::get_meta_data()}), so WooCommerce's checkout copies it onto
 		 * the order's shipping line like any other rate meta, and the admin order wizard copies it again when it
@@ -126,6 +127,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 * charge the customer never saw. A NEW data contract: the key and the `version` are never renamed.
 		 */
 		const META_QUOTED_SERVICES = '_woodev_quoted_services';
+
+		/**
+		 * Order-item meta keys hidden from the admin order screen and customer-facing order item displays.
+		 *
+		 * Carrier methods may override this declaration and merge their keys with the parent list.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string[]
+		 */
+		public static function get_hidden_order_item_meta_keys(): array {
+			return [ self::META_QUOTED_SERVICES ];
+		}
 
 		/**
 		 * The features whose declaration changes what {@see self::init_form_fields()} builds.
