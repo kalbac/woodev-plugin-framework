@@ -280,6 +280,15 @@ list when none is passed. Its optional fourth argument chooses `virtual` (all le
 built a very long parcel from many mixed items. The constant, `pack('single')` and
 `Woodev_Packer_Single_Box` remain in code; a stored `single` — packing or leftovers — is read as
 `virtual` (`Woodev_Packer_Dispatcher::normalize_stored_algorithm()`).
+`Woodev_Packer_Virtual_Box` sizes its one box from a REAL placement (#1212): candidate footprints
+built from the items' own sides, the items placed largest-first into the deepest-bottom-left free
+space over a set of maximal free boxes (any rotation; small items land in the gaps), the smallest
+volume wins and, within 10 % of it, the shortest longest side. The work is bounded by counts, never
+by the clock (determinism — the rate cache keys on the box): at most 48 footprints, fewer as the
+unit count grows, none above 120 units, where the old arithmetic grid box is returned; the grid is
+also the floor the placed box never exceeds. `get_placement()` exposes the frame and every unit's
+corners for verification. Note `Woodev_Box_Packer_Packed_Box` itself does NOT place anything: it
+checks per-item fit and summed volume only, so `Woodev_Packer_Boxes` is a volume packer, not a 3-D one.
 Every `Woodev_Packer_Package_Result` reports source item allocation (`get_items()`: cart-item key /
 order-item id, product id, quantity), box id, and origin (`store`, `carrier`, or empty). Export
 retains the same item-allocation contract.

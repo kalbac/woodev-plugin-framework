@@ -377,8 +377,10 @@ namespace Woodev\Tests\Unit {
 
 			$this->assertSame( 16, $virtual->get_item_count() );
 			$this->assertLessThanOrEqual( max( $single_sides ), max( $virtual_sides ), 'virtual never has a longer side than single' );
-			// measured (#1212): single 141 x 60 x 30, virtual 88 x 74 x 60 — the longest side falls by over a third
+			// measured (#1212): single 141 x 60 x 30 (253 800 cm3); virtual 60 x 50 x 40 (120 000) from a real
+			// placement — the longest side falls by over half and the volume too (the grid before it: 390 720)
 			$this->assertLessThan( 0.75 * max( $single_sides ), max( $virtual_sides ), 'and on many mixed items it is much shorter — no sausage' );
+			$this->assertLessThan( array_product( $single_sides ), array_product( $virtual_sides ), 'and smaller: the merchant pays less volumetric weight than for the single box' );
 
 			// every side of the virtual box is at least the largest item on that axis (the sorted sides, longest first)
 			sort( $virtual_sides );
