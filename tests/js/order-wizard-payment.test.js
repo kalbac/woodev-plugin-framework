@@ -401,7 +401,7 @@ describe( 'the chosen pickup point vs the payment method (D3: ⑤ re-validates)'
 		expect( screen.getByRole( 'button', { name: 'Создать заказ' } ) ).toBeDisabled();
 
 		const [ request ] = pointCalls();
-		expect( request.url ).toBe( `${ POINTS_ROOT }/P%2F1?weight=3250&payment_method=cod` );
+		expect( request.url ).toBe( `${ POINTS_ROOT }/P%2F1?weight=3250&payment_method=cod&method_id=cdek_courier&instance_id=3` );
 		expect( request.method ).toBe( 'GET' );
 		expect( request.headers ).toEqual( { 'X-WP-Nonce': 'nonce-1' } );
 
@@ -423,7 +423,7 @@ describe( 'the chosen pickup point vs the payment method (D3: ⑤ re-validates)'
 
 		// The flattening of the storefront's `pickup-datasource.js`: brackets kept, empty / null skipped.
 		expect( query ).toBe(
-			'weight=3250&payment_method=cod&location[provider_id]=cdek&location[country]=RU&location[settlement][id]=44' +
+			'weight=3250&payment_method=cod&method_id=cdek_courier&instance_id=3&location[provider_id]=cdek&location[country]=RU&location[settlement][id]=44' +
 				`&location[settlement][name]=${ encodeURIComponent( 'Москва' ) }&location[flags][0]=a&location[flags][1]=b`
 		);
 	} );
@@ -441,7 +441,7 @@ describe( 'the chosen pickup point vs the payment method (D3: ⑤ re-validates)'
 		rerender( withRecord( null ) );
 
 		await waitFor( () => expect( pointCalls() ).toHaveLength( 2 ) );
-		expect( pointCalls()[ 1 ].url ).toBe( `${ POINTS_ROOT }/P%2F1?weight=3250&payment_method=cod` );
+		expect( pointCalls()[ 1 ].url ).toBe( `${ POINTS_ROOT }/P%2F1?weight=3250&payment_method=cod&method_id=cdek_courier&instance_id=3` );
 	} );
 
 	test( 'changing the method to one the point accepts lifts the stop', async () => {

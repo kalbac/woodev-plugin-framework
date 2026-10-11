@@ -79,7 +79,9 @@ export function emptyWizardData( defaultCountry = '' ): WizardData {
 			pickup_check: null,
 		},
 		settlementKey: '',
+		settlementSelectionRequired: false,
 		settlementRecord: null,
+		isOrderEdit: false,
 	};
 }
 
@@ -155,7 +157,9 @@ export function prefillToData( prefill: OrderPrefill ): WizardData {
 			pickup_check: null,
 		},
 		settlementKey: '',
-		settlementRecord: null,
+		settlementSelectionRequired: !! prefill.requires_settlement_selection && ! prefill.location,
+		settlementRecord: prefill.location || null,
+		isOrderEdit: Number( prefill.order?.id ) > 0,
 	};
 }
 
@@ -222,7 +226,9 @@ export function applyCustomer( data: WizardData, record: WcCustomerRecord ): Wiz
 		},
 		billingFollowsShipping: true,
 		settlementKey: '',
+		settlementSelectionRequired: false,
 		settlementRecord: null,
+		isOrderEdit: data.isOrderEdit,
 	};
 }
 
@@ -271,6 +277,10 @@ export function buildPayload( data: WizardData ): Record<string, unknown> {
 		payment_method: data.rest.payment_method,
 	};
 
+	if ( data.settlementRecord ) {
+		payload.location = data.settlementRecord;
+	}
+
 	if ( '' !== data.rest.status ) {
 		payload.status = data.rest.status;
 	}
@@ -302,7 +312,7 @@ export function isDirty( initial: WizardData, current: WizardData ): boolean {
  */
 function withoutDerived( data: WizardData ): unknown {
 	const { rate_cost, rate_is_pickup, rates_pending, pickup_check, carrier_schema, shipping_line, ...rest } = data.rest;
-	const { settlementRecord, ...view } = data;
+	const { settlementRecord, isOrderEdit, ...view } = data;
 
 	void rate_cost;
 	void rate_is_pickup;
@@ -310,6 +320,7 @@ function withoutDerived( data: WizardData ): unknown {
 	void pickup_check;
 	void carrier_schema;
 	void settlementRecord;
+	void isOrderEdit;
 
 	return {
 		...view,

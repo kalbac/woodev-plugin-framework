@@ -117,14 +117,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Constraint_Checker'
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param Pickup_Point $point          The point being evaluated.
-		 * @param string       $payment_method The chosen WooCommerce payment method id.
-		 * @param int          $cart_weight    Current cart weight in GRAMS (not the store's
-		 *                                     configured weight unit — the caller converts).
+		 * @param Pickup_Point         $point          The point being evaluated.
+		 * @param string               $payment_method The chosen WooCommerce payment method id.
+		 * @param int                  $cart_weight    Current cart weight in GRAMS (not the store's
+		 *                                             configured weight unit — the caller converts).
+		 * @param array<string, mixed> $method_context Explicit admin shipping method context, when present.
 		 *
 		 * @return array{allowed: bool, reason: string|null}
 		 */
-		public function check( Pickup_Point $point, string $payment_method, int $cart_weight ): array {
+		public function check( Pickup_Point $point, string $payment_method, int $cart_weight, array $method_context = [] ): array {
 			$verdict = [
 				'allowed' => true,
 				'reason'  => null,
@@ -196,13 +197,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Constraint_Checker'
 			 *                                                                  payment method id.
 			 * @param int                                        $cart_weight    Current cart
 			 *                                                                  weight in grams.
+			 * @param array<string, mixed>                       $method_context Explicit admin method
+			 *                                                                  context, or empty.
 			 */
 			$filtered = apply_filters(
 				'woodev_shipping_pickup_point_selectable',
 				$verdict,
 				$point,
 				$payment_method,
-				$cart_weight
+				$cart_weight,
+				$method_context
 			);
 
 			return self::sanitize_verdict( $filtered, $verdict );

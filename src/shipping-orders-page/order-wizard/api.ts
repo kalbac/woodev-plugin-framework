@@ -215,9 +215,15 @@ export async function checkPickupPoint(
 	pointId: string,
 	weight: number,
 	paymentMethod: string,
-	location: Record<string, unknown> | null = null
+	location: Record<string, unknown> | null = null,
+	methodId = '',
+	instanceId = 0
 ): Promise<PointVerdict | null> {
-	const query = new URLSearchParams( { weight: String( Math.max( 0, Math.round( weight ) ) ), payment_method: paymentMethod } ).toString();
+	const query = new URLSearchParams( {
+		weight: String( Math.max( 0, Math.round( weight ) ) ),
+		payment_method: paymentMethod,
+		...( methodId && instanceId > 0 ? { method_id: methodId, instance_id: String( instanceId ) } : {} ),
+	} ).toString();
 	const locationQuery = location ? flattenQuery( 'location', location ).join( '&' ) : '';
 
 	try {

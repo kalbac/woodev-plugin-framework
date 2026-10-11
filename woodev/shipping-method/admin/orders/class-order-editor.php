@@ -11,6 +11,7 @@ namespace Woodev\Framework\Shipping\Admin\Orders;
 
 use Woodev\Framework\Shipping\Order\Order_Lock;
 use Woodev\Framework\Shipping\Order\Order_Marker;
+use Woodev\Framework\Shipping\Location\Location_Record;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -889,6 +890,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 			$carrier_fields = Carrier_Field_Set::for_rate( $provider, $line['method_id'], $line['instance_id'] );
 			$carrier_fields->persist( $order, $data['carrier_fields'] );
 
+			$this->persist_checkout_location( $order, $data['location'] ?? null, $is_update );
+
 			if ( null !== $previous_fields ) {
 				$previous_fields->forget_except( $order, $carrier_fields->meta_keys() );
 			}
@@ -916,6 +919,31 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 					\Woodev_Order_Compatibility::delete_order_meta( $order, $other->get_marker_meta_key() );
 				}
 			}
+		}
+
+		/**
+		 * Persists the settlement selected while editing, or removes a stale saved record.
+		 *
+		 * @since 2.0.2
+		 * @param \WC_Order            $order The edited order.
+		 * @param Location_Record|null $record The selected settlement, if any.
+		 * @param bool                 $is_update Whether this is an existing order edit.
+		 * @return void
+		 */
+		private function persist_checkout_location( \WC_Order $order, ?Location_Record $record, bool $is_update ): void {
+			$key = \Woodev\Framework\Shipping\Checkout\Checkout_Handler::ORDER_LOCATION_META_KEY;
+
+			if ( null === $record ) {
+				if ( $is_update ) {
+					\Woodev_Order_Compatibility::delete_order_meta( $order, $key );
+				}
+
+				return;
+			}
+
+			$data        = $record->to_array();
+			$data['raw'] = null;
+			\Woodev_Order_Compatibility::update_order_meta( $order, $key, $data );
 		}
 
 		/**
@@ -1192,6 +1220,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 			$plugin  = $this->registry->get_provider_plugin( $provider->get_id() );
 			$handler = null !== $plugin ? $plugin->get_checkout_handler() : null;
 			$fields  = null !== $handler ? $handler->read_values( $order ) : [];
+			$shipping_address = $this->read_address( $order, 'shipping' );
+			$billing_address  = $this->read_address( $order, 'billing' );
+			$has_shipping_place = false;
+
+			foreach ( [ 'address_1', 'address_2', 'city', 'state', 'postcode', 'country' ] as $place_key ) {
+				if ( '' !== trim( $shipping_address[ $place_key ] ) ) {
+					$has_shipping_place = true;
+
+					break;
+				}
+			}
+
+			$delivery_city = $has_shipping_place ? $shipping_address['city'] : $billing_address['city'];
+			$delivery_country = $has_shipping_place ? $shipping_address['country'] : $billing_address['country'];
+			$location_record = $this->read_checkout_location( $order, $plugin, $delivery_city, $delivery_country );
 
 			$items = [];
 
@@ -1237,6 +1280,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 				break;
 			}
 
+			$location = null !== $location_record ? $location_record->to_array() : null;
+
+			if ( null !== $location ) {
+				$location['raw'] = null;
+			}
+
 			return [
 				'order'          => [
 					'id'          => (int) $order->get_id(),
@@ -1252,11 +1301,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 					'id'             => (int) $order->get_customer_id(),
 					'create_account' => false,
 				],
-				'billing'        => $this->read_address( $order, 'billing' ) + [ 'email' => (string) $order->get_billing_email() ],
-				'shipping'       => $this->read_address( $order, 'shipping' ),
+				'billing'        => $billing_address + [ 'email' => (string) $order->get_billing_email() ],
+				'shipping'       => $shipping_address,
 				'items'          => $items,
 				'shipping_line'  => $shipping_line,
 				'pickup_point'   => $this->read_pickup_point( $order, $provider, $handler, $fields ),
+				'location'       => $location,
+				'requires_settlement_selection' => '' !== trim( $delivery_city ) && null === $location_record,
 				'fields'         => $fields,
 				// The carrier's own export fields (spec D7), read back from the meta keys the carrier declared.
 				'carrier_fields' => null === $shipping_line
@@ -1265,6 +1316,73 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 				'payment_method' => (string) $order->get_payment_method(),
 				'status'         => (string) $order->get_status(),
 			];
+		}
+
+		/**
+		 * Reads the saved checkout settlement only when it still belongs to the active provider
+		 * and names the address the order currently carries.
+		 *
+		 * @since 2.0.2
+		 * @param \WC_Order                                       $order The order.
+		 * @param \Woodev\Framework\Shipping\Shipping_Plugin|null $plugin Carrier plugin.
+		 * @param string                                          $city Delivery city.
+		 * @param string                                          $country Delivery country.
+		 * @return Location_Record|null
+		 */
+		private function read_checkout_location( \WC_Order $order, ?\Woodev\Framework\Shipping\Shipping_Plugin $plugin, string $city, string $country ): ?Location_Record {
+			if ( '' === trim( $city ) || '' === trim( $country ) || null === $plugin ) {
+				return null;
+			}
+
+			$stored = \Woodev_Order_Compatibility::get_order_meta( $order, \Woodev\Framework\Shipping\Checkout\Checkout_Handler::ORDER_LOCATION_META_KEY );
+
+			if ( is_string( $stored ) ) {
+				$stored = json_decode( $stored, true );
+			}
+
+			if ( ! is_array( $stored ) ) {
+				return null;
+			}
+
+			try {
+				$record = Location_Record::from_array( $stored );
+			} catch ( \InvalidArgumentException $exception ) {
+				return null;
+			}
+
+			$active = $plugin->get_location_service()->provider_for_level( Location_Record::LEVEL_SETTLEMENT, strtoupper( $country ) );
+
+			if ( Location_Record::LEVEL_SETTLEMENT !== $record->level()
+				|| $record->country() !== strtoupper( $country )
+				|| null === $active
+				|| $active->get_id() !== $record->provider_id()
+				|| ! self::location_record_names_city( $record, $city )
+			) {
+				return null;
+			}
+
+			return $record;
+		}
+
+		/**
+		 * Whether a record's settlement component names an address city.
+		 *
+		 * @since 2.0.2
+		 * @param Location_Record $record The record.
+		 * @param string          $city The address city.
+		 * @return bool
+		 */
+		private static function location_record_names_city( Location_Record $record, string $city ): bool {
+			$settlement = $record->settlement();
+			$name       = null !== $settlement ? trim( (string) $settlement['name'] ) : '';
+
+			if ( '' === $name ) {
+				return false;
+			}
+
+			$type = (string) ( $settlement['type'] ?? '' );
+
+			return Location_Record::normalize_city_name( $name, $type ) === Location_Record::normalize_city_name( $city, $type );
 		}
 
 		/**

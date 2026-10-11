@@ -335,6 +335,7 @@ describe( 'an order loaded for edit meets the rates (#972, O4)', () => {
 		carrier_fields: {},
 		payment_method: 'cod',
 		status: 'processing',
+		requires_settlement_selection: true,
 		...patch,
 	} );
 
@@ -346,6 +347,7 @@ describe( 'an order loaded for edit meets the rates (#972, O4)', () => {
 		expect( pickedPointId( data.rest ) ).toBe( 'P-1' );
 		expect( data.rest.rate_is_pickup ).toBe( true );
 		expect( data.rest.rate_cost ).toBe( '' );
+		expect( data.settlementSelectionRequired ).toBe( true );
 	} );
 
 	test( 'the first answer keeps the saved price and the saved point, and only fills in the reference', () => {
@@ -376,6 +378,14 @@ describe( 'an order loaded for edit meets the rates (#972, O4)', () => {
 			destination: { country: 'RU', state: 'МОСКВА', city: 'Москва', postcode: '', address: 'ул Тверская 1', address_2: '' },
 			customer_id: 5,
 		} );
+	} );
+
+	test( 'the edit request carries the newly picked settlement record', () => {
+		const data = prefillToData( prefill() );
+		const record = { key: 'dadata:77', level: 'settlement', settlement: { name: 'Москва', type: 'г' } };
+		data.settlementRecord = record;
+
+		expect( buildRatesRequest( data ).location ).toBe( record );
 	} );
 
 	test( 'the re-quote spells the same choice differently (label, meta) — that is not «the manager typed something»', () => {

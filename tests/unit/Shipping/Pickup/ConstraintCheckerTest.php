@@ -259,7 +259,7 @@ final class ConstraintCheckerTest extends TestCase {
 		$this->assertSame( 'woodev_shipping_pickup_point_selectable', $tag );
 		$this->assertFalse( $verdict['allowed'] );
 		$this->assertNotNull( $verdict['reason'] );
-		$this->assertSame( [ $point, 'bacs', 20000 ], $args );
+		$this->assertSame( [ $point, 'bacs', 20000, [] ], $args );
 	}
 
 	// ---- fail-closed: a malformed filter return must not become the verdict ----

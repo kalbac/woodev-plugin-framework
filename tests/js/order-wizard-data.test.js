@@ -19,6 +19,7 @@ import {
 	newItem,
 	prefillToData,
 } from '../../src/shipping-orders-page/order-wizard/wizard-data';
+import { buildRatesRequest } from '../../src/shipping-orders-page/order-wizard/delivery-state';
 
 const STATES = { МОСКВА: 'Москва', 'МОСКОВСКАЯ ОБЛАСТЬ': 'Московская область', 'САНКТ-ПЕТЕРБУРГ': 'Санкт-Петербург' };
 
@@ -83,6 +84,13 @@ describe( 'buildPayload', () => {
 		expect( buildPayload( data ).billing ).toMatchObject( { city: 'Тверь' } );
 	} );
 
+	test( 'sends the selected settlement with the edited order', () => {
+		const data = base();
+		data.settlementRecord = { key: 'cdek:moscow', provider_id: 'cdek', level: 'settlement', country: 'RU' };
+
+		expect( buildPayload( data ).location ).toEqual( data.settlementRecord );
+	} );
+
 	test( 'an existing line keeps its item_id, a new one sends none; status is omitted until chosen', () => {
 		const data = base();
 		data.items = [ { ...data.items[ 0 ], item_id: 77 }, { ...newItem( { product_id: 5, variation_id: 9, name: 'Футболка', price: '10' } ) } ];
@@ -113,6 +121,7 @@ describe( 'prefillToData', () => {
 		carrier_fields: {},
 		payment_method: 'cod',
 		status: 'processing',
+		requires_settlement_selection: true,
 		...overrides,
 	} );
 
@@ -126,6 +135,15 @@ describe( 'prefillToData', () => {
 		expect( data.rest.payment_method ).toBe( 'cod' );
 		expect( data.rest.status ).toBe( 'processing' );
 		expect( data.rest.fields ).toEqual( { a: 'b' } );
+		expect( data.settlementSelectionRequired ).toBe( true );
+	} );
+
+	test( 'an edit keeps requiring a fresh record after its city changes', () => {
+		const data = prefillToData( prefill() );
+		data.settlementRecord = { key: 'provider:city-1', level: 'settlement' };
+
+		expect( data.settlementRecord ).toMatchObject( { key: 'provider:city-1' } );
+		expect( data.settlementSelectionRequired ).toBe( true );
 	} );
 
 	test( 'an order with no shipping address of its own delivers to its billing one', () => {
@@ -160,6 +178,19 @@ describe( 'prefillToData', () => {
 
 		expect( isDirty( data, { ...data } ) ).toBe( false );
 		expect( isDirty( data, { ...data, billing: { ...data.billing, phone: '1' } } ) ).toBe( true );
+	} );
+
+	test( 'a stored locality prefills the wizard and is sent with the rates request', () => {
+		const location = {
+			key: 'cdek:moscow', provider_id: 'cdek', level: 'settlement', country: 'RU',
+			settlement: { name: 'Москва', type: 'г' }, raw: null,
+		};
+		const data = prefillToData( prefill( { location, requires_settlement_selection: false } ) );
+		const request = buildRatesRequest( data );
+
+		expect( data.settlementRecord ).toEqual( location );
+		expect( data.settlementSelectionRequired ).toBe( false );
+		expect( request.location ).toEqual( location );
 	} );
 } );
 

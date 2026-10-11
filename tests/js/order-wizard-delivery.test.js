@@ -346,7 +346,7 @@ describe( 'the pickup point inside the step (D3, O10)', () => {
 		expect( options.locality ).toBe( 'Москва' );
 		expect( options.localityKey ).toBe( 'dadata:77' );
 		// Read on every request by the data source; the WEIGHT comes from the rates answer, in grams.
-		expect( options.context() ).toEqual( { weight: 3250, payment_method: 'cod', location: record } );
+		expect( options.context() ).toEqual( { weight: 3250, method_id: 'cdek_pvz', instance_id: 5, payment_method: 'cod', location: record } );
 		expect( screen.getByText( 'Пункт выдачи', { selector: 'h4' } ).parentElement.querySelector( '.woodev-order-wizard__pickup-map' ) ).not.toBeNull();
 	} );
 
