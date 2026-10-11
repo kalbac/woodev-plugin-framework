@@ -133,7 +133,7 @@ export default function StepPayment( { data, setData, errors, mode, order, basel
 			check.weight,
 			rest.payment_method,
 			data.settlementRecord,
-			rest.shipping_line?.method_id || '',
+			String( rest.shipping_line?.method_id ?? '' ),
 			Number( rest.shipping_line?.instance_id ) || 0
 		).then( ( result ) => {
 			if ( ! cancelled ) {
