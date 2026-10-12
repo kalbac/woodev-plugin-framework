@@ -12,3 +12,4 @@
 ## Related
 
 - [../GOTCHAS.md](../GOTCHAS.md) — the topic map
+- [api/rest] **A REST arg `default` outside its own `minimum`/`maximum` rejects EVERY request that omits the arg (WP validates defaults); handler-level tests miss it — test the schema, probe with `rest_do_request()`.** → [a-rest-arg-default-outside-its-own-minimum-rejects-every-request](../gotchas/a-rest-arg-default-outside-its-own-minimum-rejects-every-request.md) (s170)

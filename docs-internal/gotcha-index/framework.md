@@ -13,3 +13,4 @@
 ## Related
 
 - [../GOTCHAS.md](../GOTCHAS.md) — the topic map
+- [framework/plugin] **`Woodev_Plugin::is_plugin_active()` compares the bare file name — a `folder/file.php` basename never matches; check `active_plugins` (+ sitewide keys) directly.** → [woodev-plugin-is-plugin-active-matches-the-bare-filename-only](../gotchas/woodev-plugin-is-plugin-active-matches-the-bare-filename-only.md) (s170)
