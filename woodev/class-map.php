@@ -9,6 +9,8 @@
 return [
 	'Woodev\\Framework\\Admin\\Ui_Kit_Gallery_Page' => 'woodev/admin/class-ui-kit-gallery-page.php',
 	'Woodev\\Framework\\Competitor\\Admin_Notice_Renderer' => 'woodev/competitor/class-admin-notice-renderer.php',
+	'Woodev\\Framework\\Competitor\\Carrier_Catalogue' => 'woodev/competitor/class-carrier-catalogue.php',
+	'Woodev\\Framework\\Competitor\\Carrier_Competitor_Notification_Handler' => 'woodev/competitor/class-carrier-competitor-notification-handler.php',
 	'Woodev\\Framework\\Competitor\\Competitor_Notice_Renderer' => 'woodev/competitor/interface-competitor-notice-renderer.php',
 	'Woodev\\Framework\\Competitor\\Competitor_Notification_Handler' => 'woodev/competitor/class-competitor-notification-handler.php',
 	'Woodev\\Framework\\Competitor\\Competitor_Rule' => 'woodev/competitor/class-competitor-rule.php',

@@ -34,8 +34,9 @@ final class Admin_Notice_Renderer implements Competitor_Notice_Renderer {
 	 *
 	 * @param Competitor_Rule     $rule the rule being rendered
 	 * @param array<string,mixed> $note built note payload
+	 * @param bool                $shared_dismissal whether the dismissal is shared across plugin owners
 	 */
-	public function render( Competitor_Rule $rule, array $note ): void {
+	public function render( Competitor_Rule $rule, array $note, bool $shared_dismissal = false ): void {
 
 		$content = (string) ( $note['content'] ?? '' );
 
@@ -43,9 +44,20 @@ final class Admin_Notice_Renderer implements Competitor_Notice_Renderer {
 			return;
 		}
 
-		$content .= $this->primary_action_link( $note['actions'] ?? [] );
+		$title = (string) ( $note['title'] ?? '' );
+		if ( '' !== $title ) {
+			$content = '<strong>' . esc_html( $title ) . '</strong><br>' . $content;
+		}
 
-		$this->notice_handler->add_admin_notice( $content, $rule->get_note_name() );
+		$content .= $this->primary_action_link( $note['actions'] ?? [] );
+		$content .= $this->dismiss_link( $note['actions'] ?? [] );
+
+		$message_id = ( $shared_dismissal ? 'woodev-shared-' : '' ) . $rule->get_note_name();
+		$this->notice_handler->add_admin_notice(
+			$content,
+			$message_id,
+			[ 'always_show_on_settings' => false ]
+		);
 	}
 
 	/**
@@ -73,6 +85,22 @@ final class Admin_Notice_Renderer implements Competitor_Notice_Renderer {
 					esc_url( $url ),
 					esc_html( $label )
 				);
+			}
+		}
+
+		return '';
+	}
+
+	/**
+	 * Renders the notice's explicit dismiss action through the existing AJAX handler.
+	 *
+	 * @since 2.0.2
+	 * @param array<int,array<string,mixed>> $actions built note actions
+	 */
+	private function dismiss_link( array $actions ): string {
+		foreach ( $actions as $action ) {
+			if ( 'dismiss' === ( $action['name'] ?? '' ) && ! empty( $action['label'] ) ) {
+				return sprintf( ' &nbsp; <a href="#" class="js-woodev-plugin-framework-notice-dismiss">%s</a>', esc_html( $action['label'] ) );
 			}
 		}
 

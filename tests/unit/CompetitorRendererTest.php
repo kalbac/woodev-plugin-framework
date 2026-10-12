@@ -32,7 +32,7 @@ class CompetitorRendererTest extends TestCase {
 		$handler = Mockery::mock( 'Woodev_Admin_Notice_Handler' );
 		$handler->shouldReceive( 'add_admin_notice' )
 			->once()
-			->with( 'BODY', $rule->get_note_name() );
+			->with( '<strong>T</strong><br>BODY', $rule->get_note_name(), [ 'always_show_on_settings' => false ] );
 
 		$renderer = new Admin_Notice_Renderer( $handler );
 		$renderer->render( $rule, [ 'title' => 'T', 'content' => 'BODY', 'actions' => [] ] );

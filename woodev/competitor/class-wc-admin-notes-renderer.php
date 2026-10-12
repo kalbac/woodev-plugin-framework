@@ -50,8 +50,9 @@ final class WC_Admin_Notes_Renderer implements Competitor_Notice_Renderer {
 	 *
 	 * @param Competitor_Rule     $rule the rule being rendered
 	 * @param array<string,mixed> $note built note payload
+	 * @param bool                $shared_dismissal whether the dismissal is shared across plugin owners
 	 */
-	public function render( Competitor_Rule $rule, array $note ): void {
+	public function render( Competitor_Rule $rule, array $note, bool $shared_dismissal = false ): void {
 
 		if ( ! self::is_available() ) {
 			return;

@@ -318,6 +318,15 @@ class AdminNoticeHandlerTest extends TestCase {
 		$this->assertTrue( $second->is_notice_dismissed( 'reload-id', 42 ) );
 	}
 
+	public function test_shared_competitor_dismissal_is_visible_to_every_plugin_handler(): void {
+		$store = $this->fake_user_meta_store();
+		$this->stub_user_meta( $store );
+
+		$this->handler( $this->plugin( 'edostavka' ) )->dismiss_notice( 'woodev-shared-woodev-competitor-recommend-yandex', 42 );
+
+		$this->assertTrue( $this->handler( $this->plugin( 'russian-post' ) )->is_notice_dismissed( 'woodev-shared-woodev-competitor-recommend-yandex', 42 ) );
+	}
+
 	public function test_is_notice_dismissed_false_when_never_dismissed(): void {
 		$store = $this->fake_user_meta_store();
 		$this->stub_user_meta( $store );
