@@ -255,7 +255,7 @@ final class ApiBaseSecretParamFallbackTest extends TestCase {
 	}
 
 	/** @return void */
-	public function test_pre_masked_json_request_keeps_the_original_length_band(): void {
+	public function test_pre_masked_json_request_is_fully_masked_for_broadcast(): void {
 		$request = new class( '{"token":"' . str_repeat( 'abcd', 10 ) . '"}' ) extends Testable_Unknown_Secret_Carrying_Body_Request {
 			/** @return string */
 			public function to_string_safe(): string {
@@ -264,15 +264,15 @@ final class ApiBaseSecretParamFallbackTest extends TestCase {
 		};
 		$api = new Testable_Api_Base_For_Fallback_Test();
 		$api->set_request_for_test( $request );
-		$this->assertSame( '{"token":"abcd****abcd"}', $api->get_sanitized_request_body_for_test() );
+		$this->assertSame( '{"token":"[REDACTED]"}', $api->get_sanitized_request_body_for_test() );
 	}
 
 	/** @return void */
-	public function test_json_body_partial_mask_has_literal_output(): void {
+	public function test_json_body_full_mask_has_literal_output(): void {
 		$request = new Testable_Unknown_Secret_Carrying_Body_Request( '{"token":"abc1234567890123456789xyz","n":{"password":7,"api_key":["secret"]},"id":1}' );
 		$api = new Testable_Api_Base_For_Fallback_Test();
 		$api->set_request_for_test( $request );
-		$this->assertSame( '{"token":"abc****xyz","n":{"password":"****","api_key":"****"},"id":1}', $api->get_sanitized_request_body_for_test() );
+		$this->assertSame( '{"token":"[REDACTED]","n":{"password":"[REDACTED]","api_key":"[REDACTED]"},"id":1}', $api->get_sanitized_request_body_for_test() );
 	}
 
 	/**
@@ -809,7 +809,7 @@ final class ApiBaseSecretParamFallbackTest extends TestCase {
 		$this->assertIsArray( $decoded, 'SHOULD-FIX 2: the redacted body must still be valid, parseable JSON' );
 		$this->assertStringNotContainsString( $secret, $safe_body, 'the password value must not leak' );
 		$this->assertSame(
-			\Woodev_API_Base::mask_secret( $secret, true ),
+			\Woodev_API_Base::mask_secret( $secret ),
 			$decoded['password'],
 			'the password key must be masked by key, not by scanning the text'
 		);
@@ -849,7 +849,7 @@ final class ApiBaseSecretParamFallbackTest extends TestCase {
 
 		$this->assertIsArray( $decoded, 'the redacted body must still be valid JSON' );
 		$this->assertStringNotContainsString( $secret, $safe_body );
-		$this->assertSame( \Woodev_API_Base::mask_secret( $secret, true ), $decoded['auth']['token'] );
+		$this->assertSame( \Woodev_API_Base::mask_secret( $secret ), $decoded['auth']['token'] );
 		$this->assertSame( 'json', $decoded['format'], 'a non-secret sibling param must survive untouched' );
 	}
 

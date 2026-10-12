@@ -1964,7 +1964,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 			}
 
 			$canonical_secret_names = array_unique( array_map( [ self::class, 'canonicalize_secret_param_name' ], $secret_names ) );
-			$redacted_params        = self::redact_secret_values_recursively( $params, $canonical_secret_names, $original_params );
+			$redacted_params        = self::redact_secret_values_recursively( $params, $canonical_secret_names, $original_params, true );
 
 			$query = http_build_query( $redacted_params, '', '&' );
 
@@ -2095,7 +2095,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 				$original = json_decode( $original_body, true );
 
 				$canonical_secret_names = array_unique( array_map( [ self::class, 'canonicalize_secret_param_name' ], $secret_names ) );
-				$redacted               = self::redact_secret_values_recursively( $decoded, $canonical_secret_names, is_array( $original ) ? $original : [] );
+				$redacted               = self::redact_secret_values_recursively( $decoded, $canonical_secret_names, is_array( $original ) ? $original : [], false );
 				$encoded                = json_encode( $redacted, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode
 
 				return false !== $encoded ? $encoded : $body;
@@ -2126,27 +2126,27 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * @param array<int|string, mixed> $original_values Original values; only their exact derived masks may survive a repeated pass.
 		 * @return array<int|string, mixed>
 		 */
-		private static function redact_secret_values_recursively( array $values, array $canonical_secret_names, array $original_values = [] ): array {
+		private static function redact_secret_values_recursively( array $values, array $canonical_secret_names, array $original_values = [], bool $for_log = false ): array {
 
 			foreach ( $values as $key => $value ) {
 
 				if ( in_array( self::canonicalize_secret_param_name( (string) $key ), $canonical_secret_names, true ) ) {
-					// A request's safe path/body may already contain a partial mask.
+					// A request's safe path/body may already contain a derived mask.
 					// Trust only a mask derived from the original value, never a raw
 					// credential merely containing the four-star marker.
 					if ( array_key_exists( $key, $original_values )
-						&& $value === self::mask_secret( is_string( $original_values[ $key ] ) ? $original_values[ $key ] : '', true )
+						&& $value === self::mask_secret( is_string( $original_values[ $key ] ) ? $original_values[ $key ] : '', $for_log )
 					) {
 						continue;
 					}
 
-					$values[ $key ] = self::mask_secret( is_string( $value ) ? $value : '', true );
+					$values[ $key ] = self::mask_secret( is_string( $value ) ? $value : '', $for_log );
 					continue;
 				}
 
 				if ( is_array( $value ) ) {
 					$original      = isset( $original_values[ $key ] ) && is_array( $original_values[ $key ] ) ? $original_values[ $key ] : [];
-					$values[ $key ] = self::redact_secret_values_recursively( $value, $canonical_secret_names, $original );
+					$values[ $key ] = self::redact_secret_values_recursively( $value, $canonical_secret_names, $original, $for_log );
 				}
 			}
 
@@ -2386,12 +2386,12 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		}
 
 		/**
-		 * Gets the sanitized request headers, for logging.
+		 * Gets request headers with secret values fully masked.
 		 *
 		 * Masks the VALUE of every header whose name (matched case-insensitively —
 		 * HTTP header names are case-insensitive) appears in
 		 * {@see self::get_secret_header_names()}, using
-		 * {@see self::mask_secret_values()}'s fixed placeholder. The original key
+		 * {@see self::mask_secret_values()}'s full-mask default. The original key
 		 * casing sent on the wire is preserved in the returned array; only the
 		 * comparison is case-insensitive.
 		 *
@@ -2468,9 +2468,10 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * @param array<string, mixed> $headers Name/value pairs (value: string, or array<int, string>
 		 *                              for a duplicated header), casing as sent/received.
 		 * @param array<int, string>   $secret_names Names to mask, matched case- and separator-insensitively.
+		 * @param bool                 $for_log Whether the output goes only to a log sink.
 		 * @return array<string, mixed>
 		 */
-		public static function mask_secret_values( array $headers, array $secret_names ): array {
+		public static function mask_secret_values( array $headers, array $secret_names, bool $for_log = false ): array {
 
 			$canonical_secret_names = array_unique( array_map( [ self::class, 'canonicalize_secret_param_name' ], $secret_names ) );
 
@@ -2487,16 +2488,16 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 					continue;
 				}
 
-				$mask = static function ( $item ) use ( $name ): string {
+				$mask = static function ( $item ) use ( $name, $for_log ): string {
 					$value = is_string( $item ) ? $item : '';
 
 					if ( in_array( self::canonicalize_secret_param_name( (string) $name ), [ 'authorization', 'proxyauthorization' ], true )
 						&& preg_match( '/^(\s*(?:Bearer|Basic|Token|OAuth)\s+)(\S+)(\s*)$/i', $value, $matches )
 					) {
-						return $matches[1] . self::mask_secret( $matches[2], true ) . $matches[3];
+						return $matches[1] . self::mask_secret( $matches[2], $for_log ) . $matches[3];
 					}
 
-					return self::mask_secret( $value, true );
+					return self::mask_secret( $value, $for_log );
 				};
 
 				$headers[ $name ] = is_array( $value )
@@ -2650,7 +2651,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		}
 
 		/**
-		 * Gets the sanitized response headers, for logging.
+		 * Gets response headers with secret values fully masked.
 		 *
 		 * Masks the VALUE of every header whose name (matched case-insensitively)
 		 * appears in {@see self::get_secret_header_names()} — the same list, and the

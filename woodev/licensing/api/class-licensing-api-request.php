@@ -113,7 +113,7 @@ if ( ! class_exists( 'Woodev_Licensing_API_Request' ) ) :
 		 * @return array<string, mixed>
 		 */
 		private function get_masked_params(): array {
-			return Woodev_API_Base::mask_secret_values( $this->get_params(), $this->get_secret_param_names() );
+			return Woodev_API_Base::mask_secret_values( $this->get_params(), $this->get_secret_param_names(), true );
 		}
 
 		/**
