@@ -1748,7 +1748,7 @@ final class PickupControllerTest extends TestCase {
 		$controller->handle_points_request( new WP_REST_Request( [ 'locality' => 'Москва' ] ) );
 
 		$this->assertSame(
-			'[woodev] pickup points fetch failed for plugin "test-plugin": carrier rejected api_key=' . \Woodev_API_Base::mask_secret( 'LIVESECRET' ),
+			'[woodev] pickup points fetch failed for plugin "test-plugin": carrier rejected api_key=' . \Woodev_API_Base::mask_secret( 'LIVESECRET', true ),
 			$captured
 		);
 	}

@@ -463,7 +463,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 			try {
 				$result = $this->actions->perform( $handler, $order, Order_Actions::EXPORT, $provider );
 			} catch ( \Throwable $exception ) {
-				self::log( sprintf( 'exporting the created order %1$d failed: %2$s', $order->get_id(), \Woodev_API_Base::redact_secret_log_text( $exception->getMessage() ) ) );
+				self::log( sprintf( 'exporting the created order %1$d failed: %2$s', $order->get_id(), \Woodev_API_Base::redact_secret_log_text( $exception->getMessage(), [], true ) ) );
 
 				return [
 					'success' => false,

@@ -1138,7 +1138,7 @@ class LicenseCommandTransportAcksTest extends TestCase {
 
 		$this->assertSame( $response, $result );
 		$this->assertSame(
-			'Woodev licensing: pull-command/ack consumption failed: carrier rejected api_key=' . \Woodev_API_Base::mask_secret( self::SECRET ),
+			'Woodev licensing: pull-command/ack consumption failed: carrier rejected api_key=' . \Woodev_API_Base::mask_secret( self::SECRET, true ),
 			$captured
 		);
 	}

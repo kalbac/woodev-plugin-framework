@@ -288,7 +288,7 @@ class SetupWizardRestControllerTest extends TestCase {
 		$this->assertInstanceOf( 'WP_Error', $result );
 		$this->assertSame( 'woodev_setup_server_error', $result->get_error_code() );
 		$this->assertSame(
-			'[woodev] setup wizard save_step failed on "api_key": carrier rejected api_key=' . \Woodev_API_Base::mask_secret( 'LIVESECRET' ),
+			'[woodev] setup wizard save_step failed on "api_key": carrier rejected api_key=' . 'L****T',
 			$captured
 		);
 	}
@@ -367,7 +367,7 @@ class SetupWizardRestControllerTest extends TestCase {
 		$this->assertInstanceOf( 'WP_Error', $result );
 		$this->assertSame( 'woodev_setup_step_failed', $result->get_error_code() );
 		$this->assertSame(
-			'[woodev] setup wizard on_save failed for step "connection": carrier rejected api_key=' . \Woodev_API_Base::mask_secret( 'LIVESECRET' ),
+			'[woodev] setup wizard on_save failed for step "connection": carrier rejected api_key=' . 'L****T',
 			$captured
 		);
 	}
@@ -513,7 +513,7 @@ class SetupWizardRestControllerTest extends TestCase {
 		$this->assertInstanceOf( 'WP_Error', $result );
 		$this->assertSame( 'woodev_setup_complete_failed', $result->get_error_code() );
 		$this->assertSame(
-			'[woodev] setup wizard complete failed: carrier rejected api_key=' . \Woodev_API_Base::mask_secret( 'LIVESECRET' ),
+			'[woodev] setup wizard complete failed: carrier rejected api_key=' . 'L****T',
 			$captured
 		);
 	}

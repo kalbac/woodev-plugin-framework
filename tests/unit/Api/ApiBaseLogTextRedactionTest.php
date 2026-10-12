@@ -359,7 +359,7 @@ final class ApiBaseLogTextRedactionTest extends TestCase {
 	// -------------------------------------------------------------------------
 	// Pinned OVER-REDACTION — the scan runs over the WHOLE message, so
 	// harmless prose matching the `name=value` shape is masked too, and
-	// adjacent trailing punctuation is consumed into the masked value. This
+	// adjacent trailing prose punctuation stays outside the masked value. This
 	// is the accepted trade for a diagnostic log line, but it is a real,
 	// visible behaviour — pinned so it is not discovered only while
 	// debugging.
@@ -374,7 +374,53 @@ final class ApiBaseLogTextRedactionTest extends TestCase {
 	public function test_trailing_punctuation_adjacent_to_a_redacted_value_is_preserved(): void {
 		$result = \Woodev_API_Base::redact_secret_log_text( 'api_key=abc,' );
 
-		$this->assertSame( 'api_key=****,', $result );
+		$this->assertSame( 'api_key=[REDACTED],', $result );
+	}
+
+	/**
+	 * @dataProvider free_text_secret_cases
+	 * @param string $text Input text.
+	 * @param string $expected Expected log text.
+	 * @return void
+	 */
+	public function test_free_text_secret_boundaries( string $text, string $expected ): void {
+		$this->assertSame( $expected, \Woodev_API_Base::redact_secret_log_text( $text, [], true ) );
+	}
+
+	/**
+	 * @return array<string, array{string, string}>
+	 */
+	public static function free_text_secret_cases(): array {
+		return [
+			'double quotes' => [ 'token="abcdefghijklmnop" rejected', 'token="ab****op" rejected' ],
+			'single quotes' => [ "token='abcdefghijklmnop' rejected", "token='ab****op' rejected" ],
+			'angle brackets' => [ 'token=<abcdefghijklmnop> rejected', 'token=<ab****op> rejected' ],
+			'double quoted spaces' => [ 'token="abc defgh ijklmnop" rejected', 'token="ab****op" rejected' ],
+			'single quoted ampersand' => [ "token='abcd&efghijklmnop' rejected", "token='ab****op' rejected" ],
+			'angle bracket spaces' => [ 'token=<abc defgh ijklmnop> rejected', 'token=<ab****op> rejected' ],
+			'escaped quote and spaces' => [ 'token="abcd\\"efgh ijklmnop" rejected', 'token="ab****op" rejected' ],
+			'full mask survives' => [ 'token=[REDACTED],', 'token=[REDACTED],' ],
+			'parentheses' => [ '(token=abcdefghijklmnop)', '(token=ab****op)' ],
+			'trailing comma' => [ 'token=abcdefghijklmnop,', 'token=ab****op,' ],
+			'interior comma' => [ 'password=ab,cd1234567890', 'password=a****0' ],
+			'interior semicolon' => [ 'password=ab;cd1234567890', 'password=a****0' ],
+			'interior parenthesis' => [ 'password=ab)cd1234567890', 'password=a****0' ],
+			'interior square bracket' => [ 'password=ab]cd1234567890', 'password=a****0' ],
+			'interior brace' => [ 'password=ab}cd1234567890', 'password=a****0' ],
+			'interior quote' => [ 'password=ab"cd1234567890', 'password=a****0' ],
+			'interior angle bracket' => [ 'password=ab<cd1234567890', 'password=a****0' ],
+			'quoted punctuation' => [ 'token="abcdefghijklmno,"', 'token="ab****o,"' ],
+			'twice' => [ 'token=abcdefghijklmnop and token=abcdefghijklmnop', 'token=ab****op and token=ab****op' ],
+			'xml' => [ '<token>abcdefghijklmnop</token>', '<token>ab****op</token>' ],
+		];
+	}
+
+	public function test_full_mask_is_the_default_for_text_and_secret_values(): void {
+		$this->assertSame( '[REDACTED]', \Woodev_API_Base::mask_secret( 'abcdefghijklmnop' ) );
+		$this->assertSame( '[REDACTED]', \Woodev_API_Base::mask_secret( '' ) );
+		$this->assertSame( 'token=[REDACTED]', \Woodev_API_Base::redact_secret_log_text( 'token=[REDACTED]' ) );
+		$this->assertSame( 'token="[REDACTED]"', \Woodev_API_Base::redact_secret_log_text( 'token="abcdefghijklmnop"' ) );
+		$this->assertSame( '<token>[REDACTED]</token>', \Woodev_API_Base::redact_secret_log_text( '<token>abcdefghijklmnop</token>' ) );
 	}
 
 	/**
@@ -387,7 +433,7 @@ final class ApiBaseLogTextRedactionTest extends TestCase {
 	 * @return void
 	 */
 	public function test_secret_mask_length_bands( string $value, string $expected ): void {
-		$this->assertSame( $expected, \Woodev_API_Base::mask_secret( $value ) );
+		$this->assertSame( $expected, \Woodev_API_Base::mask_secret( $value, true ) );
 	}
 
 	/**
@@ -404,6 +450,8 @@ final class ApiBaseLogTextRedactionTest extends TestCase {
 			'length 39'      => [ 'abcdefghijklmnopqrstuvwxyzabcdefghijklm', 'abc****klm' ],
 			'length 40'      => [ 'abcdefghijklmnopqrstuvwxyzabcdefghijklmn', 'abcd****klmn' ],
 			'multibyte'      => [ 'я1234567я', 'я****я' ],
+			'multibyte 8'    => [ 'абвгдежз', '****' ],
+			'emoji 16'       => [ str_repeat( '😀', 16 ), '😀😀****😀😀' ],
 			'empty'          => [ '', '****' ],
 		];
 	}

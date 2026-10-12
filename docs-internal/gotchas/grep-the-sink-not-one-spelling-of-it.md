@@ -69,6 +69,41 @@ sweeps **with what each one could not see**, rather than asserting a complete li
 completeness in a docblock closes the question for the next reader; four sweeps in a row proved
 that claim would have been wrong each time it was made.
 
+## Partial masking is a log policy, not a property of the text
+
+The #1250 review (s175) found that the same free-text redactor reaches customer JSON,
+storefront debug notices, merchant shipment results, and API reason phrases. Changing its
+shared mask to show credential ends changed all those screens too. A wrapper with two
+sinks must apply each sink's policy to the original message independently.
+
+❌ Wrong — partially redact once and reuse the result in a customer notice:
+
+```php
+$message = Woodev_API_Base::redact_secret_log_text( $message, [], true );
+$plugin->log( $message );
+Woodev_Helper::wc_add_notice( $message );
+```
+
+✅ Correct — default to `[REDACTED]`, opt into partial masking only at the logger:
+
+```php
+$plugin->log( Woodev_API_Base::redact_secret_log_text( $message, [], true ) );
+Woodev_Helper::wc_add_notice( Woodev_API_Base::redact_secret_log_text( $message ) );
+```
+
+The free-text value scan must also consume quoted values and interior punctuation.
+Stopping at a quote makes `token="value"` leak the whole value; stopping at a comma or
+closing bracket exposes the rest of an ordinary password. Consume the complete value,
+then peel its paired wrapper and trailing prose punctuation. Test literal output for
+quotes, angle brackets, repeated secrets, and punctuation inside credentials.
+
+Partial masks can shrink when the safe request path is redacted again for the final URI.
+The query redactor preserves only an exact mask derived from the original request value
+at the same key, including nested keys. It still masks credentials added or replaced by
+URI filters; a raw value merely containing `****` never earns a bypass. The same
+comparison against original values keeps an already-masked JSON request body from
+shrinking its visible ends during the base class's mandatory second pass.
+
 ## Related
 
 - [an-action-beside-a-filter-must-carry-the-filters-result](an-action-beside-a-filter-must-carry-the-filters-result.md) — the other "the seam is not where you think it is"

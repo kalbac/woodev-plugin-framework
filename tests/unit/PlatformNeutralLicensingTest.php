@@ -154,7 +154,7 @@ class PlatformNeutralLicensingTest extends TestCase {
 		$this->assertSame(
 			print_r(
 				[
-					'license' => \Woodev_API_Base::mask_secret( 'abc123' ),
+					'license' => \Woodev_API_Base::mask_secret( 'abc123', true ),
 					'item_id' => 42,
 				],
 				true

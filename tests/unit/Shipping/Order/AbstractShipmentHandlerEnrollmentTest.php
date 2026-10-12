@@ -368,7 +368,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 				sprintf(
 					'[woodev] popular-settlements enrolment failed for provider "%s": %s',
 					$provider->get_id(),
-					'carrier rejected api_key=' . \Woodev_API_Base::mask_secret( self::SECRET )
+					'carrier rejected api_key=' . \Woodev_API_Base::mask_secret( self::SECRET, true )
 				),
 				$captured
 			);

@@ -4556,7 +4556,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 					$context,
 					$this->plugin_id,
 					$kind,
-					\Woodev_API_Base::redact_secret_log_text( $e->getMessage() )
+					\Woodev_API_Base::redact_secret_log_text( $e->getMessage(), [], true )
 				)
 			);
 		}

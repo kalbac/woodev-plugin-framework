@@ -342,7 +342,7 @@ final class ApiBaseSanitizedResponseBodyTest extends TestCase {
 		$this->assertIsArray( $decoded, 'the redacted response body must still be valid, parseable JSON' );
 		$this->assertStringNotContainsString( $secret, $safe_body, 'the password value must not leak' );
 		$this->assertSame(
-			\Woodev_API_Base::mask_secret( $secret ),
+			\Woodev_API_Base::mask_secret( $secret, true ),
 			$decoded['password'],
 			'the password key must be masked by key, not by scanning the text'
 		);
@@ -381,7 +381,7 @@ final class ApiBaseSanitizedResponseBodyTest extends TestCase {
 
 		$this->assertIsArray( $decoded, 'the redacted response body must still be valid JSON' );
 		$this->assertStringNotContainsString( $secret, $safe_body );
-		$this->assertSame( \Woodev_API_Base::mask_secret( $secret ), $decoded['auth']['access_token'] );
+		$this->assertSame( \Woodev_API_Base::mask_secret( $secret, true ), $decoded['auth']['access_token'] );
 		$this->assertSame( 'active', $decoded['status'], 'a non-secret sibling must survive untouched, readable, in the log' );
 	}
 

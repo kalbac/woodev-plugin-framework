@@ -222,6 +222,59 @@ final class ApiBaseSecretParamFallbackTest extends TestCase {
 		);
 	}
 
+	/** @return void */
+	public function test_query_mask_is_literal_and_survives_uri_filter_redaction(): void {
+		$request = new Testable_Unknown_Secret_Carrying_Request( '/v1/status?api_key=' . str_repeat( 'ABCD', 10 ) . '&format=json' );
+		$api = new Testable_Api_Base_For_Fallback_Test();
+		$api->set_request_for_test( $request );
+		$this->assertSame( '/v1/status?api_key=ABCD****ABCD&format=json', $api->get_sanitized_request_path_for_test() );
+		$this->assertSame( 'https://vendor.example/v1/status?api_key=ABCD****ABCD&format=json', $api->get_sanitized_request_uri_for_test() );
+
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $tag, $value ) {
+				return 'woodev_test_vendor_api_request_uri' === $tag ? $value . '&token=abcdefghijklmnop' : $value;
+			}
+		);
+		$this->assertSame( 'https://vendor.example/v1/status?api_key=ABCD****ABCD&format=json&token=ab****op', $api->get_sanitized_request_uri_for_test() );
+	}
+
+	/** @return void */
+	public function test_query_filters_cannot_bypass_masking_with_a_star_marker_or_replaced_value(): void {
+		$request = new Testable_Unknown_Secret_Carrying_Request( '/v1/status?a[token]=abcdefghijklmnop' );
+		$api = new Testable_Api_Base_For_Fallback_Test();
+		$api->set_request_for_test( $request );
+		$this->assertSame( 'https://vendor.example/v1/status?a%5Btoken%5D=ab****op', $api->get_sanitized_request_uri_for_test() );
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $tag, $value ) {
+				return 'woodev_test_vendor_api_request_uri' === $tag
+					? str_replace( 'ab****op', 'abcd****efghijkl', $value )
+					: $value;
+			}
+		);
+		$this->assertSame( 'https://vendor.example/v1/status?a%5Btoken%5D=ab****kl', $api->get_sanitized_request_uri_for_test() );
+	}
+
+	/** @return void */
+	public function test_pre_masked_json_request_keeps_the_original_length_band(): void {
+		$request = new class( '{"token":"' . str_repeat( 'abcd', 10 ) . '"}' ) extends Testable_Unknown_Secret_Carrying_Body_Request {
+			/** @return string */
+			public function to_string_safe(): string {
+				return json_encode( \Woodev_API_Base::mask_secret_values( json_decode( $this->to_string(), true ), [ 'token' ] ) );
+			}
+		};
+		$api = new Testable_Api_Base_For_Fallback_Test();
+		$api->set_request_for_test( $request );
+		$this->assertSame( '{"token":"abcd****abcd"}', $api->get_sanitized_request_body_for_test() );
+	}
+
+	/** @return void */
+	public function test_json_body_partial_mask_has_literal_output(): void {
+		$request = new Testable_Unknown_Secret_Carrying_Body_Request( '{"token":"abc1234567890123456789xyz","n":{"password":7,"api_key":["secret"]},"id":1}' );
+		$api = new Testable_Api_Base_For_Fallback_Test();
+		$api->set_request_for_test( $request );
+		$this->assertSame( '{"token":"abc****xyz","n":{"password":"****","api_key":"****"},"id":1}', $api->get_sanitized_request_body_for_test() );
+	}
+
 	/**
 	 * @return void
 	 */
@@ -756,7 +809,7 @@ final class ApiBaseSecretParamFallbackTest extends TestCase {
 		$this->assertIsArray( $decoded, 'SHOULD-FIX 2: the redacted body must still be valid, parseable JSON' );
 		$this->assertStringNotContainsString( $secret, $safe_body, 'the password value must not leak' );
 		$this->assertSame(
-			\Woodev_API_Base::mask_secret( $secret ),
+			\Woodev_API_Base::mask_secret( $secret, true ),
 			$decoded['password'],
 			'the password key must be masked by key, not by scanning the text'
 		);
@@ -796,7 +849,7 @@ final class ApiBaseSecretParamFallbackTest extends TestCase {
 
 		$this->assertIsArray( $decoded, 'the redacted body must still be valid JSON' );
 		$this->assertStringNotContainsString( $secret, $safe_body );
-		$this->assertSame( \Woodev_API_Base::mask_secret( $secret ), $decoded['auth']['token'] );
+		$this->assertSame( \Woodev_API_Base::mask_secret( $secret, true ), $decoded['auth']['token'] );
 		$this->assertSame( 'json', $decoded['format'], 'a non-secret sibling param must survive untouched' );
 	}
 

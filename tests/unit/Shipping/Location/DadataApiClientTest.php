@@ -191,7 +191,7 @@ final class DadataApiClientTest extends TestCase {
 
 		( self::client( 'tok', $secret ) )->suggest_address( 'q' );
 
-		$this->assertSame( \Woodev_API_Base::mask_secret( $secret ), $broadcast['headers']['X-Secret'] );
+		$this->assertSame( \Woodev_API_Base::mask_secret( $secret, true ), $broadcast['headers']['X-Secret'] );
 	}
 
 	// -------------------------------------------------------------------------

@@ -1285,7 +1285,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 					'[woodev] shipping order action "%s" (%s) failed: %s',
 					$action,
 					$provider_id,
-					\Woodev_API_Base::redact_secret_log_text( $exception->getMessage() )
+					\Woodev_API_Base::redact_secret_log_text( $exception->getMessage(), [], true )
 				)
 			);
 		}

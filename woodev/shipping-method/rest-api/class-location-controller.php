@@ -2227,7 +2227,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 					'[woodev] location %s (%s) failed: %s',
 					$operation,
 					$provider_id,
-					\Woodev_API_Base::redact_secret_log_text( $exception->getMessage() )
+					\Woodev_API_Base::redact_secret_log_text( $exception->getMessage(), [], true )
 				)
 			);
 

@@ -382,6 +382,16 @@ final class LicensingApiRequestMaskingTest extends TestCase {
 		return $params;
 	}
 
+	/** @return void */
+	public function test_licensing_broadcast_keeps_literal_partial_mask_through_safe_path_and_uri(): void {
+		$request = $this->make_request( str_repeat( 'ABCD', 10 ) );
+		$api = new Testable_Licensing_Request_Api_Base();
+		$api->set_request_for_test( $request );
+		$data = $api->get_request_data_for_broadcast_for_test();
+		$this->assertStringContainsString( 'license=ABCD****ABCD', $data['uri'] );
+		$this->assertStringNotContainsString( '%2A', $data['uri'] );
+	}
+
 	// -------------------------------------------------------------------------
 	// get_path() — the actual wire path — must stay untouched.
 	// -------------------------------------------------------------------------
@@ -414,7 +424,7 @@ final class LicensingApiRequestMaskingTest extends TestCase {
 		$safe_path = $request->get_path_safe();
 		$params    = $this->parse_query( $safe_path );
 
-		$this->assertSame( \Woodev_API_Base::mask_secret( $license_key ), $params['license'] );
+		$this->assertSame( \Woodev_API_Base::mask_secret( $license_key, true ), $params['license'] );
 		$this->assertStringNotContainsString( $license_key, $safe_path, 'the license key leaked into the sanitized path' );
 	}
 

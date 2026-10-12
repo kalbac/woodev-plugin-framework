@@ -321,7 +321,7 @@ namespace Woodev\Tests\Unit {
 			$gateway->handle_transaction_response_request();
 
 			$this->assertSame(
-				'Redirect-back processing error: carrier rejected api_key=' . \Woodev_API_Base::mask_secret( self::SECRET ),
+				'Redirect-back processing error: carrier rejected api_key=' . 'L****T',
 				$captured
 			);
 		}
@@ -375,7 +375,7 @@ namespace Woodev\Tests\Unit {
 		public function test_approved_transaction_handler_redacts_a_secret_in_the_error_log(): void {
 			$this->assert_approved_transaction_log(
 				'carrier rejected api_key=' . self::SECRET,
-				'Error handling approved transaction: carrier rejected api_key=' . \Woodev_API_Base::mask_secret( self::SECRET )
+				'Error handling approved transaction: carrier rejected api_key=' . 'L****T'
 			);
 		}
 
@@ -447,7 +447,7 @@ namespace Woodev\Tests\Unit {
 		public function test_remove_token_redacts_a_secret_in_the_error_log(): void {
 			$this->assert_remove_token_log(
 				'carrier rejected api_key=' . self::SECRET,
-				'carrier rejected api_key=' . \Woodev_API_Base::mask_secret( self::SECRET )
+				'carrier rejected api_key=' . 'L****T'
 			);
 		}
 
@@ -535,8 +535,24 @@ namespace Woodev\Tests\Unit {
 		public function test_add_debug_message_redacts_a_secret_before_the_logger(): void {
 			$this->assert_add_debug_message_logs(
 				'carrier rejected api_key=' . self::SECRET,
-				'carrier rejected api_key=' . \Woodev_API_Base::mask_secret( self::SECRET )
+				'carrier rejected api_key=' . 'L****T'
 			);
+		}
+
+		/**
+		 * The same debug message is partial only in the log; shoppers get a full mask.
+		 * @return void
+		 */
+		public function test_add_debug_message_masks_fully_for_the_storefront_and_partially_for_the_log(): void {
+			$plugin = Mockery::mock();
+			$plugin->shouldReceive( 'log' )->once()->with( 'carrier rejected api_key=ab****op', 'test-debug-gateway' );
+			$gateway = $this->debug_gateway( $plugin );
+			$this->set_private( $gateway, 'debug_mode', \Woodev_Payment_Gateway::DEBUG_MODE_BOTH );
+			$GLOBALS['wp_current_filter'] = [];
+			Functions\when( 'is_admin' )->justReturn( false );
+			Functions\expect( 'wc_add_notice' )->once()->with( 'carrier rejected api_key=[REDACTED]', 'notice' );
+			$gateway->add_debug_message( 'carrier rejected api_key=abcdefghijklmnop' );
+			$this->addToAssertionCount( 1 );
 		}
 
 		/**
@@ -615,7 +631,7 @@ namespace Woodev\Tests\Unit {
 			$gateway->mark_order_as_failed( $order, $raw, null );
 
 			$this->assertSame(
-				'carrier rejected api_key=' . \Woodev_API_Base::mask_secret( self::SECRET ),
+				'carrier rejected api_key=' . 'L****T',
 				$captured,
 				'the log must not carry the secret'
 			);

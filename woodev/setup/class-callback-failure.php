@@ -31,6 +31,6 @@ final class Callback_Failure {
 	 * @return void
 	 */
 	public static function log( string $what, \Throwable $e ): void {
-		error_log( sprintf( '[woodev] setup wizard %s: %s', $what, \Woodev_API_Base::redact_secret_log_text( $e->getMessage() ) ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic for a plugin callback failure.
+		error_log( sprintf( '[woodev] setup wizard %s: %s', $what, \Woodev_API_Base::redact_secret_log_text( $e->getMessage(), [], true ) ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic for a plugin callback failure.
 	}
 }
