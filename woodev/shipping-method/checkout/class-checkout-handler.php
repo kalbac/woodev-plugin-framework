@@ -436,6 +436,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		/**
 		 * Registers the classic and Store API render paths once for all shipping plugins.
 		 * Called by the checkout handler during plugin boot, before checkout rendering hooks fire.
+		 * The host plugin must supply get_checkout_handler(): this handler owns checkout support,
+		 * so plugins that do not opt into it do not register checkout hint renderers.
 		 *
 		 * @since 2.0.2
 		 * @return void

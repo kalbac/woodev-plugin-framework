@@ -177,7 +177,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 */
 		private bool $pending_form_rebuild = false;
 
-		/** @var array<string, array{reason_code: string, message: string, context: array}> Hidden method reasons for this request. */
+		/** @var array<string, array{package_hash: string, reason_code: string, message: string, context?: array}> Hidden method reasons for this request. */
 		private static array $hidden_reasons = [];
 
 		/** WooCommerce session key for reasons belonging to session-cached package rates. */
@@ -642,10 +642,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 */
 		final public function calculate_shipping( $package = [] ): void {
 
-			$hidden_reason_key = self::hidden_reason_key( $package, $this->hidden_reason_method_id() );
-			$this->calculation_hidden_reason_key = $hidden_reason_key;
-			unset( self::$hidden_reasons[ $hidden_reason_key ] );
-			self::remove_persisted_hidden_reason( $hidden_reason_key );
+			$this->calculation_hidden_reason_key = null;
+			if ( null !== self::hidden_reason_session() && current_user_can( 'manage_woocommerce' ) ) {
+				$hidden_reason_key = self::hidden_reason_key( $package, $this->hidden_reason_method_id() );
+				$this->calculation_hidden_reason_key = $hidden_reason_key;
+				unset( self::$hidden_reasons[ $hidden_reason_key ] );
+				self::remove_persisted_hidden_reason( $hidden_reason_key );
+			}
 
 			/**
 			 * Shipping Method Before Calculate Shipping Action.
@@ -996,15 +999,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 * @since 2.0.2
 		 * @param string               $reason_code Stable reason identifier.
 		 * @param string               $message     Safe, plugin-supplied explanation for the manager.
-		 * @param array<string, mixed> $context     Optional diagnostic context; never rendered to the customer.
+		 * @param array<string, mixed> $context     Optional request-only context; never persisted or rendered to the customer.
 		 * @return void
 		 */
 		public function report_hidden( string $reason_code, string $message, array $context = [] ): void {
-			if ( null === $this->active_hidden_reason_key || '' === trim( $message ) ) {
+			if ( null === $this->active_hidden_reason_key || ! current_user_can( 'manage_woocommerce' ) || '' === trim( $message ) ) {
 				return;
 			}
 
 			self::$hidden_reasons[ $this->active_hidden_reason_key ] = [
+				'package_hash' => explode( ':', $this->active_hidden_reason_key, 2 )[0],
 				'reason_code' => strtolower( (string) preg_replace( '/[^a-z0-9_\\-]/i', '', $reason_code ) ),
 				'message'     => $message,
 				'context'     => $context,
@@ -1014,19 +1018,40 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			if ( null !== $session && method_exists( $session, 'get' ) && method_exists( $session, 'set' ) ) {
 				$reasons = call_user_func( [ $session, 'get' ], self::HIDDEN_REASONS_SESSION_KEY, [] );
 				$reasons = is_array( $reasons ) ? $reasons : [];
-				$reasons[ $this->active_hidden_reason_key ] = self::$hidden_reasons[ $this->active_hidden_reason_key ];
+				$reason = self::$hidden_reasons[ $this->active_hidden_reason_key ];
+				unset( $reason['context'] );
+				$reasons[ $this->active_hidden_reason_key ] = $reason;
 				call_user_func( [ $session, 'set' ], self::HIDDEN_REASONS_SESSION_KEY, $reasons );
 			}
 		}
 
 		/**
-		 * Returns the reasons recorded during this request or restored from session-cached rates.
+		 * Returns reasons only for current shipping packages, pruning obsolete session entries.
 		 *
 		 * @since 2.0.2
-		 * @return array<string, array{reason_code: string, message: string, context: array}>
+		 * @return array<string, array{package_hash: string, reason_code: string, message: string, context?: array}>
 		 */
 		public static function get_hidden_reasons(): array {
-			return array_merge( self::get_persisted_hidden_reasons(), self::$hidden_reasons );
+			if ( ! current_user_can( 'manage_woocommerce' ) ) {
+				return [];
+			}
+
+			$woocommerce = $GLOBALS['woocommerce'] ?? null;
+			$packages = is_object( $woocommerce ) && is_callable( [ $woocommerce, 'shipping' ] )
+				? $woocommerce->shipping()->get_packages()
+				: [];
+			$hashes = array_map( [ self::class, 'hidden_reason_package_hash' ], $packages );
+			$is_current = static function ( array $reason ) use ( $hashes ): bool {
+				return isset( $reason['package_hash'] ) && in_array( $reason['package_hash'], $hashes, true );
+			};
+			$persisted = self::get_persisted_hidden_reasons();
+			$current = array_filter( $persisted, $is_current );
+			$session = self::hidden_reason_session();
+			if ( $current !== $persisted && null !== $session && method_exists( $session, 'set' ) ) {
+				call_user_func( [ $session, 'set' ], self::HIDDEN_REASONS_SESSION_KEY, $current );
+			}
+			self::$hidden_reasons = array_filter( self::$hidden_reasons, $is_current );
+			return array_merge( $current, self::$hidden_reasons );
 		}
 
 		/**
@@ -1053,7 +1078,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			call_user_func( [ $session, 'set' ], self::HIDDEN_REASONS_SESSION_KEY, $reasons );
 		}
 
-		/** @return array<string, array{reason_code: string, message: string, context: array}> */
+		/** @return array<string, array{package_hash: string, reason_code: string, message: string, context?: array}> */
 		private static function get_persisted_hidden_reasons(): array {
 			$session = self::hidden_reason_session();
 			if ( null === $session ) {
@@ -1083,26 +1108,32 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 * @return string
 		 */
 		private static function hidden_reason_key( array $package, string $method_id ): string {
-			$contents = [];
-			foreach ( (array) ( $package['contents'] ?? [] ) as $key => $item ) {
-				$contents[ (string) $key ] = [
-					'product_id'   => (int) ( $item['product_id'] ?? 0 ),
-					'variation_id' => (int) ( $item['variation_id'] ?? 0 ),
-					'quantity'     => (float) ( $item['quantity'] ?? 0 ),
-				];
-			}
-			$package_id = isset( $package['package_id'] )
-				? (string) $package['package_id']
-				: hash(
-					'sha256',
-					serialize(
-						[
-							'destination' => $package['destination'] ?? [],
-							'contents'    => $contents,
-						]
-					)
+			return self::hidden_reason_package_hash( $package ) . ':' . $method_id;
+		}
+
+		/**
+		 * Matches WC_Shipping's private cache hash, including its WC 11 ignored-field filter.
+		 * The rates accumulated by earlier methods must never change the package identity.
+		 *
+		 * @param array $package Package data before or after rate calculation.
+		 * @return string
+		 */
+		private static function hidden_reason_package_hash( array $package ): string {
+			$package['rates'] = [];
+			if ( version_compare( (string) \Woodev_Plugin_Compatibility::get_wc_version(), '11.0.0', '>=' ) ) {
+				$ignored_fields = apply_filters(
+					'woocommerce_shipping_package_hash_ignored_fields',
+					[ 'subtotal', 'total', 'package_id', 'package_name', 'rates', 'package_index' ],
+					$package
 				);
-			return $package_id . ':' . $method_id;
+				foreach ( array_unique( array_filter( (array) $ignored_fields, 'is_string' ) ) as $field ) {
+					unset( $package[ $field ] );
+				}
+			}
+			foreach ( (array) ( $package['contents'] ?? [] ) as $item_id => $item ) {
+				unset( $package['contents'][ $item_id ]['data'] );
+			}
+			return 'wc_ship_' . md5( wp_json_encode( $package ) . \WC_Cache_Helper::get_transient_version( 'shipping' ) );
 		}
 
 		/**
@@ -1623,8 +1654,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 */
 		private function handle_rate_calculation_failure( \Woodev_Plugin_Exception $exception, array $package ): void {
 
-			$key = $this->calculation_hidden_reason_key ?? self::hidden_reason_key( $package, $this->hidden_reason_method_id() );
-			if ( ! isset( self::$hidden_reasons[ $key ] ) ) {
+			$key = $this->calculation_hidden_reason_key;
+			if ( null !== $key && ! isset( self::$hidden_reasons[ $key ] ) ) {
 				$this->active_hidden_reason_key = $key;
 				$this->report_hidden(
 					'rate_calculation_failed',
