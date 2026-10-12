@@ -124,3 +124,106 @@ test( 'hiding keeps the control in the form with its value', () => {
 	expect( document.getElementById( 'woocommerce_cdek_target' ).value ).toBe( 'saved' );
 	expect( document.getElementById( 'woocommerce_cdek_target' ).disabled ).toBe( false );
 } );
+
+/*
+ * The zone modal. Markup source: WooCommerce 11.1.2, includes/abstracts/abstract-wc-settings-api.php
+ * (generate_text_html / generate_select_html emit `tr > th > label` + `td > fieldset`) run through
+ * assets/js/admin/wc-shipping-zone-methods.js reformatSettingsHTML() → replaceHTMLTables(), which replaces
+ * `table.form-table` with `div.wc-shipping-zone-method-fields` filled with the table's inner HTML, so the browser drops
+ * the tr / th / td tags and leaves `label` and `fieldset` as siblings.
+ */
+const wcRow = ( id, title, control ) =>
+	'<tr valign="top"><th scope="row" class="titledesc"><label for="' + id + '">' + title + ' </label></th>' +
+	'<td class="forminp"><fieldset><legend class="screen-reader-text"><span>' + title + '</span></legend>' +
+	control + '<p class="description">Help for ' + title + '</p></fieldset></td></tr>';
+
+/** What WooCommerce's replaceHTMLTables() does to a settings table. */
+function modalHtml( tableHtml ) {
+	const content = $( '<div>' + tableHtml + '</div>' );
+
+	content.find( 'table.form-table' ).each( function () {
+		const table = $( this );
+		const div = $( '<div class="wc-shipping-zone-method-fields" />' );
+
+		div.html( table.html() );
+		table.replaceWith( div );
+	} );
+
+	return content.prop( 'outerHTML' );
+}
+
+const modalRows = ( dependentRule ) =>
+	wcRow( 'woocommerce_cdek_tariff', 'Tariff', '<select id="woocommerce_cdek_tariff" name="woocommerce_cdek_tariff"><option value="137">A</option><option value="139">B</option></select>' ) +
+	wcRow( 'woocommerce_cdek_target', 'Target', '<input type="text" id="woocommerce_cdek_target" value="saved" data-woodev-show-if="' + attr( dependentRule ) + '" />' ) +
+	wcRow( 'woocommerce_cdek_other', 'Other', '<input type="text" id="woocommerce_cdek_other" />' );
+
+function modal( dependentRule ) {
+	document.body.innerHTML = modalHtml( '<div><table class="form-table"><tbody>' + modalRows( dependentRule ) + '</tbody></table></div>' );
+}
+
+const tariffIs139 = () => rule( [ { field: 'woocommerce_cdek_tariff', operator: '=', value: '139' } ] );
+const targetBlock = () => [
+	document.querySelector( 'label[for="woocommerce_cdek_target"]' ),
+	document.getElementById( 'woocommerce_cdek_target' ).closest( 'fieldset' ),
+];
+const shown = ( elements ) => elements.map( ( element ) => element.style.display );
+
+test( 'the modal markup has no table row, only label and fieldset siblings', () => {
+	modal( tariffIs139() );
+
+	expect( document.querySelector( 'tr' ) ).toBeNull();
+	expect( targetBlock()[ 0 ].nextElementSibling ).toBe( targetBlock()[ 1 ] );
+} );
+
+test( 'in the modal the whole field block is hidden — label, input and description — and shown again', () => {
+	modal( tariffIs139() );
+	$( document.body ).trigger( 'wc_backbone_modal_loaded' );
+
+	expect( shown( targetBlock() ) ).toEqual( [ 'none', 'none' ] );
+	expect( targetBlock()[ 1 ].querySelector( '.description' ) ).not.toBeNull();
+
+	choose( 'woocommerce_cdek_tariff', '139' );
+	expect( shown( targetBlock() ) ).toEqual( [ '', '' ] );
+
+	choose( 'woocommerce_cdek_tariff', '137' );
+	expect( shown( targetBlock() ) ).toEqual( [ 'none', 'none' ] );
+} );
+
+test( 'in the modal only the dependent field is touched', () => {
+	modal( tariffIs139() );
+	$( document.body ).trigger( 'wc_backbone_modal_loaded' );
+
+	[ 'woocommerce_cdek_tariff', 'woocommerce_cdek_other' ].forEach( ( id ) => {
+		expect( document.querySelector( 'label[for="' + id + '"]' ).style.display ).toBe( '' );
+		expect( document.getElementById( id ).closest( 'fieldset' ).style.display ).toBe( '' );
+	} );
+} );
+
+test( 'a modal form injected after init is handled when the modal reports loaded', () => {
+	document.body.innerHTML = '';
+	$( document ).trigger( 'change' );
+
+	modal( tariffIs139() );
+	expect( shown( targetBlock() ) ).toEqual( [ '', '' ] );
+
+	$( document.body ).trigger( 'wc_backbone_modal_loaded' );
+	expect( shown( targetBlock() ) ).toEqual( [ 'none', 'none' ] );
+} );
+
+test( 'in the modal hiding keeps the control in the form with its value', () => {
+	modal( tariffIs139() );
+	$( document.body ).trigger( 'wc_backbone_modal_loaded' );
+
+	expect( document.getElementById( 'woocommerce_cdek_target' ).value ).toBe( 'saved' );
+	expect( document.getElementById( 'woocommerce_cdek_target' ).disabled ).toBe( false );
+} );
+
+test( 'a fieldset outside the modal wrapper and outside a table is left alone', () => {
+	document.body.innerHTML =
+		'<div><label for="woocommerce_cdek_target">x</label><fieldset><input id="woocommerce_cdek_target" data-woodev-show-if="' + attr( tariffIs139() ) + '" />' +
+		'<select id="woocommerce_cdek_tariff"><option value="137">A</option></select></fieldset></div>';
+	$( document.body ).trigger( 'wc_backbone_modal_loaded' );
+
+	expect( document.querySelector( 'fieldset' ).style.display ).toBe( '' );
+	expect( document.querySelector( 'label' ).style.display ).toBe( '' );
+} );
