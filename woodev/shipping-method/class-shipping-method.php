@@ -180,8 +180,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		/** @var array<string, array{reason_code: string, message: string, context: array}> Hidden method reasons for this request. */
 		private static array $hidden_reasons = [];
 
+		/** WooCommerce session key for reasons belonging to session-cached package rates. */
+		private const HIDDEN_REASONS_SESSION_KEY = 'woodev_shipping_hidden_reasons';
+
 		/** @var string|null Package/method key while rate_package() is running. */
 		private ?string $active_hidden_reason_key = null;
+
+		/** @var string|null Package/method key for the current calculate_shipping() call. */
+		private ?string $calculation_hidden_reason_key = null;
 
 		/**
 		 * Whether {@see self::get_admin_rates_for_package()} is running on this instance right now.
@@ -636,8 +642,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 */
 		final public function calculate_shipping( $package = [] ): void {
 
-			unset( self::$hidden_reasons[ self::hidden_reason_key( $package, $this->hidden_reason_method_id() ) ] );
-			Checkout\Checkout_Handler::register_hidden_reason_hooks();
+			$hidden_reason_key = self::hidden_reason_key( $package, $this->hidden_reason_method_id() );
+			$this->calculation_hidden_reason_key = $hidden_reason_key;
+			unset( self::$hidden_reasons[ $hidden_reason_key ] );
+			self::remove_persisted_hidden_reason( $hidden_reason_key );
 
 			/**
 			 * Shipping Method Before Calculate Shipping Action.
@@ -940,7 +948,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 						? $this->pack_package( $package )
 						: null;
 
-					$this->active_hidden_reason_key = self::hidden_reason_key( $package, $this->hidden_reason_method_id() );
+					$this->active_hidden_reason_key = $this->calculation_hidden_reason_key;
 					try {
 						$rate = $this->rate_package( $package, $packed );
 					} finally {
@@ -1001,20 +1009,74 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 				'message'     => $message,
 				'context'     => $context,
 			];
+
+			$session = self::hidden_reason_session();
+			if ( null !== $session && method_exists( $session, 'get' ) && method_exists( $session, 'set' ) ) {
+				$reasons = call_user_func( [ $session, 'get' ], self::HIDDEN_REASONS_SESSION_KEY, [] );
+				$reasons = is_array( $reasons ) ? $reasons : [];
+				$reasons[ $this->active_hidden_reason_key ] = self::$hidden_reasons[ $this->active_hidden_reason_key ];
+				call_user_func( [ $session, 'set' ], self::HIDDEN_REASONS_SESSION_KEY, $reasons );
+			}
 		}
 
 		/**
-		 * Returns the reasons recorded during this request for the checkout renderer.
+		 * Returns the reasons recorded during this request or restored from session-cached rates.
 		 *
 		 * @since 2.0.2
 		 * @return array<string, array{reason_code: string, message: string, context: array}>
 		 */
 		public static function get_hidden_reasons(): array {
-			return self::$hidden_reasons;
+			return array_merge( self::get_persisted_hidden_reasons(), self::$hidden_reasons );
 		}
 
 		/**
-		 * Builds a request-local package/method identity shared by reporting and rendering.
+		 * Removes a prior explanation when WooCommerce starts recalculating its package rates.
+		 *
+		 * @param string $key Package/method identity.
+		 * @return void
+		 */
+		private static function remove_persisted_hidden_reason( string $key ): void {
+			$session = self::hidden_reason_session();
+			if ( null === $session ) {
+				return;
+			}
+
+			if ( ! method_exists( $session, 'get' ) || ! method_exists( $session, 'set' ) ) {
+				return;
+			}
+			$reasons = call_user_func( [ $session, 'get' ], self::HIDDEN_REASONS_SESSION_KEY, [] );
+			if ( ! is_array( $reasons ) || ! isset( $reasons[ $key ] ) ) {
+				return;
+			}
+
+			unset( $reasons[ $key ] );
+			call_user_func( [ $session, 'set' ], self::HIDDEN_REASONS_SESSION_KEY, $reasons );
+		}
+
+		/** @return array<string, array{reason_code: string, message: string, context: array}> */
+		private static function get_persisted_hidden_reasons(): array {
+			$session = self::hidden_reason_session();
+			if ( null === $session ) {
+				return [];
+			}
+
+			if ( ! method_exists( $session, 'get' ) ) {
+				return [];
+			}
+			$reasons = call_user_func( [ $session, 'get' ], self::HIDDEN_REASONS_SESSION_KEY, [] );
+			return is_array( $reasons ) ? $reasons : [];
+		}
+
+		/** @return object|null */
+		private static function hidden_reason_session(): ?object {
+			$woocommerce = $GLOBALS['woocommerce'] ?? null;
+			return is_object( $woocommerce ) && isset( $woocommerce->session ) && is_object( $woocommerce->session )
+				? $woocommerce->session
+				: null;
+		}
+
+		/**
+		 * Builds a package/method identity shared by reporting and rendering across session-cached rates.
 		 *
 		 * @param array  $package   Package data.
 		 * @param string $method_id Shipping method instance id.
@@ -1049,7 +1111,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 * @return string
 		 */
 		private function hidden_reason_method_id(): string {
-			return isset( $this->id ) ? $this->get_id() : static::get_method_id();
+			$method_id = isset( $this->id ) ? $this->get_id() : static::get_method_id();
+			return isset( $this->instance_id ) ? $method_id . ':' . (string) $this->instance_id : $method_id;
 		}
 
 		/**
@@ -1560,7 +1623,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 */
 		private function handle_rate_calculation_failure( \Woodev_Plugin_Exception $exception, array $package ): void {
 
-			$key = self::hidden_reason_key( $package, $this->hidden_reason_method_id() );
+			$key = $this->calculation_hidden_reason_key ?? self::hidden_reason_key( $package, $this->hidden_reason_method_id() );
 			if ( ! isset( self::$hidden_reasons[ $key ] ) ) {
 				$this->active_hidden_reason_key = $key;
 				$this->report_hidden(

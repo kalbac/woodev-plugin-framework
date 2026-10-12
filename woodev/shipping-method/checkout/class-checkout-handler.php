@@ -117,8 +117,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 */
 		private static array $pickup_declarations_reconciled = [];
 
-		/** @var bool Whether the hidden-shipping-reason checkout hooks are registered. */
-		private static bool $hidden_reason_hooks_registered = false;
+		/** @var bool Whether Store API extension data has been registered this request. */
+		private static bool $hidden_reason_endpoint_registered = false;
 		/** Store API namespace for admin-only hidden method explanations. */
 		private const HIDDEN_REASON_EXTENSION = 'woodev-shipping-hidden-reasons';
 
@@ -395,6 +395,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * @return void
 		 */
 		public function register(): void {
+			self::register_hidden_reason_hooks();
 			add_filter( 'woocommerce_checkout_fields', [ $this, 'handle_checkout_fields' ] );
 			add_filter( 'woocommerce_states', [ $this, 'inject_states' ] );
 			add_action( 'woocommerce_checkout_process', [ $this, 'handle_checkout_process' ] );
@@ -434,22 +435,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 
 		/**
 		 * Registers the classic and Store API render paths once for all shipping plugins.
-		 * Called by the shipping method base when a package is calculated.
+		 * Called by the checkout handler during plugin boot, before checkout rendering hooks fire.
 		 *
 		 * @since 2.0.2
 		 * @return void
 		 */
 		public static function register_hidden_reason_hooks(): void {
-			if ( self::$hidden_reason_hooks_registered ) {
-				return;
-			}
-			self::$hidden_reason_hooks_registered = true;
 			add_action( 'woocommerce_review_order_after_shipping', [ self::class, 'render_hidden_shipping_reasons' ] );
-			add_action( 'woocommerce_blocks_loaded', [ self::class, 'register_hidden_reason_endpoint_data' ] );
-			add_action( 'wp_enqueue_scripts', [ self::class, 'enqueue_hidden_reason_script' ] );
 			if ( did_action( 'woocommerce_blocks_loaded' ) ) {
 				self::register_hidden_reason_endpoint_data();
+			} else {
+				add_action( 'woocommerce_blocks_loaded', [ self::class, 'register_hidden_reason_endpoint_data' ] );
 			}
+			add_action( 'wp_enqueue_scripts', [ self::class, 'enqueue_hidden_reason_script' ] );
 		}
 
 		/**
@@ -466,11 +464,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			if ( empty( $messages ) ) {
 				return;
 			}
-			echo '<ul class="woocommerce-error woodev-hidden-shipping-reasons" role="status">';
+			echo '<tr class="woodev-hidden-shipping-reasons-row"><td colspan="2"><ul class="woocommerce-error woodev-hidden-shipping-reasons" role="status">';
 			foreach ( $messages as $message ) {
 				echo '<li>' . esc_html( $message ) . '</li>';
 			}
-			echo '</ul>';
+			echo '</ul></td></tr>';
 		}
 
 		/**
@@ -480,9 +478,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * @return void
 		 */
 		public static function register_hidden_reason_endpoint_data(): void {
-			if ( ! function_exists( 'woocommerce_store_api_register_endpoint_data' ) ) {
+			if ( self::$hidden_reason_endpoint_registered || ! function_exists( 'woocommerce_store_api_register_endpoint_data' ) ) {
 				return;
 			}
+			self::$hidden_reason_endpoint_registered = true;
 			woocommerce_store_api_register_endpoint_data(
 				[
 					'endpoint'       => 'cart',
@@ -511,13 +510,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * @return void
 		 */
 		public static function enqueue_hidden_reason_script(): void {
-			if ( ! current_user_can( 'manage_woocommerce' ) || ! function_exists( 'is_checkout' ) || ! is_checkout()
+			$has_checkout_block = function_exists( 'has_block' ) && has_block( 'woocommerce/checkout' );
+			$block_template_checkout = ! $has_checkout_block
+				&& class_exists( Blocks\Checkout_Surface::class )
+				&& Blocks\Checkout_Surface::is_block_only();
+
+			if ( ! current_user_can( 'manage_woocommerce' ) || ( ! $has_checkout_block && ! $block_template_checkout )
 				|| ( function_exists( 'is_order_received_page' ) && is_order_received_page() ) ) {
 				return;
 			}
 			$path = dirname( __DIR__ ) . '/assets/js/frontend/hidden-shipping-reasons.js';
 			if ( file_exists( $path ) ) {
-				wp_enqueue_script( 'woodev-hidden-shipping-reasons', plugins_url( basename( $path ), $path ), [ 'wp-data' ], (string) filemtime( $path ), true );
+				wp_enqueue_script( 'woodev-hidden-shipping-reasons', self::asset_url( 'js/frontend/hidden-shipping-reasons.js' ), [ 'wp-data' ], (string) filemtime( $path ), true );
 			}
 		}
 

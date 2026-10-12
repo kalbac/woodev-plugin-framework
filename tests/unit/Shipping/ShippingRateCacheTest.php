@@ -445,7 +445,7 @@ namespace Woodev\Tests\Unit\Shipping {
 			$method->calculate_shipping( $package );
 
 			$this->assertSame( [], $this->store );
-			$this->assertSame( 'rate_calculation_failed', Shipping_Method::get_hidden_reasons()['8:rate-cache-method']['reason_code'] );
+			$this->assertSame( 'rate_calculation_failed', Shipping_Method::get_hidden_reasons()['8:rate-cache-method:1']['reason_code'] );
 
 			$method->next_exception = null;
 			$method->calculate_shipping( $package );
@@ -463,12 +463,12 @@ namespace Woodev\Tests\Unit\Shipping {
 
 			$method->calculate_shipping( $package );
 			$reasons = Shipping_Method::get_hidden_reasons();
-			$this->assertSame( 'no_service', $reasons['4:rate-cache-method']['reason_code'] );
-			$this->assertSame( 'No service in this area.', $reasons['4:rate-cache-method']['message'] );
+			$this->assertSame( 'no_service', $reasons['4:rate-cache-method:1']['reason_code'] );
+			$this->assertSame( 'No service in this area.', $reasons['4:rate-cache-method:1']['message'] );
 
 			$method->report_hidden = false;
 			$method->calculate_shipping( $package );
-			$this->assertArrayNotHasKey( '4:rate-cache-method', Shipping_Method::get_hidden_reasons() );
+			$this->assertArrayNotHasKey( '4:rate-cache-method:1', Shipping_Method::get_hidden_reasons() );
 		}
 
 		/** @return void */
@@ -483,6 +483,10 @@ namespace Woodev\Tests\Unit\Shipping {
 		\Woodev\Framework\Shipping\Checkout\Checkout_Handler::render_hidden_shipping_reasons();
 			$admin_markup = (string) ob_get_clean();
 			$this->assertStringContainsString( 'No service in this area.', $admin_markup );
+			$document = new \DOMDocument();
+			$document->loadHTML( '<table><tfoot>' . $admin_markup . '</tfoot></table>' );
+			$xpath = new \DOMXPath( $document );
+			$this->assertSame( 1, $xpath->query( '//tfoot/tr[contains(@class,"woodev-hidden-shipping-reasons-row")]/td/ul[contains(@class,"woodev-hidden-shipping-reasons")]' )->length );
 
 			$this->can_manage_woocommerce = false;
 			ob_start();
@@ -503,6 +507,89 @@ namespace Woodev\Tests\Unit\Shipping {
 			$this->assertSame( [ 'messages' => [ 'No service in this area.' ] ], $data_callback() );
 			$this->can_manage_woocommerce = false;
 			$this->assertSame( [ 'messages' => [] ], $data_callback() );
+		}
+
+		/** @return void */
+		public function test_hidden_reasons_survive_a_session_cached_rate_render_without_recalculation(): void {
+			$session = new class() {
+				/** @var array<string, mixed> */
+				public array $data = [];
+
+				public function get( string $key, $default = null ) {
+					return $this->data[ $key ] ?? $default;
+				}
+
+				public function set( string $key, $value ): void {
+					$this->data[ $key ] = $value;
+				}
+			};
+			$GLOBALS['woocommerce'] = (object) [ 'session' => $session ];
+
+			$method = $this->method();
+			$method->next_rate = null;
+			$method->report_hidden = true;
+			$package = $this->package( [ 'package_id' => 9 ] );
+			$method->calculate_shipping( $package );
+
+			// A new Store API request has a fresh PHP process: only WooCommerce's session survives.
+			$property = new \ReflectionProperty( Shipping_Method::class, 'hidden_reasons' );
+			if ( PHP_VERSION_ID < 80100 ) {
+				$property->setAccessible( true );
+			}
+			$property->setValue( null, [] );
+			$this->assertSame( 'No service in this area.', Shipping_Method::get_hidden_reasons()['9:rate-cache-method:1']['message'] );
+
+			// A subsequent calculation clears the old session entry before any new reason is reported.
+			$method->report_hidden = false;
+			$method->calculate_shipping( $package );
+			$this->assertArrayNotHasKey( '9:rate-cache-method:1', Shipping_Method::get_hidden_reasons() );
+			unset( $GLOBALS['woocommerce'] );
+		}
+
+		/** @return void */
+		public function test_hidden_reason_registry_keys_distinguish_method_instances(): void {
+			$first = $this->method();
+			$first->next_rate = null;
+			$first->report_hidden = true;
+			$second = $this->method();
+			$second->instance_id = 2;
+			$second->next_rate = null;
+			$second->report_hidden = true;
+			$package = $this->package( [ 'package_id' => 10 ] );
+
+			$first->calculate_shipping( $package );
+			$second->calculate_shipping( $package );
+
+			$this->assertArrayHasKey( '10:rate-cache-method:1', Shipping_Method::get_hidden_reasons() );
+			$this->assertArrayHasKey( '10:rate-cache-method:2', Shipping_Method::get_hidden_reasons() );
+		}
+
+		/** @return void */
+		public function test_hidden_reason_script_is_enqueued_only_for_managers_on_block_checkout(): void {
+			$this->can_manage_woocommerce = true;
+			$has_checkout_block = false;
+			$enqueued            = [];
+			Functions\when( 'has_block' )->alias( static function () use ( &$has_checkout_block ): bool {
+				return $has_checkout_block;
+			} );
+			Functions\when( 'has_shortcode' )->justReturn( false );
+			Functions\when( 'get_post' )->justReturn( null );
+			Functions\when( 'wc_get_page_id' )->justReturn( 0 );
+			Functions\when( 'is_page' )->justReturn( false );
+			Functions\when( 'plugins_url' )->alias( static fn( string $relative, string $file ): string => 'https://example.test/' . basename( $file ) );
+			Functions\when( 'wp_enqueue_script' )->alias(
+				static function ( string $handle, string $url, array $dependencies ) use ( &$enqueued ): void {
+					$enqueued[] = [ $handle, $url, $dependencies ];
+				}
+			);
+
+			\Woodev\Framework\Shipping\Checkout\Checkout_Handler::enqueue_hidden_reason_script();
+			$this->assertSame( [], $enqueued, 'classic checkout does not load the Store API renderer' );
+
+			$has_checkout_block = true;
+			\Woodev\Framework\Shipping\Checkout\Checkout_Handler::enqueue_hidden_reason_script();
+			$this->assertSame( 'woodev-hidden-shipping-reasons', $enqueued[0][0] );
+			$this->assertSame( [ 'wp-data' ], $enqueued[0][2] );
 		}
 
 		/** @return void */
