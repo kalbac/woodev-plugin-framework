@@ -2461,7 +2461,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 
 		protected function get_request_user_agent() {
 
-			$product        = static::get_user_agent_product( (string) $this->get_plugin()->get_plugin_name(), (string) $this->get_plugin()->get_id_dasherized() );
+			$product        = static::get_user_agent_product( (string) $this->get_plugin()->get_id_dasherized() );
 			$plugin_version = $this->get_plugin()->get_version();
 			$wc_version     = Woodev_Helper::get_wc_version();
 			$wp_version     = $GLOBALS['wp_version'];
@@ -2474,27 +2474,30 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		}
 
 		/**
-		 * The product token of the User-Agent: the plugin name with spaces dasherized when that is a valid HTTP
-		 * token, the plugin id otherwise.
+		 * The product token of the User-Agent: `woodev-<plugin id>`, so every carrier sees the same family prefix
+		 * whatever the merchant named the plugin. An id that already contains «woodev» is used as is.
 		 *
-		 * A header value outside ASCII is not valid HTTP, and a carrier may refuse it outright: with the plugin
-		 * named «СДЭК для WooCommerce» CDEK answered every request except the token one with HTTP 400 (s160).
+		 * The plugin name takes no part. A name outside ASCII is not a valid HTTP header value, and CDEK answered
+		 * every request except the token one with HTTP 400 when the name went into the token (s160).
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param string $plugin_name The merchant-facing plugin name.
-		 * @param string $plugin_id   The dasherized plugin id, the fallback.
+		 * @param string $plugin_id The dasherized plugin id.
 		 * @return string
 		 */
-		protected static function get_user_agent_product( string $plugin_name, string $plugin_id ): string {
+		protected static function get_user_agent_product( string $plugin_id ): string {
 
-			$product = str_replace( ' ', '-', trim( $plugin_name ) );
+			if ( '' === $plugin_id ) {
+				return 'woodev-plugin';
+			}
 
-			if ( '' !== $product && 1 === preg_match( "/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/D", $product ) ) {
+			$product = false !== stripos( $plugin_id, 'woodev' ) ? $plugin_id : 'woodev-' . $plugin_id;
+
+			if ( 1 === preg_match( "/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/D", $product ) ) {
 				return $product;
 			}
 
-			return '' !== $plugin_id ? $plugin_id : 'woodev-plugin';
+			return 'woodev-plugin';
 		}
 
 		protected function get_request_duration() {

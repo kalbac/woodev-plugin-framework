@@ -18,9 +18,11 @@ Cyrillic UA → 400; the token endpoint is not affected, which makes it look lik
 
 ❌ Use a merchant-facing (translatable, renameable) string as a protocol token.
 
-✅ `get_user_agent_product()` keeps the dasherized name only when it is a valid RFC 9110 token (`tchar` set,
-anchored with `/D`) and otherwise falls back to `get_id_dasherized()` — `edostavka/2.3.0.0 (…)`. Latin names keep a
-byte-identical UA. A test double of the plugin must now answer `get_id_dasherized()` too.
+✅ The product token never comes from the plugin name. Since s175 (#1248, operator decision 13.10.2026)
+`get_user_agent_product()` returns `woodev-<get_id_dasherized()>` — `woodev-edostavka/2.3.0.0 (…)` — and uses the id
+as is when it already contains `woodev` (case-insensitive); an empty id gives `woodev-plugin`. The s160 fix (name when
+it is a valid RFC 9110 token, else the bare id) is superseded. A test double of the plugin must answer
+`get_id_dasherized()`.
 
 ## Related
 
