@@ -1,5 +1,12 @@
 # gotcha: starting a Codex worker under Orca takes four steps — `worker-start --agent codex` alone lands in a shell
 
+> **Latest measurement — s171 (12.10.2026, macOS, Orca 1.4.224, codex-cli 0.162.1): the plain launch WORKS.**
+> `worker-start --agent codex` returned `ready / input_accepted` with `turnStart: observed` on 9 of 9 launches,
+> including `--model gpt-6.1-sol --effort high` (the effective model/effort were echoed back in `launch.effective`).
+> No dialog, no readiness timeout, and every worker sent `worker_done` itself (the report FILE stayed as a backup).
+> The failures below are history for older CLI versions — re-check only if a launch actually fails.
+> ⚠ Codex has NO Serena: a brief that demands Serena makes it stop and escalate (s171) — authorize its own file tools.
+
 > **Current recipe — measured s135 (Orca 1.4.200, codex-cli 0.153.4), three launches.** The s84 text
 > below is history. `worker-start --agent codex` now starts Codex itself; the start fails with
 > `state: failed, stage: dispatch_input, lastError: agent_prompt_blocked` because Codex opened a

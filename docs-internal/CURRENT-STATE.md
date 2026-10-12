@@ -6,7 +6,7 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-12 (s171 docs audit; runtime facts last reported by s170).** 🚧 **v2 release = TWO carrier plugins on v2, tested and compatible**
+**As of 2026-10-12 (s171; runtime facts last reported by s170).** Framework `main` and plugin `v2` (pin `df28f273`) carry s171's merges — list in `sessions/s171.md`. 🚧 **v2 release = TWO carrier plugins on v2, tested and compatible**
 (#1179): CDEK combat checks first, then Yandex. Block-checkout gaps do not block the release.
 Next checks: `next-session-prompt.md`. ⚠ Sync the plugin’s own `woodev/` before plugin rig runs
 (`wiki/local-rig.md`). The rig admin user has locale **ru_RU**; the site stays **en_US**.
