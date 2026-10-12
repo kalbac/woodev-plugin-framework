@@ -161,7 +161,7 @@ namespace Woodev\Tests\Unit {
 		 */
 		public function test_the_customer_facing_response_redacts_a_secret(): void {
 			$this->assertSame(
-				'carrier rejected api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK,
+				'carrier rejected api_key=[REDACTED]',
 				$this->drive_save( 'carrier rejected api_key=LIVESECRET' )
 			);
 		}

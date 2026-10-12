@@ -72,7 +72,7 @@ class UpdaterLogRedactionTest extends TestCase {
 
 		$this->assertFalse( $result );
 		$this->assertSame(
-			'Woodev updater: get_version_from_remote failed: carrier rejected api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK,
+			'Woodev updater: get_version_from_remote failed: carrier rejected api_key=' . 'L****T',
 			$captured
 		);
 	}
@@ -173,7 +173,7 @@ class UpdaterLogRedactionTest extends TestCase {
 
 		$this->assertFalse( $result );
 		$this->assertSame(
-			'Woodev updater: pull-command consumption failed: carrier rejected api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK,
+			'Woodev updater: pull-command consumption failed: carrier rejected api_key=' . 'L****T',
 			$captured
 		);
 	}
@@ -306,7 +306,7 @@ class UpdaterLogRedactionTest extends TestCase {
 
 		$this->assertFalse( $result );
 		$this->assertSame(
-			'Woodev updater: ack confirmation failed: carrier rejected api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK,
+			'Woodev updater: ack confirmation failed: carrier rejected api_key=' . 'L****T',
 			$captured
 		);
 	}

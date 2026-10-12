@@ -158,7 +158,7 @@ namespace Woodev\Tests\Integration\Shipping {
 			$this->assertStringNotContainsString( 'C8_SYNTHETIC_TOKEN', $result->get_message() );
 			$this->assertCount( 1, $this->capture->entries, 'the failure is logged even with logging off' );
 			$this->assertStringNotContainsString( 'C8_SYNTHETIC_TOKEN', $this->capture->entries[0]['message'] );
-			$this->assertStringContainsString( 'access_token=[REDACTED]', $this->capture->entries[0]['message'] );
+			$this->assertStringContainsString( 'access_token=C8****EN', $this->capture->entries[0]['message'] );
 			$this->assertSame( 'error', $this->capture->entries[0]['level'] );
 
 			remove_all_actions( $hook );

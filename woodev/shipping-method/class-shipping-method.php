@@ -1480,7 +1480,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 					'Rate calculation failed for the "%s" method, the method is hidden (%s): %s',
 					$this->get_title(),
 					get_class( $exception ),
-					\Woodev_API_Base::redact_secret_log_text( $exception->getMessage() )
+					\Woodev_API_Base::redact_secret_log_text( $exception->getMessage(), [], true )
 				),
 				sprintf( '%s_%s', $this->get_plugin()->get_id(), $this->get_id() )
 			);

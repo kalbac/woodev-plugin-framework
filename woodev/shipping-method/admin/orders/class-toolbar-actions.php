@@ -520,7 +520,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Toolbar_Acti
 					'[woodev] shipping toolbar action "%s" (%s) failed: %s',
 					$action,
 					$scope,
-					\Woodev_API_Base::redact_secret_log_text( $exception->getMessage() )
+					\Woodev_API_Base::redact_secret_log_text( $exception->getMessage(), [], true )
 				)
 			);
 		}

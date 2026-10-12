@@ -102,8 +102,8 @@ if ( ! class_exists( 'Woodev_Licensing_API_Request' ) ) :
 		/**
 		 * Masks the VALUE of every param named in {@see self::get_secret_param_names()}.
 		 *
-		 * Reuses {@see Woodev_API_Base::mask_secret_values()} — the same fixed
-		 * placeholder ({@see Woodev_API_Base::SECRET_VALUE_MASK}) already applied
+		 * Reuses {@see Woodev_API_Base::mask_secret_values()} — the same partial
+		 * mask already applied
 		 * to request/response headers, so a log reader sees one consistent masking
 		 * style everywhere instead of a second, differently-shaped one.
 		 *
@@ -113,7 +113,7 @@ if ( ! class_exists( 'Woodev_Licensing_API_Request' ) ) :
 		 * @return array<string, mixed>
 		 */
 		private function get_masked_params(): array {
-			return Woodev_API_Base::mask_secret_values( $this->get_params(), $this->get_secret_param_names() );
+			return Woodev_API_Base::mask_secret_values( $this->get_params(), $this->get_secret_param_names(), true );
 		}
 
 		/**

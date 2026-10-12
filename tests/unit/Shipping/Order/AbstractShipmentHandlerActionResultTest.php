@@ -169,7 +169,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$result = $this->handler( $this->failing_api( 'cancel_order', 'rejected api_key=LIVESECRET' ), $order_handler )
 				->cancel( Mockery::mock( '\WC_Order' ) );
 
-			$this->assertStringNotContainsString( 'LIVESECRET', $result->get_message() );
+			$this->assertSame( 'rejected api_key=[REDACTED]', $result->get_message() );
 		}
 
 		// ----- merchant-only: the buyer never receives the carrier's text -----

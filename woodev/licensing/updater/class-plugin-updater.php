@@ -586,7 +586,7 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 					} catch ( \Throwable $throwable ) {
 						// Ruled containment boundary (s8-p5 critic #4b): a command-processing
 						// bug must not break the update flow — loud-but-contained, never silent.
-						error_log( 'Woodev updater: pull-command consumption failed: ' . \Woodev_API_Base::redact_secret_log_text( $throwable->getMessage() ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- ruled loud-but-contained boundary (s8-p5 #4b).
+						error_log( 'Woodev updater: pull-command consumption failed: ' . \Woodev_API_Base::redact_secret_log_text( $throwable->getMessage(), [], true ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- ruled loud-but-contained boundary (s8-p5 #4b).
 					}
 				} else {
 					error_log( 'Woodev updater: Woodev_License_Command_Dispatcher not available — pull-command transport disabled.' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- wiring-failure diagnostic (OB-3 F7).
@@ -608,7 +608,7 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 					} catch ( \Throwable $throwable ) {
 						// Ruled containment boundary (s8-p5 critic #4b): ack confirmation must
 						// not break the update flow — loud-but-contained, never silent.
-						error_log( 'Woodev updater: ack confirmation failed: ' . \Woodev_API_Base::redact_secret_log_text( $throwable->getMessage() ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- ruled loud-but-contained boundary (s8-p5 #4b).
+						error_log( 'Woodev updater: ack confirmation failed: ' . \Woodev_API_Base::redact_secret_log_text( $throwable->getMessage(), [], true ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- ruled loud-but-contained boundary (s8-p5 #4b).
 					}
 				}
 
@@ -636,7 +636,7 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 				return $response;
 
 			} catch ( \Throwable $e ) {
-				error_log( 'Woodev updater: get_version_from_remote failed: ' . Woodev_API_Base::redact_secret_log_text( $e->getMessage() ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- loud-but-contained boundary; the update flow must not break on API failure (OB-3 F2).
+				error_log( 'Woodev updater: get_version_from_remote failed: ' . Woodev_API_Base::redact_secret_log_text( $e->getMessage(), [], true ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- loud-but-contained boundary; the update flow must not break on API failure (OB-3 F2).
 			}
 
 			return false;

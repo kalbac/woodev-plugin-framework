@@ -1550,7 +1550,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 					'[woodev] pickup %s failed for plugin "%s": %s',
 					$context,
 					$this->plugin_id,
-					\Woodev_API_Base::redact_secret_log_text( $e->getMessage() )
+					\Woodev_API_Base::redact_secret_log_text( $e->getMessage(), [], true )
 				)
 			);
 		}

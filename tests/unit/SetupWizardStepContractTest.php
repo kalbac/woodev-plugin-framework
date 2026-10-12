@@ -110,7 +110,7 @@ class SetupWizardStepContractTest extends TestCase {
 
 		$this->assertFalse( $step->is_visible() );
 		$this->assertSame(
-			'[woodev] setup wizard visibility check failed for step "delivery": api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK,
+			'[woodev] setup wizard visibility check failed for step "delivery": api_key=' . \Woodev_API_Base::mask_secret( 'LIVESECRET', true ),
 			$captured
 		);
 	}
@@ -315,7 +315,7 @@ class SetupWizardStepContractTest extends TestCase {
 		$this->assertStringNotContainsString( 'LIVESECRET', $result->get_error_message() );
 		$this->assertStringNotContainsString( 'bad call', $result->get_error_message() );
 		$this->assertSame(
-			'[woodev] setup wizard validation failed for step "connection": bad call, api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK,
+			'[woodev] setup wizard validation failed for step "connection": bad call, api_key=' . \Woodev_API_Base::mask_secret( 'LIVESECRET', true ),
 			$captured
 		);
 	}
@@ -694,7 +694,7 @@ class SetupWizardStepContractTest extends TestCase {
 		$this->assertStringNotContainsString( 'Carrier', $result->get_error_message() );
 		$this->assertStringNotContainsString( 'LIVESECRET', $result->get_error_message() );
 		$this->assertSame(
-			'[woodev] setup wizard action "act" failed for step "connection": Argument #1 must be Carrier, api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK,
+			'[woodev] setup wizard action "act" failed for step "connection": Argument #1 must be Carrier, api_key=' . \Woodev_API_Base::mask_secret( 'LIVESECRET', true ),
 			$captured
 		);
 	}

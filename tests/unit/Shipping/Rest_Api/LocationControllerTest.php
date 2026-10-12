@@ -1056,7 +1056,7 @@ final class LocationControllerTest extends TestCase {
 		$ctrl->handle_suggest_request( $request );
 
 		$this->assertSame(
-			'[woodev] location suggest (fake) failed: carrier rejected api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK,
+			'[woodev] location suggest (fake) failed: carrier rejected api_key=' . \Woodev_API_Base::mask_secret( 'LIVESECRET', true ),
 			$captured
 		);
 	}

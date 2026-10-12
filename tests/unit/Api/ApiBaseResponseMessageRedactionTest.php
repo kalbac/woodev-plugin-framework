@@ -164,6 +164,13 @@ final class ApiBaseResponseMessageRedactionTest extends TestCase {
 		return $api;
 	}
 
+	/** @return void */
+	public function test_response_reason_phrase_is_fully_masked_before_exception_or_screen_use(): void {
+		$api = $this->handle( 'Rejected token="abcdefghijklmnop"' );
+		$this->assertSame( 'Rejected token="[REDACTED]"', $api->broadcast_payload['message'] );
+		$this->assertSame( 'Rejected token="[REDACTED]"', $api->get_response_message_for_test() );
+	}
+
 	// -------------------------------------------------------------------------
 	// Route 1 — the broadcast, which the logging consumers write out.
 	// -------------------------------------------------------------------------
