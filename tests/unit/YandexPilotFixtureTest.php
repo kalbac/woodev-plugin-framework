@@ -29,8 +29,9 @@ class YandexPilotFixtureTest extends TestCase {
 	/**
 	 * The yandex-shaped pilot fixture should load through the Platform v2 path and
 	 * preserve every yandex installed-site contract string: the two shipping method
-	 * ids, the settings option key, the REST namespace, the warehouse table name and
-	 * the order-meta prefix + chosen-pickup-point session key.
+	 * ids, the settings option key, the REST namespace and the order-meta prefix +
+	 * chosen-pickup-point session key. The warehouse table name is asserted as a v1
+	 * fixture fact only: D10 dropped the table from the v2 contract (#1241).
 	 */
 	public function test_yandex_pilot_fixture_loads_and_preserves_contract_strings(): void {
 		$this->install_woocommerce_class_stubs();
@@ -111,7 +112,7 @@ class YandexPilotFixtureTest extends TestCase {
 		// installed-site contract: REST namespace = id-dasherized of 'yandex_delivery'.
 		$this->assertSame( 'yandex-delivery', $plugin->get_id_dasherized() );
 
-		// installed-site contract: warehouse table NAME (schema stays human-only).
+		// v1 fixture fact (NOT a v2 contract since D10, #1241): warehouse table name.
 		$this->assertSame( 'wc_yandex_delivery_warehouses', \Woodev_Yandex_Pilot_Warehouse_Store::TABLE_NAME );
 
 		// installed-site contract: order-meta prefix + chosen-pickup-point session key.
