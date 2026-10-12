@@ -1,0 +1,264 @@
+{
+ "request": {
+  "billing_info": {
+   "payment_method": "already_paid",
+   "delivery_cost": 0
+  },
+  "destination": {
+   "type": "custom_location",
+   "custom_location": {
+    "details": {
+     "full_address": "Россия, Москва, Тверская улица, 13",
+     "room": ""
+    }
+   }
+  },
+  "info": {
+   "operator_request_id": "g213-courier-small-sku_boxes-prepaid-off",
+   "referral_source": "woodev"
+  },
+  "recipient_info": {
+   "first_name": "Measure",
+   "last_name": "Test",
+   "phone": "+79000000000",
+   "email": "measure@example.com"
+  },
+  "items": [
+   {
+    "uin": "SMALL",
+    "article": "SMALL",
+    "count": 1,
+    "name": "Measure SMALL",
+    "place_barcode": "SMALL",
+    "billing_details": {
+     "assessed_unit_price": 300000,
+     "unit_price": 300000,
+     "nds": -1
+    },
+    "physical_dims": {
+     "predefined_volume": 3000,
+     "weight_gross": 500
+    }
+   }
+  ],
+  "places": [
+   {
+    "barcode": "SMALL",
+    "description": "Measure SMALL",
+    "physical_dims": {
+     "predefined_volume": 3000,
+     "weight_gross": 500
+    }
+   }
+  ],
+  "source": {
+   "platform_station": {
+    "platform_id": "20cfe81c-bb45-4cfa-85e6-31fdade8ed23"
+   }
+  },
+  "last_mile_policy": "time_interval"
+ },
+ "status": 200,
+ "response": {
+  "offers": [
+   {
+    "offer_id": "81e37241ed974d38b4b43f56f475cf1d",
+    "expires_at": "2026-10-12T18:28:35.000000Z",
+    "offer_details": {
+     "delivery_interval": {
+      "min": "2026-10-16T07:00:00.000000Z",
+      "max": "2026-10-16T20:00:00.000000Z",
+      "policy": "time_interval"
+     },
+     "pickup_interval": {
+      "min": "2026-10-12T18:13:35.000000Z",
+      "max": "2026-10-14T19:00:00.000000Z"
+     },
+     "pricing": "336.72 RUB",
+     "pricing_total": "336.72 RUB",
+     "features": {}
+    }
+   },
+   {
+    "offer_id": "7131f5b5e7c94d0d8bd88064a81f677d",
+    "expires_at": "2026-10-12T18:28:35.000000Z",
+    "offer_details": {
+     "delivery_interval": {
+      "min": "2026-10-17T07:00:00.000000Z",
+      "max": "2026-10-17T20:00:00.000000Z",
+      "policy": "time_interval"
+     },
+     "pickup_interval": {
+      "min": "2026-10-12T18:13:35.000000Z",
+      "max": "2026-10-15T19:00:00.000000Z"
+     },
+     "pricing": "336.72 RUB",
+     "pricing_total": "336.72 RUB",
+     "features": {}
+    }
+   },
+   {
+    "offer_id": "35b250a38d0a4a868e12cc92028dd6be",
+    "expires_at": "2026-10-12T18:28:35.000000Z",
+    "offer_details": {
+     "delivery_interval": {
+      "min": "2026-10-18T07:00:00.000000Z",
+      "max": "2026-10-18T20:00:00.000000Z",
+      "policy": "time_interval"
+     },
+     "pickup_interval": {
+      "min": "2026-10-12T18:13:35.000000Z",
+      "max": "2026-10-16T19:00:00.000000Z"
+     },
+     "pricing": "336.72 RUB",
+     "pricing_total": "336.72 RUB",
+     "features": {}
+    }
+   },
+   {
+    "offer_id": "d9d4ef48b528489ca392ea46dcd70a40",
+    "expires_at": "2026-10-12T18:28:35.000000Z",
+    "offer_details": {
+     "delivery_interval": {
+      "min": "2026-10-19T07:00:00.000000Z",
+      "max": "2026-10-19T20:00:00.000000Z",
+      "policy": "time_interval"
+     },
+     "pickup_interval": {
+      "min": "2026-10-12T18:13:35.000000Z",
+      "max": "2026-10-17T19:00:00.000000Z"
+     },
+     "pricing": "336.72 RUB",
+     "pricing_total": "336.72 RUB",
+     "features": {}
+    }
+   },
+   {
+    "offer_id": "ac62074df05a4af38ac2b7c8a7a40cda",
+    "expires_at": "2026-10-12T18:28:35.000000Z",
+    "offer_details": {
+     "delivery_interval": {
+      "min": "2026-10-20T07:00:00.000000Z",
+      "max": "2026-10-20T20:00:00.000000Z",
+      "policy": "time_interval"
+     },
+     "pickup_interval": {
+      "min": "2026-10-12T18:13:35.000000Z",
+      "max": "2026-10-18T19:00:00.000000Z"
+     },
+     "pricing": "336.72 RUB",
+     "pricing_total": "336.72 RUB",
+     "features": {}
+    }
+   },
+   {
+    "offer_id": "7e822e072d394747bcc6c44140b748a7",
+    "expires_at": "2026-10-12T18:28:35.000000Z",
+    "offer_details": {
+     "delivery_interval": {
+      "min": "2026-10-21T07:00:00.000000Z",
+      "max": "2026-10-21T20:00:00.000000Z",
+      "policy": "time_interval"
+     },
+     "pickup_interval": {
+      "min": "2026-10-12T18:13:35.000000Z",
+      "max": "2026-10-19T19:00:00.000000Z"
+     },
+     "pricing": "336.72 RUB",
+     "pricing_total": "336.72 RUB",
+     "features": {}
+    }
+   },
+   {
+    "offer_id": "b3983b556739482d8b1ff13acb2e8444",
+    "expires_at": "2026-10-12T18:28:35.000000Z",
+    "offer_details": {
+     "delivery_interval": {
+      "min": "2026-10-22T07:00:00.000000Z",
+      "max": "2026-10-22T20:00:00.000000Z",
+      "policy": "time_interval"
+     },
+     "pickup_interval": {
+      "min": "2026-10-12T18:13:35.000000Z",
+      "max": "2026-10-20T19:00:00.000000Z"
+     },
+     "pricing": "336.72 RUB",
+     "pricing_total": "336.72 RUB",
+     "features": {}
+    }
+   },
+   {
+    "offer_id": "a3e6fe8ba4404ccbb38b1e899aabfa7a",
+    "expires_at": "2026-10-12T18:28:35.000000Z",
+    "offer_details": {
+     "delivery_interval": {
+      "min": "2026-10-23T07:00:00.000000Z",
+      "max": "2026-10-23T20:00:00.000000Z",
+      "policy": "time_interval"
+     },
+     "pickup_interval": {
+      "min": "2026-10-12T18:13:35.000000Z",
+      "max": "2026-10-21T19:00:00.000000Z"
+     },
+     "pricing": "336.72 RUB",
+     "pricing_total": "336.72 RUB",
+     "features": {}
+    }
+   },
+   {
+    "offer_id": "b83ee4f3def04979a145bc68930f9f76",
+    "expires_at": "2026-10-12T18:28:35.000000Z",
+    "offer_details": {
+     "delivery_interval": {
+      "min": "2026-10-24T07:00:00.000000Z",
+      "max": "2026-10-24T20:00:00.000000Z",
+      "policy": "time_interval"
+     },
+     "pickup_interval": {
+      "min": "2026-10-12T18:13:35.000000Z",
+      "max": "2026-10-22T19:00:00.000000Z"
+     },
+     "pricing": "336.72 RUB",
+     "pricing_total": "336.72 RUB",
+     "features": {}
+    }
+   },
+   {
+    "offer_id": "6fabb58ff4fa4c149b6929997b2e784a",
+    "expires_at": "2026-10-12T18:28:35.000000Z",
+    "offer_details": {
+     "delivery_interval": {
+      "min": "2026-10-25T07:00:00.000000Z",
+      "max": "2026-10-25T20:00:00.000000Z",
+      "policy": "time_interval"
+     },
+     "pickup_interval": {
+      "min": "2026-10-12T18:13:35.000000Z",
+      "max": "2026-10-23T19:00:00.000000Z"
+     },
+     "pricing": "336.72 RUB",
+     "pricing_total": "336.72 RUB",
+     "features": {}
+    }
+   },
+   {
+    "offer_id": "458029328dda452c82f8083055fcc20a",
+    "expires_at": "2026-10-12T18:28:35.000000Z",
+    "offer_details": {
+     "delivery_interval": {
+      "min": "2026-10-26T07:00:00.000000Z",
+      "max": "2026-10-26T20:00:00.000000Z",
+      "policy": "time_interval"
+     },
+     "pickup_interval": {
+      "min": "2026-10-12T18:13:35.000000Z",
+      "max": "2026-10-24T19:00:00.000000Z"
+     },
+     "pricing": "336.72 RUB",
+     "pricing_total": "336.72 RUB",
+     "features": {}
+    }
+   }
+  ]
+ }
+}

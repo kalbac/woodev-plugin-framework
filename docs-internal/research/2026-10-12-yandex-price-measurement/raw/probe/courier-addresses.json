@@ -1,0 +1,194 @@
+{
+ "213": [
+  {
+   "address": "Россия, Москва, Тверская улица, 13",
+   "status": 200,
+   "response": {
+    "pricing_total": "318.42 RUB",
+    "delivery_days": 4
+   }
+  },
+  {
+   "address": "Россия, Москва и Московская область, Москва, Волгоградский проспект, 10",
+   "status": 400,
+   "response": {
+    "code": "bad_request",
+    "message": "can't restore coordinates from address"
+   }
+  }
+ ],
+ "51": [
+  {
+   "address": "Россия, Самарская область, Самара, улица Куйбышева, 90",
+   "status": 200,
+   "response": {
+    "pricing_total": "450.18 RUB",
+    "delivery_days": 5
+   }
+  },
+  {
+   "address": "Россия, Самарская область, Самара г, Мориса Тореза ул, 56",
+   "status": 400,
+   "response": {
+    "code": "bad_request",
+    "message": "can't restore coordinates from address"
+   }
+  }
+ ],
+ "22": [
+  {
+   "address": "Россия, Калининградская область, Калининград, Ленинский проспект, 1",
+   "status": 400,
+   "response": {
+    "code": "bad_request",
+    "message": "can't restore coordinates from address"
+   }
+  },
+  {
+   "address": "Россия, Калининградская область, Калининград г, Лесопарковая ул, 1",
+   "status": 400,
+   "response": {
+    "code": "bad_request",
+    "message": "can't restore coordinates from address"
+   }
+  },
+  {
+   "address": "Россия, Калининградская область, Калининград, улица Театральная, 1",
+   "status": 400,
+   "response": {
+    "code": "bad_request",
+    "message": "can't restore coordinates from address"
+   }
+  },
+  {
+   "address": "Россия, Калининградская область, Калининград, Московский проспект, 1",
+   "status": 400,
+   "response": {
+    "code": "bad_request",
+    "message": "can't restore coordinates from address"
+   }
+  }
+ ],
+ "2": [
+  {
+   "address": "Россия, Санкт-Петербург, Невский проспект, 28",
+   "status": 200,
+   "response": {
+    "pricing_total": "413.58 RUB",
+    "delivery_days": 4
+   }
+  },
+  {
+   "address": "Россия, Санкт-Петербург и Ленинградская область, Санкт-Петербург, Горское ш, 157",
+   "status": 400,
+   "response": {
+    "code": "bad_request",
+    "message": "can't restore coordinates from address"
+   }
+  }
+ ],
+ "239": [
+  {
+   "address": "Россия, Краснодарский край, Сочи, Курортный проспект, 1",
+   "status": 200,
+   "response": {
+    "pricing_total": "463.6 RUB",
+    "delivery_days": 6
+   }
+  },
+  {
+   "address": "Россия, Краснодарский край, Сочи г, Войкова ул, 20",
+   "status": 400,
+   "response": {
+    "code": "bad_request",
+    "message": "can't restore coordinates from address"
+   }
+  }
+ ],
+ "21141": [
+  {
+   "address": "Россия, Краснодарский край, Тимашевск, улица Ленина, 1",
+   "status": 200,
+   "response": {
+    "pricing_total": "463.6 RUB",
+    "delivery_days": 9
+   }
+  },
+  {
+   "address": "Россия, Краснодарский край, Тимашевск, улица Новаторов, 8",
+   "status": 200,
+   "response": {
+    "pricing_total": "463.6 RUB",
+    "delivery_days": 9
+   }
+  }
+ ],
+ "20721": [
+  {
+   "address": "Россия, Республика Марий Эл, Волжск, улица Ленина, 1",
+   "status": 400,
+   "response": {
+    "code": "bad_request",
+    "message": "can't restore coordinates from address"
+   }
+  },
+  {
+   "address": "Россия, Республика Марий Эл, Волжск г, Кошкина ул., 22",
+   "status": 400,
+   "response": {
+    "code": "bad_request",
+    "message": "can't restore coordinates from address"
+   }
+  },
+  {
+   "address": "Россия, Республика Марий Эл, Волжск, проспект Ленина, 29",
+   "status": 400,
+   "response": {
+    "code": "bad_request",
+    "message": "can't restore coordinates from address"
+   }
+  },
+  {
+   "address": "Россия, Республика Марий Эл, Волжск, улица Панфилова, 1",
+   "status": 400,
+   "response": {
+    "code": "bad_request",
+    "message": "can't restore coordinates from address"
+   }
+  }
+ ],
+ "121363": [
+  {
+   "address": "Россия, Московская область, Дрожжино, Новое шоссе, 7",
+   "status": 400,
+   "response": {
+    "code": "bad_request",
+    "message": "can't restore coordinates from address"
+   }
+  },
+  {
+   "address": "Россия, Москва и Московская область, посёлок городского типа Дрожжино, Новое шоссе, 7",
+   "status": 400,
+   "response": {
+    "code": "bad_request",
+    "message": "can't restore coordinates from address"
+   }
+  },
+  {
+   "address": "Россия, Московская область, Раменский городской округ, посёлок Дрожжино, улица Ленина, 1",
+   "status": 400,
+   "response": {
+    "code": "bad_request",
+    "message": "can't restore coordinates from address"
+   }
+  },
+  {
+   "address": "Россия, Московская область, Ленинский городской округ, посёлок Дрожжино, Новое шоссе, 1",
+   "status": 400,
+   "response": {
+    "code": "bad_request",
+    "message": "can't restore coordinates from address"
+   }
+  }
+ ]
+}

@@ -1,0 +1,69 @@
+{
+ "method": "POST",
+ "path": "/api/b2b/platform/request/create",
+ "request": {
+  "billing_info": {
+   "payment_method": "already_paid",
+   "delivery_cost": 0
+  },
+  "destination": {
+   "type": "platform_station",
+   "platform_station": {
+    "platform_id": "05212278-441c-4033-9ed8-851ca27facca"
+   }
+  },
+  "info": {
+   "operator_request_id": "C1-moscow-pickup-prepaid-retry-probe-194139",
+   "referral_source": "woodev"
+  },
+  "recipient_info": {
+   "first_name": "Measure",
+   "last_name": "Test",
+   "phone": "+79000000000",
+   "email": "measure@example.com"
+  },
+  "items": [
+   {
+    "uin": "MEDIUM",
+    "article": "MEDIUM",
+    "count": 1,
+    "name": "Measure MEDIUM",
+    "place_barcode": "MEDIUM",
+    "billing_details": {
+     "assessed_unit_price": 300000,
+     "unit_price": 300000,
+     "nds": -1
+    },
+    "physical_dims": {
+     "predefined_volume": 24000,
+     "weight_gross": 3000
+    }
+   }
+  ],
+  "places": [
+   {
+    "barcode": "MEDIUM",
+    "description": "Measure MEDIUM",
+    "physical_dims": {
+     "predefined_volume": 24000,
+     "weight_gross": 3000,
+     "dx": 40,
+     "dy": 20,
+     "dz": 30
+    }
+   }
+  ],
+  "source": {
+   "platform_station": {
+    "platform_id": "20cfe81c-bb45-4cfa-85e6-31fdade8ed23"
+   }
+  },
+  "last_mile_policy": "self_pickup"
+ },
+ "status": 404,
+ "latency_ms": 1170,
+ "response": {
+  "message": "Ваш корпоративный счёт больше не активен",
+  "code": "invalid_payment_method"
+ }
+}

@@ -1,0 +1,161 @@
+{
+ "request": {
+  "billing_info": {
+   "payment_method": "already_paid",
+   "delivery_cost": 0
+  },
+  "destination": {
+   "type": "platform_station",
+   "platform_station": {
+    "platform_id": "019e0aec42e271dab592470ac89a572c"
+   }
+  },
+  "info": {
+   "operator_request_id": "g213-pickup_5post-large-sku_boxes-prepaid-on",
+   "referral_source": "woodev"
+  },
+  "recipient_info": {
+   "first_name": "Measure",
+   "last_name": "Test",
+   "phone": "+79000000000",
+   "email": "measure@example.com"
+  },
+  "items": [
+   {
+    "uin": "LARGE",
+    "article": "LARGE",
+    "count": 1,
+    "name": "Measure LARGE",
+    "place_barcode": "LARGE",
+    "billing_details": {
+     "assessed_unit_price": 300000,
+     "unit_price": 300000,
+     "nds": -1
+    },
+    "physical_dims": {
+     "predefined_volume": 96000,
+     "weight_gross": 15000,
+     "dx": 60,
+     "dy": 40,
+     "dz": 40
+    }
+   }
+  ],
+  "places": [
+   {
+    "barcode": "LARGE",
+    "description": "Measure LARGE",
+    "physical_dims": {
+     "predefined_volume": 96000,
+     "weight_gross": 15000
+    }
+   }
+  ],
+  "source": {
+   "platform_station": {
+    "platform_id": "20cfe81c-bb45-4cfa-85e6-31fdade8ed23"
+   }
+  },
+  "last_mile_policy": "self_pickup"
+ },
+ "status": 200,
+ "response": {
+  "offers": [
+   {
+    "offer_id": "78056b4e74394a7785d4ab780f65d43a",
+    "expires_at": "2026-10-12T18:39:52.000000Z",
+    "offer_details": {
+     "delivery_interval": {
+      "min": "2026-10-17T06:00:00.000000Z",
+      "max": "2026-10-17T19:00:00.000000Z",
+      "policy": "self_pickup"
+     },
+     "pickup_interval": {
+      "min": "2026-10-12T18:24:52.000000Z",
+      "max": "2026-10-13T11:00:00.000000Z"
+     },
+     "pricing": "469.7 RUB",
+     "pricing_total": "469.7 RUB",
+     "features": {}
+    },
+    "station_id": "019e0aec42e271dab592470ac89a572c"
+   },
+   {
+    "offer_id": "8d0057f36762472da38046672c02a251",
+    "expires_at": "2026-10-12T18:39:52.000000Z",
+    "offer_details": {
+     "delivery_interval": {
+      "min": "2026-10-18T06:00:00.000000Z",
+      "max": "2026-10-18T19:00:00.000000Z",
+      "policy": "self_pickup"
+     },
+     "pickup_interval": {
+      "min": "2026-10-12T18:24:52.000000Z",
+      "max": "2026-10-14T19:00:00.000000Z"
+     },
+     "pricing": "469.7 RUB",
+     "pricing_total": "469.7 RUB",
+     "features": {}
+    },
+    "station_id": "019e0aec42e271dab592470ac89a572c"
+   },
+   {
+    "offer_id": "124d0a2956c64427917832c8324ddd20",
+    "expires_at": "2026-10-12T18:39:52.000000Z",
+    "offer_details": {
+     "delivery_interval": {
+      "min": "2026-10-19T06:00:00.000000Z",
+      "max": "2026-10-19T19:00:00.000000Z",
+      "policy": "self_pickup"
+     },
+     "pickup_interval": {
+      "min": "2026-10-12T18:24:52.000000Z",
+      "max": "2026-10-15T19:00:00.000000Z"
+     },
+     "pricing": "469.7 RUB",
+     "pricing_total": "469.7 RUB",
+     "features": {}
+    },
+    "station_id": "019e0aec42e271dab592470ac89a572c"
+   },
+   {
+    "offer_id": "0846df25dd9a411d830ac30bb2ac3af0",
+    "expires_at": "2026-10-12T18:39:52.000000Z",
+    "offer_details": {
+     "delivery_interval": {
+      "min": "2026-10-20T06:00:00.000000Z",
+      "max": "2026-10-20T19:00:00.000000Z",
+      "policy": "self_pickup"
+     },
+     "pickup_interval": {
+      "min": "2026-10-12T18:24:52.000000Z",
+      "max": "2026-10-16T19:00:00.000000Z"
+     },
+     "pricing": "469.7 RUB",
+     "pricing_total": "469.7 RUB",
+     "features": {}
+    },
+    "station_id": "019e0aec42e271dab592470ac89a572c"
+   },
+   {
+    "offer_id": "9911c0634d8d4a4bbe351df6f906b8a3",
+    "expires_at": "2026-10-12T18:39:52.000000Z",
+    "offer_details": {
+     "delivery_interval": {
+      "min": "2026-10-21T06:00:00.000000Z",
+      "max": "2026-10-21T19:00:00.000000Z",
+      "policy": "self_pickup"
+     },
+     "pickup_interval": {
+      "min": "2026-10-12T18:24:52.000000Z",
+      "max": "2026-10-17T19:00:00.000000Z"
+     },
+     "pricing": "469.7 RUB",
+     "pricing_total": "469.7 RUB",
+     "features": {}
+    },
+    "station_id": "019e0aec42e271dab592470ac89a572c"
+   }
+  ]
+ }
+}

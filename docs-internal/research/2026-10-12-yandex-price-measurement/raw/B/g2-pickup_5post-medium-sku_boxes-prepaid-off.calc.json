@@ -1,0 +1,28 @@
+{
+ "request": {
+  "tariff": "self_pickup",
+  "total_weight": 3000,
+  "places": [
+   {
+    "physical_dims": {
+     "weight_gross": 3000,
+     "dx": 40,
+     "dy": 20,
+     "dz": 30
+    }
+   }
+  ],
+  "source": {
+   "platform_station_id": "20cfe81c-bb45-4cfa-85e6-31fdade8ed23"
+  },
+  "destination": {
+   "platform_station_id": "019e00cf32af7180bac72b070369d8f1"
+  },
+  "payment_method": "already_paid"
+ },
+ "status": 200,
+ "response": {
+  "pricing_total": "457.5 RUB",
+  "delivery_days": 6
+ }
+}

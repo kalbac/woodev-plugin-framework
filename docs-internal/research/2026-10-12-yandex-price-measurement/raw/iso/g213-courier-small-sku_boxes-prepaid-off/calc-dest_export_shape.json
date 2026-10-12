@@ -1,0 +1,32 @@
+{
+ "request": {
+  "tariff": "time_interval",
+  "total_weight": 500,
+  "places": [
+   {
+    "physical_dims": {
+     "weight_gross": 500,
+     "dx": 20,
+     "dy": 10,
+     "dz": 15
+    }
+   }
+  ],
+  "source": {
+   "platform_station_id": "20cfe81c-bb45-4cfa-85e6-31fdade8ed23"
+  },
+  "destination": {
+   "custom_location": {
+    "details": {
+     "full_address": "Россия, Москва, Тверская улица, 13"
+    }
+   }
+  },
+  "payment_method": "already_paid"
+ },
+ "status": 400,
+ "response": {
+  "code": "bad_parameter",
+  "message": "Validation error: must specify either 'platform_station_id' or 'address' in 'destination'"
+ }
+}

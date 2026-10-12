@@ -1,0 +1,37 @@
+{
+ "request": {
+  "tariff": "time_interval",
+  "total_weight": 3500,
+  "places": [
+   {
+    "physical_dims": {
+     "weight_gross": 3000,
+     "dx": 40,
+     "dy": 20,
+     "dz": 30
+    }
+   },
+   {
+    "physical_dims": {
+     "weight_gross": 500,
+     "dx": 20,
+     "dy": 10,
+     "dz": 15
+    }
+   }
+  ],
+  "source": {
+   "platform_station_id": "20cfe81c-bb45-4cfa-85e6-31fdade8ed23"
+  },
+  "destination": {
+   "address": "Россия, Краснодарский край, Тимашевск, улица Ленина, 1"
+  },
+  "payment_method": "card_on_receipt",
+  "client_price": 300000
+ },
+ "status": 400,
+ "response": {
+  "code": "validation_error",
+  "message": "Payment method 'card' is not allowed for courier delivery"
+ }
+}

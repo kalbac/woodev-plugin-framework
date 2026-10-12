@@ -1,0 +1,29 @@
+{
+ "request": {
+  "tariff": "time_interval",
+  "total_weight": 15000,
+  "places": [
+   {
+    "physical_dims": {
+     "weight_gross": 15000,
+     "dx": 60,
+     "dy": 40,
+     "dz": 40
+    }
+   }
+  ],
+  "source": {
+   "platform_station_id": "20cfe81c-bb45-4cfa-85e6-31fdade8ed23"
+  },
+  "destination": {
+   "address": "Россия, Москва, Тверская улица, 13"
+  },
+  "payment_method": "card_on_receipt",
+  "client_price": 300000
+ },
+ "status": 400,
+ "response": {
+  "code": "validation_error",
+  "message": "Payment method 'card' is not allowed for courier delivery"
+ }
+}

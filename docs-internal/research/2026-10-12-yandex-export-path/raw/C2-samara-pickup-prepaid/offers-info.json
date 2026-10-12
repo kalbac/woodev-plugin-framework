@@ -1,0 +1,48 @@
+{
+ "method": "POST",
+ "path": "/api/b2b/platform/offers/info",
+ "request": {
+  "source": {
+   "platform_station_id": "20cfe81c-bb45-4cfa-85e6-31fdade8ed23"
+  },
+  "destination": {
+   "platform_station_id": "01a0ece738f473b7be140baf6bde5a51"
+  },
+  "places": [
+   {
+    "physical_dims": {
+     "weight_gross": 3000,
+     "dx": 40,
+     "dy": 20,
+     "dz": 30
+    }
+   }
+  ]
+ },
+ "status": 200,
+ "latency_ms": 168,
+ "response": {
+  "offers": [
+   {
+    "from": "2026-10-17T05:00:00.000000Z",
+    "to": "2026-10-17T14:00:00.000000Z"
+   },
+   {
+    "from": "2026-10-18T05:00:00.000000Z",
+    "to": "2026-10-18T14:00:00.000000Z"
+   },
+   {
+    "from": "2026-10-19T05:00:00.000000Z",
+    "to": "2026-10-19T14:00:00.000000Z"
+   },
+   {
+    "from": "2026-10-20T05:00:00.000000Z",
+    "to": "2026-10-20T14:00:00.000000Z"
+   },
+   {
+    "from": "2026-10-21T05:00:00.000000Z",
+    "to": "2026-10-21T14:00:00.000000Z"
+   }
+  ]
+ }
+}

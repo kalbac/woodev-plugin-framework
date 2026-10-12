@@ -1,0 +1,37 @@
+{
+ "request": {
+  "tariff": "time_interval",
+  "total_weight": 3500,
+  "places": [
+   {
+    "physical_dims": {
+     "weight_gross": 3000,
+     "dx": 1,
+     "dy": 1,
+     "dz": 1
+    }
+   },
+   {
+    "physical_dims": {
+     "weight_gross": 500,
+     "dx": 1,
+     "dy": 1,
+     "dz": 1
+    }
+   }
+  ],
+  "source": {
+   "platform_station_id": "20cfe81c-bb45-4cfa-85e6-31fdade8ed23"
+  },
+  "destination": {
+   "address": "Россия, Краснодарский край, Тимашевск, улица Ленина, 1"
+  },
+  "payment_method": "already_paid",
+  "total_assessed_price": 300000
+ },
+ "status": 200,
+ "response": {
+  "pricing_total": "624.64 RUB",
+  "delivery_days": 9
+ }
+}

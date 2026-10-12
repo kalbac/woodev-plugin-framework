@@ -1,0 +1,27 @@
+{
+ "request": {
+  "tariff": "time_interval",
+  "places": [
+   {
+    "physical_dims": {
+     "weight_gross": 3000,
+     "dx": 40,
+     "dy": 20,
+     "dz": 30
+    }
+   }
+  ],
+  "source": {
+   "platform_station_id": "20cfe81c-bb45-4cfa-85e6-31fdade8ed23"
+  },
+  "destination": {
+   "address": "Россия, Москва, Тверская улица, 13"
+  },
+  "payment_method": "already_paid"
+ },
+ "status": 200,
+ "response": {
+  "pricing_total": "402.6 RUB",
+  "delivery_days": 9
+ }
+}

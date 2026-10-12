@@ -1,0 +1,51 @@
+{
+ "request": {
+  "tariff": "self_pickup",
+  "total_weight": 9000,
+  "places": [
+   {
+    "physical_dims": {
+     "weight_gross": 3000,
+     "dx": 40,
+     "dy": 20,
+     "dz": 30
+    }
+   },
+   {
+    "physical_dims": {
+     "weight_gross": 3000,
+     "dx": 40,
+     "dy": 20,
+     "dz": 30
+    }
+   },
+   {
+    "physical_dims": {
+     "weight_gross": 3000,
+     "dx": 40,
+     "dy": 20,
+     "dz": 30
+    }
+   }
+  ],
+  "source": {
+   "platform_station_id": "20cfe81c-bb45-4cfa-85e6-31fdade8ed23"
+  },
+  "destination": {
+   "platform_station_id": "05212278-441c-4033-9ed8-851ca27facca"
+  },
+  "payment_method": "card_on_receipt",
+  "client_price": 300000,
+  "billing_info": {
+   "payment_method": "card_on_receipt",
+   "delivery_cost": 57000
+  }
+ },
+ "status": 200,
+ "response": {
+  "pricing_total": "569.74 RUB",
+  "pricing_commission_on_delivery_payment_amount": "91.5 RUB",
+  "pricing_commission_on_delivery_payment": "2.5%",
+  "delivery_days": 3
+ }
+}

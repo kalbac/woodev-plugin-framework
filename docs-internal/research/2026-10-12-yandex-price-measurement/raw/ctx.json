@@ -1,0 +1,743 @@
+{
+ "source": {
+  "id": "20cfe81c-bb45-4cfa-85e6-31fdade8ed23",
+  "operator_id": "market_l4g",
+  "name": "Пункт выдачи заказов Яндекс Маркета",
+  "type": "pickup_point",
+  "full_address": "Москва Трубная площадь 2",
+  "region": "Москва",
+  "locality": "Москва",
+  "street": "Трубная площадь",
+  "house": "2",
+  "payment_methods": [
+   "already_paid",
+   "card_on_receipt",
+   "bound_card",
+   "postpay"
+  ]
+ },
+ "geos": {
+  "213": {
+   "name": "Moscow",
+   "points": {
+    "already_paid": {
+     "v1_first": {
+      "id": "05212278-441c-4033-9ed8-851ca27facca",
+      "operator_id": "market_l4g",
+      "name": "Пункт выдачи заказов Яндекс Маркета",
+      "type": "pickup_point",
+      "full_address": "Москва Волгоградский проспект 10 стр2",
+      "region": "Москва и Московская область",
+      "locality": "Москва",
+      "street": "Волгоградский проспект",
+      "house": "10 стр2",
+      "payment_methods": [
+       "already_paid",
+       "card_on_receipt",
+       "bound_card",
+       "postpay"
+      ]
+     },
+     "market_l4g": {
+      "id": "05212278-441c-4033-9ed8-851ca27facca",
+      "operator_id": "market_l4g",
+      "name": "Пункт выдачи заказов Яндекс Маркета",
+      "type": "pickup_point",
+      "full_address": "Москва Волгоградский проспект 10 стр2",
+      "region": "Москва и Московская область",
+      "locality": "Москва",
+      "street": "Волгоградский проспект",
+      "house": "10 стр2",
+      "payment_methods": [
+       "already_paid",
+       "card_on_receipt",
+       "bound_card",
+       "postpay"
+      ]
+     },
+     "5post": {
+      "id": "019e0aec42e271dab592470ac89a572c",
+      "operator_id": "5post",
+      "name": "5 Post (Пятерочка)",
+      "type": "pickup_point",
+      "full_address": "Москва г Боровское ш 62к3",
+      "region": "Москва и Московская область",
+      "locality": "Москва",
+      "street": "Боровское ш",
+      "house": "62к3",
+      "payment_methods": [
+       "already_paid"
+      ]
+     }
+    },
+    "card_on_receipt": {
+     "v1_first": {
+      "id": "05212278-441c-4033-9ed8-851ca27facca",
+      "operator_id": "market_l4g",
+      "name": "Пункт выдачи заказов Яндекс Маркета",
+      "type": "pickup_point",
+      "full_address": "Москва Волгоградский проспект 10 стр2",
+      "region": "Москва и Московская область",
+      "locality": "Москва",
+      "street": "Волгоградский проспект",
+      "house": "10 стр2",
+      "payment_methods": [
+       "already_paid",
+       "card_on_receipt",
+       "bound_card",
+       "postpay"
+      ]
+     },
+     "market_l4g": {
+      "id": "05212278-441c-4033-9ed8-851ca27facca",
+      "operator_id": "market_l4g",
+      "name": "Пункт выдачи заказов Яндекс Маркета",
+      "type": "pickup_point",
+      "full_address": "Москва Волгоградский проспект 10 стр2",
+      "region": "Москва и Московская область",
+      "locality": "Москва",
+      "street": "Волгоградский проспект",
+      "house": "10 стр2",
+      "payment_methods": [
+       "already_paid",
+       "card_on_receipt",
+       "bound_card",
+       "postpay"
+      ]
+     },
+     "5post": null
+    }
+   },
+   "operators_prepaid": {
+    "market_l4g": 1777,
+    "5post": 499
+   },
+   "operators_cod": {
+    "market_l4g": 1741
+   },
+   "courier_address_from_point": "Россия, Москва и Московская область, Москва, Волгоградский проспект, 10 стр2",
+   "courier_address": "Россия, Москва, Тверская улица, 13"
+  },
+  "51": {
+   "name": "Samara",
+   "points": {
+    "already_paid": {
+     "v1_first": {
+      "id": "0195ce1642fe71d9a2d036c5780a2a60",
+      "operator_id": "5post",
+      "name": "5 Post (Пятерочка)",
+      "type": "pickup_point",
+      "full_address": "Самара г Мориса Тореза ул 56/2",
+      "region": "Самарская область",
+      "locality": "Самара г",
+      "street": "Мориса Тореза ул",
+      "house": "56/2",
+      "payment_methods": [
+       "already_paid"
+      ]
+     },
+     "market_l4g": {
+      "id": "01a0ece738f473b7be140baf6bde5a51",
+      "operator_id": "market_l4g",
+      "name": "Пункт выдачи заказов партнёра",
+      "type": "pickup_point",
+      "full_address": "Самара Ново-Садовая улица 106 к155",
+      "region": "Самарская область",
+      "locality": "Самара",
+      "street": "Ново-Садовая улица",
+      "house": "106 к155",
+      "payment_methods": [
+       "already_paid",
+       "card_on_receipt",
+       "bound_card",
+       "postpay"
+      ]
+     },
+     "5post": {
+      "id": "0195ce1642fe71d9a2d036c5780a2a60",
+      "operator_id": "5post",
+      "name": "5 Post (Пятерочка)",
+      "type": "pickup_point",
+      "full_address": "Самара г Мориса Тореза ул 56/2",
+      "region": "Самарская область",
+      "locality": "Самара г",
+      "street": "Мориса Тореза ул",
+      "house": "56/2",
+      "payment_methods": [
+       "already_paid"
+      ]
+     }
+    },
+    "card_on_receipt": {
+     "v1_first": {
+      "id": "01a0ece738f473b7be140baf6bde5a51",
+      "operator_id": "market_l4g",
+      "name": "Пункт выдачи заказов партнёра",
+      "type": "pickup_point",
+      "full_address": "Самара Ново-Садовая улица 106 к155",
+      "region": "Самарская область",
+      "locality": "Самара",
+      "street": "Ново-Садовая улица",
+      "house": "106 к155",
+      "payment_methods": [
+       "already_paid",
+       "card_on_receipt",
+       "bound_card",
+       "postpay"
+      ]
+     },
+     "market_l4g": {
+      "id": "01a0ece738f473b7be140baf6bde5a51",
+      "operator_id": "market_l4g",
+      "name": "Пункт выдачи заказов партнёра",
+      "type": "pickup_point",
+      "full_address": "Самара Ново-Садовая улица 106 к155",
+      "region": "Самарская область",
+      "locality": "Самара",
+      "street": "Ново-Садовая улица",
+      "house": "106 к155",
+      "payment_methods": [
+       "already_paid",
+       "card_on_receipt",
+       "bound_card",
+       "postpay"
+      ]
+     },
+     "5post": null
+    }
+   },
+   "operators_prepaid": {
+    "5post": 74,
+    "market_l4g": 237
+   },
+   "operators_cod": {
+    "market_l4g": 229
+   },
+   "courier_address_from_point": "Россия, Самарская область, Самара г, Мориса Тореза ул, 56/2",
+   "courier_address": "Россия, Самарская область, Самара, улица Куйбышева, 90"
+  },
+  "22": {
+   "name": "Kaliningrad",
+   "points": {
+    "already_paid": {
+     "v1_first": {
+      "id": "019ab6a9b91b73c9a42116355e4801c6",
+      "operator_id": "5post",
+      "name": "5 Post (Пятерочка)",
+      "type": "pickup_point",
+      "full_address": "Калининград г Лесопарковая ул 1-7",
+      "region": "Калининградская область",
+      "locality": "Калининград г",
+      "street": "Лесопарковая ул",
+      "house": "1-7",
+      "payment_methods": [
+       "already_paid"
+      ]
+     },
+     "market_l4g": null,
+     "5post": {
+      "id": "019ab6a9b91b73c9a42116355e4801c6",
+      "operator_id": "5post",
+      "name": "5 Post (Пятерочка)",
+      "type": "pickup_point",
+      "full_address": "Калининград г Лесопарковая ул 1-7",
+      "region": "Калининградская область",
+      "locality": "Калининград г",
+      "street": "Лесопарковая ул",
+      "house": "1-7",
+      "payment_methods": [
+       "already_paid"
+      ]
+     }
+    },
+    "card_on_receipt": {
+     "v1_first": null,
+     "market_l4g": null,
+     "5post": null
+    }
+   },
+   "operators_prepaid": {
+    "5post": 79
+   },
+   "operators_cod": {},
+   "courier_address_from_point": "Россия, Калининградская область, Калининград г, Лесопарковая ул, 1-7",
+   "courier_address": null
+  },
+  "2": {
+   "name": "Saint Petersburg",
+   "points": {
+    "already_paid": {
+     "v1_first": {
+      "id": "019e00cf32af7180bac72b070369d8f1",
+      "operator_id": "5post",
+      "name": "5 Post (Пятерочка)",
+      "type": "pickup_point",
+      "full_address": "Левашово п Горское ш 157к118",
+      "region": "Санкт-Петербург и Ленинградская область",
+      "locality": "Санкт-Петербург",
+      "street": "Горское ш",
+      "house": "157к118",
+      "payment_methods": [
+       "already_paid"
+      ]
+     },
+     "market_l4g": {
+      "id": "80b75f97-02a0-4a0d-9e3b-3573e44934a6",
+      "operator_id": "market_l4g",
+      "name": "Пункт выдачи заказов Яндекс Маркета",
+      "type": "pickup_point",
+      "full_address": "Санкт-Петербург Кирочная улица 9",
+      "region": "Санкт-Петербург и Ленинградская область",
+      "locality": "Санкт-Петербург",
+      "street": "Кирочная улица",
+      "house": "9",
+      "payment_methods": [
+       "already_paid",
+       "card_on_receipt",
+       "bound_card",
+       "postpay"
+      ]
+     },
+     "5post": {
+      "id": "019e00cf32af7180bac72b070369d8f1",
+      "operator_id": "5post",
+      "name": "5 Post (Пятерочка)",
+      "type": "pickup_point",
+      "full_address": "Левашово п Горское ш 157к118",
+      "region": "Санкт-Петербург и Ленинградская область",
+      "locality": "Санкт-Петербург",
+      "street": "Горское ш",
+      "house": "157к118",
+      "payment_methods": [
+       "already_paid"
+      ]
+     }
+    },
+    "card_on_receipt": {
+     "v1_first": {
+      "id": "80b75f97-02a0-4a0d-9e3b-3573e44934a6",
+      "operator_id": "market_l4g",
+      "name": "Пункт выдачи заказов Яндекс Маркета",
+      "type": "pickup_point",
+      "full_address": "Санкт-Петербург Кирочная улица 9",
+      "region": "Санкт-Петербург и Ленинградская область",
+      "locality": "Санкт-Петербург",
+      "street": "Кирочная улица",
+      "house": "9",
+      "payment_methods": [
+       "already_paid",
+       "card_on_receipt",
+       "bound_card",
+       "postpay"
+      ]
+     },
+     "market_l4g": {
+      "id": "80b75f97-02a0-4a0d-9e3b-3573e44934a6",
+      "operator_id": "market_l4g",
+      "name": "Пункт выдачи заказов Яндекс Маркета",
+      "type": "pickup_point",
+      "full_address": "Санкт-Петербург Кирочная улица 9",
+      "region": "Санкт-Петербург и Ленинградская область",
+      "locality": "Санкт-Петербург",
+      "street": "Кирочная улица",
+      "house": "9",
+      "payment_methods": [
+       "already_paid",
+       "card_on_receipt",
+       "bound_card",
+       "postpay"
+      ]
+     },
+     "5post": null
+    }
+   },
+   "operators_prepaid": {
+    "5post": 178,
+    "market_l4g": 893
+   },
+   "operators_cod": {
+    "market_l4g": 855
+   },
+   "courier_address_from_point": "Россия, Санкт-Петербург и Ленинградская область, Санкт-Петербург, Горское ш, 157к118",
+   "courier_address": "Россия, Санкт-Петербург, Невский проспект, 28"
+  },
+  "239": {
+   "name": "Sochi",
+   "points": {
+    "already_paid": {
+     "v1_first": {
+      "id": "0195ce166f9a74f490c76bc3df19f85f",
+      "operator_id": "5post",
+      "name": "5 Post (Пятерочка)",
+      "type": "pickup_point",
+      "full_address": "Сочи г Войкова ул 20",
+      "region": "Краснодарский край",
+      "locality": "Сочи г",
+      "street": "Войкова ул",
+      "house": "20",
+      "payment_methods": [
+       "already_paid"
+      ]
+     },
+     "market_l4g": {
+      "id": "019fe2f4910471039592cfb26eac263b",
+      "operator_id": "market_l4g",
+      "name": "Пункт выдачи заказов партнёра",
+      "type": "pickup_point",
+      "full_address": "Сочи улица Мира 32",
+      "region": "Краснодарский край",
+      "locality": "Сочи",
+      "street": "улица Мира",
+      "house": "32",
+      "payment_methods": [
+       "already_paid"
+      ]
+     },
+     "5post": {
+      "id": "0195ce166f9a74f490c76bc3df19f85f",
+      "operator_id": "5post",
+      "name": "5 Post (Пятерочка)",
+      "type": "pickup_point",
+      "full_address": "Сочи г Войкова ул 20",
+      "region": "Краснодарский край",
+      "locality": "Сочи г",
+      "street": "Войкова ул",
+      "house": "20",
+      "payment_methods": [
+       "already_paid"
+      ]
+     }
+    },
+    "card_on_receipt": {
+     "v1_first": {
+      "id": "67bff9d1-673d-454c-9979-6edc060ef6c1",
+      "operator_id": "market_l4g",
+      "name": "Пункт выдачи заказов Яндекс Маркета",
+      "type": "pickup_point",
+      "full_address": "Сочи улица Чекменёва 20",
+      "region": "Краснодарский край",
+      "locality": "Сочи",
+      "street": "улица Чекменёва",
+      "house": "20",
+      "payment_methods": [
+       "already_paid",
+       "card_on_receipt",
+       "bound_card",
+       "postpay"
+      ]
+     },
+     "market_l4g": {
+      "id": "67bff9d1-673d-454c-9979-6edc060ef6c1",
+      "operator_id": "market_l4g",
+      "name": "Пункт выдачи заказов Яндекс Маркета",
+      "type": "pickup_point",
+      "full_address": "Сочи улица Чекменёва 20",
+      "region": "Краснодарский край",
+      "locality": "Сочи",
+      "street": "улица Чекменёва",
+      "house": "20",
+      "payment_methods": [
+       "already_paid",
+       "card_on_receipt",
+       "bound_card",
+       "postpay"
+      ]
+     },
+     "5post": null
+    }
+   },
+   "operators_prepaid": {
+    "5post": 75,
+    "market_l4g": 120
+   },
+   "operators_cod": {
+    "market_l4g": 107
+   },
+   "courier_address_from_point": "Россия, Краснодарский край, Сочи г, Войкова ул, 20",
+   "courier_address": "Россия, Краснодарский край, Сочи, Курортный проспект, 1"
+  },
+  "21141": {
+   "name": "Timashevsk",
+   "points": {
+    "already_paid": {
+     "v1_first": {
+      "id": "5c7a5939-5b0c-44ae-abcd-a196a8208e3f",
+      "operator_id": "market_l4g",
+      "name": "Пункт выдачи заказов Яндекс Маркета",
+      "type": "pickup_point",
+      "full_address": "Тимашевск улица Новаторов 8",
+      "region": "Краснодарский край",
+      "locality": "Тимашевск",
+      "street": "улица Новаторов",
+      "house": "8",
+      "payment_methods": [
+       "already_paid",
+       "card_on_receipt",
+       "bound_card",
+       "postpay"
+      ]
+     },
+     "market_l4g": {
+      "id": "5c7a5939-5b0c-44ae-abcd-a196a8208e3f",
+      "operator_id": "market_l4g",
+      "name": "Пункт выдачи заказов Яндекс Маркета",
+      "type": "pickup_point",
+      "full_address": "Тимашевск улица Новаторов 8",
+      "region": "Краснодарский край",
+      "locality": "Тимашевск",
+      "street": "улица Новаторов",
+      "house": "8",
+      "payment_methods": [
+       "already_paid",
+       "card_on_receipt",
+       "bound_card",
+       "postpay"
+      ]
+     },
+     "5post": {
+      "id": "0195ce17924970a98989f05ffa385ff2",
+      "operator_id": "5post",
+      "name": "5 Post (Пятерочка)",
+      "type": "pickup_point",
+      "full_address": "Тимашевск г Братьев Степановых ул 133",
+      "region": "Краснодарский край",
+      "locality": "Тимашевск г",
+      "street": "Братьев Степановых ул",
+      "house": "133",
+      "payment_methods": [
+       "already_paid"
+      ]
+     }
+    },
+    "card_on_receipt": {
+     "v1_first": {
+      "id": "5c7a5939-5b0c-44ae-abcd-a196a8208e3f",
+      "operator_id": "market_l4g",
+      "name": "Пункт выдачи заказов Яндекс Маркета",
+      "type": "pickup_point",
+      "full_address": "Тимашевск улица Новаторов 8",
+      "region": "Краснодарский край",
+      "locality": "Тимашевск",
+      "street": "улица Новаторов",
+      "house": "8",
+      "payment_methods": [
+       "already_paid",
+       "card_on_receipt",
+       "bound_card",
+       "postpay"
+      ]
+     },
+     "market_l4g": {
+      "id": "5c7a5939-5b0c-44ae-abcd-a196a8208e3f",
+      "operator_id": "market_l4g",
+      "name": "Пункт выдачи заказов Яндекс Маркета",
+      "type": "pickup_point",
+      "full_address": "Тимашевск улица Новаторов 8",
+      "region": "Краснодарский край",
+      "locality": "Тимашевск",
+      "street": "улица Новаторов",
+      "house": "8",
+      "payment_methods": [
+       "already_paid",
+       "card_on_receipt",
+       "bound_card",
+       "postpay"
+      ]
+     },
+     "5post": null
+    }
+   },
+   "operators_prepaid": {
+    "market_l4g": 10,
+    "5post": 11
+   },
+   "operators_cod": {
+    "market_l4g": 9
+   },
+   "courier_address_from_point": "Россия, Краснодарский край, Тимашевск, улица Новаторов, 8",
+   "courier_address": "Россия, Краснодарский край, Тимашевск, улица Ленина, 1"
+  },
+  "20721": {
+   "name": "Volzhsk",
+   "points": {
+    "already_paid": {
+     "v1_first": {
+      "id": "0195ce14a2977759b32056fdfcca1268",
+      "operator_id": "5post",
+      "name": "5 Post (Пятерочка)",
+      "type": "pickup_point",
+      "full_address": "Волжск г Кошкина ул. 22",
+      "region": "Республика Марий Эл",
+      "locality": "Волжск г",
+      "street": "Кошкина ул.",
+      "house": "22",
+      "payment_methods": [
+       "already_paid"
+      ]
+     },
+     "market_l4g": {
+      "id": "1e1f09cb-dfe8-41cb-9f92-ba494f84d360",
+      "operator_id": "market_l4g",
+      "name": "Пункт выдачи заказов партнёра",
+      "type": "pickup_point",
+      "full_address": "Волжск улица Чкалова 2А",
+      "region": "Республика Марий Эл",
+      "locality": "Волжск",
+      "street": "улица Чкалова",
+      "house": "2А",
+      "payment_methods": [
+       "already_paid"
+      ]
+     },
+     "5post": {
+      "id": "0195ce14a2977759b32056fdfcca1268",
+      "operator_id": "5post",
+      "name": "5 Post (Пятерочка)",
+      "type": "pickup_point",
+      "full_address": "Волжск г Кошкина ул. 22",
+      "region": "Республика Марий Эл",
+      "locality": "Волжск г",
+      "street": "Кошкина ул.",
+      "house": "22",
+      "payment_methods": [
+       "already_paid"
+      ]
+     }
+    },
+    "card_on_receipt": {
+     "v1_first": {
+      "id": "01954b9a831f71c3895afff0a375e396",
+      "operator_id": "market_l4g",
+      "name": "Пункт выдачи заказов Яндекс Маркета",
+      "type": "pickup_point",
+      "full_address": "Волжск улица Шестакова 80",
+      "region": "Республика Марий Эл",
+      "locality": "Волжск",
+      "street": "улица Шестакова",
+      "house": "80",
+      "payment_methods": [
+       "already_paid",
+       "card_on_receipt",
+       "bound_card",
+       "postpay"
+      ]
+     },
+     "market_l4g": {
+      "id": "01954b9a831f71c3895afff0a375e396",
+      "operator_id": "market_l4g",
+      "name": "Пункт выдачи заказов Яндекс Маркета",
+      "type": "pickup_point",
+      "full_address": "Волжск улица Шестакова 80",
+      "region": "Республика Марий Эл",
+      "locality": "Волжск",
+      "street": "улица Шестакова",
+      "house": "80",
+      "payment_methods": [
+       "already_paid",
+       "card_on_receipt",
+       "bound_card",
+       "postpay"
+      ]
+     },
+     "5post": null
+    }
+   },
+   "operators_prepaid": {
+    "5post": 7,
+    "market_l4g": 8
+   },
+   "operators_cod": {
+    "market_l4g": 5
+   },
+   "courier_address_from_point": "Россия, Республика Марий Эл, Волжск г, Кошкина ул., 22",
+   "courier_address": null
+  },
+  "121363": {
+   "name": "Drozhzhino MO",
+   "points": {
+    "already_paid": {
+     "v1_first": {
+      "id": "019b37720b0a75809b02dab5d3dcec15",
+      "operator_id": "market_l4g",
+      "name": "Пункт выдачи заказов Яндекс Маркета",
+      "type": "pickup_point",
+      "full_address": "посёлок городского типа Дрожжино Новое шоссе 7 к1",
+      "region": "Москва и Московская область",
+      "locality": "посёлок городского типа Дрожжино",
+      "street": "Новое шоссе",
+      "house": "7 к1",
+      "payment_methods": [
+       "already_paid",
+       "card_on_receipt",
+       "bound_card",
+       "postpay"
+      ]
+     },
+     "market_l4g": {
+      "id": "019b37720b0a75809b02dab5d3dcec15",
+      "operator_id": "market_l4g",
+      "name": "Пункт выдачи заказов Яндекс Маркета",
+      "type": "pickup_point",
+      "full_address": "посёлок городского типа Дрожжино Новое шоссе 7 к1",
+      "region": "Москва и Московская область",
+      "locality": "посёлок городского типа Дрожжино",
+      "street": "Новое шоссе",
+      "house": "7 к1",
+      "payment_methods": [
+       "already_paid",
+       "card_on_receipt",
+       "bound_card",
+       "postpay"
+      ]
+     },
+     "5post": null
+    },
+    "card_on_receipt": {
+     "v1_first": {
+      "id": "019b37720b0a75809b02dab5d3dcec15",
+      "operator_id": "market_l4g",
+      "name": "Пункт выдачи заказов Яндекс Маркета",
+      "type": "pickup_point",
+      "full_address": "посёлок городского типа Дрожжино Новое шоссе 7 к1",
+      "region": "Москва и Московская область",
+      "locality": "посёлок городского типа Дрожжино",
+      "street": "Новое шоссе",
+      "house": "7 к1",
+      "payment_methods": [
+       "already_paid",
+       "card_on_receipt",
+       "bound_card",
+       "postpay"
+      ]
+     },
+     "market_l4g": {
+      "id": "019b37720b0a75809b02dab5d3dcec15",
+      "operator_id": "market_l4g",
+      "name": "Пункт выдачи заказов Яндекс Маркета",
+      "type": "pickup_point",
+      "full_address": "посёлок городского типа Дрожжино Новое шоссе 7 к1",
+      "region": "Москва и Московская область",
+      "locality": "посёлок городского типа Дрожжино",
+      "street": "Новое шоссе",
+      "house": "7 к1",
+      "payment_methods": [
+       "already_paid",
+       "card_on_receipt",
+       "bound_card",
+       "postpay"
+      ]
+     },
+     "5post": null
+    }
+   },
+   "operators_prepaid": {
+    "market_l4g": 9
+   },
+   "operators_cod": {
+    "market_l4g": 9
+   },
+   "courier_address_from_point": "Россия, Москва и Московская область, посёлок городского типа Дрожжино, Новое шоссе, 7 к1",
+   "courier_address": null
+  }
+ }
+}

@@ -1,0 +1,29 @@
+{
+ "request": {
+  "tariff": "time_interval",
+  "total_weight": 500,
+  "places": [
+   {
+    "physical_dims": {
+     "weight_gross": 500,
+     "dx": 20,
+     "dy": 10,
+     "dz": 15
+    }
+   }
+  ],
+  "source": {
+   "platform_station_id": "20cfe81c-bb45-4cfa-85e6-31fdade8ed23"
+  },
+  "destination": {
+   "address": "Россия, Самарская область, Самара, улица Куйбышева, 90"
+  },
+  "payment_method": "already_paid",
+  "total_assessed_price": 300000
+ },
+ "status": 200,
+ "response": {
+  "pricing_total": "468.48 RUB",
+  "delivery_days": 5
+ }
+}

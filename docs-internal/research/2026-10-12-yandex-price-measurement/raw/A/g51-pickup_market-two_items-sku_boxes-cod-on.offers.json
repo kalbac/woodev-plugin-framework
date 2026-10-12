@@ -1,0 +1,192 @@
+{
+ "request": {
+  "billing_info": {
+   "payment_method": "card_on_receipt",
+   "delivery_cost": 71500
+  },
+  "destination": {
+   "type": "platform_station",
+   "platform_station": {
+    "platform_id": "01a0ece738f473b7be140baf6bde5a51"
+   }
+  },
+  "info": {
+   "operator_request_id": "g51-pickup_market-two_items-sku_boxes-cod-on",
+   "referral_source": "woodev"
+  },
+  "recipient_info": {
+   "first_name": "Measure",
+   "last_name": "Test",
+   "phone": "+79000000000",
+   "email": "measure@example.com"
+  },
+  "items": [
+   {
+    "uin": "MEDIUM",
+    "article": "MEDIUM",
+    "count": 1,
+    "name": "Measure MEDIUM",
+    "place_barcode": "MEDIUM",
+    "billing_details": {
+     "assessed_unit_price": 200000,
+     "unit_price": 200000,
+     "nds": -1
+    },
+    "physical_dims": {
+     "predefined_volume": 24000,
+     "weight_gross": 3000
+    }
+   },
+   {
+    "uin": "SMALL",
+    "article": "SMALL",
+    "count": 1,
+    "name": "Measure SMALL",
+    "place_barcode": "SMALL",
+    "billing_details": {
+     "assessed_unit_price": 100000,
+     "unit_price": 100000,
+     "nds": -1
+    },
+    "physical_dims": {
+     "predefined_volume": 3000,
+     "weight_gross": 500
+    }
+   }
+  ],
+  "places": [
+   {
+    "barcode": "MEDIUM",
+    "description": "Measure MEDIUM",
+    "physical_dims": {
+     "predefined_volume": 24000,
+     "weight_gross": 3000
+    }
+   },
+   {
+    "barcode": "SMALL",
+    "description": "Measure SMALL",
+    "physical_dims": {
+     "predefined_volume": 3000,
+     "weight_gross": 500
+    }
+   }
+  ],
+  "source": {
+   "platform_station": {
+    "platform_id": "20cfe81c-bb45-4cfa-85e6-31fdade8ed23"
+   }
+  },
+  "last_mile_policy": "self_pickup"
+ },
+ "status": 200,
+ "response": {
+  "offers": [
+   {
+    "offer_id": "7dc67e28911d42c99aa940d92fc35f75",
+    "expires_at": "2026-10-12T18:26:40.000000Z",
+    "offer_details": {
+     "delivery_interval": {
+      "min": "2026-10-17T05:00:00.000000Z",
+      "max": "2026-10-17T14:00:00.000000Z",
+      "policy": "self_pickup"
+     },
+     "pickup_interval": {
+      "min": "2026-10-12T18:11:40.000000Z",
+      "max": "2026-10-13T11:00:00.000000Z"
+     },
+     "pricing": "413.58 RUB",
+     "pricing_commission_on_delivery_payment": "2.5%",
+     "pricing_commission_on_delivery_payment_amount": "113.3 RUB",
+     "pricing_total": "526.88 RUB",
+     "features": {}
+    },
+    "station_id": "01a0ece738f473b7be140baf6bde5a51"
+   },
+   {
+    "offer_id": "081eec0c80ea4789b6a7469d2e9c9e93",
+    "expires_at": "2026-10-12T18:26:40.000000Z",
+    "offer_details": {
+     "delivery_interval": {
+      "min": "2026-10-18T05:00:00.000000Z",
+      "max": "2026-10-18T14:00:00.000000Z",
+      "policy": "self_pickup"
+     },
+     "pickup_interval": {
+      "min": "2026-10-12T18:11:40.000000Z",
+      "max": "2026-10-14T19:00:00.000000Z"
+     },
+     "pricing": "413.58 RUB",
+     "pricing_commission_on_delivery_payment": "2.5%",
+     "pricing_commission_on_delivery_payment_amount": "113.3 RUB",
+     "pricing_total": "526.88 RUB",
+     "features": {}
+    },
+    "station_id": "01a0ece738f473b7be140baf6bde5a51"
+   },
+   {
+    "offer_id": "05395a21304c4f16b8fde2d4d9aa2828",
+    "expires_at": "2026-10-12T18:26:40.000000Z",
+    "offer_details": {
+     "delivery_interval": {
+      "min": "2026-10-19T05:00:00.000000Z",
+      "max": "2026-10-19T14:00:00.000000Z",
+      "policy": "self_pickup"
+     },
+     "pickup_interval": {
+      "min": "2026-10-12T18:11:40.000000Z",
+      "max": "2026-10-15T19:00:00.000000Z"
+     },
+     "pricing": "413.58 RUB",
+     "pricing_commission_on_delivery_payment": "2.5%",
+     "pricing_commission_on_delivery_payment_amount": "113.3 RUB",
+     "pricing_total": "526.88 RUB",
+     "features": {}
+    },
+    "station_id": "01a0ece738f473b7be140baf6bde5a51"
+   },
+   {
+    "offer_id": "4f7594c43d0447feb497f118594cb121",
+    "expires_at": "2026-10-12T18:26:40.000000Z",
+    "offer_details": {
+     "delivery_interval": {
+      "min": "2026-10-20T05:00:00.000000Z",
+      "max": "2026-10-20T14:00:00.000000Z",
+      "policy": "self_pickup"
+     },
+     "pickup_interval": {
+      "min": "2026-10-12T18:11:40.000000Z",
+      "max": "2026-10-16T19:00:00.000000Z"
+     },
+     "pricing": "413.58 RUB",
+     "pricing_commission_on_delivery_payment": "2.5%",
+     "pricing_commission_on_delivery_payment_amount": "113.3 RUB",
+     "pricing_total": "526.88 RUB",
+     "features": {}
+    },
+    "station_id": "01a0ece738f473b7be140baf6bde5a51"
+   },
+   {
+    "offer_id": "6de5a999d3ee40cf9b0eca7a231255ce",
+    "expires_at": "2026-10-12T18:26:40.000000Z",
+    "offer_details": {
+     "delivery_interval": {
+      "min": "2026-10-21T05:00:00.000000Z",
+      "max": "2026-10-21T14:00:00.000000Z",
+      "policy": "self_pickup"
+     },
+     "pickup_interval": {
+      "min": "2026-10-12T18:11:40.000000Z",
+      "max": "2026-10-17T19:00:00.000000Z"
+     },
+     "pricing": "413.58 RUB",
+     "pricing_commission_on_delivery_payment": "2.5%",
+     "pricing_commission_on_delivery_payment_amount": "113.3 RUB",
+     "pricing_total": "526.88 RUB",
+     "features": {}
+    },
+    "station_id": "01a0ece738f473b7be140baf6bde5a51"
+   }
+  ]
+ }
+}

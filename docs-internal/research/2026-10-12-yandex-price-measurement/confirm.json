@@ -1,0 +1,1702 @@
+[
+ {
+  "id": "g213-courier-large-sku_boxes-prepaid-off",
+  "stage": "A",
+  "calc_v1": 824,
+  "model": 702,
+  "offer_cheapest": 701,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g213-courier-large-sku_boxes-prepaid-on",
+  "stage": "A",
+  "calc_v1": 842,
+  "model": 702,
+  "offer_cheapest": 701,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g213-courier-medium-sku_boxes-prepaid-off",
+  "stage": "A",
+  "calc_v1": 403,
+  "model": 365,
+  "offer_cheapest": 364,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g213-courier-medium-sku_boxes-prepaid-on",
+  "stage": "A",
+  "calc_v1": 421,
+  "model": 365,
+  "offer_cheapest": 364,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g213-courier-medium_x3-sku_boxes-prepaid-off",
+  "stage": "A",
+  "calc_v1": 684,
+  "model": 534,
+  "offer_cheapest": 533,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g213-courier-medium_x3-sku_boxes-prepaid-on",
+  "stage": "A",
+  "calc_v1": 702,
+  "model": 534,
+  "offer_cheapest": 533,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g213-courier-small-sku_boxes-prepaid-off",
+  "stage": "A",
+  "calc_v1": 319,
+  "model": 337,
+  "offer_cheapest": 336,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g213-courier-small-sku_boxes-prepaid-on",
+  "stage": "A",
+  "calc_v1": 337,
+  "model": 337,
+  "offer_cheapest": 336,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g213-courier-two_items-common_box-prepaid-off",
+  "stage": "A",
+  "calc_v1": 487,
+  "model": 393,
+  "offer_cheapest": 392,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g213-courier-two_items-common_box-prepaid-on",
+  "stage": "A",
+  "calc_v1": 506,
+  "model": 393,
+  "offer_cheapest": 392,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g213-courier-two_items-sku_boxes-prepaid-off",
+  "stage": "A",
+  "calc_v1": 487,
+  "model": 393,
+  "offer_cheapest": 392,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g213-courier-two_items-sku_boxes-prepaid-on",
+  "stage": "A",
+  "calc_v1": 506,
+  "model": 393,
+  "offer_cheapest": 392,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g213-pickup_5post-medium-sku_boxes-prepaid-off",
+  "stage": "A",
+  "calc_v1": 330,
+  "model": 263,
+  "offer_cheapest": 262,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g213-pickup_5post-medium-sku_boxes-prepaid-on",
+  "stage": "A",
+  "calc_v1": 348,
+  "model": 263,
+  "offer_cheapest": 262,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g213-pickup_5post-medium_x3-sku_boxes-prepaid-off",
+  "stage": "A",
+  "calc_v1": 610,
+  "model": 348,
+  "offer_cheapest": 347,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g213-pickup_5post-medium_x3-sku_boxes-prepaid-on",
+  "stage": "A",
+  "calc_v1": 629,
+  "model": 348,
+  "offer_cheapest": 347,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g213-pickup_5post-small-sku_boxes-prepaid-off",
+  "stage": "A",
+  "calc_v1": 220,
+  "model": 238,
+  "offer_cheapest": 237,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g213-pickup_5post-small-sku_boxes-prepaid-on",
+  "stage": "A",
+  "calc_v1": 238,
+  "model": 238,
+  "offer_cheapest": 237,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g213-pickup_5post-two_items-common_box-prepaid-off",
+  "stage": "A",
+  "calc_v1": 452,
+  "model": 263,
+  "offer_cheapest": 262,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g213-pickup_5post-two_items-common_box-prepaid-on",
+  "stage": "A",
+  "calc_v1": 470,
+  "model": 263,
+  "offer_cheapest": 262,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g213-pickup_5post-two_items-sku_boxes-prepaid-off",
+  "stage": "A",
+  "calc_v1": 452,
+  "model": 263,
+  "offer_cheapest": 262,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g213-pickup_5post-two_items-sku_boxes-prepaid-on",
+  "stage": "A",
+  "calc_v1": 470,
+  "model": 263,
+  "offer_cheapest": 262,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g213-pickup_market-large-sku_boxes-cod-off",
+  "stage": "A",
+  "calc_v1": 692,
+  "model": 589,
+  "offer_cheapest": 609,
+  "residual": 20,
+  "offer_no_delivery_cost": 588,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g213-pickup_market-large-sku_boxes-cod-on",
+  "stage": "A",
+  "calc_v1": 711,
+  "model": 589,
+  "offer_cheapest": 609,
+  "residual": 20,
+  "offer_no_delivery_cost": 588,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g213-pickup_market-large-sku_boxes-prepaid-off",
+  "stage": "A",
+  "calc_v1": 601,
+  "model": 497,
+  "offer_cheapest": 496,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g213-pickup_market-large-sku_boxes-prepaid-on",
+  "stage": "A",
+  "calc_v1": 619,
+  "model": 497,
+  "offer_cheapest": 496,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g213-pickup_market-medium-sku_boxes-cod-off",
+  "stage": "A",
+  "calc_v1": 326,
+  "model": 296,
+  "offer_cheapest": 305,
+  "residual": 9,
+  "offer_no_delivery_cost": 295,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g213-pickup_market-medium-sku_boxes-cod-on",
+  "stage": "A",
+  "calc_v1": 345,
+  "model": 296,
+  "offer_cheapest": 305,
+  "residual": 9,
+  "offer_no_delivery_cost": 295,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g213-pickup_market-medium-sku_boxes-prepaid-off",
+  "stage": "A",
+  "calc_v1": 235,
+  "model": 204,
+  "offer_cheapest": 203,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g213-pickup_market-medium-sku_boxes-prepaid-on",
+  "stage": "A",
+  "calc_v1": 253,
+  "model": 204,
+  "offer_cheapest": 203,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g213-pickup_market-medium_x3-sku_boxes-cod-off",
+  "stage": "A",
+  "calc_v1": 570,
+  "model": 442,
+  "offer_cheapest": 459,
+  "residual": 17,
+  "offer_no_delivery_cost": 441,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g213-pickup_market-medium_x3-sku_boxes-cod-on",
+  "stage": "A",
+  "calc_v1": 589,
+  "model": 442,
+  "offer_cheapest": 459,
+  "residual": 17,
+  "offer_no_delivery_cost": 441,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g213-pickup_market-medium_x3-sku_boxes-prepaid-off",
+  "stage": "A",
+  "calc_v1": 479,
+  "model": 351,
+  "offer_cheapest": 350,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g213-pickup_market-medium_x3-sku_boxes-prepaid-on",
+  "stage": "A",
+  "calc_v1": 497,
+  "model": 351,
+  "offer_cheapest": 350,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g213-pickup_market-small-sku_boxes-cod-off",
+  "stage": "A",
+  "calc_v1": 253,
+  "model": 271,
+  "offer_cheapest": 278,
+  "residual": 7,
+  "offer_no_delivery_cost": 270,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g213-pickup_market-small-sku_boxes-cod-on",
+  "stage": "A",
+  "calc_v1": 271,
+  "model": 271,
+  "offer_cheapest": 279,
+  "residual": 8,
+  "offer_no_delivery_cost": 270,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g213-pickup_market-small-sku_boxes-prepaid-off",
+  "stage": "A",
+  "calc_v1": 162,
+  "model": 180,
+  "offer_cheapest": 179,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g213-pickup_market-small-sku_boxes-prepaid-on",
+  "stage": "A",
+  "calc_v1": 180,
+  "model": 180,
+  "offer_cheapest": 179,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g213-pickup_market-two_items-common_box-cod-off",
+  "stage": "A",
+  "calc_v1": 399,
+  "model": 320,
+  "offer_cheapest": 331,
+  "residual": 11,
+  "offer_no_delivery_cost": 319,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g213-pickup_market-two_items-common_box-cod-on",
+  "stage": "A",
+  "calc_v1": 418,
+  "model": 320,
+  "offer_cheapest": 332,
+  "residual": 12,
+  "offer_no_delivery_cost": 319,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g213-pickup_market-two_items-common_box-prepaid-off",
+  "stage": "A",
+  "calc_v1": 308,
+  "model": 229,
+  "offer_cheapest": 228,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g213-pickup_market-two_items-common_box-prepaid-on",
+  "stage": "A",
+  "calc_v1": 326,
+  "model": 229,
+  "offer_cheapest": 228,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g213-pickup_market-two_items-sku_boxes-cod-off",
+  "stage": "A",
+  "calc_v1": 399,
+  "model": 320,
+  "offer_cheapest": 331,
+  "residual": 11,
+  "offer_no_delivery_cost": 319,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g213-pickup_market-two_items-sku_boxes-cod-on",
+  "stage": "A",
+  "calc_v1": 418,
+  "model": 320,
+  "offer_cheapest": 332,
+  "residual": 12,
+  "offer_no_delivery_cost": 319,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g213-pickup_market-two_items-sku_boxes-prepaid-off",
+  "stage": "A",
+  "calc_v1": 308,
+  "model": 229,
+  "offer_cheapest": 228,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g213-pickup_market-two_items-sku_boxes-prepaid-on",
+  "stage": "A",
+  "calc_v1": 326,
+  "model": 229,
+  "offer_cheapest": 228,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g22-pickup_5post-medium-sku_boxes-prepaid-off",
+  "stage": "A",
+  "calc_v1": 1089,
+  "model": 868,
+  "offer_cheapest": 867,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g22-pickup_5post-medium-sku_boxes-prepaid-on",
+  "stage": "A",
+  "calc_v1": 1107,
+  "model": 868,
+  "offer_cheapest": 867,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g22-pickup_5post-medium_x3-sku_boxes-prepaid-off",
+  "stage": "A",
+  "calc_v1": 2284,
+  "model": 1585,
+  "offer_cheapest": 1584,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g22-pickup_5post-medium_x3-sku_boxes-prepaid-on",
+  "stage": "A",
+  "calc_v1": 2303,
+  "model": 1585,
+  "offer_cheapest": 1584,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g22-pickup_5post-small-sku_boxes-prepaid-off",
+  "stage": "A",
+  "calc_v1": 850,
+  "model": 868,
+  "offer_cheapest": 867,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g22-pickup_5post-small-sku_boxes-prepaid-on",
+  "stage": "A",
+  "calc_v1": 868,
+  "model": 868,
+  "offer_cheapest": 867,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g22-pickup_5post-two_items-common_box-prepaid-off",
+  "stage": "A",
+  "calc_v1": 1447,
+  "model": 987,
+  "offer_cheapest": 986,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g22-pickup_5post-two_items-common_box-prepaid-on",
+  "stage": "A",
+  "calc_v1": 1466,
+  "model": 987,
+  "offer_cheapest": 986,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g22-pickup_5post-two_items-sku_boxes-prepaid-off",
+  "stage": "A",
+  "calc_v1": 1447,
+  "model": 987,
+  "offer_cheapest": 986,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g22-pickup_5post-two_items-sku_boxes-prepaid-on",
+  "stage": "A",
+  "calc_v1": 1466,
+  "model": 987,
+  "offer_cheapest": 986,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g51-courier-large-sku_boxes-prepaid-off",
+  "stage": "A",
+  "calc_v1": 1513,
+  "model": 1251,
+  "offer_cheapest": 1250,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g51-courier-large-sku_boxes-prepaid-on",
+  "stage": "A",
+  "calc_v1": 1532,
+  "model": 1251,
+  "offer_cheapest": 1250,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g51-courier-medium-sku_boxes-prepaid-off",
+  "stage": "A",
+  "calc_v1": 671,
+  "model": 578,
+  "offer_cheapest": 577,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g51-courier-medium-sku_boxes-prepaid-on",
+  "stage": "A",
+  "calc_v1": 690,
+  "model": 578,
+  "offer_cheapest": 577,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g51-courier-medium_x3-sku_boxes-prepaid-off",
+  "stage": "A",
+  "calc_v1": 1233,
+  "model": 914,
+  "offer_cheapest": 913,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g51-courier-medium_x3-sku_boxes-prepaid-on",
+  "stage": "A",
+  "calc_v1": 1251,
+  "model": 914,
+  "offer_cheapest": 913,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g51-courier-small-sku_boxes-prepaid-off",
+  "stage": "A",
+  "calc_v1": 451,
+  "model": 469,
+  "offer_cheapest": 468,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g51-courier-small-sku_boxes-prepaid-on",
+  "stage": "A",
+  "calc_v1": 469,
+  "model": 469,
+  "offer_cheapest": 468,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g51-courier-two_items-common_box-prepaid-off",
+  "stage": "A",
+  "calc_v1": 840,
+  "model": 634,
+  "offer_cheapest": 633,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g51-courier-two_items-common_box-prepaid-on",
+  "stage": "A",
+  "calc_v1": 858,
+  "model": 634,
+  "offer_cheapest": 633,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g51-courier-two_items-sku_boxes-prepaid-off",
+  "stage": "A",
+  "calc_v1": 840,
+  "model": 634,
+  "offer_cheapest": 633,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g51-courier-two_items-sku_boxes-prepaid-on",
+  "stage": "A",
+  "calc_v1": 858,
+  "model": 634,
+  "offer_cheapest": 633,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g51-pickup_5post-medium-sku_boxes-prepaid-off",
+  "stage": "A",
+  "calc_v1": 582,
+  "model": 488,
+  "offer_cheapest": 488,
+  "residual": 0,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g51-pickup_5post-medium-sku_boxes-prepaid-on",
+  "stage": "A",
+  "calc_v1": 601,
+  "model": 488,
+  "offer_cheapest": 488,
+  "residual": 0,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g51-pickup_5post-medium_x3-sku_boxes-prepaid-off",
+  "stage": "A",
+  "calc_v1": 1144,
+  "model": 825,
+  "offer_cheapest": 824,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g51-pickup_5post-medium_x3-sku_boxes-prepaid-on",
+  "stage": "A",
+  "calc_v1": 1162,
+  "model": 825,
+  "offer_cheapest": 824,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g51-pickup_5post-small-sku_boxes-prepaid-off",
+  "stage": "A",
+  "calc_v1": 470,
+  "model": 488,
+  "offer_cheapest": 488,
+  "residual": 0,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g51-pickup_5post-small-sku_boxes-prepaid-on",
+  "stage": "A",
+  "calc_v1": 488,
+  "model": 488,
+  "offer_cheapest": 488,
+  "residual": 0,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g51-pickup_5post-two_items-common_box-prepaid-off",
+  "stage": "A",
+  "calc_v1": 751,
+  "model": 545,
+  "offer_cheapest": 544,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g51-pickup_5post-two_items-common_box-prepaid-on",
+  "stage": "A",
+  "calc_v1": 769,
+  "model": 545,
+  "offer_cheapest": 544,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g51-pickup_5post-two_items-sku_boxes-prepaid-off",
+  "stage": "A",
+  "calc_v1": 751,
+  "model": 545,
+  "offer_cheapest": 544,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g51-pickup_5post-two_items-sku_boxes-prepaid-on",
+  "stage": "A",
+  "calc_v1": 769,
+  "model": 545,
+  "offer_cheapest": 544,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g51-pickup_market-large-sku_boxes-cod-off",
+  "stage": "A",
+  "calc_v1": 1327,
+  "model": 1083,
+  "offer_cheapest": 1122,
+  "residual": 39,
+  "offer_no_delivery_cost": 1082,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g51-pickup_market-large-sku_boxes-cod-on",
+  "stage": "A",
+  "calc_v1": 1345,
+  "model": 1083,
+  "offer_cheapest": 1123,
+  "residual": 40,
+  "offer_no_delivery_cost": 1082,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g51-pickup_market-large-sku_boxes-prepaid-off",
+  "stage": "A",
+  "calc_v1": 1235,
+  "model": 991,
+  "offer_cheapest": 990,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g51-pickup_market-large-sku_boxes-prepaid-on",
+  "stage": "A",
+  "calc_v1": 1253,
+  "model": 991,
+  "offer_cheapest": 990,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g51-pickup_market-medium-sku_boxes-cod-off",
+  "stage": "A",
+  "calc_v1": 540,
+  "model": 453,
+  "offer_cheapest": 469,
+  "residual": 16,
+  "offer_no_delivery_cost": 452,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g51-pickup_market-medium-sku_boxes-cod-on",
+  "stage": "A",
+  "calc_v1": 558,
+  "model": 453,
+  "offer_cheapest": 469,
+  "residual": 16,
+  "offer_no_delivery_cost": 452,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g51-pickup_market-medium-sku_boxes-prepaid-off",
+  "stage": "A",
+  "calc_v1": 448,
+  "model": 362,
+  "offer_cheapest": 361,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g51-pickup_market-medium-sku_boxes-prepaid-on",
+  "stage": "A",
+  "calc_v1": 467,
+  "model": 362,
+  "offer_cheapest": 361,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g51-pickup_market-medium_x3-sku_boxes-cod-off",
+  "stage": "A",
+  "calc_v1": 1064,
+  "model": 768,
+  "offer_cheapest": 799,
+  "residual": 31,
+  "offer_no_delivery_cost": 767,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g51-pickup_market-medium_x3-sku_boxes-cod-on",
+  "stage": "A",
+  "calc_v1": 1083,
+  "model": 768,
+  "offer_cheapest": 800,
+  "residual": 32,
+  "offer_no_delivery_cost": 767,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g51-pickup_market-medium_x3-sku_boxes-prepaid-off",
+  "stage": "A",
+  "calc_v1": 973,
+  "model": 676,
+  "offer_cheapest": 675,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g51-pickup_market-medium_x3-sku_boxes-prepaid-on",
+  "stage": "A",
+  "calc_v1": 991,
+  "model": 676,
+  "offer_cheapest": 675,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g51-pickup_market-small-sku_boxes-cod-off",
+  "stage": "A",
+  "calc_v1": 336,
+  "model": 354,
+  "offer_cheapest": 364,
+  "residual": 10,
+  "offer_no_delivery_cost": 353,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g51-pickup_market-small-sku_boxes-cod-on",
+  "stage": "A",
+  "calc_v1": 354,
+  "model": 354,
+  "offer_cheapest": 364,
+  "residual": 10,
+  "offer_no_delivery_cost": 353,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g51-pickup_market-small-sku_boxes-prepaid-off",
+  "stage": "A",
+  "calc_v1": 244,
+  "model": 263,
+  "offer_cheapest": 262,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g51-pickup_market-small-sku_boxes-prepaid-on",
+  "stage": "A",
+  "calc_v1": 263,
+  "model": 263,
+  "offer_cheapest": 262,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g51-pickup_market-two_items-common_box-cod-off",
+  "stage": "A",
+  "calc_v1": 697,
+  "model": 506,
+  "offer_cheapest": 526,
+  "residual": 20,
+  "offer_no_delivery_cost": 505,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g51-pickup_market-two_items-common_box-cod-on",
+  "stage": "A",
+  "calc_v1": 715,
+  "model": 506,
+  "offer_cheapest": 526,
+  "residual": 20,
+  "offer_no_delivery_cost": 505,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g51-pickup_market-two_items-common_box-prepaid-off",
+  "stage": "A",
+  "calc_v1": 606,
+  "model": 414,
+  "offer_cheapest": 413,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g51-pickup_market-two_items-common_box-prepaid-on",
+  "stage": "A",
+  "calc_v1": 624,
+  "model": 414,
+  "offer_cheapest": 413,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g51-pickup_market-two_items-sku_boxes-cod-off",
+  "stage": "A",
+  "calc_v1": 697,
+  "model": 506,
+  "offer_cheapest": 526,
+  "residual": 20,
+  "offer_no_delivery_cost": 505,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g51-pickup_market-two_items-sku_boxes-cod-on",
+  "stage": "A",
+  "calc_v1": 715,
+  "model": 506,
+  "offer_cheapest": 526,
+  "residual": 20,
+  "offer_no_delivery_cost": 505,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g51-pickup_market-two_items-sku_boxes-prepaid-off",
+  "stage": "A",
+  "calc_v1": 606,
+  "model": 414,
+  "offer_cheapest": 413,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g51-pickup_market-two_items-sku_boxes-prepaid-on",
+  "stage": "A",
+  "calc_v1": 624,
+  "model": 414,
+  "offer_cheapest": 413,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g121363-pickup_market-medium-sku_boxes-cod-off",
+  "stage": "B",
+  "calc_v1": 326,
+  "model": 296,
+  "offer_cheapest": 305,
+  "residual": 9,
+  "offer_no_delivery_cost": 295,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g121363-pickup_market-medium-sku_boxes-cod-on",
+  "stage": "B",
+  "calc_v1": 345,
+  "model": 296,
+  "offer_cheapest": 305,
+  "residual": 9,
+  "offer_no_delivery_cost": 295,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g121363-pickup_market-medium-sku_boxes-prepaid-off",
+  "stage": "B",
+  "calc_v1": 235,
+  "model": 204,
+  "offer_cheapest": 203,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g121363-pickup_market-medium-sku_boxes-prepaid-on",
+  "stage": "B",
+  "calc_v1": 253,
+  "model": 204,
+  "offer_cheapest": 203,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g121363-pickup_market-two_items-sku_boxes-cod-off",
+  "stage": "B",
+  "calc_v1": 399,
+  "model": 320,
+  "offer_cheapest": 331,
+  "residual": 11,
+  "offer_no_delivery_cost": 319,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g121363-pickup_market-two_items-sku_boxes-cod-on",
+  "stage": "B",
+  "calc_v1": 418,
+  "model": 320,
+  "offer_cheapest": 332,
+  "residual": 12,
+  "offer_no_delivery_cost": 319,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g121363-pickup_market-two_items-sku_boxes-prepaid-off",
+  "stage": "B",
+  "calc_v1": 308,
+  "model": 229,
+  "offer_cheapest": 228,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g121363-pickup_market-two_items-sku_boxes-prepaid-on",
+  "stage": "B",
+  "calc_v1": 326,
+  "model": 229,
+  "offer_cheapest": 228,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g2-courier-medium-sku_boxes-prepaid-off",
+  "stage": "B",
+  "calc_v1": 553,
+  "model": 498,
+  "offer_cheapest": 497,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g2-courier-medium-sku_boxes-prepaid-on",
+  "stage": "B",
+  "calc_v1": 571,
+  "model": 498,
+  "offer_cheapest": 497,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g2-courier-two_items-sku_boxes-prepaid-off",
+  "stage": "B",
+  "calc_v1": 663,
+  "model": 535,
+  "offer_cheapest": 534,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g2-courier-two_items-sku_boxes-prepaid-on",
+  "stage": "B",
+  "calc_v1": 681,
+  "model": 535,
+  "offer_cheapest": 534,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g2-pickup_5post-medium-sku_boxes-prepaid-off",
+  "stage": "B",
+  "calc_v1": 458,
+  "model": 324,
+  "offer_cheapest": 323,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g2-pickup_5post-medium-sku_boxes-prepaid-on",
+  "stage": "B",
+  "calc_v1": 476,
+  "model": 324,
+  "offer_cheapest": 323,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g2-pickup_5post-two_items-sku_boxes-prepaid-off",
+  "stage": "B",
+  "calc_v1": 653,
+  "model": 324,
+  "offer_cheapest": 323,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g2-pickup_5post-two_items-sku_boxes-prepaid-on",
+  "stage": "B",
+  "calc_v1": 671,
+  "model": 324,
+  "offer_cheapest": 323,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g2-pickup_market-medium-sku_boxes-cod-off",
+  "stage": "B",
+  "calc_v1": 420,
+  "model": 375,
+  "offer_cheapest": 387,
+  "residual": 12,
+  "offer_no_delivery_cost": 374,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g2-pickup_market-medium-sku_boxes-cod-on",
+  "stage": "B",
+  "calc_v1": 438,
+  "model": 375,
+  "offer_cheapest": 387,
+  "residual": 12,
+  "offer_no_delivery_cost": 374,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g2-pickup_market-medium-sku_boxes-prepaid-off",
+  "stage": "B",
+  "calc_v1": 329,
+  "model": 284,
+  "offer_cheapest": 283,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g2-pickup_market-medium-sku_boxes-prepaid-on",
+  "stage": "B",
+  "calc_v1": 347,
+  "model": 284,
+  "offer_cheapest": 283,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g2-pickup_market-two_items-sku_boxes-cod-off",
+  "stage": "B",
+  "calc_v1": 515,
+  "model": 407,
+  "offer_cheapest": 421,
+  "residual": 14,
+  "offer_no_delivery_cost": 406,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g2-pickup_market-two_items-sku_boxes-cod-on",
+  "stage": "B",
+  "calc_v1": 534,
+  "model": 407,
+  "offer_cheapest": 422,
+  "residual": 15,
+  "offer_no_delivery_cost": 406,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g2-pickup_market-two_items-sku_boxes-prepaid-off",
+  "stage": "B",
+  "calc_v1": 424,
+  "model": 315,
+  "offer_cheapest": 314,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g2-pickup_market-two_items-sku_boxes-prepaid-on",
+  "stage": "B",
+  "calc_v1": 442,
+  "model": 315,
+  "offer_cheapest": 314,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g20721-pickup_5post-medium-sku_boxes-prepaid-off",
+  "stage": "B",
+  "calc_v1": 610,
+  "model": 517,
+  "offer_cheapest": 516,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g20721-pickup_5post-medium-sku_boxes-prepaid-on",
+  "stage": "B",
+  "calc_v1": 629,
+  "model": 517,
+  "offer_cheapest": 516,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g20721-pickup_5post-two_items-sku_boxes-prepaid-off",
+  "stage": "B",
+  "calc_v1": 779,
+  "model": 573,
+  "offer_cheapest": 572,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g20721-pickup_5post-two_items-sku_boxes-prepaid-on",
+  "stage": "B",
+  "calc_v1": 797,
+  "model": 573,
+  "offer_cheapest": 572,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g20721-pickup_market-medium-sku_boxes-cod-off",
+  "stage": "B",
+  "calc_v1": 515,
+  "model": 436,
+  "offer_cheapest": 451,
+  "residual": 15,
+  "offer_no_delivery_cost": 435,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g20721-pickup_market-medium-sku_boxes-cod-on",
+  "stage": "B",
+  "calc_v1": 534,
+  "model": 436,
+  "offer_cheapest": 451,
+  "residual": 15,
+  "offer_no_delivery_cost": 435,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g20721-pickup_market-medium-sku_boxes-prepaid-off",
+  "stage": "B",
+  "calc_v1": 424,
+  "model": 345,
+  "offer_cheapest": 344,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g20721-pickup_market-medium-sku_boxes-prepaid-on",
+  "stage": "B",
+  "calc_v1": 442,
+  "model": 345,
+  "offer_cheapest": 344,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g20721-pickup_market-two_items-sku_boxes-cod-off",
+  "stage": "B",
+  "calc_v1": 662,
+  "model": 485,
+  "offer_cheapest": 504,
+  "residual": 19,
+  "offer_no_delivery_cost": 484,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g20721-pickup_market-two_items-sku_boxes-cod-on",
+  "stage": "B",
+  "calc_v1": 680,
+  "model": 485,
+  "offer_cheapest": 505,
+  "residual": 20,
+  "offer_no_delivery_cost": 484,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g20721-pickup_market-two_items-sku_boxes-prepaid-off",
+  "stage": "B",
+  "calc_v1": 570,
+  "model": 393,
+  "offer_cheapest": 392,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g20721-pickup_market-two_items-sku_boxes-prepaid-on",
+  "stage": "B",
+  "calc_v1": 589,
+  "model": 393,
+  "offer_cheapest": 392,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g21141-courier-medium-sku_boxes-prepaid-off",
+  "stage": "B",
+  "calc_v1": 659,
+  "model": 573,
+  "offer_cheapest": 572,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g21141-courier-medium-sku_boxes-prepaid-on",
+  "stage": "B",
+  "calc_v1": 678,
+  "model": 573,
+  "offer_cheapest": 572,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g21141-courier-two_items-sku_boxes-prepaid-off",
+  "stage": "B",
+  "calc_v1": 817,
+  "model": 625,
+  "offer_cheapest": 624,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g21141-courier-two_items-sku_boxes-prepaid-on",
+  "stage": "B",
+  "calc_v1": 835,
+  "model": 625,
+  "offer_cheapest": 624,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g21141-pickup_5post-medium-sku_boxes-prepaid-off",
+  "stage": "B",
+  "calc_v1": 590,
+  "model": 496,
+  "offer_cheapest": 495,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g21141-pickup_5post-medium-sku_boxes-prepaid-on",
+  "stage": "B",
+  "calc_v1": 608,
+  "model": 496,
+  "offer_cheapest": 495,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g21141-pickup_5post-two_items-sku_boxes-prepaid-off",
+  "stage": "B",
+  "calc_v1": 758,
+  "model": 552,
+  "offer_cheapest": 551,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g21141-pickup_5post-two_items-sku_boxes-prepaid-on",
+  "stage": "B",
+  "calc_v1": 776,
+  "model": 552,
+  "offer_cheapest": 551,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g21141-pickup_market-medium-sku_boxes-cod-off",
+  "stage": "B",
+  "calc_v1": 528,
+  "model": 448,
+  "offer_cheapest": 463,
+  "residual": 15,
+  "offer_no_delivery_cost": 447,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g21141-pickup_market-medium-sku_boxes-cod-on",
+  "stage": "B",
+  "calc_v1": 546,
+  "model": 448,
+  "offer_cheapest": 464,
+  "residual": 16,
+  "offer_no_delivery_cost": 447,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g21141-pickup_market-medium-sku_boxes-prepaid-off",
+  "stage": "B",
+  "calc_v1": 436,
+  "model": 357,
+  "offer_cheapest": 356,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g21141-pickup_market-medium-sku_boxes-prepaid-on",
+  "stage": "B",
+  "calc_v1": 454,
+  "model": 357,
+  "offer_cheapest": 356,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g21141-pickup_market-two_items-sku_boxes-cod-off",
+  "stage": "B",
+  "calc_v1": 674,
+  "model": 497,
+  "offer_cheapest": 517,
+  "residual": 20,
+  "offer_no_delivery_cost": 496,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g21141-pickup_market-two_items-sku_boxes-cod-on",
+  "stage": "B",
+  "calc_v1": 692,
+  "model": 497,
+  "offer_cheapest": 517,
+  "residual": 20,
+  "offer_no_delivery_cost": 496,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g21141-pickup_market-two_items-sku_boxes-prepaid-off",
+  "stage": "B",
+  "calc_v1": 582,
+  "model": 406,
+  "offer_cheapest": 405,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g21141-pickup_market-two_items-sku_boxes-prepaid-on",
+  "stage": "B",
+  "calc_v1": 601,
+  "model": 406,
+  "offer_cheapest": 405,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g239-courier-medium-sku_boxes-prepaid-off",
+  "stage": "B",
+  "calc_v1": 659,
+  "model": 573,
+  "offer_cheapest": 572,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g239-courier-medium-sku_boxes-prepaid-on",
+  "stage": "B",
+  "calc_v1": 678,
+  "model": 573,
+  "offer_cheapest": 572,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g239-courier-two_items-sku_boxes-prepaid-off",
+  "stage": "B",
+  "calc_v1": 817,
+  "model": 625,
+  "offer_cheapest": 624,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g239-courier-two_items-sku_boxes-prepaid-on",
+  "stage": "B",
+  "calc_v1": 835,
+  "model": 625,
+  "offer_cheapest": 624,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g239-pickup_5post-medium-sku_boxes-prepaid-off",
+  "stage": "B",
+  "calc_v1": 590,
+  "model": 496,
+  "offer_cheapest": 495,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g239-pickup_5post-medium-sku_boxes-prepaid-on",
+  "stage": "B",
+  "calc_v1": 608,
+  "model": 496,
+  "offer_cheapest": 495,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g239-pickup_5post-two_items-sku_boxes-prepaid-off",
+  "stage": "B",
+  "calc_v1": 758,
+  "model": 552,
+  "offer_cheapest": 551,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g239-pickup_5post-two_items-sku_boxes-prepaid-on",
+  "stage": "B",
+  "calc_v1": 776,
+  "model": 552,
+  "offer_cheapest": 551,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g239-pickup_market-medium-sku_boxes-cod-off",
+  "stage": "B",
+  "calc_v1": 528,
+  "model": 448,
+  "offer_cheapest": 463,
+  "residual": 15,
+  "offer_no_delivery_cost": 447,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g239-pickup_market-medium-sku_boxes-cod-on",
+  "stage": "B",
+  "calc_v1": 546,
+  "model": 448,
+  "offer_cheapest": 464,
+  "residual": 16,
+  "offer_no_delivery_cost": 447,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g239-pickup_market-medium-sku_boxes-prepaid-off",
+  "stage": "B",
+  "calc_v1": 436,
+  "model": 357,
+  "offer_cheapest": 356,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g239-pickup_market-medium-sku_boxes-prepaid-on",
+  "stage": "B",
+  "calc_v1": 454,
+  "model": 357,
+  "offer_cheapest": 356,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g239-pickup_market-two_items-sku_boxes-cod-off",
+  "stage": "B",
+  "calc_v1": 674,
+  "model": 497,
+  "offer_cheapest": 517,
+  "residual": 20,
+  "offer_no_delivery_cost": 496,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g239-pickup_market-two_items-sku_boxes-cod-on",
+  "stage": "B",
+  "calc_v1": 692,
+  "model": 497,
+  "offer_cheapest": 517,
+  "residual": 20,
+  "offer_no_delivery_cost": 496,
+  "residual_no_delivery_cost": -1
+ },
+ {
+  "id": "g239-pickup_market-two_items-sku_boxes-prepaid-off",
+  "stage": "B",
+  "calc_v1": 582,
+  "model": 406,
+  "offer_cheapest": 405,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ },
+ {
+  "id": "g239-pickup_market-two_items-sku_boxes-prepaid-on",
+  "stage": "B",
+  "calc_v1": 601,
+  "model": 406,
+  "offer_cheapest": 405,
+  "residual": -1,
+  "offer_no_delivery_cost": null,
+  "residual_no_delivery_cost": null
+ }
+]

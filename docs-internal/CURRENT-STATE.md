@@ -6,8 +6,8 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-12 (s173).** Framework `main` `27df83b5` and plugin `v2` `52667fc` (pin `27df83b5`) carry s173's merges — #1185, #1166, plugin #84 (#1167), #85; list in `sessions/s173.md`. 🚧 **v2 release = TWO carrier plugins on v2, tested and compatible**
-(#1179): CDEK production checks DONE (s172), the deferred CDEK cards DONE (s173); next Yandex. Block-checkout gaps do not block the release.
+**As of 2026-10-12 (s174).** Framework `main` `27df83b5` and plugin `v2` `52667fc` (pin `27df83b5`) — no code changed in s174. 🚧 **v2 release = TWO carrier plugins on v2, tested and compatible**
+(#1179): CDEK done (s172–s173). **Yandex: brainstorm done, decisions on #1179, design spec `specs/2026-10-12-yandex-v2-plugin-design.md` (Codex-reviewed); next — file the §17 cards, then build in a NEW plugin repository.** Block-checkout gaps do not block the release.
 Next checks: `next-session-prompt.md`. ⚠ Sync the plugin’s own `woodev/` before plugin rig runs
 (`wiki/local-rig.md`). The rig admin user has locale **ru_RU**; the site stays **en_US**.
 GlitchTip receiver (#1082) is live. **Both machines are live**; routine sync is git ONLY

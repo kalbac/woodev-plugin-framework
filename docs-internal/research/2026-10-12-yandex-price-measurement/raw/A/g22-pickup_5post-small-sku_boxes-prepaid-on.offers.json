@@ -1,0 +1,158 @@
+{
+ "request": {
+  "billing_info": {
+   "payment_method": "already_paid",
+   "delivery_cost": 0
+  },
+  "destination": {
+   "type": "platform_station",
+   "platform_station": {
+    "platform_id": "019ab6a9b91b73c9a42116355e4801c6"
+   }
+  },
+  "info": {
+   "operator_request_id": "g22-pickup_5post-small-sku_boxes-prepaid-on",
+   "referral_source": "woodev"
+  },
+  "recipient_info": {
+   "first_name": "Measure",
+   "last_name": "Test",
+   "phone": "+79000000000",
+   "email": "measure@example.com"
+  },
+  "items": [
+   {
+    "uin": "SMALL",
+    "article": "SMALL",
+    "count": 1,
+    "name": "Measure SMALL",
+    "place_barcode": "SMALL",
+    "billing_details": {
+     "assessed_unit_price": 300000,
+     "unit_price": 300000,
+     "nds": -1
+    },
+    "physical_dims": {
+     "predefined_volume": 3000,
+     "weight_gross": 500
+    }
+   }
+  ],
+  "places": [
+   {
+    "barcode": "SMALL",
+    "description": "Measure SMALL",
+    "physical_dims": {
+     "predefined_volume": 3000,
+     "weight_gross": 500
+    }
+   }
+  ],
+  "source": {
+   "platform_station": {
+    "platform_id": "20cfe81c-bb45-4cfa-85e6-31fdade8ed23"
+   }
+  },
+  "last_mile_policy": "self_pickup"
+ },
+ "status": 200,
+ "response": {
+  "offers": [
+   {
+    "offer_id": "e91f53d1051d42db9375042de4920c08",
+    "expires_at": "2026-10-12T18:26:58.000000Z",
+    "offer_details": {
+     "delivery_interval": {
+      "min": "2026-10-28T06:00:00.000000Z",
+      "max": "2026-10-28T20:00:00.000000Z",
+      "policy": "self_pickup"
+     },
+     "pickup_interval": {
+      "min": "2026-10-12T18:11:58.000000Z",
+      "max": "2026-10-13T11:00:00.000000Z"
+     },
+     "pricing": "867.42 RUB",
+     "pricing_total": "867.42 RUB",
+     "features": {}
+    },
+    "station_id": "019ab6a9b91b73c9a42116355e4801c6"
+   },
+   {
+    "offer_id": "f522037fbbae4fd98b5db2ab77414120",
+    "expires_at": "2026-10-12T18:26:58.000000Z",
+    "offer_details": {
+     "delivery_interval": {
+      "min": "2026-10-29T06:00:00.000000Z",
+      "max": "2026-10-29T20:00:00.000000Z",
+      "policy": "self_pickup"
+     },
+     "pickup_interval": {
+      "min": "2026-10-12T18:11:58.000000Z",
+      "max": "2026-10-14T19:00:00.000000Z"
+     },
+     "pricing": "867.42 RUB",
+     "pricing_total": "867.42 RUB",
+     "features": {}
+    },
+    "station_id": "019ab6a9b91b73c9a42116355e4801c6"
+   },
+   {
+    "offer_id": "9f0effd6ed24490f91c09d83870466ae",
+    "expires_at": "2026-10-12T18:26:58.000000Z",
+    "offer_details": {
+     "delivery_interval": {
+      "min": "2026-10-30T06:00:00.000000Z",
+      "max": "2026-10-30T20:00:00.000000Z",
+      "policy": "self_pickup"
+     },
+     "pickup_interval": {
+      "min": "2026-10-12T18:11:58.000000Z",
+      "max": "2026-10-15T19:00:00.000000Z"
+     },
+     "pricing": "867.42 RUB",
+     "pricing_total": "867.42 RUB",
+     "features": {}
+    },
+    "station_id": "019ab6a9b91b73c9a42116355e4801c6"
+   },
+   {
+    "offer_id": "f8800083e71e4432b8d259ffb766006b",
+    "expires_at": "2026-10-12T18:26:58.000000Z",
+    "offer_details": {
+     "delivery_interval": {
+      "min": "2026-10-31T06:00:00.000000Z",
+      "max": "2026-10-31T20:00:00.000000Z",
+      "policy": "self_pickup"
+     },
+     "pickup_interval": {
+      "min": "2026-10-12T18:11:58.000000Z",
+      "max": "2026-10-16T19:00:00.000000Z"
+     },
+     "pricing": "867.42 RUB",
+     "pricing_total": "867.42 RUB",
+     "features": {}
+    },
+    "station_id": "019ab6a9b91b73c9a42116355e4801c6"
+   },
+   {
+    "offer_id": "105651afe43f4185a958acf7b8469fe0",
+    "expires_at": "2026-10-12T18:26:58.000000Z",
+    "offer_details": {
+     "delivery_interval": {
+      "min": "2026-11-01T06:00:00.000000Z",
+      "max": "2026-11-01T20:00:00.000000Z",
+      "policy": "self_pickup"
+     },
+     "pickup_interval": {
+      "min": "2026-10-12T18:11:58.000000Z",
+      "max": "2026-10-17T19:00:00.000000Z"
+     },
+     "pricing": "867.42 RUB",
+     "pricing_total": "867.42 RUB",
+     "features": {}
+    },
+    "station_id": "019ab6a9b91b73c9a42116355e4801c6"
+   }
+  ]
+ }
+}

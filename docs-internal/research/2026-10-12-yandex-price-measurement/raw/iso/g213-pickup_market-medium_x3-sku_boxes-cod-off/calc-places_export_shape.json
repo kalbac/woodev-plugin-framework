@@ -1,0 +1,27 @@
+{
+ "request": {
+  "tariff": "self_pickup",
+  "total_weight": 9000,
+  "places": [
+   {
+    "physical_dims": {
+     "weight_gross": 9000,
+     "predefined_volume": 72000
+    }
+   }
+  ],
+  "source": {
+   "platform_station_id": "20cfe81c-bb45-4cfa-85e6-31fdade8ed23"
+  },
+  "destination": {
+   "platform_station_id": "05212278-441c-4033-9ed8-851ca27facca"
+  },
+  "payment_method": "card_on_receipt",
+  "client_price": 300000
+ },
+ "status": 400,
+ "response": {
+  "code": "400",
+  "message": "Error at path 'places[0].physical_dims.dx': Field is missing"
+ }
+}

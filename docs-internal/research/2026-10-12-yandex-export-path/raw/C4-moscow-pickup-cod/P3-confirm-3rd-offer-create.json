@@ -1,0 +1,13 @@
+{
+ "method": "POST",
+ "path": "/api/b2b/platform/offers/confirm",
+ "request": {
+  "offer_id": "f0ef85c877f944529c9ab7c741488ccf"
+ },
+ "status": 404,
+ "latency_ms": 95,
+ "response": {
+  "message": "Ваш корпоративный счёт больше не активен",
+  "code": "invalid_payment_method"
+ }
+}

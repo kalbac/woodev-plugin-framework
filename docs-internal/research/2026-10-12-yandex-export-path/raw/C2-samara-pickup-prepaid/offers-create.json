@@ -1,0 +1,164 @@
+{
+ "method": "POST",
+ "path": "/api/b2b/platform/offers/create",
+ "request": {
+  "billing_info": {
+   "payment_method": "already_paid",
+   "delivery_cost": 0
+  },
+  "destination": {
+   "type": "platform_station",
+   "platform_station": {
+    "platform_id": "01a0ece738f473b7be140baf6bde5a51"
+   }
+  },
+  "info": {
+   "operator_request_id": "C2-samara-pickup-prepaid-offers-194057",
+   "referral_source": "woodev"
+  },
+  "recipient_info": {
+   "first_name": "Measure",
+   "last_name": "Test",
+   "phone": "+79000000000",
+   "email": "measure@example.com"
+  },
+  "items": [
+   {
+    "uin": "MEDIUM",
+    "article": "MEDIUM",
+    "count": 1,
+    "name": "Measure MEDIUM",
+    "place_barcode": "MEDIUM",
+    "billing_details": {
+     "assessed_unit_price": 300000,
+     "unit_price": 300000,
+     "nds": -1
+    },
+    "physical_dims": {
+     "predefined_volume": 24000,
+     "weight_gross": 3000
+    }
+   }
+  ],
+  "places": [
+   {
+    "barcode": "MEDIUM",
+    "description": "Measure MEDIUM",
+    "physical_dims": {
+     "predefined_volume": 24000,
+     "weight_gross": 3000,
+     "dx": 40,
+     "dy": 20,
+     "dz": 30
+    }
+   }
+  ],
+  "source": {
+   "platform_station": {
+    "platform_id": "20cfe81c-bb45-4cfa-85e6-31fdade8ed23"
+   }
+  },
+  "last_mile_policy": "self_pickup"
+ },
+ "status": 200,
+ "latency_ms": 176,
+ "response": {
+  "offers": [
+   {
+    "offer_id": "a97f87480be24eacb1696559af52b622",
+    "expires_at": "2026-10-12T19:55:57.000000Z",
+    "offer_details": {
+     "delivery_interval": {
+      "min": "2026-10-17T05:00:00.000000Z",
+      "max": "2026-10-17T14:00:00.000000Z",
+      "policy": "self_pickup"
+     },
+     "pickup_interval": {
+      "min": "2026-10-12T19:40:57.000000Z",
+      "max": "2026-10-13T11:00:00.000000Z"
+     },
+     "pricing": "466.04 RUB",
+     "pricing_total": "466.04 RUB",
+     "features": {}
+    },
+    "station_id": "01a0ece738f473b7be140baf6bde5a51"
+   },
+   {
+    "offer_id": "8dc546245fd54f16ac1c429d42d34bf1",
+    "expires_at": "2026-10-12T19:55:57.000000Z",
+    "offer_details": {
+     "delivery_interval": {
+      "min": "2026-10-18T05:00:00.000000Z",
+      "max": "2026-10-18T14:00:00.000000Z",
+      "policy": "self_pickup"
+     },
+     "pickup_interval": {
+      "min": "2026-10-12T19:40:57.000000Z",
+      "max": "2026-10-14T19:00:00.000000Z"
+     },
+     "pricing": "466.04 RUB",
+     "pricing_total": "466.04 RUB",
+     "features": {}
+    },
+    "station_id": "01a0ece738f473b7be140baf6bde5a51"
+   },
+   {
+    "offer_id": "e8d4f0553baa492a8f0182786a457251",
+    "expires_at": "2026-10-12T19:55:57.000000Z",
+    "offer_details": {
+     "delivery_interval": {
+      "min": "2026-10-19T05:00:00.000000Z",
+      "max": "2026-10-19T14:00:00.000000Z",
+      "policy": "self_pickup"
+     },
+     "pickup_interval": {
+      "min": "2026-10-12T19:40:57.000000Z",
+      "max": "2026-10-15T19:00:00.000000Z"
+     },
+     "pricing": "466.04 RUB",
+     "pricing_total": "466.04 RUB",
+     "features": {}
+    },
+    "station_id": "01a0ece738f473b7be140baf6bde5a51"
+   },
+   {
+    "offer_id": "0a4fb52ac0f140b288e192405fba4faa",
+    "expires_at": "2026-10-12T19:55:57.000000Z",
+    "offer_details": {
+     "delivery_interval": {
+      "min": "2026-10-20T05:00:00.000000Z",
+      "max": "2026-10-20T14:00:00.000000Z",
+      "policy": "self_pickup"
+     },
+     "pickup_interval": {
+      "min": "2026-10-12T19:40:57.000000Z",
+      "max": "2026-10-16T19:00:00.000000Z"
+     },
+     "pricing": "466.04 RUB",
+     "pricing_total": "466.04 RUB",
+     "features": {}
+    },
+    "station_id": "01a0ece738f473b7be140baf6bde5a51"
+   },
+   {
+    "offer_id": "bc089857c8d143b9818267d44ec681d5",
+    "expires_at": "2026-10-12T19:55:57.000000Z",
+    "offer_details": {
+     "delivery_interval": {
+      "min": "2026-10-21T05:00:00.000000Z",
+      "max": "2026-10-21T14:00:00.000000Z",
+      "policy": "self_pickup"
+     },
+     "pickup_interval": {
+      "min": "2026-10-12T19:40:57.000000Z",
+      "max": "2026-10-17T19:00:00.000000Z"
+     },
+     "pricing": "466.04 RUB",
+     "pricing_total": "466.04 RUB",
+     "features": {}
+    },
+    "station_id": "01a0ece738f473b7be140baf6bde5a51"
+   }
+  ]
+ }
+}
