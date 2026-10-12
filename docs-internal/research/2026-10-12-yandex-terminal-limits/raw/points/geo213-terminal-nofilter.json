@@ -1,0 +1,10 @@
+{
+ "request": {
+  "geo_id": 213,
+  "type": "terminal"
+ },
+ "status": 200,
+ "response": {
+  "points": []
+ }
+}

@@ -1,0 +1,11 @@
+{
+ "request": {
+  "geo_id": 213,
+  "type": "terminal",
+  "payment_method": "already_paid"
+ },
+ "status": 200,
+ "response": {
+  "points": []
+ }
+}

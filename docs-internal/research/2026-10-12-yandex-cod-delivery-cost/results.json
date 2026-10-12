@@ -1,0 +1,748 @@
+[
+ {
+  "case": "s1-moscow-cod-d0rub",
+  "station": "05212278-441c-4033-9ed8-851ca27facca",
+  "payment": "card_on_receipt",
+  "delivery_cost_kop": 0,
+  "client_rub": 3000,
+  "assessed_rub": 3000,
+  "status": 200,
+  "offers": 5,
+  "pricing_total": [
+   "295.24 RUB"
+  ],
+  "pricing": [
+   "203.74 RUB"
+  ],
+  "commission_pct": [
+   "2.5%"
+  ],
+  "commission_amount": [
+   "91.5 RUB"
+  ],
+  "policy": [
+   "self_pickup"
+  ],
+  "features": [
+   "{}"
+  ]
+ },
+ {
+  "case": "s1-moscow-cod-d1rub",
+  "station": "05212278-441c-4033-9ed8-851ca27facca",
+  "payment": "card_on_receipt",
+  "delivery_cost_kop": 100,
+  "client_rub": 3000,
+  "assessed_rub": 3000,
+  "status": 200,
+  "offers": 5,
+  "pricing_total": [
+   "295.27 RUB"
+  ],
+  "pricing": [
+   "203.74 RUB"
+  ],
+  "commission_pct": [
+   "2.5%"
+  ],
+  "commission_amount": [
+   "91.53 RUB"
+  ],
+  "policy": [
+   "self_pickup"
+  ],
+  "features": [
+   "{}"
+  ]
+ },
+ {
+  "case": "s1-moscow-cod-d100rub",
+  "station": "05212278-441c-4033-9ed8-851ca27facca",
+  "payment": "card_on_receipt",
+  "delivery_cost_kop": 10000,
+  "client_rub": 3000,
+  "assessed_rub": 3000,
+  "status": 200,
+  "offers": 5,
+  "pricing_total": [
+   "298.29 RUB"
+  ],
+  "pricing": [
+   "203.74 RUB"
+  ],
+  "commission_pct": [
+   "2.5%"
+  ],
+  "commission_amount": [
+   "94.55 RUB"
+  ],
+  "policy": [
+   "self_pickup"
+  ],
+  "features": [
+   "{}"
+  ]
+ },
+ {
+  "case": "s1-moscow-cod-d300rub",
+  "station": "05212278-441c-4033-9ed8-851ca27facca",
+  "payment": "card_on_receipt",
+  "delivery_cost_kop": 30000,
+  "client_rub": 3000,
+  "assessed_rub": 3000,
+  "status": 200,
+  "offers": 5,
+  "pricing_total": [
+   "304.39 RUB"
+  ],
+  "pricing": [
+   "203.74 RUB"
+  ],
+  "commission_pct": [
+   "2.5%"
+  ],
+  "commission_amount": [
+   "100.65 RUB"
+  ],
+  "policy": [
+   "self_pickup"
+  ],
+  "features": [
+   "{}"
+  ]
+ },
+ {
+  "case": "s1-moscow-cod-d500rub",
+  "station": "05212278-441c-4033-9ed8-851ca27facca",
+  "payment": "card_on_receipt",
+  "delivery_cost_kop": 50000,
+  "client_rub": 3000,
+  "assessed_rub": 3000,
+  "status": 200,
+  "offers": 5,
+  "pricing_total": [
+   "310.49 RUB"
+  ],
+  "pricing": [
+   "203.74 RUB"
+  ],
+  "commission_pct": [
+   "2.5%"
+  ],
+  "commission_amount": [
+   "106.75 RUB"
+  ],
+  "policy": [
+   "self_pickup"
+  ],
+  "features": [
+   "{}"
+  ]
+ },
+ {
+  "case": "s1-moscow-cod-d1000rub",
+  "station": "05212278-441c-4033-9ed8-851ca27facca",
+  "payment": "card_on_receipt",
+  "delivery_cost_kop": 100000,
+  "client_rub": 3000,
+  "assessed_rub": 3000,
+  "status": 200,
+  "offers": 5,
+  "pricing_total": [
+   "325.74 RUB"
+  ],
+  "pricing": [
+   "203.74 RUB"
+  ],
+  "commission_pct": [
+   "2.5%"
+  ],
+  "commission_amount": [
+   "122 RUB"
+  ],
+  "policy": [
+   "self_pickup"
+  ],
+  "features": [
+   "{}"
+  ]
+ },
+ {
+  "case": "s1-moscow-cod-d2000rub",
+  "station": "05212278-441c-4033-9ed8-851ca27facca",
+  "payment": "card_on_receipt",
+  "delivery_cost_kop": 200000,
+  "client_rub": 3000,
+  "assessed_rub": 3000,
+  "status": 200,
+  "offers": 5,
+  "pricing_total": [
+   "356.24 RUB"
+  ],
+  "pricing": [
+   "203.74 RUB"
+  ],
+  "commission_pct": [
+   "2.5%"
+  ],
+  "commission_amount": [
+   "152.5 RUB"
+  ],
+  "policy": [
+   "self_pickup"
+  ],
+  "features": [
+   "{}"
+  ]
+ },
+ {
+  "case": "s1-moscow-cod-d5000rub",
+  "station": "05212278-441c-4033-9ed8-851ca27facca",
+  "payment": "card_on_receipt",
+  "delivery_cost_kop": 500000,
+  "client_rub": 3000,
+  "assessed_rub": 3000,
+  "status": 200,
+  "offers": 5,
+  "pricing_total": [
+   "447.74 RUB"
+  ],
+  "pricing": [
+   "203.74 RUB"
+  ],
+  "commission_pct": [
+   "2.5%"
+  ],
+  "commission_amount": [
+   "244 RUB"
+  ],
+  "policy": [
+   "self_pickup"
+  ],
+  "features": [
+   "{}"
+  ]
+ },
+ {
+  "case": "s1-moscow-cod-d20000rub",
+  "station": "05212278-441c-4033-9ed8-851ca27facca",
+  "payment": "card_on_receipt",
+  "delivery_cost_kop": 2000000,
+  "client_rub": 3000,
+  "assessed_rub": 3000,
+  "status": 200,
+  "offers": 5,
+  "pricing_total": [
+   "905.24 RUB"
+  ],
+  "pricing": [
+   "203.74 RUB"
+  ],
+  "commission_pct": [
+   "2.5%"
+  ],
+  "commission_amount": [
+   "701.5 RUB"
+  ],
+  "policy": [
+   "self_pickup"
+  ],
+  "features": [
+   "{}"
+  ]
+ },
+ {
+  "case": "s1-moscow-cod-d1kop",
+  "station": "05212278-441c-4033-9ed8-851ca27facca",
+  "payment": "card_on_receipt",
+  "delivery_cost_kop": 1,
+  "client_rub": 3000,
+  "assessed_rub": 3000,
+  "status": 200,
+  "offers": 5,
+  "pricing_total": [
+   "295.24 RUB"
+  ],
+  "pricing": [
+   "203.74 RUB"
+  ],
+  "commission_pct": [
+   "2.5%"
+  ],
+  "commission_amount": [
+   "91.5 RUB"
+  ],
+  "policy": [
+   "self_pickup"
+  ],
+  "features": [
+   "{}"
+  ]
+ },
+ {
+  "case": "s1-moscow-cod-d50kop",
+  "station": "05212278-441c-4033-9ed8-851ca27facca",
+  "payment": "card_on_receipt",
+  "delivery_cost_kop": 50,
+  "client_rub": 3000,
+  "assessed_rub": 3000,
+  "status": 200,
+  "offers": 5,
+  "pricing_total": [
+   "295.25 RUB"
+  ],
+  "pricing": [
+   "203.74 RUB"
+  ],
+  "commission_pct": [
+   "2.5%"
+  ],
+  "commission_amount": [
+   "91.51 RUB"
+  ],
+  "policy": [
+   "self_pickup"
+  ],
+  "features": [
+   "{}"
+  ]
+ },
+ {
+  "case": "s1-moscow-cod-d99kop",
+  "station": "05212278-441c-4033-9ed8-851ca27facca",
+  "payment": "card_on_receipt",
+  "delivery_cost_kop": 99,
+  "client_rub": 3000,
+  "assessed_rub": 3000,
+  "status": 200,
+  "offers": 5,
+  "pricing_total": [
+   "295.27 RUB"
+  ],
+  "pricing": [
+   "203.74 RUB"
+  ],
+  "commission_pct": [
+   "2.5%"
+  ],
+  "commission_amount": [
+   "91.53 RUB"
+  ],
+  "policy": [
+   "self_pickup"
+  ],
+  "features": [
+   "{}"
+  ]
+ },
+ {
+  "case": "s1-moscow-cod-d12345kop",
+  "station": "05212278-441c-4033-9ed8-851ca27facca",
+  "payment": "card_on_receipt",
+  "delivery_cost_kop": 12345,
+  "client_rub": 3000,
+  "assessed_rub": 3000,
+  "status": 200,
+  "offers": 5,
+  "pricing_total": [
+   "299 RUB"
+  ],
+  "pricing": [
+   "203.74 RUB"
+  ],
+  "commission_pct": [
+   "2.5%"
+  ],
+  "commission_amount": [
+   "95.26 RUB"
+  ],
+  "policy": [
+   "self_pickup"
+  ],
+  "features": [
+   "{}"
+  ]
+ },
+ {
+  "case": "s1-moscow-cod-d77777kop",
+  "station": "05212278-441c-4033-9ed8-851ca27facca",
+  "payment": "card_on_receipt",
+  "delivery_cost_kop": 77777,
+  "client_rub": 3000,
+  "assessed_rub": 3000,
+  "status": 200,
+  "offers": 5,
+  "pricing_total": [
+   "318.96 RUB"
+  ],
+  "pricing": [
+   "203.74 RUB"
+  ],
+  "commission_pct": [
+   "2.5%"
+  ],
+  "commission_amount": [
+   "115.22 RUB"
+  ],
+  "policy": [
+   "self_pickup"
+  ],
+  "features": [
+   "{}"
+  ]
+ },
+ {
+  "case": "s1-moscow-cod-d300rub-rep",
+  "station": "05212278-441c-4033-9ed8-851ca27facca",
+  "payment": "card_on_receipt",
+  "delivery_cost_kop": 30000,
+  "client_rub": 3000,
+  "assessed_rub": 3000,
+  "status": 200,
+  "offers": 5,
+  "pricing_total": [
+   "304.39 RUB"
+  ],
+  "pricing": [
+   "203.74 RUB"
+  ],
+  "commission_pct": [
+   "2.5%"
+  ],
+  "commission_amount": [
+   "100.65 RUB"
+  ],
+  "policy": [
+   "self_pickup"
+  ],
+  "features": [
+   "{}"
+  ]
+ },
+ {
+  "case": "s1-moscow-cod-d1000rub-rep",
+  "station": "05212278-441c-4033-9ed8-851ca27facca",
+  "payment": "card_on_receipt",
+  "delivery_cost_kop": 100000,
+  "client_rub": 3000,
+  "assessed_rub": 3000,
+  "status": 200,
+  "offers": 5,
+  "pricing_total": [
+   "325.74 RUB"
+  ],
+  "pricing": [
+   "203.74 RUB"
+  ],
+  "commission_pct": [
+   "2.5%"
+  ],
+  "commission_amount": [
+   "122 RUB"
+  ],
+  "policy": [
+   "self_pickup"
+  ],
+  "features": [
+   "{}"
+  ]
+ },
+ {
+  "case": "s2-moscow-cod-d1000rub-client1000",
+  "station": "05212278-441c-4033-9ed8-851ca27facca",
+  "payment": "card_on_receipt",
+  "delivery_cost_kop": 100000,
+  "client_rub": 1000,
+  "assessed_rub": 1000,
+  "status": 200,
+  "offers": 5,
+  "pricing_total": [
+   "252.54 RUB"
+  ],
+  "pricing": [
+   "191.54 RUB"
+  ],
+  "commission_pct": [
+   "2.5%"
+  ],
+  "commission_amount": [
+   "61 RUB"
+  ],
+  "policy": [
+   "self_pickup"
+  ],
+  "features": [
+   "{}"
+  ]
+ },
+ {
+  "case": "s2-moscow-cod-d1000rub-client5000",
+  "station": "05212278-441c-4033-9ed8-851ca27facca",
+  "payment": "card_on_receipt",
+  "delivery_cost_kop": 100000,
+  "client_rub": 5000,
+  "assessed_rub": 5000,
+  "status": 200,
+  "offers": 5,
+  "pricing_total": [
+   "398.94 RUB"
+  ],
+  "pricing": [
+   "215.94 RUB"
+  ],
+  "commission_pct": [
+   "2.5%"
+  ],
+  "commission_amount": [
+   "183 RUB"
+  ],
+  "policy": [
+   "self_pickup"
+  ],
+  "features": [
+   "{}"
+  ]
+ },
+ {
+  "case": "s2-moscow-cod-d1000rub-client10000",
+  "station": "05212278-441c-4033-9ed8-851ca27facca",
+  "payment": "card_on_receipt",
+  "delivery_cost_kop": 100000,
+  "client_rub": 10000,
+  "assessed_rub": 10000,
+  "status": 200,
+  "offers": 5,
+  "pricing_total": [
+   "581.94 RUB"
+  ],
+  "pricing": [
+   "246.44 RUB"
+  ],
+  "commission_pct": [
+   "2.5%"
+  ],
+  "commission_amount": [
+   "335.5 RUB"
+  ],
+  "policy": [
+   "self_pickup"
+  ],
+  "features": [
+   "{}"
+  ]
+ },
+ {
+  "case": "s2-moscow-cod-d0-assessed0",
+  "station": "05212278-441c-4033-9ed8-851ca27facca",
+  "payment": "card_on_receipt",
+  "delivery_cost_kop": 0,
+  "client_rub": 3000,
+  "assessed_rub": 0,
+  "status": 200,
+  "offers": 5,
+  "pricing_total": [
+   "276.94 RUB"
+  ],
+  "pricing": [
+   "185.44 RUB"
+  ],
+  "commission_pct": [
+   "2.5%"
+  ],
+  "commission_amount": [
+   "91.5 RUB"
+  ],
+  "policy": [
+   "self_pickup"
+  ],
+  "features": [
+   "{}"
+  ]
+ },
+ {
+  "case": "s2-moscow-cod-d1000rub-assessed0",
+  "station": "05212278-441c-4033-9ed8-851ca27facca",
+  "payment": "card_on_receipt",
+  "delivery_cost_kop": 100000,
+  "client_rub": 3000,
+  "assessed_rub": 0,
+  "status": 200,
+  "offers": 5,
+  "pricing_total": [
+   "307.44 RUB"
+  ],
+  "pricing": [
+   "185.44 RUB"
+  ],
+  "commission_pct": [
+   "2.5%"
+  ],
+  "commission_amount": [
+   "122 RUB"
+  ],
+  "policy": [
+   "self_pickup"
+  ],
+  "features": [
+   "{}"
+  ]
+ },
+ {
+  "case": "s3-samara-cod-d0rub",
+  "station": "01a0ece738f473b7be140baf6bde5a51",
+  "payment": "card_on_receipt",
+  "delivery_cost_kop": 0,
+  "client_rub": 3000,
+  "assessed_rub": 3000,
+  "status": 200,
+  "offers": 5,
+  "pricing_total": [
+   "452.62 RUB"
+  ],
+  "pricing": [
+   "361.12 RUB"
+  ],
+  "commission_pct": [
+   "2.5%"
+  ],
+  "commission_amount": [
+   "91.5 RUB"
+  ],
+  "policy": [
+   "self_pickup"
+  ],
+  "features": [
+   "{}"
+  ]
+ },
+ {
+  "case": "s3-samara-cod-d1000rub",
+  "station": "01a0ece738f473b7be140baf6bde5a51",
+  "payment": "card_on_receipt",
+  "delivery_cost_kop": 100000,
+  "client_rub": 3000,
+  "assessed_rub": 3000,
+  "status": 200,
+  "offers": 5,
+  "pricing_total": [
+   "483.12 RUB"
+  ],
+  "pricing": [
+   "361.12 RUB"
+  ],
+  "commission_pct": [
+   "2.5%"
+  ],
+  "commission_amount": [
+   "122 RUB"
+  ],
+  "policy": [
+   "self_pickup"
+  ],
+  "features": [
+   "{}"
+  ]
+ },
+ {
+  "case": "s3-samara-cod-d5000rub",
+  "station": "01a0ece738f473b7be140baf6bde5a51",
+  "payment": "card_on_receipt",
+  "delivery_cost_kop": 500000,
+  "client_rub": 3000,
+  "assessed_rub": 3000,
+  "status": 200,
+  "offers": 5,
+  "pricing_total": [
+   "605.12 RUB"
+  ],
+  "pricing": [
+   "361.12 RUB"
+  ],
+  "commission_pct": [
+   "2.5%"
+  ],
+  "commission_amount": [
+   "244 RUB"
+  ],
+  "policy": [
+   "self_pickup"
+  ],
+  "features": [
+   "{}"
+  ]
+ },
+ {
+  "case": "s4-moscow5post-cod-d0rub",
+  "station": "019e0aec42e271dab592470ac89a572c",
+  "payment": "card_on_receipt",
+  "delivery_cost_kop": 0,
+  "client_rub": 3000,
+  "assessed_rub": 3000,
+  "status": 400,
+  "error": "{\"message\": \"Pickup point doesn't accept payment on delivery. Choose another pickup point or payment method.\", \"code\": \"validation_error\"}"
+ },
+ {
+  "case": "s4-moscow5post-cod-d1000rub",
+  "missing": true
+ },
+ {
+  "case": "s4-moscow5post-cod-d5000rub",
+  "missing": true
+ },
+ {
+  "case": "s5-moscow-prepaid-d0",
+  "station": "05212278-441c-4033-9ed8-851ca27facca",
+  "payment": "already_paid",
+  "delivery_cost_kop": 0,
+  "client_rub": 3000,
+  "assessed_rub": 3000,
+  "status": 200,
+  "offers": 5,
+  "pricing_total": [
+   "203.74 RUB"
+  ],
+  "pricing": [
+   "203.74 RUB"
+  ],
+  "commission_pct": [
+   null
+  ],
+  "commission_amount": [
+   null
+  ],
+  "policy": [
+   "self_pickup"
+  ],
+  "features": [
+   "{}"
+  ]
+ },
+ {
+  "case": "s5-moscow-prepaid-d1000rub",
+  "station": "05212278-441c-4033-9ed8-851ca27facca",
+  "payment": "already_paid",
+  "delivery_cost_kop": 100000,
+  "client_rub": 3000,
+  "assessed_rub": 3000,
+  "status": 200,
+  "offers": 5,
+  "pricing_total": [
+   "203.74 RUB"
+  ],
+  "pricing": [
+   "203.74 RUB"
+  ],
+  "commission_pct": [
+   null
+  ],
+  "commission_amount": [
+   null
+  ],
+  "policy": [
+   "self_pickup"
+  ],
+  "features": [
+   "{}"
+  ]
+ }
+]

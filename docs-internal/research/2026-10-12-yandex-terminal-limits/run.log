@@ -1,0 +1,121 @@
+--- terminal: weight bracket (box 10x10x10 cm), weight in g
+terminal  w-10x10x10-15000g                PASS  990.64 RUB
+terminal  w-10x10x10-30000g                FAIL  HTTP 400 dimensions_limit: Dimensions should not exceed limit
+terminal  w-10x10x10-22500g                FAIL  HTTP 400 dimensions_limit: Dimensions should not exceed limit
+terminal  w-10x10x10-18750g                PASS  1200.48 RUB
+terminal  w-10x10x10-20500g                FAIL  HTTP 400 dimensions_limit: Dimensions should not exceed limit
+terminal  w-10x10x10-19500g                PASS  1252.94 RUB
+terminal  w-10x10x10-20000g                PASS  1252.94 RUB
+terminal  w-10x10x10-20250g                FAIL  HTTP 400 dimensions_limit: Dimensions should not exceed limit
+--- terminal: length bracket (light parcel 500 g, dy=dz=10 cm), longest side in cm
+terminal  l-60x10x10-500g                  FAIL  HTTP 400 no_delivery_options: No delivery options for interval
+terminal  l-40x10x10-500g                  PASS  262.3 RUB
+terminal  l-50x10x10-500g                  FAIL  HTTP 400 no_delivery_options: No delivery options for interval
+terminal  l-45x10x10-500g                  FAIL  HTTP 400 no_delivery_options: No delivery options for interval
+terminal  l-42x10x10-500g                  FAIL  HTTP 400 no_delivery_options: No delivery options for interval
+terminal  l-41x10x10-500g                  FAIL  HTTP 400 no_delivery_options: No delivery options for interval
+--- terminal: sum/volume probes
+terminal  v-60x40x40-500g                  FAIL  HTTP 400 dimensions_limit: Dimensions should not exceed limit
+terminal  v-60x40x40-15000g                FAIL  HTTP 400 dimensions_limit: Dimensions should not exceed limit
+terminal  v-45x45x45-500g                  FAIL  HTTP 400 no_delivery_options: No delivery options for interval
+terminal  v-60x20x20-500g                  FAIL  HTTP 400 no_delivery_options: No delivery options for interval
+--- 5post: weight bracket (box 10x10x10 cm), weight in g
+5post     w-10x10x10-15000g                PASS  469.7 RUB
+5post     w-10x10x10-30000g                FAIL  HTTP 400 dimensions_limit: Dimensions should not exceed limit
+5post     w-10x10x10-22500g                FAIL  HTTP 400 dimensions_limit: Dimensions should not exceed limit
+5post     w-10x10x10-18750g                FAIL  HTTP 400 dimensions_limit: Dimensions should not exceed limit
+5post     w-10x10x10-17000g                FAIL  HTTP 400 dimensions_limit: Dimensions should not exceed limit
+5post     w-10x10x10-16000g                FAIL  HTTP 400 dimensions_limit: Dimensions should not exceed limit
+5post     w-10x10x10-15500g                FAIL  HTTP 400 dimensions_limit: Dimensions should not exceed limit
+5post     w-10x10x10-15250g                FAIL  HTTP 400 dimensions_limit: Dimensions should not exceed limit
+--- 5post: length bracket (light parcel 500 g, dy=dz=10 cm), longest side in cm
+5post     l-60x10x10-500g                  PASS  469.7 RUB
+5post     l-90x10x10-500g                  FAIL  HTTP 400 dimensions_limit: Dimensions should not exceed limit
+5post     l-75x10x10-500g                  FAIL  HTTP 400 dimensions_limit: Dimensions should not exceed limit
+5post     l-68x10x10-500g                  PASS  628.3 RUB
+5post     l-72x10x10-500g                  FAIL  HTTP 400 dimensions_limit: Dimensions should not exceed limit
+5post     l-70x10x10-500g                  PASS  628.3 RUB
+5post     l-71x10x10-500g                  FAIL  HTTP 400 dimensions_limit: Dimensions should not exceed limit
+--- 5post: sum/volume probes
+5post     v-60x40x40-500g                  FAIL  HTTP 400 dimensions_limit: Dimensions should not exceed limit
+5post     v-60x40x40-15000g                FAIL  HTTP 400 dimensions_limit: Dimensions should not exceed limit
+5post     v-45x45x45-500g                  PASS  469.7 RUB
+5post     v-60x20x20-500g                  PASS  469.7 RUB
+--- follow-up: boxes inside the longest-side limit, to test sum of sides / volume
+terminal  v-40x40x40-500g                  FAIL  HTTP 400 no_delivery_options: No delivery options for interval
+5post     v-70x35x35-500g                  FAIL  HTTP 400 dimensions_limit: Dimensions should not exceed limit
+terminal  v-30x30x2-500g                   PASS  262.3 RUB
+terminal  v-20x20x20-500g                  PASS  311.1 RUB
+5post     v-68x35x35-500g                  FAIL  HTTP 400 dimensions_limit: Dimensions should not exceed limit
+terminal  v-40x40x10-500g                  PASS  413.58 RUB
+terminal  v-40x20x20-500g                  PASS  413.58 RUB
+terminal  v-40x40x25-500g                  PASS  623.42 RUB
+terminal  v-40x40x32-500g                  PASS  780.8 RUB
+terminal  v-40x40x36-500g                  PASS  833.26 RUB
+terminal  v-40x40x38-500g                  PASS  885.72 RUB
+terminal  v-40x40x39-500g                  FAIL  HTTP 400 no_delivery_options: No delivery options for interval
+5post     v-46x45x45-500g                  PASS  469.7 RUB
+5post     v-46x46x45-500g                  FAIL  HTTP 400 dimensions_limit: Dimensions should not exceed limit
+5post     w-10x10x10-15001g                FAIL  HTTP 400 dimensions_limit: Dimensions should not exceed limit
+terminal  w-10x10x10-20001g                FAIL  HTTP 400 dimensions_limit: Dimensions should not exceed limit
+terminal  v-40x40x38-20000g                PASS  1252.94 RUB
+5post     v-46x45x45-15000g                PASS  469.7 RUB
+--- control: market_l4g pickup_point, 60x40x40 cm, 15 kg
+control   pickup-60x40x40-15000g           PASS  618.54 RUB
+{
+ "terminal": "d1a38736-becd-4297-9582-9a07ff53a198",
+ "five_post": "019e0aec42e271dab592470ac89a572c",
+ "terminal_weight": {
+  "pass_g": 20000,
+  "fail_g": 20250
+ },
+ "terminal_length": {
+  "pass_cm": 40,
+  "fail_cm": 41
+ },
+ "terminal_probes": {
+  "60x40x40_500g": false,
+  "60x40x40_15000g": false,
+  "45x45x45_500g": false,
+  "60x20x20_500g": false
+ },
+ "5post_weight": {
+  "pass_g": 15000,
+  "fail_g": 15250
+ },
+ "5post_length": {
+  "pass_cm": 70,
+  "fail_cm": 71
+ },
+ "5post_probes": {
+  "60x40x40_500g": false,
+  "60x40x40_15000g": false,
+  "45x45x45_500g": true,
+  "60x20x20_500g": true
+ },
+ "terminal_40x40x40_500g": false,
+ "5post_70x35x35_500g": false,
+ "terminal_30x30x2_500g": true,
+ "terminal_20x20x20_500g": true,
+ "5post_68x35x35_500g": false,
+ "terminal_40x40x10_500g": true,
+ "terminal_40x20x20_500g": true,
+ "terminal_40x40xc_bracket": {
+  "pass_c": 38,
+  "fail_c": 39,
+  "pass_sum": 118,
+  "fail_sum": 119,
+  "pass_vol": 60800,
+  "fail_vol": 62400
+ },
+ "5post_46x45x45_500g": true,
+ "5post_46x46x45_500g": false,
+ "5post_weight_15001g": false,
+ "terminal_weight_20001g": false,
+ "terminal_40x40x38_20000g": true,
+ "5post_46x45x45_15000g": true,
+ "control_market_pickup_60x40x40_15000g": true,
+ "calc_calls_total": 56,
+ "points_calls_total": 4
+}
+calculator calls on disk: 56 of 60; points calls on disk: 4 of 4

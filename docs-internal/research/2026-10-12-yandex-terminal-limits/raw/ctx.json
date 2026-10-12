@@ -1,0 +1,39 @@
+{
+ "source": "20cfe81c-bb45-4cfa-85e6-31fdade8ed23",
+ "terminal": {
+  "id": "d1a38736-becd-4297-9582-9a07ff53a198",
+  "operator_id": "market_l4g",
+  "name": "Постамат Яндекс Маркет",
+  "type": "terminal",
+  "full_address": "Самара 6-я просека 143",
+  "payment_methods": [
+   "already_paid"
+  ]
+ },
+ "terminal_geo_id": 51,
+ "terminal_count_geo51": 1,
+ "five_post": {
+  "id": "019e0aec42e271dab592470ac89a572c",
+  "operator_id": "5post",
+  "name": "5 Post (Пятерочка)",
+  "type": "pickup_point",
+  "full_address": "Москва г Боровское ш 62к3",
+  "payment_methods": [
+   "already_paid"
+  ]
+ },
+ "five_post_source": "s174 point still listed",
+ "market_pickup_control": {
+  "id": "05212278-441c-4033-9ed8-851ca27facca",
+  "operator_id": "market_l4g",
+  "name": "Пункт выдачи заказов Яндекс Маркета",
+  "type": "pickup_point",
+  "full_address": "Москва Волгоградский проспект 10 стр2",
+  "payment_methods": [
+   "already_paid",
+   "card_on_receipt",
+   "bound_card",
+   "postpay"
+  ]
+ }
+}

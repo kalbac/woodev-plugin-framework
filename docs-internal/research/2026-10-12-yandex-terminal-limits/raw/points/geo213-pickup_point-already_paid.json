@@ -1,0 +1,3509 @@
+{
+ "request": {
+  "geo_id": 213,
+  "type": "pickup_point",
+  "payment_method": "already_paid"
+ },
+ "status": 200,
+ "response": {
+  "points": [
+   {
+    "id": "05212278-441c-4033-9ed8-851ca27facca",
+    "operator_station_id": "10028223114",
+    "operator_id": "market_l4g",
+    "name": "Пункт выдачи заказов Яндекс Маркета",
+    "type": "pickup_point",
+    "position": {
+     "latitude": 55.730010986328125,
+     "longitude": 37.674137115478516
+    },
+    "address": {
+     "geoId": 120539,
+     "country": "Россия",
+     "region": "Москва и Московская область",
+     "subRegion": "",
+     "locality": "Москва",
+     "street": "Волгоградский проспект",
+     "house": "10 стр2",
+     "housing": "",
+     "apartment": "",
+     "building": "",
+     "comment": "ТЦ \"Волгоградский\", вывеска \"Яндекс Маркет\"",
+     "full_address": "Москва Волгоградский проспект 10 стр2",
+     "postal_code": "109044"
+    },
+    "instruction": "ТЦ \"Волгоградский\", вывеска \"Яндекс Маркет\"",
+    "payment_methods": [
+     "already_paid",
+     "card_on_receipt",
+     "bound_card",
+     "postpay"
+    ],
+    "contact": {
+     "phone": "+74951570020"
+    },
+    "schedule": {
+     "time_zone": 3,
+     "restrictions": [
+      {
+       "days": [
+        1
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        2
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        3
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        4
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        5
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        6
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        7
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      }
+     ]
+    },
+    "is_yandex_branded": true,
+    "is_market_partner": true,
+    "is_dark_store": false,
+    "is_post_office": false,
+    "dayoffs": [
+     {
+      "date": 1798761600,
+      "date_utc": "2027-01-01T00:00:00+0000"
+     }
+    ],
+    "deactivation_date": null,
+    "deactivation_date_predicted_debt": null,
+    "available_for_dropoff": true,
+    "available_for_c2c_dropoff": true,
+    "pickup_services": {
+     "is_fitting_allowed": true,
+     "is_partial_refuse_allowed": true,
+     "is_paperless_pickup_allowed": true,
+     "is_unboxing_allowed": true
+    }
+   },
+   {
+    "id": "019e0aec42e271dab592470ac89a572c",
+    "operator_station_id": "b82b9c40-36d3-48f1-9d6e-9e36d996a911",
+    "operator_id": "5post",
+    "name": "5 Post (Пятерочка)",
+    "type": "pickup_point",
+    "position": {
+     "latitude": 55.583122,
+     "longitude": 37.14324
+    },
+    "address": {
+     "geoId": 215253,
+     "country": "Россия",
+     "region": "Москва и Московская область",
+     "subRegion": "",
+     "locality": "Москва",
+     "street": "Боровское ш",
+     "house": "62к3",
+     "housing": "",
+     "apartment": "",
+     "building": "",
+     "comment": "5post. Касса в магазине «Пятёрочка»",
+     "full_address": "Москва г Боровское ш 62к3",
+     "postal_code": "108810"
+    },
+    "instruction": "5post. Касса в магазине «Пятёрочка»",
+    "payment_methods": [
+     "already_paid"
+    ],
+    "contact": {
+     "phone": "+74951570020"
+    },
+    "schedule": {
+     "time_zone": 3,
+     "restrictions": [
+      {
+       "days": [
+        1
+       ],
+       "time_from": {
+        "hours": 9,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        2
+       ],
+       "time_from": {
+        "hours": 9,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        3
+       ],
+       "time_from": {
+        "hours": 9,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        4
+       ],
+       "time_from": {
+        "hours": 9,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        5
+       ],
+       "time_from": {
+        "hours": 9,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        6
+       ],
+       "time_from": {
+        "hours": 9,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        7
+       ],
+       "time_from": {
+        "hours": 9,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      }
+     ]
+    },
+    "is_yandex_branded": false,
+    "is_market_partner": false,
+    "is_dark_store": false,
+    "is_post_office": false,
+    "dayoffs": [],
+    "deactivation_date": null,
+    "deactivation_date_predicted_debt": null,
+    "available_for_dropoff": false,
+    "available_for_c2c_dropoff": false,
+    "pickup_services": {
+     "is_fitting_allowed": false,
+     "is_partial_refuse_allowed": false,
+     "is_paperless_pickup_allowed": false,
+     "is_unboxing_allowed": false
+    }
+   },
+   {
+    "id": "01978779a22775c694eb95f34e267210",
+    "operator_station_id": "05e9c61f-23a8-4638-966d-1995fd153fd0",
+    "operator_id": "5post",
+    "name": "5 Post (Пятерочка)",
+    "type": "pickup_point",
+    "position": {
+     "latitude": 55.92071,
+     "longitude": 37.541485
+    },
+    "address": {
+     "geoId": 117044,
+     "country": "Россия",
+     "region": "Москва",
+     "subRegion": "",
+     "locality": "Москва г",
+     "street": "Долгопрудненское ш",
+     "house": "6А",
+     "housing": "",
+     "apartment": "",
+     "building": "",
+     "comment": "5post. Касса в магазине «Пятёрочка»",
+     "full_address": "Москва г Долгопрудненское ш 6А",
+     "postal_code": "127204"
+    },
+    "instruction": "5post. Касса в магазине «Пятёрочка»",
+    "payment_methods": [
+     "already_paid"
+    ],
+    "contact": {
+     "phone": "+74951570020"
+    },
+    "schedule": {
+     "time_zone": 3,
+     "restrictions": [
+      {
+       "days": [
+        1
+       ],
+       "time_from": {
+        "hours": 8,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        2
+       ],
+       "time_from": {
+        "hours": 8,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        3
+       ],
+       "time_from": {
+        "hours": 8,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        4
+       ],
+       "time_from": {
+        "hours": 8,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        5
+       ],
+       "time_from": {
+        "hours": 8,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        6
+       ],
+       "time_from": {
+        "hours": 8,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        7
+       ],
+       "time_from": {
+        "hours": 8,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      }
+     ]
+    },
+    "is_yandex_branded": false,
+    "is_market_partner": false,
+    "is_dark_store": false,
+    "is_post_office": false,
+    "dayoffs": [],
+    "deactivation_date": null,
+    "deactivation_date_predicted_debt": null,
+    "available_for_dropoff": false,
+    "available_for_c2c_dropoff": false,
+    "pickup_services": {
+     "is_fitting_allowed": false,
+     "is_partial_refuse_allowed": false,
+     "is_paperless_pickup_allowed": false,
+     "is_unboxing_allowed": false
+    }
+   },
+   {
+    "id": "01a10e15313c75849c30c47f9130f490",
+    "operator_station_id": "10040706512",
+    "operator_id": "market_l4g",
+    "name": "Пункт выдачи заказов Яндекс Маркета",
+    "type": "pickup_point",
+    "position": {
+     "latitude": 55.779753,
+     "longitude": 37.489589
+    },
+    "address": {
+     "geoId": 117053,
+     "country": "Россия",
+     "region": "Москва и Московская область",
+     "subRegion": "",
+     "locality": "Москва",
+     "street": "улица Демьяна Бедного",
+     "house": "22",
+     "housing": "",
+     "apartment": "",
+     "building": "",
+     "comment": "ст.м.Народное Ополчение (выход 8)",
+     "full_address": "Москва улица Демьяна Бедного 22",
+     "postal_code": "123308"
+    },
+    "instruction": "ст.м.Народное Ополчение (выход 8)",
+    "payment_methods": [
+     "already_paid",
+     "card_on_receipt",
+     "bound_card",
+     "postpay"
+    ],
+    "contact": {
+     "phone": "+74951570020"
+    },
+    "schedule": {
+     "time_zone": 3,
+     "restrictions": [
+      {
+       "days": [
+        1
+       ],
+       "time_from": {
+        "hours": 9,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 21,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        2
+       ],
+       "time_from": {
+        "hours": 9,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 21,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        3
+       ],
+       "time_from": {
+        "hours": 9,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 21,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        4
+       ],
+       "time_from": {
+        "hours": 9,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 21,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        5
+       ],
+       "time_from": {
+        "hours": 9,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 21,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        6
+       ],
+       "time_from": {
+        "hours": 9,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 21,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        7
+       ],
+       "time_from": {
+        "hours": 9,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 21,
+        "minutes": 0
+       }
+      }
+     ]
+    },
+    "is_yandex_branded": true,
+    "is_market_partner": true,
+    "is_dark_store": false,
+    "is_post_office": false,
+    "dayoffs": [
+     {
+      "date": 1798761600,
+      "date_utc": "2027-01-01T00:00:00+0000"
+     }
+    ],
+    "deactivation_date": null,
+    "deactivation_date_predicted_debt": null,
+    "available_for_dropoff": true,
+    "available_for_c2c_dropoff": true,
+    "pickup_services": {
+     "is_fitting_allowed": true,
+     "is_partial_refuse_allowed": true,
+     "is_paperless_pickup_allowed": true,
+     "is_unboxing_allowed": true
+    }
+   },
+   {
+    "id": "0195ce11002b72058cf709bc02a2af8e",
+    "operator_station_id": "c297557f-acdb-437d-a17c-ae0b7b86bf02",
+    "operator_id": "5post",
+    "name": "5 Post (Пятерочка)",
+    "type": "pickup_point",
+    "position": {
+     "latitude": 55.557457,
+     "longitude": 37.307247
+    },
+    "address": {
+     "geoId": 215294,
+     "country": "Россия",
+     "region": "Москва и Московская область",
+     "subRegion": "",
+     "locality": "Староселье д",
+     "street": "б/у",
+     "house": "28",
+     "housing": "",
+     "apartment": "",
+     "building": "",
+     "comment": "5post. Касса в магазине «Пятёрочка»",
+     "full_address": "Староселье д б/у 28",
+     "postal_code": "108815"
+    },
+    "instruction": "5post. Касса в магазине «Пятёрочка»",
+    "payment_methods": [
+     "already_paid"
+    ],
+    "contact": {
+     "phone": "+74951570020"
+    },
+    "schedule": {
+     "time_zone": 3,
+     "restrictions": [
+      {
+       "days": [
+        1
+       ],
+       "time_from": {
+        "hours": 9,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        2
+       ],
+       "time_from": {
+        "hours": 9,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        3
+       ],
+       "time_from": {
+        "hours": 9,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        4
+       ],
+       "time_from": {
+        "hours": 9,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        5
+       ],
+       "time_from": {
+        "hours": 9,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        6
+       ],
+       "time_from": {
+        "hours": 9,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        7
+       ],
+       "time_from": {
+        "hours": 9,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      }
+     ]
+    },
+    "is_yandex_branded": false,
+    "is_market_partner": false,
+    "is_dark_store": false,
+    "is_post_office": false,
+    "dayoffs": [],
+    "deactivation_date": null,
+    "deactivation_date_predicted_debt": null,
+    "available_for_dropoff": false,
+    "available_for_c2c_dropoff": false,
+    "pickup_services": {
+     "is_fitting_allowed": false,
+     "is_partial_refuse_allowed": false,
+     "is_paperless_pickup_allowed": false,
+     "is_unboxing_allowed": false
+    }
+   },
+   {
+    "id": "01a1170a6db770e595d4de3ef7b8f1b8",
+    "operator_station_id": "10040723637",
+    "operator_id": "market_l4g",
+    "name": "Пункт выдачи заказов Яндекс Маркета",
+    "type": "pickup_point",
+    "position": {
+     "latitude": 55.679656,
+     "longitude": 37.666455
+    },
+    "address": {
+     "geoId": 120574,
+     "country": "Россия",
+     "region": "Москва и Московская область",
+     "subRegion": "",
+     "locality": "Москва",
+     "street": "Судостроительная улица",
+     "house": "1",
+     "housing": "",
+     "apartment": "",
+     "building": "",
+     "comment": "",
+     "full_address": "Москва Судостроительная улица 1",
+     "postal_code": "115470"
+    },
+    "instruction": "",
+    "payment_methods": [
+     "already_paid",
+     "card_on_receipt",
+     "bound_card",
+     "postpay"
+    ],
+    "contact": {
+     "phone": "+74951570020"
+    },
+    "schedule": {
+     "time_zone": 3,
+     "restrictions": [
+      {
+       "days": [
+        1
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        2
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        3
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        4
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        5
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        6
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        7
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      }
+     ]
+    },
+    "is_yandex_branded": true,
+    "is_market_partner": true,
+    "is_dark_store": false,
+    "is_post_office": false,
+    "dayoffs": [
+     {
+      "date": 1798761600,
+      "date_utc": "2027-01-01T00:00:00+0000"
+     }
+    ],
+    "deactivation_date": null,
+    "deactivation_date_predicted_debt": null,
+    "available_for_dropoff": true,
+    "available_for_c2c_dropoff": true,
+    "pickup_services": {
+     "is_fitting_allowed": true,
+     "is_partial_refuse_allowed": true,
+     "is_paperless_pickup_allowed": true,
+     "is_unboxing_allowed": true
+    }
+   },
+   {
+    "id": "01961fe0d7967495a3617d1b6244de52",
+    "operator_station_id": "10033797925",
+    "operator_id": "market_l4g",
+    "name": "Пункт выдачи заказов Яндекс Маркета",
+    "type": "pickup_point",
+    "position": {
+     "latitude": 55.890532,
+     "longitude": 37.585475
+    },
+    "address": {
+     "geoId": 117036,
+     "country": "Россия",
+     "region": "Москва и Московская область",
+     "subRegion": "",
+     "locality": "Москва",
+     "street": "Алтуфьевское шоссе",
+     "house": "83",
+     "housing": "",
+     "apartment": "",
+     "building": "",
+     "comment": "вход со двора",
+     "full_address": "Москва Алтуфьевское шоссе 83",
+     "postal_code": "127549"
+    },
+    "instruction": "вход со двора",
+    "payment_methods": [
+     "already_paid",
+     "card_on_receipt",
+     "bound_card",
+     "postpay"
+    ],
+    "contact": {
+     "phone": "+74951570020"
+    },
+    "schedule": {
+     "time_zone": 3,
+     "restrictions": [
+      {
+       "days": [
+        1
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        2
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        3
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        4
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        5
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        6
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        7
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      }
+     ]
+    },
+    "is_yandex_branded": true,
+    "is_market_partner": true,
+    "is_dark_store": false,
+    "is_post_office": false,
+    "dayoffs": [
+     {
+      "date": 1798761600,
+      "date_utc": "2027-01-01T00:00:00+0000"
+     }
+    ],
+    "deactivation_date": null,
+    "deactivation_date_predicted_debt": null,
+    "available_for_dropoff": true,
+    "available_for_c2c_dropoff": true,
+    "pickup_services": {
+     "is_fitting_allowed": true,
+     "is_partial_refuse_allowed": true,
+     "is_paperless_pickup_allowed": true,
+     "is_unboxing_allowed": true
+    }
+   },
+   {
+    "id": "14fa8e84-9bcf-4b5e-8a00-0786de76002d",
+    "operator_station_id": "10031413962",
+    "operator_id": "market_l4g",
+    "name": "Пункт выдачи заказов Яндекс Маркета",
+    "type": "pickup_point",
+    "position": {
+     "latitude": 55.70375442504883,
+     "longitude": 37.49969482421875
+    },
+    "address": {
+     "geoId": 117004,
+     "country": "Россия",
+     "region": "Москва",
+     "subRegion": "",
+     "locality": "Москва",
+     "street": "улица Столетова",
+     "house": "11",
+     "housing": "",
+     "apartment": "",
+     "building": "",
+     "comment": "Вход в ПВЗ находится со стороны жилых подъездов",
+     "full_address": "Москва улица Столетова 11",
+     "postal_code": "119192"
+    },
+    "instruction": "Вход в ПВЗ находится со стороны жилых подъездов",
+    "payment_methods": [
+     "already_paid",
+     "card_on_receipt",
+     "bound_card",
+     "postpay"
+    ],
+    "contact": {
+     "phone": "+74951570020"
+    },
+    "schedule": {
+     "time_zone": 3,
+     "restrictions": [
+      {
+       "days": [
+        1
+       ],
+       "time_from": {
+        "hours": 9,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 21,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        2
+       ],
+       "time_from": {
+        "hours": 9,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 21,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        3
+       ],
+       "time_from": {
+        "hours": 9,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 21,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        4
+       ],
+       "time_from": {
+        "hours": 9,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 21,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        5
+       ],
+       "time_from": {
+        "hours": 9,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 21,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        6
+       ],
+       "time_from": {
+        "hours": 9,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 21,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        7
+       ],
+       "time_from": {
+        "hours": 9,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 21,
+        "minutes": 0
+       }
+      }
+     ]
+    },
+    "is_yandex_branded": true,
+    "is_market_partner": true,
+    "is_dark_store": false,
+    "is_post_office": false,
+    "dayoffs": [
+     {
+      "date": 1798761600,
+      "date_utc": "2027-01-01T00:00:00+0000"
+     }
+    ],
+    "deactivation_date": null,
+    "deactivation_date_predicted_debt": null,
+    "available_for_dropoff": true,
+    "available_for_c2c_dropoff": true,
+    "pickup_services": {
+     "is_fitting_allowed": true,
+     "is_partial_refuse_allowed": true,
+     "is_paperless_pickup_allowed": true,
+     "is_unboxing_allowed": true
+    }
+   },
+   {
+    "id": "0195ce168ba475a6873646a8ca2021a9",
+    "operator_station_id": "be383f8c-bedd-4be1-80fc-850a9de2cfcb",
+    "operator_id": "5post",
+    "name": "5 Post (Пятерочка)",
+    "type": "pickup_point",
+    "position": {
+     "latitude": 55.703075,
+     "longitude": 37.842342
+    },
+    "address": {
+     "geoId": 120544,
+     "country": "Россия",
+     "region": "Москва",
+     "subRegion": "",
+     "locality": "Москва г",
+     "street": "Привольная ул",
+     "house": "3 к.1",
+     "housing": "",
+     "apartment": "",
+     "building": "",
+     "comment": "5post. Касса в магазине «Пятёрочка»",
+     "full_address": "Москва г Привольная ул 3 к.1",
+     "postal_code": "109145"
+    },
+    "instruction": "5post. Касса в магазине «Пятёрочка»",
+    "payment_methods": [
+     "already_paid"
+    ],
+    "contact": {
+     "phone": "+74951570020"
+    },
+    "schedule": {
+     "time_zone": 3,
+     "restrictions": [
+      {
+       "days": [
+        1
+       ],
+       "time_from": {
+        "hours": 8,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        2
+       ],
+       "time_from": {
+        "hours": 8,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        3
+       ],
+       "time_from": {
+        "hours": 8,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        4
+       ],
+       "time_from": {
+        "hours": 8,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        5
+       ],
+       "time_from": {
+        "hours": 8,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        6
+       ],
+       "time_from": {
+        "hours": 8,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        7
+       ],
+       "time_from": {
+        "hours": 8,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      }
+     ]
+    },
+    "is_yandex_branded": false,
+    "is_market_partner": false,
+    "is_dark_store": false,
+    "is_post_office": false,
+    "dayoffs": [],
+    "deactivation_date": null,
+    "deactivation_date_predicted_debt": null,
+    "available_for_dropoff": false,
+    "available_for_c2c_dropoff": false,
+    "pickup_services": {
+     "is_fitting_allowed": false,
+     "is_partial_refuse_allowed": false,
+     "is_paperless_pickup_allowed": false,
+     "is_unboxing_allowed": false
+    }
+   },
+   {
+    "id": "019f20010813763ba03f56cafd0995d0",
+    "operator_station_id": "10039816776",
+    "operator_id": "market_l4g",
+    "name": "Пункт выдачи заказов Яндекс Маркета",
+    "type": "pickup_point",
+    "position": {
+     "latitude": 55.771177,
+     "longitude": 37.632104
+    },
+    "address": {
+     "geoId": 117069,
+     "country": "Россия",
+     "region": "Москва и Московская область",
+     "subRegion": "",
+     "locality": "Москва",
+     "street": "улица Сретенка",
+     "house": "27 стр1",
+     "housing": "",
+     "apartment": "",
+     "building": "",
+     "comment": "2 этаж, вывеска \"Яндекс Маркет\"",
+     "full_address": "Москва улица Сретенка 27 стр1",
+     "postal_code": "129090"
+    },
+    "instruction": "2 этаж, вывеска \"Яндекс Маркет\"",
+    "payment_methods": [
+     "already_paid",
+     "card_on_receipt",
+     "bound_card",
+     "postpay"
+    ],
+    "contact": {
+     "phone": "+74951570020"
+    },
+    "schedule": {
+     "time_zone": 3,
+     "restrictions": [
+      {
+       "days": [
+        1
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        2
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        3
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        4
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        5
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        6
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        7
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      }
+     ]
+    },
+    "is_yandex_branded": true,
+    "is_market_partner": true,
+    "is_dark_store": false,
+    "is_post_office": false,
+    "dayoffs": [
+     {
+      "date": 1798761600,
+      "date_utc": "2027-01-01T00:00:00+0000"
+     }
+    ],
+    "deactivation_date": null,
+    "deactivation_date_predicted_debt": null,
+    "available_for_dropoff": true,
+    "available_for_c2c_dropoff": true,
+    "pickup_services": {
+     "is_fitting_allowed": true,
+     "is_partial_refuse_allowed": true,
+     "is_paperless_pickup_allowed": true,
+     "is_unboxing_allowed": true
+    }
+   },
+   {
+    "id": "01a0a612403877a9ad0da2a4987b81cf",
+    "operator_station_id": "10040573945",
+    "operator_id": "market_l4g",
+    "name": "Пункт выдачи заказов партнёра",
+    "type": "pickup_point",
+    "position": {
+     "latitude": 55.800484,
+     "longitude": 37.583131
+    },
+    "address": {
+     "geoId": 117027,
+     "country": "Россия",
+     "region": "Москва и Московская область",
+     "subRegion": "",
+     "locality": "Москва",
+     "street": "Бутырская улица",
+     "house": "53 к1",
+     "housing": "",
+     "apartment": "",
+     "building": "",
+     "comment": "От метро Дмитровская на автобусе 427,447,543до остановки Бутырская  Слобода",
+     "full_address": "Москва Бутырская улица 53 к1",
+     "postal_code": "127015"
+    },
+    "instruction": "От метро Дмитровская на автобусе 427,447,543до остановки Бутырская  Слобода",
+    "payment_methods": [
+     "already_paid",
+     "card_on_receipt",
+     "bound_card",
+     "postpay"
+    ],
+    "contact": {
+     "phone": "+74951570020"
+    },
+    "schedule": {
+     "time_zone": 3,
+     "restrictions": [
+      {
+       "days": [
+        1
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        2
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        3
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        4
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        5
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        6
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        7
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      }
+     ]
+    },
+    "is_yandex_branded": true,
+    "is_market_partner": true,
+    "is_dark_store": false,
+    "is_post_office": false,
+    "dayoffs": [
+     {
+      "date": 1798761600,
+      "date_utc": "2027-01-01T00:00:00+0000"
+     }
+    ],
+    "deactivation_date": null,
+    "deactivation_date_predicted_debt": null,
+    "available_for_dropoff": true,
+    "available_for_c2c_dropoff": true,
+    "pickup_services": {
+     "is_fitting_allowed": true,
+     "is_partial_refuse_allowed": true,
+     "is_paperless_pickup_allowed": true,
+     "is_unboxing_allowed": true
+    }
+   },
+   {
+    "id": "019daba76e777306a7b1599aa65ca2c0",
+    "operator_station_id": "d22b5820-c189-4049-8f7f-04228749bb3b",
+    "operator_id": "5post",
+    "name": "5 Post (Пятерочка)",
+    "type": "pickup_point",
+    "position": {
+     "latitude": 55.712418,
+     "longitude": 37.50079
+    },
+    "address": {
+     "geoId": 117004,
+     "country": "Россия",
+     "region": "Москва и Московская область",
+     "subRegion": "",
+     "locality": "Москва",
+     "street": "Минская ул",
+     "house": "1Гс4",
+     "housing": "",
+     "apartment": "",
+     "building": "",
+     "comment": "5post. Касса в магазине «Пятёрочка»",
+     "full_address": "Москва г Минская ул 1Гс4",
+     "postal_code": "119285"
+    },
+    "instruction": "5post. Касса в магазине «Пятёрочка»",
+    "payment_methods": [
+     "already_paid"
+    ],
+    "contact": {
+     "phone": "+74951570020"
+    },
+    "schedule": {
+     "time_zone": 3,
+     "restrictions": [
+      {
+       "days": [
+        1
+       ],
+       "time_from": {
+        "hours": 9,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        2
+       ],
+       "time_from": {
+        "hours": 9,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        3
+       ],
+       "time_from": {
+        "hours": 9,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        4
+       ],
+       "time_from": {
+        "hours": 9,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        5
+       ],
+       "time_from": {
+        "hours": 9,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        6
+       ],
+       "time_from": {
+        "hours": 9,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        7
+       ],
+       "time_from": {
+        "hours": 9,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      }
+     ]
+    },
+    "is_yandex_branded": false,
+    "is_market_partner": false,
+    "is_dark_store": false,
+    "is_post_office": false,
+    "dayoffs": [],
+    "deactivation_date": null,
+    "deactivation_date_predicted_debt": null,
+    "available_for_dropoff": false,
+    "available_for_c2c_dropoff": false,
+    "pickup_services": {
+     "is_fitting_allowed": false,
+     "is_partial_refuse_allowed": false,
+     "is_paperless_pickup_allowed": false,
+     "is_unboxing_allowed": false
+    }
+   },
+   {
+    "id": "019f6a9bb79877758376f87af8824a63",
+    "operator_station_id": "10039969361",
+    "operator_id": "market_l4g",
+    "name": "Пункт выдачи заказов партнёра",
+    "type": "pickup_point",
+    "position": {
+     "latitude": 55.707357,
+     "longitude": 37.39597
+    },
+    "address": {
+     "geoId": 117000,
+     "country": "Россия",
+     "region": "Москва и Московская область",
+     "subRegion": "",
+     "locality": "Москва",
+     "street": "Беловежская улица",
+     "house": "71",
+     "housing": "",
+     "apartment": "",
+     "building": "",
+     "comment": "Ориентир вывеска Яндекс.Маркет",
+     "full_address": "Москва Беловежская улица 71",
+     "postal_code": "121353"
+    },
+    "instruction": "Ориентир вывеска Яндекс.Маркет",
+    "payment_methods": [
+     "already_paid",
+     "card_on_receipt",
+     "bound_card",
+     "postpay"
+    ],
+    "contact": {
+     "phone": "+74951570020"
+    },
+    "schedule": {
+     "time_zone": 3,
+     "restrictions": [
+      {
+       "days": [
+        1
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        2
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        3
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        4
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        5
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        6
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        7
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      }
+     ]
+    },
+    "is_yandex_branded": true,
+    "is_market_partner": true,
+    "is_dark_store": false,
+    "is_post_office": false,
+    "dayoffs": [
+     {
+      "date": 1793232000,
+      "date_utc": "2026-10-29T00:00:00+0000"
+     },
+     {
+      "date": 1793318400,
+      "date_utc": "2026-10-30T00:00:00+0000"
+     },
+     {
+      "date": 1793404800,
+      "date_utc": "2026-10-31T00:00:00+0000"
+     },
+     {
+      "date": 1793491200,
+      "date_utc": "2026-11-01T00:00:00+0000"
+     },
+     {
+      "date": 1793577600,
+      "date_utc": "2026-11-02T00:00:00+0000"
+     },
+     {
+      "date": 1793664000,
+      "date_utc": "2026-11-03T00:00:00+0000"
+     },
+     {
+      "date": 1793750400,
+      "date_utc": "2026-11-04T00:00:00+0000"
+     },
+     {
+      "date": 1793836800,
+      "date_utc": "2026-11-05T00:00:00+0000"
+     },
+     {
+      "date": 1793923200,
+      "date_utc": "2026-11-06T00:00:00+0000"
+     },
+     {
+      "date": 1794009600,
+      "date_utc": "2026-11-07T00:00:00+0000"
+     },
+     {
+      "date": 1794096000,
+      "date_utc": "2026-11-08T00:00:00+0000"
+     },
+     {
+      "date": 1794182400,
+      "date_utc": "2026-11-09T00:00:00+0000"
+     },
+     {
+      "date": 1794268800,
+      "date_utc": "2026-11-10T00:00:00+0000"
+     },
+     {
+      "date": 1794355200,
+      "date_utc": "2026-11-11T00:00:00+0000"
+     },
+     {
+      "date": 1794441600,
+      "date_utc": "2026-11-12T00:00:00+0000"
+     },
+     {
+      "date": 1794528000,
+      "date_utc": "2026-11-13T00:00:00+0000"
+     },
+     {
+      "date": 1794614400,
+      "date_utc": "2026-11-14T00:00:00+0000"
+     },
+     {
+      "date": 1794700800,
+      "date_utc": "2026-11-15T00:00:00+0000"
+     },
+     {
+      "date": 1794787200,
+      "date_utc": "2026-11-16T00:00:00+0000"
+     },
+     {
+      "date": 1794873600,
+      "date_utc": "2026-11-17T00:00:00+0000"
+     },
+     {
+      "date": 1794960000,
+      "date_utc": "2026-11-18T00:00:00+0000"
+     },
+     {
+      "date": 1795046400,
+      "date_utc": "2026-11-19T00:00:00+0000"
+     },
+     {
+      "date": 1795132800,
+      "date_utc": "2026-11-20T00:00:00+0000"
+     },
+     {
+      "date": 1795219200,
+      "date_utc": "2026-11-21T00:00:00+0000"
+     },
+     {
+      "date": 1795305600,
+      "date_utc": "2026-11-22T00:00:00+0000"
+     },
+     {
+      "date": 1795392000,
+      "date_utc": "2026-11-23T00:00:00+0000"
+     },
+     {
+      "date": 1795478400,
+      "date_utc": "2026-11-24T00:00:00+0000"
+     },
+     {
+      "date": 1795564800,
+      "date_utc": "2026-11-25T00:00:00+0000"
+     },
+     {
+      "date": 1795651200,
+      "date_utc": "2026-11-26T00:00:00+0000"
+     },
+     {
+      "date": 1795737600,
+      "date_utc": "2026-11-27T00:00:00+0000"
+     },
+     {
+      "date": 1795824000,
+      "date_utc": "2026-11-28T00:00:00+0000"
+     },
+     {
+      "date": 1795910400,
+      "date_utc": "2026-11-29T00:00:00+0000"
+     },
+     {
+      "date": 1795996800,
+      "date_utc": "2026-11-30T00:00:00+0000"
+     },
+     {
+      "date": 1796083200,
+      "date_utc": "2026-12-01T00:00:00+0000"
+     },
+     {
+      "date": 1796169600,
+      "date_utc": "2026-12-02T00:00:00+0000"
+     },
+     {
+      "date": 1796256000,
+      "date_utc": "2026-12-03T00:00:00+0000"
+     },
+     {
+      "date": 1796342400,
+      "date_utc": "2026-12-04T00:00:00+0000"
+     },
+     {
+      "date": 1796428800,
+      "date_utc": "2026-12-05T00:00:00+0000"
+     },
+     {
+      "date": 1796515200,
+      "date_utc": "2026-12-06T00:00:00+0000"
+     },
+     {
+      "date": 1796601600,
+      "date_utc": "2026-12-07T00:00:00+0000"
+     },
+     {
+      "date": 1796688000,
+      "date_utc": "2026-12-08T00:00:00+0000"
+     },
+     {
+      "date": 1796774400,
+      "date_utc": "2026-12-09T00:00:00+0000"
+     },
+     {
+      "date": 1796860800,
+      "date_utc": "2026-12-10T00:00:00+0000"
+     },
+     {
+      "date": 1796947200,
+      "date_utc": "2026-12-11T00:00:00+0000"
+     },
+     {
+      "date": 1797033600,
+      "date_utc": "2026-12-12T00:00:00+0000"
+     },
+     {
+      "date": 1797120000,
+      "date_utc": "2026-12-13T00:00:00+0000"
+     },
+     {
+      "date": 1797206400,
+      "date_utc": "2026-12-14T00:00:00+0000"
+     },
+     {
+      "date": 1797292800,
+      "date_utc": "2026-12-15T00:00:00+0000"
+     },
+     {
+      "date": 1797379200,
+      "date_utc": "2026-12-16T00:00:00+0000"
+     },
+     {
+      "date": 1797465600,
+      "date_utc": "2026-12-17T00:00:00+0000"
+     },
+     {
+      "date": 1797552000,
+      "date_utc": "2026-12-18T00:00:00+0000"
+     },
+     {
+      "date": 1797638400,
+      "date_utc": "2026-12-19T00:00:00+0000"
+     },
+     {
+      "date": 1797724800,
+      "date_utc": "2026-12-20T00:00:00+0000"
+     },
+     {
+      "date": 1797811200,
+      "date_utc": "2026-12-21T00:00:00+0000"
+     },
+     {
+      "date": 1797897600,
+      "date_utc": "2026-12-22T00:00:00+0000"
+     },
+     {
+      "date": 1797984000,
+      "date_utc": "2026-12-23T00:00:00+0000"
+     },
+     {
+      "date": 1798070400,
+      "date_utc": "2026-12-24T00:00:00+0000"
+     },
+     {
+      "date": 1798156800,
+      "date_utc": "2026-12-25T00:00:00+0000"
+     },
+     {
+      "date": 1798243200,
+      "date_utc": "2026-12-26T00:00:00+0000"
+     },
+     {
+      "date": 1798329600,
+      "date_utc": "2026-12-27T00:00:00+0000"
+     },
+     {
+      "date": 1798416000,
+      "date_utc": "2026-12-28T00:00:00+0000"
+     },
+     {
+      "date": 1798502400,
+      "date_utc": "2026-12-29T00:00:00+0000"
+     },
+     {
+      "date": 1798588800,
+      "date_utc": "2026-12-30T00:00:00+0000"
+     },
+     {
+      "date": 1798675200,
+      "date_utc": "2026-12-31T00:00:00+0000"
+     },
+     {
+      "date": 1798761600,
+      "date_utc": "2027-01-01T00:00:00+0000"
+     },
+     {
+      "date": 1798848000,
+      "date_utc": "2027-01-02T00:00:00+0000"
+     },
+     {
+      "date": 1798934400,
+      "date_utc": "2027-01-03T00:00:00+0000"
+     },
+     {
+      "date": 1799020800,
+      "date_utc": "2027-01-04T00:00:00+0000"
+     },
+     {
+      "date": 1799107200,
+      "date_utc": "2027-01-05T00:00:00+0000"
+     },
+     {
+      "date": 1799193600,
+      "date_utc": "2027-01-06T00:00:00+0000"
+     },
+     {
+      "date": 1799280000,
+      "date_utc": "2027-01-07T00:00:00+0000"
+     },
+     {
+      "date": 1799366400,
+      "date_utc": "2027-01-08T00:00:00+0000"
+     }
+    ],
+    "deactivation_date": "2026-11-02",
+    "deactivation_date_predicted_debt": null,
+    "available_for_dropoff": true,
+    "available_for_c2c_dropoff": true,
+    "pickup_services": {
+     "is_fitting_allowed": true,
+     "is_partial_refuse_allowed": true,
+     "is_paperless_pickup_allowed": true,
+     "is_unboxing_allowed": true
+    }
+   },
+   {
+    "id": "019735406e7b706d80384e6285784398",
+    "operator_station_id": "10034469566",
+    "operator_id": "market_l4g",
+    "name": "Пункт выдачи заказов Яндекс Маркета",
+    "type": "pickup_point",
+    "position": {
+     "latitude": 55.808083,
+     "longitude": 37.40796
+    },
+    "address": {
+     "geoId": 117052,
+     "country": "Россия",
+     "region": "Москва",
+     "subRegion": "",
+     "locality": "Москва",
+     "street": "улица Маршала Катукова",
+     "house": "17 к1",
+     "housing": "",
+     "apartment": "",
+     "building": "",
+     "comment": "Вход со двора, вывеска \"Яндекс Маркет\"",
+     "full_address": "Москва улица Маршала Катукова 17 к1",
+     "postal_code": "123181"
+    },
+    "instruction": "Вход со двора, вывеска \"Яндекс Маркет\"",
+    "payment_methods": [
+     "already_paid",
+     "card_on_receipt",
+     "bound_card",
+     "postpay"
+    ],
+    "contact": {
+     "phone": "+74951570020"
+    },
+    "schedule": {
+     "time_zone": 3,
+     "restrictions": [
+      {
+       "days": [
+        1
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        2
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        3
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        4
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        5
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        6
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        7
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      }
+     ]
+    },
+    "is_yandex_branded": true,
+    "is_market_partner": true,
+    "is_dark_store": false,
+    "is_post_office": false,
+    "dayoffs": [
+     {
+      "date": 1798761600,
+      "date_utc": "2027-01-01T00:00:00+0000"
+     }
+    ],
+    "deactivation_date": null,
+    "deactivation_date_predicted_debt": null,
+    "available_for_dropoff": true,
+    "available_for_c2c_dropoff": true,
+    "pickup_services": {
+     "is_fitting_allowed": true,
+     "is_partial_refuse_allowed": true,
+     "is_paperless_pickup_allowed": true,
+     "is_unboxing_allowed": true
+    }
+   },
+   {
+    "id": "0195ce19138476bdbf8d351702228da6",
+    "operator_station_id": "b87f3078-6499-4cdc-a792-37d5d252c41d",
+    "operator_id": "5post",
+    "name": "5 Post (Пятерочка)",
+    "type": "pickup_point",
+    "position": {
+     "latitude": 55.760296,
+     "longitude": 37.679535
+    },
+    "address": {
+     "geoId": 117066,
+     "country": "Россия",
+     "region": "Москва",
+     "subRegion": "",
+     "locality": "Москва г",
+     "street": "Академика Туполева наб",
+     "house": "15",
+     "housing": "",
+     "apartment": "",
+     "building": "",
+     "comment": "5post. Касса в магазине «Пятёрочка»",
+     "full_address": "Москва г Академика Туполева наб 15",
+     "postal_code": "105005"
+    },
+    "instruction": "5post. Касса в магазине «Пятёрочка»",
+    "payment_methods": [
+     "already_paid"
+    ],
+    "contact": {
+     "phone": "+74951570020"
+    },
+    "schedule": {
+     "time_zone": 3,
+     "restrictions": [
+      {
+       "days": [
+        1
+       ],
+       "time_from": {
+        "hours": 8,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        2
+       ],
+       "time_from": {
+        "hours": 8,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        3
+       ],
+       "time_from": {
+        "hours": 8,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        4
+       ],
+       "time_from": {
+        "hours": 8,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        5
+       ],
+       "time_from": {
+        "hours": 8,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        6
+       ],
+       "time_from": {
+        "hours": 8,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        7
+       ],
+       "time_from": {
+        "hours": 8,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      }
+     ]
+    },
+    "is_yandex_branded": false,
+    "is_market_partner": false,
+    "is_dark_store": false,
+    "is_post_office": false,
+    "dayoffs": [],
+    "deactivation_date": null,
+    "deactivation_date_predicted_debt": null,
+    "available_for_dropoff": false,
+    "available_for_c2c_dropoff": false,
+    "pickup_services": {
+     "is_fitting_allowed": false,
+     "is_partial_refuse_allowed": false,
+     "is_paperless_pickup_allowed": false,
+     "is_unboxing_allowed": false
+    }
+   },
+   {
+    "id": "019ee5743e287284a97719a47f8ee13b",
+    "operator_station_id": "10039730215",
+    "operator_id": "market_l4g",
+    "name": "Пункт выдачи заказов партнёра",
+    "type": "pickup_point",
+    "position": {
+     "latitude": 55.738124,
+     "longitude": 37.708287
+    },
+    "address": {
+     "geoId": 120551,
+     "country": "Россия",
+     "region": "Москва и Московская область",
+     "subRegion": "",
+     "locality": "Москва",
+     "street": "Смирновская улица",
+     "house": "5",
+     "housing": "",
+     "apartment": "",
+     "building": "",
+     "comment": "Вывеска \"Яндекс Маркет\"",
+     "full_address": "Москва Смирновская улица 5",
+     "postal_code": "109052"
+    },
+    "instruction": "Вывеска \"Яндекс Маркет\"",
+    "payment_methods": [
+     "already_paid",
+     "card_on_receipt",
+     "bound_card",
+     "postpay"
+    ],
+    "contact": {
+     "phone": "+74951570020"
+    },
+    "schedule": {
+     "time_zone": 3,
+     "restrictions": [
+      {
+       "days": [
+        1
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        2
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        3
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        4
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        5
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        6
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        7
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      }
+     ]
+    },
+    "is_yandex_branded": true,
+    "is_market_partner": true,
+    "is_dark_store": false,
+    "is_post_office": false,
+    "dayoffs": [
+     {
+      "date": 1794096000,
+      "date_utc": "2026-11-08T00:00:00+0000"
+     },
+     {
+      "date": 1794182400,
+      "date_utc": "2026-11-09T00:00:00+0000"
+     },
+     {
+      "date": 1794268800,
+      "date_utc": "2026-11-10T00:00:00+0000"
+     },
+     {
+      "date": 1794355200,
+      "date_utc": "2026-11-11T00:00:00+0000"
+     },
+     {
+      "date": 1794441600,
+      "date_utc": "2026-11-12T00:00:00+0000"
+     },
+     {
+      "date": 1794528000,
+      "date_utc": "2026-11-13T00:00:00+0000"
+     },
+     {
+      "date": 1794614400,
+      "date_utc": "2026-11-14T00:00:00+0000"
+     },
+     {
+      "date": 1794700800,
+      "date_utc": "2026-11-15T00:00:00+0000"
+     },
+     {
+      "date": 1794787200,
+      "date_utc": "2026-11-16T00:00:00+0000"
+     },
+     {
+      "date": 1794873600,
+      "date_utc": "2026-11-17T00:00:00+0000"
+     },
+     {
+      "date": 1794960000,
+      "date_utc": "2026-11-18T00:00:00+0000"
+     },
+     {
+      "date": 1795046400,
+      "date_utc": "2026-11-19T00:00:00+0000"
+     },
+     {
+      "date": 1795132800,
+      "date_utc": "2026-11-20T00:00:00+0000"
+     },
+     {
+      "date": 1795219200,
+      "date_utc": "2026-11-21T00:00:00+0000"
+     },
+     {
+      "date": 1795305600,
+      "date_utc": "2026-11-22T00:00:00+0000"
+     },
+     {
+      "date": 1795392000,
+      "date_utc": "2026-11-23T00:00:00+0000"
+     },
+     {
+      "date": 1795478400,
+      "date_utc": "2026-11-24T00:00:00+0000"
+     },
+     {
+      "date": 1795564800,
+      "date_utc": "2026-11-25T00:00:00+0000"
+     },
+     {
+      "date": 1795651200,
+      "date_utc": "2026-11-26T00:00:00+0000"
+     },
+     {
+      "date": 1795737600,
+      "date_utc": "2026-11-27T00:00:00+0000"
+     },
+     {
+      "date": 1795824000,
+      "date_utc": "2026-11-28T00:00:00+0000"
+     },
+     {
+      "date": 1795910400,
+      "date_utc": "2026-11-29T00:00:00+0000"
+     },
+     {
+      "date": 1795996800,
+      "date_utc": "2026-11-30T00:00:00+0000"
+     },
+     {
+      "date": 1796083200,
+      "date_utc": "2026-12-01T00:00:00+0000"
+     },
+     {
+      "date": 1796169600,
+      "date_utc": "2026-12-02T00:00:00+0000"
+     },
+     {
+      "date": 1796256000,
+      "date_utc": "2026-12-03T00:00:00+0000"
+     },
+     {
+      "date": 1796342400,
+      "date_utc": "2026-12-04T00:00:00+0000"
+     },
+     {
+      "date": 1796428800,
+      "date_utc": "2026-12-05T00:00:00+0000"
+     },
+     {
+      "date": 1796515200,
+      "date_utc": "2026-12-06T00:00:00+0000"
+     },
+     {
+      "date": 1796601600,
+      "date_utc": "2026-12-07T00:00:00+0000"
+     },
+     {
+      "date": 1796688000,
+      "date_utc": "2026-12-08T00:00:00+0000"
+     },
+     {
+      "date": 1796774400,
+      "date_utc": "2026-12-09T00:00:00+0000"
+     },
+     {
+      "date": 1796860800,
+      "date_utc": "2026-12-10T00:00:00+0000"
+     },
+     {
+      "date": 1796947200,
+      "date_utc": "2026-12-11T00:00:00+0000"
+     },
+     {
+      "date": 1797033600,
+      "date_utc": "2026-12-12T00:00:00+0000"
+     },
+     {
+      "date": 1797120000,
+      "date_utc": "2026-12-13T00:00:00+0000"
+     },
+     {
+      "date": 1797206400,
+      "date_utc": "2026-12-14T00:00:00+0000"
+     },
+     {
+      "date": 1797292800,
+      "date_utc": "2026-12-15T00:00:00+0000"
+     },
+     {
+      "date": 1797379200,
+      "date_utc": "2026-12-16T00:00:00+0000"
+     },
+     {
+      "date": 1797465600,
+      "date_utc": "2026-12-17T00:00:00+0000"
+     },
+     {
+      "date": 1797552000,
+      "date_utc": "2026-12-18T00:00:00+0000"
+     },
+     {
+      "date": 1797638400,
+      "date_utc": "2026-12-19T00:00:00+0000"
+     },
+     {
+      "date": 1797724800,
+      "date_utc": "2026-12-20T00:00:00+0000"
+     },
+     {
+      "date": 1797811200,
+      "date_utc": "2026-12-21T00:00:00+0000"
+     },
+     {
+      "date": 1797897600,
+      "date_utc": "2026-12-22T00:00:00+0000"
+     },
+     {
+      "date": 1797984000,
+      "date_utc": "2026-12-23T00:00:00+0000"
+     },
+     {
+      "date": 1798070400,
+      "date_utc": "2026-12-24T00:00:00+0000"
+     },
+     {
+      "date": 1798156800,
+      "date_utc": "2026-12-25T00:00:00+0000"
+     },
+     {
+      "date": 1798243200,
+      "date_utc": "2026-12-26T00:00:00+0000"
+     },
+     {
+      "date": 1798329600,
+      "date_utc": "2026-12-27T00:00:00+0000"
+     },
+     {
+      "date": 1798416000,
+      "date_utc": "2026-12-28T00:00:00+0000"
+     },
+     {
+      "date": 1798502400,
+      "date_utc": "2026-12-29T00:00:00+0000"
+     },
+     {
+      "date": 1798588800,
+      "date_utc": "2026-12-30T00:00:00+0000"
+     },
+     {
+      "date": 1798675200,
+      "date_utc": "2026-12-31T00:00:00+0000"
+     },
+     {
+      "date": 1798761600,
+      "date_utc": "2027-01-01T00:00:00+0000"
+     },
+     {
+      "date": 1798848000,
+      "date_utc": "2027-01-02T00:00:00+0000"
+     },
+     {
+      "date": 1798934400,
+      "date_utc": "2027-01-03T00:00:00+0000"
+     },
+     {
+      "date": 1799020800,
+      "date_utc": "2027-01-04T00:00:00+0000"
+     },
+     {
+      "date": 1799107200,
+      "date_utc": "2027-01-05T00:00:00+0000"
+     },
+     {
+      "date": 1799193600,
+      "date_utc": "2027-01-06T00:00:00+0000"
+     }
+    ],
+    "deactivation_date": null,
+    "deactivation_date_predicted_debt": null,
+    "available_for_dropoff": true,
+    "available_for_c2c_dropoff": true,
+    "pickup_services": {
+     "is_fitting_allowed": true,
+     "is_partial_refuse_allowed": true,
+     "is_paperless_pickup_allowed": true,
+     "is_unboxing_allowed": true
+    }
+   },
+   {
+    "id": "01a11b72e92673c48a7acd0d8bf8e1a3",
+    "operator_station_id": "10040738322",
+    "operator_id": "market_l4g",
+    "name": "Пункт выдачи заказов партнёра",
+    "type": "pickup_point",
+    "position": {
+     "latitude": 55.718375,
+     "longitude": 37.630238
+    },
+    "address": {
+     "geoId": 120569,
+     "country": "Россия",
+     "region": "Москва и Московская область",
+     "subRegion": "",
+     "locality": "Москва",
+     "street": "3-й Павловский переулок",
+     "house": "14",
+     "housing": "",
+     "apartment": "",
+     "building": "",
+     "comment": "",
+     "full_address": "Москва 3-й Павловский переулок 14",
+     "postal_code": "115093"
+    },
+    "instruction": "",
+    "payment_methods": [
+     "already_paid",
+     "card_on_receipt",
+     "bound_card",
+     "postpay"
+    ],
+    "contact": {
+     "phone": "+74951570020"
+    },
+    "schedule": {
+     "time_zone": 3,
+     "restrictions": [
+      {
+       "days": [
+        1
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        2
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        3
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        4
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        5
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        6
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        7
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      }
+     ]
+    },
+    "is_yandex_branded": true,
+    "is_market_partner": true,
+    "is_dark_store": false,
+    "is_post_office": false,
+    "dayoffs": [
+     {
+      "date": 1798761600,
+      "date_utc": "2027-01-01T00:00:00+0000"
+     }
+    ],
+    "deactivation_date": null,
+    "deactivation_date_predicted_debt": null,
+    "available_for_dropoff": true,
+    "available_for_c2c_dropoff": true,
+    "pickup_services": {
+     "is_fitting_allowed": true,
+     "is_partial_refuse_allowed": true,
+     "is_paperless_pickup_allowed": true,
+     "is_unboxing_allowed": true
+    }
+   },
+   {
+    "id": "019daba76e3576bc89d6221f602af4e5",
+    "operator_station_id": "8f55bc4f-8be5-46c4-8c16-8be8233454cf",
+    "operator_id": "5post",
+    "name": "5 Post (Пятерочка)",
+    "type": "pickup_point",
+    "position": {
+     "latitude": 55.79963,
+     "longitude": 37.811108
+    },
+    "address": {
+     "geoId": 116983,
+     "country": "Россия",
+     "region": "Москва и Московская область",
+     "subRegion": "",
+     "locality": "Москва",
+     "street": "Верхняя Первомайская ул",
+     "house": "71А",
+     "housing": "",
+     "apartment": "",
+     "building": "",
+     "comment": "5post. Касса в магазине «Пятёрочка»",
+     "full_address": "Москва г Верхняя Первомайская ул 71А",
+     "postal_code": "105077"
+    },
+    "instruction": "5post. Касса в магазине «Пятёрочка»",
+    "payment_methods": [
+     "already_paid"
+    ],
+    "contact": {
+     "phone": "+74951570020"
+    },
+    "schedule": {
+     "time_zone": 3,
+     "restrictions": [
+      {
+       "days": [
+        1
+       ],
+       "time_from": {
+        "hours": 8,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        2
+       ],
+       "time_from": {
+        "hours": 8,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        3
+       ],
+       "time_from": {
+        "hours": 8,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        4
+       ],
+       "time_from": {
+        "hours": 8,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        5
+       ],
+       "time_from": {
+        "hours": 8,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        6
+       ],
+       "time_from": {
+        "hours": 8,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        7
+       ],
+       "time_from": {
+        "hours": 8,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      }
+     ]
+    },
+    "is_yandex_branded": false,
+    "is_market_partner": false,
+    "is_dark_store": false,
+    "is_post_office": false,
+    "dayoffs": [],
+    "deactivation_date": null,
+    "deactivation_date_predicted_debt": null,
+    "available_for_dropoff": false,
+    "available_for_c2c_dropoff": false,
+    "pickup_services": {
+     "is_fitting_allowed": false,
+     "is_partial_refuse_allowed": false,
+     "is_paperless_pickup_allowed": false,
+     "is_unboxing_allowed": false
+    }
+   },
+   {
+    "id": "01a11ba6889f763d9f9d093a9da8a1e6",
+    "operator_station_id": "10040738339",
+    "operator_id": "market_l4g",
+    "name": "Пункт выдачи заказов партнёра",
+    "type": "pickup_point",
+    "position": {
+     "latitude": 55.688913,
+     "longitude": 37.684542
+    },
+    "address": {
+     "geoId": 120574,
+     "country": "Россия",
+     "region": "Москва и Московская область",
+     "subRegion": "",
+     "locality": "Москва",
+     "street": "Нагатинская набережная",
+     "house": "54",
+     "housing": "",
+     "apartment": "",
+     "building": "",
+     "comment": "",
+     "full_address": "Москва Нагатинская набережная 54",
+     "postal_code": "115407"
+    },
+    "instruction": "",
+    "payment_methods": [
+     "already_paid",
+     "card_on_receipt",
+     "bound_card",
+     "postpay"
+    ],
+    "contact": {
+     "phone": "+74951570020"
+    },
+    "schedule": {
+     "time_zone": 3,
+     "restrictions": [
+      {
+       "days": [
+        1
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        2
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        3
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        4
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        5
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        6
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        7
+       ],
+       "time_from": {
+        "hours": 10,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 22,
+        "minutes": 0
+       }
+      }
+     ]
+    },
+    "is_yandex_branded": true,
+    "is_market_partner": true,
+    "is_dark_store": false,
+    "is_post_office": false,
+    "dayoffs": [
+     {
+      "date": 1798761600,
+      "date_utc": "2027-01-01T00:00:00+0000"
+     }
+    ],
+    "deactivation_date": null,
+    "deactivation_date_predicted_debt": null,
+    "available_for_dropoff": true,
+    "available_for_c2c_dropoff": true,
+    "pickup_services": {
+     "is_fitting_allowed": true,
+     "is_partial_refuse_allowed": true,
+     "is_paperless_pickup_allowed": true,
+     "is_unboxing_allowed": true
+    }
+   },
+   {
+    "id": "019daba76e7371d5ba9d5bfbd17c9f5f",
+    "operator_station_id": "6c2ca85a-8329-432b-b075-13e71bb56edc",
+    "operator_id": "5post",
+    "name": "5 Post (Пятерочка)",
+    "type": "pickup_point",
+    "position": {
+     "latitude": 55.872128,
+     "longitude": 37.664463
+    },
+    "address": {
+     "geoId": 117033,
+     "country": "Россия",
+     "region": "Москва и Московская область",
+     "subRegion": "",
+     "locality": "Москва",
+     "street": "Енисейская ул",
+     "house": "29",
+     "housing": "",
+     "apartment": "",
+     "building": "",
+     "comment": "5post. Касса в магазине «Пятёрочка»",
+     "full_address": "Москва г Енисейская ул 29",
+     "postal_code": "129281"
+    },
+    "instruction": "5post. Касса в магазине «Пятёрочка»",
+    "payment_methods": [
+     "already_paid"
+    ],
+    "contact": {
+     "phone": "+74951570020"
+    },
+    "schedule": {
+     "time_zone": 3,
+     "restrictions": [
+      {
+       "days": [
+        1
+       ],
+       "time_from": {
+        "hours": 8,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        2
+       ],
+       "time_from": {
+        "hours": 8,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        3
+       ],
+       "time_from": {
+        "hours": 8,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        4
+       ],
+       "time_from": {
+        "hours": 8,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        5
+       ],
+       "time_from": {
+        "hours": 8,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        6
+       ],
+       "time_from": {
+        "hours": 8,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      },
+      {
+       "days": [
+        7
+       ],
+       "time_from": {
+        "hours": 8,
+        "minutes": 0
+       },
+       "time_to": {
+        "hours": 23,
+        "minutes": 0
+       }
+      }
+     ]
+    },
+    "is_yandex_branded": false,
+    "is_market_partner": false,
+    "is_dark_store": false,
+    "is_post_office": false,
+    "dayoffs": [],
+    "deactivation_date": null,
+    "deactivation_date_predicted_debt": null,
+    "available_for_dropoff": false,
+    "available_for_c2c_dropoff": false,
+    "pickup_services": {
+     "is_fitting_allowed": false,
+     "is_partial_refuse_allowed": false,
+     "is_paperless_pickup_allowed": false,
+     "is_unboxing_allowed": false
+    }
+   }
+  ],
+  "_trimmed": "coordinator s175: 2276 points returned; trimmed to the first 20 to keep the repo small (the full Moscow list is in the s174 geo measurement method)"
+ }
+}
