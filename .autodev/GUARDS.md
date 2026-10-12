@@ -20,7 +20,6 @@
 | settings_option_key_edostavka | `woocommerce_edostavka_settings` | `tests/unit/Contract/SettingsOptionKeyContractTest.php` | `tests/unit/Contract/recipes/settings-option-key-edostavka.recipe.json` | yes (red on flip) | maksim | 2026-06-04 |
 | shipping_method_id_yandex | `yandex_delivery_express` + `yandex_delivery_other_day` | `tests/unit/Contract/YandexShippingMethodIdContractTest.php` | `tests/unit/Contract/recipes/yandex-shipping-method-id.recipe.json` | yes (red on flip) | maksim | 2026-06-04 |
 | settings_option_key_yandex | `woocommerce_yandex_delivery_settings` | `tests/unit/Contract/YandexSettingsOptionKeyContractTest.php` | `tests/unit/Contract/recipes/yandex-settings-option-key.recipe.json` | yes (red on flip) | maksim | 2026-06-04 |
-| warehouse_table_name_yandex | `wc_yandex_delivery_warehouses` (name only; schema human-only) | `tests/unit/Contract/YandexWarehouseTableContractTest.php` | `tests/unit/Contract/recipes/yandex-warehouse-table.recipe.json` | yes (red on flip) | maksim | 2026-06-04 |
 | order_meta_prefix_yandex | `_yandex_delivery_` | `tests/unit/Contract/YandexOrderMetaPrefixContractTest.php` | `tests/unit/Contract/recipes/yandex-order-meta-prefix.recipe.json` | yes (red on flip) | maksim | 2026-06-04 |
 
 ## Notes
@@ -29,11 +28,13 @@
 - Contracts with no machine-checkable recipe (cron-payload shape, DB schema) are
   **human-only** and must NOT appear here as guarded; list them in INVARIANTS.md with
   `auto_guardable: no` instead.
-- The 4 yandex rows are **mutation-run and PASS** (GREEN → RED-on-flip → GREEN-on-revert,
+- The 3 remaining yandex rows are **mutation-run and PASS** (GREEN → RED-on-flip → GREEN-on-revert,
   verified 2026-06-04 via `tools/autodev/mutation-check.ps1`) and **blessed by maksim
-  (2026-06-04)** — their zones (`shipping_method_id`, `option_keys`, `order_session_meta`,
-  and the warehouse table NAME) are now autonomous; the conductor commits changes touching
-  them without escalation. (Warehouse 15-column schema stays human-only.)
+  (2026-06-04)** — their zones (`shipping_method_id`, `option_keys`, `order_session_meta`) are
+  now autonomous; the conductor commits changes touching them without escalation.
+- `warehouse_table_name_yandex` was **removed** (card #1241, decision D10): the warehouse table
+  leaves the contract, so its guard and recipe were retired with it. No retirement convention
+  exists in this file; the row is deleted, not kept as a stale claim of coverage.
 - **Yandex REST namespace contract — RESOLVED (operator maksim, 2026-06-04).** The worker
   correctly refused to guard the recorded value `wc-yandex-delivery`: the namespace is
   `$plugin->get_id_dasherized()` of id `yandex_delivery` (`woocommerce-yandex-delivery.php:62`)

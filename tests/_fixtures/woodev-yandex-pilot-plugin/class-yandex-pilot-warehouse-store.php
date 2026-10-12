@@ -8,8 +8,8 @@
  * with no framework base class, is exactly the end state that decision intends. This
  * fixture keeps only what {@see \Woodev\Tests\Unit\YandexPilotFixtureTest} actually
  * asserts: the installed-site table-name contract `wc_yandex_delivery_warehouses`
- * (schema is human-only, guarded separately by
- * {@see \Woodev\Tests\Unit\Contract\YandexWarehouseTableContractTest}).
+ * (schema is human-only; the table is out of the v2 contract since D10, see
+ * docs-internal/specs/2026-10-12-yandex-v2-plugin-design.md §11).
  *
  * @package Woodev_Yandex_Pilot_Fixture
  */
