@@ -145,6 +145,17 @@ class CarrierCompetitorNotificationHandlerTest extends TestCase {
 		$this->assertCount( 0, $notices );
 	}
 
+	public function test_admin_notice_renderer_is_used_when_wc_notes_are_unavailable(): void {
+		$this->assertFalse( class_exists( 'Automattic\\WooCommerce\\Admin\\Notes\\Note' ) );
+
+		$notices = [];
+		$plugin  = $this->make_plugin( [ 'woocommerce-edostavka/woocommerce-edostavka.php', 'cdekdelivery/cdek.php' ], $notices );
+		( new Carrier_Competitor_Notification_Handler( $plugin, 'cdek' ) )->run();
+
+		$this->assertCount( 1, $notices );
+		$this->assertStringContainsString( 'CDEKDelivery', $notices[0]['message'] );
+	}
+
 	/**
 	 * @param string[] $active active plugin basenames
 	 * @param array<int,array{id:string,message:string}> $notices captured notices

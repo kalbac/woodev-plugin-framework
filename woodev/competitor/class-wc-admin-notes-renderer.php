@@ -62,63 +62,112 @@ final class WC_Admin_Notes_Renderer implements Competitor_Notice_Renderer {
 				'title'   => '',
 				'content' => '',
 				'type'    => Note::E_WC_ADMIN_NOTE_UPDATE,
-				'layout'  => 'plain',
-				'image'   => '',
 				'actions' => [],
 			]
 		);
 
 		try {
 
-			// Create once: the globally named WC note owns dismissal state from here.
-			// Do not re-save on every admin load or force-resurface a dismissed note.
-			if ( Woodev_Notes_Helper::get_note_with_name( $rule->get_note_name() ) ) {
-				return;
+			$existing_note = Woodev_Notes_Helper::get_note_with_name( $rule->get_note_name() );
+			$changed       = false;
+
+			if ( $existing_note ) {
+				// Keep actioned and snoozed notes as the merchant left them.
+				if ( Note::E_WC_ADMIN_NOTE_UNACTIONED !== $existing_note->get_status() ) {
+					return;
+				}
+
+				$wc_note = $existing_note;
+			} else {
+				$wc_note = new Note();
+				$wc_note->set_name( $rule->get_note_name() );
+				$wc_note->set_source( $this->source );
+				$changed = true;
 			}
 
-			$wc_note = new Note();
-			$wc_note->set_name( $rule->get_note_name() );
+			$changed = $changed
+				|| $wc_note->get_title() !== $note['title']
+				|| $wc_note->get_content() !== $note['content']
+				|| $wc_note->get_type() !== $this->map_type( (string) $note['type'] );
+
 			$wc_note->set_title( $note['title'] );
 			$wc_note->set_content( $note['content'] );
-			$wc_note->set_source( $this->source );
 			$wc_note->set_type( $this->map_type( (string) $note['type'] ) );
-			$wc_note->set_layout( $note['layout'] );
+			$changed = $this->update_actions( $wc_note, (array) $note['actions'] ) || $changed;
 
-			if ( ! empty( $note['image'] ) ) {
-				$wc_note->set_layout( 'thumbnail' );
-				$wc_note->set_image( $note['image'] );
+			if ( $changed ) {
+				$wc_note->save();
 			}
-
-			foreach ( (array) $note['actions'] as $action ) {
-
-				$action = wp_parse_args(
-					$action,
-					[
-						'name'          => '',
-						'label'         => '',
-						'url'           => '',
-						'status'        => Note::E_WC_ADMIN_NOTE_ACTIONED,
-						'primary'       => false,
-						'actioned_text' => '',
-					]
-				);
-
-				$wc_note->add_action(
-					$action['name'],
-					$action['label'],
-					$action['url'],
-					$action['status'],
-					$action['primary'],
-					$action['actioned_text']
-				);
-			}
-
-			$wc_note->save();
-
 		} catch ( Exception $e ) {
 			// Swallow — a failed note must never fatal an admin page load.
 			unset( $e );
 		}
+	}
+
+	/**
+	 * Replaces note actions only when their visible and behavioral fields differ.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param Note             $wc_note existing or new note
+	 * @param array<int,mixed> $actions desired note actions
+	 */
+	private function update_actions( Note $wc_note, array $actions ): bool {
+
+		$desired_actions = [];
+
+		foreach ( $actions as $action ) {
+			$action = wp_parse_args(
+				$action,
+				[
+					'name'          => '',
+					'label'         => '',
+					'url'           => '',
+					'status'        => Note::E_WC_ADMIN_NOTE_ACTIONED,
+					'primary'       => false,
+					'actioned_text' => '',
+				]
+			);
+
+			$desired_actions[] = [
+				'name'          => $action['name'],
+				'label'         => $action['label'],
+				'url'           => $action['url'],
+				'status'        => $action['status'],
+				'primary'       => $action['primary'],
+				'actioned_text' => $action['actioned_text'],
+			];
+		}
+
+		$current_actions = [];
+		foreach ( $wc_note->get_actions() as $action ) {
+			$current_actions[] = [
+				'name'          => $action->name,
+				'label'         => $action->label,
+				'url'           => $action->query,
+				'status'        => $action->status,
+				'primary'       => $action->is_primary,
+				'actioned_text' => $action->actioned_text,
+			];
+		}
+
+		if ( $desired_actions === $current_actions ) {
+			return false;
+		}
+
+		$wc_note->clear_actions();
+		foreach ( $desired_actions as $action ) {
+			$wc_note->add_action(
+				$action['name'],
+				$action['label'],
+				$action['url'],
+				$action['status'],
+				$action['primary'],
+				$action['actioned_text']
+			);
+		}
+
+		return true;
 	}
 
 	/**
