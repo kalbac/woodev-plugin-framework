@@ -73,7 +73,7 @@ final class ApiBaseLogTextRedactionTest extends TestCase {
 		$result = \Woodev_API_Base::redact_secret_log_text( 'carrier rejected api_key=' . self::SECRET );
 
 		$this->assertStringNotContainsString( self::SECRET, $result );
-		$this->assertStringContainsString( \Woodev_API_Base::SECRET_VALUE_MASK, $result );
+		$this->assertStringContainsString( \Woodev_API_Base::mask_secret( self::SECRET ), $result );
 	}
 
 	// -------------------------------------------------------------------------
@@ -188,7 +188,7 @@ final class ApiBaseLogTextRedactionTest extends TestCase {
 		$result = \Woodev_API_Base::redact_secret_log_text( 'carrier rejected api_key=' . self::SECRET );
 
 		$this->assertSame(
-			'carrier rejected api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK,
+			'carrier rejected api_key=' . \Woodev_API_Base::mask_secret( self::SECRET ),
 			$result,
 			'a filter returning an unusable member must fall back to the default list and still redact, never fatal'
 		);
@@ -206,7 +206,7 @@ final class ApiBaseLogTextRedactionTest extends TestCase {
 
 		$result = \Woodev_API_Base::redact_secret_log_text( 'carrier rejected api_key=' . self::SECRET );
 
-		$this->assertSame( 'carrier rejected api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK, $result );
+		$this->assertSame( 'carrier rejected api_key=' . \Woodev_API_Base::mask_secret( self::SECRET ), $result );
 	}
 
 	public function test_extra_secret_names_with_malformed_members_does_not_throw(): void {
@@ -216,7 +216,7 @@ final class ApiBaseLogTextRedactionTest extends TestCase {
 		);
 
 		$this->assertSame(
-			'carrier rejected api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK,
+			'carrier rejected api_key=' . \Woodev_API_Base::mask_secret( self::SECRET ),
 			$result,
 			'a malformed $extra_secret_names member must be dropped, never thrown on — the default list still applies'
 		);
@@ -245,7 +245,7 @@ final class ApiBaseLogTextRedactionTest extends TestCase {
 		$result = \Woodev_API_Base::redact_secret_log_text( 'carrier rejected api_key=' . self::SECRET );
 
 		$this->assertSame(
-			'carrier rejected api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK,
+			'carrier rejected api_key=' . \Woodev_API_Base::mask_secret( self::SECRET ),
 			$result,
 			'a filter returning only a canonically-empty name must fall back to the default list, never leak raw'
 		);
@@ -263,7 +263,7 @@ final class ApiBaseLogTextRedactionTest extends TestCase {
 
 		$result = \Woodev_API_Base::redact_secret_log_text( 'carrier rejected api_key=' . self::SECRET );
 
-		$this->assertSame( 'carrier rejected api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK, $result );
+		$this->assertSame( 'carrier rejected api_key=' . \Woodev_API_Base::mask_secret( self::SECRET ), $result );
 	}
 
 	public function test_a_filter_returning_only_a_separators_only_string_falls_back_to_defaults_and_still_redacts(): void {
@@ -278,7 +278,7 @@ final class ApiBaseLogTextRedactionTest extends TestCase {
 
 		$result = \Woodev_API_Base::redact_secret_log_text( 'carrier rejected api_key=' . self::SECRET );
 
-		$this->assertSame( 'carrier rejected api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK, $result );
+		$this->assertSame( 'carrier rejected api_key=' . \Woodev_API_Base::mask_secret( self::SECRET ), $result );
 	}
 
 	/**
@@ -298,7 +298,7 @@ final class ApiBaseLogTextRedactionTest extends TestCase {
 
 		$result = \Woodev_API_Base::redact_secret_log_text( 'carrier rejected dadata_key=' . self::SECRET );
 
-		$this->assertSame( 'carrier rejected dadata_key=' . \Woodev_API_Base::SECRET_VALUE_MASK, $result );
+		$this->assertSame( 'carrier rejected dadata_key=' . \Woodev_API_Base::mask_secret( self::SECRET ), $result );
 	}
 
 	// -------------------------------------------------------------------------
@@ -309,13 +309,13 @@ final class ApiBaseLogTextRedactionTest extends TestCase {
 	public function test_a_secret_in_a_query_string_is_redacted_exactly(): void {
 		$result = \Woodev_API_Base::redact_secret_log_text( 'https://x.test/?token=' . self::SECRET . '&next=1' );
 
-		$this->assertSame( 'https://x.test/?token=' . \Woodev_API_Base::SECRET_VALUE_MASK . '&next=1', $result );
+		$this->assertSame( 'https://x.test/?token=' . \Woodev_API_Base::mask_secret( self::SECRET ) . '&next=1', $result );
 	}
 
 	public function test_a_name_equals_value_secret_is_redacted_exactly(): void {
 		$result = \Woodev_API_Base::redact_secret_log_text( 'api_key=' . self::SECRET );
 
-		$this->assertSame( 'api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK, $result );
+		$this->assertSame( 'api_key=' . \Woodev_API_Base::mask_secret( self::SECRET ), $result );
 	}
 
 	// -------------------------------------------------------------------------
@@ -368,12 +368,43 @@ final class ApiBaseLogTextRedactionTest extends TestCase {
 	public function test_harmless_prose_matching_the_name_equals_value_shape_is_over_redacted(): void {
 		$result = \Woodev_API_Base::redact_secret_log_text( 'the retry token=next is enabled' );
 
-		$this->assertSame( 'the retry token=' . \Woodev_API_Base::SECRET_VALUE_MASK . ' is enabled', $result );
+		$this->assertSame( 'the retry token=' . \Woodev_API_Base::mask_secret( 'next' ) . ' is enabled', $result );
 	}
 
-	public function test_trailing_punctuation_adjacent_to_a_redacted_value_is_consumed(): void {
+	public function test_trailing_punctuation_adjacent_to_a_redacted_value_is_preserved(): void {
 		$result = \Woodev_API_Base::redact_secret_log_text( 'api_key=abc,' );
 
-		$this->assertSame( 'api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK, $result );
+		$this->assertSame( 'api_key=****,', $result );
+	}
+
+	/**
+	 * Pins each transition in the partial-mask length bands, plus UTF-8 and empty values.
+	 *
+	 * @dataProvider secret_mask_cases
+	 *
+	 * @param string $value Secret value.
+	 * @param string $expected Expected masked value.
+	 * @return void
+	 */
+	public function test_secret_mask_length_bands( string $value, string $expected ): void {
+		$this->assertSame( $expected, \Woodev_API_Base::mask_secret( $value ) );
+	}
+
+	/**
+	 * @return array<string, array{string, string}>
+	 */
+	public static function secret_mask_cases(): array {
+		return [
+			'length 8'       => [ 'abcdefgh', '****' ],
+			'length 9'       => [ 'abcdefghi', 'a****i' ],
+			'length 15'      => [ 'abcdefghijklmno', 'a****o' ],
+			'length 16'      => [ 'abcdefghijklmnop', 'ab****op' ],
+			'length 23'      => [ 'abcdefghijklmnopqrstuvw', 'ab****vw' ],
+			'length 24'      => [ 'abcdefghijklmnopqrstuvwx', 'abc****vwx' ],
+			'length 39'      => [ 'abcdefghijklmnopqrstuvwxyzabcdefghijklm', 'abc****klm' ],
+			'length 40'      => [ 'abcdefghijklmnopqrstuvwxyzabcdefghijklmn', 'abcd****klmn' ],
+			'multibyte'      => [ 'я1234567я', 'я****я' ],
+			'empty'          => [ '', '****' ],
+		];
 	}
 }

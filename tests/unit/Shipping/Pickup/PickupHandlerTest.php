@@ -4483,7 +4483,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$handler->validate_posted_point( 'P1', 'bacs', 0 );
 
 			$this->assertSame(
-				'[woodev] pickup checkout re-check failed for plugin "p" (carrier outage): carrier rejected api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK,
+				'[woodev] pickup checkout re-check failed for plugin "p" (carrier outage): carrier rejected api_key=' . \Woodev_API_Base::mask_secret( 'LIVESECRET' ),
 				$captured
 			);
 		}

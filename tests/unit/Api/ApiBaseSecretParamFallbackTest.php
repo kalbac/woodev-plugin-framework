@@ -756,7 +756,7 @@ final class ApiBaseSecretParamFallbackTest extends TestCase {
 		$this->assertIsArray( $decoded, 'SHOULD-FIX 2: the redacted body must still be valid, parseable JSON' );
 		$this->assertStringNotContainsString( $secret, $safe_body, 'the password value must not leak' );
 		$this->assertSame(
-			\Woodev_API_Base::SECRET_VALUE_MASK,
+			\Woodev_API_Base::mask_secret( $secret ),
 			$decoded['password'],
 			'the password key must be masked by key, not by scanning the text'
 		);
@@ -796,7 +796,7 @@ final class ApiBaseSecretParamFallbackTest extends TestCase {
 
 		$this->assertIsArray( $decoded, 'the redacted body must still be valid JSON' );
 		$this->assertStringNotContainsString( $secret, $safe_body );
-		$this->assertSame( \Woodev_API_Base::SECRET_VALUE_MASK, $decoded['auth']['token'] );
+		$this->assertSame( \Woodev_API_Base::mask_secret( $secret ), $decoded['auth']['token'] );
 		$this->assertSame( 'json', $decoded['format'], 'a non-secret sibling param must survive untouched' );
 	}
 
@@ -842,7 +842,7 @@ final class ApiBaseSecretParamFallbackTest extends TestCase {
 	 * — but is not the case above, since it carries no actual secret — is
 	 * masked the same way: #395 Round 4 ran this shape through the regex
 	 * backstop, which matched the trailing quote into the value and handed
-	 * back `"token=[REDACTED]` — truncated, invalid JSON. Round 5 fixed the
+	 * back a truncated token value — invalid JSON. Round 5 fixed the
 	 * corruption by passing the scalar through unchanged; Round 6 masks it in
 	 * full instead, coherently with every other scalar, rather than trying to
 	 * special-case "this scalar happens to be safe" — there is no reliable

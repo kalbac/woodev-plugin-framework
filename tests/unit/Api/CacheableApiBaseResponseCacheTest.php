@@ -282,8 +282,8 @@ final class CacheableApiBaseResponseCacheTest extends TestCase {
 		$this->assertSame( '{"rates":[]}', $stored['value']['body'] );
 		$this->assertSame( [ 'code' => 200, 'message' => 'OK' ], $stored['value']['response'] );
 		$this->assertSame( '2', $stored['value']['headers']['X-Current-Page'] );
-		$this->assertSame( \Woodev_API_Base::SECRET_VALUE_MASK, $stored['value']['headers']['Set-Cookie'] );
-		$this->assertSame( \Woodev_API_Base::SECRET_VALUE_MASK, $stored['value']['headers']['X-Auth-Token'] );
+		$this->assertSame( \Woodev_API_Base::mask_secret( 'carrier_session=secret-cookie-value' ), $stored['value']['headers']['Set-Cookie'] );
+		$this->assertSame( \Woodev_API_Base::mask_secret( 'secret-token-value' ), $stored['value']['headers']['X-Auth-Token'] );
 		$this->assertArrayNotHasKey( 'cookies', $stored['value'] );
 		$this->assertArrayNotHasKey( 'http_response', $stored['value'] );
 		$this->assertStringNotContainsString( 'secret-cookie-value', serialize( $stored['value'] ) );

@@ -136,6 +136,6 @@ final class StatusSyncToolTest extends TestCase {
 		$this->assertStringNotContainsString( 'C8_SYNTHETIC_TOKEN', $result->get_message() );
 		$this->assertCount( 1, $logged, 'the failure is still logged' );
 		$this->assertStringNotContainsString( 'C8_SYNTHETIC_TOKEN', $logged[0] );
-		$this->assertStringContainsString( 'access_token=[REDACTED]', $logged[0] );
+		$this->assertStringContainsString( 'access_token=C8****EN', $logged[0] );
 	}
 }

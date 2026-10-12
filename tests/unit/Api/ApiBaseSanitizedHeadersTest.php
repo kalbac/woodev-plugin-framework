@@ -153,7 +153,7 @@ class Testable_Api_Base_With_Null_Request_Headers extends Testable_Api_Base {
 final class ApiBaseSanitizedHeadersTest extends TestCase {
 
 	/**
-	 * Regression guard: Authorization must stay masked exactly as before.
+	 * Regression guard: Authorization must stay masked and keep partial visibility.
 	 *
 	 * @return void
 	 */
@@ -165,7 +165,25 @@ final class ApiBaseSanitizedHeadersTest extends TestCase {
 
 		$headers = $api->get_sanitized_headers_for_test();
 
-		$this->assertSame( \Woodev_API_Base::SECRET_VALUE_MASK, $headers['Authorization'] );
+		$this->assertSame( \Woodev_API_Base::mask_secret( $value ), $headers['Authorization'] );
+	}
+
+	/**
+	 * Authorization schemes remain readable while only the credential is masked.
+	 *
+	 * @return void
+	 */
+	public function test_authorization_header_preserves_scheme(): void {
+		$credential = 'y0_A123456789012345678901234567890123456xQ9z';
+
+		foreach ( [ 'Bearer', 'Basic', 'Token', 'OAuth' ] as $scheme ) {
+			$api = new Testable_Api_Base();
+			$api->set_headers_for_test( [ 'Authorization' => $scheme . ' ' . $credential ] );
+
+			$headers = $api->get_sanitized_headers_for_test();
+
+			$this->assertSame( $scheme . ' y0_A****xQ9z', $headers['Authorization'] );
+		}
 	}
 
 	/**
@@ -181,7 +199,7 @@ final class ApiBaseSanitizedHeadersTest extends TestCase {
 
 		$headers = $api->get_sanitized_headers_for_test();
 
-		$this->assertSame( \Woodev_API_Base::SECRET_VALUE_MASK, $headers['X-Secret'] );
+		$this->assertSame( \Woodev_API_Base::mask_secret( $secret ), $headers['X-Secret'] );
 		$this->assertStringNotContainsString( $secret, print_r( $headers, true ), 'the secret leaked into the sanitized headers' );
 	}
 
@@ -201,7 +219,7 @@ final class ApiBaseSanitizedHeadersTest extends TestCase {
 
 		$this->assertArrayHasKey( 'x-secret', $headers );
 		$this->assertArrayNotHasKey( 'X-Secret', $headers );
-		$this->assertSame( \Woodev_API_Base::SECRET_VALUE_MASK, $headers['x-secret'] );
+		$this->assertSame( \Woodev_API_Base::mask_secret( $secret ), $headers['x-secret'] );
 	}
 
 	/**
@@ -218,7 +236,7 @@ final class ApiBaseSanitizedHeadersTest extends TestCase {
 
 		$headers = $api->get_sanitized_headers_for_test();
 
-		$this->assertSame( \Woodev_API_Base::SECRET_VALUE_MASK, $headers['X-Custom-Secret'] );
+		$this->assertSame( \Woodev_API_Base::mask_secret( $secret ), $headers['X-Custom-Secret'] );
 	}
 
 	/**
@@ -292,7 +310,7 @@ final class ApiBaseSanitizedHeadersTest extends TestCase {
 
 		$headers = $api->get_sanitized_response_headers_for_test();
 
-		$this->assertSame( \Woodev_API_Base::SECRET_VALUE_MASK, $headers['Set-Cookie'] );
+		$this->assertSame( \Woodev_API_Base::mask_secret( $cookie ), $headers['Set-Cookie'] );
 		$this->assertStringNotContainsString( $cookie, print_r( $headers, true ), 'the cookie leaked into the sanitized response headers' );
 	}
 
@@ -310,7 +328,7 @@ final class ApiBaseSanitizedHeadersTest extends TestCase {
 
 		$headers = $api->get_sanitized_response_headers_for_test();
 
-		$this->assertSame( \Woodev_API_Base::SECRET_VALUE_MASK, $headers['X-Auth-Token'] );
+		$this->assertSame( \Woodev_API_Base::mask_secret( $refreshed_token ), $headers['X-Auth-Token'] );
 	}
 
 	/**
@@ -329,7 +347,7 @@ final class ApiBaseSanitizedHeadersTest extends TestCase {
 
 		$this->assertArrayHasKey( 'set-cookie', $headers );
 		$this->assertArrayNotHasKey( 'Set-Cookie', $headers );
-		$this->assertSame( \Woodev_API_Base::SECRET_VALUE_MASK, $headers['set-cookie'] );
+		$this->assertSame( \Woodev_API_Base::mask_secret( $cookie ), $headers['set-cookie'] );
 	}
 
 	/**
@@ -346,7 +364,7 @@ final class ApiBaseSanitizedHeadersTest extends TestCase {
 
 		$headers = $api->get_sanitized_response_headers_for_test();
 
-		$this->assertSame( \Woodev_API_Base::SECRET_VALUE_MASK, $headers['X-Custom-Secret'] );
+		$this->assertSame( \Woodev_API_Base::mask_secret( $secret ), $headers['X-Custom-Secret'] );
 	}
 
 	/**
@@ -405,7 +423,7 @@ final class ApiBaseSanitizedHeadersTest extends TestCase {
 		$broadcast = $api->get_response_data_for_broadcast_for_test();
 
 		$this->assertArrayHasKey( 'headers', $broadcast );
-		$this->assertSame( \Woodev_API_Base::SECRET_VALUE_MASK, $broadcast['headers']['Set-Cookie'] );
+		$this->assertSame( \Woodev_API_Base::mask_secret( $cookie ), $broadcast['headers']['Set-Cookie'] );
 		$this->assertStringNotContainsString(
 			$cookie,
 			print_r( $broadcast, true ),
@@ -435,7 +453,7 @@ final class ApiBaseSanitizedHeadersTest extends TestCase {
 
 		$this->assertIsArray( $headers['Set-Cookie'], 'the array shape of a duplicated header must survive masking' );
 		$this->assertSame(
-			[ \Woodev_API_Base::SECRET_VALUE_MASK, \Woodev_API_Base::SECRET_VALUE_MASK ],
+			[ \Woodev_API_Base::mask_secret( $cookie_a ), \Woodev_API_Base::mask_secret( $cookie_b ) ],
 			$headers['Set-Cookie']
 		);
 
@@ -459,7 +477,7 @@ final class ApiBaseSanitizedHeadersTest extends TestCase {
 
 		$headers = $api->get_sanitized_headers_for_test();
 
-		$this->assertSame( \Woodev_API_Base::SECRET_VALUE_MASK, $headers['Cookie'] );
+		$this->assertSame( \Woodev_API_Base::mask_secret( $cookie ), $headers['Cookie'] );
 	}
 
 	/**
@@ -482,7 +500,7 @@ final class ApiBaseSanitizedHeadersTest extends TestCase {
 
 		$headers = $api->get_sanitized_response_headers_for_test();
 
-		$this->assertSame( \Woodev_API_Base::SECRET_VALUE_MASK, $headers[ $header_name ] );
+		$this->assertSame( \Woodev_API_Base::mask_secret( $secret ), $headers[ $header_name ] );
 	}
 
 	/**

@@ -321,7 +321,7 @@ namespace Woodev\Tests\Unit {
 			$gateway->handle_transaction_response_request();
 
 			$this->assertSame(
-				'Redirect-back processing error: carrier rejected api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK,
+				'Redirect-back processing error: carrier rejected api_key=' . \Woodev_API_Base::mask_secret( self::SECRET ),
 				$captured
 			);
 		}
@@ -375,7 +375,7 @@ namespace Woodev\Tests\Unit {
 		public function test_approved_transaction_handler_redacts_a_secret_in_the_error_log(): void {
 			$this->assert_approved_transaction_log(
 				'carrier rejected api_key=' . self::SECRET,
-				'Error handling approved transaction: carrier rejected api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK
+				'Error handling approved transaction: carrier rejected api_key=' . \Woodev_API_Base::mask_secret( self::SECRET )
 			);
 		}
 
@@ -447,7 +447,7 @@ namespace Woodev\Tests\Unit {
 		public function test_remove_token_redacts_a_secret_in_the_error_log(): void {
 			$this->assert_remove_token_log(
 				'carrier rejected api_key=' . self::SECRET,
-				'carrier rejected api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK
+				'carrier rejected api_key=' . \Woodev_API_Base::mask_secret( self::SECRET )
 			);
 		}
 
@@ -535,7 +535,7 @@ namespace Woodev\Tests\Unit {
 		public function test_add_debug_message_redacts_a_secret_before_the_logger(): void {
 			$this->assert_add_debug_message_logs(
 				'carrier rejected api_key=' . self::SECRET,
-				'carrier rejected api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK
+				'carrier rejected api_key=' . \Woodev_API_Base::mask_secret( self::SECRET )
 			);
 		}
 
@@ -615,7 +615,7 @@ namespace Woodev\Tests\Unit {
 			$gateway->mark_order_as_failed( $order, $raw, null );
 
 			$this->assertSame(
-				'carrier rejected api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK,
+				'carrier rejected api_key=' . \Woodev_API_Base::mask_secret( self::SECRET ),
 				$captured,
 				'the log must not carry the secret'
 			);

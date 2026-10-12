@@ -86,28 +86,20 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		private const CHALLENGE_REDIRECT_HOP_LIMIT = 1;
 
 		/**
-		 * The fixed placeholder used everywhere a credential value is masked out
-		 * of a log — headers and request params (both via
+		 * The fixed four-character middle used by {@see self::mask_secret()} when
+		 * masking credential values in logs — headers and request params (both via
 		 * {@see self::mask_secret_values()}, including through
 		 * {@see Woodev_Licensing_API_Request} and {@see Woodev_API_JSON_Request},
 		 * which reuse it outside this hierarchy) and free text
 		 * ({@see self::redact_secret_query_params()}).
 		 *
-		 * Round 1 and round 2 of #395 masked with `*` repeated to the value's
-		 * original length, matching the convention this class already used for
-		 * headers. Two independent critic passes flagged the same problem with
-		 * that convention: the mask's LENGTH still leaks information about the
-		 * secret — enough, for a fixed-format credential (this framework's own
-		 * license keys follow a known shape/length), to help fingerprint or
-		 * narrow down what kind of secret was logged from the redacted line
-		 * alone. A fixed placeholder leaks nothing about the original value at
-		 * all, which is the stronger property a log-redaction routine should
-		 * have — "consistency with the pre-existing header convention" doesn't
-		 * outweigh that once the same finding has been raised twice.
+		 * The visible prefix/suffix length is selected from the secret length,
+		 * while this middle marker always stays four characters so the output
+		 * does not disclose the number of hidden characters.
 		 *
 		 * @since 2.0.2
 		 */
-		public const SECRET_VALUE_MASK = '[REDACTED]';
+		public const SECRET_VALUE_MASK = '****';
 
 		/**
 		 * The placeholder logged in place of an ENTIRE request/response body
@@ -1528,7 +1520,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * license key value containing the word "license") is never mistaken for
 		 * the param itself.
 		 *
-		 * Uses {@see self::SECRET_VALUE_MASK} — the same fixed placeholder
+		 * Uses {@see self::mask_secret()} — the same partial mask
 		 * {@see self::mask_secret_values()} uses — so a log reader sees one
 		 * consistent mask everywhere; kept as a separate routine rather than
 		 * reused through it because this one operates on a flat string, not an
@@ -1547,7 +1539,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * @since 2.0.2 also matches a name's nested/percent-encoded/casing
 		 *              variants instead of only its exact literal spelling, also
 		 *              masks a `<name>value</name>` XML element, and masks with
-		 *              {@see self::SECRET_VALUE_MASK} instead of a
+		 *              {@see self::mask_secret()} instead of a
 		 *              length-revealing run of `*` — #395 Round 3 (Blocking 1 & 2,
 		 *              and the masking-shape SHOULD-FIX).
 		 * @since 2.0.2 checks EVERY bracket segment of a key, not only the first,
@@ -1574,13 +1566,13 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 			$canonical_secret_names = array_unique( array_map( [ self::class, 'canonicalize_secret_param_name' ], $secret_names ) );
 
 			$text = (string) preg_replace_callback(
-				'/([A-Za-z0-9_\-\[\]%+]+)=([^&\s]*)/',
+				'/([A-Za-z0-9_\-\[\]%+]+)=([^&\s,;\)\]}\'"<>]*)/',
 				static function ( array $matches ) use ( $canonical_secret_names ): string {
 
 					foreach ( self::get_query_param_name_segments( $matches[1] ) as $segment ) {
 
 						if ( in_array( self::canonicalize_secret_param_name( $segment ), $canonical_secret_names, true ) ) {
-							return $matches[1] . '=' . self::SECRET_VALUE_MASK;
+							return $matches[1] . '=' . self::mask_secret( $matches[2] );
 						}
 					}
 
@@ -1597,7 +1589,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 						return $matches[0];
 					}
 
-					return '<' . $matches[1] . '>' . self::SECRET_VALUE_MASK . '</' . $matches[1] . '>';
+					return '<' . $matches[1] . '>' . self::mask_secret( $matches[2] ) . '</' . $matches[1] . '>';
 				},
 				$text
 			);
@@ -1704,9 +1696,9 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * - It runs over the WHOLE message, not just an isolated parameter:
 		 *   harmless prose that happens to contain `name=value` shape is
 		 *   masked too (`the retry token=next is enabled`), and the value
-		 *   match is greedy up to the next `&`/whitespace, so trailing
-		 *   punctuation attached to the value is consumed with it
-		 *   (`api_key=abc,` becomes `api_key=[REDACTED]`, comma included).
+		 *   match ends at a value delimiter such as `&`, whitespace, or
+		 *   punctuation, so the delimiter stays outside the mask
+		 *   (`api_key=abc,` becomes `api_key=****,`, keeping the comma).
 		 *   For a diagnostic log line this over-redaction is the right
 		 *   trade against under-redaction, but it is a real, visible
 		 *   behaviour, not a hypothetical one.
@@ -1827,6 +1819,53 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 					}
 				)
 			);
+		}
+
+		/**
+		 * Partially masks a secret while keeping the hidden portion's length
+		 * private. Values up to eight characters are fully hidden; longer values
+		 * show one, two, three, or four characters from each end by length band.
+		 * The middle is always {@see self::SECRET_VALUE_MASK}.
+		 *
+		 * The mbstring extension is optional in supported installs, so use its
+		 * UTF-8-aware functions when available and a Unicode-regex fallback
+		 * otherwise.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $value Secret value to mask.
+		 * @return string
+		 */
+		public static function mask_secret( string $value ): string {
+			$characters = [];
+
+			if ( function_exists( 'mb_strlen' ) && function_exists( 'mb_substr' ) ) {
+				$length = mb_strlen( $value, 'UTF-8' );
+				$valid_utf8 = true;
+			} else {
+				$matched = preg_match_all( '/./us', $value, $characters );
+				$valid_utf8 = false !== $matched;
+				$length     = $valid_utf8 ? $matched : strlen( $value );
+			}
+
+			$visible = $length <= 8 ? 0 : ( $length <= 15 ? 1 : ( $length <= 23 ? 2 : ( $length <= 39 ? 3 : 4 ) ) );
+
+			if ( 0 === $visible ) {
+				return self::SECRET_VALUE_MASK;
+			}
+
+			if ( function_exists( 'mb_strlen' ) && function_exists( 'mb_substr' ) ) {
+				$start = mb_substr( $value, 0, $visible, 'UTF-8' );
+				$end   = mb_substr( $value, -$visible, null, 'UTF-8' );
+			} elseif ( $valid_utf8 ) {
+				$start = implode( '', array_slice( $characters[0], 0, $visible ) );
+				$end   = implode( '', array_slice( $characters[0], -$visible ) );
+			} else {
+				$start = substr( $value, 0, $visible );
+				$end   = substr( $value, -$visible );
+			}
+
+			return $start . self::SECRET_VALUE_MASK . $end;
 		}
 
 		/**
@@ -2022,7 +2061,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * Walks a decoded query-string or JSON array and redacts the value of
 		 * every entry whose KEY canonicalizes to a denylisted name, AT ANY DEPTH
 		 * — not only the top level. A matching key's entire value is replaced
-		 * with {@see self::SECRET_VALUE_MASK} in one shot, even when that value
+		 * with {@see self::mask_secret()} in one shot, even when that value
 		 * is itself an array (e.g. `token[primary]=…`): there is no safe way to
 		 * partially mask a subtree whose very key is the secret's name. A
 		 * NON-matching key whose value is an array is recursed into, so a secret
@@ -2044,7 +2083,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 			foreach ( $values as $key => $value ) {
 
 				if ( in_array( self::canonicalize_secret_param_name( (string) $key ), $canonical_secret_names, true ) ) {
-					$values[ $key ] = self::SECRET_VALUE_MASK;
+					$values[ $key ] = self::mask_secret( is_string( $value ) ? $value : '' );
 					continue;
 				}
 
@@ -2323,7 +2362,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 
 		/**
 		 * Masks the VALUE of every entry whose name matches $secret_names, using
-		 * {@see self::SECRET_VALUE_MASK}. The match is decided by
+		 * {@see self::mask_secret()}. The match is decided by
 		 * {@see self::canonicalize_secret_param_name()} on both sides — lowercased,
 		 * separators stripped — so it is both case-insensitive (HTTP header names
 		 * are case-insensitive, and this is also used for request/query params —
@@ -2365,7 +2404,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 *              — the name no longer matched what it masked once request
 		 *              params joined headers as callers.
 		 * @since 2.0.2 name matching is now separator-insensitive too (not only
-		 *              case-insensitive), and masks with {@see self::SECRET_VALUE_MASK}
+		 *              case-insensitive), and masks with {@see self::mask_secret()}
 		 *              instead of a length-revealing run of `*` — #395 Round 3.
 		 *
 		 * @param array<string, mixed> $headers Name/value pairs (value: string, or array<int, string>
@@ -2382,7 +2421,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 			 * truthy: `empty()` is true for the string `'0'`, so a credential whose
 			 * value happens to be `0` would have reached the logger in clear text.
 			 * Masking a genuinely empty value costs nothing — it still logs as
-			 * SECRET_VALUE_MASK rather than being skipped and logged as `''`.
+			 * the mask rather than being skipped and logged as `''`.
 			 */
 			foreach ( $headers as $name => $value ) {
 
@@ -2390,9 +2429,21 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 					continue;
 				}
 
+				$mask = static function ( $item ) use ( $name ): string {
+					$value = is_string( $item ) ? $item : '';
+
+					if ( in_array( self::canonicalize_secret_param_name( (string) $name ), [ 'authorization', 'proxyauthorization' ], true )
+						&& preg_match( '/^(\s*(?:Bearer|Basic|Token|OAuth)\s+)(\S+)(\s*)$/i', $value, $matches )
+					) {
+						return $matches[1] . self::mask_secret( $matches[2] ) . $matches[3];
+					}
+
+					return self::mask_secret( $value );
+				};
+
 				$headers[ $name ] = is_array( $value )
-					? array_map( static fn( $item ) => self::SECRET_VALUE_MASK, $value )
-					: self::SECRET_VALUE_MASK;
+					? array_map( $mask, $value )
+					: $mask( $value );
 			}
 
 			return $headers;

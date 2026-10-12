@@ -400,7 +400,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 					get_class( $adapter ),
 					'test_plugin',
 					$record->key(),
-					'carrier rejected api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK
+					'carrier rejected api_key=' . \Woodev_API_Base::mask_secret( self::SECRET )
 				),
 				$captured
 			);

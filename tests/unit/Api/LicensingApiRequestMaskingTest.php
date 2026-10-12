@@ -40,8 +40,8 @@
  *   license key — masking must affect ONLY what is logged, never what is sent;
  * - the logging-only getters ({@see \Woodev_Licensing_API_Request::get_path_safe()},
  *   {@see \Woodev_Licensing_API_Request::to_string_safe()}) mask the license
- *   key, using the same fixed placeholder as header masking
- *   ({@see \Woodev_API_Base::SECRET_VALUE_MASK});
+	 *   key, using the same partial masking helper as header masking
+	 *   ({@see \Woodev_API_Base::mask_secret()});
  * - non-secret params (edd_action, item_id, ...) pass through unmasked, on
  *   both sides;
  * - end to end, {@see \Woodev_API_Base::get_request_data_for_broadcast()}
@@ -414,7 +414,7 @@ final class LicensingApiRequestMaskingTest extends TestCase {
 		$safe_path = $request->get_path_safe();
 		$params    = $this->parse_query( $safe_path );
 
-		$this->assertSame( \Woodev_API_Base::SECRET_VALUE_MASK, $params['license'] );
+		$this->assertSame( \Woodev_API_Base::mask_secret( $license_key ), $params['license'] );
 		$this->assertStringNotContainsString( $license_key, $safe_path, 'the license key leaked into the sanitized path' );
 	}
 

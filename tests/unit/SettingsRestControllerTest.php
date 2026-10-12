@@ -245,7 +245,7 @@ class SettingsRestControllerTest extends TestCase {
 		$this->assertInstanceOf( 'WP_Error', $result );
 		$this->assertSame( 'woodev_settings_server_error', $result->get_error_code() );
 		$this->assertSame(
-			'[woodev] settings save failed on "api_key": carrier rejected api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK,
+			'[woodev] settings save failed on "api_key": carrier rejected api_key=' . \Woodev_API_Base::mask_secret( 'LIVESECRET' ),
 			$captured
 		);
 	}
@@ -322,7 +322,7 @@ class SettingsRestControllerTest extends TestCase {
 		$this->assertInstanceOf( 'WP_Error', $result );
 		$this->assertSame( 'woodev_settings_connection_error', $result->get_error_code() );
 		$this->assertSame(
-			'[woodev] connection test failed for cdek/main: carrier rejected api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK,
+			'[woodev] connection test failed for cdek/main: carrier rejected api_key=' . \Woodev_API_Base::mask_secret( 'LIVESECRET' ),
 			$captured
 		);
 	}
@@ -605,7 +605,7 @@ class SettingsRestControllerTest extends TestCase {
 		$this->assertInstanceOf( 'WP_Error', $result );
 		$this->assertSame( 'woodev_settings_tool_error', $result->get_error_code() );
 		$this->assertSame(
-			'[woodev] shipping tool run failed for shipping/sweep: carrier rejected api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK,
+			'[woodev] shipping tool run failed for shipping/sweep: carrier rejected api_key=' . \Woodev_API_Base::mask_secret( 'LIVESECRET' ),
 			$captured
 		);
 	}
