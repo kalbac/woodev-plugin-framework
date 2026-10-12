@@ -10,70 +10,45 @@ namespace Woodev\Tests\Unit\Contract;
 use Woodev\Tests\Unit\TestCase;
 
 /**
- * Guards the yandex shipping-method-ID data contract of the v1 -> v2.0.0 migration (framework G4, card #1241).
+ * Guards the yandex shipping-method-ID contract of the v1 -> v2.0.0 migration (G4, card #1241, decision D10).
  *
- * Decision D10 («old names are rewritten into new»), as CDEK v2 did it. The v2 plugin is not in this repository,
- * so this guard does not exercise plugin code. It guards two things:
+ * The v2 plugin is not in this repository, so no plugin code runs here. Two things are pinned:
+ * 1. THE SOURCE SET: the v1 IDs and `tariff` values, read from plugins-reference/woocommerce-yandex-delivery (1.3.7).
+ * 2. THE TARGET CONTRACT: the rewrite map is declared, not derived; the v2 migration must implement it (spec §12 step 1).
  *
- * 1. THE SOURCE SET. The v1 IDs and the v1 `tariff` values are read from the v1 reference source
- *    (plugins-reference/woocommerce-yandex-delivery, 1.3.7). If v1 renamed one, the migration's input would drift
- *    silently; this guard turns that drift RED.
- * 2. THE TARGET CONTRACT. The mapping below is declared, not derived. It is what the v2 migration must implement
- *    (spec §12 step 1).
+ * The plugin repository must test: time_interval other-day rows become courier, self_pickup become pickup, a missing or
+ * unknown tariff becomes courier and is journalled; express rows are deleted and journalled; the v2 plugin registers
+ * exactly the two v2 IDs and no v1 ID.
  *
- * WHAT THE PLUGIN REPOSITORY MUST TEST (not covered here):
- * - Split: a v1 `yandex_delivery_other_day` row with tariff `time_interval` becomes `yandex_delivery_courier`; with
- *   `self_pickup` it becomes `yandex_delivery_pickup`; a missing or unknown tariff becomes courier and is journalled.
- * - Express: rows of `yandex_delivery_express` are deleted and listed in the journal.
- * - The v2 plugin registers exactly the two v2 IDs and no v1 ID.
- *
- * WHY source-level reads: the same reason as the other contract guards in this directory. The v1 method classes
- * extend WooCommerce's shipping-method class, which is absent in unit context; the literal assigned to `$this->id`
- * is the contract and can be read without WooCommerce coupling.
+ * Source-level reads: the v1 method classes extend WooCommerce's shipping-method class, absent in unit context.
  *
  * Spec: docs-internal/specs/2026-10-12-yandex-v2-plugin-design.md §1 (D10), §11 «Method ids», §12 step 1.
- *
- * Mutation-recipes: tests/unit/Contract/recipes/yandex-shipping-method-id.recipe.json (express ID),
- *                   tests/unit/Contract/recipes/yandex-other-day-method-id.recipe.json (other-day ID).
+ * Recipes: tests/unit/Contract/recipes/yandex-other-day-method-id.recipe.json, yandex-shipping-method-id.recipe.json.
  */
 final class YandexShippingMethodIdContractTest extends TestCase {
 
-	/**
-	 * v1 method ID of the other-day method. Source: includes/class-shipping-method-other-day.php.
-	 */
+	/** v1 other-day method ID. Source: includes/class-shipping-method-other-day.php. */
 	private const V1_OTHER_DAY_ID = 'yandex_delivery_other_day';
 
-	/**
-	 * v1 method ID of the express stub (not registered in v1). Source: includes/class-shipping-method-express.php.
-	 */
+	/** v1 express stub ID (not registered in v1). Source: includes/class-shipping-method-express.php. */
 	private const V1_EXPRESS_ID = 'yandex_delivery_express';
 
-	/**
-	 * v2 method ID for the door-delivery tariff (D10).
-	 */
+	/** v2 door-delivery method ID (D10). */
 	private const V2_COURIER_ID = 'yandex_delivery_courier';
 
-	/**
-	 * v2 method ID for the pickup-point tariff (D10).
-	 */
+	/** v2 pickup-point method ID (D10). */
 	private const V2_PICKUP_ID = 'yandex_delivery_pickup';
 
-	/**
-	 * Declared rewrite of a v1 other-day row, keyed by its v1 `tariff` value (spec §12 step 1).
-	 */
+	/** Declared rewrite of a v1 other-day row, keyed by its v1 `tariff` value (spec §12 step 1). */
 	private const TARIFF_TARGETS = [
 		'time_interval' => self::V2_COURIER_ID,
 		'self_pickup'   => self::V2_PICKUP_ID,
 	];
 
-	/**
-	 * Target of an other-day row whose tariff is missing or unknown (spec §12 step 1, journalled).
-	 */
+	/** Target of an other-day row with a missing or unknown tariff (spec §12 step 1, journalled). */
 	private const FALLBACK_TARGET = self::V2_COURIER_ID;
 
-	/**
-	 * v1 IDs whose rows the migration deletes instead of rewriting (D10).
-	 */
+	/** v1 IDs whose rows the migration deletes instead of rewriting (D10). */
 	private const DELETED_V1_IDS = [ self::V1_EXPRESS_ID ];
 
 	/**
@@ -112,10 +87,7 @@ final class YandexShippingMethodIdContractTest extends TestCase {
 	}
 
 	/**
-	 * The v1 other-day ID must be exactly 'yandex_delivery_other_day'.
-	 *
-	 * Merchants' WooCommerce shipping-zone rows persist `method_id = yandex_delivery_other_day`. This is the source set
-	 * of the v1 -> v2 split (spec §12 step 1); renaming it in v1 would silently empty that set.
+	 * The v1 other-day ID is persisted in merchants' zone rows and is the source set of the split.
 	 *
 	 * @return void
 	 */
@@ -128,10 +100,7 @@ final class YandexShippingMethodIdContractTest extends TestCase {
 	}
 
 	/**
-	 * The v1 express ID must be exactly 'yandex_delivery_express'.
-	 *
-	 * Express rows are deleted by the migration (D10). The stub is not registered in v1, but merchants may still hold
-	 * zone rows keyed on this ID, so the migration must find them under this exact name.
+	 * The migration finds and deletes express zone rows by this exact ID.
 	 *
 	 * @return void
 	 */
@@ -144,64 +113,51 @@ final class YandexShippingMethodIdContractTest extends TestCase {
 	}
 
 	/**
-	 * The v1 `tariff` values of the other-day method must be exactly the keys of the declared rewrite, and the default
-	 * must be the one the rewrite falls back on.
-	 *
-	 * v1 reads a missing tariff as `time_interval` (`get_option( 'tariff', 'time_interval' )`), so the fallback target
-	 * of the migration is the target of that default. If v1 adds or renames a tariff, this guard goes RED and the
-	 * declared split must be extended before release.
+	 * The v1 `tariff` values must be exactly the declared rewrite keys; the v1 default must be the one the fallback
+	 * is derived from. A new or renamed v1 tariff turns this RED, and the declared split must be extended before release.
 	 *
 	 * @return void
 	 */
 	public function test_v1_other_day_tariff_values_are_exactly_the_declared_rewrite_keys(): void {
 		$source = $this->reference_source( 'includes/class-shipping-method-other-day.php' );
 
-		$this->assertSame(
-			1,
-			preg_match( "/'tariff'\\s*=>\\s*\\[(.*?)'shipment_type'/s", $source, $tariff ),
-			'The `tariff` field must exist in the other-day instance form fields.'
-		);
-		$this->assertSame(
-			1,
-			preg_match( "/'default'\\s*=>\\s*'([^']*)'/", $tariff[1], $default ),
-			'The `tariff` field must declare a default.'
-		);
+		$this->assertSame( 1, preg_match( "/'tariff'\\s*=>\\s*\\[(.*?)'shipment_type'/s", $source, $tariff ), 'The `tariff` field must exist.' );
+		$this->assertSame( 1, preg_match( "/'default'\\s*=>\\s*'([^']*)'/", $tariff[1], $default ), 'The `tariff` field must declare a default.' );
 		$this->assertSame( 'time_interval', $default[1], 'v1 default tariff must stay time_interval.' );
-		$this->assertSame(
-			self::FALLBACK_TARGET,
-			self::TARIFF_TARGETS[ $default[1] ],
-			'A missing tariff (v1 default) must be rewritten to the fallback target.'
-		);
+		$this->assertSame( self::FALLBACK_TARGET, self::TARIFF_TARGETS[ $default[1] ], 'A missing tariff must be rewritten to the fallback target.' );
 
-		$this->assertSame(
-			1,
-			preg_match( "/'options'\\s*=>\\s*\\[(.*)/s", $tariff[1], $options ),
-			'The `tariff` field must declare options.'
-		);
-		$this->assertGreaterThan(
-			0,
-			preg_match_all( "/'([a-z_]+)'\\s*=>/", $options[1], $keys ),
-			'The `tariff` options must list at least one value.'
-		);
+		$this->assertSame( 1, preg_match( "/'options'\\s*=>\\s*\\[(.*)/s", $tariff[1], $options ), 'The `tariff` field must declare options.' );
+		$this->assertGreaterThan( 0, preg_match_all( "/'([a-z_]+)'\\s*=>/", $options[1], $keys ), 'The `tariff` options must list at least one value.' );
 
 		$v1_tariffs = $keys[1];
 		sort( $v1_tariffs );
 		$declared = array_keys( self::TARIFF_TARGETS );
 		sort( $declared );
 
+		$this->assertSame( $declared, $v1_tariffs, 'Installed-site contract: v1 tariff values must be exactly the declared rewrite keys.' );
+	}
+
+	/**
+	 * The map must be exactly time_interval -> courier and self_pickup -> pickup, and the fallback exactly courier.
+	 * A target-set check alone passes a coordinated swap (tariffs exchanged, fallback moved with them).
+	 *
+	 * @return void
+	 */
+	public function test_rewrite_map_is_exactly_time_interval_to_courier_and_self_pickup_to_pickup(): void {
 		$this->assertSame(
-			$declared,
-			$v1_tariffs,
-			'Installed-site contract: v1 tariff values must be exactly the keys of the declared time_interval/self_pickup rewrite.'
+			[ 'time_interval' => self::V2_COURIER_ID, 'self_pickup' => self::V2_PICKUP_ID ],
+			self::TARIFF_TARGETS,
+			'Migration contract (D10): time_interval -> yandex_delivery_courier, self_pickup -> yandex_delivery_pickup.'
+		);
+		$this->assertSame(
+			self::V2_COURIER_ID,
+			self::FALLBACK_TARGET,
+			'Migration contract (D10): a missing or unknown tariff falls back to yandex_delivery_courier.'
 		);
 	}
 
 	/**
-	 * The migration's targets must be exactly the two v2 IDs, and none of them may be a v1 ID.
-	 *
-	 * "Old names are rewritten into new": a row left on a v1 ID after the migration would be a method the v2 plugin
-	 * does not register, so the merchant's zone would silently lose its rate. The deleted express ID must not be a
-	 * target either.
+	 * Targets are exactly the two v2 IDs and none is a v1 ID: a row left on a v1 ID would lose its rate silently.
 	 *
 	 * @return void
 	 */
@@ -209,24 +165,15 @@ final class YandexShippingMethodIdContractTest extends TestCase {
 		$targets = array_values( array_unique( array_merge( array_values( self::TARIFF_TARGETS ), [ self::FALLBACK_TARGET ] ) ) );
 		sort( $targets );
 
-		$this->assertSame(
-			[ self::V2_COURIER_ID, self::V2_PICKUP_ID ],
-			$targets,
-			'The v1 -> v2 migration must rewrite into exactly yandex_delivery_courier and yandex_delivery_pickup.'
-		);
+		$this->assertSame( [ self::V2_COURIER_ID, self::V2_PICKUP_ID ], $targets, 'Migration must rewrite into exactly the two v2 IDs.' );
 
 		foreach ( $targets as $target ) {
-			$this->assertNotContains(
-				$target,
-				array_merge( [ self::V1_OTHER_DAY_ID ], self::DELETED_V1_IDS ),
-				'No migration target may be a v1 ID: ' . $target
-			);
+			$this->assertNotContains( $target, array_merge( [ self::V1_OTHER_DAY_ID ], self::DELETED_V1_IDS ), 'No target may be a v1 ID: ' . $target );
 		}
 	}
 
 	/**
-	 * Express is deleted by the migration, never rewritten: it must be in the deleted set and must not be a rewrite
-	 * source or a rewrite target.
+	 * Express is deleted, never rewritten: it is neither a rewrite source nor a target.
 	 *
 	 * @return void
 	 */
