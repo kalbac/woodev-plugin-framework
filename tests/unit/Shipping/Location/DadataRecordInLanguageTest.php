@@ -16,16 +16,8 @@ namespace Woodev\Tests\Unit\Shipping\Location;
 
 use Brain\Monkey\Functions;
 use Mockery;
-use Woodev\Framework\Shipping\Location\Customer_Location_Store;
-use Woodev\Framework\Shipping\Location\Locality_Key;
-use Woodev\Framework\Shipping\Location\Location_Provider;
-use Woodev\Framework\Shipping\Location\Location_Provider_Exception;
-use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
-use Woodev\Framework\Shipping\Location\Location_Record;
-use Woodev\Framework\Shipping\Location\Location_Resolution_Cache;
-use Woodev\Framework\Shipping\Location\Location_Service;
-use Woodev\Framework\Shipping\Location\Providers\Dadata_Api_Client;
-use Woodev\Framework\Shipping\Location\Providers\Dadata_Provider;
+use Woodev\Framework\Shipping\Location\{Customer_Location_Store, Locality_Key, Location_Provider, Location_Provider_Exception, Location_Provider_Registry, Location_Record, Location_Resolution_Cache, Location_Service};
+use Woodev\Framework\Shipping\Location\Providers\{Dadata_Api_Client, Dadata_Provider};
 use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__, 4 ) . '/woodev/class-plugin-exception.php';

@@ -19,14 +19,7 @@ namespace Woodev\Tests\Unit\Shipping\Rest_Api;
 
 use WP_REST_Request;
 use Brain\Monkey\Functions;
-use Woodev\Framework\Shipping\Location\Abstract_Location_Provider;
-use Woodev\Framework\Shipping\Location\City_Limit;
-use Woodev\Framework\Shipping\Location\Location_Provider;
-use Woodev\Framework\Shipping\Location\Location_Record;
-use Woodev\Framework\Shipping\Location\Location_Scope;
-use Woodev\Framework\Shipping\Location\Location_Service;
-use Woodev\Framework\Shipping\Location\Popular_Settlement_Entry;
-use Woodev\Framework\Shipping\Location\Popular_Settlement_Store;
+use Woodev\Framework\Shipping\Location\{Abstract_Location_Provider, City_Limit, Location_Provider, Location_Record, Location_Scope, Location_Service, Popular_Settlement_Entry, Popular_Settlement_Store};
 use Woodev\Framework\Shipping\Rest_Api\Location_Controller;
 use Woodev\Tests\Unit\TestCase;
 

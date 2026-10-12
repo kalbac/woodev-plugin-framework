@@ -23,8 +23,7 @@
 
 namespace Woodev\Framework\Shipping\Location;
 
-use Woodev\Framework\Shipping\Settings\Shipping_Tool;
-use Woodev\Framework\Shipping\Settings\Tool_Result;
+use Woodev\Framework\Shipping\Settings\{Shipping_Tool, Tool_Result};
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;

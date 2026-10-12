@@ -12,8 +12,7 @@
 
 namespace Woodev\Tests\Unit\Shipping\Checkout;
 
-use Woodev\Framework\Shipping\Checkout\Presets\Dependent_Select;
-use Woodev\Framework\Shipping\Checkout\Presets\Pickup_Field;
+use Woodev\Framework\Shipping\Checkout\Presets\{Dependent_Select, Pickup_Field};
 use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/presets/class-dependent-select.php';

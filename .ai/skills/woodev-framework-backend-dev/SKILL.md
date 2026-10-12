@@ -40,6 +40,7 @@ Follow Woodev Framework project conventions when adding or modifying backend PHP
 - Always follow WordPress Coding Standards
 - Use class methods instead of standalone functions
 - Use PSR-4 autoloading with `Woodev\Framework` namespace for new code
+- Group file-level class imports from the same namespace in one statement; keep `use function` and `use const` separate. Example: `use Woodev\Framework\Shipping\Pickup\{Pickup_Point, Point_Query};`
 - Legacy code remains without namespace (`Woodev_Plugin`, `Woodev_Plugin_Bootstrap`)
 - Write comprehensive unit tests for new functionality
 - Run linting and tests before committing changes

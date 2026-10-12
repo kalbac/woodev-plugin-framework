@@ -10,9 +10,7 @@
 
 namespace Woodev\Framework\Shipping;
 
-use Woodev\Framework\Shipping\Location\City_Limit;
-use Woodev\Framework\Shipping\Location\City_Limit_Form;
-use Woodev\Framework\Shipping\Location\Location_Record;
+use Woodev\Framework\Shipping\Location\{City_Limit, City_Limit_Form, Location_Record};
 use Woodev\Framework\Shipping\Pickup\Point_Source;
 
 if ( ! defined( 'ABSPATH' ) ) {

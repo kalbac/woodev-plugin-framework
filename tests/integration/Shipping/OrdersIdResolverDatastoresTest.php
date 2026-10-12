@@ -36,11 +36,8 @@
 
 namespace Woodev\Tests\Integration\Shipping;
 
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Query;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
-use Woodev\Framework\Shipping\Order\Delivery_Status;
-use Woodev\Framework\Shipping\Order\Shipment_Cancellation;
+use Woodev\Framework\Shipping\Admin\Orders\{Orders_Provider, Orders_Query, Orders_Registry};
+use Woodev\Framework\Shipping\Order\{Delivery_Status, Shipment_Cancellation};
 use Woodev\Tests\Integration\TestCase;
 
 class OrdersIdResolverDatastoresTest extends TestCase {

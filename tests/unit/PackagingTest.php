@@ -4,12 +4,8 @@ namespace Woodev\Tests\Unit;
 
 use Brain\Monkey\Functions;
 use Mockery;
-use Woodev\Framework\Shipping\Packaging;
-use Woodev\Framework\Shipping\Settings\Boxes_Settings;
-use Woodev\Framework\Shipping\Settings\Packaging_Settings;
-use Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab;
-use Woodev\Framework\Shipping\Shipping_Plugin;
-use Woodev\Framework\Shipping\Shipping_Rate;
+use Woodev\Framework\Shipping\{Packaging, Shipping_Plugin, Shipping_Rate};
+use Woodev\Framework\Shipping\Settings\{Boxes_Settings, Packaging_Settings, Shipping_Settings_Tab};
 
 require_once __DIR__ . '/ShippingMethodBoxPackingTest.php';
 

@@ -18,15 +18,9 @@
 namespace Woodev\Tests\Unit\Shipping;
 
 use Brain\Monkey\Functions;
-use Woodev\Framework\Shipping\Checkout\Checkout_Fields;
-use Woodev\Framework\Shipping\Checkout\Checkout_Handler;
-use Woodev\Framework\Shipping\Location\Customer_Location_Store;
-use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
-use Woodev\Framework\Shipping\Location\Location_Record;
-use Woodev\Framework\Shipping\Location\Location_Service;
-use Woodev\Framework\Shipping\Pickup\Pickup_Handler;
-use Woodev\Framework\Shipping\Pickup\Point_Source;
-use Woodev\Framework\Shipping\Pickup\Provider_Selection_Scope;
+use Woodev\Framework\Shipping\Checkout\{Checkout_Fields, Checkout_Handler};
+use Woodev\Framework\Shipping\Location\{Customer_Location_Store, Location_Provider_Registry, Location_Record, Location_Service};
+use Woodev\Framework\Shipping\Pickup\{Pickup_Handler, Point_Source, Provider_Selection_Scope};
 use Woodev\Framework\Shipping\Shipping_Plugin;
 use Woodev\Tests\Unit\TestCase;
 

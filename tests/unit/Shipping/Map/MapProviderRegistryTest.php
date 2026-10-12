@@ -15,9 +15,7 @@
 namespace Woodev\Tests\Unit\Shipping\Map;
 
 use Brain\Monkey\Functions;
-use Woodev\Framework\Shipping\Map\Embedded_Map_Provider;
-use Woodev\Framework\Shipping\Map\Map_Provider_Registry;
-use Woodev\Framework\Shipping\Map\Yandex_Map_Provider;
+use Woodev\Framework\Shipping\Map\{Embedded_Map_Provider, Map_Provider_Registry, Yandex_Map_Provider};
 use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-setting.php';

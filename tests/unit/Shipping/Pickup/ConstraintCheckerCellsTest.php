@@ -9,8 +9,7 @@
 namespace Woodev\Tests\Unit\Shipping\Pickup;
 
 use Brain\Monkey\Functions;
-use Woodev\Framework\Shipping\Pickup\Constraint_Checker;
-use Woodev\Framework\Shipping\Pickup\Pickup_Point;
+use Woodev\Framework\Shipping\Pickup\{Constraint_Checker, Pickup_Point};
 use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-pickup-point.php';

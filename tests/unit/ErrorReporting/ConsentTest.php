@@ -8,8 +8,7 @@
 namespace Woodev\Tests\Unit\ErrorReporting;
 
 use Brain\Monkey\Functions;
-use Woodev\Framework\Error_Reporting\Consent;
-use Woodev\Framework\Error_Reporting\Event_Queue;
+use Woodev\Framework\Error_Reporting\{Consent, Event_Queue};
 
 /**
  * @covers \Woodev\Framework\Error_Reporting\Consent

@@ -9,9 +9,7 @@ namespace Woodev\Tests\Unit\Shipping;
 
 use Brain\Monkey\Functions;
 use Mockery;
-use Woodev\Framework\Shipping\Shipping_Helper;
-use Woodev\Framework\Shipping\Shipping_Method;
-use Woodev\Framework\Shipping\Shipping_Rate_Cache;
+use Woodev\Framework\Shipping\{Shipping_Helper, Shipping_Method, Shipping_Rate_Cache};
 use Woodev\Tests\Unit\TestCase;
 
 require_once __DIR__ . '/ShippingRateCacheTest.php';

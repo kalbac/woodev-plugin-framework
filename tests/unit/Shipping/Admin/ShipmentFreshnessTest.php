@@ -9,9 +9,7 @@ namespace Woodev\Tests\Unit\Shipping\Admin;
 
 use Brain\Monkey\Functions;
 use Mockery;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
-use Woodev\Framework\Shipping\Admin\Orders\Shipment_Freshness;
+use Woodev\Framework\Shipping\Admin\Orders\{Orders_Provider, Orders_Registry, Shipment_Freshness};
 use Woodev\Framework\Shipping\Checkout\Checkout_Handler;
 use Woodev\Framework\Shipping\Order\Shipment_Fingerprint;
 use Woodev\Framework\Shipping\Shipping_Plugin;

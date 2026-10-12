@@ -7,9 +7,7 @@
 
 namespace Woodev\Tests\Unit\ErrorReporting;
 
-use Woodev\Framework\Error_Reporting\Browser_Event_Builder;
-use Woodev\Framework\Error_Reporting\Event_Builder;
-use Woodev\Framework\Error_Reporting\Plugin_Scope;
+use Woodev\Framework\Error_Reporting\{Browser_Event_Builder, Event_Builder, Plugin_Scope};
 use Woodev\Tests\Unit\TestCase;
 
 defined( 'WP_PLUGIN_DIR' ) || define( 'WP_PLUGIN_DIR', '/srv/wp/wp-content/plugins' );

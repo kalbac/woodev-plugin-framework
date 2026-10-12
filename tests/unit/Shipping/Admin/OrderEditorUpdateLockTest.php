@@ -15,9 +15,7 @@ namespace Woodev\Tests\Unit\Shipping\Admin;
 
 use Brain\Monkey\Functions;
 use Mockery;
-use Woodev\Framework\Shipping\Admin\Orders\Order_Editor;
-use Woodev\Framework\Shipping\Admin\Orders\Order_Payload_Validator;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
+use Woodev\Framework\Shipping\Admin\Orders\{Order_Editor, Order_Payload_Validator, Orders_Registry};
 use Woodev\Tests\Unit\TestCase;
 
 require_once __DIR__ . '/order-editor-lock-fixtures.php';

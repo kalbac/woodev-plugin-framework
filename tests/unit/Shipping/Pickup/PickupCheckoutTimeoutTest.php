@@ -17,12 +17,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup;
 use Brain\Monkey\Functions;
 use Woodev\Framework\Shipping\Location\Location_Record;
 use Woodev\Framework\Shipping\Order\Shipping_Order_Handler;
-use Woodev\Framework\Shipping\Pickup\Pickup_Handler;
-use Woodev\Framework\Shipping\Pickup\Pickup_Point;
-use Woodev\Framework\Shipping\Pickup\Pickup_Selection;
-use Woodev\Framework\Shipping\Pickup\Point_Query;
-use Woodev\Framework\Shipping\Pickup\Point_Source;
-use Woodev\Framework\Shipping\Pickup\Selection_Scope;
+use Woodev\Framework\Shipping\Pickup\{Pickup_Handler, Pickup_Point, Pickup_Selection, Point_Query, Point_Source, Selection_Scope};
 use Woodev\Framework\Shipping\Rest_Api\Pickup_Controller;
 use Woodev\Tests\Unit\TestCase;
 

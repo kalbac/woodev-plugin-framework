@@ -5,9 +5,7 @@
  * @package Woodev\Framework\REST
  */
 
-use Woodev\Framework\Setup\Action_Outcome;
-use Woodev\Framework\Setup\Callback_Failure;
-use Woodev\Framework\Setup\Step;
+use Woodev\Framework\Setup\{Action_Outcome, Callback_Failure, Step};
 
 defined( 'ABSPATH' ) || exit;
 

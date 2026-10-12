@@ -22,10 +22,7 @@
 namespace Woodev\Tests\Unit\Shipping\Location;
 
 use Brain\Monkey\Functions;
-use Woodev\Framework\Shipping\Location\Location_Provider;
-use Woodev\Framework\Shipping\Location\Location_Provider_Exception;
-use Woodev\Framework\Shipping\Location\Location_Record;
-use Woodev\Framework\Shipping\Location\Location_Scope;
+use Woodev\Framework\Shipping\Location\{Location_Provider, Location_Provider_Exception, Location_Record, Location_Scope};
 use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-locality-key.php';

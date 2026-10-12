@@ -15,13 +15,8 @@
 
 defined( 'ABSPATH' ) || exit;
 
-use Woodev\Framework\Shipping\Shipping_Method_Pickup;
-use Woodev\Framework\Shipping\Shipping_Plugin;
-use Woodev\Framework\Shipping\Shipping_Rate;
-use Woodev\Framework\Shipping\Pickup\Abstract_Bulk_Point_Source;
-use Woodev\Framework\Shipping\Pickup\Pickup_Point;
-use Woodev\Framework\Shipping\Pickup\Point_Query;
-use Woodev\Framework\Shipping\Pickup\Point_Source;
+use Woodev\Framework\Shipping\{Shipping_Method_Pickup, Shipping_Plugin, Shipping_Rate};
+use Woodev\Framework\Shipping\Pickup\{Abstract_Bulk_Point_Source, Pickup_Point, Point_Query, Point_Source};
 
 /**
  * Yandex-shaped fixture pickup point source.

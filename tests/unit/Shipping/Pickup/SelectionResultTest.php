@@ -8,8 +8,7 @@
 
 namespace Woodev\Tests\Unit\Shipping\Pickup;
 
-use Woodev\Framework\Shipping\Pickup\Pickup_Point;
-use Woodev\Framework\Shipping\Pickup\Selection_Result;
+use Woodev\Framework\Shipping\Pickup\{Pickup_Point, Selection_Result};
 use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-pickup-point.php';

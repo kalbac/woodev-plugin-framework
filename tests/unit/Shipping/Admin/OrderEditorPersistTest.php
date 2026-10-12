@@ -14,14 +14,9 @@ namespace Woodev\Tests\Unit\Shipping\Admin;
 
 use Brain\Monkey\Functions;
 use Mockery;
-use Woodev\Framework\Shipping\Admin\Orders\Carrier_Field_Set;
-use Woodev\Framework\Shipping\Admin\Orders\Order_Editor;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
+use Woodev\Framework\Shipping\Admin\Orders\{Carrier_Field_Set, Order_Editor, Orders_Provider, Orders_Registry};
 use Woodev\Framework\Shipping\Checkout\Checkout_Handler;
-use Woodev\Framework\Shipping\Location\Location_Record;
-use Woodev\Framework\Shipping\Location\Location_Provider;
-use Woodev\Framework\Shipping\Location\Location_Service;
+use Woodev\Framework\Shipping\Location\{Location_Provider, Location_Record, Location_Service};
 use Woodev\Framework\Shipping\Pickup\Pickup_Handler;
 use Woodev\Framework\Shipping\Shipping_Plugin;
 use Woodev\Tests\Unit\TestCase;

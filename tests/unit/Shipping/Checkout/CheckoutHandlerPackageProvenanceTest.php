@@ -17,8 +17,7 @@
 namespace Woodev\Tests\Unit\Shipping\Checkout;
 
 use Brain\Monkey\Functions;
-use Woodev\Framework\Shipping\Checkout\Checkout_Fields;
-use Woodev\Framework\Shipping\Checkout\Checkout_Handler;
+use Woodev\Framework\Shipping\Checkout\{Checkout_Fields, Checkout_Handler};
 use Woodev\Framework\Shipping\Location\Location_Service;
 use Woodev\Tests\Unit\TestCase;
 

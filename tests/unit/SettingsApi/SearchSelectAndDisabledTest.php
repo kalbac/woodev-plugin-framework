@@ -4,11 +4,7 @@ namespace Woodev\Tests\Unit\SettingsApi;
 
 use Brain\Monkey\Functions;
 use Mockery;
-use Woodev\Framework\Settings\Composite_Settings_Handler;
-use Woodev\Framework\Settings\Field_Schema;
-use Woodev\Framework\Settings\Settings_Page_Registry;
-use Woodev\Framework\Settings\Settings_Provider;
-use Woodev\Framework\Settings\Settings_Section;
+use Woodev\Framework\Settings\{Composite_Settings_Handler, Field_Schema, Settings_Page_Registry, Settings_Provider, Settings_Section};
 use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__, 3 ) . '/woodev/rest-api/controllers/class-rest-api-settings-page.php';

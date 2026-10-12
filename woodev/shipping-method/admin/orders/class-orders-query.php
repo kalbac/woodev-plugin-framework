@@ -9,8 +9,7 @@
 
 namespace Woodev\Framework\Shipping\Admin\Orders;
 
-use Woodev\Framework\Shipping\Order\Delivery_Status;
-use Woodev\Framework\Shipping\Order\Shipment_Cancellation;
+use Woodev\Framework\Shipping\Order\{Delivery_Status, Shipment_Cancellation};
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;

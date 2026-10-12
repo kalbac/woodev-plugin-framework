@@ -13,8 +13,7 @@
 
 namespace Woodev\Framework\Shipping\Rest_Api;
 
-use Woodev\Framework\Shipping\Admin\Orders\Admin_Rate_Calculator;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
+use Woodev\Framework\Shipping\Admin\Orders\{Admin_Rate_Calculator, Orders_Registry};
 use Woodev\Framework\Shipping\Location\Location_Record;
 
 if ( ! defined( 'ABSPATH' ) ) {

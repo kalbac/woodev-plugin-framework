@@ -7,8 +7,7 @@
 
 namespace Woodev\Framework\Shipping\Rest_Api;
 
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
-use Woodev\Framework\Shipping\Admin\Orders\Toolbar_Actions;
+use Woodev\Framework\Shipping\Admin\Orders\{Orders_Registry, Toolbar_Actions};
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;

@@ -3,12 +3,8 @@ namespace Woodev\Tests\Unit;
 
 use Brain\Monkey\Functions;
 use Mockery;
-use Woodev\Framework\Settings\Settings_Group;
-use Woodev\Framework\Settings\Settings_Page_Registry;
-use Woodev\Framework\Settings\Settings_Provider;
-use Woodev\Framework\Settings\Settings_Section;
-use Woodev\Framework\Shipping\Settings\Shipping_Tool;
-use Woodev\Framework\Shipping\Settings\Tool_Result;
+use Woodev\Framework\Settings\{Settings_Group, Settings_Page_Registry, Settings_Provider, Settings_Section};
+use Woodev\Framework\Shipping\Settings\{Shipping_Tool, Tool_Result};
 
 require_once dirname( __DIR__, 2 ) . '/woodev/settings-api/class-connection-result.php';
 

@@ -8,9 +8,7 @@
 namespace Woodev\Tests\Unit\ErrorReporting;
 
 use Brain\Monkey\Functions;
-use Woodev\Framework\Error_Reporting\Dispatcher;
-use Woodev\Framework\Error_Reporting\Error_Reporter;
-use Woodev\Framework\Error_Reporting\Event_Queue;
+use Woodev\Framework\Error_Reporting\{Dispatcher, Error_Reporter, Event_Queue};
 use Woodev\Framework\Framework_Plugin_Loader_Definition;
 
 /**

@@ -8,9 +8,7 @@
 namespace Woodev\Tests\Unit\ErrorReporting;
 
 use Brain\Monkey\Functions;
-use Woodev\Framework\Error_Reporting\Consent;
-use Woodev\Framework\Error_Reporting\Dispatcher;
-use Woodev\Framework\Error_Reporting\Event_Queue;
+use Woodev\Framework\Error_Reporting\{Consent, Dispatcher, Event_Queue};
 
 /**
  * Just enough of `$wpdb` for the drain lock: an options table with `INSERT IGNORE`, a select and a

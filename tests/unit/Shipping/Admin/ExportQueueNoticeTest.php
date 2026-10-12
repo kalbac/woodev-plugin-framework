@@ -9,9 +9,7 @@
 namespace Woodev\Tests\Unit\Shipping\Admin;
 
 use Brain\Monkey\Functions;
-use Woodev\Framework\Shipping\Admin\Orders\Export_Queue_Notice;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
+use Woodev\Framework\Shipping\Admin\Orders\{Export_Queue_Notice, Orders_Provider, Orders_Registry};
 use Woodev\Tests\Unit\TestCase;
 
 /**

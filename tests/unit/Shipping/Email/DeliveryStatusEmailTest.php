@@ -63,8 +63,7 @@ use Automattic\WooCommerce\Utilities\OrderUtil;
 use Brain\Monkey\Functions;
 use Mockery;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
-use Woodev\Framework\Shipping\Email\Delivery_Status_Email;
-use Woodev\Framework\Shipping\Email\Delivery_Status_Emails;
+use Woodev\Framework\Shipping\Email\{Delivery_Status_Email, Delivery_Status_Emails};
 use Woodev\Framework\Shipping\Order\Delivery_Status;
 use Woodev\Tests\Unit\TestCase;
 

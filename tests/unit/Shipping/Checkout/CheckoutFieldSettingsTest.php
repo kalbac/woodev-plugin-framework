@@ -10,10 +10,7 @@
 namespace Woodev\Tests\Unit\Shipping\Checkout;
 
 use Brain\Monkey\Functions;
-use Woodev\Framework\Shipping\Checkout\Checkout_Field_Environment;
-use Woodev\Framework\Shipping\Checkout\Checkout_Field_Policy;
-use Woodev\Framework\Shipping\Checkout\Checkout_Field_Settings;
-use Woodev\Framework\Shipping\Checkout\Phone_Mask_Patterns;
+use Woodev\Framework\Shipping\Checkout\{Checkout_Field_Environment, Checkout_Field_Policy, Checkout_Field_Settings, Phone_Mask_Patterns};
 use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__, 4 ) . '/woodev/class-plugin-exception.php';

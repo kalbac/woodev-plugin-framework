@@ -23,21 +23,10 @@
 
 namespace Woodev\Tests\Unit\Shipping\Checkout;
 
-use Brain\Monkey\Filters;
-use Brain\Monkey\Functions;
+use Brain\Monkey\{Filters, Functions};
 use Mockery;
-use Woodev\Framework\Shipping\Checkout\Checkout_Config;
-use Woodev\Framework\Shipping\Checkout\Checkout_Field_Environment;
-use Woodev\Framework\Shipping\Checkout\Checkout_Field_Settings;
-use Woodev\Framework\Shipping\Checkout\Checkout_Fields;
-use Woodev\Framework\Shipping\Checkout\Field;
-use Woodev\Framework\Shipping\Location\Abstract_Location_Provider;
-use Woodev\Framework\Shipping\Location\Location_Provider;
-use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
-use Woodev\Framework\Shipping\Location\Location_Record;
-use Woodev\Framework\Shipping\Location\Location_Scope;
-use Woodev\Framework\Shipping\Location\Location_Service;
-use Woodev\Framework\Shipping\Location\Popular_Settlement_Store;
+use Woodev\Framework\Shipping\Checkout\{Checkout_Config, Checkout_Field_Environment, Checkout_Field_Settings, Checkout_Fields, Field};
+use Woodev\Framework\Shipping\Location\{Abstract_Location_Provider, Location_Provider, Location_Provider_Registry, Location_Record, Location_Scope, Location_Service, Popular_Settlement_Store};
 use Woodev\Framework\Shipping\Location\Providers\Dadata_Provider;
 use Woodev\Framework\Shipping\Pickup\Pickup_Map_Settings;
 use Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab;

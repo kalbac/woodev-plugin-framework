@@ -8,8 +8,7 @@
 namespace Woodev\Tests\Unit\Shipping;
 
 use Brain\Monkey\Functions;
-use Woodev\Framework\Shipping\Fee_Payments;
-use Woodev\Framework\Shipping\Shipping_Method;
+use Woodev\Framework\Shipping\{Fee_Payments, Shipping_Method};
 use Woodev\Tests\Unit\TestCase;
 
 // the method probe and the `WC_Shipping_Method` stub live there; whichever file loads first defines them

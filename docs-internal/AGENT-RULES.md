@@ -140,6 +140,7 @@ The remaining legitimate `_deprecated_function()`/`_doing_it_wrong()` calls are 
 No standalone functions outside bootstrap. Everything is a class method.
 - Legacy code: `Snake_Case` classes with no namespace (e.g. `Woodev_Plugin`)
 - New code: `Woodev\Framework\*` namespace (PSR-4)
+- Group file-level class imports from one namespace in a single `use` statement; keep `use function` and `use const` separate. Example: `use Woodev\Framework\Shipping\Pickup\{Pickup_Point, Point_Query};`
 
 ### Rule 2 — Subsystem Pattern
 The base subsystems are initialized in `Woodev_Plugin::__construct()` via `init_*()` methods; a platform base adds its own in its constructor (`Woocommerce_Plugin` → Blocks). Plugins override these to provide their own implementations.

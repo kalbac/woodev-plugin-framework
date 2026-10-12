@@ -9,8 +9,7 @@
 
 namespace Woodev\Framework\Shipping\Admin\Orders;
 
-use Woodev\Framework\Shipping\Order\Order_Lock;
-use Woodev\Framework\Shipping\Order\Order_Marker;
+use Woodev\Framework\Shipping\Order\{Order_Lock, Order_Marker};
 use Woodev\Framework\Shipping\Location\Location_Record;
 
 if ( ! defined( 'ABSPATH' ) ) {

@@ -7,9 +7,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-use Woodev\Framework\Shipping\Shipping_Method;
-use Woodev\Framework\Shipping\Shipping_Plugin;
-use Woodev\Framework\Shipping\Shipping_Rate;
+use Woodev\Framework\Shipping\{Shipping_Method, Shipping_Plugin, Shipping_Rate};
 
 /**
  * Edostavka-shaped fixture shipping method. The method ID is the installed-site contract 'edostavka'.
