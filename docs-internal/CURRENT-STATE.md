@@ -94,7 +94,7 @@ its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and
 exactly that trap, and a naive reader reports a milestone-carrying card as empty. **PRIORITY LIVES ON
 THE BOARD, not in this file** (operator, 04.09.2026, #644 part 3); its field and option ids are in
 `AGENTS.md` → Backlog rule, and every open card carries one.
-**`V2 готов` = two carrier plugins on v2, tested and compatible** (operator, 08.10.2026, #1179; superseded «#786 works» of 07.09.2026) — the gate #247/#285 wait on. For #567 sequencing, read the live card; older schedules here conflicted. **Read the board, never a card list retyped here** — a
+**`V2 готов` = two carrier plugins on v2, tested and compatible** (operator, 08.10.2026, #1179; superseded «#786 works» of 07.09.2026) — the gate #247/#285 wait on. #567 (visual translation pass) is release-gated: it runs right before the release together with #247/#285 (operator, s123; repeated on #247). **Read the board, never a card list retyped here** — a
 retyped list is what went stale and got #644 filed.
 
 **`location.levels` is a per-country matrix** (`levels[country][level]`) and the client reads it that
@@ -115,7 +115,7 @@ Build `.mo` with `wp i18n make-mo` in the rig container; `update-po` can drop th
 `lint-i18n-answers-about-the-catalogue-not-the-code`. JS bundles read handle-named JSON,
 not `.mo` (`lint:js-i18n`, #1032; `js-translations-are-handle-named-json-files`).
 
-**#567 visual translation review:** its release condition and priority live on the board.
+**#567 visual translation review:** GATED BY THE RELEASE, not by an operator answer — the whole catalogue is walked right before release because strings still change until then. Card «Заморожено» with that condition; do not reopen earlier.
 Do not infer sequencing from an old state-file snapshot.
 
 **Shipping method features support both declarations:** `$this->supports` before
