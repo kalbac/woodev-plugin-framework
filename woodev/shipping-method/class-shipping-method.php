@@ -2633,6 +2633,28 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		}
 
 		/**
+		 * Whether this method's price ALWAYS depends on the payment method (e.g. a cash-on-delivery commission).
+		 *
+		 * Declared on the CLASS, not through {@see self::add_support()}: the answer is needed before any
+		 * instance exists. On a cold request WooCommerce collects the cart's packages — and so decides whether
+		 * the chosen payment method travels with them — BEFORE `woocommerce_shipping_methods` constructs the
+		 * methods (gotcha `cart-and-checkout-share-one-shipping-rate-cache-entry`), so an instance-level
+		 * `supports` list is not yet there to read. {@see Fee_Payments::declare_payment_dependent_price()} asks
+		 * the plugin's method classes this once, at `Shipping_Plugin::add_hooks()`.
+		 *
+		 * A carrier that returns `true` gets the payment-change recalculation for EVERY instance of its method,
+		 * with no saved `fee_payments` or insurance setting and no registry write. The default `false` changes
+		 * nothing for any other method.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public static function declares_payment_dependent_price(): bool {
+			return false;
+		}
+
+		/**
 		 * Adds support for the named feature or features.
 		 *
 		 * @since 1.5.0
