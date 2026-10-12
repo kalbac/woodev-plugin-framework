@@ -35,7 +35,7 @@ $vendorDir = dirname( __DIR__ );
 $baseDir   = dirname( $vendorDir );
 ```
 
-Orca shares a directory by **symlinking** it (it clone-copies only on macOS/APFS). So inside a
+Orca shares a directory by **symlinking** it (also measured as a symlink on macOS in s136 and s171). So inside a
 worktree `vendor` points at the primary checkout, PHP resolves `__DIR__` to its real path, and
 `$baseDir` becomes **the primary checkout** — not the worktree. Every classmap entry
 (`$baseDir . '/woodev/…'`) therefore loads the primary checkout's sources, while the test bootstrap

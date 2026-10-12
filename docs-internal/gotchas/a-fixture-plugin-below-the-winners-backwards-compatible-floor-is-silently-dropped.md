@@ -10,7 +10,7 @@
 (`input[name^="shipping_method"][value^="woodev_test_shipping:"]` → 0 elements). Nothing in the
 debug log, no admin notice on the front end.
 
-Cause: `Woodev_Framework_Resolver` sorts the registered plugins by `framework_version`; the
+Cause: `Woodev\Framework\Framework_Resolver` sorts the registered plugins by `framework_version`; the
 highest wins and its loader definition's `backwards_compatible` becomes the floor. Every plugin
 whose own `framework_version` is **below** that floor goes to `incompatible_framework_plugins` and
 is skipped (`class-framework-resolver.php`, the `version_compare( $backwards_compatible, $plugin['version'], '>' )`

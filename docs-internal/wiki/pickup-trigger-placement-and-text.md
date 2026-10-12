@@ -27,9 +27,8 @@ Two anchors exist, both mounted by `placeSlots()` in
 **The framework default is `[ 'rate' ]` alone.** Precedence, lowest to highest:
 
 1. the framework default (`[ 'rate' ]`);
-2. a framework-level store setting — **not built yet**, deliberately: it belongs to the
-   carrier-settings screen being designed separately, and a one-off toggle would have to be
-   redone against it;
+2. `Pickup_Map_Settings::current()->get_value( 'pickup_button_placement' )` — the
+   shared store setting, accepting `rate` / `review` and falling back to `rate`;
 3. the `woodev_pickup_slot_placements` filter, last.
 
 ```php
@@ -112,8 +111,8 @@ and the trigger's two states are just two keys in that map:
 
 | Key | Default | When |
 |---|---|---|
-| `trigger` | «Выбрать пункт выдачи» | nothing chosen yet |
-| `triggerChange` | «Выбрать другой пункт выдачи» | a point is already chosen |
+| `trigger` | `Select a pickup point` | nothing chosen yet |
+| `triggerChange` | `Choose a different pickup point` | a point is already chosen |
 
 ```php
 add_filter(
@@ -124,8 +123,8 @@ add_filter(
 		}
 
 		// Почта РФ has no «пункты выдачи» — it has отделения.
-		$strings['trigger']       = __( 'Выбрать отделение', 'woodev-russian-post' );
-		$strings['triggerChange'] = __( 'Выбрать другое отделение', 'woodev-russian-post' );
+		$strings['trigger']       = __( 'Choose a post office', 'woodev-russian-post' );
+		$strings['triggerChange'] = __( 'Choose a different post office', 'woodev-russian-post' );
 
 		return $strings;
 	},
@@ -145,9 +144,9 @@ because it is produced by `Checkout_Handler` from the §8 field descriptor, not 
 
 | Case | Message |
 |---|---|
-| ordinary typed field, blank | «Укажите значение поля «%s».» |
-| `is_pickup_slot` field, blank | «Вы не выбрали пункт выдачи заказов.» |
-| the shipping method requires a point but the field's own condition did not match | «Для этого способа доставки нужно выбрать пункт выдачи заказов.» |
+| ordinary typed field, blank | `Please fill in the “%s” field.` |
+| `is_pickup_slot` field, blank | `You have not chosen a pickup point.` |
+| the shipping method requires a point but the field's own condition did not match | `This shipping method requires you to choose a pickup point.` |
 
 The pickup wording is separate because a button-driven field has no value to specify — telling
 the customer to fill in a field sends them looking for an input that is not on the page (#327,
@@ -160,7 +159,7 @@ found on the rig). A plugin replaces the whole sentence, both paths at once:
 // required unconditionally — and, with the blank label a button-driven field has, WooCommerce
 // would add its own «<strong></strong> — обязательное поле» on top.
 Pickup_Field::create( 'russian_post_office', [ 'russian_post_pickup' ] )
-    ->set_required_message( __( 'Вы не выбрали отделение Почты России.', 'woodev-russian-post' ) );
+    ->set_required_message( __( 'You have not chosen a Russian Post office.', 'woodev-russian-post' ) );
 ```
 
 `set_error_label()` is not enough for this: substituting «Отделение» into a sentence built around

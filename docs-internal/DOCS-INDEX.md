@@ -7,7 +7,7 @@
 
 ## Session start and end
 
-**The checklists live in `AGENTS.md` → "Session Start" / "Session End" only** — it starts with
+**The checklists live in `AGENTS.md` → "Session Start" / "Session End" only** — it starts with git sync, then
 `next-session-prompt.md`, not with this file. The mirrored copies that used to sit here had drifted
 from it (s135 audit), so they were removed rather than re-synced.
 
@@ -32,8 +32,8 @@ from it (s135 audit), so they were removed rather than re-synced.
 
 | File | Purpose |
 |------|---------|
-| `platform-v2-direction-audit-2026-06-03.md` | Direction source of truth — decisions D-1…D-5 |
-| `platform-v2-implementation-spec.md` | Architecture reference (§5/§9/§10/§12) — resolver, loader API, platform boundaries; sequencing superseded by the direction audit |
+| `platform-v2-direction-audit-2026-06-03.md` | Historical execution audit; D-1…D-5 retained as decisions in the ADRs / execution protocol |
+| `platform-v2-implementation-spec.md` | Historical pre-implementation design; current resolver/loader reference = ADR-003/004/005 + `wiki/architecture.md` |
 | `platform-v2-program-tracker.md` | **Program-history snapshot** (v2 program S0–S6, rewritten s60) — live status is `CURRENT-STATE.md` |
 | `platform-v2-s3-licensing-webhooks-spec.md` | S3.3 webhooks + Ed25519 signing — §5 is the FROZEN wire contract, pinned by `LicenseCommandContractParityTest` |
 
@@ -59,7 +59,7 @@ from it (s135 audit), so they were removed rather than re-synced.
 | `specs/2026-08-24-popular-settlements-design.md` | Popular settlements — where the list lives and how it is scoped | ✅ |
 | `specs/2026-08-25-shipping-tools-section.md` | The «Инструменты» section of the «Доставка» tab | ✅ |
 | `specs/2026-09-07-sp10-orders-page-design.md` | SP-10 «Заказы доставки» — the orders page: columns, filters, actions left open by #694 | ✅ |
-| `specs/2026-09-27-710-create-edit-order-design.md` | #710 «Создать заказ» / «Редактировать» — admin order wizard; operator's brainstorm s141, increments I0–I8 | 🟡 |
+| `specs/2026-09-27-710-create-edit-order-design.md` | #710 «Создать заказ» / «Редактировать» — admin order wizard; operator’s brainstorm s141, increments I0–I8 | ✅ |
 
 | Plan | Implements |
 |------|------------|

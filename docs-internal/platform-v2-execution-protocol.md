@@ -6,7 +6,7 @@
 
 ## 0. Resume protocol
 
-⚠ **The canonical session-start list is `AGENTS.md` → "Session Start", and it begins with
+⚠ **The canonical session-start list is `AGENTS.md` → "Session Start", and it begins with git sync, then
 `docs-internal/next-session-prompt.md`** — the per-session handoff, which this protocol used to omit
 entirely. Follow that list, not a second copy. What this protocol adds, once you are through it:
 
@@ -56,7 +56,7 @@ A gate passes only when: (1) `composer check` green; (2) the plan's exit-gate ch
 - **Phase/Stage gate:** §7 satisfied.
 
 ## 9. Operator touchpoints (when I stop and ask)
-- At each **key gate** (hand you the external audit packet).
+- Key-gate review uses an Orca critic; the manual packet handoff in §6 is historical.
 - At a **genuine design fork** I can't resolve from PLANS.md/code/sensible defaults (rare — I default to deciding).
 - Otherwise I run autonomously: routine task execution needs no check-in.
 

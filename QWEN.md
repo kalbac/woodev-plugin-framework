@@ -22,5 +22,6 @@ Where to look things up:
 | Workflow and architecture rules | `docs-internal/AGENT-RULES.md` |
 | How to write a doc here | `docs-internal/DOCS-SCHEMA.md` |
 
-Tooling that only Claude Code has (Serena, Context7, the Orca recipes) is described in `CLAUDE.md`;
-an agent without those tools follows `AGENTS.md` and says once that it lacks them.
+Claude-specific tooling (Serena, Context7) is described in `CLAUDE.md`; an agent without
+those tools follows `AGENTS.md` and says once that it lacks them. Orca CLI recipes apply
+to any dispatched agent and live in `docs-internal/wiki/orchestrating-agents-with-orca.md`.

@@ -45,7 +45,7 @@
 
 ## Project in one paragraph
 
-**Woodev Plugin Framework** — PHP library (PHP 7.4–8.1) providing a scaffold for developing WooCommerce plugins. Ships as a vendored dependency bundled inside each plugin. Multiple plugins run simultaneously; bootstrap selects highest framework version. 10+ dependent plugins in production. Codebase: `woodev/` directory, no global namespace for legacy classes, `Woodev\Framework\*` PSR-4 for new code.
+**Woodev Plugin Framework** — PHP library (PHP 7.4–8.x) providing a scaffold for developing WooCommerce plugins. Ships as a vendored dependency bundled inside each plugin. Multiple plugins run simultaneously; bootstrap selects highest framework version. 10+ dependent plugins in production. Codebase: `woodev/` directory, no global namespace for legacy classes, `Woodev\Framework\*` PSR-4 for new code.
 
 ---
 
@@ -145,7 +145,7 @@ woodev_framework/
 │   └── _fixtures/                   # 8 fixture plugins (+ dadata/ = JSON data)
 ├── .ai/                             # AI agents and skills
 │   ├── agents/                      # 5 sub-agents
-│   ├── skills/                      # 5 skill directories
+│   ├── skills/                      # 7 skill directories
 │   └── QUICK-REFERENCE.md
 └── .github/workflows/               # CI: ci.yml, dependabot-auto-merge.yml, docs.yml,
                                      #     integration-tests.yml, markdown-lint.yml, pr-triage.yml
@@ -197,7 +197,7 @@ composer test:integration   # integration tests (requires wp-env)
 # JS tests + build
 npm run test:js                                   # jest — CI gate (test-js job); jest-unit.config.js scopes roots, agent worktrees excluded
 npm run test:e2e                                  # Playwright vs the LIVE RIG (:8973), not CI — #723
-npm run build                                     # build the 5 React bundles (CI: assets-parity job)
+npm run build                                     # build the 8 React bundles (CI: assets-parity job)
 npm run lint:ts-baseline                          # TypeScript-by-default gate for src/ — CI (test-js)
 npm run lint:i18n-sources                         # every source msgid must be in the catalogue — CI (lint job, #791).
                                                   # Needs wp-cli 2.12.0; with the rig up it copies one out of the

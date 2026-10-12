@@ -1,9 +1,11 @@
 # Platform v2 — Direction Audit & Course Correction
 
+> **Historical — execution audit; its completed-work observations are superseded by `wiki/architecture.md` and `CURRENT-STATE.md`. D-1…D-5 remain decisions, carried by ADRs and the execution protocol.**
+
 > Date: 2026-06-03
 > Type: deep audit + strategic reset (analysis only — no code changed this session)
 > Author: AI agent (deep multi-agent audit pass)
-> Status: **active — supersedes the execution assumptions of `platform-v2-implementation-spec.md` where they conflict (see §8)**
+> Status: **historical execution audit — at the time, superseded the execution assumptions of `platform-v2-implementation-spec.md` where they conflict (see §8)**
 > Trigger: operator's gut feeling that the refactoring "is moving in the wrong direction" after N agent sessions.
 
 ---

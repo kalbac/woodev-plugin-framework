@@ -36,7 +36,9 @@ Full contract: `AGENT-RULES.md` → Rule 3. Decisions: `adr/001`, `adr/003`, `ad
 
 - `get_file()` — return `__FILE__`
 - `get_plugin_name()` — return the localized plugin name
-- `get_download_id()` — return the EDD/store download id
+
+`get_download_id()` is concrete: it resolves the registered loader’s store download id.
+Override only when the plugin needs its own resolution; it is not an abstract requirement.
 
 The constructor auto-initialises the base subsystems and registers WP hooks (`Woocommerce_Plugin`'s constructor adds the WooCommerce-only ones, e.g. Blocks); plugins override
 the `init_*` methods to supply their own implementations. `__construct()` is an ordered list of
@@ -75,9 +77,9 @@ the `init_*` methods to supply their own implementations. `__construct()` is an 
 
 `Woodev_API_Base` handles HTTP communication. Extend one of:
 
-- `Woodev_Abstract_API_JSON_Request` / `Woodev_Abstract_API_JSON_Response`
-- `Woodev_Abstract_API_XML_Request` / `Woodev_Abstract_API_XML_Response`
-- `Woodev_Abstract_Cacheable_API_Base` — transient-based request caching via `Cacheable_Request_Trait`
+- `Woodev_API_JSON_Request` / `Woodev_API_JSON_Response`
+- `Woodev_API_XML_Request` / `Woodev_API_XML_Response`
+- `Woodev_Cacheable_API_Base` — transient-based request caching via `Woodev_Cacheable_Request_Trait`
 
 Requests/responses must implement `Woodev_API_Request` / `Woodev_API_Response`. Requests are logged
 automatically via the `woodev_{plugin_id}_api_request_performed` action.
@@ -152,13 +154,14 @@ Settings_Section::create( 'export', 'Отправка', [ 'token', 'mode', 'othe
 ## Shipping settings — the «Доставка» tab (`woodev/shipping-method/settings/`)
 
 One tab on `Woodev → Настройки`, registered by `Shipping\Settings\Shipping_Settings_Tab`, holding
-three sections — **«Локация» / «Поля» / «Карта»**. Each section keeps its own
-`Woodev_Abstract_Settings` handler (`Location_Settings`, `Checkout_Field_Settings`,
-`Pickup_Map_Settings`); `Composite_Settings_Handler` presents the three to the settings page as one.
+«Локация», «Форма заказа» (`checkout`), «Карта», «Вес и габариты», «Упаковка»,
+and the conditional «Инструменты» section. Handlers include `Location_Settings`,
+`Checkout_Field_Settings`, `Pickup_Map_Settings`, `Default_Dimensions_Settings` and
+`Boxes_Settings`; `Composite_Settings_Handler` presents them as one settings handler.
 
 **Section visibility is derived, never declared** — there is no `supported_features` key for it: the
 tab exists when any active `Shipping_Plugin` does, «Локация» when some plugin needs a location
-provider, «Поля» always while the tab exists, «Карта» when some plugin supplies a `Pickup_Handler`.
+provider, «Форма заказа», «Вес и габариты» and «Упаковка» always while the tab exists, «Карта» when some plugin supplies a `Pickup_Handler`, and «Инструменты» when tools are registered.
 
 **Option namespaces are per-handler and never encode the tab id** — `woodev_location_*`,
 `woodev_checkout_fields_*`, `woodev_pickup_map_*`. The tab's own id moved from `location` to
@@ -227,7 +230,7 @@ A `Location_Provider` chooses ONE of these, and the choice is visible to the mer
 The second model exists because a carrier's API keys are not a location-layer concern: CDEK's
 client id and secret authenticate every CDEK request, so they belong to the carrier's own settings
 screen and the location provider merely reads them. The reference implementation is the test
-fixture `Woodev_Test_CDEK_Location_Provider` + `Woodev_Test_CDEK_Integration`.
+fixture `Woodev_Test_Cdek_Location_Provider` + `Woodev_Test_Cdek_Integration`.
 
 Two rules bind both models:
 
@@ -265,8 +268,8 @@ prompt users for reviews after key actions.
 
 ## Box packer (`woodev/box-packer/`)
 
-Self-contained shipping box-packing algorithm. Implement `Woodev_Packer_Item_Interface` and
-`Woodev_Packer_Box_Interface`; use a `Woodev_Abstract_Packer` subclass (`Woodev_Packer_Single_Box`,
+Self-contained shipping box-packing algorithm. Implement `Woodev_Box_Packer_Item` and
+`Woodev_Box_Packer_Box`; use a `Woodev_Packer` subclass (`Woodev_Packer_Single_Box`,
 `Woodev_Packer_Separately`, `Woodev_Packer_Virtual_Box`).
 
 `Woodev_Packer_Dispatcher::pack()` routes three selectable algorithms — `virtual`, `separately` and `boxes`
@@ -572,7 +575,7 @@ Moved here from `CURRENT-STATE.md` in s139: they are reference, true regardless 
   metabox list and `woodev_shipping_orders_preview_fields( $fields, $order, $provider )` the order preview opened from
   a row (`extra_fields` in the preview response). One line shape for both —
   `Order_Row_Builder::sanitize_display_fields()`: `label`, `value`, optional `url` (http/https), optional `tone`.
-- **«New» is `is_exported=false`, derived from a NON-EMPTY `carrier_order_id`** (#860, settled and
+- **«New» is unexported ∩ `Order_Actions::EXPORTABLE_STATUSES`**; exported state is derived from a NON-EMPTY `carrier_order_id` (#860, settled and
   shipped). Every witness — the REST arg, the «Все / Новые» links, the carrier counts, the badge — reads
   it through the SAME `Orders_Query`, which is why their numbers agree by construction rather than by
   coincidence. Moved here from `CURRENT-STATE.md` in s139.

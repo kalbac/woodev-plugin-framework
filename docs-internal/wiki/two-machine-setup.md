@@ -90,7 +90,7 @@ darwin binaries in `node_modules`. After the first setup the only path is git.
 | Shell the agent's Bash tool uses | Git Bash (MSYS) — rewrites `/var/...` args (`MSYS_NO_PATHCONV=1`), mangles Cyrillic in `curl` args, eats backslashes in heredocs | zsh/bash 3.2 — none of those; scripts in `scripts/machine/` avoid bash 4 features |
 | Line endings | `core.autocrlf=true` in the system gitconfig → CRLF in the working tree for `text=auto` files | LF; a copied tree is repaired by the setup script |
 | Orca `sharedDirectories` (`node_modules` in a worktree) | a directory **symlink** — `git worktree remove` can empty the primary checkout's `node_modules` | **also a symlink** (measured s136, Orca 1.4.200 — `orca.yaml` predicted a clone-copy and was WRONG): the same trap applies, the build-parity caveat applies, and it arrives UNTRACKED because `/node_modules/` is a directory pattern |
-| Codex's tool shell under Orca | WSL bash on a Windows path; an Orca worktree's absolute `gitdir` is unreadable to it | native — expected to read worktrees directly (unmeasured) |
+| Codex's tool shell under Orca | WSL bash on a Windows path; an Orca worktree's absolute `gitdir` is unreadable to it | native — reads this Orca worktree directly (measured s171, 12.10.2026) |
 | Container prefix | `de59f74e…` (32 hex) | **different SHAPE, not just a different hash**: `wp-env-woodev-plugin-framework-5fd870b7` (wp-env 11.15.0) — measured s136. Always `rig-container.sh`; it now matches both |
 | Starting the rig | `npx wp-env start` resolves to an installed binary | **`npx @wordpress/env start`** — the bare `wp-env` is a different, stub package here (measured s136) |
 | PHP | 8.5.1, sodium OFF unless `-d extension=sodium` | **8.5.7 (Homebrew), sodium ON out of the box** — measured s136 |
@@ -128,9 +128,9 @@ where the temp dir is not a symlink (gotcha
 [on-macos-sys-get-temp-dir-is-a-symlink-so-a-reflected-path-never-matches-it](../gotchas/on-macos-sys-get-temp-dir-is-a-symlink-so-a-reflected-path-never-matches-it.md)).
 The framework itself needed no change.
 
-Still **unmeasured** on the laptop, and still worth doing: the agent concurrency cap, the Codex
-launch recipe under Orca (`CLAUDE.md` → Orca, fact 3), `run-local-ci`, and whether an Orca worktree
-there reproduces the build-parity caveat.
+Still **unmeasured** here: `run-local-ci` and whether an Orca worktree reproduces the
+build-parity caveat. Native Codex worktree access was measured in s171; the cap was
+measured in s141 above. Launch recovery remains version-specific (`CLAUDE.md`).
 
 ### What the first run of `setup-macos.sh` found (s136)
 

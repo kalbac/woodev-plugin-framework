@@ -1,6 +1,8 @@
 # Platform v2 Implementation Spec
+
+> **Historical — pre-implementation design; current loader/resolver code is documented in ADR-003/004/005 and `wiki/architecture.md`. Retired compatibility flags are not a live contract.**
 > **Note (s60, 2026-08-09):** Sequencing superseded by the 2026-06-03 direction audit; §5/§9/§10/§12 remain the cited architecture reference.
-> Status: ready for implementation planning
+> Status: historical pre-implementation plan
 > Date: 2026-05-29
 > Supersedes: stale implementation assumptions in `archive/platform-v2-epic1-spec.md`
 

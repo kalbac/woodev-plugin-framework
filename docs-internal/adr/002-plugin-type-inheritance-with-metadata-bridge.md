@@ -4,7 +4,11 @@
 
 **Date:** 2026-05-28
 
-> **Superseded in part (2026-06-03, D-2 — see [ADR-005](005-platform-v2-clean-break-policy.md)):** the "deprecated metadata bridge maintained for ≥1 minor release" is overruled by the clean-break decision. Inheritance as the source of truth for plugin type **still holds**; the back-compat bridge for the legacy `is_payment_gateway` / `load_shipping_method` flags is being deleted (capabilities were later removed from the loader definition too — s27: plugin type comes only from what the plugin class `extends`; see `AGENT-RULES.md` → Rule 3).
+> **Superseded in part (2026-06-03, D-2 — see [ADR-005](005-platform-v2-clean-break-policy.md)):** the "deprecated metadata bridge maintained for ≥1 minor release" is overruled by the clean-break decision. Inheritance as the source of truth for plugin type **still holds**; the back-compat bridge for the legacy `is_payment_gateway` / `load_shipping_method` flags has been deleted (capabilities were later removed from the loader definition too — s27: plugin type comes only from what the plugin class `extends`; see `AGENT-RULES.md` → Rule 3).
+
+> **Historical class names:** the original `Woodev_Woocommerce_Plugin` proposal is
+> implemented as `Woodev\Framework\Woocommerce_Plugin`; `Woodev_EDD_Plugin` was a
+> future proposal and is not present in the current tree.
 
 ## Context
 

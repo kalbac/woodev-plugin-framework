@@ -1,6 +1,8 @@
 # RUNBOOK — Autonomous Adversarial Dev Loop (woodev-framework)
 
-> Status: implemented (`tools/autodev/`, `.autodev/`); dormant since 2026-06-18 — current method is subagent-driven + Codex critic. Authored 2026-06-04.
+> **Historical — dormant loop machinery; superseded for agent execution by `wiki/orchestrating-agents-with-orca.md` and the installed Orca orchestration guide.**
+
+> Status: implemented (`tools/autodev/`, `.autodev/`); dormant since 2026-06-18 — current method is supervised Orca orchestration. Authored 2026-06-04.
 > Purpose: a continuous, multi-model development loop where a worker model makes
 > changes, a *different* critic model adversarially verifies them, a machine gate
 > closes most commits autonomously, and only irreducible human-judgment decisions

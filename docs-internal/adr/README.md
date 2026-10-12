@@ -5,10 +5,10 @@
 | 001 | [Keep Bootstrap as Platform-Aware Loader](001-bootstrap-platform-aware-loader.md) | accepted (superseded for planning by ADR-003) | 2026-05-28 |
 | 002 | [Use Inheritance for Plugin Type with Metadata Bridge](002-plugin-type-inheritance-with-metadata-bridge.md) | accepted (metadata-bridge portion superseded) | 2026-05-28 |
 | 003 | [Platform v2 Minimal Framework Resolver](003-platform-v2-minimal-framework-resolver.md) | accepted | 2026-05-29 |
-| 004 | [Platform v2 Explicit Plugin Loader API](004-platform-v2-plugin-loader-api.md) | accepted | 2026-05-29 |
+| 004 | [Platform v2 Explicit Plugin Loader API](004-platform-v2-plugin-loader-api.md) | accepted (compatibility bridge superseded by ADR-005) | 2026-05-29 |
 | 005 | [Platform v2 Clean-Break Policy](005-platform-v2-clean-break-policy.md) | accepted | 2026-06-03 |
 | 006 | [Capability-Gated Feature Seam](006-capability-gated-feature-seam.md) | accepted | 2026-06-09 |
-| 007 | [React Admin Stack — @wordpress/scripts](007-react-admin-stack-wordpress-scripts.md) | accepted | 2026-06-11 |
+| 007 | [React Admin Stack — @wordpress/scripts](007-react-admin-stack-wordpress-scripts.md) | accepted (new src authoring now TypeScript) | 2026-06-11 |
 | 008 | [Conditional-Fields `show_if` Operator Set & Evaluation Contract](008-conditional-fields-operator-set.md) | accepted | 2026-07-05 |
 | 009 | [`Map_Provider` Seam Re-Pointed to Map Source, Not Rendering Library](009-map-provider-seam-source-not-library.md) | accepted | 2026-07-31 |
 | 010 | [Pickup Map Stays on Yandex Maps JS API 2.1; Version 3.0 Rejected](010-yandex-maps-js-api-2-1-not-3-0.md) | accepted | 2026-08-01 |

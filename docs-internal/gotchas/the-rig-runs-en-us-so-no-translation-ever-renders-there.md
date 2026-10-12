@@ -2,6 +2,11 @@
 
 > Tags: rig, i18n, gettext, verification, wp-env | Session: s118
 
+> **Resolved admin-locale configuration (s170):** the admin user now uses `ru_RU`;
+> the site remains `en_US`. This s118 incident does not mean admin translations can
+> never render today. Verify the request/user locale and field reachability separately.
+> The recorded fixture box-packing availability below is also an s118 snapshot.
+
 ## What happens
 
 You ship a translation, ask the operator to look at it on the rig, and he reports he sees no change

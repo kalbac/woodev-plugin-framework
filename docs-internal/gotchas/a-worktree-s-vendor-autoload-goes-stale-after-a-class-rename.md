@@ -1,6 +1,10 @@
 # Gotcha: [tooling/worktrees] — a worktree's COPIED classmap does not know any class that did not exist when it was made
 > Tags: orca, worktrees, composer, autoload, testing | Session: s104, second trigger s121
 
+> **Update (#802):** enabled `.githooks` now refresh Composer after checkout, merge, commit
+> and rewrite operations that move framework sources. Uncommitted class additions still
+> need `composer dump-autoload`; disabled hooks or a failed dump can leave the map stale.
+
 ## What happens
 
 The standing fact is right and stays right: `.worktreeinclude` COPIES `vendor` into a new worktree,

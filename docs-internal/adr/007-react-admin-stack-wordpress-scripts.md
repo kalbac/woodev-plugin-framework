@@ -1,6 +1,6 @@
 # ADR-007: React Admin Stack — @wordpress/scripts
 
-**Status:** accepted
+**Status:** accepted; the original JSX-only authoring choice is superseded by TypeScript for new `src/` files (operator, 26.08.2026; `AGENTS.md`).
 
 **Date:** 2026-06-11
 
@@ -92,13 +92,15 @@ Specific choices:
    > **Update (2026-08-09, s60):** there are now **five** committed bundles under
    > `woodev/assets/build/<surface>/`: `license-page`, `plugins-page`,
    > `settings-page`, `setup-wizard`, and `ui-kit-gallery`.
+   > **Update (2026-10-12, s171):** `package.json` builds eight surfaces;
+   > `shipping-orders-page`, `checkout-blocks`, and `shipping-zone-city-limit` are also committed.
 
 7. **`src/`** directory is the authoring root and must not ship in release ZIPs.
    As of this ADR the release rsync did NOT yet exclude `src/` — task **s6-p5**
    (since **shipped**: `--exclude='src'` at `.github/workflows/ci.yml:385`) adds
    `--exclude='src'` to the release workflow. `woodev/assets/build/` rides inside
-   `woodev/` and IS included. (Note, s60: `ci.yml` still carries a stale
-   `--exclude='babel.config.js'` for a file that no longer exists — harmless.)
+   `woodev/` and IS included. The old Babel exclusion note was historical;
+   the current release exclusions do not include that deleted config.
 
 ## Consequences
 

@@ -14,7 +14,7 @@ hand-maintained `require_once` list, and it had drifted badly: measured before t
 list covered 39 of the 71 real class/interface files under `woodev/shipping-method/**` — a
 **31-file gap**, not the "six classes" the card's own description estimated. Four prior file
 deletions on `feat/pickup-map` each left a dangling `require_once` on a file that no longer
-existed — a fatal on a real vendored boot, invisible to the unit suite (see gotchas
+existed — a fatal on a real vendored boot, also caught by the fixture unit path (see the measurement matrix below and gotchas
 `dispatcher-files-unwired-in-includes`, `box-packer-interface-unwired-in-includes`). The tree was
 inconsistent with itself and no rule said which side — `includes()` or the class-map — was
 supposed to win.
@@ -121,7 +121,7 @@ taken, and the static checks above, while
 consistent with safety, cover only the failure modes this project has already hit
 (file-scope side effects, `class_exists(..., false)` guards, pre-autoloader windows) — not
 every possible one. Given that the measured gap was 31 files, not the 6 the card described, and
-given that this exact class of mistake (a dangling reference invisible to the unit suite) has
+given that dangling references have
 already caused four real incidents on `feat/pickup-map`, the responsible call is to not delete a
 safety net on a hazard nobody has actually excluded, and let the reverse-guard test carry the
 weight `includes()` used to carry alone. If a future session runs the integration suite against
@@ -142,8 +142,8 @@ this one is not a permanent bar to reopening the question, it is what the eviden
 ## Consequences
 
 - Adding a new class under `woodev/shipping-method/**`, or deleting a required one, now fails one
-  of the two new unit tests immediately — this is the intended friction; it replaces a silent
-  runtime fatal with a fast, local, always-run signal, in both directions.
+  of the two new unit tests immediately — this is the intended friction; it adds a fast, named diagnostic for a missing file and catches the otherwise-silent
+  map-only gap.
 - `includes()` is longer (71 requires, up from 39) and will keep growing with the module. That cost
   was accepted explicitly in exchange for the two guards.
 - **Integration has since been run and is green** (— coordinator, 05.09.2026, commit `2fadd19`):

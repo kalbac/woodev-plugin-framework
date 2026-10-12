@@ -40,6 +40,7 @@ and `woodev_normalize_site()` (§4.2, B-6) for site binding.
 ```json
 {
   "payload": {
+    "protocol": 1,
     "command": "deactivate_plugin",
     "site": "https://example.com",
     "plugin_id": "216",
@@ -68,8 +69,9 @@ Verification — ALL must pass, any failure → reject, никаких side effe
    — the same envelope must remain deliverable by pull); commands needing urgency rely
    on the inbound fast path, not on a short TTL;
 5. **anti-replay:** `payload.nonce` not in the consumed-nonce store; on success the nonce
-   is recorded until its `expires_at` passes (store: one option
-   `woodev_license_command_nonces`, autoload `false`, pruned on write).
+   is recorded using the per-nonce option prefix `woodev_license_command_nonces_`
+   plus first-32-hex sha256(nonce), autoload `false`. Retention and atomic claim rules
+   are frozen in §5 below.
 
 Unknown `command` string → **reject with `unsupported_command` ack, take no action**
 (forward tolerance — the B-2 lesson: older framework copies must never hard-fail on
@@ -149,7 +151,7 @@ protocol-version bump.
 | Notice option | `woodev_license_remote_deactivation_notices` (site-level, autoload no), keyed by target `get_id()` → `{message, ts}`; rendered by every surviving license instance, once per request, dismissible per-user (message_id `woodev_{target_id}_remote_deactivated`) |
 | Constants | `PROTOCOL_VERSION` 1 · `MAX_BODY_BYTES` 8192 · `JSON_DEPTH` 8 · `CLOCK_SKEW` 300 · `MAX_TTL` 1 209 600 (14 d) · `STUCK_TAKEOVER_AFTER` 300 · `MAX_NONCE_ENTRIES` 100 (soft) · `MAX_PENDING_ACKS` 50 · ack retention 2 592 000 (30 d) · rate limit 30 rejections / 60 s window (`woodev_license_cmd_rl`, inbound-only, `{n, t0}`-anchored) |
 | §4 claim option | `woodev_{id_underscored}_license_required` (autoload no, raw verified envelope only; `license_required` must be strict bool) |
-| Pubkey constant | `WOODEV_LICENSE_AUTHORITY_PUBKEY` (placeholder `''` until the operator captures the production key — `test_production_pubkey_is_not_placeholder` is skipped until then) |
+| Pubkey constant | `WOODEV_LICENSE_AUTHORITY_PUBKEY` (production key provisioned; `test_production_pubkey_is_not_placeholder` checks it) |
 | Shared function | `woodev_normalize_site()` (cross-repo byte-identical contract, B-6) |
 | Multisite rules | commands bind per-site (normalized `home_url()`); network-activated target → `network_active_unsupported`; §4 claims consumed in current-blog context only, no `switch_to_blog()` |
 

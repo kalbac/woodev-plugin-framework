@@ -24,7 +24,7 @@ Spec: `docs-internal/archive/specs/2026-07-05-conditional-fields-design.md`.
 - **Total pure function.** Empty group / empty member list → visible (`true`).
 - **String comparison.** Both the controlling value and the target are coerced to string before comparing; enum option **keys** (incl. zero-based ints) round-trip correctly.
 - **Boolean coercion follows PHP's `(string)` cast:** `true → '1'`, `false → ''` (NOT `'true'`/`'false'`). The JS mirror has a `toComparable()` helper so a **toggle** controlling field agrees across client and server.
-- **Empty / non-scalar controlling value = the empty string** — no special-casing. Therefore `=` does NOT match an empty controller, and `!=` / `not_in` DO match it. Authors who want "show when `mode = live`" must write `= 'live'` (not `!= 'test'`, which also shows while `mode` is unset). An **unregistered** controlling id (typo, or a controller on another handler) that is absent from the submission also resolves to the empty string (guarded — it must never throw and abort the save).
+- **Empty / non-scalar controlling value = the empty string** — no special-casing. Matching depends on the target: `= ''` and `in ['']` match an empty controller; `!= ''` and `not_in ['']` do not. A nonempty target such as `live` gives the opposite result. Authors who want "show when `mode = live`" must write `= 'live'` (not `!= 'test'`, which also shows while `mode` is unset). An **unregistered** controlling id (typo, or a controller on another handler) that is absent from the submission also resolves to the empty string (guarded — it must never throw and abort the save).
 - **Controlling fields are scalar** in v1 (`select` / `radio` / `toggle` / `text`). A multi-value (multiselect) controller is out of scope.
 
 **Server skip:** `Woodev_Abstract_Settings::filter_visible_values()` strips hidden fields from the submitted map once, at the top of both REST save paths (settings + wizard), against the **effective** controlling value (posted, else stored). A hidden field is therefore neither validated nor persisted.
@@ -38,7 +38,7 @@ The PHP↔JS mirror is faithful for **well-formed** conditions. A `show_if` is s
 - **`value` for `=` / `!=` is a scalar** (string / bool / number). A non-scalar target coerces to `''` on both sides (no crash, no PHP warning) but is meaningless.
 - **`value` for `in` / `not_in` is a plain list** (`['a','b']`), not an associative array. A PHP associative array serializes to a JS object and the two runtimes would disagree — do not use one.
 - **Compare against the controlling field's stored form:** for `select`/`radio` that is the option **key** (a string); for a `toggle` use a boolean (`true`/`false`) — both sides coerce booleans to `'1'`/`''`. Avoid float `value`s (PHP `(string)` vs JS `String()` can differ for exponent-form/edge numbers).
-- **`operator` / `relation` empty or misspelled fails closed** (field hidden) on both sides — a visible misbehaviour caught immediately in development.
+- **An unknown `operator`, or an unknown `relation` in a nonempty group, fails closed** (field hidden) on both sides; an empty member list remains visible — a visible misbehaviour caught immediately in development.
 
 These are documented limitations, not bugs: the flat grammar + scalar-list contract covers every real conditional-settings case. (Source: Codex critic triage, s40.)
 
@@ -47,7 +47,7 @@ These are documented limitations, not bugs: the flat grammar + scalar-list contr
 ## Consequences
 
 - **Adding a future operator** is mechanical and contract-bound: add the case to PHP `evaluate_conditions()` **and** the JS `evaluateConditions()` mirror (keep string comparison + `toComparable` + fail-closed default), add a unit case to `ConditionalFieldsTest`, and document it here. Do not diverge the two runtimes.
-- **Adding nesting or a new operand shape** (unary, numeric threshold) is additive — the flat grammar is a strict subset — but each is a genuinely new evaluation shape and a new mirror surface, so it waits for a real plugin (the shipping-module pilot) to prove the need. Tracked in `FUTURE-BACKLOG.md` ("conditional-fields v2").
+- **Adding nesting or a new operand shape** (unary, numeric threshold) is additive — the flat grammar is a strict subset — but each is a genuinely new evaluation shape and a new mirror surface, so it waits for a real plugin (the shipping-module pilot) to prove the need. The old entry is historical in `FUTURE-BACKLOG.md`; live deferred work belongs on GitHub Issues + project 6 (see `AGENTS.md`).
 - **The fail-closed unknown-operator + guarded unregistered-controller rules** mean a misconfigured `show_if` degrades safely (field hidden / treated as empty) instead of crashing a save.
 - The string-comparison + boolean-coercion contract is the single most fragile invariant; both source files carry a "KEEP IN SYNC" cross-reference and this ADR is the tie-breaker.
 
