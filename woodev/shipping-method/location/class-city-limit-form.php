@@ -190,9 +190,11 @@ if ( ! class_exists( __NAMESPACE__ . '\City_Limit_Form' ) ) :
 		/**
 		 * What the zone modal's script needs to draw the list, and the notes under it.
 		 *
-		 * A stored city the current provider no longer answers for is re-resolved by its name — in memory, for this
-		 * view only; the replacement is what goes into the hidden input, so saving the form is what keeps it. One that
-		 * cannot be re-resolved stays listed, marked, and is ignored when rating (see {@see City_Limit}).
+		 * A stored city the current provider no longer answers for is re-resolved by its name and region
+		 * ({@see Location_Service::reresolve_stranded_record()}, #1185) — in memory, for this view only; the replacement
+		 * is what goes into the hidden input and the list, so the merchant's normal save of the method is what keeps it
+		 * (a view never writes). One that cannot be re-resolved (no match, several matches, the provider failing) stays
+		 * listed, marked, and is ignored when rating (see {@see City_Limit}).
 		 *
 		 * @since 2.0.2
 		 *
@@ -295,7 +297,7 @@ if ( ! class_exists( __NAMESPACE__ . '\City_Limit_Form' ) ) :
 		 */
 		private static function try_reresolve( Location_Record $record, Location_Service $service ): ?Location_Record {
 			try {
-				return $service->reresolve_stranded_record( $record );
+				return $service->reresolve_stranded_record( $record, true );
 			} catch ( \Throwable $exception ) {
 				return null;
 			}

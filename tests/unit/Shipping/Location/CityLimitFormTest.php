@@ -251,6 +251,31 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertStringContainsString( 'Сохраните', $view['notes'][0] );
 		}
 
+		public function test_the_value_the_form_submits_holds_the_new_record_for_a_replaced_city_and_the_old_one_for_a_stale_city_and_saving_keeps_it(): void {
+			City_Limit::use_zone_pairs_for_tests( static fn() => [ [ 'state', 'RU:SPE' ] ] );
+			$_REQUEST['instance_id'] = '262';
+
+			$service                = $this->service();
+			$service->owner         = 'test-cdek';
+			$service->state_code    = 'SPE';
+			$service->replacements  = [ 'dadata:pushkin' => $this->city( 'test-cdek:394', 'Пушкин' ) ];
+			City_Limit_Form::use_service_for_tests( $service );
+
+			$settings          = new \WC_Settings_API();
+			$settings->options = [
+				'city_limit_cities' => City_Limit::encode( [ $this->city( 'dadata:pushkin', 'Пушкин' ), $this->city( 'dadata:mirny', 'Мирный' ) ] ),
+			];
+
+			$html = City_Limit_Form::render( '', 'city_limit_cities', City_Limit_Form::fields()['city_limit_cities'], $settings );
+
+			preg_match( '/<input type="hidden"[^>]* value="([^"]*)"/', $html, $matches );
+			$submitted = html_entity_decode( $matches[1] );
+
+			$this->assertSame( [ 'test-cdek:394', 'dadata:mirny' ], array_map( static fn( $c ) => $c->key(), City_Limit::decode( $submitted ) ), 'new record for the replaced city, old record for the stale one' );
+			$this->assertSame( $submitted, City_Limit_Form::sanitize_cities( $submitted ), 'the existing save path takes the submitted value unchanged' );
+			$this->assertSame( City_Limit::encode( [ $this->city( 'dadata:pushkin', 'Пушкин' ), $this->city( 'dadata:mirny', 'Мирный' ) ] ), $settings->options['city_limit_cities'], 'viewing the form writes nothing' );
+		}
+
 		public function test_a_stale_city_that_cannot_be_re_resolved_stays_listed_and_marked(): void {
 			$service        = $this->service();
 			$service->owner = 'test-cdek';
