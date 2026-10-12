@@ -162,11 +162,10 @@ Compiled reference: "Shipping orders page" in `docs-internal/wiki/architecture.m
 ## Milestones
 
 `Woodev_Lifecycle` can congratulate a merchant on first actions (`trigger_milestone( $id, $message, $since )` → `register_milestone_message()`),
-but the wrapper in `woodev/class-lifecycle.php` (`generate_milestone_notice_message()`, ~l. 348) returns an EMPTY string when the
-plugin has no `get_reviews_url()`, so a plugin without a review page shows no milestone at all, silently — and otherwise it prepends
-a random English exclamation and a "leave a review / reach support" paragraph. Override `generate_milestone_notice_message()` in your
-`Woodev_Lifecycle` subclass (it is `protected`) to show your own text, translated. Also: `trigger_milestone()` is not guarded against
-repeats (each call rewrites the message), and its default `$since = '1.0.0'` means an UPDATED shop whose milestone version is already
-higher gets none — pass the version that introduced the milestone. `register_milestone_message()` stops after more than three
-dismissed ones. Framework card #1217 (open); CDEK's milestones for first export, print, courier call and delivery are plugin PR
-edostavka#61 (open at the time of writing).
+and the framework wraps the plugin's fragment in `generate_milestone_notice_message()` (`woodev/class-lifecycle.php`): a random
+translated exclamation, the fragment, then a "leave a review / reach support" paragraph — or, when the plugin has no
+`get_reviews_url()`, a support-only sentence (nothing after the fragment when there is no support URL either). The notice is never
+silently dropped (#1217). Write the fragment as the MIDDLE of a sentence. A repeated `trigger_milestone()` for an id already
+registered is a no-op. Its default `$since = '1.0.0'` means an UPDATED shop whose milestone version is already higher gets none —
+pass the version that introduced the milestone. `register_milestone_message()` stops after more than three
+dismissed ones. CDEK's milestones for first export, print, courier call and delivery: edostavka#52.

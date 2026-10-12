@@ -307,6 +307,10 @@ msgstr ""
 msgid "Are you having a great experience with %1$s so far? Please consider %2$sleaving a review%3$s! If things aren't going quite as expected, we're happy to help -- please %4$sreach out to our support team%5$s."
 msgstr ""
 
+#. translators: Placeholders: %1$s - plugin name, %2$s - <a> tag, %3$s - </a> tag
+msgid "If things aren't going quite as expected with %1$s, we're happy to help -- please %2$sreach out to our support team%3$s."
+msgstr ""
+
 #: class-plugin.php:728
 msgid "Указать лицензию"
 msgstr ""

@@ -350,27 +350,34 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 
 			$message = '';
 
+			// to be prepended at random to each milestone notice
+			$exclamations = [
+				__( 'Awesome', 'woodev-plugin-framework' ),
+				__( 'Fantastic', 'woodev-plugin-framework' ),
+				__( 'Amazing', 'woodev-plugin-framework' ),
+				__( 'Wow', 'woodev-plugin-framework' ),
+				__( 'Wonderful', 'woodev-plugin-framework' ),
+				__( 'Perfect', 'woodev-plugin-framework' ),
+				__( 'Congratulations', 'woodev-plugin-framework' ),
+			];
+
+			$message = $exclamations[ array_rand( $exclamations ) ] . ', ' . esc_html( $custom_message ) . ' ';
+
 			if ( $this->get_plugin()->get_reviews_url() ) {
-
-				// to be prepended at random to each milestone notice
-				$exclamations = [
-					__( 'Awesome', 'woodev-plugin-framework' ),
-					__( 'Fantastic', 'woodev-plugin-framework' ),
-					__( 'Amazing', 'woodev-plugin-framework' ),
-					__( 'Wow', 'woodev-plugin-framework' ),
-					__( 'Wonderful', 'woodev-plugin-framework' ),
-					__( 'Perfect', 'woodev-plugin-framework' ),
-					__( 'Congratulations', 'woodev-plugin-framework' ),
-				];
-
-				$message = $exclamations[ array_rand( $exclamations ) ] . ', ' . esc_html( $custom_message ) . ' ';
-
 				$message .= sprintf(
 				/* translators: Placeholders: %1$s - plugin name, %2$s - <a> tag, %3$s - </a> tag, %4$s - <a> tag, %5$s - </a> tag */
 					__( 'Are you having a great experience with %1$s so far? Please consider %2$sleaving a review%3$s! If things aren\'t going quite as expected, we\'re happy to help -- please %4$sreach out to our support team%5$s.', 'woodev-plugin-framework' ),
 					'<strong>' . esc_html( $this->get_plugin()->get_plugin_name() ) . '</strong>',
 					'<a href="' . esc_url( $this->get_plugin()->get_reviews_url() ) . '">',
 					'</a>',
+					'<a href="' . esc_url( $this->get_plugin()->get_support_url() ) . '">',
+					'</a>'
+				);
+			} elseif ( $this->get_plugin()->get_support_url() ) {
+				$message .= sprintf(
+				/* translators: Placeholders: %1$s - plugin name, %2$s - <a> tag, %3$s - </a> tag */
+					__( 'If things aren\'t going quite as expected with %1$s, we\'re happy to help -- please %2$sreach out to our support team%3$s.', 'woodev-plugin-framework' ),
+					'<strong>' . esc_html( $this->get_plugin()->get_plugin_name() ) . '</strong>',
 					'<a href="' . esc_url( $this->get_plugin()->get_support_url() ) . '">',
 					'</a>'
 				);
@@ -392,6 +399,11 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 		public function register_milestone_message( string $id, string $message ): bool {
 
 			$milestone_messages = $this->get_milestone_messages();
+
+			if ( isset( $milestone_messages[ $id ] ) ) {
+				return false;
+			}
+
 			$dismissed_notices  = array_keys( $this->get_plugin()->get_admin_notice_handler()->get_dismissed_notices() );
 
 			// get the total number of dismissed milestone messages
