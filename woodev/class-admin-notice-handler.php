@@ -379,7 +379,6 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 			update_user_meta( $user_id, '_woodev_plugin_framework_' . $this->get_plugin()->get_id() . '_dismissed_messages', $dismissed_notices );
 		}
 
-
 		/**
 		 * Returns true if the identified admin notice has been dismissed for the
 		 * given user

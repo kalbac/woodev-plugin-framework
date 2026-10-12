@@ -62,64 +62,121 @@ final class WC_Admin_Notes_Renderer implements Competitor_Notice_Renderer {
 				'title'   => '',
 				'content' => '',
 				'type'    => Note::E_WC_ADMIN_NOTE_UPDATE,
-				'layout'  => 'plain',
-				'image'   => '',
 				'actions' => [],
 			]
 		);
 
 		try {
 
-			// Create once (spec §5): if our per-plugin note already exists, the WC
-			// inbox owns it from here (dismissal, etc.) — do not re-save on every
-			// admin load, and never force-resurface.
-			if ( Woodev_Notes_Helper::get_note_with_name( $this->note_name( $rule ) ) ) {
-				return;
+			$existing_note = Woodev_Notes_Helper::get_note_with_name( $rule->get_note_name() );
+			$changed       = false;
+
+			if ( $existing_note ) {
+				// Keep actioned and snoozed notes as the merchant left them.
+				if ( Note::E_WC_ADMIN_NOTE_UNACTIONED !== $existing_note->get_status() ) {
+					return;
+				}
+
+				$wc_note = $existing_note;
+			} else {
+				$wc_note = new Note();
+				$wc_note->set_name( $rule->get_note_name() );
+				$wc_note->set_source( $this->source );
+				$changed = true;
 			}
 
-			$wc_note = new Note();
-			$wc_note->set_name( $this->note_name( $rule ) );
+			$changed = $changed
+				|| $wc_note->get_title() !== $note['title']
+				|| $wc_note->get_content() !== $note['content']
+				|| $wc_note->get_type() !== $this->map_type( (string) $note['type'] );
+
 			$wc_note->set_title( $note['title'] );
 			$wc_note->set_content( $note['content'] );
-			$wc_note->set_source( $this->source );
 			$wc_note->set_type( $this->map_type( (string) $note['type'] ) );
-			$wc_note->set_layout( $note['layout'] );
+			$changed = $this->update_actions( $wc_note, (array) $note['actions'] ) || $changed;
 
-			if ( ! empty( $note['image'] ) ) {
-				$wc_note->set_layout( 'thumbnail' );
-				$wc_note->set_image( $note['image'] );
+			if ( $changed ) {
+				$wc_note->save();
 			}
-
-			foreach ( (array) $note['actions'] as $action ) {
-
-				$action = wp_parse_args(
-					$action,
-					[
-						'name'          => '',
-						'label'         => '',
-						'url'           => '',
-						'status'        => Note::E_WC_ADMIN_NOTE_ACTIONED,
-						'primary'       => false,
-						'actioned_text' => '',
-					]
-				);
-
-				$wc_note->add_action(
-					$action['name'],
-					$action['label'],
-					$action['url'],
-					$action['status'],
-					$action['primary'],
-					$action['actioned_text']
-				);
-			}
-
-			$wc_note->save();
-
 		} catch ( Exception $e ) {
 			// Swallow — a failed note must never fatal an admin page load.
 			unset( $e );
 		}
+	}
+
+	/**
+	 * Replaces note actions only when their visible and behavioral fields differ.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param Note             $wc_note existing or new note
+	 * @param array<int,mixed> $actions desired note actions
+	 */
+	private function update_actions( Note $wc_note, array $actions ): bool {
+
+		$desired_actions = [];
+
+		foreach ( $actions as $action ) {
+			$action = wp_parse_args(
+				$action,
+				[
+					'name'          => '',
+					'label'         => '',
+					'url'           => '',
+					'status'        => Note::E_WC_ADMIN_NOTE_ACTIONED,
+					'primary'       => false,
+					'actioned_text' => '',
+				]
+			);
+
+			$desired_actions[] = [
+				'name'          => $action['name'],
+				'label'         => $action['label'],
+				'url'           => $action['url'],
+				'status'        => $action['status'],
+				'primary'       => $action['primary'],
+				'actioned_text' => $action['actioned_text'],
+			];
+		}
+
+		// WooCommerce no longer stores an action's "primary" flag (WC 11.x reads actions back without it),
+		// so it is left out of the comparison; reading it raised a warning and made every request re-save the note.
+		$comparable_desired = array_map(
+			static function ( array $action ): array {
+				unset( $action['primary'] );
+				return $action;
+			},
+			$desired_actions
+		);
+
+		$current_actions = [];
+		foreach ( $wc_note->get_actions() as $action ) {
+			$current_actions[] = [
+				'name'          => $action->name ?? '',
+				'label'         => $action->label ?? '',
+				'url'           => $action->query ?? '',
+				'status'        => $action->status ?? '',
+				'actioned_text' => $action->actioned_text ?? '',
+			];
+		}
+
+		if ( $comparable_desired === $current_actions ) {
+			return false;
+		}
+
+		$wc_note->clear_actions();
+		foreach ( $desired_actions as $action ) {
+			$wc_note->add_action(
+				$action['name'],
+				$action['label'],
+				$action['url'],
+				$action['status'],
+				$action['primary'],
+				$action['actioned_text']
+			);
+		}
+
+		return true;
 	}
 
 	/**
@@ -133,21 +190,9 @@ final class WC_Admin_Notes_Renderer implements Competitor_Notice_Renderer {
 			return;
 		}
 
-		if ( Woodev_Notes_Helper::note_with_name_exists( $this->note_name( $rule ) ) ) {
-			Notes::delete_notes_with_name( $this->note_name( $rule ) );
+		if ( Woodev_Notes_Helper::note_with_name_exists( $rule->get_note_name() ) ) {
+			Notes::delete_notes_with_name( $rule->get_note_name() );
 		}
-	}
-
-	/**
-	 * The plugin-namespaced WC note name. WC Admin Notes are a single global
-	 * table keyed by name, so the rule's generic name is prefixed with this
-	 * plugin's source — otherwise two Woodev plugins flagging the same competitor
-	 * would update/delete each other's note.
-	 *
-	 * @since 2.0.2
-	 */
-	private function note_name( Competitor_Rule $rule ): string {
-		return $this->source . '-' . $rule->get_note_name();
 	}
 
 	/**

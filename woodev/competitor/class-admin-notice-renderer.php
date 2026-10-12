@@ -43,9 +43,19 @@ final class Admin_Notice_Renderer implements Competitor_Notice_Renderer {
 			return;
 		}
 
-		$content .= $this->primary_action_link( $note['actions'] ?? [] );
+		$title = (string) ( $note['title'] ?? '' );
+		if ( '' !== $title ) {
+			$content = '<strong>' . esc_html( $title ) . '</strong><br>' . $content;
+		}
 
-		$this->notice_handler->add_admin_notice( $content, $rule->get_note_name() );
+		$content .= $this->primary_action_link( $note['actions'] ?? [] );
+		$content .= $this->dismiss_link( $note['actions'] ?? [] );
+
+		$this->notice_handler->add_admin_notice(
+			$content,
+			$rule->get_note_name(),
+			[ 'always_show_on_settings' => false ]
+		);
 	}
 
 	/**
@@ -73,6 +83,22 @@ final class Admin_Notice_Renderer implements Competitor_Notice_Renderer {
 					esc_url( $url ),
 					esc_html( $label )
 				);
+			}
+		}
+
+		return '';
+	}
+
+	/**
+	 * Renders the notice's explicit dismiss action through the existing AJAX handler.
+	 *
+	 * @since 2.0.2
+	 * @param array<int,array<string,mixed>> $actions built note actions
+	 */
+	private function dismiss_link( array $actions ): string {
+		foreach ( $actions as $action ) {
+			if ( 'dismiss' === ( $action['name'] ?? '' ) && ! empty( $action['label'] ) ) {
+				return sprintf( ' &nbsp; <a href="#" class="js-woodev-plugin-framework-notice-dismiss">%s</a>', esc_html( $action['label'] ) );
 			}
 		}
 

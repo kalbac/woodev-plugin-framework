@@ -31,7 +31,7 @@ class CompetitorRendererTest extends TestCase {
 		$handler = Mockery::mock( 'Woodev_Admin_Notice_Handler' );
 		$handler->shouldReceive( 'add_admin_notice' )
 			->once()
-			->with( 'BODY', $rule->get_note_name() );
+			->with( '<strong>T</strong><br>BODY', $rule->get_note_name(), [ 'always_show_on_settings' => false ] );
 
 		$renderer = new Admin_Notice_Renderer( $handler );
 		$renderer->render( $rule, [ 'title' => 'T', 'content' => 'BODY', 'actions' => [] ] );
@@ -135,9 +135,128 @@ class CompetitorRendererTest extends TestCase {
 
 		$this->assertNotEmpty( \Automattic\WooCommerce\Admin\Notes\Note::$saved );
 		$saved = \Automattic\WooCommerce\Admin\Notes\Note::$saved[0];
-		// Note name is namespaced by the plugin source to avoid cross-plugin collision.
-		$this->assertSame( 'woodev-test-plugin-woodev-competitor-recommend-cdek-php', $saved['name'] );
+		$this->assertTrue( \Woodev\Framework\Competitor\WC_Admin_Notes_Renderer::is_available() );
+		// Notes are global by name so carrier recommendations are shared across plugins.
+		$this->assertSame( 'woodev-competitor-recommend-cdek-php', $saved['name'] );
 		$this->assertSame( 'Заголовок', $saved['title'] );
 		$this->assertSame( 'woodev-test-plugin', $saved['source'] );
+		$this->assertSame( 'update', $saved['type'] );
+		$this->assertSame( 'plain', $saved['layout'] );
+		$this->assertSame( 'Перейти', $saved['acts'][0][1] );
+
+		$conflict_rule = new \Woodev\Framework\Competitor\Competitor_Rule(
+			[ 'detect' => 'cdek.php', 'mode' => 'conflict' ]
+		);
+		$renderer->render(
+			$conflict_rule,
+			[
+				'title'   => 'Конфликт',
+				'content' => 'Тело',
+				'type'    => \Automattic\WooCommerce\Admin\Notes\Note::E_WC_ADMIN_NOTE_ERROR,
+				'actions' => [],
+			]
+		);
+		$this->assertSame( 'error', \Automattic\WooCommerce\Admin\Notes\Note::$saved[1]['type'] );
+	}
+
+	/**
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_wc_renderer_updates_only_unactioned_notes_and_never_resurrects_them(): void {
+
+		require_once dirname( __DIR__ ) . '/_stubs/wc-admin-notes-note.php';
+		require_once dirname( __DIR__, 2 ) . '/woodev/admin/class-notes-helper.php';
+		require_once dirname( __DIR__, 2 ) . '/woodev/competitor/class-competitor-rule.php';
+		require_once dirname( __DIR__, 2 ) . '/woodev/competitor/interface-competitor-notice-renderer.php';
+		require_once dirname( __DIR__, 2 ) . '/woodev/competitor/class-competitor-notification-handler.php';
+		require_once dirname( __DIR__, 2 ) . '/woodev/competitor/class-wc-admin-notes-renderer.php';
+
+		\Brain\Monkey\Functions\when( 'wp_parse_args' )->alias(
+			static function ( $args, $defaults ) {
+				return array_merge( $defaults, (array) $args );
+			}
+		);
+
+		$rule     = new \Woodev\Framework\Competitor\Competitor_Rule( [ 'detect' => 'cdek.php', 'mode' => 'recommend' ] );
+		$renderer = new \Woodev\Framework\Competitor\WC_Admin_Notes_Renderer( 'woodev-test-plugin' );
+		$payload  = [
+			'title'   => 'Original title',
+			'content' => 'Original body',
+			'type'    => 'update',
+			'actions' => [ [ 'name' => 'go', 'label' => 'Visit', 'url' => 'https://x', 'primary' => true ] ],
+		];
+
+		$renderer->render( $rule, $payload );
+		$renderer->render( $rule, $payload );
+		$this->assertCount( 1, \Automattic\WooCommerce\Admin\Notes\Note::$saved );
+
+		$saved_note = \Automattic\WooCommerce\Admin\Notes\Note::$by_name[ $rule->get_note_name() ];
+		$saved_note->a['status'] = \Automattic\WooCommerce\Admin\Notes\Note::E_WC_ADMIN_NOTE_ACTIONED;
+		$payload['title'] = 'Must not resurrect';
+		$renderer->render( $rule, $payload );
+		$this->assertCount( 1, \Automattic\WooCommerce\Admin\Notes\Note::$saved );
+		$this->assertSame( 'Original title', $saved_note->get_title() );
+		$this->assertSame( 'actioned', $saved_note->get_status() );
+
+		$saved_note->a['status'] = \Automattic\WooCommerce\Admin\Notes\Note::E_WC_ADMIN_NOTE_UNACTIONED;
+		$payload['title']   = 'Updated title';
+		$payload['content'] = 'Updated body';
+		$payload['actions'][0]['label'] = 'Updated action';
+		$renderer->render( $rule, $payload );
+		$this->assertCount( 2, \Automattic\WooCommerce\Admin\Notes\Note::$saved );
+		$this->assertSame( 'Updated title', $saved_note->get_title() );
+		$this->assertSame( 'Updated body', $saved_note->get_content() );
+		$this->assertSame( 'Updated action', $saved_note->a['acts'][0][1] );
+		$this->assertSame( 'unactioned', $saved_note->get_status() );
+	}
+
+	/**
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_carrier_handler_maps_conflict_and_recommendation_types_through_wc_renderer(): void {
+
+		require_once dirname( __DIR__ ) . '/_stubs/wc-admin-notes-note.php';
+		require_once dirname( __DIR__, 2 ) . '/woodev/admin/class-notes-helper.php';
+		require_once dirname( __DIR__, 2 ) . '/woodev/competitor/class-competitor-rule.php';
+		require_once dirname( __DIR__, 2 ) . '/woodev/competitor/interface-competitor-notice-renderer.php';
+		require_once dirname( __DIR__, 2 ) . '/woodev/competitor/class-competitor-notification-handler.php';
+		require_once dirname( __DIR__, 2 ) . '/woodev/competitor/class-admin-notice-renderer.php';
+		require_once dirname( __DIR__, 2 ) . '/woodev/competitor/class-wc-admin-notes-renderer.php';
+		require_once dirname( __DIR__, 2 ) . '/woodev/competitor/class-carrier-catalogue.php';
+		require_once dirname( __DIR__, 2 ) . '/woodev/competitor/class-carrier-competitor-notification-handler.php';
+
+		$active_plugins = [ 'woocommerce-edostavka/woocommerce-edostavka.php', 'cdekdelivery/cdek.php', 'yandex-go-delivery/yandex-go-delivery.php' ];
+		\Brain\Monkey\Functions\when( '__' )->returnArg( 1 );
+		\Brain\Monkey\Functions\when( 'sanitize_key' )->alias( static fn( $key ) => strtolower( preg_replace( '/[^a-z0-9_\-]/', '', $key ) ) );
+		\Brain\Monkey\Functions\when( 'get_option' )->alias( static fn( $option, $default = false ) => 'active_plugins' === $option ? $active_plugins : $default );
+		\Brain\Monkey\Functions\when( 'update_option' )->justReturn( true );
+		\Brain\Monkey\Functions\when( 'get_site_option' )->justReturn( [] );
+		\Brain\Monkey\Functions\when( 'esc_html' )->returnArg();
+		\Brain\Monkey\Functions\when( 'esc_url_raw' )->returnArg();
+		\Brain\Monkey\Functions\when( 'admin_url' )->justReturn( 'https://example.test/wp-admin/' );
+		\Brain\Monkey\Functions\when( 'add_query_arg' )->alias( static fn( $args, $url ) => $url . '?' . http_build_query( $args ) );
+		\Brain\Monkey\Functions\when( 'wp_create_nonce' )->justReturn( 'nonce' );
+		\Brain\Monkey\Functions\when( 'wp_parse_args' )->alias( static fn( $args, $defaults ) => array_merge( $defaults, (array) $args ) );
+
+		$evaluated = new \ReflectionProperty( \Woodev\Framework\Competitor\Carrier_Competitor_Notification_Handler::class, 'recommendations_evaluated' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$evaluated->setAccessible( true );
+		}
+		$evaluated->setValue( null, false );
+
+		$existing_recommendation = new \Automattic\WooCommerce\Admin\Notes\Note();
+		$existing_recommendation->set_name( 'woodev-competitor-recommend-cdek' );
+		$existing_recommendation->save();
+
+		$plugin = Mockery::mock( 'Woodev_Plugin' );
+		$plugin->shouldReceive( 'get_id_dasherized' )->andReturn( 'woodev-edostavka' );
+		( new \Woodev\Framework\Competitor\Carrier_Competitor_Notification_Handler( $plugin, 'cdek' ) )->run();
+
+		$notes = \Automattic\WooCommerce\Admin\Notes\Note::$by_name;
+		$this->assertSame( 'error', $notes['woodev-competitor-conflict-cdekdelivery-cdek-php']->a['type'] );
+		$this->assertSame( 'update', $notes['woodev-competitor-recommend-yandex']->a['type'] );
+		$this->assertSame( [ 'woodev-competitor-recommend-cdek' ], \Automattic\WooCommerce\Admin\Notes\Notes::$deleted );
 	}
 }

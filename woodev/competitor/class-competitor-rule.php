@@ -53,6 +53,9 @@ final class Competitor_Rule {
 	/** @var string|null per-rule image URL override */
 	private ?string $image_override;
 
+	/** @var string|null stable name override for shared product notices */
+	private ?string $note_name_override;
+
 	/**
 	 * @since 2.0.2
 	 *
@@ -86,6 +89,7 @@ final class Competitor_Rule {
 		$this->title_override  = isset( $raw['title'] ) ? (string) $raw['title'] : null;
 		$this->content_override = isset( $raw['content'] ) ? (string) $raw['content'] : null;
 		$this->image_override  = isset( $raw['image'] ) ? (string) $raw['image'] : null;
+		$this->note_name_override = isset( $raw['note_name'] ) ? (string) $raw['note_name'] : null;
 	}
 
 	/**
@@ -156,6 +160,10 @@ final class Competitor_Rule {
 	 * @since 2.0.2
 	 */
 	public function get_note_name(): string {
+		if ( null !== $this->note_name_override && '' !== $this->note_name_override ) {
+			return sanitize_key( $this->note_name_override );
+		}
+
 		$slug = preg_replace( '/[^a-z0-9]+/i', '-', $this->detect_slugs[0] );
 		$slug = trim( strtolower( (string) $slug ), '-' );
 
