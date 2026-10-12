@@ -4,7 +4,8 @@
  * The form is built by PHP (Instance_Field_Conditions): a field that declares `show_if` carries
  * `data-woodev-show-if` on its control, a JSON `{ relation: 'AND'|'OR', conditions: [ { field, operator, value } ] }`
  * where `field` is the id of the controlling control and `operator` is one of `=`, `!=`, `in`, `not_in`. This file only
- * evaluates it, on load and on every change, and hides or shows the field's table row. Hiding is presentation only:
+ * evaluates it, on load and on every change, and hides or shows the field's whole block: the table row on the method's
+ * own page, the label and fieldset in the modal. Hiding is presentation only:
  * a hidden control stays in the form and is submitted, so its saved value is kept.
  *
  * Values are compared as strings; a checkbox is `yes` / `no`; a multiselect matches when any chosen value does
@@ -14,6 +15,13 @@
  * It runs on the method's own page and in the modal WooCommerce opens from the zone screen. The modal's form is
  * inserted by Backbone after load and announced with `wc_backbone_modal_loaded` (WooCommerce
  * assets/js/admin/backbone-modal.js, triggered on document.body; verified against WooCommerce 11.1.2).
+ *
+ * The modal has no table: WooCommerce's reformatSettingsHTML() (assets/js/admin/wc-shipping-zone-methods.js,
+ * replaceHTMLTables) swaps `table.form-table` for `div.wc-shipping-zone-method-fields` and re-parses its rows as HTML
+ * in a div, which drops the `tr` / `th` / `td` tags. What is left per field is a `label` and a `fieldset` standing next
+ * to each other, so the field's block there is that label plus its fieldset.
+ *
+ * @since 2.0.2
  */
 ( function ( $ ) {
 	'use strict';
@@ -87,12 +95,41 @@
 		return 'OR' === rule.relation ? results.indexOf( true ) !== -1 : results.indexOf( false ) === -1;
 	}
 
+	/**
+	 * The elements that make up a control's whole field block: the table row on the method's own page, the label
+	 * and the fieldset in the zone modal. Empty when the control sits in neither.
+	 */
+	function blockOf( control ) {
+		var row = control.closest( 'tr' );
+		var fieldset;
+		var label;
+
+		if ( row ) {
+			return [ row ];
+		}
+
+		fieldset = control.closest( 'fieldset' );
+
+		if ( ! fieldset || ! fieldset.parentElement || ! fieldset.parentElement.classList.contains( 'wc-shipping-zone-method-fields' ) ) {
+			return [];
+		}
+
+		label = fieldset.previousElementSibling;
+
+		if ( ! label || 'LABEL' !== label.tagName ) {
+			label = null;
+		}
+
+		return label ? [ label, fieldset ] : [ fieldset ];
+	}
+
 	function refresh() {
 		document.querySelectorAll( '[' + ATTRIBUTE + ']' ).forEach( function ( control ) {
-			var row = control.closest( 'tr' );
+			var block = blockOf( control );
+			var display;
 			var rule;
 
-			if ( ! row ) {
+			if ( ! block.length ) {
 				return;
 			}
 
@@ -102,8 +139,11 @@
 				return;
 			}
 
-			// an inline style, not the `hidden` attribute: a table row's own display rule would win over the latter
-			row.style.display = isVisible( rule ) ? '' : 'none';
+			// an inline style, not the `hidden` attribute: a table row's or a modal fieldset's own display rule would win over the latter
+			display = isVisible( rule ) ? '' : 'none';
+			block.forEach( function ( element ) {
+				element.style.display = display;
+			} );
 		} );
 	}
 
