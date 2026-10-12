@@ -10,8 +10,7 @@ namespace Woodev\Tests\Unit;
 require_once dirname( __DIR__, 2 ) . '/woodev/class-framework-plugin-loader-definition.php';
 
 use Brain\Monkey\Functions;
-use Woodev\Tests\Unit\Support\Pilot_Fixture_WP_Stubs;
-use Woodev\Tests\Unit\Support\Pilot_Testable_Framework_Resolver;
+use Woodev\Tests\Unit\Support\{Pilot_Fixture_WP_Stubs, Pilot_Testable_Framework_Resolver};
 
 /**
  * Class EdostavkaPilotFixtureTest

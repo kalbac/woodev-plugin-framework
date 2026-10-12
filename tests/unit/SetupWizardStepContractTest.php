@@ -9,10 +9,7 @@ namespace Woodev\Tests\Unit;
 
 use Brain\Monkey\Functions;
 use Mockery;
-use Woodev\Framework\Setup\Action_Outcome;
-use Woodev\Framework\Setup\Setup_Wizard;
-use Woodev\Framework\Setup\Step;
-use Woodev\Framework\Setup\Step_Action;
+use Woodev\Framework\Setup\{Action_Outcome, Setup_Wizard, Step, Step_Action};
 
 require_once dirname( __DIR__, 2 ) . '/woodev/api/class-api-base.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/setup/class-step.php';

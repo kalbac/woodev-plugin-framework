@@ -35,9 +35,7 @@
 
 namespace Woodev\Tests\Integration\Shipping;
 
-use Woodev\Framework\Shipping\Admin\Orders\Order_Editor;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Query;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
+use Woodev\Framework\Shipping\Admin\Orders\{Order_Editor, Orders_Query, Orders_Registry};
 use Woodev\Framework\Shipping\Checkout\Checkout_Config;
 use Woodev\Framework\Shipping\Order\Order_Marker;
 use Woodev\Tests\Integration\TestCase;

@@ -8,8 +8,7 @@
 namespace Woodev\Tests\Unit\Shipping\Order;
 
 use Brain\Monkey\Functions;
-use Woodev\Framework\Shipping\Order\Export_Queue;
-use Woodev\Framework\Shipping\Order\Export_Retry;
+use Woodev\Framework\Shipping\Order\{Export_Queue, Export_Retry};
 use Woodev\Tests\Unit\TestCase;
 
 /**

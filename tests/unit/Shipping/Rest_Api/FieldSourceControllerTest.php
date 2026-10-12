@@ -10,8 +10,7 @@
 namespace Woodev\Tests\Unit\Shipping\Rest_Api;
 
 use Brain\Monkey\Functions;
-use Woodev\Framework\Shipping\Checkout\Checkout_Fields;
-use Woodev\Framework\Shipping\Checkout\Field;
+use Woodev\Framework\Shipping\Checkout\{Checkout_Fields, Field};
 use Woodev\Framework\Shipping\Rest_Api\Field_Source_Controller;
 use Woodev\Tests\Unit\TestCase;
 

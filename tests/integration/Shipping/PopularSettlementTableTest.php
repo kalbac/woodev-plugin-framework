@@ -49,10 +49,7 @@
 
 namespace Woodev\Tests\Integration\Shipping;
 
-use Woodev\Framework\Shipping\Location\Location_Provider;
-use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
-use Woodev\Framework\Shipping\Location\Location_Record;
-use Woodev\Framework\Shipping\Location\Popular_Settlement_Store;
+use Woodev\Framework\Shipping\Location\{Location_Provider, Location_Provider_Registry, Location_Record, Popular_Settlement_Store};
 use Woodev\Tests\Integration\TestCase;
 
 class PopularSettlementTableTest extends TestCase {

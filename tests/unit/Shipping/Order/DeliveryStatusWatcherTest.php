@@ -7,14 +7,10 @@
 
 namespace Woodev\Tests\Unit\Shipping\Order;
 
-use Brain\Monkey\Actions;
-use Brain\Monkey\Functions;
+use Brain\Monkey\{Actions, Functions};
 use Mockery;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
-use Woodev\Framework\Shipping\Order\Delivery_Status;
-use Woodev\Framework\Shipping\Order\Delivery_Status_Watcher;
-use Woodev\Framework\Shipping\Order\Shipment_Cancellation;
+use Woodev\Framework\Shipping\Admin\Orders\{Orders_Provider, Orders_Registry};
+use Woodev\Framework\Shipping\Order\{Delivery_Status, Delivery_Status_Watcher, Shipment_Cancellation};
 use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__, 4 ) . '/woodev/compatibility/class-plugin-compatibility.php';

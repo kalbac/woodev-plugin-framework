@@ -2,8 +2,7 @@
 namespace Woodev\Tests\Unit;
 
 use Mockery;
-use Woodev\Framework\Settings\Settings_Provider;
-use Woodev\Framework\Settings\Settings_Section;
+use Woodev\Framework\Settings\{Settings_Provider, Settings_Section};
 
 
 class SettingsProviderTest extends TestCase {

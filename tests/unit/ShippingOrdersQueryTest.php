@@ -29,12 +29,8 @@
 namespace Woodev\Tests\Unit;
 
 use Brain\Monkey\Functions;
-use Woodev\Framework\Shipping\Admin\Orders\Order_Actions;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Query;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
-use Woodev\Framework\Shipping\Order\Delivery_Status;
-use Woodev\Framework\Shipping\Order\Shipment_Cancellation;
+use Woodev\Framework\Shipping\Admin\Orders\{Order_Actions, Orders_Provider, Orders_Query, Orders_Registry};
+use Woodev\Framework\Shipping\Order\{Delivery_Status, Shipment_Cancellation};
 
 class ShippingOrdersQueryTest extends TestCase {
 

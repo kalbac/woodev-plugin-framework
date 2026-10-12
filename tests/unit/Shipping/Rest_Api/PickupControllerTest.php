@@ -16,13 +16,9 @@
 namespace Woodev\Tests\Unit\Shipping\Rest_Api;
 
 use WP_REST_Request;
-use Brain\Monkey\Actions;
-use Brain\Monkey\Filters;
-use Brain\Monkey\Functions;
+use Brain\Monkey\{Actions, Filters, Functions};
 use Woodev\Framework\Shipping\Location\Location_Record;
-use Woodev\Framework\Shipping\Pickup\Pickup_Point;
-use Woodev\Framework\Shipping\Pickup\Point_Query;
-use Woodev\Framework\Shipping\Pickup\Point_Source;
+use Woodev\Framework\Shipping\Pickup\{Pickup_Point, Point_Query, Point_Source};
 use Woodev\Framework\Shipping\Rest_Api\Pickup_Controller;
 use Woodev\Tests\Unit\TestCase;
 

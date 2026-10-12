@@ -61,15 +61,7 @@
 namespace Woodev\Framework\Shipping\Rest_Api;
 
 use Woodev\Framework\Http\Rest_Rate_Limit_Trait;
-use Woodev\Framework\Shipping\Location\City_Limit;
-use Woodev\Framework\Shipping\Location\Customer_Location_Store;
-use Woodev\Framework\Shipping\Location\Location_Provider;
-use Woodev\Framework\Shipping\Location\Location_Record;
-use Woodev\Framework\Shipping\Location\Location_Scope;
-use Woodev\Framework\Shipping\Location\Location_Service;
-use Woodev\Framework\Shipping\Location\Popular_Settlement_Entry;
-use Woodev\Framework\Shipping\Location\Popular_Settlement_Verification;
-use Woodev\Framework\Shipping\Location\Popular_Settlement_Verifier;
+use Woodev\Framework\Shipping\Location\{City_Limit, Customer_Location_Store, Location_Provider, Location_Record, Location_Scope, Location_Service, Popular_Settlement_Entry, Popular_Settlement_Verification, Popular_Settlement_Verifier};
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;

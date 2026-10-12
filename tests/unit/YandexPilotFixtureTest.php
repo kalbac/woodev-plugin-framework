@@ -16,11 +16,8 @@ require_once dirname( __DIR__, 2 ) . '/woodev/class-framework-plugin-loader-defi
 
 use Brain\Monkey\Functions;
 use Woodev\Framework\Shipping\Shipping_Method_Pickup;
-use Woodev\Framework\Shipping\Pickup\Pickup_Point;
-use Woodev\Framework\Shipping\Pickup\Point_Query;
-use Woodev\Framework\Shipping\Pickup\Point_Source;
-use Woodev\Tests\Unit\Support\Pilot_Fixture_WP_Stubs;
-use Woodev\Tests\Unit\Support\Pilot_Testable_Framework_Resolver;
+use Woodev\Framework\Shipping\Pickup\{Pickup_Point, Point_Query, Point_Source};
+use Woodev\Tests\Unit\Support\{Pilot_Fixture_WP_Stubs, Pilot_Testable_Framework_Resolver};
 
 /**
  * Class YandexPilotFixtureTest

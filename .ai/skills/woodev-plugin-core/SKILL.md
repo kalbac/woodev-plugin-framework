@@ -31,6 +31,7 @@ REPOSITORY (`kalbac/woodev-plugin-framework`) — read them there; they are not 
    type declarations on every parameter and return, docblocks (`@since`, `@param`, `@return`) on
    every public/protected method, pure methods `static`. New classes are namespaced; do not copy
    the legacy global `Woodev_*` shape.
+6. **Imports:** Group file-level class imports from the same namespace in one statement; keep `use function` and `use const` separate. Example: `use Woodev\Edostavka\Api\{Cdek_Api_Client, Cdek_Api_Exception};`
 
 ## The map
 

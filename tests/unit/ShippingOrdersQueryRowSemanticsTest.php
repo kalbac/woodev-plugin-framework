@@ -47,13 +47,8 @@ namespace Woodev\Tests\Unit;
 
 use Brain\Monkey\Functions;
 use Mockery;
-use Woodev\Framework\Shipping\Admin\Orders\Order_Actions;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Id_Resolver;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Query;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
-use Woodev\Framework\Shipping\Order\Delivery_Status;
-use Woodev\Framework\Shipping\Order\Shipment_Cancellation;
+use Woodev\Framework\Shipping\Admin\Orders\{Order_Actions, Orders_Id_Resolver, Orders_Provider, Orders_Query, Orders_Registry};
+use Woodev\Framework\Shipping\Order\{Delivery_Status, Shipment_Cancellation};
 
 /**
  * @since 2.0.2

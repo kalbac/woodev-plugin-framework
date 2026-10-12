@@ -8,8 +8,7 @@
 
 namespace Woodev\Tests\Unit\Shipping\Location;
 
-use Brain\Monkey\Actions;
-use Brain\Monkey\Functions;
+use Brain\Monkey\{Actions, Functions};
 use Woodev\Framework\Shipping\Location\Providers\Dadata_Api_Client;
 use Woodev\Tests\Unit\TestCase;
 

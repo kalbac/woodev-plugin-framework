@@ -5,8 +5,7 @@ namespace Woodev\Framework\Competitor;
 defined( 'ABSPATH' ) || exit;
 
 use Woodev_Notes_Helper;
-use Automattic\WooCommerce\Admin\Notes\Note;
-use Automattic\WooCommerce\Admin\Notes\Notes;
+use Automattic\WooCommerce\Admin\Notes\{Note, Notes};
 use Exception;
 
 /**

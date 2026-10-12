@@ -12,8 +12,7 @@
 
 namespace Woodev\Tests\Unit;
 
-use Woodev\Framework\Competitor\Admin_Notice_Renderer;
-use Woodev\Framework\Competitor\Competitor_Rule;
+use Woodev\Framework\Competitor\{Admin_Notice_Renderer, Competitor_Rule};
 use Mockery;
 
 require_once dirname( __DIR__, 2 ) . '/woodev/competitor/class-competitor-rule.php';

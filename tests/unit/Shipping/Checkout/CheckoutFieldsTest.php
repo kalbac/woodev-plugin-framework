@@ -11,8 +11,7 @@
 
 namespace Woodev\Tests\Unit\Shipping\Checkout;
 
-use Woodev\Framework\Shipping\Checkout\Checkout_Fields;
-use Woodev\Framework\Shipping\Checkout\Field;
+use Woodev\Framework\Shipping\Checkout\{Checkout_Fields, Field};
 use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-fields.php';

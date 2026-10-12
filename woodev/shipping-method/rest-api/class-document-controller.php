@@ -4,8 +4,7 @@
 namespace Woodev\Framework\Shipping\Rest_Api;
 
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
-use Woodev\Framework\Shipping\Order\Bulk_Document_Source;
-use Woodev\Framework\Shipping\Order\Document_Result;
+use Woodev\Framework\Shipping\Order\{Bulk_Document_Source, Document_Result};
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;

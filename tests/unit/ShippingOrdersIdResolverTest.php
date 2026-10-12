@@ -30,10 +30,7 @@
 namespace Woodev\Tests\Unit;
 
 use Brain\Monkey\Functions;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Id_Resolver;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Query;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
+use Woodev\Framework\Shipping\Admin\Orders\{Orders_Id_Resolver, Orders_Provider, Orders_Query, Orders_Registry};
 use Woodev\Framework\Shipping\Order\Delivery_Status;
 
 /**

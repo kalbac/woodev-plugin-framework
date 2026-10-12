@@ -7,12 +7,10 @@
 
 namespace Woodev\Tests\Unit\Shipping\Order;
 
-use Brain\Monkey\Actions;
-use Brain\Monkey\Functions;
+use Brain\Monkey\{Actions, Functions};
 use Mockery;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
-use Woodev\Framework\Shipping\Order\Shipment_Facts;
-use Woodev\Framework\Shipping\Order\Shipment_Facts_Events;
+use Woodev\Framework\Shipping\Order\{Shipment_Facts, Shipment_Facts_Events};
 use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__, 4 ) . '/woodev/compatibility/class-plugin-compatibility.php';

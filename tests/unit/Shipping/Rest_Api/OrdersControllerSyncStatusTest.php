@@ -12,8 +12,7 @@
 namespace Woodev\Tests\Unit\Shipping\Rest_Api;
 
 use Brain\Monkey\Functions;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
+use Woodev\Framework\Shipping\Admin\Orders\{Orders_Provider, Orders_Registry};
 use Woodev\Framework\Shipping\Order\Delivery_Sync_Status;
 use Woodev\Framework\Shipping\Rest_Api\Orders_Controller;
 use Woodev\Tests\Unit\TestCase;

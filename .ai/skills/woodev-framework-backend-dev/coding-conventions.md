@@ -55,6 +55,8 @@ Follow [WordPress Coding Standards](https://developer.wordpress.org/coding-stand
 - **Braces**: Opening on same line, closing on new line
 - **Naming**: snake_case for functions and variables
 
+Group file-level class imports from the same namespace in one statement; keep `use function` and `use const` separate. Example: `use Woodev\Framework\Shipping\Pickup\{Pickup_Point, Point_Query};`
+
 ## Null Coalescing Operator
 
 Use `??` instead of `isset` checks for array access.

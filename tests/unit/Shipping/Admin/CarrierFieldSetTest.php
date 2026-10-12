@@ -14,8 +14,7 @@ namespace Woodev\Tests\Unit\Shipping\Admin;
 
 use Brain\Monkey\Functions;
 use Mockery;
-use Woodev\Framework\Shipping\Admin\Orders\Carrier_Field_Set;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
+use Woodev\Framework\Shipping\Admin\Orders\{Carrier_Field_Set, Orders_Provider};
 use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__ ) . '/Order/order-persistence-fixtures.php';

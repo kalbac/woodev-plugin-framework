@@ -10,12 +10,8 @@
 namespace Woodev\Tests\Unit\Shipping;
 
 use Brain\Monkey\Functions;
-use Woodev\Framework\Shipping\Location\City_Limit;
-use Woodev\Framework\Shipping\Location\Location_Record;
-use Woodev\Framework\Shipping\Location\Location_Service;
-use Woodev\Framework\Shipping\Shipping_Method;
-use Woodev\Framework\Shipping\Shipping_Plugin;
-use Woodev\Framework\Shipping\Shipping_Rate;
+use Woodev\Framework\Shipping\Location\{City_Limit, Location_Record, Location_Service};
+use Woodev\Framework\Shipping\{Shipping_Method, Shipping_Plugin, Shipping_Rate};
 use Woodev\Tests\Unit\Shipping\Location\City_Limit_Test_Service;
 use Woodev\Tests\Unit\TestCase;
 

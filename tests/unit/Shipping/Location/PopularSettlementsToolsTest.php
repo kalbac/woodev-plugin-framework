@@ -12,14 +12,7 @@ namespace Woodev\Tests\Unit\Shipping\Location;
 
 use Brain\Monkey\Functions;
 use Mockery;
-use Woodev\Framework\Shipping\Location\Abstract_Location_Provider;
-use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
-use Woodev\Framework\Shipping\Location\Location_Record;
-use Woodev\Framework\Shipping\Location\Location_Scope;
-use Woodev\Framework\Shipping\Location\Locality_Key;
-use Woodev\Framework\Shipping\Location\Popular_Settlement_Entry;
-use Woodev\Framework\Shipping\Location\Popular_Settlement_Store;
-use Woodev\Framework\Shipping\Location\Popular_Settlements_Tools;
+use Woodev\Framework\Shipping\Location\{Abstract_Location_Provider, Locality_Key, Location_Provider_Registry, Location_Record, Location_Scope, Popular_Settlement_Entry, Popular_Settlement_Store, Popular_Settlements_Tools};
 use Woodev\Framework\Shipping\Settings\Shipping_Tools_Registry;
 use Woodev\Tests\Unit\TestCase;
 

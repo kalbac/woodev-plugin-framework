@@ -27,8 +27,7 @@ namespace Woodev\Tests\Unit\Shipping {
 use Brain\Monkey\Functions;
 use ReflectionMethod;
 use ReflectionProperty;
-use Woodev\Framework\Shipping\Shipping_Plugin;
-use Woodev\Framework\Shipping\Shipping_Method;
+use Woodev\Framework\Shipping\{Shipping_Method, Shipping_Plugin};
 use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__, 3 ) . '/woodev/class-plugin.php';

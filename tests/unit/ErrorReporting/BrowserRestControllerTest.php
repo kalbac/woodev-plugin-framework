@@ -8,11 +8,7 @@
 namespace Woodev\Tests\Unit\ErrorReporting;
 
 use Brain\Monkey\Functions;
-use Woodev\Framework\Error_Reporting\Browser_Rest_Controller;
-use Woodev\Framework\Error_Reporting\Browser_Script;
-use Woodev\Framework\Error_Reporting\Error_Reporter;
-use Woodev\Framework\Error_Reporting\Event_Queue;
-use Woodev\Framework\Error_Reporting\Plugin_Scope;
+use Woodev\Framework\Error_Reporting\{Browser_Rest_Controller, Browser_Script, Error_Reporter, Event_Queue, Plugin_Scope};
 use Woodev\Framework\Framework_Plugin_Loader_Definition;
 
 /**

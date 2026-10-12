@@ -14,14 +14,8 @@
 
 namespace Woodev\Framework\Shipping\Rest_Api;
 
-use Woodev\Framework\Shipping\Admin\Orders\Order_Actions;
-use Woodev\Framework\Shipping\Admin\Orders\Order_Row_Builder;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Query;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
-use Woodev\Framework\Shipping\Order\Action_Result;
-use Woodev\Framework\Shipping\Order\Delivery_Status;
-use Woodev\Framework\Shipping\Order\Delivery_Sync_Status;
+use Woodev\Framework\Shipping\Admin\Orders\{Order_Actions, Order_Row_Builder, Orders_Provider, Orders_Query, Orders_Registry};
+use Woodev\Framework\Shipping\Order\{Action_Result, Delivery_Status, Delivery_Sync_Status};
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;

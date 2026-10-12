@@ -15,8 +15,7 @@
 
 namespace Woodev\Framework\Shipping\Pickup;
 
-use Woodev\Framework\Shipping\Location\Location_Record;
-use Woodev\Framework\Shipping\Location\Location_Service;
+use Woodev\Framework\Shipping\Location\{Location_Record, Location_Service};
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;

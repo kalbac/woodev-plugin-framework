@@ -13,9 +13,7 @@
 
 namespace Woodev\Tests\Unit;
 
-use Woodev\Framework\Competitor\Competitor_Notification_Handler;
-use Woodev\Framework\Competitor\Competitor_Notice_Renderer;
-use Woodev\Framework\Competitor\Competitor_Rule;
+use Woodev\Framework\Competitor\{Competitor_Notice_Renderer, Competitor_Notification_Handler, Competitor_Rule};
 use Brain\Monkey\Functions;
 use Mockery;
 

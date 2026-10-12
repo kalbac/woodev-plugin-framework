@@ -21,8 +21,7 @@
 namespace Woodev\Tests\Integration\Shipping;
 
 use ReflectionProperty;
-use Woodev\Framework\Shipping\Pickup\Point_Query;
-use Woodev\Framework\Shipping\Pickup\Point_Source;
+use Woodev\Framework\Shipping\Pickup\{Point_Query, Point_Source};
 use Woodev\Framework\Shipping\Rest_Api\Pickup_Controller;
 use Woodev\Tests\Integration\TestCase;
 use WP_REST_Request;

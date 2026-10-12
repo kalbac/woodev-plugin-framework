@@ -14,9 +14,7 @@
 
 namespace Woodev\Framework\Shipping\Rest_Api;
 
-use Woodev\Framework\Shipping\Admin\Orders\Order_Editor;
-use Woodev\Framework\Shipping\Admin\Orders\Order_Payload_Validator;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
+use Woodev\Framework\Shipping\Admin\Orders\{Order_Editor, Order_Payload_Validator, Orders_Registry};
 use Woodev\Framework\Shipping\Checkout\Checkout_Field_Policy;
 
 if ( ! defined( 'ABSPATH' ) ) {

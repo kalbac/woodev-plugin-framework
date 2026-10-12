@@ -7,9 +7,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-use Woodev\Framework\Shipping\Shipping_Method;
-use Woodev\Framework\Shipping\Shipping_Plugin;
-use Woodev\Framework\Shipping\Shipping_Rate;
+use Woodev\Framework\Shipping\{Shipping_Method, Shipping_Plugin, Shipping_Rate};
 
 /**
  * Shared fixture method base mirroring production shipping plugins with method subclasses.

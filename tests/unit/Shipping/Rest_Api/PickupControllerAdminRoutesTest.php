@@ -17,10 +17,7 @@ use Brain\Monkey\Functions;
 use WP_Error;
 use WP_REST_Request;
 use Woodev\Framework\Shipping\Location\Location_Record;
-use Woodev\Framework\Shipping\Pickup\Location_Aware_Point_Source;
-use Woodev\Framework\Shipping\Pickup\Pickup_Point;
-use Woodev\Framework\Shipping\Pickup\Point_Query;
-use Woodev\Framework\Shipping\Pickup\Point_Source;
+use Woodev\Framework\Shipping\Pickup\{Location_Aware_Point_Source, Pickup_Point, Point_Query, Point_Source};
 use Woodev\Framework\Shipping\Rest_Api\Pickup_Controller;
 use Woodev\Tests\Unit\TestCase;
 

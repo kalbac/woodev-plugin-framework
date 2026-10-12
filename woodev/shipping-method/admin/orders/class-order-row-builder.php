@@ -9,10 +9,8 @@
 
 namespace Woodev\Framework\Shipping\Admin\Orders;
 
-use Woodev\Framework\Shipping\Order\Carrier_Cancel;
-use Woodev\Framework\Shipping\Order\Order_Automation;
-use Woodev\Framework\Shipping\Shipping_Helper;
-use Woodev\Framework\Shipping\Shipping_Method;
+use Woodev\Framework\Shipping\Order\{Carrier_Cancel, Order_Automation};
+use Woodev\Framework\Shipping\{Shipping_Helper, Shipping_Method};
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;

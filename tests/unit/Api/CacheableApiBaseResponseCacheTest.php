@@ -7,8 +7,7 @@
 
 namespace Woodev\Tests\Unit\Api;
 
-use Brain\Monkey\Filters;
-use Brain\Monkey\Functions;
+use Brain\Monkey\{Filters, Functions};
 use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__, 3 ) . '/woodev/api/class-api-base.php';

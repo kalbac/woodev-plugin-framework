@@ -9,13 +9,8 @@ namespace Woodev\Tests\Unit\Shipping\Admin;
 
 use Brain\Monkey\Functions;
 use Mockery;
-use Woodev\Framework\Shipping\Admin\Orders\Order_Actions;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
-use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
-use Woodev\Framework\Shipping\Order\Bulk_Document_Source;
-use Woodev\Framework\Shipping\Order\Document_Result;
-use Woodev\Framework\Shipping\Order\Document_Source;
+use Woodev\Framework\Shipping\Admin\Orders\{Order_Actions, Orders_Provider, Orders_Registry};
+use Woodev\Framework\Shipping\Order\{Abstract_Shipment_Handler, Bulk_Document_Source, Document_Result, Document_Source};
 use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__, 4 ) . '/woodev/compatibility/class-plugin-compatibility.php';

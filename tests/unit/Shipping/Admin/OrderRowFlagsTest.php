@@ -12,8 +12,7 @@ namespace Woodev\Tests\Unit\Shipping\Admin;
 
 use Brain\Monkey\Functions;
 use Mockery;
-use Woodev\Framework\Shipping\Admin\Orders\Order_Row_Flags;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
+use Woodev\Framework\Shipping\Admin\Orders\{Order_Row_Flags, Orders_Provider};
 use Woodev\Tests\Unit\TestCase;
 
 /**

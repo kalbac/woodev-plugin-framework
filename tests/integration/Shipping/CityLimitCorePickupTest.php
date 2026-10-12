@@ -15,12 +15,7 @@
 
 namespace Woodev\Tests\Integration\Shipping;
 
-use Woodev\Framework\Shipping\Location\Abstract_Location_Provider;
-use Woodev\Framework\Shipping\Location\City_Limit;
-use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
-use Woodev\Framework\Shipping\Location\Location_Record;
-use Woodev\Framework\Shipping\Location\Location_Scope;
-use Woodev\Framework\Shipping\Location\Location_Service;
+use Woodev\Framework\Shipping\Location\{Abstract_Location_Provider, City_Limit, Location_Provider_Registry, Location_Record, Location_Scope, Location_Service};
 use Woodev\Tests\Integration\TestCase;
 
 /**

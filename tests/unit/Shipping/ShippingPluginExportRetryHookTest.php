@@ -14,8 +14,7 @@
 
 namespace Woodev\Tests\Unit\Shipping;
 
-use Brain\Monkey\Actions;
-use Brain\Monkey\Functions;
+use Brain\Monkey\{Actions, Functions};
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
 use Woodev\Framework\Shipping\Order\Export_Retry;
 use Woodev\Framework\Shipping\Shipping_Plugin;

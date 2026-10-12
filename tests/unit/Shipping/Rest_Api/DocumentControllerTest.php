@@ -13,11 +13,8 @@ namespace Woodev\Tests\Unit\Shipping\Rest_Api;
 
 use Brain\Monkey\Functions;
 use Mockery;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
-use Woodev\Framework\Shipping\Order\Bulk_Document_Source;
-use Woodev\Framework\Shipping\Order\Document_Result;
-use Woodev\Framework\Shipping\Order\Document_Source;
+use Woodev\Framework\Shipping\Admin\Orders\{Orders_Provider, Orders_Registry};
+use Woodev\Framework\Shipping\Order\{Bulk_Document_Source, Document_Result, Document_Source};
 use Woodev\Framework\Shipping\Rest_Api\Document_Controller;
 use Woodev\Tests\Unit\TestCase;
 

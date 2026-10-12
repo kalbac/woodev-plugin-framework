@@ -14,8 +14,7 @@
 
 namespace Woodev\Tests\Unit;
 
-use Brain\Monkey\Filters;
-use Brain\Monkey\Functions;
+use Brain\Monkey\{Filters, Functions};
 use Mockery;
 
 require_once dirname( __DIR__, 2 ) . '/woodev/class-plugin.php';

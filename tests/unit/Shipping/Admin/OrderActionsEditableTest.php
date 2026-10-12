@@ -13,8 +13,7 @@ namespace Woodev\Tests\Unit\Shipping\Admin;
 
 use Brain\Monkey\Functions;
 use Mockery;
-use Woodev\Framework\Shipping\Admin\Orders\Order_Actions;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
+use Woodev\Framework\Shipping\Admin\Orders\{Order_Actions, Orders_Provider};
 use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__, 4 ) . '/woodev/compatibility/class-plugin-compatibility.php';

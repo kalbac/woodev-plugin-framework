@@ -20,8 +20,7 @@
 
 namespace Woodev\Tests\Unit;
 
-use Brain\Monkey\Actions;
-use Brain\Monkey\Functions;
+use Brain\Monkey\{Actions, Functions};
 
 require_once dirname( __DIR__, 2 ) . '/woodev/licensing/class-license-store.php';
 

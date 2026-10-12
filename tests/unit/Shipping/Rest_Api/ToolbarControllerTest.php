@@ -13,8 +13,7 @@ namespace Woodev\Tests\Unit\Shipping\Rest_Api;
 
 use Brain\Monkey\Functions;
 use Mockery;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
+use Woodev\Framework\Shipping\Admin\Orders\{Orders_Provider, Orders_Registry};
 use Woodev\Framework\Shipping\Order\Action_Result;
 use Woodev\Framework\Shipping\Rest_Api\Toolbar_Controller;
 use Woodev\Tests\Unit\TestCase;
