@@ -751,10 +751,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Bu
 				$number = '' !== $value ? $value : null;
 			}
 
-			$template = null !== $provider ? $provider->get_tracking_url_template() : null;
-			$url      = ( null !== $number && null !== $template )
-				? str_replace( '{tracking}', rawurlencode( $number ), $template )
-				: null;
+			$url = null !== $provider ? $provider->resolve_tracking_url( $order ) : null;
+			if ( null === $url ) {
+				$template = null !== $provider ? $provider->get_tracking_url_template() : null;
+				$url      = ( null !== $number && null !== $template )
+					? str_replace( '{tracking}', rawurlencode( $number ), $template )
+					: null;
+			}
 
 			return [
 				'number' => $number,

@@ -331,6 +331,39 @@ class OrderRowBuilderTest extends TestCase {
 		$this->assertSame( 'https://cdek.ru/track/1234567890', $row['tracking']['url'] );
 	}
 
+	public function test_tracking_uses_a_declared_absolute_order_url(): void {
+		Functions\when( 'wp_parse_url' )->alias( static function ( $url ) { return parse_url( $url ); } );
+		$this->meta['_tracking_url'] = 'https://tracking.example.test/request/abc?share=one&source=carrier';
+		$provider = $this->provider(
+			[
+				'tracking_url_meta_key' => '_tracking_url',
+				'tracking_url_template' => 'https://carrier.example.test/{tracking}',
+			]
+		);
+
+		$row = ( new Order_Row_Builder() )->build( $this->make_order(), $provider );
+
+		$this->assertSame( 'https://tracking.example.test/request/abc?share=one&source=carrier', $row['tracking']['url'] );
+	}
+
+	public function test_tracking_falls_back_to_template_for_empty_or_invalid_absolute_url(): void {
+		$provider = $this->provider(
+			[
+				'tracking_meta_key'      => '_tracking',
+				'tracking_url_meta_key'  => '_tracking_url',
+				'tracking_url_template'  => 'https://carrier.example.test/{tracking}',
+			]
+		);
+		$this->meta['_tracking'] = 'ABC 123';
+
+		foreach ( [ '', 'javascript:alert(1)', 'not a URL' ] as $invalid_url ) {
+			$this->meta['_tracking_url'] = $invalid_url;
+			$row                         = ( new Order_Row_Builder() )->build( $this->make_order(), $provider );
+
+			$this->assertSame( 'https://carrier.example.test/ABC%20123', $row['tracking']['url'] );
+		}
+	}
+
 	/**
 	 * No number means null number AND null url — '—' is a display fallback, not this
 	 * class's job.

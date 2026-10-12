@@ -184,8 +184,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 			}
 			if ( null !== $provider && null !== $provider->get_tracking_meta_key() ) {
 				$tracking = (string) \Woodev_Order_Compatibility::get_order_meta( $order, $provider->get_tracking_meta_key() );
-				$template = $provider->get_tracking_url_template();
-				$url      = '' !== $tracking && null !== $template ? str_replace( '{tracking}', rawurlencode( $tracking ), $template ) : '';
+			}
+			if ( null !== $provider ) {
+				$url = $provider->resolve_tracking_url( $order ) ?? '';
+				if ( '' === $url ) {
+					$template = $provider->get_tracking_url_template();
+					$url      = '' !== $tracking && null !== $template ? str_replace( '{tracking}', rawurlencode( $tracking ), $template ) : '';
+				}
 			}
 			if ( null !== $provider && null !== $provider->get_pickup_point_meta_key() ) {
 				$point  = \Woodev_Order_Compatibility::get_order_meta( $order, $provider->get_pickup_point_meta_key() );
