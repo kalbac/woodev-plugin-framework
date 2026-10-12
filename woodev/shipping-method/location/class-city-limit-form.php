@@ -190,9 +190,12 @@ if ( ! class_exists( __NAMESPACE__ . '\City_Limit_Form' ) ) :
 		/**
 		 * What the zone modal's script needs to draw the list, and the notes under it.
 		 *
-		 * A stored city the current provider no longer answers for is re-resolved by its name — in memory, for this
-		 * view only; the replacement is what goes into the hidden input, so saving the form is what keeps it. One that
-		 * cannot be re-resolved stays listed, marked, and is ignored when rating (see {@see City_Limit}).
+		 * A stored city the current provider no longer answers for is re-resolved by its name and region
+		 * ({@see Location_Service::reresolve_stranded_record()}; #1185). The replacement is what goes into the hidden
+		 * input, and — when `$persist` is given — it is stored right away, so the provider is asked once per switch
+		 * and not on every view (checkout never asks: it only reads what is stored). Without `$persist`, or when it
+		 * declines, saving the form is what keeps it. One that cannot be re-resolved (no match, several matches, the
+		 * provider failing) stays listed, marked, and is ignored when rating (see {@see City_Limit}).
 		 *
 		 * @since 2.0.2
 		 *
@@ -200,10 +203,12 @@ if ( ! class_exists( __NAMESPACE__ . '\City_Limit_Form' ) ) :
 		 * @param array            $scope   {@see City_Limit::zone_scope()}.
 		 * @param Location_Service $service Location service.
 		 * @param bool             $resolve Whether to try re-resolving stale cities (needs a working provider).
+		 * @param callable|null    $persist Called with the re-resolved list (JSON) when anything was replaced; answers
+		 *                                  whether it was stored.
 		 *
 		 * @return array{value: string, items: array<int, array{record: array<string, mixed>, state: string}>, notes: string[], country: string, countries: array<int, array{code: string, name: string}>, active: bool}
 		 */
-		public static function build_view( $stored, array $scope, Location_Service $service, bool $resolve ): array {
+		public static function build_view( $stored, array $scope, Location_Service $service, bool $resolve, ?callable $persist = null ): array {
 			$parts    = City_Limit::partition( City_Limit::decode( $stored ), $service );
 			$states   = $scope['states'];
 			$kept     = [];
@@ -252,7 +257,11 @@ if ( ! class_exists( __NAMESPACE__ . '\City_Limit_Form' ) ) :
 			}
 
 			if ( $replaced > 0 ) {
-				$notes[] = __( 'Сервис определения местоположения сменился: города подобраны заново по названию. Сохраните настройки, чтобы запомнить их.', 'woodev-plugin-framework' );
+				$saved = null !== $persist && true === $persist( City_Limit::encode( $records ) );
+
+				$notes[] = $saved
+					? __( 'Сервис определения местоположения сменился: города подобраны заново по названию и региону и сохранены.', 'woodev-plugin-framework' )
+					: __( 'Сервис определения местоположения сменился: города подобраны заново по названию. Сохраните настройки, чтобы запомнить их.', 'woodev-plugin-framework' );
 			}
 
 			if ( $outside > 0 ) {
@@ -302,6 +311,36 @@ if ( ! class_exists( __NAMESPACE__ . '\City_Limit_Form' ) ) :
 		}
 
 		/**
+		 * Stores the re-resolved cities into the method's own setting (#1185), so the next view — and checkout — read
+		 * the new provider's records without asking it again.
+		 *
+		 * Only a merchant's own admin view writes (`manage_woocommerce`): this is reached from the settings screen
+		 * render, never from a customer-facing request, so an anonymous visitor can neither trigger the provider
+		 * lookups nor change the stored list (the same rule {@see Location_Service::reresolve_stranded_record()} is
+		 * a pure read for). Never throws; a store that cannot write answers `false` and the form falls back to «save
+		 * the settings to keep them».
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Settings_API $settings The settings object being drawn.
+		 * @param string           $key      Option key of the cities.
+		 * @param string           $value    The re-resolved list (JSON).
+		 *
+		 * @return bool Whether it was stored.
+		 */
+		private static function persist_cities( \WC_Settings_API $settings, string $key, string $value ): bool {
+			if ( ! function_exists( 'current_user_can' ) || ! current_user_can( 'manage_woocommerce' ) ) {
+				return false;
+			}
+
+			try {
+				return (bool) $settings->update_option( $key, $value );
+			} catch ( \Throwable $exception ) {
+				return false;
+			}
+		}
+
+		/**
 		 * `woocommerce_generate_woodev_city_limit_html` — draws the cities field's table row.
 		 *
 		 * @internal
@@ -332,7 +371,13 @@ if ( ! class_exists( __NAMESPACE__ . '\City_Limit_Form' ) ) :
 			$field_key   = $settings->get_field_key( $key );
 			$instance_id = isset( $settings->instance_id ) ? (int) $settings->instance_id : 0;
 			$service     = self::service();
-			$view        = self::build_view( $settings->get_option( $key ), City_Limit::zone_scope( $instance_id ), $service, $service->is_active() );
+			$view        = self::build_view(
+				$settings->get_option( $key ),
+				City_Limit::zone_scope( $instance_id ),
+				$service,
+				$service->is_active(),
+				static fn( string $value ): bool => self::persist_cities( $settings, $key, $value )
+			);
 
 			$config = [
 				'inputId'    => $field_key,

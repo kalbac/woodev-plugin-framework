@@ -2229,7 +2229,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * with `$stored`'s own label (or, failing that, its own level's
 		 * component name) scoped to `$stored`'s parent components, and accepts
 		 * only an UNAMBIGUOUS match (review finding F2b) — see
-		 * {@see self::unambiguous_match()}. Never throws: a provider failure,
+		 * {@see self::matching_candidates()}. Never throws: a provider failure,
 		 * an empty/refused query, an unnarrowable scope, or no unambiguous
 		 * match at all, all resolve to `null`.
 		 *
@@ -2240,8 +2240,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 *              DaData's own constraint builder reads only `region`/
 		 *              `settlement` names, so an empty components array yields
 		 *              no `locations` filter at all).
-		 * @since 2.0.2 Requires {@see self::unambiguous_match()} instead of
+		 * @since 2.0.2 Requires {@see self::matching_candidates()} instead of
 		 *              blindly accepting `$records[0]` (review finding F2b).
+		 * @since 2.0.2 Matches a settlement by bare name + region when the display label differs, and retries
+		 *              with the bare name when the label finds nothing (#1185: another provider formats labels
+		 *              its own way).
 		 *
 		 * @param Location_Provider $provider The provider to re-resolve through.
 		 * @param Location_Record   $stored   The stranded stored record.
@@ -2249,9 +2252,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * @return Location_Record|null
 		 */
 		private function reresolve_fixed_default( Location_Provider $provider, Location_Record $stored ): ?Location_Record {
-			$query = self::query_text_for( $stored );
+			$queries = self::queries_for( $stored );
 
-			if ( '' === $query ) {
+			if ( [] === $queries ) {
 				return null;
 			}
 
@@ -2259,15 +2262,28 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 				return null;
 			}
 
-			try {
-				// Stamped for THIS provider call: a provider reports its narrowing on the scope, and an unstamped
-				// one raises `_doing_it_wrong()` — printed into an AJAX reply when display_errors is on.
-				$records = $provider->suggest( $query, self::scope_for_reresolution( $stored )->for_provider( $provider->get_id() ) );
-			} catch ( \Throwable $exception ) {
-				return null;
+			foreach ( $queries as $query ) {
+				try {
+					// Stamped for THIS provider call: a provider reports its narrowing on the scope, and an unstamped
+					// one raises `_doing_it_wrong()` — printed into an AJAX reply when display_errors is on.
+					$records = $provider->suggest( $query, self::scope_for_reresolution( $stored )->for_provider( $provider->get_id() ) );
+				} catch ( \Throwable $exception ) {
+					return null;
+				}
+
+				$matches = self::matching_candidates( $records, $stored );
+
+				// Two places answer to the name (homonyms): never guess, and never let a looser query pick one.
+				if ( count( $matches ) > 1 ) {
+					return null;
+				}
+
+				if ( 1 === count( $matches ) ) {
+					return $matches[0];
+				}
 			}
 
-			return self::unambiguous_match( $records, $stored );
+			return null;
 		}
 
 		/**
@@ -2287,34 +2303,85 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		}
 
 		/**
-		 * Picks the ONE candidate `$records` that unambiguously replaces
-		 * `$stored` (review finding F2b): a match at the SAME level carrying
-		 * the EXACT SAME display label — accepted only when it is the ONE such
-		 * candidate. Zero matches, or more than one (e.g. two same-named
-		 * settlements in different regions — the exact "Мирный" scenario the
-		 * review measured against DaData), both refuse rather than guess;
-		 * `$records[0]` alone was never a safe proxy for "the merchant's own
-		 * locality", since the provider is answering a bare label with no
-		 * enforceable parent scope on a provider that ignores an empty one.
+		 * The candidates that name the same place as `$stored` (#1185): the SAME level, no region that contradicts
+		 * the stored one, and either the exact same display label or — for a settlement — the same bare name in the
+		 * same region.
+		 *
+		 * The name-and-region rule is what carries a record across providers: a display label is formatted by the
+		 * provider that produced it («г Пушкин» / «Пушкин, Санкт-Петербург»), the settlement and region names are
+		 * what the providers share. It needs the region on BOTH sides — a candidate without one cannot vouch for
+		 * the place, so only the label rule can accept it. A region on both sides that disagrees refuses the candidate
+		 * whatever its label says (the same-named settlement of another region).
+		 *
+		 * The caller accepts a result only when it is the ONE candidate (review finding F2b): zero or several
+		 * (two same-named settlements — the «Мирный» scenario the review measured against DaData) refuse rather
+		 * than guess; `$records[0]` was never a safe proxy for «the merchant's own locality».
 		 *
 		 * @since 2.0.2
 		 *
 		 * @param Location_Record[] $records Candidates `$provider->suggest()` returned.
-		 * @param Location_Record   $stored  The stranded stored record being replaced.
+		 * @param Location_Record   $stored  The stored record being replaced.
 		 *
-		 * @return Location_Record|null
+		 * @return Location_Record[]
 		 */
-		private static function unambiguous_match( array $records, Location_Record $stored ): ?Location_Record {
-			$matches = array_values(
+		private static function matching_candidates( array $records, Location_Record $stored ): array {
+			$stored_region    = $stored->region();
+			$stored_settle    = $stored->settlement();
+			$by_name          = Location_Record::LEVEL_SETTLEMENT === $stored->level() && null !== $stored_region && null !== $stored_settle;
+			$stored_region_nm = null !== $stored_region ? self::normalize_region_name( (string) $stored_region['name'] ) : '';
+			$stored_city_nm   = null !== $stored_settle ? Location_Record::normalize_city_name( (string) $stored_settle['name'], (string) ( $stored_settle['type'] ?? '' ) ) : '';
+
+			return array_values(
 				array_filter(
 					$records,
-					static fn( $candidate ): bool => $candidate instanceof Location_Record
-						&& $candidate->level() === $stored->level()
-						&& $candidate->label() === $stored->label()
+					static function ( $candidate ) use ( $stored, $stored_region, $by_name, $stored_region_nm, $stored_city_nm ): bool {
+						if ( ! $candidate instanceof Location_Record || $candidate->level() !== $stored->level() ) {
+							return false;
+						}
+
+						$region         = $candidate->region();
+						$region_matches = null !== $stored_region && null !== $region && self::normalize_region_name( (string) $region['name'] ) === $stored_region_nm;
+
+						if ( null !== $stored_region && null !== $region && ! $region_matches ) {
+							return false;
+						}
+
+						if ( $candidate->label() === $stored->label() ) {
+							return true;
+						}
+
+						$settlement = $candidate->settlement();
+
+						return $by_name
+							&& $region_matches
+							&& null !== $settlement
+							&& '' !== $stored_city_nm
+							&& Location_Record::normalize_city_name( (string) $settlement['name'], (string) ( $settlement['type'] ?? '' ) ) === $stored_city_nm;
+					}
 				)
 			);
+		}
 
-			return 1 === count( $matches ) ? $matches[0] : null;
+		/**
+		 * The free-text queries {@see self::reresolve_fixed_default()} asks the new provider, in order: the stored
+		 * display label ({@see self::query_text_for()}) and — for a settlement — its bare name, which another
+		 * provider's search understands even when it does not parse the first provider's label formatting.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Location_Record $stored The stored record.
+		 *
+		 * @return string[] Distinct, non-empty; `[]` when there is nothing to search by.
+		 */
+		private static function queries_for( Location_Record $stored ): array {
+			$queries    = [ self::query_text_for( $stored ) ];
+			$settlement = Location_Record::LEVEL_SETTLEMENT === $stored->level() ? $stored->settlement() : null;
+
+			if ( null !== $settlement ) {
+				$queries[] = trim( (string) $settlement['name'] );
+			}
+
+			return array_values( array_unique( array_filter( $queries, static fn( string $query ): bool => '' !== $query ) ) );
 		}
 
 		/**
