@@ -331,12 +331,63 @@ class OrderRowBuilderTest extends TestCase {
 		$this->assertSame( 'https://cdek.ru/track/1234567890', $row['tracking']['url'] );
 	}
 
+	public function test_tracking_uses_a_declared_absolute_order_url(): void {
+		Functions\when( 'wp_parse_url' )->alias( static function ( $url ) { return parse_url( $url ); } );
+		$this->meta['_tracking']     = 'ABC 123';
+		$this->meta['_tracking_url'] = 'https://tracking.example.test/request/abc?share=one&source=carrier';
+		$provider = $this->provider(
+			[
+				'tracking_meta_key'     => '_tracking',
+				'tracking_url_meta_key' => '_tracking_url',
+				'tracking_url_template' => 'https://carrier.example.test/{tracking}',
+			]
+		);
+
+		$row = ( new Order_Row_Builder() )->build( $this->make_order(), $provider );
+
+		$this->assertSame( 'https://tracking.example.test/request/abc?share=one&source=carrier', $row['tracking']['url'] );
+	}
+
+	public function test_tracking_falls_back_to_template_for_empty_or_invalid_absolute_url(): void {
+		Functions\when( 'wp_parse_url' )->alias( static function ( $url ) { return parse_url( $url ); } );
+		$provider = $this->provider(
+			[
+				'tracking_meta_key'      => '_tracking',
+				'tracking_url_meta_key'  => '_tracking_url',
+				'tracking_url_template'  => 'https://carrier.example.test/{tracking}',
+			]
+		);
+		$this->meta['_tracking'] = 'ABC 123';
+
+		$cases = [
+			''                                  => 'https://carrier.example.test/ABC%20123',
+			'javascript:alert(1)'               => 'https://carrier.example.test/ABC%20123',
+			'javascript://example.com/%0Aalert(1)' => 'https://carrier.example.test/ABC%20123',
+			'ftp://h.test/x'                    => 'https://carrier.example.test/ABC%20123',
+			'data://text/html,x'                => 'https://carrier.example.test/ABC%20123',
+			'not a URL'                          => 'https://carrier.example.test/ABC%20123',
+			'HTTPS://tracking.example.test/ABC' => 'HTTPS://tracking.example.test/ABC',
+		];
+		foreach ( $cases as $absolute_url => $expected_url ) {
+			$this->meta['_tracking_url'] = $absolute_url;
+			$row                         = ( new Order_Row_Builder() )->build( $this->make_order(), $provider );
+
+			$this->assertSame( $expected_url, $row['tracking']['url'] );
+		}
+	}
+
 	/**
 	 * No number means null number AND null url — '—' is a display fallback, not this
 	 * class's job.
 	 */
 	public function test_tracking_is_null_not_a_dash_when_no_number(): void {
-		$provider = $this->provider( [ 'tracking_meta_key' => '_wc_edostavka_tracking_code' ] );
+		$this->meta['_tracking_url'] = 'https://tracking.example.test/request/abc';
+		$provider = $this->provider(
+			[
+				'tracking_meta_key'     => '_tracking',
+				'tracking_url_meta_key' => '_tracking_url',
+			]
+		);
 
 		$row = ( new Order_Row_Builder() )->build( $this->make_order(), $provider );
 

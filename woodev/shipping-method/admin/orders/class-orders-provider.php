@@ -117,6 +117,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		private $tracking_url_template;
 
 		/**
+		 * Order-meta key containing an absolute tracking URL, or null when this carrier
+		 * only provides a tracking-number template.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var string|null
+		 */
+		private $tracking_url_meta_key;
+
+		/**
 		 * Order-meta key the carrier's tracking number lives under, or null when this
 		 * carrier has no tracking number of its own.
 		 *
@@ -221,6 +231,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		 * @param array<string,string> $status_map                 raw status => canonical state.
 		 * @param array<string,string> $status_labels              raw status => human label.
 		 * @param string|null          $tracking_url_template      tracking-number link template.
+		 * @param string|null          $tracking_url_meta_key      absolute tracking-URL order-meta key.
 		 * @param string|null          $tracking_meta_key          tracking-number order-meta key.
 		 * @param string|null          $pickup_point_meta_key      pickup-point order-meta key.
 		 * @param string|null          $carrier_order_id_meta_key  carrier-order-id order-meta key.
@@ -238,6 +249,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 			array $status_map,
 			array $status_labels,
 			?string $tracking_url_template,
+			?string $tracking_url_meta_key,
 			?string $tracking_meta_key,
 			?string $pickup_point_meta_key,
 			?string $carrier_order_id_meta_key,
@@ -255,6 +267,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 			$this->status_map                = $status_map;
 			$this->status_labels             = $status_labels;
 			$this->tracking_url_template     = $tracking_url_template;
+			$this->tracking_url_meta_key     = $tracking_url_meta_key;
 			$this->tracking_meta_key         = $tracking_meta_key;
 			$this->pickup_point_meta_key     = $pickup_point_meta_key;
 			$this->carrier_order_id_meta_key = $carrier_order_id_meta_key;
@@ -283,6 +296,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		 *     @type array<string,string> $status_map                raw status => canonical state.
 		 *     @type array<string,string> $status_labels             raw status => human label.
 		 *     @type string               $tracking_url_template     tracking-number link template.
+		 *     @type string               $tracking_url_meta_key     absolute tracking-URL order-meta key. Honoured only
+		 *                                                          when `tracking_meta_key` is also declared and the order
+		 *                                                          has a tracking number.
 		 *     @type string               $tracking_meta_key         tracking-number order-meta key.
 		 *     @type string               $pickup_point_meta_key     pickup-point order-meta key.
 		 *     @type string               $carrier_order_id_meta_key carrier-order-id order-meta key (SP-10 #841).
@@ -354,6 +370,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 				$string_map( $args, 'status_map' ),
 				$string_map( $args, 'status_labels' ),
 				$nullable_string( $args, 'tracking_url_template' ),
+				$nullable_string( $args, 'tracking_url_meta_key' ),
 				$nullable_string( $args, 'tracking_meta_key' ),
 				$nullable_string( $args, 'pickup_point_meta_key' ),
 				$nullable_string( $args, 'carrier_order_id_meta_key' ),
@@ -465,6 +482,32 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		 */
 		public function get_tracking_url_template(): ?string {
 			return $this->tracking_url_template;
+		}
+
+		/**
+		 * Returns this order's declared absolute tracking URL when it is a valid HTTP(S) URL.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order order.
+		 * @return string|null
+		 */
+		public function resolve_tracking_url( \WC_Order $order ): ?string {
+			if ( null === $this->tracking_url_meta_key || null === $this->tracking_meta_key ) {
+				return null;
+			}
+
+			$value = \Woodev_Order_Compatibility::get_order_meta( $order, $this->tracking_url_meta_key );
+			if ( ! is_string( $value ) || false === filter_var( $value, FILTER_VALIDATE_URL ) ) {
+				return null;
+			}
+
+			$parts = wp_parse_url( $value );
+			if ( ! is_array( $parts ) || ! isset( $parts['scheme'], $parts['host'] ) || ! in_array( strtolower( $parts['scheme'] ), [ 'http', 'https' ], true ) ) {
+				return null;
+			}
+
+			return $value;
 		}
 
 		/**

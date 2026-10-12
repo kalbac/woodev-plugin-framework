@@ -276,6 +276,87 @@ final class DeliveryStatusEmailTest extends TestCase {
 		$this->assertStringContainsString( '<a href="https://track.test/?n=TRK%3Cscript%3Ealert%281%29%3C%2Fscript%3E">', $html, 'the tracking URL is a link' );
 	}
 
+	public function test_email_uses_the_declared_absolute_tracking_url(): void {
+		Functions\when( 'wp_parse_url' )->alias( static function ( $url ) { return parse_url( $url ); } );
+		Functions\when( 'esc_url' )->alias( static function ( $url ) { return filter_var( $url, FILTER_VALIDATE_URL ) ? $url : ''; } );
+		Functions\when( 'wc_get_template_html' )->alias( static function ( $template, $args ) { return $args['body']; } );
+		$this->meta['_tracking_url'] = 'https://tracking.example.test/request/abc?share=one&source=carrier';
+		$this->meta['_tracking'] = 'ABC 123';
+		$provider = Orders_Provider::create(
+			'test',
+			'Carrier',
+			'_marker',
+			[ 'test_shipping' ],
+			[
+				'tracking_meta_key'     => '_tracking',
+				'tracking_url_meta_key' => '_tracking_url',
+				'tracking_url_template' => 'https://track.test/{tracking}',
+			]
+		);
+		$email = new Delivery_Status_Email( 'customer_shipment_created', 'T', 'D', [ Delivery_Status::CREATED ], 'S', 'H', '{tracking_url}', true );
+
+		$email->maybe_trigger( $this->order( 'buyer@example.test' ), null, Delivery_Status::CREATED, $provider );
+
+		$this->assertStringContainsString( '<a href="https://tracking.example.test/request/abc?share=one&source=carrier">', $email->get_content_html() );
+	}
+
+	public function test_email_omits_the_absolute_tracking_url_when_the_order_has_no_tracking_number(): void {
+		Functions\when( 'esc_url' )->alias( static function ( $url ) { return filter_var( $url, FILTER_VALIDATE_URL ) ? $url : ''; } );
+		Functions\when( 'wc_get_template_html' )->alias( static function ( $template, $args ) { return $args['body']; } );
+		$this->meta['_tracking_url'] = 'https://tracking.example.test/request/abc';
+		$provider = Orders_Provider::create(
+			'test',
+			'Carrier',
+			'_marker',
+			[ 'test_shipping' ],
+			[
+				'tracking_meta_key'     => '_tracking',
+				'tracking_url_meta_key' => '_tracking_url',
+				'tracking_url_template' => 'https://track.test/{tracking}',
+			]
+		);
+		$email = new Delivery_Status_Email( 'customer_shipment_created', 'T', 'D', [ Delivery_Status::CREATED ], 'S', 'H', '{tracking_url}', true );
+
+		$email->maybe_trigger( $this->order( 'buyer@example.test' ), null, Delivery_Status::CREATED, $provider );
+
+		$this->assertSame( '', $email->get_content_html() );
+	}
+
+	public function test_email_falls_back_to_template_for_empty_or_invalid_absolute_tracking_url(): void {
+		Functions\when( 'wp_parse_url' )->alias( static function ( $url ) { return parse_url( $url ); } );
+		Functions\when( 'esc_url' )->alias( static function ( $url ) { return filter_var( $url, FILTER_VALIDATE_URL ) ? $url : ''; } );
+		Functions\when( 'wc_get_template_html' )->alias( static function ( $template, $args ) { return $args['body']; } );
+		$this->meta['_tracking'] = 'ABC 123';
+		$provider = Orders_Provider::create(
+			'test',
+			'Carrier',
+			'_marker',
+			[ 'test_shipping' ],
+			[
+				'tracking_meta_key'      => '_tracking',
+				'tracking_url_meta_key'  => '_tracking_url',
+				'tracking_url_template'  => 'https://track.test/{tracking}',
+			]
+		);
+		$email = new Delivery_Status_Email( 'customer_shipment_created', 'T', 'D', [ Delivery_Status::CREATED ], 'S', 'H', '{tracking_url}', true );
+
+		$cases = [
+			''                                  => '<a href="https://track.test/ABC%20123">',
+			'javascript:alert(1)'               => '<a href="https://track.test/ABC%20123">',
+			'javascript://example.com/%0Aalert(1)' => '<a href="https://track.test/ABC%20123">',
+			'ftp://h.test/x'                    => '<a href="https://track.test/ABC%20123">',
+			'data://text/html,x'                => '<a href="https://track.test/ABC%20123">',
+			'not a URL'                          => '<a href="https://track.test/ABC%20123">',
+			'HTTPS://tracking.example.test/ABC' => '<a href="HTTPS://tracking.example.test/ABC">',
+		];
+		foreach ( $cases as $absolute_url => $expected_link ) {
+			$this->meta['_tracking_url'] = $absolute_url;
+			unset( $this->meta['_woodev_delivery_email_customer_shipment_created'] );
+			$email->maybe_trigger( $this->order( 'buyer@example.test' ), null, Delivery_Status::CREATED, $provider );
+			$this->assertStringContainsString( $expected_link, $email->get_content_html() );
+		}
+	}
+
 	public function test_one_listener_hands_a_published_status_to_every_email_without_the_mailer_being_built_first(): void {
 		$emails   = Delivery_Status_Emails::instance();
 		$provider = Orders_Provider::create( 'test', 'Carrier', '_marker', [ 'test_shipping' ] );
