@@ -269,8 +269,9 @@ Self-contained shipping box-packing algorithm. Implement `Woodev_Packer_Item_Int
 `Woodev_Packer_Box_Interface`; use a `Woodev_Abstract_Packer` subclass (`Woodev_Packer_Single_Box`,
 `Woodev_Packer_Separately`, `Woodev_Packer_Virtual_Box`).
 
-`Woodev_Packer_Dispatcher::pack()` routes four algorithms — `virtual`, `separately`, `single` and `boxes`
-(`Woodev_Packer_Boxes`, #1138). Shipping methods combine enabled **store boxes** («Доставка» →
+`Woodev_Packer_Dispatcher::pack()` routes three selectable algorithms — `virtual`, `separately` and `boxes`
+(`Woodev_Packer_Boxes`, #1138). The legacy `single` constant and class remain readable for stored settings,
+but `normalize_stored_algorithm()` maps a stored `single` value to `virtual` (#1212). Shipping methods combine enabled **store boxes** («Доставка» →
 «Упаковка», `Boxes_Settings`, option `woodev_boxes_boxes`, in store units) with enabled presets of
 only their own carrier (`Shipping_Plugin::get_box_presets()`, `Packaging_Settings`). Carrier presets
 use fixed cm/kg units. Selection maximises packed units to reduce parcels; store boxes win on equal
@@ -287,8 +288,9 @@ volume wins and, within 10 % of it, the shortest longest side. The work is bound
 by the clock (determinism — the rate cache keys on the box): at most 48 footprints, fewer as the
 unit count grows, none above 120 units, where the old arithmetic grid box is returned; the grid is
 also the volume ceiling the placed box never exceeds (and the fallback when no placement fits under it). `get_placement()` exposes the frame and every unit's
-corners for verification. Note `Woodev_Box_Packer_Packed_Box` itself does NOT place anything: it
-checks per-item fit and summed volume only, so `Woodev_Packer_Boxes` is a volume packer, not a 3-D one.
+corners for verification. `Woodev_Box_Packer_Packed_Box` uses `Woodev_Packer_Free_Space` to place units in a real
+layout when placement is required (#1214). Merchant-box packing tries the box's axis orders and accepts a parcel
+only when every packed unit has a valid position; the older volume-only behavior is recorded as a resolved gotcha.
 Every `Woodev_Packer_Package_Result` reports source item allocation (`get_items()`: cart-item key /
 order-item id, product id, quantity), box id, and origin (`store`, `carrier`, or empty). Export
 retains the same item-allocation contract.

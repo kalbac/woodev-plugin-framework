@@ -25,11 +25,11 @@ box volume. No coordinates, no layers, no voids. Found by Fable while designing 
 
 ## Fix
 
-❌ Trusting `Woodev_Packer_Boxes` / `Packed_Box::get_packed_items()` as proof that items fit a given box.
+❌ The historical behavior trusted `Woodev_Packer_Boxes` / `Packed_Box::get_packed_items()` without verifying a layout.
 
-✅ For «does this set fit this box» use a real placement: `Woodev_Packer_Virtual_Box` (#1212, PR #1213) places
-units into maximal free spaces and exposes `get_placement()`. Rebuilding the merchant-boxes mode on it is card
-#1214; the parcel-locker cell check (#1215) must use it with the cell as a fixed box.
+✅ Since #1214, merchant-box packing uses `Woodev_Packer_Free_Space` through `Woodev_Box_Packer_Packed_Box` and
+accepts a parcel only when each item has a valid placement. The parcel-locker cell check uses the same placement
+primitive with the cell as a fixed box (#1215).
 
 ## Related
 
