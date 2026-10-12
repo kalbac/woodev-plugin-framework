@@ -6087,8 +6087,8 @@ msgid "На сайте активен плагин %1$s. Он тоже доба�
 msgstr "На сайте активен плагин %1$s. Он тоже добавляет методы доставки %2$s: на оформлении заказа появятся дубли, а заказы могут уйти в %3$s дважды. Во избежание конфликтов отключите плагин %1$s."
 
 #: competitor/class-carrier-competitor-notification-handler.php:130
-msgid "Информация от Woodev: обнаружен сторонний плагин %s"
-msgstr "Информация от Woodev: обнаружен сторонний плагин %s"
+msgid "Информация от Woodev: обнаружен плагин %s стороннего разработчика"
+msgstr "Информация от Woodev: обнаружен плагин %s стороннего разработчика"
 
 #: competitor/class-carrier-competitor-notification-handler.php:136
 msgid "Отключить %s"
@@ -6103,8 +6103,8 @@ msgid "Информация от Woodev: плагин для %s"
 msgstr "Информация от Woodev: плагин для %s"
 
 #: competitor/class-carrier-competitor-notification-handler.php:186
-msgid "На сайте работает плагин <strong>%1$s</strong>. У Woodev есть плагин для %2$s: <strong>%3$s</strong>."
-msgstr "На сайте работает плагин <strong>%1$s</strong>. У Woodev есть плагин для %2$s: <strong>%3$s</strong>."
+msgid "На сайте работает плагин стороннего разработчика <strong>%1$s</strong>. У Woodev есть плагин для %2$s: <strong>%3$s</strong>."
+msgstr "На сайте работает плагин стороннего разработчика <strong>%1$s</strong>. У Woodev есть плагин для %2$s: <strong>%3$s</strong>."
 
 #: competitor/class-carrier-competitor-notification-handler.php:89
 msgid "Скрыть"

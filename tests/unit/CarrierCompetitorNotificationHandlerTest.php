@@ -54,7 +54,7 @@ class CarrierCompetitorNotificationHandlerTest extends TestCase {
 		$handler->run();
 
 		$this->assertCount( 1, $notices );
-		$this->assertStringContainsString( 'Информация от Woodev: обнаружен сторонний плагин СДЭК', $notices[0]['message'] );
+		$this->assertStringContainsString( 'Информация от Woodev: обнаружен плагин СДЭК стороннего разработчика', $notices[0]['message'] );
 		$this->assertStringContainsString( 'На сайте активен плагин CDEKDelivery.', $notices[0]['message'] );
 		$this->assertStringContainsString( 'Во избежание конфликтов отключите плагин CDEKDelivery.', $notices[0]['message'] );
 		$this->assertStringContainsString( 'Отключить CDEKDelivery', $notices[0]['message'] );

@@ -127,7 +127,7 @@ final class Carrier_Competitor_Notification_Handler extends Competitor_Notificat
 		);
 
 		return [
-			'title'   => sprintf( __( 'Информация от Woodev: обнаружен сторонний плагин %s', 'woodev-plugin-framework' ), $product['carrier_name'] ),
+			'title'   => sprintf( __( 'Информация от Woodev: обнаружен плагин %s стороннего разработчика', 'woodev-plugin-framework' ), $product['carrier_name'] ),
 			'content' => $content,
 			'type'    => self::TYPE_ERROR,
 			'actions' => [
@@ -183,7 +183,7 @@ final class Carrier_Competitor_Notification_Handler extends Competitor_Notificat
 				[
 					'title'   => sprintf( __( 'Информация от Woodev: плагин для %s', 'woodev-plugin-framework' ), $product['carrier_name'] ),
 					'content' => sprintf(
-						__( 'На сайте работает плагин <strong>%1$s</strong>. У Woodev есть плагин для %2$s: <strong>%3$s</strong>.', 'woodev-plugin-framework' ),
+						__( 'На сайте работает плагин стороннего разработчика <strong>%1$s</strong>. У Woodev есть плагин для %2$s: <strong>%3$s</strong>.', 'woodev-plugin-framework' ),
 						esc_html( $rule->get_competitor_name() ),
 						esc_html( $product['carrier_name'] ),
 						esc_html( $product['name'] )

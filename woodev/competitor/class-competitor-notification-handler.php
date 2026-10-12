@@ -153,7 +153,7 @@ abstract class Competitor_Notification_Handler {
 
 		} else {
 
-			$title   = $rule->get_title_override() ?? 'Информация от Woodev: обнаружен сторонний плагин доставки';
+			$title   = $rule->get_title_override() ?? 'Информация от Woodev: обнаружен плагин доставки стороннего разработчика';
 			$content = $rule->get_content_override() ?? $this->default_conflict_content( $rule );
 
 			$actions = [
