@@ -6,8 +6,8 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-12 (s172).** Framework `main` and plugin `v2` (pin `df28f273`) carry s171's merges — list in `sessions/s171.md`; s172 merged plugin #83 (production CDEK checks, `sessions/s172.md`). 🚧 **v2 release = TWO carrier plugins on v2, tested and compatible**
-(#1179): CDEK production checks DONE (s172, plugin #83, no plugin defect); next Yandex. Block-checkout gaps do not block the release.
+**As of 2026-10-12 (s173).** Framework `main` `27df83b5` and plugin `v2` `52667fc` (pin `27df83b5`) carry s173's merges — #1185, #1166, plugin #84 (#1167), #85; list in `sessions/s173.md`. 🚧 **v2 release = TWO carrier plugins on v2, tested and compatible**
+(#1179): CDEK production checks DONE (s172), the deferred CDEK cards DONE (s173); next Yandex. Block-checkout gaps do not block the release.
 Next checks: `next-session-prompt.md`. ⚠ Sync the plugin’s own `woodev/` before plugin rig runs
 (`wiki/local-rig.md`). The rig admin user has locale **ru_RU**; the site stays **en_US**.
 GlitchTip receiver (#1082) is live. **Both machines are live**; routine sync is git ONLY
@@ -275,9 +275,10 @@ only consumer; they get rewritten once everything is ready.
 
 ## Next Actions
 
-**Next (operator, s172): a real audit of every «Бэклог» card against code (s171 audited only the Инбокс), then
-the deferred CDEK cards #1185, #1166 + #1167. The Yandex v2 plugin (#1179) is approached with the operator. Take work from the board’s priority field, after checking
-the card against code. The old migration pilot remains frozen.
+**Next: the Yandex v2 plugin (#1179) — brainstorm WITH the operator, by code (framework seams + the CDEK plugin as the
+first consumer), before any card is cut.** The Бэклог was audited against code in s173 (55 cards, none fully done). Take
+other work from the board’s priority field after checking the card against code. The old migration pilot remains frozen; the
+v1→v2 migration stand was torn down in s173 (rebuild from the plugin’s `tests/migration-stand/`, see edostavka#86).
 
 **Issue lists and priorities live on the board.** `FUTURE-BACKLOG.md` is frozen.
 
