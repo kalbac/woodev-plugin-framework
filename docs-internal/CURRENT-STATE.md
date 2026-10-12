@@ -275,8 +275,8 @@ only consumer; they get rewritten once everything is ready.
 
 ## Next Actions
 
-**Next: the CDEK production checks are done (s172); approach the Yandex
-v2 plugin (#1179) with the operator. Take work from the board’s priority field, after checking
+**Next (operator, s172): a real audit of every «Бэклог» card against code (s171 audited only the Инбокс), then
+the deferred CDEK cards #1185, #1166 + #1167. The Yandex v2 plugin (#1179) is approached with the operator. Take work from the board’s priority field, after checking
 the card against code. The old migration pilot remains frozen.
 
 **Issue lists and priorities live on the board.** `FUTURE-BACKLOG.md` is frozen.
