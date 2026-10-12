@@ -186,7 +186,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 				$tracking = (string) \Woodev_Order_Compatibility::get_order_meta( $order, $provider->get_tracking_meta_key() );
 			}
 			if ( null !== $provider ) {
-				$url = $provider->resolve_tracking_url( $order ) ?? '';
+				$url = '' !== $tracking ? ( $provider->resolve_tracking_url( $order ) ?? '' ) : '';
 				if ( '' === $url ) {
 					$template = $provider->get_tracking_url_template();
 					$url      = '' !== $tracking && null !== $template ? str_replace( '{tracking}', rawurlencode( $tracking ), $template ) : '';

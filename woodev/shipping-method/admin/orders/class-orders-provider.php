@@ -296,7 +296,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		 *     @type array<string,string> $status_map                raw status => canonical state.
 		 *     @type array<string,string> $status_labels             raw status => human label.
 		 *     @type string               $tracking_url_template     tracking-number link template.
-		 *     @type string               $tracking_url_meta_key     absolute tracking-URL order-meta key.
+		 *     @type string               $tracking_url_meta_key     absolute tracking-URL order-meta key. Honoured only
+		 *                                                          when `tracking_meta_key` is also declared and the order
+		 *                                                          has a tracking number.
 		 *     @type string               $tracking_meta_key         tracking-number order-meta key.
 		 *     @type string               $pickup_point_meta_key     pickup-point order-meta key.
 		 *     @type string               $carrier_order_id_meta_key carrier-order-id order-meta key (SP-10 #841).
@@ -491,7 +493,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		 * @return string|null
 		 */
 		public function resolve_tracking_url( \WC_Order $order ): ?string {
-			if ( null === $this->tracking_url_meta_key ) {
+			if ( null === $this->tracking_url_meta_key || null === $this->tracking_meta_key ) {
 				return null;
 			}
 
