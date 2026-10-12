@@ -44,8 +44,10 @@ default; it is only a trap because the receipt reads like success.
 orca orchestration worker-release --dispatch <id> --json   # -> check .result.state
 ```
 
-If it says `retained` (or `release_pending` / `release_unknown` — for those, follow the recovery
-action the receipt names), close the terminal yourself:
+For `release_pending` / `release_unknown`, follow the receipt’s recovery action and the
+installed `orca skills get orchestration` guide; do not close uncertain resources blindly.
+For a proven settled, retained terminal that this session owns and no longer needs, confirm
+its identity and idle state before closing:
 
 ```bash
 orca terminal read  --terminal <handle> --screen --json    # confirm nothing is in flight FIRST

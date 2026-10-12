@@ -6,6 +6,10 @@
 
 > **Superseded for implementation planning (2026-06-01, see [ADR-003](003-platform-v2-minimal-framework-resolver.md)):** ADR-003 treats this ADR as superseded for future implementation planning — the broad platform-aware loader preserved too much legacy entry-file behavior as architecture. The core commitment that survives: `bootstrap.php` remains the compatibility entry point and multi-version framework arbitration remains a v2.0 requirement; the real logic moved behind it into the namespaced minimal resolver.
 
+> **Historical class names:** the original `Woodev_Woocommerce_Plugin` proposal is
+> implemented as `Woodev\Framework\Woocommerce_Plugin`; `Woodev_EDD_Plugin` was a
+> future proposal and is not present in the current tree.
+
 ## Context
 
 `docs-internal/archive/platform-v2-dependency-matrix.md` identifies `bootstrap.php` as a P0 spike item because it currently combines multi-version framework resolution, WooCommerce dependency checks, and conditional module loading. `PLANS.md` section 2 defines the target model as a platform-neutral `Woodev_Plugin` base with platform-specific subclasses such as `Woodev_Woocommerce_Plugin` and future `Woodev_EDD_Plugin`. `PLANS.md` section 5 leaves the fate of `bootstrap.php` open before a full implementation spec can be written.

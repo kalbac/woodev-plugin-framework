@@ -77,7 +77,7 @@ registration automatically.
 - **No flag in the constructor** — there is no `$is_wc_plugin` boolean. A plugin
   is a WooCommerce plugin iff it extends `Woocommerce_Plugin`.
 - **Forward-compatible** — a future platform (e.g. EDD in v3) gets its own
-  `Woodev_Edd_Plugin` base that registers its hooks from its own constructor. The
+  `Woodev\Framework\Edd_Plugin` (proposed; not implemented) base that registers its hooks from its own constructor. The
   platform-neutral `Woodev_Plugin` is never edited for new platform extensions.
 
 ### Anti-patterns to avoid

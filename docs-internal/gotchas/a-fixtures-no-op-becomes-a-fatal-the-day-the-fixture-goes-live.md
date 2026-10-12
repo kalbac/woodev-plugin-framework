@@ -2,6 +2,10 @@
 
 **Namespace:** `[rig/fixtures]` · **Measured:** s114 (04.09.2026), issue #758 — every admin page on the rig was white-screening.
 
+> **Resolved repository defect (#758/#759):** `Woodev_Plugin::__construct()` now reports violations of
+> the admin/license/lifecycle handler contracts and constructs their defaults. The incident below is historical; the
+> rule for new fixtures still applies.
+
 ## What happened
 
 `woodev-realistic-shipping-plugin` carried this since 31.05.2026, when it was a PHPUnit-only fixture:

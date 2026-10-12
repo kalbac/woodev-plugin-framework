@@ -42,6 +42,9 @@ framework's own `woodev/class-map.php` autoloader got there first), so the gap i
 The shipped runtime is NOT affected: `woodev/class-map.php` is committed, contains the class,
 and is what plugins actually boot through. This is a dev-autoload defect only.
 
+> **Update (#802):** enabled git hooks refresh the dev autoloader after source-changing
+> git operations. For uncommitted class additions, dump it manually before an isolated run.
+
 ## Fix
 
 ❌ Wrong — diagnosing it as a worktree defect, a bad `vendor` copy, or a defect in the PR
@@ -107,6 +110,6 @@ makes it name exactly those ten with their paths.
 ## Related
 
 - [phpunit-takes-one-path-and-silently-ignores-the-rest](phpunit-takes-one-path-and-silently-ignores-the-rest.md) — the other way a narrowed phpunit invocation misleads you about coverage
-- [a-worktree-silently-skips-five-contract-tests](a-worktree-silently-skips-five-contract-tests.md) — the other "green run that measured less than you think"; compare SKIPPED, which is 66
+- [a-worktree-silently-skips-five-contract-tests](a-worktree-silently-skips-five-contract-tests.md) — the other "green run that measured less than you think"; compare sodium-enabled SKIPPED against a dated baseline
 - [sharing-vendor-breaks-composer-autoload-in-a-worktree](sharing-vendor-breaks-composer-autoload-in-a-worktree.md) — why `vendor` is COPIED into a worktree, never shared
 - [framework-classmap-autoload-vendored-boot](framework-classmap-autoload-vendored-boot.md) — the committed `woodev/class-map.php` the shipped runtime boots through, which is why production is unaffected

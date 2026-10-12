@@ -19,6 +19,11 @@
 **Namespace:** `[tooling/parallel-agents]`
 **Discovered:** s84 (2026-08-21)
 
+> **Version-bound launch history:** the s141/s144 failures below are not a universal
+> current launch recipe. Read the installed Orca guide, inspect residual resources before
+> recovery, and supply an absolute durable REPORT FILE path (canary first word). Model
+> defaults come from `CLAUDE.md`; never infer failure from a timeout alone.
+
 ## What happens
 
 `orca orchestration worker-start --agent codex` exits 0 with `stage: input_accepted` and an effect
@@ -312,8 +317,6 @@ it makes no difference; the remedy is the same.
    times this project guessed instead of measuring, it guessed wrong.
 
 ## The observation itself, kept — it is what a truncated injection looks like from the inside
-
-After the dialog was cleared and the prompt submitted, the Codex worker reported:
 
 After the dialog was cleared and the prompt submitted, the Codex worker reported:
 

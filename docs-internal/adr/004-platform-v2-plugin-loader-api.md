@@ -1,6 +1,6 @@
 # ADR-004: Platform v2 Explicit Plugin Loader API
 
-**Status:** accepted
+**Status:** accepted; compatibility bridge partially superseded by [ADR-005](005-platform-v2-clean-break-policy.md). Legacy positional registration is a tombstone, not an adapter.
 
 **Date:** 2026-05-29
 

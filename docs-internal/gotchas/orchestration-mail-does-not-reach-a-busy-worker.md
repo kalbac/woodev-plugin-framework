@@ -19,9 +19,9 @@ applied mid-turn.
 
 | Need | Use |
 |---|---|
-| Correct a worker that is **working right now** | `orca terminal send --terminal <handle> --text "..." --enter` |
+| Correct a worker that is **working right now** | Send durable dispatch guidance, require `check` at checkpoints, and verify consumption; do not assume a busy-terminal injection is supervised |
 | Guidance the worker will pick up at its next checkpoint | `orca orchestration send --to dispatch:<id>` |
-| A tracked new task | `worker-start` / `dispatch --inject` |
+| A tracked new task | `worker-start` with a new task and the intended worktree |
 
 If the correction matters, **verify it landed** — read the file the worker was about to write, not
 the send receipt. `"ok": true` on the send means the message was stored, never that it was read.

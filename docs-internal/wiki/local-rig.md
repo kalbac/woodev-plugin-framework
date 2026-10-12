@@ -11,6 +11,9 @@ why each of these fixtures exists and what breaks if it is removed.
 
 - **There IS a pickup-type shipping method on the rig now (s81), and it lives OUTSIDE the repo.** Until s81 the only active method was `Woodev Test Shipping`, whose `delivery_type` is `courier` — so `Checkout_Config::pickup_method_ids()` resolved to `[]` and the entire `hide_for_pickup` branch of the checkout-field policy was physically unreachable on the rig. Fixed with a container-only mu-plugin, `wp-content/mu-plugins/zz-rig-test-pickup-shipping.php` (that directory is NOT bind-mounted from the repo — `zz-rig-yandex-key.php` was already there as precedent), registering `woodev_test_pickup_shipping` (`Woodev Test Pickup`) whose `get_delivery_type()` is `pickup`. It is enabled in zone 1 «Russia» as instance 4, alongside `free_shipping` and `woodev_test_shipping`, so a checkout session can switch between a pickup rate and a courier rate. ⛔ **REMOVED in s113 (#737, operator 03.09.2026) — this paragraph is history.** The second real carrier (`woodev_realistic_pickup_shipping`) covers those scenarios properly, while the mu-method was a half-declared carrier whose chosen point never survived a reload. `mu-plugins/` now holds ONLY `zz-rig-yandex-key.php`. The file is not tracked by git; a copy is kept outside the repo, and restoring it means dropping it back into `mu-plugins/`. Verified after removal: the method is gone from the checkout, both real carriers still work, and the #736 reconciliation stays silent.
 
+> **Historical (s110–s111): the container-only method below was removed in s113 (#737).
+> These patch/reinstall descriptions are evidence, not instructions to restore it.**
+
 ### s110 (01.09.2026): the method is now declared in ALL the places the framework asks
 
 Until s110 that mu-plugin declared `get_delivery_type() = 'pickup'` and nothing else, so the rig
@@ -71,11 +74,9 @@ ever drift apart again — this is what would have caught the original defect du
 
 ## `woocommerce_checkout_company_field` is `optional`, deliberately
 
-⚠ **Measured `hidden` again on 01.09.2026 (s110)** — someone took the documented revert below, so
-the §8 root demo IS dark, exactly as this section predicts: the fields are not on the checkout, and
-the operator confirmed it. What is NOT dark is their VALIDATION — `validate()` still enforces their
-`required` flag, so the checkout is blocked by two fields nobody can see or fill. That is a
-framework defect, not a rig one: card **#708**.
+**Historical defect, resolved:** s110 found required takeover fields blocking checkout while
+WooCommerce omitted them. Server #708 and client #721 fixed the visibility/ownership gates.
+Hiding the company field can still hide the demo; it no longer implies that old validation bug.
 
 - **`woocommerce_checkout_company_field` was flipped `hidden` → `optional` on the rig
   (24.08.2026).** The §8 demo moved onto `billing_company`/`billing_address_2` (#481), and
@@ -94,8 +95,9 @@ framework defect, not a rig one: card **#708**.
 - **Two live location providers on the rig now (s76).** DaData is active by default; the CDEK test
   contour is registered as `test-cdek` (fixture
   `tests/_fixtures/woodev-test-shipping-method/class-test-cdek-location-provider.php`) and its
-  credentials sit in the container's wp-config as `WOODEV_TEST_CDEK_CLIENT_ID` /
-  `WOODEV_TEST_CDEK_CLIENT_SECRET`. Flip with
+  credentials are the integration’s `cdek_client_id` / `cdek_client_secret` values in
+  `woocommerce_woodev_test_shipping_method_settings` (read via `get_option()`, not a cached handler;
+  see `the-cdek-fixture-credentials-are-not-the-option-they-look-like`). Flip with
   `wp option update woodev_location_active_provider test-cdek` (back: `dadata`). CDEK serves
   region+settlement only, so with DaData also configured the address level falls back to DaData —
   that is the layer answering honestly, not a bug (gotcha
@@ -107,8 +109,8 @@ framework defect, not a rig one: card **#708**.
 
 ## Why the location axes are set the way they are
 
-**The values themselves live in [../CURRENT-STATE.md](../CURRENT-STATE.md), read off the
-container. This section is only the WHY**, moved here from that file in s101 when it outgrew its
+**Measure values off the container; the standard option table below is the reference
+configuration. This section is only the WHY**, moved here from that file in s101 when it outgrew its
 budget.
 
 The combination left as of 24.08.2026 is **not** the historical default. It is provider
@@ -140,8 +142,9 @@ by design:
 
 ## Which field the live cascade is actually on — measured, s104
 
-`woocommerce_ship_to_destination` on this rig is **`shipping`**, so by Rule 7c the ONE live cascade
-sits on the shipping column. In the DOM that means:
+**As measured in s104**, this rig used the shipping column. The live cascade follows
+the current “ship to a different address” checkbox (Rule 7c), rather than the destination
+option alone; with separate shipping selected, the DOM is:
 
 | Axis | Live element on this rig |
 |---|---|
@@ -271,7 +274,7 @@ then shows both shapes at once, which is closer to production than either alone.
 carrier, so a change to `Woodev_Test_Bulk_Point_Source` never reaches the rig. Reach static data
 through the SECOND carrier.
 
-⚠ Rig state this arrangement required, and which git does not track: `npx wp-env start` (new
+⚠ Rig state this arrangement required, and which git does not track: `npx @wordpress/env start` (new
 mapping), `wp plugin activate woodev-realistic-shipping-plugin`, and the method added to zone 1 as
 instance **5**. The pickup e2e spec uses `woodev_realistic_pickup_shipping` from this fixture;
 it matches the method id and does not depend on the current auto-incremented instance number.
@@ -329,7 +332,7 @@ docker exec -i "$C" sh -c 'cat > /tmp/probe.php' < probe.php
 
 Gotcha: `docker-cp-into-the-wp-env-container-fails-pipe-the-probe-instead`.
 
-Integration tests run through the container, because `npx wp-env run` breaks on command parsing
+Integration tests run through the container, because `npx @wordpress/env run` breaks on command parsing
 here (`MSYS_NO_PATHCONV=1` matters only in Git Bash on Windows; it is harmless on macOS):
 
 ```bash

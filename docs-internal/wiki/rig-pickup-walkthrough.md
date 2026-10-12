@@ -1,37 +1,29 @@
-> Вынесено из `CURRENT-STATE.md` в s87: это процедура, а не состояние, и она читалась на старте
-> каждой сессии без нужды. `CURRENT-STATE.md` держит только указатель сюда.
+# Rig pickup walkthrough — classic checkout
 
-# Риг-проход по слою ПВЗ — порядок, который реально работает (проверено s75)
+> Classic-checkout procedure, originally measured in s75; the block adapter has since shipped.
+> Check the served branch, provider and checkout address state before treating these as live values.
 
-Порядок важен, иначе кнопки ПВЗ просто нет:
+1. Add an item: `http://localhost:8973/?add-to-cart=12`, then open `/classic-checkout/`.
+2. Select **Woodev Test Shipping**; the pickup container is hidden for `free_shipping`.
+3. The shipping column uses `shipping_state`, `shipping_city`, `shipping_address_1` when the
+   separate-shipping checkbox is selected. Rule 7b also fans values into `billing_*`; Rule 7c
+   chooses the active column from the live checkbox. Inspect the current form state.
+4. The site locale is `en_US`; the admin user is `ru_RU` (s170). DaData can return transliteration
+   ("Russia, Moscow city") while a carrier returns Cyrillic, so compare identity as well as labels.
+5. Open the picker with visible `button.woodev-pickup-trigger`. The button can exist while its
+   container is hidden; test visibility. The modal is `.woodev-modal__content` (`role=dialog`),
+   with `.woodev-modal__title` and `.woodev-modal__close`. The old
+   `.woodev-pickup-list__toggle` selector never existed.
+6. After confirming a point, wait for `update_checkout` to settle before reading the fields again.
 
-1. `http://localhost:8973/?add-to-cart=12` — наполнить корзину, затем `/classic-checkout/`.
-2. Выбрать метод доставки **Woodev Test Shipping** (при `free_shipping` кнопка ПВЗ скрыта).
-3. Location-слой сидит на **`shipping_state` / `shipping_city` / `shipping_address_1`** — и,
-   по Rule 7b (#458), фанится ТАКЖЕ в `billing_*`: на риге существуют обе колонки.
-   ⚠ Строка «источник подсказок демо §8 блокирует оформление целиком» держалась здесь до s111 и
-   БОЛЬШЕ НЕ ВЕРНА: оформление блокировали takeover-поля, которых нет на форме — сервер починен
-   в #708, клиентский A2-гейт в #721.
-4. Локаль рига английская: DaData отдаёт транслит («Russia, Moscow city»), карьер — кириллицу.
-   Не баг рига, а естественная почва для расхождения написаний.
-5. Модалка выбора пункта открывается кнопкой **`button.woodev-pickup-trigger`** («Выбрать ПВЗ»).
-   ⚠ Здесь до s111 стояло `.woodev-pickup-list__toggle` — такого селектора в коде нет; ошибку
-   нашёл e2e-сьют при съёме реальных селекторов со страницы. Модалка — `.woodev-modal__content`
-   (`role=dialog`), заголовок `.woodev-modal__title`, закрытие `.woodev-modal__close`.
-   ⚠ Кнопка ПВЗ **всегда отрисована**, а при не-ПВЗ методе скрыт её КОНТЕЙНЕР (`display: none`) —
-   проверять видимость, а не наличие в DOM.
-6. Читать состояние сразу после подтверждения пункта **рано** — идёт `update_checkout`, поля в
-   переходном виде. Подождать и перечитать.
+## Automated coverage
 
-## Это же проверяется автоматически
-
-`npm run test:e2e` (`tests/e2e/checkout-pickup.spec.js`, карточка #723) проходит шаги 1-6 сам:
-колонки полей, `hide_for_pickup`, кнопку ПВЗ, модалку, A2-гейт в обе стороны и живой источник
-подсказок. **Ручной проход он не заменяет** — тест проверяет лишь то, что кто-то догадался
-проверить; #721 нашёл человек, заметивший мёртвую кнопку в несценированном сценарии.
+`npm run test:e2e` (`tests/e2e/checkout-pickup.spec.js`, #723) covers the classic pickup sequence,
+field policies, modal and order-button gate. It does not replace operator acceptance.
+The old missing-takeover-field blocker is resolved by server #708 and client #721.
 
 ## Related
 
-- [../CURRENT-STATE.md](../CURRENT-STATE.md) — «Local rig», состояние и факты инфраструктуры
-- [../gotchas/rig-checkout-url-is-the-block-checkout.md](../gotchas/rig-checkout-url-is-the-block-checkout.md) — почему `/checkout/` это не тот чекаут
-- [../gotchas/rig-serves-the-working-tree-branch-switch-reverts-fixes.md](../gotchas/rig-serves-the-working-tree-branch-switch-reverts-fixes.md) — риг обслуживает рабочее дерево
+- [../CURRENT-STATE.md](../CURRENT-STATE.md) — live state and infrastructure
+- [../gotchas/rig-checkout-url-is-the-block-checkout.md](../gotchas/rig-checkout-url-is-the-block-checkout.md) — classic and block probe selectors
+- [../gotchas/rig-serves-the-working-tree-branch-switch-reverts-fixes.md](../gotchas/rig-serves-the-working-tree-branch-switch-reverts-fixes.md) — the rig serves the working tree

@@ -1,4 +1,10 @@
 # Orchestrating agents with Orca — Woodev Framework Wiki
+
+> **Current authority:** run `orca skills get orchestration` from the installed CLI before lifecycle actions.
+> A failed start can leave residual resources: inspect the receipt before retrying. Timeouts and quiet
+> terminals are not proof of failure. Settle the dispatch before release or reuse, and follow the
+> receipt’s recovery path for uncertain cleanup; historical sections below do not override it.
+> Local Qwen/Kilo recipes are historical fallbacks; the current model roster is `CLAUDE.md`.
 > Compiled reference. Last compiled: 2026-09-06 (s121: closed #779, the last two Orca candidates left
 > over from #381's capability sweep — `worktree set --comment`/`--workspace-status`, live-verified and
 > adopted; `orca-per-workspace-env`, measured against `orca.yaml` and this project's actual pains, and
@@ -188,8 +194,8 @@ without the leading dot, which was never what was configured.
 Passing an empty string does NOT clear a per-repo override — set it to the value you want instead.
 
 **Why same-volume matters:** shared directories are materialised as symlinks on Windows, and
-directory symlinks across volumes need Developer Mode or elevation. On macOS Orca clone-copies them
-instead (`orca.yaml`), so neither the volume rule nor the symlink traps below apply there.
+directory symlinks across volumes need Developer Mode or elevation. On macOS `node_modules` is also a symlink (measured s136 and s171);
+the shared-directory traps apply there too. `vendor` is copied separately.
 
 **Why inside the repo is safe here — measured, not assumed.** Every gate is path-scoped, so none of
 them sees a worktree: phpcs reads `./woodev`, phpstan `paths: woodev`, phpunit `./tests/unit`. With
@@ -264,7 +270,7 @@ reading it). None of that overlaps with the pains the card named:
 - `plugins-reference/` being gitignored is a LOCAL rig-fixture gap (five `Contract/Yandex*` tests
   skip without it — fixed by adding the path to `.worktreeinclude`, not by moving compute off-machine).
 
-There is also no adoption case independent of the card: this project runs on one desktop with no
+There is also no adoption case independent of the card: this project runs on two machines, one at a time, with no
 cloud account or billing set up for sandboxes, and every worktree decision recorded above went the
 OPPOSITE direction on purpose — same-volume placement, a shared `node_modules`, a copied `vendor` —
 to keep everything local and cheap. Standing up `orca-per-workspace-env` would mean taking on a cloud
@@ -278,7 +284,7 @@ project does not have.
 The s83 recipe above is still right. s84 ran twelve dispatches through it and found four things it
 did not say.
 
-*(History.)* **Codex was critic-only until 27.08.2026** (operator decision, 21.08.2026) after s84
+*(History.)* **Codex was initially critic-only** (operator decision, 21.08.2026) after s84
 burned 45% of the weekly Codex allowance in one night; the restriction was lifted on 24.08.2026 and
 Codex is a full worker again — `CLAUDE.md` → Orca carries the live rule.
 
@@ -308,8 +314,9 @@ because the brief arrives as `[Pasted Content N chars]` and sits unsubmitted. Af
 the task goes to `blocked`; `task-update --status ready` before redispatching. Gotcha:
 `starting-codex-under-orca-needs-four-steps-not-one`.
 
-**And once it is up, its first command must make the worktree readable.** Codex's own tool calls
-execute in a LINUX shell here — note the layering, because s107 got it wrong and the operator
+**Windows/WSL only: first make the worktree readable if its gitdir is unreadable.**
+Native macOS Codex reads the worktree directly (measured s171); do not rewrite its `.git`.
+The historical Windows worker’s tool calls execute in a LINUX shell — note the layering, because s107 got it wrong and the operator
 corrected it the same day: the TERMINAL Orca creates is PowerShell on Windows (s97,
 `orca-terminal-command-bash-lands-in-wsl-on-windows`), while Codex's INTERNAL shell is bash, which
 is where `/mnt/d/...` paths come from. A worktree created by Windows git carries `.git` as a file
@@ -358,12 +365,13 @@ about the CRLF churn left the seven dirty files unstaged.
    verify a `find_symbol` result reports a path under it.
 2. No install step. `vendor` and `node_modules` are already there.
 3. Never `git add -A` — stage by name. (Worktrees were born dirty with seven CRLF-only files until s135 renormalized the blobs.)
-4. The machine is shared and low on memory; if a gate OOMs, say so and retry once — never report a
+4. On the Windows desktop, memory is limited; on the Mac, size the wave by rate limits. If a gate OOMs, say so and retry once — never report a
    gate green whose aggregate result you never saw, and never substitute `npx jest`.
-5. **The WORK is the deliverable; the lifecycle message is not a precondition for it.** If you
-   cannot send `worker_done`, do the task anyway and print the report in your terminal — the
-   coordinator reads transcripts. Added s107, where a Codex worker could not reach the `orca` CLI
-   from its shell and therefore did nothing at all rather than work it could not announce.
+5. **The WORK and the durable report file are the deliverables.** Every brief gives an absolute
+   REPORT FILE path and requires the canary as its first word. If the CLI is unavailable, write
+   the report there anyway; the coordinator cannot depend on seeing the worker terminal.
+   When mail works, send `worker_done` exactly once with both task and dispatch IDs, an explicit
+   outcome and a three-sentence executive summary, then stop.
 
 A sixth line is worth its weight on anything non-trivial: **you are licensed to contradict this
 brief; if the code disagrees, the code wins.** In s84 it produced a correction in almost every
@@ -419,14 +427,14 @@ orca orchestration check --wait --types worker_done --timeout-ms 180000
 orca orchestration check --ack <deliveryId> --json
 ```
 
-**The `worker_done` line MUST carry `--payload '{"taskId":"..."}'`** (s99). The command as written
+**Current lifecycle commands carry BOTH `--task-id` and `--dispatch-id`.** The task-only payload below is historical (s99). The command as written
 above delivers the body fine, but Orca answers `Rejected worker_done: worker_done requires taskId`
 and wraps the report in a rejection envelope. The findings still arrive and are still readable —
 which is exactly why this is easy to miss — but the task never settles. Put the payload in the
 literal line you hand the critic:
 
 ```bash
-orca orchestration send --type worker_done --to dispatch:<D>   --subject "..." --body "<findings>" --payload "{\"taskId\":\"<T>\"}" --outcome succeeded
+orca orchestration send --type worker_done --to dispatch:<D>   --subject "..." --body "<findings>" --task-id <T> --dispatch-id <D> --outcome succeeded
 ```
 
 **`check --wait` replays the oldest UNACKNOWLEDGED batch first** (s99). Waiting for a new critic's
@@ -466,7 +474,7 @@ Operator, 28.09.2026: the local **qwen3.8:27b** is a worker only, and it is laun
 `omp` agent (Oh My Pi), not kilocode. Measured in s142:
 
 - `orca orchestration worker-start --spec "…" --worktree new-top-level --name <slug> --agent omp --json`
-  starts it; `--model` does not apply — the model comes from `~/.omp/agent/config.yml`
+  starts it; current `worker-start --help` accepts `--model` for OMP (without `--effort`); the default comes from `~/.omp/agent/config.yml`
   (`modelRoles.default: ollama/qwen3.8:27b-mlx`); `worker-read` shows `provider.model` to confirm.
 - It reads a file brief, sends a real `worker_done` (put the absolute Orca CLI path in the brief), and
   contradicts a wrong brief with evidence — it found a card already done on `main` and refused to fake
@@ -479,7 +487,7 @@ Operator, 28.09.2026: the local **qwen3.8:27b** is a worker only, and it is laun
 
 ### Added in s144
 
-- **Codex 0.158.0 fails Orca's readiness with no flags at all; the file-report fallback is the normal path now** — gotcha
+- **Historical, s144: Codex 0.158.0 failed Orca’s readiness with no flags; that dispatch used a file-report fallback** — gotcha
   `starting-codex-under-orca-needs-four-steps-not-one`, s144 section (also the usage-limit reset recipe).
 - **A Codex worker whose gates are green may start writing session docs on its own** (it read `DOCS-SCHEMA.md` and `s143.md`).
   Every brief now says «no session docs — the coordinator owns them».
@@ -520,19 +528,17 @@ Operator, 28.09.2026: the local **qwen3.8:27b** is a worker only, and it is laun
 
 ### Added in s139 (moved out of the handoff, which is size-gated)
 
-- **Codex под Orca на маке отдаёт `ok: true`, читается `live` и не делает НИЧЕГО.** `401 Unauthorized:
-  Incorrect API key provided: sk-svcac…` виден ТОЛЬКО в буфере терминала; `stage` остаётся
-  `input_accepted`, транскрипт содержит одну впрыснутую преамбулу, а `check --wait` сжигает весь
-  таймаут (15 минут, измерено). `projection.liveness` — это PTY, а не агент. Карточка — **#926**;
-  до починки читай БУФЕР после старта, а не `stage`. Мёртвый диспатч снимается `worker-stop`
-  (положительная улика: 401 на экране плюс пустой транскрипт), Task переиспользуется через
-  `--retry-of`.
-- **`orchestration check` повторяет СТАРЕЙШУЮ неподтверждённую доставку.** Хартбиты надо ack'ать,
-  иначе `worker_done` не всплывёт и опрос выглядит как молчащий воркер. А тело отчёта с
-  literal-переводами строк делает `check --json` невалидным JSON — парсить с `strict=False`.
-- **`orca worktree rm` СОХРАНЯЕТ ветку воркера** — ответ содержит `preservedBranch` с её именем и
-  head. Удалять отдельно, сверив, что содержимое уже в `main` (после squash-мержа ветка читается
-  «впереди», поэтому сверяй изменённые пути, а не число коммитов).
+- **Historical s139: a macOS Codex dispatch accepted input but made no progress.**
+  A `401 Unauthorized` appeared only in the terminal buffer; the transcript held only the
+  injected preamble. `projection.liveness` is the fleet verdict; a PTY-based worker
+  observation is not proof that the agent processed its brief. Read the transcript/buffer
+  and use positive failure evidence before recovery; inspect the current receipt and guide.
+- **`orchestration check` replays the oldest unacknowledged delivery.** Acknowledge processed
+  batches so older heartbeats do not hide later reports. s139 also observed malformed
+  JSON output; inspect raw output before applying a parser workaround.
+- **`orca worktree rm` preserves the worker branch.** Inspect `preservedBranch`; delete it
+  separately only after confirming the work is retained elsewhere. After squash merging,
+  commit counts alone do not establish that.
 
 - **`terminal wait --for tui-idle` lies.** It counts an open dialog as idle. Check the
   `satisfied` field and read the buffer before sending with `--enter`, or the prompt answers a
@@ -560,10 +566,9 @@ Operator, 28.09.2026: the local **qwen3.8:27b** is a worker only, and it is laun
 - **`worker-release` reporting `retained` still leaves the terminal unusable (s100).** Releasing two
   settled workers returned `state: retained, reason: identity_unproven, processAction: none` — which
   reads as «nothing was touched». Both agent terminals were gone from `terminal list` moments later,
-  and the next `worker-start --terminal <that handle>` failed with `terminal_not_writable`. Treat a
-  released dispatch's terminal as spent regardless of what the receipt says: start the follow-up with
-  `--worktree <the exact existing worktree> --agent claude`, which creates a fresh terminal in the
-  same checkout and reruns no setup.
+  and the next `worker-start --terminal <that handle>` failed with `terminal_not_writable`. This is a version-bound s100 observation. Today inspect the receipt and terminal identity
+  using the installed guide; reuse a proven retained terminal only with a new task/dispatch.
+  If a fresh terminal is required, use `--worktree <the exact existing worktree> --agent claude`.
 - **A fresh worker in an existing worktree needs its brief adjusted.** «You are already activated on
   this worktree» is false for it, and so is «start from origin/main» — its branch is checked out with
   the previous rounds committed. Tell it to read `git log --oneline origin/main..HEAD` first, or it

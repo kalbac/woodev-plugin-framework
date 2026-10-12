@@ -31,7 +31,7 @@ $this->markTestSkipped(
 
 `plugins-reference/` is gitignored (`.gitignore` line 25), so `git worktree add` never creates it,
 and it was absent from `.worktreeinclude`, so Orca never copied it. A worker therefore ran five
-fewer **release-blocking** data-contract guards than CI — and had no way to notice, because a
+fewer **release-blocking** data-contract guards than the primary checkout — and had no way to notice, because a
 skipped test is not a failed test.
 
 ## ✅ Fixed — `plugins-reference` is copied into every worktree
@@ -42,8 +42,9 @@ plugins-reference
 ```
 
 COPIED rather than shared (17 MB): these are read-only references, and a copy keeps a worker from
-writing through into the primary checkout. After the fix a worktree measures the same 66 skips as
-the primary checkout.
+writing through into the primary checkout. The original s84 measurement was 66 skips; it was dominated by missing sodium,
+not a permanent baseline. With sodium enabled, s138 measured 1 in a checkout with
+the references and 6 without them (see the sodium gotcha).
 
 ## The transferable lesson
 

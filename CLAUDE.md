@@ -137,7 +137,9 @@ Five project facts no skill knows, because they are ours:
    returns `failed / agent_prompt_blocked` when Codex opens its update prompt (answer: ESC — never
    Enter, which means «Update now») or its «Hooks need review» prompt (answer: the digit `3`,
    «continue without trusting»; a digit selects AND confirms). Clear it, then
-   `worker-start --task <task> --retry-of <failed dispatch> --terminal <handle> --worktree current`.
+   `worker-start --task <task> --retry-of <failed dispatch> --terminal <handle> --worktree <that terminal’s worktree>`.
+   `current` means the coordinator’s tree; inspect the failed receipt and the installed
+   orchestration guide before recovery.
    A retry while a dialog is still up fails `agent_unconfigured`. Read the buffer back after every
    step (gotcha `starting-codex-under-orca-needs-four-steps-not-one`).
 4. **Size the wave by machine** — see the caps above.
@@ -173,14 +175,11 @@ Codex is launched through Orca (fact 3), never through `codex exec` — gotcha
   `powershell-drops-the-roots-flag-from-the-jest-command`).
 - **Rig probes go to the scratchpad, never into the repo** — a stray probe file once rode along in
   a commit.
-- **Hand a Codex critic a POINTER, and require the canary in its REPORT BODY.** The old rule here —
-  "an inline bundle with a canary first line, because its shell is dead" — was obsolete: Codex's
-  shell works when it is launched from an Orca terminal, and that gotcha's own header has said so
-  since s82 (`codex-shell-sandbox-broken-windows`). What survives is the anti-fabrication check, in
-  a different shape: write the brief to a scratchpad file and send a one-line "read this file and do
-  what it says" (a pasted brief sits unsubmitted — s100), and word the canary so it survives a
-  one-line `--body`, or the critic drops it and its absence reads as the fabrication it exists to
-  catch. Two real limits remain, and neither is "the shell is dead": an input over 32k needs the
-  bundle with the canary IN THE FILE (`a-codex-bundle-over-32k-needs-a-file-and-an-in-file-canary`),
-  and an Orca worktree stays unreadable until its `.git` holds a RELATIVE `gitdir`
-  (`codex-in-wsl-needs-a-relative-gitdir`) — point a critic at the main checkout and neither bites.
+- **Hand a Codex critic a POINTER and an absolute REPORT FILE path.** Write the brief to a
+  scratchpad file and send "read this file and do what it says"; require the canary as the
+  report file’s first word. The durable file remains the deliverable if lifecycle mail fails.
+  Send a three-sentence `worker_done` body with both task and dispatch IDs when the CLI works.
+  Inputs over 32k use a file (`a-codex-bundle-over-32k-needs-a-file-and-an-in-file-canary`).
+  A relative `.git` pointer is needed only when Windows-created paths are unreadable to the
+  worker’s own Linux tool shell; native macOS reads this worktree directly
+  (`codex-in-wsl-needs-a-relative-gitdir`; macOS measured s171).

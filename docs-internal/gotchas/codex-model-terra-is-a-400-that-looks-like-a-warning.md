@@ -1,6 +1,10 @@
 # Gotcha: [tooling/parallel-agents] — `--model terra` kills a Codex run, and the buffer shows it as a warning first
 > Tags: tooling, orca, codex | Session: s103
 
+> **Historical model generation (s103):** the `gpt-5.6-terra` default below is not the
+> current roster. Use `CLAUDE.md` for the operator’s current model policy and the installed
+> Orca guide for recovery; do not leave a stale dispatch active and launch a duplicate.
+
 ## What happens
 
 You start a Codex critic through Orca with the model the operator names in conversation:

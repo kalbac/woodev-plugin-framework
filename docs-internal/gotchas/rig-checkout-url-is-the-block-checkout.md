@@ -6,8 +6,9 @@
 ## The trap
 
 `http://localhost:8973/checkout/` on the project rig renders WooCommerce's **block** checkout.
-The pickup picker is a classic-checkout feature — the block adapter is SP-11, still unbuilt — so
-on that page there is no `form.checkout`, no `carrier_pickup_point` field and no trigger button.
+The classic probe expects `form.checkout` and `carrier_pickup_point`; those selectors
+do not describe the block checkout. SP-11’s block adapter is implemented (#1078),
+so their absence there is not proof that pickup support is missing.
 
 Probing it returns a perfectly plausible "the feature is not there":
 
@@ -34,7 +35,7 @@ a matching `classic-cart` (id 14). Sanity check after loading:
   (`billing_city`) is a dependent suggest whose options are empty on load, so its value renders
   blank after a reload even when the customer picked one. Set it with jQuery plus an injected
   `<option>`, per the standing "set the city by hand or the picker is empty" trap.
-- `npx wp-env run cli wp post list` from the repo root is the reliable way to find these pages;
+- `npx @wordpress/env run cli wp post list` from the repo root is the reliable way to find these pages;
   it takes 15–120 s, which is the rig being slow, not a hang.
 
 ## Related
