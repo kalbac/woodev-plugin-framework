@@ -72,6 +72,23 @@ final class Carrier_Competitor_Notification_Handler extends Competitor_Notificat
 	}
 
 	/**
+	 * Returns the first exact active competitor basename for the conflict rule.
+	 *
+	 * @since 2.0.2
+	 * @param Competitor_Rule $rule normalized competitor rule
+	 * @return string|null active plugin basename, or null
+	 */
+	protected function get_active_slug( Competitor_Rule $rule ): ?string {
+		foreach ( $rule->get_detect_slugs() as $plugin_file ) {
+			if ( $this->is_plugin_basename_active( $plugin_file ) ) {
+				return $plugin_file;
+			}
+		}
+
+		return null;
+	}
+
+	/**
 	 * Always use the regular WordPress admin-notice renderer for this feature.
 	 *
 	 * @since 2.0.2
@@ -144,7 +161,7 @@ final class Carrier_Competitor_Notification_Handler extends Competitor_Notificat
 		$products = Carrier_Catalogue::products();
 
 		foreach ( $products as $product ) {
-			if ( $this->get_plugin()->is_plugin_active( $product['plugin_file'] ) ) {
+			if ( $this->is_our_product_active( $product ) ) {
 				continue;
 			}
 
@@ -188,7 +205,7 @@ final class Carrier_Competitor_Notification_Handler extends Competitor_Notificat
 	 */
 	private function active_recommendation_rule( array $product ): ?Competitor_Rule {
 		foreach ( $product['competitors'] as $competitor ) {
-			if ( $this->get_plugin()->is_plugin_active( $competitor['file'] ) ) {
+			if ( $this->is_plugin_basename_active( $competitor['file'] ) ) {
 				return new Competitor_Rule(
 					[
 						'mode'             => Competitor_Rule::MODE_RECOMMEND,
@@ -205,5 +222,58 @@ final class Carrier_Competitor_Notification_Handler extends Competitor_Notificat
 		}
 
 		return null;
+	}
+
+	/**
+	 * Checks whether a Woodev product is active, independent of its folder name.
+	 *
+	 * The owning product is active by definition; other products are matched by
+	 * their main plugin filename so renamed install folders still count.
+	 *
+	 * @since 2.0.2
+	 * @param array<string,mixed> $product catalogue product
+	 * @return bool
+	 */
+	private function is_our_product_active( array $product ): bool {
+		if ( $product['id'] === $this->carrier_id ) {
+			return true;
+		}
+
+		$plugin_file = basename( $product['plugin_file'] );
+
+		foreach ( $this->active_plugin_basenames() as $active_plugin ) {
+			if ( basename( $active_plugin ) === $plugin_file ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Checks for an exact active plugin basename, including network activation.
+	 *
+	 * @since 2.0.2
+	 * @param string $plugin_file plugin basename from the catalogue
+	 * @return bool
+	 */
+	private function is_plugin_basename_active( string $plugin_file ): bool {
+		return in_array( $plugin_file, $this->active_plugin_basenames(), true );
+	}
+
+	/**
+	 * Returns active plugin basenames from site and network activation lists.
+	 *
+	 * @since 2.0.2
+	 * @return string[]
+	 */
+	private function active_plugin_basenames(): array {
+		$active_plugins = get_option( 'active_plugins', [] );
+		$network_plugins = get_site_option( 'active_sitewide_plugins', [] );
+
+		return array_merge(
+			is_array( $active_plugins ) ? $active_plugins : [],
+			is_array( $network_plugins ) ? array_keys( $network_plugins ) : []
+		);
 	}
 }

@@ -19,6 +19,8 @@ require_once dirname( __DIR__, 2 ) . '/woodev/competitor/class-carrier-catalogue
 require_once dirname( __DIR__, 2 ) . '/woodev/competitor/class-carrier-competitor-notification-handler.php';
 
 class CarrierCompetitorNotificationHandlerTest extends TestCase {
+	/** @var string[] active plugin basenames supplied by the WordPress option stub */
+	private static array $active_plugins = [];
 
 	protected function setUp(): void {
 		parent::setUp();
@@ -30,7 +32,13 @@ class CarrierCompetitorNotificationHandlerTest extends TestCase {
 		Functions\when( 'admin_url' )->alias( static fn( $path = '' ) => 'https://example.test/wp-admin/' . $path );
 		Functions\when( 'add_query_arg' )->alias( static fn( $args, $url ) => $url . '?' . http_build_query( $args ) );
 		Functions\when( 'wp_create_nonce' )->justReturn( 'nonce' );
-		Functions\when( 'get_option' )->justReturn( false );
+		self::$active_plugins = [];
+		Functions\when( 'get_option' )->alias(
+			static function ( $option, $default = false ) {
+				return 'active_plugins' === $option ? self::$active_plugins : $default;
+			}
+		);
+		Functions\when( 'get_site_option' )->justReturn( [] );
 
 		$evaluated = new \ReflectionProperty( Carrier_Competitor_Notification_Handler::class, 'recommendations_evaluated' );
 		if ( PHP_VERSION_ID < 80100 ) {
@@ -107,12 +115,41 @@ class CarrierCompetitorNotificationHandlerTest extends TestCase {
 		}
 	}
 
+	public function test_other_woodev_product_is_matched_by_main_filename_after_folder_rename(): void {
+		$notices = [];
+		$plugin  = $this->make_plugin( [ 'custom-yandex-folder/woocommerce-yandex-delivery.php' ], $notices );
+		( new Carrier_Competitor_Notification_Handler( $plugin, 'cdek' ) )->run();
+
+		$this->assertCount( 0, $notices );
+	}
+
+	public function test_competitor_is_detected_from_network_active_plugin_keys(): void {
+		$notices = [];
+		Functions\when( 'get_site_option' )->alias(
+			static fn( $option, $default = false ) => 'active_sitewide_plugins' === $option ? [ 'cdekdelivery/cdek.php' => 1 ] : $default
+		);
+		$plugin = $this->make_plugin( [ 'woocommerce-edostavka/woocommerce-edostavka.php' ], $notices );
+		( new Carrier_Competitor_Notification_Handler( $plugin, 'cdek' ) )->run();
+
+		$this->assertCount( 1, $notices );
+		$this->assertStringContainsString( 'CDEKDelivery', $notices[0]['message'] );
+	}
+
+	public function test_generic_cdek_filename_in_another_folder_is_not_detected(): void {
+		$notices = [];
+		$plugin  = $this->make_plugin( [ 'unrelated-plugin/cdek.php' ], $notices );
+		( new Carrier_Competitor_Notification_Handler( $plugin, 'cdek' ) )->run();
+
+		$this->assertCount( 0, $notices );
+	}
+
 	/**
 	 * @param string[] $active active plugin basenames
 	 * @param array<int,array{id:string,message:string}> $notices captured notices
 	 * @return \Woodev_Plugin
 	 */
 	private function make_plugin( array $active, array &$notices ) {
+		self::$active_plugins = $active;
 		$admin_notices = Mockery::mock( 'Woodev_Admin_Notice_Handler' );
 		$admin_notices->shouldReceive( 'add_admin_notice' )->andReturnUsing(
 			static function ( $message, $id ) use ( &$notices ): void {
@@ -121,7 +158,6 @@ class CarrierCompetitorNotificationHandlerTest extends TestCase {
 		);
 
 		$plugin = Mockery::mock( 'Woodev_Plugin' );
-		$plugin->shouldReceive( 'is_plugin_active' )->andReturnUsing( static fn( $file ) => in_array( $file, $active, true ) );
 		$plugin->shouldReceive( 'get_admin_notice_handler' )->andReturn( $admin_notices );
 
 		return $plugin;

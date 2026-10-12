@@ -60,7 +60,7 @@ final class Carrier_Catalogue {
 			'russian-post' => [
 				'id'          => 'russian-post',
 				'plugin_file' => 'woodev-russian-post/woodev-russian-post.php',
-				'name'        => 'Russian Post EMS integration with Woocommerce',
+				'name'        => 'Почта России EMS для Woocommerce',
 				'url'         => 'https://woodev.ru/downloads/pochta-rossii-woocommerce',
 				'download_id' => 8772,
 				'competitors' => [
