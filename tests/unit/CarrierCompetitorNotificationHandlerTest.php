@@ -22,6 +22,12 @@ class CarrierCompetitorNotificationHandlerTest extends TestCase {
 	/** @var string[] active plugin basenames supplied by the WordPress option stub */
 	private static array $active_plugins = [];
 
+	/** @var array<string,mixed> option values supplied by WordPress option stubs */
+	private static array $options = [];
+
+	/** @var int number of option writes in the current test */
+	private static int $option_updates = 0;
+
 	protected function setUp(): void {
 		parent::setUp();
 		Functions\when( '__' )->returnArg( 1 );
@@ -33,9 +39,22 @@ class CarrierCompetitorNotificationHandlerTest extends TestCase {
 		Functions\when( 'add_query_arg' )->alias( static fn( $args, $url ) => $url . '?' . http_build_query( $args ) );
 		Functions\when( 'wp_create_nonce' )->justReturn( 'nonce' );
 		self::$active_plugins = [];
+		self::$options = [];
+		self::$option_updates = 0;
 		Functions\when( 'get_option' )->alias(
 			static function ( $option, $default = false ) {
-				return 'active_plugins' === $option ? self::$active_plugins : $default;
+				if ( 'active_plugins' === $option ) {
+					return self::$active_plugins;
+				}
+
+				return self::$options[ $option ] ?? $default;
+			}
+		);
+		Functions\when( 'update_option' )->alias(
+			static function ( $option, $value ): bool {
+				self::$options[ $option ] = $value;
+				++self::$option_updates;
+				return true;
 			}
 		);
 		Functions\when( 'get_site_option' )->justReturn( [] );
@@ -55,7 +74,7 @@ class CarrierCompetitorNotificationHandlerTest extends TestCase {
 
 		$this->assertCount( 1, $notices );
 		$this->assertStringContainsString( 'Информация от Woodev: обнаружен плагин СДЭК стороннего разработчика', $notices[0]['message'] );
-		$this->assertStringContainsString( 'На сайте активен плагин CDEKDelivery.', $notices[0]['message'] );
+		$this->assertStringContainsString( 'На этом сайте активен плагин CDEKDelivery.', $notices[0]['message'] );
 		$this->assertStringContainsString( 'Во избежание конфликтов отключите плагин CDEKDelivery.', $notices[0]['message'] );
 		$this->assertStringContainsString( 'Отключить CDEKDelivery', $notices[0]['message'] );
 		$this->assertStringContainsString( 'Скрыть', $notices[0]['message'] );
@@ -70,6 +89,69 @@ class CarrierCompetitorNotificationHandlerTest extends TestCase {
 		$this->assertStringContainsString( 'Яндекс Доставка', $notices[0]['message'] );
 		$this->assertSame( 'woodev-competitor-recommend-yandex', $notices[0]['id'] );
 		$this->assertStringContainsString( 'Подробнее о плагине', $notices[0]['message'] );
+		$this->assertStringContainsString( '«Яндекс Доставка»', $notices[0]['message'] );
+	}
+
+	public function test_recommendation_variant_is_stable_across_requests(): void {
+		$notices = [];
+		$plugin  = $this->make_plugin( [ 'woocommerce-edostavka/woocommerce-edostavka.php', 'yandex-go-delivery/yandex-go-delivery.php' ], $notices );
+		( new Carrier_Competitor_Notification_Handler( $plugin, 'cdek' ) )->run();
+		$first_message = $notices[0]['message'];
+
+		$this->reset_recommendation_guard();
+		( new Carrier_Competitor_Notification_Handler( $plugin, 'cdek' ) )->run();
+
+		$this->assertCount( 2, $notices );
+		$this->assertSame( $first_message, $notices[1]['message'] );
+		$this->assertSame( 1, self::$option_updates );
+	}
+
+	public function test_shared_recommendation_templates_have_both_placeholders(): void {
+		$templates = \Woodev\Framework\Competitor\Carrier_Catalogue::recommendation_templates();
+		$this->assertCount( 9, $templates );
+		foreach ( $templates as $template ) {
+			$this->assertStringContainsString( '«%1$s»', $template );
+			$this->assertStringContainsString( '%2$s', $template );
+		}
+	}
+
+	public function test_shared_recommendation_templates_render_for_every_carrier(): void {
+		$products = \Woodev\Framework\Competitor\Carrier_Catalogue::products();
+		foreach ( $products as $product ) {
+			$other_product = current( array_filter( $products, static fn( $candidate ) => $candidate['id'] !== $product['id'] ) );
+			$competitor    = $product['competitors'][0];
+			$notices       = [];
+			$plugin        = $this->make_plugin( [ $other_product['plugin_file'], $competitor['file'] ], $notices );
+			( new Carrier_Competitor_Notification_Handler( $plugin, $other_product['id'] ) )->run();
+
+			$this->assertCount( 1, $notices, $product['id'] );
+			$this->assertStringContainsString( '«' . $competitor['name'] . '»', $notices[0]['message'], $product['id'] );
+			$this->assertStringContainsString( $product['carrier_name'], $notices[0]['message'], $product['id'] );
+			$this->reset_recommendation_guard();
+		}
+	}
+
+	public function test_removing_recommendation_clears_its_saved_variant(): void {
+		$notices = [];
+		$plugin  = $this->make_plugin( [ 'woocommerce-edostavka/woocommerce-edostavka.php', 'yandex-go-delivery/yandex-go-delivery.php' ], $notices );
+		( new Carrier_Competitor_Notification_Handler( $plugin, 'cdek' ) )->run();
+		$this->assertArrayHasKey( 'yandex', self::$options['woodev_competitor_recommend_variants'] );
+
+		self::$active_plugins = [ 'woocommerce-edostavka/woocommerce-edostavka.php' ];
+		$this->reset_recommendation_guard();
+		( new Carrier_Competitor_Notification_Handler( $plugin, 'cdek' ) )->run();
+
+		$this->assertArrayNotHasKey( 'yandex', self::$options['woodev_competitor_recommend_variants'] );
+	}
+
+	public function test_out_of_range_saved_variant_is_reselected(): void {
+		$notices = [];
+		$plugin  = $this->make_plugin( [ 'woocommerce-edostavka/woocommerce-edostavka.php', 'yandex-go-delivery/yandex-go-delivery.php' ], $notices );
+		self::$options['woodev_competitor_recommend_variants'] = [ 'yandex' => 99 ];
+		( new Carrier_Competitor_Notification_Handler( $plugin, 'cdek' ) )->run();
+
+		$this->assertContains( self::$options['woodev_competitor_recommend_variants']['yandex'], range( 0, 8 ) );
+		$this->assertSame( 1, self::$option_updates );
 	}
 
 	public function test_yandex_recommendation_is_not_duplicated_across_woodev_plugins(): void {
@@ -174,5 +256,14 @@ class CarrierCompetitorNotificationHandlerTest extends TestCase {
 		$plugin->shouldReceive( 'get_admin_notice_handler' )->andReturn( $admin_notices );
 
 		return $plugin;
+	}
+
+	/** Resets the request-level fleet guard between simulated requests. */
+	private function reset_recommendation_guard(): void {
+		$evaluated = new \ReflectionProperty( Carrier_Competitor_Notification_Handler::class, 'recommendations_evaluated' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$evaluated->setAccessible( true );
+		}
+		$evaluated->setValue( null, false );
 	}
 }

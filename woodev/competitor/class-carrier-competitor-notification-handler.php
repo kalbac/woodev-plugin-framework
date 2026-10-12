@@ -120,7 +120,7 @@ final class Carrier_Competitor_Notification_Handler extends Competitor_Notificat
 		}
 
 		$content = sprintf(
-			__( 'На сайте активен плагин %1$s. Он тоже добавляет методы доставки %2$s: на оформлении заказа появятся дубли, а заказы могут уйти в %3$s дважды. Во избежание конфликтов отключите плагин %1$s.', 'woodev-plugin-framework' ),
+			__( 'На этом сайте активен плагин %1$s. Он тоже добавляет методы доставки %2$s: на оформлении заказа появятся дубли, а заказы могут уйти в %3$s дважды. Во избежание конфликтов отключите плагин %1$s.', 'woodev-plugin-framework' ),
 			esc_html( $name ),
 			esc_html( $product['carrier_name'] ),
 			esc_html( $product['service_name'] )
@@ -161,6 +161,7 @@ final class Carrier_Competitor_Notification_Handler extends Competitor_Notificat
 						]
 					)
 				);
+				$this->clear_recommendation_variant( $product['id'] );
 				continue;
 			}
 
@@ -175,19 +176,17 @@ final class Carrier_Competitor_Notification_Handler extends Competitor_Notificat
 						]
 					)
 				);
+				$this->clear_recommendation_variant( $product['id'] );
 				continue;
 			}
+
+			$variant = $this->recommendation_variant( $product );
 
 			$this->get_renderer()->render(
 				$rule,
 				[
 					'title'   => sprintf( __( 'Информация от Woodev: плагин для %s', 'woodev-plugin-framework' ), $product['carrier_name'] ),
-					'content' => sprintf(
-						__( 'На сайте работает плагин стороннего разработчика <strong>%1$s</strong>. У Woodev есть плагин для %2$s: <strong>%3$s</strong>.', 'woodev-plugin-framework' ),
-						esc_html( $rule->get_competitor_name() ),
-						esc_html( $product['carrier_name'] ),
-						esc_html( $product['name'] )
-					),
+					'content' => sprintf( $variant, esc_html( $rule->get_competitor_name() ), esc_html( $product['carrier_name'] ) ),
 					'type'    => self::TYPE_UPDATE,
 					'actions' => [
 						[
@@ -201,6 +200,46 @@ final class Carrier_Competitor_Notification_Handler extends Competitor_Notificat
 				]
 			);
 		}
+	}
+
+	/**
+	 * Returns this carrier's persisted recommendation copy variant.
+	 *
+	 * @since 2.0.2
+	 * @param array<string,mixed> $product catalogue product
+	 * @return string
+	 */
+	private function recommendation_variant( array $product ): string {
+		$variants = Carrier_Catalogue::recommendation_templates();
+		$stored   = get_option( 'woodev_competitor_recommend_variants', [] );
+		$index    = is_array( $stored ) ? ( $stored[ $product['id'] ] ?? null ) : null;
+
+		if ( ! is_int( $index ) || ! isset( $variants[ $index ] ) ) {
+			$index = random_int( 0, count( $variants ) - 1 );
+			$stored = is_array( $stored ) ? $stored : [];
+			$stored[ $product['id'] ] = $index;
+			update_option( 'woodev_competitor_recommend_variants', $stored, false );
+		}
+
+		return $variants[ $index ];
+	}
+
+	/**
+	 * Forgets the selected copy when the recommendation no longer exists.
+	 *
+	 * @since 2.0.2
+	 * @param string $carrier_id catalogue carrier key
+	 * @return void
+	 */
+	private function clear_recommendation_variant( string $carrier_id ): void {
+		$stored = get_option( 'woodev_competitor_recommend_variants', [] );
+
+		if ( ! is_array( $stored ) || ! array_key_exists( $carrier_id, $stored ) ) {
+			return;
+		}
+
+		unset( $stored[ $carrier_id ] );
+		update_option( 'woodev_competitor_recommend_variants', $stored, false );
 	}
 
 	/**

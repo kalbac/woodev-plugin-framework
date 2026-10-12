@@ -231,6 +231,7 @@ class CompetitorRendererTest extends TestCase {
 		\Brain\Monkey\Functions\when( '__' )->returnArg( 1 );
 		\Brain\Monkey\Functions\when( 'sanitize_key' )->alias( static fn( $key ) => strtolower( preg_replace( '/[^a-z0-9_\-]/', '', $key ) ) );
 		\Brain\Monkey\Functions\when( 'get_option' )->alias( static fn( $option, $default = false ) => 'active_plugins' === $option ? $active_plugins : $default );
+		\Brain\Monkey\Functions\when( 'update_option' )->justReturn( true );
 		\Brain\Monkey\Functions\when( 'get_site_option' )->justReturn( [] );
 		\Brain\Monkey\Functions\when( 'esc_html' )->returnArg();
 		\Brain\Monkey\Functions\when( 'esc_url_raw' )->returnArg();
