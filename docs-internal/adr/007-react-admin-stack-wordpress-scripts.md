@@ -97,7 +97,7 @@ Specific choices:
 
 7. **`src/`** directory is the authoring root and must not ship in release ZIPs.
    As of this ADR the release rsync did NOT yet exclude `src/` — task **s6-p5**
-   (since **shipped**: `--exclude='src'` at `.github/workflows/ci.yml:385`) adds
+   (since **shipped**: `--exclude='src'` at `.github/workflows/ci.yml:455`) adds
    `--exclude='src'` to the release workflow. `woodev/assets/build/` rides inside
    `woodev/` and IS included. The old Babel exclusion note was historical;
    the current release exclusions do not include that deleted config.

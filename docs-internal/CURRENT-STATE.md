@@ -50,7 +50,8 @@ browser catches a client defect** (s128). ⛔ **And no screenshots for him** —
 ⚠ The rig theme is **Storefront** (s147, his choice). **We do not restyle WP/WC defaults** — gotcha `short-select2-fields-on-storefront-are-woocommerce-s-not-ours`.
 
 ⛔ **The old migration pilot (#762) remains frozen.** It does not describe the current
-CDEK v2 plugin work; use the active handoff and the board for that work.
+CDEK v2 plugin work; use the active handoff and the board for that work. The new plugin ships as `2.3.0.0` — above
+the highest installed `2.2.5.5` (operator, 06.09.2026), so the update reaches every site; spec `specs/2026-10-06-cdek-v2-plugin-design.md`.
 
 ⚠ **`test-cdek` is a client of the LIVE CDEK contour, not a dictionary** — a grep over it says nothing about which cities it knows (`sessions/s113.md`).
 
@@ -94,7 +95,7 @@ its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and
 exactly that trap, and a naive reader reports a milestone-carrying card as empty. **PRIORITY LIVES ON
 THE BOARD, not in this file** (operator, 04.09.2026, #644 part 3); its field and option ids are in
 `AGENTS.md` → Backlog rule, and every open card carries one.
-**`V2 готов` = two carrier plugins on v2, tested and compatible** (operator, 08.10.2026, #1179; superseded «#786 works» of 07.09.2026) — the gate #247/#285 wait on. #567 (visual translation pass) is release-gated: it runs right before the release together with #247/#285 (operator, s123; repeated on #247). **Read the board, never a card list retyped here** — a
+**`V2 готов` = two carrier plugins on v2, tested and compatible** (operator, 08.10.2026, #1179; superseded «#786 works» of 07.09.2026) — the gate #247/#285 wait on. #567 (visual translation pass) is release-gated: it runs right before the release together with #247/#285 (see below). **Read the board, never a card list retyped here** — a
 retyped list is what went stale and got #644 filed.
 
 **`location.levels` is a per-country matrix** (`levels[country][level]`) and the client reads it that
@@ -105,7 +106,7 @@ caller's concrete order class or a `WC_Subscription` becomes a plain order (`ses
 
 **i18n rules live in `AGENTS.md` → Conventions.** Classify strings by their render path,
 not their directory (`classify-an-i18n-string-by-its-render-path-not-its-file-path`). Russian
-plural msgids need all three `msgstr` forms; JS `_n()` needs separate care
+plural msgids need all three `msgstr` forms; in JS `_n()` cannot be fixed at all — do not rely on it
 (`russian-source-i18n-plural-n`). Enforcement is partial: `lint:i18n` checks untranslated
 English entries outside `scripts/i18n-allowlist.json`; `lint:mo` checks compiled freshness;
 `lint:i18n-sources` requires extracted msgids in both `.pot` and `.po` (one-way, wp-cli 2.12.0).
@@ -115,7 +116,7 @@ Build `.mo` with `wp i18n make-mo` in the rig container; `update-po` can drop th
 `lint-i18n-answers-about-the-catalogue-not-the-code`. JS bundles read handle-named JSON,
 not `.mo` (`lint:js-i18n`, #1032; `js-translations-are-handle-named-json-files`).
 
-**#567 visual translation review:** GATED BY THE RELEASE, not by an operator answer — the whole catalogue is walked right before release because strings still change until then. Card «Заморожено» with that condition; do not reopen earlier.
+**#567 visual translation review:** GATED BY THE RELEASE, not by an operator answer (operator, 05.09.2026, repeated 07.09; s123) — the whole catalogue is walked right before release because strings still change until then. Board: «Бэклог» / «Заморожено» with that condition; do not reopen earlier.
 Do not infer sequencing from an old state-file snapshot.
 
 **Shipping method features support both declarations:** `$this->supports` before
@@ -123,8 +124,8 @@ Do not infer sequencing from an old state-file snapshot.
 `a-base-constructor-that-assigns-what-the-subclass-just-set`.
 
 **`Shipping_Plugin::includes()` is authoritative — [ADR-012](adr/012-shipping-includes-stays-authoritative.md).**
-Add new shipping classes there. `ClassMapCompletenessTest` guards the reverse direction:
-a map entry with no require; integration can pass because the autoloader resolves it anyway.
+Add new shipping classes there, or `ClassMapCompletenessTest` fails. The reverse guard is the **only** gate on
+"in the map but never required": integration stays green on it, because the autoloader resolves the class from `class-map.php`.
 
 **A foreign exception's raw text is decided by WHO READS IT** (#608/#610): merchant or plugin
 author → kept; customer → redacted; every LOG sink redacts unconditionally (#594). RESPONSE and NOTE
@@ -158,7 +159,7 @@ NEVER disables that button itself. Settings section «Форма заказа»,
 PICKS and asks `release.isStale()`; the busy token is the WRONG key for that question. Full detail:
 gotcha `a-detach-that-only-unbinds-still-writes-through-whatever-was-in-flight`.
 
-⚠ The export button is «Экспорт» (#890). Action/menu declarations live in
+⚠ The export button is «Экспорт» (operator, 13.09.2026, #890). Action/menu declarations live in
 [wiki/architecture.md](wiki/architecture.md).
 
 ✅ **The rig has two carrier fixtures; the order count is mutable.** Aggregate tests need
@@ -171,8 +172,9 @@ do not backfill existing ones (#868), so a new column needs representative rows 
   HPOS-only was rejected; order operations must work with both stores.
 
 - At most one carrier marker per order remains the declared invariant (#924). The code
-  reports violations through `_doing_it_wrong()` under `WP_DEBUG` (#932); it does not
-  silently pick an arbitrary carrier.
+  does NOT enforce it — it only reports violations through `_doing_it_wrong()` under `WP_DEBUG` (#932).
+  Operator (26.09.2026, YAGNI): «на практике нет; для этого нужна реализация мультидоставки, которой у нас нет».
+  Details: gotcha `the-orders-filter-stands-on-two-unenforced-carrier-invariants`.
 
 - The handshake secret remains in the redirect URL (#382): one use, 15-minute lifetime,
   bound to `state` + `user_id`; the long-lived `access_token_secret` travels by POST.
@@ -310,7 +312,7 @@ This section retains mutable state and the operating warnings.
   [wiki/rig-pickup-walkthrough.md](wiki/rig-pickup-walkthrough.md).
 ## Infrastructure Reference
 
-- **Version:** `Woodev_Plugin::VERSION` (in `woodev/class-plugin.php`) = 2.0.1. **Raising VERSION on `main` publishes a release** — do it deliberately (#285).
+- **Version:** `Woodev_Plugin::VERSION` (in `woodev/class-plugin.php`) = 2.0.1 (unreleased — the latest GitHub release is 2.0.0). **Raising VERSION on `main` publishes a release** — do it deliberately (#285).
 - **PHP target:** 8.1 · **WP min:** 6.6 · **WC min:** 7.0
 - **Tests:** Brain Monkey (unit) + WP Test Library (integration). `composer check` = phpcs + phpstan L3 + unit. JS tests must run **from bash**, not PowerShell (gotcha `powershell-drops-the-roots-flag-from-the-jest-command`).
 - **CI:** GitHub Actions. **Merge PRs:** `gh pr merge <N> --squash --delete-branch` only after every job is confirmed green with state CLEAN; never `gh pr merge --auto`.
