@@ -25,12 +25,62 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 
 	use Brain\Monkey\Functions;
 	use Mockery;
+	use Woodev\Framework\Settings\Settings_Page_Registry;
 	use Woodev\Framework\Shipping\Admin\Orders\Order_Payload_Validator;
 	use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
 	use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
+	use Woodev\Framework\Shipping\Location\Abstract_Location_Provider;
+	use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
+	use Woodev\Framework\Shipping\Location\Location_Record;
+	use Woodev\Framework\Shipping\Location\Location_Scope;
 	use Woodev\Tests\Unit\TestCase;
 
 	require_once dirname( __DIR__ ) . '/Order/order-persistence-fixtures.php';
+
+	/**
+	 * A real, minimal location provider: serves the settlement level for the given countries.
+	 */
+	class Payload_Validator_Location_Provider extends Abstract_Location_Provider {
+
+		/** @var string */
+		private $id;
+
+		/** @var string[] */
+		private $countries;
+
+		/**
+		 * @param string   $id        provider id.
+		 * @param string[] $countries ISO codes it serves.
+		 */
+		public function __construct( string $id, array $countries = [ 'RU' ] ) {
+			$this->id        = $id;
+			$this->countries = $countries;
+		}
+
+		public function get_id(): string {
+			return $this->id;
+		}
+
+		public function get_name(): string {
+			return $this->id;
+		}
+
+		public function get_countries(): array {
+			return $this->countries;
+		}
+
+		public function is_configured(): bool {
+			return true;
+		}
+
+		protected function declare_suggest_levels(): array {
+			return [ Location_Record::LEVEL_SETTLEMENT ];
+		}
+
+		public function suggest( string $query, Location_Scope $scope ): array {
+			return [];
+		}
+	}
 
 	/**
 	 * @covers \Woodev\Framework\Shipping\Admin\Orders\Order_Payload_Validator
@@ -119,6 +169,8 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 
 		protected function tearDown(): void {
 			Orders_Registry::instance()->reset_for_tests();
+			Location_Provider_Registry::instance()->reset_for_tests();
+			Settings_Page_Registry::instance()->reset_for_tests();
 
 			parent::tearDown();
 		}
@@ -744,6 +796,182 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 
 			$this->assertSame( [], $this->address_rule_calls );
 			$this->assertSame( [ 'billing.country:country_required' ], $this->codes( $result ) );
+		}
+
+		/**
+		 * Makes a real provider the shop's active one in the shared location registry, which is where
+		 * the validator's `Location_Service` (a carrier with no plugin) resolves the settlement provider.
+		 *
+		 * @param string   $id        provider id.
+		 * @param string[] $countries countries it serves.
+		 */
+		private function activate_location_provider( string $id, array $countries = [ 'RU' ] ): void {
+			$provider = new Payload_Validator_Location_Provider( $id, $countries );
+
+			Functions\when( 'add_action' )->justReturn( true );
+			Functions\when( 'remove_action' )->justReturn( true );
+			Functions\when( 'wc_get_base_location' )->justReturn( [ 'country' => 'RU', 'state' => '' ] );
+			Functions\when( 'get_option' )->alias(
+				static function ( $name, $default = null ) use ( $id ) {
+					return 'woodev_location_active_provider' === $name ? $id : $default;
+				}
+			);
+			Functions\when( 'apply_filters' )->alias(
+				static function ( string $tag, $value = null ) use ( $provider ) {
+					return Location_Provider_Registry::FILTER_PROVIDERS === $tag ? [ $provider ] : $value;
+				}
+			);
+
+			$registry = Location_Provider_Registry::instance();
+			$registry->declare_needed();
+			$registry->collect();
+		}
+
+		/**
+		 * @param array<string,mixed> $override fields to replace on a Moscow settlement record.
+		 * @return array<string,mixed> a serialized location record, as the editor sends it.
+		 */
+		private function location( array $override = [] ): array {
+			return array_replace(
+				[
+					'key'         => 'svc-fixture:moscow',
+					'provider_id' => 'svc-fixture',
+					'level'       => Location_Record::LEVEL_SETTLEMENT,
+					'country'     => 'RU',
+					'settlement'  => [ 'name' => 'Москва', 'type' => 'г' ],
+					'label'       => 'г Москва',
+					'raw'         => [ 'fias_id' => 'abc' ],
+				],
+				$override
+			);
+		}
+
+		public function test_an_absent_location_is_not_validated_and_carries_nothing(): void {
+			foreach ( [ null, '', [] ] as $empty ) {
+				$result = $this->validator()->validate( $this->payload( [ 'location' => $empty ] ), false );
+
+				$this->assertSame( [], $result['errors'] );
+				$this->assertNull( $result['data']['location'] );
+			}
+		}
+
+		public function test_a_location_that_is_not_a_record_is_refused_as_invalid(): void {
+			$broken = [
+				'a bare string'                 => 'Москва',
+				'a record with no key'          => [ 'level' => 'settlement', 'country' => 'RU' ],
+				'a key of another provider'     => $this->location( [ 'key' => 'other:moscow' ] ),
+				'an unknown level'              => $this->location( [ 'level' => 'planet' ] ),
+				'a country that is no ISO code' => $this->location( [ 'country' => 'Russia' ] ),
+				'a settlement given as text'    => $this->location( [ 'settlement' => 'Москва' ] ),
+			];
+
+			foreach ( $broken as $case => $location ) {
+				$result = $this->validator()->validate( $this->payload( [ 'location' => $location ] ), false );
+
+				$this->assertSame( [ 'location:invalid_location' ], $this->codes( $result ), $case );
+				$this->assertNull( $result['data']['location'], $case );
+			}
+		}
+
+		public function test_a_record_of_another_country_than_the_delivery_address_is_an_address_mismatch(): void {
+			$this->activate_location_provider( 'svc-fixture', [ 'RU', 'KZ' ] );
+
+			// The code is shared with a city mismatch: the card's «country mismatch» is the same refusal.
+			$result = $this->validator()->validate(
+				$this->payload( [ 'location' => $this->location( [ 'country' => 'KZ' ] ) ] ),
+				false
+			);
+
+			$this->assertSame( [ 'location:location_address_mismatch' ], $this->codes( $result ) );
+			$this->assertNull( $result['data']['location'] );
+		}
+
+		public function test_a_record_of_another_city_than_the_delivery_address_is_an_address_mismatch(): void {
+			$this->activate_location_provider( 'svc-fixture' );
+
+			$result = $this->validator()->validate(
+				$this->payload( [ 'location' => $this->location( [ 'settlement' => [ 'name' => 'Казань', 'type' => 'г' ] ] ) ] ),
+				false
+			);
+
+			$this->assertSame( [ 'location:location_address_mismatch' ], $this->codes( $result ) );
+			$this->assertNull( $result['data']['location'] );
+		}
+
+		public function test_a_record_that_is_not_a_settlement_is_an_address_mismatch(): void {
+			$this->activate_location_provider( 'svc-fixture' );
+
+			$result = $this->validator()->validate(
+				$this->payload( [ 'location' => $this->location( [ 'level' => Location_Record::LEVEL_REGION ] ) ] ),
+				false
+			);
+
+			$this->assertSame( [ 'location:location_address_mismatch' ], $this->codes( $result ) );
+		}
+
+		public function test_a_record_of_a_provider_that_no_longer_serves_the_country_is_a_provider_mismatch(): void {
+			$this->activate_location_provider( 'svc-fixture' );
+
+			$result = $this->validator()->validate(
+				$this->payload( [ 'location' => $this->location( [ 'key' => 'retired:moscow', 'provider_id' => 'retired' ] ) ] ),
+				false
+			);
+
+			$this->assertSame( [ 'location:location_provider_mismatch' ], $this->codes( $result ) );
+			$this->assertNull( $result['data']['location'] );
+		}
+
+		public function test_no_provider_serving_settlements_for_the_country_is_a_provider_mismatch(): void {
+			// The registry is idle (no provider registered, nothing needed): nobody can own the record.
+			$result = $this->validator()->validate( $this->payload( [ 'location' => $this->location() ] ), false );
+
+			$this->assertSame( [ 'location:location_provider_mismatch' ], $this->codes( $result ) );
+		}
+
+		public function test_a_valid_record_passes_and_is_returned_without_its_raw_payload(): void {
+			$this->activate_location_provider( 'svc-fixture' );
+
+			$result = $this->validator()->validate( $this->payload( [ 'location' => $this->location() ] ), false );
+
+			$this->assertSame( [], $result['errors'] );
+
+			$record = $result['data']['location'];
+
+			$this->assertInstanceOf( Location_Record::class, $record );
+			$this->assertNull( $record->raw(), 'the provider payload is stripped before the record reaches the order' );
+			$this->assertSame( 'svc-fixture:moscow', $record->key() );
+			$this->assertSame( 'svc-fixture', $record->provider_id() );
+			$this->assertSame( 'RU', $record->country() );
+			$this->assertSame( 'г Москва', $record->label() );
+			$this->assertSame( [ 'name' => 'Москва', 'type' => 'г' ], $record->settlement() );
+		}
+
+		public function test_the_city_is_matched_by_name_not_by_spelling_of_its_type_word_or_case(): void {
+			$this->activate_location_provider( 'svc-fixture' );
+
+			$payload                    = $this->payload( [ 'location' => $this->location() ] );
+			$payload['billing']['city'] = 'г. МОСКВА';
+			$result                     = $this->validator()->validate( $payload, false );
+
+			$this->assertSame( [], $result['errors'] );
+			$this->assertInstanceOf( Location_Record::class, $result['data']['location'] );
+		}
+
+		public function test_the_record_is_checked_against_the_shipping_address_when_one_is_filled(): void {
+			$this->activate_location_provider( 'svc-fixture' );
+
+			// Billing says Moscow, the manager typed a different delivery city: the record must follow delivery.
+			$result = $this->validator()->validate(
+				$this->payload(
+					[
+						'location' => $this->location(),
+						'shipping' => [ 'country' => 'RU', 'city' => 'Казань' ],
+					]
+				),
+				false
+			);
+
+			$this->assertSame( [ 'location:location_address_mismatch' ], $this->codes( $result ) );
 		}
 
 		public function test_every_problem_is_reported_at_once(): void {
