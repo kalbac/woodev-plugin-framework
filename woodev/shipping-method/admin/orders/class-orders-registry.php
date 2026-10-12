@@ -11,17 +11,8 @@ namespace Woodev\Framework\Shipping\Admin\Orders;
 
 use Woodev\Framework\Settings\Settings_Page_Registry;
 use Woodev\Framework\Shipping\Admin\Shipping_Admin_Order;
-use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
-use Woodev\Framework\Shipping\Order\Abstract_Tracking_Handler;
-use Woodev\Framework\Shipping\Order\Delivery_Status;
-use Woodev\Framework\Shipping\Order\Carrier_Cancel;
-use Woodev\Framework\Shipping\Order\Export_Retry;
-use Woodev\Framework\Shipping\Order\Order_Automation;
-use Woodev\Framework\Shipping\Rest_Api\Document_Controller;
-use Woodev\Framework\Shipping\Rest_Api\Order_Editor_Controller;
-use Woodev\Framework\Shipping\Rest_Api\Orders_Controller;
-use Woodev\Framework\Shipping\Rest_Api\Rates_Controller;
-use Woodev\Framework\Shipping\Rest_Api\Toolbar_Controller;
+use Woodev\Framework\Shipping\Order\{Abstract_Shipment_Handler, Abstract_Tracking_Handler, Carrier_Cancel, Delivery_Status, Export_Retry, Order_Automation};
+use Woodev\Framework\Shipping\Rest_Api\{Document_Controller, Order_Editor_Controller, Orders_Controller, Rates_Controller, Toolbar_Controller};
 use Woodev\Framework\Shipping\Shipping_Plugin;
 
 if ( ! defined( 'ABSPATH' ) ) {

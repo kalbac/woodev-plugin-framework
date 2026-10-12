@@ -15,11 +15,8 @@ namespace Woodev\Tests\Unit\Shipping\Order;
 
 use Brain\Monkey\Functions;
 use Mockery;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
-use Woodev\Framework\Shipping\Checkout\Checkout_Fields;
-use Woodev\Framework\Shipping\Checkout\Checkout_Handler;
-use Woodev\Framework\Shipping\Checkout\Field;
+use Woodev\Framework\Shipping\Admin\Orders\{Orders_Provider, Orders_Registry};
+use Woodev\Framework\Shipping\Checkout\{Checkout_Fields, Checkout_Handler, Field};
 use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
 use Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab;
 use Woodev\Framework\Shipping\Shipping_Plugin;

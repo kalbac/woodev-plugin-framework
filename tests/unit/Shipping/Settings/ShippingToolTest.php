@@ -7,8 +7,7 @@
 
 namespace Woodev\Tests\Unit\Shipping\Settings;
 
-use Woodev\Framework\Shipping\Settings\Shipping_Tool;
-use Woodev\Framework\Shipping\Settings\Tool_Result;
+use Woodev\Framework\Shipping\Settings\{Shipping_Tool, Tool_Result};
 use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/settings/class-shipping-tool.php';

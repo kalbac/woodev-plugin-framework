@@ -4,9 +4,7 @@ namespace Woodev\Tests\Unit;
 use Brain\Monkey\Functions;
 use Mockery;
 use Woodev\Framework\Settings\Settings_Section;
-use Woodev\Framework\Shipping\Settings\Shipping_Tool;
-use Woodev\Framework\Shipping\Settings\Shipping_Tools_Registry;
-use Woodev\Framework\Shipping\Settings\Tool_Result;
+use Woodev\Framework\Shipping\Settings\{Shipping_Tool, Shipping_Tools_Registry, Tool_Result};
 
 require_once dirname( __DIR__, 2 ) . '/woodev/api/class-api-base.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/class-plugin-exception.php';

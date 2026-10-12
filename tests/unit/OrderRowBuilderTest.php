@@ -12,13 +12,8 @@ namespace Woodev\Tests\Unit;
 
 use Brain\Monkey\Functions;
 use Mockery;
-use Woodev\Framework\Shipping\Admin\Orders\Order_Actions;
-use Woodev\Framework\Shipping\Admin\Orders\Order_Row_Builder;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
-use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
-use Woodev\Framework\Shipping\Order\Carrier_Cancel;
-use Woodev\Framework\Shipping\Order\Delivery_Status;
+use Woodev\Framework\Shipping\Admin\Orders\{Order_Actions, Order_Row_Builder, Orders_Provider, Orders_Registry};
+use Woodev\Framework\Shipping\Order\{Abstract_Shipment_Handler, Carrier_Cancel, Delivery_Status};
 
 require_once dirname( __DIR__, 2 ) . '/woodev/compatibility/class-plugin-compatibility.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/compatibility/class-order-compatibility.php';

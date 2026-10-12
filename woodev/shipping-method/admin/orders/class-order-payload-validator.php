@@ -9,11 +9,8 @@
 
 namespace Woodev\Framework\Shipping\Admin\Orders;
 
-use Woodev\Framework\Shipping\Checkout\Checkout_Config;
-use Woodev\Framework\Shipping\Checkout\Checkout_Field_Policy;
-use Woodev\Framework\Shipping\Checkout\Checkout_Handler;
-use Woodev\Framework\Shipping\Location\Location_Record;
-use Woodev\Framework\Shipping\Location\Location_Service;
+use Woodev\Framework\Shipping\Checkout\{Checkout_Config, Checkout_Field_Policy, Checkout_Handler};
+use Woodev\Framework\Shipping\Location\{Location_Record, Location_Service};
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;

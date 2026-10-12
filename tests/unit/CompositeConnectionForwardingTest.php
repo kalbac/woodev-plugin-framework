@@ -3,10 +3,7 @@ namespace Woodev\Tests\Unit;
 
 use Brain\Monkey\Functions;
 use Mockery;
-use Woodev\Framework\Settings\Composite_Settings_Handler;
-use Woodev\Framework\Settings\Settings_Page_Registry;
-use Woodev\Framework\Settings\Settings_Provider;
-use Woodev\Framework\Settings\Settings_Section;
+use Woodev\Framework\Settings\{Composite_Settings_Handler, Settings_Page_Registry, Settings_Provider, Settings_Section};
 
 require_once dirname( __DIR__, 2 ) . '/woodev/class-plugin-exception.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/settings-api/class-control.php';

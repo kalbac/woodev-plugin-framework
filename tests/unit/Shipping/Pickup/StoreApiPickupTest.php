@@ -4,14 +4,8 @@
  */
 namespace Woodev\Tests\Unit\Shipping\Pickup;
 
-use Brain\Monkey\Functions;
-use Brain\Monkey\Filters;
-use Woodev\Framework\Shipping\Pickup\Pickup_Handler;
-use Woodev\Framework\Shipping\Pickup\Pickup_Point;
-use Woodev\Framework\Shipping\Pickup\Pickup_Selection;
-use Woodev\Framework\Shipping\Pickup\Point_Source;
-use Woodev\Framework\Shipping\Pickup\Selection_Scope;
-use Woodev\Framework\Shipping\Pickup\Store_Api_Pickup;
+use Brain\Monkey\{Filters, Functions};
+use Woodev\Framework\Shipping\Pickup\{Pickup_Handler, Pickup_Point, Pickup_Selection, Point_Source, Selection_Scope, Store_Api_Pickup};
 use Woodev\Tests\Unit\Shipping\Order\Order_Persistence_Test_Map_Provider;
 use Woodev\Tests\Unit\TestCase;
 

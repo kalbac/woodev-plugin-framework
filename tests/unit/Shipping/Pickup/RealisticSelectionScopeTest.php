@@ -15,8 +15,7 @@
 
 namespace Woodev\Tests\Unit\Shipping\Pickup;
 
-use Woodev\Framework\Shipping\Pickup\Provider_Selection_Scope;
-use Woodev\Framework\Shipping\Pickup\Selection_Scope;
+use Woodev\Framework\Shipping\Pickup\{Provider_Selection_Scope, Selection_Scope};
 use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/interface-selection-scope.php';

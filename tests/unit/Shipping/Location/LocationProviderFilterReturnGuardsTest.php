@@ -22,11 +22,7 @@ namespace Woodev\Tests\Unit\Shipping\Location;
 
 use Brain\Monkey\Functions;
 use Woodev\Framework\Settings\Settings_Page_Registry;
-use Woodev\Framework\Shipping\Location\Abstract_Location_Provider;
-use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
-use Woodev\Framework\Shipping\Location\Location_Record;
-use Woodev\Framework\Shipping\Location\Location_Scope;
-use Woodev\Framework\Shipping\Location\Location_Service;
+use Woodev\Framework\Shipping\Location\{Abstract_Location_Provider, Location_Provider_Registry, Location_Record, Location_Scope, Location_Service};
 use Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab;
 use Woodev\Tests\Unit\TestCase;
 

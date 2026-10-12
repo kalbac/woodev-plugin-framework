@@ -12,9 +12,7 @@ namespace Woodev\Tests\Unit;
 
 use Brain\Monkey\Functions;
 use Mockery;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Query;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
+use Woodev\Framework\Shipping\Admin\Orders\{Orders_Provider, Orders_Query, Orders_Registry};
 use Woodev\Framework\Shipping\Admin\Shipping_Admin_Order;
 use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
 

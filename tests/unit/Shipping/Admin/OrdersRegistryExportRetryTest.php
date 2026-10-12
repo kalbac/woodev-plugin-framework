@@ -13,15 +13,10 @@
 
 namespace Woodev\Tests\Unit\Shipping\Admin;
 
-use Brain\Monkey\Actions;
-use Brain\Monkey\Functions;
+use Brain\Monkey\{Actions, Functions};
 use Mockery;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
-use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
-use Woodev\Framework\Shipping\Order\Action_Result;
-use Woodev\Framework\Shipping\Order\Carrier_Cancel;
-use Woodev\Framework\Shipping\Order\Export_Retry;
+use Woodev\Framework\Shipping\Admin\Orders\{Orders_Provider, Orders_Registry};
+use Woodev\Framework\Shipping\Order\{Abstract_Shipment_Handler, Action_Result, Carrier_Cancel, Export_Retry};
 use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__, 4 ) . '/woodev/compatibility/class-plugin-compatibility.php';

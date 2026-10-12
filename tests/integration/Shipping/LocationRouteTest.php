@@ -17,9 +17,7 @@
 
 namespace Woodev\Tests\Integration\Shipping;
 
-use Woodev\Framework\Shipping\Location\Location_Provider;
-use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
-use Woodev\Framework\Shipping\Location\Location_Service;
+use Woodev\Framework\Shipping\Location\{Location_Provider, Location_Provider_Registry, Location_Service};
 use Woodev\Tests\Integration\TestCase;
 use WP_REST_Request;
 

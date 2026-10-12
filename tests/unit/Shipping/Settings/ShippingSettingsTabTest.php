@@ -13,12 +13,8 @@ namespace Woodev\Tests\Unit\Shipping\Settings;
 
 use Brain\Monkey\Functions;
 use Mockery;
-use Woodev\Framework\Settings\Composite_Settings_Handler;
-use Woodev\Framework\Settings\Settings_Page_Registry;
-use Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab;
-use Woodev\Framework\Shipping\Settings\Shipping_Tool;
-use Woodev\Framework\Shipping\Settings\Shipping_Tools_Registry;
-use Woodev\Framework\Shipping\Settings\Tool_Result;
+use Woodev\Framework\Settings\{Composite_Settings_Handler, Settings_Page_Registry};
+use Woodev\Framework\Shipping\Settings\{Shipping_Settings_Tab, Shipping_Tool, Shipping_Tools_Registry, Tool_Result};
 use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__, 4 ) . '/woodev/class-plugin-exception.php';

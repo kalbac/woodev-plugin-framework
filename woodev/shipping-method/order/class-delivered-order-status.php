@@ -8,8 +8,7 @@
 
 namespace Woodev\Framework\Shipping\Order;
 
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
+use Woodev\Framework\Shipping\Admin\Orders\{Orders_Provider, Orders_Registry};
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;

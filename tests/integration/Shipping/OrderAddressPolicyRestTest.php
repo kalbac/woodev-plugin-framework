@@ -18,8 +18,7 @@
 namespace Woodev\Tests\Integration\Shipping;
 
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
-use Woodev\Framework\Shipping\Checkout\Checkout_Field_Policy;
-use Woodev\Framework\Shipping\Checkout\Checkout_Field_Settings;
+use Woodev\Framework\Shipping\Checkout\{Checkout_Field_Policy, Checkout_Field_Settings};
 use Woodev\Tests\Integration\TestCase;
 use WP_REST_Request;
 

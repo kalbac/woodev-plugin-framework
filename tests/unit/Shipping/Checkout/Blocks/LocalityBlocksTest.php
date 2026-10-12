@@ -11,8 +11,7 @@ namespace Woodev\Tests\Unit\Shipping\Checkout\Blocks;
 use Brain\Monkey\Functions;
 use Mockery;
 use Woodev\Framework\Shipping\Checkout\Blocks\Locality_Blocks;
-use Woodev\Framework\Shipping\Checkout\Checkout_Fields;
-use Woodev\Framework\Shipping\Checkout\Checkout_Handler;
+use Woodev\Framework\Shipping\Checkout\{Checkout_Fields, Checkout_Handler};
 use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__, 5 ) . '/woodev/shipping-method/checkout/class-field.php';

@@ -10,9 +10,7 @@
 
 namespace Woodev\Tests\Unit\Shipping\Order;
 
-use Brain\Monkey\Actions;
-use Brain\Monkey\Filters;
-use Brain\Monkey\Functions;
+use Brain\Monkey\{Actions, Filters, Functions};
 use Woodev\Framework\Shipping\Order\Delivery_Sync_Status;
 use Woodev\Tests\Unit\TestCase;
 

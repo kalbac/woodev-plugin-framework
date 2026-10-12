@@ -7,8 +7,7 @@
 
 namespace Woodev\Tests\Unit\Shipping\Settings;
 
-use Brain\Monkey\Actions;
-use Brain\Monkey\Functions;
+use Brain\Monkey\{Actions, Functions};
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
 use Woodev\Framework\Shipping\Settings\Status_Sync_Tool;
 use Woodev\Tests\Unit\TestCase;

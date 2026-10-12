@@ -24,10 +24,7 @@
 namespace Woodev\Tests\Unit\Shipping;
 
 use Brain\Monkey\Functions;
-use Woodev\Framework\Shipping\Location\Abstract_Location_Provider;
-use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
-use Woodev\Framework\Shipping\Location\Location_Record;
-use Woodev\Framework\Shipping\Location\Location_Scope;
+use Woodev\Framework\Shipping\Location\{Abstract_Location_Provider, Location_Provider_Registry, Location_Record, Location_Scope};
 use Woodev\Framework\Shipping\Shipping_Plugin;
 use Woodev\Tests\Unit\TestCase;
 

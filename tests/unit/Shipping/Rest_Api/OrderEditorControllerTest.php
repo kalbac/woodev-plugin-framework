@@ -14,8 +14,7 @@ namespace Woodev\Tests\Unit\Shipping\Rest_Api;
 
 use Brain\Monkey\Functions;
 use Mockery;
-use Woodev\Framework\Shipping\Admin\Orders\Order_Editor;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
+use Woodev\Framework\Shipping\Admin\Orders\{Order_Editor, Orders_Registry};
 use Woodev\Framework\Shipping\Rest_Api\Order_Editor_Controller;
 use Woodev\Tests\Unit\TestCase;
 

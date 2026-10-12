@@ -52,12 +52,7 @@ namespace Woodev\Framework\Shipping\Rest_Api;
 
 use Woodev\Framework\Http\Rest_Rate_Limit_Trait;
 use Woodev\Framework\Shipping\Location\Location_Record;
-use Woodev\Framework\Shipping\Pickup\Constraint_Checker;
-use Woodev\Framework\Shipping\Pickup\Location_Aware_Point_Source;
-use Woodev\Framework\Shipping\Pickup\Pickup_Point;
-use Woodev\Framework\Shipping\Pickup\Point_Query;
-use Woodev\Framework\Shipping\Pickup\Point_Source;
-use Woodev\Framework\Shipping\Pickup\Pickup_Selection_Service;
+use Woodev\Framework\Shipping\Pickup\{Constraint_Checker, Location_Aware_Point_Source, Pickup_Point, Pickup_Selection_Service, Point_Query, Point_Source};
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;

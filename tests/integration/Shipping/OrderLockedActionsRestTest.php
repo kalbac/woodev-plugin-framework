@@ -14,10 +14,8 @@
 
 namespace Woodev\Tests\Integration\Shipping;
 
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
-use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
-use Woodev\Framework\Shipping\Order\Action_Result;
+use Woodev\Framework\Shipping\Admin\Orders\{Orders_Provider, Orders_Registry};
+use Woodev\Framework\Shipping\Order\{Abstract_Shipment_Handler, Action_Result};
 use Woodev\Tests\Integration\TestCase;
 use WP_REST_Request;
 

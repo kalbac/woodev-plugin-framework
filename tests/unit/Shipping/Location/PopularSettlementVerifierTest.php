@@ -15,13 +15,7 @@
 
 namespace Woodev\Tests\Unit\Shipping\Location;
 
-use Woodev\Framework\Shipping\Location\Abstract_Location_Provider;
-use Woodev\Framework\Shipping\Location\Location_Record;
-use Woodev\Framework\Shipping\Location\Location_Scope;
-use Woodev\Framework\Shipping\Location\Popular_Settlement_Entry;
-use Woodev\Framework\Shipping\Location\Popular_Settlement_Store;
-use Woodev\Framework\Shipping\Location\Popular_Settlement_Verification;
-use Woodev\Framework\Shipping\Location\Popular_Settlement_Verifier;
+use Woodev\Framework\Shipping\Location\{Abstract_Location_Provider, Location_Record, Location_Scope, Popular_Settlement_Entry, Popular_Settlement_Store, Popular_Settlement_Verification, Popular_Settlement_Verifier};
 use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__, 4 ) . '/woodev/class-helper.php';

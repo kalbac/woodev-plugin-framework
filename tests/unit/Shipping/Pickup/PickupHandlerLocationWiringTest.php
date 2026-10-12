@@ -29,8 +29,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup;
 
 use Brain\Monkey\Functions;
 use Woodev\Framework\Shipping\Map\Map_Provider;
-use Woodev\Framework\Shipping\Pickup\Pickup_Handler;
-use Woodev\Framework\Shipping\Pickup\Point_Source;
+use Woodev\Framework\Shipping\Pickup\{Pickup_Handler, Point_Source};
 use Woodev\Framework\Shipping\Shipping_Plugin;
 use Woodev\Tests\Unit\TestCase;
 

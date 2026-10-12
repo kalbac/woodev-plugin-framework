@@ -7,9 +7,7 @@
 
 namespace Woodev\Tests\Integration;
 
-use Woodev\Framework\Settings\Settings_Page_Registry;
-use Woodev\Framework\Settings\Settings_Provider;
-use Woodev\Framework\Settings\Settings_Section;
+use Woodev\Framework\Settings\{Settings_Page_Registry, Settings_Provider, Settings_Section};
 
 class SettingsPageTest extends TestCase {
 

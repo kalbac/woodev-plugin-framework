@@ -29,8 +29,7 @@
 
 namespace Woodev\Tests\Integration\Shipping;
 
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Query;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
+use Woodev\Framework\Shipping\Admin\Orders\{Orders_Query, Orders_Registry};
 use Woodev\Tests\Integration\TestCase;
 
 class CarrierMarkerCheckoutTest extends TestCase {

@@ -10,9 +10,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-use Woodev\Framework\Shipping\Shipping_Method;
-use Woodev\Framework\Shipping\Shipping_Plugin;
-use Woodev\Framework\Shipping\Shipping_Rate;
+use Woodev\Framework\Shipping\{Shipping_Method, Shipping_Plugin, Shipping_Rate};
 
 /**
  * Class Woodev_Test_Shipping_Method

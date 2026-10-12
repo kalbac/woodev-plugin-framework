@@ -37,13 +37,8 @@
 
 namespace Woodev\Framework\Shipping\Admin;
 
-use Woodev\Framework\Shipping\Admin\Orders\Order_Actions;
-use Woodev\Framework\Shipping\Admin\Orders\Order_Row_Builder;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
-use Woodev\Framework\Shipping\Admin\Orders\Shipment_Freshness;
-use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
-use Woodev\Framework\Shipping\Order\Delivery_Status;
+use Woodev\Framework\Shipping\Admin\Orders\{Order_Actions, Order_Row_Builder, Orders_Provider, Orders_Registry, Shipment_Freshness};
+use Woodev\Framework\Shipping\Order\{Abstract_Shipment_Handler, Delivery_Status};
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;

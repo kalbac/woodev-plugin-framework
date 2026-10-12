@@ -9,6 +9,10 @@ Use this skill for a carrier plugin that consumes Woodev Framework v2. Also load
 
 The first plugin built on these seams is the CDEK rewrite (`kalbac/woocommerce-edostavka`, branch `v2`, outside this repository). The references cite its files as worked examples and its lessons as sources; every rule here also names the framework code, gotcha or card it comes from. A claim you cannot find in `woodev/` does not exist — `rg` the framework before writing the call.
 
+## Coding conventions
+
+Group file-level class imports from the same namespace in one statement; keep `use function` and `use const` separate. Example: `use Woodev\Edostavka\Api\{Cdek_Api_Client, Cdek_Api_Exception};`
+
 ## Start with the framework seams
 
 - Use `Shipping_Plugin` and concrete subclasses of `Shipping_Method`. The courier, pickup, and postal bases are `Shipping_Method_Courier`, `Shipping_Method_Pickup`, and `Shipping_Method_Postal`. See [shipping model and rates](references/model-rates-location-pickup.md).

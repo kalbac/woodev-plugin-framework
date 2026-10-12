@@ -77,8 +77,7 @@
 
 namespace Woodev\Framework\Shipping\Pickup;
 
-use Woodev\Framework\Shipping\Location\Location_Record;
-use Woodev\Framework\Shipping\Location\Location_Service;
+use Woodev\Framework\Shipping\Location\{Location_Record, Location_Service};
 use Woodev\Framework\Shipping\Map\Map_Provider;
 use Woodev\Framework\Shipping\Order\Shipping_Order_Handler;
 use Woodev\Framework\Shipping\Rest_Api\Pickup_Controller;

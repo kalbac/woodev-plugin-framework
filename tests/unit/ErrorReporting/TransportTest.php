@@ -8,8 +8,7 @@
 namespace Woodev\Tests\Unit\ErrorReporting;
 
 use Brain\Monkey\Functions;
-use Woodev\Framework\Error_Reporting\Dsn;
-use Woodev\Framework\Error_Reporting\Transport;
+use Woodev\Framework\Error_Reporting\{Dsn, Transport};
 
 /**
  * @covers \Woodev\Framework\Error_Reporting\Dsn

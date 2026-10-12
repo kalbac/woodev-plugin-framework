@@ -15,15 +15,8 @@ namespace Woodev\Tests\Unit\Shipping\Order;
 
 use Brain\Monkey\Functions;
 use Mockery;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
-use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
-use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
-use Woodev\Framework\Shipping\Order\Action_Result;
-use Woodev\Framework\Shipping\Order\Cancelled_Order_Status;
-use Woodev\Framework\Shipping\Order\Carrier_Cancel;
-use Woodev\Framework\Shipping\Order\Delivery_Status;
-use Woodev\Framework\Shipping\Order\Export_Retry;
-use Woodev\Framework\Shipping\Order\Order_Automation;
+use Woodev\Framework\Shipping\Admin\Orders\{Orders_Provider, Orders_Registry};
+use Woodev\Framework\Shipping\Order\{Abstract_Shipment_Handler, Action_Result, Cancelled_Order_Status, Carrier_Cancel, Delivery_Status, Export_Retry, Order_Automation};
 use Woodev\Framework\Shipping\Settings\Export_Settings;
 use Woodev\Framework\Shipping\Shipping_Plugin;
 use Woodev\Tests\Unit\TestCase;

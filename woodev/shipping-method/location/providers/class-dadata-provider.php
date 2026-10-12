@@ -16,12 +16,7 @@
 
 namespace Woodev\Framework\Shipping\Location\Providers;
 
-use Woodev\Framework\Shipping\Location\Abstract_Location_Provider;
-use Woodev\Framework\Shipping\Location\Location_Provider;
-use Woodev\Framework\Shipping\Location\Location_Record;
-use Woodev\Framework\Shipping\Location\Location_Scope;
-use Woodev\Framework\Shipping\Location\Locality_Key;
-use Woodev\Framework\Shipping\Location\Location_Provider_Exception;
+use Woodev\Framework\Shipping\Location\{Abstract_Location_Provider, Locality_Key, Location_Provider, Location_Provider_Exception, Location_Record, Location_Scope};
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;

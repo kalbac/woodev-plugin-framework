@@ -15,8 +15,7 @@
 
 namespace Woodev\Tests\Integration\Shipping;
 
-use Woodev\Framework\Shipping\Checkout\Checkout_Fields;
-use Woodev\Framework\Shipping\Checkout\Field;
+use Woodev\Framework\Shipping\Checkout\{Checkout_Fields, Field};
 use Woodev\Framework\Shipping\Rest_Api\Field_Source_Controller;
 use Woodev\Tests\Integration\TestCase;
 use WP_REST_Request;

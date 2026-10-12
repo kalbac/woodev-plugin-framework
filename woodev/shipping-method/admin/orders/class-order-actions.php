@@ -9,16 +9,8 @@
 
 namespace Woodev\Framework\Shipping\Admin\Orders;
 
-use Woodev\Framework\Shipping\Location\Location_Provider;
-use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
-use Woodev\Framework\Shipping\Location\Location_Record;
-use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
-use Woodev\Framework\Shipping\Order\Action_Result;
-use Woodev\Framework\Shipping\Order\Bulk_Document_Source;
-use Woodev\Framework\Shipping\Order\Carrier_Cancel;
-use Woodev\Framework\Shipping\Order\Delivery_Status;
-use Woodev\Framework\Shipping\Order\Order_Automation;
-use Woodev\Framework\Shipping\Order\Shipment_Cancellation;
+use Woodev\Framework\Shipping\Location\{Location_Provider, Location_Provider_Registry, Location_Record};
+use Woodev\Framework\Shipping\Order\{Abstract_Shipment_Handler, Action_Result, Bulk_Document_Source, Carrier_Cancel, Delivery_Status, Order_Automation, Shipment_Cancellation};
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;

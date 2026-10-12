@@ -24,8 +24,7 @@
 
 namespace Woodev\Tests\Integration\Shipping;
 
-use Woodev\Framework\Shipping\Checkout\Checkout_Handler;
-use Woodev\Framework\Shipping\Checkout\Checkout_Fields;
+use Woodev\Framework\Shipping\Checkout\{Checkout_Fields, Checkout_Handler};
 use Woodev\Tests\Integration\TestCase;
 
 class CheckoutFieldsFixtureTest extends TestCase {

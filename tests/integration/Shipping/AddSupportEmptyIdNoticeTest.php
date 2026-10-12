@@ -44,9 +44,7 @@
 namespace Woodev\Tests\Integration\Shipping;
 
 use Woodev\Framework\Shipping\Api\Shipping_API;
-use Woodev\Framework\Shipping\Shipping_Method;
-use Woodev\Framework\Shipping\Shipping_Plugin;
-use Woodev\Framework\Shipping\Shipping_Rate;
+use Woodev\Framework\Shipping\{Shipping_Method, Shipping_Plugin, Shipping_Rate};
 use Woodev\Tests\Integration\TestCase;
 
 /**

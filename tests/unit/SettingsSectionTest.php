@@ -2,10 +2,8 @@
 namespace Woodev\Tests\Unit;
 
 use Brain\Monkey\Functions;
-use Woodev\Framework\Settings\Settings_Group;
-use Woodev\Framework\Settings\Settings_Section;
-use Woodev\Framework\Shipping\Settings\Shipping_Tool;
-use Woodev\Framework\Shipping\Settings\Tool_Result;
+use Woodev\Framework\Settings\{Settings_Group, Settings_Section};
+use Woodev\Framework\Shipping\Settings\{Shipping_Tool, Tool_Result};
 
 require_once dirname( __DIR__, 2 ) . '/woodev/shipping-method/settings/class-shipping-tool.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/shipping-method/settings/class-tool-result.php';
