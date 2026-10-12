@@ -29,17 +29,6 @@ namespace {
 				return $this->options[ $key ] ?? $empty_value;
 			}
 
-			/** @var array<string, mixed> Writes {@see self::update_option()} made. */
-			public $written = [];
-
-			/** @param string $key option key. @param mixed $value value. @return bool */
-			public function update_option( $key, $value = '' ) {
-				$this->written[ $key ]  = $value;
-				$this->options[ $key ] = $value;
-
-				return true;
-			}
-
 			/** @param array $data field. @return string */
 			public function get_tooltip_html( $data ) {
 				return empty( $data['desc_tip'] ) ? '' : '<span class="woocommerce-help-tip" data-tip="x"></span>';
@@ -262,97 +251,29 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertStringContainsString( 'Сохраните', $view['notes'][0] );
 		}
 
-		public function test_a_re_resolved_list_is_stored_when_the_store_accepts_it_and_the_merchant_is_told_so(): void {
-			$service              = $this->service();
-			$service->owner       = 'test-cdek';
-			$service->replacement = $this->city( 'test-cdek:394', 'Пушкин' );
-			$stored               = [];
+		public function test_the_value_the_form_submits_holds_the_new_record_for_a_replaced_city_and_the_old_one_for_a_stale_city_and_saving_keeps_it(): void {
+			City_Limit::use_zone_pairs_for_tests( static fn() => [ [ 'state', 'RU:SPE' ] ] );
+			$_REQUEST['instance_id'] = '262';
 
-			$view = City_Limit_Form::build_view(
-				City_Limit::encode( [ $this->city( 'dadata:abc', 'Пушкин' ) ] ),
-				[ 'country' => 'RU', 'states' => [] ],
-				$service,
-				true,
-				static function ( string $value ) use ( &$stored ): bool {
-					$stored[] = $value;
+			$service                = $this->service();
+			$service->owner         = 'test-cdek';
+			$service->state_code    = 'SPE';
+			$service->replacements  = [ 'dadata:pushkin' => $this->city( 'test-cdek:394', 'Пушкин' ) ];
+			City_Limit_Form::use_service_for_tests( $service );
 
-					return true;
-				}
-			);
+			$settings          = new \WC_Settings_API();
+			$settings->options = [
+				'city_limit_cities' => City_Limit::encode( [ $this->city( 'dadata:pushkin', 'Пушкин' ), $this->city( 'dadata:mirny', 'Мирный' ) ] ),
+			];
 
-			$this->assertSame( [ $view['value'] ], $stored );
-			$this->assertStringContainsString( 'test-cdek:394', $stored[0] );
-			$this->assertStringContainsString( 'сохранены', $view['notes'][0] );
-			$this->assertStringNotContainsString( 'Сохраните', $view['notes'][0] );
-		}
+			$html = City_Limit_Form::render( '', 'city_limit_cities', City_Limit_Form::fields()['city_limit_cities'], $settings );
 
-		public function test_nothing_is_stored_when_nothing_was_re_resolved(): void {
-			$service        = $this->service();
-			$service->owner = 'test-cdek';
-			$calls          = 0;
+			preg_match( '/<input type="hidden"[^>]* value="([^"]*)"/', $html, $matches );
+			$submitted = html_entity_decode( $matches[1] );
 
-			$counter = static function () use ( &$calls ): bool {
-				++$calls;
-
-				return true;
-			};
-
-			// A current city, and a stale one that cannot be matched: no replacement, no write.
-			City_Limit_Form::build_view(
-				City_Limit::encode( [ $this->city( 'test-cdek:1', 'Пушкин' ), $this->city( 'dadata:abc', 'Мирный' ) ] ),
-				[ 'country' => 'RU', 'states' => [] ],
-				$service,
-				true,
-				$counter
-			);
-
-			$this->assertSame( 0, $calls );
-		}
-
-		public function test_a_store_that_declines_leaves_the_save_the_settings_hint(): void {
-			$service              = $this->service();
-			$service->owner       = 'test-cdek';
-			$service->replacement = $this->city( 'test-cdek:394', 'Пушкин' );
-
-			$view = City_Limit_Form::build_view(
-				City_Limit::encode( [ $this->city( 'dadata:abc', 'Пушкин' ) ] ),
-				[ 'country' => 'RU', 'states' => [] ],
-				$service,
-				true,
-				static fn(): bool => false
-			);
-
-			$this->assertStringContainsString( 'Сохраните', $view['notes'][0] );
-		}
-
-		public function test_drawing_the_row_as_a_shop_manager_stores_the_re_resolved_list(): void {
-			Functions\when( 'current_user_can' )->justReturn( true );
-
-			$service              = $this->service();
-			$service->owner       = 'test-cdek';
-			$service->replacement = $this->city( 'test-cdek:394', 'Пушкин' );
-			$settings             = new \WC_Settings_API();
-			$settings->options    = [ 'city_limit_cities' => City_Limit::encode( [ $this->city( 'dadata:abc', 'Пушкин' ) ] ) ];
-
-			$this->render_with( $settings, $service );
-
-			$this->assertArrayHasKey( 'city_limit_cities', $settings->written );
-			$this->assertSame( [ 'test-cdek:394' ], array_map( static fn( $c ) => $c->key(), City_Limit::decode( $settings->written['city_limit_cities'] ) ) );
-		}
-
-		public function test_drawing_the_row_without_the_capability_writes_nothing(): void {
-			Functions\when( 'current_user_can' )->justReturn( false );
-
-			$service              = $this->service();
-			$service->owner       = 'test-cdek';
-			$service->replacement = $this->city( 'test-cdek:394', 'Пушкин' );
-			$settings             = new \WC_Settings_API();
-			$settings->options    = [ 'city_limit_cities' => City_Limit::encode( [ $this->city( 'dadata:abc', 'Пушкин' ) ] ) ];
-
-			$html = $this->render_with( $settings, $service );
-
-			$this->assertSame( [], $settings->written );
-			$this->assertStringContainsString( 'test-cdek:394', $html, 'the view still shows the replacement for the merchant to save' );
+			$this->assertSame( [ 'test-cdek:394', 'dadata:mirny' ], array_map( static fn( $c ) => $c->key(), City_Limit::decode( $submitted ) ), 'new record for the replaced city, old record for the stale one' );
+			$this->assertSame( $submitted, City_Limit_Form::sanitize_cities( $submitted ), 'the existing save path takes the submitted value unchanged' );
+			$this->assertSame( City_Limit::encode( [ $this->city( 'dadata:pushkin', 'Пушкин' ), $this->city( 'dadata:mirny', 'Мирный' ) ] ), $settings->options['city_limit_cities'], 'viewing the form writes nothing' );
 		}
 
 		public function test_a_stale_city_that_cannot_be_re_resolved_stays_listed_and_marked(): void {

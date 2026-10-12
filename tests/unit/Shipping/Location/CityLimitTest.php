@@ -79,6 +79,9 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		/** @var Location_Record|null what a stale city re-resolves to. */
 		public ?Location_Record $replacement = null;
 
+		/** @var array<string, Location_Record> what a stale city re-resolves to, by its own key (wins over `$replacement`). */
+		public array $replacements = [];
+
 		/** @var bool */
 		public bool $active = true;
 
@@ -113,8 +116,8 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			];
 		}
 
-		public function reresolve_stranded_record( Location_Record $stored ): ?Location_Record {
-			return $this->replacement;
+		public function reresolve_stranded_record( Location_Record $stored, bool $across_providers = false ): ?Location_Record {
+			return $this->replacements[ $stored->key() ] ?? $this->replacement;
 		}
 
 		public function is_active(): bool {

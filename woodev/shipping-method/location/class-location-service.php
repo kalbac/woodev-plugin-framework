@@ -2203,21 +2203,26 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 *
 		 * PURE READ: writes nothing. The caller decides what to keep.
 		 *
-		 * @since 2.0.2
+		 * `$across_providers` is the city limit's wider matching (#1185): a settlement is also accepted by bare name +
+		 * region, and the bare name is asked as a second query. The `fixed` default keeps the exact-label rule.
 		 *
-		 * @param Location_Record $stored A record a merchant stored earlier.
+		 * @since 2.0.2
+		 * @since 2.0.2 `$across_providers` (#1185).
+		 *
+		 * @param Location_Record $stored           A record a merchant stored earlier.
+		 * @param bool            $across_providers Whether to match by name + region across providers' label formats.
 		 *
 		 * @return Location_Record|null The record to use now, or `null` when no provider serves its level or
 		 *                              the name does not match exactly one place.
 		 */
-		public function reresolve_stranded_record( Location_Record $stored ): ?Location_Record {
+		public function reresolve_stranded_record( Location_Record $stored, bool $across_providers = false ): ?Location_Record {
 			$current_provider = $this->provider_for_level( $stored->level(), $stored->country() );
 
 			if ( null !== $current_provider && $current_provider->get_id() === $stored->provider_id() ) {
 				return $stored;
 			}
 
-			return null !== $current_provider ? $this->reresolve_fixed_default( $current_provider, $stored ) : null;
+			return null !== $current_provider ? $this->reresolve_fixed_default( $current_provider, $stored, $across_providers ) : null;
 		}
 
 		/**
@@ -2242,17 +2247,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 *              no `locations` filter at all).
 		 * @since 2.0.2 Requires {@see self::matching_candidates()} instead of
 		 *              blindly accepting `$records[0]` (review finding F2b).
-		 * @since 2.0.2 Matches a settlement by bare name + region when the display label differs, and retries
-		 *              with the bare name when the label finds nothing (#1185: another provider formats labels
-		 *              its own way).
+		 * @since 2.0.2 `$across_providers` (#1185): the city limit matches a settlement by bare name + region when
+		 *              the display label differs, and retries with the bare name when the label finds nothing
+		 *              (another provider formats labels its own way). Off, the behaviour is the `fixed` default's
+		 *              original: one query, exact label.
 		 *
-		 * @param Location_Provider $provider The provider to re-resolve through.
-		 * @param Location_Record   $stored   The stranded stored record.
+		 * @param Location_Provider $provider         The provider to re-resolve through.
+		 * @param Location_Record   $stored           The stranded stored record.
+		 * @param bool              $across_providers Whether to use the city limit's wider matching.
 		 *
 		 * @return Location_Record|null
 		 */
-		private function reresolve_fixed_default( Location_Provider $provider, Location_Record $stored ): ?Location_Record {
-			$queries = self::queries_for( $stored );
+		private function reresolve_fixed_default( Location_Provider $provider, Location_Record $stored, bool $across_providers = false ): ?Location_Record {
+			$queries = $across_providers ? self::queries_for( $stored ) : array_values( array_filter( [ self::query_text_for( $stored ) ] ) );
 
 			if ( [] === $queries ) {
 				return null;
@@ -2271,7 +2278,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 					return null;
 				}
 
-				$matches = self::matching_candidates( $records, $stored );
+				$matches = self::matching_candidates( $records, $stored, $across_providers );
 
 				// Two places answer to the name (homonyms): never guess, and never let a looser query pick one.
 				if ( count( $matches ) > 1 ) {
@@ -2303,31 +2310,44 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		}
 
 		/**
-		 * The candidates that name the same place as `$stored` (#1185): the SAME level, no region that contradicts
-		 * the stored one, and either the exact same display label or — for a settlement — the same bare name in the
-		 * same region.
+		 * The candidates that name the same place as `$stored`: the SAME level and the EXACT SAME display label
+		 * (review finding F2b). With `$across_providers` (the city limit, #1185) the rule is wider and stricter at once:
 		 *
-		 * The name-and-region rule is what carries a record across providers: a display label is formatted by the
-		 * provider that produced it («г Пушкин» / «Пушкин, Санкт-Петербург»), the settlement and region names are
-		 * what the providers share. It needs the region on BOTH sides — a candidate without one cannot vouch for
-		 * the place, so only the label rule can accept it. A region on both sides that disagrees refuses the candidate
-		 * whatever its label says (the same-named settlement of another region).
+		 *  - when the stored record has a region, a candidate must have one too and it must agree — for an exact label
+		 *    as well (a provider can answer an unqualified same-label settlement of another region);
+		 *  - a settlement is also accepted when its bare name equals the stored one in that same region — a display
+		 *    label is formatted by the provider that produced it («г Пушкин» / «Пушкин, Санкт-Петербург»), the
+		 *    settlement and region names are what providers share.
 		 *
-		 * The caller accepts a result only when it is the ONE candidate (review finding F2b): zero or several
-		 * (two same-named settlements — the «Мирный» scenario the review measured against DaData) refuse rather
-		 * than guess; `$records[0]` was never a safe proxy for «the merchant's own locality».
+		 * A stored record without a region keeps the label rule alone.
+		 *
+		 * The caller accepts a result only when it is the ONE candidate: zero or several (two same-named settlements —
+		 * the «Мирный» scenario the review measured against DaData) refuse rather than guess; `$records[0]` was never a
+		 * safe proxy for «the merchant's own locality».
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param Location_Record[] $records Candidates `$provider->suggest()` returned.
-		 * @param Location_Record   $stored  The stored record being replaced.
+		 * @param Location_Record[] $records           Candidates `$provider->suggest()` returned.
+		 * @param Location_Record   $stored            The stored record being replaced.
+		 * @param bool              $across_providers Whether to apply the city limit's rule.
 		 *
 		 * @return Location_Record[]
 		 */
-		private static function matching_candidates( array $records, Location_Record $stored ): array {
+		private static function matching_candidates( array $records, Location_Record $stored, bool $across_providers = false ): array {
+			if ( ! $across_providers ) {
+				return array_values(
+					array_filter(
+						$records,
+						static fn( $candidate ): bool => $candidate instanceof Location_Record
+							&& $candidate->level() === $stored->level()
+							&& $candidate->label() === $stored->label()
+					)
+				);
+			}
+
 			$stored_region    = $stored->region();
 			$stored_settle    = $stored->settlement();
-			$by_name          = Location_Record::LEVEL_SETTLEMENT === $stored->level() && null !== $stored_region && null !== $stored_settle;
+			$by_name          = Location_Record::LEVEL_SETTLEMENT === $stored->level() && null !== $stored_settle;
 			$stored_region_nm = null !== $stored_region ? self::normalize_region_name( (string) $stored_region['name'] ) : '';
 			$stored_city_nm   = null !== $stored_settle ? Location_Record::normalize_city_name( (string) $stored_settle['name'], (string) ( $stored_settle['type'] ?? '' ) ) : '';
 
@@ -2339,11 +2359,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 							return false;
 						}
 
-						$region         = $candidate->region();
-						$region_matches = null !== $stored_region && null !== $region && self::normalize_region_name( (string) $region['name'] ) === $stored_region_nm;
+						if ( null !== $stored_region ) {
+							$region = $candidate->region();
 
-						if ( null !== $stored_region && null !== $region && ! $region_matches ) {
-							return false;
+							if ( null === $region || self::normalize_region_name( (string) $region['name'] ) !== $stored_region_nm ) {
+								return false;
+							}
 						}
 
 						if ( $candidate->label() === $stored->label() ) {
@@ -2353,7 +2374,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 						$settlement = $candidate->settlement();
 
 						return $by_name
-							&& $region_matches
+							&& null !== $stored_region
 							&& null !== $settlement
 							&& '' !== $stored_city_nm
 							&& Location_Record::normalize_city_name( (string) $settlement['name'], (string) ( $settlement['type'] ?? '' ) ) === $stored_city_nm;

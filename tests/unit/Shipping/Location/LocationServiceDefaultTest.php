@@ -1421,7 +1421,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 				$new
 			);
 
-			$result = $service->reresolve_stranded_record( $this->pushkin_of( 'prov-a', 'г Санкт-Петербург, г Пушкин' ) );
+			$result = $service->reresolve_stranded_record( $this->pushkin_of( 'prov-a', 'г Санкт-Петербург, г Пушкин' ), true );
 
 			$this->assertNotNull( $result );
 			$this->assertSame( 'prov-b', $result->provider_id() );
@@ -1434,7 +1434,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 				$new
 			);
 
-			$this->assertNull( $service->reresolve_stranded_record( $this->pushkin_of( 'prov-a', 'г Санкт-Петербург, г Пушкин' ) ) );
+			$this->assertNull( $service->reresolve_stranded_record( $this->pushkin_of( 'prov-a', 'г Санкт-Петербург, г Пушкин' ), true ) );
 		}
 
 		public function test_a_same_label_in_another_region_is_still_a_homonym(): void {
@@ -1444,7 +1444,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 				$new
 			);
 
-			$this->assertNull( $service->reresolve_stranded_record( $this->pushkin_of( 'prov-a', 'Пушкин' ) ) );
+			$this->assertNull( $service->reresolve_stranded_record( $this->pushkin_of( 'prov-a', 'Пушкин' ), true ) );
 		}
 
 		public function test_two_places_with_the_same_name_in_the_region_leave_the_city_stale_and_stop_asking(): void {
@@ -1456,14 +1456,14 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 				$new
 			);
 
-			$this->assertNull( $service->reresolve_stranded_record( $this->pushkin_of( 'prov-a', 'г Санкт-Петербург, г Пушкин' ) ) );
+			$this->assertNull( $service->reresolve_stranded_record( $this->pushkin_of( 'prov-a', 'г Санкт-Петербург, г Пушкин' ), true ) );
 			$this->assertCount( 1, $new->suggest_calls, 'homonyms are final: a looser query is not tried' );
 		}
 
 		public function test_a_provider_that_finds_nothing_leaves_the_city_stale_after_both_queries(): void {
 			$service = $this->service_with_new_provider( static fn() => [], $new );
 
-			$this->assertNull( $service->reresolve_stranded_record( $this->pushkin_of( 'prov-a', 'г Санкт-Петербург, г Пушкин' ) ) );
+			$this->assertNull( $service->reresolve_stranded_record( $this->pushkin_of( 'prov-a', 'г Санкт-Петербург, г Пушкин' ), true ) );
 			$this->assertSame( [ 'г Санкт-Петербург, г Пушкин', 'Пушкин' ], array_column( $new->suggest_calls, 0 ) );
 		}
 
@@ -1475,7 +1475,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 				$new
 			);
 
-			$this->assertNull( $service->reresolve_stranded_record( $this->pushkin_of( 'prov-a', 'г Санкт-Петербург, г Пушкин' ) ) );
+			$this->assertNull( $service->reresolve_stranded_record( $this->pushkin_of( 'prov-a', 'г Санкт-Петербург, г Пушкин' ), true ) );
 			$this->assertCount( 1, $new->suggest_calls, 'a failing provider is not hammered with the second query' );
 		}
 
@@ -1485,7 +1485,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 				$new
 			);
 
-			$result = $service->reresolve_stranded_record( $this->pushkin_of( 'prov-a', 'г Санкт-Петербург, г Пушкин' ) );
+			$result = $service->reresolve_stranded_record( $this->pushkin_of( 'prov-a', 'г Санкт-Петербург, г Пушкин' ), true );
 
 			$this->assertNotNull( $result );
 			$this->assertSame( 'prov-b', $result->provider_id() );
@@ -1513,7 +1513,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			);
 			$service = $this->service_with_new_provider( static fn() => [ $new_record ], $new );
 
-			$this->assertSame( $new_record, $service->reresolve_stranded_record( $stored ) );
+			$this->assertSame( $new_record, $service->reresolve_stranded_record( $stored, true ) );
 		}
 
 		public function test_a_candidate_without_a_region_cannot_vouch_for_a_city_with_another_label(): void {
@@ -1527,7 +1527,47 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			);
 			$service = $this->service_with_new_provider( static fn() => [ $bare ], $new );
 
+			$this->assertNull( $service->reresolve_stranded_record( $this->pushkin_of( 'prov-a', 'г Санкт-Петербург, г Пушкин' ), true ) );
+		}
+
+		public function test_an_exact_label_without_a_region_is_refused_when_the_stored_city_has_one(): void {
+			// A provider answering an unqualified same-label settlement must not pass for the merchant's city.
+			$unqualified = $this->record(
+				'prov-b:unqualified',
+				Location_Record::LEVEL_SETTLEMENT,
+				[
+					'label'      => 'Пушкин',
+					'settlement' => [ 'name' => 'Пушкин', 'type' => 'г' ],
+				]
+			);
+			$service     = $this->service_with_new_provider( static fn() => [ $unqualified ], $new );
+
+			$this->assertNull( $service->reresolve_stranded_record( $this->pushkin_of( 'prov-a', 'Пушкин' ), true ) );
+		}
+
+		public function test_a_stored_city_without_a_region_keeps_the_label_rule(): void {
+			// A district narrows the search, but there is no region to compare: the exact label decides, as before.
+			$stored  = $this->record( 'prov-a:old', Location_Record::LEVEL_SETTLEMENT, [ 'label' => 'Пушкин', 'district' => [ 'name' => 'Пушкинский', 'type' => 'р-н' ] ] );
+			$match   = $this->record( 'prov-b:new', Location_Record::LEVEL_SETTLEMENT, [ 'label' => 'Пушкин' ] );
+			$service = $this->service_with_new_provider( static fn() => [ $match ], $new );
+
+			$this->assertSame( $match, $service->reresolve_stranded_record( $stored, true ) );
+		}
+
+		public function test_the_fixed_default_asks_the_provider_exactly_once_when_the_label_finds_nothing(): void {
+			$service = $this->service_with_new_provider( static fn() => [], $new );
+
 			$this->assertNull( $service->reresolve_stranded_record( $this->pushkin_of( 'prov-a', 'г Санкт-Петербург, г Пушкин' ) ) );
+			$this->assertSame( [ 'г Санкт-Петербург, г Пушкин' ], array_column( $new->suggest_calls, 0 ), 'no bare-name second query for the fixed default' );
+		}
+
+		public function test_the_fixed_default_still_needs_the_exact_label(): void {
+			$service = $this->service_with_new_provider(
+				fn() => [ $this->pushkin_of( 'prov-b', 'Пушкин, Санкт-Петербург', 'Санкт-Петербург', '' ) ],
+				$new
+			);
+
+			$this->assertNull( $service->reresolve_stranded_record( $this->pushkin_of( 'prov-a', 'г Санкт-Петербург, г Пушкин' ) ), 'name + region matching is the city limit\'s alone' );
 		}
 
 		public function test_a_city_its_provider_still_owns_is_untouched_and_nobody_is_asked(): void {
