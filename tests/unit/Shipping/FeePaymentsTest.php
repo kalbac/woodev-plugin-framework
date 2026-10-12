@@ -29,6 +29,15 @@ class Woodev_Test_Fee_Payments_Method extends Woodev_Test_Shipping_Method_For_Ra
 	}
 }
 
+/** A carrier whose price always depends on the payment method (the class-level declaration). */
+class Woodev_Test_Payment_Dependent_Method extends Woodev_Test_Shipping_Method_For_Rate_Cache {
+
+	/** @return bool */
+	public static function declares_payment_dependent_price(): bool {
+		return true;
+	}
+}
+
 /**
  * @coversDefaultClass \Woodev\Framework\Shipping\Fee_Payments
  */
@@ -399,6 +408,50 @@ final class FeePaymentsTest extends TestCase {
 			[ [ 'contents_cost' => 100, 'chosen_payment_method' => 'cod' ], [ 'chosen_payment_method' => 'cod' ] ],
 			Fee_Payments::add_chosen_payment_to_packages( [ [ 'contents_cost' => 100 ], [] ] )
 		);
+	}
+
+	/** @return void */
+	public function test_a_declaring_method_class_turns_the_plumbing_on_with_an_empty_registry(): void {
+		$this->session['chosen_payment_method'] = 'cod';
+
+		Fee_Payments::declare_payment_dependent_price( [ Woodev_Test_Payment_Dependent_Method::class ] );
+
+		$this->assertTrue( Fee_Payments::is_used() );
+		$this->assertSame( [], $this->options );
+		$this->assertSame( [], $this->updates );
+		$this->assertSame(
+			[ [ 'contents_cost' => 100, 'chosen_payment_method' => 'cod' ] ],
+			Fee_Payments::add_chosen_payment_to_packages( [ [ 'contents_cost' => 100 ] ] )
+		);
+	}
+
+	/** @return void */
+	public function test_a_method_class_that_does_not_declare_leaves_the_plumbing_off(): void {
+		$this->session['chosen_payment_method'] = 'cod';
+		$packages                               = [ [ 'contents_cost' => 100 ] ];
+
+		Fee_Payments::declare_payment_dependent_price( [ Woodev_Test_Fee_Payments_Method::class, 'not_a_class', 42 ] );
+
+		$this->assertFalse( Fee_Payments::is_used() );
+		$this->assertSame( $packages, Fee_Payments::add_chosen_payment_to_packages( $packages ) );
+	}
+
+	/** @return void */
+	public function test_the_declaration_is_found_among_several_classes_and_the_registry_still_works_without_it(): void {
+		Fee_Payments::declare_payment_dependent_price( [ Woodev_Test_Fee_Payments_Method::class, Woodev_Test_Payment_Dependent_Method::class ] );
+		$this->assertTrue( Fee_Payments::is_used() );
+
+		Fee_Payments::reset();
+		$this->assertFalse( Fee_Payments::is_used() );
+
+		Fee_Payments::on_option_added( 'woocommerce_cdek_7_settings', [ Fee_Payments::OPTION_KEY => [ 'cod' ] ] );
+		$this->assertTrue( Fee_Payments::is_used() );
+	}
+
+	/** @return void */
+	public function test_a_method_defaults_to_not_declaring_a_payment_dependent_price(): void {
+		$this->assertFalse( Shipping_Method::declares_payment_dependent_price() );
+		$this->assertFalse( Woodev_Test_Fee_Payments_Method::declares_payment_dependent_price() );
 	}
 
 	/** @return void */

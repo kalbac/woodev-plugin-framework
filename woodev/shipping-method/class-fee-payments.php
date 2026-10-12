@@ -30,7 +30,10 @@ if ( ! class_exists( __NAMESPACE__ . '\Fee_Payments' ) ) :
 	 * 3. **Only where somebody uses it.** A shop where no method restricts its fee or uses insurance
 	 *    only for payment on receipt keeps its package
 	 *    hashes, its cache hits and its page weight exactly as they were: all three pieces above stay
-	 *    off until a saved instance carries a non-empty list or conditional insurance mode.
+	 *    off until a saved instance carries a non-empty list or conditional insurance mode — or a method
+	 *    class declares that its price always depends on the payment method
+	 *    ({@see Shipping_Method::declares_payment_dependent_price()}, read once by
+	 *    {@see self::declare_payment_dependent_price()}).
 	 *
 	 * «Somebody uses it» is a registry option, kept up to date from the option hooks, not a scan of
 	 * the registered methods: on a cold request WooCommerce collects the cart's packages BEFORE
@@ -62,6 +65,9 @@ if ( ! class_exists( __NAMESPACE__ . '\Fee_Payments' ) ) :
 
 		/** @var bool whether this request already wired the hooks */
 		private static bool $registered = false;
+
+		/** @var bool whether a registered method class declared that its price always depends on the payment method */
+		private static bool $price_depends_on_payment = false;
 
 		/** @var object|null a stand-in for `WC()`. Tests only: `WC` is never defined in the unit-test process. */
 		private static ?object $runtime = null;
@@ -105,8 +111,34 @@ if ( ! class_exists( __NAMESPACE__ . '\Fee_Payments' ) ) :
 		 * @return void
 		 */
 		public static function reset(): void {
-			self::$registered = false;
-			self::$runtime    = null;
+			self::$registered               = false;
+			self::$price_depends_on_payment = false;
+			self::$runtime                  = null;
+		}
+
+		/**
+		 * Switches the plumbing on for every instance of the method classes that declare a price which
+		 * always depends on the payment method ({@see Shipping_Method::declares_payment_dependent_price()}).
+		 *
+		 * Called by each shipping plugin once, with its method classes, right after {@see self::register()}.
+		 * It sets a request flag, never an option: the declaration is code, so it needs no registry write
+		 * and no re-save of any instance, and it cannot go stale when the plugin is deactivated. Fleet-wide
+		 * like the rest of the class — one declaring plugin turns the shared plumbing on for the site.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string[] $method_classes the plugin's shipping method classes.
+		 * @return void
+		 */
+		public static function declare_payment_dependent_price( array $method_classes ): void {
+
+			foreach ( $method_classes as $class ) {
+				if ( is_string( $class ) && is_subclass_of( $class, Shipping_Method::class ) && $class::declares_payment_dependent_price() ) {
+					self::$price_depends_on_payment = true;
+
+					return;
+				}
+			}
 		}
 
 		/**
@@ -149,14 +181,15 @@ if ( ! class_exists( __NAMESPACE__ . '\Fee_Payments' ) ) :
 		}
 
 		/**
-		 * Whether any saved instance needs payment-dependent fees or insurance.
+		 * Whether any saved instance needs payment-dependent fees or insurance, or a registered method
+		 * class declared a price that always depends on the payment method.
 		 *
 		 * @since 2.0.2
 		 *
 		 * @return bool
 		 */
 		public static function is_used(): bool {
-			return [] !== self::registry();
+			return self::$price_depends_on_payment || [] !== self::registry();
 		}
 
 		/**
