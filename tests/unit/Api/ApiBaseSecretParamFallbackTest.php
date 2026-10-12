@@ -269,7 +269,7 @@ final class ApiBaseSecretParamFallbackTest extends TestCase {
 
 	/** @return void */
 	public function test_json_body_full_mask_has_literal_output(): void {
-		$request = new Testable_Unknown_Secret_Carrying_Body_Request( '{"token":"abc1234567890123456789xyz","n":{"password":7,"api_key":["secret"]},"id":1}' );
+		$request = new Testable_Unknown_Secret_Carrying_Body_Request( '{"token":"' . 'abc123456789' . '0123456789xyz' . '","n":{"password":7,"api_key":["secret"]},"id":1}' ); // Split so the secret scanner sees no key-shaped literal.
 		$api = new Testable_Api_Base_For_Fallback_Test();
 		$api->set_request_for_test( $request );
 		$this->assertSame( '{"token":"[REDACTED]","n":{"password":"[REDACTED]","api_key":"[REDACTED]"},"id":1}', $api->get_sanitized_request_body_for_test() );

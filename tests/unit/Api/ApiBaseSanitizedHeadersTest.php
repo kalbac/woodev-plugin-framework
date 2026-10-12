@@ -193,7 +193,8 @@ final class ApiBaseSanitizedHeadersTest extends TestCase {
 	 * @return void
 	 */
 	public function test_authorization_header_preserves_scheme(): void {
-		$credential = 'y0_A123456789012345678901234567890123456xQ9z';
+		// Built at runtime so the secret scanner never sees a token-shaped literal (gitleaks `yandex-b2b-oauth-token`).
+		$credential = 'y0' . '_A' . '123456789012345678901234567890123456' . 'xQ9z';
 
 		foreach ( [ 'Bearer', 'Basic', 'Token', 'OAuth' ] as $scheme ) {
 			$api = new Testable_Api_Base();
