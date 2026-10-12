@@ -103,8 +103,6 @@ class Wiring_Test_Integration_Registry {
 
 /**
  * @covers \Woodev\Framework\Shipping\Shipping_Plugin::add_hooks
- * @runInSeparateProcess
- * @preserveGlobalState disabled
  */
 final class ShippingPluginPaymentDependentPriceWiringTest extends TestCase {
 
@@ -221,7 +219,14 @@ final class ShippingPluginPaymentDependentPriceWiringTest extends TestCase {
 		return $registry->registered[0];
 	}
 
-	/** @return void */
+	/**
+	 * Separate process, per method: PHPUnit 9 ignores `@runInSeparateProcess` on a class (only the
+	 * method-level form isolates), and the blocks interface this test declares must not reach the unit process.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 * @return void
+	 */
 	public function test_a_declaring_method_switches_all_three_on_through_add_hooks_with_an_empty_registry(): void {
 		$this->boot( new Wiring_Test_Shipping_Plugin( [ Wiring_Payment_Dependent_Method::class ] ) );
 
@@ -252,7 +257,11 @@ final class ShippingPluginPaymentDependentPriceWiringTest extends TestCase {
 		$this->assertSame( [ Locality_Blocks_Integration::SCRIPT_HANDLE ], $integration->get_script_handles() );
 	}
 
-	/** @return void */
+	/**
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 * @return void
+	 */
 	public function test_a_method_that_does_not_declare_leaves_all_three_off_through_add_hooks(): void {
 		$this->boot( new Wiring_Test_Shipping_Plugin( [ Woodev_Test_Shipping_Method_For_Rate_Cache::class ] ) );
 
