@@ -54,8 +54,9 @@ class CarrierCompetitorNotificationHandlerTest extends TestCase {
 		$handler->run();
 
 		$this->assertCount( 1, $notices );
-		$this->assertStringContainsString( 'Информация от Woodev: обнаружен плагин СДЭК стороннего разработчика', $notices[0]['message'] );
+		$this->assertStringContainsString( 'Информация от Woodev: обнаружен сторонний плагин СДЭК', $notices[0]['message'] );
 		$this->assertStringContainsString( 'На сайте активен плагин CDEKDelivery.', $notices[0]['message'] );
+		$this->assertStringContainsString( 'Во избежание конфликтов отключите плагин CDEKDelivery.', $notices[0]['message'] );
 		$this->assertStringContainsString( 'Отключить CDEKDelivery', $notices[0]['message'] );
 		$this->assertStringContainsString( 'Скрыть', $notices[0]['message'] );
 	}
@@ -67,7 +68,8 @@ class CarrierCompetitorNotificationHandlerTest extends TestCase {
 
 		$this->assertCount( 1, $notices );
 		$this->assertStringContainsString( 'Яндекс Доставка', $notices[0]['message'] );
-		$this->assertStringContainsString( 'woodev-shared-', $notices[0]['id'] );
+		$this->assertSame( 'woodev-competitor-recommend-yandex', $notices[0]['id'] );
+		$this->assertStringContainsString( 'Подробнее о плагине', $notices[0]['message'] );
 	}
 
 	public function test_yandex_recommendation_is_not_duplicated_across_woodev_plugins(): void {
@@ -94,8 +96,8 @@ class CarrierCompetitorNotificationHandlerTest extends TestCase {
 		( new Carrier_Competitor_Notification_Handler( $plugin, 'yandex' ) )->run();
 
 		$this->assertCount( 1, $notices );
-		$this->assertStringContainsString( 'стороннего разработчика', $notices[0]['message'] );
-		$this->assertStringNotContainsString( 'woodev-shared-', $notices[0]['id'] );
+		$this->assertStringContainsString( 'Во избежание конфликтов отключите плагин Яндекс Доставка.', $notices[0]['message'] );
+		$this->assertSame( 'woodev-competitor-conflict-yandex-go-delivery-yandex-go-delivery-php', $notices[0]['id'] );
 	}
 
 	public function test_legacy_cdek_plugin_file_is_detected(): void {

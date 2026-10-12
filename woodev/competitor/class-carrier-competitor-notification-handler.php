@@ -89,16 +89,6 @@ final class Carrier_Competitor_Notification_Handler extends Competitor_Notificat
 	}
 
 	/**
-	 * Always use the regular WordPress admin-notice renderer for this feature.
-	 *
-	 * @since 2.0.2
-	 * @return Competitor_Notice_Renderer
-	 */
-	protected function get_renderer(): Competitor_Notice_Renderer {
-		return new Admin_Notice_Renderer( $this->get_plugin()->get_admin_notice_handler() );
-	}
-
-	/**
 	 * Returns the dismiss action with the localized admin label.
 	 *
 	 * @since 2.0.2
@@ -130,14 +120,14 @@ final class Carrier_Competitor_Notification_Handler extends Competitor_Notificat
 		}
 
 		$content = sprintf(
-			__( 'На сайте активен плагин %1$s. Он тоже добавляет методы доставки %2$s: на оформлении заказа появятся дубли, а заказы могут уйти в %3$s дважды. Оставьте включённым один из плагинов.', 'woodev-plugin-framework' ),
+			__( 'На сайте активен плагин %1$s. Он тоже добавляет методы доставки %2$s: на оформлении заказа появятся дубли, а заказы могут уйти в %3$s дважды. Во избежание конфликтов отключите плагин %1$s.', 'woodev-plugin-framework' ),
 			esc_html( $name ),
 			esc_html( $product['carrier_name'] ),
 			esc_html( $product['service_name'] )
 		);
 
 		return [
-			'title'   => sprintf( __( 'Информация от Woodev: обнаружен плагин %s стороннего разработчика', 'woodev-plugin-framework' ), $product['carrier_name'] ),
+			'title'   => sprintf( __( 'Информация от Woodev: обнаружен сторонний плагин %s', 'woodev-plugin-framework' ), $product['carrier_name'] ),
 			'content' => $content,
 			'type'    => self::TYPE_ERROR,
 			'actions' => [
@@ -162,11 +152,29 @@ final class Carrier_Competitor_Notification_Handler extends Competitor_Notificat
 
 		foreach ( $products as $product ) {
 			if ( $this->is_our_product_active( $product ) ) {
+				$this->get_renderer()->delete(
+					new Competitor_Rule(
+						[
+							'mode'      => Competitor_Rule::MODE_RECOMMEND,
+							'detect'    => $product['competitors'][0]['file'],
+							'note_name' => 'woodev-competitor-recommend-' . $product['id'],
+						]
+					)
+				);
 				continue;
 			}
 
 			$rule = $this->active_recommendation_rule( $product );
 			if ( null === $rule ) {
+				$this->get_renderer()->delete(
+					new Competitor_Rule(
+						[
+							'mode'      => Competitor_Rule::MODE_RECOMMEND,
+							'detect'    => $product['competitors'][0]['file'],
+							'note_name' => 'woodev-competitor-recommend-' . $product['id'],
+						]
+					)
+				);
 				continue;
 			}
 
@@ -175,7 +183,7 @@ final class Carrier_Competitor_Notification_Handler extends Competitor_Notificat
 				[
 					'title'   => sprintf( __( 'Информация от Woodev: плагин для %s', 'woodev-plugin-framework' ), $product['carrier_name'] ),
 					'content' => sprintf(
-						__( 'На сайте работает плагин стороннего разработчика <strong>%1$s</strong>. У Woodev есть плагин для %2$s: <strong>%3$s</strong>.', 'woodev-plugin-framework' ),
+						__( 'На сайте работает плагин <strong>%1$s</strong>. У Woodev есть плагин для %2$s: <strong>%3$s</strong>.', 'woodev-plugin-framework' ),
 						esc_html( $rule->get_competitor_name() ),
 						esc_html( $product['carrier_name'] ),
 						esc_html( $product['name'] )
@@ -184,14 +192,13 @@ final class Carrier_Competitor_Notification_Handler extends Competitor_Notificat
 					'actions' => [
 						[
 							'name' => 'plugin-details',
-							'label' => __( 'Перейти на страницу плагина', 'woodev-plugin-framework' ),
+							'label' => __( 'Подробнее о плагине', 'woodev-plugin-framework' ),
 							'url' => $this->get_recommend_action_url( $rule ),
 							'primary' => true,
 						],
 						$this->dismiss_action(),
 					],
-				],
-				true
+				]
 			);
 		}
 	}

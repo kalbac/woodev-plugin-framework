@@ -6082,30 +6082,29 @@ msgstr "Населённый пункт не совпадает с адресо�
 msgid "Источник населённого пункта изменился. Выберите его ещё раз."
 msgstr "Источник населённого пункта изменился. Выберите его ещё раз."
 
-#: competitor/class-carrier-competitor-notification-handler.php:112
-msgid "На сайте активен плагин %1$s. Он тоже добавляет методы доставки %2$s: на оформлении заказа появятся дубли, а заказы могут уйти в %3$s дважды. Оставьте включённым один из плагинов."
-msgstr "На сайте активен плагин %1$s. Он тоже добавляет методы доставки %2$s: на оформлении заказа появятся дубли, а заказы могут уйти в %3$s дважды. Оставьте включённым один из плагинов."
+#: competitor/class-carrier-competitor-notification-handler.php:123
+msgid "На сайте активен плагин %1$s. Он тоже добавляет методы доставки %2$s: на оформлении заказа появятся дубли, а заказы могут уйти в %3$s дважды. Во избежание конфликтов отключите плагин %1$s."
+msgstr "На сайте активен плагин %1$s. Он тоже добавляет методы доставки %2$s: на оформлении заказа появятся дубли, а заказы могут уйти в %3$s дважды. Во избежание конфликтов отключите плагин %1$s."
 
-#: competitor/class-carrier-competitor-notification-handler.php:119
-msgid "Информация от Woodev: обнаружен плагин %s стороннего разработчика"
-msgstr "Информация от Woodev: обнаружен плагин %s стороннего разработчика"
+#: competitor/class-carrier-competitor-notification-handler.php:130
+msgid "Информация от Woodev: обнаружен сторонний плагин %s"
+msgstr "Информация от Woodev: обнаружен сторонний плагин %s"
 
-#: competitor/class-carrier-competitor-notification-handler.php:125
+#: competitor/class-carrier-competitor-notification-handler.php:136
 msgid "Отключить %s"
 msgstr "Отключить %s"
 
-#: competitor/class-carrier-competitor-notification-handler.php:166
-msgid "Перейти на страницу плагина"
-msgstr "Перейти на страницу плагина"
+#: competitor/class-carrier-competitor-notification-handler.php:195
+msgid "Подробнее о плагине"
+msgstr "Подробнее о плагине"
 
-#: competitor/class-carrier-competitor-notification-handler.php:155
+#: competitor/class-carrier-competitor-notification-handler.php:184
 msgid "Информация от Woodev: плагин для %s"
 msgstr "Информация от Woodev: плагин для %s"
 
-#: competitor/class-carrier-competitor-notification-handler.php:141
-#: competitor/class-carrier-competitor-notification-handler.php:157
-msgid "На сайте работает плагин стороннего разработчика <strong>%1$s</strong>. У Woodev есть плагин для %2$s: <strong>%3$s</strong>."
-msgstr "На сайте работает плагин стороннего разработчика <strong>%1$s</strong>. У Woodev есть плагин для %2$s: <strong>%3$s</strong>."
+#: competitor/class-carrier-competitor-notification-handler.php:186
+msgid "На сайте работает плагин <strong>%1$s</strong>. У Woodev есть плагин для %2$s: <strong>%3$s</strong>."
+msgstr "На сайте работает плагин <strong>%1$s</strong>. У Woodev есть плагин для %2$s: <strong>%3$s</strong>."
 
 #: competitor/class-carrier-competitor-notification-handler.php:89
 msgid "Скрыть"

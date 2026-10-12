@@ -34,9 +34,8 @@ final class Admin_Notice_Renderer implements Competitor_Notice_Renderer {
 	 *
 	 * @param Competitor_Rule     $rule the rule being rendered
 	 * @param array<string,mixed> $note built note payload
-	 * @param bool                $shared_dismissal whether the dismissal is shared across plugin owners
 	 */
-	public function render( Competitor_Rule $rule, array $note, bool $shared_dismissal = false ): void {
+	public function render( Competitor_Rule $rule, array $note ): void {
 
 		$content = (string) ( $note['content'] ?? '' );
 
@@ -52,10 +51,9 @@ final class Admin_Notice_Renderer implements Competitor_Notice_Renderer {
 		$content .= $this->primary_action_link( $note['actions'] ?? [] );
 		$content .= $this->dismiss_link( $note['actions'] ?? [] );
 
-		$message_id = ( $shared_dismissal ? 'woodev-shared-' : '' ) . $rule->get_note_name();
 		$this->notice_handler->add_admin_notice(
 			$content,
-			$message_id,
+			$rule->get_note_name(),
 			[ 'always_show_on_settings' => false ]
 		);
 	}

@@ -30,7 +30,7 @@ class Spy_Renderer implements Competitor_Notice_Renderer {
 	/** @var array<int,Competitor_Rule> */
 	public array $deleted = [];
 
-	public function render( Competitor_Rule $rule, array $note, bool $shared_dismissal = false ): void {
+	public function render( Competitor_Rule $rule, array $note ): void {
 		$this->rendered[] = [ 'rule' => $rule, 'note' => $note ];
 	}
 	public function delete( Competitor_Rule $rule ): void {

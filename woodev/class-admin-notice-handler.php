@@ -333,14 +333,6 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 				$user_id = get_current_user_id();
 			}
 
-			if ( 0 === strpos( $message_id, 'woodev-shared-' ) ) {
-				$dismissed_notices = get_user_meta( $user_id, '_woodev_plugin_framework_shared_dismissed_messages', true );
-				$dismissed_notices = is_array( $dismissed_notices ) ? $dismissed_notices : [];
-				$dismissed_notices[ $message_id ] = true;
-				update_user_meta( $user_id, '_woodev_plugin_framework_shared_dismissed_messages', $dismissed_notices );
-				return;
-			}
-
 			$dismissed_notices = $this->get_dismissed_notices( $user_id );
 
 			$dismissed_notices[ $message_id ] = true;
@@ -379,14 +371,6 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 				$user_id = get_current_user_id();
 			}
 
-			if ( 0 === strpos( $message_id, 'woodev-shared-' ) ) {
-				$dismissed_notices = get_user_meta( $user_id, '_woodev_plugin_framework_shared_dismissed_messages', true );
-				$dismissed_notices = is_array( $dismissed_notices ) ? $dismissed_notices : [];
-				$dismissed_notices[ $message_id ] = false;
-				update_user_meta( $user_id, '_woodev_plugin_framework_shared_dismissed_messages', $dismissed_notices );
-				return;
-			}
-
 			$dismissed_notices = $this->get_dismissed_notices( $user_id );
 
 			$dismissed_notices[ $message_id ] = false;
@@ -407,14 +391,6 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 		 * @return bool true if the message has been dismissed by the admin user
 		 */
 		public function is_notice_dismissed( string $message_id, $user_id = null ): bool {
-			if ( 0 === strpos( $message_id, 'woodev-shared-' ) ) {
-				if ( is_null( $user_id ) ) {
-					$user_id = get_current_user_id();
-				}
-
-				$dismissed_notices = get_user_meta( $user_id, '_woodev_plugin_framework_shared_dismissed_messages', true );
-				return is_array( $dismissed_notices ) && ! empty( $dismissed_notices[ $message_id ] );
-			}
 
 			$dismissed_notices = $this->get_dismissed_notices( $user_id );
 

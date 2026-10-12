@@ -135,9 +135,27 @@ class CompetitorRendererTest extends TestCase {
 
 		$this->assertNotEmpty( \Automattic\WooCommerce\Admin\Notes\Note::$saved );
 		$saved = \Automattic\WooCommerce\Admin\Notes\Note::$saved[0];
-		// Note name is namespaced by the plugin source to avoid cross-plugin collision.
-		$this->assertSame( 'woodev-test-plugin-woodev-competitor-recommend-cdek-php', $saved['name'] );
+		$this->assertTrue( \Woodev\Framework\Competitor\WC_Admin_Notes_Renderer::is_available() );
+		// Notes are global by name so carrier recommendations are shared across plugins.
+		$this->assertSame( 'woodev-competitor-recommend-cdek-php', $saved['name'] );
 		$this->assertSame( 'Заголовок', $saved['title'] );
 		$this->assertSame( 'woodev-test-plugin', $saved['source'] );
+		$this->assertSame( 'update', $saved['type'] );
+		$this->assertSame( 'plain', $saved['layout'] );
+		$this->assertSame( 'Перейти', $saved['acts'][0][1] );
+
+		$conflict_rule = new \Woodev\Framework\Competitor\Competitor_Rule(
+			[ 'detect' => 'cdek.php', 'mode' => 'conflict' ]
+		);
+		$renderer->render(
+			$conflict_rule,
+			[
+				'title'   => 'Конфликт',
+				'content' => 'Тело',
+				'type'    => \Automattic\WooCommerce\Admin\Notes\Note::E_WC_ADMIN_NOTE_ERROR,
+				'actions' => [],
+			]
+		);
+		$this->assertSame( 'error', \Automattic\WooCommerce\Admin\Notes\Note::$saved[1]['type'] );
 	}
 }

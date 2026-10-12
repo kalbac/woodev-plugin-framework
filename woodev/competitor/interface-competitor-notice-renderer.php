@@ -22,9 +22,8 @@ interface Competitor_Notice_Renderer {
 	 *
 	 * @param Competitor_Rule     $rule the rule being rendered
 	 * @param array<string,mixed> $note built note payload: title, content, type, image, actions
-	 * @param bool                $shared_dismissal whether the dismissal is shared across plugin owners
 	 */
-	public function render( Competitor_Rule $rule, array $note, bool $shared_dismissal = false ): void;
+	public function render( Competitor_Rule $rule, array $note ): void;
 
 	/**
 	 * Removes the notice for a rule whose competitor is no longer active.

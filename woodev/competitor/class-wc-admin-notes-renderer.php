@@ -49,9 +49,8 @@ final class WC_Admin_Notes_Renderer implements Competitor_Notice_Renderer {
 	 *
 	 * @param Competitor_Rule     $rule the rule being rendered
 	 * @param array<string,mixed> $note built note payload
-	 * @param bool                $shared_dismissal whether the dismissal is shared across plugin owners
 	 */
-	public function render( Competitor_Rule $rule, array $note, bool $shared_dismissal = false ): void {
+	public function render( Competitor_Rule $rule, array $note ): void {
 
 		if ( ! self::is_available() ) {
 			return;
@@ -71,15 +70,14 @@ final class WC_Admin_Notes_Renderer implements Competitor_Notice_Renderer {
 
 		try {
 
-			// Create once (spec §5): if our per-plugin note already exists, the WC
-			// inbox owns it from here (dismissal, etc.) — do not re-save on every
-			// admin load, and never force-resurface.
-			if ( Woodev_Notes_Helper::get_note_with_name( $this->note_name( $rule ) ) ) {
+			// Create once: the globally named WC note owns dismissal state from here.
+			// Do not re-save on every admin load or force-resurface a dismissed note.
+			if ( Woodev_Notes_Helper::get_note_with_name( $rule->get_note_name() ) ) {
 				return;
 			}
 
 			$wc_note = new Note();
-			$wc_note->set_name( $this->note_name( $rule ) );
+			$wc_note->set_name( $rule->get_note_name() );
 			$wc_note->set_title( $note['title'] );
 			$wc_note->set_content( $note['content'] );
 			$wc_note->set_source( $this->source );
@@ -134,21 +132,9 @@ final class WC_Admin_Notes_Renderer implements Competitor_Notice_Renderer {
 			return;
 		}
 
-		if ( Woodev_Notes_Helper::note_with_name_exists( $this->note_name( $rule ) ) ) {
-			Notes::delete_notes_with_name( $this->note_name( $rule ) );
+		if ( Woodev_Notes_Helper::note_with_name_exists( $rule->get_note_name() ) ) {
+			Notes::delete_notes_with_name( $rule->get_note_name() );
 		}
-	}
-
-	/**
-	 * The plugin-namespaced WC note name. WC Admin Notes are a single global
-	 * table keyed by name, so the rule's generic name is prefixed with this
-	 * plugin's source — otherwise two Woodev plugins flagging the same competitor
-	 * would update/delete each other's note.
-	 *
-	 * @since 2.0.2
-	 */
-	private function note_name( Competitor_Rule $rule ): string {
-		return $this->source . '-' . $rule->get_note_name();
 	}
 
 	/**
