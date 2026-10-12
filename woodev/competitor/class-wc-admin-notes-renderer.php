@@ -139,19 +139,28 @@ final class WC_Admin_Notes_Renderer implements Competitor_Notice_Renderer {
 			];
 		}
 
+		// WooCommerce no longer stores an action's "primary" flag (WC 11.x reads actions back without it),
+		// so it is left out of the comparison; reading it raised a warning and made every request re-save the note.
+		$comparable_desired = array_map(
+			static function ( array $action ): array {
+				unset( $action['primary'] );
+				return $action;
+			},
+			$desired_actions
+		);
+
 		$current_actions = [];
 		foreach ( $wc_note->get_actions() as $action ) {
 			$current_actions[] = [
-				'name'          => $action->name,
-				'label'         => $action->label,
-				'url'           => $action->query,
-				'status'        => $action->status,
-				'primary'       => $action->is_primary,
-				'actioned_text' => $action->actioned_text,
+				'name'          => $action->name ?? '',
+				'label'         => $action->label ?? '',
+				'url'           => $action->query ?? '',
+				'status'        => $action->status ?? '',
+				'actioned_text' => $action->actioned_text ?? '',
 			];
 		}
 
-		if ( $desired_actions === $current_actions ) {
+		if ( $comparable_desired === $current_actions ) {
 			return false;
 		}
 

@@ -72,7 +72,7 @@ namespace Automattic\WooCommerce\Admin\Notes {
 							'label'         => $action[1],
 							'query'         => $action[2],
 							'status'        => $action[3],
-							'is_primary'    => $action[4],
+							// WC 11.x keeps no primary flag on a stored action (Note::add_action ignores it).
 							'actioned_text' => $action[5],
 						];
 					},
