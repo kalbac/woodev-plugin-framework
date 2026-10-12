@@ -116,7 +116,7 @@ Build `.mo` with `wp i18n make-mo` in the rig container; `update-po` can drop th
 `lint-i18n-answers-about-the-catalogue-not-the-code`. JS bundles read handle-named JSON,
 not `.mo` (`lint:js-i18n`, #1032; `js-translations-are-handle-named-json-files`).
 
-**#567 visual translation review:** GATED BY THE RELEASE, not by an operator answer (operator, 05.09.2026, repeated 07.09; s123) — the whole catalogue is walked right before release because strings still change until then. Board: «Бэклог» / «Заморожено» with that condition; do not reopen earlier.
+**#567 visual translation review:** GATED BY THE RELEASE, not by an operator answer (operator, 05.09.2026, repeated 07.09; s123) — the whole catalogue is walked right before release because strings still change until then. Board: status «Бэклог», priority «Заморожено» with that condition; do not reopen earlier.
 Do not infer sequencing from an old state-file snapshot.
 
 **Shipping method features support both declarations:** `$this->supports` before
