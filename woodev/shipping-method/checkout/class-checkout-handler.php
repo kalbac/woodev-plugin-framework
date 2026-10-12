@@ -117,6 +117,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 */
 		private static array $pickup_declarations_reconciled = [];
 
+		/** @var bool Whether the hidden-shipping-reason checkout hooks are registered. */
+		private static bool $hidden_reason_hooks_registered = false;
+		/** Store API namespace for admin-only hidden method explanations. */
+		private const HIDDEN_REASON_EXTENSION = 'woodev-shipping-hidden-reasons';
+
 		/**
 		 * Registry of native WC field ids claimed by each plugin_id.
 		 *
@@ -425,6 +430,111 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			add_filter( 'woocommerce_cart_shipping_packages', [ self::class, 'add_location_provenance_to_packages' ] );
 
 			$this->guard_native_field_conflicts();
+		}
+
+		/**
+		 * Registers the classic and Store API render paths once for all shipping plugins.
+		 * Called by the shipping method base when a package is calculated.
+		 *
+		 * @since 2.0.2
+		 * @return void
+		 */
+		public static function register_hidden_reason_hooks(): void {
+			if ( self::$hidden_reason_hooks_registered ) {
+				return;
+			}
+			self::$hidden_reason_hooks_registered = true;
+			add_action( 'woocommerce_review_order_after_shipping', [ self::class, 'render_hidden_shipping_reasons' ] );
+			add_action( 'woocommerce_blocks_loaded', [ self::class, 'register_hidden_reason_endpoint_data' ] );
+			add_action( 'wp_enqueue_scripts', [ self::class, 'enqueue_hidden_reason_script' ] );
+			if ( did_action( 'woocommerce_blocks_loaded' ) ) {
+				self::register_hidden_reason_endpoint_data();
+			}
+		}
+
+		/**
+		 * Prints the hidden rate explanations below the classic checkout shipping block.
+		 *
+		 * @since 2.0.2
+		 * @return void
+		 */
+		public static function render_hidden_shipping_reasons(): void {
+			if ( ! current_user_can( 'manage_woocommerce' ) ) {
+				return;
+			}
+			$messages = self::hidden_reason_messages();
+			if ( empty( $messages ) ) {
+				return;
+			}
+			echo '<ul class="woocommerce-error woodev-hidden-shipping-reasons" role="status">';
+			foreach ( $messages as $message ) {
+				echo '<li>' . esc_html( $message ) . '</li>';
+			}
+			echo '</ul>';
+		}
+
+		/**
+		 * Registers the cart extension payload; its callback returns no reasons to non-admins.
+		 *
+		 * @since 2.0.2
+		 * @return void
+		 */
+		public static function register_hidden_reason_endpoint_data(): void {
+			if ( ! function_exists( 'woocommerce_store_api_register_endpoint_data' ) ) {
+				return;
+			}
+			woocommerce_store_api_register_endpoint_data(
+				[
+					'endpoint'       => 'cart',
+					'namespace'      => self::HIDDEN_REASON_EXTENSION,
+					'schema_callback' => static function (): array {
+						return [
+							'messages' => [
+								'type' => 'array',
+								'items' => [ 'type' => 'string' ],
+								'readonly' => true,
+							],
+						];
+					},
+					'data_callback'  => static function (): array {
+						return [ 'messages' => current_user_can( 'manage_woocommerce' ) ? self::hidden_reason_messages() : [] ];
+					},
+					'schema_type'    => 'ARRAY_A',
+				]
+			);
+		}
+
+		/**
+		 * Loads the raw-served block checkout renderer for managers only.
+		 *
+		 * @since 2.0.2
+		 * @return void
+		 */
+		public static function enqueue_hidden_reason_script(): void {
+			if ( ! current_user_can( 'manage_woocommerce' ) || ! function_exists( 'is_checkout' ) || ! is_checkout()
+				|| ( function_exists( 'is_order_received_page' ) && is_order_received_page() ) ) {
+				return;
+			}
+			$path = dirname( __DIR__ ) . '/assets/js/frontend/hidden-shipping-reasons.js';
+			if ( file_exists( $path ) ) {
+				wp_enqueue_script( 'woodev-hidden-shipping-reasons', plugins_url( basename( $path ), $path ), [ 'wp-data' ], (string) filemtime( $path ), true );
+			}
+		}
+
+		/**
+		 * Returns only safe manager-facing explanation strings.
+		 *
+		 * @since 2.0.2
+		 * @return string[]
+		 */
+		private static function hidden_reason_messages(): array {
+			$messages = [];
+			foreach ( \Woodev\Framework\Shipping\Shipping_Method::get_hidden_reasons() as $reason ) {
+				if ( isset( $reason['message'] ) && '' !== $reason['message'] ) {
+					$messages[] = (string) $reason['message'];
+				}
+			}
+			return array_values( array_unique( $messages ) );
 		}
 
 		/**

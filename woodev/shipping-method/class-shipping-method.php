@@ -177,6 +177,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 */
 		private bool $pending_form_rebuild = false;
 
+		/** @var array<string, array{reason_code: string, message: string, context: array}> Hidden method reasons for this request. */
+		private static array $hidden_reasons = [];
+
+		/** @var string|null Package/method key while rate_package() is running. */
+		private ?string $active_hidden_reason_key = null;
+
 		/**
 		 * Whether {@see self::get_admin_rates_for_package()} is running on this instance right now.
 		 *
@@ -630,6 +636,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 */
 		final public function calculate_shipping( $package = [] ): void {
 
+			unset( self::$hidden_reasons[ self::hidden_reason_key( $package, $this->hidden_reason_method_id() ) ] );
+			Checkout\Checkout_Handler::register_hidden_reason_hooks();
+
 			/**
 			 * Shipping Method Before Calculate Shipping Action.
 			 *
@@ -931,7 +940,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 						? $this->pack_package( $package )
 						: null;
 
-					$rate = $this->rate_package( $package, $packed );
+					$this->active_hidden_reason_key = self::hidden_reason_key( $package, $this->hidden_reason_method_id() );
+					try {
+						$rate = $this->rate_package( $package, $packed );
+					} finally {
+						$this->active_hidden_reason_key = null;
+					}
 
 					// «free» is the carrier's decision (a free-from threshold, a coupon), so it is read from the rate
 					// BEFORE the box cost is added: a 0 rate with a 25 box surcharge is still a free rate
@@ -965,6 +979,77 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 					return $rate;
 				}
 			);
+		}
+
+		/**
+		 * Reports why this method has no rate for the package currently being calculated.
+		 * The supplied message is for a store manager; carrier exception text must not be passed here.
+		 *
+		 * @since 2.0.2
+		 * @param string               $reason_code Stable reason identifier.
+		 * @param string               $message     Safe, plugin-supplied explanation for the manager.
+		 * @param array<string, mixed> $context     Optional diagnostic context; never rendered to the customer.
+		 * @return void
+		 */
+		public function report_hidden( string $reason_code, string $message, array $context = [] ): void {
+			if ( null === $this->active_hidden_reason_key || '' === trim( $message ) ) {
+				return;
+			}
+
+			self::$hidden_reasons[ $this->active_hidden_reason_key ] = [
+				'reason_code' => strtolower( (string) preg_replace( '/[^a-z0-9_\\-]/i', '', $reason_code ) ),
+				'message'     => $message,
+				'context'     => $context,
+			];
+		}
+
+		/**
+		 * Returns the reasons recorded during this request for the checkout renderer.
+		 *
+		 * @since 2.0.2
+		 * @return array<string, array{reason_code: string, message: string, context: array}>
+		 */
+		public static function get_hidden_reasons(): array {
+			return self::$hidden_reasons;
+		}
+
+		/**
+		 * Builds a request-local package/method identity shared by reporting and rendering.
+		 *
+		 * @param array  $package   Package data.
+		 * @param string $method_id Shipping method instance id.
+		 * @return string
+		 */
+		private static function hidden_reason_key( array $package, string $method_id ): string {
+			$contents = [];
+			foreach ( (array) ( $package['contents'] ?? [] ) as $key => $item ) {
+				$contents[ (string) $key ] = [
+					'product_id'   => (int) ( $item['product_id'] ?? 0 ),
+					'variation_id' => (int) ( $item['variation_id'] ?? 0 ),
+					'quantity'     => (float) ( $item['quantity'] ?? 0 ),
+				];
+			}
+			$package_id = isset( $package['package_id'] )
+				? (string) $package['package_id']
+				: hash(
+					'sha256',
+					serialize(
+						[
+							'destination' => $package['destination'] ?? [],
+							'contents'    => $contents,
+						]
+					)
+				);
+			return $package_id . ':' . $method_id;
+		}
+
+		/**
+		 * Reads the WC method instance identity, with a class-level fallback for direct unit-test calls.
+		 *
+		 * @return string
+		 */
+		private function hidden_reason_method_id(): string {
+			return isset( $this->id ) ? $this->get_id() : static::get_method_id();
 		}
 
 		/**
@@ -1474,6 +1559,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 * @return void
 		 */
 		private function handle_rate_calculation_failure( \Woodev_Plugin_Exception $exception, array $package ): void {
+
+			$key = self::hidden_reason_key( $package, $this->hidden_reason_method_id() );
+			if ( ! isset( self::$hidden_reasons[ $key ] ) ) {
+				$this->active_hidden_reason_key = $key;
+				$this->report_hidden(
+					'rate_calculation_failed',
+					__( 'Способ доставки скрыт: не удалось рассчитать стоимость доставки. Попробуйте позже или проверьте настройки службы доставки.', 'woodev-plugin-framework' )
+				);
+				$this->active_hidden_reason_key = null;
+			}
 
 			$this->get_plugin()->log_error(
 				sprintf(

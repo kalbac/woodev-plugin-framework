@@ -166,6 +166,9 @@ namespace Woodev\Tests\Unit\Shipping {
 		/** @var int */
 		public int $added = 0;
 
+		/** @var bool whether this probe reports a carrier reason before returning. */
+		public bool $report_hidden = false;
+
 		public function __construct() {}
 
 		/**
@@ -225,6 +228,9 @@ namespace Woodev\Tests\Unit\Shipping {
 		 */
 		protected function rate_package( array $package, ?\Woodev_Packer_Result $packed ): ?Shipping_Rate {
 			++$this->carrier_calls;
+			if ( $this->report_hidden ) {
+				$this->report_hidden( 'no_service', 'No service in this area.' );
+			}
 
 			if ( null !== $this->next_exception ) {
 				throw $this->next_exception;
@@ -272,6 +278,12 @@ namespace Woodev\Tests\Unit\Shipping {
 		/** @var int get/set_transient calls — a method that did not opt in must leave this at zero. */
 		private int $transient_calls = 0;
 
+		/** @var bool current user's manager capability in checkout renderer tests. */
+		private bool $can_manage_woocommerce = false;
+
+		/** @var array<string, mixed> Store API endpoint definitions captured in tests. */
+		private array $endpoint_definitions = [];
+
 		/** @var array<string, mixed> WooCommerce options by name. */
 		private array $options = [];
 
@@ -290,6 +302,8 @@ namespace Woodev\Tests\Unit\Shipping {
 
 			$this->transient_calls = 0;
 			$this->options         = [];
+			$this->can_manage_woocommerce = false;
+			$this->endpoint_definitions = [];
 
 			Functions\when( 'get_transient' )->alias(
 				function ( $key ) {
@@ -328,6 +342,16 @@ namespace Woodev\Tests\Unit\Shipping {
 				}
 			);
 			Functions\when( 'do_action' )->justReturn( null );
+			Functions\when( 'add_action' )->justReturn( null );
+			Functions\when( 'did_action' )->justReturn( 0 );
+			Functions\when( 'sanitize_key' )->alias( static fn( string $value ): string => strtolower( preg_replace( '/[^a-z0-9_\\-]/', '', $value ) ) );
+			Functions\when( 'sanitize_text_field' )->alias( 'strip_tags' );
+			Functions\when( 'current_user_can' )->alias( fn( string $capability ): bool => 'manage_woocommerce' === $capability && $this->can_manage_woocommerce );
+			Functions\when( 'woocommerce_store_api_register_endpoint_data' )->alias(
+				function ( array $definition ): void {
+					$this->endpoint_definitions[ $definition['namespace'] ] = $definition;
+				}
+			);
 		}
 
 		/** @return void */
@@ -416,16 +440,69 @@ namespace Woodev\Tests\Unit\Shipping {
 		public function test_a_carrier_exception_is_not_cached(): void {
 			$method                 = $this->method();
 			$method->next_exception = new \Woodev_Plugin_Exception( 'carrier down' );
+			$package = $this->package( [ 'package_id' => 8 ] );
 
-			$method->calculate_shipping( $this->package() );
+			$method->calculate_shipping( $package );
 
 			$this->assertSame( [], $this->store );
+			$this->assertSame( 'rate_calculation_failed', Shipping_Method::get_hidden_reasons()['8:rate-cache-method']['reason_code'] );
 
 			$method->next_exception = null;
-			$method->calculate_shipping( $this->package() );
+			$method->calculate_shipping( $package );
 
 			$this->assertSame( 2, $method->carrier_calls, 'a failure is retried, not remembered' );
 			$this->assertCount( 1, $this->store );
+		}
+
+		/** @return void */
+		public function test_reported_hidden_reason_is_package_scoped_and_reset_on_recalculation(): void {
+			$method = $this->method();
+			$method->next_rate = null;
+			$method->report_hidden = true;
+			$package = $this->package( [ 'package_id' => 4 ] );
+
+			$method->calculate_shipping( $package );
+			$reasons = Shipping_Method::get_hidden_reasons();
+			$this->assertSame( 'no_service', $reasons['4:rate-cache-method']['reason_code'] );
+			$this->assertSame( 'No service in this area.', $reasons['4:rate-cache-method']['message'] );
+
+			$method->report_hidden = false;
+			$method->calculate_shipping( $package );
+			$this->assertArrayNotHasKey( '4:rate-cache-method', Shipping_Method::get_hidden_reasons() );
+		}
+
+		/** @return void */
+		public function test_checkout_renderer_shows_reasons_only_to_managers(): void {
+			$method = $this->method();
+			$method->next_rate = null;
+			$method->report_hidden = true;
+			$method->calculate_shipping( $this->package( [ 'package_id' => 5 ] ) );
+
+			$this->can_manage_woocommerce = true;
+			ob_start();
+		\Woodev\Framework\Shipping\Checkout\Checkout_Handler::render_hidden_shipping_reasons();
+			$admin_markup = (string) ob_get_clean();
+			$this->assertStringContainsString( 'No service in this area.', $admin_markup );
+
+			$this->can_manage_woocommerce = false;
+			ob_start();
+		\Woodev\Framework\Shipping\Checkout\Checkout_Handler::render_hidden_shipping_reasons();
+			$this->assertSame( '', (string) ob_get_clean() );
+		}
+
+		/** @return void */
+		public function test_store_api_extension_data_is_admin_only(): void {
+			$method = $this->method();
+			$method->next_rate = null;
+			$method->report_hidden = true;
+			$method->calculate_shipping( $this->package( [ 'package_id' => 6 ] ) );
+
+			\Woodev\Framework\Shipping\Checkout\Checkout_Handler::register_hidden_reason_endpoint_data();
+			$data_callback = $this->endpoint_definitions['woodev-shipping-hidden-reasons']['data_callback'];
+			$this->can_manage_woocommerce = true;
+			$this->assertSame( [ 'messages' => [ 'No service in this area.' ] ], $data_callback() );
+			$this->can_manage_woocommerce = false;
+			$this->assertSame( [ 'messages' => [] ], $data_callback() );
 		}
 
 		/** @return void */
