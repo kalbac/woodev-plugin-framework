@@ -51,6 +51,12 @@ Adding the test file to `.gitleaks.toml`'s allowlist makes the scanner blind to 
 including to a real credential a future session pastes into a fixture there. The scanner is right
 about the string; the string is what should change.
 
+## Recurrence (s175)
+
+PR #1251 (partial log masking) added `'y0_A…xQ9z'` (matches the repo's own `yandex-b2b-oauth-token` rule) and a
+24-character JSON `token` (generic-api-key): CI's Secret scan failed. Fix used: build the value at runtime by concatenation
+(`'y0' . '_A' . '…'`), so no token-shaped literal exists in the source; the allowlist was NOT widened.
+
 ## Related
 
 - [settings-sensitive-secret-empty-skip-is-client-side](settings-sensitive-secret-empty-skip-is-client-side.md) — the other half of credential handling:

@@ -9,6 +9,14 @@ symlink (`Unable to determine Orca.app path from symlink`), and stopped: «Block
 Per the Orca CLI instructions, I stopped rather than use a different executable». It never read the brief, which named
 `/Applications/Orca.app/Contents/Resources/bin/orca`. A rate-limit dialog («Switch to gpt-6-luna?») sat on top of it.
 
+## Recurrence (s175)
+
+Twice in one night (Codex luna/sol, Orca 1.4.224) a worker stopped at its first `orca` call and idled ~25–35 min:
+the common brief named the full path, but not in a form the model treated as authorization. The terminal watchdog
+(`watch-workers.py`) does NOT catch it — there is no API error, just an idle prompt. What worked: the full path as the FIRST
+binding line of every common brief («bare orca fails — NOT a blocker») AND in the `--spec` text itself; check a long-quiet
+worker's last transcript message instead of waiting.
+
 ## Root cause
 
 The orca-cli skill says: if the selected executable fails, report and do not switch. A path mentioned in the task text
