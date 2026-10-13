@@ -593,6 +593,18 @@ final class OrdersControllerPerformActionTest extends TestCase {
 		$this->assertSame( 'Заказ выгружен перевозчику.', $result['message'] );
 	}
 
+	public function test_retry_export_reuses_the_export_success_and_failure_messages(): void {
+		$success = new \ReflectionMethod( Orders_Controller::class, 'action_success_message' );
+		$failure = new \ReflectionMethod( Orders_Controller::class, 'action_failure_message' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$success->setAccessible( true );
+			$failure->setAccessible( true );
+		}
+
+		$this->assertSame( $success->invoke( null, Order_Actions::EXPORT ), $success->invoke( null, Order_Actions::RETRY_EXPORT ) );
+		$this->assertSame( $failure->invoke( null, Order_Actions::EXPORT ), $failure->invoke( null, Order_Actions::RETRY_EXPORT ) );
+	}
+
 	/**
 	 * A handler that THROWS is not an `Action_Result` — the exception text is never
 	 * shown (it could be anything), the merchant gets the generic sentence.

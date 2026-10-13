@@ -1204,6 +1204,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 		 */
 		private static function action_success_message( string $action ): string {
 			switch ( $action ) {
+				case Order_Actions::RETRY_EXPORT:
 				case Order_Actions::EXPORT:
 					return __( 'Заказ выгружен перевозчику.', 'woodev-plugin-framework' );
 
@@ -1231,6 +1232,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 		 */
 		private static function action_failure_message( string $action ): string {
 			switch ( $action ) {
+				case Order_Actions::RETRY_EXPORT:
 				case Order_Actions::EXPORT:
 					return __( 'Не удалось выгрузить заказ перевозчику.', 'woodev-plugin-framework' );
 

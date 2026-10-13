@@ -330,6 +330,27 @@ final class OrdersControllerBulkActionTest extends TestCase {
 		$this->assertSame( 0, $result['succeeded'] );
 	}
 
+	public function test_explicit_retry_is_skipped_in_bulk_and_neighbouring_export_still_runs(): void {
+		$this->register_provider( 'cdek', 'СДЭК', '_cdek_marker' );
+		$handler = $this->register_handler( 'cdek' );
+		$handler->shouldReceive( 'export_unknown_since' )->andReturnUsing( static fn( \WC_Order $order ): int => 1000 );
+		$order_retry = $this->order( 1, 'pending', '_cdek_marker' );
+		$order_export = $this->order( 2, 'pending', '_cdek_marker' );
+		$handler->shouldReceive( 'export' )->once()->with( $order_export, null, null )->andReturn( Action_Result::success( 'CARRIER-2' ) );
+
+		$offered = array_column( ( new Order_Actions( Orders_Registry::instance() ) )->for_order( $order_retry, Orders_Registry::instance()->get_provider( 'cdek' ) ), 'action' );
+		$this->assertContains( Order_Actions::RETRY_EXPORT, $offered, 'the premise: this order offers explicit retry' );
+
+		$retry_result = $this->controller()->perform_bulk_action( $this->request( Order_Actions::RETRY_EXPORT, [ 1 ] ) );
+		$this->assertSame( 1, $retry_result['requested'] );
+		$this->assertSame( 0, $retry_result['eligible'] );
+		$this->assertSame( 1, $retry_result['skipped'] );
+
+		$export_result = $this->controller()->perform_bulk_action( $this->request( Order_Actions::EXPORT, [ 2 ] ) );
+		$this->assertSame( 1, $export_result['eligible'] );
+		$this->assertSame( 1, $export_result['succeeded'] );
+	}
+
 	// ----- mixed-carrier aggregate batch (TWO providers registered) -----
 
 	/** Each order dispatches through ITS OWN carrier's handler, never the other one's. */

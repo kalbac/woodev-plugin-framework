@@ -1027,6 +1027,15 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$this->assertSame( [ 'Подтвердите отказ: возврат платный.' ], $this->flashed_notices );
 		}
 
+		public function test_retry_export_reuses_the_metabox_export_failure_message(): void {
+			$message = new \ReflectionMethod( Shipping_Admin_Order::class, 'action_failure_message' );
+			if ( PHP_VERSION_ID < 80100 ) {
+				$message->setAccessible( true );
+			}
+
+			$this->assertSame( $message->invoke( null, Order_Actions::EXPORT ), $message->invoke( null, Order_Actions::RETRY_EXPORT ) );
+		}
+
 		public function test_perform_action_refuses_once_the_metabox_dialog_confirmed_it(): void {
 			[ $provider, $handler, $order ] = $this->refusing_setup();
 			$handler->shouldReceive( 'refuse' )->once()->andReturn( Action_Result::success() );
