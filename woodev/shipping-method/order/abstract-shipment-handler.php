@@ -500,7 +500,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 * `false` by default. A carrier overriding this to `true` must also override
 		 * {@see self::find_exported_order()}: the export of an order whose state is unknown is
 		 * then retried automatically, and asks the carrier FIRST whether it already has the order.
-		 * Mirrors {@see self::supports_update()}.
+		 * For a carrier returning `false`, automatic exports and retry runs stop when the outcome is
+		 * unknown and leave a private note asking the merchant to check the carrier account. Manual
+		 * exports keep their existing behaviour. Mirrors {@see self::supports_update()}.
 		 *
 		 * @since 2.0.2
 		 *

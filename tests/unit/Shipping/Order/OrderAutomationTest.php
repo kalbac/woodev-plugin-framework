@@ -147,6 +147,8 @@ final class OrderAutomationTest extends TestCase {
 	private function register_handler(): Abstract_Shipment_Handler {
 		$handler = Mockery::mock( Abstract_Shipment_Handler::class );
 		$handler->shouldReceive( 'supports_update' )->andReturn( false );
+		$handler->shouldReceive( 'supports_reconcile' )->andReturn( false )->byDefault();
+		$handler->shouldReceive( 'export_unknown_since' )->andReturn( 0 )->byDefault();
 		// #1204: a carrier that declares nothing keeps today's behaviour; a test overrides these (`byDefault`).
 		$handler->shouldReceive( 'get_handed_over_statuses' )->andReturn( [] )->byDefault();
 		$handler->shouldReceive( 'supports_refusal' )->andReturn( false )->byDefault();
@@ -170,6 +172,11 @@ final class OrderAutomationTest extends TestCase {
 		$order->shouldReceive( 'get_id' )->andReturn( 123 );
 		$order->shouldReceive( 'get_status' )->andReturn( $status );
 		$order->shouldReceive( 'get_meta' )->andReturnUsing( fn( $key ) => $this->meta[ $key ] ?? '' );
+		$order->shouldReceive( 'update_meta_data' )->andReturnUsing(
+			function ( $key, $value ) {
+				$this->meta[ $key ] = $value;
+			}
+		)->byDefault();
 
 		Functions\when( 'wc_get_order' )->justReturn( $order );
 
@@ -256,6 +263,35 @@ final class OrderAutomationTest extends TestCase {
 		Orders_Registry::instance()->handle_order_status_changed( 123, 'on-hold', 'processing', $order );
 
 		$this->assertSame( [], $this->scheduled );
+	}
+
+	public function test_auto_export_stops_for_unknown_non_reconciling_order_and_notes_once(): void {
+		$this->register_carrier();
+		$handler = $this->register_handler();
+		$handler->shouldReceive( 'supports_reconcile' )->andReturn( false );
+		$handler->shouldReceive( 'export_unknown_since' )->with( Mockery::type( '\\WC_Order' ) )->twice()->andReturn( 1000 );
+		$order = $this->order( 'processing' );
+		$order->shouldReceive( 'add_order_note' )->once()->with( 'Исход выгрузки неизвестен — проверьте кабинет перевозчика, автоматическая выгрузка остановлена' );
+		$order->shouldReceive( 'save_meta_data' )->once();
+
+		Orders_Registry::instance()->handle_order_status_changed( 123, 'pending', 'processing', $order );
+		Orders_Registry::instance()->handle_order_status_changed( 123, 'on-hold', 'processing', $order );
+
+		$this->assertSame( [], $this->scheduled, 'unknown outcome cannot be auto-exported again' );
+		$this->assertSame( 'yes', $this->meta[ Export_Retry::UNKNOWN_EXPORT_NOTE_META ] );
+	}
+
+	public function test_auto_export_of_unknown_reconciling_order_keeps_the_existing_queue_behaviour(): void {
+		$this->register_carrier();
+		$handler = $this->register_handler();
+		$handler->shouldReceive( 'supports_reconcile' )->andReturn( true );
+		$handler->shouldReceive( 'export_unknown_since' )->with( Mockery::type( '\\WC_Order' ) )->andReturn( 1000 );
+		$order = $this->order( 'processing' );
+
+		Orders_Registry::instance()->handle_order_status_changed( 123, 'pending', 'processing', $order );
+
+		$this->assertCount( 1, $this->scheduled_of( Export_Retry::HOOK ) );
+		$this->assertArrayNotHasKey( Export_Retry::UNKNOWN_EXPORT_NOTE_META, $this->meta );
 	}
 
 	public function test_an_order_of_another_carrier_queues_nothing(): void {
