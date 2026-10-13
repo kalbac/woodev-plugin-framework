@@ -69,6 +69,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		/** @var string[] order-item meta keys hidden by any registered carrier method */
 		private static array $hidden_order_item_meta_keys = [];
 
+		/** @var bool whether the fleet-wide chosen-method filter has been registered */
+		private static bool $chosen_method_filter_registered = false;
+
+		/** @var array<string,true> method ids of every framework carrier plugin in this process, as keys */
+		private static array $carrier_method_ids = [];
+
 		/**
 		 * Initializes the shipping plugin.
 		 *
@@ -379,6 +385,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/admin/orders/class-export-queue-notice.php';
 			// The carrier marker contract (#967): loaded with the registry it reads providers from.
 			require_once $path . '/order/class-order-marker.php';
+			require_once $path . '/order/class-unchosen-carrier-cleaner.php';
 			require_once $path . '/admin/orders/class-orders-query.php';
 			require_once $path . '/admin/orders/class-orders-id-resolver.php';
 			require_once $path . '/admin/orders/class-order-edit-lock.php';
@@ -418,6 +425,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		private function add_hooks(): void {
 
 			self::register_order_item_meta_filters( $this->get_valid_shipping_method_classes() );
+			self::register_chosen_method_filter( $this->get_valid_shipping_method_classes() );
 
 			Checkout\Checkout_Parent_Block_Notice::register( $this );
 
@@ -560,6 +568,64 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			self::$order_item_meta_filters_registered = true;
 			add_filter( 'woocommerce_hidden_order_itemmeta', [ self::class, 'hide_order_item_meta_from_admin' ] );
 			add_filter( 'woocommerce_order_item_get_formatted_meta_data', [ self::class, 'hide_order_item_meta_from_formatted_display' ], 10, 2 );
+		}
+
+		/**
+		 * Registers the fleet-wide «keep the buyer's carrier method» filter once (#1266).
+		 *
+		 * WooCommerce re-picks the DEFAULT method whenever the package's rate set changes at all
+		 * (`wc_get_chosen_shipping_method_for_package()`, `wc-cart-functions.php` ~452, via
+		 * `wc_shipping_methods_have_changed()` ~591), and the only chosen method it protects is its own local
+		 * pickup (`wc_get_default_shipping_method_for_package()` ~503). Carrier plugins on the framework are not
+		 * protected, so a rate that appears or vanishes mid-checkout silently swaps a chosen carrier pickup for
+		 * «Free shipping». One filter serves every carrier plugin of the process: each plugin only contributes
+		 * its method ids to the shared registry.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string[] $method_classes shipping method class names of the registering plugin
+		 */
+		private static function register_chosen_method_filter( array $method_classes ): void {
+
+			foreach ( $method_classes as $method_class ) {
+				self::$carrier_method_ids[ $method_class::get_method_id() ] = true;
+			}
+
+			if ( self::$chosen_method_filter_registered ) {
+				return;
+			}
+
+			self::$chosen_method_filter_registered = true;
+			add_filter( 'woocommerce_shipping_chosen_method', [ self::class, 'keep_chosen_carrier_method' ], 10, 3 );
+		}
+
+		/**
+		 * Keeps the rate the buyer already chose when it belongs to a framework carrier and is still offered.
+		 *
+		 * Both the classic checkout and the Store API cart go through `wc_get_chosen_shipping_method_for_package()`
+		 * (the block cart's `CartController` calls the same function), so one filter covers both. Anything else —
+		 * nothing chosen yet, the chosen rate gone from the package, or a rate that is not a framework carrier's —
+		 * returns WooCommerce's own default untouched, so a coupon's free-shipping default is never overridden for
+		 * a foreign method.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @internal Hooked on `woocommerce_shipping_chosen_method`; not for direct calls.
+		 *
+		 * @param mixed $default       the default rate id WooCommerce settled on
+		 * @param mixed $rates         the package's rates, keyed by rate id
+		 * @param mixed $chosen_method the rate id previously chosen (false when none)
+		 * @return mixed
+		 */
+		public static function keep_chosen_carrier_method( $default, $rates = [], $chosen_method = '' ) {
+
+			if ( ! is_string( $chosen_method ) || '' === $chosen_method || ! is_array( $rates ) || ! array_key_exists( $chosen_method, $rates ) ) {
+				return $default;
+			}
+
+			$method_id = explode( ':', $chosen_method )[0];
+
+			return isset( self::$carrier_method_ids[ $method_id ] ) ? $chosen_method : $default;
 		}
 
 		/**

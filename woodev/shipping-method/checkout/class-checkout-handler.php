@@ -117,6 +117,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 */
 		private static array $pickup_declarations_reconciled = [];
 
+		/** @var bool Whether Store API extension data has been registered this request. */
+		private static bool $hidden_reason_endpoint_registered = false;
+		/** Store API namespace for admin-only hidden method explanations. */
+		private const HIDDEN_REASON_EXTENSION = 'woodev-shipping-hidden-reasons';
+
 		/**
 		 * Registry of native WC field ids claimed by each plugin_id.
 		 *
@@ -390,6 +395,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * @return void
 		 */
 		public function register(): void {
+			self::register_hidden_reason_hooks();
 			add_filter( 'woocommerce_checkout_fields', [ $this, 'handle_checkout_fields' ] );
 			add_filter( 'woocommerce_states', [ $this, 'inject_states' ] );
 			add_action( 'woocommerce_checkout_process', [ $this, 'handle_checkout_process' ] );
@@ -424,7 +430,122 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			// Static for the same reason: one callback however many plugins register (#1087).
 			add_filter( 'woocommerce_cart_shipping_packages', [ self::class, 'add_location_provenance_to_packages' ] );
 
+			// Static for the same reason, and last (priority 999) so it follows every carrier's own
+			// checkout write: the order keeps the data of the carrier it was placed with (#1260).
+			add_action( 'woocommerce_checkout_order_processed', [ \Woodev\Framework\Shipping\Order\Unchosen_Carrier_Cleaner::class, 'handle_checkout_order_processed' ], 999, 3 );
+			add_action( 'woocommerce_store_api_checkout_order_processed', [ \Woodev\Framework\Shipping\Order\Unchosen_Carrier_Cleaner::class, 'handle_store_api_order_processed' ], 999 );
+
 			$this->guard_native_field_conflicts();
+		}
+
+		/**
+		 * Registers the classic and Store API render paths once for all shipping plugins.
+		 * Called by the checkout handler during plugin boot, before checkout rendering hooks fire.
+		 * The host plugin must supply get_checkout_handler(): this handler owns checkout support,
+		 * so plugins that do not opt into it do not register checkout hint renderers.
+		 *
+		 * @since 2.0.2
+		 * @return void
+		 */
+		public static function register_hidden_reason_hooks(): void {
+			add_action( 'woocommerce_review_order_after_shipping', [ self::class, 'render_hidden_shipping_reasons' ] );
+			if ( did_action( 'woocommerce_blocks_loaded' ) ) {
+				self::register_hidden_reason_endpoint_data();
+			} else {
+				add_action( 'woocommerce_blocks_loaded', [ self::class, 'register_hidden_reason_endpoint_data' ] );
+			}
+			add_action( 'wp_enqueue_scripts', [ self::class, 'enqueue_hidden_reason_script' ] );
+		}
+
+		/**
+		 * Prints the hidden rate explanations below the classic checkout shipping block.
+		 *
+		 * @since 2.0.2
+		 * @return void
+		 */
+		public static function render_hidden_shipping_reasons(): void {
+			if ( ! current_user_can( 'manage_woocommerce' ) ) {
+				return;
+			}
+			$messages = self::hidden_reason_messages();
+			if ( empty( $messages ) ) {
+				return;
+			}
+			echo '<tr class="woodev-hidden-shipping-reasons-row"><td colspan="2"><ul class="woocommerce-error woodev-hidden-shipping-reasons" role="status">';
+			foreach ( $messages as $message ) {
+				echo '<li>' . esc_html( $message ) . '</li>';
+			}
+			echo '</ul></td></tr>';
+		}
+
+		/**
+		 * Registers the cart extension payload; its callback returns no reasons to non-admins.
+		 *
+		 * @since 2.0.2
+		 * @return void
+		 */
+		public static function register_hidden_reason_endpoint_data(): void {
+			if ( self::$hidden_reason_endpoint_registered || ! function_exists( 'woocommerce_store_api_register_endpoint_data' ) ) {
+				return;
+			}
+			self::$hidden_reason_endpoint_registered = true;
+			woocommerce_store_api_register_endpoint_data(
+				[
+					'endpoint'       => 'cart',
+					'namespace'      => self::HIDDEN_REASON_EXTENSION,
+					'schema_callback' => static function (): array {
+						return [
+							'messages' => [
+								'type' => 'array',
+								'items' => [ 'type' => 'string' ],
+								'readonly' => true,
+							],
+						];
+					},
+					'data_callback'  => static function (): array {
+						return [ 'messages' => current_user_can( 'manage_woocommerce' ) ? self::hidden_reason_messages() : [] ];
+					},
+					'schema_type'    => 'ARRAY_A',
+				]
+			);
+		}
+
+		/**
+		 * Loads the raw-served block checkout renderer for managers only.
+		 *
+		 * @since 2.0.2
+		 * @return void
+		 */
+		public static function enqueue_hidden_reason_script(): void {
+			$has_checkout_block = function_exists( 'has_block' ) && has_block( 'woocommerce/checkout' );
+			$block_template_checkout = ! $has_checkout_block
+				&& class_exists( Blocks\Checkout_Surface::class )
+				&& Blocks\Checkout_Surface::is_block_only();
+
+			if ( ! current_user_can( 'manage_woocommerce' ) || ( ! $has_checkout_block && ! $block_template_checkout )
+				|| ( function_exists( 'is_order_received_page' ) && is_order_received_page() ) ) {
+				return;
+			}
+			$path = dirname( __DIR__ ) . '/assets/js/frontend/hidden-shipping-reasons.js';
+			if ( file_exists( $path ) ) {
+				wp_enqueue_script( 'woodev-hidden-shipping-reasons', self::asset_url( 'js/frontend/hidden-shipping-reasons.js' ), [ 'wp-data' ], (string) filemtime( $path ), true );
+			}
+		}
+
+		/**
+		 * Returns only safe manager-facing explanation strings.
+		 *
+		 * @since 2.0.2
+		 * @return string[]
+		 */
+		private static function hidden_reason_messages(): array {
+			$messages = [];
+			foreach ( \Woodev\Framework\Shipping\Shipping_Method::get_hidden_reasons() as $reason ) {
+				if ( isset( $reason['message'] ) && '' !== $reason['message'] ) {
+					$messages[] = (string) $reason['message'];
+				}
+			}
+			return array_values( array_unique( $messages ) );
 		}
 
 		/**

@@ -146,6 +146,7 @@ return [
 	'Woodev\\Framework\\Shipping\\Order\\Shipment_Facts_Flag' => 'woodev/shipping-method/order/class-shipment-facts-flag.php',
 	'Woodev\\Framework\\Shipping\\Order\\Shipment_Fingerprint' => 'woodev/shipping-method/order/class-shipment-fingerprint.php',
 	'Woodev\\Framework\\Shipping\\Order\\Shipping_Order_Handler' => 'woodev/shipping-method/order/class-shipping-order-handler.php',
+	'Woodev\\Framework\\Shipping\\Order\\Unchosen_Carrier_Cleaner' => 'woodev/shipping-method/order/class-unchosen-carrier-cleaner.php',
 	'Woodev\\Framework\\Shipping\\Packaging' => 'woodev/shipping-method/class-packaging.php',
 	'Woodev\\Framework\\Shipping\\Pickup\\Abstract_Bulk_Point_Source' => 'woodev/shipping-method/pickup/abstract-bulk-point-source.php',
 	'Woodev\\Framework\\Shipping\\Pickup\\Address_Target' => 'woodev/shipping-method/pickup/class-address-target.php',

@@ -237,6 +237,23 @@ framework checkout's bind mount. A framework change reaches the plugin on the ri
 checkout. The framework's own fixtures and e2e DO run from the framework checkout. Gotcha
 `the-rig-runs-the-cdek-plugins-own-woodev-copy-not-the-framework-checkout`.
 
+## Both carrier plugins on the rig, and the two-carrier probes (s176)
+
+- `.wp-env.override.json` (gitignored) maps BOTH plugins into the dev env: `woocommerce-edostavka` and `woocommerce-yandex-delivery`
+  from their primary checkouts, each with `woodev/` → the framework checkout's `./woodev`. Both are ACTIVE; Yandex runs on the
+  production contour (token from the container env `WOODEV_YANDEX_PROD_TOKEN`, calculator/points only — never `offers/confirm` or
+  `request/*`), methods 599 pickup / 600 courier in zone 1. The plugin's own `woodev/` copy is NOT what the rig runs.
+- The container's `wp-config.php` carries `WP_MEMORY_LIMIT` 512M (Y15 workaround for #1262; the measured cold web peak is now
+  ~85 MB after yandex#56) and the inert helper mu-plugin `zz-y15-coexistence-helper.php` (`tests/e2e/coexistence/rig/install.sh`,
+  `install.sh remove`).
+- Coexistence e2e: `npx playwright test --config=playwright.config.js tests/e2e/coexistence` (~6 min, 18 pass + 2 opt-in skipped);
+  `WOODEV_E2E_STRICT=1` shows known-defect assertions as plain failures; clean up with
+  `node tests/e2e/coexistence/rig/cleanup-orders.js --keep=1444` (order 1444 is a real CDEK export — keep it).
+- CLI rate probe (MEM1262): `wp --require=<hooks file> eval-file <cart file>` with `WC()->frontend_includes()`, `initialize_session()`,
+  `initialize_cart()`, customer COUNTRY only (a saved city blocks the default locality, #1075), `add_to_cart( 12 )` reproduces the
+  storefront calculation for every zone method; `woocommerce_shipping_method_add_rate` is a FILTER with the rate first. CLI memory
+  peaks carry a ~130 MB baseline — gotcha `a-cli-memory-peak-is-not-the-web-request-peak`.
+
 ## Operating the rig — the reference tables
 
 > Moved out of `CURRENT-STATE.md` in s119 (#778), which had grown to 3 bytes under its 28 KB gate.

@@ -6183,3 +6183,7 @@ msgstr ""
 #: competitor/class-carrier-competitor-notification-handler.php:89
 msgid "Скрыть"
 msgstr ""
+
+#: shipping-method/class-shipping-method.php:1569
+msgid "Способ доставки скрыт: не удалось рассчитать стоимость доставки. Попробуйте позже или проверьте настройки службы доставки."
+msgstr ""

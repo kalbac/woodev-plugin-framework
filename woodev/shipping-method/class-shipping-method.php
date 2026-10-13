@@ -177,6 +177,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 */
 		private bool $pending_form_rebuild = false;
 
+		/** @var array<string, array{package_hash: string, reason_code: string, message: string, context?: array}> Hidden method reasons for this request. */
+		private static array $hidden_reasons = [];
+
+		/** WooCommerce session key for reasons belonging to session-cached package rates. */
+		private const HIDDEN_REASONS_SESSION_KEY = 'woodev_shipping_hidden_reasons';
+
+		/** @var string|null Package/method key while rate_package() is running. */
+		private ?string $active_hidden_reason_key = null;
+
+		/** @var string|null Package/method key for the current calculate_shipping() call. */
+		private ?string $calculation_hidden_reason_key = null;
+
 		/**
 		 * Whether {@see self::get_admin_rates_for_package()} is running on this instance right now.
 		 *
@@ -630,6 +642,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 */
 		final public function calculate_shipping( $package = [] ): void {
 
+			$this->calculation_hidden_reason_key = null;
+			if ( null !== self::hidden_reason_session() && current_user_can( 'manage_woocommerce' ) ) {
+				$hidden_reason_key = self::hidden_reason_key( $package, $this->hidden_reason_method_id() );
+				$this->calculation_hidden_reason_key = $hidden_reason_key;
+				unset( self::$hidden_reasons[ $hidden_reason_key ] );
+				self::remove_persisted_hidden_reason( $hidden_reason_key );
+			}
+
 			/**
 			 * Shipping Method Before Calculate Shipping Action.
 			 *
@@ -931,7 +951,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 						? $this->pack_package( $package )
 						: null;
 
-					$rate = $this->rate_package( $package, $packed );
+					$this->active_hidden_reason_key = $this->calculation_hidden_reason_key;
+					try {
+						$rate = $this->rate_package( $package, $packed );
+					} finally {
+						$this->active_hidden_reason_key = null;
+					}
 
 					// «free» is the carrier's decision (a free-from threshold, a coupon), so it is read from the rate
 					// BEFORE the box cost is added: a 0 rate with a 25 box surcharge is still a free rate
@@ -965,6 +990,160 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 					return $rate;
 				}
 			);
+		}
+
+		/**
+		 * Reports why this method has no rate for the package currently being calculated.
+		 * The supplied message is for a store manager; carrier exception text must not be passed here.
+		 *
+		 * @since 2.0.2
+		 * @param string               $reason_code Stable reason identifier.
+		 * @param string               $message     Safe, plugin-supplied explanation for the manager.
+		 * @param array<string, mixed> $context     Optional request-only context; never persisted or rendered to the customer.
+		 * @return void
+		 */
+		public function report_hidden( string $reason_code, string $message, array $context = [] ): void {
+			if ( null === $this->active_hidden_reason_key || ! current_user_can( 'manage_woocommerce' ) || '' === trim( $message ) ) {
+				return;
+			}
+
+			self::$hidden_reasons[ $this->active_hidden_reason_key ] = [
+				'package_hash' => explode( ':', $this->active_hidden_reason_key, 2 )[0],
+				'reason_code' => strtolower( (string) preg_replace( '/[^a-z0-9_\\-]/i', '', $reason_code ) ),
+				'message'     => $message,
+				'context'     => $context,
+			];
+
+			$session = self::hidden_reason_session();
+			if ( null !== $session && method_exists( $session, 'get' ) && method_exists( $session, 'set' ) ) {
+				$reasons = call_user_func( [ $session, 'get' ], self::HIDDEN_REASONS_SESSION_KEY, [] );
+				$reasons = is_array( $reasons ) ? $reasons : [];
+				$reason = self::$hidden_reasons[ $this->active_hidden_reason_key ];
+				unset( $reason['context'] );
+				$reasons[ $this->active_hidden_reason_key ] = $reason;
+				call_user_func( [ $session, 'set' ], self::HIDDEN_REASONS_SESSION_KEY, $reasons );
+			}
+		}
+
+		/**
+		 * Returns reasons only for current shipping packages, pruning obsolete session entries.
+		 *
+		 * @since 2.0.2
+		 * @return array<string, array{package_hash: string, reason_code: string, message: string, context?: array}>
+		 */
+		public static function get_hidden_reasons(): array {
+			if ( ! current_user_can( 'manage_woocommerce' ) ) {
+				return [];
+			}
+
+			$woocommerce = $GLOBALS['woocommerce'] ?? null;
+			$packages = is_object( $woocommerce ) && is_callable( [ $woocommerce, 'shipping' ] )
+				? $woocommerce->shipping()->get_packages()
+				: [];
+			$hashes = array_map( [ self::class, 'hidden_reason_package_hash' ], $packages );
+			$is_current = static function ( array $reason ) use ( $hashes ): bool {
+				return isset( $reason['package_hash'] ) && in_array( $reason['package_hash'], $hashes, true );
+			};
+			$persisted = self::get_persisted_hidden_reasons();
+			$current = array_filter( $persisted, $is_current );
+			$session = self::hidden_reason_session();
+			if ( $current !== $persisted && null !== $session && method_exists( $session, 'set' ) ) {
+				call_user_func( [ $session, 'set' ], self::HIDDEN_REASONS_SESSION_KEY, $current );
+			}
+			self::$hidden_reasons = array_filter( self::$hidden_reasons, $is_current );
+			return array_merge( $current, self::$hidden_reasons );
+		}
+
+		/**
+		 * Removes a prior explanation when WooCommerce starts recalculating its package rates.
+		 *
+		 * @param string $key Package/method identity.
+		 * @return void
+		 */
+		private static function remove_persisted_hidden_reason( string $key ): void {
+			$session = self::hidden_reason_session();
+			if ( null === $session ) {
+				return;
+			}
+
+			if ( ! method_exists( $session, 'get' ) || ! method_exists( $session, 'set' ) ) {
+				return;
+			}
+			$reasons = call_user_func( [ $session, 'get' ], self::HIDDEN_REASONS_SESSION_KEY, [] );
+			if ( ! is_array( $reasons ) || ! isset( $reasons[ $key ] ) ) {
+				return;
+			}
+
+			unset( $reasons[ $key ] );
+			call_user_func( [ $session, 'set' ], self::HIDDEN_REASONS_SESSION_KEY, $reasons );
+		}
+
+		/** @return array<string, array{package_hash: string, reason_code: string, message: string, context?: array}> */
+		private static function get_persisted_hidden_reasons(): array {
+			$session = self::hidden_reason_session();
+			if ( null === $session ) {
+				return [];
+			}
+
+			if ( ! method_exists( $session, 'get' ) ) {
+				return [];
+			}
+			$reasons = call_user_func( [ $session, 'get' ], self::HIDDEN_REASONS_SESSION_KEY, [] );
+			return is_array( $reasons ) ? $reasons : [];
+		}
+
+		/** @return object|null */
+		private static function hidden_reason_session(): ?object {
+			$woocommerce = $GLOBALS['woocommerce'] ?? null;
+			return is_object( $woocommerce ) && isset( $woocommerce->session ) && is_object( $woocommerce->session )
+				? $woocommerce->session
+				: null;
+		}
+
+		/**
+		 * Builds a package/method identity shared by reporting and rendering across session-cached rates.
+		 *
+		 * @param array  $package   Package data.
+		 * @param string $method_id Shipping method instance id.
+		 * @return string
+		 */
+		private static function hidden_reason_key( array $package, string $method_id ): string {
+			return self::hidden_reason_package_hash( $package ) . ':' . $method_id;
+		}
+
+		/**
+		 * Matches WC_Shipping's private cache hash, including its WC 11 ignored-field filter.
+		 * The rates accumulated by earlier methods must never change the package identity.
+		 *
+		 * @param array $package Package data before or after rate calculation.
+		 * @return string
+		 */
+		private static function hidden_reason_package_hash( array $package ): string {
+			$package['rates'] = [];
+			if ( version_compare( (string) \Woodev_Plugin_Compatibility::get_wc_version(), '11.0.0', '>=' ) ) {
+				$ignored_fields = apply_filters(
+					'woocommerce_shipping_package_hash_ignored_fields',
+					[ 'subtotal', 'total', 'package_id', 'package_name', 'rates', 'package_index' ],
+					$package
+				);
+				foreach ( array_unique( array_filter( (array) $ignored_fields, 'is_string' ) ) as $field ) {
+					unset( $package[ $field ] );
+				}
+			}
+			foreach ( (array) ( $package['contents'] ?? [] ) as $item_id => $item ) {
+				unset( $package['contents'][ $item_id ]['data'] );
+			}
+			return 'wc_ship_' . md5( wp_json_encode( $package ) . \WC_Cache_Helper::get_transient_version( 'shipping' ) );
+		}
+
+		/**
+		 * Reads the WC method instance identity, with a class-level fallback for direct unit-test calls.
+		 *
+		 * @return string
+		 */
+		private function hidden_reason_method_id(): string {
+			$method_id = isset( $this->id ) ? $this->get_id() : static::get_method_id();
+			return isset( $this->instance_id ) ? $method_id . ':' . (string) $this->instance_id : $method_id;
 		}
 
 		/**
@@ -1474,6 +1653,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 * @return void
 		 */
 		private function handle_rate_calculation_failure( \Woodev_Plugin_Exception $exception, array $package ): void {
+
+			$key = $this->calculation_hidden_reason_key;
+			if ( null !== $key && ! isset( self::$hidden_reasons[ $key ] ) ) {
+				$this->active_hidden_reason_key = $key;
+				$this->report_hidden(
+					'rate_calculation_failed',
+					__( 'Способ доставки скрыт: не удалось рассчитать стоимость доставки. Попробуйте позже или проверьте настройки службы доставки.', 'woodev-plugin-framework' )
+				);
+				$this->active_hidden_reason_key = null;
+			}
 
 			$this->get_plugin()->log_error(
 				sprintf(
