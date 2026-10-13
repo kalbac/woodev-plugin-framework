@@ -5,15 +5,13 @@
  * The risk the spec names: «both plugins write the shipping address / postcode from the chosen point; the framework
  * `Pickup_Handler` is per plugin id, the Location layer is shared».
  *
- * TWO GROUPS, because the first run on the rig found a defect that hides everything else (report Y15, finding F2):
+ * TWO GROUPS, because the first run on the rig found a defect that hides everything else (report Y15, finding F2, fixed in
+ * #1268):
  *
- *  1. «Yandex courier method off» — isolates the point logic. This group is the scenario proper and passes.
+ *  1. «Yandex courier method off» — isolates the point logic.
  *  2. «Yandex courier method on» — the rig's standard shape (a zone offering pickup AND courier of both carriers). Choosing
- *     ANY pickup point there makes the Yandex courier rate disappear (its quote is refused as `address_not_geocodable`
- *     once the point's address lands in `address_1`), WooCommerce sees the rate set change and silently resets the chosen
- *     method to «Free shipping» — and the order is then placed with Free shipping while the pickup point's meta is stored on
- *     it. Its assertions are wrapped in `expectKnownDefect()`: a known defect, and each wrapper flips to a failure the day its
- *     assertion starts to pass.
+ *     a pickup point there used to make the Yandex courier rate disappear and WooCommerce silently reset the chosen method to
+ *     «Free shipping»; the chosen rate and the order's shipping line must now stay with the carrier the buyer picked.
  *
  * The block checkout is NOT covered here: «block-only gaps are not release blockers» (operator, 08.10.2026) and the block
  * picker has no hidden input to drive from outside; see the report for what was and was not tried.
@@ -31,7 +29,6 @@ const {
 	chosenRate,
 	expectCarrierOwnData,
 	expectCarrierShippingLine,
-	expectKnownDefect,
 	expectNoStaleKeys,
 	expectOnlyCarrier,
 	fillContact,
@@ -126,22 +123,15 @@ test.describe( 'scenario 1 — Yandex courier method off (the point logic alone)
 	test( 'F3: the CDEK order carries NO point meta of the Yandex pickup the buyer left', async () => {
 		const order = readOrder( session.orderId );
 
-		await expectKnownDefect(
-			'F3',
-			'Pickup_Handler::handle_checkout_order_processed persists the posted point of a carrier whose method is not the chosen one.',
-			() => expectNoStaleKeys( order, 'cdek', `order ${ order.id }` )
-		);
+		expectNoStaleKeys( order, 'cdek', `order ${ order.id }` );
 	} );
 
-	// Three named assertions of one defect, each inverted on its own: fixing the form but not the order (or the reverse) turns
-	// the fixed one red instead of hiding behind the other.
 	test( 'F5: the form and the CDEK order carry the CDEK point\'s address after switching back, not the Yandex one', async () => {
-		const order  = readOrder( session.orderId );
-		const reason = 'switching back restores the carrier\'s point but not the address it wrote into the form.';
+		const order = readOrder( session.orderId );
 
-		await expectKnownDefect( 'F5 (form)', reason, () => expect( session.addressAfterSwitchBack, 'the form after switching back to CDEK' ).toBe( session.cdekStreet ) );
-		await expectKnownDefect( 'F5 (order shipping)', reason, () => expect( order.shipping.address_1, `order ${ order.id }: shipping address` ).toBe( session.cdekStreet ) );
-		await expectKnownDefect( 'F5 (order billing)', reason, () => expect( order.billing.address_1, `order ${ order.id }: billing address` ).toBe( session.cdekStreet ) );
+		expect( session.addressAfterSwitchBack, 'the form after switching back to CDEK' ).toBe( session.cdekStreet );
+		expect( order.shipping.address_1, `order ${ order.id }: shipping address` ).toBe( session.cdekStreet );
+		expect( order.billing.address_1, `order ${ order.id }: billing address` ).toBe( session.cdekStreet );
 	} );
 
 	test( 'F4: Yandex → CDEK → Yandex: the order is placed with the Yandex point (not refused by the Yandex guard)', async ( { page } ) => {
@@ -166,16 +156,7 @@ test.describe( 'scenario 1 — Yandex courier method off (the point logic alone)
 
 		const { orderId, errors } = await placeOrder( page );
 
-		// The one assertion the defect owns. No order exists while it stands, so the order checks below wait for the fix.
-		if (
-			await expectKnownDefect(
-				'F4',
-				'Yandex_Pickup_Guard tightens the verdict of the stale CDEK point too, refusing the whole order.',
-				() => expect( errors, 'checkout refused the order' ).toEqual( [] )
-			)
-		) {
-			return;
-		}
+		expect( errors, 'checkout refused the order' ).toEqual( [] );
 
 		const order = readOrder( orderId );
 
@@ -192,9 +173,7 @@ test.describe( 'scenario 1 — Yandex courier method on (the rig default)', () =
 		}
 	} );
 
-	test( 'KNOWN DEFECT F2: choosing a pickup point must not move the chosen method to Free shipping', async ( { page } ) => {
-		const reason = 'with the Yandex courier method enabled, a pickup point makes its rate vanish and WooCommerce resets the choice to Free shipping.';
-
+	test( 'F2: choosing a pickup point must not move the chosen method to Free shipping', async ( { page } ) => {
 		await openCheckout( page );
 		await chooseShipping( page, METHOD_CDEK_PICKUP );
 		await pickFirstPoint( page, SLOT_CDEK );
@@ -211,14 +190,8 @@ test.describe( 'scenario 1 — Yandex courier method on (the rig default)', () =
 
 		const order = readOrder( orderId );
 
-		// Two named assertions of the one defect (the choice, and the shipping line it leaves on the order), inverted separately.
-		const choiceBroken = await expectKnownDefect( 'F2 (chosen rate)', reason, () => expect( rate, 'the chosen method after confirming a CDEK point' ).toMatch( /^edostavka_pickup:/ ) );
-		const lineBroken   = await expectKnownDefect( 'F2 (order shipping line)', reason, () => expectCarrierShippingLine( order, 'cdek', `order ${ orderId }` ) );
-
-		if ( choiceBroken || lineBroken ) {
-			return;
-		}
-
+		expect( rate, 'the chosen method after confirming a CDEK point' ).toMatch( /^edostavka_pickup:/ );
+		expectCarrierShippingLine( order, 'cdek', `order ${ orderId }` );
 		expectCarrierOwnData( order, 'cdek', `order ${ orderId }` );
 		expectNoStaleKeys( order, 'cdek', `order ${ orderId }` );
 	} );

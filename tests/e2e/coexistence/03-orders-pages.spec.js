@@ -14,7 +14,7 @@
  *    billing of the Yandex account is inactive, so no `offers/confirm` or `request/*` is ever sent. The fake request id is
  *    deleted again afterwards so the status poller never asks Yandex about it.
  *
- * The Yandex courier method is off for the run (defect F2 of scenario 1 would otherwise flip the chosen method).
+ * The Yandex courier method is off for the run, as in scenarios 1 and 2.
  */
 
 const { test, expect } = require( '@playwright/test' );

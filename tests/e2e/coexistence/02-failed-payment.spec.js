@@ -11,11 +11,11 @@
  *    (`WC_Checkout::create_order()`), and the hash includes the TOTAL — so two carriers with different prices would make the
  *    retry a brand-new order and nothing stale could ever survive. The helper's `y15_equal_rates` option makes both pickup
  *    rates cost the same, i.e. the situation of a shop where both carriers ship free above a threshold.
- *  - The Yandex courier method is switched off for the run (defect F2 of scenario 1 would otherwise flip the chosen method).
+ *  - The Yandex courier method is switched off for the run, as in scenario 1's point-logic group.
  *
  * The «isolated» variants blank the hidden slot of the carrier the buyer left before the retry. That is NOT something a
- * buyer can do; it separates the two defects the natural flow stacks (F3: the form still posts the left carrier's point;
- * F6: nothing ever deletes the meta the first attempt wrote on the reused order).
+ * buyer can do; it separates the two stale-data causes the natural flow stacks (F3: the form still posts the left carrier's
+ * point, fixed in #1267; F6: the meta the first attempt wrote on the reused order was never deleted, fixed in #1267).
  */
 
 const { test, expect } = require( '@playwright/test' );
@@ -33,7 +33,6 @@ const {
 	choosePayment,
 	expectCarrierOwnData,
 	expectCarrierShippingLine,
-	expectKnownDefect,
 	expectNoStaleKeys,
 	expectOnlyCarrier,
 	fillContact,
@@ -135,14 +134,12 @@ async function failThenSwitch( page, first, second, blankLeftSlot ) {
 
 /**
  * The assertions of the scenario once the retry was accepted: it resumed the failed order, and that order now carries ONLY the
- * second carrier. Everything but the stale-keys assertion is ordinary; THAT one is the named defect (`defect`), inverted alone.
+ * second carrier.
  *
  * @param {{ failedId: number, retriedId: number|null, errors: string[] }} run
  * @param {'cdek'|'yandex'} second
- * @param {string}          defect Defect id of the stale-keys assertion.
- * @param {string}          reason One line: what is wrong and where.
  */
-async function expectCleanRetry( run, second, defect, reason ) {
+function expectCleanRetry( run, second ) {
 	const { failedId, retriedId, errors } = run;
 
 	expect( errors.join( ' | ' ), 'the retry was refused' ).toBe( '' );
@@ -153,42 +150,31 @@ async function expectCleanRetry( run, second, defect, reason ) {
 	expect.soft( order.status, `order ${ failedId } after the accepted retry` ).toBe( 'processing' );
 	expectCarrierShippingLine( order, second, `order ${ failedId }` );
 	expectCarrierOwnData( order, second, `order ${ failedId }` );
-
-	await expectKnownDefect( defect, reason, () => expectNoStaleKeys( order, second, `order ${ failedId }` ) );
+	expectNoStaleKeys( order, second, `order ${ failedId }` );
 }
-
-const F3_F6 = 'the form re-posts the left carrier\'s point (Pickup_Handler::handle_checkout_order_processed) and nothing deletes what the first attempt wrote.';
-const F6    = 'a reused order keeps the meta its first attempt wrote for the carrier the buyer then left; no code path deletes it.';
-const F4    = 'Yandex_Pickup_Guard refuses the stale CDEK point, so the retry cannot even be placed.';
 
 test.describe( 'scenario 2 — failed payment, then the other carrier on the same order', () => {
 	test( 'Yandex → declined → CDEK: the order keeps no Yandex data', async ( { page } ) => {
 		const run = await failThenSwitch( page, 'yandex', 'cdek', false );
 
-		await expectCleanRetry( run, 'cdek', 'F3+F6', F3_F6 );
+		expectCleanRetry( run, 'cdek' );
 	} );
 
 	test( 'Yandex → declined → CDEK, left slot blanked: the order keeps no Yandex data', async ( { page } ) => {
 		const run = await failThenSwitch( page, 'yandex', 'cdek', true );
 
-		await expectCleanRetry( run, 'cdek', 'F6', F6 );
+		expectCleanRetry( run, 'cdek' );
 	} );
 
 	test( 'CDEK → declined → Yandex: the retry is accepted and the order keeps no CDEK data', async ( { page } ) => {
 		const run = await failThenSwitch( page, 'cdek', 'yandex', false );
 
-		// F4 owns «the retry is refused». No retried order exists while it stands; once it is fixed the rest runs and the next
-		// defect (F3+F6, the stale CDEK keys) is expected to surface here.
-		if ( await expectKnownDefect( 'F4', F4, () => expect( run.errors.join( ' | ' ), 'the retry was refused' ).toBe( '' ) ) ) {
-			return;
-		}
-
-		await expectCleanRetry( run, 'yandex', 'F3+F6', F3_F6 );
+		expectCleanRetry( run, 'yandex' );
 	} );
 
 	test( 'CDEK → declined → Yandex, left slot blanked: the order keeps no CDEK data', async ( { page } ) => {
 		const run = await failThenSwitch( page, 'cdek', 'yandex', true );
 
-		await expectCleanRetry( run, 'yandex', 'F6', F6 );
+		expectCleanRetry( run, 'yandex' );
 	} );
 } );

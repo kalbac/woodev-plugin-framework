@@ -8,7 +8,7 @@
  *    until the buyer re-picks, so «Place order» is refused («Please choose a pickup point», «valid postal code»).
  *
  * The block checkout has no default locality on the rig for a guest: the buyer finds a locality first («Find your locality»),
- * and only then do the carriers' methods appear. The Yandex courier method is off for the run (defect F2 of scenario 1).
+ * and only then do the carriers' methods appear. The Yandex courier method is off for the run, as in scenarios 1 and 2.
  */
 
 const { test, expect } = require( '@playwright/test' );

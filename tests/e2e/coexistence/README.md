@@ -38,18 +38,28 @@ plugin files, and the checkout flows take 15-50 s each.
 
 ## Known defects are annotated, not hidden
 
-The ONE assertion that documents a defect is wrapped in `expectKnownDefect( 'F3', reason, () => expect( … ) )` (`helpers.js`);
-every other assertion of the test is ordinary and fails the test normally. While the wrapped assertion fails, the failure is
-recorded as a `known-defect` annotation and the test passes; the day it PASSES, the wrapper throws «F3 is FIXED» and the test
-turns red — the cue to unwrap it and keep the check. A defect with several facets (F2, F5) gets one wrapper per facet, so fixing
+An open defect's assertion is wrapped in `expectKnownDefect( 'F7', reason, () => expect( … ) )` (`helpers.js`); every other
+assertion of the test is ordinary and fails the test normally. While the wrapped assertion fails, the failure is recorded as a
+`known-defect` annotation and the test passes; the day it PASSES, the wrapper throws «F7 is FIXED» and the test turns red — the
+cue to unwrap it and keep the check as an ordinary `expect`. A defect with several facets gets one wrapper per facet, so fixing
 one cannot hide behind another that still fails. Anything that is not an assertion failure (a timeout, a crashed page) is
 rethrown, never read as «still broken». The check inside a wrapper must use hard `expect`, not `expect.soft`.
 `WOODEV_E2E_STRICT=1` runs the wrapped assertions as ordinary ones so the real messages show.
 
+Currently wrapped: F7 (`05-deactivation.spec.js`, CDEK deactivated → Yandex methods vanish) and B1 (`06-block-checkout.spec.js`,
+block checkout does not restore the remembered CDEK point; block-only, not a release blocker).
+
+Fixed defects (their assertions are ordinary now):
+
+- F2 — choosing a pickup point moved the chosen method to Free shipping — fixed in framework #1268
+- F3 — the CDEK order kept the Yandex pickup point's meta — fixed in framework #1267
+- F4 — the Yandex guard refused the whole order on a stale CDEK point — fixed in the Yandex plugin #53
+- F5 — switching back did not restore the CDEK point's address — fixed in framework #1264
+- F6 — a reused order kept the meta of the carrier the buyer left — fixed in framework #1267
+
 ## What the specs change on the rig, and put back
 
-Every spec restores what it changed in `afterAll`: the Yandex courier instance's `is_enabled` flag (it is switched off while a
-point is picked — defect F2), the helper options (`y15_flaky_gateway`, `y15_equal_rates`), plugin activation (scenarios 4 and 5),
+Every spec restores what it changed in `afterAll`: the Yandex courier instance's `is_enabled` flag (the scenarios switch it off or on; restored to what it was), the helper options (`y15_flaky_gateway`, `y15_equal_rates`), plugin activation (scenarios 4 and 5),
 and — scenario 4 — a throw-away old-framework copy of the Yandex plugin in the container plus the `WOODEV_FRAMEWORK_DIR` line of
 `wp-config.php` (restored byte for byte). A crashed run is recovered by hand with
 `wp plugin activate woocommerce-edostavka woocommerce-yandex-delivery`, `rm -rf wp-content/plugins/0-y15-yandex-oldfw`, and
