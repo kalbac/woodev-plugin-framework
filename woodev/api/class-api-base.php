@@ -143,6 +143,15 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		public const UNPARSEABLE_BODY_MASK = '[REDACTED: body format could not be parsed for logging]';
 
 		/**
+		 * Maximum body size that the log redactor will decode into a PHP array.
+		 * Larger bodies are masked in full so a carrier response cannot multiply
+		 * its wire size into several in-memory copies during logging.
+		 *
+		 * @since 2.0.2
+		 */
+		private const MAX_REDACTABLE_BODY_BYTES = 1048576;
+
+		/**
 		 * Perform the request and return the parsed response
 		 *
 		 * @param Woodev_API_Request|object $request class instance which implements Woodev_API_Request
@@ -2042,14 +2051,15 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * {@see self::redact_secret_query_params()}'s `name=value` scan, corrupting
 		 * a body the redactor was never meant to touch.
 		 *
-		 * A body that decodes as a JSON ARRAY/OBJECT is walked and redacted
+		 * A body that decodes as a JSON ARRAY/OBJECT and is at most
+		 * {@see self::MAX_REDACTABLE_BODY_BYTES} bytes is walked and redacted
 		 * STRUCTURALLY — `json_decode()`, {@see self::redact_secret_values_recursively()}
 		 * by key at any depth, `json_encode()` back — so a secret-shaped substring
 		 * embedded in an unrelated string VALUE is never touched, and the result
 		 * is always valid JSON because it was rebuilt from a decoded structure,
 		 * never edited as text.
 		 *
-		 * Anything else — a body that decodes as a JSON SCALAR (a bare string,
+		 * An oversized body, or anything else — a body that decodes as a JSON SCALAR (a bare string,
 		 * number, bool, or `null`), or a body that is not valid JSON at all — is
 		 * replaced with {@see self::UNPARSEABLE_BODY_MASK} IN FULL. This covers
 		 * three cases that used to be handled separately, and unsafely:
@@ -2149,7 +2159,15 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 */
 		protected static function redact_secret_request_body( string $body, array $secret_names, string $original_body = '', bool $for_log = false ): string {
 
-			if ( '' === $body || empty( $secret_names ) ) {
+			if ( '' === $body ) {
+				return $body;
+			}
+
+			if ( strlen( $body ) > self::MAX_REDACTABLE_BODY_BYTES ) {
+				return self::UNPARSEABLE_BODY_MASK;
+			}
+
+			if ( empty( $secret_names ) ) {
 				return $body;
 			}
 

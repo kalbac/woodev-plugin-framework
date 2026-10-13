@@ -385,6 +385,42 @@ final class ApiBaseSanitizedResponseBodyTest extends TestCase {
 		$this->assertSame( 'active', $decoded['status'], 'a non-secret sibling must survive untouched, readable, in the log' );
 	}
 
+	/**
+	 * Large carrier responses are masked in full before JSON decoding, keeping
+	 * the log path bounded while ensuring no secret field reaches the broadcast.
+	 *
+	 * @return void
+	 */
+	public function test_oversized_json_response_body_is_masked_without_leaking_secrets(): void {
+
+		$secret = 'fx1262-' . bin2hex( random_bytes( 6 ) );
+		$points = [];
+
+		for ( $i = 0; $i < 2300; $i++ ) {
+			$points[] = [
+				'id'          => 'MSK' . $i,
+				'operator_id' => 'market_l4g',
+				'type'        => 'pickup_point',
+				'position'    => [ 'latitude' => 55.75, 'longitude' => 37.61 ],
+				'address'     => [ 'locality' => 'Москва', 'street' => 'Тверская', 'house' => (string) ( $i + 1 ), 'full_address' => 'Россия, Москва, Центральный административный округ, Тверская улица, дом ' . ( $i + 1 ), 'postal_code' => '101000' ],
+				'instruction' => 'Вход со стороны улицы, пункт выдачи заказов находится на первом этаже здания.',
+				'schedule'    => [ 'time_zone' => 'Europe/Moscow', 'restrictions' => [] ],
+			];
+		}
+
+		$body     = (string) json_encode( [ 'points' => $points, 'access_token' => $secret ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES );
+		$response = new Testable_Unknown_Secret_Carrying_Response( $body );
+		$api      = new Testable_Api_Base_For_Response_Body_Test();
+		$api->set_response_for_test( $response );
+
+		$this->assertGreaterThan( 1048576, strlen( $body ), 'the fixture must exceed the redactor size limit' );
+		$this->assertTrue(
+			\Woodev_API_Base::UNPARSEABLE_BODY_MASK === $api->get_sanitized_response_body_for_test(),
+			'oversized JSON must be replaced with the fixed full-redaction marker'
+		);
+		$this->assertStringNotContainsString( $secret, print_r( $api->get_response_data_for_broadcast_for_test(), true ) );
+	}
+
 	// -------------------------------------------------------------------------
 	// An unparseable response body (XML, print_r(), free text) is whole-masked
 	// — the base has no reliable way to tell a secret-named field apart from a
