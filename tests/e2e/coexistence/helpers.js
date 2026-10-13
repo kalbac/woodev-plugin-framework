@@ -13,7 +13,42 @@
  */
 
 const { execFileSync } = require( 'node:child_process' );
-const { expect } = require( '@playwright/test' );
+const fs = require( 'node:fs' );
+const os = require( 'node:os' );
+const path = require( 'node:path' );
+const { expect, test } = require( '@playwright/test' );
+
+/**
+ * The ledger of orders the specs created, one line per order: `<id>`, or `keep:<id>` for an order cleanup must spare (the one
+ * exported to CDEK for real). `rig/cleanup-orders.js` deletes EXACTLY these ids and nothing else. Lives in the OS temp dir so
+ * it never rides along in a commit; `WOODEV_E2E_ORDER_LEDGER` overrides the path.
+ */
+const ORDER_LEDGER = process.env.WOODEV_E2E_ORDER_LEDGER || path.join( os.tmpdir(), 'woodev-y15-coexistence-orders.txt' );
+
+/**
+ * Records an order id this run created. Appends one line, so parallel workers cannot clobber each other.
+ *
+ * @param {number|null} id
+ * @param {boolean}     keep The order must survive `cleanup-orders.js`.
+ */
+function recordOrder( id, keep = false ) {
+	if ( id ) {
+		fs.appendFileSync( ORDER_LEDGER, `${ keep ? 'keep:' : '' }${ Number( id ) }\n` );
+	}
+}
+
+/**
+ * Reads the ledger.
+ *
+ * @returns {{ ids: number[], keep: number[] }}
+ */
+function recordedOrders() {
+	const lines = fs.existsSync( ORDER_LEDGER ) ? fs.readFileSync( ORDER_LEDGER, 'utf8' ).split( '\n' ).filter( Boolean ) : [];
+	const keep  = lines.filter( ( l ) => l.startsWith( 'keep:' ) ).map( ( l ) => Number( l.slice( 5 ) ) );
+	const ids   = lines.filter( ( l ) => ! l.startsWith( 'keep:' ) ).map( Number );
+
+	return { ids: [ ...new Set( ids ) ].filter( ( id ) => ! keep.includes( id ) ), keep: [ ...new Set( keep ) ] };
+}
 
 /** Product id that fills the cart — `docs-internal/CURRENT-STATE.md` → Local rig. */
 const PRODUCT_ID = 12;
@@ -217,8 +252,67 @@ echo wp_json_encode( $out, JSON_UNESCAPED_UNICODE );
 	);
 }
 
+/** Order meta keys / markers of the carrier. */
+const carrierKeys = ( carrier ) => ( 'cdek' === carrier ? CDEK_META : YANDEX_META );
+
+/** The shipping method id of the carrier's pickup rate. */
+const carrierMethod = ( carrier ) => ( 'cdek' === carrier ? METHOD_CDEK_PICKUP : METHOD_YANDEX_PICKUP );
+
+/**
+ * The keys of the OTHER carrier that the order still carries — point meta and the orders-page marker. Empty is the goal.
+ *
+ * @param {ReturnType<typeof readOrder>} order
+ * @param {'cdek'|'yandex'}              carrier The carrier whose point the order must carry.
+ * @returns {string[]}
+ */
+function staleKeys( order, carrier ) {
+	const marker = 'cdek' === carrier ? YANDEX_MARKER : CDEK_MARKER;
+
+	return [ ...carrierKeys( 'cdek' === carrier ? 'yandex' : 'cdek' ), marker ].filter( ( key ) => undefined !== order.meta[ key ] );
+}
+
+/**
+ * Soft-asserts the part of an order that is the chosen carrier's own: its pickup meta and a shipping address. (No shipping
+ * line, no stale keys — those are separate named assertions, see `expectOnlyCarrier`.)
+ *
+ * @param {ReturnType<typeof readOrder>} order
+ * @param {'cdek'|'yandex'}              carrier
+ * @param {string}                       label   Prefix for the messages, e.g. «order 1412».
+ */
+function expectCarrierOwnData( order, carrier, label ) {
+	for ( const key of carrierKeys( carrier ) ) {
+		expect.soft( order.meta[ key ], `${ label }: ${ carrier } meta ${ key } must be present` ).toBeTruthy();
+	}
+
+	expect.soft( order.shipping.address_1, `${ label }: shipping address is the chosen point's` ).toBeTruthy();
+}
+
+/**
+ * Asserts the order's shipping line is the carrier's pickup method.
+ *
+ * @param {ReturnType<typeof readOrder>} order
+ * @param {'cdek'|'yandex'}              carrier
+ * @param {string}                       label
+ */
+function expectCarrierShippingLine( order, carrier, label ) {
+	expect( order.shipping_lines.map( ( l ) => l.method_id ), `${ label }: shipping line` ).toEqual( [ carrierMethod( carrier ) ] );
+}
+
+/**
+ * Asserts the order carries NO key of the other carrier.
+ *
+ * @param {ReturnType<typeof readOrder>} order
+ * @param {'cdek'|'yandex'}              carrier
+ * @param {string}                       label
+ */
+function expectNoStaleKeys( order, carrier, label ) {
+	expect( staleKeys( order, carrier ), `${ label }: stale meta of the OTHER carrier` ).toEqual( [] );
+}
+
 /**
  * Soft-asserts that an order carries ONLY one carrier's pickup meta — the point, its address, the matching shipping line.
+ * The all-in-one form, for specs where nothing is a known defect; a known defect asserts the parts through
+ * `expectKnownDefect()` one at a time.
  *
  * Soft on purpose: when a scenario fails, the run should show every wrong key of the order at once, not stop at the first.
  *
@@ -227,35 +321,53 @@ echo wp_json_encode( $out, JSON_UNESCAPED_UNICODE );
  * @param {string}                       label   Prefix for the messages, e.g. «order 1412».
  */
 function expectOnlyCarrier( order, carrier, label ) {
-	const own    = 'cdek' === carrier ? CDEK_META : YANDEX_META;
-	const other  = 'cdek' === carrier ? YANDEX_META : CDEK_META;
-	const method = 'cdek' === carrier ? METHOD_CDEK_PICKUP : METHOD_YANDEX_PICKUP;
-
-	expect.soft( order.shipping_lines.map( ( l ) => l.method_id ), `${ label }: shipping line` ).toEqual( [ method ] );
-
-	for ( const key of own ) {
-		expect.soft( order.meta[ key ], `${ label }: ${ carrier } meta ${ key } must be present` ).toBeTruthy();
-	}
-
-	for ( const key of [ ...other, 'cdek' === carrier ? YANDEX_MARKER : CDEK_MARKER ] ) {
-		expect.soft( order.meta[ key ], `${ label }: stale meta ${ key } of the OTHER carrier` ).toBeUndefined();
-	}
-
-	expect.soft( order.shipping.address_1, `${ label }: shipping address is the chosen point's` ).toBeTruthy();
+	expect.soft( order.shipping_lines.map( ( l ) => l.method_id ), `${ label }: shipping line` ).toEqual( [ carrierMethod( carrier ) ] );
+	expectCarrierOwnData( order, carrier, label );
+	expect.soft( staleKeys( order, carrier ), `${ label }: stale meta of the OTHER carrier` ).toEqual( [] );
 }
 
 /**
- * Marks a test as a KNOWN DEFECT: it asserts the correct behaviour, is expected to fail today, and turns red the day the defect
- * is fixed (Playwright reports «expected to fail, but passed») — which is the cue to delete the annotation. Set
- * `WOODEV_E2E_STRICT=1` to run the annotated tests as ordinary ones and read the real failure messages.
+ * Runs ONE named assertion that documents a KNOWN DEFECT, and inverts exactly that assertion — nothing else in the test.
  *
- * @param {import('@playwright/test').TestType<any, any>} test
- * @param {string}                                        reason Defect id and one line: what is wrong and where.
+ *  - `check` fails (a Playwright assertion error) → the defect is still there; the failure is recorded as an annotation and
+ *    the test goes on. This is the expected state today.
+ *  - `check` passes → the defect is FIXED, and this call throws: the test turns red, and the cue is to delete the wrapper
+ *    and keep `check` as an ordinary assertion. A fixed defect can never hide behind some other assertion that still fails,
+ *    because every other assertion of the test runs outside this call and fails the test normally.
+ *  - `check` throws anything that is NOT an assertion failure (a timeout, a crashed page, a bad JSON) → rethrown: the rig is
+ *    broken, the defect is neither confirmed nor fixed.
+ *
+ * `check` must use HARD `expect` (not `expect.soft`, which records without throwing and would read as «fixed»). Put the
+ * assertions the defect does not own BEFORE the call. The call RETURNS `true` while the defect stands, so a test whose later
+ * steps need the fixed behaviour (an order that was never placed) can `if ( await expectKnownDefect( … ) ) { return; }`.
+ *
+ * `WOODEV_E2E_STRICT=1` runs `check` as an ordinary assertion and shows the real failure message.
+ *
+ * @param {string}                  id     Defect id, e.g. «F3».
+ * @param {string}                  reason One line: what is wrong and where.
+ * @param {() => (void|Promise<void>)} check The assertion that is correct once the defect is fixed.
+ * @returns {Promise<boolean>} `true` while the defect stands (strict mode: never — a standing defect throws).
  */
-function knownDefect( test, reason ) {
-	if ( ! process.env.WOODEV_E2E_STRICT ) {
-		test.fail( true, reason );
+async function expectKnownDefect( id, reason, check ) {
+	if ( process.env.WOODEV_E2E_STRICT ) {
+		await check();
+
+		return false;
 	}
+
+	try {
+		await check();
+	} catch ( error ) {
+		if ( ! error || ! error.matcherResult ) {
+			throw error;
+		}
+
+		test.info().annotations.push( { type: 'known-defect', description: `${ id }: ${ reason } — ${ String( error.message ).split( '\n' )[ 0 ] }` } );
+
+		return true;
+	}
+
+	throw new Error( `${ id } is FIXED — its assertion now passes. Delete the expectKnownDefect() wrapper and keep the check as an ordinary assertion. (${ reason })` );
 }
 
 /**
@@ -427,7 +539,11 @@ async function placeOrder( page ) {
 	if ( 'received' === outcome ) {
 		const match = page.url().match( /order-received\/(\d+)/ );
 
-		return { orderId: match ? Number( match[ 1 ] ) : null, errors: [] };
+		const orderId = match ? Number( match[ 1 ] ) : null;
+
+		recordOrder( orderId );
+
+		return { orderId, errors: [] };
 	}
 
 	return { orderId: null, errors: await page.locator( '.woocommerce-error li, .woocommerce-error' ).allInnerTexts() };
@@ -563,16 +679,22 @@ module.exports = {
 	choosePayment,
 	chosenRate,
 	cliContainer,
+	ORDER_LEDGER,
+	expectCarrierOwnData,
+	expectCarrierShippingLine,
+	expectKnownDefect,
+	expectNoStaleKeys,
 	expectOnlyCarrier,
 	fillContact,
 	getOption,
-	knownDefect,
 	latestOrderId,
 	openCheckout,
 	optionScope,
 	pickFirstPoint,
 	placeOrder,
 	readOrder,
+	recordOrder,
+	recordedOrders,
 	requireRig,
 	setInstanceEnabled,
 	settle,

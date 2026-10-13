@@ -1,26 +1,47 @@
 #!/usr/bin/env node
 /**
- * Deletes the orders the coexistence specs create — every order whose billing e-mail is `y15*@example.com` — and prints how
- * many went. Run it after a session; the specs never delete their own orders, so a failure can be inspected.
+ * Deletes the orders the coexistence specs created — EXACTLY the ids they recorded in the order ledger
+ * (`helpers.js` → `ORDER_LEDGER`), never a pattern match — and prints how many went. Run it after a session; the specs never
+ * delete their own orders, so a failure can be inspected.
  *
  *   node tests/e2e/coexistence/rig/cleanup-orders.js [--dry-run] [--keep=1444,1445]
  *
- * `--keep` spares orders you want to keep — e.g. the one that was exported to CDEK for real.
+ * `--keep` spares more orders on top of the ones the specs already marked to keep (the order exported to CDEK for real).
+ * After a real run the ledger keeps only the spared ids.
  */
 
-const { wpEval } = require( '../helpers' );
+const fs = require( 'node:fs' );
+const { ORDER_LEDGER, recordedOrders, wpEval } = require( '../helpers' );
 
-const dry  = process.argv.includes( '--dry-run' );
-const keep = ( process.argv.find( ( a ) => a.startsWith( '--keep=' ) ) || '--keep=' ).slice( 7 ).split( ',' ).filter( Boolean ).map( Number );
+const dry   = process.argv.includes( '--dry-run' );
+const extra = ( process.argv.find( ( a ) => a.startsWith( '--keep=' ) ) || '--keep=' ).slice( 7 ).split( ',' ).filter( Boolean ).map( Number );
+
+const { ids, keep } = recordedOrders();
+const spare         = new Set( [ ...keep, ...extra ] );
+const doomed        = ids.filter( ( id ) => ! spare.has( id ) );
+
+if ( 0 === doomed.length ) {
+	console.log( `nothing to delete (ledger ${ ORDER_LEDGER }: ${ ids.length } recorded, ${ spare.size } spared)` );
+	process.exit( 0 );
+}
 
 console.log(
 	wpEval(
 		`
-$keep = ${ JSON.stringify( keep ) };
-$ids  = wc_get_orders( [ 'limit' => -1, 'return' => 'ids', 'status' => array_keys( wc_get_order_statuses() ) ] );
-$ids  = array_filter( $ids, static fn( $id ) => ! in_array( (int) $id, $keep, true ) && 1 === preg_match( '/^y15.*@example\\.com$/', (string) wc_get_order( $id )->get_billing_email() ) );
-${ dry ? '' : 'foreach ( $ids as $id ) { wc_get_order( $id )->delete( true ); }' }
-echo ${ dry ? "'would delete '" : "'deleted '" }, count( $ids ), ' order(s): ', implode( ',', $ids );
+$ids  = ${ JSON.stringify( doomed ) };
+$gone = [];
+foreach ( $ids as $id ) {
+	$order = wc_get_order( $id );
+	if ( $order ) {
+		${ dry ? '' : '$order->delete( true );' }
+		$gone[] = $id;
+	}
+}
+echo ${ dry ? "'would delete '" : "'deleted '" }, count( $gone ), ' order(s): ', implode( ',', $gone );
 `
 	)
 );
+
+if ( ! dry ) {
+	fs.writeFileSync( ORDER_LEDGER, [ ...spare ].map( ( id ) => `keep:${ id }\n` ).join( '' ) );
+}

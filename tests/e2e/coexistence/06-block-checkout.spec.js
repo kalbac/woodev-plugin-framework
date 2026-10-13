@@ -3,7 +3,7 @@
  *
  * «Block-only gaps are NOT release blockers» (operator, 08.10.2026) — this spec records them rather than gating on them:
  *  - the order placed after re-picking the CDEK point is clean (passes);
- *  - B1 (known gap, `knownDefect`): classic checkout restores the remembered CDEK point when CDEK is chosen again, the block
+ *  - B1 (known gap, `expectKnownDefect`): classic checkout restores the remembered CDEK point when CDEK is chosen again, the block
  *    checkout shows «Select a pickup point» again and the form keeps the Yandex point's address and an empty postcode
  *    until the buyer re-picks, so «Place order» is refused («Please choose a pickup point», «valid postal code»).
  *
@@ -15,9 +15,10 @@ const { test, expect } = require( '@playwright/test' );
 const {
 	METHOD_YANDEX_COURIER,
 	PRODUCT_ID,
+	expectKnownDefect,
 	expectOnlyCarrier,
-	knownDefect,
 	readOrder,
+	recordOrder,
 	requireRig,
 	setInstanceEnabled,
 	zoneInstances,
@@ -108,7 +109,13 @@ async function fillAndPlace( page ) {
 	await page.locator( '.wc-block-components-checkout-place-order-button' ).click();
 
 	return Promise.race( [
-		page.waitForURL( /order-received\/\d+/, { timeout: 90_000 } ).then( () => ( { orderId: Number( page.url().match( /order-received\/(\d+)/ )[ 1 ] ), errors: [] } ) ),
+		page.waitForURL( /order-received\/\d+/, { timeout: 90_000 } ).then( () => {
+			const orderId = Number( page.url().match( /order-received\/(\d+)/ )[ 1 ] );
+
+			recordOrder( orderId );
+
+			return { orderId, errors: [] };
+		} ),
 		page.locator( '.wc-block-components-notice-banner.is-error, .wc-block-components-validation-error' ).first().waitFor( { timeout: 90_000 } )
 			.then( async () => ( { orderId: null, errors: await page.locator( '.wc-block-components-notice-banner.is-error, .wc-block-components-validation-error' ).allInnerTexts() } ) ),
 	] );
@@ -133,8 +140,6 @@ test.describe( 'scenario 1 on the block checkout', () => {
 	} );
 
 	test( 'B1: switching back to CDEK restores its point, as the classic checkout does', async ( { page } ) => {
-		knownDefect( test, 'B1 (block-only): the block checkout does not restore the remembered CDEK point after another carrier was chosen; the form keeps the other carrier\'s address and an empty postcode.' );
-
 		await openBlockCheckout( page );
 
 		await chooseRate( page, 'CDEK pickup point' );
@@ -145,7 +150,17 @@ test.describe( 'scenario 1 on the block checkout', () => {
 
 		const { orderId, errors } = await fillAndPlace( page );
 
-		expect( errors.join( ' | ' ), 'placing the order without re-picking' ).toBe( '' );
+		// The one assertion the defect owns; no order exists while it stands, so the order check waits for the fix.
+		if (
+			await expectKnownDefect(
+				'B1',
+				'block-only: the block checkout does not restore the remembered CDEK point after another carrier was chosen; the form keeps the other carrier\'s address and an empty postcode.',
+				() => expect( errors.join( ' | ' ), 'placing the order without re-picking' ).toBe( '' )
+			)
+		) {
+			return;
+		}
+
 		expectOnlyCarrier( readOrder( orderId ), 'cdek', `order ${ orderId }` );
 	} );
 } );

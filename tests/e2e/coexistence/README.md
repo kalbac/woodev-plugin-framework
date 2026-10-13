@@ -27,9 +27,10 @@ Card: `kalbac/woocommerce-yandex-delivery#18`. Results and defects: the Y15 repo
 
 ```bash
 npx playwright test --config=playwright.config.js tests/e2e/coexistence          # all, ~8 min, one worker
-WOODEV_E2E_STRICT=1 npx playwright test ... tests/e2e/coexistence                 # known defects run as ordinary tests
+WOODEV_E2E_STRICT=1 npx playwright test ... tests/e2e/coexistence                 # known defects run as ordinary assertions
 WOODEV_E2E_CDEK_EXPORT=1 npx playwright test ... 05-deactivation.spec.js          # also ONE real CDEK export (see below)
-node tests/e2e/coexistence/rig/cleanup-orders.js                                  # delete the orders the specs created
+WOODEV_E2E_CDEK_DEACTIVATE=1 npx playwright test ... 05-deactivation.spec.js      # also the two «CDEK deactivated» tests (see below)
+node tests/e2e/coexistence/rig/cleanup-orders.js [--dry-run] [--keep=ID,ID]       # delete the orders the specs created
 ```
 
 Run a scenario's specs with a **long shell timeout or in the background** — scenario 4 alone restarts nothing but rewrites
@@ -37,9 +38,13 @@ plugin files, and the checkout flows take 15-50 s each.
 
 ## Known defects are annotated, not hidden
 
-A test that asserts the CORRECT behaviour of something that is broken today is marked with `knownDefect( test, 'F3: …' )`
-(`helpers.js`): Playwright reports it as an expected failure, and turns it red («expected to fail, but passed») the day the defect
-is fixed — the cue to delete the annotation. `WOODEV_E2E_STRICT=1` removes the annotation so the real assertion messages show.
+The ONE assertion that documents a defect is wrapped in `expectKnownDefect( 'F3', reason, () => expect( … ) )` (`helpers.js`);
+every other assertion of the test is ordinary and fails the test normally. While the wrapped assertion fails, the failure is
+recorded as a `known-defect` annotation and the test passes; the day it PASSES, the wrapper throws «F3 is FIXED» and the test
+turns red — the cue to unwrap it and keep the check. A defect with several facets (F2, F5) gets one wrapper per facet, so fixing
+one cannot hide behind another that still fails. Anything that is not an assertion failure (a timeout, a crashed page) is
+rethrown, never read as «still broken». The check inside a wrapper must use hard `expect`, not `expect.soft`.
+`WOODEV_E2E_STRICT=1` runs the wrapped assertions as ordinary ones so the real messages show.
 
 ## What the specs change on the rig, and put back
 
@@ -50,8 +55,17 @@ and — scenario 4 — a throw-away old-framework copy of the Yandex plugin in t
 `wp plugin activate woocommerce-edostavka woocommerce-yandex-delivery`, `rm -rf wp-content/plugins/0-y15-yandex-oldfw`, and
 copying `wp-config.php.y15-scenario4` back over `wp-config.php` if it still exists.
 
-The specs never delete their orders (a failure can be inspected); `rig/cleanup-orders.js` does, by the `y15*@example.com`
-e-mail address they use.
+The specs never delete their orders (a failure can be inspected). Every order a spec creates is appended to a ledger
+(`helpers.js` → `ORDER_LEDGER`, default `$TMPDIR/woodev-y15-coexistence-orders.txt`, override with `WOODEV_E2E_ORDER_LEDGER`);
+`rig/cleanup-orders.js` deletes exactly the ids in the ledger — never an e-mail or other pattern match — and spares the ones marked
+`keep:` (the order exported to CDEK for real) and any `--keep=` ids.
+
+## Deactivating CDEK is opt-in
+
+CDEK's deactivation removes its remote webhook subscription from the CDEK account, and reactivation does not restore it. So the
+two scenario-5 tests that deactivate CDEK (survival of CDEK's data + Yandex orders page, and F7) run only with
+`WOODEV_E2E_CDEK_DEACTIVATE=1`; by default they are skipped and a plain run leaves the CDEK account untouched. After an opt-in
+run, re-save CDEK's webhook settings (or re-register the subscription) before relying on CDEK webhooks on that rig.
 
 ## The real CDEK export
 

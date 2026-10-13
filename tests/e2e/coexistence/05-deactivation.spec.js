@@ -5,6 +5,10 @@
  *
  * Both plugins are reactivated by `afterAll` whatever happens; the final state of the rig is «both active».
  *
+ * DEACTIVATING CDEK IS OPT-IN (`WOODEV_E2E_CDEK_DEACTIVATE=1`, default OFF). CDEK's deactivation hook removes its remote webhook
+ * subscription in the CDEK account and reactivation does not bring it back — an external side effect a plain run must not
+ * have. Without the variable the two «CDEK deactivated» tests are skipped; the Yandex-deactivated half always runs.
+ *
  * THE REAL CDEK EXPORT. Spec §13 asks for «an export of the remaining plugin». The CDEK production account is a test account
  * (a few calculations and ONE real export are agreed), so the export runs only with `WOODEV_E2E_CDEK_EXPORT=1` and exactly once
  * per such run — it creates a real order in the CDEK account and is never repeated by a plain run. A Yandex export is not
@@ -21,19 +25,24 @@ const {
 	METHOD_YANDEX_PICKUP,
 	YANDEX_MARKER,
 	adminLogin,
-	knownDefect,
+	expectKnownDefect,
 	openCheckout,
 	openOrdersPage,
 	optionSnapshot,
 	ordersPageRows,
 	placePickupOrder,
 	readOrder,
+	recordOrder,
 	requireRig,
 	setInstanceEnabled,
 	wp,
 	wpEval,
 	zoneInstances,
 } = require( './helpers' );
+
+/** Deactivating CDEK deletes its remote webhook subscription (see the file header), so it needs an explicit yes. */
+const CDEK_DEACTIVATION_OPTED_IN = Boolean( process.env.WOODEV_E2E_CDEK_DEACTIVATE );
+const CDEK_DEACTIVATION_SKIP     = 'Deactivating CDEK removes its remote webhook subscription — set WOODEV_E2E_CDEK_DEACTIVATE=1 to run this test.';
 
 const CDEK_SLUG   = 'woocommerce-edostavka';
 const YANDEX_SLUG = 'woocommerce-yandex-delivery';
@@ -160,6 +169,8 @@ echo wp_json_encode( [ 'status' => $res->get_status(), 'data' => is_array( $d ) 
 					)
 				);
 
+				recordOrder( orderId, true ); // A real CDEK order now exists in the account: cleanup-orders.js must spare it.
+
 				test.info().annotations.push( { type: 'cdek-export', description: `order ${ orderId }: HTTP ${ outcome.status } ${ JSON.stringify( outcome.data ).slice( 0, 300 ) }` } );
 				expect( outcome.status, `the CDEK export answered ${ JSON.stringify( outcome.data ).slice( 0, 300 ) }` ).toBeLessThan( 300 );
 
@@ -179,6 +190,8 @@ echo wp_json_encode( [ 'status' => $res->get_status(), 'data' => is_array( $d ) 
 } );
 
 test.describe( 'scenario 5 — CDEK deactivated, Yandex keeps working', () => {
+	test.skip( ! CDEK_DEACTIVATION_OPTED_IN, CDEK_DEACTIVATION_SKIP );
+
 	test( 'options and rows survive, the Yandex orders page works, reactivation restores CDEK', async ( { page } ) => {
 		const cdekOrders = orderIdsByMarker( CDEK_MARKER );
 
@@ -215,14 +228,16 @@ test.describe( 'scenario 5 — CDEK deactivated, Yandex keeps working', () => {
 	} );
 
 	test( 'F7: with CDEK deactivated the Yandex methods are still offered at checkout', async ( { page } ) => {
-		knownDefect( test, 'F7: the shared default-locality record belongs to the CDEK location provider; without CDEK the settlement is absent, the DaData fallback names it «Moscow» and the Yandex adapter finds no geo_id, so no Yandex rate is built.' );
-
 		await withDeactivated( CDEK_SLUG, async () => {
 			await openCheckout( page );
 
 			const offered = await offeredMethods( page );
 
-			expect( offered, 'a Yandex pickup rate is offered' ).toContain( METHOD_YANDEX_PICKUP );
+			await expectKnownDefect(
+				'F7',
+				'the shared default-locality record belongs to the CDEK location provider; without CDEK the settlement is absent, the DaData fallback names it «Moscow» and the Yandex adapter finds no geo_id, so no Yandex rate is built.',
+				() => expect( offered, 'a Yandex pickup rate is offered' ).toContain( METHOD_YANDEX_PICKUP )
+			);
 		} );
 	} );
 } );
