@@ -6,8 +6,11 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-12 (s174).** Framework `main` `27df83b5` and plugin `v2` `52667fc` (pin `27df83b5`) — no code changed in s174. 🚧 **v2 release = TWO carrier plugins on v2, tested and compatible**
-(#1179): CDEK done (s172–s173). **Yandex: brainstorm done, decisions on #1179, design spec `specs/2026-10-12-yandex-v2-plugin-design.md` (Codex-reviewed); next — file the §17 cards, then build in a NEW plugin repository.** Block-checkout gaps do not block the release.
+**As of 2026-10-13 (s175).** Framework `main` `a3d154bb`; CDEK plugin `v2` `5c09c21` (pin `ac09b9bd`); Yandex plugin
+`kalbac/woocommerce-yandex-delivery` `main` `b8c4110` (pin `ac09b9bd`, NEW private repo, board №11). 🚧 **v2 release = TWO carrier
+plugins on v2, tested and compatible** (#1179): CDEK done (s172–s173). **Yandex: Y1–Y8, Y6b, Y11–Y13 merged; Y9 (#36) and Y10a (#37,
+stacked) approved/in review but NOT merged — GitHub Actions is blocked on the PRIVATE plugin repos (billing/spending limit,
+13.10.2026 ~05:15).** Remaining Y cards: Y10b, Y14, Y15, Y16 (needs F1 #1246, parked for the operator). Block-checkout gaps do not block the release.
 Next checks: `next-session-prompt.md`. ⚠ Sync the plugin’s own `woodev/` before plugin rig runs
 (`wiki/local-rig.md`). The rig admin user has locale **ru_RU**; the site stays **en_US**.
 GlitchTip receiver (#1082) is live. **Both machines are live**; routine sync is git ONLY
@@ -57,8 +60,7 @@ the highest installed `2.2.5.5` (operator, 06.09.2026), so the update reaches ev
 
 ✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — no quota consumed; the exhaustion symptom is gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`.
 
-**Historical test measurements (not rerun by this docs audit):** framework unit **7027**,
-12.10.2026 (s170 handoff); Jest **3147** in **73** suites, 09.10.2026 (s163).
+**Test measurements:** framework unit **7132** (1 skipped), Jest **3350** in **84** suites — measured 13.10.2026 (s175) on `a3d154bb`.
 Integration is CI/coordinator-owned. Re-measure before quoting these as current gate evidence.
 
 ⚠ **A `.ts` msgid fails `lint:i18n-sources`** — it extracts from the BUILT bundle (s129).
@@ -275,10 +277,9 @@ only consumer; they get rewritten once everything is ready.
 
 ## Next Actions
 
-**Next: the Yandex v2 plugin (#1179) — brainstorm WITH the operator, by code (framework seams + the CDEK plugin as the
-first consumer), before any card is cut.** The Бэклог was audited against code in s173 (55 cards, none fully done). Take
-other work from the board’s priority field after checking the card against code. The old migration pilot remains frozen; the
-v1→v2 migration stand was torn down in s173 (rebuild from the plugin’s `tests/migration-stand/`, see edostavka#86).
+**Next: restore CI on the private plugin repos (operator: billing), then merge Yandex #36 → #37, and continue Y10b → Y14
+(test contour) → Y16 (after F1) → Y15 (coexistence with CDEK on the rig).** Card list and order: board №11 + spec §17; handoff
+`next-session-prompt.md`. Framework: F1 #1246 waits for the operator's look; #1253 item (b) is his decision.
 
 **Issue lists and priorities live on the board.** `FUTURE-BACKLOG.md` is frozen.
 
