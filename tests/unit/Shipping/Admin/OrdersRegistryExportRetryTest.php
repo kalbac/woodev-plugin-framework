@@ -68,6 +68,8 @@ final class OrdersRegistryExportRetryTest extends TestCase {
 	private function register_handler(): Abstract_Shipment_Handler {
 		$handler = Mockery::mock( Abstract_Shipment_Handler::class );
 		$handler->shouldReceive( 'supports_update' )->andReturn( false );
+		$handler->shouldReceive( 'supports_reconcile' )->andReturn( false )->byDefault();
+		$handler->shouldReceive( 'export_unknown_since' )->andReturn( 0 )->byDefault();
 		// #1204: a carrier that declares nothing keeps today's behaviour.
 		$handler->shouldReceive( 'supports_refusal' )->andReturn( false )->byDefault();
 		$handler->shouldReceive( 'get_handed_over_statuses' )->andReturn( [] )->byDefault();
@@ -92,14 +94,23 @@ final class OrdersRegistryExportRetryTest extends TestCase {
 		$order->shouldReceive( 'get_id' )->andReturn( 123 );
 		$order->shouldReceive( 'get_status' )->andReturn( $status );
 		$order->shouldReceive( 'get_meta' )->andReturnUsing(
-			static function ( $key ) use ( $attempts, $deferrals ) {
+			function ( $key ) use ( $attempts, $deferrals ) {
 				if ( Export_Retry::ATTEMPTS_META === $key ) {
 					return $attempts;
 				}
 
-				return Export_Retry::DEFERRALS_META === $key ? $deferrals : '';
+				if ( Export_Retry::DEFERRALS_META === $key ) {
+					return $deferrals;
+				}
+
+				return $this->meta[ $key ] ?? '';
 			}
 		);
+		$order->shouldReceive( 'update_meta_data' )->andReturnUsing(
+			function ( $key, $value ) {
+				$this->meta[ $key ] = $value;
+			}
+		)->byDefault();
 
 		Functions\when( 'wc_get_order' )->justReturn( $order );
 
@@ -124,6 +135,35 @@ final class OrdersRegistryExportRetryTest extends TestCase {
 		Orders_Registry::instance()->run_export_retry( '123' ); // Action Scheduler hands the stored argument over as it is.
 
 		$this->addToAssertionCount( 1 );
+	}
+
+	public function test_a_due_attempt_stops_for_unknown_non_reconciling_order_and_writes_one_private_note(): void {
+		$this->register_provider();
+		$handler = $this->register_handler();
+		$handler->shouldReceive( 'supports_reconcile' )->andReturn( false );
+		$handler->shouldReceive( 'export_unknown_since' )->with( Mockery::type( '\\WC_Order' ) )->andReturn( 1000 );
+		$handler->shouldNotReceive( 'export' );
+		$order = $this->order();
+		$order->shouldReceive( 'save_meta_data' )->once();
+		$order->shouldReceive( 'add_order_note' )->once()->with( 'Исход выгрузки неизвестен — проверьте кабинет перевозчика, автоматическая выгрузка остановлена' );
+
+		Orders_Registry::instance()->run_export_retry( 123 );
+		Orders_Registry::instance()->run_export_retry( 123 );
+
+		$this->assertSame( 'yes', $this->meta[ Export_Retry::UNKNOWN_EXPORT_NOTE_META ] );
+	}
+
+	public function test_a_due_attempt_for_unknown_reconciling_order_still_reaches_the_handler(): void {
+		$this->register_provider();
+		$handler = $this->register_handler();
+		$handler->shouldReceive( 'supports_reconcile' )->andReturn( true );
+		$handler->shouldReceive( 'export_unknown_since' )->with( Mockery::type( '\\WC_Order' ) )->andReturn( 1000 );
+		$order = $this->order();
+		$handler->shouldReceive( 'export' )->once()->with( $order, null, null )->andReturn( Action_Result::success( 'CARRIER-1' ) );
+
+		Orders_Registry::instance()->run_export_retry( 123 );
+
+		$this->assertArrayNotHasKey( Export_Retry::UNKNOWN_EXPORT_NOTE_META, $this->meta );
 	}
 
 	public function test_an_order_that_is_gone_is_left_alone(): void {

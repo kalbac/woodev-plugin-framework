@@ -1283,6 +1283,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 				return;
 			}
 
+			if ( Export_Retry::stop_unknown_non_reconciling_export( $order, $handler ) ) {
+				return;
+			}
+
 			if ( null !== Order_Actions::edit_lock_owner( $order ) ) {
 				$this->defer_export_retry( $order->get_id(), __( 'заказ открыт для редактирования', 'woodev-plugin-framework' ) );
 

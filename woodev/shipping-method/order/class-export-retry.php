@@ -68,6 +68,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Export_Retry' ) ) :
 		 */
 		public const DEFERRALS_META = '_woodev_shipment_export_deferrals';
 
+		/** @var string order meta ensuring the non-reconciling unknown-export warning is written once */
+		public const UNKNOWN_EXPORT_NOTE_META = '_woodev_shipment_export_unknown_note';
+
 		/** @var string {@see self::after_failure()}: the next attempt is waiting in the queue */
 		public const SCHEDULED = 'scheduled';
 
@@ -222,6 +225,35 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Export_Retry' ) ) :
 			if ( $fresh !== $order ) {
 				self::forget( $order );
 			}
+		}
+
+		/**
+		 * Stops an automatic export when a carrier cannot reconcile an unknown outcome.
+		 *
+		 * The warning is recorded once per order, even if status changes or an already-queued
+		 * retry reaches this guard again. Manual exports do not use this guard.
+		 *
+		 * @since 2.0.2 Card #1253.
+		 *
+		 * @param \WC_Order                 $order   the order to inspect and annotate.
+		 * @param Abstract_Shipment_Handler $handler the order's carrier handler.
+		 * @return bool whether automatic export must stop.
+		 */
+		public static function stop_unknown_non_reconciling_export( \WC_Order $order, Abstract_Shipment_Handler $handler ): bool {
+
+			if ( $handler->supports_reconcile() || 0 === $handler->export_unknown_since( $order ) ) {
+				return false;
+			}
+
+			self::reset( $order, $order );
+
+			if ( '' === (string) $order->get_meta( self::UNKNOWN_EXPORT_NOTE_META ) ) {
+				$order->add_order_note( __( 'Исход выгрузки неизвестен — проверьте кабинет перевозчика, автоматическая выгрузка остановлена', 'woodev-plugin-framework' ) );
+				$order->update_meta_data( self::UNKNOWN_EXPORT_NOTE_META, 'yes' );
+				$order->save_meta_data();
+			}
+
+			return true;
 		}
 
 		/**

@@ -145,6 +145,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Order_Automation' ) 
 				return;
 			}
 
+			$handler = $this->registry->get_shipment_handler( $provider->get_id() );
+
+			if ( null !== $handler && Export_Retry::stop_unknown_non_reconciling_export( $order, $handler ) ) {
+				return;
+			}
+
 			Export_Retry::enqueue( $order->get_id(), 0 );
 		}
 
