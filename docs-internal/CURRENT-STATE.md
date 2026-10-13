@@ -6,11 +6,10 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-13 (s175).** Framework `main` `a3d154bb`; CDEK plugin `v2` `5c09c21` (pin `ac09b9bd`); Yandex plugin
-`kalbac/woocommerce-yandex-delivery` `main` `b8c4110` (pin `ac09b9bd`, NEW private repo, board №11). 🚧 **v2 release = TWO carrier
-plugins on v2, tested and compatible** (#1179): CDEK done (s172–s173). **Yandex: Y1–Y8, Y6b, Y11–Y13 merged; Y9 (#36) and Y10a (#37,
-stacked) approved/in review but NOT merged — GitHub Actions is blocked on the PRIVATE plugin repos (billing/spending limit,
-13.10.2026 ~05:15).** Remaining Y cards: Y10b, Y14, Y15, Y16 (needs F1 #1246, parked for the operator). Block-checkout gaps do not block the release.
+**As of 2026-10-13 (s175).** Framework `main` `a3d154bb`; CDEK plugin `v2` `d3f5623` (pin `ac09b9bd`); Yandex plugin
+`kalbac/woocommerce-yandex-delivery` `main` `eab5dd6` (pin `ac09b9bd`, NEW private repo, board №11). 🚧 **v2 release = TWO carrier
+plugins on v2, tested and compatible** (#1179): CDEK done (s172–s173). **Yandex: Y1–Y13 + Y6b merged. Private-repo gate = local-ci + critic (GitHub Actions pool exhausted until the 1st; global rule
+`~/.claude/CLAUDE.md` «CI: local-ci + GitHub Actions», 13.10.2026).** Remaining Y cards: Y10b, Y14, Y15, Y16 (needs F1 #1246, parked for the operator). Block-checkout gaps do not block the release.
 Next checks: `next-session-prompt.md`. ⚠ Sync the plugin’s own `woodev/` before plugin rig runs
 (`wiki/local-rig.md`). The rig admin user has locale **ru_RU**; the site stays **en_US**.
 GlitchTip receiver (#1082) is live. **Both machines are live**; routine sync is git ONLY
@@ -277,7 +276,7 @@ only consumer; they get rewritten once everything is ready.
 
 ## Next Actions
 
-**Next: restore CI on the private plugin repos (operator: billing), then merge Yandex #36 → #37, and continue Y10b → Y14
+**Next: Yandex Y10b → Y14
 (test contour) → Y16 (after F1) → Y15 (coexistence with CDEK on the rig).** Card list and order: board №11 + spec §17; handoff
 `next-session-prompt.md`. Framework: F1 #1246 waits for the operator's look; #1253 item (b) is his decision.
 
