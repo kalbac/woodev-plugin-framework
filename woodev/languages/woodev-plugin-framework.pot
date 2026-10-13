@@ -2322,6 +2322,10 @@ msgstr ""
 msgid "заказ открыт для редактирования"
 msgstr ""
 
+#: shipping-method/order/class-export-retry.php:251
+msgid "Исход выгрузки неизвестен — проверьте кабинет перевозчика, автоматическая выгрузка остановлена"
+msgstr ""
+
 #. translators: %s: the carrier's reason for refusing or failing the export
 #: shipping-method/admin/orders/class-orders-registry.php:1198
 #, php-format
