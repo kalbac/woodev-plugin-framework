@@ -387,7 +387,12 @@ class UpdaterFailedRequestPauseTest extends TestCase {
 
 			$updater = new \Woodev_Plugin_Updater( $plugin );
 
-			return ( new \ReflectionProperty( $updater, 'failed_request_cache_key' ) )->getValue( $updater );
+			$reflection = new \ReflectionProperty( $updater, 'failed_request_cache_key' );
+			if ( PHP_VERSION_ID < 80100 ) {
+				$reflection->setAccessible( true );
+			}
+
+			return $reflection->getValue( $updater );
 		};
 
 		$first = $key( 'plugin-a' );
@@ -461,7 +466,11 @@ class UpdaterFailedRequestPauseTest extends TestCase {
 		];
 
 		foreach ( $values as $property => $value ) {
-			( new \ReflectionProperty( $updater, $property ) )->setValue( $updater, $value );
+			$reflection = new \ReflectionProperty( $updater, $property );
+			if ( PHP_VERSION_ID < 80100 ) {
+				$reflection->setAccessible( true );
+			}
+			$reflection->setValue( $updater, $value );
 		}
 
 		return $updater;
@@ -474,7 +483,12 @@ class UpdaterFailedRequestPauseTest extends TestCase {
 	 * @return mixed
 	 */
 	private function call_api_request( \Woodev_Plugin_Updater $updater ) {
-		return ( new \ReflectionMethod( $updater, 'api_request' ) )->invoke( $updater, [ 'slug' => self::SLUG ] );
+		$reflection = new \ReflectionMethod( $updater, 'api_request' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$reflection->setAccessible( true );
+		}
+
+		return $reflection->invoke( $updater, [ 'slug' => self::SLUG ] );
 	}
 
 	/**
