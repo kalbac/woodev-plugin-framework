@@ -86,10 +86,14 @@ Both touch the merge gate, so both are an operator decision, not an agent's.
 
 ## What to do
 
-Do NOT merge on "the tests passed locally" — the project rule is every job green with state
-CLEAN, and s98 found a defect on the same night that only CI could see (the local PHP is 8.5,
-the CI floor is 7.4). Leave the PRs open, say so, and hand it over. After the block is lifted,
-`close`/`reopen` re-runs the checks.
+Do NOT merge on "the tests passed locally" with the host PHP — s98 found a defect on the same night
+that only CI could see (the local PHP is 8.5, the CI floor is 7.4).
+
+**Superseded for PRIVATE repos (operator decision 13.10.2026, s175; global rule `~/.claude/CLAUDE.md`
+«CI: local-ci + GitHub Actions"):** the merge evidence there is a green `local-ci` run of the REAL
+workflow (the PHP 7.4/8.3 matrix inside the official runner, not the host PHP) + a critic; GitHub CI runs
+only on `pull_request`. Measured on the Yandex plugin: local-ci counted 441 tests on PR #36, the same as a
+critic's manual run. The public framework keeps GitHub CI as before.
 
 **HOW IT WAS RESOLVED HERE (27.08.2026, operator decision): the repo went PUBLIC again.** Public
 repositories on standard runners are free and consume no quota, so the block lifted immediately —
