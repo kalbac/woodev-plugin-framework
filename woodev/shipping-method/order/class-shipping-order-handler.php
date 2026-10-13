@@ -121,6 +121,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Shipping_Order_Handl
 		}
 
 		/**
+		 * Every real order-meta key the plugin's map names — the keys that hold this carrier's own data.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string[] the real keys, in map order.
+		 */
+		public function meta_keys(): array {
+			return array_values( $this->key_map );
+		}
+
+		/**
 		 * Resolves a logical field name to the plugin's real order-meta key.
 		 *
 		 * @since 1.5.0
