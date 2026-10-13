@@ -46,6 +46,17 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		protected $response;
 
 		/**
+		 * Whether the data being built by {@see self::build_broadcast_data()} is destined for a
+		 * log-only consumer (true), or can also reach a screen (false). Null outside a broadcast:
+		 * headers and bodies then take the full mask, as for any screen, response or cache.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var bool|null
+		 */
+		private $masking_broadcast_for_log = null;
+
+		/**
 		 * Cookies received while passing an opt-in bot-protection challenge, keyed
 		 * by the origin (scheme + host + effective port) that set them, then by
 		 * cookie name, then by the cookie's own Path attribute (or its RFC 6265
@@ -84,6 +95,13 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * @since 2.0.2
 		 */
 		private const CHALLENGE_REDIRECT_HOP_LIMIT = 1;
+
+		/**
+		 * What {@see self::mask_secret()} returns for every secret outside a log sink.
+		 *
+		 * @since 2.0.2
+		 */
+		private const FULL_SECRET_MASK = '[REDACTED]';
 
 		/**
 		 * The fixed four-character middle used by {@see self::mask_secret()} when
@@ -1226,8 +1244,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 */
 		protected function broadcast_request() {
 
-			$request_data  = $this->get_request_data_for_broadcast();
-			$response_data = $this->get_response_data_for_broadcast();
+			[ $request_data, $response_data ] = $this->build_broadcast_data();
 
 			/**
 			 * API Base Request Performed Action.
@@ -1253,6 +1270,51 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 			 */
 
 			do_action( 'woodev_' . $this->get_api_id() . '_api_request_performed', $request_data, $response_data, $this );
+		}
+
+		/**
+		 * Builds the request and response data handed to the `woodev_{api_id}_api_request_performed` action.
+		 *
+		 * Header values, JSON body secrets and URI query secrets are masked partially (see
+		 * {@see self::mask_secret()}) when the consumer is a log only, and in full when the
+		 * same data can also reach a screen ({@see self::should_mask_broadcast_for_log()}).
+		 * The builders stay overridable: a subclass override of
+		 * {@see self::get_request_data_for_broadcast()} or {@see self::get_response_data_for_broadcast()}
+		 * keeps working, because the choice is made inside the sanitizers they call.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array{0: array, 1: array} The request data and the response data.
+		 */
+		protected function build_broadcast_data(): array {
+
+			$this->masking_broadcast_for_log = $this->should_mask_broadcast_for_log();
+
+			try {
+				return [ $this->get_request_data_for_broadcast(), $this->get_response_data_for_broadcast() ];
+			} finally {
+				$this->masking_broadcast_for_log = null;
+			}
+		}
+
+		/**
+		 * Whether the broadcast may show secrets partially, because only a log reads it.
+		 *
+		 * Defaults to FULL: partial masking is an explicit opt-in by the plugin
+		 * ({@see Woodev_Plugin::is_api_broadcast_log_only()}), so a missing plugin, a plugin
+		 * without that method and a plugin that did not opt in all get the full `[REDACTED]` mask.
+		 * The payment-gateway plugin stays full as its request logger also raises the storefront
+		 * debug notice from the very same data. Override on an API class whose consumers are known.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		protected function should_mask_broadcast_for_log(): bool {
+
+			$plugin = $this->get_plugin();
+
+			return is_object( $plugin ) && is_callable( [ $plugin, 'is_api_broadcast_log_only' ] ) && true === $plugin->is_api_broadcast_log_only();
 		}
 
 		protected function reset_response() {
@@ -1393,7 +1455,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 			$filtered_uri = apply_filters( 'woodev_' . $this->get_api_id() . '_api_request_uri', $uri, $this );
 			$uri          = is_string( $filtered_uri ) ? $filtered_uri : $uri;
 
-			return self::redact_secret_query_string( $uri, $this->get_secret_param_names(), $this->get_request_path() );
+			return self::redact_secret_query_string( $uri, $this->get_secret_param_names(), $this->get_request_path(), false !== $this->masking_broadcast_for_log );
 		}
 
 
@@ -1868,8 +1930,8 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * @return string
 		 */
 		public static function mask_secret( string $value, bool $for_log = false ): string {
-			if ( ! $for_log || '[REDACTED]' === $value ) {
-				return '[REDACTED]';
+			if ( ! $for_log || self::FULL_SECRET_MASK === $value ) {
+				return self::FULL_SECRET_MASK;
 			}
 
 			$characters = [];
@@ -1931,9 +1993,10 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * @param string             $text A path (`?query` included), or a full URI.
 		 * @param array<int, string> $secret_names
 		 * @param string             $original_text Original request path, used to recognize a mask already derived from its values.
+		 * @param bool               $for_log Whether the result goes only to a log sink (partial mask); false masks in full.
 		 * @return string
 		 */
-		protected static function redact_secret_query_string( string $text, array $secret_names, string $original_text = '' ): string {
+		protected static function redact_secret_query_string( string $text, array $secret_names, string $original_text = '', bool $for_log = true ): string {
 
 			if ( '' === $text || empty( $secret_names ) ) {
 				return $text;
@@ -1964,11 +2027,11 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 			}
 
 			$canonical_secret_names = array_unique( array_map( [ self::class, 'canonicalize_secret_param_name' ], $secret_names ) );
-			$redacted_params        = self::redact_secret_values_recursively( $params, $canonical_secret_names, $original_params, true );
+			$redacted_params        = self::redact_secret_values_recursively( $params, $canonical_secret_names, $original_params, $for_log );
 
 			$query = http_build_query( $redacted_params, '', '&' );
 
-			return substr( $text, 0, $query_start + 1 ) . str_replace( '%2A%2A%2A%2A', self::SECRET_VALUE_MASK, $query );
+			return substr( $text, 0, $query_start + 1 ) . str_replace( [ '%2A%2A%2A%2A', rawurlencode( self::FULL_SECRET_MASK ) ], [ self::SECRET_VALUE_MASK, self::FULL_SECRET_MASK ], $query );
 		}
 
 		/**
@@ -2080,9 +2143,11 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * @param string             $body
 		 * @param array<int, string> $secret_names
 		 * @param string             $original_body Original request body, used to preserve its already-derived JSON masks.
+		 * @param bool               $for_log Whether the result goes only to a log sink. A secret the request already
+		 *                                    masked in full is shown partially, taken from `$original_body`.
 		 * @return string
 		 */
-		protected static function redact_secret_request_body( string $body, array $secret_names, string $original_body = '' ): string {
+		protected static function redact_secret_request_body( string $body, array $secret_names, string $original_body = '', bool $for_log = false ): string {
 
 			if ( '' === $body || empty( $secret_names ) ) {
 				return $body;
@@ -2095,7 +2160,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 				$original = json_decode( $original_body, true );
 
 				$canonical_secret_names = array_unique( array_map( [ self::class, 'canonicalize_secret_param_name' ], $secret_names ) );
-				$redacted               = self::redact_secret_values_recursively( $decoded, $canonical_secret_names, is_array( $original ) ? $original : [], false );
+				$redacted               = self::redact_secret_values_recursively( $decoded, $canonical_secret_names, is_array( $original ) ? $original : [], $for_log );
 				$encoded                = json_encode( $redacted, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode
 
 				return false !== $encoded ? $encoded : $body;
@@ -2140,7 +2205,13 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 						continue;
 					}
 
-					$values[ $key ] = self::mask_secret( is_string( $value ) ? $value : '', $for_log );
+					// A request's own `to_string_safe()` masks in full before this pass; at a
+					// log sink the original value of that same key gives the approved partial mask.
+					$source = $for_log && self::FULL_SECRET_MASK === $value && isset( $original_values[ $key ] ) && is_string( $original_values[ $key ] )
+						? $original_values[ $key ]
+						: $value;
+
+					$values[ $key ] = self::mask_secret( is_string( $source ) ? $source : '', $for_log );
 					continue;
 				}
 
@@ -2374,7 +2445,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 
 			$body = ( $this->get_request() && $this->get_request()->to_string_safe() ) ? $this->get_request()->to_string_safe() : '';
 
-			return self::redact_secret_request_body( $body, $this->get_secret_param_names(), $this->get_request_body() );
+			return self::redact_secret_request_body( $body, $this->get_secret_param_names(), $this->get_request_body(), true === $this->masking_broadcast_for_log );
 		}
 
 		protected function get_request_http_version() {
@@ -2414,7 +2485,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 			$headers = $this->get_request_headers();
 
 			return is_array( $headers )
-				? self::mask_secret_values( $headers, $this->get_secret_header_names() )
+				? self::mask_secret_values( $headers, $this->get_secret_header_names(), true === $this->masking_broadcast_for_log )
 				: $headers;
 		}
 
@@ -2677,7 +2748,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 			$headers = $this->get_response_headers();
 
 			return is_array( $headers )
-				? self::mask_secret_values( $headers, $this->get_secret_header_names() )
+				? self::mask_secret_values( $headers, $this->get_secret_header_names(), true === $this->masking_broadcast_for_log )
 				: $headers;
 		}
 
@@ -2712,7 +2783,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 
 			$body = is_callable( [ $this->get_response(), 'to_string_safe' ] ) ? (string) $this->get_response()->to_string_safe() : '';
 
-			return self::redact_secret_request_body( $body, $this->get_secret_param_names() );
+			return self::redact_secret_request_body( $body, $this->get_secret_param_names(), '', true === $this->masking_broadcast_for_log );
 		}
 
 		/**

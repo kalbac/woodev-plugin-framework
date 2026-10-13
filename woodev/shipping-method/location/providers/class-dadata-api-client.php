@@ -587,6 +587,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		}
 
 		/**
+		 * The `woodev_location_dadata_api_request_performed` action has no framework log consumer, only
+		 * whatever a third party attaches, so its payload keeps the full `[REDACTED]` mask.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		protected function should_mask_broadcast_for_log(): bool {
+			return false;
+		}
+
+		/**
 		 * Matches {@see \Woodev_Plugin::require_tls_1_2()}'s own default. Called
 		 * from {@see \Woodev_API_Base::perform_request()} via {@see self::get_plugin()}
 		 * (which returns `$this`).

@@ -139,6 +139,10 @@ final class ShippingPluginLoggingAndCartTest extends TestCase {
 		$this->addToAssertionCount( 1 );
 	}
 
+	public function test_the_shipping_plugin_opts_in_to_partial_masking_of_its_log_only_broadcast(): void {
+		$this->assertTrue( $this->plugin( true )->is_api_broadcast_log_only() );
+	}
+
 	// ----- hide on the cart page -----
 
 	/** @return \WC_Shipping_Rate&\Mockery\MockInterface */
