@@ -533,19 +533,64 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		}
 
 		/**
-		 * Returns only safe manager-facing explanation strings.
+		 * Returns only safe manager-facing explanation strings, ONE LINE PER REASON.
+		 *
+		 * The methods that share a reason text are folded into one line that names them by the
+		 * instance title the shop gave them («Скрыты: А, Б, В — reason»), so ten hidden methods
+		 * never print ten lines (#68). Both the classic hint and the Store API payload read this.
 		 *
 		 * @since 2.0.2
 		 * @return string[]
 		 */
 		private static function hidden_reason_messages(): array {
-			$messages = [];
+			$groups = [];
 			foreach ( \Woodev\Framework\Shipping\Shipping_Method::get_hidden_reasons() as $reason ) {
-				if ( isset( $reason['message'] ) && '' !== $reason['message'] ) {
-					$messages[] = (string) $reason['message'];
+				$message = trim( (string) ( $reason['message'] ?? '' ) );
+				if ( '' === $message ) {
+					continue;
+				}
+				$groups[ $message ] = $groups[ $message ] ?? [];
+				$title              = trim( (string) ( $reason['title'] ?? '' ) );
+				if ( '' !== $title && ! in_array( $title, $groups[ $message ], true ) ) {
+					$groups[ $message ][] = $title;
 				}
 			}
-			return array_values( array_unique( $messages ) );
+
+			$lines = [];
+			foreach ( $groups as $message => $titles ) {
+				$lines[] = self::hidden_reason_line( (string) $message, $titles );
+			}
+			return $lines;
+		}
+
+		/**
+		 * Composes one hint line: the titles, then the plugin's reason text. A reason with no known
+		 * title (an entry persisted by an older version) is the bare reason.
+		 *
+		 * @param string   $message Reason text, owned by the plugin.
+		 * @param string[] $titles  Distinct instance titles that share it.
+		 * @return string
+		 */
+		private static function hidden_reason_line( string $message, array $titles ): string {
+			if ( [] === $titles ) {
+				return $message;
+			}
+
+			$names = implode(
+				', ',
+				array_map(
+					static function ( string $title ): string {
+						return '«' . $title . '»';
+					},
+					$titles
+				)
+			);
+
+			return count( $titles ) > 1
+				/* translators: 1: titles of the hidden shipping methods, 2: why they have no rate */
+				? sprintf( __( 'Скрыты: %1$s — %2$s', 'woodev-plugin-framework' ), $names, $message )
+				/* translators: 1: title of the hidden shipping method, 2: why it has no rate */
+				: sprintf( __( 'Скрыт: %1$s — %2$s', 'woodev-plugin-framework' ), $names, $message );
 		}
 
 		/**

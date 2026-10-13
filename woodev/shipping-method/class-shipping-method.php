@@ -1010,9 +1010,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 * Reports why this method has no rate for the package currently being calculated.
 		 * The supplied message is for a store manager; carrier exception text must not be passed here.
 		 *
+		 * The message is the REASON only — never the method's name. The framework records the instance
+		 * title (what the buyer sees, {@see self::get_title()}) beside it, and the checkout hint groups
+		 * the methods that share a reason into one line («Скрыты: А, Б — reason», #68).
+		 *
 		 * @since 2.0.2
 		 * @param string               $reason_code Stable reason identifier.
-		 * @param string               $message     Safe, plugin-supplied explanation for the manager.
+		 * @param string               $message     Safe, plugin-supplied reason for the manager, without the method title.
 		 * @param array<string, mixed> $context     Optional request-only context; never persisted or rendered to the customer.
 		 * @return void
 		 */
@@ -1025,6 +1029,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 				'package_hash' => explode( ':', $this->active_hidden_reason_key, 2 )[0],
 				'reason_code' => strtolower( (string) preg_replace( '/[^a-z0-9_\\-]/i', '', $reason_code ) ),
 				'message'     => $message,
+				'title'       => $this->hidden_reason_title(),
 				'context'     => $context,
 			];
 
@@ -1043,7 +1048,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 * Returns reasons only for current shipping packages, pruning obsolete session entries.
 		 *
 		 * @since 2.0.2
-		 * @return array<string, array{package_hash: string, reason_code: string, message: string, context?: array}>
+		 * @since 2.0.2 Each reason carries `title`, the instance title of the method that reported it ('' when unknown).
+		 * @return array<string, array{package_hash: string, reason_code: string, message: string, title?: string, context?: array}>
 		 */
 		public static function get_hidden_reasons(): array {
 			if ( ! current_user_can( 'manage_woocommerce' ) ) {
@@ -1092,7 +1098,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			call_user_func( [ $session, 'set' ], self::HIDDEN_REASONS_SESSION_KEY, $reasons );
 		}
 
-		/** @return array<string, array{package_hash: string, reason_code: string, message: string, context?: array}> */
+		/** @return array<string, array{package_hash: string, reason_code: string, message: string, title?: string, context?: array}> */
 		private static function get_persisted_hidden_reasons(): array {
 			$session = self::hidden_reason_session();
 			if ( null === $session ) {
@@ -1148,6 +1154,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 				unset( $package['contents'][ $item_id ]['data'] );
 			}
 			return 'wc_ship_' . md5( wp_json_encode( $package ) . \WC_Cache_Helper::get_transient_version( 'shipping' ) );
+		}
+
+		/**
+		 * The title the shop gave this instance — the one the buyer sees — for the manager's hint.
+		 *
+		 * `get_title()` runs a third party's filter, so a non-string return is discarded.
+		 *
+		 * @return string
+		 */
+		private function hidden_reason_title(): string {
+			$title = $this->get_title();
+
+			return is_string( $title ) ? trim( $title ) : '';
 		}
 
 		/**
@@ -1673,7 +1692,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 				$this->active_hidden_reason_key = $key;
 				$this->report_hidden(
 					'rate_calculation_failed',
-					__( 'Способ доставки скрыт: не удалось рассчитать стоимость доставки. Попробуйте позже или проверьте настройки службы доставки.', 'woodev-plugin-framework' )
+					__( 'не удалось рассчитать стоимость доставки. Попробуйте позже или проверьте настройки службы доставки.', 'woodev-plugin-framework' )
 				);
 				$this->active_hidden_reason_key = null;
 			}

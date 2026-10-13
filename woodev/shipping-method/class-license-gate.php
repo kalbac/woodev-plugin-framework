@@ -126,7 +126,7 @@ if ( ! class_exists( __NAMESPACE__ . '\License_Gate' ) ) :
 		public static function hidden_reason(): string {
 			return sprintf(
 				/* translators: %s: the licence page address */
-				__( 'Способ доставки скрыт: лицензия плагина не действует. Введите или продлите ключ на странице лицензий: %s', 'woodev-plugin-framework' ),
+				__( 'лицензия плагина не действует. Введите или продлите ключ на странице лицензий: %s', 'woodev-plugin-framework' ),
 				self::page_url()
 			);
 		}
