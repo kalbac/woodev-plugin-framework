@@ -43,6 +43,7 @@ use Brain\Monkey\Functions;
 use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__, 3 ) . '/woodev/api/interface-api-response.php';
+require_once dirname( __DIR__, 3 ) . '/woodev/api/interface-api-request.php';
 require_once dirname( __DIR__, 3 ) . '/woodev/api/class-api-base.php';
 
 /**
@@ -113,6 +114,43 @@ class Testable_Falsy_To_String_Safe_Response implements \Woodev_API_Response {
 }
 
 /**
+ * A minimal request whose serializers leave a credential visible so the
+ * request-side log sanitizer is exercised.
+ */
+class Testable_Oversized_Secret_Request implements \Woodev_API_Request {
+
+	/** @var string */
+	private $body;
+
+	/**
+	 * @param string $body Request body.
+	 */
+	public function __construct( string $body ) {
+		$this->body = $body;
+	}
+
+	/** @return string */
+	public function get_method() {
+		return 'POST';
+	}
+
+	/** @return string */
+	public function get_path() {
+		return '/v1/status';
+	}
+
+	/** @return string */
+	public function to_string() {
+		return $this->body;
+	}
+
+	/** @return string */
+	public function to_string_safe() {
+		return $this->body;
+	}
+}
+
+/**
  * Minimal concrete Woodev_API_Base double exposing the protected response-body
  * sanitizer and broadcast payload under test, without pulling in the
  * HTTP/broadcast machinery this fix does not touch.
@@ -127,6 +165,16 @@ class Testable_Api_Base_For_Response_Body_Test extends \Woodev_API_Base {
 	 */
 	public function set_response_for_test( object $response ): void {
 		$this->response = $response;
+	}
+
+	/**
+	 * Seeds the request under test.
+	 *
+	 * @param \Woodev_API_Request $request Request instance.
+	 * @return void
+	 */
+	public function set_request_for_test( \Woodev_API_Request $request ): void {
+		$this->request = $request;
 	}
 
 	/**
@@ -148,6 +196,15 @@ class Testable_Api_Base_For_Response_Body_Test extends \Woodev_API_Base {
 	 */
 	public function get_sanitized_response_body_for_test(): string {
 		return $this->get_sanitized_response_body();
+	}
+
+	/**
+	 * Exposes the protected request-body sanitizer.
+	 *
+	 * @return string
+	 */
+	public function get_sanitized_request_body_for_test(): string {
+		return $this->get_sanitized_request_body();
 	}
 
 	/**
@@ -383,6 +440,108 @@ final class ApiBaseSanitizedResponseBodyTest extends TestCase {
 		$this->assertStringNotContainsString( $secret, $safe_body );
 		$this->assertSame( \Woodev_API_Base::mask_secret( $secret ), $decoded['auth']['access_token'] );
 		$this->assertSame( 'active', $decoded['status'], 'a non-secret sibling must survive untouched, readable, in the log' );
+	}
+
+	/**
+	 * Large carrier responses are masked in full before JSON decoding, keeping
+	 * the log path bounded while ensuring no secret field reaches the broadcast.
+	 *
+	 * @return void
+	 */
+	public function test_oversized_json_response_body_is_masked_without_leaking_secrets(): void {
+
+		$secret = 'fx1262-' . bin2hex( random_bytes( 6 ) );
+		$points = [];
+
+		for ( $i = 0; $i < 2300; $i++ ) {
+			$points[] = [
+				'id'          => 'MSK' . $i,
+				'operator_id' => 'market_l4g',
+				'type'        => 'pickup_point',
+				'position'    => [ 'latitude' => 55.75, 'longitude' => 37.61 ],
+				'address'     => [ 'locality' => 'Москва', 'street' => 'Тверская', 'house' => (string) ( $i + 1 ), 'full_address' => 'Россия, Москва, Центральный административный округ, Тверская улица, дом ' . ( $i + 1 ), 'postal_code' => '101000' ],
+				'instruction' => 'Вход со стороны улицы, пункт выдачи заказов находится на первом этаже здания.',
+				'schedule'    => [ 'time_zone' => 'Europe/Moscow', 'restrictions' => [] ],
+			];
+		}
+
+		$body     = (string) json_encode( [ 'points' => $points, 'access_token' => $secret ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES );
+		$response = new Testable_Unknown_Secret_Carrying_Response( $body );
+		$api      = new Testable_Api_Base_For_Response_Body_Test();
+		$api->set_response_for_test( $response );
+
+		$this->assertGreaterThan( 1048576, strlen( $body ), 'the fixture must exceed the redactor size limit' );
+		$this->assertSame(
+			sprintf( '[REDACTED: body of %d bytes exceeds the 1048576-byte logging limit; withheld for size]', strlen( $body ) ),
+			$api->get_sanitized_response_body_for_test()
+		);
+		$this->assertStringNotContainsString( $secret, print_r( $api->get_response_data_for_broadcast_for_test(), true ) );
+	}
+
+	/**
+	 * A valid JSON body exactly at the byte limit still receives structural redaction.
+	 *
+	 * @return void
+	 */
+	public function test_json_response_body_at_size_limit_is_structurally_redacted(): void {
+
+		$secret = 'fx1262-' . bin2hex( random_bytes( 6 ) );
+		$prefix = '{"access_token":"' . $secret . '","padding":"';
+		$suffix = '"}';
+		$body   = $prefix . str_repeat( 'x', 1048576 - strlen( $prefix ) - strlen( $suffix ) ) . $suffix;
+		$api    = new Testable_Api_Base_For_Response_Body_Test();
+		$api->set_response_for_test( new Testable_Unknown_Secret_Carrying_Response( $body ) );
+
+		$this->assertSame( 1048576, strlen( $body ) );
+		$safe_body = $api->get_sanitized_response_body_for_test();
+		$decoded   = json_decode( $safe_body, true );
+
+		$this->assertIsArray( $decoded );
+		$this->assertSame( \Woodev_API_Base::mask_secret( $secret ), $decoded['access_token'] );
+		$this->assertStringNotContainsString( $secret, $safe_body );
+	}
+
+	/**
+	 * A valid JSON body one byte over the limit is withheld with its size and threshold.
+	 *
+	 * @return void
+	 */
+	public function test_json_response_body_one_byte_over_size_limit_is_withheld(): void {
+
+		$secret = 'fx1262-' . bin2hex( random_bytes( 6 ) );
+		$prefix = '{"access_token":"' . $secret . '","padding":"';
+		$suffix = '"}';
+		$body   = $prefix . str_repeat( 'x', 1048577 - strlen( $prefix ) - strlen( $suffix ) ) . $suffix;
+		$api    = new Testable_Api_Base_For_Response_Body_Test();
+		$api->set_response_for_test( new Testable_Unknown_Secret_Carrying_Response( $body ) );
+
+		$this->assertSame( 1048577, strlen( $body ) );
+		$this->assertSame(
+			'[REDACTED: body of 1048577 bytes exceeds the 1048576-byte logging limit; withheld for size]',
+			$api->get_sanitized_response_body_for_test()
+		);
+		$this->assertStringNotContainsString( $secret, print_r( $api->get_response_data_for_broadcast_for_test(), true ) );
+	}
+
+	/**
+	 * The request-side sanitizer also withholds an oversized body before broadcast.
+	 *
+	 * @return void
+	 */
+	public function test_oversized_json_request_body_is_withheld_without_leaking_secrets(): void {
+
+		$secret = 'fx1262-' . bin2hex( random_bytes( 6 ) );
+		$prefix = '{"access_token":"' . $secret . '","padding":"';
+		$suffix = '"}';
+		$body   = $prefix . str_repeat( 'x', 1048577 - strlen( $prefix ) - strlen( $suffix ) ) . $suffix;
+		$api    = new Testable_Api_Base_For_Response_Body_Test();
+		$api->set_request_for_test( new Testable_Oversized_Secret_Request( $body ) );
+
+		$this->assertSame(
+			'[REDACTED: body of 1048577 bytes exceeds the 1048576-byte logging limit; withheld for size]',
+			$api->get_sanitized_request_body_for_test()
+		);
+		$this->assertStringNotContainsString( $secret, $api->get_sanitized_request_body_for_test() );
 	}
 
 	// -------------------------------------------------------------------------
