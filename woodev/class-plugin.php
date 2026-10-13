@@ -1216,16 +1216,18 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		/**
 		 * Whether the API request/response broadcast reaches a log only.
 		 *
-		 * When true, {@see Woodev_API_Base} shows secrets in the broadcast partially (start,
-		 * `****`, end). A plugin whose broadcast consumer can also raise a screen notice
-		 * returns false so the broadcast carries the full `[REDACTED]` mask.
+		 * Defaults to false: the `woodev_{plugin_id}_api_request_performed` action is public, so any
+		 * subscriber may render its payload on a screen, and {@see Woodev_API_Base} then carries the
+		 * full `[REDACTED]` mask. A plugin family whose broadcast is known to reach a log only
+		 * (the shipping plugin) opts in by returning true, which shows secrets partially
+		 * (start, `****`, end) in the broadcast.
 		 *
 		 * @since 2.0.2
 		 *
 		 * @return bool
 		 */
 		public function is_api_broadcast_log_only(): bool {
-			return true;
+			return false;
 		}
 
 		/**

@@ -5,15 +5,16 @@
  * `Woodev_API_Base::broadcast_request()` feeds the `woodev_{api_id}_api_request_performed`
  * action. Its consumers split into two kinds:
  *
- * - LOG only — {@see \Woodev_Plugin::log_api_request()}, the shipping plugin's override of it,
- *   and the licensing API's direct call. Their headers, JSON body secrets and URI query secrets
- *   are shown partially (`Bearer y0_A****xQ9z`), the operator's table from #1250.
+ * - LOG only — the shipping plugin's {@see \Woodev_Plugin::log_api_request()} override and the
+ *   licensing API's direct call. Their headers, JSON body secrets and URI query secrets are
+ *   shown partially (`Bearer y0_A****xQ9z`), the operator's table from #1250. This is an explicit
+ *   OPT-IN: the default (base plugin, unknown or missing plugin) is the full mask.
  * - LOG AND SCREEN — {@see \Woodev_Payment_Gateway::log_api_request()}, which writes the very
  *   same text to the log and to the storefront debug notice through `add_debug_message()`.
  *   It must keep getting the full `[REDACTED]` mask.
  *
- * The choice is {@see \Woodev_Plugin::is_api_broadcast_log_only()}, overridden by the
- * payment-gateway plugin. Token-shaped literals are built at runtime so the secret scanner
+ * The choice is {@see \Woodev_Plugin::is_api_broadcast_log_only()}, false in the base and true
+ * only in the shipping plugin. Token-shaped literals are built at runtime so the secret scanner
  * has nothing to match.
  *
  * @package Woodev\Tests\Unit\Api
@@ -102,6 +103,17 @@ namespace Woodev\Tests\Unit\Api {
 		 */
 		public function log( $message, $log_id = null ) {
 			$this->logged[] = $message;
+		}
+	}
+
+	/**
+	 * A plugin family that opted in: its broadcast reaches a log only.
+	 */
+	class Broadcast_Mask_Log_Only_Plugin extends Broadcast_Mask_Plugin {
+
+		/** @return bool */
+		public function is_api_broadcast_log_only(): bool {
+			return true;
 		}
 	}
 
@@ -300,10 +312,13 @@ namespace Woodev\Tests\Unit\Api {
 		}
 
 		/**
+		 * A plugin that opted in to partial masking.
+		 *
+		 * @param class-string<Broadcast_Mask_Plugin> $class Plugin double class.
 		 * @return Broadcast_Mask_Plugin
 		 */
-		private function log_plugin(): Broadcast_Mask_Plugin {
-			$plugin   = ( new \ReflectionClass( Broadcast_Mask_Plugin::class ) )->newInstanceWithoutConstructor();
+		private function log_plugin( string $class = Broadcast_Mask_Log_Only_Plugin::class ): Broadcast_Mask_Plugin {
+			$plugin   = ( new \ReflectionClass( $class ) )->newInstanceWithoutConstructor();
 			$property = new \ReflectionProperty( \Woodev_Plugin::class, 'id' );
 			if ( PHP_VERSION_ID < 80100 ) {
 				$property->setAccessible( true );
@@ -470,17 +485,69 @@ namespace Woodev\Tests\Unit\Api {
 		}
 
 		/**
-		 * Plugin defaults: log-only, except the payment-gateway plugin.
+		 * Plugin defaults: the base plugin and the payment-gateway plugin are NOT log-only; partial
+		 * masking is an explicit opt-in.
 		 *
 		 * @return void
 		 */
-		public function test_plugin_defaults_to_log_only_and_the_gateway_plugin_does_not(): void {
+		public function test_plugin_defaults_to_full_mask_and_log_only_is_an_opt_in(): void {
+			$this->assertFalse( $this->log_plugin( Broadcast_Mask_Plugin::class )->is_api_broadcast_log_only() );
 			$this->assertTrue( $this->log_plugin()->is_api_broadcast_log_only() );
 
 			require_once dirname( __DIR__, 3 ) . '/woodev/payment-gateway/class-payment-gateway-plugin.php';
 			$gateway_plugin = \Mockery::mock( \Woodev_Payment_Gateway_Plugin::class )->makePartial();
 
 			$this->assertFalse( $gateway_plugin->is_api_broadcast_log_only() );
+		}
+
+		/**
+		 * A plugin that did not opt in (inherits the base default) gets the full mask everywhere.
+		 *
+		 * @return void
+		 */
+		public function test_base_plugin_gets_the_full_mask(): void {
+			[ $request, $response ] = $this->broadcast( new Broadcast_Mask_Api( $this->log_plugin( Broadcast_Mask_Plugin::class ) ) );
+
+			$this->assertSame( 'Bearer [REDACTED]', $request['headers']['Authorization'] );
+			$this->assertSame( '{"token":"[REDACTED]","city":"Moscow"}', $request['body'] );
+			$this->assertSame( '{"access_token":"[REDACTED]","status":"ok"}', $response['body'] );
+			$this->assertStringNotContainsString( 'y0_A', print_r( [ $request, $response ], true ) );
+		}
+
+		/**
+		 * Missing or unknown plugins are treated as FULL: null, an object without the method, and a
+		 * method that returns something other than `true`.
+		 *
+		 * @return void
+		 */
+		public function test_missing_or_unknown_plugin_gets_the_full_mask(): void {
+			$plugins = [
+				'null'            => null,
+				'plain object'    => new \stdClass(),
+				'no method'       => new class() {
+
+					/** @return string */
+					public function get_id() {
+						return 'acme-plugin';
+					}
+				},
+				'non-true answer' => new class() {
+
+					/** @return int */
+					public function is_api_broadcast_log_only() {
+						return 1;
+					}
+				},
+			];
+
+			foreach ( $plugins as $label => $plugin ) {
+				[ $request, $response ] = $this->broadcast( new Broadcast_Mask_Api( $plugin ) );
+
+				$this->assertSame( 'Bearer [REDACTED]', $request['headers']['Authorization'], $label );
+				$this->assertSame( '{"token":"[REDACTED]","city":"Moscow"}', $request['body'], $label );
+				$this->assertSame( [ '[REDACTED]' ], $response['headers']['Set-Cookie'], $label );
+				$this->assertStringContainsString( 'api_key=[REDACTED]', $request['uri'], $label );
+			}
 		}
 
 		/**

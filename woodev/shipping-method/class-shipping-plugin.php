@@ -2801,6 +2801,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		}
 
 		/**
+		 * The carrier API broadcast reaches the log only: {@see self::log_api_request()} is the one framework
+		 * consumer, and it writes through {@see self::log_debug()} to the WooCommerce logger — no notice,
+		 * no screen. Opts in to the partial masks (start, `****`, end) in that broadcast.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public function is_api_broadcast_log_only(): bool {
+			return true;
+		}
+
+		/**
 		 * Logs a carrier API request and its response at the DEBUG level — only while «Логирование» is on.
 		 *
 		 * @since 2.0.2

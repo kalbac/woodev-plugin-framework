@@ -1300,10 +1300,11 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		/**
 		 * Whether the broadcast may show secrets partially, because only a log reads it.
 		 *
-		 * Defaults to the plugin's answer ({@see Woodev_Plugin::is_api_broadcast_log_only()}):
-		 * the payment-gateway plugin turns it off, since its request logger also raises the
-		 * storefront debug notice from the very same data, and a screen must never get more
-		 * than the full `[REDACTED]` mask. Override on an API class whose consumers are known.
+		 * Defaults to FULL: partial masking is an explicit opt-in by the plugin
+		 * ({@see Woodev_Plugin::is_api_broadcast_log_only()}), so a missing plugin, a plugin
+		 * without that method and a plugin that did not opt in all get the full `[REDACTED]` mask.
+		 * The payment-gateway plugin stays full as its request logger also raises the storefront
+		 * debug notice from the very same data. Override on an API class whose consumers are known.
 		 *
 		 * @since 2.0.2
 		 *
@@ -1313,7 +1314,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 
 			$plugin = $this->get_plugin();
 
-			return ! is_object( $plugin ) || ! is_callable( [ $plugin, 'is_api_broadcast_log_only' ] ) || (bool) $plugin->is_api_broadcast_log_only();
+			return is_object( $plugin ) && is_callable( [ $plugin, 'is_api_broadcast_log_only' ] ) && true === $plugin->is_api_broadcast_log_only();
 		}
 
 		protected function reset_response() {
