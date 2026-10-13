@@ -1205,15 +1205,23 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		}
 
 		/**
-		 * Takes this plugin's refresh slot: true at most once per {@see self::CLAIM_REFRESH_THROTTLE}.
+		 * Takes one of this plugin's two refresh slots: true at most once per {@see self::CLAIM_REFRESH_THROTTLE}
+		 * for each slot.
+		 *
+		 * The slots are independent on purpose: the buyer's scheduling slot (`claim_schedule`) must never hold
+		 * the manager's synchronous-attempt slot (`claim_refresh`), or a cron event that cannot run (WP-Cron off,
+		 * no system cron) would keep renewing the first and starve the second forever.
 		 *
 		 * @since 2.0.2
 		 *
-		 * @return bool whether the caller may attempt a refresh now.
+		 * @param string $slot `claim_schedule` (a buyer request queues the cron event) or `claim_refresh` (a
+		 *                     manager's request calls the licence server itself).
+		 *
+		 * @return bool whether the caller may proceed now.
 		 */
-		private function take_claim_refresh_slot(): bool {
+		private function take_claim_refresh_slot( string $slot ): bool {
 
-			$transient = $this->plugin->get_plugin_option_name( 'claim_refresh' );
+			$transient = $this->plugin->get_plugin_option_name( $slot );
 
 			if ( false !== get_transient( $transient ) ) {
 				return false;
@@ -1229,7 +1237,9 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		 * at most once per {@see self::CLAIM_REFRESH_THROTTLE} (#1270).
 		 *
 		 * Safe in a buyer's request: it writes a cron entry and does no HTTP — the licence server is called by
-		 * {@see self::run_claim_refresh()} in the cron request.
+		 * {@see self::run_claim_refresh()} in the cron request. A pending event is left alone and does not
+		 * renew any slot; the manager's own synchronous attempt ({@see self::refresh_claim_on_admin_init()})
+		 * has a separate throttle, so buyer traffic can never starve it.
 		 *
 		 * @since 2.0.2
 		 *
@@ -1237,13 +1247,13 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		 */
 		public function schedule_claim_refresh(): bool {
 
-			if ( ! $this->needs_claim_refresh() || ! $this->take_claim_refresh_slot() ) {
+			if ( ! $this->needs_claim_refresh() ) {
 				return false;
 			}
 
 			$hook = self::get_claim_refresh_hook( $this->plugin );
 
-			if ( wp_next_scheduled( $hook ) ) {
+			if ( wp_next_scheduled( $hook ) || ! $this->take_claim_refresh_slot( 'claim_schedule' ) ) {
 				return false;
 			}
 
@@ -1276,8 +1286,9 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 
 		/**
 		 * `admin_init`: a store manager's own request refreshes a missing claim at once (the cron entry may
-		 * not run on a site with WP-Cron off), under the same throttle. Never for a buyer, an AJAX heartbeat or
-		 * a cron run.
+		 * not run on a site with WP-Cron off), at most once per {@see self::CLAIM_REFRESH_THROTTLE}, whether or
+		 * not a cron event is pending. After a successful refresh the now-pointless pending event is removed.
+		 * Never for a buyer, an AJAX heartbeat or a cron run.
 		 *
 		 * @internal
 		 *
@@ -1291,11 +1302,15 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 				return;
 			}
 
-			if ( ! $this->needs_claim_refresh() || ! $this->take_claim_refresh_slot() ) {
+			if ( ! $this->needs_claim_refresh() || ! $this->take_claim_refresh_slot( 'claim_refresh' ) ) {
 				return;
 			}
 
 			$this->run_claim_refresh();
+
+			if ( ! $this->needs_claim_refresh() ) {
+				wp_clear_scheduled_hook( self::get_claim_refresh_hook( $this->plugin ) );
+			}
 		}
 
 		/**

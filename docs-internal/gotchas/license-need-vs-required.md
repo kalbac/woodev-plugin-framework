@@ -63,7 +63,7 @@ Two rules that follow from it. A carrier's OWN order action (declared through `w
 default — `Order_Actions::perform()` refuses it before `woodev_shipping_perform_order_action` runs — unless its declaration
 carries `'read_only' => true`. And a stored key with no usable claim (absent, or past its own 14 days) is refreshed promptly:
 `Woodev_Plugins_License::schedule_claim_refresh()` (a cron event, at most once per 15 minutes per plugin; asked by a refused
-checkout, by activation / upgrade) and `refresh_claim_on_admin_init()` for a store manager. A verified claim that SAYS
+checkout, by activation / upgrade) and `refresh_claim_on_admin_init()` for a store manager — a synchronous refresh on its OWN 15-minute throttle (separate from the buyer's scheduling slot, so a cron event that cannot run on a WP-Cron-off site never starves it), which unschedules the pending event once a claim lands. A verified claim that SAYS
 `expired` is the server's answer and is NOT re-fetched on that path — only the weekly check renews it.
 
 ## Related

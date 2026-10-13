@@ -627,6 +627,13 @@ class LicenseInForceTest extends TestCase {
 			}
 		);
 		Functions\when( 'wp_next_scheduled' )->alias( fn( $hook ) => in_array( $hook, $this->scheduled, true ) ? self::NOW : false );
+		Functions\when( 'wp_clear_scheduled_hook' )->alias(
+			function ( $hook ) {
+				$this->scheduled = array_values( array_diff( $this->scheduled, [ $hook ] ) );
+
+				return 1;
+			}
+		);
 		Functions\when( 'wp_schedule_single_event' )->alias(
 			function ( $timestamp, $hook ) {
 				$this->scheduled[] = $hook;
@@ -639,16 +646,24 @@ class LicenseInForceTest extends TestCase {
 		$plugin->shouldReceive( 'get_download_id' )->andReturn( $download_id );
 		$plugin->shouldReceive( 'get_id' )->andReturn( 'test_plugin' );
 		$plugin->shouldReceive( 'get_plugin_option_name' )->with( 'claim_refresh' )->andReturn( 'woodev_test_plugin_claim_refresh' );
+		$plugin->shouldReceive( 'get_plugin_option_name' )->with( 'claim_schedule' )->andReturn( 'woodev_test_plugin_claim_schedule' );
 
 		$license = new class() extends \Woodev_Plugins_License {
 
 			/** @var string[] the keys validate_license() was called with */
 			public array $validated = [];
 
+			/** @var callable|null runs inside validate_license() — lets a test land a claim as a real refresh would */
+			public $on_validate = null;
+
 			public function __construct() {}
 
 			public function validate_license( $license = '', $deprecated = false, $ajax = false ) {
 				$this->validated[] = $license;
+
+				if ( null !== $this->on_validate ) {
+					( $this->on_validate )();
+				}
 			}
 		};
 
@@ -775,6 +790,65 @@ class LicenseInForceTest extends TestCase {
 		$license->refresh_claim_on_admin_init();
 
 		$this->assertSame( [ 'KEY-1' ], $license->validated, 'one attempt per window' );
+	}
+
+	/**
+	 * The round-3 starvation: with WP-Cron off the scheduled event never runs, and buyer traffic keeps asking
+	 * for it. The manager's own synchronous refresh must still happen — once per window — and must clear the
+	 * pending event when it lands a claim.
+	 *
+	 * @return void
+	 */
+	public function test_buyer_scheduling_never_starves_the_managers_synchronous_refresh(): void {
+		Functions\when( 'wp_doing_ajax' )->justReturn( false );
+		Functions\when( 'wp_doing_cron' )->justReturn( false );
+		Functions\when( 'current_user_can' )->alias( static fn( $cap ) => 'manage_woocommerce' === $cap );
+
+		$license = $this->refreshing_engine();
+		$hook    = 'woodev_test_plugin_refresh_license_claim';
+
+		// Checkout traffic: one event is queued, then window after window of buyers meet it still pending.
+		$this->assertTrue( $license->schedule_claim_refresh() );
+		for ( $window = 0; $window < 3; $window++ ) {
+			unset( $this->transients['woodev_test_plugin_claim_schedule'] );
+			$this->assertFalse( $license->schedule_claim_refresh() );
+		}
+		$this->assertSame( [ $hook ], $this->scheduled, 'the event stays pending, never doubled' );
+		$this->assertSame( [], $license->validated );
+
+		// The claim lands during the manager's synchronous refresh, as validate_license() would store it.
+		$license->on_validate = function () use ( $license ) {
+			$license->get_authority_claims()->consume_from_response( [ 'license_authority' => $this->sign( $this->paid() ) ] );
+		};
+
+		$license->refresh_claim_on_admin_init();
+		$this->assertSame( [ 'KEY-1' ], $license->validated, 'the manager refreshes although an event is pending' );
+		$this->assertSame( [], $this->scheduled, 'the now-pointless pending event is unscheduled' );
+		$this->assertTrue( $license->is_license_in_force() );
+	}
+
+	/**
+	 * A failed manager refresh leaves the event alone, and the admin throttle holds for the whole window even
+	 * while buyers keep scheduling.
+	 *
+	 * @return void
+	 */
+	public function test_a_second_admin_init_inside_the_window_makes_no_second_attempt(): void {
+		Functions\when( 'wp_doing_ajax' )->justReturn( false );
+		Functions\when( 'wp_doing_cron' )->justReturn( false );
+		Functions\when( 'current_user_can' )->alias( static fn( $cap ) => 'manage_woocommerce' === $cap );
+
+		$license = $this->refreshing_engine();
+		$license->schedule_claim_refresh();
+
+		$license->refresh_claim_on_admin_init(); // The server is unreachable: no claim arrives.
+		$this->assertSame( [ 'woodev_test_plugin_refresh_license_claim' ], $this->scheduled, 'a failed refresh keeps the event' );
+
+		unset( $this->transients['woodev_test_plugin_claim_schedule'] );
+		$license->schedule_claim_refresh();
+		$license->refresh_claim_on_admin_init();
+
+		$this->assertSame( [ 'KEY-1' ], $license->validated, 'one admin attempt per window, buyers or not' );
 	}
 
 	/**
