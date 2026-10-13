@@ -11,7 +11,7 @@
 plugins on v2, tested and compatible** (#1179): CDEK done (s172–s173). **Yandex: Y1–Y15 merged (Y10b documents, Y14 acceptance,
 Y15 coexistence — five classic-checkout coexistence defects fixed, e2e `tests/e2e/coexistence/` 18 pass / 0 fail).** Left: Y16 and Y43 (bulk act +
 document labels) — both UNBLOCKED (F1, F5 merged); plugin pins still `c241bfba`, bump first. ⚠ **The Yandex TEST contour is silent** (HTTP 200,
-empty body): live confirm/cancel/status/PDF are UNVERIFIED — operator question yandex#47. Private-repo gate = local-ci + critic
+empty body): live confirm/cancel/status/PDF are UNVERIFIED; the operator ruled out a production check (yandex#47) — test contour or simulation only. Private-repo gate = local-ci + critic
 (global rule `~/.claude/CLAUDE.md`). Block-checkout gaps do not block the release (#1263).
 Next checks: `next-session-prompt.md`. ⚠ Sync the plugin’s own `woodev/` before plugin rig runs
 (`wiki/local-rig.md`). The rig admin user has locale **ru_RU**; the site stays **en_US**.
@@ -278,7 +278,7 @@ only consumer; they get rewritten once everything is ready.
 
 ## Next Actions
 
-**Next:** bump both plugin pins to `e74db682`, then Y16 and Y43; operator: yandex#47 live-check route, #1253(b).
+**Next:** bump both plugin pins to `e74db682`, then Y16 and Y43; #1253(b) — decided (explicit retry action), build it. No live Yandex export check (operator, yandex#47): test contour when it revives, or simulated responses.
 Without him: #1262 closes after a real 128 MB web run on the rig; then the board («Приоритет») — #1269, yandex#52/#57/#58.
 Handoff `next-session-prompt.md`; framework: #1263 is block-only (after v2).
 
