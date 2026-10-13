@@ -942,6 +942,19 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 		 */
 		public function add_api_request_logging() {}
 
+		/**
+		 * The gateway's request logger raises the storefront debug notice from the same
+		 * broadcast data it logs ({@see Woodev_Payment_Gateway::log_api_request()}), so the
+		 * broadcast must carry the full mask, never a partial one.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public function is_api_broadcast_log_only(): bool {
+			return false;
+		}
+
 
 		/**
 		 * Returns the set of accepted currencies, or empty array if all currencies

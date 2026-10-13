@@ -1214,6 +1214,21 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		}
 
 		/**
+		 * Whether the API request/response broadcast reaches a log only.
+		 *
+		 * When true, {@see Woodev_API_Base} shows secrets in the broadcast partially (start,
+		 * `****`, end). A plugin whose broadcast consumer can also raise a screen notice
+		 * returns false so the broadcast carries the full `[REDACTED]` mask.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public function is_api_broadcast_log_only(): bool {
+			return true;
+		}
+
+		/**
 		 * Log API requests/responses
 		 *
 		 * @param array       $request request data, see Woodev_API_Base::broadcast_request() for format

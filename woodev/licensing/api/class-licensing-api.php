@@ -37,11 +37,22 @@ if ( ! class_exists( 'Woodev_Licensing_API' ) ) :
 		protected function broadcast_request() {
 			if ( $this->is_debug_enabled() ) {
 
-				$request  = $this->get_request_data_for_broadcast();
-				$response = $this->get_response_data_for_broadcast();
+				[ $request, $response ] = $this->build_broadcast_data();
 
 				$this->plugin->log_api_request( $request, $response, sprintf( '%s_license_remote_data', $this->get_api_id() ) );
 			}
+		}
+
+		/**
+		 * The licensing broadcast goes straight to the plugin's log (never to a screen),
+		 * whatever kind of plugin is being licensed.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		protected function should_mask_broadcast_for_log(): bool {
+			return true;
 		}
 
 		/**
