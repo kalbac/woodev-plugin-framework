@@ -2193,6 +2193,41 @@ describe( 'pickup address follows a restored classic shipping method (#1261)', (
 		expect( console ).toHaveWarned(); // plain billing_address_1/postcode are intentionally DOM-only.
 	} );
 
+	it( 'keeps the restored pickup slot when the other carrier uses a different city spelling', async () => {
+		makeStore();
+		addShippingMethods();
+		setConfig( makeConfig( {
+			replaceAddress: { enabled: true, billingOnly: true },
+			location: { current: { key: 'dadata:msk' }, settlementKey: 'dadata:msk' },
+		} ) );
+		mountAll();
+		clickTrigger();
+		await selectAndConfirm( StubProvider.instances[ 0 ], point( {
+			id: 'CDEK-1',
+			address: 'Москва, СДЭК, 1',
+			locality: 'Москва',
+			postal_code: '119180',
+		} ) );
+
+		changeMethod( 'yandex_pickup:2' );
+		setCitySelectValue( 'billing_city', 'Moscow' );
+		document.getElementById( 'billing_city' ).dispatchEvent( new Event( 'change', { bubbles: true } ) );
+		document.getElementById( 'billing_address_1' ).value = 'Moscow, Yandex, 10';
+		document.getElementById( 'billing_postcode' ).value = '';
+		updateCheckout();
+
+		changeMethod( 'cdek_pickup:1' );
+		// WooCommerce restores this carrier's session-backed slot value during checkout refresh.
+		document.getElementById( FIELD_ID ).value = 'CDEK-1';
+		updateCheckout();
+
+		expect( document.getElementById( FIELD_ID ).value ).toBe( 'CDEK-1' );
+		expect( document.getElementById( 'billing_address_1' ).value ).toBe( 'Москва, СДЭК, 1' );
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Москва' );
+		expect( document.getElementById( 'billing_postcode' ).value ).toBe( '119180' );
+		expect( console ).toHaveWarned(); // plain billing_address_1/postcode are intentionally DOM-only.
+	} );
+
 	it( 'does not replace a manually typed courier address', async () => {
 		makeStore();
 		addShippingMethods();
@@ -2203,10 +2238,12 @@ describe( 'pickup address follows a restored classic shipping method (#1261)', (
 
 		changeMethod( 'cdek_courier:3' );
 		document.getElementById( 'billing_address_1' ).value = 'Адрес введён покупателем';
+		setCitySelectValue( 'billing_city', 'Екатеринбург' );
 		document.getElementById( 'billing_postcode' ).value = '101000';
 		updateCheckout();
 
 		expect( document.getElementById( 'billing_address_1' ).value ).toBe( 'Адрес введён покупателем' );
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Екатеринбург' );
 		expect( document.getElementById( 'billing_postcode' ).value ).toBe( '101000' );
 		expect( console ).toHaveWarned(); // initial confirmation writes the unmanaged address fields.
 	} );

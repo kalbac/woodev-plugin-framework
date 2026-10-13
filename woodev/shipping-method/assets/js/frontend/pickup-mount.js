@@ -644,7 +644,18 @@
 				return;
 			}
 
-			applyAddressReplacement( config, point );
+			// Guard the city change just like a freshly confirmed selection. A Location
+			// Provider checkout may use a different spelling for the same settlement across
+			// carriers; without this guard the locality handler clears the slot we just restored.
+			applyingSelection[ config.fieldId ] = true;
+
+			try {
+				applyAddressReplacement( config, point );
+			} finally {
+				delete applyingSelection[ config.fieldId ];
+			}
+
+			appliedLocality[ config.fieldId ] = resolveLocality( config );
 		};
 
 		if ( remembered.point ) {
