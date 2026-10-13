@@ -22,6 +22,24 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 		private string $failed_request_cache_key;
 
 		/**
+		 * The waits between consecutive calls to the licence server by ONE plugin of ONE site, by the number
+		 * of attempts that already ended without usable version info (#1273): 15 minutes after the first,
+		 * then 1 h, 6 h and 24 h — and 24 h from then on. Same ladder as the signed-claim refresh in
+		 * {@see Woodev_Plugins_License::CLAIM_REFRESH_BACKOFF}. A server that is down, erroring or answering
+		 * nonsense is therefore asked at most once a day per plugin once the ramp is over.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var int[]
+		 */
+		private const FAILED_REQUEST_BACKOFF = [
+			15 * MINUTE_IN_SECONDS,
+			HOUR_IN_SECONDS,
+			6 * HOUR_IN_SECONDS,
+			DAY_IN_SECONDS,
+		];
+
+		/**
 		 * Nonces of the pending acks attached to the CURRENT outgoing request.
 		 *
 		 * Set by get_api_params() when it attaches consumed_command_nonces; reset to
@@ -59,7 +77,10 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 			$this->slug                     = basename( $this->plugin->get_plugin_file(), '.php' );
 			$this->version                  = $this->plugin->get_version();
 			$this->beta                     = ! empty( $this->api_data['beta'] );
-			$this->failed_request_cache_key = 'woodev_failed_http_' . md5( $this->api_url );
+			// Keyed per store URL AND plugin: one plugin's failures must neither pause its siblings nor be
+			// cleared by their successes (#1273). The option holds the pause state ({failures, next_at}),
+			// autoload off; the store-wide key old releases only ever READ is deliberately left alone.
+			$this->failed_request_cache_key = 'woodev_failed_http_' . md5( $this->api_url . '|' . $this->slug );
 
 			// Set up hooks.
 			$this->init();
@@ -336,7 +357,8 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 		 * @param string $_action
 		 * @param object $_args
 		 *
-		 * @return object $_data
+		 * @return mixed The version object, or $_data untouched when there is no version info (the server is
+		 *               failing, or its pause is running — #1273).
 		 * @uses api_request()
 		 */
 		public function plugins_api_filter( $_data, $_action = '', $_args = null ) {
@@ -366,14 +388,20 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 
 				$api_response = $this->api_request( $to_send );
 
-				// Expires in 3 hours
-				$this->set_version_info_cache( $api_response );
-
+				// A failed (or paused) request is not cached: the pause, not a cached `false`, bounds the retries.
 				if ( false !== $api_response ) {
+					// Expires in 3 hours
+					$this->set_version_info_cache( $api_response );
+
 					$_data = $api_response;
 				}
 			} else {
 				$_data = $edd_api_request_transient;
+			}
+
+			// No version info (server failing, or its pause running): leave the popup to core.
+			if ( ! is_object( $_data ) ) {
+				return $_data;
 			}
 
 			// Convert sections into an associative array, since we're getting an object, but Core expects an array.
@@ -432,11 +460,14 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 		 *
 		 * All callers issue the same `get_version` action (OB-3 F5: the former
 		 * `$_action` parameter was unused — every call resolved to `get_version`).
-		 * Returns false in two cases: (a) slug mismatch (containment sanity-check —
+		 * Returns false in three cases: (a) slug mismatch (containment sanity-check —
 		 * both call sites always pass `$this->slug`, so this only fires on a wiring
-		 * mistake); (b) a recent request failure recorded by request_recently_failed().
+		 * mistake); (b) the pause after an earlier failure is still running — no HTTP
+		 * call is made; (c) the call itself produced no usable version info.
 		 *
 		 * @since 1.2.1
+		 * @since 2.0.2 every attempt spends the pause budget ({@see self::take_request_budget()}) and a
+		 *              failed one leaves the next pause on the {@see self::FAILED_REQUEST_BACKOFF} ladder — #1273.
 		 *
 		 * @param array $_data Parameters that must contain a `slug` key matching this plugin.
 		 *
@@ -449,39 +480,144 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 				return false;
 			}
 
-			if ( $this->request_recently_failed() ) {
+			// The ONLY door to the licence server for every updater path (update check, plugin-information
+			// popup, multisite row notice, changelog view): the pause is honoured here and the budget for an
+			// attempt is spent BEFORE the network (#1273).
+			if ( ! $this->take_request_budget() ) {
 				return false;
 			}
 
-			return $this->get_version_from_remote();
+			$version_info = $this->get_version_from_remote();
+
+			if ( false === $version_info ) {
+				// No usable version info: the spent budget stands, so this attempt counts as a failure.
+				return false;
+			}
+
+			$this->clear_request_backoff();
+
+			return $version_info;
 		}
 
 		/**
-		 * Determines if a request has recently failed.
+		 * The stored pause state, normalised.
 		 *
-		 * @since 1.2.1
+		 * @since 2.0.2
 		 *
-		 * @return bool
+		 * @return array{failures: int, next_at: int}
 		 */
-		private function request_recently_failed(): bool {
-			$failed_request_details = get_option( $this->failed_request_cache_key );
+		private function get_request_backoff_state(): array {
+			return $this->normalize_request_backoff_state( get_option( $this->failed_request_cache_key, [] ) );
+		}
 
-			// Request has never failed.
-			if ( empty( $failed_request_details ) || ! is_numeric( $failed_request_details ) ) {
+		/**
+		 * Normalises a stored backoff state of any shape to the two integers.
+		 *
+		 * A value that is not an array (a corrupt row, or a bare timestamp left by another writer) is read as
+		 * «no failures recorded».
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param mixed $state The stored value.
+		 *
+		 * @return array{failures: int, next_at: int}
+		 */
+		private function normalize_request_backoff_state( $state ): array {
+			return [
+				'failures' => is_array( $state ) ? max( 0, (int) ( $state['failures'] ?? 0 ) ) : 0,
+				'next_at'  => is_array( $state ) ? max( 0, (int) ( $state['next_at'] ?? 0 ) ) : 0,
+			];
+		}
+
+		/**
+		 * Spends this plugin's budget for ONE call to the licence server: true when no pause is running, and
+		 * then the NEXT pause — one step longer on the {@see self::FAILED_REQUEST_BACKOFF} ladder — is written
+		 * BEFORE the caller goes to the network, so an attempt that dies mid-request still counts. A successful
+		 * attempt wipes it again ({@see self::clear_request_backoff()}).
+		 *
+		 * Taking is ATOMIC: the state row is read raw from the database (never the object cache) and replaced
+		 * by a compare-and-swap `UPDATE … WHERE option_value = <what was read>` — or, while no row exists yet,
+		 * by an `INSERT IGNORE` — so of N concurrent requests that read the same open window exactly one
+		 * proceeds. No transient and no object cache is involved.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool Whether the caller may call the licence server now.
+		 */
+		private function take_request_budget(): bool {
+
+			global $wpdb;
+
+			$now    = time();
+			$ladder = self::FAILED_REQUEST_BACKOFF;
+
+			// No database handle (a bare CLI bootstrap): the best remaining effort is the plain, non-atomic write.
+			if ( ! isset( $wpdb ) || ! is_object( $wpdb ) ) {
+				$state = $this->get_request_backoff_state();
+
+				if ( $now < $state['next_at'] ) {
+					return false;
+				}
+
+				$failures = $state['failures'] + 1;
+
+				update_option(
+					$this->failed_request_cache_key,
+					[
+						'failures' => $failures,
+						'next_at'  => $now + $ladder[ min( $failures, count( $ladder ) ) - 1 ],
+					],
+					false
+				);
+
+				return true;
+			}
+
+			$raw   = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s LIMIT 1", $this->failed_request_cache_key ) );
+			$state = $this->normalize_request_backoff_state( null === $raw ? [] : maybe_unserialize( $raw ) );
+
+			if ( $now < $state['next_at'] ) {
 				return false;
 			}
 
-			/*
-			 * Request previously failed, but the timeout has expired.
-			 * This means we're allowed to try again.
-			 */
-			if ( time() > $failed_request_details ) {
-				delete_option( $this->failed_request_cache_key );
+			$failures = $state['failures'] + 1;
+			$next     = maybe_serialize(
+				[
+					'failures' => $failures,
+					'next_at'  => $now + $ladder[ min( $failures, count( $ladder ) ) - 1 ],
+				]
+			);
 
-				return false;
+			if ( null === $raw ) {
+				// INSERT IGNORE, not add_option(): add_option() ends in ON DUPLICATE KEY UPDATE, which overwrites a racer's row.
+				$won = 1 === (int) $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", $this->failed_request_cache_key, $next ) );
+			} else {
+				$won = 1 === (int) $wpdb->update(
+					$wpdb->options,
+					[ 'option_value' => $next ],
+					[
+						'option_name'  => $this->failed_request_cache_key,
+						'option_value' => $raw,
+					]
+				);
 			}
 
-			return true;
+			// Later reads (this request and, with a persistent cache, others) must see the database, not a stale copy.
+			wp_cache_delete( $this->failed_request_cache_key, 'options' );
+			wp_cache_delete( 'notoptions', 'options' );
+
+			return $won;
+		}
+
+		/**
+		 * Forgets the pause once the server has answered with usable version info.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		private function clear_request_backoff(): void {
+			delete_option( $this->failed_request_cache_key );
 		}
 
 		/**
