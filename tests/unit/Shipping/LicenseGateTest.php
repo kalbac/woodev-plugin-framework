@@ -107,6 +107,21 @@ final class LicenseGateTest extends TestCase {
 		$this->assertFalse( License_Gate::is_in_force( $this->plugin( false ) ) );
 	}
 
+	public function test_a_claim_refresh_request_reaches_the_engine_and_can_never_break_the_caller(): void {
+		$engine = Mockery::mock( \Woodev_Plugins_License::class );
+		$engine->shouldReceive( 'schedule_claim_refresh' )->once()->andReturn( true );
+		$plugin = Mockery::mock( Shipping_Plugin::class );
+		$plugin->shouldReceive( 'get_license_instance' )->andReturn( $engine );
+
+		License_Gate::request_claim_refresh( $plugin );
+
+		$broken = Mockery::mock( Shipping_Plugin::class );
+		$broken->shouldReceive( 'get_license_instance' )->andThrow( new \RuntimeException( 'boom' ) );
+		License_Gate::request_claim_refresh( $broken );
+
+		$this->addToAssertionCount( 1 ); // reaching this line is the assertion: nothing escaped.
+	}
+
 	public function test_the_refusal_names_the_action_and_carries_the_licence_page_address(): void {
 		$text = License_Gate::refusal( 'выгрузить заказ перевозчику' );
 

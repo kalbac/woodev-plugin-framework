@@ -914,6 +914,7 @@ class LicensePureOperationsTest extends TestCase {
 		$plugin->shouldReceive( 'get_plugin_url' )->andReturn( 'https://example.test' );
 		$plugin->shouldReceive( 'get_plugin_name' )->andReturn( 'Test Plugin' );
 		$plugin->shouldReceive( 'get_id_underscored' )->andReturn( 'woodev_test_plugin' );
+		$plugin->shouldReceive( 'get_id' )->andReturn( 'test_plugin' ); // the hook name of the prompt claim refresh (#1270).
 		$plugin->shouldReceive( 'get_download_id' )->andReturn( 216 );
 		$plugin->shouldReceive( 'get_plugin_file' )->andReturn( 'test-plugin/test-plugin.php' );
 

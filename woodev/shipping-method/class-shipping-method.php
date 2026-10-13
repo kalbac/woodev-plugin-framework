@@ -672,6 +672,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			// the pre-calculate filter, so a cached rate cannot slip through.
 			if ( ! License_Gate::is_in_force( $this->get_plugin() ) ) {
 				$this->report_license_hidden();
+				// A key with no signed claim yet (just updated, or the claim ran out) is refreshed in the background, not at the next weekly check.
+				License_Gate::request_claim_refresh( $this->get_plugin() );
 
 				return;
 			}

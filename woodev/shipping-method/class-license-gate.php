@@ -155,6 +155,25 @@ if ( ! class_exists( __NAMESPACE__ . '\License_Gate' ) ) :
 
 			return $days <= self::EXPIRY_WARNING_DAYS ? $days : null;
 		}
+
+		/**
+		 * Asks the licence engine to refresh a missing signed claim soon (#1270) — called where the gate has just
+		 * said «no» to a buyer's checkout. It only schedules a WP-Cron event (throttled per plugin, see
+		 * {@see \Woodev_Plugins_License::schedule_claim_refresh()}), so the buyer's request does no licence-server
+		 * call, and it can never break the checkout.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \Woodev_Plugin $plugin the carrier plugin.
+		 * @return void
+		 */
+		public static function request_claim_refresh( \Woodev_Plugin $plugin ): void {
+			try {
+				$plugin->get_license_instance()->schedule_claim_refresh();
+			} catch ( \Throwable $throwable ) {
+				return;
+			}
+		}
 	}
 
 endif;

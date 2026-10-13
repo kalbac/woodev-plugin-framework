@@ -235,6 +235,10 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 
 			add_action( 'admin_notices', [ $this, 'notices' ] );
 
+			// #1270: a stored key with no usable signed claim is refreshed promptly, not at the next weekly check.
+			add_action( self::get_claim_refresh_hook( $this->plugin ), [ $this, 'run_claim_refresh' ] );
+			add_action( 'admin_init', [ $this, 'refresh_claim_on_admin_init' ] );
+
 			add_action( 'admin_print_scripts-plugins.php', [ $this, 'plugin_screen_scripts' ] );
 
 			add_action(
@@ -1155,6 +1159,143 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 			}
 
 			return $this->get_authority_claims()->get_license_expires();
+		}
+
+		/**
+		 * How long one plugin waits between two attempts to refresh a missing signed claim (#1270): a
+		 * licence server outage or a wrong key must not be hit on every request.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var int
+		 */
+		public const CLAIM_REFRESH_THROTTLE = 15 * MINUTE_IN_SECONDS;
+
+		/**
+		 * The WP-Cron hook of one plugin's immediate claim refresh.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Woodev_Plugin $plugin the plugin.
+		 * @return string
+		 */
+		public static function get_claim_refresh_hook( Woodev_Plugin $plugin ): string {
+			return 'woodev_' . $plugin->get_id() . '_refresh_license_claim';
+		}
+
+		/**
+		 * Whether a licence key is stored but the signed claim is missing — absent, unverifiable, or past its
+		 * own 14 days — so the gate is closed for a reason a `check_license` round-trip can lift (#1270).
+		 *
+		 * Deliberately FALSE when a verified claim exists, whatever it says: a signed `expired` / `invalid`
+		 * statement is the server's answer, refreshed on the normal weekly path, not hammered. Also false for
+		 * a plugin with no store product and for one with no key (nothing to check).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public function needs_claim_refresh(): bool {
+
+			if ( ! self::has_store_product( $this->plugin->get_download_id() ) || ! $this->get_license() ) {
+				return false;
+			}
+
+			return null === $this->get_authority_claims()->get_verified();
+		}
+
+		/**
+		 * Takes this plugin's refresh slot: true at most once per {@see self::CLAIM_REFRESH_THROTTLE}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool whether the caller may attempt a refresh now.
+		 */
+		private function take_claim_refresh_slot(): bool {
+
+			$transient = $this->plugin->get_plugin_option_name( 'claim_refresh' );
+
+			if ( false !== get_transient( $transient ) ) {
+				return false;
+			}
+
+			set_transient( $transient, time(), self::CLAIM_REFRESH_THROTTLE );
+
+			return true;
+		}
+
+		/**
+		 * Schedules ONE immediate WP-Cron refresh of the signed claim when {@see self::needs_claim_refresh()},
+		 * at most once per {@see self::CLAIM_REFRESH_THROTTLE} (#1270).
+		 *
+		 * Safe in a buyer's request: it writes a cron entry and does no HTTP — the licence server is called by
+		 * {@see self::run_claim_refresh()} in the cron request.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool whether an event was scheduled by this call.
+		 */
+		public function schedule_claim_refresh(): bool {
+
+			if ( ! $this->needs_claim_refresh() || ! $this->take_claim_refresh_slot() ) {
+				return false;
+			}
+
+			$hook = self::get_claim_refresh_hook( $this->plugin );
+
+			if ( wp_next_scheduled( $hook ) ) {
+				return false;
+			}
+
+			return false !== wp_schedule_single_event( time(), $hook );
+		}
+
+		/**
+		 * The scheduled refresh: one `check_license` round-trip, whose signed claim (if any) lands in the claim
+		 * store. A no-op when the claim has arrived in the meantime; a transport failure is swallowed — the
+		 * throttle, not a retry loop, decides when the next attempt comes.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		public function run_claim_refresh(): void {
+
+			if ( ! $this->needs_claim_refresh() ) {
+				return;
+			}
+
+			try {
+				$this->validate_license( (string) $this->get_license() );
+			} catch ( \Throwable $throwable ) {
+				return;
+			}
+		}
+
+		/**
+		 * `admin_init`: a store manager's own request refreshes a missing claim at once (the cron entry may
+		 * not run on a site with WP-Cron off), under the same throttle. Never for a buyer, an AJAX heartbeat or
+		 * a cron run.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		public function refresh_claim_on_admin_init(): void {
+
+			if ( wp_doing_ajax() || wp_doing_cron() || ! current_user_can( 'manage_woocommerce' ) ) {
+				return;
+			}
+
+			if ( ! $this->needs_claim_refresh() || ! $this->take_claim_refresh_slot() ) {
+				return;
+			}
+
+			$this->run_claim_refresh();
 		}
 
 		/**

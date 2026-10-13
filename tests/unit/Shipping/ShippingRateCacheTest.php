@@ -1434,6 +1434,7 @@ namespace Woodev\Tests\Unit\Shipping {
 		private function licensed_method( bool $in_force ): Woodev_Test_Shipping_Method_For_Rate_Cache {
 			$license = Mockery::mock( \Woodev_Plugins_License::class );
 			$license->shouldReceive( 'is_license_in_force' )->andReturn( $in_force );
+			$license->shouldReceive( 'schedule_claim_refresh' )->andReturn( false )->byDefault();
 
 			$method              = $this->method();
 			$method->download_id = 9001;
@@ -1450,6 +1451,24 @@ namespace Woodev\Tests\Unit\Shipping {
 
 			$this->assertSame( 0, $method->added, 'no rate reaches the cart' );
 			$this->assertSame( 0, $method->carrier_calls, 'the carrier is not even asked' );
+		}
+
+		/**
+		 * Round 2: a key with no claim yet must not wait for the weekly check — the checkout that just refused asks for a
+		 * background refresh (a cron event, never a licence-server call in the buyer's request).
+		 *
+		 * @return void
+		 */
+		public function test_a_refused_checkout_asks_for_a_background_claim_refresh_and_an_allowed_one_does_not(): void {
+			$refused = $this->licensed_method( false );
+			$refused->license->shouldReceive( 'schedule_claim_refresh' )->once()->andReturn( true );
+			$refused->calculate_shipping( $this->package() );
+			$this->assertSame( 0, $refused->added );
+
+			$allowed = $this->licensed_method( true );
+			$allowed->license->shouldReceive( 'schedule_claim_refresh' )->never();
+			$allowed->calculate_shipping( $this->package() );
+			$this->assertSame( 1, $allowed->added );
 		}
 
 		/** @return void */

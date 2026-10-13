@@ -6227,3 +6227,9 @@ msgstr ""
 #: shipping-method/rest-api/class-document-controller.php:312
 msgid "получить документ перевозчика"
 msgstr ""
+
+#. translators: %s: the label of the carrier's own order action
+#: shipping-method/admin/orders/class-order-actions.php:834
+#, php-format
+msgid "выполнить действие «%s»"
+msgstr ""

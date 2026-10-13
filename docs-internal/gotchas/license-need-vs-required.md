@@ -59,6 +59,13 @@ and `now <= license_expires` (`null` = lifetime). No claim → not in force. A p
 There is no constant, filter or option that switches it off — do not add one, and do not "fix" a failing test by
 reading `is_need_license()` or the status option instead.
 
+Two rules that follow from it. A carrier's OWN order action (declared through `woodev_shipping_order_actions`) is gated by
+default — `Order_Actions::perform()` refuses it before `woodev_shipping_perform_order_action` runs — unless its declaration
+carries `'read_only' => true`. And a stored key with no usable claim (absent, or past its own 14 days) is refreshed promptly:
+`Woodev_Plugins_License::schedule_claim_refresh()` (a cron event, at most once per 15 minutes per plugin; asked by a refused
+checkout, by activation / upgrade) and `refresh_claim_on_admin_init()` for a store manager. A verified claim that SAYS
+`expired` is the server's answer and is NOT re-fetched on that path — only the weekly check renews it.
+
 ## Related
 - Spec: `docs-internal/archive/platform-v2-s3-licensing-need-license-spec.md` (§2 two-layer model, §3.3, §6 anti-pirate)
 - [contract-string-not-derivable](contract-string-not-derivable.md) — another "looks derivable but isn't" licensing/shipping trap

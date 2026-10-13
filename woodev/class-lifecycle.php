@@ -116,6 +116,26 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 
 				// new version number
 				$this->set_installed_version( $plugin_version );
+
+				// #1270: an updated plugin has a key but may have no signed claim yet — fetch it now.
+				$this->request_license_claim_refresh();
+			}
+		}
+
+
+		/**
+		 * Schedules a prompt refresh of the signed licence claim when a key is stored but no claim is (#1270).
+		 * Throttled and cron-only inside the licence engine; a failure here never blocks the lifecycle.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		private function request_license_claim_refresh(): void {
+			try {
+				$this->get_plugin()->get_license_instance()->schedule_claim_refresh();
+			} catch ( \Throwable $throwable ) {
+				return;
 			}
 		}
 
@@ -145,6 +165,8 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 
 				// Reschedule weekly license check
 				wp_reschedule_event( time(), 'weekly', 'woodev_weekly_scheduled_events' );
+
+				$this->request_license_claim_refresh();
 
 				/**
 				 * Fires when the plugin is activated.

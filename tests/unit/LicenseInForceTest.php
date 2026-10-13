@@ -598,6 +598,209 @@ class LicenseInForceTest extends TestCase {
 		$this->assertTrue( $license->is_license_in_force(), 'an object response (the shape get_response_data() returns) is consumed too' );
 	}
 
+	// ---- prompt refresh of a missing claim (round 2) --------------------------------------------------------
+
+	/** @var array<string, mixed> the in-memory transient table */
+	private array $transients = [];
+
+	/** @var string[] the single events scheduled so far (hook names) */
+	private array $scheduled = [];
+
+	/**
+	 * An engine around a stored key, a real claim store and in-memory cron / transients; its
+	 * validate_license() only counts the calls.
+	 *
+	 * @param string $key         the stored licence key ('' = none).
+	 * @param int    $download_id the plugin's download id.
+	 * @return \Woodev_Plugins_License
+	 */
+	private function refreshing_engine( string $key = 'KEY-1', int $download_id = 9001 ): \Woodev_Plugins_License {
+		$this->transients = [];
+		$this->scheduled  = [];
+
+		Functions\when( 'get_transient' )->alias( fn( $name ) => $this->transients[ $name ] ?? false );
+		Functions\when( 'set_transient' )->alias(
+			function ( $name, $value ) {
+				$this->transients[ $name ] = $value;
+
+				return true;
+			}
+		);
+		Functions\when( 'wp_next_scheduled' )->alias( fn( $hook ) => in_array( $hook, $this->scheduled, true ) ? self::NOW : false );
+		Functions\when( 'wp_schedule_single_event' )->alias(
+			function ( $timestamp, $hook ) {
+				$this->scheduled[] = $hook;
+
+				return true;
+			}
+		);
+
+		$plugin = Mockery::mock( \Woodev_Plugin::class );
+		$plugin->shouldReceive( 'get_download_id' )->andReturn( $download_id );
+		$plugin->shouldReceive( 'get_id' )->andReturn( 'test_plugin' );
+		$plugin->shouldReceive( 'get_plugin_option_name' )->with( 'claim_refresh' )->andReturn( 'woodev_test_plugin_claim_refresh' );
+
+		$license = new class() extends \Woodev_Plugins_License {
+
+			/** @var string[] the keys validate_license() was called with */
+			public array $validated = [];
+
+			public function __construct() {}
+
+			public function validate_license( $license = '', $deprecated = false, $ajax = false ) {
+				$this->validated[] = $license;
+			}
+		};
+
+		// The properties are private to the parent class, so they are set through IT, not the anonymous subclass.
+		foreach ( [
+			'plugin'           => $plugin,
+			'authority_claims' => $this->claims( $download_id ),
+			'license_key'      => $key,
+		] as $property => $value ) {
+			$reflection_property = new \ReflectionProperty( \Woodev_Plugins_License::class, $property );
+			if ( PHP_VERSION_ID < 80100 ) {
+				$reflection_property->setAccessible( true );
+			}
+			$reflection_property->setValue( $license, $value );
+		}
+
+		return $license;
+	}
+
+	/**
+	 * @return void
+	 */
+	public function test_a_key_with_no_claim_schedules_one_refresh_and_the_second_call_is_throttled(): void {
+		$license = $this->refreshing_engine();
+
+		$this->assertTrue( $license->needs_claim_refresh() );
+		$this->assertTrue( $license->schedule_claim_refresh() );
+		$this->assertSame( [ 'woodev_test_plugin_refresh_license_claim' ], $this->scheduled );
+
+		$this->assertFalse( $license->schedule_claim_refresh(), 'the second call within the window schedules nothing' );
+		$this->assertCount( 1, $this->scheduled );
+		$this->assertSame( [], $license->validated, 'scheduling does no licence-server call' );
+	}
+
+	/**
+	 * @return void
+	 */
+	public function test_the_throttle_window_ends_and_a_pending_event_is_not_doubled(): void {
+		$license = $this->refreshing_engine();
+		$license->schedule_claim_refresh();
+
+		// The window has passed but the event is still waiting for cron: still a single event.
+		$this->transients = [];
+		$this->assertFalse( $license->schedule_claim_refresh() );
+		$this->assertCount( 1, $this->scheduled );
+
+		// The event ran (and found nothing); the next window may schedule again.
+		$this->scheduled  = [];
+		$this->transients = [];
+		$this->assertTrue( $license->schedule_claim_refresh() );
+	}
+
+	/**
+	 * @return void
+	 */
+	public function test_a_claim_that_expired_at_rest_is_refreshed_like_an_absent_one(): void {
+		$license = $this->refreshing_engine();
+		// Stored, genuinely signed, but its own 14 days are over (the store's clock says NOW).
+		$this->options[ self::CLAIM_OPTION ] = $this->sign( $this->paid( [ 'expires_at' => self::NOW - 1 ] ) );
+
+		$this->assertTrue( $license->needs_claim_refresh() );
+		$this->assertTrue( $license->schedule_claim_refresh() );
+	}
+
+	/**
+	 * A verified claim that SAYS expired / invalid is the server's answer, not a missing one: no refresh storm,
+	 * the normal weekly path carries on.
+	 *
+	 * @return void
+	 */
+	public function test_a_signed_expired_claim_does_not_trigger_a_refresh(): void {
+		foreach ( [ 'expired', 'invalid', 'site_inactive', 'disabled' ] as $status ) {
+			$license = $this->refreshing_engine();
+			$license->get_authority_claims()->consume_from_response( [ 'license_authority' => $this->sign( $this->paid( [ 'license_status' => $status ] ) ) ] );
+
+			$this->assertFalse( $license->is_license_in_force() );
+			$this->assertFalse( $license->needs_claim_refresh(), $status );
+			$this->assertFalse( $license->schedule_claim_refresh(), $status );
+			$this->assertSame( [], $this->scheduled, $status );
+
+			$license->run_claim_refresh();
+			$this->assertSame( [], $license->validated, $status );
+		}
+	}
+
+	/**
+	 * @return void
+	 */
+	public function test_no_key_or_no_store_product_schedules_nothing(): void {
+		$keyless = $this->refreshing_engine( '' );
+		$this->assertFalse( $keyless->needs_claim_refresh() );
+		$this->assertFalse( $keyless->schedule_claim_refresh() );
+		$this->assertSame( [], $this->scheduled );
+
+		$unlicensed = $this->refreshing_engine( 'KEY-1', 0 );
+		$this->assertFalse( $unlicensed->schedule_claim_refresh() );
+		$this->assertSame( [], $this->scheduled );
+	}
+
+	/**
+	 * @return void
+	 */
+	public function test_the_scheduled_run_asks_the_server_once_and_only_while_the_claim_is_missing(): void {
+		$license = $this->refreshing_engine( 'KEY-1' );
+		$license->run_claim_refresh();
+		$this->assertSame( [ 'KEY-1' ], $license->validated );
+
+		$license->get_authority_claims()->consume_from_response( [ 'license_authority' => $this->sign( $this->paid() ) ] );
+		$license->run_claim_refresh();
+		$this->assertSame( [ 'KEY-1' ], $license->validated, 'the claim arrived: nothing more to fetch' );
+		$this->assertTrue( $license->is_license_in_force(), 'and the next request is in force' );
+	}
+
+	/**
+	 * @return void
+	 */
+	public function test_a_manager_in_admin_refreshes_at_once_under_the_same_throttle(): void {
+		Functions\when( 'wp_doing_ajax' )->justReturn( false );
+		Functions\when( 'wp_doing_cron' )->justReturn( false );
+		Functions\when( 'current_user_can' )->alias( static fn( $cap ) => 'manage_woocommerce' === $cap );
+
+		$license = $this->refreshing_engine();
+		$license->refresh_claim_on_admin_init();
+		$license->refresh_claim_on_admin_init();
+
+		$this->assertSame( [ 'KEY-1' ], $license->validated, 'one attempt per window' );
+	}
+
+	/**
+	 * @return void
+	 */
+	public function test_admin_init_refreshes_nothing_for_a_non_manager_an_ajax_call_or_a_cron_run(): void {
+		Functions\when( 'current_user_can' )->justReturn( false );
+		Functions\when( 'wp_doing_ajax' )->justReturn( false );
+		Functions\when( 'wp_doing_cron' )->justReturn( false );
+		$license = $this->refreshing_engine();
+		$license->refresh_claim_on_admin_init();
+		$this->assertSame( [], $license->validated, 'a non-manager' );
+
+		Functions\when( 'current_user_can' )->justReturn( true );
+		Functions\when( 'wp_doing_ajax' )->justReturn( true );
+		$license = $this->refreshing_engine();
+		$license->refresh_claim_on_admin_init();
+		$this->assertSame( [], $license->validated, 'an AJAX call' );
+
+		Functions\when( 'wp_doing_ajax' )->justReturn( false );
+		Functions\when( 'wp_doing_cron' )->justReturn( true );
+		$license = $this->refreshing_engine();
+		$license->refresh_claim_on_admin_init();
+		$this->assertSame( [], $license->validated, 'a cron run' );
+	}
+
 	/**
 	 * @param object $object   object to update.
 	 * @param string $property property name.

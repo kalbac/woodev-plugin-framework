@@ -226,6 +226,51 @@ class PlatformNeutralLifecycleTest extends TestCase {
 	}
 
 	/**
+	 * #1270 round 2: a plugin that was just activated or updated has a key but may have no signed licence claim
+	 * yet — the lifecycle asks the licence engine for a prompt (cron, throttled) refresh.
+	 *
+	 * @return void
+	 */
+	public function test_activation_and_upgrade_each_ask_the_licence_engine_for_a_claim_refresh(): void {
+
+		$id = 'platform-neutral-lifecycle';
+
+		$engine = Mockery::mock( \Woodev_Plugins_License::class );
+		$engine->shouldReceive( 'schedule_claim_refresh' )->twice()->andReturn( true );
+
+		$plugin = Mockery::mock( \Woodev_Plugin::class );
+		$plugin->shouldReceive( 'get_id' )->andReturn( $id );
+		$plugin->shouldReceive( 'get_version' )->andReturn( '2.0.2' );
+		$plugin->shouldReceive( 'get_license_instance' )->andReturn( $engine );
+		$plugin->shouldReceive( 'log_debug' );
+		$plugin->shouldReceive( 'get_plugin_version_name' )->andReturn( 'woodev_' . $id . '_version' );
+
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = false ) use ( $id ) {
+				if ( 'woodev_' . $id . '_is_active' === $name ) {
+					return false; // a genuine activation transition.
+				}
+				if ( 'woodev_' . $id . '_version' === $name ) {
+					return '2.0.0'; // installed: older than the running version → an upgrade.
+				}
+				return $default;
+			}
+		);
+		Functions\when( 'wp_reschedule_event' )->justReturn( true );
+		Functions\when( 'delete_option' )->justReturn( true );
+		Functions\when( 'update_option' )->justReturn( true );
+		Functions\when( 'current_time' )->justReturn( 1_717_171_717 );
+		Functions\when( 'wp_json_encode' )->alias( static fn( $value ): string => (string) json_encode( $value ) );
+		Functions\when( 'sanitize_text_field' )->alias( static fn( $value ): string => trim( strip_tags( (string) $value ) ) );
+		$GLOBALS['wpdb'] = new Testable_Platform_Neutral_Lifecycle_WPDB();
+
+		( new Testable_Platform_Neutral_Lifecycle( $plugin ) )->init();
+
+		// Mockery verifies `twice()` on teardown: once from the activation, once from the upgrade.
+		$this->addToAssertionCount( 1 );
+	}
+
+	/**
 	 * Base-owned lifecycle should not call wc_clean() directly anymore.
 	 *
 	 * @return void
