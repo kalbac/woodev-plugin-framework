@@ -31,6 +31,7 @@ final class LicenseGateTest extends TestCase {
 
 		$this->notices = [];
 		$_GET          = [];
+		License_Gate::reset();
 
 		Functions\when( 'admin_url' )->alias( static fn( string $path = '' ): string => 'https://shop.test/wp-admin/' . $path );
 		Functions\when( 'esc_url' )->returnArg( 1 );
@@ -40,6 +41,7 @@ final class LicenseGateTest extends TestCase {
 
 	protected function tearDown(): void {
 		$_GET = [];
+		License_Gate::reset();
 
 		parent::tearDown();
 	}
@@ -165,6 +167,104 @@ final class LicenseGateTest extends TestCase {
 	public function test_no_reminder_when_the_licence_is_not_in_force_or_the_product_is_licence_free(): void {
 		$this->assertNull( License_Gate::days_until_expiry( $this->plugin( false, self::NOW + DAY_IN_SECONDS ), self::NOW ) );
 		$this->assertNull( License_Gate::days_until_expiry( $this->plugin( true, null ), self::NOW ), 'a licence-free or lifetime product has no end to remind of' );
+	}
+
+	// ---- the licence state on the package ---------------------------------------------------------------------------
+
+	/**
+	 * A tracked carrier with its own id and a mutable in-force answer.
+	 *
+	 * @param string    $id       plugin id.
+	 * @param bool|null $in_force the engine's answer; null = no store product.
+	 * @return \Woodev_Plugin&\Mockery\MockInterface
+	 */
+	private function tracked_plugin( string $id, ?bool &$in_force ) {
+		$plugin = Mockery::mock( Shipping_Plugin::class )->makePartial();
+		$plugin->shouldReceive( 'get_id' )->andReturn( $id );
+		$plugin->shouldReceive( 'get_download_id' )->andReturnUsing( static function () use ( &$in_force ) { return null === $in_force ? 0 : 9001; } );
+
+		$engine = Mockery::mock( \Woodev_Plugins_License::class );
+		$engine->shouldReceive( 'is_license_in_force' )->andReturnUsing( static function () use ( &$in_force ) { return (bool) $in_force; } );
+		$plugin->shouldReceive( 'get_license_instance' )->andReturn( $engine );
+
+		License_Gate::track_license_state( $plugin );
+
+		return $plugin;
+	}
+
+	public function test_the_state_lists_every_paid_carrier_sorted_by_id(): void {
+		$yandex_state = false;
+		$cdek_state   = true;
+		$this->tracked_plugin( 'yandex_delivery', $yandex_state );
+		$this->tracked_plugin( 'edostavka', $cdek_state );
+
+		$this->assertSame( 'edostavka:1,yandex_delivery:0', License_Gate::license_state() );
+	}
+
+	public function test_the_package_key_changes_when_one_carrier_flips_and_not_otherwise(): void {
+		$yandex_state = false;
+		$cdek_state   = true;
+		$this->tracked_plugin( 'edostavka', $cdek_state );
+		$this->tracked_plugin( 'yandex_delivery', $yandex_state );
+		$packages = [ [ 'contents' => [], 'destination' => [ 'city' => 'Москва' ] ] ];
+
+		$first  = License_Gate::add_license_state_to_packages( $packages );
+		$second = License_Gate::add_license_state_to_packages( $packages );
+
+		$this->assertSame( $first, $second, 'no change between two calls: the same packages, so the same hash' );
+		$this->assertSame( 'edostavka:1,yandex_delivery:0', $first[0][ License_Gate::PACKAGE_KEY ] );
+		$this->assertSame( 'Москва', $first[0]['destination']['city'], 'the rest of the package is untouched' );
+
+		$yandex_state = true;
+		$flipped      = License_Gate::add_license_state_to_packages( $packages );
+
+		$this->assertNotSame( $first, $flipped );
+		$this->assertSame( 'edostavka:1,yandex_delivery:1', $flipped[0][ License_Gate::PACKAGE_KEY ] );
+	}
+
+	public function test_every_package_of_the_cart_carries_the_key(): void {
+		$state = true;
+		$this->tracked_plugin( 'edostavka', $state );
+
+		$packages = License_Gate::add_license_state_to_packages( [ [ 'a' => 1 ], [ 'a' => 2 ] ] );
+
+		$this->assertSame( 'edostavka:1', $packages[0][ License_Gate::PACKAGE_KEY ] );
+		$this->assertSame( 'edostavka:1', $packages[1][ License_Gate::PACKAGE_KEY ] );
+	}
+
+	public function test_a_package_is_unaffected_while_no_tracked_carrier_has_a_licence(): void {
+		$packages = [ [ 'contents' => [ 1 ] ] ];
+
+		$this->assertSame( $packages, License_Gate::add_license_state_to_packages( $packages ), 'nothing tracked' );
+
+		$free = null;
+		$this->tracked_plugin( 'free_carrier', $free );
+
+		$this->assertSame( '', License_Gate::license_state() );
+		$this->assertSame( $packages, License_Gate::add_license_state_to_packages( $packages ), 'licence-free carriers keep their hashes' );
+		$this->assertSame( [], License_Gate::add_license_state_to_packages( [] ) );
+		$this->assertSame( 'x', License_Gate::add_license_state_to_packages( 'x' ), 'a non-array passes through' );
+	}
+
+	public function test_a_broken_engine_reads_as_not_in_force_instead_of_breaking_the_cart(): void {
+		$plugin = Mockery::mock( Shipping_Plugin::class )->makePartial();
+		$plugin->shouldReceive( 'get_id' )->andReturn( 'edostavka' );
+		$plugin->shouldReceive( 'get_download_id' )->andReturn( 9001 );
+		$plugin->shouldReceive( 'get_license_instance' )->andThrow( new \RuntimeException( 'boom' ) );
+		License_Gate::track_license_state( $plugin );
+
+		$this->assertSame( 'edostavka:0', License_Gate::license_state() );
+	}
+
+	public function test_the_package_filter_is_wired_once_however_many_plugins_track(): void {
+		Functions\expect( 'add_filter' )
+			->once()
+			->with( 'woocommerce_cart_shipping_packages', [ License_Gate::class, 'add_license_state_to_packages' ] );
+
+		$a = true;
+		$b = true;
+		$this->tracked_plugin( 'edostavka', $a );
+		$this->tracked_plugin( 'yandex_delivery', $b );
 	}
 
 	// ---- the notices -----------------------------------------------------------------------------------------------

@@ -435,6 +435,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			Fee_Payments::register();
 			Fee_Payments::declare_payment_dependent_price( $this->get_valid_shipping_method_classes() );
 
+			// a licence flip must recalculate the rates WooCommerce cached in the session (#1270)
+			License_Gate::track_license_state( $this );
+
 			// register shipping methods with WooCommerce
 			add_filter( 'woocommerce_shipping_methods', [ $this, 'register_shipping_methods' ] );
 
