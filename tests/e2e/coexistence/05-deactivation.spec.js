@@ -41,7 +41,7 @@ const {
 } = require( './helpers' );
 
 /** Deactivating CDEK deletes its remote webhook subscription (see the file header), so it needs an explicit yes. */
-const CDEK_DEACTIVATION_OPTED_IN = Boolean( process.env.WOODEV_E2E_CDEK_DEACTIVATE );
+const CDEK_DEACTIVATION_OPTED_IN = '1' === process.env.WOODEV_E2E_CDEK_DEACTIVATE;
 const CDEK_DEACTIVATION_SKIP     = 'Deactivating CDEK removes its remote webhook subscription — set WOODEV_E2E_CDEK_DEACTIVATE=1 to run this test.';
 
 const CDEK_SLUG   = 'woocommerce-edostavka';
@@ -156,7 +156,7 @@ test.describe( 'scenario 5 — Yandex deactivated, CDEK keeps working', () => {
 			await expect( page.getByText( /^Яндекс Доставка \(\d+\)$/ ), 'the picker no longer offers Yandex' ).toHaveCount( 0 );
 
 			// The one real CDEK export (opt-in, see the file header).
-			if ( process.env.WOODEV_E2E_CDEK_EXPORT ) {
+			if ( '1' === process.env.WOODEV_E2E_CDEK_EXPORT ) {
 				const outcome = JSON.parse(
 					wpEval(
 						`

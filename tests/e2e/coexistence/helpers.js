@@ -349,7 +349,7 @@ function expectOnlyCarrier( order, carrier, label ) {
  * @returns {Promise<boolean>} `true` while the defect stands (strict mode: never — a standing defect throws).
  */
 async function expectKnownDefect( id, reason, check ) {
-	if ( process.env.WOODEV_E2E_STRICT ) {
+	if ( '1' === process.env.WOODEV_E2E_STRICT ) {
 		await check();
 
 		return false;
