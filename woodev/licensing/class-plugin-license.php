@@ -1114,6 +1114,50 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		}
 
 		/**
+		 * Whether the server-signed statement says this plugin's licence is in force right now (#1270) —
+		 * the ONE predicate every licence gate (checkout, carrier actions, notices) asks.
+		 *
+		 * True only when a VERIFIED stored claim for this site and plugin says the product needs no licence
+		 * (`license_required === false`), or the licence is `valid` and not past its `license_expires`
+		 * (`null` = lifetime). No claim, an unverifiable / tampered / wrong-site / wrong-plugin one, or an
+		 * expired / disabled / invalid licence → false. A plugin with no store product at all (see
+		 * {@see self::has_store_product()}) has nothing to license and is never gated.
+		 *
+		 * It deliberately reads neither the plain licence-status option ({@see self::is_license_valid()},
+		 * {@see self::is_active()} — a forgeable option) nor the local {@see Woodev_Plugin::is_need_license()}
+		 * flag: see gotcha `license-need-vs-required`. There is NO switch that turns it off.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public function is_license_in_force(): bool {
+
+			if ( ! self::has_store_product( $this->plugin->get_download_id() ) ) {
+				return true;
+			}
+
+			return $this->get_authority_claims()->is_license_in_force();
+		}
+
+		/**
+		 * The verified Unix time the licence ends at, or null when there is none to report (no verified
+		 * claim, a licence-free product, or a lifetime licence). Feeds the «expires soon» reminder.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return int|null
+		 */
+		public function get_license_expires(): ?int {
+
+			if ( ! self::has_store_product( $this->plugin->get_download_id() ) ) {
+				return null;
+			}
+
+			return $this->get_authority_claims()->get_license_expires();
+		}
+
+		/**
 		 * Gets the §4 signed-claim store for this engine (lazily constructed).
 		 *
 		 * @since 2.0.0

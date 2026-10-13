@@ -49,6 +49,16 @@ public function is_license_valid() {
 
 `is_license_required()` is the anti-pirate chokepoint: it reads no local option and is never influenced by `is_need_license()`. If signing (S3.1 spec §4) later makes `is_license_required()` read a **verified** server claim, the trap gets sharper — a developer "simplifying" by gating enforcement on the local `is_need_license()` would hand pirates free feature unlock. The unit test `LicenseNeedLicenseFlagTest::test_anti_pirate_flag_does_not_validate_license` locks this invariant; do not weaken it.
 
+## A third question: «is this licence in force?» (#1270)
+
+The licence GATES (checkout rate, new carrier actions, the notices) ask neither of the two above and neither of the
+plain accessors `is_license_valid()` / `is_active()` — those read a plain status option, which is one `update_option()`
+from forged. They ask `Woodev_Plugins_License::is_license_in_force()`, which rests on the server-signed claim alone:
+a verified stored claim for THIS site and plugin that says `license_required === false`, or `license_status === 'valid'`
+and `now <= license_expires` (`null` = lifetime). No claim → not in force. A plugin with no store product is never gated.
+There is no constant, filter or option that switches it off — do not add one, and do not "fix" a failing test by
+reading `is_need_license()` or the status option instead.
+
 ## Related
 - Spec: `docs-internal/archive/platform-v2-s3-licensing-need-license-spec.md` (§2 two-layer model, §3.3, §6 anti-pirate)
 - [contract-string-not-derivable](contract-string-not-derivable.md) — another "looks derivable but isn't" licensing/shipping trap
