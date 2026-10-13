@@ -517,6 +517,7 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 			// §4: consume any signed claim riding the activation response (post-dispatch
 			// only; a dispatch() throw bypasses this — outage grace untouched).
 			$this->get_authority_claims()->consume_from_response( $response_data );
+			$this->reset_claim_refresh_backoff_if_claimed();
 
 			// Clear the option for licensed extensions to force regeneration.
 			if ( ! empty( $license_data->license ) && 'valid' === $license_data->license ) {
@@ -850,6 +851,7 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 				// (§3.2) is preserved byte-for-byte. consume_from_response() swallows its
 				// own Throwables, so it can never break the weekly check.
 				$this->get_authority_claims()->consume_from_response( $license_data->get_response_data() );
+				$this->reset_claim_refresh_backoff_if_claimed();
 
 				$this->woodev_license->update(
 					[
@@ -1162,14 +1164,32 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		}
 
 		/**
-		 * How long one plugin waits between two attempts to refresh a missing signed claim (#1270): a
-		 * licence server outage or a wrong key must not be hit on every request.
+		 * The waits between consecutive AUTOMATIC attempts to refresh a missing signed claim (#1270), by the
+		 * number of attempts that already ended without a verified claim: 15 minutes after the first, then 1 h,
+		 * 6 h and 24 h — and 24 h from then on. A licence server that is down, erroring or unable to sign (an
+		 * old plugin version stays installed for years) is therefore asked at most once a day per site and
+		 * plugin once the ramp is over.
 		 *
 		 * @since 2.0.2
 		 *
-		 * @var int
+		 * @var int[]
 		 */
-		public const CLAIM_REFRESH_THROTTLE = 15 * MINUTE_IN_SECONDS;
+		public const CLAIM_REFRESH_BACKOFF = [
+			15 * MINUTE_IN_SECONDS,
+			HOUR_IN_SECONDS,
+			6 * HOUR_IN_SECONDS,
+			DAY_IN_SECONDS,
+		];
+
+		/**
+		 * The suffix of the plugin option holding the backoff state (`failures`, `next_at`). A regular option
+		 * (autoload off), not a transient: a site whose object cache does not persist must not forget it.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var string
+		 */
+		public const CLAIM_REFRESH_STATE_OPTION = 'claim_refresh_state';
 
 		/**
 		 * The WP-Cron hook of one plugin's immediate claim refresh.
@@ -1181,6 +1201,17 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		 */
 		public static function get_claim_refresh_hook( Woodev_Plugin $plugin ): string {
 			return 'woodev_' . $plugin->get_id() . '_refresh_license_claim';
+		}
+
+		/**
+		 * The current Unix time — a seam so a test can move the clock.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return int
+		 */
+		protected function now(): int {
+			return time();
 		}
 
 		/**
@@ -1205,41 +1236,97 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		}
 
 		/**
-		 * Takes one of this plugin's two refresh slots: true at most once per {@see self::CLAIM_REFRESH_THROTTLE}
-		 * for each slot.
-		 *
-		 * The slots are independent on purpose: the buyer's scheduling slot (`claim_schedule`) must never hold
-		 * the manager's synchronous-attempt slot (`claim_refresh`), or a cron event that cannot run (WP-Cron off,
-		 * no system cron) would keep renewing the first and starve the second forever.
+		 * The stored backoff state, normalised.
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param string $slot `claim_schedule` (a buyer request queues the cron event) or `claim_refresh` (a
-		 *                     manager's request calls the licence server itself).
-		 *
-		 * @return bool whether the caller may proceed now.
+		 * @return array{failures: int, next_at: int}
 		 */
-		private function take_claim_refresh_slot( string $slot ): bool {
+		private function get_claim_refresh_state(): array {
 
-			$transient = $this->plugin->get_plugin_option_name( $slot );
+			$state = get_option( $this->plugin->get_plugin_option_name( self::CLAIM_REFRESH_STATE_OPTION ), [] );
 
-			if ( false !== get_transient( $transient ) ) {
+			return [
+				'failures' => is_array( $state ) ? max( 0, (int) ( $state['failures'] ?? 0 ) ) : 0,
+				'next_at'  => is_array( $state ) ? max( 0, (int) ( $state['next_at'] ?? 0 ) ) : 0,
+			];
+		}
+
+		/**
+		 * Whether the shared automatic-refresh budget is open: no attempt is owed a wait any more.
+		 *
+		 * Reading it spends nothing — the buyer's request uses it to decide whether queueing a cron event is
+		 * worth it, the budget itself is spent only by an attempt ({@see self::take_claim_refresh_budget()}).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		private function is_claim_refresh_window_open(): bool {
+			return $this->now() >= $this->get_claim_refresh_state()['next_at'];
+		}
+
+		/**
+		 * Spends this plugin's ONE automatic-refresh budget, shared by the buyer-queued cron run and the
+		 * manager's `admin_init` attempt: true when the window is open, and then the next window — one step
+		 * longer on the {@see self::CLAIM_REFRESH_BACKOFF} ladder — is written BEFORE the caller goes to the
+		 * network, so an attempt that dies mid-request still counts.
+		 *
+		 * A pending cron event holds nothing: a buyer only reads the window, so an event that cannot run
+		 * (WP-Cron off, no system cron) can never keep the manager's own attempt waiting.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool whether the caller may call the licence server now.
+		 */
+		private function take_claim_refresh_budget(): bool {
+
+			$state = $this->get_claim_refresh_state();
+			$now   = $this->now();
+
+			if ( $now < $state['next_at'] ) {
 				return false;
 			}
 
-			set_transient( $transient, time(), self::CLAIM_REFRESH_THROTTLE );
+			$failures = $state['failures'] + 1;
+			$ladder   = self::CLAIM_REFRESH_BACKOFF;
+
+			update_option(
+				$this->plugin->get_plugin_option_name( self::CLAIM_REFRESH_STATE_OPTION ),
+				[
+					'failures' => $failures,
+					'next_at'  => $now + $ladder[ min( $failures, count( $ladder ) ) - 1 ],
+				],
+				false
+			);
 
 			return true;
 		}
 
 		/**
-		 * Schedules ONE immediate WP-Cron refresh of the signed claim when {@see self::needs_claim_refresh()},
-		 * at most once per {@see self::CLAIM_REFRESH_THROTTLE} (#1270).
+		 * Forgets the backoff once a verified claim is stored — by an automatic attempt or by a human action
+		 * (activating or saving a key, «Проверить», the weekly check). Does nothing while the claim is missing.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		private function reset_claim_refresh_backoff_if_claimed(): void {
+
+			if ( null !== $this->get_authority_claims()->get_verified() ) {
+				delete_option( $this->plugin->get_plugin_option_name( self::CLAIM_REFRESH_STATE_OPTION ) );
+			}
+		}
+
+		/**
+		 * Schedules ONE immediate WP-Cron refresh of the signed claim when {@see self::needs_claim_refresh()}
+		 * and the automatic-refresh window is open (#1270).
 		 *
 		 * Safe in a buyer's request: it writes a cron entry and does no HTTP — the licence server is called by
-		 * {@see self::run_claim_refresh()} in the cron request. A pending event is left alone and does not
-		 * renew any slot; the manager's own synchronous attempt ({@see self::refresh_claim_on_admin_init()})
-		 * has a separate throttle, so buyer traffic can never starve it.
+		 * {@see self::run_claim_refresh()} in the cron request, which spends the shared budget. A pending event
+		 * is left alone and spends nothing; the manager's own attempt
+		 * ({@see self::refresh_claim_on_admin_init()}) draws from the same budget but is never held by the
+		 * event, so buyer traffic can never starve it.
 		 *
 		 * @since 2.0.2
 		 *
@@ -1247,23 +1334,24 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		 */
 		public function schedule_claim_refresh(): bool {
 
-			if ( ! $this->needs_claim_refresh() ) {
+			if ( ! $this->needs_claim_refresh() || ! $this->is_claim_refresh_window_open() ) {
 				return false;
 			}
 
 			$hook = self::get_claim_refresh_hook( $this->plugin );
 
-			if ( wp_next_scheduled( $hook ) || ! $this->take_claim_refresh_slot( 'claim_schedule' ) ) {
+			if ( wp_next_scheduled( $hook ) ) {
 				return false;
 			}
 
-			return false !== wp_schedule_single_event( time(), $hook );
+			return false !== wp_schedule_single_event( $this->now(), $hook );
 		}
 
 		/**
 		 * The scheduled refresh: one `check_license` round-trip, whose signed claim (if any) lands in the claim
-		 * store. A no-op when the claim has arrived in the meantime; a transport failure is swallowed — the
-		 * throttle, not a retry loop, decides when the next attempt comes.
+		 * store. A no-op when the claim has arrived in the meantime or when the shared budget is spent (the
+		 * manager's attempt used the window first); a transport failure is swallowed — the backoff, not a retry
+		 * loop, decides when the next attempt comes.
 		 *
 		 * @internal
 		 *
@@ -1273,21 +1361,35 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		 */
 		public function run_claim_refresh(): void {
 
-			if ( ! $this->needs_claim_refresh() ) {
+			if ( ! $this->needs_claim_refresh() || ! $this->take_claim_refresh_budget() ) {
 				return;
 			}
+
+			$this->attempt_claim_refresh();
+		}
+
+		/**
+		 * One licence-server round-trip for a missing claim; the budget is already spent by the caller.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		private function attempt_claim_refresh(): void {
 
 			try {
 				$this->validate_license( (string) $this->get_license() );
 			} catch ( \Throwable $throwable ) {
 				return;
 			}
+
+			$this->reset_claim_refresh_backoff_if_claimed();
 		}
 
 		/**
 		 * `admin_init`: a store manager's own request refreshes a missing claim at once (the cron entry may
-		 * not run on a site with WP-Cron off), at most once per {@see self::CLAIM_REFRESH_THROTTLE}, whether or
-		 * not a cron event is pending. After a successful refresh the now-pointless pending event is removed.
+		 * not run on a site with WP-Cron off) when the shared automatic-refresh window is open, whether or not
+		 * a cron event is pending. After a successful refresh the now-pointless pending event is removed.
 		 * Never for a buyer, an AJAX heartbeat or a cron run.
 		 *
 		 * @internal
@@ -1302,11 +1404,11 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 				return;
 			}
 
-			if ( ! $this->needs_claim_refresh() || ! $this->take_claim_refresh_slot( 'claim_refresh' ) ) {
+			if ( ! $this->needs_claim_refresh() || ! $this->take_claim_refresh_budget() ) {
 				return;
 			}
 
-			$this->run_claim_refresh();
+			$this->attempt_claim_refresh();
 
 			if ( ! $this->needs_claim_refresh() ) {
 				wp_clear_scheduled_hook( self::get_claim_refresh_hook( $this->plugin ) );

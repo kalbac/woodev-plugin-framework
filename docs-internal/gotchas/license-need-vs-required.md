@@ -62,8 +62,8 @@ reading `is_need_license()` or the status option instead.
 Two rules that follow from it. A carrier's OWN order action (declared through `woodev_shipping_order_actions`) is gated by
 default — `Order_Actions::perform()` refuses it before `woodev_shipping_perform_order_action` runs — unless its declaration
 carries `'read_only' => true`. And a stored key with no usable claim (absent, or past its own 14 days) is refreshed promptly:
-`Woodev_Plugins_License::schedule_claim_refresh()` (a cron event, at most once per 15 minutes per plugin; asked by a refused
-checkout, by activation / upgrade) and `refresh_claim_on_admin_init()` for a store manager — a synchronous refresh on its OWN 15-minute throttle (separate from the buyer's scheduling slot, so a cron event that cannot run on a WP-Cron-off site never starves it), which unschedules the pending event once a claim lands. A verified claim that SAYS
+`Woodev_Plugins_License::schedule_claim_refresh()` (queues a cron event; asked by a refused
+checkout, by activation / upgrade) and `refresh_claim_on_admin_init()` for a store manager (a synchronous refresh that unschedules the pending event once a claim lands). Both automatic paths draw from ONE per-plugin budget with exponential backoff — 15 min, 1 h, 6 h, then 24 h forever — kept in the autoload-off option `woodev_{id}_claim_refresh_state` (`failures`, `next_at`; a regular option so a broken object cache cannot reset it), written BEFORE the HTTP call and cleared when a verified claim is stored. A pending cron event never holds the budget (only the attempt spends it), so a cron that cannot run on a WP-Cron-off site cannot starve the manager. Human actions (activate, save, «Проверить», the weekly check) are never throttled. Why so strict: old plugin versions stay installed for years, and a licence server that cannot answer must not be hit more than once a day per site and plugin. A verified claim that SAYS
 `expired` is the server's answer and is NOT re-fetched on that path — only the weekly check renews it.
 
 ## Related

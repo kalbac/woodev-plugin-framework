@@ -33,7 +33,7 @@ class LicenseInForceTest extends TestCase {
 	private const CLAIM_OPTION = 'woodev_test_plugin_license_required';
 
 	/** @var int the moment the tests live at */
-	private const NOW = 1800000000;
+	public const NOW = 1800000000;
 
 	/** @var array<string, mixed> the in-memory option table */
 	private array $options = [];
@@ -66,6 +66,13 @@ class LicenseInForceTest extends TestCase {
 		Functions\when( 'update_option' )->alias(
 			function ( $name, $value ) {
 				$this->options[ $name ] = $value;
+
+				return true;
+			}
+		);
+		Functions\when( 'delete_option' )->alias(
+			function ( $name ) {
+				unset( $this->options[ $name ] );
 
 				return true;
 			}
@@ -600,32 +607,26 @@ class LicenseInForceTest extends TestCase {
 
 	// ---- prompt refresh of a missing claim (round 2) --------------------------------------------------------
 
-	/** @var array<string, mixed> the in-memory transient table */
-	private array $transients = [];
+	/** @var string the option the automatic-refresh backoff state lives in */
+	private const STATE_OPTION = 'woodev_test_plugin_claim_refresh_state';
 
 	/** @var string[] the single events scheduled so far (hook names) */
 	private array $scheduled = [];
 
 	/**
-	 * An engine around a stored key, a real claim store and in-memory cron / transients; its
-	 * validate_license() only counts the calls.
+	 * An engine around a stored key, a real claim store, in-memory cron / options and a movable clock
+	 * (`$license->clock`); its validate_license() only counts the calls.
 	 *
 	 * @param string $key         the stored licence key ('' = none).
 	 * @param int    $download_id the plugin's download id.
 	 * @return \Woodev_Plugins_License
 	 */
 	private function refreshing_engine( string $key = 'KEY-1', int $download_id = 9001 ): \Woodev_Plugins_License {
-		$this->transients = [];
-		$this->scheduled  = [];
+		$this->scheduled = [];
 
-		Functions\when( 'get_transient' )->alias( fn( $name ) => $this->transients[ $name ] ?? false );
-		Functions\when( 'set_transient' )->alias(
-			function ( $name, $value ) {
-				$this->transients[ $name ] = $value;
-
-				return true;
-			}
-		);
+		// A site whose object cache does not persist: a transient never reads back. The backoff must not need one.
+		Functions\when( 'get_transient' )->justReturn( false );
+		Functions\when( 'set_transient' )->justReturn( true );
 		Functions\when( 'wp_next_scheduled' )->alias( fn( $hook ) => in_array( $hook, $this->scheduled, true ) ? self::NOW : false );
 		Functions\when( 'wp_clear_scheduled_hook' )->alias(
 			function ( $hook ) {
@@ -645,18 +646,24 @@ class LicenseInForceTest extends TestCase {
 		$plugin = Mockery::mock( \Woodev_Plugin::class );
 		$plugin->shouldReceive( 'get_download_id' )->andReturn( $download_id );
 		$plugin->shouldReceive( 'get_id' )->andReturn( 'test_plugin' );
-		$plugin->shouldReceive( 'get_plugin_option_name' )->with( 'claim_refresh' )->andReturn( 'woodev_test_plugin_claim_refresh' );
-		$plugin->shouldReceive( 'get_plugin_option_name' )->with( 'claim_schedule' )->andReturn( 'woodev_test_plugin_claim_schedule' );
+		$plugin->shouldReceive( 'get_plugin_option_name' )->with( 'claim_refresh_state' )->andReturn( self::STATE_OPTION );
 
 		$license = new class() extends \Woodev_Plugins_License {
 
 			/** @var string[] the keys validate_license() was called with */
 			public array $validated = [];
 
+			/** @var int the clock the backoff sees */
+			public int $clock = LicenseInForceTest::NOW;
+
 			/** @var callable|null runs inside validate_license() — lets a test land a claim as a real refresh would */
 			public $on_validate = null;
 
 			public function __construct() {}
+
+			protected function now(): int {
+				return $this->clock;
+			}
 
 			public function validate_license( $license = '', $deprecated = false, $ajax = false ) {
 				$this->validated[] = $license;
@@ -686,34 +693,32 @@ class LicenseInForceTest extends TestCase {
 	/**
 	 * @return void
 	 */
-	public function test_a_key_with_no_claim_schedules_one_refresh_and_the_second_call_is_throttled(): void {
+	public function test_a_key_with_no_claim_schedules_one_refresh_and_never_doubles_the_pending_event(): void {
 		$license = $this->refreshing_engine();
 
 		$this->assertTrue( $license->needs_claim_refresh() );
 		$this->assertTrue( $license->schedule_claim_refresh() );
 		$this->assertSame( [ 'woodev_test_plugin_refresh_license_claim' ], $this->scheduled );
 
-		$this->assertFalse( $license->schedule_claim_refresh(), 'the second call within the window schedules nothing' );
+		$this->assertFalse( $license->schedule_claim_refresh(), 'a pending event is never doubled' );
 		$this->assertCount( 1, $this->scheduled );
 		$this->assertSame( [], $license->validated, 'scheduling does no licence-server call' );
+		$this->assertArrayNotHasKey( self::STATE_OPTION, $this->options, 'and spends none of the budget' );
 	}
 
 	/**
 	 * @return void
 	 */
-	public function test_the_throttle_window_ends_and_a_pending_event_is_not_doubled(): void {
+	public function test_a_buyer_schedules_only_while_the_window_is_open(): void {
 		$license = $this->refreshing_engine();
-		$license->schedule_claim_refresh();
+		$license->run_claim_refresh(); // Fails: the next window opens in 15 minutes.
+		$this->assertSame( [ 'KEY-1' ], $license->validated );
 
-		// The window has passed but the event is still waiting for cron: still a single event.
-		$this->transients = [];
-		$this->assertFalse( $license->schedule_claim_refresh() );
-		$this->assertCount( 1, $this->scheduled );
+		$this->assertFalse( $license->schedule_claim_refresh(), 'inside the window nothing is queued' );
+		$this->assertSame( [], $this->scheduled );
 
-		// The event ran (and found nothing); the next window may schedule again.
-		$this->scheduled  = [];
-		$this->transients = [];
-		$this->assertTrue( $license->schedule_claim_refresh() );
+		$license->clock += 15 * MINUTE_IN_SECONDS;
+		$this->assertTrue( $license->schedule_claim_refresh(), 'the window is open again' );
 	}
 
 	/**
@@ -780,10 +785,8 @@ class LicenseInForceTest extends TestCase {
 	/**
 	 * @return void
 	 */
-	public function test_a_manager_in_admin_refreshes_at_once_under_the_same_throttle(): void {
-		Functions\when( 'wp_doing_ajax' )->justReturn( false );
-		Functions\when( 'wp_doing_cron' )->justReturn( false );
-		Functions\when( 'current_user_can' )->alias( static fn( $cap ) => 'manage_woocommerce' === $cap );
+	public function test_a_manager_in_admin_refreshes_at_once_under_the_same_budget(): void {
+		$this->as_manager();
 
 		$license = $this->refreshing_engine();
 		$license->refresh_claim_on_admin_init();
@@ -794,23 +797,20 @@ class LicenseInForceTest extends TestCase {
 
 	/**
 	 * The round-3 starvation: with WP-Cron off the scheduled event never runs, and buyer traffic keeps asking
-	 * for it. The manager's own synchronous refresh must still happen — once per window — and must clear the
-	 * pending event when it lands a claim.
+	 * for it. The manager's own synchronous refresh must still happen when the window opens — event or not —
+	 * and must clear the pending event when it lands a claim.
 	 *
 	 * @return void
 	 */
-	public function test_buyer_scheduling_never_starves_the_managers_synchronous_refresh(): void {
-		Functions\when( 'wp_doing_ajax' )->justReturn( false );
-		Functions\when( 'wp_doing_cron' )->justReturn( false );
-		Functions\when( 'current_user_can' )->alias( static fn( $cap ) => 'manage_woocommerce' === $cap );
+	public function test_a_pending_cron_event_does_not_block_the_admin_path_once_the_window_opens(): void {
+		$this->as_manager();
 
 		$license = $this->refreshing_engine();
 		$hook    = 'woodev_test_plugin_refresh_license_claim';
 
-		// Checkout traffic: one event is queued, then window after window of buyers meet it still pending.
+		// Checkout traffic: one event is queued, then buyers keep meeting it pending.
 		$this->assertTrue( $license->schedule_claim_refresh() );
-		for ( $window = 0; $window < 3; $window++ ) {
-			unset( $this->transients['woodev_test_plugin_claim_schedule'] );
+		for ( $i = 0; $i < 3; $i++ ) {
 			$this->assertFalse( $license->schedule_claim_refresh() );
 		}
 		$this->assertSame( [ $hook ], $this->scheduled, 'the event stays pending, never doubled' );
@@ -828,15 +828,13 @@ class LicenseInForceTest extends TestCase {
 	}
 
 	/**
-	 * A failed manager refresh leaves the event alone, and the admin throttle holds for the whole window even
-	 * while buyers keep scheduling.
+	 * The buyer-queued cron run and the manager's admin_init draw from ONE budget: whichever comes first
+	 * spends the window, the other waits for the next one.
 	 *
 	 * @return void
 	 */
-	public function test_a_second_admin_init_inside_the_window_makes_no_second_attempt(): void {
-		Functions\when( 'wp_doing_ajax' )->justReturn( false );
-		Functions\when( 'wp_doing_cron' )->justReturn( false );
-		Functions\when( 'current_user_can' )->alias( static fn( $cap ) => 'manage_woocommerce' === $cap );
+	public function test_the_buyer_cron_run_and_the_admin_path_share_one_window(): void {
+		$this->as_manager();
 
 		$license = $this->refreshing_engine();
 		$license->schedule_claim_refresh();
@@ -844,11 +842,234 @@ class LicenseInForceTest extends TestCase {
 		$license->refresh_claim_on_admin_init(); // The server is unreachable: no claim arrives.
 		$this->assertSame( [ 'woodev_test_plugin_refresh_license_claim' ], $this->scheduled, 'a failed refresh keeps the event' );
 
-		unset( $this->transients['woodev_test_plugin_claim_schedule'] );
-		$license->schedule_claim_refresh();
+		$license->run_claim_refresh(); // The queued event finally runs, inside the window the admin spent.
 		$license->refresh_claim_on_admin_init();
+		$this->assertSame( [ 'KEY-1' ], $license->validated, 'one automatic attempt per window, whichever path' );
 
-		$this->assertSame( [ 'KEY-1' ], $license->validated, 'one admin attempt per window, buyers or not' );
+		$license->clock += 15 * MINUTE_IN_SECONDS;
+		$license->run_claim_refresh(); // Now the cron run has the window.
+		$license->refresh_claim_on_admin_init();
+		$this->assertSame( [ 'KEY-1', 'KEY-1' ], $license->validated );
+	}
+
+	/**
+	 * @return void
+	 */
+	private function as_manager(): void {
+		Functions\when( 'wp_doing_ajax' )->justReturn( false );
+		Functions\when( 'wp_doing_cron' )->justReturn( false );
+		Functions\when( 'current_user_can' )->alias( static fn( $cap ) => 'manage_woocommerce' === $cap );
+	}
+
+	/**
+	 * Consecutive attempts that end without a verified claim wait 15 min, 1 h, 6 h, 24 h, then 24 h again.
+	 *
+	 * @return void
+	 */
+	public function test_the_backoff_ladder_is_15_minutes_1_hour_6_hours_then_24_hours(): void {
+		$license = $this->refreshing_engine();
+
+		foreach ( [ 15 * MINUTE_IN_SECONDS, HOUR_IN_SECONDS, 6 * HOUR_IN_SECONDS, DAY_IN_SECONDS, DAY_IN_SECONDS, DAY_IN_SECONDS ] as $attempt => $wait ) {
+			$before = count( $license->validated );
+			$license->run_claim_refresh();
+			$this->assertCount( $before + 1, $license->validated, "attempt #{$attempt} goes out" );
+			$this->assertSame( $attempt + 1, $this->options[ self::STATE_OPTION ]['failures'] );
+			$this->assertSame( $license->clock + $wait, $this->options[ self::STATE_OPTION ]['next_at'] );
+
+			$license->clock += $wait - 1;
+			$license->run_claim_refresh();
+			$this->assertCount( $before + 1, $license->validated, "one second early: attempt #{$attempt} is followed by nothing" );
+
+			$license->clock += 1;
+		}
+	}
+
+	/**
+	 * The state is written BEFORE the HTTP call: an attempt that dies mid-request still counts.
+	 *
+	 * @return void
+	 */
+	public function test_the_state_is_written_before_the_licence_server_is_called(): void {
+		$license              = $this->refreshing_engine();
+		$seen                 = null;
+		$license->on_validate = function () use ( &$seen ) {
+			$seen = $this->options[ self::STATE_OPTION ] ?? null;
+			throw new \RuntimeException( 'the request died' );
+		};
+
+		$license->run_claim_refresh();
+
+		$this->assertSame( [ 'failures' => 1, 'next_at' => self::NOW + 15 * MINUTE_IN_SECONDS ], $seen );
+		$license->run_claim_refresh();
+		$this->assertCount( 1, $license->validated, 'and the dead attempt still holds the window' );
+	}
+
+	/**
+	 * A verified claim stored afterwards — whatever it says — resets the counter.
+	 *
+	 * @return void
+	 */
+	public function test_a_verified_claim_resets_the_backoff(): void {
+		foreach ( [ 'valid', 'expired' ] as $status ) {
+			$this->options = [];
+			$license       = $this->refreshing_engine();
+			$license->run_claim_refresh();
+			$license->clock += 15 * MINUTE_IN_SECONDS;
+			$license->run_claim_refresh();
+			$this->assertSame( 2, $this->options[ self::STATE_OPTION ]['failures'], $status );
+
+			$license->clock      += HOUR_IN_SECONDS;
+			$license->on_validate = function () use ( $license, $status ) {
+				$license->get_authority_claims()->consume_from_response( [ 'license_authority' => $this->sign( $this->paid( [ 'license_status' => $status ] ) ) ] );
+			};
+			$license->run_claim_refresh();
+
+			$this->assertArrayNotHasKey( self::STATE_OPTION, $this->options, $status );
+		}
+	}
+
+	/**
+	 * A failure under a broken object cache: get_transient() never returns anything, yet the wait holds.
+	 *
+	 * @return void
+	 */
+	public function test_the_backoff_survives_an_object_cache_that_does_not_persist(): void {
+		$this->as_manager();
+		$license = $this->refreshing_engine(); // get_transient() is always false here.
+
+		for ( $i = 0; $i < 20; $i++ ) {
+			$license->schedule_claim_refresh();
+			$license->run_claim_refresh();
+			$license->refresh_claim_on_admin_init();
+		}
+
+		$this->assertCount( 1, $license->validated, 'twenty cron runs inside one window: one attempt' );
+	}
+
+	/**
+	 * The REAL validate_license() — the body of the weekly check and of «Проверить» — never consults the
+	 * automatic window, and a signed claim riding its response clears the backoff.
+	 *
+	 * @return void
+	 */
+	public function test_a_manual_check_ignores_the_window_and_resets_it_when_a_claim_lands(): void {
+		$license = $this->refreshing_engine();
+		$license->run_claim_refresh();
+		$this->options[ self::STATE_OPTION ] = [ 'failures' => 4, 'next_at' => self::NOW + DAY_IN_SECONDS ];
+
+		$plugin = Mockery::mock( \Woodev_Plugin::class );
+		$plugin->shouldReceive( 'get_download_id' )->andReturn( 9001 );
+		$plugin->shouldReceive( 'get_version' )->andReturn( '2.0.0' );
+		$plugin->shouldReceive( 'get_plugin_name' )->andReturn( 'Test Plugin' );
+		$plugin->shouldReceive( 'get_plugin_option_name' )->with( 'claim_refresh_state' )->andReturn( self::STATE_OPTION );
+
+		$response = new class( [ 'license_authority' => $this->sign( $this->paid() ) ] ) {
+			public $license = 'valid';
+			public $success = true;
+			public $error   = null;
+			public $expires = null;
+
+			private array $data;
+
+			public function __construct( array $data ) {
+				$this->data = $data;
+			}
+
+			public function get_response_data() {
+				return $this->data;
+			}
+		};
+
+		$api = Mockery::mock();
+		$api->shouldReceive( 'make_request' )->once()->andReturn( $response );
+
+		$stored = Mockery::mock( \Woodev_License::class );
+		$stored->shouldReceive( 'update' )->once();
+		$stored->license   = 'valid';
+		$stored->success   = true;
+		$stored->item_name = 'Test Plugin';
+
+		$real = ( new \ReflectionClass( \Woodev_Plugins_License::class ) )->newInstanceWithoutConstructor();
+		foreach ( [
+			'plugin'           => $plugin,
+			'authority_claims' => $this->claims(),
+			'license_key'      => 'KEY-1',
+			'api_handler'      => $api,
+			'woodev_license'   => $stored,
+			'item_name'        => 'Test Plugin',
+		] as $property => $value ) {
+			$this->set_private_property( $real, $property, $value );
+		}
+
+		Functions\when( 'current_time' )->justReturn( self::NOW );
+
+		$real->validate_license( 'KEY-1' ); // Goes out although the automatic window is shut for a day.
+
+		$this->assertArrayNotHasKey( self::STATE_OPTION, $this->options, 'and the verified claim clears the backoff' );
+	}
+
+	/**
+	 * No key, no store product, or a signed statement (even `invalid`) → zero automatic attempts, ever.
+	 *
+	 * @return void
+	 */
+	public function test_no_key_no_store_product_and_a_signed_invalid_claim_make_zero_attempts(): void {
+		$this->as_manager();
+
+		$engines = [
+			'no key'        => $this->refreshing_engine( '' ),
+			'no product'    => $this->refreshing_engine( 'KEY-1', 0 ),
+			'signed invalid' => $this->refreshing_engine(),
+		];
+		$engines['signed invalid']->get_authority_claims()->consume_from_response( [ 'license_authority' => $this->sign( $this->paid( [ 'license_status' => 'invalid' ] ) ) ] );
+
+		foreach ( $engines as $label => $engine ) {
+			for ( $hour = 0; $hour < 72; $hour++ ) {
+				$engine->clock += HOUR_IN_SECONDS;
+				$engine->schedule_claim_refresh();
+				$engine->run_claim_refresh();
+				$engine->refresh_claim_on_admin_init();
+			}
+			$this->assertSame( [], $engine->validated, $label );
+		}
+		$this->assertSame( [], $this->scheduled );
+		$this->assertArrayNotHasKey( self::STATE_OPTION, $this->options );
+	}
+
+	/**
+	 * Worst case: a licence server that never gives a claim, buyers and a manager hitting the site every
+	 * minute for three days. Ramp: 15 min, 1 h, 6 h; after that one attempt per 24 h.
+	 *
+	 * @return void
+	 */
+	public function test_a_permanently_failing_server_is_called_at_most_once_a_day_after_the_ramp(): void {
+		$this->as_manager();
+		$license = $this->refreshing_engine();
+		$start   = $license->clock;
+
+		$attempts_at = [];
+		$seen        = 0;
+		for ( $minute = 0; $minute < 3 * 24 * 60; $minute++ ) {
+			$license->clock = $start + $minute * MINUTE_IN_SECONDS;
+			$license->schedule_claim_refresh();
+			if ( $minute % 2 ) {
+				$license->run_claim_refresh();
+			}
+			$license->refresh_claim_on_admin_init();
+			$this->scheduled = [];
+
+			if ( count( $license->validated ) > $seen ) {
+				$attempts_at[] = $license->clock - $start;
+				$seen          = count( $license->validated );
+			}
+		}
+
+		$this->assertSame(
+			[ 0, 15 * 60, 75 * 60, 435 * 60, 1875 * 60, 3315 * 60 ],
+			array_map( static fn( $s ) => (int) ( $s / 60 ) * 60, $attempts_at ),
+			'0, +15 min, +1 h, +6 h, then every 24 h'
+		);
+		$this->assertCount( 6, $license->validated, 'six requests in three days, three of them in the first 7.5 hours' );
 	}
 
 	/**
