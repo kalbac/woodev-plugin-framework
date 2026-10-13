@@ -348,6 +348,138 @@ final class OrderActionsRefusalTest extends TestCase {
 		$this->assertContains( Order_Actions::CANCEL, $this->offered( $order ), 'offered, then refused on click — not hidden' );
 	}
 
+	/**
+	 * Registers the carrier's plugin with a licence engine that answers `$in_force`, and makes the two filters of a
+	 * carrier's own action behave like a carrier plugin that hooked them: `woodev_shipping_order_actions` declares
+	 * `$declared`, `woodev_shipping_perform_order_action` counts how often it ran and succeeds.
+	 *
+	 * @param bool                           $in_force whether the licence is in force.
+	 * @param array<int,array<string,mixed>> $declared the carrier's own actions.
+	 * @param int                            $performed counts the runs of the perform filter.
+	 * @return void
+	 */
+	private function with_a_carrier_action( bool $in_force, array $declared, int &$performed ): void {
+		Functions\when( 'admin_url' )->alias( static fn( string $path = '' ): string => 'https://shop.test/wp-admin/' . $path );
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $hook, $value = null ) use ( $declared, &$performed ) {
+				if ( 'woodev_shipping_order_actions' === $hook ) {
+					return array_merge( $value, $declared );
+				}
+
+				if ( 'woodev_shipping_perform_order_action' === $hook ) {
+					++$performed;
+
+					return Action_Result::success();
+				}
+
+				return $value;
+			}
+		);
+
+		$engine = Mockery::mock( \Woodev_Plugins_License::class );
+		$engine->shouldReceive( 'is_license_in_force' )->andReturn( $in_force );
+		$plugin = Mockery::mock( \Woodev\Framework\Shipping\Shipping_Plugin::class );
+		$plugin->shouldReceive( 'get_download_id' )->andReturn( 9001 );
+		$plugin->shouldReceive( 'get_license_instance' )->andReturn( $engine );
+		Orders_Registry::instance()->register_provider( $this->provider(), $plugin );
+	}
+
+	/**
+	 * Round 2 (#1270): a carrier's own action — CDEK's courier call, Yandex's interval export — is a NEW carrier
+	 * operation. Gated by default: refused with the licence sentence before the carrier's filter ever runs.
+	 */
+	public function test_a_carriers_own_action_is_refused_without_a_licence_and_its_filter_never_runs(): void {
+		$performed = 0;
+		$this->with_a_carrier_action( false, [ [ 'action' => 'cdek_intake', 'label' => 'Вызвать курьера' ] ], $performed );
+
+		$handler = $this->handler();
+		$order   = $this->order();
+
+		$result = $this->actions()->perform( $handler, $order, 'cdek_intake', $this->provider() );
+
+		$this->assertSame( 0, $performed, 'the carrier plugin\'s callback is not reached' );
+		$this->assertFalse( $result->is_success() );
+		$this->assertTrue( $result->is_license_refused() );
+		$this->assertStringContainsString( 'выполнить действие «Вызвать курьера»', $result->get_message() );
+		$this->assertStringContainsString( 'https://shop.test/wp-admin/admin.php?page=woodev-licenses', $result->get_message() );
+	}
+
+	public function test_an_action_the_carrier_never_declared_is_gated_too(): void {
+		$performed = 0;
+		$this->with_a_carrier_action( false, [], $performed );
+
+		$result = $this->actions()->perform( $this->handler(), $this->order(), 'ghost', $this->provider() );
+
+		$this->assertSame( 0, $performed );
+		$this->assertTrue( $result->is_license_refused() );
+		$this->assertStringContainsString( '«ghost»', $result->get_message() );
+	}
+
+	public function test_a_carrier_action_declared_read_only_still_runs_without_a_licence(): void {
+		$performed = 0;
+		$this->with_a_carrier_action( false, [ [ 'action' => 'cdek_lookup', 'label' => 'Справка', 'read_only' => true ] ], $performed );
+
+		$result = $this->actions()->perform( $this->handler(), $this->order(), 'cdek_lookup', $this->provider() );
+
+		$this->assertSame( 1, $performed );
+		$this->assertTrue( $result->is_success() );
+	}
+
+	public function test_only_a_strict_true_makes_an_action_read_only(): void {
+		$performed = 0;
+		$this->with_a_carrier_action( false, [ [ 'action' => 'cdek_x', 'label' => 'X', 'read_only' => 'yes' ] ], $performed );
+
+		$result = $this->actions()->perform( $this->handler(), $this->order(), 'cdek_x', $this->provider() );
+
+		$this->assertSame( 0, $performed );
+		$this->assertTrue( $result->is_license_refused() );
+	}
+
+	public function test_the_read_only_flag_survives_the_declaration_sanitising_and_is_absent_otherwise(): void {
+		$performed = 0;
+		$this->with_a_carrier_action(
+			false,
+			[
+				[ 'action' => 'cdek_lookup', 'label' => 'Справка', 'read_only' => true ],
+				[ 'action' => 'cdek_call', 'label' => 'Вызов' ],
+			],
+			$performed
+		);
+		$handler = $this->handler();
+		$order   = $this->order();
+
+		$by_id = array_column( $this->actions()->for_order( $order, $this->provider() ), null, 'action' );
+
+		$this->assertTrue( $by_id['cdek_lookup']['read_only'] );
+		$this->assertArrayNotHasKey( 'read_only', $by_id['cdek_call'] );
+		$this->assertArrayNotHasKey( 'read_only', $by_id[ Order_Actions::EXPORT ] ?? [], 'a framework verb never carries it' );
+		$this->assertNotNull( $handler );
+	}
+
+	public function test_a_carriers_own_action_runs_when_the_licence_is_in_force(): void {
+		$performed = 0;
+		$this->with_a_carrier_action( true, [ [ 'action' => 'cdek_intake', 'label' => 'Вызвать курьера' ] ], $performed );
+
+		$result = $this->actions()->perform( $this->handler(), $this->order(), 'cdek_intake', $this->provider() );
+
+		$this->assertSame( 1, $performed );
+		$this->assertTrue( $result->is_success() );
+	}
+
+	public function test_the_built_in_update_still_runs_without_a_licence_next_to_a_gated_custom_action(): void {
+		$performed = 0;
+		$this->with_a_carrier_action( false, [ [ 'action' => 'cdek_intake', 'label' => 'Вызвать курьера' ] ], $performed );
+
+		$handler = $this->handler( [ Delivery_Status::IN_TRANSIT ], true );
+		$order   = $this->order();
+		$handler->shouldReceive( 'update' )->once()->with( $order )->andReturn( Action_Result::success() );
+
+		$result = $this->actions()->perform( $handler, $order, Order_Actions::UPDATE, $this->provider() );
+
+		$this->assertTrue( $result->is_success() );
+		$this->assertSame( 0, $performed );
+	}
+
 	public function test_a_successful_refusal_closes_the_action_for_that_shipment(): void {
 		$this->handler( [ Delivery_Status::IN_TRANSIT ], true );
 
