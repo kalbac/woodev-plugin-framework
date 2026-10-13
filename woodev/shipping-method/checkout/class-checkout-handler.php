@@ -424,6 +424,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			// Static for the same reason: one callback however many plugins register (#1087).
 			add_filter( 'woocommerce_cart_shipping_packages', [ self::class, 'add_location_provenance_to_packages' ] );
 
+			// Static for the same reason, and last (priority 999) so it follows every carrier's own
+			// checkout write: the order keeps the data of the carrier it was placed with (#1260).
+			add_action( 'woocommerce_checkout_order_processed', [ \Woodev\Framework\Shipping\Order\Unchosen_Carrier_Cleaner::class, 'handle_checkout_order_processed' ], 999, 3 );
+			add_action( 'woocommerce_store_api_checkout_order_processed', [ \Woodev\Framework\Shipping\Order\Unchosen_Carrier_Cleaner::class, 'handle_store_api_order_processed' ], 999 );
+
 			$this->guard_native_field_conflicts();
 		}
 

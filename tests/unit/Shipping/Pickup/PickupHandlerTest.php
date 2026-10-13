@@ -7177,7 +7177,10 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				$selection
 			);
 
-			$handler->handle_checkout_order_processed( 1, [], new \WC_Order() );
+			$order = \Mockery::mock( \WC_Order::class );
+			$order->shouldReceive( 'get_items' )->andReturn( [] );
+
+			$handler->handle_checkout_order_processed( 1, [], $order );
 
 			$this->assertNull( $selection->recall( 'msk', 'pvz' ), 'the selection map must be cleared on order creation' );
 		}
@@ -7197,6 +7200,194 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$handler->handle_checkout_order_processed( 1, [], new \WC_Order() );
 
 			$this->assertTrue( true );
+		}
+
+		// -------------------------------------------------------------------
+		// #1260 (Y15 F3): the classic checkout keeps / checks the posted point only for the
+		// carrier whose method is chosen.
+		// -------------------------------------------------------------------
+
+		/**
+		 * A scope that serves `own_pickup` with a pickup type and no other method.
+		 */
+		private function own_pickup_scope(): Pickup_Handler_Selection_Test_Scope {
+			return new Pickup_Handler_Selection_Test_Scope(
+				'key',
+				static fn( Pickup_Point $point ) => 'msk',
+				static fn() => 'msk',
+				static fn( string $method_id ) => 'own_pickup' === $method_id ? 'pvz' : null
+			);
+		}
+
+		/**
+		 * An order whose only shipping line was placed with `$method_id`.
+		 */
+		private function order_shipped_with( string $method_id ): \WC_Order {
+			// A real method, not a Mockery expectation: the handler guards with `method_exists()`.
+			$line = new class( $method_id ) {
+				private string $method_id;
+
+				public function __construct( string $method_id ) {
+					$this->method_id = $method_id;
+				}
+
+				public function get_method_id(): string {
+					return $this->method_id;
+				}
+			};
+
+			$order = \Mockery::mock( \WC_Order::class );
+			$order->shouldReceive( 'get_items' )->andReturn( [ $line ] );
+			$order->shouldReceive( 'get_id' )->andReturn( 123 );
+
+			return $order;
+		}
+
+		public function test_checkout_order_processed_does_not_store_a_point_posted_for_another_carriers_method(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\expect( 'update_post_meta' )->never();
+
+			$_POST   = [ 'pickup_point' => 'P1' ];
+			$handler = $this->make_handler(
+				[
+					'field_id'            => 'pickup_point',
+					'source'              => $this->source_returning( $this->point() ),
+					'order_handler'       => new Shipping_Order_Handler( [ 'pickup_full' => 'own_full_point' ] ),
+					'point_field_logical' => 'pickup_full',
+					'selection_scope'     => $this->own_pickup_scope(),
+				]
+			);
+
+			$handler->handle_checkout_order_processed( 1, [], $this->order_shipped_with( 'other_carrier_pickup' ) );
+
+			$this->assertTrue( true );
+		}
+
+		public function test_checkout_order_processed_does_not_store_a_point_on_an_order_with_no_shipping_line(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\expect( 'update_post_meta' )->never();
+
+			$order = \Mockery::mock( \WC_Order::class );
+			$order->shouldReceive( 'get_items' )->andReturn( [] );
+
+			$_POST   = [ 'pickup_point' => 'P1' ];
+			$handler = $this->make_handler(
+				[
+					'field_id'            => 'pickup_point',
+					'source'              => $this->source_returning( $this->point() ),
+					'order_handler'       => new Shipping_Order_Handler( [ 'pickup_full' => 'own_full_point' ] ),
+					'point_field_logical' => 'pickup_full',
+					'selection_scope'     => $this->own_pickup_scope(),
+				]
+			);
+
+			$handler->handle_checkout_order_processed( 1, [], $order );
+
+			$this->assertTrue( true );
+		}
+
+		public function test_checkout_order_processed_stores_the_point_for_its_own_method(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+
+			$captured = [];
+			Functions\when( 'update_post_meta' )->alias(
+				static function ( $id, $key, $value ) use ( &$captured ) {
+					$captured[] = $key;
+
+					return true;
+				}
+			);
+
+			$_POST   = [ 'pickup_point' => 'P1' ];
+			$handler = $this->make_handler(
+				[
+					'field_id'            => 'pickup_point',
+					'source'              => $this->source_returning( $this->point() ),
+					'order_handler'       => new Shipping_Order_Handler( [ 'pickup_full' => 'own_full_point' ] ),
+					'point_field_logical' => 'pickup_full',
+					'selection_scope'     => $this->own_pickup_scope(),
+				]
+			);
+
+			$handler->handle_checkout_order_processed( 1, [], $this->order_shipped_with( 'own_pickup' ) );
+
+			$this->assertSame( [ 'own_full_point' ], $captured );
+		}
+
+		public function test_checkout_process_does_not_check_a_point_posted_for_another_carriers_method(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\expect( 'wc_add_notice' )->never();
+
+			$fetched = 0;
+			$source  = new Pickup_Handler_Test_Source(
+				Point_Source::STRATEGY_BULK,
+				static function ( string $id ) use ( &$fetched ) {
+					++$fetched;
+
+					return null;
+				}
+			);
+
+			$_POST   = [
+				'pickup_point'    => 'STALE-FOREIGN',
+				'shipping_method' => [ 'other_carrier_pickup:7' ],
+			];
+			$handler = $this->make_handler(
+				[
+					'field_id'        => 'pickup_point',
+					'source'          => $source,
+					'selection_scope' => $this->own_pickup_scope(),
+				]
+			);
+
+			$handler->handle_checkout_process();
+
+			$this->assertSame( 0, $fetched, 'a stale point of a carrier the buyer left is not looked up' );
+		}
+
+		public function test_checkout_process_still_checks_a_point_posted_for_its_own_method(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( '__' )->returnArg( 1 );
+
+			$fetched = 0;
+			$source  = new Pickup_Handler_Test_Source(
+				Point_Source::STRATEGY_BULK,
+				static function ( string $id ) use ( &$fetched ) {
+					++$fetched;
+
+					return null;
+				}
+			);
+
+			$_POST   = [
+				'pickup_point'    => 'P1',
+				'shipping_method' => [ 'own_pickup:7' ],
+			];
+			$handler = $this->make_handler(
+				[
+					'field_id'        => 'pickup_point',
+					'source'          => $source,
+					'selection_scope' => $this->own_pickup_scope(),
+				]
+			);
+
+			Functions\expect( 'wc_add_notice' )->once();
+			$handler->handle_checkout_process();
+
+			$this->assertSame( 1, $fetched );
+		}
+
+		public function test_order_meta_keys_lists_the_slot_and_every_mapped_point_key(): void {
+			$handler = $this->make_handler(
+				[
+					'field_id'            => 'pickup_point',
+					'order_handler'       => new Shipping_Order_Handler( [ 'a' => 'k_data', 'b' => 'k_id' ] ),
+					'point_field_logical' => 'a',
+				]
+			);
+
+			$this->assertSame( [ 'pickup_point', 'k_data', 'k_id' ], $handler->order_meta_keys() );
+			$this->assertSame( [ 'pickup_point' ], $this->make_handler( [ 'field_id' => 'pickup_point' ] )->order_meta_keys() );
 		}
 
 		// -------------------------------------------------------------------
