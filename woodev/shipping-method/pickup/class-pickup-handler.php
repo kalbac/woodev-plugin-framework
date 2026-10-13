@@ -4249,6 +4249,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				return;
 			}
 
+			// A point posted while ANOTHER carrier's method (or none of ours) is chosen is stale —
+			// the slot of a carrier the customer left. It is neither checked nor kept.
+			if ( null !== $this->selection_scope && ! $this->owns_pickup_method( self::posted_shipping_method() ) ) {
+				return;
+			}
+
 			$this->validate_posted_point(
 				$point_id,
 				$this->checkout_payment_method(),
@@ -4294,6 +4300,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 */
 		public function handle_checkout_order_processed( int $order_id, array $posted_data, \WC_Order $order ): void {
 			$this->forget_remembered_selections();
+
+			// The posted value of this slot is persisted only for an order placed with one of this
+			// carrier's methods: after CDEK → Yandex → CDEK the Yandex slot still posts its point,
+			// and storing it would put the Yandex keys on a CDEK order (#1260).
+			if ( null !== $this->selection_scope && ! $this->owns_pickup_method( self::order_shipping_method( $order ) ) ) {
+				return;
+			}
 
 			$this->persist_full_point( $order, $this->posted_field_value(), true );
 		}
@@ -4517,6 +4530,56 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			}
 
 			return '';
+		}
+
+		/**
+		 * The bare id of the method the classic checkout form posted for the first package, or `''`.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		private static function posted_shipping_method(): string {
+			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- WC verifies the nonce before its checkout hooks fire.
+			$value = $_POST['shipping_method'][0] ?? '';
+
+			return is_scalar( $value ) ? explode( ':', (string) wc_clean( (string) wp_unslash( $value ) ) )[0] : '';
+		}
+
+		/**
+		 * Whether a shipping method is one this handler's carrier serves with a pickup point.
+		 *
+		 * Meaningful only with a selection scope wired — without one a handler cannot tell its
+		 * methods apart, and its callers keep the behaviour they had before the scope existed.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $method_id bare shipping method id (no `:instance_id`), or `''`.
+		 *
+		 * @return bool
+		 */
+		private function owns_pickup_method( string $method_id ): bool {
+			return '' !== $method_id && null !== $this->selection_pair_for_method( $method_id );
+		}
+
+		/**
+		 * Every order-meta key this handler writes for a chosen point: the slot's own id and each
+		 * key of the plugin's point map. What the checkout removes from an order whose buyer left
+		 * this carrier ({@see \Woodev\Framework\Shipping\Order\Unchosen_Carrier_Cleaner}).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string[]
+		 */
+		public function order_meta_keys(): array {
+			return array_values(
+				array_unique(
+					array_merge(
+						[ $this->field_id ],
+						null !== $this->order_handler ? $this->order_handler->meta_keys() : []
+					)
+				)
+			);
 		}
 
 		/**
