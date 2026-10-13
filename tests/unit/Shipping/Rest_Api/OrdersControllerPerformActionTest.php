@@ -90,6 +90,8 @@ final class OrdersControllerPerformActionTest extends TestCase {
 
 	private function register_handler( bool $supports_update = false ): Abstract_Shipment_Handler {
 		$handler = Mockery::mock( Abstract_Shipment_Handler::class );
+		$handler->shouldReceive( 'supports_reconcile' )->andReturn( false )->byDefault();
+		$handler->shouldReceive( 'export_unknown_since' )->andReturn( 0 )->byDefault();
 		$handler->shouldReceive( 'supports_update' )->andReturn( $supports_update );
 		// #1204: a carrier that declares nothing keeps today's behaviour.
 		$handler->shouldReceive( 'supports_refusal' )->andReturn( false )->byDefault();

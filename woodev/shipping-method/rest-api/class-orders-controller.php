@@ -907,6 +907,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 					continue;
 				}
 
+				// #1253: the deliberate retry is a per-order decision and must never be batched.
+				if ( Order_Actions::RETRY_EXPORT === $action ) {
+					continue;
+				}
+
 				// #1000: an order another manager is editing is skipped WITH its reason, the rest of
 				// the batch goes on — `locked` carries who holds it, `skipped` counts it as it counts
 				// every other order the action did not touch. Only an order the action would otherwise

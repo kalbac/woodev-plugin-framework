@@ -296,6 +296,8 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$expected = Action_Result::success( 'CARRIER-1' );
 
 			$handler = Mockery::mock( Abstract_Shipment_Handler::class );
+		$handler->shouldReceive( 'supports_reconcile' )->andReturn( false )->byDefault();
+		$handler->shouldReceive( 'export_unknown_since' )->andReturn( 0 )->byDefault();
 			$handler->shouldReceive( 'export' )
 				->once()
 				->with(
@@ -324,6 +326,8 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$expected = Action_Result::success( 'CARRIER-1' );
 
 			$handler = Mockery::mock( Abstract_Shipment_Handler::class );
+		$handler->shouldReceive( 'supports_reconcile' )->andReturn( false )->byDefault();
+		$handler->shouldReceive( 'export_unknown_since' )->andReturn( 0 )->byDefault();
 			$handler->shouldReceive( 'export' )->once()->with( $order, null, null )->andReturn( $expected );
 
 			$result = $this->actions_with_store( $store )->perform( $handler, $order, Order_Actions::EXPORT, $this->orders_provider() );
@@ -355,6 +359,8 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$expected = Action_Result::success( 'CARRIER-1' );
 
 			$handler = Mockery::mock( Abstract_Shipment_Handler::class );
+		$handler->shouldReceive( 'supports_reconcile' )->andReturn( false )->byDefault();
+		$handler->shouldReceive( 'export_unknown_since' )->andReturn( 0 )->byDefault();
 			$handler->shouldReceive( 'export' )
 				->once()
 				->with( $order, Mockery::on( fn( $settlement ) => $settlement === $record ), null )

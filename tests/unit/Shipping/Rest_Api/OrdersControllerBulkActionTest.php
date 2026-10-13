@@ -120,6 +120,8 @@ final class OrdersControllerBulkActionTest extends TestCase {
 
 	private function register_handler( string $provider_id ): Abstract_Shipment_Handler {
 		$handler = Mockery::mock( Abstract_Shipment_Handler::class );
+		$handler->shouldReceive( 'supports_reconcile' )->andReturn( false )->byDefault();
+		$handler->shouldReceive( 'export_unknown_since' )->andReturn( 0 )->byDefault();
 
 		Orders_Registry::instance()->register_shipment_handler( $provider_id, $handler );
 

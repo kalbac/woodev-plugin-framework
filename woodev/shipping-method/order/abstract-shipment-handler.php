@@ -163,7 +163,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 *   note on the order); the retry, like any next export of an unknown order,
 		 *   asks {@see self::find_exported_order()} FIRST and only creates an order when the carrier
 		 *   has none. A carrier that cannot look up gets no automatic retry and a failure text that
-		 *   tells the merchant to check the carrier's account; a MANUAL export stays allowed.
+		 *   tells the merchant to check the carrier's account; another manual export is refused until the merchant
+		 *   explicitly authorises a retry after checking the carrier account.
 		 * - the carrier answered HTTP 429 ({@see \Woodev_API_Rate_Limit_Exception}): it is throttling
 		 *   us and created nothing. Not a refusal and not «unknown» — the export is retried by
 		 *   {@see Export_Retry} after the `Retry-After` wait the carrier asked for (the standard
@@ -212,13 +213,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 *              hooks fired: it is an «unknown» failure and fires neither hook.
 		 * @since 2.0.2 Card #1270: a NEW export is refused with {@see Action_Result::license_inactive()} while the
 		 *              plugin's licence is not in force — before the lock, the hooks and any carrier call.
+		 * @since 2.0.2 Card #1253: an unknown export for a carrier without reconciliation needs an explicit retry.
 		 *
 		 * @param \WC_Order              $order      the order to export to the carrier
 		 * @param Location_Record|null   $settlement the settlement this order ships to, if known; null skips enrolment
 		 * @param Location_Provider|null $provider the provider that produced `$settlement`, if known; null skips enrolment
+		 * @param bool                   $retry_unknown explicit permission to retry this order after checking the carrier account
 		 * @return Action_Result success carrying the carrier-assigned order id, or a failure
 		 */
-		public function export( \WC_Order $order, ?Location_Record $settlement = null, ?Location_Provider $provider = null ): Action_Result {
+		public function export( \WC_Order $order, ?Location_Record $settlement = null, ?Location_Provider $provider = null, bool $retry_unknown = false ): Action_Result {
 
 			$stored = $this->stored_carrier_order_id( $order );
 
@@ -244,7 +247,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 				// The carrier call and the lookup before it are an export: they get the «export» timeout (#954).
 				return \Woodev_API_Request_Purpose::run(
 					\Woodev_API_Request_Purpose::EXPORT,
-					fn() => $this->export_locked( $order, $settlement, $provider )
+					fn() => $this->export_locked( $order, $settlement, $provider, $retry_unknown )
 				);
 			} finally {
 				$this->release_export_lock( $order_id );
@@ -263,9 +266,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 * @param \WC_Order              $order      the order to export
 		 * @param Location_Record|null   $settlement the settlement this order ships to, if known
 		 * @param Location_Provider|null $provider   the provider that produced `$settlement`, if known
+		 * @param bool                   $retry_unknown true only for an explicit merchant-authorised retry
 		 * @return Action_Result
 		 */
-		private function export_locked( \WC_Order $order, ?Location_Record $settlement, ?Location_Provider $provider ): Action_Result {
+		private function export_locked( \WC_Order $order, ?Location_Record $settlement, ?Location_Provider $provider, bool $retry_unknown ): Action_Result {
 
 			// What the datastore holds NOW: a request that waited for the lock must see the export that just finished.
 			$fresh  = $this->fresh_order( $order );
@@ -275,7 +279,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 				return Action_Result::success( $stored );
 			}
 
-			if ( $this->supports_reconcile() && $this->export_unknown_since( $fresh ) > 0 ) {
+			$unknown_since = $this->export_unknown_since( $fresh );
+
+			if ( $unknown_since > 0 && ! $this->supports_reconcile() ) {
+				if ( ! $retry_unknown ) {
+					return Action_Result::failure( __( 'Исход прошлой выгрузки неизвестен — проверьте заказ в кабинете перевозчика. Если заявки там нет, выгрузите повторно.', 'woodev-plugin-framework' ) );
+				}
+
+				// The explicit retry is made under the export lock; clear only this order's stale marker before a new attempt.
+				$this->clear_export_unknown( $order, $fresh );
+			}
+
+			if ( $this->supports_reconcile() && $unknown_since > 0 ) {
 
 				try {
 					$found = (string) $this->find_exported_order( $fresh );

@@ -234,6 +234,8 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 
 		private function registry_with_handed_over_states( Orders_Provider $provider, array $states ) {
 			$handler = Mockery::mock( Abstract_Shipment_Handler::class );
+		$handler->shouldReceive( 'supports_reconcile' )->andReturn( false )->byDefault();
+		$handler->shouldReceive( 'export_unknown_since' )->andReturn( 0 )->byDefault();
 			$handler->shouldReceive( 'get_handed_over_statuses' )->andReturn( $states );
 			$handler->shouldReceive( 'is_handed_over' )->andReturnUsing( static fn( $o, $c ) => in_array( $c, $states, true ) );
 
@@ -950,6 +952,8 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 		 */
 		private function register_handler( bool $supports_update = false ): Abstract_Shipment_Handler {
 			$handler = Mockery::mock( Abstract_Shipment_Handler::class );
+		$handler->shouldReceive( 'supports_reconcile' )->andReturn( false )->byDefault();
+		$handler->shouldReceive( 'export_unknown_since' )->andReturn( 0 )->byDefault();
 			$handler->shouldReceive( 'supports_update' )->andReturn( $supports_update );
 			// #1204: a carrier that declares nothing keeps today's behaviour.
 			$handler->shouldReceive( 'supports_refusal' )->andReturn( false )->byDefault();
