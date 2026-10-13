@@ -194,10 +194,17 @@ export interface OrderRowAction {
 	 */
 	icon?: string;
 	/**
-	 * #1192: on a document action (`waybill`, `barcode`) — the carrier can print it for SEVERAL orders as one file,
+	 * #1192: on a document action — the carrier can print it for SEVERAL orders as one file,
 	 * so the bulk picker offers the matching «Печать …» entry. Absent => single-order only.
 	 */
 	bulk?: boolean;
+	/**
+	 * #1257: the action downloads a carrier document of type `action` through the documents route instead of posting
+	 * to an action route. The carrier declares the type and its labels; the page keeps no list of them.
+	 */
+	document?: boolean;
+	/** #1257: on a `bulk` document action — the wording of its bulk picker entry (absent => `label`). */
+	bulk_label?: string;
 }
 
 /** The `payload` an action with fields sends: field id → value (a time range is `{ from, to }`, an orders field a list of ids). */

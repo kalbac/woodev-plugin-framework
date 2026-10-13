@@ -171,7 +171,7 @@ defined( 'ABSPATH' ) || exit;
 		>
 			<?php foreach ( $actions as $action ) : ?>
 				<?php
-				$is_document = \Woodev\Framework\Shipping\Admin\Orders\Order_Actions::is_document( (string) $action['action'] );
+				$is_document = ! empty( $action['document'] ) || \Woodev\Framework\Shipping\Admin\Orders\Order_Actions::is_document( (string) $action['action'] );
 				$icon        = \Woodev\Framework\Shipping\Admin\Orders\Order_Actions::sanitize_icon( $action['icon'] ?? '' );
 				$hint        = (string) ( $action['title'] ?? '' );
 				$tooltip     = $icon_only ? trim( $action['label'] . ( '' !== $hint && $hint !== $action['label'] ? ' — ' . $hint : '' ) ) : $hint;

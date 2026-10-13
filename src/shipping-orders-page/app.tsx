@@ -769,7 +769,7 @@ interface BulkAction {
 	label: string;
 	destructive: boolean;
 	/** #1192: set on a bulk PRINT entry — the document type it fetches as one file. It never reaches the bulk action route. */
-	document?: 'waybill' | 'barcode';
+	document?: string;
 }
 
 const BULK_ACTIONS: BulkAction[] = [
@@ -779,28 +779,33 @@ const BULK_ACTIONS: BulkAction[] = [
 ];
 
 /**
- * #1192 — the bulk print entries. Offered only while a row on the page carries the matching document action marked
- * `bulk` (the carrier's source implements `Bulk_Document_Source`), so a carrier that cannot print several orders in
- * one file never gets the entry.
+ * #1192 / #1257 — the bulk print entries, built from the rows on the page: one per document type a row's action marks
+ * `bulk` (the carrier's source implements `Bulk_Document_Source` and declares the type), worded by the carrier's
+ * `bulk_label`. A carrier that cannot print several orders in one file never gets an entry; a type the page has never
+ * heard of gets one all the same.
  */
-const BULK_DOCUMENT_ACTIONS: BulkAction[] = [
-	{ action: 'print:waybill', label: __( 'Печать накладных', 'woodev-plugin-framework' ), destructive: false, document: 'waybill' },
-	{ action: 'print:barcode', label: __( 'Печать штрихкодов', 'woodev-plugin-framework' ), destructive: false, document: 'barcode' },
-];
-
-/** The bulk picker's entries for the rows on screen. */
-function bulkActionsFor( rows: OrderRow[] | null ): BulkAction[] {
-	const printable = new Set<string>();
+function bulkDocumentActionsFor( rows: OrderRow[] | null ): BulkAction[] {
+	const entries = new Map<string, BulkAction>();
 
 	( rows || [] ).forEach( ( row ) =>
 		( row.actions || [] ).forEach( ( action ) => {
-			if ( action.bulk ) {
-				printable.add( action.action );
+			if ( action.bulk && action.document && ! entries.has( action.action ) ) {
+				entries.set( action.action, {
+					action: `print:${ action.action }`,
+					label: action.bulk_label || action.label,
+					destructive: false,
+					document: action.action,
+				} );
 			}
 		} )
 	);
 
-	return [ ...BULK_ACTIONS, ...BULK_DOCUMENT_ACTIONS.filter( ( a ) => a.document && printable.has( a.document ) ) ];
+	return [ ...entries.values() ];
+}
+
+/** The bulk picker's entries for the rows on screen. */
+function bulkActionsFor( rows: OrderRow[] | null ): BulkAction[] {
+	return [ ...BULK_ACTIONS, ...bulkDocumentActionsFor( rows ) ];
 }
 
 /** Why an order is missing from a bulk document, in the merchant's words (codes: `Document_Controller::SKIP_CODES`). */
@@ -2137,7 +2142,7 @@ export default function OrdersPage() {
 	 * #1134 / #1191 — one carrier document for one order: the row is busy (button disabled, busy bar) from the click
 	 * until the file is saved.
 	 */
-	const downloadDocument = ( row: ActionableOrder, type: 'waybill' | 'barcode' ) => {
+	const downloadDocument = ( row: ActionableOrder, type: string ) => {
 		const token = claimRows( [ row.id ], type );
 
 		fetchAndSaveDocument( ( signal ) => fetchOrderDocument( row.id, type, signal ) ).finally( () => {
@@ -2149,7 +2154,7 @@ export default function OrdersPage() {
 	 * #1192 — ONE file (waybills, barcodes) for the selected orders. Every selected row is busy meanwhile; the
 	 * selection stays, since nothing changed. The orders the carrier or the framework left out are named in a warning.
 	 */
-	const printBulkDocument = ( type: 'waybill' | 'barcode', ids: number[] ) => {
+	const printBulkDocument = ( type: string, ids: number[] ) => {
 		// One bulk document at a time, and never over rows another operation is still busy with.
 		if ( bulkDocumentOwner.current || ids.some( ( id ) => rowOwners.current.has( id ) ) ) {
 			return;
@@ -2211,7 +2216,7 @@ export default function OrdersPage() {
 		);
 
 	const performAction = ( row: ActionableOrder, action: OrderRowAction, payload?: OrderActionPayload, confirmed = false ) => {
-		if ( 'waybill' === action.action || 'barcode' === action.action ) {
+		if ( action.document ) {
 			downloadDocument( row, action.action );
 			return;
 		}
