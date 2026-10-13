@@ -1541,6 +1541,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 * of the framework's cards or repeats an earlier one, and an action whose id the tab already uses, is dropped
 		 * the same way. Like the rest of the section, it exists only for a carrier that exports orders.
 		 *
+		 * A group may also hold FIELDS ({@see \Woodev\Framework\Settings\Settings_Group::with_fields()}) — the way for a carrier
+		 * to give its export options a card of their own instead of «Документы для печати». Each field must be one of
+		 * {@see self::get_export_section_setting_ids()}: it is rendered once, in the carrier's card, and leaves «Документы для
+		 * печати» (which then shows only the ids no carrier card took, and disappears when none is left). Saving and
+		 * validation are unchanged — the field stays a setting of the handler that owns it. A field that is not in that list,
+		 * or that an earlier carrier card already holds, is reported with `_doing_it_wrong()` and left out of the group. The
+		 * carrier's cards follow the framework's, in the order they are returned.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @return array{actions?: \Woodev\Framework\Shipping\Settings\Shipping_Tool[], groups?: \Woodev\Framework\Settings\Settings_Group[], description?: string}
@@ -1574,11 +1582,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 * A group whose id is the framework's own or repeats an earlier entry, and an action whose id the tab already
 		 * uses, is dropped with a notice: ids are the key a card is rendered and an action is run by.
 		 *
+		 * A field a group holds must be one of the carrier's accepted `$extra_ids` and not held by an earlier carrier group;
+		 * any other is dropped from the group with a notice (a field belongs to one card).
+		 *
 		 * @param string[] $reserved_action_ids ids of the actions the tab's other sections (and the framework's own button) already carry.
+		 * @param string[] $extra_ids           the carrier's accepted export-section fields.
 		 * @return array{actions: \Woodev\Framework\Shipping\Settings\Shipping_Tool[], groups: \Woodev\Framework\Settings\Settings_Group[], description: string}
 		 */
-		private function resolve_export_section_extension( array $reserved_action_ids ): array {
+		private function resolve_export_section_extension( array $reserved_action_ids, array $extra_ids ): array {
 
+			$claimed   = [];
 			$resolved  = [
 				'actions'     => [],
 				'groups'      => [],
@@ -1634,6 +1647,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 						continue;
 					}
 
+					if ( 'groups' === $key ) {
+						$own = array_values( array_diff( array_intersect( $item->get_setting_ids(), $extra_ids ), $claimed ) );
+
+						if ( $own !== $item->get_setting_ids() ) {
+							$report( sprintf( 'has a "groups" entry "%s" that holds a field which is not in get_export_section_setting_ids() or is held by an earlier group', $item->get_id() ) );
+							$item = $item->with_fields( $own );
+						}
+
+						$claimed = array_merge( $claimed, $own );
+					}
+
 					$taken[]            = $item->get_id();
 					$resolved[ $key ][] = $item;
 				}
@@ -1649,8 +1673,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 * left out (the settings page registry omits it), so a carrier without print fields shows no «Документы для печати» and one
 		 * without status sync shows «Статусы доставки» without the button.
 		 *
-		 * The section lists its fields card by card (auto-export, the carrier's fields, delivered and cancelled statuses), because a
-		 * card renders where its first field is declared.
+		 * The section lists its fields card by card (auto-export, the carrier's fields, delivered and cancelled statuses, then the
+		 * fields of the carrier's own cards), because a card renders where its first field is declared. A field that a carrier
+		 * card holds is taken out of «Документы для печати» and listed once, with that card.
 		 *
 		 * @param Settings\Export_Settings                               $export              the framework's export handler.
 		 * @param string[]                                               $extra_ids           the carrier's accepted fields.
@@ -1660,7 +1685,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 */
 		private function build_export_section( Settings\Export_Settings $export, array $extra_ids, ?\Woodev\Framework\Shipping\Settings\Shipping_Tool $sync, array $reserved_action_ids ): \Woodev\Framework\Settings\Settings_Section {
 
-			$extension = $this->resolve_export_section_extension( null === $sync ? $reserved_action_ids : array_merge( $reserved_action_ids, [ $sync->get_id() ] ) );
+			$extension = $this->resolve_export_section_extension( null === $sync ? $reserved_action_ids : array_merge( $reserved_action_ids, [ $sync->get_id() ] ), $extra_ids );
+
+			// a field a carrier card holds leaves «Документы для печати»; the card lists them after the framework's cards
+			$card_ids  = [];
+
+			foreach ( $extension['groups'] as $carrier_group ) {
+				$card_ids = array_merge( $card_ids, $carrier_group->get_setting_ids() );
+			}
+
+			$extra_ids = array_values( array_diff( $extra_ids, $card_ids ) );
 			$delivered = Settings\Export_Settings::SETTING_STATUS_DELIVERED;
 			$cancelled = Settings\Export_Settings::SETTING_STATUS_CANCELLED;
 			$auto_ids  = array_values( array_diff( $export->get_owned_setting_ids(), [ $delivered, $cancelled ] ) );
@@ -1700,7 +1734,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			$section = \Woodev\Framework\Settings\Settings_Section::create(
 				Settings\Export_Settings::SECTION_ID,
 				__( 'Выгрузка заказов', 'woodev-plugin-framework' ),
-				array_merge( $auto_ids, $extra_ids, [ $delivered, $cancelled ] ),
+				array_merge( $auto_ids, $extra_ids, [ $delivered, $cancelled ], $card_ids ),
 				$description
 			);
 
