@@ -5,6 +5,7 @@
 
 ## [woocommerce/*] — WooCommerce-specific
 
+- [woocommerce/shipping] **WooCommerce resets the chosen method to the default (often Free shipping) when ONE rate id appears or disappears; only its local pickup is exempt — filter `woocommerce_shipping_chosen_method` (#1268).** → [woocommerce-resets-the-chosen-shipping-method-on-any-rate-set-change](../gotchas/woocommerce-resets-the-chosen-shipping-method-on-any-rate-set-change.md) (s176)
 - [woocommerce/shipping-api-broken-contract] **Shipping_API interface references types that don't exist in the framework.** → [shipping-api-broken-contract](../gotchas/shipping-api-broken-contract.md)
 - [woocommerce/shipping] **`add_rate()` discards `description`/`delivery_time` silently, though `WC_Shipping_Rate` has had both since WC 9.2.0 — set them on the object AFTERWARDS.** → [wc-add-rate-ignores-the-rate-description-and-delivery-time](../gotchas/wc-add-rate-ignores-the-rate-description-and-delivery-time.md) (s117)
 - [woocommerce/shipping] **Never stringify a numeric cost: `(string) 1.0e20` is `'1.0E+20'`, and `wc_format_decimal()`'s string branch strips the `E` and returns **1.02**. Pass the number through.** → [stringifying-a-float-cost-lets-wc-format-decimal-destroy-it](../gotchas/stringifying-a-float-cost-lets-wc-format-decimal-destroy-it.md) (s117)

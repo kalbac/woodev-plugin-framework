@@ -57,11 +57,11 @@ class CheckoutHandlerRegisterTest extends TestCase {
 			->once()
 			->with( 'woocommerce_states', \Mockery::type( 'array' ) );
 
-		// Fourteen since F1 registered the hidden-reason render hooks at plugin boot; eleven since #332 added `woocommerce_customer_save_address`; ten since #331 added `woocommerce_calculated_shipping`; nine since #966 added the Store API pickup-required validation on both hooks (seven since #964
+		// Sixteen since F1 registered the hidden-reason render hooks (+3) and #1260 added the unchosen-carrier cleaner on the classic and the Store API order hooks (+2); eleven since #332 added `woocommerce_customer_save_address`; ten since #331 added `woocommerce_calculated_shipping`; nine since #966 added the Store API pickup-required validation on both hooks (seven since #964
 		// added the Store API order-processed callback, six before, since issue #518 added
 		// `woodev_shipping_pickup_point_selected`).
 		Functions\expect( 'add_action' )
-			->times( 14 )
+			->times( 16 )
 			->withAnyArgs();
 
 		$fields  = Checkout_Fields::from_array( [] );
@@ -237,7 +237,7 @@ class CheckoutHandlerRegisterTest extends TestCase {
 
 		Functions\when( 'add_action' )->alias(
 			static function ( $hook, $callback = null, $priority = 10, $accepted_args = 1 ) use ( &$registered ) {
-				$registered[ $hook ] = [ $callback, $priority, $accepted_args ];
+				$registered[ $hook ][ $priority ] = [ $callback, $priority, $accepted_args ];
 
 				return true;
 			}
@@ -248,7 +248,39 @@ class CheckoutHandlerRegisterTest extends TestCase {
 
 		$this->assertSame(
 			[ [ $handler, 'handle_store_api_order_processed' ], 10, 1 ],
-			$registered['woocommerce_store_api_checkout_order_processed'] ?? null
+			$registered['woocommerce_store_api_checkout_order_processed'][10] ?? null
+		);
+	}
+
+	/**
+	 * #1260: register() wires the unchosen-carrier cleaner LAST (priority 999) on both order hooks —
+	 * as a static callback, so N carrier plugins collapse into one registration.
+	 */
+	public function test_register_hooks_the_unchosen_carrier_cleaner_last_on_both_order_hooks(): void {
+
+		Functions\when( 'add_filter' )->justReturn( true );
+
+		$registered = [];
+
+		Functions\when( 'add_action' )->alias(
+			static function ( $hook, $callback = null, $priority = 10, $accepted_args = 1 ) use ( &$registered ) {
+				$registered[ $hook ][ $priority ] = [ $callback, $accepted_args ];
+
+				return true;
+			}
+		);
+
+		( new Checkout_Handler( Checkout_Fields::from_array( [] ), 'carrier' ) )->register();
+
+		$cleaner = \Woodev\Framework\Shipping\Order\Unchosen_Carrier_Cleaner::class;
+
+		$this->assertSame(
+			[ [ $cleaner, 'handle_checkout_order_processed' ], 3 ],
+			$registered['woocommerce_checkout_order_processed'][999] ?? null
+		);
+		$this->assertSame(
+			[ [ $cleaner, 'handle_store_api_order_processed' ], 1 ],
+			$registered['woocommerce_store_api_checkout_order_processed'][999] ?? null
 		);
 	}
 
@@ -362,7 +394,7 @@ class CheckoutHandlerRegisterTest extends TestCase {
 	public function test_guard_fires_doing_it_wrong_on_native_field_conflict(): void {
 
 		Functions\expect( 'add_filter' )->times( 10 )->withAnyArgs();
-		Functions\expect( 'add_action' )->times( 28 )->withAnyArgs();
+		Functions\expect( 'add_action' )->times( 32 )->withAnyArgs();
 		Functions\expect( '_doing_it_wrong' )
 			->once()
 			->with(
@@ -385,7 +417,7 @@ class CheckoutHandlerRegisterTest extends TestCase {
 	public function test_guard_does_not_fire_for_same_plugin_id(): void {
 
 		Functions\expect( 'add_filter' )->times( 10 )->withAnyArgs();
-		Functions\expect( 'add_action' )->times( 28 )->withAnyArgs();
+		Functions\expect( 'add_action' )->times( 32 )->withAnyArgs();
 		Functions\expect( '_doing_it_wrong' )->never();
 
 		$field   = Field::create( 'billing_city' )->set_type( 'text' )->set_section( 'billing' )->to_array();
@@ -403,7 +435,7 @@ class CheckoutHandlerRegisterTest extends TestCase {
 	public function test_guard_ignores_non_native_fields(): void {
 
 		Functions\expect( 'add_filter' )->times( 10 )->withAnyArgs();
-		Functions\expect( 'add_action' )->times( 28 )->withAnyArgs();
+		Functions\expect( 'add_action' )->times( 32 )->withAnyArgs();
 		Functions\expect( '_doing_it_wrong' )->never();
 
 		$field = Field::create( 'carrier_pvz' )->set_type( 'hidden' )->set_section( 'order' )->to_array();

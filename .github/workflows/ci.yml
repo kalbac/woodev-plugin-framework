@@ -87,7 +87,7 @@ jobs:
         run: composer audit --locked
 
       - name: Run PHPCS
-        run: ./vendor/bin/phpcs --warning-severity=0
+        run: ./vendor/bin/phpcs
 
       - name: Run PHPStan
         run: ./vendor/bin/phpstan analyse --memory-limit=4G
