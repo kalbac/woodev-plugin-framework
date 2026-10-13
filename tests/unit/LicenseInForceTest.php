@@ -89,6 +89,19 @@ class LicenseInForceTest extends TestCase {
 	}
 
 	/**
+	 * @return void
+	 */
+	protected function tearDown(): void {
+		if ( null === $this->previous_wpdb ) {
+			unset( $GLOBALS['wpdb'] );
+		} else {
+			$GLOBALS['wpdb'] = $this->previous_wpdb;
+		}
+
+		parent::tearDown();
+	}
+
+	/**
 	 * A paid-product payload: valid, ending in ten days, signed a day ago, valid for 14 days.
 	 *
 	 * @param array<string, mixed> $overrides fields to replace (a null value removes the key).
@@ -610,6 +623,9 @@ class LicenseInForceTest extends TestCase {
 	/** @var string the option the automatic-refresh backoff state lives in */
 	private const STATE_OPTION = 'woodev_test_plugin_claim_refresh_state';
 
+	/** @var mixed the global `$wpdb` before arm_wpdb() replaced it */
+	private $previous_wpdb = null;
+
 	/** @var string[] the single events scheduled so far (hook names) */
 	private array $scheduled = [];
 
@@ -642,6 +658,8 @@ class LicenseInForceTest extends TestCase {
 				return true;
 			}
 		);
+
+		$this->arm_wpdb();
 
 		$plugin = Mockery::mock( \Woodev_Plugin::class );
 		$plugin->shouldReceive( 'get_download_id' )->andReturn( $download_id );
@@ -1094,6 +1112,137 @@ class LicenseInForceTest extends TestCase {
 		$license = $this->refreshing_engine();
 		$license->refresh_claim_on_admin_init();
 		$this->assertSame( [], $license->validated, 'a cron run' );
+	}
+
+	/**
+	 * The options table as `$wpdb` sees it: the in-memory option map, values serialised, with the real
+	 * semantics of the two statements the budget uses — a compare-and-swap UPDATE (1 row only when the stored
+	 * value still equals the one the caller read) and INSERT IGNORE (1 row only when no row exists yet).
+	 *
+	 * @return object
+	 */
+	private function arm_wpdb(): object {
+		Functions\when( 'maybe_serialize' )->alias( static fn( $value ) => is_scalar( $value ) ? $value : serialize( $value ) );
+		Functions\when( 'maybe_unserialize' )->alias( static fn( $value ) => is_string( $value ) && '' !== $value && false !== @unserialize( $value ) ? unserialize( $value ) : $value );
+		Functions\when( 'wp_cache_delete' )->justReturn( true );
+
+		$wpdb = new class( $this ) {
+
+			public string $options = 'wp_options';
+
+			/** @var string|null|false when not false, get_var() returns this instead of the live row — a racer's stale read */
+			public $stale_read = false;
+
+			/** @var int[] the row counts the write statements returned, in order */
+			public array $writes = [];
+
+			/** @var LicenseInForceTest the test whose option map is the table */
+			private $test;
+
+			public function __construct( LicenseInForceTest $test ) {
+				$this->test = $test;
+			}
+
+			public function prepare( string $sql, ...$args ): string {
+				return json_encode( [ $sql, $args ] );
+			}
+
+			public function get_var( string $prepared ) {
+				if ( false !== $this->stale_read ) {
+					return $this->stale_read;
+				}
+
+				$name = json_decode( $prepared, true )[1][0];
+				$map  = &$this->test->options_ref();
+
+				return array_key_exists( $name, $map ) ? serialize( $map[ $name ] ) : null;
+			}
+
+			public function update( string $table, array $data, array $where ) {
+				$map = &$this->test->options_ref();
+				$hit = array_key_exists( $where['option_name'], $map ) && serialize( $map[ $where['option_name'] ] ) === $where['option_value'];
+
+				if ( $hit ) {
+					$map[ $where['option_name'] ] = unserialize( $data['option_value'] );
+				}
+
+				return $this->writes[] = $hit ? 1 : 0;
+			}
+
+			public function query( string $prepared ) {
+				[ , $args ] = json_decode( $prepared, true );
+				$map        = &$this->test->options_ref();
+				$free       = ! array_key_exists( $args[0], $map );
+
+				if ( $free ) {
+					$map[ $args[0] ] = unserialize( $args[1] );
+				}
+
+				return $this->writes[] = $free ? 1 : 0;
+			}
+		};
+
+		$this->previous_wpdb = $GLOBALS['wpdb'] ?? null;
+		$GLOBALS['wpdb']     = $wpdb;
+
+		return $wpdb;
+	}
+
+	/**
+	 * Hands the option map to the wpdb double by reference.
+	 *
+	 * @return array<string, mixed>
+	 */
+	public function &options_ref(): array {
+		return $this->options;
+	}
+
+	/**
+	 * Two requests read the same open window before either writes: exactly one compare-and-swap wins and
+	 * goes to the network (first insert).
+	 *
+	 * @return void
+	 */
+	public function test_of_two_takers_reading_the_same_empty_state_only_the_first_proceeds(): void {
+		$first  = $this->refreshing_engine();
+		$second = $this->refreshing_engine();
+		$wpdb   = $GLOBALS['wpdb'];
+
+		$wpdb->stale_read = null; // Both read "no row yet".
+		$first->run_claim_refresh();
+		$second->run_claim_refresh();
+
+		$this->assertSame( 1, count( $first->validated ) + count( $second->validated ), 'one request, not two' );
+		$this->assertSame( [ 1, 0 ], $wpdb->writes, 'the INSERT IGNORE lost for the second racer' );
+		$this->assertSame( [ 'failures' => 1, 'next_at' => self::NOW + 15 * MINUTE_IN_SECONDS ], $this->options[ self::STATE_OPTION ] );
+	}
+
+	/**
+	 * Same race on an existing row whose window has just opened: both read the old state, the first UPDATE
+	 * changes the row, the second finds the row no longer equal to what it read.
+	 *
+	 * @return void
+	 */
+	public function test_of_two_takers_reading_the_same_expired_state_only_the_first_proceeds(): void {
+		$first  = $this->refreshing_engine();
+		$second = $this->refreshing_engine();
+		$wpdb   = $GLOBALS['wpdb'];
+
+		$old                                 = [ 'failures' => 2, 'next_at' => self::NOW - 1 ];
+		$this->options[ self::STATE_OPTION ] = $old;
+		$wpdb->stale_read                    = serialize( $old );
+
+		$first->run_claim_refresh();
+		$second->run_claim_refresh();
+
+		$this->assertSame( 1, count( $first->validated ) + count( $second->validated ) );
+		$this->assertSame( [ 1, 0 ], $wpdb->writes );
+		$this->assertSame( [ 'failures' => 3, 'next_at' => self::NOW + 6 * HOUR_IN_SECONDS ], $this->options[ self::STATE_OPTION ] );
+
+		// A late third taker that reads the live row sees the shut window and never reaches the CAS.
+		$wpdb->stale_read = false;
+		$this->refreshing_engine()->run_claim_refresh();
+		$this->assertSame( [ 1, 0 ], $wpdb->writes );
 	}
 
 	/**

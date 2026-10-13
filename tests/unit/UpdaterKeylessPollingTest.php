@@ -200,6 +200,57 @@ class UpdaterKeylessPollingTest extends TestCase {
 	}
 
 	/**
+	 * get_version_from_remote(): a signed claim consumed from the poll resets the automatic-refresh backoff
+	 * the same way the refresh and human paths do (#1270) — after the claim store has seen the response.
+	 *
+	 * @return void
+	 */
+	public function test_get_version_from_remote_resets_the_refresh_backoff_after_consuming_a_claim(): void {
+		$response                    = new \stdClass();
+		$response->license_authority = array( 'payload' => array(), 'signature' => 's' );
+
+		$order  = array();
+		$claims = Mockery::mock();
+		$claims->shouldReceive( 'consume_from_response' )->once()->andReturnUsing(
+			static function () use ( &$order ) {
+				$order[] = 'consume';
+			}
+		);
+
+		$license = Mockery::mock();
+		$license->shouldReceive( 'get_authority_claims' )->andReturn( $claims );
+		$license->shouldReceive( 'reset_claim_refresh_backoff_if_claimed' )->once()->andReturnUsing(
+			static function () use ( &$order ) {
+				$order[] = 'reset';
+			}
+		);
+
+		$plugin = Mockery::mock( \Woodev_Plugin::class );
+		$plugin->shouldReceive( 'get_license_instance' )->andReturn( $license );
+
+		$updater = $this->make_updater( array(), 'woodev-test-plugin', false, $plugin );
+
+		$api_handler = Mockery::mock();
+		$request     = Mockery::mock();
+		$request->shouldReceive( 'get_response_data' )->andReturn( $response );
+		$api_handler->shouldReceive( 'make_request' )->andReturn( $request );
+		$this->set_private( $updater, 'api_handler', $api_handler );
+
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
+		Functions\when( 'get_option' )->justReturn( false );
+		Functions\when( 'wp_json_encode' )->alias(
+			static function ( $data, $options = 0, $depth = 512 ) {
+				return json_encode( $data, $options, $depth );
+			}
+		);
+
+		$this->call_private( $updater, 'get_version_from_remote' );
+
+		$this->assertSame( array( 'consume', 'reset' ), $order );
+	}
+
+	/**
 	 * get_version_from_remote(): an AUTHORITY-ONLY response (license_authority but
 	 * NO sections — the keyless-free-plugin case B-3 exists for) still feeds the
 	 * claim store, and the function returns false exactly as before (holistic-round

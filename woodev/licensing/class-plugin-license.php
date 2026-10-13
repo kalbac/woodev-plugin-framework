@@ -1243,9 +1243,18 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		 * @return array{failures: int, next_at: int}
 		 */
 		private function get_claim_refresh_state(): array {
+			return $this->normalize_claim_refresh_state( get_option( $this->plugin->get_plugin_option_name( self::CLAIM_REFRESH_STATE_OPTION ), [] ) );
+		}
 
-			$state = get_option( $this->plugin->get_plugin_option_name( self::CLAIM_REFRESH_STATE_OPTION ), [] );
-
+		/**
+		 * Normalises a stored backoff state of any shape to the two integers.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param mixed $state the stored value.
+		 * @return array{failures: int, next_at: int}
+		 */
+		private function normalize_claim_refresh_state( $state ): array {
 			return [
 				'failures' => is_array( $state ) ? max( 0, (int) ( $state['failures'] ?? 0 ) ) : 0,
 				'next_at'  => is_array( $state ) ? max( 0, (int) ( $state['next_at'] ?? 0 ) ) : 0,
@@ -1272,6 +1281,11 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		 * longer on the {@see self::CLAIM_REFRESH_BACKOFF} ladder — is written BEFORE the caller goes to the
 		 * network, so an attempt that dies mid-request still counts.
 		 *
+		 * Taking is ATOMIC: the state row is read raw from the database (never the object cache) and replaced
+		 * by a compare-and-swap `UPDATE … WHERE option_value = <what was read>` — or, while no row exists yet,
+		 * by an `INSERT IGNORE` — so of N requests that read the same open window exactly one sees a changed
+		 * row and proceeds; the rest get false. No transient and no object cache is involved.
+		 *
 		 * A pending cron event holds nothing: a buyer only reads the window, so an event that cannot run
 		 * (WP-Cron off, no system cron) can never keep the manager's own attempt waiting.
 		 *
@@ -1281,37 +1295,81 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		 */
 		private function take_claim_refresh_budget(): bool {
 
-			$state = $this->get_claim_refresh_state();
+			global $wpdb;
+
+			$name  = $this->plugin->get_plugin_option_name( self::CLAIM_REFRESH_STATE_OPTION );
 			$now   = $this->now();
+			$ladder = self::CLAIM_REFRESH_BACKOFF;
+
+			// No database handle (a bare CLI bootstrap): the best remaining effort is the plain, non-atomic write.
+			if ( ! isset( $wpdb ) || ! is_object( $wpdb ) ) {
+				$state = $this->get_claim_refresh_state();
+
+				if ( $now < $state['next_at'] ) {
+					return false;
+				}
+
+				$failures = $state['failures'] + 1;
+
+				update_option(
+					$name,
+					[
+						'failures' => $failures,
+						'next_at' => $now + $ladder[ min( $failures, count( $ladder ) ) - 1 ],
+					],
+					false
+				);
+
+				return true;
+			}
+
+			$raw   = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s LIMIT 1", $name ) );
+			$state = $this->normalize_claim_refresh_state( null === $raw ? [] : maybe_unserialize( $raw ) );
 
 			if ( $now < $state['next_at'] ) {
 				return false;
 			}
 
 			$failures = $state['failures'] + 1;
-			$ladder   = self::CLAIM_REFRESH_BACKOFF;
-
-			update_option(
-				$this->plugin->get_plugin_option_name( self::CLAIM_REFRESH_STATE_OPTION ),
+			$next     = maybe_serialize(
 				[
 					'failures' => $failures,
-					'next_at'  => $now + $ladder[ min( $failures, count( $ladder ) ) - 1 ],
-				],
-				false
+					'next_at' => $now + $ladder[ min( $failures, count( $ladder ) ) - 1 ],
+				]
 			);
 
-			return true;
+			if ( null === $raw ) {
+				// INSERT IGNORE, not add_option(): add_option() ends in ON DUPLICATE KEY UPDATE, which overwrites a racer's row.
+				$won = 1 === (int) $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", $name, $next ) );
+			} else {
+				$won = 1 === (int) $wpdb->update(
+					$wpdb->options,
+					[ 'option_value' => $next ],
+					[
+						'option_name' => $name,
+						'option_value' => $raw,
+					]
+				);
+			}
+
+			// Later reads (this request and, with a persistent cache, others) must see the database, not a stale copy.
+			wp_cache_delete( $name, 'options' );
+			wp_cache_delete( 'notoptions', 'options' );
+
+			return $won;
 		}
 
 		/**
 		 * Forgets the backoff once a verified claim is stored — by an automatic attempt or by a human action
 		 * (activating or saving a key, «Проверить», the weekly check). Does nothing while the claim is missing.
 		 *
+		 * @internal Public so the updater, which also receives signed claims, can reset it; not an extension point.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @return void
 		 */
-		private function reset_claim_refresh_backoff_if_claimed(): void {
+		public function reset_claim_refresh_backoff_if_claimed(): void {
 
 			if ( null !== $this->get_authority_claims()->get_verified() ) {
 				delete_option( $this->plugin->get_plugin_option_name( self::CLAIM_REFRESH_STATE_OPTION ) );
