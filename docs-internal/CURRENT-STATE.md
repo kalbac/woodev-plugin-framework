@@ -6,11 +6,11 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-13 (s176).** Framework `main` `4263db84`; CDEK plugin `v2` `b61e159` (pin `c241bfba`); Yandex plugin
+**As of 2026-10-13 (s176).** Framework `main` `e74db682` (F1 #1246, F5 #1258 merged at the end); CDEK plugin `v2` `b61e159` (pin `c241bfba`); Yandex plugin
 `kalbac/woocommerce-yandex-delivery` `main` `a8e6f00` (pin `c241bfba`, private repo, board №11). 🚧 **v2 release = TWO carrier
 plugins on v2, tested and compatible** (#1179): CDEK done (s172–s173). **Yandex: Y1–Y15 merged (Y10b documents, Y14 acceptance,
-Y15 coexistence — five classic-checkout coexistence defects fixed, e2e `tests/e2e/coexistence/` 18 pass / 0 fail).** Left: Y16 (needs
-F1 #1246) and Y43 bulk act (needs F5 #1258) — both parked for the operator's look. ⚠ **The Yandex TEST contour is silent** (HTTP 200,
+Y15 coexistence — five classic-checkout coexistence defects fixed, e2e `tests/e2e/coexistence/` 18 pass / 0 fail).** Left: Y16 and Y43 (bulk act +
+document labels) — both UNBLOCKED (F1, F5 merged); plugin pins still `c241bfba`, bump first. ⚠ **The Yandex TEST contour is silent** (HTTP 200,
 empty body): live confirm/cancel/status/PDF are UNVERIFIED — operator question yandex#47. Private-repo gate = local-ci + critic
 (global rule `~/.claude/CLAUDE.md`). Block-checkout gaps do not block the release (#1263).
 Next checks: `next-session-prompt.md`. ⚠ Sync the plugin’s own `woodev/` before plugin rig runs
@@ -278,7 +278,7 @@ only consumer; they get rewritten once everything is ready.
 
 ## Next Actions
 
-**Next:** the operator's looks (F1 #1246 → then Y16; F5 #1258 → then Y43 bulk act; yandex#47 live-check route; #1253(b)).
+**Next:** bump both plugin pins to `e74db682`, then Y16 and Y43; operator: yandex#47 live-check route, #1253(b).
 Without him: #1262 closes after a real 128 MB web run on the rig; then the board («Приоритет») — #1269, yandex#52/#57/#58.
 Handoff `next-session-prompt.md`; framework: #1263 is block-only (after v2).
 
