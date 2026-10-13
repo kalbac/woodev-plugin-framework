@@ -521,6 +521,10 @@
 	 */
 	var rememberedSelections = {};
 
+	/** @type {Object.<string, string>} method restorations awaiting updated_checkout. */
+	var pendingAddressRestores = {};
+	var shippingMethodWatcherBound = { native: false, jquery: false };
+
 	/**
 	 * Seeds {@see rememberedSelections} for one field id from `config.selections` — guarded to
 	 * run once per field id, exactly like {@see seedChosenAddress}, so a later mount pass never
@@ -574,7 +578,7 @@
 	 * @param {string} address
 	 * @returns {void}
 	 */
-	function rememberSelectionLocally( config, pointId, address ) {
+	function rememberSelectionLocally( config, pointId, address, point ) {
 		if ( ! pointId ) {
 			return;
 		}
@@ -599,7 +603,129 @@
 		rememberedSelections[ config.fieldId ][ localityKey ] = {
 			id: pointId,
 			address: 'string' === typeof address ? address : '',
+			point: point,
+			method: selectedShippingMethod(),
 		};
+	}
+
+	/**
+	 * Reads the chosen classic shipping method, including its instance id.
+	 *
+	 * @returns {string}
+	 */
+	function selectedShippingMethod() {
+		var method = document.querySelector( 'input[name^="shipping_method"]:checked' ) ||
+			document.querySelector( 'input[type="hidden"][name^="shipping_method"]' );
+
+		return method ? String( method.value || '' ) : '';
+	}
+
+	/**
+	 * Re-applies the cached point address after WooCommerce restores that pickup slot.
+	 *
+	 * The request is deferred until `updated_checkout` has replaced the shipping fragment.
+	 * The method and slot are checked again after any async detail lookup, so switching to a
+	 * courier while the lookup is in flight cannot overwrite an address the customer typed.
+	 *
+	 * @param {Object} config
+	 * @param {string} methodValue
+	 * @returns {void}
+	 */
+	function restorePointAddress( config, methodValue ) {
+		var localityKey = resolveLocalityKey( config );
+		var remembered = ( rememberedSelections[ config.fieldId ] || {} )[ localityKey ];
+
+		if ( ! remembered || remembered.method !== methodValue || fieldValue( config.fieldId ) !== remembered.id ) {
+			return;
+		}
+
+		var applyPoint = function( point ) {
+			if ( selectedShippingMethod() !== methodValue || fieldValue( config.fieldId ) !== remembered.id ) {
+				return;
+			}
+
+			// Guard the city change just like a freshly confirmed selection. A Location
+			// Provider checkout may use a different spelling for the same settlement across
+			// carriers; without this guard the locality handler clears the slot we just restored.
+			applyingSelection[ config.fieldId ] = true;
+
+			try {
+				applyAddressReplacement( config, point );
+			} finally {
+				delete applyingSelection[ config.fieldId ];
+			}
+
+			appliedLocality[ config.fieldId ] = resolveLocality( config );
+		};
+
+		if ( remembered.point ) {
+			applyPoint( remembered.point );
+
+			return;
+		}
+
+		var factory = window.WoodevPickupDataSource;
+
+		if ( ! config.restRoot || 'function' !== typeof factory ) {
+			return;
+		}
+
+		factory( { restRoot: config.restRoot, nonce: function() { return currentNonce( config ); } } )
+			.fetchDetails( remembered.id )
+			.then( applyPoint, function() {} );
+	}
+
+	/**
+	 * Records a method switch that may restore a previously selected pickup slot.
+	 *
+	 * @param {Event|Object} event native or jQuery change event.
+	 * @returns {void}
+	 */
+	function handleShippingMethodChanged( event ) {
+		if ( event && event.target && ! /^shipping_method/.test( event.target.name || '' ) ) {
+			return;
+		}
+
+		var methodValue = selectedShippingMethod();
+
+		collectConfigs().forEach( function( config ) {
+			seedRememberedSelections( config );
+
+			var remembered = ( rememberedSelections[ config.fieldId ] || {} )[ resolveLocalityKey( config ) ];
+
+			if ( remembered && remembered.method === methodValue ) {
+				pendingAddressRestores[ config.fieldId ] = methodValue;
+			} else {
+				delete pendingAddressRestores[ config.fieldId ];
+			}
+		} );
+	}
+
+	/**
+	 * Completes pending address restores after WooCommerce has restored pickup slot values.
+	 *
+	 * @returns {void}
+	 */
+	function handleShippingMethodRestore() {
+		var methodValue = selectedShippingMethod();
+
+		Object.keys( pendingAddressRestores ).forEach( function( fieldId ) {
+			var pendingMethod = pendingAddressRestores[ fieldId ];
+
+			delete pendingAddressRestores[ fieldId ];
+
+			if ( pendingMethod !== methodValue ) {
+				return;
+			}
+
+			var config = collectConfigs().filter( function( candidate ) {
+				return candidate.fieldId === fieldId;
+			} )[ 0 ];
+
+			if ( config ) {
+				restorePointAddress( config, pendingMethod );
+			}
+		} );
 	}
 
 	/**
@@ -1155,7 +1281,7 @@
 		// the restore below would only ever know about selections made before this page loaded —
 		// so "pick a point, switch locality, switch back" would still come up empty until a
 		// reload, which is the exact half of #176 that was missing.
-		rememberSelectionLocally( config, pointId, chosenAddress[ config.fieldId ] );
+		rememberSelectionLocally( config, pointId, chosenAddress[ config.fieldId ], point );
 	}
 
 	/**
@@ -1602,6 +1728,31 @@
 	}
 
 	/**
+	 * Binds the classic shipping-method watcher in both event systems.
+	 *
+	 * @returns {void}
+	 */
+	function bindShippingMethodWatcher() {
+		if ( ! shippingMethodWatcherBound.native ) {
+			shippingMethodWatcherBound.native = true;
+			document.body.addEventListener( 'change', handleShippingMethodChanged );
+		}
+
+		if ( shippingMethodWatcherBound.jquery || ! window.jQuery ) {
+			return;
+		}
+
+		var $body = window.jQuery( document.body );
+
+		if ( ! $body || 'function' !== typeof $body.on ) {
+			return;
+		}
+
+		shippingMethodWatcherBound.jquery = true;
+		$body.on( 'change', handleShippingMethodChanged );
+	}
+
+	/**
 	 * Mounts every currently-registered config's trigger — the single entry
 	 * point both the deferred `updated_checkout` handler and the initial boot
 	 * call below use.
@@ -1610,6 +1761,7 @@
 	 */
 	function mountAll() {
 		bindLocalityWatchers();
+		bindShippingMethodWatcher();
 
 		collectConfigs().forEach( function( config ) {
 			mountOne( config );
@@ -1711,7 +1863,10 @@
 	// -------------------------------------------------------------------------
 
 	onCheckoutUpdated( function() {
-		window.setTimeout( mountAll, MOUNT_DEFER_MS );
+		window.setTimeout( function() {
+			mountAll();
+			handleShippingMethodRestore();
+		}, MOUNT_DEFER_MS );
 	} );
 
 	// #238: a second, independent, permanent `updated_checkout` subscriber — see

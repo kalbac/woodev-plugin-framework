@@ -384,6 +384,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/admin/orders/class-export-queue-notice.php';
 			// The carrier marker contract (#967): loaded with the registry it reads providers from.
 			require_once $path . '/order/class-order-marker.php';
+			require_once $path . '/order/class-unchosen-carrier-cleaner.php';
 			require_once $path . '/admin/orders/class-orders-query.php';
 			require_once $path . '/admin/orders/class-orders-id-resolver.php';
 			require_once $path . '/admin/orders/class-order-edit-lock.php';
