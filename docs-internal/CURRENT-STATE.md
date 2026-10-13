@@ -6,10 +6,13 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-13 (s175).** Framework `main` `a3d154bb`; CDEK plugin `v2` `d3f5623` (pin `ac09b9bd`); Yandex plugin
-`kalbac/woocommerce-yandex-delivery` `main` `eab5dd6` (pin `ac09b9bd`, NEW private repo, board №11). 🚧 **v2 release = TWO carrier
-plugins on v2, tested and compatible** (#1179): CDEK done (s172–s173). **Yandex: Y1–Y13 + Y6b merged. Private-repo gate = local-ci + critic (GitHub Actions pool exhausted until the 1st; global rule
-`~/.claude/CLAUDE.md` «CI: local-ci + GitHub Actions», 13.10.2026).** Remaining Y cards: Y10b, Y14, Y15, Y16 (needs F1 #1246, parked for the operator). Block-checkout gaps do not block the release.
+**As of 2026-10-13 (s176).** Framework `main` `4263db84`; CDEK plugin `v2` `b61e159` (pin `c241bfba`); Yandex plugin
+`kalbac/woocommerce-yandex-delivery` `main` `a8e6f00` (pin `c241bfba`, private repo, board №11). 🚧 **v2 release = TWO carrier
+plugins on v2, tested and compatible** (#1179): CDEK done (s172–s173). **Yandex: Y1–Y15 merged (Y10b documents, Y14 acceptance,
+Y15 coexistence — five classic-checkout coexistence defects fixed, e2e `tests/e2e/coexistence/` 18 pass / 0 fail).** Left: Y16 (needs
+F1 #1246) and Y43 bulk act (needs F5 #1258) — both parked for the operator's look. ⚠ **The Yandex TEST contour is silent** (HTTP 200,
+empty body): live confirm/cancel/status/PDF are UNVERIFIED — operator question yandex#47. Private-repo gate = local-ci + critic
+(global rule `~/.claude/CLAUDE.md`). Block-checkout gaps do not block the release (#1263).
 Next checks: `next-session-prompt.md`. ⚠ Sync the plugin’s own `woodev/` before plugin rig runs
 (`wiki/local-rig.md`). The rig admin user has locale **ru_RU**; the site stays **en_US**.
 GlitchTip receiver (#1082) is live. **Both machines are live**; routine sync is git ONLY
@@ -59,7 +62,7 @@ the highest installed `2.2.5.5` (operator, 06.09.2026), so the update reaches ev
 
 ✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — no quota consumed; the exhaustion symptom is gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`.
 
-**Test measurements:** framework unit **7132** (1 skipped), Jest **3350** in **84** suites — measured 13.10.2026 (s175) on `a3d154bb`.
+**Test measurements:** framework unit **7160** (1 skipped), Jest **3353** in **84** suites — measured 13.10.2026 (s176) on `4263db84`.
 Integration is CI/coordinator-owned. Re-measure before quoting these as current gate evidence.
 
 ⚠ **A `.ts` msgid fails `lint:i18n-sources`** — it extracts from the BUILT bundle (s129).
@@ -275,9 +278,9 @@ only consumer; they get rewritten once everything is ready.
 
 ## Next Actions
 
-**Next: Yandex Y10b → Y14
-(test contour) → Y16 (after F1) → Y15 (coexistence with CDEK on the rig).** Card list and order: board №11 + spec §17; handoff
-`next-session-prompt.md`. Framework: F1 #1246 waits for the operator's look; #1253 item (b) is his decision.
+**Next:** the operator's looks (F1 #1246 → then Y16; F5 #1258 → then Y43 bulk act; yandex#47 live-check route; #1253(b)).
+Without him: #1262 closes after a real 128 MB web run on the rig; then the board («Приоритет») — #1269, yandex#52/#57/#58.
+Handoff `next-session-prompt.md`; framework: #1263 is block-only (after v2).
 
 **Issue lists and priorities live on the board.** `FUTURE-BACKLOG.md` is frozen.
 

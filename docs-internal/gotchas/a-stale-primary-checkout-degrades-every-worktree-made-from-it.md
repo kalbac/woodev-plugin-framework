@@ -50,3 +50,11 @@ afterwards, rather than leaving it parked there while agents run.
 - [a-worktree-silently-skips-five-contract-tests](a-worktree-silently-skips-five-contract-tests.md) — the s84 discovery this is the second-order cause of
 - [sharing-vendor-breaks-composer-autoload-in-a-worktree](sharing-vendor-breaks-composer-autoload-in-a-worktree.md) — why `vendor` is copied rather than shared
 - `../wiki/orchestrating-agents-with-orca.md` — worktree layout and what makes one gate-capable
+
+## s176: the same trap in a CARRIER PLUGIN — a pin bump does not refresh the primary's `woodev/`
+
+A plugin's `.worktreeinclude` copies its gitignored `woodev/` from the plugin's PRIMARY checkout. After the Yandex pin moved
+`ac09b9bd` → `a3d154bb` (PR #49) the primary `woodev/` was not re-synced, so the next worker's worktree ran the OLD framework and
+reported «two failures outside this change» — exactly the two tests the pin bump had adapted. local-ci (which fetches the pinned
+sha) was green. After every pin-bump merge run the plugin's `scripts/sync-framework.sh` in its primary checkout
+(`WOODEV_FRAMEWORK_DIR=<framework checkout>`).
