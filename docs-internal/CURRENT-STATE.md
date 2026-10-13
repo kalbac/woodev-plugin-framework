@@ -278,7 +278,7 @@ only consumer; they get rewritten once everything is ready.
 
 ## Next Actions
 
-**Next:** bump both plugin pins to `e74db682`, then Y16 and Y43; #1253(b) — decided (explicit retry action), build it. No live Yandex export check (operator, yandex#47): test contour when it revives, or simulated responses.
+**Next:** ⛔ RELEASE-BLOCKING #1270 — v2 carrier plugins run fully without a valid licence; gate checkout + new carrier actions on a SERVER-SIGNED licence status (operator decisions on the card). Then bump both plugin pins to `e74db682`, then Y16 and Y43; #1253(b) — decided (explicit retry action), build it. No live Yandex export check (operator, yandex#47): test contour when it revives, or simulated responses.
 Without him: #1262 closes after a real 128 MB web run on the rig; then the board («Приоритет») — #1269, yandex#52/#57/#58.
 Handoff `next-session-prompt.md`; framework: #1263 is block-only (after v2).
 
