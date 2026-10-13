@@ -247,6 +247,8 @@ namespace Woodev\Tests\Unit\Shipping {
 			$this->plugin = Mockery::mock( Shipping_Plugin::class );
 			$this->plugin->shouldReceive( 'get_location_service' )->andReturn( $service );
 			$this->plugin->shouldReceive( 'get_accepted_countries' )->andReturn( [] );
+			// no store product → the licence gate (#1270) has nothing to ask
+			$this->plugin->shouldReceive( 'get_download_id' )->andReturn( 0 );
 			$this->plugin->shouldReceive( 'log' )->andReturnNull();
 		}
 

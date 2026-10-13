@@ -296,6 +296,58 @@ final class OrderActionsRefusalTest extends TestCase {
 		$this->assertTrue( $result->is_success() );
 	}
 
+	/**
+	 * #1270: the refusal is a NEW carrier action. The carrier implements refuse() itself, so the base handler cannot
+	 * gate it — Order_Actions::perform() does, before the carrier is called and before any order note is written.
+	 */
+	public function test_the_refusal_is_refused_while_the_licence_is_not_in_force(): void {
+		Functions\when( 'admin_url' )->alias( static fn( string $path = '' ): string => 'https://shop.test/wp-admin/' . $path );
+
+		$engine = Mockery::mock( \Woodev_Plugins_License::class );
+		$engine->shouldReceive( 'is_license_in_force' )->andReturn( false );
+		$plugin = Mockery::mock( \Woodev\Framework\Shipping\Shipping_Plugin::class );
+		$plugin->shouldReceive( 'get_download_id' )->andReturn( 9001 );
+		$plugin->shouldReceive( 'get_license_instance' )->andReturn( $engine );
+		Orders_Registry::instance()->register_provider( $this->provider(), $plugin );
+
+		$handler = $this->handler( [ Delivery_Status::IN_TRANSIT ], true );
+		$handler->shouldNotReceive( 'refuse' );
+		$order = $this->order();
+		$order->shouldNotReceive( 'add_order_note' );
+
+		$result = $this->actions()->perform( $handler, $order, Order_Actions::REFUSE, $this->provider() );
+
+		$this->assertFalse( $result->is_success() );
+		$this->assertTrue( $result->is_license_refused() );
+		$this->assertStringContainsString( 'оформить отказ от посылки', $result->get_message() );
+		$this->assertStringContainsString( 'https://shop.test/wp-admin/admin.php?page=woodev-licenses', $result->get_message() );
+	}
+
+	/**
+	 * #1270: what the buyer and the merchant rely on keeps working without a licence — asking the carrier for an
+	 * order's CURRENT STATUS («Обновить») is polling, not a new carrier action, and the row still offers its
+	 * buttons (a click is refused with the licence sentence, not hidden).
+	 */
+	public function test_status_polling_and_the_rows_buttons_survive_a_licence_that_is_not_in_force(): void {
+		$engine = Mockery::mock( \Woodev_Plugins_License::class );
+		$engine->shouldReceive( 'is_license_in_force' )->andReturn( false );
+		$plugin = Mockery::mock( \Woodev\Framework\Shipping\Shipping_Plugin::class );
+		$plugin->shouldReceive( 'get_download_id' )->andReturn( 9001 );
+		$plugin->shouldReceive( 'get_license_instance' )->andReturn( $engine );
+		Orders_Registry::instance()->register_provider( $this->provider(), $plugin );
+
+		$handler = $this->handler( [ Delivery_Status::IN_TRANSIT ], true );
+		$order = $this->order();
+
+		$handler->shouldReceive( 'update' )->once()->with( $order )->andReturn( Action_Result::success() );
+
+		$result = $this->actions()->perform( $handler, $order, Order_Actions::UPDATE, $this->provider() );
+
+		$this->assertTrue( $result->is_success() );
+		$this->assertFalse( $result->is_license_refused() );
+		$this->assertContains( Order_Actions::CANCEL, $this->offered( $order ), 'offered, then refused on click — not hidden' );
+	}
+
 	public function test_a_successful_refusal_closes_the_action_for_that_shipment(): void {
 		$this->handler( [ Delivery_Status::IN_TRANSIT ], true );
 

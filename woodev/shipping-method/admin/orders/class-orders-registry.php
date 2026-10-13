@@ -282,6 +282,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 * use replaces the first (last write wins), the same rule
 		 * {@see self::register_provider()} applies to providers.
 		 *
+		 * The handler's licence gate (#1270) finds its plugin through this registration
+		 * ({@see self::get_handler_plugin()}): a new export or a cancellation is refused while the licence of
+		 * the plugin that owns the provider is not in force — whoever asks.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @param string                    $provider_id carrier/tab id.
@@ -290,6 +294,30 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 */
 		public function register_shipment_handler( string $provider_id, Abstract_Shipment_Handler $handler ): void {
 			$this->shipment_handlers[ $provider_id ] = $handler;
+		}
+
+		/**
+		 * The carrier plugin a registered shipment handler belongs to — the plugin that registered the provider the
+		 * handler was registered for — or null when the handler is not registered here, or its provider was
+		 * registered without a plugin (#1270).
+		 *
+		 * Resolved when asked, not when the handler is registered: a plugin may register its provider and its
+		 * handler in either order.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Abstract_Shipment_Handler $handler the handler.
+		 * @return Shipping_Plugin|null
+		 */
+		public function get_handler_plugin( Abstract_Shipment_Handler $handler ): ?Shipping_Plugin {
+
+			foreach ( $this->shipment_handlers as $provider_id => $registered ) {
+				if ( $registered === $handler ) {
+					return $this->get_provider_plugin( (string) $provider_id );
+				}
+			}
+
+			return null;
 		}
 
 		/**
@@ -1302,6 +1330,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			}
 
 			$result = $actions->perform( $handler, $order, Order_Actions::EXPORT, $provider );
+
+			if ( $result->is_license_refused() ) {
+				// #1270: nothing was sent, so there is nothing to retry and the order is NOT marked failed — the chain
+				// ends here and the order stays exportable by hand once the licence is back.
+				Export_Retry::reset( $order, $order );
+				$order->add_order_note( __( 'Автоматическая выгрузка не выполнена: лицензия плагина не действует. После продления лицензии выгрузите заказ кнопкой «Экспорт».', 'woodev-plugin-framework' ) );
+
+				$plugin = $this->get_provider_plugin( $provider->get_id() );
+
+				if ( null !== $plugin ) {
+					$plugin->log( sprintf( 'Automatic export of order #%d skipped: the plugin licence is not in force.', $order->get_id() ), $plugin->get_id() );
+				}
+
+				return;
+			}
 
 			if ( $result->is_busy() ) {
 				$this->defer_export_retry( $order->get_id(), $result->get_message() );

@@ -4,6 +4,7 @@
 namespace Woodev\Framework\Shipping\Rest_Api;
 
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
+use Woodev\Framework\Shipping\License_Gate;
 use Woodev\Framework\Shipping\Order\{Bulk_Document_Source, Document_Result};
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -164,6 +165,11 @@ class Document_Controller extends \WP_REST_Controller {
 			return new \WP_Error( 'woodev_document_unavailable', __( 'Документ недоступен.', 'woodev-plugin-framework' ), [ 'status' => 404 ] );
 		}
 
+		$denied = $this->license_denial( $provider->get_id() );
+		if ( null !== $denied ) {
+			return $denied;
+		}
+
 		try {
 			$result = $source->get_document( $order, $type );
 		} catch ( \Throwable $error ) {
@@ -235,6 +241,11 @@ class Document_Controller extends \WP_REST_Controller {
 		$selected    = $orders[ $provider_id ];
 		$source      = $this->registry->get_document_source( $provider_id );
 
+		$denied = $this->license_denial( $provider_id );
+		if ( null !== $denied ) {
+			return $denied;
+		}
+
 		if ( ! $source instanceof Bulk_Document_Source || ! in_array( $type, $source->get_bulk_document_types(), true ) ) {
 			return new \WP_Error( 'woodev_document_unavailable', __( 'Массовая печать этого документа для выбранного перевозчика недоступна.', 'woodev-plugin-framework' ), [ 'status' => 404 ] );
 		}
@@ -278,6 +289,27 @@ class Document_Controller extends \WP_REST_Controller {
 			'json' === (string) $request->get_param( 'format' ),
 			$skipped
 		);
+	}
+
+	/**
+	 * The refusal for a document the carrier would be asked for while the plugin's licence is not in force (#1270).
+	 *
+	 * A document is fetched from the carrier on demand and never stored here (only a «downloaded» timestamp is), so
+	 * there is nothing already in hand to keep serving: every download is a new request to the carrier. A provider
+	 * registered with no plugin has no licence to ask and is not gated.
+	 *
+	 * @since 2.0.2
+	 * @param string $provider_id carrier id.
+	 * @return \WP_Error|null the refusal, or null when the document may be requested.
+	 */
+	private function license_denial( string $provider_id ): ?\WP_Error {
+		$plugin = $this->registry->get_provider_plugin( $provider_id );
+
+		if ( null === $plugin || License_Gate::is_in_force( $plugin ) ) {
+			return null;
+		}
+
+		return new \WP_Error( 'woodev_license_inactive', License_Gate::refusal( __( 'получить документ перевозчика', 'woodev-plugin-framework' ) ), [ 'status' => 403 ] );
 	}
 
 	/**

@@ -639,6 +639,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 * @since 2.0.2 A method that declared {@see self::FEATURE_RATE_CACHE} has its successful rate cached
 		 *              for a few minutes ({@see Shipping_Rate_Cache}, #958); a failure or an empty result
 		 *              never is, and a method that did not declare it is never cached.
+		 * @since 2.0.2 A plugin whose licence is not in force ({@see License_Gate}, #1270) yields NO rate — the
+		 *              method is hidden, a store manager sees why through {@see self::report_hidden()}
+		 *              (`license_inactive`), the buyer sees nothing.
 		 */
 		final public function calculate_shipping( $package = [] ): void {
 
@@ -661,6 +664,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			do_action( 'woodev_shipping_method_before_calculate_shipping', $package, $this );
 
 			if ( ! $this->should_send_cart_api_request() ) {
+				return;
+			}
+
+			// #1270: no signed licence in force → no rate. The buyer sees nothing new (the method is simply
+			// not offered); a store manager is told why through report_hidden(). Before the rate cache and
+			// the pre-calculate filter, so a cached rate cannot slip through.
+			if ( ! License_Gate::is_in_force( $this->get_plugin() ) ) {
+				$this->report_license_hidden();
+
 				return;
 			}
 
@@ -1691,6 +1703,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			 * @param Shipping_Method          $method    Method instance.
 			 */
 			do_action( 'woodev_shipping_method_rate_calculation_failed', $exception, $package, $this );
+		}
+
+		/**
+		 * Tells a store manager why the method gave no rate: the plugin's licence is not in force (#1270).
+		 *
+		 * The buyer is told nothing. Nothing is logged either — this runs on every rate calculation, and the
+		 * licence notice on the settings and orders pages is the standing message.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		private function report_license_hidden(): void {
+
+			$key = $this->calculation_hidden_reason_key;
+
+			if ( null === $key ) {
+				return;
+			}
+
+			$this->active_hidden_reason_key = $key;
+			$this->report_hidden( 'license_inactive', License_Gate::hidden_reason() );
+			$this->active_hidden_reason_key = null;
 		}
 
 		protected function get_shipping_classes_options(): array {

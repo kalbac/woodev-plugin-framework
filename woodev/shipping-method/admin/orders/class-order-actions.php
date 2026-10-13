@@ -9,6 +9,7 @@
 
 namespace Woodev\Framework\Shipping\Admin\Orders;
 
+use Woodev\Framework\Shipping\License_Gate;
 use Woodev\Framework\Shipping\Location\{Location_Provider, Location_Provider_Registry, Location_Record};
 use Woodev\Framework\Shipping\Order\{Abstract_Shipment_Handler, Action_Result, Bulk_Document_Source, Carrier_Cancel, Delivery_Status, Document_Source, Document_Type_Declarations, Order_Automation, Shipment_Cancellation};
 
@@ -739,6 +740,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		 * @throws \Throwable Whatever the carrier call throws, after the note is written.
 		 */
 		private function refuse( Abstract_Shipment_Handler $handler, \WC_Order $order, Orders_Provider $provider ): Action_Result {
+			// #1270: the refusal is a NEW (and paid) carrier action — not while the licence is not in force. The
+			// carrier implements refuse() itself, so unlike export / cancel the base handler cannot gate it.
+			$plugin = $this->registry->get_provider_plugin( $provider->get_id() );
+
+			if ( null !== $plugin && ! License_Gate::is_in_force( $plugin ) ) {
+				return Action_Result::license_inactive( License_Gate::refusal( __( 'оформить отказ от посылки', 'woodev-plugin-framework' ) ) );
+			}
+
 			try {
 				$result = $handler->refuse( $order );
 			} catch ( \Throwable $exception ) {
