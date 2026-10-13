@@ -135,8 +135,7 @@ boundaries only; per-site table on the cards + `sessions/s101.md`.
 **The checkout layer reports a builder conflict**; a failed lookup may throw. A location field's `takeover_condition` is
 dropped and reported (#474, s113). An architectural card is decided by measurement, not by asking.
 
-**The local phpcs warning level is ARMED (#139)**; `[]`-only too. CI currently overrides it
-with `--warning-severity=0`; aligning that workflow is a follow-up. **Line length is the one
+**The phpcs warning level is ARMED (#139)** — locally and in CI since #1235 (s176); `[]`-only too. **Line length is the one
 deliberate hole and needs its own ruleset** —
 `vendor/bin/phpcs --standard=phpcs-line-length.xml --report=summary ./woodev`; why it cannot be revived from the CLI: gotcha
 `a-phpcs-rule-silenced-by-exclude-pattern-cannot-be-revived-from-the-cli`.

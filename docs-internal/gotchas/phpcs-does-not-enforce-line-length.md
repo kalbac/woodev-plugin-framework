@@ -9,9 +9,8 @@ That was fixed in s110: `phpcs.xml` now sets `warning-severity` to `1`, and new 
 remaining warning-level sniffs fail `composer phpcs`. The old count of 1,786 violations across 19
 sniffs is historical evidence for that decision, not a claim about today's gate.
 
-> **CI discrepancy (s171):** `.github/workflows/ci.yml` explicitly runs PHPCS with
-> `--warning-severity=0`, overriding the local ruleset. The documented policy enables
-> warnings; aligning CI is a source/config follow-up, outside this documentation audit.
+> **CI aligned (s176, #1235):** the CI step no longer passes `--warning-severity=0`, so CI
+> enforces the same warning level as the local ruleset (measured 0 warnings on `main` first).
 
 ## The live exception
 
