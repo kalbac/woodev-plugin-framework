@@ -753,7 +753,15 @@ namespace Woodev\Tests\Unit\Shipping {
 			return 'wc_ship_' . md5( json_encode( $package ) . 'shipping-generation-1' ) . ':rate-cache-method:' . $instance_id;
 		}
 
-		/** @return void */
+		/**
+		 * Isolated: `Functions\when( 'has_block' )` defines the function for the rest of the process, which
+		 * flips `Checkout_Surface::is_block_only()` past its `function_exists( 'has_block' )` guard in
+		 * the pickup / checkout enqueue tests that run later (CI's reverse-order gate).
+		 *
+		 * @runInSeparateProcess
+		 * @preserveGlobalState disabled
+		 * @return void
+		 */
 		public function test_hidden_reason_script_is_enqueued_only_for_managers_on_block_checkout(): void {
 			$this->can_manage_woocommerce = true;
 			$has_checkout_block = false;
