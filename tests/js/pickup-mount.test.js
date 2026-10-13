@@ -2141,6 +2141,77 @@ test( 'address replacement writes to shipping_* when the "ship to a different ad
 	expect( console ).toHaveWarned(); // shipping_* fields are unmanaged — acknowledge.
 } );
 
+describe( 'pickup address follows a restored classic shipping method (#1261)', () => {
+	function addShippingMethods() {
+		document.body.insertAdjacentHTML(
+			'beforeend',
+			'<input type="radio" name="shipping_method[0]" value="cdek_pickup:1" checked>' +
+			'<input type="radio" name="shipping_method[0]" value="yandex_pickup:2">' +
+			'<input type="radio" name="shipping_method[0]" value="cdek_courier:3">'
+		);
+	}
+
+	function changeMethod( value ) {
+		const radio = Array.from( document.querySelectorAll( 'input[name^="shipping_method"]' ) )
+			.find( ( input ) => input.value === value );
+
+		radio.checked = true;
+		radio.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+	}
+
+	function updateCheckout() {
+		document.body.dispatchEvent( new Event( 'updated_checkout' ) );
+		jest.advanceTimersByTime( 60 );
+	}
+
+	it( 're-applies the remembered point address after its pickup slot is restored', async () => {
+		makeStore();
+		addShippingMethods();
+		setConfig( makeConfig( { replaceAddress: { enabled: true, billingOnly: true } } ) );
+		mountAll();
+		clickTrigger();
+		await selectAndConfirm( StubProvider.instances[ 0 ], point( {
+			id: 'CDEK-1',
+			address: 'Москва, СДЭК, 1',
+			locality: 'Москва',
+			postal_code: '119180',
+		} ) );
+
+		changeMethod( 'yandex_pickup:2' );
+		document.getElementById( 'billing_address_1' ).value = 'Москва, Яндекс, 10';
+		document.getElementById( 'billing_postcode' ).value = '';
+		updateCheckout();
+
+		changeMethod( 'cdek_pickup:1' );
+		// WooCommerce restores this carrier's session-backed slot value during checkout refresh.
+		document.getElementById( FIELD_ID ).value = 'CDEK-1';
+		updateCheckout();
+
+		expect( document.getElementById( 'billing_address_1' ).value ).toBe( 'Москва, СДЭК, 1' );
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Москва' );
+		expect( document.getElementById( 'billing_postcode' ).value ).toBe( '119180' );
+		expect( console ).toHaveWarned(); // plain billing_address_1/postcode are intentionally DOM-only.
+	} );
+
+	it( 'does not replace a manually typed courier address', async () => {
+		makeStore();
+		addShippingMethods();
+		setConfig( makeConfig( { replaceAddress: { enabled: true, billingOnly: true } } ) );
+		mountAll();
+		clickTrigger();
+		await selectAndConfirm( StubProvider.instances[ 0 ], point( { id: 'CDEK-1' } ) );
+
+		changeMethod( 'cdek_courier:3' );
+		document.getElementById( 'billing_address_1' ).value = 'Адрес введён покупателем';
+		document.getElementById( 'billing_postcode' ).value = '101000';
+		updateCheckout();
+
+		expect( document.getElementById( 'billing_address_1' ).value ).toBe( 'Адрес введён покупателем' );
+		expect( document.getElementById( 'billing_postcode' ).value ).toBe( '101000' );
+		expect( console ).toHaveWarned(); // initial confirmation writes the unmanaged address fields.
+	} );
+} );
+
 test( 'a city with no matching <option> gets one added before the value is set', async () => {
 	const store = makeStore();
 	setConfig( makeConfig( { replaceAddress: { enabled: true, billingOnly: true } } ) );
