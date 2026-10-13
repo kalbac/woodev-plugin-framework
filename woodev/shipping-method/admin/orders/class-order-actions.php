@@ -10,7 +10,7 @@
 namespace Woodev\Framework\Shipping\Admin\Orders;
 
 use Woodev\Framework\Shipping\Location\{Location_Provider, Location_Provider_Registry, Location_Record};
-use Woodev\Framework\Shipping\Order\{Abstract_Shipment_Handler, Action_Result, Bulk_Document_Source, Carrier_Cancel, Delivery_Status, Order_Automation, Shipment_Cancellation};
+use Woodev\Framework\Shipping\Order\{Abstract_Shipment_Handler, Action_Result, Bulk_Document_Source, Carrier_Cancel, Delivery_Status, Document_Source, Document_Type_Declarations, Order_Automation, Shipment_Cancellation};
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -345,15 +345,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 			return $actions;
 		}
 
-		/**
-		 * Document downloads are client-side actions, offered only on rows, for an order that has a carrier order
-		 * ({@see self::is_exported()} — the same precondition the download route enforces).
-		 *
-		 * @since 2.0.2
-		 * @param \WC_Order            $order order.
-		 * @param Orders_Provider|null $provider matched carrier.
-		 * @return array<int,array<string,mixed>>
-		 */
 		private function document_actions( \WC_Order $order, ?Orders_Provider $provider ): array {
 			if ( null === $provider || ! self::is_exported( $order, $provider ) || ! $provider->supports_label_printing() ) {
 				return [];
@@ -364,30 +355,73 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 				return [];
 			}
 
-			$labels = [
-				'waybill' => __( 'Накладная', 'woodev-plugin-framework' ),
-				'barcode' => __( 'Штрихкод', 'woodev-plugin-framework' ),
-			];
-			// Two different glyphs: a waybill is a page, a barcode is the label stuck on the parcel.
-			$icons = [
-				'waybill' => 'media-document',
-				'barcode' => 'tag',
-			];
+			// #1257: the carrier names its own types; a source that declares nothing keeps waybill / barcode. A type
+			// nobody can name is not offered — the framework will not label a handover act «Накладная».
+			$declared = self::document_type_declarations( $source );
 			// #1192: a carrier that can print this document for SEVERAL orders says so on the row, so the orders page
-			// offers «Печать накладных» / «Печать штрихкодов» only where it will work. Absent => single-order only.
+			// offers the bulk entry only where it will work. Absent => single-order only.
 			$bulk_types = $source instanceof Bulk_Document_Source ? $source->get_bulk_document_types() : [];
 			$actions    = [];
 			foreach ( $source->get_document_types( $order ) as $type ) {
-				if ( isset( $labels[ $type ] ) ) {
-					$action = self::build_action( $type, $labels[ $type ], __( 'Скачать документ перевозчика', 'woodev-plugin-framework' ), false, $icons[ $type ] );
-					if ( in_array( $type, $bulk_types, true ) ) {
-						$action['bulk'] = true;
-					}
-					$actions[] = $action;
+				if ( ! isset( $declared[ $type ] ) ) {
+					continue;
 				}
+
+				$action             = self::build_action( $type, $declared[ $type ]['label'], __( 'Скачать документ перевозчика', 'woodev-plugin-framework' ), false, $declared[ $type ]['icon'] );
+				$action['document'] = true;
+				if ( in_array( $type, $bulk_types, true ) ) {
+					$action['bulk']       = true;
+					$action['bulk_label'] = $declared[ $type ]['bulk_label'];
+				}
+				$actions[] = $action;
 			}
 
 			return $actions;
+		}
+
+		/**
+		 * The document types a source can name (#1257): the framework defaults, overridden and extended by what the
+		 * source declares through {@see Document_Type_Declarations}. A declaration without a usable label is ignored.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Document_Source $source the carrier's document source.
+		 * @return array<string,array{label:string,bulk_label:string,icon:string}> by type key.
+		 */
+		private static function document_type_declarations( Document_Source $source ): array {
+			// Two different glyphs: a waybill is a page, a barcode is the label stuck on the parcel.
+			$types = [
+				'waybill' => [
+					'label'      => __( 'Накладная', 'woodev-plugin-framework' ),
+					'bulk_label' => __( 'Печать накладных', 'woodev-plugin-framework' ),
+					'icon'       => 'media-document',
+				],
+				'barcode' => [
+					'label'      => __( 'Штрихкод', 'woodev-plugin-framework' ),
+					'bulk_label' => __( 'Печать штрихкодов', 'woodev-plugin-framework' ),
+					'icon'       => 'tag',
+				],
+			];
+
+			if ( ! $source instanceof Document_Type_Declarations ) {
+				return $types;
+			}
+
+			foreach ( $source->get_document_type_declarations() as $type => $declaration ) {
+				$label = is_array( $declaration ) && is_string( $declaration['label'] ?? null ) ? trim( $declaration['label'] ) : '';
+				if ( '' === $label ) {
+					continue;
+				}
+
+				$bulk_label = is_string( $declaration['bulk_label'] ?? null ) ? trim( $declaration['bulk_label'] ) : '';
+				$types[ (string) $type ] = [
+					'label'      => $label,
+					'bulk_label' => '' !== $bulk_label ? $bulk_label : $label,
+					'icon'       => self::sanitize_icon( $declaration['icon'] ?? ( $types[ $type ]['icon'] ?? '' ) ),
+				];
+			}
+
+			return $types;
 		}
 
 		/**

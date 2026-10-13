@@ -2550,8 +2550,8 @@ describe( 'the «Накладная» / «Штрихкод» document actions (#
 	function documentRow() {
 		return makeRow( {
 			actions: [
-				{ action: 'waybill', label: 'Накладная', title: 'Скачать документ перевозчика', destructive: false },
-				{ action: 'barcode', label: 'Штрихкод', title: 'Скачать документ перевозчика', destructive: false },
+				{ action: 'waybill', label: 'Накладная', title: 'Скачать документ перевозчика', destructive: false, document: true },
+				{ action: 'barcode', label: 'Штрихкод', title: 'Скачать документ перевозчика', destructive: false, document: true },
 			],
 		} );
 	}
@@ -2824,8 +2824,8 @@ describe( 'bulk print for the selected orders (#1192)', () => {
 			id,
 			order_number: `N${ id }`,
 			actions: [
-				{ action: 'waybill', label: 'Накладная', title: '', destructive: false, bulk: true },
-				{ action: 'barcode', label: 'Штрихкод', title: '', destructive: false, bulk: true },
+				{ action: 'waybill', label: 'Накладная', title: '', destructive: false, document: true, bulk: true, bulk_label: 'Печать накладных' },
+				{ action: 'barcode', label: 'Штрихкод', title: '', destructive: false, document: true, bulk: true, bulk_label: 'Печать штрихкодов' },
 			],
 			...overrides,
 		} );
@@ -2851,7 +2851,7 @@ describe( 'bulk print for the selected orders (#1192)', () => {
 
 	test( 'the print entries are offered only where a row can print in bulk', async () => {
 		fetchOrders.mockResolvedValue(
-			resultOf( [ makeRow( { id: 1, actions: [ { action: 'waybill', label: 'Накладная', title: '', destructive: false } ] } ) ] )
+			resultOf( [ makeRow( { id: 1, actions: [ { action: 'waybill', label: 'Накладная', title: '', destructive: false, document: true } ] } ) ] )
 		);
 
 		const { unmount } = render( <App /> );
@@ -4340,8 +4340,8 @@ describe( 'the «Действия» column icons and red (s164)', () => {
 		fetchOrders.mockResolvedValue(
 			resultOf( [
 				row( [
-					{ action: 'waybill', label: 'Накладная', title: '', destructive: false, icon: 'media-document' },
-					{ action: 'barcode', label: 'Штрихкод', title: '', destructive: false, icon: 'tag' },
+					{ action: 'waybill', label: 'Накладная', title: '', destructive: false, document: true, icon: 'media-document' },
+					{ action: 'barcode', label: 'Штрихкод', title: '', destructive: false, document: true, icon: 'tag' },
 					{ action: 'carrier_call', label: 'Вызвать', title: '', destructive: false, icon: 'calendar-alt' },
 				] ),
 			] )
@@ -4669,7 +4669,7 @@ describe( 'carrier seams (s164)', () => {
 			jest.spyOn( HTMLAnchorElement.prototype, 'click' ).mockImplementation( () => undefined );
 
 			fetchOrders.mockResolvedValue(
-				resultOf( [ makeRow( { actions: [ { action: 'waybill', label: 'Накладная', title: '', destructive: false } ] } ) ] )
+				resultOf( [ makeRow( { actions: [ { action: 'waybill', label: 'Накладная', title: '', destructive: false, document: true } ] } ) ] )
 			);
 			fetchOrderDocument
 				.mockResolvedValueOnce( { kind: 'pending', message: '', retryAfter: 3 } )
@@ -4696,7 +4696,7 @@ describe( 'carrier seams (s164)', () => {
 			window.URL.revokeObjectURL = jest.fn();
 			jest.spyOn( HTMLAnchorElement.prototype, 'click' ).mockImplementation( () => undefined );
 
-			const action = { action: 'waybill', label: 'Накладная', title: '', destructive: false };
+			const action = { action: 'waybill', label: 'Накладная', title: '', destructive: false, document: true };
 
 			fetchOrders.mockResolvedValue(
 				resultOf( [
@@ -4743,7 +4743,7 @@ describe( 'carrier seams (s164)', () => {
 		test( 'is taken down when the wait fails too, leaving only the failure', async () => {
 			jest.useFakeTimers();
 			fetchOrders.mockResolvedValue(
-				resultOf( [ makeRow( { actions: [ { action: 'waybill', label: 'Накладная', title: '', destructive: false } ] } ) ] )
+				resultOf( [ makeRow( { actions: [ { action: 'waybill', label: 'Накладная', title: '', destructive: false, document: true } ] } ) ] )
 			);
 			fetchOrderDocument
 				.mockResolvedValueOnce( { kind: 'pending', message: '', retryAfter: 3 } )
@@ -4760,5 +4760,77 @@ describe( 'carrier seams (s164)', () => {
 			await waitFor( () => expect( screen.getAllByText( 'Перевозчик недоступен' ).length ).toBeGreaterThan( 0 ) );
 			expect( document.querySelector( '.components-snackbar' ).textContent ).not.toContain( 'формируется' );
 		} );
+	} );
+} );
+
+/**
+ * #1257 — the carrier declares its document types. The page keeps no list of them: a row action marked `document`
+ * is a download of type `action`, and a bulk entry exists only for a type marked `bulk`, worded by `bulk_label`.
+ */
+describe( 'carrier-declared document types (#1257)', () => {
+	/** A row of a carrier with its own documents: a label (single only) and a handover act (also in bulk). */
+	function declaredRow( id = 42 ) {
+		return makeRow( {
+			id,
+			order_number: `N${ id }`,
+			actions: [
+				{ action: 'label', label: 'Этикетка', title: '', destructive: false, document: true },
+				{ action: 'handover_act', label: 'Акт приёма-передачи', title: '', destructive: false, document: true, bulk: true, bulk_label: 'Печать актов приёма-передачи' },
+			],
+		} );
+	}
+
+	const picker = () => screen.getByLabelText( 'Массовые действия' );
+	const optionLabels = () => Array.from( picker().querySelectorAll( 'option' ) ).map( ( option ) => option.textContent );
+
+	beforeEach( () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( resultOf( [ declaredRow() ] ) );
+		fetchOrderDocument.mockReset();
+		fetchBulkDocument.mockReset();
+		performOrderAction.mockReset();
+		window.URL.createObjectURL = jest.fn( () => 'blob:pdf' );
+		window.URL.revokeObjectURL = jest.fn();
+		jest.spyOn( HTMLAnchorElement.prototype, 'click' ).mockImplementation( () => {} );
+		jest.spyOn( window, 'open' ).mockImplementation( () => null );
+	} );
+
+	afterEach( () => {
+		jest.restoreAllMocks();
+	} );
+
+	test( 'a document type the page has never heard of gets its own button, and the click downloads that type', async () => {
+		fetchOrderDocument.mockResolvedValue( { kind: 'file', blob: new Blob( [ '%PDF-' ] ), filename: 'act.pdf' } );
+
+		render( <App /> );
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Акт приёма-передачи' } ) );
+
+		await waitFor( () => expect( fetchOrderDocument ).toHaveBeenCalledWith( 42, 'handover_act', expect.anything() ) );
+		expect( screen.getByRole( 'button', { name: 'Этикетка' } ) ).toBeInTheDocument();
+		// A download, never an action-route POST.
+		expect( performOrderAction ).not.toHaveBeenCalled();
+	} );
+
+	test( 'the bulk picker lists only the types declared bulk-capable, under the carrier\'s wording', async () => {
+		render( <App /> );
+		await screen.findByRole( 'checkbox', { name: 'Выбрать заказ N42' } );
+
+		expect( optionLabels() ).toContain( 'Печать актов приёма-передачи' );
+		expect( optionLabels() ).not.toContain( 'Этикетка' );
+		expect( optionLabels() ).not.toContain( 'Печать накладных' );
+		expect( optionLabels().filter( ( label ) => /Печать/.test( label ) ) ).toHaveLength( 1 );
+	} );
+
+	test( 'a bulk entry fetches the declared type for the selected orders', async () => {
+		fetchOrders.mockResolvedValue( resultOf( [ declaredRow( 1 ), declaredRow( 2 ) ] ) );
+		fetchBulkDocument.mockResolvedValue( { kind: 'file', blob: new Blob( [ '%PDF-' ] ), filename: 'acts.pdf' } );
+
+		render( <App /> );
+		fireEvent.click( await screen.findByRole( 'checkbox', { name: 'Выбрать заказ N1' } ) );
+		fireEvent.click( screen.getByRole( 'checkbox', { name: 'Выбрать заказ N2' } ) );
+		fireEvent.change( picker(), { target: { value: 'print:handover_act' } } );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Применить действие' } ) );
+
+		await waitFor( () => expect( fetchBulkDocument ).toHaveBeenCalledWith( [ 1, 2 ], 'handover_act', expect.anything() ) );
 	} );
 } );

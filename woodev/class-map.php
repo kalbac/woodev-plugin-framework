@@ -134,6 +134,7 @@ return [
 	'Woodev\\Framework\\Shipping\\Order\\Delivery_Sync_Status' => 'woodev/shipping-method/order/class-delivery-sync-status.php',
 	'Woodev\\Framework\\Shipping\\Order\\Document_Result' => 'woodev/shipping-method/order/class-document-result.php',
 	'Woodev\\Framework\\Shipping\\Order\\Document_Source' => 'woodev/shipping-method/order/interface-document-source.php',
+	'Woodev\\Framework\\Shipping\\Order\\Document_Type_Declarations' => 'woodev/shipping-method/order/interface-document-type-declarations.php',
 	'Woodev\\Framework\\Shipping\\Order\\Export_Queue' => 'woodev/shipping-method/order/class-export-queue.php',
 	'Woodev\\Framework\\Shipping\\Order\\Export_Retry' => 'woodev/shipping-method/order/class-export-retry.php',
 	'Woodev\\Framework\\Shipping\\Order\\Order_Automation' => 'woodev/shipping-method/order/class-order-automation.php',
