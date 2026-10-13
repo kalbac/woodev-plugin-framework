@@ -152,6 +152,13 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		private const MAX_REDACTABLE_BODY_BYTES = 1048576;
 
 		/**
+		 * Describe why an oversized body was omitted from an API log.
+		 *
+		 * @since 2.0.2
+		 */
+		private const OVERSIZED_BODY_MASK_FORMAT = '[REDACTED: body of %1$d bytes exceeds the %2$d-byte logging limit; withheld for size]';
+
+		/**
 		 * Perform the request and return the parsed response
 		 *
 		 * @param Woodev_API_Request|object $request class instance which implements Woodev_API_Request
@@ -2057,11 +2064,15 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * by key at any depth, `json_encode()` back — so a secret-shaped substring
 		 * embedded in an unrelated string VALUE is never touched, and the result
 		 * is always valid JSON because it was rebuilt from a decoded structure,
-		 * never edited as text.
+		 * never edited as text. A larger body is withheld with its byte size and
+		 * the configured logging limit, without decoding it.
 		 *
-		 * An oversized body, or anything else — a body that decodes as a JSON SCALAR (a bare string,
-		 * number, bool, or `null`), or a body that is not valid JSON at all — is
-		 * replaced with {@see self::UNPARSEABLE_BODY_MASK} IN FULL. This covers
+		 * An oversized body is replaced with an explicit size marker before
+		 * decoding. This applies even if `$secret_names` is empty: without parsing,
+		 * the body cannot be checked for credentials, and a large log entry is
+		 * withheld for size. Any other unsupported body — a JSON SCALAR (a bare
+		 * string, number, bool, or `null`), or a body that is not valid JSON at
+		 * all — is replaced with {@see self::UNPARSEABLE_BODY_MASK} IN FULL. This covers
 		 * three cases that used to be handled separately, and unsafely:
 		 *
 		 * - Round 4 fell back to {@see self::redact_secret_query_params()} for a
@@ -2163,8 +2174,10 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 				return $body;
 			}
 
-			if ( strlen( $body ) > self::MAX_REDACTABLE_BODY_BYTES ) {
-				return self::UNPARSEABLE_BODY_MASK;
+			$body_size = strlen( $body );
+
+			if ( $body_size > self::MAX_REDACTABLE_BODY_BYTES ) {
+				return sprintf( self::OVERSIZED_BODY_MASK_FORMAT, $body_size, self::MAX_REDACTABLE_BODY_BYTES );
 			}
 
 			if ( empty( $secret_names ) ) {
@@ -2788,10 +2801,10 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * Whatever `to_string_safe()` returns — or `''` when there is no response
 		 * yet, or its class does not implement the method at all — is run through
 		 * {@see self::redact_secret_request_body()} unconditionally, exactly like
-		 * the request side: a JSON object/array body is walked and redacted by
-		 * key at any depth, anything else (XML, a `print_r()` dump, free text, a
-		 * bare JSON scalar) is replaced with {@see self::UNPARSEABLE_BODY_MASK} in
-		 * full.
+		 * the request side: a JSON object/array body within the size limit is
+		 * walked and redacted by key at any depth, an oversized body is withheld
+		 * with its byte size, and anything else (XML, a `print_r()` dump, free text,
+		 * a bare JSON scalar) is replaced with {@see self::UNPARSEABLE_BODY_MASK}.
 		 *
 		 * @since 2.0.2
 		 *
