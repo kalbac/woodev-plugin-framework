@@ -13,6 +13,8 @@ use WP_UnitTestCase;
 
 abstract class TestCase extends WP_UnitTestCase {
 
+	use Seeds_Signed_License_Claims;
+
 	/**
 	 * Инициализация перед каждым тестом.
 	 */
@@ -41,6 +43,21 @@ abstract class TestCase extends WP_UnitTestCase {
 		if ( class_exists( '\Woodev\Framework\Shipping\Settings\Shipping_Tools_Registry' ) ) {
 			\Woodev\Framework\Shipping\Settings\Shipping_Tools_Registry::reset_for_tests();
 		}
+
+		// The licence gate (#1270) refuses checkout, export and cancel for a plugin with a store product and
+		// no verified signed claim. The fixture plugins have none, so each test starts with an in-force one
+		// signed by a test key; a test that needs the closed gate removes it (see remove_license_claim()).
+		$this->seed_in_force_license_claims();
+	}
+
+	/**
+	 * Drops the claim store's per-process memo: the option behind it is rolled back with the test, the
+	 * memo would not be.
+	 */
+	protected function tearDown(): void {
+		$this->forget_license_claims();
+
+		parent::tearDown();
 	}
 
 	/**
