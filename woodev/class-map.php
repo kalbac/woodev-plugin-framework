@@ -90,6 +90,7 @@ return [
 	'Woodev\\Framework\\Shipping\\Exceptions\\Shipping_Exception' => 'woodev/shipping-method/exceptions/class-shipping-exception.php',
 	'Woodev\\Framework\\Shipping\\Fee_Payments' => 'woodev/shipping-method/class-fee-payments.php',
 	'Woodev\\Framework\\Shipping\\Instance_Field_Conditions' => 'woodev/shipping-method/class-instance-field-conditions.php',
+	'Woodev\\Framework\\Shipping\\License_Gate' => 'woodev/shipping-method/class-license-gate.php',
 	'Woodev\\Framework\\Shipping\\Location\\Abstract_Location_Provider' => 'woodev/shipping-method/location/abstract-location-provider.php',
 	'Woodev\\Framework\\Shipping\\Location\\City_Limit' => 'woodev/shipping-method/location/class-city-limit.php',
 	'Woodev\\Framework\\Shipping\\Location\\City_Limit_Form' => 'woodev/shipping-method/location/class-city-limit-form.php',

@@ -43,17 +43,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Action_Result' ) ) :
 		/** @var bool whether the action was not attempted because the order was busy — a transient refusal, not a carrier answer */
 		private bool $busy;
 
+		/** @var bool whether the action was refused because the plugin's licence is not in force — the carrier was never called (#1270) */
+		private bool $license_refused;
+
 		/**
 		 * @param bool   $success          whether the carrier accepted the action
 		 * @param string $message          the carrier's text, or '' when it gave none
 		 * @param string $carrier_order_id the carrier-assigned order id, or ''
 		 * @param bool   $busy             whether the order was busy and the carrier was never called
+		 * @param bool   $license_refused  whether the plugin's licence is not in force and the carrier was never called
 		 */
-		private function __construct( bool $success, string $message, string $carrier_order_id, bool $busy = false ) {
+		private function __construct( bool $success, string $message, string $carrier_order_id, bool $busy = false, bool $license_refused = false ) {
 			$this->success          = $success;
 			$this->message          = trim( $message );
 			$this->carrier_order_id = $carrier_order_id;
 			$this->busy             = $busy;
+			$this->license_refused  = $license_refused;
 		}
 
 		/**
@@ -95,6 +100,35 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Action_Result' ) ) :
 		 */
 		public static function busy( string $message = '' ): self {
 			return new self( false, $message, '', true );
+		}
+
+		/**
+		 * The action was refused before it started: the plugin's licence is not in force (#1270).
+		 *
+		 * A failure for every caller that only asks {@see self::is_success()}, and the message is the
+		 * framework's own sentence for the merchant (it links to the licence page). A background caller
+		 * asks {@see self::is_license_refused()} to tell it from a carrier answer: nothing was sent, so
+		 * nothing is retried and nothing is marked failed for good — the order stays exportable once the
+		 * licence is back.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $message the sentence for the merchant ({@see \Woodev\Framework\Shipping\License_Gate::refusal()})
+		 * @return self
+		 */
+		public static function license_inactive( string $message ): self {
+			return new self( false, $message, '', false, true );
+		}
+
+		/**
+		 * Whether the action was refused because the plugin's licence is not in force — no carrier call was made.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public function is_license_refused(): bool {
+			return $this->license_refused;
 		}
 
 		/**

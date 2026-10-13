@@ -342,6 +342,41 @@ final class OrdersRegistryExportRetryTest extends TestCase {
 		$this->addToAssertionCount( 1 );
 	}
 
+	// ----- #1270: a licence that is not in force -----
+
+	public function test_an_attempt_refused_for_the_licence_ends_the_chain_leaves_one_note_and_marks_nothing_failed(): void {
+		$this->register_provider();
+		$handler = $this->register_handler();
+		$order   = $this->order( 'processing', 2, 1 ); // mid-chain: counters present.
+
+		$handler->shouldReceive( 'export' )->once()->andReturn( Action_Result::license_inactive( 'Лицензия плагина не действует' ) );
+
+		$notes = [];
+		$order->shouldReceive( 'add_order_note' )->andReturnUsing(
+			function ( $note ) use ( &$notes ) {
+				$notes[] = $note;
+			}
+		);
+		$order->shouldReceive( 'delete_meta_data' )->with( Export_Retry::ATTEMPTS_META )->once();
+		$order->shouldReceive( 'delete_meta_data' )->with( Export_Retry::DEFERRALS_META )->once();
+		$order->shouldReceive( 'save_meta_data' )->once();
+
+		// Nothing is queued again: no retry for a refusal that repeats until the licence is back.
+		Functions\when( 'as_schedule_single_action' )->alias(
+			function () {
+				$this->fail( 'a licence refusal must not be retried' );
+			}
+		);
+
+		Orders_Registry::instance()->run_export_retry( 123 );
+
+		$this->assertCount( 1, $notes, 'one private note, and not the «в фоне» failure sentence' );
+		$this->assertStringContainsString( 'лицензия плагина не действует', $notes[0] );
+		$this->assertStringContainsString( 'кнопкой «Экспорт»', $notes[0] );
+		$this->assertStringNotContainsString( 'Не удалось выгрузить', $notes[0] );
+		$this->assertArrayNotHasKey( '_woodev_shipment_export_unknown', $this->meta, 'the order is not marked as an export in doubt' );
+	}
+
 	public function test_a_failure_without_a_reason_says_so(): void {
 		$this->register_provider();
 		$handler = $this->register_handler();

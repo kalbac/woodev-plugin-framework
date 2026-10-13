@@ -112,7 +112,18 @@ namespace Woodev\Tests\Unit\Shipping {
 		/** @var \Woodev\Framework\Shipping\Pickup\Pickup_Handler|null */
 		public $pickup_handler = null;
 
+		/** @var int the store product id the licence gate (#1270) sees; 0 = no store product, never gated */
+		public int $download_id = 0;
+
+		/** @var \Woodev_Plugins_License|null the licence engine the gate asks when there IS a store product */
+		public $license = null;
+
 		public function __construct() {}
+
+		/** @return \Woodev_Plugins_License|null */
+		public function get_license_instance() {
+			return $this->license;
+		}
 
 		/** @return \Woodev\Framework\Shipping\Pickup\Pickup_Handler|null */
 		public function get_pickup_handler(): ?\Woodev\Framework\Shipping\Pickup\Pickup_Handler {
@@ -136,7 +147,7 @@ namespace Woodev\Tests\Unit\Shipping {
 
 		/** @return int */
 		public function get_download_id() {
-			return 0;
+			return $this->download_id;
 		}
 
 		/** @return string */
@@ -195,6 +206,12 @@ namespace Woodev\Tests\Unit\Shipping {
 
 		/** @var \Woodev\Framework\Shipping\Pickup\Pickup_Handler|null */
 		public $pickup_handler = null;
+
+		/** @var int store product id of the plugin this probe sits in (#1270); 0 = never gated */
+		public int $download_id = 0;
+
+		/** @var \Woodev_Plugins_License|null the licence engine of that plugin */
+		public $license = null;
 
 		/** @var Shipping_Rate|null */
 		public ?Shipping_Rate $next_rate = null;
@@ -259,6 +276,8 @@ namespace Woodev\Tests\Unit\Shipping {
 		protected function get_plugin(): Shipping_Plugin {
 			$plugin                 = new Woodev_Test_Shipping_Plugin_For_Rate_Cache();
 			$plugin->pickup_handler = $this->pickup_handler;
+			$plugin->download_id    = $this->download_id;
+			$plugin->license        = $this->license;
 
 			return $plugin;
 		}
@@ -1404,6 +1423,110 @@ namespace Woodev\Tests\Unit\Shipping {
 
 			$this->assertFalse( ( new Shipping_Rate_Cache() )->put( $method, $this->package(), $other ) );
 			$this->assertSame( [], $this->store );
+		}
+
+		/**
+		 * A paid plugin (a store product id) whose licence engine answers `$in_force`.
+		 *
+		 * @param bool $in_force whether the signed statement says the licence is in force.
+		 * @return Woodev_Test_Shipping_Method_For_Rate_Cache
+		 */
+		private function licensed_method( bool $in_force ): Woodev_Test_Shipping_Method_For_Rate_Cache {
+			$license = Mockery::mock( \Woodev_Plugins_License::class );
+			$license->shouldReceive( 'is_license_in_force' )->andReturn( $in_force );
+			$license->shouldReceive( 'schedule_claim_refresh' )->andReturn( false )->byDefault();
+
+			$method              = $this->method();
+			$method->download_id = 9001;
+			$method->license     = $license;
+
+			return $method;
+		}
+
+		/** @return void */
+		public function test_a_licence_not_in_force_gives_no_rate_and_asks_the_carrier_nothing(): void {
+			$method = $this->licensed_method( false );
+
+			$method->calculate_shipping( $this->package() );
+
+			$this->assertSame( 0, $method->added, 'no rate reaches the cart' );
+			$this->assertSame( 0, $method->carrier_calls, 'the carrier is not even asked' );
+		}
+
+		/**
+		 * Round 2: a key with no claim yet must not wait for the weekly check — the checkout that just refused asks for a
+		 * background refresh (a cron event, never a licence-server call in the buyer's request).
+		 *
+		 * @return void
+		 */
+		public function test_a_refused_checkout_asks_for_a_background_claim_refresh_and_an_allowed_one_does_not(): void {
+			$refused = $this->licensed_method( false );
+			$refused->license->shouldReceive( 'schedule_claim_refresh' )->once()->andReturn( true );
+			$refused->calculate_shipping( $this->package() );
+			$this->assertSame( 0, $refused->added );
+
+			$allowed = $this->licensed_method( true );
+			$allowed->license->shouldReceive( 'schedule_claim_refresh' )->never();
+			$allowed->calculate_shipping( $this->package() );
+			$this->assertSame( 1, $allowed->added );
+		}
+
+		/** @return void */
+		public function test_a_licence_in_force_leaves_the_rate_alone(): void {
+			$method = $this->licensed_method( true );
+
+			$method->calculate_shipping( $this->package() );
+
+			$this->assertSame( 1, $method->added );
+			$this->assertSame( 1, $method->carrier_calls );
+		}
+
+		/** @return void */
+		public function test_a_plugin_without_a_store_product_is_never_gated(): void {
+			$method          = $this->method(); // download id 0, and no licence engine to ask.
+			$method->license = null;
+
+			$method->calculate_shipping( $this->package() );
+
+			$this->assertSame( 1, $method->added );
+		}
+
+		/** @return void */
+		public function test_a_cached_rate_cannot_slip_through_when_the_licence_lapses(): void {
+			$method = $this->licensed_method( true );
+			$method->calculate_shipping( $this->package() );
+			$this->assertSame( 1, $method->added );
+			$this->assertCount( 1, $this->store, 'the rate is cached while the licence is in force' );
+
+			$lapsed = $this->licensed_method( false );
+			$lapsed->calculate_shipping( $this->package() );
+
+			$this->assertSame( 0, $lapsed->added, 'the cache is behind the gate' );
+		}
+
+		/** @return void */
+		public function test_a_manager_sees_why_the_method_is_hidden_and_the_buyer_sees_nothing(): void {
+			Functions\when( 'admin_url' )->alias( static fn( string $path = '' ): string => 'https://shop.test/wp-admin/' . $path );
+
+			$package = $this->package();
+			$GLOBALS['woocommerce']->packages = [ $package ];
+
+			$this->can_manage_woocommerce = true;
+			$this->licensed_method( false )->calculate_shipping( $package );
+
+			$reason = Shipping_Method::get_hidden_reasons()[ $this->hidden_key( $package ) ];
+			$this->assertSame( 'license_inactive', $reason['reason_code'] );
+			$this->assertStringContainsString( 'лицензия плагина не действует', $reason['message'] );
+			$this->assertStringContainsString( 'https://shop.test/wp-admin/admin.php?page=woodev-licenses', $reason['message'] );
+
+			// The buyer: the same gate, no capability — nothing is recorded, nothing is readable.
+			$this->reset_hidden_reasons();
+			$this->can_manage_woocommerce = false;
+			$method                       = $this->licensed_method( false );
+			$method->calculate_shipping( $package );
+
+			$this->assertSame( 0, $method->added );
+			$this->assertSame( [], Shipping_Method::get_hidden_reasons() );
 		}
 
 		/** @return void */

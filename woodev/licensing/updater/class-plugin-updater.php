@@ -568,6 +568,8 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 				// belt-and-suspenders against a resolution failure.
 				try {
 					$this->plugin->get_license_instance()->get_authority_claims()->consume_from_response( $response );
+					// A verified claim from this poll ends the automatic-refresh backoff, as the refresh and human paths do (#1270).
+					$this->plugin->get_license_instance()->reset_claim_refresh_backoff_if_claimed();
 				} catch ( \Throwable $throwable ) {
 					// Intentionally swallowed — the update flow must not break on claim IO.
 					unset( $throwable );

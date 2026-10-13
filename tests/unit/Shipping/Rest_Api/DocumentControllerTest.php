@@ -227,6 +227,100 @@ final class DocumentControllerTest extends TestCase {
 		$this->assertSame( 404, $this->controller( $this->source( $ready, [ 'barcode' ] ) )->download( $this->request() )->data['status'] );
 	}
 
+	// ----- licence gate (#1270) -----
+
+	/**
+	 * A controller whose provider was registered by a paid plugin (store product 9001) whose licence is, or is not, in force.
+	 *
+	 * @param Document_Source $source   the carrier's document source.
+	 * @param bool            $in_force whether the signed statement says the licence is in force.
+	 * @return Document_Controller
+	 */
+	private function licensed_controller( Document_Source $source, bool $in_force ): Document_Controller {
+		$license = Mockery::mock( \Woodev_Plugins_License::class );
+		$license->shouldReceive( 'is_license_in_force' )->andReturn( $in_force );
+
+		$plugin = Mockery::mock( \Woodev\Framework\Shipping\Shipping_Plugin::class );
+		$plugin->shouldReceive( 'get_download_id' )->andReturn( 9001 );
+		$plugin->shouldReceive( 'get_license_instance' )->andReturn( $license );
+
+		Orders_Registry::instance()->register_provider(
+			Orders_Provider::create( 'cdek', 'СДЭК', '_cdek_marker', [ 'cdek' ], [ 'supports_label_printing' => true, 'carrier_order_id_meta_key' => '_cdek_order_id' ] ),
+			$plugin
+		);
+		Orders_Registry::instance()->register_document_source( 'cdek', $source );
+
+		return new Document_Controller( Orders_Registry::instance() );
+	}
+
+	public function test_a_licence_not_in_force_refuses_a_document_before_the_carrier_is_asked(): void {
+		Functions\when( 'admin_url' )->alias( static fn( string $path = '' ): string => 'https://shop.test/wp-admin/' . $path );
+
+		$asked  = new class() implements Document_Source {
+			public $calls = 0;
+
+			public function get_document_types( \WC_Order $order ): array {
+				return [ 'waybill' ];
+			}
+
+			public function get_document( \WC_Order $order, string $type ): Document_Result {
+				++$this->calls;
+
+				return Document_Result::binary( '%PDF-' );
+			}
+		};
+		$result = $this->licensed_controller( $asked, false )->download( $this->request() );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'woodev_license_inactive', $result->get_error_code() );
+		$this->assertSame( 403, $result->data['status'] );
+		$this->assertStringContainsString( 'https://shop.test/wp-admin/admin.php?page=woodev-licenses', $result->get_error_message() );
+		$this->assertSame( 0, $asked->calls, 'no request to the carrier' );
+		$this->assertSame( [], $this->written, 'and nothing marked as downloaded' );
+	}
+
+	public function test_a_licence_in_force_serves_the_document(): void {
+		$response = $this->licensed_controller( $this->source( Document_Result::binary( '%PDF-1.4' ) ), true )->download( $this->request() );
+
+		$this->assertSame( 200, $response->get_status() );
+	}
+
+	public function test_a_licence_not_in_force_refuses_a_bulk_document_too(): void {
+		Functions\when( 'admin_url' )->alias( static fn( string $path = '' ): string => 'https://shop.test/wp-admin/' . $path );
+
+		$bulk = new class() implements Document_Source, Bulk_Document_Source {
+			public $calls = 0;
+
+			public function get_document_types( \WC_Order $order ): array {
+				return [ 'waybill' ];
+			}
+
+			public function get_document( \WC_Order $order, string $type ): Document_Result {
+				return Document_Result::binary( '%PDF-' );
+			}
+
+			public function get_bulk_document_types(): array {
+				return [ 'waybill' ];
+			}
+
+			public function get_bulk_document_limit(): int {
+				return 50;
+			}
+
+			public function get_bulk_document( array $orders, string $type ): Document_Result {
+				++$this->calls;
+
+				return Document_Result::binary( '%PDF-' );
+			}
+		};
+
+		$result = $this->licensed_controller( $bulk, false )->download_bulk( new \WP_REST_Request( [ 'type' => 'waybill', 'ids' => [ 123 ] ], [ 'X-WP-Nonce' => self::NONCE ] ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'woodev_license_inactive', $result->get_error_code() );
+		$this->assertSame( 0, $bulk->calls );
+	}
+
 	// ----- results -----
 
 	public function test_a_binary_result_is_a_pdf_attachment_with_a_safe_filename_and_marks_the_download(): void {

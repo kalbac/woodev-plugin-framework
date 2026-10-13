@@ -174,6 +174,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/class-shipping-rate-cache.php';
 			// «fee only for chosen payment methods» (#1144): the method's feature reads it, so it loads first
 			require_once $path . '/class-fee-payments.php';
+			// the licence gate (#1270): the method's calculate_shipping() and the shipment handler both ask it
+			require_once $path . '/class-license-gate.php';
 			// additional carrier services (#1145): the method's declaration seam builds them
 			require_once $path . '/class-carrier-service.php';
 			require_once $path . '/class-instance-field-conditions.php';
@@ -432,6 +434,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			// «fee only for chosen payment methods» (#1144): one fleet-wide wiring, inert until a method instance uses it
 			Fee_Payments::register();
 			Fee_Payments::declare_payment_dependent_price( $this->get_valid_shipping_method_classes() );
+
+			// a licence flip must recalculate the rates WooCommerce cached in the session (#1270)
+			License_Gate::track_license_state( $this );
 
 			// register shipping methods with WooCommerce
 			add_filter( 'woocommerce_shipping_methods', [ $this, 'register_shipping_methods' ] );
@@ -1910,6 +1915,114 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			// add a notice when DaData is refusing the store's requests —
 			// exhausted balance / daily limit, unconfirmed e-mail or a bad key (#956)
 			$this->add_location_provider_access_denied_notice();
+
+			// the licence is not in force / ends soon (#1270)
+			$this->add_license_admin_notices();
+		}
+
+		/**
+		 * Adds the licence notices (#1270), on the two screens a merchant manages the carrier from — its
+		 * settings tab and the shipping orders page — and nowhere else.
+		 *
+		 * - the licence is NOT in force (including: no key entered yet): a persistent error notice, no
+		 *   dismiss button — the condition is read live from the signed claim, so it goes away by itself
+		 *   the moment the key is saved and the statement refreshes;
+		 * - in force, but it ends within {@see License_Gate::EXPIRY_WARNING_DAYS}: a reminder to renew,
+		 *   dismissible, and it comes back each week (the week is part of the notice id, so a dismissal
+		 *   covers the week it was made in).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		protected function add_license_admin_notices(): void {
+
+			if ( ! $this->is_license_notice_screen() ) {
+				return;
+			}
+
+			$link_open = '<a href="' . esc_url( License_Gate::page_url() ) . '">';
+			$id_prefix = 'woodev-' . $this->get_id_dasherized() . '-license-';
+
+			if ( ! License_Gate::is_in_force( $this ) ) {
+
+				$has_key = (bool) $this->get_license_instance()->get_license();
+
+				$this->get_admin_notice_handler()->add_admin_notice(
+					sprintf(
+						/* translators: 1: the plugin name, 2: opening <a> tag to the licence page, 3: closing </a> tag */
+						$has_key
+							? __( 'Лицензия плагина «%1$s» не действует. Пока она не продлена, способы доставки плагина не показываются покупателям, а выгрузка заказов и отмена заявок у перевозчика недоступны. %2$sПроверьте или продлите лицензию%3$s.', 'woodev-plugin-framework' )
+							: __( 'Для плагина «%1$s» не введён лицензионный ключ. Пока его нет, способы доставки плагина не показываются покупателям, а выгрузка заказов и отмена заявок у перевозчика недоступны. %2$sВведите ключ%3$s.', 'woodev-plugin-framework' ),
+						$this->get_plugin_name(),
+						$link_open,
+						'</a>'
+					),
+					$id_prefix . 'inactive',
+					[
+						'dismissible'  => false,
+						'notice_class' => 'notice-error',
+					]
+				);
+
+				return;
+			}
+
+			$days = License_Gate::days_until_expiry( $this, time() );
+
+			if ( null === $days ) {
+				return;
+			}
+
+			$this->get_admin_notice_handler()->add_admin_notice(
+				sprintf(
+					/* translators: 1: number of days, 2: opening <a> tag to the licence page, 3: closing </a> tag, 4: the plugin name */
+					__( 'Срок лицензии закончится через %1$d дн. — не забудьте %2$sпродлить%3$s. Плагин: %4$s.', 'woodev-plugin-framework' ),
+					$days,
+					$link_open,
+					'</a>',
+					$this->get_plugin_name()
+				),
+				$id_prefix . 'expires-' . gmdate( 'o-\WW' ),
+				[
+					'dismissible'  => true,
+					'notice_class' => 'notice-warning',
+				]
+			);
+		}
+
+		/**
+		 * Whether the current admin screen is one the licence notices belong on (#1270): this carrier's tab on
+		 * the Woodev settings page (or its integration settings, while the configuration is still
+		 * integration-backed), or the shipping orders page.
+		 *
+		 * A protected seam: it reads the request, which a unit test cannot set.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		protected function is_license_notice_screen(): bool {
+
+			// phpcs:disable WordPress.Security.NonceVerification.Recommended -- reads which admin screen this is, changes nothing.
+			$page = isset( $_GET['page'] ) ? sanitize_text_field( wp_unslash( (string) $_GET['page'] ) ) : '';
+			$tab  = isset( $_GET['tab'] ) ? sanitize_text_field( wp_unslash( (string) $_GET['tab'] ) ) : '';
+			$path = isset( $_GET['path'] ) ? sanitize_text_field( wp_unslash( (string) $_GET['path'] ) ) : '';
+			// phpcs:enable WordPress.Security.NonceVerification.Recommended
+
+			if ( 'woodev-settings' === $page ) {
+				return $this->get_id() === $tab;
+			}
+
+			if ( Admin\Orders\Orders_Registry::PAGE_SLUG === $page ) {
+				return true;
+			}
+
+			if ( 'wc-admin' === $page ) {
+				return '/' . Admin\Orders\Orders_Registry::PAGE_SLUG === $path;
+			}
+
+			return $this->is_plugin_settings();
 		}
 
 		/**

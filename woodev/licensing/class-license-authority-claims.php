@@ -107,8 +107,19 @@ if ( ! class_exists( 'Woodev_License_Authority_Claims' ) ) :
 					return;
 				}
 
-				if ( null === $this->verify_claim( $envelope ) ) {
+				$incoming = $this->verify_claim( $envelope );
+
+				if ( null === $incoming ) {
 					// Present but invalid → keep last-known-good, never store (safe).
+					return;
+				}
+
+				// Anti-rollback (#1270): a replayed OLD statement ("valid", signed last month) must not
+				// replace a newer one that is still good. Equal or newer replaces; a stored claim that no
+				// longer verifies (expired, tampered) is simply replaced.
+				$current = $this->get_verified();
+
+				if ( null !== $current && self::issued_at_of( $incoming ) < self::issued_at_of( $current ) ) {
 					return;
 				}
 
@@ -165,7 +176,11 @@ if ( ! class_exists( 'Woodev_License_Authority_Claims' ) ) :
 		 * license_required is a STRICT bool. The last gate is enforcement-critical: a
 		 * signed payload carrying 0 / '' / null / [] would otherwise be cast to false
 		 * downstream (= unlock); absent or non-bool rejects the WHOLE claim — it is
-		 * never stored and enforcement stays locked. Any failure → null.
+		 * never stored and enforcement stays locked. A claim for a PAID product
+		 * (`license_required === true`) must also carry the licence statement (#1270):
+		 * `license_status` a non-empty string, `license_expires` an int or null, `issued_at`
+		 * an int — a malformed one is rejected whole, like a non-bool `license_required`.
+		 * Any failure → null.
 		 *
 		 * @since 2.0.0
 		 *
@@ -201,7 +216,92 @@ if ( ! class_exists( 'Woodev_License_Authority_Claims' ) ) :
 				return null;
 			}
 
+			// A paid product's claim is the signed licence statement the gate rests on (#1270).
+			if ( true === $payload['license_required'] ) {
+
+				if ( ! is_string( $payload['license_status'] ?? null ) || '' === $payload['license_status'] ) {
+					return null;
+				}
+
+				if ( ! array_key_exists( 'license_expires', $payload ) || ( null !== $payload['license_expires'] && ! is_int( $payload['license_expires'] ) ) ) {
+					return null;
+				}
+
+				if ( ! is_int( $payload['issued_at'] ?? null ) ) {
+					return null;
+				}
+			}
+
 			return $payload;
+		}
+
+		/**
+		 * The moment a verified payload was signed; 0 when it carries none (a licence-free claim from
+		 * before the licence statement existed).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string, mixed> $payload A verified payload.
+		 * @return int
+		 */
+		private static function issued_at_of( array $payload ): int {
+			return is_int( $payload['issued_at'] ?? null ) ? $payload['issued_at'] : 0;
+		}
+
+		/**
+		 * Whether the server-signed statement says this plugin's licence is in force RIGHT NOW (#1270).
+		 *
+		 * True only when a VERIFIED stored claim exists for this site and plugin AND either the product
+		 * needs no licence (`license_required === false`) or the licence is `valid` and not past its
+		 * `license_expires` (`null` = lifetime). No claim, an unverifiable, tampered, expired, wrong-site
+		 * or wrong-plugin claim → false. It reads NOTHING else: not the plain status option, not the
+		 * local `is_need_license()` flag (gotcha `license-need-vs-required`) — those are one edit away
+		 * from forged, the signed claim is not.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public function is_license_in_force(): bool {
+
+			$claim = $this->get_verified();
+
+			if ( null === $claim ) {
+				return false;
+			}
+
+			if ( false === $claim['license_required'] ) {
+				return true;
+			}
+
+			if ( 'valid' !== ( $claim['license_status'] ?? null ) ) {
+				return false;
+			}
+
+			$expires = $claim['license_expires'] ?? null;
+
+			return null === $expires || $this->now() <= $expires;
+		}
+
+		/**
+		 * The verified licence expiry (Unix time) of a paid product's claim, or null when there is none to
+		 * report: no verified claim, a licence-free product, or a lifetime licence.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return int|null
+		 */
+		public function get_license_expires(): ?int {
+
+			$claim = $this->get_verified();
+
+			if ( null === $claim || true !== $claim['license_required'] ) {
+				return null;
+			}
+
+			$expires = $claim['license_expires'] ?? null;
+
+			return is_int( $expires ) ? $expires : null;
 		}
 
 		/**

@@ -30,6 +30,7 @@ namespace Woodev\Framework\Shipping\Order;
 
 use Woodev\Framework\Shipping\Location\{Location_Provider, Location_Provider_Registry, Location_Record, Popular_Settlement_Store};
 use Woodev\Framework\Shipping\Api\Shipping_API;
+use Woodev\Framework\Shipping\License_Gate;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -209,6 +210,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 *              transport failure is retried only by a carrier that can reconcile.
 		 *              A response with NO carrier id is no longer stored as `''` with the export
 		 *              hooks fired: it is an «unknown» failure and fires neither hook.
+		 * @since 2.0.2 Card #1270: a NEW export is refused with {@see Action_Result::license_inactive()} while the
+		 *              plugin's licence is not in force — before the lock, the hooks and any carrier call.
 		 *
 		 * @param \WC_Order              $order      the order to export to the carrier
 		 * @param Location_Record|null   $settlement the settlement this order ships to, if known; null skips enrolment
@@ -221,6 +224,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 
 			if ( '' !== $stored ) {
 				return Action_Result::success( $stored );
+			}
+
+			// #1270: a NEW export needs a licence in force. After the stored-id check on purpose — handing
+			// back the id of an order that is already exported asks nothing of the carrier.
+			$refusal = $this->license_refusal( __( 'выгрузить заказ перевозчику', 'woodev-plugin-framework' ) );
+
+			if ( null !== $refusal ) {
+				return $refusal;
 			}
 
 			$order_id = $order->get_id();
@@ -756,11 +767,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 * @since 2.0.2 Card #1037: records {@see Shipment_Cancellation::CANCELLED_AT_META} on success,
 		 *              so the delivery status reads «Отменено».
 		 * @since 2.0.2 Card #947: also removes {@see Shipment_Fingerprint::META} on success.
+		 * @since 2.0.2 Card #1270: refused with {@see Action_Result::license_inactive()} while the plugin's licence is not in force.
 		 *
 		 * @param \WC_Order $order the order whose shipment to cancel
 		 * @return Action_Result success when the carrier accepted the cancellation, a failure otherwise
 		 */
 		public function cancel( \WC_Order $order ): Action_Result {
+
+			// #1270: cancelling at the carrier is a carrier action too — refused while the licence is not in force.
+			$refusal = $this->license_refusal( __( 'отменить заявку у перевозчика', 'woodev-plugin-framework' ) );
+
+			if ( null !== $refusal ) {
+				return $refusal;
+			}
 
 			$carrier_order_id = (string) $this->order_handler->get( $order, static::CARRIER_ORDER_ID_FIELD );
 
@@ -999,6 +1018,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 */
 		public function refuse( \WC_Order $order ): Action_Result {
 			return Action_Result::failure();
+		}
+
+		/**
+		 * The refusal to hand back when the licence of the plugin this handler belongs to is not in force, or
+		 * null when the action may go on (#1270).
+		 *
+		 * The plugin is the one that registered the handler with the shipping orders registry
+		 * ({@see License_Gate::handler_refusal()}); a handler registered with none — a unit test, a
+		 * half-wired carrier — has nobody to ask and is not gated. There is no way to switch this off: no
+		 * flag, filter or setter.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $action what cannot be done, as an infinitive phrase for the merchant's sentence.
+		 * @return Action_Result|null
+		 */
+		protected function license_refusal( string $action ): ?Action_Result {
+
+			$message = License_Gate::handler_refusal( $this, $action );
+
+			return null === $message ? null : Action_Result::license_inactive( $message );
 		}
 
 		/**

@@ -6187,3 +6187,49 @@ msgstr ""
 #: shipping-method/class-shipping-method.php:1569
 msgid "Способ доставки скрыт: не удалось рассчитать стоимость доставки. Попробуйте позже или проверьте настройки службы доставки."
 msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:748
+msgid "оформить отказ от посылки"
+msgstr ""
+
+#: shipping-method/admin/orders/class-orders-registry.php:1338
+msgid "Автоматическая выгрузка не выполнена: лицензия плагина не действует. После продления лицензии выгрузите заказ кнопкой «Экспорт»."
+msgstr ""
+
+#: shipping-method/class-license-gate.php:103
+msgid "Лицензия плагина не действует, поэтому нельзя %1$s. Введите или продлите ключ на странице лицензий: %2$s"
+msgstr ""
+
+#: shipping-method/class-license-gate.php:120
+msgid "Способ доставки скрыт: лицензия плагина не действует. Введите или продлите ключ на странице лицензий: %s"
+msgstr ""
+
+#: shipping-method/class-shipping-plugin.php:1952
+msgid "Лицензия плагина «%1$s» не действует. Пока она не продлена, способы доставки плагина не показываются покупателям, а выгрузка заказов и отмена заявок у перевозчика недоступны. %2$sПроверьте или продлите лицензию%3$s."
+msgstr ""
+
+#: shipping-method/class-shipping-plugin.php:1953
+msgid "Для плагина «%1$s» не введён лицензионный ключ. Пока его нет, способы доставки плагина не показываются покупателям, а выгрузка заказов и отмена заявок у перевозчика недоступны. %2$sВведите ключ%3$s."
+msgstr ""
+
+#: shipping-method/class-shipping-plugin.php:1977
+msgid "Срок лицензии закончится через %1$d дн. — не забудьте %2$sпродлить%3$s. Плагин: %4$s."
+msgstr ""
+
+#: shipping-method/order/abstract-shipment-handler.php:231
+msgid "выгрузить заказ перевозчику"
+msgstr ""
+
+#: shipping-method/order/abstract-shipment-handler.php:778
+msgid "отменить заявку у перевозчика"
+msgstr ""
+
+#: shipping-method/rest-api/class-document-controller.php:312
+msgid "получить документ перевозчика"
+msgstr ""
+
+#. translators: %s: the label of the carrier's own order action
+#: shipping-method/admin/orders/class-order-actions.php:834
+#, php-format
+msgid "выполнить действие «%s»"
+msgstr ""

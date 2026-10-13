@@ -9,6 +9,7 @@
 
 namespace Woodev\Framework\Shipping\Admin\Orders;
 
+use Woodev\Framework\Shipping\License_Gate;
 use Woodev\Framework\Shipping\Location\{Location_Provider, Location_Provider_Registry, Location_Record};
 use Woodev\Framework\Shipping\Order\{Abstract_Shipment_Handler, Action_Result, Bulk_Document_Source, Carrier_Cancel, Delivery_Status, Document_Source, Document_Type_Declarations, Order_Automation, Shipment_Cancellation};
 
@@ -190,6 +191,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		 *     'fields'      => array,   // optional (#1180): the input the action asks for, {@see Order_Action_Fields}.
 		 *     'icon'        => string,  // optional: a Dashicons slug without the `dashicons-` prefix, e.g. 'upload'. None => the neutral {@see self::FALLBACK_ICON}, never a gear.
 		 *     'confirm'     => string,  // optional (s164), `destructive` actions only: the sentence the confirmation asks. None => each surface's generic question.
+		 *     'read_only'   => bool,    // optional (#1270), a carrier's own action only: `true` => it only READS from the carrier (a status poll, a lookup)
+		 *                               // and stays available while the plugin's licence is not in force. Absent / anything else => a NEW carrier
+		 *                               // operation, refused without a licence before the carrier's `woodev_shipping_perform_order_action` callback runs.
 		 * ]
 		 */
 		public function for_order( \WC_Order $order, ?Orders_Provider $provider ): array {
@@ -660,6 +664,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		 *              `Action_Result` too, and anything else a callback returns is treated as a failure.
 		 * @since 2.0.2 Card #974: moved here from `Orders_Controller::dispatch_action()`, unchanged.
 		 * @since 2.0.2 Card #1180: takes the action's validated `$payload`, passed on to the filter below.
+		 * @since 2.0.2 Card #1270: a carrier's own action is refused while the plugin's licence is not in force, unless
+		 *              its declaration carries `'read_only' => true` ({@see self::for_order()}).
 		 *
 		 * @param Abstract_Shipment_Handler $handler  handler resolved for the order's carrier.
 		 * @param \WC_Order                 $order    the order.
@@ -690,6 +696,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 					return \Woodev_API_Request_Purpose::run( \Woodev_API_Request_Purpose::EXPORT, fn() => $handler->update( $order ) );
 
 				default:
+					// #1270: a carrier's own action is a NEW carrier operation unless it declares itself `read_only` —
+					// refused before the filter runs, so the carrier plugin's callback is never reached.
+					$refusal = $this->custom_action_refusal( $order, $action, $provider );
+
+					if ( null !== $refusal ) {
+						return Action_Result::license_inactive( $refusal );
+					}
+
 					/**
 					 * Performs a carrier's own extra order action (one declared via the
 					 * `woodev_shipping_order_actions` filter, not one of the framework's
@@ -739,6 +753,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		 * @throws \Throwable Whatever the carrier call throws, after the note is written.
 		 */
 		private function refuse( Abstract_Shipment_Handler $handler, \WC_Order $order, Orders_Provider $provider ): Action_Result {
+			// #1270: the refusal is a NEW (and paid) carrier action — not while the licence is not in force. The
+			// carrier implements refuse() itself, so unlike export / cancel the base handler cannot gate it.
+			$plugin = $this->registry->get_provider_plugin( $provider->get_id() );
+
+			if ( null !== $plugin && ! License_Gate::is_in_force( $plugin ) ) {
+				return Action_Result::license_inactive( License_Gate::refusal( __( 'оформить отказ от посылки', 'woodev-plugin-framework' ) ) );
+			}
+
 			try {
 				$result = $handler->refuse( $order );
 			} catch ( \Throwable $exception ) {
@@ -766,6 +788,53 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 			);
 
 			return $result;
+		}
+
+		/**
+		 * The licence refusal for a carrier's OWN action, or null when it may go on (#1270).
+		 *
+		 * The framework cannot tell a status lookup from a call that books something at the carrier, so a
+		 * carrier-declared action is a NEW carrier operation — refused while the owning plugin's licence is
+		 * not in force — unless its declaration says `'read_only' => true`. The declaration is read from the
+		 * same set the caller already checked ({@see self::carrier_actions()}); an action not declared there is
+		 * gated. A provider registered with no plugin has no licence to ask and is not gated, as for the handler.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order       $order    the order.
+		 * @param string          $action   the carrier's action id.
+		 * @param Orders_Provider $provider the matched carrier.
+		 * @return string|null the sentence to show the merchant, or null.
+		 */
+		private function custom_action_refusal( \WC_Order $order, string $action, Orders_Provider $provider ): ?string {
+			$plugin = $this->registry->get_provider_plugin( $provider->get_id() );
+
+			if ( null === $plugin || License_Gate::is_in_force( $plugin ) ) {
+				return null;
+			}
+
+			$label = $action;
+
+			foreach ( $this->carrier_actions( $order, $provider ) as $declared ) {
+				if ( $declared['action'] !== $action ) {
+					continue;
+				}
+
+				if ( true === ( $declared['read_only'] ?? false ) ) {
+					return null;
+				}
+
+				$label = $declared['label'];
+				break;
+			}
+
+			return License_Gate::refusal(
+				sprintf(
+					/* translators: %s: the label of the carrier's own order action */
+					__( 'выполнить действие «%s»', 'woodev-plugin-framework' ),
+					$label
+				)
+			);
 		}
 
 		/**
@@ -1248,6 +1317,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 
 				if ( '' !== $confirm ) {
 					$sanitized[ count( $sanitized ) - 1 ]['confirm'] = $confirm;
+				}
+
+				// #1270: only an explicit `true` keeps an action available without a licence; the key is absent otherwise.
+				if ( true === ( $action['read_only'] ?? false ) ) {
+					$sanitized[ count( $sanitized ) - 1 ]['read_only'] = true;
 				}
 			}
 

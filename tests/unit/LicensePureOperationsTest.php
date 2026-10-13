@@ -132,6 +132,48 @@ class LicensePureOperationsTest extends TestCase {
 	}
 
 	/**
+	 * activate(): the response of a key saved from the licence page goes to the signed-claim store before
+	 * the call returns (#1270), so the licence gate sees a FRESH statement at once and a block lifts (or
+	 * lands) with the save — no waiting for the weekly check. This is the React page's save path: the
+	 * REST /verify route calls activate() and nothing else.
+	 *
+	 * @return void
+	 */
+	public function test_activate_hands_the_response_to_the_claim_store_for_an_immediate_recheck(): void {
+		$payload = (object) [ 'license' => 'valid', 'expires' => 'lifetime' ];
+
+		$plugin = $this->make_plugin_stub();
+		$plugin->shouldReceive( 'is_need_license' )->andReturn( true );
+
+		$response = Mockery::mock();
+		$response->license = 'valid';
+		$response->shouldReceive( 'get_response_data' )->once()->andReturn( $payload );
+
+		$woodev_license            = Mockery::mock( \Woodev_License::class );
+		$woodev_license->license   = '';
+		$woodev_license->expires   = 'lifetime';
+		$woodev_license->item_name = 'Test Plugin';
+		$woodev_license->shouldReceive( 'save' )->once()->andReturn( true );
+
+		$license = $this->make_license( $plugin, '', '', $woodev_license );
+		$this->stub_api_handler( $license, 'activate_license', 'KEY-123', $response );
+
+		// Replace the default no-op double with one that REQUIRES the call, with the activation response.
+		$claims = Mockery::mock( \Woodev_License_Authority_Claims::class );
+		$claims->shouldReceive( 'get_verified' )->andReturn( null );
+		$claims->shouldReceive( 'consume_from_response' )->once()->with( $payload );
+		$this->set_private_property( $license, 'authority_claims', $claims );
+
+		Functions\expect( 'sanitize_text_field' )->andReturnFirstArg();
+		Functions\expect( 'home_url' )->andReturn( 'https://example.test' );
+		Functions\expect( 'update_option' )->once()->with( 'woodev_test_plugin_license_key', 'KEY-123' );
+		Functions\expect( 'delete_transient' )->once()->with( 'woodev_extensions' );
+		Functions\expect( 'current_time' )->andReturn( 1000 );
+
+		$license->activate( 'KEY-123' );
+	}
+
+	/**
 	 * activate(): a transport failure (dispatch throws) propagates without
 	 * touching stored license DATA. Per the documented legacy-parity ordering, the
 	 * key option IS written first (the legacy Settings API wrote it even when the
@@ -872,6 +914,7 @@ class LicensePureOperationsTest extends TestCase {
 		$plugin->shouldReceive( 'get_plugin_url' )->andReturn( 'https://example.test' );
 		$plugin->shouldReceive( 'get_plugin_name' )->andReturn( 'Test Plugin' );
 		$plugin->shouldReceive( 'get_id_underscored' )->andReturn( 'woodev_test_plugin' );
+		$plugin->shouldReceive( 'get_id' )->andReturn( 'test_plugin' ); // the hook name of the prompt claim refresh (#1270).
 		$plugin->shouldReceive( 'get_download_id' )->andReturn( 216 );
 		$plugin->shouldReceive( 'get_plugin_file' )->andReturn( 'test-plugin/test-plugin.php' );
 
