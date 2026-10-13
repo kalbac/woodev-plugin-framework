@@ -6,13 +6,18 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-13 (s176).** Framework `main` `e74db682` (F1 #1246, F5 #1258 merged at the end); CDEK plugin `v2` `b61e159` (pin `c241bfba`); Yandex plugin
-`kalbac/woocommerce-yandex-delivery` `main` `a8e6f00` (pin `c241bfba`, private repo, board №11). 🚧 **v2 release = TWO carrier
-plugins on v2, tested and compatible** (#1179): CDEK done (s172–s173). **Yandex: Y1–Y15 merged (Y10b documents, Y14 acceptance,
-Y15 coexistence — five classic-checkout coexistence defects fixed, e2e `tests/e2e/coexistence/` 18 pass / 0 fail).** Left: Y16 and Y43 (bulk act +
-document labels) — both UNBLOCKED (F1, F5 merged); plugin pins still `c241bfba`, bump first. ⚠ **The Yandex TEST contour is silent** (HTTP 200,
-empty body): live confirm/cancel/status/PDF are UNVERIFIED; the operator ruled out a production check (yandex#47) — test contour or simulation only. Private-repo gate = local-ci + critic
-(global rule `~/.claude/CLAUDE.md`). Block-checkout gaps do not block the release (#1263).
+**As of 2026-10-14 (s177).** Framework `main` `8b56ae0a` (+ s177 docs) — the licence gate #1270 merged (#1271); CDEK plugin `v2` `46707aa`
+(pin `8b56ae0a`); Yandex plugin `kalbac/woocommerce-yandex-delivery` `main` `c7618f5` (pin `8b56ae0a`, private repo, board №11).
+🚧 **v2 release = TWO carrier plugins on v2, tested and compatible** (#1179): CDEK done (s172–s173); Yandex Y1–Y16 + document
+labels/bulk act merged — the operator is reviewing the Yandex rig and holds a list of findings (next session starts with it).
+⚠ **The Yandex TEST contour is silent** (HTTP 200, empty body): live confirm/cancel/status/PDF are UNVERIFIED; no production
+check (yandex#47). Private-repo gate = local-ci + critic (global rule `~/.claude/CLAUDE.md`; mirrored to the Homelab host in s177).
+Block-checkout gaps do not block the release (#1263).
+✅ **Licence gate (#1270) is LIVE end to end:** woodev-core 1.0.4 on woodev.ru signs paid-licence status (source: Homelab
+`woodev-ru` monorepo, local-only); the framework blocks checkout and new carrier actions without an in-force SIGNED claim;
+automatic refresh backs off 15 m → 1 h → 6 h → 24 h (operator: never spam woodev.ru). The rig needs real keys for CDEK/Yandex
+and `tests/e2e/rig/zz-woodev-rig-license.php` for the fixtures (`wiki/local-rig.md`). Open tail: #1273 (updater never records
+a failed request).
 Next checks: `next-session-prompt.md`. ⚠ Sync the plugin’s own `woodev/` before plugin rig runs
 (`wiki/local-rig.md`). The rig admin user has locale **ru_RU**; the site stays **en_US**.
 GlitchTip receiver (#1082) is live. **Both machines are live**; routine sync is git ONLY
@@ -62,7 +67,7 @@ the highest installed `2.2.5.5` (operator, 06.09.2026), so the update reaches ev
 
 ✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — no quota consumed; the exhaustion symptom is gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`.
 
-**Test measurements:** framework unit **7160** (1 skipped), Jest **3353** in **84** suites — measured 13.10.2026 (s176) on `4263db84`.
+**Test measurements:** framework unit **7295** (1 skipped), integration **516** — measured 14.10.2026 (s177) on `d5aea56f` (= `8b56ae0a`); Jest **3353** in **84** suites — 13.10.2026 (s176), `src/` unchanged since.
 Integration is CI/coordinator-owned. Re-measure before quoting these as current gate evidence.
 
 ⚠ **A `.ts` msgid fails `lint:i18n-sources`** — it extracts from the BUILT bundle (s129).
@@ -278,8 +283,9 @@ only consumer; they get rewritten once everything is ready.
 
 ## Next Actions
 
-**Next:** ⛔ RELEASE-BLOCKING #1270 — v2 carrier plugins run fully without a valid licence; gate checkout + new carrier actions on a SERVER-SIGNED licence status (operator decisions on the card). Then bump both plugin pins to `e74db682`, then Y16 and Y43; #1253(b) — decided (explicit retry action), build it. No live Yandex export check (operator, yandex#47): test contour when it revives, or simulated responses.
-Without him: #1262 closes after a real 128 MB web run on the rig; then the board («Приоритет») — #1269, yandex#52/#57/#58.
+**Next:** the operator's Yandex rig findings (he holds a list — match each against planned cards first); #1253(b) explicit
+«Выгрузить повторно (я проверил кабинет)» (visible); #1262 closes after a real 128 MB web run on the rig; #1273 updater backoff
+(before release). Then the board («Приоритет») — #1269, yandex#52/#57/#58/#62/#63. No live Yandex export check (yandex#47).
 Handoff `next-session-prompt.md`; framework: #1263 is block-only (after v2).
 
 **Issue lists and priorities live on the board.** `FUTURE-BACKLOG.md` is frozen.

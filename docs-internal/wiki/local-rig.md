@@ -316,7 +316,17 @@ that is the whole reason this warning outlives the table it introduces.
 `dadata` rows beside the 6 `test-cdek` (s112).
 
 `mu-plugins/` holds ONLY `zz-rig-yandex-key.php` since s113 — the third pickup method was removed
-(#737); why, and how to restore it, is in the sections above. Switching the default-locality policy
+(#737); why, and how to restore it, is in the sections above.
+
+**Licence gate on the rig (s177, #1270).** Since framework `8b56ae0a` a carrier with a store product works only under a
+SERVER-SIGNED licence claim. Two rules on the rig:
+- The real carriers (CDEK 216, Yandex 821) carry the operator's REAL licence keys, entered on «Woodev → Лицензии»; their claims
+  come from production woodev.ru (bound to `http://localhost:8973`).
+- The framework's fixture carriers (download ids 9001–9006) get their claim from the rig-only mu-plugin
+  `tests/e2e/rig/zz-woodev-rig-license.php`: a rig-local Ed25519 key (generated once, option `woodev_rig_license_keypair`),
+  swapped in through `woodev_license_authority_pubkey` ONLY for those ids. Install it on a new rig with
+  `docker exec -i <wordpress container> sh -c 'cat > /var/www/html/wp-content/mu-plugins/zz-woodev-rig-license.php' < tests/e2e/rig/zz-woodev-rig-license.php`.
+  Without it every fixture carrier yields no rate. It is never shipped. Switching the default-locality policy
 to `geoip` needs `dadata` plus a pinned non-local IP: gotcha
 `the-geoip-default-locality-cannot-resolve-on-a-local-rig`.
 

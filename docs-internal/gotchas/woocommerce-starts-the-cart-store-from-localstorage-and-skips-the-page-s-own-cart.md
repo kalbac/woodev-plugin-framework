@@ -111,6 +111,14 @@ Move the server's rate out of band — a raw `fetch` to `/cart/select-shipping-r
 header, so the store never hears — and reload. All three rig rates are free, so the hash matches.
 Without the fix 4 of 8 reloads are stale; with it 0 of 8.
 
+## Fixed in core: WooCommerce 11.3 (s177)
+
+Our upstream report woocommerce/woocommerce#69428 (s156) was closed by woocommerce/woocommerce#69667, merged 13.10.2026 for
+**WooCommerce 11.3.0**: `AssetDataRegistry` exposes `wcSettings.preloadedApiRequestPaths`, and the cart store's `load` listener no
+longer marks `getCartData` resolved when `/wc/store/v1/cart` was preloaded. That also covers the case our workaround cannot — a
+bundle evaluated AFTER `load` (script-delay optimisers). Keep `resolveCartFromServer()` while the supported minimum is below 11.3
+(it is a no-op on 11.3+); remove it when the minimum reaches 11.3.
+
 ## Related
 
 - [core-takes-a-cart-extension-reply-s-addresses-into-the-store-before-your-code-sees-it](core-takes-a-cart-extension-reply-s-addresses-into-the-store-before-your-code-sees-it.md) — the other place the cart store holds something other than what you assume

@@ -51,6 +51,7 @@
 - [testing/paths] **macOS `sys_get_temp_dir()` is a symlink but `ReflectionClass::getFileName()` reports the RESOLVED path — a fixture comparing the two reads as a resolver regression.** → [on-macos-sys-get-temp-dir-is-a-symlink-so-a-reflected-path-never-matches-it](../gotchas/on-macos-sys-get-temp-dir-is-a-symlink-so-a-reflected-path-never-matches-it.md) (s136)
 - [testing/integration] **`WP_UnitTestCase` restores the hook table after each test, so a WooCommerce mailer first built INSIDE a test loses its e-mail listeners for the rest of the run — 0 e-mails on WC 8.5/9.3.** → [wp-unittestcase-hook-restore-unhooks-woocommerce-email-listeners-before-wc-11](../gotchas/wp-unittestcase-hook-restore-unhooks-woocommerce-email-listeners-before-wc-11.md) (s143)
 - [testing/unit] **A digit-only «must not contain» needle is clock-flaky when the JSON carries `time()` or a random hex id — `'999'` hit timestamp `1791088999`; use a needle only the stripped text can produce.** → [an-absence-needle-of-digits-can-occur-in-a-timestamp-or-random-id](../gotchas/an-absence-needle-of-digits-can-occur-in-a-timestamp-or-random-id.md) (s151)
+- [testing/unit] **A framework class constant on `MINUTE_IN_SECONDS` turns a plugin's unit suite red (21 unrelated errors) when its bootstrap lacks WP time constants — define them there.** → [a-framework-class-constant-on-a-wp-time-constant-breaks-a-plugin-unit-bootstrap](../gotchas/a-framework-class-constant-on-a-wp-time-constant-breaks-a-plugin-unit-bootstrap.md) (s177)
 
 ## Related
 
