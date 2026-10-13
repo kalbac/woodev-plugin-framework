@@ -803,6 +803,148 @@ final class CarrierSettingsTabTest extends TestCase {
 		$this->assertSame( [ 'credentials' ], $this->section_ids( $plugin->get_settings_providers()[0] ) );
 	}
 
+	// ----- the carrier's own titled cards in «Выгрузка заказов» (F-SEAM) -----
+
+	/** A contribution whose handler owns `api_key` (shown in «Доступ») plus these export fields, in no section of its own. */
+	private function credentials_with_export_fields( array $export_field_ids ): Settings_Provider {
+		$handler = new class( 'cdek', array_merge( [ 'api_key' ], $export_field_ids ) ) extends \Woodev_Abstract_Settings {
+
+			/** @var string[] */
+			private array $field_ids;
+
+			public function __construct( string $id, array $field_ids ) {
+				$this->field_ids = $field_ids;
+				parent::__construct( $id );
+			}
+
+			protected function register_settings() {
+				foreach ( $this->field_ids as $field_id ) {
+					$this->register_setting( $field_id, \Woodev_Setting::TYPE_STRING, [ 'name' => $field_id ] );
+					$this->register_control( $field_id, \Woodev_Control::TYPE_TEXT );
+				}
+			}
+		};
+
+		return Settings_Provider::create_with_sections( 'cdek', 'Подключение', $handler, [], Settings_Section::create( 'credentials', 'Доступ', [ 'api_key' ] ) );
+	}
+
+	public function test_a_carrier_card_holds_its_own_fields_and_they_leave_the_print_documents_card(): void {
+		Functions\when( 'has_action' )->justReturn( 10 );
+
+		$plugin = $this->carrier( 'cdek', [ $this->credentials_with_export_fields( [ 'label_format', 'price_growth', 'poll_interval', 'point_types' ] ) ] );
+		$plugin->shouldReceive( 'get_export_section_setting_ids' )->andReturn( [ 'label_format', 'price_growth', 'poll_interval', 'point_types' ] );
+		$plugin->shouldReceive( 'get_export_section_extension' )->andReturn(
+			[
+				'groups' => [
+					Settings_Group::create( 'tuning', 'Параметры выгрузки', 'Как часто опрашивать перевозчика.' )->with_fields( [ 'price_growth', 'poll_interval' ] ),
+					Settings_Group::create( 'points', 'Пункты выдачи' )->with_fields( [ 'point_types' ] ),
+				],
+			]
+		);
+		$this->export_with_cron_hook( $plugin, 'cdek_update_orders' );
+
+		$export = $this->export_of( $plugin );
+		$groups = $export->get_groups();
+
+		$this->assertSame( [ 'auto-export', 'labels', 'delivery-status', 'tuning', 'points' ], $this->group_ids( $export ) );
+		$this->assertSame( [ 'label_format' ], $groups[1]->get_setting_ids(), 'only what no carrier card took stays under «Документы для печати»' );
+		$this->assertSame( [ 'price_growth', 'poll_interval' ], $groups[3]->get_setting_ids() );
+		$this->assertSame( 'Параметры выгрузки', $groups[3]->get_title() );
+		$this->assertSame( 'Как часто опрашивать перевозчика.', $groups[3]->get_description() );
+		$this->assertSame( [ 'point_types' ], $groups[4]->get_setting_ids() );
+		$this->assertSame(
+			[ 'auto_export_orders', 'export_statuses', 'label_format', 'status_delivered', 'status_cancelled', 'price_growth', 'poll_interval', 'point_types' ],
+			$export->get_setting_ids(),
+			'every field is listed once'
+		);
+	}
+
+	public function test_the_labels_card_disappears_when_a_carrier_card_took_every_field(): void {
+		$plugin = $this->carrier( 'cdek', [ $this->credentials_with_export_fields( [ 'price_growth' ] ) ] );
+		$plugin->shouldReceive( 'get_export_section_setting_ids' )->andReturn( [ 'price_growth' ] );
+		$plugin->shouldReceive( 'get_export_section_extension' )->andReturn(
+			[ 'groups' => [ Settings_Group::create( 'tuning', 'Параметры выгрузки' )->with_fields( [ 'price_growth' ] ) ] ]
+		);
+		$this->make_it_export( $plugin );
+
+		$this->assertSame( [ 'auto-export', 'delivery-status', 'tuning' ], $this->group_ids( $this->export_of( $plugin ) ) );
+	}
+
+	public function test_the_schema_renders_each_carrier_card_field_once_in_its_own_card(): void {
+		$plugin = $this->carrier( 'cdek', [ $this->credentials_with_export_fields( [ 'label_format', 'price_growth' ] ) ] );
+		$plugin->shouldReceive( 'get_export_section_setting_ids' )->andReturn( [ 'label_format', 'price_growth' ] );
+		$plugin->shouldReceive( 'get_export_section_extension' )->andReturn(
+			[ 'groups' => [ Settings_Group::create( 'tuning', 'Параметры выгрузки' )->with_fields( [ 'price_growth' ] ) ] ]
+		);
+		$this->make_it_export( $plugin );
+
+		$tabs   = Settings_Page_Registry::instance()->build_tabs(
+			array_map( static fn( $provider ) => [ 'provider' => $provider, 'is_woocommerce' => true ], $plugin->get_settings_providers() ),
+			static fn( string $capability ): bool => true
+		);
+		$export = $tabs[0]['sections'][1];
+
+		$this->assertSame( 'export', $export['id'] );
+		$this->assertSame( [ 'auto-export', 'labels', 'delivery-status', 'tuning' ], array_column( $export['groups'], 'id' ) );
+		$this->assertSame( [ 'label_format' ], $export['groups'][1]['fields'] );
+		$this->assertSame( [ 'price_growth' ], $export['groups'][3]['fields'] );
+
+		$in_cards = array_merge( ...array_column( $export['groups'], 'fields' ) );
+
+		$this->assertSame( $in_cards, array_values( array_unique( $in_cards ) ), 'no field appears in two cards' );
+		$this->assertEqualsCanonicalizing( array_keys( $export['fields'] ), $in_cards, 'every field is in a card' );
+	}
+
+	public function test_a_carrier_card_field_is_still_a_setting_of_the_composed_handler_so_it_saves_and_validates_there(): void {
+		$plugin = $this->carrier( 'cdek', [ $this->credentials_with_export_fields( [ 'price_growth' ] ) ] );
+		$plugin->shouldReceive( 'get_export_section_setting_ids' )->andReturn( [ 'price_growth' ] );
+		$plugin->shouldReceive( 'get_export_section_extension' )->andReturn(
+			[ 'groups' => [ Settings_Group::create( 'tuning', 'Параметры выгрузки' )->with_fields( [ 'price_growth' ] ) ] ]
+		);
+		$this->make_it_export( $plugin );
+
+		$provider = $plugin->get_settings_providers()[0];
+
+		$this->assertNotNull( $provider->get_handler()->get_setting( 'price_growth' ), 'the handler of the card\'s field is the contributing one' );
+		$this->assertContains( 'price_growth', $this->export_of( $plugin )->get_setting_ids() );
+	}
+
+	public function test_a_carrier_card_field_outside_the_export_ids_or_held_twice_is_reported_and_dropped_from_the_card(): void {
+		$plugin = $this->carrier( 'cdek', [ $this->credentials_with_export_fields( [ 'label_format', 'price_growth' ] ) ] );
+		$plugin->shouldReceive( 'get_export_section_setting_ids' )->andReturn( [ 'label_format', 'price_growth' ] );
+		$plugin->shouldReceive( 'get_export_section_extension' )->andReturn(
+			[
+				'groups' => [
+					Settings_Group::create( 'tuning', 'Параметры выгрузки' )->with_fields( [ 'price_growth', 'status_delivered', 'api_key' ] ),
+					Settings_Group::create( 'again', 'Ещё раз' )->with_fields( [ 'price_growth' ] ),
+				],
+			]
+		);
+		$this->make_it_export( $plugin );
+
+		Functions\expect( '_doing_it_wrong' )->times( 2 )->with( Mockery::type( 'string' ), Mockery::pattern( '/groups.*(tuning|again).*holds a field/' ), '2.0.2' );
+
+		$export = $this->export_of( $plugin );
+		$groups = $export->get_groups();
+
+		$this->assertSame( [ 'price_growth' ], $groups[3]->get_setting_ids(), 'a framework field and a field outside the ids are not stolen' );
+		$this->assertSame( [], $groups[4]->get_setting_ids() );
+		$this->assertSame( [ 'label_format' ], $groups[1]->get_setting_ids() );
+		$this->assertSame( 1, count( array_keys( $export->get_setting_ids(), 'price_growth', true ) ) );
+	}
+
+	public function test_a_carrier_without_field_bearing_cards_gets_the_same_section_as_before(): void {
+		$with_seam = $this->carrier( 'cdek', [ $this->credentials( [], 'label_format', 'labels' ) ] );
+		$with_seam->shouldReceive( 'get_export_section_setting_ids' )->andReturn( [ 'label_format' ] );
+		$with_seam->shouldReceive( 'get_export_section_extension' )->andReturn( [ 'groups' => [ Settings_Group::create( 'webhooks', 'Вебхуки' ) ] ] );
+		$this->make_it_export( $with_seam );
+		$export = $this->export_of( $with_seam );
+
+		$this->assertSame( [ 'auto-export', 'labels', 'delivery-status', 'webhooks' ], $this->group_ids( $export ) );
+		$this->assertSame( [ 'label_format' ], $export->get_groups()[1]->get_setting_ids() );
+		$this->assertSame( [ 'auto_export_orders', 'export_statuses', 'label_format', 'status_delivered', 'status_cancelled' ], $export->get_setting_ids() );
+	}
+
 	// ----- «Обновить статусы сейчас» -----
 
 	private function export_with_cron_hook( Shipping_Plugin $plugin, ?string $hook ): void {

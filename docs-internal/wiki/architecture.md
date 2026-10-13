@@ -150,6 +150,10 @@ Settings_Section::create( 'export', 'Отправка', [ 'token', 'mode', 'othe
   refresh button, an earlier entry), is dropped the same way. The REST `run_tool` route still answers 409
   `woodev_settings_ambiguous_tool` if an id ever repeats across the tab's sections. The seam is skipped silently for a
   carrier that does not export orders. (It replaced `get_advanced_section_extension()` in the same PR — v2 clean break.)
+  A `groups` entry may also hold FIELDS (`Settings_Group::with_fields()`): each must be an id of
+  `get_export_section_setting_ids()`, is rendered once in the carrier's card and leaves «Документы для печати» (the
+  card disappears when none is left); a foreign or doubly-held field is dropped from the group with `_doing_it_wrong()`
+  (F-SEAM, s178).
 
 ## Shipping settings — the «Доставка» tab (`woodev/shipping-method/settings/`)
 
