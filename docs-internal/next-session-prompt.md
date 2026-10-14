@@ -1,4 +1,4 @@
-> Составлено по итогам s178 (14.10.2026, MacBook; овернайт разрешён оператором). Формат: `DOCS-SCHEMA.md` → Handoff Format.
+> Составлено по итогам s178 (14.10.2026, MacBook; овернайт разрешён оператором). PR framework docs #1281 ждёт review/merge; review build PRs перечислены ниже и ждут взгляда оператора. Формат: `DOCS-SCHEMA.md` → Handoff Format.
 >
 > **Дерево:** основные checkout рига оставлены на `origin/kalbac/review-s178` (framework #1274/#1276; Yandex `2cb1337`, #73/#74/#75/#77/#79/#80); CDEK `v2` `2051201`. В framework main есть #1280, в Yandex main — #78. Ожидается взгляд оператора; риг `:8973` остаётся на review build.
 > Замеры 14.10.2026: framework unit **7321** (1 skipped, CI #1278); Yandex unit **677** (#78) / **800** (review); CDEK unit **1484+** (#97); acceptance **105/0/12** после #99 (6.3 мин). Integration не запускали. Контур Яндекса: HTTP 200, пустое тело (01:20).
@@ -102,14 +102,9 @@
 | | |
 |---|---|
 | Дерево | Framework/Yandex rig: `origin/kalbac/review-s178`; CDEK `v2` `2051201`; framework main after #1280, Yandex main after #78 |
-| Открытые PR | review build PRs #1274 #1276, Yandex #73 #74 #75 #77 #79 #80; #81 draft |
+| Открытые PR | docs #1281 ждёт review; review build: #1274 #1276, Yandex #73 #74 #75 #77 #79 #80; #81 draft |
 | Ворктри | rig checkouts intentionally on review branches; see header |
 | Риг | `:8973`, review build; smoke summary above |
 | Доски | №6 фреймворк, №11 Яндекс, №9 СДЭК |
 | Доки | 425 готчей; следующий аудит — s180 |
 | Лимиты (14.10, конец) | Claude неделя ~95 % (сброс ср 08:00); Fable неделя 11 %; Codex неделя ~17 % |
-
-# Related
-
-- [sessions/s178.md](sessions/s178.md) — детали сессии
-- [specs/2026-10-12-yandex-v2-plugin-design.md](specs/2026-10-12-yandex-v2-plugin-design.md) — спецификация Яндекса v2
