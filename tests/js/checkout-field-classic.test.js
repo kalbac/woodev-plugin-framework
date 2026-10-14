@@ -367,7 +367,11 @@ describe( 'pickup slot placements (#274 item 3)', () => {
 	 * per package, so a real checkout genuinely carries duplicate ids and one checked radio per
 	 * package (`shipping_method[0]`, `shipping_method[1]`).
 	 *
-	 * @param {{withRateListItem?: boolean, preChecked?: boolean, packages?: number}} [options]
+	 * `packageRates` renders ONE rate per package, exactly as WooCommerce does for a package with
+	 * a single rate: `{ value, hidden: true }` is the `<input type="hidden">` it emits INSTEAD of
+	 * a radio (never `checked`), `{ value }` is a lone pre-checked radio. Overrides `packages`.
+	 *
+	 * @param {{withRateListItem?: boolean, preChecked?: boolean, packages?: number, packageRates?: Array<{value: string, hidden?: boolean}>}} [options]
 	 * @returns {void}
 	 */
 	function installPickupMarkup( options ) {
@@ -392,9 +396,28 @@ describe( 'pickup slot placements (#274 item 3)', () => {
 			</tr>
 		`;
 
+		const singleRateList = ( index, spec ) => `
+			<tr class="woocommerce-shipping-totals shipping">
+				<td>
+					<ul id="shipping_method" class="woocommerce-shipping-methods">
+						<li>
+							${ spec.hidden
+								? `<input type="hidden" name="shipping_method[${ index }]" value="${ spec.value }"
+									id="shipping_method_${ index }_${ spec.value }" class="shipping_method" />
+									<label for="shipping_method_${ index }_${ spec.value }">${ spec.value }</label>`
+								: rate( index, spec.value, spec.value, true ) }
+						</li>
+					</ul>
+				</td>
+			</tr>
+		`;
+		const rows         = opts.packageRates
+			? opts.packageRates.map( ( spec, index ) => singleRateList( index, spec ) )
+			: Array.from( { length: packages }, ( unused, index ) => list( index ) );
+
 		document.body.innerHTML = `
 			<table class="shop_table woocommerce-checkout-review-order-table">
-				${ Array.from( { length: packages }, ( unused, index ) => list( index ) ).join( '' ) }
+				${ rows.join( '' ) }
 			</table>
 			<button type="submit" id="place_order"></button>
 		`;
@@ -428,7 +451,7 @@ describe( 'pickup slot placements (#274 item 3)', () => {
 
 	/**
 	 * @param {string[]|undefined}           placements See {@see buildPickupConfig}.
-	 * @param {{withRateListItem?: boolean}} [markup]   See {@see installPickupMarkup}.
+	 * @param {Object}                       [markup]   See {@see installPickupMarkup}.
 	 * @returns {void}
 	 */
 	function bootPickup( placements, markup ) {
@@ -584,6 +607,112 @@ describe( 'pickup slot placements (#274 item 3)', () => {
 		global.jQuery( document.body ).trigger( 'updated_checkout' );
 
 		expect( slots()[ 0 ].style.display ).not.toBe( 'none' );
+	} );
+
+	/**
+	 * Issue #1282, round 2. WooCommerce renders a HIDDEN input (no `:checked`) for a package that
+	 * has exactly one rate, so a two-package cart with one rate each carries TWO hidden
+	 * `shipping_method[i]` inputs. The selection must be read inside the package the slot belongs
+	 * to — the first one, which is also the only one the server reads
+	 * (`shipping_method[0]`) — not from "the page has exactly one input".
+	 */
+	describe( 'selected method is resolved per package (#1282 round 2)', () => {
+		const PICKUP  = { value: 'carrier_pickup' };
+		const COURIER = { value: 'flat_rate' };
+		const hidden  = ( spec ) => Object.assign( {}, spec, { hidden: true } );
+		const visible = () => slots()[ 0 ].style.display !== 'none';
+
+		/**
+		 * Boots the adapter on the given per-package rates. One boot per test: the adapter is a
+		 * `require`d IIFE, so a second call in the same test would not re-run it.
+		 */
+		function bootPackages( packageRates, placements ) {
+			bootPickup( placements || [ 'review' ], { packageRates } );
+		}
+
+		it( 'one package, radio: pickup shows the slot', () => {
+			bootPackages( [ PICKUP ] );
+			expect( visible() ).toBe( true );
+		} );
+
+		it( 'one package, radio: courier hides the slot', () => {
+			bootPackages( [ COURIER ] );
+			expect( visible() ).toBe( false );
+		} );
+
+		it( 'one package, hidden input: pickup shows the slot', () => {
+			bootPackages( [ hidden( PICKUP ) ] );
+			expect( visible() ).toBe( true );
+		} );
+
+		it( 'one package, hidden input: courier hides the slot', () => {
+			bootPackages( [ hidden( COURIER ) ] );
+			expect( visible() ).toBe( false );
+		} );
+
+		it( 'two hidden inputs, pickup in package 0: the slot stays shown after updated_checkout', () => {
+			bootPackages( [ hidden( PICKUP ), hidden( COURIER ) ] );
+			expect( visible() ).toBe( true );
+
+			global.jQuery( document.body ).trigger( 'updated_checkout' );
+
+			expect( visible() ).toBe( true );
+		} );
+
+		it( 'two hidden inputs, courier in package 0: the slot is hidden, even though package 1 is pickup', () => {
+			bootPackages( [ hidden( COURIER ), hidden( PICKUP ) ] );
+			expect( visible() ).toBe( false );
+
+			global.jQuery( document.body ).trigger( 'updated_checkout' );
+
+			expect( visible() ).toBe( false );
+		} );
+
+		it( 'mixed radio + hidden: pickup radio in package 0, courier hidden in package 1', () => {
+			bootPackages( [ PICKUP, hidden( COURIER ) ] );
+			global.jQuery( document.body ).trigger( 'updated_checkout' );
+
+			expect( visible() ).toBe( true );
+		} );
+
+		it( 'mixed hidden + radio: pickup hidden in package 0, courier radio in package 1', () => {
+			bootPackages( [ hidden( PICKUP ), COURIER ] );
+			global.jQuery( document.body ).trigger( 'updated_checkout' );
+
+			expect( visible() ).toBe( true );
+		} );
+
+		it( 'mixed, reversed: courier radio in package 0, pickup hidden in package 1 hides the slot', () => {
+			bootPackages( [ COURIER, hidden( PICKUP ) ] );
+			global.jQuery( document.body ).trigger( 'updated_checkout' );
+			expect( visible() ).toBe( false );
+		} );
+
+		it( 'mixed, reversed: courier hidden in package 0, pickup radio in package 1 hides the slot', () => {
+			bootPackages( [ hidden( COURIER ), PICKUP ] );
+			global.jQuery( document.body ).trigger( 'updated_checkout' );
+			expect( visible() ).toBe( false );
+		} );
+
+		it( 'follows package 0 when WooCommerce re-renders it with another method (two hidden inputs)', () => {
+			bootPackages( [ hidden( PICKUP ), hidden( COURIER ) ] );
+			expect( visible() ).toBe( true );
+
+			document.querySelectorAll( '#shipping_method' )[ 0 ].innerHTML =
+				'<li><input type="hidden" name="shipping_method[0]" value="flat_rate" /></li>';
+			global.jQuery( document.body ).trigger( 'updated_checkout' );
+
+			expect( visible() ).toBe( false );
+		} );
+
+		it( "'rate' placement mounts ONE slot inside package 0's hidden-input <li>", () => {
+			bootPackages( [ hidden( PICKUP ), hidden( COURIER ) ], [ 'rate' ] );
+
+			const mounted = slots();
+
+			expect( mounted ).toHaveLength( 1 );
+			expect( mounted[ 0 ].closest( 'ul' ) ).toBe( document.querySelectorAll( '#shipping_method' )[ 0 ] );
+		} );
 	} );
 
 	/**

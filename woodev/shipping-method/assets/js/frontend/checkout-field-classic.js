@@ -71,25 +71,51 @@
 	// ---------------------------------------------------------------------
 
 	/**
-	 * Возвращает выбранное значение метода доставки.
+	 * Возвращает input выбранного тарифа ПЕРВОГО пакета доставки.
 	 *
-	 * Reused from checkout.js: отмеченный радио либо единственный скрытый input.
+	 * WooCommerce включает `templates/cart/cart-shipping.php` один раз на пакет, и у каждого
+	 * пакета своё имя поля: `shipping_method[0]`, `shipping_method[1]`... Пакет с единственным
+	 * тарифом рисует скрытый input вместо радио. Поэтому выбор читается ВНУТРИ пакета:
+	 * отмеченное радио либо единственный input этого пакета. Прежнее «всего input'ов на
+	 * странице ровно один» ломалось на двух пакетах с одним тарифом в каждом — два скрытых
+	 * input'а, ни одного `:checked` — и отдавало пустой метод (#1282, раунд 2).
 	 *
+	 * Слот ПВЗ принадлежит первому пакету: `'review'` встаёт после первого
+	 * `#shipping_method`, а сервер читает только `shipping_method[0]`
+	 * (`Checkout_Handler::resolve_chosen_method_id_from_post()`), так что стор и сервер
+	 * видят один и тот же метод.
+	 *
+	 * @returns {jQuery} Пустой набор, если выбор не определён.
+	 */
+	function selectedShippingInput() {
+		var $all = $( 'input[name^="shipping_method"]' )
+
+		if( ! $all.length ) {
+			return $()
+		}
+
+		var name = $all.first().attr( 'name' )
+		var $pkg = $all.filter( function() {
+			return $( this ).attr( 'name' ) === name
+		} )
+
+		var $checked = $pkg.filter( ':checked' )
+
+		if( $checked.length ) {
+			return $checked.first()
+		}
+
+		return $pkg.length === 1 ? $pkg : $()
+	}
+
+	/**
+	 * Возвращает выбранное значение метода доставки первого пакета.
+	 *
+	 * @see selectedShippingInput
 	 * @returns {string}
 	 */
 	function selectedShippingMethod() {
-		var $radios  = $( 'input[name^="shipping_method"]' )
-		var $checked = $radios.filter( ':checked' )
-
-		if( $checked.length ) {
-			return $checked.val()
-		}
-
-		if( $radios.length === 1 ) {
-			return $radios.val()
-		}
-
-		return ''
+		return selectedShippingInput().val() || ''
 	}
 
 	/**
@@ -676,12 +702,7 @@
 	 */
 	function resolvePlacementAnchor( placement ) {
 		if( placement === 'rate' ) {
-			var $radios = $( 'input[name^="shipping_method"]' )
-			var $target = $radios.filter( ':checked' )
-
-			if( ! $target.length && $radios.length === 1 ) {
-				$target = $radios
-			}
+			var $target = selectedShippingInput()
 
 			// `.first()` обязателен, а не косметика (#323). При мультипакетной
 			// корзине WooCommerce включает `templates/cart/cart-shipping.php` ОДИН
