@@ -6,7 +6,7 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-14 (s178).** Framework `main` after #1275/#1277/#1278/#1280; the primary rig checkout is deliberately on `origin/kalbac/review-s178` with #1274/#1276 for the operator's visual review. CDEK plugin `v2` `2051201`; Yandex plugin `main` after #78, while its primary rig checkout is on `origin/kalbac/review-s178` (`2cb1337`, #73/#74/#75/#77/#79/#80). The operator's nine Yandex rig findings are recorded as yandex#66–#71; merge order is in `next-session-prompt.md`.
+**As of 2026-10-14 (s179).** Framework `main` after #1283 (pickup slot hides when WooCommerce re-selects a non-pickup method); the primary rig checkout is deliberately DETACHED on `origin/kalbac/review-s178` (main + #1274 + #1276) for the operator's review; open framework PRs #1274 #1276 #1285. Yandex `main` after #75 (v1 pins) and #83 (bare-answer matching, 200-place corpus); Yandex TEST MODE is removed (operator, s179) in PR #73.
 🚧 **v2 release = TWO carrier plugins on v2, tested and compatible** (#1179): CDEK is done; Yandex main and review-build work is staged for the operator's look. Review-build smoke passed settings, method fields, Moscow quotes, bulk menu and CDEK quotes; Pushkin was verified through suggestions. No terminal pins were seen (unverified); hidden-method hint was not exercised.
 ⚠ **The Yandex TEST contour is silent** (HTTP 200, empty body): live confirm/cancel/status/PDF are UNVERIFIED; no production
 check (yandex#47). Private-repo gate = local-ci + critic (global rule `~/.claude/CLAUDE.md`; mirrored to the Homelab host in s177).

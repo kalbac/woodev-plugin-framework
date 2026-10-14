@@ -2022,6 +2022,18 @@ msgstr ""
 msgid "Выгрузить заказ в систему перевозчика"
 msgstr ""
 
+#: shipping-method/admin/orders/class-order-actions.php:249
+msgid "Выгрузить повторно (я проверил кабинет)"
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:250
+msgid "Проверьте, что заявки нет в кабинете перевозчика, прежде чем выгружать заказ повторно."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:254
+msgid "Вы проверили кабинет перевозчика и подтверждаете, что заявки для этого заказа там нет?"
+msgstr ""
+
 #: shipping-method/admin/orders/class-order-actions.php:206
 #: assets/build/shipping-orders-page/index.js:13
 msgid "Обновить"
@@ -2324,6 +2336,10 @@ msgstr ""
 
 #: shipping-method/order/class-export-retry.php:251
 msgid "Исход выгрузки неизвестен — проверьте кабинет перевозчика, автоматическая выгрузка остановлена"
+msgstr ""
+
+#: shipping-method/order/abstract-shipment-handler.php:286
+msgid "Исход прошлой выгрузки неизвестен — проверьте заказ в кабинете перевозчика. Если заявки там нет, выгрузите повторно."
 msgstr ""
 
 #. translators: %s: the carrier's reason for refusing or failing the export
@@ -6184,8 +6200,20 @@ msgstr ""
 msgid "Скрыть"
 msgstr ""
 
+#. translators: 1: titles of the hidden shipping methods, 2: why they have no rate
+#: shipping-method/checkout/class-checkout-handler.php:610
+#, php-format
+msgid "Скрыты: %1$s — %2$s"
+msgstr ""
+
+#. translators: 1: title of the hidden shipping method, 2: why it has no rate
+#: shipping-method/checkout/class-checkout-handler.php:612
+#, php-format
+msgid "Скрыт: %1$s — %2$s"
+msgstr ""
+
 #: shipping-method/class-shipping-method.php:1569
-msgid "Способ доставки скрыт: не удалось рассчитать стоимость доставки. Попробуйте позже или проверьте настройки службы доставки."
+msgid "не удалось рассчитать стоимость доставки. Попробуйте позже или проверьте настройки службы доставки."
 msgstr ""
 
 #: shipping-method/admin/orders/class-order-actions.php:748
@@ -6201,7 +6229,7 @@ msgid "Лицензия плагина не действует, поэтому �
 msgstr ""
 
 #: shipping-method/class-license-gate.php:120
-msgid "Способ доставки скрыт: лицензия плагина не действует. Введите или продлите ключ на странице лицензий: %s"
+msgid "лицензия плагина не действует. Введите или продлите ключ на странице лицензий: %s"
 msgstr ""
 
 #: shipping-method/class-shipping-plugin.php:1952

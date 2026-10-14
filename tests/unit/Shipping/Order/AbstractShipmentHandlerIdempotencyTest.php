@@ -378,14 +378,14 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$this->assertSame( 0, $handler->lookups, 'the order was not unknown BEFORE this attempt: nothing to reconcile yet' );
 		}
 
-		public function test_a_second_transport_failure_keeps_the_time_of_the_first(): void {
+		public function test_an_explicit_retry_that_times_out_records_the_new_unknown_attempt(): void {
 			$this->meta[55][ self::META ] = 1000;
 
 			$this->expect_retries( 0 );
 			$handler = $this->handler( $this->api( new \Woodev_API_Transport_Exception( 'timed out' ) ) );
-			$handler->export( $this->order() );
+			$handler->export( $this->order(), null, null, true );
 
-			$this->assertSame( 1000, $this->meta[55][ self::META ] );
+			$this->assertGreaterThan( 1000, $this->meta[55][ self::META ] );
 		}
 
 		public function test_the_default_classification_is_the_exception_type_and_a_carrier_can_override_it(): void {
@@ -432,15 +432,29 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$this->assertArrayNotHasKey( self::META, $this->meta[55] );
 		}
 
-		public function test_an_unknown_order_of_a_carrier_that_cannot_look_up_is_created_by_a_manual_export(): void {
+		public function test_a_manual_export_refuses_an_unknown_order_without_reconcile(): void {
+			$this->meta[55][ self::META ] = 1000;
+
+			$handler = $this->handler( $this->api( null, 0 ) );
+
+			$result = $handler->export( $this->order() );
+
+			$this->assertFalse( $result->is_success() );
+			$this->assertSame( 'Исход прошлой выгрузки неизвестен — проверьте заказ в кабинете перевозчика. Если заявки там нет, выгрузите повторно.', $result->get_message() );
+			$this->assertSame( 0, $handler->lookups );
+			$this->assertSame( 1000, $this->meta[55][ self::META ] );
+		}
+
+		public function test_an_explicit_retry_clears_unknown_state_under_the_lock_then_exports(): void {
 			$this->meta[55][ self::META ] = 1000;
 
 			$handler = $this->handler( $this->api( null, 1 ) );
 
-			$result = $handler->export( $this->order() );
+			$result = $handler->export( $this->order(), null, null, true );
 
-			$this->assertTrue( $result->is_success(), 'a MANUAL export stays allowed' );
-			$this->assertSame( 0, $handler->lookups );
+			$this->assertTrue( $result->is_success() );
+			$this->assertSame( [ 55 ], $handler->locked );
+			$this->assertSame( [ 55 ], $handler->released );
 			$this->assertArrayNotHasKey( self::META, $this->meta[55] );
 		}
 

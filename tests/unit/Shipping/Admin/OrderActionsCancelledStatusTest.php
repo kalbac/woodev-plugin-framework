@@ -158,6 +158,8 @@ final class OrderActionsCancelledStatusTest extends TestCase {
 	 */
 	public function test_a_cancelled_shipment_offers_export_again_and_no_cancel(): void {
 		$handler = Mockery::mock( Abstract_Shipment_Handler::class );
+		$handler->shouldReceive( 'supports_reconcile' )->andReturn( false )->byDefault();
+		$handler->shouldReceive( 'export_unknown_since' )->andReturn( 0 )->byDefault();
 		$handler->shouldReceive( 'supports_update' )->andReturn( false );
 		// #1204: a carrier that declares nothing keeps today's behaviour.
 		$handler->shouldReceive( 'supports_refusal' )->andReturn( false )->byDefault();

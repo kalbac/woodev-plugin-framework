@@ -228,6 +228,8 @@ class ShippingOrdersRegistryTest extends TestCase {
 
 	public function test_get_shipment_handler_returns_the_registered_handler(): void {
 		$handler = Mockery::mock( Abstract_Shipment_Handler::class );
+		$handler->shouldReceive( 'supports_reconcile' )->andReturn( false )->byDefault();
+		$handler->shouldReceive( 'export_unknown_since' )->andReturn( 0 )->byDefault();
 
 		Orders_Registry::instance()->register_shipment_handler( 'cdek', $handler );
 
@@ -241,6 +243,8 @@ class ShippingOrdersRegistryTest extends TestCase {
 	 */
 	public function test_register_shipment_handler_does_not_require_a_matching_provider(): void {
 		$handler = Mockery::mock( Abstract_Shipment_Handler::class );
+		$handler->shouldReceive( 'supports_reconcile' )->andReturn( false )->byDefault();
+		$handler->shouldReceive( 'export_unknown_since' )->andReturn( 0 )->byDefault();
 
 		Orders_Registry::instance()->register_shipment_handler( 'unregistered', $handler );
 
@@ -266,6 +270,8 @@ class ShippingOrdersRegistryTest extends TestCase {
 	 */
 	public function test_replacing_a_provider_descriptor_drops_the_previous_shipment_handler(): void {
 		$handler = Mockery::mock( Abstract_Shipment_Handler::class );
+		$handler->shouldReceive( 'supports_reconcile' )->andReturn( false )->byDefault();
+		$handler->shouldReceive( 'export_unknown_since' )->andReturn( 0 )->byDefault();
 
 		Orders_Registry::instance()->register_provider( $this->provider( 'cdek', 'СДЭК v1' ) );
 		Orders_Registry::instance()->register_shipment_handler( 'cdek', $handler );
@@ -300,6 +306,8 @@ class ShippingOrdersRegistryTest extends TestCase {
 	 */
 	public function test_registering_a_provider_for_the_first_time_does_not_drop_a_handler_registered_before_it(): void {
 		$handler = Mockery::mock( Abstract_Shipment_Handler::class );
+		$handler->shouldReceive( 'supports_reconcile' )->andReturn( false )->byDefault();
+		$handler->shouldReceive( 'export_unknown_since' )->andReturn( 0 )->byDefault();
 
 		Orders_Registry::instance()->register_shipment_handler( 'cdek', $handler );
 		Orders_Registry::instance()->register_provider( $this->provider( 'cdek' ) );

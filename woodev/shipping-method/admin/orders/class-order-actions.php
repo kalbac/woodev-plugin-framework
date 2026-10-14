@@ -37,6 +37,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		/** @var string */
 		public const EXPORT = 'export';
 
+		/** @since 2.0.2 Card #1253. @var string */
+		public const RETRY_EXPORT = 'woodev_retry_export';
+
 		/** @var string */
 		public const UPDATE = 'update';
 
@@ -236,6 +239,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 					__( 'Выгрузить заказ в систему перевозчика', 'woodev-plugin-framework' ),
 					false,
 					'upload'
+				);
+			}
+
+			if ( ! $is_exported && in_array( $order->get_status(), self::EXPORTABLE_STATUSES, true ) && ! $handler->supports_reconcile() && $handler->export_unknown_since( $order ) > 0 ) {
+				$actions[] = array_merge(
+					self::build_action(
+						self::RETRY_EXPORT,
+						__( 'Выгрузить повторно (я проверил кабинет)', 'woodev-plugin-framework' ),
+						__( 'Проверьте, что заявки нет в кабинете перевозчика, прежде чем выгружать заказ повторно.', 'woodev-plugin-framework' ),
+						true,
+						'upload'
+					),
+					[ 'confirm' => __( 'Вы проверили кабинет перевозчика и подтверждаете, что заявки для этого заказа там нет?', 'woodev-plugin-framework' ) ]
 				);
 			}
 
@@ -669,7 +685,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		 *
 		 * @param Abstract_Shipment_Handler $handler  handler resolved for the order's carrier.
 		 * @param \WC_Order                 $order    the order.
-		 * @param string                    $action   one of this class's action ids, or a carrier extra.
+		 * @param string                    $action   one of this class's action ids (including the per-order retry), or a carrier extra.
 		 * @param Orders_Provider           $provider the matched carrier descriptor.
 		 * @param array<string,mixed>       $payload  the values the action's declared `fields` collected, ALREADY validated by
 		 *                                            the caller against that declaration ({@see self::resolve_payload()}); `[]`
@@ -684,6 +700,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 					[ $settlement, $settlement_provider ] = $this->resolve_popular_settlement_context( $order );
 
 					return $handler->export( $order, $settlement, $settlement_provider );
+
+				case self::RETRY_EXPORT:
+					[ $settlement, $settlement_provider ] = $this->resolve_popular_settlement_context( $order );
+
+					return $handler->export( $order, $settlement, $settlement_provider, true );
 
 				case self::CANCEL:
 					return $handler->cancel( $order );

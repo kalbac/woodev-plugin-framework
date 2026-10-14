@@ -120,6 +120,8 @@ final class OrdersControllerBulkActionTest extends TestCase {
 
 	private function register_handler( string $provider_id ): Abstract_Shipment_Handler {
 		$handler = Mockery::mock( Abstract_Shipment_Handler::class );
+		$handler->shouldReceive( 'supports_reconcile' )->andReturn( false )->byDefault();
+		$handler->shouldReceive( 'export_unknown_since' )->andReturn( 0 )->byDefault();
 
 		Orders_Registry::instance()->register_shipment_handler( $provider_id, $handler );
 
@@ -326,6 +328,27 @@ final class OrdersControllerBulkActionTest extends TestCase {
 		$this->assertSame( 0, $result['eligible'] );
 		$this->assertSame( 1, $result['skipped'] );
 		$this->assertSame( 0, $result['succeeded'] );
+	}
+
+	public function test_explicit_retry_is_skipped_in_bulk_and_neighbouring_export_still_runs(): void {
+		$this->register_provider( 'cdek', 'СДЭК', '_cdek_marker' );
+		$handler = $this->register_handler( 'cdek' );
+		$handler->shouldReceive( 'export_unknown_since' )->andReturnUsing( static fn( \WC_Order $order ): int => 1000 );
+		$order_retry = $this->order( 1, 'pending', '_cdek_marker' );
+		$order_export = $this->order( 2, 'pending', '_cdek_marker' );
+		$handler->shouldReceive( 'export' )->once()->with( $order_export, null, null )->andReturn( Action_Result::success( 'CARRIER-2' ) );
+
+		$offered = array_column( ( new Order_Actions( Orders_Registry::instance() ) )->for_order( $order_retry, Orders_Registry::instance()->get_provider( 'cdek' ) ), 'action' );
+		$this->assertContains( Order_Actions::RETRY_EXPORT, $offered, 'the premise: this order offers explicit retry' );
+
+		$retry_result = $this->controller()->perform_bulk_action( $this->request( Order_Actions::RETRY_EXPORT, [ 1 ] ) );
+		$this->assertSame( 1, $retry_result['requested'] );
+		$this->assertSame( 0, $retry_result['eligible'] );
+		$this->assertSame( 1, $retry_result['skipped'] );
+
+		$export_result = $this->controller()->perform_bulk_action( $this->request( Order_Actions::EXPORT, [ 2 ] ) );
+		$this->assertSame( 1, $export_result['eligible'] );
+		$this->assertSame( 1, $export_result['succeeded'] );
 	}
 
 	// ----- mixed-carrier aggregate batch (TWO providers registered) -----

@@ -38,6 +38,8 @@ final class OrderActionsConfirmTextTest extends TestCase {
 		Functions\when( 'wp_strip_all_tags' )->alias( static fn( string $text ): string => strip_tags( $text ) );
 
 		$handler = Mockery::mock( Abstract_Shipment_Handler::class );
+		$handler->shouldReceive( 'supports_reconcile' )->andReturn( false )->byDefault();
+		$handler->shouldReceive( 'export_unknown_since' )->andReturn( 0 )->byDefault();
 		$handler->shouldReceive( 'supports_update' )->andReturn( false );
 		// #1204: a carrier that declares nothing keeps today's behaviour.
 		$handler->shouldReceive( 'supports_refusal' )->andReturn( false )->byDefault();

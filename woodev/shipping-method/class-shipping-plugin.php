@@ -441,6 +441,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			// register shipping methods with WooCommerce
 			add_filter( 'woocommerce_shipping_methods', [ $this, 'register_shipping_methods' ] );
 
+			// #68: the admin hint of hidden methods is shown per plugin, while THAT plugin's debug mode is on — a
+			// session-cached reason is rendered in a request where no method of this plugin has run.
+			Shipping_Method::register_hidden_reason_plugin( $this );
+
 			// «Не показывать на странице корзины»: the cart page's packages are marked, and a marked package's rates lose
 			// this carrier's own — see hide_rates_on_cart_page() for why the mark is what makes it cache-safe.
 			add_filter( 'woocommerce_cart_shipping_packages', [ $this, 'mark_cart_page_packages' ] );

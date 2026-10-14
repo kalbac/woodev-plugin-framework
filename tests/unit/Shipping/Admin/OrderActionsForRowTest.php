@@ -38,6 +38,7 @@ final class OrderActionsForRowTest extends TestCase {
 		\Automattic\WooCommerce\Internal\Admin\Orders\EditLock::$locks = [];
 
 		Functions\when( 'apply_filters' )->returnArg( 2 );
+		Functions\when( 'wp_strip_all_tags' )->alias( static fn( string $text ): string => strip_tags( $text ) );
 		Functions\when( 'get_post_meta' )->alias(
 			function ( int $post_id, string $key, bool $single ) {
 				return $this->meta[ $key ] ?? '';
@@ -91,6 +92,8 @@ final class OrderActionsForRowTest extends TestCase {
 	private function register_handler( bool $supports_update = true ): void {
 		$handler = Mockery::mock( Abstract_Shipment_Handler::class );
 		$handler->shouldReceive( 'supports_update' )->andReturn( $supports_update );
+		$handler->shouldReceive( 'supports_reconcile' )->andReturn( false )->byDefault();
+		$handler->shouldReceive( 'export_unknown_since' )->andReturn( 0 )->byDefault();
 		// #1204: a carrier that declares nothing keeps today's behaviour.
 		$handler->shouldReceive( 'supports_refusal' )->andReturn( false )->byDefault();
 		$handler->shouldReceive( 'get_handed_over_statuses' )->andReturn( [] )->byDefault();
@@ -110,6 +113,29 @@ final class OrderActionsForRowTest extends TestCase {
 		$this->register_handler();
 
 		$this->assertSame( [ Order_Actions::EDIT, Order_Actions::EXPORT ], $this->ids( $this->order() ) );
+	}
+
+	public function test_unknown_non_reconciling_export_offers_an_explicit_retry_action(): void {
+		$this->register_handler();
+		$handler = Orders_Registry::instance()->get_shipment_handler( 'cdek' );
+		$handler->shouldReceive( 'export_unknown_since' )->andReturn( 1000 );
+
+		$actions = $this->actions()->for_row( $this->order(), $this->provider() );
+		$retry   = array_values( array_filter( $actions, static fn( array $action ): bool => Order_Actions::RETRY_EXPORT === $action['action'] ) );
+
+		$this->assertCount( 1, $retry );
+		$this->assertSame( 'Выгрузить повторно (я проверил кабинет)', $retry[0]['label'] );
+		$this->assertTrue( $retry[0]['destructive'] );
+		$this->assertNotSame( '', $retry[0]['confirm'] );
+	}
+
+	public function test_reconciling_carrier_does_not_offer_the_explicit_retry(): void {
+		$this->register_handler();
+		$handler = Orders_Registry::instance()->get_shipment_handler( 'cdek' );
+		$handler->shouldReceive( 'supports_reconcile' )->andReturn( true );
+		$handler->shouldReceive( 'export_unknown_since' )->andReturn( 1000 );
+
+		$this->assertNotContains( Order_Actions::RETRY_EXPORT, $this->ids( $this->order() ) );
 	}
 
 	public function test_the_edit_action_is_a_plain_button_with_a_label_and_a_tooltip(): void {
