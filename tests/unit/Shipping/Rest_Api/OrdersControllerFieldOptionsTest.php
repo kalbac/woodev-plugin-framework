@@ -350,6 +350,27 @@ final class OrdersControllerFieldOptionsTest extends TestCase {
 		$this->assertSame( 400, $result->get_error_data()['status'] );
 	}
 
+	public function test_an_order_another_manager_is_editing_is_a_409_and_the_carrier_is_not_asked(): void {
+		$this->register_provider();
+		$this->register_handler();
+		$this->stub_interval_action( [ [ 'value' => 'x', 'label' => 'X' ] ], $calls );
+		$this->order( 'completed' );
+		\Automattic\WooCommerce\Internal\Admin\Orders\EditLock::$locks[123] = [ 'time' => time(), 'user_id' => 7 ];
+
+		$user               = new \stdClass();
+		$user->ID           = 7;
+		$user->display_name = 'Мария';
+		Functions\when( 'get_user_by' )->justReturn( $user );
+
+		$result = $this->controller()->get_field_options( $this->request( 123, 'pick_interval', 'interval' ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'woodev_shipping_order_locked', $result->get_error_code() );
+		$this->assertSame( 409, $result->get_error_data()['status'] );
+		$this->assertSame( 'This order is already being edited by Мария', $result->get_error_message() );
+		$this->assertSame( 0, $calls, 'a locked order never reaches the carrier options' );
+	}
+
 	public function test_a_carrier_wp_error_passes_its_merchant_sentence_on_as_a_502(): void {
 		$this->register_provider();
 		$this->register_handler();
