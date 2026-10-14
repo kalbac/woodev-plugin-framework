@@ -541,6 +541,52 @@ describe( 'pickup slot placements (#274 item 3)', () => {
 	} );
 
 	/**
+	 * Issue #1282. The buyer changes the city, the pickup rate disappears from the list and
+	 * WooCommerce checks the first remaining rate ITSELF — no `change` event fires, only
+	 * `updated_checkout`. The trigger stayed shown for a method that has no points.
+	 *
+	 * Drives the real sequence: the rate list is re-rendered WITHOUT the pickup rate, the new
+	 * first rate is checked by script (what WC's template does), then `updated_checkout`.
+	 */
+	it( 'hides the slot when WooCommerce itself selects another method on updated_checkout (#1282)', () => {
+		bootPickup( [ 'review' ] );
+
+		expect( slots()[ 0 ].style.display ).not.toBe( 'none' );
+
+		document.querySelector( '#shipping_method' ).innerHTML = `
+			<li>
+				<input type="radio" name="shipping_method[0]" value="free_shipping:1"
+					id="shipping_method_0_free_shipping1" checked="checked" />
+				<label for="shipping_method_0_free_shipping1">Free shipping</label>
+			</li>
+		`;
+		global.jQuery( document.body ).trigger( 'updated_checkout' );
+
+		expect( slots()[ 0 ].style.display ).toBe( 'none' );
+	} );
+
+	/**
+	 * The return trip of the sequence above: the pickup rate comes back and is checked by WC
+	 * (the buyer went back to the city that has it) — the trigger must come back with it.
+	 */
+	it( 'shows the slot again when WooCommerce re-selects the pickup method on updated_checkout (#1282)', () => {
+		bootPickup( [ 'review' ] );
+
+		const list = document.querySelector( '#shipping_method' );
+		const pickupRate = list.innerHTML;
+
+		list.innerHTML = '<li><input type="radio" name="shipping_method[0]" value="free_shipping:1" checked="checked" /></li>';
+		global.jQuery( document.body ).trigger( 'updated_checkout' );
+
+		expect( slots()[ 0 ].style.display ).toBe( 'none' );
+
+		list.innerHTML = pickupRate;
+		global.jQuery( document.body ).trigger( 'updated_checkout' );
+
+		expect( slots()[ 0 ].style.display ).not.toBe( 'none' );
+	} );
+
+	/**
 	 * A multi-package cart renders `templates/cart/cart-shipping.php` once per package, so
 	 * there are several `<ul id="shipping_method">` blocks and one checked radio PER PACKAGE.
 	 * `$( 'input[name^="shipping_method"]' ).filter( ':checked' ).closest( 'li' )` therefore

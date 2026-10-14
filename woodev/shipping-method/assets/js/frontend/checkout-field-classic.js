@@ -1326,6 +1326,18 @@
 
 		// 4. updated_checkout: восстановление значений + re-init select2 + слоты.
 		$( document.body ).on( 'updated_checkout', function() {
+			// Issue #1282. WooCommerce re-renders the rate list on every `updated_checkout` and
+			// may SELECT A DIFFERENT METHOD ITSELF (the buyer changed the city, the pickup rate
+			// vanished, the first remaining rate — Free Shipping — became checked). That change
+			// fires no `change` event, so the store kept the pickup method as the chosen one and
+			// `placeSlots()` below kept the trigger shown for a method that has no points.
+			// Re-read the DOM's selection BEFORE anything reads the store.
+			var chosen = selectedShippingMethod()
+
+			stores.forEach( function( entry ) {
+				entry.store.setChosenMethod( chosen )
+			} )
+
 			stores.forEach( function( entry ) {
 				var store  = entry.store
 				var fields = store.allFields()
