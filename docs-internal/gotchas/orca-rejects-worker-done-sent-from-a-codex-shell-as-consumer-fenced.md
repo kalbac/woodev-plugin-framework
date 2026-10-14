@@ -19,6 +19,18 @@ Before failing, the worker wandered into `orca computer …` commands trying to 
 
 Do not ask the worker to resend more than once; do not let it run `orca computer` commands.
 
+## s180 variant: the fence hits the worker's MID-TASK `check`, and it stops silently
+
+Orca 1.4.224, codex gpt-6-luna. While the coordinator ran a consuming `orchestration check --run <run> --wait`
+loop, a Codex worker's own checkpoint `orchestration check --terminal <its handle>` failed `consumer_fenced`. Its
+preamble told it to stop on that error WITHOUT `worker_done`, so it idled after three of four steps («Worked for 8m»,
+«Ask Codex to do anything»), and the coordinator's inbox loop — waiting only for `worker_done` — never woke. The
+operator noticed «no active process» ~1 h later.
+
+✅ Alongside every inbox wait, watch each worker terminal for the idle prompt (`Worked for` + `Ask Codex` without
+`esc to interrupt`). On this case, `terminal send` a nudge saying the fence was the coordinator's own wait and to finish
+WITHOUT calling `orchestration check` again, then send `worker_done`.
+
 ## Related
 
 - `docs-internal/wiki/orchestrating-agents-with-orca.md`
