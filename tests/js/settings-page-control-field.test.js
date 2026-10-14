@@ -414,6 +414,32 @@ test( 'a flat-array option submits its own value, not its array index', () => {
 	expect( submitted ).toBe( 'green' );
 } );
 
+test( 'ordered schema options retain numeric values and labels in declared order', async () => {
+	const { container } = render(
+		createElement( ControlField, {
+			schema: {
+				type: 'string',
+				controlType: 'select',
+				name: 'Ставка НДС',
+				options: [
+					{ value: 'none', label: 'Без НДС' },
+					{ value: '0', label: '0%' },
+					{ value: '5', label: '5%' },
+				],
+			},
+			value: '0',
+			onChange: () => {},
+			showErrors: false,
+		} )
+	);
+
+	fireEvent.click( container.querySelector( '.woodev-select__trigger' ) );
+	await waitFor( () => expect( screen.getByText( 'Без НДС' ) ).toBeTruthy() );
+
+	const labels = Array.from( document.querySelectorAll( '.woodev-select__option' ) ).map( ( node ) => node.textContent );
+	expect( labels ).toEqual( [ 'Без НДС', '0%', '5%' ] );
+} );
+
 // -----------------------------------------------------------------------
 // Issue #397 — `schema.serverError` is the leaf of the setup wizard's per-field error chain,
 // and it had NO coverage anywhere. The chain is:

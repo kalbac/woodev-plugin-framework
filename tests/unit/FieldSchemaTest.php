@@ -17,7 +17,7 @@ class FieldSchemaTest extends TestCase {
 		$setting->shouldReceive( 'get_id' )->andReturn( $id );
 		$setting->shouldReceive( 'get_type' )->andReturn( $type );
 		$setting->shouldReceive( 'get_name' )->andReturn( 'Имя ' . $id );
-		$setting->shouldReceive( 'get_options' )->andReturn( [] );
+		$setting->shouldReceive( 'get_options' )->andReturn( [] )->byDefault();
 		$setting->shouldReceive( 'is_is_multi' )->andReturn( false );
 		$setting->shouldReceive( 'get_description' )->andReturn( 'desc ' . $id );
 		$setting->shouldReceive( 'get_control' )->andReturn( $control );
@@ -518,5 +518,34 @@ class FieldSchemaTest extends TestCase {
 				$this->assertArrayNotHasKey( 'description_on', $schema['test_mode'] );
 			}
 		}
+	}
+
+	/**
+	 * Numeric associative option keys become ordered entries in the JSON schema.
+	 *
+	 * @return void
+	 */
+	public function test_numeric_assoc_options_are_emitted_in_declared_order(): void {
+		$control = Mockery::mock( \Woodev_Control::class );
+		foreach ( [ 'get_type' => 'select', 'get_description' => '', 'get_tooltip' => '', 'get_placeholder' => '', 'get_description_on' => '', 'get_min' => null, 'get_max' => null, 'get_step' => null, 'is_disabled' => false, 'get_disabled_reason' => '', 'get_country' => '', 'get_box_preset' => [], 'is_native_bounds' => false ] as $method => $result ) {
+			$control->shouldReceive( $method )->andReturn( $result );
+		}
+		$setting = $this->make_setting( 'vat', 'string', $control );
+		$setting->shouldReceive( 'get_options' )->andReturn( [ 'none' => 'Без НДС', '0' => '0%', '5' => '5%' ] );
+		$handler = Mockery::mock();
+		$handler->shouldReceive( 'get_settings' )->andReturn( [ $setting ] );
+		$handler->shouldReceive( 'get_value' )->andReturn( '0' );
+		$handler->shouldReceive( 'get_display_value' )->andReturn( '0' );
+
+		$schema = Field_Schema::from_handler( $handler, [ 'vat' ] );
+
+		$this->assertSame(
+			[
+				[ 'value' => 'none', 'label' => 'Без НДС' ],
+				[ 'value' => '0', 'label' => '0%' ],
+				[ 'value' => '5', 'label' => '5%' ],
+			],
+			$schema['vat']['options']
+		);
 	}
 }
