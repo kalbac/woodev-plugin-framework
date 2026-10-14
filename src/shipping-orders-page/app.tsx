@@ -2928,6 +2928,7 @@ export default function OrdersPage() {
 			) }
 			{ null !== actionInput && actionInput.action.fields && (
 				<ActionInputModal
+					orderId={ actionInput.row.id }
 					action={ { ...actionInput.action, fields: actionInput.action.fields } }
 					errors={ actionInputErrors }
 					message={ actionInputMessage }

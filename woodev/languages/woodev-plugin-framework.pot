@@ -6261,3 +6261,23 @@ msgstr ""
 #, php-format
 msgid "выполнить действие «%s»"
 msgstr ""
+
+#: shipping-method/admin/views/html-admin-order-metabox.php
+msgid "Загружаем варианты…"
+msgstr ""
+
+#: shipping-method/admin/views/html-admin-order-metabox.php
+msgid "Нет доступных вариантов."
+msgstr ""
+
+#: shipping-method/admin/views/html-admin-order-metabox.php
+msgid "Не удалось загрузить варианты. Попробуйте ещё раз."
+msgstr ""
+
+#: shipping-method/rest-api/class-orders-controller.php
+msgid "У этого действия нет такого поля."
+msgstr ""
+
+#: shipping-method/rest-api/class-orders-controller.php
+msgid "Не удалось получить варианты у перевозчика. Попробуйте ещё раз."
+msgstr ""

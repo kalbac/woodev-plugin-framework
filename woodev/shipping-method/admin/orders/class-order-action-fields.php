@@ -43,6 +43,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 	 * orders the one submit is run for. A per-order action's `fields` ({@see Order_Actions}) never carry it —
 	 * {@see self::sanitize()} drops it unless asked to allow it.
 	 *
+	 * A `select` of a PER-ORDER action may take its options from the carrier WHEN THE DIALOG OPENS instead of
+	 * declaring them (card kalbac/woocommerce-yandex-delivery#84): `'async_options' => true`, and any declared
+	 * `options` are ignored. The client then asks
+	 * `GET /shipping/orders/<id>/actions/<action>/fields/<field>/options`
+	 * ({@see \Woodev\Framework\Shipping\Rest_Api\Orders_Controller::get_field_options()}), which answers with what the
+	 * carrier's `woodev_shipping_order_action_field_options` filter returns. Nothing is loaded for a list row — only an
+	 * opened dialog asks. Because the options are not known when the payload is checked, such a field validates only
+	 * the SHAPE of the chosen value ({@see self::MAX_ASYNC_VALUE_LENGTH}, no control characters); the carrier's
+	 * handler MUST match it against its own fresh data. A toolbar dialog ({@see Toolbar_Actions}) has no order to
+	 * ask about, so there the key is not part of the vocabulary and such a field is dropped.
+	 *
 	 * @since 2.0.2
 	 */
 	final class Order_Action_Fields {
@@ -98,6 +109,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		public const DEFAULT_TEXTAREA_MAXLENGTH = 1000;
 
 		/**
+		 * The longest value an `async_options` select accepts — its options are unknown to the payload check, so
+		 * only the shape of the value is bounded here.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var int
+		 */
+		public const MAX_ASYNC_VALUE_LENGTH = 255;
+
+		/**
+		 * The most options one `async_options` select shows; a longer list from the carrier is cut.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var int
+		 */
+		public const MAX_ASYNC_OPTIONS = 100;
+
+		/**
 		 * The ceiling a declared `maxlength` is clamped to.
 		 *
 		 * @since 2.0.2
@@ -122,13 +152,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 s164: the optional `help`, and the `orders` type — accepted only with `$allow_orders`.
+		 * @since 2.0.2 s179: a `select` with `async_options` (options loaded when the dialog opens) — accepted only with `$allow_async`.
 		 *
 		 * @param mixed $fields       the declared value, of unknown shape.
 		 * @param bool  $allow_orders whether the `orders` type is part of the vocabulary here — true for a toolbar
 		 *                            action's dialog, false (the default) for a per-order action.
+		 * @param bool  $allow_async  whether a `select` may load its options for the order when the dialog opens — true for a
+		 *                            per-order action, false (the default) elsewhere, where a select must declare its options.
 		 * @return array<int,array<string,mixed>> the field list; `[]` when nothing usable was declared.
 		 */
-		public static function sanitize( $fields, bool $allow_orders = false ): array {
+		public static function sanitize( $fields, bool $allow_orders = false, bool $allow_async = false ): array {
 			if ( ! is_array( $fields ) ) {
 				return [];
 			}
@@ -174,6 +207,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 						break;
 
 					case self::TYPE_SELECT:
+						// The carrier supplies the options per order when the dialog opens: none are shipped with the row.
+						if ( $allow_async && true === ( $field['async_options'] ?? false ) ) {
+							$clean['async_options'] = true;
+							$clean['options']       = [];
+							$clean['default']       = '';
+
+							$empty = self::sanitize_help( $field['empty_text'] ?? null );
+
+							if ( '' !== $empty ) {
+								$clean['empty_text'] = $empty;
+							}
+							break;
+						}
+
 						$options = self::sanitize_options( $field['options'] ?? null );
 
 						if ( [] === $options ) {
@@ -362,6 +409,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 				return [ '', ! empty( $field['required'] ) ? 'required' : null ];
 			}
 
+			// The options of an `async_options` select are not known here (they were loaded for the dialog, not stored):
+			// only the shape of the value is checked, and the carrier's handler matches it against its own fresh data.
+			if ( ! empty( $field['async_options'] ) ) {
+				return mb_strlen( $value ) > self::MAX_ASYNC_VALUE_LENGTH || 1 === preg_match( '/[\x00-\x1F\x7F]/', $value )
+					? [ '', 'invalid_option' ]
+					: [ $value, null ];
+			}
+
 			if ( ! in_array( $value, array_column( $field['options'], 'value' ), true ) ) {
 				return [ '', 'invalid_option' ];
 			}
@@ -511,6 +566,26 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 				default:
 					return __( 'Проверьте значение.', 'woodev-plugin-framework' );
 			}
+		}
+
+		/**
+		 * The options a carrier answered for an `async_options` select: the usable ones of
+		 * {@see self::sanitize_options()}, cut at {@see self::MAX_ASYNC_OPTIONS} and with values no longer than
+		 * {@see self::MAX_ASYNC_VALUE_LENGTH} (a longer one could never be submitted back).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param mixed $options what the carrier's filter returned, of unknown shape.
+		 * @return array<int,array{value:string,label:string}>
+		 */
+		public static function sanitize_async_options( $options ): array {
+			$usable = array_filter(
+				self::sanitize_options( $options ),
+				static fn( array $option ): bool => mb_strlen( $option['value'] ) <= self::MAX_ASYNC_VALUE_LENGTH
+					&& 1 !== preg_match( '/[\x00-\x1F\x7F]/', $option['value'] )
+			);
+
+			return array_slice( array_values( $usable ), 0, self::MAX_ASYNC_OPTIONS );
 		}
 
 		/**

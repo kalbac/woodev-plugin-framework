@@ -6246,3 +6246,23 @@ msgstr "получить документ перевозчика"
 #, php-format
 msgid "выполнить действие «%s»"
 msgstr "выполнить действие «%s»"
+
+#: shipping-method/admin/views/html-admin-order-metabox.php
+msgid "Загружаем варианты…"
+msgstr "Загружаем варианты…"
+
+#: shipping-method/admin/views/html-admin-order-metabox.php
+msgid "Нет доступных вариантов."
+msgstr "Нет доступных вариантов."
+
+#: shipping-method/admin/views/html-admin-order-metabox.php
+msgid "Не удалось загрузить варианты. Попробуйте ещё раз."
+msgstr "Не удалось загрузить варианты. Попробуйте ещё раз."
+
+#: shipping-method/rest-api/class-orders-controller.php
+msgid "У этого действия нет такого поля."
+msgstr "У этого действия нет такого поля."
+
+#: shipping-method/rest-api/class-orders-controller.php
+msgid "Не удалось получить варианты у перевозчика. Попробуйте ещё раз."
+msgstr "Не удалось получить варианты у перевозчика. Попробуйте ещё раз."

@@ -14,7 +14,7 @@
 
 namespace Woodev\Framework\Shipping\Rest_Api;
 
-use Woodev\Framework\Shipping\Admin\Orders\{Order_Actions, Order_Row_Builder, Orders_Provider, Orders_Query, Orders_Registry};
+use Woodev\Framework\Shipping\Admin\Orders\{Order_Action_Fields, Order_Actions, Order_Row_Builder, Orders_Provider, Orders_Query, Orders_Registry};
 use Woodev\Framework\Shipping\Order\{Action_Result, Delivery_Status, Delivery_Sync_Status};
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -214,6 +214,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 							'type' => 'integer',
 						],
 						'action' => [
+							'type' => 'string',
+						],
+					],
+				]
+			);
+
+			// The options of an action field that loads them WHEN ITS DIALOG OPENS (Yandex #84). A read, but of the
+			// carrier's API for one order, so it takes the write route's capability, not the page's.
+			register_rest_route(
+				\Woodev_REST_V1_Registrar::ROUTE_NAMESPACE,
+				'/shipping/orders/(?P<id>\d+)/actions/(?P<action>[a-z_]+)/fields/(?P<field>[a-z0-9_-]+)/options',
+				[
+					'methods'             => \WP_REST_Server::READABLE,
+					'callback'            => [ $this, 'get_field_options' ],
+					'permission_callback' => [ $this, 'perform_action_permissions_check' ],
+					'args'                => [
+						'id'     => [
+							'type' => 'integer',
+						],
+						'action' => [
+							'type' => 'string',
+						],
+						'field'  => [
 							'type' => 'string',
 						],
 					],
@@ -845,6 +868,128 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 					'row'     => $this->build_row( self::reread_order( $order ), $provider ),
 					'message' => $result->merchant_message( $provider->get_label(), self::action_success_message( $action ) ),
 				]
+			);
+		}
+
+		/**
+		 * The options of one `async_options` select of an offered action, loaded for THIS order when its dialog opens.
+		 *
+		 * Only an opened dialog calls this — a list row ships the declaration with no options, so no carrier call is made
+		 * per row. The same gate as {@see self::perform_action()} runs first (order, carrier, edit lock, the action being
+		 * offered NOW), then the field must be one the action declared with `async_options`. The options come from the
+		 * carrier through the `woodev_shipping_order_action_field_options` filter and are re-sanitised here
+		 * ({@see Order_Action_Fields::sanitize_async_options()}). An empty list is a valid answer — the client says so;
+		 * a `WP_Error` from the filter is passed on with its merchant text, anything else that is not a list is a 502.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WP_REST_Request $request request; `id`, `action` and `field` come from the route.
+		 * @return \WP_REST_Response|\WP_Error `{ options: [ { value, label } ] }`.
+		 */
+		public function get_field_options( $request ) {
+			$order_id = absint( $request->get_param( 'id' ) );
+			$action   = (string) $request->get_param( 'action' );
+			$field_id = (string) $request->get_param( 'field' );
+			$order    = wc_get_order( $order_id );
+
+			if ( ! $order instanceof \WC_Order ) {
+				return new \WP_Error(
+					'woodev_shipping_orders_unknown_order',
+					__( 'Заказ не найден.', 'woodev-plugin-framework' ),
+					[ 'status' => 404 ]
+				);
+			}
+
+			$provider = $this->resolve_matched_provider( $order );
+
+			if ( null === $provider ) {
+				return new \WP_Error(
+					'woodev_shipping_orders_unknown_carrier',
+					__( 'Не удалось определить перевозчика для этого заказа.', 'woodev-plugin-framework' ),
+					[ 'status' => 400 ]
+				);
+			}
+
+			$locked_reason = Order_Actions::edit_locked_reason( $order );
+
+			if ( '' !== $locked_reason ) {
+				return new \WP_Error( 'woodev_shipping_order_locked', $locked_reason, [ 'status' => 409 ] );
+			}
+
+			$offered = $this->order_actions->for_order( $order, $provider );
+
+			if ( ! in_array( $action, array_column( $offered, 'action' ), true ) ) {
+				return new \WP_Error(
+					'woodev_shipping_orders_action_not_available',
+					$this->order_actions->unavailable_reason( $order, $provider, $action ),
+					[ 'status' => 400 ]
+				);
+			}
+
+			$declared = null;
+
+			foreach ( Order_Actions::fields_of( $offered, $action ) as $field ) {
+				if ( $field['id'] === $field_id && Order_Action_Fields::TYPE_SELECT === $field['type'] && ! empty( $field['async_options'] ) ) {
+					$declared = $field;
+					break;
+				}
+			}
+
+			if ( null === $declared ) {
+				return new \WP_Error(
+					'woodev_shipping_orders_unknown_field',
+					__( 'У этого действия нет такого поля.', 'woodev-plugin-framework' ),
+					[ 'status' => 404 ]
+				);
+			}
+
+			try {
+				/**
+				 * Supplies the options of an action's `async_options` select for one order, when its dialog opens.
+				 *
+				 * Called ONLY for an opened dialog, never for a list row. Return a list of `[ 'value' => string, 'label' => string ]`
+				 * (an empty list is a valid «nothing to offer»), or a `\WP_Error` whose message is a sentence for the merchant. The
+				 * handler of the action must match the value the merchant submits against its own fresh data: the framework
+				 * checks only its shape.
+				 *
+				 * @since 2.0.2
+				 *
+				 * @param array<int,array{value:string,label:string}>|\WP_Error|null $options  null until a carrier answers.
+				 * @param \WC_Order                                                    $order    the order.
+				 * @param string                                                       $action   the action id.
+				 * @param string                                                       $field_id the field id.
+				 * @param Orders_Provider                                              $provider the matched carrier.
+				 */
+				$options = apply_filters( 'woodev_shipping_order_action_field_options', null, $order, $action, $field_id, $provider );
+			} catch ( \Throwable $exception ) {
+				$this->log_action_failure( $provider->get_id(), $action, $exception );
+
+				return $this->field_options_error();
+			}
+
+			if ( $options instanceof \WP_Error ) {
+				return new \WP_Error( 'woodev_shipping_orders_field_options_failed', $options->get_error_message(), [ 'status' => 502 ] );
+			}
+
+			if ( ! is_array( $options ) ) {
+				return $this->field_options_error();
+			}
+
+			return rest_ensure_response( [ 'options' => Order_Action_Fields::sanitize_async_options( $options ) ] );
+		}
+
+		/**
+		 * The answer when a field's options could not be loaded and the carrier gave no sentence of its own.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return \WP_Error
+		 */
+		private function field_options_error(): \WP_Error {
+			return new \WP_Error(
+				'woodev_shipping_orders_field_options_failed',
+				__( 'Не удалось получить варианты у перевозчика. Попробуйте ещё раз.', 'woodev-plugin-framework' ),
+				[ 'status' => 502 ]
 			);
 		}
 

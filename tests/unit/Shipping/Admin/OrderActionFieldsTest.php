@@ -657,4 +657,108 @@ final class OrderActionFieldsTest extends TestCase {
 
 		$this->assertSame( 'invalid_option', $result['errors'][0]['code'] );
 	}
+
+	// ----- `async_options` select (kalbac/woocommerce-yandex-delivery#84) -----
+
+	/** @return array<int,array<string,mixed>> an async select declaration; `$extra` overrides or adds keys. */
+	private function async_declaration( array $extra = [] ): array {
+		return [
+			array_merge(
+				[
+					'id'            => 'interval',
+					'type'          => 'select',
+					'label'         => 'Интервал',
+					'required'      => true,
+					'async_options' => true,
+				],
+				$extra
+			),
+		];
+	}
+
+	public function test_an_async_select_ships_no_options_and_keeps_its_empty_text(): void {
+		// Declared options are ignored: the carrier supplies them per order.
+		Functions\when( 'wp_strip_all_tags' )->alias( static fn( string $text ): string => trim( strip_tags( $text ) ) );
+
+		$fields = Order_Action_Fields::sanitize( $this->async_declaration( [ 'empty_text' => ' <b>Нет интервалов</b> ', 'options' => [ 'stale' => 'Устаревший' ] ] ), false, true );
+
+		$this->assertSame(
+			[
+				'id'            => 'interval',
+				'type'          => 'select',
+				'label'         => 'Интервал',
+				'required'      => true,
+				'async_options' => true,
+				'options'       => [],
+				'default'       => '',
+				'empty_text'    => 'Нет интервалов',
+			],
+			$fields[0]
+		);
+	}
+
+	public function test_an_async_select_exists_only_where_it_is_allowed(): void {
+		$this->assertSame( [], Order_Action_Fields::sanitize( $this->async_declaration() ), 'a select with no options is unusable where it cannot load them' );
+		$this->assertSame( [], Order_Action_Fields::sanitize( $this->async_declaration(), true ), 'a toolbar dialog has no order to ask about' );
+		$this->assertSame( [ 'interval' ], array_column( Order_Action_Fields::sanitize( $this->async_declaration(), false, true ), 'id' ) );
+	}
+
+	public function test_only_an_explicit_true_makes_a_select_async(): void {
+		foreach ( [ 'yes', 1, '1', null, false ] as $flag ) {
+			$fields = Order_Action_Fields::sanitize( $this->async_declaration( [ 'async_options' => $flag, 'options' => [ 'stale' => 'Устаревший' ] ] ), false, true );
+
+			$this->assertCount( 1, $fields, 'it falls back to its declared options' );
+			$this->assertArrayNotHasKey( 'async_options', $fields[0] );
+			$this->assertSame( 'stale', $fields[0]['options'][0]['value'] );
+		}
+	}
+
+	public function test_an_async_select_value_is_checked_for_shape_only(): void {
+		$fields = Order_Action_Fields::sanitize( $this->async_declaration(), false, true );
+
+		$ok = Order_Action_Fields::validate( $fields, [ 'interval' => ' 2026-10-20T07:00:00Z/2026-10-20T11:00:00Z ' ] );
+
+		$this->assertSame( [], $ok['errors'] );
+		$this->assertSame( '2026-10-20T07:00:00Z/2026-10-20T11:00:00Z', $ok['values']['interval'], 'not matched against any list: the carrier handler does that' );
+
+		foreach ( [ str_repeat( 'a', Order_Action_Fields::MAX_ASYNC_VALUE_LENGTH + 1 ), "a\x00b", "line\nbreak" ] as $bad ) {
+			$result = Order_Action_Fields::validate( $fields, [ 'interval' => $bad ] );
+
+			$this->assertSame( 'invalid_option', $result['errors'][0]['code'] );
+			$this->assertSame( '', $result['values']['interval'] );
+		}
+
+		$this->assertSame( 'required', Order_Action_Fields::validate( $fields, [] )['errors'][0]['code'] );
+	}
+
+	public function test_the_carriers_options_are_sanitised_bounded_and_cut(): void {
+		$long = str_repeat( 'v', Order_Action_Fields::MAX_ASYNC_VALUE_LENGTH + 1 );
+
+		$this->assertSame(
+			[
+				[
+					'value' => 'a',
+					'label' => 'A',
+				],
+				[
+					'value' => 'b',
+					'label' => 'b',
+				],
+			],
+			Order_Action_Fields::sanitize_async_options(
+				[
+					[ 'value' => 'a', 'label' => 'A' ],
+					[ 'value' => 'a', 'label' => 'Дубль' ],
+					[ 'value' => $long, 'label' => 'Слишком длинное' ],
+					[ 'value' => "x\ny", 'label' => 'Управляющий символ' ],
+					[ 'value' => 'b' ],
+				]
+			)
+		);
+		$this->assertSame( [], Order_Action_Fields::sanitize_async_options( 'not a list' ) );
+		$this->assertCount(
+			Order_Action_Fields::MAX_ASYNC_OPTIONS,
+			Order_Action_Fields::sanitize_async_options( array_map( static fn( int $i ): array => [ 'value' => 'v' . $i, 'label' => 'L' ], range( 1, Order_Action_Fields::MAX_ASYNC_OPTIONS + 5 ) ) )
+		);
+	}
 }

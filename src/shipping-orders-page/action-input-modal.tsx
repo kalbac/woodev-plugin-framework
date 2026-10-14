@@ -10,7 +10,7 @@
  * @package woodev-plugin-framework
  */
 
-import { useEffect, useState } from '@wordpress/element';
+import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import {
 	Button,
@@ -23,14 +23,18 @@ import {
 import { initialValues, toPayload, validateInput } from './action-input';
 import type { ActionInputValues } from './action-input';
 import { OrdersSelect } from './orders-select';
+import { fetchActionFieldOptions } from './rest';
 import type {
 	OrderActionField,
 	OrderActionFieldError,
+	OrderActionFieldOption,
 	OrderActionPayload,
 	OrderRowAction,
 } from './rest';
 
 interface ActionInputModalProps {
+	/** The order the action is for — the options of an `async_options` select are loaded for it when the dialog opens. */
+	orderId?: number;
 	/** The action, with the `fields` it declared. */
 	action: OrderRowAction & { fields: OrderActionField[] };
 	/** The server's per-field errors from the last submit; `[]` before the first. */
@@ -90,14 +94,95 @@ export function useFieldValues( fields: OrderActionField[], serverErrors: OrderA
 	return { values, setValues, shown, change, check };
 }
 
-export function ActionInputModal( { action, errors, message, busy, onSubmit, onClose }: ActionInputModalProps ) {
+/** Where an `async_options` select stands: asking, answered (an empty list is «nothing to offer»), or failed. */
+export type RemoteOptionsState =
+	| { status: 'loading' }
+	| { status: 'ready'; options: OrderActionFieldOption[] }
+	| { status: 'error'; message: string };
+
+/** Whether a field takes its options from the carrier when the dialog opens. */
+const isRemote = ( field: OrderActionField ): boolean => 'select' === field.type && true === field.async_options;
+
+/**
+ * Loads the options of every `async_options` select of the action, ONCE, when the dialog opens — never before, so a list
+ * row costs no carrier call. `retry( id )` asks again after a failure. A dialog closed meanwhile drops a late answer.
+ *
+ * @param orderId the order the action is for.
+ * @param action  the action id.
+ * @param fields  the declared fields.
+ */
+export function useRemoteOptions( orderId: number | undefined, action: string, fields: OrderActionField[] ) {
+	const [ states, setStates ] = useState<Record<string, RemoteOptionsState>>( () => {
+		const initial: Record<string, RemoteOptionsState> = {};
+
+		fields.filter( isRemote ).forEach( ( field ) => {
+			initial[ field.id ] = { status: 'loading' };
+		} );
+
+		return initial;
+	} );
+	const alive = useRef( true );
+
+	const load = useCallback(
+		( id: string ) => {
+			setStates( ( current ) => ( { ...current, [ id ]: { status: 'loading' } } ) );
+
+			if ( undefined === orderId ) {
+				setStates( ( current ) => ( {
+					...current,
+					[ id ]: { status: 'error', message: __( 'Не удалось загрузить варианты. Попробуйте ещё раз.', 'woodev-plugin-framework' ) },
+				} ) );
+				return;
+			}
+
+			fetchActionFieldOptions( orderId, action, id )
+				.then( ( answer ) => {
+					if ( alive.current ) {
+						setStates( ( current ) => ( { ...current, [ id ]: { status: 'ready', options: answer.options } } ) );
+					}
+				} )
+				.catch( ( error: { message?: string } ) => {
+					if ( alive.current ) {
+						setStates( ( current ) => ( {
+							...current,
+							[ id ]: {
+								status: 'error',
+								message:
+									error?.message ||
+									__( 'Не удалось загрузить варианты. Попробуйте ещё раз.', 'woodev-plugin-framework' ),
+							},
+						} ) );
+					}
+				} );
+		},
+		[ orderId, action ]
+	);
+
+	useEffect( () => {
+		alive.current = true;
+		fields.filter( isRemote ).forEach( ( field ) => load( field.id ) );
+
+		return () => {
+			alive.current = false;
+		};
+		// Once, on open: a re-render with the same declaration must not ask the carrier again.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [] );
+
+	return { states, retry: load };
+}
+
+export function ActionInputModal( { orderId, action, errors, message, busy, onSubmit, onClose }: ActionInputModalProps ) {
 	const fields = action.fields;
 	const { values, shown, change, check } = useFieldValues( fields, errors );
+	const { states, retry } = useRemoteOptions( orderId, action.action, fields );
+	const loading = Object.values( states ).some( ( state ) => 'loading' === state.status );
 
 	const submit = ( event: { preventDefault: () => void } ) => {
 		event.preventDefault();
 
-		if ( ! check() ) {
+		// Options still on their way: nothing to send yet.
+		if ( loading || ! check() ) {
 			return;
 		}
 
@@ -119,6 +204,8 @@ export function ActionInputModal( { action, errors, message, busy, onSubmit, onC
 						value={ values[ field.id ] }
 						error={ shown[ field.id ] }
 						disabled={ busy }
+						remote={ states[ field.id ] }
+						onRetry={ () => retry( field.id ) }
 						onChange={ ( value ) => change( field.id, value ) }
 					/>
 				) ) }
@@ -131,7 +218,7 @@ export function ActionInputModal( { action, errors, message, busy, onSubmit, onC
 					<Button variant="tertiary" onClick={ onClose } disabled={ busy }>
 						{ __( 'Отмена', 'woodev-plugin-framework' ) }
 					</Button>
-					<Button variant="primary" type="submit" isBusy={ busy } disabled={ busy }>
+					<Button variant="primary" type="submit" isBusy={ busy } disabled={ busy || loading }>
 						{ action.label }
 					</Button>
 				</div>
@@ -145,6 +232,10 @@ interface FieldControlProps {
 	value: ActionInputValues[ string ] | undefined;
 	error?: string;
 	disabled: boolean;
+	/** An `async_options` select's load state; absent for every other field. */
+	remote?: RemoteOptionsState;
+	/** Asks the carrier for an `async_options` select's options again after a failure. */
+	onRetry?: () => void;
 	onChange: ( value: ActionInputValues[ string ] ) => void;
 }
 
@@ -152,7 +243,7 @@ interface FieldControlProps {
  * One declared field, drawn with the page's own WordPress controls. Shared with the toolbar dialog's form tab
  * (`./toolbar-dialog`), which is why it is exported. A field's `help` is one plain sentence under the input.
  */
-export function FieldControl( { field, value, error, disabled, onChange }: FieldControlProps ) {
+export function FieldControl( { field, value, error, disabled, remote, onRetry, onChange }: FieldControlProps ) {
 	const label = field.required ? `${ field.label } *` : field.label;
 	const text = 'string' === typeof value ? value : '';
 	let control;
@@ -166,6 +257,46 @@ export function FieldControl( { field, value, error, disabled, onChange }: Field
 				disabled={ disabled }
 				onChange={ onChange }
 			/>
+		);
+	} else if ( 'select' === field.type && field.async_options && remote ) {
+		const loaded = 'ready' === remote.status ? remote.options : [];
+		const options = [
+			{
+				value: '',
+				label: 'loading' === remote.status
+					? __( 'Загружаем варианты…', 'woodev-plugin-framework' )
+					: __( '— не выбрано —', 'woodev-plugin-framework' ),
+			},
+			...loaded,
+		];
+
+		control = (
+			<>
+				<SelectControl
+					label={ label }
+					value={ text }
+					options={ options }
+					disabled={ disabled || 'ready' !== remote.status || 0 === loaded.length }
+					onChange={ onChange }
+					__next40pxDefaultSize
+					__nextHasNoMarginBottom
+				/>
+				{ 'ready' === remote.status && 0 === loaded.length && (
+					<p className="woodev-action-form__status" role="status">
+						{ field.empty_text || __( 'Нет доступных вариантов.', 'woodev-plugin-framework' ) }
+					</p>
+				) }
+				{ 'error' === remote.status && (
+					<p className="woodev-action-form__status is-error" role="status">
+						{ remote.message }{ ' ' }
+						{ onRetry && (
+							<Button variant="link" onClick={ onRetry }>
+								{ __( 'Повторить', 'woodev-plugin-framework' ) }
+							</Button>
+						) }
+					</p>
+				) }
+			</>
 		);
 	} else if ( 'select' === field.type ) {
 		const options = field.required && field.default

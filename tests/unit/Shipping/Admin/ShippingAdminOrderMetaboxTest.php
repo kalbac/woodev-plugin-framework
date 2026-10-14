@@ -1382,6 +1382,53 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$this->assertStringNotContainsString( 'data-fields', $plain[0], 'an action without fields is exactly as before' );
 		}
 
+		public function test_an_async_select_button_carries_its_options_route_and_nonce_and_a_plain_one_does_not(): void {
+			$provider = $this->provider();
+			$order    = $this->make_order();
+
+			$this->meta['_wc_cdek_order_id'] = 'CARRIER-1';
+			$this->register_handler();
+			$this->declare_courier_action(
+				static function ( string $hook, $value ) {
+					if ( 'woodev_shipping_order_actions' === $hook ) {
+						$value[] = [
+							'action' => 'pick_interval',
+							'label'  => 'Выгрузить с интервалом',
+							'fields' => [
+								[
+									'id'            => 'interval',
+									'type'          => 'select',
+									'label'         => 'Интервал',
+									'required'      => true,
+									'async_options' => true,
+								],
+							],
+						];
+					}
+
+					return $value;
+				}
+			);
+			Functions\when( 'wp_json_encode' )->alias( static fn( $value ) => json_encode( $value, JSON_UNESCAPED_UNICODE ) );
+
+			ob_start();
+			( new Shipping_Admin_Order( Orders_Registry::instance() ) )->render_metabox( $order, $provider );
+			$html = ob_get_clean();
+
+			$this->assertSame( 1, preg_match( '/<button[^>]*data-woodev-order-action="pick_interval"[^>]*>/s', $html, $m ) );
+			$this->assertSame( 1, preg_match( '/data-options-urls="([^"]*)"/', $m[0], $u ), 'the dialog knows where to ask once it opens' );
+			$this->assertSame( 1, preg_match( '/data-rest-nonce="([^"]*)"/', $m[0], $n ) );
+			$this->assertSame( 'nonce-123', $n[1] );
+
+			$urls = json_decode( html_entity_decode( $u[1] ), true );
+
+			$this->assertSame( [ 'interval' ], array_keys( $urls ) );
+			$this->assertStringEndsWith( '/shipping/orders/' . $order->get_id() . '/actions/pick_interval/fields/interval/options', $urls['interval'] );
+
+			$this->assertSame( 1, preg_match( '/<button[^>]*data-woodev-order-action="call_courier"[^>]*>/s', $html, $plain ) );
+			$this->assertStringNotContainsString( 'data-options-urls', $plain[0], 'a button with only static fields asks for nothing' );
+		}
+
 		// -----------------------------------------------------------------------
 		// s164 — documents go through the REST route; one button group; icons vs text; destructive red.
 		// -----------------------------------------------------------------------

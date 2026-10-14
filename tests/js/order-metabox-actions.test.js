@@ -435,6 +435,173 @@ describe( 'order-metabox-actions — an action with input fields', () => {
 	} );
 } );
 
+describe( 'order-metabox-actions — a select that loads its options when the dialog opens (Yandex #84)', () => {
+	const FIELDS = [
+		{ id: 'interval', type: 'select', label: 'Интервал', required: true, default: '', options: [], async_options: true },
+	];
+	const LABELS = {
+		cancel: 'Отмена',
+		close: 'Закрыть',
+		none: '— не выбрано —',
+		loading: 'Загружаем варианты…',
+		empty: 'Нет доступных вариантов.',
+		failed: 'Не удалось загрузить варианты. Попробуйте ещё раз.',
+		retry: 'Повторить',
+	};
+	const URL = 'https://example.test/wp-json/woodev/v1/shipping/orders/123/actions/pick_interval/fields/interval/options';
+
+	let fetchSpy;
+
+	function answer( ok, body ) {
+		return Promise.resolve( { ok, json: () => Promise.resolve( body ) } );
+	}
+
+	function render() {
+		document.body.innerHTML = `
+			<form id="order" method="post" action="post.php">
+				<div class="woodev-shipping-order-metabox"><p>
+					<button
+						type="button"
+						class="button woodev-shipping-order-action"
+						data-woodev-order-action="pick_interval"
+						data-post-url="https://example.test/wp-admin/admin-post.php"
+						data-post-action="woodev_shipping_order_action"
+						data-order-id="123"
+						data-nonce="nonce-abc"
+						data-fields='${ JSON.stringify( FIELDS ) }'
+						data-labels='${ JSON.stringify( LABELS ) }'
+						data-options-urls='${ JSON.stringify( { interval: URL } ) }'
+						data-rest-nonce="rest-nonce-1"
+					>Выгрузить с интервалом</button>
+				</p></div>
+			</form>`;
+
+		return document.querySelector( 'button[data-woodev-order-action]' );
+	}
+
+	const dialog = () => document.querySelector( '.woodev-modal__content' );
+	const select = () => dialog().querySelector( '[name="payload[interval]"]' );
+	const status = () => dialog().querySelector( '.woodev-action-form__status' );
+	const submitForm = () => dialog().querySelector( 'form' ).dispatchEvent( new Event( 'submit', { cancelable: true, bubbles: true } ) );
+	const settle = () => new Promise( ( resolve ) => setTimeout( resolve, 0 ) );
+
+	beforeEach( () => {
+		window.WoodevModal = require( '../../woodev/assets/js/frontend/woodev-modal' );
+		fetchSpy = jest.fn();
+		window.fetch = fetchSpy;
+	} );
+
+	afterEach( () => {
+		delete window.WoodevModal;
+		delete window.fetch;
+	} );
+
+	it( 'asks nothing until the dialog is opened', () => {
+		render();
+
+		expect( fetchSpy ).not.toHaveBeenCalled();
+	} );
+
+	it( 'asks the field\'s route with the REST nonce when the dialog opens, and says «loading» meanwhile', () => {
+		fetchSpy.mockReturnValue( new Promise( () => {} ) );
+		render().click();
+
+		expect( fetchSpy ).toHaveBeenCalledTimes( 1 );
+		expect( fetchSpy.mock.calls[ 0 ][ 0 ] ).toBe( URL );
+		expect( fetchSpy.mock.calls[ 0 ][ 1 ].headers[ 'X-WP-Nonce' ] ).toBe( 'rest-nonce-1' );
+		expect( fetchSpy.mock.calls[ 0 ][ 1 ].method ).toBe( 'GET' );
+		expect( select().disabled ).toBe( true );
+		expect( select().options[ 0 ].textContent ).toBe( 'Загружаем варианты…' );
+	} );
+
+	it( 'does not post while the options are on their way', () => {
+		fetchSpy.mockReturnValue( new Promise( () => {} ) );
+		render().click();
+		submitForm();
+
+		expect( submitSpy ).not.toHaveBeenCalled();
+	} );
+
+	it( 'fills the select from the answer, enables it, and posts the chosen value', async () => {
+		fetchSpy.mockReturnValue( answer( true, { options: [ { value: 'a/b', label: '20 октября, 10:00–14:00' }, { value: 'c/d', label: '21 октября, 10:00–14:00' } ] } ) );
+		render().click();
+		await settle();
+
+		expect( select().disabled ).toBe( false );
+		expect( Array.from( select().options ).map( ( o ) => o.value ) ).toEqual( [ '', 'a/b', 'c/d' ] );
+		expect( select().options[ 1 ].textContent ).toBe( '20 октября, 10:00–14:00' );
+
+		select().value = 'c/d';
+		submitForm();
+
+		expect( submitSpy ).toHaveBeenCalledTimes( 1 );
+		expect( fields( submitSpy.mock.instances[ 0 ] )[ 'payload[interval]' ] ).toBe( 'c/d' );
+	} );
+
+	it( 'a required field cannot be sent unchosen once the options are in', async () => {
+		fetchSpy.mockReturnValue( answer( true, { options: [ { value: 'a/b', label: 'A' } ] } ) );
+		render().click();
+		await settle();
+		submitForm();
+
+		expect( submitSpy ).not.toHaveBeenCalled();
+	} );
+
+	it( 'says there is nothing to offer, and a required field cannot be sent', async () => {
+		fetchSpy.mockReturnValue( answer( true, { options: [] } ) );
+		render().click();
+		await settle();
+
+		expect( status().textContent ).toBe( 'Нет доступных вариантов.' );
+		expect( select().disabled ).toBe( true );
+		submitForm();
+
+		expect( submitSpy ).not.toHaveBeenCalled();
+	} );
+
+	it( 'shows the server\'s own sentence on a failure, offers a retry, and the retry asks again', async () => {
+		fetchSpy
+			.mockReturnValueOnce( answer( false, { message: 'Яндекс Доставка не ответила.' } ) )
+			.mockReturnValueOnce( answer( true, { options: [ { value: 'a/b', label: 'A' } ] } ) );
+		render().click();
+		await settle();
+
+		expect( status().textContent ).toBe( 'Яндекс Доставка не ответила.' );
+		expect( status().classList.contains( 'is-error' ) ).toBe( true );
+
+		const retry = dialog().querySelector( '.woodev-action-form__retry' );
+
+		expect( retry.hidden ).toBe( false );
+		expect( retry.textContent ).toBe( 'Повторить' );
+		submitForm();
+		expect( submitSpy ).not.toHaveBeenCalled();
+
+		retry.click();
+		await settle();
+
+		expect( fetchSpy ).toHaveBeenCalledTimes( 2 );
+		expect( select().disabled ).toBe( false );
+		expect( retry.hidden ).toBe( true );
+		expect( Array.from( select().options ).map( ( o ) => o.value ) ).toEqual( [ '', 'a/b' ] );
+	} );
+
+	it( 'a network failure shows the generic sentence', async () => {
+		fetchSpy.mockReturnValue( Promise.reject( new Error( 'offline' ) ) );
+		render().click();
+		await settle();
+
+		expect( status().textContent ).toBe( 'Не удалось загрузить варианты. Попробуйте ещё раз.' );
+	} );
+
+	it( 'a field with static options never asks the network', () => {
+		document.body.innerHTML = '';
+		const built = mod.buildField( { id: 's', type: 'select', label: 'S', required: false, default: 'a', options: [ { value: 'a', label: 'A' } ] }, 'u', LABELS );
+
+		expect( built.pending() ).toBe( false );
+		expect( fetchSpy ).not.toHaveBeenCalled();
+	} );
+} );
+
 describe( 'a carrier document (s164)', () => {
 	// The metabox used to POST `waybill` / `barcode` to the action handler, which refused both («Это действие недоступно
 	// для данного заказа.») because a document is not a carrier action. They are fetched from the documents REST route,

@@ -485,6 +485,17 @@ Moved here from `CURRENT-STATE.md` in s139: they are reference, true regardless 
   `@wordpress/components` `Modal` (`action-input-modal.tsx`), the metabox the vanilla `WoodevModal` shell
   (`order-metabox-actions.js`, fields as JSON in `data-fields`) — gotcha
   `the-modal-shell-handles-are-registered-on-the-storefront-hook-only`.
+- **A `select` may load its options WHEN THE DIALOG OPENS (Yandex #84)** — `'async_options' => true` on a per-order
+  action's select (no `options`; an optional `empty_text`): the row ships the field with `options => []`, so a list row
+  costs no carrier call. The dialog (React `action-input-modal.tsx`, metabox `order-metabox-actions.js` through
+  `data-options-urls` + `data-rest-nonce`) asks `GET /shipping/orders/{id}/actions/{action}/fields/{field}/options`
+  (`Orders_Controller::get_field_options()`: `edit_shop_orders`, the same offered-action / edit-lock gate as the write
+  route), which answers with the carrier's `woodev_shipping_order_action_field_options` filter (a list of
+  `{ value, label }`, or a `WP_Error` with a merchant sentence), re-sanitised and cut at
+  `Order_Action_Fields::MAX_ASYNC_OPTIONS`. Loading / empty / error (+ «Повторить») are drawn in Russian and the submit
+  waits for the list. At submit the framework checks only the value's SHAPE (`MAX_ASYNC_VALUE_LENGTH`, no control
+  characters) — the options are not stored, so the carrier's handler MUST match the value against its own fresh data. A
+  toolbar dialog has no order to ask about: `sanitize( …, $allow_async = false )` drops such a field there.
 - **An action may declare its own ICON (s164)** — an `icon` string on the same `woodev_shipping_order_actions` entry,
   next to `fields`: a **Dashicons slug without the `dashicons-` prefix** (`'calendar-alt'`), validated by
   `Order_Actions::sanitize_icon()` (`^[a-z][a-z0-9-]*$`, anything else is dropped). Both surfaces draw

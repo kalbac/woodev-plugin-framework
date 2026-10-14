@@ -230,7 +230,11 @@ interface OrderActionFieldBase {
  */
 export type OrderActionField =
 	| ( OrderActionFieldBase & { type: 'date'; default: string; min?: string; max?: string } )
-	| ( OrderActionFieldBase & { type: 'select'; default: string; options: { value: string; label: string }[] } )
+	/**
+	 * A select. With `async_options` it ships NO options: the dialog asks {@link fetchActionFieldOptions} for the order's
+	 * when it opens (Yandex #84), and `empty_text` is the sentence for «nothing to offer» (absent => the generic one).
+	 */
+	| ( OrderActionFieldBase & { type: 'select'; default: string; options: { value: string; label: string }[]; async_options?: boolean; empty_text?: string } )
 	| ( OrderActionFieldBase & { type: 'time_range'; default: OrderActionTimeRange; min?: string; max?: string } )
 	| ( OrderActionFieldBase & { type: 'textarea'; default: string; maxlength: number } )
 	/** s164: a toolbar dialog's multi-select of orders; `default` is the ids preselected (all of them unless declared). */
@@ -752,6 +756,31 @@ export function performOrderAction(
 		// #1204: `confirmed` is the merchant's yes to a destructive action's confirmation — a paid action (the refusal)
 		// is refused by the server without it.
 		...( payload || confirmed ? { data: { ...( payload ? { payload } : {} ), ...( confirmed ? { confirmed: true } : {} ) } } : {} ),
+	} );
+}
+
+/** One choice of a select: what is sent and what the merchant reads. */
+export interface OrderActionFieldOption {
+	value: string;
+	label: string;
+}
+
+/**
+ * `GET /shipping/orders/<id>/actions/<action>/fields/<field>/options` — the choices of a select that declared
+ * `async_options`, loaded for ONE order when its dialog opens (Yandex #84). Never called for a list row. A rejection
+ * carries the server's own Russian `message` (the carrier's, or the generic «не удалось получить варианты»).
+ */
+export function fetchActionFieldOptions(
+	orderId: number,
+	action: string,
+	fieldId: string
+): Promise<{ options: OrderActionFieldOption[] }> {
+	const { restRoot = '', nonce = '' } = bootstrap();
+
+	return apiFetch<{ options: OrderActionFieldOption[] }>( {
+		url: `${ restRoot.replace( /\/+$/, '' ) }/${ orderId }/actions/${ action }/fields/${ fieldId }/options`,
+		method: 'GET',
+		headers: { 'X-WP-Nonce': nonce },
 	} );
 }
 

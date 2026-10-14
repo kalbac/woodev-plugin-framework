@@ -806,6 +806,27 @@
 		margin: 0;
 	}
 
+	// A select that loads its options when the dialog opens (`async_options`): the line under it says «nothing to offer»
+	// or why the load failed, with a «retry» beside the failure.
+	&__status {
+		color: wd.$muted;
+		font-size: 12px;
+		line-height: 1.5;
+		margin: 0;
+
+		&:empty {
+			display: none;
+		}
+
+		&.is-error {
+			color: #d63638;
+		}
+	}
+
+	&__retry {
+		align-self: flex-start;
+	}
+
 	&__buttons {
 		display: flex;
 		gap: wd.$gap-xs;
