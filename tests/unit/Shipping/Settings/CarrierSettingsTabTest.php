@@ -29,6 +29,7 @@ require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/abstract-class-settin
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/settings/class-export-settings.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/settings/class-advanced-settings.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/settings/class-status-sync-tool.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/rest-api/controllers/class-rest-api-settings-page.php';
 
 /**
  * @covers \Woodev\Framework\Shipping\Shipping_Plugin::get_settings_providers
@@ -50,10 +51,12 @@ final class CarrierSettingsTabTest extends TestCase {
 		Functions\when( 'wc_string_to_bool' )->alias( static fn( $value ) => in_array( strtolower( (string) $value ), [ 'yes', 'true', '1' ], true ) );
 
 		Orders_Registry::instance()->reset_for_tests();
+		Settings_Page_Registry::instance()->reset_for_tests();
 	}
 
 	protected function tearDown(): void {
 		Orders_Registry::instance()->reset_for_tests();
+		Settings_Page_Registry::instance()->reset_for_tests();
 
 		parent::tearDown();
 	}
@@ -907,6 +910,102 @@ final class CarrierSettingsTabTest extends TestCase {
 
 		$this->assertNotNull( $provider->get_handler()->get_setting( 'price_growth' ), 'the handler of the card\'s field is the contributing one' );
 		$this->assertContains( 'price_growth', $this->export_of( $plugin )->get_setting_ids() );
+	}
+
+	/**
+	 * The same handler as {@see self::credentials_with_export_fields()}, but the card's field carries a plugin
+	 * validate callback: a percentage from 0 to 100.
+	 */
+	private function credentials_with_validated_export_field( string $field_id ): Settings_Provider {
+		$handler = new class( 'cdek', $field_id ) extends \Woodev_Abstract_Settings {
+
+			/** @var string */
+			private string $field_id;
+
+			public function __construct( string $id, string $field_id ) {
+				$this->field_id = $field_id;
+				parent::__construct( $id );
+			}
+
+			protected function register_settings() {
+				$this->register_setting( 'api_key', \Woodev_Setting::TYPE_STRING, [ 'name' => 'api_key' ] );
+				$this->register_control( 'api_key', \Woodev_Control::TYPE_TEXT );
+
+				$this->register_setting(
+					$this->field_id,
+					\Woodev_Setting::TYPE_STRING,
+					[
+						'name'             => $this->field_id,
+						'validate'         => static fn( $value ): bool => ctype_digit( (string) $value ) && (int) $value <= 100,
+						'validate_message' => 'Укажите процент от 0 до 100.',
+					]
+				);
+				$this->register_control( $this->field_id, \Woodev_Control::TYPE_TEXT );
+			}
+		};
+
+		return Settings_Provider::create_with_sections( 'cdek', 'Подключение', $handler, [], Settings_Section::create( 'credentials', 'Доступ', [ 'api_key' ] ) );
+	}
+
+	/**
+	 * The settings page's own save controller over a real carrier: `price_growth` is a field of the «Параметры
+	 * выгрузки» card, registered on the composed handler and reachable through the registry the page reads.
+	 */
+	private function settings_rest_controller_for_carrier_card(): \Woodev_REST_API_Settings_Page {
+		$plugin = $this->carrier( 'cdek', [ $this->credentials_with_validated_export_field( 'price_growth' ) ] );
+		$plugin->shouldReceive( 'get_export_section_setting_ids' )->andReturn( [ 'price_growth' ] );
+		$plugin->shouldReceive( 'get_export_section_extension' )->andReturn(
+			[ 'groups' => [ Settings_Group::create( 'tuning', 'Параметры выгрузки' )->with_fields( [ 'price_growth' ] ) ] ]
+		);
+		$this->make_it_export( $plugin );
+		Settings_Page_Registry::instance()->register_plugin( $plugin );
+
+		Functions\when( 'rest_ensure_response' )->returnArg( 1 );
+
+		return new \Woodev_REST_API_Settings_Page( Settings_Page_Registry::instance() );
+	}
+
+	/**
+	 * Replaces the setUp() stub of update_option() with one that records every write: Brain Monkey's expect() is
+	 * shadowed by the earlier when() stub, so the writes are captured here and asserted on directly.
+	 *
+	 * @param array<int,array{0:string,1:mixed}> $writes filled with each update_option( $name, $value ) call.
+	 */
+	private function record_option_writes( array &$writes ): void {
+		Functions\when( 'update_option' )->alias(
+			static function ( string $name, $value ) use ( &$writes ): bool {
+				$writes[] = [ $name, $value ];
+
+				return true;
+			}
+		);
+	}
+
+	public function test_a_carrier_card_field_saved_through_the_settings_rest_route_is_written_to_its_option(): void {
+		$controller = $this->settings_rest_controller_for_carrier_card();
+		$writes     = [];
+		$this->record_option_writes( $writes );
+
+		$response = $controller->save( new \WP_REST_Request( [ 'provider_id' => 'cdek', 'values' => [ 'price_growth' => '15' ] ] ) );
+
+		$this->assertSame( [ 'saved' => true, 'provider' => 'cdek' ], $response );
+		$this->assertSame( [ [ 'woodev_cdek_price_growth', '15' ] ], $writes );
+	}
+
+	public function test_a_carrier_card_field_failing_validation_on_the_settings_rest_route_is_rejected_and_nothing_is_written(): void {
+		$controller = $this->settings_rest_controller_for_carrier_card();
+		$writes     = [];
+		$this->record_option_writes( $writes );
+
+		$result = $controller->save( new \WP_REST_Request( [ 'provider_id' => 'cdek', 'values' => [ 'price_growth' => '150' ] ] ) );
+
+		$this->assertInstanceOf( 'WP_Error', $result );
+		$this->assertSame( 'woodev_settings_invalid', $result->get_error_code() );
+		$this->assertSame(
+			[ 'status' => 400, 'errors' => [ 'price_growth' => 'Укажите процент от 0 до 100.' ] ],
+			$result->get_error_data()
+		);
+		$this->assertSame( [], $writes );
 	}
 
 	public function test_a_carrier_card_field_outside_the_export_ids_or_held_twice_is_reported_and_dropped_from_the_card(): void {
