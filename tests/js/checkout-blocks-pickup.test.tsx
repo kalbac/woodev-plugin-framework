@@ -330,6 +330,58 @@ describe( 'PickupPicker — shown for the framework’s pickup rates only', () =
 		expect( container ).toBeEmptyDOMElement();
 	} );
 
+	/**
+	 * Issue #1282, block side. The shopper changes the address, the cart's answer drops the pickup
+	 * rate and WooCommerce selects the first remaining one ITSELF — one cart reply carrying both the
+	 * new `selected` flag and the new extension data, with no click on a rate. The button, the point,
+	 * the echo and the «choose a point» error must all go with it, and come back with the rate.
+	 */
+	it( 'hides the button, the point and the error when the cart answer selects another rate by itself (#1282)', () => {
+		chooseRate( PICKUP_RATE );
+		serverAnswers( PICKUP_RATE, snapshot() );
+
+		const { container } = renderPicker();
+
+		expect( screen.getByText( 'Тверская, 1' ) ).toBeInTheDocument();
+		expect( lastEcho() ).not.toBeNull();
+
+		act( () => {
+			chooseRate( COURIER_RATE );
+			serverAnswers( COURIER_RATE, null );
+			notify();
+		} );
+
+		expect( container ).toBeEmptyDOMElement();
+		expect( lastEcho() ).toBeNull();
+		expect( mockStore.validation[ ERROR_ID ] ).toBeUndefined();
+	} );
+
+	it( 'shows the button again, with no stale point, when the cart answer selects the pickup rate back (#1282)', () => {
+		chooseRate( PICKUP_RATE );
+		serverAnswers( PICKUP_RATE, snapshot() );
+
+		const { container } = renderPicker();
+
+		act( () => {
+			chooseRate( COURIER_RATE );
+			serverAnswers( COURIER_RATE, null );
+			notify();
+		} );
+
+		expect( container ).toBeEmptyDOMElement();
+
+		act( () => {
+			chooseRate( PICKUP_RATE );
+			serverAnswers( PICKUP_RATE, null );
+			notify();
+		} );
+
+		expect( screen.getByRole( 'button', { name: 'Select a pickup point' } ) ).toBeInTheDocument();
+		expect( screen.queryByText( 'Тверская, 1' ) ).not.toBeInTheDocument();
+		expect( lastEcho() ).toBeNull();
+		expect( mockStore.validation[ ERROR_ID ] ).toBeDefined();
+	} );
+
 	it( 'shows nothing when the server published no extension data (WooCommerce below 9.9)', () => {
 		mockStore.extensions = {};
 
