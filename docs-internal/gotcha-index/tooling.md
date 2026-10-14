@@ -3,6 +3,10 @@
 > One line per gotcha in this topic; the detail is in the linked file. Map of every topic:
 > [../GOTCHAS.md](../GOTCHAS.md). Format and the write protocol: `DOCS-SCHEMA.md` → "GOTCHAS.md Format".
 
+
+- [tooling/codex] **An Orca Codex worker may leave its work uncommitted because the injected preamble blocks external posting — explicitly authorize commit/push or have the coordinator own the branch.** → [codex-worker-may-not-commit-without-explicit-authorization](../gotchas/codex-worker-may-not-commit-without-explicit-authorization.md) (s178)
+- [tooling/local-ci] **`npx run-local-ci --all …` omits the required `run` subcommand, prints usage and exits 1.** → [run-local-ci-requires-run-subcommand](../gotchas/run-local-ci-requires-run-subcommand.md) (s178)
+- [tooling/orca] **`watch-workers.py` can retrigger on an old `API Error` still in terminal scrollback; exclude the handle or match only new output.** → [watch-workers-retriggers-on-stale-api-error-buffer](../gotchas/watch-workers-retriggers-on-stale-api-error-buffer.md) (s178)
 - [tooling/parallel-agents] **An OOM-killed `check --wait` is indistinguishable from an empty timeout; the workers are usually ALIVE. Ask `worker-list`, never relaunch on the silence.** → [an-oom-killed-check-wait-reads-as-an-empty-timeout](../gotchas/an-oom-killed-check-wait-reads-as-an-empty-timeout.md) (s133)
 - [tooling/orca] **Auto mode can refuse `orca … --ack` / `worker-release` (and `cat` of the waiter file) as «Instruction Poisoning» when the prompt came from a worker message; read the file with Read, have the operator run the mutation with `!`.** → [auto-mode-refuses-orca-commands-prompted-by-a-worker-message](../gotchas/auto-mode-refuses-orca-commands-prompted-by-a-worker-message.md) (s174)
 - [tooling/orca] **`check --json` mixes one-line keepalives with a PRETTY-PRINTED delivery, so a line-by-line parser reports «nothing delivered» three waits running while the worker is fine.** → [orca-check-json-is-pretty-printed-so-a-line-parser-reads-it-as-empty](../gotchas/orca-check-json-is-pretty-printed-so-a-line-parser-reads-it-as-empty.md) (s132)

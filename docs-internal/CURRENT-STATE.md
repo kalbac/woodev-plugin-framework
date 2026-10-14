@@ -6,18 +6,15 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-14 (s177).** Framework `main` `8b56ae0a` (+ s177 docs) — the licence gate #1270 merged (#1271); CDEK plugin `v2` `46707aa`
-(pin `8b56ae0a`); Yandex plugin `kalbac/woocommerce-yandex-delivery` `main` `c7618f5` (pin `8b56ae0a`, private repo, board №11).
-🚧 **v2 release = TWO carrier plugins on v2, tested and compatible** (#1179): CDEK done (s172–s173); Yandex Y1–Y16 + document
-labels/bulk act merged — the operator is reviewing the Yandex rig and holds a list of findings (next session starts with it).
+**As of 2026-10-14 (s178).** Framework `main` after #1275/#1277/#1278/#1280; the primary rig checkout is deliberately on `origin/kalbac/review-s178` with #1274/#1276 for the operator's visual review. CDEK plugin `v2` `2051201`; Yandex plugin `main` after #78, while its primary rig checkout is on `origin/kalbac/review-s178` (`2cb1337`, #73/#74/#75/#77/#79/#80). The operator's nine Yandex rig findings are recorded as yandex#66–#71; merge order is in `next-session-prompt.md`.
+🚧 **v2 release = TWO carrier plugins on v2, tested and compatible** (#1179): CDEK is done; Yandex main and review-build work is staged for the operator's look. Review-build smoke passed settings, method fields, Moscow quotes, bulk menu and CDEK quotes; Pushkin was verified through suggestions. No terminal pins were seen (unverified); hidden-method hint was not exercised.
 ⚠ **The Yandex TEST contour is silent** (HTTP 200, empty body): live confirm/cancel/status/PDF are UNVERIFIED; no production
 check (yandex#47). Private-repo gate = local-ci + critic (global rule `~/.claude/CLAUDE.md`; mirrored to the Homelab host in s177).
 Block-checkout gaps do not block the release (#1263).
 ✅ **Licence gate (#1270) is LIVE end to end:** woodev-core 1.0.4 on woodev.ru signs paid-licence status (source: Homelab
 `woodev-ru` monorepo, local-only); the framework blocks checkout and new carrier actions without an in-force SIGNED claim;
 automatic refresh backs off 15 m → 1 h → 6 h → 24 h (operator: never spam woodev.ru). The rig needs real keys for CDEK/Yandex
-and `tests/e2e/rig/zz-woodev-rig-license.php` for the fixtures (`wiki/local-rig.md`). Open tail: #1273 (updater never records
-a failed request).
+and `tests/e2e/rig/zz-woodev-rig-license.php` for the fixtures (`wiki/local-rig.md`). The updater failure backoff is implemented in #1275.
 Next checks: `next-session-prompt.md`. ⚠ Sync the plugin’s own `woodev/` before plugin rig runs
 (`wiki/local-rig.md`). The rig admin user has locale **ru_RU**; the site stays **en_US**.
 GlitchTip receiver (#1082) is live. **Both machines are live**; routine sync is git ONLY
@@ -67,7 +64,7 @@ the highest installed `2.2.5.5` (operator, 06.09.2026), so the update reaches ev
 
 ✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — no quota consumed; the exhaustion symptom is gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`.
 
-**Test measurements:** framework unit **7295** (1 skipped), integration **516** — measured 14.10.2026 (s177) on `d5aea56f` (= `8b56ae0a`); Jest **3353** in **84** suites — 13.10.2026 (s176), `src/` unchanged since.
+**Test measurements:** framework unit **7321** (1 skipped) on #1278 branch CI; Yandex unit **677** on main+#78 and **800** on review build; CDEK unit **1484+** on #97; acceptance **105 PASS / 0 FAIL / 12 UNVERIFIABLE** (6.3 min) after #99 — measured 14.10.2026 (s178). Integration was not run tonight.
 Integration is CI/coordinator-owned. Re-measure before quoting these as current gate evidence.
 
 ⚠ **A `.ts` msgid fails `lint:i18n-sources`** — it extracts from the BUILT bundle (s129).
