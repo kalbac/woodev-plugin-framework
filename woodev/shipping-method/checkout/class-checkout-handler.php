@@ -539,12 +539,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * instance title the shop gave them («Скрыты: А, Б, В — reason»), so ten hidden methods
 		 * never print ten lines (#68). Both the classic hint and the Store API payload read this.
 		 *
+		 * A reason is listed only while the debug mode of the plugin that reported it is on — the hint reads as a
+		 * fault to a merchant who is not an IT person (#68). The reason itself is always in the WooCommerce log.
+		 *
 		 * @since 2.0.2
 		 * @return string[]
 		 */
 		private static function hidden_reason_messages(): array {
 			$groups = [];
 			foreach ( \Woodev\Framework\Shipping\Shipping_Method::get_hidden_reasons() as $reason ) {
+				if ( ! \Woodev\Framework\Shipping\Shipping_Method::is_hidden_reason_visible( $reason ) ) {
+					continue;
+				}
 				$message = trim( (string) ( $reason['message'] ?? '' ) );
 				if ( '' === $message ) {
 					continue;
