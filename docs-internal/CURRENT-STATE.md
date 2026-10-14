@@ -6,10 +6,9 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-14 (s179).** Framework `main` after #1283 (pickup slot hides when WooCommerce re-selects a non-pickup method); the primary rig checkout is deliberately DETACHED on `origin/kalbac/review-s178` (main + #1274 + #1276) for the operator's review; open framework PRs #1274 #1276 #1285. Yandex `main` after #75 (v1 pins) and #83 (bare-answer matching, 200-place corpus); Yandex TEST MODE is removed (operator, s179) in PR #73.
-🚧 **v2 release = TWO carrier plugins on v2, tested and compatible** (#1179): CDEK is done; Yandex main and review-build work is staged for the operator's look. Review-build smoke passed settings, method fields, Moscow quotes, bulk menu and CDEK quotes; Pushkin was verified through suggestions. No terminal pins were seen (unverified); hidden-method hint was not exercised.
-⚠ **The Yandex TEST contour is silent** (HTTP 200, empty body): live confirm/cancel/status/PDF are UNVERIFIED; no production
-check (yandex#47). Private-repo gate = local-ci + critic (global rule `~/.claude/CLAUDE.md`; mirrored to the Homelab host in s177).
+**As of 2026-10-15 (s180).** Framework `main` `32600acd` (#1274 explicit retry for unknown exports, #1276 hidden-method hint behind «Логирование», #1285 async order-action select). Yandex `main` `14c45179` (#79 #73 #74 #77 #80 #86; test mode removed; pin `32600acd`); CDEK `v2` `b9c21b17` (#102 v1 excluded locality/region codes). The rig `:8973` runs `main`/`v2` in all three repos, plugins synced; no review build is staged. Open: yandex#85 (НДС), draft yandex#81.
+🚧 **v2 release = TWO carrier plugins on v2, tested and compatible** (#1179): all operator rig findings are merged; the remaining gate is the detailed two-plugin acceptance (field-mode matrix × big/small settlements × min/max order and minimum delivery cost — scope on #1179).
+⚠ **Yandex runs production-only** (test mode removed, #73): live confirm/cancel/status/PDF remain UNVERIFIED — production `offers/confirm` and `request/*` are forbidden without the operator. Private-repo gate = local-ci + critic (global rule `~/.claude/CLAUDE.md`; mirrored to the Homelab host in s177).
 Block-checkout gaps do not block the release (#1263).
 ✅ **Licence gate (#1270) is LIVE end to end:** woodev-core 1.0.4 on woodev.ru signs paid-licence status (source: Homelab
 `woodev-ru` monorepo, local-only); the framework blocks checkout and new carrier actions without an in-force SIGNED claim;
@@ -64,7 +63,7 @@ the highest installed `2.2.5.5` (operator, 06.09.2026), so the update reaches ev
 
 ✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — no quota consumed; the exhaustion symptom is gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`.
 
-**Test measurements:** framework unit **7321** (1 skipped) on #1278 branch CI; Yandex unit **677** on main+#78 and **800** on review build; CDEK unit **1484+** on #97; acceptance **105 PASS / 0 FAIL / 12 UNVERIFIABLE** (6.3 min) after #99 — measured 14.10.2026 (s178). Integration was not run tonight.
+**Test measurements:** framework integration **516** (0 failures) on main + #1274 #1276 #1285, framework unit CI green on each merged head; Yandex unit **1047** (main + #86, pin `32600acd`); CDEK unit **1513** on #102; acceptance **105 PASS / 0 FAIL / 12 UNVERIFIABLE** is the s178 figure (before #102) — measured 14–15.10.2026 (s180).
 Integration is CI/coordinator-owned. Re-measure before quoting these as current gate evidence.
 
 ⚠ **A `.ts` msgid fails `lint:i18n-sources`** — it extracts from the BUILT bundle (s129).
