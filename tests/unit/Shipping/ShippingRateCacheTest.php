@@ -57,7 +57,7 @@ namespace {
 
 			/** @return string */
 			public function get_title() {
-				return $this->title;
+				return $this->instance_title;
 			}
 		}
 	}
@@ -118,7 +118,21 @@ namespace Woodev\Tests\Unit\Shipping {
 		/** @var \Woodev_Plugins_License|null the licence engine the gate asks when there IS a store product */
 		public $license = null;
 
+		/** @var string the plugin id — two probes with different ids are two carrier plugins on one checkout. */
+		public string $plugin_id = 'rate-cache';
+
+		/** @var array<string, bool> «Логирование» (`enable_debug`) by plugin id; a plugin that is not listed has it off. */
+		public static array $debug = [];
+
+		/** @var string[] what the plugins wrote to the log at the error level (always written, whatever the debug mode). */
+		public static array $errors = [];
+
 		public function __construct() {}
+
+		/** @return bool */
+		public function is_debug_enabled(): bool {
+			return self::$debug[ $this->plugin_id ] ?? false;
+		}
 
 		/** @return \Woodev_Plugins_License|null */
 		public function get_license_instance() {
@@ -152,7 +166,7 @@ namespace Woodev\Tests\Unit\Shipping {
 
 		/** @return string */
 		public function get_id() {
-			return 'rate-cache';
+			return $this->plugin_id;
 		}
 
 		/** @return string */
@@ -177,7 +191,9 @@ namespace Woodev\Tests\Unit\Shipping {
 		 * @param string|null $log_id  log id.
 		 * @return void
 		 */
-		public function log_error( $message, $log_id = null ): void {}
+		public function log_error( $message, $log_id = null ): void {
+			self::$errors[] = (string) $message;
+		}
 	}
 
 	/** Minimal Shipping_Method double that counts carrier calls. */
@@ -228,6 +244,15 @@ namespace Woodev\Tests\Unit\Shipping {
 		/** @var bool whether this probe reports a carrier reason before returning. */
 		public bool $report_hidden = false;
 
+		/** @var string the instance title the shop gave this probe (what the buyer sees). */
+		public string $instance_title = 'Rate Cache Method';
+
+		/** @var string the reason text this probe reports — the plugin's text, never the title. */
+		public string $reason_text = 'No service in this area.';
+
+		/** @var string id of the plugin this probe sits in. */
+		public string $plugin_id = 'rate-cache';
+
 		public function __construct() {}
 
 		/**
@@ -240,7 +265,7 @@ namespace Woodev\Tests\Unit\Shipping {
 
 		/** @return string */
 		public function get_title() {
-			return 'Rate Cache Method';
+			return $this->instance_title;
 		}
 
 		/** @return string */
@@ -278,6 +303,7 @@ namespace Woodev\Tests\Unit\Shipping {
 			$plugin->pickup_handler = $this->pickup_handler;
 			$plugin->download_id    = $this->download_id;
 			$plugin->license        = $this->license;
+			$plugin->plugin_id      = $this->plugin_id;
 
 			return $plugin;
 		}
@@ -290,7 +316,7 @@ namespace Woodev\Tests\Unit\Shipping {
 		protected function rate_package( array $package, ?\Woodev_Packer_Result $packed ): ?Shipping_Rate {
 			++$this->carrier_calls;
 			if ( $this->report_hidden ) {
-				$this->report_hidden( 'no_service', 'No service in this area.', [ 'diagnostic' => 'request only' ] );
+				$this->report_hidden( 'no_service', $this->reason_text, [ 'diagnostic' => 'request only' ] );
 			}
 
 			if ( null !== $this->next_exception ) {
@@ -365,8 +391,18 @@ namespace Woodev\Tests\Unit\Shipping {
 			$this->options         = [];
 			$this->can_manage_woocommerce = false;
 			$this->endpoint_definitions = [];
+			// the Store API payload registers once per process; each test captures its own definition
+			$registered = new \ReflectionProperty( \Woodev\Framework\Shipping\Checkout\Checkout_Handler::class, 'hidden_reason_endpoint_registered' );
+			if ( PHP_VERSION_ID < 80100 ) {
+				$registered->setAccessible( true );
+			}
+			$registered->setValue( null, false );
 			$GLOBALS['woocommerce'] = new Hidden_Reason_Test_WooCommerce();
 			$this->reset_hidden_reasons();
+			$this->reset_hidden_reason_plugins();
+			// the plugin's «Логирование» is ON unless a test says otherwise (#68); each test starts with no log lines
+			Woodev_Test_Shipping_Plugin_For_Rate_Cache::$debug  = [ 'rate-cache' => true ];
+			Woodev_Test_Shipping_Plugin_For_Rate_Cache::$errors = [];
 
 			Functions\when( 'get_transient' )->alias(
 				function ( $key ) {
@@ -421,6 +457,9 @@ namespace Woodev\Tests\Unit\Shipping {
 		protected function tearDown(): void {
 			\Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab::reset_for_tests();
 			$this->reset_hidden_reasons();
+			$this->reset_hidden_reason_plugins();
+			Woodev_Test_Shipping_Plugin_For_Rate_Cache::$debug  = [];
+			Woodev_Test_Shipping_Plugin_For_Rate_Cache::$errors = [];
 			unset( $GLOBALS['woocommerce'] );
 			parent::tearDown();
 		}
@@ -579,7 +618,7 @@ namespace Woodev\Tests\Unit\Shipping {
 			\Woodev\Framework\Shipping\Checkout\Checkout_Handler::register_hidden_reason_endpoint_data();
 			$data_callback = $this->endpoint_definitions['woodev-shipping-hidden-reasons']['data_callback'];
 			$this->can_manage_woocommerce = true;
-			$this->assertSame( [ 'messages' => [ 'No service in this area.' ] ], $data_callback() );
+			$this->assertSame( [ 'messages' => [ 'Скрыт: «Rate Cache Method» — No service in this area.' ] ], $data_callback() );
 			$this->can_manage_woocommerce = false;
 			$this->assertSame( [ 'messages' => [] ], $data_callback() );
 		}
@@ -629,6 +668,282 @@ namespace Woodev\Tests\Unit\Shipping {
 
 			$this->assertArrayHasKey( $this->hidden_key( $package ), Shipping_Method::get_hidden_reasons() );
 			$this->assertArrayHasKey( $this->hidden_key( $package, 2 ), Shipping_Method::get_hidden_reasons() );
+		}
+
+		/**
+		 * A hidden probe: instance `$instance_id`, titled `$title`, reporting `$reason`.
+		 *
+		 * @param int    $instance_id WooCommerce instance id.
+		 * @param string $title       Instance title.
+		 * @param string $reason      Reason text.
+		 * @return Woodev_Test_Shipping_Method_For_Rate_Cache
+		 */
+		private function hidden_method( int $instance_id, string $title, string $reason = 'No service in this area.' ): Woodev_Test_Shipping_Method_For_Rate_Cache {
+			$method                = $this->method();
+			$method->next_rate     = null;
+			$method->report_hidden = true;
+			$method->instance_id   = $instance_id;
+			$method->instance_title = $title;
+			$method->reason_text    = $reason;
+
+			return $method;
+		}
+
+		/**
+		 * The checkout hint's <li> texts, as the classic renderer prints them.
+		 *
+		 * @return string[]
+		 */
+		private function rendered_hint_lines(): array {
+			ob_start();
+			\Woodev\Framework\Shipping\Checkout\Checkout_Handler::render_hidden_shipping_reasons();
+			$markup = (string) ob_get_clean();
+			if ( '' === $markup ) {
+				return [];
+			}
+			$document = new \DOMDocument();
+			$document->loadHTML( '<?xml encoding="utf-8"?><table><tfoot>' . $markup . '</tfoot></table>' );
+			$lines = [];
+			foreach ( ( new \DOMXPath( $document ) )->query( '//ul[contains(@class,"woodev-hidden-shipping-reasons")]/li' ) as $item ) {
+				$lines[] = $item->textContent;
+			}
+
+			return $lines;
+		}
+
+		/** @return void */
+		public function test_hidden_reason_records_the_instance_title_beside_the_plugin_reason(): void {
+			$this->can_manage_woocommerce = true;
+			$package                      = $this->package();
+			$GLOBALS['woocommerce']->packages = [ $package ];
+			$this->hidden_method( 1, '  Доставка в пункт выдачи  ' )->calculate_shipping( $package );
+
+			$reason = Shipping_Method::get_hidden_reasons()[ $this->hidden_key( $package ) ];
+			$this->assertSame( 'Доставка в пункт выдачи', $reason['title'], 'the title the buyer sees, trimmed' );
+			$this->assertSame( 'No service in this area.', $reason['message'], 'the plugin owns the reason text, the framework adds no title to it' );
+			$this->assertSame( 'Доставка в пункт выдачи', $GLOBALS['woocommerce']->session->get( 'woodev_shipping_hidden_reasons' )[ $this->hidden_key( $package ) ]['title'], 'the title survives a session-cached render' );
+		}
+
+		/** @return void */
+		public function test_a_non_string_title_is_recorded_as_empty(): void {
+			$this->can_manage_woocommerce     = true;
+			$package                          = $this->package();
+			$GLOBALS['woocommerce']->packages = [ $package ];
+			$method                           = new class() extends Woodev_Test_Shipping_Method_For_Rate_Cache {
+				/** @return mixed a third party's filtered value. */
+				public function get_title() {
+					return [ 'not', 'a', 'string' ];
+				}
+			};
+			$method->next_rate                = null;
+			$method->report_hidden            = true;
+			$method->calculate_shipping( $package );
+
+			$this->assertSame( '', Shipping_Method::get_hidden_reasons()[ $this->hidden_key( $package ) ]['title'] );
+			$this->assertSame( [ 'No service in this area.' ], $this->rendered_hint_lines(), 'no title known: the bare reason, never a fatal' );
+		}
+
+		/** @return void */
+		public function test_methods_that_share_a_reason_collapse_into_one_line_of_titles(): void {
+			$this->can_manage_woocommerce     = true;
+			$package                          = $this->package();
+			$GLOBALS['woocommerce']->packages = [ $package ];
+			foreach ( [ 1 => 'Пункт выдачи', 2 => 'Курьером до двери', 3 => 'Экспресс' ] as $instance_id => $title ) {
+				$this->hidden_method( $instance_id, $title )->calculate_shipping( $package );
+			}
+
+			$expected = 'Скрыты: «Пункт выдачи», «Курьером до двери», «Экспресс» — No service in this area.';
+			$this->assertSame( [ $expected ], $this->rendered_hint_lines(), 'classic checkout: three methods, one line' );
+
+			\Woodev\Framework\Shipping\Checkout\Checkout_Handler::register_hidden_reason_endpoint_data();
+			$this->assertSame( [ 'messages' => [ $expected ] ], $this->endpoint_definitions['woodev-shipping-hidden-reasons']['data_callback'](), 'block checkout: the same single line' );
+		}
+
+		/** @return void */
+		public function test_each_distinct_reason_gets_its_own_line_and_a_lone_method_is_singular(): void {
+			$this->can_manage_woocommerce     = true;
+			$package                          = $this->package();
+			$GLOBALS['woocommerce']->packages = [ $package ];
+			$this->hidden_method( 1, 'Пункт выдачи', 'no points here.' )->calculate_shipping( $package );
+			$this->hidden_method( 2, 'Курьером', 'courier does not take COD.' )->calculate_shipping( $package );
+			$this->hidden_method( 3, 'Экспресс', 'no points here.' )->calculate_shipping( $package );
+
+			$this->assertSame(
+				[
+					'Скрыты: «Пункт выдачи», «Экспресс» — no points here.',
+					'Скрыт: «Курьером» — courier does not take COD.',
+				],
+				$this->rendered_hint_lines()
+			);
+		}
+
+		/** @return void */
+		public function test_two_instances_with_the_same_title_are_listed_once(): void {
+			$this->can_manage_woocommerce     = true;
+			$package                          = $this->package();
+			$GLOBALS['woocommerce']->packages = [ $package ];
+			$this->hidden_method( 1, 'Пункт выдачи' )->calculate_shipping( $package );
+			$this->hidden_method( 2, 'Пункт выдачи' )->calculate_shipping( $package );
+
+			$this->assertSame( [ 'Скрыт: «Пункт выдачи» — No service in this area.' ], $this->rendered_hint_lines() );
+		}
+
+		/** @return void */
+		public function test_a_reason_persisted_without_a_title_is_shown_as_the_bare_reason(): void {
+			$this->can_manage_woocommerce     = true;
+			$package                          = $this->package();
+			$GLOBALS['woocommerce']->packages = [ $package ];
+			// What a version that did not record titles left in the session (the plugin is booted: it is the title that is missing).
+			Shipping_Method::register_hidden_reason_plugin( new Woodev_Test_Shipping_Plugin_For_Rate_Cache() );
+			$GLOBALS['woocommerce']->session->set(
+				'woodev_shipping_hidden_reasons',
+				[
+					$this->hidden_key( $package ) => [
+						'package_hash' => explode( ':', $this->hidden_key( $package ), 2 )[0],
+						'reason_code'  => 'no_service',
+						'message'      => 'No service in this area.',
+						'plugin_id'    => 'rate-cache',
+					],
+				]
+			);
+
+			$this->assertSame( [ 'No service in this area.' ], $this->rendered_hint_lines() );
+		}
+
+		/**
+		 * The Store API payload as the block checkout receives it.
+		 *
+		 * @return string[]
+		 */
+		private function store_api_hint_lines(): array {
+			\Woodev\Framework\Shipping\Checkout\Checkout_Handler::register_hidden_reason_endpoint_data();
+
+			return $this->endpoint_definitions['woodev-shipping-hidden-reasons']['data_callback']()['messages'];
+		}
+
+		/** @return void */
+		public function test_the_hint_is_not_rendered_while_the_plugin_debug_mode_is_off(): void {
+			Woodev_Test_Shipping_Plugin_For_Rate_Cache::$debug = [ 'rate-cache' => false ];
+			$this->can_manage_woocommerce                      = true;
+			$package                                           = $this->package();
+			$GLOBALS['woocommerce']->packages                  = [ $package ];
+			$this->hidden_method( 1, 'Пункт выдачи' )->calculate_shipping( $package );
+
+			$this->assertSame( [], $this->rendered_hint_lines(), 'classic checkout: nothing' );
+			$this->assertSame( [], $this->store_api_hint_lines(), 'block checkout: no messages' );
+			$this->assertCount( 1, Shipping_Method::get_hidden_reasons(), 'the reason is still recorded — only its display is gated' );
+		}
+
+		/** @return void */
+		public function test_the_hint_is_rendered_while_the_plugin_debug_mode_is_on(): void {
+			$this->can_manage_woocommerce     = true;
+			$package                          = $this->package();
+			$GLOBALS['woocommerce']->packages = [ $package ];
+			$this->hidden_method( 1, 'Пункт выдачи' )->calculate_shipping( $package );
+			$this->hidden_method( 2, 'Курьером' )->calculate_shipping( $package );
+
+			$expected = 'Скрыты: «Пункт выдачи», «Курьером» — No service in this area.';
+			$this->assertSame( [ $expected ], $this->rendered_hint_lines() );
+			$this->assertSame( [ $expected ], $this->store_api_hint_lines() );
+		}
+
+		/** @return void */
+		public function test_each_plugin_is_shown_only_while_its_own_debug_mode_is_on(): void {
+			$this->can_manage_woocommerce     = true;
+			$package                          = $this->package();
+			$GLOBALS['woocommerce']->packages = [ $package ];
+			$other                            = $this->hidden_method( 2, 'Курьером', 'other carrier: no courier.' );
+			$other->plugin_id                 = 'other-carrier';
+			$this->hidden_method( 1, 'Пункт выдачи' )->calculate_shipping( $package );
+			$other->calculate_shipping( $package );
+
+			// carrier A on, carrier B off: only A's reason
+			Woodev_Test_Shipping_Plugin_For_Rate_Cache::$debug = [ 'rate-cache' => true, 'other-carrier' => false ];
+			$this->assertSame( [ 'Скрыт: «Пункт выдачи» — No service in this area.' ], $this->rendered_hint_lines() );
+			$this->assertSame( [ 'Скрыт: «Пункт выдачи» — No service in this area.' ], $this->store_api_hint_lines() );
+
+			// the other way round: only B's
+			Woodev_Test_Shipping_Plugin_For_Rate_Cache::$debug = [ 'rate-cache' => false, 'other-carrier' => true ];
+			$this->assertSame( [ 'Скрыт: «Курьером» — other carrier: no courier.' ], $this->rendered_hint_lines() );
+			$this->assertSame( [ 'Скрыт: «Курьером» — other carrier: no courier.' ], $this->store_api_hint_lines() );
+
+			// both on: both lines; both off: none
+			Woodev_Test_Shipping_Plugin_For_Rate_Cache::$debug = [ 'rate-cache' => true, 'other-carrier' => true ];
+			$this->assertCount( 2, $this->rendered_hint_lines() );
+			Woodev_Test_Shipping_Plugin_For_Rate_Cache::$debug = [];
+			$this->assertSame( [], $this->rendered_hint_lines() );
+			$this->assertSame( [], $this->store_api_hint_lines() );
+		}
+
+		/** @return void */
+		public function test_a_session_cached_reason_follows_the_debug_mode_of_the_moment(): void {
+			$this->can_manage_woocommerce     = true;
+			$package                          = $this->package();
+			$GLOBALS['woocommerce']->packages = [ $package ];
+			$this->hidden_method( 1, 'Пункт выдачи' )->calculate_shipping( $package );
+			$this->assertArrayHasKey( 'plugin_id', $GLOBALS['woocommerce']->session->get( 'woodev_shipping_hidden_reasons' )[ $this->hidden_key( $package ) ] );
+
+			// A new request: only the session survives, no method of the plugin runs; the plugin boot registers it.
+			$this->reset_hidden_reasons();
+			$this->reset_hidden_reason_plugins();
+			Shipping_Method::register_hidden_reason_plugin( new Woodev_Test_Shipping_Plugin_For_Rate_Cache() );
+
+			$this->assertSame( [ 'Скрыт: «Пункт выдачи» — No service in this area.' ], $this->rendered_hint_lines() );
+			// the merchant switches «Логирование» off: the cached reason disappears from the next render at once
+			Woodev_Test_Shipping_Plugin_For_Rate_Cache::$debug = [ 'rate-cache' => false ];
+			$this->assertSame( [], $this->rendered_hint_lines() );
+		}
+
+		/** @return void */
+		public function test_a_reason_of_an_unknown_plugin_or_without_a_plugin_id_is_not_shown(): void {
+			$this->can_manage_woocommerce     = true;
+			$package                          = $this->package();
+			$GLOBALS['woocommerce']->packages = [ $package ];
+			$hash                             = explode( ':', $this->hidden_key( $package ), 2 )[0];
+			$GLOBALS['woocommerce']->session->set(
+				'woodev_shipping_hidden_reasons',
+				[
+					$this->hidden_key( $package, 1 ) => [
+						'package_hash' => $hash,
+						'reason_code'  => 'no_service',
+						'message'      => 'Written by a version that did not record the plugin.',
+						'title'        => 'Старый',
+					],
+					$this->hidden_key( $package, 2 ) => [
+						'package_hash' => $hash,
+						'reason_code'  => 'no_service',
+						'message'      => 'Plugin that never booted.',
+						'title'        => 'Чужой',
+						'plugin_id'    => 'not-booted',
+					],
+				]
+			);
+
+			$this->assertCount( 2, Shipping_Method::get_hidden_reasons() );
+			$this->assertSame( [], $this->rendered_hint_lines() );
+			$this->assertSame( [], $this->store_api_hint_lines() );
+		}
+
+		/** @return void */
+		public function test_the_log_line_of_a_hidden_reason_is_written_whatever_the_debug_mode(): void {
+			$this->can_manage_woocommerce     = true;
+			$package                          = $this->package();
+			$GLOBALS['woocommerce']->packages = [ $package ];
+
+			foreach ( [ true, false ] as $debug ) {
+				Woodev_Test_Shipping_Plugin_For_Rate_Cache::$debug  = [ 'rate-cache' => $debug ];
+				Woodev_Test_Shipping_Plugin_For_Rate_Cache::$errors = [];
+				$this->reset_hidden_reasons();
+
+				$method                 = $this->method();
+				$method->next_rate      = null;
+				$method->next_exception = new \Woodev_Plugin_Exception( 'carrier down' );
+				$method->calculate_shipping( $package );
+
+				$this->assertCount( 1, Woodev_Test_Shipping_Plugin_For_Rate_Cache::$errors, 'debug ' . ( $debug ? 'on' : 'off' ) . ': the failure reaches the log' );
+				$this->assertStringContainsString( 'Rate calculation failed', Woodev_Test_Shipping_Plugin_For_Rate_Cache::$errors[0] );
+				$this->assertSame( $debug ? 1 : 0, count( $this->rendered_hint_lines() ), 'the hint follows the debug mode' );
+			}
 		}
 
 		/** @return void */
@@ -751,6 +1066,19 @@ namespace Woodev\Tests\Unit\Shipping {
 		/** @return void */
 		private function reset_hidden_reasons(): void {
 			$property = new \ReflectionProperty( Shipping_Method::class, 'hidden_reasons' );
+			if ( PHP_VERSION_ID < 80100 ) {
+				$property->setAccessible( true );
+			}
+			$property->setValue( null, [] );
+		}
+
+		/**
+		 * The plugin registry is process state like the reasons; a new test is a new process.
+		 *
+		 * @return void
+		 */
+		private function reset_hidden_reason_plugins(): void {
+			$property = new \ReflectionProperty( Shipping_Method::class, 'hidden_reason_plugins' );
 			if ( PHP_VERSION_ID < 80100 ) {
 				$property->setAccessible( true );
 			}

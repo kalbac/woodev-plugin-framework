@@ -6200,8 +6200,20 @@ msgstr ""
 msgid "Скрыть"
 msgstr ""
 
+#. translators: 1: titles of the hidden shipping methods, 2: why they have no rate
+#: shipping-method/checkout/class-checkout-handler.php:610
+#, php-format
+msgid "Скрыты: %1$s — %2$s"
+msgstr ""
+
+#. translators: 1: title of the hidden shipping method, 2: why it has no rate
+#: shipping-method/checkout/class-checkout-handler.php:612
+#, php-format
+msgid "Скрыт: %1$s — %2$s"
+msgstr ""
+
 #: shipping-method/class-shipping-method.php:1569
-msgid "Способ доставки скрыт: не удалось рассчитать стоимость доставки. Попробуйте позже или проверьте настройки службы доставки."
+msgid "не удалось рассчитать стоимость доставки. Попробуйте позже или проверьте настройки службы доставки."
 msgstr ""
 
 #: shipping-method/admin/orders/class-order-actions.php:748
@@ -6217,7 +6229,7 @@ msgid "Лицензия плагина не действует, поэтому �
 msgstr ""
 
 #: shipping-method/class-license-gate.php:120
-msgid "Способ доставки скрыт: лицензия плагина не действует. Введите или продлите ключ на странице лицензий: %s"
+msgid "лицензия плагина не действует. Введите или продлите ключ на странице лицензий: %s"
 msgstr ""
 
 #: shipping-method/class-shipping-plugin.php:1952

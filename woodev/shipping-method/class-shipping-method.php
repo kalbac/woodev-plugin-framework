@@ -180,6 +180,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		/** @var array<string, array{package_hash: string, reason_code: string, message: string, context?: array}> Hidden method reasons for this request. */
 		private static array $hidden_reasons = [];
 
+		/**
+		 * The shipping plugins of this process by plugin id — asked LIVE whether their debug mode is on when the
+		 * hint is rendered (#68). A reason is shown only if the plugin that reported it has «Логирование» on, and
+		 * a session-cached reason must follow a merchant who switches it, so the flag is never stored with the reason.
+		 *
+		 * @var array<string, Shipping_Plugin>
+		 */
+		private static array $hidden_reason_plugins = [];
+
 		/** WooCommerce session key for reasons belonging to session-cached package rates. */
 		private const HIDDEN_REASONS_SESSION_KEY = 'woodev_shipping_hidden_reasons';
 
@@ -1010,9 +1019,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 * Reports why this method has no rate for the package currently being calculated.
 		 * The supplied message is for a store manager; carrier exception text must not be passed here.
 		 *
+		 * The message is the REASON only — never the method's name. The framework records the instance
+		 * title (what the buyer sees, {@see self::get_title()}) beside it, and the checkout hint groups
+		 * the methods that share a reason into one line («Скрыты: А, Б — reason», #68).
+		 *
 		 * @since 2.0.2
 		 * @param string               $reason_code Stable reason identifier.
-		 * @param string               $message     Safe, plugin-supplied explanation for the manager.
+		 * @param string               $message     Safe, plugin-supplied reason for the manager, without the method title.
 		 * @param array<string, mixed> $context     Optional request-only context; never persisted or rendered to the customer.
 		 * @return void
 		 */
@@ -1021,10 +1034,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 				return;
 			}
 
+			$plugin = $this->get_plugin();
+			self::register_hidden_reason_plugin( $plugin );
+
 			self::$hidden_reasons[ $this->active_hidden_reason_key ] = [
 				'package_hash' => explode( ':', $this->active_hidden_reason_key, 2 )[0],
 				'reason_code' => strtolower( (string) preg_replace( '/[^a-z0-9_\\-]/i', '', $reason_code ) ),
 				'message'     => $message,
+				'title'       => $this->hidden_reason_title(),
+				'plugin_id'   => (string) $plugin->get_id(),
 				'context'     => $context,
 			];
 
@@ -1040,10 +1058,47 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		}
 
 		/**
+		 * Makes a shipping plugin known to the hidden-method hint, so the hint can ask whether ITS debug mode is on.
+		 *
+		 * Called by {@see Shipping_Plugin::add_hooks()} for every shipping plugin, and by {@see self::report_hidden()}.
+		 * A plugin that is not registered has its reasons kept out of the hint (fail closed).
+		 *
+		 * @since 2.0.2
+		 * @param Shipping_Plugin $plugin The shipping plugin.
+		 * @return void
+		 */
+		public static function register_hidden_reason_plugin( Shipping_Plugin $plugin ): void {
+			self::$hidden_reason_plugins[ (string) $plugin->get_id() ] = $plugin;
+		}
+
+		/**
+		 * Whether the admin hint may show this reason: only while the debug mode («Логирование», `enable_debug`)
+		 * of the plugin that reported it is on (#68). Non-IT merchants see the hint on their own checkout and
+		 * take it for a fault; the reason is always in the WooCommerce log regardless.
+		 *
+		 * Each plugin answers for its own reasons, so two carriers on one checkout show theirs independently.
+		 * An entry with no plugin id (persisted by an older version) or of an unknown plugin is not shown.
+		 *
+		 * @since 2.0.2
+		 * @param array<string, mixed> $reason One entry of {@see self::get_hidden_reasons()}.
+		 * @return bool
+		 */
+		public static function is_hidden_reason_visible( array $reason ): bool {
+			$plugin_id = $reason['plugin_id'] ?? '';
+			if ( ! is_string( $plugin_id ) || '' === $plugin_id || ! isset( self::$hidden_reason_plugins[ $plugin_id ] ) ) {
+				return false;
+			}
+
+			return self::$hidden_reason_plugins[ $plugin_id ]->is_debug_enabled();
+		}
+
+		/**
 		 * Returns reasons only for current shipping packages, pruning obsolete session entries.
 		 *
 		 * @since 2.0.2
-		 * @return array<string, array{package_hash: string, reason_code: string, message: string, context?: array}>
+		 * @since 2.0.2 Each reason carries `title`, the instance title of the method that reported it ('' when unknown),
+		 *              and `plugin_id`, the id of the plugin that reported it.
+		 * @return array<string, array{package_hash: string, reason_code: string, message: string, title?: string, plugin_id?: string, context?: array}>
 		 */
 		public static function get_hidden_reasons(): array {
 			if ( ! current_user_can( 'manage_woocommerce' ) ) {
@@ -1092,7 +1147,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			call_user_func( [ $session, 'set' ], self::HIDDEN_REASONS_SESSION_KEY, $reasons );
 		}
 
-		/** @return array<string, array{package_hash: string, reason_code: string, message: string, context?: array}> */
+		/** @return array<string, array{package_hash: string, reason_code: string, message: string, title?: string, context?: array}> */
 		private static function get_persisted_hidden_reasons(): array {
 			$session = self::hidden_reason_session();
 			if ( null === $session ) {
@@ -1148,6 +1203,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 				unset( $package['contents'][ $item_id ]['data'] );
 			}
 			return 'wc_ship_' . md5( wp_json_encode( $package ) . \WC_Cache_Helper::get_transient_version( 'shipping' ) );
+		}
+
+		/**
+		 * The title the shop gave this instance — the one the buyer sees — for the manager's hint.
+		 *
+		 * `get_title()` runs a third party's filter, so a non-string return is discarded.
+		 *
+		 * @return string
+		 */
+		private function hidden_reason_title(): string {
+			$title = $this->get_title();
+
+			return is_string( $title ) ? trim( $title ) : '';
 		}
 
 		/**
@@ -1673,7 +1741,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 				$this->active_hidden_reason_key = $key;
 				$this->report_hidden(
 					'rate_calculation_failed',
-					__( 'Способ доставки скрыт: не удалось рассчитать стоимость доставки. Попробуйте позже или проверьте настройки службы доставки.', 'woodev-plugin-framework' )
+					__( 'не удалось рассчитать стоимость доставки. Попробуйте позже или проверьте настройки службы доставки.', 'woodev-plugin-framework' )
 				);
 				$this->active_hidden_reason_key = null;
 			}
