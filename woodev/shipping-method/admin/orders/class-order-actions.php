@@ -1299,7 +1299,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 				}
 
 				// #1180: an action that needs input declares it; an action with none keeps exactly the shape it always had.
-				$fields = Order_Action_Fields::sanitize( $action['fields'] ?? null );
+				// A per-order action: a `select` may load its options when the dialog opens (`async_options`).
+				$fields = Order_Action_Fields::sanitize( $action['fields'] ?? null, false, true );
 
 				if ( [] !== $fields ) {
 					$sanitized[ count( $sanitized ) - 1 ]['fields'] = $fields;

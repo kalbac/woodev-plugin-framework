@@ -148,6 +148,11 @@ defined( 'ABSPATH' ) || exit;
 		'none'     => __( '— не выбрано —', 'woodev-plugin-framework' ),
 		'required' => __( 'обязательное поле', 'woodev-plugin-framework' ),
 		'range'    => __( 'Время окончания должно быть позже времени начала.', 'woodev-plugin-framework' ),
+		// A select whose options are loaded when the dialog opens (`async_options`).
+		'loading'  => __( 'Загружаем варианты…', 'woodev-plugin-framework' ),
+		'empty'    => __( 'Нет доступных вариантов.', 'woodev-plugin-framework' ),
+		'failed'   => __( 'Не удалось загрузить варианты. Попробуйте ещё раз.', 'woodev-plugin-framework' ),
+		'retry'    => __( 'Повторить', 'woodev-plugin-framework' ),
 	];
 	?>
 
@@ -196,6 +201,20 @@ defined( 'ABSPATH' ) || exit;
 					<?php if ( ! empty( $action['fields'] ) ) : ?>
 						data-fields="<?php echo esc_attr( (string) wp_json_encode( $action['fields'] ) ); ?>"
 						data-labels="<?php echo esc_attr( (string) wp_json_encode( $field_dialog_labels ) ); ?>"
+						<?php
+						// Where an `async_options` select loads its options when the dialog opens. The ROUTE, not a URL, goes through
+						// `rest_url()` whole (plain permalinks keep `?rest_route=` in it); the dialog asks only once it is opened.
+						$options_urls = [];
+						foreach ( $action['fields'] as $declared_field ) {
+							if ( ! empty( $declared_field['async_options'] ) ) {
+								$options_urls[ (string) $declared_field['id'] ] = rest_url( \Woodev_REST_V1_Registrar::ROUTE_NAMESPACE . '/shipping/orders/' . $order_id . '/actions/' . rawurlencode( (string) $action['action'] ) . '/fields/' . rawurlencode( (string) $declared_field['id'] ) . '/options' );
+							}
+						}
+						?>
+						<?php if ( [] !== $options_urls ) : ?>
+							data-options-urls="<?php echo esc_attr( (string) wp_json_encode( $options_urls ) ); ?>"
+							data-rest-nonce="<?php echo esc_attr( $rest_nonce ); ?>"
+						<?php endif; ?>
 					<?php endif; ?>
 					<?php disabled( ! empty( $action['disabled'] ) ); ?>
 				>

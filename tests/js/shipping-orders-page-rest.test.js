@@ -9,6 +9,7 @@
 
 import apiFetch from '@wordpress/api-fetch';
 import {
+	fetchActionFieldOptions,
 	fetchBulkDocument,
 	fetchOrderDocument,
 	fetchOrders,
@@ -540,5 +541,22 @@ describe( 'toolbar actions (s164)', () => {
 		apiFetch.mockRejectedValueOnce( rejection );
 
 		await expect( submitToolbarAction( 'call_courier', {} ) ).rejects.toBe( rejection );
+	} );
+} );
+
+describe( 'fetchActionFieldOptions (Yandex #84)', () => {
+	test( 'GETs the field\'s options route of one order with the nonce, and returns the answer', async () => {
+		apiFetch.mockResolvedValue( { options: [ { value: 'a', label: 'A' } ] } );
+
+		const answer = await fetchActionFieldOptions( 42, 'pick_interval', 'interval' );
+
+		expect( answer ).toEqual( { options: [ { value: 'a', label: 'A' } ] } );
+		expect( calledUrl() ).toBe( 'https://example.test/wp-json/woodev/v1/shipping/orders/42/actions/pick_interval/fields/interval/options' );
+
+		const request = apiFetch.mock.calls[ 0 ][ 0 ];
+
+		expect( request.method ).toBe( 'GET' );
+		expect( request.headers[ 'X-WP-Nonce' ] ).toBe( 'abc' );
+		expect( request.data ).toBeUndefined();
 	} );
 } );

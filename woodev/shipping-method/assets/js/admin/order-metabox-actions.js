@@ -20,6 +20,11 @@
  * usual fields. The browser checks `required` / `min` / `max` / `maxlength` while typing; the server checks
  * them again against the same declaration and flashes a notice on a miss.
  *
+ * A SELECT WITH `async_options` (Yandex #84) ships no options: when the dialog opens it asks the field's route
+ * (`data-options-urls`, a map of field id to URL, with `data-rest-nonce`) for THIS order's options, says «loading» /
+ * «nothing to offer» / the failure with a retry in the dialog, and the form cannot be sent until the list is in.
+ * Nothing is asked before the dialog is opened.
+ *
  * A CARRIER DOCUMENT (waybill, barcode) is not posted at all: its button carries `data-document-url` (the documents
  * REST route, `?format=json`) and `data-rest-nonce`, and a click fetches it exactly as the orders page does — a PDF is
  * saved, a carrier link opens, «формируется» (while it keeps asking by itself, #1191) and a failure are said in the line under the buttons. One contract for
@@ -106,20 +111,132 @@
 	}
 
 	/**
+	 * Loads the options of an `async_options` select for the order, now that its dialog is open.
+	 *
+	 * The select is disabled and says «loading» until the answer is in; an empty answer and a failure are said in a line
+	 * under it (a failure with a «retry» button). While the list is not in, `pending()` is true, and the select holds no
+	 * value, so a required field blocks the submit.
+	 *
+	 * @param {HTMLSelectElement} control the select.
+	 * @param {HTMLElement}       wrap    the field's block, where the status line goes.
+	 * @param {Object}            field   the declared field.
+	 * @param {Object}            labels  the dialog's sentences.
+	 * @param {{url: string, nonce: string}} [source] where to ask.
+	 * @return {{pending: Function}} `pending()` is true while a request is in flight.
+	 */
+	function loadOptionsInto( control, wrap, field, labels, source ) {
+		var state = { loading: false };
+		var status = el( 'p', 'woodev-action-form__status' );
+		var retry = el( 'button', 'button-link woodev-action-form__retry', labels.retry || '' );
+
+		status.setAttribute( 'role', 'status' );
+		retry.type = 'button';
+		retry.hidden = true;
+		wrap.appendChild( status );
+		wrap.appendChild( retry );
+
+		function say( text, isError ) {
+			status.textContent = text;
+			status.className = 'woodev-action-form__status' + ( isError ? ' is-error' : '' );
+			retry.hidden = ! isError;
+		}
+
+		function fill( options, blankText ) {
+			while ( control.options.length ) {
+				control.remove( 0 );
+			}
+
+			var blank = el( 'option', '', blankText );
+
+			blank.value = '';
+			control.appendChild( blank );
+			options.forEach( function ( option ) {
+				var node = el( 'option', '', option.label );
+
+				node.value = option.value;
+				control.appendChild( node );
+			} );
+			control.value = '';
+		}
+
+		function load() {
+			if ( state.loading ) {
+				return;
+			}
+
+			state.loading = true;
+			control.disabled = true;
+			fill( [], labels.loading || '' );
+			say( '', false );
+
+			var request = source && source.url
+				? window.fetch( source.url, {
+					method: 'GET',
+					credentials: 'same-origin',
+					headers: { 'X-WP-Nonce': source.nonce || '' },
+				} ).then( function ( response ) {
+					return response.json().then( function ( body ) {
+						return { ok: response.ok, body: body || {} };
+					} );
+				} )
+				: Promise.reject( new Error( 'no source' ) );
+
+			request.then( function ( result ) {
+				state.loading = false;
+
+				if ( ! result.ok || ! Array.isArray( result.body.options ) ) {
+					fill( [], labels.none || '' );
+					say( ( ! result.ok && result.body.message ) || labels.failed || '', true );
+					return;
+				}
+
+				fill( result.body.options, labels.none || '' );
+
+				if ( 0 === result.body.options.length ) {
+					say( field.empty_text || labels.empty || '', false );
+					return;
+				}
+
+				control.disabled = false;
+			} ).catch( function () {
+				state.loading = false;
+				fill( [], labels.none || '' );
+				say( labels.failed || '', true );
+			} );
+		}
+
+		retry.addEventListener( 'click', load );
+		load();
+
+		return {
+			pending: function () {
+				// A disabled select is exempt from the browser's own `required` check, so «nothing to offer» and a failed load
+				// block a REQUIRED field here until a retry fills it; an optional one is sent empty.
+				return state.loading || ( !! field.required && control.disabled );
+			},
+		};
+	}
+
+	/**
 	 * Builds the input (or inputs) of one declared field.
 	 *
 	 * @param {Object} field  one entry of the action's `fields`.
 	 * @param {string} uid    a page-unique prefix for ids.
 	 * @param {Object} labels the dialog's sentences.
-	 * @return {{wrap: HTMLElement, checks: Function}} the field's block; `checks()` runs the checks the browser has no attribute for.
+	 * @param {{url: string, nonce: string}} [source] where an `async_options` select loads its options; absent for any other field.
+	 * @return {{wrap: HTMLElement, checks: Function, pending: Function}} the field's block; `checks()` runs the checks the browser
+	 *         has no attribute for, `pending()` is true while the field's options are still being loaded.
 	 */
-	function buildField( field, uid, labels ) {
+	function buildField( field, uid, labels, source ) {
 		var wrap = el( 'div', 'woodev-action-form__field woodev-action-form__field--' + field.type );
 		var controlId = uid + '-' + field.id;
 		var label = el( 'label', 'woodev-action-form__label', field.label );
 		var name = 'payload[' + field.id + ']';
 		var control;
 		var checks = function () {};
+		var pending = function () {
+			return false;
+		};
 
 		label.setAttribute( 'for', controlId );
 
@@ -149,6 +266,10 @@
 				control.appendChild( node );
 			} );
 			control.value = field.default || '';
+
+			if ( field.async_options ) {
+				pending = loadOptionsInto( control, wrap, field, labels, source ).pending;
+			}
 		} else if ( 'textarea' === field.type ) {
 			control = el( 'textarea', 'woodev-action-form__control' );
 			control.rows = 3;
@@ -229,7 +350,7 @@
 			wrap.appendChild( el( 'p', 'woodev-action-form__help', field.help ) );
 		}
 
-		return { wrap: wrap, checks: checks };
+		return { wrap: wrap, checks: checks, pending: pending };
 	}
 
 	/**
@@ -262,8 +383,15 @@
 		} );
 		var form = el( 'form', 'woodev-action-form' );
 		var uid = 'woodev-action-' + ( ++dialogSeq );
+		var optionsUrls = parseJson( button.getAttribute( 'data-options-urls' ) ) || {};
+		var restNonce = button.getAttribute( 'data-rest-nonce' ) || '';
 		var built = fields.map( function ( field ) {
-			return buildField( field, uid, labels );
+			return buildField(
+				field,
+				uid,
+				labels,
+				field.async_options ? { url: optionsUrls[ field.id ] || '', nonce: restNonce } : undefined
+			);
 		} );
 		var buttons = el( 'div', 'woodev-action-form__buttons' );
 		var cancel = el( 'button', 'button', labels.cancel || '' );
@@ -288,6 +416,13 @@
 			event.preventDefault();
 
 			if ( submitting ) {
+				return;
+			}
+
+			// Options still on their way: nothing to send yet.
+			if ( built.some( function ( item ) {
+				return item.pending();
+			} ) ) {
 				return;
 			}
 
@@ -624,6 +759,7 @@
 		module.exports = {
 			buildForm: buildForm,
 			buildField: buildField,
+			loadOptionsInto: loadOptionsInto,
 			downloadDocument: downloadDocument,
 			cancelPolls: cancelPolls,
 			onClick: onClick,
