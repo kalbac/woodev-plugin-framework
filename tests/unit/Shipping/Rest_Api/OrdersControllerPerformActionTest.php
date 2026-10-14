@@ -90,6 +90,8 @@ final class OrdersControllerPerformActionTest extends TestCase {
 
 	private function register_handler( bool $supports_update = false ): Abstract_Shipment_Handler {
 		$handler = Mockery::mock( Abstract_Shipment_Handler::class );
+		$handler->shouldReceive( 'supports_reconcile' )->andReturn( false )->byDefault();
+		$handler->shouldReceive( 'export_unknown_since' )->andReturn( 0 )->byDefault();
 		$handler->shouldReceive( 'supports_update' )->andReturn( $supports_update );
 		// #1204: a carrier that declares nothing keeps today's behaviour.
 		$handler->shouldReceive( 'supports_refusal' )->andReturn( false )->byDefault();
@@ -589,6 +591,18 @@ final class OrdersControllerPerformActionTest extends TestCase {
 		$result = $this->controller()->perform_action( $this->request( 123, Order_Actions::EXPORT ) );
 
 		$this->assertSame( 'Заказ выгружен перевозчику.', $result['message'] );
+	}
+
+	public function test_retry_export_reuses_the_export_success_and_failure_messages(): void {
+		$success = new \ReflectionMethod( Orders_Controller::class, 'action_success_message' );
+		$failure = new \ReflectionMethod( Orders_Controller::class, 'action_failure_message' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$success->setAccessible( true );
+			$failure->setAccessible( true );
+		}
+
+		$this->assertSame( $success->invoke( null, Order_Actions::EXPORT ), $success->invoke( null, Order_Actions::RETRY_EXPORT ) );
+		$this->assertSame( $failure->invoke( null, Order_Actions::EXPORT ), $failure->invoke( null, Order_Actions::RETRY_EXPORT ) );
 	}
 
 	/**

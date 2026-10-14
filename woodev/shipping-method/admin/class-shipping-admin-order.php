@@ -751,6 +751,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 		 */
 		private static function action_failure_message( string $action ): string {
 			switch ( $action ) {
+				case Order_Actions::RETRY_EXPORT:
 				case Order_Actions::EXPORT:
 					return __( 'Не удалось выгрузить заказ перевозчику.', 'woodev-plugin-framework' );
 

@@ -850,6 +850,8 @@ class OrderRowBuilderTest extends TestCase {
 	 */
 	public function test_actions_reflects_order_actions_for_row(): void {
 		$handler = Mockery::mock( Abstract_Shipment_Handler::class );
+		$handler->shouldReceive( 'supports_reconcile' )->andReturn( false )->byDefault();
+		$handler->shouldReceive( 'export_unknown_since' )->andReturn( 0 )->byDefault();
 
 		Orders_Registry::instance()->register_shipment_handler( 'cdek', $handler );
 

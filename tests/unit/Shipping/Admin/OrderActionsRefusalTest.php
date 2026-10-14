@@ -91,6 +91,8 @@ final class OrderActionsRefusalTest extends TestCase {
 	 */
 	private function handler( array $handed_over = [], bool $refusal = false, ?array $refusable = null ): Abstract_Shipment_Handler {
 		$handler = Mockery::mock( Abstract_Shipment_Handler::class );
+		$handler->shouldReceive( 'supports_reconcile' )->andReturn( false )->byDefault();
+		$handler->shouldReceive( 'export_unknown_since' )->andReturn( 0 )->byDefault();
 		$handler->shouldReceive( 'supports_update' )->andReturn( false );
 		$handler->shouldReceive( 'get_handed_over_statuses' )->andReturn( $handed_over );
 		$handler->shouldReceive( 'is_handed_over' )->andReturnUsing( static fn( $o, $c ) => in_array( $c, $handed_over, true ) )->byDefault();

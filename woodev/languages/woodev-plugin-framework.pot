@@ -2022,6 +2022,18 @@ msgstr ""
 msgid "Выгрузить заказ в систему перевозчика"
 msgstr ""
 
+#: shipping-method/admin/orders/class-order-actions.php:249
+msgid "Выгрузить повторно (я проверил кабинет)"
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:250
+msgid "Проверьте, что заявки нет в кабинете перевозчика, прежде чем выгружать заказ повторно."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:254
+msgid "Вы проверили кабинет перевозчика и подтверждаете, что заявки для этого заказа там нет?"
+msgstr ""
+
 #: shipping-method/admin/orders/class-order-actions.php:206
 #: assets/build/shipping-orders-page/index.js:13
 msgid "Обновить"
@@ -2324,6 +2336,10 @@ msgstr ""
 
 #: shipping-method/order/class-export-retry.php:251
 msgid "Исход выгрузки неизвестен — проверьте кабинет перевозчика, автоматическая выгрузка остановлена"
+msgstr ""
+
+#: shipping-method/order/abstract-shipment-handler.php:286
+msgid "Исход прошлой выгрузки неизвестен — проверьте заказ в кабинете перевозчика. Если заявки там нет, выгрузите повторно."
 msgstr ""
 
 #. translators: %s: the carrier's reason for refusing or failing the export
