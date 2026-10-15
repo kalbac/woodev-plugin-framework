@@ -54,7 +54,6 @@ const {
 	chooseShipping,
 	chosenRate,
 	expectCarrierOwnData,
-	expectKnownDefect,
 	expectNoStaleKeys,
 	openCheckout,
 	optionScope,
@@ -83,10 +82,7 @@ const PLACE = {
 	myshkin:     { name: 'Мышкин', region: 'Ярославская область', kind: 'small town, mixed', serves: [ CDEK_COURIER, METHOD_YANDEX_PICKUP ] },
 	chemal:      { name: 'Чемал', region: 'Республика Алтай', kind: 'village, CDEK only', serves: [ METHOD_CDEK_PICKUP, CDEK_COURIER ] },
 	krPolyana:   { name: 'Красная Поляна', region: 'Краснодарский край', kind: 'village', serves: [ METHOD_CDEK_PICKUP, CDEK_COURIER, METHOD_YANDEX_PICKUP, METHOD_YANDEX_COURIER ] },
-	// `needsRegion`: offered only while «Регион» is on the page (M3 — with it removed WooCommerce sends the state wildcard `*` (or the
-	// shop's stale default state), not an empty string, so the Yandex courier address is «Russia, *, Приозерск» and Yandex cannot
-	// geocode it; measured for Приозерск (409 ₽ with the region shown) and Суздаль (706 ₽)).
-	priozersk:   { name: 'Приозерск', region: 'Ленинградская область', kind: 'small town', serves: [ METHOD_CDEK_PICKUP, CDEK_COURIER, METHOD_YANDEX_PICKUP, METHOD_YANDEX_COURIER ], needsRegion: [ METHOD_YANDEX_COURIER ] },
+	priozersk:   { name: 'Приозерск', region: 'Ленинградская область', kind: 'small town', serves: [ METHOD_CDEK_PICKUP, CDEK_COURIER, METHOD_YANDEX_PICKUP, METHOD_YANDEX_COURIER ] },
 	ferapontovo: { name: 'Ферапонтово', region: 'Вологодская область', kind: 'village, nobody serves it', serves: [] },
 };
 
@@ -195,19 +191,7 @@ for ( const cell of CELLS ) {
 
 			rates = await M.carrierRates( page );
 
-			const lost = 'remove' === cell.regionField ? place.needsRegion || [] : [];
-
-			// The ordinary check covers the methods that are NOT defective; the Yandex courier M3 hides is asserted by its wrapper only,
-			// because a fixed courier here would fail this line before the wrapper could report «M3 is FIXED».
-			expect( Object.keys( rates ).filter( ( id ) => ! lost.includes( id ) ).sort(), `${ cell.id } ${ place.name } (${ place.kind }): offered carrier methods — ${ M.describeRates( rates ) }` ).toEqual( place.serves.filter( ( id ) => ! lost.includes( id ) ).sort() );
-
-			if ( lost.length ) {
-				await expectKnownDefect(
-					'M3',
-					'with «Регион» removed the Yandex courier rate is hidden («Яндекс не смог найти адрес покупателя на карте») — the package state is the WooCommerce wildcard «*» (guest) or the shop default state (admin), not empty, so courier_address() (trait-yandex-rate-method.php:854, guard \'\' === $state) never takes the record region and geocodes «Russia, *, Приозерск»',
-					() => expect( Object.keys( rates ), `${ cell.id } ${ place.name }: the Yandex courier is offered as it is with «Регион» shown` ).toEqual( expect.arrayContaining( lost ) )
-				);
-			}
+			expect( Object.keys( rates ).sort(), `${ cell.id } ${ place.name } (${ place.kind }): offered carrier methods — ${ M.describeRates( rates ) }` ).toEqual( [ ...place.serves ].sort() );
 
 			for ( const [ id, price ] of Object.entries( rates ) ) {
 				expect( sane( price ), `${ cell.id } ${ place.name }: ${ id } price ${ price } is a sane number` ).toBe( true );
