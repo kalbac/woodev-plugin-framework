@@ -17,7 +17,7 @@ All helpers are static methods. You call them without creating an object, and th
 
 ## Strings
 
-These methods are safe for multibyte (UTF-8) text and match case-sensitively.
+They match case-sensitively. With the `mbstring` extension loaded they handle UTF-8 text; without it they fall back to ASCII and drop non-ASCII characters, so declare `mbstring` in your plugin's `dependencies` if you use them on Cyrillic or other UTF-8 text.
 
 | Method | Description |
 |---|---|

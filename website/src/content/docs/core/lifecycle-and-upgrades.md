@@ -22,7 +22,7 @@ After `install()` or `upgrade()` it stores the plugin's current version. You wri
 The work is done by `Woodev_Lifecycle`. Every plugin gets a default one, and you subclass it to add your routines.
 
 :::caution
-Routines run only on **wp-admin page loads**, not on the storefront, in AJAX requests, in WP-Cron or in REST requests. After an update they wait for the first admin page load. Never write a feature that needs an upgrade routine to have run before the storefront works, and do not assume WP-CLI runs them.
+Install and upgrade routines run only on **wp-admin page loads**, not on the storefront, in AJAX requests, in WP-Cron or in REST requests. After an update they wait for the first admin page load. (`activate()` is the exception: it runs on the first `admin_init` after activation, which can be an admin AJAX request.) Never write a feature that needs an upgrade routine to have run before the storefront works, and do not assume WP-CLI runs them.
 :::
 
 ## Wire up your lifecycle class
@@ -118,7 +118,7 @@ class My_Carrier_Lifecycle extends Woodev_Lifecycle {
 	protected $upgrade_versions = [ '1.1.0', '1.2.0' ];
 
 	/**
-	 * Runs once, on the first admin page load after the first activation.
+	 * Runs once, on the first admin_init request after the first activation.
 	 *
 	 * @return void
 	 */
@@ -233,7 +233,7 @@ Each routine is logged at debug level with its start and end.
 
 WordPress only accepts `register_activation_hook()` before `plugins_loaded`, which is too early for a framework plugin. The framework tracks activation instead, with an option, and calls your methods:
 
-- `activate()` runs once on the first admin page load after activation, before `install()` on a new site.
+- `activate()` runs once on the first `admin_init` request after activation (possibly an admin AJAX request), before `install()` on a new site.
 - `deactivate()` runs when the merchant deactivates the plugin.
 
 Deactivation is not uninstallation. Clear your scheduled events in `deactivate()`, and leave the merchant's data alone.
