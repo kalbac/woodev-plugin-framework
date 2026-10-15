@@ -1,0 +1,196 @@
+---
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
+import { Code } from '@astrojs/starlight/components';
+import { frameworkVersion } from '../../plugins/framework-version.mjs';
+import '../styles/landing.css';
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const doc = (path: string) => `${base}/${path}/`;
+const repo = 'https://github.com/kalbac/woodev-plugin-framework';
+const partnerUrl = 'https://woodev.ru/contacts';
+const storeUrl = 'https://woodev.ru/shop';
+
+const entryFile = `<?php
+/**
+ * Plugin Name: My Carrier for WooCommerce
+ */
+defined( 'ABSPATH' ) || exit;
+
+require_once __DIR__ . '/woodev/loader.php';
+
+Woodev_Loader::register( __FILE__, [
+    'plugin_id'            => 'my-carrier',
+    'download_id'          => 1234,
+    'plugin_name'          => 'My Carrier',
+    'plugin_version'       => '1.0.0',
+    'framework_version'    => '${frameworkVersion}',
+    'backwards_compatible' => '2.0.0',
+    'platform'             => 'woocommerce',
+    'type'                 => 'shipping',
+    'requirements'         => [
+        'php'         => '7.4',
+        'wordpress'   => '6.6',
+        'woocommerce' => '7.0',
+    ],
+    'supported_features'   => [ 'hpos' ],
+    'main_class'           => 'My_Carrier_Plugin',
+] );`;
+
+const icons = {
+	layers: '<path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/>',
+	sliders: '<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
+	plug: '<path d="M12 22v-5M9 8V2M15 8V2M18 8v5a6 6 0 0 1-12 0V8Z"/>',
+	truck: '<path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62L18.3 9.38A1 1 0 0 0 17.52 9H14"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/>',
+	pin: '<path d="M20 10c0 5-8 12-8 12s-8-7-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>',
+	box: '<path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/>',
+	clipboard: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/>',
+	shield: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1Z"/>',
+	store: '<path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="M2 7h20v3a2 2 0 0 1-4 0 2 2 0 0 1-4 0 2 2 0 0 1-4 0 2 2 0 0 1-4 0 2 2 0 0 1-4 0Z"/>',
+	key: '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/>',
+	refresh: '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+	users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+};
+
+const features = [
+	{ icon: 'layers', title: 'Loader & multi-version', text: 'Ship woodev/ inside every plugin. When several plugins bring their own copy, the newest one serves them all.', href: doc('getting-started/loader-definition-reference') },
+	{ icon: 'sliders', title: 'Settings & setup wizard', text: 'Declare typed settings and get a React settings page, tabs, cards, connection tests and a first-run wizard.', href: doc('settings/overview') },
+	{ icon: 'plug', title: 'API client', text: 'JSON and XML requests, caching, typed exceptions and request logging with secrets redacted.', href: doc('core/calling-external-apis') },
+	{ icon: 'truck', title: 'Shipping methods & rates', text: 'Courier, pickup and postal bases. You return a rate; caching, limits and failure handling are done.', href: doc('shipping/methods-and-rates') },
+	{ icon: 'pin', title: 'Pickup points & checkout', text: 'City fields, pickup point maps and phone masks that work in both the classic and the block checkout.', href: doc('shipping/pickup-points-and-maps') },
+	{ icon: 'clipboard', title: 'Orders & tracking', text: 'An orders screen with export, documents, delivery statuses and buyer emails for every carrier.', href: doc('shipping/orders-export-documents-and-tracking') },
+];
+
+const columns = [
+	{ title: 'Get started', links: [['Introduction', 'getting-started/introduction'], ['Your first plugin', 'getting-started/your-first-plugin'], ['Loader definition', 'getting-started/loader-definition-reference']] },
+	{ title: 'Core', links: [['The plugin class', 'core/plugin-class'], ['Lifecycle & upgrades', 'core/lifecycle-and-upgrades'], ['HPOS & Blocks', 'core/hpos-and-blocks-compatibility']] },
+	{ title: 'Settings & admin', links: [['Typed settings', 'settings/typed-settings'], ['Setup wizard', 'settings/setup-wizard'], ['REST endpoints', 'settings/rest-endpoints']] },
+	{ title: 'Shipping', links: [['Plugin anatomy', 'shipping/plugin-anatomy'], ['Packaging', 'shipping/packaging-and-box-packing'], ['Location fields', 'shipping/location-and-checkout-fields']] },
+];
+
+const steps = [
+	{ n: '01', title: 'Bundle', text: 'Copy the woodev/ folder from the release archive into your plugin. No Composer at runtime.' },
+	{ n: '02', title: 'Declare', text: 'Register your plugin with one literal array: id, versions, requirements, features.' },
+	{ n: '03', title: 'Extend', text: 'Extend a base class — WordPress, WooCommerce or shipping — and fill in only what is yours.' },
+];
+
+const perks = [
+	{ icon: 'store', title: 'A store with an audience', text: 'Your plugin is listed on woodev.ru next to the plugins Russian WooCommerce shops already run.' },
+	{ icon: 'key', title: 'Licences and updates included', text: 'Licence keys, the licences page and automatic updates come with the framework. You write none of it.' },
+	{ icon: 'refresh', title: 'Plays well with others', text: 'Every plugin on the platform shares one framework, so your plugin coexists with the rest on one site.' },
+	{ icon: 'users', title: 'Support from people who ship', text: 'We review, test and help release — the same process our own carrier plugins go through.' },
+];
+---
+
+<StarlightPage
+	frontmatter={{
+		title: 'Woodev Plugin Framework',
+		description: 'A PHP framework for building WooCommerce plugins — from the loader to shipping, checkout and orders.',
+		template: 'splash',
+	}}
+>
+	<div class="wd-landing">
+		<section class="wd-hero">
+			<div class="wd-hero__copy">
+				<p class="wd-eyebrow"><span class="wd-dot"></span> v{frameworkVersion} · WooCommerce plugin framework</p>
+				<h1 class="wd-display">Build WooCommerce<br />plugins that <span class="wd-hl">ship.</span></h1>
+				<p class="wd-lead">
+					Woodev gives your plugin a loader, typed settings with a React admin, an API client and a complete
+					shipping toolkit — so you write the carrier logic, not the plumbing.
+				</p>
+				<div class="wd-actions">
+					<a class="wd-btn wd-btn--primary" href={doc('getting-started/introduction')}>Get started <span aria-hidden="true">→</span></a>
+					<a class="wd-btn wd-btn--ghost" href={repo}>View on GitHub</a>
+				</div>
+				<ul class="wd-facts">
+					<li><strong>PHP 7.4+</strong> WordPress 6.6+</li>
+					<li><strong>HPOS</strong> ready</li>
+					<li><strong>Classic</strong> + block checkout</li>
+				</ul>
+			</div>
+			<div class="wd-hero__code">
+				<div class="wd-window">
+					<div class="wd-window__bar"><span></span><span></span><span></span><em>my-carrier.php</em></div>
+					<Code code={entryFile} lang="php" frame="none" />
+				</div>
+			</div>
+		</section>
+
+		<section class="wd-section">
+			<header class="wd-section__head">
+				<p class="wd-kicker">What you get</p>
+				<h2 class="wd-h2">Everything a WooCommerce plugin needs</h2>
+			</header>
+			<div class="wd-grid">
+				{features.map((f) => (
+					<a class="wd-card" href={f.href}>
+						<span class="wd-icon"><svg viewBox="0 0 24 24" set:html={icons[f.icon as keyof typeof icons]} /></span>
+						<h3>{f.title}</h3>
+						<p>{f.text}</p>
+						<span class="wd-card__more">Read more →</span>
+					</a>
+				))}
+			</div>
+		</section>
+
+		<section class="wd-section">
+			<header class="wd-section__head">
+				<p class="wd-kicker">How it works</p>
+				<h2 class="wd-h2">Three steps to a working plugin</h2>
+			</header>
+			<ol class="wd-steps">
+				{steps.map((s) => (
+					<li>
+						<span class="wd-steps__n">{s.n}</span>
+						<h3>{s.title}</h3>
+						<p>{s.text}</p>
+					</li>
+				))}
+			</ol>
+		</section>
+
+		<section class="wd-partner" aria-labelledby="partner-title">
+			<div class="wd-partner__copy">
+				<p class="wd-kicker">Partner programme</p>
+				<h2 id="partner-title" class="wd-h2 wd-h2--big">You build plugins.<br />We bring <span class="wd-hl">buyers.</span></h2>
+				<p class="wd-lead">
+					Develop WooCommerce plugins on Woodev and sell them on woodev.ru. You keep doing what you do best;
+					the platform takes care of distribution, licences and updates.
+				</p>
+				<div class="wd-actions">
+					<a class="wd-btn wd-btn--primary" href={partnerUrl}>Become a partner <span aria-hidden="true">→</span></a>
+					<a class="wd-btn wd-btn--ghost" href={storeUrl}>See the store</a>
+				</div>
+			</div>
+			<ul class="wd-perks">
+				{perks.map((p) => (
+					<li>
+						<span class="wd-icon"><svg viewBox="0 0 24 24" set:html={icons[p.icon as keyof typeof icons]} /></span>
+						<div>
+							<h3>{p.title}</h3>
+							<p>{p.text}</p>
+						</div>
+					</li>
+				))}
+			</ul>
+		</section>
+
+		<section class="wd-section wd-section--links">
+			<header class="wd-section__head">
+				<p class="wd-kicker">Documentation</p>
+				<h2 class="wd-h2">Jump straight in</h2>
+			</header>
+			<div class="wd-columns">
+				{columns.map((c) => (
+					<nav aria-label={c.title}>
+						<h3>{c.title}</h3>
+						<ul>
+							{c.links.map(([label, path]) => (
+								<li><a href={doc(path)}>{label}</a></li>
+							))}
+						</ul>
+					</nav>
+				))}
+			</div>
+		</section>
+	</div>
+</StarlightPage>
