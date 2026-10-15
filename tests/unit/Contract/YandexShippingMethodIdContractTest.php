@@ -13,7 +13,7 @@ use Woodev\Tests\Unit\TestCase;
  * Guards the yandex shipping-method-ID contract of the v1 -> v2.0.0 migration (G4, card #1241, decision D10).
  *
  * The v2 plugin is not in this repository, so no plugin code runs here. Two things are pinned:
- * 1. THE SOURCE SET: the v1 IDs and `tariff` values, read from plugins-reference/woocommerce-yandex-delivery (1.3.7).
+ * 1. THE SOURCE SET: the v1 IDs and `tariff` values, read from the committed v1 fixture tests/_fixtures/legacy-v1/woocommerce-yandex-delivery (1.3.7).
  * 2. THE TARGET CONTRACT: the rewrite map is declared, not derived; the v2 migration must implement it (spec §12 step 1).
  *
  * The plugin repository must test: time_interval other-day rows become courier, self_pickup become pickup, a missing or
@@ -52,17 +52,13 @@ final class YandexShippingMethodIdContractTest extends TestCase {
 	private const DELETED_V1_IDS = [ self::V1_EXPRESS_ID ];
 
 	/**
-	 * Skips when the v1 reference copy is absent (it is gitignored).
+	 * Reads a file of the frozen v1 plugin source committed under tests/_fixtures/legacy-v1.
 	 *
 	 * @param string $relative Path inside the v1 reference plugin.
 	 * @return string Contents of the v1 source file.
 	 */
 	private function reference_source( string $relative ): string {
-		if ( ! is_dir( dirname( __DIR__, 3 ) . '/plugins-reference/woocommerce-yandex-delivery' ) ) {
-			$this->markTestSkipped( 'plugins-reference/woocommerce-yandex-delivery is not present (gitignored); this yandex contract guard runs where the reference plugin copy exists.' );
-		}
-
-		$file = dirname( __DIR__, 3 ) . '/plugins-reference/woocommerce-yandex-delivery/' . $relative;
+		$file = dirname( __DIR__, 3 ) . '/tests/_fixtures/legacy-v1/woocommerce-yandex-delivery/' . $relative;
 		$this->assertFileExists( $file, 'Canonical v1 source must exist: ' . $relative );
 
 		return (string) file_get_contents( $file );

@@ -146,7 +146,7 @@ if [ -d "$TRANSFER" ]; then
 	[ -f composer.lock ] || { [ -f "$TRANSFER/composer.lock" ] && cp "$TRANSFER/composer.lock" composer.lock && say 'restored composer.lock'; }
 	[ -d plugins-reference ] || { [ -f "$TRANSFER/plugins-reference.tar" ] && tar -xf - < "$TRANSFER/plugins-reference.tar" && say 'restored plugins-reference/'; }
 else
-	say '⚠ no .machine-transfer/ — the rig will start EMPTY and plugins-reference/ is missing (five contract tests skip)'
+	say '⚠ no .machine-transfer/ — the rig will start EMPTY and the gitignored plugins-reference/ donor folder is missing (the contract tests do not need it: the v1 sources are committed under tests/_fixtures/legacy-v1/)'
 	record transfer-bundle MISSING
 fi
 [ -f .wp-env.override.json ] || say '⚠ no .wp-env.override.json — wp-env will use its default ports (8888/8889), not 8973/8974'

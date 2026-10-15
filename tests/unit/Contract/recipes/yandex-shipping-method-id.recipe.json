@@ -2,7 +2,7 @@
   "zone_id": "shipping_method_id",
   "contract_id": "shipping_method_id_yandex_express",
   "description": "v1 yandex express method ID must stay exactly 'yandex_delivery_express' in the v1 source: the v1 -> v2 migration finds and deletes its zone rows by this ID (D10). Guarded by YandexShippingMethodIdContractTest.",
-  "file": "plugins-reference/woocommerce-yandex-delivery/includes/class-shipping-method-express.php",
+  "file": "tests/_fixtures/legacy-v1/woocommerce-yandex-delivery/includes/class-shipping-method-express.php",
   "locator": "'yandex_delivery_express'",
   "canonical_value": "yandex_delivery_express",
   "mutated_value": "yandex_delivery_express__MUTATED__",
