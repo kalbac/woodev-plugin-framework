@@ -379,7 +379,10 @@ describe( 'LocalityChooser — provider absence and fallback', () => {
 		await waitFor( () => expect( mockStore.setBillingAddress ).toHaveBeenCalledTimes( 1 ) );
 		await waitFor( () => expect( mockStore.setShippingAddress ).toHaveBeenCalledTimes( 1 ) );
 		expect( mockStore.setBillingAddress.mock.calls[ 0 ][ 0 ] ).toMatchObject( { city: 'Подольск', state: 'МОСКОВСКАЯ ОБЛАСТЬ' } );
-		expect( mockStore.updateCustomerData ).toHaveBeenCalledWith( { shipping_address: { city: 'Подольск', state: 'МОСКОВСКАЯ ОБЛАСТЬ', country: 'RU' } }, true, true );
+		expect( mockStore.updateCustomerData ).toHaveBeenCalledWith( {
+			shipping_address: { city: 'Подольск', state: 'МОСКОВСКАЯ ОБЛАСТЬ', country: 'RU' },
+			billing_address: { city: 'Подольск', state: 'МОСКОВСКАЯ ОБЛАСТЬ', country: 'RU' },
+		}, true, true );
 		expect( billing.querySelector( '[role="combobox"]' ) ).toBeInTheDocument();
 	} );
 
@@ -485,6 +488,10 @@ describe( 'LocalityChooser — choosing a locality', () => {
 		expect( mockStore.setBillingAddress ).toHaveBeenCalledWith(
 			expect.objectContaining( { city: 'Подольск', state: 'МОСКОВСКАЯ ОБЛАСТЬ' } )
 		);
+		expect( mockStore.updateCustomerData ).toHaveBeenCalledWith( {
+			shipping_address: { city: 'Подольск', state: 'МОСКОВСКАЯ ОБЛАСТЬ', country: 'RU' },
+			billing_address: { city: 'Подольск', state: 'МОСКОВСКАЯ ОБЛАСТЬ', country: 'RU' },
+		}, true, true );
 	} );
 
 	it( 'leaves the state alone when the region field is removed', async () => {

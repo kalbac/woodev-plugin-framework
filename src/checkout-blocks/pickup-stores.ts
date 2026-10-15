@@ -436,6 +436,9 @@ function confirmsCommand( snapshot: PickupSnapshot, pointId: string ): boolean {
  * moved the destination in the same request and the confirmation names the fields it moved; they
  * are taken into the native address here, before this resolves — so still under the caller's
  * checkout gate. `billingIsShipping`: the store ships to the billing address.
+ * Bootstrap filters our extension reply's address snapshots before core imports them (#1293),
+ * so this explicit destination adoption is the normal writer. The guards below also tolerate an
+ * address import if called without that bootstrap protection.
  *
  * THREE GUARDS AGAINST A LATE ANSWER (SP-11 C-3, #1090):
  *

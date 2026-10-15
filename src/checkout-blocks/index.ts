@@ -5,7 +5,8 @@
  * @package woodev-plugin-framework
  */
 
-import { watchPostcodeEdits } from './pickup-stores';
+import { readPickupData, watchPostcodeEdits } from './pickup-stores';
+import { keepExtensionAddressesInForm } from './extension-cart-addresses';
 import { readFeePaymentsNamespace, watchPaymentMethod } from './payment-recalc';
 import { registerLocalityBlock, registerPickupBlock } from './register';
 import { captureWcRuntime } from './wc-runtime';
@@ -15,6 +16,9 @@ import '../../woodev/shipping-method/assets/js/frontend/location-typeahead.js';
 
 // First: every later read of a WooCommerce global answers from this capture.
 captureWcRuntime();
+
+const feePaymentsNamespace = readFeePaymentsNamespace();
+keepExtensionAddressesInForm( [ readPickupData()?.namespace ?? '', feePaymentsNamespace ?? '' ] );
 
 const locality = registerLocalityBlock();
 const pickup = registerPickupBlock();
@@ -31,8 +35,6 @@ if ( pickup ) {
 }
 
 // A fee limited to chosen payment methods needs the server to know the chosen one (#1144); off unless the server says so.
-const feePaymentsNamespace = readFeePaymentsNamespace();
-
 if ( feePaymentsNamespace !== null ) {
 	watchPaymentMethod( feePaymentsNamespace );
 }
