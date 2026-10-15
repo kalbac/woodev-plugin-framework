@@ -54,13 +54,9 @@ one cannot hide behind another that still fails. Anything that is not an asserti
 rethrown, never read as «still broken». The check inside a wrapper must use hard `expect`, not `expect.soft`.
 `WOODEV_E2E_STRICT=1` runs the wrapped assertions as ordinary ones so the real messages show.
 
-Currently wrapped: F7 (`05-deactivation.spec.js`, CDEK deactivated → Yandex methods vanish), B1 (`06-block-checkout.spec.js`,
-block checkout does not restore the remembered CDEK point; block-only, not a release blocker) and one from the #1179 matrix:
-
-- M3 (`07` cell G) — with «Регион» removed the Yandex courier rate is gone for every settlement that is not its own region. The
-  #94 fix reads the record's region only when the package state is `''`, but the package state is WooCommerce's wildcard `*` (guest) or
-  the shop's stale default state (admin: `МОСКВА`), so the geocoded address is still «Russia, *, Приозерск»
-  (`trait-yandex-rate-method.php:854`, `courier_address()`).
+Currently wrapped: F7 (`05-deactivation.spec.js`, CDEK deactivated → Yandex methods vanish) and B1 (`06-block-checkout.spec.js`,
+block checkout does not restore the remembered CDEK point; block-only, not a release blocker). The #1179 matrix (`07`, `08`) has no
+wrapped defect left.
 
 Fixed defects (their assertions are ordinary now):
 
@@ -71,6 +67,7 @@ Fixed defects (their assertions are ordinary now):
 - F6 — a reused order kept the meta of the carrier the buyer left — fixed in framework #1267
 - M1 — CDEK hid a method (no route, order-amount limit) without a line in the admin «method hidden» hint — fixed in the CDEK plugin #104
 - M2 — confirming a Yandex pickup point blanked a text-with-suggestions «Населённый пункт» — fixed in framework #1292 and the Yandex plugin #94
+- M3 — with «Регион» removed the Yandex courier rate was gone for every settlement outside its own region (geocoded «Russia, *, Приозерск») — fixed in the Yandex plugin #100 (rates) and #102 (export): the courier region now comes from the settlement record, never `*`
 
 ## What the specs change on the rig, and put back
 
