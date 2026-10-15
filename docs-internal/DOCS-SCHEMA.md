@@ -33,7 +33,7 @@ directory.
 | Scope | Language |
 |-------|----------|
 | `docs-internal/gotchas/*.md`, `wiki/*.md`, `adr/*.md` — the agent's own explanation | English |
-| `CLAUDE.md`, `QWEN.md`, `AGENTS.md`, `AGENT-RULES.md`, `DOCS-*.md` | English |
+| `CLAUDE.md`, `AGENTS.md`, `AGENT-RULES.md`, `DOCS-*.md` | English |
 | **The operator's own words, quoted** | **His, verbatim** — a translated quote is no longer evidence of what he decided, and this repo settles arguments by quoting him |
 | **Domain data** (DaData answers, settlement names, method labels, UI captions) | **As it really is** — «Нижегородская обл, г Бор» translated is a false record |
 | **Source strings shown as examples** (i18n msgids, admin notices) | As in the code |
@@ -432,7 +432,7 @@ Run at session end, **after** writing the session file, **before** committing:
 
 ## Sync Rule
 
-`CLAUDE.md`, `QWEN.md`, `AGENTS.md`, and `AGENT-RULES.md` must NOT duplicate information that lives in `docs-internal/` files:
+`CLAUDE.md`, `AGENTS.md`, and `AGENT-RULES.md` must NOT duplicate information that lives in `docs-internal/` files:
 - **Sprint status** → only in `CURRENT-STATE.md`. Gateway files point to it.
 - **Gotcha details** → only in `gotchas/*.md`. Gateway files point to the `GOTCHAS.md` map.
 - **Architecture decisions** → only in `adr/*.md`.

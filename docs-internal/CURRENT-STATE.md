@@ -239,7 +239,7 @@ flakiness, the three field modes and their Russian labels — is one line under 
 ⚠ Before probing `test-cdek` credentials, read gotcha
 `the-cdek-fixture-credentials-are-not-the-option-they-look-like` — the obvious option is a decoy.
 
-**`@since` ceiling:** `composer.json` → `extra.woodev.planned-release` currently says `2.0.2`, the same as the released `VERSION`; no distinct next release is declared. `SinceTagCeilingTest` enforces the configured ceiling. See `AGENT-RULES.md` Rule 5 (including inherited code → `1.0.0`).
+**`@since` ceiling:** `composer.json` → `extra.woodev.planned-release` currently says `2.0.3`; the released `VERSION` is `2.0.2`. `SinceTagCeilingTest` enforces the configured ceiling. See `AGENT-RULES.md` Rule 5 (semver, and inherited code → `1.0.0`).
 
 **Agents and Orca — the recipes, the caps and the launch traps are
 [wiki/orchestrating-agents-with-orca.md](wiki/orchestrating-agents-with-orca.md).** The two facts

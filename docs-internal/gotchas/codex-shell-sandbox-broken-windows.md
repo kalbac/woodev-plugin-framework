@@ -338,6 +338,6 @@ partially: nothing in it is evidence.
 
 ## Related
 
-- [autodev-critic-ratelimit-false-positive](autodev-critic-ratelimit-false-positive.md) — the other codex-critic transport gotcha
+- `autodev-critic-ratelimit-false-positive` (archived in `docs-internal/archive/autodev-gotchas/`) — the other codex-critic transport gotcha
 - `tools/autodev/invoke-critic.ps1` — the autodev loop's codex-critic wrapper (uses the
   same `-s read-only` path; would hit this same wall on this box if it spawned shell)

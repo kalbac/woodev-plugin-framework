@@ -2,7 +2,6 @@
 .ai/**
 # AI tooling documentation
 CLAUDE.md
-QWEN.md
 docs-internal/SESSION-LOG.md
 docs-internal/GOTCHAS.md
 docs-internal/CURRENT-STATE.md

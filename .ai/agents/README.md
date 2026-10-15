@@ -24,7 +24,7 @@ Agents are supplementary to `CLAUDE.md` (project root), which is automatically l
 
 Add agents as context via `@` mentions in Cursor chat, or configure them in `.cursorrules`.
 
-### Qwen / Windsurf
+### Windsurf
 
 Agents can be loaded via MCP tools (Serena) or referenced in project configuration files.
 

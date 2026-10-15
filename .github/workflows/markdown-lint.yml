@@ -48,7 +48,6 @@ jobs:
 
       - name: Lint markdown files
         # Gate the PUBLISHED docs/ tree (GH Pages) + root markdown. Excludes: vendored/AI-tool
-        # files (.ai, CLAUDE.md, QWEN.md, AGENTS.md — agent-instruction/constitution docs), the
-        # AI-agent operational docs (docs-internal/, not published), the autodev loop blackboard
-        # (.autodev/, machine-generated queue/escalations/digest) and Serena tooling (.serena/).
-        run: markdownlint-cli2 "**/*.md" "#node_modules" "#vendor" "#.ai" "#.kiro" "#CLAUDE.md" "#QWEN.md" "#AGENTS.md" "#docs-internal" "#.autodev" "#.serena" "#CHANGELOG.md"
+        # files (.ai, CLAUDE.md, AGENTS.md — agent-instruction/constitution docs), the
+        # AI-agent operational docs (docs-internal/, not published) and Serena tooling (.serena/).
+        run: markdownlint-cli2 "**/*.md" "#node_modules" "#vendor" "#.ai" "#.kiro" "#CLAUDE.md" "#AGENTS.md" "#docs-internal" "#.serena" "#CHANGELOG.md"

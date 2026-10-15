@@ -104,7 +104,7 @@
 
 **When to use:**
 
-- Writing README.md and the gateway files (`AGENTS.md`, `CLAUDE.md`, `QWEN.md`)
+- Writing README.md and the gateway files (`AGENTS.md`, `CLAUDE.md`)
 - Editing `.md` files
 - Developer docs: **English**, User docs: **Russian**
 - **CHANGELOG.md is auto-generated** (do not edit manually)
@@ -222,7 +222,6 @@ Rules that ALL AI agents must follow. When you discover new important rules or c
 
 - [AGENTS.md](../AGENTS.md) — **the single source of truth for project knowledge**, read by every agent
 - [CLAUDE.md](../CLAUDE.md) — Claude Code only: Serena/Context7/Orca tooling. It restates nothing from `AGENTS.md`
-- [QWEN.md](../QWEN.md) — the Qwen-facing gateway
 - [docs-internal/DOCS-INDEX.md](../docs-internal/DOCS-INDEX.md) — navigation hub for internal docs
 - [agents/README.md](agents/README.md) — Agent documentation
 - [docs/README.md](../docs/README.md) — Project documentation

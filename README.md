@@ -201,7 +201,7 @@ real symlinks: nothing had depended on them for half a year, and activating five
 whose text nobody has reviewed since would add risk, not capability.
 
 What an agent actually reads is in the entry points: `CLAUDE.md` (Claude Code), `AGENTS.md` (every
-other agent), `QWEN.md`, and `docs-internal/` for the operational detail.
+other agent), and `docs-internal/` for the operational detail.
 
 ## Key Concepts
 
