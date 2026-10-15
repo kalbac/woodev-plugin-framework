@@ -45,7 +45,7 @@ Before writing any new code block:
 Exception: `Read`, `Glob`, `Grep` built-in tools are fine for markdown, JSON, YAML, and non-PHP files.
 
 **And for whole directories Serena is configured to ignore.** `.serena/project.yml` sets
-`ignored_paths` to **`tests/**`, `docs/**`, `.github/**`, `.ai/**`, `.serena/**`, `.claude/**`**.
+`ignored_paths` to **`tests/**`, `website/**`, `.github/**`, `.ai/**`, `.serena/**`, `.claude/**`**.
 A symbolic operation against any of them fails flatly with `… while the path is ignored` — so
 there `Read`/`Edit`/`Write` are not a fallback, they are **the only tool, and using them is not a
 rule violation**. Every brief that touches test files must say so; one that repeats the bare

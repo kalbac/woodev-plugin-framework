@@ -15,8 +15,8 @@ REPOSITORY (`kalbac/woodev-plugin-framework`) — read them there; they are not 
 
 ## Ground rules
 
-1. **Read the code, not `docs/`.** The public `docs/` are stale and will be rewritten after the first
-   real plugin. The source of truth is `woodev/` (symbol names are cited below; line numbers rot).
+1. **Read the code first.** The public site (`website/`) is being rewritten against 2.0.2 and may lag;
+   the source of truth is `woodev/` (symbol names are cited below; line numbers rot).
 2. **Never invent an API.** Every class, method, filter and option named in this skill exists in
    `woodev/` today. If you need something not named here, `rg` the framework first; if it is not
    there, it does not exist — do not write the call, ask the operator.

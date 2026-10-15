@@ -20,7 +20,7 @@ ignore_all_files_in_gitignore: true
 # Note: global ignored_paths from serena_config.yml are also applied additively.
 ignored_paths:
 - tests/**
-- docs/**
+- website/**
 - .github/**
 - .ai/**
 - .serena/**

@@ -1,0 +1,63 @@
+/* Woodev docs theme — the woodev.ru yellow as the one accent, Inter for text, JetBrains Mono for
+   code and display type. Everything is expressed through Starlight's own custom properties. */
+
+:root {
+	--sl-font: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+	--sl-font-mono: 'JetBrains Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace;
+	--sl-content-width: 46rem;
+	--wd-yellow: #ffd93d;
+	--wd-yellow-ink: #141414;
+}
+
+/* Dark theme (Starlight's default) — near-black, neutral greys */
+:root {
+	--sl-color-accent-low: #2e2708;
+	--sl-color-accent: #ffd93d;
+	--sl-color-accent-high: #ffe680;
+	--sl-color-white: #ffffff;
+	--sl-color-gray-1: #ececec;
+	--sl-color-gray-2: #c4c4c4;
+	--sl-color-gray-3: #8f8f8f;
+	--sl-color-gray-4: #5e5e5e;
+	--sl-color-gray-5: #333333;
+	--sl-color-gray-6: #1c1c1c;
+	--sl-color-black: #0d0d0d;
+	--wd-grid-dot: rgba(255, 255, 255, 0.07);
+}
+
+/* Light theme — yellow stays for fills; text accents use a deep amber for contrast */
+:root[data-theme='light'] {
+	--sl-color-accent-low: #fff3c2;
+	--sl-color-accent: #8a6400;
+	--sl-color-accent-high: #5c4300;
+	--sl-color-white: #111111;
+	--sl-color-gray-1: #1f1f1f;
+	--sl-color-gray-2: #3a3a3a;
+	--sl-color-gray-3: #5c5c5c;
+	--sl-color-gray-4: #8c8c8c;
+	--sl-color-gray-5: #cfcfcf;
+	--sl-color-gray-6: #ededed;
+	--sl-color-gray-7: #f7f7f5;
+	--sl-color-black: #ffffff;
+	--wd-grid-dot: rgba(0, 0, 0, 0.08);
+}
+
+/* The site title reads as a wordmark */
+.site-title {
+	font-family: var(--sl-font-mono);
+	font-weight: 700;
+	letter-spacing: -0.02em;
+	color: var(--sl-color-white);
+}
+
+/* Active sidebar link: a yellow bar instead of a filled pill */
+.sidebar-content a[aria-current='page'] {
+	background: var(--sl-color-accent-low);
+	color: var(--sl-color-white);
+	box-shadow: inset 2px 0 0 var(--wd-yellow);
+	border-radius: 0 0.25rem 0.25rem 0;
+}
+
+.sl-markdown-content h2 {
+	letter-spacing: -0.01em;
+}

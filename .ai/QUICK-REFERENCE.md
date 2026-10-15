@@ -197,15 +197,16 @@ Rules that ALL AI agents must follow. When you discover new important rules or c
 
 ### Documentation Code Examples
 
-- All PHP code examples in `docs/*.md` **must be verified** against the actual framework source code before writing or editing. Never write examples from memory or assumptions — use Serena to look up real method signatures, parameter types, return types, and visibility.
+- All PHP code examples in `website/src/content/docs/**` **must be verified** against the actual framework source code before writing or editing. Never write examples from memory or assumptions — use Serena to look up real method signatures, parameter types, return types, and visibility.
 - All PHP code blocks must include the `<?php` opening tag.
-- Markdown linting (`markdownlint-cli2`) covers the `.md` files written for HUMANS — `docs/`, `CHANGELOG.md`, `.github/`. Agent-facing files are excluded, `docs-internal/` included, because formatting is not the point there. The authoritative exclusion list is `.markdownlintignore` plus the inline negations in `.github/workflows/markdown-lint.yml`; read it there rather than copying a command line, which is what went stale here.
+- Markdown linting (`markdownlint-cli2`) covers the `.md` files written for HUMANS — `website/src/content/docs/`, `CHANGELOG.md`, `.github/`. Agent-facing files are excluded, `docs-internal/` included, because formatting is not the point there. The authoritative exclusion list is `.markdownlintignore` plus the inline negations in `.github/workflows/markdown-lint.yml`; read it there rather than copying a command line, which is what went stale here.
 
 ### Documentation Site
 
-- Docs site: MkDocs Material, config in `mkdocs.yml`, source in `docs/`.
-- Custom landing page template: `docs/overrides/home.html`.
-- `%%FRAMEWORK_VERSION%%` placeholder in docs is injected by CI (from `Woodev_Plugin::VERSION`) before `mkdocs build`.
+- Docs site: Astro Starlight in `website/` (own `package.json`); pages in `website/src/content/docs/`.
+- Landing page: `website/src/pages/index.astro`.
+- `%%FRAMEWORK_VERSION%%` in a page is replaced at build time with `Woodev_Plugin::VERSION` (`website/plugins/`).
+- Rules for public docs: `docs-internal/DOCS-SCHEMA.md` → "Public docs".
 - CHANGELOG.md is **auto-generated** by git-cliff — do not edit manually (except formatting fixes for linting).
 
 ### Knowledge Persistence
@@ -224,4 +225,4 @@ Rules that ALL AI agents must follow. When you discover new important rules or c
 - [CLAUDE.md](../CLAUDE.md) — Claude Code only: Serena/Context7/Orca tooling. It restates nothing from `AGENTS.md`
 - [docs-internal/DOCS-INDEX.md](../docs-internal/DOCS-INDEX.md) — navigation hub for internal docs
 - [agents/README.md](agents/README.md) — Agent documentation
-- [docs/README.md](../docs/README.md) — Project documentation
+- [website/](../website/) — public documentation site

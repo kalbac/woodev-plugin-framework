@@ -1,20 +1,23 @@
 name: Deploy Docs
 
-# ⚠ DISABLED on push, 25.08.2026. The repo went PRIVATE, and GitHub Pages is not available for a
-# private repo on the Free plan — the site at kalbac.github.io/woodev-plugin-framework is gone
-# (the Pages API now returns 404) and every automatic run of this workflow would fail on deploy.
-# Operator decision: «Закроем GH Pages. Ничего страшного. Потребителей у нас 0.»
-#
-# Kept rather than deleted, and still runnable by hand, so that publishing is one line away if the
-# account moves to Pro or the repo goes public again: restore the `push:` block below.
+# The public documentation site is the Astro Starlight project in `website/`.
+#   - push to main (site paths)  -> build + deploy to GitHub Pages
+#   - pull_request (site paths)  -> build only, so a broken site fails the PR
+#   - workflow_dispatch          -> build + deploy by hand
+# GitHub Pages itself (Settings → Pages → Source: GitHub Actions) is enabled by the maintainer.
 on:
-  # push:
-  #   branches:
-  #     - main
-  #   paths:
-  #     - 'docs/**'
-  #     - 'mkdocs.yml'
-  #     - 'woodev/class-plugin.php'
+  push:
+    branches:
+      - main
+    paths:
+      - 'website/**'
+      - 'woodev/class-plugin.php'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    paths:
+      - 'website/**'
+      - 'woodev/class-plugin.php'
+      - '.github/workflows/docs.yml'
   workflow_dispatch:
 
 permissions:
@@ -23,42 +26,50 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  # Deploys queue behind each other (never cancelled mid-flight); PR builds get their own
+  # per-ref group so they can neither block a deploy nor be dropped by one.
+  group: ${{ github.event_name == 'pull_request' && format('pages-pr-{0}', github.ref) || 'pages' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
-    name: Build MkDocs
+    name: Build site
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: website
     steps:
       - name: Checkout
         uses: actions/checkout@v7
-
-      - name: Setup Python
-        uses: actions/setup-python@v7
         with:
-          python-version: '3.12'
+          # Full history: Starlight's "last updated" date comes from git log.
+          fetch-depth: 0
 
-      - name: Install MkDocs Material
-        run: pip install mkdocs-material==9.6.7
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: website/package-lock.json
 
-      - name: Inject framework version into docs
-        run: |
-          VERSION=$(grep -oP "const VERSION = '\K[^']+" woodev/class-plugin.php)
-          echo "Framework version: $VERSION"
-          find docs -name "*.md" -o -name "*.html" | xargs sed -i "s/%%FRAMEWORK_VERSION%%/$VERSION/g"
+      - name: Install dependencies
+        run: npm ci
 
-      - name: Build docs
-        run: mkdocs build --strict --site-dir _site
+      - name: Build site
+        # The framework version comes from woodev/class-plugin.php at build time
+        # (website/plugins/remark-framework-version.mjs).
+        run: npm run build
 
       - name: Upload Pages artifact
+        if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v5
         with:
-          path: _site
+          path: website/dist
 
   deploy:
     name: Deploy to GitHub Pages
+    if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 10

@@ -5,7 +5,9 @@
 composer.lock
 phpstan.neon
 .wp-env.override.json
-/_site/
+/website/node_modules/
+/website/dist/
+/website/.astro/
 opencode.json
 .mcp.json
 
