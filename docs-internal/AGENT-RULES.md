@@ -77,7 +77,8 @@ measured effect is fewer mistakes and fewer tokens. Three hard requirements:
 After implementing each logical code block:
 1. Document new gotchas immediately (Don't defer to session end)
 2. Update `CURRENT-STATE.md` — honest current status
-3. Git commit with Conventional Commits message
+3. A trap that the author of the NEXT plugin would hit goes into `.ai/skills/woodev-plugin-core/` or `woodev-shipping-plugin/` in the same PR (`AGENTS.md` → «Plugin-author skills rule»)
+4. Git commit with Conventional Commits message
 
 ### Subagent-Driven Execution for Parallelism
 When a task has **3+ independent workstreams each taking > 2 minutes**, use subagent-driven

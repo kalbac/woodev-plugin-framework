@@ -65,6 +65,19 @@ The framework's pattern (`tests/unit/TestCase.php`, `tests/bootstrap.php`, the g
   `tests/unit/RealisticShippingFixtureTest.php`, `YandexPilotFixtureTest.php`,
   `EdostavkaPilotFixtureTest.php`, `RealisticPaymentFixtureTest.php` show the whole load-and-assert
   pattern; `LoaderEntryPathTest.php` shows a test that `include`s a real entry file.
+- **Define EVERY WordPress time constant in your unit bootstrap** (`MINUTE_IN_SECONDS`, `HOUR_IN_SECONDS`,
+  `DAY_IN_SECONDS`, `WEEK_IN_SECONDS`, …), not just the ones your own code uses. A framework class constant built on
+  one (`CLAIM_REFRESH_THROTTLE = 15 * MINUTE_IN_SECONDS` in `Woodev_Plugins_License`) is evaluated the first time the
+  class's constants are touched: the framework's and CDEK's suites stayed green while Yandex's went from 489 green to
+  21 `Undefined constant` errors in tests that never touch licensing (gotcha
+  `a-framework-class-constant-on-a-wp-time-constant-breaks-a-plugin-unit-bootstrap`; Yandex PR #64 fixed its bootstrap).
+- **PHPUnit 9 ignores `@runInSeparateProcess` on a CLASS docblock** — the test leaks into the shared process and fails
+  only under CI's reverse-order gate (`--order-by=reverse`). Put the annotation (and `@preserveGlobalState disabled`) on
+  the METHOD; run `--order-by=reverse` locally for anything that defines a function or class at runtime (Brain Monkey's
+  `Functions\when( 'has_block' )` defines it process-wide). Gotcha `phpunit-9-ignores-run-in-separate-process-on-a-class`.
+- A test that `include`s your ENTRY FILE in a subprocess (the literals-only loader definition test) stubs every WordPress
+  function the entry file calls at file level — adding the error-reporting DSN `add_filter()` broke CDEK's
+  `LoaderDefinitionTest` until it got a recording stub ([services.md](services.md#error-reporting)).
 - Mocked tests are blind to declaration-time fatals. Add `npm run probe:signature` to your checks
   (`docs-internal/migration/signature-probe.md`).
 - Run order: `phpunit.xml` of the framework uses `executionOrder="depends,defects"`, so delete
@@ -97,6 +110,22 @@ fails fast if `Woodev_Plugin_Bootstrap` is not loaded). Commands: `composer test
   those functions for you and stays green (gotcha `admin-only-wp-functions-are-undefined-on-plugins-loaded`).
 - Verify on the dev rig (a real WordPress with several Woodev plugins active) before calling it done:
   multi-version resolution and checkout/blocks behaviour are not reproducible in unit tests.
+
+## CI of a plugin repo
+
+Both carrier plugins share one shape (`.github/workflows/ci.yml` in `kalbac/woocommerce-yandex-delivery` is the
+cleanest copy; CDEK `v2` has the same). Reuse it rather than inventing one:
+
+- **The framework is pinned by SHA** (`WOODEV_FRAMEWORK_REF` in the workflow; one line to move to a reviewed framework
+  commit) and fetched as a codeload tarball; `scripts/sync-framework.sh` copies its `woodev/` into the plugin. A plugin
+  that is not synced to the pinned commit tests a different framework than CI does. The script's default source is
+  `../woodev-plugin-framework`, which is WRONG inside an Orca worktree — run it as
+  `WOODEV_FRAMEWORK_DIR=<framework checkout> bash scripts/sync-framework.sh`.
+- **A private repo's GitHub Actions minutes are one shared, metered pool**: run GitHub CI on `pull_request` only (no
+  `push` trigger) and gate agents' work with `local-ci` (the real GitHub runner in Docker). It needs `.github/local-ci.Dockerfile`,
+  `runner=self-hosted` for `shivammathur/setup-php` under `LOCAL_CI_LOCAL`, no second `actions/checkout`, and the mock
+  Composer GitHub token unset — all four are already in the Yandex workflow (PRs #39, #40).
+- The matrix is PHP 7.4 and 8.3; the Mac sees PHP 8.5 deprecations the matrix never does (guard `setAccessible()` etc.).
 
 ## Related
 

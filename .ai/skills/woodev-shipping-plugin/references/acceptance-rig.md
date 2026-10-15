@@ -44,7 +44,7 @@ contour is where a carrier plugin is accepted. The CDEK plugin's harness is the 
 | The rig runs the plugin's OWN gitignored `woodev/` copy, not the framework checkout: run the plugin's `scripts/sync-framework.sh` before any measurement and prove it on the page, not with `docker inspect` (one acceptance "against" fixed code ran stale code and its report claimed the opposite) | gotcha [the rig runs the plugin's own woodev copy](../../../../docs-internal/gotchas/the-rig-runs-the-cdek-plugins-own-woodev-copy-not-the-framework-checkout.md), s162 |
 | The rig serves the WORKING TREE: a branch switch silently un-fixes things, and a concurrent agent's half-written edit fatals every request | gotcha [rig serves the working tree](../../../../docs-internal/gotchas/rig-serves-the-working-tree-branch-switch-reverts-fixes.md) |
 | A fresh plugin worktree has no `vendor/` and no `woodev/`; a worker cannot see a pinned-source test break there | gotcha [a fresh plugin worktree](../../../../docs-internal/gotchas/a-fresh-cdek-plugin-worktree-has-no-vendor-and-no-woodev.md) |
-| The rig runs `en_US`: no translation ever renders there, so it can show an i18n defect and never its fix | gotcha [the rig runs en_US](../../../../docs-internal/gotchas/the-rig-runs-en-us-so-no-translation-ever-renders-there.md) |
+| The rig runs `en_US`: no translation ever renders there, so it can show an i18n defect and never its fix | gotcha [the rig runs en_US](../../../../docs-internal/gotchas/the-rig-runs-en-us-so-no-translation-ever-renders-there.md). For a storefront-text pass switch the site language to `ru_RU` first (that is how Yandex's missing catalogue was seen, yandex PR #104) |
 | A rig option left switched after an acceptance reads as "stale e2e tests"; diff the rig against its baseline first | gotcha [a rig option left switched](../../../../docs-internal/gotchas/a-rig-option-left-switched-after-an-acceptance-reads-as-stale-e2e-tests.md) |
 | A fixture plugin below the winning framework's `backwards_compatible` floor is silently dropped | gotcha [loader floor](../../../../docs-internal/gotchas/a-fixture-plugin-below-the-winners-backwards-compatible-floor-is-silently-dropped.md) |
 | `wp wc shipping_zone_method delete <zone> <instance>` deletes instance `<zone>` (it took Free shipping twice): delete over REST after a GET that proves the row | gotcha [shipping_zone_method delete](../../../../docs-internal/gotchas/wp-wc-shipping-zone-method-delete-takes-the-first-number-as-the-instance.md) |
@@ -52,6 +52,9 @@ contour is where a carrier plugin is accepted. The CDEK plugin's harness is the 
 | `wp eval-file` prints nothing for a probe with one very long line; `docker cp` into the container fails on a bind mount — pipe the probe in | gotchas [eval-file long line](../../../../docs-internal/gotchas/wp-eval-file-prints-nothing-for-a-probe-with-one-very-long-line.md), [docker cp](../../../../docs-internal/gotchas/docker-cp-into-the-wp-env-container-fails-pipe-the-probe-instead.md) |
 | A logged-in customer's WC session outranks the profile and holds the location record too: a probe that edits only user meta reads stale data | gotcha [logged-in customer's session](../../../../docs-internal/gotchas/a-logged-in-customer-s-wc-session-outranks-the-profile.md) |
 | The rig is HPOS, the integration environment is the posts store: measure every order query on both | [orders and tracking](orders-tracking.md#finding-orders--wc_get_orders-drops-meta_query-on-the-posts-store) |
+| On the CLASSIC checkout, typing a city leaves the default locality record in place — a Pushkin smoke then shows "no rates" for a correctly typed address. Pick the settlement from the framework's SUGGESTIONS, as a buyer does, and verify the selected locality | gotcha [select the checkout city from suggestions](../../../../docs-internal/gotchas/rig-classic-checkout-city-must-be-selected-from-suggestions.md) |
+| BLOCK checkout in a harness: judge only the real order POST, and let the address push settle before «Place order» — a harness that counted any POST, or clicked while the Store API address update was in flight, produced false FAILs and false PASSes | CDEK PRs #99, #106 (`tests/acceptance/e2e/cdek-acceptance.spec.js`) |
+| `woocommerce_ship_to_destination=billing_only` is the rig's NORM (CIS shops ship to the billing address); do not "restore" WooCommerce's `shipping` default and call it a normal shop | operator, s181 |
 | A migration does not re-run where the target version is already stored; on the rig run the migration by hand before judging it (do not bump the version for the rig) | s157 (finding F2) |
 
 ## Real deliveries to a local rig
@@ -73,9 +76,16 @@ For a v1 → v2 plugin, accept the migration on a separate site with the REAL pr
 because the migration can only be judged on migrated data and it found three defects no unit test saw ([settings and
 migration](settings-migration.md#mechanics-that-held-up)).
 
+## Know what the contour can do before you build the acceptance on it
+
+- **Probe the contour first, and write down what it cannot do.** Yandex's TEST contour answered HTTP 200 with an EMPTY body to every path, token and header (13–15.10.2026) — confirm, cancel, the status walk and the PDF shape were never observed and were implemented from the published docs; the operator's production account reads fine but returns 404 `invalid_payment_method` for `offers/confirm` and `request/create`. A 404 there is the account, not your body. Rows the contour cannot show are `UNVERIFIABLE`, never `PASS` (gotcha [the Yandex test account cannot create requests](../../../../docs-internal/gotchas/the-yandex-test-account-cannot-create-requests.md)).
+- **Build the stub from the PUBLISHED shapes and pin it with documented-contract tests** (Yandex PR #45 corrected a stub that had drifted from the docs; PR #48 then fixed the polling that the wrong stub had hidden: `state_history`, five statuses, courier date).
+- The operator's CDEK and Yandex production accounts are test accounts: reads and a small load are the agent's to run, no 500-export volumes, a heads-up only for courier dispatch or public exposure.
+
 ## Two carriers on the rig
 
 Release needs two compatible carrier plugins on one site (framework #1179). Boot both and run each one's gate: the traps are in
 [shipping traps](traps.md#a-second-carrier-plugin-on-the-same-site). Give each carrier its own checkout field id, marker meta key
 and webhook route, and scope every locator to one carrier's slot — `button.woodev-pickup-trigger` is a strict-mode violation as
-soon as two carriers render one.
+soon as two carriers render one. The matrix itself is `tests/e2e/coexistence/` in the framework (07 field modes, 08 order limits); its
+workflow and the three defects it found are in [shipping traps](traps.md#a-second-carrier-plugin-on-the-same-site).

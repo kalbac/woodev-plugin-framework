@@ -26,6 +26,17 @@ Store: woodev.ru (EDD Software Licensing).
   by design (`single-plugin-site-cannot-render-its-own-deactivation-banner`).
 - The license page is the framework's React page; the weekly check runs from `Cron_Handler`
   (`woodev_weekly_scheduled_events`, rescheduled on activation). A plugin writes no license UI.
+- **A paid plugin is GATED on the server-signed claim (#1270, framework `8b56ae0a`).**
+  `Woodev_Plugins_License::is_license_in_force()` answers from the verified, site-bound, unexpired claim
+  alone — no claim, a tampered one, or a status other than `valid` is `false`; a plugin with no store product
+  is never gated, and no option or flag switches it off. A shipping plugin gets the behaviour for free
+  (checkout rates, export, cancel, documents, the carrier's own order actions — see
+  [../woodev-shipping-plugin/references/traps.md](../woodev-shipping-plugin/references/traps.md)); nothing
+  else is gated automatically, so a plugin of another type decides what to gate and reads the predicate. Consequences for an author: your
+  integration fixtures need a TEST-SIGNED in-force claim (the framework's integration fixtures carry one),
+  the weekly check is not the only refresh (a key without a claim triggers one throttled cron check; automatic
+  calls to woodev.ru back off 15 m → 1 h → 6 h → 24 h in an atomic budget — never add your own polling),
+  and a v1 plugin that still ships on a shop (CDEK 2.1.x) floods the server, which is why the budget exists.
 - A subclass must build the license object: if you override `init_license_handler()`, assign
   `$this->license`; the base enforces it (`enforce_license_handler_contract()`).
 
@@ -39,24 +50,38 @@ Source of truth: `woodev/error-reporting/`, spec `docs-internal/specs/2026-10-04
   receiver — the DSN comes from the constant `WOODEV_ERROR_REPORTING_DSN`, then the filter
   `woodev_error_reporting_dsn`. The reporter is inert until a DSN exists.
 - It is installed once by the winning framework copy before any plugin code runs, so the plugin builds no
-  reporter. **But the framework ships no receiver, so a production plugin must contribute its DSN:**
-  `Consent::get_dsn()` (`woodev/error-reporting/class-consent.php`) starts from the constant (empty when
-  unset), applies the filter `woodev_error_reporting_dsn`, and returns `null` when no DSN results —
-  `Consent::is_available()` is then false, nothing is queued and the merchant's consent checkbox is not
-  offered at all. The project's per-plugin setup is to supply the DSN through that filter from each
-  production plugin (take the value from the operator — never invent one, and keep server details out of the public repo):
+  reporter. **The framework ships no receiver, so a production plugin must contribute its OWN DSN — one
+  GlitchTip project per plugin (#1302, framework `2.0.2`).** `Consent::get_dsn( $plugin_id )`
+  (`woodev/error-reporting/class-consent.php`) starts from the site-wide constant (the fallback for a plugin
+  with no DSN of its own), applies the filter `woodev_error_reporting_dsn` with TWO arguments —
+  `( $dsn, $plugin_id )` — and returns `null` when nothing results; the owner of an event is routed to its
+  own DSN. Your callback answers **only for your own plugin id** and returns `$dsn` untouched for every
+  other, or two plugins on one site overwrite each other. Take the DSN from the operator — never invent one,
+  and keep server details out of the public repo. Register it at file level in the entry file (before
+  `plugins_loaded`, when the reporter is installed), with priority and `accepted_args = 2`:
 
   ```php
   add_filter(
       'woodev_error_reporting_dsn',
-      static function ( $dsn ) {
-          return is_string( $dsn ) && '' !== $dsn ? $dsn : 'https://<key>@<receiver-host>/<project-id>';
-      }
+      static function ( $dsn, $plugin_id = '' ) {
+          return 'my-plugin-id' === $plugin_id ? 'https://<key>@<receiver-host>/<project-id>' : $dsn;
+      },
+      10,
+      2
   );
   ```
 
-  Register it at file level in the entry file (before `plugins_loaded`, when the reporter is installed),
-  keep an already-configured DSN (as above), and do not add a second reporter or your own phone-home.
+  Worked examples: `woocommerce-edostavka.php` (CDEK, PR #109) and the Yandex entry file (PR #103); both pin
+  the behaviour in `tests/unit/LoaderDefinitionTest.php`. Facts that follow from the design: the merchant's
+  consent stays ONE site-wide checkbox («Отправлять отчёты об ошибках», default off), offered when at least
+  one registered plugin has a DSN; an event whose owner has no DSN is not queued; a throw inside the shared
+  `woodev/` copy belongs to the first plugin-owned frame of the stack; dedupe and the daily budget (20 PHP +
+  10 browser attempts) are kept PER OWNER. A one-argument callback written for the old single-DSN contract
+  still works (it just gets `$dsn`). Do not add a second reporter or your own phone-home.
+  **Test trap:** a unit test that `include`s the entry file in a subprocess with a stubbed `Woodev_Loader`
+  must also stub `add_filter()` once the entry file registers this filter — CDEK's `LoaderDefinitionTest`
+  defines a recording `add_filter()` and then calls the captured callback with its own id, another id and
+  one argument, asserting only its own id gets the DSN.
   What a plugin author otherwise controls is the quality of its own error handling: throw/log with
   `Woodev_Plugin::log()`, never swallow a failure silently, never put secrets or customer data in a message.
 
@@ -133,8 +158,17 @@ Rules: `AGENTS.md` → Conventions → «Translatable strings», gotchas in `doc
   it from `WP_LANG_DIR/{domain}/` and `{plugin dir}/languages`, and loads the framework's own domain
   separately. Never use the framework's domain (`woodev-plugin-framework`) for your own strings.
 - **An English msgid without a catalogue entry is a storefront regression** (the shopper sees English),
-  and the framework's `lint:i18n` cannot catch it in your repo — run your own check (gotcha
-  `rule-1-has-two-halves-an-english-msgid-alone-is-a-regression`).
+  and the framework's `lint:i18n` cannot catch it in your repo (gotcha
+  `rule-1-has-two-halves-an-english-msgid-alone-is-a-regression`). **Ship the catalogue and a test for it
+  from the FIRST storefront string:** `languages/{text-domain}-ru_RU.po` + a compiled `.mo` (build it with
+  `wp i18n make-mo` in the rig container; commit both) and a `tests/unit/I18n/*StorefrontTranslationTest.php`
+  that asserts every English msgid in your storefront code (including `_n()` forms) has a Russian entry, no
+  entry is orphaned, the header is valid and the `.mo` exists. The Yandex plugin went to the operator's
+  pre-release pass with NO `languages/` directory at all — every English storefront string rendered in
+  English on a ru_RU shop (yandex PR #104, written after CDEK's `tests/unit/I18n/CdekStorefrontTranslationTest.php`).
+  Strings that the FRAMEWORK renders from your data (a pickup point's `payment_methods`, `services`, type label)
+  are storefront strings too — map carrier codes to translated customer labels in your mapper (see
+  [../woodev-shipping-plugin/references/model-rates-location-pickup.md](../woodev-shipping-plugin/references/model-rates-location-pickup.md)).
 - **Plurals:** `_n()` with a Russian msgid works in PHP once the catalogue entry carries all three
   `msgstr` forms; in JS it cannot be made right (gotcha `russian-source-i18n-plural-n`).
 - **A concatenated msgid** (`__( 'a ' . 'b' )`) is one msgid to gettext and zero to a scanner (gotcha

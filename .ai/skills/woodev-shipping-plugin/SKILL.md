@@ -7,7 +7,7 @@ description: Load before writing or changing a shipping plugin that runs on Wood
 
 Use this skill for a carrier plugin that consumes Woodev Framework v2. Also load [woodev-plugin-core](../woodev-plugin-core/SKILL.md) for shared plugin loading, lifecycle, settings, licensing, i18n, testing, and framework conventions; this skill adds shipping-specific seams.
 
-The first plugin built on these seams is the CDEK rewrite (`kalbac/woocommerce-edostavka`, branch `v2`, outside this repository). The references cite its files as worked examples and its lessons as sources; every rule here also names the framework code, gotcha or card it comes from. A claim you cannot find in `woodev/` does not exist — `rg` the framework before writing the call.
+The first two plugins built on these seams are the CDEK rewrite (`kalbac/woocommerce-edostavka`, branch `v2`) and the Yandex Delivery rewrite (`kalbac/woocommerce-yandex-delivery`, branch `main`), both outside this repository and both private — read them with `gh` or from the operator's checkouts (`~/Projects/…`). The references cite their files as worked examples and their lessons as sources; CDEK is the reference for a carrier with webhooks, a location dictionary and a courier call, Yandex for an offers-based export, a bare-answer geo adapter and a second carrier on one site; every rule here also names the framework code, gotcha or card it comes from. A claim you cannot find in `woodev/` does not exist — `rg` the framework before writing the call.
 
 ## Coding conventions
 
@@ -36,7 +36,10 @@ Group file-level class imports from the same namespace in one statement; keep `u
 | Export, cancel, a parcel already in transit, refusal | `Abstract_Shipment_Handler` (`is_handed_over()`, `supports_refusal()` / `refuse()`) | [orders and tracking](references/orders-tracking.md#cancel-a-parcel-already-on-its-way-and-refusal-1204) |
 | Delivery status, neutral cost / date / issue / courier events | `status_meta_key` + `status_map`; `Shipment_Facts_Events::record()` | [orders and tracking](references/orders-tracking.md#carrier-neutral-shipment-facts-1205) |
 | Inbound webhooks, only where the carrier pushes events | `Abstract_Webhook_Handler` verifies and dispatches; the trust, acknowledgement and subscription rules are carrier-specific | [orders and tracking](references/orders-tracking.md#delivery-statuses-and-tracking) |
-| Waybills, barcodes, bulk print | `Document_Source`, `Bulk_Document_Source`, `Document_Result::pending()` | [orders and tracking](references/orders-tracking.md#buyer-emails-and-carrier-documents) |
+| Waybills, barcodes, bulk print, carrier-named documents | `Document_Source`, `Bulk_Document_Source`, `Document_Result::pending()`, `Document_Type_Declarations` | [orders and tracking](references/orders-tracking.md#buyer-emails-and-carrier-documents) |
+| A method yields no rate — tell the manager why | `Shipping_Method::report_hidden( $reason_code, $message )` beside your log line | [method features](references/method-features.md#why-a-method-is-hidden-the-admin-only-hint) |
+| An export whose outcome is unknown | `supports_reconcile()` or the framework `woodev_retry_export` action — never your own retry button | [orders and tracking](references/orders-tracking.md#an-export-with-an-unknown-outcome-1253-1274) |
+| A paid plugin without a valid licence | automatic: `License_Gate` hides the rates and refuses export / cancel / documents; flag a read-only order action `read_only` | [shipping traps](references/traps.md#licence-gate-1270) |
 | Courier call and other order operations | order actions with `fields`, row flags, toolbar actions | [orders and tracking](references/orders-tracking.md#order-actions-row-flags-and-toolbar-actions-the-courier-call) |
 | Finding orders by meta | a datastore-aware helper — `wc_get_orders()` drops `meta_query` on the posts store | [orders and tracking](references/orders-tracking.md#finding-orders--wc_get_orders-drops-meta_query-on-the-posts-store) |
 | Buyer status emails, delivered / cancelled status | framework emails, `Delivered_Order_Status`, `Cancelled_Order_Status` | [orders and tracking](references/orders-tracking.md#buyer-emails-and-carrier-documents) |
@@ -52,6 +55,18 @@ Group file-level class imports from the same namespace in one statement; keep `u
 - Buyer status emails and carrier documents (waybill/barcode download, single and bulk) are FRAMEWORK features: never write carrier-owned buyer emails or a download flow. Declare `status_meta_key`/`status_map` on the provider (the framework publishes status changes, and the emails, by itself) and implement a `Document_Source` — see [orders and tracking](references/orders-tracking.md). Cost, date, problem and courier changes go through `Shipment_Facts_Events::record()`, never through carrier-owned notes and flags.
 - Register the orders provider and shipment handler on EVERY request, not under `is_admin()` — see [orders and tracking](references/orders-tracking.md#shared-order-plumbing).
 - For a v1 rewrite, preserve installed-site contracts byte-for-byte and make an explicit migration checklist from `docs-internal/migration/*`; run `npm run probe:signature` and follow `docs-internal/migration/signature-probe.md`. Migrate from the RELEASED code, set the oldest supported version by measuring release archives, and accept the migration on a stand with the real previous release — [settings and migration](references/settings-migration.md#migrating-a-v1-plugin).
+
+## Before you call a carrier plugin done
+
+One line per lesson that was found late on a real plugin; each links its detail.
+
+- **Russian storefront text exists and is tested** — `languages/{domain}-ru_RU.po/.mo` plus a storefront-translation test (Yandex had no catalogue at all until the operator's visual pass; [core services](../woodev-plugin-core/services.md#internationalisation)).
+- **Every string of a `Pickup_Point` is read by the shopper verbatim** — map carrier codes (`already_paid`, `card_on_receipt`) to translated customer labels, drop the codes with no meaning to a buyer ([pickup](references/model-rates-location-pickup.md#pickup-and-checkout)).
+- **Every refusal path of `rate_package()` reports its reason** to the manager as well as to the log, from ONE helper ([hint](references/method-features.md#why-a-method-is-hidden-the-admin-only-hint)).
+- **The plugin survives a second carrier and a removed Region field** — acceptance includes the two-carrier matrix and a shop with the region field removed ([second carrier](references/traps.md#a-second-carrier-plugin-on-the-same-site), [location](references/model-rates-location-pickup.md#location)).
+- **The licence gate does not break your suite**: a signed in-force claim in integration fixtures, every WordPress time constant in the unit bootstrap ([core testing](../woodev-plugin-core/layout-and-testing.md)).
+- **An own DSN for error reports** and the entry-file test stub that goes with it ([core services](../woodev-plugin-core/services.md#error-reporting)).
+- **Acceptance judges on carrier data, in a real browser path** — block checkout through a real order POST, the classic city picked from the suggestions, never a typed name ([acceptance](references/acceptance-rig.md)).
 
 ## Use fixtures as worked examples
 

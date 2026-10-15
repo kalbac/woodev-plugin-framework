@@ -80,6 +80,19 @@ internals (class-map wiring, build/CI, rig) are left out on purpose. Shipping-sp
 - The dependency handler's PHP-function check once used `extension_loaded` instead of `function_exists`;
   read before relying on `php_functions`. →
   `docs-internal/gotchas/dependency-function-check-bug.md`
+- `Woodev_Plugin::is_plugin_active()` compares BARE file names (it strips the folder from every `active_plugins`
+  entry): passing `folder/file.php` never matches, and a test that mocks it stays green. Compare the full basename
+  with `get_option( 'active_plugins' )` plus `active_sitewide_plugins` yourself. →
+  `docs-internal/gotchas/woodev-plugin-is-plugin-active-matches-the-bare-filename-only.md`
+- A REST argument whose `default` lies outside its own `minimum`/`maximum` rejects EVERY request that omits it
+  (WordPress validates the default like a sent value); leave an optional argument without a default and treat
+  `null` as absent. Unit tests that call the handler directly skip validation — prove a new route with
+  `rest_do_request()`. →
+  `docs-internal/gotchas/a-rest-arg-default-outside-its-own-minimum-rejects-every-request.md`
+- WooCommerce caches the calculated rates per package hash in the session: a gate that HIDES a rate (a licence,
+  a setting) and then flips back keeps serving the cached empty set until the cart cache is cleared, unless the
+  gate's state is part of the package. →
+  `docs-internal/gotchas/woocommerce-caches-rates-per-package-hash-so-a-rate-gate-must-change-the-package.md`
 - Legacy `Woodev_*` classes vs namespaced `Woodev\Framework\*`: new code is namespaced; know which
   spelling a symbol has before you type it. →
   `docs-internal/gotchas/namespace-migration-legacy-psr4.md`
@@ -95,12 +108,29 @@ internals (class-map wiring, build/CI, rig) are left out on purpose. Shipping-sp
   `docs-internal/gotchas/woodev-setting-get-value-is-cached-not-a-live-option-read.md`
 - Save path: validate enums by key-or-value, coerce numbers, sanitise HTML. →
   `docs-internal/gotchas/settings-api-control-save-path-pitfalls.md`
+- A `TYPE_STRING` enum map keyed by numeric strings (`[ 'none' => …, '0' => '0%', '5' => '5%' ]` — a VAT rate, a day
+  count) used to be refused at registration with `_doing_it_wrong()` and rejected on save, because PHP casts `'5'`
+  to `int 5` as an array key. Since framework #1288 the schema carries `{value, label}` pairs in declared order and
+  validation compares the key as a string (`'05'` and the int `5` are still refused). Update the bundled framework
+  before relying on it, and send the value as a string. → framework PR #1288; the user is Yandex's «Ставка НДС» (PR #91).
 - A `constant_name`-backed field is masked even when the constant is undefined. →
   `docs-internal/gotchas/mask-constant-backed-field-even-when-constant-undefined.md`
 - The "don't overwrite a stored secret with an empty submit" guard is client-side only. →
   `docs-internal/gotchas/settings-sensitive-secret-empty-skip-is-client-side.md`
 - Format validators must guard non-string input (`is_email`/`strpos` on `null` is a PHP 8.1 deprecation). →
   `docs-internal/gotchas/format-validator-null-strlen-deprecation.md`
+
+## Testing (topic `testing`)
+
+- Define every WordPress time constant in a plugin's unit bootstrap — a framework class constant built on
+  `MINUTE_IN_SECONDS` took Yandex's suite from 489 green to 21 errors while the framework's stayed green. →
+  `docs-internal/gotchas/a-framework-class-constant-on-a-wp-time-constant-breaks-a-plugin-unit-bootstrap.md`
+- PHPUnit 9 ignores `@runInSeparateProcess` on a CLASS docblock (method annotation, or
+  `@runTestsInSeparateProcesses` on the class); only CI's reverse-order gate shows the leak. →
+  `docs-internal/gotchas/phpunit-9-ignores-run-in-separate-process-on-a-class.md`
+- Three bugs passed green because the test mocked the very seam that was wrong (REST validation, `is_plugin_active`,
+  WC note actions): when a test stubs the thing under suspicion, add one test that runs the real one. →
+  `docs-internal/sessions/s170.md` (How the work went)
 
 ## HPOS and compatibility (topic `compat`)
 
@@ -135,6 +165,9 @@ internals (class-map wiring, build/CI, rig) are left out on purpose. Shipping-sp
 
 ## Internationalisation (topic `i18n`)
 
+- A plugin with storefront strings and NO `languages/` directory renders every one in English (Yandex shipped so
+  until the operator's pre-release pass): ship `{domain}-ru_RU.po/.mo` and a storefront-translation unit test from
+  the first storefront string. → [services.md](services.md#internationalisation)
 - An English msgid WITHOUT a catalogue entry is a storefront regression, and a gate that reads only the
   `.po` cannot see it. →
   `docs-internal/gotchas/rule-1-has-two-halves-an-english-msgid-alone-is-a-regression.md`

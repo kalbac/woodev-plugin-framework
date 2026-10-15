@@ -43,6 +43,8 @@ A carrier that pushes events to you implements webhooks by extending `Abstract_W
 - **Subscriptions are opt-in and cap-aware.** CDEK allows 2 active subscriptions PER TYPE per account (`v2_too_many_webhooks`); reconcile each type on its own, check the slots before subscribing, never delete a foreign subscription, never subscribe from a local site, and remember that "a test SITE ≠ a test CONTOUR" — a test site with production keys takes a production slot. Offer «Подключить» / «Отключить» buttons with the result shown at once (the framework's `Settings_Group` seam, [settings and migration](settings-migration.md#framework-sections-of-the-carrier-tab)). Per-account state belongs in its own option (`woodev_edostavka_webhook_state`).
 - **Verify locally by emulating the carrier's request** from the documented schema (token gate, status + track, replay, unknown order and status, malformed bodies, the preserved legacy callback), then prove real delivery only through a one-path tunnel — [acceptance on the rig](acceptance-rig.md#real-deliveries-to-a-local-rig). A carrier cannot reach `localhost`.
 
+**A tracking link that is not a number template (#1245).** `Orders_Provider::create()` accepts `tracking_url_meta_key`: an order-meta key holding an ABSOLUTE tracking URL (Yandex's `_yandex_delivery_sharing_url`, cleared on cancel). It is honoured only when `tracking_meta_key` is also declared AND the order has a tracking number, and only for a valid `http(s)` URL; otherwise the number-template link is used. The buyer emails and the orders page read it through `Orders_Provider::resolve_tracking_url()`.
+
 `Delivery_Sync_Status` records the last delivery refresh; it does not schedule polling. The carrier plugin owns its cron or Action Scheduler schedule. Shipment creation state (remote id/tracking) and delivery status remain separate concerns; preserve in-flight order metadata during migration. See `woodev/shipping-method/order/class-delivery-sync-status.php` and `docs-internal/specs/2026-06-25-shipping-module-decisions.md` §12 and §19.
 
 ## Buyer emails and carrier documents
@@ -61,9 +63,30 @@ A carrier that pushes events to you implements webhooks by extending `Abstract_W
   `woodev_shipping_delivery_email_placeholders` filter; the base set includes order number, tracking number/URL,
   carrier name, pickup point and delivery date (values are escaped in the HTML email).
 - Carrier documents use the shared `Order\Document_Source` seam (#1134). Register a source against the carrier's orders-provider id with `Orders_Registry::register_document_source()`, declare `supports_label_printing` on the provider, return supported types from `get_document_types()`, and implement `get_document()` as a short request that returns `Document_Result::binary()`, `url()`, `pending($retry_after)`, or `failed($reason)`. Do not block while a carrier generates a file: return `pending` and let the merchant retry. The framework owns the REST download response, filename, authorization (capability + `X-WP-Nonce`), the in-page admin outcome («ещё готовится» / failure notices; a carrier link opens in a new tab) and the download meta flag; document bytes are fetched on demand and are not persisted. Fixture: `tests/_fixtures/woodev-realistic-shipping-plugin/includes/class-realistic-document-source.php`.
+- **Name your own document types (#1257).** A `Document_Source` may also implement `Order\Document_Type_Declarations::get_document_type_declarations()` and return `type key => [ 'label' => …, 'bulk_label' => … (absent = label), 'icon' => Dashicons slug without the prefix ]`; the orders page then builds its single and bulk menu entries from those declarations instead of a fixed «Накладная» / «Штрихкод» pair. Without it only waybill and barcode exist — Yandex's «Этикетка» and «Акт приёма-передачи» were INVISIBLE in the UI until this landed (yandex PR #61). The method is called while the orders page is built: answer from local data, never from the carrier's API.
 - **A document without a second click (#1191).** The client polls a `pending` answer on its own (30 s absolute deadline, `AbortSignal`, cancelled on `pagehide`) and downloads when ready, so `get_document()` must be idempotent and keep its carrier task between calls. "Not ready" is `pending`, never a failure: CDEK answers a print task for an order it has not accepted yet with `STATE_INVALID`, and the plugin turns that into `pending` (HTTP 202) while the order has no carrier number, and into a plain Russian failure with the raw reason in the log only once it has one (edostavka#8).
 - **Bulk print (#1192) is optional**: implement `Order\Bulk_Document_Source` (`get_bulk_document_types()`, `get_bulk_document_limit()` ≥ 1, `get_bulk_document( $orders, $type )`); the route is `GET woodev/v1/shipping/orders/documents/{type}?ids=`. The framework checks each order exists, belongs to this carrier, has a carrier id and offers the type; a carrier that silently leaves an order out of the file (CDEK answers `READY` with a warning) returns `Document_Result::with_skipped()` and the merchant is told through the `X-Woodev-Skipped` header. Remember the task by the SET (a hash of the sorted carrier order ids), never by one order's meta, because the client re-asks with the same orders. CDEK: one task ≤ 100 orders → one PDF.
+- **A bulk fallback is bounded.** When the carrier refuses a whole batch because of a few ids, retry without those ids — but cap the work: Yandex's first fallback made O(N) sequential probes after one bulk refusal (found by its critic); the fix short-circuits on 401/403, bisects, stops after 20 calls, and reports a count-based "select fewer" message when the carrier names the size limit (yandex PR #79). Exclude locally cancelled / terminal orders before the call. Keep your bulk limit at or below the framework's 500.
 - **Copies, format and what the merchant prints are carrier fields** in the «Документы для печати» card of «Выгрузка заказов» (`get_export_section_setting_ids()`, card id `labels`): CDEK's receipt copies (default 2), barcode copies (default 1, `copy_count`) and barcode format A4–A7; its waybill is always A4 because `/v2/print/orders` has no format parameter (edostavka#30, s166).
+
+## An export with an unknown outcome (#1253, #1274)
+
+A timeout or 5xx on `create_order()` means the carrier MAY have booked the shipment. The framework marks the order «export state
+unknown» (`_woodev_shipment_export_unknown`, kept until an export succeeds or is reconciled) and then depends on what the carrier
+can do — declare it honestly on your `Abstract_Shipment_Handler`:
+
+- **The carrier can look an order up** → override `supports_reconcile()` / `find_exported_order()`: `Export_Retry` retries at 1 min,
+  5 min, 30 min, 2 h (five attempts, then a note) and asks `find_exported_order()` FIRST. CDEK does.
+- **The carrier cannot** (Yandex does not reconcile) → no automatic retry, automatic exports stop
+  after the first unknown outcome and leave ONE private note, and a manual export is refused until the merchant explicitly authorises a
+  retry after checking the carrier's cabinet. Do NOT build your own retry button: use the framework action `woodev_retry_export`
+  (`Order_Actions::RETRY_EXPORT`) and pass its retry flag into your own pre-create guard (Yandex PR #80; the duplicate Yandex button was
+  removed). A retry-authorisation lives only in the current synchronous action, never in queued job metadata.
+- **Keep BOTH guards.** The framework marker covers the automatic paths; a plugin whose create is two-phase (offers → confirm) also
+  needs its own "confirmation pending" flag saved BEFORE the confirm call and cleared after the id is stored, because a process killed
+  between `offers/confirm` and the framework's marker leaves nothing unknown for the framework to see (Yandex gotcha
+  `framework-unknown-export-does-not-block-a-new-create`).
+- A carrier **429** is neither: nothing was created, it is retried after `Retry-After` for any carrier.
 
 ## Carrier-neutral shipment facts (#1205)
 
@@ -145,6 +168,14 @@ Compiled reference: "Shipping orders page" in `docs-internal/wiki/architecture.m
   `help`), an `icon` (Dashicons slug without `dashicons-`), and `destructive => true` with a `confirm` sentence. The values arrive
   validated as the `array $payload` argument of `woodev_shipping_perform_order_action` (422 `woodev_shipping_orders_invalid_payload`
   on a bad value). A bulk run skips an action that needs fields.
+- **A `select` field may load its options when the dialog opens (#1285).** Declare `async_options` on the field: the row ships with no
+  options, the opened dialog calls `GET woodev/v1/shipping/orders/{id}/actions/{action}/fields/{field}/options` (capability `edit_shop_orders`,
+  the same offered-action and edit-lock gate as the write route) and your callback on the filter
+  `woodev_shipping_order_action_field_options` returns them; the orders page and the metabox draw loading / empty / error with a retry
+  and hold the submit until the list is in. Use it for a list that costs a carrier call (Yandex's delivery-interval list for «Выгрузить с
+  интервалом»); at submit the framework checks only the value's SHAPE, so your handler must match it against fresh carrier data.
+- **A carrier's own order action is refused without a valid licence unless it declares `'read_only' => true`** (a strict `true`; an
+  undeclared action is gated too) — see [shipping traps](traps.md#licence-gate-1270).
 - **Row flags** — `woodev_shipping_order_row_flags` (`label`, `tone` ok|warn|error|info|muted, `title`, `icon`; at most 3 per row).
   The filter runs for EVERY row of every page: read meta and options only, never the carrier's API.
 - **Toolbar action** — one dialog that runs ONE thing for SEVERAL orders: four filters (`woodev_shipping_orders_toolbar_actions`,

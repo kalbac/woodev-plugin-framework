@@ -89,7 +89,22 @@ Rules that follow from the lifecycle mechanics:
    `wc_edostavka_upgraded_to_2_2_2_0` is an example of a key you must keep). Leave the old keys in place
    after copying: `Settings_Provider` takes an optional `legacy_option_key` (migration source) and a
    `legacy_page` (redirect from the old admin URL) — see [settings.md](settings.md).
-3. **Preserve the old public hooks.** Alias only where consumers justify it; never silently drop one.
+3. **Preserve the old public hooks.** Alias only where consumers justify it; never silently drop one. A hook v2
+   no longer fires is DECLARED, not just deleted: override `Woodev_Plugin::get_deprecated_hooks()` (the
+   `Woodev_Hook_Deprecator` reads it) with `old_hook => [ 'version' => …, 'removed' => true, 'replacement' =>
+   '<new hook>' | false, 'map' => false ]`, so a shop's custom code hooked to it gets a deprecation notice that
+   names the replacement. Declare what shop code really used, not everything: CDEK inventoried 70 + 4 dynamic
+   hooks and the operator cut the list to the 39 a shop plausibly hooked (checkout/map params, field toggles,
+   rate customisation, tariffs, export/status/tracking, emails, services/boxes, customer location, settings
+   fields) — v1 internals and per-status names stay out (`includes/class-plugin.php`
+   `DEPRECATED_HOOK_REPLACEMENTS`, edostavka PRs #76, #77).
+   **A migration must not hang on `upgrade_to_X_Y_Z()` alone.** If the v1 line shares your plugin id (Yandex
+   1.x → 2.0.0 does), a shop that ran a skeleton build is stamped with the new version and no
+   `upgrade_to_2_0_0()` will ever run; run the migration from your lifecycle `init()` BEFORE `parent::init()`
+   whenever v1 data exists (`Yandex_V1_Migration::is_needed()`), decided from data, never from the version — and
+   an exception then keeps the framework from storing the version. The same shared id means a v1 licence key
+   already sits in the option v2 reads: copy nothing (gotchas in the Yandex repo
+   `framework-upgrade-routine-never-runs-for-a-stamped-version`, `v1-and-v2-share-the-license-option`).
 4. **Preserve the license.** Same `download_id`, and the license option names the old plugin used (gotcha
    `docs-internal/gotchas/license-key-option-double-prefix.md` — plugin ids starting with `woodev`
    double-prefix their license option key).
