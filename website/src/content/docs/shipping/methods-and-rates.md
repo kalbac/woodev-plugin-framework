@@ -87,7 +87,7 @@ add_action(
 );
 ```
 
-`calculate_shipping()` is `final`, so you cannot override it. It runs the hooks, the licence and availability checks, the optional rate cache, and calls `rate_package()`. Implement `rate_package()` instead.
+`calculate_shipping()` is `final`, so you cannot override it. It runs the hooks, the availability checks, the optional rate cache, and calls `rate_package()`. Implement `rate_package()` instead.
 
 ### One total, not a sum of parcels
 

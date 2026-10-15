@@ -111,8 +111,14 @@ final class My_Carrier_Plugin extends \Woodev\Framework\Shipping\Shipping_Plugin
 
 		$registry->register_provider( $provider, $this );
 
+		// Export and tracking talk to the carrier, so they need a real API client.
+		$api = $this->get_api();
+		if ( null === $api ) {
+			return;
+		}
+
 		$shipment_handler = new My_Carrier_Shipment_Handler(
-			$this->get_api(),
+			$api,
 			new Shipping_Order_Handler(
 				[
 					'carrier_order_id' => '_my_carrier_order_id',
@@ -123,7 +129,7 @@ final class My_Carrier_Plugin extends \Woodev\Framework\Shipping\Shipping_Plugin
 		);
 
 		$registry->register_shipment_handler( 'my_carrier', $shipment_handler );
-		$registry->register_tracking_handler( 'my_carrier', new My_Carrier_Tracking_Handler( $this->get_api(), 'my_carrier' ) );
+		$registry->register_tracking_handler( 'my_carrier', new My_Carrier_Tracking_Handler( $api, 'my_carrier' ) );
 		$registry->register_document_source( 'my_carrier', new My_Carrier_Document_Source() );
 	}
 
