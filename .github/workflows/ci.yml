@@ -459,6 +459,25 @@ jobs:
             --exclude='package-lock.json' \
             --exclude='src' \
             --exclude='.nvmrc' \
+            --exclude='/docs-internal' \
+            --exclude='/.autodev' \
+            --exclude='/.githooks' \
+            --exclude='/.serena' \
+            --exclude='/.worktreeinclude' \
+            --exclude='/.markdownlint.json' \
+            --exclude='/.markdownlintignore' \
+            --exclude='/AGENTS.md' \
+            --exclude='/CLAUDE.md' \
+            --exclude='/QWEN.md' \
+            --exclude='/orca.yaml' \
+            --exclude='/scripts' \
+            --exclude='/tools' \
+            --exclude='/bin' \
+            --exclude='/jest-unit.config.js' \
+            --exclude='/playwright.config.js' \
+            --exclude='/tsconfig.json' \
+            --exclude='/patchwork.json' \
+            --exclude='/mkdocs.yml' \
             ./ /tmp/release/woodev-plugin-framework/
 
           cd /tmp/release && zip -r "$ZIP_NAME" woodev-plugin-framework/
