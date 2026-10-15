@@ -1,0 +1,365 @@
+---
+title: Shipping plugin anatomy
+description: Understand the parts of a shipping plugin built on the framework and how they connect.
+---
+
+import { FileTree } from '@astrojs/starlight/components';
+
+In this page you will learn what a carrier plugin is made of: the plugin class that extends `\Woodev\Framework\Shipping\Shipping_Plugin`, the two methods it must implement, and the optional override points that switch on checkout fields, pickup maps, order export and the rest.
+
+A shipping plugin is a normal framework plugin (see [Your first plugin](../../getting-started/your-first-plugin/)) with one difference: its main class extends `Shipping_Plugin` instead of `Woocommerce_Plugin`. `Shipping_Plugin` extends `Woocommerce_Plugin`, so everything in [The plugin class](../../core/plugin-class/) still applies.
+
+## The pieces
+
+A carrier plugin has four kinds of parts. The framework supplies the plumbing for each; you supply the carrier-specific logic.
+
+| Part | You write | The framework supplies |
+|---|---|---|
+| **Plugin class** | A `Shipping_Plugin` subclass that lists your methods and, optionally, the handlers below. | Hooks, registration with WooCommerce, the settings tab, the «not configured» warning. |
+| **Shipping methods** | One class per delivery type, extending `Shipping_Method_Courier`, `Shipping_Method_Pickup` or `Shipping_Method_Postal`. | Rate hooks, instance settings, optional features, the rate cache. See [Methods & rates](../methods-and-rates/). |
+| **Settings** | A settings class for the values that are shared by all methods, such as credentials. | The «Woodev → Настройки» (Settings) tab, sections for export and logging. |
+| **Handlers** | Optional objects for checkout, pickup, export and webhooks. | Checkout fields, the pickup map, order screens, delivery statuses. |
+
+## The layout
+
+This is the plugin that the rest of this page builds. The method class is covered in [Methods & rates](../methods-and-rates/).
+
+<FileTree>
+
+- my-carrier/
+  - my-carrier.php **entry file**
+  - includes/
+    - class-my-carrier-plugin.php **the plugin class**
+    - class-my-carrier-settings.php shared settings
+    - shipping/
+      - class-my-carrier-courier-method.php one delivery type
+  - woodev/ the bundled framework
+
+</FileTree>
+
+## Declare it as a shipping plugin
+
+Add `'type' => 'shipping'` to the loader definition. It is the only value `type` accepts, and it tells the framework that this plugin is a carrier. Cart and Checkout Blocks support is then on by default, so you only declare HPOS yourself.
+
+```php
+<?php
+/**
+ * Plugin Name:          My Carrier
+ * Description:          Delivery by My Carrier.
+ * Version:              1.0.0
+ * Author:               Your Name
+ * Text Domain:          my-carrier
+ * Requires at least:    6.6
+ * Requires PHP:         7.4
+ * WC requires at least: 7.0
+ *
+ * @package My_Carrier
+ */
+
+defined( 'ABSPATH' ) || exit;
+
+defined( 'MY_CARRIER_FILE' ) || define( 'MY_CARRIER_FILE', __FILE__ );
+defined( 'MY_CARRIER_VERSION' ) || define( 'MY_CARRIER_VERSION', '1.0.0' );
+
+require_once plugin_dir_path( __FILE__ ) . 'woodev/loader.php';
+
+/**
+ * Builds the plugin once the framework is ready.
+ *
+ * The method classes are loaded first: the plugin reads its method list while it is built.
+ *
+ * @return void
+ */
+function my_carrier_start(): void {
+	$includes = plugin_dir_path( MY_CARRIER_FILE ) . 'includes/';
+
+	require_once $includes . 'class-my-carrier-settings.php';
+	require_once $includes . 'shipping/class-my-carrier-courier-method.php';
+	require_once $includes . 'class-my-carrier-plugin.php';
+
+	My_Carrier_Plugin::instance();
+}
+
+Woodev_Loader::register(
+	MY_CARRIER_FILE,
+	[
+		'plugin_id'            => 'my-carrier',
+		'download_id'          => 1234,
+		'plugin_name'          => 'My Carrier',
+		'plugin_version'       => MY_CARRIER_VERSION,
+		'framework_version'    => '%%FRAMEWORK_VERSION%%',
+		'backwards_compatible' => '2.0.0',
+		'platform'             => 'woocommerce',
+		'type'                 => 'shipping',
+		'requirements'         => [
+			'php'         => '7.4',
+			'wordpress'   => '6.6',
+			'woocommerce' => '7.0',
+		],
+		'supported_features'   => [
+			'hpos' => true,
+		],
+		'main_class'           => 'My_Carrier_Plugin',
+		'callback'             => 'my_carrier_start',
+	]
+);
+```
+
+:::caution
+Write `'type' => 'shipping'` as a string. A framework class constant in the definition is a fatal error, because the framework is not loaded when PHP builds the array. See [Loader definition reference](../../getting-started/loader-definition-reference/#literals-only).
+:::
+
+## The plugin class
+
+Two methods are abstract, so every carrier writes them:
+
+- **`get_shipping_method_classes(): array`** returns the class names of your shipping methods.
+- **`get_api(): ?Shipping_API`** returns the object that talks to the carrier. It may return `null` when your methods call the carrier some other way. The `Shipping_API` interface and the `Abstract_Shipping_API` base class describe the usual operations: rates, pickup points, creating, reading and cancelling an order, tracking.
+
+The rest of the class is the usual plugin boilerplate plus the settings, shown below.
+
+```php
+<?php
+defined( 'ABSPATH' ) || exit;
+
+use Woodev\Framework\Settings\{Settings_Provider, Settings_Section};
+use Woodev\Framework\Shipping\Api\Shipping_API;
+
+/**
+ * The My Carrier plugin.
+ */
+final class My_Carrier_Plugin extends \Woodev\Framework\Shipping\Shipping_Plugin {
+
+	/**
+	 * The single instance.
+	 *
+	 * @var My_Carrier_Plugin|null
+	 */
+	protected static $instance;
+
+	/**
+	 * The shared settings, built on first use.
+	 *
+	 * @var My_Carrier_Settings|null
+	 */
+	private $settings;
+
+	/**
+	 * Sets up the plugin.
+	 */
+	public function __construct() {
+		parent::__construct(
+			'my-carrier',
+			MY_CARRIER_VERSION,
+			[
+				'text_domain' => 'my-carrier',
+			]
+		);
+	}
+
+	/**
+	 * Gets the single instance.
+	 *
+	 * @return My_Carrier_Plugin
+	 */
+	public static function instance(): self {
+		return self::$instance ??= new self();
+	}
+
+	/**
+	 * Gets the full path of the plugin's entry file.
+	 *
+	 * @return string
+	 */
+	protected function get_file(): string {
+		return MY_CARRIER_FILE;
+	}
+
+	/**
+	 * Gets the plugin's display name.
+	 *
+	 * Return a plain string: the framework reads this before translations are loaded.
+	 *
+	 * @return string
+	 */
+	public function get_plugin_name(): string {
+		return 'My Carrier';
+	}
+
+	/**
+	 * Lists the shipping method classes the plugin registers with WooCommerce.
+	 *
+	 * @return string[]
+	 */
+	protected function get_shipping_method_classes(): array {
+		return [ My_Carrier_Courier_Method::class ];
+	}
+
+	/**
+	 * Gets the carrier API client. This example calls the carrier from its methods instead.
+	 *
+	 * @return Shipping_API|null
+	 */
+	public function get_api(): ?Shipping_API {
+		return null;
+	}
+
+	/**
+	 * Gets the settings shared by all of the plugin's methods.
+	 *
+	 * @return My_Carrier_Settings
+	 */
+	public function get_my_settings(): My_Carrier_Settings {
+		if ( null === $this->settings ) {
+			$this->settings = new My_Carrier_Settings( $this->get_id() );
+		}
+
+		return $this->settings;
+	}
+
+	/**
+	 * Adds the plugin's own sections to its tab on «Woodev → Настройки».
+	 *
+	 * @return Settings_Provider[]
+	 */
+	protected function get_tab_settings_providers(): array {
+		return [
+			Settings_Provider::create_with_sections(
+				$this->get_id(),
+				'My Carrier',
+				$this->get_my_settings(),
+				[],
+				Settings_Section::create( 'connection', 'Connection', [ 'api_key', 'sender_city' ] )
+			),
+		];
+	}
+
+	/**
+	 * Tells the framework whether the carrier is ready to quote rates.
+	 *
+	 * @return bool
+	 */
+	public function is_configured(): bool {
+		return '' !== (string) $this->get_my_settings()->get_value( 'api_key' );
+	}
+}
+```
+
+The shared settings class registers each value once:
+
+```php
+<?php
+defined( 'ABSPATH' ) || exit;
+
+/**
+ * The settings that all My Carrier methods share.
+ */
+class My_Carrier_Settings extends \Woodev_Abstract_Settings {
+
+	/**
+	 * Registers the settings and the controls that edit them.
+	 *
+	 * @return void
+	 */
+	protected function register_settings() {
+		$this->register_setting(
+			'api_key',
+			\Woodev_Setting::TYPE_STRING,
+			[
+				'name'      => 'API key',
+				'default'   => '',
+				'sensitive' => true,
+			]
+		);
+		$this->register_control( 'api_key', \Woodev_Control::TYPE_PASSWORD );
+
+		$this->register_setting(
+			'sender_city',
+			\Woodev_Setting::TYPE_STRING,
+			[
+				'name'    => 'Sender city',
+				'default' => '',
+			]
+		);
+		$this->register_control( 'sender_city', \Woodev_Control::TYPE_TEXT );
+	}
+}
+```
+
+:::caution
+Load the method classes before the plugin is built, as the entry file above does. The plugin reads its method list while its constructor runs, and a class that is not loaded then is dropped from the list without any warning. The method is simply missing from WooCommerce. The same happens to a class that does not extend `Shipping_Method`.
+:::
+
+### What registration does
+
+`register_shipping_methods()` is `final`: you do not override it. It runs on WooCommerce's `woocommerce_shipping_methods` filter and registers every valid class returned by `get_shipping_method_classes()`. Around it the framework fires three hooks:
+
+| Hook | Type | Arguments |
+|---|---|---|
+| `woodev_shipping_plugin_method_classes` | filter | The class list, the plugin. Change what gets registered. |
+| `woodev_shipping_plugin_before_register_method` / `woodev_shipping_plugin_after_register_method` | action | The method id, the class name, the plugin. |
+| `woodev_shipping_plugin_registered_methods` | filter | The final methods array, the plugin. |
+
+A filter that returns something other than an array is ignored, and the plugin's own list is used.
+
+## The «not configured» warning
+
+`is_configured()` answers one question: can this carrier work yet? While it returns `false`, the framework shows a warning on wp-admin that names the plugin and links to its settings tab, even when no method has been added to any shipping zone.
+
+The default answer is `true` for a plugin that has no WooCommerce Integration screen. A carrier that needs credentials overrides it, as above, with one line that reads its own settings. Keep it cheap: it runs on every wp-admin page, so it must not call the carrier.
+
+## Override points
+
+Everything else is optional. Most overrides return `null`, `false` or an empty array by default, and the framework leaves that part switched off until you return something. Each row links to the page that explains it.
+
+| Override | Switches on | Covered in |
+|---|---|---|
+| `get_tab_settings_providers()` | Your own sections on the plugin's settings tab. | This page, below. |
+| `get_export_section_setting_ids()`, `get_export_section_extension()` | Your own fields, cards and buttons in the «Выгрузка заказов» (Order export) section. | [Orders, export, documents & tracking](../orders-export-documents-and-tracking/) |
+| `get_checkout_handler()` | Checkout fields managed by the framework, in the classic and the block checkout. | [Location & checkout fields](../location-and-checkout-fields/) |
+| `needs_location_provider()`, `get_location_adapter()` | The shared city and region fields. Return `true` from the first and an adapter from the second. | [Location & checkout fields](../location-and-checkout-fields/) |
+| `get_pickup_handler()` | The pickup point button, map and selection saved to the order. | [Pickup points & maps](../pickup-points-and-maps/) |
+| `get_webhook_handler()` | An inbound webhook route, for carriers that push delivery events. | [Orders, export, documents & tracking](../orders-export-documents-and-tracking/) |
+| `get_box_presets()`, `uses_boxes()` | The carrier's own boxes in the packing settings. | [Packaging & box packing](../packaging-and-box-packing/) |
+| `is_configured()` | The «not configured» warning. | This page, above. |
+| `init_lifecycle_handler()` | Install and upgrade routines, for example a migration from an earlier version. | [Lifecycle & upgrades](../../core/lifecycle-and-upgrades/) |
+| `build_setup_wizard_handler()` | An onboarding wizard. | [Setup wizard](../../settings/setup-wizard/) |
+| `get_integration_handler()` | A WooCommerce Integrations screen. Only for a plugin that must keep one it already has. | n/a |
+
+Order handling for export, documents and tracking is registered through the order classes rather than a single override; see [Orders, export, documents & tracking](../orders-export-documents-and-tracking/).
+
+:::note
+The pickup handler is the one seam that is easy to get half right. The framework registers the checkout and webhook handlers for you, but not the pickup handler. You build it and call its `register()` yourself. [Pickup points & maps](../pickup-points-and-maps/) shows where.
+:::
+
+## Where settings live
+
+A carrier has two kinds of settings, and they live in two different places.
+
+- **Settings shared by every method**, such as credentials, the sender address and account defaults, belong to the plugin. You return them from `get_tab_settings_providers()`, as above, and they appear on the plugin's own tab on «Woodev → Настройки» (Settings). A connection section can add a button that tests the credentials; see [Connection tests](../../settings/connection-tests/).
+- **Settings of one delivery method**, such as tariffs, fees and free-shipping thresholds, belong to the WooCommerce shipping method instance. You declare them in the method's `get_method_form_fields()`, and the merchant edits them in the shipping zone. See [Methods & rates](../methods-and-rates/).
+
+Use a plugin-wide setting only when the value is really the same for all instances. If a merchant could sensibly want two different values in two zones, make it an instance field.
+
+The framework adds sections of its own to the same tab, so do not build them:
+
+| Section | When it appears | What it holds |
+|---|---|---|
+| «Упаковка» (Packaging) | The plugin declares boxes. | How cart items are packed, and which of the carrier's boxes are enabled. |
+| «Выгрузка заказов» (Order export) | The plugin exports orders. | Automatic export, the print documents and the delivery statuses. |
+| «Дополнительно» (Advanced) | Always. | The «Логирование» (Logging) switch and hiding the carrier on the cart page. |
+
+Section ids `export`, `advanced` and `packaging` are reserved for these. A contribution that reuses one of them, or that reuses a setting id, is left out of the tab and reported with a developer notice.
+
+Some settings are not per carrier at all. «Woodev → Настройки → Доставка» (Shipping) holds the store-wide sections: the boxes the store owns, default weight and dimensions for products without them, the checkout form fields, and the map. Every carrier plugin on the site shares them.
+
+## The name merchants see
+
+`get_carrier_name()` returns the short carrier name that the settings tab and delivery emails use. It is the label of the first settings provider you return, so a plugin that labels its provider «СДЭК» gets that name everywhere. A plugin with no labelled provider falls back to `get_plugin_name()`.
+
+## Next steps
+
+- [Methods & rates](../methods-and-rates/) builds the courier method that this plugin lists.
+- [Method features](../method-features/) adds optional capabilities to a method.
+- [Packaging & box packing](../packaging-and-box-packing/) turns the cart into parcels for the carrier.
+- [Location & checkout fields](../location-and-checkout-fields/) and [Pickup points & maps](../pickup-points-and-maps/) cover the checkout.
