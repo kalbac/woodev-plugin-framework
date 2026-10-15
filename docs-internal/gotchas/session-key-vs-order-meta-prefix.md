@@ -28,7 +28,7 @@ is not under `_yandex_delivery_`, and the order-meta side is decomposed fields, 
 - **Order-meta persistence** is a SEPARATE responsibility owned by the order handler
   (`class-shipping-order-handler.php`), keyed by the plugin's **order-meta prefix**.
 - Never funnel both through one composed key. They are two independent entries on the
-  "never break" list (`.autodev/INVARIANTS.md` `order_session_meta.exact_strings` lists BOTH
+  "never break" list ([`archive/autodev-contracts/INVARIANTS.md`](../archive/autodev-contracts/INVARIANTS.md) `order_session_meta.exact_strings` lists BOTH
   `_yandex_delivery_` AND `chosen_yandex_pickup_point*` precisely because they are distinct).
 
 ### What the session primitive actually looks like (corrected s66, #143)
@@ -71,7 +71,7 @@ installed site at plugin-migration time.
 - Spec corrected: `docs-internal/archive/platform-v2-s1-shipping-spec.md` §4.1.v (session-only)
 - Contract source of truth: `docs-internal/migration/yandex-data-preservation-checklist.md`
   ("Chosen-point session key" row)
-- `.autodev/INVARIANTS.md` — `order_session_meta` zone
+- [`archive/autodev-contracts/INVARIANTS.md`](../archive/autodev-contracts/INVARIANTS.md) — `order_session_meta` zone
 - [an-empty-domain-key-is-not-a-key](an-empty-domain-key-is-not-a-key.md) — the framework's one rule about these plugin-supplied
   keys: `''` is the seam failing to answer, not a key, and must be refused on read AND write.
 - [guest-session-write-needs-the-cart-cookie](guest-session-write-needs-the-cart-cookie.md) — why this store needs no user-meta twin the way

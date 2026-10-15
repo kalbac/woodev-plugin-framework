@@ -12,7 +12,7 @@ plugin id by a naming convention (`{plugin_id}_orders`, `wc-{dasherize(plugin_id
 follow one convention, and a derived value that differs by even one character orphans live data /
 breaks a bookmarked URL / 404s a live AJAX endpoint.
 
-Proof from the two S1 pilots (`.autodev/INVARIANTS.md`):
+Proof from the two S1 pilots ([`archive/autodev-contracts/INVARIANTS.md`](../archive/autodev-contracts/INVARIANTS.md)):
 
 | Contract | edostavka | yandex | Derivation would give |
 |----------|-----------|--------|-----------------------|
@@ -47,6 +47,6 @@ NOT recalibrate it away from these findings (contrast: the critic's *over-flaggi
 additive hooks / unwired classes — see `autodev-critic-overflag` (archived) — which IS miscalibration).
 
 ## Related
-- the retired autodev INVARIANTS file (removed s183; see git history) — `ajax_actions`, `admin_page_slugs`, `rest`, `log_source`, `cron`, `order_session_meta` exact_strings
+- [the retired autodev INVARIANTS file](../archive/autodev-contracts/INVARIANTS.md) — `ajax_actions`, `admin_page_slugs`, `rest`, `log_source`, `cron`, `order_session_meta` exact_strings
 - [session-key-vs-order-meta-prefix](session-key-vs-order-meta-prefix.md) — the order-handler instance of the same root
 - `autodev-critic-overflag` (archived) — the critic's *real* miscalibration (distinct from this, which it gets right)

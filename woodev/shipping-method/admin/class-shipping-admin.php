@@ -12,7 +12,7 @@
  *
  * CRITICAL — admin page slugs are installed-site contracts and are NOT derivable.
  * The live slugs do NOT follow one convention: edostavka uses `wc_edostavka_orders`
- * (underscores), yandex uses `wc-yandex-orders` (dashes) (see the `admin_page_slugs` invariant in git history, pre-s183). Dasherizing the plugin id (`edostavka` -> `wc-edostavka-orders`)
+ * (underscores), yandex uses `wc-yandex-orders` (dashes) (`admin_page_slugs` in docs-internal/archive/autodev-contracts/INVARIANTS.md). Dasherizing the plugin id (`edostavka` -> `wc-edostavka-orders`)
  * matches NEITHER live slug and would break the merchant's bookmarked admin URL. So,
  * exactly like the order handler's meta-key map (§4.3) and the AJAX action map (§4.1),
  * the PLUGIN SUPPLIES its exact admin page slug(s) as explicit values; the framework
