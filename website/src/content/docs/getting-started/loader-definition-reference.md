@@ -49,11 +49,11 @@ The first argument is the full path of the main file. `register()` adds it to th
 | Field | Type | Required | Meaning | Example |
 |---|---|---|---|---|
 | `plugin_id` | string | yes | The plugin's stable identifier. It must equal the ID you pass to `parent::__construct()`, and it must be unique among the plugins on a site. | `'my-carrier'` |
-| `download_id` | positive integer | yes | The plugin's product id in the woodev.ru store, unique per plugin. | `1234` |
+| `download_id` | positive integer | yes | The plugin's product id in the woodev.ru store, unique per plugin. Write it as an integer literal. | `1234` |
 | `plugin_name` | string | yes | The display name. | `'My Carrier'` |
 | `plugin_version` | string | yes | The plugin's own version. | `'1.0.0'` |
 | `framework_version` | string | yes | The version of the framework copy you bundle. | `'%%FRAMEWORK_VERSION%%'` |
-| `backwards_compatible` | string | recommended | The oldest framework version your bundled copy can still serve. | `'2.0.0'` |
+| `backwards_compatible` | string | required in practice | The oldest framework version your bundled copy can still serve. Not checked by the validator, but always set it — see below. | `'2.0.0'` |
 | `platform` | string | yes | `'wordpress'` or `'woocommerce'`. | `'woocommerce'` |
 | `requirements` | array | yes | Minimum versions: `php`, `wordpress`, and `woocommerce` for a WooCommerce plugin. | `[ 'php' => '7.4', ... ]` |
 | `main_class` | string | one of `main_class` or `callback` | The class the loader builds. | `'My_Carrier_Plugin'` |
@@ -169,7 +169,7 @@ When you use a callback, keep `main_class` set too. The framework uses it to mat
 
 The callback must be callable when `register()` runs. A function declared at the top level of the main file qualifies, wherever in the file it sits.
 
-A `main_class` that does not exist makes the definition invalid, and the plugin does not start.
+When there is no callback and the loader builds the plugin from `main_class`, a class that does not exist makes the definition invalid, and the plugin does not start. With a callback, building the plugin is the callback's job.
 
 ## When validation fails
 
