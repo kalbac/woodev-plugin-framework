@@ -1187,11 +1187,25 @@
 		var locality = point && 'string' === typeof point.locality ? point.locality : '';
 		var postalCode = point && 'string' === typeof point.postal_code ? point.postal_code : '';
 
+		// Issue #1290: a value the point does not carry is not announced and not written. A
+		// carrier whose points have no locality or postcode (Yandex's) would otherwise blank a
+		// field the customer already filled — the city, in the typeahead mode, taking the
+		// settlement's hidden key out of agreement with its visible text and refusing the
+		// order for an empty required field. Mirrors the server's own rule
+		// (`Pickup_Handler::store_api_replacement_address()`: «only values the point actually has»).
 		var fields = {};
 
-		fields[ target + '_address_1' ] = address;
-		fields[ target + '_city' ] = locality;
-		fields[ target + '_postcode' ] = postalCode;
+		if ( '' !== address ) {
+			fields[ target + '_address_1' ] = address;
+		}
+
+		if ( '' !== locality ) {
+			fields[ target + '_city' ] = locality;
+		}
+
+		if ( '' !== postalCode ) {
+			fields[ target + '_postcode' ] = postalCode;
+		}
 
 		// Issue #339, BEFORE the writes and never after them. These fields are shared with
 		// `location-cascade.js`, which treats a value that no longer matches its confirmed
