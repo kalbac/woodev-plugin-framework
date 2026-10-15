@@ -1,3 +1,8 @@
+# #1293 worker handoff (2026-10-15)
+
+Code `f8197c9a`; [s182](sessions/s182.md). Jest 3403; PHP 7359 / 1 skip. Coordinator owes build,
+review, rig acceptance and publication. No options/orders changed. Prior commitments below stand.
+
 > Составлено по итогам s181 (15.10.2026, MacBook, **ночная автономная сессия**; оператор спал). Формат: `DOCS-SCHEMA.md` → Handoff Format.
 >
 > **Дерево:** framework `main` (см. `git log -1`; s181 закрыт PR #1296–#1299), Yandex `main` `1e8b41a`, CDEK `v2` `569a0f4`;
@@ -43,8 +48,6 @@
 
 **Снято решением, не молчанием:** s181 — #1253 (закрыто с его разрешения), #1290, yandex#62 #85 #89 #90 #93 #95 #97 #98 #101, edostavka#103
 #105 #107 (слиты/закрыты); #247 — не начинать до релиза (его слово 13.08). Старшие — `SESSION-LOG.md`.
-
-**Реестр номеров — РАДИ ГЕЙТА, не для чтения:** статус каждого — на карточке.
 
 **Реестр номеров — РАДИ ГЕЙТА, не для чтения:** статус каждого — на карточке.
 

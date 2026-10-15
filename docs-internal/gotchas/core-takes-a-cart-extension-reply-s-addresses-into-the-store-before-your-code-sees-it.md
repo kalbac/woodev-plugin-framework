@@ -77,6 +77,34 @@ recovery `updateCustomerData` races core's own debounced sync, leaving the serve
 (core has no diff against its own baseline). A real fix needs a writer signal (form setter vs reply import), not value
 equality — see #1115.
 
+## #1293: extension replies can erase the locality BEFORE core pushes it (2026-10-15)
+
+The same import also races native setters. A fresh guest on WC 11.2.1, with forced billing delivery,
+showed the chooser write both cities as `Москва`, followed 77 ms later by a payment-fee extension reply
+that imported `city=''`, `state='*'` and an empty email. Core's next debounce/focusout sees that erased
+form and can send it back: its private customer snapshot is not an independent form owner.
+
+The localStorage dirty flag is **debounced 300 ms** (`It` in `wc-blocks-data.js`), while
+`updateCustomerData` clears it even after a partial locality-only write (`wi`). Checking that flag or
+passing `overwriteDirtyCustomerData: false` cannot close either window. The framework's immediate rate
+refresh also used to save only shipping locality, leaving billing city empty on the server.
+
+❌ Let a fee/pickup cart reply import all addresses, then restore values after the promise resolves:
+React subscribers already saw the blank city and can invalidate the selection in between.
+
+✅ `keepExtensionAddressesInForm()` removes address properties from successful replies of the server's
+published framework fee/pickup namespaces **before** WooCommerce imports them, including indexed batch
+responses and plain-permalink routes. Foreign namespaces and customer-update replies are untouched.
+`writeDeliveryLocality()` / native setters own city/state; `adoptDestination()` explicitly adopts only
+the confirmed pickup street/postcode. `refreshRates()` persists linked billing locality as well as
+shipping locality, and still leaves half-typed street/postcode/email to core's own validation and push.
+
+This supersedes the assumption in the historical fix above that our pickup replies necessarily move
+addresses before resolving; the explicit destination adoption remains required. The #1115 historical
+limit still describes unprotected foreign extension replies, not the now-filtered framework replies.
+The regression suite is `tests/js/checkout-blocks-extension-addresses.test.ts`. Browser evidence used
+no orders or option changes; the final built-bundle carrier-switch acceptance belongs to the coordinator.
+
 ## Related
 
 - [the-block-checkout-is-a-rest-request-and-fires-none-of-the-classic-checkout-hooks](the-block-checkout-is-a-rest-request-and-fires-none-of-the-classic-checkout-hooks.md) — the other place the block checkout's own request order decides behaviour

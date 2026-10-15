@@ -282,8 +282,10 @@ only consumer; they get rewritten once everything is ready.
 
 ## Next Actions
 
-**Next:** #1293 block-checkout address race (framework locality chooser vs WooCommerce focusout push; block-only, after-release
-class but first in the queue); #1169 one clean CDEK acceptance run (order 1444 cancelled s181); then the board («Приоритет»).
+**Next:** #1293 source fix is committed locally on `kalbac/fix-1293-block-address-race` (`f8197c9a`): framework extension replies
+no longer import native address snapshots; linked billing locality is persisted during refresh. Coordinator must build bundles,
+run the block carrier-switch acceptance and publish before closing the card. Then #1169 one clean CDEK acceptance run
+(order 1444 cancelled s181); then the board («Приоритет»).
 The rig keeps `ship_to_destination=billing_only` as the norm (operator s181: CIS shops ship to the billing address). Handoff
 `next-session-prompt.md`.
 
