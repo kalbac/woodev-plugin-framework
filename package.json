@@ -7,7 +7,9 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "wp-scripts build ./src/license-page/index.js --output-path=woodev/assets/build/license-page && wp-scripts build ./src/plugins-page/index.js --output-path=woodev/assets/build/plugins-page && wp-scripts build ./src/setup-wizard/index.js --output-path=woodev/assets/build/setup-wizard && wp-scripts build ./src/settings-page/index.js --output-path=woodev/assets/build/settings-page && wp-scripts build \"index=./src/shipping-orders-page/index.tsx\" --output-path=woodev/assets/build/shipping-orders-page && wp-scripts build \"index=./src/checkout-blocks/index.ts\" --output-path=woodev/assets/build/checkout-blocks && wp-scripts build \"index=./src/shipping-zone-city-limit/index.tsx\" --output-path=woodev/assets/build/shipping-zone-city-limit && wp-scripts build ./src/ui-kit-gallery/index.js --output-path=woodev/assets/build/ui-kit-gallery",
+    "build": "wp-scripts build ./src/license-page/index.js --output-path=woodev/assets/build/license-page && wp-scripts build ./src/plugins-page/index.js --output-path=woodev/assets/build/plugins-page && wp-scripts build ./src/setup-wizard/index.js --output-path=woodev/assets/build/setup-wizard && wp-scripts build ./src/settings-page/index.js --output-path=woodev/assets/build/settings-page && wp-scripts build \"index=./src/shipping-orders-page/index.tsx\" --output-path=woodev/assets/build/shipping-orders-page && wp-scripts build \"index=./src/checkout-blocks/index.ts\" --output-path=woodev/assets/build/checkout-blocks && wp-scripts build \"index=./src/shipping-zone-city-limit/index.tsx\" --output-path=woodev/assets/build/shipping-zone-city-limit && wp-scripts build ./src/ui-kit-gallery/index.js --output-path=woodev/assets/build/ui-kit-gallery && node scripts/build-min-assets.mjs",
+    "build:min": "node scripts/build-min-assets.mjs",
+    "lint:min": "node scripts/build-min-assets.mjs --check",
     "build:setup": "wp-scripts build ./src/setup-wizard/index.js --output-path=woodev/assets/build/setup-wizard",
     "build:settings": "wp-scripts build ./src/settings-page/index.js --output-path=woodev/assets/build/settings-page",
     "build:orders": "wp-scripts build \"index=./src/shipping-orders-page/index.tsx\" --output-path=woodev/assets/build/shipping-orders-page",
@@ -46,9 +48,12 @@
     "@wordpress/date": "^5.53.0",
     "@wordpress/notices": "^5.40.1",
     "@wordpress/scripts": "32.4.0",
+    "cssnano": "^6.1.2",
     "imask": "^7.6.1",
     "jquery": "^4.0.0",
     "libphonenumber-js": "^1.13.12",
+    "postcss": "^8.5.15",
+    "terser": "^5.48.0",
     "typescript": "^6.0.3"
   }
 }

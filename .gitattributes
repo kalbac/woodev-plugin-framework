@@ -27,6 +27,11 @@
 # Linux CI build-parity check byte-for-byte.
 woodev/assets/build/** text eol=lf
 
+# Minified siblings of the hand-written css/js (`npm run build:min`, card #247) — same LF pin, same
+# reason: CI rebuilds them on Linux and fails on any diff.
+*.min.js text eol=lf
+*.min.css text eol=lf
+
 # Binary files — no conversion
 *.png binary
 *.jpg binary

@@ -97,6 +97,12 @@ overridden anyway — only its *structure* is worth having.
   every template against a committed fixture of number plans. It was watched RED against the
   original Turkmen template before being accepted. The fixture is committed rather than read from
   the library so the unit suite never depends on a devDependency being installed.
+- **Amended 15.10.2026 (card #247) — «no build step at this layer» now means «no bundler».** Every
+  hand-written file under `assets/js` and `assets/css` gets a 1:1 minified `name.min.*` sibling from
+  `scripts/build-min-assets.mjs` (terser / cssnano; no concatenation, no transpile, no source maps),
+  and `Woodev_Plugin::get_assets_suffix()` picks it unless `SCRIPT_DEBUG` is on. Sources keep their own
+  handle, dependencies and version, and are still what a developer debugs. The vendored
+  `vendor/imask.min.js` is untouched by that script and still produced only by `generate:imask`.
 - **Not decided here:** whether other layers may vendor runtime JS. This ADR covers the checkout
   phone mask. A second case should be argued on its own evidence rather than by citing this one.
 
