@@ -47,10 +47,10 @@ Bug introduced in PR # . (If applicable)
 
 ### Checklist
 
-- [ ] I have run linting: `composer phpcs`
-- [ ] I have run tests (if applicable): `composer test:unit`, `composer test:integration`
+- [ ] I have run `composer check` (PHPCS, PHPStan, unit tests)
+- [ ] I have run `npm run test:js` (if JS/TS changed) and, for `src/` changes, `npm run build` plus the `lint:i18n*` checks from the [contributing guide](.github/CONTRIBUTING.md)
 - [ ] I have updated `docs-internal/` where the change belongs (`wiki/architecture.md` for a seam, `adr/` for a decision, a gotcha for a trap)
-- [ ] I have updated README.md (if user-facing changes)
+- [ ] I have updated the public docs in `website/` (if a public capability changed)
 - [ ] **All commits follow Conventional Commits format** (for automatic CHANGELOG generation)
 - [ ] **No installed-site data contract broken** (option keys, hook names, cron, REST namespaces, AJAX actions, admin slugs, meta keys)
 
@@ -63,6 +63,7 @@ Bug introduced in PR # . (If applicable)
 - [ ] `feat:` — New feature
 - [ ] `fix:` — Bug fix
 - [ ] `docs:` — Documentation
+- [ ] `perf:` — Performance improvement
 - [ ] `refactor:` — Code refactoring (no functionality change)
 - [ ] `test:` — Tests
 - [ ] `chore:` — Auxiliary tasks (CI/CD, config)
