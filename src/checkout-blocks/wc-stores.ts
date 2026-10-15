@@ -35,7 +35,10 @@ interface CartActions {
 	setShippingAddress?: ( address: WcAddress ) => void;
 	setBillingAddress?: ( address: WcAddress ) => void;
 	updateCustomerData?: (
-		customerData: { shipping_address: Pick< WcAddress, 'city' | 'state' | 'country' > },
+		customerData: {
+			shipping_address: Pick< WcAddress, 'city' | 'state' | 'country' >;
+			billing_address?: Pick< WcAddress, 'city' | 'state' | 'country' >;
+		},
 		editing?: boolean,
 		haveAddressFieldsForShippingRatesChanged?: boolean
 	) => Promise< unknown >;
@@ -401,7 +404,9 @@ export function adoptDestination(
  * (`wc-blocks-data.js`, `wi=`) and 9.9.0 (`data/cart/thunks.ts`), not recalled.
  *
  * Only country, state and city travel: the server merges a partial address into the one it holds,
- * and a half-typed postcode is core's to validate and push, not ours.
+ * and a half-typed postcode is core's to validate and push, not ours. Billing locality travels too
+ * when the addresses are linked: leaving it unsaved made the next extension reply carry an empty
+ * billing city even after shipping had been rated (#1293). A separate billing address stays alone.
  */
 export async function refreshRates( billingOnly = false ): Promise< void > {
 	const actions = dispatch( CART_STORE ) as unknown as CartActions | undefined;
@@ -411,9 +416,15 @@ export async function refreshRates( billingOnly = false ): Promise< void > {
 	}
 
 	const { city, state, country } = readDeliveryAddress( billingOnly );
+	const billing = readBillingAddress();
 
 	try {
-		await actions.updateCustomerData( { shipping_address: { city, state, country } }, true, true );
+		await actions.updateCustomerData( {
+			shipping_address: { city, state, country },
+			...( billingOnly || readUseShippingAsBilling() ? {
+				billing_address: { city: billing.city, state: billing.state, country: billing.country },
+			} : {} ),
+		}, true, true );
 	} catch {
 		// Core has already recorded the error; the next address push recalculates.
 	}

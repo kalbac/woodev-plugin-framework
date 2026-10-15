@@ -379,7 +379,10 @@ describe( 'LocalityChooser — provider absence and fallback', () => {
 		await waitFor( () => expect( mockStore.setBillingAddress ).toHaveBeenCalledTimes( 1 ) );
 		await waitFor( () => expect( mockStore.setShippingAddress ).toHaveBeenCalledTimes( 1 ) );
 		expect( mockStore.setBillingAddress.mock.calls[ 0 ][ 0 ] ).toMatchObject( { city: 'Подольск', state: 'МОСКОВСКАЯ ОБЛАСТЬ' } );
-		expect( mockStore.updateCustomerData ).toHaveBeenCalledWith( { shipping_address: { city: 'Подольск', state: 'МОСКОВСКАЯ ОБЛАСТЬ', country: 'RU' } }, true, true );
+		expect( mockStore.updateCustomerData ).toHaveBeenCalledWith( {
+			shipping_address: { city: 'Подольск', state: 'МОСКОВСКАЯ ОБЛАСТЬ', country: 'RU' },
+			billing_address: { city: 'Подольск', state: 'МОСКОВСКАЯ ОБЛАСТЬ', country: 'RU' },
+		}, true, true );
 		expect( billing.querySelector( '[role="combobox"]' ) ).toBeInTheDocument();
 	} );
 
@@ -485,6 +488,10 @@ describe( 'LocalityChooser — choosing a locality', () => {
 		expect( mockStore.setBillingAddress ).toHaveBeenCalledWith(
 			expect.objectContaining( { city: 'Подольск', state: 'МОСКОВСКАЯ ОБЛАСТЬ' } )
 		);
+		expect( mockStore.updateCustomerData ).toHaveBeenCalledWith( {
+			shipping_address: { city: 'Подольск', state: 'МОСКОВСКАЯ ОБЛАСТЬ', country: 'RU' },
+			billing_address: { city: 'Подольск', state: 'МОСКОВСКАЯ ОБЛАСТЬ', country: 'RU' },
+		}, true, true );
 	} );
 
 	it( 'leaves the state alone when the region field is removed', async () => {
@@ -495,6 +502,25 @@ describe( 'LocalityChooser — choosing a locality', () => {
 
 		await waitFor( () => expect( mockStore.setShippingAddress ).toHaveBeenCalledTimes( 1 ) );
 		expect( mockStore.setShippingAddress ).toHaveBeenCalledWith( expect.objectContaining( { city: 'Подольск', state: 'МОСКВА' } ) );
+	} );
+
+	it( 'replaces the wildcard with a free-text region in both billing-only addresses and the rate refresh', async () => {
+		mockStore.forcedBillingAddress = true;
+		mockStore.customer.billingAddress.state = '*';
+		mockStore.customer.shippingAddress.state = '*';
+		( window as unknown as { wc: { wcSettings: { getSetting: unknown } } } ).wc.wcSettings.getSetting = ( name: string, fallback: unknown ) =>
+			( { countryData: { RU: { states: [] } }, forcedBillingAddress: true } as Record< string, unknown > )[ name ] ?? fallback;
+
+		render( <LocalityChooser config={ baseConfig( { billingOnly: true } ) } addressTarget="billing" /> );
+		await chooseFirstSuggestion();
+
+		await waitFor( () => expect( mockStore.updateCustomerData ).toHaveBeenCalledWith( {
+			shipping_address: { city: 'Подольск', state: 'Московская область', country: 'RU' },
+			billing_address: { city: 'Подольск', state: 'Московская область', country: 'RU' },
+		}, true, true ) );
+		expect( mockStore.customer.billingAddress.state ).toBe( 'Московская область' );
+		expect( mockStore.customer.shippingAddress.state ).toBe( 'Московская область' );
+		expect( screen.queryByText( 'The region could not be matched.' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'does not write the native address when the server did not keep the choice', async () => {

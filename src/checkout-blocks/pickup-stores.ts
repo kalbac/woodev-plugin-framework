@@ -298,10 +298,9 @@ function movableAddress( billingIsShipping: boolean ): string {
  * `address` — a {@link movableAddress} value — as a confirmation's own move leaves it: the fields
  * `destination` names hold the point's, in every address the value covers.
  *
- * That is what the store reads when the reply lands and the shopper has no unsaved edit: core takes
- * the reply's addresses into the cart store BEFORE `extensionCartUpdate()` resolves (WooCommerce
- * 11.1, `wc-blocks-data.js`: `gi=` — `receiveCart( response )`, addresses included unless
- * `WOOCOMMERCE_CHECKOUT_IS_CUSTOMER_DATA_DIRTY`), and the server has already moved them.
+ * Framework extension replies have their native addresses removed before core imports them by
+ * `keepExtensionAddressesInForm()`. The move is applied explicitly by `adoptDestination()`; this
+ * comparison also recognizes an address already moved to that same confirmed destination.
  */
 function asMovedTo( address: string | null, destination: PickupDestination ): string | null {
 	if ( address === null ) {
@@ -436,6 +435,9 @@ function confirmsCommand( snapshot: PickupSnapshot, pointId: string ): boolean {
  * moved the destination in the same request and the confirmation names the fields it moved; they
  * are taken into the native address here, before this resolves — so still under the caller's
  * checkout gate. `billingIsShipping`: the store ships to the billing address.
+ * Bootstrap filters our extension reply's address snapshots before core imports them (#1293),
+ * so this explicit destination adoption is the normal writer. The guards below also tolerate an
+ * address import if called without that bootstrap protection.
  *
  * THREE GUARDS AGAINST A LATE ANSWER (SP-11 C-3, #1090):
  *

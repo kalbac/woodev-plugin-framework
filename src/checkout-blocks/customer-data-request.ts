@@ -31,15 +31,17 @@ type BatchItem = { path?: unknown; url?: unknown };
 type BatchRequestOptions = { requests?: unknown };
 type BatchResponse = { responses?: unknown };
 
-function requestPath( value: unknown ): string {
+/** Store API route, including the `rest_route` form used with plain permalinks. */
+export function requestPath( value: unknown ): string {
 	if ( typeof value !== 'string' ) {
 		return '';
 	}
 
 	const [ pathname, query = '' ] = value.split( '?' );
 	const route = new URLSearchParams( query ).get( 'rest_route' );
+	const storeRoute = pathname.match( /(?:^|\/)(wc\/store\/v\d+\/.*)$/ );
 
-	return route ?? pathname;
+	return route ?? ( storeRoute ? `/${ storeRoute[ 1 ] }` : pathname );
 }
 
 function batchIndexes( data: unknown ): number[] | null {

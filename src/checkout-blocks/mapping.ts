@@ -4,10 +4,10 @@
  * The chooser never invents a value the core address form cannot hold:
  *
  * - City is the settlement's bare component name, never the record's display label.
- * - State is a REAL key of the country's `woocommerce_states` list (what the core State control
- *   renders). A record's own region spelling — a provider key, a name — is never written as a state.
- *   When no option matches, nothing invalid is written: the state is cleared and the shopper picks it
- *   in the native control.
+ * - State is a REAL key of the country's `woocommerce_states` list when it has one. When no option
+ *   matches, the state is cleared and the shopper picks it in the native control. Without a list,
+ *   core can render a required free-text State field: write the record's bare region name, as the
+ *   classic location layer does. A provider key is never written as a state.
  * - With the region field removed (`regionFieldRemoved`), the state is not touched at all.
  *
  * Pure: no DOM, no store, no network — so the cases below are unit-tested directly.
@@ -24,7 +24,7 @@ export interface NativeAddressPatch {
 	/** The bare city name to write into the native City field. */
 	city: string;
 	/**
-	 * The state code to write; `null` means «leave the native value alone»
+	 * The state code or free-text region name to write; `null` means «leave the native value alone»
 	 * (region field removed, so the shopper cannot see or fix it anyway).
 	 */
 	state: string | null;
@@ -242,9 +242,10 @@ export function resolveNativeAddress(
 		return { city, state: null, stateMatched: true };
 	}
 
-	// A country with no state list renders no State control: nothing to match, nothing to clear.
+	// No list means a free-text state, potentially required (RU). Match classic's bare-name policy;
+	// clearing it fails required validation, while leaving it alone can retain WC's '*' placeholder.
 	if ( Object.keys( context.states ).length === 0 ) {
-		return { city, state: '', stateMatched: true };
+		return { city, state: regionCandidates( record )[ 0 ] ?? '', stateMatched: true };
 	}
 
 	const code = matchState( record, context.states );

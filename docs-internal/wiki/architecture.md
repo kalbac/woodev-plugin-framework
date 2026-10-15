@@ -200,6 +200,16 @@ Anything that must reach the block checkout has to travel through A — the bloc
 JS-driven**: PHP only publishes their effective values (and the pickup method ids) into the checkout
 config, and `checkout-field-classic.js` acts on them.
 
+**Block address ownership (#1293):** native WooCommerce setters own the form's address. Framework
+pickup/payment cart-extension replies contribute contents and extension snapshots, with their native
+address properties removed before WooCommerce imports them (`extension-cart-addresses.ts`). Pickup
+adopts only confirmed street/postcode explicitly; the locality rate refresh also saves linked billing
+locality. The dirty flag alone is insufficient: it trails a setter by 300 ms. Evidence and boundaries:
+[the extension-reply gotcha](../gotchas/core-takes-a-cart-extension-reply-s-addresses-into-the-store-before-your-code-sees-it.md).
+The chooser writes a real state-list code when one exists, or the record's bare region name for a
+free-text state (classic's policy). No state list does not imply a hidden or optional field; RU's
+required State/County input must not be cleared or retain the `'*'` placeholder after a pick.
+
 **The block checkout's own adapter** (SP-11: the locality chooser, the pickup button, the
 `woodev-shipping` Store API namespace) keeps its contracts in
 [the SP-11 spec](../specs/2026-10-04-sp11-block-checkout-design.md) — «C-2a server transport

@@ -115,12 +115,31 @@ describe( 'resolveNativeAddress', () => {
 		} );
 	} );
 
-	it( 'clears the state for a country with no state list, without calling it a miss', () => {
+	it( 'writes the bare region name into a free-text state when the country has no list', () => {
 		expect( resolveNativeAddress( podolsk, { states: {}, regionFieldRemoved: false } ) ).toEqual( {
 			city: 'Подольск',
-			state: '',
+			state: 'Московская область',
 			stateMatched: true,
 		} );
+	} );
+
+	it.each( [
+		record( { region: { name: ' Москва ', type: 'г' }, settlement: { name: 'Москва' } } ),
+		record( { settlement: { name: 'Москва', type: 'г' } } ),
+	] )( 'writes a federal city name into a free-text state, with either record shape', ( moscow ) => {
+		expect( resolveNativeAddress( moscow, { states: {}, regionFieldRemoved: false } ) ).toEqual( {
+			city: 'Москва',
+			state: 'Москва',
+			stateMatched: true,
+		} );
+	} );
+
+	it( 'does not invent a free-text state when the record names nothing', () => {
+		expect( resolveNativeAddress( record(), { states: {}, regionFieldRemoved: false } ).state ).toBe( '' );
+	} );
+
+	it( 'leaves a removed region untouched even when the country has no state list', () => {
+		expect( resolveNativeAddress( podolsk, { states: {}, regionFieldRemoved: true } ).state ).toBeNull();
 	} );
 
 	it( 'never writes an invalid state: an unmatched region clears it and says so', () => {
