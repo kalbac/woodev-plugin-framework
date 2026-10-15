@@ -104,7 +104,7 @@ it.each( [
 	expect( reply ).not.toHaveProperty( 'billing_address' );
 } );
 
-it( 'strips only matching successful batch bodies; customer, foreign and error replies stay untouched', async () => {
+it( 'strips only our batch carts, including refusals; customer and foreign replies stay untouched', async () => {
 	const responses = [
 		{ status: 200, body: cart() },
 		{ status: 200, body: cart() },
@@ -125,9 +125,23 @@ it( 'strips only matching successful batch bodies; customer, foreign and error r
 	expect( reply.responses[ 0 ] ).toBe( responses[ 0 ] );
 	expect( reply.responses[ 1 ].body ).not.toHaveProperty( 'shipping_address' );
 	expect( reply.responses[ 2 ] ).toBe( responses[ 2 ] );
-	expect( reply.responses[ 3 ] ).toBe( responses[ 3 ] );
+	expect( reply.responses[ 3 ] ).toMatchObject( { status: 400, body: { code: 'refused' } } );
+	expect( reply.responses[ 3 ].body ).not.toHaveProperty( 'data.cart.shipping_address' );
 	expect( reply.responses[ 4 ].body ).not.toHaveProperty( 'billing_address' );
 	expect( responses[ 1 ].body ).toHaveProperty( 'shipping_address' );
+} );
+
+it( 'preserves an extension refusal while keeping its attached cart out of newer native addresses', async () => {
+	const error = { code: 'pickup_refused', message: 'Choose another point', data: { status: 400, cart: cart() } };
+	try {
+		await request( { path: EXTENSION_PATH, data: { namespace: PICKUP } }, Promise.reject( error ) );
+		throw new Error( 'Expected the refusal to propagate' );
+	} catch ( caught ) {
+		expect( caught ).toMatchObject( { code: error.code, message: error.message, data: { status: 400 } } );
+		const refused = caught as typeof error;
+		expect( receiveCart( chosen, refused.data.cart, false ) ).toEqual( chosen );
+		expect( refused.data.cart ).toMatchObject( { extensions: cart().extensions } );
+	}
 } );
 
 it( 'leaves foreign direct replies, malformed requests and malformed responses untouched', async () => {

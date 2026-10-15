@@ -94,7 +94,9 @@ React subscribers already saw the blank city and can invalidate the selection in
 
 ✅ `keepExtensionAddressesInForm()` removes address properties from successful replies of the server's
 published framework fee/pickup namespaces **before** WooCommerce imports them, including indexed batch
-responses and plain-permalink routes. Foreign namespaces and customer-update replies are untouched.
+responses and plain-permalink routes. A refusal's attached `data.cart` is filtered too: core's
+`receiveError` imports it before recording the refusal. Error metadata, foreign namespaces and
+customer-update replies are untouched.
 `writeDeliveryLocality()` / native setters own city/state; `adoptDestination()` explicitly adopts only
 the confirmed pickup street/postcode. `refreshRates()` persists linked billing locality as well as
 shipping locality, and still leaves half-typed street/postcode/email to core's own validation and push.

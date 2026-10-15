@@ -1,6 +1,6 @@
 # #1293 worker handoff (2026-10-15)
 
-Code `f8197c9a`; [s182](sessions/s182.md). Jest 3403; PHP 7359 / 1 skip. Coordinator owes build,
+Code `f8197c9a`; [s182](sessions/s182.md). Jest 3404; PHP 7359 / 1 skip. Coordinator owes build,
 review, rig acceptance and publication. No options/orders changed. Prior commitments below stand.
 
 > Составлено по итогам s181 (15.10.2026, MacBook, **ночная автономная сессия**; оператор спал). Формат: `DOCS-SCHEMA.md` → Handoff Format.

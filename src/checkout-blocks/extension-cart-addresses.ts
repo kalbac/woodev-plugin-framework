@@ -32,6 +32,15 @@ function withoutAddresses( response: unknown ): unknown {
 	return contents;
 }
 
+/** Core's receiveError also imports a cart attached to an API refusal. */
+function withoutErrorAddresses( error: unknown ): unknown {
+	if ( ! isObject( error ) || ! isObject( error.data ) || ! isObject( error.data.cart ) ) {
+		return error;
+	}
+
+	return { ...error, data: { ...error.data, cart: withoutAddresses( error.data.cart ) } };
+}
+
 /** Install before any framework extension request is sent; foreign namespaces are untouched. */
 export function keepExtensionAddressesInForm( namespaces: string[] ): void {
 	const owned = new Set( namespaces.filter( ( namespace ) => namespace !== '' ) );
@@ -71,12 +80,12 @@ export function keepExtensionAddressesInForm( namespaces: string[] ): void {
 			return {
 				...response,
 				responses: response.responses.map( ( item: unknown, index: number ) =>
-					indexes.includes( index ) && isObject( item ) && typeof item.status === 'number' &&
-					item.status >= 200 && item.status < 300
-						? { ...item, body: withoutAddresses( item.body ) }
+					indexes.includes( index ) && isObject( item ) && typeof item.status === 'number'
+						? { ...item, body: item.status >= 200 && item.status < 300
+							? withoutAddresses( item.body ) : withoutErrorAddresses( item.body ) }
 						: item
 				),
 			};
-		} );
+		}, ( error: unknown ) => Promise.reject( withoutErrorAddresses( error ) ) );
 	} );
 }
