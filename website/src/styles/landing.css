@@ -22,9 +22,6 @@ main:has(.wd-landing) .sl-markdown-content > * + * {
 	--wd-panel: color-mix(in srgb, var(--sl-color-gray-6) 70%, transparent);
 	position: relative;
 	color: var(--sl-color-gray-2);
-	background-image: radial-gradient(var(--wd-grid-dot) 1px, transparent 1px);
-	background-size: 22px 22px;
-	background-position: center top;
 }
 
 .wd-landing > section {
@@ -161,19 +158,39 @@ main:has(.wd-landing) .sl-markdown-content > * + * {
 
 /* ---------- hero ---------- */
 
-.wd-hero {
-	display: grid;
-	grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-	gap: clamp(2rem, 4vw, 3.5rem);
-	align-items: center;
-	padding-block: clamp(3.5rem, 9vw, 7rem) clamp(3rem, 7vw, 5.5rem);
+.wd-landing > .wd-top {
+	position: relative;
+	max-width: none;
+	padding-inline: 0;
+	isolation: isolate;
 }
 
-.wd-hero__copy {
+.wd-top__field {
+	position: absolute;
+	inset: 0 0 auto 0;
+	z-index: -1;
+	pointer-events: none;
+	-webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 42%, transparent 78%);
+	mask-image: linear-gradient(to bottom, #000 0%, #000 42%, transparent 78%);
+}
+
+.wd-hero {
 	display: flex;
 	flex-direction: column;
-	gap: 1.5rem;
-	align-items: flex-start;
+	align-items: center;
+	gap: 1.6rem;
+	max-width: 58rem;
+	margin-inline: auto;
+	padding: clamp(4rem, 10vw, 7.5rem) var(--wd-pad) clamp(3rem, 6vw, 4.5rem);
+	text-align: center;
+}
+
+.wd-hero .wd-lead {
+	max-width: 42rem;
+}
+
+.wd-hero .wd-actions {
+	justify-content: center;
 }
 
 .wd-facts {
@@ -189,6 +206,152 @@ main:has(.wd-landing) .sl-markdown-content > * + * {
 .wd-facts strong {
 	color: var(--sl-color-white);
 	font-weight: 600;
+}
+
+/* ---------- bento ---------- */
+
+.wd-bento {
+	display: grid;
+	grid-template-columns: minmax(0, 1.9fr) minmax(0, 1fr);
+	grid-template-rows: auto auto;
+	gap: 0.75rem;
+	max-width: var(--wd-max);
+	margin-inline: auto;
+	padding: 0 var(--wd-pad) clamp(3.5rem, 7vw, 5rem);
+}
+
+.wd-tile {
+	position: relative;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+	gap: 0.8rem;
+	padding: clamp(1.5rem, 3vw, 2.25rem);
+	background: var(--sl-color-gray-6);
+	border: 1px solid var(--wd-line);
+	border-radius: 1rem;
+	color: inherit;
+}
+
+.wd-tile--main {
+	grid-row: span 2;
+	display: grid;
+	grid-template-columns: minmax(17rem, 1fr) minmax(0, 1.15fr);
+	gap: clamp(1.25rem, 3vw, 2rem);
+	align-items: center;
+	padding-right: 0;
+	padding-block: clamp(1.75rem, 3vw, 2.5rem) 0;
+}
+
+.wd-tile--main .wd-tile__copy {
+	display: flex;
+	flex-direction: column;
+	gap: 1rem;
+	align-items: flex-start;
+	align-self: center;
+	padding-bottom: clamp(1.75rem, 3vw, 2.5rem);
+}
+
+.wd-tile--main p {
+	color: var(--sl-color-gray-2);
+	line-height: 1.6;
+}
+
+.wd-tile--main .wd-window {
+	align-self: end;
+	border-right: 0;
+	border-bottom: 0;
+	border-radius: 0.6rem 0 0 0;
+	box-shadow: 0 -10px 60px -10px color-mix(in srgb, var(--wd-yellow) 14%, transparent);
+}
+
+.wd-badge {
+	display: inline-block;
+	padding: 0.2rem 0.55rem;
+	font-family: var(--sl-font-mono);
+	font-size: 0.72rem;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	background: var(--wd-yellow);
+	color: var(--wd-yellow-ink);
+}
+
+.wd-tile__title {
+	font-family: var(--sl-font-mono);
+	font-size: clamp(1.5rem, 2.3vw, 2rem);
+	font-weight: 700;
+	line-height: 1.08;
+	letter-spacing: -0.035em;
+	color: var(--sl-color-white);
+}
+
+.wd-tile--side {
+	justify-content: flex-start;
+	transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.wd-tile--side:hover {
+	border-color: var(--sl-color-gray-4);
+	transform: translateY(-2px);
+}
+
+.wd-tile--side p {
+	position: relative;
+	font-size: 0.92rem;
+	line-height: 1.6;
+	color: var(--sl-color-gray-3);
+	max-width: 22rem;
+}
+
+.wd-tile--accent {
+	border-color: color-mix(in srgb, var(--wd-yellow) 45%, var(--wd-line));
+	background:
+		radial-gradient(120% 120% at 100% 100%, color-mix(in srgb, var(--wd-yellow) 14%, transparent), transparent 60%),
+		var(--sl-color-gray-6);
+}
+
+.wd-tile__head {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+}
+
+.wd-tile__head h3 {
+	font-size: 1.2rem;
+	font-weight: 650;
+	color: var(--sl-color-white);
+}
+
+.wd-tile__mark {
+	position: absolute;
+	right: -1.5rem;
+	bottom: -2rem;
+	width: 9.5rem;
+	height: 9.5rem;
+	fill: none;
+	stroke: var(--sl-color-gray-5);
+	stroke-width: 1.2;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	opacity: 0.55;
+	transform: rotate(-12deg);
+	transition: transform 0.4s ease, opacity 0.3s ease;
+}
+
+.wd-tile--side:hover .wd-tile__mark {
+	transform: rotate(-6deg) scale(1.05);
+	opacity: 0.8;
+}
+
+.wd-link {
+	position: relative;
+	margin-top: auto;
+	padding-top: 0.75rem;
+	font-family: var(--sl-font-mono);
+	font-size: 0.82rem;
+	color: var(--sl-color-accent);
 }
 
 .wd-window {
@@ -454,7 +617,18 @@ main:has(.wd-landing) .sl-markdown-content > * + * {
 /* ---------- responsive ---------- */
 
 @media (max-width: 60rem) {
-	.wd-hero,
+	.wd-bento,
+	.wd-tile--main {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.wd-tile--main {
+		grid-row: auto;
+		padding-right: clamp(1.5rem, 3vw, 2.25rem);
+	}
+	.wd-tile--main .wd-window {
+		border-right: 1px solid var(--wd-line);
+		border-radius: 0.6rem 0.6rem 0 0;
+	}
 	.wd-landing > .wd-partner {
 		grid-template-columns: minmax(0, 1fr);
 	}
@@ -483,6 +657,8 @@ main:has(.wd-landing) .sl-markdown-content > * + * {
 
 @media (prefers-reduced-motion: reduce) {
 	.wd-btn,
+	.wd-tile,
+	.wd-tile__mark,
 	.wd-card,
 	.wd-card__more,
 	.wd-steps li {

@@ -89,10 +89,11 @@ const perks = [
 	}}
 >
 	<div class="wd-landing">
-		<section class="wd-hero">
-			<div class="wd-hero__copy">
+		<section class="wd-top" data-dot-field>
+			<canvas class="wd-top__field" aria-hidden="true"></canvas>
+			<div class="wd-hero">
 				<p class="wd-eyebrow"><span class="wd-dot"></span> v{frameworkVersion} · WooCommerce plugin framework</p>
-				<h1 class="wd-display">Build WooCommerce<br />plugins that <span class="wd-hl">ship.</span></h1>
+				<h1 class="wd-display">Build WooCommerce plugins<br />that <span class="wd-hl">ship.</span></h1>
 				<p class="wd-lead">
 					Woodev gives your plugin a loader, typed settings with a React admin, an API client and a complete
 					shipping toolkit — so you write the carrier logic, not the plumbing.
@@ -101,17 +102,44 @@ const perks = [
 					<a class="wd-btn wd-btn--primary" href={doc('getting-started/introduction')}>Get started <span aria-hidden="true">→</span></a>
 					<a class="wd-btn wd-btn--ghost" href={repo}>View on GitHub</a>
 				</div>
-				<ul class="wd-facts">
-					<li><strong>PHP 7.4+</strong> WordPress 6.6+</li>
-					<li><strong>HPOS</strong> ready</li>
-					<li><strong>Classic</strong> + block checkout</li>
-				</ul>
 			</div>
-			<div class="wd-hero__code">
-				<div class="wd-window">
-					<div class="wd-window__bar"><span></span><span></span><span></span><em>my-carrier.php</em></div>
-					<Code code={entryFile} lang="php" frame="none" />
-				</div>
+
+			<div class="wd-bento">
+				<article class="wd-tile wd-tile--main">
+					<div class="wd-tile__copy">
+						<span class="wd-badge">Quick start</span>
+						<h2 class="wd-tile__title">One file.<br />A running plugin.</h2>
+						<p>Register your plugin with a literal array. The framework checks requirements, picks the newest copy on the site and boots your main class.</p>
+						<ul class="wd-facts">
+							<li><strong>PHP 7.4+</strong> WordPress 6.6+</li>
+							<li><strong>HPOS</strong> ready</li>
+							<li><strong>Classic</strong> + block checkout</li>
+						</ul>
+						<a class="wd-btn wd-btn--primary" href={doc('getting-started/your-first-plugin')}>Your first plugin <span aria-hidden="true">→</span></a>
+					</div>
+					<div class="wd-window">
+						<div class="wd-window__bar"><span></span><span></span><span></span><em>my-carrier.php</em></div>
+						<Code code={entryFile} lang="php" frame="none" />
+					</div>
+				</article>
+				<a class="wd-tile wd-tile--side" href={doc('shipping/plugin-anatomy')}>
+					<svg class="wd-tile__mark" viewBox="0 0 24 24" set:html={icons.truck} />
+					<div class="wd-tile__head">
+						<span class="wd-icon"><svg viewBox="0 0 24 24" set:html={icons.truck} /></span>
+						<h3>Shipping toolkit</h3>
+					</div>
+					<p>Rates, box packing, pickup point maps, checkout fields, an orders screen and tracking — for any carrier.</p>
+					<span class="wd-link">Build a carrier plugin →</span>
+				</a>
+				<a class="wd-tile wd-tile--side wd-tile--accent" href="#partner-title">
+					<svg class="wd-tile__mark" viewBox="0 0 24 24" set:html={icons.store} />
+					<div class="wd-tile__head">
+						<span class="wd-icon"><svg viewBox="0 0 24 24" set:html={icons.store} /></span>
+						<h3>Sell on woodev.ru</h3>
+					</div>
+					<p>Build a plugin on Woodev and we put it in front of the shops that already run our plugins.</p>
+					<span class="wd-link">Partner programme →</span>
+				</a>
 			</div>
 		</section>
 
@@ -194,3 +222,96 @@ const perks = [
 		</section>
 	</div>
 </StarlightPage>
+
+<script>
+	// Hero dot-field: a grid of small squares that swell and pick up colour around the pointer —
+	// yellow at the centre, through green and teal, to blue and violet at the edge. Static when the
+	// user prefers reduced motion or has no fine pointer.
+	const host = document.querySelector<HTMLElement>('[data-dot-field]');
+	const canvas = host?.querySelector<HTMLCanvasElement>('canvas');
+	const ctx = canvas?.getContext('2d');
+
+	if (host && canvas && ctx) {
+		const GAP = 26;
+		const BASE = 2;
+		const GROW = 13;
+		const RADIUS = 210;
+		const still = matchMedia('(prefers-reduced-motion: reduce)').matches || !matchMedia('(pointer: fine)').matches;
+
+		let width = 0;
+		let height = 0;
+		let target = { x: -1e4, y: -1e4 };
+		let pos = { x: -1e4, y: -1e4 };
+		let strength = 0;
+		let wanted = 0;
+		let frame = 0;
+
+		const light = () => document.documentElement.dataset.theme === 'light';
+
+		const resize = () => {
+			const dpr = Math.min(window.devicePixelRatio || 1, 2);
+			width = host.clientWidth;
+			height = host.clientHeight;
+			canvas.width = width * dpr;
+			canvas.height = height * dpr;
+			canvas.style.width = `${width}px`;
+			canvas.style.height = `${height}px`;
+			ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+			draw();
+		};
+
+		const draw = () => {
+			ctx.clearRect(0, 0, width, height);
+			const base = light() ? 'rgba(0,0,0,0.13)' : 'rgba(255,255,255,0.09)';
+			const offsetX = ((width % GAP) + GAP) / 2;
+			for (let y = GAP / 2; y < height; y += GAP) {
+				for (let x = offsetX; x < width; x += GAP) {
+					const d = Math.hypot(x - pos.x, y - pos.y);
+					const t = strength * Math.max(0, 1 - d / RADIUS);
+					if (t <= 0.01) {
+						ctx.fillStyle = base;
+						ctx.fillRect(x - BASE / 2, y - BASE / 2, BASE, BASE);
+						continue;
+					}
+					const size = BASE + GROW * Math.pow(t, 1.15);
+					const hue = 50 + Math.pow(1 - t, 1.6) * 225;
+					const sat = (light() ? 60 : 55) + t * 35;
+					const lum = light() ? 48 : 56 + (1 - t) * 6;
+					ctx.fillStyle = `hsla(${hue}, ${sat}%, ${lum}%, ${0.32 + t * 0.48})`;
+					ctx.fillRect(x - size / 2, y - size / 2, size, size);
+				}
+			}
+		};
+
+		const tick = () => {
+			pos.x += (target.x - pos.x) * 0.18;
+			pos.y += (target.y - pos.y) * 0.18;
+			strength += (wanted - strength) * 0.12;
+			draw();
+			const settled = Math.abs(wanted - strength) < 0.005 && Math.hypot(target.x - pos.x, target.y - pos.y) < 0.5;
+			frame = settled ? 0 : requestAnimationFrame(tick);
+		};
+
+		const kick = () => {
+			if (!frame) frame = requestAnimationFrame(tick);
+		};
+
+		if (!still) {
+			host.addEventListener('pointermove', (event) => {
+				const rect = host.getBoundingClientRect();
+				target = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+				if (strength < 0.02) pos = { ...target };
+				wanted = 1;
+				kick();
+			});
+			host.addEventListener('pointerleave', () => {
+				wanted = 0;
+				kick();
+			});
+		}
+
+		new ResizeObserver(resize).observe(host);
+		new MutationObserver(draw).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+		resize();
+	}
+</script>
