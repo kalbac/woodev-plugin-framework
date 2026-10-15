@@ -77,9 +77,8 @@ internals (class-map wiring, build/CI, rig) are left out on purpose. Shipping-sp
   `?Woodev_Blocks_Handler` and is `null` for a pure-WordPress plugin (the old `TypeError` is resolved —
   null-check the getter). →
   `docs-internal/gotchas/blocks-handler-typed-property-trap.md`
-- The dependency handler's PHP-function check once used `extension_loaded` instead of `function_exists`;
-  read before relying on `php_functions`. →
-  `docs-internal/gotchas/dependency-function-check-bug.md`
+- Do not declare `memory_limit` in `php_settings`: the dependency handler compares `-1` (unlimited) as a number
+  and reports it as below the minimum (#1316).
 - `Woodev_Plugin::is_plugin_active()` compares BARE file names (it strips the folder from every `active_plugins`
   entry): passing `folder/file.php` never matches, and a test that mocks it stays green. Compare the full basename
   with `get_option( 'active_plugins' )` plus `active_sitewide_plugins` yourself. →

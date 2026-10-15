@@ -63,8 +63,8 @@ realistic fixture registers its demo seeder on `admin_init` for exactly this rea
 
 `$args['dependencies']` takes `php_extensions`, `php_functions` and `php_settings` arrays; the
 `Woodev_Plugin_Dependencies` handler (`woodev/class-woodev-plugin-dependencies.php`) adds admin notices
-for what is missing. Read the gotcha `docs-internal/gotchas/dependency-function-check-bug.md` before
-relying on `php_functions`. Do not declare `ext-mbstring` and then rely on it silently — see
+for what is missing (`php_functions` is checked with `function_exists()`). Do not declare `memory_limit` in
+`php_settings`: an unlimited `-1` is compared as a number and reported as too low (#1316). Do not declare `ext-mbstring` and then rely on it silently — see
 [traps.md](traps.md).
 
 ## HPOS and Blocks compatibility

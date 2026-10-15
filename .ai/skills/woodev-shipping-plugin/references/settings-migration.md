@@ -79,7 +79,7 @@ One framework method id is one delivery type ([model, rates, location, pickup](m
 
 ### Migration wizard
 
-A migration is also onboarding. Build it on the Setup Wizard v2 engine (`Woodev_Plugin::get_setup_wizard_handler()`, `woodev/setup/`; contract `docs-internal/specs/2026-10-08-setup-wizard-v2-contract.md`, D1–D4; worked example `includes/setup/class-cdek-migration-wizard.php`):
+A migration is also onboarding. Build it on the Setup Wizard v2 engine (`Woodev_Plugin::build_setup_wizard_handler()` (override; `get_setup_wizard_handler()` is the public getter), `woodev/setup/`; contract `docs-internal/specs/2026-10-08-setup-wizard-v2-contract.md`, D1–D4; worked example `includes/setup/class-cdek-migration-wizard.php`):
 
 - **The shop keeps working before anyone opens it.** Completed means the merchant reached the end (monotonic: `completed` is never overwritten by `skipped`), not that the plugin is ready — readiness is reported by the plugin's own notices. «Настрою позже» = `skipped`; the wizard stays reachable.
 - A step is `skippable`, validates BEFORE anything is persisted (structured per-field errors), and may carry typed ACTIONS (destructive ones declare it and are confirmed); callbacks are wrapped in `Throwable`. The step graph is recomputed on the server after every save; a save for a hidden step is refused (409). A plugin-supplied React component can fill a step slot. `Step::set_short_label()` (#1210) gives the stepper a one-word label while the full label stays the card heading.

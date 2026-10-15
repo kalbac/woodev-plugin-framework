@@ -80,7 +80,7 @@
 | `get_box_presets()` / `uses_boxes()` | The carrier's own boxes in cm/kg. | No carrier boxes. See [packaging](packaging.md). |
 | `get_export_section_setting_ids()` / `get_export_section_extension()` | Own fields / cards / actions of «Выгрузка заказов». | Section carries the framework's cards only. See [settings and migration](settings-migration.md#framework-sections-of-the-carrier-tab). |
 | `init_lifecycle_handler()` | A `Woodev_Lifecycle` subclass: upgrades, v1 migration, milestones. | No migration, no milestone text (see [orders and tracking](orders-tracking.md#milestones)). |
-| `get_setup_wizard_handler()` | An onboarding / migration wizard on the Setup Wizard v2 engine. | No wizard. See [settings and migration](settings-migration.md#migration-wizard). |
+| `build_setup_wizard_handler()` | An onboarding / migration wizard on the Setup Wizard v2 engine. | No wizard. See [settings and migration](settings-migration.md#migration-wizard). |
 
 ## Fixture map
 
