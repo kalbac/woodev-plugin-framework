@@ -398,20 +398,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.1'
-          coverage: none
-          tools: composer:v2
-
       - name: Install git-cliff
         uses: taiki-e/install-action@v2.87.27
         with:
           tool: git-cliff
-
-      - name: Install Composer dependencies (production only)
-        run: composer install --prefer-dist --no-progress --no-interaction --no-dev --optimize-autoloader
 
       - name: Create and push tag
         run: |
@@ -438,49 +428,11 @@ jobs:
         run: |
           VERSION="${{ needs.version.outputs.current }}"
           ZIP_NAME="woodev-plugin-framework-${VERSION}.zip"
-          mkdir -p /tmp/release/woodev-plugin-framework
-
-          rsync -av \
-            --exclude='.git' \
-            --exclude='.github' \
-            --exclude='.ai' \
-            --exclude='tests' \
-            --exclude='node_modules' \
-            --exclude='vendor/bin' \
-            --exclude='*.xml' \
-            --exclude='*.neon' \
-            --exclude='*.toml' \
-            --exclude='.wp-env*.json' \
-            --exclude='.gitattributes' \
-            --exclude='.gitignore' \
-            --exclude='RELEASE_NOTES.md' \
-            --exclude='composer.lock' \
-            --exclude='package.json' \
-            --exclude='package-lock.json' \
-            --exclude='src' \
-            --exclude='.nvmrc' \
-            --exclude='/docs-internal' \
-            --exclude='/.autodev' \
-            --exclude='/.githooks' \
-            --exclude='/.serena' \
-            --exclude='/.worktreeinclude' \
-            --exclude='/.markdownlint.json' \
-            --exclude='/.markdownlintignore' \
-            --exclude='/AGENTS.md' \
-            --exclude='/CLAUDE.md' \
-            --exclude='/QWEN.md' \
-            --exclude='/orca.yaml' \
-            --exclude='/scripts' \
-            --exclude='/tools' \
-            --exclude='/bin' \
-            --exclude='/jest-unit.config.js' \
-            --exclude='/playwright.config.js' \
-            --exclude='/tsconfig.json' \
-            --exclude='/patchwork.json' \
-            --exclude='/mkdocs.yml' \
-            ./ /tmp/release/woodev-plugin-framework/
-
-          cd /tmp/release && zip -r "$ZIP_NAME" woodev-plugin-framework/
+          # The ZIP is the framework code only: the woodev/ directory a plugin vendors, nothing else
+          # (operator, 15.10.2026). The framework has no runtime Composer dependencies and loads through
+          # its own autoloader, so no vendor/, docs, tests or repo tooling belong in it.
+          mkdir -p /tmp/release
+          git archive --format=zip --output="/tmp/release/${ZIP_NAME}" HEAD woodev/
           echo "zip_path=/tmp/release/${ZIP_NAME}" >> $GITHUB_OUTPUT
           echo "zip_name=${ZIP_NAME}" >> $GITHUB_OUTPUT
 
