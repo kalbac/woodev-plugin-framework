@@ -3027,7 +3027,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			 * Rebuild the settings form when the declaration just made changes what it contains.
 			 *
 			 * `init_form_fields()` runs INSIDE the constructor, so a feature declared after
-			 * construction — which is the path `docs/shipping-method.md` recommends, in those
+			 * construction — which is the path the former v1 `docs/shipping-method.md` recommends, in those
 			 * words, for FEATURE_SHIPPING_CLASSES — arrived too late to be seen by it. Measured
 			 * on the rig (#813), with a subclass declaring the feature ONLY this way:
 			 *

@@ -4,7 +4,7 @@
  *
  * The second half of #811. That one stopped the base constructor from discarding a
  * `$this->supports` the subclass had just set; this one is about the OTHER way to declare a
- * feature — the way `docs/shipping-method.md` recommends in those words:
+ * feature — the way the former v1 `docs/shipping-method.md` recommends in those words:
  *
  * > `Shipping_Method::FEATURE_SHIPPING_CLASSES` -- opt-in via `add_support()`
  *

@@ -8,6 +8,7 @@ on:
       - 'docs-internal/gotchas/**'
       - 'docs-internal/sessions/**'
       - 'website/**'
+      - '.github/workflows/markdown-lint.yml'
   push:
     branches:
       - main
@@ -17,6 +18,7 @@ on:
       - 'docs-internal/gotchas/**'
       - 'docs-internal/sessions/**'
       - 'website/**'
+      - '.github/workflows/markdown-lint.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

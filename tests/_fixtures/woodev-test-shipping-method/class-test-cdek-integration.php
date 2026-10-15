@@ -13,7 +13,7 @@
  * `Shipping_Integration` (a `WC_Integration` subclass, one instance per plugin,
  * rendered on WooCommerce > Settings > Integrations, storage keyed by
  * `woocommerce_{plugin_id}_settings`) is the framework's own documented home for
- * exactly this shape of setting — see `docs/shipping-method.md`'s "Settings
+ * exactly this shape of setting — see the former v1 `docs/shipping-method.md`'s "Settings
  * Integration" section, whose own worked example is `api_key`/`api_secret`. The
  * ALTERNATIVE considered and rejected: `Woodev_Test_Shipping_Method`'s own
  * `instance_form_fields` (the base `Shipping_Method`, a `WC_Shipping_Method`
@@ -74,7 +74,7 @@ if ( ! class_exists( 'Woodev_Test_Cdek_Integration' ) ) {
 		 *
 		 * Both fields, plain WC_Settings_API shape (`title`/`type`/`description`/
 		 * `default`) — this is the SAME `Shipping_Integration::get_method_form_fields()`
-		 * vocabulary `docs/shipping-method.md`'s own worked example uses for
+		 * vocabulary the former v1 `docs/shipping-method.md`'s own worked example uses for
 		 * `api_key`/`api_secret`, not the Woodev settings-API `register_setting()`
 		 * shape {@see \Woodev\Framework\Shipping\Location\Location_Provider::get_settings_fields()}
 		 * uses — the two surfaces are unrelated on purpose (#375: this is the
