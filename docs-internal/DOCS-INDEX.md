@@ -33,7 +33,7 @@ from it (s135 audit), so they were removed rather than re-synced.
 ```
 woodev_framework/
 ├── CLAUDE.md                        # ← Entry point for Claude Code agents
-├── AGENTS.md                        # ← Entry point for all other AI agents (this file)
+├── AGENTS.md                        # ← Entry point for all other AI agents
 ├── docs/                            # Public docs → MkDocs; Pages deployment currently disabled
 │   ├── README.md, getting-started.md, core-framework.md …
 │   ├── admin-module.md, settings-api.md, helpers.md …
