@@ -19,7 +19,7 @@ export interface SetupWizardField {
 	name?: string;
 	value?: unknown;
 	controlType?: string | null;
-	options?: Record<string, string>;
+	options?: Record<string, string> | Array<{ value: string; label: string }> | string[];
 	required?: boolean;
 	[ key: string ]: unknown;
 }

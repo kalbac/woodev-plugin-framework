@@ -35,6 +35,23 @@ final class Field_Schema {
 
 		foreach ( $handler->get_settings( $setting_ids ) as $setting ) {
 			$control = $setting->get_control();
+			$options = $setting->get_options();
+
+			// JSON objects reorder integer-like keys in JavaScript. Send associative
+			// options as an ordered list so numeric string values keep their declared order.
+			$has_numeric_keys = ! empty( array_filter( array_keys( $options ), 'is_int' ) );
+			$is_flat_list     = [] === $options || array_keys( $options ) === range( 0, count( $options ) - 1 );
+
+			if ( $has_numeric_keys && ! $is_flat_list ) {
+				$ordered_options = [];
+				foreach ( $options as $value => $label ) {
+					$ordered_options[] = [
+						'value' => (string) $value,
+						'label' => $label,
+					];
+				}
+				$options = $ordered_options;
+			}
 
 			// Mask secrets: sensitive fields and constant-backed fields never emit
 			// their stored value to the browser — only whether a value is present.
@@ -54,7 +71,7 @@ final class Field_Schema {
 			$entry = [
 				'type'        => $setting->get_type(),
 				'name'        => $setting->get_name(),
-				'options'     => $setting->get_options(),
+				'options'     => $options,
 				'value'       => $is_secret ? '' : $shown,
 				'is_multi'    => $setting->is_is_multi(),
 				'controlType' => $control ? $control->get_type() : null,

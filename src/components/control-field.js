@@ -257,7 +257,9 @@ function normalizeOptions( options ) {
 	}
 
 	if ( Array.isArray( options ) ) {
-		return options.map( ( label ) => ( { value: label, label } ) );
+		return options.map( ( option ) => ( option && 'object' === typeof option
+			? { value: option.value, label: option.label }
+			: { value: option, label: option } ) );
 	}
 
 	return Object.entries( options ).map( ( [ value, label ] ) => ( { value, label } ) );

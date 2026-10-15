@@ -91,6 +91,40 @@ class SettingUpdateValueTest extends TestCase {
 		$this->assertSame( 'fixed', $setting->get_value() );
 	}
 
+	/**
+	 * Numeric-string keys remain string enum values despite PHP casting them to integers.
+	 *
+	 * @return void
+	 */
+	public function test_update_value_accepts_numeric_string_enum_keys_without_coercing_input(): void {
+		$setting = $this->make_setting( 'string', false, [ 'none' => 'Без НДС', '0' => '0%', '5' => '5%' ] );
+
+		$setting->update_value( '0' );
+		$this->assertSame( '0', $setting->get_value() );
+
+		$setting->update_value( '5' );
+		$this->assertSame( '5', $setting->get_value() );
+	}
+
+	/**
+	 * TYPE_STRING rejects a leading-zero alias and an integer input before enum matching.
+	 *
+	 * @return void
+	 */
+	public function test_numeric_string_enum_is_strict_and_rejects_int_input(): void {
+		$setting = $this->make_setting( 'string', false, [ '0' => '0%', '5' => '5%' ] );
+
+		try {
+			$setting->update_value( '05' );
+			$this->fail( 'Leading-zero alias must not match.' );
+		} catch ( \Woodev_Plugin_Exception $e ) {
+			$this->assertSame( 400, $e->getCode() );
+		}
+
+		$this->expectException( \Woodev_Plugin_Exception::class );
+		$setting->update_value( 5 );
+	}
+
 	// -----------------------------------------------------------------------
 	// 2. Enum by VALUE (plain list: [0 => 'Курьер', 1 => 'ПВЗ'])
 	// -----------------------------------------------------------------------
