@@ -484,10 +484,7 @@ Before every commit touching docs:
 Moved here from `AGENTS.md` in s115: it is reference material, not a session-start rule, and
 `AGENTS.md` is read at the start of every session against a 28 KB gate.
 
-⚠ **Right now the operator's standing decision is DO NOT TOUCH public docs** — they teach the v1
-positional `register_plugin()` (a v2 tombstone) and hardcode versions in five files. He is their
-only consumer today; they get rewritten once v2 is ready. See `CURRENT-STATE.md` →
-"Public-docs API staleness".
+Public docs are being rewritten against framework 2.0.2 in s183. They must describe **only public capabilities a plugin author uses**, with a working example for each capability. Keep every explanation clear to a reader a year later. Never describe internal mechanics or disclose information a third party should not know; examples include how the licence check works and the remote plugin-deactivation hook.
 
 **How to edit**
 
@@ -497,18 +494,16 @@ only consumer today; they get rewritten once v2 is ready. See `CURRENT-STATE.md`
    CI injects the real one from `Woodev_Plugin::VERSION` at deploy time.
 4. Lint: `npx markdownlint-cli2 "docs/**/*.md"`.
 
-**What belongs here:** API reference, usage guides, getting-started tutorials, module
+**What belongs here:** public API reference, usage guides, getting-started tutorials, module
 documentation (settings-api, payment-gateway, shipping-method …), and code examples verified
-against actual source.
+against actual source. Every documented capability needs a working example.
 
 **What does NOT:** session logs, gotchas, ADRs, bug tracking, phase status, internal architecture
 decisions, deferred features, AI-agent workflow rules — all of those live in `docs-internal/`.
 
-**Deploy:** push to `main` → GitHub Actions (`docs.yml`) builds mkdocs → GitHub Pages at
-<https://kalbac.github.io/woodev-plugin-framework/>. Triggers on changes to `docs/**`,
-`mkdocs.yml` or `woodev/class-plugin.php`.
+**Deploy:** automatic push deployment is disabled. `.github/workflows/docs.yml` has its `push` trigger commented out and exposes `workflow_dispatch` only. On 2026-10-15 the GitHub Pages API returned HTTP 404 for this repository, so do not describe a live Pages site or a push-to-deploy path. The workflow file is unchanged by this audit. The repository became public on 2026-08-27; restore/enable publishing only through a separate workflow/operator decision.
 
 ## Related
 
 - [AGENTS.md](../AGENTS.md) — the two-tier documentation table this detail was lifted out of
-- [CURRENT-STATE.md](CURRENT-STATE.md) — the standing "do not touch public docs" decision
+- [CURRENT-STATE.md](CURRENT-STATE.md) — current project status and s183 documentation work

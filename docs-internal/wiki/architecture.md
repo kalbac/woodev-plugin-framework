@@ -691,7 +691,7 @@ Moved here from `CURRENT-STATE.md` in s139: they are reference, true regardless 
 | Box Packer | ✅ | ✅ | Shipping box-packing algorithm |
 | REST API | ✅ | ✅ | Plugin REST routes |
 | PHPStan | ✅ | — | Level 3, **no baseline** (`phpstan-baseline.neon` removed; do not reintroduce) |
-| Documentation | ✅ | — | Two-tier: `docs/` (GH Pages) + `docs-internal/` (AI agents) |
+| Documentation | ✅ | — | Two-tier: `docs/` (public MkDocs source; deployment currently disabled) + `docs-internal/` (AI agents) |
 
 ## Related
 

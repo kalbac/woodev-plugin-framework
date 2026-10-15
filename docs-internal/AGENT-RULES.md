@@ -213,16 +213,16 @@ public function get_plugin_name() {
 
 ### Rule 5 — Docblocks
 Docblocks are **required** on all public and protected methods:
-- `@since` — the **planned release** the change ships in, currently `2.0.2`. It is NOT the
-  `Woodev_Plugin::VERSION` constant: `VERSION` records the *released* version (`2.0.1`) and lags on
-  purpose, because raising it on `main` publishes a release (#285). Operator decision, #409 (s83) —
+- `@since` — use the machine-readable ceiling in `composer.json` → `extra.woodev.planned-release`, currently `2.0.2`.
+  This currently equals the released `Woodev_Plugin::VERSION` (`2.0.2`); no distinct next release is declared.
+  Raising `VERSION` on `main` publishes a release (#285). Operator decision, #409 (s83) —
   the earlier "uses current VERSION" wording contradicted 1388 tags against one and was wrong.
 - **Inherited code carries `1.0.0`, never an upstream number** (#116a, s111). This framework was
   forked with its upstream's docblocks, and that upstream's ladder ran to 5.x. Seven members read
-  `@since 3.0.0`/`4.0.0`/`5.2.0` — numbers ABOVE the released `2.0.1`, so anything comparing
+  `@since 3.0.0`/`4.0.0`/`5.2.0` — numbers ABOVE the released `2.0.2`, so anything comparing
   versions concluded the API was unreleased. In THIS repo's history those members exist since the
   initial import (`01dfbe7`), which is exactly what `1.0.0` already marks in 151 other places.
-  `2.0.2` would be equally untrue: it claims the API is new in the coming release.
+  `2.0.2` would be equally untrue: it claims the API is new in the 2.0.2 release.
 - The machine-readable authority for the planned release is `composer.json` →
   `extra.woodev.planned-release`, and `tests/unit/SinceTagCeilingTest.php` gates every `@since` in
   `woodev/**` against it (#752) — the #116a sweep above had no gate and regressed within one night.

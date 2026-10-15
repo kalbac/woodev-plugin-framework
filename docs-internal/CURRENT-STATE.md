@@ -239,9 +239,7 @@ flakiness, the three field modes and their Russian labels — is one line under 
 ⚠ Before probing `test-cdek` credentials, read gotcha
 `the-cdek-fixture-credentials-are-not-the-option-they-look-like` — the obvious option is a decoy.
 
-**`@since` = the PLANNED release `2.0.2`; `VERSION` = the released one and lags on purpose**
-(#409, #546; full rule in `AGENT-RULES.md` Rule 5, which also covers INHERITED code → `1.0.0`).
-Nothing above `2.0.2` remains — #116(a) closed that in s111, and `SinceTagCeilingTest` now gates it.
+**`@since` ceiling:** `composer.json` → `extra.woodev.planned-release` currently says `2.0.2`, the same as the released `VERSION`; no distinct next release is declared. `SinceTagCeilingTest` enforces the configured ceiling. See `AGENT-RULES.md` Rule 5 (including inherited code → `1.0.0`).
 
 **Agents and Orca — the recipes, the caps and the launch traps are
 [wiki/orchestrating-agents-with-orca.md](wiki/orchestrating-agents-with-orca.md).** The two facts
@@ -280,18 +278,13 @@ there is historical evidence, not a fresh acceptance run. The live programme sta
 - [⚠️] `class-payment-gateway.php` ~3.6k lines — trait-extraction candidate (#117).
 - **B-2 loader-protocol forward-tolerance:** the resolver loads framework classes from the **highest registered copy for the whole fleet**; `backwards_compatible` deactivates-with-notice any plugin below that copy's min. Rules → `AGENT-RULES.md` Rule 3.
 
-### Public-docs API staleness — DEFERRED (operator decision)
+### Public docs
 
-`docs/` still teaches the v1 positional `register_plugin()`, a v2 **tombstone**, and hardcodes
-versions instead of `%%FRAMEWORK_VERSION%%` (5 files). **Do NOT touch public docs yet** — he is the
-only consumer; they get rewritten once everything is ready.
+Public docs are being rewritten against framework 2.0.2 in s183; scope and publishing rules: `DOCS-SCHEMA.md` → "Public docs".
 
 ## Next Actions
 
-**Next:** #1293 block-checkout address race (framework locality chooser vs WooCommerce focusout push; block-only, after-release
-class but first in the queue); #1169 one clean CDEK acceptance run (order 1444 cancelled s181); then the board («Приоритет»).
-The rig keeps `ship_to_destination=billing_only` as the norm (operator s181: CIS shops ship to the billing address). Handoff
-`next-session-prompt.md`.
+**Next:** use `next-session-prompt.md` for the current handoff and GitHub Project №6 for open work and priorities.
 
 **Issue lists and priorities live on the board.** `FUTURE-BACKLOG.md` is frozen.
 
@@ -326,7 +319,7 @@ This section retains mutable state and the operating warnings.
   [wiki/rig-pickup-walkthrough.md](wiki/rig-pickup-walkthrough.md).
 ## Infrastructure Reference
 
-- **Version:** `Woodev_Plugin::VERSION` (in `woodev/class-plugin.php`) = 2.0.1 (unreleased — the latest GitHub release is 2.0.0). **Raising VERSION on `main` publishes a release** — do it deliberately (#285).
+- **Version:** `Woodev_Plugin::VERSION` (in `woodev/class-plugin.php`) = 2.0.2, released at tag `v2.0.2`. **Raising VERSION on `main` publishes a release** — do it deliberately (#285).
 - **PHP target:** 8.1 · **WP min:** 6.6 · **WC min:** 7.0
 - **Tests:** Brain Monkey (unit) + WP Test Library (integration). `composer check` = phpcs + phpstan L3 + unit. JS tests must run **from bash**, not PowerShell (gotcha `powershell-drops-the-roots-flag-from-the-jest-command`).
 - **CI:** GitHub Actions. **Merge PRs:** `gh pr merge <N> --squash --delete-branch` only after every job is confirmed green with state CLEAN; never `gh pr merge --auto`.
