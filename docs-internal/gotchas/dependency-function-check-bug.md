@@ -1,6 +1,8 @@
 # Gotcha: [php/dependency-function-check-bug] — get_missing_php_functions() uses extension_loaded instead of function_exists
 > Tags: php, dependencies, bug, functions | Session: s2
 
+> **RESOLVED (verified s183, 16.10.2026):** the code uses `function_exists()`. Kept as history.
+
 ## What happens
 `Woodev_Plugin_Dependencies::get_missing_php_functions()` incorrectly uses `extension_loaded()` to check whether a PHP **function** exists. This means it checks for a PHP extension with the same name as the function, not the function itself. The method will never correctly detect missing functions (unless the function name happens to match an extension name, which is rare).
 
