@@ -17,7 +17,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 	abstract class Woodev_Plugin {
 
 		/** Plugin Framework Version */
-		const VERSION = '2.0.1';
+		const VERSION = '2.0.2';
 
 		/** @var object single instance of plugin */
 		protected static $instance;
