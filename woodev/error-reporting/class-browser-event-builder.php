@@ -130,8 +130,9 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Browser_Event_Builder' )
 			$type = $payload['type'] ?? '';
 			$type = is_string( $type ) && in_array( $type, self::ERROR_TYPES, true ) ? $type : self::DEFAULT_ERROR_TYPE;
 
-			$frames = [];
-			$owner  = null;
+			$frames   = [];
+			$owner    = null; // Innermost frame of the plugin's OWN code.
+			$fallback = null; // Innermost frame of a vendored framework copy: shared code (#1302).
 
 			$reported = is_array( $payload['frames'] ?? null ) ? $payload['frames'] : [];
 
@@ -142,13 +143,22 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Browser_Event_Builder' )
 					continue;
 				}
 
-				$owner    = $owner ?? $located['owner']; // Innermost owned frame owns the event.
+				if ( $located['framework'] ) {
+					$fallback = $fallback ?? $located['owner'];
+				} else {
+					$owner = $owner ?? $located['owner'];
+				}
+
 				$frames[] = $located['frame'];
 
 				if ( count( $frames ) >= self::MAX_FRAMES ) {
 					break;
 				}
 			}
+
+			// The first plugin-owned frame owns the event, the framework is shared and does not (see
+			// Plugin_Scope::match()); a framework-only stack falls back to the plugin supplying that copy.
+			$owner = $owner ?? $fallback;
 
 			if ( null === $owner ) {
 				return null;
@@ -213,7 +223,7 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Browser_Event_Builder' )
 		 * One reported frame: its owner and the anonymised entry — or null when it is not a real script of ours.
 		 *
 		 * @param array<string,mixed> $frame Client frame: url, line, col.
-		 * @return array{owner:array{id:string,version:string},frame:array<string,mixed>}|null
+		 * @return array{owner:array{id:string,version:string},framework:bool,frame:array<string,mixed>}|null
 		 */
 		private function locate( array $frame ): ?array {
 			$url = $frame['url'] ?? '';
@@ -235,6 +245,7 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Browser_Event_Builder' )
 					'id'      => $located['id'],
 					'version' => $located['version'],
 				],
+				'framework' => $located['framework'],
 				'frame' => [
 					'filename' => $located['path'],
 					'lineno'   => self::position( $frame['line'] ?? 0 ),

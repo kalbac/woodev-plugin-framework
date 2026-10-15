@@ -38,6 +38,9 @@ final class BrowserRestControllerTest extends ErrorReportingTestCase {
 	/** @var array<string,mixed> */
 	private array $calls = [];
 
+	/** @var array<int,string> Plugin ids the DSN filter gives NO receiver (#1302); every other plugin gets one. */
+	private array $without_dsn = [];
+
 	/** @var array<string,array<string>> what the pickup handlers declare */
 	private array $pickup_fields = [];
 
@@ -82,11 +85,12 @@ final class BrowserRestControllerTest extends ErrorReportingTestCase {
 		);
 		$this->pickup_fields = [ 'acme-delivery' => [ 'pickup_point' ] ];
 		$this->filters       = [];
+		$this->without_dsn   = [];
 
 		Functions\when( 'apply_filters' )->alias(
-			function ( $tag, $value ) {
+			function ( $tag, $value, $plugin_id = null ) {
 				if ( 'woodev_error_reporting_dsn' === $tag ) {
-					return 'https://k@errors.example.ru/7';
+					return in_array( $plugin_id, $this->without_dsn, true ) ? '' : 'https://k@errors.example.ru/7';
 				}
 
 				// What the pickup handlers declare through `Pickup_Handler::register()`.
@@ -658,6 +662,35 @@ final class BrowserRestControllerTest extends ErrorReportingTestCase {
 		$this->assertSame( [ true, true, true, false, false ], $results );
 		$this->assertCount( 3, $this->queued() );
 		$this->assertArrayHasKey( 'woodev_er_js_in_' . gmdate( 'YmdH' ), $this->transients );
+	}
+
+	public function test_a_report_of_a_plugin_without_a_dsn_is_not_queued_and_does_not_use_up_the_intake_cap(): void {
+		$this->install();
+
+		// A second registered plugin keeps reporting available; acme-delivery itself has no receiver.
+		$this->install_scope(
+			new \Woodev\Framework\Error_Reporting\Plugin_Scope(
+				[
+					[
+						'id'      => 'acme-delivery',
+						'version' => '1.4.0',
+						'dir'     => $this->plugin_dir,
+						'url'     => self::OUR_URL,
+					],
+					[
+						'id'      => 'beta-shipping',
+						'version' => '2.0.0',
+						'dir'     => self::BETA,
+					],
+				]
+			)
+		);
+		$this->without_dsn = [ 'acme-delivery' ];
+
+		$this->assertTrue( \Woodev\Framework\Error_Reporting\Consent::is_active() );
+		$this->assertFalse( Error_Reporter::report_browser( $this->error_report() ) );
+		$this->assertSame( [], $this->queued() );
+		$this->assertArrayNotHasKey( 'woodev_er_js_in_' . gmdate( 'YmdH' ), $this->transients );
 	}
 
 	public function test_a_report_that_is_not_ours_does_not_use_up_the_intake_cap(): void {

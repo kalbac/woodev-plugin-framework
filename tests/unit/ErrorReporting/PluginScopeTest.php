@@ -160,9 +160,10 @@ final class PluginScopeTest extends ErrorReportingTestCase {
 
 		$this->assertSame(
 			[
-				'id'      => 'acme-delivery',
-				'version' => '1.4.0',
-				'path'    => 'plugins/acme-delivery/assets/js/a.js',
+				'id'        => 'acme-delivery',
+				'version'   => '1.4.0',
+				'path'      => 'plugins/acme-delivery/assets/js/a.js',
+				'framework' => false,
 			],
 			$located
 		);
@@ -256,5 +257,31 @@ final class PluginScopeTest extends ErrorReportingTestCase {
 		);
 
 		$this->assertNull( $scope->locate_url( self::OUR_URL . '/assets/js/map.js' ) );
+	}
+
+	public function test_a_shared_framework_frame_does_not_own_the_event_when_another_plugin_called_it(): void {
+		$scope = $this->make_two_plugin_scope();
+
+		// The winning framework copy is vendored in acme and runs for beta (#1302).
+		$this->assertSame( 'beta-shipping', $scope->match( [ self::OURS . '/woodev/api/shared.php', self::BETA . '/client.php' ] )['id'] );
+		$this->assertSame( 'beta-shipping', $scope->match( [ self::OURS . '/vendor/woodev/api/shared.php', self::BETA . '/client.php' ] )['id'] );
+	}
+
+	public function test_the_plugins_own_code_wins_even_when_it_is_the_outer_frame_of_its_own_framework_call(): void {
+		$owner = $this->make_two_plugin_scope()->match( [ self::OURS . '/woodev/api/shared.php', self::OURS . '/includes/class-x.php', self::BETA . '/client.php' ] );
+
+		$this->assertSame( 'acme-delivery', $owner['id'], 'the first plugin-owned frame, not the last' );
+	}
+
+	public function test_a_framework_only_stack_falls_back_to_the_plugin_supplying_the_copy(): void {
+		$scope = $this->make_two_plugin_scope();
+
+		$this->assertSame( 'acme-delivery', $scope->match( [ self::OURS . '/woodev/api/shared.php', '/srv/wp/wp-includes/plugin.php' ] )['id'] );
+		$this->assertSame( 'beta-shipping', $scope->match( [ self::BETA . '/woodev/a.php', self::OURS . '/woodev/b.php' ] )['id'], 'the innermost framework frame' );
+		$this->assertSame( [ 'id', 'version' ], array_keys( $scope->match( [ self::OURS . '/woodev/a.php' ] ) ) );
+	}
+
+	public function test_a_directory_that_merely_starts_with_woodev_is_the_plugins_own_code(): void {
+		$this->assertSame( 'acme-delivery', $this->make_two_plugin_scope()->match( [ self::OURS . '/woodev-extra/x.php', self::BETA . '/client.php' ] )['id'] );
 	}
 }

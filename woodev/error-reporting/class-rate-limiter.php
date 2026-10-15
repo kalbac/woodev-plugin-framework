@@ -67,9 +67,11 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Rate_Limiter' ) ) :
 		 *
 		 * @param string $signature From {@see self::signature()}.
 		 * @param bool   $browser   Whether the event came from the browser ({@see Event_Queue::is_browser()}).
+		 * @param string $owner     Plugin id the event goes out for (its own project): the dedupe window and the daily
+		 *                          budgets are kept per owner, so one noisy plugin cannot spend another's. Empty = site-wide.
 		 * @return bool
 		 */
-		public function allow( string $signature, bool $browser = false ): bool {
+		public function allow( string $signature, bool $browser = false, string $owner = '' ): bool {
 			/**
 			 * Filters how many hours the same error is suppressed after being sent.
 			 *
@@ -100,6 +102,12 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Rate_Limiter' ) ) :
 				 */
 				$cap     = max( 0, (int) apply_filters( 'woodev_error_reporting_daily_cap', self::DEFAULT_DAILY_CAP ) );
 				$day_key = 'woodev_er_day_' . gmdate( 'Ymd' );
+			}
+
+			if ( '' !== $owner ) {
+				// A hash keeps any plugin id within the transient key length limit.
+				$day_key  .= '_' . substr( md5( $owner ), 0, 12 );
+				$signature = sha1( $owner . '|' . $signature );
 			}
 
 			$seen_key = 'woodev_er_sig_' . substr( $signature, 0, 32 );

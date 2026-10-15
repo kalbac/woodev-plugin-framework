@@ -56,16 +56,11 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Dispatcher' ) ) :
 			$sent = 0;
 
 			try {
-				if ( ! Consent::is_active() ) {
-					// Consent withdrawn or the receiver gone since the events were queued.
+				if ( ! Consent::is_enabled() ) {
+					// Consent withdrawn since the events were queued. A receiver gone since then is
+					// handled per event in drain(): each owner's DSN is looked up there.
 					Event_Queue::clear();
 
-					return 0;
-				}
-
-				$dsn = Consent::get_dsn();
-
-				if ( null === $dsn ) {
 					return 0;
 				}
 
@@ -80,7 +75,7 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Dispatcher' ) ) :
 				}
 
 				try {
-					$sent = self::drain( $dsn, $lock );
+					$sent = self::drain( $lock );
 				} finally {
 					self::release_lock( $lock );
 
@@ -95,13 +90,25 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Dispatcher' ) ) :
 			return $sent;
 		}
 
-		private static function drain( Dsn $dsn, string $lock ): int {
+		/**
+		 * Sends the queue, each event to the DSN of the plugin that owns it (one GlitchTip project per
+		 * plugin, #1302). Dedupe and the daily budgets are kept per owner. A destination that fails is
+		 * skipped for the rest of the run — its remaining events are dropped, no further timeouts are
+		 * spent on it — while the other destinations carry on. An event whose owner has no DSN (any
+		 * more) is dropped, so the queue cannot fill with events nobody can receive.
+		 *
+		 * @param string $lock The row value {@see self::acquire_lock()} returned.
+		 * @return int Events sent.
+		 */
+		private static function drain( string $lock ): int {
 			$limiter   = new Rate_Limiter();
 			$transport = new Transport();
 			$batch     = Event_Queue::all();
 			$ids       = array_map( static fn( array $event ): string => (string) ( $event['event_id'] ?? '' ), $batch );
 			$done      = [];
 			$sent      = 0;
+			$receivers = []; // Owner => its DSN (null: none), resolved once per run.
+			$failed    = []; // Destination key => true once a post to it failed in this run.
 
 			foreach ( $batch as $index => $event ) {
 				// Before EVERY post: the lock is still ours (a run paused past the TTL may have been
@@ -110,22 +117,39 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Dispatcher' ) ) :
 					break; // The new owner drains what is left; only what we handled leaves the queue.
 				}
 
-				if ( ! Consent::is_active_fresh() ) {
+				if ( ! Consent::is_enabled_fresh() ) {
 					Event_Queue::clear();
 
 					return $sent;
 				}
 
 				$done[] = $ids[ $index ];
+				$owner  = Event_Queue::owner( $event );
 
-				if ( ! $limiter->allow( $limiter->signature( $event ), Event_Queue::is_browser( $event ) ) ) {
+				if ( ! array_key_exists( $owner, $receivers ) ) {
+					$receivers[ $owner ] = Consent::get_dsn( $owner );
+				}
+
+				$dsn = $receivers[ $owner ];
+
+				if ( null === $dsn ) {
+					continue; // Nowhere to send it.
+				}
+
+				$destination = $dsn->get_envelope_url() . '|' . $dsn->get_public_key();
+
+				if ( isset( $failed[ $destination ] ) ) {
+					continue; // Unreachable: do not queue up one timeout per event.
+				}
+
+				if ( ! $limiter->allow( $limiter->signature( $event ), Event_Queue::is_browser( $event ), $owner ) ) {
 					continue;
 				}
 
 				if ( ! $transport->send( $event, $dsn ) ) {
-					$done = $ids; // The receiver is unreachable: do not queue up one timeout per event.
+					$failed[ $destination ] = true;
 
-					break;
+					continue;
 				}
 
 				++$sent;

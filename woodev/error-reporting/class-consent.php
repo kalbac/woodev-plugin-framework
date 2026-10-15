@@ -14,9 +14,12 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Consent' ) ) :
 	/**
 	 * The single place that answers «may this site send error reports, and where to?».
 	 *
-	 * Two independent switches, both required: the merchant's consent (a site-wide option,
-	 * default OFF) and a receiver DSN (a constant or a filter — there is deliberately no
-	 * built-in default, so a framework without a configured receiver sends nothing).
+	 * Two independent switches, both required: the merchant's consent (ONE site-wide option,
+	 * default OFF) and a receiver DSN. The DSN is resolved PER PLUGIN (one GlitchTip project per
+	 * plugin): the `woodev_error_reporting_dsn` filter gets the plugin id, the site-wide constant is
+	 * the fallback for every plugin. There is deliberately no built-in default, so a framework
+	 * without a configured receiver sends nothing. Reporting is «available» when at least one
+	 * registered plugin has a DSN.
 	 *
 	 * @since 2.0.2
 	 */
@@ -25,7 +28,7 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Consent' ) ) :
 		/** Site-wide consent option. `yes` | `no`; absent means `no`. */
 		const OPTION = 'woodev_error_reporting_enabled';
 
-		/** wp-config constant carrying the receiver DSN. */
+		/** wp-config constant carrying the site-wide receiver DSN — the fallback for a plugin with none of its own. */
 		const DSN_CONSTANT = 'WOODEV_ERROR_REPORTING_DSN';
 
 		/**
@@ -56,47 +59,54 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Consent' ) ) :
 		}
 
 		/**
-		 * The configured receiver, if any.
+		 * The receiver of one plugin's events, if it has any.
 		 *
 		 * @since 2.0.2
 		 *
+		 * @param string $plugin_id Id of the plugin that owns the events.
 		 * @return Dsn|null
 		 */
-		public static function get_dsn(): ?Dsn {
+		public static function get_dsn( string $plugin_id ): ?Dsn {
+			if ( '' === $plugin_id ) {
+				return null;
+			}
+
 			$raw = defined( self::DSN_CONSTANT ) ? constant( self::DSN_CONSTANT ) : '';
 
 			/**
-			 * Filters the error-reporting receiver DSN.
+			 * Filters the error-reporting receiver DSN of ONE plugin (one GlitchTip project per plugin).
+			 *
+			 * A plugin answers only for its own id and returns `$dsn` untouched for every other, so two
+			 * plugins on one site never overwrite each other. `$dsn` arrives holding the site-wide
+			 * `WOODEV_ERROR_REPORTING_DSN` constant (empty when it is not defined), which is therefore
+			 * the fallback for every plugin that has no DSN of its own. A callback registered with one
+			 * argument simply gets `$dsn` and keeps working.
 			 *
 			 * @since 2.0.2
 			 *
-			 * @param string $dsn Sentry/GlitchTip DSN; empty string disables the reporter.
+			 * @param string $dsn       Sentry/GlitchTip DSN; empty string means this plugin reports nowhere.
+			 * @param string $plugin_id Id of the plugin the events belong to (its loader definition's plugin id).
 			 */
-			$raw = apply_filters( 'woodev_error_reporting_dsn', $raw );
+			$raw = apply_filters( 'woodev_error_reporting_dsn', $raw, $plugin_id );
 
 			return is_string( $raw ) ? Dsn::parse( $raw ) : null;
 		}
 
 		/**
-		 * Whether a receiver is configured (the checkbox is only offered when it is).
+		 * Whether at least one registered plugin has a receiver (the checkbox is only offered when one does).
 		 *
 		 * @since 2.0.2
 		 *
 		 * @return bool
 		 */
 		public static function is_available(): bool {
-			return null !== self::get_dsn();
-		}
+			foreach ( Error_Reporter::plugin_ids() as $plugin_id ) {
+				if ( null !== self::get_dsn( $plugin_id ) ) {
+					return true;
+				}
+			}
 
-		/**
-		 * {@see self::is_active()} with the consent read past this request's object cache.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @return bool
-		 */
-		public static function is_active_fresh(): bool {
-			return self::is_available() && self::is_enabled_fresh();
+			return false;
 		}
 
 		/**
@@ -119,7 +129,8 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Consent' ) ) :
 		}
 
 		/**
-		 * Whether reports may leave this site right now: receiver configured AND consent given.
+		 * Whether reports may leave this site right now: some plugin has a receiver AND consent given.
+		 * Which plugin's events actually go anywhere is {@see self::get_dsn()}'s answer per plugin.
 		 *
 		 * @since 2.0.2
 		 *

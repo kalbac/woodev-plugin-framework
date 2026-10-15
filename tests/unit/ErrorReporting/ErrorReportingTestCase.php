@@ -7,7 +7,7 @@
 
 namespace Woodev\Tests\Unit\ErrorReporting;
 
-use Woodev\Framework\Error_Reporting\{Browser_Event_Builder, Event_Builder, Plugin_Scope};
+use Woodev\Framework\Error_Reporting\{Browser_Event_Builder, Error_Reporter, Event_Builder, Plugin_Scope};
 use Woodev\Tests\Unit\TestCase;
 
 defined( 'WP_PLUGIN_DIR' ) || define( 'WP_PLUGIN_DIR', '/srv/wp/wp-content/plugins' );
@@ -20,6 +20,9 @@ abstract class ErrorReportingTestCase extends TestCase {
 	protected const HOME  = 'https://shop.example.ru';
 	protected const OURS  = '/srv/wp/wp-content/plugins/acme-delivery';
 	protected const OTHER = '/srv/wp/wp-content/plugins/some-other-plugin';
+
+	/** The second registered plugin of {@see self::make_two_plugin_scope()}. */
+	protected const BETA = '/srv/wp/wp-content/plugins/beta-shipping';
 
 	/** Asset base URL of the registered plugin (browser side, #1081). */
 	protected const OUR_URL = 'https://shop.example.ru/wp-content/plugins/acme-delivery';
@@ -54,6 +57,7 @@ abstract class ErrorReportingTestCase extends TestCase {
 	}
 
 	protected function tearDown(): void {
+		Error_Reporter::reset();
 		$this->remove_tree( $this->fs_root );
 
 		parent::tearDown();
@@ -166,6 +170,64 @@ abstract class ErrorReportingTestCase extends TestCase {
 				'plugin_dir' => '/srv/wp/wp-content/plugins',
 			]
 		);
+	}
+
+	/**
+	 * @return Plugin_Scope Two registered plugins: acme-delivery 1.4.0 and beta-shipping 2.0.0 (two projects, #1302).
+	 */
+	protected function make_two_plugin_scope(): Plugin_Scope {
+		return new Plugin_Scope(
+			[
+				[
+					'id'      => 'acme-delivery',
+					'version' => '1.4.0',
+					'dir'     => self::OURS,
+				],
+				[
+					'id'      => 'beta-shipping',
+					'version' => '2.0.0',
+					'dir'     => self::BETA,
+				],
+			]
+		);
+	}
+
+	/**
+	 * @return Event_Builder Builder over {@see self::make_two_plugin_scope()} with fixed context.
+	 */
+	protected function make_two_plugin_builder(): Event_Builder {
+		return new Event_Builder(
+			$this->make_two_plugin_scope(),
+			[
+				'site'              => 'abcdef0123456789',
+				'framework_version' => '2.0.1',
+				'wp_version'        => '6.8',
+				'wc_version'        => '10.0.0',
+				'php_version'       => '8.1.0',
+				'environment'       => 'production',
+			],
+			[
+				'abspath'    => '/srv/wp/',
+				'plugin_dir' => '/srv/wp/wp-content/plugins',
+			]
+		);
+	}
+
+	/**
+	 * Makes the reporter know a set of registered plugins, as `Error_Reporter::install()` does at runtime
+	 * ({@see Error_Reporter::plugin_ids()} feeds `Consent::is_available()`). Undone by `Error_Reporter::reset()`.
+	 *
+	 * @param Plugin_Scope $scope Scope to install.
+	 * @return void
+	 */
+	protected function install_scope( Plugin_Scope $scope ): void {
+		$property = new \ReflectionProperty( Error_Reporter::class, 'scope' );
+
+		if ( PHP_VERSION_ID < 80100 ) {
+			$property->setAccessible( true );
+		}
+
+		$property->setValue( null, $scope );
 	}
 
 	/**

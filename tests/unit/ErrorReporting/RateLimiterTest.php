@@ -202,4 +202,15 @@ final class RateLimiterTest extends ErrorReportingTestCase {
 
 		$this->assertFalse( $limiter->allow_browser_intake() );
 	}
+
+	public function test_dedupe_and_daily_budget_are_kept_per_owner(): void {
+		$limiter = new Rate_Limiter();
+		$this->filters['woodev_error_reporting_daily_cap'] = 1;
+
+		$this->assertTrue( $limiter->allow( 'sig-a', false, 'acme-delivery' ) );
+		$this->assertFalse( $limiter->allow( 'sig-a', false, 'acme-delivery' ), 'same owner, same signature: deduped' );
+		$this->assertFalse( $limiter->allow( 'sig-b', false, 'acme-delivery' ), 'same owner: its budget of one is spent' );
+		$this->assertTrue( $limiter->allow( 'sig-a', false, 'beta-shipping' ), 'another owner has its own window and budget' );
+		$this->assertTrue( $limiter->allow( 'sig-c' ), 'the site-wide (ownerless) bucket is untouched by either' );
+	}
 }
