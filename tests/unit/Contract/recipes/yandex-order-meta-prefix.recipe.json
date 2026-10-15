@@ -2,7 +2,7 @@
   "zone_id": "order_session_meta",
   "contract_id": "order_meta_prefix_yandex",
   "description": "Installed-site order meta keys must keep the exact prefix '_yandex_delivery_'. The flip rewrites the prefix on the canonical '_yandex_delivery_request_id' key, which the guard pins.",
-  "file": "plugins-reference/woocommerce-yandex-delivery/includes/class-order.php",
+  "file": "tests/_fixtures/legacy-v1/woocommerce-yandex-delivery/includes/class-order.php",
   "locator": "_yandex_delivery_request_id",
   "canonical_value": "_yandex_delivery_",
   "mutated_value": "_yandex_MUTATED_delivery_",

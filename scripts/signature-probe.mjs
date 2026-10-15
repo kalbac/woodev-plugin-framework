@@ -27,12 +27,12 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = join( dirname( fileURLToPath( import.meta.url ) ), '..' );
 
-const DEFAULT_ROOTS = [ 'woodev', 'plugins-reference' ];
+const DEFAULT_ROOTS = [ 'woodev', 'tests/_fixtures/legacy-v1' ];
 
 const DEFAULT_PAIRS = [
-	'plugins-reference/woocommerce-edostavka/woocommerce-edostavka.php:WC_Edostavka_Shipping=woodev/shipping-method/class-shipping-plugin.php:Shipping_Plugin',
-	'plugins-reference/woocommerce-edostavka/includes/class-wc-edostavka-shipping-method.php:WD_Edostavka_Shipping=woodev/shipping-method/class-shipping-method.php:Shipping_Method',
-	'plugins-reference/woocommerce-edostavka/includes/class-wc-edostavka-integration.php:WC_Edostavka_Integration=woodev/shipping-method/settings/class-shipping-integration.php:Shipping_Integration',
+	'tests/_fixtures/legacy-v1/woocommerce-edostavka/woocommerce-edostavka.php:WC_Edostavka_Shipping=woodev/shipping-method/class-shipping-plugin.php:Shipping_Plugin',
+	'tests/_fixtures/legacy-v1/woocommerce-edostavka/includes/class-wc-edostavka-shipping-method.php:WD_Edostavka_Shipping=woodev/shipping-method/class-shipping-method.php:Shipping_Method',
+	'tests/_fixtures/legacy-v1/woocommerce-edostavka/includes/class-wc-edostavka-integration.php:WC_Edostavka_Integration=woodev/shipping-method/settings/class-shipping-integration.php:Shipping_Integration',
 ];
 
 /* ------------------------------------------------------------------ *
@@ -719,7 +719,6 @@ function parseArgs( argv ) {
 	return {
 		pairs: pairs.length ? pairs : DEFAULT_PAIRS,
 		roots: roots.length ? roots : DEFAULT_ROOTS,
-		usedDefaults: ! pairs.length,
 	};
 }
 
@@ -790,7 +789,7 @@ function printReport( results ) {
 }
 
 function main() {
-	const { pairs, roots, usedDefaults } = parseArgs( process.argv.slice( 2 ) );
+	const { pairs, roots } = parseArgs( process.argv.slice( 2 ) );
 	const index = buildIndex( roots );
 
 	const results = [];
@@ -798,19 +797,11 @@ function main() {
 	for ( const spec of pairs ) {
 		const { subjectFile, subjectClass, baseFile, baseClass } = parsePairSpec( spec );
 
-		// The default pairs point into `plugins-reference/`, which is GITIGNORED — it is a
-		// local convenience holding donor plugins, and it is absent in CI and in a fresh
-		// clone. A missing DEFAULT pair is therefore an ordinary state, not an error: say
-		// so and carry on. A pair the caller named explicitly IS an error, because they
-		// asked for a file that is not there.
+		// The default pairs point at the frozen v1 sources committed under tests/_fixtures/legacy-v1/,
+		// so a missing file is always an error — either a bad --pair or a broken checkout.
 		const missing = [ subjectFile, baseFile ].filter( ( p ) => ! existsSync( resolve( ROOT, p ) ) );
 
 		if ( missing.length ) {
-			if ( usedDefaults ) {
-				console.log( `\nskipped ${ subjectClass } vs ${ baseClass } — not in this checkout: ${ missing.join( ', ' ) }` );
-				continue;
-			}
-
 			throw new Error( `Cannot probe "${ spec }": no such file(s): ${ missing.join( ', ' ) }` );
 		}
 
@@ -818,8 +809,7 @@ function main() {
 	}
 
 	if ( ! results.length ) {
-		console.log( '\nNothing to probe. The default pairs live under plugins-reference/, which is gitignored.' );
-		console.log( 'Pass --pair "subjectFile:Subject=baseFile:Base" to probe classes that are in this checkout.' );
+		console.log( '\nNothing to probe. Pass --pair "subjectFile:Subject=baseFile:Base".' );
 		return;
 	}
 

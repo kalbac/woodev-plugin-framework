@@ -13,26 +13,18 @@
 'use strict';
 
 const { execFileSync } = require( 'node:child_process' );
-const { mkdtempSync, writeFileSync, mkdirSync, rmSync, existsSync } = require( 'node:fs' );
+const { mkdtempSync, writeFileSync, mkdirSync, rmSync } = require( 'node:fs' );
 const { tmpdir } = require( 'node:os' );
 const path = require( 'node:path' );
 
 const SCRIPT = path.resolve( __dirname, '../../scripts/signature-probe.mjs' );
 
 /**
- * `plugins-reference/` is GITIGNORED — it holds donor plugins as a local convenience and
- * is absent in CI and in a fresh clone. The acceptance case below is the only test that
- * reads real files out of it, so it is skipped where they do not exist rather than
- * failing there: a red CI job would say "the probe is broken" about a checkout that
- * simply does not carry the subject.
- *
- * Everything else in this file builds its own PHP fixtures in a temp directory and runs
- * everywhere, which is what keeps the rules themselves gated in CI.
+ * The acceptance case below probes the frozen v1 edostavka source committed under
+ * `tests/_fixtures/legacy-v1/` (it used to read the gitignored `plugins-reference/` copy and
+ * skip where that was absent, which is every CI run). The rest of this file builds its own PHP
+ * fixtures in a temp directory.
  */
-const HAS_DONOR_PLUGINS = existsSync(
-	path.resolve( __dirname, '../../plugins-reference/woocommerce-edostavka' )
-);
-const itWithDonorPlugins = HAS_DONOR_PLUGINS ? it : it.skip;
 
 /** Writes a fixture PHP file and returns its absolute path. */
 function writeFixture( dir, relativePath, contents ) {
@@ -248,10 +240,10 @@ describe( 'signature-probe', () => {
 		expect( report ).toMatch( /\[visibility-narrowed\] Subject::get_shipping_classes_options\(\)/ );
 	} );
 
-	itWithDonorPlugins( 'reports the edostavka shipping-method acceptance figures (card #767): 3 fatals, 5 unimplemented abstracts', () => {
+	it( 'reports the edostavka shipping-method acceptance figures (card #767): 3 fatals, 5 unimplemented abstracts', () => {
 		const report = runProbe(
 			path.resolve( __dirname, '../..' ),
-			'plugins-reference/woocommerce-edostavka/includes/class-wc-edostavka-shipping-method.php',
+			'tests/_fixtures/legacy-v1/woocommerce-edostavka/includes/class-wc-edostavka-shipping-method.php',
 			'WD_Edostavka_Shipping',
 			'woodev/shipping-method/class-shipping-method.php',
 			'Shipping_Method'

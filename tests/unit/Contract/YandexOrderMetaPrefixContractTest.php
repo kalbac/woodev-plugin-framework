@@ -23,14 +23,6 @@ use Woodev\Tests\Unit\TestCase;
  */
 final class YandexOrderMetaPrefixContractTest extends TestCase {
 
-	protected function setUp(): void {
-		parent::setUp();
-
-		if ( ! is_dir( dirname( __DIR__, 3 ) . '/plugins-reference/woocommerce-yandex-delivery' ) ) {
-			$this->markTestSkipped( 'plugins-reference/woocommerce-yandex-delivery is not present (gitignored); this yandex contract guard runs where the reference plugin copy exists.' );
-		}
-	}
-
 	/**
 	 * The contract prefix for all yandex order meta keys.
 	 */
@@ -43,7 +35,7 @@ final class YandexOrderMetaPrefixContractTest extends TestCase {
 	 */
 	private static function source_file(): string {
 		return dirname( __DIR__, 3 )
-			. '/plugins-reference/woocommerce-yandex-delivery/includes/class-order.php';
+			. '/tests/_fixtures/legacy-v1/woocommerce-yandex-delivery/includes/class-order.php';
 	}
 
 	/**
