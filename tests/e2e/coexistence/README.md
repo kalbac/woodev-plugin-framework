@@ -12,6 +12,14 @@ Card: `kalbac/woocommerce-yandex-delivery#18`. Results and defects: the Y15 repo
 | `04-framework-versions.spec.js` | 4 — two framework versions: the newer copy runs |
 | `05-deactivation.spec.js` | 5 — deactivate each plugin in turn |
 | `06-block-checkout.spec.js` | 1 on the block checkout (block-only gaps are recorded, not release blockers) |
+| `07-field-modes-matrix.spec.js` | framework #1179 — all 8 combinations of the «Регион» / «Населённый пункт» field modes, 12 big and small places picked from the suggestions, pickup points of both carriers, an order per cell |
+| `08-order-limits.spec.js` | framework #1179 — «Минимальная/Максимальная сумма заказа» and «Минимальная/Максимальная стоимость доставки» on both plugins' method instances (hidden / offered / clamped price, the admin hint) |
+
+`07` and `08` are the two-carrier acceptance matrix of #1179; each spec's header lists its cells, the settings read off the code and
+its API budget. They share `matrix-helpers.js` (the three location widgets, the rates the buyer sees, byte-exact option restore, a
+whole-rig snapshot, an outbound-request counter) and install the rig-only mu-plugin `rig/zz-1179-api-counter.php` themselves (and
+remove it again): it appends one line per outbound HTTP request to `wp-content/uploads/1179-api-calls.log`, and each spec prints
+`API-CALLS <spec> cdek=… yandex=…` when it ends. Run them one at a time; they never export an order to a carrier.
 
 ## Rig requirements
 
@@ -46,8 +54,13 @@ one cannot hide behind another that still fails. Anything that is not an asserti
 rethrown, never read as «still broken». The check inside a wrapper must use hard `expect`, not `expect.soft`.
 `WOODEV_E2E_STRICT=1` runs the wrapped assertions as ordinary ones so the real messages show.
 
-Currently wrapped: F7 (`05-deactivation.spec.js`, CDEK deactivated → Yandex methods vanish) and B1 (`06-block-checkout.spec.js`,
-block checkout does not restore the remembered CDEK point; block-only, not a release blocker).
+Currently wrapped: F7 (`05-deactivation.spec.js`, CDEK deactivated → Yandex methods vanish), B1 (`06-block-checkout.spec.js`,
+block checkout does not restore the remembered CDEK point; block-only, not a release blocker) and three from the #1179 matrix:
+
+- M1 (`07` cell H, `08` L9) — CDEK hides a method (no route, order-amount limit) without a line in the admin «method hidden» hint; Yandex does.
+- M2 (`07` cells A, C, G) — confirming a Yandex pickup point blanks a text-with-suggestions «Населённый пункт» (the point carries no
+  locality and `pickup-mount.js` writes it unguarded); the order is then refused «Город (Location Provider) is a required field».
+- M3 (`07` cell G) — with «Регион» removed the Yandex courier rate is gone for every settlement that is not its own region.
 
 Fixed defects (their assertions are ordinary now):
 
@@ -69,6 +82,13 @@ The specs never delete their orders (a failure can be inspected). Every order a 
 (`helpers.js` → `ORDER_LEDGER`, default `$TMPDIR/woodev-y15-coexistence-orders.txt`, override with `WOODEV_E2E_ORDER_LEDGER`);
 `rig/cleanup-orders.js` deletes exactly the ids in the ledger — never an e-mail or other pattern match — and spares the ones marked
 `keep:` (the order exported to CDEK for real) and any `--keep=` ids.
+
+`07` and `08` also change, and put back in `afterAll` (a failed cell included): the two field-mode options and `region_field`, the two
+plugins' «Логирование» flags (`08`), the raw settings of any method instance a cell patches (restored byte for byte), and the admin
+user's saved address / locality / persistent cart (the hint cells log in as admin). Each spec snapshots the whole rig before and
+compares it after (`matrix-helpers.js` → `rigSnapshot()`; transients, sessions, cron, the updater caches and WooCommerce's own
+`wc_pending_batch_processes` queue are not part of it) and fails its `afterAll` on any difference. The orders they place are in the
+ledger, so `cleanup-orders.js` removes them.
 
 ## Deactivating CDEK is opt-in
 
