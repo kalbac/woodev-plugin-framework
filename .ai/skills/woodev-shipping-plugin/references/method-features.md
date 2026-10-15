@@ -13,6 +13,8 @@ Source: constants in `woodev/shipping-method/class-shipping-method.php` (`FEATUR
 | `FEATURE_CITY_LIMIT` (#1176) | nothing | below |
 | `declare_services()` (#1145) | return `Carrier_Service` objects | below |
 | `show_if` on instance form fields (#1158) | add `show_if` to a `form_fields` entry | below |
+| `declares_payment_dependent_price()` (#1239) | return `true` from the method CLASS when the price always depends on the payment method | in «Fee by payment method» |
+| `report_hidden()` (#1238, #1276) | report every refusal path's reason next to the log line | [below](#why-a-method-is-hidden-the-admin-only-hint) |
 
 ## Cost limits (`FEATURE_COST_LIMITS`)
 
@@ -43,6 +45,12 @@ block `extensionCartUpdate` through the `woodev-shipping-fee-payments` Store API
 instance actually restricts a fee. «Nothing chosen yet» = a restricted fee does not apply (v1 parity). Gotchas
 [payment method change recalculates nothing](../../../../docs-internal/gotchas/payment-method-change-recalculates-nothing-in-either-checkout.md),
 [cart and checkout share one rate cache entry](../../../../docs-internal/gotchas/cart-and-checkout-share-one-shipping-rate-cache-entry.md).
+**A carrier whose price ALWAYS depends on the payment method** (Yandex: cash-on-delivery commission is part of the quote)
+has no `fee_payments` setting to switch the wiring on. Declare it on the method CLASS:
+`public static function declares_payment_dependent_price(): bool { return true; }` (#1239). It is a static answer, read once in
+`Shipping_Plugin::add_hooks()` — on a cold request the packages are collected before the method objects exist, so an instance
+`supports` list is too late — and gives every instance of the method the payment-change recalculation in both checkouts. Do not
+copy `Fee_Payments` or patch the rate cache from the plugin (Yandex's wiring regression is pinned by framework test #1244).
 Offering only some gateways for a method is a different thing: filter `woodev_shipping_available_payment_gateways`
 (`checkout/class-checkout-handler.php`), used by CDEK's `allowed_payments` instance option (#1143).
 
@@ -78,10 +86,41 @@ retries once without the refused service, remembers it for 24 h, writes an order
 A `form_fields` entry may carry `show_if` in the settings-API shape (`[ 'setting' => <unprefixed key>, 'operator' => '='|'!='|
 'in'|'not_in', 'value' => … ]`, optionally a list with `relation`); `Instance_Field_Conditions` turns it into a data attribute
 a framework script evaluates. A malformed rule is dropped and the field stays visible; hiding is presentation only (the
-value is still submitted). It works on the method's own page; inside WooCommerce's zone modal it does not yet (#1166), and a
+value is still submitted). It works on the method's own page AND inside WooCommerce's zone modal (#1166, which hides the whole
+`fieldset` block there, not only table rows), and a
 `.wc-enhanced-select` / `.wc-product-search` field needs the framework's re-init on `wc_backbone_modal_loaded` (already wired —
 gotcha [enhanced select in the method modal](../../../../docs-internal/gotchas/wc-enhanced-select-is-not-initialised-in-the-shipping-method-modal.md)).
 Source: `class-instance-field-conditions.php`.
+
+## Why a method is hidden: the admin-only hint
+
+A method that yields no rate is invisible to everyone, including the manager who is trying to find out why. Every `rate_package()`
+path that returns `null` or throws reports its reason: `Shipping_Method::report_hidden( string $reason_code, string $message )`
+(#1238, #1276). The rules, all measured:
+
+- **One helper, one reason code, two sinks.** Yandex routes every refusal through a single `hide()` in `Yandex_Rate_Method`
+  (`trait-yandex-rate-method.php`) that writes the always-on log line AND calls `report_hidden()` with the SAME code, so the log and
+  the hint cannot disagree. CDEK does the same from its rate path (PR #104 — the acceptance matrix found it silent, defect M1).
+- **The message is the REASON only**, plain Russian for a shop manager, WITHOUT the method's name: the framework records the
+  instance title (what the buyer sees) beside it and folds the methods that share a reason text into one line
+  («Скрыты: «А», «Б» — reason»). Never pass a carrier exception's text.
+- **Report the plugin's own reason before rethrowing a carrier failure** (`api_error`); the framework then skips its generic
+  «rate calculation failed» entry. The framework's own two reasons are `license_inactive` and that failure.
+- `report_hidden()` is a no-op for a visitor without `manage_woocommerce` and outside a rate calculation, so calling it costs
+  nothing for a guest. The hint is drawn on the classic checkout and, as a Store API extension, on the block checkout.
+- **It shows only while THAT plugin's «Логирование» (`enable_debug`) is on** (operator, 14.10.2026): non-IT merchants read the line
+  as a breakage of their shop. The log line is written regardless.
+- A reason you cannot attach to a decision point is not reported (Yandex's `ambiguous_geo_id`, whose method only sees `null`) —
+  say so in the PR rather than inventing a code.
+
+## Settings fields that call the carrier — and WooCommerce's zone-method modal
+
+A method form field whose option list comes from the carrier's API (CDEK tariffs) is rendered when the merchant opens the zone-method
+modal, which loads through the **REST API**, not `is_admin()` (`wc/v2|v3 …/shipping/zones/N/methods`, `wc/v4 …/shipping-zone-method`).
+A guard keyed on `is_admin()` alone silently serves the cached or empty list there (edostavka PR #84). Allow the live call when
+`is_admin()` OR (a REST request, `manage_woocommerce`, and one of those zone-method routes); NEVER on a Store API request (a shopper
+would pay 60 s × N); cap the timeout (`get_all_tariffs_quickly( 8 )`) and remember a failure for ~120 s keyed by base URL plus a
+secret fingerprint.
 
 ## A signature trap that takes the site down
 

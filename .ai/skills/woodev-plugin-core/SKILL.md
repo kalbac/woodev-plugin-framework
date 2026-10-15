@@ -120,6 +120,15 @@ For the rest of the settings API, read [settings.md](settings.md).
 - **i18n msgid language is decided by who reads the string.** Storefront → English msgid, Russian from
   the catalogue; admin → Russian msgid is fine; logs/exceptions → plain strings, no `__()`.
   `AGENTS.md` → Conventions → «Translatable strings». Details in [services.md](services.md).
+  **The Russian must actually exist:** a plugin with storefront strings ships `languages/{domain}-ru_RU.po/.mo`
+  AND a unit test that every English storefront msgid has a Russian entry (Yandex shipped with no `languages/`
+  at all until the operator's visual pass). Text the framework renders from your data counts as storefront text.
+- **Error reporting needs YOUR OWN DSN, one per plugin:** an entry-file `add_filter( 'woodev_error_reporting_dsn',
+  …, 10, 2 )` that answers for your plugin id only and returns `$dsn` for every other. Without it nothing from your
+  plugin is queued or sent (and if no plugin has a DSN the consent checkbox is not offered at all). [services.md](services.md#error-reporting).
+- **A paid plugin is gated on the server-signed licence claim** (`is_license_in_force()`): no claim means no
+  checkout rates and no carrier actions, a local flag cannot change that, and your integration fixtures need a
+  signed in-force claim. [services.md](services.md#licensing-and-updates).
 
 ## Before you hand work back
 
@@ -129,4 +138,7 @@ For the rest of the settings API, read [settings.md](settings.md).
   `register_loader_definition()` called by a test — see
   `tests/_fixtures/woodev-entry-path-fixture/` and `tests/unit/LoaderEntryPathTest.php`.
 - The data-preservation checklist for a migrated plugin is verified (see [lifecycle.md](lifecycle.md)).
+- The plugin has a Russian catalogue plus its storefront-translation test, an error-reporting DSN filter, a unit
+  bootstrap that defines every WordPress time constant, and CI pinned to a reviewed framework SHA
+  ([layout-and-testing.md](layout-and-testing.md#ci-of-a-plugin-repo)).
 - Read [traps.md](traps.md) once per plugin — it is one line per trap and each links its gotcha.

@@ -28,11 +28,12 @@
    - Add ONE index line to the right `docs-internal/gotcha-index/{topic}.md` (a new topic also gets a row in the `GOTCHAS.md` map)
    - Update `docs-internal/wiki/*.md` if a pattern was clarified
    - Read `docs-internal/DOCS-SCHEMA.md` for exact format rules
-4. **Audit the board** — move the session's cards (`В работе` → `Готово`), close cards resolved by unrelated work, file cards for anything that surfaced but was never written down (see Backlog rule below)
-5. **Update `docs-internal/next-session-prompt.md`** — replace it with the handoff for the next session (write it for someone with zero context)
-6. **Close the agent terminals this session started** — `orca terminal list --json`, then `orca terminal close` for each worker of yours. A Codex critic that has already sent `worker_done` stays a LIVE terminal holding RAM (the hard cap on the Windows desktop, 2–3 agents) and a slot of the rate-limit budget (the only cap on the Mac). s123 left one running; it was still there ~10 h later and the operator had to point it out. Check at session START too — a stray worker is not always yours.
-7. Commit with Conventional Commits format (`feat:`, `fix:`, `docs:`, etc.)
-8. **Push every branch that carries work** — git is how the other machine gets it; a local-only
+4. **Plugin-author lessons → skills** — every trap found this session that the author of the next plugin would hit is in `.ai/skills/woodev-plugin-core/` or `woodev-shipping-plugin/` (a gotcha file alone is NOT enough: the skills are what that author reads). Ask of each new gotcha and merged PR: would a new plugin hit this again?
+5. **Audit the board** — move the session's cards (`В работе` → `Готово`), close cards resolved by unrelated work, file cards for anything that surfaced but was never written down (see Backlog rule below)
+6. **Update `docs-internal/next-session-prompt.md`** — replace it with the handoff for the next session (write it for someone with zero context)
+7. **Close the agent terminals this session started** — `orca terminal list --json`, then `orca terminal close` for each of yours (a critic that already sent `worker_done` is still a LIVE terminal holding RAM and a rate-limit slot; check at session START too).
+8. Commit with Conventional Commits format (`feat:`, `fix:`, `docs:`, etc.)
+9. **Push every branch that carries work** — git is how the other machine gets it; a local-only
    branch simply does not travel.
 
 ---
@@ -273,16 +274,11 @@ Full details + code examples in `docs-internal/gotchas/`. Open your topic from t
 - Full policy: `docs-internal/adr/005-platform-v2-clean-break-policy.md`; operating rules: `docs-internal/platform-v2-execution-protocol.md`.
 - Legacy namespace: `Woodev_*` classes; new code: `Woodev\Framework\*` PSR-4 (include-based, not Composer autoload at runtime).
 
-**Serena MCP (PHP navigation) — binds agents that HAVE Serena:**
-- Always use Serena tools for PHP source reading — never raw `Read` on `.php` files
-- **Serena is a Claude Code MCP.** An agent without access to it — Codex, for one — is not expected
-  to follow this rule and should say so once and proceed with git/shell inspection. Reporting the
-  absence is right; stalling on it is not (s83)
-- Serena is pre-indexed, faster and more accurate than file reads
-- **Mandatory (operator decision, s60):** verify Serena is connected at session start; if it is
-  missing, report to the operator before any PHP work — do not silently fall back to `Read`.
-  Every subagent brief touching PHP must repeat this rule. Full enforcement text:
-  `docs-internal/AGENT-RULES.md` → "Use Serena MCP".
+**Serena MCP (PHP navigation) — binds agents that HAVE Serena:** never raw `Read` on `.php` files (Serena is pre-indexed and more
+accurate). Mandatory (operator, s60): verify it is connected at session start; if it is missing, report to the operator before any PHP
+work, do not silently fall back to `Read`; every subagent brief touching PHP repeats this rule. Serena is a Claude Code MCP: an agent
+without it (Codex) says so once and proceeds with git/shell inspection — stalling on it is wrong (s83). Full text:
+`docs-internal/AGENT-RULES.md` → "Use Serena MCP".
 
 **Type safety:**
 - Type declarations required on ALL parameters and return types
@@ -361,6 +357,14 @@ Run review before committing when changes touch:
 
 **Full protocol with examples:** `docs-internal/DOCS-SCHEMA.md` → "Gotcha write protocol"
 
+### Plugin-author skills rule
+
+When a fix — in a plugin (CDEK, Yandex) or the framework — reveals a trap the author of a NEW plugin would hit too, update
+`.ai/skills/woodev-plugin-core/` or `woodev-shipping-plugin/` **in the SAME PR as the fix** (checklist line in `SKILL.md`/`traps.md`,
+detail in the reference file, citing the plugin file or gotcha slug). A plugin-repo PR cannot edit them: it carries a «skill update
+needed: …» note and the coordinator opens the skill PR the same session. Operator, 15.10.2026: «мы же потом снова на эти проблемы
+наткнёмся».
+
 ---
 
 ## 📋 Backlog rule — GitHub Projects, not docs (MANDATORY)
@@ -368,8 +372,7 @@ Run review before committing when changes touch:
 **The single backlog for this repo is GitHub Issues + the board
 [Woodev Framework Backlog](https://github.com/users/kalbac/projects/6) (project №6).**
 
-Ideas, bugs, tech debt and deferred findings go there — **not** into `docs-internal/FUTURE-BACKLOG.md`,
-not into a `// TODO` comment, not into a chat message the operator has to remember.
+Ideas, bugs, tech debt and deferred findings go there — **not** into `docs-internal/FUTURE-BACKLOG.md`, a `// TODO`, or a chat message.
 
 ### Capture — do this immediately, not at session end
 
@@ -409,25 +412,18 @@ A code `TODO` must reference an issue (`// TODO(#123): …`) — never stand alo
 
 ### Lifecycle
 
-- **An agent may move a card itself — but only a card that is already SETTLED.** The discriminator is
-  not who wrote it, it is **whether the card needs the operator's answer** (operator, 27.08.2026, #600):
+- **An agent may move a card itself — but only a card that is already SETTLED.** The discriminator is **whether the card needs the
+  operator's answer**, not who wrote it (operator, 27.08.2026, #600):
   - you filed it and it needs no answer from him → move it wherever it belongs, `Бэклог` included.
-    Parking a decision already made in `Инбокс` only forces a re-triage of it.
-  - the card is FOR HIM — it asks him to decide something → it stays in `Инбокс` and **he** moves it,
-    either to `Бэклог` or closed as `not planned`. This holds even when an AGENT wrote the card:
-    #600 was agent-authored and still belonged in `Инбокс`, because its whole content was a question
-    only he could answer.
-  The earlier wording keyed on authorship alone, which gets that last case wrong — do not simplify it
-  back.
+  - the card is FOR HIM — it asks him to decide something → it stays in `Инбокс` and **he** moves it (to `Бэклог`, or closed as
+    `not planned`), even when an AGENT wrote it. Do not simplify this back to "keyed on authorship".
 - **Take the card you are working on into `В работе`.** Work driven by a spec/plan rather than a card
   still needs one — create it and move it, so the board reflects reality.
 - Close via `Closes #N` in the implementing commit or PR (the board moves the card to `Готово` itself),
   or `gh issue close --reason completed` with a **Russian** comment explaining what closed it.
   Wrong-idea rejections close as `not planned`, also with a Russian comment.
-- **Before creating a card from memory or docs, verify against the code first.** A card was once filed
-  for work that had already shipped weeks earlier.
-- **At session end, audit the board** — some cards get closed by unrelated work. A file deleted for one
-  reason can resolve a card filed for another.
+- **Before creating a card from memory or docs, verify against the code first** (one was filed for work already shipped).
+- **At session end, audit the board** — unrelated work can resolve a card (Session End step 5).
 
 ### `docs-internal/FUTURE-BACKLOG.md` is superseded
 

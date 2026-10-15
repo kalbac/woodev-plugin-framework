@@ -101,9 +101,10 @@ Decide per plugin and write it down. CDEK carried the v1 boxes to everybody but 
 into boxes in v1, so behaviour did not change for the rest (s158); its old carrier box codes (`S`, `L`, `500GR`, …) were
 NOT carried because the live catalogue gives other dimensions under other codes (`docs/cdek-api/contract.md` in the plugin).
 
-## Parcel-locker cells — not on `main` yet
+## Parcel-locker cells
 
-Checking that the order fits the CELL of a parcel locker is framework PR #1219 (card #1215): `Pickup_Point` carries optional
-cells and `Constraint_Checker` places the cart items into each cell as a fixed box. Until it merges, `Constraint_Checker`
-checks weight and cash-on-delivery only, and `Pickup_Point` has no cells — do not write a carrier-side check; re-read
-`pickup/class-pickup-point.php` once #1219 is merged. The CDEK mapper half is plugin PR #64 (`dimensions` on `POSTAMAT`).
+Checking that the order fits the CELL of a parcel locker is in the framework (PR #1219, card #1215): `Pickup_Point` carries
+optional cells and `Constraint_Checker` places the cart items into each cell as a fixed box, after weight and before
+cash-on-delivery. The contract (units, all-or-nothing, the 32-cell cap, what the browser never receives) and the CDEK mapper half
+(plugin PR #64, `dimensions` on `POSTAMAT`) are in [pickup](model-rates-location-pickup.md#pickup-and-checkout). Do not write a
+carrier-side check.
