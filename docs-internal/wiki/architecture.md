@@ -206,6 +206,9 @@ address properties removed before WooCommerce imports them (`extension-cart-addr
 adopts only confirmed street/postcode explicitly; the locality rate refresh also saves linked billing
 locality. The dirty flag alone is insufficient: it trails a setter by 300 ms. Evidence and boundaries:
 [the extension-reply gotcha](../gotchas/core-takes-a-cart-extension-reply-s-addresses-into-the-store-before-your-code-sees-it.md).
+The chooser writes a real state-list code when one exists, or the record's bare region name for a
+free-text state (classic's policy). No state list does not imply a hidden or optional field; RU's
+required State/County input must not be cleared or retain the `'*'` placeholder after a pick.
 
 **The block checkout's own adapter** (SP-11: the locality chooser, the pickup button, the
 `woodev-shipping` Store API namespace) keeps its contracts in

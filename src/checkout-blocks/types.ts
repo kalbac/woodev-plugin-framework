@@ -105,10 +105,9 @@ export interface Selection {
 	cityType: string;
 	country: string;
 	/**
-	 * The WooCommerce state code the record's region stands for — written by a pick, derived from
-	 * the same state list for a selection restored from the server — or `null` when there is none
-	 * to vouch for (region field removed, no state list, no single matching option): the state is
-	 * then not watched.
+	 * The WooCommerce state code or free-text region name written by a pick. A restored selection
+	 * derives a code from the state list, or uses `null` when there is none to vouch for (region
+	 * field removed, no state list, no single matching option): the state is then not watched.
 	 */
 	state: string | null;
 }

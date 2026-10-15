@@ -298,10 +298,9 @@ function movableAddress( billingIsShipping: boolean ): string {
  * `address` — a {@link movableAddress} value — as a confirmation's own move leaves it: the fields
  * `destination` names hold the point's, in every address the value covers.
  *
- * That is what the store reads when the reply lands and the shopper has no unsaved edit: core takes
- * the reply's addresses into the cart store BEFORE `extensionCartUpdate()` resolves (WooCommerce
- * 11.1, `wc-blocks-data.js`: `gi=` — `receiveCart( response )`, addresses included unless
- * `WOOCOMMERCE_CHECKOUT_IS_CUSTOMER_DATA_DIRTY`), and the server has already moved them.
+ * Framework extension replies have their native addresses removed before core imports them by
+ * `keepExtensionAddressesInForm()`. The move is applied explicitly by `adoptDestination()`; this
+ * comparison also recognizes an address already moved to that same confirmed destination.
  */
 function asMovedTo( address: string | null, destination: PickupDestination ): string | null {
 	if ( address === null ) {

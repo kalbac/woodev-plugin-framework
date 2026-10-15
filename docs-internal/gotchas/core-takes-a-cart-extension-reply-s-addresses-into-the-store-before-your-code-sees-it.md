@@ -107,6 +107,21 @@ limit still describes unprotected foreign extension replies, not the now-filtere
 The regression suite is `tests/js/checkout-blocks-extension-addresses.test.ts`. Browser evidence used
 no orders or option changes; the final built-bundle carrier-switch acceptance belongs to the coordinator.
 
+### The race hid an empty required state (#1293 round 2)
+
+After protecting the address, the rig's refusal changed from missing city to missing State/County.
+RU had `countryData.RU.states = []`, `locale.state = { index: 50 }`, region mode `ajax-select2`, and a
+visible required native text input. Picking Moscow changed both states from `'*'` to `''`: the chooser
+had assumed that no state list meant no state control. No-list countries can still require free text.
+
+❌ Return `state: ''` for every country without a state list, or return `null` and preserve `'*'`.
+
+✅ `resolveNativeAddress()` writes the record's bare region name in that branch, using the settlement
+name for a federal-city record without a region component. This matches classic's `fieldValueFor()` /
+`backwardsFill()` policy in `location-cascade.js`. WC's `ValidationUtils::validate_state()` accepts any
+state when no states are defined; `format_state()` keeps the text. Listed states still require a real
+option code, and a removed region field still leaves the native value untouched.
+
 ## Related
 
 - [the-block-checkout-is-a-rest-request-and-fires-none-of-the-classic-checkout-hooks](the-block-checkout-is-a-rest-request-and-fires-none-of-the-classic-checkout-hooks.md) — the other place the block checkout's own request order decides behaviour
