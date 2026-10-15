@@ -86,10 +86,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 			}
 
 			// Stylesheet
-			wp_enqueue_style( 'woodev-payment-gateway-token-editor', $this->get_gateway()->get_plugin()->get_payment_gateway_framework_assets_url() . '/css/admin/woodev-payment-gateway-token-editor.css', [], Woodev_Plugin::VERSION );
+			wp_enqueue_style( 'woodev-payment-gateway-token-editor', $this->get_gateway()->get_plugin()->get_payment_gateway_framework_assets_url() . '/css/admin/woodev-payment-gateway-token-editor' . Woodev_Plugin::get_assets_suffix() . '.css', [], Woodev_Plugin::VERSION );
 
 			// Main editor script
-			wp_enqueue_script( 'woodev-payment-gateway-token-editor', $this->get_gateway()->get_plugin()->get_payment_gateway_framework_assets_url() . '/js/admin/woodev-payment-gateway-token-editor.js', [ 'jquery' ], Woodev_Plugin::VERSION, true );
+			wp_enqueue_script( 'woodev-payment-gateway-token-editor', $this->get_gateway()->get_plugin()->get_payment_gateway_framework_assets_url() . '/dist/admin/woodev-payment-gateway-token-editor.js', [ 'jquery' ], Woodev_Plugin::VERSION, true );
 
 			wp_localize_script(
 				'woodev-payment-gateway-token-editor',

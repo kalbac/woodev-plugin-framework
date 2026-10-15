@@ -61,7 +61,7 @@ if ( ! class_exists( 'Woodev_Job_Batch_Handler' ) ) :
 		 * Enqueues the scripts.
 		 */
 		public function enqueue_scripts() {
-			wp_enqueue_script( $this->get_job_handler()->get_identifier() . '_batch_handler', $this->get_plugin()->get_framework_assets_url() . '/js/admin/woodev-admin-job-batch-handler.min.js', [ 'jquery' ], $this->get_plugin()->get_version() );
+			wp_enqueue_script( $this->get_job_handler()->get_identifier() . '_batch_handler', $this->get_plugin()->get_framework_assets_url() . '/js/admin/woodev-admin-job-batch-handler' . Woodev_Plugin::get_assets_suffix() . '.js', [ 'jquery' ], $this->get_plugin()->get_version() );
 		}
 
 

@@ -321,10 +321,10 @@ class CheckoutHandlerEnqueueTest extends TestCase {
 		$handler->enqueue_assets();
 
 		$this->assertArrayHasKey( 'woodev-location-typeahead', $scripts );
-		$this->assertStringContainsString( 'location-typeahead.js', $scripts['woodev-location-typeahead']['src'] );
+		$this->assertStringContainsString( 'location-typeahead.min.js', $scripts['woodev-location-typeahead']['src'] );
 
 		$this->assertArrayHasKey( 'woodev-location-cascade', $scripts );
-		$this->assertStringContainsString( 'location-cascade.js', $scripts['woodev-location-cascade']['src'] );
+		$this->assertStringContainsString( 'location-cascade.min.js', $scripts['woodev-location-cascade']['src'] );
 		$this->assertContains( 'woodev-location-typeahead', $scripts['woodev-location-cascade']['deps'] );
 		$this->assertContains( 'woodev-checkout-field-store', $scripts['woodev-location-cascade']['deps'] );
 
@@ -333,13 +333,13 @@ class CheckoutHandlerEnqueueTest extends TestCase {
 		// `<select>`), and declared as a dependency of the cascade itself so its own renderer
 		// registration has always already run by the time the cascade reads it.
 		$this->assertArrayHasKey( 'woodev-location-select-modes', $scripts );
-		$this->assertStringContainsString( 'location-select-modes.js', $scripts['woodev-location-select-modes']['src'] );
+		$this->assertStringContainsString( 'location-select-modes.min.js', $scripts['woodev-location-select-modes']['src'] );
 		$this->assertContains( 'selectWoo', $scripts['woodev-location-select-modes']['deps'] );
 		$this->assertContains( 'woodev-location-select-modes', $scripts['woodev-location-cascade']['deps'] );
 
 		// The typeahead's own suggestion-listbox stylesheet — same "built" probe, same guard.
 		$this->assertArrayHasKey( 'woodev-location-styles', $styles );
-		$this->assertStringContainsString( 'location.css', $styles['woodev-location-styles']['src'] );
+		$this->assertStringContainsString( 'location.min.css', $styles['woodev-location-styles']['src'] );
 
 		$this->assertCount( 1, $localized );
 		$this->assertArrayHasKey( 'location', $localized[0][2] );

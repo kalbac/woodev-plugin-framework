@@ -99,7 +99,7 @@ namespace Woodev\Tests\Unit {
 
 			$this->assertArrayHasKey( 'woodev-payment-gateway-payment-form', $scripts );
 			$this->assertStringEndsWith(
-				'/js/frontend/woodev-payment-gateway-frontend.js',
+				'/js/frontend/woodev-payment-gateway-frontend.min.js',
 				$scripts['woodev-payment-gateway-payment-form']
 			);
 		}
@@ -123,7 +123,7 @@ namespace Woodev\Tests\Unit {
 
 			$this->assertArrayHasKey( 'woodev-payment-gateway-payment-form', $styles );
 			$this->assertStringEndsWith(
-				'/css/frontend/woodev-payment-gateway-payment-form.css',
+				'/css/frontend/woodev-payment-gateway-payment-form.min.css',
 				$styles['woodev-payment-gateway-payment-form']
 			);
 		}

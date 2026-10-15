@@ -768,7 +768,7 @@ class WoocommercePluginTest extends TestCase {
 		);
 		$this->assertArrayHasKey( 'woodev-modal', $registered );
 		$this->assertStringContainsString(
-			'/woodev/assets/js/frontend/woodev-modal.js',
+			'/woodev/assets/js/frontend/woodev-modal.min.js',
 			$registered['woodev-modal']['src']
 		);
 		$this->assertStringNotContainsString( 'shipping-method', $registered['woodev-modal']['src'] );
@@ -840,13 +840,13 @@ class WoocommercePluginTest extends TestCase {
 		);
 		$this->assertArrayHasKey( 'woodev-modal', $registered );
 		$this->assertStringContainsString(
-			'/woodev/assets/css/frontend/woodev-modal.css',
+			'/woodev/assets/css/frontend/woodev-modal.min.css',
 			$registered['woodev-modal']['src']
 		);
 		$this->assertStringNotContainsString( 'shipping-method', $registered['woodev-modal']['src'] );
 		$this->assertSame( [], $registered['woodev-modal']['deps'] );
 
-		$style_path = dirname( __DIR__, 2 ) . '/woodev/assets/css/frontend/woodev-modal.css';
+		$style_path = dirname( __DIR__, 2 ) . '/woodev/assets/css/frontend/woodev-modal.min.css';
 		$this->assertFileExists( $style_path, 'The chrome stylesheet created by this task must exist on disk.' );
 		$this->assertSame(
 			(string) filemtime( $style_path ),

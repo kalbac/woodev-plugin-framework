@@ -163,7 +163,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 
 			wp_register_script( 'jquery-tiptip', WC()->plugin_url() . '/assets/js/jquery-tiptip/jquery.tipTip.min.js', [ 'jquery' ], Woodev_Helper::get_wc_version(), true );
 
-			wp_enqueue_style( $handle, $this->get_plugin()->get_payment_gateway_framework_assets_url() . '/css/frontend/' . $handle . '.css', [ 'dashicons' ], Woodev_Plugin::VERSION );
+			wp_enqueue_style( $handle, $this->get_plugin()->get_payment_gateway_framework_assets_url() . '/css/frontend/' . $handle . Woodev_Plugin::get_assets_suffix() . '.css', [ 'dashicons' ], Woodev_Plugin::VERSION );
 
 			wp_enqueue_script(
 				$handle,

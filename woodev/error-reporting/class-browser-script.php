@@ -42,7 +42,7 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Browser_Script' ) ) :
 			}
 
 			$framework_dir = dirname( __DIR__ );
-			$relative      = 'assets/js/frontend/woodev-error-reporter.js';
+			$relative      = 'assets/js/frontend/woodev-error-reporter' . \Woodev_Plugin::get_assets_suffix() . '.js';
 			$path          = $framework_dir . '/' . $relative;
 
 			wp_register_script(

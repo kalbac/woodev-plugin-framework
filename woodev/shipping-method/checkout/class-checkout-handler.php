@@ -526,7 +526,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 				|| ( function_exists( 'is_order_received_page' ) && is_order_received_page() ) ) {
 				return;
 			}
-			$path = dirname( __DIR__ ) . '/assets/js/frontend/hidden-shipping-reasons.js';
+			$path = self::asset_path( 'js/frontend/hidden-shipping-reasons.js' );
 			if ( file_exists( $path ) ) {
 				wp_enqueue_script( 'woodev-hidden-shipping-reasons', self::asset_url( 'js/frontend/hidden-shipping-reasons.js' ), [ 'wp-data' ], (string) filemtime( $path ), true );
 			}
@@ -1950,6 +1950,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * Mirrors {@see asset_url()} but returns a local path suitable for
 		 * `filemtime()` and `file_exists()` checks.
 		 *
+		 * Callers pass the SOURCE name (`js/frontend/phone-mask.js`); the `.min` sibling is what is
+		 * resolved unless `SCRIPT_DEBUG` is on ({@see \Woodev_Plugin::get_assets_suffix()}). A name that
+		 * is already minified (the vendored `js/vendor/imask.min.js`) is returned as given.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @param string $relative path relative to the assets directory
@@ -1957,7 +1961,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * @return string absolute filesystem path to the asset
 		 */
 		private static function asset_path( string $relative ): string {
-			return dirname( __DIR__ ) . '/assets/' . ltrim( $relative, '/' );
+			$relative = ltrim( $relative, '/' );
+
+			if ( 1 !== preg_match( '/\.min\.(js|css)$/', $relative ) ) {
+				$relative = (string) preg_replace( '/\.(js|css)$/', \Woodev_Plugin::get_assets_suffix() . '.$1', $relative );
+			}
+
+			return dirname( __DIR__ ) . '/assets/' . $relative;
 		}
 
 		/**

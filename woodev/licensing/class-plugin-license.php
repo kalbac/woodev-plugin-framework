@@ -1021,7 +1021,7 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 
 			wp_enqueue_style(
 				'woodev-plugins-table-style',
-				$this->plugin->get_framework_assets_url() . '/css/admin/woodev-plugins-table.css'
+				$this->plugin->get_framework_assets_url() . '/css/admin/woodev-plugins-table' . $this->plugin->get_assets_suffix() . '.css'
 			);
 		}
 

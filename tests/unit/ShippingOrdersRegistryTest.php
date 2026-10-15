@@ -717,7 +717,7 @@ class ShippingOrdersRegistryTest extends TestCase {
 		Orders_Registry::instance()->enqueue_metabox_script();
 
 		$this->assertSame( 'woodev-shipping-order-metabox-actions', $captured[0] );
-		$this->assertSame( 'https://example.test/plugins/order-metabox-actions.js', $captured[1] );
+		$this->assertSame( 'https://example.test/plugins/order-metabox-actions.min.js', $captured[1] );
 		$this->assertSame( [ 'woodev-modal' ], $captured[2], 'plain JS, the modal shell is its only dependency' );
 		$this->assertSame( [ 'woodev-modal' ], $styles, 'the shell\'s chrome stylesheet is enqueued too' );
 		$this->assertTrue( $captured[4], 'printed in the footer' );
@@ -757,7 +757,7 @@ class ShippingOrdersRegistryTest extends TestCase {
 		Orders_Registry::instance()->enqueue_in_transit_warning();
 
 		$this->assertSame( 'woodev-shipping-order-in-transit-warning', $captured[0] );
-		$this->assertSame( 'https://example.test/plugins/order-in-transit-warning.js', $captured[1] );
+		$this->assertSame( 'https://example.test/plugins/order-in-transit-warning.min.js', $captured[1] );
 		$this->assertSame( [ 'jquery' ], $captured[2] );
 		$this->assertSame( 'woodev-shipping-order-in-transit-warning', $inline[0] );
 		$this->assertStringContainsString( '"status":"wc-cancelled"', $inline[1] );

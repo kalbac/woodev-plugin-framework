@@ -1029,7 +1029,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 				return;
 			}
 
-			$path = __DIR__ . '/assets/css/frontend/additional-info.css';
+			$path = __DIR__ . '/assets/css/frontend/additional-info' . self::get_assets_suffix() . '.css';
 
 			if ( ! file_exists( $path ) ) {
 				return;
@@ -1261,7 +1261,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			if ( wp_script_is( 'woodev-instance-field-conditions', 'enqueued' ) ) {
 				return;
 			}
-			$path = __DIR__ . '/assets/js/admin/instance-field-conditions.js';
+			$path = __DIR__ . '/assets/js/admin/instance-field-conditions' . self::get_assets_suffix() . '.js';
 			wp_enqueue_script( 'woodev-instance-field-conditions', plugins_url( basename( $path ), $path ), [ 'jquery' ], (string) filemtime( $path ), true );
 			// WooCommerce initialises .wc-product-search / .wc-enhanced-select on page load and on this event only; a method's
 			// settings open later in a WCBackboneModal whose wc_backbone_modal_loaded handler never fires it, so the selects stay plain.
