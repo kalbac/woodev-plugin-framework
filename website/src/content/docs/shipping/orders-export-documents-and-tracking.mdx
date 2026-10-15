@@ -1,0 +1,713 @@
+---
+title: "Orders, export, documents & tracking"
+description: Send orders to a carrier, reconcile and cancel them, print waybills, track deliveries and receive carrier webhooks.
+---
+
+import { FileTree } from '@astrojs/starlight/components';
+
+In this page you will learn how a carrier plugin connects to the framework's shipping orders page: how to register your carrier, export and cancel shipments, map delivery statuses and tracking, hand over documents, report cost and date changes, add your own order actions, receive webhooks, and find your orders safely.
+
+Covers framework release `%%FRAMEWORK_VERSION%%`. It assumes a plugin built as in [Shipping plugin anatomy](../plugin-anatomy/).
+
+## What the framework gives you
+
+The framework owns the shipping orders page, the order box on the order screen, the export queue and its retries, the buyer's status emails, and the settings that control them. Your plugin supplies the parts that depend on your carrier:
+
+| You write | It does |
+|---|---|
+| An `Orders_Provider` | Describes your carrier: which orders are yours, which meta keys hold the status and the tracking number, how raw statuses map to the framework's states. |
+| An `Abstract_Shipment_Handler` subclass | Exports an order to the carrier, cancels it, and optionally reconciles, updates and refuses. |
+| An `Abstract_Tracking_Handler` subclass | Turns the carrier's tracking answer into a list of events. |
+| A `Document_Source` | Returns waybills, barcodes and other documents. |
+| An `Abstract_Webhook_Handler` subclass | Receives events that the carrier pushes. Only when the carrier pushes. |
+
+You do **not** write buyer emails, a download flow for documents, a retry button or an export queue. The framework has them.
+
+## A carrier's order classes
+
+<FileTree>
+
+- my-carrier/
+  - includes/
+    - class-my-carrier-plugin.php registers the provider and the handlers
+    - orders/
+      - class-my-carrier-shipment-handler.php export, cancel, refuse
+      - class-my-carrier-tracking-handler.php tracking events
+      - class-my-carrier-document-source.php waybills and barcodes
+      - class-my-carrier-webhook-handler.php only for a carrier that pushes events
+      - class-my-carrier-order-actions.php order actions, row flags, toolbar buttons
+      - class-my-carrier-order-query.php finding orders by meta
+    - api/
+      - class-my-carrier-api.php implements `Shipping_API`
+
+</FileTree>
+
+## Register on every request
+
+Register the provider and its handlers once, from `init_plugin()`:
+
+```php
+<?php
+defined( 'ABSPATH' ) || exit;
+
+use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
+use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
+use Woodev\Framework\Shipping\Order\Shipping_Order_Handler;
+
+final class My_Carrier_Plugin extends \Woodev\Framework\Shipping\Shipping_Plugin {
+
+	/**
+	 * Registers the plugin's hooks once WordPress and WooCommerce are ready.
+	 *
+	 * @return void
+	 */
+	public function init_plugin(): void {
+		$this->register_orders();
+	}
+
+	/**
+	 * Registers the carrier with the shipping orders page.
+	 *
+	 * @return void
+	 */
+	private function register_orders(): void {
+		$registry = Orders_Registry::instance();
+
+		$provider = Orders_Provider::create(
+			'my_carrier',
+			__( 'My Carrier', 'my-carrier' ),
+			'_my_carrier_marker',
+			[ 'my_carrier_courier', 'my_carrier_pickup' ],
+			[
+				'status_meta_key'           => '_my_carrier_status',
+				'status_map'                => [
+					'NEW'        => 'created',
+					'ACCEPTED'   => 'in_transit',
+					'IN_TRANSIT' => 'in_transit',
+					'READY'      => 'ready_for_pickup',
+					'DELIVERED'  => 'delivered',
+					'RETURNED'   => 'returned',
+					'CANCELLED'  => 'cancelled',
+				],
+				'status_labels'             => [
+					'NEW'        => __( 'Created', 'my-carrier' ),
+					'ACCEPTED'   => __( 'Accepted by the carrier', 'my-carrier' ),
+					'IN_TRANSIT' => __( 'In transit', 'my-carrier' ),
+					'READY'      => __( 'Ready for pickup', 'my-carrier' ),
+					'DELIVERED'  => __( 'Delivered', 'my-carrier' ),
+					'RETURNED'   => __( 'Returned', 'my-carrier' ),
+					'CANCELLED'  => __( 'Cancelled', 'my-carrier' ),
+				],
+				'tracking_meta_key'         => '_my_carrier_tracking_number',
+				'tracking_url_template'     => 'https://my-carrier.example/track/{tracking}',
+				'pickup_point_meta_key'     => '_my_carrier_pickup_point',
+				'carrier_order_id_meta_key' => '_my_carrier_order_id',
+				'supports_label_printing'   => true,
+				'marker_writer'             => static function ( \WC_Order $order, array $context ): void {
+					$order->update_meta_data( '_my_carrier_marker', '1' );
+				},
+			]
+		);
+
+		$registry->register_provider( $provider, $this );
+
+		$shipment_handler = new My_Carrier_Shipment_Handler(
+			$this->get_api(),
+			new Shipping_Order_Handler(
+				[
+					'carrier_order_id' => '_my_carrier_order_id',
+					'status'           => '_my_carrier_status',
+				]
+			),
+			'my_carrier'
+		);
+
+		$registry->register_shipment_handler( 'my_carrier', $shipment_handler );
+		$registry->register_tracking_handler( 'my_carrier', new My_Carrier_Tracking_Handler( $this->get_api(), 'my_carrier' ) );
+		$registry->register_document_source( 'my_carrier', new My_Carrier_Document_Source() );
+	}
+
+	// The remaining methods of the plugin class are shown in "Shipping plugin anatomy".
+}
+```
+
+:::caution
+Register on **every** request. Never put it under `is_admin()`. Status automation, scheduled actions, REST calls and webhooks all run outside the order screens, and they find your carrier only if it was registered in that same request.
+:::
+
+The first argument of `Orders_Provider::create()` is the **carrier id**. Use the same id for `register_shipment_handler()`, `register_tracking_handler()`, `register_document_source()` and as the hook prefix of your handlers, so everything about one carrier lines up. A second provider registered under the same id replaces the first, and takes its handlers with it.
+
+### What the provider declares
+
+| Argument | Meaning |
+|---|---|
+| `id`, `label` | The carrier id and the name shown to the merchant. |
+| `marker_meta_key` | An order-meta key that marks an order as this carrier's. It must hold a non-empty scalar, or the order lists without an owner. Give each carrier its **own** key. |
+| `method_ids` | The WooCommerce shipping method ids of this carrier, courier and pickup together. |
+| `status_meta_key` | The order-meta key holding the carrier's **raw** status. |
+| `status_map` | Raw status → one of the framework's states, see below. A raw status you leave out reads as `unknown`. |
+| `status_labels` | Raw status → the text shown to the merchant. |
+| `tracking_meta_key` | The key holding the tracking number. |
+| `tracking_url_template` | A link with `{tracking}` where the number goes. |
+| `tracking_url_meta_key` | A key holding an absolute tracking link, used instead of the template for an order that has a tracking number and a valid `http(s)` link in it. Needs `tracking_meta_key`. |
+| `pickup_point_meta_key` | The key holding the chosen pickup point. |
+| `carrier_order_id_meta_key` | The key holding the carrier's order id. |
+| `cron_hook` | The action your plugin runs to refresh statuses. The «Обновить статусы сейчас» (Update statuses now) button fires it. |
+| `marker_writer` | A callable `fn( \WC_Order $order, array $context ): void` that writes your marker onto an order. Without it the framework lists your orders but never creates or edits one for you. |
+| `order_fields` | A callable returning your own export fields for a tariff, shown when a manager puts an order together by hand. |
+| `supports_label_printing` | `true` when you register a `Document_Source`. |
+| `legacy_page_slug` | The slug of an old orders page, whose address now redirects to the framework page. |
+
+A missing id, label, marker key or method list throws a `Shipping_Exception` at registration.
+
+## Delivery statuses
+
+The framework understands these states:
+
+| State | Meaning |
+|---|---|
+| `pending` | Waiting to be sent. |
+| `created` | Registered with the carrier. |
+| `in_transit` | On its way. |
+| `ready_for_pickup` | Waiting at a pickup point. |
+| `delivered` | Delivered. |
+| `returning`, `returned` | On the way back, or back. |
+| `failed` | The delivery failed. |
+| `cancelled` | Cancelled. |
+| `unknown` | The raw status is not in your map. |
+
+Keep the **raw** carrier status in `status_meta_key` and let the map translate it. Never invent a state for a status you do not recognise: leaving it out of the map shows it as `unknown`, which is honest. The constants live on `Woodev\Framework\Shipping\Order\Delivery_Status`.
+
+Write the raw status with the order's meta API, from any path: a webhook, a status refresh, a cron run or a manual edit. The framework watches that key. After the request has written everything, it fires `woodev_shipping_delivery_status_changed` once for every real change of the state.
+
+## Export, cancel and refuse
+
+Extend `Abstract_Shipment_Handler`. The only method you must write is `extract_carrier_order_id()`, which reads the carrier's order id from the answer of `create_order()`. The framework does the rest: it exports each order **once**, under a per-order lock, so a double click or a retry cannot create two shipments, and it stores the id under the key you mapped.
+
+```php
+<?php
+defined( 'ABSPATH' ) || exit;
+
+use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
+use Woodev\Framework\Shipping\Order\Action_Result;
+use Woodev\Framework\Shipping\Order\Delivery_Status;
+
+/**
+ * Exports, cancels and refuses My Carrier shipments.
+ */
+final class My_Carrier_Shipment_Handler extends Abstract_Shipment_Handler {
+
+	/**
+	 * Reads the carrier's order id from the answer of create_order().
+	 *
+	 * @param \Woodev_API_Response $response The carrier's answer.
+	 * @return string The id, or an empty string when the answer carries none.
+	 */
+	protected function extract_carrier_order_id( \Woodev_API_Response $response ): string {
+		return $response instanceof My_Carrier_Api_Response ? (string) $response->get_order_id() : '';
+	}
+
+	/**
+	 * Tells the framework this carrier can look an order up on its side.
+	 *
+	 * @return bool
+	 */
+	public function supports_reconcile(): bool {
+		return true;
+	}
+
+	/**
+	 * Finds the order that an earlier, timed-out export may have created.
+	 *
+	 * Return null when the carrier has no such order. Throw only when the carrier could not answer.
+	 *
+	 * @param \WC_Order $order The order whose export state is unknown.
+	 * @return string|null The carrier's order id, or null.
+	 *
+	 * @throws \Woodev_API_Exception When the carrier could not say either way.
+	 */
+	public function find_exported_order( \WC_Order $order ): ?string {
+		return $this->api->find_order_by_number( (string) $order->get_order_number() );
+	}
+
+	/**
+	 * Lists the states in which the carrier no longer lets a merchant delete a shipment.
+	 *
+	 * @return string[]
+	 */
+	public function get_handed_over_statuses(): array {
+		return [ Delivery_Status::IN_TRANSIT, Delivery_Status::READY_FOR_PICKUP, Delivery_Status::RETURNING ];
+	}
+
+	/**
+	 * Tells the framework this carrier can refuse a shipment that is already on its way.
+	 *
+	 * @return bool
+	 */
+	public function supports_refusal(): bool {
+		return true;
+	}
+
+	/**
+	 * Refuses the shipment: the parcel returns to the sender. Normally this is paid.
+	 *
+	 * `$this->order_handler` reads the carrier's order id from the order meta you mapped.
+	 *
+	 * @param \WC_Order $order The order.
+	 * @return Action_Result
+	 */
+	public function refuse( \WC_Order $order ): Action_Result {
+		try {
+			$this->api->refuse_order( (string) $this->order_handler->get( $order, 'carrier_order_id' ) );
+		} catch ( \Woodev_API_Exception $exception ) {
+			return Action_Result::failure( $exception->getMessage() );
+		}
+
+		return Action_Result::success();
+	}
+}
+```
+
+`$this->api` is your `Shipping_API` implementation. It has `create_order( \WC_Order )`, `cancel_order( string )`, `get_order( string )`, `get_tracking( string )`, `calculate_rates( array )`, `get_pickup_points( array )`, `get_request()` and `get_response()`; the abstract class `Abstract_Shipping_API` supplies the HTTP part.
+
+### When the carrier did not answer
+
+A timeout or a 5xx on `create_order()` does not tell you whether the carrier created the shipment. The framework marks the order **export state unknown** and then depends on what your carrier can do:
+
+- **It can look an order up** (`supports_reconcile()` returns `true`). The export is retried by the framework after 1 minute, 5 minutes, 30 minutes and 2 hours, five attempts in all, followed by an order note. Each retry calls `find_exported_order()` **first** and creates an order only when the carrier has none. "Not found" must return `null`. If it throws, the framework reads that as "the carrier could not answer" and never creates the order.
+- **It cannot.** There is no automatic retry. The framework leaves one private note, and another export of that order is refused until the merchant has checked the carrier's account and explicitly authorises a retry. Do not build a retry button of your own. The framework action `woodev_retry_export` (`Order_Actions::RETRY_EXPORT`) is the button, and its flag reaches the handler as the `$retry_unknown` argument of `export()`.
+- **A refusal** (an HTTP 4xx, a carrier error) means nothing was created. It is not retried, and the carrier's text is shown to the merchant.
+- **A 429 answer** also means nothing was created. The export is retried after the wait the carrier asked for, and it counts toward the same five attempts.
+
+If your carrier needs two steps to create an order, add a flag of your own and save it **before** the second step, because a process that dies between the steps leaves nothing for the framework to see.
+
+### Cancel and refuse
+
+When WooCommerce cancels or refunds an order, the framework cancels the shipment at the carrier, in the background. It never blocks the WooCommerce status change. The merchant's decision stands.
+
+If the carrier cannot delete a shipment after a certain point, list the states in `get_handed_over_statuses()`. If the canonical state is too coarse, override `is_handed_over( $order, $canonical )` instead, and read the order's own stored data, never the carrier's API. For such an order the framework sends no request that is bound to fail. It writes a note, and warns on the order screen when the merchant sets «Отменён» (Cancelled).
+
+«Оформить отказ» (Make a refusal) is for a parcel that is already on its way. It is an explicit button with a confirmation that names the cost. Declare it with `supports_refusal()` and `refuse()`, plus `get_refusable_statuses()` or `is_refusable()` when the states differ from the handed-over ones. It is never run by automation, in bulk, or by a status change. Read the carrier's existing refusal before you post a new one, so a retry cannot be paid twice.
+
+### Hooks of the handler
+
+| Hook | Arguments |
+|---|---|
+| `woodev_shipping_my_carrier_shipment_exported` | The order and the carrier's order id. |
+| `woodev_shipping_my_carrier_shipment_export_failed` | The order and the exception. |
+| `woodev_shipping_my_carrier_shipment_cancelled` | The order and the carrier's order id. |
+| `woodev_shipping_my_carrier_shipment_cancel_failed` | The order and the exception. |
+| `woodev_shipping_order_export_requested` | The order, just before the create call. Shared by all carriers. |
+| `woodev_shipping_order_exported` | The order and the carrier's order id. Shared by all carriers. |
+
+### What the merchant sets
+
+The framework adds an «Выгрузка заказов» (Order export) section to your carrier's tab when a provider and a shipment handler are registered in the request. The merchant turns «Включить автоэкспорт» (Enable auto export) on, picks «Статусы для автоэкспорта» (Statuses for auto export), and picks the WooCommerce status given to a delivered order («Статус доставленного заказа») and to a cancelled one («Статус отменённого заказа»). Do not add a second export settings page. Your own fields go into the same section through `get_export_section_setting_ids()` and `get_export_section_extension()`.
+
+## Tracking
+
+Extend `Abstract_Tracking_Handler`, and turn the carrier's answer into events with `map_events()`. Build each event with `make_event( $status, $description, $timestamp, $location )`.
+
+```php
+<?php
+defined( 'ABSPATH' ) || exit;
+
+use Woodev\Framework\Shipping\Order\Abstract_Tracking_Handler;
+
+/**
+ * Turns My Carrier's tracking answer into events.
+ */
+final class My_Carrier_Tracking_Handler extends Abstract_Tracking_Handler {
+
+	/**
+	 * Maps the carrier's tracking answer to a list of events.
+	 *
+	 * @param \Woodev_API_Response $response The carrier's answer.
+	 * @return array<int, array<string, mixed>>
+	 */
+	protected function map_events( \Woodev_API_Response $response ): array {
+		$events = [];
+
+		foreach ( (array) $response->get( 'events' ) as $row ) {
+			$events[] = self::make_event(
+				(string) ( $row['status'] ?? '' ),
+				(string) ( $row['text'] ?? '' ),
+				(int) strtotime( (string) ( $row['time'] ?? '' ) ),
+				(string) ( $row['city'] ?? '' )
+			);
+		}
+
+		return $events;
+	}
+}
+```
+
+`get_history( $tracking_number )` calls `get_tracking()` on your API and returns the events. A carrier or network failure returns an empty list and is never fatal. The handler fires two hooks you can use to draw the history yourself: `woodev_shipping_my_carrier_tracking_admin_display` and `woodev_shipping_my_carrier_tracking_frontend_display`, each with the history and the order.
+
+### Buyer emails
+
+Buyer emails about a delivery come from the framework, under WooCommerce → Settings → Emails. **Your plugin does nothing to get them.** Declare `status_meta_key` and `status_map` and write the raw status; the framework sends each email once per shipment when the state really changes. Shipments that were already on their way when the framework first saw them are adopted silently, so nobody gets an email about an old status.
+
+Do not send buyer status emails of your own. To add carrier values to the text, use the filter `woodev_shipping_delivery_email_placeholders`, which receives the placeholders, the order and the provider. Values are escaped in the HTML email. The built-in placeholders cover the order number, the tracking number and link, the carrier name, the pickup point and the delivery date.
+
+## Cost, date, problems and couriers
+
+Besides the status, a shipment has facts that are not a status: the carrier's cost, the delivery date, a delivery problem, an assigned courier. Do not invent notes, flags and hooks of your own for them. Fill a `Shipment_Facts` object from **your own read of the carrier's API** (never from a webhook body) and give it to the framework:
+
+```php
+<?php
+defined( 'ABSPATH' ) || exit;
+
+use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
+use Woodev\Framework\Shipping\Order\Shipment_Facts;
+use Woodev\Framework\Shipping\Order\Shipment_Facts_Events;
+
+/**
+ * Hands the facts of one shipment to the framework.
+ *
+ * @param \WC_Order           $order The order.
+ * @param array<string,mixed> $data  What the carrier's API reported.
+ * @return bool Whether the framework applied them. False means "try again on the next pass".
+ */
+function my_carrier_record_facts( \WC_Order $order, array $data ): bool {
+	$provider = Orders_Registry::instance()->get_provider( 'my_carrier' );
+
+	if ( null === $provider ) {
+		return false;
+	}
+
+	$facts = Shipment_Facts::create()
+		->with_cost( (float) $data['cost'], 'RUB' )
+		->with_delivery_date( (string) $data['date'], Shipment_Facts::DATE_PLANNED, [ 'from' => '10:00', 'to' => '14:00' ] )
+		->with_courier( $data['courier'] ?? null )
+		->with_issues( $data['issues'] ?? [] );
+
+	return Shipment_Facts_Events::record( $order, $provider, $facts );
+}
+```
+
+Each fact has three states, and you choose which by what you call:
+
+- **Not reported.** You do not call its `with_…()`. The stored value is left alone.
+- **Reported as none.** `with_cost( null )`, `with_courier( null )`, `with_issues( [] )`. This is stored.
+- **Reported with a value.** A cost of `0.0` is a value.
+
+A courier is an array such as `[ 'name' => …, 'phone' => …, 'vehicle' => …, 'plate' => … ]`. An issue is `[ 'code' => …, 'label' => …, 'at' => … ]`. The cost can have components, `with_cost( $amount, $currency, $component )`, where the default component is `delivery`.
+
+The framework compares each fact with the value it stored last time and acts once for each **real** change. The first reading just sets the starting value, in silence. A change adds one order note, fires one action, and may leave one attention flag on the order row. WooCommerce totals and shipping lines are never rewritten.
+
+| Action | Arguments |
+|---|---|
+| `woodev_shipping_carrier_cost_changed` | Order, old cost or `null`, new cost, currency, provider, component. |
+| `woodev_shipping_delivery_date_changed` | Order, date, time window, kind, previous date, provider. |
+| `woodev_shipping_delivery_issue` | Order, code, label, time, provider. |
+| `woodev_shipping_courier_assigned` | Order, courier, provider. |
+
+The lock covers `record()` only. Take your own per-order lock around "read the API, stage carrier-only data, call `record()`", and return the `false` result to your caller so it tries again on its next pass.
+
+## Documents
+
+A document is a waybill, a barcode, a label. Implement `Document_Source`, and register it with `register_document_source()`. The framework owns the download route, the file name, the permission check, and the message the merchant sees. Your code only returns a `Document_Result`.
+
+```php
+<?php
+defined( 'ABSPATH' ) || exit;
+
+use Woodev\Framework\Shipping\Order\Document_Result;
+use Woodev\Framework\Shipping\Order\Document_Source;
+use Woodev\Framework\Shipping\Order\Document_Type_Declarations;
+
+/**
+ * Hands My Carrier's documents to the orders page.
+ */
+final class My_Carrier_Document_Source implements Document_Source, Document_Type_Declarations {
+
+	/**
+	 * Lists the document types offered for an order.
+	 *
+	 * The orders page asks once per row, so answer from local data and never call the carrier.
+	 *
+	 * @param \WC_Order $order The order.
+	 * @return string[]
+	 */
+	public function get_document_types( \WC_Order $order ): array {
+		return [ 'waybill', 'label' ];
+	}
+
+	/**
+	 * Names the types, for a type that is not a built-in one.
+	 *
+	 * @return array<string, array<string, string>>
+	 */
+	public function get_document_type_declarations(): array {
+		return [
+			'label' => [
+				'label'      => __( 'Label', 'my-carrier' ),
+				'bulk_label' => __( 'Labels', 'my-carrier' ),
+				'icon'       => 'tag',
+			],
+		];
+	}
+
+	/**
+	 * Gets one document. This must be a short request.
+	 *
+	 * @param \WC_Order $order The order.
+	 * @param string    $type  The document type.
+	 * @return Document_Result
+	 */
+	public function get_document( \WC_Order $order, string $type ): Document_Result {
+		$api = My_Carrier_Plugin::instance()->get_api();
+
+		try {
+			$state = $api->request_document( (string) $order->get_meta( '_my_carrier_order_id' ), $type );
+		} catch ( \Woodev_API_Exception $exception ) {
+			return Document_Result::failed( __( 'The carrier could not prepare the document. Please try again later.', 'my-carrier' ) );
+		}
+
+		if ( 'ready' === $state['status'] ) {
+			return Document_Result::binary( $state['pdf'] );
+		}
+
+		// The carrier is still working. Ask the merchant's screen to come back in 5 seconds.
+		return Document_Result::pending( 5 );
+	}
+}
+```
+
+Rules for a document source:
+
+- **Never wait for the carrier.** If the file is not ready, return `Document_Result::pending( $seconds )`. The merchant's page asks again by itself for a short time and downloads the file when it is ready. "Not ready" is not a failure. `get_document()` must be safe to call again and again, so keep the carrier's task id between calls.
+- **The four results.** `binary( $bytes )`, `url( $link )` (opens in a new tab), `pending( $retry_after )` and `failed( $reason )`. Bytes are fetched when asked and are not stored.
+- **Name your own types.** Without `Document_Type_Declarations` only `waybill` and `barcode` appear in the menus, and every other type you return stays hidden. A declaration gives the single button's `label`, an optional `bulk_label` and a Dashicons `icon` slug without the `dashicons-` prefix. The method runs while the orders page is built, so answer from local data.
+- **Bulk printing is optional.** Also implement `Bulk_Document_Source`: `get_bulk_document_types()`, `get_bulk_document_limit()` (at least 1) and `get_bulk_document( array $orders, string $type )`. The framework checks that each order exists, is yours, has a carrier id and offers the type. If the carrier leaves some orders out of the file, return `Document_Result::with_skipped( $order_ids )` and the merchant is told which. Remember the carrier's task by the **set** of orders, for example a hash of the sorted carrier ids, because the page asks again with the same orders.
+- **Keep a fallback bounded.** If the carrier refuses a whole batch because of a few ids, retry without those ids, but cap the number of calls.
+- **Copies and format are carrier fields.** Settings such as the number of copies belong in a card of the «Выгрузка заказов» section.
+
+## Order actions, row flags and toolbar buttons
+
+An operation that belongs to one carrier, such as calling a courier, is an **order action** and not a separate screen. Declare it once, and it appears in the orders page row and in the order box.
+
+```php
+<?php
+defined( 'ABSPATH' ) || exit;
+
+use Woodev\Framework\Shipping\Admin\Orders\Order_Actions;
+use Woodev\Framework\Shipping\Order\Action_Result;
+
+add_filter(
+	'woodev_shipping_order_actions',
+	static function ( $actions, $order, $provider ) {
+		if ( ! is_array( $actions ) || null === $provider || 'my_carrier' !== $provider->get_id()
+			|| ! Order_Actions::is_exported( $order, $provider ) ) {
+			return $actions;
+		}
+
+		$actions[] = [
+			'action'      => 'call_courier',
+			'label'       => __( 'Call a courier', 'my-carrier' ),
+			'title'       => __( 'Call a courier to collect the parcel', 'my-carrier' ),
+			'icon'        => 'car',
+			'destructive' => false,
+			'fields'      => [
+				[
+					'id'       => 'day',
+					'type'     => 'date',
+					'label'    => __( 'Day', 'my-carrier' ),
+					'required' => true,
+					'min'      => wp_date( 'Y-m-d', strtotime( '+1 day' ) ),
+				],
+				[
+					'id'       => 'window',
+					'type'     => 'time_range',
+					'label'    => __( 'Time', 'my-carrier' ),
+					'required' => true,
+					'default'  => [ 'from' => '09:00', 'to' => '18:00' ],
+				],
+				[
+					'id'        => 'comment',
+					'type'      => 'textarea',
+					'label'     => __( 'Note for the courier', 'my-carrier' ),
+					'maxlength' => 200,
+				],
+			],
+		];
+
+		return $actions;
+	},
+	10,
+	3
+);
+
+add_filter(
+	'woodev_shipping_perform_order_action',
+	static function ( $result, $action, $order, $provider, $payload = [] ) {
+		if ( 'call_courier' !== $action || 'my_carrier' !== $provider->get_id() ) {
+			return $result;
+		}
+
+		try {
+			My_Carrier_Plugin::instance()->get_api()->call_courier( $order, $payload );
+		} catch ( \Woodev_API_Exception $exception ) {
+			return Action_Result::failure( $exception->getMessage() );
+		}
+
+		return Action_Result::success( '', __( 'The courier is on the way.', 'my-carrier' ) );
+	},
+	10,
+	5
+);
+```
+
+- **Fields** are `date`, `select`, `time_range` and `textarea`, each with an optional `help` text. The values reach your callback already validated, in `$payload`. A bad value is refused with an error before your code runs. A bulk run skips an action that needs fields.
+- **`destructive => true`** with a `confirm` sentence shows a confirmation. Use it for anything the merchant pays for.
+- **`read_only => true`** marks an action that only reads. The framework applies its own checks to actions that change something at the carrier, so declare a pure read as `read_only`, never a booking.
+- **A `select` that costs a carrier call** can load its options when the dialog opens. Declare `async_options` on the field and answer with the filter `woodev_shipping_order_action_field_options`. At submit the framework checks only the shape of the value, so match it against fresh carrier data in your handler.
+- **Leave a result you do not own untouched.** Both filters receive every action of every carrier. Check the action id and the provider first, as above.
+
+**Row flags** are short badges on a row of the orders page, such as "Cost changed". Add them with `woodev_shipping_order_row_flags`:
+
+```php
+<?php
+defined( 'ABSPATH' ) || exit;
+
+add_filter(
+	'woodev_shipping_order_row_flags',
+	static function ( $flags, $order, $provider ) {
+		if ( 'my_carrier' !== $provider->get_id() ) {
+			return $flags;
+		}
+
+		if ( '' !== (string) $order->get_meta( '_my_carrier_problem' ) ) {
+			$flags[] = [
+				'label' => __( 'Delivery problem', 'my-carrier' ),
+				'tone'  => 'error',
+				'title' => (string) $order->get_meta( '_my_carrier_problem' ),
+			];
+		}
+
+		return $flags;
+	},
+	10,
+	3
+);
+```
+
+A flag has a `label`, a `tone` (`ok`, `warn`, `error`, `info` or `muted`), an optional `title` and an optional `icon`. Only the first three flags of a row are shown. The filter runs for **every row** of every page, so read order meta only and never call the carrier. To add lines to the order box and the preview, use `woodev_shipping_order_metabox_fields` and `woodev_shipping_orders_preview_fields`.
+
+A **toolbar button** sits above the table and runs one thing for several orders. Four filters describe it:
+
+| Filter | Answers |
+|---|---|
+| `woodev_shipping_orders_toolbar_actions` | Which buttons exist: `id`, `provider` (required), `label`, `title`, `icon`, an optional `count` and `visible`. A `count` of 0 hides the button. |
+| `woodev_shipping_orders_toolbar_dialog` | The dialog of one button: its tabs. Check the action id first. |
+| `woodev_shipping_perform_toolbar_action` | Runs the submitted form for one order. It is called once per chosen order, in order. |
+| `woodev_shipping_perform_toolbar_row_action` | Runs a button on a row of a list tab. |
+
+A dialog has up to four tabs. A `form` tab holds fields and exactly one `orders` field that names the orders (up to 100). A `list` tab shows rows that your code supplies, each with optional buttons. Orders run one after another, so ten orders mean ten carrier calls. One order's failure does not stop the others. Only orders of the button's own carrier reach your callback.
+
+## Webhooks
+
+A carrier that **pushes** events to the shop implements `Abstract_Webhook_Handler` and returns it from `get_webhook_handler()`. The framework then registers the route. The default returns `null`, which is right for a carrier that only answers when asked.
+
+```php
+<?php
+defined( 'ABSPATH' ) || exit;
+
+use Woodev\Framework\Shipping\Order\Abstract_Webhook_Handler;
+
+/**
+ * Receives My Carrier's delivery events.
+ */
+final class My_Carrier_Webhook_Handler extends Abstract_Webhook_Handler {
+
+	/**
+	 * Checks that the request is authentic. It gets the raw body, before any parsing.
+	 *
+	 * @param string               $raw_body The unparsed body.
+	 * @param array<string, mixed> $headers  The request headers.
+	 * @return bool
+	 */
+	protected function verify_signature( string $raw_body, array $headers ): bool {
+		$signature = (string) ( $headers['x_my_carrier_signature'][0] ?? '' );
+		$expected  = hash_hmac( 'sha256', $raw_body, My_Carrier_Plugin::instance()->get_webhook_secret() );
+
+		return '' !== $signature && hash_equals( $expected, $signature );
+	}
+
+	/**
+	 * Turns the verified body into a plain array.
+	 *
+	 * @param string $raw_body The verified body.
+	 * @return array<string, mixed>
+	 */
+	protected function parse_payload( string $raw_body ): array {
+		$data = json_decode( $raw_body, true );
+
+		return is_array( $data ) ? $data : [];
+	}
+
+	/**
+	 * Gets the REST namespace.
+	 *
+	 * @return string
+	 */
+	protected function get_namespace(): string {
+		return 'my-carrier/v1';
+	}
+
+	/**
+	 * Gets the REST route.
+	 *
+	 * @return string
+	 */
+	protected function get_route(): string {
+		return '/webhook';
+	}
+}
+```
+
+Construct it with the carrier id as the hook prefix (`new My_Carrier_Webhook_Handler( 'my_carrier' )`) and return it from `get_webhook_handler()`. Use the **same** id as in `Orders_Provider::create()`, so the orders page can show when this carrier last updated a status.
+
+What the base class does and does not do:
+
+- **It verifies, parses and announces.** Your `verify_signature()` is the permission check, so an unsigned or forged request is refused with a 401 before anything else runs. A verified request fires `woodev_shipping_my_carrier_webhook_received` with the parsed payload and the request, and gets a 200 answer.
+- **It changes no order.** What you write from the payload is up to you. Hook `…_webhook_received`, deduplicate carrier event ids, and write the raw status to the order's `status_meta_key`.
+- **A filter** decides whether a payload counts as a status update: `woodev_shipping_my_carrier_webhook_touches_delivery_status`. It defaults to `true`; return `false` for event types that carry no status.
+
+Rules that save the feed:
+
+- **Treat the body as a hint.** If the carrier has a read endpoint, fetch the record from the carrier before you write a status, a price or a date. Follow the carrier's own trust rules; some carriers make the authenticated event itself authoritative.
+- **Answer 200 to every authentic event**, even one you do not handle. Carriers disable a URL that keeps failing, and a 4xx for "I do not handle this" costs the merchant the whole feed. Refuse only what fails the signature check.
+- **Expect repeats.** Carriers retry. A replay must not add a second note, and the next event must still be applied. Retry a temporary failure on your side, for example with Action Scheduler, and not by failing the response.
+- **Serialise per order**, from the read through `Shipment_Facts_Events::record()`.
+- **Keep an old callback address working** when you replace an older plugin, because the address is registered at the carrier.
+
+## Finding your orders
+
+:::caution
+`wc_get_orders()` ignores a `meta_query` on the older posts-based order store and returns **every** order, as if you had not filtered. HPOS honours it, so the code works on your development site and fails on a store without HPOS. Never pass a `meta_query` to it directly.
+:::
+
+For one exact key and value, pass the top-level `meta_key` and `meta_value`; both stores support them:
+
+```php
+<?php
+defined( 'ABSPATH' ) || exit;
+
+$orders = wc_get_orders(
+	[
+		'limit'      => 1,
+		'meta_key'   => '_my_carrier_order_id',
+		'meta_value' => $carrier_order_id,
+	]
+);
+```
+
+For anything richer, such as OR groups, `NOT EXISTS` or numeric comparisons, use a helper that works on both stores. [HPOS & Blocks compatibility](../../core/hpos-and-blocks-compatibility/#find-orders-by-meta) has the full class. Test every order query on **both** stores, because a check on one proves nothing about the other.
+
+## Next steps
+
+- [Pickup points & maps](../pickup-points-and-maps/) covers the chosen point that your export sends.
+- [Location & checkout fields](../location-and-checkout-fields/) covers the fields that become part of the order.
+- [HPOS & Blocks compatibility](../../core/hpos-and-blocks-compatibility/) covers how to read and write order data on either store.
