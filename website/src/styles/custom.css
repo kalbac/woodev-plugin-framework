@@ -1,0 +1,49 @@
+/* Woodev docs theme — one accent colour, Inter for text, JetBrains Mono for code.
+   Everything is expressed through Starlight's own custom properties. */
+
+:root {
+	--sl-font: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+	--sl-font-mono: 'JetBrains Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace;
+	--sl-content-width: 46rem;
+}
+
+/* Dark theme (Starlight's default) */
+:root {
+	--sl-color-accent-low: #1e1b4b;
+	--sl-color-accent: #6366f1;
+	--sl-color-accent-high: #c7d2fe;
+	--sl-color-white: #ffffff;
+	--sl-color-gray-1: #e8eaf0;
+	--sl-color-gray-2: #c3c7d1;
+	--sl-color-gray-3: #8c92a1;
+	--sl-color-gray-4: #5a6070;
+	--sl-color-gray-5: #323744;
+	--sl-color-gray-6: #1f232d;
+	--sl-color-black: #14171f;
+}
+
+/* Light theme */
+:root[data-theme='light'] {
+	--sl-color-accent-low: #e0e7ff;
+	--sl-color-accent: #4f46e5;
+	--sl-color-accent-high: #3730a3;
+	--sl-color-white: #14171f;
+	--sl-color-gray-1: #232733;
+	--sl-color-gray-2: #394050;
+	--sl-color-gray-3: #5a6070;
+	--sl-color-gray-4: #8c92a1;
+	--sl-color-gray-5: #c9cdd6;
+	--sl-color-gray-6: #eceef3;
+	--sl-color-gray-7: #f6f7f9;
+	--sl-color-black: #ffffff;
+}
+
+/* Quieter headings and a plain, tight hero */
+.sl-markdown-content h2 {
+	letter-spacing: -0.01em;
+}
+
+.hero h1 {
+	letter-spacing: -0.03em;
+	font-weight: 650;
+}

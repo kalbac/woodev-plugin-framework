@@ -110,45 +110,9 @@ class My_Plugin extends Woodev_Plugin {
 }
 ```
 
-## Documentation Structure
+## Documentation
 
-### Getting Started
-
-| Document | Description |
-| --- | --- |
-| [Getting Started](getting-started.md) | Installation, requirements, and architecture overview |
-| [Core Framework](core-framework.md) | Bootstrap, plugin base class, lifecycle management |
-
-### Core Modules
-
-| Document | Description |
-| --- | --- |
-| [Admin Module](admin-module.md) | Admin pages, notices, and message handlers |
-| [Settings API](settings-api.md) | Typed settings framework |
-| [Helpers](helpers.md) | Utility functions and helpers |
-
-### API & Integration
-
-| Document | Description |
-| --- | --- |
-| [API Module](api-module.md) | HTTP client base classes |
-| [REST API](rest-api.md) | REST endpoints and system status integration |
-
-### Specialized Plugins
-
-| Document | Description |
-| --- | --- |
-| [Shipping Method](shipping-method.md) | Building shipping plugins |
-| [Payment Gateway](payment-gateway.md) | Building payment gateway plugins |
-| [Box Packer](box-packer.md) | Product packing algorithms for shipping |
-
-### Utilities & Compatibility
-
-| Document | Description |
-| --- | --- |
-| [Utilities](utilities.md) | Background jobs and async requests |
-| [Compatibility](compatibility.md) | HPOS and WooCommerce version compatibility |
-| [Handlers](handlers.md) | Blocks and script handlers |
+The developer documentation lives at <https://kalbac.github.io/woodev-plugin-framework/>. Its source is the Astro Starlight project in [`website/`](website/); see `docs-internal/DOCS-SCHEMA.md` → "Public docs" for how to edit, preview and build it.
 
 ## Framework Architecture
 
@@ -262,24 +226,9 @@ parent::__construct(
 );
 ```
 
-## Recommended Reading Order
-
-For developers new to Woodev Framework:
-
-1. **[Getting Started](getting-started.md)** — Understand the architecture
-2. **[Core Framework](core-framework.md)** — Learn the plugin base class
-3. **[Settings API](settings-api.md)** — Add plugin settings
-4. **[Admin Module](admin-module.md)** — Create admin pages
-5. **[Helpers](helpers.md)** — Use utility functions
-6. **[Utilities](utilities.md)** — Implement background processing
-7. **[Compatibility](compatibility.md)** — Ensure HPOS compatibility
-8. **[API Module](api-module.md)** — Make HTTP requests
-9. **[REST API](rest-api.md)** — Expose plugin data via REST
-10. **[Shipping Method](shipping-method.md)** or **[Payment Gateway](payment-gateway.md)** — Build specialized plugins
-
 ## Support
 
-- Documentation: [docs/](./docs/)
+- Documentation: <https://kalbac.github.io/woodev-plugin-framework/>
 - Framework Source: [woodev/](../)
 
 ## Version Information

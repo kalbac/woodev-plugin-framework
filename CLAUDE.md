@@ -36,7 +36,7 @@ symbolically — faster and more accurate than a raw file read.
 | Add code around a symbol | `insert_after_symbol` / `insert_before_symbol` |
 
 `Read`/`Edit`/`Write` remain correct for non-source files (markdown, JSON, YAML, `.env`) — **and
-for the directories Serena is configured to ignore: `tests/**`, `docs/**`, `.github/**`, `.ai/**`,
+for the directories Serena is configured to ignore: `tests/**`, `website/**`, `.github/**`, `.ai/**`,
 `.serena/**`, `.claude/**`** (`.serena/project.yml` → `ignored_paths`). A symbolic call there fails
 with `… while the path is ignored`, so the built-in tools are the ONLY tool and using them is not a
 rule violation. **Say this in any brief that touches test files** — omitting it sends the worker

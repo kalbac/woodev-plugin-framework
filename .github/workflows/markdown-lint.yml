@@ -7,6 +7,7 @@ on:
       - 'scripts/lint-docs.mjs'
       - 'docs-internal/gotchas/**'
       - 'docs-internal/sessions/**'
+      - 'website/**'
   push:
     branches:
       - main
@@ -15,6 +16,7 @@ on:
       - 'scripts/lint-docs.mjs'
       - 'docs-internal/gotchas/**'
       - 'docs-internal/sessions/**'
+      - 'website/**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -47,7 +49,7 @@ jobs:
         run: npm run lint:docs
 
       - name: Lint markdown files
-        # Gate the PUBLISHED docs/ tree (GH Pages) + root markdown. Excludes: vendored/AI-tool
+        # Gate the PUBLISHED site content (website/src/content/docs, GH Pages) + root markdown. Excludes: vendored/AI-tool
         # files (.ai, CLAUDE.md, AGENTS.md — agent-instruction/constitution docs), the
         # AI-agent operational docs (docs-internal/, not published) and Serena tooling (.serena/).
-        run: markdownlint-cli2 "**/*.md" "#node_modules" "#vendor" "#.ai" "#.kiro" "#CLAUDE.md" "#AGENTS.md" "#docs-internal" "#.serena" "#CHANGELOG.md"
+        run: markdownlint-cli2 "**/*.md" "website/src/content/docs/**/*.mdx" "#node_modules" "#website/node_modules" "#website/dist" "#vendor" "#.ai" "#.kiro" "#CLAUDE.md" "#AGENTS.md" "#docs-internal" "#.serena" "#CHANGELOG.md"

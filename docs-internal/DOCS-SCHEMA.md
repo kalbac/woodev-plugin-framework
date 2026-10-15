@@ -479,20 +479,21 @@ Before every commit touching docs:
 
 ---
 
-## Public docs (`docs/`) — how to work with them
+## Public docs (`website/`) — how to work with them
 
 Moved here from `AGENTS.md` in s115: it is reference material, not a session-start rule, and
 `AGENTS.md` is read at the start of every session against a 28 KB gate.
 
-Public docs are being rewritten against framework 2.0.2 in s183. They must describe **only public capabilities a plugin author uses**, with a working example for each capability. Keep every explanation clear to a reader a year later. Never describe internal mechanics or disclose information a third party should not know; examples include how the licence check works and the remote plugin-deactivation hook.
+The public site is an Astro Starlight project in `website/` (own `package.json`; the root toolchain is not involved), English only, published to GitHub Pages at <https://kalbac.github.io/woodev-plugin-framework/>. Its pages are being written against framework 2.0.2 (s183). They must describe **only public capabilities a plugin author uses**, with a working example for each capability. Keep every explanation clear to a reader a year later. Never describe internal mechanics or disclose information a third party should not know; examples include how the licence check works and the remote plugin-deactivation hook.
 
 **How to edit**
 
-1. Edit `.md` files directly in `docs/`.
-2. Preview locally: `mkdocs serve` (needs Python + mkdocs-material).
+1. Edit `.md` / `.mdx` files in `website/src/content/docs/`; the sidebar order is defined explicitly in `website/astro.config.mjs`, so a new page must be added there.
+2. Preview locally: `cd website && npm ci && npm run dev` (Node 22.22+), then open the printed URL (it ends in `/woodev-plugin-framework/`). `npm run build` produces `website/dist/` plus the Pagefind search index; `npm run preview` serves that build.
 3. Use the `%%FRAMEWORK_VERSION%%` placeholder for version numbers — **never hardcode a version**.
-   CI injects the real one from `Woodev_Plugin::VERSION` at deploy time.
-4. Lint: `npx markdownlint-cli2 "docs/**/*.md"`.
+   The build replaces it with `Woodev_Plugin::VERSION`, read from `woodev/class-plugin.php`
+   (`website/plugins/remark-framework-version.mjs`).
+4. Lint: `npx markdownlint-cli2 "website/src/content/docs/**/*.{md,mdx}"`.
 
 **What belongs here:** public API reference, usage guides, getting-started tutorials, module
 documentation (settings-api, payment-gateway, shipping-method …), and code examples verified
@@ -501,7 +502,7 @@ against actual source. Every documented capability needs a working example.
 **What does NOT:** session logs, gotchas, ADRs, bug tracking, phase status, internal architecture
 decisions, deferred features, AI-agent workflow rules — all of those live in `docs-internal/`.
 
-**Deploy:** automatic push deployment is disabled. `.github/workflows/docs.yml` has its `push` trigger commented out and exposes `workflow_dispatch` only. On 2026-10-15 the GitHub Pages API returned HTTP 404 for this repository, so do not describe a live Pages site or a push-to-deploy path. The workflow file is unchanged by this audit. The repository became public on 2026-08-27; restore/enable publishing only through a separate workflow/operator decision.
+**Deploy:** `.github/workflows/docs.yml` builds `website/` on every pull request that touches the site (build only, no deploy) and deploys to GitHub Pages on push to `main`. GitHub Pages must be enabled in the repository settings (source: GitHub Actions) for the deploy job to succeed; do not claim the site is live until that is verified.
 
 ## Related
 

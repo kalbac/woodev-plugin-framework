@@ -1,0 +1,39 @@
+---
+title: Woodev Plugin Framework
+description: A PHP framework for building WooCommerce plugins, from the loader to shipping and checkout.
+template: splash
+hero:
+  title: Woodev Plugin Framework
+  tagline: Build WooCommerce plugins on a tested foundation, with loader, settings, API client and shipping in one framework.
+  actions:
+    - text: Get started
+      link: getting-started/introduction/
+      icon: right-arrow
+    - text: GitHub
+      link: https://github.com/kalbac/woodev-plugin-framework
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+<CardGrid>
+  <Card title="Loader & multi-version" icon="rocket">
+    Bundle the framework once, and let the loader pick the newest copy when several plugins ship their own.
+  </Card>
+  <Card title="Settings page & wizard" icon="setting">
+    Typed settings, tabs, cards and a first-run wizard, built from declarations.
+  </Card>
+  <Card title="API client" icon="random">
+    Requests, responses, authentication and error handling for any remote service.
+  </Card>
+  <Card title="Shipping methods & rates" icon="open-book">
+    Shipping methods, rate calculation and box packing for carrier integrations.
+  </Card>
+  <Card title="Pickup points & checkout fields" icon="pin">
+    Location fields and pickup point selection, with a map, in the classic and block checkout.
+  </Card>
+  <Card title="Orders & tracking" icon="document">
+    Send orders to a carrier, print documents and show tracking to customers.
+  </Card>
+</CardGrid>

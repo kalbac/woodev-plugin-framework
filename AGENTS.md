@@ -54,19 +54,19 @@
 
 This project has **two documentation directories** with different audiences, publishing rules, and editing conventions.
 
-| Directory | Audience | Published | MkDocs | Linted | Purpose |
-|-----------|----------|-----------|--------|--------|---------|
-| `docs/` | Plugin developers (public) | ⚠️ Not currently deployed | ✅ `mkdocs.yml` | ✅ markdownlint | Usage guides, API reference, tutorials |
+| Directory | Audience | Published | Built with | Linted | Purpose |
+|-----------|----------|-----------|------------|--------|---------|
+| `website/` | Plugin developers (public) | GitHub Pages (`docs.yml`, on push to `main`) | Astro Starlight | ✅ markdownlint | Usage guides, API reference, tutorials |
 | `docs-internal/` | AI agents + maintainers | ❌ Not published | ❌ excluded | ⚠️ partial | Session logs, gotchas, ADRs, operational state |
 
-### Working with `docs/` — public documentation
+### Working with `website/` — public documentation
 
-Public docs are being rewritten against framework 2.0.2 in s183; scope and publishing rules: `docs-internal/DOCS-SCHEMA.md` → "Public docs".
+The public site is an Astro Starlight project in `website/` (English only; pages in `website/src/content/docs/`). Edit, preview and build rules: `docs-internal/DOCS-SCHEMA.md` → "Public docs".
 
 ### Working with `docs-internal/` — internal technical docs
 
 **How to edit:**
-1. Edit files directly — no build step, no mkdocs
+1. Edit files directly — no build step
 2. Follow format rules in `docs-internal/DOCS-SCHEMA.md`
 3. Session logs and gotchas excluded from markdownlint (in `.markdownlintignore`)
 4. All files tracked in git — never gitignore docs-internal/ (the only ignored path is the gate's
@@ -87,9 +87,9 @@ Public docs are being rewritten against framework 2.0.2 in s183; scope and publi
 - `archive/` — resolved historical documents
 
 **What does NOT go here:**
-- ❌ Public-facing API documentation (→ `docs/`)
-- ❌ User guides, tutorials (→ `docs/`)
-- ❌ mkdocs configuration (→ `mkdocs.yml`)
+- ❌ Public-facing API documentation (→ `website/`)
+- ❌ User guides, tutorials (→ `website/`)
+- ❌ Public site configuration (→ `website/astro.config.mjs`)
 
 ---
 
@@ -129,8 +129,8 @@ npm run lint:i18n-sources                         # every source msgid must be i
 npm run typecheck                                 # tsc --noEmit over src/ — CI gate (test-js job)
 
 # Docs
-mkdocs serve                # preview public docs locally
-npx markdownlint-cli2 "docs/**/*.md"  # lint public docs
+cd website && npm ci && npm run dev   # preview public docs locally
+npx markdownlint-cli2 "website/src/content/docs/**/*.{md,mdx}"  # lint public docs
 ```
 
 - **Line length is the one thing `composer phpcs` does NOT check** (#139). 120 is a soft target
@@ -214,9 +214,9 @@ without it (Codex) says so once and proceeds with git/shell inspection — stall
 - Gateway plugins extend `Woodev_Payment_Gateway_Plugin`, not `Woodev_Plugin` directly
 
 **Docs:**
-- Public docs (`docs/`) use `%%FRAMEWORK_VERSION%%` placeholder — never hardcode version
+- Public docs (`website/`) use the `%%FRAMEWORK_VERSION%%` placeholder — never hardcode a version
 - Internal docs and all agent work, dispatched agents' reasoning and reports included (operator, 09.10.2026) — English; quoted operator words, domain data and msgids keep their language (`DOCS-SCHEMA.md` → Language Rule)
-- Gotchas go in `docs-internal/gotchas/`, NOT in `docs/`
+- Gotchas go in `docs-internal/gotchas/`, NOT in `website/`
 
 ---
 

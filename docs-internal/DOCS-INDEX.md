@@ -34,12 +34,10 @@ from it (s135 audit), so they were removed rather than re-synced.
 woodev_framework/
 ├── CLAUDE.md                        # ← Entry point for Claude Code agents
 ├── AGENTS.md                        # ← Entry point for all other AI agents
-├── docs/                            # Public docs → MkDocs; Pages deployment currently disabled
-│   ├── README.md, getting-started.md, core-framework.md …
-│   ├── admin-module.md, settings-api.md, helpers.md …
-│   ├── api-module.md, rest-api.md …
-│   ├── shipping-method.md, payment-gateway.md, box-packer.md …
-│   ├── utilities.md, compatibility.md, handlers.md
+├── website/                         # Public docs → Astro Starlight (English), GitHub Pages
+│   ├── astro.config.mjs             #   site config + explicit sidebar
+│   ├── src/content/docs/            #   pages: getting-started/, core/, settings/, shipping/, payments/, reference/
+│   └── plugins/                     #   build-time %%FRAMEWORK_VERSION%% replacement
 │   └── overrides/home.html, assets/stylesheets/extra.css
 ├── docs-internal/                   # Internal docs → AI agents only
 │   ├── next-session-prompt.md       # Per-session handoff — every session starts here
@@ -99,7 +97,7 @@ CI workflows: `ci.yml` (jobs: `unit-tests`, `test-js` — jest, added s55 PR #18
 | Testing (integration) | WP PHPUnit + wp-env | ^6.9 |
 | Linting | PHP_CodeSniffer (WPCS) | ^3.9 / ^3.1 |
 | Static analysis | PHPStan | ^1.12 (level 3) |
-| Docs build | MkDocs Material | 9.6.7 (Python) |
+| Docs build | Astro Starlight | see `website/package.json` (Node 22.22+) |
 | Changelog | git-cliff | latest |
 | CI/CD | GitHub Actions | — |
 | Composer | PHP dependency manager | ^2 |
@@ -189,7 +187,7 @@ Passed-gate audits, the completed platform-v2 program docs (plans/specs/prompts)
 
 ## Public Docs
 
-`docs/` (repo root) are public-facing. They are being rewritten against framework 2.0.2 in s183; scope and publishing rules are in [`DOCS-SCHEMA.md`](DOCS-SCHEMA.md#public-docs-docs--how-to-work-with-them).
+`website/` (repo root) is the public documentation site (Astro Starlight). Its pages are being written against framework 2.0.2 in s183; scope, editing and publishing rules are in [`DOCS-SCHEMA.md`](DOCS-SCHEMA.md#public-docs-website--how-to-work-with-them).
 
 ---
 
