@@ -197,7 +197,9 @@ for ( const cell of CELLS ) {
 
 			const lost = 'remove' === cell.regionField ? place.needsRegion || [] : [];
 
-			expect( Object.keys( rates ).sort(), `${ cell.id } ${ place.name } (${ place.kind }): offered carrier methods — ${ M.describeRates( rates ) }` ).toEqual( place.serves.filter( ( id ) => ! lost.includes( id ) ).sort() );
+			// The ordinary check covers the methods that are NOT defective; the Yandex courier M3 hides is asserted by its wrapper only,
+			// because a fixed courier here would fail this line before the wrapper could report «M3 is FIXED».
+			expect( Object.keys( rates ).filter( ( id ) => ! lost.includes( id ) ).sort(), `${ cell.id } ${ place.name } (${ place.kind }): offered carrier methods — ${ M.describeRates( rates ) }` ).toEqual( place.serves.filter( ( id ) => ! lost.includes( id ) ).sort() );
 
 			if ( lost.length ) {
 				await expectKnownDefect(
@@ -272,11 +274,19 @@ for ( const cell of CELLS ) {
 				expect( hint, `${ cell.id }: the hint says why the Yandex courier method is hidden` ).toContain( 'Yandex courier' );
 
 				// CDEK writes its reasons (no route, outside the limits) to the debug log only — no `report_hidden()` anywhere in the plugin.
+				// One wrapper per method: a fixed pickup line must not hide behind a courier line that still fails, or the reverse.
 				await expectKnownDefect(
 					'M1',
 					'CDEK hides a method (no route, order-amount limit) without telling the admin hint — only a debug-log line',
 					() => {
 						expect( hint, `${ cell.id }: the hint says why the CDEK pickup method is hidden` ).toContain( 'CDEK pickup point' );
+					}
+				);
+
+				await expectKnownDefect(
+					'M1',
+					'CDEK hides a method (no route, order-amount limit) without telling the admin hint — only a debug-log line',
+					() => {
 						expect( hint, `${ cell.id }: the hint says why the CDEK courier method is hidden` ).toContain( 'CDEK courier delivery' );
 					}
 				);

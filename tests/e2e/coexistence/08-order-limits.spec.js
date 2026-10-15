@@ -321,11 +321,19 @@ test.describe( 'order amount: «Минимальная сумма заказа»
 		expect( hint, 'the hint names the hidden Yandex pickup method' ).toContain( 'Yandex pickup point' );
 
 		// CDEK refuses through `log_unavailable()` — a debug-log line only; no `report_hidden()` is called anywhere in the plugin.
+		// One wrapper per method: a fixed pickup line must not hide behind a courier line that still fails, or the reverse.
 		await expectKnownDefect(
 			'M1',
 			'CDEK hides a method by its order-amount limit without telling the admin hint (Cdek_Shipping_Rate_Service::calculate() only logs)',
 			() => {
 				expect( hint, 'the hint names the hidden CDEK pickup method' ).toContain( 'CDEK pickup point' );
+			}
+		);
+
+		await expectKnownDefect(
+			'M1',
+			'CDEK hides a method by its order-amount limit without telling the admin hint (Cdek_Shipping_Rate_Service::calculate() only logs)',
+			() => {
 				expect( hint, 'the hint names the hidden CDEK courier method' ).toContain( 'CDEK courier delivery' );
 			}
 		);
