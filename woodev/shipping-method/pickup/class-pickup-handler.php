@@ -4769,6 +4769,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * `assets/` is ALSO a direct child of that root — a sibling of `pickup/`, not of
 		 * this file's own directory.
 		 *
+		 * Callers pass the SOURCE name (`js/frontend/pickup-geo.js`); the `.min` sibling is what is
+		 * resolved unless `SCRIPT_DEBUG` is on ({@see \Woodev_Plugin::get_assets_suffix()}). A name that
+		 * is already minified (a vendored file) is returned as given.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @param string $relative path relative to the assets directory.
@@ -4776,7 +4780,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * @return string absolute filesystem path to the asset.
 		 */
 		private static function asset_path( string $relative ): string {
-			return dirname( __DIR__ ) . '/assets/' . ltrim( $relative, '/' );
+			$relative = ltrim( $relative, '/' );
+
+			if ( 1 !== preg_match( '/\.min\.(js|css)$/', $relative ) ) {
+				$relative = (string) preg_replace( '/\.(js|css)$/', \Woodev_Plugin::get_assets_suffix() . '.$1', $relative );
+			}
+
+			return dirname( __DIR__ ) . '/assets/' . $relative;
 		}
 
 		/**

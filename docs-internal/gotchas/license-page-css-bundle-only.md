@@ -12,10 +12,10 @@ stylesheets on the "Woodev → Лицензии" page:
 2. `woodev-license-app` → `woodev/assets/build/license-page/style-index.css`
    (the compiled React bundle CSS, built from `src/license-page/style.scss`)
 
-It does **NOT** enqueue the legacy `woodev/assets/css/admin/woodev-license-page.css`
-— that file is enqueued **nowhere** (`rg "woodev-license-page" woodev --glob '*.php'`
-returns no hits). It is dead pre-React CSS (mostly `.wrap-licenses .form-table`
-rules for the Settings-API form that clean-break removed in 2.0.0).
+It does **NOT** enqueue the legacy `woodev-license-page.css` — that file was enqueued
+**nowhere** and was deleted in #247 (it was dead pre-React CSS, mostly
+`.wrap-licenses .form-table` rules for the Settings-API form that clean-break removed in
+2.0.0).
 
 The page also renders a **server-side** section below the React mount:
 `license_page()` → `get_settings_section()` → `include html-settings-section.php`
@@ -32,9 +32,9 @@ Anything rendered on the license page — **including PHP-rendered markup like
 `html-settings-section.php`** — must have its CSS in `src/license-page/style.scss`,
 because `style-index.css` (built from it) is the only framework stylesheet loaded
 on that page. The bundle CSS is global on the page, so it styles the server-rendered
-DOM just fine. Do **not** revive the legacy `woodev-license-page.css` by enqueuing it
-(it would drag in dead form rules + an off-theme gradient); port what you need into
-`style.scss` and `npm run build`.
+DOM just fine. Do **not** bring the legacy `woodev-license-page.css` back (it dragged in
+dead form rules + an off-theme gradient); port what you need into `style.scss` and
+`npm run build`.
 
 Also: `license_page()` must wrap its output in the standard WP admin
 `<div class="wrap"><h1>…</h1><hr class="wp-header-end">…</div>` — without `.wrap`

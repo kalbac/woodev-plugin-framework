@@ -342,23 +342,28 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
+      # `npm run build` also runs `npm run build:min`, which rewrites the `.min.js` / `.min.css`
+      # siblings of the hand-written assets (card #247) — so they fall under the same diff below.
       - name: Build assets
         run: npm run build
 
       - name: Verify build parity
         run: |
-          DIFF=$(git diff -- woodev/assets/build/)
+          # woodev/assets/build/ (wp-scripts bundles) and every `*.min.js` / `*.min.css` (hand-written
+          # assets, built by scripts/build-min-assets.mjs; the vendored ones are never rewritten).
+          PATHS=(woodev/assets/build/ '*.min.js' '*.min.css')
+          DIFF=$(git diff -- "${PATHS[@]}")
           # Run git status separately so its failure fails the job; the `|| true`
           # below tolerates only the grep filtering step, not a git error.
-          STATUS=$(git status --porcelain woodev/assets/build/)
+          STATUS=$(git status --porcelain -- "${PATHS[@]}")
           UNTRACKED=$(printf '%s\n' "$STATUS" | grep '^??' || true)
           if [ -n "$DIFF" ] || [ -n "$UNTRACKED" ]; then
-            echo "::error::The committed bundle in woodev/assets/build/ does not match the build output."
+            echo "::error::The committed bundle in woodev/assets/build/ or a committed *.min.js / *.min.css does not match the build output."
             echo "Run 'npm ci && npm run build' locally, then commit the updated files."
             echo ""
             if [ -n "$DIFF" ]; then
               echo "--- Modified files ---"
-              git diff --name-only -- woodev/assets/build/
+              git diff --name-only -- "${PATHS[@]}"
             fi
             if [ -n "$UNTRACKED" ]; then
               echo "--- Untracked files ---"

@@ -107,7 +107,7 @@ final class ShippingPluginAdditionalInfoTest extends TestCase {
 			->once()
 			->with(
 				'woodev-shipping-additional-info',
-				'https://example.test/additional-info.css',
+				'https://example.test/additional-info.min.css',
 				[],
 				\Mockery::pattern( '/^\d+$/' )
 			);

@@ -281,12 +281,13 @@ if ( ! class_exists( __NAMESPACE__ . '\Fee_Payments' ) ) :
 				return;
 			}
 
-			$path = __DIR__ . '/assets/js/frontend/fee-payments-classic.js';
+			$file = 'assets/js/frontend/fee-payments-classic' . \Woodev_Plugin::get_assets_suffix() . '.js';
+			$path = __DIR__ . '/' . $file;
 			$ver  = file_exists( $path ) ? (string) filemtime( $path ) : (string) \Woodev_Plugin::VERSION;
 
 			wp_enqueue_script(
 				'woodev-fee-payments-classic',
-				plugins_url( 'assets/js/frontend/fee-payments-classic.js', __FILE__ ),
+				plugins_url( $file, __FILE__ ),
 				[ 'jquery', 'wc-checkout' ],
 				$ver,
 				true

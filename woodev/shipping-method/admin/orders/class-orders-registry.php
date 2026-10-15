@@ -1781,7 +1781,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 * @return void
 		 */
 		public function enqueue_metabox_script(): void {
-			$path = dirname( __DIR__, 2 ) . '/assets/js/admin/order-metabox-actions.js';
+			$path = dirname( __DIR__, 2 ) . '/assets/js/admin/order-metabox-actions' . \Woodev_Plugin::get_assets_suffix() . '.js';
 
 			if ( ! file_exists( $path ) ) {
 				return;
@@ -1818,7 +1818,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 * @return void
 		 */
 		public function enqueue_in_transit_warning(): void {
-			$path = dirname( __DIR__, 2 ) . '/assets/js/admin/order-in-transit-warning.js';
+			$path = dirname( __DIR__, 2 ) . '/assets/js/admin/order-in-transit-warning' . \Woodev_Plugin::get_assets_suffix() . '.js';
 
 			if ( ! file_exists( $path ) ) {
 				return;
@@ -1859,18 +1859,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 				if ( ! wp_script_is( 'woodev-modal', 'registered' ) ) {
 					wp_register_script(
 						'woodev-modal',
-						$plugin->get_framework_assets_url() . '/js/frontend/woodev-modal.js',
+						$plugin->get_framework_assets_url() . '/js/frontend/woodev-modal' . \Woodev_Plugin::get_assets_suffix() . '.js',
 						[],
 						$plugin->get_assets_version()
 					);
 				}
 
 				if ( ! wp_style_is( 'woodev-modal', 'registered' ) ) {
-					$style_path = $plugin->get_framework_path() . '/assets/css/frontend/woodev-modal.css';
+					$style_path = $plugin->get_framework_path() . '/assets/css/frontend/woodev-modal' . \Woodev_Plugin::get_assets_suffix() . '.css';
 
 					wp_register_style(
 						'woodev-modal',
-						$plugin->get_framework_assets_url() . '/css/frontend/woodev-modal.css',
+						$plugin->get_framework_assets_url() . '/css/frontend/woodev-modal' . \Woodev_Plugin::get_assets_suffix() . '.css',
 						[],
 						file_exists( $style_path ) ? (string) filemtime( $style_path ) : $plugin->get_version()
 					);

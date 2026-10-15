@@ -444,10 +444,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			// may depend on it for wp_add_inline_script() or as a dependency), but the file it
 			// enqueues is 'woodev-payment-gateway-frontend.js' — the payment-form JS shipped
 			// under that name, not "$handle . '.js'"; see #738.
-			wp_enqueue_script( $handle, $this->get_plugin()->get_payment_gateway_framework_assets_url() . '/js/frontend/woodev-payment-gateway-frontend.js', [ 'jquery-payment' ], Woodev_Plugin::VERSION, true );
+			wp_enqueue_script( $handle, $this->get_plugin()->get_payment_gateway_framework_assets_url() . '/js/frontend/woodev-payment-gateway-frontend' . Woodev_Plugin::get_assets_suffix() . '.js', [ 'jquery-payment' ], Woodev_Plugin::VERSION, true );
 
 			// Frontend CSS
-			wp_enqueue_style( $handle, $this->get_plugin()->get_payment_gateway_framework_assets_url() . '/css/frontend/' . $handle . '.css', [], Woodev_Plugin::VERSION );
+			wp_enqueue_style( $handle, $this->get_plugin()->get_payment_gateway_framework_assets_url() . '/css/frontend/' . $handle . Woodev_Plugin::get_assets_suffix() . '.css', [], Woodev_Plugin::VERSION );
 
 			// localized JS params
 			$this->localize_script( $handle, $this->get_payment_form_js_localized_script_params(), 'woodev_payment_gateway_payment_form_params' );

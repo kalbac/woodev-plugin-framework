@@ -666,7 +666,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			// own docblock.
 			wp_register_script(
 				'woodev-modal',
-				$this->get_framework_assets_url() . '/js/frontend/woodev-modal.js',
+				$this->get_framework_assets_url() . '/js/frontend/woodev-modal' . self::get_assets_suffix() . '.js',
 				[],
 				$this->get_assets_version()
 			);
@@ -678,14 +678,14 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			// see `Pickup_Handler::enqueue_assets()`. Versioned by the file's own `filemtime()`,
 			// not `self::VERSION`: a CSS-only tweak must bust the browser cache on its own,
 			// without needing a framework version bump (gotcha wp-scripts-css-enqueue-version-by-mtime).
-			$modal_style_path    = $this->get_framework_path() . '/assets/css/frontend/woodev-modal.css';
+			$modal_style_path    = $this->get_framework_path() . '/assets/css/frontend/woodev-modal' . self::get_assets_suffix() . '.css';
 			$modal_style_version = file_exists( $modal_style_path )
 				? (string) filemtime( $modal_style_path )
 				: self::VERSION;
 
 			wp_register_style(
 				'woodev-modal',
-				$this->get_framework_assets_url() . '/css/frontend/woodev-modal.css',
+				$this->get_framework_assets_url() . '/css/frontend/woodev-modal' . self::get_assets_suffix() . '.css',
 				[],
 				$modal_style_version
 			);
@@ -700,10 +700,10 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 
 				wp_enqueue_style( 'jquery-confirm', $this->get_framework_assets_url() . '/css/admin/jquery-confirm.min.css', [], '3.3.2' );
 				wp_enqueue_style( 'font-awesome', $this->get_framework_assets_url() . '/css/admin/font-awesome.min.css', null, '4.7.0' );
-				wp_enqueue_style( 'admin-confirm', $this->get_framework_assets_url() . '/css/admin/admin-confirm.css', null, $this->get_version() );
+				wp_enqueue_style( 'admin-confirm', $this->get_framework_assets_url() . '/css/admin/admin-confirm' . self::get_assets_suffix() . '.css', null, $this->get_version() );
 
 				wp_register_script( 'jquery-confirm', $this->get_framework_assets_url() . '/js/admin/jquery.jquery-confirm.min.js', [ 'jquery' ], '3.3.2', false );
-				wp_enqueue_script( 'woodev-admin-script', $this->get_framework_assets_url() . '/js/admin/woodev-admin-script.js', [ 'jquery-confirm' ], $this->get_version() );
+				wp_enqueue_script( 'woodev-admin-script', $this->get_framework_assets_url() . '/js/admin/woodev-admin-script' . self::get_assets_suffix() . '.js', [ 'jquery-confirm' ], $this->get_version() );
 
 				wp_localize_script( 'woodev-admin-script', 'woodev_admin_strings', $this->get_admin_js_strings() );
 			}
@@ -1696,6 +1696,33 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			}
 
 			return $this->version;
+		}
+
+		/**
+		 * Gets the file-name suffix of the framework's hand-written assets: `''` or `'.min'`.
+		 *
+		 * Every hand-written `*.js` / `*.css` under the framework's `assets/` directories ships with a
+		 * minified `*.min.js` / `*.min.css` sibling (`npm run build:min`). The sibling is what a shop
+		 * loads; the readable source is loaded when debugging is asked for. Append the result before the
+		 * extension: `'/js/frontend/woodev-modal' . self::get_assets_suffix() . '.js'`. Do not spell
+		 * `.min` anywhere else — the vendored third-party `*.min.*` files and the wp-scripts bundles in
+		 * `assets/build/` are not subject to this and are referenced by their literal names.
+		 *
+		 * The switch is `SCRIPT_DEBUG` ALONE, exactly like WooCommerce (`$suffix = Constants::is_true(
+		 * 'SCRIPT_DEBUG' ) ? '' : '.min'`). `WP_DEBUG` does not select the readable file: it is the
+		 * *error-reporting* switch and is routinely on in staging and on shops that never debug
+		 * scripts. {@see self::get_assets_version()} deliberately keeps its own, wider test
+		 * (`SCRIPT_DEBUG || WP_DEBUG`) because busting a cache is harmless where swapping the file is not.
+		 *
+		 * Static so a class with no plugin instance in reach (a static enqueue hook) uses the same answer.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string `''` when `SCRIPT_DEBUG` is true, `'.min'` otherwise.
+		 */
+		public static function get_assets_suffix(): string {
+
+			return defined( 'SCRIPT_DEBUG' ) && SCRIPT_DEBUG ? '' : '.min';
 		}
 
 

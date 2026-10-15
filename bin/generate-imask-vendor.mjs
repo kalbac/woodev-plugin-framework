@@ -15,7 +15,9 @@
  * WHY imask STAYS A devDependency. Same reasoning as `libphonenumber-js` in
  * `bin/generate-phone-masks.mjs`: the decision is made at build time and only the RESULT ships.
  * `src/` is bundled by wp-scripts, but the checkout frontend under
- * `woodev/shipping-method/assets/js/frontend/` is served raw — it must not gain a build step.
+ * `woodev/shipping-method/assets/js/frontend/` is not bundled — it must not gain a bundler. (Since
+ * #247 each file there gets a 1:1 `.min.js` sibling from `scripts/build-min-assets.mjs`; this
+ * vendored `imask.min.js` is skipped by that script and shipped exactly as generated here.)
  *
  * THE THREE PLACES A VERSION IS WRITTEN, which is exactly why this script exists. Before it, a
  * bump meant remembering all three by hand, and the enqueue comment said so in prose:

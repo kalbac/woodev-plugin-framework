@@ -85,7 +85,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Order' ) ) :
 		 */
 		protected function enqueue_edit_order_assets( WC_Order $order ) {
 
-			wp_enqueue_script( 'woodev-payment-gateway-admin-order', $this->get_plugin()->get_payment_gateway_framework_assets_url() . '/js/admin/woodev-payment-gateway-admin-order.js', [ 'jquery' ], Woodev_Plugin::VERSION, true );
+			wp_enqueue_script( 'woodev-payment-gateway-admin-order', $this->get_plugin()->get_payment_gateway_framework_assets_url() . '/dist/admin/woodev-payment-gateway-admin-order.js', [ 'jquery' ], Woodev_Plugin::VERSION, true );
 
 			wp_localize_script(
 				'woodev-payment-gateway-admin-order',
@@ -101,7 +101,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Order' ) ) :
 				]
 			);
 
-			wp_enqueue_style( 'woodev-payment-gateway-admin-order', $this->get_plugin()->get_payment_gateway_framework_assets_url() . '/css/admin/woodev-payment-gateway-admin-order.css', Woodev_Plugin::VERSION );
+			wp_enqueue_style( 'woodev-payment-gateway-admin-order', $this->get_plugin()->get_payment_gateway_framework_assets_url() . '/css/admin/woodev-payment-gateway-admin-order' . Woodev_Plugin::get_assets_suffix() . '.css', Woodev_Plugin::VERSION );
 		}
 
 		/**

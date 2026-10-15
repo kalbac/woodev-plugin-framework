@@ -5992,19 +5992,19 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$this->assertArrayNotHasKey( 'woodev-pickup-modal', $scripts );
 
 			$this->assertArrayHasKey( 'woodev-pickup-datasource', $scripts );
-			$this->assertStringContainsString( 'pickup-datasource.js', $scripts['woodev-pickup-datasource']['src'] );
+			$this->assertStringContainsString( 'pickup-datasource.min.js', $scripts['woodev-pickup-datasource']['src'] );
 			$this->assertSame( [], $scripts['woodev-pickup-datasource']['deps'] );
 
 			// pickup-geo.js (SP-5 Task 9, T20 wiring): pure functions, no dependencies of its
 			// own.
 			$this->assertArrayHasKey( 'woodev-pickup-geo', $scripts );
-			$this->assertStringContainsString( 'pickup-geo.js', $scripts['woodev-pickup-geo']['src'] );
+			$this->assertStringContainsString( 'pickup-geo.min.js', $scripts['woodev-pickup-geo']['src'] );
 			$this->assertSame( [], $scripts['woodev-pickup-geo']['deps'] );
 
 			// pickup-panels.js (SP-5 Tasks 12-16, T20 wiring): depends on pickup-geo.js for its
 			// distance/colour arithmetic.
 			$this->assertArrayHasKey( 'woodev-pickup-panels', $scripts );
-			$this->assertStringContainsString( 'pickup-panels.js', $scripts['woodev-pickup-panels']['src'] );
+			$this->assertStringContainsString( 'pickup-panels.min.js', $scripts['woodev-pickup-panels']['src'] );
 			$this->assertSame( [ 'woodev-pickup-geo' ], $scripts['woodev-pickup-panels']['deps'] );
 
 			// map-provider-yandex.js (SP-5 Tasks 13/14) exists on disk — see the method
@@ -6013,13 +6013,13 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			// boundsFor()/matchPoints().
 			$this->assertArrayHasKey( 'woodev-pickup-map-provider-yandex', $scripts );
 			$this->assertStringContainsString(
-				'map-provider-yandex.js',
+				'map-provider-yandex.min.js',
 				$scripts['woodev-pickup-map-provider-yandex']['src']
 			);
 			$this->assertSame( [ 'woodev-pickup-geo' ], $scripts['woodev-pickup-map-provider-yandex']['deps'] );
 
 			$this->assertArrayHasKey( 'woodev-pickup-mount', $scripts );
-			$this->assertStringContainsString( 'pickup-mount.js', $scripts['woodev-pickup-mount']['src'] );
+			$this->assertStringContainsString( 'pickup-mount.min.js', $scripts['woodev-pickup-mount']['src'] );
 			$this->assertSame(
 				[
 					'jquery',
@@ -6036,7 +6036,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			// pickup-session.js (SP-11 C-2b, #1089): the surface-neutral picker session the mount
 			// opens — everything the mount used to depend on for it, minus jQuery.
 			$this->assertArrayHasKey( 'woodev-pickup-session', $scripts );
-			$this->assertStringContainsString( 'pickup-session.js', $scripts['woodev-pickup-session']['src'] );
+			$this->assertStringContainsString( 'pickup-session.min.js', $scripts['woodev-pickup-session']['src'] );
 			$this->assertSame(
 				[
 					'woodev-modal',
@@ -6051,7 +6051,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			// pickup.css (SP-5 Task 15) exists on disk — see the method docblock above for
 			// why this flipped from an `expect( 'wp_enqueue_style' )->never()` expectation.
 			$this->assertArrayHasKey( 'woodev-pickup-styles', $styles );
-			$this->assertStringContainsString( 'pickup.css', $styles['woodev-pickup-styles']['src'] );
+			$this->assertStringContainsString( 'pickup.min.css', $styles['woodev-pickup-styles']['src'] );
 			// D-13: declares the framework-registered chrome stylesheet as a dependency,
 			// exactly like the mount script's own 'woodev-modal' script dependency above.
 			$this->assertSame( [ 'woodev-modal' ], $styles['woodev-pickup-styles']['deps'] );
@@ -6108,24 +6108,24 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$this->assertArrayNotHasKey( 'woodev-pickup-modal', $scripts );
 
 			$this->assertArrayHasKey( 'woodev-pickup-datasource', $scripts );
-			$this->assertStringContainsString( 'pickup-datasource.js', $scripts['woodev-pickup-datasource']['src'] );
+			$this->assertStringContainsString( 'pickup-datasource.min.js', $scripts['woodev-pickup-datasource']['src'] );
 
 			$this->assertArrayHasKey( 'woodev-pickup-geo', $scripts );
-			$this->assertStringContainsString( 'pickup-geo.js', $scripts['woodev-pickup-geo']['src'] );
+			$this->assertStringContainsString( 'pickup-geo.min.js', $scripts['woodev-pickup-geo']['src'] );
 
 			$this->assertArrayHasKey( 'woodev-pickup-panels', $scripts );
-			$this->assertStringContainsString( 'pickup-panels.js', $scripts['woodev-pickup-panels']['src'] );
+			$this->assertStringContainsString( 'pickup-panels.min.js', $scripts['woodev-pickup-panels']['src'] );
 			$this->assertSame( [ 'woodev-pickup-geo' ], $scripts['woodev-pickup-panels']['deps'] );
 
 			$this->assertArrayHasKey( 'woodev-pickup-map-provider-yandex', $scripts );
 			$this->assertStringContainsString(
-				'map-provider-yandex.js',
+				'map-provider-yandex.min.js',
 				$scripts['woodev-pickup-map-provider-yandex']['src']
 			);
 			$this->assertSame( [ 'woodev-pickup-geo' ], $scripts['woodev-pickup-map-provider-yandex']['deps'] );
 
 			$this->assertArrayHasKey( 'woodev-pickup-mount', $scripts );
-			$this->assertStringContainsString( 'pickup-mount.js', $scripts['woodev-pickup-mount']['src'] );
+			$this->assertStringContainsString( 'pickup-mount.min.js', $scripts['woodev-pickup-mount']['src'] );
 			$this->assertSame(
 				[
 					'jquery',
@@ -6140,7 +6140,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			);
 
 			$this->assertArrayHasKey( 'woodev-pickup-styles', $styles );
-			$this->assertStringContainsString( 'pickup.css', $styles['woodev-pickup-styles']['src'] );
+			$this->assertStringContainsString( 'pickup.min.css', $styles['woodev-pickup-styles']['src'] );
 			$this->assertSame( [ 'woodev-modal' ], $styles['woodev-pickup-styles']['deps'] );
 		}
 
@@ -7442,7 +7442,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 
 			// `woodev-modal` is registered on the storefront only; a style depending on it would be dropped.
 			$this->assertSame( [], $styles['woodev-pickup-styles']['deps'] );
-			$this->assertStringContainsString( 'pickup.css', $styles['woodev-pickup-styles']['src'] );
+			$this->assertStringContainsString( 'pickup.min.css', $styles['woodev-pickup-styles']['src'] );
 		}
 
 		public function test_register_admin_wizard_assets_skips_what_is_not_built(): void {

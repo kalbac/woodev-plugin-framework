@@ -25,6 +25,10 @@ With `text=auto` alone, `.css`/`.js` were normalised to LF in the repo on commit
 but a Windows working-tree checkout could be CRLF, so a local rebuild showed the
 files as "modified" (pure line-ending churn) and risked committing CRLF blobs.
 
+**Since #247 the same pin covers `*.min.js` / `*.min.css`** (the minified siblings of the hand-written
+assets, written by `npm run build:min`, which `npm run build` runs). The CI `assets` job diffs them next to
+`woodev/assets/build/`; edit a hand-written asset and you must commit its regenerated sibling.
+
 ## Workflow when changing `src/license-page/*`
 
 1. Edit `src/license-page/{index,app,license-card}.js` or `style.scss`.
