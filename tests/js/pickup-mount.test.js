@@ -2266,6 +2266,65 @@ test( 'a city with no matching <option> gets one added before the value is set',
 	expect( console ).toHaveWarned(); // address_1/postcode are unmanaged — acknowledge.
 } );
 
+// Issue #1290: a point that carries no locality / postcode (Yandex's) must not blank a field the
+// customer already filled — the city in particular, which in the typeahead mode is the visible
+// half of a settlement record and a required checkout field.
+test( 'a point with NO locality leaves the customer\'s city untouched and does not announce it', async () => {
+	const store = makeStore();
+	setConfig( makeConfig( { replaceAddress: { enabled: true, billingOnly: true } } ) );
+	setCitySelectValue( 'billing_city', 'Суздаль' );
+	store.setValue( 'billing_city', 'Суздаль' );
+	document.getElementById( 'billing_postcode' ).value = '601293';
+
+	const announced = [];
+	document.body.addEventListener( 'woodev_pickup_address_replacing', ( event ) => announced.push( Object.assign( {}, event.detail.fields ) ) );
+
+	mountAll();
+	clickTrigger();
+
+	await selectAndConfirm( StubProvider.instances[ 0 ], point( { locality: '', postal_code: '' } ) );
+
+	expect( document.getElementById( 'billing_city' ).value ).toBe( 'Суздаль' );
+	expect( store.getValue( 'billing_city' ) ).toBe( 'Суздаль' );
+	expect( document.getElementById( 'billing_postcode' ).value ).toBe( '601293' );
+	// The address the point DOES carry still lands.
+	expect( document.getElementById( 'billing_address_1' ).value ).toBe( 'ул. Ленина, 1' );
+	expect( document.getElementById( FIELD_ID ).value ).toBe( 'PVZ-1' );
+
+	expect( announced.length ).toBe( 1 );
+	expect( Object.keys( announced[ 0 ] ) ).toEqual( [ 'billing_address_1' ] );
+	expect( console ).toHaveWarned(); // address_1 is unmanaged — acknowledge.
+} );
+
+test( 'a point WITH a locality and postcode still replaces them (guard is empty-only)', async () => {
+	const store = makeStore();
+	setConfig( makeConfig( { replaceAddress: { enabled: true, billingOnly: true } } ) );
+	setCitySelectValue( 'billing_city', 'Суздаль' );
+	document.getElementById( 'billing_postcode' ).value = '601293';
+	mountAll();
+	clickTrigger();
+
+	await selectAndConfirm( StubProvider.instances[ 0 ], point( { locality: 'Владимир', postal_code: '600000' } ) );
+
+	expect( document.getElementById( 'billing_city' ).value ).toBe( 'Владимир' );
+	expect( store.getValue( 'billing_city' ) ).toBe( 'Владимир' );
+	expect( document.getElementById( 'billing_postcode' ).value ).toBe( '600000' );
+	expect( console ).toHaveWarned(); // address_1/postcode are unmanaged — acknowledge.
+} );
+
+test( 'a point with no address text does not blank the street line either', async () => {
+	makeStore();
+	setConfig( makeConfig( { replaceAddress: { enabled: true, billingOnly: true } } ) );
+	document.getElementById( 'billing_address_1' ).value = 'ул. Мира, 5';
+	mountAll();
+	clickTrigger();
+
+	await selectAndConfirm( StubProvider.instances[ 0 ], point( { address: '', short_address: '' } ) );
+
+	expect( document.getElementById( 'billing_address_1' ).value ).toBe( 'ул. Мира, 5' );
+	expect( console ).toHaveWarned(); // postcode is unmanaged — acknowledge.
+} );
+
 test( 'replaceAddress.enabled: false writes no address field at all', async () => {
 	const store = makeStore();
 	setConfig( makeConfig( { replaceAddress: { enabled: false, billingOnly: true } } ) );
