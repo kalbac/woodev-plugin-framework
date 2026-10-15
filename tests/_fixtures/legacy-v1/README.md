@@ -22,6 +22,6 @@ plugin.
   `woodev/`, phpunit only discovers `tests/unit` and `tests/integration`, and composer's
   `autoload-dev` maps `tests/unit` and `tests/integration` only.
 - **Never edited casually.** A change here would move the contract the test pins. If an excerpt has
-  to change, a real v1 release changed the contract, and the matching test and recipe change with it.
+  to change, a real v1 release changed the contract, and the matching test changes with it.
 - **Never grown back into source.** Do not paste plugin logic, comments, strings or keys in here.
   If a new test needs another literal, add that literal, not the file around it.

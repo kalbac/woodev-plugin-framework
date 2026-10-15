@@ -16,10 +16,7 @@ use Woodev\Tests\Unit\TestCase;
  * (request id, destination station, intervals, sharing url, state status). The shared
  * prefix is the contract: renaming it orphans all live order meta. This guard pins the
  * canonical `_yandex_delivery_request_id` key literal and asserts it carries the exact
- * prefix, so flipping the prefix in the source flips this test RED -- proven by
- * mutation-check.ps1.
- *
- * Mutation-recipe: tests/unit/Contract/recipes/yandex-order-meta-prefix.recipe.json
+ * prefix, so flipping the prefix in the source flips this test RED.
  */
 final class YandexOrderMetaPrefixContractTest extends TestCase {
 

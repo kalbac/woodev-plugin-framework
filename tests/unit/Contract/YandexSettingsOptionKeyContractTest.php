@@ -16,10 +16,7 @@ use Woodev\Tests\Unit\TestCase;
  * Source-level guard for the same reason as YandexShippingMethodIdContractTest: the
  * contract is the literal WP option key, read via get_option() in the plugin's
  * integration accessor. The guard extracts the key from the canonical source and asserts
- * the exact contract string, so any rename flips this test RED -- proven mechanically by
- * mutation-check.ps1.
- *
- * Mutation-recipe: tests/unit/Contract/recipes/yandex-settings-option-key.recipe.json
+ * the exact contract string, so any rename flips this test RED.
  */
 final class YandexSettingsOptionKeyContractTest extends TestCase {
 

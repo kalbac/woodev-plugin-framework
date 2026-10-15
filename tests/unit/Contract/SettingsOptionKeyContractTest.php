@@ -16,9 +16,7 @@ use Woodev\Tests\Unit\TestCase;
  * Source-level guard for the same reason as ShippingMethodIdContractTest: the contract
  * is the literal option key, declared as a class constant. The guard extracts the
  * declared value from the canonical source and asserts the exact contract string, so
- * any rename flips this test RED -- proven mechanically by mutation-check.ps1.
- *
- * Mutation-recipe: tests/unit/Contract/recipes/settings-option-key-edostavka.recipe.json
+ * any rename flips this test RED.
  */
 final class SettingsOptionKeyContractTest extends TestCase {
 
