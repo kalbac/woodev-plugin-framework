@@ -20,7 +20,7 @@ Every row has the hook name, its type, the arguments in the order they are passe
 
 A few rules apply to all hooks in this page:
 
-- **A filter that returns the wrong type is ignored.** Most filters check what you return and keep the original value when it is the wrong type, so a typo does not break a checkout. Return the same type you were given.
+- **Return the type the filter expects.** Many filters check what you return and keep the original value when it is the wrong type, but not all do: some cast the result (a `bool` filter treats the string `'false'` as `true`). Never rely on a wrong-type return being ignored. Return the same type you were given.
 - **Add your callbacks early.** Register them from `init_plugin()` or from `plugins_loaded`, not from a later action. Registries such as the tools and location providers read their filter once.
 - **Keep hot-path callbacks cheap.** Filters that run for every order row, every rate or every pickup point on a map must not call a remote service.
 
