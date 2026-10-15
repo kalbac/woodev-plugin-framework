@@ -1,0 +1,260 @@
+---
+title: "Plugin layout & conventions"
+description: Learn the recommended directory layout, naming rules and file conventions for a framework-based plugin.
+---
+
+import { FileTree } from '@astrojs/starlight/components';
+
+In this page you will learn how to lay out a framework-based plugin, how to load your own files, how to name things, and where translations, assets and settings belong.
+
+## Recommended layout
+
+<FileTree>
+
+- my-carrier/
+  - my-carrier.php **entry file**: header, constants, loader and registration
+  - includes/ your PHP classes, one class per file
+    - class-plugin.php the main class
+    - class-lifecycle.php install and upgrade routines
+    - api/
+      - class-client.php
+  - assets/
+    - js/
+      - storefront.js
+      - storefront.min.js
+    - css/
+  - languages/
+    - my-carrier-ru_RU.po
+    - my-carrier-ru_RU.mo
+  - woodev/ **the bundled framework, never edited**
+  - tests/
+  - readme.txt
+
+</FileTree>
+
+Three rules shape this tree:
+
+- **The entry file stays thin.** It defines constants, loads `woodev/loader.php` and calls `Woodev_Loader::register()`. All behaviour lives in classes.
+- **One class per file.** Name the file `class-{slug}.php`, and `abstract-class-{slug}.php` for an abstract class. This is the framework's own convention.
+- **Never put files in `woodev/`.** The next framework update replaces the whole folder.
+
+## Loading your own files
+
+The framework loads its own classes, but yours are your business. The one thing to remember is **timing**: a class that extends a framework class, such as your main class, can only be loaded after the loader has run on `plugins_loaded`. Never `require` it at the top of the entry file.
+
+There are two ways to load your files safely.
+
+### With a `callback`
+
+Give the loader definition a `callback` that requires your files in dependency order (parents and interfaces first) and then builds the plugin. This is the approach of [Your first plugin](../your-first-plugin/). It suits plugins with a small, fixed set of files.
+
+### With your own autoloader
+
+Register a small autoloader at the top of the entry file and let the loader build the class through `main_class`. The classes are then loaded on demand, in any order. This is the better choice once the plugin grows.
+
+This entry file maps the namespace `My_Carrier` to the `includes/` folder, so `My_Carrier\Plugin` is `includes/class-plugin.php` and `My_Carrier\Api\Client` is `includes/api/class-client.php`:
+
+```php
+<?php
+/**
+ * Plugin Name:          My Carrier
+ * Description:          A WooCommerce plugin built on the Woodev Plugin Framework.
+ * Version:              1.0.0
+ * Author:               Your Name
+ * Text Domain:          my-carrier
+ * Requires at least:    6.6
+ * Requires PHP:         7.4
+ * WC requires at least: 7.0
+ *
+ * @package My_Carrier
+ */
+
+defined( 'ABSPATH' ) || exit;
+
+defined( 'MY_CARRIER_FILE' ) || define( 'MY_CARRIER_FILE', __FILE__ );
+defined( 'MY_CARRIER_VERSION' ) || define( 'MY_CARRIER_VERSION', '1.0.0' );
+
+require_once plugin_dir_path( __FILE__ ) . 'woodev/loader.php';
+
+spl_autoload_register(
+	static function ( string $class_name ): void {
+		$prefix = 'My_Carrier\\';
+
+		if ( 0 !== strpos( $class_name, $prefix ) ) {
+			return;
+		}
+
+		$parts = explode( '\\', strtolower( str_replace( '_', '-', substr( $class_name, strlen( $prefix ) ) ) ) );
+		$file  = 'class-' . array_pop( $parts ) . '.php';
+		$path  = __DIR__ . '/includes/' . ( $parts ? implode( '/', $parts ) . '/' : '' ) . $file;
+
+		if ( is_readable( $path ) ) {
+			require_once $path;
+		}
+	}
+);
+
+Woodev_Loader::register(
+	MY_CARRIER_FILE,
+	[
+		'plugin_id'            => 'my-carrier',
+		'download_id'          => 1234,
+		'plugin_name'          => 'My Carrier',
+		'plugin_version'       => MY_CARRIER_VERSION,
+		'framework_version'    => '%%FRAMEWORK_VERSION%%',
+		'backwards_compatible' => '2.0.0',
+		'platform'             => 'woocommerce',
+		'requirements'         => [
+			'php'         => '7.4',
+			'wordpress'   => '6.6',
+			'woocommerce' => '7.0',
+		],
+		'supported_features'   => [
+			'hpos' => true,
+		],
+		'main_class'           => 'My_Carrier\\Plugin',
+	]
+);
+```
+
+The loader calls `My_Carrier\Plugin::instance()` for you, so no `callback` is needed. Registering the autoloader does not load anything, so it is safe at the top of the file.
+
+## Naming
+
+Pick the plugin ID once, in lowercase with dashes (`my-carrier`), and use it everywhere: the `plugin_id` of the loader definition, the first argument of `parent::__construct()`, the text domain, the plugin folder and the main file name. The ID is a permanent identifier; see [Loader definition reference](../loader-definition-reference/#plugin_id).
+
+The base class gives you the ID in the forms you need, so you never convert it by hand:
+
+| Method | Result for `my-carrier` | Use it for |
+|---|---|---|
+| `get_id()` | `my-carrier` | The ID as registered. |
+| `get_id_dasherized()` | `my-carrier` | CSS classes, element IDs and script handles. Underscores become dashes. |
+| `get_id_underscored()` | `my_carrier` | Hook names, meta keys and anything that must be a PHP-safe name. Dashes become underscores. |
+| `get_plugin_option_name( 'api_key' )` | `woodev_my_carrier_api_key` | Option names. The prefix is built for you. |
+
+Further conventions:
+
+- **Prefix everything global.** Functions `my_carrier_…`, constants `MY_CARRIER_…`, classes `My_Carrier_…` or a `My_Carrier\` namespace, and your own hooks `my_carrier_…`. Do not use the `woodev_` or `Woodev_` prefix; it belongs to the framework.
+- **Namespace new code.** Group classes under your own namespace, as the autoloader above expects.
+- **Use WordPress coding style:** tabs, `snake_case` methods and hooks, short array syntax `[]`, and type declarations on parameters and return values.
+- **Guard shared declarations.** If you declare a function or class that another plugin's copy of the same code could also declare, wrap it in `function_exists()` or `class_exists( '...', false )`.
+
+## Text domain
+
+Your plugin has **its own text domain**, never the framework's. The framework loads its own catalogue under the fixed domain `woodev-plugin-framework`, separately from yours. Strings you write under that domain would not be found in your catalogue, and the framework's catalogue is replaced on every framework update.
+
+Pass your domain to the constructor, as in [Your first plugin](../your-first-plugin/):
+
+```php
+<?php
+// In the constructor of your main class.
+parent::__construct( 'my-carrier', MY_CARRIER_VERSION, [ 'text_domain' => 'my-carrier' ] );
+```
+
+The framework then loads your translations on the `init` hook, from `languages/` in your plugin folder, or from `wp-content/languages/my-carrier/`. Name the files `{domain}-{locale}.mo`, for example `my-carrier-ru_RU.mo`. The `Text Domain:` line in your plugin header must name the same domain.
+
+Which language to write the source strings in depends on who reads them:
+
+- **Strings a shopper sees:** English source strings, with the Russian translation in the catalogue.
+- **Strings only the merchant sees in wp-admin:** Russian source strings are fine.
+- **Log lines and exception messages:** plain strings, no translation function.
+
+## Assets
+
+Ship every hand-written script and stylesheet **twice**: the readable file and a minified sibling, `storefront.js` and `storefront.min.js`. Do not spell `.min` by hand. Ask the base class for the suffix:
+
+- `Woodev_Plugin::get_assets_suffix()` returns `''` when `SCRIPT_DEBUG` is on, and `'.min'` otherwise. It is static, so a static hook can call it too. `WP_DEBUG` alone does not switch it.
+- `$plugin->get_assets_version()` is the cache-busting version. It is the plugin version, or the current time while `SCRIPT_DEBUG` or `WP_DEBUG` is on.
+- `$plugin->get_plugin_url()` and `$plugin->get_plugin_path()` give the plugin's URL and path, without a trailing slash.
+
+Make your build write the `.min` file; the framework does not do it for you. A complete main class that enqueues a script this way, in the namespaced layout from above:
+
+```php
+<?php
+namespace My_Carrier;
+
+defined( 'ABSPATH' ) || exit;
+
+/**
+ * The My Carrier plugin.
+ */
+final class Plugin extends \Woodev\Framework\Woocommerce_Plugin {
+
+	/**
+	 * The single instance.
+	 *
+	 * @var Plugin|null
+	 */
+	protected static $instance;
+
+	/**
+	 * Sets up the plugin.
+	 */
+	public function __construct() {
+		parent::__construct(
+			'my-carrier',
+			MY_CARRIER_VERSION,
+			[
+				'text_domain' => 'my-carrier',
+			]
+		);
+	}
+
+	/**
+	 * Gets the single instance.
+	 *
+	 * @return Plugin
+	 */
+	public static function instance(): self {
+		return self::$instance ??= new self();
+	}
+
+	/**
+	 * Gets the full path of the plugin's entry file.
+	 *
+	 * @return string
+	 */
+	protected function get_file(): string {
+		return MY_CARRIER_FILE;
+	}
+
+	/**
+	 * Gets the plugin's display name.
+	 *
+	 * @return string
+	 */
+	public function get_plugin_name(): string {
+		return 'My Carrier';
+	}
+
+	/**
+	 * Registers the plugin's hooks once WordPress and WooCommerce are ready.
+	 *
+	 * @return void
+	 */
+	public function init_plugin(): void {
+		add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_storefront_script' ] );
+	}
+
+	/**
+	 * Enqueues the storefront script, minified unless SCRIPT_DEBUG is on.
+	 *
+	 * @return void
+	 */
+	public function enqueue_storefront_script(): void {
+		wp_enqueue_script(
+			$this->get_id_dasherized() . '-storefront',
+			$this->get_plugin_url() . '/assets/js/storefront' . self::get_assets_suffix() . '.js',
+			[],
+			$this->get_assets_version(),
+			true
+		);
+	}
+}
+```
+
+## Settings
+
+A Woodev plugin's settings live on the framework's shared page, «Woodev → Настройки» (Settings). Your plugin adds a tab to it by overriding `get_settings_providers()` in the main class, which returns a list of `\Woodev\Framework\Settings\Settings_Provider` objects, one per tab. The page appears in the «Woodev» menu as soon as one active plugin contributes a tab.
+
+**Do not build your own top-level settings page**, and do not add a menu item for settings. Merchants of every Woodev plugin expect to find settings in one place. [Settings overview](../../settings/overview/) and [Tabs, sections and cards](../../settings/tabs-sections-and-cards/) show how to build a tab.

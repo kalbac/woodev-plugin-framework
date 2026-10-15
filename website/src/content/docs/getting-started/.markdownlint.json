@@ -1,0 +1,4 @@
+{
+  "extends": "../../../../../.markdownlint.json",
+  "MD010": { "code_blocks": false }
+}

@@ -1,0 +1,370 @@
+---
+title: Your first plugin
+description: Build a minimal plugin on the framework, from the main file to an activated plugin in wp-admin.
+---
+
+import { Steps, FileTree } from '@astrojs/starlight/components';
+
+In this page you will build a small WooCommerce plugin, **My Carrier**, from an empty folder to an activated plugin in wp-admin. It adds an order note to every new order. That is little, but it is a complete plugin, and it is the shape every Woodev plugin starts from.
+
+You need the framework ZIP from [Requirements & bundling](../requirements-and-bundling/) and a WordPress site with WooCommerce 7.0 or newer.
+
+## The layout you will end up with
+
+<FileTree>
+
+- my-carrier/
+  - my-carrier.php **entry file** (step 2)
+  - includes/
+    - class-my-carrier-plugin.php **main class** (step 3)
+  - woodev/ the bundled framework (step 1)
+
+</FileTree>
+
+## Build it
+
+<Steps>
+
+1. **Add the framework.**
+
+   Create the plugin folder and extract the framework into it, as described in [Requirements & bundling](../requirements-and-bundling/#get-the-framework). Create an empty `includes/` folder next to `woodev/`.
+
+2. **Write the entry file.**
+
+   Create `my-carrier.php`. It does three things: it defines two constants, it loads the framework, and it registers the plugin.
+
+   ```php
+   <?php
+   /**
+    * Plugin Name:          My Carrier
+    * Description:          A minimal WooCommerce plugin built on the Woodev Plugin Framework.
+    * Version:              1.0.0
+    * Author:               Your Name
+    * Text Domain:          my-carrier
+    * Requires at least:    6.6
+    * Requires PHP:         7.4
+    * WC requires at least: 7.0
+    *
+    * @package My_Carrier
+    */
+
+   defined( 'ABSPATH' ) || exit;
+
+   defined( 'MY_CARRIER_FILE' ) || define( 'MY_CARRIER_FILE', __FILE__ );
+   defined( 'MY_CARRIER_VERSION' ) || define( 'MY_CARRIER_VERSION', '1.0.0' );
+
+   require_once plugin_dir_path( __FILE__ ) . 'woodev/loader.php';
+
+   /**
+    * Builds the plugin once the framework is ready.
+    *
+    * The loader calls this on `plugins_loaded`, after the framework classes are available.
+    *
+    * @return void
+    */
+   function my_carrier_start(): void {
+   	require_once plugin_dir_path( MY_CARRIER_FILE ) . 'includes/class-my-carrier-plugin.php';
+
+   	My_Carrier_Plugin::instance();
+   }
+
+   Woodev_Loader::register(
+   	MY_CARRIER_FILE,
+   	[
+   		'plugin_id'            => 'my-carrier',
+   		'download_id'          => 1234,
+   		'plugin_name'          => 'My Carrier',
+   		'plugin_version'       => MY_CARRIER_VERSION,
+   		'framework_version'    => '%%FRAMEWORK_VERSION%%',
+   		'backwards_compatible' => '2.0.0',
+   		'platform'             => 'woocommerce',
+   		'requirements'         => [
+   			'php'         => '7.4',
+   			'wordpress'   => '6.6',
+   			'woocommerce' => '7.0',
+   		],
+   		'supported_features'   => [
+   			'hpos' => true,
+   		],
+   		'main_class'           => 'My_Carrier_Plugin',
+   		'callback'             => 'my_carrier_start',
+   	]
+   );
+   ```
+
+   The array passed to `Woodev_Loader::register()` is the **loader definition**; every field is explained in the [Loader definition reference](../loader-definition-reference/). Three things matter here:
+
+   - `register()` runs at the top level of the file, while WordPress includes it.
+   - The definition holds plain literals and your own constants, nothing from the framework.
+   - The `callback` builds the plugin. It runs later, on `plugins_loaded`, which is why the class file is required inside it and not at the top of the file.
+
+   :::caution
+   Do not `require` the main class at the top of the entry file. The class extends a framework class, and the framework classes only become available after the loader has run. Load it from the `callback` or from your own autoloader (see [Plugin layout & conventions](../plugin-layout-and-conventions/#loading-your-own-files)).
+   :::
+
+3. **Write the main class.**
+
+   Create `includes/class-my-carrier-plugin.php`. A WooCommerce plugin extends `\Woodev\Framework\Woocommerce_Plugin`.
+
+   ```php
+   <?php
+   defined( 'ABSPATH' ) || exit;
+
+   /**
+    * The My Carrier plugin.
+    */
+   final class My_Carrier_Plugin extends \Woodev\Framework\Woocommerce_Plugin {
+
+   	/**
+   	 * The single instance.
+   	 *
+   	 * @var My_Carrier_Plugin|null
+   	 */
+   	protected static $instance;
+
+   	/**
+   	 * Sets up the plugin.
+   	 */
+   	public function __construct() {
+   		parent::__construct(
+   			'my-carrier',
+   			MY_CARRIER_VERSION,
+   			[
+   				'text_domain' => 'my-carrier',
+   			]
+   		);
+   	}
+
+   	/**
+   	 * Gets the single instance.
+   	 *
+   	 * @return My_Carrier_Plugin
+   	 */
+   	public static function instance(): self {
+   		return self::$instance ??= new self();
+   	}
+
+   	/**
+   	 * Gets the full path of the plugin's entry file.
+   	 *
+   	 * @return string
+   	 */
+   	protected function get_file(): string {
+   		return MY_CARRIER_FILE;
+   	}
+
+   	/**
+   	 * Gets the plugin's display name.
+   	 *
+   	 * @return string
+   	 */
+   	public function get_plugin_name(): string {
+   		return 'My Carrier';
+   	}
+
+   	/**
+   	 * Registers the plugin's hooks once WordPress and WooCommerce are ready.
+   	 *
+   	 * @return void
+   	 */
+   	public function init_plugin(): void {
+   		add_action( 'woocommerce_new_order', [ $this, 'handle_new_order' ] );
+   	}
+
+   	/**
+   	 * Adds an order note to a new order.
+   	 *
+   	 * @param int $order_id The new order's ID.
+   	 * @return void
+   	 */
+   	public function handle_new_order( $order_id ): void {
+   		$order = wc_get_order( $order_id );
+
+   		if ( $order instanceof \WC_Order ) {
+   			$order->add_order_note( __( 'Order received by My Carrier.', 'my-carrier' ) );
+   		}
+   	}
+   }
+   ```
+
+   What each part is for:
+
+   - `parent::__construct()` takes the plugin ID, the plugin version and optional arguments. The ID **must equal** the `plugin_id` in the loader definition, and `text_domain` is your own text domain.
+   - `instance()` returns the one object. The loader calls it for you, and it lets other code reach the plugin.
+   - `get_file()` returns the entry file, not the class file. That is why the entry file defines `MY_CARRIER_FILE`.
+   - `get_plugin_name()` returns the display name that the framework shows in its pages and notices. Keep it a plain string at first; if you translate it, make sure it is not read before the `init` hook, because WordPress 6.7 and newer warns about translations loaded too early.
+   - `init_plugin()` runs on `plugins_loaded` at priority 15. Put hooks that need WordPress or WooCommerce here and not in the constructor.
+
+   The note code reads the order through the `WC_Order` object, never through post meta. That is what keeps it correct with HPOS, which the definition declared with `'hpos' => true`.
+
+   :::caution
+   Declare HPOS and Blocks support in the loader definition, as the entry file does. A value passed to the constructor never wins: if it disagrees with the definition, the definition is used and a developer notice (`_doing_it_wrong()`) is raised. WooCommerce reads the declaration before your class is built, so only the definition can be early enough.
+   :::
+
+4. **Activate the plugin.**
+
+   Zip the `my-carrier/` folder or copy it into `wp-content/plugins/`, then activate **My Carrier** on the Plugins screen. If WooCommerce is not active, or a requirement in your definition is not met, the plugin does not start and wp-admin shows a notice that names the missing version.
+
+5. **See what the merchant sees.**
+
+   - **Plugins screen.** My Carrier is listed like any plugin. The framework adds action links to the row when the plugin provides the matching data, such as a documentation, support or settings URL.
+   - **The «Woodev» menu.** The framework adds one top-level «Woodev» item to the wp-admin menu. It is shared by all Woodev plugins on the site and holds the «Лицензии» (Licenses) and «Плагины» (Plugins) pages. The framework handles licences and updates, with no code in your plugin.
+   - **«Woodev → Настройки» (Settings).** This page appears once at least one active plugin contributes a settings tab. My Carrier contributes none yet, so it has no tab. [Settings overview](../../settings/overview/) shows how to add one.
+   - **Orders.** Place a test order. The order's notes now include «Order received by My Carrier.»
+
+</Steps>
+
+## Full listing
+
+The two files from above, complete.
+
+`my-carrier/my-carrier.php`
+
+```php
+<?php
+/**
+ * Plugin Name:          My Carrier
+ * Description:          A minimal WooCommerce plugin built on the Woodev Plugin Framework.
+ * Version:              1.0.0
+ * Author:               Your Name
+ * Text Domain:          my-carrier
+ * Requires at least:    6.6
+ * Requires PHP:         7.4
+ * WC requires at least: 7.0
+ *
+ * @package My_Carrier
+ */
+
+defined( 'ABSPATH' ) || exit;
+
+defined( 'MY_CARRIER_FILE' ) || define( 'MY_CARRIER_FILE', __FILE__ );
+defined( 'MY_CARRIER_VERSION' ) || define( 'MY_CARRIER_VERSION', '1.0.0' );
+
+require_once plugin_dir_path( __FILE__ ) . 'woodev/loader.php';
+
+/**
+ * Builds the plugin once the framework is ready.
+ *
+ * The loader calls this on `plugins_loaded`, after the framework classes are available.
+ *
+ * @return void
+ */
+function my_carrier_start(): void {
+	require_once plugin_dir_path( MY_CARRIER_FILE ) . 'includes/class-my-carrier-plugin.php';
+
+	My_Carrier_Plugin::instance();
+}
+
+Woodev_Loader::register(
+	MY_CARRIER_FILE,
+	[
+		'plugin_id'            => 'my-carrier',
+		'download_id'          => 1234,
+		'plugin_name'          => 'My Carrier',
+		'plugin_version'       => MY_CARRIER_VERSION,
+		'framework_version'    => '%%FRAMEWORK_VERSION%%',
+		'backwards_compatible' => '2.0.0',
+		'platform'             => 'woocommerce',
+		'requirements'         => [
+			'php'         => '7.4',
+			'wordpress'   => '6.6',
+			'woocommerce' => '7.0',
+		],
+		'supported_features'   => [
+			'hpos' => true,
+		],
+		'main_class'           => 'My_Carrier_Plugin',
+		'callback'             => 'my_carrier_start',
+	]
+);
+```
+
+`my-carrier/includes/class-my-carrier-plugin.php`
+
+```php
+<?php
+defined( 'ABSPATH' ) || exit;
+
+/**
+ * The My Carrier plugin.
+ */
+final class My_Carrier_Plugin extends \Woodev\Framework\Woocommerce_Plugin {
+
+	/**
+	 * The single instance.
+	 *
+	 * @var My_Carrier_Plugin|null
+	 */
+	protected static $instance;
+
+	/**
+	 * Sets up the plugin.
+	 */
+	public function __construct() {
+		parent::__construct(
+			'my-carrier',
+			MY_CARRIER_VERSION,
+			[
+				'text_domain' => 'my-carrier',
+			]
+		);
+	}
+
+	/**
+	 * Gets the single instance.
+	 *
+	 * @return My_Carrier_Plugin
+	 */
+	public static function instance(): self {
+		return self::$instance ??= new self();
+	}
+
+	/**
+	 * Gets the full path of the plugin's entry file.
+	 *
+	 * @return string
+	 */
+	protected function get_file(): string {
+		return MY_CARRIER_FILE;
+	}
+
+	/**
+	 * Gets the plugin's display name.
+	 *
+	 * @return string
+	 */
+	public function get_plugin_name(): string {
+		return 'My Carrier';
+	}
+
+	/**
+	 * Registers the plugin's hooks once WordPress and WooCommerce are ready.
+	 *
+	 * @return void
+	 */
+	public function init_plugin(): void {
+		add_action( 'woocommerce_new_order', [ $this, 'handle_new_order' ] );
+	}
+
+	/**
+	 * Adds an order note to a new order.
+	 *
+	 * @param int $order_id The new order's ID.
+	 * @return void
+	 */
+	public function handle_new_order( $order_id ): void {
+		$order = wc_get_order( $order_id );
+
+		if ( $order instanceof \WC_Order ) {
+			$order->add_order_note( __( 'Order received by My Carrier.', 'my-carrier' ) );
+		}
+	}
+}
+```
+
+## Where to go next
+
+- [Loader definition reference](../loader-definition-reference/) explains every field you just wrote.
+- [Plugin layout & conventions](../plugin-layout-and-conventions/) shows how to grow this folder into a real plugin.
+- [The plugin class](../../core/plugin-class/) covers everything else the base class offers.
+- To turn My Carrier into a carrier integration, extend `\Woodev\Framework\Shipping\Shipping_Plugin` instead and add `'type' => 'shipping'` to the definition. Start with [Shipping plugin anatomy](../../shipping/plugin-anatomy/).
