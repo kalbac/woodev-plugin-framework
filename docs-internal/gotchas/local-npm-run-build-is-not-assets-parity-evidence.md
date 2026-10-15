@@ -123,6 +123,11 @@ NOT push; the coordinator pushes that commit from the PRIMARY checkout, where th
 `git push origin <sha>:refs/heads/<branch>` (the branch itself is checked out in the worktree, so the
 primary cannot check it out). Say this in every brief; forbid `--no-verify` by name.
 
+s182 (15.10.2026, #247): a change to `package.json` also counts as a build input, so the hook fired for a worker that touched no
+`src/`; the worker stopped and asked, and the coordinator — having missed the question for hours — pushed with `--no-verify`,
+breaking the rule above (CI's `assets` job was green, so no harm, but the catalogue gates were skipped). The brief template must
+carry the sha-push recipe; the coordinator follows it too.
+
 ## Related
 
 - [sharing-vendor-breaks-composer-autoload-in-a-worktree](sharing-vendor-breaks-composer-autoload-in-a-worktree.md) — the same symlink-resolution mechanism, one layer down: Composer bakes `$baseDir` and PHP resolves the link too
