@@ -22,7 +22,7 @@
  *   L6  window 0.5S–1.5S on both pickups             → offered at S; the cart grown to 3S → hidden
  *   L7  contradicting limits (minimum above maximum) → hidden, whatever the cart
  *   L8  the carriers set differently, couriers/postamat mixed in → the exact hidden/offered split
- *   L9  L8 viewed by the admin, «Логирование» ON for both → the hint names the hidden methods   (M1: CDEK writes no hint)
+ *   L9  L8 viewed by the admin, «Логирование» ON for both → the hint names the hidden methods
  *   L10 L8 viewed by the admin, Yandex «Логирование» OFF  → no Yandex line in the hint
  *   C1  maximum cost below the natural price on both couriers → the price is the maximum
  *   C2  «free from» below S + a minimum cost on both pickups → the rate stays free
@@ -49,7 +49,6 @@ const {
 	METHOD_YANDEX_COURIER,
 	METHOD_YANDEX_PICKUP,
 	adminLogin,
-	expectKnownDefect,
 	optionScope,
 	requireRig,
 	settle,
@@ -320,23 +319,8 @@ test.describe( 'order amount: «Минимальная сумма заказа»
 		// Yandex reports the order-amount refusal to the framework's hint (`order_amount_refused()` → `hide()`).
 		expect( hint, 'the hint names the hidden Yandex pickup method' ).toContain( 'Yandex pickup point' );
 
-		// CDEK refuses through `log_unavailable()` — a debug-log line only; no `report_hidden()` is called anywhere in the plugin.
-		// One wrapper per method: a fixed pickup line must not hide behind a courier line that still fails, or the reverse.
-		await expectKnownDefect(
-			'M1',
-			'CDEK hides a method by its order-amount limit without telling the admin hint (Cdek_Shipping_Rate_Service::calculate() only logs)',
-			() => {
-				expect( hint, 'the hint names the hidden CDEK pickup method' ).toContain( 'CDEK pickup point' );
-			}
-		);
-
-		await expectKnownDefect(
-			'M1',
-			'CDEK hides a method by its order-amount limit without telling the admin hint (Cdek_Shipping_Rate_Service::calculate() only logs)',
-			() => {
-				expect( hint, 'the hint names the hidden CDEK courier method' ).toContain( 'CDEK courier delivery' );
-			}
-		);
+		expect( hint, 'the hint names the hidden CDEK pickup method' ).toContain( 'CDEK pickup point' );
+		expect( hint, 'the hint names the hidden CDEK courier method' ).toContain( 'CDEK courier delivery' );
 	} );
 
 	test( 'L10 — the same admin checkout with Yandex «Логирование» OFF: no Yandex line in the hint', async ( { browser } ) => {

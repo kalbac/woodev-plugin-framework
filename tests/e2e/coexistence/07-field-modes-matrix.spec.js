@@ -83,9 +83,9 @@ const PLACE = {
 	myshkin:     { name: 'Мышкин', region: 'Ярославская область', kind: 'small town, mixed', serves: [ CDEK_COURIER, METHOD_YANDEX_PICKUP ] },
 	chemal:      { name: 'Чемал', region: 'Республика Алтай', kind: 'village, CDEK only', serves: [ METHOD_CDEK_PICKUP, CDEK_COURIER ] },
 	krPolyana:   { name: 'Красная Поляна', region: 'Краснодарский край', kind: 'village', serves: [ METHOD_CDEK_PICKUP, CDEK_COURIER, METHOD_YANDEX_PICKUP, METHOD_YANDEX_COURIER ] },
-	// `needsRegion`: offered only while «Регион» is on the page (M3 — Yandex geocodes the courier address from country, region and
-	// city; with «Регион» removed the Yandex courier rate is gone for EVERY settlement that is not its own region: measured for
-	// Приозерск (409 ₽ with the region shown) and Суздаль (706 ₽)).
+	// `needsRegion`: offered only while «Регион» is on the page (M3 — with it removed WooCommerce sends the state wildcard `*` (or the
+	// shop's stale default state), not an empty string, so the Yandex courier address is «Russia, *, Приозерск» and Yandex cannot
+	// geocode it; measured for Приозерск (409 ₽ with the region shown) and Суздаль (706 ₽)).
 	priozersk:   { name: 'Приозерск', region: 'Ленинградская область', kind: 'small town', serves: [ METHOD_CDEK_PICKUP, CDEK_COURIER, METHOD_YANDEX_PICKUP, METHOD_YANDEX_COURIER ], needsRegion: [ METHOD_YANDEX_COURIER ] },
 	ferapontovo: { name: 'Ферапонтово', region: 'Вологодская область', kind: 'village, nobody serves it', serves: [] },
 };
@@ -204,7 +204,7 @@ for ( const cell of CELLS ) {
 			if ( lost.length ) {
 				await expectKnownDefect(
 					'M3',
-					'with «Регион» removed the Yandex courier rate is hidden («Яндекс не смог найти адрес покупателя на карте») — courier_address() geocodes country + region + city and the region is empty (trait-yandex-rate-method.php:836)',
+					'with «Регион» removed the Yandex courier rate is hidden («Яндекс не смог найти адрес покупателя на карте») — the package state is the WooCommerce wildcard «*» (guest) or the shop default state (admin), not empty, so courier_address() (trait-yandex-rate-method.php:854, guard \'\' === $state) never takes the record region and geocodes «Russia, *, Приозерск»',
 					() => expect( Object.keys( rates ), `${ cell.id } ${ place.name }: the Yandex courier is offered as it is with «Регион» shown` ).toEqual( expect.arrayContaining( lost ) )
 				);
 			}
@@ -233,26 +233,7 @@ for ( const cell of CELLS ) {
 
 			const heldCity = async () => ( await M.locationFields( page ) ).city;
 
-			if ( METHOD_YANDEX_PICKUP === methodId && MODE.TYPEAHEAD === cell.settlement ) {
-				// M2: the Yandex point carries no `locality`, and `applyAddressReplacement()` writes it into the city field
-				// unguarded — a text «Населённый пункт» is blanked, a `<select>` ignores the empty value. The buyer's
-				// way out is picking the settlement again (the point and the chosen method survive), which this test does
-				// so the order below can still be placed.
-				const standing = await expectKnownDefect(
-					'M2',
-					'confirming a Yandex pickup point blanks the text «Населённый пункт» (the point has no locality; pickup-mount.js applyAddressReplacement writes it unguarded) — the order is then refused «Город (Location Provider) is a required field»',
-					async () => expect( await heldCity(), `${ cell.id } ${ last.name }: «Населённый пункт» still holds the settlement after the Yandex point is confirmed` ).toBe( last.name )
-				);
-
-				if ( standing ) {
-					const before = updates.count();
-
-					await M.pickSettlement( page, cell.settlement, last.name, 'remove' === cell.regionField ? ( last.region === last.name ? '' : last.region ) : last.district || '' );
-					await M.waitForRecalculation( page, updates, before );
-				}
-			} else {
-				expect( await heldCity(), `${ cell.id } ${ last.name }: «Населённый пункт» still holds the settlement after the ${ methodId } point is confirmed` ).toBe( last.name );
-			}
+			expect( await heldCity(), `${ cell.id } ${ last.name }: «Населённый пункт» still holds the settlement after the ${ methodId } point is confirmed` ).toBe( last.name );
 
 			expect( await slotValue( page, slot ), `${ cell.id } ${ last.name }: the ${ methodId } point survives` ).toBe( picked[ methodId ] );
 
@@ -273,23 +254,8 @@ for ( const cell of CELLS ) {
 				expect( hint, `${ cell.id }: the hint says why the Yandex pickup method is hidden` ).toContain( 'Yandex pickup point' );
 				expect( hint, `${ cell.id }: the hint says why the Yandex courier method is hidden` ).toContain( 'Yandex courier' );
 
-				// CDEK writes its reasons (no route, outside the limits) to the debug log only — no `report_hidden()` anywhere in the plugin.
-				// One wrapper per method: a fixed pickup line must not hide behind a courier line that still fails, or the reverse.
-				await expectKnownDefect(
-					'M1',
-					'CDEK hides a method (no route, order-amount limit) without telling the admin hint — only a debug-log line',
-					() => {
-						expect( hint, `${ cell.id }: the hint says why the CDEK pickup method is hidden` ).toContain( 'CDEK pickup point' );
-					}
-				);
-
-				await expectKnownDefect(
-					'M1',
-					'CDEK hides a method (no route, order-amount limit) without telling the admin hint — only a debug-log line',
-					() => {
-						expect( hint, `${ cell.id }: the hint says why the CDEK courier method is hidden` ).toContain( 'CDEK courier delivery' );
-					}
-				);
+				expect( hint, `${ cell.id }: the hint says why the CDEK pickup method is hidden` ).toContain( 'CDEK pickup point' );
+				expect( hint, `${ cell.id }: the hint says why the CDEK courier method is hidden` ).toContain( 'CDEK courier delivery' );
 
 				M.resetAdminSession();
 			}

@@ -55,12 +55,12 @@ rethrown, never read as «still broken». The check inside a wrapper must use ha
 `WOODEV_E2E_STRICT=1` runs the wrapped assertions as ordinary ones so the real messages show.
 
 Currently wrapped: F7 (`05-deactivation.spec.js`, CDEK deactivated → Yandex methods vanish), B1 (`06-block-checkout.spec.js`,
-block checkout does not restore the remembered CDEK point; block-only, not a release blocker) and three from the #1179 matrix:
+block checkout does not restore the remembered CDEK point; block-only, not a release blocker) and one from the #1179 matrix:
 
-- M1 (`07` cell H, `08` L9) — CDEK hides a method (no route, order-amount limit) without a line in the admin «method hidden» hint; Yandex does.
-- M2 (`07` cells A, C, G) — confirming a Yandex pickup point blanks a text-with-suggestions «Населённый пункт» (the point carries no
-  locality and `pickup-mount.js` writes it unguarded); the order is then refused «Город (Location Provider) is a required field».
-- M3 (`07` cell G) — with «Регион» removed the Yandex courier rate is gone for every settlement that is not its own region.
+- M3 (`07` cell G) — with «Регион» removed the Yandex courier rate is gone for every settlement that is not its own region. The
+  #94 fix reads the record's region only when the package state is `''`, but the package state is WooCommerce's wildcard `*` (guest) or
+  the shop's stale default state (admin: `МОСКВА`), so the geocoded address is still «Russia, *, Приозерск»
+  (`trait-yandex-rate-method.php:854`, `courier_address()`).
 
 Fixed defects (their assertions are ordinary now):
 
@@ -69,6 +69,8 @@ Fixed defects (their assertions are ordinary now):
 - F4 — the Yandex guard refused the whole order on a stale CDEK point — fixed in the Yandex plugin #53
 - F5 — switching back did not restore the CDEK point's address — fixed in framework #1264
 - F6 — a reused order kept the meta of the carrier the buyer left — fixed in framework #1267
+- M1 — CDEK hid a method (no route, order-amount limit) without a line in the admin «method hidden» hint — fixed in the CDEK plugin #104
+- M2 — confirming a Yandex pickup point blanked a text-with-suggestions «Населённый пункт» — fixed in framework #1292 and the Yandex plugin #94
 
 ## What the specs change on the rig, and put back
 
