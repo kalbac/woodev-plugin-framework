@@ -44,7 +44,7 @@ Woodev_Loader::register(
         'platform'             => 'woocommerce',
         'requirements'         => [
             'php'         => '7.4',
-            'wordpress'   => '6.3',
+            'wordpress'   => '6.6',
             'woocommerce' => '7.0',
         ],
         'main_class'           => 'My_Plugin',
@@ -83,7 +83,7 @@ notice and logged; the plugin does not start).
 | `plugin_name` | Required. |
 | `plugin_version` | Required. |
 | `framework_version` | Required. The framework version this plugin bundles. The highest one on the site wins. |
-| `backwards_compatible` | Not validated but REQUIRED in practice: oldest framework version the plugin works with. Without it a too-old plugin is never quarantined. |
+| `backwards_compatible` | Not validated but REQUIRED in practice: the oldest framework version the BUNDLED COPY can serve. Only the winning copy's value is read; plugins whose `framework_version` is below it are skipped. Without it a too-old plugin is never quarantined. |
 | `platform` | Required: `'wordpress'` or `'woocommerce'`. `'edd'` is reserved and rejected. |
 | `requirements` | Required: `php` and `wordpress`; `woocommerce` is also required when `platform` is `woocommerce`. A plugin failing a requirement is skipped with an admin notice. |
 | `main_class` or `callback` | At least one. `callback` runs first when callable; otherwise `main_class::instance()` (if the class has a static `instance()`) or `new main_class()`. A `main_class` that does not exist is an invalid definition. |

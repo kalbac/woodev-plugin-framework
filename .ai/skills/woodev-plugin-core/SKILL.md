@@ -96,7 +96,9 @@ For the rest of the settings API, read [settings.md](settings.md).
   Gotcha `docs-internal/gotchas/a-loader-definition-cannot-use-a-framework-class-constant.md`.
 - **Always set `framework_version` AND `backwards_compatible`.** Without the second, a too-old plugin
   is never quarantined. `framework_version` is the version you bundle; `backwards_compatible` is the
-  oldest framework version your plugin works with.
+  oldest framework version THE COPY YOU BUNDLE can still serve. Only the winning (highest) copy's value
+  is read (`Framework_Resolver::load_plugins()`): every plugin whose `framework_version` is below it is
+  skipped with a notice. Raise it only when your bundled copy really breaks older plugins.
 - **`download_id` is the license identity.** It is a positive integer (the EDD product id on
   woodev.ru) and two plugins sharing one is an author error: the second is quarantined and, in admin,
   deactivated. Do not override `Woodev_Plugin::get_download_id()` — it reads the loader definition.
