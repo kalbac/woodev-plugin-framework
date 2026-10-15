@@ -15,13 +15,13 @@ critical path. It works **without a server**: no DSN means the reporter is off a
 
 | Switch | Where | Default |
 |---|---|---|
-| Receiver DSN | constant `WOODEV_ERROR_REPORTING_DSN`, then filter `woodev_error_reporting_dsn` | none — **no built-in DSN** |
+| Receiver DSN, **per plugin** (D8) | filter `woodev_error_reporting_dsn( $dsn, $plugin_id )`; the constant `WOODEV_ERROR_REPORTING_DSN` is its starting value | none — **no built-in DSN** |
 | Merchant consent | option `woodev_error_reporting_enabled` (`yes`/`no`, autoloaded) | `no` |
 
-`Consent::is_active()` = DSN parses AND consent is `yes`. The checkbox «Отправлять отчёты об
+`Consent::is_active()` = at least one registered plugin has a DSN that parses (`is_available()`) AND consent is `yes`. The checkbox «Отправлять отчёты об
 ошибках» sits on Woodev → Лицензии, under the card grid, written through
 `GET|POST /woodev/v1/error-reporting` (`manage_options`, body `{enabled: bool}`, answer
-`{enabled, available}`). It is rendered **only when `available`** (a DSN is configured): a checkbox
+`{enabled, available}`). It is rendered **only when `available`** (some plugin has a DSN): a checkbox
 that changes nothing is not offered. Flip that in `error-reporting-toggle.tsx` if the operator wants
 it always visible. The help text lists exactly what is sent (D5) and says no message texts, no customer data, no address.
 
@@ -85,13 +85,13 @@ The failing request only **enqueues** — no network, ever. `Event_Queue`: optio
 `woodev_error_reporting_queue` (autoload **no**), at most 20 events, oldest dropped; an event whose
 signature is already pending is not stored again; one request queues at most 5. Enqueue schedules the
 single cron event `woodev_error_reporting_dispatch` (+60 s) if none waits. `Dispatcher::run()` (the cron
-callback): re-checks consent and DSN **now** (off → clears the queue), takes the lock row
+callback): re-checks consent **now** (off → clears the queue; the DSN is looked up per event, D8), takes the lock row
 `woodev_error_reporting_lock` by an atomic `INSERT IGNORE` (stale after 300 s, taken over by
 compare-and-set), then for each event applies `Rate_Limiter` — signature `sha1( type | throw-site file |
 line | md5( engine message ) )`, once per `woodev_error_reporting_dedupe_hours` (default 6, transient
 `woodev_er_sig_*`), at most `woodev_error_reporting_daily_cap` per UTC day (default 20, transient
 `woodev_er_day_YYYYMMDD`) — and posts it. Dedupe + cap live only here, serialised by the lock. A failed
-post stops the batch; the whole batch leaves the queue (silent drop). Withdrawing consent also clears it.
+post stops THAT DESTINATION for the run; every event handled leaves the queue (silent drop), see D8. Withdrawing consent also clears it.
 
 **Lock ownership (r3).** The lock row's value is `<unix time>|<random token>`. Only the run that wrote it
 releases it — a conditional `DELETE … WHERE option_value = <its value>` — and before **each** post the run
@@ -210,6 +210,48 @@ SAME `Event_Queue`, so consent, anonymity and anti-spam stay in one place (D1, D
   cap — 30 browser reports queued per UTC hour, whoever sent them (`Rate_Limiter::allow_browser_intake()`,
   filter `woodev_error_reporting_browser_hourly_cap`) — is checked before enqueue, counting only reports
   that are ours. The answer is `200 {queued:bool}` — a foreign or duplicate report is not an error for the browser.
+
+## D8. One DSN per plugin (#1302)
+
+**Operator decision (s152, confirmed s182): one GlitchTip project per plugin; the plugin supplies its own DSN
+from its own code.** With two of our plugins on a site (CDEK + Yandex) a single site-wide DSN made the last
+filter win and sent both plugins' events to one project.
+
+- **Resolve.** `Consent::get_dsn( string $plugin_id )` applies `woodev_error_reporting_dsn( $dsn, $plugin_id )`;
+  `$dsn` arrives holding the site-wide constant (or `''`), so **the constant is the fallback for every plugin**
+  that has no DSN of its own. A plugin answers only for its own id and returns `$dsn` untouched for the rest; a
+  pre-#1302 one-argument callback simply gets `$dsn` and keeps working (it answers for every plugin). The
+  declaration is the filter, not a plugin-class method: the reporter installs before any plugin object exists
+  (D2), so it must be answerable from the plugin's main file, at include time.
+- **Owner.** `Event_Queue::owner( $event )` = `tags.plugin`, else the `release` prefix before `@` — both
+  builders (PHP and browser) set both from `Plugin_Scope`, so an event's owner is always a registered plugin id.
+- **Enqueue.** `Error_Reporter::enqueue()` drops an event whose owner has no DSN (not queued, no cron scheduled);
+  `report_browser()` makes the same check **before** the browser intake cap so a plugin without a DSN cannot
+  spend the site's budget. The queue therefore never fills with events nobody can receive.
+- **Consent stays ONE site-wide checkbox.** `available` = at least one plugin in `Plugin_Scope` has a DSN
+  (`Error_Reporter::plugin_ids()`; empty before `install()`). The DSN never reaches the browser; the browser
+  script (`bases`) still lists every registered plugin — the server drops what has no DSN.
+- **Grouped dispatch.** `Dispatcher::drain()` stays one run under one lock over one queue, but resolves each
+  event's owner → DSN once per run and posts it there. Per destination (`<envelope url>|<public key>`): a failed
+  post marks it dead for the rest of the run — its remaining events are dropped without spending a timeout, the
+  other destinations carry on (before: one failure dropped the whole batch). An event whose owner has no DSN
+  (any more) is dropped. Consent is still re-read before every post. Lock ownership and cron liveness are unchanged.
+- **Rate limits per owner.** `Rate_Limiter::allow( $signature, $browser, $owner )` keeps the dedupe window and
+  the daily budgets (PHP and browser) per owner (`woodev_er_day_YYYYMMDD_<md5(owner)[0..12]>`), so one noisy
+  plugin cannot spend another's budget or hide its errors by sharing a signature. Filters/caps are unchanged
+  (the cap applies per plugin).
+
+**Plugin author snippet** (top level of the plugin's main file, not inside its init callback — the handlers are
+hooked at `install()`, before plugin callbacks run):
+
+```php
+add_filter(
+	'woodev_error_reporting_dsn',
+	static fn( $dsn, $plugin_id = '' ) => 'woocommerce-edostavka' === $plugin_id ? 'https://<key>@errors.example/<project>' : $dsn,
+	10,
+	2
+);
+```
 
 ## Classes (`woodev/error-reporting/`, `Woodev\Framework\Error_Reporting`)
 

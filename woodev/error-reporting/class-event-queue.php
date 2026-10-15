@@ -101,6 +101,29 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Event_Queue' ) ) :
 		}
 
 		/**
+		 * The plugin that owns an event: `tags.plugin`, else the `release` prefix (`<plugin_id>@<version>`).
+		 * Both builders ({@see Event_Builder}, {@see Browser_Event_Builder}) set both; the receiver of the
+		 * event is that plugin's DSN.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string,mixed> $event Queued or about-to-be-queued event.
+		 * @return string Plugin id; empty when the event names no owner.
+		 */
+		public static function owner( array $event ): string {
+			$plugin = $event['tags']['plugin'] ?? '';
+
+			if ( is_string( $plugin ) && '' !== $plugin ) {
+				return $plugin;
+			}
+
+			$release = $event['release'] ?? '';
+			$at      = is_string( $release ) ? strpos( $release, '@' ) : false;
+
+			return false === $at ? '' : substr( $release, 0, $at );
+		}
+
+		/**
 		 * All pending events, oldest first.
 		 *
 		 * @since 2.0.2

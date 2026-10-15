@@ -14,7 +14,7 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Error_Reporter' ) ) :
 	/**
 	 * Collects anonymised reports of OUR plugins' fatal errors and uncaught exceptions for a
 	 * Sentry-compatible receiver (self-hosted GlitchTip), when — and only when — the merchant
-	 * consented and a receiver DSN is configured.
+	 * consented and the owning plugin has a receiver DSN (one project per plugin, #1302).
 	 *
 	 * The failing request does the cheapest possible thing: build the event and put it in
 	 * {@see Event_Queue}. Nothing here touches the network; {@see Dispatcher} sends from WP-Cron.
@@ -116,6 +116,20 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Error_Reporter' ) ) :
 		}
 
 		/**
+		 * Ids of the plugins in scope — the candidates for a per-plugin DSN ({@see Consent::get_dsn()}).
+		 * Empty until {@see self::install()} ran.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string[]
+		 */
+		public static function plugin_ids(): array {
+			return null === self::$scope ? [] : self::$scope->ids();
+		}
+
+		/**
 		 * Whether {@see self::install()} already ran this request.
 		 *
 		 * @since 2.0.2
@@ -166,7 +180,8 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Error_Reporter' ) ) :
 
 				$event = ( new Browser_Event_Builder( self::$scope, self::context(), self::pickup_fields() ) )->from_payload( $payload );
 
-				if ( null === $event || ! ( new Rate_Limiter() )->allow_browser_intake() ) {
+				// Before the intake cap: a report of a plugin with no DSN would only spend the site's budget.
+				if ( null === $event || null === Consent::get_dsn( Event_Queue::owner( $event ) ) || ! ( new Rate_Limiter() )->allow_browser_intake() ) {
 					return false;
 				}
 
@@ -359,6 +374,11 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Error_Reporter' ) ) :
 			$event = apply_filters( 'woodev_error_reporting_event', $event );
 
 			if ( ! is_array( $event ) ) {
+				return false;
+			}
+
+			// An event of a plugin with no DSN has nowhere to go: not queued, so the queue never fills with it.
+			if ( null === Consent::get_dsn( Event_Queue::owner( $event ) ) ) {
 				return false;
 			}
 

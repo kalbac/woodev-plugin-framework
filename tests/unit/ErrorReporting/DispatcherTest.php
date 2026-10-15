@@ -109,6 +109,9 @@ final class DispatcherTest extends ErrorReportingTestCase {
 	/** @var string */
 	private string $dsn = 'https://k@errors.example.ru/7';
 
+	/** @var array<string,string> DSN by plugin id; a plugin not listed gets {@see self::$dsn}. */
+	private array $dsns = [];
+
 	/** @var array<int,array{string,array}> */
 	private array $posts = [];
 
@@ -130,6 +133,7 @@ final class DispatcherTest extends ErrorReportingTestCase {
 		$this->options    = [ 'woodev_error_reporting_enabled' => 'yes' ];
 		$this->transients = [];
 		$this->dsn        = 'https://k@errors.example.ru/7';
+		$this->dsns       = [];
 		$this->posts      = [];
 		$this->scheduled  = [];
 		$this->filters    = [];
@@ -158,9 +162,9 @@ final class DispatcherTest extends ErrorReportingTestCase {
 			}
 		);
 		Functions\when( 'apply_filters' )->alias(
-			function ( $tag, $value ) {
+			function ( $tag, $value, $plugin_id = null ) {
 				if ( 'woodev_error_reporting_dsn' === $tag ) {
-					return $this->dsn;
+					return $this->dsns[ $plugin_id ] ?? $this->dsn;
 				}
 
 				return $this->filters[ $tag ] ?? $value;
@@ -231,6 +235,25 @@ final class DispatcherTest extends ErrorReportingTestCase {
 	}
 
 	/**
+	 * @param string $plugin_id Owner of the event.
+	 * @param int    $line      Throw-site line: makes the signature unique.
+	 * @return void
+	 */
+	private function enqueue_for( string $plugin_id, int $line ): void {
+		$file = 'beta-shipping' === $plugin_id ? self::BETA : self::OURS;
+
+		Event_Queue::push( $this->make_two_plugin_builder()->from_throwable( $this->make_exception( $file . '/a.php', $line ), $plugin_id ) );
+	}
+
+	/**
+	 * @param string $plugin_id Owner whose daily PHP budget it is.
+	 * @return string Transient key of that owner's budget for today.
+	 */
+	private function day_key( string $plugin_id ): string {
+		return 'woodev_er_day_' . gmdate( 'Ymd' ) . '_' . substr( md5( $plugin_id ), 0, 12 );
+	}
+
+	/**
 	 * Calls the private release the way a (possibly paused) lock holder would.
 	 *
 	 * @param string $lock The row value that holder believes it wrote.
@@ -266,6 +289,109 @@ final class DispatcherTest extends ErrorReportingTestCase {
 		$this->assertLessThanOrEqual( 5, $this->posts[0][1]['timeout'] );
 		$this->assertSame( [], Event_Queue::all() );
 		$this->assertSame( [], $this->db->rows, 'the lock is released' );
+	}
+
+	public function test_two_plugins_with_two_dsns_reach_two_destinations(): void {
+		$this->dsns = [
+			'acme-delivery' => 'https://a@errors.example.ru/1',
+			'beta-shipping' => 'https://b@errors.example.ru/2',
+		];
+
+		$this->enqueue_for( 'acme-delivery', 1 );
+		$this->enqueue_for( 'beta-shipping', 2 );
+		$this->enqueue_for( 'acme-delivery', 3 );
+
+		$this->assertSame( 3, Dispatcher::run() );
+
+		$urls = array_map( static fn( array $post ): string => $post[0], $this->posts );
+		$this->assertSame(
+			[
+				'https://errors.example.ru/api/1/envelope/',
+				'https://errors.example.ru/api/2/envelope/',
+				'https://errors.example.ru/api/1/envelope/',
+			],
+			$urls
+		);
+		$this->assertStringContainsString( 'sentry_key=a', $this->posts[0][1]['headers']['X-Sentry-Auth'] );
+		$this->assertStringContainsString( 'sentry_key=b', $this->posts[1][1]['headers']['X-Sentry-Auth'] );
+		$this->assertStringContainsString( '"release":"beta-shipping@2.0.0"', $this->posts[1][1]['body'], 'the event body is the owner\'s own' );
+		$this->assertSame( [], Event_Queue::all() );
+	}
+
+	public function test_events_of_a_plugin_without_a_dsn_are_dropped_and_never_posted(): void {
+		$this->dsn  = '';
+		$this->dsns = [ 'beta-shipping' => 'https://b@errors.example.ru/2' ];
+
+		$this->enqueue_for( 'acme-delivery', 1 );
+		$this->enqueue_for( 'beta-shipping', 2 );
+
+		$this->assertSame( 1, Dispatcher::run() );
+
+		$this->assertCount( 1, $this->posts );
+		$this->assertSame( 'https://errors.example.ru/api/2/envelope/', $this->posts[0][0] );
+		$this->assertSame( [], Event_Queue::all(), 'the queue does not keep what nobody can receive' );
+	}
+
+	public function test_the_site_wide_fallback_dsn_serves_a_plugin_with_none_of_its_own(): void {
+		// The filter hands back the constant's value for every plugin but beta-shipping, which has a DSN.
+		$this->dsns = [ 'beta-shipping' => 'https://b@errors.example.ru/2' ];
+
+		$this->enqueue_for( 'acme-delivery', 1 );
+		$this->enqueue_for( 'beta-shipping', 2 );
+
+		$this->assertSame( 2, Dispatcher::run() );
+
+		$this->assertSame( 'https://errors.example.ru/api/7/envelope/', $this->posts[0][0], 'the fallback' );
+		$this->assertSame( 'https://errors.example.ru/api/2/envelope/', $this->posts[1][0] );
+	}
+
+	public function test_one_destination_failing_does_not_block_or_drop_the_other(): void {
+		$this->dsns = [
+			'acme-delivery' => 'https://a@errors.example.ru/1',
+			'beta-shipping' => 'https://b@errors.example.ru/2',
+		];
+
+		// acme's receiver is unreachable; beta's is fine. The queue interleaves them.
+		$this->enqueue_for( 'acme-delivery', 1 );
+		$this->enqueue_for( 'beta-shipping', 2 );
+		$this->enqueue_for( 'acme-delivery', 3 );
+		$this->enqueue_for( 'beta-shipping', 4 );
+
+		Functions\when( 'wp_remote_post' )->alias(
+			function ( $url, $args ) {
+				$this->posts[] = [ $url, $args ];
+
+				return $url;
+			}
+		);
+		Functions\when( 'is_wp_error' )->alias(
+			static function ( $response ) {
+				return 'https://errors.example.ru/api/1/envelope/' === $response;
+			}
+		);
+
+		$this->assertSame( 2, Dispatcher::run(), 'both of beta\'s events were sent' );
+
+		$urls = array_map( static fn( array $post ): string => $post[0], $this->posts );
+		$this->assertSame( 1, count( array_keys( $urls, 'https://errors.example.ru/api/1/envelope/', true ) ), 'no second timeout spent on the dead destination' );
+		$this->assertSame( 2, count( array_keys( $urls, 'https://errors.example.ru/api/2/envelope/', true ) ) );
+		$this->assertSame( [], Event_Queue::all(), 'the failed destination\'s events are dropped, the other\'s were sent' );
+	}
+
+	public function test_rate_limits_are_kept_per_plugin(): void {
+		$this->filters['woodev_error_reporting_daily_cap'] = 1;
+		$this->dsns = [
+			'acme-delivery' => 'https://a@errors.example.ru/1',
+			'beta-shipping' => 'https://b@errors.example.ru/2',
+		];
+
+		$this->enqueue_for( 'acme-delivery', 1 );
+		$this->enqueue_for( 'acme-delivery', 2 );
+		$this->enqueue_for( 'beta-shipping', 3 );
+
+		$this->assertSame( 2, Dispatcher::run(), 'acme spent its one report; beta still has its own budget' );
+		$this->assertSame( 1, $this->transients[ $this->day_key( 'acme-delivery' ) ] );
+		$this->assertSame( 1, $this->transients[ $this->day_key( 'beta-shipping' ) ] );
 	}
 
 	public function test_a_signature_seen_inside_the_window_is_dropped_not_sent(): void {
@@ -427,7 +553,7 @@ final class DispatcherTest extends ErrorReportingTestCase {
 		// releases «its» lock, C enters while B is still draining. Played here from B's side.
 		$this->enqueue( 1 );
 		$this->db->rows[ Dispatcher::LOCK_OPTION ] = ( time() - Dispatcher::LOCK_TTL - 10 ) . '|owner-a';
-		$this->transients[ 'woodev_er_day_' . gmdate( 'Ymd' ) ] = 19;
+		$this->transients[ $this->day_key( 'acme-delivery' ) ] = 19;
 
 		$competing = null;
 		$started   = false;
@@ -450,7 +576,7 @@ final class DispatcherTest extends ErrorReportingTestCase {
 
 		$this->assertSame( 0, $competing, 'C finds B\'s lock intact' );
 		$this->assertCount( 1, $this->posts, 'one post, not two' );
-		$this->assertSame( 20, $this->transients[ 'woodev_er_day_' . gmdate( 'Ymd' ) ], 'the daily counter moved once' );
+		$this->assertSame( 20, $this->transients[ $this->day_key( 'acme-delivery' ) ], 'the daily counter moved once' );
 	}
 
 	public function test_a_run_that_lost_its_lock_stops_posting_and_leaves_the_rest_for_the_new_owner(): void {

@@ -25,6 +25,9 @@ final class ErrorReporterTest extends ErrorReportingTestCase {
 	/** @var string */
 	private string $dsn = 'https://k@errors.example.ru/7';
 
+	/** @var array<string,string> DSN by plugin id; a plugin not listed gets {@see self::$dsn}. */
+	private array $dsns = [];
+
 	/** @var array<int,array{string,array}> wp_remote_post calls — must stay empty: the request never sends */
 	private array $posts = [];
 
@@ -60,6 +63,7 @@ final class ErrorReporterTest extends ErrorReportingTestCase {
 		$this->options          = [ 'woodev_error_reporting_enabled' => 'yes' ];
 		$this->transients       = [];
 		$this->dsn              = 'https://k@errors.example.ru/7';
+		$this->dsns             = [];
 		$this->posts            = [];
 		$this->scheduled        = [];
 		$this->actions          = [];
@@ -75,8 +79,8 @@ final class ErrorReporterTest extends ErrorReportingTestCase {
 			}
 		);
 		Functions\when( 'apply_filters' )->alias(
-			function ( $tag, $value ) {
-				return 'woodev_error_reporting_dsn' === $tag ? $this->dsn : $value;
+			function ( $tag, $value, $plugin_id = null ) {
+				return 'woodev_error_reporting_dsn' === $tag ? ( $this->dsns[ $plugin_id ] ?? $this->dsn ) : $value;
 			}
 		);
 		Functions\when( 'get_transient' )->alias(
@@ -210,6 +214,34 @@ final class ErrorReporterTest extends ErrorReportingTestCase {
 	}
 
 	/**
+	 * The registry of acme-delivery AND beta-shipping (two projects, #1302).
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function registry_of_two(): array {
+		$errors     = [];
+		$definition = Framework_Plugin_Loader_Definition::from_array(
+			[
+				'plugin_id'         => 'beta-shipping',
+				'plugin_name'       => 'Beta',
+				'plugin_version'    => '2.0.0',
+				'framework_version' => '2.0.1',
+				'plugin_file'       => self::BETA . '/beta-shipping.php',
+				'platform'          => Framework_Plugin_Loader_Definition::PLATFORM_WORDPRESS,
+				'download_id'       => 78,
+				'main_class'        => 'Beta_Plugin',
+				'requirements'      => [
+					'php'       => '7.4',
+					'wordpress' => '6.3',
+				],
+			],
+			$errors
+		);
+
+		return array_merge( $this->registry(), [ $definition->to_legacy_plugin() ] );
+	}
+
+	/**
 	 * @return array<int,array<string,mixed>> Events waiting in the queue option.
 	 */
 	private function queued(): array {
@@ -227,6 +259,29 @@ final class ErrorReporterTest extends ErrorReportingTestCase {
 		$this->assertFalse( Error_Reporter::capture( $this->make_exception( self::OURS . '/a.php', 1 ), 'acme-delivery' ) );
 		$this->assertSame( [], $this->queued() );
 		$this->assertSame( [], $this->scheduled );
+	}
+
+	public function test_the_reporter_is_available_when_only_one_of_two_plugins_has_a_dsn(): void {
+		$this->dsn  = '';
+		$this->dsns = [ 'beta-shipping' => 'https://b@errors.example.ru/2' ];
+
+		$this->assertTrue( Error_Reporter::install( $this->registry_of_two() ), 'the handlers are hooked: one plugin can report' );
+		$this->assertTrue( \Woodev\Framework\Error_Reporting\Consent::is_available() );
+		$this->assertSame( [ 'acme-delivery', 'beta-shipping' ], Error_Reporter::plugin_ids() );
+	}
+
+	public function test_an_event_of_a_plugin_without_a_dsn_is_not_queued_while_its_neighbours_is(): void {
+		$this->dsn  = '';
+		$this->dsns = [ 'beta-shipping' => 'https://b@errors.example.ru/2' ];
+		Error_Reporter::install( $this->registry_of_two() );
+
+		$this->assertFalse( Error_Reporter::capture( $this->make_exception( self::OURS . '/a.php', 1 ) ), 'acme has no DSN: nowhere to send, nothing is queued' );
+		$this->assertSame( [], $this->queued() );
+		$this->assertSame( [], $this->scheduled, 'and no drain is scheduled for it' );
+
+		$this->assertTrue( Error_Reporter::capture( $this->make_exception( self::BETA . '/b.php', 2 ) ) );
+		$this->assertCount( 1, $this->queued() );
+		$this->assertSame( 'beta-shipping@2.0.0', $this->queued()[0]['release'] );
 	}
 
 	public function test_without_consent_nothing_is_hooked_and_nothing_is_queued(): void {

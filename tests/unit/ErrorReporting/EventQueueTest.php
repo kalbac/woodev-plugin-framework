@@ -201,4 +201,13 @@ final class EventQueueTest extends ErrorReportingTestCase {
 		$this->assertSame( $extra['event_id'], $all[ Event_Queue::LIMIT - 1 ]['event_id'] );
 		$this->assertCount( 16, array_filter( $all, static fn( array $e ): bool => ! Event_Queue::is_browser( $e ) ) );
 	}
+
+	public function test_the_owner_of_an_event_is_its_plugin_tag_else_the_release_prefix(): void {
+		$this->assertSame( 'acme-delivery', Event_Queue::owner( $this->make_builder()->from_throwable( $this->make_exception( self::OURS . '/a.php', 1 ) ) ) );
+		$this->assertSame( 'beta-shipping', Event_Queue::owner( $this->make_two_plugin_builder()->from_throwable( $this->make_exception( self::BETA . '/a.php', 1 ) ) ) );
+		$this->assertSame( 'cdek', Event_Queue::owner( [ 'release' => 'cdek@2.1.0' ] ), 'a filter may have stripped the tags' );
+		$this->assertSame( 'tagged', Event_Queue::owner( [ 'tags' => [ 'plugin' => 'tagged' ], 'release' => 'other@1' ] ) );
+		$this->assertSame( '', Event_Queue::owner( [ 'release' => 'no-at-sign' ] ) );
+		$this->assertSame( '', Event_Queue::owner( [] ) );
+	}
 }

@@ -145,6 +145,17 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Plugin_Scope' ) ) :
 		}
 
 		/**
+		 * Ids of every plugin in scope (a refused single-file plugin is not).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string[]
+		 */
+		public function ids(): array {
+			return array_values( array_unique( array_column( $this->roots, 'id' ) ) );
+		}
+
+		/**
 		 * The owner of the first (innermost) file that lies under a registered plugin directory.
 		 *
 		 * @since 2.0.2

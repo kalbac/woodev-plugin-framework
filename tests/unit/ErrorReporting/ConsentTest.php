@@ -18,14 +18,24 @@ final class ConsentTest extends ErrorReportingTestCase {
 	/** @var array<string,mixed> */
 	private array $options = [];
 
-	/** @var string */
+	/** @var string DSN every plugin gets from the filter ('' = the filter leaves the value alone). */
 	private string $dsn = '';
+
+	/** @var array<string,string> DSN by plugin id: a plugin answering only for its own id. */
+	private array $dsns = [];
+
+	/** @var array<int,array{mixed,mixed}> Arguments the DSN filter was applied with: [ $value, $plugin_id ]. */
+	private array $filter_calls = [];
 
 	protected function setUp(): void {
 		parent::setUp();
 
-		$this->options = [];
-		$this->dsn     = '';
+		$this->options      = [];
+		$this->dsn          = '';
+		$this->dsns         = [];
+		$this->filter_calls = [];
+
+		$this->install_scope( $this->make_two_plugin_scope() );
 
 		Functions\when( 'get_option' )->alias(
 			function ( $name, $default = false ) {
@@ -47,8 +57,14 @@ final class ConsentTest extends ErrorReportingTestCase {
 			}
 		);
 		Functions\when( 'apply_filters' )->alias(
-			function ( $tag, $value ) {
-				return 'woodev_error_reporting_dsn' === $tag && '' !== $this->dsn ? $this->dsn : $value;
+			function ( $tag, $value, $plugin_id = null ) {
+				if ( 'woodev_error_reporting_dsn' !== $tag ) {
+					return $value;
+				}
+
+				$this->filter_calls[] = [ $value, $plugin_id ];
+
+				return $this->dsns[ $plugin_id ] ?? ( '' !== $this->dsn ? $this->dsn : $value );
 			}
 		);
 	}
@@ -79,7 +95,7 @@ final class ConsentTest extends ErrorReportingTestCase {
 	}
 
 	public function test_there_is_no_built_in_receiver(): void {
-		$this->assertNull( Consent::get_dsn() );
+		$this->assertNull( Consent::get_dsn( 'acme-delivery' ) );
 		$this->assertFalse( Consent::is_available() );
 	}
 
@@ -87,7 +103,66 @@ final class ConsentTest extends ErrorReportingTestCase {
 		$this->dsn = 'https://k@errors.example.ru/7';
 
 		$this->assertTrue( Consent::is_available() );
-		$this->assertSame( 'https://errors.example.ru/api/7/envelope/', Consent::get_dsn()->get_envelope_url() );
+		$this->assertSame( 'https://errors.example.ru/api/7/envelope/', Consent::get_dsn( 'acme-delivery' )->get_envelope_url() );
+	}
+
+	public function test_the_filter_gets_the_plugin_id_and_each_plugin_has_its_own_receiver(): void {
+		$this->dsns = [
+			'acme-delivery' => 'https://a@errors.example.ru/1',
+			'beta-shipping' => 'https://b@errors.example.ru/2',
+		];
+
+		$this->assertSame( 'https://errors.example.ru/api/1/envelope/', Consent::get_dsn( 'acme-delivery' )->get_envelope_url() );
+		$this->assertSame( 'https://errors.example.ru/api/2/envelope/', Consent::get_dsn( 'beta-shipping' )->get_envelope_url() );
+		$this->assertContains( [ '', 'beta-shipping' ], $this->filter_calls, 'the owner id is the filter\'s second argument' );
+	}
+
+	public function test_a_plugin_without_a_dsn_has_no_receiver_while_another_does(): void {
+		$this->dsns = [ 'beta-shipping' => 'https://b@errors.example.ru/2' ];
+
+		$this->assertNull( Consent::get_dsn( 'acme-delivery' ) );
+		$this->assertNotNull( Consent::get_dsn( 'beta-shipping' ) );
+		$this->assertNull( Consent::get_dsn( '' ), 'an event naming no owner has no receiver' );
+	}
+
+	public function test_available_when_at_least_one_registered_plugin_has_a_dsn(): void {
+		$this->assertFalse( Consent::is_available() );
+
+		$this->dsns = [ 'beta-shipping' => 'https://b@errors.example.ru/2' ];
+		$this->assertTrue( Consent::is_available() );
+
+		$this->dsns = [ 'not-registered' => 'https://b@errors.example.ru/2' ];
+		$this->assertFalse( Consent::is_available(), 'a DSN for a plugin that is not registered counts for nothing' );
+	}
+
+	public function test_a_site_has_no_receivers_before_the_reporter_knows_its_plugins(): void {
+		$this->dsn = 'https://k@errors.example.ru/7';
+		\Woodev\Framework\Error_Reporting\Error_Reporter::reset();
+
+		$this->assertFalse( Consent::is_available() );
+	}
+
+	public function test_a_legacy_one_argument_filter_callback_keeps_working(): void {
+		// A callback that predates #1302 knows nothing of the plugin id: it answers for every plugin.
+		$this->dsn = 'https://k@errors.example.ru/7';
+
+		$this->assertNotNull( Consent::get_dsn( 'acme-delivery' ) );
+		$this->assertNotNull( Consent::get_dsn( 'beta-shipping' ) );
+		$this->assertTrue( Consent::is_available() );
+	}
+
+	/**
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_the_site_wide_constant_is_the_fallback_for_every_plugin(): void {
+		define( 'WOODEV_ERROR_REPORTING_DSN', 'https://k@errors.example.ru/9' );
+
+		$this->dsns = [ 'beta-shipping' => 'https://b@errors.example.ru/2' ];
+
+		$this->assertSame( 'https://errors.example.ru/api/9/envelope/', Consent::get_dsn( 'acme-delivery' )->get_envelope_url(), 'no DSN of its own: the constant' );
+		$this->assertSame( 'https://errors.example.ru/api/2/envelope/', Consent::get_dsn( 'beta-shipping' )->get_envelope_url(), 'its own DSN wins over the constant' );
+		$this->assertContains( [ 'https://k@errors.example.ru/9', 'acme-delivery' ], $this->filter_calls, 'the filter receives the constant as its value' );
 	}
 
 	public function test_a_garbage_dsn_counts_as_no_receiver(): void {
