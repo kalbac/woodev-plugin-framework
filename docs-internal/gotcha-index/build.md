@@ -25,5 +25,6 @@
 - [build/wp-scripts] **Only an imported `style.(s)css` lands in `style-index.css`; any other imported stylesheet goes to `index.css`, which the Blocks integration never registers.** → [a-plain-css-import-in-the-blocks-bundle-lands-in-index-css-which-nothing-loads](../gotchas/a-plain-css-import-in-the-blocks-bundle-lands-in-index-css-which-nothing-loads.md) (s160)
 
 ## Related
+- [build/website] **Astro bundles a page's imported modules into `dist/`: resolve repo paths from `process.cwd()` (the build runs in `website/`), never from `import.meta.url`.** → [astro-bundles-page-modules-into-dist-resolve-repo-paths-from-cwd](../gotchas/astro-bundles-page-modules-into-dist-resolve-repo-paths-from-cwd.md)
 
 - [../GOTCHAS.md](../GOTCHAS.md) — the topic map

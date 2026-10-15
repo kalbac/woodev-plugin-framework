@@ -83,6 +83,7 @@
 - [tooling/worktrees] **A fresh CDEK-plugin worktree has no `vendor/` and no `woodev/` — copy vendor, run `scripts/sync-framework.sh`.** → [a-fresh-cdek-plugin-worktree-has-no-vendor-and-no-woodev](../gotchas/a-fresh-cdek-plugin-worktree-has-no-vendor-and-no-woodev.md) (s160)
 
 ## Related
+- [tooling/github] **A force-pushed commit stays fetchable by SHA on a PUBLIC repo until GitHub GC — no commercial source or keys on any pushed branch, worker branches included.** → [a-force-pushed-commit-stays-fetchable-by-sha-on-a-public-repo](../gotchas/a-force-pushed-commit-stays-fetchable-by-sha-on-a-public-repo.md)
 
 - [../GOTCHAS.md](../GOTCHAS.md) — the topic map
 - [tooling/git] **`gh pr merge --delete-branch` from a DETACHED checkout merges the PR, then errors «not on any branch» — it reads as a refusal, a retry is a no-op, and the remote branch survives. Pass `-R <owner/repo>` and verify with `gh pr view`.** → [gh-pr-merge-from-a-detached-head-merges-then-errors](../gotchas/gh-pr-merge-from-a-detached-head-merges-then-errors.md) (s149)
