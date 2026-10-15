@@ -282,10 +282,10 @@ only consumer; they get rewritten once everything is ready.
 
 ## Next Actions
 
-**Next:** the operator's Yandex rig findings (he holds a list — match each against planned cards first); #1253(b) explicit
-«Выгрузить повторно (я проверил кабинет)» (visible); #1262 closes after a real 128 MB web run on the rig; #1273 updater backoff
-(before release). Then the board («Приоритет») — #1269, yandex#52/#57/#58/#62/#63. No live Yandex export check (yandex#47).
-Handoff `next-session-prompt.md`; framework: #1263 is block-only (after v2).
+**Next:** #1293 block-checkout address race (framework locality chooser vs WooCommerce focusout push; block-only, after-release
+class but first in the queue); #1169 one clean CDEK acceptance run (order 1444 cancelled s181); then the board («Приоритет»).
+The rig keeps `ship_to_destination=billing_only` as the norm (operator s181: CIS shops ship to the billing address). Handoff
+`next-session-prompt.md`.
 
 **Issue lists and priorities live on the board.** `FUTURE-BACKLOG.md` is frozen.
 
