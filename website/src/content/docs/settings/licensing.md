@@ -5,7 +5,7 @@ description: Learn how a plugin declares licence support through the public API.
 
 In this page you will learn the four things a plugin author needs to know about licensing: where the product id goes, where customers enter their key, how to mark a plugin that is sold without a key, and what a shipping plugin does while the licence is not active.
 
-The framework handles licences and updates. Your plugin contains no licensing code.
+The framework handles licences and updates: you do not implement licence validation or key management in your plugin. What is left for you is the few declarations below.
 
 ## 1. The product id is `download_id`
 

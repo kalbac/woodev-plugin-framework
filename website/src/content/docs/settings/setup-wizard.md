@@ -11,7 +11,7 @@ The wizard is a full-screen, step-by-step page that walks a merchant through the
 
 The framework handles the rest:
 
-- **First install.** The first time the plugin is installed, an administrator is sent to the wizard once. Bulk activation does not redirect.
+- **First install.** The first time the plugin is installed, a user with the wizard's required capability (an administrator, or a shop manager for a WooCommerce wizard) is sent to the wizard once. Bulk activation does not redirect.
 - **Until it is finished.** A notice «Завершите настройку My Carrier» (Finish setting up My Carrier) with a «Запустить мастер настройки» (Run the setup wizard) button stays in wp-admin, and the plugin row on the Plugins screen carries a «Настройка» (Setup) link.
 - **The merchant can leave.** «Настрою позже» (I'll do it later) marks the wizard as skipped. The notice stays until the merchant reaches the last step.
 
