@@ -18,8 +18,9 @@ wrong.
 
 ## Root cause: webpack resolves the shared `node_modules` symlink out of the project
 
-`orca.yaml` clone-copies shared directories on macOS but shares `node_modules` by **symlink**
-elsewhere, so a fresh non-macOS worktree can run the JS gate without a 658 MB install. Webpack resolves that symlink to its real path, so from inside such a worktree every
+`orca.yaml` shares `node_modules` by **symlink** — on macOS too (measured s181, 15.10.2026: `ls -ld node_modules` in an
+Orca worktree → `node_modules -> /Users/…/woodev-plugin-framework/node_modules`), so a fresh worktree can run the JS gate without a
+658 MB install. Webpack resolves that symlink to its real path, so from inside such a worktree every
 module request is emitted relative to a directory *outside* the project:
 
 ```text
@@ -71,6 +72,15 @@ rebuilding produced exactly the ten files CI had flagged.
 
   `--detach` works even though the branch is checked out in the worktree; a normal `git checkout`
   of it would be refused.
+- **When the primary checkout cannot be switched (the rig is serving it), build in the worktree from a REAL `node_modules`**
+  (s181, PR #1288: CI parity red → green with this): replace the symlink with an APFS clone and rebuild —
+
+  ```bash
+  rm node_modules && cp -c -R <primary>/node_modules ./node_modules   # ~20 s, copy-on-write
+  npm run build && git add woodev/assets/build && git commit && git push
+  ```
+
+  The pre-push hook then also reproduces the bundles. Remove the worktree through Orca afterwards (the clone is gitignored).
 - **A local `npm run build` is never parity evidence.** Say "CI will decide", and treat the
   `Assets build parity` job as the only authority.
 - Always run the **full** `npm run build`. `control-field.js` and `location-picker-field.js` are
