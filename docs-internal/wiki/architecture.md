@@ -46,6 +46,23 @@ the `init_*` methods to supply their own implementations. `__construct()` is an 
 
 `VERSION` lives here — and **raising it on `main` publishes a release** (#285).
 
+**Browser assets — three kinds, one rule (#247).** The framework serves (1) `wp-scripts` bundles from
+`woodev/assets/build/` (React pages; minified by the build, versioned from `index.asset.php`, never
+suffixed), (2) vendored third-party `*.min.*` files (`font-awesome`, `jquery-confirm`, `imask`; shipped as
+they are, referenced by their literal names), and (3) hand-written ES5/CSS under `woodev/assets/{js,css}`,
+`woodev/payment-gateway/assets/{js,css}` and `woodev/shipping-method/assets/{js,css}`. Every file of kind
+3 has a committed `name.min.js` / `name.min.css` sibling written by `npm run build:min`
+(`scripts/build-min-assets.mjs`: terser + cssnano, per file, no bundling, no source maps; `npm run build`
+runs it too; `npm run lint:min` checks it). The ONE switch is `Woodev_Plugin::get_assets_suffix()` — `''`
+when `SCRIPT_DEBUG` is true, else `'.min'`, exactly WooCommerce's rule. **`WP_DEBUG` alone does not select
+the readable files** (it is on in staging for error reporting); `get_assets_version()` keeps its own
+`SCRIPT_DEBUG || WP_DEBUG` test because that only busts a cache. Every enqueue of a kind-3 file appends the
+helper before the extension; the shipping `Checkout_Handler` / `Pickup_Handler` do it once, inside their
+private `asset_path()`. No other code spells `.min`. `tests/unit/MinifiedAssetsContractTest.php` fails on a
+source without a sibling, an orphan sibling, an enqueue that skips the helper, or an asset path that points
+at no file; the CI `assets` job rebuilds and diffs `build/` plus every `*.min.js` / `*.min.css`. The payment
+gateway's `dist/` Parcel bundles are already minified and are referenced by their literal names.
+
 ## Subsystems (base constructor, or the platform base that owns them)
 
 | Class | Purpose |

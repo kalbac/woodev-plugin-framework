@@ -96,6 +96,18 @@ Declared in the LOADER DEFINITION's `supported_features` ([loading.md](loading.m
   gotcha `blocks-handler-typed-property-trap` is resolved, the lesson stands: a base-class property
   initialised only by a subclass must be nullable).
 
+## Your own browser assets: `get_assets_suffix()`
+
+The framework ships each hand-written css/js with a minified `name.min.js` / `name.min.css` sibling and
+loads it unless `SCRIPT_DEBUG` is on. If your plugin does the same for ITS assets, ask the base class for
+the suffix instead of spelling `.min`:
+`$this->get_plugin_url() . '/assets/js/my-script' . Woodev_Plugin::get_assets_suffix() . '.js'`
+(static, so it also works from a static hook; `''` under `SCRIPT_DEBUG`, `'.min'` otherwise — `WP_DEBUG`
+alone does not switch, like WooCommerce). Ship BOTH files and make your build write the sibling; the
+framework's own pair is built by `scripts/build-min-assets.mjs`. Cache-busting is a separate method:
+`get_assets_version()` returns `time()` under `SCRIPT_DEBUG` or `WP_DEBUG` and the plugin version otherwise.
+Framework bundles under `woodev/assets/build/` and the framework's own files are not yours to suffix.
+
 ## Hooks the plugin class should and should not register
 
 - Register request-scoped wiring in `init_plugin()` / `init_admin()` or in your own handler's constructor.
