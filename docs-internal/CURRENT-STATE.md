@@ -6,7 +6,8 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-15 (s182).** 🎉 **Framework 2.0.2 is RELEASED** — tag `v2.0.2`, `main` `898a527e` (#1307; GitHub Release
+**As of 2026-10-16 (s183):** public docs site live (Starlight, all pages); repo cleaned (autodev, QWEN, legacy fixtures);
+`planned-release` 2.0.3 (semver). **s182:** 🎉 **Framework 2.0.2 is RELEASED** — tag `v2.0.2`, `main` `898a527e` (#1307; GitHub Release
 `woodev-plugin-framework-2.0.2.zip`). **The release ZIP is the `woodev/` directory ONLY** (`git archive HEAD woodev/`, operator
 15.10.2026: no docs, vendor or tooling — the framework has no runtime Composer deps). Since s181: #1300 block-checkout address
 race fixed (#1293), #1303 one GlitchTip DSN per plugin (#1302), #1305 minified `.min` siblings + `get_assets_suffix()` (#247,
@@ -73,7 +74,8 @@ the highest installed `2.2.5.5` (operator, 06.09.2026), so the update reaches ev
 
 ✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — no quota consumed; the exhaustion symptom is gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`.
 
-**Test measurements:** framework unit **7398** / jest **3409** on main after #1305 (CI green on every merged head); full e2e on minified assets **45 passed / 6 failed (#1306, pre-existing) / 1 flake / 3 skipped**; Yandex unit **1095** (#104); CDEK unit **1524+** (v2 + #109); CDEK acceptance **105 / 0 / 12** — measured 15.10.2026 (s182).
+**Test measurements:** framework unit **7398** / jest **3409** on main after #1305 (CI green on every merged head); full e2e on minified assets **45 passed / 6 failed (#1306, pre-existing) / 1 flake / 3 skipped**; Yandex unit **1095** (#104); CDEK unit **1524+** (v2 + #109); CDEK acceptance **105 / 0 / 12** — measured 15.10.2026 (s182). After #1311 the unit suite skips **1** (was 6) — the Yandex/CDEK contract tests now run on
+committed fixtures (s183).
 Integration is CI/coordinator-owned. Re-measure before quoting these as current gate evidence.
 
 ⚠ **A `.ts` msgid fails `lint:i18n-sources`** — it extracts from the BUILT bundle (s129).
@@ -280,7 +282,10 @@ there is historical evidence, not a fresh acceptance run. The live programme sta
 
 ### Public docs
 
-Public docs are being rewritten against framework 2.0.2 in s183; scope and publishing rules: `DOCS-SCHEMA.md` → "Public docs".
+✅ **Published (s183):** Astro Starlight site in `website/` → <https://kalbac.github.io/woodev-plugin-framework/> (GitHub
+Pages, source Actions; `docs.yml` builds every PR touching `website/**` and deploys on `main`). All 33 pages written
+against 2.0.x and critic-checked; the framework version is read from `Woodev_Plugin::VERSION` at build time. Rules:
+`DOCS-SCHEMA.md` → "Public docs". Code/docblock discrepancies found while writing: #1316.
 
 ## Next Actions
 
