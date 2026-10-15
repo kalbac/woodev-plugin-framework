@@ -28,6 +28,84 @@ from it (s135 audit), so they were removed rather than re-synced.
 | `DOCS-SCHEMA.md` | Doc format rules, lint checklist, compilation protocol |
 | `platform-v2-execution-protocol.md` | Operating rulebook + resume protocol + authority chain |
 
+## Repository map
+
+```
+woodev_framework/
+├── CLAUDE.md                        # ← Entry point for Claude Code agents
+├── AGENTS.md                        # ← Entry point for all other AI agents (this file)
+├── docs/                            # Public docs → MkDocs; Pages deployment currently disabled
+│   ├── README.md, getting-started.md, core-framework.md …
+│   ├── admin-module.md, settings-api.md, helpers.md …
+│   ├── api-module.md, rest-api.md …
+│   ├── shipping-method.md, payment-gateway.md, box-packer.md …
+│   ├── utilities.md, compatibility.md, handlers.md
+│   └── overrides/home.html, assets/stylesheets/extra.css
+├── docs-internal/                   # Internal docs → AI agents only
+│   ├── next-session-prompt.md       # Per-session handoff — every session starts here
+│   ├── CURRENT-STATE.md, SESSION-LOG.md (index), GOTCHAS.md (topic map)
+│   ├── sessions/                     # Per-session detail files
+│   ├── AGENT-RULES.md, DOCS-INDEX.md, DOCS-SCHEMA.md, FUTURE-BACKLOG.md (frozen)
+│   ├── gotcha-index/                # One-line gotcha indexes, one file per topic (mapped by GOTCHAS.md)
+│   ├── gotchas/                     # Atomic gotcha detail files
+│   ├── adr/                         # Architecture Decision Records
+│   ├── wiki/                        # Compiled topic references
+│   ├── specs/                       # Feature specifications
+│   ├── plans/                       # Implementation plans
+│   ├── research/                    # Research notes
+│   ├── reviews/                     # Review reports
+│   ├── migration/                   # Per-plugin v2 migration docs
+│   └── archive/                     # Resolved historical docs
+├── woodev/                          # Framework source code
+│   ├── bootstrap.php                # Singleton bootstrap loader
+│   ├── class-plugin.php             # Woodev_Plugin abstract base (VERSION here)
+│   ├── class-lifecycle.php          # Install/upgrade lifecycle
+│   ├── class-helper.php             # Static utility helpers
+│   ├── admin/                       # Admin pages
+│   ├── api/                         # HTTP API base classes
+│   ├── box-packer/                  # Box packing algorithm
+│   ├── compatibility/               # HPOS + WooCommerce compat
+│   ├── handlers/                    # Blocks + script handlers
+│   ├── licensing/                   # License key + EDD store integration (incl. updater/ — plugin update mechanism)
+│   ├── payment-gateway/             # Payment gateway base classes (~13.9k lines; main file ~3.6k)
+│   ├── rest-api/                    # REST API routes
+│   ├── settings-api/                # Typed settings framework
+│   ├── shipping-method/             # Shipping plugin + method bases
+│   └── utilities/                   # Async requests, background jobs
+├── tests/
+│   ├── unit/                        # Brain Monkey + Mockery (no WP needed)
+│   ├── integration/                 # WP_UnitTestCase (wp-env)
+│   └── _fixtures/                   # 10 fixture plugins (+ data fixtures)
+├── .ai/                             # AI agents and skills
+│   ├── agents/                      # 6 sub-agents
+│   ├── skills/                      # 7 skill directories
+│   └── QUICK-REFERENCE.md
+└── .github/workflows/               # CI: ci.yml, dependabot-auto-merge.yml, docs.yml,
+                                     #     integration-tests.yml, markdown-lint.yml, pr-triage.yml
+```
+
+CI workflows: `ci.yml` (jobs: `unit-tests`, `test-js` — jest, added s55 PR #184, `secrets` — gitleaks, `assets` — build parity, `release`), `dependabot-auto-merge.yml`, `docs.yml`, `integration-tests.yml`, `markdown-lint.yml`, `pr-triage.yml`.
+
+---
+
+## Tech stack
+
+| Layer | Technology | Version |
+|-------|-----------|---------|
+| Language | PHP | 7.4–8.x (platform: 8.1) |
+| WordPress | WP API | ≥6.6 |
+| WooCommerce | WC API | ≥7.0 |
+| Testing (unit) | Brain Monkey + Mockery | ^2.6 / ^1.6 |
+| Testing (integration) | WP PHPUnit + wp-env | ^6.9 |
+| Linting | PHP_CodeSniffer (WPCS) | ^3.9 / ^3.1 |
+| Static analysis | PHPStan | ^1.12 (level 3) |
+| Docs build | MkDocs Material | 9.6.7 (Python) |
+| Changelog | git-cliff | latest |
+| CI/CD | GitHub Actions | — |
+| Composer | PHP dependency manager | ^2 |
+
+---
+
 ## Architecture & Direction
 
 | File | Purpose |
@@ -111,7 +189,7 @@ Passed-gate audits, the completed platform-v2 program docs (plans/specs/prompts)
 
 ## Public Docs
 
-`docs/` (repo root) → GH Pages, public-facing. ⚠️ Registration examples currently teach the v2-tombstoned `register_plugin()` positional API — see `CURRENT-STATE.md` → "Public-docs API staleness".
+`docs/` (repo root) are public-facing. They are being rewritten against framework 2.0.2 in s183; scope and publishing rules are in [`DOCS-SCHEMA.md`](DOCS-SCHEMA.md#public-docs-docs--how-to-work-with-them).
 
 ---
 
