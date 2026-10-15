@@ -318,6 +318,43 @@ final class DispatcherTest extends ErrorReportingTestCase {
 		$this->assertSame( [], Event_Queue::all() );
 	}
 
+	public function test_identical_raw_signatures_of_two_owners_both_reach_their_own_projects_through_the_queue(): void {
+		$this->dsns = [
+			'acme-delivery' => 'https://a@errors.example.ru/1',
+			'beta-shipping' => 'https://b@errors.example.ru/2',
+		];
+
+		// Both plugins hit the same foreign throw site; the builder infers each owner from its own caller frame.
+		$builder = $this->make_two_plugin_builder();
+		$site    = '/srv/wp/wp-includes/shared.php';
+
+		$this->assertTrue( Event_Queue::push( $builder->from_throwable( $this->make_exception( $site, 7, [ [ 'file' => self::OURS . '/a.php', 'line' => 20, 'function' => 'f' ] ] ) ) ) );
+		$this->assertTrue( Event_Queue::push( $builder->from_throwable( $this->make_exception( $site, 7, [ [ 'file' => self::BETA . '/b.php', 'line' => 40, 'function' => 'g' ] ] ) ) ) );
+		$this->assertFalse( Event_Queue::push( $builder->from_throwable( $this->make_exception( $site, 7, [ [ 'file' => self::OURS . '/a.php', 'line' => 21, 'function' => 'f' ] ] ) ) ), 'same owner coalesces' );
+
+		$this->assertSame( 2, Dispatcher::run() );
+
+		$this->assertSame(
+			[ 'https://errors.example.ru/api/1/envelope/', 'https://errors.example.ru/api/2/envelope/' ],
+			array_map( static fn( array $post ): string => $post[0], $this->posts )
+		);
+		$this->assertStringContainsString( '"release":"acme-delivery@1.4.0"', $this->posts[0][1]['body'] );
+		$this->assertStringContainsString( '"release":"beta-shipping@2.0.0"', $this->posts[1][1]['body'] );
+	}
+
+	public function test_a_throw_in_shared_framework_code_called_by_beta_reaches_betas_project_through_the_queue(): void {
+		$this->dsns = [
+			'acme-delivery' => 'https://a@errors.example.ru/1',
+			'beta-shipping' => 'https://b@errors.example.ru/2',
+		];
+
+		$e = $this->make_exception( self::OURS . '/woodev/api/shared.php', 12, [ [ 'file' => self::BETA . '/client.php', 'line' => 20, 'function' => 'send' ] ] );
+		Event_Queue::push( $this->make_two_plugin_builder()->from_throwable( $e ) );
+
+		$this->assertSame( 1, Dispatcher::run() );
+		$this->assertSame( 'https://errors.example.ru/api/2/envelope/', $this->posts[0][0] );
+	}
+
 	public function test_events_of_a_plugin_without_a_dsn_are_dropped_and_never_posted(): void {
 		$this->dsn  = '';
 		$this->dsns = [ 'beta-shipping' => 'https://b@errors.example.ru/2' ];

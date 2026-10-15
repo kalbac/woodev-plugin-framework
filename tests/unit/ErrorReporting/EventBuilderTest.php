@@ -352,4 +352,36 @@ final class EventBuilderTest extends ErrorReportingTestCase {
 		$this->assertLessThanOrEqual( 504, strlen( $value ) );
 		$this->assertTrue( mb_check_encoding( $value, 'UTF-8' ) );
 	}
+
+	public function test_a_throw_in_shared_framework_code_is_attributed_to_the_plugin_that_called_it(): void {
+		$e = $this->make_exception(
+			self::OURS . '/woodev/api/shared.php',
+			12,
+			[
+				[
+					'file'     => self::BETA . '/client.php',
+					'line'     => 20,
+					'function' => 'send',
+				],
+			]
+		);
+
+		$event = $this->make_two_plugin_builder()->from_throwable( $e );
+
+		$this->assertSame( 'beta-shipping@2.0.0', $event['release'] );
+		$this->assertSame( 'beta-shipping', $event['tags']['plugin'] );
+		$this->assertTrue( $event['exception']['values'][0]['stacktrace']['frames'][1]['in_app'], 'the framework frame is still shown' );
+	}
+
+	public function test_a_framework_only_stack_is_attributed_to_the_plugin_supplying_the_copy(): void {
+		$e = $this->make_exception( self::OURS . '/woodev/api/shared.php', 12, [ [ 'file' => '/srv/wp/wp-includes/plugin.php', 'line' => 9, 'function' => 'do_action' ] ] );
+
+		$this->assertSame( 'acme-delivery@1.4.0', $this->make_two_plugin_builder()->from_throwable( $e )['release'] );
+	}
+
+	public function test_an_explicit_plugin_id_still_wins_over_the_stack_attribution(): void {
+		$e = $this->make_exception( self::OURS . '/woodev/api/shared.php', 12, [ [ 'file' => self::BETA . '/client.php', 'line' => 20, 'function' => 'send' ] ] );
+
+		$this->assertSame( 'acme-delivery@1.4.0', $this->make_two_plugin_builder()->from_throwable( $e, 'acme-delivery' )['release'] );
+	}
 }

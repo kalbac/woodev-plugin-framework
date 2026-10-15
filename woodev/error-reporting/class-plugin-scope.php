@@ -26,6 +26,12 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Plugin_Scope' ) ) :
 	final class Plugin_Scope {
 
 		/**
+		 * Directories under a plugin root that hold its vendored framework copy. The copy that wins the
+		 * resolver's arbitration runs for ALL plugins, so a frame there is shared code, not the plugin's own.
+		 */
+		const FRAMEWORK_DIRS = [ 'woodev/', 'vendor/woodev/' ];
+
+		/**
 		 * Roots sorted longest-first so a nested directory wins over its parent.
 		 *
 		 * @var array<int,array{id:string,version:string,root:string}>
@@ -156,7 +162,16 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Plugin_Scope' ) ) :
 		}
 
 		/**
-		 * The owner of the first (innermost) file that lies under a registered plugin directory.
+		 * The owner of a stack: the first (innermost) file that lies under a registered plugin directory
+		 * but NOT inside that plugin's vendored framework copy ({@see self::FRAMEWORK_DIRS}).
+		 *
+		 * The framework is shared: the winning copy lives in ONE plugin's `woodev/` and runs for every
+		 * plugin on the site, so a throw inside it says nothing about whom it served. The caller's own
+		 * frame does, and it wins (#1302 F1). **Fallback for a framework-only stack** (no plugin-owned
+		 * frame at all, e.g. a shutdown fatal or a hook fired by core into framework code): the innermost
+		 * framework frame's owner, i.e. the plugin that supplies the running copy. It is deterministic,
+		 * it is the pre-#1302 rule, and the alternative (drop) would lose a genuine framework defect that
+		 * no plugin frame can be blamed for; routing it to the supplier's project keeps it findable.
 		 *
 		 * @since 2.0.2
 		 *
@@ -164,15 +179,28 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Plugin_Scope' ) ) :
 		 * @return array{id:string,version:string}|null Null when no file is ours.
 		 */
 		public function match( array $files ): ?array {
-			foreach ( $files as $file ) {
-				$owner = $this->owner_of( (string) $file );
+			$fallback = null;
 
-				if ( null !== $owner ) {
-					return $owner;
+			foreach ( $files as $file ) {
+				$owner = $this->locate_file( (string) $file );
+
+				if ( null === $owner ) {
+					continue;
 				}
+
+				$found = [
+					'id'      => $owner['id'],
+					'version' => $owner['version'],
+				];
+
+				if ( ! $owner['framework'] ) {
+					return $found;
+				}
+
+				$fallback = $fallback ?? $found;
 			}
 
-			return null;
+			return $fallback;
 		}
 
 		/**
@@ -184,7 +212,7 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Plugin_Scope' ) ) :
 		 * @return bool
 		 */
 		public function contains( string $file ): bool {
-			return null !== $this->owner_of( $file );
+			return null !== $this->locate_file( $file );
 		}
 
 		/**
@@ -204,7 +232,7 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Plugin_Scope' ) ) :
 		 * @since 2.0.2
 		 *
 		 * @param string $url Script URL as the browser reported it.
-		 * @return array{id:string,version:string,path:string}|null Null when the URL is not a real script of a registered plugin.
+		 * @return array{id:string,version:string,path:string,framework:bool}|null Null when the URL is not a real script of a registered plugin; `framework` is true for the plugin's vendored framework copy (shared code).
 		 */
 		public function locate_url( string $url ): ?array {
 			$normalized = self::normalize_url( $url );
@@ -227,9 +255,10 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Plugin_Scope' ) ) :
 				}
 
 				return [
-					'id'      => $entry['id'],
-					'version' => $entry['version'],
-					'path'    => 'plugins/' . $entry['dir'] . '/' . $asset,
+					'id'        => $entry['id'],
+					'version'   => $entry['version'],
+					'path'      => 'plugins/' . $entry['dir'] . '/' . $asset,
+					'framework' => self::is_framework_path( $asset ),
 				];
 			}
 
@@ -333,10 +362,12 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Plugin_Scope' ) ) :
 		}
 
 		/**
+		 * The plugin whose directory holds a file, and whether it is that plugin's vendored framework.
+		 *
 		 * @param string $file Absolute file path.
-		 * @return array{id:string,version:string}|null
+		 * @return array{id:string,version:string,framework:bool}|null
 		 */
-		private function owner_of( string $file ): ?array {
+		private function locate_file( string $file ): ?array {
 			$file = self::normalize_path( $file );
 
 			if ( '' === $file ) {
@@ -346,13 +377,30 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Plugin_Scope' ) ) :
 			foreach ( $this->roots as $entry ) {
 				if ( 0 === strpos( $file, $entry['root'] ) ) {
 					return [
-						'id'      => $entry['id'],
-						'version' => $entry['version'],
+						'id'        => $entry['id'],
+						'version'   => $entry['version'],
+						'framework' => self::is_framework_path( substr( $file, strlen( $entry['root'] ) ) ),
 					];
 				}
 			}
 
 			return null;
+		}
+
+		/**
+		 * Whether a path relative to a plugin root lies in the vendored framework copy.
+		 *
+		 * @param string $relative Path below the plugin root, forward slashes.
+		 * @return bool
+		 */
+		private static function is_framework_path( string $relative ): bool {
+			foreach ( self::FRAMEWORK_DIRS as $dir ) {
+				if ( 0 === strpos( $relative, $dir ) ) {
+					return true;
+				}
+			}
+
+			return false;
 		}
 
 		/**

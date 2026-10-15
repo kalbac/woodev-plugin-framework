@@ -210,4 +210,21 @@ final class EventQueueTest extends ErrorReportingTestCase {
 		$this->assertSame( '', Event_Queue::owner( [ 'release' => 'no-at-sign' ] ) );
 		$this->assertSame( '', Event_Queue::owner( [] ) );
 	}
+
+	public function test_the_same_raw_signature_of_two_owners_is_two_pending_events_and_the_same_owner_coalesces(): void {
+		$builder = $this->make_two_plugin_builder();
+		$site    = '/srv/wp/wp-includes/shared.php'; // One foreign throw site both plugins call into.
+
+		$acme = $builder->from_throwable( $this->make_exception( $site, 7, [ [ 'file' => self::OURS . '/a.php', 'line' => 20, 'function' => 'f' ] ] ) );
+		$beta = $builder->from_throwable( $this->make_exception( $site, 7, [ [ 'file' => self::BETA . '/b.php', 'line' => 40, 'function' => 'g' ] ] ) );
+
+		$limiter = new \Woodev\Framework\Error_Reporting\Rate_Limiter();
+		$this->assertSame( $limiter->signature( $acme ), $limiter->signature( $beta ), 'identical raw signatures' );
+
+		$this->assertTrue( Event_Queue::push( $acme ) );
+		$this->assertTrue( Event_Queue::push( $beta ), 'another owner is another project' );
+		$this->assertFalse( Event_Queue::push( $acme ), 'the same owner still coalesces' );
+		$this->assertFalse( Event_Queue::push( $beta ) );
+		$this->assertSame( [ 'acme-delivery', 'beta-shipping' ], array_map( [ Event_Queue::class, 'owner' ], Event_Queue::all() ) );
+	}
 }

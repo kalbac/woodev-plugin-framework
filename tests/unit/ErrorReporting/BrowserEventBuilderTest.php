@@ -7,7 +7,7 @@
 
 namespace Woodev\Tests\Unit\ErrorReporting;
 
-use Woodev\Framework\Error_Reporting\Browser_Event_Builder;
+use Woodev\Framework\Error_Reporting\{Browser_Event_Builder, Plugin_Scope};
 
 /**
  * @covers \Woodev\Framework\Error_Reporting\Browser_Event_Builder
@@ -548,5 +548,59 @@ final class BrowserEventBuilderTest extends ErrorReportingTestCase {
 		);
 
 		$this->assertStringNotContainsString( 'John', $this->encode( $event ) );
+	}
+
+	/**
+	 * Two registered plugins with real files: acme carries the shared framework copy, beta its own script.
+	 *
+	 * @return Browser_Event_Builder
+	 */
+	private function make_shared_framework_builder(): Browser_Event_Builder {
+		$this->touch_file( $this->fs_root . '/acme-delivery/woodev/assets/js/shared.js' );
+		$this->touch_file( $this->fs_root . '/beta-shipping/assets/js/client.js' );
+
+		return new Browser_Event_Builder(
+			new Plugin_Scope(
+				[
+					[
+						'id'      => 'acme-delivery',
+						'version' => '1.4.0',
+						'dir'     => $this->fs_root . '/acme-delivery',
+						'url'     => self::OUR_URL,
+					],
+					[
+						'id'      => 'beta-shipping',
+						'version' => '2.0.0',
+						'dir'     => $this->fs_root . '/beta-shipping',
+						'url'     => 'https://shop.example.ru/wp-content/plugins/beta-shipping',
+					],
+				]
+			),
+			[],
+			[]
+		);
+	}
+
+	public function test_an_error_in_shared_framework_script_is_attributed_to_the_plugin_that_called_it(): void {
+		$event = $this->make_shared_framework_builder()->from_payload(
+			$this->error_payload(
+				[
+					[ 'url' => self::OUR_URL . '/woodev/assets/js/shared.js', 'line' => 12 ],
+					[ 'url' => 'https://shop.example.ru/wp-content/plugins/beta-shipping/assets/js/client.js', 'line' => 40 ],
+				]
+			)
+		);
+
+		$this->assertSame( 'beta-shipping@2.0.0', $event['release'] );
+		$this->assertSame( 'beta-shipping', $event['tags']['plugin'] );
+		$this->assertCount( 2, $event['exception']['values'][0]['stacktrace']['frames'], 'the framework frame is still shown' );
+	}
+
+	public function test_a_framework_only_browser_stack_falls_back_to_the_plugin_supplying_the_copy(): void {
+		$event = $this->make_shared_framework_builder()->from_payload(
+			$this->error_payload( [ [ 'url' => self::OUR_URL . '/woodev/assets/js/shared.js', 'line' => 12 ] ] )
+		);
+
+		$this->assertSame( 'acme-delivery@1.4.0', $event['release'] );
 	}
 }

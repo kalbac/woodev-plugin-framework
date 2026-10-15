@@ -19,7 +19,8 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Event_Queue' ) ) :
 	 * is dropped first), of which at most {@see self::BROWSER_LIMIT} may come from the browser —
 	 * guests can feed that route, so it can never push a PHP event out. Read-modify-write is not atomic, so two simultaneous failures can lose one
 	 * of the two — acceptable for best-effort telemetry, and cheaper than a lock in a request that
-	 * is already failing. An event whose signature is already pending is not stored again, so one
+	 * is already failing. An event whose signature is already pending for the same owner is not
+	 * stored again (another owner's identical signature is: it goes to another project), so one
 	 * broken page hit a thousand times does not rewrite the option a thousand times.
 	 *
 	 * @since 2.0.2
@@ -46,15 +47,18 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Event_Queue' ) ) :
 		 * @since 2.0.2
 		 *
 		 * @param array<string,mixed> $event Event from {@see Event_Builder} or {@see Browser_Event_Builder}.
-		 * @return bool True when the event was stored; false when an identical one is already pending, or a browser event found no room.
+		 * @return bool True when the event was stored; false when an identical one of the same owner is already pending, or a browser event found no room.
 		 */
 		public static function push( array $event ): bool {
 			$queue     = self::all();
 			$limiter   = new Rate_Limiter();
 			$signature = $limiter->signature( $event );
+			$owner     = self::owner( $event );
 
+			// Same signature AND same owner: two plugins hitting one shared throw site (core, a library)
+			// are two reports for two projects, each coalesces only with its own (#1302).
 			foreach ( $queue as $pending ) {
-				if ( $limiter->signature( $pending ) === $signature ) {
+				if ( self::owner( $pending ) === $owner && $limiter->signature( $pending ) === $signature ) {
 					return false;
 				}
 			}
