@@ -6,11 +6,15 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-15 (s181, overnight).** Framework `main` `d8063108` (#1288 numeric-string enum keys, #1291/#1294 two-carrier e2e
-matrix, #1292 pickup point without locality no longer blanks the address). Yandex `main` (#81 #91 VAT rate, #92 #94 #96 wizard
-D1–D7, #99 #100 courier region with «Регион» removed; #102 export region in flight). CDEK `v2` `569a0f4` (#104 hidden-method hint,
-#106 acceptance harness, #108 courier count). The rig `:8973` runs `main`/`v2`; plugins' `woodev/` synced to framework main.
-🚧 **v2 release = TWO carrier plugins on v2, tested and compatible** (#1179): the two-carrier matrix is written and green on the classic checkout (`tests/e2e/coexistence/07`/`08`, s181); its defects M1–M3 are fixed. Open on the block checkout only: the address race #1293.
+**As of 2026-10-15 (s182).** 🎉 **Framework 2.0.2 is RELEASED** — tag `v2.0.2`, `main` `898a527e` (#1307; GitHub Release
+`woodev-plugin-framework-2.0.2.zip`). **The release ZIP is the `woodev/` directory ONLY** (`git archive HEAD woodev/`, operator
+15.10.2026: no docs, vendor or tooling — the framework has no runtime Composer deps). Since s181: #1300 block-checkout address
+race fixed (#1293), #1303 one GlitchTip DSN per plugin (#1302), #1305 minified `.min` siblings + `get_assets_suffix()` (#247,
+SCRIPT_DEBUG only), #1304 plugin-author skills refreshed + the same-PR skill rule. Yandex `main` `4f26228` (#103 own DSN, #104
+storefront `ru_RU` catalogue + customer payment labels). CDEK `v2` `8812a42` (#109 own DSN). The rig `:8973` runs `main`/`v2`.
+✅ **v2 release gate met** (#1179 closed: CDEK + Yandex on v2, tested together; #567 translation pass done). Next: plugin releases
+— each must declare `framework_version '2.0.2'` in its loader definition (today `2.0.1`; harmless, the resolver compares declared
+values only). Private-repo Actions are billing-blocked until 01.11.2026 → plugin builds/CI via local-ci until then.
 ⚠ **Yandex runs production-only** (test mode removed, #73): live confirm/cancel/status/PDF remain UNVERIFIED — production `offers/confirm` and `request/*` are forbidden without the operator. Private-repo gate = local-ci + critic (global rule `~/.claude/CLAUDE.md`; mirrored to the Homelab host in s177).
 Block-checkout gaps do not block the release (#1263).
 ✅ **Licence gate (#1270) is LIVE end to end:** woodev-core 1.0.4 on woodev.ru signs paid-licence status (source: Homelab
@@ -18,7 +22,10 @@ Block-checkout gaps do not block the release (#1263).
 automatic refresh backs off 15 m → 1 h → 6 h → 24 h (operator: never spam woodev.ru). The rig needs real keys for CDEK/Yandex
 and `tests/e2e/rig/zz-woodev-rig-license.php` for the fixtures (`wiki/local-rig.md`). The updater failure backoff is implemented in #1275.
 Next checks: `next-session-prompt.md`. ⚠ Sync the plugin’s own `woodev/` before plugin rig runs
-(`wiki/local-rig.md`). The rig admin user has locale **ru_RU**; the site stays **en_US**.
+(`wiki/local-rig.md`). The rig admin user has locale **ru_RU**; the site stays **en_US** (WP core + WooCommerce `ru_RU` packs
+are installed: `wp site switch-language ru_RU` for a translation pass, back to `en_US` after — e2e expects English).
+⚠ The rig runs `SCRIPT_DEBUG=true` (`.wp-env.json`) → it serves UNMINIFIED assets; set it false to test the `.min` files.
+⚠ 6 classic-checkout e2e specs assume a separate shipping column and fail under the rig's `billing_only` norm (#1306).
 GlitchTip receiver (#1082) is live. **Both machines are live**; routine sync is git ONLY
 (`wiki/two-machine-setup.md`).
 
@@ -66,7 +73,7 @@ the highest installed `2.2.5.5` (operator, 06.09.2026), so the update reaches ev
 
 ✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — no quota consumed; the exhaustion symptom is gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`.
 
-**Test measurements:** framework unit 7358 / jest 3394 on main after #1292 (CI green on every merged head; integration green in CI, not re-run in `tests-cli` this session); Yandex unit **1090** (#102 branch); CDEK unit **1524** (v2 + #108); matrix 07 **8/8**, 08 **16/16** (s181); CDEK acceptance **104 / 1 / 12** with harness #106 (the FAIL was the rig-restore row, since excluded) — measured 15.10.2026 (s181).
+**Test measurements:** framework unit **7398** / jest **3409** on main after #1305 (CI green on every merged head); full e2e on minified assets **45 passed / 6 failed (#1306, pre-existing) / 1 flake / 3 skipped**; Yandex unit **1095** (#104); CDEK unit **1524+** (v2 + #109); CDEK acceptance **105 / 0 / 12** — measured 15.10.2026 (s182).
 Integration is CI/coordinator-owned. Re-measure before quoting these as current gate evidence.
 
 ⚠ **A `.ts` msgid fails `lint:i18n-sources`** — it extracts from the BUILT bundle (s129).
@@ -103,7 +110,7 @@ its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and
 exactly that trap, and a naive reader reports a milestone-carrying card as empty. **PRIORITY LIVES ON
 THE BOARD, not in this file** (operator, 04.09.2026, #644 part 3); its field and option ids are in
 `AGENTS.md` → Backlog rule, and every open card carries one.
-**`V2 готов` = two carrier plugins on v2, tested and compatible** (operator, 08.10.2026, #1179; superseded «#786 works» of 07.09.2026) — the gate #247/#285 wait on. #567 (visual translation pass) is release-gated: it runs right before the release together with #247/#285 (see below). **Read the board, never a card list retyped here** — a
+**`V2 готов` = two carrier plugins on v2, tested and compatible** (operator, 08.10.2026, #1179) — met; #567, #247, #285 done and 2.0.2 released in s182. **Read the board, never a card list retyped here** — a
 retyped list is what went stale and got #644 filed.
 
 **`location.levels` is a per-country matrix** (`levels[country][level]`) and the client reads it that
@@ -124,8 +131,7 @@ Build `.mo` with `wp i18n make-mo` in the rig container; `update-po` can drop th
 `lint-i18n-answers-about-the-catalogue-not-the-code`. JS bundles read handle-named JSON,
 not `.mo` (`lint:js-i18n`, #1032; `js-translations-are-handle-named-json-files`).
 
-**#567 visual translation review:** GATED BY THE RELEASE, not by an operator answer (operator, 05.09.2026, repeated 07.09; s123) — the whole catalogue is walked right before release because strings still change until then. Board: status «Бэклог», priority «Заморожено» with that condition; do not reopen earlier.
-Do not infer sequencing from an old state-file snapshot.
+**#567 visual translation review: DONE (s182)** — framework catalogue fresh (all four i18n gates green); the operator's ru_RU pass found only the Yandex plugin's missing catalogue (fixed, yandex#104). Every plugin needs a storefront `languages/*.po/.mo` + a catalogue-coverage test (skill `woodev-plugin-core` → services.md).
 
 **Shipping method features support both declarations:** `$this->supports` before
 `parent::__construct()` and `add_support()` afterwards. See

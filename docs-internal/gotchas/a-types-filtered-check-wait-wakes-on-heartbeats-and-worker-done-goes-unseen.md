@@ -50,6 +50,13 @@ and starts the loop again. After this was in place (s163, second half) no `worke
 the run's single waiter slot, so every new loop's `check` returns an error object without `result` (s163 follow-up: 200
 iterations of `KeyError: 'result'` in seconds). Kill the orphan too: `pgrep -fl "orchestration check"`.
 
+⚠ **A message the loop chooses to SKIP must still be acked** (s182, 15.10.2026). A hand-written variant filtered out one old,
+already-handled `worker_done` (`if 'ctx_…' in body: continue`) and printed nothing — so it neither exited nor acked. The FIFO
+replays the oldest unacknowledged delivery forever, so that stale message sat in front of three new ones (two `worker_done` and a
+worker's blocking `question`) for ~4 hours while the coordinator told the operator «агенты работают». The recipe above has no
+skip branch on purpose: every delivery is either acked (heartbeat-only) or ends the loop. If a delivery is stale, ack it by id
+(`check --ack <deliveryId>`) and keep looping; after any doubt, drain with plain `check --ack <id>` until `deliveryId` is null.
+
 ## Related
 
 - [a-backgrounded-orca-check-wait-starves-every-later-waiter](a-backgrounded-orca-check-wait-starves-every-later-waiter.md) — run only ONE waiter per run
