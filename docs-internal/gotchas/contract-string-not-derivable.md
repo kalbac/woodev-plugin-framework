@@ -12,7 +12,7 @@ plugin id by a naming convention (`{plugin_id}_orders`, `wc-{dasherize(plugin_id
 follow one convention, and a derived value that differs by even one character orphans live data /
 breaks a bookmarked URL / 404s a live AJAX endpoint.
 
-Proof from the two S1 pilots (`.autodev/INVARIANTS.md`):
+Proof from the two S1 pilots ([`archive/autodev-contracts/INVARIANTS.md`](../archive/autodev-contracts/INVARIANTS.md)):
 
 | Contract | edostavka | yandex | Derivation would give |
 |----------|-----------|--------|-----------------------|
@@ -44,9 +44,9 @@ task touching `ajax_actions`, `admin_page_slugs`, `rest`, `log_source`, or `cron
 The GPT-5.5 critic flagged all three with high confidence (0.96–0.98) by cross-referencing the
 derived value against the INVARIANTS exact_strings. This is the critic working as designed — do
 NOT recalibrate it away from these findings (contrast: the critic's *over-flagging* of new
-additive hooks / unwired classes — see [autodev-critic-overflag](autodev-critic-overflag.md) — which IS miscalibration).
+additive hooks / unwired classes — see `autodev-critic-overflag` (archived) — which IS miscalibration).
 
 ## Related
-- `.autodev/INVARIANTS.md` — `ajax_actions`, `admin_page_slugs`, `rest`, `log_source`, `cron`, `order_session_meta` exact_strings
+- [the retired autodev INVARIANTS file](../archive/autodev-contracts/INVARIANTS.md) — `ajax_actions`, `admin_page_slugs`, `rest`, `log_source`, `cron`, `order_session_meta` exact_strings
 - [session-key-vs-order-meta-prefix](session-key-vs-order-meta-prefix.md) — the order-handler instance of the same root
-- [autodev-critic-overflag](autodev-critic-overflag.md) — the critic's *real* miscalibration (distinct from this, which it gets right)
+- `autodev-critic-overflag` (archived) — the critic's *real* miscalibration (distinct from this, which it gets right)

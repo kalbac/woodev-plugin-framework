@@ -213,8 +213,7 @@ public function get_plugin_name() {
 
 ### Rule 5 — Docblocks
 Docblocks are **required** on all public and protected methods:
-- `@since` — use the machine-readable ceiling in `composer.json` → `extra.woodev.planned-release`, currently `2.0.2`.
-  This currently equals the released `Woodev_Plugin::VERSION` (`2.0.2`); no distinct next release is declared.
+- `@since` — the planned release: `composer.json` → `extra.woodev.planned-release`, currently `2.0.3`, gated by `SinceTagCeilingTest`. Plain semver: `2.0.x` = bug fixes only; `2.1.0` = minor, set by the first feature PR that merges (that PR raises `planned-release`); `3.0.0` = breaking. Until a feature PR merges, new code carries the next patch.
   Raising `VERSION` on `main` publishes a release (#285). Operator decision, #409 (s83) —
   the earlier "uses current VERSION" wording contradicted 1388 tags against one and was wrong.
 - **Inherited code carries `1.0.0`, never an upstream number** (#116a, s111). This framework was

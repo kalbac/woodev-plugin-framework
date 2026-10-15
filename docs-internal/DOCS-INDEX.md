@@ -174,7 +174,7 @@ here: the last two counts written into this line went stale. **The earlier docs 
 |------|---------|
 | `migration/edostavka-data-preservation-checklist.md` · `migration/yandex-...` | Per-plugin release-blocking data contracts (enforced at rewrite time) |
 | `wiki/` | Deep-dive topic references — the full list with a line each is [wiki/README.md](wiki/README.md) |
-| `autodev-loop-runbook.md` | Autodev loop runbook — implemented (`tools/autodev/`, `.autodev/`), dormant since 2026-06-18 |
+| `archive/autodev-loop-runbook.md` | Autodev loop runbook — retired s183 (`tools/autodev/` and `.autodev/` removed); history only |
 
 ## Historical reference (kept in place — still cited by active docs)
 
@@ -202,5 +202,4 @@ Passed-gate audits, the completed platform-v2 program docs (plans/specs/prompts)
 - `wiki/local-rig.md` — why the rig's fixtures and options are set the way they are (the pickup mu-plugin, the company field, the two location providers, the live-Yandex switch); moved here from `CURRENT-STATE.md` in s91
 - `AGENTS.md` — shared project rules (session start/end, coding principles)
 - `wiki/pickup-trigger-placement-and-text.md` — who decides where the checkout pickup button is drawn (the framework) and what it says (the carrier)
-- `QWEN.md` — the Qwen gateway; a pointer to `AGENTS.md`
 - `.ai/QUICK-REFERENCE.md` — shared project rules and conventions for all AI agents

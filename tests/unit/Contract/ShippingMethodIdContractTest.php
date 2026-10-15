@@ -19,9 +19,6 @@ use Woodev\Tests\Unit\TestCase;
  * context, so loading the class would require WC stubs and make this permanent CI
  * guard fragile. The guard instead extracts whatever value the source declares and
  * asserts it equals the contract, so ANY change to the constant flips this test RED.
- * tools/autodev/mutation-check.ps1 proves that via the paired mutation-recipe.
- *
- * Mutation-recipe: tests/unit/Contract/recipes/shipping-method-id-edostavka.recipe.json
  */
 final class ShippingMethodIdContractTest extends TestCase {
 

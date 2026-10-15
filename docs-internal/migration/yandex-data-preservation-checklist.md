@@ -115,7 +115,7 @@ Other-day adds (`includes/class-shipping-method-other-day.php:46–84`): `tariff
 ## Public Hooks (third-party contract)
 
 Preserve these `do_action`/`apply_filters` names (subset; full list in survey). Renaming breaks
-third-party subscribers — `hooks` is a contract zone in `.autodev/INVARIANTS.md`:
+third-party subscribers — `hooks` is a contract zone in the retired autodev INVARIANTS file (`docs-internal/archive/autodev-contracts/INVARIANTS.md`):
 `wc_yandex_order_status_changed`, `wc_yandex_order_status_changed_to_{status}`,
 `wc_yandex_order_mark_as_delivered`, `wc_yandex_order_mark_as_cancelled`,
 `wc_yandex_delivery_update_sharing_url`, `wc_yandex_delivery_delete_sharing_url`,
@@ -145,5 +145,5 @@ third-party subscribers — `hooks` is a contract zone in `.autodev/INVARIANTS.m
 ## Related
 - `docs-internal/archive/platform-v2-s1-shipping-spec.md` — the S1 architecture this preserves contracts for.
 - `docs-internal/migration/edostavka-data-preservation-checklist.md` — the format mirrored.
-- `.autodev/INVARIANTS.md` — these strings become guard candidates (see `guard-yandex-contracts` task).
+- the retired autodev INVARIANTS file (`docs-internal/archive/autodev-contracts/INVARIANTS.md`) — these strings were guard candidates (see `guard-yandex-contracts` task).
 - `plugins-reference/woocommerce-yandex-delivery` — the read-only evidence source.

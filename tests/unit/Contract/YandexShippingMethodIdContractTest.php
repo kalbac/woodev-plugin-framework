@@ -23,7 +23,6 @@ use Woodev\Tests\Unit\TestCase;
  * Source-level reads: the v1 method classes extend WooCommerce's shipping-method class, absent in unit context.
  *
  * Spec: docs-internal/specs/2026-10-12-yandex-v2-plugin-design.md §1 (D10), §11 «Method ids», §12 step 1.
- * Recipes: tests/unit/Contract/recipes/yandex-other-day-method-id.recipe.json, yandex-shipping-method-id.recipe.json.
  */
 final class YandexShippingMethodIdContractTest extends TestCase {
 

@@ -40,10 +40,6 @@ opencode.json
 # `npm run test:js` is correct — never `npx jest`.
 /.orca/
 
-# Autodev loop — ephemeral scratch only (blackboard + queue + escalations stay tracked)
-/.autodev/runtime/
-/.autodev/conductor.log
-
 # OS / editor junk
 .DS_Store
 Thumbs.db
