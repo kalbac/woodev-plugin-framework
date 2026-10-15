@@ -6,8 +6,11 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-15 (s180).** Framework `main` `32600acd` (#1274 explicit retry for unknown exports, #1276 hidden-method hint behind «Логирование», #1285 async order-action select). Yandex `main` `14c45179` (#79 #73 #74 #77 #80 #86; test mode removed; pin `32600acd`); CDEK `v2` `b9c21b17` (#102 v1 excluded locality/region codes). The rig `:8973` runs `main`/`v2` in all three repos, plugins synced; no review build is staged. Open: yandex#85 (НДС), draft yandex#81.
-🚧 **v2 release = TWO carrier plugins on v2, tested and compatible** (#1179): all operator rig findings are merged; the remaining gate is the detailed two-plugin acceptance (field-mode matrix × big/small settlements × min/max order and minimum delivery cost — scope on #1179).
+**As of 2026-10-15 (s181, overnight).** Framework `main` `d8063108` (#1288 numeric-string enum keys, #1291/#1294 two-carrier e2e
+matrix, #1292 pickup point without locality no longer blanks the address). Yandex `main` (#81 #91 VAT rate, #92 #94 #96 wizard
+D1–D7, #99 #100 courier region with «Регион» removed; #102 export region in flight). CDEK `v2` `569a0f4` (#104 hidden-method hint,
+#106 acceptance harness, #108 courier count). The rig `:8973` runs `main`/`v2`; plugins' `woodev/` synced to framework main.
+🚧 **v2 release = TWO carrier plugins on v2, tested and compatible** (#1179): the two-carrier matrix is written and green on the classic checkout (`tests/e2e/coexistence/07`/`08`, s181); its defects M1–M3 are fixed. Open on the block checkout only: the address race #1293.
 ⚠ **Yandex runs production-only** (test mode removed, #73): live confirm/cancel/status/PDF remain UNVERIFIED — production `offers/confirm` and `request/*` are forbidden without the operator. Private-repo gate = local-ci + critic (global rule `~/.claude/CLAUDE.md`; mirrored to the Homelab host in s177).
 Block-checkout gaps do not block the release (#1263).
 ✅ **Licence gate (#1270) is LIVE end to end:** woodev-core 1.0.4 on woodev.ru signs paid-licence status (source: Homelab
@@ -63,7 +66,7 @@ the highest installed `2.2.5.5` (operator, 06.09.2026), so the update reaches ev
 
 ✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — no quota consumed; the exhaustion symptom is gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`.
 
-**Test measurements:** framework integration **516** (0 failures) on main + #1274 #1276 #1285, framework unit CI green on each merged head; Yandex unit **1047** (main + #86, pin `32600acd`); CDEK unit **1513** on #102; acceptance **105 PASS / 0 FAIL / 12 UNVERIFIABLE** is the s178 figure (before #102) — measured 14–15.10.2026 (s180).
+**Test measurements:** framework unit 7358 / jest 3394 on main after #1292 (CI green on every merged head; integration green in CI, not re-run in `tests-cli` this session); Yandex unit **1090** (#102 branch); CDEK unit **1524** (v2 + #108); matrix 07 **8/8**, 08 **16/16** (s181); CDEK acceptance **104 / 1 / 12** with harness #106 (the FAIL was the rig-restore row, since excluded) — measured 15.10.2026 (s181).
 Integration is CI/coordinator-owned. Re-measure before quoting these as current gate evidence.
 
 ⚠ **A `.ts` msgid fails `lint:i18n-sources`** — it extracts from the BUILT bundle (s129).
