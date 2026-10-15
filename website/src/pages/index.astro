@@ -9,6 +9,16 @@ const doc = (path: string) => `${base}/${path}/`;
 const repo = 'https://github.com/kalbac/woodev-plugin-framework';
 const partnerUrl = 'https://woodev.ru/contacts';
 const storeUrl = 'https://woodev.ru/shop';
+const releaseZip = `woodev-plugin-framework-${frameworkVersion}.zip`;
+const installCmd = `curl -LO ${repo}/releases/download/v${frameworkVersion}/${releaseZip}
+unzip -q ${releaseZip} -d my-plugin/`;
+
+const showcase = [
+	{ name: 'CDEK', icon: 'cdek.png', href: 'https://woodev.ru/downloads/wc-edostavka-integration' },
+	{ name: 'Yandex Delivery', icon: 'yandex-delivery.png', href: 'https://woodev.ru/downloads/yandex-dostavka-woocommerce' },
+	{ name: 'Russian Post', icon: 'russian-post.png', href: 'https://woodev.ru/downloads/pochta-rossii-woocommerce' },
+	{ name: 'Ozon', icon: 'ozon.png', href: 'https://woodev.ru/downloads/ozon-woocommerce' },
+];
 
 const entryFile = `<?php
 /**
@@ -140,6 +150,32 @@ const perks = [
 					<p>Build a plugin on Woodev and we put it in front of the shops that already run our plugins.</p>
 					<span class="wd-link">Partner programme →</span>
 				</a>
+				<article class="wd-tile wd-tile--install">
+					<div class="wd-tile__head">
+						<span class="wd-icon"><svg viewBox="0 0 24 24" set:html={icons.box} /></span>
+						<h3>Quick install</h3>
+					</div>
+					<p>No Composer, no build step: the framework ships as one folder inside your plugin.</p>
+					<Code code={installCmd} lang="sh" frame="terminal" title="Terminal" />
+					<a class="wd-link" href={`${repo}/releases/latest`}>Or download the latest release →</a>
+				</article>
+				<article class="wd-tile wd-tile--showcase">
+					<div class="wd-tile__head">
+						<span class="wd-icon"><svg viewBox="0 0 24 24" set:html={icons.layers} /></span>
+						<h3>Built on Woodev</h3>
+					</div>
+					<p>Our own flagship plugins run on the same framework.</p>
+					<ul class="wd-showcase">
+						{showcase.map((item) => (
+							<li>
+								<a href={item.href} title={item.name}>
+									<img src={`${base}/plugins/${item.icon}`} alt="" width="64" height="64" loading="lazy" />
+									<span>{item.name}</span>
+								</a>
+							</li>
+						))}
+					</ul>
+				</article>
 			</div>
 		</section>
 
@@ -235,7 +271,7 @@ const perks = [
 		const GAP = 26;
 		const BASE = 2;
 		const GROW = 13;
-		const RADIUS = 210;
+		const RADIUS = 140;
 		const still = matchMedia('(prefers-reduced-motion: reduce)').matches || !matchMedia('(pointer: fine)').matches;
 
 		let width = 0;

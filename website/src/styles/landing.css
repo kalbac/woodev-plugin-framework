@@ -210,6 +210,70 @@ main:has(.wd-landing) .sl-markdown-content > * + * {
 
 /* ---------- bento ---------- */
 
+.wd-tile--install {
+	grid-column: 1;
+	min-width: 0;
+}
+
+.wd-tile--install p,
+.wd-tile--showcase p {
+	font-size: 0.92rem;
+	line-height: 1.6;
+	color: var(--sl-color-gray-3);
+}
+
+.wd-tile--install .expressive-code {
+	margin-top: 0.25rem;
+}
+
+.wd-tile--install .expressive-code pre {
+	font-size: 0.78rem;
+}
+
+.wd-tile--install .wd-link {
+	padding-top: 0.25rem;
+}
+
+.wd-showcase {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 0.75rem;
+	margin-top: auto;
+	padding: 0.5rem 0 0;
+	list-style: none;
+}
+
+.wd-showcase a {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.5rem;
+	text-align: center;
+	font-size: 0.75rem;
+	line-height: 1.25;
+	color: var(--sl-color-gray-2);
+}
+
+.wd-showcase img {
+	width: 100%;
+	max-width: 4rem;
+	height: auto;
+	aspect-ratio: 1;
+	object-fit: cover;
+	border-radius: 0.9rem;
+	border: 1px solid var(--wd-line);
+	transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.wd-showcase a:hover img {
+	transform: translateY(-3px);
+	box-shadow: 0 10px 24px -8px color-mix(in srgb, var(--wd-yellow) 45%, transparent);
+}
+
+.wd-showcase a:hover span {
+	color: var(--sl-color-white);
+}
+
 .wd-bento {
 	display: grid;
 	grid-template-columns: minmax(0, 1.9fr) minmax(0, 1fr);
@@ -625,6 +689,9 @@ main:has(.wd-landing) .sl-markdown-content > * + * {
 		grid-row: auto;
 		padding-right: clamp(1.5rem, 3vw, 2.25rem);
 	}
+	.wd-tile--install {
+		grid-column: auto;
+	}
 	.wd-tile--main .wd-window {
 		border-right: 1px solid var(--wd-line);
 		border-radius: 0.6rem 0.6rem 0 0;
@@ -659,6 +726,7 @@ main:has(.wd-landing) .sl-markdown-content > * + * {
 	.wd-btn,
 	.wd-tile,
 	.wd-tile__mark,
+	.wd-showcase img,
 	.wd-card,
 	.wd-card__more,
 	.wd-steps li {
