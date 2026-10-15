@@ -1,233 +1,254 @@
 # Contributing to Woodev Plugin Framework
 
-Thank you for considering contributing to the Woodev Plugin Framework! Your help making it even better is greatly appreciated.
+Thank you for considering a contribution. This guide covers what a pull request has to
+satisfy before a maintainer reviews it.
 
-## ⚠️ Important: This is a Framework
+## What this project is
 
-**CRITICAL:** This is a **base framework** used by 10+ dependent plugins — but "backward
-compatibility" here means **two different rules**, and confusing them is the mistake to avoid.
-Policy set 2026-06-03 by [ADR-005](../docs-internal/adr/005-platform-v2-clean-break-policy.md); it
-**superseded** the old "deprecation cycle for everything" rule on the v2 line.
+The Woodev Plugin Framework is a PHP library (PHP 7.4 and newer) that gives WooCommerce
+plugins a common base: plugin lifecycle, settings, admin pages, shipping and payment
+subsystems. It is **bundled inside every plugin that uses it** — plugin authors copy the
+`woodev/` directory into their plugin, and several such plugins run on the same site at
+once.
 
-**Internal code is FREE TO BREAK on `main`:**
+That is why compatibility matters more here than in a typical library. A change is judged
+by two separate rules:
 
-- class names, method signatures, the plugin entry/registration shape, namespacing, file layout;
-- do **NOT** add `@deprecated` shims, `class_alias` files or `_deprecated_function()` wrappers for a
-  moved or renamed internal API — delete the ones you find;
-- dependent plugins are rewritten onto v2, not migrated by shims.
+- **Framework internals can change.** Class names, method signatures, file layout and
+  namespaces are free to move on `main`. Do not add `@deprecated` shims, `class_alias`
+  files or `_deprecated_function()` wrappers for an internal API you renamed or moved;
+  delete the old one instead. The reasoning is in
+  [ADR-005](../docs-internal/adr/005-platform-v2-clean-break-policy.md).
+- **Data on installed sites must never change.** A shop that has the plugin installed
+  already stores these, and a changed value silently breaks it. Keep each of them
+  byte-for-byte identical:
+  - option keys and order, session and user meta keys;
+  - WooCommerce gateway and shipping-method IDs, and their instance setting keys;
+  - public action and filter names, and the shape of their arguments;
+  - cron hooks and their payloads, custom database tables, background-job IDs;
+  - REST namespaces, AJAX actions, admin page slugs, log source names.
 
-**Installed-site data contracts are RELEASE-BLOCKING and never break:** option keys, license and
-instance IDs, updater identity, WC gateway and shipping-method IDs plus instance setting keys,
-**public action/filter names**, cron hooks and payloads, custom tables, REST namespaces, AJAX
-actions, admin page slugs, log source names, background-job IDs, order and session meta keys.
-Preserve these byte-for-byte.
+If your change touches one of these, say so in the pull request description and explain why.
+Anything under `woodev/` gets a closer review than the rest of the repository.
 
-- **Any change in `woodev/` requires enhanced review**
+## Ways to contribute
 
-## Ways to Contribute
+Report a bug through an [issue](https://github.com/kalbac/woodev-plugin-framework/issues/new/choose) with reproduction steps and your
+WordPress, WooCommerce and PHP versions. For a feature, open an issue first and describe the
+problem, so the approach is agreed before you write code. Questions go to
+[Discussions](https://github.com/kalbac/woodev-plugin-framework/discussions); issues labelled
+[`good first issue`](https://github.com/kalbac/woodev-plugin-framework/labels/good%20first%20issue) are the easiest start.
 
-There are many ways to contribute to the project:
+**Security issues are never reported in public issues.** See [SECURITY.md](SECURITY.md).
 
-- **Reporting bugs** — Open an issue with detailed reproduction steps
-- **Answering questions** in the community
-- **Testing** open [issues](../../issues) or [pull requests](../../pulls) and sharing your findings
-- **Submitting fixes, improvements, and enhancements**
-- **Security issues:** Please report security issues responsibly
+## Setting up
 
-## How to Submit Code
-
-If you wish to contribute code:
-
-1. [Fork](https://docs.github.com/en/get-started/quickstart/fork-a-repo) the repository
-2. Create a feature branch (see [Git Flow](#git-flow))
-3. Make your changes following our [Coding Guidelines](#coding-guidelines)
-4. Run linting and tests
-5. **Write commits in Conventional Commits format** (for automatic CHANGELOG)
-6. [Submit a pull request](../../pulls) 🎉
-
-## Environment Setup
+You need PHP 7.4 or newer with [Composer](https://getcomposer.org/), and the Node.js version
+in [`.nvmrc`](../.nvmrc) (22).
 
 ```bash
-git clone https://github.com/kalbac/woodev-plugin-framework.git
+# after forking on GitHub:
+git clone https://github.com/<your-username>/woodev-plugin-framework.git
 cd woodev-plugin-framework
-composer install
+
+composer install        # PHPCS, PHPStan, PHPUnit
+npm ci                  # wp-scripts (jest, build), TypeScript
+
+git config core.hooksPath .githooks   # once per clone — see below
 ```
 
-### Good First Issues
+### Git hooks
 
-We use the `good first issue` label to mark issues that are suitable for new contributors. Filter issues by this label to find a good starting point.
+The hooks in [`.githooks/`](../.githooks) stop mistakes that would cost a review round:
 
-## Git Flow
+- `commit-msg` refuses a GitHub closing keyword (`closes`, `fixes`, `resolves` plus `#N`)
+  anywhere except alone on its own line — GitHub runs them literally, even inside a quote.
+- `pre-push`, when the push touches `src/` or `woodev/`, rebuilds the JS bundles and runs the
+  translation-catalogue checks (about 20 seconds). It refuses a push whose committed bundles
+  differ from a fresh build.
+- `post-merge`, `post-checkout`, `post-commit` and `post-rewrite` run `composer dump-autoload`
+  when git moved framework PHP files, so your class map is never stale.
 
-### Branch Naming
+`git push --no-verify` skips `pre-push`, but CI runs the same checks and will fail.
 
-Use descriptive branch names:
+### Integration tests (optional)
 
-```
-{type}/{description}
-```
+Unit tests need only PHP. The integration suite needs WordPress with WooCommerce, which
+[`@wordpress/env`](https://www.npmjs.com/package/@wordpress/env) provides (Docker required):
 
-**Types:**
-
-- `feature/` — new features
-- `fix/` — bug fixes
-- `hotfix/` — urgent fixes
-- `docs/` — documentation
-- `refactor/` — refactoring
-- `chore/` — maintenance tasks
-
-**Examples:**
-
-```
-feature/shipping-by-volume
-fix/calculation-rounding-error
-docs/update-installation-guide
+```bash
+npx @wordpress/env start
+npx @wordpress/env run tests-cli \
+  env TEST_SUITE=integration \
+  php /var/www/html/woodev-framework/vendor/bin/phpunit \
+    --configuration /var/www/html/woodev-framework/phpunit.xml \
+    --testsuite=Integration --no-coverage
+npx @wordpress/env stop
 ```
 
-### Commit Messages
+CI runs this suite across a WordPress × WooCommerce × PHP matrix, so you need not.
 
-**All commits MUST follow Conventional Commits format.** This is critical because `git-cliff` uses commit messages to auto-generate `CHANGELOG.md`.
+## Coding rules
 
+A reviewer checks the following; [the checks below](#checks-that-must-pass) automate most of it.
+
+### PHP
+
+- **WordPress Coding Standards**: tabs, `snake_case` for methods, variables and hooks,
+  `Snake_Case` for classes, Yoda conditions. `composer phpcs` reports violations and
+  `composer phpcbf` fixes most of them.
+- **Short array syntax** — `[]`, never `array()`.
+- **Type declarations** on every parameter and return value.
+- **Docblocks** on every public and protected method, with `@since`, `@param` and `@return`.
+- **Visibility**: start with `private`; use `protected` or `public` only when something
+  outside needs the member. A method that depends only on its arguments is `static`.
+- **Namespaces**: write new code under `Woodev\Framework\*` (PSR-4 layout, e.g.
+  `Woodev\Framework\Shipping\Shipping_Plugin`). The legacy global `Woodev_*` classes exist
+  only in files that have not been migrated yet; do not add new ones.
+- **HPOS**: read and write order data through `Woodev_Order_Compatibility`, never
+  `get_post_meta()` on an order.
+- Treat request data as untrusted: sanitise input, escape output, check capabilities and
+  nonces, use `$wpdb->prepare()`.
+
+#### `@since` follows semver
+
+`@since` is the release the code first ships in — not the current `VERSION` and not a date.
+The authority is `extra.woodev.planned-release` in [`composer.json`](../composer.json)
+(currently `2.0.3`); the unit test `SinceTagCeilingTest` fails if a tag is above it.
+
+- `2.0.x` — bug fixes only; until a feature merges, new code carries the next patch.
+- `2.1.0` — a minor release; the first pull request that adds a feature raises
+  `planned-release` to it.
+- `3.0.0` — a breaking release.
+
+### JavaScript and TypeScript (`src/`)
+
+- **New files in `src/` are TypeScript.** Existing `.js` and `.jsx` files are migrated when
+  you touch them, not in bulk. `npm run lint:ts-baseline` and `npm run typecheck` enforce this.
+- The raw scripts under `woodev/**/assets/js/frontend/` are served to the browser as they
+  are; they stay plain JavaScript.
+- `woodev/assets/build/` holds **generated** bundles that are committed. Never edit them by
+  hand; change `src/` and run `npm run build`.
+
+### Translatable strings
+
+Who reads a string decides its language:
+
+| The string is read by… | Write the `msgid` in… |
+|---|---|
+| A shopper, on the storefront | **English** — the Russian text comes from the catalogue, because a shop's frontend can run in English |
+| A merchant, in the admin | Russian is fine; if you write English, add the translation to the catalogue |
+| Nobody on a screen — logs, exception messages | Either language; no `__()` wrapper is needed |
+
+Where you do wrap a string, the text domain is `woodev-plugin-framework`. Decide by where
+the string is **rendered**, not by which directory the file sits in. When you add or change
+a translatable string, the Russian catalogue,
+`woodev/languages/woodev-plugin-framework-ru_RU.po`, must agree with the source: every
+source string has to be in it, and every English `msgid` needs a Russian translation.
+`npm run lint:i18n-sources` and `npm run lint:i18n` check both; `npm run lint:mo` and
+`npm run lint:js-i18n` check that the compiled `.mo` and per-bundle JSON files are current
+relative to the `.po`.
+
+### Wording merchants read
+
+Merchants are shop owners, not developers. In anything they read — labels, tooltips,
+descriptions, admin notices:
+
+- say «форма оформления заказа», not «чекаут»;
+- never use the word «фреймворк»; name the plugin, or leave the word out;
+- keep labels short; a tooltip or description explains the setting.
+
+Code comments, docblocks and log lines are written for developers and may use the precise terms.
+
+## Checks that must pass
+
+Run these before you open a pull request. CI runs the same ones.
+
+```bash
+composer check          # PHPCS + PHPStan + unit tests
+npm run test:js         # jest, through wp-scripts
+npm run typecheck       # tsc over src/
+npm run lint:ts-baseline
 ```
-{type}: {description}
+
+If you changed anything under `src/`, also run:
+
+```bash
+npm run build           # rebuild bundles — commit the result
+npm run lint:i18n-sources
+npm run lint:i18n
+npm run lint:mo
+npm run lint:js-i18n
 ```
 
-**Types:**
+- Use `npm run test:js`, never `npx jest` — a bare jest loses the jsdom environment.
+- **Build parity**: CI rebuilds the bundles and fails if they differ from what you
+  committed, `*.min.js` and `*.min.css` included.
+- One unit test file: `./vendor/bin/phpunit tests/unit/BootstrapTest.php`.
+- New behaviour comes with a test: PHP unit tests (Brain Monkey, no WordPress) in
+  `tests/unit/`, JS tests in `tests/js/`.
 
-| Type | Description | CHANGELOG Section |
-|------|-------------|-------------------|
-| `feat:` | Новая функция | ✨ Features |
-| `fix:` | Исправление бага | 🐛 Bug Fixes |
-| `docs:` | Документация | 📝 Documentation |
-| `style:` | Форматирование (не влияет на логику) | — |
-| `refactor:` | Рефакторинг | 🔧 Refactoring |
-| `test:` | Тесты | ✅ Tests |
-| `chore:` | Вспомогательные задачи | ⚙️ Chores |
-| `ci:` | CI/CD изменения | 🚀 CI/CD |
+## Commits and pull requests
 
-**Breaking changes:** Add `!` after type (e.g., `feat!:`) and include `BREAKING CHANGE:` footer.
+Name a branch `{type}/{short-description}` — `feat/shipping-by-volume`,
+`fix/rate-rounding`, `docs/contributing-guide` — with the same types as commits.
 
-```
-feat!: remove deprecated old_method()
+Commits follow [Conventional Commits](https://www.conventionalcommits.org/):
+`type(scope): description`, for example `fix(bootstrap): handle missing WooCommerce`. The
+changelog is generated from them, so the type decides which section your change lands in.
+Types: `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `ci`, `chore` (left out of the
+changelog). A breaking change adds `!` after the type and a footer:
+
+```text
+feat!: remove old_method()
 
 BREAKING CHANGE: old_method() has been removed. Use new_method() instead.
 ```
 
-## Coding Guidelines
+A GitHub closing keyword goes **alone on its own line**, and only when the commit finishes
+the issue:
 
-### PHP Code
+```text
+fix: stop rounding the rate twice
 
-- Follow [WordPress PHP Coding Standards](https://make.wordpress.org/core/handbook/best-practices/coding-standards/php/)
-- Use **class methods**, not standalone functions
-- Use **type declarations** (PHP 7.4+)
-- Use **DTOs or contracts** for data transfer between layers
-- Follow **SOLID principles**
-- Add comprehensive **docblocks** with `@since`, `@param`, `@return`
-- **Respect the two-rule policy above** — internal APIs may break cleanly; data contracts may not
-
-### JavaScript Code
-
-- Follow [WordPress JavaScript Coding Standards](https://make.wordpress.org/core/handbook/best-practices/coding-standards/javascript/)
-- Use `snake_case` for properties/methods/functions
-- Use `PascalCase` for class names
-- Do **not** use semicolons at end of lines
-- Prefer built-in WordPress/WooCommerce scripts
-
-### Documentation
-
-- All `.md` files must follow `woodev-framework-markdown` skill
-- Developer documentation in **English**
-- User documentation in **Russian**
-- **CHANGELOG.md is auto-generated** by git-cliff (do not edit manually)
-
-## Development Workflow
-
-1. **Make code changes**
-2. **Run linting** — `composer phpcs`
-3. **Fix issues** — `composer phpcbf -- path/to/file.php`
-4. **Run tests** (if applicable) — `composer test:unit`, `composer test:integration`
-5. **Commit with Conventional Commits format**
-6. **Create PR** — only after all checks pass
-
-### Pre-commit Checklist
-
-Before committing:
-
-- [ ] Linting passes: `composer phpcs`
-- [ ] Tests pass (if applicable): `composer test:unit`, `composer test:integration`
-- [ ] **Commits follow Conventional Commits format**
-- [ ] **No installed-site data contract broken** (option keys, hook names, IDs, slugs, meta keys)
-- [ ] CLAUDE.md updated (if architecture changed)
-- [ ] README.md updated (if user-facing changes)
-
-## Testing
-
-### Environment Setup
-
-```bash
-# Install wp-env
-npm install -g @wordpress/env
-
-# Start environment
-wp-env start
+Closes #123
 ```
 
-### Running Tests
+To merely mention an issue write `see #123`; the `commit-msg` hook rejects `closes`,
+`fixes` and `resolves` anywhere else.
 
-```bash
-# All unit tests (no WordPress required)
-composer test:unit
+For the pull request: work in a branch of your fork, keep one concern per pull request, run
+the [checks](#checks-that-must-pass), open it against `main` and fill in the template —
+especially *How to test* and *Areas for human testing*, where you name what a machine could
+not verify. Reviewers look at coding standards, design, tests, security, documentation and,
+above all, whether anything on the [installed-site list](#what-this-project-is) changed.
 
-# All integration tests (requires wp-env)
-composer test:integration
+## Publishing rules
 
-# Specific test class
-TEST_SUITE=unit ./vendor/bin/phpunit --filter TestClassName
-```
+- **Only the maintainer merges.**
+- **A pull request without green CI is not reviewed.** Every CI job has to pass on its own.
+- **Only the maintainer raises `Woodev_Plugin::VERSION`.** Raising it on `main` publishes a
+  release (tag, changelog, archive). Do not change it in a contribution; if your change
+  should ship, say so in the pull request.
+- **The changelog is generated** from commit messages. Never edit `CHANGELOG.md`.
+- **Documentation changes go to `website/`** and follow the rules below.
 
-See `woodev-framework-dev-cycle` skill for detailed testing instructions.
+## Documentation
 
-## Release Workflow — Fully Automatic
+The public site lives in [`website/`](../website) (Astro Starlight, English); pages are
+Markdown in `website/src/content/docs/`.
 
-**No manual release steps needed!**
+- Document **only the public API** a plugin author uses, with a working example for each
+  capability, written so a reader a year from now still understands it.
+- **Verify every example against the source.**
+- Use the `%%FRAMEWORK_VERSION%%` placeholder for version numbers; never hardcode one.
+- A new page also needs an entry in the sidebar in `website/astro.config.mjs`.
+- Preview with `cd website && npm ci && npm run dev`; check a production build with
+  `npm run build`.
+- Lint with `npx markdownlint-cli2 "website/src/content/docs/**/*.{md,mdx}"`.
 
-1. Update `VERSION` constant in `woodev/class-plugin.php`
-2. Commit: `git commit -m "chore: release version 2.1.0"`
-3. Push to main: `git push origin main`
+## License and questions
 
-**GitHub Actions automatically:**
-
-- Runs all tests (PHPCS, PHPStan, Unit, Integration)
-- Creates git tag `v2.1.0`
-- Generates CHANGELOG via `git-cliff`
-- Builds release ZIP
-- Publishes GitHub Release
-
-## Code Review
-
-All PRs will be reviewed against:
-
-- WordPress Coding Standards compliance
-- Architecture and design patterns
-- Test coverage (if applicable)
-- Documentation completeness
-- Security best practices
-- **Backward compatibility** (CRITICAL for framework)
-
-Reviewers will use the `woodev-framework-code-review` skill as a reference.
-
-## License
-
-All contributions are released under the same license as the project (GPLv3+).
-
-## Questions?
-
-If you have questions about contributing, please:
-
-- Open a [Discussion](../../discussions)
-- Check existing [Issues](../../issues)
-- Browse the [Documentation](https://kalbac.github.io/woodev-plugin-framework/)
-
----
-
-**Thank you for contributing!** 🎉
+Contributions are released under the project's license, GPL-3.0-or-later. Questions go to
+[Discussions](https://github.com/kalbac/woodev-plugin-framework/discussions); the
+[documentation](https://kalbac.github.io/woodev-plugin-framework/) is the place to start.

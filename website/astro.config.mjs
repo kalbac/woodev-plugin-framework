@@ -99,6 +99,7 @@ export default defineConfig({
 					label: 'Reference',
 					items: ['reference/hooks-and-filters'],
 				},
+				'contributing',
 			],
 		}),
 	],
