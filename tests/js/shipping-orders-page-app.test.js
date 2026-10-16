@@ -2868,6 +2868,28 @@ describe( 'bulk print for the selected orders (#1192)', () => {
 		expect( optionLabels() ).toEqual( expect.arrayContaining( [ 'Печать накладных', 'Печать штрихкодов' ] ) );
 	} );
 
+	test( 'the canonical bulk actions are offered only when a row on the page offers them', async () => {
+		fetchOrders.mockResolvedValue(
+			resultOf( [ makeRow( { id: 1, actions: [ { action: 'export', label: 'Выгрузить', title: '', destructive: false } ] } ) ] )
+		);
+
+		const { unmount } = render( <App /> );
+		await waitFor( () => expect( screen.getByLabelText( 'Массовые действия' ) ).toBeInTheDocument() );
+		expect( optionLabels() ).toContain( 'Экспортировать' );
+		expect( optionLabels() ).not.toContain( 'Обновить' );
+		expect( optionLabels() ).not.toContain( 'Отменить' );
+		unmount();
+
+		fetchOrders.mockResolvedValue(
+			resultOf( [ makeRow( { id: 2, actions: [ { action: 'update', label: 'Обновить', title: '', destructive: false } ] } ) ] )
+		);
+		render( <App /> );
+		await screen.findByRole( 'checkbox', { name: 'Выбрать заказ 42' } );
+		expect( optionLabels() ).toEqual( expect.arrayContaining( [ 'Обновить' ] ) );
+		expect( optionLabels() ).not.toContain( 'Экспортировать' );
+		expect( optionLabels() ).not.toContain( 'Отменить' );
+	} );
+
 	test( 'one request carries every selected id and the file is saved by itself', async () => {
 		const blob = new Blob( [ '%PDF-' ] );
 
@@ -3269,6 +3291,16 @@ describe( 'the cb column and bulk actions (#874)', () => {
 			};
 		}
 
+		function cancellableRow( overrides = {} ) {
+			return checkableRow( {
+				...overrides,
+				actions: [
+					{ action: 'export', label: 'Выгрузить', title: '', destructive: false },
+					{ action: 'cancel', label: 'Отменить', title: '', destructive: true },
+				],
+			} );
+		}
+
 		test( 'the request carries exactly the selected ids', async () => {
 			fetchOrders.mockResolvedValue(
 				resultOf( [
@@ -3453,8 +3485,8 @@ describe( 'the cb column and bulk actions (#874)', () => {
 			test( 'confirms first, naming the count, and never calls the API before confirming', async () => {
 				fetchOrders.mockResolvedValue(
 					resultOf( [
-						checkableRow( { id: 1, order_number: '1' } ),
-						checkableRow( { id: 2, order_number: '2' } ),
+						cancellableRow( { id: 1, order_number: '1' } ),
+						cancellableRow( { id: 2, order_number: '2' } ),
 					] )
 				);
 
@@ -3474,7 +3506,7 @@ describe( 'the cb column and bulk actions (#874)', () => {
 			} );
 
 			test( 'confirming with «Да» sends the request', async () => {
-				fetchOrders.mockResolvedValue( resultOf( [ checkableRow() ] ) );
+				fetchOrders.mockResolvedValue( resultOf( [ cancellableRow() ] ) );
 				performBulkOrderAction.mockResolvedValue( bulkResult( { action: 'cancel' } ) );
 
 				render( <App /> );
@@ -3491,7 +3523,7 @@ describe( 'the cb column and bulk actions (#874)', () => {
 			} );
 
 			test( '«Нет» drops the confirm without ever calling the API', async () => {
-				fetchOrders.mockResolvedValue( resultOf( [ checkableRow() ] ) );
+				fetchOrders.mockResolvedValue( resultOf( [ cancellableRow() ] ) );
 
 				render( <App /> );
 
