@@ -6,7 +6,12 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-16 afternoon (s184, with the operator):** everything from the night and morning is merged (framework `main`
+**As of 2026-10-16 evening (s185, autonomous):** framework `main` `9ef7b4fb` (#1344: bulk actions offered only when a row offers
+them, #1345); CDEK `v2` `4036d67` (#116, COD per-unit split, edostavka#115); Yandex `main` `0d0a975` (#119, pickup points the
+packed parcels do not fit are refused, yandex#113). No open PRs. Publication plan #1342: stage 1 delivered for the operator
+(docs audit, screen inventory P1b, structure plan + 4 questions as a card comment); base article «Возможности плагинов Woodev»
+is a BetterDocs DRAFT (doc 145776), fact-checked, awaiting his look. Detail: `sessions/s185.md`.
+**Before that —** **As of 2026-10-16 afternoon (s184, with the operator):** everything from the night and morning is merged (framework `main`
 `ce870e02`; #1332 #1339 #1340 #1341; yandex#109 via PR #118; WooCommerce upstream issue woocommerce/woocommerce#69892). No open PRs.
 Plugins are code-ready for release; the release now waits for the **publication plan, card #1342** (woodev.ru docs + blog,
 Telegram; every operator decision is a comment on the card; written and published through the `woodev-ru` project on ACEMAGIC).
