@@ -2125,6 +2125,167 @@ describe( 'PickupPicker — restore and clear', () => {
 } );
 
 /*
+ * #1263: CDEK point → Yandex point → back to CDEK on the block checkout. Where the store replaces the
+ * address with the point's, the other carrier's point wrote its own street and postcode, so the
+ * server no longer confirms this rate's point for the address the cart holds — but it still names
+ * the point it remembers (`owner.remembered_point_id`). Coming back to the rate confirms that point
+ * again, as the classic checkout restores it (#1261).
+ */
+describe( 'PickupPicker — coming back to a rate restores its remembered point (#1263)', () => {
+	const CDEK_ADDRESS = { address_1: 'Большая Полянка, 28к1', postcode: '119180' };
+	const YANDEX_ADDRESS = { address_1: 'Волынская, 10', postcode: '' };
+
+	/** The server's answer for `rate`: no confirmation that holds, and `remembered` as the remembered point. */
+	const staleAnswer = ( rate: string, remembered: string ): void => {
+		serverAnswers( rate, null );
+		const extension = mockStore.extensions[ NAMESPACE ] as { owner: Record< string, string > | null };
+
+		if ( extension.owner ) {
+			extension.owner = { ...extension.owner, remembered_point_id: remembered };
+		}
+	};
+
+	const replacingConfig = ( over: Record< string, unknown > = {} ): void => {
+		( window as unknown as Record< string, unknown > ).woodev_pickup_config_carrier = {
+			...config,
+			replaceAddress: { enabled: true, billingOnly: false },
+			...over,
+		};
+	};
+
+	/** The server confirms the point again and moves the destination back to it. */
+	const serverReconfirms = (): void => {
+		extensionCartUpdate.mockImplementation( async () => {
+			serverAnswers( PICKUP_RATE, snapshot( { destination: CDEK_ADDRESS } as Partial< PickupSnapshot > ) );
+			notify();
+
+			return { extensions: mockStore.extensions };
+		} );
+	};
+
+	/** On our pickup rate with a confirmed point, away to a rate we do not own, and back. */
+	const leaveAndComeBack = async ( remembered = 'P1' ): Promise< void > => {
+		mockStore.shipping = { ...HOME, ...CDEK_ADDRESS };
+		serverAnswers( PICKUP_RATE, snapshot() );
+
+		renderPicker();
+
+		act( () => {
+			chooseRate( COURIER_RATE );
+			serverAnswers( COURIER_RATE, null );
+			// The other carrier's point moved the address while the shopper was away.
+			mockStore.shipping = { ...HOME, ...YANDEX_ADDRESS };
+			notify();
+		} );
+
+		await act( async () => {
+			chooseRate( PICKUP_RATE );
+			notify();
+		} );
+		await act( async () => {
+			staleAnswer( PICKUP_RATE, remembered );
+			notify();
+		} );
+	};
+
+	it( 'confirms the remembered point again and moves the address back to it', async () => {
+		replacingConfig();
+		serverReconfirms();
+
+		await leaveAndComeBack();
+
+		expect( extensionCartUpdate ).toHaveBeenCalledTimes( 1 );
+		expect( extensionCartUpdate ).toHaveBeenCalledWith( {
+			namespace: NAMESPACE,
+			data: { pickup: { carrier: { carrier_point: { point_id: 'P1', payment_method: 'cod' } } } },
+		} );
+		expect( mockStore.shipping ).toEqual( { ...HOME, ...CDEK_ADDRESS } );
+		expect( screen.getByRole( 'button', { name: 'Choose a different pickup point' } ) ).toBeInTheDocument();
+		expect( lastEcho() ).toMatchObject( { point_id: 'P1', rate_id: PICKUP_RATE } );
+		expect( mockStore.validation[ ERROR_ID ] ).toBeUndefined();
+		expect( mockStore.calculating ).toBe( 0 );
+	} );
+
+	it( 'waits for the cart to answer for the rate it came back to', async () => {
+		replacingConfig();
+		serverReconfirms();
+		mockStore.shipping = { ...HOME, ...CDEK_ADDRESS };
+		serverAnswers( PICKUP_RATE, snapshot() );
+
+		renderPicker();
+
+		act( () => {
+			chooseRate( COURIER_RATE );
+			serverAnswers( COURIER_RATE, null );
+			notify();
+		} );
+		// Selected, but the server still answers for the courier rate: nothing to confirm yet.
+		await act( async () => {
+			chooseRate( PICKUP_RATE );
+			notify();
+		} );
+
+		expect( extensionCartUpdate ).not.toHaveBeenCalled();
+
+		await act( async () => {
+			staleAnswer( PICKUP_RATE, 'P1' );
+			notify();
+		} );
+
+		expect( extensionCartUpdate ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'asks once per switch — a refusal leaves «choose a pickup point», with no retry loop', async () => {
+		replacingConfig();
+		extensionCartUpdate.mockRejectedValue( {
+			code: 'woodev_pickup_validation',
+			message: 'This pickup point is closed.',
+			data: { status: 400 },
+		} );
+
+		await leaveAndComeBack();
+		await act( async () => {
+			notify();
+		} );
+
+		expect( extensionCartUpdate ).toHaveBeenCalledTimes( 1 );
+		expect( screen.getByRole( 'button', { name: 'Select a pickup point' } ) ).toBeInTheDocument();
+		expect( mockStore.validation[ ERROR_ID ] ).toBeDefined();
+	} );
+
+	it( 'asks nothing when the store keeps the shopper’s address (the point never moved it)', async () => {
+		serverReconfirms();
+
+		await leaveAndComeBack();
+
+		expect( extensionCartUpdate ).not.toHaveBeenCalled();
+	} );
+
+	it( 'asks nothing when the server remembers no point for the rate', async () => {
+		replacingConfig();
+		serverReconfirms();
+
+		await leaveAndComeBack( '' );
+
+		expect( extensionCartUpdate ).not.toHaveBeenCalled();
+		expect( screen.getByRole( 'button', { name: 'Select a pickup point' } ) ).toBeInTheDocument();
+	} );
+
+	it( 'never restores without a switch — an address edited on the rate itself stays the shopper’s', async () => {
+		replacingConfig();
+		serverReconfirms();
+		staleAnswer( PICKUP_RATE, 'P1' );
+
+		renderPicker();
+		await act( async () => {
+			notify();
+		} );
+
+		expect( extensionCartUpdate ).not.toHaveBeenCalled();
+	} );
+} );
+
+/*
  * SP-11 C-3 (#1090): answers that arrive late, out of order, or after a failed order. Every request
  * is held open by the test and answered at a moment the test chooses, so the order of events is
  * the test's own — no timers, no real network.

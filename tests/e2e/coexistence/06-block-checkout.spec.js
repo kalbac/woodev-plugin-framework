@@ -1,11 +1,11 @@
 /**
  * Scenario 1 on the BLOCK checkout (`/checkout/`): CDEK point → Yandex point → CDEK point in one session.
  *
- * «Block-only gaps are NOT release blockers» (operator, 08.10.2026) — this spec records them rather than gating on them:
- *  - the order placed after re-picking the CDEK point is clean (passes);
- *  - B1 (known gap, `expectKnownDefect`): classic checkout restores the remembered CDEK point when CDEK is chosen again, the block
- *    checkout shows «Select a pickup point» again and the form keeps the Yandex point's address and an empty postcode
- *    until the buyer re-picks, so «Place order» is refused («Please choose a pickup point», «valid postal code»).
+ *  - the order placed after re-picking the CDEK point is clean;
+ *  - B1 (fixed in #1263): choosing CDEK again restores the remembered CDEK point, as the classic checkout does. The Yandex point
+ *    had written its own street and postcode into the form, so the block confirms the CDEK point again and moves the address
+ *    back; «Place order» then needs no re-pick (before the fix: «Select a pickup point» again, the Yandex address kept, the
+ *    order refused).
  *
  * The block checkout has no default locality on the rig for a guest: the buyer finds a locality first («Find your locality»),
  * and only then do the carriers' methods appear. The Yandex courier method is off for the run, as in scenarios 1 and 2.
@@ -15,7 +15,6 @@ const { test, expect } = require( '@playwright/test' );
 const {
 	METHOD_YANDEX_COURIER,
 	PRODUCT_ID,
-	expectKnownDefect,
 	expectOnlyCarrier,
 	readOrder,
 	recordOrder,
@@ -144,23 +143,98 @@ test.describe( 'scenario 1 on the block checkout', () => {
 
 		await chooseRate( page, 'CDEK pickup point' );
 		await pickPoint( page );
+
+		const cdekPoint = ( await page.locator( '.woodev-pickup-block__chosen strong' ).innerText() ).trim();
+		const cdekAddress = await page.evaluate( () => window.wp.data.select( 'wc/store/cart' ).getCustomerData().shippingAddress.address_1 );
+
 		await chooseRate( page, 'Yandex pickup point' );
 		await pickPoint( page );
 		await chooseRate( page, 'CDEK pickup point' );
 
+		// The remembered CDEK point comes back on its own — shown, and the address moved back from the Yandex point's.
+		await expect( page.locator( '.woodev-pickup-block__chosen strong' ) ).toHaveText( cdekPoint, { timeout: 60_000 } );
+		await expect
+			.poll( () => page.evaluate( () => window.wp.data.select( 'wc/store/cart' ).getCustomerData().shippingAddress.address_1 ), { timeout: 30_000 } )
+			.toBe( cdekAddress );
+
 		const { orderId, errors } = await fillAndPlace( page );
 
-		// The one assertion the defect owns; no order exists while it stands, so the order check waits for the fix.
-		if (
-			await expectKnownDefect(
-				'B1',
-				'block-only: the block checkout does not restore the remembered CDEK point after another carrier was chosen; the form keeps the other carrier\'s address and an empty postcode.',
-				() => expect( errors.join( ' | ' ), 'placing the order without re-picking' ).toBe( '' )
-			)
-		) {
-			return;
-		}
+		expect( errors.join( ' | ' ), 'placing the order without re-picking' ).toBe( '' );
 
 		expectOnlyCarrier( readOrder( orderId ), 'cdek', `order ${ orderId }` );
+	} );
+} );
+
+/*
+ * #1279 — WooCommerce core, reproduced on a clean WooCommerce 11.2.1 with none of our plugins: the buyer edits the postcode and
+ * presses «Place order» straight away. The press takes focus from the field, core pushes the address at once, the checkout turns
+ * «calculating» and the button is disabled before the mouse is released — the click is lost. The framework's guard
+ * (`src/checkout-blocks/place-order-guard.ts`) carries that one press out when the button is enabled again.
+ */
+test.describe( 'the first «Place order» press right after a postcode edit (#1279)', () => {
+	test( 'places the order', async ( { page } ) => {
+		await openBlockCheckout( page );
+
+		const courier = page.locator( '.wc-block-components-radio-control__option', { hasText: 'CDEK courier delivery' } ).first();
+
+		await courier.click();
+		await page.waitForTimeout( 3000 );
+		await page.fill( '#email', `y15-block-1279-${ Date.now() }@example.com` );
+
+		for ( const [ name, value ] of [ [ 'first_name', 'Тест' ], [ 'last_name', 'Y15' ], [ 'phone', '+79001234567' ], [ 'address_1', 'ул. Тверская, 1' ], [ 'postcode', '125009' ] ] ) {
+			for ( const prefix of [ '#shipping-', '#billing-' ] ) {
+				const field = page.locator( prefix + name );
+
+				if ( ( await field.count() ) && ( await field.isVisible() ) ) {
+					await field.fill( value );
+				}
+			}
+		}
+
+		const postcode = page.locator( '#billing-postcode:visible, #shipping-postcode:visible' ).first();
+
+		// Every edit above pushed and answered: the button is enabled and the form is settled.
+		await postcode.blur();
+		await expect( page.locator( '.wc-block-components-checkout-place-order-button' ) ).toBeEnabled( { timeout: 60_000 } );
+		await page.waitForTimeout( 5000 );
+
+		// The edit the buyer makes last, and the press that follows it — a human press, not an instant one.
+		await postcode.click();
+		await page.keyboard.press( 'End' );
+		await page.keyboard.press( 'Backspace' );
+		await page.keyboard.type( '5' );
+
+		const button = page.locator( '.wc-block-components-checkout-place-order-button' );
+
+		await button.scrollIntoViewIfNeeded();
+
+		const box = await button.boundingBox();
+		const checkoutPosts = [];
+
+		page.on( 'request', ( request ) => {
+			const url = decodeURIComponent( request.url() );
+
+			if ( 'POST' === request.method() && /wc\/store\/v1\/checkout/.test( url ) && ! /calc_totals/.test( url + ( request.postData() || '' ) ) ) {
+				checkoutPosts.push( url );
+			}
+		} );
+
+		await page.mouse.move( box.x + ( box.width / 2 ), box.y + ( box.height / 2 ) );
+		await page.mouse.down();
+		await page.waitForTimeout( 100 );
+		await page.mouse.up();
+
+		await page.waitForURL( /order-received\/\d+/, { timeout: 90_000 } );
+
+		const orderId = Number( page.url().match( /order-received\/(\d+)/ )[ 1 ] );
+
+		recordOrder( orderId );
+		expect( checkoutPosts, 'one order request for one press' ).toHaveLength( 1 );
+
+		const order = readOrder( orderId );
+
+		expect( order.shipping_lines.map( ( line ) => line.method_id ), `order ${ orderId }: shipping line` ).toEqual( [ 'edostavka_courier' ] );
+		// Placed for the address the buyer had just typed, not the one before the edit.
+		expect( [ order.billing.postcode, order.shipping.postcode ], `order ${ orderId }: postcode` ).toContain( '125005' );
 	} );
 } );

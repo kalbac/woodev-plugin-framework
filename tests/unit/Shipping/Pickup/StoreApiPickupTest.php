@@ -227,7 +227,7 @@ final class StoreApiPickupTest extends TestCase {
 	 */
 	public function test_cart_data_names_the_field_that_owns_the_chosen_rate(): void {
 		$this->assertSame(
-			[ 'plugin_id' => 'carrier', 'field_id' => 'carrier_point', 'rate_id' => 'carrier_pickup:7', 'locality' => 'msk' ],
+			[ 'plugin_id' => 'carrier', 'field_id' => 'carrier_point', 'rate_id' => 'carrier_pickup:7', 'locality' => 'msk', 'remembered_point_id' => '' ],
 			C2a_Adapter::cart_data()['owner']
 		);
 
@@ -283,6 +283,38 @@ final class StoreApiPickupTest extends TestCase {
 		// …and it is still bound to it: the residential address it replaced no longer carries the point.
 		$this->packages[0]['destination'] = $this->address;
 		$this->assertNull( C2a_Adapter::cart_data()['pickup']['carrier']['carrier_point'] );
+	}
+
+	/**
+	 * #1263: another carrier's point moved the destination, so this carrier's confirmation no longer
+	 * holds — but the owner still names the point the session remembers, so the block checkout can
+	 * confirm it again when the shopper comes back to this rate.
+	 */
+	public function test_owner_names_the_remembered_point_after_the_destination_moved_away_from_it(): void {
+		$this->handler->replace_address = true;
+		$this->point_data['address'] = 'Tverskaya 1';
+		$this->point_data['postal_code'] = '101000';
+		C2a_Adapter::update( $this->command() );
+		$this->assertSame( 'P1', C2a_Adapter::cart_data()['owner']['remembered_point_id'] );
+
+		// Another carrier's point wrote its own street and cleared the postcode.
+		$this->packages[0]['destination'] = array_merge( $this->packages[0]['destination'], [ 'address_1' => 'Volynskaya 10', 'postcode' => '' ] );
+
+		$cart = C2a_Adapter::cart_data();
+		$this->assertNull( $cart['pickup']['carrier']['carrier_point'], 'the confirmation is bound to the address it moved' );
+		$this->assertSame( 'P1', $cart['owner']['remembered_point_id'] );
+
+		// Confirming it again moves the destination back and binds the confirmation to it.
+		C2a_Adapter::update( $this->command() );
+		$this->assertSame( 'Tverskaya 1', $this->packages[0]['destination']['address_1'] );
+		$this->assertSame( '101000', $this->packages[0]['destination']['postcode'] );
+		$this->assertSame( 'P1', C2a_Adapter::cart_data()['pickup']['carrier']['carrier_point']['point_id'] );
+	}
+
+	public function test_owner_names_no_remembered_point_in_another_locality(): void {
+		C2a_Adapter::update( $this->command() );
+		$this->scope->locality = 'spb';
+		$this->assertSame( '', C2a_Adapter::cart_data()['owner']['remembered_point_id'] );
 	}
 
 	public function test_address_replacement_is_off_unless_the_store_asks_for_it(): void {

@@ -291,6 +291,59 @@ export function PickupPicker( { data, checkoutExtensionData }: PickupPickerProps
 		openRef.current?.();
 	}, [ openWhenReady, addressPending ] );
 
+	/*
+	 * Coming back to a rate restores its point, as the classic checkout does (#1263, #1261).
+	 *
+	 * Where the store replaces the address with the point's, another carrier's point chosen in
+	 * between has written ITS street and postcode, and this rate's confirmation is bound to the
+	 * address it moved — the server keeps the point but no longer confirms it here. So once the
+	 * shopper has switched back and the cart has answered for this rate, the point the server still
+	 * remembers (`owner.remembered_point_id`) is confirmed again through the ordinary command: the
+	 * server re-checks it and moves the address back in the same request. Armed by a rate SWITCH
+	 * only — an address the shopper edits on this rate is theirs, never overwritten here — and
+	 * carried out once per switch; a refusal leaves «choose a pickup point», as before.
+	 */
+	const previousRateRef = useRef( selectedRateId );
+	const restoreForRef = useRef( '' );
+
+	useEffect( () => {
+		if ( previousRateRef.current !== '' && previousRateRef.current !== selectedRateId ) {
+			restoreForRef.current = selectedRateId;
+		}
+
+		previousRateRef.current = selectedRateId;
+	}, [ selectedRateId ] );
+
+	const rememberedPointId = view.owner?.remembered_point_id ?? '';
+	const restoresAddress = config?.replaceAddress?.enabled === true;
+
+	useEffect( () => {
+		// Wait for the cart's answer for the rate switched to (until then the view is the old rate's,
+		// or none) and for an address edit to settle.
+		if ( restoreForRef.current === '' || restoreForRef.current !== selectedRateId || ! field || ! config || addressPending ) {
+			return;
+		}
+
+		restoreForRef.current = '';
+
+		if ( confirmed || rememberedPointId === '' || ! restoresAddress || noLocality ) {
+			return;
+		}
+
+		const scope = scopeRef.current;
+
+		createHost( {
+			data,
+			field,
+			config,
+			trigger: triggerRef.current,
+			onClose: () => undefined,
+			isCurrent: () => ! scope.left,
+		} )
+			.confirmSelection( { id: rememberedPointId } )
+			.catch( () => undefined );
+	}, [ selectedRateId, field, config, addressPending, confirmed, rememberedPointId, restoresAddress, noLocality, data ] );
+
 	openRef.current = null;
 
 	if ( ! field || ! config ) {
