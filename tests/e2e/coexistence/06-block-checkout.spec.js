@@ -78,7 +78,31 @@ async function pickPoint( page ) {
 	await page.waitForSelector( '.woodev-modal__content' );
 	await page.waitForSelector( '.woodev-pickup-list__item', { state: 'attached' } );
 
-	const first = page.locator( '.woodev-pickup-list__item' ).first();
+	// A point that is already chosen — restored on its own after switching back to the carrier (#1263), or simply chosen before —
+	// opens the modal zoomed in on it, with its card over a list that holds that one point. A buyer who wants another point closes
+	// the card (✕), zooms out until others appear and picks one: that is the manual re-pick this helper performs, on a point other
+	// than the chosen one. A first pick finds no card and a full list, and takes the first point.
+	const card = page.locator( '.woodev-pickup-card:visible' );
+
+	if ( await card.count() ) {
+		await card.locator( '.woodev-pickup-card__close' ).click();
+		await expect( card ).toHaveCount( 0 );
+		await expect
+			.poll(
+				async () => {
+					if ( 0 === ( await page.locator( '.woodev-pickup-list__item:not(.is-selected)' ).count() ) ) {
+						await page.locator( '.woodev-pickup-zoom__button--out' ).click();
+						await page.waitForTimeout( 2000 );
+					}
+
+					return page.locator( '.woodev-pickup-list__item:not(.is-selected)' ).count();
+				},
+				{ timeout: 60_000, intervals: [ 500 ] }
+			)
+			.toBeGreaterThan( 0 );
+	}
+
+	const first = page.locator( '.woodev-pickup-list__item:not(.is-selected)' ).first();
 
 	if ( ! ( await first.isVisible() ) ) {
 		await page.locator( '.woodev-pickup-list__toggle' ).click();
