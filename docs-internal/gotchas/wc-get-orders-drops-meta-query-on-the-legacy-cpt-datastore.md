@@ -92,6 +92,13 @@ The transferable half: "matches nothing" is never the absence of a condition. Ev
 you and the database is entitled to read an empty or unrecognised filter as "no filter", and at
 least one of them will.
 
+## s184 (yandex#112): the same drop hit a status poller
+
+The Yandex status poller selected its orders with `meta_query`, which the CPT store ignores (yandex#112). Fixed by a bridge on
+`woocommerce_order_data_store_cpt_get_orders_query` (`Yandex_Order_Meta_Query`) and a `NOT EXISTS`-OR-`NOT IN` status clause —
+a bare `NOT IN` on the status key would have skipped orders that have no status meta yet. Background jobs (pollers, scans) are
+callers too: grep them when auditing `wc_get_orders()` uses.
+
 ## Related
 
 - [wpenv-windows-gitbash-path-mangling](wpenv-windows-gitbash-path-mangling.md) — how to run the

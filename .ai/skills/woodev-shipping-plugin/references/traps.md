@@ -33,6 +33,17 @@ Each detail link records the failure and the correct seam. Check the relevant en
 - A failed `get_option()` reads as "absent" and is cached so; a one-time migration must use a verified reader: [get_option gotcha](../../../../docs-internal/gotchas/get-option-turns-a-failed-select-into-the-default-and-caches-it.md).
 - Document "not ready yet" is `pending`, never a failure; a print task for an order the carrier has not accepted is not an error (edostavka#8).
 
+- A background job (status poller, scan) that selects orders by meta is a `wc_get_orders()` caller too: on the posts store its
+  `meta_query` is dropped. Yandex bridged it with `Yandex_Order_Meta_Query` on `woocommerce_order_data_store_cpt_get_orders_query`
+  (yandex PR #116), and the status clause is `NOT EXISTS` OR `NOT IN` so orders with no status meta yet are still polled.
+- **COD collection = the order's STORED numbers:** per line `get_total() + get_total_tax()`, shipping `get_shipping_total() +
+  get_shipping_total_tax()`, in both price-entry modes, never the live product's `get_tax_status()` (edostavka PR #114, yandex#110):
+  [COD tax gotcha](../../../../docs-internal/gotchas/cod-collection-must-include-stored-line-tax-and-shipping-tax.md).
+- **A carrier «cancel» reply is not always «cancelled»:** only the carrier's completed state (Yandex `SUCCESS`) may clear the request
+  id and reach the framework's success path; `CREATED`/`ERROR`/malformed are failures, and the poller clears the failure marker when
+  `CANCELLED` arrives (yandex PR #115): [pending-cancel gotcha](../../../../docs-internal/gotchas/a-carrier-cancel-reply-can-mean-accepted-but-pending.md).
+- A quote in a currency other than the store's is refused BEFORE the API call (edostavka PR #114).
+
 ### Plugin identity and wiring
 
 - `get_plugin_name()` runs before `init`: return a plain, untranslated string: [get_plugin_name gotcha](../../../../docs-internal/gotchas/get-plugin-name-runs-before-init-so-a-translated-name-warns.md).

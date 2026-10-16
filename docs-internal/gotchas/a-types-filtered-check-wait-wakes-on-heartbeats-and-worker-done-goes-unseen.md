@@ -57,6 +57,12 @@ worker's blocking `question`) for ~4 hours while the coordinator told the operat
 skip branch on purpose: every delivery is either acked (heartbeat-only) or ends the loop. If a delivery is stale, ack it by id
 (`check --ack <deliveryId>`) and keep looping; after any doubt, drain with plain `check --ack <id>` until `deliveryId` is null.
 
+## s184 (16.10.2026): a handled delivery replays until it is acked
+
+The Orca inbox replays a delivery on every `check` until `check --ack <deliveryId>` is called for it. A watchdog that exits on a
+delivery therefore exits again on the same one after a restart. Ack each delivery as soon as it is handled, then restart the
+waiter.
+
 ## Related
 
 - [a-backgrounded-orca-check-wait-starves-every-later-waiter](a-backgrounded-orca-check-wait-starves-every-later-waiter.md) — run only ONE waiter per run

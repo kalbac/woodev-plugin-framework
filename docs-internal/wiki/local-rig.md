@@ -229,12 +229,16 @@ What actually happened, so the next person knows what is normal:
   `docker exec … -tests-cli-1` integration command still works. Check this before assuming a broken
   command is a broken environment.
 
-## The CDEK plugin on the rig runs its OWN framework copy (s162)
+## Which `woodev/` a plugin runs on the rig (s162 corrected by s184)
 
-`woocommerce-edostavka` on `:8973` loads the framework from the plugin checkout's gitignored `woodev/` directory, which shadows the
-framework checkout's bind mount. A framework change reaches the plugin on the rig only after
-`WOODEV_FRAMEWORK_DIR=/Users/maksimmartirosov/Projects/woodev-plugin-framework bash scripts/sync-framework.sh` in the plugin
-checkout. The framework's own fixtures and e2e DO run from the framework checkout. Gotcha
+`.wp-env.override.json` (gitignored) bind-mounts the framework PRIMARY checkout's `./woodev` over
+`wp-content/plugins/woocommerce-edostavka/woodev` and `…/woocommerce-yandex-delivery/woodev` — measured s184 (16.10.2026, MacBook).
+So the plugins run the framework primary tree, and **verifying a framework branch on the rig means the primary checkout must
+serve that branch** (a worktree is not mounted; generated bundles are built in the primary — gotcha
+`auto-mode-refuses-a-self-reviewed-merge-and-a-branch-overlay-on-the-primary-checkout`). The s162 claim that a gitignored
+`woodev/` copy in the plugin checkout shadows the mount (and that `sync-framework.sh` is needed) is NOT the state measured in
+s184; the two observations disagree, so prove which code answers with a version marker or observable behaviour on the page, never
+by `docker inspect` or by reading this paragraph. Gotcha
 `the-rig-runs-the-cdek-plugins-own-woodev-copy-not-the-framework-checkout`.
 
 ## Both carrier plugins on the rig, and the two-carrier probes (s176)
@@ -242,7 +246,7 @@ checkout. The framework's own fixtures and e2e DO run from the framework checkou
 - `.wp-env.override.json` (gitignored) maps BOTH plugins into the dev env: `woocommerce-edostavka` and `woocommerce-yandex-delivery`
   from their primary checkouts, each with `woodev/` → the framework checkout's `./woodev`. Both are ACTIVE; Yandex runs on the
   production contour (token from the container env `WOODEV_YANDEX_PROD_TOKEN`, calculator/points only — never `offers/confirm` or
-  `request/*`), methods 599 pickup / 600 courier in zone 1. The plugin's own `woodev/` copy is NOT what the rig runs.
+  `request/*`), methods 599 pickup / 600 courier in zone 1. The plugin's own `woodev/` copy is NOT what the rig runs (s184 confirmed).
 - The container's `wp-config.php` carries `WP_MEMORY_LIMIT` 512M (Y15 workaround for #1262; the measured cold web peak is now
   ~85 MB after yandex#56) and the inert helper mu-plugin `zz-y15-coexistence-helper.php` (`tests/e2e/coexistence/rig/install.sh`,
   `install.sh remove`).

@@ -66,6 +66,9 @@ One line per lesson that was found late on a real plugin; each links its detail.
 - **The plugin survives a second carrier and a removed Region field** — acceptance includes the two-carrier matrix and a shop with the region field removed ([second carrier](references/traps.md#a-second-carrier-plugin-on-the-same-site), [location](references/model-rates-location-pickup.md#location)).
 - **The licence gate does not break your suite**: a signed in-force claim in integration fixtures, every WordPress time constant in the unit bootstrap ([core testing](../woodev-plugin-core/layout-and-testing.md)).
 - **An own DSN for error reports** and the entry-file test stub that goes with it ([core services](../woodev-plugin-core/services.md#error-reporting)).
+- **COD amount comes from the order's stored line tax and shipping tax**, not the live product ([traps](references/traps.md#orders-and-data); edostavka PR #114).
+- **A carrier's cancel reply is classified, not assumed** — only the completed state clears the request id; background jobs that select orders by meta go through the datastore-aware helper ([traps](references/traps.md#orders-and-data); yandex PRs #115 #116).
+- **No `add_option()` as a lock** in any scan or poller ([core traps](../woodev-plugin-core/traps.md#php-and-wordpress-topic-php); edostavka PR #113).
 - **Acceptance judges on carrier data, in a real browser path** — block checkout through a real order POST, the classic city picked from the suggestions, never a typed name ([acceptance](references/acceptance-rig.md)).
 
 ## Use fixtures as worked examples
