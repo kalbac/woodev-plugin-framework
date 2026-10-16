@@ -387,6 +387,13 @@ EARLIEST-expiring reset → `1` «Yes, use reset» → `1` «Close» → send «
 it; `orca account list` shows `rateLimitResetCredits.availableCount`. A watcher that greps the WHOLE buffer for the limit text fires
 again on the stale line — match only the last few lines.
 
+## s184 (16.10.2026, macOS, codex 0.163.0): the update prompt blocked EVERY new Codex launch
+
+Every `worker-start --agent codex` of the session returned `failed / agent_prompt_blocked` (`agent-update-prompt`). Recovery is the
+same as above and worked every time: ESC to the terminal (never Enter), read the buffer back, then
+`worker-start --retry-of <failed dispatch> --terminal <handle> --worktree <that terminal's worktree>`. Budget the extra round-trip
+into every Codex launch until the CLI is updated or the notice is skipped for good.
+
 ## Related
 
 - [input-accepted-is-not-proof-a-worker-started](input-accepted-is-not-proof-a-worker-started.md) — the s83 half of this: the receipt lies about delivery

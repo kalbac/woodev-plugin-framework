@@ -6,7 +6,17 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-16 (s183):** public docs site live (Starlight, all pages); repo cleaned (autodev, QWEN, legacy fixtures);
+**As of 2026-10-16 (s184, overnight):** the #1324 code audit (framework PHP + React/TS, CDEK, Yandex) is done and its real
+defects are fixed. Framework `main` `d978d303`: #1329 (#1316 four real bugs: async request POST, `require_ssl`, `memory_limit -1`,
+`str_to_ascii`), #1330 (order-editor keeps coupon discounts; plugins-catalogue failure cooldown), #1331 (#1306 classic-checkout
+e2e under `billing_only`), #1333 (#1326 settings page keeps an edit typed while Save is pending), #1337 (wizard REST keeps
+`location`; all variation pages; licence-key field locked while busy). Yandex `main`: #105 #107 #114 #115 #116 (pickup customer
+services, poller/stop-polling, v1-order export after migration, cancel only on SUCCESS, CPT `meta_query` bridge). CDEK `v2`: #114
+(currency refusal, COD tax). Operator decisions (start of s184): bugs get fixed; block-checkout extension NOT now; #780 taken
+(loop lives in Support AI, ADR-004). Open: **PR #1332** (block checkout #1263/#1279, critic said ship, awaits the operator's rig
+look), **yandex#109** (COD delivery_cost ≠ what the buyer agreed — operator's call), edostavka#115, yandex#113 (Потом).
+In flight at writing: see `next-session-prompt.md`. Gotchas of the session: `sessions/s184.md`.
+**Before that — as of 2026-10-16 (s183):** public docs site live (Starlight, all pages); repo cleaned (autodev, QWEN, legacy fixtures);
 `planned-release` 2.0.3 (semver). **s182:** 🎉 **Framework 2.0.2 is RELEASED** — tag `v2.0.2`, `main` `898a527e` (#1307; GitHub Release
 `woodev-plugin-framework-2.0.2.zip`). **The release ZIP is the `woodev/` directory ONLY** (`git archive HEAD woodev/`, operator
 15.10.2026: no docs, vendor or tooling — the framework has no runtime Composer deps). Since s181: #1300 block-checkout address
@@ -22,8 +32,8 @@ Block-checkout gaps do not block the release (#1263).
 `woodev-ru` monorepo, local-only); the framework blocks checkout and new carrier actions without an in-force SIGNED claim;
 automatic refresh backs off 15 m → 1 h → 6 h → 24 h (operator: never spam woodev.ru). The rig needs real keys for CDEK/Yandex
 and `tests/e2e/rig/zz-woodev-rig-license.php` for the fixtures (`wiki/local-rig.md`). The updater failure backoff is implemented in #1275.
-Next checks: `next-session-prompt.md`. ⚠ Sync the plugin’s own `woodev/` before plugin rig runs
-(`wiki/local-rig.md`). The rig admin user has locale **ru_RU**; the site stays **en_US** (WP core + WooCommerce `ru_RU` packs
+Next checks: `next-session-prompt.md`. ⚠ The rig serves the framework PRIMARY checkout's `woodev/` to both plugins (s184) —
+a framework branch must be in the primary tree to be seen (`wiki/local-rig.md`). The rig admin user has locale **ru_RU**; the site stays **en_US** (WP core + WooCommerce `ru_RU` packs
 are installed: `wp site switch-language ru_RU` for a translation pass, back to `en_US` after — e2e expects English).
 ⚠ The rig runs `SCRIPT_DEBUG=true` (`.wp-env.json`) → it serves UNMINIFIED assets; set it false to test the `.min` files.
 ⚠ 6 classic-checkout e2e specs assume a separate shipping column and fail under the rig's `billing_only` norm (#1306).
@@ -278,6 +288,9 @@ there is historical evidence, not a fresh acceptance run. The live programme sta
 ## Known Bugs / Open debt
 
 - [⚠️] `class-payment-gateway.php` ~3.6k lines — trait-extraction candidate (#117).
+- **s184 open debt:** PR #1332 (block checkout restore point + Place-Order guard) waits for a rig look; the upstream WooCommerce
+  issue for #1279 is drafted, not filed; rig test orders 1917–1928 on `:8973` need cleaning; >1000 variations are silently
+  truncated by the wizard (cap 20×50, rated near-zero, not carded).
 - **B-2 loader-protocol forward-tolerance:** the resolver loads framework classes from the **highest registered copy for the whole fleet**; `backwards_compatible` deactivates-with-notice any plugin below that copy's min. Rules → `AGENT-RULES.md` Rule 3.
 
 ### Public docs

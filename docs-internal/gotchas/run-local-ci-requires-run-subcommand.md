@@ -15,6 +15,13 @@ npx run-local-ci --all --commit-status
 npx run-local-ci run --all --commit-status --github-token "$(gh auth token)"
 ```
 
+## s184 additions (16.10.2026)
+
+- **`npx` without `-y` hangs an unattended run** on «Ok to proceed?». The unattended form is
+  `npx -y run-local-ci run -w <workflow file>` — the `run` subcommand is still required.
+- **Two local-ci runs at once can collide on generated container names (Docker 409).** Serialize merge-evidence runs; do not start
+  the second until the first has finished (the existing flake rule: re-run ONCE alone).
+
 ## Related
 
 - [every-ci-job-failing-in-two-seconds-is-a-billing-block.md](every-ci-job-failing-in-two-seconds-is-a-billing-block.md) — local-ci runs the repository workflow locally

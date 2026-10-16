@@ -19,3 +19,5 @@
 ## Related
 
 - [../GOTCHAS.md](../GOTCHAS.md) — the topic map
+- [shipping/cod] **COD collection must include the STORED line tax + shipping tax (from the order's own numbers, not the live product's tax status), in either price-entry mode.** → [cod-collection-must-include-stored-line-tax-and-shipping-tax](../gotchas/cod-collection-must-include-stored-line-tax-and-shipping-tax.md) (s184)
+- [shipping/cancel] **A carrier «cancel» reply can mean accepted-but-pending (Yandex `CREATED`); only a completed cancel may clear the request id and run the destructive success path.** → [a-carrier-cancel-reply-can-mean-accepted-but-pending](../gotchas/a-carrier-cancel-reply-can-mean-accepted-but-pending.md) (s184)

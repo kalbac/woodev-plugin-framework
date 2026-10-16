@@ -57,6 +57,10 @@ internals (class-map wiring, build/CI, rig) are left out on purpose. Shipping-sp
   `docs-internal/gotchas/php-stdlib-traps-that-survive-tests.md`
 - A `NOT IN` meta clause drops every row that has no such meta; only `NOT EXISTS` makes a LEFT JOIN. →
   `docs-internal/gotchas/a-not-in-meta-query-silently-drops-rows-that-have-no-meta-at-all.md`
+- `add_option()` is NOT an atomic lock: it checks existence, then upserts, so two contenders both «acquire» (found in the CDEK
+  courier-status scan, edostavka PR #113). Claim with `INSERT IGNORE` + an owner token and a conditional UPDATE/DELETE
+  (`woodev/error-reporting/class-dispatcher.php`), or `GET_LOCK` (`Order_Lock`). →
+  `docs-internal/gotchas/wp-add-option-is-not-an-atomic-lock.md`
 - A remaining-capacity bound as a raw float subtraction refuses the final cent (`10.00 - 9.99`). →
   `docs-internal/gotchas/a-remaining-capacity-computed-as-a-raw-float-refuses-the-final-cent.md`
 - A sanitiser that leans on an optional extension is not one (`mb_substr()`; `ext-mbstring` is not a

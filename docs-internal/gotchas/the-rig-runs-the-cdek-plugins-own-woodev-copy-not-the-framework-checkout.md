@@ -1,4 +1,11 @@
-# Gotcha: [rig/plugin] — The rig runs the CDEK plugin's OWN `woodev/` copy, not the framework checkout
+# Gotcha: [rig/plugin] — Which `woodev/` the rig runs in a plugin: the s162 «own copy» finding is CONTRADICTED by s184
+
+> **⚠ s184 (16.10.2026, MacBook) CORRECTION.** On this Mac `.wp-env.override.json` bind-mounts the framework PRIMARY checkout's
+> `./woodev` over `wp-content/plugins/woocommerce-edostavka/woodev` and `…/woocommerce-yandex-delivery/woodev` — the plugins do NOT
+> run their own copies, so verifying a framework branch on the rig means the PRIMARY tree must serve that branch (a worktree is
+> not mounted). The s162 text below (a gitignored `woodev/` in the plugin checkout shadowing the mount) was true for the rig
+> state measured then and is NOT the current state; the two disagree, so never trust either by reading — put a version marker or
+> observable behaviour on the page and check which code answers.
 > Tags: rig/plugin, tooling/parallel-agents | Session: s162
 
 ## What happens
