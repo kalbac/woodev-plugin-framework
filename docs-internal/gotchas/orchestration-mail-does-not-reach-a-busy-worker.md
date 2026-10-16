@@ -26,6 +26,11 @@ applied mid-turn.
 If the correction matters, **verify it landed** — read the file the worker was about to write, not
 the send receipt. `"ok": true` on the send means the message was stored, never that it was read.
 
+**Seen again s184 (16.10.2026):** two operator constraints for a screenshot worker (Russian storefront, fixture plugins
+off) were sent with `orchestration send` while it was shooting; it never ran `check`, then lost the API connection, and
+delivered 16 shots taken with fixtures active and an English storefront — all discarded. Put every hard constraint in the
+brief before the start; a late one goes by `terminal send` as well, and the output is checked against it before use.
+
 ## Related
 
 - [input-accepted-is-not-proof-a-worker-started](input-accepted-is-not-proof-a-worker-started.md)
