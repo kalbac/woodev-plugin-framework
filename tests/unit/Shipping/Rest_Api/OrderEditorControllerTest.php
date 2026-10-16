@@ -137,6 +137,63 @@ final class OrderEditorControllerTest extends TestCase {
 		$this->assertStringContainsString( 'A-77', $response->data['message'] );
 	}
 
+	/**
+	 * The selected settlement record the wizard sends as `location` (#1334) — dropping it here made every
+	 * save delete the order's stored checkout location.
+	 *
+	 * @return array<string,mixed>
+	 */
+	private function selected_location(): array {
+		return [
+			'provider' => 'cdek',
+			'id'       => '44',
+			'name'     => 'Москва',
+			'country'  => 'RU',
+		];
+	}
+
+	public function test_create_passes_the_selected_location_record_through_to_the_service(): void {
+		$location = $this->selected_location();
+		$editor   = Mockery::mock( Order_Editor::class );
+		$editor->shouldReceive( 'create' )->once()->with(
+			[
+				'items'    => [ [ 'product_id' => 10 ] ],
+				'location' => $location,
+			]
+		)->andReturn( $this->saved_order() );
+
+		$this->controller( $editor )->create_order(
+			$this->request(
+				[
+					'items'    => [ [ 'product_id' => 10 ] ],
+					'location' => $location,
+				]
+			)
+		);
+	}
+
+	public function test_update_passes_the_selected_location_record_through_to_the_service(): void {
+		$location = $this->selected_location();
+		$editor   = Mockery::mock( Order_Editor::class );
+		$editor->shouldReceive( 'update' )->once()->with(
+			123,
+			[
+				'billing'  => [ 'phone' => '+79990000000' ],
+				'location' => $location,
+			]
+		)->andReturn( $this->saved_order( 123, '123' ) );
+
+		$this->controller( $editor )->update_order(
+			$this->request(
+				[
+					'billing'  => [ 'phone' => '+79990000000' ],
+					'location' => $location,
+				],
+				[ 'id' => '123' ]
+			)
+		);
+	}
+
 	public function test_a_form_body_is_read_when_the_request_is_not_json(): void {
 		$editor = Mockery::mock( Order_Editor::class );
 		$editor->shouldReceive( 'create' )->once()->with( [ 'items' => 'from-form' ] )->andReturn( $this->saved_order() );
