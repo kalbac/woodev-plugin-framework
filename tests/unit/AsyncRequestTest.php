@@ -97,7 +97,7 @@ class AsyncRequestTest extends TestCase {
 			}
 		);
 
-		Functions\when( 'wp_safe_remote_get' )->alias(
+		Functions\when( 'wp_safe_remote_post' )->alias(
 			static function ( $url, $args ) {
 				return [
 					'requested_url' => $url,
@@ -110,5 +110,46 @@ class AsyncRequestTest extends TestCase {
 
 		$this->assertNotNull( $captured_url );
 		$this->assertSame( $result['requested_url'], $captured_url );
+	}
+
+	/**
+	 * #1316: the data from `set_data()` is the request body. A GET never carries
+	 * it into `$_POST` in `handle()`, so the loopback must be a POST.
+	 *
+	 * @return void
+	 */
+	public function test_dispatch_posts_the_set_data_as_the_request_body(): void {
+		$request = new Testable_Async_Request();
+		$request->set_data( [ 'job_id' => 42 ] );
+
+		Functions\when( 'wp_create_nonce' )->justReturn( 'nonce-value' );
+		Functions\when( 'admin_url' )->justReturn( 'https://example.test/wp-admin/admin-ajax.php' );
+		Functions\when( 'add_query_arg' )->alias(
+			static function ( $args, $url ) {
+				return $url . '?' . http_build_query( $args );
+			}
+		);
+		Functions\when( 'esc_url_raw' )->returnArg( 1 );
+		Functions\when( 'apply_filters' )->alias(
+			static function ( $tag, $default = null ) {
+				return $default;
+			}
+		);
+
+		Functions\expect( 'wp_safe_remote_post' )
+			->once()
+			->andReturnUsing(
+				static function ( $url, $args ) {
+					return [
+						'requested_url' => $url,
+						'args'          => $args,
+					];
+				}
+			);
+		Functions\expect( 'wp_safe_remote_get' )->never();
+
+		$result = $request->dispatch();
+
+		$this->assertSame( [ 'job_id' => 42 ], $result['args']['body'] );
 	}
 }

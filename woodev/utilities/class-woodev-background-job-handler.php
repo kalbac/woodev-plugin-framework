@@ -119,7 +119,7 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 			/**
 			 * WC core does 2 things here that can interfere with our nonce check:
 			 *
-			 * 1. WooCommerce starts a session due to our GET request to dispatch a job
+			 * 1. WooCommerce starts a session due to our request to dispatch a job
 			 *  However, this happens *after* we've generated a nonce without a session (in CRON context)
 			 * 2. it then filters nonces for logged-out users indiscriminately without checking the nonce action; if
 			 *  there is a session created (and now the server does have one), it tries to filter every.single.nonce
