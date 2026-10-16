@@ -158,6 +158,17 @@ update_option( $name, $s ); wp_cache_flush(); WC_Cache_Helper::get_transient_ver
 }
 
 /**
+ * Lets a plugin that was deactivated and activated again (scenario 5 of 01–05 does that) recreate its lifecycle option, so a
+ * snapshot taken next is of a settled rig. The framework does it on `admin_init` (`Woodev_Lifecycle` — the option is
+ * `woodev_<plugin>_is_active`), NOT on a storefront request: a plain front-page fetch leaves it missing, and the first ADMIN
+ * request of the spec (cell H of 07 is the admin one) then creates it and the end-of-spec comparison reports «the rig differs»
+ * (#1306). `admin-ajax.php` fires `admin_init` without a login.
+ */
+async function settleActivation() {
+	await fetch( `${ process.env.WP_BASE_URL || 'http://localhost:8973' }/wp-admin/admin-ajax.php` );
+}
+
+/**
  * Every row of `wp_options` that is rig CONFIGURATION, plus the shipping-zone method table and the active plugin / mu-plugin
  * lists — a whole-rig fingerprint. The patterns drop what moves by itself: transients, WC sessions, the licence updater's
  * `woodev_<md5>` caches (gotcha `the-licence-updater-cache-options-change-by-themselves-during-a-rig-run`), cron, the
@@ -569,6 +580,7 @@ module.exports = {
 	resetAdminSession,
 	rigSnapshot,
 	setOption,
+	settleActivation,
 	snapshotDiff,
 	trackCheckoutUpdates,
 	waitForRecalculation,

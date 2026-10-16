@@ -20,6 +20,7 @@
  */
 
 const { test, expect } = require( '@playwright/test' );
+const { DESTINATIONS, useShippingDestination } = require( './shipping-destination' );
 
 /** Product id that fills the cart — `docs-internal/CURRENT-STATE.md` → Local rig. */
 const PRODUCT_ID = 12;
@@ -129,19 +130,6 @@ test.describe( 'classic checkout — pickup walkthrough (#723)', () => {
 		await expect( page.locator( 'input[name^="shipping_method"]' ).first() ).toBeAttached();
 	} );
 
-	test( 'location fields fan out to BOTH address columns (Rule 7b, #458)', async ( { page } ) => {
-		await openCheckout( page );
-
-		// `effective_fields()` fans a `source_location()` field into billing_* AND shipping_*
-		// on any store that is not force-ship-to-billing. Measured on the rig: all six exist.
-		for ( const id of [
-			'billing_state', 'billing_city', 'billing_address_1',
-			'shipping_state', 'shipping_city', 'shipping_address_1',
-		] ) {
-			await expect( page.locator( `#${ id }` ), `${ id } must exist` ).toHaveCount( 1 );
-		}
-	} );
-
 	test( 'a courier method leaves the address visible and offers no pickup control', async ( { page } ) => {
 		await openCheckout( page );
 		await chooseShipping( page, METHOD_FREE );
@@ -154,26 +142,6 @@ test.describe( 'classic checkout — pickup walkthrough (#723)', () => {
 		// pickup one. The first draft of this test asserted `toHaveCount( 0 )` and failed —
 		// correctly, against a wrong expectation of mine, not against the code.
 		await expect( page.locator( PICKUP_TRIGGER ) ).toBeHidden();
-	} );
-
-	test( 'a pickup method hides address and postcode on BOTH columns and offers the trigger', async ( { page } ) => {
-		await openCheckout( page );
-		await chooseShipping( page, METHOD_PICKUP );
-
-		// `hide_for_pickup` policy (#362 §4.3), client-side by design — the class is the
-		// contract, the invisibility is the effect. Assert both, so a CSS-only regression
-		// and a logic-only regression are distinguishable.
-		for ( const id of [
-			'billing_address_1', 'billing_postcode',
-			'shipping_address_1', 'shipping_postcode',
-		] ) {
-			await expect( row( page, id ), `${ id } row must carry the policy class` )
-				.toHaveClass( /woodev-field--hidden-for-pickup/ );
-			await expect( row( page, id ), `${ id } row must not be visible` ).toBeHidden();
-		}
-
-		// The realistic fixture declares this method as pickup, so its control exists.
-		await expect( page.locator( PICKUP_TRIGGER ) ).toBeVisible();
 	} );
 
 	test( 'the A2 gate blocks while no pickup point is chosen, and does NOT block on a courier method (#721)', async ( { page } ) => {
@@ -211,52 +179,105 @@ test.describe( 'classic checkout — pickup walkthrough (#723)', () => {
 		await page.locator( '.woodev-modal__close' ).click();
 		await expect( dialog ).toBeHidden();
 	} );
-
-	test( 'the settlement field is a LIVE source: typing issues a request the server answers', async ( { page } ) => {
-		await openCheckout( page );
-
-		// Both levels are select2-enhanced `<select>`s on the standard rig config
-		// (`field_mode_settlement = ajax-select2`). select2 replaces the control with its own UI,
-		// so drive it the way a customer does rather than writing to the `<select>`.
-		const settlement = page.locator( '#shipping_city' );
-
-		await expect( settlement ).toHaveJSProperty( 'tagName', 'SELECT' );
-
-		// WHAT THIS ASSERTS, and why it is not "Moscow comes back".
-		// The settlement search is SCOPED BY THE REGION (#551/#552), including a region filled in
-		// by the default-locality path, and the rig's stored region is whatever the operator last
-		// left it as. Two earlier drafts of this test proved the point rather than the code: asking
-		// for «Моск» under a Saint-Petersburg scope returned Petersburg settlements, and a bare «а»
-		// returned «No results found» — both CORRECT behaviour, both making the assertion flaky.
-		// So this pins the contract that does not move: typing reaches OUR endpoint and the server
-		// answers it. Which settlements come back is the scope rule's job, and unit tests own that.
-		const answered = page.waitForResponse(
-			( response ) =>
-				/\/woodev\/v1\/.*location/.test( response.url() ) && response.request().method() === 'GET',
-			{ timeout: 40_000 }
-		);
-
-		await page.locator( '#shipping_city_field .select2-selection' ).click();
-
-		const search = page.locator( 'input.select2-search__field' );
-
-		await expect( search ).toBeVisible();
-		await search.fill( 'ск' );
-
-		const response = await answered;
-
-		expect(
-			response.status(),
-			`The location endpoint answered ${ response.status() } for ${ response.url() }`
-		).toBeLessThan( 400 );
-
-		// select2's own loading row must clear — otherwise the transport never resolved at all,
-		// which is a different failure from "the server said no results".
-		await expect( page.locator( '.select2-results__option.loading-results' ) )
-			.toHaveCount( 0, { timeout: 40_000 } );
-
-		// Either real options or select2's honest "no results" row is an ANSWER. A blank dropdown
-		// is not, and neither is a JS exception, which would leave the results list empty.
-		await expect( page.locator( '.select2-results__option' ).first() ).toBeVisible();
-	} );
 } );
+
+/**
+ * The scenarios that depend on WHICH address columns the page has, once per destination mode (#1306). The rig itself runs
+ * `billing_only` (the CIS norm), so each describe states the mode it needs and `useShippingDestination()` restores the rig's own
+ * afterwards: the «on BOTH columns» assertions run with a shipping column, and the same scenarios run under `billing_only`,
+ * where the billing column must carry the behaviour alone and the shipping fields must not exist.
+ */
+for ( const { mode, label, columns, live } of DESTINATIONS ) {
+	test.describe( `classic checkout — pickup walkthrough, ${ label } (#723, #1306)`, () => {
+		useShippingDestination( mode );
+
+		test( 'location fields fan out to every address column (Rule 7b, #458)', async ( { page } ) => {
+			await openCheckout( page );
+
+			// `effective_fields()` fans a `source_location()` field into billing_* AND shipping_* on any store that is not
+			// force-ship-to-billing; under `billing_only` it fans into billing_* alone. Measured on the rig: all six exist
+			// with a shipping column.
+			for ( const column of columns ) {
+				for ( const id of [ 'state', 'city', 'address_1' ] ) {
+					await expect( page.locator( `#${ column }_${ id }` ), `${ column }_${ id } must exist` ).toHaveCount( 1 );
+				}
+			}
+
+			if ( ! columns.includes( 'shipping' ) ) {
+				for ( const id of [ 'state', 'city', 'address_1' ] ) {
+					await expect( page.locator( `#shipping_${ id }` ), `shipping_${ id } must not exist under ${ mode }` ).toHaveCount( 0 );
+				}
+			}
+		} );
+
+		test( 'a pickup method hides address and postcode on every column and offers the trigger', async ( { page } ) => {
+			await openCheckout( page );
+			await chooseShipping( page, METHOD_PICKUP );
+
+			// `hide_for_pickup` policy (#362 §4.3), client-side by design — the class is the contract, the invisibility is the
+			// effect. Assert both, so a CSS-only regression and a logic-only regression are distinguishable.
+			for ( const column of columns ) {
+				for ( const id of [ 'address_1', 'postcode' ] ) {
+					await expect( row( page, `${ column }_${ id }` ), `${ column }_${ id } row must carry the policy class` )
+						.toHaveClass( /woodev-field--hidden-for-pickup/ );
+					await expect( row( page, `${ column }_${ id }` ), `${ column }_${ id } row must not be visible` ).toBeHidden();
+				}
+			}
+
+			if ( ! columns.includes( 'shipping' ) ) {
+				await expect( row( page, 'shipping_address_1' ), `shipping rows must not exist under ${ mode }` ).toHaveCount( 0 );
+			}
+
+			// The realistic fixture declares this method as pickup, so its control exists.
+			await expect( page.locator( PICKUP_TRIGGER ) ).toBeVisible();
+		} );
+
+		test( 'the settlement field is a LIVE source: typing issues a request the server answers', async ( { page } ) => {
+			await openCheckout( page );
+
+			// Both levels are select2-enhanced `<select>`s on the standard rig config
+			// (`field_mode_settlement = ajax-select2`). select2 replaces the control with its own UI,
+			// so drive it the way a customer does rather than writing to the `<select>`.
+			const settlement = page.locator( `#${ live }_city` );
+
+			await expect( settlement ).toHaveJSProperty( 'tagName', 'SELECT' );
+
+			// WHAT THIS ASSERTS, and why it is not "Moscow comes back".
+			// The settlement search is SCOPED BY THE REGION (#551/#552), including a region filled in
+			// by the default-locality path, and the rig's stored region is whatever the operator last
+			// left it as. Two earlier drafts of this test proved the point rather than the code: asking
+			// for «Моск» under a Saint-Petersburg scope returned Petersburg settlements, and a bare «а»
+			// returned «No results found» — both CORRECT behaviour, both making the assertion flaky.
+			// So this pins the contract that does not move: typing reaches OUR endpoint and the server
+			// answers it. Which settlements come back is the scope rule's job, and unit tests own that.
+			const answered = page.waitForResponse(
+				( response ) =>
+					/\/woodev\/v1\/.*location/.test( response.url() ) && response.request().method() === 'GET',
+				{ timeout: 40_000 }
+			);
+
+			await page.locator( `#${ live }_city_field .select2-selection` ).click();
+
+			const search = page.locator( 'input.select2-search__field' );
+
+			await expect( search ).toBeVisible();
+			await search.fill( 'ск' );
+
+			const response = await answered;
+
+			expect(
+				response.status(),
+				`The location endpoint answered ${ response.status() } for ${ response.url() }`
+			).toBeLessThan( 400 );
+
+			// select2's own loading row must clear — otherwise the transport never resolved at all,
+			// which is a different failure from "the server said no results".
+			await expect( page.locator( '.select2-results__option.loading-results' ) )
+				.toHaveCount( 0, { timeout: 40_000 } );
+
+			// Either real options or select2's honest "no results" row is an ANSWER. A blank dropdown
+			// is not, and neither is a JS exception, which would leave the results list empty.
+			await expect( page.locator( '.select2-results__option' ).first() ).toBeVisible();
+		} );
+	} );
+}

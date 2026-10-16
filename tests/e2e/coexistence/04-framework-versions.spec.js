@@ -15,7 +15,7 @@
  *  - its `woodev/` is `git archive` of an older framework commit (`OLD_FRAMEWORK_COMMIT`), `Woodev_Plugin::VERSION` patched to
  *    2.0.0, and its main file declares `framework_version` 2.0.0;
  *  - the real Yandex plugin is deactivated while the copy is active (same plugin id and download id), and restored afterwards.
- * CDEK (declaring 2.0.1, the framework primary checkout's `woodev/`) stays as it is.
+ * CDEK (declaring a newer framework version than the copy, the framework primary checkout's `woodev/`) stays as it is.
  *
  * The rig defines `WOODEV_FRAMEWORK_DIR`, which makes every plugin take its bootstrap from the primary checkout whatever copy
  * it carries — that would make the older copy's resolver irrelevant, and no production site defines it. The spec removes the
@@ -23,6 +23,7 @@
  */
 
 const { execFileSync } = require( 'node:child_process' );
+const fs = require( 'node:fs' );
 const path = require( 'node:path' );
 const { test, expect } = require( '@playwright/test' );
 const {
@@ -51,6 +52,12 @@ const WP_CONFIG            = '/var/www/html/wp-config.php';
 const WP_CONFIG_BACKUP     = '/var/www/html/wp-config.php.y15-scenario4';
 
 const repoRoot = path.resolve( __dirname, '..', '..', '..' );
+
+/**
+ * The framework version the winner must report: the primary checkout's own `Woodev_Plugin::VERSION`, read from the file — a
+ * literal here went stale at every release (2.0.2 loaded, 2.0.1 expected; #1306).
+ */
+const FRAMEWORK_VERSION = /const VERSION = '([0-9.]+)';/.exec( fs.readFileSync( path.join( repoRoot, 'woodev', 'class-plugin.php' ), 'utf8' ) )[ 1 ];
 
 /** The container that serves WordPress (files are written there as root; wp-cli runs in the cli container). */
 function wordpressContainer() {
@@ -158,7 +165,7 @@ echo wp_json_encode( [
 		expect( state.loader ).toBe( `${ OLD_DIR }/woodev/loader.php` );
 
 		// The framework itself comes from the winner of the version sort.
-		expect( state.version, 'the loaded Woodev_Plugin is the newer one' ).toBe( '2.0.1' );
+		expect( state.version, 'the loaded Woodev_Plugin is the newer one' ).toBe( FRAMEWORK_VERSION );
 		expect( state.plugin_file, 'Woodev_Plugin was loaded from CDEK\'s (newer) copy' ).toBe( 'woocommerce-edostavka/woodev/class-plugin.php' );
 		expect( state.autoloader, 'the framework autoloader was registered from the winner' ).toMatch( /^woocommerce-edostavka\/woodev\// );
 		expect( state.old_runtime, 'no framework runtime file of the old copy was ever included (only its three early classes)' )
