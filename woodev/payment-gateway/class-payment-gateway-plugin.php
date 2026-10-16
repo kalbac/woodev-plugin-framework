@@ -102,7 +102,8 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 
 			$this->currencies  = (array) $args['currencies'];
 			$this->supports    = (array) $args['supports'];
-			$this->require_ssl = (array) $args['require_ssl'];
+			// kept as given: `(array) false` would be the truthy `[ false ]`
+			$this->require_ssl = $args['require_ssl'];
 
 			// require the files
 			$this->includes();
