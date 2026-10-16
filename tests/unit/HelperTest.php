@@ -415,4 +415,52 @@ class HelperTest extends TestCase {
 			'negative zero'          => [ -0.0, '0.00' ],
 		];
 	}
+
+	/** String: str_to_ascii **************************************************/
+
+	/**
+	 * #1316: str_to_ascii() relied on FILTER_SANITIZE_STRING (deprecated since PHP 8.1), which also
+	 * entity-encoded quotes. It must only drop control and non-ASCII characters.
+	 *
+	 * @dataProvider provider_str_to_ascii
+	 *
+	 * @param string $input
+	 * @param string $expected
+	 */
+	public function test_str_to_ascii( string $input, string $expected ): void {
+		$deprecations = [];
+
+		set_error_handler( // phpcs:ignore WordPress.PHP.DevelopmentFunctions.prevent_path_disclosure_set_error_handler
+			static function ( int $errno, string $errstr ) use ( &$deprecations ): bool {
+				$deprecations[] = $errstr;
+
+				return true;
+			},
+			E_DEPRECATED
+		);
+
+		try {
+			$actual = \Woodev_Helper::str_to_ascii( $input );
+		} finally {
+			restore_error_handler();
+		}
+
+		$this->assertSame( [], $deprecations );
+		$this->assertSame( $expected, $actual );
+	}
+
+	/**
+	 * Data provider for str_to_ascii.
+	 *
+	 * @return array
+	 */
+	public function provider_str_to_ascii(): array {
+		return [
+			'plain ascii is untouched'      => [ 'Hello World', 'Hello World' ],
+			'non-ascii is removed'          => [ "caf\u{e9} \u{43f}\u{440}\u{438}\u{432}\u{435}\u{442}", 'caf ' ],
+			'control characters removed'    => [ "a\r\nb\tc", 'abc' ],
+			'quotes are not entity-encoded' => [ 'say "hi" it\'s', 'say "hi" it\'s' ],
+			'delete char removed'           => [ "a\x7Fb", 'ab' ],
+		];
+	}
 }

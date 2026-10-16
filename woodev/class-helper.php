@@ -155,7 +155,7 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 		 * Returns a string with all non-ASCII characters removed. This is useful
 		 * for any string functions that expect only ASCII chars and can't
 		 * safely handle UTF-8. Note this only allows ASCII chars in the range
-		 * 33-126 (newlines/carriage returns are stripped)
+		 * 32-126 (control characters, including newlines/carriage returns, are stripped)
 		 *
 		 * @param string $string string to make ASCII
 		 *
@@ -163,11 +163,8 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 		 */
 		public static function str_to_ascii( string $string ): string {
 
-			// strip ASCII chars 32 and under
-			$string = filter_var( $string, FILTER_SANITIZE_STRING, FILTER_FLAG_STRIP_LOW );
-
-			// strip ASCII chars 127 and higher
-			return filter_var( $string, FILTER_SANITIZE_STRING, FILTER_FLAG_STRIP_HIGH );
+			// keep only printable ASCII (space to tilde)
+			return (string) preg_replace( '/[^\x20-\x7E]/', '', $string );
 		}
 
 		/**
