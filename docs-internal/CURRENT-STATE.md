@@ -6,7 +6,11 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-16 (s184, overnight):** the #1324 code audit (framework PHP + React/TS, CDEK, Yandex) is done and its real
+**As of 2026-10-16 afternoon (s184, with the operator):** everything from the night and morning is merged (framework `main`
+`ce870e02`; #1332 #1339 #1340 #1341; yandex#109 via PR #118; WooCommerce upstream issue woocommerce/woocommerce#69892). No open PRs.
+Plugins are code-ready for release; the release now waits for the **publication plan, card #1342** (woodev.ru docs + blog,
+Telegram; every operator decision is a comment on the card; written and published through the `woodev-ru` project on ACEMAGIC).
+**Overnight part:** the #1324 code audit (framework PHP + React/TS, CDEK, Yandex) is done and its real
 defects are fixed. Framework `main` `d978d303`: #1329 (#1316 four real bugs: async request POST, `require_ssl`, `memory_limit -1`,
 `str_to_ascii`), #1330 (order-editor keeps coupon discounts; plugins-catalogue failure cooldown), #1331 (#1306 classic-checkout
 e2e under `billing_only`), #1333 (#1326 settings page keeps an edit typed while Save is pending), #1337 (wizard REST keeps
@@ -288,12 +292,13 @@ there is historical evidence, not a fresh acceptance run. The live programme sta
 ## Known Bugs / Open debt
 
 - [⚠️] `class-payment-gateway.php` ~3.6k lines — trait-extraction candidate (#117).
-- **s184 open debt:** PR #1332 (block checkout restore point + Place-Order guard) waits for a rig look; the upstream WooCommerce
-  issue for #1279 is drafted, not filed; rig test orders 1917–1928 on `:8973` need cleaning; >1000 variations are silently
-  truncated by the wizard (cap 20×50, rated near-zero, not carded).
+- **s184 open debt:** >1000 variations are silently truncated by the wizard (cap 20×50, rated near-zero, not carded). (#1332, the
+  #1279 upstream issue and the rig orders were all closed on 16.10.2026.)
 - **B-2 loader-protocol forward-tolerance:** the resolver loads framework classes from the **highest registered copy for the whole fleet**; `backwards_compatible` deactivates-with-notice any plugin below that copy's min. Rules → `AGENT-RULES.md` Rule 3.
 
 ### Public docs
+
+**Merchant docs on woodev.ru (Russian, BetterDocs) — separate from this developer site:** plan and decisions on #1342.
 
 ✅ **Published (s183):** Astro Starlight site in `website/` → <https://kalbac.github.io/woodev-plugin-framework/> (GitHub
 Pages, source Actions; `docs.yml` builds every PR touching `website/**` and deploys on `main`). All 33 pages written

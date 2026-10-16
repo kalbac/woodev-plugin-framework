@@ -598,6 +598,18 @@ Operator, 28.09.2026: the local **qwen3.8:27b** is a worker only, and it is laun
   coordinator runs the gates. That last clause is what keeps this inside the desktop's three-agent RAM cap:
   the OOM in s84 came from concurrent heavy gate runs, not from the agents themselves.
 
+
+## Workers in woodev-ru on Homelab
+
+The merchant site woodev.ru is written and published from the `woodev-ru` project on ACEMAGIC (operator decision on #1342, s184).
+
+- Start: `orca orchestration worker-start --task <id> --on Homelab --worktree "id:85e8a518-6f8e-438c-8e49-1275a6c88b22::/home/maksim/Projects/sites/woodev-ru" --agent claude --model claude-sonnet-5-5`.
+- The project's own skills do the work: `woodev-docs` (BetterDocs MCP; create with `status: draft`), `woodev-blog-post`
+  (WordPress MCP), `woodev-hero-image`. `bd-get-status` returned all capabilities on 16.10.2026.
+- That checkout cannot see the framework code: build the facts on the Mac and bring them over as a file — there is no SSH,
+  see [a-file-for-homelab-goes-through-orca-terminal-send-and-read-drops-the-last-chunk](../gotchas/a-file-for-homelab-goes-through-orca-terminal-send-and-read-drops-the-last-chunk.md).
+- A shell there for reading: `orca terminal create --environment Homelab --worktree path:/home/maksim/Projects/sites/woodev-ru`.
+
 ## Related
 
 - [two-agents-one-file-is-the-orchestrator-s-bug](../gotchas/two-agents-one-file-is-the-orchestrator-s-bug.md) — the loss this placement rule exists to prevent
