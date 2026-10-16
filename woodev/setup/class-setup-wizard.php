@@ -13,7 +13,7 @@ defined( 'ABSPATH' ) || exit;
  * Platform-neutral, opt-in, React-driven setup wizard.
  *
  * Plugins extend this (or Woocommerce_Setup_Wizard), implement register_steps(),
- * and return an instance from Woodev_Plugin::get_setup_wizard_handler().
+ * and return an instance from Woodev_Plugin::build_setup_wizard_handler().
  *
  * @since 2.0.2
  */

@@ -19,14 +19,12 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 	 * on the checkout & settings pages / api hook.  The gateway can also be loaded
 	 * in the following instances:
 	 *
-	 * + On the My Account page to display / change saved payment methods (if supports tokenization)
+	 * + On the My Account page to display / change saved payment methods (if supports my_payment_methods)
 	 * + On the Admin User/Your Profile page to render/persist the customer ID field(s) (if supports customer_id)
-	 * + On the Admin Order Edit page to render a merchant account transaction direct link (if supports transaction_link)
 	 *
-	 * ## Supports (zero or more):
+	 * ## Supports (zero or more; the `FEATURE_*` constants of this class):
 	 *
 	 * + `customer_id`             - adds actions to show/persist the "Customer ID" area of the admin User edit page
-	 * + `transaction_link`        - adds actions to render the merchant account transaction direct link on the Admin Order Edit page.  (Don't forget to override the Woodev_Payment_Gateway::get_transaction_url() method!)
 	 * + `capture_charge`          - adds actions to capture charge for authorization-only transactions
 	 * + `my_payment_methods`      - adds actions to show/handle a "My Payment Methods" area on the customer's My Account page. This will show saved payment methods for all plugin gateways that support tokenization.
 	 */
@@ -48,7 +46,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 		/** @var array optional array of currency codes this gateway is allowed for */
 		private $currencies = [];
 
-		/** @var array named features that this gateway supports which require action from the parent plugin, including 'tokenization' */
+		/** @var array named features that this plugin supports which require action from it (the `FEATURE_*` constants) */
 		private $supports = [];
 
 		/** @var array|bool gateway IDs that require SSL, or bool for all/none */
@@ -72,7 +70,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 		 * + `require_ssl` - boolean true if this plugin requires SSL for proper functioning, false otherwise. Defaults to false
 		 * + `gateways` - array associative array of gateway id to gateway class name. A single plugin might support more than one gateway variant. Note that the credit card gateway must always be the first one listed.
 		 * + `currencies` -  array of currency codes this gateway is allowed for, defaults to all
-		 * + `supports` - array named features that this gateway supports, including 'tokenization', 'transaction_link', 'customer_id', 'capture_charge'
+		 * + `supports` - array named features this plugin supports: 'customer_id', 'capture_charge', 'my_payment_methods' (the `FEATURE_*` constants)
 		 *
 		 * @param string $id plugin id
 		 * @param string $version plugin version number
@@ -959,8 +957,8 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 
 		/**
 		 * Returns the set of accepted currencies, or empty array if all currencies
-		 * are accepted.  This is the intersection of all currencies accepted by
-		 * any gateways this plugin supports.
+		 * are accepted.  This is the `currencies` list the plugin was constructed
+		 * with, returned as-is; it is not computed from its gateways.
 		 *
 		 * @return array of accepted currencies
 		 * @since 1.0.0

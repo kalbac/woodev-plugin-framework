@@ -518,7 +518,7 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 
 			array_unshift( $history, $event );
 
-			// limit to the last 30 events
+			// limit to the last 29 events
 			$history = array_slice( $history, 0, 29 );
 
 			return $wpdb->replace(
@@ -538,7 +538,7 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 
 		/**
 		 * Gets the lifecycle event history.
-		 * The last 30 events are stored, with the latest first.
+		 * The last 29 events are stored, with the latest first.
 		 *
 		 * @return array
 		 */

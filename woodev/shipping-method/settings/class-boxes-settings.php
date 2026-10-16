@@ -291,7 +291,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Boxes_Settings' )
 				self::SETTING_BOXES,
 				\Woodev_Control::TYPE_BOXES_TABLE,
 				[
-					'tooltip' => __( 'Внутренние размеры — в сантиметрах, вес — в килограммах. Пустой или нулевой макс. вес означает отсутствие ограничения. Макс. вес включает вес самой упаковки.', 'woodev-plugin-framework' ),
+					'tooltip' => __( 'Внутренние размеры и вес — в единицах, заданных в настройках WooCommerce (Настройки → Товары). Пустой или нулевой макс. вес означает отсутствие ограничения. Макс. вес включает вес самой упаковки.', 'woodev-plugin-framework' ),
 				]
 			);
 		}

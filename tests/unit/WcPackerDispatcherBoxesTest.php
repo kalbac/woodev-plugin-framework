@@ -217,8 +217,10 @@ namespace Woodev\Tests\Unit {
 
 			$tooltip = Boxes_Settings::current()->get_setting( 'boxes' )->get_control()->get_tooltip();
 
-			$this->assertStringContainsString( 'сантиметрах', $tooltip );
-			$this->assertStringContainsString( 'килограммах', $tooltip );
+			// #1316: the values are read in the store's own units, so the hint must not promise cm/kg
+			$this->assertStringContainsString( 'единицах, заданных в настройках WooCommerce', $tooltip );
+			$this->assertStringNotContainsString( 'сантиметрах', $tooltip );
+			$this->assertStringNotContainsString( 'килограммах', $tooltip );
 		}
 
 		public function test_table_control_carries_conversion_factors_and_keeps_legacy_storage(): void {

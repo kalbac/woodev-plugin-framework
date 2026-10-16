@@ -90,10 +90,17 @@ names are an installed-site data contract the moment you ship: choose setting id
 
 `register_control( $setting_id, $type, $args )` — `$type` is a `Woodev_Control::TYPE_*` constant:
 `text`, `textarea`, `number`, `email`, `tel`, `url`, `password`, `date`, `checkbox`, `radio`, `select`,
-`file`, `color`, `range`, `toggle`, `richtext`, `multiselect`, and `location-picker` (read the constant's
-docblock before using it). Args: `name`, `description`, `options`, `min`, `max`, `step`, `native_bounds`,
-`tooltip`, `placeholder`, `rows` (textarea only), `country`, `disabled` + `disabled_reason`. A control type that does not fit
+`search-select`, `boxes-table`, `file`, `color`, `range`, `toggle`, `richtext`, `multiselect`, and
+`location-picker` (read the constant's docblock before using it). Args: `name`, `description`,
+`description_on`, `options`, `min`, `max`, `step`, `native_bounds`, `tooltip`, `placeholder`, `rows`
+(textarea only), `country`, `disabled` + `disabled_reason`. A control type that does not fit
 the setting's type is rejected with `_doing_it_wrong()`; `toggle`/`checkbox` fit a scalar boolean only.
+
+- **`search-select`** needs a scalar string/integer setting and BOTH `search_callback` (term → value/label
+  pairs) and `label_callback` (saved value → label, `''` when unknown); without them the control is rejected.
+- **`boxes-table`** is the inline table over the box-list text; `box_preset` seeds it.
+- **`file` has no React renderer.** The registry accepts it, but the settings page falls through to a plain
+  text input — do not use it for uploads.
 
 Rules that bit us:
 

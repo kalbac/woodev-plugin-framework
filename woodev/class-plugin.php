@@ -1023,7 +1023,8 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 * ({@see self::get_not_configured_notice_url()}), whether or not the merchant has enabled or
 		 * added anything yet, so a fresh install is told what to do. The default is `true`: a plugin that
 		 * needs no setup never warns. A plugin that does override this — one line, answering from its own
-		 * settings (`return $this->get_settings_handler()->is_configured();`).
+		 * settings, e.g. `return '' !== $this->get_settings_handler()->get_value( 'api_key' );` —
+		 * `Woodev_Abstract_Settings` has no `is_configured()` of its own, so write the rule here.
 		 *
 		 * The answer is read on `admin_footer`, after a settings save of the same request, and the notice is
 		 * not dismissible, so it disappears by itself the moment this turns `true`. Keep it cheap and free of
