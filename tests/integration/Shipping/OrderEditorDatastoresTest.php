@@ -1953,4 +1953,161 @@ class OrderEditorDatastoresTest extends TestCase {
 		$this->assertStringContainsString( 'Выгрузить можно только заказ', $outcome['message'] );
 		$this->assertSame( '', (string) $this->fresh( $created->get_id() )->get_meta( self::TEST_EXPORTED, true ) );
 	}
+
+	/**
+	 * A real coupon on a fresh code.
+	 *
+	 * @param string $type   `percent` or `fixed_cart`.
+	 * @param string $amount the coupon amount.
+	 * @return string the coupon code.
+	 */
+	private function make_coupon( string $type, string $amount ): string {
+		$code   = 'editor-1327-' . wp_generate_password( 8, false );
+		$coupon = new \WC_Coupon();
+		$coupon->set_code( $code );
+		$coupon->set_discount_type( $type );
+		$coupon->set_amount( $amount );
+		$coupon->save();
+
+		return $code;
+	}
+
+	/**
+	 * A processing order edited through the editor (2 × 150, courier 350), then given a real coupon the
+	 * way WooCommerce applies one, so the line carries subtotal 300 and a smaller total.
+	 *
+	 * @param string $type   coupon type.
+	 * @param string $amount coupon amount.
+	 * @return \WC_Order the order, read fresh.
+	 */
+	private function order_with_coupon( string $type, string $amount ): \WC_Order {
+		$created = $this->create( $this->payload() );
+		$order   = $this->fresh( $created->get_id() );
+		$applied = $order->apply_coupon( $this->make_coupon( $type, $amount ) );
+
+		$this->assertNotWPError( $applied );
+
+		$order->save();
+
+		return $this->fresh( $order->get_id() );
+	}
+
+	/**
+	 * What the wizard sends back for an untouched line: the prefill's pre-discount unit price.
+	 *
+	 * @param \WC_Order $order    the order.
+	 * @param int      $quantity the wanted quantity.
+	 * @return array<string,mixed> a payload that differs from the saved order only in `$quantity`.
+	 */
+	private function prefill_payload( \WC_Order $order, int $quantity ): array {
+		$item = array_values( $order->get_items( 'line_item' ) )[0];
+
+		return $this->payload(
+			[
+				'items' => [
+					[
+						'item_id'    => (int) $item->get_id(),
+						'product_id' => $this->product_id,
+						'quantity'   => $quantity,
+						'price'      => wc_format_decimal( (float) $item->get_subtotal() / max( 1, (int) $item->get_quantity() ) ),
+					],
+				],
+			]
+		);
+	}
+
+	/**
+	 * @return array<string,array{0:bool,1:string,2:string,3:float,4:float}> datastore, coupon type, amount, discount at 2 units, discount at 3 units.
+	 */
+	public function coupon_provider(): array {
+		return [
+			'HPOS, 10% coupon'        => [ true, 'percent', '10', 30.0, 45.0 ],
+			'legacy CPT, 10% coupon'  => [ false, 'percent', '10', 30.0, 45.0 ],
+			'HPOS, 50 fixed coupon'   => [ true, 'fixed_cart', '50', 50.0, 50.0 ],
+			'legacy CPT, 50 fixed'    => [ false, 'fixed_cart', '50', 50.0, 50.0 ],
+		];
+	}
+
+	/**
+	 * #1327: saving only an address must not drop the coupon discount from the line.
+	 *
+	 * @dataProvider coupon_provider
+	 * @param bool   $hpos     datastore under test.
+	 * @param string $type     coupon type.
+	 * @param string $amount   coupon amount.
+	 * @param float  $discount the discount at the order's current 2 units.
+	 * @return void
+	 */
+	public function test_an_address_only_save_keeps_the_coupon_discount( bool $hpos, string $type, string $amount, float $discount ): void {
+		$this->use_datastore( $hpos );
+
+		$order = $this->order_with_coupon( $type, $amount );
+		$line  = array_values( $order->get_items( 'line_item' ) )[0];
+
+		$this->assertEquals( 300, (float) $line->get_subtotal() );
+		$this->assertEquals( 300 - $discount, (float) $line->get_total(), 'precondition: WooCommerce applied the coupon' );
+		$this->assertEquals( $discount, (float) $order->get_discount_total(), 'precondition' );
+
+		$payload                        = $this->prefill_payload( $order, 2 );
+		$payload['billing']['city']     = 'Тула';
+		$payload['billing']['address_1'] = 'ул. Мира, 5';
+
+		$updated = ( new Order_Editor() )->update( $order->get_id(), $payload );
+
+		$this->assertInstanceOf( \WC_Order::class, $updated, $updated instanceof \WP_Error ? $updated->get_error_message() : '' );
+
+		$after      = $this->fresh( $order->get_id() );
+		$after_line = array_values( $after->get_items( 'line_item' ) )[0];
+
+		$this->assertSame( 'Тула', $after->get_billing_city(), 'the address was saved' );
+		$this->assertEquals( 300, (float) $after_line->get_subtotal() );
+		$this->assertEquals( 300 - $discount, (float) $after_line->get_total(), 'the line keeps its discounted total' );
+		$this->assertEquals( $discount, (float) $after->get_discount_total() );
+		$this->assertEquals( (float) $order->get_total(), (float) $after->get_total(), 'the amount to pay does not change' );
+		$this->assertCount( 1, $after->get_items( 'coupon' ), 'the coupon is still on the order' );
+	}
+
+	/**
+	 * #1327: an intentional quantity change re-applies the coupon exactly as WooCommerce's own
+	 * «Recalculate» does it.
+	 *
+	 * @dataProvider coupon_provider
+	 * @param bool   $hpos       datastore under test.
+	 * @param string $type       coupon type.
+	 * @param string $amount     coupon amount.
+	 * @param float  $discount   the discount at 2 units (unused here).
+	 * @param float  $discount_3 the discount at 3 units.
+	 * @return void
+	 */
+	public function test_a_quantity_change_reapplies_the_coupon_like_woocommerce( bool $hpos, string $type, string $amount, float $discount, float $discount_3 ): void {
+		$this->use_datastore( $hpos );
+
+		$edited    = $this->order_with_coupon( $type, $amount );
+		$reference = $this->order_with_coupon( $type, $amount );
+
+		$updated = ( new Order_Editor() )->update( $edited->get_id(), $this->prefill_payload( $edited, 3 ) );
+
+		$this->assertInstanceOf( \WC_Order::class, $updated, $updated instanceof \WP_Error ? $updated->get_error_message() : '' );
+
+		// What WooCommerce itself computes for the same change: edit the line, then Recalculate.
+		$ref_line = array_values( $reference->get_items( 'line_item' ) )[0];
+		$ref_line->set_quantity( 3 );
+		$ref_line->set_subtotal( '450' );
+		$ref_line->set_total( '450' );
+		$ref_line->save();
+		$reference->recalculate_coupons();
+
+		$after      = $this->fresh( $edited->get_id() );
+		$after_line = array_values( $after->get_items( 'line_item' ) )[0];
+		$expected   = $this->fresh( $reference->get_id() );
+		$exp_line   = array_values( $expected->get_items( 'line_item' ) )[0];
+
+		$this->assertEquals( 450, (float) $after_line->get_subtotal() );
+		$this->assertEquals( 450 - $discount_3, (float) $after_line->get_total(), 'the coupon is re-applied to the new quantity' );
+		$this->assertEquals( $discount_3, (float) $after->get_discount_total() );
+		$this->assertEquals( (float) $exp_line->get_total(), (float) $after_line->get_total(), 'line total = what WooCommerce computes' );
+		$this->assertEquals( (float) $expected->get_discount_total(), (float) $after->get_discount_total(), 'discount = what WooCommerce computes' );
+		$this->assertEquals( (float) $expected->get_total(), (float) $after->get_total(), 'order total = what WooCommerce computes' );
+		$this->assertEquals( 450 - $discount_3 + 350, (float) $after->get_total() );
+	}
 }

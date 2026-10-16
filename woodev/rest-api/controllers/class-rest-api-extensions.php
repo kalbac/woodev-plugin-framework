@@ -45,6 +45,28 @@ if ( ! class_exists( 'Woodev_REST_API_Extensions' ) ) :
 		const CACHE_KEY = 'woodev_extensions_catalog_v2';
 
 		/**
+		 * Transient holding the response served while the failure cooldown runs.
+		 *
+		 * It is written BEFORE the network call, so a fetch that dies mid-request still starts the pause.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var string
+		 */
+		const COOLDOWN_KEY = 'woodev_extensions_catalog_v2_cooldown';
+
+		/**
+		 * How long (seconds) an incomplete fetch is not retried: the page serves its stale/partial response
+		 * instead of calling woodev.ru again on every load. Worst case that is 144 attempts (288 requests)
+		 * per site per day, and only while someone keeps opening the page during an outage.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var int
+		 */
+		const FAILURE_COOLDOWN = 600;
+
+		/**
 		 * Remote-fetch timeout (seconds). The default WP 5s is too short for the
 		 * enriched products payload (~250KB) on a cold cache; a timeout there fails
 		 * the whole catalog (gotcha extensions-catalog-fetch-5s-timeout). Mirrors the
@@ -135,8 +157,10 @@ if ( ! class_exists( 'Woodev_REST_API_Extensions' ) ) :
 		 * Serves a cached payload when present; otherwise fetches both endpoints and
 		 * normalizes. Only a COMPLETE result (both products and categories non-empty)
 		 * is cached — a partial result (e.g. the categories endpoint blipped while
-		 * products succeeded) is still served this request but left uncached, so the
-		 * next load retries rather than serving a chip-less catalog for a full week.
+		 * products succeeded) is not cached as the catalogue: it is served for a
+		 * short cooldown ({@see self::FAILURE_COOLDOWN}) and then retried, rather
+		 * than serving a chip-less catalog for a full week or hitting woodev.ru on
+		 * every page load during an outage.
 		 * `stale: true` (products empty) is the hard-failure flag the client renders
 		 * an error for; a categories-only outage does NOT hide the working grid.
 		 *
@@ -154,6 +178,24 @@ if ( ! class_exists( 'Woodev_REST_API_Extensions' ) ) :
 				return rest_ensure_response( $cached );
 			}
 
+			// An incomplete fetch is not retried until its cooldown ends: serve what it produced.
+			$paused = get_transient( self::COOLDOWN_KEY );
+
+			if ( is_array( $paused ) ) {
+				return rest_ensure_response( $paused );
+			}
+
+			// Start the pause before the network call, with the failure response; a fetch that never returns keeps it.
+			set_transient(
+				self::COOLDOWN_KEY,
+				[
+					'categories' => [],
+					'products'   => [],
+					'stale'      => true,
+				],
+				self::FAILURE_COOLDOWN
+			);
+
 			$products   = $this->fetch_products();
 			$categories = $this->fetch_categories();
 
@@ -163,9 +205,13 @@ if ( ! class_exists( 'Woodev_REST_API_Extensions' ) ) :
 				'stale'      => ( [] === $products ),
 			];
 
-			// Cache only a complete fetch; a partial/failed one stays retryable.
 			if ( [] !== $products && [] !== $categories ) {
+				// Only a complete fetch is cached as the catalogue.
 				set_transient( self::CACHE_KEY, $payload, WEEK_IN_SECONDS );
+				delete_transient( self::COOLDOWN_KEY );
+			} else {
+				// A partial/failed one is served for the cooldown, then retried.
+				set_transient( self::COOLDOWN_KEY, $payload, self::FAILURE_COOLDOWN );
 			}
 
 			return rest_ensure_response( $payload );
