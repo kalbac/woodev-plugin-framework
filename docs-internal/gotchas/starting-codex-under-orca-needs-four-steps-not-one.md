@@ -1,5 +1,11 @@
 # gotcha: starting a Codex worker under Orca takes four steps — `worker-start --agent codex` alone lands in a shell
 
+> **s185 (16.10.2026, Orca 1.4.224, codex-cli 0.162.1 → 0.163.0 available): the update prompt is back on EVERY launch** —
+> 9 of 9 `worker-start --agent codex` returned `failed / agent_readiness / agent-update-prompt`. Recovery each time: read the
+> terminal, send ESC until the composer shows `Ask Codex` (one ESC was sometimes not enough), then
+> `worker-start --task <task> --retry-of <failed dispatch> --terminal <same handle> --worktree id:<that worktree>` → `ready`.
+> Updating Codex would likely end it; the update is the operator's call (global tool).
+
 > **Latest measurement — s171 (12.10.2026, macOS, Orca 1.4.224, codex-cli 0.162.1): the plain launch WORKS.**
 > `worker-start --agent codex` returned `ready / input_accepted` with `turnStart: observed` on 9 of 9 launches,
 > including `--model gpt-6.1-sol --effort high` (the effective model/effort were echoed back in `launch.effective`).
