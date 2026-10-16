@@ -99,10 +99,9 @@ final class My_Carrier_Plugin extends \Woodev\Framework\Woocommerce_Plugin {
 
 For an integer minimum, the framework understands shorthand sizes such as `128M` in the server's value, so write the expected value in bytes. WordPress defines `MB_IN_BYTES` for that.
 
-Three limits to know:
+Two limits to know:
 
-- A setting whose current value is empty or `0` is skipped, so this check cannot catch a setting that is switched off.
-- A `memory_limit` of `-1` (unlimited) is compared as the number `-1` and reported as too low. Do not declare `memory_limit`.
+- A setting whose current value is empty or `0` is skipped, so this check cannot catch a setting that is switched off. A value of `-1` (unlimited, as `memory_limit` can be) is skipped too: it meets any minimum.
 - Declaring any `php_settings` also checks the Suhosin limits that the framework knows about. They apply only on servers that run Suhosin.
 
 ### What the merchant sees

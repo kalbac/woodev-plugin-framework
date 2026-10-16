@@ -411,6 +411,11 @@ if ( ! class_exists( 'Woodev_Plugin_Dependencies' ) ) :
 
 					if ( is_int( $expected ) ) {
 
+						// "-1" means unlimited (e.g. memory_limit), which satisfies any minimum
+						if ( '-1' === trim( (string) $actual ) ) {
+							continue;
+						}
+
 						// determine if this is a size string, like "10MB"
 						$is_size = ! is_numeric( substr( $actual, -1 ) );
 
