@@ -313,6 +313,7 @@ export default function LicenseCard( { initialState } ) {
 								? keyInput
 								: ( revealKey ? licenseKey : maskKey( licenseKey ) ) }
 							readOnly={ ! view.keyEditable }
+							disabled={ busy }
 							onChange={ ( value ) => setKeyInput( value ) }
 							placeholder={ __( 'Укажите ваш ключ', 'woodev-plugin-framework' ) }
 						/>
