@@ -22,6 +22,7 @@
  */
 
 const { test, expect } = require( '@playwright/test' );
+const { DESTINATIONS, useShippingDestination } = require( './shipping-destination' );
 
 /** Product id that fills the cart — `docs-internal/CURRENT-STATE.md` → Local rig. */
 const PRODUCT_ID = 12;
@@ -73,58 +74,74 @@ async function chooseShipping( page, methodId ) {
 
 const row = ( page, id ) => page.locator( `#${ id }_field` );
 
-test.describe( 'classic checkout — WooCommerce core pickup (#1176)', () => {
+/**
+ * Once per destination mode (#1306): the rig runs `billing_only`, so each describe states the mode it needs and
+ * `useShippingDestination()` restores the rig's own afterwards. With a shipping column the policy is asserted on BOTH
+ * columns; under `billing_only` the billing column carries it alone and the shipping rows do not exist.
+ */
+for ( const { mode, label, columns, live } of DESTINATIONS ) {
+	test.describe( `classic checkout — WooCommerce core pickup, ${ label } (#1176, #1306)`, () => {
+		useShippingDestination( mode );
 
-	test( 'core pickup hides the address and postcode rows and a courier brings them back', async ( { page } ) => {
-		await openCheckout( page );
-		await chooseShipping( page, METHOD_CORE_PICKUP );
 
-		for ( const id of [ 'shipping_address_1', 'shipping_postcode' ] ) {
-			await expect( row( page, id ), `${ id } row must carry the policy class` ).toHaveClass( /woodev-field--hidden-for-pickup/ );
-			await expect( row( page, id ), `${ id } row must not be visible` ).toBeHidden();
-		}
-
-		// What was required stays decided by the page: the row is hidden, so it must not block the order.
-		await expect( page.locator( '#shipping_address_1' ) ).not.toHaveJSProperty( 'required', true );
-
-		await chooseShipping( page, METHOD_FREE );
-
-		for ( const id of [ 'shipping_address_1', 'shipping_postcode' ] ) {
-			await expect( row( page, id ) ).not.toHaveClass( /woodev-field--hidden-for-pickup/ );
-			await expect( row( page, id ) ).toBeVisible();
-		}
-	} );
-
-	test( 'a method that only looks like core pickup does not hide the address', async ( { page } ) => {
-		await openCheckout( page );
-		await chooseShipping( page, METHOD_FREE );
-
-		await expect( row( page, 'shipping_address_1' ) ).toBeVisible();
-	} );
-
-	test( 'city limit: core pickup is offered in a listed city and not elsewhere', async ( { page } ) => {
-		test.skip( ! process.env.WOODEV_E2E_CITY_LIMIT, 'Needs the rig prepared as the file header says; set WOODEV_E2E_CITY_LIMIT=1.' );
-
-		const corePickup = page.locator( `input[name^="shipping_method"][value^="${ METHOD_CORE_PICKUP }:"]` );
-
-		/**
-		 * Picks a settlement in the framework's city select. The select2 offers options only after a search,
-		 * so the name is typed first; and a pick narrows later searches to its region, so every pick starts
-		 * from a fresh session (the customer's chosen locality lives in the WooCommerce session).
-		 */
-		async function pickCity( name ) {
-			await page.context().clearCookies();
+		test( 'core pickup hides the address and postcode rows and a courier brings them back', async ( { page } ) => {
 			await openCheckout( page );
-			await page.click( '#shipping_city_field .select2-selection' );
-			await page.locator( 'input.select2-search__field' ).fill( name );
-			await page.click( `.select2-results__option:has-text("${ name }")`, { timeout: 40_000 } );
-			await settle( page );
-		}
+			await chooseShipping( page, METHOD_CORE_PICKUP );
 
-		await pickCity( 'Москва' );
-		await expect( corePickup, 'Moscow is not in the list: core pickup must not be offered' ).toHaveCount( 0 );
+			const ids = columns.flatMap( ( column ) => [ `${ column }_address_1`, `${ column }_postcode` ] );
 
-		await pickCity( 'Пушкин' );
-		await expect( corePickup, 'Pushkin is in the list: core pickup must be offered' ).toHaveCount( 1 );
+			for ( const id of ids ) {
+				await expect( row( page, id ), `${ id } row must carry the policy class` ).toHaveClass( /woodev-field--hidden-for-pickup/ );
+				await expect( row( page, id ), `${ id } row must not be visible` ).toBeHidden();
+			}
+
+			// What was required stays decided by the page: the row is hidden, so it must not block the order.
+			await expect( page.locator( `#${ live }_address_1` ) ).not.toHaveJSProperty( 'required', true );
+
+			await chooseShipping( page, METHOD_FREE );
+
+			for ( const id of ids ) {
+				await expect( row( page, id ) ).not.toHaveClass( /woodev-field--hidden-for-pickup/ );
+				await expect( row( page, id ) ).toBeVisible();
+			}
+
+			// `billing_only` has no shipping column at all: the billing rows above are the whole behaviour.
+			if ( ! columns.includes( 'shipping' ) ) {
+				await expect( row( page, 'shipping_address_1' ), `shipping rows must not exist under ${ mode }` ).toHaveCount( 0 );
+			}
+		} );
+
+		test( 'a method that only looks like core pickup does not hide the address', async ( { page } ) => {
+			await openCheckout( page );
+			await chooseShipping( page, METHOD_FREE );
+
+			await expect( row( page, `${ live }_address_1` ) ).toBeVisible();
+		} );
+
+		test( 'city limit: core pickup is offered in a listed city and not elsewhere', async ( { page } ) => {
+			test.skip( ! process.env.WOODEV_E2E_CITY_LIMIT, 'Needs the rig prepared as the file header says; set WOODEV_E2E_CITY_LIMIT=1.' );
+
+			const corePickup = page.locator( `input[name^="shipping_method"][value^="${ METHOD_CORE_PICKUP }:"]` );
+
+			/**
+			 * Picks a settlement in the framework's city select. The select2 offers options only after a search,
+			 * so the name is typed first; and a pick narrows later searches to its region, so every pick starts
+			 * from a fresh session (the customer's chosen locality lives in the WooCommerce session).
+			 */
+			async function pickCity( name ) {
+				await page.context().clearCookies();
+				await openCheckout( page );
+				await page.click( `#${ live }_city_field .select2-selection` );
+				await page.locator( 'input.select2-search__field' ).fill( name );
+				await page.click( `.select2-results__option:has-text("${ name }")`, { timeout: 40_000 } );
+				await settle( page );
+			}
+
+			await pickCity( 'Москва' );
+			await expect( corePickup, 'Moscow is not in the list: core pickup must not be offered' ).toHaveCount( 0 );
+
+			await pickCity( 'Пушкин' );
+			await expect( corePickup, 'Pushkin is in the list: core pickup must be offered' ).toHaveCount( 1 );
+		} );
 	} );
-} );
+}

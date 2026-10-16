@@ -186,8 +186,8 @@ test.beforeAll( async () => {
 	requireRig();
 
 	// A plugin that was deactivated and activated again (scenario 5 of 01–05 does that) recreates its lifecycle option on the
-	// FIRST request after — let it, so the snapshot below is of a settled rig.
-	await fetch( `${ process.env.WP_BASE_URL || 'http://localhost:8973' }/` );
+	// FIRST ADMIN request after (`admin_init`) — let it, so the snapshot below is of a settled rig.
+	await M.settleActivation();
 
 	Object.assign( rigBefore, M.rigSnapshot() );
 	profile.save();
