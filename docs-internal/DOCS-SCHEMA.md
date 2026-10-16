@@ -489,7 +489,7 @@ The public site is an Astro Starlight project in `website/` (own `package.json`;
 **How to edit**
 
 1. Edit `.md` / `.mdx` files in `website/src/content/docs/`; the sidebar order is defined explicitly in `website/astro.config.mjs`, so a new page must be added there.
-2. Preview locally: `cd website && npm ci && npm run dev` (Node 22.22+), then open the printed URL (it ends in `/woodev-plugin-framework/`). `npm run build` produces `website/dist/` plus the Pagefind search index; `npm run preview` serves that build.
+2. Preview locally: `cd website && npm ci && npm run dev` (Node 22.22+), then open the printed URL (it ends in `/woodev-plugin-framework/`). `npm run build` produces `website/dist/` plus the Pagefind search index and, through `starlight-llms-txt`, `llms.txt`, `llms-full.txt` and `llms-small.txt` for AI agents (#1349); `npm run preview` serves that build.
 3. Use the `%%FRAMEWORK_VERSION%%` placeholder for version numbers — **never hardcode a version**.
    The build replaces it with `Woodev_Plugin::VERSION`, read from `woodev/class-plugin.php`
    (`website/plugins/remark-framework-version.mjs`).
