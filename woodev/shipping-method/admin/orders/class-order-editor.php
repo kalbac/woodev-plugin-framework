@@ -588,7 +588,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 
 			$this->apply_payment_method( $order, (string) $data['payment_method'] );
 
-			$touched = $this->apply_items( $order, $data['items'], $is_update );
+			$repriced = false;
+			$touched  = $this->apply_items( $order, $data['items'], $is_update, $repriced );
 
 			// The tariff about to be replaced may have asked for fields the new one does not (D7).
 			$previous_fields = $is_update ? $this->current_field_set( $order ) : null;
@@ -606,6 +607,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 			}
 
 			$written = $this->persist( $order, $data, $is_update, $previous_fields );
+
+			$this->refresh_discounts( $order, $repriced, $is_update );
 
 			$order->calculate_totals( true );
 
@@ -710,9 +713,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 		 * @param \WC_Order                        $order     the order.
 		 * @param array<int, array<string, mixed>> $wanted    validated lines.
 		 * @param bool                             $is_update whether the order already existed.
+		 * @param bool                             $repriced  set to true when a line was added, removed or given a new
+		 *                                                    quantity or price — the order's coupons then need re-applying.
 		 * @return \WC_Order_Item_Product[] the lines that were added or edited.
 		 */
-		private function apply_items( \WC_Order $order, array $wanted, bool $is_update ): array {
+		private function apply_items( \WC_Order $order, array $wanted, bool $is_update, bool &$repriced = false ): array {
 			/** @var array<int, \WC_Order_Item_Product> $existing */
 			$existing = $is_update ? $order->get_items( 'line_item' ) : [];
 			$kept     = [];
@@ -739,9 +744,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 					}
 
 					$order->add_item( $item );
+
+					$repriced = true;
 				}
 
-				$this->price_line( $item, $line );
+				if ( $this->price_line( $item, $line ) ) {
+					$repriced = true;
+				}
 
 				$touched[] = $item;
 			}
@@ -753,6 +762,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 
 				wc_maybe_adjust_line_item_product_stock( $old, 0 );
 				$order->remove_item( (int) $item_id );
+
+				$repriced = true;
 			}
 
 			return $touched;
@@ -762,21 +773,35 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 		 * Quantity and price of one line. The price is per unit, before tax; absent, an edited line
 		 * keeps the unit price it had and a new one takes the product's own (spec O8).
 		 *
+		 * A saved line whose quantity and unit price are what the prefill showed is left exactly as it is: its
+		 * subtotal and total may differ by a coupon, and rewriting both from `price × quantity` would silently
+		 * drop that discount on an address-only save (#1327).
+		 *
 		 * @since 2.0.2
 		 *
 		 * @param \WC_Order_Item_Product $item the line.
 		 * @param array<string, mixed>   $line the validated wanted line.
-		 * @return void
+		 * @return bool whether the line's quantity or price was changed.
 		 */
-		private function price_line( \WC_Order_Item_Product $item, array $line ): void {
+		private function price_line( \WC_Order_Item_Product $item, array $line ): bool {
 			$quantity = (int) $line['quantity'];
+			$saved    = $item->get_id() > 0 && (int) $item->get_quantity() > 0;
 
 			if ( null !== $line['price'] ) {
 				$unit = (float) $line['price'];
-			} elseif ( $item->get_id() > 0 && (int) $item->get_quantity() > 0 ) {
+			} elseif ( $saved ) {
 				$unit = (float) $item->get_subtotal() / (int) $item->get_quantity();
 			} else {
 				$unit = (float) wc_get_price_excluding_tax( $line['product'] );
+			}
+
+			if ( $saved && $quantity === (int) $item->get_quantity() ) {
+				// The same rounding build_prefill() applies to the unit price it sends to the wizard.
+				$saved_unit = round( (float) $item->get_subtotal() / $quantity, wc_get_rounding_precision() );
+
+				if ( abs( $saved_unit - round( $unit, wc_get_rounding_precision() ) ) < 0.000001 ) {
+					return false;
+				}
 			}
 
 			$total = wc_format_decimal( round( $unit * $quantity, wc_get_rounding_precision() ) );
@@ -784,6 +809,30 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 			$item->set_quantity( $quantity );
 			$item->set_subtotal( $total );
 			$item->set_total( $total );
+
+			return true;
+		}
+
+		/**
+		 * Re-applies the order's coupons after an edit changed its lines.
+		 *
+		 * A repriced line is written at its full subtotal, so the discount it carried has to come back through
+		 * WooCommerce's own coupon recalculation (what the «Recalculate» button runs), which also recomputes the
+		 * totals. An order whose lines nobody touched keeps its discounts as they were saved (#1327).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order     the saved order.
+		 * @param bool      $repriced  whether apply_items() changed, added or removed a line.
+		 * @param bool      $is_update whether the order already existed.
+		 * @return void
+		 */
+		private function refresh_discounts( \WC_Order $order, bool $repriced, bool $is_update ): void {
+			if ( ! $repriced || ! $is_update || [] === $order->get_items( 'coupon' ) ) {
+				return;
+			}
+
+			$order->recalculate_coupons();
 		}
 
 		/**
