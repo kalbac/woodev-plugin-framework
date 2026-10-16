@@ -21,6 +21,18 @@ import TabsNav from '../components/tabs-nav';
 import SectionView from './section-view';
 
 /**
+ * Whether a staged value is still the one that was submitted (scalars by identity,
+ * arrays/objects by content — a control may hand back an equal copy).
+ *
+ * @param {*} a staged value now.
+ * @param {*} b value captured when Save was pressed.
+ * @return {boolean} true when nothing changed since.
+ */
+function isSameValue( a, b ) {
+	return a === b || JSON.stringify( a ) === JSON.stringify( b );
+}
+
+/**
  * Builds the REST save payload from staged edits, dropping any field whose current
  * schema says `disabled: true` — a disabled field is rendered read-only (D11) and
  * must never leave the browser on save, even if it is still staged as an edit from
@@ -314,9 +326,16 @@ export default function App() {
 						if ( res && res.tabs ) {
 							setTabs( res.tabs );
 						}
+						// #1326: drop only the values that were SUBMITTED. An edit typed
+						// while the save/refetch was pending differs from the snapshot and
+						// stays staged instead of being silently discarded.
 						setEdits( ( prev ) => {
 							const tabEdits = { ...( prev[ providerId ] || {} ) };
-							sectionFieldIds.forEach( ( id ) => delete tabEdits[ id ] );
+							Object.keys( sectionEdits ).forEach( ( id ) => {
+								if ( Object.prototype.hasOwnProperty.call( tabEdits, id ) && isSameValue( tabEdits[ id ], sectionEdits[ id ] ) ) {
+									delete tabEdits[ id ];
+								}
+							} );
 							return { ...prev, [ providerId ]: tabEdits };
 						} );
 					} )
