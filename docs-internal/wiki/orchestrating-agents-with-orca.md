@@ -609,6 +609,16 @@ The merchant site woodev.ru is written and published from the `woodev-ru` projec
 - That checkout cannot see the framework code: build the facts on the Mac and bring them over as a file — there is no SSH,
   see [a-file-for-homelab-goes-through-orca-terminal-send-and-read-drops-the-last-chunk](../gotchas/a-file-for-homelab-goes-through-orca-terminal-send-and-read-drops-the-last-chunk.md).
 - A shell there for reading: `orca terminal create --environment Homelab --worktree path:/home/maksim/Projects/sites/woodev-ru`.
+- **Binary files (screenshots) go through the operator's NAS, not the terminal** (s185): the Mac mounts it at `/Volumes/maksim`, Homelab
+  reads the same share at `/run/user/1000/gvfs/smb-share:server=routerich.local,share=maksim/`. Doc screenshots live in
+  `woodev-docs-media/screens-<date>/` with a `manifest.md` (file → paragraph, alt, caption). Delete macOS `._*` files after copying.
+- **Uploading media:** the MCP `woodev-blog/upload-media` takes only a public URL or inline base64, so a worker in the `homelab-ai`
+  project (it holds the server access) imports files with `wp media import --alt --caption` and writes `media-ids.tsv` next to the
+  manifest. Its worktree: `id:99619f9a-8f81-42e0-954d-473edc24c8e4::/home/maksim/Projects/homelab-ai`.
+- **Slug and Yoast fields:** `woodev-seo/get-post-seo` / `update-post-seo` (site plugin `woodev-mcp-adapter` ≥ 1.2.1). Every ability
+  checks `edit_post`; for BetterDocs `docs` that needs the BetterDocs article roles, so the MCP user is an Editor AND Editor is in the
+  BetterDocs article roles (operator, 17.10.2026). A bare «Permission denied» from `mcp-adapter-execute-ability` is that check failing.
+- A production change the auto-mode classifier refuses (a deploy, a role change) goes to the operator as a click, not a workaround.
 
 ## Related
 
