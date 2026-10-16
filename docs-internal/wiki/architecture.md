@@ -76,7 +76,7 @@ gateway's `dist/` Parcel bundles are already minified and are referenced by thei
 | `Woodev_Lifecycle` | Install/upgrade routines and milestone notices |
 | `Woodev_REST_API` | Registers plugin REST API routes |
 | `Woodev_Blocks_Handler` | Declares WC Cart/Checkout block compatibility |
-| `Woodev\Framework\Setup\Setup_Wizard` | Admin onboarding wizard — neutral React-driven, opt-in via `get_setup_wizard_handler()` (WC wrapper: `Woocommerce_Setup_Wizard`) |
+| `Woodev\Framework\Setup\Setup_Wizard` | Admin onboarding wizard — neutral React-driven, opt-in via `build_setup_wizard_handler()` (WC wrapper: `Woocommerce_Setup_Wizard`) |
 | `Woodev_Admin_Pages` | Plugin settings page registration |
 | `Woodev_Plugin_Compatibility` | WP/WC version helpers |
 | `Woodev_Order_Compatibility` | HPOS-compatible order data access |
@@ -294,7 +294,7 @@ The updater (`woodev/licensing/updater/`) drives the plugin update mechanism.
 ## Lifecycle & upgrades (`woodev/class-lifecycle.php`)
 
 Override `Woodev_Lifecycle` per plugin: define the `$upgrade_versions` array and add methods named
-`upgrade_to_X_Y_Z()`. Install/upgrade events are stored in the DB (last 30). Milestone notices
+`upgrade_to_X_Y_Z()`. Install/upgrade events are stored in the DB (last 29). Milestone notices
 prompt users for reviews after key actions.
 
 ## Box packer (`woodev/box-packer/`)

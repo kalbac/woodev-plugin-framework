@@ -6,8 +6,8 @@
  * (WC_Order, WC_Product, WC_Order_Item_Product, etc.) and was previously part
  * of the platform-neutral {@see \Woodev_Helper} base.
  *
- * The base class keeps deprecated shims that delegate here. New code should
- * call this class directly.
+ * `Woodev_Helper` keeps no shims for these methods (v2 clean break): call
+ * this class directly.
  *
  * @package Woodev\Framework
  */
@@ -159,26 +159,21 @@ if ( ! class_exists( Woocommerce_Helper::class, false ) ) :
 		 *
 		 * Enqueues JavaScript required for AJAX search with Select2.
 		 *
-		 * Example usage:
-		 *    <input type="hidden" class="woodev-wc-enhanced-search" name="category_ids" data-multiple="true" style="min-width: 300px;"
+		 * Example usage (the script enhances every `select.woodev-wc-enhanced-search`):
+		 *    <select multiple class="woodev-wc-enhanced-search" name="category_ids[]" style="min-width: 300px;"
 		 *       data-action="wc_cart_notices_json_search_product_categories"
 		 *       data-nonce="<?php echo wp_create_nonce( 'search-categories' ); ?>"
-		 *       data-request_data = "<?php echo esc_attr( wp_json_encode( array( 'field_name' => 'something_exciting', 'default' => 'default_label' ) ) ) ?>"
-		 *       data-placeholder="<?php esc_attr_e( 'Search for a category&hellip;', 'wc-cart-notices' ) ?>"
-		 *       data-allow_clear="true"
-		 *       data-selected="<?php
-		 *          $json_ids    = array();
-		 *          if ( isset( $notice->data['categories'] ) ) {
-		 *             foreach ( $notice->data['categories'] as $value => $title ) {
-		 *                $json_ids[ esc_attr( $value ) ] = esc_html( $title );
-		 *             }
-		 *          }
-		 *          echo esc_attr( wp_json_encode( $json_ids ) ) );
-		 *       ?>"
-		 *       value="<?php echo implode( ',', array_keys( $json_ids ) ); ?>" />
+		 *       data-request_data="<?php echo esc_attr( wp_json_encode( [ 'field_name' => 'something_exciting', 'default' => 'default_label' ] ) ); ?>"
+		 *       data-placeholder="<?php esc_attr_e( 'Search for a category&hellip;', 'wc-cart-notices' ); ?>"
+		 *       data-allow_clear="true">
+		 *       <?php foreach ( $selected as $value => $title ) : ?>
+		 *          <option value="<?php echo esc_attr( $value ); ?>" selected><?php echo esc_html( $title ); ?></option>
+		 *       <?php endforeach; ?>
+		 *    </select>
 		 *
-		 * - `data-selected` can be a json encoded associative array like Array( 'key' => 'value' )
-		 * - `value` should be a comma-separated list of selected keys
+		 * - preselected values are `<option selected>` children; the script reads no `data-selected` or `value`
+		 * - `data-action` is the AJAX search action (default `woocommerce_json_search_products_and_variations`)
+		 * - `data-minimum_input_length` sets the characters needed before a search starts (default 3)
 		 * - `data-request_data` can be used to pass any additional data to the AJAX request
 		 *
 		 * @return void

@@ -2311,6 +2311,8 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 
 		protected function get_request_args() {
 
+			// `woodev_sl_api_request_verify_ssl` applies to EVERY API client built on this base, not only a
+			// licence one; the `sl` in the name is a legacy leftover, kept because hook names are frozen.
 			$args = [
 				'method'      => $this->get_request_method(),
 				'timeout'     => $this->resolve_request_timeout(),

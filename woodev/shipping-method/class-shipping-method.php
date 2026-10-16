@@ -571,7 +571,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			 *
 			 * This terminates. The second pass runs with the feature already in `supports`, so
 			 * a callback that declares it again is a no-op in `add_support()` and sets nothing
-			 * pending; and only five features shape the form at all, which bounds even a
+			 * pending; and only six features shape the form at all, which bounds even a
 			 * pathological callback that declares a different one each time.
 			 */
 			if ( $this->pending_form_rebuild ) {

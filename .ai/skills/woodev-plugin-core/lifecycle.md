@@ -49,7 +49,7 @@ What it does (all verified in `woodev/class-lifecycle.php`):
   `plugins_loaded`): `handle_activation()` watches the option `woodev_{plugin id}_is_active`, calls your
   `activate()` once, reschedules the weekly license check and fires `woodev_{plugin id}_activated`;
   `handle_deactivation()` is hooked to `deactivate_{plugin file}`. Override `activate()` / `deactivate()`.
-- **Event history:** the last 30 events (`install`, `upgrade`, `migrate`) are stored in
+- **Event history:** the last 29 events (`install`, `upgrade`, `migrate`) are stored in
   `woodev_{plugin id}_lifecycle_events`. `add_migrate_event( $from_plugin, $from_version, $data )`
   records a migration from another plugin.
 - **Milestone notices** (ask for a review after a key action): `register_milestone_message( $id, $message )`

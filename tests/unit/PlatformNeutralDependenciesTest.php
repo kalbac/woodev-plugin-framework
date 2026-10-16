@@ -114,6 +114,42 @@ class PlatformNeutralDependenciesTest extends TestCase {
 	}
 
 	/**
+	 * #1316: `memory_limit = -1` means "unlimited" to PHP; compared as a plain number it was
+	 * read as "below every minimum" and raised a false incompatibility notice.
+	 *
+	 * @return void
+	 */
+	public function test_unlimited_memory_limit_is_not_reported_as_below_the_minimum(): void {
+		Functions\when( 'wp_parse_args' )->alias(
+			static function ( array $args, array $defaults ): array {
+				return array_merge( $defaults, $args );
+			}
+		);
+		Functions\when( 'size_format' )->alias(
+			static function ( int $bytes ): string {
+				return (string) $bytes;
+			}
+		);
+
+		$previous = ini_set( 'memory_limit', '-1' ); // phpcs:ignore WordPress.PHP.IniSet.memory_limit_Blacklisted
+
+		try {
+			$dependencies = new Testable_Platform_Neutral_Plugin_Dependencies(
+				new Testable_Platform_Neutral_Dependencies_Plugin(),
+				[
+					'php_settings' => [
+						'memory_limit' => 256 * 1024 * 1024,
+					],
+				]
+			);
+
+			$this->assertSame( [], $dependencies->get_incompatible_php_settings() );
+		} finally {
+			ini_set( 'memory_limit', (string) $previous ); // phpcs:ignore WordPress.PHP.IniSet.memory_limit_Blacklisted
+		}
+	}
+
+	/**
 	 * Base-owned dependency handling should not call wc_let_to_num() directly anymore.
 	 *
 	 * @return void

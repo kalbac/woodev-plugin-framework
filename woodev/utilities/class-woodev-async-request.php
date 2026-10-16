@@ -62,7 +62,8 @@ if ( ! class_exists( 'Woodev_Async_Request' ) ) :
 			$url  = add_query_arg( $this->get_query_args(), $this->get_query_url() );
 			$args = $this->get_request_args( $url );
 
-			return wp_safe_remote_get( esc_url_raw( $url ), $args );
+			// a POST, so the `set_data()` body reaches `$_POST` in handle(); a GET drops it
+			return wp_safe_remote_post( esc_url_raw( $url ), $args );
 		}
 
 

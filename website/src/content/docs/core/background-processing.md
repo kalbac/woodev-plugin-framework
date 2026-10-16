@@ -73,7 +73,7 @@ Start it with `dispatch()`:
 The constructor registers the AJAX hooks that receive the second request. Create the object on **every** request, from your plugin's constructor, and keep it in a property. If it exists only in the code that calls `dispatch()`, the second request finds no handler and nothing happens.
 :::
 
-`set_data( array $data )` returns the request and stores `$data` for the dispatch. The dispatch is a `GET` request, and PHP does not fill `$_POST` for a `GET`, so do not count on reading the data back in `handle()`. Keep the real data in storage (an option, a transient or a job) and treat the request as a trigger. That is exactly what the job handler below does.
+`set_data( array $data )` returns the request and stores `$data` for the dispatch. The dispatch is a `POST` request, so `$_POST` in `handle()` holds `$data` (unslash and sanitize it as you would any request input). The request is non-blocking and its body is small, so keep large or important data in storage (an option, a transient or a job) and treat the request as a trigger. That is exactly what the job handler below does.
 
 ## Background jobs
 
