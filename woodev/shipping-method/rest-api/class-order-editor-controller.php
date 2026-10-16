@@ -70,6 +70,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Order_Editor_Cont
 			'carrier_fields',
 			'payment_method',
 			'status',
+			'location',
 		];
 
 		/**

@@ -471,6 +471,30 @@ describe( 'step ③ Товары', () => {
 		expect( screen.getByLabelText( 'Цена за шт.' ) ).toHaveValue( 550 );
 	} );
 
+	test( 'every page of a variable product\'s variations is loaded, not just the first 50 (#1335)', async () => {
+		// 51 variations: WooCommerce answers 50 on page 1 and the last one on page 2.
+		const all = Array.from( { length: 51 }, ( _, i ) => ( { id: 100 + i, price: '550', attributes: [ { name: 'Размер', option: `S${ i + 1 }` } ] } ) );
+		routeApi( {
+			'/wc/v3/products/20/variations': ( request ) => {
+				const page = Number( new URL( request.url ).searchParams.get( 'page' ) );
+
+				return Promise.resolve( all.slice( ( page - 1 ) * 50, page * 50 ) );
+			},
+		} );
+		toItems();
+
+		type( 'Добавить товар', 'футб' );
+		fireEvent.click( await screen.findByRole( 'option', { name: /Футболка/ } ) );
+
+		// The 51st variation exists only on page 2.
+		expect( await screen.findByRole( 'option', { name: /Футболка — S51/ } ) ).toBeInTheDocument();
+		expect( screen.getAllByRole( 'option' ) ).toHaveLength( 51 );
+
+		const asked = apiFetch.mock.calls.map( ( c ) => c[ 0 ].url ).filter( ( url ) => url.includes( '/products/20/variations' ) );
+		expect( asked ).toHaveLength( 2 );
+		expect( asked[ 1 ] ).toContain( 'page=2' );
+	} );
+
 	test( 'quantity and price are checked per line, each error on its own control', async () => {
 		toItems();
 

@@ -286,6 +286,40 @@ const priceHint = ( product: WcProduct ): string =>
 		.filter( Boolean )
 		.join( ' · ' );
 
+/** Variations per request — WooCommerce caps `per_page` at 100; a page shorter than this is the last one. */
+const VARIATIONS_PER_PAGE = 50;
+
+/** A safety net against a runaway loop: 20 pages × 50 = 1000 variations, far past any real catalogue. */
+const VARIATIONS_MAX_PAGES = 20;
+
+/**
+ * Every variation of a variable product, page by page — one request would cut a product with more
+ * than {@link VARIATIONS_PER_PAGE} variations off, and the rest could not be ordered (#1335).
+ *
+ * @param {number} productId the variable product.
+ * @return {Promise<WcProduct[]>} its variations, in the order WooCommerce returned them.
+ */
+async function loadVariations( productId: number ): Promise<WcProduct[]> {
+	const all: WcProduct[] = [];
+
+	for ( let page = 1; page <= VARIATIONS_MAX_PAGES; page += 1 ) {
+		const batch = await apiFetch<WcProduct[]>( {
+			url: wcUrl( `/wc/v3/products/${ productId }/variations`, { per_page: String( VARIATIONS_PER_PAGE ), page: String( page ) } ),
+			method: 'GET',
+			headers: headers(),
+		} );
+		const rows = Array.isArray( batch ) ? batch : [];
+
+		all.push( ...rows );
+
+		if ( rows.length < VARIATIONS_PER_PAGE ) {
+			break;
+		}
+	}
+
+	return all;
+}
+
 /**
  * Product search through WooCommerce's own REST (`wc/v3/products`). A variable product is not
  * orderable itself — its option lists the variations, fetched only when it is picked.
@@ -310,13 +344,9 @@ export async function searchProducts( query: string ): Promise<SearchOption[]> {
 				hint: __( 'Вариативный товар — выберите вариант', 'woodev-plugin-framework' ),
 				value: null,
 				loadChildren: async () => {
-					const variations = await apiFetch<WcProduct[]>( {
-						url: wcUrl( `/wc/v3/products/${ product.id }/variations`, { per_page: '50' } ),
-						method: 'GET',
-						headers: headers(),
-					} );
+					const variations = await loadVariations( product.id );
 
-					return ( Array.isArray( variations ) ? variations : [] ).map( ( variation ) => {
+					return variations.map( ( variation ) => {
 						const attributes = ( variation.attributes || [] ).map( ( a ) => a.option ).filter( Boolean ).join( ', ' );
 						const picked: PickedProduct = {
 							product_id: product.id,
