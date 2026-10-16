@@ -120,3 +120,78 @@ describe( 'Сохранить reflects the open section, not the whole tab (#515
 		await waitFor( () => expect( screen.getByDisplayValue( 'A edit' ) ).toBeInTheDocument() );
 	} );
 } );
+
+/**
+ * Pins #1326: an edit made in the SAME section while its save (or the refetch
+ * after it) is still pending used to be wiped, because the post-refetch cleanup
+ * dropped every staged id of the section instead of only the values that were
+ * actually submitted.
+ */
+describe( 'an edit made while Save is pending survives the save (#1326)', () => {
+	/**
+	 * @return {{promise: Promise, resolve: Function}} a manually settled promise.
+	 */
+	function deferred() {
+		let resolve;
+		const promise = new Promise( ( res ) => {
+			resolve = res;
+		} );
+		return { promise, resolve };
+	}
+
+	beforeEach( () => {
+		jest.clearAllMocks();
+		fetchSchema.mockResolvedValue( { tabs: [ tabWithTwoFieldSections() ] } );
+	} );
+
+	it( 'keeps an edit typed while the save request is in flight', async () => {
+		const save = deferred();
+		saveTab.mockReturnValue( save.promise );
+
+		render( <App /> );
+		await waitFor( () => expect( screen.getByRole( 'textbox' ) ).toBeInTheDocument() );
+		fireEvent.change( screen.getByRole( 'textbox' ), { target: { value: 'first' } } );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Сохранить' } ) );
+		await waitFor( () => expect( saveTab ).toHaveBeenCalledWith( 'shipping', { field_a: 'first' } ) );
+
+		// The user keeps typing while the request is pending.
+		fireEvent.change( screen.getByRole( 'textbox' ), { target: { value: 'second' } } );
+
+		save.resolve( { saved: true } );
+		await waitFor( () => expect( fetchSchema ).toHaveBeenCalledTimes( 2 ) );
+
+		await waitFor( () => expect( screen.getByDisplayValue( 'second' ) ).toBeInTheDocument() );
+		expect( screen.getByRole( 'button', { name: 'Сохранить' } ) ).not.toBeDisabled();
+	} );
+
+	it( 'keeps an edit typed while the post-save refetch is in flight', async () => {
+		saveTab.mockResolvedValue( { saved: true } );
+		const refetch = deferred();
+
+		render( <App /> );
+		await waitFor( () => expect( screen.getByRole( 'textbox' ) ).toBeInTheDocument() );
+		fireEvent.change( screen.getByRole( 'textbox' ), { target: { value: 'first' } } );
+
+		fetchSchema.mockReturnValueOnce( refetch.promise );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Сохранить' } ) );
+		await waitFor( () => expect( fetchSchema ).toHaveBeenCalledTimes( 2 ) );
+
+		fireEvent.change( screen.getByRole( 'textbox' ), { target: { value: 'second' } } );
+
+		refetch.resolve( { tabs: [ tabWithTwoFieldSections() ] } );
+		await waitFor( () => expect( screen.getByDisplayValue( 'second' ) ).toBeInTheDocument() );
+		expect( screen.getByRole( 'button', { name: 'Сохранить' } ) ).not.toBeDisabled();
+	} );
+
+	it( 'still clears the submitted edit once nothing changed meanwhile', async () => {
+		saveTab.mockResolvedValue( { saved: true } );
+
+		render( <App /> );
+		await waitFor( () => expect( screen.getByRole( 'textbox' ) ).toBeInTheDocument() );
+		fireEvent.change( screen.getByRole( 'textbox' ), { target: { value: 'first' } } );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Сохранить' } ) );
+
+		await waitFor( () => expect( fetchSchema ).toHaveBeenCalledTimes( 2 ) );
+		await waitFor( () => expect( screen.getByRole( 'button', { name: 'Сохранить' } ) ).toBeDisabled() );
+	} );
+} );
