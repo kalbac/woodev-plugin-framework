@@ -638,9 +638,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 		 * owner's points are addressed by — the same one a confirmation is remembered under —
 		 * and `''` when the customer has not chosen a settlement.
 		 *
+		 * `remembered_point_id` is the point this session remembers for the owner's rate and
+		 * locality, `''` when none — whether or not its confirmation still holds. After a switch
+		 * to another carrier's point moved the destination, the remembered point's confirmation is
+		 * bound to an address the cart no longer holds; the block checkout then confirms that
+		 * point again when the shopper comes back to its rate, as the classic checkout restores it
+		 * (#1263). It is an id the shopper chose in this session, never a confirmation: the server
+		 * re-fetches and re-checks the point like any other command.
+		 *
 		 * @since 2.0.2
 		 * @param array<string, mixed> $context Server cart context.
-		 * @return array{plugin_id: string, field_id: string, rate_id: string, locality: string}|null
+		 * @return array{plugin_id: string, field_id: string, rate_id: string, locality: string, remembered_point_id: string}|null
 		 */
 		private static function owner( array $context ): ?array {
 			if ( '' === $context['rate_id'] ) {
@@ -657,6 +665,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 						'field_id' => (string) $field_id,
 						'rate_id' => $context['rate_id'],
 						'locality' => (string) ( $selected['locality'] ?? '' ),
+						'remembered_point_id' => (string) ( $selected['point_id'] ?? '' ),
 					];
 				}
 			}

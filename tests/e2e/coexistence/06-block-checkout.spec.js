@@ -1,11 +1,11 @@
 /**
  * Scenario 1 on the BLOCK checkout (`/checkout/`): CDEK point → Yandex point → CDEK point in one session.
  *
- * «Block-only gaps are NOT release blockers» (operator, 08.10.2026) — this spec records them rather than gating on them:
- *  - the order placed after re-picking the CDEK point is clean (passes);
- *  - B1 (known gap, `expectKnownDefect`): classic checkout restores the remembered CDEK point when CDEK is chosen again, the block
- *    checkout shows «Select a pickup point» again and the form keeps the Yandex point's address and an empty postcode
- *    until the buyer re-picks, so «Place order» is refused («Please choose a pickup point», «valid postal code»).
+ *  - the order placed after re-picking the CDEK point is clean;
+ *  - B1 (fixed in #1263): choosing CDEK again restores the remembered CDEK point, as the classic checkout does. The Yandex point
+ *    had written its own street and postcode into the form, so the block confirms the CDEK point again and moves the address
+ *    back; «Place order» then needs no re-pick (before the fix: «Select a pickup point» again, the Yandex address kept, the
+ *    order refused).
  *
  * The block checkout has no default locality on the rig for a guest: the buyer finds a locality first («Find your locality»),
  * and only then do the carriers' methods appear. The Yandex courier method is off for the run, as in scenarios 1 and 2.
@@ -15,7 +15,6 @@ const { test, expect } = require( '@playwright/test' );
 const {
 	METHOD_YANDEX_COURIER,
 	PRODUCT_ID,
-	expectKnownDefect,
 	expectOnlyCarrier,
 	readOrder,
 	recordOrder,
@@ -144,22 +143,23 @@ test.describe( 'scenario 1 on the block checkout', () => {
 
 		await chooseRate( page, 'CDEK pickup point' );
 		await pickPoint( page );
+
+		const cdekPoint = ( await page.locator( '.woodev-pickup-block__chosen strong' ).innerText() ).trim();
+		const cdekAddress = await page.evaluate( () => window.wp.data.select( 'wc/store/cart' ).getCustomerData().shippingAddress.address_1 );
+
 		await chooseRate( page, 'Yandex pickup point' );
 		await pickPoint( page );
 		await chooseRate( page, 'CDEK pickup point' );
 
+		// The remembered CDEK point comes back on its own — shown, and the address moved back from the Yandex point's.
+		await expect( page.locator( '.woodev-pickup-block__chosen strong' ) ).toHaveText( cdekPoint, { timeout: 60_000 } );
+		await expect
+			.poll( () => page.evaluate( () => window.wp.data.select( 'wc/store/cart' ).getCustomerData().shippingAddress.address_1 ), { timeout: 30_000 } )
+			.toBe( cdekAddress );
+
 		const { orderId, errors } = await fillAndPlace( page );
 
-		// The one assertion the defect owns; no order exists while it stands, so the order check waits for the fix.
-		if (
-			await expectKnownDefect(
-				'B1',
-				'block-only: the block checkout does not restore the remembered CDEK point after another carrier was chosen; the form keeps the other carrier\'s address and an empty postcode.',
-				() => expect( errors.join( ' | ' ), 'placing the order without re-picking' ).toBe( '' )
-			)
-		) {
-			return;
-		}
+		expect( errors.join( ' | ' ), 'placing the order without re-picking' ).toBe( '' );
 
 		expectOnlyCarrier( readOrder( orderId ), 'cdek', `order ${ orderId }` );
 	} );

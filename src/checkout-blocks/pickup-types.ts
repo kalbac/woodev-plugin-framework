@@ -73,6 +73,12 @@ export interface PickupOwner {
 	 * client then opens no dialog (`localityMissing()`, #1110).
 	 */
 	locality: string;
+	/**
+	 * The point this session remembers for the rate and locality, `''` when none — whether or not
+	 * its confirmation still holds. The block confirms it again when the shopper comes back to the
+	 * rate after another point moved the address (#1263). Absent from servers before it.
+	 */
+	remembered_point_id?: string;
 }
 
 /** `cart.extensions[ 'woodev-shipping' ]`. */
