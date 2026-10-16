@@ -1,6 +1,7 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import starlightLlmsTxt from 'starlight-llms-txt';
 import { unified } from '@astrojs/markdown-remark';
 import remarkFrameworkVersion from './plugins/remark-framework-version.mjs';
 
@@ -22,6 +23,7 @@ export default defineConfig({
 				baseUrl: `${repo}/edit/main/website/`,
 			},
 			lastUpdated: true,
+			plugins: [starlightLlmsTxt()],
 			customCss: [
 				'@fontsource-variable/inter',
 				'@fontsource-variable/jetbrains-mono',
