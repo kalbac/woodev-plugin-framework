@@ -805,7 +805,14 @@ function bulkDocumentActionsFor( rows: OrderRow[] | null ): BulkAction[] {
 
 /** The bulk picker's entries for the rows on screen. */
 function bulkActionsFor( rows: OrderRow[] | null ): BulkAction[] {
-	return [ ...BULK_ACTIONS, ...bulkDocumentActionsFor( rows ) ];
+	const offered = new Set(
+		( rows || [] ).flatMap( ( row ) => ( row.actions || [] ).map( ( action ) => action.action ) )
+	);
+
+	return [
+		...BULK_ACTIONS.filter( ( action ) => offered.has( action.action ) ),
+		...bulkDocumentActionsFor( rows ),
+	];
 }
 
 /** Why an order is missing from a bulk document, in the merchant's words (codes: `Document_Controller::SKIP_CODES`). */
