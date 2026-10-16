@@ -2477,6 +2477,8 @@ export default function OrdersPage() {
 
 	// #1192: the picker's entries — the print ones only while a row on screen can print in bulk.
 	const bulkActions = bulkActionsFor( rows );
+	/** #1345 — a pick whose option left the menu (page, filter or refresh) reads as nothing chosen. */
+	const bulkValue = bulkActions.some( ( a ) => a.action === bulkAction ) ? bulkAction : '';
 
 	/** The header `cb`'s select-all — sets the underlying selection directly, busy rows included. */
 	const onSelectAll = ( checked: boolean ) => {
@@ -2565,7 +2567,7 @@ export default function OrdersPage() {
 				actions={ bulkActions }
 				selectedCount={ selectedIds.size }
 				busy={ bulkDocumentBusy }
-				value={ bulkAction }
+				value={ bulkValue }
 				onChange={ setBulkAction }
 				onApply={ onBulkApply }
 				confirming={ bulkConfirming }
