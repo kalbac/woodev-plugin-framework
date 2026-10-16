@@ -213,9 +213,29 @@ final class ExtensionsRestControllerTest extends TestCase {
 		Functions\when( 'wp_remote_retrieve_response_code' )->justReturn( 200 );
 		Functions\when( 'rest_ensure_response' )->returnArg();
 		Functions\when( 'wp_safe_remote_get' )->returnArg();
+		$this->record_transient_writes();
 		Functions\when( 'wp_remote_retrieve_body' )->alias(
 			static function ( $url ) use ( $categories_json, $products_json ) {
 				return ( false !== strpos( (string) $url, 'categories' ) ) ? $categories_json : $products_json;
+			}
+		);
+	}
+
+	/** @var string[] transient keys written by the controller, in order. */
+	private array $written = array();
+
+	/**
+	 * Records every `set_transient()` key so a test can tell the catalogue cache from the cooldown row.
+	 *
+	 * @return void
+	 */
+	private function record_transient_writes(): void {
+		$this->written = array();
+
+		Functions\when( 'set_transient' )->alias(
+			function ( $key ) {
+				$this->written[] = $key;
+				return true;
 			}
 		);
 	}
@@ -226,10 +246,12 @@ final class ExtensionsRestControllerTest extends TestCase {
 			'{"products":[{"info":{"id":1,"slug":"a","title":"A","link":"https://woodev.ru/a"},"pricing":{"amount":"100"}}]}'
 		);
 
-		// A complete fetch (both non-empty) is cached exactly once.
-		Functions\expect( 'set_transient' )->once();
+		// A complete fetch (both non-empty) is cached exactly once, and ends the cooldown.
+		Functions\expect( 'delete_transient' )->with( \Woodev_REST_API_Extensions::COOLDOWN_KEY )->once();
 
 		$payload = ( new \Woodev_REST_API_Extensions() )->get_items();
+
+		$this->assertSame( 1, count( array_keys( $this->written, \Woodev_REST_API_Extensions::CACHE_KEY, true ) ) );
 
 		$this->assertNotEmpty( $payload['products'] );
 		$this->assertNotEmpty( $payload['categories'] );
@@ -243,10 +265,10 @@ final class ExtensionsRestControllerTest extends TestCase {
 			'{"products":[{"info":{"id":1,"slug":"a","title":"A","link":"https://woodev.ru/a"},"pricing":{"amount":"100"}}]}'
 		);
 
-		// A partial fetch must NOT be cached — it stays retryable next load.
-		Functions\expect( 'set_transient' )->never();
-
+		// A partial fetch must NOT be cached as the catalogue — it is retried after the cooldown.
 		$payload = ( new \Woodev_REST_API_Extensions() )->get_items();
+
+		$this->assertNotContains( \Woodev_REST_API_Extensions::CACHE_KEY, $this->written );
 
 		// Still served this request: products render, chips just missing.
 		$this->assertNotEmpty( $payload['products'] );
@@ -261,12 +283,80 @@ final class ExtensionsRestControllerTest extends TestCase {
 			''
 		);
 
-		Functions\expect( 'set_transient' )->never();
-
 		$payload = ( new \Woodev_REST_API_Extensions() )->get_items();
 
+		$this->assertNotContains( \Woodev_REST_API_Extensions::CACHE_KEY, $this->written );
 		$this->assertSame( array(), $payload['products'] );
 		$this->assertTrue( $payload['stale'] );
+	}
+
+	public function test_a_failed_fetch_is_not_retried_during_the_cooldown(): void {
+		// Both endpoints down. The cooldown row is a real (fake) transient store, so the second read sees the first's.
+		$store = array();
+		Functions\when( 'get_transient' )->alias(
+			static function ( $key ) use ( &$store ) {
+				return $store[ $key ] ?? false;
+			}
+		);
+		Functions\when( 'set_transient' )->alias(
+			static function ( $key, $value ) use ( &$store ) {
+				$store[ $key ] = $value;
+				return true;
+			}
+		);
+		Functions\when( 'delete_transient' )->justReturn( true );
+		Functions\when( 'is_wp_error' )->justReturn( false );
+		Functions\when( 'rest_ensure_response' )->returnArg();
+		Functions\when( 'wp_remote_retrieve_response_code' )->justReturn( 503 );
+
+		$requests = 0;
+		Functions\when( 'wp_safe_remote_get' )->alias(
+			static function ( $url ) use ( &$requests ) {
+				++$requests;
+				return $url;
+			}
+		);
+
+		$controller = new \Woodev_REST_API_Extensions();
+		$first      = $controller->get_items();
+		$after_one  = $requests;
+		$second     = $controller->get_items();
+
+		$this->assertSame( 2, $after_one, 'one read = one products + one categories request' );
+		$this->assertSame( $after_one, $requests, 'the second read must not touch the network' );
+		$this->assertTrue( $second['stale'] );
+		$this->assertSame( array(), $second['products'] );
+		$this->assertSame( $first, $second );
+		$this->assertArrayNotHasKey( \Woodev_REST_API_Extensions::CACHE_KEY, $store, 'a failure is never cached as the catalogue' );
+	}
+
+	public function test_the_cooldown_is_recorded_before_the_network_call(): void {
+		$store = array();
+		Functions\when( 'get_transient' )->alias(
+			static function ( $key ) use ( &$store ) {
+				return $store[ $key ] ?? false;
+			}
+		);
+		Functions\when( 'set_transient' )->alias(
+			static function ( $key, $value ) use ( &$store ) {
+				$store[ $key ] = $value;
+				return true;
+			}
+		);
+		Functions\when( 'is_wp_error' )->justReturn( true );
+		Functions\when( 'rest_ensure_response' )->returnArg();
+
+		$seen = null;
+		Functions\when( 'wp_safe_remote_get' )->alias(
+			static function () use ( &$store, &$seen ) {
+				$seen = $seen ?? isset( $store[ \Woodev_REST_API_Extensions::COOLDOWN_KEY ] );
+				return new \stdClass();
+			}
+		);
+
+		( new \Woodev_REST_API_Extensions() )->get_items();
+
+		$this->assertTrue( $seen, 'the pause must already be recorded when the first request goes out' );
 	}
 
 	public function test_catalog_fetch_uses_extended_timeout(): void {
@@ -274,6 +364,7 @@ final class ExtensionsRestControllerTest extends TestCase {
 		// (products + categories) must pass an extended timeout, or a cold cache
 		// fails against a slow issuer (gotcha extensions-catalog-fetch-5s-timeout).
 		Functions\when( 'get_transient' )->justReturn( false );
+		Functions\when( 'set_transient' )->justReturn( true );
 		Functions\when( 'is_wp_error' )->justReturn( false );
 		Functions\when( 'wp_remote_retrieve_response_code' )->justReturn( 200 );
 		Functions\when( 'wp_remote_retrieve_body' )->justReturn( '{"products":[],"categories":[]}' );
