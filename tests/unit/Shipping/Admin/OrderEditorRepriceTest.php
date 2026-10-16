@@ -93,6 +93,9 @@ final class OrderEditorRepriceTest extends TestCase {
 	private function apply_items( $order, array $wanted ): bool {
 		$repriced = false;
 		$method   = new \ReflectionMethod( Order_Editor::class, 'apply_items' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$method->setAccessible( true );
+		}
 		$args     = [ $order, $wanted, true, &$repriced ];
 
 		$method->invokeArgs( new Order_Editor( Mockery::mock( Orders_Registry::class ) ), $args );
@@ -162,6 +165,9 @@ final class OrderEditorRepriceTest extends TestCase {
 	 */
 	private function refresh( $order, bool $repriced, bool $is_update = true ): void {
 		$method = new \ReflectionMethod( Order_Editor::class, 'refresh_discounts' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$method->setAccessible( true );
+		}
 		$method->invoke( new Order_Editor( Mockery::mock( Orders_Registry::class ) ), $order, $repriced, $is_update );
 	}
 
