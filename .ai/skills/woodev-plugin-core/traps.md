@@ -101,7 +101,6 @@ internals (class-map wiring, build/CI, rig) are left out on purpose. Shipping-sp
   `docs-internal/gotchas/namespace-migration-legacy-psr4.md`
 
 ## Settings API (topic `settings-api`)
-- For a string enum with numeric keys starting at zero, use `options` as `[{ 'value' => '0', 'label' => 'No' }, …]`; PHP otherwise turns the map into a flat list and labels can be stored as values. See the typed settings guide.
 
 - A setting with a `'name'` label and no `register_control()` never renders. →
   `docs-internal/gotchas/a-registered-setting-without-a-control-never-renders.md`
@@ -123,6 +122,11 @@ internals (class-map wiring, build/CI, rig) are left out on purpose. Shipping-sp
   `docs-internal/gotchas/settings-sensitive-secret-empty-skip-is-client-side.md`
 - Format validators must guard non-string input (`is_email`/`strpos` on `null` is a PHP 8.1 deprecation). →
   `docs-internal/gotchas/format-validator-null-strlen-deprecation.md`
+- For a string enum with numeric keys starting at zero, declare `options` as
+  `[ [ 'value' => '0', 'label' => 'No' ], … ]`; PHP otherwise cannot distinguish the map from a flat list.
+  Pairs work with every setting type and require string labels; malformed/duplicate pairs reject all values
+  even with `WP_DEBUG` off. An unchanged `get_options()` → `set_options()` round trip preserves the pair
+  declaration. → `docs-internal/gotchas/settings-api-control-save-path-pitfalls.md`; typed settings guide.
 
 ## Testing (topic `testing`)
 

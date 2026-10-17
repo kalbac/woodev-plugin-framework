@@ -27,6 +27,25 @@ if ( ! $this->validate_value( $key ) && ! $this->validate_value( $option ) ) {
 }
 ```
 
+### Zero-based string enums need explicit pairs (#1289)
+
+PHP turns `[ '0' => 'No', '1' => 'Yes' ]` into the same array shape as a flat string list.
+Declare `[ [ 'value' => '0', 'label' => 'No' ], [ 'value' => '1', 'label' => 'Yes' ] ]`
+to validate tokens while displaying labels. `get_options()` stays a normalized map;
+`get_option_pairs()` supplies ordered UI pairs, with string tokens for string settings.
+An unchanged `get_options()` → `set_options()` round trip preserves this distinction.
+
+Malformed or duplicate pairs must clear the options AND retain an invalid-declaration flag.
+`_doing_it_wrong()` alone does not enforce anything with `WP_DEBUG` off, while an empty options
+array normally means unrestricted input. Reject all validation and update attempts until a valid
+`set_options()` call replaces the declaration, including optional empty values, custom validators,
+and empty multiselect updates. A pair requires a scalar value and string label; if type validation
+drops any pair, reject the declaration rather than expose UI choices the server cannot accept.
+
+`register_control()` uses normalized keys only for explicit pairs. Other declarations retain the
+previous raw `get_options()` filtering contract; changing all declarations to `array_keys()`
+removes control choices for flat string lists such as `[ 'red', 'green' ]`.
+
 ## 2. Numeric values arrive as strings — coerce before strict validation
 
 HTML number inputs (`<input type="number">`, wp `TextControl type="number"`) submit

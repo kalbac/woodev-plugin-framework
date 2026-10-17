@@ -46,6 +46,9 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		/** @var bool whether options were declared as explicit value/label pairs */
 		protected $options_are_pairs = false;
 
+		/** @var bool whether a malformed option declaration rejects all submitted values */
+		private $options_invalid = false;
+
 		/** @var array ordered value/label pairs for UI payloads, or empty for map declarations */
 		protected $option_pairs = [];
 
@@ -140,7 +143,7 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		 * @since 2.0.3
 		 * @return array
 		 */
-		public function get_option_pairs() {
+		public function get_option_pairs(): array {
 			return $this->options_are_pairs ? $this->option_pairs : [];
 		}
 
@@ -399,28 +402,39 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		/**
 		 * Sets the setting options.
 		 *
-		 * @param array $options
+		 * @since 1.0.0
+		 * @param array $options option map, flat list, or explicit value/label pairs.
+		 * @return void
 		 */
-		public function set_options( $options ) {
+		public function set_options( array $options ): void {
+			// An unchanged normalized map retains the explicit value/label distinction.
+			if ( ! $this->options_invalid && $this->options_are_pairs && $options === $this->options ) {
+				return;
+			}
+
+			$this->options_invalid   = false;
 			$this->options_are_pairs = false;
 			$this->option_pairs      = [];
 			$is_list                 = [] !== $options && array_keys( $options ) === range( 0, count( $options ) - 1 );
 			$contains_pair_shape     = $is_list && (bool) array_filter( $options, 'is_array' );
 			if ( $is_list && ( $contains_pair_shape || ( isset( $options[0] ) && is_array( $options[0] ) ) ) ) {
 				$normalized = [];
-				foreach ( $options as $pair ) {
-					if ( ! is_array( $pair ) || ! array_key_exists( 'value', $pair ) || ! array_key_exists( 'label', $pair ) || ! is_scalar( $pair['value'] ) || ! is_scalar( $pair['label'] ) ) {
-						_doing_it_wrong( __METHOD__, 'Option pairs must each contain scalar value and label entries.', '2.0.3' );
-						$this->options = [];
+				foreach ( $options as $index => $pair ) {
+					if ( ! is_array( $pair ) || ! array_key_exists( 'value', $pair ) || ! array_key_exists( 'label', $pair ) || ! is_scalar( $pair['value'] ) || ! is_string( $pair['label'] ) ) {
+						$this->options_invalid = true;
+						$this->options         = [];
+						_doing_it_wrong( __METHOD__, 'Option pairs must each contain a scalar value and a string label.', '2.0.3' );
 						return;
 					}
 					$value = (string) $pair['value'];
 					if ( array_key_exists( $value, $normalized ) ) {
+						$this->options_invalid = true;
+						$this->options         = [];
 						_doing_it_wrong( __METHOD__, 'Option pair values must be unique.', '2.0.3' );
-						$this->options = [];
 						return;
 					}
-					$normalized[ $value ] = $pair['label'];
+					$normalized[ $value ]       = $pair['label'];
+					$options[ $index ]['value'] = self::TYPE_STRING === $this->type ? $value : $pair['value'];
 				}
 				$this->options_are_pairs = true;
 				$this->option_pairs      = $options;
@@ -438,6 +452,14 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 				if ( ! $this->validate_value( $key ) && ! $this->validate_value( $option ) ) {
 					unset( $options[ $key ] );
 				}
+			}
+
+			if ( $this->options_are_pairs && count( $options ) !== count( $this->option_pairs ) ) {
+				$this->options_invalid = true;
+				$this->options         = [];
+				$this->option_pairs    = [];
+				_doing_it_wrong( __METHOD__, 'Option pair values must match the setting type.', '2.0.3' );
+				return;
 			}
 
 			$this->options = $options;
@@ -501,6 +523,10 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		 * @throws Woodev_Plugin_Exception
 		 */
 		public function update_value( $value ) {
+
+			if ( $this->options_invalid ) {
+				throw new Woodev_Plugin_Exception( __( 'Неверное значение.', 'woodev-plugin-framework' ), 400 );
+			}
 
 			if ( $this->is_is_multi() ) {
 
@@ -604,6 +630,10 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		 * @return string|null error message (Russian) or null when valid.
 		 */
 		public function get_validation_error( $value ): ?string {
+
+			if ( $this->options_invalid ) {
+				return __( 'Неверное значение.', 'woodev-plugin-framework' );
+			}
 
 			$value        = $this->coerce_value( $value );
 			$control_type = $this->control instanceof Woodev_Control ? $this->control->get_type() : null;

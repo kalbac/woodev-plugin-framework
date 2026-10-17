@@ -156,6 +156,25 @@ class SettingsControlTypesTest extends TestCase {
 		$this->assertSame( 'help', $control->get_tooltip() );
 	}
 
+	public function test_register_control_preserves_flat_list_string_options(): void {
+		$this->settings->register_setting( 'colour', 'string', [ 'options' => [ 'red', 'green' ] ] );
+		$this->assertTrue( $this->settings->register_control( 'colour', 'select', [
+			'options' => [ 'red' => 'Red', 'blue' => 'Blue' ],
+		] ) );
+
+		$this->assertSame( [ 'red' => 'Red' ], $this->settings->get_setting( 'colour' )->get_control()->get_options() );
+	}
+
+	public function test_register_control_preserves_legacy_string_map_filtering(): void {
+		$this->settings->register_setting( 'colour', 'string', [ 'options' => [ 'red' => 'Red', 'green' => 'Green' ] ] );
+		$this->assertTrue( $this->settings->register_control( 'colour', 'select', [
+			'options' => [ 'Red' => 'Legacy red', 'red' => 'Red', 'blue' => 'Blue' ],
+		] ) );
+
+		// Non-pair declarations retain the pre-pair control contract (raw option values).
+		$this->assertSame( [ 'Red' => 'Legacy red' ], $this->settings->get_setting( 'colour' )->get_control()->get_options() );
+	}
+
 	public function test_register_control_filters_options_against_pair_values(): void {
 		$this->settings->register_setting( 'mode', 'string', [
 			'options' => [
@@ -166,6 +185,11 @@ class SettingsControlTypesTest extends TestCase {
 		$this->settings->register_control( 'mode', 'select', [ 'options' => [ '1' => 'Yes' ] ] );
 
 		$this->assertSame( [ '1' => 'Yes' ], $this->settings->get_setting( 'mode' )->get_control()->get_options() );
+		$schema = \Woodev\Framework\Settings\Field_Schema::from_handler( $this->settings );
+		$this->assertSame( [
+			[ 'value' => '0', 'label' => 'No' ],
+			[ 'value' => '1', 'label' => 'Yes' ],
+		], $schema['mode']['options'] );
 	}
 
 	/**

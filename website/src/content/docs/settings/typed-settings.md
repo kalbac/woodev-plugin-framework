@@ -56,6 +56,16 @@ All arguments are optional.
 | `description` | Help text shown under the field. A control can override it. |
 | `default` | The value used while nothing is stored. Defaults to `null`. |
 | `options` | Allowed values for a choice, as `key => label`. A flat list such as `[ 'red', 'green' ]` is also accepted for strings. Explicit `[ 'value' => ..., 'label' => ... ]` pairs preserve numeric values starting at zero. |
+| `is_multi` | `true` when the setting holds a list of values. Each element is validated on its own. |
+| `required` | `true` to reject an empty value. Has no effect on a toggle, a checkbox or a range, which always carry a value. |
+| `validate` | A callable `fn( $value ): bool`, see [Custom validation](#custom-validation). |
+| `validate_message` | The message shown when `validate` returns anything but `true`. |
+| `show_if` | Conditions that decide when the field is shown, see [Showing a field conditionally](#showing-a-field-conditionally). |
+| `disabled_if` | Conditions that decide when the field is disabled. Same format as `show_if`. |
+| `sensitive` | `true` for a secret. The saved value is never sent to the browser. |
+| `constant_name` | The name of a PHP constant that supplies the value, see [Secrets](#secrets). |
+
+### Explicit option pairs
 
 For an enum whose numeric keys start at zero, PHP makes a `key => label` array indistinguishable from a flat list. Use explicit pairs to keep submitted values separate from their labels:
 
@@ -66,14 +76,7 @@ For an enum whose numeric keys start at zero, PHP makes a `key => label` array i
 ],
 ```
 
-| `is_multi` | `true` when the setting holds a list of values. Each element is validated on its own. |
-| `required` | `true` to reject an empty value. Has no effect on a toggle, a checkbox or a range, which always carry a value. |
-| `validate` | A callable `fn( $value ): bool`, see [Custom validation](#custom-validation). |
-| `validate_message` | The message shown when `validate` returns anything but `true`. |
-| `show_if` | Conditions that decide when the field is shown, see [Showing a field conditionally](#showing-a-field-conditionally). |
-| `disabled_if` | Conditions that decide when the field is disabled. Same format as `show_if`. |
-| `sensitive` | `true` for a secret. The saved value is never sent to the browser. |
-| `constant_name` | The name of a PHP constant that supplies the value, see [Secrets](#secrets). |
+Pairs work with every setting type; labels must be strings. Malformed or duplicate pairs report `_doing_it_wrong()` and reject every submitted value, even with `WP_DEBUG` off. An unchanged `get_options()` → `set_options()` round trip preserves the pair declaration.
 
 Declare `options` on the setting. A control may narrow the list but cannot add keys the setting does not have.
 

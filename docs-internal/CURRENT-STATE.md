@@ -298,6 +298,7 @@ there is historical evidence, not a fresh acceptance run. The live programme sta
 
 ## Known Bugs / Open debt
 
+- **#1289 / PR #1353:** round 3 awaits coordinator review/merge; [validation](sessions/s186.md).
 - [⚠️] `class-payment-gateway.php` ~3.6k lines — trait-extraction candidate (#117).
 - **s184 open debt:** >1000 variations are silently truncated by the wizard (cap 20×50, rated near-zero, not carded). (#1332, the
   #1279 upstream issue and the rig orders were all closed on 16.10.2026.)
