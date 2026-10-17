@@ -92,6 +92,7 @@ class SetupWizardFieldSchemaTest extends TestCase {
 
 		// Build the setting mock.
 		$setting = Mockery::mock( 'Woodev_Setting' );
+		$setting->shouldReceive( 'get_option_pairs' )->andReturn( [] );
 		$setting->shouldReceive( 'get_id' )->andReturn( 'speed' );
 		$setting->shouldReceive( 'is_is_multi' )->andReturn( false );
 		$setting->shouldReceive( 'get_type' )->andReturn( 'integer' );
@@ -165,6 +166,7 @@ class SetupWizardFieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'is_native_bounds' )->andReturn( false )->byDefault();
 
 		$setting = Mockery::mock( 'Woodev_Setting' );
+		$setting->shouldReceive( 'get_option_pairs' )->andReturn( [] );
 		$setting->shouldReceive( 'get_id' )->andReturn( 'api_key' );
 		$setting->shouldReceive( 'is_is_multi' )->andReturn( false );
 		$setting->shouldReceive( 'get_type' )->andReturn( 'string' );
@@ -203,6 +205,7 @@ class SetupWizardFieldSchemaTest extends TestCase {
 	 */
 	public function test_no_control_emits_null_controltype(): void {
 		$setting = Mockery::mock( 'Woodev_Setting' );
+		$setting->shouldReceive( 'get_option_pairs' )->andReturn( [] );
 		$setting->shouldReceive( 'get_id' )->andReturn( 'label' );
 		$setting->shouldReceive( 'is_is_multi' )->andReturn( false );
 		$setting->shouldReceive( 'get_type' )->andReturn( 'string' );
@@ -242,6 +245,7 @@ class SetupWizardFieldSchemaTest extends TestCase {
 	 */
 	public function test_schema_emits_is_multi_flag(): void {
 		$setting = Mockery::mock( 'Woodev_Setting' );
+		$setting->shouldReceive( 'get_option_pairs' )->andReturn( [] );
 		$setting->shouldReceive( 'get_id' )->andReturn( 'methods' );
 		$setting->shouldReceive( 'is_is_multi' )->andReturn( true );
 		$setting->shouldReceive( 'get_type' )->andReturn( 'string' );

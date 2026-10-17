@@ -163,6 +163,161 @@ class SettingValidationTest extends TestCase {
 		$this->assertNotNull( $setting->get_validation_error( 5 ) );
 	}
 
+	public function test_string_setting_accepts_zero_based_labelled_option_pairs_by_value(): void {
+		Functions\expect( '_doing_it_wrong' )->never();
+		$setting = $this->make( 'string', 'select' );
+		$pairs = [
+			[ 'value' => '0', 'label' => 'Нет' ],
+			[ 'value' => '1', 'label' => 'Да' ],
+		];
+		$setting->set_options( $pairs );
+
+		$this->assertSame( [ '0' => 'Нет', '1' => 'Да' ], $setting->get_options() );
+		$this->assertSame( $pairs, $setting->get_option_pairs() );
+		$this->assertNull( $setting->get_validation_error( '0' ) );
+		$this->assertNull( $setting->get_validation_error( '1' ) );
+		$this->assertNotNull( $setting->get_validation_error( 'Нет' ) );
+	}
+
+	public function test_malformed_option_pairs_report_misuse_and_reject_every_value(): void {
+		Functions\expect( '_doing_it_wrong' )->once()->with(
+			'Woodev_Setting::set_options',
+			'Option pairs must each contain a scalar value and a string label.',
+			'2.0.3'
+		);
+		$setting = $this->make( 'string', 'select' );
+		$setting->set_options( [
+			[ 'value' => '0', 'label' => 'Нет' ],
+			[ 'value' => '1' ],
+		] );
+
+		$this->assertSame( [], $setting->get_options() );
+		foreach ( [ 'unexpected', '0', '1', '', null, [] ] as $value ) {
+			$this->assertNotNull( $setting->get_validation_error( $value ) );
+		}
+	}
+
+	public function test_malformed_option_pairs_reject_values_when_diagnostic_is_a_noop(): void {
+		// WP_DEBUG off: the diagnostic returns normally and does not enforce validation.
+		Functions\when( '_doing_it_wrong' )->justReturn( null );
+		$setting = $this->make( 'string', 'select' );
+		$setting->set_options( [ [ 'value' => '0', 'label' => null ] ] );
+		$setting->set_validate( static function (): bool { return true; } );
+
+		foreach ( [ 'unexpected', '0', '', null, [] ] as $value ) {
+			$this->assertNotNull( $setting->get_validation_error( $value ) );
+		}
+		$this->expectException( \Woodev_Plugin_Exception::class );
+		$setting->update_value( 'unexpected' );
+	}
+
+	public function test_malformed_multi_option_pairs_reject_empty_update(): void {
+		Functions\when( '_doing_it_wrong' )->justReturn( null );
+		$setting = $this->make( 'string', 'multiselect' );
+		$setting->set_is_multi( true );
+		$setting->set_options( [ [ 'value' => '0' ] ] );
+
+		$this->expectException( \Woodev_Plugin_Exception::class );
+		$setting->update_value( [] );
+	}
+
+	public function test_valid_options_reset_a_malformed_declaration(): void {
+		Functions\when( '_doing_it_wrong' )->justReturn( null );
+		$setting = $this->make( 'string', 'select' );
+		$setting->set_options( [ [ 'value' => '0' ] ] );
+		$setting->set_options( [ 'red', 'green' ] );
+
+		$this->assertNull( $setting->get_validation_error( 'red' ) );
+		$this->assertNotNull( $setting->get_validation_error( 'unexpected' ) );
+		$setting->set_options( [] );
+		$this->assertNull( $setting->get_validation_error( 'anything' ) );
+	}
+
+	public function test_pair_option_map_round_trip_preserves_values_and_payload(): void {
+		$setting = $this->make( 'string', 'select' );
+		$pairs = [
+			[ 'value' => '0', 'label' => 'No' ],
+			[ 'value' => '1', 'label' => 'Yes' ],
+		];
+		$setting->set_options( $pairs );
+		$setting->set_options( $setting->get_options() );
+
+		$this->assertSame( $pairs, $setting->get_option_pairs() );
+		$this->assertNull( $setting->get_validation_error( '0' ) );
+		$this->assertNull( $setting->get_validation_error( '1' ) );
+		$this->assertNotNull( $setting->get_validation_error( 'No' ) );
+		$this->assertNotNull( $setting->get_validation_error( 'Yes' ) );
+	}
+
+	public function test_string_pair_payload_normalizes_integer_values_to_strings(): void {
+		$setting = $this->make( 'string', 'select' );
+		$setting->set_options( [ [ 'value' => 0, 'label' => 'No' ] ] );
+
+		$this->assertSame( [ [ 'value' => '0', 'label' => 'No' ] ], $setting->get_option_pairs() );
+		$this->assertNull( $setting->get_validation_error( '0' ) );
+	}
+
+	public function test_option_pairs_reject_non_string_labels(): void {
+		Functions\expect( '_doing_it_wrong' )->once();
+		$setting = $this->make( 'string', 'select' );
+		$setting->set_options( [ [ 'value' => '0', 'label' => 5 ] ] );
+
+		$this->assertSame( [], $setting->get_options() );
+		$this->assertSame( [], $setting->get_option_pairs() );
+		$this->assertNotNull( $setting->get_validation_error( '0' ) );
+	}
+
+	public function test_integer_pair_options_validate_by_value(): void {
+		$setting = $this->make( 'integer', 'select' );
+		$setting->set_options( [ [ 'value' => 0, 'label' => 'Zero' ], [ 'value' => 1, 'label' => 'One' ] ] );
+
+		$this->assertSame( [ [ 'value' => 0, 'label' => 'Zero' ], [ 'value' => 1, 'label' => 'One' ] ], $setting->get_option_pairs() );
+		$this->assertNull( $setting->get_validation_error( 0 ) );
+		$this->assertNull( $setting->get_validation_error( 1 ) );
+		$this->assertNotNull( $setting->get_validation_error( 2 ) );
+	}
+
+	public function test_pair_payload_never_exposes_options_removed_by_type_validation(): void {
+		Functions\expect( '_doing_it_wrong' )->once();
+		$setting = $this->make( 'integer', 'select' );
+		$setting->set_options( [ [ 'value' => 0, 'label' => 'Zero' ], [ 'value' => 'invalid', 'label' => 'Invalid' ] ] );
+
+		$this->assertSame( [], $setting->get_options() );
+		$this->assertSame( [], $setting->get_option_pairs() );
+		$this->assertNotNull( $setting->get_validation_error( 0 ) );
+		$this->assertNotNull( $setting->get_validation_error( 2 ) );
+		$setting->set_options( [] );
+		$this->assertNull( $setting->get_validation_error( 2 ) );
+	}
+
+	public function test_pair_values_must_be_unique(): void {
+		Functions\expect( '_doing_it_wrong' )->once();
+		$setting = $this->make( 'string', 'select' );
+		$setting->set_options( [
+			[ 'value' => '0', 'label' => 'Zero' ],
+			[ 'value' => '0', 'label' => 'Again' ],
+		] );
+
+		$this->assertSame( [], $setting->get_options() );
+		$this->assertNotNull( $setting->get_validation_error( '0' ) );
+		$this->assertNotNull( $setting->get_validation_error( 'unexpected' ) );
+	}
+
+	public function test_normalized_pair_options_can_be_extended_and_reset_as_a_map(): void {
+		$setting = $this->make( 'string', 'select' );
+		$setting->set_options( [
+			[ 'value' => '0', 'label' => 'No' ],
+			[ 'value' => '1', 'label' => 'Yes' ],
+		] );
+
+		$options           = $setting->get_options();
+		$options['legacy'] = 'Legacy';
+		$setting->set_options( $options );
+
+		$this->assertSame( [ '0' => 'No', '1' => 'Yes', 'legacy' => 'Legacy' ], $setting->get_options() );
+		$this->assertSame( [], $setting->get_option_pairs(), 'map extensions use the normalized internal representation' );
+	}
+
 	public function test_control_flat_string_list_does_not_match_its_numeric_indices(): void {
 		$setting = $this->make( 'string', 'select' );
 		$setting->set_options( [ 'red', 'green', 'blue' ] );

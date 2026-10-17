@@ -36,6 +36,9 @@ final class Field_Schema {
 		foreach ( $handler->get_settings( $setting_ids ) as $setting ) {
 			$control = $setting->get_control();
 			$options = $setting->get_options();
+			if ( method_exists( $setting, 'get_option_pairs' ) && [] !== $setting->get_option_pairs() ) {
+				$options = $setting->get_option_pairs();
+			}
 
 			// JSON objects reorder integer-like keys in JavaScript. Send associative
 			// options as an ordered list so numeric string values keep their declared order.

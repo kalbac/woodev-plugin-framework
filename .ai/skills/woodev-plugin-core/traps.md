@@ -122,6 +122,11 @@ internals (class-map wiring, build/CI, rig) are left out on purpose. Shipping-sp
   `docs-internal/gotchas/settings-sensitive-secret-empty-skip-is-client-side.md`
 - Format validators must guard non-string input (`is_email`/`strpos` on `null` is a PHP 8.1 deprecation). →
   `docs-internal/gotchas/format-validator-null-strlen-deprecation.md`
+- For a string enum with numeric keys starting at zero, declare `options` as
+  `[ [ 'value' => '0', 'label' => 'No' ], … ]`; PHP otherwise cannot distinguish the map from a flat list.
+  Pairs work with every setting type and require string labels; malformed/duplicate pairs reject all values
+  even with `WP_DEBUG` off. An unchanged `get_options()` → `set_options()` round trip preserves the pair
+  declaration. → `docs-internal/gotchas/settings-api-control-save-path-pitfalls.md`; typed settings guide.
 
 ## Testing (topic `testing`)
 
