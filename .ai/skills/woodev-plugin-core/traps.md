@@ -83,6 +83,9 @@ internals (class-map wiring, build/CI, rig) are left out on purpose. Shipping-sp
   `docs-internal/gotchas/blocks-handler-typed-property-trap.md`
 - Do not declare `memory_limit` in `php_settings`: the dependency handler compares `-1` (unlimited) as a number
   and reports it as below the minimum (#1316).
+- `Woodev_API_JSON_Response` already decodes the body (into stdClass) on construction; decoding `to_string()` a
+  second time into an array doubles the memory of every large carrier response (~+45 MB on 2289 pickup points).
+  Decode once in your response subclass and read that one representation everywhere — CDEK PR #118, Yandex #56 (#1269).
 - `Woodev_Plugin::is_plugin_active()` compares BARE file names (it strips the folder from every `active_plugins`
   entry): passing `folder/file.php` never matches, and a test that mocks it stays green. Compare the full basename
   with `get_option( 'active_plugins' )` plus `active_sitewide_plugins` yourself. →

@@ -6,27 +6,20 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-17 night (s185, with the operator):** framework `main` `de551e0c` (#1350 llms.txt). Publication plan #1342: six general
+**As of 2026-10-17 overnight (s186, autonomous):** the whole #1342 drafting queue is done and fact-checked against the code — CDEK and
+Yandex instructions + migration articles (BetterDocs drafts 145857 145855 145849 145850, with rig screenshots), «Плагины Woodev» (#1347,
+draft 145875), product cards/FAQ/changelog/requirements and the general docs FAQ (NAS files), blog draft 145839, Telegram 01–04 on his
+Desktop. Live: 20 `woo-sc-box` → `notice` in 7 docs, 45581 dead links fixed. Code merged: yandex#120 (#121), CDEK #117 (wizard text,
+rounding regression), #118 (#1269 plugin side), #119 (stand, #86); framework PR #1353 (#1289). CDEK `v2` `4152684`, Yandex `main`
+`6cb97fa`. The NAS stopped accepting writes ~01:00 UTC — the CDEK wizard shots wait on his Desktop. Detail: `sessions/s186.md`.
+**Before that — as of 2026-10-17 night (s185, with the operator):** framework `main` `de551e0c` (#1350 llms.txt). Publication plan #1342: six general
 shipping articles are PUBLISHED on woodev.ru in the subcategory «Плагины доставки: общие возможности» (id 89, `common-shipping-abilities`):
 `shipping-plugins-features`, `shipping-settings`, `checkout-and-pickup-points`, `shipping-orders`, `delivery-emails`, `migration-wizard`.
 All are fact-checked against the code, Yoast is green, and they have rig screenshots. All four structure questions are decided (card
 comments). The theme is v1.0.29. Site plugin `woodev-mcp-adapter` 1.2.1 (agent sets slug + Yoast fields). The MCP user is an Editor,
 and Editor is in the BetterDocs article roles. Next in the chain: CDEK v2 docs + migration article (drafts until he approves the style),
 product card/FAQ/changelog/requirements, then releases. #1348 (first-run wizard) «После v2». Detail: `sessions/s185.md`.
-**Before that —** **As of 2026-10-16 afternoon (s184, with the operator):** everything from the night and morning is merged (framework `main`
-`ce870e02`; #1332 #1339 #1340 #1341; yandex#109 via PR #118; WooCommerce upstream issue woocommerce/woocommerce#69892). No open PRs.
-Plugins are code-ready for release; the release now waits for the **publication plan, card #1342** (woodev.ru docs + blog,
-Telegram; every operator decision is a comment on the card; written and published through the `woodev-ru` project on ACEMAGIC).
-**Overnight part:** the #1324 code audit (framework PHP + React/TS, CDEK, Yandex) is done and its real
-defects are fixed. Framework `main` `d978d303`: #1329 (#1316 four real bugs: async request POST, `require_ssl`, `memory_limit -1`,
-`str_to_ascii`), #1330 (order-editor keeps coupon discounts; plugins-catalogue failure cooldown), #1331 (#1306 classic-checkout
-e2e under `billing_only`), #1333 (#1326 settings page keeps an edit typed while Save is pending), #1337 (wizard REST keeps
-`location`; all variation pages; licence-key field locked while busy). Yandex `main`: #105 #107 #114 #115 #116 (pickup customer
-services, poller/stop-polling, v1-order export after migration, cancel only on SUCCESS, CPT `meta_query` bridge). CDEK `v2`: #114
-(currency refusal, COD tax). Operator decisions (start of s184): bugs get fixed; block-checkout extension NOT now; #780 taken
-(loop lives in Support AI, ADR-004). Open: **PR #1332** (block checkout #1263/#1279, critic said ship, awaits the operator's rig
-look), **yandex#109** (COD delivery_cost ≠ what the buyer agreed — operator's call), edostavka#115, yandex#113 (Потом).
-In flight at writing: see `next-session-prompt.md`. Gotchas of the session: `sessions/s184.md`.
+**Before that —** s184 (16.10): night code audit #1324 fixed and merged — `sessions/s184.md`.
 **Before that — as of 2026-10-16 (s183):** public docs site live (Starlight, all pages); repo cleaned (autodev, QWEN, legacy fixtures);
 `planned-release` 2.0.3 (semver). **s182:** 🎉 **Framework 2.0.2 is RELEASED** — tag `v2.0.2`, `main` `898a527e` (#1307; GitHub Release
 `woodev-plugin-framework-2.0.2.zip`). **The release ZIP is the `woodev/` directory ONLY** (`git archive HEAD woodev/`, operator

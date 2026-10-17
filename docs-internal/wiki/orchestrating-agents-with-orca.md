@@ -619,6 +619,11 @@ The merchant site woodev.ru is written and published from the `woodev-ru` projec
   checks `edit_post`; for BetterDocs `docs` that needs the BetterDocs article roles, so the MCP user is an Editor AND Editor is in the
   BetterDocs article roles (operator, 17.10.2026). A bare «Permission denied» from `mcp-adapter-execute-ability` is that check failing.
 - A production change the auto-mode classifier refuses (a deploy, a role change) goes to the operator as a click, not a workaround.
+- **BetterDocs MCP: write with `content_format: blocks`.** `bd-update-doc` with `content_format: html` converts to blocks itself and
+  fragmented five LIVE articles for ~3 min in s186. Doc images use the `wp:html` figure shape of the published set, never a link.
+- **Watch Homelab workers as `Homelab:term_…`** in `watch-workers.py` — a bare remote handle reads `terminal_handle_stale`.
+- When the NAS refuses writes (s186: SMB `Input/output error` on both machines with space free), park binaries on the Mac Desktop
+  and leave the import for the operator's morning — the NAS is his device.
 
 ## Related
 
