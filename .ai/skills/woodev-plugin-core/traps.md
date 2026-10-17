@@ -101,6 +101,7 @@ internals (class-map wiring, build/CI, rig) are left out on purpose. Shipping-sp
   `docs-internal/gotchas/namespace-migration-legacy-psr4.md`
 
 ## Settings API (topic `settings-api`)
+- For a string enum with numeric keys starting at zero, use `options` as `[{ 'value' => '0', 'label' => 'No' }, …]`; PHP otherwise turns the map into a flat list and labels can be stored as values. See the typed settings guide.
 
 - A setting with a `'name'` label and no `register_control()` never renders. →
   `docs-internal/gotchas/a-registered-setting-without-a-control-never-renders.md`

@@ -163,6 +163,18 @@ class SettingValidationTest extends TestCase {
 		$this->assertNotNull( $setting->get_validation_error( 5 ) );
 	}
 
+	public function test_string_setting_accepts_zero_based_labelled_option_pairs_by_value(): void {
+		$setting = $this->make( 'string', 'select' );
+		$setting->set_options( [
+			[ 'value' => '0', 'label' => 'Нет' ],
+			[ 'value' => '1', 'label' => 'Да' ],
+		] );
+
+		$this->assertNull( $setting->get_validation_error( '0' ) );
+		$this->assertNull( $setting->get_validation_error( '1' ) );
+		$this->assertNotNull( $setting->get_validation_error( 'Нет' ) );
+	}
+
 	public function test_control_flat_string_list_does_not_match_its_numeric_indices(): void {
 		$setting = $this->make( 'string', 'select' );
 		$setting->set_options( [ 'red', 'green', 'blue' ] );

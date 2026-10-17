@@ -43,6 +43,9 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		/** @var array valid setting options */
 		protected $options = [];
 
+		/** @var bool whether options were declared as explicit value/label pairs */
+		protected $options_are_pairs = false;
+
 		/** @var mixed setting default value */
 		protected $default;
 
@@ -125,6 +128,17 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		 * @return array
 		 */
 		public function get_options() {
+			if ( $this->options_are_pairs ) {
+				$pairs = [];
+				foreach ( $this->options as $value => $label ) {
+					$pairs[] = [
+						'value' => (string) $value,
+						'label' => $label,
+					];
+				}
+				return $pairs;
+			}
+
 			return $this->options;
 		}
 
@@ -386,6 +400,20 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		 * @param array $options
 		 */
 		public function set_options( $options ) {
+			$this->options_are_pairs = [] !== $options && array_keys( $options ) === range( 0, count( $options ) - 1 );
+			if ( $this->options_are_pairs ) {
+				$normalized = [];
+				foreach ( $options as $pair ) {
+					if ( ! is_array( $pair ) || ! isset( $pair['value'], $pair['label'] ) || ! is_scalar( $pair['value'] ) || ! is_scalar( $pair['label'] ) ) {
+						$this->options_are_pairs = false;
+						break;
+					}
+					$normalized[ (string) $pair['value'] ] = $pair['label'];
+				}
+				if ( $this->options_are_pairs ) {
+					$options = $normalized;
+				}
+			}
 
 			foreach ( $options as $key => $option ) {
 
@@ -647,7 +675,7 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 			// token (key or label) actually got stored.
 			if ( ! empty( $this->options ) ) {
 
-				$is_valid_option = ( self::TYPE_STRING === $this->type && self::is_flat_options_list( $this->options ) )
+				$is_valid_option = ( self::TYPE_STRING === $this->type && ! $this->options_are_pairs && self::is_flat_options_list( $this->options ) )
 					? in_array( $value, $this->options, true )
 					: ( self::TYPE_STRING === $this->type
 						? ( is_string( $value ) && in_array( $value, array_map( 'strval', array_keys( $this->options ) ), true ) )
