@@ -46,6 +46,9 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		/** @var bool whether options were declared as explicit value/label pairs */
 		protected $options_are_pairs = false;
 
+		/** @var array ordered value/label pairs for UI payloads, or empty for map declarations */
+		protected $option_pairs = [];
+
 		/** @var mixed setting default value */
 		protected $default;
 
@@ -128,18 +131,17 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		 * @return array
 		 */
 		public function get_options() {
-			if ( $this->options_are_pairs ) {
-				$pairs = [];
-				foreach ( $this->options as $value => $label ) {
-					$pairs[] = [
-						'value' => (string) $value,
-						'label' => $label,
-					];
-				}
-				return $pairs;
-			}
-
 			return $this->options;
+		}
+
+		/**
+		 * Gets the ordered option pairs for UI payloads.
+		 *
+		 * @since 2.0.3
+		 * @return array
+		 */
+		public function get_option_pairs() {
+			return $this->options_are_pairs ? $this->option_pairs : [];
 		}
 
 		/**
@@ -400,19 +402,29 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		 * @param array $options
 		 */
 		public function set_options( $options ) {
-			$this->options_are_pairs = [] !== $options && array_keys( $options ) === range( 0, count( $options ) - 1 );
-			if ( $this->options_are_pairs ) {
+			$this->options_are_pairs = false;
+			$this->option_pairs      = [];
+			$is_list                 = [] !== $options && array_keys( $options ) === range( 0, count( $options ) - 1 );
+			$contains_pair_shape     = $is_list && (bool) array_filter( $options, 'is_array' );
+			if ( $is_list && ( $contains_pair_shape || ( isset( $options[0] ) && is_array( $options[0] ) ) ) ) {
 				$normalized = [];
 				foreach ( $options as $pair ) {
-					if ( ! is_array( $pair ) || ! isset( $pair['value'], $pair['label'] ) || ! is_scalar( $pair['value'] ) || ! is_scalar( $pair['label'] ) ) {
-						$this->options_are_pairs = false;
-						break;
+					if ( ! is_array( $pair ) || ! array_key_exists( 'value', $pair ) || ! array_key_exists( 'label', $pair ) || ! is_scalar( $pair['value'] ) || ! is_scalar( $pair['label'] ) ) {
+						_doing_it_wrong( __METHOD__, 'Option pairs must each contain scalar value and label entries.', '2.0.3' );
+						$this->options = [];
+						return;
 					}
-					$normalized[ (string) $pair['value'] ] = $pair['label'];
+					$value = (string) $pair['value'];
+					if ( array_key_exists( $value, $normalized ) ) {
+						_doing_it_wrong( __METHOD__, 'Option pair values must be unique.', '2.0.3' );
+						$this->options = [];
+						return;
+					}
+					$normalized[ $value ] = $pair['label'];
 				}
-				if ( $this->options_are_pairs ) {
-					$options = $normalized;
-				}
+				$this->options_are_pairs = true;
+				$this->option_pairs      = $options;
+				$options                 = $normalized;
 			}
 
 			foreach ( $options as $key => $option ) {

@@ -55,9 +55,9 @@ All arguments are optional.
 | `name` | The label shown above the field. A control can override it. |
 | `description` | Help text shown under the field. A control can override it. |
 | `default` | The value used while nothing is stored. Defaults to `null`. |
-| `options` | Allowed values for a choice, as `key => label`. A flat list such as `[ 'red', 'green' ]` is also accepted for strings. |
+| `options` | Allowed values for a choice, as `key => label`. A flat list such as `[ 'red', 'green' ]` is also accepted for strings. Explicit `[ 'value' => ..., 'label' => ... ]` pairs preserve numeric values starting at zero. |
 
-For a `TYPE_STRING` enum whose numeric keys start at zero, PHP makes a `key => label` array indistinguishable from a flat list. Use explicit pairs to keep the submitted values separate from their labels:
+For an enum whose numeric keys start at zero, PHP makes a `key => label` array indistinguishable from a flat list. Use explicit pairs to keep submitted values separate from their labels:
 
 ```php
 'options' => [
@@ -65,6 +65,7 @@ For a `TYPE_STRING` enum whose numeric keys start at zero, PHP makes a `key => l
     [ 'value' => '1', 'label' => __( 'Yes', 'my-plugin' ) ],
 ],
 ```
+
 | `is_multi` | `true` when the setting holds a list of values. Each element is validated on its own. |
 | `required` | `true` to reject an empty value. Has no effect on a toggle, a checkbox or a range, which always carry a value. |
 | `validate` | A callable `fn( $value ): bool`, see [Custom validation](#custom-validation). |

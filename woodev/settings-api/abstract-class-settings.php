@@ -191,7 +191,7 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 				$control->set_description( $args['description'] );
 
 				if ( is_array( $args['options'] ) ) {
-					$control->set_options( $args['options'], $setting->get_options() );
+					$control->set_options( $args['options'], array_keys( $setting->get_options() ) );
 				}
 
 				if ( isset( $args['min'] ) ) {

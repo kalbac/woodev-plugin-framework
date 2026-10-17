@@ -164,15 +164,61 @@ class SettingValidationTest extends TestCase {
 	}
 
 	public function test_string_setting_accepts_zero_based_labelled_option_pairs_by_value(): void {
+		Functions\expect( '_doing_it_wrong' )->never();
 		$setting = $this->make( 'string', 'select' );
-		$setting->set_options( [
+		$pairs = [
 			[ 'value' => '0', 'label' => 'Нет' ],
 			[ 'value' => '1', 'label' => 'Да' ],
-		] );
+		];
+		$setting->set_options( $pairs );
 
+		$this->assertSame( [ '0' => 'Нет', '1' => 'Да' ], $setting->get_options() );
+		$this->assertSame( $pairs, $setting->get_option_pairs() );
 		$this->assertNull( $setting->get_validation_error( '0' ) );
 		$this->assertNull( $setting->get_validation_error( '1' ) );
 		$this->assertNotNull( $setting->get_validation_error( 'Нет' ) );
+	}
+
+	public function test_malformed_option_pairs_report_misuse_and_disable_enum(): void {
+		Functions\expect( '_doing_it_wrong' )->once()->with(
+			'Woodev_Setting::set_options',
+			'Option pairs must each contain scalar value and label entries.',
+			'2.0.3'
+		);
+		$setting = $this->make( 'string', 'select' );
+		$setting->set_options( [
+			[ 'value' => '0', 'label' => 'Нет' ],
+			[ 'value' => '1' ],
+		] );
+
+		$this->assertSame( [], $setting->get_options() );
+		$this->assertNull( $setting->get_validation_error( 'unexpected' ) );
+	}
+
+	public function test_pair_values_must_be_unique(): void {
+		Functions\expect( '_doing_it_wrong' )->once();
+		$setting = $this->make( 'string', 'select' );
+		$setting->set_options( [
+			[ 'value' => '0', 'label' => 'Zero' ],
+			[ 'value' => '0', 'label' => 'Again' ],
+		] );
+
+		$this->assertSame( [], $setting->get_options() );
+	}
+
+	public function test_normalized_pair_options_can_be_extended_and_reset_as_a_map(): void {
+		$setting = $this->make( 'string', 'select' );
+		$setting->set_options( [
+			[ 'value' => '0', 'label' => 'No' ],
+			[ 'value' => '1', 'label' => 'Yes' ],
+		] );
+
+		$options           = $setting->get_options();
+		$options['legacy'] = 'Legacy';
+		$setting->set_options( $options );
+
+		$this->assertSame( [ '0' => 'No', '1' => 'Yes', 'legacy' => 'Legacy' ], $setting->get_options() );
+		$this->assertSame( [], $setting->get_option_pairs(), 'map extensions use the normalized internal representation' );
 	}
 
 	public function test_control_flat_string_list_does_not_match_its_numeric_indices(): void {

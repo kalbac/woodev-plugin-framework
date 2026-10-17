@@ -156,6 +156,18 @@ class SettingsControlTypesTest extends TestCase {
 		$this->assertSame( 'help', $control->get_tooltip() );
 	}
 
+	public function test_register_control_filters_options_against_pair_values(): void {
+		$this->settings->register_setting( 'mode', 'string', [
+			'options' => [
+				[ 'value' => '0', 'label' => 'No' ],
+				[ 'value' => '1', 'label' => 'Yes' ],
+			],
+		] );
+		$this->settings->register_control( 'mode', 'select', [ 'options' => [ '1' => 'Yes' ] ] );
+
+		$this->assertSame( [ '1' => 'Yes' ], $this->settings->get_setting( 'mode' )->get_control()->get_options() );
+	}
+
 	/**
 	 * Omitting min/max/step/tooltip args leaves the control in its default (null/empty) state.
 	 *
