@@ -624,6 +624,18 @@ The merchant site woodev.ru is written and published from the `woodev-ru` projec
 - **Watch Homelab workers as `Homelab:term_…`** in `watch-workers.py` — a bare remote handle reads `terminal_handle_stale`.
 - When the NAS refuses writes (s186: SMB `Input/output error` on both machines with space free), park binaries on the Mac Desktop
   and leave the import for the operator's morning — the NAS is his device.
+- **NAS down, binaries anyway (s187):** base64 the file (or a tar) on the Mac, `terminal send` it to Homelab in 6000-char
+  `printf %s '…' >> /tmp/x.b64` chunks, decode there and compare `sha256sum` with the Mac's `shasum -a 256` — a 1.2 MB PNG took
+  ~2 min. Then write it with REST from a Homelab script that reads the app password from `woodev-ru/.mcp.json`
+  (`/wp-json/wp/v2/media`, `/wp/v2/docs`, `/wp/v2/posts`, BetterDocs abilities at `/wp-json/wp-abilities/v1/abilities/betterdocs/<name>/run`).
+  A script copies content byte-exact; an LLM worker calling MCP retypes the payload (s187 Haiku said so itself).
+- EDD downloads (product cards) are outside `woodev-mcp-adapter` on purpose and their `_faq_content` meta is not in REST — card
+  edits are the operator's until an ability is added (wanted later, s187).
+- **BetterDocs FAQ:** one group per plugin; `betterdocs/attach-faq` puts a `betterdocs/faq` block into a doc, and its section `<h2>`
+  is always printed — set `faqSectionText` (default «Frequently Asked Questions»). On a card, the FAQ field takes
+  `[betterdocs_faq_list_modern groups="<id>"]`.
+- **Yoast social fields set once override later changes** — after a new title/cover rewrite `og_title`/`og_description` via
+  `woodev-seo/update-post-seo` and re-check the live `og:` tags.
 
 ## Related
 

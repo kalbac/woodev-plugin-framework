@@ -6,43 +6,18 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-17 overnight (s186, autonomous):** the whole #1342 drafting queue is done and fact-checked against the code — CDEK and
+**As of 2026-10-19 (s187, with the operator):** everything that must precede the plugin releases is PUBLISHED on woodev.ru — blog
+145839 (`/woodev-new-foundation.html`, cover «Woodev 2.0»), docs `plugins-update` (new), `woodev-plugins-basics`, `cdek-plugin-setup`,
+`cdek-migration`, `yandex-delivery-migration`, and 48467 rewritten in place with the 145849 text; BetterDocs FAQ groups «Плагин СДЭК» (58),
+«Плагин Яндекс Доставка» (90), «Общие вопросы» (63) rewritten. The warm-up Telegram post is scheduled by him for 19.10 10:00 MSK. Next: the
+CDEK 2.3 and Yandex 2.0 releases, then posts 02–04. Detail: `sessions/s187.md`.
+**Before that — as of 2026-10-17 overnight (s186, autonomous):** the whole #1342 drafting queue is done and fact-checked against the code — CDEK and
 Yandex instructions + migration articles (BetterDocs drafts 145857 145855 145849 145850, with rig screenshots), «Плагины Woodev» (#1347,
 draft 145875), product cards/FAQ/changelog/requirements and the general docs FAQ (NAS files), blog draft 145839, Telegram 01–04 on his
 Desktop. Live: 20 `woo-sc-box` → `notice` in 7 docs, 45581 dead links fixed. Code merged: yandex#120 (#121), CDEK #117 (wizard text,
 rounding regression), #118 (#1269 plugin side), #119 (stand, #86); framework PR #1353 (#1289). CDEK `v2` `4152684`, Yandex `main`
 `6cb97fa`. The NAS stopped accepting writes ~01:00 UTC — the CDEK wizard shots wait on his Desktop. Detail: `sessions/s186.md`.
-**Before that — as of 2026-10-17 night (s185, with the operator):** framework `main` `de551e0c` (#1350 llms.txt). Publication plan #1342: six general
-shipping articles are PUBLISHED on woodev.ru in the subcategory «Плагины доставки: общие возможности» (id 89, `common-shipping-abilities`):
-`shipping-plugins-features`, `shipping-settings`, `checkout-and-pickup-points`, `shipping-orders`, `delivery-emails`, `migration-wizard`.
-All are fact-checked against the code, Yoast is green, and they have rig screenshots. All four structure questions are decided (card
-comments). The theme is v1.0.29. Site plugin `woodev-mcp-adapter` 1.2.1 (agent sets slug + Yoast fields). The MCP user is an Editor,
-and Editor is in the BetterDocs article roles. Next in the chain: CDEK v2 docs + migration article (drafts until he approves the style),
-product card/FAQ/changelog/requirements, then releases. #1348 (first-run wizard) «После v2». Detail: `sessions/s185.md`.
-**Before that —** s184 (16.10): night code audit #1324 fixed and merged — `sessions/s184.md`.
-**Before that — as of 2026-10-16 (s183):** public docs site live (Starlight, all pages); repo cleaned (autodev, QWEN, legacy fixtures);
-`planned-release` 2.0.3 (semver). **s182:** 🎉 **Framework 2.0.2 is RELEASED** — tag `v2.0.2`, `main` `898a527e` (#1307; GitHub Release
-`woodev-plugin-framework-2.0.2.zip`). **The release ZIP is the `woodev/` directory ONLY** (`git archive HEAD woodev/`, operator
-15.10.2026: no docs, vendor or tooling — the framework has no runtime Composer deps). Since s181: #1300 block-checkout address
-race fixed (#1293), #1303 one GlitchTip DSN per plugin (#1302), #1305 minified `.min` siblings + `get_assets_suffix()` (#247,
-SCRIPT_DEBUG only), #1304 plugin-author skills refreshed + the same-PR skill rule. Yandex `main` `4f26228` (#103 own DSN, #104
-storefront `ru_RU` catalogue + customer payment labels). CDEK `v2` `8812a42` (#109 own DSN). The rig `:8973` runs `main`/`v2`.
-✅ **v2 release gate met** (#1179 closed: CDEK + Yandex on v2, tested together; #567 translation pass done). Next: plugin releases
-— each must declare `framework_version '2.0.2'` in its loader definition (today `2.0.1`; harmless, the resolver compares declared
-values only). Private-repo Actions are billing-blocked until 01.11.2026 → plugin builds/CI via local-ci until then.
-⚠ **Yandex runs production-only** (test mode removed, #73): live confirm/cancel/status/PDF remain UNVERIFIED — production `offers/confirm` and `request/*` are forbidden without the operator. Private-repo gate = local-ci + critic (global rule `~/.claude/CLAUDE.md`; mirrored to the Homelab host in s177).
-Block-checkout gaps do not block the release (#1263).
-✅ **Licence gate (#1270) is LIVE end to end:** woodev-core 1.0.4 on woodev.ru signs paid-licence status (source: Homelab
-`woodev-ru` monorepo, local-only); the framework blocks checkout and new carrier actions without an in-force SIGNED claim;
-automatic refresh backs off 15 m → 1 h → 6 h → 24 h (operator: never spam woodev.ru). The rig needs real keys for CDEK/Yandex
-and `tests/e2e/rig/zz-woodev-rig-license.php` for the fixtures (`wiki/local-rig.md`). The updater failure backoff is implemented in #1275.
-Next checks: `next-session-prompt.md`. ⚠ The rig serves the framework PRIMARY checkout's `woodev/` to both plugins (s184) —
-a framework branch must be in the primary tree to be seen (`wiki/local-rig.md`). The rig admin user has locale **ru_RU**; the site stays **en_US** (WP core + WooCommerce `ru_RU` packs
-are installed: `wp site switch-language ru_RU` for a translation pass, back to `en_US` after — e2e expects English).
-⚠ The rig runs `SCRIPT_DEBUG=true` (`.wp-env.json`) → it serves UNMINIFIED assets; set it false to test the `.min` files.
-⚠ 6 classic-checkout e2e specs assume a separate shipping column and fail under the rig's `billing_only` norm (#1306).
-GlitchTip receiver (#1082) is live. **Both machines are live**; routine sync is git ONLY
-(`wiki/two-machine-setup.md`).
+**Earlier sessions:** see `SESSION-LOG.md` (s185 `sessions/s185.md`).
 
 ✅ **Fixtures carry real download ids `9001`-`9005`** (#910), so `LicenseCommandEndpointTest` drives
 the real signed-envelope route. The admin license REST route refuses an ambiguous id (#907) but
@@ -291,7 +266,7 @@ there is historical evidence, not a fresh acceptance run. The live programme sta
 
 ## Known Bugs / Open debt
 
-- **#1289 / PR #1353:** round 3 awaits coordinator review/merge; [validation](sessions/s186.md).
+- **#1289 / PR #1353:** merged s186 (`7a74a8d8`); [validation](sessions/s186.md).
 - [⚠️] `class-payment-gateway.php` ~3.6k lines — trait-extraction candidate (#117).
 - **s184 open debt:** >1000 variations are silently truncated by the wizard (cap 20×50, rated near-zero, not carded). (#1332, the
   #1279 upstream issue and the rig orders were all closed on 16.10.2026.)
