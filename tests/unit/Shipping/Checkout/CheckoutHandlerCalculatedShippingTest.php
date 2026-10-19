@@ -8,11 +8,16 @@
  * different COUNTRY is not handled here — it already makes the record stale server-side
  * (`Location_Service::is_customer_record_stale()` rule b).
  *
+ * Issue #1368: where the store ships to the billing address only, the calculator's
+ * country / region / city are ALSO written to billing (the checkout reads it), and the record is
+ * judged against that address; in the default mode billing is never touched.
+ *
  * @package Woodev\Tests\Unit\Shipping\Checkout
  */
 
 namespace Woodev\Tests\Unit\Shipping\Checkout;
 
+use Brain\Monkey\Functions;
 use Woodev\Framework\Shipping\Checkout\{Checkout_Fields, Checkout_Handler};
 use Woodev\Framework\Shipping\Location\{Location_Record, Location_Service};
 use Woodev\Tests\Unit\TestCase;
@@ -69,6 +74,16 @@ final class Calculated_Shipping_Handler extends Checkout_Handler {
  * @covers \Woodev\Framework\Shipping\Checkout\Checkout_Handler::handle_calculated_shipping
  */
 class CheckoutHandlerCalculatedShippingTest extends TestCase {
+
+	/**
+	 * The default shipping destination unless a test says `billing_only`. Stubbed every time: once
+	 * any other test has stubbed `wc_ship_to_billing_address_only()` the function exists for the
+	 * rest of the process, and an unstubbed call would then throw instead of answering.
+	 */
+	protected function setUp(): void {
+		parent::setUp();
+		Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+	}
 
 	private function record(): Location_Record {
 		return Location_Record::from_array(
@@ -154,5 +169,163 @@ class CheckoutHandlerCalculatedShippingTest extends TestCase {
 
 	public function test_no_stored_record_is_a_no_op(): void {
 		$this->assertSame( 0, $this->run_with( null, 'Москва' ) );
+	}
+
+	/**
+	 * A WC_Customer stand-in carrying both addresses; records what is written to billing.
+	 *
+	 * @param array<string, string> $shipping The calculator's address (country/state/postcode/city).
+	 * @param array<string, string> $billing  The customer's earlier billing address.
+	 */
+	private function customer_with( array $shipping, array $billing ): object {
+		return new class( $shipping, $billing ) {
+			public array $shipping;
+			public array $billing;
+			public int $saves = 0;
+
+			public function __construct( array $shipping, array $billing ) {
+				$this->shipping = $shipping;
+				$this->billing  = $billing;
+			}
+
+			public function get_shipping_country(): string {
+				return $this->shipping['country'];
+			}
+
+			public function get_shipping_state(): string {
+				return $this->shipping['state'];
+			}
+
+			public function get_shipping_postcode(): string {
+				return $this->shipping['postcode'];
+			}
+
+			public function get_shipping_city(): string {
+				return $this->shipping['city'];
+			}
+
+			public function get_billing_city(): string {
+				return $this->billing['city'];
+			}
+
+			public function set_billing_country( string $value ): void {
+				$this->billing['country'] = $value;
+			}
+
+			public function set_billing_state( string $value ): void {
+				$this->billing['state'] = $value;
+			}
+
+			public function set_billing_city( string $value ): void {
+				$this->billing['city'] = $value;
+			}
+
+			public function set_billing_postcode( string $value ): void {
+				$this->billing['postcode'] = $value;
+			}
+
+			public function save(): void {
+				++$this->saves;
+			}
+		};
+	}
+
+	private function lipetsk_record(): Location_Record {
+		return Location_Record::from_array(
+			[
+				'key'         => 'test:lip',
+				'provider_id' => 'test',
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'country'     => 'RU',
+				'label'       => 'Липецк, Липецкая область',
+				'settlement'  => [ 'name' => 'Липецк', 'type' => 'г' ],
+			]
+		);
+	}
+
+	/**
+	 * @return array{0: Calculated_Shipping_Handler, 1: Calculated_Shipping_Fake_Service}
+	 */
+	private function handler_for( object $customer, ?Location_Record $record, bool $billing_only ): array {
+		Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( $billing_only );
+
+		$service           = new Calculated_Shipping_Fake_Service( $record );
+		$handler           = new Calculated_Shipping_Handler( Checkout_Fields::from_array( [] ), 'carrier', $service );
+		$handler->customer = $customer;
+
+		return [ $handler, $service ];
+	}
+
+	/** @var array<string, string> */
+	private const MOSCOW_BILLING = [ 'country' => 'RU', 'state' => 'RU-MOW', 'postcode' => '125009', 'city' => 'Москва' ];
+
+	/** @var array<string, string> */
+	private const LIPETSK_CALC = [ 'country' => 'RU', 'state' => 'RU-LIP', 'postcode' => '', 'city' => 'Липецк' ];
+
+	public function test_billing_only_writes_the_calculator_address_to_billing_and_keeps_the_record(): void {
+		$customer = $this->customer_with( self::LIPETSK_CALC, self::MOSCOW_BILLING );
+
+		[ $handler, $service ] = $this->handler_for( $customer, $this->lipetsk_record(), true );
+		$handler->handle_calculated_shipping();
+
+		$this->assertSame( 'Липецк', $customer->billing['city'] );
+		$this->assertSame( 'RU-LIP', $customer->billing['state'] );
+		$this->assertSame( 'RU', $customer->billing['country'] );
+		$this->assertSame( 0, $service->forgotten, 'the picked record names the delivery (billing) city' );
+		$this->assertSame( 1, $customer->saves );
+	}
+
+	public function test_billing_only_keeps_the_old_postcode_when_the_calculator_carried_none(): void {
+		$customer = $this->customer_with( self::LIPETSK_CALC, self::MOSCOW_BILLING );
+
+		[ $handler ] = $this->handler_for( $customer, $this->lipetsk_record(), true );
+		$handler->handle_calculated_shipping();
+
+		$this->assertSame( '125009', $customer->billing['postcode'] );
+
+		$customer = $this->customer_with( [ 'postcode' => '398000' ] + self::LIPETSK_CALC, self::MOSCOW_BILLING );
+
+		[ $handler ] = $this->handler_for( $customer, $this->lipetsk_record(), true );
+		$handler->handle_calculated_shipping();
+
+		$this->assertSame( '398000', $customer->billing['postcode'] );
+	}
+
+	public function test_billing_only_still_forgets_a_record_that_does_not_name_the_delivery_city(): void {
+		$customer = $this->customer_with( self::LIPETSK_CALC, self::MOSCOW_BILLING );
+
+		[ $handler, $service ] = $this->handler_for( $customer, $this->record(), true );
+		$handler->handle_calculated_shipping();
+
+		$this->assertSame( 'Липецк', $customer->billing['city'] );
+		$this->assertSame( 1, $service->forgotten, 'a Kazan record must not confirm a Lipetsk delivery address' );
+	}
+
+	public function test_billing_only_without_a_calculator_country_leaves_billing_alone(): void {
+		$customer = $this->customer_with( [ 'country' => '' ] + self::LIPETSK_CALC, self::MOSCOW_BILLING );
+
+		[ $handler, $service ] = $this->handler_for( $customer, $this->lipetsk_record(), true );
+		$handler->handle_calculated_shipping();
+
+		$this->assertSame( self::MOSCOW_BILLING, $customer->billing );
+		$this->assertSame( 0, $customer->saves );
+		$this->assertSame( 0, $service->forgotten, 'the shipping city still names the record' );
+	}
+
+	public function test_the_default_mode_never_touches_billing_and_judges_the_shipping_city(): void {
+		$customer = $this->customer_with( self::LIPETSK_CALC, self::MOSCOW_BILLING );
+
+		[ $handler, $service ] = $this->handler_for( $customer, $this->lipetsk_record(), false );
+		$handler->handle_calculated_shipping();
+
+		$this->assertSame( self::MOSCOW_BILLING, $customer->billing );
+		$this->assertSame( 0, $customer->saves );
+		$this->assertSame( 0, $service->forgotten );
+
+		[ $handler, $service ] = $this->handler_for( $customer, $this->record(), false );
+		$handler->handle_calculated_shipping();
+
+		$this->assertSame( 1, $service->forgotten, 'a record for another city is still forgotten' );
+		$this->assertSame( self::MOSCOW_BILLING, $customer->billing );
 	}
 }

@@ -1451,6 +1451,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			return $out;
 		}
 
+		/**
+		 * Keeps the stored customer locality consistent with the address the classic cart's
+		 * shipping calculator just saved (issues #331, #1368).
+		 *
+		 * WooCommerce's calculator writes the SHIPPING address, and copies it to billing only for
+		 * a customer with no billing first name. When the store ships to the billing address only,
+		 * the checkout has no shipping column — it reads billing, so a customer with an earlier
+		 * order would land there on the OLD city while the record they just picked names the new
+		 * one, and {@see self::guard_custom_settlement()} would refuse the order. So in that mode
+		 * the calculator's country, region and city are written to the address that IS the
+		 * delivery destination — billing — the same destination
+		 * {@see self::handle_customer_save_address()} judges on My Account, and the stored record
+		 * is then judged against THAT address. The judgement itself is untouched: a record that
+		 * does not name the delivery city is still forgotten.
+		 *
+		 * @since 2.0.6
+		 *
+		 * @internal
+		 *
+		 * @return void
+		 */
 		public function handle_calculated_shipping(): void {
 			$customer = $this->wc_customer();
 
@@ -1458,7 +1479,64 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 				return;
 			}
 
-			$this->forget_record_unless_it_names_city( (string) $customer->get_shipping_city() );
+			$type = 'shipping';
+
+			if ( self::ships_to_billing_only() && $this->copy_calculated_address_to_billing( $customer ) ) {
+				$type = 'billing';
+			}
+
+			$getter = 'get_' . $type . '_city';
+
+			$this->forget_record_unless_it_names_city( (string) $customer->$getter() );
+		}
+
+		/**
+		 * Whether the store ships to the billing address only (`billing_only`) — the checkout then
+		 * has no shipping column and billing IS the delivery destination.
+		 *
+		 * @since 2.0.6
+		 *
+		 * @return bool
+		 */
+		private static function ships_to_billing_only(): bool {
+			return function_exists( 'wc_ship_to_billing_address_only' ) && wc_ship_to_billing_address_only();
+		}
+
+		/**
+		 * Writes the country, region and city the cart calculator saved to the customer's
+		 * SHIPPING address onto the BILLING address too, plus the postcode when the calculator
+		 * carried one (issue #1368). A calculator submitted without a country has already reset
+		 * both addresses to the shop base — nothing to copy then.
+		 *
+		 * @since 2.0.6
+		 *
+		 * @param object $customer The `WC_Customer` the calculator just saved.
+		 *
+		 * @return bool Whether billing now carries the calculator's address.
+		 */
+		private function copy_calculated_address_to_billing( object $customer ): bool {
+			if ( ! is_callable( [ $customer, 'get_shipping_country' ] ) || ! is_callable( [ $customer, 'set_billing_city' ] ) || ! is_callable( [ $customer, 'save' ] ) ) {
+				return false;
+			}
+
+			$country = (string) $customer->get_shipping_country();
+
+			if ( '' === $country ) {
+				return false;
+			}
+
+			foreach ( [ 'country', 'state', 'postcode', 'city' ] as $part ) {
+				$value = (string) $customer->{ 'get_shipping_' . $part }();
+
+				// A blank postcode is the calculator saying nothing, not a postcode to blank out.
+				if ( 'postcode' !== $part || '' !== $value ) {
+					$customer->{ 'set_billing_' . $part }( $value );
+				}
+			}
+
+			$customer->save();
+
+			return true;
 		}
 
 		/**
@@ -1511,8 +1589,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 
 			$billing      = (string) $customer->get_billing_city();
 			$shipping     = (string) $customer->get_shipping_city();
-			$billing_only = function_exists( 'wc_ship_to_billing_address_only' ) && wc_ship_to_billing_address_only();
-			$use_billing  = $billing_only || '' === self::normalize_for_settlement_match( $shipping );
+			$use_billing  = self::ships_to_billing_only() || '' === self::normalize_for_settlement_match( $shipping );
 			$city         = $use_billing ? $billing : $shipping;
 			$country      = $use_billing ? $this->saved_country( $customer, 'billing' ) : $this->saved_country( $customer, 'shipping' );
 
