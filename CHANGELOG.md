@@ -1,6 +1,14 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.0.5] — 2026-10-19
+### Bug Fixes
+- **pickup**: Fill the address line with the point's street address, not the full one (#1360) (#1365)
+
+- **release**: Woodev Framework 2.0.5 — framework translations load early with bundled fallback (#1361) (#1366)
+
+
+
 ## [2.0.4] — 2026-10-19
 ### Bug Fixes
 - **release**: Woodev Framework 2.0.4 — HPOS compatibility declaration, order meta slashes (#1364)
