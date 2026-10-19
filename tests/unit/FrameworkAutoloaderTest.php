@@ -95,6 +95,22 @@ final class FrameworkAutoloaderTest extends TestCase {
 		$this->assertFalse( \Woodev_Framework_Autoloader::is_registered() );
 	}
 
+	public function test_register_does_not_require_wordpress_hooks(): void {
+		$root = dirname( __DIR__, 2 );
+		$code = sprintf(
+			"if ( function_exists( 'has_action' ) || function_exists( 'add_action' ) ) { exit( 2 ); }\n"
+			. "define( 'ABSPATH', __DIR__ . '/' );\n"
+			. "require %s;\n"
+			. "Woodev_Framework_Autoloader::register( %s );\n",
+			var_export( $root . '/woodev/class-framework-autoloader.php', true ),
+			var_export( $root, true )
+		);
+
+		exec( escapeshellarg( PHP_BINARY ) . ' -r ' . escapeshellarg( $code ), $output, $exit_code );
+
+		$this->assertSame( 0, $exit_code, implode( "\n", $output ) );
+	}
+
 	public function test_real_classmap_maps_known_framework_classes_to_readable_files(): void {
 		$root = dirname( __DIR__, 2 );
 		$map  = require $root . '/woodev/class-map.php';
