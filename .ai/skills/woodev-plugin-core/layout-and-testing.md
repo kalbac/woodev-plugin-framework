@@ -127,6 +127,23 @@ cleanest copy; CDEK `v2` has the same). Reuse it rather than inventing one:
   Composer GitHub token unset — all four are already in the Yandex workflow (PRs #39, #40).
 - The matrix is PHP 7.4 and 8.3; the Mac sees PHP 8.5 deprecations the matrix never does (guard `setAccessible()` etc.).
 
+## Releasing a plugin
+
+Copy `release.yml` + `scripts/build-release-zip.sh` from either carrier plugin (s188, PRs CDEK #120 / Yandex #122):
+
+- **One script builds the ZIP, locally and in Actions**: `git archive HEAD` → an allowlist (main file, `includes/`,
+  `assets/`, `languages/`, `woodev/`) → one top folder named after the slug. No README (it is the developer README),
+  no tests/docs/agent files. The script FAILS unless the bundled `woodev/class-plugin.php` `VERSION` equals the
+  loader's `framework_version` and `woodev/assets/build` exists. Timestamps are pinned to the HEAD commit time, files
+  added in sorted order with `zip -X`, so two builds are byte-identical.
+- **Publish when the tag `v<version>` is missing, not when the version changed.** A first release whose version is
+  already on the base branch never "changes", so a version-diff trigger merges the release PR and publishes nothing.
+  Trigger: `push` to the base branch filtered to the main file + `workflow_dispatch`; skip when the tag or release exists.
+- The release body is the README `### <version>` changelog section (Russian, merchant-facing) — not git-cliff, which
+  prints the internal commit log with PR numbers.
+- The workflow fetches `woodev/` from the framework tag `v<framework_version>`, so the framework release goes first.
+- Under `set -o pipefail`, `printf … | grep -q` fails at random with SIGPIPE (grep exits early) — grep a file instead.
+
 ## Related
 
 - [SKILL.md](SKILL.md), [loading.md](loading.md), [traps.md](traps.md)

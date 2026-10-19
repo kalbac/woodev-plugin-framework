@@ -6,18 +6,16 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-19 (s187, with the operator):** everything that must precede the plugin releases is PUBLISHED on woodev.ru — blog
+**As of 2026-10-19 overnight (s188, autonomous):** the releases are prepared «up to the button» and NOTHING is merged/tagged:
+framework PR #1356 (2.0.3 — merging it publishes the framework release, which the plugin release workflows fetch), CDEK
+edostavka#120 (2.3.0.0) and Yandex yandex#122 (2.0.0) with release workflows that publish when the tag is missing, ZIPs on his
+Desktop; pre-release fixes edostavka#121 (v1 fixed price) and yandex#123 (reverses s16 — his call). Detail: `sessions/s188.md`.
+**Before that — as of 2026-10-19 (s187, with the operator):** everything that must precede the plugin releases is PUBLISHED on woodev.ru — blog
 145839 (`/woodev-new-foundation.html`, cover «Woodev 2.0»), docs `plugins-update` (new), `woodev-plugins-basics`, `cdek-plugin-setup`,
 `cdek-migration`, `yandex-delivery-migration`, and 48467 rewritten in place with the 145849 text; BetterDocs FAQ groups «Плагин СДЭК» (58),
 «Плагин Яндекс Доставка» (90), «Общие вопросы» (63) rewritten. The warm-up Telegram post is scheduled by him for 19.10 10:00 MSK. Next: the
 CDEK 2.3 and Yandex 2.0 releases, then posts 02–04. Detail: `sessions/s187.md`.
-**Before that — as of 2026-10-17 overnight (s186, autonomous):** the whole #1342 drafting queue is done and fact-checked against the code — CDEK and
-Yandex instructions + migration articles (BetterDocs drafts 145857 145855 145849 145850, with rig screenshots), «Плагины Woodev» (#1347,
-draft 145875), product cards/FAQ/changelog/requirements and the general docs FAQ (NAS files), blog draft 145839, Telegram 01–04 on his
-Desktop. Live: 20 `woo-sc-box` → `notice` in 7 docs, 45581 dead links fixed. Code merged: yandex#120 (#121), CDEK #117 (wizard text,
-rounding regression), #118 (#1269 plugin side), #119 (stand, #86); framework PR #1353 (#1289). CDEK `v2` `4152684`, Yandex `main`
-`6cb97fa`. The NAS stopped accepting writes ~01:00 UTC — the CDEK wizard shots wait on his Desktop. Detail: `sessions/s186.md`.
-**Earlier sessions:** see `SESSION-LOG.md` (s185 `sessions/s185.md`).
+**Earlier sessions:** see `SESSION-LOG.md` (s186 `sessions/s186.md`).
 
 ✅ **Fixtures carry real download ids `9001`-`9005`** (#910), so `LicenseCommandEndpointTest` drives
 the real signed-envelope route. The admin license REST route refuses an ambiguous id (#907) but
@@ -63,7 +61,7 @@ the highest installed `2.2.5.5` (operator, 06.09.2026), so the update reaches ev
 
 ✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — no quota consumed; the exhaustion symptom is gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`.
 
-**Test measurements:** framework unit **7398** / jest **3409** on main after #1305 (CI green on every merged head); full e2e on minified assets **45 passed / 6 failed (#1306, pre-existing) / 1 flake / 3 skipped**; Yandex unit **1095** (#104); CDEK unit **1524+** (v2 + #109); CDEK acceptance **105 / 0 / 12** — measured 15.10.2026 (s182). After #1311 the unit suite skips **1** (was 6) — the Yandex/CDEK contract tests now run on
+**Test measurements:** framework unit **7398** / jest **3409** on main after #1305 (CI green on every merged head); full e2e on minified assets **45 passed / 6 failed (#1306, pre-existing) / 1 flake / 3 skipped**; Yandex unit **1159** (yandex#122) / **1160** (#123); CDEK unit **1565** (edostavka#120) / **1576** (#121); CDEK acceptance **98–99 / 1 / 11–12 / 4 BLOCKED** — a different block-checkout pickup case fails each run (#1357), measured 19.10.2026 (s188; was 105/0/12 on 15.10). After #1311 the unit suite skips **1** (was 6) — the Yandex/CDEK contract tests now run on
 committed fixtures (s183).
 Integration is CI/coordinator-owned. Re-measure before quoting these as current gate evidence.
 
