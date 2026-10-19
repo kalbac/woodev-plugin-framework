@@ -1,6 +1,80 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.0.3] — 2026-10-19
+### Bug Fixes
+- Real bugs and stale docs from #1316 (#1329)
+
+- Keep order-editor coupon discounts on save; cool down the plugins catalogue after a failure (#1330)
+
+- **settings-page**: Keep an edit typed while Save is pending (#1326) (#1333)
+
+- Three audit fixes — wizard location, variation pages, license key lock (#1334 #1335 #1336) (#1337)
+
+- **checkout-blocks**: Restore the remembered pickup point (#1263) and carry out the swallowed Place Order press (#1279) (#1332)
+
+- **shipping-orders**: Offer a bulk action only when a row on the page offers it (#1345) (#1344)
+
+- **settings**: Accept value/label pairs for 0..n-keyed string options (#1353)
+
+
+### Documentation
+- **s182**: Session save — 2.0.2 released, handoff for the repo-order session (#1308)
+
+- S183 documentation audit (#1309)
+
+- **site**: Replace MkDocs with an Astro Starlight site (#1313) ⚠ BREAKING
+
+- **site**: Getting started — five pages (#1315)
+
+- **site**: Core — ten pages (#1317)
+
+- **site**: Settings & admin — eight pages (#1318)
+
+- **site**: Shipping — seven pages (#1319)
+
+- Contributing guide for 2.0.x and a Contributing page (#1320)
+
+- **skills**: Correct override names and dependency traps found while writing the public docs (#1321)
+
+- **site**: Payments (legacy) and the hooks & filters reference (#1322)
+
+- **s183**: Session save — public docs site published, repo cleanup, handoff (#1323)
+
+- **s183**: Handoff carries #1324 (#1325)
+
+- **s184**: Session record, gotchas, skills and handoff (#1338)
+
+- **s184**: Spec §5.4 — COD delivery_cost decision (#109); handoff after the morning merges (#1340)
+
+- **s184**: Handoff — leaked s183 commit needs no GitHub purge (operator, public partner key only) (#1341)
+
+- **s184**: Afternoon — publication plan (#1342), Homelab file-transfer gotcha, autonomous handoff (#1343)
+
+- **s185**: Publication plan stage 1 (#1342), merged cards, handoff (#1346)
+
+- **website**: Generate llms.txt files for AI agents (#1350)
+
+- **s185**: Evening — six shipping articles published (#1342), Yoast/NAS/MCP-permission lessons, overnight handoff (#1351)
+
+- **s185**: Handoff — review all FAQs (docs + product cards) from Support AI cases (#1352)
+
+- **s186**: Overnight — #1342 drafts, four plugin PRs, handoff (#1354)
+
+- **s187**: #1342 publications live, FAQ groups, release handoff (#1355)
+
+- **s188**: Releases prepared up to the button — framework 2.0.3, CDEK 2.3, Yandex 2.0; release gotchas, plugin release skill (#1358)
+
+
+### Tests
+- **contract**: Pin v1 Yandex/CDEK literals as committed fixtures (#1311)
+
+- **e2e**: Classic-checkout specs set their own shipping-destination mode and run under billing_only too (#1306) (#1331)
+
+- **e2e**: Coexistence/06 re-pick closes the restored point's card and picks another point (#1339)
+
+
+
 ## [2.0.2] — 2026-10-15
 ### #839
 - Закон роста джойнов измерен и закреплён тестом; готчи и документы s138 (#920)
