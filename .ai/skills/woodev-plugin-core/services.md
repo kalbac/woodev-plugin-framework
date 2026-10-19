@@ -155,8 +155,11 @@ Rules: `AGENTS.md` → Conventions → «Translatable strings», gotchas in `doc
   fine. Logs, exception texts, anything that never reaches a screen → either language and NOT wrapped in
   `__()`.
 - **Text domain** is the `text_domain` you pass to `parent::__construct()`. `Translation_Handler` loads
-  it from `WP_LANG_DIR/{domain}/` and `{plugin dir}/languages`, and loads the framework's own domain
-  separately. Never use the framework's domain (`woodev-plugin-framework`) for your own strings.
+  it from `WP_LANG_DIR/{domain}/` and `{plugin dir}/languages`. The resolver loads the framework's domain
+  once at `init` priority 0, with explicit external-pack merging and a bundled fallback
+  (`woodev/handlers/class-framework-translations.php`, #1361). Never use the framework's domain
+  (`woodev-plugin-framework`) for your own strings. A JIT path registration alone cannot fill gaps in an
+  already-loaded external pack; locale changes must rebuild override precedence.
 - **An English msgid without a catalogue entry is a storefront regression** (the shopper sees English),
   and the framework's `lint:i18n` cannot catch it in your repo (gotcha
   `rule-1-has-two-halves-an-english-msgid-alone-is-a-regression`). **Ship the catalogue and a test for it

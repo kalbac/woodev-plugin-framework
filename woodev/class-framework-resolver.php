@@ -273,6 +273,13 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 						\Woodev_Framework_Autoloader::register( $winner_path );
 					}
 
+					// Notices must be translated even when every plugin fails its requirements.
+					$translations = $winner_path . '/woodev/handlers/class-framework-translations.php';
+					if ( is_readable( $translations ) ) {
+						require_once $translations;
+						\Woodev\Framework\Handlers\Framework_Translations::register();
+					}
+
 					// The winner is known and the registry is complete: hook the error reporter NOW,
 					// before the first plugin's constructor or main-class include can throw or
 					// fatal — a startup failure is exactly what it exists to catch (#130).

@@ -256,6 +256,25 @@ class FrameworkResolverTest extends TestCase {
 		$this->assertCount( 1, $resolver->get_incompatible_wc_version_plugins() );
 	}
 
+	/** Even if every plugin is refused, the selected copy schedules the shared translation loader. */
+	public function test_registers_framework_translations_without_starting_a_plugin(): void {
+		$resolver = new Resolver_Testable_Framework_Resolver();
+		$registered = false;
+		Functions\when( 'has_action' )->alias( static function () use ( &$registered ) { return $registered ? 0 : false; } );
+		Functions\when( 'untrailingslashit' )->alias( static function ( string $path ): string { return rtrim( $path, '/\\' ); } );
+		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
+		Functions\when( 'is_admin' )->justReturn( false );
+		Functions\expect( 'add_action' )->once()->with( 'init', [ \Woodev\Framework\Handlers\Framework_Translations::class, 'load_translations' ], 0 )->andReturnUsing( static function () use ( &$registered ): void { $registered = true; } );
+		Functions\expect( 'add_action' )->once()->with( 'change_locale', [ \Woodev\Framework\Handlers\Framework_Translations::class, 'reload_translations' ], 0 );
+		$resolver->register_loader_definition( $this->get_loader_definition( [
+			'requirements' => [ 'php' => '99.0', 'wordpress' => '6.3' ],
+			'callback' => static function (): void { throw new \RuntimeException( 'A rejected plugin must never start.' ); },
+		] ) );
+		$resolver->load_plugins();
+		$this->assertSame( [], $resolver->get_active_plugins() );
+		$this->assertCount( 1, $resolver->get_incompatible_php_version_plugins() );
+	}
+
 	/**
 	 * Explicit main_class-only definitions should use the class instance() bootstrap path.
 	 */

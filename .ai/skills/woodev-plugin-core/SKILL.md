@@ -121,6 +121,7 @@ For the rest of the settings API, read [settings.md](settings.md).
   `docs-internal/AGENT-RULES.md` → Rules 10a–10c.
 - **i18n msgid language is decided by who reads the string.** Storefront → English msgid, Russian from
   the catalogue; admin → Russian msgid is fine; logs/exceptions → plain strings, no `__()`.
+  Resolve labels and milestone keys at display time; a JIT path alone cannot merge a stale external pack (#1361, [services.md](services.md#internationalisation)).
   `AGENTS.md` → Conventions → «Translatable strings». Details in [services.md](services.md).
   **The Russian must actually exist:** a plugin with storefront strings ships `languages/{domain}-ru_RU.po/.mo`
   AND a unit test that every English storefront msgid has a Russian entry (Yandex shipped with no `languages/`

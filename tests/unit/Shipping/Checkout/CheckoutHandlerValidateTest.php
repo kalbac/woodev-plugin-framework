@@ -897,6 +897,34 @@ class CheckoutHandlerValidateTest extends TestCase {
 		\Brain\Monkey\Functions\expect( 'wc_add_notice' )->never();
 		$this->assertTrue( $handler->validate( [], [ 'chosen_shipping_method' => 'truth_pickup' ] ) );
 	}
+	/** Explicit carrier labels keep precedence over the lazy pickup fallback. */
+	public function test_pickup_error_preserves_an_explicit_visual_label(): void {
+		Functions\expect( 'wc_add_notice' )->once()->with( 'The “Место получения” field is filled in incorrectly.', 'error' );
+		$field = Field::create( 'pvz' )->mark_pickup_slot()->set_label( 'Место получения' )
+			->set_validate_callback( static function (): bool { return false; } )->to_array();
+		$handler = new Checkout_Handler( Checkout_Fields::from_array( [ $field ] ), 'carrier' );
+		$this->assertFalse( $handler->validate( [ 'pvz' => '123' ], [] ) );
+	}
+
+	/** The preset is built early, but bare-false validator errors use the display locale. */
+	public function test_pickup_error_label_is_translated_when_displayed(): void {
+		$field = \Woodev\Framework\Shipping\Checkout\Presets\Pickup_Field::create( 'pvz' )
+			->set_validate_callback( static function (): bool { return false; } )->to_array();
+		$fields = Checkout_Fields::from_array( [ $field ] );
+		$handler = new Checkout_Handler( $fields, 'carrier' );
+		$locale = 'ru';
+		Functions\when( '__' )->alias( static function ( string $message ) use ( &$locale ): string {
+			return 'Pickup point' === $message ? ( 'ru' === $locale ? 'Пункт выдачи' : 'Pickup point' ) : $message;
+		} );
+		$notices = [];
+		Functions\when( 'wc_add_notice' )->alias( static function ( string $message ) use ( &$notices ): void { $notices[] = $message; } );
+		$this->assertFalse( $handler->validate( [ 'pvz' => '123' ], [] ) );
+		$this->assertStringContainsString( 'Пункт выдачи', $notices[0] );
+		$locale = 'en';
+		$this->assertFalse( $handler->validate( [ 'pvz' => '123' ], [] ) );
+		$this->assertStringContainsString( 'Pickup point', $notices[1] );
+	}
+
 }
 
 /**

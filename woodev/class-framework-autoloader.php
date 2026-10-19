@@ -55,6 +55,12 @@ if ( ! class_exists( 'Woodev_Framework_Autoloader', false ) ) :
 			self::$registered = true;
 
 			spl_autoload_register( [ self::class, 'autoload' ] );
+
+			// An older copy may own the resolver; it still registers THIS winning autoloader.
+			if ( isset( self::$map['Woodev\\Framework\\Handlers\\Framework_Translations'] ) ) {
+				self::autoload( 'Woodev\\Framework\\Handlers\\Framework_Translations' );
+				\Woodev\Framework\Handlers\Framework_Translations::register();
+			}
 		}
 
 		/**

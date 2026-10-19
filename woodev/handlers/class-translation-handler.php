@@ -11,12 +11,9 @@ defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( '\Woodev\Framework\Handlers\Translation_Handler' ) ) :
 	/**
-	 * Loads the framework and plugin text domains.
+	 * Loads each plugin's own text domain.
 	 *
-	 * This handler owns the `init` hook that loads translations, so the base
-	 * plugin class no longer carries the translation-loading concern. The
-	 * framework text domain string and the load timing are preserved exactly
-	 * as they were in Woodev_Plugin to keep the installed-site contract stable.
+	 * Framework_Translations handles the shared domain once from the resolver's winning copy.
 	 *
 	 * @since 2.0.0
 	 */
@@ -55,7 +52,7 @@ if ( ! class_exists( '\Woodev\Framework\Handlers\Translation_Handler' ) ) :
 		}
 
 		/**
-		 * Load plugin & framework text domains.
+		 * Load the plugin's own text domain.
 		 *
 		 * @since 2.0.0
 		 *
@@ -63,23 +60,10 @@ if ( ! class_exists( '\Woodev\Framework\Handlers\Translation_Handler' ) ) :
 		 */
 		public function load_translations(): void {
 
-			$this->load_framework_textdomain();
-
 			// if this plugin passes along its text domain, load its translation files
 			if ( $this->plugin->get_textdomain() ) {
 				$this->load_plugin_textdomain();
 			}
-		}
-
-		/**
-		 * Loads the framework textdomain.
-		 *
-		 * @since 2.0.0
-		 *
-		 * @return void
-		 */
-		private function load_framework_textdomain(): void {
-			$this->load_textdomain( self::FRAMEWORK_TEXTDOMAIN, dirname( plugin_basename( $this->plugin->get_framework_file() ) ) );
 		}
 
 		/**

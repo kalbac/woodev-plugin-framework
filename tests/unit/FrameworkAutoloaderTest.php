@@ -25,6 +25,15 @@ final class FrameworkAutoloaderTest extends TestCase {
 		\Woodev_Framework_Autoloader::reset();
 	}
 
+	/** An older resolver still loads the winner's autoloader, which must schedule translations itself. */
+	public function test_winning_autoloader_registers_translations_even_with_an_older_resolver(): void {
+		\Brain\Monkey\Functions\when( 'has_action' )->justReturn( false );
+		\Brain\Monkey\Functions\expect( 'add_action' )->once()->with( 'init', [ \Woodev\Framework\Handlers\Framework_Translations::class, 'load_translations' ], 0 );
+		\Brain\Monkey\Functions\expect( 'add_action' )->once()->with( 'change_locale', [ \Woodev\Framework\Handlers\Framework_Translations::class, 'reload_translations' ], 0 );
+		\Woodev_Framework_Autoloader::register( dirname( __DIR__, 2 ) );
+		$this->assertTrue( \Woodev_Framework_Autoloader::is_registered() );
+	}
+
 	protected function tearDown(): void {
 		\Woodev_Framework_Autoloader::reset();
 

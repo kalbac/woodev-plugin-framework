@@ -306,6 +306,9 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 					continue;
 				}
 
+				// New gateway milestones store a key; historical strings remain displayable as-is.
+				$message = self::resolve_milestone_message( $id, $message );
+
 				/**
 				 * Filters a milestone notice message.
 				 *
@@ -358,6 +361,29 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 			}
 
 			return $this->register_milestone_message( $id, $message );
+		}
+
+
+		/**
+		 * Resolves framework milestone keys in the display locale, preserving legacy strings.
+		 *
+		 * @since 2.0.5
+		 *
+		 * @param string $id      Milestone identifier.
+		 * @param string $message Stored key or previously translated message.
+		 * @return string
+		 */
+		private static function resolve_milestone_message( string $id, string $message ): string {
+			if ( $id === $message ) {
+				switch ( $id ) {
+					case 'payment-processed':
+						return __( 'you successfully processed a payment!', 'woodev-plugin-framework' );
+					case 'refund-processed':
+						return __( 'you successfully processed a refund!', 'woodev-plugin-framework' );
+				}
+			}
+
+			return $message;
 		}
 
 
