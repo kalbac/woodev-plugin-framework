@@ -596,6 +596,28 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 		}
 
 		/**
+		 * Gets the value for the customer's «Адрес» (`address_1`) line when a point replaces the
+		 * address (#1360): the point's `short_address` when it has a non-blank one, else the full
+		 * `address`.
+		 *
+		 * The full address carries the postcode, region and settlement the destination already holds
+		 * in their own fields, so writing it into the street line duplicates them in the order and in
+		 * the carrier export. This is the ONE rule every address-replacing write site follows; its
+		 * browser twins are `pointAddressLine()` in `pickup-mount.js` and `pickup-session.ts`.
+		 *
+		 * @since 2.0.5
+		 *
+		 * @return string
+		 */
+		public function get_address_line(): string {
+			$short = isset( $this->data['short_address'] ) && is_string( $this->data['short_address'] )
+				? trim( $this->data['short_address'] )
+				: '';
+
+			return '' !== $short ? $short : $this->get_address();
+		}
+
+		/**
 		 * Gets the locality, or an empty string.
 		 *
 		 * @since 2.0.2

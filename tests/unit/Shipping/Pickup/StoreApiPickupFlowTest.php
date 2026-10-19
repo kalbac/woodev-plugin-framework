@@ -397,6 +397,25 @@ final class StoreApiPickupFlowTest extends TestCase {
 		$this->assertSame( 'P1-fixed', $this->meta[502]['carrier_full']['id'] );
 	}
 
+	public function test_address_replacement_writes_the_short_address_not_the_full_one(): void {
+		$this->carriers['carrier']['handler']->replace_address = true;
+		$this->points['P1']['address']       = '101000, Moscow, Moscow, Point street P1';
+		$this->points['P1']['short_address'] = 'Point street P1';
+		$this->points['P1']['postal_code']   = '101000';
+		$this->confirm();
+
+		$this->assertSame( [ 'address_1' => 'Point street P1', 'postcode' => '101000' ], $this->snapshot()['destination'] );
+	}
+
+	public function test_address_replacement_falls_back_to_the_full_address_when_the_short_one_is_blank(): void {
+		$this->carriers['carrier']['handler']->replace_address = true;
+		$this->points['P1']['address']       = 'Point street P1';
+		$this->points['P1']['short_address'] = '   ';
+		$this->confirm();
+
+		$this->assertSame( 'Point street P1', $this->snapshot()['destination']['address_1'] );
+	}
+
 	public function test_address_replacement_survives_draft_updates_and_ends_with_the_next_manual_edit(): void {
 		$this->carriers['carrier']['handler']->replace_address = true;
 		$this->points['P1']['postal_code'] = '101000';

@@ -54,6 +54,22 @@ export interface PickupPoint {
 	[ key: string ]: unknown;
 }
 
+/**
+ * The value for the «Адрес» (`address_1`) line when a point replaces the address (#1360): `short_address`
+ * when it is a non-blank string, else the full `address` — which carries the postcode, region and settlement
+ * the destination holds in their own fields. Twin of `Pickup_Point::get_address_line()` (PHP) and of
+ * `pointAddressLine()` in `pickup-mount.js`. Returned as received: display fields arrive `esc_html()`-escaped.
+ *
+ * @since 2.0.5
+ */
+export function pointAddressLine( point: PickupPoint ): string {
+	if ( 'string' === typeof point.short_address && '' !== point.short_address.trim() ) {
+		return point.short_address.trim();
+	}
+
+	return 'string' === typeof point.address ? point.address : '';
+}
+
 /** `Pickup_Handler::get_admin_wizard_js_config()` — only the keys this file reads are typed. */
 export interface PickupWizardConfig {
 	provider: string;

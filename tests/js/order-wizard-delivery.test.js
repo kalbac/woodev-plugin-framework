@@ -379,6 +379,38 @@ describe( 'the pickup point inside the step (D3, O10)', () => {
 		} ) );
 	} );
 
+	test( 'the delivery address line takes the point short address, not the full one with postcode, region and city (#1360)', async () => {
+		window.woodevShippingOrders.wizard.pickup.cdek = { ...PICKER_CONFIG, replaceAddress: { enabled: true, billingOnly: false } };
+		mount();
+		await choosePvz();
+		await waitFor( () => expect( createPickupSession ).toHaveBeenCalled() );
+
+		await pick( {
+			id: 'P-1',
+			address: '140180, Московская обл., Жуковский, ул. Пушкина, 1',
+			short_address: 'ул. Пушкина, 1',
+			locality: 'Жуковский',
+			postal_code: '140180',
+		} );
+
+		await waitFor( () => expect( probe.data.shipping ).toMatchObject( {
+			address_1: 'ул. Пушкина, 1',
+			city: 'Жуковский',
+			postcode: '140180',
+		} ) );
+	} );
+
+	test( 'the delivery address line falls back to the full address when the point has no usable short one (#1360)', async () => {
+		window.woodevShippingOrders.wizard.pickup.cdek = { ...PICKER_CONFIG, replaceAddress: { enabled: true, billingOnly: false } };
+		mount();
+		await choosePvz();
+		await waitFor( () => expect( createPickupSession ).toHaveBeenCalled() );
+
+		await pick( { id: 'P-1', address: 'ул. Пушкина, 1', short_address: '  ', locality: 'Жуковский', postal_code: '140180' } );
+
+		await waitFor( () => expect( probe.data.shipping ).toMatchObject( { address_1: 'ул. Пушкина, 1' } ) );
+	} );
+
 	test( 'decodes the selected point address, locality and postcode before the order carries them', async () => {
 		window.woodevShippingOrders.wizard.pickup.cdek = { ...PICKER_CONFIG, replaceAddress: { enabled: true, billingOnly: false } };
 		const data = filled();
