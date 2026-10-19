@@ -297,6 +297,83 @@ class BootstrapRegistrationTest extends TestCase {
 	}
 
 	/**
+	 * #1363: on `before_woocommerce_init` WooCommerce has NOT loaded `FeaturesUtil` yet — the class is
+	 * only reachable through its autoloader. A `class_exists( …, false )` guard made the handler
+	 * return silently, so no plugin ever declared HPOS / blocks compatibility. The stub here is
+	 * defined on demand by an autoloader and is never pre-loaded, unlike
+	 * {@see self::reset_woocommerce_features_util_stub()}, which masked the bug.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_early_compatibility_declares_when_features_util_is_only_autoloadable(): void {
+		$registered_hooks = [];
+		define( 'WC_VERSION', '9.0.0' );
+
+		Functions\when( 'add_action' )->alias(
+			static function ( string $hook, $callback ) use ( &$registered_hooks ): void {
+				$registered_hooks[] = [ $hook, $callback ];
+			}
+		);
+
+		$GLOBALS['woodev_test_features_util_declared'] = [];
+
+		spl_autoload_register(
+			static function ( string $class_name ): void {
+				if ( 'Automattic\\WooCommerce\\Utilities\\FeaturesUtil' === $class_name ) {
+					eval( 'namespace Automattic\\WooCommerce\\Utilities; class FeaturesUtil { public static function declare_compatibility( $feature, $plugin_file, $compatible ) { $GLOBALS["woodev_test_features_util_declared"][] = [ $feature, $plugin_file, $compatible ]; } }' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged
+				}
+			}
+		);
+
+		$this->assertFalse( class_exists( '\\Automattic\\WooCommerce\\Utilities\\FeaturesUtil', false ), 'Precondition: the class is not loaded yet.' );
+
+		\Woodev_Plugin_Bootstrap::instance()->register_loader_definition(
+			$this->loader_definition(
+				'wc-feature-plugin',
+				'WC Feature Plugin',
+				'2.0.0',
+				[
+					'plugin_file'        => '/path/to/plugin/wc-feature-plugin.php',
+					'platform'           => \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WOOCOMMERCE,
+					'requirements'       => [
+						'php'         => '7.4',
+						'wordpress'   => '6.3',
+						'woocommerce' => '7.0',
+					],
+					'supported_features' => [
+						'hpos'   => true,
+						'blocks' => [
+							'cart'     => true,
+							'checkout' => true,
+						],
+					],
+				]
+			)
+		);
+
+		$early_hooks = array_values(
+			array_filter(
+				$registered_hooks,
+				static function ( array $hook ): bool {
+					return 'before_woocommerce_init' === $hook[0];
+				}
+			)
+		);
+
+		$this->assertCount( 1, $early_hooks );
+		$early_hooks[0][1]();
+
+		$this->assertSame(
+			[
+				[ 'custom_order_tables', '/path/to/plugin/wc-feature-plugin.php', true ],
+				[ 'cart_checkout_blocks', '/path/to/plugin/wc-feature-plugin.php', true ],
+			],
+			$GLOBALS['woodev_test_features_util_declared']
+		);
+	}
+
+	/**
 	 * Shipping definitions default both block surfaces to compatible, without changing the HPOS default.
 	 *
 	 * @runInSeparateProcess

@@ -329,7 +329,8 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 				if ( is_numeric( $order_id ) && $order_id > 0 ) {
 					$fired = self::count_post_meta_actions();
 
-					update_post_meta( (int) $order_id, $meta_key, $meta_value );
+					// the *_post_meta() functions wp_unslash() the value, so slash it first (as WC's CPT data store does)
+					update_post_meta( (int) $order_id, $meta_key, wp_slash( $meta_value ) );
 					self::flush_order_meta_cache( (int) $order_id, $fired );
 				}
 			}
@@ -363,7 +364,8 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 				if ( is_numeric( $order_id ) && $order_id > 0 ) {
 					$fired = self::count_post_meta_actions();
 
-					add_post_meta( (int) $order_id, $meta_key, $meta_value, $unique );
+					// the *_post_meta() functions wp_unslash() the value, so slash it first (as WC's CPT data store does)
+					add_post_meta( (int) $order_id, $meta_key, wp_slash( $meta_value ), $unique );
 					self::flush_order_meta_cache( (int) $order_id, $fired );
 				}
 			}
@@ -396,7 +398,8 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 				if ( is_numeric( $order_id ) && $order_id > 0 ) {
 					$fired = self::count_post_meta_actions();
 
-					delete_post_meta( (int) $order_id, $meta_key, $meta_value );
+					// delete_post_meta() wp_unslash()es the comparison value too, so slash it to match what was stored
+					delete_post_meta( (int) $order_id, $meta_key, wp_slash( $meta_value ) );
 					self::flush_order_meta_cache( (int) $order_id, $fired );
 				}
 			}

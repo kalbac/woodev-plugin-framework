@@ -424,7 +424,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Popular_Settlemen
 				return; // D4a: a derived key can never be resolved again, so it is never enrolled.
 			}
 
-			if ( null === $this->find_row_by_key( $record->provider_id(), $record->key() ) ) {
+			if ( self::looks_unslashed( $record ) ) {
+				return; // names with their backslashes stripped (see looks_unslashed()) are never enrolled.
+			}
+
+			$existing = $this->find_row_by_key( $record->provider_id(), $record->key() );
+
+			if ( null !== $existing && self::row_looks_unslashed( $existing ) ) {
+				// replace a previously enrolled corrupted row instead of bumping it.
+				$this->delete_entry( (int) $existing['id'] );
+				$existing = null;
+			}
+
+			if ( null === $existing ) {
 				$this->evict_if_over_cap( $record->provider_id() );
 			}
 
@@ -446,18 +458,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Popular_Settlemen
 			);
 		}
 
-		/**
-		 * Gets every stored entry for a provider, ranked by `order_count` descending
-		 * (spec: "order_count orders the list").
-		 *
-		 * @since 2.0.2
-		 *
-		 * @param string $provider_id The provider whose entries to read.
-		 *
-		 * @return Popular_Settlement_Entry[]
-		 */
 		public function all_for_provider( string $provider_id ): array {
-			$entries = array_map( [ $this, 'entry_from_row' ], $this->raw_rows_for_provider( $provider_id ) );
+			$entries = [];
+
+			foreach ( $this->raw_rows_for_provider( $provider_id ) as $row ) {
+				$entry = $this->entry_from_row( $row );
+
+				// Self-heal: a row enrolled from a record whose names lost their backslashes
+				// (framework <= 2.0.3 on non-HPOS sites) is dropped; the list refills from new orders.
+				if ( self::looks_unslashed( $entry->record() ) ) {
+					$this->delete_entry( $entry->id() );
+
+					continue;
+				}
+
+				$entries[] = $entry;
+			}
 
 			usort(
 				$entries,
@@ -867,6 +883,63 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Popular_Settlemen
 				$this->to_timestamp( $row['last_verified_at'] ?? null ),
 				(int) $this->to_timestamp( $row['created_at'] ?? null )
 			);
+		}
+
+		/**
+		 * Whether a record's display names look like JSON `\uXXXX` escapes whose backslashes were
+		 * stripped — `"Са"` stored as `"u0421u0430"` by `update_post_meta()` on non-HPOS
+		 * sites (framework <= 2.0.3).
+		 *
+		 * Two or more consecutive `uXXXX` groups, or one in the Cyrillic block (`u04xx`/`u05xx`),
+		 * are the signature. A real name never carries these: Cyrillic names contain no ASCII `u`
+		 * followed by hex digits, and Latin ones like "Uushu" or "Ulu-Yul" have no `u` + four hex
+		 * characters in a row.
+		 *
+		 * @since 2.0.4
+		 *
+		 * @param Location_Record $record The record to inspect.
+		 *
+		 * @return bool
+		 */
+		private static function looks_unslashed( Location_Record $record ): bool {
+			$names = [ $record->label() ];
+
+			foreach ( [ $record->region(), $record->district(), $record->settlement(), $record->street() ] as $component ) {
+				if ( null !== $component ) {
+					$names[] = $component['name'];
+				}
+			}
+
+			foreach ( $names as $name ) {
+				if ( 1 === preg_match( '/(?:u[0-9a-f]{4}){2,}|u0[45][0-9a-f]{2}/i', $name ) ) {
+					return true;
+				}
+			}
+
+			return false;
+		}
+
+		/**
+		 * {@see self::looks_unslashed()} for a raw table row; an undecodable record is not flagged.
+		 *
+		 * @since 2.0.4
+		 *
+		 * @param array<string, mixed> $row Raw database row.
+		 *
+		 * @return bool
+		 */
+		private static function row_looks_unslashed( array $row ): bool {
+			$decoded = json_decode( (string) ( $row['record'] ?? '' ), true );
+
+			if ( ! is_array( $decoded ) ) {
+				return false;
+			}
+
+			try {
+				return self::looks_unslashed( Location_Record::from_array( $decoded ) );
+			} catch ( \InvalidArgumentException $exception ) {
+				return false;
+			}
 		}
 
 		/**

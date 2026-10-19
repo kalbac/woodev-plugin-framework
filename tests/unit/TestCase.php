@@ -29,6 +29,8 @@ abstract class TestCase extends PHPUnitTestCase {
 		Monkey\Functions\stubEscapeFunctions();
 		// Settings schema descriptions are sanitized before being sent to React.
 		Monkey\Functions\when( 'wp_kses_post' )->returnArg();
+		// Woodev_Order_Compatibility slashes non-HPOS meta values before update_post_meta() (#1362).
+		Monkey\Functions\when( 'wp_slash' )->returnArg();
 	}
 
 	/**

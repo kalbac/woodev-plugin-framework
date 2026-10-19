@@ -205,7 +205,7 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 			add_action(
 				'before_woocommerce_init',
 				static function () use ( $plugin_file, $supported_features ): void {
-					if ( ! class_exists( '\\Automattic\\WooCommerce\\Utilities\\FeaturesUtil', false ) ) {
+					if ( ! class_exists( '\\Automattic\\WooCommerce\\Utilities\\FeaturesUtil' ) ) {
 						return;
 					}
 
