@@ -116,4 +116,33 @@ class LifecycleMilestoneTest extends TestCase {
 		$this->assertFalse( $lifecycle->trigger_milestone( 'first', 'replacement message' ) );
 		$this->assertSame( [ 'first' => 'first message' ], get_option( 'woodev_milestone-test_milestone_messages', [] ) );
 	}
+	/** New gateway keys resolve in the current locale; historical strings stay intact. */
+	public function test_gateway_keys_are_translated_at_display_time_and_legacy_strings_survive(): void {
+		$plugin = Mockery::mock();
+		$plugin->shouldReceive( 'get_id' )->andReturn( 'milestone-test' );
+		$plugin->shouldReceive( 'get_reviews_url', 'get_support_url' )->andReturn( '' );
+		$notice_handler = Mockery::mock();
+		$notice_handler->shouldReceive( 'get_dismissed_notices' )->andReturn( [] );
+		$notice_handler->shouldReceive( 'should_display_notice' )->andReturn( true );
+		$notices = [];
+		$notice_handler->shouldReceive( 'add_admin_notice' )->andReturnUsing( static function ( string $message ) use ( &$notices ): void { $notices[] = $message; } );
+		$plugin->shouldReceive( 'get_admin_notice_handler' )->andReturn( $notice_handler );
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+		$lifecycle = new Testable_Lifecycle_Milestone( $plugin );
+
+		$this->assertTrue( $lifecycle->trigger_milestone( 'payment-processed', 'payment-processed' ) );
+		$this->assertSame( [ 'payment-processed' => 'payment-processed' ], get_option( 'woodev_milestone-test_milestone_messages' ) );
+		Functions\when( '__' )->alias( static function ( string $message ): string { return 'you successfully processed a payment!' === $message ? 'вы успешно провели платёж!' : $message; } );
+		$lifecycle->add_admin_notices();
+		$this->assertStringContainsString( 'вы успешно провели платёж!', $notices[0] );
+
+		Functions\when( '__' )->returnArg();
+		$lifecycle->add_admin_notices();
+		$this->assertStringContainsString( 'you successfully processed a payment!', $notices[1] );
+
+		update_option( 'woodev_milestone-test_milestone_messages', [ 'refund-processed' => 'старое сообщение о возврате' ] );
+		$lifecycle->add_admin_notices();
+		$this->assertStringContainsString( 'старое сообщение о возврате', $notices[2] );
+	}
+
 }

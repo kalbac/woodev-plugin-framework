@@ -176,6 +176,11 @@ internals (class-map wiring, build/CI, rig) are left out on purpose. Shipping-sp
 
 ## Internationalisation (topic `i18n`)
 
+- Load shared translations before building notices; defer constructor labels and resolve persisted
+  milestone keys at display time. `load_plugin_textdomain()` alone cannot merge an already-loaded
+  external pack on WP 6.7+. See [services.md](services.md#internationalisation) and
+  `docs-internal/gotchas/an-external-language-pack-needs-an-explicit-bundled-fallback.md` (#1361).
+
 - A plugin with storefront strings and NO `languages/` directory renders every one in English (Yandex shipped so
   until the operator's pre-release pass): ship `{domain}-ru_RU.po/.mo` and a storefront-translation unit test from
   the first storefront string. → [services.md](services.md#internationalisation)

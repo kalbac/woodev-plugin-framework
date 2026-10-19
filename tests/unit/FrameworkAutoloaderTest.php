@@ -25,6 +25,15 @@ final class FrameworkAutoloaderTest extends TestCase {
 		\Woodev_Framework_Autoloader::reset();
 	}
 
+	/** An older resolver still loads the winner's autoloader, which must schedule translations itself. */
+	public function test_winning_autoloader_registers_translations_even_with_an_older_resolver(): void {
+		\Brain\Monkey\Functions\when( 'has_action' )->justReturn( false );
+		\Brain\Monkey\Functions\expect( 'add_action' )->once()->with( 'init', [ \Woodev\Framework\Handlers\Framework_Translations::class, 'load_translations' ], 0 );
+		\Brain\Monkey\Functions\expect( 'add_action' )->once()->with( 'change_locale', [ \Woodev\Framework\Handlers\Framework_Translations::class, 'reload_translations' ], 0 );
+		\Woodev_Framework_Autoloader::register( dirname( __DIR__, 2 ) );
+		$this->assertTrue( \Woodev_Framework_Autoloader::is_registered() );
+	}
+
 	protected function tearDown(): void {
 		\Woodev_Framework_Autoloader::reset();
 
@@ -84,6 +93,22 @@ final class FrameworkAutoloaderTest extends TestCase {
 		\Woodev_Framework_Autoloader::register( $base );
 
 		$this->assertFalse( \Woodev_Framework_Autoloader::is_registered() );
+	}
+
+	public function test_register_does_not_require_wordpress_hooks(): void {
+		$root = dirname( __DIR__, 2 );
+		$code = sprintf(
+			"if ( function_exists( 'has_action' ) || function_exists( 'add_action' ) ) { exit( 2 ); }\n"
+			. "define( 'ABSPATH', __DIR__ . '/' );\n"
+			. "require %s;\n"
+			. "Woodev_Framework_Autoloader::register( %s );\n",
+			var_export( $root . '/woodev/class-framework-autoloader.php', true ),
+			var_export( $root, true )
+		);
+
+		exec( escapeshellarg( PHP_BINARY ) . ' -r ' . escapeshellarg( $code ), $output, $exit_code );
+
+		$this->assertSame( 0, $exit_code, implode( "\n", $output ) );
 	}
 
 	public function test_real_classmap_maps_known_framework_classes_to_readable_files(): void {

@@ -29,7 +29,6 @@ class TranslationHandlerTest extends TestCase {
 	private function make_plugin( string $textdomain ) {
 		$plugin = Mockery::mock( \Woodev_Plugin::class );
 		$plugin->shouldReceive( 'get_textdomain' )->andReturn( $textdomain );
-		$plugin->shouldReceive( 'get_framework_file' )->andReturn( '/srv/wp/plugins/acme/woodev/class-plugin.php' );
 		$plugin->shouldReceive( 'get_plugin_file' )->andReturn( 'acme/acme.php' );
 
 		return $plugin;
@@ -66,11 +65,11 @@ class TranslationHandlerTest extends TestCase {
 	}
 
 	/**
-	 * load_translations() loads both the framework and the plugin textdomains.
+	 * load_translations() loads only the plugin domain; the resolver owns the shared domain.
 	 *
 	 * @return void
 	 */
-	public function test_load_translations_loads_framework_and_plugin_domains(): void {
+	public function test_load_translations_loads_only_plugin_domain(): void {
 		$plugin = $this->make_plugin( 'acme-plugin' );
 
 		Functions\when( 'add_action' )->justReturn( true );
@@ -110,9 +109,9 @@ class TranslationHandlerTest extends TestCase {
 
 		$handler->load_translations();
 
-		// framework domain must be loaded with the fixed string
-		$this->assertArrayHasKey( 'woodev-plugin-framework', $loaded_textdomains );
-		$this->assertArrayHasKey( 'woodev-plugin-framework', $loaded_plugin_textdomains );
+		// The framework loader belongs to the resolver, independent of plugin instances.
+		$this->assertArrayNotHasKey( 'woodev-plugin-framework', $loaded_textdomains );
+		$this->assertArrayNotHasKey( 'woodev-plugin-framework', $loaded_plugin_textdomains );
 
 		// the plugin's own domain (from get_textdomain()) must be loaded too
 		$this->assertArrayHasKey( 'acme-plugin', $loaded_textdomains );
@@ -120,7 +119,7 @@ class TranslationHandlerTest extends TestCase {
 	}
 
 	/**
-	 * When the plugin has no textdomain, only the framework domain is loaded.
+	 * When the plugin has no textdomain, no per-plugin translation loading is needed.
 	 *
 	 * @return void
 	 */
@@ -157,8 +156,8 @@ class TranslationHandlerTest extends TestCase {
 
 		$handler->load_translations();
 
-		$this->assertArrayHasKey( 'woodev-plugin-framework', $loaded_textdomains );
+		$this->assertArrayNotHasKey( 'woodev-plugin-framework', $loaded_textdomains );
 		$this->assertArrayNotHasKey( '', $loaded_textdomains );
-		$this->assertCount( 1, $loaded_textdomains );
+		$this->assertCount( 0, $loaded_textdomains );
 	}
 }

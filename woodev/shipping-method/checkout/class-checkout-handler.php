@@ -3953,7 +3953,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 
 			$label = (string) ( $field['label'] ?? '' );
 
-			return '' !== $label ? $label : (string) $field['id'];
+			if ( '' !== $label ) {
+				return $label;
+			}
+
+			return ! empty( $field['is_pickup_slot'] )
+				? __( 'Pickup point', 'woodev-plugin-framework' )
+				: (string) $field['id'];
 		}
 
 		/**

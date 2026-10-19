@@ -283,7 +283,7 @@ msgstr[2] "%1$s, и %2$s"
 
 #: class-lifecycle.php:357
 msgid "Awesome"
-msgstr "Потресающе"
+msgstr "Потрясающе"
 
 #: class-lifecycle.php:358
 msgid "Fantastic"
@@ -299,11 +299,11 @@ msgstr "Вау"
 
 #: class-lifecycle.php:361
 msgid "Wonderful"
-msgstr "Чудестно"
+msgstr "Чудесно"
 
 #: class-lifecycle.php:362
 msgid "Perfect"
-msgstr "Привосходно"
+msgstr "Превосходно"
 
 #: class-lifecycle.php:363
 msgid "Congratulations"
@@ -313,11 +313,11 @@ msgstr "Поздравляем"
 #: class-lifecycle.php:370
 #, php-format
 msgid "Are you having a great experience with %1$s so far? Please consider %2$sleaving a review%3$s! If things aren't going quite as expected, we're happy to help -- please %4$sreach out to our support team%5$s."
-msgstr "У вас уже есть хороший опыт в использовании плагина %1$s? Если вас не затруднит %2$sоставьте отзыв%3$s! Если что-то пойдет не так, как ожидалось, мы будем рады помочь — %4$sобратитесь в нашу службу поддержки%5$s."
+msgstr "Нравится работать с %1$s? Будем благодарны за %2$sотзыв%3$s! Если что-то идёт не так, %4$sнапишите в поддержку%5$s — поможем."
 
 #. translators: Placeholders: %1$s - plugin name, %2$s - <a> tag, %3$s - </a> tag
 msgid "If things aren't going quite as expected with %1$s, we're happy to help -- please %2$sreach out to our support team%3$s."
-msgstr "Если что-то пойдет не так, как ожидалось, с плагином %1$s, мы будем рады помочь — %2$sобратитесь в нашу службу поддержки%3$s."
+msgstr "Если что-то идёт не так с %1$s, %2$sнапишите в поддержку%3$s — поможем."
 
 #: class-plugin.php:728
 msgid "Указать лицензию"

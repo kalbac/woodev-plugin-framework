@@ -67,12 +67,13 @@ class PresetsTest extends TestCase {
 
 	// -------------------------------------------------------------------------
 	// error_label default — #299/#134: a hidden pickup field legitimately has
-	// no visual label, so the preset seeds a sensible messages-only default.
+	// no visual label, so the message renderer resolves a sensible default lazily.
 	// -------------------------------------------------------------------------
 
-	public function test_pickup_field_sets_a_default_error_label(): void {
+	public function test_pickup_field_does_not_translate_during_construction(): void {
+		\Brain\Monkey\Functions\expect( '__' )->never();
 		$a = Pickup_Field::create( 'carrier_pickup_point', [ 'carrier_pickup' ] )->to_array();
-		$this->assertSame( 'Pickup point', $a['error_label'] );
+		$this->assertArrayNotHasKey( 'error_label', $a );
 	}
 
 	public function test_pickup_field_leaves_the_visual_label_unset(): void {

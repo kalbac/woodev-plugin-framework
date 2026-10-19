@@ -61,9 +61,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Presets\\Pickup_F
 		 * The field's visual `label` is intentionally left unset — its visible
 		 * control is the pickup-point button/modal, not a native input, so a
 		 * checkout-form label would be redundant. A sensible default
-		 * `error_label` («Пункт выдачи») is set instead, so the framework's own
-		 * required-field messages stay human even though `label` is blank
-		 * (#299, #134). Call {@see Field::set_error_label()} again on the
+		 * `error_label` («Пункт выдачи») is resolved lazily at display time, so the
+		 * framework's required-field messages stay human even though `label` is blank
+		 * (#299, #134). Call {@see Field::set_error_label()} on the
 		 * returned builder to override the default text.
 		 *
 		 * `$pickup_method_ids` is now OPTIONAL (issue #709). Omitted (`null`), the
@@ -106,7 +106,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Presets\\Pickup_F
 			return Field::create( $id )
 				->set_type( 'hidden' )
 				->set_required( $required_spec )
-				->set_error_label( __( 'Pickup point', 'woodev-plugin-framework' ) )
 				->mark_pickup_slot();
 		}
 	}

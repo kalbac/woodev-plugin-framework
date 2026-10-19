@@ -343,7 +343,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			add_action(
 				'wc_payment_gateway_' . $this->get_id() . '_payment_processed',
 				function () {
-					$this->get_plugin()->get_lifecycle_handler()->trigger_milestone( 'payment-processed', __( 'you successfully processed a payment!', 'woodev-plugin-framework' ) );
+					$this->get_plugin()->get_lifecycle_handler()->trigger_milestone( 'payment-processed', 'payment-processed' );
 				}
 			);
 
@@ -351,7 +351,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			add_action(
 				'wc_payment_gateway_' . $this->get_id() . '_refund_processed',
 				function () {
-					$this->get_plugin()->get_lifecycle_handler()->trigger_milestone( 'refund-processed', __( 'you successfully processed a refund!', 'woodev-plugin-framework' ) );
+					$this->get_plugin()->get_lifecycle_handler()->trigger_milestone( 'refund-processed', 'refund-processed' );
 				}
 			);
 		}
