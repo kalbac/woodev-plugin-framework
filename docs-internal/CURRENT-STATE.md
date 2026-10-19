@@ -6,10 +6,10 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-19 overnight (s188, autonomous):** the releases are prepared «up to the button» and NOTHING is merged/tagged:
-framework PR #1356 (2.0.3 — merging it publishes the framework release, which the plugin release workflows fetch), CDEK
-edostavka#120 (2.3.0.0) and Yandex yandex#122 (2.0.0) with release workflows that publish when the tag is missing, ZIPs on his
-Desktop; pre-release fixes edostavka#121 (v1 fixed price) and yandex#123 (reverses s16 — his call). Detail: `sessions/s188.md`.
+**As of 2026-10-19 (s188, releases published on his word):** framework `v2.0.3`, CDEK `v2.3.0.0` (edostavka `v2` `cd26eda`, after
+#121 v1 fixed-price migration) and Yandex `v2.0.0` (yandex `main` `c361dec`) are tagged and released on GitHub with the release ZIPs
+(the plugin `release.yml` runs failed on the Actions billing block, so he ran `gh release create` with the Desktop ZIPs — same
+sha256). Open: yandex#123 (reverses s16 — his call), #1357 then #1169, EDD upload + posts 02–04 (his). Detail: `sessions/s188.md`.
 **Before that — as of 2026-10-19 (s187, with the operator):** everything that must precede the plugin releases is PUBLISHED on woodev.ru — blog
 145839 (`/woodev-new-foundation.html`, cover «Woodev 2.0»), docs `plugins-update` (new), `woodev-plugins-basics`, `cdek-plugin-setup`,
 `cdek-migration`, `yandex-delivery-migration`, and 48467 rewritten in place with the 145849 text; BetterDocs FAQ groups «Плагин СДЭК» (58),
