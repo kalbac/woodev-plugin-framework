@@ -1926,7 +1926,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 
 			return array_filter(
 				[
-					'address_1' => trim( $prepared['point']->get_address() ),
+					'address_1' => trim( $prepared['point']->get_address_line() ),
 					'postcode'  => trim( $prepared['point']->get_postal_code() ),
 				],
 				static fn( string $value ): bool => '' !== $value

@@ -2067,7 +2067,7 @@ test( 'a field with no owning §8 store (billing_address_1) is written to the DO
 	await selectAndConfirm( StubProvider.instances[ 0 ], point() );
 
 	// The DOM is authoritative for the unmanaged field...
-	expect( document.getElementById( 'billing_address_1' ).value ).toBe( 'ул. Ленина, 1' );
+	expect( document.getElementById( 'billing_address_1' ).value ).toBe( 'Ленина, 1' );
 	// ...but no store anywhere claims to hold it (store.getValue on the ONE store that
 	// exists must not have been used as a dumping ground for a field it does not manage).
 	expect( store.getValue( 'billing_address_1' ) ).toBeUndefined();
@@ -2089,6 +2089,37 @@ test( 'a field WITH an owning §8 store (billing_city) is written through that s
 	expect( console ).toHaveWarned();
 } );
 
+// #1360 — «Адрес» takes the point's STREET line, not the full address that already
+// carries the postcode, region and city the destination holds in their own fields.
+test( 'address replacement writes the short address, not the full one, into address_1 (#1360)', async () => {
+	makeStore();
+	setConfig( makeConfig( { replaceAddress: { enabled: true, billingOnly: true } } ) );
+	mountAll();
+	clickTrigger();
+
+	await selectAndConfirm(
+		StubProvider.instances[ 0 ],
+		point( { address: '101000, Москва, Москва, ул. Ленина, 1', short_address: 'ул. Ленина, 1' } )
+	);
+
+	expect( document.getElementById( 'billing_address_1' ).value ).toBe( 'ул. Ленина, 1' );
+	expect( document.getElementById( 'billing_city' ).value ).toBe( 'Москва' );
+	expect( document.getElementById( 'billing_postcode' ).value ).toBe( '101000' );
+	expect( console ).toHaveWarned(); // address_1/postcode are unmanaged — acknowledge.
+} );
+
+test( 'address replacement falls back to the full address when the point has no usable short one (#1360)', async () => {
+	makeStore();
+	setConfig( makeConfig( { replaceAddress: { enabled: true, billingOnly: true } } ) );
+	mountAll();
+	clickTrigger();
+
+	await selectAndConfirm( StubProvider.instances[ 0 ], point( { address: 'ул. Ленина, 1', short_address: '   ' } ) );
+
+	expect( document.getElementById( 'billing_address_1' ).value ).toBe( 'ул. Ленина, 1' );
+	expect( console ).toHaveWarned();
+} );
+
 // -------------------------------------------------------------------------
 // Address replacement — target resolution + missing option
 // -------------------------------------------------------------------------
@@ -2102,7 +2133,7 @@ test( 'address replacement writes to billing_* when billingOnly is true, regardl
 
 	await selectAndConfirm( StubProvider.instances[ 0 ], point() );
 
-	expect( document.getElementById( 'billing_address_1' ).value ).toBe( 'ул. Ленина, 1' );
+	expect( document.getElementById( 'billing_address_1' ).value ).toBe( 'Ленина, 1' );
 	expect( document.getElementById( 'billing_city' ).value ).toBe( 'Москва' );
 	expect( document.getElementById( 'billing_postcode' ).value ).toBe( '101000' );
 
@@ -2133,7 +2164,7 @@ test( 'address replacement writes to shipping_* when the "ship to a different ad
 
 	await selectAndConfirm( StubProvider.instances[ 0 ], point() );
 
-	expect( document.getElementById( 'shipping_address_1' ).value ).toBe( 'ул. Ленина, 1' );
+	expect( document.getElementById( 'shipping_address_1' ).value ).toBe( 'Ленина, 1' );
 	expect( document.getElementById( 'shipping_city' ).value ).toBe( 'Москва' );
 	expect( document.getElementById( 'shipping_postcode' ).value ).toBe( '101000' );
 
@@ -2173,6 +2204,7 @@ describe( 'pickup address follows a restored classic shipping method (#1261)', (
 		await selectAndConfirm( StubProvider.instances[ 0 ], point( {
 			id: 'CDEK-1',
 			address: 'Москва, СДЭК, 1',
+			short_address: 'Москва, СДЭК, 1',
 			locality: 'Москва',
 			postal_code: '119180',
 		} ) );
@@ -2205,6 +2237,7 @@ describe( 'pickup address follows a restored classic shipping method (#1261)', (
 		await selectAndConfirm( StubProvider.instances[ 0 ], point( {
 			id: 'CDEK-1',
 			address: 'Москва, СДЭК, 1',
+			short_address: 'Москва, СДЭК, 1',
 			locality: 'Москва',
 			postal_code: '119180',
 		} ) );
@@ -2288,7 +2321,7 @@ test( 'a point with NO locality leaves the customer\'s city untouched and does n
 	expect( store.getValue( 'billing_city' ) ).toBe( 'Суздаль' );
 	expect( document.getElementById( 'billing_postcode' ).value ).toBe( '601293' );
 	// The address the point DOES carry still lands.
-	expect( document.getElementById( 'billing_address_1' ).value ).toBe( 'ул. Ленина, 1' );
+	expect( document.getElementById( 'billing_address_1' ).value ).toBe( 'Ленина, 1' );
 	expect( document.getElementById( FIELD_ID ).value ).toBe( 'PVZ-1' );
 
 	expect( announced.length ).toBe( 1 );
@@ -7414,7 +7447,7 @@ test( 'the address replacement fires woodev_pickup_address_replacing carrying ev
 
 	expect( seen ).toHaveLength( 1 );
 	expect( seen[ 0 ].fields ).toEqual( {
-		billing_address_1: 'ул. Ленина, 1',
+		billing_address_1: 'Ленина, 1',
 		billing_city: 'Москва',
 		billing_postcode: '101000',
 	} );
@@ -7456,7 +7489,7 @@ test( 'a listener that vetoes billing_city on the announcement keeps the custome
 	await selectAndConfirm( StubProvider.instances[ 0 ], point( { locality: 'г.Москва' } ) );
 
 	expect( city.value ).toBe( before );
-	expect( document.getElementById( 'billing_address_1' ).value ).toBe( 'ул. Ленина, 1' );
+	expect( document.getElementById( 'billing_address_1' ).value ).toBe( 'Ленина, 1' );
 	expect( document.getElementById( 'billing_postcode' ).value ).toBe( '101000' );
 	expect( console ).toHaveWarned();
 } );
