@@ -734,6 +734,125 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		}
 
 		/**
+		 * @param string $provider_id Provider id.
+		 * @param string $key         Locality key.
+		 * @param string $name        Settlement display name.
+		 * @return Location_Record
+		 */
+		private function named_record( string $provider_id, string $key, string $name ): Location_Record {
+			return Location_Record::from_array(
+				[
+					'key'         => $provider_id . ':' . $key,
+					'provider_id' => $provider_id,
+					'level'       => Location_Record::LEVEL_SETTLEMENT,
+					'country'     => 'RU',
+					'settlement'  => [ 'name' => $name, 'type' => 'city' ],
+					'label'       => $name,
+				]
+			);
+		}
+
+		/**
+		 * @return array<string,array{0:string}>
+		 */
+		public function corrupted_names(): array {
+			return [
+				'whole name unslashed'  => [ 'u0421u0430u043du043au0442-u041fu0435u0442u0435u0440u0431u0443u0440u0433' ],
+				'two groups'            => [ 'u0421u0430' ],
+				'single cyrillic group' => [ 'u0416' ],
+				'mixed with latin'      => [ 'Mu043eskva' ],
+			];
+		}
+
+		/**
+		 * @return array<string,array{0:string}>
+		 */
+		public function genuine_names(): array {
+			return [
+				'cyrillic'      => [ 'Санкт-Петербург' ],
+				'latin'         => [ 'Moscow' ],
+				'latin with u'  => [ 'Uushu' ],
+				'hyphenated'    => [ 'Ulu-Yul' ],
+				'u then digits' => [ 'Gulu 1234' ],
+			];
+		}
+
+		/**
+		 * #1362: a record whose names are unslashed JSON escapes (framework <= 2.0.3 on non-HPOS
+		 * sites) is never enrolled — no table write at all.
+		 *
+		 * @dataProvider corrupted_names
+		 */
+		public function test_enroll_rejects_a_record_with_unslashed_unicode_escapes( string $name ): void {
+			$wpdb     = new \Popular_Settlement_Store_Fake_Wpdb();
+			$store    = new Popular_Settlement_Store( $wpdb );
+			$provider = new \Popular_Settlement_Resolving_Fixture_Provider();
+
+			$store->enroll( $provider, $this->named_record( $provider->get_id(), '1', $name ) );
+
+			$this->assertSame( [], $wpdb->queries, 'A corrupted record must not reach the table.' );
+			$this->assertSame( [], $wpdb->rows );
+		}
+
+		/**
+		 * @dataProvider genuine_names
+		 */
+		public function test_enroll_accepts_a_genuine_name( string $name ): void {
+			$wpdb     = new \Popular_Settlement_Store_Fake_Wpdb();
+			$store    = new Popular_Settlement_Store( $wpdb );
+			$provider = new \Popular_Settlement_Resolving_Fixture_Provider();
+
+			$store->enroll( $provider, $this->named_record( $provider->get_id(), '1', $name ) );
+
+			$entries = $store->all_for_provider( $provider->get_id() );
+
+			$this->assertCount( 1, $entries );
+			$this->assertSame( $name, $entries[0]->record()->settlement()['name'] );
+		}
+
+		/**
+		 * Self-healing: rows already enrolled from a corrupted record are excluded from the list and
+		 * deleted; healthy rows are untouched.
+		 */
+		public function test_all_for_provider_drops_and_deletes_corrupted_rows(): void {
+			$provider = new \Popular_Settlement_Resolving_Fixture_Provider();
+
+			$wpdb       = new \Popular_Settlement_Store_Fake_Wpdb();
+			$wpdb->rows = [
+				$this->row( $this->named_record( $provider->get_id(), 'bad', 'u0421u0430u043d' ), 5, '2026-08-24 12:00:00', 1 ),
+				$this->row( $this->named_record( $provider->get_id(), 'good', 'Санкт-Петербург' ), 2, '2026-08-24 12:00:00', 2 ),
+			];
+			$store = new Popular_Settlement_Store( $wpdb );
+
+			$entries = $store->all_for_provider( $provider->get_id() );
+
+			$this->assertCount( 1, $entries );
+			$this->assertSame( 'Санкт-Петербург', $entries[0]->record()->settlement()['name'] );
+			$this->assertSame( [ [ 'id' => 1 ] ], array_column( $wpdb->deletes, 'where' ), 'Only the corrupted row is deleted.' );
+			$this->assertCount( 1, $wpdb->rows );
+		}
+
+		/**
+		 * A good order for a settlement whose row was enrolled corrupted replaces that row
+		 * (count restarts at 1) instead of bumping the corrupted one.
+		 */
+		public function test_enroll_replaces_an_existing_corrupted_row(): void {
+			$provider = new \Popular_Settlement_Resolving_Fixture_Provider();
+
+			$wpdb       = new \Popular_Settlement_Store_Fake_Wpdb();
+			$wpdb->rows = [
+				$this->row( $this->named_record( $provider->get_id(), '78', 'u0421u0430u043d' ), 9, '2026-08-24 12:00:00', 1 ),
+			];
+			$store = new Popular_Settlement_Store( $wpdb );
+
+			$store->enroll( $provider, $this->named_record( $provider->get_id(), '78', 'Санкт-Петербург' ) );
+
+			$this->assertCount( 1, $wpdb->rows );
+			$this->assertSame( 'Санкт-Петербург', json_decode( (string) $wpdb->rows[0]['record'], true )['settlement']['name'] );
+			$this->assertSame( 1, (int) $wpdb->rows[0]['order_count'] );
+		}
+
+		/**
 		 * D3: an entry whose provider_id is not the requested (active) provider is
 		 * never returned. This test is now driven through a fake that GENUINELY
 		 * filters by whatever WHERE columns the production query text names (see the
