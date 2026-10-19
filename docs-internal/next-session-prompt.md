@@ -1,24 +1,18 @@
-> Составлено по итогам s187 (19.10.2026, MacBook; с оператором). Формат: `DOCS-SCHEMA.md` → Handoff Format.
+> Составлено по итогам s187 (19.10.2026, MacBook). Формат: `DOCS-SCHEMA.md` → Handoff Format.
 >
-> **Тема — релизы СДЭК 2.3 и Яндекс Доставки 2.0 (#1342, последний этап).** Всё, что идёт до релизов, уже опубликовано на woodev.ru
-> (`sessions/s187.md`); прогревочный пост стоит у оператора на 19.10 10:00 МСК.
-> **Дерево:** framework `main` (этот коммит s187 поверх `bdaf2535`); Yandex `main` `6cb97fa`; CDEK `v2` `4152684`.
-> Правила и решения по текстам — комментарии #1342 (читать ВСЕ), память `merchant-docs-are-written-for-a-wordpress-novice`,
-> `images-are-drawn-by-codex-not-by-me`; стиль постов Telegram — woodev-ru `docs/style/editorial-voice.md` → Playbook E.
+> **Тема — ОВЕРНАЙТ (максимальная автономия, оператора нет до утра; никогда не блокироваться на вопросе): подготовить релизы
+> СДЭК 2.3 и Яндекс Доставки 2.0 «до кнопки».** Всё, что идёт до релизов, уже опубликовано (`sessions/s187.md`); прогрев стоит на 19.10 10:00.
+> **Дерево:** framework `main` (s187); Yandex `main` `6cb97fa`; CDEK `v2` `4152684`. Лимиты на 19.10 01:50: Claude 48 % недели (сброс ср 08:00 —
+> тратить смело, волнами Sonnet), Codex 3 % (сброс вс) — **грузить Codex по максимуму**.
+> Правила текстов — комментарии #1342, память `merchant-docs-are-written-for-a-wordpress-novice`, `images-are-drawn-by-codex-not-by-me`;
+> стиль постов — woodev-ru `docs/style/editorial-voice.md` → Playbook E.
 
 # Ждёт кнопки оператора
 
-- **Релизы СДЭК 2.3 и Яндекса 2.0** — его слово. Порядок (решение s187): статьи → прогрев (стоит на 19.10 10:00) → **релизы** →
-  посты 02–04 **только после того, как обновления реально доступны** на сайте. `framework_version` в загрузчиках → 2.0.2;
-  Actions приватных репо заблокированы до 01.11.2026 → local-ci как доказательство.
-- **Посты 02–04** — черновик пишет ОН, агент дорабатывает (Playbook E, скилл `woodev-telegram-post` в woodev-ru); отдельных обложек
-  для Telegram не делаем. Превью woodev.ru в Telegram не строится (с 2024) — не чиним (s187).
-- **Карточки товаров** (описание, changelog, требования) — правит ОН вручную в EDD (MCP товары не пускает); тексты —
-  `woodev-ru/.superpowers/scratch/s186/cdek-card.md`, `yandex-card.md`. Перед тем как отдать — убрать любые обещания возврата «в течение
-  банковского дня» (решение s187: условия возврата у каждого плагина свои, у большинства возврата нет). FAQ в карточках он уже поставил.
-- **Возможность `woodev-mcp-adapter` править товары EDD** — «на потом» (s187), без его слова не начинать (код сайта, выкладка — его клик).
-- **NAS** — его устройство; 11 кадров мастера СДЭК ждут в `~/Desktop/woodev-publications/wizard-screens-pending-nas/`.
-- **Выкладка на прод** (тема, плагины сайта, роли) — его клик. **Карточки «После v2»** (в т.ч. #1348) — его решение.
+- **Сам релиз** (загрузка архивов в EDD, публикация на сайте) — его слово утром. Порядок (s187): статьи ✓ → прогрев ✓ (10:00) →
+  релизы → посты 02–04 только когда обновления реально доступны.
+- **Карточки товаров** правит ОН в EDD (MCP товары не пускает); FAQ в карточках уже стоит. Возможность `woodev-mcp-adapter` для EDD —
+  «на потом». **NAS**, выкладка на прод, «После v2» (#1348) — его.
 
 **⛔ Не брать без него:** **#711** (после перехода ВСЕХ плагинов на v2) **#170 #589 #310 #946 #957**, **#621** (за **#639**);
 **#639** — гейт на карточке; **#115** (B-10) — по триггеру; **#129** — «реальный перевозчик»; **#110** — только п.7; **#124** — гейт;
@@ -70,35 +64,36 @@ edostavka#115, yandex#113, #1345, #1350 (слит по его слову), ре�
 
 Плюс `edostavka#2` `edostavka#5` `edostavka#6` `edostavka#7` `edostavka#8` `edostavka#9` `edostavka#10` `edostavka#11` `edostavka#12` `edostavka#13` `edostavka#14` `edostavka#15` `edostavka#16` `edostavka#17` `edostavka#18` `edostavka#19` `edostavka#20` `edostavka#21` `edostavka#22` `edostavka#23` `edostavka#24` `edostavka#25` `edostavka#26` `edostavka#27` `edostavka#28` `edostavka#29` `edostavka#30` `edostavka#31` `edostavka#32` `edostavka#33` `edostavka#34` `edostavka#35` `edostavka#36` `edostavka#37` `edostavka#38` `edostavka#39` `edostavka#40` `edostavka#41` `edostavka#42` `edostavka#43` `edostavka#44` `edostavka#45` `edostavka#46` `edostavka#47` `edostavka#48` `edostavka#49` `edostavka#50` `edostavka#51` `edostavka#52` `edostavka#53` `edostavka#54` `edostavka#55` `edostavka#56` `edostavka#57` `edostavka#58` `edostavka#59` `edostavka#60` `edostavka#61` `edostavka#62` `edostavka#63` `edostavka#64` `edostavka#65` `edostavka#66` `edostavka#67` `edostavka#68` `edostavka#69` `edostavka#70` `edostavka#71` `edostavka#72` `edostavka#73` `edostavka#74` `edostavka#75` `edostavka#76` `edostavka#77` `edostavka#78` `edostavka#79` `edostavka#80` `edostavka#81` `edostavka#82`; контракты #2 #3 #4 #5 — `sessions/s115.md`. Плюс `edostavka#110` `edostavka#111` `edostavka#112` `edostavka#113` `edostavka#114` `edostavka#115` `edostavka#116` `edostavka#117` `edostavka#118` `edostavka#119`. Плюс `edostavka#83` `edostavka#84` `edostavka#85` `edostavka#86` `edostavka#87` `edostavka#88` `edostavka#89` `edostavka#90` `edostavka#91` `edostavka#92` `edostavka#93` `edostavka#94` `edostavka#95` `edostavka#96` `edostavka#97` `edostavka#98` `edostavka#99` `edostavka#100` `edostavka#101` `edostavka#102` `edostavka#103` `edostavka#104` `edostavka#105` `edostavka#106` `edostavka#107` `edostavka#108` `edostavka#109`. Плагин Яндекса — `yandex-delivery#1`…`yandex-delivery#117` (статусы — на доске №11; сессия s184: yandex#108 #109 #110 #111 #112 #113; s185: yandex#119 #120; s186: yandex#121). Плюс `woodev-theme#3` `woodev-theme#32`, `yandex-delivery#76`.
 
-# С чего начать
+# С чего начать — план ночи
 
-0. Скиллы `orchestration` + `orca-team` (Orca 1.4.229: агенты открываются чатом или терминалом по настройке, здесь — терминал);
-   `orca account list` (`updatedAt`); сторож `watch-workers.py` на КАЖДЫЙ воркер (`run_in_background`, Homelab — `Homelab:term_…`),
-   доставку разбирать целиком.
-1. **Релиз СДЭК 2.3** (CDEK `v2`) и **Яндекс 2.0** (Yandex `main`): спросить его слово → чеклист релиза плагина из `.ai/skills` /
-   прошлых релизов (framework_version 2.0.2 в загрузчике, версия, changelog, local-ci в видимом терминале + критик другой линии) →
-   сборка архива → загрузка в EDD — его действие или по его слову. **#1169** (приёмка СДЭК) закрыть до релиза.
-2. После того как обновления доступны: посты 02–04 по его черновикам; ссылки — на карточки товаров и `docs/cdek-migration` /
-   `docs/yandex-delivery-migration`.
-3. Тексты карточек — проверить формулировку о возврате (см. выше) и отдать ему.
-4. Хвосты: кадры мастера СДЭК → `migration-wizard` (когда NAS оживёт); в старые статьи (84399 СДЭК 2.2) — `notice--warning` со ссылками
-   на новую версию и переход; черновик 145849 после переноса в 48467 можно убрать (только с его слова).
-5. Код, если ждём его: yandex#88 п.1/п.3 — предложить; #1269 (фреймворк) — обсудить.
+0. **Скиллы `orchestration` + `orca-team`.** `orca account list` (`updatedAt`). **Сторож `watch-workers.py` на КАЖДЫЙ воркер с момента
+   запуска** (`run_in_background`, один процесс на все хэндлы, Homelab — `Homelab:term_…`): ловит обрыв API, после которого воркер
+   встаёт. После выхода сторожа — разобрать ВСЮ доставку, пнуть упавшего, перезапустить сторож.
+1. **Подготовка релизов до кнопки** (СДЭК `v2`, Яндекс `main`): `framework_version` 2.0.2 в загрузчиках, версия 2.3.0 / 2.0.0,
+   changelog, требования в readme, все тесты, local-ci в видимом терминале + критик другой линии. PR **не сливать** — ждут его слова. **#1169** (приёмка СДЭК 105/0/12) — перепрогнать, если зелёно — закрыть с отчётом.
+2. **Авторелиз по смене версии, как у фреймворка** (`.github/workflows/ci.yml` → задачи `version` + `release`: тег, git-cliff
+   notes, ZIP, `softprops/action-gh-release`). В плагинах — такая же `release` (заработает с квотой Actions в ноябре) + сейчас тот же
+   путь локально: замерить local-ci (`--github-token`, секретов нет), иначе скрипт (`git tag` + `gh release create` + ZIP; состав ZIP —
+   как у прошлых архивов, с вендорным `woodev/`). Тег/Release — только после его слова; ночью сухой прогон, ZIP в
+   `~/Desktop/woodev-publications/release/`. Workflow = гейт слияния: предложить, не сливать.
+3. **Аудит готовности силами Codex `gpt-6.1-sol` high** — оба плагина: что сломается у магазина в первый день после обновления
+   (перенос, оформление, выгрузка, лицензия). Подтверждённое — фикс + критик + local-ci, прочее — карточки.
+4. **Тексты карточек для вставки** (по полям EDD: описание, changelog, требования) из `woodev-ru/.superpowers/scratch/s186/cdek-card.md`,
+   `yandex-card.md` — без возврата «в течение банковского дня», без версии WC → `~/Desktop/woodev-publications/cards/`.
+5. **Посты 02–04 переписать** (`~/Desktop/woodev-publications/telegram/02…04.md`) по Playbook E и образцу одобренного 01 (тот же
+   каталог) и релизным постам канала (t.me/s/wooplug). Ссылки — карточки и `docs/cdek-migration` / `docs/yandex-delivery-migration`.
+6. **Старые статьи** (84399 СДЭК 2.2 и подобные) — сверху `notice--warning` со ссылками на новую инструкцию и переход (REST-скриптом с Homelab).
 
-**woodev-ru (ACEMAGIC):** вики `orchestrating-agents-with-orca.md` → «Workers in woodev-ru on Homelab».
+К утру — сводка раздельно: готово / ждёт его слова / отложено / не проверено. Боевые заказы, загрузка в EDD, теги — нет.
 
 
 # Доказано замером
 
-19.10.2026 (s187): все опубликованные адреса (блог, 6 статей, 48467) — 200; текст 145839/145920 на сайте = утверждённый файл (разница
-только в пробелах); FAQ на `/docs`: 16 / 7 (Ozon) / 17 / 11 в утверждённом порядке; `og:` блога — новые заголовок и обложка.
-
+19.10.2026 (s187): все опубликованные адреса — 200; FAQ на `/docs` в утверждённом порядке — `sessions/s187.md`.
 
 # Ловушки
 
-s187 — `sessions/s187.md` → Lessons; вики Homelab дополнена (база64-передача, REST вместо перепечатки, FAQ-блок, Yoast). s186 —
-`a-remote-terminal-read-without-environment-is-terminal-handle-stale`.
-
+s187 — `sessions/s187.md` → Lessons + вики «Workers in woodev-ru on Homelab».
 
 # Состояние на входе
 
