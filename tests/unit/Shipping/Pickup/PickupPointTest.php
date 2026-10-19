@@ -305,6 +305,19 @@ final class PickupPointTest extends TestCase {
 		$this->assertSame( 15000, $point->get_max_weight() );
 	}
 
+	public function test_the_address_line_is_the_short_address_when_the_point_has_one(): void {
+		$point = $this->make_point( [ 'address' => '125009, Москва, ул. Тверская, 1', 'short_address' => 'ул. Тверская, 1' ] );
+		$this->assertSame( 'ул. Тверская, 1', $point->get_address_line() );
+		$this->assertSame( '125009, Москва, ул. Тверская, 1', $point->get_address() );
+	}
+
+	public function test_the_address_line_falls_back_to_the_full_address(): void {
+		$absent = $this->make_point( [ 'address' => 'ул. Тверская, 1' ] );
+		$blank  = $this->make_point( [ 'address' => 'ул. Тверская, 1', 'short_address' => "  \t" ] );
+		$this->assertSame( 'ул. Тверская, 1', $absent->get_address_line() );
+		$this->assertSame( 'ул. Тверская, 1', $blank->get_address_line() );
+	}
+
 	public function test_optional_string_fields_default_to_empty(): void {
 		$point = Pickup_Point::from_array( $this->valid() );
 		$this->assertNotNull( $point );

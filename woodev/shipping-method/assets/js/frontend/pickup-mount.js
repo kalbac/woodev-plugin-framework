@@ -1166,6 +1166,25 @@
 	}
 
 	/**
+	 * The value for the «Адрес» (`address_1`) line when a point replaces the address (#1360):
+	 * `short_address` when it is a non-blank string, else the full `address`. The full address
+	 * carries the postcode, region and settlement the destination holds in their own fields.
+	 * Twin of `Pickup_Point::get_address_line()` and of `pointAddressLine()` in `pickup-session.ts`.
+	 *
+	 * @param {Object} point
+	 * @returns {string}
+	 */
+	function pointAddressLine( point ) {
+		var short = point && 'string' === typeof point.short_address ? point.short_address.trim() : '';
+
+		if ( '' !== short ) {
+			return short;
+		}
+
+		return point && 'string' === typeof point.address ? point.address : '';
+	}
+
+	/**
 	 * Writes a selected point's address/locality/postal code into the resolved
 	 * fieldset — a no-op when `replaceAddress` is disabled. A field a
 	 * `woodev_pickup_address_replacing` listener vetoed (deleted from the announced
@@ -1183,7 +1202,7 @@
 		}
 
 		var target = resolveAddressTarget( config );
-		var address = point && 'string' === typeof point.address ? point.address : '';
+		var address = pointAddressLine( point );
 		var locality = point && 'string' === typeof point.locality ? point.locality : '';
 		var postalCode = point && 'string' === typeof point.postal_code ? point.postal_code : '';
 

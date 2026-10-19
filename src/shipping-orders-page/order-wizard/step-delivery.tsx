@@ -64,7 +64,7 @@ import {
 } from './delivery-state';
 import { FieldErrorList, TextField, errorsFor } from './fields';
 import PickupMap from './pickup-map';
-import { isPickupRuntimeAvailable } from './pickup-session';
+import { isPickupRuntimeAvailable, pointAddressLine } from './pickup-session';
 import type { PickupPoint, PickupWizardConfig } from './pickup-session';
 import type { StepProps } from './step-props';
 import type { CarrierField, FieldErrors, RateGroup, RateOption, RatesResponse, WizardData } from './types';
@@ -315,7 +315,7 @@ export default function StepDelivery( { data, setData, errors }: StepProps ) {
 			return selected;
 		}
 
-		const address = 'string' === typeof point.address ? decodeEntities( point.address ) : '';
+		const address = decodeEntities( pointAddressLine( point ) );
 		const locality = 'string' === typeof point.locality ? decodeEntities( point.locality ) : '';
 		const postcode = 'string' === typeof point.postal_code ? decodeEntities( point.postal_code ) : '';
 		const cityChanged = '' !== locality && normalizedLocality( locality ) !== normalizedLocality( selected.shipping.city );
