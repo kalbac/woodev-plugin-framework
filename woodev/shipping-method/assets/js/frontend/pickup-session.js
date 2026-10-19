@@ -393,6 +393,9 @@
 	 */
 	function errorMessage( config, reason ) {
 		var code = reason && reason.code;
+		if ( 'map_script' === code ) {
+			return text( config, 'mapUnavailable' ) || text( config, 'error' );
+		}
 		var key = code ? ERROR_MESSAGE_KEYS[ code ] : null;
 		var mapped = key ? text( config, key ) : '';
 
@@ -807,6 +810,7 @@
 		 * @type {number}
 		 */
 		var visibleGroupCount = 0;
+		var mapUnavailable = false;
 
 		/** @type {Array} the address suggestions from the LAST `searchResults` event — what
 		 *  `searchAddressPicked( index )` indexes into. */
@@ -1620,6 +1624,12 @@
 			poolGeneration += 1;
 		}
 
+		function logRenderError( error ) {
+			if ( config.debug && window.console && 'function' === typeof window.console.error ) {
+				window.console.error( '[woodev-pickup] Pickup points could not be rendered.', error );
+			}
+		}
+
 		function fetchAndSetPoints( query ) {
 			bumpLoading();
 
@@ -1641,7 +1651,7 @@
 			// already-rejected promise routes it through that SAME reject branch instead — the exact
 			// cleanup (`dropLoading()`, `clearInitialBusy()`, the degrade UI, the `Promise.reject()`
 			// re-throw) an async rejection already gets, not a second copy of it. Every existing
-			// caller of this function chains `.catch( function() {} )` onto its return value, so the
+			// caller of this function chains `.catch( logRenderError )` onto its return value, so the
 			// settled-promise contract they observe is unchanged either way.
 			var pointsPromise;
 
@@ -1756,9 +1766,14 @@
 						restoreSelection( restoreGroup );
 					}
 
-					provider.setPoints( groups, restoreGroup ? { focus: restoreGroup.key } : null );
+					if ( ! mapUnavailable ) {
+						provider.setPoints( groups, restoreGroup ? { focus: restoreGroup.key } : null );
+					}
 
 					if ( panels ) {
+						if ( mapUnavailable ) {
+							panels.setVisible( groups );
+						}
 						// #234: from the DRAWN set, not this listing — a chip that vanishes
 						// because the customer panned past the last point of its type, while
 						// points of that type are still drawn, is the same defect this issue
@@ -2618,7 +2633,7 @@
 				forgetPointDetails();
 
 				if ( lastBbox ) {
-					fetchAndSetPoints( { bounds: lastBbox, types: codes } ).catch( function() {} );
+					fetchAndSetPoints( { bounds: lastBbox, types: codes } ).catch( logRenderError );
 				}
 			} );
 
@@ -2750,7 +2765,7 @@
 						lastAddresses = ( results && results.addresses ) || [];
 
 						panels.previewSearchResults( results );
-					} ).catch( function() {} );
+					} ).catch( logRenderError );
 
 					return;
 				}
@@ -2833,7 +2848,7 @@
 					// `searchAddressPicked` handler above for why the trimmed one re-geocodes
 					// ambiguously.
 					return provider.resolveAddress( addresses[ 0 ].query || addresses[ 0 ].displayName );
-				} ).catch( function() {} ).then( function() {
+				} ).catch( logRenderError ).then( function() {
 					searchSubmitInFlight = false;
 				} );
 			} );
@@ -2926,6 +2941,15 @@
 					message: reason && reason.message,
 				} );
 
+				if ( reason && 'map_script' === reason.code ) {
+					mapUnavailable = true;
+					if ( config.debug && window.console && 'function' === typeof window.console.error ) {
+						window.console.error( '[woodev-pickup] ' + ( reason.message || 'Yandex Maps API key is missing or was not accepted for this domain.' ) );
+					}
+					modal.showNotice( errorMessage( config, reason ) );
+					return;
+				}
+
 				degrade( errorMessage( config, reason ), start );
 			} );
 
@@ -2976,7 +3000,7 @@
 
 				provider.on( 'boundsChange', function( bbox ) {
 					lastBbox = bbox;
-					fetchAndSetPoints( { bounds: bbox, types: currentTypeFilter } ).catch( function() {} );
+					fetchAndSetPoints( { bounds: bbox, types: currentTypeFilter } ).catch( logRenderError );
 				} );
 
 				provider.on( 'nothingNearby', function( info ) {
@@ -3120,8 +3144,8 @@
 				// boundsChange (wired above) — see the file docblock. Either way, whatever settles
 				// first (a fetch resolving/rejecting, or a viewport starting out `bboxTooWide`) is
 				// what clears stage 2 via {@see clearInitialBusy} — see those call sites.
-				if ( ! ownsChrome && 'bulk' === config.strategy ) {
-					fetchAndSetPoints( bulkQuery() ).catch( function() {} );
+				if ( ! ownsChrome && ( 'bulk' === config.strategy || mapUnavailable ) ) {
+					fetchAndSetPoints( bulkQuery() ).catch( logRenderError );
 				}
 			} );
 		}
@@ -3180,11 +3204,11 @@
 			resetPointPool();
 
 			if ( 'bulk' === config.strategy ) {
-				return fetchAndSetPoints( bulkQuery() ).catch( function() {} );
+				return fetchAndSetPoints( bulkQuery() ).catch( logRenderError );
 			}
 
 			if ( lastBbox ) {
-				return fetchAndSetPoints( { bounds: lastBbox, types: currentTypeFilter } ).catch( function() {} );
+				return fetchAndSetPoints( { bounds: lastBbox, types: currentTypeFilter } ).catch( logRenderError );
 			}
 
 			return Promise.resolve();

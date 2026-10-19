@@ -3241,6 +3241,10 @@ msgstr "Загрузка пунктов выдачи…"
 msgid "Could not load pickup points. Please try again."
 msgstr "Не удалось загрузить пункты выдачи. Попробуйте ещё раз."
 
+#: shipping-method/pickup/class-pickup-handler.php
+msgid "The map is unavailable right now. You can still choose a pickup point from the list."
+msgstr "Карта сейчас недоступна. Вы всё ещё можете выбрать пункт выдачи из списка."
+
 #: shipping-method/pickup/class-pickup-handler.php:1223
 msgid "No results found."
 msgstr "Поиск не дал результатов."

@@ -128,6 +128,9 @@ StubProvider.instances = [];
 
 StubProvider.prototype.init = function( container, config, dataSource ) {
 	this.initCalls.push( { container: container, config: config, dataSource: dataSource } );
+	if ( config.simulateMapFailure ) {
+		this.emit( 'error', { code: 'map_script', message: 'map unavailable in this test' } );
+	}
 };
 
 StubProvider.prototype.on = function( event, cb ) {
@@ -604,6 +607,7 @@ function phpI18n( overrides ) {
 			select: 'Выбрать этот пункт',
 			loading: 'Загрузка пунктов выдачи…',
 			error: 'Не удалось загрузить пункты выдачи. Попробуйте ещё раз.',
+			mapUnavailable: 'Карта сейчас недоступна. Вы всё ещё можете выбрать пункт выдачи из списка.',
 			noResults: 'Поиск не дал результатов.',
 			blocked: 'Этот пункт выдачи недоступен для вашего заказа.',
 			trigger: 'Выбрать пункт выдачи',
@@ -3476,6 +3480,55 @@ test( 'fires woodev_pickup_error when the provider reports a fatal error', async
 		code: 'map_script',
 		message: 'ymaps script failed to load',
 	} );
+} );
+
+test( 'a map failure keeps fetched points in the list, skips drawing, and logs technical detail only in debug mode', async () => {
+	let resolvePoints;
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => new Promise( ( resolve ) => { resolvePoints = resolve; } ) );
+	const error = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
+	const session = await openSession( configWith( { debug: true } ) );
+	session.provider.emit( 'error', {
+		code: 'map_script',
+		message: 'Yandex Maps API key is missing or was not accepted for this domain.',
+	} );
+	resolvePoints( [ point( { id: 'still-selectable' } ) ] );
+	await flushAsync();
+
+	expect( session.provider.setPointsCalls ).toHaveLength( 0 );
+	expect( session.panels.lastVisible[ 0 ].points[ 0 ].id ).toBe( 'still-selectable' );
+	expect( document.body.textContent ).toContain( 'Карта сейчас недоступна' );
+	expect( error ).toHaveBeenCalledWith( '[woodev-pickup] Yandex Maps API key is missing or was not accepted for this domain.' );
+	error.mockRestore();
+} );
+
+test( 'map failure does not log technical detail when debug mode is disabled', async () => {
+	const error = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
+	const session = await openSession( configWith( { debug: false } ) );
+	session.provider.emit( 'error', { code: 'map_script', message: 'secret map configuration detail' } );
+
+	expect( error ).not.toHaveBeenCalled();
+	error.mockRestore();
+} );
+
+test( 'a viewport session still fetches the locality list when map initialization fails before bounds are available', async () => {
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( [ point( { id: 'viewport-list-point' } ) ] ) );
+	const session = await openSession( configWith( {
+		strategy: 'viewport',
+		mapConfig: { simulateMapFailure: true },
+	} ) );
+
+	expect( session.provider.setPointsCalls ).toHaveLength( 0 );
+	expect( session.panels.lastVisible[ 0 ].points[ 0 ].id ).toBe( 'viewport-list-point' );
+} );
+
+test( 'a points render failure is logged in debug mode instead of disappearing in a catch', async () => {
+	const error = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
+	const session = await openSession( configWith( { debug: true } ) );
+	session.provider.setPoints = jest.fn( () => { throw new Error( 'render failed' ); } );
+	await session.refresh();
+
+	expect( error ).toHaveBeenCalledWith( '[woodev-pickup] Pickup points could not be rendered.', expect.any( Error ) );
+	error.mockRestore();
 } );
 
 test( 'woodev_pickup_error names the owning plugin (#1081 — the error reporter attributes by it)', async () => {
