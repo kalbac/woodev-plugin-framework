@@ -780,7 +780,7 @@ class WoocommercePluginTest extends TestCase {
 		// framework release and left `woodev-modal.js` edits invisible to a browser that had
 		// already loaded the page (gotcha modal-script-versioned-by-version-constant-not-filemtime).
 		// The test plugin's own version ('1.0.0') intentionally differs from the framework's
-		// \Woodev_Plugin::VERSION ('2.0.4') so a regression to the bare constant is caught here.
+		// \Woodev_Plugin::VERSION ('2.0.5') so a regression to the bare constant is caught here.
 		$this->assertSame( $plugin->get_assets_version(), $registered['woodev-modal']['ver'] );
 		$this->assertNotSame( \Woodev_Plugin::VERSION, $registered['woodev-modal']['ver'] );
 	}
