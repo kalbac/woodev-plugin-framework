@@ -264,6 +264,10 @@ there is historical evidence, not a fresh acceptance run. The live programme sta
 
 ## Known Bugs / Open debt
 
+- **#1361:** framework-domain loading fix prepared on `fix/1361-framework-textdomain` for 2.0.5:
+  shared init-0 loader (including older resolvers), explicit bundled fallback, locale reloads, lazy gateway milestones/pickup labels.
+  Validation and delivery: [s188](sessions/s188.md#framework-translations-1361). Release VERSION unchanged.
+
 - **#1289 / PR #1353:** merged s186 (`7a74a8d8`); [validation](sessions/s186.md).
 - [⚠️] `class-payment-gateway.php` ~3.6k lines — trait-extraction candidate (#117).
 - **s184 open debt:** >1000 variations are silently truncated by the wizard (cap 20×50, rated near-zero, not carded). (#1332, the
