@@ -1,6 +1,16 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.0.4] — 2026-10-19
+### Bug Fixes
+- **release**: Woodev Framework 2.0.4 — HPOS compatibility declaration, order meta slashes (#1364)
+
+
+### Documentation
+- **s188**: Releases published — framework v2.0.3, CDEK v2.3.0.0, Yandex v2.0.0 (#1359)
+
+
+
 ## [2.0.3] — 2026-10-19
 ### Bug Fixes
 - Real bugs and stale docs from #1316 (#1329)
