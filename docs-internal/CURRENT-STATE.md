@@ -6,7 +6,8 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-10-19 (s188, releases published on his word):** framework `v2.0.3`, CDEK `v2.3.0.0` (edostavka `v2` `cd26eda`, after
+**As of 2026-10-20 (s188, hotfix day with the operator):** released and verified — framework `v2.0.5` (after `v2.0.4`), CDEK `v2.3.0.2` (edostavka `v2` `c43f30e`), Yandex `v2.0.2` (yandex `main` `6e8a7a1`); Yandex `v2.0.3` (map fallback key, yandex#127) — see `next-session-prompt.md` for whether it is merged/released. EDD upload is his (2.3.0.2 / 2.0.3 ZIPs on his Desktop). Open from his demo pass: #1367 #1368 #1370 (Следом), #1369 (Потом); also #1357 → #1169. Detail: `sessions/s188.md` → «Hotfix day».
+**Before that — as of 2026-10-19 (s188, releases published on his word):** framework `v2.0.3`, CDEK `v2.3.0.0` (edostavka `v2` `cd26eda`, after
 #121 v1 fixed-price migration) and Yandex `v2.0.0` (yandex `main` `c361dec`) are tagged and released on GitHub with the release ZIPs
 (the plugin `release.yml` runs failed on the Actions billing block, so he ran `gh release create` with the Desktop ZIPs — same
 sha256). Open: yandex#123 (reverses s16 — his call), #1357 then #1169, EDD upload + posts 02–04 (his). Detail: `sessions/s188.md`.
