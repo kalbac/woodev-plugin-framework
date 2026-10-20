@@ -141,6 +141,14 @@ Copy `release.yml` + `scripts/build-release-zip.sh` from either carrier plugin (
   Trigger: `push` to the base branch filtered to the main file + `workflow_dispatch`; skip when the tag or release exists.
 - The release body is the README `### <version>` changelog section (Russian, merchant-facing) — not git-cliff, which
   prints the internal commit log with PR numbers.
+- **Changelog format (operator, 20.10.2026): Keep a Changelog, in Russian.** Each README `### <version> — DD.MM.YYYY`
+  section groups its bullets under `#### Новое`, `#### Улучшено`, `#### Исправлено`, `#### Удалено` (only the groups
+  that have bullets). Every bullet ends with the PR it came from, prefixed by its repo, as plain text — the repos are
+  private, so no links: `(edostavka#127)`, `(yandex#129)`, `(framework#1384)`. A PR number, not a commit hash (a
+  squash hash says nothing). A bullet that sums up many PRs, such as a rewrite, carries none.
+- **The EDD changelog on woodev.ru is the same text with the `(repo#N)` references stripped**, rendered as HTML
+  (`<h4>` per group, `<ul><li>`). Buyers read it in the WordPress «View details» window, where a PR number is noise;
+  the README keeps the references for us. One source text — never edit the two by hand separately.
 - The workflow fetches `woodev/` from the framework tag `v<framework_version>`, so the framework release goes first.
 - Under `set -o pipefail`, `printf … | grep -q` fails at random with SIGPIPE (grep exits early) — grep a file instead.
 
