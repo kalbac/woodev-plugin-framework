@@ -6515,6 +6515,31 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$this->assertSame( '', $handler->get_selected_point_for_method( 'pickup-method' )['point_id'] );
 		}
 
+		/** #1163: a nested calculation hands the enclosing one its own point back, not an empty selection. */
+		public function test_a_nested_request_selected_point_restores_the_enclosing_one(): void {
+			$handler = $this->handler_with_scope( $this->source_returning( null ) );
+			$seen    = [];
+
+			$handler->with_request_selected_point(
+				'pickup-method',
+				'outer-point',
+				function () use ( $handler, &$seen ) {
+					$seen[] = $handler->get_selected_point_for_method( 'pickup-method' )['point_id'];
+					$handler->with_request_selected_point(
+						'pickup-method',
+						'inner-point',
+						function () use ( $handler, &$seen ) {
+							$seen[] = $handler->get_selected_point_for_method( 'pickup-method' )['point_id'];
+						}
+					);
+					$seen[] = $handler->get_selected_point_for_method( 'pickup-method' )['point_id'];
+				}
+			);
+
+			$this->assertSame( [ 'outer-point', 'inner-point', 'outer-point' ], $seen );
+			$this->assertSame( '', $handler->get_selected_point_for_method( 'pickup-method' )['point_id'] );
+		}
+
 		/** #1163: a point of the method's type that passes the checks is acceptable. */
 		public function test_refuse_request_point_accepts_a_point_of_the_methods_type(): void {
 			$handler = $this->handler_with_scope( $this->source_returning( $this->selection_point( 'P1', 'pvz' ) ) );

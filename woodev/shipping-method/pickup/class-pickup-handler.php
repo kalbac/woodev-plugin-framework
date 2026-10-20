@@ -4071,8 +4071,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		/**
 		 * Runs `$calculation` with `$point_id` as the point {@see self::get_selected_point_for_method()}
 		 * answers for `$method_id` — the admin order wizard's way to price a pickup tariff for the point the
-		 * manager chose, with no WooCommerce session (#1163). The override is request-scoped: it is cleared
-		 * when the calculation ends, however it ends, and nothing is written to a session.
+		 * manager chose, with no WooCommerce session (#1163). The override is request-scoped: when the calculation
+		 * ends, however it ends, the enclosing override (or none) is restored, and nothing is written to a session.
 		 *
 		 * @since 2.0.7
 		 *
@@ -4083,6 +4083,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * @return mixed
 		 */
 		public function with_request_selected_point( string $method_id, string $point_id, callable $calculation ) {
+			$previous            = $this->request_point;
 			$this->request_point = [
 				'method_id' => $method_id,
 				'point_id'  => $point_id,
@@ -4091,7 +4092,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			try {
 				return $calculation();
 			} finally {
-				$this->request_point = null;
+				$this->request_point = $previous;
 			}
 		}
 
