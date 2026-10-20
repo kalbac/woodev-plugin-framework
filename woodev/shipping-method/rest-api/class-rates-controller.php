@@ -14,6 +14,7 @@
 namespace Woodev\Framework\Shipping\Rest_Api;
 
 use Woodev\Framework\Shipping\Admin\Orders\{Admin_Rate_Calculator, Orders_Registry};
+use Woodev\Framework\Shipping\Fee_Payments;
 use Woodev\Framework\Shipping\Location\Location_Record;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -65,7 +66,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Rates_Controller'
 		 *
 		 * The body is the wizard's state after the Items step: the lines at their edited prices,
 		 * the destination (typed fields and/or a `Location_Record::to_array()` shape) and the
-		 * chosen customer. Nothing is read from a cart or a session.
+		 * chosen customer, and — once the manager has chosen one — the payment method. Nothing is
+		 * read from a cart or a session.
 		 *
 		 * @since 2.0.2
 		 *
@@ -128,6 +130,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Rates_Controller'
 							'default'           => 0,
 							'validate_callback' => 'rest_validate_request_arg',
 						],
+						// The gateway the order will be paid with. The wizard sends it once the manager has
+						// chosen one (step ⑤), so the quote carries what depends on it; absent = no method yet.
+						'payment_method' => [
+							'type'              => 'string',
+							'default'           => '',
+							'validate_callback' => 'rest_validate_request_arg',
+						],
 					],
 				]
 			);
@@ -173,6 +182,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Rates_Controller'
 				);
 			}
 
+			$payment_method = $this->resolve_payment_method( $request->get_param( 'payment_method' ) );
+
+			if ( $payment_method instanceof \WP_Error ) {
+				return $payment_method;
+			}
+
 			$lines = $this->resolve_lines( (array) $request->get_param( 'items' ) );
 
 			if ( $lines instanceof \WP_Error ) {
@@ -192,7 +207,36 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Rates_Controller'
 				);
 			}
 
-			return rest_ensure_response( $this->calculator->calculate( $lines, $destination, $record, $customer_id ) );
+			return rest_ensure_response( $this->calculator->calculate( $lines, $destination, $record, $customer_id, $payment_method ) );
+		}
+
+		/**
+		 * Validates the optional `payment_method` param against the shop's enabled gateways: it rides
+		 * into the carriers' rate code as the chosen method, so an id the shop does not offer is
+		 * refused rather than priced.
+		 *
+		 * @since 2.0.7
+		 *
+		 * @param mixed $raw the raw param.
+		 * @return string|\WP_Error `''` when none was sent.
+		 */
+		private function resolve_payment_method( $raw ) {
+
+			$method = is_string( $raw ) ? trim( $raw ) : '';
+
+			if ( '' === $method ) {
+				return '';
+			}
+
+			if ( ! array_key_exists( $method, Fee_Payments::gateway_options() ) ) {
+				return new \WP_Error(
+					'woodev_rates_unknown_payment_method',
+					__( 'Такого способа оплаты нет в магазине.', 'woodev-plugin-framework' ),
+					[ 'status' => 422 ]
+				);
+			}
+
+			return $method;
 		}
 
 		/**

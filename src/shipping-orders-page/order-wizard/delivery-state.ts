@@ -74,6 +74,26 @@ export function buildRatesRequest( data: WizardData ): Record<string, unknown> |
 	return request;
 }
 
+/**
+ * The rates request step ⑤ makes once the manager has chosen how the order is paid: the package the
+ * delivery step quoted, plus the payment method, so everything that depends on it (insurance for a
+ * cash-on-delivery order, a fee limited to some payment methods, a carrier's own cash-on-delivery
+ * commission) is in the price. An empty method asks for the quote without one — what ④ got.
+ * `null` while the wizard cannot ask (see {@link buildRatesRequest}).
+ *
+ * @param {WizardData} data the wizard state.
+ * @return {Record<string, unknown>|null} the request body.
+ */
+export function buildRepriceRequest( data: WizardData ): Record<string, unknown> | null {
+	const request = buildRatesRequest( data );
+
+	if ( null === request || '' === data.rest.payment_method ) {
+		return request;
+	}
+
+	return { ...request, payment_method: data.rest.payment_method };
+}
+
 /** Same request ⇒ same key: the step asks again only when this changes. */
 export function ratesRequestKey( request: Record<string, unknown> | null ): string {
 	return null === request ? '' : JSON.stringify( request );
@@ -258,6 +278,42 @@ export function applyRates( data: WizardData, response: RatesResponse ): WizardD
 			carrier_schema: schema,
 		},
 	};
+}
+
+export interface RepriceResult {
+	/** The state to keep: the chosen tariff re-priced, or the very same object when it could not be. */
+	data: WizardData;
+	/** `failed` — the answer no longer offers the chosen tariff; `changed` — the price moved; `same` — it did not. */
+	outcome: 'failed' | 'changed' | 'same';
+	/** The delivery price before and after, for the notice. */
+	from: number;
+	to: number;
+}
+
+/**
+ * Applies the answer of the payment-aware quote to the chosen tariff (card #1163).
+ *
+ * The reconciliation is {@link applyRates}: a price the manager typed over the carrier's own stays
+ * theirs (O8) — then nothing moved, so nothing is announced — and a carrier price follows the
+ * fresh quote. A tariff that the answer no longer offers is NOT dropped here (that is step ④'s
+ * decision about the destination and the package): the old line stays and the outcome is `failed`,
+ * so the order can still be saved at the price the manager has seen.
+ *
+ * @param {WizardData}    data     the wizard state.
+ * @param {RatesResponse} response the fresh answer.
+ * @return {RepriceResult} the new state and what happened to the price.
+ */
+export function applyReprice( data: WizardData, response: RatesResponse ): RepriceResult {
+	const from = Number( data.rest.shipping_line?.cost );
+
+	if ( null === findRate( response, chosenRateId( data.rest ) ) ) {
+		return { data, outcome: 'failed', from, to: from };
+	}
+
+	const next = applyRates( data, response );
+	const to = Number( next.rest.shipping_line?.cost );
+
+	return { data: next, outcome: Math.abs( to - from ) >= 0.005 ? 'changed' : 'same', from, to };
 }
 
 /** The fields the carrier asks for under a tariff (D7); none when it declares none. */

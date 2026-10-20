@@ -9,6 +9,7 @@
 
 namespace Woodev\Framework\Shipping\Admin\Orders;
 
+use Woodev\Framework\Shipping\Fee_Payments;
 use Woodev\Framework\Shipping\Location\Location_Record;
 use Woodev\Framework\Shipping\Pickup\Constraint_Checker;
 use Woodev\Framework\Shipping\Shipping_Method;
@@ -235,12 +236,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Admin_Rate_C
 		 * @since 2.0.2
 		 *
 		 * @param array<int, array{product: \WC_Product, quantity: int, price: float|null}> $lines       Wizard lines; `price` is the per-unit price override, `null` keeps the product's own.
-		 * @param array<string, string>                                                     $destination A {@see self::normalize_destination()} result.
-		 * @param int                                                                       $customer_id Customer user id, 0 for a guest.
+		 * @param array<string, string>                                                     $destination    A {@see self::normalize_destination()} result.
+		 * @param int                                                                       $customer_id    Customer user id, 0 for a guest.
+		 * @param string                                                                    $payment_method Gateway id the order will be paid with, `''` while none is chosen. Added in 2.0.7.
 		 *
 		 * @return array<string, mixed> Package; `contents` is empty when nothing needs shipping.
 		 */
-		public function build_package( array $lines, array $destination, int $customer_id = 0 ): array {
+		public function build_package( array $lines, array $destination, int $customer_id = 0, string $payment_method = '' ): array {
 
 			$contents = [];
 			$cost     = 0.0;
@@ -279,7 +281,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Admin_Rate_C
 				$cost += $line_total;
 			}
 
-			return [
+			$package = [
 				'contents'              => $contents,
 				'contents_cost'         => $cost,
 				'cart_subtotal'         => $cost,
@@ -288,6 +290,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Admin_Rate_C
 				'destination'           => $destination,
 				self::PACKAGE_MARKER    => true,
 			];
+
+			// The payment method rides on the package exactly as the checkout puts it there
+			// ({@see Fee_Payments::add_chosen_payment_to_packages()}), so insurance, the payment-limited
+			// fee and a price a carrier declares payment-dependent all read it from the same key.
+			if ( '' !== $payment_method ) {
+				$package[ Fee_Payments::PACKAGE_KEY ] = $payment_method;
+			}
+
+			return $package;
 		}
 
 		/**
@@ -299,6 +310,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Admin_Rate_C
 		 * @param array<string, string>                                                     $destination A {@see self::normalize_destination()} result.
 		 * @param Location_Record|null                                                      $record      Destination location record, or `null`.
 		 * @param int                                                                       $customer_id Customer user id, 0 for a guest.
+		 * @param string                                                                    $payment_method Gateway id the order will be paid with, `''` while none is chosen. Added in 2.0.7.
 		 *
 		 * @return array{
 		 *     destination: array<string, string>,
@@ -309,9 +321,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Admin_Rate_C
 		 * } Every registered provider appears, with an empty `rates` list when it offers nothing for
 		 *   this package — the wizard can then say so instead of silently dropping a carrier.
 		 */
-		public function calculate( array $lines, array $destination, ?Location_Record $record = null, int $customer_id = 0 ): array {
+		public function calculate( array $lines, array $destination, ?Location_Record $record = null, int $customer_id = 0, string $payment_method = '' ): array {
 
-			$package   = $this->build_package( $lines, $destination, $customer_id );
+			$package   = $this->build_package( $lines, $destination, $customer_id, $payment_method );
 			$providers = $this->registry->get_providers();
 			$zone      = null;
 			$methods   = [];

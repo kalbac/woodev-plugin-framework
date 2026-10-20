@@ -14,6 +14,14 @@
  * the question being asked does: the button waits (and refuses to send) until the answer is in,
  * because the server does not re-run this check on save.
  *
+ * **The price is re-asked with the payment method (#1163).** Step ④ quotes before the payment method
+ * exists, so whatever depends on it — insurance for a cash-on-delivery order, a fee limited to some
+ * payment methods, a carrier's own cash-on-delivery commission — is missing from that price. Once a
+ * method is chosen the step asks the rates route again for the tariff already chosen, with the
+ * method, and moves the delivery price if the answer differs, saying «350 ₽ → 420 ₽» right under the
+ * select. A failed or empty answer keeps the old price and warns; it never blocks the order. A price
+ * the manager typed over the carrier's own is theirs and is left alone (O8).
+ *
  * **The button (StepProps.submit).** It reads «Создать заказ» / «Сохранить». A 422 comes back
  * routed by the shell to the step and field that own the problem; the ones that belong here
  * (`payment_method`, `status`, anything unmapped) are shown on this step.
@@ -33,14 +41,14 @@
  * @package woodev-plugin-framework
  */
 
-import { useEffect, useState } from '@wordpress/element';
+import { useEffect, useRef, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import { Button, Notice } from '@wordpress/components';
 import type { ReactNode } from 'react';
 import { getWizardContext } from '../rest';
-import { checkPickupPoint } from './api';
+import { checkPickupPoint, fetchRates } from './api';
 import type { PointVerdict } from './api';
-import { decodeEntities, pickedPointId } from './delivery-state';
+import { applyReprice, buildRepriceRequest, chosenRateId, decodeEntities, pickedPointId, ratesRequestKey } from './delivery-state';
 import { CheckboxField, FieldErrorList, SelectField, errorsFor } from './fields';
 import type { PaidTotalChange } from './payment-state';
 import { addressLine, exportOffered, orderTotals, paidTotalChange, paymentOptions, personName, shownStatus, statusOptions } from './payment-state';
@@ -90,6 +98,14 @@ function paidWarning( change: PaidTotalChange, symbol: string, approximate: bool
 				was,
 				now
 		  );
+}
+
+/** What the price re-calculation answered, tagged with the question it answers. */
+interface RepriceAnswer {
+	key: string;
+	outcome: 'failed' | 'changed' | 'same';
+	from: number;
+	to: number;
 }
 
 export default function StepPayment( { data, setData, errors, mode, order, baselineTotal, submit, busy, goToStep }: StepProps ) {
@@ -149,6 +165,64 @@ export default function StepPayment( { data, setData, errors, mode, order, basel
 	}, [ checkKey ] );
 
 	const pointRefused = null !== verdict && ! verdict.allowed;
+	// #1163: the price ④ showed knows nothing of the payment method — ask again for the chosen tariff with it.
+	// An empty method asks too once a payment-aware price is on the line, so «not specified» takes it back.
+	const [ repriced, setRepriced ] = useState<RepriceAnswer | null>( null );
+	const pricedWithPayment = useRef( false );
+	const latest = useRef( data );
+	latest.current = data;
+
+	const rateId = chosenRateId( rest );
+	const repriceRequest = '' !== rateId && ( '' !== rest.payment_method || pricedWithPayment.current ) ? buildRepriceRequest( data ) : null;
+	const repriceKey = null === repriceRequest ? null : JSON.stringify( [ ratesRequestKey( repriceRequest ), rateId ] );
+	const repriceAnswered = null !== repriceKey && repriced?.key === repriceKey;
+	// Derived, like `checking`: the render that changes the question already waits for its answer, so the
+	// button is never live on a price the answer is about to move.
+	const repricing = null !== repriceKey && ! repriceAnswered;
+	// The answer on screen: the current question's, or — once «not specified» has taken the payment-aware price back and nothing more is asked — the last one.
+	const repriceShown = repriced && ( null === repriceKey || repriced.key === repriceKey ) ? repriced : null;
+
+	useEffect( () => {
+		if ( null === repriceKey || null === repriceRequest ) {
+			return undefined;
+		}
+
+		let cancelled = false;
+		const withPayment = '' !== rest.payment_method;
+
+		const answer = ( outcome: RepriceAnswer[ 'outcome' ], from: number, to: number ) => {
+			if ( ! cancelled ) {
+				pricedWithPayment.current = withPayment;
+				setRepriced( { key: repriceKey, outcome, from, to } );
+			}
+		};
+
+		fetchRates( repriceRequest )
+			.then( ( response ) => {
+				if ( cancelled ) {
+					return;
+				}
+
+				const result = applyReprice( latest.current, response );
+
+				if ( result.data !== latest.current ) {
+					setData( ( d ) => applyReprice( d, response ).data );
+				}
+
+				answer( result.outcome, result.from, result.to );
+			} )
+			.catch( () => {
+				// No answer: the line stays as the manager has seen it, and the warning says so.
+				answer( 'failed', Number( latest.current.rest.shipping_line?.cost ), Number( latest.current.rest.shipping_line?.cost ) );
+			} );
+
+		return () => {
+			cancelled = true;
+		};
+		// `repriceKey` is the package, the destination, the customer, the tariff and the method; the object identities are not the question.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [ repriceKey ] );
+
 	const line = rest.shipping_line;
 	const strayErrors = Object.entries( errorsOfStep( errors, 'payment' ) )
 		.filter( ( [ field ] ) => ! OWN_FIELDS.includes( field ) )
@@ -254,6 +328,27 @@ export default function StepPayment( { data, setData, errors, mode, order, basel
 				{ __( 'Деньги не списываются. От статуса зависит, какие письма получит покупатель и спишутся ли остатки — это делает сам WooCommerce.', 'woodev-plugin-framework' ) }
 			</p>
 
+			{ repriceShown && 'changed' === repriceShown.outcome && (
+				<Notice status="info" isDismissible={ false } className="woodev-order-wizard__reprice-notice">
+					{ sprintf(
+						/* translators: 1: the delivery price before, 2: the delivery price now. */
+						__( 'Стоимость доставки пересчитана с учётом способа оплаты: %1$s → %2$s', 'woodev-plugin-framework' ),
+						formatMoney( repriceShown.from, symbol ),
+						formatMoney( repriceShown.to, symbol )
+					) }
+				</Notice>
+			) }
+
+			{ repriceShown && 'failed' === repriceShown.outcome && (
+				<Notice status="warning" isDismissible={ false } className="woodev-order-wizard__reprice-notice">
+					{ sprintf(
+						/* translators: %s: the delivery price that stays in the order. */
+						__( 'Не удалось пересчитать доставку с учётом способа оплаты — осталась прежняя стоимость %s. Заказ можно сохранить; при необходимости поправьте стоимость на шаге «Доставка».', 'woodev-plugin-framework' ),
+						formatMoney( totals.delivery, symbol )
+					) }
+				</Notice>
+			) }
+
 			{ ! editing && (
 				<CheckboxField
 					label={ __( 'Сразу выгрузить перевозчику', 'woodev-plugin-framework' ) }
@@ -311,9 +406,9 @@ export default function StepPayment( { data, setData, errors, mode, order, basel
 				<Button
 					variant="primary"
 					__next40pxDefaultSize
-					isBusy={ busy || checking }
-					disabled={ busy || checking || pointRefused }
-					onClick={ () => ( checking ? undefined : void submit() ) }
+					isBusy={ busy || checking || repricing }
+					disabled={ busy || checking || repricing || pointRefused }
+					onClick={ () => ( checking || repricing ? undefined : void submit() ) }
 				>
 					{ editing
 						? __( 'Сохранить', 'woodev-plugin-framework' )

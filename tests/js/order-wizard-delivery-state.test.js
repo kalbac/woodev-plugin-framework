@@ -8,7 +8,9 @@
 
 import {
 	applyRates,
+	applyReprice,
 	buildRatesRequest,
+	buildRepriceRequest,
 	chooseRate,
 	chosenRateId,
 	decodeEntities,
@@ -247,6 +249,56 @@ describe( 'applyRates — a fresh answer against a tariff already chosen', () =>
 
 		expect( data.rest.pickup_point ).toBeNull();
 		expect( data.rest.rate_is_pickup ).toBe( false );
+	} );
+} );
+
+describe( 'buildRepriceRequest and applyReprice — the quote with the payment method (#1163)', () => {
+	const chosenAt = ( cost, patch = {} ) => {
+		const data = chooseRate( filled(), { ...COURIER, cost } );
+
+		return { ...data, rest: { ...data.rest, ...patch } };
+	};
+
+	test( 'is the rates request plus the payment method; none chosen asks the plain quote', () => {
+		const data = filled();
+
+		expect( buildRepriceRequest( data ) ).toEqual( buildRatesRequest( data ) );
+		expect( buildRepriceRequest( { ...data, rest: { ...data.rest, payment_method: 'cod' } } ) ).toEqual( { ...buildRatesRequest( data ), payment_method: 'cod' } );
+		expect( buildRepriceRequest( { ...data, items: [], rest: { ...data.rest, payment_method: 'cod' } } ) ).toBeNull();
+	} );
+
+	test( 'a moved carrier price follows the answer and is reported old → new', () => {
+		const result = applyReprice( chosenAt( 350 ), answer( { ...COURIER, cost: 420 } ) );
+
+		expect( result.outcome ).toBe( 'changed' );
+		expect( [ result.from, result.to ] ).toEqual( [ 350, 420 ] );
+		expect( result.data.rest.shipping_line.cost ).toBe( '420' );
+		expect( result.data.rest.rate_cost ).toBe( '420' );
+	} );
+
+	test( 'the same price is `same` and keeps the very same state', () => {
+		const data = chosenAt( 350 );
+		const result = applyReprice( data, answer( { ...COURIER, cost: 350 } ) );
+
+		expect( result.outcome ).toBe( 'same' );
+		expect( result.data ).toBe( data );
+	} );
+
+	test( 'a price the manager typed stays theirs: nothing moved, nothing announced', () => {
+		const typed = setDeliveryCost( chosenAt( 350 ), '300' );
+		const result = applyReprice( typed, answer( { ...COURIER, cost: 420 } ) );
+
+		expect( result.outcome ).toBe( 'same' );
+		expect( result.data.rest.shipping_line.cost ).toBe( '300' );
+	} );
+
+	test( 'a tariff the answer no longer offers is a failure that leaves the line alone', () => {
+		const data = chosenAt( 350 );
+		const result = applyReprice( data, answer( PVZ ) );
+
+		expect( result.outcome ).toBe( 'failed' );
+		expect( result.data ).toBe( data );
+		expect( result.data.rest.shipping_line.cost ).toBe( '350' );
 	} );
 } );
 

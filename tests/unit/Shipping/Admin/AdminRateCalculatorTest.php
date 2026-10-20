@@ -124,6 +124,7 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 	use Woodev\Framework\Shipping\Admin\Orders\Admin_Rate_Calculator;
 	use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
 	use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
+	use Woodev\Framework\Shipping\Fee_Payments;
 	use Woodev\Framework\Shipping\Location\Location_Record;
 	use Woodev\Framework\Shipping\Shipping_Method;
 	use Woodev\Tests\Unit\TestCase;
@@ -131,6 +132,7 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-locality-key.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-record.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/class-shipping-method.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/class-fee-payments.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/admin/orders/class-orders-provider.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-constraint-checker.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/admin/orders/class-admin-rate-calculator.php';
@@ -482,6 +484,66 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$package = $this->calculator()->build_package( [], [] );
 
 			$this->assertTrue( $package[ Admin_Rate_Calculator::PACKAGE_MARKER ] );
+		}
+
+		/**
+		 * #1163: the chosen payment method rides on the package under the key the checkout uses, so a
+		 * carrier reads it from the one place ({@see Fee_Payments::PACKAGE_KEY}); none chosen leaves it out.
+		 *
+		 * @covers ::build_package
+		 *
+		 * @return void
+		 */
+		public function test_the_payment_method_travels_on_the_package_under_the_checkout_key(): void {
+			$lines = [
+				[
+					'product'  => $this->product(),
+					'quantity' => 1,
+					'price'    => null,
+				],
+			];
+
+			$with = $this->calculator()->build_package( $lines, [], 0, 'cod' );
+			$none = $this->calculator()->build_package( $lines, [] );
+
+			$this->assertSame( 'chosen_payment_method', Fee_Payments::PACKAGE_KEY );
+			$this->assertSame( 'cod', $with[ Fee_Payments::PACKAGE_KEY ] );
+			$this->assertArrayNotHasKey( Fee_Payments::PACKAGE_KEY, $none );
+		}
+
+		/**
+		 * @covers ::calculate
+		 *
+		 * @return void
+		 */
+		public function test_calculate_quotes_every_method_with_the_payment_method_on_the_package(): void {
+			$seen   = [];
+			$method = Mockery::mock( Shipping_Method::class );
+
+			$method->id = 'test_shipping';
+			$method->shouldReceive( 'is_pickup_shipping' )->andReturn( false );
+			$method->shouldReceive( 'get_admin_rates_for_package' )->andReturnUsing(
+				function ( array $package ) use ( &$seen ) {
+					$seen[] = $package[ Fee_Payments::PACKAGE_KEY ] ?? null;
+
+					return [];
+				}
+			);
+
+			$calculator               = $this->calculator( $this->provider( 'test', [ 'test_shipping' ] ) );
+			$calculator->zone_methods = [ $method ];
+			$lines                    = [
+				[
+					'product'  => $this->product(),
+					'quantity' => 1,
+					'price'    => null,
+				],
+			];
+
+			$calculator->calculate( $lines, [ 'country' => 'RU' ], null, 0, 'cod' );
+			$calculator->calculate( $lines, [ 'country' => 'RU' ] );
+
+			$this->assertSame( [ 'cod', null ], $seen, 'a quote without a payment method carries no key' );
 		}
 
 		/**
