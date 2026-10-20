@@ -1,6 +1,18 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.0.7] — 2026-10-20
+### Bug Fixes
+- **shipping**: The order wizard re-prices the delivery after the payment step (#1384)
+
+
+### Documentation
+- **shipping**: Insurance migration notes from #1163 (#1382)
+
+- **s189**: Overnight — framework 2.0.6, CDEK 2.3.0.3, Yandex 2.0.4 released; handoff (#1383)
+
+
+
 ## [2.0.6] — 2026-10-20
 ### Bug Fixes
 - **api**: Decode JSON responses lazily (#1375)
