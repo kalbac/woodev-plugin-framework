@@ -637,6 +637,18 @@ The merchant site woodev.ru is written and published from the `woodev-ru` projec
 - **Yoast social fields set once override later changes** — after a new title/cover rewrite `og_title`/`og_description` via
   `woodev-seo/update-post-seo` and re-check the live `og:` tags.
 
+## Follow-up turns on a Homelab worker (s190)
+
+Once a worker's dispatch has settled, any follow-up instruction sent with `terminal send` is answered IN ITS TERMINAL. A second
+`worker_done` is rejected («No recipient or active Dispatch Run»), so the watchdog never fires.
+
+- Wait by diffing the terminal's last `… for Nm Ns · done HH:MM` marker against the value read before sending. A grep for an anchor
+  line fails silently once that line scrolls out of the tail, and in s190 it missed two finished workers for about 30 minutes.
+- `terminal send` corrupted a payload of about 14 KB of base64. For anything over roughly 8 KB, write a file into the worker's
+  worktree in 1500-char chunks with `terminal create --environment Homelab --worktree name:<wt> --command "printf '%s' '<chunk>' >> f"`,
+  then compare sha256 before the worker uses it.
+- Reading a Homelab report: `terminal create --command "cat <file>"` followed by `terminal read --limit 400`.
+
 ## Related
 
 - [two-agents-one-file-is-the-orchestrator-s-bug](../gotchas/two-agents-one-file-is-the-orchestrator-s-bug.md) — the loss this placement rule exists to prevent
