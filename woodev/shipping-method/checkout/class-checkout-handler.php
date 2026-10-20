@@ -1451,6 +1451,28 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			return $out;
 		}
 
+		/**
+		 * Keeps the stored customer locality consistent with the address the classic cart's
+		 * shipping calculator just saved (issues #331, #1368).
+		 *
+		 * WooCommerce's calculator writes the SHIPPING address, and copies it to billing only for
+		 * a customer with no billing first name. When the classic checkout ships to billing by
+		 * default (`billing_only`, or `billing` with the «ship to a different address» checkbox
+		 * unchecked — {@see self::classic_checkout_default_target()}) it reads billing, so a
+		 * customer with an earlier order would land there on the OLD city while the record they
+		 * just picked names the new one, and {@see self::guard_custom_settlement()} would refuse
+		 * the order. So in that case the calculator's address is written to billing, the address
+		 * that IS the delivery destination, and the stored record is judged against THAT
+		 * address. The judgement itself is untouched: a record that does not name the delivery
+		 * city is still forgotten. A store whose checkbox is checked by default (`shipping`)
+		 * keeps today's behaviour.
+		 *
+		 * @since 2.0.6
+		 *
+		 * @internal
+		 *
+		 * @return void
+		 */
 		public function handle_calculated_shipping(): void {
 			$customer = $this->wc_customer();
 
@@ -1458,7 +1480,84 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 				return;
 			}
 
-			$this->forget_record_unless_it_names_city( (string) $customer->get_shipping_city() );
+			$type = 'shipping';
+
+			if ( 'billing' === $this->classic_checkout_default_target() && $this->copy_calculated_address_to_billing( $customer ) ) {
+				$type = 'billing';
+			}
+
+			$getter = 'get_' . $type . '_city';
+
+			$this->forget_record_unless_it_names_city( (string) $customer->$getter() );
+		}
+
+		/**
+		 * Whether the store ships to the billing address only (`billing_only`) — the checkout then
+		 * has no shipping column and billing IS the delivery destination.
+		 *
+		 * @since 2.0.6
+		 *
+		 * @return bool
+		 */
+		private static function ships_to_billing_only(): bool {
+			return function_exists( 'wc_ship_to_billing_address_only' ) && wc_ship_to_billing_address_only();
+		}
+
+		/**
+		 * The address the CLASSIC checkout ships to before the customer touches the «ship to a
+		 * different address» checkbox — `billing` or `shipping` (issue #1368).
+		 *
+		 * Computed the way WooCommerce computes the checkbox default in
+		 * `templates/checkout/form-shipping.php` (the destination option through the
+		 * `woocommerce_ship_to_different_address_checked` filter) and resolved through
+		 * {@see \Woodev\Framework\Shipping\Pickup\Address_Target::resolve()}: `billing_only` and
+		 * `billing` (checkbox unchecked) land on billing, `shipping` (checkbox checked) keeps the
+		 * shipping address the calculator already wrote.
+		 *
+		 * @since 2.0.6
+		 *
+		 * @return string `billing` or `shipping`.
+		 */
+		private function classic_checkout_default_target(): string {
+			$checked = apply_filters(
+				'woocommerce_ship_to_different_address_checked',
+				'shipping' === get_option( 'woocommerce_ship_to_destination' ) ? 1 : 0
+			);
+
+			return \Woodev\Framework\Shipping\Pickup\Address_Target::resolve( (bool) $checked );
+		}
+
+		/**
+		 * Writes the country, region, city and postcode the cart calculator saved to the
+		 * customer's SHIPPING address onto the BILLING address too (issue #1368). The postcode is
+		 * copied even when blank — WooCommerce's own `set_*_location()` does the same, and another
+		 * city's postcode must never stay behind a new city. A calculator submitted without a
+		 * country has already reset both addresses to the shop base — nothing to copy then.
+		 *
+		 * @since 2.0.6
+		 *
+		 * @param object $customer The `WC_Customer` the calculator just saved.
+		 *
+		 * @return bool Whether billing now carries the calculator's address.
+		 */
+		private function copy_calculated_address_to_billing( object $customer ): bool {
+			if ( ! is_callable( [ $customer, 'get_shipping_country' ] ) || ! is_callable( [ $customer, 'set_billing_city' ] ) || ! is_callable( [ $customer, 'save' ] ) ) {
+				return false;
+			}
+
+			$country = (string) $customer->get_shipping_country();
+
+			if ( '' === $country ) {
+				return false;
+			}
+
+			foreach ( [ 'country', 'state', 'postcode', 'city' ] as $part ) {
+				$customer->{ 'set_billing_' . $part }( (string) $customer->{ 'get_shipping_' . $part }() );
+			}
+
+			$customer->save();
+
+			return true;
 		}
 
 		/**
@@ -1511,8 +1610,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 
 			$billing      = (string) $customer->get_billing_city();
 			$shipping     = (string) $customer->get_shipping_city();
-			$billing_only = function_exists( 'wc_ship_to_billing_address_only' ) && wc_ship_to_billing_address_only();
-			$use_billing  = $billing_only || '' === self::normalize_for_settlement_match( $shipping );
+			$use_billing  = self::ships_to_billing_only() || '' === self::normalize_for_settlement_match( $shipping );
 			$city         = $use_billing ? $billing : $shipping;
 			$country      = $use_billing ? $this->saved_country( $customer, 'billing' ) : $this->saved_country( $customer, 'shipping' );
 
