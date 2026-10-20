@@ -6449,6 +6449,150 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		}
 
 		/**
+		 * #1163: the admin wizard has no session, so a calculation told which point to price for gets it
+		 * from the accessor carriers already read — and only for that method, only for that call.
+		 */
+		public function test_a_request_selected_point_is_what_the_accessor_answers_inside_the_calculation_only(): void {
+			$handler = $this->handler_with_scope( $this->source_returning( null ) );
+			$seen    = [];
+
+			$result = $handler->with_request_selected_point(
+				'pickup-method',
+				'P-CHOSEN',
+				function () use ( $handler, &$seen ) {
+					$seen['pickup']  = $handler->get_selected_point_for_method( 'pickup-method' );
+					$seen['courier'] = $handler->get_selected_point_for_method( 'courier-method' );
+
+					return 'calculated';
+				}
+			);
+
+			$this->assertSame( 'calculated', $result );
+			$this->assertSame( [ 'locality' => 'msk', 'type' => 'pvz', 'point_id' => 'P-CHOSEN' ], $seen['pickup'] );
+			$this->assertNull( $seen['courier'], 'a method with no pickup type is untouched' );
+			$this->assertSame( '', $handler->get_selected_point_for_method( 'pickup-method' )['point_id'], 'cleared when the calculation ends' );
+		}
+
+		/**
+		 * #1163, the card's own numbers: a carrier that quotes the way Yandex does — the selected point when there
+		 * is one, else the first point — prices the chosen one (516) instead of the first (310).
+		 */
+		public function test_a_carrier_reading_the_selected_point_quotes_the_chosen_one_inside_the_calculation(): void {
+			$handler = $this->handler_with_scope( $this->source_returning( null ) );
+			$prices  = [
+				'market-cod'    => 310,
+				'market-second' => 516,
+			];
+			$quote   = static function () use ( $handler, $prices ): int {
+				$selected = $handler->get_selected_point_for_method( 'pickup-method' );
+				$point    = is_array( $selected ) && '' !== $selected['point_id'] ? $selected['point_id'] : 'market-cod';
+
+				return $prices[ $point ];
+			};
+
+			$this->assertSame( 310, $quote(), 'admin, no session, nothing chosen: the first point' );
+			$this->assertSame( 516, $handler->with_request_selected_point( 'pickup-method', 'market-second', $quote ) );
+			$this->assertSame( 310, $quote(), 'and back once the calculation is over' );
+		}
+
+		/** #1163: a calculation that throws must not leave the override behind. */
+		public function test_a_request_selected_point_is_cleared_when_the_calculation_throws(): void {
+			$handler = $this->handler_with_scope( $this->source_returning( null ) );
+
+			try {
+				$handler->with_request_selected_point(
+					'pickup-method',
+					'P-CHOSEN',
+					static function () {
+						throw new \RuntimeException( 'carrier down' );
+					}
+				);
+				$this->fail( 'the exception must propagate' );
+			} catch ( \RuntimeException $e ) {
+				$this->assertSame( 'carrier down', $e->getMessage() );
+			}
+
+			$this->assertSame( '', $handler->get_selected_point_for_method( 'pickup-method' )['point_id'] );
+		}
+
+		/** #1163: a nested calculation hands the enclosing one its own point back, not an empty selection. */
+		public function test_a_nested_request_selected_point_restores_the_enclosing_one(): void {
+			$handler = $this->handler_with_scope( $this->source_returning( null ) );
+			$seen    = [];
+
+			$handler->with_request_selected_point(
+				'pickup-method',
+				'outer-point',
+				function () use ( $handler, &$seen ) {
+					$seen[] = $handler->get_selected_point_for_method( 'pickup-method' )['point_id'];
+					$handler->with_request_selected_point(
+						'pickup-method',
+						'inner-point',
+						function () use ( $handler, &$seen ) {
+							$seen[] = $handler->get_selected_point_for_method( 'pickup-method' )['point_id'];
+						}
+					);
+					$seen[] = $handler->get_selected_point_for_method( 'pickup-method' )['point_id'];
+				}
+			);
+
+			$this->assertSame( [ 'outer-point', 'inner-point', 'outer-point' ], $seen );
+			$this->assertSame( '', $handler->get_selected_point_for_method( 'pickup-method' )['point_id'] );
+		}
+
+		/** #1163: a point of the method's type that passes the checks is acceptable. */
+		public function test_refuse_request_point_accepts_a_point_of_the_methods_type(): void {
+			$handler = $this->handler_with_scope( $this->source_returning( $this->selection_point( 'P1', 'pvz' ) ) );
+
+			$this->assertNull( $handler->refuse_request_point( 'pickup-method', 'P1', 'cod', 1000 ) );
+		}
+
+		/** #1163: every way the point can fail the wizard's check is a reason, never an exception. */
+		public function test_refuse_request_point_gives_a_reason_for_a_point_that_does_not_fit(): void {
+			$wrong_type = $this->handler_with_scope( $this->source_returning( $this->selection_point( 'P1', 'postamat' ) ) );
+			$unknown    = $this->handler_with_scope( $this->source_returning( null ) );
+			$down       = $this->handler_with_scope( $this->source_throwing( new \RuntimeException( 'outage' ) ) );
+			$no_cod     = $this->handler_with_scope(
+				$this->source_returning(
+					Pickup_Point::from_array(
+						[
+							'id'          => 'P1',
+							'name'        => 'Точка',
+							'lat'         => 55.75,
+							'lng'         => 37.61,
+							'address'     => 'Тверская, 1',
+							'type'        => [ 'code' => 'pvz', 'label' => 'ПВЗ' ],
+							'accepts_cod' => false,
+						]
+					)
+				)
+			);
+
+			$this->assertIsString( $wrong_type->refuse_request_point( 'pickup-method', 'P1', '', 1000 ), 'a point of another type' );
+			$this->assertIsString( $unknown->refuse_request_point( 'pickup-method', 'P1', '', 1000 ), 'a point the carrier does not know' );
+			$this->assertIsString( $down->refuse_request_point( 'pickup-method', 'P1', '', 1000 ), 'a carrier outage' );
+			$this->assertIsString( $no_cod->refuse_request_point( 'pickup-method', 'P1', 'cod', 1000 ), 'cash on delivery the point does not take' );
+			$this->assertNull( $no_cod->refuse_request_point( 'pickup-method', 'P1', 'bacs', 1000 ), 'the same point, paid online' );
+			$this->assertIsString( $no_cod->refuse_request_point( 'courier-method', 'P1', '', 1000 ), 'a method with no pickup type' );
+		}
+
+		/**
+		 * @param Pickup_Handler_Test_Source $source the point source.
+		 * @return Pickup_Handler_With_Selection_Probe a handler whose scope says `pickup-method` carries `pvz` points in `msk`.
+		 */
+		private function handler_with_scope( Pickup_Handler_Test_Source $source ): Pickup_Handler_With_Selection_Probe {
+			$scope     = new Pickup_Handler_Selection_Test_Scope(
+				'woodev_test_selection',
+				static fn( Pickup_Point $point ) => 'msk',
+				static fn() => 'msk',
+				static fn( string $method_id ) => 'pickup-method' === $method_id ? 'pvz' : null
+			);
+			$selection = new Pickup_Handler_Selection_Probe( $scope, new Pickup_Handler_Fake_Session() );
+
+			return new Pickup_Handler_With_Selection_Probe( 'p', 'pickup_point', $source, $this->yandex_provider(), $this->default_location(), $scope, $selection );
+		}
+
+		/**
 		 * The load-bearing bridge test: {@see Pickup_Handler_Bridge_Probe} starts with
 		 * NO usable session at all (`wc_cart()` forced absent) — it becomes usable
 		 * ONLY once `remember_selection()` calls `load_wc_cart()`, exactly the way a

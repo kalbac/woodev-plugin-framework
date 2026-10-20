@@ -2215,6 +2215,14 @@ msgstr ""
 msgid "Покупатель не найден."
 msgstr ""
 
+#: shipping-method/admin/orders/class-admin-rate-calculator.php:427
+msgid "У этого способа доставки нет пунктов выдачи."
+msgstr ""
+
+#: shipping-method/rest-api/class-rates-controller.php:269
+msgid "Укажите способ доставки, к которому относится пункт выдачи."
+msgstr ""
+
 #: shipping-method/admin/orders/class-order-payload-validator.php:232
 #: assets/build/shipping-orders-page/index.js:2
 msgid "Чтобы создать аккаунт, укажите email покупателя."
@@ -6270,3 +6278,13 @@ msgstr "У этого действия нет такого поля."
 #: shipping-method/rest-api/class-orders-controller.php
 msgid "Не удалось получить варианты у перевозчика. Попробуйте ещё раз."
 msgstr "Не удалось получить варианты у перевозчика. Попробуйте ещё раз."
+
+#: assets/build/shipping-orders-page/index.js
+#, js-format
+msgid "Стоимость доставки пересчитана с учётом способа оплаты: %1$s → %2$s"
+msgstr "Стоимость доставки пересчитана с учётом способа оплаты: %1$s → %2$s"
+
+#: assets/build/shipping-orders-page/index.js
+#, js-format
+msgid "Не удалось пересчитать доставку: сохранена цена %s. Заказ можно сохранить."
+msgstr "Не удалось пересчитать доставку: сохранена цена %s. Заказ можно сохранить."

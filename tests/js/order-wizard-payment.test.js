@@ -90,6 +90,8 @@ const mountStep = ( props = {} ) => {
 
 beforeEach( () => {
 	apiFetch.mockReset();
+	// Choosing a payment method re-asks the rates route (#1163); a test that does not care gets «no answer», which the step survives.
+	apiFetch.mockResolvedValue( undefined );
 	window.woodevShippingOrders = { restRoot: ORDERS_ROOT, nonce: 'nonce-1', providers: [], wizard: WIZARD };
 } );
 
@@ -180,8 +182,11 @@ describe( 'summary and totals', () => {
 	} );
 } );
 
+/** The step has heard the answer to the price re-calculation (#1163): its button is live again. */
+const settled = () => waitFor( () => expect( screen.getByRole( 'button', { name: /Создать|Сохранить/ } ) ).toBeEnabled() );
+
 describe( 'payment method and status (O7)', () => {
-	test( 'the methods are «Не указан» plus the enabled gateways; picking one lands in the state', () => {
+	test( 'the methods are «Не указан» plus the enabled gateways; picking one lands in the state', async () => {
 		const { data } = mountStep();
 		const select = screen.getByLabelText( 'Способ оплаты' );
 
@@ -191,14 +196,16 @@ describe( 'payment method and status (O7)', () => {
 		fireEvent.change( select, { target: { value: 'cod' } } );
 
 		expect( data().rest.payment_method ).toBe( 'cod' );
+		await settled();
 	} );
 
-	test( 'a gateway the order carries but the shop switched off stays selectable under its own id', () => {
+	test( 'a gateway the order carries but the shop switched off stays selectable under its own id', async () => {
 		const base = filledState();
 
 		mountStep( { initial: filledState( { rest: { ...base.rest, payment_method: 'bacs' } } ) } );
 
 		expect( screen.getByLabelText( 'Способ оплаты' ) ).toHaveValue( 'bacs' );
+		await settled();
 	} );
 
 	test( 'a new order shows «Ожидает оплаты» — what the server creates when no status is sent — and sends none until one is picked', () => {
@@ -383,6 +390,18 @@ describe( 'the chosen pickup point vs the payment method (D3: ⑤ re-validates)'
 	const inStep = () => within( document.querySelector( '.woodev-order-wizard__step' ) );
 	const pointCalls = () => apiFetch.mock.calls.map( ( c ) => c[ 0 ] ).filter( ( r ) => r.url.startsWith( POINTS_ROOT ) );
 
+	// Choosing a method also re-asks the rates route for the chosen tariff (#1163). These tests are about the point,
+	// so that route answers the same pickup tariff at the same price and everything else goes to `handler`.
+	const SAME_RATES = {
+		destination: {},
+		needs_shipping: true,
+		weight: 3250,
+		zone: null,
+		providers: [ { id: 'cdek', label: 'СДЭК', rates: [ { id: 'cdek_courier:3', method_id: 'cdek_courier', instance_id: 3, label: 'Курьер', cost: 250.5, delivery_time: '', description: '', is_pickup: true, meta: {} } ] } ],
+	};
+	const answering = ( handler ) =>
+		apiFetch.mockImplementation( ( request ) => ( request.url === `${ ORDERS_ROOT }/rates` ? Promise.resolve( SAME_RATES ) : handler( request ) ) );
+
 	test( 'nothing is asked until a payment method is chosen', () => {
 		mountStep( { initial: pickupState() } );
 
@@ -391,7 +410,7 @@ describe( 'the chosen pickup point vs the payment method (D3: ⑤ re-validates)'
 	} );
 
 	test( 'choosing a method asks the admin detail route with the weight and the method, and a refusal stops the order', async () => {
-		apiFetch.mockResolvedValue( { id: 'P/1', selectable: { allowed: false, reason: 'Пункт не принимает наложенный платёж.' } } );
+		answering( () => Promise.resolve( { id: 'P/1', selectable: { allowed: false, reason: 'Пункт не принимает наложенный платёж.' } } ) );
 		const { goToStep } = mountStep( { initial: pickupState() } );
 
 		fireEvent.change( screen.getByLabelText( 'Способ оплаты' ), { target: { value: 'cod' } } );
@@ -410,7 +429,7 @@ describe( 'the chosen pickup point vs the payment method (D3: ⑤ re-validates)'
 	} );
 
 	test( 'the destination record step ② picked travels with the check as PHP-style nested params (#959)', async () => {
-		apiFetch.mockResolvedValue( { id: 'P/1', selectable: { allowed: true } } );
+		answering( () => Promise.resolve( { id: 'P/1', selectable: { allowed: true } } ) );
 		const record = { provider_id: 'cdek', country: 'RU', settlement: { id: '44', name: 'Москва', empty: '', gone: null }, flags: [ 'a', 'b' ] };
 		mountStep( { initial: { ...pickupState(), settlementRecord: record } } );
 
@@ -429,7 +448,7 @@ describe( 'the chosen pickup point vs the payment method (D3: ⑤ re-validates)'
 	} );
 
 	test( 'a new destination re-asks the route; a hand-typed city sends no location', async () => {
-		apiFetch.mockResolvedValue( { id: 'P/1', selectable: { allowed: true } } );
+		answering( () => Promise.resolve( { id: 'P/1', selectable: { allowed: true } } ) );
 		const base = pickupState();
 		const props = { setData: jest.fn(), errors: {}, mode: 'create', order: null, baselineTotal: null, submit: jest.fn(), busy: false, goToStep: jest.fn() };
 		const withRecord = ( settlementRecord ) => createElement( StepPayment, { ...props, data: { ...base, rest: { ...base.rest, payment_method: 'cod' }, settlementRecord } } );
@@ -445,9 +464,7 @@ describe( 'the chosen pickup point vs the payment method (D3: ⑤ re-validates)'
 	} );
 
 	test( 'changing the method to one the point accepts lifts the stop', async () => {
-		apiFetch.mockImplementation( ( request ) =>
-			Promise.resolve( { selectable: request.url.includes( 'payment_method=cod' ) ? { allowed: false, reason: '' } : { allowed: true } } )
-		);
+		answering( ( request ) => Promise.resolve( { selectable: request.url.includes( 'payment_method=cod' ) ? { allowed: false, reason: '' } : { allowed: true } } ) );
 		mountStep( { initial: pickupState() } );
 
 		fireEvent.change( screen.getByLabelText( 'Способ оплаты' ), { target: { value: 'cod' } } );
@@ -461,7 +478,7 @@ describe( 'the chosen pickup point vs the payment method (D3: ⑤ re-validates)'
 	} );
 
 	test( 'a point the route no longer knows (404) is refused with a sentence of its own', async () => {
-		apiFetch.mockRejectedValue( { code: 'woodev_pickup_point_not_found', message: 'x', data: { status: 404 } } );
+		answering( () => Promise.reject( { code: 'woodev_pickup_point_not_found', message: 'x', data: { status: 404 } } ) );
 		mountStep( { initial: pickupState() } );
 
 		fireEvent.change( screen.getByLabelText( 'Способ оплаты' ), { target: { value: 'cod' } } );
@@ -471,14 +488,14 @@ describe( 'the chosen pickup point vs the payment method (D3: ⑤ re-validates)'
 	} );
 
 	test( 'an answer without a verdict, or a failed request, never blocks — the checker is permissive by omission', async () => {
-		apiFetch.mockResolvedValueOnce( { id: 'P/1' } );
+		const verdicts = [ () => Promise.resolve( { id: 'P/1' } ), () => Promise.reject( new Error( 'Failed to fetch' ) ) ];
+		answering( () => verdicts.shift()() );
 		mountStep( { initial: pickupState() } );
 
 		fireEvent.change( screen.getByLabelText( 'Способ оплаты' ), { target: { value: 'cod' } } );
 		await waitFor( () => expect( pointCalls() ).toHaveLength( 1 ) );
 		await waitFor( () => expect( screen.getByRole( 'button', { name: 'Создать заказ' } ) ).toBeEnabled() );
 
-		apiFetch.mockRejectedValueOnce( new Error( 'Failed to fetch' ) );
 		fireEvent.change( screen.getByLabelText( 'Способ оплаты' ), { target: { value: 'yookassa' } } );
 		await waitFor( () => expect( pointCalls() ).toHaveLength( 2 ) );
 		await waitFor( () => expect( screen.getByRole( 'button', { name: 'Создать заказ' } ) ).toBeEnabled() );
@@ -487,7 +504,7 @@ describe( 'the chosen pickup point vs the payment method (D3: ⑤ re-validates)'
 
 	test( 'M1: while the check is in flight the button is off and does not send; once the check allows, it sends', async () => {
 		let answer;
-		apiFetch.mockImplementation( () => new Promise( ( resolve ) => ( answer = resolve ) ) );
+		answering( () => new Promise( ( resolve ) => ( answer = resolve ) ) );
 		const { submit } = mountStep( { initial: pickupState() } );
 
 		fireEvent.change( screen.getByLabelText( 'Способ оплаты' ), { target: { value: 'cod' } } );
@@ -508,7 +525,7 @@ describe( 'the chosen pickup point vs the payment method (D3: ⑤ re-validates)'
 
 	test( 'M1: a refusal that arrives after the wait still blocks; a FAILED check ends the wait and stays permissive', async () => {
 		let answer;
-		apiFetch.mockImplementation( () => new Promise( ( resolve, reject ) => ( answer = { resolve, reject } ) ) );
+		answering( () => new Promise( ( resolve, reject ) => ( answer = { resolve, reject } ) ) );
 		const { submit } = mountStep( { initial: pickupState() } );
 
 		fireEvent.change( screen.getByLabelText( 'Способ оплаты' ), { target: { value: 'cod' } } );
@@ -527,26 +544,225 @@ describe( 'the chosen pickup point vs the payment method (D3: ⑤ re-validates)'
 		expect( submit ).toHaveBeenCalledTimes( 1 );
 	} );
 
-	test( 'no check for a courier tariff', () => {
+	test( 'no check for a courier tariff', async () => {
 		mountStep( { initial: filledState( { rest: { ...filledState().rest, payment_method: 'cod' } } ) } );
 
 		expect( pointCalls() ).toHaveLength( 0 );
+		await settled();
 	} );
 
-	test( 'a pickup tariff whose carrier has no picker config is not asked about', () => {
+	test( 'a pickup tariff whose carrier has no picker config is not asked about', async () => {
 		const state = pickupState( { provider: 'boxberry', weight: 500 } );
 
 		mountStep( { initial: { ...state, rest: { ...state.rest, payment_method: 'cod' } } } );
 
 		expect( pointCalls() ).toHaveLength( 0 );
+		await settled();
 	} );
 
-	test( 'a pickup state the rates have not answered for yet (no check info) is not asked about either', () => {
+	test( 'a pickup state the rates have not answered for yet (no check info) is not asked about either', async () => {
 		const state = pickupState( null );
 
 		mountStep( { initial: { ...state, rest: { ...state.rest, payment_method: 'cod' } } } );
 
 		expect( pointCalls() ).toHaveLength( 0 );
+		await settled();
+	} );
+} );
+
+describe( 'the delivery price is re-asked with the payment method (#1163)', () => {
+	const RATES_URL = `${ ORDERS_ROOT }/rates`;
+	const ratesAt = ( cost ) => ( {
+		destination: {},
+		needs_shipping: true,
+		weight: 1000,
+		zone: null,
+		providers: [ { id: 'cdek', label: 'СДЭК', rates: [ { id: 'cdek_courier:3', method_id: 'cdek_courier', instance_id: 3, label: 'Курьер', cost, delivery_time: '', description: '', is_pickup: false, meta: {} } ] } ],
+	} );
+	// The carrier charges 70 more for a cash-on-delivery order — the insurance, a COD commission or a fee limited to some methods.
+	const priceByPayment = ( request ) => Promise.resolve( ratesAt( 'cod' === request.data.payment_method ? 420 : 350 ) );
+	const rateCalls = () => apiFetch.mock.calls.map( ( c ) => c[ 0 ] ).filter( ( r ) => r.url === RATES_URL );
+	/** A state at the price step ④ quoted without a payment method. */
+	const quotedAt350 = ( rest = {} ) =>
+		filledState( {
+			rest: { shipping_line: { method_id: 'cdek_courier', instance_id: 3, rate_id: 'cdek_courier:3', label: 'Курьер', cost: '350', meta: {} }, rate_cost: '350', ...rest },
+		} );
+	const inStep = () => within( document.querySelector( '.woodev-order-wizard__step' ) );
+	const pick = ( value ) => fireEvent.change( screen.getByLabelText( 'Способ оплаты' ), { target: { value } } );
+
+	test( 'nothing is asked while no payment method is chosen', () => {
+		mountStep( { initial: quotedAt350() } );
+
+		expect( rateCalls() ).toHaveLength( 0 );
+		expect( document.querySelector( '.woodev-order-wizard__reprice-notice' ) ).toBeNull();
+	} );
+
+	test( 'a price that moves is written into the line and announced, old → new', async () => {
+		apiFetch.mockImplementation( priceByPayment );
+		const { data } = mountStep( { initial: quotedAt350() } );
+
+		pick( 'cod' );
+
+		const notice = await inStep().findByText( /Стоимость доставки пересчитана с учётом способа оплаты/ );
+
+		expect( plain( notice ) ).toBe( 'Стоимость доставки пересчитана с учётом способа оплаты: 350,00 ₽ → 420,00 ₽' );
+		expect( data().rest.shipping_line.cost ).toBe( '420' );
+		expect( data().rest.rate_cost ).toBe( '420' );
+		expect( plain( document.querySelector( '.woodev-order-wizard__totals-sum' ) ) ).toContain( '1 420,00 ₽' );
+
+		// The question carries the package ④ quoted, the chosen tariff and the method.
+		expect( rateCalls() ).toHaveLength( 1 );
+		expect( rateCalls()[ 0 ].data ).toMatchObject( { payment_method: 'cod', items: [ { product_id: 12 } ], destination: { country: 'RU' } } );
+		expect( screen.getByRole( 'button', { name: 'Создать заказ' } ) ).toBeEnabled();
+	} );
+
+	test( 'a price that does not move says nothing', async () => {
+		apiFetch.mockImplementation( priceByPayment );
+		const { data } = mountStep( { initial: quotedAt350() } );
+
+		pick( 'yookassa' );
+
+		await waitFor( () => expect( rateCalls() ).toHaveLength( 1 ) );
+		await settled();
+
+		expect( data().rest.shipping_line.cost ).toBe( '350' );
+		expect( document.querySelector( '.woodev-order-wizard__reprice-notice' ) ).toBeNull();
+		expect( document.querySelector( '.components-notice' ) ).toBeNull();
+	} );
+
+	test( 'changing the method again re-prices again, and «Не указан» takes the payment-aware price back', async () => {
+		apiFetch.mockImplementation( priceByPayment );
+		const { data } = mountStep( { initial: quotedAt350() } );
+
+		pick( 'cod' );
+		await inStep().findByText( /350,00 ₽ → 420,00 ₽/ );
+
+		pick( 'yookassa' );
+		await inStep().findByText( /420,00 ₽ → 350,00 ₽/ );
+		expect( data().rest.shipping_line.cost ).toBe( '350' );
+
+		pick( 'cod' );
+		await inStep().findByText( /350,00 ₽ → 420,00 ₽/ );
+
+		pick( '' );
+		await inStep().findByText( /420,00 ₽ → 350,00 ₽/ );
+		expect( data().rest.shipping_line.cost ).toBe( '350' );
+		expect( rateCalls().map( ( r ) => r.data.payment_method ) ).toEqual( [ 'cod', 'yookassa', 'cod', undefined ] );
+	} );
+
+	test( 'a price the manager typed over the carrier\'s own stays theirs, and nothing is announced', async () => {
+		apiFetch.mockImplementation( priceByPayment );
+		const { data } = mountStep( { initial: quotedAt350( { shipping_line: { method_id: 'cdek_courier', instance_id: 3, rate_id: 'cdek_courier:3', label: 'Курьер', cost: '300', meta: {} } } ) } );
+
+		pick( 'cod' );
+
+		await waitFor( () => expect( rateCalls() ).toHaveLength( 1 ) );
+		await settled();
+
+		expect( data().rest.shipping_line.cost ).toBe( '300' );
+		expect( document.querySelector( '.woodev-order-wizard__reprice-notice' ) ).toBeNull();
+	} );
+
+	test( 'a typed price survives a quote that happens to equal it: 350, typed 420, COD quotes 420, online quotes 350 — still 420', async () => {
+		apiFetch.mockImplementation( priceByPayment );
+		const { data } = mountStep( { initial: quotedAt350( { shipping_line: { method_id: 'cdek_courier', instance_id: 3, rate_id: 'cdek_courier:3', label: 'Курьер', cost: '420', meta: {} } } ) } );
+
+		pick( 'cod' );
+		await waitFor( () => expect( rateCalls() ).toHaveLength( 1 ) );
+		await settled();
+		expect( data().rest.shipping_line.cost ).toBe( '420' );
+
+		pick( 'yookassa' );
+		await waitFor( () => expect( rateCalls() ).toHaveLength( 2 ) );
+		await settled();
+
+		expect( data().rest.shipping_line.cost ).toBe( '420' );
+		expect( document.querySelector( '.woodev-order-wizard__reprice-notice' ) ).toBeNull();
+	} );
+
+	test( 'a pickup tariff re-quotes for the chosen point: the method and the point ride in the request', async () => {
+		apiFetch.mockImplementation( ( request ) => {
+			const rate = ratesAt( 350 );
+
+			rate.providers[ 0 ].rates[ 0 ] = { ...rate.providers[ 0 ].rates[ 0 ], id: 'cdek_pvz:5', method_id: 'cdek_pvz', instance_id: 5, is_pickup: true, cost: 'market-second' === request.data.pickup_point ? 516 : 310 };
+
+			return Promise.resolve( rate );
+		} );
+		const { data } = mountStep( {
+			initial: filledState( {
+				rest: {
+					shipping_line: { method_id: 'cdek_pvz', instance_id: 5, rate_id: 'cdek_pvz:5', label: 'ПВЗ', cost: '310', meta: {} },
+					rate_cost: '310',
+					rate_is_pickup: true,
+					pickup_point: { id: 'market-second', name: 'Второй', address: 'ул Арбат 3' },
+				},
+			} ),
+		} );
+
+		pick( 'cod' );
+		await waitFor( () => expect( rateCalls() ).toHaveLength( 1 ) );
+		await settled();
+
+		expect( rateCalls()[ 0 ].data ).toMatchObject( { payment_method: 'cod', method_id: 'cdek_pvz', pickup_point: 'market-second' } );
+		expect( data().rest.shipping_line.cost ).toBe( '516' );
+		expect( plain( await inStep().findByText( /310,00 ₽ → 516,00 ₽/ ) ) ).toContain( '310,00 ₽ → 516,00 ₽' );
+	} );
+
+	test( 'a failed re-calculation keeps the old price, warns, and does not block the order', async () => {
+		apiFetch.mockRejectedValue( { code: 'woodev_rates_unknown_payment_method', message: 'Такого способа оплаты нет в магазине.', data: { status: 422 } } );
+		const { data, submit } = mountStep( { initial: quotedAt350() } );
+
+		pick( 'cod' );
+
+		const warning = await inStep().findByText( /Не удалось пересчитать доставку/ );
+
+		expect( plain( warning ) ).toBe( 'Не удалось пересчитать доставку: сохранена цена 350,00 ₽. Заказ можно сохранить.' );
+		expect( warning.closest( '.components-notice' ) ).toHaveClass( 'is-warning' );
+		expect( data().rest.shipping_line.cost ).toBe( '350' );
+
+		const button = screen.getByRole( 'button', { name: 'Создать заказ' } );
+
+		expect( button ).toBeEnabled();
+		fireEvent.click( button );
+		expect( submit ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	test( 'an answer that no longer offers the chosen tariff is a failure too — the line is not dropped here', async () => {
+		apiFetch.mockResolvedValue( { ...ratesAt( 420 ), providers: [ { id: 'cdek', label: 'СДЭК', rates: [] } ] } );
+		const { data } = mountStep( { initial: quotedAt350() } );
+
+		pick( 'cod' );
+
+		await inStep().findByText( /Не удалось пересчитать доставку/ );
+
+		expect( data().rest.shipping_line ).toMatchObject( { rate_id: 'cdek_courier:3', cost: '350' } );
+	} );
+
+	test( 'the button waits for the answer and does not send on the old price', async () => {
+		let answer;
+		apiFetch.mockImplementation( () => new Promise( ( resolve ) => ( answer = resolve ) ) );
+		const { submit } = mountStep( { initial: quotedAt350() } );
+
+		pick( 'cod' );
+
+		const button = screen.getByRole( 'button', { name: 'Создать заказ' } );
+
+		expect( button ).toBeDisabled();
+		fireEvent.click( button );
+		expect( submit ).not.toHaveBeenCalled();
+
+		answer( ratesAt( 420 ) );
+
+		await waitFor( () => expect( button ).toBeEnabled() );
+	} );
+
+	test( 'an order opened for edit with its payment method is re-priced on arrival', async () => {
+		apiFetch.mockImplementation( priceByPayment );
+		const { data } = mountStep( { mode: 'edit', initial: quotedAt350( { payment_method: 'cod' } ) } );
+
+		await inStep().findByText( /350,00 ₽ → 420,00 ₽/ );
+
+		expect( data().rest.shipping_line.cost ).toBe( '420' );
 	} );
 } );
 
@@ -733,6 +949,8 @@ describe( 'the real step inside the shell', () => {
 
 		fireEvent.change( screen.getByLabelText( 'Способ оплаты' ), { target: { value: 'cod' } } );
 		fireEvent.change( screen.getByLabelText( 'Статус заказа' ), { target: { value: 'processing' } } );
+		// The button waits for the price re-calculation the payment method starts (#1163).
+		await settled();
 		fireEvent.click( screen.getByRole( 'button', { name: 'Создать заказ' } ) );
 
 		await waitFor( () => expect( onSaved ).toHaveBeenCalledTimes( 1 ) );
@@ -903,6 +1121,9 @@ describe( 'editing an order through the whole shell (#972)', () => {
 		await waitFor( () => expect( screen.getByRole( 'radio', { name: /Курьер/ } ) ).toBeChecked() );
 		next(); // ④ → ⑤
 		await screen.findByRole( 'button', { name: 'Сохранить' } );
+		// ⑤ opens on the order's payment method, so the price is re-asked at once (#1163). Let that answer land: an update
+		// still pending when a fake-timer test ends leaves React's scheduler waiting for a timer that no longer exists.
+		await settled();
 
 		return { onClose, onSaved };
 	};

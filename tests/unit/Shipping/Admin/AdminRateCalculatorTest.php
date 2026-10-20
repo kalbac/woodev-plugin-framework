@@ -124,13 +124,17 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 	use Woodev\Framework\Shipping\Admin\Orders\Admin_Rate_Calculator;
 	use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
 	use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
+	use Woodev\Framework\Shipping\Fee_Payments;
 	use Woodev\Framework\Shipping\Location\Location_Record;
+	use Woodev\Framework\Shipping\Pickup\Pickup_Handler;
 	use Woodev\Framework\Shipping\Shipping_Method;
+	use Woodev\Framework\Shipping\Shipping_Plugin;
 	use Woodev\Tests\Unit\TestCase;
 
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-locality-key.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-record.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/class-shipping-method.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/class-fee-payments.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/admin/orders/class-orders-provider.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-constraint-checker.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/admin/orders/class-admin-rate-calculator.php';
@@ -482,6 +486,209 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$package = $this->calculator()->build_package( [], [] );
 
 			$this->assertTrue( $package[ Admin_Rate_Calculator::PACKAGE_MARKER ] );
+		}
+
+		/**
+		 * #1163: the chosen payment method rides on the package under the key the checkout uses, so a
+		 * carrier reads it from the one place ({@see Fee_Payments::PACKAGE_KEY}); none chosen leaves it out.
+		 *
+		 * @covers ::build_package
+		 *
+		 * @return void
+		 */
+		public function test_the_payment_method_travels_on_the_package_under_the_checkout_key(): void {
+			$lines = [
+				[
+					'product'  => $this->product(),
+					'quantity' => 1,
+					'price'    => null,
+				],
+			];
+
+			$with = $this->calculator()->build_package( $lines, [], 0, 'cod' );
+			$none = $this->calculator()->build_package( $lines, [] );
+
+			$this->assertSame( 'chosen_payment_method', Fee_Payments::PACKAGE_KEY );
+			$this->assertSame( 'cod', $with[ Fee_Payments::PACKAGE_KEY ] );
+			$this->assertArrayNotHasKey( Fee_Payments::PACKAGE_KEY, $none );
+		}
+
+		/**
+		 * @covers ::calculate
+		 *
+		 * @return void
+		 */
+		public function test_calculate_quotes_every_method_with_the_payment_method_on_the_package(): void {
+			$seen   = [];
+			$method = Mockery::mock( Shipping_Method::class );
+
+			$method->id = 'test_shipping';
+			$method->shouldReceive( 'is_pickup_shipping' )->andReturn( false );
+			$method->shouldReceive( 'get_admin_rates_for_package' )->andReturnUsing(
+				function ( array $package ) use ( &$seen ) {
+					$seen[] = $package[ Fee_Payments::PACKAGE_KEY ] ?? null;
+
+					return [];
+				}
+			);
+
+			$calculator               = $this->calculator( $this->provider( 'test', [ 'test_shipping' ] ) );
+			$calculator->zone_methods = [ $method ];
+			$lines                    = [
+				[
+					'product'  => $this->product(),
+					'quantity' => 1,
+					'price'    => null,
+				],
+			];
+
+			$calculator->calculate( $lines, [ 'country' => 'RU' ], null, 0, 'cod' );
+			$calculator->calculate( $lines, [ 'country' => 'RU' ] );
+
+			$this->assertSame( [ 'cod', null ], $seen, 'a quote without a payment method carries no key' );
+		}
+
+		/**
+		 * @param Orders_Provider $provider the provider that owns the pickup method.
+		 * @param Pickup_Handler|null $handler its plugin's pickup handler.
+		 * @return Admin_Rate_Calculator_With_Fixed_Zone
+		 */
+		private function calculator_with_pickup_handler( Orders_Provider $provider, ?Pickup_Handler $handler ): Admin_Rate_Calculator_With_Fixed_Zone {
+			$plugin = Mockery::mock( Shipping_Plugin::class );
+			$plugin->shouldReceive( 'get_pickup_handler' )->andReturn( $handler );
+
+			$registry = Mockery::mock( Orders_Registry::class );
+			$registry->shouldReceive( 'get_providers' )->andReturn( [ $provider ] );
+			$registry->shouldReceive( 'get_provider_plugin' )->with( $provider->get_id() )->andReturn( $plugin );
+
+			$calculator         = new Admin_Rate_Calculator_With_Fixed_Zone( $registry );
+			$calculator->states = $this->states;
+
+			return $calculator;
+		}
+
+		/**
+		 * @return array<int, array{product: \WC_Product, quantity: int, price: float|null}>
+		 */
+		private function one_line(): array {
+			return [
+				[
+					'product'  => $this->product(),
+					'quantity' => 1,
+					'price'    => null,
+				],
+			];
+		}
+
+		/**
+		 * #1163: the chosen point is installed around the chosen method's rate call and the carrier reads it
+		 * the way Yandex does (the handler's accessor) — here two points price differently and the chosen one wins.
+		 *
+		 * @covers ::calculate
+		 * @covers ::method_rates
+		 *
+		 * @return void
+		 */
+		public function test_the_chosen_point_is_what_the_carrier_reads_while_it_quotes(): void {
+			$prices  = [
+				'market-cod'    => '310',
+				'market-second' => '516',
+			];
+			$current = null;
+			$handler = Mockery::mock( Pickup_Handler::class );
+
+			// The handler double stands for the real accessor: the override is visible only inside the callback.
+			$handler->shouldReceive( 'with_request_selected_point' )->andReturnUsing(
+				static function ( string $method_id, string $point_id, callable $calculation ) use ( &$current ) {
+					$current = [ $method_id => $point_id ];
+
+					try {
+						return $calculation();
+					} finally {
+						$current = null;
+					}
+				}
+			);
+
+			$method     = Mockery::mock( Shipping_Method::class );
+			$method->id = 'test_pickup';
+			$method->shouldReceive( 'is_pickup_shipping' )->andReturn( true );
+			$method->shouldReceive( 'get_admin_rates_for_package' )->andReturnUsing(
+				function () use ( &$current, $prices ) {
+					// Like the Yandex trait: the selected point when there is one, else the first point.
+					$point = $current['test_pickup'] ?? 'market-cod';
+
+					return [ 'test_pickup:5' => $this->rate( [ 'id' => 'test_pickup:5', 'method_id' => 'test_pickup', 'instance_id' => 5, 'cost' => $prices[ $point ] ] ) ];
+				}
+			);
+
+			$calculator               = $this->calculator_with_pickup_handler( $this->provider( 'test', [ 'test_pickup' ] ), $handler );
+			$calculator->zone_methods = [ $method ];
+
+			$without = $calculator->calculate( $this->one_line(), [ 'country' => 'RU' ], null, 0, 'cod' );
+			$chosen  = $calculator->calculate( $this->one_line(), [ 'country' => 'RU' ], null, 0, 'cod', [ 'method_id' => 'test_pickup', 'point_id' => 'market-second' ] );
+
+			$this->assertSame( 310.0, $without['providers'][0]['rates'][0]['cost'], 'no point: the first one, as before' );
+			$this->assertSame( 516.0, $chosen['providers'][0]['rates'][0]['cost'], 'the chosen point wins' );
+			$this->assertNull( $current, 'and is gone afterwards' );
+		}
+
+		/**
+		 * #1163: a method other than the one the point belongs to is quoted as before — no handler call at all.
+		 *
+		 * @covers ::method_rates
+		 *
+		 * @return void
+		 */
+		public function test_a_method_the_point_does_not_belong_to_is_quoted_without_it(): void {
+			$handler = Mockery::mock( Pickup_Handler::class );
+			$handler->shouldNotReceive( 'with_request_selected_point' );
+
+			$method = $this->method( 'test_courier', false, [ $this->rate() ] );
+
+			$calculator               = $this->calculator_with_pickup_handler( $this->provider( 'test', [ 'test_courier', 'test_pickup' ] ), $handler );
+			$calculator->zone_methods = [ $method ];
+
+			$answer = $calculator->calculate( $this->one_line(), [ 'country' => 'RU' ], null, 0, '', [ 'method_id' => 'test_pickup', 'point_id' => 'P1' ] );
+
+			$this->assertSame( 250.5, $answer['providers'][0]['rates'][0]['cost'] );
+		}
+
+		/**
+		 * #1163: the refusal goes through the owning carrier's handler, with the package weight in grams
+		 * and the payment method; a carrier with no picker has nothing to refuse with.
+		 *
+		 * @covers ::refuse_pickup
+		 * @covers ::pickup_handler_for
+		 *
+		 * @return void
+		 */
+		public function test_refuse_pickup_asks_the_owning_handler_with_the_package_weight(): void {
+			$handler = Mockery::mock( Pickup_Handler::class );
+			$handler->shouldReceive( 'refuse_request_point' )->once()->with( 'test_pickup', 'P1', 'cod', 2500 )->andReturn( 'too heavy' );
+
+			$line = [
+				[
+					'product'  => $this->product( 100.0, true, 12, 0, '1.25' ),
+					'quantity' => 2,
+					'price'    => null,
+				],
+			];
+
+			// The store keeps kilograms; the conversion authority answers grams.
+			Functions\when( 'wc_get_weight' )->alias( static fn( $weight, $unit ) => 'g' === $unit ? (float) $weight * 1000 : $weight );
+
+			$calculator = $this->calculator_with_pickup_handler( $this->provider( 'test', [ 'test_pickup' ] ), $handler );
+
+			$this->assertSame( 'too heavy', $calculator->refuse_pickup( $line, [ 'country' => 'RU' ], 0, 'cod', [ 'method_id' => 'test_pickup', 'point_id' => 'P1' ] ) );
+			$this->assertIsString(
+				$this->calculator_with_pickup_handler( $this->provider( 'test', [ 'test_pickup' ] ), null )->refuse_pickup( $line, [ 'country' => 'RU' ], 0, '', [ 'method_id' => 'test_pickup', 'point_id' => 'P1' ] ),
+				'a carrier with no picker'
+			);
+			$this->assertIsString(
+				$this->calculator( $this->provider( 'test', [ 'test_pickup' ] ) )->refuse_pickup( $line, [ 'country' => 'RU' ], 0, '', [ 'method_id' => 'nobody_owns_this', 'point_id' => 'P1' ] ),
+				'a method no carrier owns'
+			);
 		}
 
 		/**

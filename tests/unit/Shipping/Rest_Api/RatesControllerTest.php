@@ -32,6 +32,7 @@ namespace Woodev\Tests\Unit\Shipping\Rest_Api {
 	use Mockery;
 	use Woodev\Framework\Shipping\Admin\Orders\Admin_Rate_Calculator;
 	use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
+	use Woodev\Framework\Shipping\Fee_Payments;
 	use Woodev\Framework\Shipping\Location\Location_Record;
 	use Woodev\Framework\Shipping\Rest_Api\Rates_Controller;
 	use Woodev\Tests\Unit\TestCase;
@@ -43,6 +44,7 @@ namespace Woodev\Tests\Unit\Shipping\Rest_Api {
 	require_once dirname( __DIR__, 4 ) . '/woodev/rest-api/class-rest-v1-registrar.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-locality-key.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-record.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/class-fee-payments.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/rest-api/class-rates-controller.php';
 
 	/**
@@ -68,6 +70,86 @@ namespace Woodev\Tests\Unit\Shipping\Rest_Api {
 			Functions\when( 'get_userdata' )->alias(
 				static function ( $id ) {
 					return 7 === (int) $id ? (object) [ 'ID' => 7 ] : false;
+				}
+			);
+		}
+
+		/** @return void */
+		protected function tearDown(): void {
+			Fee_Payments::use_runtime_for_tests( null );
+
+			parent::tearDown();
+		}
+
+		/**
+		 * Stands in for `WC()` with the given gateways (id => enabled flag).
+		 *
+		 * @param array<string, string> $gateways gateway id => 'yes' / 'no'.
+		 * @return void
+		 */
+		private function shop_with_gateways( array $gateways ): void {
+			Functions\when( 'wp_strip_all_tags' )->returnArg();
+
+			$objects = [];
+
+			foreach ( $gateways as $id => $enabled ) {
+				$objects[ $id ] = new class( $enabled, $id ) {
+					/** @var string */
+					public $enabled;
+
+					/** @var string */
+					private $id;
+
+					/**
+					 * @param string $enabled 'yes' / 'no'.
+					 * @param string $id      gateway id.
+					 */
+					public function __construct( string $enabled, string $id ) {
+						$this->enabled = $enabled;
+						$this->id      = $id;
+					}
+
+					/** @return string */
+					public function get_title() {
+						return 'Title ' . $this->id;
+					}
+
+					/** @return string */
+					public function get_method_title() {
+						return 'Title ' . $this->id;
+					}
+				};
+			}
+
+			$registry = new class( $objects ) {
+				/** @var array */
+				private $objects;
+
+				/** @param array $objects gateways. */
+				public function __construct( array $objects ) {
+					$this->objects = $objects;
+				}
+
+				/** @return array */
+				public function payment_gateways() {
+					return $this->objects;
+				}
+			};
+
+			Fee_Payments::use_runtime_for_tests(
+				new class( $registry ) {
+					/** @var object */
+					private $registry;
+
+					/** @param object $registry the gateways registry. */
+					public function __construct( object $registry ) {
+						$this->registry = $registry;
+					}
+
+					/** @return object */
+					public function payment_gateways() {
+						return $this->registry;
+					}
 				}
 			);
 		}
@@ -189,7 +271,9 @@ namespace Woodev\Tests\Unit\Shipping\Rest_Api {
 					],
 					$normalized,
 					null,
-					7
+					7,
+					'',
+					null
 				)
 				->andReturn( [ 'providers' => [] ] );
 
@@ -239,7 +323,9 @@ namespace Woodev\Tests\Unit\Shipping\Rest_Api {
 					],
 					Mockery::type( 'array' ),
 					null,
-					0
+					0,
+					'',
+					null
 				)
 				->andReturn( [] );
 
@@ -349,10 +435,152 @@ namespace Woodev\Tests\Unit\Shipping\Rest_Api {
 
 			$this->calculator->shouldReceive( 'calculate' )
 				->once()
-				->with( Mockery::type( 'array' ), [ 'country' => 'RU' ], Mockery::type( Location_Record::class ), 0 )
+				->with( Mockery::type( 'array' ), [ 'country' => 'RU' ], Mockery::type( Location_Record::class ), 0, '', null )
 				->andReturn( [] );
 
 			$this->controller()->get_rates( $this->request( [ 'location' => $record ] ) );
+		}
+
+		/**
+		 * The payment method the manager chose on step ⑤ reaches the calculation (#1163).
+		 *
+		 * @covers ::get_rates
+		 * @covers ::resolve_payment_method
+		 *
+		 * @return void
+		 */
+		public function test_a_chosen_payment_method_is_handed_to_the_calculator(): void {
+			$this->shop_with_gateways( [ 'cod' => 'yes', 'bacs' => 'yes' ] );
+			Functions\when( 'wc_get_product' )->justReturn( $this->product( 12 ) );
+
+			$this->calculator->shouldReceive( 'normalize_destination' )->andReturn( [ 'country' => 'RU' ] );
+			$this->calculator->shouldReceive( 'calculate' )
+				->once()
+				->with( Mockery::type( 'array' ), [ 'country' => 'RU' ], null, 0, 'cod', null )
+				->andReturn( [] );
+
+			$this->controller()->get_rates( $this->request( [ 'payment_method' => ' cod ' ] ) );
+		}
+
+		/**
+		 * A gateway the shop does not offer (unknown, or switched off) is a 422, never priced.
+		 *
+		 * @covers ::get_rates
+		 * @covers ::resolve_payment_method
+		 *
+		 * @return void
+		 */
+		public function test_a_payment_method_the_shop_does_not_offer_is_a_422(): void {
+			$this->shop_with_gateways( [ 'cod' => 'yes', 'cheque' => 'no' ] );
+			$this->calculator->shouldNotReceive( 'calculate' );
+
+			foreach ( [ 'nonexistent', 'cheque' ] as $gateway ) {
+				$result = $this->controller()->get_rates( $this->request( [ 'payment_method' => $gateway ] ) );
+
+				$this->assertInstanceOf( \WP_Error::class, $result, $gateway );
+				$this->assertSame( 'woodev_rates_unknown_payment_method', $result->code );
+				$this->assertSame( 422, $result->data['status'] );
+			}
+		}
+
+		/**
+		 * The chosen pickup point reaches the calculation after the calculator accepted it (#1163).
+		 *
+		 * @covers ::get_rates
+		 * @covers ::resolve_pickup
+		 *
+		 * @return void
+		 */
+		public function test_a_chosen_pickup_point_is_validated_then_handed_to_the_calculator(): void {
+			$this->shop_with_gateways( [ 'cod' => 'yes' ] );
+			Functions\when( 'wc_get_product' )->justReturn( $this->product( 12 ) );
+			Functions\when( 'wc_clean' )->returnArg();
+			Functions\when( 'wp_unslash' )->returnArg();
+
+			$pickup = [
+				'method_id' => 'yandex_pickup',
+				'point_id'  => 'market-second',
+			];
+
+			$this->calculator->shouldReceive( 'normalize_destination' )->andReturn( [ 'country' => 'RU' ] );
+			$this->calculator->shouldReceive( 'refuse_pickup' )->once()->with( Mockery::type( 'array' ), [ 'country' => 'RU' ], 0, 'cod', $pickup )->andReturn( null );
+			$this->calculator->shouldReceive( 'calculate' )->once()->with( Mockery::type( 'array' ), [ 'country' => 'RU' ], null, 0, 'cod', $pickup )->andReturn( [] );
+
+			$this->controller()->get_rates( $this->request( [ 'payment_method' => 'cod', 'method_id' => 'yandex_pickup', 'pickup_point' => ' market-second ' ] ) );
+		}
+
+		/**
+		 * A point the carrier refuses, or one with no method to belong to, is a 422 and is never priced (#1163).
+		 *
+		 * @covers ::get_rates
+		 * @covers ::resolve_pickup
+		 *
+		 * @return void
+		 */
+		public function test_a_refused_pickup_point_is_a_422(): void {
+			Functions\when( 'wc_get_product' )->justReturn( $this->product( 12 ) );
+			Functions\when( 'wc_clean' )->returnArg();
+			Functions\when( 'wp_unslash' )->returnArg();
+
+			$this->calculator->shouldReceive( 'normalize_destination' )->andReturn( [ 'country' => 'RU' ] );
+			$this->calculator->shouldReceive( 'refuse_pickup' )->once()->andReturn( 'This pickup point does not accept cash on delivery.' );
+			$this->calculator->shouldNotReceive( 'calculate' );
+
+			$refused = $this->controller()->get_rates( $this->request( [ 'method_id' => 'yandex_pickup', 'pickup_point' => 'P1' ] ) );
+			$bare    = $this->controller()->get_rates( $this->request( [ 'pickup_point' => 'P1' ] ) );
+
+			foreach ( [ $refused, $bare ] as $result ) {
+				$this->assertInstanceOf( \WP_Error::class, $result );
+				$this->assertSame( 'woodev_rates_pickup_point_refused', $result->code );
+				$this->assertSame( 422, $result->data['status'] );
+			}
+
+			$this->assertSame( 'This pickup point does not accept cash on delivery.', $refused->get_error_message() );
+		}
+
+		/**
+		 * No point, no pickup context: the quote is the one the route always made (#1163).
+		 *
+		 * @covers ::resolve_pickup
+		 *
+		 * @return void
+		 */
+		public function test_no_pickup_point_means_no_pickup_context(): void {
+			Functions\when( 'wc_get_product' )->justReturn( $this->product( 12 ) );
+			Functions\when( 'wc_clean' )->returnArg();
+			Functions\when( 'wp_unslash' )->returnArg();
+
+			$this->calculator->shouldReceive( 'normalize_destination' )->andReturn( [ 'country' => 'RU' ] );
+			$this->calculator->shouldNotReceive( 'refuse_pickup' );
+			$this->calculator->shouldReceive( 'calculate' )->once()->with( Mockery::type( 'array' ), [ 'country' => 'RU' ], null, 0, '', null )->andReturn( [] );
+
+			// A method id alone names no point.
+			$this->controller()->get_rates( $this->request( [ 'method_id' => 'yandex_pickup' ] ) );
+		}
+
+		/**
+		 * @covers ::register_routes
+		 *
+		 * @return void
+		 */
+		public function test_the_route_declares_an_optional_string_payment_method(): void {
+			$captured = [];
+
+			Functions\when( 'register_rest_route' )->alias(
+				static function ( $namespace, $route, $args ) use ( &$captured ) {
+					$captured = $args;
+				}
+			);
+
+			$this->controller()->register_routes();
+
+			$this->assertSame( 'string', $captured['args']['payment_method']['type'] );
+			$this->assertArrayNotHasKey( 'required', $captured['args']['payment_method'] );
+
+			foreach ( [ 'method_id', 'pickup_point' ] as $arg ) {
+				$this->assertSame( 'string', $captured['args'][ $arg ]['type'], $arg );
+				$this->assertArrayNotHasKey( 'required', $captured['args'][ $arg ], $arg );
+			}
 		}
 	}
 }

@@ -9,6 +9,7 @@ namespace Woodev\Tests\Unit\Shipping;
 
 use Brain\Monkey\Functions;
 use Mockery;
+use Woodev\Framework\Shipping\Admin\Orders\{Admin_Rate_Calculator, Orders_Registry};
 use Woodev\Framework\Shipping\{Shipping_Helper, Shipping_Method, Shipping_Rate_Cache};
 use Woodev\Tests\Unit\TestCase;
 
@@ -114,6 +115,31 @@ final class InsuranceTest extends TestCase {
 		$this->assertTrue( $method->resolve_insurance_for_package( [ 'chosen_payment_method' => 'terminal_on_receipt' ] )['enabled'] );
 		Functions\when( 'apply_filters' )->alias( static fn( $tag, $value ) => 'woodev_shipping_insurance_cod_gateways' === $tag ? 'bad return' : $value );
 		$this->assertFalse( $method->resolve_insurance_for_package( [] )['enabled'] );
+	}
+
+	/**
+	 * #1163: the admin wizard's quote, built with the payment method the manager chose on step ⑤, insures
+	 * a «only for cash on delivery» method for COD and for nothing else — the same verdict the checkout gets.
+	 *
+	 * @return void
+	 */
+	public function test_the_admin_wizard_quote_follows_the_payment_method_it_is_built_with(): void {
+		$method = new Woodev_Test_Shipping_Method_For_Rate_Cache();
+		$method->supports[] = Shipping_Method::FEATURE_INSURANCE;
+		$method->option_values[ Shipping_Method::OPTION_INSURANCE ] = 'delivery_payment';
+
+		$product = Mockery::mock( 'WC_Product' );
+		$product->shouldReceive( 'needs_shipping' )->andReturn( true );
+		$product->shouldReceive( 'get_price' )->andReturn( '80' );
+		$product->shouldReceive( 'get_id' )->andReturn( 12 );
+
+		$calculator = new Admin_Rate_Calculator( Mockery::mock( Orders_Registry::class ) );
+		$lines      = [ [ 'product' => $product, 'quantity' => 1, 'price' => null ] ];
+		$quote      = static fn( string $payment ): array => $method->resolve_insurance_for_package( $calculator->build_package( $lines, [], 0, $payment ) );
+
+		$this->assertSame( [ 'enabled' => true, 'declared_value' => 80.0 ], $quote( 'cod' ) );
+		$this->assertSame( [ 'enabled' => false, 'declared_value' => 0.0 ], $quote( 'bacs' ) );
+		$this->assertSame( [ 'enabled' => false, 'declared_value' => 0.0 ], $quote( '' ), 'no method chosen yet: conditional insurance counts as off' );
 	}
 
 	/** @return void */

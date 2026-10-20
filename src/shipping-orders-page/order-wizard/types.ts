@@ -90,6 +90,13 @@ export interface WizardRest {
 	 * edit, before the rates came back). UI only: never sent.
 	 */
 	rate_cost: string;
+	/**
+	 * The manager typed a delivery price over the carrier's own and that is still the intent. Numeric
+	 * inequality with `rate_cost` cannot carry it alone: a re-quote that happens to equal the typed price
+	 * would end it, and the next quote would overwrite the price (#1163). Cleared by the reset, by a
+	 * different tariff and by typing the carrier's own price. UI only: never sent.
+	 */
+	cost_typed: boolean;
 	/** Whether the chosen rate is a pickup one — the step checks it for a point. UI only: never sent. */
 	rate_is_pickup: boolean;
 	/**

@@ -9,8 +9,10 @@
 
 namespace Woodev\Framework\Shipping\Admin\Orders;
 
+use Woodev\Framework\Shipping\Fee_Payments;
 use Woodev\Framework\Shipping\Location\Location_Record;
 use Woodev\Framework\Shipping\Pickup\Constraint_Checker;
+use Woodev\Framework\Shipping\Pickup\Pickup_Handler;
 use Woodev\Framework\Shipping\Shipping_Method;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -235,12 +237,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Admin_Rate_C
 		 * @since 2.0.2
 		 *
 		 * @param array<int, array{product: \WC_Product, quantity: int, price: float|null}> $lines       Wizard lines; `price` is the per-unit price override, `null` keeps the product's own.
-		 * @param array<string, string>                                                     $destination A {@see self::normalize_destination()} result.
-		 * @param int                                                                       $customer_id Customer user id, 0 for a guest.
+		 * @param array<string, string>                                                     $destination    A {@see self::normalize_destination()} result.
+		 * @param int                                                                       $customer_id    Customer user id, 0 for a guest.
+		 * @param string                                                                    $payment_method Gateway id the order will be paid with, `''` while none is chosen. Added in 2.0.7.
 		 *
 		 * @return array<string, mixed> Package; `contents` is empty when nothing needs shipping.
 		 */
-		public function build_package( array $lines, array $destination, int $customer_id = 0 ): array {
+		public function build_package( array $lines, array $destination, int $customer_id = 0, string $payment_method = '' ): array {
 
 			$contents = [];
 			$cost     = 0.0;
@@ -279,7 +282,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Admin_Rate_C
 				$cost += $line_total;
 			}
 
-			return [
+			$package = [
 				'contents'              => $contents,
 				'contents_cost'         => $cost,
 				'cart_subtotal'         => $cost,
@@ -288,6 +291,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Admin_Rate_C
 				'destination'           => $destination,
 				self::PACKAGE_MARKER    => true,
 			];
+
+			// The payment method rides on the package exactly as the checkout puts it there
+			// ({@see Fee_Payments::add_chosen_payment_to_packages()}), so insurance, the payment-limited
+			// fee and a price a carrier declares payment-dependent all read it from the same key.
+			if ( '' !== $payment_method ) {
+				$package[ Fee_Payments::PACKAGE_KEY ] = $payment_method;
+			}
+
+			return $package;
 		}
 
 		/**
@@ -299,6 +311,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Admin_Rate_C
 		 * @param array<string, string>                                                     $destination A {@see self::normalize_destination()} result.
 		 * @param Location_Record|null                                                      $record      Destination location record, or `null`.
 		 * @param int                                                                       $customer_id Customer user id, 0 for a guest.
+		 * @param string                                                                    $payment_method Gateway id the order will be paid with, `''` while none is chosen. Added in 2.0.7.
+		 * @param array{method_id: string, point_id: string}|null                           $pickup         The pickup tariff's method and the point the manager chose, priced as the checkout prices the
+		 *                                                                                                 session's choice — validate it first with {@see self::refuse_pickup()}. Added in 2.0.7.
 		 *
 		 * @return array{
 		 *     destination: array<string, string>,
@@ -309,9 +324,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Admin_Rate_C
 		 * } Every registered provider appears, with an empty `rates` list when it offers nothing for
 		 *   this package — the wizard can then say so instead of silently dropping a carrier.
 		 */
-		public function calculate( array $lines, array $destination, ?Location_Record $record = null, int $customer_id = 0 ): array {
+		public function calculate( array $lines, array $destination, ?Location_Record $record = null, int $customer_id = 0, string $payment_method = '', ?array $pickup = null ): array {
 
-			$package   = $this->build_package( $lines, $destination, $customer_id );
+			$package   = $this->build_package( $lines, $destination, $customer_id, $payment_method );
 			$providers = $this->registry->get_providers();
 			$zone      = null;
 			$methods   = [];
@@ -336,7 +351,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Admin_Rate_C
 					// instance, and every rate it yields carries them.
 					$order_fields = Carrier_Field_Set::for_rate( $provider, (string) $method->id, (int) ( $method->instance_id ?? 0 ), $method )->to_schema();
 
-					foreach ( $method->get_admin_rates_for_package( $package, $record ) as $rate ) {
+					foreach ( $this->method_rates( $method, $package, $record, $pickup ) as $rate ) {
 						$rates[] = $this->format_rate( $rate, $method, $order_fields );
 					}
 				}
@@ -358,6 +373,91 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Admin_Rate_C
 				],
 				'providers'      => $groups,
 			];
+		}
+
+		/**
+		 * One method's rates for the package. For the method the manager chose a pickup point under, the
+		 * calculation runs with that point installed as the selection the carrier's own accessor
+		 * ({@see Pickup_Handler::get_selected_point_for_method()}) answers — the admin has no WooCommerce
+		 * session to hold it — and the override is gone when the call returns.
+		 *
+		 * @since 2.0.7
+		 *
+		 * @param Shipping_Method                                 $method  The method.
+		 * @param array<string, mixed>                            $package A {@see self::build_package()} result.
+		 * @param Location_Record|null                            $record  Destination location record, or `null`.
+		 * @param array{method_id: string, point_id: string}|null $pickup  The chosen point, or `null`.
+		 *
+		 * @return array<int|string, \WC_Shipping_Rate>
+		 */
+		private function method_rates( Shipping_Method $method, array $package, ?Location_Record $record, ?array $pickup ): array {
+
+			$handler = null !== $pickup && (string) $method->id === $pickup['method_id'] ? $this->pickup_handler_for( $pickup['method_id'] ) : null;
+
+			if ( null === $pickup || null === $handler ) {
+				return $method->get_admin_rates_for_package( $package, $record );
+			}
+
+			return $handler->with_request_selected_point(
+				$pickup['method_id'],
+				$pickup['point_id'],
+				static fn() => $method->get_admin_rates_for_package( $package, $record )
+			);
+		}
+
+		/**
+		 * Why the chosen pickup point cannot be priced for the wizard's package, or `null` when it can: the
+		 * point belongs to the chosen method and passes the acceptance check step ⑤ already runs (#1163).
+		 *
+		 * @since 2.0.7
+		 *
+		 * @param array<int, array{product: \WC_Product, quantity: int, price: float|null}> $lines          Wizard lines, see {@see self::build_package()}.
+		 * @param array<string, string>                                                     $destination    A {@see self::normalize_destination()} result.
+		 * @param int                                                                       $customer_id    Customer user id, 0 for a guest.
+		 * @param string                                                                    $payment_method Gateway id the order will be paid with, `''` while none is chosen.
+		 * @param array{method_id: string, point_id: string}                                $pickup         The pickup tariff's method and the chosen point.
+		 *
+		 * @return string|null
+		 */
+		public function refuse_pickup( array $lines, array $destination, int $customer_id, string $payment_method, array $pickup ): ?string {
+
+			$handler = $this->pickup_handler_for( $pickup['method_id'] );
+
+			if ( null === $handler ) {
+				return __( 'У этого способа доставки нет пунктов выдачи.', 'woodev-plugin-framework' );
+			}
+
+			return $handler->refuse_request_point(
+				$pickup['method_id'],
+				$pickup['point_id'],
+				$payment_method,
+				$this->package_weight_grams( $this->build_package( $lines, $destination, $customer_id, $payment_method ) )
+			);
+		}
+
+		/**
+		 * The pickup handler of the carrier plugin whose provider owns a shipping method.
+		 *
+		 * @since 2.0.7
+		 *
+		 * @param string $method_id Bare shipping-method id.
+		 *
+		 * @return Pickup_Handler|null `null` for a method no registered carrier owns, or a carrier with no picker.
+		 */
+		private function pickup_handler_for( string $method_id ): ?Pickup_Handler {
+
+			foreach ( $this->registry->get_providers() as $provider ) {
+
+				if ( ! in_array( $method_id, $provider->get_method_ids(), true ) ) {
+					continue;
+				}
+
+				$plugin = $this->registry->get_provider_plugin( $provider->get_id() );
+
+				return null !== $plugin ? $plugin->get_pickup_handler() : null;
+			}
+
+			return null;
 		}
 
 		/**
