@@ -76,6 +76,11 @@ add_filter(
 
 Before a customer has chosen a payment method, the conditional mode counts as off. The outcome of the decision is part of the default [rate cache](../methods-and-rates/#cache-rates) key.
 
+Two things to know when you move a carrier from an older plugin onto this feature:
+
+- **The declared value is measured differently.** An older plugin may have sent the cart total before discounts. This feature sends the value after discounts, without tax. The insured amount, and so the insurance charge, can be lower for an order with a coupon. That is intended, not a regression.
+- **The admin order wizard quotes without a payment method.** The wizard prices the tariffs in its delivery step, before the manager chooses the payment method, so there the conditional mode counts as off: the quote carries no insurance, and a fee limited to some payment methods is not added. The export reads the order's real payment method (`resolve_insurance_for_order()`), so the insurance is still sent. If your carrier's quote includes the insurance charge, the wizard's tariff can therefore be lower than the checkout's for a cash-on-delivery order. The manager can change the delivery price in the wizard.
+
 ## Fee by payment method
 
 `FEATURE_FEE_PAYMENTS` lets a merchant charge a handling fee only when the customer pays in certain ways, such as cash on delivery.

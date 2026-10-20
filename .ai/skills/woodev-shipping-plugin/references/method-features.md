@@ -35,6 +35,13 @@ fees; the amount is in the store currency and the carrier owns any API currency 
 uses the shared gateway registry (filter `woodev_shipping_insurance_cod_gateways`, default `[ 'cod' ]`). The outcome is part
 of the rate-cache context. Check the carrier itself: CDEK prices `INSURANCE` from the declared value on `/calculator/tariff`
 and adds it at order creation whether or not the quote carried it — a quote that omits it is a wrong price (s159, s160).
+Two traps for a plugin moving off a v1 plugin (#1163): the declared value is measured AFTER discounts and ex-tax, so it can
+be lower than a v1 plugin's cart-before-discounts figure — deliberate, not a regression; and the admin order wizard prices
+tariffs at step ④, before step ⑤ chooses the payment method (`Admin_Rate_Calculator::build_package()` puts no
+`chosen_payment_method` on the package), so `delivery_payment` insurance and a `fee_payments`-limited fee are OFF in the
+wizard's quote while the export (`resolve_insurance_for_order()`) reads the order's real method. A registry row is never
+needed for a carrier that declares `declares_payment_dependent_price()`; any other instance saved through `update_option`
+(the admin form, a migration) enters the `Fee_Payments` registry by itself — only a raw SQL import skips it.
 
 ## Fee by payment method (`FEATURE_FEE_PAYMENTS`)
 
