@@ -149,6 +149,15 @@ Copy `release.yml` + `scripts/build-release-zip.sh` from either carrier plugin (
 - **The EDD changelog on woodev.ru is the same text with the `(repo#N)` references stripped**, rendered as HTML
   (`<h4>` per group, `<ul><li>`). Buyers read it in the WordPress «View details» window, where a PR number is noise;
   the README keeps the references for us. One source text — never edit the two by hand separately.
+- **Publishing to EDD (woodev.ru)** happens only on the operator's word, after he checks the GitHub-release ZIP on his demo sites. It
+  goes through the woodev-mcp-adapter release abilities (see `docs/wiki/edd-release-mcp.md` in the woodev-ru repo). Facts measured on
+  EDD Software Licensing 3.8.14 (s190):
+  - the update API keeps only `p li ul ol strong a em span br` in the changelog, so headings vanish; write a version line as
+    `<p><strong>2.3.0.4 — DD.MM.YYYY</strong></p>`;
+  - the «View details» description tab shows `post_excerpt` when it is set;
+  - staged rollouts pick sites by `crc32(licence + site URL) % 100` (stable, never growing on their own). Bucket 0 is never eligible,
+    so release to everyone by switching rollouts OFF, not by setting 100. Only the update API is gated; account downloads always
+    serve the newest file. Start a full rewrite at 20 %.
 - The workflow fetches `woodev/` from the framework tag `v<framework_version>`, so the framework release goes first.
 - Under `set -o pipefail`, `printf … | grep -q` fails at random with SIGPIPE (grep exits early) — grep a file instead.
 
