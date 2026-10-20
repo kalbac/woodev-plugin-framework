@@ -73,9 +73,12 @@ function wooCommerce( options: APIFetchOptions ): Promise< unknown > {
 	} );
 }
 
-/** One `apiFetch()` call through the registered middlewares, as `@wordpress/api-fetch` chains them. */
+/**
+ * One `apiFetch()` call through the registered middlewares, as `@wordpress/api-fetch` chains them:
+ * it `unshift()`s each one and runs them `reduceRight()`, so the LAST registered runs first.
+ */
 function apiFetch( options: APIFetchOptions, handler: ( options: APIFetchOptions ) => Promise< unknown > = wooCommerce ): Promise< unknown > {
-	const run = mockMiddlewares.reduceRight< ( args: APIFetchOptions ) => Promise< unknown > >(
+	const run = mockMiddlewares.reduce< ( args: APIFetchOptions ) => Promise< unknown > >(
 		( next, middleware ) => ( args ) => middleware( args, next ),
 		handler
 	);
@@ -100,6 +103,9 @@ const confirmPoint = (): APIFetchOptions => batch( '/wc/store/v1/cart/extensions
 
 const later = ( ms: number, request: () => Promise< unknown > ): Promise< unknown > =>
 	new Promise( ( resolve ) => setTimeout( resolve, ms ) ).then( request );
+
+/** The queue lets the next request go a task after the last one ended: a 0 ms timer, which fake timers run 1 ms on. */
+const HANDOVER = 1;
 
 beforeEach( () => {
 	jest.useFakeTimers();
@@ -173,7 +179,7 @@ describe( 'serializeStoreApiMutations (#1357)', () => {
 
 		expect( sent ).toEqual( [ '/wc/store/v1/cart/update-customer' ] );
 
-		await jest.advanceTimersByTimeAsync( 1 );
+		await jest.advanceTimersByTimeAsync( 1 + HANDOVER );
 
 		expect( sent ).toEqual( [ '/wc/store/v1/cart/update-customer', '/wc/store/v1/cart/select-shipping-rate' ] );
 
@@ -212,7 +218,7 @@ describe( 'serializeStoreApiMutations (#1357)', () => {
 
 		expect( sent ).toEqual( [] );
 
-		await jest.advanceTimersByTimeAsync( 1 );
+		await jest.advanceTimersByTimeAsync( 1 + HANDOVER );
 
 		await expect( caught ).resolves.toBe( refusal );
 		expect( sent ).toEqual( [ '/wc/store/v1/cart/select-shipping-rate' ] );
@@ -244,7 +250,7 @@ describe( 'serializeStoreApiMutations (#1357)', () => {
 
 		expect( sent ).toEqual( [] );
 
-		await jest.advanceTimersByTimeAsync( 1 );
+		await jest.advanceTimersByTimeAsync( 1 + HANDOVER );
 
 		expect( sent ).toEqual( [ '/wc/store/v1/cart/select-shipping-rate' ] );
 
@@ -252,6 +258,130 @@ describe( 'serializeStoreApiMutations (#1357)', () => {
 		await rate;
 
 		expect( session.rate ).toBe( 'carrier_pickup:7' );
+	} );
+
+	describe( 'the cap belongs to the request that holds the queue, not to each waiter', () => {
+		/** When each request left, to 10 ms (a handover takes a task), and how many were on the server with it, by `data.id`. */
+		const started: Array< { id: string; at: number; onServer: number } > = [];
+		let onServer = 0;
+		let start = 0;
+
+		/** A server that answers request `id` after `ms[ id ]`, or never when that is `Infinity`. */
+		const server =
+			( ms: Record< string, number > ) =>
+			( options: APIFetchOptions ): Promise< unknown > => {
+				const id = String( ( options.data as { id: string } ).id );
+
+				started.push( { id, at: Math.round( ( Date.now() - start ) / 10 ) * 10, onServer: ++onServer } );
+
+				return new Promise( ( resolve ) => {
+					if ( ms[ id ] !== Infinity ) {
+						setTimeout( () => {
+							onServer--;
+							resolve( id );
+						}, ms[ id ] );
+					}
+				} );
+			};
+		const ask = ( id: string, path: string, handler: ( options: APIFetchOptions ) => Promise< unknown > ): Promise< unknown > =>
+			apiFetch( { path, method: 'POST', data: { id } }, handler );
+		const tick = ( ms: number ): Promise< void > => jest.advanceTimersByTimeAsync( ms );
+
+		beforeEach( () => {
+			started.length = 0;
+			onServer = 0;
+			start = Date.now();
+		} );
+
+		it( 'keeps a healthy backlog one at a time: the third waits for the second, however long they all waited', async () => {
+			const handler = server( { a: 8000, b: 8000, c: 100 } );
+			const all = Promise.all( [
+				ask( 'a', '/wc/store/v1/cart/update-customer', handler ),
+				ask( 'b', '/wc/store/v1/cart/update-customer', handler ),
+				ask( 'c', '/wc/store/v1/cart/extensions', handler ),
+			] );
+
+			await tick( 16200 );
+			await all;
+
+			expect( started ).toEqual( [
+				{ id: 'a', at: 0, onServer: 1 },
+				{ id: 'b', at: 8000, onServer: 1 },
+				{ id: 'c', at: 16000, onServer: 1 },
+			] );
+		} );
+
+		it( 'lets ONE request past a stalled head; the order then waits for it to be answered', async () => {
+			const handler = server( { stalled: Infinity, rate: 1000, order: 100 } );
+
+			void ask( 'stalled', '/wc/store/v1/cart/extensions', handler );
+			const rest = Promise.all( [
+				ask( 'rate', '/wc/store/v1/cart/select-shipping-rate', handler ),
+				ask( 'order', '/wc/store/v1/checkout', handler ),
+			] );
+
+			await tick( 16200 );
+			await rest;
+
+			expect( started ).toEqual( [
+				{ id: 'stalled', at: 0, onServer: 1 },
+				{ id: 'rate', at: queue.QUEUE_WAIT_CAP_MS, onServer: 2 },
+				{ id: 'order', at: queue.QUEUE_WAIT_CAP_MS + 1000, onServer: 2 },
+			] );
+		} );
+
+		it( 'gives the request past a stalled head its OWN cap before the order goes', async () => {
+			const handler = server( { stalled: Infinity, rate: Infinity, order: 100 } );
+
+			void ask( 'stalled', '/wc/store/v1/cart/extensions', handler );
+			void ask( 'rate', '/wc/store/v1/cart/select-shipping-rate', handler );
+			const order = ask( 'order', '/wc/store/v1/checkout', handler );
+
+			await tick( 2 * queue.QUEUE_WAIT_CAP_MS - 100 );
+
+			expect( started.map( ( { id } ) => id ) ).toEqual( [ 'stalled', 'rate' ] );
+
+			await tick( 300 );
+			await order;
+
+			expect( started[ 2 ] ).toEqual( { id: 'order', at: 2 * queue.QUEUE_WAIT_CAP_MS, onServer: 3 } );
+		} );
+
+		it( 'does not let a second request go when the stalled head finally answers', async () => {
+			const handler = server( { stalled: queue.QUEUE_WAIT_CAP_MS + 300, rate: 1000, order: 100 } );
+			const all = Promise.all( [
+				ask( 'stalled', '/wc/store/v1/cart/extensions', handler ),
+				ask( 'rate', '/wc/store/v1/cart/select-shipping-rate', handler ),
+				ask( 'order', '/wc/store/v1/checkout', handler ),
+			] );
+
+			await tick( 16200 );
+			await all;
+
+			expect( started.map( ( { id, at } ) => [ id, at ] ) ).toEqual( [
+				[ 'stalled', 0 ],
+				[ 'rate', queue.QUEUE_WAIT_CAP_MS ],
+				[ 'order', queue.QUEUE_WAIT_CAP_MS + 1000 ],
+			] );
+		} );
+
+		it( 'lets the next one go when the request holding the queue is aborted', async () => {
+			const controller = new AbortController();
+			const handler = server( { stalled: Infinity, rate: 100 } );
+
+			void apiFetch( { path: '/wc/store/v1/cart/extensions', method: 'POST', data: { id: 'stalled' }, signal: controller.signal }, handler );
+			const rate = ask( 'rate', '/wc/store/v1/cart/select-shipping-rate', handler );
+
+			await tick( 500 );
+			controller.abort();
+			await tick( 200 );
+			await rate;
+
+			expect( started.map( ( { id, at } ) => [ id, at ] ) ).toEqual( [
+				[ 'stalled', 0 ],
+				[ 'rate', 500 ],
+			] );
+		} );
 	} );
 
 	it( 'lets a request aborted while it waits leave at once, and keeps the queue for the rest', async () => {
@@ -270,7 +400,7 @@ describe( 'serializeStoreApiMutations (#1357)', () => {
 
 		expect( sent ).toHaveLength( 2 );
 
-		await jest.advanceTimersByTimeAsync( 1 );
+		await jest.advanceTimersByTimeAsync( 1 + HANDOVER );
 
 		expect( sent[ 2 ] ).toBe( '/wc/store/v1/cart/extensions' );
 

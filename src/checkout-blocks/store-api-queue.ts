@@ -18,9 +18,10 @@
  * So every cart MUTATION this page sends to the Store API waits until the previous one has been
  * answered: the server sees them one after another, and their replies reach the store in the order
  * they were asked. Reads pass straight through, and so does every request that is not the Store
- * API's. A wait never blocks for longer than {@link QUEUE_WAIT_CAP_MS} — a request that hangs costs
- * the next one that long, then the queue moves on — and a request aborted while it waits leaves at
- * once (its fetch then fails as aborted).
+ * API's. No request holds the queue for longer than {@link QUEUE_WAIT_CAP_MS}: one that hangs costs
+ * the queue that long, then the NEXT one goes — one, not everything that waited, so the rest stay
+ * one after another behind it. A request aborted while it waits leaves at once (its fetch then fails
+ * as aborted) without holding the queue; one aborted while it holds it lets the next one go.
  *
  * Registered as the OUTERMOST middleware (last `apiFetch.use()`), so the middlewares inside it —
  * core's nonce, the framework's own reply bookkeeping — see a request when it really leaves.
@@ -32,7 +33,7 @@ import apiFetch from '@wordpress/api-fetch';
 import type { APIFetchMiddleware, APIFetchOptions } from '@wordpress/api-fetch';
 import { requestPath } from './customer-data-request';
 
-/** The longest a mutation waits for the one before it. */
+/** The longest one request holds the queue — it is counted from the moment the request leaves, not from when it was asked for. */
 export const QUEUE_WAIT_CAP_MS = 15000;
 
 /** The page-wide mark that the queue is installed — a second copy of the bundle must not add another. */
@@ -50,39 +51,71 @@ export function isStoreApiMutation( options: APIFetchOptions ): boolean {
 	return ! READ_METHODS.includes( method ) && MUTATED_ROUTE.test( requestPath( options.path ?? options.url ) );
 }
 
-/** Settles when the last mutation asked for has been answered. */
-let last: Promise< void > = Promise.resolve();
+/** The mutations waiting for their turn, oldest first: each is let go with the number of its turn. */
+const waiting: Array< ( turn: number ) => void > = [];
 
-/** Resolves once `previous` settles or the cap runs out, whichever is first. */
-function turnAfter( previous: Promise< void > ): Promise< void > {
-	return new Promise( ( resolve ) => {
-		const timer = setTimeout( resolve, QUEUE_WAIT_CAP_MS );
+/** The number of the turn that holds the queue now: `null` while no request does, `0` while it is handed over. */
+let holder: number | null = null;
 
-		previous.then( () => {
-			clearTimeout( timer );
-			resolve();
-		} );
-	} );
-}
+/** The numbers handed out so far. */
+let turns = 0;
 
-/** `turn`, or earlier when `signal` aborts. */
-function orAbort( turn: Promise< void >, signal?: AbortSignal | null ): Promise< void > {
-	if ( ! signal ) {
-		return turn;
+/** Ends `holder`'s turn after the cap. */
+let watchdog: ReturnType< typeof setTimeout > | undefined;
+
+/** Hands the queue to the oldest waiter, or frees it — the only place a request is let go. */
+function advance(): void {
+	const go = waiting.shift();
+
+	if ( ! go ) {
+		holder = null;
+
+		return;
 	}
 
+	const turn = ++turns;
+
+	holder = turn;
+	watchdog = setTimeout( () => leave( turn ), QUEUE_WAIT_CAP_MS );
+	go( turn );
+}
+
+/**
+ * Ends `turn`: answered, aborted or out of time, whichever comes first — the rest are no-ops. The
+ * next one goes a task later, so whoever asked for `turn` has handled its reply (a refreshed nonce,
+ * the cart it returned) before the next request leaves.
+ */
+function leave( turn: number ): void {
+	if ( holder === turn ) {
+		clearTimeout( watchdog );
+		holder = 0;
+		setTimeout( advance, 0 );
+	}
+}
+
+/** The turn `signal`'s request was given, or `null` when it was aborted before it got one. */
+function waitForTurn( signal?: AbortSignal | null ): Promise< number | null > {
 	return new Promise( ( resolve ) => {
-		const go = (): void => {
-			signal.removeEventListener( 'abort', go );
-			resolve();
+		if ( signal?.aborted ) {
+			resolve( null );
+
+			return;
+		}
+
+		const quit = (): void => {
+			waiting.splice( waiting.indexOf( go ), 1 );
+			resolve( null );
+		};
+		const go = ( turn: number ): void => {
+			signal?.removeEventListener( 'abort', quit );
+			resolve( turn );
 		};
 
-		turn.then( go );
+		signal?.addEventListener( 'abort', quit );
+		waiting.push( go );
 
-		if ( signal.aborted ) {
-			go();
-		} else {
-			signal.addEventListener( 'abort', go );
+		if ( holder === null ) {
+			advance();
 		}
 	} );
 }
@@ -93,29 +126,35 @@ export const serializeStoreApiMutations: APIFetchMiddleware = ( options, next ) 
 		return next( options );
 	}
 
-	const turn = turnAfter( last );
-	let release: () => void = () => undefined;
+	const signal = options.signal;
 
-	// The next one goes when this one is answered AND its own turn came: one aborted while it waited
-	// must not let the rest overtake the request it was waiting for.
-	last = new Promise< void >( ( resolve ) => {
-		release = resolve;
-	} ).then( () => turn );
+	return waitForTurn( signal ).then( ( turn ) => {
+		if ( turn === null ) {
+			return next( options );
+		}
 
-	return orAbort( turn, options.signal )
-		.then( () => next( options ) )
-		.then(
-			( response ) => {
-				release();
+		const done = (): void => {
+			signal?.removeEventListener( 'abort', done );
+			leave( turn );
+		};
 
-				return response;
-			},
-			( error: unknown ) => {
-				release();
+		signal?.addEventListener( 'abort', done );
 
-				throw error;
-			}
-		);
+		return Promise.resolve()
+			.then( () => next( options ) )
+			.then(
+				( response ) => {
+					done();
+
+					return response;
+				},
+				( error: unknown ) => {
+					done();
+
+					throw error;
+				}
+			);
+	} );
 };
 
 /**

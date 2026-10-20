@@ -37,7 +37,10 @@ see what the server lost, and every retry is one more overlapping request.
 
 The checkout-blocks bundle serializes every Store API cart MUTATION the page sends through `apiFetch`
 (`src/checkout-blocks/store-api-queue.ts`, the outermost middleware). Each mutation waits for the previous
-one's answer, with a 15 s cap and FIFO order. Reads pass through. A plugin's own storefront JS must
+one's answer, in FIFO order. The 15 s cap belongs to the request that holds the queue, counted from
+when it leaves: a hung request then lets ONE successor go, and the rest stay serialized behind that one.
+A per-waiter timer started at enqueue would release a whole backlog at once and reopen the race. Reads
+pass through. A plugin's own storefront JS must
 send its cart mutations through `apiFetch` (`extensionCartUpdate`, the cart store's actions), never a raw
 `fetch()`: a raw request bypasses the queue and can erase the shopper's rate or point again. The classic
 checkout has the same server-side race through `admin-ajax`, and nothing guards it (a per-session server
