@@ -2953,15 +2953,25 @@
 
 				// A bulk listing is already in flight and the list alone is a usable picker, so a
 				// missing map degrades to that list. Under viewport the list only ever comes from the
-				// map's own bounds, so there is nothing to fall back to: the honest error with a retry
-				// replaces the stage, and the busy stage is released here too. Without this the
-				// `.then()` in `start()` still raises it after init() returns, on panels no longer shown.
+				// map's own bounds, so there is nothing to fall back to: the honest error with a retry,
+				// and the busy stage is released here too. Without this the `.then()` in `start()` still
+				// raises it after init() returns. With panels the error is their non-destructive card, so
+				// the panels stay mounted and its retry (`retryRequested` → `start()`) rebuilds the
+				// provider into a map element that is still in the document; `degrade()` would replace
+				// the modal body and detach it.
 				if ( reason && 'map_script' === reason.code && 'bulk' === config.strategy ) {
 					modal.showNotice( errorMessage( config, reason ) );
 					return;
 				}
 
 				clearInitialBusy();
+
+				if ( panels && reason && 'map_script' === reason.code ) {
+					panels.showMessage( errorMessageKey( config, reason ) );
+
+					return;
+				}
+
 				degrade( errorMessage( config, reason ), start );
 			} );
 

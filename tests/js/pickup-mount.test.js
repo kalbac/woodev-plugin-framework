@@ -3526,9 +3526,9 @@ test( 'a failed viewport map does not issue a locality-only fetch the controller
 // #1377 — the REAL Yandex provider fails synchronously inside init() (`hasApiKey:false`), before
 // start()'s `.then()` runs. Under viewport nothing else can ever arrive, so the shopper must get the
 // generic error with a retry and no busy stage. Under bulk the same failure is the list-only notice.
-function openRealYandexPanels( config ) {
+function openRealYandexPanels( config, providerCtor ) {
 	const panels = [];
-	window.WoodevPickupMapProviders = { testProvider: RealYandexProvider };
+	window.WoodevPickupMapProviders = { testProvider: providerCtor || RealYandexProvider };
 	window.WoodevPickupPanels = function( container, panelsConfig ) {
 		const instance = new RealPanels( container, panelsConfig );
 		panels.push( instance );
@@ -3558,8 +3558,57 @@ test( 'a failed viewport map (real Yandex provider) shows the generic error with
 	expect( fetchPoints ).not.toHaveBeenCalled();
 	expect( document.body.textContent ).toContain( phpI18n().error );
 	expect( document.body.textContent ).not.toContain( phpI18n().mapUnavailable );
-	expect( document.querySelector( '.woodev-modal__retry' ) ).not.toBeNull();
+	// The panels stay mounted: the error is their own card, whose retry re-runs start(). The modal's
+	// destructive error body would detach the map element a retry has to mount into.
+	const card = document.querySelector( '.woodev-pickup-message' );
+	expect( card.hidden ).toBe( false );
+	expect( card.textContent ).toContain( phpI18n().error );
+	expect( document.querySelector( '.woodev-pickup-message__retry' ) ).not.toBeNull();
+	expect( document.querySelector( '.woodev-modal__retry' ) ).toBeNull();
+	expect( document.body.contains( panels.getMapElement() ) ).toBe( true );
 	expect( error ).toHaveBeenCalledWith( '[woodev-pickup] Yandex Maps API key is missing or was not accepted for this domain.' );
+	error.mockRestore();
+} );
+
+test( 'a viewport map script failure recovers on retry: the picker is restored and usable', async () => {
+	const error = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
+	const fetchPoints = jest.fn( () => Promise.resolve( [ point( { id: 'p1' } ) ] ) );
+	window.WoodevPickupDataSource = fakeDataSourceFactory( fetchPoints );
+
+	// The first provider is the REAL Yandex module failing on its script; the retry gets a provider
+	// whose script has recovered (a transient failure), which is what a retry is for.
+	let constructed = 0;
+	function FlakyProvider() {
+		constructed += 1;
+
+		return 1 === constructed ? new RealYandexProvider() : new StubProvider();
+	}
+
+	const panels = await openRealYandexPanels( configWith( {
+		strategy: 'viewport',
+		debug: true,
+		mapConfig: { hasApiKey: false, ns: 'ymaps' },
+	} ), FlakyProvider );
+
+	expect( document.querySelector( '.woodev-pickup-message' ).hidden ).toBe( false );
+
+	document.querySelector( '.woodev-pickup-message__retry' ).click();
+	await flushAsync();
+
+	const provider = StubProvider.instances[ StubProvider.instances.length - 1 ];
+
+	expect( constructed ).toBe( 2 );
+	expect( provider.initCalls ).toHaveLength( 1 );
+	expect( provider.initCalls[ 0 ].container ).toBe( panels.getMapElement() );
+	expect( document.body.contains( provider.initCalls[ 0 ].container ) ).toBe( true );
+
+	provider.emit( 'boundsChange', [ 55, 37, 56, 38 ] );
+	await flushAsync();
+
+	expect( fetchPoints ).toHaveBeenCalledTimes( 1 );
+	expect( provider.setPointsCalls ).toHaveLength( 1 );
+	expect( document.querySelector( '.woodev-pickup-message' ).hidden ).toBe( true );
+	expect( panels.isBusy() ).toBe( false );
 	error.mockRestore();
 } );
 
