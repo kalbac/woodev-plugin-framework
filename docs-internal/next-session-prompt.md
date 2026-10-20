@@ -1,9 +1,9 @@
 > Составлено по итогам s189 (20.10.2026, MacBook, ночь автономно). Формат: `DOCS-SCHEMA.md` → Handoff Format.
 >
-> **Дерево:** framework `main` после docs PR s189; CDEK `v2` `25bd602a` (2.3.0.3); Yandex `main` `6f90fef8` (2.0.4).
+> **Дерево:** framework `main` после docs PR s189; CDEK `v2` `cb34c3e4` (2.3.0.3 + фикс порядка тестов); Yandex `main` `6f90fef8` (2.0.4).
 > Выпущено и проверено (20.10.2026): фреймворк `v2.0.6`, СДЭК `v2.3.0.3`, Яндекс `v2.0.4` — теги на слитых коммитах,
-> sha256 ассетов = ZIP на столе. Гейты: framework unit 7523 (оба порядка) / jest 3470; Yandex 1163; CDEK 1586 (обратный порядок — 70
-> старых ошибок, PR фикса тестов — см. ниже). Открытые PR: yandex#123 (его решение); CDEK фикс порядка тестов (если не слит — проверить).
+> sha256 ассетов = ZIP на столе. Гейты: framework unit 7523 (оба порядка) / jest 3470; Yandex 1163; CDEK 1586 — зелёный в обычном,
+> обратном и случайном порядке (edostavka#126 слит, `cb34c3e4`). Открытые PR: yandex#123 (его решение).
 
 # Ждёт кнопки оператора
 
@@ -38,7 +38,7 @@
 аккаунт. **#1342** — посты 02–04; неоднозначные статьи (выше). **#1381** — замер сделан (гонка на сервере реальна 3/3, путь покупателя
 теоретический), «Потом». **#1314** — закрыть после его взгляда на сайт. **#780** — цикл тикетов в Support AI. **yandex#87 п.3** — живьём, с его слова.
 **yandex#88 п.1/п.3** — предложить. **#1279** — WC PR #69896 (открыт на 20.10); если сольют — перепроверить #1332 (и очередь #1378).
-**#1289** — «Потом». **CDEK обратный порядок тестов** — PR фикса этой ночи; если не слит — довести. **Только с десктопа:** #886, **#878**, **#809**.
+**#1289** — «Потом». **Только с десктопа:** #886, **#878**, **#809**.
 
 **Сделано в s189:** yandex#127 (Яндекс 2.0.3 слит и выпущен 19.10, проверено в начале s189); #1367 #1368 #1370 #1377 #1357 #1369 #1269 — слиты и выпущены.
 
@@ -72,11 +72,11 @@
 #1043 #1044 #1045 #1046 #1047 #1048 #1049 #1050 #1051 #1052 #1053 #1054 #1055 #1056 #1057
 #1058 #1059 #1060 #1061 #1062 #1063 #1064 #1065 #1066 #1067 #1068 #1069 #1070 #1071 #1072 #1073 #1074 #1075 #1076 #1077 #1078 #1079 #1080 #1081 #1082 #1083 #1084 #1085 #1086 #1087 #1088 #1089 #1090 #1091 #1092 #1093 #1094 #1095 #1096 #1097 #1098 #1099 #1100 #1101 #1102 #1103 #1104 #1105 #1106 #1107 #1108 #1109 #1110 #1111 #1112 #1113 #1114 #1115 #1116 #331 #332 #652 #114 #152 #181 #379 #843 #913 #1117 #1118 #1119 #1120 #1121 #1122 #1123 #1125 #1126 #1127 #1128 #1129 #1130 #1131 #1132 #1133 #1134 #1136 #1138 #1140 #714 #786 #1135 #1137 #1139 #1141 #1142 #1143 #1144 #1145 #1146 #1147 #1148 #1149 #1150 #1151 #1152 #1153 #1154 #1155 #1156 #1157 #1158 #1159 #1160 #1161 #1162 #1163 #1164 #1165 #1166 #1167 #1168 #1169 #1170 #1171 #1172 #1173 #1174 #1175 #1176 #1177 #1178 #1179 #1180 #1181 #1182 #1183 #1184 #1185 #1186 #1187 #1188 #1189 #1190 #1191 #1192 #1193 #1194 #1195 #1196 #1197 #1198 #1199 #1200 #1201 #1202 #1203 #1204 #1205 #1206 #1207 #1208 #1209 #1210 #1211 #1212 #1213 #1214 #1215 #1216 #1217 #1218 #1219 #1220 #1221 #1222 #1223 #1224 #1225 #1226 #1227 #1228 #1229 #1230 #109 #177 #409 #151 #371 #819 #689 #701 #780 #1231 #1232 #1233 #1234 #1235 #103 #108 #1236 #1237 #85 #1238 #1239 #1240 #1241 #1242 #1243 #1244 #1245 #1246 #1247 #1248 #1249 #1250 #1251 #1252 #1253 #1254 #1255 #1256 #1257 #1258 #1259 #1260 #1261 #1262 #1263 #1264 #1265 #1266 #1267 #1268 #1269 #1270 #1271 #1272 #1273 #1274 #1275 #1276 #1277 #1278 #1279 #1280 #1281 #1282 #1283 #1284 #1285 #1286 #1281 #1282 #1283 #1284 #1285 #1287 #1288 #1289 #1290 #1291 #1292 #1293 #1294 #1295 #1296 #1297 #1298 #1299 #1300 #1301 #1302 #1303 #1304 #1305 #1306 #1307 #1308 #1309 #1310 #1311 #1312 #1313 #1314 #1315 #1316 #1317 #1318 #1319 #1320 #1321 #1322 #1323 #1324 #1325 #1326 #1327 #1328 #1329 #1330 #1331 #1332 #1333 #1334 #1335 #1336 #1337 #1338 #1339 #1340 #1341 #1342 #1343 #1344 #1345 #1346 #1347 #1348 #1350 #1353 #1356 #1357 #1358 #1359 #1360 #1361 #1362 #1363 #1364 #1365 #1366 #1367 #1368 #1369 #1370 #567 #247 #285 #215 #1371 #1372 #1373 #1374 #1375 #1376 #1377 #1378 #1379 #1380 #1381 #1382
 
-Плюс `edostavka#2` `edostavka#5` `edostavka#6` `edostavka#7` `edostavka#8` `edostavka#9` `edostavka#10` `edostavka#11` `edostavka#12` `edostavka#13` `edostavka#14` `edostavka#15` `edostavka#16` `edostavka#17` `edostavka#18` `edostavka#19` `edostavka#20` `edostavka#21` `edostavka#22` `edostavka#23` `edostavka#24` `edostavka#25` `edostavka#26` `edostavka#27` `edostavka#28` `edostavka#29` `edostavka#30` `edostavka#31` `edostavka#32` `edostavka#33` `edostavka#34` `edostavka#35` `edostavka#36` `edostavka#37` `edostavka#38` `edostavka#39` `edostavka#40` `edostavka#41` `edostavka#42` `edostavka#43` `edostavka#44` `edostavka#45` `edostavka#46` `edostavka#47` `edostavka#48` `edostavka#49` `edostavka#50` `edostavka#51` `edostavka#52` `edostavka#53` `edostavka#54` `edostavka#55` `edostavka#56` `edostavka#57` `edostavka#58` `edostavka#59` `edostavka#60` `edostavka#61` `edostavka#62` `edostavka#63` `edostavka#64` `edostavka#65` `edostavka#66` `edostavka#67` `edostavka#68` `edostavka#69` `edostavka#70` `edostavka#71` `edostavka#72` `edostavka#73` `edostavka#74` `edostavka#75` `edostavka#76` `edostavka#77` `edostavka#78` `edostavka#79` `edostavka#80` `edostavka#81` `edostavka#82`; контракты #2 #3 #4 #5 — `sessions/s115.md`. Плюс `edostavka#110` `edostavka#111` `edostavka#112` `edostavka#113` `edostavka#114` `edostavka#115` `edostavka#116` `edostavka#117` `edostavka#118` `edostavka#119` `edostavka#120` `edostavka#121` `edostavka#122` `edostavka#123`. Плюс `edostavka#83` `edostavka#84` `edostavka#85` `edostavka#86` `edostavka#87` `edostavka#88` `edostavka#89` `edostavka#90` `edostavka#91` `edostavka#92` `edostavka#93` `edostavka#94` `edostavka#95` `edostavka#96` `edostavka#97` `edostavka#98` `edostavka#99` `edostavka#100` `edostavka#101` `edostavka#102` `edostavka#103` `edostavka#104` `edostavka#105` `edostavka#106` `edostavka#107` `edostavka#108` `edostavka#109`. Плагин Яндекса — `yandex-delivery#1`…`yandex-delivery#117` (статусы — на доске №11; сессия s184: yandex#108 #109 #110 #111 #112 #113; s185: yandex#119 #120; s186: yandex#121). Плюс `woodev-theme#3` `woodev-theme#32`, `yandex-delivery#76`, `yandex-delivery#122`…`yandex-delivery#128`; `edostavka#124` `edostavka#125`.
+Плюс `edostavka#2` `edostavka#5` `edostavka#6` `edostavka#7` `edostavka#8` `edostavka#9` `edostavka#10` `edostavka#11` `edostavka#12` `edostavka#13` `edostavka#14` `edostavka#15` `edostavka#16` `edostavka#17` `edostavka#18` `edostavka#19` `edostavka#20` `edostavka#21` `edostavka#22` `edostavka#23` `edostavka#24` `edostavka#25` `edostavka#26` `edostavka#27` `edostavka#28` `edostavka#29` `edostavka#30` `edostavka#31` `edostavka#32` `edostavka#33` `edostavka#34` `edostavka#35` `edostavka#36` `edostavka#37` `edostavka#38` `edostavka#39` `edostavka#40` `edostavka#41` `edostavka#42` `edostavka#43` `edostavka#44` `edostavka#45` `edostavka#46` `edostavka#47` `edostavka#48` `edostavka#49` `edostavka#50` `edostavka#51` `edostavka#52` `edostavka#53` `edostavka#54` `edostavka#55` `edostavka#56` `edostavka#57` `edostavka#58` `edostavka#59` `edostavka#60` `edostavka#61` `edostavka#62` `edostavka#63` `edostavka#64` `edostavka#65` `edostavka#66` `edostavka#67` `edostavka#68` `edostavka#69` `edostavka#70` `edostavka#71` `edostavka#72` `edostavka#73` `edostavka#74` `edostavka#75` `edostavka#76` `edostavka#77` `edostavka#78` `edostavka#79` `edostavka#80` `edostavka#81` `edostavka#82`; контракты #2 #3 #4 #5 — `sessions/s115.md`. Плюс `edostavka#110` `edostavka#111` `edostavka#112` `edostavka#113` `edostavka#114` `edostavka#115` `edostavka#116` `edostavka#117` `edostavka#118` `edostavka#119` `edostavka#120` `edostavka#121` `edostavka#122` `edostavka#123`. Плюс `edostavka#83` `edostavka#84` `edostavka#85` `edostavka#86` `edostavka#87` `edostavka#88` `edostavka#89` `edostavka#90` `edostavka#91` `edostavka#92` `edostavka#93` `edostavka#94` `edostavka#95` `edostavka#96` `edostavka#97` `edostavka#98` `edostavka#99` `edostavka#100` `edostavka#101` `edostavka#102` `edostavka#103` `edostavka#104` `edostavka#105` `edostavka#106` `edostavka#107` `edostavka#108` `edostavka#109`. Плагин Яндекса — `yandex-delivery#1`…`yandex-delivery#117` (статусы — на доске №11; сессия s184: yandex#108 #109 #110 #111 #112 #113; s185: yandex#119 #120; s186: yandex#121). Плюс `woodev-theme#3` `woodev-theme#32`, `yandex-delivery#76`, `yandex-delivery#122`…`yandex-delivery#128`; `edostavka#124` `edostavka#125` `edostavka#126`.
 
 # С чего начать
 
-0. Скиллы `orchestration` + `orca-team`; `orca account list` (`updatedAt`). Проверить, слит ли PR фикса порядка тестов СДЭК.
+0. Скиллы `orchestration` + `orca-team`; `orca account list` (`updatedAt`).
 1. Если он дал решения по #1163 п.3 / yandex#123 / #1169 — выполнить (yandex#123 → Яндекс 2.0.5 по образцу s189).
 2. Иначе — доска: «Следом»/«Потом» без его гейта; перед планированием прочитать комментарии карточек.
 
@@ -96,8 +96,8 @@
 
 | | |
 |---|---|
-| Дерево | framework `main`; CDEK `v2` `25bd602a`; Yandex `main` `6f90fef8` |
-| Открытые PR | yandex#123 (его решение); фикс порядка тестов СДЭК |
+| Дерево | framework `main`; CDEK `v2` `cb34c3e4`; Yandex `main` `6f90fef8` |
+| Открытые PR | yandex#123 (его решение) |
 | Артефакты | `~/Desktop/woodev-publications/release/` (ZIP + notes 2.3.0.3 / 2.0.4) |
 | Готчи | 439 |
 | Доски | №6 фреймворк, №11 Яндекс, №9 СДЭК |
