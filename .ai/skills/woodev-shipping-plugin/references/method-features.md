@@ -42,7 +42,7 @@ the package and `delivery_payment` insurance and a `fee_payments`-limited fee ar
 rates route (`payment_method` param, validated against the enabled gateways) for the chosen tariff once a method is picked;
 `Admin_Rate_Calculator::build_package()` then puts the method under `Fee_Payments::PACKAGE_KEY`, the key the checkout uses, so
 read the method with the same helpers (`resolve_insurance_for_package()`, `fee_applies_for_package()`) and the wizard needs
-nothing special. A failed re-quote keeps the old price with a warning; the export (`resolve_insurance_for_order()`) always
+nothing special. For a pickup tariff the request also carries `method_id` + `pickup_point` (validated by `Admin_Rate_Calculator::refuse_pickup()`: the point is of the method's type and passes the step-⑤ acceptance check) and the calculation runs inside `Pickup_Handler::with_request_selected_point()`, so a carrier that prices by point must read it through `get_selected_point_for_method()` — the admin has no WC session, and a carrier reading the session directly quotes without the point. A price the manager typed stays theirs across every quote (`cost_typed`). A failed re-quote keeps the old price with a warning; the export (`resolve_insurance_for_order()`) always
 reads the order's real method. A registry row is never
 needed for a carrier that declares `declares_payment_dependent_price()`; any other instance saved through `update_option`
 (the admin form, a migration) enters the `Fee_Payments` registry by itself — only a raw SQL import skips it.

@@ -41,6 +41,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Rates_Controller'
 		private const MAX_LINES = 200;
 
 		/**
+		 * The longest pickup-point id the route reads — the pickup routes' own cap.
+		 *
+		 * @since 2.0.7
+		 *
+		 * @var int
+		 */
+		private const MAX_POINT_ID_LENGTH = 128;
+
+		/**
 		 * Rate calculator.
 		 *
 		 * @since 2.0.2
@@ -137,6 +146,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Rates_Controller'
 							'default'           => '',
 							'validate_callback' => 'rest_validate_request_arg',
 						],
+						// The pickup tariff the manager chose and the point under it (step ⑤): a pickup carrier's price
+						// depends on the point, so the re-quote is made for it. Both or neither.
+						'method_id'      => [
+							'type'              => 'string',
+							'default'           => '',
+							'validate_callback' => 'rest_validate_request_arg',
+						],
+						'pickup_point'   => [
+							'type'              => 'string',
+							'default'           => '',
+							'validate_callback' => 'rest_validate_request_arg',
+						],
 					],
 				]
 			);
@@ -207,7 +228,70 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Rates_Controller'
 				);
 			}
 
-			return rest_ensure_response( $this->calculator->calculate( $lines, $destination, $record, $customer_id, $payment_method ) );
+			$pickup = $this->resolve_pickup( $request, $lines, $destination, $customer_id, $payment_method );
+
+			if ( $pickup instanceof \WP_Error ) {
+				return $pickup;
+			}
+
+			return rest_ensure_response( $this->calculator->calculate( $lines, $destination, $record, $customer_id, $payment_method, $pickup ) );
+		}
+
+		/**
+		 * Validates the optional `method_id` + `pickup_point` pair: the point must belong to the chosen
+		 * method and pass the acceptance check step ⑤ already runs (see
+		 * {@see Admin_Rate_Calculator::refuse_pickup()}). It is installed into the carrier's own selection
+		 * accessor for the one calculation, so an id the carrier would refuse is a 422, never priced.
+		 *
+		 * @since 2.0.7
+		 *
+		 * @param \WP_REST_Request                                                          $request        the request.
+		 * @param array<int, array{product: \WC_Product, quantity: int, price: float|null}> $lines          resolved lines.
+		 * @param array<string, string>                                                     $destination    normalized destination.
+		 * @param int                                                                       $customer_id    customer id.
+		 * @param string                                                                    $payment_method validated payment method.
+		 * @return array{method_id: string, point_id: string}|null|\WP_Error `null` when no point was sent.
+		 */
+		private function resolve_pickup( $request, array $lines, array $destination, int $customer_id, string $payment_method ) {
+
+			$point_id  = $this->clean_param( $request->get_param( 'pickup_point' ), self::MAX_POINT_ID_LENGTH );
+			$method_id = $this->clean_param( $request->get_param( 'method_id' ), self::MAX_POINT_ID_LENGTH );
+
+			if ( '' === $point_id ) {
+				return null;
+			}
+
+			$pickup  = [
+				'method_id' => $method_id,
+				'point_id'  => $point_id,
+			];
+			$refusal = '' === $method_id
+				? __( 'Укажите способ доставки, к которому относится пункт выдачи.', 'woodev-plugin-framework' )
+				: $this->calculator->refuse_pickup( $lines, $destination, $customer_id, $payment_method, $pickup );
+
+			if ( null !== $refusal ) {
+				return new \WP_Error(
+					'woodev_rates_pickup_point_refused',
+					$refusal,
+					[ 'status' => 422 ]
+				);
+			}
+
+			return $pickup;
+		}
+
+		/**
+		 * A string param, unslashed, cleaned and capped; `''` for anything that is not a string.
+		 *
+		 * @since 2.0.7
+		 *
+		 * @param mixed $raw    the raw param.
+		 * @param int   $length the cap.
+		 * @return string
+		 */
+		private function clean_param( $raw, int $length ): string {
+
+			return is_string( $raw ) ? substr( trim( (string) wc_clean( wp_unslash( $raw ) ) ), 0, $length ) : '';
 		}
 
 		/**

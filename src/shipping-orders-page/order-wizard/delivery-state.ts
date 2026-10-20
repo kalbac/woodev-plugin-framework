@@ -79,6 +79,10 @@ export function buildRatesRequest( data: WizardData ): Record<string, unknown> |
  * delivery step quoted, plus the payment method, so everything that depends on it (insurance for a
  * cash-on-delivery order, a fee limited to some payment methods, a carrier's own cash-on-delivery
  * commission) is in the price. An empty method asks for the quote without one — what ④ got.
+ *
+ * A pickup tariff also carries its method and the chosen point (`method_id`, `pickup_point`): a pickup
+ * carrier's price depends on the point, and the server prices it for that one, exactly as the checkout
+ * does for the point in the session. The point is part of the request, so a different point asks again.
  * `null` while the wizard cannot ask (see {@link buildRatesRequest}).
  *
  * @param {WizardData} data the wizard state.
@@ -87,11 +91,18 @@ export function buildRatesRequest( data: WizardData ): Record<string, unknown> |
 export function buildRepriceRequest( data: WizardData ): Record<string, unknown> | null {
 	const request = buildRatesRequest( data );
 
-	if ( null === request || '' === data.rest.payment_method ) {
-		return request;
+	if ( null === request ) {
+		return null;
 	}
 
-	return { ...request, payment_method: data.rest.payment_method };
+	const pointId = pickedPointId( data.rest );
+	const methodId = String( data.rest.shipping_line?.method_id ?? '' );
+
+	return {
+		...request,
+		...( '' !== data.rest.payment_method ? { payment_method: data.rest.payment_method } : {} ),
+		...( data.rest.rate_is_pickup && '' !== pointId && '' !== methodId ? { method_id: methodId, pickup_point: pointId } : {} ),
+	};
 }
 
 /** Same request ⇒ same key: the step asks again only when this changes. */
@@ -162,6 +173,7 @@ export function chooseRate( data: WizardData, rate: RateOption ): WizardData {
 			shipping_line: toShippingLine( rate, cost ),
 			pickup_point: null,
 			rate_cost: cost,
+			cost_typed: false,
 			rate_is_pickup: rate.is_pickup,
 			// The carrier's fields belong to the tariff: another tariff asks for its own (D7).
 			carrier_fields: {},
@@ -180,16 +192,23 @@ export function isCostOverridden( rest: WizardRest ): boolean {
 
 	const typed = String( line.cost ?? '' ).trim();
 
-	return '' !== typed && Number( typed ) !== Number( rest.rate_cost );
+	return '' !== typed && ( rest.cost_typed || Number( typed ) !== Number( rest.rate_cost ) );
 }
 
-/** The manager types a delivery price (O8). Kept as text while typing, like an item's price. */
+/**
+ * The manager types a delivery price (O8). Kept as text while typing, like an item's price. A price
+ * that differs from the carrier's own is the manager's intent from now on ({@see WizardRest.cost_typed});
+ * typing the carrier's own price, or nothing, gives the intent up.
+ */
 export function setDeliveryCost( data: WizardData, cost: string ): WizardData {
 	if ( ! data.rest.shipping_line ) {
 		return data;
 	}
 
-	return { ...data, rest: { ...data.rest, shipping_line: { ...data.rest.shipping_line, cost } } };
+	const { rate_cost } = data.rest;
+	const typed = '' !== rate_cost && '' !== cost.trim() && Number( cost ) !== Number( rate_cost );
+
+	return { ...data, rest: { ...data.rest, shipping_line: { ...data.rest.shipping_line, cost }, cost_typed: typed } };
 }
 
 /** Back to the carrier's own price. */
@@ -241,7 +260,7 @@ export function applyRates( data: WizardData, response: RatesResponse ): WizardD
 	if ( ! found ) {
 		return {
 			...data,
-			rest: { ...data.rest, shipping_line: null, pickup_point: null, rate_cost: '', rate_is_pickup: false, carrier_fields: {}, carrier_schema: [] },
+			rest: { ...data.rest, shipping_line: null, pickup_point: null, rate_cost: '', cost_typed: false, rate_is_pickup: false, carrier_fields: {}, carrier_schema: [] },
 		};
 	}
 
@@ -255,6 +274,7 @@ export function applyRates( data: WizardData, response: RatesResponse ): WizardD
 	const same =
 		JSON.stringify( line ) === JSON.stringify( data.rest.shipping_line ) &&
 		data.rest.rate_cost === fresh &&
+		data.rest.cost_typed === overridden &&
 		data.rest.rate_is_pickup === rate.is_pickup &&
 		JSON.stringify( schema ) === JSON.stringify( data.rest.carrier_schema ) &&
 		Object.keys( carrierFields ).length === Object.keys( data.rest.carrier_fields ).length;
@@ -269,6 +289,8 @@ export function applyRates( data: WizardData, response: RatesResponse ): WizardD
 			...data.rest,
 			shipping_line: line,
 			rate_cost: fresh,
+			// The intent outlives a quote that equals the typed price; the reference alone could not say so.
+			cost_typed: overridden,
 			rate_is_pickup: rate.is_pickup,
 			// A point belongs to a pickup tariff only.
 			pickup_point: rate.is_pickup ? data.rest.pickup_point : null,

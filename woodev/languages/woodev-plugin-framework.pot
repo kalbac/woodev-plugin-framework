@@ -2211,6 +2211,14 @@ msgstr ""
 msgid "Покупатель не найден."
 msgstr ""
 
+#: shipping-method/admin/orders/class-admin-rate-calculator.php:427
+msgid "У этого способа доставки нет пунктов выдачи."
+msgstr ""
+
+#: shipping-method/rest-api/class-rates-controller.php:269
+msgid "Укажите способ доставки, к которому относится пункт выдачи."
+msgstr ""
+
 #: shipping-method/admin/orders/class-order-payload-validator.php:232
 #: assets/build/shipping-orders-page/index.js:2
 msgid "Чтобы создать аккаунт, укажите email покупателя."

@@ -267,6 +267,21 @@ describe( 'buildRepriceRequest and applyReprice — the quote with the payment m
 		expect( buildRepriceRequest( { ...data, items: [], rest: { ...data.rest, payment_method: 'cod' } } ) ).toBeNull();
 	} );
 
+	test( 'a pickup tariff with a chosen point also sends its method and the point; a courier or no point sends neither', () => {
+		const pvz = chooseRate( filled(), PVZ );
+		const withPoint = setPickupPoint( { ...pvz, rest: { ...pvz.rest, payment_method: 'cod' } }, { id: 'market-second', name: 'ПВЗ', address: 'ул Тверская 1' } );
+
+		expect( buildRepriceRequest( withPoint ) ).toEqual( { ...buildRatesRequest( withPoint ), payment_method: 'cod', method_id: 'cdek_pvz', pickup_point: 'market-second' } );
+		// A different point is a different question.
+		expect( ratesRequestKey( buildRepriceRequest( setPickupPoint( withPoint, { id: 'market-cod', name: 'ПВЗ', address: 'ул Тверская 1' } ) ) ) ).not.toBe( ratesRequestKey( buildRepriceRequest( withPoint ) ) );
+		expect( buildRepriceRequest( { ...pvz, rest: { ...pvz.rest, payment_method: 'cod' } } ) ).toEqual( { ...buildRatesRequest( pvz ), payment_method: 'cod' } );
+
+		const courier = chooseRate( filled(), COURIER );
+		const courierWithStalePoint = { ...courier, rest: { ...courier.rest, payment_method: 'cod', pickup_point: { id: 'old' } } };
+
+		expect( buildRepriceRequest( courierWithStalePoint ) ).toEqual( { ...buildRatesRequest( courier ), payment_method: 'cod' } );
+	} );
+
 	test( 'a moved carrier price follows the answer and is reported old → new', () => {
 		const result = applyReprice( chosenAt( 350 ), answer( { ...COURIER, cost: 420 } ) );
 
@@ -290,6 +305,30 @@ describe( 'buildRepriceRequest and applyReprice — the quote with the payment m
 
 		expect( result.outcome ).toBe( 'same' );
 		expect( result.data.rest.shipping_line.cost ).toBe( '300' );
+	} );
+
+	test( 'a typed price stays manual across successive quotes, even when one of them equals it (350 → typed 420 → COD 420 → online 350)', () => {
+		const typed = setDeliveryCost( chosenAt( 350 ), '420' );
+		const cod = applyReprice( typed, answer( { ...COURIER, cost: 420 } ) );
+
+		expect( cod.outcome ).toBe( 'same' );
+		expect( isCostOverridden( cod.data.rest ) ).toBe( true );
+
+		const online = applyReprice( cod.data, answer( { ...COURIER, cost: 350 } ) );
+
+		expect( online.outcome ).toBe( 'same' );
+		expect( online.data.rest.shipping_line.cost ).toBe( '420' );
+		expect( online.data.rest.rate_cost ).toBe( '350' );
+		// The manager's own reset, and a different tariff, are what end the intent.
+		expect( resetDeliveryCost( online.data ).rest.shipping_line.cost ).toBe( '350' );
+		expect( isCostOverridden( resetDeliveryCost( online.data ).rest ) ).toBe( false );
+		expect( isCostOverridden( chooseRate( online.data, { ...PVZ, cost: 420 } ).rest ) ).toBe( false );
+	} );
+
+	test( 'a typed price equal to the reference is not manual: the next quote moves it', () => {
+		const typed = setDeliveryCost( chosenAt( 350 ), '350' );
+
+		expect( applyReprice( typed, answer( { ...COURIER, cost: 420 } ) ).data.rest.shipping_line.cost ).toBe( '420' );
 	} );
 
 	test( 'a tariff the answer no longer offers is a failure that leaves the line alone', () => {

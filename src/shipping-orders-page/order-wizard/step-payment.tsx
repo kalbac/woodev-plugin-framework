@@ -343,7 +343,7 @@ export default function StepPayment( { data, setData, errors, mode, order, basel
 				<Notice status="warning" isDismissible={ false } className="woodev-order-wizard__reprice-notice">
 					{ sprintf(
 						/* translators: %s: the delivery price that stays in the order. */
-						__( 'Не удалось пересчитать доставку с учётом способа оплаты — осталась прежняя стоимость %s. Заказ можно сохранить; при необходимости поправьте стоимость на шаге «Доставка».', 'woodev-plugin-framework' ),
+						__( 'Не удалось пересчитать доставку: сохранена цена %s. Заказ можно сохранить.', 'woodev-plugin-framework' ),
 						formatMoney( totals.delivery, symbol )
 					) }
 				</Notice>

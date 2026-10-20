@@ -663,15 +663,60 @@ describe( 'the delivery price is re-asked with the payment method (#1163)', () =
 		expect( document.querySelector( '.woodev-order-wizard__reprice-notice' ) ).toBeNull();
 	} );
 
+	test( 'a typed price survives a quote that happens to equal it: 350, typed 420, COD quotes 420, online quotes 350 — still 420', async () => {
+		apiFetch.mockImplementation( priceByPayment );
+		const { data } = mountStep( { initial: quotedAt350( { shipping_line: { method_id: 'cdek_courier', instance_id: 3, rate_id: 'cdek_courier:3', label: 'Курьер', cost: '420', meta: {} } } ) } );
+
+		pick( 'cod' );
+		await waitFor( () => expect( rateCalls() ).toHaveLength( 1 ) );
+		await settled();
+		expect( data().rest.shipping_line.cost ).toBe( '420' );
+
+		pick( 'yookassa' );
+		await waitFor( () => expect( rateCalls() ).toHaveLength( 2 ) );
+		await settled();
+
+		expect( data().rest.shipping_line.cost ).toBe( '420' );
+		expect( document.querySelector( '.woodev-order-wizard__reprice-notice' ) ).toBeNull();
+	} );
+
+	test( 'a pickup tariff re-quotes for the chosen point: the method and the point ride in the request', async () => {
+		apiFetch.mockImplementation( ( request ) => {
+			const rate = ratesAt( 350 );
+
+			rate.providers[ 0 ].rates[ 0 ] = { ...rate.providers[ 0 ].rates[ 0 ], id: 'cdek_pvz:5', method_id: 'cdek_pvz', instance_id: 5, is_pickup: true, cost: 'market-second' === request.data.pickup_point ? 516 : 310 };
+
+			return Promise.resolve( rate );
+		} );
+		const { data } = mountStep( {
+			initial: filledState( {
+				rest: {
+					shipping_line: { method_id: 'cdek_pvz', instance_id: 5, rate_id: 'cdek_pvz:5', label: 'ПВЗ', cost: '310', meta: {} },
+					rate_cost: '310',
+					rate_is_pickup: true,
+					pickup_point: { id: 'market-second', name: 'Второй', address: 'ул Арбат 3' },
+				},
+			} ),
+		} );
+
+		pick( 'cod' );
+		await waitFor( () => expect( rateCalls() ).toHaveLength( 1 ) );
+		await settled();
+
+		expect( rateCalls()[ 0 ].data ).toMatchObject( { payment_method: 'cod', method_id: 'cdek_pvz', pickup_point: 'market-second' } );
+		expect( data().rest.shipping_line.cost ).toBe( '516' );
+		expect( plain( await inStep().findByText( /310,00 ₽ → 516,00 ₽/ ) ) ).toContain( '310,00 ₽ → 516,00 ₽' );
+	} );
+
 	test( 'a failed re-calculation keeps the old price, warns, and does not block the order', async () => {
 		apiFetch.mockRejectedValue( { code: 'woodev_rates_unknown_payment_method', message: 'Такого способа оплаты нет в магазине.', data: { status: 422 } } );
 		const { data, submit } = mountStep( { initial: quotedAt350() } );
 
 		pick( 'cod' );
 
-		const warning = await inStep().findByText( /Не удалось пересчитать доставку с учётом способа оплаты/ );
+		const warning = await inStep().findByText( /Не удалось пересчитать доставку/ );
 
-		expect( plain( warning ) ).toContain( 'осталась прежняя стоимость 350,00 ₽' );
+		expect( plain( warning ) ).toBe( 'Не удалось пересчитать доставку: сохранена цена 350,00 ₽. Заказ можно сохранить.' );
 		expect( warning.closest( '.components-notice' ) ).toHaveClass( 'is-warning' );
 		expect( data().rest.shipping_line.cost ).toBe( '350' );
 

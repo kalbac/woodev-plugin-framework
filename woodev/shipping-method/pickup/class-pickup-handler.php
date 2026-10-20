@@ -373,6 +373,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		private ?Selection_Scope $selection_scope;
 
 		/**
+		 * The pickup point a SINGLE calculation is told to price for, as `[ method_id, point_id ]`, or
+		 * `null` — set and cleared only by {@see self::with_request_selected_point()} (#1163).
+		 *
+		 * The admin order wizard has no WooCommerce session, so the session choice
+		 * {@see self::get_selected_point_for_method()} reads is always empty there; this is the explicit,
+		 * request-scoped stand-in. Never written into a session, never outlives the calculation.
+		 *
+		 * @since 2.0.7
+		 * @var array{method_id: string, point_id: string}|null
+		 */
+		private ?array $request_point = null;
+
+		/**
 		 * Method ids for which {@see reconcile_pickup_scope()} has already reconciled
 		 * a scope claim this request (issue #749), keyed by METHOD ID — never a bare
 		 * process-wide bool.
@@ -4022,7 +4035,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *
 		 * @return array{locality: string, type: string, point_id: string}|null `null` when no
 		 *         scope is wired or the method carries no pickup type for this plugin; `point_id`
-		 *         is `''` when nothing is remembered (also the case in admin, with no WC session).
+		 *         is `''` when nothing is remembered (also the case in admin, with no WC session —
+		 *         unless the calculation runs inside {@see self::with_request_selected_point()}, which
+		 *         names the point explicitly, @since 2.0.7).
 		 */
 		public function get_selected_point_for_method( string $method_id ): ?array {
 			$selection = $this->selection();
@@ -4037,11 +4052,84 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				return null;
 			}
 
+			// #1163: a calculation that was told which point to price for answers with it (admin, no session).
+			if ( null !== $this->request_point && $this->request_point['method_id'] === $method_id ) {
+				return [
+					'locality' => $pair['locality'],
+					'type'     => $pair['type'],
+					'point_id' => $this->request_point['point_id'],
+				];
+			}
+
 			return [
 				'locality' => $pair['locality'],
 				'type'     => $pair['type'],
 				'point_id' => (string) $this->recall_for_pair( $selection, $pair ),
 			];
+		}
+
+		/**
+		 * Runs `$calculation` with `$point_id` as the point {@see self::get_selected_point_for_method()}
+		 * answers for `$method_id` — the admin order wizard's way to price a pickup tariff for the point the
+		 * manager chose, with no WooCommerce session (#1163). The override is request-scoped: it is cleared
+		 * when the calculation ends, however it ends, and nothing is written to a session.
+		 *
+		 * @since 2.0.7
+		 *
+		 * @param string   $method_id   Bare shipping-method id (no `:instance_id` suffix).
+		 * @param string   $point_id    Carrier point id the manager chose.
+		 * @param callable $calculation The calculation; its return value is returned.
+		 *
+		 * @return mixed
+		 */
+		public function with_request_selected_point( string $method_id, string $point_id, callable $calculation ) {
+			$this->request_point = [
+				'method_id' => $method_id,
+				'point_id'  => $point_id,
+			];
+
+			try {
+				return $calculation();
+			} finally {
+				$this->request_point = null;
+			}
+		}
+
+		/**
+		 * Whether `$point_id` may be priced for `$method_id`: the same acceptance check the order wizard's
+		 * step ⑤ runs through the admin point route ({@see Pickup_Selection_Service::check()} — weight, cells,
+		 * cash on delivery), plus the one the route cannot make without a method — the point is of the type
+		 * the method carries ({@see Selection_Scope::type_for_method()}).
+		 *
+		 * @since 2.0.7
+		 *
+		 * @param string $method_id      Bare shipping-method id (no `:instance_id` suffix).
+		 * @param string $point_id       Carrier point id the manager chose.
+		 * @param string $payment_method Gateway id the order will be paid with, `''` while none is chosen.
+		 * @param int    $weight         The package weight in GRAMS, 0 when unknown.
+		 *
+		 * @return string|null `null` when the point is acceptable, else the reason it is not.
+		 */
+		public function refuse_request_point( string $method_id, string $point_id, string $payment_method, int $weight ): ?string {
+			$type = null === $this->selection_scope ? null : $this->selection_scope->type_for_method( $method_id );
+
+			if ( null === $type ) {
+				return self::default_blocked_message();
+			}
+
+			try {
+				$point = $this->fetch_point( $point_id, false );
+			} catch ( \Throwable $e ) {
+				return self::point_unavailable_message();
+			}
+
+			if ( null === $point || ( Selection_Scope::TYPE_ANY !== $type && $point->to_array()['type']['code'] !== $type ) ) {
+				return self::point_unavailable_message();
+			}
+
+			$verdict = Pickup_Selection_Service::check( $point, $payment_method, $weight );
+
+			return $verdict['allowed'] ? null : ( $verdict['reason'] ?? self::default_blocked_message() );
 		}
 
 		/**

@@ -272,7 +272,8 @@ namespace Woodev\Tests\Unit\Shipping\Rest_Api {
 					$normalized,
 					null,
 					7,
-					''
+					'',
+					null
 				)
 				->andReturn( [ 'providers' => [] ] );
 
@@ -323,7 +324,8 @@ namespace Woodev\Tests\Unit\Shipping\Rest_Api {
 					Mockery::type( 'array' ),
 					null,
 					0,
-					''
+					'',
+					null
 				)
 				->andReturn( [] );
 
@@ -433,7 +435,7 @@ namespace Woodev\Tests\Unit\Shipping\Rest_Api {
 
 			$this->calculator->shouldReceive( 'calculate' )
 				->once()
-				->with( Mockery::type( 'array' ), [ 'country' => 'RU' ], Mockery::type( Location_Record::class ), 0, '' )
+				->with( Mockery::type( 'array' ), [ 'country' => 'RU' ], Mockery::type( Location_Record::class ), 0, '', null )
 				->andReturn( [] );
 
 			$this->controller()->get_rates( $this->request( [ 'location' => $record ] ) );
@@ -454,7 +456,7 @@ namespace Woodev\Tests\Unit\Shipping\Rest_Api {
 			$this->calculator->shouldReceive( 'normalize_destination' )->andReturn( [ 'country' => 'RU' ] );
 			$this->calculator->shouldReceive( 'calculate' )
 				->once()
-				->with( Mockery::type( 'array' ), [ 'country' => 'RU' ], null, 0, 'cod' )
+				->with( Mockery::type( 'array' ), [ 'country' => 'RU' ], null, 0, 'cod', null )
 				->andReturn( [] );
 
 			$this->controller()->get_rates( $this->request( [ 'payment_method' => ' cod ' ] ) );
@@ -482,6 +484,81 @@ namespace Woodev\Tests\Unit\Shipping\Rest_Api {
 		}
 
 		/**
+		 * The chosen pickup point reaches the calculation after the calculator accepted it (#1163).
+		 *
+		 * @covers ::get_rates
+		 * @covers ::resolve_pickup
+		 *
+		 * @return void
+		 */
+		public function test_a_chosen_pickup_point_is_validated_then_handed_to_the_calculator(): void {
+			$this->shop_with_gateways( [ 'cod' => 'yes' ] );
+			Functions\when( 'wc_get_product' )->justReturn( $this->product( 12 ) );
+			Functions\when( 'wc_clean' )->returnArg();
+			Functions\when( 'wp_unslash' )->returnArg();
+
+			$pickup = [
+				'method_id' => 'yandex_pickup',
+				'point_id'  => 'market-second',
+			];
+
+			$this->calculator->shouldReceive( 'normalize_destination' )->andReturn( [ 'country' => 'RU' ] );
+			$this->calculator->shouldReceive( 'refuse_pickup' )->once()->with( Mockery::type( 'array' ), [ 'country' => 'RU' ], 0, 'cod', $pickup )->andReturn( null );
+			$this->calculator->shouldReceive( 'calculate' )->once()->with( Mockery::type( 'array' ), [ 'country' => 'RU' ], null, 0, 'cod', $pickup )->andReturn( [] );
+
+			$this->controller()->get_rates( $this->request( [ 'payment_method' => 'cod', 'method_id' => 'yandex_pickup', 'pickup_point' => ' market-second ' ] ) );
+		}
+
+		/**
+		 * A point the carrier refuses, or one with no method to belong to, is a 422 and is never priced (#1163).
+		 *
+		 * @covers ::get_rates
+		 * @covers ::resolve_pickup
+		 *
+		 * @return void
+		 */
+		public function test_a_refused_pickup_point_is_a_422(): void {
+			Functions\when( 'wc_get_product' )->justReturn( $this->product( 12 ) );
+			Functions\when( 'wc_clean' )->returnArg();
+			Functions\when( 'wp_unslash' )->returnArg();
+
+			$this->calculator->shouldReceive( 'normalize_destination' )->andReturn( [ 'country' => 'RU' ] );
+			$this->calculator->shouldReceive( 'refuse_pickup' )->once()->andReturn( 'This pickup point does not accept cash on delivery.' );
+			$this->calculator->shouldNotReceive( 'calculate' );
+
+			$refused = $this->controller()->get_rates( $this->request( [ 'method_id' => 'yandex_pickup', 'pickup_point' => 'P1' ] ) );
+			$bare    = $this->controller()->get_rates( $this->request( [ 'pickup_point' => 'P1' ] ) );
+
+			foreach ( [ $refused, $bare ] as $result ) {
+				$this->assertInstanceOf( \WP_Error::class, $result );
+				$this->assertSame( 'woodev_rates_pickup_point_refused', $result->code );
+				$this->assertSame( 422, $result->data['status'] );
+			}
+
+			$this->assertSame( 'This pickup point does not accept cash on delivery.', $refused->get_error_message() );
+		}
+
+		/**
+		 * No point, no pickup context: the quote is the one the route always made (#1163).
+		 *
+		 * @covers ::resolve_pickup
+		 *
+		 * @return void
+		 */
+		public function test_no_pickup_point_means_no_pickup_context(): void {
+			Functions\when( 'wc_get_product' )->justReturn( $this->product( 12 ) );
+			Functions\when( 'wc_clean' )->returnArg();
+			Functions\when( 'wp_unslash' )->returnArg();
+
+			$this->calculator->shouldReceive( 'normalize_destination' )->andReturn( [ 'country' => 'RU' ] );
+			$this->calculator->shouldNotReceive( 'refuse_pickup' );
+			$this->calculator->shouldReceive( 'calculate' )->once()->with( Mockery::type( 'array' ), [ 'country' => 'RU' ], null, 0, '', null )->andReturn( [] );
+
+			// A method id alone names no point.
+			$this->controller()->get_rates( $this->request( [ 'method_id' => 'yandex_pickup' ] ) );
+		}
+
+		/**
 		 * @covers ::register_routes
 		 *
 		 * @return void
@@ -499,6 +576,11 @@ namespace Woodev\Tests\Unit\Shipping\Rest_Api {
 
 			$this->assertSame( 'string', $captured['args']['payment_method']['type'] );
 			$this->assertArrayNotHasKey( 'required', $captured['args']['payment_method'] );
+
+			foreach ( [ 'method_id', 'pickup_point' ] as $arg ) {
+				$this->assertSame( 'string', $captured['args'][ $arg ]['type'], $arg );
+				$this->assertArrayNotHasKey( 'required', $captured['args'][ $arg ], $arg );
+			}
 		}
 	}
 }

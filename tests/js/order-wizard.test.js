@@ -611,7 +611,7 @@ describe( 'sending the order and server-side validation (422, shown per field)',
 			meta: {},
 		} );
 		expect( request.data.pickup_point ).toBeNull();
-		expect( JSON.stringify( request.data ) ).not.toMatch( /rate_cost|rate_is_pickup|rates_pending|pickup_check|settlementRecord/ );
+		expect( JSON.stringify( request.data ) ).not.toMatch( /rate_cost|cost_typed|rate_is_pickup|rates_pending|pickup_check|settlementRecord/ );
 	} );
 
 	test( 'a 422 puts each message on the field it names and returns to the earliest step with one', async () => {
