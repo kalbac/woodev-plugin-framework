@@ -246,7 +246,7 @@ class Woodev_Plugin {
 `woodev/class-plugin.php` until 2026-09-05; operator decision #409 settled the opposite, and the two
 are deliberately separate concepts.
 
-- `@since` = the **planned release** the change ships in — currently `2.0.6`. Plain semver:
+- `@since` = the **planned release** the change ships in — currently `2.0.7`. Plain semver:
   `2.0.x` = fixes only; the first feature PR raises it to the next minor; `3.0.0` = breaking.
 - `VERSION` = the **released** version (`2.0.6`). It lags on purpose, because raising it on `main`
   publishes a release.
