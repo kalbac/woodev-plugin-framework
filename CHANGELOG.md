@@ -1,6 +1,30 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.0.6] — 2026-10-20
+### Bug Fixes
+- **api**: Decode JSON responses lazily (#1375)
+
+- **shipping**: Cart calculator writes the delivery address to billing under billing_only (#1368) (#1374)
+
+- **shipping**: Keep pickup list available when map fails (#1373)
+
+- **location**: Keep the customer's locality per site on a multisite network (#1376)
+
+- **checkout-blocks**: Serialize Store API cart mutations so overlapping requests stop undoing the rate and the pickup point (#1357) (#1378)
+
+- **shipping**: Show the map error under viewport instead of an endless spinner (#1379)
+
+
+### Documentation
+- **s188**: Hotfix day — framework 2.0.4/2.0.5, CDEK 2.3.0.1/2.3.0.2, Yandex 2.0.1–2.0.3; overnight pool handoff (#1371)
+
+
+### Build
+- **deps**: Bump taiki-e/install-action from 2.87.27 to 2.87.29 (#1372)
+
+
+
 ## [2.0.5] — 2026-10-19
 ### Bug Fixes
 - **pickup**: Fill the address line with the point's street address, not the full one (#1360) (#1365)
