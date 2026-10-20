@@ -74,6 +74,7 @@ const { createStore } = require( '../../woodev/shipping-method/assets/js/fronten
 require( '../../woodev/assets/js/frontend/woodev-modal' ); // side effect: window.WoodevModal
 const { mountAll, getSession } = require( '../../woodev/shipping-method/assets/js/frontend/pickup-mount' );
 const RealPanels = require( '../../woodev/shipping-method/assets/js/frontend/pickup-panels' );
+const RealYandexProvider = require( '../../woodev/shipping-method/assets/js/frontend/map-provider-yandex' );
 
 const FIELD_ID = 'carrier_pickup_point';
 
@@ -3520,6 +3521,56 @@ test( 'a failed viewport map does not issue a locality-only fetch the controller
 	} ) );
 
 	expect( fetchPoints ).not.toHaveBeenCalled();
+} );
+
+// #1377 — the REAL Yandex provider fails synchronously inside init() (`hasApiKey:false`), before
+// start()'s `.then()` runs. Under viewport nothing else can ever arrive, so the shopper must get the
+// generic error with a retry and no busy stage. Under bulk the same failure is the list-only notice.
+function openRealYandexPanels( config ) {
+	const panels = [];
+	window.WoodevPickupMapProviders = { testProvider: RealYandexProvider };
+	window.WoodevPickupPanels = function( container, panelsConfig ) {
+		const instance = new RealPanels( container, panelsConfig );
+		panels.push( instance );
+
+		return instance;
+	};
+
+	setConfig( config );
+	mountAll();
+	clickTrigger();
+
+	return flushAsync().then( () => panels[ 0 ] );
+}
+
+test( 'a failed viewport map (real Yandex provider) shows the generic error with a retry and clears the busy stage', async () => {
+	const error = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
+	const fetchPoints = jest.fn( () => Promise.resolve( [ point( { id: 'p1' } ) ] ) );
+	window.WoodevPickupDataSource = fakeDataSourceFactory( fetchPoints );
+
+	const panels = await openRealYandexPanels( configWith( {
+		strategy: 'viewport',
+		debug: true,
+		mapConfig: { hasApiKey: false, ns: 'ymaps' },
+	} ) );
+
+	expect( panels.isBusy() ).toBe( false );
+	expect( fetchPoints ).not.toHaveBeenCalled();
+	expect( document.body.textContent ).toContain( phpI18n().error );
+	expect( document.body.textContent ).not.toContain( phpI18n().mapUnavailable );
+	expect( document.querySelector( '.woodev-modal__retry' ) ).not.toBeNull();
+	expect( error ).toHaveBeenCalledWith( '[woodev-pickup] Yandex Maps API key is missing or was not accepted for this domain.' );
+	error.mockRestore();
+} );
+
+test( 'a failed bulk map (real Yandex provider) still shows the list-only notice and the fetched list', async () => {
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( [ point( { id: 'p1' } ) ] ) );
+
+	await openRealYandexPanels( configWith( { mapConfig: { hasApiKey: false, ns: 'ymaps' } } ) );
+
+	expect( document.body.textContent ).toContain( phpI18n().mapUnavailable );
+	expect( document.querySelector( '.woodev-modal__retry' ) ).toBeNull();
+	expect( document.querySelectorAll( '.woodev-pickup-list__item' ).length ).toBe( 1 );
 } );
 
 test( 'a points render failure is logged in debug mode instead of disappearing in a catch', async () => {

@@ -393,7 +393,9 @@
 	 */
 	function errorMessage( config, reason ) {
 		var code = reason && reason.code;
-		if ( 'map_script' === code ) {
+		// Only a bulk listing has a list to choose from without the map; under viewport a
+		// missing map leaves nothing to pick from, so it reads as the generic error below.
+		if ( 'map_script' === code && 'bulk' === config.strategy ) {
 			return text( config, 'mapUnavailable' ) || text( config, 'error' );
 		}
 		var key = code ? ERROR_MESSAGE_KEYS[ code ] : null;
@@ -2947,10 +2949,19 @@
 					if ( config.debug && window.console && 'function' === typeof window.console.error ) {
 						window.console.error( '[woodev-pickup] ' + ( reason.message || 'Map failed to load.' ) );
 					}
+				}
+
+				// A bulk listing is already in flight and the list alone is a usable picker, so a
+				// missing map degrades to that list. Under viewport the list only ever comes from the
+				// map's own bounds, so there is nothing to fall back to: the honest error with a retry
+				// replaces the stage, and the busy stage is released here too. Without this the
+				// `.then()` in `start()` still raises it after init() returns, on panels no longer shown.
+				if ( reason && 'map_script' === reason.code && 'bulk' === config.strategy ) {
 					modal.showNotice( errorMessage( config, reason ) );
 					return;
 				}
 
+				clearInitialBusy();
 				degrade( errorMessage( config, reason ), start );
 			} );
 
@@ -3135,7 +3146,9 @@
 				// under `ownsChrome`; an embed loads its own points invisibly to this file and has no
 				// stage of its own to mark busy (see the file docblock's "THIS FILE, NOT THE
 				// PROVIDER, NOW OWNS FETCHING" section).
-				if ( panels ) {
+				// `busyClearedThisStart` already true means the map failed synchronously inside init()
+				// (see the error handler above) and the stage was released there: never re-raise it.
+				if ( panels && ! busyClearedThisStart ) {
 					panels.setBusy( true );
 				}
 
