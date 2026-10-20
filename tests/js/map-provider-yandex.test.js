@@ -655,8 +655,40 @@ test( 'hasApiKey: false emits a map_script error and never constructs a map', as
 
 	await provider.init( document.createElement( 'div' ), config );
 
-	expect( seen[ 0 ] ).toEqual( { code: 'map_script', message: '' } );
+	expect( seen[ 0 ] ).toEqual( {
+		code: 'map_script',
+		message: 'Yandex Maps API key is missing or was not accepted for this domain.',
+	} );
 	expect( ymapsStub.lastMap ).toBeUndefined();
+	expect( provider.map ).toBeNull();
+} );
+
+test( 'a failed map keeps list-driven focus and type filtering safe without a map or ObjectManager', async () => {
+	const config = makeConfig( { hasApiKey: false } );
+	window[ config.ns ] = ymapsStub;
+	const provider = new WoodevYandexMapProvider();
+	await provider.init( document.createElement( 'div' ), config );
+
+	await expect( provider.focusGroup( '55.75,37.61', { zoom: true } ) ).resolves.toBeUndefined();
+	expect( () => provider.setTypeFilter( [ 'pvz' ] ) ).not.toThrow();
+	expect( provider.map ).toBeNull();
+	expect( provider.objectManager ).toBeNull();
+} );
+
+test( 'map initialization exceptions emit a map_script error instead of rejecting silently', async () => {
+	const config = makeConfig();
+	window[ config.ns ] = ymapsStub;
+	const provider = new WoodevYandexMapProvider();
+	const seen = [];
+	provider._buildMap = jest.fn( () => { throw new Error( 'map constructor failed' ); } );
+	provider.on( 'error', ( error ) => seen.push( error ) );
+
+	await provider.init( document.createElement( 'div' ), config );
+
+	expect( seen[ 0 ] ).toEqual( {
+		code: 'map_script',
+		message: 'Yandex Maps initialization failed: map constructor failed',
+	} );
 	expect( provider.map ).toBeNull();
 } );
 

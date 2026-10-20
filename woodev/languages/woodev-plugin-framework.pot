@@ -3234,6 +3234,10 @@ msgstr ""
 msgid "Could not load pickup points. Please try again."
 msgstr ""
 
+#: shipping-method/pickup/class-pickup-handler.php
+msgid "The map is unavailable right now, but you can choose a pickup point from the list."
+msgstr ""
+
 #: shipping-method/pickup/class-pickup-handler.php:1223
 msgid "No results found."
 msgstr ""

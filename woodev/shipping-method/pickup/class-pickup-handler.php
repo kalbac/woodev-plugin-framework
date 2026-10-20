@@ -1280,6 +1280,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 					'Could not load pickup points. Please try again.',
 					'woodev-plugin-framework'
 				),
+				'mapUnavailable' => __(
+					'The map is unavailable right now, but you can choose a pickup point from the list.',
+					'woodev-plugin-framework'
+				),
 				'noResults'      => __( 'No results found.', 'woodev-plugin-framework' ),
 				'blocked'        => __(
 					'This pickup point is not available for your order.',
@@ -1562,6 +1566,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 
 			$config = [
 				'fieldId'              => $this->field_id,
+				'debug'                => $this->plugin ? $this->plugin->is_debug_enabled() : false,
 
 				// Names the owning plugin in the `woodev_pickup_error` event, so the error reporter
 				// (#1081) can attribute it; the browser has no other way to know.

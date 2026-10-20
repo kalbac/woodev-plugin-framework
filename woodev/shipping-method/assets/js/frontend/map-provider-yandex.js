@@ -1030,7 +1030,7 @@
 		this.config = config || {};
 
 		if ( false === this.config.hasApiKey ) {
-			this.emit( 'error', { code: 'map_script', message: '' } );
+			this.emit( 'error', { code: 'map_script', message: 'Yandex Maps API key is missing or was not accepted for this domain.' } );
 
 			return Promise.resolve();
 		}
@@ -1050,7 +1050,7 @@
 			},
 			function() {
 				if ( ! self._destroyed ) {
-					self.emit( 'error', { code: 'map_script', message: '' } );
+					self.emit( 'error', { code: 'map_script', message: 'Yandex Maps failed to load. Check that the API key is valid for this domain.' } );
 				}
 			}
 		).then( function() {
@@ -1095,6 +1095,11 @@
 				self._emitVisibleChange();
 				self._emitZoomChange();
 			} );
+		} ).catch( function( error ) {
+			if ( ! self._destroyed ) {
+				var detail = error && error.message ? String( error.message ) : 'unknown initialization error';
+				self.emit( 'error', { code: 'map_script', message: 'Yandex Maps initialization failed: ' + detail } );
+			}
 		} );
 	};
 
@@ -2170,6 +2175,10 @@
 
 		this._activeTypeFilter = list;
 
+		if ( ! this.map || ! this.objectManager ) {
+			return;
+		}
+
 		this.objectManager.setFilter( function( object ) {
 			if ( ! list ) {
 				return true;
@@ -2671,6 +2680,10 @@
 		var opts = options || {};
 		var wantsZoom = true === opts.zoom;
 		var fit = this._cameraFit;
+
+		if ( ! this.map || ! this.objectManager ) {
+			return Promise.resolve();
+		}
 
 		if ( ! fit ) {
 			return this._moveAndFocus( key, wantsZoom, mySeq );
