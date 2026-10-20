@@ -57,7 +57,8 @@ internals (class-map wiring, build/CI, rig) are left out on purpose. Shipping-sp
   `docs-internal/gotchas/php-stdlib-traps-that-survive-tests.md`
 - User meta is shared by every site of a multisite network: customer data tied to one site (a provider's codes, a chosen
   locality) goes through `update_user_option()`/`get_user_option()`/`delete_user_option()` (blog-prefixed row), and
-  `get_user_option()` falls back to the bare key, so a delete must clear that too. →
+  `get_user_option()` falls back to the bare key, so after a forget leave a per-site tombstone row (never delete the
+  shared bare row — another site owns it). →
   `docs-internal/gotchas/user-meta-is-network-wide-on-multisite-store-per-site-data-with-user-option.md`
 - A `NOT IN` meta clause drops every row that has no such meta; only `NOT EXISTS` makes a LEFT JOIN. →
   `docs-internal/gotchas/a-not-in-meta-query-silently-drops-rows-that-have-no-meta-at-all.md`

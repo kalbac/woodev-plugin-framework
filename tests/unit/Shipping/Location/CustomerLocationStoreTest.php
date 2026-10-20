@@ -1079,7 +1079,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->stub_logged_in( 42 );
 			$this->stub_ttl_filter( 10 );
 
-			$meta_store[42][ self::META_KEY ] = [
+			$meta_store[42][ self::SITE_META_KEY ] = [
 				'record'   => $this->record()->to_array(),
 				'implicit' => false,
 				'saved_at' => time() - 3600,
@@ -1090,7 +1090,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			$this->assertNull( $store->get_chain(), 'an expired chain must read back as though it were never stored' );
 			$this->assertArrayNotHasKey(
-				self::META_KEY,
+				self::SITE_META_KEY,
 				$meta_store[42],
 				'the expired chain must be PHYSICALLY deleted from user meta, not merely hidden from this read'
 			);
@@ -1547,7 +1547,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			);
 			$store = new Customer_Location_Store_Probe( $session );
 
-			$meta_store[7][ self::META_KEY ] = [
+			$meta_store[7][ self::SITE_META_KEY ] = [
 				'record'   => $this->record( 'dadata:erased-customer' )->to_array(),
 				'implicit' => false,
 				'saved_at' => 1,
@@ -1557,7 +1557,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			$store->forget( 7 );
 
-			$this->assertArrayNotHasKey( self::META_KEY, $meta_store[7] );
+			$this->assertArrayNotHasKey( self::SITE_META_KEY, $meta_store[7] );
 			// A weaker "session is not null" check would stay green even if a
 			// guard were removed and the session got REWRITTEN to something else
 			// non-null — assert the stored value is the exact same one, untouched.
@@ -1659,6 +1659,13 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		 * the review caught.
 		 */
 		public function test_forget_with_user_id_does_not_fire_the_forgotten_action_when_the_meta_delete_itself_fails(): void {
+			Functions\when( 'get_user_option' )->justReturn(
+				[
+					'record'   => $this->record()->to_array(),
+					'implicit' => false,
+					'saved_at' => 1,
+				]
+			);
 			Functions\when( 'get_user_meta' )->justReturn(
 				[
 					'record'   => $this->record()->to_array(),
@@ -1667,7 +1674,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 				]
 			);
 			Functions\when( 'delete_user_option' )->justReturn( false );
-			Functions\when( 'delete_user_meta' )->justReturn( false );
+			Functions\when( 'update_user_option' )->justReturn( false );
 
 			$store = new Customer_Location_Store_Probe( null );
 
@@ -2536,15 +2543,17 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertSame( 'dadata:fias-changed', $store->get()['record']->key(), 'the per-site row now wins over the legacy one' );
 		}
 
-		public function test_forget_removes_the_legacy_row_this_site_honours_so_it_cannot_resurrect(): void {
+		public function test_forget_keeps_the_legacy_row_for_other_sites_and_tombstones_this_site(): void {
 			$meta_store                   = $this->fake_user_meta_store();
 			$meta_store[42][ self::META_KEY ] = $this->stored_entry( 'dadata:fias-legacy' );
+			$legacy_before                = $meta_store[42][ self::META_KEY ];
 			$store                        = $this->multisite_store( $meta_store, [ 'dadata' ] );
 
 			$store->forget();
 
-			$this->assertNull( $store->get_chain() );
-			$this->assertArrayNotHasKey( self::META_KEY, $meta_store[42] );
+			$this->assertNull( $store->get_chain(), 'the forgotten legacy choice must not resurrect' );
+			$this->assertSame( $legacy_before, $meta_store[42][ self::META_KEY ], 'the legacy row belongs to every site of the network' );
+			$this->assertSame( [ 'forgotten' => true ], $meta_store[42][ self::SITE_META_KEY ], 'this site records that it stopped using the legacy row' );
 		}
 
 		public function test_forget_leaves_a_legacy_row_that_belongs_to_another_provider(): void {
@@ -2590,6 +2599,156 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertTrue( $result['items_removed'] );
 			$this->assertArrayNotHasKey( self::META_KEY, $meta_store[7] );
 			$this->assertArrayNotHasKey( self::SITE_META_KEY, $meta_store[7] );
+		}
+
+		// -------------------------------------------------------------------
+		// Critic round 1 (PR #1376): forget isolation, export of both rows, partial erase
+		// -------------------------------------------------------------------
+
+		public function test_forgetting_on_site_two_leaves_site_ones_legacy_choice_intact(): void {
+			$meta_store        = [ 42 => [ self::META_KEY => $this->stored_entry( 'dadata:site-one-legacy' ) ] ];
+			$this->blog_prefix = 'wp_2_';
+			$site_two          = $this->multisite_store( $meta_store, [ 'dadata' ] );
+
+			$site_two->set( $this->record( 'dadata:site-two-new' ) );
+			$site_two->forget();
+
+			$this->assertNull( $site_two->get(), 'site 2 forgot its choice and must not fall back on the shared row' );
+
+			$this->blog_prefix = 'wp_';
+			$site_one          = $this->multisite_store( $meta_store, [ 'dadata' ] );
+
+			$this->assertSame( 'dadata:site-one-legacy', $site_one->get()['record']->key(), 'site 1 still has its choice' );
+		}
+
+		public function test_forget_does_not_resurrect_a_legacy_choice_when_the_provider_switches_back(): void {
+			$meta_store = [ 42 => [ self::META_KEY => $this->stored_entry( 'cdek:44' ) ] ];
+			$store      = $this->multisite_store( $meta_store, [ 'dadata' ] );
+
+			$store->set( $this->record( 'dadata:new-choice' ) );
+			$store->forget();
+
+			$store->served = [ 'cdek', 'dadata' ];
+
+			$this->assertNull( $store->get(), 'this site stopped using the legacy row on its first write' );
+		}
+
+		public function test_a_new_choice_after_forgetting_replaces_the_tombstone(): void {
+			$meta_store = [ 42 => [ self::META_KEY => $this->stored_entry( 'dadata:legacy' ) ] ];
+			$store      = $this->multisite_store( $meta_store, [ 'dadata' ] );
+
+			$store->forget();
+			$store->set( $this->record( 'dadata:after-forget' ) );
+
+			$this->assertSame( 'dadata:after-forget', $store->get()['record']->key() );
+		}
+
+		public function test_forget_with_no_legacy_row_deletes_the_site_row_outright(): void {
+			$meta_store = [ 42 => [ self::SITE_META_KEY => $this->stored_entry( 'dadata:fias-1' ) ] ];
+			$store      = $this->multisite_store( $meta_store, [ 'dadata' ] );
+
+			$store->forget();
+
+			$this->assertArrayNotHasKey( self::SITE_META_KEY, $meta_store[42], 'nothing to shield from the fallback, so no tombstone is left behind' );
+		}
+
+		public function test_forget_does_nothing_for_a_choice_this_site_cannot_see(): void {
+			$meta_store = [ 42 => [ self::META_KEY => $this->stored_entry( 'cdek:44' ) ] ];
+			$store      = $this->multisite_store( $meta_store, [ 'dadata' ] );
+
+			Actions\expectDone( 'woodev_customer_location_forgotten' )->never();
+
+			$store->forget();
+
+			$this->assertArrayNotHasKey( self::SITE_META_KEY, $meta_store[42] );
+		}
+
+		public function test_privacy_export_lists_the_legacy_row_kept_after_a_new_write_as_well(): void {
+			$meta_store = [ 42 => [ self::META_KEY => $this->stored_entry( 'dadata:legacy-private-address' ) ] ];
+			$store      = $this->multisite_store( $meta_store, [ 'dadata' ] );
+
+			$store->set( $this->record( 'dadata:new-private-address' ) );
+			Functions\when( 'get_user_by' )->justReturn( (object) [ 'ID' => 42 ] );
+
+			$result = $store->export_personal_data( 'customer@example.com' );
+			$ids    = array_column( $result['data'], 'item_id' );
+			$dump   = json_encode( $result );
+
+			$this->assertCount( 2, $ids );
+			$this->assertSame( 2, count( array_unique( $ids ) ), 'the two rows get distinct item ids' );
+			$this->assertStringContainsString( 'dadata:legacy-private-address', $dump );
+			$this->assertStringContainsString( 'dadata:new-private-address', $dump );
+		}
+
+		public function test_privacy_export_lists_a_legacy_only_row_once(): void {
+			$meta_store = [ 42 => [ self::META_KEY => $this->stored_entry( 'dadata:legacy-only' ) ] ];
+			$store      = $this->multisite_store( $meta_store, [ 'dadata' ] );
+			Functions\when( 'get_user_by' )->justReturn( (object) [ 'ID' => 42 ] );
+
+			$this->assertCount( 1, $store->export_personal_data( 'customer@example.com' )['data'] );
+		}
+
+		public function test_privacy_export_does_not_filter_a_retained_row_by_provider(): void {
+			$meta_store = [ 42 => [ self::META_KEY => $this->stored_entry( 'cdek:44' ) ] ];
+			$store      = $this->multisite_store( $meta_store, [ 'dadata' ] );
+			Functions\when( 'get_user_by' )->justReturn( (object) [ 'ID' => 42 ] );
+
+			$this->assertCount( 1, $store->export_personal_data( 'customer@example.com' )['data'], 'retained personal data is exported whichever provider wrote it' );
+		}
+
+		public function test_privacy_export_skips_a_tombstone(): void {
+			$meta_store = [ 42 => [ self::SITE_META_KEY => [ 'forgotten' => true ] ] ];
+			$store      = $this->multisite_store( $meta_store, [ 'dadata' ] );
+			Functions\when( 'get_user_by' )->justReturn( (object) [ 'ID' => 42 ] );
+
+			$this->assertSame( [], $store->export_personal_data( 'customer@example.com' )['data'] );
+		}
+
+		public function test_erase_reports_retained_when_only_the_legacy_delete_fails(): void {
+			$meta_store = [ 42 => [
+				self::META_KEY      => $this->stored_entry( 'dadata:legacy' ),
+				self::SITE_META_KEY => $this->stored_entry( 'dadata:site' ),
+			] ];
+			$store      = $this->multisite_store( $meta_store, [ 'dadata' ] );
+			Functions\when( 'get_user_by' )->justReturn( (object) [ 'ID' => 42 ] );
+			Functions\when( 'delete_user_meta' )->justReturn( false );
+
+			$result = $store->erase_personal_data( 'customer@example.com' );
+
+			$this->assertTrue( $result['items_removed'] );
+			$this->assertTrue( $result['items_retained'], 'the legacy row is still in the database' );
+			$this->assertNotEmpty( $result['messages'] );
+			$this->assertArrayHasKey( self::META_KEY, $meta_store[42] );
+		}
+
+		public function test_erase_reports_retained_when_only_the_site_delete_fails(): void {
+			$meta_store = [ 42 => [
+				self::META_KEY      => $this->stored_entry( 'dadata:legacy' ),
+				self::SITE_META_KEY => $this->stored_entry( 'dadata:site' ),
+			] ];
+			$store      = $this->multisite_store( $meta_store, [ 'dadata' ] );
+			Functions\when( 'get_user_by' )->justReturn( (object) [ 'ID' => 42 ] );
+			Functions\when( 'delete_user_option' )->justReturn( false );
+
+			$result = $store->erase_personal_data( 'customer@example.com' );
+
+			$this->assertTrue( $result['items_removed'] );
+			$this->assertTrue( $result['items_retained'], 'the per-site row is still in the database' );
+			$this->assertArrayHasKey( self::SITE_META_KEY, $meta_store[42] );
+		}
+
+		public function test_erase_reports_a_clean_removal_when_both_deletes_succeed(): void {
+			$meta_store = [ 42 => [
+				self::META_KEY      => $this->stored_entry( 'dadata:legacy' ),
+				self::SITE_META_KEY => $this->stored_entry( 'dadata:site' ),
+			] ];
+			$store      = $this->multisite_store( $meta_store, [ 'dadata' ] );
+			Functions\when( 'get_user_by' )->justReturn( (object) [ 'ID' => 42 ] );
+
+			$result = $store->erase_personal_data( 'customer@example.com' );
+
+			$this->assertTrue( $result['items_removed'] );
+			$this->assertFalse( $result['items_retained'] );
 		}
 	}
 }

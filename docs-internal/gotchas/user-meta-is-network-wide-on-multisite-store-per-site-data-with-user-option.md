@@ -23,7 +23,12 @@ Two traps inside the fix:
 
 - `get_user_option()` FALLS BACK to the bare, unprefixed key when the prefixed one is absent. That is exactly
   the migration path (the legacy row is still honoured), but it also means `delete_user_option()` alone does
-  not forget: the legacy row resurrects the chain. Delete the legacy row too when this site honours it.
+  not forget: the legacy row resurrects the chain. Do NOT delete the legacy row to fix that — it is shared with
+  every other site of the network (forgetting on site 2 erased site 1's choice), and a provider switch brings it
+  back. Instead leave a per-site TOMBSTONE (`['forgotten' => true]`) in the per-site row when a legacy row
+  exists: once a site has written or forgotten, its own row exists and the legacy row is never consulted again.
+  Only the privacy eraser deletes the legacy row, and the export lists BOTH physical rows (the per-site row alone
+  hides retained personal data); judge each delete separately when reporting `items_retained`.
 - A chain may legitimately hold a record owned by the bundled fallback provider (D15), so "provider differs
   from the active one" is the wrong test; compare against {active provider, fallback provider}.
 
