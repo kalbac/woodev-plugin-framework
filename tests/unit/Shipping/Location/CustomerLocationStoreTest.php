@@ -161,12 +161,19 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		/** @var Customer_Location_Store_Fake_Session|null */
 		private ?Customer_Location_Store_Fake_Session $fake_session;
 
+		/** @var string[]|null The providers this "site" serves; `null` = layer inactive, nothing is judged. */
+		public ?array $served = null;
+
 		public function __construct( ?Customer_Location_Store_Fake_Session $fake_session ) {
 			$this->fake_session = $fake_session;
 		}
 
 		protected function session() {
 			return $this->fake_session;
+		}
+
+		protected function site_provider_ids(): ?array {
+			return $this->served;
 		}
 	}
 
@@ -177,6 +184,12 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 		private const SESSION_KEY = 'woodev_customer_location';
 		private const META_KEY    = 'woodev_customer_location';
+
+		/** The per-site row `update_user_option()` writes on a single site (blog prefix `wp_`). */
+		private const SITE_META_KEY = 'wp_woodev_customer_location';
+
+		/** The blog prefix the stubbed `*_user_option()` functions use; a test may switch "site". */
+		private string $blog_prefix = 'wp_';
 
 		/**
 		 * `Customer_Location_Store::get_chain()` now calls its own
@@ -227,6 +240,8 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		 * @return void
 		 */
 		private function stub_user_meta( array &$store ): void {
+			$this->stub_user_options( $store );
+
 			Functions\when( 'get_user_meta' )->alias(
 				static function ( $user_id, $key, $single = false ) use ( &$store ) {
 					return $store[ $user_id ][ $key ] ?? '';
@@ -245,6 +260,40 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 				static function ( $user_id, $key ) use ( &$store ) {
 					$had = isset( $store[ $user_id ][ $key ] );
 					unset( $store[ $user_id ][ $key ] );
+
+					return $had;
+				}
+			);
+		}
+
+		/**
+		 * Wires `get_user_option()`/`update_user_option()`/`delete_user_option()` over the
+		 * same array, with WordPress' own semantics: the row is `{blog prefix}{name}`, and a
+		 * read falls back to the bare, unprefixed (legacy) key when the prefixed one is absent.
+		 *
+		 * @param array<int, array<string, mixed>> $store Backing store, by reference.
+		 *
+		 * @return void
+		 */
+		private function stub_user_options( array &$store ): void {
+			Functions\when( 'get_user_option' )->alias(
+				function ( $name, $user_id ) use ( &$store ) {
+					return $store[ $user_id ][ $this->blog_prefix . $name ] ?? $store[ $user_id ][ $name ] ?? false;
+				}
+			);
+
+			Functions\when( 'update_user_option' )->alias(
+				function ( $user_id, $name, $value ) use ( &$store ) {
+					$store[ $user_id ][ $this->blog_prefix . $name ] = $value;
+
+					return true;
+				}
+			);
+
+			Functions\when( 'delete_user_option' )->alias(
+				function ( $user_id, $name ) use ( &$store ) {
+					$had = isset( $store[ $user_id ][ $this->blog_prefix . $name ] );
+					unset( $store[ $user_id ][ $this->blog_prefix . $name ] );
 
 					return $had;
 				}
@@ -373,7 +422,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertTrue( $store->set( $this->record() ) );
 
 			$this->assertNotNull( $session->raw( self::SESSION_KEY ), 'session fast path must be written' );
-			$this->assertNotNull( $meta_store[42][ self::META_KEY ] ?? null, 'user meta must be written' );
+			$this->assertNotNull( $meta_store[42][ self::SITE_META_KEY ] ?? null, 'user meta must be written' );
 		}
 
 		public function test_logged_in_read_prefers_the_session_over_meta(): void {
@@ -636,9 +685,9 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			$this->assertSame(
 				'dadata:guest-choice',
-				$meta_store[7][ self::META_KEY ]['records'][ Location_Record::LEVEL_SETTLEMENT ]['key'] ?? null
+				$meta_store[7][ self::SITE_META_KEY ]['records'][ Location_Record::LEVEL_SETTLEMENT ]['key'] ?? null
 			);
-			$this->assertSame( Location_Record::LEVEL_SETTLEMENT, $meta_store[7][ self::META_KEY ]['current'] ?? null );
+			$this->assertSame( Location_Record::LEVEL_SETTLEMENT, $meta_store[7][ self::SITE_META_KEY ]['current'] ?? null );
 		}
 
 		public function test_login_migration_implicit_guest_guess_does_not_overwrite_an_explicit_account_record(): void {
@@ -667,7 +716,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			$this->assertSame(
 				'dadata:account-choice',
-				$meta_store[7][ self::META_KEY ]['records'][ Location_Record::LEVEL_SETTLEMENT ]['key'],
+				$meta_store[7][ self::SITE_META_KEY ]['records'][ Location_Record::LEVEL_SETTLEMENT ]['key'],
 				'the account explicit choice must survive an implicit guest guess'
 			);
 			// The session (now the logged-in user's fast path) must be resynced to
@@ -705,7 +754,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			$this->assertSame(
 				'dadata:fresh-guest-choice',
-				$meta_store[7][ self::META_KEY ]['records'][ Location_Record::LEVEL_SETTLEMENT ]['key'],
+				$meta_store[7][ self::SITE_META_KEY ]['records'][ Location_Record::LEVEL_SETTLEMENT ]['key'],
 				'a fresh explicit choice made while logged out is the customer\'s real answer and must win'
 			);
 		}
@@ -734,7 +783,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			$store->handle_wp_login( 'jdoe', $this->wp_user( 7 ) );
 
-			$this->assertSame( 'dadata:fresh-guess', $meta_store[7][ self::META_KEY ]['records'][ Location_Record::LEVEL_SETTLEMENT ]['key'] );
+			$this->assertSame( 'dadata:fresh-guess', $meta_store[7][ self::SITE_META_KEY ]['records'][ Location_Record::LEVEL_SETTLEMENT ]['key'] );
 		}
 
 		public function test_login_migration_is_a_noop_when_the_session_has_no_record(): void {
@@ -800,17 +849,17 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			$store->handle_wp_login( 'jdoe', $this->wp_user( 7 ) );
 
-			$first_meta    = $meta_store[7][ self::META_KEY ];
+			$first_meta    = $meta_store[7][ self::SITE_META_KEY ];
 			$first_session = $session->raw( self::SESSION_KEY );
 
 			// Simulate wp_login firing a second time for the same login.
 			$store->handle_wp_login( 'jdoe', $this->wp_user( 7 ) );
 
-			$this->assertSame( $first_meta, $meta_store[7][ self::META_KEY ], 'a second migration run must not change the winner' );
+			$this->assertSame( $first_meta, $meta_store[7][ self::SITE_META_KEY ], 'a second migration run must not change the winner' );
 			$this->assertSame( $first_session, $session->raw( self::SESSION_KEY ), 'a second migration run must not change the resynced session' );
 			$this->assertSame(
 				'dadata:account-choice',
-				$meta_store[7][ self::META_KEY ]['records'][ Location_Record::LEVEL_SETTLEMENT ]['key'],
+				$meta_store[7][ self::SITE_META_KEY ]['records'][ Location_Record::LEVEL_SETTLEMENT ]['key'],
 				'the account explicit choice must still have won after a second run'
 			);
 		}
@@ -1409,7 +1458,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertTrue( $store->set( $this->record( 'dadata:meta-only-write' ) ) );
 			$this->assertSame(
 				'dadata:meta-only-write',
-				$meta_store[42][ self::META_KEY ]['records'][ Location_Record::LEVEL_SETTLEMENT ]['key']
+				$meta_store[42][ self::SITE_META_KEY ]['records'][ Location_Record::LEVEL_SETTLEMENT ]['key']
 			);
 		}
 
@@ -1468,12 +1517,12 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			$store->set( $this->record() );
 			$this->assertNotNull( $session->raw( self::SESSION_KEY ), 'sanity: session was written' );
-			$this->assertNotNull( $meta_store[42][ self::META_KEY ] ?? null, 'sanity: meta was written' );
+			$this->assertNotNull( $meta_store[42][ self::SITE_META_KEY ] ?? null, 'sanity: meta was written' );
 
 			$store->forget();
 
 			$this->assertNull( $session->raw( self::SESSION_KEY ) );
-			$this->assertArrayNotHasKey( self::META_KEY, $meta_store[42], 'delete_user_meta() must actually remove the key, not write an empty value' );
+			$this->assertArrayNotHasKey( self::SITE_META_KEY, $meta_store[42], 'delete_user_meta() must actually remove the key, not write an empty value' );
 		}
 
 		/**
@@ -1617,6 +1666,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 					'saved_at' => 1,
 				]
 			);
+			Functions\when( 'delete_user_option' )->justReturn( false );
 			Functions\when( 'delete_user_meta' )->justReturn( false );
 
 			$store = new Customer_Location_Store_Probe( null );
@@ -1965,6 +2015,14 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 					'saved_at' => 1,
 				]
 			);
+			Functions\when( 'get_user_option' )->justReturn(
+				[
+					'record'   => $this->record()->to_array(),
+					'implicit' => false,
+					'saved_at' => 1,
+				]
+			);
+			Functions\when( 'delete_user_option' )->justReturn( false );
 			Functions\when( 'delete_user_meta' )->justReturn( false );
 
 			$store  = new Customer_Location_Store();
@@ -2323,7 +2381,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			);
 			$this->assertSame(
 				'dadata:settlement-1',
-				$meta_store[42][ self::META_KEY ]['records'][ Location_Record::LEVEL_SETTLEMENT ]['key'] ?? null,
+				$meta_store[42][ self::SITE_META_KEY ]['records'][ Location_Record::LEVEL_SETTLEMENT ]['key'] ?? null,
 				'the meta store must persist the whole chain, keyed by level'
 			);
 		}
@@ -2346,7 +2404,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			$store->handle_wp_login( 'jdoe', $this->wp_user( 7 ) );
 
-			$meta_records = $meta_store[7][ self::META_KEY ]['records'] ?? [];
+			$meta_records = $meta_store[7][ self::SITE_META_KEY ]['records'] ?? [];
 
 			$this->assertSame(
 				[ Location_Record::LEVEL_SETTLEMENT, Location_Record::LEVEL_ADDRESS ],
@@ -2355,7 +2413,183 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			);
 			$this->assertSame( 'dadata:settlement-1', $meta_records[ Location_Record::LEVEL_SETTLEMENT ]['key'] );
 			$this->assertSame( 'dadata:address-1', $meta_records[ Location_Record::LEVEL_ADDRESS ]['key'] );
-			$this->assertSame( Location_Record::LEVEL_ADDRESS, $meta_store[7][ self::META_KEY ]['current'] );
+			$this->assertSame( Location_Record::LEVEL_ADDRESS, $meta_store[7][ self::SITE_META_KEY ]['current'] );
+		}
+
+		// -------------------------------------------------------------------
+		// Multisite (#1369): the logged-in record is per SITE, and a record
+		// carrying another provider's codes is foreign.
+		// -------------------------------------------------------------------
+
+		/**
+		 * @param array<int, array<string, mixed>> $meta_store Backing store, by reference.
+		 * @param string[]|null                    $served     The providers the "site" serves.
+		 *
+		 * @return Customer_Location_Store_Probe
+		 */
+		private function multisite_store( array &$meta_store, ?array $served ): Customer_Location_Store_Probe {
+			$this->stub_user_meta( $meta_store );
+			$this->stub_logged_in( 42 );
+
+			$store         = new Customer_Location_Store_Probe( null );
+			$store->served = $served;
+
+			return $store;
+		}
+
+		/**
+		 * @param string $key Locality key.
+		 *
+		 * @return array<string, mixed>
+		 */
+		private function stored_entry( string $key ): array {
+			return [
+				'records'  => [ Location_Record::LEVEL_SETTLEMENT => $this->record( $key )->to_array() ],
+				'current'  => Location_Record::LEVEL_SETTLEMENT,
+				'implicit' => false,
+				'saved_at' => time(),
+			];
+		}
+
+		public function test_a_choice_made_on_one_site_is_not_visible_on_another_site_of_the_network(): void {
+			$meta_store = $this->fake_user_meta_store();
+
+			$this->blog_prefix = 'wp_2_';
+			$site_two          = $this->multisite_store( $meta_store, [ 'dadata' ] );
+			$this->assertTrue( $site_two->set( $this->record( 'dadata:fias-ryazan' ) ) );
+
+			$this->assertArrayHasKey( 'wp_2_woodev_customer_location', $meta_store[42], 'the row must be blog-prefixed' );
+			$this->assertArrayNotHasKey( self::META_KEY, $meta_store[42], 'the shared, unprefixed key must not be written any more' );
+
+			$this->blog_prefix = 'wp_3_';
+			$site_three        = $this->multisite_store( $meta_store, [ 'dadata' ] );
+
+			$this->assertNull( $site_three->get_chain(), 'site 3 must not inherit the choice made on site 2' );
+
+			$this->blog_prefix = 'wp_2_';
+			$this->assertSame( 'dadata:fias-ryazan', $site_two->get()['record']->key(), 'site 2 still has its own choice' );
+		}
+
+		public function test_a_chain_written_by_another_provider_is_discarded_but_left_in_place(): void {
+			$meta_store                        = $this->fake_user_meta_store();
+			$meta_store[42][ self::SITE_META_KEY ] = $this->stored_entry( 'cdek:44' );
+			$store                             = $this->multisite_store( $meta_store, [ 'dadata' ] );
+
+			$this->assertNull( $store->get_chain(), 'a CDEK code is meaningless on a DaData site' );
+			$this->assertSame( 'cdek:44', $meta_store[42][ self::SITE_META_KEY ]['records']['settlement']['key'], 'a read must never erase it' );
+		}
+
+		public function test_a_chain_of_the_sites_own_provider_is_read(): void {
+			$meta_store                        = $this->fake_user_meta_store();
+			$meta_store[42][ self::SITE_META_KEY ] = $this->stored_entry( 'cdek:44' );
+			$store                             = $this->multisite_store( $meta_store, [ 'cdek' ] );
+
+			$this->assertSame( 'cdek:44', $store->get()['record']->key() );
+		}
+
+		public function test_a_record_owned_by_the_bundled_fallback_provider_is_read_while_another_provider_is_active(): void {
+			$meta_store                        = $this->fake_user_meta_store();
+			$meta_store[42][ self::SITE_META_KEY ] = $this->stored_entry( 'dadata:fias-1' );
+			$store                             = $this->multisite_store( $meta_store, [ 'cdek', 'dadata' ] );
+
+			$this->assertSame( 'dadata:fias-1', $store->get()['record']->key(), 'D15: a level the fallback answered is legitimately stored' );
+		}
+
+		public function test_the_legacy_shared_row_is_honoured_when_its_provider_is_the_sites_provider(): void {
+			$meta_store                   = $this->fake_user_meta_store();
+			$meta_store[42][ self::META_KEY ] = $this->stored_entry( 'dadata:fias-legacy' );
+			$store                        = $this->multisite_store( $meta_store, [ 'dadata' ] );
+
+			$this->assertSame( 'dadata:fias-legacy', $store->get()['record']->key() );
+		}
+
+		public function test_the_legacy_shared_row_is_ignored_when_its_provider_is_another_one(): void {
+			$meta_store                   = $this->fake_user_meta_store();
+			$meta_store[42][ self::META_KEY ] = $this->stored_entry( 'cdek:44' );
+			$store                        = $this->multisite_store( $meta_store, [ 'dadata' ] );
+
+			$this->assertNull( $store->get_chain() );
+		}
+
+		public function test_the_first_write_goes_to_the_site_row_and_leaves_the_legacy_row_for_other_sites(): void {
+			$meta_store                   = $this->fake_user_meta_store();
+			$meta_store[42][ self::META_KEY ] = $this->stored_entry( 'cdek:44' );
+			$legacy_before                = $meta_store[42][ self::META_KEY ];
+			$store                        = $this->multisite_store( $meta_store, [ 'dadata' ] );
+
+			$this->assertTrue( $store->set( $this->record( 'dadata:fias-new' ) ) );
+
+			$this->assertSame( 'dadata:fias-new', $store->get()['record']->key() );
+			$this->assertSame( $legacy_before, $meta_store[42][ self::META_KEY ], 'another site may still need the legacy row as its fallback' );
+		}
+
+		public function test_a_single_site_customer_keeps_the_choice_stored_under_the_old_key(): void {
+			$meta_store                   = $this->fake_user_meta_store();
+			$meta_store[42][ self::META_KEY ] = $this->stored_entry( 'dadata:fias-legacy' );
+			$store                        = $this->multisite_store( $meta_store, null );
+
+			$this->assertSame( 'dadata:fias-legacy', $store->get()['record']->key(), 'installed-site data contract: the legacy key is still read' );
+
+			$store->set( $this->record( 'dadata:fias-changed' ) );
+
+			$this->assertArrayHasKey( self::SITE_META_KEY, $meta_store[42], 'a single site writes `{wp_}woodev_customer_location`' );
+			$this->assertSame( 'dadata:fias-changed', $store->get()['record']->key(), 'the per-site row now wins over the legacy one' );
+		}
+
+		public function test_forget_removes_the_legacy_row_this_site_honours_so_it_cannot_resurrect(): void {
+			$meta_store                   = $this->fake_user_meta_store();
+			$meta_store[42][ self::META_KEY ] = $this->stored_entry( 'dadata:fias-legacy' );
+			$store                        = $this->multisite_store( $meta_store, [ 'dadata' ] );
+
+			$store->forget();
+
+			$this->assertNull( $store->get_chain() );
+			$this->assertArrayNotHasKey( self::META_KEY, $meta_store[42] );
+		}
+
+		public function test_forget_leaves_a_legacy_row_that_belongs_to_another_provider(): void {
+			$meta_store                   = $this->fake_user_meta_store();
+			$meta_store[42][ self::META_KEY ] = $this->stored_entry( 'cdek:44' );
+			$store                        = $this->multisite_store( $meta_store, [ 'dadata' ] );
+
+			$store->forget();
+
+			$this->assertArrayHasKey( self::META_KEY, $meta_store[42], 'the CDEK site still falls back on it' );
+		}
+
+		public function test_login_does_not_reconcile_with_a_foreign_providers_account_chain(): void {
+			$meta_store                   = $this->fake_user_meta_store();
+			$meta_store[7][ self::META_KEY ] = $this->stored_entry( 'cdek:44' );
+			$this->stub_user_meta( $meta_store );
+
+			$session         = new Customer_Location_Store_Fake_Session();
+			$store           = new Customer_Location_Store_Probe( $session );
+			$store->served   = [ 'dadata' ];
+
+			$this->stub_guest();
+			$store->set( $this->record( 'dadata:guest-guess' ), true );
+
+			$store->handle_wp_login( 'jdoe', $this->wp_user( 7 ) );
+
+			$this->assertSame(
+				'dadata:guest-guess',
+				$meta_store[7][ self::SITE_META_KEY ]['records']['settlement']['key'],
+				'an implicit guest guess must not lose to an explicit chain this site cannot use'
+			);
+		}
+
+		public function test_erasing_personal_data_removes_the_site_row_and_the_legacy_row_alike(): void {
+			$meta_store                        = $this->fake_user_meta_store();
+			$meta_store[7][ self::META_KEY ]      = $this->stored_entry( 'cdek:44' );
+			$meta_store[7][ self::SITE_META_KEY ] = $this->stored_entry( 'dadata:fias-1' );
+			$this->stub_user_meta( $meta_store );
+			Functions\when( 'get_user_by' )->justReturn( (object) [ 'ID' => 7 ] );
+
+			$result = ( new Customer_Location_Store_Probe( null ) )->erase_personal_data( 'customer@example.com' );
+
+			$this->assertTrue( $result['items_removed'] );
+			$this->assertArrayNotHasKey( self::META_KEY, $meta_store[7] );
+			$this->assertArrayNotHasKey( self::SITE_META_KEY, $meta_store[7] );
 		}
 	}
 }

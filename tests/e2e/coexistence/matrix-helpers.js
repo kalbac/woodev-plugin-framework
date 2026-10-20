@@ -208,7 +208,7 @@ function snapshotDiff( before, after ) {
 }
 
 /** The user-meta rows of the admin (user 1) a checkout visit as the admin writes: the saved address, the saved locality, the cart. */
-const ADMIN_META_WHERE = "user_id = 1 AND ( meta_key LIKE 'billing\\\\_%' OR meta_key LIKE 'shipping\\\\_%' OR meta_key IN ( 'woodev_customer_location', '_woodev_location_saved_city_miss', '_woocommerce_persistent_cart_1' ) )";
+const ADMIN_META_WHERE = "user_id = 1 AND ( meta_key LIKE 'billing\\\\_%' OR meta_key LIKE 'shipping\\\\_%' OR meta_key IN ( 'woodev_customer_location', 'wp_woodev_customer_location', '_woodev_location_saved_city_miss', '_woocommerce_persistent_cart_1' ) )";
 
 /**
  * Empties what a logged-in admin carries from one checkout visit to the next, so a hint cell starts from «a customer with no
@@ -220,7 +220,7 @@ const ADMIN_META_WHERE = "user_id = 1 AND ( meta_key LIKE 'billing\\\\_%' OR met
  */
 function resetAdminSession() {
 	wp( 'db', 'query', "DELETE FROM wp_woocommerce_sessions WHERE session_key = '1'" );
-	wp( 'db', 'query', "DELETE FROM wp_usermeta WHERE user_id = 1 AND meta_key IN ( 'woodev_customer_location', '_woodev_location_saved_city_miss', '_woocommerce_persistent_cart_1' )" );
+	wp( 'db', 'query', "DELETE FROM wp_usermeta WHERE user_id = 1 AND meta_key IN ( 'woodev_customer_location', 'wp_woodev_customer_location', '_woodev_location_saved_city_miss', '_woocommerce_persistent_cart_1' )" );
 }
 
 /**

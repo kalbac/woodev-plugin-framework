@@ -55,6 +55,10 @@ internals (class-map wiring, build/CI, rig) are left out on purpose. Shipping-sp
 - Four stdlib traps that pass tests and fail in production (`is_numeric()` accepts `0.5`/`+1`/`1e3`, then
   `(int)` turns `0.5` into the deletion sentinel `0`). →
   `docs-internal/gotchas/php-stdlib-traps-that-survive-tests.md`
+- User meta is shared by every site of a multisite network: customer data tied to one site (a provider's codes, a chosen
+  locality) goes through `update_user_option()`/`get_user_option()`/`delete_user_option()` (blog-prefixed row), and
+  `get_user_option()` falls back to the bare key, so a delete must clear that too. →
+  `docs-internal/gotchas/user-meta-is-network-wide-on-multisite-store-per-site-data-with-user-option.md`
 - A `NOT IN` meta clause drops every row that has no such meta; only `NOT EXISTS` makes a LEFT JOIN. →
   `docs-internal/gotchas/a-not-in-meta-query-silently-drops-rows-that-have-no-meta-at-all.md`
 - `add_option()` is NOT an atomic lock: it checks existence, then upserts, so two contenders both «acquire» (found in the CDEK

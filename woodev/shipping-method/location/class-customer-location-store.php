@@ -59,9 +59,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 		/**
 		 * The single framework-owned key used on BOTH sides: the `WC()->session`
 		 * key for a guest (or a logged-in customer's fast path) and the
-		 * `get_user_meta()`/`update_user_meta()` key for a logged-in customer's
-		 * authoritative record. A NEW key (installed-site data contracts untouched
-		 * — CLAUDE.md "never break" list).
+		 * user-option key for a logged-in customer's authoritative record. A NEW
+		 * key (installed-site data contracts untouched — CLAUDE.md "never break"
+		 * list).
+		 *
+		 * In user meta it is stored PER SITE through `update_user_option()` /
+		 * `get_user_option()` / `delete_user_option()` (#1369): the row is
+		 * `{$wpdb->get_blog_prefix()}woodev_customer_location` — `wp_woodev_…` on a
+		 * single site, `wp_2_woodev_…` on network site 2. The bare, unprefixed key
+		 * is the LEGACY shared row written before #1369; `get_user_option()` falls
+		 * back to it when the per-site row is absent, and it is honoured only when
+		 * its provider is one this site serves ({@see self::chain_is_served_here()}),
+		 * so existing single-site customers keep their choice. It is never deleted
+		 * by a write — another site of the network may still need it as a fallback.
 		 *
 		 * @since 2.0.2
 		 * @var string
@@ -529,19 +539,38 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param int $user_id The user whose meta chain should be deleted.
+		 * @since 2.0.6 Deletes the per-site row, and the legacy network-wide row
+		 *              when this site honours it (#1369).
+		 *
+		 * @param int  $user_id             The user whose meta chain should be deleted.
+		 * @param bool $erase_legacy_always Delete the legacy network-wide row even
+		 *                                  when this site would not honour it (privacy erasure).
 		 *
 		 * @return bool `true` only when a chain was stored AND
-		 *              `delete_user_meta()` reports it actually removed it;
+		 *              the delete reports it actually removed it;
 		 *              `false` when there was nothing to delete, OR when the
 		 *              delete itself failed.
 		 */
-		private function delete_meta_chain( int $user_id ): bool {
-			if ( '' === get_user_meta( $user_id, self::STORAGE_KEY, true ) ) {
-				return false;
+		private function delete_meta_chain( int $user_id, bool $erase_legacy_always = false ): bool {
+			// This site's own `{blog prefix}woodev_customer_location` row.
+			$removed = (bool) delete_user_option( $user_id, self::STORAGE_KEY );
+
+			// The legacy network-wide row is what `get_user_option()` falls back to
+			// when the per-site one is gone, so leaving it would resurrect the chain
+			// the customer just forgot. It is shared with every other site of the
+			// network though, so it goes only when THIS site would honour it (or on
+			// a privacy erasure, which must leave nothing behind).
+			$legacy = get_user_meta( $user_id, self::STORAGE_KEY, true );
+
+			if ( '' !== $legacy ) {
+				$legacy_chain = $this->parse_stored_chain( $legacy );
+
+				if ( $erase_legacy_always || ( null !== $legacy_chain && $this->chain_is_served_here( $legacy_chain ) ) ) {
+					$removed = (bool) delete_user_meta( $user_id, self::STORAGE_KEY ) || $removed;
+				}
 			}
 
-			return (bool) delete_user_meta( $user_id, self::STORAGE_KEY );
+			return $removed;
 		}
 
 		/**
@@ -559,8 +588,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 		 *              `false` when there was nothing to forget, or the delete
 		 *              itself failed.
 		 */
-		private function forget_user_meta( int $user_id ): bool {
-			$removed = $this->delete_meta_chain( $user_id );
+		private function forget_user_meta( int $user_id, bool $erase_legacy_always = false ): bool {
+			$removed = $this->delete_meta_chain( $user_id, $erase_legacy_always );
 
 			if ( $removed ) {
 				$this->fire_forgotten( $user_id );
@@ -661,7 +690,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 			}
 
 			$user_id = (int) $user->ID;
-			$chain   = $this->parse_stored_chain( get_user_meta( $user_id, self::STORAGE_KEY, true ) );
+			$chain   = $this->parse_stored_chain( get_user_option( self::STORAGE_KEY, $user_id ) );
 
 			if ( null === $chain ) {
 				return [
@@ -774,8 +803,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 			}
 
 			$user_id = (int) $user->ID;
-			$had     = '' !== get_user_meta( $user_id, self::STORAGE_KEY, true );
-			$removed = $this->forget_user_meta( $user_id );
+			$had     = false !== get_user_option( self::STORAGE_KEY, $user_id );
+			$removed = $this->forget_user_meta( $user_id, true );
 
 			return self::eraser_result( $removed, $had && ! $removed );
 		}
@@ -1001,7 +1030,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 			}
 
 			$user_id    = (int) $user->ID;
-			$meta_chain = $this->parse_stored_chain( get_user_meta( $user_id, self::STORAGE_KEY, true ) );
+			$meta_chain = $this->parse_stored_chain( get_user_option( self::STORAGE_KEY, $user_id ) );
+
+			if ( null !== $meta_chain && ! $this->chain_is_served_here( $meta_chain ) ) {
+				$meta_chain = null; // Another site's provider wrote it; it is not this site's to reconcile with.
+			}
 
 			$winner = self::may_overwrite( $meta_chain, $session_chain['implicit'] ) ? $session_chain : $meta_chain;
 
@@ -1050,14 +1083,93 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 				}
 			}
 
-			$raw_meta  = get_user_meta( get_current_user_id(), self::STORAGE_KEY, true );
+			$raw_meta  = get_user_option( self::STORAGE_KEY, get_current_user_id() );
 			$from_meta = $this->parse_stored_chain( $raw_meta );
+
+			// User meta is shared across a multisite network: discard a chain
+			// carrying another site's provider codes (never delete it — that site
+			// still owns it).
+			if ( null !== $from_meta && ! $this->chain_is_served_here( $from_meta ) ) {
+				return null;
+			}
 
 			if ( null !== $from_meta && null !== $session ) {
 				$session->set( self::STORAGE_KEY, $raw_meta );
 			}
 
 			return $from_meta;
+		}
+
+		/**
+		 * Whether every record of a chain read from USER META belongs to a
+		 * provider this site can serve (#1369).
+		 *
+		 * On a multisite network users and their meta are shared by every site,
+		 * but a record carries one provider's codes (a CDEK city code, a DaData
+		 * FIAS id): on a site running another provider it is foreign. The set of
+		 * providers a site serves is its active provider plus the bundled
+		 * fallback ({@see Location_Provider_Registry::DEFAULT_PROVIDER_ID}) when
+		 * that is registered, because the D15 chain legitimately stores a level
+		 * the fallback answered (gotcha
+		 * `a-level-served-can-come-from-the-fallback-not-the-active-provider`).
+		 *
+		 * A foreign chain is read as absent, never erased: the site that wrote it
+		 * still owns it. When the site's providers cannot be determined (the layer
+		 * is not active) nothing is judged and the chain is kept — the failure
+		 * mode must be "keep the customer's data".
+		 *
+		 * @since 2.0.6
+		 *
+		 * @param array{records: array<string, Location_Record>, current: string, implicit: bool, saved_at: int} $chain A parsed chain.
+		 *
+		 * @return bool
+		 */
+		private function chain_is_served_here( array $chain ): bool {
+			$served = $this->site_provider_ids();
+
+			if ( null === $served ) {
+				return true;
+			}
+
+			foreach ( $chain['records'] as $record ) {
+				if ( ! in_array( $record->provider_id(), $served, true ) ) {
+					return false;
+				}
+			}
+
+			return true;
+		}
+
+		/**
+		 * The ids of the providers this site serves — see
+		 * {@see self::chain_is_served_here()}. `null` when the layer has no
+		 * active provider to judge against.
+		 *
+		 * `protected` as a test seam, like {@see self::session()}.
+		 *
+		 * @since 2.0.6
+		 *
+		 * @return string[]|null
+		 */
+		protected function site_provider_ids(): ?array {
+			if ( ! class_exists( Location_Provider_Registry::class ) ) {
+				return null;
+			}
+
+			$registry = Location_Provider_Registry::instance();
+			$active   = $registry->get_active_provider();
+
+			if ( null === $active ) {
+				return null;
+			}
+
+			$ids = [ $active->get_id() ];
+
+			if ( $registry->has_provider( Location_Provider_Registry::DEFAULT_PROVIDER_ID ) ) {
+				$ids[] = Location_Provider_Registry::DEFAULT_PROVIDER_ID;
+			}
+
+			return $ids;
 		}
 
 		/**
@@ -1205,7 +1317,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 			];
 
 			if ( null !== $user_id ) {
-				update_user_meta( $user_id, self::STORAGE_KEY, $entry );
+				update_user_option( $user_id, self::STORAGE_KEY, $entry );
 			}
 
 			$session = $this->session();

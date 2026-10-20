@@ -116,7 +116,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 		/**
 		 * `Customer_Location_Store::get_chain()` — reached via
-		 * `stub_logged_in_chain()`'s `get_user_meta()` fixtures below — now calls
+		 * `stub_logged_in_chain()`'s `get_user_option()` fixtures below — now calls
 		 * `retention_ttl_seconds()` on every read too (issue #356 part 3), which
 		 * reads `get_option()` through WooCommerce's `wc_parse_relative_date_option()`.
 		 * 'Not configured' keeps every test in this file, none of which is about
@@ -283,14 +283,14 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 		/**
 		 * Stubs the logged-in path of {@see \Woodev\Framework\Shipping\Location\Customer_Location_Store::get_chain()}
-		 * with `$raw_chain` via `get_user_meta()` — a plain WordPress function, safe
+		 * with `$raw_chain` via `get_user_option()` — a plain WordPress function, safe
 		 * to stub (unlike `WC()`, which this codebase deliberately never mocks
 		 * globally — see CustomerLocationStoreTest.php's own docblock — because
 		 * Brain Monkey/Patchwork would leak `function_exists('WC') === true` to the
 		 * rest of the PHPUnit process). `Customer_Location_Store::session()` itself
 		 * safely returns null here since `WC()` genuinely does not exist anywhere in
 		 * this test process, so the logged-in path falls straight through to
-		 * `get_user_meta()`.
+		 * `get_user_option()`.
 		 *
 		 * @param array<string, mixed> $raw_chain
 		 * @return void
@@ -298,7 +298,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		private function stub_logged_in_chain( array $raw_chain ): void {
 			Functions\when( 'is_user_logged_in' )->justReturn( true );
 			Functions\when( 'get_current_user_id' )->justReturn( 42 );
-			Functions\when( 'get_user_meta' )->justReturn( $raw_chain );
+			Functions\when( 'get_user_option' )->justReturn( $raw_chain );
 		}
 
 		/**
