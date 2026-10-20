@@ -59,14 +59,38 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 		/**
 		 * The single framework-owned key used on BOTH sides: the `WC()->session`
 		 * key for a guest (or a logged-in customer's fast path) and the
-		 * `get_user_meta()`/`update_user_meta()` key for a logged-in customer's
-		 * authoritative record. A NEW key (installed-site data contracts untouched
-		 * — CLAUDE.md "never break" list).
+		 * user-option key for a logged-in customer's authoritative record. A NEW
+		 * key (installed-site data contracts untouched — CLAUDE.md "never break"
+		 * list).
+		 *
+		 * In user meta it is stored PER SITE through `update_user_option()` /
+		 * `get_user_option()` / `delete_user_option()` (#1369): the row is
+		 * `{$wpdb->get_blog_prefix()}woodev_customer_location` — `wp_woodev_…` on a
+		 * single site, `wp_2_woodev_…` on network site 2. The bare, unprefixed key
+		 * is the LEGACY shared row written before #1369; `get_user_option()` falls
+		 * back to it when the per-site row is absent, and it is honoured only when
+		 * its provider is one this site serves ({@see self::chain_is_served_here()}),
+		 * so existing single-site customers keep their choice. It is never deleted
+		 * by a write or by {@see self::forget()} — another site of the network may
+		 * still need it as a fallback; only a privacy erasure removes it. Once this
+		 * site has written or forgotten a choice, its per-site row (a chain, or the
+		 * {@see self::TOMBSTONE}) exists and the legacy row is never consulted again.
 		 *
 		 * @since 2.0.2
 		 * @var string
 		 */
 		private const STORAGE_KEY = 'woodev_customer_location';
+
+		/**
+		 * The per-site row {@see self::forget()} leaves when a legacy network-wide
+		 * row exists: "this site has forgotten its choice". It keeps
+		 * `get_user_option()` from falling back to the legacy row (which another
+		 * site still owns), and holds no personal data.
+		 *
+		 * @since 2.0.6
+		 * @var array<string, bool>
+		 */
+		private const TOMBSTONE = [ 'forgotten' => true ];
 
 		/**
 		 * Fires after {@see self::set()} or {@see self::handle_wp_login()} actually
@@ -510,38 +534,53 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 		}
 
 		/**
-		 * Deletes `$user_id`'s stored chain from user meta, reporting whether it
-		 * was ACTUALLY deleted — the shared primitive behind both branches of
-		 * {@see self::forget()} and behind {@see self::erase_personal_data()}'s
-		 * honest `items_removed`/`items_retained` report.
+		 * Forgets `$user_id`'s chain on THIS site, reporting whether something was
+		 * ACTUALLY removed — the primitive behind both branches of
+		 * {@see self::forget()}.
 		 *
-		 * Returns `delete_user_meta()`'s OWN result, not a blanket `true` once a
-		 * row was found — Codex review, round 2: a fixed `true` here would make
+		 * Returns the write's OWN result, not a blanket `true` once a row was
+		 * found — Codex review, round 2: a fixed `true` would make
 		 * {@see self::forget()} fire {@see self::ACTION_FORGOTTEN} and clear the
-		 * session, and {@see self::erase_personal_data()} report
-		 * `items_removed: true`, even on a failed database write that left the
-		 * row in place. On the very next request
-		 * {@see self::get_chain_for_logged_in_user()}'s meta fallback would then
-		 * repopulate the session from that still-present row — the exact
-		 * resurrection bug this whole forget-path exists to prevent — while
-		 * having ALREADY told a WP Privacy erasure requester their data was
-		 * gone.
+		 * session even on a failed database write that left the row in place,
+		 * and the next {@see self::get_chain_for_logged_in_user()} would then
+		 * repopulate the session from it.
+		 *
+		 * The legacy network-wide row is NEVER deleted here (#1369): another site
+		 * of the network may still use it. `get_user_option()` falls back to it
+		 * once the per-site row is gone, though, so when it exists the per-site row
+		 * becomes {@see self::TOMBSTONE} instead of being deleted — from then on
+		 * this site never consults the legacy row. A foreign-provider row is
+		 * invisible here and therefore not this site's to forget.
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param int $user_id The user whose meta chain should be deleted.
+		 * @since 2.0.6 Leaves a tombstone instead of deleting when a legacy row
+		 *              exists, and never touches that row (#1369).
 		 *
-		 * @return bool `true` only when a chain was stored AND
-		 *              `delete_user_meta()` reports it actually removed it;
-		 *              `false` when there was nothing to delete, OR when the
-		 *              delete itself failed.
+		 * @param int $user_id The user whose chain should be forgotten on this site.
+		 *
+		 * @return bool `true` only when a chain was visible here AND the write
+		 *              reports it is now gone; `false` when there was nothing to
+		 *              forget, OR when the write itself failed.
 		 */
 		private function delete_meta_chain( int $user_id ): bool {
-			if ( '' === get_user_meta( $user_id, self::STORAGE_KEY, true ) ) {
+			$stored = get_user_option( self::STORAGE_KEY, $user_id );
+
+			if ( false === $stored || self::TOMBSTONE === $stored ) {
 				return false;
 			}
 
-			return (bool) delete_user_meta( $user_id, self::STORAGE_KEY );
+			$chain = $this->parse_stored_chain( $stored );
+
+			if ( null !== $chain && ! $this->chain_is_served_here( $chain ) ) {
+				return false;
+			}
+
+			if ( '' === get_user_meta( $user_id, self::STORAGE_KEY, true ) ) {
+				return (bool) delete_user_option( $user_id, self::STORAGE_KEY );
+			}
+
+			return (bool) update_user_option( $user_id, self::STORAGE_KEY, self::TOMBSTONE );
 		}
 
 		/**
@@ -661,16 +700,42 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 			}
 
 			$user_id = (int) $user->ID;
-			$chain   = $this->parse_stored_chain( get_user_meta( $user_id, self::STORAGE_KEY, true ) );
+			// The two physical rows are exported on their own: once this site has
+			// written, `get_user_option()` returns only the per-site row, but the
+			// legacy network-wide row is still in the database (#1369) and is still
+			// the customer's personal data. No provider filter here — that is a
+			// checkout concern, not a privacy one.
+			$stored = get_user_option( self::STORAGE_KEY, $user_id );
+			$legacy = get_user_meta( $user_id, self::STORAGE_KEY, true );
+			$items  = $this->export_chain_items( $this->parse_stored_chain( $stored ), $user_id, '' );
 
-			if ( null === $chain ) {
-				return [
-					'data' => [],
-					'done' => true,
-				];
+			if ( $legacy !== $stored ) { // Equal means the read above already fell back to the legacy row.
+				$items = array_merge( $items, $this->export_chain_items( $this->parse_stored_chain( $legacy ), $user_id, 'legacy-' ) );
 			}
 
+			return [
+				'data' => $items,
+				'done' => true,
+			];
+		}
+
+		/**
+		 * The export items of one stored chain — one per level.
+		 *
+		 * @since 2.0.6
+		 *
+		 * @param array{records: array<string, Location_Record>, current: string, implicit: bool, saved_at: int}|null $chain   The parsed chain, or `null` for none.
+		 * @param int                                                                                                 $user_id The exported user.
+		 * @param string                                                                                              $id_part Distinguishes the rows' item ids (`''` or `'legacy-'`).
+		 *
+		 * @return array<int, array{group_id: string, group_label: string, group_description: string, item_id: string, data: array<int, array{name: string, value: mixed}>}>
+		 */
+		private function export_chain_items( ?array $chain, int $user_id, string $id_part ): array {
 			$items = [];
+
+			if ( null === $chain ) {
+				return $items;
+			}
 
 			foreach ( $chain['records'] as $level => $record ) {
 				$fields = [
@@ -714,15 +779,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 					'group_id'          => 'woodev-customer-location',
 					'group_label'       => __( 'Customer location', 'woodev-plugin-framework' ),
 					'group_description' => __( 'The delivery location the customer selected, or that was detected automatically during checkout.', 'woodev-plugin-framework' ),
-					'item_id'           => "woodev-customer-location-{$level}",
+					'item_id'           => "woodev-customer-location-{$id_part}{$level}",
 					'data'              => $fields,
 				];
 			}
 
-			return [
-				'data' => $items,
-				'done' => true,
-			];
+			return $items;
 		}
 
 		/**
@@ -731,8 +793,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 		 * for how this is wired onto the `wp_privacy_personal_data_erasers`
 		 * filter.
 		 *
-		 * Erases via {@see self::forget_user_meta()} — {@see self::forget()}'s
-		 * own explicit-`$user_id` primitive — for the SAME meta-only,
+		 * Erases the user's meta only, unlike {@see self::forget()} — it deletes
+		 * the per-site row AND the legacy network-wide row (#1369) — for the SAME
 		 * session-untouched reason {@see self::forget()}'s own docblock
 		 * explains: this callback runs in wp-admin, against an arbitrary
 		 * customer's email, so `$this->session()` here would be the
@@ -747,15 +809,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 		 * the database, not merely whether a row was found beforehand (Codex
 		 * review, round 2): a row that existed but whose `delete_user_meta()`
 		 * call itself failed is reported as RETAINED, with a message, rather
-		 * than as removed — see {@see self::delete_meta_chain()}'s own docblock
-		 * for why silently reporting success there would be worse than a
-		 * cosmetic bug.
+		 * than as removed. The per-site and the legacy row are judged separately:
+		 * a partial failure reports `items_retained: true` even when the other
+		 * row was removed (#1369).
 		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 `items_removed`/`items_retained` now come from
-		 *              {@see self::forget_user_meta()}'s actual result, not a
-		 *              pre-check that could not see whether the delete itself
-		 *              succeeded (Codex review, round 2, must-fix 1).
+		 *              the deletes' actual results, not a pre-check that could not
+		 *              see whether the delete itself succeeded (Codex review,
+		 *              round 2, must-fix 1).
+		 * @since 2.0.6 Deletes the per-site and the legacy row, judging each (#1369).
 		 *
 		 * @param string $email_address The requester's email address.
 		 * @param int    $page          1-based page number.
@@ -774,10 +837,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 			}
 
 			$user_id = (int) $user->ID;
-			$had     = '' !== get_user_meta( $user_id, self::STORAGE_KEY, true );
-			$removed = $this->forget_user_meta( $user_id );
+			// Both physical rows go, and each delete is judged on its own: one
+			// succeeding must not hide the other one failing. `get_user_option()`
+			// sees the per-site row and, failing that, the legacy one, so a row
+			// still standing after the deletes is reported as retained.
+			$removed  = (bool) delete_user_option( $user_id, self::STORAGE_KEY );
+			$removed  = (bool) delete_user_meta( $user_id, self::STORAGE_KEY ) || $removed;
+			$retained = false !== get_user_option( self::STORAGE_KEY, $user_id ) || '' !== get_user_meta( $user_id, self::STORAGE_KEY, true );
 
-			return self::eraser_result( $removed, $had && ! $removed );
+			if ( $removed ) {
+				$this->fire_forgotten( $user_id );
+			}
+
+			return self::eraser_result( $removed, $retained );
 		}
 
 		/**
@@ -1001,7 +1073,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 			}
 
 			$user_id    = (int) $user->ID;
-			$meta_chain = $this->parse_stored_chain( get_user_meta( $user_id, self::STORAGE_KEY, true ) );
+			$meta_chain = $this->parse_stored_chain( get_user_option( self::STORAGE_KEY, $user_id ) ); // A tombstone parses to null.
+
+			if ( null !== $meta_chain && ! $this->chain_is_served_here( $meta_chain ) ) {
+				$meta_chain = null; // Another site's provider wrote it; it is not this site's to reconcile with.
+			}
 
 			$winner = self::may_overwrite( $meta_chain, $session_chain['implicit'] ) ? $session_chain : $meta_chain;
 
@@ -1050,14 +1126,93 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 				}
 			}
 
-			$raw_meta  = get_user_meta( get_current_user_id(), self::STORAGE_KEY, true );
-			$from_meta = $this->parse_stored_chain( $raw_meta );
+			$raw_meta  = get_user_option( self::STORAGE_KEY, get_current_user_id() );
+			$from_meta = self::TOMBSTONE === $raw_meta ? null : $this->parse_stored_chain( $raw_meta );
+
+			// User meta is shared across a multisite network: discard a chain
+			// carrying another site's provider codes (never delete it — that site
+			// still owns it).
+			if ( null !== $from_meta && ! $this->chain_is_served_here( $from_meta ) ) {
+				return null;
+			}
 
 			if ( null !== $from_meta && null !== $session ) {
 				$session->set( self::STORAGE_KEY, $raw_meta );
 			}
 
 			return $from_meta;
+		}
+
+		/**
+		 * Whether every record of a chain read from USER META belongs to a
+		 * provider this site can serve (#1369).
+		 *
+		 * On a multisite network users and their meta are shared by every site,
+		 * but a record carries one provider's codes (a CDEK city code, a DaData
+		 * FIAS id): on a site running another provider it is foreign. The set of
+		 * providers a site serves is its active provider plus the bundled
+		 * fallback ({@see Location_Provider_Registry::DEFAULT_PROVIDER_ID}) when
+		 * that is registered, because the D15 chain legitimately stores a level
+		 * the fallback answered (gotcha
+		 * `a-level-served-can-come-from-the-fallback-not-the-active-provider`).
+		 *
+		 * A foreign chain is read as absent, never erased: the site that wrote it
+		 * still owns it. When the site's providers cannot be determined (the layer
+		 * is not active) nothing is judged and the chain is kept — the failure
+		 * mode must be "keep the customer's data".
+		 *
+		 * @since 2.0.6
+		 *
+		 * @param array{records: array<string, Location_Record>, current: string, implicit: bool, saved_at: int} $chain A parsed chain.
+		 *
+		 * @return bool
+		 */
+		private function chain_is_served_here( array $chain ): bool {
+			$served = $this->site_provider_ids();
+
+			if ( null === $served ) {
+				return true;
+			}
+
+			foreach ( $chain['records'] as $record ) {
+				if ( ! in_array( $record->provider_id(), $served, true ) ) {
+					return false;
+				}
+			}
+
+			return true;
+		}
+
+		/**
+		 * The ids of the providers this site serves — see
+		 * {@see self::chain_is_served_here()}. `null` when the layer has no
+		 * active provider to judge against.
+		 *
+		 * `protected` as a test seam, like {@see self::session()}.
+		 *
+		 * @since 2.0.6
+		 *
+		 * @return string[]|null
+		 */
+		protected function site_provider_ids(): ?array {
+			if ( ! class_exists( Location_Provider_Registry::class ) ) {
+				return null;
+			}
+
+			$registry = Location_Provider_Registry::instance();
+			$active   = $registry->get_active_provider();
+
+			if ( null === $active ) {
+				return null;
+			}
+
+			$ids = [ $active->get_id() ];
+
+			if ( $registry->has_provider( Location_Provider_Registry::DEFAULT_PROVIDER_ID ) ) {
+				$ids[] = Location_Provider_Registry::DEFAULT_PROVIDER_ID;
+			}
+
+			return $ids;
 		}
 
 		/**
@@ -1205,7 +1360,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 			];
 
 			if ( null !== $user_id ) {
-				update_user_meta( $user_id, self::STORAGE_KEY, $entry );
+				update_user_option( $user_id, self::STORAGE_KEY, $entry );
 			}
 
 			$session = $this->session();

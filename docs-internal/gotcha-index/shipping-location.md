@@ -3,6 +3,7 @@
 > One line per gotcha in this topic; the detail is in the linked file. Map of every topic:
 > [../GOTCHAS.md](../GOTCHAS.md). Format and the write protocol: `DOCS-SCHEMA.md` → "GOTCHAS.md Format".
 
+- [shipping/location] **User meta is NETWORK-wide on multisite — store per-site data with `update_user_option()`; `get_user_option()` falls back to the unprefixed key.** → [user-meta-is-network-wide-on-multisite-store-per-site-data-with-user-option](../gotchas/user-meta-is-network-wide-on-multisite-store-per-site-data-with-user-option.md) (s189)
 - [shipping/location] **A stored field mode outlives the chooser — a server guard keyed on `ajax-select2` alone blocks the whole checkout when no token is set.** → [a-stored-field-mode-outlives-the-chooser-and-a-guard-keyed-on-it-blocks-checkout](../gotchas/a-stored-field-mode-outlives-the-chooser-and-a-guard-keyed-on-it-blocks-checkout.md) (s159)
 - [shipping/location] **A fixture docblock asserted an API parameter that does not exist (`/location/regions?region_code=`) and a capability was declared on it — every region key resolved to the same wrong row.** → [the-fixture-docblock-asserted-an-api-parameter-that-does-not-exist](../gotchas/the-fixture-docblock-asserted-an-api-parameter-that-does-not-exist.md) (s96)
 - [shipping/location] **To sample a region's settlements, scope the LIST — `suggest()` by name returns homonyms from other regions.** → [list-by-region-scope-not-suggest-by-name](../gotchas/list-by-region-scope-not-suggest-by-name.md) (s92)
