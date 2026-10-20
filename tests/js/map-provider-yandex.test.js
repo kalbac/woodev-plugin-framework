@@ -663,6 +663,18 @@ test( 'hasApiKey: false emits a map_script error and never constructs a map', as
 	expect( provider.map ).toBeNull();
 } );
 
+test( 'a failed map keeps list-driven focus and type filtering safe without a map or ObjectManager', async () => {
+	const config = makeConfig( { hasApiKey: false } );
+	window[ config.ns ] = ymapsStub;
+	const provider = new WoodevYandexMapProvider();
+	await provider.init( document.createElement( 'div' ), config );
+
+	await expect( provider.focusGroup( '55.75,37.61', { zoom: true } ) ).resolves.toBeUndefined();
+	expect( () => provider.setTypeFilter( [ 'pvz' ] ) ).not.toThrow();
+	expect( provider.map ).toBeNull();
+	expect( provider.objectManager ).toBeNull();
+} );
+
 test( 'map initialization exceptions emit a map_script error instead of rejecting silently', async () => {
 	const config = makeConfig();
 	window[ config.ns ] = ymapsStub;

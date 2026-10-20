@@ -3658,7 +3658,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'select'           => 'Choose this point',
 				'loading'          => 'Loading pickup points…',
 				'error'            => 'Could not load pickup points. Please try again.',
-				'mapUnavailable'  => 'The map is unavailable right now. You can still choose a pickup point from the list.',
+				'mapUnavailable'  => 'The map is unavailable right now, but you can choose a pickup point from the list.',
 				'noResults'        => 'No results found.',
 				'blocked'          => 'This pickup point is not available for your order.',
 				'trigger'          => 'Select a pickup point',

@@ -2900,6 +2900,7 @@
 
 			provider = new ProviderCtor();
 			lastBbox = null;
+			mapUnavailable = false;
 			initialAnchor = null;
 			anchorCaptured = false;
 
@@ -2944,7 +2945,7 @@
 				if ( reason && 'map_script' === reason.code ) {
 					mapUnavailable = true;
 					if ( config.debug && window.console && 'function' === typeof window.console.error ) {
-						window.console.error( '[woodev-pickup] ' + ( reason.message || 'Yandex Maps API key is missing or was not accepted for this domain.' ) );
+						window.console.error( '[woodev-pickup] ' + ( reason.message || 'Map failed to load.' ) );
 					}
 					modal.showNotice( errorMessage( config, reason ) );
 					return;
@@ -3141,10 +3142,11 @@
 				fireDocumentEvent( EVENT_MAP_READY, { fieldId: config.fieldId, provider: config.provider } );
 
 				// bulk fetches once, right here; viewport waits for the provider's own
-				// boundsChange (wired above) — see the file docblock. Either way, whatever settles
+				// boundsChange (wired above), because the REST controller rejects viewport queries
+				// without bounds. Either way, whatever settles
 				// first (a fetch resolving/rejecting, or a viewport starting out `bboxTooWide`) is
 				// what clears stage 2 via {@see clearInitialBusy} — see those call sites.
-				if ( ! ownsChrome && ( 'bulk' === config.strategy || mapUnavailable ) ) {
+				if ( ! ownsChrome && 'bulk' === config.strategy ) {
 					fetchAndSetPoints( bulkQuery() ).catch( logRenderError );
 				}
 			} );

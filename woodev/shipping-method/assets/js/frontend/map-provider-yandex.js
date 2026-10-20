@@ -2175,6 +2175,10 @@
 
 		this._activeTypeFilter = list;
 
+		if ( ! this.map || ! this.objectManager ) {
+			return;
+		}
+
 		this.objectManager.setFilter( function( object ) {
 			if ( ! list ) {
 				return true;
@@ -2676,6 +2680,10 @@
 		var opts = options || {};
 		var wantsZoom = true === opts.zoom;
 		var fit = this._cameraFit;
+
+		if ( ! this.map || ! this.objectManager ) {
+			return Promise.resolve();
+		}
 
 		if ( ! fit ) {
 			return this._moveAndFocus( key, wantsZoom, mySeq );

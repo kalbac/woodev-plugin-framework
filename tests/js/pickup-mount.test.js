@@ -607,7 +607,7 @@ function phpI18n( overrides ) {
 			select: 'Выбрать этот пункт',
 			loading: 'Загрузка пунктов выдачи…',
 			error: 'Не удалось загрузить пункты выдачи. Попробуйте ещё раз.',
-			mapUnavailable: 'Карта сейчас недоступна. Вы всё ещё можете выбрать пункт выдачи из списка.',
+			mapUnavailable: 'Карта сейчас недоступна, но пункт выдачи можно выбрать из списка.',
 			noResults: 'Поиск не дал результатов.',
 			blocked: 'Этот пункт выдачи недоступен для вашего заказа.',
 			trigger: 'Выбрать пункт выдачи',
@@ -3510,15 +3510,16 @@ test( 'map failure does not log technical detail when debug mode is disabled', a
 	error.mockRestore();
 } );
 
-test( 'a viewport session still fetches the locality list when map initialization fails before bounds are available', async () => {
-	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( [ point( { id: 'viewport-list-point' } ) ] ) );
-	const session = await openSession( configWith( {
+test( 'a failed viewport map does not issue a locality-only fetch the controller rejects', async () => {
+	const fetchPoints = jest.fn( () => Promise.resolve( [] ) );
+	dataSourceFactory = fakeDataSourceFactory( fetchPoints );
+	window.WoodevPickupDataSource = dataSourceFactory;
+	await openSession( configWith( {
 		strategy: 'viewport',
 		mapConfig: { simulateMapFailure: true },
 	} ) );
 
-	expect( session.provider.setPointsCalls ).toHaveLength( 0 );
-	expect( session.panels.lastVisible[ 0 ].points[ 0 ].id ).toBe( 'viewport-list-point' );
+	expect( fetchPoints ).not.toHaveBeenCalled();
 } );
 
 test( 'a points render failure is logged in debug mode instead of disappearing in a catch', async () => {

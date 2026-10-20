@@ -1281,7 +1281,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 					'woodev-plugin-framework'
 				),
 				'mapUnavailable' => __(
-					'The map is unavailable right now. You can still choose a pickup point from the list.',
+					'The map is unavailable right now, but you can choose a pickup point from the list.',
 					'woodev-plugin-framework'
 				),
 				'noResults'      => __( 'No results found.', 'woodev-plugin-framework' ),
