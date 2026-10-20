@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Topic map.** 438 atomic gotchas across 30 topics. At session start read THIS file, then open
+> **Topic map.** 439 atomic gotchas across 30 topics. At session start read THIS file, then open
 > the topic indexes your task touches — each holds one line per gotcha, linking the detail file.
 > `[tooling/*]`, `[testing/*]` and `[rig/*]` apply to almost every session.
 > **Adding one:** create `gotchas/{slug}.md`, then add ONE line to the right `gotcha-index/{topic}.md`
@@ -34,7 +34,7 @@
 | [`admin-ui/modal`](gotcha-index/admin-ui-modal.md) | 5 | Framework modal shell |
 | [`admin-ui/react-state`](gotcha-index/admin-ui-react-state.md) | 2 | React component state |
 | [`box-packer/*`](gotcha-index/box-packer.md) | 3 | Box-packer algorithm (S2) |
-| [`shipping/checkout`](gotcha-index/shipping-checkout.md) | 21 | Checkout field layer (§8) |
+| [`shipping/checkout`](gotcha-index/shipping-checkout.md) | 22 | Checkout field layer (§8) |
 | [`shipping/pickup`](gotcha-index/shipping-pickup.md) | 28 | Pickup point picker / ymaps |
 | [`shipping/*`](gotcha-index/shipping.md) | 12 | Shipping module (S1) |
 | [`perf/*`](gotcha-index/perf.md) | 4 | Payload size and wire cost |

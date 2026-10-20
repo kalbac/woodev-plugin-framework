@@ -23,6 +23,7 @@
 - [shipping/checkout] **The block checkout is a REST request: the shipping guard blocks its rates, and a block-checkout order fires none of the classic checkout hooks.** → [the-block-checkout-is-a-rest-request-and-fires-none-of-the-classic-checkout-hooks](../gotchas/the-block-checkout-is-a-rest-request-and-fires-none-of-the-classic-checkout-hooks.md) (s142)
 - [shipping/checkout] **The wizard's address policy replays `woocommerce_default_address_fields`, not `woocommerce_checkout_fields` relaxations.** → [the-wizard-address-policy-replays-default-address-field-filters-but-not-checkout-field-filters](../gotchas/the-wizard-address-policy-replays-default-address-field-filters-but-not-checkout-field-filters.md) (s144)
 - [shipping/checkout] **WC sends `update-customer` inside `/wc/store/v1/batch`, ~300 ms AFTER `isCustomerDataUpdating()` turns true — a route-matching middleware never fires; a snapshot at `updating=true` is inert. Both passed jest.** → [wc-store-api-batches-update-customer-300ms-after-updating-flips](../gotchas/wc-store-api-batches-update-customer-300ms-after-updating-flips.md) (s156)
+- [shipping/checkout] **Overlapping Store API cart requests lose each other's session writes (WC saves the whole row at the end): a rate or point chosen during core's address push is undone. Never send cart mutations by raw `fetch()`.** → [overlapping-store-api-cart-requests-lose-each-other-s-session-writes](../gotchas/overlapping-store-api-cart-requests-lose-each-other-s-session-writes.md) (s189)
 
 ## Related
 

@@ -10,6 +10,7 @@ import { keepExtensionAddressesInForm } from './extension-cart-addresses';
 import { readFeePaymentsNamespace, watchPaymentMethod } from './payment-recalc';
 import { guardPlaceOrderPresses } from './place-order-guard';
 import { registerLocalityBlock, registerPickupBlock } from './register';
+import { serializeStoreApiMutationsOnce } from './store-api-queue';
 import { captureWcRuntime } from './wc-runtime';
 import { resolveCartFromServer } from './wc-stores';
 import { watchBlockAddressSuggestions } from './address-suggestions';
@@ -30,6 +31,9 @@ if ( locality || pickup ) {
 	resolveCartFromServer();
 	// A Place Order press core swallows while it recalculates an edited postcode or city is carried out (#1279).
 	guardPlaceOrderPresses();
+	// Overlapping cart requests lose each other's session writes — the chosen rate, the confirmed point (#1357).
+	// Installed last: the outermost middleware.
+	serializeStoreApiMutationsOnce();
 }
 
 // From before the form can be typed in: whose postcode it is, is asked at the next point (#1113).
