@@ -6293,3 +6293,13 @@ msgstr ""
 #: shipping-method/rest-api/class-orders-controller.php
 msgid "Не удалось получить варианты у перевозчика. Попробуйте ещё раз."
 msgstr ""
+
+#: assets/build/shipping-orders-page/index.js
+#, js-format
+msgid "Стоимость доставки пересчитана с учётом способа оплаты: %1$s → %2$s"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js
+#, js-format
+msgid "Не удалось пересчитать доставку: сохранена цена %s. Заказ можно сохранить."
+msgstr ""
