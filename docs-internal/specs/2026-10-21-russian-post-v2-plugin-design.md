@@ -660,14 +660,18 @@ Plugin unit and integration, PHP style and static analysis, JS build and lint; `
 
 ### 18.3 Questions only the operator can answer
 
-- **Q2** Method ids: are `russian_post_courier|pickup|postamat|international` acceptable names, given the framework's per-plugin prefix habit (`edostavka_*`, `yandex_delivery_*`)?
-- **Q4** Doubtful address: should auto-export hold an order whose address the carrier cannot validate (the spec's interpretation), or send it and flag it?
+None open. Decided by the coordinator on 21.10.2026 (reversible, no operator input needed):
+
+- **Q2** Method ids → `russian_post_courier`, `russian_post_pickup`, `russian_post_postamat`, `russian_post_international`. They
+  carry the plugin's own prefix and differ from v1's `wc_russian_post_courier` / `wc_russian_post_postal`, which D8 requires.
+- **Q4** Doubtful address → auto-export **holds** the order and shows the reason on the order; the manager can still send it by
+  hand (admin trusts the merchant). Nothing doubtful leaves automatically.
 
 **Closed since the first draft (no longer questions):** Q1 tracking transport → REST by token, decision 7 amended (§0); Q3 label outside a batch → measure first, design both paths (D14); Q5 old-order rewrite → full migration, no read-only legacy (D15); Q6 widget backend as the only source → risk accepted (D16). The numbers are kept so earlier references stay readable.
 
 ## 19. Card decomposition (proposed; not filed)
 
-Repo codes: **Ф** = framework (`kalbac/woodev-plugin-framework`); **П** = the Russian Post plugin repository — a NEW repository (v1 has none; "all plugins without one will get one over time", the Yandex precedent), created in P1. «≤400» = one worker, about 400 changed lines or fewer. Titles are Russian (card titles go to the backlog). R-cards are measurement only, cheap, safe for Haiku with a detailed brief; they never exceed the quota rule of §16.4.
+Repo codes: **Ф** = framework (`kalbac/woodev-plugin-framework`); **П** = the Russian Post plugin repository: the EXISTING private repo `kalbac/woodev-russian-post` (default branch `master`, last push 16.07.2022, older than v1 1.2.6.0). v2 is built on a new `v2` branch there, as CDEK does (`--base-branch v2` for plugin worktrees); P1 first commits v1 1.2.6.0 from `plugins-reference/` to `master` so history starts from the shipped code. The plugin folder and main file stay `woodev-russian-post` / `woodev-russian-post.php`, or EDD updates break. «≤400» = one worker, about 400 changed lines or fewer. Titles are Russian (card titles go to the backlog). R-cards are measurement only, cheap, safe for Haiku with a detailed brief; they never exceed the quota rule of §16.4.
 
 | # | Repo | Title | Scope | Depends on |
 |---|---|---|---|---|
