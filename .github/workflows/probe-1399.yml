@@ -16,21 +16,23 @@ jobs:
           coverage: none
       - name: probe
         run: |
-          php -v
-          dpkg -l | grep -E "php${{ matrix.php }}-(cli|common)" || true
-          zcat /usr/share/doc/php${{ matrix.php }}-cli/changelog.Debian.gz 2>/dev/null | head -8 || true
-          php -i | grep -i -E "^(Configure Command|Zend Memory Manager|Zend Signal|Zend Extension Build|PHP Extension Build|Debug Build|Thread Safety|memory_limit|zend.assertions|opcache.enable_cli)" || true
+          set +e
+          apt list --installed 2>/dev/null | grep -E "^php${{ matrix.php }}-(cli|common)/" 
+          php -i | grep -i -E "^(Build Date|Build System|Server API|PHP API|Configure Command)" | cut -c1-300
           cat > /tmp/a.php <<'PHP'
           <?php
           register_shutdown_function(function () { fwrite(STDERR, "SHUTDOWN-RAN\n"); });
-          if (($argv[1] ?? '') === 'ini') { ini_set('memory_limit', '8M'); }
+          $mode = $argv[1] ?? '';
+          if ($mode === 'ini' || $mode === 'ini-loop') { ini_set('memory_limit', '8M'); }
+          if ($mode === 'ini-loop' || $mode === 'cli-loop') { $a = []; while (true) { $a[] = str_repeat('x', 4096); } }
           echo strlen(str_repeat('x', 64 * 1024 * 1024)), "\n";
           PHP
-          for m in ini cli; do
-            echo "== variant $m"
-            if [ "$m" = cli ]; then php -d memory_limit=8M /tmp/a.php; else php /tmp/a.php ini; fi
-            echo "rc=$?"
-          done
-          echo "== uncaught exception"
-          php -r 'register_shutdown_function(function(){fwrite(STDERR,"SHUTDOWN-RAN\n");}); throw new Exception("x");'; echo "rc=$?"
-          echo "== ulimit"; ulimit -a | head -20
+          run() { echo "== $*"; "$@"; echo "rc=$?"; }
+          run php /tmp/a.php ini
+          run php -d memory_limit=8M /tmp/a.php cli
+          run php -d memory_limit=8M /tmp/a.php cli-loop
+          run php /tmp/a.php ini-loop
+          run php -d display_errors=1 -d html_errors=0 -d log_errors=0 -d error_reporting=-1 /tmp/a.php ini
+          run php -d display_errors=0 -d log_errors=1 /tmp/a.php ini
+          run php -d zend.signals=0 /tmp/a.php ini
+          run php -r 'register_shutdown_function(function(){fwrite(STDERR,"SHUTDOWN-RAN\n");}); throw new Exception("x");'
