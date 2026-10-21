@@ -22,6 +22,35 @@ use PHPUnit\Framework\TestCase;
 final class ErrorReporterProcessTest extends TestCase {
 
 	/**
+	 * Whether this PHP binary runs shutdown functions after a memory-limit fatal (cached per process).
+	 *
+	 * Measured on the hosted runner (#1399): the php7.4 / php8.0 / php8.1 packages built on 19–20.10.2026
+	 * die on ANY «Allowed memory size» fatal with exit status 1, no shutdown function and no log line —
+	 * even in a three-line script — while 8.2+ and every other fatal (uncaught exception) still exit
+	 * 255 and run them. No code of ours can report an OOM there, so the two OOM scenarios below prove
+	 * nothing on such a build; on a sound engine they run in full and nothing is relaxed.
+	 */
+	private static ?bool $shutdown_runs_after_oom = null;
+
+	private function skip_unless_shutdown_runs_after_oom(): void {
+		if ( null === self::$shutdown_runs_after_oom ) {
+			$process = proc_open( [ PHP_BINARY, '-d', 'display_errors=0', '-d', 'log_errors=0', __DIR__ . '/fixtures/oom-probe.php' ], [ 1 => [ 'pipe', 'w' ], 2 => [ 'pipe', 'w' ] ], $pipes );
+			$this->assertIsResource( $process, 'could not start a child PHP' );
+
+			$out = (string) stream_get_contents( $pipes[1] );
+			fclose( $pipes[1] );
+			fclose( $pipes[2] );
+			proc_close( $process );
+
+			self::$shutdown_runs_after_oom = false !== strpos( $out, 'SHUTDOWN-RAN' );
+		}
+
+		if ( ! self::$shutdown_runs_after_oom ) {
+			$this->markTestSkipped( 'PHP ' . PHP_VERSION . ' (this build) exits 1 on a memory-limit fatal without running shutdown functions, so an OOM cannot be reported here (#1399).' );
+		}
+	}
+
+	/**
 	 * @param string $scenario Scenario name understood by fixtures/runner.php.
 	 * @return array{out:string,exit:int,queue:array<int,array<string,mixed>>}
 	 */
@@ -145,6 +174,8 @@ final class ErrorReporterProcessTest extends TestCase {
 	}
 
 	public function test_an_engine_fatal_in_our_code_is_queued_with_php_s_own_message(): void {
+		$this->skip_unless_shutdown_runs_after_oom();
+
 		$run = $this->run_scenario( 'engine_fatal' );
 
 		$this->assertSame( 255, $run['exit'] );
@@ -157,6 +188,8 @@ final class ErrorReporterProcessTest extends TestCase {
 	}
 
 	public function test_a_near_full_heap_oom_keeps_the_original_fatal_and_queues_without_a_second_fatal(): void {
+		$this->skip_unless_shutdown_runs_after_oom();
+
 		$run = $this->run_scenario( 'oom_heap' );
 
 		$this->assertSame( 255, $run['exit'] );
