@@ -14,6 +14,19 @@ Section 1 lists the binding operator decisions (brainstorm of 21.10.2026); nothi
 1. **Report L is committed and decision 7 is amended.** [l-new-api.md](../research/2026-10-21-russian-post-v2/l-new-api.md) ("Russian Post's new business API documentation", 21.10.2026) is in the fact base; its claims are labelled **L** below. It amended `decisions.md` item 7: tracking is REST by token, no SOAP, no tracking login. That is settled, not an open question (§10).
 2. **Decision 6 and the only Ф7 measurement disagree, and the operator has settled how to proceed.** Decision 6 asks for the Ф7 label "printed from the admin (one order)" with batches deferred; the only Ф7 measurement (G) was on an order *already in a batch*. Operator answer of 21.10.2026 (D14): measure first (card R1) and design both paths (§8.6).
 
+## Amendment — wave-0 measurements (21.10.2026, s191)
+
+Cards R1, R2, R3, R4 and R7 ran on the test account the same day; the reports are in the research folder (`wave0-r*.md`). Where
+they settle a branch or an UNVERIFIED item, they win over the text below.
+
+| Card | Outcome | Effect on this spec |
+|---|---|---|
+| R1 | Ф7 for an order **outside a batch: NO** for ONLINE_PARCEL, the postamat COMBINED product, PARCEL_CLASS_1, ONLINE_COURIER, POSTAL_PARCEL (500 `Forbidden mail type` / 404); **EMS is the exception** (1-page label from `forms/backlog/{id}/forms`, body PDF although the content type says zip). Inside a batch `f7pdf` gives a 1-page PDF. ([wave0-r1.md](../research/2026-10-21-russian-post-v2/wave0-r1.md)) | §8.6 branch 3 is the design: the label is offered only when the order is already in a batch (EMS also before), no implicit single-order batch in release 1 |
+| R2 | Order-create mass limits: ONLINE_PARCEL 20 000 g, PARCEL_CLASS_1 5 000 g, POSTAL_PARCEL 20 000 g, ONLINE_COURIER 31 500 g, EMS 31 500 g; the API applies volumetric weight itself (5 000 cm³/kg) when `dimension` is sent; only real 10-digit leaf ТН ВЭД codes pass; only KZ/AM/KG are declaration-free (both directions confirmed, 161 open countries swept). ([wave0-r2.md](../research/2026-10-21-russian-post-v2/wave0-r2.md)) | §4 and §9.4 limits use these numbers; §9.2 rule table confirmed |
+| R3 | Token tracking answers in ~0.1 s; `Language` header / query change nothing; status groups seen: RECEPTION_EXPECTED, IN_WAY, READY_FOR_DELIVERY, GIVING; an unknown valid-format barcode returns 200 with `trackingItemOperationGroupStatuses: null`; no limit header or endpoint. ([wave0-r3.md](../research/2026-10-21-russian-post-v2/wave0-r3.md)) | §10: the mapper treats `null` statuses as "no data yet"; the daily cap default stays 100; the real quota stays UNVERIFIED |
+| R4 | `find-from-rectangle` carries closed flags and hours in the list, but costs ~7× bytes per row (~22× per city viewport); the widget set is a subset of its open points. ([wave0-r4.md](../research/2026-10-21-russian-post-v2/wave0-r4.md)) | §5 unchanged: widget backend for release 1; `find-from-rectangle` is the documented candidate if a fallback is ever built |
+| R7 | Domestic products reject a goods list (`UNEXPECTED_GOODS`); COD = `insr-value` + `payment`, no `payment-method` (CASH/PLASTIC_CARD → 400); `dimension` in whole cm; a prefixed `order-num` is found by exact match in «Новые» (`backlog/search`) and after batching (`shipment/search`); one wp.org collision (`russian_post_courier` in an abandoned Dokan add-on, 0 active installs). ([wave0-r7.md](../research/2026-10-21-russian-post-v2/wave0-r7.md)) | §8.2 body rules follow these; §8.5 duplicate guard can rely on exact `order-num` search (U25 closed); method ids kept |
+
 ## 1. Operator decisions (binding)
 
 Source: `docs-internal/research/2026-10-21-russian-post-v2/decisions.md`, walked item by item with the operator on 21.10.2026. Where the agenda or a report disagrees, `decisions.md` wins. Decision numbers D1–D13 are the file's own; D14–D16 are the operator's later answers of the same day, recorded here.

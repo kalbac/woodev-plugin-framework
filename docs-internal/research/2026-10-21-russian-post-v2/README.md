@@ -31,6 +31,11 @@ repo.
 | [i-php-import.md](i-php-import.md) | I | PHP import of the passport dump on the rig: streaming parse 0.6 s / 4 MB, custom-table import 2 s / +12 MB, bbox reads 0.5–54 ms (MEASURED) |
 | [k-international.md](k-international.md) | K | international on the test account: order create works for parcel/EMS/small packet, 29 orders in 12 countries, CN22/CN23/E-1, v1 country table sends SK/HR/RS parcels to the wrong country (MEASURED) |
 | [l-new-api.md](l-new-api.md) | L | the new cabinet docs: REST tracking by token (verified live), tariff.pochta.ru v2 officially documented with `dogovor=`, 54020 = DELIVERY_PLUS since 16.09.2026, no new points or webhook API |
+| [wave0-r1.md](wave0-r1.md) | R1 | Ф7 outside a batch: NO for every domestic product except EMS; inside a batch a 1-page PDF (MEASURED) |
+| [wave0-r2.md](wave0-r2.md) | R2 | mass limits per product, volumetric divisor 5 000 cm³/kg applied by the API, only real 10-digit ТН ВЭД codes, only KZ/AM/KG declaration-free (MEASURED) |
+| [wave0-r3.md](wave0-r3.md) | R3 | token tracking: ~0.1 s, four status groups seen, no limit headers, unknown barcode = 200 with null statuses (MEASURED) |
+| [wave0-r4.md](wave0-r4.md) | R4 | pochta.ru find-from-rectangle vs widget: keep the widget for release 1 (7× bytes per row), G stays the fallback (MEASURED) |
+| [wave0-r7.md](wave0-r7.md) | R7 | domestic products reject goods lists; COD = insr-value + payment; dimension in whole cm; prefixed order-num findable; one dead wp.org id collision (MEASURED) |
 
 ## 1. Summary
 
