@@ -243,7 +243,7 @@ if ( ! class_exists( 'Woodev_REST_API_Settings' ) ) :
 					'description' => $setting->get_description(),
 					'is_multi'    => $setting->is_is_multi(),
 					'options'     => [] !== $setting->get_option_pairs() ? $setting->get_option_pairs() : $setting->get_options(),
-					'default'     => $setting->get_default(),
+					'default'     => $is_secret ? '' : $setting->get_default(),
 					'value'       => $is_secret ? '' : $stored,
 					'control'     => null,
 				];

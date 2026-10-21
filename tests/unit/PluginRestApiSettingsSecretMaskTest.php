@@ -56,6 +56,9 @@ namespace Woodev\Tests\Unit {
 
 		private const CONSTANT_VALUE = 'dummy-constant-value';
 
+		/** @var string declared default of the 'api_key' fixture (must match the literal in register_settings) */
+		private const DEFAULT_SECRET = 'dummy-declared-default';
+
 		/** @var array<string,mixed> in-memory options table */
 		private $options = [];
 
@@ -121,6 +124,7 @@ namespace Woodev\Tests\Unit {
 				 */
 				protected function register_settings() {
 					$this->register_setting( 'token', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Token', 'sensitive' => true ] );
+					$this->register_setting( 'api_key', \Woodev_Setting::TYPE_STRING, [ 'name' => 'API key', 'sensitive' => true, 'default' => 'dummy-declared-default' ] );
 					$this->register_setting( 'const_defined', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Const', 'constant_name' => 'WOODEV_1406_DEFINED' ] );
 					$this->register_setting( 'const_undefined', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Const', 'constant_name' => 'WOODEV_1406_UNDEFINED' ] );
 					$this->register_setting( 'title', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Title' ] );
@@ -310,6 +314,51 @@ namespace Woodev\Tests\Unit {
 			$this->assertTrue( self::NEW_VALUE === $this->options['woodev_test-plugin_const_undefined'] );
 			$this->assertSame( '', $item['value'] );
 			$this->assert_response_lacks( $item, self::NEW_VALUE );
+		}
+
+		/**
+		 * A secret's declared default is masked too: GET single and list never emit it.
+		 *
+		 * @return void
+		 */
+		public function test_get_masks_the_declared_default_of_a_secret(): void {
+			$controller = $this->make_controller( [ 'api_key' => self::STORED ] );
+
+			$item = $controller->get_item( $this->request( [ 'id' => 'api_key' ] ) );
+
+			$this->assertSame( '', $item['default'] );
+			$this->assertSame( '', $item['value'] );
+			$this->assertTrue( $item['is_set'] );
+			$this->assert_response_lacks( $item, self::DEFAULT_SECRET );
+			$this->assert_response_lacks( $item, self::STORED );
+
+			$items = $controller->get_items( $this->request( [] ) );
+			$by_id = array_column( $items, null, 'id' );
+
+			$this->assertSame( '', $by_id['api_key']['default'] );
+			$this->assert_response_lacks( $items, self::DEFAULT_SECRET );
+		}
+
+		/**
+		 * The declared default of a secret stays masked in the update response, for the mask and for a new value.
+		 *
+		 * @return void
+		 */
+		public function test_update_masks_the_declared_default_of_a_secret(): void {
+			$controller = $this->make_controller( [ 'api_key' => self::STORED ] );
+
+			$masked = $controller->update_item( $this->request( [ 'id' => 'api_key', 'value' => '' ] ) );
+
+			$this->assertTrue( self::STORED === $this->options['woodev_test-plugin_api_key'], 'the stored secret was changed by a masked update' );
+			$this->assertSame( '', $masked['default'] );
+			$this->assert_response_lacks( $masked, self::DEFAULT_SECRET );
+
+			$changed = $controller->update_item( $this->request( [ 'id' => 'api_key', 'value' => self::NEW_VALUE ] ) );
+
+			$this->assertTrue( self::NEW_VALUE === $this->options['woodev_test-plugin_api_key'], 'the secret was not updated' );
+			$this->assertSame( '', $changed['default'] );
+			$this->assert_response_lacks( $changed, self::DEFAULT_SECRET );
+			$this->assert_response_lacks( $changed, self::NEW_VALUE );
 		}
 
 		/**
