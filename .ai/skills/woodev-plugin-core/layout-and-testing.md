@@ -75,6 +75,10 @@ The framework's pattern (`tests/unit/TestCase.php`, `tests/bootstrap.php`, the g
   only under CI's reverse-order gate (`--order-by=reverse`). Put the annotation (and `@preserveGlobalState disabled`) on
   the METHOD; run `--order-by=reverse` locally for anything that defines a function or class at runtime (Brain Monkey's
   `Functions\when( 'has_block' )` defines it process-wide). Gotcha `phpunit-9-ignores-run-in-separate-process-on-a-class`.
+- **A Mockery `alias:` mock declares the class for the whole process** (e.g. `alias:` + WooCommerce's `OrderUtil`): a
+  later test in a file you never touched dies on the leftover alias once two branches merge. Run such a test in its own
+  process (method annotations) and run `vendor/bin/phpunit --order-by=random` before finishing any card. Gotcha
+  `a-mockery-alias-mock-lives-for-the-whole-phpunit-process`.
 - A test that `include`s your ENTRY FILE in a subprocess (the literals-only loader definition test) stubs every WordPress
   function the entry file calls at file level — adding the error-reporting DSN `add_filter()` broke CDEK's
   `LoaderDefinitionTest` until it got a recording stub ([services.md](services.md#error-reporting)).
