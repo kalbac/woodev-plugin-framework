@@ -174,6 +174,9 @@
 	/** @type {string} prefix of every `woodev_pickup_config_{suffix}` JS config global. */
 	var CONFIG_PREFIX = 'woodev_pickup_config_';
 
+	/** @type {string} prefix of every `woodev_checkout_field_config_{suffix}` (§8) JS config global. */
+	var CHECKOUT_CONFIG_PREFIX = 'woodev_checkout_field_config_';
+
 	/** @type {string} marker class on the one trigger button mounted per slot. */
 	var TRIGGER_CLASS = 'woodev-pickup-trigger';
 
@@ -524,6 +527,15 @@
 	/** @type {Object.<string, string>} method restorations awaiting updated_checkout. */
 	var pendingAddressRestores = {};
 	var shippingMethodWatcherBound = { native: false, jquery: false };
+	var paymentMethodWatcherBound = { native: false, jquery: false };
+
+	/**
+	 * The native `change` the last payment-method refresh was raised for — a jQuery-delegated and a
+	 * native listener both see one real click, and this keeps that to a single refresh request.
+	 *
+	 * @type {Event|null}
+	 */
+	var lastPaymentChangeEvent = null;
 
 	/**
 	 * Seeds {@see rememberedSelections} for one field id from `config.selections` — guarded to
@@ -699,6 +711,103 @@
 				delete pendingAddressRestores[ config.fieldId ];
 			}
 		} );
+	}
+
+	/**
+	 * Whether the chosen classic shipping method is one of the framework's pickup methods.
+	 *
+	 * The ids come from the §8 checkout config (`pickup_method_ids`, bare method ids without the
+	 * zone-instance suffix) — the same list, and the same exact-or-`id:` prefix match, the
+	 * field layer and the server use. No config published means no pickup method is known, so the
+	 * answer is `false`: a courier-only page never pays for a refresh it does not need.
+	 *
+	 * @returns {boolean}
+	 */
+	function isPickupMethodChosen() {
+		var chosen = selectedShippingMethod();
+
+		if ( '' === chosen ) {
+			return false;
+		}
+
+		return Object.keys( window ).some( function( key ) {
+			if ( 0 !== key.indexOf( CHECKOUT_CONFIG_PREFIX ) ) {
+				return false;
+			}
+
+			var ids = window[ key ] && window[ key ].pickup_method_ids;
+
+			return Array.isArray( ids ) && ids.some( function( id ) {
+				return chosen === id || 0 === chosen.indexOf( id + ':' );
+			} );
+		} );
+	}
+
+	/**
+	 * Re-prices the order and refreshes the picker's server verdict after the payment method
+	 * changed (#1386).
+	 *
+	 * WooCommerce's `checkout.js` does not update the order review on a gateway change, so the
+	 * session's `chosen_payment_method` — which the points routes read the cash-on-delivery gate
+	 * from ({@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::rest_payment_method()}) —
+	 * stayed on the gateway of the last refresh: switching away from «cash on delivery» left every
+	 * point not selectable until something else (a shipping-method or address change) refreshed
+	 * the checkout. `update_checkout` posts the live gateway, WooCommerce writes it to the session
+	 * and re-prices, and its `updated_checkout` reaches {@see handleCartChanged}, which refreshes
+	 * an open picker. Scoped to a chosen pickup method: anywhere else the gateway is irrelevant to
+	 * this layer and the extra round trip would be pure cost.
+	 *
+	 * @param {Event|Object} event a native `change`, or jQuery's normalized event object.
+	 * @returns {void}
+	 */
+	function handlePaymentMethodChanged( event ) {
+		var target = event && event.target;
+
+		if ( ! target || 'payment_method' !== target.name ) {
+			return;
+		}
+
+		var nativeEvent = event.originalEvent || event;
+
+		if ( nativeEvent === lastPaymentChangeEvent ) {
+			return;
+		}
+
+		lastPaymentChangeEvent = nativeEvent;
+
+		if ( ! window.jQuery || ! isPickupMethodChosen() ) {
+			return;
+		}
+
+		window.jQuery( document.body ).trigger( 'update_checkout' );
+	}
+
+	/**
+	 * Binds {@see handlePaymentMethodChanged} in both event worlds, for the reason
+	 * {@see bindLocalityWatchers} documents: a jQuery `.trigger( 'change' )` dispatches no native
+	 * event, and a native click may reach a page without jQuery's delegation. One real click
+	 * reaches both listeners; {@see lastPaymentChangeEvent} collapses that into one refresh.
+	 *
+	 * @returns {void}
+	 */
+	function bindPaymentMethodWatcher() {
+		if ( ! paymentMethodWatcherBound.native ) {
+			paymentMethodWatcherBound.native = true;
+			document.body.addEventListener( 'change', handlePaymentMethodChanged );
+		}
+
+		if ( paymentMethodWatcherBound.jquery || ! window.jQuery ) {
+			return;
+		}
+
+		var $body = window.jQuery( document.body );
+
+		if ( ! $body || 'function' !== typeof $body.on ) {
+			return;
+		}
+
+		paymentMethodWatcherBound.jquery = true;
+		$body.on( 'change', handlePaymentMethodChanged );
 	}
 
 	/**
@@ -1795,6 +1904,7 @@
 	function mountAll() {
 		bindLocalityWatchers();
 		bindShippingMethodWatcher();
+		bindPaymentMethodWatcher();
 
 		collectConfigs().forEach( function( config ) {
 			mountOne( config );

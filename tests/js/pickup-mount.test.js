@@ -7823,3 +7823,147 @@ describe( 'restores the point remembered for a locality (#349)', () => {
 		expect( picker.field.value ).toBe( 'PVZ-LOCAL' );
 	} );
 } );
+
+describe( 'a payment-method change refreshes the checkout while a pickup method is chosen (#1386)', () => {
+	// The picker reads its cash-on-delivery gate from the session's `chosen_payment_method`, which
+	// WooCommerce writes only on `update_order_review` — and `checkout.js` raises none on a gateway
+	// change. A jQuery double records the `update_checkout` the watcher raises.
+	let triggered;
+
+	function installJQuery() {
+		triggered = [];
+		window.jQuery = ( el ) => ( {
+			trigger: ( type ) => triggered.push( { el, type } ),
+		} );
+	}
+
+	function addPaymentMethods() {
+		document.body.insertAdjacentHTML(
+			'beforeend',
+			'<input type="radio" name="payment_method" value="cod" checked>' +
+			'<input type="radio" name="payment_method" value="online">'
+		);
+	}
+
+	function chooseShipping( value ) {
+		document.body.insertAdjacentHTML(
+			'beforeend',
+			'<input type="radio" name="shipping_method[0]" value="' + value + '" checked>'
+		);
+	}
+
+	function publishPickupMethodIds( ids ) {
+		window.woodev_checkout_field_config_p = { pickup_method_ids: ids };
+	}
+
+	function choosePayment( value ) {
+		const radio = Array.from( document.querySelectorAll( 'input[name="payment_method"]' ) )
+			.find( ( input ) => input.value === value );
+
+		radio.checked = true;
+		radio.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+	}
+
+	afterEach( () => {
+		delete window.woodev_checkout_field_config_p;
+	} );
+
+	test( 'switching the gateway raises update_checkout when a framework pickup method is chosen', () => {
+		installJQuery();
+		addPaymentMethods();
+		chooseShipping( 'cdek_pickup:1' );
+		publishPickupMethodIds( [ 'cdek_pickup' ] );
+		setConfig( makeConfig() );
+		mountAll();
+
+		choosePayment( 'online' );
+
+		expect( triggered.map( ( call ) => call.type ) ).toEqual( [ 'update_checkout' ] );
+		expect( triggered[ 0 ].el ).toBe( document.body );
+	} );
+
+	test( 'the bare method id (no zone instance) counts as a pickup method too', () => {
+		installJQuery();
+		addPaymentMethods();
+		chooseShipping( 'cdek_pickup' );
+		publishPickupMethodIds( [ 'cdek_pickup' ] );
+		setConfig( makeConfig() );
+		mountAll();
+
+		choosePayment( 'online' );
+
+		expect( triggered.length ).toBe( 1 );
+	} );
+
+	test( 'a courier method chosen: the gateway change costs no round trip', () => {
+		installJQuery();
+		addPaymentMethods();
+		chooseShipping( 'cdek_courier:3' );
+		publishPickupMethodIds( [ 'cdek_pickup' ] );
+		setConfig( makeConfig() );
+		mountAll();
+
+		choosePayment( 'online' );
+
+		expect( triggered ).toEqual( [] );
+	} );
+
+	test( 'a method id that merely STARTS with a pickup id does not match', () => {
+		installJQuery();
+		addPaymentMethods();
+		chooseShipping( 'cdek_pickup_express:1' );
+		publishPickupMethodIds( [ 'cdek_pickup' ] );
+		setConfig( makeConfig() );
+		mountAll();
+
+		choosePayment( 'online' );
+
+		expect( triggered ).toEqual( [] );
+	} );
+
+	test( 'no pickup method ids published: nothing is raised', () => {
+		installJQuery();
+		addPaymentMethods();
+		chooseShipping( 'cdek_pickup:1' );
+		setConfig( makeConfig() );
+		mountAll();
+
+		choosePayment( 'online' );
+
+		expect( triggered ).toEqual( [] );
+	} );
+
+	test( 'a change on any other input is ignored', () => {
+		installJQuery();
+		addPaymentMethods();
+		chooseShipping( 'cdek_pickup:1' );
+		publishPickupMethodIds( [ 'cdek_pickup' ] );
+		setConfig( makeConfig() );
+		mountAll();
+
+		document.getElementById( 'billing_address_1' ).dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		expect( triggered ).toEqual( [] );
+	} );
+
+	test( 'one real click reaching both the native and the jQuery listener raises ONE refresh', () => {
+		// A jQuery double that really binds, so the delegated listener fires beside the native one.
+		triggered = [];
+		window.jQuery = ( el ) => ( {
+			trigger: ( type ) => triggered.push( { el, type } ),
+			on: ( type, handler ) => {
+				jqBoundListeners.push( { type, handler } );
+				document.body.addEventListener( type, handler );
+			},
+		} );
+		addPaymentMethods();
+		chooseShipping( 'cdek_pickup:1' );
+		publishPickupMethodIds( [ 'cdek_pickup' ] );
+		setConfig( makeConfig() );
+		mountAll();
+
+		choosePayment( 'online' );
+
+		expect( triggered.length ).toBe( 1 );
+	} );
+} );

@@ -31,6 +31,11 @@ explicitly: classic → a `change` listener on `input[name="payment_method"]` th
 (the route recalculates the cart, shipping included — `StoreApi/Schemas/V1/CartExtensionsSchema.php`
 `get_item_response()`). Both only while some method instance actually uses the option — see `Fee_Payments`.
 
+The same fact bit the pickup picker (#1386): its points routes read the cash-on-delivery gate from the session's
+`chosen_payment_method`, which a gateway change never refreshed — after leaving «Оплата при получении» every point stayed
+unselectable. `pickup-mount.js` now raises `update_checkout` on a gateway `change` while a framework pickup method
+(`pickup_method_ids` of the §8 config) is the chosen shipping method; its `updated_checkout` refreshes an open picker.
+
 ⚠ Never define `WC()` in a unit test (`Functions\when( 'WC' )`): Brain Monkey leaves the function defined for the rest of
 the process and ~300 later tests that guard on `function_exists( 'WC' )` fail. Inject a stand-in instead.
 
