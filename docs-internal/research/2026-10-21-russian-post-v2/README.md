@@ -30,6 +30,7 @@ repo.
 | [v-verify.md](v-verify.md) | V | independent re-measurement of the key claims, 251 requests, nine contradictions |
 | [i-php-import.md](i-php-import.md) | I | PHP import of the passport dump on the rig: streaming parse 0.6 s / 4 MB, custom-table import 2 s / +12 MB, bbox reads 0.5–54 ms (MEASURED) |
 | [k-international.md](k-international.md) | K | international on the test account: order create works for parcel/EMS/small packet, 29 orders in 12 countries, CN22/CN23/E-1, v1 country table sends SK/HR/RS parcels to the wrong country (MEASURED) |
+| [l-new-api.md](l-new-api.md) | L | the new cabinet docs: REST tracking by token (verified live), tariff.pochta.ru v2 officially documented with `dogovor=`, 54020 = DELIVERY_PLUS since 16.09.2026, no new points or webhook API |
 
 ## 1. Summary
 
