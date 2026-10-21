@@ -20,6 +20,7 @@ Each detail link records the failure and the correct seam. Check the relevant en
 - A per-plugin static once-per-request flag can let only the first carrier through: [multi-plugin request gate](../../../../docs-internal/gotchas/a-process-static-once-per-request-gate-checks-only-the-first-plugin.md).
 - A warehouse's storage row ID is not its carrier-unique ID: [warehouse identity](../../../../docs-internal/gotchas/warehouse-storage-id-vs-carrier-id.md).
 - Measure cached rates against every input to the quote and opt in only when context is complete; see `Shipping_Method::get_rate_cache_context()` and `Shipping_Rate_Cache`.
+- A carrier call that spends a daily quota (a settings/limit probe, a widget request) is reserved before it is sent with a compare-and-swap option row and fails closed; never `add_option()`/`update_option()` as the counter: see «Reserve before send» in the core skill, [traps](../../woodev-plugin-core/traps.md).
 - Treat box-packer inputs and axis identities carefully: [box-packer gotcha index](../../../../docs-internal/gotcha-index/box-packer.md). The `boxes` mode and the virtual box now place items for real; do not re-derive "does it fit" from summed volume ([packaging](packaging.md)).
 - A raw JSON byte count is not a wire cost; measure gzip on the real response before adding pickup/locality payload: [compressed payload measurement](../../../../docs-internal/gotchas/a-raw-payload-size-is-not-a-wire-cost-measure-it-after-gzip.md).
 

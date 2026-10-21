@@ -66,6 +66,18 @@ internals (class-map wiring, build/CI, rig) are left out on purpose. Shipping-sp
   courier-status scan, edostavka PR #113). Claim with `INSERT IGNORE` + an owner token and a conditional UPDATE/DELETE
   (`woodev/error-reporting/class-dispatcher.php`), or `GET_LOCK` (`Order_Lock`). →
   `docs-internal/gotchas/wp-add-option-is-not-an-atomic-lock.md`
+- **Reserve before send.** A call that costs quota (a carrier's daily limit, a paid lookup) must be counted BEFORE it is sent, and only
+  sent when the reservation was really stored. One non-autoloaded option row per counter, changed ONLY by compare-and-swap
+  (`UPDATE {$wpdb->options} SET option_value = <new> WHERE option_name = <n> AND BINARY option_value = <what you read>`, or
+  `INSERT IGNORE` for a missing row): read the row straight from `$wpdb` (never the options cache), compute the new value, swap, and
+  recompute when you lost (bounded retries); of N racers exactly one wins each value. FAIL CLOSED: a read or write that errors, or a row
+  that stays contended, means «do not send», never «send anyway». Carry the day/window inside the record so it resets by itself. Worked
+  example: `Russian_Post_Gate_Storage` (`woodev-russian-post` `v2`, verified under 8-way MariaDB concurrency); do not use `add_option()`/
+  `update_option()` for this. → `docs-internal/gotchas/update-option-returns-false-on-an-unchanged-value-as-well-as-on-a-failed-write.md`
+- `update_option()` returns `false` BOTH when the write failed AND when the value is unchanged. Treating false as failure blocks a
+  repeated state forever; ignoring it lets an unpersisted change through. On false, `wp_cache_delete( $key, 'options' )`, re-read with
+  `get_option( $key, null )` and compare with what you meant to store. →
+  `docs-internal/gotchas/update-option-returns-false-on-an-unchanged-value-as-well-as-on-a-failed-write.md`
 - A remaining-capacity bound as a raw float subtraction refuses the final cent (`10.00 - 9.99`). →
   `docs-internal/gotchas/a-remaining-capacity-computed-as-a-raw-float-refuses-the-final-cent.md`
 - A sanitiser that leans on an optional extension is not one (`mb_substr()`; `ext-mbstring` is not a
@@ -144,6 +156,10 @@ internals (class-map wiring, build/CI, rig) are left out on purpose. Shipping-sp
 - PHPUnit 9 ignores `@runInSeparateProcess` on a CLASS docblock (method annotation, or
   `@runTestsInSeparateProcesses` on the class); only CI's reverse-order gate shows the leak. →
   `docs-internal/gotchas/phpunit-9-ignores-run-in-separate-process-on-a-class.md`
+- A process test that exhausts `memory_limit` and expects exit 255 plus a shutdown-function log fails on the hosted runner's rebuilt
+  php7.4/8.0/8.1 packages (they exit 1 and skip shutdown). Probe the engine in a child process first and skip explicitly with the measured
+  reason; never loosen the assertion. →
+  `docs-internal/gotchas/a-hosted-runner-php-build-exits-1-on-a-memory-limit-fatal-without-running-shutdown-functions.md`
 - Three bugs passed green because the test mocked the very seam that was wrong (REST validation, `is_plugin_active`,
   WC note actions): when a test stubs the thing under suspicion, add one test that runs the real one. →
   `docs-internal/sessions/s170.md` (How the work went)

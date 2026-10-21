@@ -125,6 +125,12 @@ cleanest copy; CDEK `v2` has the same). Reuse it rather than inventing one:
   `push` trigger) and gate agents' work with `local-ci` (the real GitHub runner in Docker). It needs `.github/local-ci.Dockerfile`,
   `runner=self-hosted` for `shivammathur/setup-php` under `LOCAL_CI_LOCAL`, no second `actions/checkout`, and the mock
   Composer GitHub token unset — all four are already in the Yandex workflow (PRs #39, #40).
+- **Bake the matrix PHP versions into `.github/local-ci.Dockerfile`.** Under local-ci `setup-php` installs PHP from the ondrej PPA
+  at job time and hides apt's output, so a Launchpad outage fails `Set up PHP` with no message. Never run two local-ci runs at
+  once — a real failure looked like a flake. → `docs-internal/gotchas/local-ci-setup-php-dies-silently-when-the-launchpad-ppa-is-down-bake-php-into-the-image.md`
+- **Judge a gate by its exit code, not by its output.** `vendor/bin/phpcs -q | tail` returns `tail`'s 0 and showed 21 introduced
+  errors as a quiet screen. Run `phpcs`, `phpunit` and `phpstan` bare and read `$?`. →
+  `docs-internal/gotchas/a-gate-read-through-tail-reports-the-exit-code-of-tail-not-of-the-gate.md`
 - The matrix is PHP 7.4 and 8.3; the Mac sees PHP 8.5 deprecations the matrix never does (guard `setAccessible()` etc.).
 
 ## Releasing a plugin
