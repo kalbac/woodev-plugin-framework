@@ -53,20 +53,28 @@ final class Pickup_Timeout_Probe_Source implements Point_Source {
 	/** @var int[] the timeout, in seconds, of each call — in call order */
 	public array $timeouts = [];
 
+	/** @var bool[] whether each call ran as a CONFIRMATION of a choice (#1405) — in call order */
+	public array $confirmations = [];
+
 	public function get_strategy(): string {
 		return Point_Source::STRATEGY_BULK;
 	}
 
 	public function fetch_points( Point_Query $query ): array {
-		$this->timeouts[] = $this->timeout_now();
+		$this->record();
 
 		return [ $this->point() ];
 	}
 
 	public function fetch_details( string $point_id ): ?Pickup_Point {
-		$this->timeouts[] = $this->timeout_now();
+		$this->record();
 
 		return $this->point();
+	}
+
+	private function record(): void {
+		$this->timeouts[]      = $this->timeout_now();
+		$this->confirmations[] = \Woodev_API_Request_Purpose::is_confirmation();
 	}
 
 	private function timeout_now(): int {
@@ -84,6 +92,16 @@ final class Pickup_Timeout_Probe_Source implements Point_Source {
 				'type'    => [ 'code' => 'PVZ', 'label' => 'ПВЗ' ],
 			]
 		);
+	}
+}
+
+/**
+ * The controller with the rate limiter out of the way — the select route is driven directly.
+ */
+final class Pickup_Timeout_Controller extends Pickup_Controller {
+
+	protected function is_rate_limited( string $key_prefix, int $max, int $window = 60 ): bool {
+		return false;
 	}
 }
 
@@ -322,6 +340,7 @@ final class PickupCheckoutTimeoutTest extends TestCase {
 		$handler->handle_store_api_order_processed( $order );
 
 		$this->assertSame( [ 8 ], $source->timeouts, 'the re-fetch of the confirmed point runs in the Store API request' );
+		$this->assertSame( [ true ], $source->confirmations, 'the Store API persistence is a confirmation' );
 	}
 
 	public function test_persisting_the_point_from_the_admin_order_editor_keeps_the_reference_timeout(): void {
@@ -331,6 +350,108 @@ final class PickupCheckoutTimeoutTest extends TestCase {
 		$this->handler( $source )->persist_full_point( $this->order(), 'P1' );
 
 		$this->assertSame( [ 20 ], $source->timeouts );
+	}
+
+	// ---- #1405: a confirmation of a choice is told apart from a view, at the SAME checkout budget ----
+
+	public function test_a_card_view_is_not_a_confirmation(): void {
+		$source = new Pickup_Timeout_Probe_Source();
+
+		$this->controller( $source )->get_point_data( 'P1' );
+
+		$this->assertSame( [ 8 ], $source->timeouts, 'the view keeps the checkout budget' );
+		$this->assertSame( [ false ], $source->confirmations );
+	}
+
+	public function test_a_points_list_is_not_a_confirmation(): void {
+		$source = new Pickup_Timeout_Probe_Source();
+
+		$this->controller( $source )->get_points_data( [ 'locality' => 'Москва' ] );
+
+		$this->assertSame( [ false ], $source->confirmations );
+	}
+
+	public function test_the_select_route_looks_the_point_up_as_a_confirmation_at_the_checkout_budget(): void {
+		Functions\when( 'rest_ensure_response' )->returnArg();
+
+		$source     = new Pickup_Timeout_Probe_Source();
+		$controller = new Pickup_Timeout_Controller( 'test-plugin', $source, static fn() => 0, static fn() => 'bacs', static fn() => 'carrier_pickup' );
+
+		$controller->handle_select_request( new \WP_REST_Request( [ 'field_id' => 'pvz', 'point_id' => 'P1' ] ) );
+
+		$this->assertSame( [ 8 ], $source->timeouts, 'a confirmation waits like a view: the checkout budget' );
+		$this->assertSame( [ true ], $source->confirmations );
+	}
+
+	public function test_an_admin_lookup_is_not_a_confirmation(): void {
+		$source = new Pickup_Timeout_Probe_Source();
+
+		$this->controller( $source )->get_point_data_for( 'P1', 0, 'bacs', null );
+
+		$this->assertSame( [ false ], $source->confirmations );
+	}
+
+	public function test_the_checkout_recheck_of_the_posted_point_is_a_confirmation(): void {
+		$source = new Pickup_Timeout_Probe_Source();
+
+		$this->handler( $source )->validate_posted_point( 'P1', 'bacs', 0 );
+
+		$this->assertSame( [ 8 ], $source->timeouts );
+		$this->assertSame( [ true ], $source->confirmations );
+	}
+
+	public function test_persisting_the_point_from_the_classic_checkout_hook_is_a_confirmation(): void {
+		$source = new Pickup_Timeout_Probe_Source();
+		$_POST  = [ 'pickup_point' => 'P1' ];
+
+		$this->handler( $source )->handle_checkout_order_processed( 1, [], $this->order() );
+
+		$this->assertSame( [ true ], $source->confirmations );
+	}
+
+	public function test_persisting_the_point_from_the_admin_order_editor_is_not_a_confirmation(): void {
+		$source = new Pickup_Timeout_Probe_Source();
+
+		$this->handler( $source )->persist_full_point( $this->order(), 'P1' );
+
+		$this->assertSame( [ 20 ], $source->timeouts );
+		$this->assertSame( [ false ], $source->confirmations );
+	}
+
+	public function test_the_confirmation_mark_does_not_leak_past_the_call(): void {
+		$source = new Pickup_Timeout_Probe_Source();
+
+		$this->handler( $source )->validate_posted_point( 'P1', 'bacs', 0 );
+
+		$this->assertFalse( \Woodev_API_Request_Purpose::is_confirmation() );
+	}
+
+	public function test_the_confirmation_mark_is_cleared_when_the_call_throws(): void {
+		try {
+			\Woodev_API_Request_Purpose::run_at_confirmation(
+				static function (): void {
+					throw new \RuntimeException( 'carrier down' );
+				}
+			);
+			$this->fail( 'the exception must propagate' );
+		} catch ( \RuntimeException $e ) {
+			$this->assertFalse( \Woodev_API_Request_Purpose::is_confirmation() );
+			$this->assertSame( \Woodev_API_Request_Purpose::DEFAULT_PURPOSE, \Woodev_API_Request_Purpose::current() );
+		}
+	}
+
+	public function test_a_confirmation_scope_nests_and_the_mark_survives_the_inner_one(): void {
+		$seen = [];
+
+		\Woodev_API_Request_Purpose::run_at_confirmation(
+			static function () use ( &$seen ): void {
+				\Woodev_API_Request_Purpose::run_at_confirmation( static function (): void {} );
+				$seen[] = \Woodev_API_Request_Purpose::is_confirmation();
+			}
+		);
+
+		$this->assertSame( [ true ], $seen );
+		$this->assertFalse( \Woodev_API_Request_Purpose::is_confirmation() );
 	}
 
 	public function test_the_timeout_scope_does_not_leak_past_the_call(): void {

@@ -225,6 +225,21 @@ $rates = \Woodev_API_Request_Purpose::run_at_checkout(
 
 Scopes nest, and an inner scope can only shorten the wait, never lengthen it. A pickup-point lookup made inside a checkout rate call keeps the rate timeout.
 
+A point source that meters its calls (a daily quota with a part kept for confirmations) can tell a shopper choosing a point from one merely viewing its card. When the framework looks a point up to accept the choice (the `select` route, the checkout re-check of the posted point, saving the point on the order), it runs the call with `run_at_confirmation( $callback )`, which is the checkout budget plus a mark. Read it inside your source:
+
+```php
+<?php
+public function fetch_details( string $point_id ): ?Pickup_Point {
+	// `false` for a card view and for the admin; the timeout is 8 seconds either way at the checkout.
+	$confirming = method_exists( 'Woodev_API_Request_Purpose', 'is_confirmation' )
+		&& \Woodev_API_Request_Purpose::is_confirmation();
+
+	return $this->fetch( $point_id, $confirming );
+}
+```
+
+`\Woodev_API_Request_Purpose::current()` and the timeout do not change, so a source that ignores the mark behaves exactly as before. The `method_exists()` guard keeps a plugin working when an older framework copy wins the bootstrap.
+
 To change the timeouts of your own client, override `get_request_timeout( string $purpose ): int` in it, or filter the result (see the hooks table below). A filter value that is not a positive number is ignored.
 
 ## Hooks around a request

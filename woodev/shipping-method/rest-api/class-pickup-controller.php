@@ -585,7 +585,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 			}
 
 			try {
-				$point = $this->from_source( true, fn() => $this->source->fetch_details( $point_id ) );
+				// The customer is ACCEPTING this point, not viewing its card: mark it so a metered source can tell (#1405).
+				$point = $this->from_source( true, fn() => $this->source->fetch_details( $point_id ), true );
 			} catch ( \Woodev_API_Exception $e ) {
 				$this->log_carrier_failure( $e, 'point selection' );
 				return $this->upstream_error();
@@ -1090,12 +1091,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 		 * @since 2.0.2 Card #1017: `$at_checkout` — the public routes are what the checkout picker
 		 *              calls while a customer waits, so they get the checkout budget; the admin
 		 *              routes keep the reference timeout.
+		 * @since 2.0.8 Card #1405: `$confirming` — the `select` route ACCEPTS a point rather than
+		 *              showing its card; the source can tell ({@see \Woodev_API_Request_Purpose::is_confirmation()}).
+		 *              The timeout is the checkout budget either way.
 		 *
 		 * @param bool     $at_checkout whether the route serves the checkout picker (public) rather than the admin.
 		 * @param callable $call        the point-source call.
+		 * @param bool     $confirming  whether the call confirms the customer's choice (implies a checkout request).
 		 * @return mixed whatever the call returns.
 		 */
-		private function from_source( bool $at_checkout, callable $call ) {
+		private function from_source( bool $at_checkout, callable $call, bool $confirming = false ) {
+			if ( $confirming ) {
+				return \Woodev_API_Request_Purpose::run_at_confirmation( $call );
+			}
+
 			return \Woodev_API_Request_Purpose::run_reference( $at_checkout, $call );
 		}
 
