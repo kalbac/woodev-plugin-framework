@@ -57,6 +57,7 @@ final class ErrorReporterProcessTest extends TestCase {
 			'out'   => $out,
 			'exit'  => $exit,
 			'queue' => $queue,
+			'diag'  => 'DIAG status=' . json_encode( $status ) . ' close=' . $code . ' php=' . PHP_VERSION . ' out=' . $out,
 		];
 	}
 
@@ -147,7 +148,7 @@ final class ErrorReporterProcessTest extends TestCase {
 	public function test_an_engine_fatal_in_our_code_is_queued_with_php_s_own_message(): void {
 		$run = $this->run_scenario( 'engine_fatal' );
 
-		$this->assertSame( 255, $run['exit'] );
+		$this->assertSame( 255, $run['exit'], $run['diag'] );
 		$this->assertCount( 1, $run['queue'] );
 
 		$exception = $run['queue'][0]['exception']['values'][0];
@@ -159,7 +160,7 @@ final class ErrorReporterProcessTest extends TestCase {
 	public function test_a_near_full_heap_oom_keeps_the_original_fatal_and_queues_without_a_second_fatal(): void {
 		$run = $this->run_scenario( 'oom_heap' );
 
-		$this->assertSame( 255, $run['exit'] );
+		$this->assertSame( 255, $run['exit'], $run['diag'] );
 		$this->assertSame( 1, substr_count( $run['out'], 'Fatal error:' ), 'only PHP\'s own fatal: the shutdown handler must not die a second time' );
 		$this->assertStringContainsString( 'Allowed memory size of', $run['out'] );
 		$this->assertStringContainsString( 'boom.php', $run['out'], 'the original fatal names the original file' );
