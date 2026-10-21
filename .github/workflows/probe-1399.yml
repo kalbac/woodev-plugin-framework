@@ -1,0 +1,36 @@
+name: probe-1399
+on:
+  pull_request:
+    branches: [main]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['7.4', '8.1', '8.2']
+    steps:
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+      - name: probe
+        run: |
+          php -v
+          dpkg -l | grep -E "php${{ matrix.php }}-(cli|common)" || true
+          zcat /usr/share/doc/php${{ matrix.php }}-cli/changelog.Debian.gz 2>/dev/null | head -8 || true
+          php -i | grep -i -E "^(Configure Command|Zend Memory Manager|Zend Signal|Zend Extension Build|PHP Extension Build|Debug Build|Thread Safety|memory_limit|zend.assertions|opcache.enable_cli)" || true
+          cat > /tmp/a.php <<'PHP'
+          <?php
+          register_shutdown_function(function () { fwrite(STDERR, "SHUTDOWN-RAN\n"); });
+          if (($argv[1] ?? '') === 'ini') { ini_set('memory_limit', '8M'); }
+          echo strlen(str_repeat('x', 64 * 1024 * 1024)), "\n";
+          PHP
+          for m in ini cli; do
+            echo "== variant $m"
+            if [ "$m" = cli ]; then php -d memory_limit=8M /tmp/a.php; else php /tmp/a.php ini; fi
+            echo "rc=$?"
+          done
+          echo "== uncaught exception"
+          php -r 'register_shutdown_function(function(){fwrite(STDERR,"SHUTDOWN-RAN\n");}); throw new Exception("x");'; echo "rc=$?"
+          echo "== ulimit"; ulimit -a | head -20
