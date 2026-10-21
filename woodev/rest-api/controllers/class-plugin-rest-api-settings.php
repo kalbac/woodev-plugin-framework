@@ -163,6 +163,20 @@ if ( ! class_exists( 'Woodev_REST_API_Settings' ) ) :
 		}
 
 		/**
+		 * Whether a setting holds a secret: declared sensitive, or backed by a constant.
+		 *
+		 * A constant-backed setting counts even when the constant is undefined — it then
+		 * falls back to the stored option, which is just as sensitive. Same rule as
+		 * Field_Schema.
+		 *
+		 * @param Woodev_Setting $setting a setting object
+		 * @return bool
+		 */
+		private function is_secret( Woodev_Setting $setting ): bool {
+			return $setting->is_sensitive() || null !== $setting->get_constant_name();
+		}
+
+		/**
 		 * Updates a single setting.
 		 *
 		 * @param WP_REST_Request $request request object
@@ -179,7 +193,17 @@ if ( ! class_exists( 'Woodev_REST_API_Settings' ) ) :
 					$value = sanitize_text_field( $value );
 				}
 
-				$this->settings->update_value( $setting_id, $value );
+				$setting = $this->settings->get_setting( $setting_id );
+
+				// The mask a GET returns for a secret is an empty value: posting it back keeps
+				// the stored secret unchanged (as the settings screen and the connection test do).
+				$is_masked = $setting instanceof Woodev_Setting
+					&& $this->is_secret( $setting )
+					&& ( null === $value || '' === $value );
+
+				if ( ! $is_masked ) {
+					$this->settings->update_value( $setting_id, $value );
+				}
 
 				return rest_ensure_response( $this->prepare_setting_item( $this->settings->get_setting( $setting_id ), $request ) );
 
@@ -207,6 +231,11 @@ if ( ! class_exists( 'Woodev_REST_API_Settings' ) ) :
 
 			if ( $setting instanceof Woodev_Setting ) {
 
+				// A secret (sensitive or constant-backed) never leaves the server: same mask
+				// as the settings screen (Field_Schema) — an empty value plus an `is_set` flag.
+				$is_secret = $this->is_secret( $setting );
+				$stored    = $setting->get_value();
+
 				$item = [
 					'id'          => $setting->get_id(),
 					'type'        => $setting->get_type(),
@@ -215,9 +244,13 @@ if ( ! class_exists( 'Woodev_REST_API_Settings' ) ) :
 					'is_multi'    => $setting->is_is_multi(),
 					'options'     => [] !== $setting->get_option_pairs() ? $setting->get_option_pairs() : $setting->get_options(),
 					'default'     => $setting->get_default(),
-					'value'       => $setting->get_value(),
+					'value'       => $is_secret ? '' : $stored,
 					'control'     => null,
 				];
+
+				if ( $is_secret ) {
+					$item['is_set'] = '' !== (string) ( is_array( $stored ) ? implode( '', $stored ) : $stored );
+				}
 
 				if ( $control = $setting->get_control() ) {
 					$item['control'] = [
