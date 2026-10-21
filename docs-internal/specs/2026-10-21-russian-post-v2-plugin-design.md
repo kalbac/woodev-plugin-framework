@@ -27,6 +27,21 @@ they settle a branch or an UNVERIFIED item, they win over the text below.
 | R4 | `find-from-rectangle` carries closed flags and hours in the list, but costs ~7× bytes per row (~22× per city viewport); the widget set is a subset of its open points. ([wave0-r4.md](../research/2026-10-21-russian-post-v2/wave0-r4.md)) | §5 unchanged: widget backend for release 1; `find-from-rectangle` is the documented candidate if a fallback is ever built |
 | R7 | Domestic products reject a goods list (`UNEXPECTED_GOODS`); COD = `insr-value` + `payment`, no `payment-method` (CASH/PLASTIC_CARD → 400); `dimension` in whole cm; a prefixed `order-num` is found by exact match in «Новые» (`backlog/search`) and after batching (`shipment/search`); one wp.org collision (`russian_post_courier` in an abandoned Dokan add-on, 0 active installs). ([wave0-r7.md](../research/2026-10-21-russian-post-v2/wave0-r7.md)) | §8.2 body rules follow these; §8.5 duplicate guard can rely on exact `order-num` search (U25 closed); method ids kept |
 
+## Amendment — implementation decisions (22.10.2026, s192)
+
+Coordinator decisions taken while building waves 4–6 (cards on board №12). They win over the text below.
+
+| Where | Decision | Why |
+|---|---|---|
+| §14.1 step 4 (auto-export) | A v1 shop with `export_type = widget` keeps automatic export **off** after migration even when Otpravka keys and statuses are present; the stored values stay untouched (P16). | Stale cabinet keys must not start creating outward-facing orders by surprise. Telling the merchant: woodev-russian-post#40. |
+| §14.1 (statuses) | v1 `tracking_delivering` is preserved byte-for-byte, not mapped: the framework has no in-transit status setting (woodev-russian-post#37). | No framework option to map it to. |
+| §14.1 (export settings) | The framework's generic `Export_Settings` carry-over is suppressed with a `pre_option` filter; Tier A alone writes migrated export settings and checks keys + statuses (P16). | The framework migrates them in its constructor before Tier A can check credentials. |
+| §14.1 step 2 (instance keys) | `free_cost`, `coupon_free_shipping`, `show_delivery_time`, `allowed_payments` are copied but nothing in v2 reads them yet — woodev-russian-post#39 (Следом, before release). | Found by the P16 critic; data is kept, behaviour is not. |
+| §8 (cancel during migration) | A cancel while the order's migration lock is held answers «busy, retry»; a corrupt v1 rate row does not block a cancel (P17a). | The lock holder could write the barcode back after the cancel cleared it. |
+| §8.6 (Ф7) | The Ф7 button is offered for every exported domestic order; the first click on an order outside a batch leaves a note and hides the button for 60 s (P12). Offering it only for batched orders needs an «in a batch» fact nobody has yet — woodev-russian-post#43. | The framework forbids carrier calls while it lists an order's documents. |
+| §5.7 (reserve) | Display lookups and confirmations share one framework purpose, so a busy map can spend the confirmation reserve; the hard cap still holds — framework #1405. | The plugin cannot tell them apart. |
+| §16.5 (storage) | Order-migration checks on real HPOS and posts storage move to rig acceptance P19b (woodev-russian-post#32); unit tests cover the converter without a database. | Brain Monkey tests cannot host a real order store. |
+
 ## 1. Operator decisions (binding)
 
 Source: `docs-internal/research/2026-10-21-russian-post-v2/decisions.md`, walked item by item with the operator on 21.10.2026. Where the agenda or a report disagrees, `decisions.md` wins. Decision numbers D1–D13 are the file's own; D14–D16 are the operator's later answers of the same day, recorded here.
