@@ -10,6 +10,8 @@
  * «Fatal error: Uncaught …» text and exit status 255 are visible exactly as PHP wrote them.
  */
 
+fwrite( STDERR, "\nD0 envsize=" . strlen( serialize( $_SERVER ) ) . ' mem=' . memory_get_usage() . ' limit=' . ini_get( 'memory_limit' ) . "\n" );
+register_shutdown_function( static function () { fwrite( STDERR, "\nD1 first-shutdown mem=" . memory_get_usage() . ' peak=' . memory_get_peak_usage() . ' last=' . json_encode( error_get_last() ) . "\n" ); } );
 define( 'ABSPATH', __DIR__ . '/' );
 define( 'WP_PLUGIN_DIR', __DIR__ );
 
@@ -106,6 +108,7 @@ Error_Reporter::install( [ $definition->to_legacy_plugin() ] );
 register_shutdown_function(
 	static function () {
 		$queue = $GLOBALS['woodev_fixture_options']['woodev_error_reporting_queue'] ?? [];
+		fwrite( STDERR, "\nD2 queue-fn mem=" . memory_get_usage() . "\n" );
 		echo "\nQUEUE:" . json_encode( $queue, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) . "\n";
 	}
 );

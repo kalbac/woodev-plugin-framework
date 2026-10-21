@@ -48,6 +48,11 @@ final class ErrorReporterProcessTest extends TestCase {
 		$exit   = $status['running'] ? $code : (int) $status['exitcode'];
 		$exit   = -1 === $exit ? $code : $exit;
 
+		$rc = -9;
+		$o2 = [];
+		exec( implode( ' ', array_map( 'escapeshellarg', $command ) ) . ' 2>&1', $o2, $rc );
+		$out .= "\nDIAG2 shell-rc=" . $rc . ' out2=' . implode( "\n", $o2 ) . "\nENV=" . strlen( serialize( $_SERVER ) ) . "\n";
+
 		$queue = [];
 		if ( 1 === preg_match( '/^QUEUE:(.*)$/m', $out, $match ) ) {
 			$queue = (array) json_decode( $match[1], true );
