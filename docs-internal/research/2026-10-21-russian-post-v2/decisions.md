@@ -25,9 +25,13 @@
   order export; the manager sees an «address doubtful» flag. Trust only the quality/validation codes.
 - **6.** Export: order create + tracking number + Ф7 label printed from the admin (one order). Batches, Ф103/«checkin», courier
   call — later, after a check on a real account.
-- **7.** Tracking: port the SOAP tracking (its own tracking.pochta.ru login, 100 requests/day without a contract) onto the
-  framework's polling mechanism, active orders in turn; with more than 100 active orders statuses simply update slower. The
-  operator has a tracking login; a live measurement follows.
+- **7.** Tracking: port tracking onto the framework's polling mechanism, active orders in turn. **Updated 21.10.2026 by task L
+  ([l-new-api.md](l-new-api.md)):** use the NEW REST tracking `GET postapi.pochta.ru/tracking/api/external/v1/info` with
+  `Authorization: ApiKey <token>` (a separate ~1 050-char token from the cabinet settings, legal entities only; the operator has
+  one; verified live). One barcode per call, ~5 000 requests/day per the FAQ (the old terms page says 100; unverified). No SOAP,
+  no tracking login/password, no batch SOAP in release 1. Poller: queue, per-barcode interval, backoff and a hard daily cap
+  well under the limit (state worst-case requests/day). Declare the token secret for log masking. Without a token tracking is
+  visibly off (or only the public tracking link), never a silent drop.
 - **8.** Old-site data: NEW method ids, no permanent legacy code. A one-time background migration (batched, restartable, progress
   visible in the admin) rewrites shipping zones to the new methods (CDEK pattern), rewrites old orders' shipping-line method
   ids and converts order meta to the v2 format (the two serialized-object metas to plain arrays). Losing a zone method is
@@ -46,7 +50,8 @@
   migration keeps old international orders' data.
 - **12.** Wizard: short — Otpravka keys with a connection check → sender point picked from user-shipping-points → default weight/
   dimensions → the tariffs this account can use, explaining why one is unavailable. Plus the v1 migration screen (topic 1).
-  The v1 six-step wizard that mirrors the settings screen is not ported.
+  The v1 six-step wizard that mirrors the settings screen is not ported. The tracking token is an OPTIONAL last step (skip =
+  tracking off), checked with one call on an invalid barcode (403 = bad token, 400/1003 = token OK); it never blocks export.
 - **13.** Coexistence: nothing more to do. Merchants are warned (Telegram channel + documentation). The EDD folder is
   `woodev-russian-post`, so CDEK v2 (`woocommerce-edostavka`) and Yandex v2 (`woocommerce-yandex-delivery`) load first and
   Russian Post v1 is quarantined (gone from checkout, admin notice only). The answer is speed: do not delay the v2 release.
