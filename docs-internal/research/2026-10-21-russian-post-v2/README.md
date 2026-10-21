@@ -28,6 +28,7 @@ repo.
 | [f-widget-api.md](f-widget-api.md) | F | the widget backend as a point source, 1 710 anonymous requests |
 | [g-otpravka-live.md](g-otpravka-live.md) | G | live run on the test «Отправка» account: quota, passport, tariffs, order lifecycle |
 | [v-verify.md](v-verify.md) | V | independent re-measurement of the key claims, 251 requests, nine contradictions |
+| [i-php-import.md](i-php-import.md) | I | PHP import of the passport dump on the rig: streaming parse 0.6 s / 4 MB, custom-table import 2 s / +12 MB, bbox reads 0.5–54 ms (MEASURED) |
 
 ## 1. Summary
 
@@ -46,6 +47,10 @@ repo.
    security defects (see §3).
 7. **A real CDEK 2.3.0.4 (framework 2.0.7) beside Russian Post 1.2.6.0 (framework 1.3.3) never fatals**, but exactly one of them
    runs; no newer Russian Post exists, so the notice sends the merchant into a dead end until Russian Post v2 ships.
+8. **The passport dump imports cheaply in PHP, but only streamed into a custom table** (I, MEASURED on the rig). The zip is
+   5.6 MB / 51.5 MB of single-line JSON; a whole `json_decode` needs ~445 MB and fatals at 128M and 256M, while a dependency-free
+   streaming parser takes 0.6 s and 4 MB. A custom table loads in ~2 s at +12 MB (fits 64M) and answers a city bbox in 0.5 ms.
+   The framework's transient pattern (Yandex's 500-row chunks) does not hold 36k full rows on 128M.
 
 ## 2. What Russian Post offers today
 
