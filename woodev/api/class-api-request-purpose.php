@@ -45,6 +45,9 @@ if ( ! class_exists( 'Woodev_API_Request_Purpose' ) ) :
 		/** @var string[] the purposes of the scopes currently running, outermost first */
 		private static array $scopes = [];
 
+		/** @var int how many {@see self::run_at_confirmation()} scopes are running now */
+		private static int $confirmations = 0;
+
 		/**
 		 * The purpose of the call being made now: the innermost scope's, or `default` outside any.
 		 *
@@ -133,6 +136,48 @@ if ( ! class_exists( 'Woodev_API_Request_Purpose' ) ) :
 		 */
 		public static function run_reference( bool $at_checkout, callable $callback ) {
 			return $at_checkout ? self::run_at_checkout( $callback ) : self::run( self::REFERENCE, $callback );
+		}
+
+		/**
+		 * Runs a callback under the checkout budget AND marks it as the CONFIRMATION of a choice (#1405).
+		 *
+		 * A pickup point is looked up twice for two different reasons inside a checkout: to SHOW its
+		 * card (a view) and to ACCEPT it (the customer selects it, or the checkout re-checks the
+		 * posted point). Both are customer-waiting calls, so both get the checkout budget — but a
+		 * carrier that meters calls (a daily quota with a part kept for confirmations) must tell
+		 * them apart. {@see self::is_confirmation()} is that signal; {@see self::current()} and the
+		 * timeout are exactly what {@see self::run_at_checkout()} gives.
+		 *
+		 * @since 2.0.8
+		 *
+		 * @param callable $callback the work that calls the API
+		 * @return mixed whatever the callback returns
+		 * @throws \Throwable whatever the callback throws, after the mark is cleared
+		 */
+		public static function run_at_confirmation( callable $callback ) {
+
+			++self::$confirmations;
+
+			try {
+				return self::run_at_checkout( $callback );
+			} finally {
+				--self::$confirmations;
+			}
+		}
+
+		/**
+		 * Whether the call being made now confirms a choice rather than shows one (#1405).
+		 *
+		 * `true` only inside {@see self::run_at_confirmation()}; a plain checkout lookup, an admin
+		 * lookup and any call outside a scope read `false`. Orthogonal to the purpose: it does not
+		 * change {@see self::current()} or the timeout.
+		 *
+		 * @since 2.0.8
+		 *
+		 * @return bool
+		 */
+		public static function is_confirmation(): bool {
+			return self::$confirmations > 0;
 		}
 
 		/**

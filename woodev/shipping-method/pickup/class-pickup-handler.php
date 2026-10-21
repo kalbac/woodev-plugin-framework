@@ -2410,6 +2410,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *              the checkout budget instead of the `reference` timeout (the admin order
 		 *              editor, which persists a point too, keeps the longer one). The budget is
 		 *              the FIRST lookup's: a memoized point or failure is reused as is.
+		 * @since 2.0.8 Card #1405: a checkout-request lookup is also a CONFIRMATION of the chosen
+		 *              point ({@see \Woodev_API_Request_Purpose::is_confirmation()}); same timeout.
 		 *
 		 * @param string $point_id    the point id to fetch.
 		 * @param bool   $at_checkout whether a customer is waiting for the lookup in a checkout request.
@@ -2430,8 +2432,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 
 			try {
 				// The pickup-point lookup is a reference-data load (#954): the «reference» timeout, or the
-				// checkout budget when a customer waits for it inside a checkout request (#1017).
-				$point = \Woodev_API_Request_Purpose::run_reference( $at_checkout, fn() => $this->source->fetch_details( $point_id ) );
+				// checkout budget when a customer waits for it inside a checkout request (#1017). Every
+				// checkout-request caller here re-checks or persists the point the customer CHOSE (no
+				// handler path shows a card), so that lookup is also marked a confirmation (#1405).
+				$point = $at_checkout
+					? \Woodev_API_Request_Purpose::run_at_confirmation( fn() => $this->source->fetch_details( $point_id ) )
+					: \Woodev_API_Request_Purpose::run_reference( false, fn() => $this->source->fetch_details( $point_id ) );
 			} catch ( \Throwable $e ) {
 				$this->fetch_failures[ $point_id ] = $e;
 
