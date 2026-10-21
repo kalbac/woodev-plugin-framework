@@ -24,6 +24,12 @@ its first call (owner lookup) fails and the follow-up commands get empty ids.
   check runs `gh api repos/<o>/<r>/commits/<sha>/check-runs`, issue state, comments. Board edits have no
   REST route — queue them and wait for the reset `rate_limit` reports (it was right about the reset time).
 
+## s191 addition (21.10.2026): a burst of board edits trips it
+
+About 70 `gh project item-edit` / `item-add` calls in one burst (filling a 35-card board) tripped GitHub's **secondary** GraphQL limit for roughly
+50 minutes, while `gh api rate_limit` still showed thousands remaining. Pace board writes (`sleep 2` between calls) and batch the
+work instead of one `gh` process per field.
+
 ## Related
 
 - [gh-project-item-list-json-mangles-the-cyrillic-field-key](gh-project-item-list-json-mangles-the-cyrillic-field-key.md) — the other `gh project` trap
