@@ -7946,6 +7946,40 @@ describe( 'a payment-method change refreshes the checkout while a pickup method 
 		expect( triggered ).toEqual( [] );
 	} );
 
+	test( 'a split cart: a hidden first-package pickup rate beats a checked courier in package 2', () => {
+		installJQuery();
+		addPaymentMethods();
+		document.body.insertAdjacentHTML(
+			'beforeend',
+			'<input type="hidden" name="shipping_method[0]" value="cdek_pickup:7">' +
+			'<input type="radio" name="shipping_method[1]" value="flat_rate:8" checked>'
+		);
+		publishPickupMethodIds( [ 'cdek_pickup' ] );
+		setConfig( makeConfig() );
+		mountAll();
+
+		choosePayment( 'online' );
+
+		expect( triggered.map( ( call ) => call.type ) ).toEqual( [ 'update_checkout' ] );
+	} );
+
+	test( 'a split cart: a courier first package costs no refresh even when package 2 is a pickup', () => {
+		installJQuery();
+		addPaymentMethods();
+		document.body.insertAdjacentHTML(
+			'beforeend',
+			'<input type="hidden" name="shipping_method[0]" value="flat_rate:8">' +
+			'<input type="radio" name="shipping_method[1]" value="cdek_pickup:7" checked>'
+		);
+		publishPickupMethodIds( [ 'cdek_pickup' ] );
+		setConfig( makeConfig() );
+		mountAll();
+
+		choosePayment( 'online' );
+
+		expect( triggered ).toEqual( [] );
+	} );
+
 	test( 'one real click reaching both the native and the jQuery listener raises ONE refresh', () => {
 		// A jQuery double that really binds, so the delegated listener fires beside the native one.
 		triggered = [];

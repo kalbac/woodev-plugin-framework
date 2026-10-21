@@ -623,11 +623,29 @@
 	/**
 	 * Reads the chosen classic shipping method, including its instance id.
 	 *
+	 * Only the FIRST package counts: the pickup slot belongs to it, and the server reads just
+	 * `shipping_method[0]` (`Checkout_Handler::resolve_chosen_method_id_from_post()`) — the same
+	 * contract as `selectedShippingInput()` in checkout-field-classic.js. Its checked radio wins;
+	 * a lone rate has no checked radio, only a hidden input, so that is the fallback. A later
+	 * package's checked radio must never shadow a hidden first-package input.
+	 *
 	 * @returns {string}
 	 */
 	function selectedShippingMethod() {
-		var method = document.querySelector( 'input[name^="shipping_method"]:checked' ) ||
-			document.querySelector( 'input[type="hidden"][name^="shipping_method"]' );
+		var inputs = document.querySelectorAll( 'input[name^="shipping_method"]' );
+
+		if ( ! inputs.length ) {
+			return '';
+		}
+
+		var name = inputs[ 0 ].name;
+		var pkg = Array.prototype.filter.call( inputs, function( input ) {
+			return input.name === name;
+		} );
+		var checked = pkg.filter( function( input ) {
+			return input.checked;
+		} )[ 0 ];
+		var method = checked || ( 1 === pkg.length ? pkg[ 0 ] : null );
 
 		return method ? String( method.value || '' ) : '';
 	}
