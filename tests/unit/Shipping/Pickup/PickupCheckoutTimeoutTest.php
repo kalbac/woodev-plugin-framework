@@ -340,6 +340,7 @@ final class PickupCheckoutTimeoutTest extends TestCase {
 		$handler->handle_store_api_order_processed( $order );
 
 		$this->assertSame( [ 8 ], $source->timeouts, 'the re-fetch of the confirmed point runs in the Store API request' );
+		$this->assertSame( [ true ], $source->confirmations, 'the Store API persistence is a confirmation' );
 	}
 
 	public function test_persisting_the_point_from_the_admin_order_editor_keeps_the_reference_timeout(): void {
