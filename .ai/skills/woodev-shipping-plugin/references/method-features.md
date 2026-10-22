@@ -92,6 +92,30 @@ account and the calculator returned nothing for every tariff, so the method vani
 retries once without the refused service, remembers it for 24 h, writes an order note and an admin notice
 (`Cdek_Refused_Services`, `Cdek_Service_Rules` in the plugin; s167). Encode documented incompatibilities in your own rules class.
 
+## The merchant price options every calculated-rate method offers
+
+A merchant expects the SAME price controls in every carrier's method settings. Forgotten twice — Yandex, then Russian Post
+(woodev-russian-post#54, operator's rig pass 22.10.2026) — because most of them are NOT framework fields: the framework owns
+only the two features marked below, the rest each carrier builds itself (Yandex `class-yandex-cost-rules.php`, CDEK
+`class-cdek-rate-configuration.php` + `trait-cdek-rate-method.php`). A method whose price comes from the carrier's API ships
+ALL of these, keeping a v1 key wherever v1 had the option:
+
+| Option (Russian label) | Key (Yandex / CDEK) | Owner |
+|---|---|---|
+| «Наценка» — fixed or percent, and «База процента наценки» | `fee`, `fee_type` | carrier |
+| «Оплата с наценкой» — apply the fee only for chosen gateways | `fee_payments` | framework `FEATURE_FEE_PAYMENTS` |
+| «Бесплатная доставка от» | `free_cost` | carrier |
+| «Купон на бесплатную доставку» | `coupon_free_shipping` | carrier |
+| «Округление цены» and «Шаг округления цены» | `round_cost`, `round_cost_range` | carrier |
+| «Минимальная / Максимальная сумма заказа» — hides the method | `min_order_cost`, `max_order_cost` | carrier |
+| «Минимальная / Максимальная стоимость доставки» — clamps the price | `min_cost`, `max_cost` | framework `FEATURE_COST_LIMITS` |
+| Delivery time shown to the buyer | `show_delivery_time` (CDEK), rate `delivery_time` arg | carrier |
+
+Order of application (Yandex, CDEK): carrier price → fee → free-delivery rules → rounding → the framework's cost limits LAST.
+Order-amount limits and delivery-cost limits are different things with similar names; label them so the merchant cannot
+confuse them (Russian Post #45). Before calling a method done, open its settings modal on the rig next to a sibling's and
+compare the lists field by field.
+
 ## Instance form `show_if`
 
 A `form_fields` entry may carry `show_if` in the settings-API shape (`[ 'setting' => <unprefixed key>, 'operator' => '='|'!='|
