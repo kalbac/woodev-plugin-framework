@@ -111,7 +111,9 @@ ALL of these, keeping a v1 key wherever v1 had the option:
 | «Минимальная / Максимальная стоимость доставки» — clamps the price | `min_cost`, `max_cost` | framework `FEATURE_COST_LIMITS` |
 | Delivery time shown to the buyer | `show_delivery_time` (CDEK), rate `delivery_time` arg | carrier |
 
-Order of application (Yandex, CDEK): carrier price → fee → free-delivery rules → rounding → the framework's cost limits LAST.
+Order of application (Yandex `Yandex_Cost_Rules::price()`, CDEK the same): free delivery (coupon or amount) decides first, otherwise
+the fee is added → rounding → the framework's cost limits LAST (a free rate stays free). Both siblings keep a v1 quirk exactly at
+the free threshold (carrier price, no fee); a carrier without that v1 history need not copy it.
 Order-amount limits and delivery-cost limits are different things with similar names; label them so the merchant cannot
 confuse them (Russian Post #45). Before calling a method done, open its settings modal on the rig next to a sibling's and
 compare the lists field by field.
