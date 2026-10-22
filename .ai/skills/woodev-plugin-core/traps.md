@@ -163,6 +163,12 @@ internals (class-map wiring, build/CI, rig) are left out on purpose. Shipping-sp
 - Three bugs passed green because the test mocked the very seam that was wrong (REST validation, `is_plugin_active`,
   WC note actions): when a test stubs the thing under suspicion, add one test that runs the real one. →
   `docs-internal/sessions/s170.md` (How the work went)
+- A unit bootstrap that stubs `WC_Email` (or any WC parent) hides a boot fatal: a subclass autoloaded on `plugins_loaded` —
+  even by a static `register()` call — kills every request on a real site. Touch it only inside the WC hook that needs it; keep a
+  boot test without the stand-ins. →
+  `docs-internal/gotchas/a-stubbed-wc-class-hides-a-boot-fatal.md`
+- Two parallel branches can merge cleanly and still break a test (a new call needs a Brain Monkey stub the other branch's test
+  lacks): run the full suite on the merge commit, never trust the two branch greens. → `docs-internal/sessions/s193.md`
 
 ## HPOS and compatibility (topic `compat`)
 

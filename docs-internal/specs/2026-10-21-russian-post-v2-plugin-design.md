@@ -42,6 +42,21 @@ Coordinator decisions taken while building waves 4–6 (cards on board №12). T
 | §5.7 (reserve) | Display lookups and confirmations share one framework purpose, so a busy map can spend the confirmation reserve; the hard cap still holds — framework #1405. | The plugin cannot tell them apart. |
 | §16.5 (storage) | Order-migration checks on real HPOS and posts storage move to rig acceptance P19b (woodev-russian-post#32); unit tests cover the converter without a database. | Brain Monkey tests cannot host a real order store. |
 
+## Amendment — implementation decisions (22.10.2026, s193)
+
+Coordinator decisions taken while building waves 7–8 (cards on board №12). They win over the text below.
+
+| Where | Decision | Why |
+|---|---|---|
+| §9.2 (customs entries) | A customs entry's `weight` AND `value` are the LINE totals (unit × quantity), whole grams / kopecks, the weights never summing above the mass; more lines than grams → refused before the request (P13b). | Measured on the test account: the service sums `weight` as sent against the mass and the CN23 prints `weight` and `value` as sent, never × `amount`. |
+| §9.5 (CN22/CN23) | The customs-forms button follows the Ф7 rule of the s192 amendment (offered for every exported international order, a first click outside a batch leaves a note and hides it 60 s); the «in a batch» fact stays woodev-russian-post#43. | Same constraint as Ф7. |
+| §10.4 (U24) | Measured from code: with a tracking token the framework's `customer_shipment_created` also fires at the first poll, prematurely; no change shipped — options are on woodev-russian-post#44 for the operator. | It changes what a customer receives. |
+| §14.2 (Tier B) | The runner ends with one bounded leftover check per domain; an order with hundreds of shipping lines is not split across batches; a 20-candidate leftover probe that is all false positives is accepted as a known near-zero gap (P17b). | Real-shop probability; v1 code cannot run after the update. |
+| §4.5 (reasons) | New closed reason `order_amount`: a v1 «minimum/maximum order amount» bound hides the method (#45); v1 `min_price`/`max_price` are never written into the framework's delivery-price `min_cost`/`max_cost`. | v1 bounds were order amounts; the framework fields are price bounds. |
+| §2 (instance keys) | `free_cost`, `coupon_free_shipping`, `show_delivery_time`, `allowed_payments` are read by the plugin under the v1 keys, as CDEK/Yandex do; `allowed_payments` follows v1 (chosen method at checkout; the order-pay page is not restricted) (#39). | The framework has none of them; v1 parity. |
+| §14.3 (rollback marker) | The shipping-item marker is `_wc_russian_post_v1_method_id` (leading underscore, hidden in the order screen); a postamat line whose v1 type matches no product of the kind (`ECOM_MARKETPLACE`, `COMBINED`, `ECOM`) takes the kind's default product; v2 export keeps v1's `_wc_russian_post_status` (#50, #51). | Found in rig acceptance P19b; no shop runs v2 yet, so nothing to rename. |
+| §5.7, §11 (framework 2.0.8) | The widget reserve keys on the framework's `is_confirmation()` (#1405); the REST settings workaround is lifted when the loaded framework is ≥ 2.0.8 (#1406). The loader's `framework_version` and CI's `WOODEV_FRAMEWORK_REF` move to 2.0.8 with the framework release, shipped together with the plugin release (#47). | No shop runs v2 yet; releases are combined. |
+
 ## 1. Operator decisions (binding)
 
 Source: `docs-internal/research/2026-10-21-russian-post-v2/decisions.md`, walked item by item with the operator on 21.10.2026. Where the agenda or a report disagrees, `decisions.md` wins. Decision numbers D1–D13 are the file's own; D14–D16 are the operator's later answers of the same day, recorded here.
