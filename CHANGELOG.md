@@ -1,6 +1,48 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.0.8] — 2026-10-22
+### Bug Fixes
+- **checkout**: Refresh the classic checkout when the payment method changes under a pickup method (#1390)
+
+- **rest-api**: Mask secret settings in the plugin settings REST controller (#1406) (#1408)
+
+
+### Documentation
+- **release**: Changelog in Keep a Changelog form with repo#PR references, stripped for EDD (#1387)
+
+- **s190**: First v2 EDD publication — framework 2.0.7, CDEK 2.3.0.4, Yandex 2.0.5; handoff (#1388)
+
+- **research**: Russian Post v2 fact base and brainstorm agenda (s191) (#1391)
+
+- **research**: Russian Post passport import measured in PHP (s191, task I) (#1392)
+
+- **research**: Russian Post v2 brainstorm decisions and international measurement (s191) (#1393)
+
+- **research**: Russian Post new cabinet API docs — REST tracking by token (s191, task L) (#1394)
+
+- **specs**: Russian Post v2 plugin design (s191) (#1395)
+
+- **s191**: Session notes and handoff — Russian Post v2 underway (#1398)
+
+- **s191**: Point the pipeline at the plugin repo's docs/orchestration (#1403)
+
+- **s191**: Gotchas and plugin-author skills (#1404)
+
+- **s192**: Session notes, handoff, Russian Post spec amendment, Mockery alias gotcha (#1407)
+
+- **s193**: Session notes, handoff, Russian Post spec amendment, stubbed-WC boot-fatal gotcha (#1411)
+
+
+### Features
+- **pickup**: Tell point sources a confirmation from a card view (#1405) (#1409)
+
+
+### Tests
+- **error-reporting**: Skip the two OOM process tests on PHP builds that die without shutdown (#1399) (#1401)
+
+
+
 ## [2.0.7] — 2026-10-20
 ### Bug Fixes
 - **shipping**: The order wizard re-prices the delivery after the payment step (#1384)
