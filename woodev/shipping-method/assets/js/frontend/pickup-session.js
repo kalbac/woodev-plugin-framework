@@ -26,6 +26,7 @@
  *   - `getSelectedId()`                  CONTEXT: the point id the surface currently holds, `''` for none.
  *   - `getLocality()`                    CONTEXT: the locality NAME the map provider centres on.
  *   - `getLocalityKey()`                 CONTEXT: the locality the points query is addressed by.
+ *   - `getGeocodeQuery()`                OPTIONAL, CONTEXT: city + region, what the map geocodes to centre itself (#1425).
  *   - `getContextKey()` (optional)       CONTEXT: a fingerprint of what the checkout is about (shipping
  *                                        method, locality); a dismissed dialog's late answer is applied
  *                                        only while it is unchanged.
@@ -566,6 +567,8 @@
 			strategy: config.strategy,
 			i18n: config.i18n,
 			locality: host.getLocality(),
+			// Optional on the host: a surface without it centres on the bare city name.
+			geocodeQuery: 'function' === typeof host.getGeocodeQuery ? host.getGeocodeQuery() : '',
 			defaultLocation: config.defaultLocation,
 			pointIcons: config.pointIcons,
 			accentColor: config.accentColor,

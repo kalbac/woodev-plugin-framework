@@ -1570,7 +1570,11 @@
 			return Promise.resolve();
 		}
 
-		var locality = this.config.locality;
+		// `geocodeQuery` is the city PLUS its region ("Берёзовка, Красноярский край"): a bare
+		// name geocodes to whichever namesake the geocoder ranks first — a Берёзовка in Belarus
+		// for a customer in Krasnoyarsk (#1425). `locality` stays the bare city name, which
+		// the address search relies on (see {@see trimAddressValue}).
+		var locality = this.config.geocodeQuery || this.config.locality;
 
 		if ( ! locality ) {
 			this._applyDefaultLocation();

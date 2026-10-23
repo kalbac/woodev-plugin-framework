@@ -1786,6 +1786,36 @@ test( 'geocodes the locality under viewport', async () => {
 	expect( ymapsStub.geocodeCalls ).toBe( 1 );
 } );
 
+test( 'geocodes the city plus region when the host supplies one — a namesake city must not win (#1425)', async () => {
+	let geocoded = null;
+
+	ymapsStub = createYmapsStub();
+	ymapsStub.geocodeImpl = ( request ) => {
+		geocoded = request;
+
+		return Promise.resolve( ymapsStub.geocodeResult );
+	};
+
+	await init( { strategy: 'viewport', locality: 'Берёзовка', geocodeQuery: 'Берёзовка, Красноярский край' } );
+
+	expect( geocoded ).toBe( 'Берёзовка, Красноярский край' );
+} );
+
+test( 'without a geocodeQuery the bare locality is geocoded, as before', async () => {
+	let geocoded = null;
+
+	ymapsStub = createYmapsStub();
+	ymapsStub.geocodeImpl = ( request ) => {
+		geocoded = request;
+
+		return Promise.resolve( ymapsStub.geocodeResult );
+	};
+
+	await init( { strategy: 'viewport', locality: 'Москва' } );
+
+	expect( geocoded ).toBe( 'Москва' );
+} );
+
 test( 'the initial-viewport fit is animated (live-review fix — every camera move gets a duration now)', async () => {
 	await init( { strategy: 'viewport', locality: 'Москва' } );
 
