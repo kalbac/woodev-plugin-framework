@@ -116,7 +116,7 @@ function buildOptions( overrides ) {
 			parentKey: jest.fn( () => null ),
 			buildUrl,
 			fetchJson: fakeFetchJson(),
-			nonceHeader: jest.fn( () => ( { 'X-WP-Nonce': 'N' } ) ),
+			readHeaders: jest.fn( () => ( {} ) ),
 		},
 		overrides
 	);

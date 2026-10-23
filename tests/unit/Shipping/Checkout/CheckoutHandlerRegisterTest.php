@@ -57,11 +57,11 @@ class CheckoutHandlerRegisterTest extends TestCase {
 			->once()
 			->with( 'woocommerce_states', \Mockery::type( 'array' ) );
 
-		// Sixteen since F1 registered the hidden-reason render hooks (+3) and #1260 added the unchosen-carrier cleaner on the classic and the Store API order hooks (+2); eleven since #332 added `woocommerce_customer_save_address`; ten since #331 added `woocommerce_calculated_shipping`; nine since #966 added the Store API pickup-required validation on both hooks (seven since #964
+		// Seventeen since #1426 added the location nonce node's `wp_footer` print (the matching fragment filter makes the other filter six); sixteen since F1 registered the hidden-reason render hooks (+3) and #1260 added the unchosen-carrier cleaner on the classic and the Store API order hooks (+2); eleven since #332 added `woocommerce_customer_save_address`; ten since #331 added `woocommerce_calculated_shipping`; nine since #966 added the Store API pickup-required validation on both hooks (seven since #964
 		// added the Store API order-processed callback, six before, since issue #518 added
 		// `woodev_shipping_pickup_point_selected`).
 		Functions\expect( 'add_action' )
-			->times( 16 )
+			->times( 17 )
 			->withAnyArgs();
 
 		$fields  = Checkout_Fields::from_array( [] );
@@ -77,7 +77,7 @@ class CheckoutHandlerRegisterTest extends TestCase {
 	 */
 	public function test_register_hooks_init_for_wc_address_provider_suppression(): void {
 
-		Functions\expect( 'add_filter' )->times( 5 )->withAnyArgs();
+		Functions\expect( 'add_filter' )->times( 6 )->withAnyArgs();
 		Functions\expect( 'add_action' )
 			->atLeast()->once()
 			->with( 'init', \Mockery::type( 'array' ), 21 );
@@ -90,7 +90,7 @@ class CheckoutHandlerRegisterTest extends TestCase {
 	 */
 	public function test_register_hooks_checkout_process(): void {
 
-		Functions\expect( 'add_filter' )->times( 5 )->withAnyArgs();
+		Functions\expect( 'add_filter' )->times( 6 )->withAnyArgs();
 		Functions\expect( 'add_action' )
 			->atLeast()->once()
 			->with( 'woocommerce_checkout_process', \Mockery::type( 'array' ) );
@@ -125,7 +125,7 @@ class CheckoutHandlerRegisterTest extends TestCase {
 	 */
 	public function test_register_hooks_the_store_api_pickup_required_validation(): void {
 
-		Functions\expect( 'add_filter' )->times( 5 )->withAnyArgs();
+		Functions\expect( 'add_filter' )->times( 6 )->withAnyArgs();
 		Functions\expect( 'add_action' )
 			->atLeast()->once()
 			->with( 'woocommerce_checkout_validate_order_before_payment', \Mockery::type( 'array' ), 10, 2 );
@@ -141,7 +141,7 @@ class CheckoutHandlerRegisterTest extends TestCase {
 	 */
 	public function test_register_hooks_the_store_api_update_order_from_request_fallback(): void {
 
-		Functions\expect( 'add_filter' )->times( 5 )->withAnyArgs();
+		Functions\expect( 'add_filter' )->times( 6 )->withAnyArgs();
 		Functions\expect( 'add_action' )
 			->atLeast()->once()
 			->with( 'woocommerce_store_api_checkout_update_order_from_request', \Mockery::type( 'array' ), 10, 2 );
@@ -159,7 +159,7 @@ class CheckoutHandlerRegisterTest extends TestCase {
 	 */
 	public function test_register_hooks_the_pickup_point_selected_listener(): void {
 
-		Functions\expect( 'add_filter' )->times( 5 )->withAnyArgs();
+		Functions\expect( 'add_filter' )->times( 6 )->withAnyArgs();
 		Functions\expect( 'add_action' )
 			->atLeast()->once()
 			->with( 'woodev_shipping_pickup_point_selected', \Mockery::type( 'array' ) );
@@ -216,7 +216,7 @@ class CheckoutHandlerRegisterTest extends TestCase {
 	 */
 	public function test_register_hooks_checkout_order_processed(): void {
 
-		Functions\expect( 'add_filter' )->times( 5 )->withAnyArgs();
+		Functions\expect( 'add_filter' )->times( 6 )->withAnyArgs();
 		Functions\expect( 'add_action' )
 			->atLeast()->once()
 			->with( 'woocommerce_checkout_order_processed', \Mockery::type( 'array' ), 10, 3 );
@@ -289,7 +289,7 @@ class CheckoutHandlerRegisterTest extends TestCase {
 	 */
 	public function test_register_hooks_wp_enqueue_scripts(): void {
 
-		Functions\expect( 'add_filter' )->times( 5 )->withAnyArgs();
+		Functions\expect( 'add_filter' )->times( 6 )->withAnyArgs();
 		Functions\expect( 'add_action' )
 			->atLeast()->once()
 			->with( 'wp_enqueue_scripts', \Mockery::type( 'array' ) );
@@ -302,7 +302,7 @@ class CheckoutHandlerRegisterTest extends TestCase {
 	 */
 	public function test_register_hooks_rest_api_init(): void {
 
-		Functions\expect( 'add_filter' )->times( 5 )->withAnyArgs();
+		Functions\expect( 'add_filter' )->times( 6 )->withAnyArgs();
 		Functions\expect( 'add_action' )
 			->atLeast()->once()
 			->with( 'rest_api_init', \Mockery::type( 'array' ) );
@@ -393,8 +393,8 @@ class CheckoutHandlerRegisterTest extends TestCase {
 	 */
 	public function test_guard_fires_doing_it_wrong_on_native_field_conflict(): void {
 
-		Functions\expect( 'add_filter' )->times( 10 )->withAnyArgs();
-		Functions\expect( 'add_action' )->times( 32 )->withAnyArgs();
+		Functions\expect( 'add_filter' )->times( 12 )->withAnyArgs();
+		Functions\expect( 'add_action' )->times( 34 )->withAnyArgs();
 		Functions\expect( '_doing_it_wrong' )
 			->once()
 			->with(
@@ -416,8 +416,8 @@ class CheckoutHandlerRegisterTest extends TestCase {
 	 */
 	public function test_guard_does_not_fire_for_same_plugin_id(): void {
 
-		Functions\expect( 'add_filter' )->times( 10 )->withAnyArgs();
-		Functions\expect( 'add_action' )->times( 32 )->withAnyArgs();
+		Functions\expect( 'add_filter' )->times( 12 )->withAnyArgs();
+		Functions\expect( 'add_action' )->times( 34 )->withAnyArgs();
 		Functions\expect( '_doing_it_wrong' )->never();
 
 		$field   = Field::create( 'billing_city' )->set_type( 'text' )->set_section( 'billing' )->to_array();
@@ -434,8 +434,8 @@ class CheckoutHandlerRegisterTest extends TestCase {
 	 */
 	public function test_guard_ignores_non_native_fields(): void {
 
-		Functions\expect( 'add_filter' )->times( 10 )->withAnyArgs();
-		Functions\expect( 'add_action' )->times( 32 )->withAnyArgs();
+		Functions\expect( 'add_filter' )->times( 12 )->withAnyArgs();
+		Functions\expect( 'add_action' )->times( 34 )->withAnyArgs();
 		Functions\expect( '_doing_it_wrong' )->never();
 
 		$field = Field::create( 'carrier_pvz' )->set_type( 'hidden' )->set_section( 'order' )->to_array();

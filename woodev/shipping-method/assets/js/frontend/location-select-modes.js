@@ -20,7 +20,7 @@
  * ever uses `options.fetch` (suggest) and `options.list` (the full scoped `/location/list`,
  * issue #463) — both already scoped AND already value-stamped by the cascade's own
  * `fieldValueFor()` — plus the generic `options.buildUrl`/`options.fetchJson`/
- * `options.nonceHeader`/`options.country`/`options.parentKey` primitives the cascade hands over
+ * `options.readHeaders`/`options.country`/`options.parentKey` primitives the cascade hands over
  * for a renderer (like `related-list:region`) that watches a WooCommerce-rendered field instead.
  *
  * `options.onResolving()` (issue #541) is the one primitive a renderer calls BEFORE it knows the
@@ -195,7 +195,7 @@
 			listCountry = country;
 			listPromise = options.fetchJson(
 				options.buildUrl( options.location.endpoints.list, { level: 'region', country: country } ),
-				{ method: 'GET', headers: options.nonceHeader() }
+				{ method: 'GET', headers: options.readHeaders() }
 			).then(
 				function( body ) {
 					return body && Array.isArray( body.localities ) ? body.localities : [];

@@ -9197,3 +9197,135 @@ describe( 'a saved city that resolved to no record (#1075)', () => {
 		expect( address().disabled ).toBe( false );
 	} );
 } );
+
+// -----------------------------------------------------------------------
+// #1426 — a cached checkout page carries a stale `wp_rest` nonce
+// -----------------------------------------------------------------------
+
+describe( '#1426 — a stale page nonce must not break the location layer', () => {
+	const NODE_ID = 'woodev-location-nonce';
+	const NONCE_ERROR = { code: 'rest_cookie_invalid_nonce', message: 'Cookie check failed', data: { status: 403 } };
+	const ITEM = {
+		key: 'dadata:city1', label: 'г Москва', level: 'settlement',
+		record: { key: 'dadata:city1', provider_id: 'dadata', level: 'settlement', country: 'RU', label: 'г Москва' },
+	};
+
+	// A refused /select now runs a longer promise chain (json → reject → refresh → retry).
+	async function settleChain() {
+		for ( let i = 0; i < 40; i++ ) {
+			await Promise.resolve();
+		}
+	}
+
+	function selectRequests() {
+		return fetchCalls.filter( ( c ) => SELECT_URL === c.url );
+	}
+
+	function addNonceNode( nonce ) {
+		document.body.insertAdjacentHTML( 'beforeend', `<span id="${ NODE_ID }" data-woodev-location-nonce="${ nonce }" hidden></span>` );
+	}
+
+	function notice() {
+		return document.querySelector( '.woodev-location-notice' );
+	}
+
+	it( 'sends NO nonce header on a public suggestion read', () => {
+		boot( { settlement: true } );
+
+		callFor( 'billing_city' ).fetch( 'Мос' );
+
+		const req = fetchCalls[ fetchCalls.length - 1 ];
+
+		expect( req.url ).toContain( SUGGEST_URL );
+		expect( req.init.headers ).toEqual( {} );
+	} );
+
+	it( 'signs /select with the live node nonce, not the one baked into the page', () => {
+		boot( { settlement: true } );
+		addNonceNode( 'fresh-nonce' );
+
+		selectViaFake( callFor( 'billing_city' ), ITEM );
+
+		expect( selectRequests()[ 0 ].init.headers[ 'X-WP-Nonce' ] ).toBe( 'fresh-nonce' );
+	} );
+
+	it( 'falls back to the page nonce when the node is absent', () => {
+		boot( { settlement: true } );
+
+		selectViaFake( callFor( 'billing_city' ), ITEM );
+
+		expect( selectRequests()[ 0 ].init.headers[ 'X-WP-Nonce' ] ).toBe( 'test-nonce' );
+	} );
+
+	it( 'retries /select ONCE with the refreshed nonce after a nonce refusal, and no notice shows', async () => {
+		boot( { settlement: true } );
+		addNonceNode( 'stale-nonce' );
+
+		selectViaFake( callFor( 'billing_city' ), ITEM );
+
+		// The refusal triggers an update_checkout; its fragments replace the node.
+		window.jQuery( document.body ).on( 'update_checkout', () => {
+			document.getElementById( NODE_ID ).dataset.woodevLocationNonce = 'fresh-nonce';
+			window.jQuery( document.body ).trigger( 'updated_checkout' );
+		} );
+
+		selectRequests()[ 0 ].resolve( NONCE_ERROR, false );
+		await settleChain();
+
+		expect( selectRequests().length ).toBe( 2 );
+		expect( selectRequests()[ 1 ].init.headers[ 'X-WP-Nonce' ] ).toBe( 'fresh-nonce' );
+
+		selectRequests()[ 1 ].resolve( { current: { key: ITEM.record.key, level: 'settlement' }, persisted: true, chain: { settlement: { key: ITEM.record.key, level: 'settlement' } } } );
+		await settleChain();
+
+		expect( notice() ).toBeNull();
+	} );
+
+	it( 'does not wait for an update_checkout when the live nonce already moved on', async () => {
+		boot( { settlement: true } );
+		addNonceNode( 'stale-nonce' );
+
+		selectViaFake( callFor( 'billing_city' ), ITEM );
+		// A checkout refresh landed while the request was in flight.
+		document.getElementById( NODE_ID ).dataset.woodevLocationNonce = 'newer-nonce';
+
+		selectRequests()[ 0 ].resolve( NONCE_ERROR, false );
+		await settleChain();
+
+		expect( selectRequests().length ).toBe( 2 );
+		expect( selectRequests()[ 1 ].init.headers[ 'X-WP-Nonce' ] ).toBe( 'newer-nonce' );
+	} );
+
+	it( 'tells the customer when the retry is refused too — and clears the stale locality key', async () => {
+		boot( { settlement: true } );
+		addNonceNode( 'newer-nonce' );
+
+		const seen = [];
+
+		document.body.addEventListener( 'woodev_location_applied', ( event ) => seen.push( event.detail ) );
+
+		selectViaFake( callFor( 'billing_city' ), ITEM );
+		document.getElementById( NODE_ID ).dataset.woodevLocationNonce = 'even-newer';
+
+		selectRequests()[ 0 ].resolve( NONCE_ERROR, false );
+		await settleChain();
+		selectRequests()[ 1 ].resolve( NONCE_ERROR, false );
+		await settleChain();
+
+		expect( selectRequests().length ).toBe( 2 );
+		expect( notice() ).not.toBeNull();
+		expect( seen ).toEqual( [ { key: '', level: '', settlementKey: '', implicit: false } ] );
+	} );
+
+	it( 'does not retry a refusal that is not about the nonce (rate limit) but still tells the customer', async () => {
+		boot( { settlement: true } );
+
+		selectViaFake( callFor( 'billing_city' ), ITEM );
+
+		selectRequests()[ 0 ].resolve( { code: 'woodev_location_rate_limited', message: 'Too many', data: { status: 429 } }, false );
+		await settleChain();
+
+		expect( selectRequests().length ).toBe( 1 );
+		expect( notice() ).not.toBeNull();
+	} );
+} );

@@ -397,15 +397,64 @@
 	}
 
 	/**
-	 * The `X-WP-Nonce` header for a location REST call — the SAME `wp_rest` nonce for both
-	 * `/suggest` and `/select` (`class-checkout-config.php`'s own docblock: "deliberately the
-	 * SAME... nonce").
+	 * Id of the hidden node `Checkout_Handler::print_location_nonce_node()` prints and every
+	 * `update_checkout` replaces with a freshly minted `wp_rest` nonce (#1426).
+	 *
+	 * @type {string}
+	 */
+	var LOCATION_NONCE_NODE_ID = 'woodev-location-nonce';
+
+	/**
+	 * How long a `/select` that was refused for its nonce waits for an `update_checkout` to
+	 * bring a fresh one, before it gives up and tells the customer.
+	 *
+	 * @type {number}
+	 */
+	var NONCE_REFRESH_TIMEOUT_MS = 8000;
+
+	/**
+	 * The freshest `wp_rest` nonce available: the node WooCommerce replaces on every
+	 * `update_checkout`, falling back to the one baked into the page-load config when the node
+	 * is absent (a theme that dropped `wp_footer`, a non-checkout surface).
+	 *
+	 * The page-load nonce alone is not safe to keep: on a page cache it is up to a cache
+	 * lifetime old, and a `wp_rest` nonce expires after 12–24 hours (#1426).
+	 *
+	 * @param {Object} entry
+	 * @returns {string}
+	 */
+	function liveNonce( entry ) {
+		var node = document.getElementById( LOCATION_NONCE_NODE_ID );
+		var live = node && node.dataset ? node.dataset.woodevLocationNonce : '';
+
+		return live || entry.location.nonce || '';
+	}
+
+	/**
+	 * The `X-WP-Nonce` header for a location REST WRITE (`/select`, `/forget`) — the only two
+	 * routes whose `permission_callback` checks it.
+	 *
+	 * A public read must not send one: core's `rest_cookie_check_errors()` answers 403
+	 * `rest_cookie_invalid_nonce` for ANY request carrying an invalid nonce, `__return_true` or
+	 * not, whereas a request with no nonce at all is simply treated as logged out. See
+	 * {@see readHeaders}.
 	 *
 	 * @param {Object} entry
 	 * @returns {Object}
 	 */
 	function nonceHeader( entry ) {
-		return { 'X-WP-Nonce': entry.location.nonce || '' };
+		return { 'X-WP-Nonce': liveNonce( entry ) };
+	}
+
+	/**
+	 * The headers of a PUBLIC location read (`/suggest`, `/list`): none. A stale or foreign
+	 * nonce on a cached checkout page made the whole suggestion list answer 403 for guests
+	 * while an administrator, who is never served the cache, saw it work (#1426).
+	 *
+	 * @returns {Object}
+	 */
+	function readHeaders() {
+		return {};
 	}
 
 	/**
@@ -1582,7 +1631,7 @@
 				within: scopeKeyFor( entry, node.level ),
 			} );
 
-			var init = { method: 'GET', headers: nonceHeader( entry ) };
+			var init = { method: 'GET', headers: readHeaders() };
 
 			if ( opts && opts.signal ) {
 				init.signal = opts.signal;
@@ -1643,7 +1692,7 @@
 				within: scopeKeyFor( entry, node.level ),
 			} );
 
-			return fetchJson( url, { method: 'GET', headers: nonceHeader( entry ) } ).then( function( body ) {
+			return fetchJson( url, { method: 'GET', headers: readHeaders() } ).then( function( body ) {
 				var localities = body && Array.isArray( body.localities ) ? body.localities : [];
 
 				// Issue #361, critic finding s104: `/location/list` carries the SAME `within_status`
@@ -2602,6 +2651,81 @@
 	}
 
 	/**
+	 * Whether a rejected location REST call was refused for its nonce: core's own
+	 * `rest_cookie_invalid_nonce` (it answers before any `permission_callback` runs) or the
+	 * route's own `woodev_pickup_invalid_nonce`.
+	 *
+	 * @param {*} error The rejection reason {@see fetchJson} produced — the parsed body.
+	 * @returns {boolean}
+	 */
+	function isNonceFailure( error ) {
+		return !! error && ( 'rest_cookie_invalid_nonce' === error.code || 'woodev_pickup_invalid_nonce' === error.code );
+	}
+
+	/**
+	 * Resolves once a nonce newer than `stale` can be read, or after
+	 * {@see NONCE_REFRESH_TIMEOUT_MS} — never rejects. When the live node already differs from
+	 * `stale` an `update_checkout` has refreshed it in the meantime and nothing is waited for;
+	 * otherwise one is fired (its fragments replace the node, `Checkout_Handler::
+	 * inject_location_nonce_fragment()`) and waited on.
+	 *
+	 * @param {Object} entry
+	 * @param {string} stale The nonce the refused request carried.
+	 * @returns {Promise<void>}
+	 */
+	function refreshNonce( entry, stale ) {
+		if ( liveNonce( entry ) !== stale || ! window.jQuery ) {
+			return Promise.resolve();
+		}
+
+		return new Promise( function( resolve ) {
+			var $body = window.jQuery( document.body );
+			var timer = 0;
+
+			function finish() {
+				$body.off( 'updated_checkout', finish );
+				clearTimeout( timer );
+				resolve();
+			}
+
+			timer = setTimeout( finish, NONCE_REFRESH_TIMEOUT_MS );
+			$body.on( 'updated_checkout', finish );
+			triggerCheckoutUpdate();
+		} );
+	}
+
+	/**
+	 * POSTs one record to `/select`. A request refused for its nonce is retried ONCE with a
+	 * refreshed one ({@see refreshNonce}) before its failure reaches the caller (#1426): the
+	 * nonce on a cached checkout page is stale by construction, and a stale tab left open
+	 * overnight reaches the same state.
+	 *
+	 * @param {Object}  entry
+	 * @param {Object}  record
+	 * @param {boolean} retried Whether this call already IS the retry.
+	 * @returns {Promise<*>}
+	 */
+	function postSelect( entry, record, retried ) {
+		var headers = nonceHeader( entry );
+		var sentNonce = headers[ 'X-WP-Nonce' ];
+
+		headers[ 'Content-Type' ] = 'application/json';
+
+		return fetchJson(
+			entry.location.endpoints.select,
+			{ method: 'POST', headers: headers, body: JSON.stringify( { record: record } ) }
+		).then( null, function( error ) {
+			if ( retried || ! isNonceFailure( error ) ) {
+				return Promise.reject( error );
+			}
+
+			return refreshNonce( entry, sentNonce ).then( function() {
+				return postSelect( entry, record, true );
+			} );
+		} );
+	}
+
+	/**
 	 * Dequeues `entry.pendingRecord` (if any) and sends it — the sole place that actually
 	 * issues a `/select` POST. A no-op when nothing is queued (the single-flight slot simply
 	 * stays free until the next {@see enqueueSelect} call).
@@ -2637,12 +2761,7 @@
 		// enqueue-then-send path is unaffected.
 		markSelectBusy( entry, record );
 
-		var url = entry.location.endpoints.select;
-		var headers = nonceHeader( entry );
-
-		headers[ 'Content-Type' ] = 'application/json';
-
-		fetchJson( url, { method: 'POST', headers: headers, body: JSON.stringify( { record: record } ) } ).then(
+		postSelect( entry, record, false ).then(
 			function( body ) {
 				// D7 (spec + plan Seam D): a cancelled response is a wholly different outcome
 				// from an ordinary persisted/not-persisted one — see handleCancelledSelect()'s
@@ -2706,13 +2825,18 @@
 			},
 			function( error ) {
 				logError( error );
-				// A network/parse failure is a DIFFERENT failure mode from an honest
-				// `persisted: false` — the server never got to answer at all, so there is no
-				// signal to "consume" here (#295 finding 1 is specifically about the EXISTING
-				// `persisted` flag going unread, not about inventing a new one for transport
-				// errors). Stays silent to the customer, same as before this task; the visible
-				// field value still survives (the widget already wrote it before onSelect ran).
-				settleSelect( entry, false, false, record );
+				// The server never persisted this pick — a refused nonce (a cached or long-open
+				// page, once the retry in {@see postSelect} has failed too), the rate limit, a
+				// transport failure. Treated exactly like an honest `persisted: false` (#1425,
+				// #1426): the customer is told, and `woodev_location_applied` goes out with an
+				// empty key so the pickup map stops addressing points by the PREVIOUS city's
+				// key. Silence here left the city field on one city and the map on another, with
+				// nothing on screen to say why. The visible field value still survives (the
+				// widget already wrote it before onSelect ran).
+				//
+				// A transport failure (`fetch` rejects with an Error: offline, DNS) is a DIFFERENT
+				// mode — no server answer, nothing to explain — and stays silent as before.
+				settleSelect( entry, false, !! error && ! ( error instanceof Error ), record );
 			}
 		);
 	}
@@ -4080,8 +4204,8 @@
 			},
 			buildUrl: buildUrl,
 			fetchJson: fetchJson,
-			nonceHeader: function() {
-				return nonceHeader( entry );
+			readHeaders: function() {
+				return readHeaders();
 			},
 		};
 

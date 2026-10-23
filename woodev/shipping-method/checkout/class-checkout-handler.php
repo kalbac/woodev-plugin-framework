@@ -53,6 +53,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		/** Order meta holding the checkout's selected settlement record for the admin editor. */
 		public const ORDER_LOCATION_META_KEY = '_woodev_shipping_checkout_location';
 
+		/**
+		 * Id of the hidden node carrying the live `wp_rest` nonce for the location routes (#1426).
+		 *
+		 * One node for the whole fleet, never one per carrier plugin: every plugin's handler registers the
+		 * same static print/fragment callbacks, which WordPress collapses into one.
+		 */
+		public const LOCATION_NONCE_NODE_ID = 'woodev-location-nonce';
+
 		/** @var Checkout_Fields the field definitions this handler manages */
 		private Checkout_Fields $fields;
 
@@ -251,6 +259,67 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		}
 
 		/**
+		 * Prints the hidden node that carries the location routes' live `wp_rest` nonce (#1426).
+		 *
+		 * The nonce baked into the page-load config goes stale on a page cache: the page is served for up to
+		 * the cache lifetime, a `wp_rest` nonce lives 12–24 hours, and one minted for a logged-in visitor
+		 * never validates for a guest. `location-cascade.js` therefore reads the node instead, which
+		 * {@see self::inject_location_nonce_fragment()} replaces on every `update_checkout` — a request a
+		 * page cache never serves. It must exist in the first render: WooCommerce replaces only the
+		 * fragments whose selector it finds. Mirrors `Pickup_Handler::print_nonce_node()`.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.10
+		 *
+		 * @return void
+		 */
+		public static function print_location_nonce_node(): void {
+			if ( ! function_exists( 'is_checkout' ) || ! is_checkout() ) {
+				return;
+			}
+
+			$markup = self::location_nonce_node_markup();
+
+			// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped at build time.
+			echo $markup;
+		}
+
+		/**
+		 * Replaces the location nonce node on every checkout refresh (#1426).
+		 *
+		 * Adds exactly one key to the shared fragment array and returns it, never replaces it.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.10
+		 *
+		 * @param array<string, string> $fragments the checkout fragments collected so far.
+		 *
+		 * @return array<string, string>
+		 */
+		public static function inject_location_nonce_fragment( array $fragments ): array {
+			$fragments[ '#' . self::LOCATION_NONCE_NODE_ID ] = self::location_nonce_node_markup();
+
+			return $fragments;
+		}
+
+		/**
+		 * The node's markup — one builder for the first render and its replacement, so the two cannot diverge.
+		 *
+		 * @since 2.0.10
+		 *
+		 * @return string
+		 */
+		private static function location_nonce_node_markup(): string {
+			return sprintf(
+				'<span id="%1$s" data-woodev-location-nonce="%2$s" hidden></span>',
+				esc_attr( self::LOCATION_NONCE_NODE_ID ),
+				esc_attr( wp_create_nonce( 'wp_rest' ) )
+			);
+		}
+
+		/**
 		 * Adds the customer's chosen locality to every shipping package, so WooCommerce's rate cache
 		 * is keyed by it (SP-11 C-1, #1087).
 		 *
@@ -429,6 +498,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 
 			// Static for the same reason: one callback however many plugins register (#1087).
 			add_filter( 'woocommerce_cart_shipping_packages', [ self::class, 'add_location_provenance_to_packages' ] );
+
+			// Static for the same reason (#1426): ONE live-nonce node however many plugins register.
+			add_action( 'wp_footer', [ self::class, 'print_location_nonce_node' ] );
+			add_filter( 'woocommerce_update_order_review_fragments', [ self::class, 'inject_location_nonce_fragment' ] );
 
 			// Static for the same reason, and last (priority 999) so it follows every carrier's own
 			// checkout write: the order keeps the data of the carrier it was placed with (#1260).
