@@ -1172,6 +1172,42 @@
 	}
 
 	/**
+	 * What the map geocodes to find the customer's city: the city PLUS its region, read off the
+	 * same address column as {@see resolveLocality}.
+	 *
+	 * A bare city name geocodes to whichever namesake the geocoder ranks first — a Берёзовка
+	 * in Belarus for a customer in Krasnoyarsk Krai, and a map that opens on the wrong city
+	 * (#1425). The region is the `<select>`'s visible label (WooCommerce state codes are not
+	 * geocodable), or the typed text for a free-text state field; a region that only repeats the
+	 * city (Москва, Москва) is dropped. `''` when the city is blank.
+	 *
+	 * @param {Object} config the full mount config (`window.woodev_pickup_config_*`).
+	 * @returns {string}
+	 */
+	function resolveGeocodeQuery( config ) {
+		var city = resolveLocality( config ).trim();
+
+		if ( '' === city ) {
+			return '';
+		}
+
+		var stateField = document.getElementById( resolveAddressTarget( config ) + '_state' );
+		var region = '';
+
+		if ( stateField && 'SELECT' === stateField.tagName ) {
+			var option = stateField.options[ stateField.selectedIndex ];
+
+			region = option && '' !== stateField.value ? option.textContent : '';
+		} else if ( stateField && 'string' === typeof stateField.value ) {
+			region = stateField.value;
+		}
+
+		region = region.trim();
+
+		return '' === region || region.toLowerCase() === city.toLowerCase() ? city : city + ', ' + region;
+	}
+
+	/**
 	 * The Location Provider layer's current locality KEY for each provider-backed field,
 	 * keyed by field id (Task 15; issue #159) — refreshed live by
 	 * {@see handleLocationApplied} listening for `location-cascade.js`'s own
@@ -1542,6 +1578,10 @@
 
 			getLocalityKey: function() {
 				return resolveLocalityKey( config );
+			},
+
+			getGeocodeQuery: function() {
+				return resolveGeocodeQuery( config );
 			},
 
 			// What the checkout is about right now — the chosen shipping method and the

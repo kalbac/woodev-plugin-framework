@@ -3,6 +3,7 @@
 > One line per gotcha in this topic; the detail is in the linked file. Map of every topic:
 > [../GOTCHAS.md](../GOTCHAS.md). Format and the write protocol: `DOCS-SCHEMA.md` → "GOTCHAS.md Format".
 
+- [shipping/pickup] **A viewport map geocodes the city field's BARE name — a namesake in another country wins (Берёзовка → Belarus). Geocode city + the state field's label.** → [a-bare-city-name-geocodes-to-a-namesake-send-the-region-too](../gotchas/a-bare-city-name-geocodes-to-a-namesake-send-the-region-too.md) (s195, #1425)
 - [shipping/pickup] **A `Pickup_Handler` built without its plugin (the 14th positional arg) SILENTLY addresses the carrier by a DOM-read place name instead of the locality key — and gives the source no record and no resolved identity.** → [a-pickup-handler-built-without-its-plugin-silently-addresses-by-name](../gotchas/a-pickup-handler-built-without-its-plugin-silently-addresses-by-name.md) (s113)
 - [shipping/pickup] **A restore tied to a server confirmation looks like a render artefact — settle "who did this" with a timestamped ledger AND a control, never by watching.** → [a-restore-tied-to-a-server-confirmation-looks-like-a-render-artefact](../gotchas/a-restore-tied-to-a-server-confirmation-looks-like-a-render-artefact.md) (s77)
 - [shipping/pickup] **Two hook registrations in a reference can mean two OPTIONS, not two outputs.** → [two-hook-registrations-can-mean-two-options-not-two-outputs](../gotchas/two-hook-registrations-can-mean-two-options-not-two-outputs.md) (s73)

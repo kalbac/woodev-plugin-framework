@@ -1333,6 +1333,7 @@ test( 'clicking the trigger opens the shell and calls provider.init with the con
 		strategy: 'bulk',
 		i18n: config.i18n,
 		locality: '',
+		geocodeQuery: '',
 		defaultLocation: config.defaultLocation,
 		pointIcons: config.pointIcons,
 		accentColor: config.accentColor,
@@ -1454,6 +1455,7 @@ test( 'the provider config merges mapConfig with strategy, i18n, and the resolve
 		strategy: 'viewport',
 		i18n: config.i18n,
 		locality: 'Казань',
+		geocodeQuery: 'Казань',
 		// Everything below is a TOP-LEVEL key of the mount config that the provider reads off
 		// the config it is handed. `toEqual` is deliberate: it fails on a MISSING key as loudly
 		// as on a wrong one, which a per-key `toMatchObject` would not.
@@ -1461,6 +1463,61 @@ test( 'the provider config merges mapConfig with strategy, i18n, and the resolve
 		pointIcons: config.pointIcons,
 		accentColor: config.accentColor,
 		searchLayoutEl: StubPanels.instances[ 0 ].builtSearchLayoutEl,
+	} );
+} );
+
+describe( 'geocodeQuery — city plus region, so a namesake city cannot win the map (#1425)', () => {
+	function geocodeQueryFor( cityValue, stateHtml ) {
+		setConfig( makeConfig( { strategy: 'viewport' } ) );
+		mountAll();
+
+		document.getElementById( 'billing_city' ).insertAdjacentHTML( 'afterend', stateHtml );
+		setCitySelectValue( 'billing_city', cityValue );
+		clickTrigger();
+
+		return StubProvider.instances[ 0 ].initCalls[ 0 ].config;
+	}
+
+	test( 'a state <select> contributes its visible label, never its code', () => {
+		const received = geocodeQueryFor(
+			'Берёзовка',
+			'<select id="billing_state"><option value="">--</option><option value="KYA" selected>Красноярский край</option></select>'
+		);
+
+		expect( received.geocodeQuery ).toBe( 'Берёзовка, Красноярский край' );
+		// The address search keeps relying on the bare city name.
+		expect( received.locality ).toBe( 'Берёзовка' );
+	} );
+
+	test( 'a free-text state field contributes its typed value', () => {
+		const received = geocodeQueryFor( 'Берёзовка', '<input id="billing_state" value="Красноярский край" />' );
+
+		expect( received.geocodeQuery ).toBe( 'Берёзовка, Красноярский край' );
+	} );
+
+	test( 'a region that only repeats the city is dropped (Москва, Москва)', () => {
+		const received = geocodeQueryFor(
+			'Москва',
+			'<select id="billing_state"><option value="MOW" selected>москва</option></select>'
+		);
+
+		expect( received.geocodeQuery ).toBe( 'Москва' );
+	} );
+
+	test( 'no state field, or an unselected one, leaves the bare city', () => {
+		expect( geocodeQueryFor( 'Казань', '' ).geocodeQuery ).toBe( 'Казань' );
+
+		buildCheckoutDom();
+
+		expect(
+			geocodeQueryFor( 'Казань', '<select id="billing_state"><option value="" selected>--</option></select>' ).geocodeQuery
+		).toBe( 'Казань' );
+	} );
+
+	test( 'a blank city yields no query, whatever the region says', () => {
+		const received = geocodeQueryFor( '', '<input id="billing_state" value="Красноярский край" />' );
+
+		expect( received.geocodeQuery ).toBe( '' );
 	} );
 } );
 

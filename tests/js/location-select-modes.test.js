@@ -101,6 +101,8 @@ function fakeFetchJson() {
  * @returns {Object}
  */
 function buildOptions( overrides ) {
+	const fetchJson = fakeFetchJson();
+
 	return Object.assign(
 		{
 			fetch: jest.fn( () => Promise.resolve( [] ) ),
@@ -115,8 +117,9 @@ function buildOptions( overrides ) {
 			country: jest.fn( () => 'RU' ),
 			parentKey: jest.fn( () => null ),
 			buildUrl,
-			fetchJson: fakeFetchJson(),
-			nonceHeader: jest.fn( () => ( { 'X-WP-Nonce': 'N' } ) ),
+			fetchJson,
+			// The cascade's signed-or-unsigned GET (`readJson`); only the URL matters to a renderer.
+			fetchRead: ( url ) => fetchJson( url, { method: 'GET' } ),
 		},
 		overrides
 	);
