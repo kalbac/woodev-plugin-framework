@@ -357,6 +357,13 @@ final class ShippingPluginLocationProviderNoticeTest extends TestCase {
 					return $active_provider_id;
 				}
 
+				// A DaData that is being refused HAS a token — without one it is not the
+				// provider in force any more (#1424: the registry falls back to the
+				// first configured provider).
+				if ( 'woodev_location_token' === $name ) {
+					return 'tok';
+				}
+
 				if ( null !== $cached_cause && 'woodev_location_clean_secret' === $name ) {
 					return 'sec';
 				}
@@ -432,6 +439,10 @@ final class ShippingPluginLocationProviderNoticeTest extends TestCase {
 			static function ( $name, $default = false ) {
 				if ( 'woodev_location_active_provider' === $name ) {
 					return 'dadata';
+				}
+
+				if ( 'woodev_location_token' === $name ) {
+					return 'tok';
 				}
 
 				return \Woodev\Framework\Shipping\Location\Providers\Dadata_Api_Client::OPTION_ACCESS_DENIED === $name ? 1700000000 : $default;

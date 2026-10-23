@@ -346,6 +346,40 @@ final class LocationProviderRegistryTest extends TestCase {
 		);
 	}
 
+	/**
+	 * Stubs `get_option` from a name => value map; every other name falls through
+	 * to its caller-supplied default, like the real function.
+	 *
+	 * @param array<string, mixed> $options Stored options.
+	 * @return void
+	 */
+	private function stub_options( array $options ): void {
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = false ) use ( $options ) {
+				return array_key_exists( $name, $options ) ? $options[ $name ] : $default;
+			}
+		);
+	}
+
+	/**
+	 * A fake provider that is configured only once a required key has a value —
+	 * the shape of a provider whose credentials a shop may still be missing.
+	 */
+	private function unconfigured_provider( string $id ): Fake_Location_Provider {
+		return new Fake_Location_Provider(
+			$id,
+			strtoupper( $id ),
+			[
+				$id . '_key' => [
+					'name'     => 'Key',
+					'type'     => \Woodev_Setting::TYPE_STRING,
+					'required' => true,
+					'default'  => '',
+				],
+			]
+		);
+	}
+
 	// -------------------------------------------------------------------------
 	// Activation gate — closed
 	// -------------------------------------------------------------------------
@@ -921,7 +955,7 @@ final class LocationProviderRegistryTest extends TestCase {
 
 		Functions\when( 'add_action' )->justReturn( true );
 		$this->stub_providers_filter( [ $acme ] );
-		Functions\when( 'get_option' )->justReturn( null );
+		$this->stub_options( [ 'woodev_location_token' => 'dadata-token' ] );
 
 		$registry = Location_Provider_Registry::instance();
 		$registry->declare_needed();
@@ -936,7 +970,12 @@ final class LocationProviderRegistryTest extends TestCase {
 		Functions\when( 'add_action' )->justReturn( true );
 		$this->stub_providers_filter( [ $acme ] );
 		// Stored value names a provider nothing is (or was ever) registered under.
-		$this->stub_active_provider_option( 'ghost-id' );
+		$this->stub_options(
+			[
+				'woodev_location_active_provider' => 'ghost-id',
+				'woodev_location_token'           => 'dadata-token',
+			]
+		);
 
 		$registry = Location_Provider_Registry::instance();
 		$registry->declare_needed();
@@ -964,13 +1003,205 @@ final class LocationProviderRegistryTest extends TestCase {
 
 		Functions\when( 'add_action' )->justReturn( true );
 		$this->stub_providers_filter( [ $acme ] );
-		Functions\when( 'get_option' )->justReturn( null );
+		$this->stub_options( [ 'woodev_location_token' => 'dadata-token' ] );
 
 		$registry = Location_Provider_Registry::instance();
 		$registry->declare_needed();
 		$registry->collect();
 
 		$this->assertSame( 'dadata', $registry->get_active_provider()->get_id() );
+	}
+
+	// -------------------------------------------------------------------------
+	// Effective provider: never a shop with no working provider (#1424)
+	// -------------------------------------------------------------------------
+
+	private function collect_with( array $providers, array $options ): Location_Provider_Registry {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( $providers );
+		$this->stub_options( $options );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		return $registry;
+	}
+
+	public function test_unset_provider_resolves_to_the_plugin_provider_while_dadata_has_no_token(): void {
+		$cdek = new Fake_Location_Provider( 'cdek', 'CDEK' );
+
+		$registry = $this->collect_with( [ $cdek ], [] );
+
+		$this->assertSame( $cdek, $registry->get_active_provider() );
+	}
+
+	public function test_stored_dadata_without_a_token_resolves_to_the_plugin_provider(): void {
+		$cdek = new Fake_Location_Provider( 'cdek', 'CDEK' );
+
+		$registry = $this->collect_with( [ $cdek ], [ 'woodev_location_active_provider' => 'dadata' ] );
+
+		$this->assertSame( $cdek, $registry->get_active_provider() );
+	}
+
+	public function test_unknown_stored_provider_without_a_dadata_token_resolves_to_the_plugin_provider(): void {
+		$cdek = new Fake_Location_Provider( 'cdek', 'CDEK' );
+
+		$registry = $this->collect_with( [ $cdek ], [ 'woodev_location_active_provider' => 'ghost-id' ] );
+
+		$this->assertSame( $cdek, $registry->get_active_provider() );
+	}
+
+	public function test_dadata_stays_active_when_it_is_configured(): void {
+		$cdek = new Fake_Location_Provider( 'cdek', 'CDEK' );
+
+		$registry = $this->collect_with( [ $cdek ], [ 'woodev_location_token' => 'dadata-token' ] );
+
+		$this->assertSame( 'dadata', $registry->get_active_provider()->get_id() );
+	}
+
+	public function test_an_explicit_configured_choice_wins_over_a_configured_dadata(): void {
+		$cdek = new Fake_Location_Provider( 'cdek', 'CDEK' );
+
+		$registry = $this->collect_with(
+			[ $cdek ],
+			[
+				'woodev_location_active_provider' => 'cdek',
+				'woodev_location_token'           => 'dadata-token',
+			]
+		);
+
+		$this->assertSame( $cdek, $registry->get_active_provider() );
+	}
+
+	public function test_an_explicit_unconfigured_non_default_choice_is_not_swapped_behind_the_merchants_back(): void {
+		$cdek  = $this->unconfigured_provider( 'cdek' );
+		$other = new Fake_Location_Provider( 'other', 'Other' );
+
+		$registry = $this->collect_with( [ $cdek, $other ], [ 'woodev_location_active_provider' => 'cdek' ] );
+
+		$this->assertSame( $cdek, $registry->get_active_provider() );
+	}
+
+	public function test_with_several_plugin_providers_the_first_configured_one_in_registration_order_is_used(): void {
+		$broken = $this->unconfigured_provider( 'broken' );
+		$first  = new Fake_Location_Provider( 'first', 'First' );
+		$second = new Fake_Location_Provider( 'second', 'Second' );
+
+		$registry = $this->collect_with( [ $broken, $first, $second ], [] );
+
+		$this->assertSame( $first, $registry->get_active_provider(), 'deterministic: the unconfigured one is skipped, then registration order' );
+	}
+
+	public function test_dadata_is_preferred_over_plugin_providers_when_it_is_configured_and_nothing_is_stored(): void {
+		$first  = new Fake_Location_Provider( 'first', 'First' );
+		$second = new Fake_Location_Provider( 'second', 'Second' );
+
+		$registry = $this->collect_with( [ $first, $second ], [ 'woodev_location_token' => 'dadata-token' ] );
+
+		$this->assertSame( 'dadata', $registry->get_active_provider()->get_id() );
+	}
+
+	public function test_nothing_configured_anywhere_keeps_the_default_provider(): void {
+		$broken = $this->unconfigured_provider( 'broken' );
+
+		$registry = $this->collect_with( [ $broken ], [] );
+
+		$this->assertSame( 'dadata', $registry->get_active_provider()->get_id(), 'as before #1424 — the layer degrades on its own' );
+	}
+
+	public function test_the_fallback_writes_no_option(): void {
+		$cdek = new Fake_Location_Provider( 'cdek', 'CDEK' );
+
+		Functions\expect( 'update_option' )->never();
+		Functions\expect( 'add_option' )->never();
+
+		$registry = $this->collect_with( [ $cdek ], [] );
+		$registry->get_active_provider();
+
+		$this->assertSame( $cdek, $registry->get_active_provider() );
+	}
+
+	public function test_the_admin_select_shows_the_provider_in_force_not_the_stored_default(): void {
+		$cdek = new Fake_Location_Provider( 'cdek', 'CDEK' );
+
+		$handler = $this->collect_with( [ $cdek ], [] )->get_settings_handler();
+
+		$this->assertSame( 'cdek', $handler->get_display_value( Location_Provider_Registry::SETTING_ACTIVE_PROVIDER ) );
+		$this->assertSame( 'dadata', $handler->get_value( Location_Provider_Registry::SETTING_ACTIVE_PROVIDER ), 'the stored/default value is untouched' );
+	}
+
+	public function test_the_admin_select_shows_an_explicit_configured_choice_unchanged(): void {
+		$cdek = new Fake_Location_Provider( 'cdek', 'CDEK' );
+
+		$handler = $this->collect_with( [ $cdek ], [ 'woodev_location_active_provider' => 'dadata', 'woodev_location_token' => 'dadata-token' ] )->get_settings_handler();
+
+		$this->assertSame( 'dadata', $handler->get_display_value( Location_Provider_Registry::SETTING_ACTIVE_PROVIDER ) );
+	}
+
+	// -------------------------------------------------------------------------
+	// A provider's required key blocks a save only while that provider is active (#1424)
+	// -------------------------------------------------------------------------
+
+	public function test_the_dadata_token_is_not_an_unconditional_required_setting(): void {
+		$handler = $this->collect_with( [ new Fake_Location_Provider( 'cdek', 'CDEK' ) ], [] )->get_settings_handler();
+
+		$this->assertFalse( $handler->get_setting( 'token' )->is_required(), 'an unconditional required blocked every save under another provider' );
+	}
+
+	public function test_saving_a_plugin_provider_with_an_empty_dadata_token_succeeds(): void {
+		$handler = $this->collect_with( [ new Fake_Location_Provider( 'cdek', 'CDEK' ) ], [] )->get_settings_handler();
+
+		$this->assertSame( [], $handler->validate_values( [ 'active_provider' => 'cdek', 'token' => '' ] ) );
+		$this->assertSame( [], $handler->validate_values( [ 'active_provider' => 'cdek' ] ) );
+	}
+
+	public function test_saving_dadata_with_an_empty_token_fails_with_the_required_error(): void {
+		$handler = $this->collect_with( [ new Fake_Location_Provider( 'cdek', 'CDEK' ) ], [] )->get_settings_handler();
+
+		$errors = $handler->validate_values( [ 'active_provider' => 'dadata', 'token' => '' ] );
+
+		$this->assertSame( [ 'token' => 'Обязательное поле.' ], $errors );
+	}
+
+	public function test_choosing_dadata_without_sending_the_token_fails_while_none_is_stored(): void {
+		$handler = $this->collect_with( [ new Fake_Location_Provider( 'cdek', 'CDEK' ) ], [] )->get_settings_handler();
+
+		$this->assertSame( [ 'token' => 'Обязательное поле.' ], $handler->validate_values( [ 'active_provider' => 'dadata' ] ) );
+	}
+
+	public function test_choosing_dadata_passes_when_a_token_is_already_stored_or_sent(): void {
+		$handler = $this->collect_with( [ new Fake_Location_Provider( 'cdek', 'CDEK' ) ], [ 'woodev_location_token' => 'stored-token' ] )->get_settings_handler();
+
+		$this->assertSame( [], $handler->validate_values( [ 'active_provider' => 'dadata' ] ), 'the stored token counts' );
+		$this->assertSame( [], $handler->validate_values( [ 'active_provider' => 'dadata', 'token' => 'new-token' ] ) );
+	}
+
+	public function test_clearing_the_token_of_the_provider_in_force_fails(): void {
+		$handler = $this->collect_with( [ new Fake_Location_Provider( 'cdek', 'CDEK' ) ], [ 'woodev_location_token' => 'stored-token' ] )->get_settings_handler();
+
+		$this->assertSame( [ 'token' => 'Обязательное поле.' ], $handler->validate_values( [ 'token' => '' ] ) );
+	}
+
+	public function test_clearing_a_token_nobody_uses_is_allowed(): void {
+		$handler = $this->collect_with( [ new Fake_Location_Provider( 'cdek', 'CDEK' ) ], [ 'woodev_location_active_provider' => 'cdek', 'woodev_location_token' => 'stored-token' ] )->get_settings_handler();
+
+		$this->assertSame( [], $handler->validate_values( [ 'token' => '' ] ) );
+	}
+
+	public function test_a_save_that_touches_neither_the_provider_nor_the_token_is_never_blocked(): void {
+		$handler = $this->collect_with( [ new Fake_Location_Provider( 'cdek', 'CDEK' ) ], [ 'woodev_location_active_provider' => 'dadata' ] )->get_settings_handler();
+
+		$this->assertSame( [], $handler->validate_values( [ Location_Provider_Registry::SETTING_ADDRESS_SUGGESTIONS => true ] ) );
+	}
+
+	public function test_a_non_default_providers_required_key_is_required_only_while_it_is_the_chosen_one(): void {
+		$cdek = $this->unconfigured_provider( 'cdek' );
+
+		$handler = $this->collect_with( [ $cdek, new Fake_Location_Provider( 'other', 'Other' ) ], [] )->get_settings_handler();
+
+		$this->assertSame( [ 'cdek_key' => 'Обязательное поле.' ], $handler->validate_values( [ 'active_provider' => 'cdek', 'cdek_key' => '' ] ) );
+		$this->assertSame( [], $handler->validate_values( [ 'active_provider' => 'other', 'cdek_key' => '' ] ) );
 	}
 
 	public function test_active_provider_filter_can_swap_the_resolved_instance(): void {

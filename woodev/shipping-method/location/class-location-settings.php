@@ -110,6 +110,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 		private array $provider_fields;
 
 		/**
+		 * Provider-declared fields that are required only while their OWN provider
+		 * is the active one, `field id => owning provider id` (#1424). Filled by
+		 * {@see self::register_provider_field()} from the `required_for_provider`
+		 * key {@see Location_Provider_Registry::collect_all_provider_fields()} tags
+		 * onto a field its provider declares `required`; enforced by
+		 * {@see self::validate_values()}.
+		 *
+		 * @since 2.0.9
+		 * @var array<string, string>
+		 */
+		private array $required_for_provider = [];
+
+		/**
 		 * Offered `default_locality_policy` select options, `id => label` (Task 14;
 		 * spec D11), already gated by the active provider's `locate` capability —
 		 * resolved by the caller
@@ -253,6 +266,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 		 */
 		public function get_display_value( $setting_id ) {
 			$value = parent::get_display_value( $setting_id );
+
+			// #1424: the select shows the provider IN FORCE. A shop with no token for
+			// the stored/default DaData runs on the first configured provider
+			// ({@see Location_Provider_Registry::resolve_effective_provider()}); showing
+			// DaData there would mislead the merchant about what the checkout uses.
+			if ( Location_Provider_Registry::SETTING_ACTIVE_PROVIDER === $setting_id ) {
+				$effective = ( $this->resolve_active_provider_id )( (string) $value );
+
+				return isset( $this->provider_options[ $effective ] ) ? $effective : $value;
+			}
 
 			if ( in_array( $setting_id, [ Location_Provider_Registry::SETTING_FIELD_MODE_REGION, Location_Provider_Registry::SETTING_FIELD_MODE_SETTLEMENT ], true ) ) {
 				return ( $this->resolve_displayed_field_mode )( $setting_id, (string) $value );
@@ -661,7 +684,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 		 */
 		public function validate_values( array $values ): array {
 
-			$errors      = parent::validate_values( $values );
+			$errors      = $this->add_required_for_provider_errors( $values, parent::validate_values( $values ) );
 			$policy_id   = Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY;
 			$record_id   = Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD;
 			$provider_id = Location_Provider_Registry::SETTING_ACTIVE_PROVIDER;
@@ -744,9 +767,73 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 			return $errors;
 		}
 
+		/**
+		 * Adds the "required while its provider is active" errors (#1424).
+		 *
+		 * A provider declares its token `required` because the provider cannot
+		 * work without it, but the token field stays on the form while ANOTHER
+		 * provider is active (DaData is the address fallback, so its key must stay
+		 * reachable). An unconditional `required` therefore blocked saving the
+		 * «Локация» section for a shop that picked the CDEK provider and has no
+		 * DaData token. The requirement is checked here instead, against the
+		 * provider the save moves to.
+		 *
+		 * A save touching neither `active_provider` nor the field is never blocked
+		 * (same discipline as the #406 check below). A SUBMITTED provider id is
+		 * compared raw — an explicit pick of DaData must demand its token even
+		 * though DaData would not be the provider in force without one; a STORED
+		 * id goes through {@see self::$resolve_active_provider_id}, so a shop
+		 * running on the fallback provider can still clear a token it never had.
+		 *
+		 * @since 2.0.9
+		 *
+		 * @param array<string,mixed>  $values submitted setting_id => value.
+		 * @param array<string,string> $errors errors found so far.
+		 *
+		 * @return array<string,string>
+		 */
+		private function add_required_for_provider_errors( array $values, array $errors ): array {
+			$provider_id        = Location_Provider_Registry::SETTING_ACTIVE_PROVIDER;
+			$provider_submitted = array_key_exists( $provider_id, $values );
+
+			foreach ( $this->required_for_provider as $field_id => $owner_id ) {
+				if ( isset( $errors[ $field_id ] ) || ( ! $provider_submitted && ! array_key_exists( $field_id, $values ) ) ) {
+					continue;
+				}
+
+				$active_id = $provider_submitted
+					? (string) $values[ $provider_id ]
+					: ( $this->resolve_active_provider_id )( (string) $this->get_value( $provider_id ) );
+
+				if ( $owner_id !== $active_id ) {
+					continue;
+				}
+
+				$value        = array_key_exists( $field_id, $values ) ? $values[ $field_id ] : $this->get_value( $field_id, false );
+				$control      = $this->get_setting( $field_id )->get_control();
+				$control_type = $control instanceof \Woodev_Control ? $control->get_type() : null;
+
+				if ( \Woodev_Setting::is_empty_value( $control_type, $value ) ) {
+					$errors[ $field_id ] = __( 'Обязательное поле.', 'woodev-plugin-framework' );
+				}
+			}
+
+			return $errors;
+		}
+
 		private function register_provider_field( string $field_id, array $field ): void {
 			$type = $field['type'] ?? \Woodev_Setting::TYPE_STRING;
 			unset( $field['type'] );
+
+			// #1424: `required_for_provider` (tagged by the registry onto a field its
+			// provider declares `required`) turns the requirement conditional — it is
+			// enforced in validate_values() while that provider is active, never as an
+			// unconditional `required` that also blocks saves under other providers.
+			if ( isset( $field['required_for_provider'] ) ) {
+				$this->required_for_provider[ $field_id ] = (string) $field['required_for_provider'];
+				$field['required']                        = false;
+			}
+			unset( $field['required_for_provider'] );
 
 			// Issue #373: a provider declares its OWN field copy (name/description/
 			// tooltip) right alongside the field itself — that is where a plugin
