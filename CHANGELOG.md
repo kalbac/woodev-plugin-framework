@@ -1,6 +1,32 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.0.9] — 2026-10-23
+### Bug Fixes
+- **location**: Fall back to a configured provider; a provider's key is required only while it is active (#1429)
+
+
+### Documentation
+- **spec**: Russian Post U24 decided — option Б (#44) (#1413)
+
+- **s193**: Framework 2.0.8 and Russian Post 2.0.0 released; handoff (#1414)
+
+- **skill**: Shipping methods must offer the full merchant price-option set (#1416)
+
+- **s193**: Evening — Russian Post #54 merged, 2.0.2 ready, publications drafted; handoff (#1418)
+
+- **s193**: Night — Russian Post 2.0.2 and 2.0.3 released, publications live; handoff (#1419)
+
+- **s194**: Russian Post 2.0.3 and 2.0.4 on EDD, galleries, #1420; handoff (#1422)
+
+- **s194**: Retire staged rollouts; hand s195 the Support AI ticket triage (#1423)
+
+
+### Features
+- **location**: Warn a plugin that half-declares the location layer (#1420) (#1421)
+
+
+
 ## [2.0.8] — 2026-10-22
 ### Bug Fixes
 - **checkout**: Refresh the classic checkout when the payment method changes under a pickup method (#1390)
