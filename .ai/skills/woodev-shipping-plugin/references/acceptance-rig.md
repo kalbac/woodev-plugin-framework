@@ -84,6 +84,8 @@ migration](settings-migration.md#mechanics-that-held-up)).
 
 ## Two carriers on the rig
 
+First, run the carrier **alone**: your plugin as the ONLY Woodev plugin on the site, with the location layer checked end to end — the «Локация» section in the settings, the region → settlement cascade and the address hint at checkout. CDEK and Yandex open the layer for the whole fleet, so with either of them active a plugin that declares only part of it still looks fine (Russian Post 2.0.3, framework #1420).
+
 Release needs two compatible carrier plugins on one site (framework #1179). Boot both and run each one's gate: the traps are in
 [shipping traps](traps.md#a-second-carrier-plugin-on-the-same-site). Give each carrier its own checkout field id, marker meta key
 and webhook route, and scope every locator to one carrier's slot — `button.woodev-pickup-trigger` is a strict-mode violation as

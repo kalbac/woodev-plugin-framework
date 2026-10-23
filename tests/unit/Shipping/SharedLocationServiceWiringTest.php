@@ -161,6 +161,9 @@ final class SharedLocationServiceWiringTest extends TestCase {
 		Functions\when( 'is_user_logged_in' )->justReturn( false );
 		Functions\when( 'wc_get_base_location' )->justReturn( [ 'country' => 'RU', 'state' => '' ] );
 		Functions\when( 'wc_parse_relative_date_option' )->justReturn( [ 'number' => '', 'unit' => 'days' ] );
+		// The fixture plugin opts OUT of the layer yet inherits an adapter from its base fixture — the half-declared
+		// notice (#1420) is fired and is not what this test is about.
+		Functions\when( '_doing_it_wrong' )->justReturn( null );
 
 		Location_Provider_Registry::instance()->reset_for_tests();
 	}
