@@ -286,6 +286,23 @@ then DaData is the only thing the fallback chain can still use for addresses, an
 reachable to enter. That predicate is deliberately country-scoped (a provider can serve `address`
 in one country and not another), resolved through `Location_Service::resolve_default_country()`.
 
+**The provider in force is resolved at read time, never written (#1424).** An explicit choice of a
+registered non-default provider always wins, even half-configured. Everything else — the setting
+unset, naming a provider nothing is registered under, or naming DaData while DaData has no token —
+resolves to the first provider whose `is_configured()` is true: DaData itself when configured, then
+the plugin providers in registration order (the order the `woodev_location_providers` filter
+returned them); with none configured it stays DaData. A shop migrated from v1 without a DaData key
+therefore runs on the carrier's own provider instead of switching the whole layer off. The
+«Провайдер локаций» select shows this provider in force (`Location_Settings::get_display_value()`),
+not the stored default; no option is written.
+
+**A provider's `required` field is required only while that provider is active.** The provider keeps
+declaring `'required' => true` (the abstract `is_configured()` default reads it), but the registry tags
+the field `required_for_provider` and registers it as NOT required: DaData's token stays visible under
+the CDEK provider (address fallback), so an unconditional `required` blocked saving the section for a
+shop that has no DaData token. `Location_Settings::validate_values()` enforces the requirement against
+the provider the save moves to.
+
 ## Licensing (`woodev/licensing/`)
 
 License validation has its own API layer (`woodev/licensing/api/`) for talking to the Woodev store.

@@ -302,6 +302,11 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Prov
 		 *    rig's fixture) is the reference implementation of this model.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.9 A field declared `required` is required only while this provider is the
+		 *              active one (#1424): the registry registers it as not required and
+		 *              {@see \Woodev\Framework\Shipping\Location\Location_Settings::validate_values()}
+		 *              enforces it. The flag still marks the provider as unconfigured while the
+		 *              field is empty ({@see Abstract_Location_Provider::is_configured()}).
 		 * @since 2.0.2 Documented the two-model contract fork and the
 		 *              now-shared field-id namespace (#375/#377).
 		 *

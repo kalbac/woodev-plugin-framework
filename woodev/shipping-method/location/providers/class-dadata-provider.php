@@ -365,6 +365,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 					'tooltip'     => __( 'API-ключ сервиса DaData (Suggestions API) — без него подсказки городов и адресов в форме оформления заказа работать не будут.', 'woodev-plugin-framework' ),
 					'description' => __( 'Получить токен можно в <a href="https://dadata.ru/profile/#info" target="_blank" rel="noopener noreferrer">личном кабинете DaData</a>.', 'woodev-plugin-framework' ),
 					'default'     => '',
+					// Required only while DaData is the active provider (#1424): the
+					// registry turns this flag into a conditional rule. Without a token
+					// DaData is not configured, so the layer runs on another provider.
 					'required'    => true,
 					'sensitive'   => true,
 				],

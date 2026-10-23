@@ -96,6 +96,8 @@ class LocationRouteTest extends TestCase {
 	}
 
 	protected function tearDown(): void {
+		remove_filter( Location_Provider_Registry::FILTER_PROVIDERS, '__return_empty_array', PHP_INT_MAX );
+
 		if ( false === $this->original_dadata_token ) {
 			delete_option( self::OPTION_DADATA_TOKEN );
 		} else {
@@ -227,6 +229,18 @@ class LocationRouteTest extends TestCase {
 		rest_get_server();
 	}
 
+	/**
+	 * Makes the layer truly provider-less for an INACTIVE-layer test: since #1424 the registry
+	 * falls back to the first configured plugin provider when DaData is not configured, and the
+	 * rig fixture plugin registers `test-list`, which is always configured. Neutralising the
+	 * DaData token alone therefore no longer leaves the layer inactive. Removed in tearDown().
+	 *
+	 * @return void
+	 */
+	private function register_no_plugin_providers(): void {
+		add_filter( Location_Provider_Registry::FILTER_PROVIDERS, '__return_empty_array', PHP_INT_MAX );
+	}
+
 	// -------------------------------------------------------------------------
 	// 1. Routes register through the real registry gate, on rest_api_init,
 	//    with NO checkout page ever visited or is_checkout() ever true.
@@ -274,6 +288,7 @@ class LocationRouteTest extends TestCase {
 	// -------------------------------------------------------------------------
 
 	public function test_a_guest_can_call_suggest_and_it_never_fatals_with_no_provider_configured(): void {
+		$this->register_no_plugin_providers();
 		$this->activate_and_boot_rest();
 
 		wp_set_current_user( 0 );
@@ -310,6 +325,7 @@ class LocationRouteTest extends TestCase {
 	 * sent, so there is nothing a stray always-present session could mask.
 	 */
 	public function test_a_guest_suggest_response_carries_within_applied_false_when_the_layer_is_inactive(): void {
+		$this->register_no_plugin_providers();
 		$this->activate_and_boot_rest();
 
 		wp_set_current_user( 0 );
@@ -368,6 +384,7 @@ class LocationRouteTest extends TestCase {
 	}
 
 	public function test_select_with_a_valid_nonce_but_inactive_layer_returns_404_not_500(): void {
+		$this->register_no_plugin_providers();
 		$this->activate_and_boot_rest();
 
 		wp_set_current_user( 0 );
@@ -651,6 +668,7 @@ class LocationRouteTest extends TestCase {
 	}
 
 	public function test_forget_with_a_valid_nonce_but_inactive_layer_returns_404_not_500(): void {
+		$this->register_no_plugin_providers();
 		$this->activate_and_boot_rest();
 
 		wp_set_current_user( 0 );

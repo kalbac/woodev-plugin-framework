@@ -2627,7 +2627,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 						continue;
 					}
 
-					$field           = (array) $field;
+					$field = (array) $field;
+
+					// #1424: a field its provider declares `required` is required only
+					// while THAT provider is active — Location_Settings enforces it from
+					// this tag. An unconditional `required` also blocked saving the
+					// section under any other provider whenever the field stayed visible
+					// (DaData's token does: it is the address fallback).
+					if ( ! empty( $field['required'] ) ) {
+						$field['required_for_provider'] = $provider_id;
+					}
+
 					$field['show_if'] = self::DEFAULT_PROVIDER_ID === $provider_id
 						? [
 							'operator' => 'in',
@@ -2948,16 +2958,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 			return self::DEFAULT_PROVIDER_ID;
 		}
 
-
 		/**
-		 * Resolves a provider id to its registered instance, falling back to
-		 * {@see self::DEFAULT_PROVIDER_ID} and applying {@see self::FILTER_ACTIVE_PROVIDER}
-		 * — the single resolution both {@see self::get_active_provider()} and
-		 * {@see self::register_settings()} now go through (PR #304 review finding
-		 * 6), so the admin settings surface and the runtime can never disagree
-		 * about which provider is active.
+		 * Resolves a provider id to its registered instance, falling back per
+		 * {@see self::resolve_effective_provider()} and applying
+		 * {@see self::FILTER_ACTIVE_PROVIDER} — the single resolution both
+		 * {@see self::get_active_provider()} and {@see self::register_settings()}
+		 * go through (PR #304 review finding 6), so the admin settings surface
+		 * and the runtime can never disagree about which provider is active.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.9 An unset id, an unknown id or an unconfigured default
+		 *              provider resolves to the first configured provider
+		 *              (#1424) instead of the unconfigured default.
 		 *
 		 * @param string $active_id A provider id — typically the store setting's
 		 *                          raw value, already resolved to a KNOWN id by
@@ -2967,7 +2979,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 * @return Location_Provider|null
 		 */
 		private function resolve_active_provider_for_id( string $active_id ): ?Location_Provider {
-			$provider = $this->providers[ $active_id ] ?? $this->providers[ self::DEFAULT_PROVIDER_ID ] ?? null;
+			$provider = $this->resolve_effective_provider( $active_id );
 
 			/**
 			 * Filters the resolved active location provider instance.
@@ -2998,6 +3010,51 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 			$filtered = apply_filters( self::FILTER_ACTIVE_PROVIDER, $provider, $active_id );
 
 			return null === $filtered || $filtered instanceof Location_Provider ? $filtered : $provider;
+		}
+
+		/**
+		 * The provider an id stands for in practice, before
+		 * {@see self::FILTER_ACTIVE_PROVIDER} runs.
+		 *
+		 * A registered id that is not {@see self::DEFAULT_PROVIDER_ID} is the
+		 * merchant's explicit choice and always wins (even half-configured: the
+		 * layer degrades on its own, nothing is swapped behind the merchant's
+		 * back). Everything else — an unset id, an id nothing is registered under,
+		 * or the default DaData provider while it has no token — would leave the
+		 * shop with a provider that cannot serve anything, which switches the
+		 * whole layer off and hides every carrier's methods (#1424: a v1 shop
+		 * migrates without a DaData token). It resolves, at READ time and without
+		 * writing an option, to the first provider that IS configured: DaData
+		 * itself when it is, otherwise the remaining providers in registration
+		 * order (the order {@see self::FILTER_PROVIDERS} returned them), so the
+		 * answer is deterministic. When no provider is configured at all it stays
+		 * the default provider, as before.
+		 *
+		 * @since 2.0.9
+		 *
+		 * @param string $active_id A provider id, typically the stored setting.
+		 *
+		 * @return Location_Provider|null
+		 */
+		private function resolve_effective_provider( string $active_id ): ?Location_Provider {
+			$default   = $this->providers[ self::DEFAULT_PROVIDER_ID ] ?? null;
+			$requested = $this->providers[ $active_id ] ?? null;
+
+			if ( null !== $requested && ( self::DEFAULT_PROVIDER_ID !== $active_id || $requested->is_configured() ) ) {
+				return $requested;
+			}
+
+			if ( null !== $default && $default->is_configured() ) {
+				return $default;
+			}
+
+			foreach ( $this->providers as $id => $provider ) {
+				if ( self::DEFAULT_PROVIDER_ID !== $id && $provider->is_configured() ) {
+					return $provider;
+				}
+			}
+
+			return $default;
 		}
 	}
 
