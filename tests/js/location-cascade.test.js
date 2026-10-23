@@ -9229,15 +9229,112 @@ describe( '#1426 — a stale page nonce must not break the location layer', () =
 		return document.querySelector( '.woodev-location-notice' );
 	}
 
-	it( 'sends NO nonce header on a public suggestion read', () => {
-		boot( { settlement: true } );
+	// A refreshed (`live`) node is the ONLY source of the guest/customer decision: the first render
+	// may come from a page cache and says nothing about who is looking.
+	function addLiveNode( nonce, auth ) {
+		document.body.insertAdjacentHTML(
+			'beforeend',
+			`<span id="${ NODE_ID }" data-woodev-location-nonce="${ nonce }" data-woodev-location-live="1" data-woodev-location-auth="${ auth }" hidden></span>`
+		);
+	}
 
+	function suggest() {
 		callFor( 'billing_city' ).fetch( 'Мос' );
 
-		const req = fetchCalls[ fetchCalls.length - 1 ];
+		return fetchCalls[ fetchCalls.length - 1 ];
+	}
+
+	it( 'a refreshed node that says GUEST: the suggestion read carries no nonce at all', () => {
+		boot( { settlement: true } );
+		addLiveNode( 'fresh-nonce', '0' );
+
+		const req = suggest();
 
 		expect( req.url ).toContain( SUGGEST_URL );
 		expect( req.init.headers ).toEqual( {} );
+	} );
+
+	it( 'a refreshed node that says LOGGED IN: the read is signed with the fresh nonce (core would demote an unsigned one to user 0)', () => {
+		boot( { settlement: true } );
+		addLiveNode( 'fresh-nonce', '1' );
+
+		expect( suggest().init.headers ).toEqual( { 'X-WP-Nonce': 'fresh-nonce' } );
+	} );
+
+	it( 'a node that is NOT live (first render, possibly cached) is never trusted: the read is signed', () => {
+		boot( { settlement: true } );
+		addNonceNode( 'cached-nonce' ); // no live/auth attributes — a footer print
+
+		expect( suggest().init.headers ).toEqual( { 'X-WP-Nonce': 'cached-nonce' } );
+	} );
+
+	it( 'no node at all: the read is signed with the page nonce, as before #1426', () => {
+		boot( { settlement: true } );
+
+		expect( suggest().init.headers ).toEqual( { 'X-WP-Nonce': 'test-nonce' } );
+	} );
+
+	it( 'a signed read refused for its nonce retries once; the refresh tells a GUEST, so the retry is unsigned', async () => {
+		boot( { settlement: true } );
+		addNonceNode( 'cached-nonce' );
+
+		window.jQuery( document.body ).on( 'update_checkout', () => {
+			document.getElementById( NODE_ID ).remove();
+			addLiveNode( 'fresh-nonce', '0' );
+			window.jQuery( document.body ).trigger( 'updated_checkout' );
+		} );
+
+		const pending = callFor( 'billing_city' ).fetch( 'Мос' );
+		const reads = () => fetchCalls.filter( ( c ) => c.url.startsWith( SUGGEST_URL ) );
+
+		reads()[ 0 ].resolve( NONCE_ERROR, false );
+		await settleChain();
+
+		expect( reads().length ).toBe( 2 );
+		expect( reads()[ 1 ].init.headers ).toEqual( {} );
+
+		reads()[ 1 ].resolve( { suggestions: [], within_status: 'not_requested' } );
+
+		await expect( pending ).resolves.toEqual( [] );
+	} );
+
+	it( 'a signed read refused for its nonce retries once; the refresh tells a CUSTOMER, so the retry carries the fresh nonce', async () => {
+		boot( { settlement: true } );
+		addNonceNode( 'cached-nonce' );
+
+		window.jQuery( document.body ).on( 'update_checkout', () => {
+			document.getElementById( NODE_ID ).remove();
+			addLiveNode( 'fresh-nonce', '1' );
+			window.jQuery( document.body ).trigger( 'updated_checkout' );
+		} );
+
+		callFor( 'billing_city' ).fetch( 'Мос' );
+
+		const reads = () => fetchCalls.filter( ( c ) => c.url.startsWith( SUGGEST_URL ) );
+
+		reads()[ 0 ].resolve( NONCE_ERROR, false );
+		await settleChain();
+
+		expect( reads().length ).toBe( 2 );
+		expect( reads()[ 1 ].init.headers ).toEqual( { 'X-WP-Nonce': 'fresh-nonce' } );
+	} );
+
+	it( 'a read refused twice rejects — one retry, never a loop', async () => {
+		boot( { settlement: true } );
+		addNonceNode( 'cached-nonce' );
+
+		const pending = callFor( 'billing_city' ).fetch( 'Мос' ).catch( ( e ) => e );
+		const reads = () => fetchCalls.filter( ( c ) => c.url.startsWith( SUGGEST_URL ) );
+
+		// A newer nonce is already on the page, so no update_checkout is awaited.
+		document.getElementById( NODE_ID ).dataset.woodevLocationNonce = 'newer';
+		reads()[ 0 ].resolve( NONCE_ERROR, false );
+		await settleChain();
+		reads()[ 1 ].resolve( NONCE_ERROR, false );
+		await settleChain();
+
+		expect( reads().length ).toBe( 2 );
+		expect( await pending ).toEqual( NONCE_ERROR );
 	} );
 
 	it( 'signs /select with the live node nonce, not the one baked into the page', () => {

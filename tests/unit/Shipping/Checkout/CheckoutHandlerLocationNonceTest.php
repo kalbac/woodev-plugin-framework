@@ -84,6 +84,24 @@ final class CheckoutHandlerLocationNonceTest extends TestCase {
 		$this->assertStringContainsString( 'hidden', $html );
 	}
 
+	/**
+	 * The first render may come from a page cache, captured for somebody else: it must make no claim
+	 * about who is looking. Only the `update_checkout` fragment — an AJAX answer for THIS request's
+	 * cookies, never cached — says whether the visitor is logged in.
+	 */
+	public function test_the_footer_node_makes_no_claim_about_who_is_logged_in(): void {
+		Functions\when( 'is_checkout' )->justReturn( true );
+		Functions\expect( 'is_user_logged_in' )->never();
+		$this->stub_nonce();
+
+		ob_start();
+		Checkout_Handler::print_location_nonce_node();
+		$html = (string) ob_get_clean();
+
+		$this->assertStringNotContainsString( 'data-woodev-location-live', $html );
+		$this->assertStringNotContainsString( 'data-woodev-location-auth', $html );
+	}
+
 	public function test_the_footer_prints_nothing_off_the_checkout_page(): void {
 		Functions\when( 'is_checkout' )->justReturn( false );
 		Functions\expect( 'wp_create_nonce' )->never();
@@ -97,6 +115,8 @@ final class CheckoutHandlerLocationNonceTest extends TestCase {
 	public function test_the_fragment_is_keyed_by_the_node_id_and_carries_a_freshly_minted_nonce(): void {
 		$this->stub_nonce();
 
+		Functions\when( 'is_user_logged_in' )->justReturn( false );
+
 		$fragments = Checkout_Handler::inject_location_nonce_fragment( [] );
 
 		$this->assertSame( [ '#' . Checkout_Handler::LOCATION_NONCE_NODE_ID ], array_keys( $fragments ) );
@@ -104,11 +124,32 @@ final class CheckoutHandlerLocationNonceTest extends TestCase {
 		$this->assertStringContainsString( 'data-woodev-location-nonce="NONCE-FOR-wp_rest"', $fragments['#woodev-location-nonce'] );
 	}
 
+	public function test_the_fragment_is_live_and_says_a_guest_is_a_guest(): void {
+		Functions\when( 'is_user_logged_in' )->justReturn( false );
+		$this->stub_nonce();
+
+		$markup = Checkout_Handler::inject_location_nonce_fragment( [] )['#woodev-location-nonce'];
+
+		$this->assertStringContainsString( 'data-woodev-location-live="1"', $markup );
+		$this->assertStringContainsString( 'data-woodev-location-auth="0"', $markup );
+	}
+
+	public function test_the_fragment_says_a_logged_in_customer_is_logged_in(): void {
+		Functions\when( 'is_user_logged_in' )->justReturn( true );
+		$this->stub_nonce();
+
+		$markup = Checkout_Handler::inject_location_nonce_fragment( [] )['#woodev-location-nonce'];
+
+		$this->assertStringContainsString( 'data-woodev-location-live="1"', $markup );
+		$this->assertStringContainsString( 'data-woodev-location-auth="1"', $markup );
+	}
+
 	/**
 	 * `woocommerce_update_order_review_fragments` is a SHARED array — WooCommerce's own
 	 * order-review fragment lives in it. Replacing it instead of adding a key blanks the totals.
 	 */
 	public function test_the_fragment_leaves_every_other_fragment_untouched(): void {
+		Functions\when( 'is_user_logged_in' )->justReturn( false );
 		$this->stub_nonce();
 
 		$fragments = Checkout_Handler::inject_location_nonce_fragment(

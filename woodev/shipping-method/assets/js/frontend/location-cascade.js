@@ -381,13 +381,23 @@
 	 *
 	 * @param {string} url
 	 * @param {Object} init
+	 * @param {function(*): ?Promise} [onRefused] Given the parsed body of a non-OK answer; returning
+	 *   a Promise adopts it as the outcome instead of the rejection.
 	 * @returns {Promise<*>}
 	 */
-	function fetchJson( url, init ) {
+	function fetchJson( url, init, onRefused ) {
 		return fetch( url, init ).then( function( response ) {
 			return response.json().then(
 				function( body ) {
-					return response.ok ? body : Promise.reject( body );
+					if ( response.ok ) {
+						return body;
+					}
+
+					// `onRefused` may answer with a Promise of a SECOND attempt. It lives down here, not in
+					// a `.then()` chained on the result, so the success path keeps its exact tick count.
+					var again = onRefused ? onRefused( body ) : null;
+
+					return again || Promise.reject( body );
 				},
 				function() {
 					return response.ok ? {} : Promise.reject( {} );
@@ -431,13 +441,9 @@
 	}
 
 	/**
-	 * The `X-WP-Nonce` header for a location REST WRITE (`/select`, `/forget`) — the only two
-	 * routes whose `permission_callback` checks it.
-	 *
-	 * A public read must not send one: core's `rest_cookie_check_errors()` answers 403
-	 * `rest_cookie_invalid_nonce` for ANY request carrying an invalid nonce, `__return_true` or
-	 * not, whereas a request with no nonce at all is simply treated as logged out. See
-	 * {@see readHeaders}.
+	 * The `X-WP-Nonce` header for a location REST call that is signed: the writes (`/select`,
+	 * `/forget` — the only two routes whose `permission_callback` checks it) and, for a
+	 * logged-in customer, the reads ({@see readHeaders}).
 	 *
 	 * @param {Object} entry
 	 * @returns {Object}
@@ -447,14 +453,37 @@
 	}
 
 	/**
-	 * The headers of a PUBLIC location read (`/suggest`, `/list`): none. A stale or foreign
-	 * nonce on a cached checkout page made the whole suggestion list answer 403 for guests
-	 * while an administrator, who is never served the cache, saw it work (#1426).
+	 * The headers of a location READ (`/suggest`, `/list`).
 	 *
+	 * A GUEST reads without a nonce: core's `rest_cookie_check_errors()` answers 403
+	 * `rest_cookie_invalid_nonce` for ANY request carrying an invalid nonce — `__return_true`
+	 * or not — while a request with none is simply treated as logged out. A stale or foreign
+	 * nonce on a cached checkout made every guest's suggestion list answer 403 while an
+	 * administrator, never served the cache, saw it work (#1426).
+	 *
+	 * A LOGGED-IN customer must NOT: with no nonce core demotes the request to user 0, the
+	 * controller's `bridge_wc_session()` then starts a GUEST session over the customer's numeric
+	 * one and WooCommerce destroys it (the cart goes), and the scope loses the user-meta chain.
+	 * So the read is signed unless the node says the visitor is a guest.
+	 *
+	 * That decision is read from the node ONLY once an `update_checkout` has refreshed it
+	 * (`data-woodev-location-live="1"`): the first render may come from a page cache, and a flag
+	 * baked into a cached page proves nothing about who is looking at it. Until then the read is
+	 * signed with whatever nonce is at hand, and a refusal takes the refresh-and-retry path in
+	 * {@see readJson}.
+	 *
+	 * @param {Object} entry
 	 * @returns {Object}
 	 */
-	function readHeaders() {
-		return {};
+	function readHeaders( entry ) {
+		var node = document.getElementById( LOCATION_NONCE_NODE_ID );
+		var data = node && node.dataset ? node.dataset : null;
+
+		if ( data && '1' === data.woodevLocationLive && '1' !== data.woodevLocationAuth ) {
+			return {};
+		}
+
+		return nonceHeader( entry );
 	}
 
 	/**
@@ -1631,13 +1660,7 @@
 				within: scopeKeyFor( entry, node.level ),
 			} );
 
-			var init = { method: 'GET', headers: readHeaders() };
-
-			if ( opts && opts.signal ) {
-				init.signal = opts.signal;
-			}
-
-			return fetchJson( url, init ).then( function( body ) {
+			return readJson( entry, url, opts && opts.signal ).then( function( body ) {
 				var suggestions = body && Array.isArray( body.suggestions ) ? body.suggestions : [];
 
 				suggestions.forEach( function( suggestion ) {
@@ -1692,7 +1715,7 @@
 				within: scopeKeyFor( entry, node.level ),
 			} );
 
-			return fetchJson( url, { method: 'GET', headers: readHeaders() } ).then( function( body ) {
+			return readJson( entry, url ).then( function( body ) {
 				var localities = body && Array.isArray( body.localities ) ? body.localities : [];
 
 				// Issue #361, critic finding s104: `/location/list` carries the SAME `within_status`
@@ -2692,6 +2715,41 @@
 			$body.on( 'updated_checkout', finish );
 			triggerCheckoutUpdate();
 		} );
+	}
+
+	/**
+	 * GETs one location read ({@see readHeaders} for what it is signed with). A read refused for
+	 * its nonce is retried ONCE after {@see refreshNonce}, re-deciding its headers: the refresh
+	 * is what tells a guest (retry unsigned) from a customer (retry with the fresh nonce).
+	 * Only a SIGNED read can be refused for a nonce, so an unsigned one never retries.
+	 *
+	 * @param {Object}      entry
+	 * @param {string}      url
+	 * @param {AbortSignal} [signal]
+	 * @returns {Promise<*>}
+	 */
+	function readJson( entry, url, signal ) {
+		function attempt( retried ) {
+			var headers = readHeaders( entry );
+			var sentNonce = headers[ 'X-WP-Nonce' ];
+			var init = { method: 'GET', headers: headers };
+
+			if ( signal ) {
+				init.signal = signal;
+			}
+
+			return fetchJson( url, init, function( error ) {
+				if ( retried || ! sentNonce || ! isNonceFailure( error ) ) {
+					return null;
+				}
+
+				return refreshNonce( entry, sentNonce ).then( function() {
+					return attempt( true );
+				} );
+			} );
+		}
+
+		return attempt( false );
 	}
 
 	/**
@@ -4204,8 +4262,8 @@
 			},
 			buildUrl: buildUrl,
 			fetchJson: fetchJson,
-			readHeaders: function() {
-				return readHeaders();
+			fetchRead: function( url ) {
+				return readJson( entry, url );
 			},
 		};
 

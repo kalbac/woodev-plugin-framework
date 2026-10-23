@@ -22,12 +22,21 @@ cache, sees everything work. The first diagnosis («the nonce belongs to another
 
 ## Fix
 
-❌ A public read signed with the page-load nonce; a write that reads only the page-load config.
+❌ A read signed with the page-load nonce for everybody — or, the first attempt at a fix, a read UNSIGNED for everybody.
 
-✅ Public reads (`/suggest`, `/list`) send no `X-WP-Nonce` (`readHeaders()` in `location-cascade.js`). Writes read the live nonce
-from `#woodev-location-nonce` — printed by `Checkout_Handler::print_location_nonce_node()` and replaced on every `update_checkout`
-by `inject_location_nonce_fragment()`, an AJAX request a page cache never serves. A write refused for its nonce retries ONCE after
-an `update_checkout`; a second refusal shows the existing «Could not save your choice» notice and clears the stale locality key.
+⚠ Unsigned for a LOGGED-IN customer is worse than the 403: core demotes the request to user 0
+(`rest_cookie_check_errors()` → `wp_set_current_user( 0 )`), the controller's `bridge_wc_session()` then starts the WooCommerce
+session as a guest and `WC_Session_Handler::init_session_cookie()` DESTROYS the customer's numeric session (the cart goes), and
+`build_scope()` loses the user-meta chain. Measured on the rig and with the real classes
+(`tests/integration/Shipping/LocationReadAuthTest.php`).
+
+✅ `readHeaders()` in `location-cascade.js`: a GUEST reads (`/suggest`, `/list`) with no `X-WP-Nonce`; a logged-in customer's read is
+signed. Who is looking comes from `#woodev-location-nonce` — printed by `Checkout_Handler::print_location_nonce_node()` and replaced
+on every `update_checkout` by `inject_location_nonce_fragment()`, an AJAX answer computed for THIS request's cookies that a page
+cache never serves — and only once the node is `data-woodev-location-live="1"`; the first render (possibly cached for somebody
+else) makes no claim, so the read is signed and a refusal takes the refresh-and-retry path. Writes (`/select`, `/forget`) always
+sign with the node's nonce; a write or a signed read refused for its nonce retries ONCE after an `update_checkout`; a final
+refusal of a write shows the existing «Could not save your choice» notice and clears the stale locality key.
 
 ⚠ Testing trap: WooCommerce skips `replaceWith()` for a fragment whose markup equals the previous response's. A probe that plants
 a stale node AFTER the first `update_checkout` is never refreshed — simulate the cache by rewriting the served DOCUMENT instead.

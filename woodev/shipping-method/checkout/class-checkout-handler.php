@@ -279,7 +279,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 				return;
 			}
 
-			$markup = self::location_nonce_node_markup();
+			// Not `live`: this first render may come from a page cache, so it must not tell the cascade
+			// who is looking — only a refreshed node does (see location_nonce_node_markup()).
+			$markup = self::location_nonce_node_markup( false );
 
 			// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped at build time.
 			echo $markup;
@@ -299,7 +301,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * @return array<string, string>
 		 */
 		public static function inject_location_nonce_fragment( array $fragments ): array {
-			$fragments[ '#' . self::LOCATION_NONCE_NODE_ID ] = self::location_nonce_node_markup();
+			$fragments[ '#' . self::LOCATION_NONCE_NODE_ID ] = self::location_nonce_node_markup( true );
 
 			return $fragments;
 		}
@@ -307,15 +309,26 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		/**
 		 * The node's markup — one builder for the first render and its replacement, so the two cannot diverge.
 		 *
+		 * A `$live` node (the `update_checkout` fragment) also says whether the visitor is logged in:
+		 * `location-cascade.js` signs a logged-in customer's reads with the nonce and lets only a guest
+		 * read without one. It is carried by the fragment alone because that is an AJAX answer computed
+		 * for THIS request's cookies and never served from a page cache; the first render, which a cache
+		 * may have captured for somebody else, carries no such claim.
+		 *
 		 * @since 2.0.10
+		 *
+		 * @param bool $live whether the markup is a live (uncached) answer.
 		 *
 		 * @return string
 		 */
-		private static function location_nonce_node_markup(): string {
+		private static function location_nonce_node_markup( bool $live ): string {
 			return sprintf(
-				'<span id="%1$s" data-woodev-location-nonce="%2$s" hidden></span>',
+				'<span id="%1$s" data-woodev-location-nonce="%2$s"%3$s hidden></span>',
 				esc_attr( self::LOCATION_NONCE_NODE_ID ),
-				esc_attr( wp_create_nonce( 'wp_rest' ) )
+				esc_attr( wp_create_nonce( 'wp_rest' ) ),
+				$live
+					? sprintf( ' data-woodev-location-live="1" data-woodev-location-auth="%s"', is_user_logged_in() ? '1' : '0' )
+					: ''
 			);
 		}
 
