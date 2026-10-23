@@ -516,6 +516,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 				\Woodev\Framework\Shipping\Checkout\Blocks\Locality_Blocks::register( $checkout_handler );
 			}
 
+			// #1420: developer notice for a plugin that declares only part of the Location Provider layer. Here, not
+			// next to declare_needed() above, because the checkout handler's declared fields are known only now.
+			$this->report_half_declared_location_layer( $checkout_handler );
+
 			// inbound carrier webhook REST route
 			$webhook_handler = $this->get_webhook_handler();
 			if ( null !== $webhook_handler ) {
@@ -2821,6 +2825,78 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 */
 		public function get_location_adapter(): ?Location\Location_Adapter {
 			return null;
+		}
+
+		/**
+		 * Reports, with `_doing_it_wrong()`, a plugin that declares only half of the Location Provider layer.
+		 *
+		 * The layer has three parts a plugin must state together: {@see self::get_location_adapter()},
+		 * {@see self::needs_location_provider()} and the three `Field::source_location()` checkout fields
+		 * (region, settlement, address). Missing either of the last two leaves the layer closed on a site where
+		 * that plugin is the ONLY Woodev plugin — no «Локация» section, no cascade, no address hints — while a
+		 * fleet that holds a second, correctly declared plugin opens it for everyone and hides the mistake.
+		 *
+		 * Two cases are reported, each as a developer notice only (production behaviour is unchanged):
+		 *
+		 * 1. The plugin overrides `get_location_adapter()` but `needs_location_provider()` is `false`. The override
+		 *    is detected by reflection, never by calling the getter — an adapter getter can build an API client.
+		 * 2. The plugin opted in, yet its checkout handler does not declare ALL THREE `source_location()` levels
+		 *    (region, settlement, address); the notice names the missing ones. A plugin without a checkout
+		 *    handler is left alone.
+		 *
+		 * Called once from {@see self::add_hooks()}, at the point where the checkout handler — and so its declared
+		 * fields — is known.
+		 *
+		 * @since 2.0.9
+		 *
+		 * @internal Wired from {@see self::add_hooks()}; public only so the unit tests can reach it.
+		 *
+		 * @param Checkout\Checkout_Handler|null $checkout_handler This plugin's checkout handler, if it has one.
+		 *
+		 * @return void
+		 */
+		public function report_half_declared_location_layer( ?Checkout\Checkout_Handler $checkout_handler ): void {
+
+			if ( ! $this->needs_location_provider() ) {
+				if ( ( new \ReflectionMethod( $this, 'get_location_adapter' ) )->getDeclaringClass()->getName() !== self::class ) {
+					_doing_it_wrong(
+						__METHOD__,
+						sprintf(
+							'Shipping plugin "%s" overrides get_location_adapter() but needs_location_provider() returns false, so the Location Provider layer stays closed when it is the only Woodev plugin on the site; override needs_location_provider() to return true.',
+							esc_html( (string) $this->get_id() )
+						),
+						'2.0.9'
+					);
+				}
+
+				return;
+			}
+
+			if ( null === $checkout_handler ) {
+				return;
+			}
+
+			$declared = [];
+			foreach ( $checkout_handler->get_fields()->get_fields() as $field ) {
+				if ( 'location' === ( $field['source_kind'] ?? null ) && isset( $field['location_level'] ) ) {
+					$declared[] = $field['location_level'];
+				}
+			}
+
+			$missing = array_values( array_diff( Location\Location_Record::LEVELS, $declared ) );
+			if ( [] === $missing ) {
+				return;
+			}
+
+			_doing_it_wrong(
+				__METHOD__,
+				sprintf(
+					'Shipping plugin "%s" declares needs_location_provider() but its checkout handler has no field declared with Field::source_location() for the %s level(s), so there is no complete locality cascade or address hint; declare the region, settlement and address fields.',
+					esc_html( (string) $this->get_id() ),
+					implode( ', ', $missing )
+				),
+				'2.0.9'
+			);
 		}
 
 		/**
