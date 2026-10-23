@@ -2840,8 +2840,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 *
 		 * 1. The plugin overrides `get_location_adapter()` but `needs_location_provider()` is `false`. The override
 		 *    is detected by reflection, never by calling the getter — an adapter getter can build an API client.
-		 * 2. The plugin opted in, yet its checkout handler declares no field with a `source_location()` level.
-		 *    A plugin without a checkout handler is left alone.
+		 * 2. The plugin opted in, yet its checkout handler does not declare ALL THREE `source_location()` levels
+		 *    (region, settlement, address); the notice names the missing ones. A plugin without a checkout
+		 *    handler is left alone.
 		 *
 		 * Called once from {@see self::add_hooks()}, at the point where the checkout handler — and so its declared
 		 * fields — is known.
@@ -2875,17 +2876,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 				return;
 			}
 
+			$declared = [];
 			foreach ( $checkout_handler->get_fields()->get_fields() as $field ) {
-				if ( 'location' === ( $field['source_kind'] ?? null ) ) {
-					return;
+				if ( 'location' === ( $field['source_kind'] ?? null ) && isset( $field['location_level'] ) ) {
+					$declared[] = $field['location_level'];
 				}
+			}
+
+			$missing = array_values( array_diff( Location\Location_Record::LEVELS, $declared ) );
+			if ( [] === $missing ) {
+				return;
 			}
 
 			_doing_it_wrong(
 				__METHOD__,
 				sprintf(
-					'Shipping plugin "%s" declares needs_location_provider() but its checkout handler has no field declared with Field::source_location(), so there is no locality cascade or address hint; declare the region, settlement and address fields.',
-					esc_html( (string) $this->get_id() )
+					'Shipping plugin "%s" declares needs_location_provider() but its checkout handler has no field declared with Field::source_location() for the %s level(s), so there is no complete locality cascade or address hint; declare the region, settlement and address fields.',
+					esc_html( (string) $this->get_id() ),
+					implode( ', ', $missing )
 				),
 				'2.0.9'
 			);
