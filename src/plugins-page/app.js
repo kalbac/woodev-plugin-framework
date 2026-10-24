@@ -29,6 +29,7 @@ export default function App( { config } ) {
 	const [ tab, setTab ] = useState( 'catalog' );
 	const [ purchases, setPurchases ] = useState( null );
 	const [ installState, setInstallState ] = useState( {} );
+	const [ installErrors, setInstallErrors ] = useState( {} );
 
 	const connected = !! ( config.accountEnabled && config.account && config.account.connected );
 
@@ -37,6 +38,7 @@ export default function App( { config } ) {
 		if ( ! id ) {
 			return;
 		}
+		setInstallErrors( ( prev ) => ( { ...prev, [ id ]: '' } ) );
 		setInstallState( ( prev ) => ( { ...prev, [ id ]: 'installing' } ) );
 		apiFetch( {
 			path: '/woodev/v1/account/install',
@@ -44,7 +46,15 @@ export default function App( { config } ) {
 			data: { download_id: id },
 		} )
 			.then( () => setInstallState( ( prev ) => ( { ...prev, [ id ]: 'done' } ) ) )
-			.catch( () => setInstallState( ( prev ) => ( { ...prev, [ id ]: 'error' } ) ) );
+			.catch( ( installError ) => {
+				setInstallState( ( prev ) => ( { ...prev, [ id ]: 'error' } ) );
+				const message = installError && 'string' === typeof installError.message ? installError.message : '';
+				const causeIndex = message.indexOf( 'Причина:' );
+				setInstallErrors( ( prev ) => ( {
+					...prev,
+					[ id ]: causeIndex >= 0 ? message.slice( causeIndex ) : '',
+				} ) );
+			} );
 	};
 
 	useEffect( () => {
@@ -111,6 +121,7 @@ export default function App( { config } ) {
 					installed={ config.installed || [] }
 					updates={ config.updates || [] }
 					installState={ installState }
+					installErrors={ installErrors }
 					onInstall={ installPlugin }
 				/>
 			) : (
@@ -142,6 +153,7 @@ export default function App( { config } ) {
 								updates={ config.updates || [] }
 								purchased={ purchased }
 								installState={ installState }
+								installErrors={ installErrors }
 								onInstall={ installPlugin }
 							/>
 						</Fragment>

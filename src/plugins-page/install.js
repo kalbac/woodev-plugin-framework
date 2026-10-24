@@ -15,12 +15,14 @@ import { __ } from '@wordpress/i18n';
  * @param {Object}   props           Props.
  * @param {string}   props.state     'idle' | 'installing' | 'done' | 'error'.
  * @param {boolean}  props.isUpdate  Whether this replaces an installed plugin.
+ * @param {string}   props.errorMessage REST error returned for the failed install.
  * @param {Function} props.onInstall Click handler (no args).
  * @return {JSX.Element} The control.
  */
 export default function InstallButton( {
 	state = 'idle',
 	isUpdate = false,
+	errorMessage = '',
 	onInstall,
 } ) {
 	if ( 'done' === state ) {
@@ -60,18 +62,25 @@ export default function InstallButton( {
 	}
 
 	return (
-		<button
-			type="button"
-			className={
-				'woodev-install woodev-install__button' +
-				( failed ? ' woodev-install__button--error' : '' )
-			}
-			onClick={ onInstall }
-			disabled={ installing }
-			aria-busy={ installing }
-		>
-			{ label }
-		</button>
+		<Fragment>
+			<button
+				type="button"
+				className={
+					'woodev-install woodev-install__button' +
+					( failed ? ' woodev-install__button--error' : '' )
+				}
+				onClick={ onInstall }
+				disabled={ installing }
+				aria-busy={ installing }
+			>
+				{ label }
+			</button>
+			{ failed && errorMessage ? (
+				<p className="woodev-install__error" role="alert">
+					{ errorMessage }
+				</p>
+			) : null }
+		</Fragment>
 	);
 }
 

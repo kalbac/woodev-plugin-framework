@@ -72,6 +72,13 @@ class Testable_Account_Installer extends \Woodev_Account_Installer {
 	}
 }
 
+/** Installer exposing the production debug lookup without overriding it. */
+class Debug_Lookup_Account_Installer extends \Woodev_Account_Installer {
+	public function debug_enabled_for_download( int $download_id ): bool {
+		return $this->is_debug_enabled_for_download( $download_id );
+	}
+}
+
 /**
  * @covers \Woodev_Account_Installer
  */
@@ -173,6 +180,42 @@ final class AccountInstallerTest extends TestCase {
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'woodev_install_invalid', $result->get_error_code() );
+	}
+
+	public function test_incompatible_plugin_debug_lookup_uses_the_v2_option(): void {
+		$plugin_id   = 'debug-lookup-test';
+		$download_id = 48151;
+		$definition  = \Woodev\Framework\Framework_Plugin_Loader_Definition::from_array(
+			[
+				'plugin_id'         => $plugin_id,
+				'download_id'       => $download_id,
+				'plugin_name'       => 'Debug Lookup Test',
+				'plugin_version'    => '1.0.0',
+				'framework_version' => '1.0.0',
+				'plugin_file'       => __FILE__,
+				'platform'          => \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WORDPRESS,
+				'requirements'      => [ 'php' => '7.4', 'wordpress' => '6.3' ],
+				'callback'          => static function (): void {},
+			]
+		);
+		$this->assertInstanceOf( \Woodev\Framework\Framework_Plugin_Loader_Definition::class, $definition );
+
+		$bootstrap = \Woodev_Plugin_Bootstrap::instance();
+		$property  = new \ReflectionProperty( \Woodev_Plugin_Bootstrap::class, 'incompatible_framework_plugins' );
+		$property->setValue( $bootstrap, [ [ 'definition' => $definition ] ] );
+		$active_plugins = new \ReflectionProperty( \Woodev_Plugin_Bootstrap::class, 'active_plugins' );
+		$active_plugins->setValue( $bootstrap, [] );
+
+		$requested_options = [];
+		Functions\when( 'get_option' )->alias(
+			static function ( string $option, $default = false ) use ( &$requested_options ): string {
+				$requested_options[] = $option;
+				return 'yes';
+			}
+		);
+
+		$this->assertTrue( ( new Debug_Lookup_Account_Installer() )->debug_enabled_for_download( $download_id ) );
+		$this->assertSame( [ 'woodev_debug_lookup_test_advanced_enable_debug' ], $requested_options );
 	}
 
 	public function test_install_rejects_when_not_connected(): void {
@@ -301,6 +344,20 @@ final class AccountInstallerTest extends TestCase {
 		$this->assertStringNotContainsString( 'token=', $logger->message );
 		$this->assertStringNotContainsString( 'signature=', $logger->message );
 		$this->assertSame( 'woodev-account-installer', $logger->context['source'] );
+	}
+
+	public function test_upgrader_cause_uses_the_last_skin_message(): void {
+		$installer = new Testable_Account_Installer();
+		$skin      = new class() {
+			public function get_upgrade_messages(): array {
+				return [ 'Downloading package…', 'Unpacking…', 'Installation failed: archive is invalid.' ];
+			}
+		};
+
+		$this->assertSame(
+			'Installation failed: archive is invalid.',
+			$installer->extract_error( (object) [ 'result' => [] ], $skin )
+		);
 	}
 
 	public function test_install_error_includes_cause_only_when_debug_is_enabled(): void {

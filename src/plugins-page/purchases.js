@@ -33,6 +33,7 @@ function formatDate( raw ) {
  * @param {Array}       props.installed    Installed download ids.
  * @param {Array}       props.updates      Installed plugin ids refused by the current framework.
  * @param {Object}      props.installState Per-download install lifecycle state.
+ * @param {Object}      props.installErrors Per-download REST error messages.
  * @param {Function}    props.onInstall    Install handler (receives a download id).
  * @return {JSX.Element} The tab.
  */
@@ -42,6 +43,7 @@ export default function PurchasesTab( {
 	installed = [],
 	updates = [],
 	installState = {},
+	installErrors = {},
 	onInstall,
 } ) {
 	if ( ! data ) {
@@ -91,6 +93,7 @@ export default function PurchasesTab( {
 					action = (
 						<InstallButton
 							state={ installState[ item.id ] || 'idle' }
+							errorMessage={ installErrors[ item.id ] || '' }
 							isUpdate
 							onInstall={ () =>
 								onInstall && onInstall( item.id )
@@ -107,6 +110,7 @@ export default function PurchasesTab( {
 					action = (
 						<InstallButton
 							state={ installState[ item.id ] || 'idle' }
+							errorMessage={ installErrors[ item.id ] || '' }
 							onInstall={ () =>
 								onInstall && onInstall( item.id )
 							}

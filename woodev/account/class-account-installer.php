@@ -274,7 +274,7 @@ if ( ! class_exists( 'Woodev_Account_Installer' ) ) :
 				$error = (string) $skin->get_error_messages();
 			} elseif ( method_exists( $skin, 'get_upgrade_messages' ) ) {
 				$messages = (array) $skin->get_upgrade_messages();
-				$error    = implode( ' ', $messages );
+				$error    = (string) end( $messages );
 			} else {
 				$error = '';
 			}
@@ -295,7 +295,7 @@ if ( ! class_exists( 'Woodev_Account_Installer' ) ) :
 			$error = preg_replace_callback(
 				'~https?://[^\s<>"\']+~i',
 				static function ( array $matches ): string {
-					$url   = rtrim( $matches[0], '.,);' );
+					$url   = preg_replace( '/[.,);…]+$/u', '', $matches[0] );
 					$parts = wp_parse_url( $url );
 
 					if ( ! is_array( $parts ) || empty( $parts['host'] ) ) {
@@ -366,11 +366,9 @@ if ( ! class_exists( 'Woodev_Account_Installer' ) ) :
 					continue;
 				}
 
-				$option_key = 'woocommerce_' . str_replace( '-', '_', $definition->get_plugin_id() ) . '_settings';
-				$settings   = get_option( $option_key, [] );
-				$debug      = is_array( $settings ) ? ( $settings['enable_debug'] ?? $settings['enable_debug_mode'] ?? 'no' ) : 'no';
+				$option_key = 'woodev_' . str_replace( '-', '_', $definition->get_plugin_id() ) . '_advanced_enable_debug';
 
-				return in_array( $debug, [ true, 'yes', '1', 1 ], true );
+				return 'yes' === get_option( $option_key, 'no' );
 			}
 
 			return false;
