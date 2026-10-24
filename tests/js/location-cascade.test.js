@@ -4579,6 +4579,34 @@ describe( 'location chain restore (issue #330, spec §7)', () => {
 		expect( seen ).toEqual( [ { key: 'dadata:addr1', level: 'address', settlementKey: 'dadata:city1', implicit: false } ] );
 	} );
 
+	it( 'boot fire: settlementCenter survives when `current` IS the settlement — the seed must not drop the chain node\'s coordinates (#1432)', () => {
+		const seen = [];
+		document.body.addEventListener( 'woodev_location_applied', ( event ) => seen.push( event.detail ) );
+
+		boot( {
+			settlement: true,
+			current: { key: 'cdek:288', level: 'settlement' },
+			chain: { settlement: { key: 'cdek:288', level: 'settlement', lat: 43.1155, lon: 131.8855 } },
+		} );
+
+		expect( seen ).toEqual( [ {
+			key: 'cdek:288', level: 'settlement', settlementKey: 'cdek:288', settlementCenter: [ 43.1155, 131.8855 ], implicit: false,
+		} ] );
+	} );
+
+	it( 'boot fire: a chain node of ANOTHER key never lends its coordinates to the current record (#1432)', () => {
+		const seen = [];
+		document.body.addEventListener( 'woodev_location_applied', ( event ) => seen.push( event.detail ) );
+
+		boot( {
+			settlement: true,
+			current: { key: 'cdek:288', level: 'settlement' },
+			chain: { settlement: { key: 'cdek:999', level: 'settlement', lat: 1, lon: 2 } },
+		} );
+
+		expect( seen[ 0 ].settlementCenter ).toBeUndefined();
+	} );
+
 	it( 'adopts a /select response\'s own rebuilt chain, so the very next suggest in the SAME page load is scoped by the settlement it names', async () => {
 		boot( { settlement: true, address: true } );
 
@@ -4671,6 +4699,45 @@ describe( 'location chain restore (issue #330, spec §7)', () => {
 
 		expect( last.key ).toBe( 'dadata:address-cherkizovo' );
 		expect( last.settlementKey ).toBe( 'dadata:settlement-pushkino' );
+	} );
+
+	// detail.settlementCenter (issue #1432) — the settlement's own coordinates, so the pickup map
+	// can centre on the city when its geocoder gives no answer.
+	function settleWithChain( chainNode ) {
+		selectViaFake( callFor( 'billing_city' ), {
+			key: 'dadata:vl', label: 'г Владивосток', level: 'settlement',
+			record: { key: 'dadata:vl', provider_id: 'dadata', level: 'settlement', country: 'RU', label: 'г Владивосток' },
+		} );
+
+		fetchCalls[ fetchCalls.length - 1 ].resolve( {
+			current: { key: 'dadata:vl', level: 'settlement' },
+			persisted: true,
+			chain: { settlement: chainNode },
+		} );
+
+		return flushMicrotasks();
+	}
+
+	it( 'settlementCenter carries the settlement\'s [lat, lon] from the server chain (issue #1432)', async () => {
+		boot( { settlement: true } );
+
+		const seen = [];
+		document.body.addEventListener( 'woodev_location_applied', ( event ) => seen.push( event.detail ) );
+
+		await settleWithChain( { key: 'dadata:vl', level: 'settlement', lat: 43.1155, lon: 131.8855 } );
+
+		expect( seen[ seen.length - 1 ].settlementCenter ).toEqual( [ 43.1155, 131.8855 ] );
+	} );
+
+	it( 'settlementCenter is absent when the chain node has no coordinates, or half of them (issue #1432)', async () => {
+		boot( { settlement: true } );
+
+		const seen = [];
+		document.body.addEventListener( 'woodev_location_applied', ( event ) => seen.push( event.detail ) );
+
+		await settleWithChain( { key: 'dadata:vl', level: 'settlement', lat: 43.1155 } );
+
+		expect( seen[ seen.length - 1 ] ).toEqual( { key: 'dadata:vl', level: 'settlement', settlementKey: 'dadata:vl', implicit: false } );
 	} );
 
 	it( 'settlementKey is empty when no settlement has ever been picked on this page load (issue #336)', async () => {

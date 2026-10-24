@@ -1641,6 +1641,63 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		}
 
 		/**
+		 * #1432: the settlement's own coordinates ride in the block, so the pickup map can centre
+		 * on the city when its geocoder gives no answer.
+		 */
+		public function test_config_carries_the_settlement_center_when_the_record_has_coordinates(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			$record = Location_Record::from_array(
+				[
+					'key'         => 'dadata:vladivostok',
+					'provider_id' => 'dadata',
+					'level'       => Location_Record::LEVEL_SETTLEMENT,
+					'country'     => 'RU',
+					'lat'         => 43.1155,
+					'lon'         => 131.8855,
+				]
+			);
+
+			$plugin = $this->location_plugin( $record, null, true );
+			$config = $this->make_handler( [ 'plugin' => $plugin ] )->get_js_config();
+
+			$this->assertSame( [ 43.1155, 131.8855 ], $config['location']['settlementCenter'] );
+		}
+
+		/**
+		 * #1432: no coordinates (most records), or only one of the pair — `null`, never a half
+		 * centre the map would trust.
+		 */
+		public function test_config_settlement_center_is_null_without_a_full_coordinate_pair(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			$plugin = $this->location_plugin( $this->location_record( 'dadata:fias-1' ), null, true );
+			$config = $this->make_handler( [ 'plugin' => $plugin ] )->get_js_config();
+
+			$this->assertNull( $config['location']['settlementCenter'] );
+
+			$half = Location_Record::from_array(
+				[
+					'key'         => 'dadata:fias-2',
+					'provider_id' => 'dadata',
+					'level'       => Location_Record::LEVEL_SETTLEMENT,
+					'country'     => 'RU',
+					'lat'         => 43.1155,
+				]
+			);
+
+			$config = $this->make_handler( [ 'plugin' => $this->location_plugin( $half, null, true ) ] )->get_js_config();
+
+			$this->assertNull( $config['location']['settlementCenter'] );
+		}
+
+		/**
 		 * The fallback half of the same rule — an address typed without ever picking a
 		 * settlement must still publish a usable key (its own), never `''`, which would
 		 * needlessly disable the browser's own DOM fallback (gotcha
@@ -3692,6 +3749,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				'showNearest'      => 'Show the nearest',
 				'continueCheckout' => 'Continue to checkout',
 				'zoomIn'           => 'Zoom in to see pickup points',
+				'cityUnresolved'   => 'Could not determine the city on the map — enter an address in the search',
 				'sectionPoints'    => 'Pickup points',
 				'sectionAddresses' => 'Addresses',
 				'filterTypes'      => 'Point type',

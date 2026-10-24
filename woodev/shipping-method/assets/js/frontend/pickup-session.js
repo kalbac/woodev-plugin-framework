@@ -27,6 +27,8 @@
  *   - `getLocality()`                    CONTEXT: the locality NAME the map provider centres on.
  *   - `getLocalityKey()`                 CONTEXT: the locality the points query is addressed by.
  *   - `getGeocodeQuery()`                OPTIONAL, CONTEXT: city + region, what the map geocodes to centre itself (#1425).
+ *   - `getLocalityCenter()`              OPTIONAL, CONTEXT: the city's own `[lat, lon]`, what the map centres on when the
+ *                                        geocode gives no answer (#1432), or `null`.
  *   - `getContextKey()` (optional)       CONTEXT: a fingerprint of what the checkout is about (shipping
  *                                        method, locality); a dismissed dialog's late answer is applied
  *                                        only while it is unchanged.
@@ -569,6 +571,8 @@
 			locality: host.getLocality(),
 			// Optional on the host: a surface without it centres on the bare city name.
 			geocodeQuery: 'function' === typeof host.getGeocodeQuery ? host.getGeocodeQuery() : '',
+			// Optional on the host too: the map's fallback when the geocode gives no answer (#1432).
+			localityCenter: 'function' === typeof host.getLocalityCenter ? host.getLocalityCenter() : null,
 			defaultLocation: config.defaultLocation,
 			pointIcons: config.pointIcons,
 			accentColor: config.accentColor,
@@ -3046,6 +3050,15 @@
 					// message asks for.
 					clearInitialBusy();
 					showFetchMessage( 'zoomIn' );
+				} );
+
+				// #1432: the buyer's city could not be placed (no geocode, no coordinates) and the
+				// provider fetches nothing for its placeholder camera. Say so — a silent empty map
+				// reads as "no points" — and leave the search box to do the work. Settles the
+				// initial busy state like `bboxTooWide`: nothing else will.
+				provider.on( 'cityUnresolved', function() {
+					clearInitialBusy();
+					showFetchMessage( 'cityUnresolved' );
 				} );
 
 				provider.on( 'searchResults', function( results ) {

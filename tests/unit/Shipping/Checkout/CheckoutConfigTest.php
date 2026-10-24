@@ -1627,6 +1627,42 @@ class CheckoutConfigTest extends TestCase {
 		$this->assertSame( [ 'key' => 'dadata:address-1', 'level' => 'address' ], $config['location']['current'] );
 	}
 
+	/**
+	 * #1432: a chain node carries the record's coordinates when it has both, so the pickup map
+	 * can centre on the city without its geocoder.
+	 */
+	public function test_chain_node_carries_the_record_coordinates(): void {
+		$settlement = Location_Record::from_array(
+			[
+				'key'         => 'dadata:settlement-1',
+				'provider_id' => 'dadata',
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'country'     => 'RU',
+				'lat'         => 43.1155,
+				'lon'         => 131.8855,
+			]
+		);
+
+		$service = new Checkout_Config_Fake_Location_Service(
+			true,
+			[ 'region' => true, 'settlement' => true, 'address' => true ],
+			[ 'record' => $settlement, 'implicit' => false, 'saved_at' => 0 ],
+			[ 'RU' ],
+			Location_Provider_Registry::MODE_TYPEAHEAD,
+			[],
+			'RU',
+			[ Location_Record::LEVEL_SETTLEMENT => $settlement ]
+		);
+		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertSame(
+			[ 'settlement' => [ 'key' => 'dadata:settlement-1', 'level' => 'settlement', 'lat' => 43.1155, 'lon' => 131.8855 ] ],
+			$config['location']['chain']
+		);
+		// `current` stays exactly `{ key, level }`.
+		$this->assertSame( [ 'key' => 'dadata:settlement-1', 'level' => 'settlement' ], $config['location']['current'] );
+	}
+
 	// -------------------------------------------------------------------------
 	// D15 — the client learns WHICH LEVELS are served, never WHICH PROVIDER
 	// -------------------------------------------------------------------------

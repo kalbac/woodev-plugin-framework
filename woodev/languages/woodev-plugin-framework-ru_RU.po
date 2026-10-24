@@ -3359,6 +3359,10 @@ msgstr "Продолжить оформление заказа"
 msgid "Zoom in to see pickup points"
 msgstr "Приблизьте карту, чтобы увидеть пункты выдачи"
 
+#: shipping-method/pickup/class-pickup-handler.php:1366
+msgid "Could not determine the city on the map — enter an address in the search"
+msgstr "Не удалось определить город на карте — введите адрес в поиске"
+
 #: shipping-method/pickup/class-pickup-handler.php:1284
 msgid "Pickup points"
 msgstr "Пункты выдачи"

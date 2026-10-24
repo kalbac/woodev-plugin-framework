@@ -1361,6 +1361,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 					'Zoom in to see pickup points',
 					'woodev-plugin-framework'
 				),
+				// #1432: the map could not place the buyer's city (geocoder gave no answer and the
+				// location record has no coordinates). Shown instead of a silent Moscow.
+				'cityUnresolved'   => __(
+					'Could not determine the city on the map — enter an address in the search',
+					'woodev-plugin-framework'
+				),
 				'sectionPoints'    => __( 'Pickup points', 'woodev-plugin-framework' ),
 				'sectionAddresses' => __( 'Addresses', 'woodev-plugin-framework' ),
 				'filterTypes'      => __( 'Point type', 'woodev-plugin-framework' ),
@@ -3754,7 +3760,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *              OPPOSITE of #334's storage-key rule, which must refuse rather than fall
 		 *              back (see {@see self::current_location_record()}).
 		 *
-		 * @return array{current: array{key: string}, settlementKey: string, implicit: bool}|null
+		 * @since 2.0.11 Publishes `settlementCenter` — that settlement's `[ lat, lon ]` or `null`
+		 *               (#1432), the map's fallback centre when its geocoder gives no answer.
+		 *
+		 * @return array{current: array{key: string}, settlementKey: string, settlementCenter: array{0: float, 1: float}|null, implicit: bool}|null
 		 */
 		protected function location_config_block(): ?array {
 			if ( null === $this->plugin || ! $this->plugin->get_location_service()->is_active() ) {
@@ -3772,7 +3781,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				// #336 wrote the settlement key in here instead, which made the block
 				// self-contradictory (`current.key` naming one record while `implicit`
 				// described another) and broke the field's contract for every other reader.
-				'current'       => [
+				'current'          => [
 					'key' => null !== $customer ? $customer['record']->key() : '',
 				],
 				// The map's addressing locality rides in its OWN field, mirroring the
@@ -3781,8 +3790,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				// `''` when the chain holds no settlement — `pickup-mount.js` then falls back
 				// to `current.key`, which is the fallback #336 exists to preserve (a customer
 				// who typed an address without picking a settlement must still see points).
-				'settlementKey' => null !== $settlement ? $settlement->key() : '',
-				'implicit'      => null !== $customer && (bool) $customer['implicit'],
+				'settlementKey'    => null !== $settlement ? $settlement->key() : '',
+				// `[ lat, lon ]` of that settlement when the provider recorded both, else `null`
+				// (#1432) — what the map centres on when its own geocoder gives no answer.
+				'settlementCenter' => null !== $settlement && null !== $settlement->lat() && null !== $settlement->lon()
+					? [ $settlement->lat(), $settlement->lon() ]
+					: null,
+				'implicit'         => null !== $customer && (bool) $customer['implicit'],
 			];
 		}
 

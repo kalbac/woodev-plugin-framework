@@ -33,14 +33,14 @@
  * `pointClick( key )`, `clusterClick( { coords } )`, `boundsChange( bbox )`, `bboxTooWide()`,
  * `visibleChange( keys )`, `zoomChange( { canZoomIn, canZoomOut } )`,
  * `nothingNearby( { key, distanceMeters, name } )`,
- * `searchResults( { points, addresses } )`, `searchCleared()`,
+ * `searchResults( { points, addresses } )`, `searchCleared()`, `cityUnresolved()`,
  * `addressFocused( { latLng, label } )`, `addressMatchedPoint( { key } )`,
  * `error( { code, message } )`. `bbox` is the flat `[lat1,lng1,lat2,lng2]` shape
  * `pickup-datasource.js`'s `serializePointsQuery()` expects (see {@see flattenBounds}).
  *
  * CONFIG is FLAT — the merge `pickup-mount.js`'s `buildProviderConfig()` builds from
  * `mapConfig` (`scriptUrl`, `ns`, `hasApiKey`, `lang`, `layers`, `copyrights`) plus
- * `strategy`/`locality`/`i18n`, and (Task 20) the plugin-level `defaultLocation`
+ * `strategy`/`locality`/`localityCenter`/`i18n`, and (Task 20) the plugin-level `defaultLocation`
  * (`{ center: [lat,lng], zoom }`, ALWAYS present — a required plugin argument),
  * `pointIcons` (`{ typeCode: { default, active } }`, `active` always filled — cascade
  * tier 2, see the "ICONS ARE AN HTML LAYOUT" section below for tier 1, a POINT's own
@@ -317,6 +317,21 @@
 
 	/** @type {number} technical placeholder zoom paired with {@see DEFAULT_CENTER}. */
 	var DEFAULT_ZOOM = 2;
+
+	/**
+	 * The ymaps behaviours that zoom (and so can drift the centre towards a pointer or a pinch's
+	 * focal point) — switched off while the viewport is held (#1432). Only those the map has
+	 * ENABLED are touched, and exactly that set is restored.
+	 *
+	 * @type {string[]}
+	 */
+	var ZOOM_BEHAVIORS = [ 'scrollZoom', 'dblClickZoom', 'multiTouch', 'rightMouseButtonMagnifier' ];
+
+	/** @type {number} how far, in degrees, a held camera's centre may drift (rounding of a zoom) and still count as unmoved (#1432). */
+	var HELD_CENTER_TOLERANCE_DEG = 0.0001;
+
+	/** @type {number} zoom the map centres on a city's own coordinates at (#1432): a whole city. */
+	var LOCALITY_FALLBACK_ZOOM = 11;
 
 	/** @type {number} minimum zoom the map allows the customer to reach (Task 18, D-7). */
 	var MIN_ZOOM = 8;
@@ -908,6 +923,7 @@
 			clusterClick: [],
 			boundsChange: [],
 			bboxTooWide: [],
+			cityUnresolved: [],
 			visibleChange: [],
 			zoomChange: [],
 			nothingNearby: [],
@@ -922,6 +938,17 @@
 		 *  `zoomChange` — the dedupe baseline in {@see _emitZoomChange}. `null` means "nothing
 		 *  reported yet", which is why the first call always emits. */
 		this._zoomLimits = null;
+
+		// #1432: true while the buyer's city could not be placed on the map (no geocode, no
+		// coordinates) and the camera still sits on its placeholder — `_checkAndEmitBounds()`
+		// fetches nothing until the customer moves the map.
+		this._viewportHeld = false;
+
+		/** @type {number[]|null} the placeholder centre a held viewport is measured against. */
+		this._heldCenter = null;
+
+		/** @type {string[]} the zoom behaviours {@see _holdViewport} switched off, restored on release. */
+		this._heldBehaviors = [];
 
 		/** @type {Object.<string, Object>} the current groups, by key — see {@see setPoints}. */
 		this._groupsByKey = {};
@@ -1069,7 +1096,17 @@
 				// Fire once for the viewport just resolved, THEN start listening — in that
 				// order, so this initial call is never immediately followed by a redundant
 				// second one from a listener that was not registered yet.
-				self._checkAndEmitBounds();
+				if ( self._viewportHeld ) {
+					// #1432: the buyer's city could not be placed. No points are fetched for the
+					// placeholder camera; it stays held through zoom-only actions and is released
+					// when the camera centre moves away or an address is picked — see
+					// {@see _holdViewport}.
+					self._holdViewport();
+					self.emit( 'cityUnresolved', null );
+				} else {
+					self._checkAndEmitBounds();
+				}
+
 				self.map.events.add( 'boundschange', function() {
 					self._checkAndEmitBounds();
 
@@ -1552,10 +1589,14 @@
 	 * Resolves the map's initial viewport for `strategy: 'viewport'` (Task 18, D-7) — a no-op
 	 * for `strategy: 'bulk'`, which fits the camera to whatever {@see setPoints} is first called
 	 * with instead (see that method). A known `config.locality` is geocoded and its bounds
-	 * APPLIED (awaited — see the file docblock's first lesson); an empty locality, or a geocode
-	 * that resolves nothing, falls back to `config.defaultLocation` via `map.setCenter()`.
-	 * Neither fallback path emits an `error` — an unresolved geocode is not a broken map, just a
-	 * wider first viewport.
+	 * APPLIED (awaited — see the file docblock's first lesson). An EMPTY locality — the buyer has
+	 * no city yet — falls back to `config.defaultLocation` via `map.setCenter()`.
+	 *
+	 * A geocode that fails or resolves nothing (#1432) never lands on `defaultLocation`: that
+	 * silently showed a Vladivostok buyer the offices of Moscow. {@see _applyUnresolvedCity}
+	 * centres on the city's own coordinates (`config.localityCenter`) or, with none, holds the
+	 * map and reports `cityUnresolved`. Neither emits an `error` — a missing geocode is not a
+	 * broken map.
 	 *
 	 * `config.locality` MUST be a geocodable place name, not an opaque carrier code —
 	 * `ymaps.geocode()` is a free-text geocoder; see `pickup-mount.js`'s own
@@ -1591,9 +1632,7 @@
 				var bounds = extractGeocodeBounds( result );
 
 				if ( ! bounds ) {
-					self._applyDefaultLocation();
-
-					return undefined;
+					return self._applyUnresolvedCity();
 				}
 
 				// setBounds() is ASYNCHRONOUS — always RETURNED/awaited, never fire-and-forgotten.
@@ -1605,15 +1644,109 @@
 			},
 			function() {
 				if ( ! self._destroyed ) {
-					self._applyDefaultLocation();
+					return self._applyUnresolvedCity();
 				}
+
+				return undefined;
 			}
 		);
 	};
 
 	/**
-	 * Centres the map on `config.defaultLocation` — the shared fallback for every "could not
-	 * resolve a real viewport" case under `strategy: 'viewport'` (see {@see _resolveInitialViewport}).
+	 * What the initial viewport does when the buyer HAS a city but the geocoder gave no answer
+	 * (#1432). Never `defaultLocation` — that showed another city's offices as the buyer's own.
+	 *
+	 * 1. `config.localityCenter` (the customer's location record's own `[lat, lon]`) → centre on
+	 *    it at city zoom; the awaited move keeps the first `boundsChange` honest, like
+	 *    `setBounds()` above.
+	 * 2. Nothing to centre on → the map stays usable but HOLDS its viewport: `_viewportHeld`
+	 *    stops {@see _checkAndEmitBounds} from fetching the points of wherever the placeholder
+	 *    camera happens to sit, until its centre moves away or the customer picks an address —
+	 *    a zoom alone never releases it ({@see _holdViewport}). The caller learns of it through
+	 *    `cityUnresolved` (emitted from {@see init}).
+	 *
+	 * @returns {Promise<void>|undefined}
+	 */
+	WoodevYandexMapProvider.prototype._applyUnresolvedCity = function() {
+		var center = this.config.localityCenter;
+
+		if (
+			Array.isArray( center ) &&
+			2 === center.length &&
+			'number' === typeof center[ 0 ] && isFinite( center[ 0 ] ) && Math.abs( center[ 0 ] ) <= 90 &&
+			'number' === typeof center[ 1 ] && isFinite( center[ 1 ] ) && Math.abs( center[ 1 ] ) <= 180
+		) {
+			return this.map.setCenter( center, LOCALITY_FALLBACK_ZOOM );
+		}
+
+		this._viewportHeld = true;
+
+		return undefined;
+	};
+
+	/**
+	 * Starts holding the viewport (#1432): remembers the placeholder centre and turns the
+	 * {@see ZOOM_BEHAVIORS} the map has enabled off, so a zoom can neither fetch the placeholder's
+	 * points nor — wheel, double click, pinch and the right-button magnifier move the centre
+	 * towards the pointer — look like a move. The zoom buttons
+	 * zoom around the centre, which {@see _heldCameraMoved} reads as "not moved".
+	 *
+	 * @returns {void}
+	 */
+	WoodevYandexMapProvider.prototype._holdViewport = function() {
+		var behaviors = this.map.behaviors;
+
+		this._heldCenter = this.map.getCenter();
+		this._heldBehaviors = [];
+
+		if ( ! behaviors || 'function' !== typeof behaviors.disable ) {
+			return;
+		}
+
+		this._heldBehaviors = ZOOM_BEHAVIORS.filter( function( name ) {
+			return 'function' !== typeof behaviors.isEnabled || behaviors.isEnabled( name );
+		} );
+
+		if ( this._heldBehaviors.length > 0 ) {
+			behaviors.disable( this._heldBehaviors );
+		}
+	};
+
+	/**
+	 * Whether the camera centre has left the placeholder it was held on — a drag, or a camera fit
+	 * to a picked address. A zoom keeps the centre, so it never counts.
+	 *
+	 * @returns {boolean}
+	 */
+	WoodevYandexMapProvider.prototype._heldCameraMoved = function() {
+		var held = this._heldCenter;
+		var now = this.map.getCenter();
+
+		return ! held || ! now ||
+			Math.abs( now[ 0 ] - held[ 0 ] ) > HELD_CENTER_TOLERANCE_DEG ||
+			Math.abs( now[ 1 ] - held[ 1 ] ) > HELD_CENTER_TOLERANCE_DEG;
+	};
+
+	/**
+	 * Ends the hold: points load for the camera from here on, and the zoom gestures come back.
+	 *
+	 * @returns {void}
+	 */
+	WoodevYandexMapProvider.prototype._releaseViewport = function() {
+		this._viewportHeld = false;
+
+		var held = this._heldBehaviors;
+
+		this._heldBehaviors = [];
+
+		if ( held.length > 0 && this.map && this.map.behaviors && 'function' === typeof this.map.behaviors.enable ) {
+			this.map.behaviors.enable( held );
+		}
+	};
+
+	/**
+	 * Centres the map on `config.defaultLocation` — the fallback for a buyer with no city at all
+	 * under `strategy: 'viewport'` (see {@see _resolveInitialViewport}).
 	 *
 	 * @returns {void}
 	 */
@@ -1699,6 +1832,14 @@
 	};
 
 	WoodevYandexMapProvider.prototype._checkAndEmitBounds = function() {
+		if ( this._viewportHeld ) {
+			if ( ! this._heldCameraMoved() ) {
+				return;
+			}
+
+			this._releaseViewport();
+		}
+
 		var bounds = this.map.getBounds();
 		var latSpan = Math.abs( bounds[ 1 ][ 0 ] - bounds[ 0 ][ 0 ] );
 		var lngSpan = Math.abs( bounds[ 1 ][ 1 ] - bounds[ 0 ][ 1 ] );
@@ -2515,6 +2656,12 @@
 
 		this._addressSeq += 1;
 
+		// #1432: a picked address is the buyer telling us where to look — end the hold so the
+		// camera fit below fetches that place's points.
+		if ( this._viewportHeld ) {
+			this._releaseViewport();
+		}
+
 		var groupsByKey = this._groupsByKey;
 		var groups = Object.keys( groupsByKey ).map( function( key ) {
 			return groupsByKey[ key ];
@@ -2898,6 +3045,7 @@
 			clusterClick: [],
 			boundsChange: [],
 			bboxTooWide: [],
+			cityUnresolved: [],
 			visibleChange: [],
 			zoomChange: [],
 			nothingNearby: [],

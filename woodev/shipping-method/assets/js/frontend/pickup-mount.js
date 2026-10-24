@@ -1280,6 +1280,54 @@
 	}
 
 	/**
+	 * The settlement's own `[ lat, lon ]` for each provider-backed field, keyed by field id
+	 * (#1432) — refreshed live by {@see handleLocationApplied} from the event's
+	 * `settlementCenter`, seeded once from `config.location.settlementCenter` by
+	 * {@see resolveLocalityCenter}. Absent / `null`: the provider recorded no coordinates.
+	 *
+	 * @type {Object.<string, number[]|null>}
+	 */
+	var resolvedLocalityCenter = {};
+
+	/**
+	 * Whether `value` is a usable `[ lat, lon ]` pair.
+	 *
+	 * @param {*} value
+	 * @returns {boolean}
+	 */
+	function isCoordinatePair( value ) {
+		return Array.isArray( value ) && 2 === value.length &&
+			'number' === typeof value[ 0 ] && isFinite( value[ 0 ] ) &&
+			'number' === typeof value[ 1 ] && isFinite( value[ 1 ] );
+	}
+
+	/**
+	 * The customer's city centre `[ lat, lon ]` off their location record — what the map centres
+	 * on when geocoding the city text gives no answer (#1432), instead of falling back to the
+	 * plugin's default location (another city's points under the buyer's name).
+	 *
+	 * Read live, like {@see resolveLocalityKey}: the page-load value (`config.location`) is adopted
+	 * on first sight, and {@see handleLocationApplied} keeps it current afterwards. `null` for a
+	 * plugin outside the Location Provider layer, and whenever the record carries no coordinates.
+	 *
+	 * @param {Object} config the full mount config (`window.woodev_pickup_config_*`).
+	 * @returns {number[]|null}
+	 */
+	function resolveLocalityCenter( config ) {
+		if ( ! config || ! config.location ) {
+			return null;
+		}
+
+		if ( ! Object.prototype.hasOwnProperty.call( resolvedLocalityCenter, config.fieldId ) ) {
+			resolvedLocalityCenter[ config.fieldId ] = isCoordinatePair( config.location.settlementCenter )
+				? config.location.settlementCenter
+				: null;
+		}
+
+		return resolvedLocalityCenter[ config.fieldId ];
+	}
+
+	/**
 	 * Handles `woodev_location_applied` (Task 15; issue #159; `location-cascade.js`'s own
 	 * event, fired once the customer's `/select` round-trip actually persisted) — updates
 	 * {@see resolvedLocalityKey} for EVERY currently-registered, Location-Provider-backed
@@ -1303,8 +1351,8 @@
 	 * its own `resolveLocalityKey()` falls back to the DOM read regardless, so writing an
 	 * entry here for it would only be dead state.
 	 *
-	 * @param {CustomEvent} event `detail: { key, level, settlementKey, implicit }` — `key` and
-	 *                            `settlementKey` are read here.
+	 * @param {CustomEvent} event `detail: { key, level, settlementKey, settlementCenter, implicit }` — `key`,
+	 *                            `settlementKey` and `settlementCenter` are read here.
 	 * @returns {void}
 	 */
 	function handleLocationApplied( event ) {
@@ -1315,6 +1363,12 @@
 		collectConfigs().forEach( function( config ) {
 			if ( config.location ) {
 				resolvedLocalityKey[ config.fieldId ] = key;
+
+				// The centre travels with the settlement key only (#1432): a `key` taken from
+				// the fallback record names no settlement, so no settlement centre goes with it.
+				resolvedLocalityCenter[ config.fieldId ] = settlementKey && isCoordinatePair( detail.settlementCenter )
+					? detail.settlementCenter
+					: null;
 
 				// Issue #349. THIS is where a selection can be restored, and the only place it
 				// can: {@see handleLocalityChanged} runs off a `change` on the city field, which
@@ -1582,6 +1636,10 @@
 
 			getGeocodeQuery: function() {
 				return resolveGeocodeQuery( config );
+			},
+
+			getLocalityCenter: function() {
+				return resolveLocalityCenter( config );
 			},
 
 			// What the checkout is about right now — the chosen shipping method and the

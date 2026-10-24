@@ -423,6 +423,11 @@ export function createPickupSession( options: PickupSessionOptions ): PickupSess
 				clearInitialBusy();
 				panels.showMessage( 'zoomIn' );
 			} );
+			// The city could not be placed and the provider fetches nothing for its placeholder camera (#1432).
+			provider.on( 'cityUnresolved', () => {
+				clearInitialBusy();
+				panels.showMessage( 'cityUnresolved' );
+			} );
 			provider.on( 'searchResults', ( results: { addresses?: typeof lastAddresses } ) => {
 				lastAddresses = ( results && results.addresses ) || [];
 				panels.renderSearchResults( results );

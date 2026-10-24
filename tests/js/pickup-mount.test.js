@@ -1334,6 +1334,7 @@ test( 'clicking the trigger opens the shell and calls provider.init with the con
 		i18n: config.i18n,
 		locality: '',
 		geocodeQuery: '',
+		localityCenter: null,
 		defaultLocation: config.defaultLocation,
 		pointIcons: config.pointIcons,
 		accentColor: config.accentColor,
@@ -1456,6 +1457,7 @@ test( 'the provider config merges mapConfig with strategy, i18n, and the resolve
 		i18n: config.i18n,
 		locality: 'Казань',
 		geocodeQuery: 'Казань',
+		localityCenter: null,
 		// Everything below is a TOP-LEVEL key of the mount config that the provider reads off
 		// the config it is handed. `toEqual` is deliberate: it fails on a MISSING key as loudly
 		// as on a wrong one, which a per-key `toMatchObject` would not.
@@ -1463,6 +1465,128 @@ test( 'the provider config merges mapConfig with strategy, i18n, and the resolve
 		pointIcons: config.pointIcons,
 		accentColor: config.accentColor,
 		searchLayoutEl: StubPanels.instances[ 0 ].builtSearchLayoutEl,
+	} );
+} );
+
+describe( 'localityCenter — the city\'s own coordinates for a map whose geocoder gives no answer (#1432)', () => {
+	// Dedicated field ids: this file's module state (the live locality maps) is never reset
+	// between tests, so a shared id would let one test's seed answer for another's.
+	function mountField( fieldId, location ) {
+		document.body.insertAdjacentHTML(
+			'beforeend',
+			'<div data-woodev-pickup-slot="' + fieldId + '"></div>' +
+			'<input id="' + fieldId + '" type="hidden" value="" />'
+		);
+
+		setConfig( makeConfig( { fieldId, strategy: 'viewport', location } ) );
+		mountAll();
+		clickTrigger();
+
+		return StubProvider.instances[ 0 ].initCalls[ 0 ].config;
+	}
+
+	test( 'is the page-load settlementCenter of the location block', () => {
+		const received = mountField( 'pickup_center_seed', {
+			current: { key: 'dadata:vl' },
+			settlementKey: 'dadata:vl',
+			settlementCenter: [ 43.1155, 131.8855 ],
+		} );
+
+		expect( received.localityCenter ).toEqual( [ 43.1155, 131.8855 ] );
+	} );
+
+	test( 'is null when the record carries no coordinates', () => {
+		expect( mountField( 'pickup_center_none', { current: { key: 'dadata:vl' }, settlementCenter: null } ).localityCenter )
+			.toBeNull();
+	} );
+
+	test( 'is null for a plugin outside the location layer', () => {
+		expect( mountField( 'pickup_center_no_layer', undefined ).localityCenter ).toBeNull();
+	} );
+
+	test( 'a malformed settlementCenter is ignored', () => {
+		const received = mountField( 'pickup_center_bad', {
+			current: { key: 'dadata:vl' },
+			settlementKey: 'dadata:vl',
+			settlementCenter: [ 'x', 1 ],
+		} );
+
+		expect( received.localityCenter ).toBeNull();
+	} );
+
+	test( 'follows woodev_location_applied: the new settlement\'s centre, and null when it has none', () => {
+		const fieldId = 'pickup_center_live';
+
+		document.body.insertAdjacentHTML(
+			'beforeend',
+			'<div data-woodev-pickup-slot="' + fieldId + '"></div>' +
+			'<input id="' + fieldId + '" type="hidden" value="" />'
+		);
+
+		setConfig( makeConfig( {
+			fieldId,
+			strategy: 'viewport',
+			location: { current: { key: 'dadata:msk' }, settlementKey: 'dadata:msk', settlementCenter: [ 55.75, 37.62 ] },
+		} ) );
+		mountAll();
+
+		const fire = ( detail ) => document.body.dispatchEvent(
+			new CustomEvent( 'woodev_location_applied', { detail, bubbles: true } )
+		);
+
+		fire( { key: 'cdek:77', level: 'settlement', settlementKey: 'cdek:77', settlementCenter: [ 43.1155, 131.8855 ] } );
+		clickTrigger();
+
+		expect( StubProvider.instances[ 0 ].initCalls[ 0 ].config.localityCenter ).toEqual( [ 43.1155, 131.8855 ] );
+	} );
+
+	test( 'a later settlement without coordinates clears the previous centre', () => {
+		const fieldId = 'pickup_center_cleared';
+
+		document.body.insertAdjacentHTML(
+			'beforeend',
+			'<div data-woodev-pickup-slot="' + fieldId + '"></div>' +
+			'<input id="' + fieldId + '" type="hidden" value="" />'
+		);
+
+		setConfig( makeConfig( {
+			fieldId,
+			strategy: 'viewport',
+			location: { current: { key: 'dadata:msk' }, settlementKey: 'dadata:msk', settlementCenter: [ 55.75, 37.62 ] },
+		} ) );
+		mountAll();
+
+		const fire = ( detail ) => document.body.dispatchEvent(
+			new CustomEvent( 'woodev_location_applied', { detail, bubbles: true } )
+		);
+
+		// The old centre must not linger and point the map at the previous city.
+		fire( { key: 'cdek:77', level: 'settlement', settlementKey: 'cdek:77', settlementCenter: [ 43.1155, 131.8855 ] } );
+		fire( { key: 'cdek:99', level: 'settlement', settlementKey: 'cdek:99' } );
+		clickTrigger();
+
+		expect( StubProvider.instances[ 0 ].initCalls[ 0 ].config.localityCenter ).toBeNull();
+	} );
+
+	test( 'a centre never travels with a fallback key that names no settlement', () => {
+		const fieldId = 'pickup_center_fallback';
+
+		document.body.insertAdjacentHTML(
+			'beforeend',
+			'<div data-woodev-pickup-slot="' + fieldId + '"></div>' +
+			'<input id="' + fieldId + '" type="hidden" value="" />'
+		);
+
+		setConfig( makeConfig( { fieldId, strategy: 'viewport', location: { current: { key: 'dadata:x' } } } ) );
+		mountAll();
+
+		document.body.dispatchEvent( new CustomEvent( 'woodev_location_applied', {
+			detail: { key: 'dadata:addr', level: 'address', settlementCenter: [ 1, 2 ] },
+			bubbles: true,
+		} ) );
+		clickTrigger();
+
+		expect( StubProvider.instances[ 0 ].initCalls[ 0 ].config.localityCenter ).toBeNull();
 	} );
 } );
 
@@ -4000,6 +4124,19 @@ test( 'provider bboxTooWide calls panels.showMessage( \'zoomIn\' ) WITHOUT destr
 	expect( dialog.querySelector( '.woodev-modal__message--error' ) ).toBeNull();
 	expect( dialog.querySelector( '.woodev-modal__message--empty' ) ).toBeNull();
 	expect( dialog.querySelector( '.woodev-modal__notice' ) ).toBeNull();
+	expect( dialog.querySelector( '.woodev-pickup-list' ) ).not.toBeNull();
+} );
+
+test( 'provider cityUnresolved shows the city message in the panel, non-destructively (#1432)', async () => {
+	const session = await openSession( configWith( { strategy: 'viewport' } ) );
+
+	session.provider.emit( 'cityUnresolved', null );
+
+	// The map and the search box stay in place — the message tells the customer what to do with them.
+	expect( session.panels.showMessageCalls ).toEqual( [ 'cityUnresolved' ] );
+
+	const dialog = document.querySelector( '[role="dialog"]' );
+	expect( dialog.querySelector( '.woodev-modal__message--error' ) ).toBeNull();
 	expect( dialog.querySelector( '.woodev-pickup-list' ) ).not.toBeNull();
 } );
 
