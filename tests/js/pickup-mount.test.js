@@ -3803,6 +3803,23 @@ test( 'a failed bulk map (real Yandex provider) still shows the list-only notice
 	expect( document.querySelectorAll( '.woodev-pickup-list__item' ).length ).toBe( 1 );
 } );
 
+test( 'a failed bulk map opens the list so the fetched points are visible (#1427)', async () => {
+	const session = await openSession( configWith() );
+
+	session.provider.emit( 'error', { code: 'map_script', message: 'ymaps script failed to load' } );
+
+	expect( session.panels.openListCalls ).toBe( 1 );
+	expect( session.panels._stageOpen ).toBe( true );
+} );
+
+test( 'a failed viewport map does not open the list: it has no bulk listing to fall back to (#1427)', async () => {
+	const session = await openSession( configWith( { strategy: 'viewport' } ) );
+
+	session.provider.emit( 'error', { code: 'map_script', message: 'ymaps script failed to load' } );
+
+	expect( session.panels.openListCalls ).toBeUndefined();
+} );
+
 test( 'a points render failure is logged in debug mode instead of disappearing in a catch', async () => {
 	const error = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
 	const session = await openSession( configWith( { debug: true } ) );
