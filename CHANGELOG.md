@@ -1,6 +1,32 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.0.12] — 2026-10-24
+### Bug Fixes
+- **pickup**: Open the list when the bulk map fails to load (#1427) (#1446)
+
+- **pickup**: A free-text locality no longer gets another locality's points (#1433) (#1448)
+
+- **account**: «Обновить» with overwrite for a v1 plugin quarantined next to v2 (#1438) (#1450)
+
+- **pickup**: Send the typed city, not a stale record key, when they disagree (#1449) (#1452)
+
+- **account**: Keep the real installer error; show its cause only in debug mode (#1451) (#1453)
+
+
+### Documentation
+- **s195**: Support AI triage, three hotfix waves (2.0.9–2.0.11), plugin repos on main; handoff (#1443)
+
+- **s195**: Хендофф — s196 овернайт, автономно (#1444)
+
+
+### Tests
+- **location**: LocationReadAuthTest drives real routes with a seeded cart and within scope (#1436) (#1447)
+
+- **account**: Make the reflection setup work on PHP < 8.1 (#1451) (#1454)
+
+
+
 ## [2.0.11] — 2026-10-24
 ### Bug Fixes
 - **pickup**: A failed city geocode centres on the record's coordinates or says so, never a silent Moscow (#1432) (#1440)
