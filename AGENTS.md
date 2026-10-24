@@ -237,7 +237,7 @@ without it (Codex) says so once and proceeds with git/shell inspection — stall
 | Merchant-facing vocabulary | **No jargon in anything a merchant reads** (operator, 31.08.2026) — «чекаут» and «фреймворк» specifically. The two replacements and the scope: `AGENT-RULES.md` Rule 10c. |
 | Git | Conventional Commits (`feat:`, `fix:`, `docs:`, etc.) |
 | Version | Stored in `Woodev_Plugin::VERSION` (in `woodev/class-plugin.php`) |
-| `@since` | Planned release is `composer.json` → `extra.woodev.planned-release`, currently `2.0.12` (released `VERSION` is `2.0.11`); semver rule in `AGENT-RULES.md` Rule 5, gated by `SinceTagCeilingTest`. Raising `VERSION` on `main` publishes a release (#285). |
+| `@since` | Planned release is `composer.json` → `extra.woodev.planned-release`, currently `2.0.13` (released `VERSION` is `2.0.12`); semver rule in `AGENT-RULES.md` Rule 5, gated by `SinceTagCeilingTest`. Raising `VERSION` on `main` publishes a release (#285). |
 
 ---
 
