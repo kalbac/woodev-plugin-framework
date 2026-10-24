@@ -1607,6 +1607,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$config = $this->make_handler( [ 'plugin' => $plugin ] )->get_js_config();
 
 			$this->assertSame( 'dadata:fias-1', $config['location']['current']['key'] );
+			$this->assertSame( 'Москва', $config['location']['settlementName'] );
+			$this->assertSame( 'г', $config['location']['settlementType'] );
 		}
 
 		/**

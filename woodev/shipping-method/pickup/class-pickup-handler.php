@@ -3762,8 +3762,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *
 		 * @since 2.0.11 Publishes `settlementCenter` — that settlement's `[ lat, lon ]` or `null`
 		 *               (#1432), the map's fallback centre when its geocoder gives no answer.
+		 * @since 2.0.12 Publishes the settlement's display name/type for the stale-key guard (#1449).
 		 *
-		 * @return array{current: array{key: string}, settlementKey: string, settlementCenter: array{0: float, 1: float}|null, implicit: bool}|null
+		 * @return array{current: array{key: string}, settlementKey: string, settlementName: string, settlementType: string, settlementCenter: array{0: float, 1: float}|null, implicit: bool}|null
 		 */
 		protected function location_config_block(): ?array {
 			if ( null === $this->plugin || ! $this->plugin->get_location_service()->is_active() ) {
@@ -3774,6 +3775,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			$customer = $service->get_customer_record();
 
 			$settlement = $service->get_customer_record_at( Location_Record::LEVEL_SETTLEMENT );
+			$component  = null !== $settlement ? $settlement->settlement() : null;
 
 			return [
 				// `current` still means EXACTLY what its name says — the customer's CURRENT
@@ -3791,6 +3793,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				// to `current.key`, which is the fallback #336 exists to preserve (a customer
 				// who typed an address without picking a settlement must still see points).
 				'settlementKey'    => null !== $settlement ? $settlement->key() : '',
+				// #1449: the browser can use this key only while the visible city still
+				// names this settlement. Keep the comparison data beside the key;
+				// `current` and `chain` intentionally carry keys only.
+				'settlementName'   => is_array( $component ) ? (string) $component['name'] : '',
+				'settlementType'   => is_array( $component ) ? (string) $component['type'] : '',
 				// `[ lat, lon ]` of that settlement when the provider recorded both, else `null`
 				// (#1432) — what the map centres on when its own geocoder gives no answer.
 				'settlementCenter' => null !== $settlement && null !== $settlement->lat() && null !== $settlement->lon()
