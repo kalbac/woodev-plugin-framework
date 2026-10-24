@@ -72,6 +72,7 @@ One line per lesson that was found late on a real plugin; each links its detail.
 - **A carrier's cancel reply is classified, not assumed** — only the completed state clears the request id; background jobs that select orders by meta go through the datastore-aware helper ([traps](references/traps.md#orders-and-data); yandex PRs #115 #116).
 - **No `add_option()` as a lock** in any scan or poller ([core traps](../woodev-plugin-core/traps.md#php-and-wordpress-topic-php); edostavka PR #113).
 - **Acceptance judges on carrier data, in a real browser path** — block checkout through a real order POST, the classic city picked from the suggestions, never a typed name ([acceptance](references/acceptance-rig.md)).
+- **Also exercise a free-text city that has no provider record**: an old/default record must not supply another city's points or overwrite the typed city when a point is selected (#1433; [pickup](references/model-rates-location-pickup.md#pickup-and-checkout)).
 
 ## Use fixtures as worked examples
 
