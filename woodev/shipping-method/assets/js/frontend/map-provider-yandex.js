@@ -318,6 +318,18 @@
 	/** @type {number} technical placeholder zoom paired with {@see DEFAULT_CENTER}. */
 	var DEFAULT_ZOOM = 2;
 
+	/**
+	 * The ymaps behaviours that zoom (and so can drift the centre towards a pointer or a pinch's
+	 * focal point) — switched off while the viewport is held (#1432). Only those the map has
+	 * ENABLED are touched, and exactly that set is restored.
+	 *
+	 * @type {string[]}
+	 */
+	var ZOOM_BEHAVIORS = [ 'scrollZoom', 'dblClickZoom', 'multiTouch', 'rightMouseButtonMagnifier' ];
+
+	/** @type {number} how far, in degrees, a held camera's centre may drift (rounding of a zoom) and still count as unmoved (#1432). */
+	var HELD_CENTER_TOLERANCE_DEG = 0.0001;
+
 	/** @type {number} zoom the map centres on a city's own coordinates at (#1432): a whole city. */
 	var LOCALITY_FALLBACK_ZOOM = 11;
 
@@ -932,6 +944,12 @@
 		// fetches nothing until the customer moves the map.
 		this._viewportHeld = false;
 
+		/** @type {number[]|null} the placeholder centre a held viewport is measured against. */
+		this._heldCenter = null;
+
+		/** @type {string[]} the zoom behaviours {@see _holdViewport} switched off, restored on release. */
+		this._heldBehaviors = [];
+
 		/** @type {Object.<string, Object>} the current groups, by key — see {@see setPoints}. */
 		this._groupsByKey = {};
 
@@ -1080,12 +1098,10 @@
 				// second one from a listener that was not registered yet.
 				if ( self._viewportHeld ) {
 					// #1432: the buyer's city could not be placed. No points are fetched for the
-					// placeholder camera; the first camera action of the customer's own (a drag,
-					// a zoom, a picked address) releases the hold, and the `boundschange` that
-					// follows it fetches for wherever they went.
-					self.map.events.add( 'actionbegin', function() {
-						self._viewportHeld = false;
-					} );
+					// placeholder camera; it stays held through zoom-only actions and is released
+					// when the camera centre moves away or an address is picked — see
+					// {@see _holdViewport}.
+					self._holdViewport();
 					self.emit( 'cityUnresolved', null );
 				} else {
 					self._checkAndEmitBounds();
@@ -1645,8 +1661,9 @@
 	 *    `setBounds()` above.
 	 * 2. Nothing to centre on → the map stays usable but HOLDS its viewport: `_viewportHeld`
 	 *    stops {@see _checkAndEmitBounds} from fetching the points of wherever the placeholder
-	 *    camera happens to sit, until the customer moves the map or picks an address. The
-	 *    caller learns of it through `cityUnresolved` (emitted from {@see init}).
+	 *    camera happens to sit, until its centre moves away or the customer picks an address —
+	 *    a zoom alone never releases it ({@see _holdViewport}). The caller learns of it through
+	 *    `cityUnresolved` (emitted from {@see init}).
 	 *
 	 * @returns {Promise<void>|undefined}
 	 */
@@ -1665,6 +1682,66 @@
 		this._viewportHeld = true;
 
 		return undefined;
+	};
+
+	/**
+	 * Starts holding the viewport (#1432): remembers the placeholder centre and turns the
+	 * {@see ZOOM_BEHAVIORS} the map has enabled off, so a zoom can neither fetch the placeholder's
+	 * points nor — wheel, double click, pinch and the right-button magnifier move the centre
+	 * towards the pointer — look like a move. The zoom buttons
+	 * zoom around the centre, which {@see _heldCameraMoved} reads as "not moved".
+	 *
+	 * @returns {void}
+	 */
+	WoodevYandexMapProvider.prototype._holdViewport = function() {
+		var behaviors = this.map.behaviors;
+
+		this._heldCenter = this.map.getCenter();
+		this._heldBehaviors = [];
+
+		if ( ! behaviors || 'function' !== typeof behaviors.disable ) {
+			return;
+		}
+
+		this._heldBehaviors = ZOOM_BEHAVIORS.filter( function( name ) {
+			return 'function' !== typeof behaviors.isEnabled || behaviors.isEnabled( name );
+		} );
+
+		if ( this._heldBehaviors.length > 0 ) {
+			behaviors.disable( this._heldBehaviors );
+		}
+	};
+
+	/**
+	 * Whether the camera centre has left the placeholder it was held on — a drag, or a camera fit
+	 * to a picked address. A zoom keeps the centre, so it never counts.
+	 *
+	 * @returns {boolean}
+	 */
+	WoodevYandexMapProvider.prototype._heldCameraMoved = function() {
+		var held = this._heldCenter;
+		var now = this.map.getCenter();
+
+		return ! held || ! now ||
+			Math.abs( now[ 0 ] - held[ 0 ] ) > HELD_CENTER_TOLERANCE_DEG ||
+			Math.abs( now[ 1 ] - held[ 1 ] ) > HELD_CENTER_TOLERANCE_DEG;
+	};
+
+	/**
+	 * Ends the hold: points load for the camera from here on, and the zoom gestures come back.
+	 *
+	 * @returns {void}
+	 */
+	WoodevYandexMapProvider.prototype._releaseViewport = function() {
+		this._viewportHeld = false;
+
+		var held = this._heldBehaviors;
+
+		this._heldBehaviors = [];
+
+		if ( held.length > 0 && this.map && this.map.behaviors && 'function' === typeof this.map.behaviors.enable ) {
+			this.map.behaviors.enable( held );
+		}
 	};
 
 	/**
@@ -1756,7 +1833,11 @@
 
 	WoodevYandexMapProvider.prototype._checkAndEmitBounds = function() {
 		if ( this._viewportHeld ) {
-			return;
+			if ( ! this._heldCameraMoved() ) {
+				return;
+			}
+
+			this._releaseViewport();
 		}
 
 		var bounds = this.map.getBounds();
@@ -2574,6 +2655,12 @@
 		var self = this;
 
 		this._addressSeq += 1;
+
+		// #1432: a picked address is the buyer telling us where to look — end the hold so the
+		// camera fit below fetches that place's points.
+		if ( this._viewportHeld ) {
+			this._releaseViewport();
+		}
 
 		var groupsByKey = this._groupsByKey;
 		var groups = Object.keys( groupsByKey ).map( function( key ) {

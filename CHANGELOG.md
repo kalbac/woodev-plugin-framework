@@ -1,6 +1,12 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.0.10] — 2026-10-23
+### Bug Fixes
+- **location**: Survive a stale page nonce on a cached checkout (#1426) (#1435)
+
+
+
 ## [2.0.9] — 2026-10-23
 ### Bug Fixes
 - **location**: Fall back to a configured provider; a provider's key is required only while it is active (#1429)
