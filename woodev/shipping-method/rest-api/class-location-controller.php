@@ -1673,10 +1673,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 				$implicit = ! empty( $customer_chain['implicit'] );
 
 				foreach ( $customer_chain['records'] as $chain_level => $chain_record ) {
-					$chain[ $chain_level ] = [
-						'key'   => $chain_record->key(),
-						'level' => $chain_record->level(),
-					];
+					$chain[ $chain_level ] = $chain_record->to_chain_node();
 				}
 			}
 

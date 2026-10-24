@@ -332,9 +332,9 @@
 
 	/**
 	 * @type {string[]} the `showMessage()` keys with nothing to retry — see that method's own
-	 * docblock for why these three are the exception rather than the rule.
+	 * docblock for why these are the exception rather than the rule.
 	 */
-	var NO_RETRY_MESSAGE_KEYS = [ 'emptyLocality', 'emptyInView', 'zoomIn' ];
+	var NO_RETRY_MESSAGE_KEYS = [ 'emptyLocality', 'emptyInView', 'zoomIn', 'cityUnresolved' ];
 
 	/** @type {number} minimum query length before point matching fires at all (spec V-6). */
 	var SEARCH_MIN_CHARS = 3;
@@ -3018,7 +3018,7 @@
 	 * card is showing (s48 decision) — see {@see Panels.prototype.render}'s own note on why the
 	 * card is a SEPARATE element from the busy overlay, never a second use of it.
 	 *
-	 * Every key grows a retry control EXCEPT the three in {@see NO_RETRY_MESSAGE_KEYS}: an empty
+	 * Every key grows a retry control EXCEPT those in {@see NO_RETRY_MESSAGE_KEYS}: an empty
 	 * bulk/viewport result and a too-wide bbox have nothing to retry, only a different
 	 * search/zoom to try — matching `WoodevModal#showError()` vs `#showEmpty()`'s identical
 	 * split. Every OTHER key — the generic `'error'` and the mount's own specific

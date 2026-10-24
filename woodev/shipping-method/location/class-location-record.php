@@ -560,6 +560,36 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Record' 
 		}
 
 		/**
+		 * The record as one node of the wire `chain`: `key` and `level`, plus `lat`/`lon` when the
+		 * provider supplied both (#1432).
+		 *
+		 * The coordinates ride along so the pickup map can centre on the buyer's city when its
+		 * own geocoder gives no answer — the browser holds only the chain, never the whole record.
+		 * Absent, not `null`, when the record has no coordinates: most records do not, and the
+		 * chain is sent with every checkout refresh.
+		 *
+		 * @since 2.0.11
+		 *
+		 * @return array{key: string, level: string, lat?: float, lon?: float}
+		 */
+		public function to_chain_node(): array {
+			$node = [
+				'key'   => $this->key(),
+				'level' => $this->level(),
+			];
+
+			$lat = $this->lat();
+			$lon = $this->lon();
+
+			if ( null !== $lat && null !== $lon ) {
+				$node['lat'] = $lat;
+				$node['lon'] = $lon;
+			}
+
+			return $node;
+		}
+
+		/**
 		 * Gets the display label, or an empty string.
 		 *
 		 * @since 2.0.2

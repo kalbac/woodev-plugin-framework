@@ -2091,6 +2091,37 @@ final class LocationControllerTest extends TestCase {
 	}
 
 	/**
+	 * #1432: the `/select` chain node carries the settlement's coordinates (when it has both), so
+	 * the browser can hand the pickup map a city centre without a geocoder.
+	 */
+	public function test_select_response_chain_node_carries_the_coordinates(): void {
+		$settlement = Location_Record::from_array(
+			[
+				'key'         => 'dadata:settlement-1',
+				'provider_id' => 'dadata',
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'country'     => 'RU',
+				'lat'         => 43.1155,
+				'lon'         => 131.8855,
+			]
+		);
+
+		$service = new Location_Controller_Fake_Service(
+			true, null, null, true, true, null, null, null, false, null,
+			[ Location_Record::LEVEL_SETTLEMENT => $settlement ]
+		);
+		$ctrl = new Location_Controller_Probe( $service );
+
+		$result = $ctrl->handle_select_request( new WP_REST_Request( [ 'record' => $settlement->to_array() ] ) );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertSame(
+			[ 'key' => 'dadata:settlement-1', 'level' => 'settlement', 'lat' => 43.1155, 'lon' => 131.8855 ],
+			$result['chain'][ Location_Record::LEVEL_SETTLEMENT ]
+		);
+	}
+
+	/**
 	 * Issue #502, s91 critic finding MAJOR-1. `/select` used to answer with a
 	 * `chain` and no word about its provenance, and the client therefore had to
 	 * guess — it guessed "a select response is a customer's own pick, so this is

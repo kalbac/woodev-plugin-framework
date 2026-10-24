@@ -1288,10 +1288,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 
 			if ( null !== $customer_chain ) {
 				foreach ( $customer_chain['records'] as $chain_level => $chain_record ) {
-					$chain[ $chain_level ] = [
-						'key'   => $chain_record->key(),
-						'level' => $chain_record->level(),
-					];
+					$chain[ $chain_level ] = $chain_record->to_chain_node();
 				}
 			}
 

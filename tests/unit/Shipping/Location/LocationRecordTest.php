@@ -232,6 +232,34 @@ final class LocationRecordTest extends TestCase {
 		$this->assertNull( $record->raw() );
 	}
 
+	// ---- the wire chain node (#1432) ----
+
+	public function test_chain_node_carries_the_coordinates_when_the_record_has_both(): void {
+		$record = Location_Record::from_array(
+			[
+				'key' => 'cdek:77', 'provider_id' => 'cdek', 'level' => 'settlement', 'country' => 'RU',
+				'lat' => 43.1155, 'lon' => 131.8855,
+			]
+		);
+
+		$this->assertSame(
+			[ 'key' => 'cdek:77', 'level' => 'settlement', 'lat' => 43.1155, 'lon' => 131.8855 ],
+			$record->to_chain_node()
+		);
+	}
+
+	public function test_chain_node_is_just_key_and_level_without_a_full_coordinate_pair(): void {
+		$none = Location_Record::from_array(
+			[ 'key' => 'dadata:1', 'provider_id' => 'dadata', 'level' => 'settlement', 'country' => 'RU' ]
+		);
+		$half = Location_Record::from_array(
+			[ 'key' => 'dadata:2', 'provider_id' => 'dadata', 'level' => 'settlement', 'country' => 'RU', 'lat' => 1.5 ]
+		);
+
+		$this->assertSame( [ 'key' => 'dadata:1', 'level' => 'settlement' ], $none->to_chain_node() );
+		$this->assertSame( [ 'key' => 'dadata:2', 'level' => 'settlement' ], $half->to_chain_node() );
+	}
+
 	// ---- raw is opaque: scalars, nested arrays, and null all survive untouched ----
 
 	public function test_raw_scalar_survives_untouched(): void {

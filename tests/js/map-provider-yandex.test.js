@@ -1865,16 +1865,117 @@ test( 'getCenter() returns null before init() has built a map', () => {
 	expect( provider.getCenter() ).toBeNull();
 } );
 
-test( 'falls back to the plugin default when the geocode is empty', async () => {
+/**
+ * Like {@see init}, but with listeners registered BEFORE the map settles: `cityUnresolved` and the
+ * first `boundsChange` are emitted from inside `init()`, so a listener added afterwards never
+ * sees them.
+ */
+function initWithEvents( overrides ) {
+	const config = makeConfig( overrides );
+	const events = { boundsChange: [], bboxTooWide: [], cityUnresolved: [] };
+
+	window[ config.ns ] = ymapsStub;
+
+	const provider = new WoodevYandexMapProvider();
+
+	Object.keys( events ).forEach( ( name ) => provider.on( name, () => events[ name ].push( 1 ) ) );
+
+	return provider.init( document.createElement( 'div' ), config ).then( () => ( { provider, events } ) );
+}
+
+// #1432 — a geocode that gives no answer used to land on `defaultLocation` (Moscow) and fetch
+// Moscow's points for a buyer from Vladivostok, with no message.
+test( 'geocode empty + the city\'s own coordinates: centres on them at city zoom, never on the plugin default (#1432)', async () => {
 	ymapsStub.geocodeResult = null;
 
-	await init( {
+	const { events } = await initWithEvents( {
 		strategy: 'viewport',
-		locality: 'Нетакогогорода',
+		locality: 'Владивосток',
+		localityCenter: [ 43.1155, 131.8855 ],
 		defaultLocation: { center: [ 55.76, 37.64 ], zoom: 12 },
 	} );
 
-	expect( ymapsStub.lastMap.setCenterCalls[ 0 ] ).toEqual( { center: [ 55.76, 37.64 ], zoom: 12, options: undefined } );
+	expect( ymapsStub.lastMap.setCenterCalls ).toEqual( [
+		{ center: [ 43.1155, 131.8855 ], zoom: 11, options: undefined },
+	] );
+	expect( events.cityUnresolved ).toHaveLength( 0 );
+	expect( events.boundsChange ).toHaveLength( 1 );
+} );
+
+test( 'a REJECTED geocode (key without geocoder, network, blocker) takes the same coordinates fallback (#1432)', async () => {
+	ymapsStub.geocodeImpl = () => Promise.reject( new Error( 'blocked' ) );
+
+	const { events } = await initWithEvents( {
+		strategy: 'viewport',
+		locality: 'Владивосток',
+		localityCenter: [ 43.1155, 131.8855 ],
+		defaultLocation: { center: [ 55.76, 37.64 ], zoom: 12 },
+	} );
+
+	expect( ymapsStub.lastMap.setCenterCalls.map( ( call ) => call.center ) ).toEqual( [ [ 43.1155, 131.8855 ] ] );
+	expect( events.cityUnresolved ).toHaveLength( 0 );
+} );
+
+test( 'geocode failed and no coordinates: says so, fetches nothing, keeps the map usable (#1432)', async () => {
+	ymapsStub.geocodeImpl = () => Promise.reject( new Error( 'blocked' ) );
+
+	const { provider, events } = await initWithEvents( {
+		strategy: 'viewport',
+		locality: 'Владивосток',
+		defaultLocation: { center: [ 55.76, 37.64 ], zoom: 12 },
+	} );
+
+	// Never Moscow: the camera is not moved to the plugin default, and no fetch is requested.
+	expect( ymapsStub.lastMap.setCenterCalls ).toHaveLength( 0 );
+	expect( events.cityUnresolved ).toHaveLength( 1 );
+	expect( events.boundsChange ).toHaveLength( 0 );
+
+	// A spurious boundschange (a resize) does not fetch the placeholder camera either.
+	ymapsStub.lastMap.fireBoundsChange();
+
+	expect( events.boundsChange ).toHaveLength( 0 );
+
+	// The customer's own first camera action (a drag, a picked address) releases the hold, and
+	// the boundschange that follows fetches for wherever they went.
+	ymapsStub.lastMap._eventHandlers.actionbegin.forEach( ( handler ) => handler() );
+	ymapsStub.lastMap.fireBoundsChange();
+
+	expect( events.boundsChange ).toHaveLength( 1 );
+	expect( provider.map ).not.toBeNull();
+} );
+
+test( 'coordinates that are not a usable [lat, lon] pair count as none (#1432)', async () => {
+	for ( const bad of [ [ 91, 10 ], [ 10, 181 ], [ 'a', 'b' ], [ NaN, 1 ], [ 1 ] ] ) {
+		ymapsStub = createYmapsStub();
+		ymapsStub.geocodeResult = null;
+
+		const { events } = await initWithEvents( { strategy: 'viewport', locality: 'Город', localityCenter: bad } );
+
+		expect( events.cityUnresolved ).toHaveLength( 1 );
+		expect( ymapsStub.lastMap.setCenterCalls ).toHaveLength( 0 );
+	}
+} );
+
+test( 'a successful geocode wins over the coordinates (#1432)', async () => {
+	const { events } = await initWithEvents( {
+		strategy: 'viewport',
+		locality: 'Москва',
+		localityCenter: [ 43.1155, 131.8855 ],
+	} );
+
+	expect( ymapsStub.lastMap.setCenterCalls ).toHaveLength( 0 );
+	expect( ymapsStub.lastMap.setBoundsCalls ).toHaveLength( 1 );
+	expect( events.cityUnresolved ).toHaveLength( 0 );
+} );
+
+test( 'bulk is not affected: no geocode, no hold, no message (#1432)', async () => {
+	ymapsStub.geocodeResult = null;
+
+	const { events } = await initWithEvents( { strategy: 'bulk', locality: 'Владивосток' } );
+
+	expect( ymapsStub.geocodeCalls ).toBe( 0 );
+	expect( events.cityUnresolved ).toHaveLength( 0 );
+	expect( ymapsStub.lastMap.setCenterCalls ).toHaveLength( 0 );
 } );
 
 test( 'uses the plugin default without geocoding when there is no locality', async () => {

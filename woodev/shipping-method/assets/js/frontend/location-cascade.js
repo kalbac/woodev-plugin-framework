@@ -121,9 +121,9 @@
  * less test harness for its own non-jQuery-producer paths).
  *
  * `woodev_location_applied` (Task 15; issue #159; `implicit` added issue #309, spec D11/§4.6;
- * `settlementKey` added issue #336):
+ * `settlementKey` added issue #336, `settlementCenter` added issue #1432):
  * a native, bubbling `CustomEvent` on `document.body`, `detail: { key, level, settlementKey,
- * implicit }`, fired from {@see settleSelect} on the SAME "this response is final and
+ * settlementCenter, implicit }`, fired from {@see settleSelect} on the SAME "this response is final and
  * persisted" condition as the `update_checkout` trigger above — see that function's own
  * docblock — AND from {@see prefill} on boot, when `config.location.current` already names a
  * record (see below). This is a NATIVE event, never a jQuery `.trigger()` (unlike
@@ -142,6 +142,11 @@
  * `key` only when `settlementKey` is absent/empty, mirroring
  * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::current_location_record()}'s own
  * settlement-preferred, current-record-fallback rule server-side.
+ *
+ * `detail.settlementCenter` (issue #1432) is that settlement's `[ lat, lon ]` when the provider
+ * recorded coordinates for it, else ABSENT. Published only beside a non-empty `settlementKey`,
+ * so the centre and the key always name the same place; the pickup map centres on it when its
+ * own geocoder gives no answer.
  *
  * `detail.implicit` (issue #309; spec D11/§4.6) is this event's SECOND consumer surface:
  * `config.location.implicit` had ZERO consumers anywhere in this codebase before this — a
@@ -3129,9 +3134,18 @@
 			? settlementRecord.key
 			: '';
 
+		// #1432: that same settlement's `[ lat, lon ]` — the pickup map's fallback centre. Only
+		// ever published beside a `settlementKey`, so the centre and the key name one place; the
+		// key is absent from `detail` when there is none (most records carry no coordinates).
+		var detail = { key: key, level: level, settlementKey: settlementKey, implicit: !! implicit };
+
+		if ( '' !== settlementKey && 'number' === typeof settlementRecord.lat && 'number' === typeof settlementRecord.lon ) {
+			detail.settlementCenter = [ settlementRecord.lat, settlementRecord.lon ];
+		}
+
 		document.body.dispatchEvent(
 			new CustomEvent( 'woodev_location_applied', {
-				detail: { key: key, level: level, settlementKey: settlementKey, implicit: !! implicit },
+				detail: detail,
 				bubbles: true,
 			} )
 		);
@@ -5747,6 +5761,13 @@
 				// for BOTH sources (spec §4.6: an implicit record is never a customer's own
 				// answer, `fixed` or not).
 				adopted[ level ] = { key: node.key, confirmed: true, implicit: !! implicit, implicitSource: source };
+
+				// #1432: the record's own coordinates, when the server sent them — the pickup map
+				// centres on the city with them if its geocoder gives no answer.
+				if ( 'number' === typeof node.lat && isFinite( node.lat ) && 'number' === typeof node.lon && isFinite( node.lon ) ) {
+					adopted[ level ].lat = node.lat;
+					adopted[ level ].lon = node.lon;
+				}
 			}
 		} );
 
@@ -5946,12 +5967,22 @@
 			// would silently launder the store's default locality into a record that looks
 			// like a customer pick at exactly the level the lock reads. `implicitSource`
 			// (issue #536) travels the same way, for the same reason.
+			var chainRecord = entry.records[ current.level ];
+
 			entry.records[ current.level ] = {
 				key: current.key,
 				confirmed: true,
 				implicit: !! entry.location.implicit,
 				implicitSource: entry.location.implicit ? defaultLocalitySource( entry ) : null,
 			};
+
+			// #1432: this line replaces the record adoptChain() just wrote for `current.level`, and
+			// with it the coordinates the chain carried — the very record the map's fallback
+			// centre is read from when `current` IS the settlement. Keep them (same key only).
+			if ( chainRecord && chainRecord.key === current.key && 'number' === typeof chainRecord.lat && 'number' === typeof chainRecord.lon ) {
+				entry.records[ current.level ].lat = chainRecord.lat;
+				entry.records[ current.level ].lon = chainRecord.lon;
+			}
 
 			// Issue #536 (spec §4.6/D11 amendment, operator decision 25.08.2026): a `fixed`
 			// default locality is shown to the customer exactly as if they had picked it —

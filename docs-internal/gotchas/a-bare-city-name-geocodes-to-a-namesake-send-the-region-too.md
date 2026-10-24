@@ -25,8 +25,8 @@ its code; a region that repeats the city is dropped). `config.locality` stays th
 from address suggestions and a longer string would stop matching.
 
 Not covered: the Checkout block host (`src/checkout-blocks/pickup-host.ts`) has no `getGeocodeQuery` and keeps the bare city;
-a geocoder FAILURE (no Geocoder entitlement on the key, network) still falls back silently to `defaultLocation` (Moscow) —
-card filed separately.
+a geocoder FAILURE (no Geocoder entitlement on the key, network) was a silent fall-back to `defaultLocation` (Moscow) —
+fixed in #1432, see [a-failed-city-geocode-must-not-fall-back-to-another-citys-default-location](a-failed-city-geocode-must-not-fall-back-to-another-citys-default-location.md).
 
 ## Related
 
