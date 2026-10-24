@@ -30,6 +30,13 @@ if ( PHP_VERSION_ID < 80100 ) {
 $this->assertMatchesRegularExpression( '/^(RuntimeException|class)@anonymous$/', $type );
 ```
 
+## Recurrence (s196)
+
+`AccountInstallerTest::test_incompatible_plugin_debug_lookup_uses_the_v2_option` (#1451) wrote two private
+`Woodev_Plugin_Bootstrap` properties without `setAccessible( true )`; the worker and the critic ran PHP 8.5 and saw green, CI
+7.4/8.0 went red, and the coordinator merged it because the merge ran in the same command as the CI wait. Fix: #1454. A
+local check on the floor is one line: `docker run --rm -v "$PWD":/app -w /app php:7.4-cli php vendor/bin/phpunit --filter <Test>`.
+
 ## Related
 
 - [the-local-php-is-four-versions-above-the-ci-floor](the-local-php-is-four-versions-above-the-ci-floor.md) — why only CI sees this
