@@ -1,5 +1,7 @@
 # gotcha: a `new-top-level` worktree of the CDEK plugin branches from `master`, not `v2`
 
+> **Resolved s195 (23.10.2026):** CDEK and Russian Post renamed `v2` → `main` (the default branch) and `master` → `v1`. Plugin PRs now merge into the default branch and `new-top-level` bases on `main`. Kept for history.
+
 **Namespace:** `[tooling/orca]`
 **Discovered:** s164 (2026-10-09), Orca 1.4.222
 

@@ -1,4 +1,7 @@
 # Gotcha: [tooling/github] — `Closes #N` in a CDEK plugin PR does not close the card: the PR merges into `v2`, not the default branch
+
+> **Resolved s195 (23.10.2026):** CDEK and Russian Post renamed `v2` → `main` (the default branch) and `master` → `v1`. Plugin PRs now merge into the default branch and `new-top-level` bases on `main`. Kept for history.
+
 > Tags: github, backlog, edostavka | Session: s169
 
 ## What happens
