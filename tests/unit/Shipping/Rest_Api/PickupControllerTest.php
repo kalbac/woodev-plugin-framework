@@ -1581,14 +1581,14 @@ final class PickupControllerTest extends TestCase {
 	 *
 	 * @dataProvider locality_record_cases
 	 */
-	public function test_request_locality_must_name_the_stored_record( string $name, string $type, string $locality, bool $matches ): void {
+	public function test_request_locality_must_name_the_stored_record( string $name, string $type, string $locality, bool $matches, string $bounds = '' ): void {
 		$record = Location_Record::from_array(
 			array_merge( $this->location_record()->to_array(), [ 'settlement' => [ 'name' => $name, 'type' => $type ] ] )
 		);
 		$queries = [];
 		$point   = $this->point();
 		$source  = new Pickup_Controller_Test_Source(
-			Point_Source::STRATEGY_BULK,
+			'' !== $bounds ? Point_Source::STRATEGY_VIEWPORT : Point_Source::STRATEGY_BULK,
 			static function ( Point_Query $query ) use ( &$queries, $point ): array {
 				$queries[] = $query;
 				return [ $point ];
@@ -1604,7 +1604,11 @@ final class PickupControllerTest extends TestCase {
 			static fn() => [ 'record' => $record, 'resolved_identity' => 'carrier-city-77' ]
 		);
 
-		$data = $controller->get_points_data( [ 'locality' => $locality ] );
+		$params = [ 'locality' => $locality ];
+		if ( '' !== $bounds ) {
+			$params['bbox'] = $bounds;
+		}
+		$data = $controller->get_points_data( $params );
 
 		$this->assertCount( $matches ? 1 : 0, $data['points'] );
 		$this->assertCount( $matches ? 1 : 0, $queries, 'a mismatching city must never reach the carrier source' );
@@ -1617,7 +1621,7 @@ final class PickupControllerTest extends TestCase {
 		}
 	}
 
-	/** @return array<string, array{string, string, string, bool}> */
+	/** @return array<string, array{string, string, string, bool}|array{string, string, string, bool, string}> */
 	public static function locality_record_cases(): array {
 		return [
 			'matching text'       => [ 'Москва', 'г', 'Москва', true ],
@@ -1628,6 +1632,7 @@ final class PickupControllerTest extends TestCase {
 			'free text mismatch'  => [ 'Москва', 'г', 'Нижнезаимка', false ],
 			'old provider key'    => [ 'Москва', 'г', 'dadata:previous-city', false ],
 			'no guessed alias'    => [ 'Москва', 'г', 'Moscow', false ],
+			'bounds with mismatching locality hint' => [ 'Москва', 'г', 'Нижнезаимка', true, '55.70,37.50,55.80,37.70' ],
 		];
 	}
 

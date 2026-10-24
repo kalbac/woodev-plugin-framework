@@ -1260,9 +1260,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 			$record   = $query->get_record();
 			$locality = $query->get_locality();
 
-			// Provider keys remain the authority after a suggestion pick; bbox-only and
-			// record-free requests retain their existing point-source behavior.
-			if ( null === $record || null === $locality || $record->key() === $locality ) {
+			// Provider keys remain the authority after a suggestion pick; viewport queries
+			// are addressed by bounds, so a locality hint must not narrow them.
+			if ( null === $record || null === $locality || null !== $query->get_bounds() || $record->key() === $locality ) {
 				return $query;
 			}
 
