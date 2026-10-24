@@ -1754,7 +1754,7 @@ describe( 'resolveLocalityKey() — Task 15 (issue #159)', () => {
 		expect( queries[ 0 ].locality ).toBe( 'Москва' );
 	} );
 
-	test( 'a plugin WITH config.location addresses by the SERVER-RESOLVED key, ignoring the DOM city value', async () => {
+	test( 'a plugin WITH config.location but no settlement name keeps its server-resolved key', async () => {
 		const queries = [];
 		window.WoodevPickupDataSource = fakeDataSourceFactory( ( query ) => {
 			queries.push( query );
@@ -1766,14 +1766,80 @@ describe( 'resolveLocalityKey() — Task 15 (issue #159)', () => {
 			location: { current: { key: 'dadata:fias-1' } },
 		} ) );
 		mountAll();
-		// A DOM value is present too (e.g. a §8 takeover select) — it must be IGNORED once
-		// config.location is wired; this is #159's own bug, inverted into a regression guard.
+		// A DOM value is present too (e.g. a §8 takeover select), but this legacy fixture has
+		// no settlement display name to compare it with, so the resolved key stays authoritative.
 		setCitySelectValue( 'billing_city', 'Москва' );
 
 		clickTrigger();
 		await flushAsync();
 
 		expect( queries[ 0 ].locality ).toBe( 'dadata:fias-1' );
+	} );
+
+	test( 'a city that matches the saved settlement keeps addressing by its key (#1449)', async () => {
+		const fieldId = 'pickup_locality_matching_record_test';
+		document.body.insertAdjacentHTML(
+			'beforeend',
+			'<div data-woodev-pickup-slot="' + fieldId + '"></div>' +
+			'<input id="' + fieldId + '" type="hidden" value="" />'
+		);
+
+		const queries = [];
+		window.WoodevPickupDataSource = fakeDataSourceFactory( ( query ) => {
+			queries.push( query );
+			return Promise.resolve( [] );
+		} );
+
+		setConfig( makeConfig( {
+			fieldId,
+			strategy: 'bulk',
+			location: {
+				current: { key: 'cdek:44' },
+				settlementKey: 'cdek:44',
+				settlementName: 'Москва',
+				settlementType: 'г',
+			},
+		} ) );
+		mountAll();
+		setCitySelectValue( 'billing_city', 'г. МОСКВА' );
+
+		clickTrigger();
+		await flushAsync();
+
+		expect( queries[ 0 ].locality ).toBe( 'cdek:44' );
+	} );
+
+	test( 'a city that differs from the saved settlement sends text instead of its stale key (#1449)', async () => {
+		const fieldId = 'pickup_locality_stale_record_test';
+		document.body.insertAdjacentHTML(
+			'beforeend',
+			'<div data-woodev-pickup-slot="' + fieldId + '"></div>' +
+			'<input id="' + fieldId + '" type="hidden" value="" />'
+		);
+
+		const queries = [];
+		window.WoodevPickupDataSource = fakeDataSourceFactory( ( query ) => {
+			queries.push( query );
+			return Promise.resolve( [] );
+		} );
+
+		setConfig( makeConfig( {
+			fieldId,
+			strategy: 'bulk',
+			location: {
+				current: { key: 'cdek:44' },
+				settlementKey: 'cdek:44',
+				settlementName: 'Москва',
+				settlementType: 'г',
+			},
+		} ) );
+		mountAll();
+		setCitySelectValue( 'billing_city', 'Нижнезаимка' );
+
+		clickTrigger();
+		await flushAsync();
+
+		expect( queries[ 0 ].locality ).toBe( 'Нижнезаимка' );
 	} );
 
 	test( 'PREFERS config.location.settlementKey over current.key at page load (issue #336)', async () => {

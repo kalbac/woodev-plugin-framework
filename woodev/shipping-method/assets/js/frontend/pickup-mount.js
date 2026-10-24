@@ -1275,8 +1275,60 @@
 		}
 
 		var key = resolvedLocalityKey[ config.fieldId ];
+		var location = config.location;
+		var city = resolveLocality( config );
 
-		return key ? key : resolveLocality( config );
+		// The pickup config carries only opaque keys unless it also includes the
+		// settlement display name. If the visible city has since changed (for
+		// example, a restored free-text value beside a stale customer record), send
+		// that text so the server's locality/record guard can refuse the old identity.
+		if (
+			key && key === location.settlementKey &&
+			'string' === typeof location.settlementName && '' !== location.settlementName &&
+			city && normalizeSettlementName( city, location.settlementType ) !== normalizeSettlementName( location.settlementName, location.settlementType )
+		) {
+			return city;
+		}
+
+		return key ? key : city;
+	}
+
+	/** @type {string[]} Settlement-type prefixes ignored when comparing a city with its saved record. */
+	var CITY_TYPE_WORDS = [
+		'город', 'гор', 'г', 'поселок', 'посёлок', 'пос', 'пгт', 'п', 'село', 'с', 'деревня', 'д',
+		'станица', 'ст-ца', 'хутор', 'х', 'аул',
+	];
+
+	/**
+	 * Normalize the stored settlement name and visible city like the server and location cascade do.
+	 *
+	 * @param {string} value The city text.
+	 * @param {string} [type] The stored settlement's own type word.
+	 * @returns {string}
+	 */
+	function normalizeSettlementName( value, type ) {
+		var fold = function( text ) {
+			return String( text ).toLowerCase().replace( /ё/g, 'е' );
+		};
+		var folded = fold( value ).replace( /\s+/g, ' ' ).trim();
+		var words = CITY_TYPE_WORDS.slice();
+		var ownType = fold( type || '' ).replace( /^[ \t.]+|[ \t.]+$/g, '' );
+
+		if ( '' !== ownType ) {
+			words.unshift( ownType );
+		}
+
+		var alternatives = words
+			.filter( function( word ) {
+				return '' !== word && '0' !== word;
+			} )
+			.map( function( word ) {
+				return fold( word ).replace( /[.*+?^${}()|[\]\\]/g, '\\$&' );
+			} )
+			.join( '|' );
+		var stripped = folded.replace( new RegExp( '^(?:' + alternatives + ')(?:\\.\\s*|\\s+)(?=\\S)' ), '' );
+
+		return '' !== stripped ? stripped : folded;
 	}
 
 	/**
