@@ -318,6 +318,15 @@
 	/** @type {number} technical placeholder zoom paired with {@see DEFAULT_CENTER}. */
 	var DEFAULT_ZOOM = 2;
 
+	/**
+	 * The ymaps behaviours that zoom (and so can drift the centre towards a pointer or a pinch's
+	 * focal point) — switched off while the viewport is held (#1432). Only those the map has
+	 * ENABLED are touched, and exactly that set is restored.
+	 *
+	 * @type {string[]}
+	 */
+	var ZOOM_BEHAVIORS = [ 'scrollZoom', 'dblClickZoom', 'multiTouch', 'rightMouseButtonMagnifier' ];
+
 	/** @type {number} how far, in degrees, a held camera's centre may drift (rounding of a zoom) and still count as unmoved (#1432). */
 	var HELD_CENTER_TOLERANCE_DEG = 0.0001;
 
@@ -937,6 +946,9 @@
 
 		/** @type {number[]|null} the placeholder centre a held viewport is measured against. */
 		this._heldCenter = null;
+
+		/** @type {string[]} the zoom behaviours {@see _holdViewport} switched off, restored on release. */
+		this._heldBehaviors = [];
 
 		/** @type {Object.<string, Object>} the current groups, by key — see {@see setPoints}. */
 		this._groupsByKey = {};
@@ -1673,18 +1685,30 @@
 	};
 
 	/**
-	 * Starts holding the viewport (#1432): remembers the placeholder centre and turns the two
-	 * gestures that zoom without a drag off, so a zoom can neither fetch the placeholder's points
-	 * nor — wheel zoom moves the centre towards the cursor — look like a move. The zoom buttons
+	 * Starts holding the viewport (#1432): remembers the placeholder centre and turns the
+	 * {@see ZOOM_BEHAVIORS} the map has enabled off, so a zoom can neither fetch the placeholder's
+	 * points nor — wheel, double click, pinch and the right-button magnifier move the centre
+	 * towards the pointer — look like a move. The zoom buttons
 	 * zoom around the centre, which {@see _heldCameraMoved} reads as "not moved".
 	 *
 	 * @returns {void}
 	 */
 	WoodevYandexMapProvider.prototype._holdViewport = function() {
-		this._heldCenter = this.map.getCenter();
+		var behaviors = this.map.behaviors;
 
-		if ( this.map.behaviors && 'function' === typeof this.map.behaviors.disable ) {
-			this.map.behaviors.disable( [ 'scrollZoom', 'dblClickZoom' ] );
+		this._heldCenter = this.map.getCenter();
+		this._heldBehaviors = [];
+
+		if ( ! behaviors || 'function' !== typeof behaviors.disable ) {
+			return;
+		}
+
+		this._heldBehaviors = ZOOM_BEHAVIORS.filter( function( name ) {
+			return 'function' !== typeof behaviors.isEnabled || behaviors.isEnabled( name );
+		} );
+
+		if ( this._heldBehaviors.length > 0 ) {
+			behaviors.disable( this._heldBehaviors );
 		}
 	};
 
@@ -1711,8 +1735,12 @@
 	WoodevYandexMapProvider.prototype._releaseViewport = function() {
 		this._viewportHeld = false;
 
-		if ( this.map && this.map.behaviors && 'function' === typeof this.map.behaviors.enable ) {
-			this.map.behaviors.enable( [ 'scrollZoom', 'dblClickZoom' ] );
+		var held = this._heldBehaviors;
+
+		this._heldBehaviors = [];
+
+		if ( held.length > 0 && this.map && this.map.behaviors && 'function' === typeof this.map.behaviors.enable ) {
+			this.map.behaviors.enable( held );
 		}
 	};
 

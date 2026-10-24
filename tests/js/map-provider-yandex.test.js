@@ -156,7 +156,13 @@ function createYmapsStub( options ) {
 		this.geoObjects = { add: jest.fn(), remove: jest.fn() };
 		this.controls = { add: jest.fn() };
 		this.destroy = jest.fn();
-		this.behaviors = { disable: jest.fn(), enable: jest.fn() };
+		this.enabledBehaviors = [ 'drag', 'scrollZoom', 'dblClickZoom', 'multiTouch', 'rightMouseButtonMagnifier', 'leftMouseButtonMagnifier' ]
+			.filter( ( name ) => ! ( stub.preDisabled || [] ).includes( name ) );
+		this.behaviors = {
+			isEnabled: jest.fn( ( name ) => this.enabledBehaviors.includes( name ) ),
+			disable: jest.fn(),
+			enable: jest.fn(),
+		};
 		this._eventHandlers = {};
 		this._pendingSetBounds = [];
 		this._pendingCameraMoves = [];
@@ -1950,7 +1956,9 @@ test( 'geocode failed and no coordinates: says so, fetches nothing, keeps the ma
 	ymapsStub.lastMap.fireBoundsChange();
 
 	expect( events.boundsChange ).toHaveLength( 1 );
-	expect( ymapsStub.lastMap.behaviors.enable ).toHaveBeenCalledWith( [ 'scrollZoom', 'dblClickZoom' ] );
+	expect( ymapsStub.lastMap.behaviors.enable ).toHaveBeenCalledWith(
+		[ 'scrollZoom', 'dblClickZoom', 'multiTouch', 'rightMouseButtonMagnifier' ]
+	);
 	expect( provider.map ).not.toBeNull();
 } );
 
@@ -1959,8 +1967,12 @@ test( 'a held viewport turns the zoom gestures that move the centre off, and a p
 
 	const { provider, events } = await initWithEvents( { strategy: 'viewport', locality: 'Владивосток' } );
 
-	// Wheel zoom drifts the centre towards the cursor, so it must not be able to read as a move.
-	expect( ymapsStub.lastMap.behaviors.disable ).toHaveBeenCalledWith( [ 'scrollZoom', 'dblClickZoom' ] );
+	// Every zoom gesture that drifts the centre towards a pointer or a pinch's focal point is
+	// switched off — and nothing else (drag stays: it is how the buyer moves away).
+	expect( ymapsStub.lastMap.behaviors.disable ).toHaveBeenCalledTimes( 1 );
+	expect( ymapsStub.lastMap.behaviors.disable ).toHaveBeenCalledWith(
+		[ 'scrollZoom', 'dblClickZoom', 'multiTouch', 'rightMouseButtonMagnifier' ]
+	);
 
 	await provider.focusAddress( [ 43.1155, 131.8855 ], 'Светланская, 1', [ [ 43.11, 131.88 ], [ 43.12, 131.89 ] ] );
 	ymapsStub.lastMap.fireBoundsChange();
@@ -3699,4 +3711,21 @@ test( 'setPoints() never re-applies focus to a group that no longer exists in th
 		'a',
 		expect.anything()
 	);
+} );
+
+test( 'only the zoom behaviours the map has ENABLED are switched off, and exactly those come back (#1432)', async () => {
+	ymapsStub.geocodeImpl = () => Promise.reject( new Error( 'blocked' ) );
+	// An integrator who already turned the pinch and the magnifier off.
+	ymapsStub.preDisabled = [ 'multiTouch', 'rightMouseButtonMagnifier' ];
+
+	const { provider } = await initWithEvents( { strategy: 'viewport', locality: 'Владивосток' } );
+	const map = ymapsStub.lastMap;
+
+	expect( map.behaviors.disable ).toHaveBeenCalledWith( [ 'scrollZoom', 'dblClickZoom' ] );
+
+	await provider.focusAddress( [ 43.1155, 131.8855 ], 'Светланская, 1', [ [ 43.11, 131.88 ], [ 43.12, 131.89 ] ] );
+
+	// The release restores exactly what the hold took — it never switches on what was off.
+	expect( map.behaviors.enable ).toHaveBeenCalledTimes( 1 );
+	expect( map.behaviors.enable ).toHaveBeenCalledWith( [ 'scrollZoom', 'dblClickZoom' ] );
 } );
