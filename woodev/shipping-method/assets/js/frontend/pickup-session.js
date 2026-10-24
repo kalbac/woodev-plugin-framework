@@ -2968,6 +2968,14 @@
 				// the modal body and detach it.
 				if ( reason && 'map_script' === reason.code && 'bulk' === config.strategy ) {
 					modal.showNotice( errorMessage( config, reason ) );
+
+					// The sidebar starts closed, so without this the fetched list lands behind a closed
+					// drawer and the customer sees only the notice. The notice sits above the stage in
+					// the dialog body, so opening the list covers nothing the customer still needs.
+					if ( panels ) {
+						panels.openList();
+					}
+
 					return;
 				}
 
