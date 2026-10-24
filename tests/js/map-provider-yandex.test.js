@@ -156,6 +156,7 @@ function createYmapsStub( options ) {
 		this.geoObjects = { add: jest.fn(), remove: jest.fn() };
 		this.controls = { add: jest.fn() };
 		this.destroy = jest.fn();
+		this.behaviors = { disable: jest.fn(), enable: jest.fn() };
 		this._eventHandlers = {};
 		this._pendingSetBounds = [];
 		this._pendingCameraMoves = [];
@@ -1935,13 +1936,36 @@ test( 'geocode failed and no coordinates: says so, fetches nothing, keeps the ma
 
 	expect( events.boundsChange ).toHaveLength( 0 );
 
-	// The customer's own first camera action (a drag, a picked address) releases the hold, and
-	// the boundschange that follows fetches for wherever they went.
-	ymapsStub.lastMap._eventHandlers.actionbegin.forEach( ( handler ) => handler() );
+	// A zoom-only action (the panel's zoom buttons) keeps the centre: still held, nothing fetched
+	// — the placeholder's points must never appear because a button was pressed.
+	ymapsStub.lastMap.bounds = [ [ 55.0, 37.0 ], [ 56.0, 38.0 ] ];
+	ymapsStub.lastMap.fireBoundsChange();
+	provider.zoomBy( -1 );
+	ymapsStub.lastMap.fireBoundsChange();
+
+	expect( events.boundsChange ).toHaveLength( 0 );
+
+	// The customer's own drag moves the centre away: the hold ends and the boundschange fetches.
+	ymapsStub.lastMap.center = [ 43.1, 131.9 ];
 	ymapsStub.lastMap.fireBoundsChange();
 
 	expect( events.boundsChange ).toHaveLength( 1 );
+	expect( ymapsStub.lastMap.behaviors.enable ).toHaveBeenCalledWith( [ 'scrollZoom', 'dblClickZoom' ] );
 	expect( provider.map ).not.toBeNull();
+} );
+
+test( 'a held viewport turns the zoom gestures that move the centre off, and a picked address ends the hold (#1432)', async () => {
+	ymapsStub.geocodeImpl = () => Promise.reject( new Error( 'blocked' ) );
+
+	const { provider, events } = await initWithEvents( { strategy: 'viewport', locality: 'Владивосток' } );
+
+	// Wheel zoom drifts the centre towards the cursor, so it must not be able to read as a move.
+	expect( ymapsStub.lastMap.behaviors.disable ).toHaveBeenCalledWith( [ 'scrollZoom', 'dblClickZoom' ] );
+
+	await provider.focusAddress( [ 43.1155, 131.8855 ], 'Светланская, 1', [ [ 43.11, 131.88 ], [ 43.12, 131.89 ] ] );
+	ymapsStub.lastMap.fireBoundsChange();
+
+	expect( events.boundsChange ).toHaveLength( 1 );
 } );
 
 test( 'coordinates that are not a usable [lat, lon] pair count as none (#1432)', async () => {

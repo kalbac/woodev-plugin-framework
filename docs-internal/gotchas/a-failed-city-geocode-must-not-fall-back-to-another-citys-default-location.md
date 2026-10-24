@@ -19,8 +19,9 @@ One shared fallback served two different situations: «the buyer has no city yet
 ❌ geocode fails → `map.setCenter( defaultLocation )` and fetch there.
 
 ✅ geocode fails → centre on the customer location record's own `[lat, lon]` (`config.localityCenter`, city zoom 11); with none,
-HOLD the viewport (`_viewportHeld`: no points fetched for the placeholder camera, the first camera action of the customer's own
-releases it), emit `cityUnresolved` and show the panel message «Не удалось определить город на карте — введите адрес в
+HOLD the viewport (`_viewportHeld`: no points fetched for the placeholder camera; released only when the camera CENTRE moves
+away or an address is picked — a zoom button keeps the centre, and `scrollZoom`/`dblClickZoom` are turned off while held because
+they drift the centre towards the cursor; keying the release on `actionbegin` let a zoom press load Moscow's points), emit `cityUnresolved` and show the panel message «Не удалось определить город на карте — введите адрес в
 поиске». The default location stays only for an EMPTY city field.
 
 How the coordinates reach the browser: the wire `chain` node is `{ key, level }` plus `lat`/`lon` when the record has both
