@@ -6,7 +6,7 @@ it would have published NOTHING: both base branches already declared the release
 `2.0.0` on `main`) long before the release PR, so merging the PR changes only the framework pin — "version unchanged,
 nothing to release". The first Yandex critic missed it; the CDEK critic (Codex sol) reproduced it by running the step
 with `BEFORE=origin/v2`. A `workflow_dispatch` fallback did not help either: GitHub offers the button only for a workflow
-on the DEFAULT branch, and CDEK's default is still `master` (the v1 line).
+on the DEFAULT branch, and CDEK's default is still `master` (the v1 line). (Since s195, 23.10.2026, CDEK and Russian Post default to `main`, so the button is there.)
 
 ❌ **Wrong:**
 
