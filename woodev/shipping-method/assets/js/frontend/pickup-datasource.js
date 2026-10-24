@@ -225,6 +225,9 @@
 	/**
 	 * Joins a base URL and query strings, skipping the empty ones.
 	 *
+	 * The separator is `&` when `base` already holds a query: on plain permalinks the REST base is
+	 * `index.php?rest_route=/woodev/v1/…`, and a second `?` would end up INSIDE the `rest_route` value.
+	 *
 	 * @param {string} base
 	 * @param {...string} queries
 	 * @returns {string}
@@ -234,7 +237,7 @@
 			return 'string' === typeof query && query.length > 0;
 		} );
 
-		return queries.length > 0 ? base + '?' + queries.join( '&' ) : base;
+		return queries.length > 0 ? base + ( -1 === base.indexOf( '?' ) ? '?' : '&' ) + queries.join( '&' ) : base;
 	}
 
 	/**

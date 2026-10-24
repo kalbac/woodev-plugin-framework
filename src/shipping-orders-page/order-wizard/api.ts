@@ -12,6 +12,7 @@
 
 import apiFetch from '@wordpress/api-fetch';
 import { __ } from '@wordpress/i18n';
+import { withQuery } from '../../components/rest-url';
 import { getWizardContext } from '../rest';
 import type { AddressPolicyResponse, OrderPrefill, RatesResponse, SaveResult, ServerError } from './types';
 import type { WcCustomerRecord } from './wizard-data';
@@ -106,7 +107,7 @@ export function fetchAddressPolicy( country: string, pickup: boolean ): Promise<
 
 	return Promise.resolve(
 		apiFetch<AddressPolicyResponse>( {
-			url: `${ ordersRoot }/address-policy?${ query }`,
+			url: withQuery( `${ ordersRoot }/address-policy`, query ),
 			method: 'GET',
 			headers: headers(),
 		} )
@@ -228,7 +229,10 @@ export async function checkPickupPoint(
 
 	try {
 		const point = await apiFetch<{ selectable?: { allowed?: unknown; reason?: unknown } }>( {
-			url: `${ pointsRoot.replace( /\/+$/, '' ) }/${ encodeURIComponent( pointId ) }?${ query }${ locationQuery ? `&${ locationQuery }` : '' }`,
+			url: withQuery(
+				`${ pointsRoot.replace( /\/+$/, '' ) }/${ encodeURIComponent( pointId ) }`,
+				`${ query }${ locationQuery ? `&${ locationQuery }` : '' }`
+			),
 			method: 'GET',
 			headers: headers(),
 		} );
@@ -261,7 +265,10 @@ export interface SearchOption {
 }
 
 const wcUrl = ( path: string, params: Record<string, string> ): string =>
-	`${ getWizardContext().apiRoot.replace( /\/woodev\/v1$/, '' ) }${ path }?${ new URLSearchParams( params ).toString() }`;
+	withQuery(
+		`${ getWizardContext().apiRoot.replace( /\/woodev\/v1$/, '' ) }${ path }`,
+		new URLSearchParams( params ).toString()
+	);
 
 /** The chosen product / variation, as the items step turns it into a line. */
 export interface PickedProduct {

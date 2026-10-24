@@ -154,6 +154,56 @@ test( 'a bounds array of the wrong arity is omitted from the query rather than s
 	expect( fetchMock.mock.calls[ 0 ][ 0 ] ).toBe( REST_ROOT );
 } );
 
+// Issue #1439 — plain permalinks: `rest_url()` is `index.php?rest_route=/…`, so every query
+// parameter joins with `&`; a second `?` would end up inside the `rest_route` value.
+describe( 'a REST root that already holds a query (plain permalinks)', () => {
+	const PLAIN_ROOT = 'https://example.test/index.php?rest_route=/woodev/v1/shipping/pickup/carrier/points';
+
+	test( 'fetchPoints() appends its parameters with &', async () => {
+		jest.useFakeTimers();
+		const fetchMock = mockFetchOnce( 200, { points: [] } );
+
+		const ds = WoodevPickupDataSource( { restRoot: PLAIN_ROOT, nonce: NONCE } );
+		const promise = ds.fetchPoints( { bounds: [ 55.1, 37.2, 55.9, 37.9 ], q: 'твер' } );
+		jest.advanceTimersByTime( 300 );
+		await promise;
+
+		const sent = fetchMock.mock.calls[ 0 ][ 0 ];
+
+		expect( sent.split( '?' ).length ).toBe( 2 );
+		expect( sent ).toBe(
+			PLAIN_ROOT + '&bbox=' + encodeURIComponent( '55.1,37.2,55.9,37.9' ) + '&q=' + encodeURIComponent( 'твер' )
+		);
+		expect( new URL( sent ).searchParams.get( 'rest_route' ) ).toBe( '/woodev/v1/shipping/pickup/carrier/points' );
+	} );
+
+	test( 'fetchPoints() with no parameters leaves the root untouched', async () => {
+		jest.useFakeTimers();
+		const fetchMock = mockFetchOnce( 200, { points: [] } );
+
+		const ds = WoodevPickupDataSource( { restRoot: PLAIN_ROOT, nonce: NONCE } );
+		const promise = ds.fetchPoints( {} );
+		jest.advanceTimersByTime( 300 );
+		await promise;
+
+		expect( fetchMock.mock.calls[ 0 ][ 0 ] ).toBe( PLAIN_ROOT );
+	} );
+
+	test( 'fetchDetails() appends the context with & and keeps the point id inside the route', async () => {
+		const fetchMock = mockFetchOnce( 200, { id: 'P1' } );
+
+		const ds = WoodevPickupDataSource( { restRoot: PLAIN_ROOT, nonce: NONCE, context: { weight: 500 } } );
+		await ds.fetchDetails( 'P1' );
+
+		const sent = fetchMock.mock.calls[ 0 ][ 0 ];
+		const url = new URL( sent );
+
+		expect( sent.split( '?' ).length ).toBe( 2 );
+		expect( url.searchParams.get( 'rest_route' ) ).toBe( '/woodev/v1/shipping/pickup/carrier/points/P1' );
+		expect( url.searchParams.get( 'weight' ) ).toBe( '500' );
+	} );
+} );
+
 // -----------------------------------------------------------------------
 // Nonce header
 // -----------------------------------------------------------------------
