@@ -537,7 +537,7 @@
 .woodev-purchases__action {
 	flex: 0 0 auto;
 	display: flex;
-	flex-direction: column;
+	flex-wrap: wrap;
 	align-items: center;
 	min-width: 140px;
 	justify-content: flex-end;
