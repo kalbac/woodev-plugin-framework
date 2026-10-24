@@ -1077,6 +1077,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 
 			$query = $this->attach_location_context( $query );
 
+			if ( null === $query ) {
+				return [ 'points' => [] ];
+			}
+
 			$cart_weight    = ( $this->cart_weight )();
 			$payment_method = ( $this->payment_method )();
 
@@ -1236,20 +1240,39 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 		 * misbehaving must not fatal a public, guest-facing route). {@see Point_Query} is
 		 * immutable, so this always returns either the SAME instance (no-op) or a fresh one
 		 * from {@see Point_Query::with_location()}, never mutates `$query` in place.
+		 * A locality that disagrees with the stored record returns `null` (#1433): a
+		 * free-text city must never inherit another city's resolved carrier identity.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.12 Refuses a locality that does not name the stored record.
 		 *
 		 * @param Point_Query $query The built, strategy-validated query.
 		 *
-		 * @return Point_Query
+		 * @return Point_Query|null Null when the request and stored locality disagree.
 		 */
-		private function attach_location_context( Point_Query $query ): Point_Query {
+		private function attach_location_context( Point_Query $query ): ?Point_Query {
 
 			if ( null === $this->location_context ) {
 				return $query;
 			}
 
-			return $this->apply_location_context( $query, ( $this->location_context )() );
+			$query    = $this->apply_location_context( $query, ( $this->location_context )() );
+			$record   = $query->get_record();
+			$locality = $query->get_locality();
+
+			// Provider keys remain the authority after a suggestion pick; viewport queries
+			// are addressed by bounds, so a locality hint must not narrow them.
+			if ( null === $record || null === $locality || null !== $query->get_bounds() || $record->key() === $locality ) {
+				return $query;
+			}
+
+			$component = $record->settlement() ?? $record->region();
+			$name      = (string) ( $component['name'] ?? '' );
+			$type      = (string) ( $component['type'] ?? '' );
+
+			return '' !== trim( $name )
+				&& Location_Record::normalize_city_name( $name, $type ) === Location_Record::normalize_city_name( $locality, $type )
+				? $query : null;
 		}
 
 		/**
