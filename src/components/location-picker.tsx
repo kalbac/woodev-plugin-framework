@@ -52,6 +52,7 @@ import { useState, useEffect, useRef } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { Dropdown, SearchControl, Spinner } from '@wordpress/components';
 import apiFetch from '@wordpress/api-fetch';
+import { withQuery } from './rest-url';
 import { ChevronIcon, CheckFilledIcon } from './icons';
 
 /** The levels a search can run at, outermost first (`Location_Record::LEVELS`). */
@@ -288,7 +289,7 @@ export default function LocationPicker( {
 			} );
 
 			apiFetch<SuggestResponse>( {
-				url: `${ restRoot }${ endpoint }?${ query_params.toString() }`,
+				url: withQuery( `${ restRoot }${ endpoint }`, query_params.toString() ),
 				method: 'GET',
 				headers: nonce ? { 'X-WP-Nonce': nonce } : {},
 			} )

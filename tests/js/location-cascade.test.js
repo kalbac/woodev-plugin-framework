@@ -197,7 +197,7 @@ function buildConfig( opts ) {
 		nonce: 'test-nonce',
 		takeover: {},
 		location: {
-			endpoints: { suggest: SUGGEST_URL, select: SELECT_URL, list: LIST_URL, forget: FORGET_URL },
+			endpoints: o.endpoints || { suggest: SUGGEST_URL, select: SELECT_URL, list: LIST_URL, forget: FORGET_URL },
 			nonce: 'test-nonce',
 			countries: o.countries || [ 'RU' ],
 			// Issue #380: two independent axes — each 'typeahead' | 'related-list' |
@@ -470,6 +470,27 @@ describe( 'chain assembly from present fields only', () => {
 // -----------------------------------------------------------------------
 
 describe( 'suggestion scoping', () => {
+	// Issue #1439 — plain permalinks: the REST base is `index.php?rest_route=/…`, so the query is
+	// appended with `&`; a second `?` would end up inside the `rest_route` value.
+	it( 'appends the suggest query with & when the endpoint already holds a rest_route query', () => {
+		boot( {
+			settlement: true,
+			endpoints: {
+				suggest: 'https://example.test/index.php?rest_route=/woodev/v1/location/suggest',
+				select: SELECT_URL, list: LIST_URL, forget: FORGET_URL,
+			},
+		} );
+
+		callFor( 'billing_city' ).fetch( 'Мос' );
+
+		const url = new URL( fetchCalls[ fetchCalls.length - 1 ].url );
+
+		expect( fetchCalls[ fetchCalls.length - 1 ].url.split( '?' ).length ).toBe( 2 );
+		expect( url.searchParams.get( 'rest_route' ) ).toBe( '/woodev/v1/location/suggest' );
+		expect( url.searchParams.get( 'level' ) ).toBe( 'settlement' );
+		expect( url.searchParams.get( 'country' ) ).toBe( 'RU' );
+	} );
+
 	it( 'scopes settlement suggestions by the selected region record key', () => {
 		boot( { region: true, settlement: true, address: true } );
 

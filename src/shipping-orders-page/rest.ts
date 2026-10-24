@@ -11,6 +11,7 @@
  */
 
 import apiFetch from '@wordpress/api-fetch';
+import { withQuery } from '../components/rest-url';
 
 /** `status` — the plain WC order status (increment 1; kept alongside `delivery_status`). */
 export interface OrderRowStatus {
@@ -401,16 +402,6 @@ async function documentError( error: unknown ): Promise<DocumentError> {
 	}
 
 	return ( error || {} ) as DocumentError;
-}
-
-/**
- * Appends a query string to a REST URL that may already hold one.
- *
- * On plain permalinks `rest_url()` is `…/index.php?rest_route=/woodev/v1/…`; a second `?` would end up INSIDE the
- * `rest_route` value and the route would not match, so the separator is `&` when a query is already there.
- */
-function withQuery( url: string, query: string ): string {
-	return `${ url }${ url.includes( '?' ) ? '&' : '?' }${ query }`;
 }
 
 /** Response header the bulk route names the orders left out in: `id:code,id:code`. */

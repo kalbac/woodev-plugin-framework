@@ -361,6 +361,9 @@
 	 * omitted `within` is how "no scope" is expressed to the REST controller (never an empty
 	 * string, which `build_scope()` would treat as a literal, if harmless, value).
 	 *
+	 * The separator is `&` when `base` already holds a query: on plain permalinks the REST base is
+	 * `index.php?rest_route=/woodev/v1/…`, and a second `?` would end up INSIDE the `rest_route` value.
+	 *
 	 * @param {string}                       base
 	 * @param {Object.<string, string|null>} params
 	 * @returns {string}
@@ -376,7 +379,7 @@
 			}
 		} );
 
-		return parts.length ? base + '?' + parts.join( '&' ) : base;
+		return parts.length ? base + ( -1 === base.indexOf( '?' ) ? '?' : '&' ) + parts.join( '&' ) : base;
 	}
 
 	/**
