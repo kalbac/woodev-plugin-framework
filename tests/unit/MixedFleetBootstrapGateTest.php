@@ -17,6 +17,8 @@ namespace Woodev\Tests\Unit;
 use Brain\Monkey\Functions;
 use ReflectionClass;
 
+require_once dirname( __DIR__, 2 ) . '/woodev/account/class-installed-plugins.php';
+
 /**
  * Class MixedFleetBootstrapGateTest
  */
@@ -357,9 +359,9 @@ class MixedFleetBootstrapGateTest extends TestCase {
 
 		// v1 positional signature: register_plugin( $framework_version, $plugin_name, $path, $callback, $args ).
 		$bootstrap->register_plugin(
-			'1.4.1',
-			'Legacy Plugin',
-			'/path/legacy.php',
+			'1.x',
+			'EMS',
+			'/var/www/wp-content/plugins/woodev-russian-post/woodev-russian-post.php',
 			static function (): void {
 				$GLOBALS['b1_cb'] = true;
 			},
@@ -370,8 +372,9 @@ class MixedFleetBootstrapGateTest extends TestCase {
 
 		$recorded = $this->get_protected_property( $bootstrap, 'mixed_fleet_incompatible_plugins' );
 		$this->assertCount( 1, $recorded, 'The legacy plugin must be recorded in the mixed-fleet list.' );
-		$this->assertSame( 'Legacy Plugin', $recorded[0]['plugin_name'] );
-		$this->assertSame( '/path/legacy.php', $recorded[0]['path'] );
+		$this->assertSame( 'EMS', $recorded[0]['plugin_name'] );
+		$this->assertSame( '/var/www/wp-content/plugins/woodev-russian-post/woodev-russian-post.php', $recorded[0]['path'] );
+		$this->assertSame( [ 8772 ], \Woodev_Installed_Plugins::download_ids_from_mixed_fleet_records( $recorded ) );
 
 		// Filtered by callback, not just the hook name: the bootstrap constructor also
 		// unconditionally wires 'admin_notices' to render_activation_guard_notice() (#916),

@@ -57,4 +57,38 @@ final class InstalledPluginsTest extends TestCase {
 	public function test_empty_input_yields_empty_array(): void {
 		$this->assertSame( array(), \Woodev_Installed_Plugins::download_ids( array() ) );
 	}
+
+	public function test_collects_ids_from_framework_refusal_records(): void {
+		$definition = static function ( int $id ): object {
+			return new class( $id ) {
+				private int $id;
+				public function __construct( int $id ) { $this->id = $id; }
+				public function get_download_id(): int { return $this->id; }
+			};
+		};
+
+		$records = [
+			[ 'definition' => $definition( 216 ) ],
+			[ 'definition' => $definition( 216 ) ],
+			[ 'definition' => $definition( 0 ) ],
+			[ 'definition' => new \stdClass() ],
+			'not a resolver record',
+		];
+
+		$this->assertSame( [ 216 ], \Woodev_Installed_Plugins::download_ids_from_records( $records ) );
+	}
+
+	public function test_unmatched_legacy_plugin_does_not_look_like_a_store_product(): void {
+		$this->assertSame(
+			[],
+			\Woodev_Installed_Plugins::download_ids_from_mixed_fleet_records(
+				[
+					[
+						'plugin_name' => 'Third-party plugin',
+						'path'        => '/var/www/wp-content/plugins/third-party/third-party.php',
+					],
+				]
+			)
+		);
+	}
 }

@@ -26,8 +26,26 @@ class Spy_Account_Installer extends \Woodev_Account_Installer {
 	/** @var true|\WP_Error The canned upgrader result. */
 	public $result = true;
 
-	protected function run_upgrader( string $package ) {
+	/** @var bool Whether the install should overwrite the refused plugin folder. */
+	public $overwrite = false;
+
+	/** @var array<int,array<string,mixed>> Resolver records refused by framework compatibility. */
+	public $incompatible_plugins = [];
+
+	/** @var array<int,array<string,mixed>> Legacy tombstone records. */
+	public $legacy_plugins = [];
+
+	protected function get_incompatible_framework_plugins(): array {
+		return $this->incompatible_plugins;
+	}
+
+	protected function get_mixed_fleet_incompatible_plugins(): array {
+		return $this->legacy_plugins;
+	}
+
+	protected function run_upgrader( string $package, bool $overwrite = false ) {
 		$this->ran = $package;
+		$this->overwrite = $overwrite;
 		return $this->result;
 	}
 }
@@ -176,5 +194,56 @@ final class AccountInstallerTest extends TestCase {
 
 		$this->assertTrue( $result );
 		$this->assertSame( 'https://woodev.ru/index.php?eddfile=7:21:0&token=abc', $installer->ran );
+		$this->assertFalse( $installer->overwrite, 'A first-time install must not delete an existing directory.' );
+	}
+
+	public function test_install_overwrites_a_plugin_refused_by_the_framework(): void {
+		$this->stub_connected_transport( '{"package":"https://woodev.ru/index.php?eddfile=7:21:0&token=abc"}' );
+		Functions\when( 'is_wp_error' )->justReturn( false );
+
+		$definition = new class() {
+			public function get_download_id(): int { return 21; }
+		};
+		$installer = new Spy_Account_Installer();
+		$installer->incompatible_plugins = [ [ 'definition' => $definition ] ];
+
+		$this->assertTrue( $installer->install( 21 ) );
+		$this->assertTrue( $installer->overwrite, 'The refused product should install with overwrite enabled.' );
+	}
+
+	public function test_install_overwrites_a_v1_plugin_recorded_by_the_tombstone(): void {
+		$this->stub_connected_transport( '{"package":"https://woodev.ru/index.php?eddfile=7:8772:0&token=abc"}' );
+		Functions\when( 'is_wp_error' )->justReturn( false );
+
+		$installer = new Spy_Account_Installer();
+		$installer->legacy_plugins = [
+			[
+				'plugin_name' => 'EMS',
+				'path'        => '/var/www/wp-content/plugins/woodev-russian-post/woodev-russian-post.php',
+			],
+		];
+
+		$this->assertTrue( $installer->install( 8772 ) );
+		$this->assertTrue( $installer->overwrite, 'The tombstoned v1 product should install with overwrite enabled.' );
+	}
+
+	public function test_renamed_v1_plugin_folder_is_not_offered_or_overwritten(): void {
+		$legacy_plugins = [
+			[
+				'plugin_name' => 'EMS',
+				'path'        => '/var/www/wp-content/plugins/woodev-russian-post-1.2.6/woodev-russian-post.php',
+			],
+		];
+
+		$this->assertSame( [], \Woodev_Installed_Plugins::download_ids_from_mixed_fleet_records( $legacy_plugins ) );
+
+		$this->stub_connected_transport( '{"package":"https://woodev.ru/index.php?eddfile=7:8772:0&token=abc"}' );
+		Functions\when( 'is_wp_error' )->justReturn( false );
+
+		$installer                 = new Spy_Account_Installer();
+		$installer->legacy_plugins = $legacy_plugins;
+
+		$this->assertTrue( $installer->install( 8772 ) );
+		$this->assertFalse( $installer->overwrite, 'A renamed v1 folder must not trigger a destructive overwrite.' );
 	}
 }

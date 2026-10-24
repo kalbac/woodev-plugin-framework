@@ -325,8 +325,15 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 			$account['connectUrl']   = $connection->get_connect_url();
 			$account['myAccountUrl'] = Woodev_Helper::filtered_url( 'woodev_account_api_url', 'https://woodev.ru' ) . '/my-account/';
 
-			$installed = Woodev_Installed_Plugins::download_ids(
-				Woodev_Plugin_Bootstrap::instance()->get_active_plugin_instances()
+			$bootstrap = Woodev_Plugin_Bootstrap::instance();
+			$installed = Woodev_Installed_Plugins::download_ids( $bootstrap->get_active_plugin_instances() );
+			$updates = array_values(
+				array_unique(
+					array_merge(
+						Woodev_Installed_Plugins::download_ids_from_records( $bootstrap->get_incompatible_framework_plugins() ),
+						Woodev_Installed_Plugins::download_ids_from_mixed_fleet_records( $bootstrap->get_mixed_fleet_incompatible_plugins() )
+					)
+				)
 			);
 
 			// Inline bootstrap data BEFORE the bundle so it is available on first render.
@@ -348,6 +355,7 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 						'accountEnabled' => (bool) apply_filters( 'woodev_extensions_account_enabled', true ),
 						'account'        => $account,
 						'installed'      => $installed,
+						'updates'        => $updates,
 					]
 				) . ';',
 				'before'

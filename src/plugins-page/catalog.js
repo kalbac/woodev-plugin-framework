@@ -98,6 +98,7 @@ export function RatingStars( { rating } ) {
  *
  * @param {Object} props         Props.
  * @param {Object} props.product Normalized product.
+ * @param {boolean} props.isUpdate Whether the installed plugin was refused by the current framework.
  * @return {JSX.Element} The card.
  */
 export function ExtensionCard( {
@@ -105,6 +106,7 @@ export function ExtensionCard( {
 	isInstalled = false,
 	isPurchased = false,
 	installState = 'idle',
+	isUpdate = false,
 	onInstall,
 } ) {
 	const buttonText = isInstalled
@@ -172,6 +174,7 @@ export function ExtensionCard( {
 				{ isPurchased && ! isInstalled ? (
 					<InstallButton
 						state={ installState }
+						isUpdate={ isUpdate }
 						onInstall={ () => onInstall && onInstall( product.id ) }
 					/>
 				) : (
@@ -198,11 +201,13 @@ export function ExtensionCard( {
  *
  * @param {Object} props          Props.
  * @param {Array}  props.products Filtered products.
+ * @param {Array}  props.updates  Installed plugin ids refused by the current framework.
  * @return {JSX.Element} The grid.
  */
 export function ExtensionGrid( {
 	products,
 	installed = [],
+	updates = [],
 	purchased = [],
 	installState = {},
 	onInstall,
@@ -223,6 +228,7 @@ export function ExtensionGrid( {
 					product={ p }
 					isInstalled={ installed.includes( p.id ) }
 					isPurchased={ purchased.includes( p.id ) }
+					isUpdate={ updates.includes( p.id ) }
 					installState={ installState[ p.id ] || 'idle' }
 					onInstall={ onInstall }
 				/>

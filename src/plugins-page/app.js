@@ -109,6 +109,7 @@ export default function App( { config } ) {
 					data={ purchases }
 					products={ data ? data.products : [] }
 					installed={ config.installed || [] }
+					updates={ config.updates || [] }
 					installState={ installState }
 					onInstall={ installPlugin }
 				/>
@@ -138,6 +139,7 @@ export default function App( { config } ) {
 							<ExtensionGrid
 								products={ products }
 								installed={ config.installed || [] }
+								updates={ config.updates || [] }
 								purchased={ purchased }
 								installState={ installState }
 								onInstall={ installPlugin }
