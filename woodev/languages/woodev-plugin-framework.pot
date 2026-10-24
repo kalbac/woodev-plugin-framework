@@ -68,6 +68,10 @@ msgstr ""
 msgid "Не удалось установить плагин."
 msgstr ""
 
+#: account/class-account-installer.php:243
+msgid "Причина: %s"
+msgstr ""
+
 #: admin/class-admin-pages.php:80
 #: admin/class-admin-pages.php:81
 msgid "Woodev"

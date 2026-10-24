@@ -106,6 +106,7 @@ export function ExtensionCard( {
 	isInstalled = false,
 	isPurchased = false,
 	installState = 'idle',
+	installError = '',
 	isUpdate = false,
 	onInstall,
 } ) {
@@ -174,6 +175,7 @@ export function ExtensionCard( {
 				{ isPurchased && ! isInstalled ? (
 					<InstallButton
 						state={ installState }
+						errorMessage={ installError }
 						isUpdate={ isUpdate }
 						onInstall={ () => onInstall && onInstall( product.id ) }
 					/>
@@ -202,6 +204,7 @@ export function ExtensionCard( {
  * @param {Object} props          Props.
  * @param {Array}  props.products Filtered products.
  * @param {Array}  props.updates  Installed plugin ids refused by the current framework.
+ * @param {Object} props.installErrors Per-download REST error messages.
  * @return {JSX.Element} The grid.
  */
 export function ExtensionGrid( {
@@ -210,6 +213,7 @@ export function ExtensionGrid( {
 	updates = [],
 	purchased = [],
 	installState = {},
+	installErrors = {},
 	onInstall,
 } ) {
 	if ( ! products.length ) {
@@ -230,6 +234,7 @@ export function ExtensionGrid( {
 					isPurchased={ purchased.includes( p.id ) }
 					isUpdate={ updates.includes( p.id ) }
 					installState={ installState[ p.id ] || 'idle' }
+					installError={ installErrors[ p.id ] || '' }
 					onInstall={ onInstall }
 				/>
 			) ) }

@@ -43,10 +43,39 @@ class Spy_Account_Installer extends \Woodev_Account_Installer {
 		return $this->legacy_plugins;
 	}
 
-	protected function run_upgrader( string $package, bool $overwrite = false ) {
+	protected function run_upgrader( string $package, bool $overwrite = false, int $download_id = 0 ) {
 		$this->ran = $package;
 		$this->overwrite = $overwrite;
 		return $this->result;
+	}
+}
+
+/** Installer test seam for upgrader error and response behavior. */
+class Testable_Account_Installer extends \Woodev_Account_Installer {
+	/** @var bool Whether to expose diagnostic detail in the response. */
+	public $debug_enabled = false;
+
+	public function extract_error( $upgrader, $skin ): string {
+		return $this->get_upgrader_error( $upgrader, $skin );
+	}
+
+	public function create_error( int $download_id, string $error ): \WP_Error {
+		return $this->create_install_error( $download_id, $error );
+	}
+
+	public function log_error( string $package, string $error ): void {
+		$this->log_install_error( $package, $error );
+	}
+
+	protected function is_debug_enabled_for_download( int $download_id ): bool {
+		return $this->debug_enabled;
+	}
+}
+
+/** Installer exposing the production debug lookup without overriding it. */
+class Debug_Lookup_Account_Installer extends \Woodev_Account_Installer {
+	public function debug_enabled_for_download( int $download_id ): bool {
+		return $this->is_debug_enabled_for_download( $download_id );
 	}
 }
 
@@ -60,6 +89,7 @@ final class AccountInstallerTest extends TestCase {
 		Functions\when( 'wp_parse_url' )->alias( static function ( $u ) { return parse_url( (string) $u ); } );
 		Functions\when( 'untrailingslashit' )->alias( static function ( $u ) { return rtrim( (string) $u, '/' ); } );
 		Functions\when( '__' )->returnArg();
+		Functions\when( 'wp_strip_all_tags' )->alias( static function ( $value ) { return strip_tags( (string) $value ); } );
 		// Default: filters return the passed default value.
 		Functions\when( 'apply_filters' )->alias( static function ( $t, $v = null ) { return $v; } );
 	}
@@ -150,6 +180,42 @@ final class AccountInstallerTest extends TestCase {
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'woodev_install_invalid', $result->get_error_code() );
+	}
+
+	public function test_incompatible_plugin_debug_lookup_uses_the_v2_option(): void {
+		$plugin_id   = 'debug-lookup-test';
+		$download_id = 48151;
+		$definition  = \Woodev\Framework\Framework_Plugin_Loader_Definition::from_array(
+			[
+				'plugin_id'         => $plugin_id,
+				'download_id'       => $download_id,
+				'plugin_name'       => 'Debug Lookup Test',
+				'plugin_version'    => '1.0.0',
+				'framework_version' => '1.0.0',
+				'plugin_file'       => __FILE__,
+				'platform'          => \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WORDPRESS,
+				'requirements'      => [ 'php' => '7.4', 'wordpress' => '6.3' ],
+				'callback'          => static function (): void {},
+			]
+		);
+		$this->assertInstanceOf( \Woodev\Framework\Framework_Plugin_Loader_Definition::class, $definition );
+
+		$bootstrap = \Woodev_Plugin_Bootstrap::instance();
+		$property  = new \ReflectionProperty( \Woodev_Plugin_Bootstrap::class, 'incompatible_framework_plugins' );
+		$property->setValue( $bootstrap, [ [ 'definition' => $definition ] ] );
+		$active_plugins = new \ReflectionProperty( \Woodev_Plugin_Bootstrap::class, 'active_plugins' );
+		$active_plugins->setValue( $bootstrap, [] );
+
+		$requested_options = [];
+		Functions\when( 'get_option' )->alias(
+			static function ( string $option, $default = false ) use ( &$requested_options ): string {
+				$requested_options[] = $option;
+				return 'yes';
+			}
+		);
+
+		$this->assertTrue( ( new Debug_Lookup_Account_Installer() )->debug_enabled_for_download( $download_id ) );
+		$this->assertSame( [ 'woodev_debug_lookup_test_advanced_enable_debug' ], $requested_options );
 	}
 
 	public function test_install_rejects_when_not_connected(): void {
@@ -245,5 +311,63 @@ final class AccountInstallerTest extends TestCase {
 
 		$this->assertTrue( $installer->install( 8772 ) );
 		$this->assertFalse( $installer->overwrite, 'A renamed v1 folder must not trigger a destructive overwrite.' );
+	}
+
+	public function test_wp_error_from_download_is_logged_without_signed_query_parameters(): void {
+		$download_error = new \WP_Error(
+			'download_failed',
+			'Download failed.',
+			'403 from https://woodev.ru/index.php?token=secret&signature=signed'
+		);
+		$logger = new class() {
+			public $message = '';
+			public $context = [];
+			public function error( $message, $context ): void {
+				$this->message = $message;
+				$this->context = $context;
+			}
+		};
+		Functions\when( 'wc_get_logger' )->justReturn( $logger );
+
+		$installer = new Testable_Account_Installer();
+		$detail    = $installer->extract_error( (object) [ 'result' => [] ], new class( $download_error ) {
+			private $message;
+			public function __construct( \WP_Error $error ) {
+				$this->message = $error->get_error_message() . ' ' . $error->get_error_data();
+			}
+			public function get_upgrade_messages(): array { return [ $this->message ]; }
+		} );
+		$installer->log_error( 'https://woodev.ru/index.php?token=secret&signature=signed', $detail );
+
+		$this->assertStringContainsString( '403', $logger->message );
+		$this->assertStringContainsString( 'https://woodev.ru/index.php', $logger->message );
+		$this->assertStringNotContainsString( 'token=', $logger->message );
+		$this->assertStringNotContainsString( 'signature=', $logger->message );
+		$this->assertSame( 'woodev-account-installer', $logger->context['source'] );
+	}
+
+	public function test_upgrader_cause_uses_the_last_skin_message(): void {
+		$installer = new Testable_Account_Installer();
+		$skin      = new class() {
+			public function get_upgrade_messages(): array {
+				return [ 'Downloading package…', 'Unpacking…', 'Installation failed: archive is invalid.' ];
+			}
+		};
+
+		$this->assertSame(
+			'Installation failed: archive is invalid.',
+			$installer->extract_error( (object) [ 'result' => [] ], $skin )
+		);
+	}
+
+	public function test_install_error_includes_cause_only_when_debug_is_enabled(): void {
+		$installer = new Testable_Account_Installer();
+		$installer->debug_enabled = true;
+		$detail = $installer->create_error( 21, 'Download failed. 403 Forbidden.' );
+		$this->assertStringContainsString( '403 Forbidden', $detail->get_error_message() );
+
+		$installer->debug_enabled = false;
+		$generic = $installer->create_error( 21, 'Download failed. 403 Forbidden.' );
+		$this->assertSame( 'Не удалось установить плагин.', $generic->get_error_message() );
 	}
 }
