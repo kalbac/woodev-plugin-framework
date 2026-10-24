@@ -327,8 +327,13 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 
 			$bootstrap = Woodev_Plugin_Bootstrap::instance();
 			$installed = Woodev_Installed_Plugins::download_ids( $bootstrap->get_active_plugin_instances() );
-			$updates = Woodev_Installed_Plugins::download_ids_from_records(
-				$bootstrap->get_incompatible_framework_plugins()
+			$updates = array_values(
+				array_unique(
+					array_merge(
+						Woodev_Installed_Plugins::download_ids_from_records( $bootstrap->get_incompatible_framework_plugins() ),
+						Woodev_Installed_Plugins::download_ids_from_mixed_fleet_records( $bootstrap->get_mixed_fleet_incompatible_plugins() )
+					)
+				)
 			);
 
 			// Inline bootstrap data BEFORE the bundle so it is available on first render.

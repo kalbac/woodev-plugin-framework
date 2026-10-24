@@ -77,4 +77,18 @@ final class InstalledPluginsTest extends TestCase {
 
 		$this->assertSame( [ 216 ], \Woodev_Installed_Plugins::download_ids_from_records( $records ) );
 	}
+
+	public function test_unmatched_legacy_plugin_does_not_look_like_a_store_product(): void {
+		$this->assertSame(
+			[],
+			\Woodev_Installed_Plugins::download_ids_from_mixed_fleet_records(
+				[
+					[
+						'plugin_name' => 'Third-party plugin',
+						'path'        => '/var/www/wp-content/plugins/third-party/third-party.php',
+					],
+				]
+			)
+		);
+	}
 }

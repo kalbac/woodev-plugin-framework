@@ -68,7 +68,11 @@ if ( ! class_exists( 'Woodev_Account_Installer' ) ) :
 				);
 			}
 
-			$overwrite = self::is_framework_incompatible_plugin( $download_id, $this->get_incompatible_framework_plugins() );
+			$overwrite = self::is_framework_incompatible_plugin(
+				$download_id,
+				$this->get_incompatible_framework_plugins(),
+				$this->get_mixed_fleet_incompatible_plugins()
+			);
 
 			return $this->run_upgrader( $package, $overwrite );
 		}
@@ -80,11 +84,17 @@ if ( ! class_exists( 'Woodev_Account_Installer' ) ) :
 		 *
 		 * @param int              $download_id Store download id.
 		 * @param array<int,mixed> $plugins     Resolver records refused by framework compatibility.
+		 * @param array<int,mixed> $legacy      Legacy v1 tombstone records.
 		 *
 		 * @return bool
 		 */
-		public static function is_framework_incompatible_plugin( int $download_id, array $plugins ): bool {
-			return in_array( $download_id, Woodev_Installed_Plugins::download_ids_from_records( $plugins ), true );
+		public static function is_framework_incompatible_plugin( int $download_id, array $plugins, array $legacy = [] ): bool {
+			$ids = array_merge(
+				Woodev_Installed_Plugins::download_ids_from_records( $plugins ),
+				Woodev_Installed_Plugins::download_ids_from_mixed_fleet_records( $legacy )
+			);
+
+			return in_array( $download_id, $ids, true );
 		}
 
 		/**
@@ -96,6 +106,17 @@ if ( ! class_exists( 'Woodev_Account_Installer' ) ) :
 		 */
 		protected function get_incompatible_framework_plugins(): array {
 			return Woodev_Plugin_Bootstrap::instance()->get_incompatible_framework_plugins();
+		}
+
+		/**
+		 * Gets legacy v1 plugin records quarantined by the mixed-fleet tombstone.
+		 *
+		 * @since 2.0.12
+		 *
+		 * @return array<int,array{plugin_name:string,path:string}>
+		 */
+		protected function get_mixed_fleet_incompatible_plugins(): array {
+			return Woodev_Plugin_Bootstrap::instance()->get_mixed_fleet_incompatible_plugins();
 		}
 
 		/**

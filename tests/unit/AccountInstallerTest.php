@@ -32,8 +32,15 @@ class Spy_Account_Installer extends \Woodev_Account_Installer {
 	/** @var array<int,array<string,mixed>> Resolver records refused by framework compatibility. */
 	public $incompatible_plugins = [];
 
+	/** @var array<int,array<string,mixed>> Legacy tombstone records. */
+	public $legacy_plugins = [];
+
 	protected function get_incompatible_framework_plugins(): array {
 		return $this->incompatible_plugins;
+	}
+
+	protected function get_mixed_fleet_incompatible_plugins(): array {
+		return $this->legacy_plugins;
 	}
 
 	protected function run_upgrader( string $package, bool $overwrite = false ) {
@@ -202,5 +209,21 @@ final class AccountInstallerTest extends TestCase {
 
 		$this->assertTrue( $installer->install( 21 ) );
 		$this->assertTrue( $installer->overwrite, 'The refused product should install with overwrite enabled.' );
+	}
+
+	public function test_install_overwrites_a_v1_plugin_recorded_by_the_tombstone(): void {
+		$this->stub_connected_transport( '{"package":"https://woodev.ru/index.php?eddfile=7:8772:0&token=abc"}' );
+		Functions\when( 'is_wp_error' )->justReturn( false );
+
+		$installer = new Spy_Account_Installer();
+		$installer->legacy_plugins = [
+			[
+				'plugin_name' => 'EMS',
+				'path'        => '/var/www/wp-content/plugins/woodev-russian-post/woodev-russian-post.php',
+			],
+		];
+
+		$this->assertTrue( $installer->install( 8772 ) );
+		$this->assertTrue( $installer->overwrite, 'The tombstoned v1 product should install with overwrite enabled.' );
 	}
 }

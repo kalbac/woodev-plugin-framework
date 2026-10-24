@@ -298,6 +298,17 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 		}
 
 		/**
+		 * Gets legacy v1 plugin records quarantined by the mixed-fleet tombstone.
+		 *
+		 * @since 2.0.12
+		 *
+		 * @return array<int,array{plugin_name:string,path:string}>
+		 */
+		public function get_mixed_fleet_incompatible_plugins(): array {
+			return $this->mixed_fleet_incompatible_plugins;
+		}
+
+		/**
 		 * Guards a single plugin activation against a download id collision (#916).
 		 *
 		 * @since 2.0.2
