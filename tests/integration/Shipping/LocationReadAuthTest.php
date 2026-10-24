@@ -49,6 +49,12 @@ class LocationReadAuthTest extends TestCase {
 	/** @var mixed */
 	private $original_wc_customer;
 
+	/** @var mixed */
+	private $original_server_nonce;
+
+	/** @var mixed */
+	private $original_request_nonce;
+
 	protected function setUp(): void {
 		parent::setUp();
 
@@ -57,6 +63,8 @@ class LocationReadAuthTest extends TestCase {
 		$this->original_wc_session       = WC()->session;
 		$this->original_wc_cart          = WC()->cart;
 		$this->original_wc_customer      = WC()->customer;
+		$this->original_server_nonce     = $_SERVER['HTTP_X_WP_NONCE'] ?? null;
+		$this->original_request_nonce    = $_REQUEST['_wpnonce'] ?? null;
 		unset( $_SERVER['HTTP_X_WP_NONCE'], $_REQUEST['_wpnonce'] );
 
 		// Destroying a session expires its cookie; headers are already sent in a test run and WooCommerce
@@ -67,7 +75,13 @@ class LocationReadAuthTest extends TestCase {
 	protected function tearDown(): void {
 		$GLOBALS['wp_rest_auth_cookie'] = $this->original_rest_auth_cookie;
 		$_COOKIE                        = $this->original_cookies;
-		unset( $_SERVER['HTTP_X_WP_NONCE'] );
+		unset( $_SERVER['HTTP_X_WP_NONCE'], $_REQUEST['_wpnonce'] );
+		if ( null !== $this->original_server_nonce ) {
+			$_SERVER['HTTP_X_WP_NONCE'] = $this->original_server_nonce;
+		}
+		if ( null !== $this->original_request_nonce ) {
+			$_REQUEST['_wpnonce'] = $this->original_request_nonce;
+		}
 		remove_filter( 'woocommerce_set_cookie_enabled', '__return_false' );
 		wp_set_current_user( 0 );
 
