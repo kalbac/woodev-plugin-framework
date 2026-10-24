@@ -226,4 +226,24 @@ final class AccountInstallerTest extends TestCase {
 		$this->assertTrue( $installer->install( 8772 ) );
 		$this->assertTrue( $installer->overwrite, 'The tombstoned v1 product should install with overwrite enabled.' );
 	}
+
+	public function test_renamed_v1_plugin_folder_is_not_offered_or_overwritten(): void {
+		$legacy_plugins = [
+			[
+				'plugin_name' => 'EMS',
+				'path'        => '/var/www/wp-content/plugins/woodev-russian-post-1.2.6/woodev-russian-post.php',
+			],
+		];
+
+		$this->assertSame( [], \Woodev_Installed_Plugins::download_ids_from_mixed_fleet_records( $legacy_plugins ) );
+
+		$this->stub_connected_transport( '{"package":"https://woodev.ru/index.php?eddfile=7:8772:0&token=abc"}' );
+		Functions\when( 'is_wp_error' )->justReturn( false );
+
+		$installer                 = new Spy_Account_Installer();
+		$installer->legacy_plugins = $legacy_plugins;
+
+		$this->assertTrue( $installer->install( 8772 ) );
+		$this->assertFalse( $installer->overwrite, 'A renamed v1 folder must not trigger a destructive overwrite.' );
+	}
 }

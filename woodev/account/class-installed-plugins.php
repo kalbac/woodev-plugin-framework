@@ -76,11 +76,11 @@ if ( ! class_exists( 'Woodev_Installed_Plugins' ) ) :
 		}
 
 		/**
-		 * Collects store ids from legacy v1 tombstone records by plugin folder or store slug.
+		 * Collects store ids from legacy v1 tombstone records by known plugin folder.
 		 *
 		 * The v1 tombstone records contain only `plugin_name` and the main-file `path`.
-		 * Product slugs come from the store catalog; the catalog does not expose plugin
-		 * folders, so known folder/slug pairs are kept here. Unknown products are ignored.
+		 * The store catalog does not expose plugin folders, so known folder names are
+		 * mapped to download ids here. Unknown folders are ignored.
 		 *
 		 * @since 2.0.12
 		 *
@@ -93,11 +93,6 @@ if ( ! class_exists( 'Woodev_Installed_Plugins' ) ) :
 				'woocommerce-yandex-delivery' => 821,
 				'woodev-russian-post'         => 8772,
 			];
-			$product_slugs = [
-				'wc-edostavka-integration'   => 216,
-				'yandex-dostavka-woocommerce' => 821,
-				'pochta-rossii-woocommerce'  => 8772,
-			];
 			$ids = [];
 
 			foreach ( $plugins as $plugin ) {
@@ -109,42 +104,12 @@ if ( ! class_exists( 'Woodev_Installed_Plugins' ) ) :
 				$folder = basename( dirname( $path ) );
 				$id     = $product_ids[ $folder ] ?? 0;
 
-				if ( 0 === $id && is_readable( $path ) ) {
-					$headers = self::plugin_headers( $path );
-					$uri     = isset( $headers['PluginURI'] ) ? (string) $headers['PluginURI'] : '';
-					$slug    = '';
-
-					if ( preg_match( '~/(?:downloads|download)/([^/?#]+)/?$~i', $uri, $matches ) ) {
-						$slug = sanitize_title( rawurldecode( $matches[1] ) );
-					}
-
-					$id = $product_slugs[ $slug ] ?? 0;
-				}
-
 				if ( $id > 0 ) {
 					$ids[ $id ] = $id;
 				}
 			}
 
 			return array_values( $ids );
-		}
-
-		/**
-		 * Reads only the plugin header fields needed to resolve a store product slug.
-		 *
-		 * @since 2.0.12
-		 *
-		 * @param string $plugin_file Main plugin file.
-		 * @return array<string,string>
-		 */
-		private static function plugin_headers( string $plugin_file ): array {
-			if ( ! function_exists( 'get_plugin_data' ) ) {
-				require_once ABSPATH . 'wp-admin/includes/plugin.php';
-			}
-
-			$data = get_plugin_data( $plugin_file, false, false );
-
-			return [ 'PluginURI' => isset( $data['PluginURI'] ) ? (string) $data['PluginURI'] : '' ];
 		}
 	}
 
