@@ -287,6 +287,17 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 		}
 
 		/**
+		 * Gets plugins refused because the selected framework is newer than they support.
+		 *
+		 * @since 2.0.12
+		 *
+		 * @return array<int,array<string,mixed>>
+		 */
+		public function get_incompatible_framework_plugins(): array {
+			return $this->incompatible_framework_plugins;
+		}
+
+		/**
 		 * Guards a single plugin activation against a download id collision (#916).
 		 *
 		 * @since 2.0.2

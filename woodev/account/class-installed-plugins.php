@@ -5,7 +5,7 @@ defined( 'ABSPATH' ) || exit;
 if ( ! class_exists( 'Woodev_Installed_Plugins' ) ) :
 
 	/**
-	 * Pure collector of installed framework-plugin download ids.
+	 * Pure collectors of framework-plugin download ids from instances and resolver records.
 	 *
 	 * Maps active plugin instances (each a singleton exposing get_download_id()) to a
 	 * deduped list of positive integer EDD download ids — the «installed» set the
@@ -40,6 +40,35 @@ if ( ! class_exists( 'Woodev_Installed_Plugins' ) ) :
 
 				if ( $id > 0 ) {
 					$ids[ $id ] = $id; // keyed by id → dedup; insertion order preserved.
+				}
+			}
+
+			return array_values( $ids );
+		}
+
+		/**
+		 * Collects download ids from loader records for plugins refused at bootstrap.
+		 *
+		 * @since 2.0.12
+		 *
+		 * @param array<int,mixed> $plugins Resolver plugin records.
+		 *
+		 * @return array<int,int> Deduped positive download ids.
+		 */
+		public static function download_ids_from_records( array $plugins ): array {
+			$ids = [];
+
+			foreach ( $plugins as $plugin ) {
+				$definition = is_array( $plugin ) ? ( $plugin['definition'] ?? null ) : null;
+
+				if ( ! is_object( $definition ) || ! method_exists( $definition, 'get_download_id' ) ) {
+					continue;
+				}
+
+				$id = (int) $definition->get_download_id();
+
+				if ( $id > 0 ) {
+					$ids[ $id ] = $id;
 				}
 			}
 

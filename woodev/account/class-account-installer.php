@@ -11,7 +11,8 @@ if ( ! class_exists( 'Woodev_Account_Installer' ) ) :
 	 * URL for an owned download, validates that the returned URL points at the
 	 * trusted store origin (SSRF guard — the issuer reply is never followed
 	 * blindly), then installs it with WordPress's own Plugin_Upgrader. The plugin
-	 * is installed INACTIVE; activation is left to the user on the Plugins page.
+	 * is installed inactive. When the active framework refused an older Woodev plugin,
+	 * its existing folder is overwritten in place so the stored activation remains intact.
 	 *
 	 * @since 2.0.2
 	 */
@@ -67,7 +68,34 @@ if ( ! class_exists( 'Woodev_Account_Installer' ) ) :
 				);
 			}
 
-			return $this->run_upgrader( $package );
+			$overwrite = self::is_framework_incompatible_plugin( $download_id, $this->get_incompatible_framework_plugins() );
+
+			return $this->run_upgrader( $package, $overwrite );
+		}
+
+		/**
+		 * Whether an owned plugin is installed but refused by the selected framework.
+		 *
+		 * @since 2.0.12
+		 *
+		 * @param int              $download_id Store download id.
+		 * @param array<int,mixed> $plugins     Resolver records refused by framework compatibility.
+		 *
+		 * @return bool
+		 */
+		public static function is_framework_incompatible_plugin( int $download_id, array $plugins ): bool {
+			return in_array( $download_id, Woodev_Installed_Plugins::download_ids_from_records( $plugins ), true );
+		}
+
+		/**
+		 * Gets framework-incompatible plugin records from the bootstrap.
+		 *
+		 * @since 2.0.12
+		 *
+		 * @return array<int,array<string,mixed>>
+		 */
+		protected function get_incompatible_framework_plugins(): array {
+			return Woodev_Plugin_Bootstrap::instance()->get_incompatible_framework_plugins();
 		}
 
 		/**
@@ -136,18 +164,19 @@ if ( ! class_exists( 'Woodev_Account_Installer' ) ) :
 		}
 
 		/**
-		 * Runs WordPress's Plugin_Upgrader against the package URL (no activation).
+		 * Runs WordPress's Plugin_Upgrader against the package URL.
 		 *
 		 * Isolated as a protected seam so the install orchestration can be unit
 		 * tested without a live upgrader.
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param string $package The trusted package URL.
+		 * @param string $package   The trusted package URL.
+		 * @param bool   $overwrite Whether this replaces an installed but refused plugin.
 		 *
 		 * @return true|WP_Error
 		 */
-		protected function run_upgrader( string $package ) {
+		protected function run_upgrader( string $package, bool $overwrite = false ) {
 
 			require_once ABSPATH . 'wp-admin/includes/file.php';
 			require_once ABSPATH . 'wp-admin/includes/misc.php';
@@ -165,7 +194,7 @@ if ( ! class_exists( 'Woodev_Account_Installer' ) ) :
 			$skin     = new Automatic_Upgrader_Skin();
 			$upgrader = new Plugin_Upgrader( $skin );
 
-			$result = $upgrader->install( $package ); // No activation — user activates manually.
+			$result = $upgrader->install( $package, [ 'overwrite_package' => $overwrite ] );
 
 			if ( is_wp_error( $result ) ) {
 				return $result;

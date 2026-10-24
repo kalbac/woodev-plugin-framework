@@ -4077,6 +4077,10 @@ msgid "Установлено"
 msgstr ""
 
 #: assets/build/plugins-page/index.js:1
+msgid "Обновлено"
+msgstr ""
+
+#: assets/build/plugins-page/index.js:1
 msgid "Активировать в «Плагинах»"
 msgstr ""
 
@@ -4085,11 +4089,19 @@ msgid "Установка…"
 msgstr ""
 
 #: assets/build/plugins-page/index.js:1
+msgid "Обновление…"
+msgstr ""
+
+#: assets/build/plugins-page/index.js:1
 msgid "Ошибка, повторить"
 msgstr ""
 
 #: assets/build/plugins-page/index.js:1
 msgid "Установить"
+msgstr ""
+
+#: assets/build/plugins-page/index.js:1
+msgid "Обновить"
 msgstr ""
 
 #: assets/build/plugins-page/index.js:1

@@ -31,6 +31,7 @@ function formatDate( raw ) {
  * @param {Object|null} props.data         { purchases, purchased, stale } or null while loading.
  * @param {Array}       props.products     Loaded catalog products (for the id→permalink cross-ref).
  * @param {Array}       props.installed    Installed download ids.
+ * @param {Array}       props.updates      Installed plugin ids refused by the current framework.
  * @param {Object}      props.installState Per-download install lifecycle state.
  * @param {Function}    props.onInstall    Install handler (receives a download id).
  * @return {JSX.Element} The tab.
@@ -39,6 +40,7 @@ export default function PurchasesTab( {
 	data,
 	products = [],
 	installed = [],
+	updates = [],
 	installState = {},
 	onInstall,
 } ) {
@@ -81,6 +83,36 @@ export default function PurchasesTab( {
 				const link = linkById[ item.id ] || null;
 				const date = formatDate( item.date );
 				const installing = 'installing' === installState[ item.id ];
+				const updating = updates.includes( item.id );
+				const isInstalled = installed.includes( item.id );
+				let action;
+
+				if ( updating ) {
+					action = (
+						<InstallButton
+							state={ installState[ item.id ] || 'idle' }
+							isUpdate
+							onInstall={ () =>
+								onInstall && onInstall( item.id )
+							}
+						/>
+					);
+				} else if ( isInstalled ) {
+					action = (
+						<span className="woodev-purchases__installed">
+							{ __( 'Установлен', 'woodev-plugin-framework' ) }
+						</span>
+					);
+				} else {
+					action = (
+						<InstallButton
+							state={ installState[ item.id ] || 'idle' }
+							onInstall={ () =>
+								onInstall && onInstall( item.id )
+							}
+						/>
+					);
+				}
 
 				return (
 					<li
@@ -117,16 +149,7 @@ export default function PurchasesTab( {
 							<span className="woodev-purchases__date">{ date }</span>
 						) : null }
 						<span className="woodev-purchases__action">
-							{ installed.includes( item.id ) ? (
-								<span className="woodev-purchases__installed">
-									{ __( 'Установлен', 'woodev-plugin-framework' ) }
-								</span>
-							) : (
-								<InstallButton
-									state={ installState[ item.id ] || 'idle' }
-									onInstall={ () => onInstall && onInstall( item.id ) }
-								/>
-							) }
+							{ action }
 						</span>
 					</li>
 				);

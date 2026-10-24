@@ -26,8 +26,19 @@ class Spy_Account_Installer extends \Woodev_Account_Installer {
 	/** @var true|\WP_Error The canned upgrader result. */
 	public $result = true;
 
-	protected function run_upgrader( string $package ) {
+	/** @var bool Whether the install should overwrite the refused plugin folder. */
+	public $overwrite = false;
+
+	/** @var array<int,array<string,mixed>> Resolver records refused by framework compatibility. */
+	public $incompatible_plugins = [];
+
+	protected function get_incompatible_framework_plugins(): array {
+		return $this->incompatible_plugins;
+	}
+
+	protected function run_upgrader( string $package, bool $overwrite = false ) {
 		$this->ran = $package;
+		$this->overwrite = $overwrite;
 		return $this->result;
 	}
 }
@@ -176,5 +187,20 @@ final class AccountInstallerTest extends TestCase {
 
 		$this->assertTrue( $result );
 		$this->assertSame( 'https://woodev.ru/index.php?eddfile=7:21:0&token=abc', $installer->ran );
+		$this->assertFalse( $installer->overwrite, 'A first-time install must not delete an existing directory.' );
+	}
+
+	public function test_install_overwrites_a_plugin_refused_by_the_framework(): void {
+		$this->stub_connected_transport( '{"package":"https://woodev.ru/index.php?eddfile=7:21:0&token=abc"}' );
+		Functions\when( 'is_wp_error' )->justReturn( false );
+
+		$definition = new class() {
+			public function get_download_id(): int { return 21; }
+		};
+		$installer = new Spy_Account_Installer();
+		$installer->incompatible_plugins = [ [ 'definition' => $definition ] ];
+
+		$this->assertTrue( $installer->install( 21 ) );
+		$this->assertTrue( $installer->overwrite, 'The refused product should install with overwrite enabled.' );
 	}
 }
