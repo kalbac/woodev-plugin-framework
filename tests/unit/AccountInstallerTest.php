@@ -202,8 +202,10 @@ final class AccountInstallerTest extends TestCase {
 
 		$bootstrap = \Woodev_Plugin_Bootstrap::instance();
 		$property  = new \ReflectionProperty( \Woodev_Plugin_Bootstrap::class, 'incompatible_framework_plugins' );
+		$property->setAccessible( true );
 		$property->setValue( $bootstrap, [ [ 'definition' => $definition ] ] );
 		$active_plugins = new \ReflectionProperty( \Woodev_Plugin_Bootstrap::class, 'active_plugins' );
+		$active_plugins->setAccessible( true );
 		$active_plugins->setValue( $bootstrap, [] );
 
 		$requested_options = [];
