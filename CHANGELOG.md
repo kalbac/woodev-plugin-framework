@@ -1,6 +1,14 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.0.11] — 2026-10-24
+### Bug Fixes
+- **pickup**: A failed city geocode centres on the record's coordinates or says so, never a silent Moscow (#1432) (#1440)
+
+- **frontend**: REST query strings join with & on plain permalinks (#1439) (#1441)
+
+
+
 ## [2.0.10] — 2026-10-23
 ### Bug Fixes
 - **location**: Survive a stale page nonce on a cached checkout (#1426) (#1435)
