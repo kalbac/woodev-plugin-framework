@@ -28,5 +28,6 @@
 
 ## Related
 - [build/website] **Astro bundles a page's imported modules into `dist/`: resolve repo paths from `process.cwd()` (the build runs in `website/`), never from `import.meta.url`.** → [astro-bundles-page-modules-into-dist-resolve-repo-paths-from-cwd](../gotchas/astro-bundles-page-modules-into-dist-resolve-repo-paths-from-cwd.md)
+- [build/release] **A plugin release ZIP's sha256 changes with the commit it is built from (`git archive` stamps the commit time): compare the merge-commit build with the reviewed PR-head build by unzipped content, not by hash.** → [a-plugin-release-zip-hash-changes-with-the-commit-it-is-built-from](../gotchas/a-plugin-release-zip-hash-changes-with-the-commit-it-is-built-from.md) (s197)
 
 - [../GOTCHAS.md](../GOTCHAS.md) — the topic map
