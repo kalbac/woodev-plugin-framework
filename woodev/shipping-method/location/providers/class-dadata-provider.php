@@ -196,6 +196,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		private const RU_FIAS_LEVEL_REGION = '1';
 
 		/**
+		 * The RU (ФИАС) fias_level value denoting an area-level row (`3`).
+		 * Accepted at a settlement-bound query ONLY when the row is a city that
+		 * is its own urban okrug (Дмитров, Коломна, Клин…) —
+		 * {@see self::should_reject_settlement_row()} detects that as a filled
+		 * `city_fias_id` equal to `area_fias_id`. Any other level-3 row is a bare
+		 * district/okrug, finer than a city.
+		 *
+		 * @since 2.0.13
+		 * @var string
+		 */
+		private const RU_FIAS_LEVEL_AREA = '3';
+
+		/**
 		 * The RU (ФИАС) fias_level value meaning "foreign or empty" per DaData's
 		 * own docs — every row outside RU (OpenStreetMap and GeoNames tiers
 		 * alike) carries this value; it is meaningless as a granularity signal
@@ -1100,14 +1113,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		 *    (`1`) ONLY when the row is a federal city
 		 *    (`region_fias_id === city_fias_id`, the docs' own definition —
 		 *    detected structurally, never by hardcoding Moscow/Saint-Petersburg
-		 *    GUIDs the way the reference plugins do), and reject every other
-		 *    `fias_level` (`0, 3, 5, 7, 8, 9, 65`, and anything unrecognized).
+		 *    GUIDs the way the reference plugins do), accept
+		 *    {@see self::RU_FIAS_LEVEL_AREA} (`3`) ONLY when the row is a city
+		 *    that is its own urban okrug (`city_fias_id === area_fias_id`, both
+		 *    filled), and reject every other `fias_level` (`0, 5, 7, 8, 9, 65`,
+		 *    and anything unrecognized).
 		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 Generalized from the earlier `fias_level !== '65'`-only
 		 *              filter to the full granularity rule above (measured
 		 *              defect: the Moscow federal-city/city-district
 		 *              duplicate).
+		 * @since 2.0.13 Accepts a `fias_level` `3` row that is a city and its own
+		 *              urban okrug (#1459).
 		 *
 		 * @param array<string, mixed> $data DaData field set for one raw
 		 *                                    suggestion's `data` object.
@@ -1144,6 +1162,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 
 				// Federal city: the docs' own definition, detected structurally.
 				return ! ( '' !== $region_fias_id && $region_fias_id === $city_fias_id );
+			}
+
+			if ( self::RU_FIAS_LEVEL_AREA === $fias_level ) {
+				$area_fias_id = (string) ( $data['area_fias_id'] ?? '' );
+				$city_fias_id = (string) ( $data['city_fias_id'] ?? '' );
+
+				// A city that is its own urban okrug (#1459): the city IS the area.
+				return ! ( '' !== $city_fias_id && $city_fias_id === $area_fias_id );
 			}
 
 			return true;

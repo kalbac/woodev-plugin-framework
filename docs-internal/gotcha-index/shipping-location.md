@@ -22,6 +22,7 @@
 - [shipping/location] **A locality's display NAME is not an identifier — the same settlement answers «Москва» or «Moscow» depending on the account's locale.** → [a-locality-display-name-is-not-an-identifier](../gotchas/a-locality-display-name-is-not-an-identifier.md) (s71)
 - [shipping/location] **DaData has no 402: an exhausted balance, an exhausted daily limit, an unconfirmed e-mail and a bad key are all 403; 429 is a per-second throttle, never a quota signal.** → [dadata-has-no-402-an-exhausted-balance-is-a-403](../gotchas/dadata-has-no-402-an-exhausted-balance-is-a-403.md) (s148)
 - [shipping/location] **An English-locale record's names are transliterated and never match a Cyrillic carrier dictionary — fetch the Russian spelling with `get_record_in_language()`.** → [an-english-locale-record-cannot-be-matched-against-a-cyrillic-dictionary](../gotchas/an-english-locale-record-cannot-be-matched-against-a-cyrillic-dictionary.md) (s159)
+- [shipping/location] **DaData `fias_level 3` is both a bare okrug and a city that is its own okrug (Дмитров, Коломна, Клин…) — accept it only when `city_fias_id === area_fias_id`, never by the level alone.** → [dadata-fias-level-3-is-both-a-bare-okrug-and-a-city-that-is-its-own-okrug](../gotchas/dadata-fias-level-3-is-both-a-bare-okrug-and-a-city-that-is-its-own-okrug.md) (s197)
 
 ## Related
 
