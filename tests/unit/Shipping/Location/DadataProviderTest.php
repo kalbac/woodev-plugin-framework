@@ -761,6 +761,111 @@ final class DadataProviderTest extends TestCase {
 		$this->assertNotContains( 'г Москва, р-н Москворечье-Сабурово', $labels, 'the finer city-district row must be rejected' );
 	}
 
+	// -------------------------------------------------------------------------
+	// A city that is its own urban okrug comes back at fias_level=3 (#1459) —
+	// measured 25.10.2026: Дмитров, Коломна, Клин, Шатура, Сергиев Посад all carry
+	// `city` filled and city_fias_id === area_fias_id === fias_id. Level 3 is
+	// otherwise a bare district/okrug, which must stay out of the city list.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Pins the defect end-to-end against the VERBATIM live capture for "Дмитров":
+	 * the level-3 «г Дмитров» row used to be dropped, which left the city
+	 * missing from the «Город» suggestions.
+	 */
+	public function test_suggest_settlement_level_keeps_a_city_that_is_its_own_okrug_at_fias_level_3(): void {
+		$this->set_token( 'tok' );
+		$fixture = self::load_dadata_fixture( 'ru-settlement-dmitrov-level-3.json' );
+		$this->stub_http_response( 200, (string) json_encode( [ 'suggestions' => $fixture['response']['suggestions'] ] ) );
+
+		$records = ( self::provider() )->suggest( 'Дмитров', Location_Scope::for_country( 'RU', Location_Record::LEVEL_SETTLEMENT ) );
+
+		// 10 raw rows minus the «г Москва, Дмитровский р-н» city-district row.
+		$this->assertCount( 9, $records );
+
+		$labels = array_map( static fn( Location_Record $record ) => $record->label(), $records );
+		$this->assertContains( 'Московская обл, г Дмитров', $labels );
+		$this->assertNotContains( 'г Москва, Дмитровский р-н', $labels );
+
+		$keys = array_map( static fn( Location_Record $record ) => $record->key(), $records );
+		$this->assertSame( $keys, array_unique( $keys ), 'no duplicate «г Дмитров»' );
+	}
+
+	/**
+	 * The okrug city must reach the carriers shaped like a level-4 city: the
+	 * city name/type as the settlement component and the okrug as the district.
+	 */
+	public function test_a_fias_level_3_city_is_mapped_like_a_level_4_city(): void {
+		$this->set_token( 'tok' );
+		$fixture = self::load_dadata_fixture( 'ru-settlement-dmitrov-level-3.json' );
+		$this->stub_http_response( 200, (string) json_encode( [ 'suggestions' => $fixture['response']['suggestions'] ] ) );
+
+		$records = ( self::provider() )->suggest( 'Дмитров', Location_Scope::for_country( 'RU', Location_Record::LEVEL_SETTLEMENT ) );
+		$dmitrov = $records[0];
+
+		$this->assertSame( 'dadata:0d8a246f-6446-403e-91c6-3aec9cdbfc32', $dmitrov->key() );
+		$this->assertSame( Location_Record::LEVEL_SETTLEMENT, $dmitrov->level() );
+		$this->assertSame( 'Дмитров', $dmitrov->settlement()['name'] ?? null );
+		$this->assertSame( 'г', $dmitrov->settlement()['type'] ?? null );
+		$this->assertSame( 'Московская', $dmitrov->region()['name'] ?? null );
+		$this->assertSame( '141400', $dmitrov->postcode() );
+		$this->assertSame( [ 'dadata:29251dcf-00a1-4e34-98d4-5c47484a36d4' ], $dmitrov->ancestors() );
+	}
+
+	public function test_suggest_settlement_level_keeps_kolomna_but_not_its_planning_structure_rows(): void {
+		$this->set_token( 'tok' );
+		$fixture = self::load_dadata_fixture( 'ru-settlement-kolomna-level-3.json' );
+		$this->stub_http_response( 200, (string) json_encode( [ 'suggestions' => $fixture['response']['suggestions'] ] ) );
+
+		$records = ( self::provider() )->suggest( 'Коломна', Location_Scope::for_country( 'RU', Location_Record::LEVEL_SETTLEMENT ) );
+
+		$this->assertCount( 1, $records, 'the level-3 city survives, the two level-65 СНТ/городок rows (same city === area ids) do not' );
+		$this->assertSame( 'Московская обл, г Коломна', $records[0]->label() );
+	}
+
+	public function test_suggest_settlement_level_still_keeps_a_fias_level_4_city_unchanged(): void {
+		$this->set_token( 'tok' );
+		$fixture = self::load_dadata_fixture( 'ru-settlement-khimki-level-4.json' );
+		$this->stub_http_response( 200, (string) json_encode( [ 'suggestions' => $fixture['response']['suggestions'] ] ) );
+
+		$records = ( self::provider() )->suggest( 'Химки', Location_Scope::for_country( 'RU', Location_Record::LEVEL_SETTLEMENT ) );
+
+		$this->assertCount( 1, $records );
+		$this->assertSame( 'Московская обл, г Химки', $records[0]->label() );
+	}
+
+	/**
+	 * A level-3 row that is a bare district/okrug — no city, or a city that is
+	 * NOT the okrug itself — must stay out of the city list.
+	 *
+	 * @dataProvider bare_level_3_row_mutations_provider
+	 *
+	 * @param array<string, mixed> $override Fields to overwrite on the real level-3 Дмитров row.
+	 */
+	public function test_suggest_settlement_level_rejects_a_level_3_row_that_is_not_a_city_okrug( array $override ): void {
+		$this->set_token( 'tok' );
+		$fixture = self::load_dadata_fixture( 'ru-settlement-dmitrov-level-3.json' );
+		$row     = $fixture['response']['suggestions'][0];
+		$row['data'] = array_merge( $row['data'], $override );
+		$this->stub_http_response( 200, (string) json_encode( [ 'suggestions' => [ $row ] ] ) );
+
+		$records = ( self::provider() )->suggest( 'Дмитров', Location_Scope::for_country( 'RU', Location_Record::LEVEL_SETTLEMENT ) );
+
+		$this->assertCount( 0, $records );
+	}
+
+	/**
+	 * @return array<string, array{0: array<string, mixed>}>
+	 */
+	public function bare_level_3_row_mutations_provider(): array {
+		return [
+			'a district: no city at all'                 => [ [ 'city' => null, 'city_fias_id' => null, 'city_with_type' => null, 'city_type' => null ] ],
+			'a city that is not the okrug itself'        => [ [ 'city_fias_id' => 'a-different-fias-id-than-area' ] ],
+			'neither id present'                         => [ [ 'city_fias_id' => null, 'area_fias_id' => null ] ],
+			'a city district inside the okrug'           => [ [ 'city_district' => 'Центральный' ] ],
+		];
+	}
+
 	public function test_suggest_settlement_record_carries_postcode_lat_lon_and_full_raw(): void {
 		$this->set_token( 'tok' );
 		$fixture = [ 'suggestions' => [ self::settlement_suggestion( '4' ) ] ];
