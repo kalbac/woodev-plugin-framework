@@ -193,7 +193,7 @@ class ShippingOrderActionsTest extends TestCase {
 		}
 	}
 
-	/** #1458: the filter gets the list and the carrier, and its answer is the gate. */
+	/** #1458: the filter gets the list and nothing else, and its answer is the gate; a final, draft or trashed slug it names is dropped. */
 	public function test_the_exportable_statuses_filter_can_narrow_and_widen_the_gate(): void {
 		$this->register_handler();
 		$this->stub_a_shop_with_custom_statuses();
@@ -209,32 +209,36 @@ class ShippingOrderActionsTest extends TestCase {
 
 				$seen[] = [ $value, $args ];
 
-				return [ 'wc-completed', 'processing', 'processing', '', 7 ];
+				return [ 'wc-completed', 'wc-v-sborke', 'processing', 'processing', '', 7 ];
 			}
 		);
 
-		$this->assertSame( [ Order_Actions::EXPORT ], $this->action_ids( $this->actions()->for_order( $this->order( 'completed' ), $provider ) ), 'a callback may widen; the wc- prefix is tolerated' );
+		$this->assertSame( [], $this->action_ids( $this->actions()->for_order( $this->order( 'completed' ), $provider ) ), 'a callback cannot make a final status exportable' );
+		$this->assertSame( [ Order_Actions::EXPORT ], $this->action_ids( $this->actions()->for_order( $this->order( 'v-sborke' ), $provider ) ), 'a callback may widen with a custom status; the wc- prefix is tolerated' );
 		$this->assertSame( [ Order_Actions::EXPORT ], $this->action_ids( $this->actions()->for_order( $this->order( 'processing' ), $provider ) ) );
 		$this->assertSame( [], $this->action_ids( $this->actions()->for_order( $this->order( 'pending' ), $provider ) ), 'a callback may narrow' );
-		$this->assertSame( [ 'completed', 'processing' ], Order_Actions::get_exportable_statuses(), 'duplicates, empties and non-strings are dropped' );
-		$this->assertSame( [ [ 'pending', 'on-hold', 'processing', 'v-sborke' ], [ $provider ] ], $seen[0] );
+		$this->assertSame( [ 'v-sborke', 'processing' ], Order_Actions::get_exportable_statuses(), 'duplicates, empties and non-strings are dropped' );
+		$this->assertSame( [ [ 'pending', 'on-hold', 'processing', 'v-sborke' ], [] ], $seen[0], 'the filter is site-wide: it gets the list and no carrier' );
 	}
 
-	/** #1458: a site-wide caller (the settings page) has no carrier; the filter is told so. */
-	public function test_the_exportable_statuses_filter_gets_null_where_no_carrier_applies(): void {
-		$received = 'unset';
+	/** #1458: a plugin's filter cannot make a final, draft or trashed status exportable, with or without the wc- prefix. */
+	public function test_the_exportable_statuses_filter_cannot_make_a_final_draft_or_trashed_status_exportable(): void {
+		$this->register_handler();
+		$this->stub_a_shop_with_custom_statuses();
 
 		Functions\when( 'apply_filters' )->alias(
-			static function ( string $hook, $value, $provider = 'none' ) use ( &$received ) {
-				$received = $provider;
+			static function ( string $hook, $value ) {
+				if ( 'woodev_shipping_exportable_statuses' !== $hook ) {
+					return $value;
+				}
 
-				return $value;
+				return [ 'wc-completed', 'cancelled', 'wc-refunded', 'failed', 'checkout-draft', 'wc-draft', 'trash', 'wc-trash' ];
 			}
 		);
 
-		Order_Actions::get_exportable_statuses();
-
-		$this->assertNull( $received );
+		$this->assertSame( [], Order_Actions::get_exportable_statuses() );
+		$this->assertSame( [], $this->action_ids( $this->actions()->for_order( $this->order( 'completed' ), $this->provider() ) ) );
+		$this->assertSame( [], $this->action_ids( $this->actions()->for_order( $this->order( 'failed' ), $this->provider() ) ) );
 	}
 
 	public function test_export_is_not_offered_once_exported(): void {

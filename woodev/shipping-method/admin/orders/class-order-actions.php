@@ -231,7 +231,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 			$is_exported = self::is_exported( $order, $provider );
 			$actions     = [];
 
-			$can_export = ! $is_exported && in_array( $order->get_status(), self::get_exportable_statuses( $provider ), true );
+			$can_export = ! $is_exported && in_array( $order->get_status(), self::get_exportable_statuses(), true );
 
 			if ( $can_export ) {
 				$actions[] = self::build_action(
@@ -1080,7 +1080,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 					return sprintf(
 						/* translators: %s: comma-separated WooCommerce order status names. */
 						__( 'Выгрузить можно только заказ в одном из статусов: %s.', 'woodev-plugin-framework' ),
-						self::exportable_status_names( $provider )
+						self::exportable_status_names()
 					);
 
 				case self::UPDATE:
@@ -1126,22 +1126,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		 * — so a custom status such as «В сборке» exports, and a status a v1 plugin saved for
 		 * auto-export keeps working. Order is the base list first, then WooCommerce's own order.
 		 *
-		 * Several carrier plugins share one site and one copy of this class, so every one of them
-		 * gets the same list unless a `woodev_shipping_exportable_statuses` callback tells them
-		 * apart by `$provider`.
+		 * The answer is site-wide: several carrier plugins share one site and one copy of this
+		 * class, and every one of them, the settings page and the orders list get the same list.
+		 * Whatever the `woodev_shipping_exportable_statuses` filter returns, a final, draft or
+		 * trashed status is dropped ({@see self::FINAL_STATUSES}, `checkout-draft`, `draft`, `trash`).
 		 *
 		 * @since 2.0.14
 		 *
-		 * @param Orders_Provider|null $provider the carrier asking, or null where none applies (the
-		 *                                       site-wide settings page, the orders list).
 		 * @return string[] status slugs without the `wc-` prefix; never contains duplicates or empty strings.
 		 */
-		public static function get_exportable_statuses( ?Orders_Provider $provider = null ): array {
-			$statuses = self::EXPORTABLE_STATUSES;
+		public static function get_exportable_statuses(): array {
+			$statuses       = self::EXPORTABLE_STATUSES;
+			$not_exportable = array_merge( self::FINAL_STATUSES, [ 'checkout-draft', 'draft', 'trash' ] );
 
 			if ( function_exists( 'wc_get_order_statuses' ) ) {
-				$not_exportable = array_merge( self::FINAL_STATUSES, [ 'checkout-draft', 'draft' ] );
-
 				foreach ( array_keys( (array) wc_get_order_statuses() ) as $slug ) {
 					$slug = self::unprefix_status( (string) $slug );
 
@@ -1154,14 +1152,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 			/**
 			 * Filters the order statuses an export may start from.
 			 *
+			 * Site-wide: the same answer for every carrier, the settings page and the orders list.
+			 * Final, draft and trashed statuses are removed from whatever the callback returns.
+			 *
 			 * @since 2.0.14
 			 *
-			 * @param string[]             $statuses status slugs without the `wc-` prefix: the base
-			 *                                       {@see Order_Actions::EXPORTABLE_STATUSES} plus every registered
-			 *                                       non-final status.
-			 * @param Orders_Provider|null $provider the carrier asking, or null when the caller has none.
+			 * @param string[] $statuses status slugs without the `wc-` prefix: the base
+			 *                           {@see Order_Actions::EXPORTABLE_STATUSES} plus every registered
+			 *                           non-final status.
 			 */
-			$filtered = apply_filters( 'woodev_shipping_exportable_statuses', $statuses, $provider );
+			$filtered = apply_filters( 'woodev_shipping_exportable_statuses', $statuses );
 
 			// a callback that returns anything but a list must not switch export off site-wide
 			$result = [];
@@ -1169,7 +1169,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 			foreach ( is_array( $filtered ) ? $filtered : $statuses as $slug ) {
 				$slug = is_string( $slug ) ? self::unprefix_status( $slug ) : '';
 
-				if ( '' !== $slug ) {
+				if ( '' !== $slug && ! in_array( $slug, $not_exportable, true ) ) {
 					$result[] = $slug;
 				}
 			}
@@ -1199,13 +1199,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param Orders_Provider|null $provider the carrier the refusal is for.
 		 * @return string
 		 */
-		private static function exportable_status_names( ?Orders_Provider $provider ): string {
+		private static function exportable_status_names(): string {
 			return implode(
 				', ',
-				array_map( 'wc_get_order_status_name', self::get_exportable_statuses( $provider ) )
+				array_map( 'wc_get_order_status_name', self::get_exportable_statuses() )
 			);
 		}
 
