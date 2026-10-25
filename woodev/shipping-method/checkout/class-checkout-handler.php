@@ -2794,6 +2794,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * @since 2.0.2 Re-declares a non-empty `data-input-classes` through `custom_attributes`
 		 *              for a field WooCommerce would otherwise have rendered through its `state`
 		 *              branch, the only branch that emits the attribute (issue #469).
+		 * @since 2.0.14 An empty descriptor `label` no longer erases a non-empty label WooCommerce
+		 *               already has for a native field; a non-empty descriptor label still wins
+		 *               (issue #1467).
 		 *
 		 * @param array<string, mixed> $checkout_fields WC checkout fields, keyed by section
 		 * @param string               $section         unused override kept for BC; per-field
@@ -2837,6 +2840,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 					'label' => (string) $field['label'],
 				];
 
+				// Conservative merge: start from whatever WC already has for this field,
+				// then overlay only our keys — preserving validate, class, priority, etc.
+				$existing_wc_args = $checkout_fields[ $field_section ][ $id ] ?? [];
+				$existing_wc_args = is_array( $existing_wc_args ) ? $existing_wc_args : [];
+
+				// An EMPTY descriptor label never erases a label WooCommerce already has
+				// (issue #1467). `woocommerce_form_field()` renders a <label> only for a
+				// non-empty `label`, and `address-i18n.js` writes the locale label only INTO an
+				// existing <label>, so blanking a native field's label leaves the row without
+				// one. A non-empty descriptor label still wins; a plugin's own field has no WC
+				// label, so it keeps its empty one.
+				if ( '' === $our_overrides['label'] && '' !== trim( (string) ( $existing_wc_args['label'] ?? '' ) ) ) {
+					unset( $our_overrides['label'] );
+				}
+
 				if ( is_array( $field['required'] ) ) {
 					$our_overrides['required'] = false;
 				} elseif ( true === $field['required'] ) {
@@ -2876,11 +2894,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 
 					$our_overrides['options'] = $options;
 				}
-
-				// Conservative merge: start from whatever WC already has for this field,
-				// then overlay only our keys — preserving validate, class, priority, etc.
-				$existing_wc_args = $checkout_fields[ $field_section ][ $id ] ?? [];
-				$existing_wc_args = is_array( $existing_wc_args ) ? $existing_wc_args : [];
 
 				// WooCommerce emits `data-input-classes` ONLY from the three sub-branches of
 				// `case 'state':` in `woocommerce_form_field()`. Overriding `type` moves the field
