@@ -149,7 +149,7 @@ The first argument of `Orders_Provider::create()` is the **carrier id**. Use the
 |---|---|
 | `id`, `label` | The carrier id and the name shown to the merchant. |
 | `marker_meta_key` | An order-meta key that marks an order as this carrier's. It must hold a non-empty scalar, or the order lists without an owner. Give each carrier its **own** key. |
-| `method_ids` | The WooCommerce shipping method ids of this carrier, courier and pickup together. |
+| `method_ids` | The WooCommerce shipping method ids of this carrier, courier and pickup together. Also list ids that only old orders carry, such as an id from a previous version of your plugin. An id left out makes its orders show as `unknown`. |
 | `status_meta_key` | The order-meta key holding the carrier's **raw** status. |
 | `status_map` | Raw status → one of the framework's states, see below. A raw status you leave out reads as `unknown`. |
 | `status_labels` | Raw status → the text shown to the merchant. |

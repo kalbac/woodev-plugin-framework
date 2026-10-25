@@ -52,6 +52,16 @@ grep -rnE "get_option|update_option|add_option|apply_filters|do_action|register_
 
 For every hit, decide one of two things: the v2 plugin uses the same name, or the v2 plugin reads the old name once and moves the data in a migration. Check the list again before each release.
 
+### When a method ID has to change
+
+Avoid it. If a method must be split or renamed, do all of this in one idempotent, journalled migration:
+
+- Map each existing zone row to exactly one new ID, decided from that instance's own settings (for example, its tariff), then rewrite the row's `method_id` column and keep its `instance_id`, so zones and instance numbers survive. Copy the instance settings to the option name of the new ID (`woocommerce_{method_id}_{instance_id}_settings`); leave the old option for a rollback.
+- `instance_id` is the primary key of WooCommerce's zone-methods table, so one row cannot become two. If one old instance really has to turn into several methods, keep its `instance_id` for one of them, add the others as new instances, and map their settings explicitly.
+- Rewrite the gateway settings that store method IDs, such as the shipping methods a cash on delivery gateway is enabled for, so they name the new ID (`old:12` becomes `new:12`). Never leave the list empty: an empty list means every method.
+- Decide what happens to old orders. Their shipping lines still hold the old ID. Either leave them and declare the old ID in the `method_ids` of your `Orders_Provider`, so the orders page still recognises them; or rewrite the lines in a background job and keep the original ID in a hidden line meta for a rollback. Say which one you did in your release notes.
+- WooCommerce builds `woocommerce_shipping_{method_id}_is_available` from the ID, so code hooked to the old ID stops matching. List it in `get_deprecated_hooks()` or the release notes.
+
 ## The version option and a live site
 
 The framework decides between install and upgrade with the `woodev_{id}_version` option, as described in [Lifecycle & upgrades](../lifecycle-and-upgrades/). A v1 plugin kept its version somewhere else. On the first v2 load, the framework finds no version and runs `install()` on a site that already has data.
@@ -228,6 +238,8 @@ Each entry is keyed by the **old** hook name:
 | `removed` | `true` if the hook no longer fires, `false` if it still does and is only discouraged. |
 | `replacement` | The new hook name, or `false` if there is none. |
 | `map` | `true` to pass values through callbacks that are still attached to the old name whenever the new hook runs. It needs `removed` and a `replacement`. |
+
+Use `'map' => false` when the new hook takes different arguments from the old one. The notice still names the replacement, but the callbacks attached to the old name do not run, so none of them is called with arguments it does not expect.
 
 What the merchant's developer sees: while `WP_DEBUG` is on, a notice such as `My Carrier: action/filter "wc_my_carrier_rate_label" was removed in version 2.0.0. Use my_carrier_rate_label instead.` appears for every listed hook that some code has attached a callback to. Return `false` from the `woodev_plugin_framework_show_deprecated_hook_notices` filter to silence them.
 
