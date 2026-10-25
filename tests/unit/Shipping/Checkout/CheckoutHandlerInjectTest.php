@@ -193,6 +193,45 @@ class CheckoutHandlerInjectTest extends TestCase {
 		$this->assertSame( '', $out['order']['carrier_pvz']['label'] );
 	}
 
+	// -------------------------------------------------------------------------
+	// An EMPTY descriptor label must not erase a native WooCommerce label (#1467).
+	// WooCommerce renders a <label> only for a non-empty `label`, and
+	// address-i18n.js can fill the locale label only into an existing <label>.
+	// -------------------------------------------------------------------------
+
+	public function test_inject_keeps_wc_label_when_the_descriptor_declares_none(): void {
+		$fields = Checkout_Fields::from_array( [ Field::create( 'shipping_city' )->set_type( 'select' )->set_section( 'shipping' )->to_array() ] );
+		$wc     = [ 'shipping' => [ 'shipping_city' => [ 'type' => 'text', 'label' => 'Населённый пункт' ] ] ];
+		$out    = ( new Checkout_Handler( $fields, 'carrier' ) )->inject( $wc );
+
+		$this->assertSame( 'select', $out['shipping']['shipping_city']['type'], 'The other overrides still apply.' );
+		$this->assertSame( 'Населённый пункт', $out['shipping']['shipping_city']['label'] );
+	}
+
+	public function test_inject_non_empty_descriptor_label_wins_over_the_wc_label(): void {
+		$fields = Checkout_Fields::from_array( [ Field::create( 'shipping_city' )->set_type( 'select' )->set_label( 'Город' )->set_section( 'shipping' )->to_array() ] );
+		$wc     = [ 'shipping' => [ 'shipping_city' => [ 'type' => 'text', 'label' => 'Населённый пункт' ] ] ];
+		$out    = ( new Checkout_Handler( $fields, 'carrier' ) )->inject( $wc );
+
+		$this->assertSame( 'Город', $out['shipping']['shipping_city']['label'] );
+	}
+
+	public function test_inject_keeps_an_empty_label_on_a_native_field_whose_wc_label_is_empty(): void {
+		$fields = Checkout_Fields::from_array( [ Field::create( 'shipping_city' )->set_type( 'select' )->set_section( 'shipping' )->to_array() ] );
+		$wc     = [ 'shipping' => [ 'shipping_city' => [ 'type' => 'text', 'label' => '' ] ] ];
+		$out    = ( new Checkout_Handler( $fields, 'carrier' ) )->inject( $wc );
+
+		$this->assertSame( '', $out['shipping']['shipping_city']['label'] );
+	}
+
+	public function test_inject_plugin_field_without_a_label_keeps_the_empty_label(): void {
+		$fields = Checkout_Fields::from_array( [ Field::create( 'carrier_pickup_point' )->set_type( 'hidden' )->set_section( 'order' )->to_array() ] );
+		$out    = ( new Checkout_Handler( $fields, 'carrier' ) )->inject( [ 'order' => [ 'order_comments' => [ 'label' => 'Notes' ] ] ] );
+
+		$this->assertSame( '', $out['order']['carrier_pickup_point']['label'] );
+		$this->assertSame( 'Notes', $out['order']['order_comments']['label'], 'A neighbouring field is untouched.' );
+	}
+
 	/**
 	 * A condition-spec `required` (array) must NOT become WC's static `required => true`
 	 * — otherwise WooCommerce's own validation blocks a blank conditional field regardless
