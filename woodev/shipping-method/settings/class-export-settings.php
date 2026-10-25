@@ -191,10 +191,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Export_Settings' 
 		}
 
 		/**
-		 * The saved auto-export statuses the framework no longer exports on — a v1 site could pick any
-		 * non-final status, including a custom one, and v2 offers only
-		 * {@see Order_Actions::EXPORTABLE_STATUSES}. The runner refuses such an order, so the merchant is
-		 * told instead of finding out from orders that never reach the carrier.
+		 * The saved auto-export statuses the framework does not export on — a status that is final, or
+		 * that is not registered any more (a custom status whose plugin was removed), while v2 exports
+		 * from {@see Order_Actions::get_exportable_statuses()}. The runner refuses such an order, so the
+		 * merchant is told instead of finding out from orders that never reach the carrier.
 		 *
 		 * @since 2.0.2
 		 *
@@ -204,9 +204,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Export_Settings' 
 
 			$unsupported = [];
 
+			$exportable = Order_Actions::get_exportable_statuses();
+
 			foreach ( $this->get_export_statuses() as $status ) {
 
-				if ( ! in_array( $status, Order_Actions::EXPORTABLE_STATUSES, true ) ) {
+				if ( ! in_array( $status, $exportable, true ) ) {
 					$unsupported[ 'wc-' . $status ] = wc_get_order_status_name( $status );
 				}
 			}
@@ -354,7 +356,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Export_Settings' 
 
 		/**
 		 * The statuses auto-export may be set to: the ones «Экспорт» is offered in
-		 * ({@see Order_Actions::EXPORTABLE_STATUSES}) — a later status would queue an export the gate refuses.
+		 * ({@see Order_Actions::get_exportable_statuses()}, custom statuses included) — a final status would
+		 * queue an export the gate refuses.
 		 *
 		 * @return array<string,string> `wc-` status slug => its name.
 		 */
@@ -362,7 +365,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Export_Settings' 
 
 			$options = [];
 
-			foreach ( Order_Actions::EXPORTABLE_STATUSES as $status ) {
+			foreach ( Order_Actions::get_exportable_statuses() as $status ) {
 				$options[ 'wc-' . $status ] = wc_get_order_status_name( $status );
 			}
 

@@ -1430,7 +1430,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 		}
 
 		/**
-		 * {@see Order_Actions::EXPORTABLE_STATUSES} as `wc-`-prefixed native statuses — the single
+		 * {@see Order_Actions::get_exportable_statuses()} as `wc-`-prefixed native statuses — the single
 		 * source of the «new» scope's status set (#1024), so the tab, the badge and the
 		 * «Выгрузить» button cannot disagree.
 		 *
@@ -1443,7 +1443,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 				static function ( string $status ): string {
 					return 'wc-' . $status;
 				},
-				Order_Actions::EXPORTABLE_STATUSES
+				Order_Actions::get_exportable_statuses()
 			);
 		}
 

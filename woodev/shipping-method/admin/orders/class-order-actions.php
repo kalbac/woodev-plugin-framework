@@ -93,16 +93,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		public const FALLBACK_ICON = 'controls-play';
 
 		/**
-		 * WC order statuses «Выгрузить» is offered on: still early enough in the
+		 * The BASE of the statuses «Выгрузить» is offered on: still early enough in the
 		 * order's own lifecycle to be worth shipping (mirrors the shipped v1
 		 * plugins' own gate, see class docblock of
 		 * {@see \Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler}).
 		 *
-		 * PUBLIC because it is part of what this class DECLARES, not an implementation
-		 * detail: the same gate feeds the row column, the bulk actions and the order
-		 * metabox, `unavailable_reason()` renders it into the sentence a merchant reads,
-		 * and a plugin author asking "from which statuses can my carrier export?" deserves
-		 * an answer that cannot drift from the gate itself.
+		 * NOT the gate itself since 2.0.14 (#1458): a shop's own non-final statuses are exportable
+		 * too, and a filter may reshape the list. Read {@see self::get_exportable_statuses()} for
+		 * the answer the row column, the bulk actions, the order metabox, the orders page and the
+		 * auto-export setting all share; this constant is only what that method starts from.
 		 *
 		 * @since 2.0.2
 		 *
@@ -232,7 +231,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 			$is_exported = self::is_exported( $order, $provider );
 			$actions     = [];
 
-			if ( ! $is_exported && in_array( $order->get_status(), self::EXPORTABLE_STATUSES, true ) ) {
+			$can_export = ! $is_exported && in_array( $order->get_status(), self::get_exportable_statuses(), true );
+
+			if ( $can_export ) {
 				$actions[] = self::build_action(
 					self::EXPORT,
 					__( 'Экспорт', 'woodev-plugin-framework' ),
@@ -242,7 +243,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 				);
 			}
 
-			if ( ! $is_exported && in_array( $order->get_status(), self::EXPORTABLE_STATUSES, true ) && ! $handler->supports_reconcile() && $handler->export_unknown_since( $order ) > 0 ) {
+			if ( $can_export && ! $handler->supports_reconcile() && $handler->export_unknown_since( $order ) > 0 ) {
 				$actions[] = array_merge(
 					self::build_action(
 						self::RETRY_EXPORT,
@@ -1116,9 +1117,82 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		}
 
 		/**
+		 * The WooCommerce order statuses an export may start from — the ONE answer behind the
+		 * «Экспорт» row action, the bulk action, the order metabox, REST, the background retry, the
+		 * «Новые» tab and badge, the wizard's «сразу выгрузить» box and the auto-export setting.
+		 *
+		 * Since 2.0.14 (#1458) that is {@see self::EXPORTABLE_STATUSES} plus every status the shop
+		 * has registered that is not final ({@see self::FINAL_STATUSES}) and not a WooCommerce draft
+		 * — so a custom status such as «В сборке» exports, and a status a v1 plugin saved for
+		 * auto-export keeps working. Order is the base list first, then WooCommerce's own order.
+		 *
+		 * The answer is site-wide: several carrier plugins share one site and one copy of this
+		 * class, and every one of them, the settings page and the orders list get the same list.
+		 * Whatever the `woodev_shipping_exportable_statuses` filter returns, a final, draft or
+		 * trashed status is dropped ({@see self::FINAL_STATUSES}, `checkout-draft`, `draft`, `trash`).
+		 *
+		 * @since 2.0.14
+		 *
+		 * @return string[] status slugs without the `wc-` prefix; never contains duplicates or empty strings.
+		 */
+		public static function get_exportable_statuses(): array {
+			$statuses       = self::EXPORTABLE_STATUSES;
+			$not_exportable = array_merge( self::FINAL_STATUSES, [ 'checkout-draft', 'draft', 'trash' ] );
+
+			if ( function_exists( 'wc_get_order_statuses' ) ) {
+				foreach ( array_keys( (array) wc_get_order_statuses() ) as $slug ) {
+					$slug = self::unprefix_status( (string) $slug );
+
+					if ( '' !== $slug && ! in_array( $slug, $not_exportable, true ) && ! in_array( $slug, $statuses, true ) ) {
+						$statuses[] = $slug;
+					}
+				}
+			}
+
+			/**
+			 * Filters the order statuses an export may start from.
+			 *
+			 * Site-wide: the same answer for every carrier, the settings page and the orders list.
+			 * Final, draft and trashed statuses are removed from whatever the callback returns.
+			 *
+			 * @since 2.0.14
+			 *
+			 * @param string[] $statuses status slugs without the `wc-` prefix: the base
+			 *                           {@see Order_Actions::EXPORTABLE_STATUSES} plus every registered
+			 *                           non-final status.
+			 */
+			$filtered = apply_filters( 'woodev_shipping_exportable_statuses', $statuses );
+
+			// a callback that returns anything but a list must not switch export off site-wide
+			$result = [];
+
+			foreach ( is_array( $filtered ) ? $filtered : $statuses as $slug ) {
+				$slug = is_string( $slug ) ? self::unprefix_status( $slug ) : '';
+
+				if ( '' !== $slug && ! in_array( $slug, $not_exportable, true ) ) {
+					$result[] = $slug;
+				}
+			}
+
+			return array_values( array_unique( $result ) );
+		}
+
+		/**
+		 * A status slug without WooCommerce's `wc-` prefix.
+		 *
+		 * @since 2.0.14
+		 *
+		 * @param string $status the slug, with or without the prefix.
+		 * @return string
+		 */
+		private static function unprefix_status( string $status ): string {
+			return 0 === strpos( $status, 'wc-' ) ? substr( $status, 3 ) : $status;
+		}
+
+		/**
 		 * The WooCommerce status NAMES an export is allowed from, comma-separated.
 		 *
-		 * Built from {@see self::EXPORTABLE_STATUSES} through
+		 * Built from {@see self::get_exportable_statuses()} through
 		 * `wc_get_order_status_name()` rather than typed out, so the sentence cannot drift
 		 * from the gate it describes — and so it reads in the merchant's own locale
 		 * («В ожидании оплаты, На удержании, Обработка») instead of exposing our slugs.
@@ -1130,7 +1204,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		private static function exportable_status_names(): string {
 			return implode(
 				', ',
-				array_map( 'wc_get_order_status_name', self::EXPORTABLE_STATUSES )
+				array_map( 'wc_get_order_status_name', self::get_exportable_statuses() )
 			);
 		}
 

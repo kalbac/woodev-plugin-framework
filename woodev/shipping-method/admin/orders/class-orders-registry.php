@@ -2047,7 +2047,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 				'paymentMethods'     => [],
 				'orderStatuses'      => [],
 				'finalStatuses'      => Order_Actions::FINAL_STATUSES,
-				'exportableStatuses' => Order_Actions::EXPORTABLE_STATUSES,
+				'exportableStatuses' => Order_Actions::get_exportable_statuses(),
 				'taxesEnabled'       => $this->taxes_enabled(),
 			];
 

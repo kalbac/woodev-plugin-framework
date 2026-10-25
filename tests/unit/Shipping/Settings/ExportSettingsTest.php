@@ -103,7 +103,53 @@ final class ExportSettingsTest extends TestCase {
 	public function test_only_the_statuses_the_export_button_is_offered_in_can_be_picked(): void {
 		$options = $this->settings()->get_setting( 'export_statuses' )->get_options();
 
-		$this->assertSame( array_map( static fn( $status ) => 'wc-' . $status, \Woodev\Framework\Shipping\Admin\Orders\Order_Actions::EXPORTABLE_STATUSES ), array_keys( $options ) );
+		$this->assertSame( array_map( static fn( $status ) => 'wc-' . $status, \Woodev\Framework\Shipping\Admin\Orders\Order_Actions::get_exportable_statuses() ), array_keys( $options ) );
+	}
+
+	/** A shop-registered status, not final, can be picked — and stays offered with its own name. */
+	public function test_a_registered_custom_status_can_be_picked_for_auto_export(): void {
+		$this->stub_a_shop_with_a_custom_status();
+
+		$options = $this->settings()->get_setting( 'export_statuses' )->get_options();
+
+		$this->assertSame( [ 'wc-pending', 'wc-on-hold', 'wc-processing', 'wc-v-sborke' ], array_keys( $options ) );
+		$this->assertSame( 'Status v-sborke', $options['wc-v-sborke'] );
+	}
+
+	/** #1458: a status the v1 plugin saved and the shop still registers works again — no «(не поддерживается)». */
+	public function test_a_saved_registered_custom_status_is_not_flagged_unsupported(): void {
+		$this->stub_a_shop_with_a_custom_status();
+		$this->options[ self::STATUSES_OPTION ] = [ 'wc-v-sborke' ];
+
+		$settings = $this->settings();
+
+		$this->assertSame( [ 'v-sborke' ], $settings->get_export_statuses() );
+		$this->assertSame( [], $settings->get_unsupported_statuses() );
+		$this->assertSame( [ 'wc-pending', 'wc-on-hold', 'wc-processing', 'wc-v-sborke' ], array_keys( $settings->get_setting( 'export_statuses' )->get_options() ) );
+	}
+
+	/** A saved status that is final, or not registered any more, keeps the «(не поддерживается)» marker. */
+	public function test_a_saved_final_or_unregistered_status_stays_marked_unsupported(): void {
+		$this->options[ self::STATUSES_OPTION ] = [ 'wc-completed', 'wc-gone-status' ];
+
+		$settings = $this->settings();
+
+		$this->assertSame( [ 'wc-completed', 'wc-gone-status' ], array_keys( $settings->get_unsupported_statuses() ) );
+		$this->assertSame( 'Status completed (не поддерживается)', $settings->get_setting( 'export_statuses' )->get_options()['wc-completed'] );
+		$this->assertSame( 'Status gone-status (не поддерживается)', $settings->get_setting( 'export_statuses' )->get_options()['wc-gone-status'] );
+	}
+
+	private function stub_a_shop_with_a_custom_status(): void {
+		Functions\when( 'wc_get_order_statuses' )->justReturn(
+			[
+				'wc-pending'    => 'Pending',
+				'wc-processing' => 'Processing',
+				'wc-on-hold'    => 'On hold',
+				'wc-v-sborke'   => 'В сборке',
+				'wc-completed'  => 'Completed',
+				'wc-cancelled'  => 'Cancelled',
+			]
+		);
 	}
 
 	// ----- save / load -----
