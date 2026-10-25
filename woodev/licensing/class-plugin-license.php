@@ -846,6 +846,13 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 					throw new Exception( __( 'Cannot get license data. Please try again.', 'woodev-plugin-framework' ) );
 				}
 
+				// A 200 whose JSON carries no licence token ({}, a maintenance object, a bare string, a list) says
+				// nothing about this licence: treat it like an unusable answer and keep the last-known-good state
+				// (#1460). Every definite EDD answer (valid, expired, invalid, ...) carries a `license` string.
+				if ( ! is_string( $license_data->license ) || '' === $license_data->license ) {
+					throw new Exception( __( 'Cannot get license data. Please try again.', 'woodev-plugin-framework' ) );
+				}
+
 				// §4: consume any signed claim riding this response. Only reached after a
 				// successful dispatch — a dispatch() throw bypasses this, so outage grace
 				// (§3.2) is preserved byte-for-byte. consume_from_response() swallows its
@@ -853,12 +860,19 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 				$this->get_authority_claims()->consume_from_response( $license_data->get_response_data() );
 				$this->reset_claim_refresh_backoff_if_claimed();
 
+				$expires = $license_data->expires;
+
+				// A valid answer that omits the expiry must not wipe the stored one (it would render as lifetime).
+				if ( 'valid' === $license_data->license && null === $expires ) {
+					$expires = $this->woodev_license->expires;
+				}
+
 				$this->woodev_license->update(
 					[
 						'license' => $license_data->license,
 						'success' => $license_data->success,
 						'error'   => $license_data->error,
-						'expires' => $license_data->expires,
+						'expires' => $expires,
 					]
 				);
 
