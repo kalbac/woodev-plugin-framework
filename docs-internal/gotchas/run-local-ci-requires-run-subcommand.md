@@ -25,6 +25,12 @@ npx run-local-ci run --all --commit-status --github-token "$(gh auth token)"
 - A silent red `Set up PHP` is a Launchpad outage, not your code:
   [local-ci-setup-php-dies-silently-when-the-launchpad-ppa-is-down-bake-php-into-the-image](local-ci-setup-php-dies-silently-when-the-launchpad-ppa-is-down-bake-php-into-the-image.md).
 
+## s197 addition (26.10.2026, MacBook)
+
+- **`/var/run/docker.sock` can be missing on the Mac** (OrbStack serves `~/.orbstack/run/docker.sock`; the `default` Docker context
+  points at the missing path). local-ci then dies before any job with «couldn't use a Docker socket at /var/run/docker.sock». Pass the
+  socket explicitly: `LOCAL_CI_DOCKER_HOST=unix://$HOME/.orbstack/run/docker.sock npx -y run-local-ci run -w .github/workflows/ci.yml …`.
+
 ## Related
 
 - [local-ci-setup-php-dies-silently-when-the-launchpad-ppa-is-down-bake-php-into-the-image](local-ci-setup-php-dies-silently-when-the-launchpad-ppa-is-down-bake-php-into-the-image.md) — PHP baked into the image
