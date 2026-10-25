@@ -63,6 +63,25 @@ Run `npm run probe:signature` against the v1 source and follow `docs-internal/mi
 
 One framework method id is one delivery type ([model, rates, location, pickup](model-rates-location-pickup.md)). When v1 had one id for courier and pickup, the migration (a) keeps the zone instance's number and settings but rewrites its `method_id` to the new courier or pickup id, (b) rewrites references to the id — CDEK also fixed COD gateways' `enable_for_methods` — and (c) leaves old ORDERS recognisable under the old id everywhere (the orders filter, tracking, export). Verify with real zone rows, not fixtures (CDEK s157, `Cdek_Wpdb_Zone_Method_Store`).
 
+### Declare every v1 hook you dropped, and publish what changed
+
+A v1 rewrite changes contracts that code OUTSIDE the plugin depends on: a shop's own `functions.php`, a 1C or CRM exchange,
+an integrator's add-on. Nobody tells them, so the release must:
+
+1. **Declare every dropped public hook.** Inventory `do_action` / `apply_filters` (dynamic names too) in the RELEASED v1 code,
+   keep the ones shop code plausibly hooked, and return them from `get_deprecated_hooks()` with the replacement, or `false`,
+   and `'map' => false` where the new hook's arguments differ. Pin the list with a unit test. A hook that silently stops
+   firing is the failure: CDEK declared its list (`Plugin::DEPRECATED_HOOK_REPLACEMENTS`), Yandex 2.0.x and Russian
+   Post 2.0.x shipped without one and a shop's 1C exchange broke with no notice (ticket 17067, framework #1428, yandex#138,
+   post#63). Rule and format: [lifecycle](../../woodev-plugin-core/lifecycle.md) rule 3.
+2. **List the method-id change as a contract change.** WooCommerce derives `woocommerce_shipping_{method_id}_is_available`
+   from the id, and integrations match orders by `method_id`. State the old → new ids and whether OLD orders keep the old id
+   (CDEK, Yandex) or are rewritten with the original kept in hidden line meta (Russian Post).
+3. **Publish an integrator article with the release** («Переход на версию 2: что меняется для разработчиков и интеграций»,
+   one per plugin, on woodev.ru next to the migration article): method ids, old orders, order meta keys, hooks kept /
+   replaced / removed (full lists), URLs, AJAX and cron, a 1C checklist. The drafts for the three current plugins are in
+   `docs-internal/research/2026-10-24-v2-integrator-article-1428/`.
+
 ### Mechanics that held up
 
 - **Idempotent, journalled, fill-only.** Never overwrite a value the merchant already saved on the new page; record every key carried, skipped and `no_counterpart` in a journal (it doubles as the rollback and cleanup list). Map only EXACT counterparts: CDEK carried v1 checkout-field switches into `woodev_checkout_fields_*` / `woodev_location_allow_custom_settlement` only where a counterpart existed and left the rest at framework defaults (#1149). A v1 value the framework retired still reads: `single` packing is read as `virtual` ([packaging](packaging.md)), and a stored `related-list` field mode is clamped on read (#1216).
