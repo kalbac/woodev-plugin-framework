@@ -678,6 +678,49 @@ final class Location_Controller_Fake_List_Provider extends Abstract_Location_Pro
 }
 
 /**
+ * #1445: a provider that overrides the selection seam
+ * {@see Abstract_Location_Provider::enrich_selected_record()} with a caller-supplied callback.
+ */
+final class Location_Controller_Enriching_Provider extends Abstract_Location_Provider {
+
+	/** @var callable */
+	private $enrich_callback;
+
+	/** @var Location_Record[] */
+	public array $enrich_calls = [];
+
+	public function __construct( callable $enrich_callback ) {
+		$this->enrich_callback = $enrich_callback;
+	}
+
+	public function get_id(): string {
+		return 'fake';
+	}
+
+	public function get_name(): string {
+		return 'Enriching';
+	}
+
+	public function get_countries(): array {
+		return [ 'RU' ];
+	}
+
+	protected function declare_suggest_levels(): array {
+		return [ Location_Record::LEVEL_SETTLEMENT ];
+	}
+
+	public function suggest( string $query, Location_Scope $scope ): array {
+		return [];
+	}
+
+	public function enrich_selected_record( Location_Record $record ): Location_Record {
+		$this->enrich_calls[] = $record;
+
+		return ( $this->enrich_callback )( $record );
+	}
+}
+
+/**
  * Probe bypassing the rate limiter — mirrors Field_Source_Controller_Probe /
  * Pickup_Controller's own probe pattern; the rate-limit MECHANISM itself is
  * exhaustively covered by RestRateLimitTraitTest, not re-proven here.
@@ -2365,6 +2408,92 @@ final class LocationControllerTest extends TestCase {
 		$this->assertCount( 1, $logged, 'The provider failure must be logged via log_failure().' );
 		$this->assertSame( 'woodev_location_provider_operation_failed', $logged[0][0] );
 		$this->assertSame( $exception, $logged[0][3] );
+	}
+
+	// -------------------------------------------------------------------
+	// #1445: the selection seam — a provider may enrich the chosen record once.
+	// -------------------------------------------------------------------
+
+	private function select_with_provider( Location_Provider $provider, Location_Record $record ): array {
+		$service = new Location_Controller_Fake_Service(
+			true, null, null, true, true, null, null, null, false, null, null, [], [],
+			null, $provider
+		);
+		$ctrl    = new Location_Controller_Probe( $service );
+		$result  = $ctrl->handle_select_request( new WP_REST_Request( [ 'record' => $record->to_array() ] ) );
+
+		return [ $service, $result ];
+	}
+
+	public function test_select_persists_the_record_the_provider_enriched_with_coordinates(): void {
+		$record   = $this->record( 'fake:city-1' );
+		$provider = new Location_Controller_Enriching_Provider(
+			static fn( Location_Record $r ) => Location_Record::from_array( array_merge( $r->to_array(), [ 'lat' => 43.1, 'lon' => 131.9 ] ) )
+		);
+
+		[ $service, $result ] = $this->select_with_provider( $provider, $record );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertCount( 1, $provider->enrich_calls );
+		$this->assertNull( $provider->enrich_calls[0]->lat(), 'the provider is handed the record the customer posted' );
+		$this->assertSame( 43.1, $service->set_calls[0][0]->lat() );
+		$this->assertSame( 131.9, $service->set_calls[0][0]->lon() );
+	}
+
+	public function test_select_a_provider_without_the_override_stores_the_posted_record_unchanged(): void {
+		$record   = $this->record( 'fake:city-1' );
+		$provider = new Location_Controller_Fake_Provider( static fn() => [] );
+
+		[ $service ] = $this->select_with_provider( $provider, $record );
+
+		$this->assertCount( 1, $service->set_calls );
+		$this->assertSame( $record->to_array(), $service->set_calls[0][0]->to_array() );
+	}
+
+	public function test_select_a_throwing_enrichment_never_blocks_the_pick_and_is_logged(): void {
+		$record    = $this->record( 'fake:city-1' );
+		$exception = new \RuntimeException( 'carrier lookup timed out' );
+		$provider  = new Location_Controller_Enriching_Provider(
+			static function () use ( $exception ) {
+				throw $exception;
+			}
+		);
+
+		$logged = [];
+		Functions\when( 'do_action' )->alias(
+			static function ( ...$args ) use ( &$logged ) {
+				$logged[] = $args;
+			}
+		);
+
+		[ $service, $result ] = $this->select_with_provider( $provider, $record );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( $record->to_array(), $service->set_calls[0][0]->to_array() );
+		$this->assertCount( 1, $logged );
+		$this->assertSame( 'woodev_location_provider_operation_failed', $logged[0][0] );
+		$this->assertSame( 'enrich_selected_record', $logged[0][2] );
+		$this->assertSame( $exception, $logged[0][3] );
+	}
+
+	public function test_select_enrichment_cannot_re_identify_the_pick(): void {
+		$record   = $this->record( 'fake:city-1' );
+		$provider = new Location_Controller_Enriching_Provider(
+			fn() => $this->record( 'fake:another-city' )
+		);
+
+		[ $service ] = $this->select_with_provider( $provider, $record );
+
+		$this->assertSame( 'fake:city-1', $service->set_calls[0][0]->key() );
+	}
+
+	public function test_abstract_location_provider_enrichment_defaults_to_identity_and_is_not_a_capability(): void {
+		$provider = new Location_Controller_Fake_Provider( static fn() => [] );
+		$record   = $this->record( 'fake:city-1' );
+
+		$this->assertSame( $record, $provider->enrich_selected_record( $record ) );
+		$this->assertNotContains( 'enrich_selected_record', $provider->get_capabilities() );
+		$this->assertSame( [], $provider->get_capabilities(), 'the seam must not widen the reflected capability set' );
 	}
 
 	public function test_select_a_stale_entry_with_no_registered_provider_is_treated_like_failed(): void {

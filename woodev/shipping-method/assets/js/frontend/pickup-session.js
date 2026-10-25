@@ -2953,6 +2953,13 @@
 
 				if ( reason && 'map_script' === reason.code ) {
 					mapUnavailable = true;
+
+					// The search layout is mounted by the map provider alone, so with no map the type
+					// filter parked in it would never reach the document (#1445).
+					if ( panels ) {
+						panels.moveFilterToList();
+					}
+
 					if ( config.debug && window.console && 'function' === typeof window.console.error ) {
 						window.console.error( '[woodev-pickup] ' + ( reason.message || 'Map failed to load.' ) );
 					}

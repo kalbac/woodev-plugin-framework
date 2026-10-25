@@ -3656,6 +3656,25 @@
 	};
 
 	/**
+	 * Gives up on the search layout as the filter's home and makes the list panel its home (#1445).
+	 * The layout `buildSearchLayout()` returns is mounted by the MAP provider alone, once its
+	 * library has loaded; when the map fails (#1370/#1427) it is never put in the document, so a
+	 * filter parked in it — already built, or built by a later `setTypes()` — would stay invisible.
+	 * The session calls this on a map-script failure. Safe to call at any time and any number of
+	 * times: with no filter built yet it only redirects the later attach.
+	 *
+	 * @since 2.0.14
+	 * @returns {void}
+	 */
+	Panels.prototype.moveFilterToList = function() {
+		this._controlsEl = null;
+
+		if ( this._filterWrapEl && this._listEl ) {
+			this._listEl.appendChild( this._filterWrapEl );
+		}
+	};
+
+	/**
 	 * Shows or hides the card over the list: flips the stage's `is-card` class AND marks the list
 	 * `inert` for exactly as long as the card covers it (#1109). The card sits ABOVE the list at a
 	 * higher `z-index` rather than replacing it, so without `inert` every row stays a tab stop
