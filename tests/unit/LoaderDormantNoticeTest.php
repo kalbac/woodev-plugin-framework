@@ -256,6 +256,11 @@ final class LoaderDormantNoticeTest extends TestCase {
 		Functions\stubs( [ 'add_action', 'has_action' ] );
 		Functions\when( 'is_admin' )->justReturn( true );
 		Functions\when( 'wp_kses' )->returnArg();
+		Functions\when( 'admin_url' )->alias(
+			static function ( string $path = '' ): string {
+				return 'https://example.test/wp-admin/' . $path;
+			}
+		);
 
 		$bootstrap = \Woodev_Plugin_Bootstrap::instance();
 		$bootstrap->register_plugin( '1.4.1', 'Legacy Plugin', '/path/legacy.php', static function (): void {}, [] );
@@ -265,6 +270,11 @@ final class LoaderDormantNoticeTest extends TestCase {
 		$output = (string) ob_get_clean();
 
 		$this->assertStringContainsString( 'Legacy Plugin', $output );
+		// #1389: one quarantined plugin reads in the singular and points at Woodev → Плагины,
+		// where «Обновить» appears when an update exists (#1438) — no blind «обновите».
+		$this->assertStringContainsString( 'Плагин <strong>Legacy Plugin</strong> не запущен', $output );
+		$this->assertStringContainsString( 'admin.php?page=woodev-extensions', $output );
+		$this->assertStringNotContainsString( 'до последней версии', $output );
 		$this->assertStringNotContainsStringIgnoringCase( 'фреймворк', $output, 'The merchant-facing text must never say "фреймворк" (AGENTS.md Conventions).' );
 	}
 

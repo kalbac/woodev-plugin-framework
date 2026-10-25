@@ -170,17 +170,35 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 				$name_list = (string) reset( $names );
 			}
 
+			// After #1438 the Woodev → Плагины page shows «Обновить» for a quarantined v1 plugin
+			// whenever an update exists, so the notice sends the merchant there instead of guessing.
+			$plugins_page_link = sprintf(
+				'<a href="%s">%s</a>',
+				esc_url( admin_url( 'admin.php?page=woodev-extensions' ) ),
+				esc_html__( 'Woodev → Плагины', 'woodev-plugin-framework' )
+			);
+
+			$message = $count > 1
+				? sprintf(
+					/* translators: 1: list of plugin names, 2: link to the Woodev → Плагины page. */
+					__( 'Плагины %1$s не запущены: они работают на старой версии Woodev и несовместимы с новыми плагинами Woodev на этом сайте. Проверьте обновления в разделе %2$s: если они вышли, там будет кнопка «Обновить». Если обновлений нет, на время отключите эти плагины или верните прежние версии новых плагинов Woodev.', 'woodev-plugin-framework' ),
+					$name_list,
+					$plugins_page_link
+				)
+				: sprintf(
+					/* translators: 1: plugin name, 2: link to the Woodev → Плагины page. */
+					__( 'Плагин %1$s не запущен: он работает на старой версии Woodev и несовместим с новыми плагинами Woodev на этом сайте. Проверьте обновление в разделе %2$s: если оно вышло, там будет кнопка «Обновить». Если обновления нет, на время отключите этот плагин или верните прежнюю версию нового плагина Woodev.', 'woodev-plugin-framework' ),
+					$name_list,
+					$plugins_page_link
+				);
+
 			echo '<div class="error"><p>';
 			echo wp_kses(
-				sprintf(
-					/* translators: %s — list of plugin names. */
-					__(
-						'Следующие плагины не запущены: %s. Они работают на старой версии Woodev и несовместимы с новыми плагинами Woodev на этом сайте. Если для них вышло обновление, обновите их. Если нет, на время выберите одно из двух: отключите их или верните прежние версии новых плагинов Woodev.',
-						'woodev-plugin-framework'
-					),
-					$name_list
-				),
-				[ 'strong' => [] ]
+				$message,
+				[
+					'strong' => [],
+					'a'      => [ 'href' => [] ],
+				]
 			);
 			echo '</p></div>';
 		}

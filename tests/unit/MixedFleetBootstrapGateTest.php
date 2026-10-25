@@ -477,6 +477,11 @@ class MixedFleetBootstrapGateTest extends TestCase {
 		Functions\when( 'has_action' )->justReturn( false );
 
 		$added = [];
+		Functions\when( 'admin_url' )->alias(
+			static function ( string $path = '' ): string {
+				return 'https://example.test/wp-admin/' . $path;
+			}
+		);
 		Functions\when( 'add_action' )->alias(
 			static function ( string $hook, $callback ) use ( &$added ): void {
 				$added[] = [ $hook, $callback ];
@@ -567,6 +572,11 @@ class MixedFleetBootstrapGateTest extends TestCase {
 		Functions\when( 'has_action' )->justReturn( false );
 
 		$added = [];
+		Functions\when( 'admin_url' )->alias(
+			static function ( string $path = '' ): string {
+				return 'https://example.test/wp-admin/' . $path;
+			}
+		);
 		Functions\when( 'add_action' )->alias(
 			static function ( string $hook, $callback ) use ( &$added ): void {
 				$added[] = [ $hook, $callback ];
