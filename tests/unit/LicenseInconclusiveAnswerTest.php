@@ -1,12 +1,11 @@
 <?php
 /**
- * Probe: what does the REAL validate_license() store for each licence-server answer?
+ * Regression for #1460: an answer that carries no licence token must not wipe the stored licence.
  *
- * Research probe (branch research/license-validate-overwrite), not a fix. It drives the real
- * Woodev_Plugins_License::validate_license() through the real Woodev_Licensing_API response handling
- * (only the HTTP transport is canned) against an in-memory options table that already holds a
- * genuinely valid licence. The assertions state the DESIRED behaviour: an inconclusive answer keeps
- * the previous state. A case that fails today is a proven overwrite.
+ * Drives the real Woodev_Plugins_License::validate_license() through the real Woodev_Licensing_API
+ * response handling (only the HTTP transport is canned) against an in-memory options table that already
+ * holds a genuinely valid licence. An inconclusive answer keeps the previous state; every definite EDD
+ * answer is still stored as-is.
  *
  * @package Woodev\Tests\Unit
  */
@@ -91,11 +90,11 @@ class Canned_Transport_Licensing_API extends \Woodev_Licensing_API {
 }
 
 /**
- * Class LicenseValidateOverwriteProbeTest.
+ * Class LicenseInconclusiveAnswerTest.
  */
-class LicenseValidateOverwriteProbeTest extends TestCase {
+class LicenseInconclusiveAnswerTest extends TestCase {
 
-	private const OPTION = 'woodev_probe_plugin_license';
+	private const OPTION = 'woodev_inconclusive_plugin_license';
 
 	/** @var array<string, mixed> In-memory options table. */
 	private $options = [];
@@ -164,8 +163,26 @@ class LicenseValidateOverwriteProbeTest extends TestCase {
 	}
 
 	/**
-	 * Characterisation: every definite EDD answer IS written. Passing today — the decision under test
-	 * is only which of them may flip a licence that is genuinely valid.
+	 * The AJAX caller (the "Check" button) still gets an error message for an inconclusive answer.
+	 *
+	 * @dataProvider inconclusive_answers
+	 *
+	 * @param mixed $answer What the transport returns.
+	 * @return void
+	 */
+	public function test_inconclusive_answer_still_reports_an_error_to_ajax( $answer ): void {
+		$license = $this->make_engine( $answer );
+
+		Functions\expect( 'wp_send_json_error' )->once();
+		Functions\expect( 'wp_send_json_success' )->never();
+
+		$license->validate_license( 'KEY-123', false, true );
+
+		$this->assertSame( 'valid', $this->options[ self::OPTION ]->license );
+	}
+
+	/**
+	 * Every definite EDD answer IS written, so these may flip a licence that is genuinely valid.
 	 *
 	 * @return array<string, array{0: string, 1: array<string, mixed>}>
 	 */
@@ -191,7 +208,7 @@ class LicenseValidateOverwriteProbeTest extends TestCase {
 	 * @return void
 	 */
 	public function test_definite_edd_answer_is_stored_as_is( string $status, array $extra ): void {
-		$body    = wp_json_encode_probe( array_merge( [ 'license' => $status ], $extra ) );
+		$body    = wp_json_encode_license_answer( array_merge( [ 'license' => $status ], $extra ) );
 		$license = $this->make_engine(
 			[
 				'response' => [ 'code' => 200, 'message' => 'OK' ],
@@ -228,7 +245,7 @@ class LicenseValidateOverwriteProbeTest extends TestCase {
 	}
 
 	/**
-	 * Characterisation: a valid answer that omits `expires` wipes the stored expiry (a lifetime-looking value).
+	 * A valid answer that omits `expires` must not wipe the stored expiry (it would render as lifetime).
 	 *
 	 * @return void
 	 */
@@ -261,7 +278,7 @@ class LicenseValidateOverwriteProbeTest extends TestCase {
 				'error'   => null,
 				'expires' => '2099-01-01 00:00:00',
 			],
-			'woodev_probe_plugin_license_key' => 'KEY-123',
+			'woodev_inconclusive_plugin_license_key' => 'KEY-123',
 		];
 
 		Functions\when( 'get_option' )->alias(
@@ -333,7 +350,7 @@ class LicenseValidateOverwriteProbeTest extends TestCase {
 		$plugin->shouldReceive( 'get_plugin_name' )->andReturn( 'Probe Plugin' );
 		$plugin->shouldReceive( 'get_plugin_option_name' )->andReturnUsing(
 			static function ( $suffix ) {
-				return 'woodev_probe_plugin_' . $suffix;
+				return 'woodev_inconclusive_plugin_' . $suffix;
 			}
 		);
 		$plugin->shouldReceive( 'require_tls_1_2' )->andReturn( false );
@@ -349,7 +366,7 @@ class LicenseValidateOverwriteProbeTest extends TestCase {
 
 		$woodev_license = ( new \ReflectionClass( \Woodev_License::class ) )->newInstanceWithoutConstructor();
 		$this->set_private_property( $woodev_license, 'option_name', self::OPTION );
-		$this->set_private_property( $woodev_license, 'plugin_id', 'woodev_probe_plugin' );
+		$this->set_private_property( $woodev_license, 'plugin_id', 'woodev_inconclusive_plugin' );
 		$woodev_license->get();
 
 		$claims = Mockery::mock( \Woodev_License_Authority_Claims::class );
@@ -404,6 +421,6 @@ class LicenseValidateOverwriteProbeTest extends TestCase {
  * @param array<string, mixed> $data Payload.
  * @return string
  */
-function wp_json_encode_probe( array $data ): string {
+function wp_json_encode_license_answer( array $data ): string {
 	return (string) json_encode( $data );
 }
