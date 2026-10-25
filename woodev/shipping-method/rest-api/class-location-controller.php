@@ -1508,7 +1508,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 				}
 			}
 
-			$record = $record_to_persist;
+			// #1445 seam: the owning provider may fill what its suggestions left out (a fuzzy
+			// suggestion without coordinates) once, here, before the record is stored and its
+			// chain node is published.
+			$record = $this->enrich_selected_record( $record_to_persist );
 
 			// Always EXPLICIT (spec D11): a customer's own selection through this
 			// route is never an implicit/default guess — only
@@ -1555,6 +1558,44 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 					'implicit'  => $chain_block['implicit'],
 				]
 			);
+		}
+
+		/**
+		 * Lets the record's own provider enrich a chosen record before it is stored (#1445).
+		 *
+		 * The provider hook is {@see Abstract_Location_Provider::enrich_selected_record()}; a provider
+		 * that implements {@see Location_Provider} directly may declare the same method and is honoured
+		 * too, one that declares nothing is left alone. A provider failure, or an answer that is not a
+		 * record with the SAME provider id and key (enrichment may add detail, never re-identify the
+		 * pick), keeps the customer's record: an outage must never block the purchase.
+		 *
+		 * @since 2.0.14
+		 *
+		 * @param Location_Record $record The record about to be persisted.
+		 *
+		 * @return Location_Record The enriched record, or `$record` itself.
+		 */
+		private function enrich_selected_record( Location_Record $record ): Location_Record {
+			$provider = $this->service->get_registered_provider( $record->provider_id() );
+
+			if ( null === $provider || ! method_exists( $provider, 'enrich_selected_record' ) ) {
+				return $record;
+			}
+
+			try {
+				// Runs while the customer waits for the pick to be accepted (#1017).
+				$enriched = \Woodev_API_Request_Purpose::run_at_checkout( fn() => $provider->enrich_selected_record( $record ) );
+			} catch ( \Throwable $exception ) {
+				$this->log_failure( $record->provider_id(), 'enrich_selected_record', $exception );
+
+				return $record;
+			}
+
+			if ( ! $enriched instanceof Location_Record || $enriched->provider_id() !== $record->provider_id() || $enriched->key() !== $record->key() ) {
+				return $record;
+			}
+
+			return $enriched;
 		}
 
 
@@ -2211,7 +2252,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 *              (#405).
 		 *
 		 * @param string     $provider_id The failing provider's {@see Location_Provider::get_id()}.
-		 * @param string     $operation   One of `suggest`, `list`.
+		 * @param string     $operation   One of `suggest`, `list`, `verify_key`, `enrich_selected_record`.
 		 * @param \Throwable $exception   The caught failure.
 		 *
 		 * @return void
@@ -2240,7 +2281,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 			 * @since 2.0.2
 			 *
 			 * @param string     $provider_id The failing provider's own id.
-			 * @param string     $operation   One of `suggest`, `list`.
+			 * @param string     $operation   One of `suggest`, `list`, `verify_key`, `enrich_selected_record`.
 			 * @param \Throwable $exception   The caught failure, UNREDACTED.
 			 */
 			do_action( 'woodev_location_provider_operation_failed', $provider_id, $operation, $exception );

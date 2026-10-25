@@ -278,6 +278,31 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Abstract_Location
 		}
 
 		/**
+		 * Selection seam (#1445): called once, when a customer has chosen a record
+		 * (`POST /location/select`), before it is persisted and its chain node is published.
+		 * A provider overrides it to fill what its suggestions left out — e.g. coordinates
+		 * a fuzzy suggestion without a region does not carry — typically
+		 * `Location_Record::from_array( array_merge( $record->to_array(), [ 'lat' => …, 'lon' => … ] ) )`.
+		 *
+		 * Deliberately NOT part of {@see Location_Provider} and NOT a capability: it is a plain
+		 * overridable default, so no existing provider has to change. It runs on the request
+		 * the customer waits on — return `$record` untouched when there is nothing to add, and
+		 * keep any upstream call short. A throw, or a record with another provider id or key, is
+		 * ignored by the caller (the customer's own record is stored).
+		 *
+		 * Default: identity.
+		 *
+		 * @since 2.0.14
+		 *
+		 * @param Location_Record $record The record the customer chose.
+		 *
+		 * @return Location_Record The record to persist — same provider id and key.
+		 */
+		public function enrich_selected_record( Location_Record $record ): Location_Record {
+			return $record;
+		}
+
+		/**
 		 * {@inheritDoc}
 		 *
 		 * FINAL template method — enforces that every declared suggest level is a

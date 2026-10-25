@@ -463,6 +463,10 @@ StubPanels.prototype.setAnchor = function( latLng, label ) {
 
 StubPanels.prototype.toggleList = function() {};
 
+StubPanels.prototype.moveFilterToList = function() {
+	this.moveFilterToListCalls = ( this.moveFilterToListCalls || 0 ) + 1;
+};
+
 StubPanels.prototype.openList = function() {
 	this.openListCalls = ( this.openListCalls || 0 ) + 1;
 
@@ -3876,6 +3880,28 @@ test( 'a failed bulk map opens the list so the fetched points are visible (#1427
 
 	expect( session.panels.openListCalls ).toBe( 1 );
 	expect( session.panels._stageOpen ).toBe( true );
+} );
+
+test( 'a map script failure hands the type filter to the list, since the map never mounts its controls (#1445)', async () => {
+	const session = await openSession( configWith() );
+
+	session.provider.emit( 'error', { code: 'map_script', message: 'ymaps script failed to load' } );
+
+	expect( session.panels.moveFilterToListCalls ).toBe( 1 );
+} );
+
+test( 'a failed bulk map (real Yandex provider) shows the type filter in the list when search and two types are on (#1445)', async () => {
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () => Promise.resolve( [
+		point( { id: 'p1', type: { code: 'pvz', label: 'ПВЗ' } } ),
+		point( { id: 'p2', type: { code: 'postamat', label: 'Постамат' } } ),
+	] ) );
+
+	await openRealYandexPanels( configWith( { mapConfig: { hasApiKey: false, ns: 'ymaps' } } ) );
+
+	const filter = document.querySelector( '.woodev-pickup-list .woodev-pickup-filter' );
+
+	expect( filter ).not.toBeNull();
+	expect( document.body.contains( filter ) ).toBe( true );
 } );
 
 test( 'a failed viewport map does not open the list: it has no bulk listing to fall back to (#1427)', async () => {

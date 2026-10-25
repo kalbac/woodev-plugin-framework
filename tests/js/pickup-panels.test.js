@@ -5164,3 +5164,66 @@ describe( 'manager mode (#710 D3 — the same panels inside the admin order wiza
 		expect( stage.classList.contains( 'is-open' ) ).toBe( false );
 	} );
 } );
+
+// -----------------------------------------------------------------------
+// #1445: the search layout (`.woodev-pickup-controls`) is mounted by the MAP provider only. When the
+// map never loads, a filter parked in it never reaches the document, so `moveFilterToList()` — the
+// session's map-failure hook — hands the filter to the list panel instead.
+// -----------------------------------------------------------------------
+describe( 'moveFilterToList() when the map never mounts the search layout (#1445)', () => {
+	const searchFilterConfig = Object.assign( {}, filterConfig, { search: true } );
+
+	it( 'moves a filter already parked in the unmounted layout into the list panel', () => {
+		const panels = mount( searchFilterConfig );
+		const layout = panels.buildSearchLayout();
+
+		panels.setTypes( twoTypes );
+
+		expect( layout.querySelector( '.woodev-pickup-filter' ) ).not.toBeNull();
+		expect( document.body.contains( layout ) ).toBe( false );
+
+		panels.moveFilterToList();
+
+		expect( layout.querySelector( '.woodev-pickup-filter' ) ).toBeNull();
+		expect( panels._listEl.querySelector( '.woodev-pickup-filter' ) ).not.toBeNull();
+		expect( document.body.contains( panels._listEl.querySelector( '.woodev-pickup-filter__toggle' ) ) ).toBe( true );
+	} );
+
+	it( 'attaches a filter that is built AFTER the failure to the list panel too', () => {
+		const panels = mount( searchFilterConfig );
+		const layout = panels.buildSearchLayout();
+
+		panels.moveFilterToList();
+		panels.setTypes( twoTypes );
+
+		expect( layout.querySelector( '.woodev-pickup-filter' ) ).toBeNull();
+		expect( panels._listEl.querySelector( '.woodev-pickup-filter' ) ).not.toBeNull();
+	} );
+
+	it( 'keeps the moved filter working: unchecking a type still emits typeFilterChange', () => {
+		const panels = mount( searchFilterConfig );
+		const onFilter = jest.fn();
+
+		panels.buildSearchLayout();
+		panels.on( 'typeFilterChange', onFilter );
+		panels.setTypes( twoTypes );
+		panels.moveFilterToList();
+
+		panels._listEl.querySelector( '.woodev-pickup-filter__checkbox' ).click();
+
+		expect( onFilter ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'is a harmless no-op with no filter built and with no search layout at all', () => {
+		const panels = mount( searchFilterConfig );
+
+		expect( () => panels.moveFilterToList() ).not.toThrow();
+		expect( panels.root.querySelector( '.woodev-pickup-filter' ) ).toBeNull();
+	} );
+
+	it( 'leaves the filter in the layout when the map did mount it and nothing abandoned it', () => {
+		const { el } = layoutWith( twoTypes );
+
+		expect( el.querySelectorAll( '.woodev-pickup-filter' ) ).toHaveLength( 1 );
+	} );
+} );
