@@ -97,7 +97,9 @@ Rules that follow from the lifecycle mechanics:
    hooks and the operator cut the list to the 39 a shop plausibly hooked (checkout/map params, field toggles,
    rate customisation, tariffs, export/status/tracking, emails, services/boxes, customer location, settings
    fields) — v1 internals and per-status names stay out (`includes/class-plugin.php`
-   `DEPRECATED_HOOK_REPLACEMENTS`, edostavka PRs #76, #77).
+   `DEPRECATED_HOOK_REPLACEMENTS`, edostavka PRs #76, #77). **This is a release gate, not a nicety:** Yandex 2.0.x and Russian
+   Post 2.0.x declared nothing, and a shop's 1C exchange broke with no notice (ticket 17067, framework #1428). Pin the declared list with
+   a unit test so a refactor cannot drop it.
    **A migration must not hang on `upgrade_to_X_Y_Z()` alone.** If the v1 line shares your plugin id (Yandex
    1.x → 2.0.0 does), a shop that ran a skeleton build is stamped with the new version and no
    `upgrade_to_2_0_0()` will ever run; run the migration from your lifecycle `init()` BEFORE `parent::init()`

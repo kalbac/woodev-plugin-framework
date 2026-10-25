@@ -141,6 +141,8 @@ For the rest of the settings API, read [settings.md](settings.md).
   `register_loader_definition()` called by a test — see
   `tests/_fixtures/woodev-entry-path-fixture/` and `tests/unit/LoaderEntryPathTest.php`.
 - The data-preservation checklist for a migrated plugin is verified (see [lifecycle.md](lifecycle.md)).
+- A v1 rewrite declares every public v1 hook it no longer fires in `get_deprecated_hooks()`, pinned by a unit test
+  ([lifecycle.md](lifecycle.md) rule 3) — Yandex and Russian Post 2.0.x shipped without it and a shop's 1C exchange broke silently.
 - The plugin has a Russian catalogue plus its storefront-translation test, an error-reporting DSN filter, a unit
   bootstrap that defines every WordPress time constant, and CI pinned to a reviewed framework SHA
   ([layout-and-testing.md](layout-and-testing.md#ci-of-a-plugin-repo)).
