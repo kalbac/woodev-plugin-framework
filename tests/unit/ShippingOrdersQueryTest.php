@@ -508,8 +508,8 @@ class ShippingOrdersQueryTest extends TestCase {
 
 		$args = $this->query_with_hpos( true )->build_args( [ 'is_exported' => false ] );
 
-		// A custom status is not exportable either (#1024), so only `pending` survives of this shop's four.
-		$this->assertSame( [ 'wc-pending' ], $args['status'] );
+		// Cancelled is final, so it goes; a shop-registered status is exportable since #1458.
+		$this->assertSame( [ 'wc-pending', 'wc-custom' ], $args['status'] );
 	}
 
 	/** The explicit filter is validated against the FULL status list, so the hidden status stays reachable. */
@@ -584,7 +584,7 @@ class ShippingOrdersQueryTest extends TestCase {
 	}
 
 	/**
-	 * The «new» set IS `Order_Actions::EXPORTABLE_STATUSES` (prefixed) — the list the «Выгрузить» button
+	 * The «new» set IS `Order_Actions::get_exportable_statuses()` (prefixed) — the list the «Выгрузить» button
 	 * reads — not a second hand-typed list. Pinned on a shop that registers every status, so the
 	 * intersection can only be as wide as the constant says.
 	 */
@@ -595,7 +595,7 @@ class ShippingOrdersQueryTest extends TestCase {
 			static function ( string $status ): string {
 				return 'wc-' . $status;
 			},
-			Order_Actions::EXPORTABLE_STATUSES
+			Order_Actions::get_exportable_statuses()
 		);
 		$actual   = $this->query_with_hpos( true )->build_args( [ 'is_exported' => false ] )['status'];
 

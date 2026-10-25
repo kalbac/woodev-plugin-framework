@@ -33,6 +33,18 @@ class ShippingOrderActionsTest extends TestCase {
 		$this->meta = [];
 
 		Functions\when( 'apply_filters' )->returnArg( 2 );
+		// A stock shop (#1458): WooCommerce's own statuses only, so the exportable list is the base one.
+		Functions\when( 'wc_get_order_statuses' )->justReturn(
+			[
+				'wc-pending'    => 'Pending',
+				'wc-processing' => 'Processing',
+				'wc-on-hold'    => 'On hold',
+				'wc-completed'  => 'Completed',
+				'wc-cancelled'  => 'Cancelled',
+				'wc-refunded'   => 'Refunded',
+				'wc-failed'     => 'Failed',
+			]
+		);
 		Functions\when( 'get_post_meta' )->alias(
 			function ( int $post_id, string $key, bool $single ) {
 				return $this->meta[ $key ] ?? '';
@@ -133,6 +145,96 @@ class ShippingOrderActionsTest extends TestCase {
 
 			$this->assertSame( [], $this->action_ids( $actions ), "status: {$status}" );
 		}
+	}
+
+	/** The statuses a shop registers on top of WooCommerce's own. */
+	private function stub_a_shop_with_custom_statuses(): void {
+		Functions\when( 'wc_get_order_statuses' )->justReturn(
+			[
+				'wc-pending'        => 'Pending',
+				'wc-processing'     => 'Processing',
+				'wc-on-hold'        => 'On hold',
+				'wc-v-sborke'       => 'В сборке',
+				'wc-completed'      => 'Completed',
+				'wc-cancelled'      => 'Cancelled',
+				'wc-refunded'       => 'Refunded',
+				'wc-failed'         => 'Failed',
+				'wc-checkout-draft' => 'Draft',
+			]
+		);
+	}
+
+	/** #1458: a status the shop registered itself, not final, is exported from like a core one. */
+	public function test_export_is_offered_for_a_registered_custom_status(): void {
+		$this->register_handler();
+		$this->stub_a_shop_with_custom_statuses();
+
+		$actions = $this->actions()->for_order( $this->order( 'v-sborke' ), $this->provider() );
+
+		$this->assertSame( [ Order_Actions::EXPORT ], $this->action_ids( $actions ) );
+	}
+
+	/** #1458: the list is the base, then every non-final, non-draft status the shop registers — nothing else. */
+	public function test_the_exportable_statuses_are_the_base_plus_every_registered_non_final_status(): void {
+		$this->stub_a_shop_with_custom_statuses();
+
+		$this->assertSame( [ 'pending', 'on-hold', 'processing', 'v-sborke' ], Order_Actions::get_exportable_statuses() );
+	}
+
+	/** #1458: a shop-registered final status stays out whatever a plugin names it. */
+	public function test_export_is_not_offered_for_a_final_or_draft_status_of_a_shop_with_custom_statuses(): void {
+		$this->register_handler();
+		$this->stub_a_shop_with_custom_statuses();
+
+		foreach ( [ 'completed', 'cancelled', 'refunded', 'failed', 'checkout-draft', 'not-registered' ] as $status ) {
+			$actions = $this->actions()->for_order( $this->order( $status ), $this->provider() );
+
+			$this->assertSame( [], $this->action_ids( $actions ), "status: {$status}" );
+		}
+	}
+
+	/** #1458: the filter gets the list and the carrier, and its answer is the gate. */
+	public function test_the_exportable_statuses_filter_can_narrow_and_widen_the_gate(): void {
+		$this->register_handler();
+		$this->stub_a_shop_with_custom_statuses();
+
+		$provider = $this->provider();
+		$seen     = [];
+
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $hook, $value, ...$args ) use ( &$seen ) {
+				if ( 'woodev_shipping_exportable_statuses' !== $hook ) {
+					return $value;
+				}
+
+				$seen[] = [ $value, $args ];
+
+				return [ 'wc-completed', 'processing', 'processing', '', 7 ];
+			}
+		);
+
+		$this->assertSame( [ Order_Actions::EXPORT ], $this->action_ids( $this->actions()->for_order( $this->order( 'completed' ), $provider ) ), 'a callback may widen; the wc- prefix is tolerated' );
+		$this->assertSame( [ Order_Actions::EXPORT ], $this->action_ids( $this->actions()->for_order( $this->order( 'processing' ), $provider ) ) );
+		$this->assertSame( [], $this->action_ids( $this->actions()->for_order( $this->order( 'pending' ), $provider ) ), 'a callback may narrow' );
+		$this->assertSame( [ 'completed', 'processing' ], Order_Actions::get_exportable_statuses(), 'duplicates, empties and non-strings are dropped' );
+		$this->assertSame( [ [ 'pending', 'on-hold', 'processing', 'v-sborke' ], [ $provider ] ], $seen[0] );
+	}
+
+	/** #1458: a site-wide caller (the settings page) has no carrier; the filter is told so. */
+	public function test_the_exportable_statuses_filter_gets_null_where_no_carrier_applies(): void {
+		$received = 'unset';
+
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $hook, $value, $provider = 'none' ) use ( &$received ) {
+				$received = $provider;
+
+				return $value;
+			}
+		);
+
+		Order_Actions::get_exportable_statuses();
+
+		$this->assertNull( $received );
 	}
 
 	public function test_export_is_not_offered_once_exported(): void {
@@ -400,6 +502,26 @@ class ShippingOrderActionsTest extends TestCase {
 		foreach ( Order_Actions::EXPORTABLE_STATUSES as $status ) {
 			$this->assertStringContainsString( 'НАЗВАНИЕ:' . $status, $reason );
 		}
+	}
+
+	/** #1458: the sentence names the custom statuses too — it is built from the same list as the gate. */
+	public function test_reason_for_export_from_a_wrong_status_names_a_custom_status(): void {
+		$this->register_handler();
+		$this->stub_a_shop_with_custom_statuses();
+		Functions\when( 'wc_get_order_status_name' )->alias(
+			static function ( string $status ): string {
+				return 'НАЗВАНИЕ:' . $status;
+			}
+		);
+
+		$reason = $this->actions()->unavailable_reason(
+			$this->order( 'completed' ),
+			$this->provider( [ 'carrier_order_id_meta_key' => '_cdek_carrier_order_id' ] ),
+			Order_Actions::EXPORT
+		);
+
+		$this->assertStringContainsString( 'НАЗВАНИЕ:v-sborke', $reason );
+		$this->assertStringNotContainsString( 'НАЗВАНИЕ:completed', $reason );
 	}
 
 	public function test_reason_for_update_on_an_order_that_was_never_exported(): void {

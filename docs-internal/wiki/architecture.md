@@ -634,7 +634,7 @@ Moved here from `CURRENT-STATE.md` in s139: they are reference, true regardless 
   metabox list and `woodev_shipping_orders_preview_fields( $fields, $order, $provider )` the order preview opened from
   a row (`extra_fields` in the preview response). One line shape for both —
   `Order_Row_Builder::sanitize_display_fields()`: `label`, `value`, optional `url` (http/https), optional `tone`.
-- **«New» is unexported ∩ `Order_Actions::EXPORTABLE_STATUSES`**; exported state is derived from a NON-EMPTY `carrier_order_id` (#860, settled and
+- **«New» is unexported ∩ `Order_Actions::get_exportable_statuses()`** (base `EXPORTABLE_STATUSES` + every registered non-final status, filter `woodev_shipping_exportable_statuses`, #1458); exported state is derived from a NON-EMPTY `carrier_order_id` (#860, settled and
   shipped). Every witness — the REST arg, the «Все / Новые» links, the carrier counts, the badge — reads
   it through the SAME `Orders_Query`, which is why their numbers agree by construction rather than by
   coincidence. Moved here from `CURRENT-STATE.md` in s139.
