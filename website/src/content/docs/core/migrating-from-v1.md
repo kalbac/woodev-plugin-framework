@@ -56,7 +56,8 @@ For every hit, decide one of two things: the v2 plugin uses the same name, or th
 
 Avoid it. If a method must be split or renamed, do all of this in one idempotent, journalled migration:
 
-- Rewrite the `method_id` column of the shipping zone rows and keep the `instance_id`, so zones and instance numbers survive. Copy the instance settings to the option name of the new ID (`woocommerce_{method_id}_{instance_id}_settings`); leave the old option for a rollback.
+- Map each existing zone row to exactly one new ID, decided from that instance's own settings (for example, its tariff), then rewrite the row's `method_id` column and keep its `instance_id`, so zones and instance numbers survive. Copy the instance settings to the option name of the new ID (`woocommerce_{method_id}_{instance_id}_settings`); leave the old option for a rollback.
+- `instance_id` is the primary key of WooCommerce's zone-methods table, so one row cannot become two. If one old instance really has to turn into several methods, keep its `instance_id` for one of them, add the others as new instances, and map their settings explicitly.
 - Rewrite the gateway settings that store method IDs, such as the shipping methods a cash on delivery gateway is enabled for, so they name the new ID (`old:12` becomes `new:12`). Never leave the list empty: an empty list means every method.
 - Decide what happens to old orders. Their shipping lines still hold the old ID. Either leave them and declare the old ID in the `method_ids` of your `Orders_Provider`, so the orders page still recognises them; or rewrite the lines in a background job and keep the original ID in a hidden line meta for a rollback. Say which one you did in your release notes.
 - WooCommerce builds `woocommerce_shipping_{method_id}_is_available` from the ID, so code hooked to the old ID stops matching. List it in `get_deprecated_hooks()` or the release notes.
