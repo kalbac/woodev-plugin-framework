@@ -1,6 +1,24 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.0.13] — 2026-10-25
+### Bug Fixes
+- **location**: Accept DaData fias_level 3 rows that are a city and their own okrug (#1459) (#1461)
+
+- **licensing**: Keep the stored licence when the server answer carries no licence token (#1460) (#1463)
+
+
+### Documentation
+- **s196**: 2.0.12 + plugin releases in EDD, #1428 research, Support AI loop rules; handoff (#1456)
+
+- **s196**: Handoff starts with #1428; Support AI s47 findings (#1457)
+
+
+### Tests
+- **account**: Skip setAccessible on PHP 8.1+ so PHP 8.5 reports no risky test (#1462)
+
+
+
 ## [2.0.12] — 2026-10-24
 ### Bug Fixes
 - **pickup**: Open the list when the bulk map fails to load (#1427) (#1446)
