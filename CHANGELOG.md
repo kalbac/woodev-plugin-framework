@@ -1,6 +1,22 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.0.14] — 2026-10-25
+### Bug Fixes
+- **pickup**: Type filter without the map; add a selection seam to location providers (#1445) (#1468)
+
+- **checkout**: Keep WooCommerce's native field label when the descriptor declares none (#1467) (#1470)
+
+- **shipping**: Export from custom order statuses through one filterable list (#1458) (#1469)
+
+
+### Documentation
+- **skills**: A v1 rewrite must declare every dropped hook and publish an integrator article (#1465)
+
+- **website**: Explain method ID changes and map=false in v1 migration (#1466)
+
+
+
 ## [2.0.13] — 2026-10-25
 ### Bug Fixes
 - **location**: Accept DaData fias_level 3 rows that are a city and their own okrug (#1459) (#1461)
