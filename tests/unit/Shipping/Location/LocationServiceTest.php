@@ -15,6 +15,9 @@
 namespace Woodev\Tests\Unit\Shipping\Location {
 
 	use Brain\Monkey\Functions;
+	use Woodev\Framework\Shipping\Checkout\Checkout_Fields;
+	use Woodev\Framework\Shipping\Checkout\Checkout_Handler;
+	use Woodev\Framework\Shipping\Checkout\Field;
 	use Woodev\Framework\Shipping\Location\Abstract_Location_Provider;
 	use Woodev\Framework\Shipping\Location\Customer_Location_Store;
 	use Woodev\Framework\Shipping\Location\Location_Adapter;
@@ -46,6 +49,15 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/interface-location-adapter.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-resolution-cache.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-service.php';
+	// #1381: the classic-placement half of rule (c) resolves the posted delivery column through
+	// Address_Target, and the regression for the round-2 critic finding runs the REAL
+	// Checkout_Handler::guard_custom_settlement() against this service.
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-address-target.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-field.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-fields.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-condition.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-config.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-handler.php';
 	// Task 7: the bundled DaData provider now ALWAYS registers under
 	// Location_Provider_Registry::DEFAULT_PROVIDER_ID whenever the gate is
 	// open — required here (not left to load-order luck from another test
@@ -344,6 +356,57 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 	}
 
 	/**
+	 * A {@see Location_Service} living in ONE request: `WC()` is `$woocommerce` (a double, or `null`),
+	 * the record's country offers `$states`, and the request kind is whatever the test makes it
+	 * (`do_action( 'woocommerce_before_checkout_process' )` plus `$_POST` = classic placement; a
+	 * Store API flag on the double = Store API). The two settings `Checkout_Handler::guard_custom_settlement()`
+	 * asks about are toggles so the REAL guard can run against the REAL gate (#1381, round 2).
+	 */
+	final class Location_Service_Request_Probe extends Location_Service {
+
+		/** @var object|null */
+		private $woocommerce;
+
+		/** @var array<string, string> */
+		private array $states;
+
+		/** `null`: the parent's answer. */
+		public ?string $field_mode = null;
+
+		/** `null`: the parent's answer. */
+		public ?bool $custom_settlement_allowed = null;
+
+		/**
+		 * @param array<string, string> $states `woocommerce_states` for the record's country.
+		 */
+		public function __construct( Location_Provider_Registry $registry, Customer_Location_Store $store, ?object $woocommerce, array $states ) {
+			parent::__construct( $registry, $store );
+			$this->woocommerce = $woocommerce;
+			$this->states      = $states;
+		}
+
+		protected function woocommerce() {
+			return $this->woocommerce;
+		}
+
+		protected function native_states( string $country ): array {
+			return 'RU' === $country ? $this->states : [];
+		}
+
+		public function is_region_field_removed(): bool {
+			return false;
+		}
+
+		public function get_field_mode_settlement(): string {
+			return $this->field_mode ?? parent::get_field_mode_settlement();
+		}
+
+		public function is_custom_settlement_allowed(): bool {
+			return $this->custom_settlement_allowed ?? parent::is_custom_settlement_allowed();
+		}
+	}
+
+	/**
 	 * @covers \Woodev\Framework\Shipping\Location\Location_Service
 	 */
 	final class LocationServiceTest extends TestCase {
@@ -380,12 +443,21 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			// wc_get_base_location() above: 'not configured' keeps every test in
 			// this file, none of which is about retention, from expiring a fixture.
 			Functions\when( 'wc_parse_relative_date_option' )->justReturn( [ 'number' => '', 'unit' => 'days' ] );
+			// Rule (c) at classic order placement (#1381) reads the POSTED delivery address on every
+			// stored-record read once `woocommerce_before_checkout_process` has fired: the column
+			// through Address_Target::resolve() (the default store ships to billing unless the
+			// shopper ticks «ship to a different address») and the value cleaned as WooCommerce
+			// cleans a posted text field. Pass-through stubs; a test about the column re-stubs.
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+			Functions\when( 'wp_unslash' )->returnArg();
+			Functions\when( 'wc_clean' )->returnArg();
 
 			Location_Provider_Registry::instance()->reset_for_tests();
 			Settings_Page_Registry::instance()->reset_for_tests();
 		}
 
 		protected function tearDown(): void {
+			$_POST = [];
 			Location_Provider_Registry::instance()->reset_for_tests();
 			Settings_Page_Registry::instance()->reset_for_tests();
 			parent::tearDown();
@@ -2967,9 +3039,12 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 		// ------------------------------------------------------------------
 		// Rule (c) at classic ORDER PLACEMENT (#1381) — the REAL request
-		// classification (`is_native_address_authority()`), with `WC()` stood in
-		// for by a double. A disagreeing record gives no rate and no pickup
-		// point when the order is placed; a classic refresh is still exempt.
+		// classification (`native_address_value()`), with `WC()` stood in for by a
+		// double and the form by `$_POST`. At placement the gate judges by the
+		// POSTED delivery address: WooCommerce copies it into `WC()->customer` only
+		// in `update_session()`, AFTER `woocommerce_checkout_process` has run every
+		// validation, so until then the customer still holds whatever the LAST
+		// refresh saved (round-2 critic finding). A classic refresh stays exempt.
 		// ------------------------------------------------------------------
 
 		/**
@@ -3015,52 +3090,93 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 		/**
 		 * A service holding an EXPLICIT `$record`, whose `WC()` is `$woocommerce`; the request kind is
-		 * what the test makes it (`do_action( 'woocommerce_before_checkout_process' )` = placement).
+		 * what the test makes it ({@see self::place_order_with()} = classic placement).
 		 *
 		 * @param array<string, string> $states `woocommerce_states` for the record's country.
 		 */
-		private function service_in_request( Location_Record $record, ?object $woocommerce, array $states = self::RU_STATES ): Location_Service {
+		private function service_in_request( Location_Record $record, ?object $woocommerce, array $states = self::RU_STATES ): Location_Service_Request_Probe {
 			$store    = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
 			$registry = $this->activate_owning_provider( new Location_Service_Fake_Provider( 'svc-fixture', Location_Record::LEVELS, true, [ 'RU' ] ) );
 
 			$store->set( $record, false );
 
-			return new class( $registry, $store, $woocommerce, $states ) extends Location_Service {
-				/** @var object|null */
-				private $woocommerce;
+			return new Location_Service_Request_Probe( $registry, $store, $woocommerce, $states );
+		}
 
-				/** @var array<string, string> */
-				private array $states;
+		/**
+		 * Puts the request at classic order placement with `$fields` posted — what `wc-ajax=checkout`
+		 * and the no-JS form post both carry into `WC_Checkout::process_checkout()`, whose first
+		 * action is `woocommerce_before_checkout_process`.
+		 *
+		 * @param array<string, string> $fields Posted checkout fields (`billing_city`, …).
+		 */
+		private function place_order_with( array $fields ): void {
+			$_POST = array_merge( $_POST, $fields );
+			do_action( 'woocommerce_before_checkout_process' );
+		}
 
-				/**
-				 * @param array<string, string> $states
-				 */
-				public function __construct( Location_Provider_Registry $registry, Customer_Location_Store $store, ?object $woocommerce, array $states ) {
-					parent::__construct( $registry, $store );
-					$this->woocommerce = $woocommerce;
-					$this->states      = $states;
+		/**
+		 * The real {@see Checkout_Handler} the carriers run at `woocommerce_checkout_process`, over a
+		 * settlement field on `billing_city`, against `$service` configured the way #531's guard bites:
+		 * `ajax-select2` mode, custom settlements NOT allowed.
+		 *
+		 * @param string[] $notices Receives every `wc_add_notice()` message.
+		 */
+		private function custom_settlement_guard_over( Location_Service_Request_Probe $service, array &$notices ): Checkout_Handler {
+			$service->field_mode                = Location_Provider_Registry::MODE_AJAX_SELECT2;
+			$service->custom_settlement_allowed = false;
+
+			Functions\when( 'wc_add_notice' )->alias(
+				static function ( string $message ) use ( &$notices ): void {
+					$notices[] = $message;
 				}
+			);
 
-				protected function woocommerce() {
-					return $this->woocommerce;
-				}
+			return new Checkout_Handler(
+				Checkout_Fields::from_array( [ Field::create( 'billing_city' )->set_type( 'text' )->source_location( 'settlement' )->to_array() ] ),
+				'carrier',
+				$service
+			);
+		}
 
-				protected function native_states( string $country ): array {
-					return 'RU' === $country ? $this->states : [];
-				}
+		public function test_custom_settlement_guard_accepts_the_picked_city_at_placement_while_the_customer_still_holds_the_old_one(): void {
+			// Round-2 critic finding (#1381): the record and the posted form both say Podolsk; the
+			// customer object still says Kazan — a slow refresh saved it last, and B1 deliberately
+			// does not merge WooCommerce's own `customer` key. `guard_custom_settlement()` runs at
+			// `woocommerce_checkout_process`, BEFORE `update_session()` copies the posted address
+			// into the customer. Judged by the customer, the record read as absent and an honest
+			// pick was refused with «not in the list».
+			$notices = [];
+			$service = $this->service_in_request( $this->named_record(), $this->woocommerce_double( 'Казань', 'TA' ) );
+			$handler = $this->custom_settlement_guard_over( $service, $notices );
 
-				public function is_region_field_removed(): bool {
-					return false;
-				}
-			};
+			$this->place_order_with( [ 'billing_city' => 'Подольск', 'billing_state' => 'MOS' ] );
+
+			$this->assertTrue( $handler->guard_custom_settlement( [ 'billing_city' => 'Подольск' ], 'RU', 'billing' ), 'the form and the record agree — the stale customer is not the authority' );
+			$this->assertSame( [], $notices );
+			$this->assertSame( 'svc-fixture:podolsk', $service->get_customer_record_at( Location_Record::LEVEL_SETTLEMENT )->key() );
+		}
+
+		public function test_custom_settlement_guard_still_refuses_a_city_the_form_does_not_name_at_placement(): void {
+			// The other half of the same request: the posted form says Kazan, the record (and the
+			// customer) say Podolsk — no record for Kazan was ever picked, so #531 refuses the order.
+			$notices = [];
+			$service = $this->service_in_request( $this->named_record(), $this->woocommerce_double( 'Подольск', 'MOS' ) );
+			$handler = $this->custom_settlement_guard_over( $service, $notices );
+
+			$this->place_order_with( [ 'billing_city' => 'Казань', 'billing_state' => 'TA' ] );
+
+			$this->assertFalse( $handler->guard_custom_settlement( [ 'billing_city' => 'Казань' ], 'RU', 'billing' ) );
+			$this->assertCount( 1, $notices );
 		}
 
 		public function test_gate_drops_a_disagreeing_record_at_classic_order_placement(): void {
 			// yandex#140: the session row says Podolsk (a stale refresh saved last), the form the shopper
-			// is placing the order from says Kazan. `wc-ajax=checkout` → `process_checkout()`.
-			do_action( 'woocommerce_before_checkout_process' );
+			// is placing the order from says Kazan. The customer object agreeing with the RECORD changes
+			// nothing — the form is what `update_session()` is about to copy and the order will carry.
+			$service = $this->service_in_request( $this->named_record(), $this->woocommerce_double( 'Подольск', 'MOS' ) );
 
-			$service = $this->service_in_request( $this->named_record(), $this->woocommerce_double( 'Казань' ) );
+			$this->place_order_with( [ 'billing_city' => 'Казань' ] );
 
 			$this->assertNull( $service->get_customer_record(), 'no rate and no pickup point for a city the form does not show' );
 			$this->assertNull( $service->get_customer_record_at( Location_Record::LEVEL_SETTLEMENT ) );
@@ -3069,7 +3185,9 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 		public function test_gate_keeps_a_disagreeing_record_on_a_classic_refresh(): void {
 			// `update_order_review` (operator decision, #1381): the record legitimately runs ahead of
-			// the city WooCommerce holds, and in typeahead mode the field is still being typed.
+			// the city WooCommerce holds, and in typeahead mode the field is still being typed. The
+			// refresh posts the same fields, but `woocommerce_before_checkout_process` never fires.
+			$_POST   = [ 'billing_city' => 'Казань' ];
 			$service = $this->service_in_request( $this->named_record(), $this->woocommerce_double( 'Казань' ) );
 
 			$this->assertNotNull( $service->get_customer_record() );
@@ -3079,42 +3197,97 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		/**
 		 * @dataProvider cities_naming_podolsk
 		 */
-		public function test_gate_keeps_a_record_the_form_names_at_classic_order_placement( string $city ): void {
-			do_action( 'woocommerce_before_checkout_process' );
+		public function test_gate_keeps_a_record_the_form_names_at_classic_order_placement_whatever_the_customer_holds( string $city ): void {
+			$service = $this->service_in_request( $this->named_record(), $this->woocommerce_double( 'Казань', 'TA' ) );
 
-			$service = $this->service_in_request( $this->named_record(), $this->woocommerce_double( $city ) );
+			$this->place_order_with( [ 'billing_city' => $city ] );
 
-			$this->assertNotNull( $service->get_customer_record(), '«г. Подольск» names Подольск — the name contract, not a byte compare' );
+			$this->assertNotNull( $service->get_customer_record(), '«г. Подольск» names Подольск — the name contract, not a byte compare; the not-yet-synced customer is not consulted' );
 		}
 
 		public function test_gate_at_classic_order_placement_drops_the_same_name_in_another_region(): void {
 			// Same city name, another region: a different place. The record's region maps to `MOS`,
 			// the form's State is Tatarstan.
-			do_action( 'woocommerce_before_checkout_process' );
+			$service = $this->service_in_request( $this->named_record(), $this->woocommerce_double( 'Подольск', 'MOS' ) );
 
-			$service = $this->service_in_request( $this->named_record(), $this->woocommerce_double( 'Подольск', 'TA' ) );
+			$this->place_order_with( [ 'billing_city' => 'Подольск', 'billing_state' => 'TA' ] );
 
 			$this->assertNull( $service->get_customer_record() );
 		}
 
 		public function test_gate_at_classic_order_placement_keeps_the_same_name_in_the_same_region(): void {
-			do_action( 'woocommerce_before_checkout_process' );
+			$service = $this->service_in_request( $this->named_record(), $this->woocommerce_double( 'Казань', 'TA' ) );
 
-			$service = $this->service_in_request( $this->named_record(), $this->woocommerce_double( 'Подольск', 'MOS' ) );
+			$this->place_order_with( [ 'billing_city' => 'Подольск', 'billing_state' => 'MOS' ] );
 
 			$this->assertNotNull( $service->get_customer_record() );
 		}
 
-		public function test_gate_at_classic_order_placement_needs_a_customer_to_judge_by(): void {
-			do_action( 'woocommerce_before_checkout_process' );
+		public function test_gate_at_classic_order_placement_judges_the_posted_form_without_a_customer_object(): void {
+			$service = $this->service_in_request( $this->named_record(), $this->woocommerce_double( null, null, false, false ) );
 
-			$service = $this->service_in_request( $this->named_record(), $this->woocommerce_double( 'Казань', null, false, false ) );
+			$this->place_order_with( [ 'billing_city' => 'Казань' ] );
 
-			$this->assertNotNull( $service->get_customer_record(), 'no native address to compare with — the rule does not apply' );
+			$this->assertNull( $service->get_customer_record(), 'the form is the authority at placement — no customer object is needed to judge by it' );
 		}
 
-		public function test_gate_still_judges_a_store_api_request_that_is_not_placing_an_order(): void {
-			// The SP-11 C-1 behaviour (#1087) is unchanged by the classic extension.
+		public function test_gate_at_classic_order_placement_does_not_judge_a_form_that_names_no_city(): void {
+			$service = $this->service_in_request( $this->named_record(), $this->woocommerce_double( 'Казань', 'TA' ) );
+
+			$this->place_order_with( [ 'billing_city' => '  ' ] );
+
+			$this->assertNotNull( $service->get_customer_record(), 'a blank city disagrees with nothing' );
+		}
+
+		public function test_gate_at_classic_order_placement_reads_the_shipping_column_when_shipping_to_a_different_address(): void {
+			// `WC_Checkout::update_session()` copies `shipping_city` over `billing_city` into the
+			// customer's shipping address when the shopper ticked the box — so does the gate.
+			$service = $this->service_in_request( $this->named_record(), $this->woocommerce_double( 'Казань', 'TA' ) );
+
+			$this->place_order_with(
+				[
+					'ship_to_different_address' => '1',
+					'billing_city'              => 'Казань',
+					'shipping_city'             => 'Подольск',
+				]
+			);
+
+			$this->assertNotNull( $service->get_customer_record(), 'judged by the shipping column' );
+		}
+
+		public function test_gate_at_classic_order_placement_reads_the_billing_column_when_the_box_is_not_ticked(): void {
+			$service = $this->service_in_request( $this->named_record(), $this->woocommerce_double( 'Подольск', 'MOS' ) );
+
+			$this->place_order_with(
+				[
+					'billing_city'  => 'Казань',
+					'shipping_city' => 'Подольск',
+				]
+			);
+
+			$this->assertNull( $service->get_customer_record(), 'an unticked box ships to billing — a stray shipping value is not the delivery address' );
+		}
+
+		public function test_gate_at_classic_order_placement_ignores_the_shipping_column_under_force_shipping_to_billing(): void {
+			// `billing_only`: WooCommerce forces the flag false whatever was posted
+			// (`get_posted_data()`), and Address_Target::resolve() follows it.
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( true );
+			$service = $this->service_in_request( $this->named_record(), $this->woocommerce_double( 'Казань', 'TA' ) );
+
+			$this->place_order_with(
+				[
+					'ship_to_different_address' => '1',
+					'billing_city'              => 'Подольск',
+					'shipping_city'             => 'Казань',
+				]
+			);
+
+			$this->assertNotNull( $service->get_customer_record() );
+		}
+
+		public function test_gate_still_judges_a_store_api_request_by_the_customer_it_carries(): void {
+			// The SP-11 C-1 behaviour (#1087) is unchanged by the classic extension: a Store API
+			// request has no posted form — the request body is JSON, already synced into the customer.
 			$service = $this->service_in_request( $this->named_record(), $this->woocommerce_double( 'Казань', null, true ) );
 
 			$this->assertNull( $service->get_customer_record() );

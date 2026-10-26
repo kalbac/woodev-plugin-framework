@@ -1190,7 +1190,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 *
 		 * (c) NATIVE ADDRESS moved (SP-11 C-1, #1087; classic placement #1381) — Store API
 		 * requests and classic order placement, never a classic `update_order_review`
-		 * ({@see self::is_native_address_authority()}, {@see self::native_address_disagrees()}):
+		 * ({@see self::native_address_value()}, {@see self::native_address_disagrees()}):
 		 * the record names a settlement the
 		 * customer's native shipping city no longer names ({@see self::native_shipping_city()},
 		 * {@see self::record_names_city()}), or belongs to a region the native shipping
@@ -1238,8 +1238,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 *              stale (SP-11 C-1, #1087) — and so is one whose region maps to
 		 *              a WooCommerce state other than the native shipping state.
 		 * @since 2.0.15 Rule (c) also applies during classic order placement
-		 *              (`wc-ajax=checkout` and the no-JS form post, #1381), compared by
-		 *              name plus region; a classic `update_order_review` is still exempt.
+		 *              (`wc-ajax=checkout` and the no-JS form post, #1381), judged by the
+		 *              POSTED delivery address — not `WC()->customer`, which WooCommerce syncs
+		 *              only after `woocommerce_checkout_process` — compared by name plus
+		 *              region; a classic `update_order_review` is still exempt.
 		 *
 		 * @param Location_Record $record      Stored record to check.
 		 * @param string|null     $for_country Optional ISO-3166 alpha-2 country
@@ -1266,17 +1268,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		}
 
 		/**
-		 * The city of the customer's NATIVE shipping address when THIS request is one where that
-		 * address is the authority a saved record must agree with — rule (c) of
-		 * {@see self::is_customer_record_stale()} — or `null` when the rule does not apply.
+		 * The city of the delivery address THIS request is authoritative about — the one a saved
+		 * record must agree with under rule (c) of {@see self::is_customer_record_stale()} — or `null`
+		 * when the rule does not apply.
 		 *
-		 * It applies to WooCommerce Store API requests (`/wc/store/…`: what the Cart and Checkout
-		 * blocks rate and place an order through) and to classic order placement
-		 * ({@see self::is_native_address_authority()}). In both the native address form is the one thing
-		 * the customer sees and edits, the request itself carries or has already synced it into
-		 * `WC()->customer`, and the saved record is written by a SEPARATE request the framework cannot
-		 * order against it — so a record that no longer names that city must not be rated or paid
-		 * against (SP-11 C-1, #1087; #1381).
+		 * Which address that is depends on the kind of request ({@see self::native_address_value()}):
+		 * in a WooCommerce Store API request (`/wc/store/…`: what the Cart and Checkout blocks rate and
+		 * place an order through) it is the customer's native shipping address, which the request itself
+		 * carries or has already synced into `WC()->customer` (SP-11 C-1, #1087); during classic order
+		 * placement it is the POSTED form (#1381). In both the address form is the one thing the customer
+		 * sees and edits, and the saved record is written by a SEPARATE request the framework cannot
+		 * order against it — so a record that no longer names that city must not be rated or paid against.
 		 *
 		 * It deliberately does NOT apply to a classic refresh (`update_order_review`). There the
 		 * locality field IS the city field: `/location/select` saves the record first and WooCommerce
@@ -1289,18 +1291,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * `protected` as a test seam — same reasoning as {@see self::customer_shipping_country()}.
 		 *
 		 * @since 2.0.2
-		 * @since 2.0.15 Also answers during classic order placement (#1381).
+		 * @since 2.0.15 Also answers during classic order placement (#1381) — from the posted form.
 		 *
 		 * @return string|null Trimmed city text, or `null` when rule (c) does not apply.
 		 */
 		protected function native_shipping_city(): ?string {
-			if ( ! $this->is_native_address_authority() ) {
-				return null;
-			}
-
-			$city = trim( (string) $this->woocommerce()->customer->get_shipping_city() );
-
-			return '' !== $city ? $city : null;
+			return $this->native_address_value( 'city' );
 		}
 
 		/**
@@ -1348,68 +1344,108 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		}
 
 		/**
-		 * The state of the customer's NATIVE shipping address when THIS request is one where that
-		 * address is the authority a saved record must agree with — the region half of rule (c) of
-		 * {@see self::is_customer_record_stale()} — or `null` when the rule does not apply: outside
-		 * a Store API request or classic order placement ({@see self::is_native_address_authority()}),
+		 * The state of the delivery address THIS request is authoritative about — the region half of
+		 * rule (c) of {@see self::is_customer_record_stale()} — or `null` when the rule does not apply:
+		 * outside a Store API request or classic order placement ({@see self::native_address_value()}),
 		 * or for a blank state, which names no region and so disagrees with none.
 		 *
 		 * `protected` as a test seam — same reasoning as {@see self::native_shipping_city()}.
 		 *
 		 * @since 2.0.2
-		 * @since 2.0.15 Also answers during classic order placement (#1381).
+		 * @since 2.0.15 Also answers during classic order placement (#1381) — from the posted form.
 		 *
 		 * @return string|null Trimmed state value, or `null` when the rule does not apply.
 		 */
 		protected function native_shipping_state(): ?string {
-			if ( ! $this->is_native_address_authority() ) {
-				return null;
-			}
-
-			$state = trim( (string) $this->woocommerce()->customer->get_shipping_state() );
-
-			return '' !== $state ? $state : null;
+			return $this->native_address_value( 'state' );
 		}
 
 		/**
-		 * Whether this request is one where the customer's NATIVE address is the authority rule (c)
-		 * judges a saved record by — and there is a customer to read it from.
+		 * One part (`city` or `state`) of the delivery address rule (c) judges a saved record by, read
+		 * from the source that is authoritative in THIS kind of request — or `null` when the rule does
+		 * not apply, or when the part is blank (an address that names no city or region disagrees with
+		 * nothing).
 		 *
 		 * Two kinds of request qualify:
 		 *
 		 * - a WooCommerce Store API request (`/wc/store/…`, the Cart and Checkout blocks): the request
-		 *   itself carries or has already synced the address into `WC()->customer` (SP-11 C-1, #1087);
+		 *   itself carries or has already synced the address into `WC()->customer`, which is read
+		 *   (SP-11 C-1, #1087). `is_store_api_request()` exists from WooCommerce 9.0; the Blocks adapter
+		 *   starts at 9.9;
 		 * - classic ORDER PLACEMENT (#1381): `WC_Checkout::process_checkout()`, which both
 		 *   `wc-ajax=checkout` and the no-JS form post run, fires `woocommerce_before_checkout_process`
-		 *   as its first action and then copies the posted address into `WC()->customer` before it rates
-		 *   (`update_session()`). An order must never carry a rate or a pickup point for a city the form
-		 *   does not show, and under the session race of #1381 the stored record can be another city's
-		 *   while the form is right. Detected by that action, not by `WOOCOMMERCE_CHECKOUT`: WooCommerce
-		 *   defines the constant for `update_order_review` too.
+		 *   as its first action. Here the POSTED form is read, NOT `WC()->customer`: WooCommerce copies
+		 *   the posted address into the customer only in `update_session()`, AFTER
+		 *   `woocommerce_checkout_process` has run every validation — among them
+		 *   {@see \Woodev\Framework\Shipping\Checkout\Checkout_Handler::guard_custom_settlement()}, which
+		 *   reads the record through this very gate. Until then the customer holds whatever the LAST
+		 *   refresh saved, which under the session race of #1381 can be a city neither the form nor the
+		 *   record names — judged by it, the gate hid a record the form agreed with and the guard refused
+		 *   an honest pick as «not in the list» (round-2 critic finding). The posted value is what
+		 *   `update_session()` is about to copy and what the rates and the order are then computed
+		 *   against, so it is the one authority that holds through the whole placement request. An order
+		 *   must never carry a rate or a pickup point for a city the form does not show. Detected by the
+		 *   action, not by `WOOCOMMERCE_CHECKOUT`: WooCommerce defines the constant for
+		 *   `update_order_review` too.
 		 *
 		 * A classic `update_order_review` does NOT qualify (operator decision, #1381): there the record
 		 * legitimately runs ahead of the city WooCommerce holds — `/location/select` saves it first and
 		 * the next refresh catches up — and in `typeahead` mode the field is still being typed while the
 		 * refresh fires, so judging it there would make the rates flicker on every keystroke.
 		 *
-		 * @since 2.0.2
-		 * @since 2.0.15 Also true during classic order placement (#1381).
+		 * @since 2.0.15
 		 *
-		 * @return bool
+		 * @param string $part `city` or `state`.
+		 *
+		 * @return string|null Trimmed value, or `null` when rule (c) does not apply or the part is blank.
 		 */
-		private function is_native_address_authority(): bool {
+		private function native_address_value( string $part ): ?string {
 			$woocommerce = $this->woocommerce();
 
-			if ( null === $woocommerce || empty( $woocommerce->customer ) ) {
-				return false;
+			if (
+				null !== $woocommerce
+				&& ! empty( $woocommerce->customer )
+				&& method_exists( $woocommerce, 'is_store_api_request' )
+				&& $woocommerce->is_store_api_request()
+			) {
+				$value = 'state' === $part ? $woocommerce->customer->get_shipping_state() : $woocommerce->customer->get_shipping_city();
+			} elseif ( did_action( 'woocommerce_before_checkout_process' ) > 0 ) {
+				$value = $this->posted_delivery_address_value( $part );
+			} else {
+				return null;
 			}
 
-			// `is_store_api_request()` exists from WooCommerce 9.0; the Blocks adapter starts at 9.9.
-			if ( method_exists( $woocommerce, 'is_store_api_request' ) && $woocommerce->is_store_api_request() ) {
-				return true;
-			}
+			$value = trim( (string) $value );
 
-			return did_action( 'woocommerce_before_checkout_process' ) > 0;
+			return '' !== $value ? $value : null;
+		}
+
+		/**
+		 * `$part` of the POSTED address this order is about to ship to — the same column
+		 * `WC_Checkout::update_session()` copies into the customer's shipping address: `shipping_*` when
+		 * the shopper ticked «ship to a different address» and the store lets them, `billing_*`
+		 * otherwise ({@see \Woodev\Framework\Shipping\Pickup\Address_Target::resolve()}, the one
+		 * resolution every classic consumer in this framework shares). Cleaned the way
+		 * `get_posted_data()` cleans a text field; `''` when the form does not carry the field.
+		 *
+		 * Read straight from `$_POST` rather than through `WC()->checkout()->get_posted_data()`: that
+		 * walks every checkout field and runs every per-field filter, while this gate is consulted on
+		 * every stored-record read of the request. The one case where the two can differ — a cart that
+		 * needs no shipping address, where WooCommerce copies billing over a ticked box — rates nothing,
+		 * so the column choice is moot there.
+		 *
+		 * @since 2.0.15
+		 *
+		 * @param string $part `city` or `state` — the posted field's suffix.
+		 *
+		 * @return string
+		 */
+		private function posted_delivery_address_value( string $part ): string {
+			// phpcs:disable WordPress.Security.NonceVerification.Missing -- WooCommerce verified the checkout nonce before firing `woocommerce_before_checkout_process`, the only time this is read.
+			$section = \Woodev\Framework\Shipping\Pickup\Address_Target::resolve( ! empty( $_POST['ship_to_different_address'] ) );
+
+			return (string) wc_clean( (string) wp_unslash( $_POST[ "{$section}_{$part}" ] ?? '' ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotValidated
+			// phpcs:enable WordPress.Security.NonceVerification.Missing
 		}
 
 		/**
