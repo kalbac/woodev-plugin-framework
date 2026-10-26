@@ -1188,8 +1188,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * normalized ISO-3166 by the caller — see `$for_country` below) is
 		 * never empty either.
 		 *
-		 * (c) NATIVE ADDRESS moved (SP-11 C-1, #1087) — Store API requests only
-		 * ({@see self::native_address_disagrees()}): the record names a settlement the
+		 * (c) NATIVE ADDRESS moved (SP-11 C-1, #1087; classic placement #1381) — Store API
+		 * requests and classic order placement, never a classic `update_order_review`
+		 * ({@see self::is_native_address_authority()}, {@see self::native_address_disagrees()}):
+		 * the record names a settlement the
 		 * customer's native shipping city no longer names ({@see self::native_shipping_city()},
 		 * {@see self::record_names_city()}), or belongs to a region the native shipping
 		 * state is not ({@see self::native_shipping_state()}, {@see self::record_state_code()})
@@ -1235,6 +1237,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 *              settlement the native shipping city no longer names is
 		 *              stale (SP-11 C-1, #1087) — and so is one whose region maps to
 		 *              a WooCommerce state other than the native shipping state.
+		 * @since 2.0.15 Rule (c) also applies during classic order placement
+		 *              (`wc-ajax=checkout` and the no-JS form post, #1381), compared by
+		 *              name plus region; a classic `update_order_review` is still exempt.
 		 *
 		 * @param Location_Record $record      Stored record to check.
 		 * @param string|null     $for_country Optional ISO-3166 alpha-2 country
@@ -1265,17 +1270,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * address is the authority a saved record must agree with — rule (c) of
 		 * {@see self::is_customer_record_stale()} — or `null` when the rule does not apply.
 		 *
-		 * It applies to WooCommerce Store API requests only (`/wc/store/…`: what the Cart and
-		 * Checkout blocks rate and place an order through). There the native address form is the
-		 * one thing the customer sees and edits, the request itself carries or has already synced
-		 * it into `WC()->customer`, and the saved record is written by a SEPARATE request the
-		 * framework cannot order against it — so a record that no longer names that city must not
-		 * be rated or paid against (SP-11 C-1, #1087).
+		 * It applies to WooCommerce Store API requests (`/wc/store/…`: what the Cart and Checkout
+		 * blocks rate and place an order through) and to classic order placement
+		 * ({@see self::is_native_address_authority()}). In both the native address form is the one thing
+		 * the customer sees and edits, the request itself carries or has already synced it into
+		 * `WC()->customer`, and the saved record is written by a SEPARATE request the framework cannot
+		 * order against it — so a record that no longer names that city must not be rated or paid
+		 * against (SP-11 C-1, #1087; #1381).
 		 *
-		 * It deliberately does NOT apply anywhere else. On the classic checkout the locality field
-		 * IS the city field: `/location/select` saves the record first and WooCommerce learns the
-		 * new city only with the next `update_checkout`, so in between — including in `/select`'s own
-		 * response — the record and the customer's city legitimately differ.
+		 * It deliberately does NOT apply to a classic refresh (`update_order_review`). There the
+		 * locality field IS the city field: `/location/select` saves the record first and WooCommerce
+		 * learns the new city only with the next `update_checkout`, so in between — including in
+		 * `/select`'s own response — the record and the customer's city legitimately differ.
 		 *
 		 * A blank city is `null` too: an address that names no city yet disagrees with nothing (the
 		 * store's default locality rates exactly that state).
@@ -1283,6 +1289,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * `protected` as a test seam — same reasoning as {@see self::customer_shipping_country()}.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.15 Also answers during classic order placement (#1381).
 		 *
 		 * @return string|null Trimmed city text, or `null` when rule (c) does not apply.
 		 */
@@ -1291,7 +1298,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 				return null;
 			}
 
-			$city = trim( (string) WC()->customer->get_shipping_city() );
+			$city = trim( (string) $this->woocommerce()->customer->get_shipping_city() );
 
 			return '' !== $city ? $city : null;
 		}
@@ -1344,12 +1351,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * The state of the customer's NATIVE shipping address when THIS request is one where that
 		 * address is the authority a saved record must agree with — the region half of rule (c) of
 		 * {@see self::is_customer_record_stale()} — or `null` when the rule does not apply: outside
-		 * a Store API request ({@see self::is_native_address_authority()}), or for a blank state,
-		 * which names no region and so disagrees with none.
+		 * a Store API request or classic order placement ({@see self::is_native_address_authority()}),
+		 * or for a blank state, which names no region and so disagrees with none.
 		 *
 		 * `protected` as a test seam — same reasoning as {@see self::native_shipping_city()}.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.15 Also answers during classic order placement (#1381).
 		 *
 		 * @return string|null Trimmed state value, or `null` when the rule does not apply.
 		 */
@@ -1358,32 +1366,71 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 				return null;
 			}
 
-			$state = trim( (string) WC()->customer->get_shipping_state() );
+			$state = trim( (string) $this->woocommerce()->customer->get_shipping_state() );
 
 			return '' !== $state ? $state : null;
 		}
 
 		/**
-		 * Whether this request is a WooCommerce Store API one with a customer to read — the only
-		 * place the native address is the authority rule (c) judges a saved record by.
+		 * Whether this request is one where the customer's NATIVE address is the authority rule (c)
+		 * judges a saved record by — and there is a customer to read it from.
+		 *
+		 * Two kinds of request qualify:
+		 *
+		 * - a WooCommerce Store API request (`/wc/store/…`, the Cart and Checkout blocks): the request
+		 *   itself carries or has already synced the address into `WC()->customer` (SP-11 C-1, #1087);
+		 * - classic ORDER PLACEMENT (#1381): `WC_Checkout::process_checkout()`, which both
+		 *   `wc-ajax=checkout` and the no-JS form post run, fires `woocommerce_before_checkout_process`
+		 *   as its first action and then copies the posted address into `WC()->customer` before it rates
+		 *   (`update_session()`). An order must never carry a rate or a pickup point for a city the form
+		 *   does not show, and under the session race of #1381 the stored record can be another city's
+		 *   while the form is right. Detected by that action, not by `WOOCOMMERCE_CHECKOUT`: WooCommerce
+		 *   defines the constant for `update_order_review` too.
+		 *
+		 * A classic `update_order_review` does NOT qualify (operator decision, #1381): there the record
+		 * legitimately runs ahead of the city WooCommerce holds — `/location/select` saves it first and
+		 * the next refresh catches up — and in `typeahead` mode the field is still being typed while the
+		 * refresh fires, so judging it there would make the rates flicker on every keystroke.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.15 Also true during classic order placement (#1381).
 		 *
 		 * @return bool
 		 */
 		private function is_native_address_authority(): bool {
-			if ( ! function_exists( 'WC' ) ) {
+			$woocommerce = $this->woocommerce();
+
+			if ( null === $woocommerce || empty( $woocommerce->customer ) ) {
 				return false;
+			}
+
+			// `is_store_api_request()` exists from WooCommerce 9.0; the Blocks adapter starts at 9.9.
+			if ( method_exists( $woocommerce, 'is_store_api_request' ) && $woocommerce->is_store_api_request() ) {
+				return true;
+			}
+
+			return did_action( 'woocommerce_before_checkout_process' ) > 0;
+		}
+
+		/**
+		 * The live `WooCommerce` instance, or `null` when it is not loaded.
+		 *
+		 * `protected` as a test seam — same shape and reasoning as
+		 * {@see Customer_Location_Store::session()}: a probe overrides this one line rather than `WC()`
+		 * needing to be a real function in the unit-test process.
+		 *
+		 * @since 2.0.15
+		 *
+		 * @return \WooCommerce|null
+		 */
+		protected function woocommerce() {
+			if ( ! function_exists( 'WC' ) ) {
+				return null;
 			}
 
 			$woocommerce = WC();
 
-			// `is_store_api_request()` exists from WooCommerce 9.0; the Blocks adapter starts at 9.9.
-			if ( ! is_object( $woocommerce ) || ! method_exists( $woocommerce, 'is_store_api_request' ) || ! $woocommerce->is_store_api_request() ) {
-				return false;
-			}
-
-			return ! empty( $woocommerce->customer );
+			return is_object( $woocommerce ) ? $woocommerce : null;
 		}
 
 		/**

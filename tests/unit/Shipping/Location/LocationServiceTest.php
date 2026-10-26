@@ -2964,5 +2964,160 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			$this->assertSame( 'svc-fixture:svc-fixture:podolsk', $named->get_customer_provenance() );
 		}
+
+		// ------------------------------------------------------------------
+		// Rule (c) at classic ORDER PLACEMENT (#1381) — the REAL request
+		// classification (`is_native_address_authority()`), with `WC()` stood in
+		// for by a double. A disagreeing record gives no rate and no pickup
+		// point when the order is placed; a classic refresh is still exempt.
+		// ------------------------------------------------------------------
+
+		/**
+		 * A `WooCommerce` double: a customer whose native shipping address is `$city` / `$state`
+		 * (`$with_customer` false: `WC()->customer` not built yet), in a Store API request or not.
+		 */
+		private function woocommerce_double( ?string $city, ?string $state = null, bool $store_api = false, bool $with_customer = true ): object {
+			$customer = new class( (string) $city, (string) $state ) {
+				private string $city;
+
+				private string $state;
+
+				public function __construct( string $city, string $state ) {
+					$this->city  = $city;
+					$this->state = $state;
+				}
+
+				public function get_shipping_city(): string {
+					return $this->city;
+				}
+
+				public function get_shipping_state(): string {
+					return $this->state;
+				}
+			};
+
+			return new class( $with_customer ? $customer : null, $store_api ) {
+				/** @var object|null */
+				public $customer;
+
+				private bool $store_api;
+
+				public function __construct( ?object $customer, bool $store_api ) {
+					$this->customer  = $customer;
+					$this->store_api = $store_api;
+				}
+
+				public function is_store_api_request(): bool {
+					return $this->store_api;
+				}
+			};
+		}
+
+		/**
+		 * A service holding an EXPLICIT `$record`, whose `WC()` is `$woocommerce`; the request kind is
+		 * what the test makes it (`do_action( 'woocommerce_before_checkout_process' )` = placement).
+		 *
+		 * @param array<string, string> $states `woocommerce_states` for the record's country.
+		 */
+		private function service_in_request( Location_Record $record, ?object $woocommerce, array $states = self::RU_STATES ): Location_Service {
+			$store    = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
+			$registry = $this->activate_owning_provider( new Location_Service_Fake_Provider( 'svc-fixture', Location_Record::LEVELS, true, [ 'RU' ] ) );
+
+			$store->set( $record, false );
+
+			return new class( $registry, $store, $woocommerce, $states ) extends Location_Service {
+				/** @var object|null */
+				private $woocommerce;
+
+				/** @var array<string, string> */
+				private array $states;
+
+				/**
+				 * @param array<string, string> $states
+				 */
+				public function __construct( Location_Provider_Registry $registry, Customer_Location_Store $store, ?object $woocommerce, array $states ) {
+					parent::__construct( $registry, $store );
+					$this->woocommerce = $woocommerce;
+					$this->states      = $states;
+				}
+
+				protected function woocommerce() {
+					return $this->woocommerce;
+				}
+
+				protected function native_states( string $country ): array {
+					return 'RU' === $country ? $this->states : [];
+				}
+
+				public function is_region_field_removed(): bool {
+					return false;
+				}
+			};
+		}
+
+		public function test_gate_drops_a_disagreeing_record_at_classic_order_placement(): void {
+			// yandex#140: the session row says Podolsk (a stale refresh saved last), the form the shopper
+			// is placing the order from says Kazan. `wc-ajax=checkout` → `process_checkout()`.
+			do_action( 'woocommerce_before_checkout_process' );
+
+			$service = $this->service_in_request( $this->named_record(), $this->woocommerce_double( 'Казань' ) );
+
+			$this->assertNull( $service->get_customer_record(), 'no rate and no pickup point for a city the form does not show' );
+			$this->assertNull( $service->get_customer_record_at( Location_Record::LEVEL_SETTLEMENT ) );
+			$this->assertSame( '', $service->get_customer_provenance(), 'and the rate cache is not keyed by it either' );
+		}
+
+		public function test_gate_keeps_a_disagreeing_record_on_a_classic_refresh(): void {
+			// `update_order_review` (operator decision, #1381): the record legitimately runs ahead of
+			// the city WooCommerce holds, and in typeahead mode the field is still being typed.
+			$service = $this->service_in_request( $this->named_record(), $this->woocommerce_double( 'Казань' ) );
+
+			$this->assertNotNull( $service->get_customer_record() );
+			$this->assertSame( 'svc-fixture:svc-fixture:podolsk', $service->get_customer_provenance() );
+		}
+
+		/**
+		 * @dataProvider cities_naming_podolsk
+		 */
+		public function test_gate_keeps_a_record_the_form_names_at_classic_order_placement( string $city ): void {
+			do_action( 'woocommerce_before_checkout_process' );
+
+			$service = $this->service_in_request( $this->named_record(), $this->woocommerce_double( $city ) );
+
+			$this->assertNotNull( $service->get_customer_record(), '«г. Подольск» names Подольск — the name contract, not a byte compare' );
+		}
+
+		public function test_gate_at_classic_order_placement_drops_the_same_name_in_another_region(): void {
+			// Same city name, another region: a different place. The record's region maps to `MOS`,
+			// the form's State is Tatarstan.
+			do_action( 'woocommerce_before_checkout_process' );
+
+			$service = $this->service_in_request( $this->named_record(), $this->woocommerce_double( 'Подольск', 'TA' ) );
+
+			$this->assertNull( $service->get_customer_record() );
+		}
+
+		public function test_gate_at_classic_order_placement_keeps_the_same_name_in_the_same_region(): void {
+			do_action( 'woocommerce_before_checkout_process' );
+
+			$service = $this->service_in_request( $this->named_record(), $this->woocommerce_double( 'Подольск', 'MOS' ) );
+
+			$this->assertNotNull( $service->get_customer_record() );
+		}
+
+		public function test_gate_at_classic_order_placement_needs_a_customer_to_judge_by(): void {
+			do_action( 'woocommerce_before_checkout_process' );
+
+			$service = $this->service_in_request( $this->named_record(), $this->woocommerce_double( 'Казань', null, false, false ) );
+
+			$this->assertNotNull( $service->get_customer_record(), 'no native address to compare with — the rule does not apply' );
+		}
+
+		public function test_gate_still_judges_a_store_api_request_that_is_not_placing_an_order(): void {
+			// The SP-11 C-1 behaviour (#1087) is unchanged by the classic extension.
+			$service = $this->service_in_request( $this->named_record(), $this->woocommerce_double( 'Казань', null, true ) );
+
+			$this->assertNull( $service->get_customer_record() );
+		}
 	}
 }

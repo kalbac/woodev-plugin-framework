@@ -18,6 +18,8 @@
 
 namespace Woodev\Framework\Shipping\Location;
 
+use Woodev\Framework\Shipping\Session_Key_Merger;
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 } // Exit if accessed directly
@@ -320,7 +322,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 				return null;
 			}
 
-			return $this->parse_stored_chain( $session->get( self::STORAGE_KEY ) );
+			return $this->parse_stored_chain( $this->read_session_entry( $session ) );
 		}
 
 		/**
@@ -518,7 +520,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 			}
 
 			$session      = $this->session();
-			$session_had  = null !== $session && null !== $session->get( self::STORAGE_KEY );
+			$session_had  = null !== $session && null !== $this->read_session_entry( $session );
 			$current_id   = is_user_logged_in() ? get_current_user_id() : 0;
 			$meta_removed = 0 !== $current_id && $this->delete_meta_chain( $current_id );
 
@@ -527,7 +529,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 			}
 
 			if ( $session_had ) {
-				$session->set( self::STORAGE_KEY, null );
+				$this->write_session_entry( $session, null );
 			}
 
 			$this->fire_forgotten( $current_id );
@@ -1066,7 +1068,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 				return;
 			}
 
-			$session_chain = $this->parse_stored_chain( $session->get( self::STORAGE_KEY ) );
+			$session_chain = $this->parse_stored_chain( $this->read_session_entry( $session ) );
 
 			if ( null === $session_chain ) {
 				return;
@@ -1108,6 +1110,40 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 		}
 
 		/**
+		 * Reads the chain slot from `$session` and puts {@see self::STORAGE_KEY} under
+		 * {@see Session_Key_Merger}'s protection for this request: the copy this request now
+		 * holds will be written back whole by WooCommerce < 11.4, so a concurrent `/select` or
+		 * `/forget` must be re-read before that save (#1381).
+		 *
+		 * @since 2.0.15
+		 *
+		 * @param \WC_Session $session The live session.
+		 *
+		 * @return mixed The raw stored value (an array, `null` when absent).
+		 */
+		private function read_session_entry( $session ) {
+			Session_Key_Merger::note_read( self::STORAGE_KEY );
+
+			return $session->get( self::STORAGE_KEY );
+		}
+
+		/**
+		 * Writes the chain slot in `$session` and tells {@see Session_Key_Merger} this request's
+		 * value is the one to keep (#1381).
+		 *
+		 * @since 2.0.15
+		 *
+		 * @param \WC_Session $session The live session.
+		 * @param mixed       $value   The chain entry to store, or `null` to clear it.
+		 *
+		 * @return void
+		 */
+		private function write_session_entry( $session, $value ): void {
+			$session->set( self::STORAGE_KEY, $value );
+			Session_Key_Merger::note_write( self::STORAGE_KEY );
+		}
+
+		/**
 		 * The logged-in half of {@see self::get_chain()} — session-preferred read
 		 * with a meta fallback that repopulates the session.
 		 *
@@ -1119,7 +1155,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 			$session = $this->session();
 
 			if ( null !== $session ) {
-				$from_session = $this->parse_stored_chain( $session->get( self::STORAGE_KEY ) );
+				$from_session = $this->parse_stored_chain( $this->read_session_entry( $session ) );
 
 				if ( null !== $from_session ) {
 					return $from_session;
@@ -1137,7 +1173,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 			}
 
 			if ( null !== $from_meta && null !== $session ) {
-				$session->set( self::STORAGE_KEY, $raw_meta );
+				$this->write_session_entry( $session, $raw_meta );
 			}
 
 			return $from_meta;
@@ -1366,7 +1402,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 			$session = $this->session();
 
 			if ( null !== $session ) {
-				$session->set( self::STORAGE_KEY, $entry );
+				$this->write_session_entry( $session, $entry );
 			}
 
 			/** This action is documented above, on {@see self::ACTION_SAVED}. */
