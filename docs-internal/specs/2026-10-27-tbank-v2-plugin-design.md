@@ -13,7 +13,11 @@ this repo. Bank facts cite the official docs at `https://forma.tbank.ru/docs/onl
 `settings/app-notifications`, `setup-types/api/methods`, `setup-types/api/testing-api`, `setup-types/api/auth`,
 `settings/return-links`, `settings/auto-commit`). Labels: **READ** (code or official page), **MEASURED** (a probe was run),
 **UNVERIFIED** (not established, reason given), **Provisional (coordinator may revisit)** — a gap in the inputs that this spec
-had to close overnight without the operator; every one is listed again in §22.2.
+had to close overnight without the operator; every one is listed again in §22.2.  
+**Revision:** critic round 1 (Codex, review of `4ee4244e`) applied on 27.10.2026 — ten Must-fix and three Should-fix findings,
+all applied (none contradicted D1–D14 / I1–I14); the main changes are the per-attempt record (§9.4), settlement only on a
+committed application (§10.3), the bounded webhook budget (§10.5), the legacy order-number resolver (§10.2), the licence gate on
+the wizard's demo check (§13) and the release archive in W8 (§23).
 
 ## 0. How to read this spec
 
@@ -33,6 +37,11 @@ with its fix and its test, §§17–19 security, i18n and the worst-case traffic
    treats a non-2xx answer as "the bank will try again at some unknown time" and never depends on a second delivery.
 3. **The docs' own webhook example is invalid JSON** (a missing comma after `expected_overdue_at`, READ). Test fixtures are
    built from it with that comma restored and the defect noted in the fixture file.
+4. **Goods are released only after the bank confirms.** The webhook page says of `signed`: «вы можете подтвердить заявку
+   методом API Commit или в личном кабинете агента, а затем выдать товар покупателю» (`settings/app-notifications` § Вебхуки,
+   READ again 27.10.2026), and Commit is impossible during cooling. No webhook is documented for a MANUAL confirmation in the
+   cabinet. So an order is paid only when the bank reports `committed = true` (§10.3); with manual confirmation the merchant
+   confirms in the cabinet and then refreshes the status (I4) or moves the order on by hand.
 
 ## 1. Binding decisions
 
@@ -141,14 +150,15 @@ Every v1 key keeps its name, type and stored value format. New keys are additive
 
 | Key | Written by v1? | 2.0.0 |
 |---|---|---|
-| `trans_id` (loan number), `trans_date`, `environment` | yes (framework `add_transaction_data`) | written the same way |
+| `trans_id` (loan number), `trans_date`, `environment` | yes (framework `add_transaction_data`) | same keys and value format, written by the plugin from the settling attempt (§10.3) — the base helper is not called, because it overwrites `environment` with the gateway's CURRENT setting (`woodev/payment-gateway/class-payment-gateway.php:2086`) |
 | `promo_code` | yes (`v1:includes/api/class-wc-tinkoff-api.php:59-62`) | written, value now whitelisted |
 | `retry_count` | yes (framework `get_order_with_unique_transaction_ref`) | left alone, not used (§9.2) |
 | `status_message`, `first_payment`, `credit_amount`, `credit_product`, `credit_term`, `monthly_payment`, `signing_type` | **never** (§2) | **now written** from `Info`/webhook data, same keys, same value meaning (`credit_product` = bank `product`, `credit_term` = `term`) |
 | `_transaction_id` (WC core) | yes | same |
-| new, additive: `status`, `committed`, `chosen_bank`, `transfer_amount`, `cooldown_until`, `expected_overdue_at`, `application_id`, `application_link`, `order_number` (one row per number sent, non-unique), `current_order_number`, `create_fingerprint`, `status_signature`, `info_checked_at`, `data_source` (`info`/`webhook`), `resume_count`, `return_info_count`, `late_signed_notified` | — | §9, §10, §12 |
+| new, additive — the current attempt's mirror for the panel: `status`, `committed`, `chosen_bank`, `transfer_amount`, `cooldown_until`, `expected_overdue_at`, `application_id`, `application_link`, `info_checked_at`, `data_source` (`info`/`webhook`) | — | §12.1 |
+| new, additive — bookkeeping: `order_number` (one row per number sent, non-unique, the lookup index), `current_order_number`, `attempts` (one array keyed by bank number, §9.4), `hold_reason` (`cooling` / `not_committed` / `manual_review`, §10.3), `resume_count`, `return_info_count` | — | §9, §10, §12 |
 
-The order lookup for old (v1-created) orders has no `order_number` row; §10.2 covers it.
+The order lookup for old (v1-created) orders has no `order_number` row and no attempt record; §10.2 and §9.4 cover them.
 
 ### 3.4 Webhook URL and routes
 
@@ -187,9 +197,15 @@ A test computes the URL for fixed ids and compares it with the v1 formula charac
   framework's `get_order()`, which writes `retry_count` on every call — gotcha
   [a-hosted-gateway-s-default-response-flow-fails-orders-it-does-not-understand](../gotchas/a-hosted-gateway-s-default-response-flow-fails-orders-it-does-not-understand.md)).
 - **Changed order behaviour** (merchant-visible, for the notes): bank refusal → «Не удался» instead of «Отменён» (I7); an
-  approved-but-unsigned application keeps the order «Ожидает оплаты» instead of «На удержании» (§10.3, Provisional); a late
-  signature on a cancelled order → «На удержании» + e-mail (I5); the gateway is offered only for RUB and only in the amount
-  window (D11).
+  approved-but-unsigned application keeps the order «Ожидает оплаты» instead of «На удержании» (§10.3, Provisional); a signed
+  application that the bank has **not yet confirmed** keeps the order «На удержании» with the instruction to confirm it in the
+  cabinet — v1 marked it paid (§0 note 4, §10.3); `enable_cooling` no longer decides the status (an application under cooling
+  is never confirmed), it only shows the «не отгружайте до» date; a late signature on a cancelled order → «На удержании» +
+  e-mail (I5); the gateway is offered only for RUB and only in the amount window (D11).
+- **Changed debug behaviour:** the stored «Режим отладки» values `checkout` and `both` no longer print anything to buyers;
+  they write to the log like `log` (§6.5, I2).
+- **Order number sent to the bank:** exactly `get_order_number()` as v1 sent it (a `#` prefix from a numbering plugin is kept);
+  a new attempt for a changed order, programme or environment gets `{number}-{n}` (§9.2).
 
 ## 4. Capability → framework seam map
 
@@ -199,11 +215,11 @@ A test computes the URL for fixed ids and compares it with the v1 formula charac
 | Gateway registration | `Woodev_Payment_Gateway_Plugin::__construct( $id, $version, $args )` with `gateways`, `currencies` (`woodev/payment-gateway/class-payment-gateway-plugin.php:64-110`) | One gateway | No |
 | Hosted redirect | `Woodev_Payment_Gateway_Hosted::process_payment()` → `get_payment_url()` → abstract `get_hosted_pay_page_url()` (`class-payment-gateway-hosted.php:78-136,357`) | `Create` returns `link` | No |
 | Notification handling | `handle_transaction_response_request()` (`:365-407`) and its default flow (`:496-552`) | **Overridden entirely** (§10): the default flow fails a pending order on any exception and on any status it does not recognise, and calls `get_order()` | No (plugin) — gotcha filed |
-| Status transitions | `complete_payment()` (`class-payment-gateway.php:1439-1476`), `mark_order_as_held/failed/cancelled()` (`:2329,2447,2480`), `add_transaction_data()` | Used from the plugin's handler | No |
+| Status transitions | `complete_payment()` (`class-payment-gateway.php:1439-1476`), `mark_order_as_held/failed/cancelled()` (`:2329,2447,2480`) | Used from the plugin's handler; `add_transaction_data()` is NOT used (it rewrites `environment` from the current setting, `:2086`) — the plugin writes the same keys from the attempt | No (plugin) |
 | Settings fields | `init_form_fields()` + `get_method_form_fields()` (`class-payment-gateway.php:867-968`) | Fields of §15 | No |
-| Debug / log | `debug_log()`, `add_debug_message()` with redaction at the sink (`:3435-3486`) | Merchant reasons go through it | No |
+| Debug / log | `debug_log()`, `add_debug_message()` with redaction at the sink (`:3435-3486`); the base registers `log_api_request()` for every API call (`:329` → `:3608-3616` → `add_debug_message()`), which prints to frontend notices when `debug_checkout()` or, for errors, in the test environment (`:3478`) | **Overridden** (§6.5): log only, never a notice | No (plugin) |
 | API base | `Woodev_API_Base`: Basic auth (`woodev/api/class-api-base.php:2883`), `get_secret_header_names()` (`:2654`, masks `Authorization`), `get_secret_param_names()` (`:1501`), body redaction by key at any depth (`:2473`, `:2815`), timeouts by purpose (`:2359`) | Add PII keys to the secret list; own timeouts | No |
-| Licence | `Woodev\Framework\Shipping\License_Gate::is_in_force()`, `refusal()`, `request_claim_refresh()` (`woodev/shipping-method/class-license-gate.php`), autoloadable by any plugin through the class map (`woodev/class-map.php:94`) | Call it from the gateway | **Small — F1:** the class lives in the Shipping namespace; lift to a neutral namespace with an alias (not blocking) |
+| Licence | `Woodev\Framework\Shipping\License_Gate::is_in_force()`, `refusal()`, `request_claim_refresh()` (`woodev/shipping-method/class-license-gate.php`), autoloadable by any plugin through the class map (`woodev/class-map.php:94`) | Call it from the gateway, the resume endpoint and the wizard's demo action | **Small — F1:** the class lives in the Shipping namespace; lift to a neutral namespace with an alias (not blocking) |
 | Setup wizard | `Woocommerce_Setup_Wizard`, `register_step()` / `register_content_step()`, `Step_Action`, `Action_Outcome` (`woodev/setup/`); a settings step resolves its fields through `$plugin->get_settings_handler()` (`class-setup-wizard.php:643-700,771-779`) | A `Woodev_Abstract_Settings` subclass mapped onto the gateway option (§14.1) | No (plugin) |
 | Blocks payment bridge | none | — | **G1 (#1476)**, after 2.0.0 (D3) |
 | `woodev-settings` page | `Settings_Page_Registry` (providers default none, `woodev/class-plugin.php:1635-1650`) | none (D7) | Not needed |
@@ -234,11 +250,11 @@ constant is `shipping`, `woodev/class-framework-plugin-loader-definition.php:26`
 | `Api\Request`, `Api\Response`, `Api\Application_State` | request serialisation with fixed float precision (§7.5); response DTOs; a typed view of an Info/webhook body |
 | `Api\Error_Explainer` | bank error → merchant reason + fix (I2), §6.4 |
 | `Order\Item_List_Builder` | the kopeck reconciliation (§7) |
-| `Order\Order_Numbers` | the orderNumber sent per attempt and the lookup back (§9.2, §10.2) |
-| `Order\Application_Meta` | read/write of every `_wc_wc_tinkoff_kvk_*` key (one place; contract-tested) |
+| `Order\Order_Numbers` | attempt identity, the orderNumber sent per attempt and the lookup back (§9.2, §10.2) |
+| `Order\Application_Meta` | read/write of every `_wc_wc_tinkoff_kvk_*` key and the attempt record (one place; contract-tested, §9.4) |
 | `Order\Status_Mapper` | bank state → WooCommerce action (§10.3) |
 | `Order\Auto_Cancel_Veto` | the I5a filter (§11) |
-| `Webhook\Handler` | verification, throttle, idempotency, dispatch (§10) |
+| `Webhook\Handler` | verification, environment check, the per-attempt budget, dispatch (§10) |
 | `Admin\Order_Panel` | the panel and «Обновить статус» (§12.1–12.2) |
 | `Frontend\Order_Status_Notice`, `Frontend\Resume_Endpoint` | thank-you / «Мои заказы» state text, «Вернуться к заявке», safety Info (§12.3) |
 | `Frontend\Product_Informer` | the product-page text (§8.3) |
@@ -266,8 +282,9 @@ rows once (§20.4).
 
 - `upgrade_to_1_4_0` is ported verbatim in behaviour (a shop still below 1.4.0 that jumps to 2.0.0 would otherwise lose its
   licence key and, with D8, its checkout). **Provisional (coordinator may revisit):** keep it; ten lines.
-- `upgrade_to_2_0_0`: no data change (D2). It records nothing but the framework's own version option. It does **not** start
-  the wizard for a shop whose `shop_id` and `showcase_id` are set (§14.3).
+- `upgrade_to_2_0_0`: no data change to v1 keys (D2). For a shop whose `shop_id` and `showcase_id` are set it calls the
+  wizard's `complete_setup()` (`woodev/setup/class-setup-wizard.php:321`), so neither the first-run redirect nor the «setup is not
+  finished» notice appears (§14.3); otherwise it records nothing but the framework's own version option.
 - No `uninstall.php` (the tooling AGENTS.md: installed data survives).
 
 ## 6. Bank API client
@@ -300,15 +317,17 @@ turned off; a TLS failure (cURL error 60/77) is explained to the merchant (§6.4
 
 Rules: `Content-Type` and `Accept` `application/json`; header and body field `integrationType: woodev` kept from v1
 (`v1:includes/api/class-wc-tinkoff-api.php:14,41`; undocumented, UNVERIFIED whether the bank uses it — harmless). The environment
-of an Info call is the environment **stored on the order** (`environment` meta), not the current setting, so a merchant who
-switches to live mode can still refresh a demo order and vice versa.
+and showcase of an Info call are those **stored in the attempt record** for that bank number (§9.4), not the current settings,
+so a merchant who switches to live mode can still refresh a demo application and vice versa; only the password is the current
+one (a single password is stored — a 401 after a showcase change is explained, §6.4).
 
 ### 6.3 Timeouts and rate limits
 
 - Purpose-based timeouts (`get_request_timeout()` override): `create` / `create_demo` **20 s** (the buyer waits; the framework's
   60 s default for payment APIs is too long), `info` **10 s**. **Provisional (coordinator may revisit).**
 - HTTP 429 with `Retry-After` (≤ 25 req/s, `setup-types/api/methods`, READ): never retried inline. At checkout → the buyer's
-  generic text; in a webhook → HTTP 503 so the bank re-delivers; in the admin → «Банк просит повторить позже (через N с)».
+  generic text; in a webhook → the attempt's backoff of §10.5 (which honours `Retry-After`); in the admin → «Банк просит
+  повторить позже (через N с)».
 
 ### 6.4 Error mapping (I2)
 
@@ -346,13 +365,22 @@ responses, which the docs do not say are masked (d-docs §7). The webhook body i
 `to_string_safe()` = `print_r`, `v1:includes/api/class-wc-api-ipn-response.php:302-308`): the handler logs order number, status,
 `demo`, `committed` and the decision only.
 
+**No diagnostic ever reaches a buyer.** The framework gateway logs every API request through `log_api_request()` →
+`add_debug_message()`, which prints a frontend notice when `debug_mode` is `checkout` or `both`, and for errors in the test
+environment whatever the mode (`woodev/payment-gateway/class-payment-gateway.php:3478`). Redacting credentials does not remove the
+bank's error text from such a notice. The plugin's `Gateway` therefore overrides `add_debug_message()`: it writes to the log when
+`debug_mode` is `log`, `both` **or `checkout`** (the merchant who chose `checkout` asked for diagnostics — they now go to the log)
+and never calls `wc_add_notice()`. The stored option keeps its key and value (D2). **Provisional (coordinator may revisit):**
+`checkout` treated as `log` rather than as `off`. Test: a refused `create` under `debug_mode` = `checkout`, `both`, and `log` +
+test environment leaves exactly one buyer notice — the calm §6.4 text.
+
 ### 6.6 What works without the API password
 
 | Feature | With password | Without password |
 |---|---|---|
 | Checkout `Create`, «Вернуться к заявке» | yes | yes |
 | Webhook authenticity | `Info` re-query (authoritative); source IP advisory | **source IP in `91.194.226.0/23` is mandatory** (§10.1); the webhook body is the data |
-| Status decisions | from `Info` | from the webhook body, with one restriction: a webhook `rejected` is **per bank** («Вебхук Rejected не означает, что по всей заявке пришел отказ», `settings/app-notifications`, READ), so without `Info` it only adds a note; the order is not failed (I7 needs «all banks») |
+| Status decisions | from `Info` | from the webhook body, **forward-only per attempt** (a replayed older state never moves an order back, §10.3), with one more restriction: a webhook `rejected` is **per bank** («Вебхук Rejected не означает, что по всей заявке пришел отказ», `settings/app-notifications`, READ), so without `Info` it only adds a note; the order is not failed (I7 needs «all banks») |
 | I3 panel | `Info` data | webhook data (same field set, PII masked by the bank), marked «по уведомлению банка» |
 | I4 «Обновить статус» | yes | button disabled with the reason «Нужен пароль API» |
 | I6 safety `Info` on return | yes | skipped; the page shows the last known state |
@@ -499,29 +527,37 @@ description. Programme labels show the merchant's names. Nothing else is printed
 
 1. Licence in force, else refuse (the gateway is hidden anyway; this guards the pay page).
 2. Build the item list (§7); on failure → buyer text, no call.
-3. Choose the order number (§9.2); store `order_number` row, `current_order_number`, `create_fingerprint`, `promo_code`,
-   `environment`.
+3. Choose the order number (§9.2). For a new number, write its attempt record (§9.4) with `created_at` EMPTY and an
+   `order_number` row; set `current_order_number`, `promo_code` (the attempt's programme).
 4. `create` or `create_demo` with: `shopId`, `showcaseId`, `sum`, `items`, `orderNumber`, `promoCode`, `webhookURL` (§3.4),
    `successURL` = `get_checkout_order_received_url()`, `failURL` = `get_checkout_payment_url()` (the buyer can pay another way —
    I7), `returnURL` = `get_cancel_order_url_raw()` (v1, `v1:includes/api/class-wc-tinkoff-api.php:43-46`), `values.contact`
    with **`lastName` = billing last name, `firstName` = billing first name** (the v1 swap, `:50-51`, fixed), `mobilePhone`,
    `email`; in test mode `demoFlow` (required by the docs; v1 sent it only when an admin picked it, so a non-admin test order
    had none — fixed with the default `sms`) and optional `initialStage`.
-5. Store `application_id` and `application_link` from the response; return `link` (the framework redirects).
+5. On a successful answer: store `application_id` and `application_link` in the attempt and the mirror, set the attempt's
+   `created_at` (the bank's `created_at` when returned, else the local time of the answer); return `link` (the framework
+   redirects). On any failure (no HTTP answer, 4xx/5xx, refused assertion): the attempt is marked `create_failed`, gets no
+   `created_at`, and is not «live» for the veto (§11) — a number alone never pretends an application exists.
 
-### 9.2 Order numbers
+### 9.2 Order numbers and attempt identity
 
 The framework's `unique_transaction_ref` is unusable: `get_order()` increments `retry_count` on every call
 (`woodev/payment-gateway/class-payment-gateway.php:2005-2023`), webhook lookups included. The plugin owns the number:
 
-- First attempt: `ltrim( $order->get_order_number(), '#' )` — v1's value, so v1 orders and their webhooks keep matching.
-- A **new** number `{base}-{n}` (n = 2, 3, …; base shortened with a hash suffix if the result would exceed 64 characters) is
-  minted only when the previous application is terminal (`rejected` / `canceled` in the stored status) **or** the order's
-  `create_fingerprint` (S + item list hash) changed since the last `create` — the bank refuses a known number with a different
-  composition, and returns the OLD application for a known number with the same composition (`setup-types/api/methods` § Create,
-  READ), which after a refusal would hand the buyer the refused application again.
-- Otherwise the stored number is reused, and the bank returns the same application and link — that is what «Вернуться к
-  заявке» relies on (§12.3).
+- **Attempt identity** = (environment, `showcaseId`, `sum` in kopecks, item-list hash, effective whitelisted `promoCode`). It is
+  computed before every `create` from what WOULD be sent now.
+- First attempt: `(string) $order->get_order_number()` **exactly** — the value v1 sent (`v1:includes/api/class-wc-tinkoff-api.php:42`),
+  including a `#` or any prefix a numbering plugin's `woocommerce_order_number` filter adds, so an application created by v1
+  before the update is resumed, not duplicated. Longer than 64 characters (the bank's limit; v1 would have been refused) →
+  shortened with a hash suffix.
+- A **new** number `{base}-{n}` (n = 2, 3, …; same 64-character rule) is minted when the current attempt is terminal
+  (`rejected` / `canceled`), or `create_failed` with a bank refusal, **or** the identity differs from the current attempt's —
+  the bank refuses a known number with a different composition and returns the OLD application for a known number with the
+  same composition (`setup-types/api/methods` § Create, READ; d-docs §5). So a buyer who switches from credit to an instalment
+  programme, a merchant who switches demo ↔ live or changes the showcase, and an edited order each get a distinct attempt.
+- Otherwise the current number is reused with the attempt's **stored** programme, and the bank returns the same application and
+  link — that is what «Вернуться к заявке» relies on (§12.3); the resume never re-chooses «the first programme offered today».
 
 ### 9.3 Demo selectors (test mode, `manage_woocommerce` only)
 
@@ -529,6 +565,27 @@ The framework's `unique_transaction_ref` is unusable: `get_order()` increments `
 `initialStage`: the documented values `filling`, `wait-offer`, `offers-all`, `wait-offer-timeout`, `kvk-signing-sms`,
 `kvk-issued`, `canceled`, `rejected` (v1's `canceled-by-partner` is not in the docs and is dropped). Posted values are
 validated against these lists. Labels are admin strings (Russian msgids).
+
+### 9.4 The attempt record
+
+One order meta `attempts` (an array keyed by the exact bank number, written only through `Order\Application_Meta`) holds every
+application the plugin ever started for the order, so a callback is always judged against what was sent for ITS number:
+
+| Field | Written | Meaning |
+|---|---|---|
+| `number`, `environment` (`production`/`test`), `showcase_id`, `sum` (kopecks), `items_hash`, `promo_code`, `minted_at` | once, before `create`; **immutable** | the identity of §9.2 |
+| `created_at`, `application_id`, `link` | once, on a successful `create` | the application exists |
+| `create_failed` | on a failed `create` | not live |
+| `status`, `committed`, `cooling_until`, `cooling_over`, `verified` (`info`/`webhook`), `checked_at` | upsert on every accepted state | the last accepted bank state |
+| `applied` | list of side-effect keys already applied (§10.3) | idempotency of notes, status changes, e-mails |
+| `info_calls_in`, `info_calls_out`, `info_failures`, `next_info_at` | under the lock of §10.5 | the webhook budget |
+| `legacy` | `true` for a record built from v1 meta | §10.2 |
+
+A **legacy attempt** is created the first time a v1-era order is matched (§10.2): `number` = the matched number, `environment`
+from the order's `environment` meta when present, else taken once from the first callback's boolean `demo` and then fixed;
+`sum` = the order total at that moment; no `items_hash` (the composition check of §10.3 compares the sum only). A meta-only
+change, nothing migrated (D2). Test: the record round-trips on HPOS and posts storage; immutable fields cannot be rewritten
+through `Application_Meta`.
 
 ## 10. Webhook handler (D11, D14, I5, I7)
 
@@ -548,58 +605,138 @@ validated against these lists. Labels are admin strings (Russian msgids).
   `woodev_wc_tinkoff_kvk_webhook_source_trusted( bool, $remote_addr )` lets a site behind a trusted proxy (and the rig, §20.2)
   supply its own verdict. **Provisional (coordinator may revisit):** advisory-with-password / mandatory-without.
 - **Order lookup** (§10.2) happens before any bank call; not found or not paid with `wc_tinkoff_kvk` → 200, debug line, no
-  `Info` (bounds the cost of a forged request, README §9).
-- **Throttle** before `Info`: at most one `Info` per order number per 10 s (a held answer → HTTP 503 + `Retry-After: 10`, the
-  bank re-delivers) and at most 120 webhook-driven `Info` calls per site per hour (excess → 503). **Provisional (coordinator
-  may revisit).**
-- **Verification**: with the password, `Info` for the payload's order number; its body is the state. `Info` failing (timeout,
-  5xx, 429) → **503** so the bank re-delivers; `Info` 401/403 → 200, a debug line and an admin-visible order note «пароль API не
-  подходит — статус не проверен» once per order, and the webhook body is used under the without-password rules if the source
-  address is in the range. Without the password: the body is the state.
-- **Amount**: `order_amount` must equal the `sum` we sent for this order number (kopecks); a mismatch → note «сумма в
-  уведомлении не совпадает с заявкой», no status change, 200.
-- Answer 200 for every handled or deliberately ignored request; 503 only for "try again later". The handler never lets an
+  `Info` (bounds the cost of a forged request, README §9). The matched number's attempt record (§9.4) is loaded; every check
+  below is against THAT attempt.
+- **Environment**: the body's `demo` must be a JSON boolean equal to the attempt's environment (`true` ↔ `test`), on the
+  no-password path too; with the password the `Info` body's `demo` must match as well. Mismatch → 200, note «уведомление из
+  другого режима (тестовый / боевой) — проигнорировано», no state change.
+- **Budget** before `Info`: the per-attempt reservation, lifetime budget and backoff of §10.5.
+- **Verification**: with the password, `Info` for the payload's number with the attempt's environment and showcase (§6.2); its
+  body is the state. `Info` failing (timeout, 5xx, 429) → the attempt's backoff (§10.5); `Info` 401/403 → 200, a debug line and
+  an admin-visible order note «пароль API не подходит — статус не проверен» once per attempt, and the webhook body is used under
+  the without-password rules if the source address is in the range. Without the password: the body is the state.
+- **Amount**: `order_amount` must equal the attempt's `sum` (kopecks); a mismatch → note «сумма в уведомлении не совпадает с
+  заявкой», no status change, 200.
+- Answer 200 for every handled or deliberately ignored request; 503 only for "try again later" inside the attempt's budget
+  (§10.5), never as the only record of a lost state. The handler never lets an
   exception reach the framework's default catch, which would mark a pending order failed
   (`woodev/payment-gateway/class-payment-gateway-hosted.php:387-406`).
 
 ### 10.2 Order lookup by our own number (fixes D11 «order lookup by our own order number»)
 
-In order: (1) `wc_get_orders( [ 'meta_key' => '_wc_wc_tinkoff_kvk_order_number', 'meta_value' => $id, 'limit' => 2 ] )` —
-HPOS-safe, every number we ever sent; (2) for v1-era orders, `_order_number` meta (the key the common sequential-numbering
-plugins write) with the same query; (3) `wc_get_order( (int) $id )` when `$id` is all digits AND that order's
-`get_order_number()` equals `$id` (default numbering). More than one match → none (note + debug line); the order must have
-payment method `wc_tinkoff_kvk`. v1 looked up `wc_get_order( $payload->id )` only (`v1:includes/api/class-wc-api-ipn-response.php:48-65`).
+v1 looked up `wc_get_order( $payload->id )` only (`v1:includes/api/class-wc-api-ipn-response.php:48-65`). The public order
+number is whatever the `woocommerce_order_number` filter returns (WC 11.2.1 `includes/class-wc-order.php:586`), so no single meta
+convention can invert it. The resolver therefore **generates candidates and confirms each one by the exact public number**:
+
+1. `wc_get_orders( [ 'meta_key' => '_wc_wc_tinkoff_kvk_order_number', 'meta_value' => $id, 'limit' => 2 ] )` — HPOS/CPT-safe,
+   every number 2.0.0 ever sent. A hit here is final (no confirmation needed: we wrote it).
+2. For v1-era orders: the developer seam `woodev_wc_tinkoff_kvk_find_order_id( ?int $order_id, string $number )` — a numbering
+   plugin or custom code returns its own reverse lookup.
+3. `wc_get_orders` by `_order_number` meta (the key common sequential-numbering plugins write) for `$id` and for `$id` with a
+   leading `#` stripped. Which plugins write which key is UNVERIFIED (U14) — this is a candidate source, not a rule.
+4. `wc_get_order( (int) $digits )` when `$id`, a leading `#` stripped, is all digits (default numbering).
+
+A candidate from steps 2–4 is accepted only if its `get_order_number()` **equals `$id` byte for byte** and its payment method is
+`wc_tinkoff_kvk`. More than one accepted order → none (note + debug line). A v1 order found this way gets its `order_number` row
+and a legacy attempt (§9.4) written once, so the next callback takes step 1. Tests: default numbering; a filter returning `#42`
+with `_order_number` = 42 (found by step 3, confirmed); a prefix `INV-42` with `_order_number` = 42 (not found by steps 3–4,
+found through the seam); two orders confirming the same number (none); HPOS and posts storage.
 
 ### 10.3 Status map
 
 `Application_State` is built from `Info` (or from the webhook body without the password). «Cooling active» = `commit_cooldown.until`
-in the future (`Info` has only `until`; the webhook adds `has_happened`, `settings/app-notifications`, READ).
+in the future (`Info` has only `until`; the webhook adds `has_happened`, `settings/app-notifications`, READ). An application under
+cooling is never `committed` (Commit is possible only after cooling, same page), so cooling and «not confirmed» both mean «do not
+ship yet».
 
-| Bank state | Order now | Action |
+**Steps, in order, for every accepted state** (after §10.1 and §10.5):
+
+1. **Details upsert.** The attempt record (§9.4) always takes the newly returned detail fields (`transfer_amount`, `term`,
+   `monthly_payment`, `chosen_bank`, `signing_type`, …) with `checked_at` and `verified`; the order's mirror keys (§3.3) take them
+   when the attempt is the current one. This never depends on deduplication, so a later `Info` that adds an optional field fills
+   the panel even if the status tuple is unchanged.
+2. **Transition check.** Ranks: `new` 0 < `inprogress` 1 < `approved` 2 < `signed` 3; `canceled` and `rejected` are absorbing.
+   Within `signed`: `committed` false → true and cooling active → over are forward. Without the password (body = state) a state
+   that is not forward of the attempt's stored state is a replay: details are NOT upserted from it, a debug line, nothing else.
+   With the password `Info` is the bank's current state and is taken as it is; absorbing states still stay absorbing for side
+   effects.
+3. **Side-effect key** = (number, status, committed, cooling active). A key already in the attempt's `applied` list changes no
+   status and adds no note or e-mail.
+4. **Settlement guard.** An attempt may move the order towards «paid» only if it is the **current** attempt AND its identity
+   still matches the order now (attempt `sum` = order total in kopecks, `items_hash` = the item list built now; a legacy attempt
+   compares the sum only). Otherwise a `signed` goes to **manual review** (below), every other state is recorded with a note.
+5. **Status table**, on the order's state and the durable `hold_reason`:
+
+«Open» = `pending`, `failed`, or `on-hold` with `hold_reason` ∈ {`cooling`, `not_committed`} set by THIS attempt. «Settled» =
+`$order->is_paid()`. An `on-hold` order with `hold_reason = manual_review`, or with no plugin hold reason (the merchant put it
+there), is never moved automatically by any later state — only a note is added.
+
+| Bank state (current, matching attempt) | Order | Action |
 |---|---|---|
-| `new`, `inprogress` | any | meta only; no status change, no note (v1 sent unknown states into the failure path, `v1fw:payment-gateway/class-payment-gateway-hosted.php:539-546`) |
-| `approved` | `pending` / `failed` | meta; order note «Банк одобрил заявку»; **customer note** with the application link (I6, once per application); status stays **`pending`**. **Provisional (coordinator may revisit):** v1 set `on-hold` and reduced stock; an approval is not a payment, an unsigned application gets no expiry webhook (d-docs §3), and a `pending` order stays under the I5a veto, so WooCommerce releases it after the limit instead of leaving it on hold forever |
-| `signed`, cooling active, `enable_cooling = yes` | needs payment | `mark_order_as_held()` (`on-hold`, stock reduced — v1) with «не отгружайте до {until}» |
-| `signed`, cooling over or `enable_cooling = no` | needs payment (`pending`, `failed`, `on-hold`) | `add_transaction_data()` + `complete_payment()` → `payment_complete()`; note «не подтверждена — подтвердите в кабинете банка в течение 14 дней» when `committed = false` |
-| `signed` | `cancelled` | **I5:** `on-hold` (not `processing` — stock may have been released), order note, one admin e-mail (§10.4) |
-| `signed` | `processing` / `completed` / `on-hold` with the same signature | nothing (idempotent) |
-| `rejected` (from `Info`: all banks) | needs payment | `failed` with a calm note (I7); the buyer can pay another way on the pay page |
-| `rejected` (webhook body only, no password) | any | note «отказ одного из банков», no status change |
-| `canceled` | needs payment | `cancelled` (v1) |
-| `canceled` | `processing` / `completed` | `on-hold` + note «покупатель отменил заявку после подписания — деньги не поступят, не отгружайте» + admin e-mail. **Provisional (coordinator may revisit)** |
+| `new`, `inprogress` | any | details only; no status change, no note (v1 sent unknown states into the failure path, `v1fw:payment-gateway/class-payment-gateway-hosted.php:539-546`) |
+| `approved` | open | `failed` → `pending` by an explicit `update_status( 'pending' )`; `pending` stays; note «Банк одобрил заявку»; **customer note** with the application link once per attempt (I6). **Provisional (coordinator may revisit):** v1 set `on-hold` and reduced stock; an approval is not a payment, an unsigned application gets no expiry webhook (d-docs §3), and a `pending` order stays under the I5a veto, so WooCommerce releases it after the limit instead of leaving it on hold forever |
+| `signed`, cooling active | open | `mark_order_as_held()` (`on-hold`, stock reduced — v1), `hold_reason = cooling`, note «договор подписан, идёт период охлаждения — не отгружайте до {until}» (the date shown when `enable_cooling = yes`, v1's switch) |
+| `signed`, `committed = false`, no cooling or cooling over | open | `on-hold`, `hold_reason = not_committed`, note «договор подписан, но банк ещё не подтвердил заявку — подтвердите её в кабинете банка в течение 14 дней, затем нажмите «Обновить статус» или переведите заказ в «Обработка» сами» (§0 note 4) |
+| `signed`, `committed = true`, no cooling or cooling over | open | the plugin writes `trans_id` / `trans_date` / `environment` from the attempt + `_transaction_id`, then `complete_payment()` → `payment_complete()`; `hold_reason` cleared |
+| `signed` | `cancelled` | **I5 manual review:** `on-hold` (not `processing` — stock may have been released), `hold_reason = manual_review`, note, one admin e-mail (§10.4) |
+| `signed` | settled by this attempt | details only |
+| `signed` | settled by **another** attempt, or `on-hold` not set by this attempt | no status change; note + admin e-mail «по заказу подписана ещё одна заявка — возможно двойное оформление, проверьте кабинет банка» |
+| `rejected` (from `Info`: all banks) | open | `failed` with a calm note (I7); the buyer can pay another way on the pay page |
+| `rejected` (webhook body only, no password) | any | note «отказ одного из банков», no status change, the attempt's stored state unchanged (it is not «all banks») |
+| `canceled` | open | `cancelled` (v1); `hold_reason` cleared |
+| `canceled` | settled, or held by this attempt's `cooling` / `not_committed` | `on-hold`, `hold_reason = manual_review`, note «покупатель отменил заявку после подписания — деньги не поступят, не отгружайте» + admin e-mail. **Interim, pending operator item O1** (D5 requires the cancellation history before any cancel behaviour is settled): no bank call, nothing shipped automatically |
 
-Idempotency: every processed state stores `status_signature` = hash of (`status`, `committed`, cooling active, order number);
-a delivery with the stored signature changes nothing and adds no note. Every write goes through `Application_Meta`
-(the seven v1 display keys plus the additive keys of §3.3, money as decimal strings — v1's `intval()` truncation,
-`v1:includes/api/class-wc-api-ipn-response.php:194-213`, is gone). A state for a **superseded** order number (§9.2) only writes
-a note, except `signed`, which always goes through the table above (a buyer who signed an older application is never ignored).
+**Manual review** (`hold_reason = manual_review`) is set for: I5's late signature on a cancelled order; a signature on a superseded
+or no-longer-matching attempt (step 4) when the order is open — `on-hold` with the note «подписана заявка на прежний состав или
+сумму заказа ({sum} ₽) — сверьте заказ с кабинетом банка», never `complete_payment()`; and the post-signature cancel. It is cleared
+only when the merchant changes the order status (`woocommerce_order_status_changed` not triggered by the plugin itself — the plugin
+sets a request-scoped flag around its own status writes). No later bank state, replay or `Info` refresh moves such an order.
 
-### 10.4 The admin e-mail for I5 and the post-signature cancel
+Every write goes through `Application_Meta` (the seven v1 display keys plus the additive keys of §3.3, money as decimal strings —
+v1's `intval()` truncation, `v1:includes/api/class-wc-api-ipn-response.php:194-213`, is gone).
+
+### 10.4 The admin e-mails
 
 WooCommerce has no stock «order needs attention» e-mail. **Provisional (coordinator may revisit):** one plain message through
 `WC()->mailer()` (WooCommerce's header/footer wrapper) to the shop's admin address, subject «Заказ №{n}: требуется ваше
-решение», body naming what the bank reported and what to check; sent once per order (`late_signed_notified`). The wording is an
-operator item (§22.3).
+решение», body naming what the bank reported and what to check. Sent once per (attempt, event) — the side-effect key of §10.3
+step 3 — so a redelivery never repeats it and a different event on the same order still reports. Events: I5 late signature,
+signature on a superseded attempt, a second financing on a settled order, post-signature cancel. The wording is an operator item
+(§22.3).
+
+### 10.5 Webhook budget: reservation, lifetime cap, backoff
+
+Every webhook-driven `Info` is bounded per attempt, so one order — genuine or named by a forger — can neither make endless bank
+calls nor use up the verification capacity of other orders. Nothing here assumes the bank re-delivers (§0 note 2).
+
+- **Reservation (atomic).** Before `Info` the handler inserts the option `woodev_wc_tinkoff_kvk_lock_{md5(number)}` with
+  `add_option()` — a unique `option_name` INSERT, so of two concurrent requests exactly one gets it; a lock older than 30 s is
+  stale and replaced. The budget counters of the attempt are read and written only while holding it; it is deleted in a
+  `finally`. A request that finds the lock held: with the password → 200 without `Info` (the holder is reading the same
+  authoritative state); without the password → 503 + `Retry-After: 10` (its body is the only copy of that state).
+- **Lifetime budget per attempt:** at most **12** `Info` calls for requests from the bank's range (`info_calls_in`) and at most
+  **4** for requests from outside it (`info_calls_out`, password only), so forged outside traffic cannot spend the bank's own
+  deliveries' allowance. An application emits at most about six events (approvals per bank, signed, cooling end, cancel).
+- **Backoff after an `Info` failure:** next allowed call at `max( Retry-After, 30 s × 2^(failures − 1) )`, capped at 1 h. Inside
+  the backoff, or on a failure: 503 with `Retry-After` = the remaining wait; the attempt is marked «статус не проверен» and one
+  order note says so with the instruction to press «Обновить статус».
+- **No call needed:** an attempt whose verified state is absorbing (`canceled`, `rejected`) or final (`signed` + `committed` +
+  cooling over) → 200 without `Info`; a body whose (status, committed, cooling over) equals the attempt's last **verified** state
+  → 200 without `Info` (it can teach nothing and applies nothing).
+- **Budget exhausted** → 200 without `Info`, one note per attempt «автоматические проверки по заявке исчерпаны — проверьте статус
+  кнопкой «Обновить статус»». Recovery is the merchant's button (I4) and the buyer's return check (I6), which do not count against
+  this budget (they have their own limits, §12).
+- **Site-wide guard for outside-range requests only:** an hourly counter option incremented with one atomic
+  `UPDATE … SET option_value = option_value + 1 WHERE option_name = … AND option_value < 60`, accepted only when one row was
+  affected; over 60 per hour → 200 + debug line «слишком много уведомлений не с адресов банка — если сайт за прокси, настройте
+  фильтр доверенного источника». Requests from the bank's range have no site cap — they are bounded by the per-attempt budgets.
+- **Without the password** no `Info` is ever made; the reservation still serialises state writes for one number.
+- **Provisional (coordinator may revisit):** the numbers 12 / 4 / 60 and the 30 s → 1 h backoff.
+
+Tests: two concurrent requests for one number → one `Info`; the 13th in-range request → no `Info`, note once; 5th outside
+request → no `Info`; failure sequence → waits 30, 60, 120 s … capped; `Retry-After: 300` honoured; absorbing / final / same
+verified state → no `Info`; the 61st outside request in an hour → no `Info`, while an in-range request for another order still
+calls `Info`.
 
 ## 11. WooCommerce auto-cancel veto (I5a)
 
@@ -608,9 +745,16 @@ Facts (I5a, measured from WC source): `wc_cancel_unpaid_orders()` cancels only `
 `woocommerce_cancel_unpaid_order( bool $cancel, WC_Order $order )` decides per order.
 
 - Settings: `prevent_auto_cancel` (checkbox, default **yes**), `auto_cancel_hold_hours` (integer 1–720, default **72**).
-- The filter returns `false` when the setting is on, the order is paid with `wc_tinkoff_kvk`, it has a `current_order_number`,
-  its stored bank state is not terminal (`new`, `inprogress`, `approved`, or none yet), and the order is younger than the limit.
-  Past the limit, or after `expected_overdue_at` when known, WooCommerce cancels as usual; I5 stays the last safety net.
+- The filter returns `false` when the setting is on, the order is paid with `wc_tinkoff_kvk`, and its **current attempt is a
+  live application**: it has a `created_at` (a successful `create`, §9.1 step 5 — a `create_failed` attempt or a bare number
+  does not count), its stored bank state is not absorbing (`new`, `inprogress`, `approved`, or none yet), and the
+  **application** — not the order — is younger than the limit (`now − created_at < auto_cancel_hold_hours`) and, when the bank
+  sent `expected_overdue_at`, not past it. So a buyer who opens a four-day-old unpaid order and starts a new application today is
+  protected for the full limit from today (WooCommerce selects pending orders by last modification, `includes/data-stores/
+  class-wc-order-data-store-cpt.php:552`, `src/Internal/DataStores/Orders/OrdersTableDataStore.php:1199`, so this case is
+  reachable). Past the limit WooCommerce cancels as usual; I5 stays the last safety net.
+- **v1-era orders** (no attempt record, or a legacy attempt without `created_at`): no veto — v1 had none, and such an
+  application is already days old. A resume on 2.0.0 creates a real attempt with its own `created_at`, which is then protected.
 - The bank's application lifetime from the docs: `expected_overdue_at` in every body; the docs' example shows +14 days; an
   unconfirmed phone is deleted after 24 h (d-docs §3). **Provisional (coordinator may revisit):** keep 72 h as the default
   (holding stock for 14 days hurts the merchant more than a late signature, which I5 recovers); the field's tooltip says the
@@ -627,7 +771,9 @@ status in words (`new` «покупатель ещё не подтвердил �
 банков», `approved` «одобрена — ждём подписания», `signed` «договор подписан», `canceled` «отменена покупателем», `rejected` «отказ всех банков»), product (кредит / рассрочка), bank, term, monthly payment, credit amount, down payment, signing type
 (`sms` «по СМС», `ses` «Self ID», `bank` «на встрече с представителем банка» — v1 mapped everything but `sms` to «Личная
 встреча», `v1:woodev-vkredit.php:148-149`), cooling end «не отгружайте до …», «не подтверждена — подтвердите в кабинете банка»
-when `committed = false`, application and order numbers, the refund line «к возврату — сумма, которую банк перевёл магазину:
+when `committed = false`, a highlighted «требуется ваше решение» line with the reason while `hold_reason = manual_review` (§10.3),
+application and order numbers (and, when the order has more than one attempt, one short line per earlier attempt: number,
+programme, sum, last status), the refund line «к возврату — сумма, которую банк перевёл магазину:
 {transfer_amount}; комиссия за рассрочку не возвращается; возврат оформляется в кабинете банка» (D5), the data source and
 time, and the fiscal hint (§12.4). All output escaped.
 
@@ -636,7 +782,8 @@ time, and the fiscal hint (§12.4). All output escaped.
 A button in the panel → admin AJAX action `woodev_wc_tinkoff_kvk_refresh_status` with `check_ajax_referer` and
 `current_user_can( 'manage_woocommerce' )`; one `Info` per press for the order's current number; at most one per 30 s per order
 (transient; a second press inside the window answers «можно повторить через N с» without a call); the result runs through the
-same `Status_Mapper` as a webhook. Works with the licence not in force (checking an existing application is not a new action,
+same `Status_Mapper` as a webhook (details always refreshed; a manual-review hold is never lifted by a refresh, §10.3). It does not
+count against the webhook budget of §10.5. Works with the licence not in force (checking an existing application is not a new action,
 D8/I4). Without the password the button is disabled with the reason. No scheduled polling anywhere.
 
 ### 12.3 Buyer side (I6)
@@ -647,7 +794,8 @@ D8/I4). Without the password the button is disabled with the reason. No schedule
 - **«Вернуться к заявке»** while not signed and not terminal: a link to `?wc-api=wc_tinkoff_kvk_resume&order={id}&key={order_key}`;
   the endpoint checks the order key (WooCommerce's guest authorisation), the licence (a re-`Create` is a new action: not in
   force → no link and the endpoint refuses), at most one per 60 s and ten per order (`resume_count`); it re-uses §9.2 (same
-  number + same composition → the bank returns the same application) and redirects to the link. **Provisional (coordinator may
+  number + same identity, with the attempt's stored programme → the bank returns the same application; a changed order or
+  environment → a new attempt) and redirects to the link. **Provisional (coordinator may
   revisit):** order key instead of a nonce, because the buyer may open it from an e-mail in another session.
 - **Customer note on `approved`** with the application link (WooCommerce's standard «Заметка к заказу» e-mail), once per
   application.
@@ -670,10 +818,12 @@ One sentence in the wizard checklist, the order panel and the merchant docs: «�
 | the gateway at checkout (`is_available()` last check; `request_claim_refresh()` is called there, which only schedules a cron refresh) | webhooks and their `Info` re-query |
 | `create` from the pay page (§9.1) and «Вернуться к заявке» | the order panel and «Обновить статус» |
 | the product informer (it advertises a method that is hidden) | the thank-you / «Мои заказы» text and the safety `Info` |
-| | settings screen, saving, the wizard and its demo check (§14) |
+| the wizard's «Создать тестовую заявку» action (§14.2) — `create_demo` starts a new application object at the bank's API | settings screen, saving, opening and walking the wizard (§14) |
 
-**Provisional (coordinator may revisit):** the wizard's demo check counts as part of the settings, not a new bank action
-(CreateDemo creates nothing at the bank, `setup-types/api/testing-api`, READ). Refusals use `License_Gate::refusal()` wording.
+D8 reads «no NEW bank action starts without a licence in force»; a demo application is new bank work even though it is never
+sent to a lender, so the demo check is gated like every other `create` (critic round 1 reversed the earlier provisional
+exemption; an exception would need the operator's word). The step shows the `License_Gate::refusal()` text with the link to
+activate the licence, and the merchant can still save ids and password. Refusals everywhere use `License_Gate::refusal()` wording.
 Unlike shipping rates, gateway availability is evaluated on every checkout refresh, so the carriers' package-hash trick
 (`track_license_state()`) is not needed.
 
@@ -698,6 +848,7 @@ settings-page providers, so no tab appears (D7). An empty submitted password kee
    md5(home_url + showcase_id)}` — the **same number every time** for the same shop and showcase, so repeated presses return the
    same demo application instead of creating new ones (§9.2 rule). Then, with a password, one `info` on that number with the
    `demo-` login → «пароль API подходит» / «не подходит». Result lines use §6.4. Limits: one press per 60 s, ten per day.
+   **Licence-gated** (§13): with the licence not in force the button is replaced by the refusal text; nothing is sent.
    The link to the demo form is shown so the merchant can click through it (any SMS code works, `testing-api`).
 3. **«Боевой режим»** — the environment switch plus a checklist: (a) in the cabinet, «Адрес сайта», «Success URL» and «Fail
    URL» hold the domain **without a trailing slash**, shown ready to copy (`scheme://host` of `home_url()`) — D12 Q2; (b) the
@@ -708,7 +859,8 @@ settings-page providers, so no tab appears (D7). An empty submitted password kee
 ### 14.3 When it appears
 
 New installs: the framework's standard first-run redirect / notice. A shop updated from v1 with `shop_id` and `showcase_id` set:
-no redirect and no notice; the wizard is linked from the gateway settings screen («Мастер настройки»). No v1 migration screen
+no redirect, and the framework's «setup is not finished» notice is suppressed as well (the wizard is marked complete for such a
+shop on the 2.0.0 upgrade); the wizard is linked from the gateway settings screen («Мастер настройки»). No v1 migration screen
 (D9). **Provisional (coordinator may revisit).**
 
 ## 15. Settings (WooCommerce → Настройки → Платежи → Т-Банк)
@@ -722,13 +874,13 @@ are English msgids translated in the catalogue (§18).
 | `title` | text | "T-Bank credit or instalments" → «Кредит или рассрочка от Т-Банка» | framework | framework tooltip |
 | `description` | textarea | §8.5 text | framework | framework tooltip |
 | `enable_customer_decline_messages` | checkbox | no | framework | framework |
-| `debug_mode` | select | off | framework «Режим отладки» | description: «Не включайте без необходимости: в журнал записывается больше данных» (Rule 10b case 3) |
+| `debug_mode` | select | off | framework «Режим отладки» | description: «Не включайте без необходимости: в журнал записывается больше данных. Покупателям сообщения отладки не показываются» (Rule 10b case 3); every non-`off` value writes to the log only (§6.5) |
 | `environment` | select | production | framework; options «Боевой режим» / «Тестовый режим» | tooltip |
 | `shop_id` | text | '' | «Идентификатор магазина» | description with the cabinet link (case 1) |
 | `showcase_id` | text | '' | «Идентификатор витрины» | description with the cabinet link |
 | `password` | **secret** (custom `generate_secret_html` / `validate_secret_field`: a password input rendered EMPTY with «сохранён» in the placeholder; an empty submission keeps the stored value; a checkbox «Удалить пароль» clears it) | '' | «Пароль API» | description: why it is needed + where to set a new one. **Provisional (coordinator may revisit):** WooCommerce's stock `password` field prints the stored value into the page source |
 | (display only, no key) | — | — | «Адрес для уведомлений» | description: the webhook URL to copy into the cabinet (case 2) |
-| `enable_cooling` | checkbox | no (v1) | «Период охлаждения»; checkbox label «Учитывать период охлаждения» | tooltip (v1 text) |
+| `enable_cooling` | checkbox | no (v1) | «Период охлаждения»; checkbox label «Учитывать период охлаждения» | tooltip: when on, the order note and panel show the date until which goods must not be shipped; the order stays on hold until the bank confirms the application either way (§10.3) |
 | `accept_down_payment` | checkbox | no | «Первоначальный взнос»; checkbox label «Принимать первоначальный взнос» | tooltip: switch it on only when the same switch is on in the bank cabinet; then orders up to 1 000 000 ₽ are accepted |
 | `order_button_text` | text | «Оформить заявку в Т-Банк» (v1) | «Текст на кнопке» | tooltip |
 | `promo_codes` | custom table: name, code, enabled, from, to | [] | «Программы» | description: from the bank's personal manager; an empty list uses the basic credit |
@@ -745,7 +897,7 @@ Refund instruction (D5) sits in the gateway's admin `method_description`: «Во
 | # | Defect (v1 evidence) | Fix | Test |
 |---:|---|---|---|
 | 1 | First/last name swapped (`v1:includes/api/class-wc-tinkoff-api.php:50-51`) | §9.1 | request body fixture asserts `fio.lastName` = billing last name |
-| 2 | Webhook order looked up as a WC id (`v1:includes/api/class-wc-api-ipn-response.php:48-65`) | §10.2 | sequential-number order (`_order_number`), our meta, numeric fallback, ambiguous match |
+| 2 | Webhook order looked up as a WC id (`v1:includes/api/class-wc-api-ipn-response.php:48-65`) | §10.2 | our meta; `#42` with `_order_number` 42; `INV-42` through the seam; numeric fallback; ambiguous match; v1 number sent unchanged |
 | 3 | The md5 webhook route only in production; demo applications sent to the class-name URL (`v1:includes/class-gateway.php:47-72`, `v1fw:payment-gateway/class-payment-gateway-hosted.php:780-794`) | §10.1 | test-mode body carries the md5 URL; route registered in test mode; same URL string as v1 |
 | 4 | Promo name raw in checkout HTML (`v1:includes/class-gateway.php:134`); informer unescaped (`v1:includes/product.php:26`) | §8.2, §8.3 | `<script>` in a promo name / informer text renders escaped |
 | 5 | `intval` on money (`v1:includes/api/class-wc-api-ipn-response.php:194-213`) | §10.3 | 1234.99 stays 1234.99 in meta and panel |
@@ -756,7 +908,7 @@ Refund instruction (D5) sits in the gateway's admin `method_description`: «Во
 | 10 | Seven order-card keys never written (§2) | §10.3 | after a signed fixture every key present with the bank's value |
 | 11 | No source check (README D11) | §10.1 | IP outside range without password → 403, no change; with password → verified by Info |
 | 12 | Sum ≠ items (`v1:includes/api/class-wc-tinkoff-api.php:78-137`) | §7 | T1–T21 |
-| 13 | Bank error text and an HTML settings link shown to buyers (`v1:includes/class-gateway.php:341-348`, `v1:includes/api/class-wc-api-response.php:66-72`) | §6.4 | buyer notice is the calm text; debug log has the reason |
+| 13 | Bank error text and an HTML settings link shown to buyers (`v1:includes/class-gateway.php:341-348`, `v1:includes/api/class-wc-api-response.php:66-72`); the inherited API log also printed requests/responses as checkout notices with `debug_mode` `checkout`/`both` | §6.4, §6.5 | buyer notice is the calm text under `checkout`, `both`, `log` + test mode; debug log has the reason |
 | 14 | Any posted promo code sent (`v1:includes/api/class-wc-tinkoff-api.php:59-62`) | §8.2 | posted unknown code → first offered code |
 | 15 | Promo code stored HTML-escaped (`v1:includes/class-gateway.php:285`) | §8.2 | `A&B` reaches the body as `A&B` |
 | 16 | `demoFlow` missing for non-admin test orders (`v1:includes/api/class-wc-tinkoff-api.php:64-76`) | §9.1 | test-mode body always has `demoFlow` |
@@ -768,6 +920,8 @@ Refund instruction (D5) sits in the gateway's admin `method_description`: «Во
 | 22 | Class-name IPN route reachable in production through a lowercase `wc-api` (`v1fw:payment-gateway/class-payment-gateway-hosted.php:37-50,802-804`) | §3.4 | the route is not registered (any case) |
 | 23 | A forged or malformed webhook could fail a pending order (default flow, `:387-406`) | §10.1 | malformed body / mismatched amount → 200, order unchanged |
 | 24 | Order-details table prints filter output raw (`v1:woodev-vkredit.php:175`) | §12.3 | escaped |
+| 25 | `signed` completed the order even when the bank had not confirmed it (`committed = false`) | §10.3 | signed + uncommitted → `on-hold` `not_committed`; committed → paid |
+| 26 | No per-attempt identity: a signature for an old amount, programme or environment could pay the current order | §9.2, §9.4, §10.3 | signed old attempt (10 000 ₽) on an order edited to 15 000 ₽ → manual review; `demo: true` on a live attempt → ignored; programme change → new number |
 
 ## 17. Security
 
@@ -776,7 +930,9 @@ Refund instruction (D5) sits in the gateway's admin `method_description`: «Во
   order key and is rate-limited.
 - Secrets: the password never rendered back (§15), never logged (`Authorization` masked); PII keys masked (§6.5); the webhook body
   never logged raw.
-- The webhook trusts `REMOTE_ADDR` only, verifies with `Info` when it can, bounds forged traffic (§10.1, §19).
+- The webhook trusts `REMOTE_ADDR` only, verifies with `Info` when it can, checks the attempt's environment and amount, never
+  lets a replay move an order back, and bounds forged traffic per attempt and per hour (§10.1, §10.3, §10.5, §19).
+- No diagnostic notice ever reaches a buyer, whatever `debug_mode` holds (§6.5).
 - No `sslverify` override; JSON size cap on intake; order number validated before it becomes a URL path segment
   (`rawurlencode`, ≤ 64 characters).
 
@@ -790,21 +946,31 @@ wrapper. `load_plugin_textdomain` from `languages/`. A coverage test reads the `
 `woocommerce-yandex-delivery:tests/unit/I18n/YandexStorefrontTranslationTest.php` and fails on a storefront msgid without a
 translation. The wizard's `__()` labels are built on `init` (the Russian Post wizard pattern).
 
+**Catalogue ownership by wave** (§23): the coverage test is green from W0, so **every wave that adds a storefront msgid adds its
+Russian translation to the `.po` and rebuilds the `.mo` in the same PR** — W3 the title / description / button defaults, the
+calm error text and the item names; W5 nothing storefront; W6 the state texts, the customer note and the order-details labels.
+Admin msgids are Russian and need no catalogue entry. W8 only audits and packages the complete catalogue.
+
 ## 19. Worst-case bank traffic per shop
 
 | Channel | Bound | Why |
 |---|---|---|
 | `create` at checkout | one per buyer checkout attempt (buyer-driven) | v1 parity |
 | `create` from «Вернуться к заявке» | ≤ 1/min, ≤ 10 per order | §12.3 |
-| `create_demo` from the wizard | ≤ 1/min, ≤ 10/day; repeated presses hit the same demo application | §14.2 |
-| `info` from webhooks | ≤ 1 per order per 10 s and ≤ **120 per hour** per site; forged requests for unknown orders cost nothing | §10.1 |
+| `create_demo` from the wizard | ≤ 1/min, ≤ 10/day, licence in force only; repeated presses hit the same demo application | §14.2 |
+| `info` from webhooks, bank range | ≤ **12 per attempt, lifetime**, one at a time per number (atomic lock), exponential backoff after failures; none for absorbing / final / already-verified states; forged requests for unknown orders cost nothing | §10.5 |
+| `info` from webhooks, outside the range (password only) | ≤ 4 per attempt, lifetime, and ≤ **60 per hour** per site (atomic counter) | §10.5 |
 | `info` from «Обновить статус» | ≤ 1 per 30 s per order, human presses | §12.2 |
 | `info` on buyer return | ≤ 1 per 5 min, ≤ 10 per order | §12.3 |
 | `info` from the wizard | one per demo check | §14.2 |
 | scheduled | **zero** | no cron, no Action Scheduler job calls the bank |
 | woodev.ru | nothing new (the framework's licence/updater only) | — |
 
-The bank's 25 req/s limit is out of reach of every bounded channel.
+**Worst case per day**, automatic calls only: webhook `Info` ≤ 12 × (attempts created that day) for the bank's own deliveries,
+plus ≤ 1 440 for outside-range requests (60/h, and never more than 4 per attempt); everything else is a human press with its own
+limit. Per number the calls are strictly sequential. The bank's 25 req/s limit could only be reached if the bank itself delivered
+webhooks for 25 different live attempts in the same second, or if humans pressed buttons on 25 orders at once — the 429 answer
+is then handled by the backoff (§6.3), never retried inline.
 
 ## 20. Testing
 
@@ -812,13 +978,20 @@ The bank's 25 req/s limit is out of reach of every bounded channel.
 
 Client (recorded fixtures from the docs for `create`, `create-demo`, `info` in every state, and refusal shapes 400/401/403/422/429
 with `Retry-After`/500/timeout/cURL 60; auth header per environment; timeouts; secret and PII masking; host constant);
-`Item_List_Builder` T1–T21; `Order_Numbers` (first attempt = v1 value, new number on terminal state or changed fingerprint,
-64-character cap, lookup chain); `Status_Mapper` table §10.3 row by row incl. idempotency and superseded numbers;
+`Item_List_Builder` T1–T21; `Order_Numbers` (first attempt = `get_order_number()` unchanged incl. `#`, new number on terminal
+state or on any identity change — sum, items, programme, environment, showcase — 64-character cap, resume keeps the stored
+programme, the resolver of §10.2); attempt record (§9.4: immutable fields, `create_failed`, legacy attempt); `Status_Mapper`
+table §10.3 row by row, plus: signed + `committed = false` → `not_committed` hold, then committed → paid; old attempt signed after
+an edit → manual review; manual review never lifted by a later state or refresh, lifted by a merchant status change; without the
+password `signed` → `canceled` → replayed `signed` → stays held; details upsert with an unchanged status tuple (`transfer_amount`
+arrives later); a second attempt signed on a settled order → note + e-mail, no change; `failed` → `pending` on `approved`;
 `Webhook\Handler` (method, size cap, malformed JSON, required-fields filter, IP range edges `91.194.225.255` / `91.194.226.0` /
-`91.194.227.255` / `91.194.228.0`, advisory vs mandatory, throttle → 503, `Info` failure → 503, 401 → note, amount mismatch,
-demo order); `Auto_Cancel_Veto` (each condition and the limit); licence gate matrix of §13; informer divisor/escaping; programmes
-window and whitelist; settings secret field; the wizard settings mapping and both actions' limits; i18n catalogue coverage;
-contract tests of §3 (option keys, meta keys, gateway id, webhook URL formula, hook names kept/renamed).
+`91.194.227.255` / `91.194.228.0`, advisory vs mandatory, `demo` mismatch and non-boolean `demo`, the §10.5 budget list, 401 →
+note, amount against the attempt's sum, demo order); `Auto_Cancel_Veto` (each condition, the limit counted from the
+application's `created_at`, a four-day-old order with a new application vetoed, `create_failed` not vetoed, v1 order not
+vetoed); licence gate matrix of §13 incl. the wizard's demo action; the buyer-notice test of §6.5; informer divisor/escaping;
+programmes window and whitelist; settings secret field; the wizard settings mapping and both actions' limits; i18n catalogue
+coverage; contract tests of §3 (option keys, meta keys, gateway id, webhook URL formula, hook names kept/renamed).
 
 ### 20.2 Simulating the bank (D14)
 
@@ -844,7 +1017,9 @@ storage, classic checkout → `create` stubbed → redirect URL, the wizard REST
 Classic checkout with the gateway offered/hidden by amount and programme; demo application end to end with the **operator's live
 ids** only through `create-demo` and only within the overnight scope (≤ 2 demo applications in total — card R1 may use one); the
 simulated webhooks of §20.2 moving a real order through every row; panel and refresh (refresh stubbed without a password);
-thank-you and «Мои заказы» texts; informer; the wizard; the three coexistence rows of §5.3.
+thank-you and «Мои заказы» texts; informer; the wizard; the three coexistence rows of §5.3; and the **release ZIP** built by
+`scripts/build-release-zip.sh` (W8) installed and activated on a clean rig site — the boot must come from the packaged
+`woodev/`, not from a working tree.
 
 ### 20.5 Gates
 
@@ -876,67 +1051,88 @@ tab (D7); scheduled status polling of any kind; a GlitchTip project (§22.3).
 | U10 | Whether `integrationType: woodev` is used by the bank | the bank contact | No |
 | U11 | Whether the over-limit down-payment mechanism applies to instalments as well as credits (d-docs §6) | the bank contact | No — the switch is the merchant's |
 | U12 | How the bank's fiscal receipt renders a split remainder item (§7.2 step 5) | first real signed order | No |
+| U13 | Whether the `signed` webhook of an auto-confirm shop already carries `committed = true`, or the confirmation lands moments later with no webhook (the auto-commit page says the order «перейдет в статус «Подтвержден»» as soon as the buyer signs; the docs' example `signed` body has `committed: false`) | first real signed order on an auto-confirm shop with debug on; with the password the webhook's own `Info` re-query and the buyer's return check (I6) read the later state | No — the order is held, not lost; but without the password an auto-confirm shop would have to move such orders by hand, so it matters for the release notes |
+| U14 | Which numbering plugins write which reverse-lookup meta (`_order_number` and others) | read the two or three plugins merchants use, when a ticket names one | No — candidates are confirmed by the exact public number; the seam covers the rest |
 
 ### 22.2 Provisional decisions (coordinator may revisit)
 
 1. No function alias for `wc_tinkoff_kredit()` (§3.6).
 2. Keep `upgrade_to_1_4_0` (§5.4).
 3. API host `forma.tinkoff.ru` by default, switch after R2 (§6.1).
-4. Timeouts: `create` 20 s, `info` 10 s (§6.3).
+4. Timeouts: `create` 20 s, `info` 10 s (§6.3); webhook retries per §10.5.
 5. Remainder item without a name suffix (§7.2).
 6. Programmes with bounds and none fitting → gateway hidden, no `default` fallback (§8.2).
 7. Source IP advisory with the password, mandatory without; filter for trusted proxies (§10.1).
-8. Webhook throttle: 1 `Info` / order / 10 s, 120 / site / hour, 503 beyond (§10.1).
-9. `approved` keeps the order `pending` (v1: `on-hold`) (§10.3).
-10. `canceled` after `processing` → `on-hold` + admin e-mail (§10.3).
-11. I5 / post-signature-cancel admin e-mail as one plain WooCommerce-mailer message (§10.4).
-12. I5a default stays 72 h (§11).
+8. **Changed in round 1:** webhook budget per attempt — atomic lock, 12 in-range / 4 outside `Info` calls per attempt lifetime,
+   backoff 30 s → 1 h honouring `Retry-After`, 60/h site guard for outside-range requests only (§10.5). Replaces 10 s / 120 h.
+9. `approved` keeps the order `pending` (v1: `on-hold`); a `failed` order is moved back to `pending` explicitly (§10.3).
+10. **Changed in round 1:** `canceled` after signing → `on-hold` with the durable `manual_review` hold + admin e-mail, as an
+    interim until O1 (§10.3); replays are blocked by the per-attempt transition rules.
+11. Admin e-mails as one plain WooCommerce-mailer message, deduplicated per (attempt, event) (§10.4).
+12. I5a default stays 72 h, counted from the application's `created_at` (§11).
 13. Resume link authorised by the order key, not a nonce (§12.3).
-14. The wizard's demo check is not licence-gated (§13).
+14. **Withdrawn in round 1:** the wizard's demo check IS licence-gated (D8, §13).
 15. Wizard settings through a `Woodev_Abstract_Settings` subclass mapped onto the gateway option (§14.1).
-16. No wizard redirect or notice for shops updated from v1 with ids set (§14.3).
+16. No wizard redirect and no «setup not finished» notice for shops updated from v1 with ids set — `complete_setup()` on the
+    2.0.0 upgrade (§5.4, §14.3).
 17. Password as a custom secret field rendered empty (§15).
-18. Text domain `woodev-vkredit` (§18).
+18. Text domain `woodev-vkredit`; each wave ships the translations of the storefront strings it adds (§18).
 19. `License_Gate` used from its Shipping namespace until framework card F1 lifts it (§4).
+20. **New:** `debug_mode = checkout` is treated as `log` (not `off`); no value prints to buyers (§6.5).
+21. **New:** settlement only on `committed = true`; signed + uncommitted → `on-hold` `not_committed` with the cabinet
+    instruction; `enable_cooling` keeps only its display role (§0 note 4, §10.3).
+22. **New:** attempt identity = environment + showcase + sum + item hash + programme; any change mints `{number}-{n}` (§9.2).
+23. **New:** the durable `manual_review` hold is lifted only by a merchant's status change (§10.3).
+24. **New:** v1-era orders get a legacy attempt on first match and no auto-cancel veto (§9.4, §11).
+25. **New:** the legacy resolver confirms every candidate by the exact public number and offers the seam
+    `woodev_wc_tinkoff_kvk_find_order_id` (§10.2).
 
 ### 22.3 Operator items (each with the provisional choice in force)
 
 | # | Question | Provisional choice |
 |---|---|---|
-| O1 | D5's cancellation history: what went wrong for merchants before? **This worker did not reach Support AI / FreeScout** (no access path from this machine was tried or configured in the brief). Release 1 makes no cancel calls, so nothing in 2.0.0 depends on it | none needed for 2.0.0; recover before any Cancel/Commit work |
+| O1 | D5's cancellation history: what went wrong for merchants before? **Neither round reached Support AI / FreeScout** (no access path from this machine). Release 1 makes no cancel calls, but §10.3 does decide what the ORDER does when the buyer cancels after signing — D5 says the history comes first. **Answer before release (W8 gate);** W4 ships the interim | interim: `on-hold` + `manual_review` + note + admin e-mail, nothing shipped automatically, no bank call |
 | O2 | `approved` → keep `pending` (new) or `on-hold` (v1)? | `pending` (§10.3) |
+| — | Critic round 1: no finding contradicted D1–D14 / I1–I14, so none was moved here instead of being applied | — |
 | O3 | Wording of the I5 admin e-mail and of the split remainder item | §10.4 text; same name |
 | O4 | A GlitchTip project for the plugin (the carriers have one each) | none in 2.0.0 |
 | O5 | Default host once R2 is measured | `forma.tinkoff.ru` |
 | O6 | Card to file: «Оформить кредит/рассрочку» button on the product card (D4) | after 2.0.0 |
+| O7 | Merchant-visible change for the release notes: a signed but not yet confirmed application now keeps the order «На удержании» (v1: paid). For a shop with manual confirmation and no API password this means moving the order to «Обработка» by hand after confirming in the cabinet; U13 decides whether auto-confirm shops see it at all. Not a decision conflict (D12 forbids depending on auto-confirm; the bank's own text says ship after confirming) — listed so the notes and the merchant docs say it | applied as §10.3; the notes and docs explain it |
 
 ## 23. Implementation plan in waves (repo `kalbac/woodev-vkredit`, one reviewable PR per wave into `main`)
 
-Status found on 26.10.2026: `main` = `3095883` (v1 code + Orca/Serena files); branch `v1` keeps v1; branch
-`kalbac/chore-v2-tooling-skeleton` (`d2c06bd`, **not merged**) adds `AGENTS.md`, `CLAUDE.md`, `composer.json/lock`,
-`.github/workflows/ci.yml`, `.github/local-ci.Dockerfile`, `phpunit.xml.dist`, `phpcs.xml.dist`, `phpstan.neon.dist`,
-`scripts/sync-framework.sh`, `tests/bootstrap.php`, `tests/phpstan-bootstrap.php`, `tests/unit/PluginHeaderTest.php`,
-`docs-internal/` stubs, and removes the bundled v1 `woodev/` from git. Backlog board №13. Every brief names the worker's own
-worktree path for Serena; `tests/**` is Serena-ignored there as here.
+Status on 27.10.2026: the tooling skeleton is **merged** — `main` = `28e32d4` (PR #5): `AGENTS.md`, `CLAUDE.md`,
+`composer.json/lock`, `.github/workflows/ci.yml`, `.github/local-ci.Dockerfile`, `phpunit.xml.dist`, `phpcs.xml.dist`,
+`phpstan.neon.dist`, `scripts/sync-framework.sh`, `tests/bootstrap.php`, `tests/phpstan-bootstrap.php`,
+`tests/unit/PluginHeaderTest.php`, `docs-internal/` stubs; the bundled v1 `woodev/` is no longer tracked (the framework copy is
+synced from tag `v2.0.14` and ignored). `main` still carries the v1 `woodev-vkredit.php` and `includes/**`; branch `v1` keeps v1.
+**No release ZIP script or release workflow exists yet** — card `kalbac/woodev-vkredit#4`: an archive made from git lacks
+`woodev/` and the plugin fatals on activation, so W8 cannot finish without it. Backlog board №13. Every brief names the worker's
+own worktree path for Serena; `tests/**` is Serena-ignored there as here.
 
 | Wave | Scope (files) | Acceptance tests | Depends on | Parallel? |
 |---|---|---|---|---|
-| **W0** skeleton | merge/finish the tooling branch; new `woodev-vkredit.php` (header 2.0.0, loader literals §5.1), `includes/class-autoloader.php`, `includes/class-plugin.php`, empty `includes/class-gateway.php`, `includes/class-lifecycle.php` (§5.4), `languages/woodev-vkredit-ru_RU.po/.mo` (header only), v1 `includes/**` removed from `main`; `PluginHeaderTest` → 2.0.0 | boot test through `Woodev_Loader`; contract tests §3.1–3.5 (ids, option keys, meta prefix, webhook URL formula vs v1, hook names); i18n coverage test (empty set passes); CI and local-ci green | — | alone |
+| **W0** skeleton | new `woodev-vkredit.php` (header 2.0.0, loader literals §5.1), `includes/class-autoloader.php`, `includes/class-plugin.php`, empty `includes/class-gateway.php`, `includes/class-lifecycle.php` (§5.4), `languages/woodev-vkredit-ru_RU.po/.mo` (header only), v1 `includes/**` removed; `PluginHeaderTest` → 2.0.0; check and complete what PR #5 left (nothing known missing) | boot test through `Woodev_Loader`; contract tests §3.1–3.5 (ids, option keys, meta prefix, webhook URL formula vs v1, hook names); i18n coverage test (empty set passes); CI and local-ci green | — | alone |
 | **W1** bank client | `includes/api/*` (`Client`, `Request`, `Response`, `Application_State`, `Error_Explainer`), `tests/fixtures/bank/*` | §20.1 client list; §6.4 table; masking | W0 | ∥ W2 |
 | **W2** item list | `includes/order/class-item-list-builder.php` + its tests | T1–T21 | W0 | ∥ W1 |
 | **R1** measurement (Haiku, detailed brief) | one `create-demo` with live ids, 2-unit item; record answer and any error body in `docs-internal/research` of the plugin repo | U1, U3 closed; ≤ 1 demo application | W1 | ∥ W2 |
 | **R2** measurement | TLS of both hosts from a hosting server (no body) | U2 closed | — | any time |
-| **W3** gateway + checkout | `includes/class-gateway.php`, `includes/order/class-order-numbers.php`, `includes/order/class-application-meta.php`, `includes/admin/class-promo-codes-field.php` | settings round-trip incl. secret field; availability (window, RUB, programmes, licence, kept filter order); checkout fields escaped and whitelisted; `create` body fixture (names, URLs, demoFlow); order-number rules | W1, W2 | alone |
-| **W4** webhook + veto | `includes/webhook/class-handler.php`, `includes/order/class-status-mapper.php`, `includes/order/class-auto-cancel-veto.php` | §20.1 handler list; §10.3 table end to end with simulated webhooks (§20.2); veto conditions; I5 e-mail once | W3 | alone |
-| **W5** admin panel | `includes/admin/class-order-panel.php` + view, AJAX refresh | panel rows from fixtures; capability/nonce; 30 s limit; no-password disabled; licence-independent | W4 | ∥ W6, W7 |
-| **W6** buyer side + informer | `includes/frontend/*` (status notice, resume endpoint, product informer), order-details/e-mail block | state texts; resume limits + order key + licence; customer note once; safety Info limits; informer divisor/escaping/licence | W4 | ∥ W5, W7 |
-| **W7** wizard | `includes/setup/*` | mapping onto the gateway option; empty password keeps stored; demo check limits and stable number; password check; checklist content | W1, W3 | ∥ W5, W6 |
-| **W8** release prep | catalogue complete, `readme`/changelog with §3.6, merchant docs card, rig acceptance §20.4, coexistence rows §5.3 | coverage test with all storefront msgids; rig run recorded | W5, W6, W7 | alone |
+| **W3** gateway + checkout + attempts | `includes/class-gateway.php` (incl. the `add_debug_message()` override, §6.5), `includes/order/class-order-numbers.php` (identity, numbers, the §10.2 resolver), `includes/order/class-application-meta.php` (attempt record §9.4), `includes/admin/class-promo-codes-field.php`; `.po/.mo` entries for its storefront strings | settings round-trip incl. secret field; availability (window, RUB, programmes, licence, kept filter order); checkout fields escaped and whitelisted; `create` body fixture (names, URLs, demoFlow, number unchanged incl. `#`); identity → new number; `create_failed`; buyer-notice test §6.5; coverage test green with the new msgids | W1, W2 | alone |
+| **W4** webhook + veto | `includes/webhook/class-handler.php` (intake, environment check, §10.5 budget), `includes/order/class-status-mapper.php` (§10.3 incl. holds and manual review), `includes/order/class-auto-cancel-veto.php`, the admin mailer message | §20.1 handler, mapper and veto lists; §10.3 table end to end with simulated webhooks (§20.2); e-mails once per (attempt, event) | W3 | alone |
+| **W5** admin panel | `includes/admin/class-order-panel.php` + view, AJAX refresh | panel rows from fixtures incl. manual-review line and earlier attempts; capability/nonce; 30 s limit; no-password disabled; licence-independent; refresh never lifts manual review | W4 | ∥ W6, W7 (code) |
+| **W6** buyer side + informer | `includes/frontend/*` (status notice, resume endpoint, product informer), order-details/e-mail block; `.po/.mo` entries for its storefront strings | state texts; resume limits + order key + licence + stored programme; customer note once; safety Info limits; informer divisor/escaping/licence; coverage test green | W4 | ∥ W5, W7 (code) |
+| **W7** wizard | `includes/setup/*` | mapping onto the gateway option; empty password keeps stored; demo check licence-gated, limits and stable number; password check; checklist content; `complete_setup()` on upgrade for configured shops | W1, W3 | ∥ W5, W6 (code) |
+| **W8** release prep | **release archive (card `kalbac/woodev-vkredit#4`)**: `scripts/build-release-zip.sh` + `.github/workflows/release.yml` modelled on `woodev-russian-post` (same two files), the ZIP built from the tag with the framework synced from the `WOODEV_FRAMEWORK_REF` tag; catalogue audit; `readme`/changelog with §3.6 and O7; merchant docs card; rig acceptance §20.4 incl. the coexistence rows §5.3; O1 answered | as on Russian Post the script builds from a clean `git archive` export with an allowlist of runtime paths (so `tests/`, `.env*`, `docs-internal/`, `scripts/` never ship), fails unless the bundled framework `VERSION` equals the loader's `framework_version` and the header version equals the loader's `plugin_version`, and asserts `woodev/`, `woodev/assets/build` with built JavaScript, `includes/` and `languages/*.mo` are inside; the ZIP installed and activated on a clean rig site; coverage test with all storefront msgids; rig run recorded. Building and a dry-run of the workflow are preparation; publishing the release and the EDD upload wait for the operator | W5, W6, W7 | alone |
 
-Parallel waves own disjoint directories (W1 `includes/api/`, W2 `includes/order/class-item-list-builder.php`; W5 `includes/admin/`,
-W6 `includes/frontend/`, W7 `includes/setup/`); the plugin class wiring (`includes/class-plugin.php`) is touched by W5–W7 and must be
-merged in order (each wave adds one `init` line). Rounds: at most 2–3 per wave, then decompose. Release (framework pin, plugin
-release, EDD upload) waits for the operator's word (decisions → Overnight scope).
+**Shared files.** Only two files are touched by more than one wave: the plugin wiring `includes/class-plugin.php` (W3–W7 each add
+their `init` line) and the catalogue `languages/woodev-vkredit-ru_RU.po/.mo` (W3, W6). W5, W6 and W7 may be **written** in
+parallel (their own directories: W5 `includes/admin/`, W6 `includes/frontend/`, W7 `includes/setup/`), but they are **merged
+serially** in the order W5 → W6 → W7: each later wave rebases on the merged `main`, re-applies its additive wiring line and its
+own block in the `.po` (one comment-headed block per wave), rebuilds the `.mo`, and only then runs its gates. A worker never
+overwrites another wave's wiring line or catalogue block, and never weakens the coverage test to pass. W1 ∥ W2 share nothing.
+Rounds: at most 2–3 per wave, then decompose. Release (framework pin, plugin release, EDD upload) waits for the operator's word
+(decisions → Overnight scope).
 
 ## Related
 
