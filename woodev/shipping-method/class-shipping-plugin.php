@@ -248,6 +248,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/location/class-location-resolution-cache.php';
 			require_once $path . '/location/class-location-service.php';
 
+			// #1381: the per-key session merge the location store and the pickup selection map write
+			// through on WooCommerce < 11.4. Loaded unconditionally; inert until one of them touches a key.
+			require_once $path . '/class-session-key-merger.php';
+
 			// #1176: the city limit of a method (and of WooCommerce's own «Самовывоз»). The decision, the instance-form
 			// control, and the store-wide hooks on core's method. Loaded unconditionally; inert until a method asks.
 			require_once $path . '/location/class-city-limit.php';

@@ -13,6 +13,8 @@
 
 namespace Woodev\Framework\Shipping\Pickup;
 
+use Woodev\Framework\Shipping\Session_Key_Merger;
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 } // Exit if accessed directly
@@ -139,7 +141,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Selection' )
 
 			$map = $this->evict_over_cap( $map, $locality, $type );
 
-			$session->set( $this->scope->session_key(), $map );
+			$this->write_map( $session, $map );
 		}
 
 		/**
@@ -159,7 +161,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Selection' )
 			$map = $this->read_map( $session );
 			if ( isset( $map[ $locality ][ $type ] ) ) {
 				$map[ $locality ][ $type ]['confirmation'] = $confirmation;
-				$session->set( $this->scope->session_key(), $map );
+				$this->write_map( $session, $map );
 			}
 		}
 
@@ -204,7 +206,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Selection' )
 			} else {
 				unset( $map[ $locality ][ $type ] );
 			}
-			$session->set( $this->scope->session_key(), $map );
+			$this->write_map( $session, $map );
 		}
 
 
@@ -370,7 +372,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Selection' )
 				return;
 			}
 
-			$session->set( $this->scope->session_key(), [] );
+			$this->write_map( $session, [] );
 		}
 
 		/**
@@ -401,6 +403,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Selection' )
 					'confirmation' => $confirmation,
 				]
 			);
+			Session_Key_Merger::note_write( $this->placed_key() );
 		}
 
 		/**
@@ -413,6 +416,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Selection' )
 		 */
 		public function recall_placed( int $order_id ): ?array {
 			$session = $this->session();
+			if ( null !== $session ) {
+				Session_Key_Merger::note_read( $this->placed_key() );
+			}
 			$placed = null !== $session ? $session->get( $this->placed_key() ) : null;
 			if ( ! is_array( $placed ) || $order_id <= 0 || (int) ( $placed['order_id'] ?? 0 ) !== $order_id
 				|| ! is_array( $placed['confirmation'] ?? null ) ) {
@@ -432,6 +438,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Selection' )
 			$session = $this->session();
 			if ( null !== $session && null !== $this->recall_placed( $order_id ) ) {
 				$session->set( $this->placed_key(), [] );
+				Session_Key_Merger::note_write( $this->placed_key() );
 			}
 		}
 
@@ -467,8 +474,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Selection' )
 		}
 
 		/**
-		 * Reads and shape-guards the stored map.
+		 * Reads and shape-guards the stored map, and puts the map's key under
+		 * {@see Session_Key_Merger}'s protection for this request (#1381).
 		 *
+		 * @since 2.0.15 Reports the read to {@see Session_Key_Merger}.
 		 * @since 2.0.2
 		 *
 		 * @param \WC_Session|null $session The session to read from, or `null`.
@@ -480,9 +489,28 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Selection' )
 				return [];
 			}
 
+			Session_Key_Merger::note_read( $this->scope->session_key() );
+
 			$map = $session->get( $this->scope->session_key() );
 
 			return is_array( $map ) ? $map : [];
+		}
+
+		/**
+		 * Writes the map and tells {@see Session_Key_Merger} this request's map is the one to keep —
+		 * WooCommerce < 11.4 writes the whole session row back at the end of the request, and a
+		 * concurrent request must not revert this write, nor this write a concurrent one (#1381).
+		 *
+		 * @since 2.0.15
+		 *
+		 * @param \WC_Session                                               $session The live session.
+		 * @param array<string, array<string, array{id: string, seq: int}>> $map     The map to store.
+		 *
+		 * @return void
+		 */
+		private function write_map( $session, array $map ): void {
+			$session->set( $this->scope->session_key(), $map );
+			Session_Key_Merger::note_write( $this->scope->session_key() );
 		}
 
 		/**

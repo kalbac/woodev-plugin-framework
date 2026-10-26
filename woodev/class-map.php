@@ -175,6 +175,7 @@ return [
 	'Woodev\\Framework\\Shipping\\Rest_Api\\Rates_Controller' => 'woodev/shipping-method/rest-api/class-rates-controller.php',
 	'Woodev\\Framework\\Shipping\\Rest_Api\\Shipping_REST_API' => 'woodev/shipping-method/rest-api/class-shipping-rest-api.php',
 	'Woodev\\Framework\\Shipping\\Rest_Api\\Toolbar_Controller' => 'woodev/shipping-method/rest-api/class-toolbar-controller.php',
+	'Woodev\\Framework\\Shipping\\Session_Key_Merger' => 'woodev/shipping-method/class-session-key-merger.php',
 	'Woodev\\Framework\\Shipping\\Settings\\Advanced_Settings' => 'woodev/shipping-method/settings/class-advanced-settings.php',
 	'Woodev\\Framework\\Shipping\\Settings\\Boxes_Settings' => 'woodev/shipping-method/settings/class-boxes-settings.php',
 	'Woodev\\Framework\\Shipping\\Settings\\Default_Dimensions_Settings' => 'woodev/shipping-method/settings/class-default-dimensions-settings.php',
