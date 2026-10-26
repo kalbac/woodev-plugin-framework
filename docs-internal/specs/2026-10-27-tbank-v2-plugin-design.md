@@ -17,7 +17,11 @@ had to close overnight without the operator; every one is listed again in §22.2
 **Revision:** critic round 1 (Codex, review of `4ee4244e`) applied on 27.10.2026 — ten Must-fix and three Should-fix findings,
 all applied (none contradicted D1–D14 / I1–I14); the main changes are the per-attempt record (§9.4), settlement only on a
 committed application (§10.3), the bounded webhook budget (§10.5), the legacy order-number resolver (§10.2), the licence gate on
-the wizard's demo check (§13) and the release archive in W8 (§23).
+the wizard's demo check (§13) and the release archive in W8 (§23). **Round 2** (Codex, review of `463f9e2d`): the D5 ticket
+history was recovered ([e-d5-cancellation-history.md](../research/2026-10-26-tbank-v2/e-d5-cancellation-history.md), all 4 319
+FreeScout conversations 2023–2026), O1 is closed from it and the post-signature cancellation branch is decided (§10.3); its
+pattern 3 adds the late-approval-after-refusal rule (§10.3, §10.5); the no-password manual-confirmation path is specified as a
+required merchant action with a defined outcome after the bank's deadline (§0 note 4, §6.6, §10.3, §12.1).
 
 ## 0. How to read this spec
 
@@ -41,7 +45,10 @@ with its fix and its test, §§17–19 security, i18n and the worst-case traffic
    методом API Commit или в личном кабинете агента, а затем выдать товар покупателю» (`settings/app-notifications` § Вебхуки,
    READ again 27.10.2026), and Commit is impossible during cooling. No webhook is documented for a MANUAL confirmation in the
    cabinet. So an order is paid only when the bank reports `committed = true` (§10.3); with manual confirmation the merchant
-   confirms in the cabinet and then refreshes the status (I4) or moves the order on by hand.
+   confirms in the cabinet and then — **with the API password** — presses «Обновить статус» (I4), or — **without it** — must
+   move the order to «Обработка» by hand: without the password the plugin has no way to learn of the confirmation, and I4 is
+   disabled (§6.6). That manual step is a required merchant action, shown on the order panel and in the merchant docs, with a
+   defined outcome when the bank's 14-day confirmation window passes (§10.3 «Manual confirmation without the password»).
 
 ## 1. Binding decisions
 
@@ -54,7 +61,7 @@ any report disagrees, that file wins.
 | D2 | Installed data unchanged: gateway id, settings key, order meta prefix, webhook URL format; no migration. The two `geteway` hooks are renamed WITHOUT aliases and announced; the five correctly named hooks stay | §3 |
 | D3 | Classic checkout only in 2.0.0; the Blocks payment bridge (#1476) is the next task after release | §21 |
 | D4 | Product-page informer stays; divisor 19 becomes a setting (default 19), filter kept, invalid divisor never divides, output escaped; promo codes as v1 + escaping + `default` fallback | §8.3, §8.4 |
-| D5 | No automatic Cancel/Commit/refund calls; order page and gateway description explain refunding from the bank cabinet; cancellation history to be recovered from tickets before any cancel behaviour | §12.1, §22.3 |
+| D5 | No automatic Cancel/Commit/refund calls; order page and gateway description explain refunding from the bank cabinet; cancellation history to be recovered from tickets before any cancel behaviour — recovered in round 2 | §10.3, §12.1, §22.3 |
 | D6 | «Долями», T-Kassa, bank transfer out of 2.0.0 (#1474, #1475) | §21 |
 | D7 | Settings stay on the WooCommerce gateway screen; no `woodev-settings` tab; the API password becomes a password-type field | §5, §15 |
 | D8 | Licence not in force → gateway not offered, no NEW bank action; callbacks, viewing and settings always work — the carriers' `License_Gate` contract | §13 |
@@ -383,6 +390,7 @@ test environment leaves exactly one buyer notice — the calm §6.4 text.
 | Status decisions | from `Info` | from the webhook body, **forward-only per attempt** (a replayed older state never moves an order back, §10.3), with one more restriction: a webhook `rejected` is **per bank** («Вебхук Rejected не означает, что по всей заявке пришел отказ», `settings/app-notifications`, READ), so without `Info` it only adds a note; the order is not failed (I7 needs «all banks») |
 | I3 panel | `Info` data | webhook data (same field set, PII masked by the bank), marked «по уведомлению банка» |
 | I4 «Обновить статус» | yes | button disabled with the reason «Нужен пароль API» |
+| Signed, confirmed manually in the cabinet | «Обновить статус» reads `committed = true` and settles the order (§10.3) | **the plugin cannot learn of it** (no documented webhook, no `Info`, U15); the merchant moves the order to «Обработка» by hand — a required action the panel and the docs state (§10.3 «Manual confirmation without the password»); nothing here suggests the button would help |
 | I6 safety `Info` on return | yes | skipped; the page shows the last known state |
 | Wizard check | demo application + password check (`Info` on it with `demo-` login) | demo application only; the password row says «не указан — проверка статусов недоступна» |
 
@@ -556,6 +564,8 @@ The framework's `unique_transaction_ref` is unusable: `get_order()` increments `
   the bank refuses a known number with a different composition and returns the OLD application for a known number with the
   same composition (`setup-types/api/methods` § Create, READ; d-docs §5). So a buyer who switches from credit to an instalment
   programme, a merchant who switches demo ↔ live or changes the showcase, and an edited order each get a distinct attempt.
+- A `rejected` attempt stays able to take a partner bank's later approval (D5 pattern 3, §10.3) until the buyer starts a new
+  one; from then on the old attempt is superseded and its signature goes to manual review (§10.3 step 4).
 - Otherwise the current number is reused with the attempt's **stored** programme, and the bank returns the same application and
   link — that is what «Вернуться к заявке» relies on (§12.3); the resume never re-chooses «the first programme offered today».
 
@@ -577,6 +587,7 @@ application the plugin ever started for the order, so a callback is always judge
 | `created_at`, `application_id`, `link` | once, on a successful `create` | the application exists |
 | `create_failed` | on a failed `create` | not live |
 | `status`, `committed`, `cooling_until`, `cooling_over`, `verified` (`info`/`webhook`), `checked_at` | upsert on every accepted state | the last accepted bank state |
+| `signed_at`, `rejected_at` | once, on the first accepted `signed` / `rejected` | the post-signature branch and the no-password deadline (§10.3); the late-approval rows (pattern 3) |
 | `applied` | list of side-effect keys already applied (§10.3) | idempotency of notes, status changes, e-mails |
 | `info_calls_in`, `info_calls_out`, `info_failures`, `next_info_at` | under the lock of §10.5 | the webhook budget |
 | `legacy` | `true` for a record built from v1 meta | §10.2 |
@@ -655,11 +666,14 @@ ship yet».
    `monthly_payment`, `chosen_bank`, `signing_type`, …) with `checked_at` and `verified`; the order's mirror keys (§3.3) take them
    when the attempt is the current one. This never depends on deduplication, so a later `Info` that adds an optional field fills
    the panel even if the status tuple is unchanged.
-2. **Transition check.** Ranks: `new` 0 < `inprogress` 1 < `approved` 2 < `signed` 3; `canceled` and `rejected` are absorbing.
-   Within `signed`: `committed` false → true and cooling active → over are forward. Without the password (body = state) a state
-   that is not forward of the attempt's stored state is a replay: details are NOT upserted from it, a debug line, nothing else.
-   With the password `Info` is the bank's current state and is taken as it is; absorbing states still stay absorbing for side
-   effects.
+2. **Transition check.** Ranks: `new` 0 < `inprogress` 1 < `approved` 2 < `signed` 3; `canceled` is absorbing. `rejected` is
+   **not** absorbing: the ticket history (D5 pattern 3, [e-d5-cancellation-history.md](../research/2026-10-26-tbank-v2/e-d5-cancellation-history.md))
+   has a primary-bank refusal followed by a partner bank's approval on the same application, so a later `approved` or `signed`
+   of the same attempt after a stored `rejected` is forward. A `canceled` or `rejected` after a stored `signed` is forward too
+   (it is the post-signature branch below). Within `signed`: `committed` false → true and cooling active → over are forward.
+   Without the password (body = state) a state that is not forward of the attempt's stored state is a replay: details are NOT
+   upserted from it, a debug line, nothing else. With the password `Info` is the bank's current state and is taken as it is;
+   `canceled` still stays absorbing for side effects.
 3. **Side-effect key** = (number, status, committed, cooling active). A key already in the attempt's `applied` list changes no
    status and adds no note or e-mail.
 4. **Settlement guard.** An attempt may move the order towards «paid» only if it is the **current** attempt AND its identity
@@ -667,30 +681,77 @@ ship yet».
    compares the sum only). Otherwise a `signed` goes to **manual review** (below), every other state is recorded with a note.
 5. **Status table**, on the order's state and the durable `hold_reason`:
 
-«Open» = `pending`, `failed`, or `on-hold` with `hold_reason` ∈ {`cooling`, `not_committed`} set by THIS attempt. «Settled» =
-`$order->is_paid()`. An `on-hold` order with `hold_reason = manual_review`, or with no plugin hold reason (the merchant put it
-there), is never moved automatically by any later state — only a note is added.
+«Open» = `pending`, or `on-hold` with `hold_reason` ∈ {`cooling`, `not_committed`} set by THIS attempt. A **`failed`** order has
+its own rows (D5 pattern 3): the plugin's I7 refusal, or another failure, put it there, the buyer was told the payment failed,
+and any stock reservation from the checkout has lapsed. «Settled» = `$order->is_paid()`. An `on-hold` order with `hold_reason = manual_review`,
+or with no plugin hold reason (the merchant put it there), is never moved automatically by any later state — only a note is
+added (and, for the post-signature rows below, the admin e-mail).
 
 | Bank state (current, matching attempt) | Order | Action |
 |---|---|---|
 | `new`, `inprogress` | any | details only; no status change, no note (v1 sent unknown states into the failure path, `v1fw:payment-gateway/class-payment-gateway-hosted.php:539-546`) |
-| `approved` | open | `failed` → `pending` by an explicit `update_status( 'pending' )`; `pending` stays; note «Банк одобрил заявку»; **customer note** with the application link once per attempt (I6). **Provisional (coordinator may revisit):** v1 set `on-hold` and reduced stock; an approval is not a payment, an unsigned application gets no expiry webhook (d-docs §3), and a `pending` order stays under the I5a veto, so WooCommerce releases it after the limit instead of leaving it on hold forever |
+| `approved` | open | `pending` stays; note «Банк одобрил заявку»; **customer note** with the application link once per attempt (I6). **Provisional (coordinator may revisit):** v1 set `on-hold` and reduced stock; an approval is not a payment, an unsigned application gets no expiry webhook (d-docs §3), and a `pending` order stays under the I5a veto, so WooCommerce releases it after the limit instead of leaving it on hold forever |
+| `approved` | `failed` | **late approval after a refusal (D5 pattern 3):** `failed` → `pending` by an explicit `update_status( 'pending' )`, note «после отказа заявку одобрил другой банк — покупатель может подписать договор», the customer note with the application link once per attempt, and one admin e-mail (§10.4) — the merchant may already have told the buyer the payment failed or sold the goods. The next `signed` then lands on a `pending` order and takes the ordinary rows. **Provisional (coordinator may revisit):** `pending`, not `on-hold`, for the same reason as the row above — an unsigned approval must not hold the order forever |
+| `signed` (any `committed` / cooling) | `failed` | **late signature after a refusal (D5 pattern 3; the I5 rule applied to `failed`):** `on-hold` (not `processing` — the order's stock reservation is gone and the goods may have been sold), `hold_reason = manual_review`, note «договор подписан после отказа банка — проверьте наличие товара и заявку в кабинете банка», one admin e-mail (§10.4). Reached when the `approved` in between was never seen (a lost webhook, or a state read by «Обновить статус» or the return check) |
 | `signed`, cooling active | open | `mark_order_as_held()` (`on-hold`, stock reduced — v1), `hold_reason = cooling`, note «договор подписан, идёт период охлаждения — не отгружайте до {until}» (the date shown when `enable_cooling = yes`, v1's switch) |
-| `signed`, `committed = false`, no cooling or cooling over | open | `on-hold`, `hold_reason = not_committed`, note «договор подписан, но банк ещё не подтвердил заявку — подтвердите её в кабинете банка в течение 14 дней, затем нажмите «Обновить статус» или переведите заказ в «Обработка» сами» (§0 note 4) |
+| `signed`, `committed = false`, no cooling or cooling over | open | `on-hold`, `hold_reason = not_committed`, a note that depends on the password (§0 note 4): **with it** «договор подписан, но банк ещё не подтвердил заявку — подтвердите её в кабинете банка в течение 14 дней, затем нажмите «Обновить статус»»; **without it** «договор подписан, но банк ещё не подтвердил заявку — подтвердите её в кабинете банка в течение 14 дней и затем переведите заказ в «Обработка» вручную: без пароля API плагин не узнаёт о подтверждении» (see «Manual confirmation without the password» below) |
 | `signed`, `committed = true`, no cooling or cooling over | open | the plugin writes `trans_id` / `trans_date` / `environment` from the attempt + `_transaction_id`, then `complete_payment()` → `payment_complete()`; `hold_reason` cleared |
 | `signed` | `cancelled` | **I5 manual review:** `on-hold` (not `processing` — stock may have been released), `hold_reason = manual_review`, note, one admin e-mail (§10.4) |
 | `signed` | settled by this attempt | details only |
 | `signed` | settled by **another** attempt, or `on-hold` not set by this attempt | no status change; note + admin e-mail «по заказу подписана ещё одна заявка — возможно двойное оформление, проверьте кабинет банка» |
-| `rejected` (from `Info`: all banks) | open | `failed` with a calm note (I7); the buyer can pay another way on the pay page |
-| `rejected` (webhook body only, no password) | any | note «отказ одного из банков», no status change, the attempt's stored state unchanged (it is not «all banks») |
-| `canceled` | open | `cancelled` (v1); `hold_reason` cleared |
-| `canceled` | settled, or held by this attempt's `cooling` / `not_committed` | `on-hold`, `hold_reason = manual_review`, note «покупатель отменил заявку после подписания — деньги не поступят, не отгружайте» + admin e-mail. **Interim, pending operator item O1** (D5 requires the cancellation history before any cancel behaviour is settled): no bank call, nothing shipped automatically |
+| `rejected` (from `Info`: all banks), attempt never `signed` | open | `failed` with a calm note (I7); the buyer can pay another way on the pay page. The attempt stays live for a later partner approval (pattern 3, the `failed` rows above) |
+| `rejected` (webhook body only, no password), attempt never `signed` | any | note «отказ одного из банков», no status change, the attempt's stored state unchanged (it is not «all banks») |
+| `canceled`, attempt never `signed` | open or `failed` | `cancelled` (v1); `hold_reason` cleared |
+| **after this attempt's `signed`:** `canceled`, or `rejected` from `Info` | held by this attempt (`cooling` / `not_committed`), or `processing` settled by this attempt | **post-signature branch, decided from the D5 history (pattern 2):** `on-hold`, `hold_reason = manual_review`, note «после подписания банк сообщил об отмене заявки — деньги не поступят или будут возвращены банку; не отгружайте товар и проверьте заявку в кабинете банка», one admin e-mail (§10.4) |
+| after this attempt's `signed`: `canceled`, or `rejected` from `Info` | `completed`, or `on-hold` the plugin may not move (`manual_review`, or the merchant's own hold) | no status change (a completed order's goods are already with the buyer); the same note and the same admin e-mail, adding for `completed` «если товар вернут, возврат по кредиту оформляется в кабинете банка» |
+| after this attempt's `signed`: `rejected` (webhook body only, no password) | held, or settled by this attempt | no status change (a per-bank refusal can be another bank's late answer); note «после подписания пришёл отказ одного из банков — проверьте заявку в кабинете банка», one admin e-mail (§10.4) — so the event that v1 dropped (pattern 2) always reaches the merchant |
 
 **Manual review** (`hold_reason = manual_review`) is set for: I5's late signature on a cancelled order; a signature on a superseded
 or no-longer-matching attempt (step 4) when the order is open — `on-hold` with the note «подписана заявка на прежний состав или
-сумму заказа ({sum} ₽) — сверьте заказ с кабинетом банка», never `complete_payment()`; and the post-signature cancel. It is cleared
-only when the merchant changes the order status (`woocommerce_order_status_changed` not triggered by the plugin itself — the plugin
-sets a request-scoped flag around its own status writes). No later bank state, replay or `Info` refresh moves such an order.
+сумму заказа ({sum} ₽) — сверьте заказ с кабинетом банка», never `complete_payment()`; a signature on a `failed` order (pattern 3);
+and the post-signature cancellation. It is cleared only when the merchant changes the order status (`woocommerce_order_status_changed`
+not triggered by the plugin itself — the plugin sets a request-scoped flag around its own status writes). No later bank state,
+replay or `Info` refresh moves such an order.
+
+**Post-signature cancellation — decided from the D5 history (O1 closed).** The history
+([e-d5-cancellation-history.md](../research/2026-10-26-tbank-v2/e-d5-cancellation-history.md)) has three patterns, and each
+lands in this map:
+
+1. *WooCommerce cancelled an unpaid order while the application was approved or a callback was late or missing* (6
+   conversations) — the I5a veto (§11), I5's late-signature row, the wizard's webhook-address and password checks (§14.2).
+2. *A cancellation or rejection after signing was ignored on an order already in «Обработка»; the merchant had to find out and
+   cancel by hand* (1 conversation) — the post-signature rows: the event is never dropped, the merchant gets a note, the panel's
+   «требуется ваше решение» line and an e-mail; an unshipped order is held so it is not shipped by mistake.
+3. *A primary-bank refusal failed the order and a partner bank's later approval never moved it* (1 conversation) — the `failed`
+   rows and the non-absorbing `rejected` (step 2, §10.5).
+
+What the plugin does **not** do, consistent with D5 and the history (no thread shows a supported plugin action that cancels a
+signed bank agreement): it never calls `Cancel` or `Commit`, never sends a refund, and never sets the order to `cancelled` after a
+signature — cancelling restocks the goods and e-mails the buyer, which is the merchant's decision once the cabinet is checked.
+
+**Manual confirmation without the password** (critic round 2). A signed, uncommitted application on a shop without the API
+password leaves the order `on-hold` / `not_committed`, and nothing the plugin can do will move it: no webhook is documented for a
+cabinet confirmation (U15) and `Info` needs the password. So:
+
+- **Required merchant action, stated where the merchant looks.** The order note of the `not_committed` row (without-password
+  wording); the order panel (§12.1) shows a highlighted line «требуется ваше действие: подтвердите заявку в кабинете банка до
+  {deadline}, затем переведите заказ в «Обработка» вручную» with the reason «без пароля API статус не проверяется» and a link to
+  the gateway settings; the «Обновить статус» button stays disabled with «Нужен пароль API» (§12.2) — no copy says or implies that
+  the button or any automatic check would see the confirmation. The merchant docs (W8) carry the same procedure under «Ручное
+  подтверждение заявок без пароля API», and recommend setting the password. `{deadline}` = signature time + 14 days (Commit
+  must be called «в течение 14 дней после подписания», `setup-types/api/methods` § Commit, READ; signature time = the attempt's
+  `signed_at`, §9.4).
+- **Outcome after the deadline.** No automatic status change and no scheduled job: the plugin cannot tell a confirmed loan from
+  an expired one, and auto-cancelling a confirmed one would restock goods the bank has paid for. The order stays `on-hold` with
+  its stock reduced (by `mark_order_as_held()`); WooCommerce never auto-cancels `on-hold`. Past the deadline the panel line
+  becomes «срок подтверждения истёк {deadline}: если вы подтвердили заявку в кабинете банка — переведите заказ в «Обработка»;
+  если нет — банк деньги не переведёт, отмените заказ (товар вернётся на склад)». If the bank does send a webhook after
+  confirmation or after the window lapses (U15), the ordinary rows apply: `signed` + `committed = true` settles a
+  `not_committed` hold, `canceled` takes the post-signature branch.
+- **How common this is.** The history shows support routinely asking merchants for the API password (patterns 1 and 3), so many
+  installed shops already have it; the wizard's step 1 and the 2.0.0 release notes ask for it (§14.2, O7). **Provisional
+  (coordinator may revisit):** no reminder e-mail at or after the deadline — the hold, the note and the panel line are the
+  signal, and a mail would need a scheduled job for a case the password removes.
 
 Every write goes through `Application_Meta` (the seven v1 display keys plus the additive keys of §3.3, money as decimal strings —
 v1's `intval()` truncation, `v1:includes/api/class-wc-api-ipn-response.php:194-213`, is gone).
@@ -701,7 +762,8 @@ WooCommerce has no stock «order needs attention» e-mail. **Provisional (coordi
 `WC()->mailer()` (WooCommerce's header/footer wrapper) to the shop's admin address, subject «Заказ №{n}: требуется ваше
 решение», body naming what the bank reported and what to check. Sent once per (attempt, event) — the side-effect key of §10.3
 step 3 — so a redelivery never repeats it and a different event on the same order still reports. Events: I5 late signature,
-signature on a superseded attempt, a second financing on a settled order, post-signature cancel. The wording is an operator item
+signature on a superseded attempt, a second financing on a settled order, a post-signature cancellation or refusal (D5
+pattern 2), a late approval or signature on a `failed` order (D5 pattern 3). The wording is an operator item
 (§22.3).
 
 ### 10.5 Webhook budget: reservation, lifetime cap, backoff
@@ -720,8 +782,9 @@ calls nor use up the verification capacity of other orders. Nothing here assumes
 - **Backoff after an `Info` failure:** next allowed call at `max( Retry-After, 30 s × 2^(failures − 1) )`, capped at 1 h. Inside
   the backoff, or on a failure: 503 with `Retry-After` = the remaining wait; the attempt is marked «статус не проверен» and one
   order note says so with the instruction to press «Обновить статус».
-- **No call needed:** an attempt whose verified state is absorbing (`canceled`, `rejected`) or final (`signed` + `committed` +
-  cooling over) → 200 without `Info`; a body whose (status, committed, cooling over) equals the attempt's last **verified** state
+- **No call needed:** an attempt whose verified state is absorbing (`canceled`) or final (`signed` + `committed` + cooling over)
+  → 200 without `Info`. A verified `rejected` is **not** a reason to skip: a partner bank can still approve the same application
+  (D5 pattern 3, §10.3 step 2), so its later webhooks are verified within the per-attempt budget; a body whose (status, committed, cooling over) equals the attempt's last **verified** state
   → 200 without `Info` (it can teach nothing and applies nothing).
 - **Budget exhausted** → 200 without `Info`, one note per attempt «автоматические проверки по заявке исчерпаны — проверьте статус
   кнопкой «Обновить статус»». Recovery is the merchant's button (I4) and the buyer's return check (I6), which do not count against
@@ -735,7 +798,7 @@ calls nor use up the verification capacity of other orders. Nothing here assumes
 
 Tests: two concurrent requests for one number → one `Info`; the 13th in-range request → no `Info`, note once; 5th outside
 request → no `Info`; failure sequence → waits 30, 60, 120 s … capped; `Retry-After: 300` honoured; absorbing / final / same
-verified state → no `Info`; the 61st outside request in an hour → no `Info`, while an in-range request for another order still
+verified state → no `Info`; a verified `rejected` attempt → the next in-range webhook still calls `Info` (pattern 3); the 61st outside request in an hour → no `Info`, while an in-range request for another order still
 calls `Info`.
 
 ## 11. WooCommerce auto-cancel veto (I5a)
@@ -771,7 +834,9 @@ status in words (`new` «покупатель ещё не подтвердил �
 банков», `approved` «одобрена — ждём подписания», `signed` «договор подписан», `canceled` «отменена покупателем», `rejected` «отказ всех банков»), product (кредит / рассрочка), bank, term, monthly payment, credit amount, down payment, signing type
 (`sms` «по СМС», `ses` «Self ID», `bank` «на встрече с представителем банка» — v1 mapped everything but `sms` to «Личная
 встреча», `v1:woodev-vkredit.php:148-149`), cooling end «не отгружайте до …», «не подтверждена — подтвердите в кабинете банка»
-when `committed = false`, a highlighted «требуется ваше решение» line with the reason while `hold_reason = manual_review` (§10.3),
+when `committed = false`, a highlighted «требуется ваше решение» line with the reason while `hold_reason = manual_review` (§10.3), and — on a shop
+without the API password — the highlighted «требуется ваше действие» line of §10.3 «Manual confirmation without the password»
+while `hold_reason = not_committed` (before and after the deadline; never a hint that the plugin will notice the confirmation),
 application and order numbers (and, when the order has more than one attempt, one short line per earlier attempt: number,
 programme, sum, last status), the refund line «к возврату — сумма, которую банк перевёл магазину:
 {transfer_amount}; комиссия за рассрочку не возвращается; возврат оформляется в кабинете банка» (D5), the data source and
@@ -842,7 +907,8 @@ settings-page providers, so no tab appears (D7). An empty submitted password kee
 ### 14.2 Steps
 
 1. **«Подключение»** — shop id, showcase id, API password; validation callback: ids non-empty, ≤ 50 characters. Description:
-   where to find them, and that the password is needed for status checks (a new one is set in «Магазины» → «Настройки API»).
+   where to find them, and that the password is needed for status checks — without it a manually confirmed application has to
+   be moved to «Обработка» by hand (§10.3) — (a new one is set in «Магазины» → «Настройки API»).
 2. **«Проверка подключения»** — a content step with the action «Создать тестовую заявку»: one `create_demo` with
    `sum 5 000 ₽`, one item «Тестовый товар», `promoCode default`, `demoFlow sms`, orderNumber `woodev-check-{8 hex of
    md5(home_url + showcase_id)}` — the **same number every time** for the same shop and showcase, so repeated presses return the
@@ -922,6 +988,8 @@ Refund instruction (D5) sits in the gateway's admin `method_description`: «Во
 | 24 | Order-details table prints filter output raw (`v1:woodev-vkredit.php:175`) | §12.3 | escaped |
 | 25 | `signed` completed the order even when the bank had not confirmed it (`committed = false`) | §10.3 | signed + uncommitted → `on-hold` `not_committed`; committed → paid |
 | 26 | No per-attempt identity: a signature for an old amount, programme or environment could pay the current order | §9.2, §9.4, §10.3 | signed old attempt (10 000 ₽) on an order edited to 15 000 ₽ → manual review; `demo: true` on a live attempt → ignored; programme change → new number |
+| 27 | A cancellation or rejection after signing was dropped on an order already in «Обработка»; the merchant had to discover it (D5 history pattern 2) | §10.3 post-signature rows | signed + committed → paid, then `canceled` → `on-hold` `manual_review` + note + one e-mail; `completed` → note + e-mail, no status change; webhook-only `rejected` after signed → note + e-mail, no status change; a replay sends no second e-mail; no `Cancel` / refund call and never `cancelled` |
+| 28 | A primary-bank refusal failed the order and a partner bank's later approval never moved it (D5 history pattern 3) | §10.3 `failed` rows, step 2, §10.5 | `Info` `rejected` → `failed`; then `Info` `approved` for the same attempt → `pending` + note + customer note + one e-mail, then `signed` + committed → paid; `signed` straight onto `failed` → `on-hold` `manual_review` + e-mail; the `rejected` attempt is not short-circuited by the budget |
 
 ## 17. Security
 
@@ -984,7 +1052,10 @@ programme, the resolver of §10.2); attempt record (§9.4: immutable fields, `cr
 table §10.3 row by row, plus: signed + `committed = false` → `not_committed` hold, then committed → paid; old attempt signed after
 an edit → manual review; manual review never lifted by a later state or refresh, lifted by a merchant status change; without the
 password `signed` → `canceled` → replayed `signed` → stays held; details upsert with an unchanged status tuple (`transfer_amount`
-arrives later); a second attempt signed on a settled order → note + e-mail, no change; `failed` → `pending` on `approved`;
+arrives later); a second attempt signed on a settled order → note + e-mail, no change; the D5 rows (§16 #27, #28): post-signature
+`canceled` / `rejected` on held, `processing` and `completed` orders, late `approved` and `signed` on a `failed` order; the
+no-password `not_committed` note wording and the panel's required-action line before and after the `signed_at` + 14 days
+deadline (no status change at the deadline);
 `Webhook\Handler` (method, size cap, malformed JSON, required-fields filter, IP range edges `91.194.225.255` / `91.194.226.0` /
 `91.194.227.255` / `91.194.228.0`, advisory vs mandatory, `demo` mismatch and non-boolean `demo`, the §10.5 budget list, 401 →
 note, amount against the attempt's sum, demo order); `Auto_Cancel_Veto` (each condition, the limit counted from the
@@ -1053,6 +1124,7 @@ tab (D7); scheduled status polling of any kind; a GlitchTip project (§22.3).
 | U12 | How the bank's fiscal receipt renders a split remainder item (§7.2 step 5) | first real signed order | No |
 | U13 | Whether the `signed` webhook of an auto-confirm shop already carries `committed = true`, or the confirmation lands moments later with no webhook (the auto-commit page says the order «перейдет в статус «Подтвержден»» as soon as the buyer signs; the docs' example `signed` body has `committed: false`) | first real signed order on an auto-confirm shop with debug on; with the password the webhook's own `Info` re-query and the buyer's return check (I6) read the later state | No — the order is held, not lost; but without the password an auto-confirm shop would have to move such orders by hand, so it matters for the release notes |
 | U14 | Which numbering plugins write which reverse-lookup meta (`_order_number` and others) | read the two or three plugins merchants use, when a ticket names one | No — candidates are confirmed by the exact public number; the seam covers the rest |
+| U15 | Whether any webhook arrives after a MANUAL confirmation in the cabinet (`signed` with `committed = true`), or when the 14-day Commit window lapses unconfirmed (`canceled`?) — the docs document neither | first manual-confirm shop with debug on; or the bank contact | No — without the password the merchant's manual step is the documented path (§10.3); a webhook, if one comes, takes the ordinary rows |
 
 ### 22.2 Provisional decisions (coordinator may revisit)
 
@@ -1066,8 +1138,9 @@ tab (D7); scheduled status polling of any kind; a GlitchTip project (§22.3).
 8. **Changed in round 1:** webhook budget per attempt — atomic lock, 12 in-range / 4 outside `Info` calls per attempt lifetime,
    backoff 30 s → 1 h honouring `Retry-After`, 60/h site guard for outside-range requests only (§10.5). Replaces 10 s / 120 h.
 9. `approved` keeps the order `pending` (v1: `on-hold`); a `failed` order is moved back to `pending` explicitly (§10.3).
-10. **Changed in round 1:** `canceled` after signing → `on-hold` with the durable `manual_review` hold + admin e-mail, as an
-    interim until O1 (§10.3); replays are blocked by the per-attempt transition rules.
+10. **Decided in round 2 from the D5 history (no longer interim):** `canceled`, or `rejected` from `Info`, after signing →
+    `on-hold` + `manual_review` + note + admin e-mail for held and `processing` orders; note + e-mail only for `completed` and
+    merchant-held orders; webhook-only `rejected` after signing → note + e-mail; never `cancelled`, no bank call (§10.3).
 11. Admin e-mails as one plain WooCommerce-mailer message, deduplicated per (attempt, event) (§10.4).
 12. I5a default stays 72 h, counted from the application's `created_at` (§11).
 13. Resume link authorised by the order key, not a nonce (§12.3).
@@ -1086,19 +1159,25 @@ tab (D7); scheduled status polling of any kind; a GlitchTip project (§22.3).
 24. **New:** v1-era orders get a legacy attempt on first match and no auto-cancel veto (§9.4, §11).
 25. **New:** the legacy resolver confirms every candidate by the exact public number and offers the seam
     `woodev_wc_tinkoff_kvk_find_order_id` (§10.2).
+26. **New (round 2, D5 pattern 3):** a late `approved` on a `failed` order → `pending` + note + customer note + admin e-mail
+    (not `on-hold`, so an unsigned approval cannot hold the order forever); a late `signed` on a `failed` order → I5-style
+    `on-hold` + `manual_review` + e-mail; `rejected` is not absorbing (§10.3, §10.5).
+27. **New (round 2):** without the password a manually confirmed application is a required merchant action (note, panel line,
+    docs); after `signed_at` + 14 days no automatic status change and no reminder e-mail — only the panel wording changes
+    (§10.3).
 
 ### 22.3 Operator items (each with the provisional choice in force)
 
 | # | Question | Provisional choice |
 |---|---|---|
-| O1 | D5's cancellation history: what went wrong for merchants before? **Neither round reached Support AI / FreeScout** (no access path from this machine). Release 1 makes no cancel calls, but §10.3 does decide what the ORDER does when the buyer cancels after signing — D5 says the history comes first. **Answer before release (W8 gate);** W4 ships the interim | interim: `on-hold` + `manual_review` + note + admin e-mail, nothing shipped automatically, no bank call |
+| O1 | D5's cancellation history: what went wrong for merchants before? | **Closed in round 2.** Recovered from all 4 319 FreeScout conversations 2023–2026 ([e-d5-cancellation-history.md](../research/2026-10-26-tbank-v2/e-d5-cancellation-history.md)); three patterns, each mapped in §10.3 «Post-signature cancellation»; the branch W4 implements is decided from it, not interim |
 | O2 | `approved` → keep `pending` (new) or `on-hold` (v1)? | `pending` (§10.3) |
 | — | Critic round 1: no finding contradicted D1–D14 / I1–I14, so none was moved here instead of being applied | — |
 | O3 | Wording of the I5 admin e-mail and of the split remainder item | §10.4 text; same name |
 | O4 | A GlitchTip project for the plugin (the carriers have one each) | none in 2.0.0 |
 | O5 | Default host once R2 is measured | `forma.tinkoff.ru` |
 | O6 | Card to file: «Оформить кредит/рассрочку» button on the product card (D4) | after 2.0.0 |
-| O7 | Merchant-visible change for the release notes: a signed but not yet confirmed application now keeps the order «На удержании» (v1: paid). For a shop with manual confirmation and no API password this means moving the order to «Обработка» by hand after confirming in the cabinet; U13 decides whether auto-confirm shops see it at all. Not a decision conflict (D12 forbids depending on auto-confirm; the bank's own text says ship after confirming) — listed so the notes and the merchant docs say it | applied as §10.3; the notes and docs explain it |
+| O7 | Merchant-visible change for the release notes: a signed but not yet confirmed application now keeps the order «На удержании» (v1: paid). For a shop with manual confirmation and no API password this means moving the order to «Обработка» by hand after confirming in the cabinet — a required action (§10.3 «Manual confirmation without the password»); the notes recommend setting the API password, which support has long asked merchants for (D5 history); U13 decides whether auto-confirm shops see it at all. Also for the notes: a cancellation after signing now holds the order and e-mails the shop (D5 pattern 2), and a partner bank's approval after a refusal revives a failed order (pattern 3). Not a decision conflict (D12 forbids depending on auto-confirm; the bank's own text says ship after confirming) — listed so the notes and the merchant docs say it | applied as §10.3; the notes and docs explain it |
 
 ## 23. Implementation plan in waves (repo `kalbac/woodev-vkredit`, one reviewable PR per wave into `main`)
 
@@ -1119,11 +1198,11 @@ own worktree path for Serena; `tests/**` is Serena-ignored there as here.
 | **R1** measurement (Haiku, detailed brief) | one `create-demo` with live ids, 2-unit item; record answer and any error body in `docs-internal/research` of the plugin repo | U1, U3 closed; ≤ 1 demo application | W1 | ∥ W2 |
 | **R2** measurement | TLS of both hosts from a hosting server (no body) | U2 closed | — | any time |
 | **W3** gateway + checkout + attempts | `includes/class-gateway.php` (incl. the `add_debug_message()` override, §6.5), `includes/order/class-order-numbers.php` (identity, numbers, the §10.2 resolver), `includes/order/class-application-meta.php` (attempt record §9.4), `includes/admin/class-promo-codes-field.php`; `.po/.mo` entries for its storefront strings | settings round-trip incl. secret field; availability (window, RUB, programmes, licence, kept filter order); checkout fields escaped and whitelisted; `create` body fixture (names, URLs, demoFlow, number unchanged incl. `#`); identity → new number; `create_failed`; buyer-notice test §6.5; coverage test green with the new msgids | W1, W2 | alone |
-| **W4** webhook + veto | `includes/webhook/class-handler.php` (intake, environment check, §10.5 budget), `includes/order/class-status-mapper.php` (§10.3 incl. holds and manual review), `includes/order/class-auto-cancel-veto.php`, the admin mailer message | §20.1 handler, mapper and veto lists; §10.3 table end to end with simulated webhooks (§20.2); e-mails once per (attempt, event) | W3 | alone |
-| **W5** admin panel | `includes/admin/class-order-panel.php` + view, AJAX refresh | panel rows from fixtures incl. manual-review line and earlier attempts; capability/nonce; 30 s limit; no-password disabled; licence-independent; refresh never lifts manual review | W4 | ∥ W6, W7 (code) |
+| **W4** webhook + veto | `includes/webhook/class-handler.php` (intake, environment check, §10.5 budget), `includes/order/class-status-mapper.php` (§10.3 incl. holds, manual review, the post-signature branch decided from the D5 history and the `failed` late-approval rows), `includes/order/class-auto-cancel-veto.php`, the admin mailer message | §20.1 handler, mapper and veto lists; §10.3 table end to end with simulated webhooks (§20.2), incl. §16 #27 and #28 and the no-password `not_committed` note; e-mails once per (attempt, event) | W3 | alone |
+| **W5** admin panel | `includes/admin/class-order-panel.php` + view, AJAX refresh | panel rows from fixtures incl. manual-review line, the no-password «требуется ваше действие» line before and after the deadline (and its absence with a password), and earlier attempts; capability/nonce; 30 s limit; no-password disabled; licence-independent; refresh never lifts manual review | W4 | ∥ W6, W7 (code) |
 | **W6** buyer side + informer | `includes/frontend/*` (status notice, resume endpoint, product informer), order-details/e-mail block; `.po/.mo` entries for its storefront strings | state texts; resume limits + order key + licence + stored programme; customer note once; safety Info limits; informer divisor/escaping/licence; coverage test green | W4 | ∥ W5, W7 (code) |
 | **W7** wizard | `includes/setup/*` | mapping onto the gateway option; empty password keeps stored; demo check licence-gated, limits and stable number; password check; checklist content; `complete_setup()` on upgrade for configured shops | W1, W3 | ∥ W5, W6 (code) |
-| **W8** release prep | **release archive (card `kalbac/woodev-vkredit#4`)**: `scripts/build-release-zip.sh` + `.github/workflows/release.yml` modelled on `woodev-russian-post` (same two files), the ZIP built from the tag with the framework synced from the `WOODEV_FRAMEWORK_REF` tag; catalogue audit; `readme`/changelog with §3.6 and O7; merchant docs card; rig acceptance §20.4 incl. the coexistence rows §5.3; O1 answered | as on Russian Post the script builds from a clean `git archive` export with an allowlist of runtime paths (so `tests/`, `.env*`, `docs-internal/`, `scripts/` never ship), fails unless the bundled framework `VERSION` equals the loader's `framework_version` and the header version equals the loader's `plugin_version`, and asserts `woodev/`, `woodev/assets/build` with built JavaScript, `includes/` and `languages/*.mo` are inside; the ZIP installed and activated on a clean rig site; coverage test with all storefront msgids; rig run recorded. Building and a dry-run of the workflow are preparation; publishing the release and the EDD upload wait for the operator | W5, W6, W7 | alone |
+| **W8** release prep | **release archive (card `kalbac/woodev-vkredit#4`)**: `scripts/build-release-zip.sh` + `.github/workflows/release.yml` modelled on `woodev-russian-post` (same two files), the ZIP built from the tag with the framework synced from the `WOODEV_FRAMEWORK_REF` tag; catalogue audit; `readme`/changelog with §3.6 and O7; merchant docs card incl. «Ручное подтверждение заявок без пароля API» (§10.3) and the post-signature cancellation behaviour; rig acceptance §20.4 incl. the coexistence rows §5.3 | as on Russian Post the script builds from a clean `git archive` export with an allowlist of runtime paths (so `tests/`, `.env*`, `docs-internal/`, `scripts/` never ship), fails unless the bundled framework `VERSION` equals the loader's `framework_version` and the header version equals the loader's `plugin_version`, and asserts `woodev/`, `woodev/assets/build` with built JavaScript, `includes/` and `languages/*.mo` are inside; the ZIP installed and activated on a clean rig site; coverage test with all storefront msgids; rig run recorded. Building and a dry-run of the workflow are preparation; publishing the release and the EDD upload wait for the operator | W5, W6, W7 | alone |
 
 **Shared files.** Only two files are touched by more than one wave: the plugin wiring `includes/class-plugin.php` (W3–W7 each add
 their `init` line) and the catalogue `languages/woodev-vkredit-ru_RU.po/.mo` (W3, W6). W5, W6 and W7 may be **written** in
@@ -1137,6 +1216,8 @@ Rounds: at most 2–3 per wave, then decompose. Release (framework pin, plugin r
 ## Related
 
 - [T-Bank v2 decisions](../research/2026-10-26-tbank-v2/decisions.md) — the binding input.
+- [D5 cancellation history](../research/2026-10-26-tbank-v2/e-d5-cancellation-history.md) — the ticket history that closes O1
+  and decides the post-signature branch of §10.3.
 - [T-Bank v2 fact base](../research/2026-10-26-tbank-v2/README.md), [v1 inventory](../research/2026-10-26-tbank-v2/a-v1-inventory.md),
   [bank docs](../research/2026-10-26-tbank-v2/d-docs.md), [framework map](../research/2026-10-26-tbank-v2/c-framework-map.md),
   [improvements](../research/2026-10-26-tbank-v2/improvements.ru.md), [API market](../research/2026-10-26-tbank-v2/b-api-market.md) —
