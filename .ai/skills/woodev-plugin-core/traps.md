@@ -169,6 +169,9 @@ internals (class-map wiring, build/CI, rig) are left out on purpose. Shipping-sp
   `docs-internal/gotchas/a-stubbed-wc-class-hides-a-boot-fatal.md`
 - Two parallel branches can merge cleanly and still break a test (a new call needs a Brain Monkey stub the other branch's test
   lacks): run the full suite on the merge commit, never trust the two branch greens. → `docs-internal/sessions/s193.md`
+- Unit tests on WordPress doubles do not prove a hook is wired: T-Bank W5 registered `add_meta_boxes` without `accepted_args`, so the
+  panel never rendered on real WordPress while 213 tests passed. Run one real-WP probe (rig container `wp eval-file`, no activation)
+  per admin and storefront surface. → `docs-internal/sessions/s199.md` (How the work went)
 
 ## HPOS and compatibility (topic `compat`)
 
