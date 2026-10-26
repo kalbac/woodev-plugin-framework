@@ -18,7 +18,7 @@
 
 ## Старые заказы: идентификаторы переписываются
 
-> **Внимание.** После обновления плагин в фоне (через планировщик действий WooCommerce, задача `woodev_wc_russian_post_migrate_orders_batch`) проходит по заказам и заменяет в строке доставки `wc_russian_post_courier` и `wc_russian_post_postal` на новые идентификаторы из таблицы выше. Прежний идентификатор сохраняется в скрытом мета-поле строки доставки `_wc_russian_post_v1_method_id`. Переход идёт пачками, поэтому какое-то время после обновления часть заказов ещё содержит старые значения, часть — новые. <!-- не подтверждено: сколько времени занимает перенос на большом магазине, не измерялось -->
+> **Внимание.** После обновления плагин в фоне (через планировщик действий WooCommerce, задача `woodev_wc_russian_post_migrate_orders_batch`) проходит по заказам и заменяет в строке доставки `wc_russian_post_courier` и `wc_russian_post_postal` на новые идентификаторы из таблицы выше. Прежний идентификатор сохраняется в скрытом мета-поле строки доставки `_wc_russian_post_v1_method_id`. Переход идёт пачками, поэтому какое-то время после обновления часть заказов ещё содержит старые значения, часть — новые.
 
 Для обмена это значит:
 
@@ -72,16 +72,16 @@ add_action( 'wc_russian_post_success_exported_order', function ( $response, $exp
 
 `wc_russian_post_after_order_update`, `wc_russian_post_parcel_types`, `wc_russian_post_method_title`, `wc_russian_post_formatted_address`, `wc_russian_post_shipping_rate_cart_total`, `wc_russian_post_cart_content_total`, `wc_russian_post_checkout_script_params`, `wc_russian_post_suggestions_plugin_default_params`, `wc_russian_post_additional_info_strings`, `wc_russian_post_need_reload_shipping_methods`, `wc_russian_post_order_statuses`, `wc_russian_post_allow_country_codes`, `wc_russian_post_clear_address_part`, `wc_russian_post_clear_address_part_patterns`, `wc_russian_post_tracking_url`, `wc_russian_post_order_needs_insurance_cost`, `wc_russian_post_order_otpravka_export_data`, `wc_russian_post_order_otpravka_export_item_data`, `wc_russian_post_order_otpravka_translate_fields`, `wc_russian_post_order_widget_export_data`, `wc_russian_post_disabled_statuses_for_export`, `wc_russian_post_disabled_statuses_for_complete`, `wc_russian_post_disabled_statuses_for_delivering`, `wc_russian_post_disabled_statuses_for_canceled`, `wc_russian_mail_category`, `wc_russian_post_tracking_update_interval`, `wc_russian_post_max_orders_per_update`.
 
-Хуки расчёта стоимости (`wc_russian_post_rates_item`, `wc_russian_post_rate_cost`, `wc_russian_post_rate_calculate_shipping`) и `wc_russian_post_integration_form_fields` в версии 2 не вызываются. Аналоги общего модуля — `woodev_shipping_method_calculated_rate($rate, $package, $method)`, `woodev_shipping_method_after_calculate_shipping($package, $rate, $method)` и `woodev_shipping_plugin_settings_{id}_form_fields` — подходят по смыслу, но с другими аргументами. <!-- не подтверждено: что расчёт Почты России проходит через эти хуки во всех способах -->
+Хуки расчёта стоимости (`wc_russian_post_rates_item`, `wc_russian_post_rate_cost`, `wc_russian_post_rate_calculate_shipping`) и `wc_russian_post_integration_form_fields` в версии 2 не вызываются. Аналоги общего модуля — `woodev_shipping_method_calculated_rate($rate, $package, $method)`, `woodev_shipping_method_after_calculate_shipping($package, $rate, $method)` и `woodev_shipping_plugin_settings_{id}_form_fields` — подходят по смыслу, но с другими аргументами.
 
 Фильтр `woocommerce_shipping_{method_id}_is_available` строится из идентификатора способа, поэтому код, подписанный на `wc_russian_post_courier` или `wc_russian_post_postal`, больше не срабатывает.
 
 ## Адреса, AJAX и расписание
 
-- Действия `admin-ajax.php` `get_post_office`, `set_russian_post_point`, `russian_post_order_action` удалены (первое было открытым прокси к «Отправке»).
+- Действия `admin-ajax.php` `get_post_office`, `set_russian_post_point`, `russian_post_order_action`, `russian_post_set_customer_location` удалены (первое было открытым прокси к «Отправке»).
 - Адреса `?wc-api=russian_post_barcode` и `?wc-api=russian_post_status` удалены вместе с кабинетом «Виджет».
 - Страница заказов `wc_russian_post_orders` сохранена.
-- Задача `wc_russian_post_orders_update` (раз в 12 часов) при обновлении отменяется; отслеживание ведёт задача `woodev_wc_russian_post_poll_tracking`.
+- Задача `wc_russian_post_orders_update` (раз в 12 часов) при обновлении отменяется; отслеживание ведёт задача `woodev_wc_russian_post_poll_tracking`. В версии 2 также появились хуки `woodev_wc_russian_post_customs_declaration`, `woodev_wc_russian_post_no_declaration_countries` и `woodev_wc_russian_post_tracking_daily_cap`; это новые точки расширения, а не замены хуков версии 1.
 
 ## Что проверить в обмене с 1С
 

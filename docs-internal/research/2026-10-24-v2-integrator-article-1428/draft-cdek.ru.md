@@ -6,7 +6,7 @@
 
 ## Идентификаторы способов доставки
 
-В версии 1 был один способ `edostavka` на все тарифы. В версии 2 способов три, по типу доставки:
+В актуальной версии 1 был один способ `edostavka` на все тарифы. В версиях до 2.2 встречались также строки способов `edostavka-<тариф>`; миграция v2 их не преобразует, такие строки нужно проверить отдельно. В версии 2 способов три, по типу доставки:
 
 | Было (версия 1) | Стало (версия 2) | Когда |
 |---|---|---|
@@ -82,21 +82,20 @@ add_filter( 'woodev_shipping_method_calculated_rate', function ( $rate, $package
 
 ```php
 add_action( 'woodev_shipping_delivery_status_changed', function ( $order, $previous, $current, $provider ) {
-	// Проверьте, что $provider относится к СДЭК.
-	if ( 'delivered' === $current ) {
+	if ( 'edostavka' === $provider && 'delivered' === $current ) {
 		// ...
 	}
 }, 10, 4 );
 ```
 
-**Удалены без замены.** `wc_edostavka_checkout_params`, `wc_edostavka_widget_map_params`, `wc_edostavka_native_widget_map_params`, `wc_edostavka_suggestions_plugin_default_params`, `wc_edostavka_is_admin`, `wc_edostavka_checkout_hidden_or_remove_state_field`, `wc_edostavka_checkout_hidden_or_remove_postcode_field`, `wc_cdek_shipping_rates_calc_params`, `wc_edostavka_shipping_method_delivery_points_request_params`, `wc_edostavka_disabled_statuses_for_export`, `wc_edostavka_order_package`, `wc_edostavka_order_package_item`, `wc_edostavka_update_tracking_code`, `wc_edostavka_delete_tracking_code`, `wc_edostavka_after_send_email_*`, `wc_edostavka_extra_services_list`, `wc_edostavka_carton_boxes`, `wc_edostavka_customer_default_city_code`, `wc_cdek_shipping_integration_form_fields`.
+**Удалены без замены.** `wc_edostavka_checkout_params`, `wc_edostavka_widget_map_params`, `wc_edostavka_native_widget_map_params`, `wc_edostavka_suggestions_plugin_default_params`, `wc_edostavka_is_admin`, `wc_edostavka_checkout_hidden_or_remove_state_field`, `wc_edostavka_checkout_hidden_or_remove_postcode_field`, `wc_cdek_shipping_rates_calc_params`, `wc_edostavka_shipping_method_delivery_points_request_params`, `wc_edostavka_disabled_statuses_for_export`, `wc_edostavka_order_package`, `wc_edostavka_order_package_item`, `wc_edostavka_update_tracking_code`, `wc_edostavka_delete_tracking_code`, `woocommerce_edostavka_email_tracking_core_url`, `wc_edostavka_after_send_email_*`, `wc_edostavka_extra_services_list`, `wc_edostavka_carton_boxes`, `wc_edostavka_customer_default_city_code`, `wc_cdek_shipping_integration_form_fields`.
 
-Без уведомления также перестали вызываться: `wc_edostavka_cod_payment_methods`, `wc_edostavka_order_is_delivered`, `wc_edostavka_order_is_editable`, `wc_edostavka_print_form_ready`, `wc_edostavka_after_details_order_table`, `wc_edostavka_order_preview_details`, `wc_edostavka_currencies`, `wc_edostavka_locale`, `wc_edostavka_order_status_changed_from_{старый}_to_{новый}`, `wc_edostavka_order_status_changed_to_{статус}`, `wc_edostavka_order_{статус}_notification` и другие служебные хуки версии 1. Для `wc_edostavka_print_form_ready` в версии 2 есть `woodev_edostavka_document_ready($type)`, но у него другие аргументы.
+Без уведомления перестали вызываться и другие хуки версии 1, которых нет в карте `get_deprecated_hooks()`: `edostavka_update_order_review_address_args`, `edostavka_update_order_review_postcode_args`, `edostavka_update_order_review_state_args`, `wc_edostavka_after_details_order_table`, `wc_edostavka_after_order_preview_table`, `wc_edostavka_ajax_rate_limit`, `wc_edostavka_allowed_countries_for_state`, `wc_edostavka_api_base_url`, `wc_edostavka_before_order_preview_table`, `wc_edostavka_before_order_update_save_meta`, `wc_edostavka_cod_payment_methods`, `wc_edostavka_create_order_barcode_params`, `wc_edostavka_create_order_waybill_params`, `wc_edostavka_currencies`, `wc_edostavka_customer_allow_geo_location`, `wc_edostavka_customer_location_fields`, `wc_edostavka_customer_set_default_destination`, `wc_edostavka_delivery_photo_ready`, `wc_edostavka_enable_admin_help_tab`, `wc_edostavka_excluded_location_region_ids`, `wc_edostavka_generate_delivery_point_button_args`, `wc_edostavka_integration_params`, `wc_edostavka_locale`, `wc_edostavka_location_cities_sort_results`, `wc_edostavka_location_regions_list`, `wc_edostavka_order_is_delivered`, `wc_edostavka_order_is_editable`, `wc_edostavka_order_need_create_notice`, `wc_edostavka_order_preview_details`, `wc_edostavka_order_status_changed_from_{старый}_to_{новый}`, `wc_edostavka_order_status_changed_to_{статус}`, `wc_edostavka_order_statuses_to_create_notice`, `wc_edostavka_order_{статус}_notification`, `wc_edostavka_preloaded_data_locations`, `wc_edostavka_print_form_ready`, `wc_edostavka_status_keys_for_show`, `woocommerce_edostavka_cart_delivery_points_template`, `woocommerce_edostavka_disallow_city_ids`, `woocommerce_edostavka_order_number`, `woocommerce_edostavka_shipping_id`. Для `wc_edostavka_print_form_ready` в версии 2 есть `woodev_edostavka_document_ready($type)`, но у него другие аргументы.
 
 ## Адреса, AJAX и расписание
 
 - Запросы `admin-ajax.php` с действиями `edostavka_get_location_cities`, `edostavka_get_deliverypoints`, `edostavka_set_delivery_point`, `edostavka_order_action`, `edostavka_create_courier_call` и остальными из версии 1 удалены.
-- Адрес уведомлений от СДЭК `?wc-api=wc_edostavka_order_status` продолжает работать. Адреса `wc_edostavka_print_form` и `wc_edostavka_download_photo` в версии 2 не подтверждены; проверьте, если они вам нужны.
+- Адреса уведомлений `?wc-api=wc_edostavka_order_status` и `?wc-api=wc_edostavka_orders` принимаются совместимым обработчиком версии 2. Адреса `wc_edostavka_print_form` и `wc_edostavka_download_photo` в релизе не найдены; проверьте, если они вам нужны.
 - Регулярный опрос статусов теперь идёт через планировщик действий WooCommerce каждые 15 минут; настройка интервала убрана.
 
 ## Что проверить в обмене с 1С
