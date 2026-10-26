@@ -673,7 +673,11 @@ ship yet».
    (it is the post-signature branch below). Within `signed`: `committed` false → true and cooling active → over are forward.
    Without the password (body = state) a state that is not forward of the attempt's stored state is a replay: details are NOT
    upserted from it, a debug line, nothing else. With the password `Info` is the bank's current state and is taken as it is;
-   `canceled` still stays absorbing for side effects.
+   `canceled` still stays absorbing for side effects. **Leaving `rejected` needs a fresh `Info`** (critic round 3): once the
+   attempt's `rejected` was recorded from an authoritative `Info`, only a later `Info` result may move it to `approved` or
+   `signed`; a body-only webhook (no password, or `Info` unavailable) is recorded as a debug line and never advances the
+   attempt, so the order stays `failed`. This keeps a delayed or replayed `approved`/`signed` body from reviving a refused
+   application; the D5 pattern-3 path (partner bank's later approval) therefore works only with the API password.
 3. **Side-effect key** = (number, status, committed, cooling active). A key already in the attempt's `applied` list changes no
    status and adds no note or e-mail.
 4. **Settlement guard.** An attempt may move the order towards «paid» only if it is the **current** attempt AND its identity
@@ -798,7 +802,7 @@ calls nor use up the verification capacity of other orders. Nothing here assumes
 
 Tests: two concurrent requests for one number → one `Info`; the 13th in-range request → no `Info`, note once; 5th outside
 request → no `Info`; failure sequence → waits 30, 60, 120 s … capped; `Retry-After: 300` honoured; absorbing / final / same
-verified state → no `Info`; a verified `rejected` attempt → the next in-range webhook still calls `Info` (pattern 3); the 61st outside request in an hour → no `Info`, while an in-range request for another order still
+verified state → no `Info`; a verified `rejected` attempt → the next in-range webhook still calls `Info` (pattern 3); without the password, a body-only `approved`/`signed` after a verified `rejected` → no state change, order stays `failed`, debug line (§10.3 step 2); the 61st outside request in an hour → no `Info`, while an in-range request for another order still
 calls `Info`.
 
 ## 11. WooCommerce auto-cancel veto (I5a)
