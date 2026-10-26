@@ -30,6 +30,7 @@ help pages on `tbank.ru`. Nothing about bank behaviour is MEASURED against a rea
 | [a-v1-inventory.md](a-v1-inventory.md) | A | v1 1.7.0 feature map, installed-site contracts, code red flags, Blocks status, candidate fate per surface (READ) |
 | [b-api-market.md](b-api-market.md) | B | bank API today (secondary transcription + help pages), v1 endpoint audit, related products, market, 10 open questions |
 | [c-framework-map.md](c-framework-map.md) | C | framework v2 payment-gateway capability map, Blocks gap, mixed-fleet mechanism, gap list G1–G8 |
+| [e-d5-cancellation-history.md](e-d5-cancellation-history.md) | E | D5: anonymised FreeScout history 2023–2026 of T-Bank cancellation problems — three patterns |
 
 ## 1. Summary
 
