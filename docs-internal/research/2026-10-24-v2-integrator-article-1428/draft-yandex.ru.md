@@ -30,17 +30,17 @@
 | `_yandex_delivery_destination_station_id`, `_yandex_delivery_destination_interval_from`, `_yandex_delivery_destination_interval_to` | у старых заказов читаются для выгрузки |
 | `_yandex_delivery_carrier_price`, `_yandex_delivery_delivery_cost` | новые, пишутся у новых заказов |
 
-Настройки плагина остаются в опции `woocommerce_yandex_delivery_settings`. Таблица складов `wp_wc_yandex_delivery_warehouses` не используется: обновление один раз читает из неё код станции и больше её не трогает.
+Настройки плагина остаются в опции `woocommerce_yandex_delivery_settings`. Таблица складов `{prefix}wc_yandex_delivery_warehouses` не используется: обновление один раз читает из неё код станции и больше её не трогает.
 
 ## Хуки
 
-В версии 2 из хуков плагина сохранился только `woodev_yandex_map_api_key` (фильтр ключа Яндекс.Карт, один аргумент). Фильтр `woodev_yandex_delivery_http_request_args($args, $api)` (параметры HTTP-запросов к API) остаётся с тем же именем: он принадлежит общему клиенту API и берёт имя из идентификатора плагина `yandex_delivery`. <!-- не подтверждено: исходник версии 1 недоступен, имя сохранилось по утверждению карточки #1428 -->
+В версии 2 плагин вызывает фильтр `woodev_yandex_map_api_key` (ключ Яндекс.Карт, один аргумент). Общий API-клиент также предоставляет фильтр `woodev_yandex_delivery_http_request_args($args, $api)`: он формируется из API id `yandex_delivery`. Связь этого фильтра с версией 1 нельзя подтвердить без её исходников.
 
-Уведомлений о удалённых хуках плагин **не показывает**: код на удалённых хуках просто перестаёт срабатывать. Проверьте его по таблице.
+Уведомлений об удалённых хуках плагин **не показывает**: код на удалённых хуках просто перестаёт срабатывать. Проверьте его по таблице.
 
 | Был (версия 1) | Что в версии 2 |
 |---|---|
-| `wc_yandex_order_status_changed`, `wc_yandex_order_status_changed_to_{статус}`, `wc_yandex_order_status_changed_from_{старый}_to{новый}`, `wc_yandex_order_mark_as_delivered`, `wc_yandex_order_mark_as_cancelled` | замена по смыслу (<!-- не подтверждено: вызов этого действия из опроса статусов Яндекса напрямую не найден, см. facts-yandex.md §4 -->): действие `woodev_shipping_delivery_status_changed($order, $previous_status, $current_status, $provider)`; статусы общие (`pending`, `created`, `in_transit`, `ready_for_pickup`, `delivered`, `returning`, `returned`, `failed`, `cancelled`, `unknown`), событие приходит от всех служб доставки — проверяйте `$provider` |
+| `wc_yandex_order_status_changed`, `wc_yandex_order_status_changed_to_{статус}`, `wc_yandex_order_status_changed_from_{старый}_to_{новый}`, `wc_yandex_order_mark_as_delivered`, `wc_yandex_order_mark_as_cancelled` | возможная замена по смыслу: действие `woodev_shipping_delivery_status_changed($order, $previous_status, $current_status, $provider)`; статусы общие (`pending`, `created`, `in_transit`, `ready_for_pickup`, `delivered`, `returning`, `returned`, `failed`, `cancelled`, `unknown`), событие приходит от всех служб доставки — проверяйте `$provider` |
 | `wc_yandex_delivery_rate_cost` | фильтр `woodev_shipping_method_calculated_rate($rate, $package, $method)` |
 | `wc_yandex_delivery_{id}_fallback_calculate_shipping` | действие `woodev_shipping_method_rate_calculation_failed($exception, $package, $method)` |
 | `wc_yandex_delivery_update_sharing_url`, `wc_yandex_delivery_delete_sharing_url` | нет; ссылка лежит в мета-ключе `_yandex_delivery_sharing_url` |
@@ -51,20 +51,19 @@
 
 ```php
 add_action( 'woodev_shipping_delivery_status_changed', function ( $order, $previous, $current, $provider ) {
-	// Проверьте, что $provider относится к Яндекс Доставке.
-	if ( 'delivered' === $current ) {
+	if ( 'yandex_delivery' === $provider && 'delivered' === $current ) {
 		// ...
 	}
 }, 10, 4 );
 ```
 
-Новые фильтры версии 2, не связанные с версией 1: `woodev_yandex_delivery_cod_payment_methods` (какие способы оплаты считать наложенным платежом).
+Новые хуки версии 2, не связанные с версией 1: фильтр `woodev_yandex_delivery_cod_payment_methods` (способы оплаты с наложенным платежом), фильтр `woodev_yandex_delivery_upgrade_gateway_options` (опции способов оплаты, участвующие в миграции) и действие `woodev_yandex_delivery_status_sync_failed` (ошибка синхронизации статуса).
 
 ## Адреса, AJAX и расписание
 
 - Запросы `admin-ajax.php` с действиями `get_yandex_delivery_location_detect`, `get_yandex_delivery_shipment_points`, `set_yandex_delivery_pickup_point`, `set_yandex_delivery_time_interval`, а также `yandex_delivery_export_order`, `yandex_delivery_update_order`, `yandex_delivery_cancel_order`, `yandex_delivery_print_label_order`, `yandex_delivery_print_act` удалены.
 - REST-маршруты `yandex-delivery/warehouses` удалены вместе со складами.
-- Адрес страницы заказов `wc-yandex-orders` сохранён как совместимый. <!-- не подтверждено: поведение (открытие или перенаправление) не проверялось -->
+- Страница заказов использует `wc-yandex-orders` как совместимый старый slug.
 - Задачи планировщика `wc_yandex_orders_update`, `wc_yandex_update_order`, `wc_yandex_export_order` при обновлении отменяются; статусы теперь обновляет задача `woodev_yandex_delivery_poll_status`. Заказы в статусе `EXPORTING_PROCESS` обновление не меняет, а лишь показывает в отчёте.
 
 ## Что проверить в обмене с 1С
