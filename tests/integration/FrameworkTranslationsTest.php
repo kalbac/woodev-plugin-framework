@@ -107,13 +107,21 @@ class FrameworkTranslationsTest extends TestCase {
 		};
 		add_filter( 'get_available_languages', $this->available_languages_filter );
 		$forced_locale = null;
-		$this->assertTrue( switch_to_locale( 'ru_RU' ) );
+		// WP_Locale_Switcher caches the available languages in init(), so a fresh one sees the filter.
+		global $wp_locale_switcher;
+		$original_switcher  = $wp_locale_switcher;
+		$wp_locale_switcher = new \WP_Locale_Switcher();
+		$wp_locale_switcher->init();
 		try {
+			$this->assertTrue( switch_to_locale( 'ru_RU' ) );
 			$this->assertSame( 'Внешний перевод', __( 'Shared', $domain ) );
 			$this->assertSame( 'Только внешний перевод', __( 'External only', $domain ) );
 			$this->assertSame( 'Перевод из комплекта', __( 'Bundled only', $domain ) );
 		} finally {
 			restore_current_locale();
+			remove_filter( 'locale', [ $wp_locale_switcher, 'filter_locale' ] );
+			remove_filter( 'determine_locale', [ $wp_locale_switcher, 'filter_locale' ] );
+			$wp_locale_switcher = $original_switcher;
 		}
 		$this->assertSame( 'Shared', __( 'Shared', $domain ) );
 	}
