@@ -110,10 +110,7 @@ if ( ! class_exists( '\Woodev\Framework\Handlers\Translation_Handler' ) ) :
 		 * @return void
 		 */
 		private function load_textdomain( string $textdomain, string $path ): void {
-			// user's locale if in the admin for WP 4.7+, or the site locale otherwise
-			$locale = ( is_admin() && is_callable( 'get_user_locale' ) ) ? get_user_locale() : get_locale();
-
-			$locale = apply_filters( 'plugin_locale', $locale, $textdomain );
+			$locale = apply_filters( 'plugin_locale', determine_locale(), $textdomain );
 			$file   = $textdomain . '-' . $locale . '.mo';
 
 			load_textdomain( $textdomain, WP_LANG_DIR . '/' . $textdomain . '/' . $file, $locale );

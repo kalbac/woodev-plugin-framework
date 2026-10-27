@@ -41,6 +41,7 @@ class FrameworkTranslationsTest extends TestCase {
 		}
 		if ( $this->translation_handler ) {
 			remove_action( 'init', [ $this->translation_handler, 'load_translations' ] );
+			remove_action( 'change_locale', [ $this->translation_handler, 'reload_translations' ] );
 		}
 		foreach ( $this->packs as $pack ) {
 			unlink( $pack );

@@ -78,6 +78,7 @@ class TranslationHandlerTest extends TestCase {
 		Functions\when( 'add_action' )->justReturn( true );
 		Functions\when( 'is_admin' )->justReturn( false );
 		Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
+		Functions\when( 'determine_locale' )->justReturn( 'ru_RU' );
 		Functions\when( 'apply_filters' )->returnArg( 2 );
 		Functions\when( 'plugin_basename' )->returnArg( 1 );
 		Functions\when( 'untrailingslashit' )->alias(
@@ -141,6 +142,39 @@ class TranslationHandlerTest extends TestCase {
 		$this->addToAssertionCount( 1 );
 	}
 
+	/** Admin profile locale must not override the active switched locale during reload. */
+	public function test_reload_translations_uses_switched_locale_and_restores_profile_locale(): void {
+		$plugin = $this->make_plugin( 'acme-plugin' );
+		$current_locale = 'ru_RU';
+		$loaded_locales = [];
+		Functions\when( 'add_action' )->justReturn( true );
+		Functions\when( 'did_action' )->justReturn( 1 );
+		Functions\when( 'is_admin' )->justReturn( true );
+		Functions\when( 'get_user_locale' )->justReturn( 'en_US' );
+		Functions\when( 'determine_locale' )->alias( static function () use ( &$current_locale ): string { return $current_locale; } );
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+		Functions\when( 'plugin_basename' )->returnArg( 1 );
+		Functions\when( 'untrailingslashit' )->alias( static function ( $value ): string { return rtrim( (string) $value, '/' ); } );
+		Functions\when( 'load_textdomain' )->alias( static function ( $domain, $file, $locale ) use ( &$loaded_locales ): bool { $loaded_locales[] = $locale; return true; } );
+		Functions\when( 'load_plugin_textdomain' )->justReturn( true );
+		Functions\when( 'unload_textdomain' )->justReturn( true );
+
+		if ( ! defined( 'WP_LANG_DIR' ) ) {
+			define( 'WP_LANG_DIR', '/srv/wp/languages' );
+		}
+		if ( ! defined( 'WP_PLUGIN_DIR' ) ) {
+			define( 'WP_PLUGIN_DIR', '/srv/wp/wp-content/plugins' );
+		}
+
+		$handler = new Translation_Handler( $plugin );
+		$handler->reload_translations();
+		$this->assertSame( [ 'ru_RU', 'ru_RU', 'ru_RU' ], $loaded_locales );
+
+		$current_locale = 'en_US';
+		$handler->reload_translations();
+		$this->assertSame( [ 'ru_RU', 'ru_RU', 'ru_RU', 'en_US', 'en_US', 'en_US' ], $loaded_locales );
+	}
+
 	/**
 	 * When the plugin has no textdomain, no per-plugin translation loading is needed.
 	 *
@@ -152,6 +186,7 @@ class TranslationHandlerTest extends TestCase {
 		Functions\when( 'add_action' )->justReturn( true );
 		Functions\when( 'is_admin' )->justReturn( false );
 		Functions\when( 'get_locale' )->justReturn( 'ru_RU' );
+		Functions\when( 'determine_locale' )->justReturn( 'ru_RU' );
 		Functions\when( 'apply_filters' )->returnArg( 2 );
 		Functions\when( 'plugin_basename' )->returnArg( 1 );
 		Functions\when( 'untrailingslashit' )->alias(
