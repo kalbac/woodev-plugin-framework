@@ -28,13 +28,10 @@
 /* -------------------------------------------------------------------------
  * STYLE ISOLATION (Task 18, spec V-14) — the shell's own elements.
  *
- * Same contract, and same `:where()` specificity reasoning, as the equivalent block at the top of
- * `woodev/shipping-method/assets/css/frontend/pickup.css` — see that file's own docblock for the
- * full rationale. In short: `:where()` carries zero specificity, so `.woodev-modal :where( h2 )` /
- * `.woodev-modal :where( p )` etc. tie exactly with every single-class component rule later in
- * THIS file (`.woodev-modal__message { display: block }` is (0,1,0) too), so source order decides
- * and the later, real rule always wins — while still outranking a theme's bare `button {}` /
- * `h1 {}` (0,0,1) outright on class count alone.
+ * The reset uses `:where()` so non-button element rules stay at one class: their single-class
+ * component rules tie and source order decides. Buttons get a separate reset below, and each
+ * shell button component uses `.woodev-modal.woodev-modal button.<component>` so its style beats
+ * common theme `button` and `button:hover`/`:focus` rules without `!important`.
  *
  * ROOTED ON `.woodev-modal`, NOT `.woodev-modal__header`/`__body` separately: `showNotice()`
  * (below) inserts `.woodev-modal__notice` as a SIBLING of header/body — `this._dialog.insertBefore(
@@ -85,8 +82,8 @@
 	appearance: none;
 }
 
-.woodev-modal.woodev-modal :where( button ) {
-	/* Beat theme-kit element selectors while letting component rules below win by source order. */
+.woodev-modal.woodev-modal button {
+	/* Components below tie this default and own their declared appearance. */
 	padding: 0;
 	border: 0;
 	background: none;
@@ -101,7 +98,9 @@
 }
 
 .woodev-modal.woodev-modal button:hover,
-.woodev-modal.woodev-modal button:focus {
+.woodev-modal.woodev-modal button:focus,
+.woodev-modal.woodev-modal button:disabled,
+.woodev-modal.woodev-modal button:active {
 	padding: 0;
 	border: 0;
 	background: none;
@@ -246,7 +245,7 @@ body.woodev-modal-lock {
    `.woodev-modal__content` clips its square corner into that shape for free — nothing to round
    here directly). See the `:focus-visible` rule further down for why this one control needed
    splitting out of the shared focus-ring group once it went flush to that corner. */
-.woodev-modal .woodev-modal__close {
+.woodev-modal.woodev-modal button.woodev-modal__close {
 	flex: 0 0 auto;
 	width: 48px;
 	height: 48px;
@@ -264,20 +263,20 @@ body.woodev-modal-lock {
 
 /* The glyph is an inline SVG (see buildDom) — sized here so a theme's own `svg` rules cannot
    stretch it. `display: block` kills the inline baseline gap that would offset it in its box. */
-.woodev-modal__close svg {
+.woodev-modal.woodev-modal button.woodev-modal__close svg {
 	display: block;
 	width: 24px;
 	height: 24px;
 }
 
-.woodev-modal .woodev-modal__close.woodev-modal__close.woodev-modal__close:hover,
-.woodev-modal .woodev-modal__close.woodev-modal__close.woodev-modal__close:focus {
+.woodev-modal.woodev-modal button.woodev-modal__close:hover,
+.woodev-modal.woodev-modal button.woodev-modal__close:focus {
 	background: #ddd;
 	border-color: #ccc;
 	color: #000;
 }
 
-.woodev-modal .woodev-modal__close.woodev-modal__close.woodev-modal__close:focus {
+.woodev-modal.woodev-modal button.woodev-modal__close:focus {
 	outline: none;
 }
 
@@ -321,7 +320,7 @@ body.woodev-modal-lock {
 	color: #b32d2e;
 }
 
-.woodev-modal__retry {
+.woodev-modal.woodev-modal button.woodev-modal__retry {
 	display: block;
 	margin: 0 auto 48px;
 	padding: 8px 16px;
@@ -333,7 +332,7 @@ body.woodev-modal-lock {
 	cursor: pointer;
 }
 
-.woodev-modal__retry:hover {
+.woodev-modal.woodev-modal button.woodev-modal__retry:hover {
 	background: #f6f7f7;
 }
 
@@ -355,8 +354,8 @@ body.woodev-modal-lock {
 	margin: 0;
 }
 
-.woodev-modal__notice-retry,
-.woodev-modal__notice-dismiss {
+.woodev-modal.woodev-modal button.woodev-modal__notice-retry,
+.woodev-modal.woodev-modal button.woodev-modal__notice-dismiss {
 	flex: 0 0 auto;
 	padding: 4px 10px;
 	font-size: 13px;
@@ -367,8 +366,8 @@ body.woodev-modal-lock {
 	cursor: pointer;
 }
 
-.woodev-modal__notice-retry:hover,
-.woodev-modal__notice-dismiss:hover {
+.woodev-modal.woodev-modal button.woodev-modal__notice-retry:hover,
+.woodev-modal.woodev-modal button.woodev-modal__notice-dismiss:hover {
 	background: #f6f7f7;
 }
 
@@ -380,9 +379,9 @@ body.woodev-modal-lock {
  * focus-visible rules in the consumer's own stylesheet.
  * ---------------------------------------------------------------------- */
 
-.woodev-modal__retry:focus-visible,
-.woodev-modal__notice-retry:focus-visible,
-.woodev-modal__notice-dismiss:focus-visible {
+.woodev-modal.woodev-modal button.woodev-modal__retry:focus-visible,
+.woodev-modal.woodev-modal button.woodev-modal__notice-retry:focus-visible,
+.woodev-modal.woodev-modal button.woodev-modal__notice-dismiss:focus-visible {
 	outline: 2px solid #06aedd;
 	outline-offset: 1px;
 }
@@ -395,7 +394,7 @@ body.woodev-modal-lock {
    invisible where a keyboard user would look for it first. A NEGATIVE `outline-offset` draws the
    ring INSIDE the button's own box instead, so it survives the clip on every side; a 48px square
    button has plenty of room for a 2px ring 3px in from its own edge. */
-.woodev-modal .woodev-modal__close.woodev-modal__close.woodev-modal__close:focus-visible {
+.woodev-modal.woodev-modal button.woodev-modal__close:focus-visible {
 	outline: 2px solid #06aedd;
 	outline-offset: -3px;
 }

@@ -30,10 +30,10 @@
  * only when it exists on disk), so there is no preprocessor, no `@import`, no remote URL here.
  *
  * THIS IS STOREFRONT CSS, NOT ADMIN CSS. It loads inside a merchant's theme, which may be
- * anything, so it assumes nothing about the page's own styles. Specificity stays flat — single
- * class selectors almost everywhere, no `!important` — so a theme CAN restyle decoration without
- * a specificity war, while every property that matters for LAYOUT states its own value outright
- * rather than inheriting one a theme might have overridden globally.
+ * anything, so it assumes nothing about the page's own styles. Most panel selectors stay at one
+ * class so themes can restyle non-interactive decoration. Button controls use the stage twice plus
+ * their native `button` and component class: that specificity protects their complete appearance
+ * from common theme button and hover/focus rules, while component state rules remain authoritative.
  *
  * ACCENT COLOURS — D-15, split into THREE knobs by issue #203 (was two: a single accent
  * doubled as both brand identity AND the surface under contrast text, which is why
@@ -202,9 +202,8 @@
 	appearance: none;
 }
 
-.woodev-pickup-stage.woodev-pickup-stage :where( button ) {
-	/* Keep the full reset ahead of theme-kit element selectors; component rules later
-	   in this file remain authoritative by source order. */
+.woodev-pickup-stage.woodev-pickup-stage button {
+	/* Component rules below tie this reset and own the final button appearance. */
 	padding: 0;
 	border: 0;
 	background: none;
@@ -219,7 +218,9 @@
 }
 
 .woodev-pickup-stage.woodev-pickup-stage button:hover,
-.woodev-pickup-stage.woodev-pickup-stage button:focus {
+.woodev-pickup-stage.woodev-pickup-stage button:focus,
+.woodev-pickup-stage.woodev-pickup-stage button:disabled,
+.woodev-pickup-stage.woodev-pickup-stage button:active {
 	padding: 0;
 	border: 0;
 	background: none;
@@ -655,7 +656,7 @@
 	color: #1e1e1e;
 }
 
-.woodev-pickup-message__retry {
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-message__retry {
 	display: inline-block;
 	margin-top: 12px;
 	padding: 6px 16px;
@@ -801,7 +802,7 @@
    `.woodev-pickup-list__point` — see `buildListItem()` in pickup-panels.js), while one point of
    a co-located group gets its OWN `.woodev-pickup-list__point` button instead. */
 .woodev-pickup-list__item:not( :has( .woodev-pickup-list__point ) ),
-.woodev-pickup-stage .woodev-pickup-list__point{
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-list__point {
 	display: grid;
 	grid-template-columns: auto 1fr;
 	grid-template-areas: 'icon address' 'icon name' 'icon distance';
@@ -819,7 +820,7 @@
 }
 
 .woodev-pickup-list__item:not( :has( .woodev-pickup-list__point ) ):hover,
-.woodev-pickup-stage .woodev-pickup-list__point.woodev-pickup-list__point:hover{
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-list__point:hover {
 	background: #f6f7f7;
 }
 
@@ -843,7 +844,7 @@
    triplet) can be alpha-blended through without a second, independently-invented CSS variable for
    the channels. */
 .woodev-pickup-list__item.is-selected,
-.woodev-pickup-stage .woodev-pickup-list__point.is-selected{
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-list__point.is-selected {
 	background: rgba( 6, 174, 221, 0.06 );
 	background: color-mix( in srgb, var( --woodev-pickup-accent, #06aedd ) 6%, transparent );
 	box-shadow: inset 3px 0 0 var( --woodev-pickup-accent, #06aedd );
@@ -865,7 +866,7 @@
    on source order (this rule comes later); the point half already outranks its own 2-class `:hover`
    rule outright, so it only needs to exist here for symmetry/readability, not to win anything new. */
 .woodev-pickup-list__item.is-selected:hover,
-.woodev-pickup-stage .woodev-pickup-list__point.woodev-pickup-list__point.is-selected:hover{
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-list__point.is-selected:hover {
 	background: rgba( 6, 174, 221, 0.06 );
 	background: color-mix( in srgb, var( --woodev-pickup-accent, #06aedd ) 6%, transparent );
 }
@@ -889,7 +890,7 @@
    button reset also sets both (for its OWN default `inline-flex` case) and grid's initial values
    differ enough from a flat row's implicit defaults to be worth stating outright, matching this
    file's own "state values a theme might override, don't inherit them" convention. */
-.woodev-pickup-stage .woodev-pickup-list__point{
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-list__point {
 	display: grid !important;
 	align-items: stretch;
 	justify-content: normal;
@@ -977,7 +978,7 @@
 	color: #646970;
 }
 
-.woodev-pickup-list__show-nearest {
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-list__show-nearest {
 	padding: 8px 16px;
 	font-size: 13px;
 	color: #1e1e1e;
@@ -987,7 +988,7 @@
 	cursor: pointer;
 }
 
-.woodev-pickup-list__show-nearest:hover {
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-list__show-nearest:hover {
 	background: #f6f7f7;
 }
 
@@ -1018,7 +1019,7 @@
    `.drawer-control__button`, `wc-yandex-delivery-pickup-point-modal-map.css`) — one more case of
    the file docblock's "GEOMETRY MATCHES THE REFERENCE EXACTLY" rule, not a new number invented
    for this task. */
-.woodev-pickup-stage .woodev-pickup-list__toggle{
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-list__toggle {
 	position: absolute;
 	right: 16px;
 	bottom: 32px;
@@ -1038,7 +1039,7 @@
 	pointer-events: auto;
 }
 
-.woodev-pickup-stage .woodev-pickup-list__toggle::before{
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-list__toggle::before {
 	content: '\2039'; /* ‹ — invites opening (list is off-screen to the right of it). */
 	font-size: 22px;
 	line-height: 1;
@@ -1061,11 +1062,11 @@
    button must clear the panel's own 320px cap PLUS that 16px gutter, and then keep its own 16px of
    air beside it: 16 + 16 = 32. Left at the old 16, the button would sit exactly on the panel's edge
    and overlap the list content beneath it. */
-.woodev-pickup-stage.is-open .woodev-pickup-list__toggle {
+.woodev-pickup-stage.woodev-pickup-stage .is-open button.woodev-pickup-list__toggle {
 	right: calc( min( 320px, 100% - 48px ) + 32px );
 }
 
-.woodev-pickup-stage.is-open .woodev-pickup-list__toggle::before {
+.woodev-pickup-stage.woodev-pickup-stage .is-open button.woodev-pickup-list__toggle::before {
 	content: '\203A'; /* › — invites closing, mirrored once the list is open beside it. */
 }
 
@@ -1103,7 +1104,7 @@
 	box-shadow: 0 1px 2px rgba( 0, 0, 0, 0.04 ), 0 4px 8px rgba( 0, 0, 0, 0.06 );
 }
 
-.woodev-pickup-stage .woodev-pickup-zoom__button{
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-zoom__button {
 	width: 36px;
 	height: 36px;
 	margin: 0;
@@ -1122,7 +1123,7 @@
 	cursor: pointer;
 }
 
-.woodev-pickup-stage .woodev-pickup-zoom__button.woodev-pickup-zoom__button:hover{
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-zoom__button:hover {
 	background: #f6f7f7;
 }
 
@@ -1134,16 +1135,16 @@
    bug. `!important` on `display`-adjacent chrome is not needed here (nothing in the hostile-theme
    reset touches `opacity`), but the `:hover` background IS re-neutralised below, because the
    base `:hover` rule above would otherwise still light up a dead button. */
-.woodev-pickup-stage .woodev-pickup-zoom__button.woodev-pickup-zoom__button:disabled{
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-zoom__button:disabled {
 	opacity: 0.4;
 	cursor: default;
 }
 
-.woodev-pickup-stage .woodev-pickup-zoom__button.woodev-pickup-zoom__button:disabled:hover{
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-zoom__button:disabled:hover {
 	background: #fff;
 }
 
-.woodev-pickup-stage .woodev-pickup-zoom__button + .woodev-pickup-zoom__button{
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-zoom__button + button.woodev-pickup-zoom__button {
 	border-top: 1px solid rgba( 0, 0, 0, 0.08 );
 }
 
@@ -1228,7 +1229,7 @@
    here any more; the svg simply inherits `color` below like any other icon in this file.
    (The magnifier this rule used to share was removed with the submit button — operator,
    07.08.2026; see `pickup-panels.js`'s "NO SUBMIT BUTTON" note.) */
-.woodev-pickup-search__reset {
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-search__reset {
 	display: inline-flex;
 	flex: 0 0 auto;
 	align-items: center;
@@ -1262,11 +1263,11 @@
    records — see gotcha `hostile-theme-display-none-needs-important`. The sibling
    `.woodev-pickup-search__results[hidden]` guard needs no flag: it is a `<div>`, and the div reset
    is not `!important`. */
-.woodev-pickup-search__reset[hidden] {
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-search__reset[hidden] {
 	display: none !important;
 }
 
-.woodev-pickup-search__reset:hover {
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-search__reset:hover {
 	background: #f6f7f7;
 }
 
@@ -1422,7 +1423,7 @@
 	border-top: 1px solid #dcdcde;
 }
 
-.woodev-pickup-stage .woodev-pickup-filter__toggle{
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-filter__toggle {
 	display: inline-flex;
 	position: relative; /* positions the badge, pinned to this button's own corner. */
 	align-items: center;
@@ -1439,25 +1440,25 @@
 	cursor: pointer;
 }
 
-.woodev-pickup-stage .woodev-pickup-filter__toggle.woodev-pickup-filter__toggle:hover{
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-filter__toggle:hover {
 	background: #f6f7f7;
 }
 
-.woodev-pickup-stage .woodev-pickup-filter__toggle svg{
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-filter__toggle svg {
 	width: 18px;
 	height: 18px;
 }
 
 /* Fallback home: a flat, borderless 32px icon button — matching the sidebar's own controls
    instead of the search bar's floating white pill, which would look out of place mid-list. */
-.woodev-pickup-stage .woodev-pickup-list .woodev-pickup-filter__toggle{
+.woodev-pickup-stage.woodev-pickup-stage .woodev-pickup-list button.woodev-pickup-filter__toggle {
 	width: 32px;
 	height: 32px;
 	background: none;
 	box-shadow: none;
 }
 
-.woodev-pickup-stage .woodev-pickup-list .woodev-pickup-filter__toggle.woodev-pickup-filter__toggle:hover{
+.woodev-pickup-stage.woodev-pickup-stage .woodev-pickup-list button.woodev-pickup-filter__toggle:hover {
 	background: #f6f7f7;
 }
 
@@ -1469,15 +1470,15 @@
    control in this file does. Selectors repeat both toggle homes explicitly (desktop pill + the
    list fallback) so this always outranks whichever base rule applies, on specificity rather than
    on which one happens to load last. */
-.woodev-pickup-stage .woodev-pickup-filter__toggle.is-filtered,
-.woodev-pickup-stage .woodev-pickup-list .woodev-pickup-filter__toggle.is-filtered{
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-filter__toggle.is-filtered,
+.woodev-pickup-stage.woodev-pickup-stage .woodev-pickup-list button.woodev-pickup-filter__toggle.is-filtered {
 	color: var( --woodev-pickup-accent-contrast, #fff );
 	background: var( --woodev-pickup-accent-fill, #047a9b );
 	box-shadow: 0 1px 2px rgba( 0, 0, 0, 0.04 ), 0 4px 8px rgba( 0, 0, 0, 0.06 );
 }
 
-.woodev-pickup-stage .woodev-pickup-filter__toggle.woodev-pickup-filter__toggle.is-filtered:hover,
-.woodev-pickup-stage .woodev-pickup-list .woodev-pickup-filter__toggle.woodev-pickup-filter__toggle.is-filtered:hover{
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-filter__toggle.is-filtered:hover,
+.woodev-pickup-stage.woodev-pickup-stage .woodev-pickup-list button.woodev-pickup-filter__toggle.is-filtered:hover {
 	filter: brightness( 1.08 );
 }
 
@@ -1861,7 +1862,7 @@
 	border-radius: 4px;
 }
 
-.woodev-pickup-stage .woodev-pickup-card__tab{
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-card__tab {
 	flex: 1 1 auto; /* Content-sized first, equal split of the LEFTOVER only — round 5, see this
 	                    block's own comment for why `flex: 1 1 0` truncated the ordinary case. */
 	min-width: 0; /* Lets `text-overflow` below actually engage — WITHOUT this, a flex item's
@@ -1880,23 +1881,23 @@
 	cursor: pointer;
 }
 
-.woodev-pickup-stage .woodev-pickup-card__tab:first-child{
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-card__tab:first-child {
 	border-radius: 3px 0 0 3px; /* 1px less than the container's own radius — nests inside its border. */
 }
 
-.woodev-pickup-stage .woodev-pickup-card__tab:last-child{
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-card__tab:last-child {
 	border-radius: 0 3px 3px 0;
 }
 
-.woodev-pickup-stage .woodev-pickup-card__tab:only-child{
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-card__tab:only-child {
 	border-radius: 3px; /* Defensive: D-4 omits `.woodev-pickup-card__tabs` entirely below 2 points. */
 }
 
-.woodev-pickup-stage .woodev-pickup-card__tab + .woodev-pickup-card__tab{
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-card__tab + button.woodev-pickup-card__tab {
 	border-left: 1px solid #dcdcde; /* The divider — replaces the old inter-tab `gap`. */
 }
 
-.woodev-pickup-stage .woodev-pickup-card__tab.is-active{
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-card__tab.is-active {
 	color: var( --woodev-pickup-accent-contrast, #fff );
 	background: var( --woodev-pickup-accent-fill, #047a9b );
 }
@@ -1909,7 +1910,7 @@
    treatment in a separate live-review round) — a small circular button sitting inside a panel
    reads differently from a control that IS a dialog's own corner, and nothing about this row
    restructure changes that distinction. */
-.woodev-pickup-stage .woodev-pickup-card__close{
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-card__close {
 	flex: 0 0 auto;
 	width: 32px;
 	height: 32px;
@@ -1924,7 +1925,7 @@
 	cursor: pointer;
 }
 
-.woodev-pickup-stage .woodev-pickup-card__close.woodev-pickup-card__close:hover{
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-card__close:hover {
 	color: #000;
 	background: #f6f7f7;
 }
@@ -1944,7 +1945,7 @@
  * than a circle because it carries text.
  * ---------------------------------------------------------------------- */
 
-.woodev-pickup-card__back {
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-card__back {
 	display: inline-flex;
 	flex: 0 0 auto;
 	align-items: center;
@@ -1961,7 +1962,7 @@
 	cursor: pointer;
 }
 
-.woodev-pickup-card__back:hover {
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-card__back:hover {
 	color: #000;
 	background: #f6f7f7;
 }
@@ -2039,7 +2040,7 @@
 
 /* The info button beside the "Opening hours" heading (#152). A bare icon, 20px square so the tap
    target is not a 16px sliver; the tooltip it describes is `.woodev-pickup-tip` below. */
-.woodev-pickup-stage .woodev-pickup-card__tip-toggle{
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-card__tip-toggle {
 	width: 20px;
 	height: 20px;
 	border-radius: 50%;
@@ -2047,8 +2048,8 @@
 	cursor: help;
 }
 
-.woodev-pickup-stage .woodev-pickup-card__tip-toggle.woodev-pickup-card__tip-toggle:hover,
-.woodev-pickup-stage .woodev-pickup-card__tip-toggle.woodev-pickup-card__tip-toggle:focus-visible{
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-card__tip-toggle:hover,
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-card__tip-toggle:focus-visible {
 	color: #1e1e1e;
 }
 
@@ -2171,7 +2172,7 @@
 	border-radius: 0 4px 4px 0;
 }
 
-.woodev-pickup-stage .woodev-pickup-card__cta{
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-card__cta {
 	display: block;
 	width: 100%;
 	padding: 10px 16px;
@@ -2184,7 +2185,7 @@
 	cursor: pointer;
 }
 
-.woodev-pickup-stage .woodev-pickup-card__cta.woodev-pickup-card__cta:disabled{
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-card__cta:disabled {
 	color: #646970;
 	background: #dcdcde;
 	cursor: not-allowed;
@@ -2198,7 +2199,7 @@
    accent-fill border and text, a tick drawn by `::before`. Wins over `:disabled` above by
    specificity (0,2,0 + a pseudo-class vs 0,1,0 + one), no `!important` needed. Element-only
    selector, no `.is-manager` gate: only manager mode ever adds the class. */
-.woodev-pickup-stage .woodev-pickup-card__cta.woodev-pickup-card__cta.is-selected:disabled{
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-card__cta.is-selected:disabled {
 	color: var( --woodev-pickup-accent-fill, #047a9b );
 	background: rgba( 6, 174, 221, 0.06 );
 	background: color-mix( in srgb, var( --woodev-pickup-accent, #06aedd ) 6%, transparent );
@@ -2207,7 +2208,7 @@
 	cursor: default;
 }
 
-.woodev-pickup-stage .woodev-pickup-card__cta.is-selected::before{
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-card__cta.is-selected::before {
 	margin-right: 8px;
 	content: '\2713'; /* ✓ */
 }
@@ -2228,7 +2229,7 @@
    which of the two confirmations is running, and a button that changes size mid-request makes
    the whole footer jump. Same 0.8s linear rotation as `.woodev-pickup-spinner`, at text size,
    in the button's own colour. */
-.woodev-pickup-stage .woodev-pickup-card__cta.is-busy::before{
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-card__cta.is-busy::before {
 	display: inline-block;
 	width: 14px;
 	height: 14px;
@@ -2243,7 +2244,7 @@
 
 @media ( prefers-reduced-motion: reduce ) {
 
-	.woodev-pickup-stage .woodev-pickup-card__cta.is-busy::before{
+	.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-card__cta.is-busy::before {
 		animation-duration: 3s;
 	}
 }
@@ -2380,19 +2381,19 @@
  * the tab order at all and has no rule here (a pre-existing gap, tracked separately).
  * ---------------------------------------------------------------------- */
 
-.woodev-pickup-stage .woodev-pickup-list__toggle.woodev-pickup-list__toggle:focus-visible,
-.woodev-pickup-stage .woodev-pickup-zoom__button.woodev-pickup-zoom__button:focus-visible,
-.woodev-pickup-stage .woodev-pickup-list__point.woodev-pickup-list__point:focus-visible,
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-list__toggle:focus-visible,
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-zoom__button:focus-visible,
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-list__point:focus-visible,
 .woodev-pickup-list__item[role="button"]:focus-visible,
-.woodev-pickup-list__show-nearest:focus-visible,
-.woodev-pickup-stage .woodev-pickup-filter__toggle.woodev-pickup-filter__toggle:focus-visible,
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-list__show-nearest:focus-visible,
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-filter__toggle:focus-visible,
 .woodev-pickup-filter__checkbox:focus-visible,
-.woodev-pickup-stage .woodev-pickup-card__tab.woodev-pickup-card__tab:focus-visible,
-.woodev-pickup-stage .woodev-pickup-card__close.woodev-pickup-card__close:focus-visible,
-.woodev-pickup-card__back:focus-visible,
-.woodev-pickup-stage .woodev-pickup-card__cta.woodev-pickup-card__cta:focus-visible,
-.woodev-pickup-stage .woodev-pickup-card__tip-toggle.woodev-pickup-card__tip-toggle:focus-visible,
-.woodev-pickup-card__howto > summary:focus-visible{
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-card__tab:focus-visible,
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-card__close:focus-visible,
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-card__back:focus-visible,
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-card__cta:focus-visible,
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-card__tip-toggle:focus-visible,
+.woodev-pickup-card__howto > summary:focus-visible {
 	outline: 2px solid var( --woodev-pickup-accent, #06aedd );
 	outline-offset: 1px;
 }
@@ -2482,7 +2483,7 @@
 	   is what removes that strip and forces a different answer. What IS taken from the reference is
 	   the card state below — there the button simply disappears under the panel (`.balloon-layout`
 	   `z-index: 3` over a button with no `z-index` at all). */
-	.woodev-pickup-stage.is-open .woodev-pickup-list__toggle {
+	.woodev-pickup-stage.woodev-pickup-stage .is-open button.woodev-pickup-list__toggle {
 		right: 0;
 		bottom: 0;
 		left: 0;
@@ -2513,7 +2514,7 @@
 	   `.woodev-pickup-search__reset[hidden]` further up — see the gotcha
 	   `hostile-theme-button-display-none-needs-important` and its s51 addendum, whose whole point
 	   is that every LATER rule touching an `!important`-defended property needs the flag in kind. */
-	.woodev-pickup-stage.is-open.is-card .woodev-pickup-list__toggle {
+	.woodev-pickup-stage.woodev-pickup-stage .is-open.is-card button.woodev-pickup-list__toggle {
 		display: none !important;
 	}
 
@@ -2524,9 +2525,9 @@
 	 * filter toggle's fallback list-home (32×32, used when the plugin disables search), the zoom
 	 * buttons (36×36) and the card close button (32×32) are still under the minimum.
 	 */
-	.woodev-pickup-stage .woodev-pickup-list .woodev-pickup-filter__toggle,
-.woodev-pickup-stage .woodev-pickup-zoom__button,
-.woodev-pickup-stage .woodev-pickup-card__close{
+	.woodev-pickup-stage.woodev-pickup-stage .woodev-pickup-list button.woodev-pickup-filter__toggle,
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-zoom__button,
+.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-card__close {
 		width: 44px;
 		height: 44px;
 	}
@@ -2585,7 +2586,7 @@
 		display: flex !important;
 	}
 
-	.woodev-pickup-card__back {
+	.woodev-pickup-stage.woodev-pickup-stage button.woodev-pickup-card__back {
 		height: 44px;
 		border-radius: 22px;
 	}
