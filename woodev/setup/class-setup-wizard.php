@@ -31,9 +31,6 @@ abstract class Setup_Wizard {
 	/** @var bool Whether plugin steps have been registered for this request. */
 	private bool $steps_initialized = false;
 
-	/** @var bool Whether the wizard hooks have been wired. */
-	private bool $hooks_added = false;
-
 	/**
 	 * Cached completion state ('' | 'completed' | 'skipped'); null until first read.
 	 *
@@ -52,27 +49,13 @@ abstract class Setup_Wizard {
 	 */
 	public function __construct( \Woodev_Plugin $plugin ) {
 		$this->plugin = $plugin;
-		add_action( 'admin_init', [ $this, 'initialize' ], 0 );
+		// Some hooks (notably the one-shot installation event and REST bootstrap) fire
+		// before admin_init or on requests where admin_init never runs.
+		$this->add_hooks();
 	}
 
 	/**
-	 * Builds plugin steps and wires the wizard once WordPress reaches admin_init.
-	 *
-	 * @since 2.0.15
-	 *
-	 * @return void
-	 */
-	public function initialize(): void {
-		$this->ensure_steps_initialized();
-
-		if ( ! empty( $this->steps ) && ! $this->hooks_added ) {
-			$this->hooks_added = true;
-			$this->add_hooks();
-		}
-	}
-
-	/**
-	 * Registers the steps on first use, then wires hooks when the wizard has any.
+	 * Registers the steps on first use.
 	 *
 	 * @since 2.0.15
 	 *
@@ -397,6 +380,10 @@ abstract class Setup_Wizard {
 	 * @return void
 	 */
 	public function handle_installed(): void {
+		if ( ! $this->has_steps() ) {
+			return;
+		}
+
 		set_transient( $this->get_redirect_transient_name(), 1, HOUR_IN_SECONDS );
 	}
 
@@ -437,7 +424,7 @@ abstract class Setup_Wizard {
 	 * @return void
 	 */
 	public function maybe_redirect(): void {
-		if ( ! $this->should_redirect_on_admin_init() ) {
+		if ( ! $this->should_redirect_on_admin_init() || ! $this->has_steps() ) {
 			return;
 		}
 
@@ -478,6 +465,10 @@ abstract class Setup_Wizard {
 	 * @return void
 	 */
 	public function register_page(): void {
+		if ( ! $this->has_steps() ) {
+			return;
+		}
+
 		$hook = add_submenu_page(
 			'', // hidden: no parent menu.
 			$this->plugin->get_plugin_name(),
@@ -532,7 +523,7 @@ abstract class Setup_Wizard {
 	 * @return void
 	 */
 	public function maybe_render_full_screen(): void {
-		if ( ! $this->is_wizard_page_request() ) {
+		if ( ! $this->is_wizard_page_request() || ! $this->has_steps() ) {
 			return;
 		}
 
@@ -899,7 +890,7 @@ abstract class Setup_Wizard {
 	 * @return void
 	 */
 	public function maybe_render_notice(): void {
-		if ( ! current_user_can( $this->required_capability ) ) {
+		if ( ! current_user_can( $this->required_capability ) || ! $this->has_steps() ) {
 			return;
 		}
 
@@ -940,7 +931,7 @@ abstract class Setup_Wizard {
 	 * @return string[]
 	 */
 	public function add_action_link( array $links ): array {
-		if ( ! $this->is_complete() ) {
+		if ( $this->has_steps() && ! $this->is_complete() ) {
 			$links[] = sprintf( '<a href="%s">%s</a>', esc_url( $this->get_setup_url() ), esc_html__( 'Настройка', 'woodev-plugin-framework' ) );
 		}
 
@@ -957,6 +948,10 @@ abstract class Setup_Wizard {
 	 * @return void
 	 */
 	public function register_rest(): void {
+		if ( ! $this->has_steps() ) {
+			return;
+		}
+
 		if ( ! class_exists( 'Woodev_REST_API_Setup' ) ) {
 			require_once $this->plugin->get_framework_path() . '/rest-api/controllers/class-rest-api-setup.php';
 		}

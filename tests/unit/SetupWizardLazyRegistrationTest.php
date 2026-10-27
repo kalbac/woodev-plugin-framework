@@ -7,6 +7,8 @@
 
 namespace Woodev\Tests\Unit;
 
+use Brain\Monkey\Actions;
+use Brain\Monkey\Filters;
 use Brain\Monkey\Functions;
 use Mockery;
 use Woodev\Framework\Setup\Setup_Wizard;
@@ -30,9 +32,13 @@ class Lazy_Registration_Test_Wizard extends Setup_Wizard {
 /** @covers \Woodev\Framework\Setup\Setup_Wizard */
 class SetupWizardLazyRegistrationTest extends TestCase {
 
-	public function test_constructor_defers_steps_until_first_access_and_registers_only_once(): void {
-		Functions\when( 'add_action' )->justReturn( null );
-		Functions\when( 'add_filter' )->justReturn( null );
+	public function test_constructor_registers_hooks_without_building_steps_until_first_access(): void {
+		Actions\expectAdded( 'woodev_lazy-registration_installed' )->once();
+		Actions\expectAdded( 'admin_init' )->twice();
+		Actions\expectAdded( 'admin_notices' )->once();
+		Actions\expectAdded( 'admin_menu' )->once();
+		Actions\expectAdded( 'rest_api_init' )->once();
+		Filters\expectAdded( 'plugin_action_links_acme/plugin.php' )->once();
 		Functions\when( 'apply_filters' )->returnArg( 2 );
 		Functions\when( 'plugin_basename' )->justReturn( 'acme/plugin.php' );
 
@@ -43,10 +49,10 @@ class SetupWizardLazyRegistrationTest extends TestCase {
 		$wizard = new Lazy_Registration_Test_Wizard( $plugin );
 
 		$this->assertSame( 0, $wizard->register_calls );
+
 		$this->assertTrue( $wizard->has_steps() );
 		$this->assertSame( 1, $wizard->register_calls );
-
-		$wizard->initialize();
+		$this->assertTrue( $wizard->has_steps() );
 		$this->assertSame( 1, $wizard->register_calls );
 	}
 }
