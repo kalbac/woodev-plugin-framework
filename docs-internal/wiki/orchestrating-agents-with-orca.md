@@ -380,6 +380,15 @@ consumed, and a "the brief's baseline is stale" that turned out to be the skippe
 
 ## kilo as the critic — the recipe that actually returns an event (s97)
 
+> **s200 (27.10.2026, Mac, Orca current, kilo 7.8.3): `worker-start --agent kilo` now works end to end** — the
+> brief is injected, the critic reads files, runs tests and sends a real `worker_done` (9 critic rounds, none revoked).
+> Used when the Claude weekly limit was at 93 % and every worker was Codex: the critic ran
+> `kilo/anthropic/claude-sonnet-5.5` on the Kilo Gateway balance (another lineage, not the Claude subscription). `--model`
+> still does not reach kilo; it starts on the LAST USED model, so pin it once with a throwaway
+> `kilo run -m kilo/anthropic/claude-sonnet-5.5 "Reply PONG"` and check the status bar (`terminal read`). A headless
+> `kilo run --auto` critic from the coordinator's shell is refused by the auto-mode classifier («Create Unsafe Agents») —
+> go through Orca. Kilo critics report `activity: unknown` in `worker-list`; the terminal watchdog still works.
+
 > **Status, 28.08.2026 (s102): Codex is back, the subscription was renewed, and it is the default
 > critic again — smoke-tested through Orca, not assumed.** Everything below stays as the FALLBACK
 > recipe: it is what you need the day Codex is unreachable again, and every measurement in it was
