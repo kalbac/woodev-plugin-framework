@@ -8,6 +8,7 @@
 namespace Woodev\Tests\Integration;
 
 use Woodev\Framework\Handlers\Framework_Translations;
+use Woodev\Framework\Handlers\Translation_Handler;
 use Woodev\Framework\Framework_Resolver;
 
 /** Core l10n semantics cannot be proven by Brain Monkey doubles. */
@@ -19,14 +20,34 @@ class FrameworkTranslationsTest extends TestCase {
 	/** @var callable|null File remapping filter. */
 	private $file_filter;
 
+	/** @var callable|null Plugin locale filter. */
+	private $plugin_locale_filter;
+
+	/** @var callable|null Available locales filter. */
+	private $available_languages_filter;
+
+	/** @var Translation_Handler|null Handler registered by the plugin-domain test. */
+	private ?Translation_Handler $translation_handler = null;
+
 	protected function tearDown(): void {
 		if ( $this->file_filter ) {
 			remove_filter( 'load_textdomain_mofile', $this->file_filter );
+		}
+		if ( $this->plugin_locale_filter ) {
+			remove_filter( 'plugin_locale', $this->plugin_locale_filter );
+		}
+		if ( $this->available_languages_filter ) {
+			remove_filter( 'get_available_languages', $this->available_languages_filter );
+		}
+		if ( $this->translation_handler ) {
+			remove_action( 'init', [ $this->translation_handler, 'load_translations' ] );
+			remove_action( 'change_locale', [ $this->translation_handler, 'reload_translations' ] );
 		}
 		foreach ( $this->packs as $pack ) {
 			unlink( $pack );
 		}
 		unload_textdomain( 'woodev-plugin-framework' );
+		unload_textdomain( 'woodev-test-plugin' );
 		parent::tearDown();
 	}
 
@@ -48,6 +69,61 @@ class FrameworkTranslationsTest extends TestCase {
 
 		$this->assertSame( 'Внешнее поздравление', __( 'Wonderful', 'woodev-plugin-framework' ) );
 		$this->assertSame( 'Восхитительно', __( 'Amazing', 'woodev-plugin-framework' ) );
+	}
+
+	/** The plugin handler merges its bundled catalogue after an external stale catalogue. */
+	public function test_plugin_domain_fills_stale_external_pack_gaps_without_overriding_it(): void {
+		$domain = 'woodev-test-plugin';
+		$plugin = $this->get_test_plugin();
+		$external = $this->create_pack( [ 'Shared' => 'Внешний перевод', 'External only' => 'Только внешний перевод' ] );
+		$bundled  = $this->create_pack( [ 'Shared' => 'Перевод плагина', 'Bundled only' => 'Перевод из комплекта' ] );
+		$plugin_file = $plugin->get_plugin_file();
+		$plugin_path = WP_PLUGIN_DIR . '/' . dirname( plugin_basename( $plugin_file ) ) . '/languages/' . $domain . '-ru_RU.mo';
+		$external_path = WP_LANG_DIR . '/plugins/' . $domain . '-ru_RU.mo';
+		$this->file_filter = static function ( string $file, string $loaded_domain ) use ( $domain, $external_path, $plugin_path, $external, $bundled ): string {
+			if ( $domain !== $loaded_domain ) {
+				return $file;
+			}
+
+			return $external_path === $file ? $external : ( $plugin_path === $file ? $bundled : $file );
+		};
+		$forced_locale = 'ru_RU';
+		$this->plugin_locale_filter = static function ( string $locale, string $loaded_domain ) use ( $domain, &$forced_locale ): string {
+			return $domain === $loaded_domain && null !== $forced_locale ? $forced_locale : $locale;
+		};
+		add_filter( 'load_textdomain_mofile', $this->file_filter, 10, 2 );
+		add_filter( 'plugin_locale', $this->plugin_locale_filter, 10, 2 );
+
+		unload_textdomain( $domain );
+		$this->translation_handler = new Translation_Handler( $plugin );
+		$this->translation_handler->load_translations();
+
+		$this->assertSame( 'Внешний перевод', __( 'Shared', $domain ) );
+		$this->assertSame( 'Только внешний перевод', __( 'External only', $domain ) );
+		$this->assertSame( 'Перевод из комплекта', __( 'Bundled only', $domain ) );
+
+		$this->available_languages_filter = static function ( array $languages ): array {
+			return array_merge( $languages, [ 'ru_RU' ] );
+		};
+		add_filter( 'get_available_languages', $this->available_languages_filter );
+		$forced_locale = null;
+		// WP_Locale_Switcher caches the available languages in init(), so a fresh one sees the filter.
+		global $wp_locale_switcher;
+		$original_switcher  = $wp_locale_switcher;
+		$wp_locale_switcher = new \WP_Locale_Switcher();
+		$wp_locale_switcher->init();
+		try {
+			$this->assertTrue( switch_to_locale( 'ru_RU' ) );
+			$this->assertSame( 'Внешний перевод', __( 'Shared', $domain ) );
+			$this->assertSame( 'Только внешний перевод', __( 'External only', $domain ) );
+			$this->assertSame( 'Перевод из комплекта', __( 'Bundled only', $domain ) );
+		} finally {
+			restore_current_locale();
+			remove_filter( 'locale', [ $wp_locale_switcher, 'filter_locale' ] );
+			remove_filter( 'determine_locale', [ $wp_locale_switcher, 'filter_locale' ] );
+			$wp_locale_switcher = $original_switcher;
+		}
+		$this->assertSame( 'Shared', __( 'Shared', $domain ) );
 	}
 
 	/** Locale switching and restoration must merge overrides again, rather than JIT-loading one file. */
@@ -115,18 +191,27 @@ class FrameworkTranslationsTest extends TestCase {
 
 	/** Remaps a real external .mo path to a temporary pack without touching rig language files. */
 	private function remap_external_pack( string $directory ): void {
-		$mo = new \MO();
-		$mo->set_header( 'Language', 'ru_RU' );
-		$mo->add_entry( new \Translation_Entry( [ 'singular' => 'Wonderful', 'translations' => [ 'Внешнее поздравление' ] ] ) );
-		$temporary = tempnam( sys_get_temp_dir(), 'woodev-i18n-' );
-		$pack = $temporary . '.mo';
-		rename( $temporary, $pack );
-		$this->packs[] = $pack;
-		$this->assertTrue( $mo->export_to_file( $pack ) );
+		$pack = $this->create_pack( [ 'Wonderful' => 'Внешнее поздравление' ] );
 		$external = WP_LANG_DIR . '/' . $directory . '/woodev-plugin-framework-ru_RU.mo';
 		$this->file_filter = static function ( string $file, string $domain ) use ( $external, $pack ): string {
 			return 'woodev-plugin-framework' === $domain && $external === $file ? $pack : $file;
 		};
 		add_filter( 'load_textdomain_mofile', $this->file_filter, 10, 2 );
+	}
+
+	/** Create a real MO catalogue for WordPress core to load. */
+	private function create_pack( array $entries ): string {
+		$mo = new \MO();
+		$mo->set_header( 'Language', 'ru_RU' );
+		foreach ( $entries as $singular => $translation ) {
+			$mo->add_entry( new \Translation_Entry( [ 'singular' => $singular, 'translations' => [ $translation ] ] ) );
+		}
+		$temporary = tempnam( sys_get_temp_dir(), 'woodev-i18n-' );
+		$pack      = $temporary . '.mo';
+		rename( $temporary, $pack );
+		$this->packs[] = $pack;
+		$this->assertTrue( $mo->export_to_file( $pack ) );
+
+		return $pack;
 	}
 }

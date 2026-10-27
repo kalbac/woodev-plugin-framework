@@ -1853,6 +1853,49 @@ describe( 'resetWidgetGuard() on the OTHER two clearing routes, against the REAL
 		return { select, resultItem, instance: instances[ 0 ] };
 	}
 
+	it.each( [ 'transport failure', 'persisted false' ] )( 'retries the same city after a %s response', async ( outcome ) => {
+		const consoleSpy = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
+		const instances = bootRealAjaxSelect2Settlement( {} );
+		const query = instances[ 0 ].query( SETTLEMENT_ITEM.label );
+
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { suggestions: [ SETTLEMENT_ITEM ] } );
+		await flushMicrotasks();
+
+		const resultItem = query.success.mock.calls.slice( -1 )[ 0 ][ 0 ].results[ 0 ];
+		instances[ 0 ].pick( resultItem );
+		expect( selectRequests().length ).toBe( 1 );
+
+		if ( 'persisted false' === outcome ) {
+			selectRequests()[ 0 ].resolve( { current: { key: SETTLEMENT_ITEM.key, level: 'settlement' }, persisted: false } );
+		} else {
+			selectRequests()[ 0 ].reject( new Error( 'network down' ) );
+		}
+		await flushMicrotasks();
+
+		instances[ 0 ].pick( resultItem );
+		expect( selectRequests().length ).toBe( 2 );
+		consoleSpy.mockRestore();
+	} );
+
+	it( 'does not resend the same city after a successful response', async () => {
+		const instances = bootRealAjaxSelect2Settlement( {} );
+		const query = instances[ 0 ].query( SETTLEMENT_ITEM.label );
+
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { suggestions: [ SETTLEMENT_ITEM ] } );
+		await flushMicrotasks();
+
+		const resultItem = query.success.mock.calls.slice( -1 )[ 0 ][ 0 ].results[ 0 ];
+		instances[ 0 ].pick( resultItem );
+		selectRequests()[ 0 ].resolve( {
+			current: { key: SETTLEMENT_ITEM.key, level: 'settlement' }, persisted: true,
+			chain: { settlement: { key: SETTLEMENT_ITEM.key, level: 'settlement' } },
+		} );
+		await flushMicrotasks();
+
+		instances[ 0 ].pick( resultItem );
+		expect( selectRequests().length ).toBe( 1 );
+	} );
+
 	it( 'an ancestor (region) text edit — clearDescendants() — lets the SAME still-rendered settlement entry be re-picked', async () => {
 		const { select, resultItem, instance } = await attachPopulateAndPick( { region: true } );
 

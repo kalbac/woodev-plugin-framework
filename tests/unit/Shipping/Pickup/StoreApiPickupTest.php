@@ -137,7 +137,7 @@ final class StoreApiPickupTest extends TestCase {
 
 	protected function setUp(): void {
 		parent::setUp();
-		foreach ( [ 'handlers' => [], 'booted' => false, 'registered' => false, 'echoes' => [] ] as $name => $value ) {
+		foreach ( [ 'handlers' => [], 'booted' => false, 'registered' => false, 'package_filter_registered' => false, 'echoes' => [] ] as $name => $value ) {
 			$property = new \ReflectionProperty( Store_Api_Pickup::class, $name );
 			if ( PHP_VERSION_ID < 80100 ) { $property->setAccessible( true ); }
 			$property->setValue( null, $value );
@@ -147,6 +147,7 @@ final class StoreApiPickupTest extends TestCase {
 		$this->packages = [ [ 'destination' => $this->address, 'rates' => [ 'carrier_pickup:7' => new C2a_Line() ] ] ];
 		$this->point_data = [ 'id' => 'P1', 'name' => 'Point', 'lat' => 55.7, 'lng' => 37.6, 'address' => 'Street', 'locality' => 'msk', 'type' => [ 'code' => 'PVZ', 'label' => 'Pickup' ] ];
 		Functions\when( 'wc_clean' )->alias( static fn( $value ) => is_array( $value ) ? $value : trim( (string) $value ) );
+		Functions\when( 'WC' )->justReturn( (object) [ 'session' => $this->session ] );
 		Functions\when( 'wp_unslash' )->returnArg();
 		Functions\when( 'wp_json_encode' )->alias( 'json_encode' );
 		Functions\when( 'did_action' )->justReturn( 0 );
@@ -185,7 +186,7 @@ final class StoreApiPickupTest extends TestCase {
 	}
 
 	protected function tearDown(): void {
-		foreach ( [ 'handlers' => [], 'booted' => false, 'registered' => false, 'echoes' => [] ] as $name => $value ) {
+		foreach ( [ 'handlers' => [], 'booted' => false, 'registered' => false, 'package_filter_registered' => false, 'echoes' => [] ] as $name => $value ) {
 			$property = new \ReflectionProperty( Store_Api_Pickup::class, $name );
 			if ( PHP_VERSION_ID < 80100 ) { $property->setAccessible( true ); }
 			$property->setValue( null, $value );
@@ -206,6 +207,25 @@ final class StoreApiPickupTest extends TestCase {
 		$errors = new \WP_Error();
 		C2a_Adapter::validate_order( $order, $errors );
 		return $errors;
+	}
+
+	public function test_confirmed_point_changes_shipping_package_hash_input_without_cart_changes(): void {
+		$before = [ [ 'contents_cost' => 42.0 ] ];
+		$this->assertSame( $before, Store_Api_Pickup::add_pickup_selection_to_packages( $before ) );
+
+		$this->handler->fake_selection->remember( 'msk', 'PVZ', 'network_a_point' );
+		$network_a = Store_Api_Pickup::add_pickup_selection_to_packages( $before );
+		$this->handler->fake_selection->remember( 'msk', 'PVZ', 'network_b_point' );
+		$network_b = Store_Api_Pickup::add_pickup_selection_to_packages( $before );
+
+		$this->assertSame( $before, [ [ 'contents_cost' => 42.0 ] ] );
+		$this->assertNotSame( $network_a, $network_b );
+		$this->assertSame( [ 'carrier:carrier_point:carrier_pickup' => 'network_b_point' ], $network_b[0][ Store_Api_Pickup::PACKAGE_KEY ] );
+	}
+
+	public function test_no_confirmed_point_leaves_package_hash_input_unchanged(): void {
+		$packages = [ [ 'contents_cost' => 42.0 ] ];
+		$this->assertSame( $packages, Store_Api_Pickup::add_pickup_selection_to_packages( $packages ) );
 	}
 
 	public function test_confirmation_uses_shared_verdict_action_memory_and_snapshot(): void {

@@ -28,6 +28,9 @@ abstract class Setup_Wizard {
 	/** @var Step[] every registered step keyed by id (visible or not — see get_steps()). */
 	protected array $steps = [];
 
+	/** @var bool Whether plugin steps have been registered for this request. */
+	private bool $steps_initialized = false;
+
 	/**
 	 * Cached completion state ('' | 'completed' | 'skipped'); null until first read.
 	 *
@@ -46,11 +49,25 @@ abstract class Setup_Wizard {
 	 */
 	public function __construct( \Woodev_Plugin $plugin ) {
 		$this->plugin = $plugin;
-		$this->build_steps();
+		// Some hooks (notably the one-shot installation event and REST bootstrap) fire
+		// before admin_init or on requests where admin_init never runs.
+		$this->add_hooks();
+	}
 
-		if ( $this->has_steps() ) {
-			$this->add_hooks();
+	/**
+	 * Registers the steps on first use.
+	 *
+	 * @since 2.0.15
+	 *
+	 * @return void
+	 */
+	private function ensure_steps_initialized(): void {
+		if ( $this->steps_initialized ) {
+			return;
 		}
+
+		$this->steps_initialized = true;
+		$this->build_steps();
 	}
 
 	/**
@@ -199,6 +216,8 @@ abstract class Setup_Wizard {
 	 * @return Step[]
 	 */
 	public function get_steps(): array {
+		$this->ensure_steps_initialized();
+
 		return array_filter(
 			$this->steps,
 			static function ( Step $step ): bool {
@@ -216,22 +235,25 @@ abstract class Setup_Wizard {
 	 * @return Step|null
 	 */
 	public function get_registered_step( string $step_id ): ?Step {
+		$this->ensure_steps_initialized();
+
 		return $this->steps[ $step_id ] ?? null;
 	}
 
 	/**
 	 * Whether the wizard has any registered step.
 	 *
-	 * Deliberately not "any VISIBLE step": it decides whether the hooks are wired, which happens
-	 * while the plugin boots, and running the plugins' visibility predicates that early (over
-	 * settings that may not be ready) is exactly what the graph avoids. A wizard whose steps are
-	 * all hidden shows just its finish step.
+	 * Deliberately not "any VISIBLE step": a hidden step can become visible after a save, and
+	 * running visibility predicates over settings that may not be ready is exactly what the graph
+	 * avoids. A wizard whose steps are all hidden shows just its finish step.
 	 *
 	 * @since 2.0.2
 	 *
 	 * @return bool
 	 */
 	public function has_steps(): bool {
+		$this->ensure_steps_initialized();
+
 		return ! empty( $this->steps );
 	}
 
@@ -358,6 +380,10 @@ abstract class Setup_Wizard {
 	 * @return void
 	 */
 	public function handle_installed(): void {
+		if ( ! $this->has_steps() ) {
+			return;
+		}
+
 		set_transient( $this->get_redirect_transient_name(), 1, HOUR_IN_SECONDS );
 	}
 
@@ -398,7 +424,7 @@ abstract class Setup_Wizard {
 	 * @return void
 	 */
 	public function maybe_redirect(): void {
-		if ( ! $this->should_redirect_on_admin_init() ) {
+		if ( ! $this->should_redirect_on_admin_init() || ! $this->has_steps() ) {
 			return;
 		}
 
@@ -439,6 +465,10 @@ abstract class Setup_Wizard {
 	 * @return void
 	 */
 	public function register_page(): void {
+		if ( ! $this->has_steps() ) {
+			return;
+		}
+
 		$hook = add_submenu_page(
 			'', // hidden: no parent menu.
 			$this->plugin->get_plugin_name(),
@@ -493,7 +523,7 @@ abstract class Setup_Wizard {
 	 * @return void
 	 */
 	public function maybe_render_full_screen(): void {
-		if ( ! $this->is_wizard_page_request() ) {
+		if ( ! $this->is_wizard_page_request() || ! $this->has_steps() ) {
 			return;
 		}
 
@@ -642,6 +672,8 @@ abstract class Setup_Wizard {
 	 * @return array<int,array<string,mixed>>
 	 */
 	public function get_step_graph(): array {
+		$this->ensure_steps_initialized();
+
 		$schema = $this->get_field_schema();
 		$steps  = [];
 
@@ -858,7 +890,7 @@ abstract class Setup_Wizard {
 	 * @return void
 	 */
 	public function maybe_render_notice(): void {
-		if ( ! current_user_can( $this->required_capability ) ) {
+		if ( ! current_user_can( $this->required_capability ) || ! $this->has_steps() ) {
 			return;
 		}
 
@@ -899,7 +931,7 @@ abstract class Setup_Wizard {
 	 * @return string[]
 	 */
 	public function add_action_link( array $links ): array {
-		if ( ! $this->is_complete() ) {
+		if ( $this->has_steps() && ! $this->is_complete() ) {
 			$links[] = sprintf( '<a href="%s">%s</a>', esc_url( $this->get_setup_url() ), esc_html__( 'Настройка', 'woodev-plugin-framework' ) );
 		}
 
@@ -916,6 +948,10 @@ abstract class Setup_Wizard {
 	 * @return void
 	 */
 	public function register_rest(): void {
+		if ( ! $this->has_steps() ) {
+			return;
+		}
+
 		if ( ! class_exists( 'Woodev_REST_API_Setup' ) ) {
 			require_once $this->plugin->get_framework_path() . '/rest-api/controllers/class-rest-api-setup.php';
 		}

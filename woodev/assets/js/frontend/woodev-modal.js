@@ -257,7 +257,10 @@
 		if ( self._backdrop.parentNode ) {
 			self._backdrop.parentNode.removeChild( self._backdrop );
 		}
-		document.body.classList.remove( SCROLL_LOCK_CLASS );
+		if ( ! document.querySelector( '.woodev-modal-backdrop' ) ) {
+			document.body.classList.remove( SCROLL_LOCK_CLASS );
+			document.documentElement.classList.remove( SCROLL_LOCK_CLASS );
+		}
 		self._isOpen = false;
 
 		if ( self._returnFocusTo && typeof self._returnFocusTo.focus === 'function' ) {
@@ -369,6 +372,7 @@
 
 		document.body.appendChild( this._backdrop );
 		document.body.classList.add( SCROLL_LOCK_CLASS );
+		document.documentElement.classList.add( SCROLL_LOCK_CLASS );
 		bindOpenListeners( this );
 		this._isOpen = true;
 

@@ -3056,6 +3056,16 @@
 			return;
 		}
 
+		// A renderer remembers the last key it submitted to suppress duplicate events. Once the
+		// server has answered without persisting it, the same customer choice is a new attempt.
+		var failedNode = entry.chain.find( function( node ) {
+			return node.level === record.level;
+		} );
+
+		if ( failedNode ) {
+			resetWidgetGuard( entry, failedNode.fieldId );
+		}
+
 		if ( notPersisted ) {
 			showNotPersistedNotice( entry );
 			// Nothing was persisted, so there is no record to flag as a default guess —
