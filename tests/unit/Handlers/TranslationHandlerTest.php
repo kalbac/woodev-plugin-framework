@@ -86,13 +86,16 @@ class TranslationHandlerTest extends TestCase {
 		if ( ! defined( 'WP_LANG_DIR' ) ) {
 			define( 'WP_LANG_DIR', '/srv/wp/languages' );
 		}
+		if ( ! defined( 'WP_PLUGIN_DIR' ) ) {
+			define( 'WP_PLUGIN_DIR', '/srv/wp/wp-content/plugins' );
+		}
 
 		$loaded_textdomains        = [];
 		$loaded_plugin_textdomains = [];
 
 		Functions\when( 'load_textdomain' )->alias(
 			static function ( $domain, $mofile ) use ( &$loaded_textdomains ): bool {
-				$loaded_textdomains[ $domain ] = $mofile;
+				$loaded_textdomains[] = [ $domain, $mofile ];
 
 				return true;
 			}
@@ -114,7 +117,10 @@ class TranslationHandlerTest extends TestCase {
 		$this->assertArrayNotHasKey( 'woodev-plugin-framework', $loaded_plugin_textdomains );
 
 		// the plugin's own domain (from get_textdomain()) must be loaded too
-		$this->assertArrayHasKey( 'acme-plugin', $loaded_textdomains );
+		$this->assertSame( [
+			[ 'acme-plugin', WP_LANG_DIR . '/acme-plugin/acme-plugin-ru_RU.mo' ],
+			[ 'acme-plugin', WP_PLUGIN_DIR . '/acme/languages/acme-plugin-ru_RU.mo' ],
+		], $loaded_textdomains );
 		$this->assertArrayHasKey( 'acme-plugin', $loaded_plugin_textdomains );
 	}
 

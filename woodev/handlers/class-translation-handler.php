@@ -95,6 +95,10 @@ if ( ! class_exists( '\Woodev\Framework\Handlers\Translation_Handler' ) ) :
 			load_textdomain( $textdomain, WP_LANG_DIR . '/' . $textdomain . '/' . $textdomain . '-' . $locale . '.mo' );
 
 			load_plugin_textdomain( $textdomain, false, untrailingslashit( $path ) . '/languages' );
+
+			// load_plugin_textdomain() only registers a JIT path on WordPress 6.7+.
+			// Load the bundled catalogue explicitly so it fills gaps in external packs.
+			load_textdomain( $textdomain, WP_PLUGIN_DIR . '/' . untrailingslashit( $path ) . '/languages/' . $textdomain . '-' . $locale . '.mo', $locale );
 		}
 	}
 
