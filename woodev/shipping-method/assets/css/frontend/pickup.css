@@ -1062,11 +1062,11 @@
    button must clear the panel's own 320px cap PLUS that 16px gutter, and then keep its own 16px of
    air beside it: 16 + 16 = 32. Left at the old 16, the button would sit exactly on the panel's edge
    and overlap the list content beneath it. */
-.woodev-pickup-stage.woodev-pickup-stage .is-open button.woodev-pickup-list__toggle {
+.woodev-pickup-stage.woodev-pickup-stage.is-open button.woodev-pickup-list__toggle {
 	right: calc( min( 320px, 100% - 48px ) + 32px );
 }
 
-.woodev-pickup-stage.woodev-pickup-stage .is-open button.woodev-pickup-list__toggle::before {
+.woodev-pickup-stage.woodev-pickup-stage.is-open button.woodev-pickup-list__toggle::before {
 	content: '\203A'; /* › — invites closing, mirrored once the list is open beside it. */
 }
 
@@ -2483,7 +2483,7 @@
 	   is what removes that strip and forces a different answer. What IS taken from the reference is
 	   the card state below — there the button simply disappears under the panel (`.balloon-layout`
 	   `z-index: 3` over a button with no `z-index` at all). */
-	.woodev-pickup-stage.woodev-pickup-stage .is-open button.woodev-pickup-list__toggle {
+	.woodev-pickup-stage.woodev-pickup-stage.is-open button.woodev-pickup-list__toggle {
 		right: 0;
 		bottom: 0;
 		left: 0;
@@ -2514,7 +2514,7 @@
 	   `.woodev-pickup-search__reset[hidden]` further up — see the gotcha
 	   `hostile-theme-button-display-none-needs-important` and its s51 addendum, whose whole point
 	   is that every LATER rule touching an `!important`-defended property needs the flag in kind. */
-	.woodev-pickup-stage.woodev-pickup-stage .is-open.is-card button.woodev-pickup-list__toggle {
+	.woodev-pickup-stage.woodev-pickup-stage.is-open.is-card button.woodev-pickup-list__toggle {
 		display: none !important;
 	}
 
