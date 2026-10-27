@@ -32,6 +32,7 @@ function makeTrigger() {
 afterEach( () => {
 	document.body.innerHTML = '';
 	document.body.className = '';
+	document.documentElement.className = '';
 } );
 
 test( 'open() renders a dialog with the aria contract', () => {
@@ -298,17 +299,37 @@ test( 'Shift+Tab wraps backward from the first focusable element to the last', (
 	modal.destroy();
 } );
 
-test( 'body gets a scroll-lock class while open, removed on close', () => {
+test( 'html and body get a scroll-lock class while open, removed on close', () => {
 	const modal = new WoodevModal( { title: 'T' } );
 	expect( document.body.className ).not.toMatch( /woodev-modal-lock/ );
+	expect( document.documentElement.className ).not.toMatch( /woodev-modal-lock/ );
 
 	modal.open();
 	expect( document.body.className ).toMatch( /woodev-modal-lock/ );
+	expect( document.documentElement.className ).toMatch( /woodev-modal-lock/ );
 
 	modal.close();
 	expect( document.body.className ).not.toMatch( /woodev-modal-lock/ );
+	expect( document.documentElement.className ).not.toMatch( /woodev-modal-lock/ );
 
 	modal.destroy();
+} );
+
+test( 'closing one modal keeps the shared scroll lock while another remains open', () => {
+	const first = new WoodevModal( { title: 'First' } );
+	const second = new WoodevModal( { title: 'Second' } );
+	first.open();
+	second.open();
+
+	first.close();
+	expect( document.body.className ).toMatch( /woodev-modal-lock/ );
+	expect( document.documentElement.className ).toMatch( /woodev-modal-lock/ );
+
+	second.close();
+	expect( document.body.className ).not.toMatch( /woodev-modal-lock/ );
+	expect( document.documentElement.className ).not.toMatch( /woodev-modal-lock/ );
+	first.destroy();
+	second.destroy();
 } );
 
 test( 'isOpen() reports false before open(), true while open, and false again after close() (#238)', () => {

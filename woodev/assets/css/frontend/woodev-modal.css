@@ -85,6 +85,36 @@
 	appearance: none;
 }
 
+.woodev-modal.woodev-modal :where( button ) {
+	/* Beat theme-kit element selectors while letting component rules below win by source order. */
+	padding: 0;
+	border: 0;
+	background: none;
+	color: inherit;
+	font-size: 14px;
+	line-height: 1.4;
+	letter-spacing: normal;
+	text-transform: none;
+	box-shadow: none;
+	width: auto;
+	height: auto;
+}
+
+.woodev-modal.woodev-modal button:hover,
+.woodev-modal.woodev-modal button:focus {
+	padding: 0;
+	border: 0;
+	background: none;
+	color: inherit;
+	font-size: 14px;
+	line-height: 1.4;
+	letter-spacing: normal;
+	text-transform: none;
+	box-shadow: none;
+	width: auto;
+	height: auto;
+}
+
 .woodev-modal :where( input ) {
 	display: block;
 	width: auto;
@@ -103,10 +133,11 @@
 
 /* -------------------------------------------------------------------------
  * Scroll lock — set on <body> while the modal is open (see SCROLL_LOCK_CLASS
- * in woodev-modal.js).
+ * in woodev-modal.js). Applied to both roots because themes may set overflow on html.
  * ---------------------------------------------------------------------- */
 
-.woodev-modal-lock {
+html.woodev-modal-lock,
+body.woodev-modal-lock {
 	overflow: hidden;
 }
 
@@ -215,7 +246,7 @@
    `.woodev-modal__content` clips its square corner into that shape for free — nothing to round
    here directly). See the `:focus-visible` rule further down for why this one control needed
    splitting out of the shared focus-ring group once it went flush to that corner. */
-.woodev-modal__close {
+.woodev-modal .woodev-modal__close {
 	flex: 0 0 auto;
 	width: 48px;
 	height: 48px;
@@ -239,14 +270,14 @@
 	height: 24px;
 }
 
-.woodev-modal__close:hover,
-.woodev-modal__close:focus {
+.woodev-modal .woodev-modal__close.woodev-modal__close.woodev-modal__close:hover,
+.woodev-modal .woodev-modal__close.woodev-modal__close.woodev-modal__close:focus {
 	background: #ddd;
 	border-color: #ccc;
 	color: #000;
 }
 
-.woodev-modal__close:focus {
+.woodev-modal .woodev-modal__close.woodev-modal__close.woodev-modal__close:focus {
 	outline: none;
 }
 
@@ -364,7 +395,7 @@
    invisible where a keyboard user would look for it first. A NEGATIVE `outline-offset` draws the
    ring INSIDE the button's own box instead, so it survives the clip on every side; a 48px square
    button has plenty of room for a 2px ring 3px in from its own edge. */
-.woodev-modal__close:focus-visible {
+.woodev-modal .woodev-modal__close.woodev-modal__close.woodev-modal__close:focus-visible {
 	outline: 2px solid #06aedd;
 	outline-offset: -3px;
 }
