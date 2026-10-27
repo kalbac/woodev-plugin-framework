@@ -3830,6 +3830,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		}
 
 		/**
+		 * Returns the point remembered for a bare shipping method id.
+		 *
+		 * @since 2.0.15
+		 * @param string $method_id Bare shipping method id.
+		 * @return string|null
+		 */
+		public function selected_point_for_method( string $method_id ): ?string {
+			$pair = $this->selection_pair_for_method( $method_id );
+			if ( null === $pair || '' === $pair['locality'] ) {
+				return null;
+			}
+			$selection = $this->selection();
+			if ( null === $selection ) {
+				return null;
+			}
+			return Selection_Scope::TYPE_ANY === $pair['type']
+				? $selection->recall_latest( $pair['locality'] )
+				: $selection->recall( $pair['locality'], $pair['type'] );
+		}
+
+		/**
 		 * Handles `woodev_shipping_pickup_point_selected` — remembers a confirmed,
 		 * allowed pickup-point selection (issue #176), address included (issue #274
 		 * item 2).
