@@ -1,5 +1,5 @@
 # Ticket → fix → reply: the development half of the support loop — Woodev Framework Wiki
-> Compiled reference. Last compiled: 2026-10-24 (s196, card #780; Support AI reply s46).
+> Compiled reference. Last compiled: 2026-10-27 (s200: the coordinator closes plugin issues after EDD; s196, card #780; Support AI reply s46).
 
 ## Overview
 
@@ -7,20 +7,22 @@ The support loop has two halves in two projects (operator decision s184, 16.10.2
 
 | Half | Project | Owner of |
 |---|---|---|
-| Support | `woodev-support-ai-agent` (Homelab), ADR-004 + ADR-013 there | triage in FreeScout, filing the issue, linking ticket ↔ issue with its own FreeScout module `WoodevGithub` (signed webhooks, no GitHub token), writing and sending the customer letter, closing the issue after the release |
+| Support | `woodev-support-ai-agent` (Homelab), ADR-004 + ADR-013 there | triage in FreeScout, filing the issue, linking ticket ↔ issue with its own FreeScout module `WoodevGithub` (signed webhooks, no GitHub token), sending the customer notice when the issue is CLOSED |
 | Development | this repo + the plugin repos | verifying the issue, the fix, the PR, the release, the customer-reply draft text |
 
 The two halves meet at **one GitHub issue in the plugin's repo** (`woocommerce-edostavka`, `woocommerce-yandex-delivery`,
 `woodev-russian-post`). The issue body carries one line `FreeScout: #17071, #17081` (last line); when another ticket has the
 same cause, add its number there.
 
-**A plugin PR writes `Refs #N`, never `Closes #N`** (operator via Support AI, s46, 24.10.2026): the issue is closed by the
-Support AI script once EDD serves the fixing version and the letters are recorded. s196 closed yandex#131 with `Closes` and had
-to reopen it.
+**A plugin PR writes `Refs #N`, never `Closes #N`** (operator via Support AI, s46, 24.10.2026): a merge is not a release, and
+closing the issue is what sends the customer notice. **The coordinator closes the plugin issue itself, right after EDD serves
+the `fixed_in` version** (public SL `get_version` checked) — operator, s200, 27.10.2026: cards of s197 and s200 sat open for a
+day because this page said Support AI would close them, so no customer got a notice. s196 closed yandex#131 with `Closes` and
+had to reopen it.
 
 ## Where the issue lives
 
-- **The bug is in the plugin** → fix in the plugin repo with `Refs #N`; Support AI closes the issue after the EDD release.
+- **The bug is in the plugin** → fix in the plugin repo with `Refs #N`; the coordinator closes the issue once EDD serves the fix.
 - **The bug is in the framework** → the linked plugin issue stays the customer-facing tracker. The fix lands as a framework
   card + PR (framework `Closes #N` closes the framework card only). The plugin issue stays open until the plugin release that
   bundles the framework fix is live in EDD — that is the moment the customer can actually update.
@@ -39,7 +41,8 @@ to reopen it.
    - **Customer impact** — who hits it (which setup), severity, the workaround that works today;
    - **Areas for human testing** — what only a person on the rig or a real shop can confirm;
    - **Docs to update** — merchant docs (woodev.ru) or public framework docs, or «none».
-5. **Release** (framework tag → plugin bundle bump → plugin release → EDD). Do not close the plugin issue yourself.
+5. **Release** (framework tag → plugin bundle bump → plugin release → EDD), then **close every plugin issue of the wave** with a
+   Russian comment «Исправлено в версии X, опубликовано в EDD» — closing is the trigger for the customer notice.
 6. **Customer-reply draft**: a comment on the plugin issue headed `Черновик ответа клиенту`, in Russian, for a WordPress
    novice (merchant-docs tone): what was wrong in plain words, the version that fixes it, what to do (update; any setting to
    re-check). Two shapes only: «исправлено в версии X» and «это не ошибка — вот как настроить». Add ONE line
