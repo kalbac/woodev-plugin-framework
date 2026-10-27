@@ -41,6 +41,8 @@ add_filter( 'woocommerce_cart_shipping_packages', static function ( array $packa
 The value must be deterministic (sorted, no timestamps) or it busts the cache on every request. Block checkout goes
 through the same `get_shipping_packages()`, so one filter covers both.
 
+For a pickup-dependent rate, the framework includes the chosen point as `woodev_pickup` when the carrier reads it from the framework's selection storage (`Pickup_Handler::get_selected_point_for_method()`, #1490).
+
 ## Related
 
 - [a-cached-asset-under-an-unchanged-ver-reads-as-a-broken-feature](a-cached-asset-under-an-unchanged-ver-reads-as-a-broken-feature.md) — the same «unchanged key, stale result» shape on the asset side

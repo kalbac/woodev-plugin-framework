@@ -28,6 +28,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 
 		/** @var string Store API extension namespace. */
 		public const EXTENSION_NAMESPACE = 'woodev-shipping';
+		/** @var string Package field that keys rates by confirmed pickup selection. */
+		public const PACKAGE_KEY = 'woodev_pickup';
 		/** @var string Session key of the destination postcode's writer record ({@see self::adopted_postcode()}). */
 		private const ADOPTED_POSTCODE_KEY = 'woodev_store_api_adopted_postcode';
 		/**
@@ -47,6 +49,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 		private static array $handlers = [];
 		/** @var bool Whether initialization hooks were attached. */
 		private static bool $booted = false;
+		/** @var bool Whether the pickup rate-cache key filter was attached. */
+		private static bool $package_filter_registered = false;
 		/** @var bool Whether Store API callbacks were registered. */
 		private static bool $registered = false;
 		/** @var array<int, array<string, mixed>> Request echoes, scoped to this PHP request. */
@@ -63,6 +67,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 		 */
 		public static function add_handler( Pickup_Handler $handler, string $plugin_id, string $field_id ): void {
 			self::$handlers[ $plugin_id ][ $field_id ] = $handler;
+			if ( ! self::$package_filter_registered ) {
+				self::$package_filter_registered = true;
+				add_filter( 'woocommerce_cart_shipping_packages', [ self::class, 'add_pickup_selection_to_packages' ] );
+			}
 			if ( ! self::$booted ) {
 				self::$booted = true;
 				add_action( 'woocommerce_blocks_loaded', [ self::class, 'register' ] );
@@ -71,6 +79,50 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 			if ( did_action( 'woocommerce_blocks_loaded' ) ) {
 				self::register();
 			}
+		}
+
+		/**
+		 * Adds confirmed pickup selections to WooCommerce's rate-cache hash input.
+		 *
+		 * @since 2.0.15
+		 * @param mixed $packages Shipping packages.
+		 * @return mixed
+		 */
+		public static function add_pickup_selection_to_packages( $packages ) {
+			if ( ! is_array( $packages ) || [] === $packages || ! function_exists( 'WC' ) || ! WC()->session ) {
+				return $packages;
+			}
+
+			$chosen = WC()->session->get( 'chosen_shipping_methods', [] );
+			if ( ! is_array( $chosen ) ) {
+				return $packages;
+			}
+
+			$selections = [];
+			foreach ( $chosen as $chosen_method ) {
+				if ( ! is_scalar( $chosen_method ) ) {
+					continue;
+				}
+				$method_id = explode( ':', (string) wc_clean( (string) $chosen_method ) )[0];
+				foreach ( self::$handlers as $plugin_id => $fields ) {
+					foreach ( $fields as $field_id => $handler ) {
+						$point_id = $handler->selected_point_for_method( $method_id );
+						if ( null !== $point_id ) {
+							$selections[ $plugin_id . ':' . $field_id . ':' . $method_id ] = $point_id;
+						}
+					}
+				}
+			}
+			if ( [] === $selections ) {
+				return $packages;
+			}
+			ksort( $selections, SORT_STRING );
+			foreach ( $packages as $key => $package ) {
+				if ( is_array( $package ) ) {
+					$packages[ $key ][ self::PACKAGE_KEY ] = $selections;
+				}
+			}
+			return $packages;
 		}
 
 		/**
