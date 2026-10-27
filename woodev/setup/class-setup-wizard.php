@@ -28,6 +28,12 @@ abstract class Setup_Wizard {
 	/** @var Step[] every registered step keyed by id (visible or not — see get_steps()). */
 	protected array $steps = [];
 
+	/** @var bool Whether plugin steps have been registered for this request. */
+	private bool $steps_initialized = false;
+
+	/** @var bool Whether the wizard hooks have been wired. */
+	private bool $hooks_added = false;
+
 	/**
 	 * Cached completion state ('' | 'completed' | 'skipped'); null until first read.
 	 *
@@ -46,11 +52,39 @@ abstract class Setup_Wizard {
 	 */
 	public function __construct( \Woodev_Plugin $plugin ) {
 		$this->plugin = $plugin;
-		$this->build_steps();
+		add_action( 'admin_init', [ $this, 'initialize' ], 0 );
+	}
 
-		if ( $this->has_steps() ) {
+	/**
+	 * Builds plugin steps and wires the wizard once WordPress reaches admin_init.
+	 *
+	 * @since 2.0.15
+	 *
+	 * @return void
+	 */
+	public function initialize(): void {
+		$this->ensure_steps_initialized();
+
+		if ( ! empty( $this->steps ) && ! $this->hooks_added ) {
+			$this->hooks_added = true;
 			$this->add_hooks();
 		}
+	}
+
+	/**
+	 * Registers the steps on first use, then wires hooks when the wizard has any.
+	 *
+	 * @since 2.0.15
+	 *
+	 * @return void
+	 */
+	private function ensure_steps_initialized(): void {
+		if ( $this->steps_initialized ) {
+			return;
+		}
+
+		$this->steps_initialized = true;
+		$this->build_steps();
 	}
 
 	/**
@@ -199,6 +233,8 @@ abstract class Setup_Wizard {
 	 * @return Step[]
 	 */
 	public function get_steps(): array {
+		$this->ensure_steps_initialized();
+
 		return array_filter(
 			$this->steps,
 			static function ( Step $step ): bool {
@@ -216,22 +252,25 @@ abstract class Setup_Wizard {
 	 * @return Step|null
 	 */
 	public function get_registered_step( string $step_id ): ?Step {
+		$this->ensure_steps_initialized();
+
 		return $this->steps[ $step_id ] ?? null;
 	}
 
 	/**
 	 * Whether the wizard has any registered step.
 	 *
-	 * Deliberately not "any VISIBLE step": it decides whether the hooks are wired, which happens
-	 * while the plugin boots, and running the plugins' visibility predicates that early (over
-	 * settings that may not be ready) is exactly what the graph avoids. A wizard whose steps are
-	 * all hidden shows just its finish step.
+	 * Deliberately not "any VISIBLE step": a hidden step can become visible after a save, and
+	 * running visibility predicates over settings that may not be ready is exactly what the graph
+	 * avoids. A wizard whose steps are all hidden shows just its finish step.
 	 *
 	 * @since 2.0.2
 	 *
 	 * @return bool
 	 */
 	public function has_steps(): bool {
+		$this->ensure_steps_initialized();
+
 		return ! empty( $this->steps );
 	}
 
@@ -642,6 +681,8 @@ abstract class Setup_Wizard {
 	 * @return array<int,array<string,mixed>>
 	 */
 	public function get_step_graph(): array {
+		$this->ensure_steps_initialized();
+
 		$schema = $this->get_field_schema();
 		$steps  = [];
 
