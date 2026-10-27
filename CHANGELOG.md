@@ -1,6 +1,38 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.0.15] — 2026-10-27
+### Bug Fixes
+- **bootstrap**: Honest notice when a v1 and a v2 Woodev plugin cannot run together (#1389) (#1473)
+
+- **location**: Per-key session merge on WooCommerce < 11.4 + placement guard by the posted address (#1381) (#1481)
+
+- **shipping**: Include pickup selection in rate cache key (#1492)
+
+- Retry city selection and defer wizard steps (#1491)
+
+- **modal**: Resist theme button and overflow styles (#1493)
+
+- **i18n**: Load bundled plugin catalogue as fallback (#1494)
+
+
+### Documentation
+- **s197**: Ticket wave released (2.0.13, 2.0.14, Yandex 2.0.10, CDEK 2.3.0.9, Post 2.0.9); handoff (#1472)
+
+- **s198**: T-Bank v2 research and operator decisions, #1381 race measurement, handoff for overnight s199 (#1477)
+
+- **research**: #1428 drafts verified against released plugins (#1479)
+
+- **spec**: T-Bank «Рассрочки и кредиты» 2.0.0 plugin design (#1483)
+
+- **s199**: T-Bank waves W0–W5 + W7 merged, #1381 merged, spec, session docs, handoff (#1486)
+
+
+### Build
+- **deps**: Bump taiki-e/install-action from 2.87.29 to 2.87.31 (#1488)
+
+
+
 ## [2.0.14] — 2026-10-25
 ### Bug Fixes
 - **pickup**: Type filter without the map; add a selection seam to location providers (#1445) (#1468)
