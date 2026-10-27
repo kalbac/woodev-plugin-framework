@@ -23,6 +23,9 @@ class FrameworkTranslationsTest extends TestCase {
 	/** @var callable|null Plugin locale filter. */
 	private $plugin_locale_filter;
 
+	/** @var callable|null Available locales filter. */
+	private $available_languages_filter;
+
 	/** @var Translation_Handler|null Handler registered by the plugin-domain test. */
 	private ?Translation_Handler $translation_handler = null;
 
@@ -32,6 +35,9 @@ class FrameworkTranslationsTest extends TestCase {
 		}
 		if ( $this->plugin_locale_filter ) {
 			remove_filter( 'plugin_locale', $this->plugin_locale_filter );
+		}
+		if ( $this->available_languages_filter ) {
+			remove_filter( 'get_available_languages', $this->available_languages_filter );
 		}
 		if ( $this->translation_handler ) {
 			remove_action( 'init', [ $this->translation_handler, 'load_translations' ] );
@@ -68,7 +74,7 @@ class FrameworkTranslationsTest extends TestCase {
 	public function test_plugin_domain_fills_stale_external_pack_gaps_without_overriding_it(): void {
 		$domain = 'woodev-test-plugin';
 		$plugin = $this->get_test_plugin();
-		$external = $this->create_pack( [ 'Shared' => 'Внешний перевод' ] );
+		$external = $this->create_pack( [ 'Shared' => 'Внешний перевод', 'External only' => 'Только внешний перевод' ] );
 		$bundled  = $this->create_pack( [ 'Shared' => 'Перевод плагина', 'Bundled only' => 'Перевод из комплекта' ] );
 		$plugin_file = $plugin->get_plugin_file();
 		$plugin_path = WP_PLUGIN_DIR . '/' . dirname( plugin_basename( $plugin_file ) ) . '/languages/' . $domain . '-ru_RU.mo';
@@ -80,8 +86,9 @@ class FrameworkTranslationsTest extends TestCase {
 
 			return $external_path === $file ? $external : ( $plugin_path === $file ? $bundled : $file );
 		};
-		$this->plugin_locale_filter = static function ( string $locale, string $loaded_domain ) use ( $domain ): string {
-			return $domain === $loaded_domain ? 'ru_RU' : $locale;
+		$forced_locale = 'ru_RU';
+		$this->plugin_locale_filter = static function ( string $locale, string $loaded_domain ) use ( $domain, &$forced_locale ): string {
+			return $domain === $loaded_domain && null !== $forced_locale ? $forced_locale : $locale;
 		};
 		add_filter( 'load_textdomain_mofile', $this->file_filter, 10, 2 );
 		add_filter( 'plugin_locale', $this->plugin_locale_filter, 10, 2 );
@@ -91,7 +98,23 @@ class FrameworkTranslationsTest extends TestCase {
 		$this->translation_handler->load_translations();
 
 		$this->assertSame( 'Внешний перевод', __( 'Shared', $domain ) );
+		$this->assertSame( 'Только внешний перевод', __( 'External only', $domain ) );
 		$this->assertSame( 'Перевод из комплекта', __( 'Bundled only', $domain ) );
+
+		$this->available_languages_filter = static function ( array $languages ): array {
+			return array_merge( $languages, [ 'ru_RU' ] );
+		};
+		add_filter( 'get_available_languages', $this->available_languages_filter );
+		$forced_locale = null;
+		$this->assertTrue( switch_to_locale( 'ru_RU' ) );
+		try {
+			$this->assertSame( 'Внешний перевод', __( 'Shared', $domain ) );
+			$this->assertSame( 'Только внешний перевод', __( 'External only', $domain ) );
+			$this->assertSame( 'Перевод из комплекта', __( 'Bundled only', $domain ) );
+		} finally {
+			restore_current_locale();
+		}
+		$this->assertSame( 'Shared', __( 'Shared', $domain ) );
 	}
 
 	/** Locale switching and restoration must merge overrides again, rather than JIT-loading one file. */

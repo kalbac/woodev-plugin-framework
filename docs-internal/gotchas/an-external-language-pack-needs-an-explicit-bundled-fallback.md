@@ -24,8 +24,11 @@ Wrong: load an external pack, then rely only on `load_plugin_textdomain()` for t
 Correct: the selected resolver copy registers `Framework_Translations` at `init` priority 0, before
 lifecycle notices at 10. The selected autoloader also registers it (idempotently), because an older
 framework copy can own the resolver while selecting newer runtime files. Explicitly `load_textdomain()` each external pack, then the bundled `.mo`, using
-one resolved locale for both filenames and locale arguments. On `change_locale`, unload and rebuild
-that order; the hook covers `switch_to_locale()` and restoration. Plugin domains keep their own loader.
+one resolved locale for both filenames and locale arguments. Plugin domains use their own
+`Translation_Handler`, which must explicitly load `WP_LANG_DIR/<domain>/`,
+`WP_LANG_DIR/plugins/`, then the plugin's bundled `.mo` in that order; `load_plugin_textdomain()`
+registers a JIT path but does not fill gaps in an already-loaded domain. On `change_locale`, unload
+and rebuild the same order; the hook covers `switch_to_locale()` and restoration for both loaders.
 
 Store known gateway milestone keys in the existing `id => string` option and resolve them at display
 time. Preserve historical string values. Defer default pickup labels until the error renderer needs them.

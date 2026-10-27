@@ -38,6 +38,7 @@ if ( ! class_exists( '\Woodev\Framework\Handlers\Translation_Handler' ) ) :
 
 			// hook for translations separately to ensure they're loaded
 			add_action( 'init', [ $this, 'load_translations' ] );
+			add_action( 'change_locale', [ $this, 'reload_translations' ] );
 		}
 
 		/**
@@ -67,6 +68,28 @@ if ( ! class_exists( '\Woodev\Framework\Handlers\Translation_Handler' ) ) :
 		}
 
 		/**
+		 * Reloads this plugin's catalogue after WordPress changes locale.
+		 *
+		 * @since 2.0.15
+		 *
+		 * @return void
+		 */
+		public function reload_translations(): void {
+			if ( ! did_action( 'init' ) ) {
+				return;
+			}
+
+			$textdomain = $this->plugin->get_textdomain();
+
+			if ( ! $textdomain ) {
+				return;
+			}
+
+			unload_textdomain( $textdomain );
+			$this->load_plugin_textdomain();
+		}
+
+		/**
 		 * Loads the plugin textdomain.
 		 *
 		 * @since 2.0.0
@@ -91,14 +114,16 @@ if ( ! class_exists( '\Woodev\Framework\Handlers\Translation_Handler' ) ) :
 			$locale = ( is_admin() && is_callable( 'get_user_locale' ) ) ? get_user_locale() : get_locale();
 
 			$locale = apply_filters( 'plugin_locale', $locale, $textdomain );
+			$file   = $textdomain . '-' . $locale . '.mo';
 
-			load_textdomain( $textdomain, WP_LANG_DIR . '/' . $textdomain . '/' . $textdomain . '-' . $locale . '.mo' );
+			load_textdomain( $textdomain, WP_LANG_DIR . '/' . $textdomain . '/' . $file, $locale );
 
 			load_plugin_textdomain( $textdomain, false, untrailingslashit( $path ) . '/languages' );
+			load_textdomain( $textdomain, WP_LANG_DIR . '/plugins/' . $file, $locale );
 
 			// load_plugin_textdomain() only registers a JIT path on WordPress 6.7+.
-			// Load the bundled catalogue explicitly so it fills gaps in external packs.
-			load_textdomain( $textdomain, WP_PLUGIN_DIR . '/' . untrailingslashit( $path ) . '/languages/' . $textdomain . '-' . $locale . '.mo', $locale );
+			// Explicitly load the bundle after external packs so they fill catalogue gaps.
+			load_textdomain( $textdomain, WP_PLUGIN_DIR . '/' . untrailingslashit( $path ) . '/languages/' . $file, $locale );
 		}
 	}
 

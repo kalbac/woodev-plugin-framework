@@ -45,6 +45,9 @@ class TranslationHandlerTest extends TestCase {
 		Functions\expect( 'add_action' )
 			->once()
 			->with( 'init', Mockery::type( 'array' ) );
+		Functions\expect( 'add_action' )
+			->once()
+			->with( 'change_locale', Mockery::type( 'array' ) );
 
 		new Translation_Handler( $plugin );
 	}
@@ -119,9 +122,23 @@ class TranslationHandlerTest extends TestCase {
 		// the plugin's own domain (from get_textdomain()) must be loaded too
 		$this->assertSame( [
 			[ 'acme-plugin', WP_LANG_DIR . '/acme-plugin/acme-plugin-ru_RU.mo' ],
+			[ 'acme-plugin', WP_LANG_DIR . '/plugins/acme-plugin-ru_RU.mo' ],
 			[ 'acme-plugin', WP_PLUGIN_DIR . '/acme/languages/acme-plugin-ru_RU.mo' ],
 		], $loaded_textdomains );
 		$this->assertArrayHasKey( 'acme-plugin', $loaded_plugin_textdomains );
+	}
+
+	/** A locale switch before init must not trigger an early plugin catalogue load. */
+	public function test_reload_translations_skips_before_init(): void {
+		$plugin = $this->make_plugin( 'acme-plugin' );
+		Functions\when( 'add_action' )->justReturn( true );
+		Functions\when( 'did_action' )->justReturn( 0 );
+		Functions\expect( 'unload_textdomain' )->never();
+		Functions\expect( 'load_textdomain' )->never();
+
+		$handler = new Translation_Handler( $plugin );
+		$handler->reload_translations();
+		$this->addToAssertionCount( 1 );
 	}
 
 	/**
