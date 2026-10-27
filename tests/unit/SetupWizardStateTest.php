@@ -10,6 +10,7 @@ namespace Woodev\Tests\Unit;
 use Brain\Monkey\Functions;
 use Woodev\Framework\Setup\Setup_Wizard;
 
+require_once dirname( __DIR__, 2 ) . '/woodev/setup/class-step.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/setup/class-setup-wizard.php';
 
 /**
@@ -17,7 +18,9 @@ require_once dirname( __DIR__, 2 ) . '/woodev/setup/class-setup-wizard.php';
  */
 class State_Test_Wizard extends Setup_Wizard {
 	public function __construct() {}
-	protected function register_steps(): void {}
+	protected function register_steps(): void {
+		$this->register_content_step( 'welcome', 'Welcome', static function (): string { return ''; } );
+	}
 	public function get_id(): string { return 'acme'; }
 }
 
@@ -26,7 +29,9 @@ class State_Test_Wizard extends Setup_Wizard {
  */
 class Notice_Test_Wizard extends Setup_Wizard {
 	public function __construct( $plugin ) { $this->plugin = $plugin; }
-	protected function register_steps(): void {}
+	protected function register_steps(): void {
+		$this->register_content_step( 'welcome', 'Welcome', static function (): string { return ''; } );
+	}
 	public function get_id(): string { return 'acme'; }
 }
 
@@ -103,6 +108,7 @@ class SetupWizardStateTest extends TestCase {
 	// D1 — «Настрою позже» keeps the wizard reachable from the notice / plugin-row link.
 
 	public function test_a_skipped_wizard_still_offers_its_action_link(): void {
+		Functions\when( 'apply_filters' )->returnArg( 2 );
 		Functions\when( 'get_option' )->justReturn( 'skipped' );
 		Functions\when( 'esc_url' )->returnArg( 1 );
 		Functions\when( 'esc_html__' )->returnArg( 1 );
@@ -115,6 +121,7 @@ class SetupWizardStateTest extends TestCase {
 	}
 
 	public function test_a_completed_wizard_drops_its_action_link(): void {
+		Functions\when( 'apply_filters' )->returnArg( 2 );
 		Functions\when( 'get_option' )->justReturn( 'completed' );
 
 		$wizard = new State_Test_Wizard();
@@ -123,6 +130,7 @@ class SetupWizardStateTest extends TestCase {
 	}
 
 	private function render_notice_for_state( string $state ): string {
+		Functions\when( 'apply_filters' )->returnArg( 2 );
 		Functions\when( 'get_option' )->justReturn( $state );
 		Functions\when( 'current_user_can' )->justReturn( true );
 		Functions\when( '__' )->returnArg( 1 );
