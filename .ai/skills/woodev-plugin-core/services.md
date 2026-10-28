@@ -182,6 +182,22 @@ Rules: `AGENTS.md` → Conventions → «Translatable strings», gotchas in `doc
   bundles, after `wp_enqueue_script()`. For YOUR bundles call `wp_set_script_translations()` with your
   own domain and ship the JSON (gotcha `js-translations-are-handle-named-json-files`).
 
+## Hosted payment notifications
+
+From framework 2.0.16, implement `Woodev\Framework\Payment_Gateway\Api\Pending_Notification_Response` on a notification
+response and return true from `transaction_pending(): bool` for intermediate provider states. Responses using only the
+original notification interface retain the old default (not pending); false approved/held/cancelled predicates still mean
+a decline. The protected `do_transaction_pending()` acknowledgement leaves order status unchanged. Authenticate requests
+in the existing validation seam: exceptions take the invalid-response path and are logged with secret redaction when debug
+logging is enabled, without failing the order.
+
+`get_order()` and `get_order_with_unique_transaction_ref()` only hydrate the current reference. The default hosted redirect,
+hosted form and direct-payment entry points call protected `start_payment_attempt( WC_Order $order ): WC_Order` once when
+starting a payment request. A custom entry point must do the same before building the provider request; hydration filters
+run before the attempt counter advances. Existing `retry_count` meta and suffixes are preserved. Never call the helper
+while handling a webhook. Source: `woodev/payment-gateway/class-payment-gateway-hosted.php` and the shared gateway base;
+[trap](traps.md#hosted-payment-notifications).
+
 ## Related
 
 - [SKILL.md](SKILL.md), [plugin-class.md](plugin-class.md), [traps.md](traps.md)

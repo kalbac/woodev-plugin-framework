@@ -2006,20 +2006,28 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 
 			$retry_count = $this->get_order_meta( $order, 'retry_count' );
 
-			// generate a unique retry count
-			if ( is_numeric( $retry_count ) ) {
-				++$retry_count;
-			} else {
-				$retry_count = 0;
-			}
-
-			// keep track of the retry count
-			$this->update_order_meta( $order, 'retry_count', $retry_count );
-
 			// generate a unique transaction ref based on the order number and retry count, for gateways that require a unique identifier for every transaction request
 			$order->unique_transaction_ref = ltrim( $order->get_order_number(), esc_html_x( '#', 'hash before order number', 'woodev-plugin-framework' ) ) . ( $retry_count > 0 ? '-' . $retry_count : '' );
 
 			return $order;
+		}
+
+		/**
+		 * Starts a new payment attempt with a fresh provider-facing reference.
+		 *
+		 * Order lookup alone must never advance or persist the attempt counter.
+		 *
+		 * @since 2.0.16
+		 * @param WC_Order $order Order prepared for payment.
+		 * @return WC_Order Order with the new attempt reference.
+		 */
+		protected function start_payment_attempt( WC_Order $order ): WC_Order {
+			$retry_count = $this->get_order_meta( $order, 'retry_count' );
+			$retry_count = is_numeric( $retry_count ) ? $retry_count + 1 : 0;
+
+			$this->update_order_meta( $order, 'retry_count', $retry_count );
+
+			return $this->get_order_with_unique_transaction_ref( $order );
 		}
 
 		/**

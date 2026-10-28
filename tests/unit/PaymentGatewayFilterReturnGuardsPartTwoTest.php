@@ -428,6 +428,17 @@ namespace {
 		}
 
 		/**
+		 * Keep the held-status guard test independent of attempt persistence.
+		 *
+		 * @since 2.0.16
+		 * @param \WC_Order $order Order stub.
+		 * @return \WC_Order
+		 */
+		protected function start_payment_attempt( \WC_Order $order ): \WC_Order {
+			return $order;
+		}
+
+		/**
 		 * @param object|null $order unused.
 		 * @return string
 		 */

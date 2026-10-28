@@ -43,6 +43,14 @@ The annotations go on the METHOD — PHPUnit 9 ignores them on the class
 ([phpunit-9-ignores-run-in-separate-process-on-a-class](phpunit-9-ignores-run-in-separate-process-on-a-class.md)).
 Better still, inject the dependency so no alias is needed.
 
+## Eager fallback declarations have the same lifetime (s201, #1480)
+
+An `if ( ! class_exists( 'WC_Order', false ) ) { class WC_Order {} }` at a test file's top level runs while PHPUnit
+collects the suite. Adding it to `HostedResponseFlowTest.php` preempted the richer order stub from later payment tests;
+18 unrelated shipping tests then failed on missing `get_id()`, although each focused run passed. Defer a standalone-only
+fallback until test setup, after collection has loaded the suite's existing fixtures; do not replace their contract with
+an earlier empty class. `Mockery::close()` cannot repair this declaration either.
+
 ## How to catch it
 
 Run `vendor/bin/phpunit --order-by=random` (and once after every merge of two parallel branches). The

@@ -1,55 +1,56 @@
-# Gotcha: [framework/payment-gateway] — A hosted gateway's default response flow fails orders it does not understand
+# Gotcha: [framework/payment-gateway] — `Woodev_Payment_Gateway_Hosted` must distinguish pending notifications from declines
 
-> Tags: payment-gateway, hosted, webhook, ipn, security | Session: s199
+> Tags: payment-gateway, hosted, webhook, ipn, security | Session: s199, updated s201 (#1480)
 
 ## What happens
 
-A hosted payment plugin that keeps `Woodev_Payment_Gateway_Hosted::handle_transaction_response_request()` turns every
-notification it cannot classify into a **failed order**. A provider's intermediate status (T-Bank's `new`, `inprogress`), a
-notification whose validation throws, or a forged POST that names a real pending order all end in `mark_order_as_failed()`.
-And every webhook writes a meta row, because the default flow calls the gateway's `get_order()`.
+Before #1480, `Woodev_Payment_Gateway_Hosted` failed unpaid orders for intermediate provider states and verification
+exceptions. Every response lookup also incremented and saved `retry_count`, changing the provider-facing reference on every
+webhook. The 2.0.16 fix separates these paths; plugins still have to identify intermediate states explicitly.
 
 ## Root cause
 
-- `process_transaction_response()` knows three outcomes — approved/held, cancelled, and **everything else → failure**
-  (`woodev/payment-gateway/class-payment-gateway-hosted.php` lines ~516–552: `do_transaction_failed_result()` +
-  `do_transaction_failed()`). A provider state that means "nothing happened yet" has no branch.
-- The `catch ( Woodev_Payment_Gateway_Exception )` of `handle_transaction_response_request()` (~lines 387–406) calls
-  `mark_order_as_failed()` whenever the order still needs payment — so an *unauthenticated* request that makes validation throw
-  (wrong amount, missing field) fails the buyer's order.
-- `get_order_from_response()` → `get_order()` → `get_order_with_unique_transaction_ref()`
-  (`woodev/payment-gateway/class-payment-gateway.php` ~line 2005) increments and saves `retry_count` on **every** call, so the
-  `unique_transaction_ref` changes per call and is useless as a stable provider-side order number.
-
-T-Bank v1 1.7.0 inherited all three (its webhook carried no signature; the status came from an `Info` re-query, and an `Info`
-error or an intermediate status went down the failure path).
+- `process_transaction_response()` treated everything outside approved/held/cancelled as declined.
+- The request handler's exception catch marked the order failed before acknowledging an invalid response.
+- `get_order_with_unique_transaction_ref()` combined reference hydration with starting a new payment attempt.
 
 ## Fix
 
-❌ **Wrong** — implement only `get_transaction_response()` and the response's `transaction_*()` predicates, and let the base
-class decide:
+❌ **Wrong** — return false for all original outcome predicates on a provider's `inprogress` state. That still means declined
+for legacy response implementations. Do not start an attempt from webhook validation or order lookup.
+
+✅ **Correct** — implement `Woodev\Framework\Payment_Gateway\Api\Pending_Notification_Response` (which extends the original
+payment-notification interface) and add the predicate alongside the existing outcome methods:
 
 ```php
-protected function get_transaction_response( $request_response_data ) {
-    return new My_IPN_Response( file_get_contents( 'php://input' ), $this ); // base flow: unknown → failed
+public function transaction_pending(): bool {
+    return in_array( $this->status, [ 'new', 'inprogress' ], true );
 }
 ```
 
-✅ **Correct** — override the entry point, own the outcome of every state, and never let an exception reach the base catch:
+`Woodev_Payment_Gateway_Hosted` acknowledges pending through the protected `do_transaction_pending()` extension point (IPN: HTTP 200;
+redirect-back: the return URL), without marking the order paid, held or failed. Existing responses that implement only
+`Woodev_Payment_Gateway_API_Payment_Notification_Response` default to not pending and preserve their decline behavior.
+Authentication and validation exceptions in this class are redacted and logged when debug logging is enabled, then take the
+existing invalid-request path without failing the order. Exceptions while processing a verified response are logged
+regardless of debug logging. IPNs are rethrown and receive HTTP 500 so the provider can retry; redirect-back requests
+route the buyer through the invalid-response path (a redirect to the return URL) and leave the order status unchanged,
+because a browser has no retry. Subclasses remain responsible for authenticating the provider request.
 
-```php
-public function handle_transaction_response_request() {
-    $result = $this->webhook_handler->handle( file_get_contents( 'php://input' ), $_SERVER['REMOTE_ADDR'] ?? '' );
-    status_header( $result->http_status() ); // 200 handled/ignored, 503 = provider should retry
-    exit;
-}
-```
+`get_order()` now reconstructs `unique_transaction_ref` from the existing `retry_count` without writing meta. The hosted
+redirect/form entry points and direct `process_payment()` call protected `start_payment_attempt()` exactly once per new
+payment request. This keeps the existing meta key and suffix convention (`42`, `42-1`, …). Custom payment entry points
+must call that helper when starting a new attempt; `get_order()` alone no longer consumes a reference. Order hydration
+filters run before the new attempt is started, so build provider payloads after `start_payment_attempt()` returns.
 
-Inside, map each provider state explicitly (intermediate → no change), look the order up with `wc_get_order()` / an HPOS meta
-query instead of the gateway's `get_order()`, and store the provider order number yourself. Design reference: the T-Bank v2
-spec §10.
+T-Bank's custom handler also implements provider-specific authentication, lookup and application transitions; this base
+fix does not replace those responsibilities or change that plugin. Its original workaround is documented in the design §10.
+
+This fix covers `Woodev_Payment_Gateway_Hosted` only. The separate `Abstract_Hosted_Payment_Handler` architecture in
+`handlers/abstract-hosted-payment-handler.php` and `handlers/abstract-payment-handler.php` still has the pending-status and
+verification-exception order-handling bugs; track that path separately in #1500.
 
 ## Related
 
-- [T-Bank v2 plugin design](../specs/2026-10-27-tbank-v2-plugin-design.md) — §10 is the handler built around this trap.
-- [handler-extraction-must-preserve-override-chain](handler-extraction-must-preserve-override-chain.md) — the other override trap in the same module.
+- [T-Bank v2 plugin design](../specs/2026-10-27-tbank-v2-plugin-design.md) — §10 documents the original workaround.
+- [handler-extraction-must-preserve-override-chain](handler-extraction-must-preserve-override-chain.md) — preserve subclass dispatch.

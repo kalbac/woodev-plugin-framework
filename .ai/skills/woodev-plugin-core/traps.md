@@ -150,6 +150,10 @@ internals (class-map wiring, build/CI, rig) are left out on purpose. Shipping-sp
 
 ## Testing (topic `testing`)
 
+- A top-level empty `WC_Order` fallback in one unit test can shadow a richer fixture during suite collection and break
+  unrelated shipping tests. Defer a standalone-only fallback to setup; PHP cannot undo a class declaration. →
+  `docs-internal/gotchas/a-mockery-alias-mock-lives-for-the-whole-phpunit-process.md` (s201, #1480).
+
 - Define every WordPress time constant in a plugin's unit bootstrap — a framework class constant built on
   `MINUTE_IN_SECONDS` took Yandex's suite from 489 green to 21 errors while the framework's stayed green. →
   `docs-internal/gotchas/a-framework-class-constant-on-a-wp-time-constant-breaks-a-plugin-unit-bootstrap.md`
@@ -226,6 +230,14 @@ internals (class-map wiring, build/CI, rig) are left out on purpose. Shipping-sp
   `docs-internal/gotchas/a-concatenated-msgid-is-invisible-to-a-single-literal-scanner.md`
 - Classify a string by its RENDER PATH, not by its file's directory. →
   `docs-internal/gotchas/classify-an-i18n-string-by-its-render-path-not-its-file-path.md`
+
+## Hosted payment notifications
+
+- Intermediate provider states must implement the optional `Pending_Notification_Response` contract; the legacy interface
+  still treats false approved/held/cancelled predicates as a decline. Order lookup reads the stored retry reference; only a
+  new payment request calls `start_payment_attempt()`. Never advance it from a webhook. See
+  [services.md](services.md#hosted-payment-notifications) and
+  `docs-internal/gotchas/a-hosted-gateway-s-default-response-flow-fails-orders-it-does-not-understand.md` (#1480).
 
 ## Related
 

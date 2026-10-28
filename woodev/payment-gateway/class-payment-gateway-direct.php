@@ -242,7 +242,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 			}
 
 			// add payment information to order
-			$order = $this->get_order( $order_id );
+			$order = $this->start_payment_attempt( $this->get_order( $order_id ) );
 
 			try {
 
