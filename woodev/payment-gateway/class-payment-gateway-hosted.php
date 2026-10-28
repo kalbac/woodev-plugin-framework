@@ -892,27 +892,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 		}
 
 		/**
-		 * Formats request parameters as `name=value` pairs for the log.
-		 *
-		 * The secret redaction in {@see Woodev_Payment_Gateway::add_debug_message()} matches `name=value`
-		 * (and nested `name[key]=value`), which `print_r()` output never is — so a body logged through
-		 * `print_r()` reached the log with every secret in clear text.
-		 *
-		 * @since 2.0.16
-		 *
-		 * @param array|object|string $params request parameters, or an already formatted string
-		 * @return string
-		 */
-		protected function get_params_for_log( $params ) {
-
-			if ( is_string( $params ) ) {
-				return $params;
-			}
-
-			return http_build_query( (array) $params, '', '&', PHP_QUERY_RFC3986 );
-		}
-
-		/**
 		 * Returns true if this is a hosted type gateway
 		 *
 		 * @return boolean true if this is a hosted payment gateway

@@ -237,8 +237,8 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Hosted_Payment_Handler' ) 
 		/**
 		 * Logs a transaction response request.
 		 *
-		 * @param string $request data to log
-		 * @param string $message prefix message, like Request: or Response:
+		 * @param array|object|string $request data to log
+		 * @param string              $message prefix message, like Request: or Response:
 		 */
 		protected function log_transaction_response_request( $request, $message = '' ) {
 
@@ -250,7 +250,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Hosted_Payment_Handler' ) 
 					$message = 'Request: %s';
 				}
 
-				$this->get_gateway()->get_plugin()->log( sprintf( $message, print_r( $request, true ) ), $this->get_gateway()->get_id() );
+				$this->get_gateway()->get_plugin()->log(
+					\Woodev_API_Base::redact_secret_log_text( sprintf( $message, $this->get_gateway()->get_params_for_log( $request ) ), [], true ),
+					$this->get_gateway()->get_id()
+				);
 			}
 		}
 

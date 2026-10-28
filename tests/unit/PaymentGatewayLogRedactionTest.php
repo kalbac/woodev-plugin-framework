@@ -62,6 +62,7 @@ namespace {
 	require_once dirname( __DIR__, 2 ) . '/woodev/payment-gateway/class-payment-gateway.php';
 	require_once dirname( __DIR__, 2 ) . '/woodev/payment-gateway/class-payment-gateway-hosted.php';
 	require_once dirname( __DIR__, 2 ) . '/woodev/payment-gateway/handlers/abstract-payment-handler.php';
+	require_once dirname( __DIR__, 2 ) . '/woodev/payment-gateway/handlers/abstract-hosted-payment-handler.php';
 	require_once dirname( __DIR__, 2 ) . '/woodev/payment-gateway/payment-tokens/class-payment-gateway-payment-tokens-handler.php';
 	require_once dirname( __DIR__, 2 ) . '/woodev/api/class-api-base.php';
 
@@ -181,6 +182,37 @@ namespace {
 			 * @return void
 			 */
 			public function render_pay_page_form( $order, $request_params ) {}
+		}
+	}
+
+	if ( ! class_exists( 'Woodev_Test_Hosted_Handler_For_Redaction', false ) ) {
+		/**
+		 * Hosted payment handler test double exposing the protected log sink (#1507).
+		 */
+		class Woodev_Test_Hosted_Handler_For_Redaction extends \Woodev_Payment_Gateway_Abstract_Hosted_Payment_Handler {
+
+			/**
+			 * @return string
+			 */
+			protected function get_hosted_payment_url() {
+				return '';
+			}
+
+			/**
+			 * @param array $request_response_data unused
+			 * @return object
+			 */
+			protected function get_transaction_response( $request_response_data ) {
+				return new \stdClass();
+			}
+
+			/**
+			 * @param array|object|string $request data to log
+			 * @return void
+			 */
+			public function call_log_transaction_response_request( $request ) {
+				$this->log_transaction_response_request( $request );
+			}
 		}
 	}
 
@@ -485,6 +517,40 @@ namespace Woodev\Tests\Unit {
 			$this->set_private( $gateway, 'debug_mode', \Woodev_Payment_Gateway::DEBUG_MODE_LOG );
 
 			$gateway->log_transaction_response_request( [ 'status' => 'ok', 'api_key' => self::SECRET ] );
+
+			$this->assertSame( 'Request: status=ok&api_key=L****T', $captured );
+		}
+
+		/**
+		 * The shared hosted handler logged a raw request array through print_r() too, so `[api_key] => secret`
+		 * bypassed the name=value redaction (#1507).
+		 *
+		 * @return void
+		 */
+		public function test_hosted_handler_transaction_response_array_is_logged_with_secrets_masked(): void {
+			$gateway     = new \Woodev_Test_Hosted_For_Redaction_Test();
+			$gateway->id = 'test-hosted-gateway';
+
+			$captured = null;
+			$plugin   = Mockery::mock();
+			$plugin->shouldReceive( 'log' )
+				->once()
+				->with(
+					Mockery::on(
+						static function ( $message ) use ( &$captured ) {
+							$captured = $message;
+							return true;
+						}
+					),
+					'test-hosted-gateway'
+				);
+
+			$this->set_private( $gateway, 'plugin', $plugin );
+			$this->set_private( $gateway, 'debug_mode', \Woodev_Payment_Gateway::DEBUG_MODE_LOG );
+			Functions\when( 'has_action' )->justReturn( true );
+
+			$handler = new \Woodev_Test_Hosted_Handler_For_Redaction( $gateway );
+			$handler->call_log_transaction_response_request( [ 'status' => 'ok', 'api_key' => self::SECRET ] );
 
 			$this->assertSame( 'Request: status=ok&api_key=L****T', $captured );
 		}
