@@ -825,7 +825,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 					break;
 				case "wc_{$gateway_id}_payment_form_end":
 					$this->payment_form_js_rendered[] = $gateway_id;
-					wc_enqueue_js( $this->get_safe_handler_js() );
+					wp_add_inline_script(
+						'woodev-payment-gateway-payment-form',
+						'jQuery(function($) {' . $this->get_safe_handler_js() . '});'
+					);
 					break;
 			endswitch;
 		}

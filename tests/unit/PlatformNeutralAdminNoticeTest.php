@@ -135,4 +135,22 @@ class PlatformNeutralAdminNoticeTest extends TestCase {
 		$this->assertIsString( $contents );
 		$this->assertStringNotContainsString( 'wc_enqueue_js(', $contents );
 	}
+
+	/**
+	 * Payment gateways should not use WooCommerce's deprecated inline-script helper.
+	 *
+	 * @return void
+	 */
+	public function test_payment_gateway_module_does_not_call_wc_enqueue_js(): void {
+		$files = glob( dirname( __DIR__, 2 ) . '/woodev/payment-gateway/*.php' );
+
+		$this->assertIsArray( $files );
+
+		foreach ( $files as $file ) {
+			$contents = file_get_contents( $file );
+
+			$this->assertIsString( $contents );
+			$this->assertStringNotContainsString( 'wc_enqueue_js(', $contents, $file );
+		}
+	}
 }

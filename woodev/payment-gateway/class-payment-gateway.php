@@ -1101,6 +1101,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 
 			parent::admin_options();
 
+			$admin_script = 'woodev-payment-gateway-admin';
+			wp_register_script( $admin_script, false, [ 'jquery' ], Woodev_Plugin::VERSION, true );
+			wp_enqueue_script( $admin_script );
+
 			?>
 			<style type="text/css">.nowrap {
 					white-space: nowrap;
@@ -1125,7 +1129,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 				} ).change();
 				<?php
 
-				wc_enqueue_js( ob_get_clean() );
+				wp_add_inline_script( $admin_script, 'jQuery(function($) {' . ob_get_clean() . '});' );
 
 			}
 
@@ -1149,7 +1153,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 				} ).change();
 				<?php
 
-				wc_enqueue_js( ob_get_clean() );
+				wp_add_inline_script( $admin_script, 'jQuery(function($) {' . ob_get_clean() . '});' );
 			}
 
 			// if there's more than one environment include the environment settings switcher code
@@ -1179,7 +1183,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 				} ).change();
 				<?php
 
-				wc_enqueue_js( ob_get_clean() );
+				wp_add_inline_script( $admin_script, 'jQuery(function($) {' . ob_get_clean() . '});' );
 
 			}
 
@@ -1205,7 +1209,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 				} ).change();
 				<?php
 
-				wc_enqueue_js( ob_get_clean() );
+				wp_add_inline_script( $admin_script, 'jQuery(function($) {' . ob_get_clean() . '});' );
 
 			}
 		}
