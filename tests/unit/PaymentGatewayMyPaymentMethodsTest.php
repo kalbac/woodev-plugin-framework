@@ -15,6 +15,13 @@ namespace {
 	 * Minimal plugin double for the details HTML filter name.
 	 */
 	class Woodev_Test_Payment_Gateway_Plugin {
+		public function get_payment_gateway_framework_assets_url(): string {
+			return 'https://example.test/assets';
+		}
+
+		public function get_id_dasherized(): string {
+			return 'test-gateway';
+		}
 
 		/**
 		 * Gets the gateway ID.
@@ -76,6 +83,21 @@ namespace {
 	 * Exposes the details renderer without initializing its WordPress hooks.
 	 */
 	class Woodev_Testable_Payment_Gateway_My_Payment_Methods extends Woodev_Payment_Gateway_My_Payment_Methods {
+
+		/** Runs the enqueue method without registering constructor hooks. */
+		public function run_enqueue(): void {
+			$this->maybe_enqueue_styles_scripts();
+		}
+
+		/** Adds the real inline handler without registering constructor hooks. */
+		public function run_render_js(): void {
+			$this->render_js();
+		}
+
+		/** @return string */
+		protected function get_safe_handler_js( array $additional_args = [], $handler_name = '', $object_name = '' ) {
+			return 'window.testHandler = true;';
+		}
 
 		/**
 		 * Renders details HTML for a token.
@@ -143,6 +165,54 @@ namespace Woodev\Tests\Unit {
 
 			$this->assertStringContainsString( '&lt;img src=x onerror=alert(1)&gt;', $html );
 			$this->assertStringNotContainsString( '<img src=x onerror=alert(1)>', $html );
+		}
+
+		/**
+		 * The inline handler is attached after enqueueing, so its script handle must remain
+		 * queued for the footer. WordPress stores that choice as extra['group'] = 1.
+		 *
+		 * Runs in its own process: `Functions\when( 'WC' )` defines the global `WC()` for the rest of the run.
+		 *
+		 * @runInSeparateProcess
+		 * @preserveGlobalState disabled
+		 *
+		 * @return void
+		 */
+		public function test_my_payment_methods_script_is_enqueued_in_footer_before_inline_js_is_added(): void {
+			$enqueue_args = [];
+			$inline       = [];
+
+			Functions\when( 'WC' )->justReturn( new class {
+				public function plugin_url(): string {
+					return 'https://example.test/woocommerce';
+				}
+			} );
+			Functions\when( 'get_option' )->justReturn( '11.1.0' );
+			Functions\when( 'is_multisite' )->justReturn( false );
+			Functions\when( 'wc_get_customer_saved_methods_list' )->justReturn( [] );
+			Functions\when( 'wp_register_script' )->justReturn( null );
+			Functions\when( 'wp_enqueue_style' )->justReturn( null );
+			Functions\when( 'wp_enqueue_script' )->alias(
+				static function ( ...$args ) use ( &$enqueue_args ): void {
+					$enqueue_args = $args;
+				}
+			);
+			Functions\when( 'wp_add_inline_script' )->alias(
+				static function ( $handle, $data, $position = 'after' ) use ( &$inline ): void {
+					$inline[] = compact( 'handle', 'data', 'position' );
+				}
+			);
+			Functions\when( 'esc_js' )->returnArg( 1 );
+
+			$methods = ( new \ReflectionClass( \Woodev_Testable_Payment_Gateway_My_Payment_Methods::class ) )->newInstanceWithoutConstructor();
+			$methods->run_enqueue();
+			$methods->run_render_js();
+
+			$this->assertSame( 'woodev-payment-gateway-my-payment-methods', $enqueue_args[0] );
+			$this->assertTrue( $enqueue_args[4], 'WordPress must register the handle with footer group 1.' );
+			$this->assertSame( 'woodev-payment-gateway-my-payment-methods', $inline[0]['handle'] );
+			$this->assertSame( 'after', $inline[0]['position'] );
+			$this->assertNotSame( '', $inline[0]['data'] );
 		}
 
 		/* ------------------------------------------------------------------- *

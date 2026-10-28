@@ -172,7 +172,8 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 					'jquery-tiptip',
 					'jquery',
 				],
-				Woodev_Plugin::VERSION
+				Woodev_Plugin::VERSION,
+				true
 			);
 		}
 
@@ -867,7 +868,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 		 * Renders the JavaScript.
 		 */
 		public function render_js() {
-			wc_enqueue_js( $this->get_safe_handler_js() );
+			wp_add_inline_script(
+				'woodev-payment-gateway-my-payment-methods',
+				'jQuery(function($) {' . $this->get_safe_handler_js() . '});'
+			);
 		}
 
 

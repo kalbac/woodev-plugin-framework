@@ -231,7 +231,12 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 			$args = $this->get_auto_post_form_args( $order );
 
 			// attempt to automatically submit the form and redirect
-			wc_enqueue_js(
+			$script_handle = 'woodev-hosted-payment-form';
+			wp_register_script( $script_handle, false, [ 'jquery' ], Woodev_Plugin::VERSION, true );
+			wp_enqueue_script( $script_handle );
+			wp_add_inline_script(
+				$script_handle,
+				'jQuery(function($) {' .
 				'
 			$( "body" ).block( {
 					message: "<img src=\"' . esc_url( $this->get_plugin()->get_framework_assets_url() . '/images/ajax-loader.gif' ) . '\" alt=\"Redirecting&hellip;\" style=\"float:left; margin-right: 10px;\" />' . esc_html( $args['thanks_message'] ) . '",
@@ -252,6 +257,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 
 			$( "#submit_' . $this->get_id() . '_payment_form" ).click();
 		'
+				. '});'
 			);
 
 			echo '<p>' . esc_html( $args['message'] ) . '</p>';
