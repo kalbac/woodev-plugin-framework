@@ -59,6 +59,108 @@ class Probe_Command_Dispatcher extends \Woodev_License_Command_Dispatcher {
 }
 
 /**
+ * A wpdb double for the nonce store's raw claim writes.
+ *
+ * The store claims with `INSERT IGNORE` and takes over with a conditional `UPDATE`. This double routes
+ * those writes to the add_option / update_option / get_option stubs the dispatcher tests already arm, so
+ * a stubbed add_option() returning false still means «the row was already there» (0 rows affected).
+ */
+class Option_Claim_Wpdb {
+
+	/**
+	 * Table name.
+	 *
+	 * @var string
+	 */
+	public $options = 'wp_options';
+
+	/**
+	 * Rows affected by the last write.
+	 *
+	 * @var int
+	 */
+	public $rows_affected = 0;
+
+	/**
+	 * Rows returned by get_results() (the store's prune / count scan).
+	 *
+	 * @var array<int, object>
+	 */
+	private $rows;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param array<int, object> $rows Option rows for fetch_rows().
+	 */
+	public function __construct( array $rows = array() ) {
+		$this->rows = $rows;
+	}
+
+	/**
+	 * Passthrough LIKE escape.
+	 *
+	 * @param string $text Text.
+	 * @return string
+	 */
+	public function esc_like( $text ) {
+		return $text;
+	}
+
+	/**
+	 * Packs the query and its args so query() / get_var() can interpret them.
+	 *
+	 * @param string $query   Query.
+	 * @param mixed  ...$args Args.
+	 * @return string
+	 */
+	public function prepare( $query, ...$args ) {
+		return serialize( array( $query, $args ) );
+	}
+
+	/**
+	 * The prune / count scan.
+	 *
+	 * @return array<int, object>
+	 */
+	public function get_results() {
+		return $this->rows;
+	}
+
+	/**
+	 * The raw option value for the takeover, as get_option() currently sees it.
+	 *
+	 * @param string $sql Packed query.
+	 * @return string|null
+	 */
+	public function get_var( $sql ) {
+		list( , $args ) = unserialize( $sql );
+		$value          = get_option( $args[0] );
+
+		return false === $value ? null : serialize( $value );
+	}
+
+	/**
+	 * INSERT IGNORE → add_option(); conditional UPDATE → update_option().
+	 *
+	 * @param string $sql Packed query.
+	 * @return int Rows affected.
+	 */
+	public function query( $sql ) {
+		list( $query, $args ) = unserialize( $sql );
+
+		if ( 0 === strpos( $query, 'INSERT IGNORE' ) ) {
+			$this->rows_affected = add_option( $args[0], unserialize( $args[1] ), '', 'no' ) ? 1 : 0;
+		} else {
+			$current             = get_option( $args[1] );
+			$this->rows_affected = ( false !== $current && serialize( $current ) === $args[2] && update_option( $args[1], unserialize( $args[0] ), false ) ) ? 1 : 0;
+		}
+
+		return $this->rows_affected;
+	}
+}
+
+/**
  * Class LicenseCommandDispatcherTest.
  */
 class LicenseCommandDispatcherTest extends TestCase {
@@ -277,11 +379,12 @@ class LicenseCommandDispatcherTest extends TestCase {
 	 * @return \Mockery\MockInterface
 	 */
 	private function arm_wpdb( array $rows = array() ): object {
-		$wpdb          = Mockery::mock();
-		$wpdb->options = 'wp_options';
-		$wpdb->shouldReceive( 'esc_like' )->andReturnUsing( static fn( $text ) => $text );
-		$wpdb->shouldReceive( 'prepare' )->andReturn( 'SQL' );
-		$wpdb->shouldReceive( 'get_results' )->andReturn( $rows );
+		$wpdb = new Option_Claim_Wpdb( $rows );
+
+		// The store's raw claim writes serialise with maybe_serialize() and read back with maybe_unserialize().
+		Functions\when( 'maybe_serialize' )->alias( static fn( $value ) => is_scalar( $value ) ? $value : serialize( $value ) );
+		Functions\when( 'maybe_unserialize' )->alias( static fn( $value ) => is_string( $value ) && false !== @unserialize( $value ) ? unserialize( $value ) : $value ); // phpcs:ignore WordPress.PHP.NoSilencedErrors, WordPress.PHP.DiscouragedPHPFunctions
+		Functions\when( 'wp_cache_delete' )->justReturn( true );
 
 		$GLOBALS['wpdb'] = $wpdb;
 
