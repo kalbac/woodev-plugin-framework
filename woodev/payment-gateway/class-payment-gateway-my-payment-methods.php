@@ -172,7 +172,8 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 					'jquery-tiptip',
 					'jquery',
 				],
-				Woodev_Plugin::VERSION
+				Woodev_Plugin::VERSION,
+				true
 			);
 		}
 
