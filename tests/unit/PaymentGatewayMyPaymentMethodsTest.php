@@ -171,6 +171,11 @@ namespace Woodev\Tests\Unit {
 		 * The inline handler is attached after enqueueing, so its script handle must remain
 		 * queued for the footer. WordPress stores that choice as extra['group'] = 1.
 		 *
+		 * Runs in its own process: `Functions\when( 'WC' )` defines the global `WC()` for the rest of the run.
+		 *
+		 * @runInSeparateProcess
+		 * @preserveGlobalState disabled
+		 *
 		 * @return void
 		 */
 		public function test_my_payment_methods_script_is_enqueued_in_footer_before_inline_js_is_added(): void {
