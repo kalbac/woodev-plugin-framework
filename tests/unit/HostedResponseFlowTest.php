@@ -29,19 +29,27 @@ namespace Woodev\Tests\Unit {
 		public $id = 'hosted-flow';
 		public $response;
 		public $verification_exception;
+		public $processing_exception;
 		public $logger;
 		public $outcome = '';
 		public $references = [];
 		public $form_post = false;
+		public $debug_enabled = true;
 
 		public function __construct() {}
 		protected function get_method_form_fields(): array { return []; }
 		public function get_payment_type() { return 'credit-card'; }
 		public function use_form_post() { return $this->form_post; }
 		public function use_auto_form_post() { return false; }
-		public function debug_log() { return true; }
+		public function supports_tokenization() { return false; }
+		public function debug_log() { return $this->debug_enabled; }
 		public function get_plugin() { return $this->logger; }
 		protected function get_transaction_response( $request_response_data ) { return $this->response; }
+		public function add_transaction_data( $order, $response = null ) {
+			if ( $this->processing_exception ) {
+				throw $this->processing_exception;
+			}
+		}
 		public function get_hosted_pay_page_url( $order = null ) {
 			$this->references[] = $order->unique_transaction_ref;
 			return 'https://example.test/pay';
@@ -59,7 +67,8 @@ namespace Woodev\Tests\Unit {
 				throw $this->verification_exception;
 			}
 		}
-		protected function do_transaction_held( \WC_Order $order, $response ) { $this->outcome = 'acknowledged'; }
+		protected function do_transaction_held( \WC_Order $order, $response ) { $this->outcome = 'held'; }
+		protected function do_transaction_pending( \WC_Order $order, \Woodev_Payment_Gateway_API_Payment_Notification_Response $response ): void { $this->outcome = 'acknowledged'; }
 		protected function do_transaction_failed( \WC_Order $order, $response ) { $this->outcome = 'failed'; }
 		protected function do_invalid_transaction_response( $order, $response ) { $this->outcome = 'invalid'; }
 		public function mark_order_as_failed( $order, $error_message, $response = null ) {
@@ -110,12 +119,13 @@ namespace Woodev\Tests\Unit {
 			$this->gateway->logger->shouldReceive( 'log' )->andReturnUsing( function ( $message ) { $this->logs[] = $message; } );
 		}
 
-		private function response( bool $pending = true, bool $extended = true ) {
+		private function response( bool $pending = true, bool $extended = true, bool $approved = false ) {
 			$response = Mockery::mock( $extended ? Pending_Notification_Response::class : \Woodev_Payment_Gateway_API_Payment_Notification_Response::class );
 			$response->shouldReceive( 'get_order_id' )->andReturn( 42 );
 			$response->shouldReceive( 'get_account_number' )->andReturn( null );
 			$response->shouldReceive( 'to_string_safe' )->andReturn( 'notification' );
-			$response->shouldReceive( 'transaction_approved', 'transaction_held', 'transaction_cancelled' )->andReturn( false );
+			$response->shouldReceive( 'transaction_approved' )->andReturn( $approved );
+			$response->shouldReceive( 'transaction_held', 'transaction_cancelled' )->andReturn( false );
 			$response->shouldReceive( 'is_ipn' )->andReturn( true );
 			$response->shouldReceive( 'get_status_code', 'get_status_message', 'get_transaction_id' )->andReturn( '' );
 			if ( $extended ) {
@@ -139,6 +149,24 @@ namespace Woodev\Tests\Unit {
 			$this->gateway->handle_transaction_response_request();
 			$this->assertSame( 'invalid', $this->gateway->outcome );
 			$this->assertContains( 'IPN processing error: Invalid signature', $this->logs );
+		}
+
+		public function test_processing_failure_is_logged_and_not_acknowledged_or_marked_failed(): void {
+			$this->gateway->debug_enabled = false;
+			$this->gateway->response = $this->response( true, true, true );
+			$this->gateway->processing_exception = new \RuntimeException( 'Transaction data write failed' );
+			$this->order->shouldNotReceive( 'update_status' );
+			Functions\expect( 'status_header' )->once()->with( 500 );
+
+			try {
+				$this->gateway->handle_transaction_response_request();
+				$this->fail( 'The processing exception must escape so the provider can retry.' );
+			} catch ( \RuntimeException $exception ) {
+				$this->assertSame( 'Transaction data write failed', $exception->getMessage() );
+			}
+
+			$this->assertContains( 'IPN processing error: Transaction data write failed', $this->logs );
+			$this->assertNotSame( 'failed', $this->gateway->outcome );
 		}
 
 		public static function verification_errors(): array {

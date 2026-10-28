@@ -381,26 +381,48 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 				// Validate the response data such as order ID and payment status
 				$this->validate_transaction_response( $order, $response );
 
-				// Handle the order based on the response
-				$this->process_transaction_response( $order, $response );
-
 			} catch ( Exception $e ) {
-
 				if ( $this->debug_log() ) {
-
-					$this->get_plugin()->log(
-					/* translators: Placeholders: %1$s - transaction request type such as IPN or Redirect-back, %2$s - the error message */
-						sprintf(
-							'%1$s processing error: %2$s',
-							( $response && $response->is_ipn() ) ? 'IPN' : 'Redirect-back',
-							\Woodev_API_Base::redact_secret_log_text( $e->getMessage(), [], true )
-						),
-						$this->get_id()
-					);
+					$this->log_transaction_response_error( $response, $e );
 				}
 
 				$this->do_invalid_transaction_response( $order, $response );
+				return;
 			}
+
+			try {
+
+				// Process only after the provider response has been verified.
+				$this->process_transaction_response( $order, $response );
+
+			} catch ( Exception $e ) {
+				$this->log_transaction_response_error( $response, $e );
+
+				if ( $response->is_ipn() ) {
+					status_header( 500 );
+				}
+
+				throw $e;
+			}
+		}
+
+
+		/**
+		 * Logs an error raised while handling a transaction response.
+		 *
+		 * @param Woodev_Payment_Gateway_API_Payment_Notification_Response|null $response transaction response, if available
+		 * @param Exception                                                     $exception processing exception
+		 */
+		protected function log_transaction_response_error( $response, Exception $exception ): void {
+			$this->get_plugin()->log(
+			/* translators: Placeholders: %1$s - transaction request type such as IPN or Redirect-back, %2$s - the error message */
+				sprintf(
+					'%1$s processing error: %2$s',
+					( $response && $response->is_ipn() ) ? 'IPN' : 'Redirect-back',
+					\Woodev_API_Base::redact_secret_log_text( $exception->getMessage(), [], true )
+				),
+				$this->get_id()
+			);
 		}
 
 
@@ -699,7 +721,13 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 		 * @return void
 		 */
 		protected function do_transaction_pending( WC_Order $order, Woodev_Payment_Gateway_API_Payment_Notification_Response $response ): void {
-			$this->do_transaction_held( $order, $response );
+			if ( $response->is_ipn() ) {
+				status_header( 200 );
+				die;
+			}
+
+			wp_safe_redirect( $this->get_return_url( $order ) );
+			exit;
 		}
 
 		/**
