@@ -119,14 +119,14 @@ namespace Woodev\Tests\Unit {
 			$this->gateway->logger->shouldReceive( 'log' )->andReturnUsing( function ( $message ) { $this->logs[] = $message; } );
 		}
 
-		private function response( bool $pending = true, bool $extended = true, bool $approved = false ) {
+		private function response( bool $pending = true, bool $extended = true, bool $approved = false, bool $ipn = true ) {
 			$response = Mockery::mock( $extended ? Pending_Notification_Response::class : \Woodev_Payment_Gateway_API_Payment_Notification_Response::class );
 			$response->shouldReceive( 'get_order_id' )->andReturn( 42 );
 			$response->shouldReceive( 'get_account_number' )->andReturn( null );
 			$response->shouldReceive( 'to_string_safe' )->andReturn( 'notification' );
 			$response->shouldReceive( 'transaction_approved' )->andReturn( $approved );
 			$response->shouldReceive( 'transaction_held', 'transaction_cancelled' )->andReturn( false );
-			$response->shouldReceive( 'is_ipn' )->andReturn( true );
+			$response->shouldReceive( 'is_ipn' )->andReturn( $ipn );
 			$response->shouldReceive( 'get_status_code', 'get_status_message', 'get_transaction_id' )->andReturn( '' );
 			if ( $extended ) {
 				$response->shouldReceive( 'transaction_pending' )->andReturn( $pending );
@@ -167,6 +167,19 @@ namespace Woodev\Tests\Unit {
 
 			$this->assertContains( 'IPN processing error: Transaction data write failed', $this->logs );
 			$this->assertNotSame( 'failed', $this->gateway->outcome );
+		}
+
+		public function test_processing_failure_on_redirect_back_is_logged_and_routes_the_buyer_without_rethrowing(): void {
+			$this->gateway->debug_enabled = false;
+			$this->gateway->response = $this->response( true, true, true, false );
+			$this->gateway->processing_exception = new \RuntimeException( 'Transaction data write failed' );
+			$this->order->shouldNotReceive( 'update_status' );
+			Functions\expect( 'status_header' )->never();
+
+			$this->gateway->handle_transaction_response_request();
+
+			$this->assertSame( 'invalid', $this->gateway->outcome );
+			$this->assertContains( 'Redirect-back processing error: Transaction data write failed', $this->logs );
 		}
 
 		public static function verification_errors(): array {

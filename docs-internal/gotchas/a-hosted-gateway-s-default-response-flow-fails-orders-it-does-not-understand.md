@@ -33,8 +33,9 @@ redirect-back: the return URL), without marking the order paid, held or failed. 
 `Woodev_Payment_Gateway_API_Payment_Notification_Response` default to not pending and preserve their decline behavior.
 Authentication and validation exceptions in this class are redacted and logged when debug logging is enabled, then take the
 existing invalid-request path without failing the order. Exceptions while processing a verified response are logged
-regardless of debug logging and rethrown; IPNs receive HTTP 500 so the provider can retry. Subclasses remain responsible
-for authenticating the provider request.
+regardless of debug logging. IPNs are rethrown and receive HTTP 500 so the provider can retry; redirect-back requests
+route the buyer through the invalid-response path (a redirect to the return URL) and leave the order status unchanged,
+because a browser has no retry. Subclasses remain responsible for authenticating the provider request.
 
 `get_order()` now reconstructs `unique_transaction_ref` from the existing `retry_count` without writing meta. The hosted
 redirect/form entry points and direct `process_payment()` call protected `start_payment_attempt()` exactly once per new
@@ -47,7 +48,7 @@ fix does not replace those responsibilities or change that plugin. Its original 
 
 This fix covers `Woodev_Payment_Gateway_Hosted` only. The separate `Abstract_Hosted_Payment_Handler` architecture in
 `handlers/abstract-hosted-payment-handler.php` and `handlers/abstract-payment-handler.php` still has the pending-status and
-verification-exception order-handling bugs; track that path separately.
+verification-exception order-handling bugs; track that path separately in #1500.
 
 ## Related
 

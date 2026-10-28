@@ -398,11 +398,14 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 			} catch ( Exception $e ) {
 				$this->log_transaction_response_error( $response, $e );
 
+				// IPNs must get a non-2xx so the provider retries; a browser has no retry, so the buyer goes back to the order.
 				if ( $response->is_ipn() ) {
 					status_header( 500 );
+
+					throw $e;
 				}
 
-				throw $e;
+				$this->do_invalid_transaction_response( $order, $response );
 			}
 		}
 
