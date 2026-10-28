@@ -4,12 +4,14 @@
  *
  * The anti-replay primitive behind the §3.4.1 command dispatcher. One option PER
  * nonce (name = OPTION_PREFIX . first-32-hex of sha256(nonce), autoload 'no') so the
- * claim is ATOMIC: add_option() relies on MySQL's UNIQUE index on option_name —
- * exactly one concurrent writer wins, the loser's INSERT fails (add_option() returns
- * false) and is rejected 'replayed'. A processing → consumed state machine guards the
- * window between the claim and the action; a `processing` record stuck longer than
- * STUCK_TAKEOVER_AFTER is taken over for crash recovery (the only v1 command is
- * idempotent). Retention is capped at MAX_TTL so a huge signed expires_at cannot pin
+ * claim is ATOMIC: it is a raw `INSERT IGNORE` (NOT add_option(), whose
+ * `ON DUPLICATE KEY UPDATE` overwrites a racer's row) and rides MySQL's UNIQUE index on
+ * option_name — exactly one concurrent writer sees rows_affected === 1, every loser's
+ * insert is ignored (0 rows) and is rejected 'replayed'. A processing → consumed state
+ * machine guards the window between the claim and the action; a `processing` record
+ * stuck longer than STUCK_TAKEOVER_AFTER is taken over for crash recovery by a
+ * compare-and-set `UPDATE … WHERE option_value = <what was read>`, so exactly one
+ * contender wins it (the only v1 command is idempotent). Retention is capped at MAX_TTL so a huge signed expires_at cannot pin
  * entries, and the live-entry cap (MAX_NONCE_ENTRIES) is a correctness bound — only
  * authentically-signed envelopes ever reach the store (the dispatcher verifies the
  * signature first), so the cap is never an attacker-growth surface.
@@ -107,19 +109,20 @@ if ( ! class_exists( 'Woodev_License_Command_Nonce_Store' ) ) :
 		 * record), 'replayed' for a consumed nonce / an in-flight processing record /
 		 * the concurrent loser, and 'store_full' when the live-entry cap is reached.
 		 *
-		 * Atomicity contract (plan §9.1/§9.2, amended 2026-06-11): the atomic
-		 * guarantee covers the FRESH-claim path ONLY — add_option() rides MySQL's
-		 * UNIQUE option_name index, so exactly one concurrent writer wins. The stale
-		 * TAKEOVER path is explicitly BEST-EFFORT, not atomic: two requests can both
-		 * pass the stale check and both re-execute. Accepted because the sealed
-		 * vocabulary contract requires idempotent commands (see
+		 * Atomicity contract (plan §9.1/§9.2; #1485): BOTH paths are single-winner.
+		 * The FRESH claim is a raw `INSERT IGNORE` on MySQL's UNIQUE option_name
+		 * index — only the contender whose insert affects one row is 'claimed'; add_option()
+		 * is not used because its `ON DUPLICATE KEY UPDATE` lets every racer «win». The
+		 * stale TAKEOVER is a compare-and-set `UPDATE … WHERE option_value = <the raw
+		 * value just read>` — a contender that finds the row already rewritten affects
+		 * zero rows and is 'replayed'. The commands stay idempotent regardless (see
 		 * Woodev_License_Command_Dispatcher::get_commands()).
 		 *
-		 * Writes: the add_option() claim and the update_option() takeover (claimed
+		 * Writes: the INSERT IGNORE claim and the conditional UPDATE takeover (claimed
 		 * path), plus — on the at-cap 'store_full' path only — prune() deletions of
 		 * EXPIRED rows (the recorded exception, plan §9.2). Every other rejection
 		 * path writes nothing; below cap a claim attempt performs NO maintenance
-		 * writes (add_option is the first write).
+		 * writes (the insert is the first write).
 		 *
 		 * @since 2.0.0
 		 *
@@ -148,10 +151,7 @@ if ( ! class_exists( 'Woodev_License_Command_Nonce_Store' ) ) :
 						return 'replayed';
 					}
 
-					$existing['c'] = $this->now();
-					update_option( $name, $existing, false );
-
-					return 'claimed';
+					return $this->take_over( $name ) ? 'claimed' : 'replayed';
 				}
 
 				// An unknown state shape → treat as in-flight (safe default, no write).
@@ -179,12 +179,110 @@ if ( ! class_exists( 'Woodev_License_Command_Nonce_Store' ) ) :
 				'e' => min( $expires_at, $this->now() + self::MAX_TTL ),
 			];
 
-			// Atomic insert: the UNIQUE option_name index makes the concurrent loser fail.
-			if ( false === add_option( $name, $record, '', 'no' ) ) {
+			global $wpdb;
+
+			// Atomic claim: INSERT IGNORE on the UNIQUE option_name index affects one row for the
+			// single winner and zero for every loser. add_option() cannot be used — it ends in
+			// ON DUPLICATE KEY UPDATE, which overwrites a racer's row and reports success (#1485).
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- an atomic claim cannot go through the options API.
+			$result = $wpdb->query(
+				$wpdb->prepare(
+					"INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, %s)", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					$name,
+					maybe_serialize( $record ),
+					'no'
+				)
+			);
+
+			if ( ! $this->affected_one( $result ) ) {
 				return 'replayed';
 			}
 
+			$this->forget_cached_option( $name );
+
 			return 'claimed';
+		}
+
+		/**
+		 * Takes over a stuck `processing` record by compare-and-set.
+		 *
+		 * The row is read raw from the database (never the object cache), re-checked for being
+		 * a stale `processing` record, and replaced by `UPDATE … WHERE option_value = <that raw
+		 * value>`. Of N requests that read the same stale row exactly one changes it; the rest
+		 * affect zero rows and lose.
+		 *
+		 * @since 2.0.16
+		 *
+		 * @param string $name The per-nonce option name.
+		 * @return bool Whether this caller won the takeover.
+		 */
+		private function take_over( string $name ): bool {
+
+			global $wpdb;
+
+			// phpcs:disable WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- an atomic compare-and-set cannot go through the options API.
+			$raw = $wpdb->get_var(
+				$wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $name )
+			);
+
+			$current = is_string( $raw ) ? maybe_unserialize( $raw ) : null;
+
+			// Row gone, rewritten meanwhile, or no longer stale → someone else owns it.
+			if (
+				! is_array( $current )
+				|| 'processing' !== ( $current['s'] ?? null )
+				|| ( $this->now() - (int) ( $current['c'] ?? 0 ) ) <= self::STUCK_TAKEOVER_AFTER
+			) {
+				return false;
+			}
+
+			$current['c'] = $this->now();
+
+			$result = $wpdb->query(
+				$wpdb->prepare(
+					"UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s AND option_value = %s",
+					maybe_serialize( $current ),
+					$name,
+					$raw
+				)
+			);
+			// phpcs:enable WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+			if ( ! $this->affected_one( $result ) ) {
+				return false;
+			}
+
+			$this->forget_cached_option( $name );
+
+			return true;
+		}
+
+		/**
+		 * Whether the last raw write changed exactly one row (the winner of an atomic claim).
+		 *
+		 * @since 2.0.16
+		 *
+		 * @param int|bool $result The `$wpdb->query()` return (false on a database error).
+		 * @return bool
+		 */
+		private function affected_one( $result ): bool {
+
+			global $wpdb;
+
+			return false !== $result && 1 === (int) $wpdb->rows_affected;
+		}
+
+		/**
+		 * Drops the option from the object cache after a raw write, so later get_option() reads see the database.
+		 *
+		 * @since 2.0.16
+		 *
+		 * @param string $name The per-nonce option name.
+		 * @return void
+		 */
+		private function forget_cached_option( string $name ): void {
+			wp_cache_delete( $name, 'options' );
+			wp_cache_delete( 'notoptions', 'options' );
 		}
 
 		/**

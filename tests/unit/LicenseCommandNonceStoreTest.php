@@ -3,10 +3,11 @@
  * Atomic nonce-claim store tests (§9.1 / §9.2).
  *
  * The store is the anti-replay primitive for signed license commands. The claim is
- * atomic via add_option() (the UNIQUE option_name index makes the concurrent loser's
- * INSERT fail → add_option() returns false → 'replayed'). State machine:
+ * atomic via a raw `INSERT IGNORE` (the UNIQUE option_name index makes every concurrent
+ * loser's insert affect 0 rows → 'replayed'; add_option() is NOT used — its
+ * ON DUPLICATE KEY UPDATE overwrites a racer's row, #1485). State machine:
  * processing → consumed; a stuck `processing` record older than STUCK_TAKEOVER_AFTER
- * is taken over (crash recovery, §9.1 — the only v1 command is idempotent). Retention
+ * is taken over by a conditional UPDATE (crash recovery, §9.1 — single winner). Retention
  * is capped at MAX_TTL so a huge signed expires_at cannot pin entries; the live-entry
  * cap (MAX_NONCE_ENTRIES) returns 'store_full' (the dispatcher maps it → rate_limited).
  *
@@ -46,6 +47,142 @@ class Clockable_Nonce_Store extends \Woodev_License_Command_Nonce_Store {
 }
 
 /**
+ * An in-memory `wp_options` table behind the wpdb API the nonce store uses.
+ *
+ * Models the two atomic primitives: `INSERT IGNORE` (one row affected only when the name is new) and
+ * the conditional `UPDATE … WHERE option_value = <raw>` (one row affected only when the raw value still
+ * matches). The hooks run a «concurrent request» between the store's read and its write.
+ */
+class Options_Table_Wpdb {
+
+	/**
+	 * Table name.
+	 *
+	 * @var string
+	 */
+	public $options = 'wp_options';
+
+	/**
+	 * Rows affected by the last write.
+	 *
+	 * @var int
+	 */
+	public $rows_affected = 0;
+
+	/**
+	 * Raw option values by option_name.
+	 *
+	 * @var array<string, string>
+	 */
+	public $table = array();
+
+	/**
+	 * Autoload flag written by INSERT IGNORE, by option_name.
+	 *
+	 * @var array<string, string>
+	 */
+	public $autoload = array();
+
+	/**
+	 * Runs just before an INSERT IGNORE is applied (a racer inserts first).
+	 *
+	 * @var callable|null
+	 */
+	public $before_insert;
+
+	/**
+	 * Runs just before a conditional UPDATE is applied (a racer rewrites the row first).
+	 *
+	 * @var callable|null
+	 */
+	public $before_update;
+
+	/**
+	 * Passthrough LIKE escape.
+	 *
+	 * @param string $text Text.
+	 * @return string
+	 */
+	public function esc_like( $text ) {
+		return $text;
+	}
+
+	/**
+	 * Packs the query and its args so query() / get_var() can interpret them.
+	 *
+	 * @param string $query   Query.
+	 * @param mixed  ...$args Args.
+	 * @return string
+	 */
+	public function prepare( $query, ...$args ) {
+		return serialize( array( $query, $args ) );
+	}
+
+	/**
+	 * The prune / count scan: every row (the tests only seed nonce rows).
+	 *
+	 * @return array<int, object>
+	 */
+	public function get_results() {
+		$rows = array();
+		foreach ( $this->table as $name => $value ) {
+			$rows[] = (object) array( 'option_name' => $name, 'option_value' => $value );
+		}
+
+		return $rows;
+	}
+
+	/**
+	 * The raw stored value.
+	 *
+	 * @param string $sql Packed query.
+	 * @return string|null
+	 */
+	public function get_var( $sql ) {
+		list( , $args ) = unserialize( $sql );
+
+		return $this->table[ $args[0] ] ?? null;
+	}
+
+	/**
+	 * INSERT IGNORE or conditional UPDATE, with MySQL's rows-affected semantics.
+	 *
+	 * @param string $sql Packed query.
+	 * @return int Rows affected.
+	 */
+	public function query( $sql ) {
+		list( $query, $args ) = unserialize( $sql );
+
+		if ( 0 === strpos( $query, 'INSERT IGNORE' ) ) {
+			if ( $this->before_insert ) {
+				( $this->before_insert )( $this );
+			}
+
+			if ( isset( $this->table[ $args[0] ] ) ) {
+				return $this->rows_affected = 0;
+			}
+
+			$this->table[ $args[0] ]    = $args[1];
+			$this->autoload[ $args[0] ] = $args[2];
+
+			return $this->rows_affected = 1;
+		}
+
+		if ( $this->before_update ) {
+			( $this->before_update )( $this );
+		}
+
+		if ( ( $this->table[ $args[1] ] ?? null ) !== $args[2] ) {
+			return $this->rows_affected = 0;
+		}
+
+		$this->table[ $args[1] ] = $args[0];
+
+		return $this->rows_affected = 1;
+	}
+}
+
+/**
  * Class LicenseCommandNonceStoreTest.
  */
 class LicenseCommandNonceStoreTest extends TestCase {
@@ -68,6 +205,29 @@ class LicenseCommandNonceStoreTest extends TestCase {
 		$wpdb->shouldReceive( 'get_results' )->andReturn( array() );
 
 		$GLOBALS['wpdb'] = $wpdb;
+
+		// The raw claim writes serialise like add_option() does and read back with maybe_unserialize().
+		Functions\when( 'maybe_serialize' )->alias( static fn( $value ) => is_scalar( $value ) ? $value : serialize( $value ) );
+		Functions\when( 'maybe_unserialize' )->alias( static fn( $value ) => is_string( $value ) && false !== @unserialize( $value ) ? unserialize( $value ) : $value ); // phpcs:ignore WordPress.PHP.NoSilencedErrors, WordPress.PHP.DiscouragedPHPFunctions
+		Functions\when( 'wp_cache_delete' )->justReturn( true );
+	}
+
+	/**
+	 * Arms an in-memory options table as the wpdb global; get_option() reads the same table.
+	 *
+	 * @return Options_Table_Wpdb
+	 */
+	private function arm_options_table(): Options_Table_Wpdb {
+		$wpdb            = new Options_Table_Wpdb();
+		$GLOBALS['wpdb'] = $wpdb;
+
+		Functions\when( 'get_option' )->alias(
+			static function ( $name ) use ( $wpdb ) {
+				return isset( $wpdb->table[ $name ] ) ? unserialize( $wpdb->table[ $name ] ) : false;
+			}
+		);
+
+		return $wpdb;
 	}
 
 	/**
@@ -135,35 +295,43 @@ class LicenseCommandNonceStoreTest extends TestCase {
 	}
 
 	/**
-	 * claim() on a fresh nonce writes the processing record via add_option (autoload
-	 * 'no'), caps retention at MAX_TTL, and returns 'claimed'.
+	 * claim() on a fresh nonce writes the processing record via INSERT IGNORE (autoload
+	 * 'no'), caps retention at MAX_TTL, clears the option cache entry and returns
+	 * 'claimed' — and never touches add_option() (ON DUPLICATE KEY UPDATE, #1485).
 	 *
 	 * @return void
 	 */
 	public function test_claim_fresh_nonce_writes_processing_record(): void {
 		$store            = new Clockable_Nonce_Store();
 		$store->fixed_now = self::NOW;
+		$wpdb             = $this->arm_options_table();
 
-		$captured = null;
-		Functions\when( 'get_option' )->justReturn( false );
 		// Below cap a claim performs NO maintenance writes (lazy prune, §9.2 amended).
 		Functions\expect( 'delete_option' )->never();
-		Functions\expect( 'add_option' )->once()->andReturnUsing(
-			static function ( $name, $value, $deprecated, $autoload ) use ( &$captured ) {
-				$captured = array( $name, $value, $deprecated, $autoload );
+		Functions\expect( 'add_option' )->never();
+		Functions\expect( 'update_option' )->never();
+
+		$cleared = array();
+		Functions\when( 'wp_cache_delete' )->alias(
+			static function ( $key, $group ) use ( &$cleared ) {
+				$cleared[] = array( $key, $group );
 				return true;
 			}
 		);
 
 		// A small expires_at (well under MAX_TTL) is kept verbatim.
 		$result = $store->claim( self::NONCE, self::NOW + 100 );
+		$name   = $this->option_name_for( self::NONCE );
 
 		$this->assertSame( 'claimed', $result );
-		$this->assertSame( $this->option_name_for( self::NONCE ), $captured[0] );
-		$this->assertSame( 'no', $captured[3] );
-		$this->assertSame( 'processing', $captured[1]['s'] );
-		$this->assertSame( self::NOW, $captured[1]['c'] );
-		$this->assertSame( self::NOW + 100, $captured[1]['e'] );
+		$this->assertSame( array( $name ), array_keys( $wpdb->table ) );
+		$this->assertSame( 'no', $wpdb->autoload[ $name ] );
+		$this->assertSame(
+			array( 's' => 'processing', 'c' => self::NOW, 'e' => self::NOW + 100 ),
+			unserialize( $wpdb->table[ $name ] )
+		);
+		$this->assertContains( array( $name, 'options' ), $cleared, 'The option cache entry is dropped after the raw insert.' );
+		$this->assertContains( array( 'notoptions', 'options' ), $cleared );
 	}
 
 	/**
@@ -175,48 +343,60 @@ class LicenseCommandNonceStoreTest extends TestCase {
 	public function test_claim_caps_retention_at_max_ttl(): void {
 		$store            = new Clockable_Nonce_Store();
 		$store->fixed_now = self::NOW;
+		$wpdb             = $this->arm_options_table();
 
-		$captured = null;
-		Functions\when( 'get_option' )->justReturn( false );
 		Functions\expect( 'delete_option' )->never();
-		Functions\when( 'add_option' )->alias(
-			static function ( $name, $value ) use ( &$captured ) {
-				$captured = $value;
-				return true;
-			}
-		);
 
 		$store->claim( self::NONCE, self::NOW + ( 100 * YEAR_IN_SECONDS ) );
 
-		$this->assertSame( self::NOW + \Woodev_License_Command_Nonce_Store::MAX_TTL, $captured['e'] );
+		$record = unserialize( $wpdb->table[ $this->option_name_for( self::NONCE ) ] );
+
+		$this->assertSame( self::NOW + \Woodev_License_Command_Nonce_Store::MAX_TTL, $record['e'] );
 	}
 
 	/**
-	 * The concurrent loser: add_option() returns false (UNIQUE index conflict) and
-	 * there is no readable record yet → 'replayed' (§9.9 concurrency double-execution).
+	 * The same key claimed twice: 'claimed' once, then 'replayed' (the first claim's
+	 * processing record is in flight).
 	 *
 	 * @return void
 	 */
-	public function test_claim_loser_when_add_option_false_is_replayed(): void {
-		$store = new Clockable_Nonce_Store();
+	public function test_second_claim_of_the_same_key_is_replayed(): void {
+		$store            = new Clockable_Nonce_Store();
+		$store->fixed_now = self::NOW;
+		$wpdb             = $this->arm_options_table();
 
-		// First read sees nothing; the winner already inserted between our read and write,
-		// so add_option fails; the re-read then sees the winner's processing record.
-		Functions\when( 'get_option' )->alias(
-			static function () {
-				static $calls = 0;
-				$calls++;
-				if ( 1 === $calls ) {
-					return false;
-				}
-				return array( 's' => 'processing', 'c' => self::NOW, 'e' => self::NOW + 100 );
-			}
-		);
-		Functions\when( 'add_option' )->justReturn( false );
-		Functions\expect( 'delete_option' )->never();
+		Functions\expect( 'add_option' )->never();
 		Functions\expect( 'update_option' )->never();
 
+		$this->assertSame( 'claimed', $store->claim( self::NONCE, self::NOW + 100 ) );
 		$this->assertSame( 'replayed', $store->claim( self::NONCE, self::NOW + 100 ) );
+		$this->assertCount( 1, $wpdb->table );
+	}
+
+	/**
+	 * The concurrent loser: this request read «no record», but another process inserted the
+	 * row before our INSERT IGNORE ran → 0 rows affected → 'replayed', and the winner's row is
+	 * left untouched (add_option()'s ON DUPLICATE KEY UPDATE would have overwritten it, #1485).
+	 *
+	 * @return void
+	 */
+	public function test_claim_loser_when_row_inserted_between_read_and_insert_is_replayed(): void {
+		$store            = new Clockable_Nonce_Store();
+		$store->fixed_now = self::NOW;
+		$wpdb             = $this->arm_options_table();
+		$name             = $this->option_name_for( self::NONCE );
+		$winner           = serialize( array( 's' => 'processing', 'c' => self::NOW - 1, 'e' => self::NOW + 50 ) );
+
+		$wpdb->before_insert = static function ( Options_Table_Wpdb $db ) use ( $name, $winner ): void {
+			$db->table[ $name ] = $winner;
+		};
+
+		Functions\expect( 'add_option' )->never();
+		Functions\expect( 'update_option' )->never();
+		Functions\expect( 'delete_option' )->never();
+
+		$this->assertSame( 'replayed', $store->claim( self::NONCE, self::NOW + 100 ) );
+		$this->assertSame( $winner, $wpdb->table[ $name ], 'The winner\'s row is not overwritten by the loser.' );
 	}
 
 	/**
@@ -279,32 +459,80 @@ class LicenseCommandNonceStoreTest extends TestCase {
 	}
 
 	/**
-	 * A processing record older than STUCK_TAKEOVER_AFTER is taken over: c refreshed
-	 * via update_option, returns 'claimed' (§9.9 crash-between-claim-and-action).
+	 * A processing record older than STUCK_TAKEOVER_AFTER is taken over by a conditional
+	 * UPDATE: c refreshed, returns 'claimed' (§9.9 crash-between-claim-and-action).
 	 *
 	 * @return void
 	 */
 	public function test_claim_takes_over_stale_processing_record(): void {
 		$store            = new Clockable_Nonce_Store();
 		$store->fixed_now = self::NOW;
+		$wpdb             = $this->arm_options_table();
+		$name             = $this->option_name_for( self::NONCE );
 
-		Functions\when( 'get_option' )->justReturn(
-			array( 's' => 'processing', 'c' => self::NOW - 301, 'e' => self::NOW + 100 )
-		);
+		$wpdb->table[ $name ] = serialize( array( 's' => 'processing', 'c' => self::NOW - 301, 'e' => self::NOW + 100 ) );
+
 		Functions\expect( 'add_option' )->never();
-
-		$captured = null;
-		Functions\expect( 'update_option' )->once()->andReturnUsing(
-			static function ( $name, $value ) use ( &$captured ) {
-				$captured = array( $name, $value );
-				return true;
-			}
-		);
+		Functions\expect( 'update_option' )->never();
 
 		$this->assertSame( 'claimed', $store->claim( self::NONCE, self::NOW + 100 ) );
-		$this->assertSame( $this->option_name_for( self::NONCE ), $captured[0] );
-		$this->assertSame( 'processing', $captured[1]['s'] );
-		$this->assertSame( self::NOW, $captured[1]['c'], 'Takeover refreshes the claimed-at timestamp.' );
+
+		$record = unserialize( $wpdb->table[ $name ] );
+
+		$this->assertSame( 'processing', $record['s'] );
+		$this->assertSame( self::NOW, $record['c'], 'Takeover refreshes the claimed-at timestamp.' );
+		$this->assertSame( self::NOW + 100, $record['e'] );
+	}
+
+	/**
+	 * Two contenders read the same stale record (a persistent object cache can serve it to both):
+	 * exactly one wins the takeover; the other re-reads the rewritten row and is 'replayed'.
+	 *
+	 * @return void
+	 */
+	public function test_stale_takeover_is_won_by_exactly_one_of_two_contenders(): void {
+		$store            = new Clockable_Nonce_Store();
+		$store->fixed_now = self::NOW;
+		$wpdb             = $this->arm_options_table();
+		$name             = $this->option_name_for( self::NONCE );
+		$stale            = array( 's' => 'processing', 'c' => self::NOW - 301, 'e' => self::NOW + 100 );
+
+		$wpdb->table[ $name ] = serialize( $stale );
+
+		// Both contenders' get_option() read is the cached stale copy.
+		Functions\when( 'get_option' )->justReturn( $stale );
+		Functions\expect( 'update_option' )->never();
+
+		$results = array(
+			$store->claim( self::NONCE, self::NOW + 100 ),
+			$store->claim( self::NONCE, self::NOW + 100 ),
+		);
+
+		$this->assertSame( array( 'claimed', 'replayed' ), $results );
+	}
+
+	/**
+	 * The compare-and-set itself: a racer rewrites the stale row AFTER this request read it but
+	 * BEFORE its UPDATE → the `WHERE option_value = <raw read>` matches nothing → 'replayed'.
+	 *
+	 * @return void
+	 */
+	public function test_takeover_loses_when_the_row_is_rewritten_before_the_update(): void {
+		$store            = new Clockable_Nonce_Store();
+		$store->fixed_now = self::NOW;
+		$wpdb             = $this->arm_options_table();
+		$name             = $this->option_name_for( self::NONCE );
+		$racer            = serialize( array( 's' => 'processing', 'c' => self::NOW, 'e' => self::NOW + 100 ) );
+
+		$wpdb->table[ $name ] = serialize( array( 's' => 'processing', 'c' => self::NOW - 301, 'e' => self::NOW + 100 ) );
+		$wpdb->before_update  = static function ( Options_Table_Wpdb $db ) use ( $name, $racer ): void {
+			$db->table[ $name ] = $racer;
+		};
+
+		Functions\expect( 'update_option' )->never();
+
+		$this->assertSame( 'replayed', $store->claim( self::NONCE, self::NOW + 100 ) );
+		$this->assertSame( $racer, $wpdb->table[ $name ], 'The racer\'s row is not overwritten by the loser.' );
 	}
 
 	/**
@@ -507,7 +735,7 @@ class LicenseCommandNonceStoreTest extends TestCase {
 	/**
 	 * LAZY prune (§9.2 amended): BELOW cap, a fresh claim performs NO maintenance
 	 * writes — even when expired rows exist, delete_option is never called and
-	 * add_option is the first (and only) write.
+	 * the INSERT IGNORE claim is the first (and only) write.
 	 *
 	 * @return void
 	 */
@@ -515,42 +743,22 @@ class LicenseCommandNonceStoreTest extends TestCase {
 		$store            = new Clockable_Nonce_Store();
 		$store->fixed_now = self::NOW;
 
-		Functions\when( 'get_option' )->justReturn( false );
-
+		$wpdb   = $this->arm_options_table();
 		$prefix = \Woodev_License_Command_Nonce_Store::OPTION_PREFIX;
-		$rows   = array(
-			(object) array(
-				'option_name'  => $prefix . str_repeat( '1', 32 ),
-				'option_value' => serialize( array( 's' => 'processing', 'e' => self::NOW + 1000 ) ), // live
-			),
-			(object) array(
-				'option_name'  => $prefix . str_repeat( '2', 32 ),
-				'option_value' => serialize( array( 's' => 'consumed', 'e' => self::NOW - 1 ) ), // expired
-			),
-		);
 
-		$wpdb = Mockery::mock();
-		$wpdb->options = 'wp_options';
-		$wpdb->shouldReceive( 'esc_like' )->andReturnUsing( static fn( $text ) => $text );
-		$wpdb->shouldReceive( 'prepare' )->andReturn( 'SQL' );
-		$wpdb->shouldReceive( 'get_results' )->andReturn( $rows );
-		$GLOBALS['wpdb'] = $wpdb;
-
-		Functions\when( 'maybe_unserialize' )->alias(
-			static function ( $value ) {
-				return is_string( $value ) ? unserialize( $value ) : $value;
-			}
+		$wpdb->table = array(
+			$prefix . str_repeat( '1', 32 ) => serialize( array( 's' => 'processing', 'e' => self::NOW + 1000 ) ), // live
+			$prefix . str_repeat( '2', 32 ) => serialize( array( 's' => 'consumed', 'e' => self::NOW - 1 ) ), // expired
 		);
 
 		// The maintenance-write ban below cap: the stale row is left alone.
 		Functions\expect( 'delete_option' )->never();
 		Functions\expect( 'update_option' )->never();
-		Functions\expect( 'add_option' )->once()->andReturn( true );
+		Functions\expect( 'add_option' )->never();
 
 		$result = $store->claim( self::NONCE, self::NOW + 100 );
 
-		unset( $GLOBALS['wpdb'] );
-
 		$this->assertSame( 'claimed', $result );
+		$this->assertArrayHasKey( $prefix . str_repeat( '2', 32 ), $wpdb->table, 'The expired row survives a below-cap claim.' );
 	}
 }

@@ -889,6 +889,11 @@ class LicenseCommandTransportAcksTest extends TestCase {
 		);
 		$wpdb->shouldReceive( 'prepare' )->andReturn( 'SQL' );
 		$wpdb->shouldReceive( 'get_results' )->andReturn( array() );
+		// The nonce store's INSERT IGNORE claim: one row affected, serialised like add_option() does.
+		$wpdb->rows_affected = 1;
+		$wpdb->shouldReceive( 'query' )->andReturn( 1 );
+		Functions\when( 'maybe_serialize' )->alias( static fn( $value ) => is_scalar( $value ) ? $value : serialize( $value ) );
+		Functions\when( 'wp_cache_delete' )->justReturn( true );
 		$GLOBALS['wpdb'] = $wpdb;
 
 		// Fixture keypair (seed 0x01 x 32) + pubkey filter.
@@ -1013,6 +1018,11 @@ class LicenseCommandTransportAcksTest extends TestCase {
 		);
 		$wpdb->shouldReceive( 'prepare' )->andReturn( 'SQL' );
 		$wpdb->shouldReceive( 'get_results' )->andReturn( array() );
+		// The nonce store's INSERT IGNORE claim: one row affected, serialised like add_option() does.
+		$wpdb->rows_affected = 1;
+		$wpdb->shouldReceive( 'query' )->andReturn( 1 );
+		Functions\when( 'maybe_serialize' )->alias( static fn( $value ) => is_scalar( $value ) ? $value : serialize( $value ) );
+		Functions\when( 'wp_cache_delete' )->justReturn( true );
 		$GLOBALS['wpdb'] = $wpdb;
 
 		// Fixture keypair (seed 0x01 x 32) + pubkey filter.
