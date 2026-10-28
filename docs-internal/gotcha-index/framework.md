@@ -14,4 +14,4 @@
 
 - [../GOTCHAS.md](../GOTCHAS.md) — the topic map
 - [framework/plugin] **`Woodev_Plugin::is_plugin_active()` compares the bare file name — a `folder/file.php` basename never matches; check `active_plugins` (+ sitewide keys) directly.** → [woodev-plugin-is-plugin-active-matches-the-bare-filename-only](../gotchas/woodev-plugin-is-plugin-active-matches-the-bare-filename-only.md) (s170)
-- [framework/payment-gateway] **The default hosted notification flow fails any order it cannot classify (intermediate status, validation throw, forged POST); `get_order()` rewrites `retry_count` — override it.** → [a-hosted-gateway-s-default-response-flow-fails-orders-it-does-not-understand](../gotchas/a-hosted-gateway-s-default-response-flow-fails-orders-it-does-not-understand.md) (s199)
+- [framework/payment-gateway] **Hosted intermediate states must opt into `Pending_Notification_Response`; exceptions preserve status, and `get_order()` reads the reference without starting an attempt (#1480).** → [a-hosted-gateway-s-default-response-flow-fails-orders-it-does-not-understand](../gotchas/a-hosted-gateway-s-default-response-flow-fails-orders-it-does-not-understand.md) (s199, s201)

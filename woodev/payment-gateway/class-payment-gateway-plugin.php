@@ -213,6 +213,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 			require_once $payment_gateway_framework_path . '/api/interface-payment-gateway-api-create-payment-token-response.php';
 			require_once $payment_gateway_framework_path . '/api/interface-payment-gateway-api-get-tokenized-payment-methods-response.php';
 			require_once $payment_gateway_framework_path . '/api/interface-payment-gateway-api-payment-notification-response.php';
+			require_once $payment_gateway_framework_path . '/api/interface-pending-notification-response.php';
 			require_once $payment_gateway_framework_path . '/api/interface-payment-gateway-api-payment-notification-credit-card-response.php';
 				require_once $payment_gateway_framework_path . '/api/interface-payment-gateway-api-payment-notification-loans-response.php';
 			require_once $payment_gateway_framework_path . '/api/interface-payment-gateway-api-payment-notification-tokenization-response.php';

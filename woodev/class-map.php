@@ -35,6 +35,7 @@ return [
 	'Woodev\\Framework\\Handlers\\Script_Translations' => 'woodev/handlers/class-script-translations.php',
 	'Woodev\\Framework\\Handlers\\Translation_Handler' => 'woodev/handlers/class-translation-handler.php',
 	'Woodev\\Framework\\Http\\Rest_Rate_Limit_Trait' => 'woodev/http/trait-rest-rate-limit.php',
+	'Woodev\\Framework\\Payment_Gateway\\Api\\Pending_Notification_Response' => 'woodev/payment-gateway/api/interface-pending-notification-response.php',
 	'Woodev\\Framework\\Settings\\Composite_Settings_Handler' => 'woodev/settings-page/class-composite-settings-handler.php',
 	'Woodev\\Framework\\Settings\\Field_Schema' => 'woodev/settings-page/class-field-schema.php',
 	'Woodev\\Framework\\Settings\\Settings_Group' => 'woodev/settings-page/class-settings-group.php',

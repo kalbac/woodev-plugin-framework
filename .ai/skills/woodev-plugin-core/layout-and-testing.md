@@ -79,6 +79,9 @@ The framework's pattern (`tests/unit/TestCase.php`, `tests/bootstrap.php`, the g
   later test in a file you never touched dies on the leftover alias once two branches merge. Run such a test in its own
   process (method annotations) and run `vendor/bin/phpunit --order-by=random` before finishing any card. Gotcha
   `a-mockery-alias-mock-lives-for-the-whole-phpunit-process`.
+  The same applies to eager empty WC fallback classes at file scope: they run during suite collection and can shadow a
+  richer fixture before its file loads. Defer standalone-only fallbacks to test setup (framework #1480).
+
 - A test that `include`s your ENTRY FILE in a subprocess (the literals-only loader definition test) stubs every WordPress
   function the entry file calls at file level — adding the error-reporting DSN `add_filter()` broke CDEK's
   `LoaderDefinitionTest` until it got a recording stub ([services.md](services.md#error-reporting)).

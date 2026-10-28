@@ -54,6 +54,17 @@ namespace {
 		}
 
 		/**
+		 * Keep this URL-only test independent of attempt persistence.
+		 *
+		 * @since 2.0.16
+		 * @param \WC_Order $order Order stub.
+		 * @return \WC_Order
+		 */
+		protected function start_payment_attempt( \WC_Order $order ): \WC_Order {
+			return $order;
+		}
+
+		/**
 		 * Simulates an unconfigured hosted pay page endpoint.
 		 *
 		 * @param object|null $order order
@@ -120,7 +131,7 @@ namespace Woodev\Tests\Unit {
 		 * @since 2.0.2
 		 */
 		public function test_get_payment_url_returns_false_when_hosted_pay_page_url_is_empty(): void {
-			$gateway = new \Woodev_Testable_Payment_Gateway_Hosted_Url( new \stdClass() );
+			$gateway = new \Woodev_Testable_Payment_Gateway_Hosted_Url( \Mockery::mock( \WC_Order::class ) );
 
 			$result = $gateway->expose_get_payment_url( 123 );
 
@@ -137,7 +148,7 @@ namespace Woodev\Tests\Unit {
 		 * @since 2.0.2
 		 */
 		public function test_process_payment_returns_failure_when_hosted_pay_page_url_is_empty(): void {
-			$gateway = new \Woodev_Testable_Payment_Gateway_Hosted_Url( new \stdClass() );
+			$gateway = new \Woodev_Testable_Payment_Gateway_Hosted_Url( \Mockery::mock( \WC_Order::class ) );
 
 			$result = $gateway->process_payment( 123 );
 

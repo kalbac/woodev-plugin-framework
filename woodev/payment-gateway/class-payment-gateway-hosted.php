@@ -123,7 +123,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 			} else {
 
 				// setup the order object
-				$order = $this->get_order( $order_id );
+				$order = $this->start_payment_attempt( $this->get_order( $order_id ) );
 
 				// direct-redirect, so append the hosted pay page params to the hosted pay page url
 				$pay_page_url = $this->get_hosted_pay_page_url( $order );
@@ -178,7 +178,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 		public function generate_pay_form( $order_id ) {
 
 			// setup the order object
-			$order = $this->get_order( $order_id );
+			$order = $this->start_payment_attempt( $this->get_order( $order_id ) );
 
 			$request_params = $this->get_hosted_pay_page_params( $order );
 
@@ -384,11 +384,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 				// Handle the order based on the response
 				$this->process_transaction_response( $order, $response );
 
-			} catch ( Woodev_Payment_Gateway_Exception $e ) {
-
-				if ( $order && $order->needs_payment() ) {
-					$this->mark_order_as_failed( $order, $e->getMessage(), $response );
-				}
+			} catch ( Exception $e ) {
 
 				if ( $this->debug_log() ) {
 
@@ -543,6 +539,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 
 				$this->do_transaction_cancelled( $order, $response );
 
+			} elseif ( $response instanceof \Woodev\Framework\Payment_Gateway\Api\Pending_Notification_Response && $response->transaction_pending() ) {
+
+				$this->do_transaction_pending( $order, $response );
+
 			} else {
 
 				// Add the order note and debug info
@@ -691,6 +691,18 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 
 
 		/**
+		 * Acknowledges an intermediate status without changing the order.
+		 *
+		 * @since 2.0.16
+		 * @param WC_Order                                                 $order The order object.
+		 * @param Woodev_Payment_Gateway_API_Payment_Notification_Response $response The response object.
+		 * @return void
+		 */
+		protected function do_transaction_pending( WC_Order $order, Woodev_Payment_Gateway_API_Payment_Notification_Response $response ): void {
+			$this->do_transaction_held( $order, $response );
+		}
+
+		/**
 		 * Handles a cancelled transaction response.
 		 *
 		 * @param WC_Order                                                 $order the order object
@@ -742,7 +754,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 		 */
 		protected function do_invalid_transaction_response( $order, $response ) {
 
-			if ( $response->is_ipn() ) {
+			if ( $response && $response->is_ipn() ) {
 
 				status_header( 200 );
 				die();
