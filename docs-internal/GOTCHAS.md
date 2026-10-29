@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Topic map.** 462 atomic gotchas across 30 topics. At session start read THIS file, then open
+> **Topic map.** 467 atomic gotchas across 30 topics. At session start read THIS file, then open
 > the topic indexes your task touches — each holds one line per gotcha, linking the detail file.
 > `[tooling/*]`, `[testing/*]` and `[rig/*]` apply to almost every session.
 > **Adding one:** create `gotchas/{slug}.md`, then add ONE line to the right `gotcha-index/{topic}.md`
@@ -19,7 +19,7 @@
 | [`lifecycle/*`](gotcha-index/lifecycle.md) | 1 | Install/upgrade routines |
 | [`woocommerce/states`](gotcha-index/woocommerce-states.md) | 2 | The `woocommerce_states` table |
 | [`woocommerce/*`](gotcha-index/woocommerce.md) | 42 | WooCommerce-specific · WooCommerce-specific (session) |
-| [`framework/*`](gotcha-index/framework.md) | 8 | Framework internals |
+| [`framework/*`](gotcha-index/framework.md) | 10 | Framework internals |
 | [`framework/contracts`](gotcha-index/framework-contracts.md) | 3 | What the framework guarantees to its consumers |
 | [`shipping/location`](gotcha-index/shipping-location.md) | 20 | Location provider layer |
 | [`rig/*`](gotcha-index/rig.md) | 29 | Local verification rig |
@@ -27,9 +27,9 @@
 | [`testing/*`](gotcha-index/testing.md) | 56 | Testing patterns |
 | [`js/*`](gotcha-index/js.md) | 9 | JavaScript language traps |
 | [`testing/js`](gotcha-index/testing-js.md) | 9 | JavaScript testing pitfalls |
-| [`api/*`](gotcha-index/api.md) | 6 | API layer |
+| [`api/*`](gotcha-index/api.md) | 7 | API layer |
 | [`licensing/*`](gotcha-index/licensing.md) | 7 | License/EDD store |
-| [`build/*`](gotcha-index/build.md) | 24 | Build/CI/release |
+| [`build/*`](gotcha-index/build.md) | 26 | Build/CI/release |
 | [`admin-ui/*`](gotcha-index/admin-ui.md) | 10 | Admin pages / React UI |
 | [`admin-ui/modal`](gotcha-index/admin-ui-modal.md) | 5 | Framework modal shell |
 | [`admin-ui/react-state`](gotcha-index/admin-ui-react-state.md) | 2 | React component state |

@@ -171,6 +171,11 @@ Copy `release.yml` + `scripts/build-release-zip.sh` from either carrier plugin (
   - staged rollouts pick sites by `crc32(licence + site URL) % 100` (stable, never growing on their own). Bucket 0 is never eligible,
     so release to everyone by switching rollouts OFF, not by setting 100. Only the update API is gated; account downloads always
     serve the newest file. Start a full rewrite at 20 %.
+- **EDD publish-release does not set «Файл обновления» (`_edd_sl_upgrade_file_key`)** — unset on T-Bank 1849 and Russian Post 8772, only CDEK
+  216 has it. Harmless while a download has one file (EDD SL falls back to the first); check and set it in every release, then verify with
+  `get_version`. → `docs-internal/gotchas/edd-publish-release-does-not-set-the-update-file-so-check-it-in-the-release-checklist.md`
+- **A product-card FAQ renders only in the hidden «FAQ» tab** (`_faq_content`); a curl count of questions does not prove it is visible — click
+  the tab. → `docs-internal/gotchas/a-product-card-faq-renders-only-in-a-hidden-tab-so-a-curl-count-proves-nothing.md`
 - The workflow fetches `woodev/` from the framework tag `v<framework_version>`, so the framework release goes first.
 - Under `set -o pipefail`, `printf … | grep -q` fails at random with SIGPIPE (grep exits early) — grep a file instead.
 
