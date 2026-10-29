@@ -65,6 +65,11 @@ final class LoaderDormantNoticeTest extends TestCase {
 
 		Functions\when( 'is_admin' )->justReturn( true );
 		Functions\when( 'wp_kses' )->returnArg();
+		Functions\when( 'admin_url' )->alias(
+			static function ( string $path = '' ): string {
+				return 'https://example.test/wp-admin/' . $path;
+			}
+		);
 
 		$added = [];
 		Functions\when( 'add_action' )->alias(
@@ -113,6 +118,7 @@ final class LoaderDormantNoticeTest extends TestCase {
 
 		$this->assertStringContainsString( 'Dormant Fixture Plugin', $output, 'The notice must name the dormant plugin.' );
 		$this->assertStringContainsString( '<div class="error">', $output, 'The notice must produce the admin-notice markup.' );
+		$this->assertStringContainsString( 'admin.php?page=woodev-extensions', $output, 'The notice must point the merchant to Woodev → Плагины (#1503).' );
 		$this->assertStringNotContainsStringIgnoringCase( 'фреймворк', $output, 'The merchant-facing text must never say "фреймворк" (AGENTS.md Conventions).' );
 	}
 
@@ -186,6 +192,11 @@ final class LoaderDormantNoticeTest extends TestCase {
 
 		Functions\when( 'is_admin' )->justReturn( true );
 		Functions\when( 'wp_kses' )->returnArg();
+		Functions\when( 'admin_url' )->alias(
+			static function ( string $path = '' ): string {
+				return 'https://example.test/wp-admin/' . $path;
+			}
+		);
 
 		$added = [];
 		Functions\when( 'add_action' )->alias(
@@ -246,6 +257,7 @@ final class LoaderDormantNoticeTest extends TestCase {
 
 		$this->assertStringContainsString( 'Dormant Plugin One', $output, 'The notice must name the first dormant plugin.' );
 		$this->assertStringContainsString( 'Dormant Plugin Two', $output, 'The notice must name the second dormant plugin.' );
+		$this->assertStringContainsString( 'admin.php?page=woodev-extensions', $output, 'The notice must point the merchant to Woodev → Плагины (#1503).' );
 	}
 
 	/**

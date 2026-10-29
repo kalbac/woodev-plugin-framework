@@ -62,6 +62,7 @@ namespace {
 	require_once dirname( __DIR__, 2 ) . '/woodev/payment-gateway/class-payment-gateway.php';
 	require_once dirname( __DIR__, 2 ) . '/woodev/payment-gateway/class-payment-gateway-hosted.php';
 	require_once dirname( __DIR__, 2 ) . '/woodev/payment-gateway/handlers/abstract-payment-handler.php';
+	require_once dirname( __DIR__, 2 ) . '/woodev/payment-gateway/handlers/abstract-hosted-payment-handler.php';
 	require_once dirname( __DIR__, 2 ) . '/woodev/payment-gateway/payment-tokens/class-payment-gateway-payment-tokens-handler.php';
 	require_once dirname( __DIR__, 2 ) . '/woodev/api/class-api-base.php';
 
@@ -132,6 +133,86 @@ namespace {
 			 * @return void
 			 */
 			protected function do_invalid_transaction_response( $order, $response ) {}
+		}
+	}
+
+	if ( ! class_exists( 'Woodev_Test_Hosted_Pay_Form_For_Redaction_Test', false ) ) {
+		/**
+		 * Hosted gateway test double that reaches the pay-form request log (#1504).
+		 */
+		class Woodev_Test_Hosted_Pay_Form_For_Redaction_Test extends \Woodev_Test_Hosted_For_Redaction_Test {
+
+			/** @var array request parameters the gateway would POST to the hosted page */
+			public $pay_page_params = [];
+
+			/**
+			 * @param int $order_id unused
+			 * @return \WC_Order
+			 */
+			public function get_order( $order_id = 0 ) {
+				return new \WC_Order();
+			}
+
+			/**
+			 * @param \WC_Order $order order
+			 * @return \WC_Order
+			 */
+			protected function start_payment_attempt( \WC_Order $order ): \WC_Order {
+				return $order;
+			}
+
+			/**
+			 * @param \WC_Order $order unused
+			 * @return array
+			 */
+			protected function get_hosted_pay_page_params( $order ) {
+				return $this->pay_page_params;
+			}
+
+			/**
+			 * @return bool
+			 */
+			public function use_auto_form_post() {
+				return false;
+			}
+
+			/**
+			 * @param \WC_Order $order          unused
+			 * @param array     $request_params unused
+			 * @return void
+			 */
+			public function render_pay_page_form( $order, $request_params ) {}
+		}
+	}
+
+	if ( ! class_exists( 'Woodev_Test_Hosted_Handler_For_Redaction', false ) ) {
+		/**
+		 * Hosted payment handler test double exposing the protected log sink (#1507).
+		 */
+		class Woodev_Test_Hosted_Handler_For_Redaction extends \Woodev_Payment_Gateway_Abstract_Hosted_Payment_Handler {
+
+			/**
+			 * @return string
+			 */
+			protected function get_hosted_payment_url() {
+				return '';
+			}
+
+			/**
+			 * @param array $request_response_data unused
+			 * @return object
+			 */
+			protected function get_transaction_response( $request_response_data ) {
+				return new \stdClass();
+			}
+
+			/**
+			 * @param array|object|string $request data to log
+			 * @return void
+			 */
+			public function call_log_transaction_response_request( $request ) {
+				$this->log_transaction_response_request( $request );
+			}
 		}
 	}
 
@@ -360,6 +441,118 @@ namespace Woodev\Tests\Unit {
 				'Redirect-back processing error: gateway endpoint unreachable',
 				$captured
 			);
+		}
+
+		/* ----------------------------------------------------------------------- *
+		 * Hosted request body and response logging (#1504)
+		 * ----------------------------------------------------------------------- */
+
+		/**
+		 * The pay-form request body was logged through print_r(), which the name=value redaction
+		 * never matched: every secret parameter reached the log in clear text.
+		 *
+		 * @return void
+		 */
+		public function test_hosted_pay_form_request_body_is_logged_with_secrets_masked(): void {
+			$gateway                  = new \Woodev_Test_Hosted_Pay_Form_For_Redaction_Test();
+			$gateway->id              = 'test-hosted-gateway';
+			$gateway->pay_page_params = [
+				'order_id' => '42',
+				'password' => self::SECRET,
+				'auth'     => [ 'token' => 'NESTEDSECRET' ],
+			];
+
+			$captured = null;
+			$plugin   = Mockery::mock();
+			$plugin->shouldReceive( 'log' )
+				->once()
+				->with(
+					Mockery::on(
+						static function ( $message ) use ( &$captured ) {
+							$captured = $message;
+							return true;
+						}
+					),
+					'test-hosted-gateway'
+				);
+
+			$this->set_private( $gateway, 'plugin', $plugin );
+			$this->set_private( $gateway, 'debug_mode', \Woodev_Payment_Gateway::DEBUG_MODE_LOG );
+			$GLOBALS['wp_current_filter'] = [];
+			Functions\when( 'is_admin' )->justReturn( true );
+
+			$gateway->generate_pay_form( 42 );
+
+			$this->assertStringNotContainsString( self::SECRET, $captured );
+			$this->assertStringNotContainsString( 'NESTEDSECRET', $captured );
+			$this->assertStringContainsString( 'password=L****T', $captured );
+			$this->assertStringContainsString( 'order_id=42', $captured, 'a non-secret parameter must stay readable' );
+		}
+
+		/**
+		 * A plugin may hand log_transaction_response_request() the raw parameter array, which this sink
+		 * wrote straight to the log through print_r().
+		 *
+		 * @return void
+		 */
+		public function test_hosted_transaction_response_array_is_logged_with_secrets_masked(): void {
+			$gateway     = new \Woodev_Test_Hosted_For_Redaction_Test();
+			$gateway->id = 'test-hosted-gateway';
+
+			$captured = null;
+			$plugin   = Mockery::mock();
+			$plugin->shouldReceive( 'log' )
+				->once()
+				->with(
+					Mockery::on(
+						static function ( $message ) use ( &$captured ) {
+							$captured = $message;
+							return true;
+						}
+					),
+					'test-hosted-gateway'
+				);
+
+			$this->set_private( $gateway, 'plugin', $plugin );
+			$this->set_private( $gateway, 'debug_mode', \Woodev_Payment_Gateway::DEBUG_MODE_LOG );
+
+			$gateway->log_transaction_response_request( [ 'status' => 'ok', 'api_key' => self::SECRET ] );
+
+			$this->assertSame( 'Request: status=ok&api_key=L****T', $captured );
+		}
+
+		/**
+		 * The shared hosted handler logged a raw request array through print_r() too, so `[api_key] => secret`
+		 * bypassed the name=value redaction (#1507).
+		 *
+		 * @return void
+		 */
+		public function test_hosted_handler_transaction_response_array_is_logged_with_secrets_masked(): void {
+			$gateway     = new \Woodev_Test_Hosted_For_Redaction_Test();
+			$gateway->id = 'test-hosted-gateway';
+
+			$captured = null;
+			$plugin   = Mockery::mock();
+			$plugin->shouldReceive( 'log' )
+				->once()
+				->with(
+					Mockery::on(
+						static function ( $message ) use ( &$captured ) {
+							$captured = $message;
+							return true;
+						}
+					),
+					'test-hosted-gateway'
+				);
+
+			$this->set_private( $gateway, 'plugin', $plugin );
+			$this->set_private( $gateway, 'debug_mode', \Woodev_Payment_Gateway::DEBUG_MODE_LOG );
+			Functions\when( 'has_action' )->justReturn( true );
+
+			$handler = new \Woodev_Test_Hosted_Handler_For_Redaction( $gateway );
+			$handler->call_log_transaction_response_request( [ 'status' => 'ok', 'api_key' => self::SECRET ] );
+
+			$this->assertSame( 'Request: status=ok&api_key=L****T', $captured );
 		}
 
 		/* ----------------------------------------------------------------------- *

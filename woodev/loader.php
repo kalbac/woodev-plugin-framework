@@ -148,6 +148,13 @@ if ( ! class_exists( 'Woodev_Loader', false ) ) :
 				$name_list = (string) reset( $names );
 			}
 
+			// Same destination as the v1-quarantine notice in bootstrap.php: the Woodev → Плагины page.
+			$plugins_page_link = sprintf(
+				'<a href="%s">%s</a>',
+				esc_url( admin_url( 'admin.php?page=woodev-extensions' ) ),
+				esc_html__( 'Woodev → Плагины', 'woodev-plugin-framework' )
+			);
+
 			$conflicting_name = self::resolve_conflicting_plugin_name();
 
 			if ( '' !== $conflicting_name ) {
@@ -155,33 +162,43 @@ if ( ! class_exists( 'Woodev_Loader', false ) ) :
 
 				$message = $count > 1
 					? sprintf(
-						/* translators: 1: list of dormant plugin names, 2: the conflicting plugin name. */
-						__( 'Плагины %1$s не запущены: плагин %2$s работает на старой версии Woodev и несовместим с ними. Если для %2$s вышло обновление, обновите его. Если нет, на время выберите одно из двух: отключите %2$s или верните прежние версии плагинов %1$s.', 'woodev-plugin-framework' ),
+						/* translators: 1: list of dormant plugin names, 2: the conflicting plugin name, 3: link to the Woodev → Плагины page. */
+						__( 'Плагины %1$s не запущены: плагин %2$s работает на старой версии Woodev и несовместим с ними. Если для %2$s вышло обновление, обновите его в разделе %3$s. Если нет, на время выберите одно из двух: отключите %2$s или верните прежние версии плагинов %1$s.', 'woodev-plugin-framework' ),
 						$name_list,
-						$conflicting_markup
+						$conflicting_markup,
+						$plugins_page_link
 					)
 					: sprintf(
-						/* translators: 1: dormant plugin name, 2: the conflicting plugin name. */
-						__( 'Плагин %1$s не запущен: плагин %2$s работает на старой версии Woodev и несовместим с ним. Если для %2$s вышло обновление, обновите его. Если нет, на время выберите одно из двух: отключите %2$s или верните прежнюю версию плагина %1$s.', 'woodev-plugin-framework' ),
+						/* translators: 1: dormant plugin name, 2: the conflicting plugin name, 3: link to the Woodev → Плагины page. */
+						__( 'Плагин %1$s не запущен: плагин %2$s работает на старой версии Woodev и несовместим с ним. Если для %2$s вышло обновление, обновите его в разделе %3$s. Если нет, на время выберите одно из двух: отключите %2$s или верните прежнюю версию плагина %1$s.', 'woodev-plugin-framework' ),
 						$name_list,
-						$conflicting_markup
+						$conflicting_markup,
+						$plugins_page_link
 					);
 			} else {
 				$message = $count > 1
 					? sprintf(
-						/* translators: %s — list of dormant plugin names. */
-						__( 'Плагины %s не запущены: на сайте активен другой плагин Woodev, который работает на старой версии Woodev и несовместим с ними. Если для него вышло обновление, обновите его. Если нет, на время выберите одно из двух: отключите его или верните прежние версии этих плагинов.', 'woodev-plugin-framework' ),
-						$name_list
+						/* translators: 1: list of dormant plugin names, 2: link to the Woodev → Плагины page. */
+						__( 'Плагины %1$s не запущены: на сайте активен другой плагин Woodev, который работает на старой версии Woodev и несовместим с ними. Если для него вышло обновление, обновите его в разделе %2$s. Если нет, на время выберите одно из двух: отключите его или верните прежние версии этих плагинов.', 'woodev-plugin-framework' ),
+						$name_list,
+						$plugins_page_link
 					)
 					: sprintf(
-						/* translators: %s — the dormant plugin name. */
-						__( 'Плагин %s не запущен: на сайте активен другой плагин Woodev, который работает на старой версии Woodev и несовместим с ним. Если для него вышло обновление, обновите его. Если нет, на время выберите одно из двух: отключите его или верните прежнюю версию этого плагина.', 'woodev-plugin-framework' ),
-						$name_list
+						/* translators: 1: dormant plugin name, 2: link to the Woodev → Плагины page. */
+						__( 'Плагин %1$s не запущен: на сайте активен другой плагин Woodev, который работает на старой версии Woodev и несовместим с ним. Если для него вышло обновление, обновите его в разделе %2$s. Если нет, на время выберите одно из двух: отключите его или верните прежнюю версию этого плагина.', 'woodev-plugin-framework' ),
+						$name_list,
+						$plugins_page_link
 					);
 			}
 
 			echo '<div class="error"><p>';
-			echo wp_kses( $message, [ 'strong' => [] ] );
+			echo wp_kses(
+				$message,
+				[
+					'strong' => [],
+					'a'      => [ 'href' => [] ],
+				]
+			);
 			echo '</p></div>';
 		}
 
