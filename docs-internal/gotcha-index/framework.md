@@ -9,6 +9,8 @@
 - [framework/autoload] **class_exists() "init-once" guards break under the runtime class-map autoloader.** → [classmap-autoload-breaks-class-exists-once-guard](../gotchas/classmap-autoload-breaks-class-exists-once-guard.md) (s35)
 - [framework/autoload] **Deleting a framework file has a tail: `includes()`, the class map, and fixture bootstraps.** → [file-deletion-tail-includes-classmap-fixtures](../gotchas/file-deletion-tail-includes-classmap-fixtures.md) (s45)
 - [framework/handler-extraction] **A handler extraction that self-registers its hook can silently disable a subclass override.** → [handler-extraction-must-preserve-override-chain](../gotchas/handler-extraction-must-preserve-override-chain.md)
+- [framework/payment-gateway] **A bank's documented notification IP range is not the range it calls from: T-Bank sends from `212.233.80.0/22`, not only `91.194.226.0/23` — an IP-only trust list answers 403.** → [a-bank-s-documented-notification-ip-range-is-not-the-range-it-calls-from](../gotchas/a-bank-s-documented-notification-ip-range-is-not-the-range-it-calls-from.md) (s202)
+- [framework/payment-gateway] **A bank binds its test keys to the cabinet's site domain: `create` returns 400 for return URLs on another domain, and a URL-less probe passes without proving the domain.** → [a-bank-binds-its-test-keys-to-the-cabinet-domain-so-a-url-less-probe-proves-nothing](../gotchas/a-bank-binds-its-test-keys-to-the-cabinet-domain-so-a-url-less-probe-proves-nothing.md) (s202)
 
 ## Related
 

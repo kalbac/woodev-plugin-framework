@@ -204,7 +204,7 @@ A test computes the URL for fixed ids and compares it with the v1 formula charac
   framework's `get_order()`, which writes `retry_count` on every call — gotcha
   [a-hosted-gateway-s-default-response-flow-fails-orders-it-does-not-understand](../gotchas/a-hosted-gateway-s-default-response-flow-fails-orders-it-does-not-understand.md)).
 - **Changed order behaviour** (merchant-visible, for the notes): bank refusal → «Не удался» instead of «Отменён» (I7); an
-  approved-but-unsigned application keeps the order «Ожидает оплаты» instead of «На удержании» (§10.3, Provisional); a signed
+  approved-but-unsigned application keeps the order «Ожидает оплаты» instead of «На удержании» (§10.3, operator O2 29.10.2026); a signed
   application that the bank has **not yet confirmed** keeps the order «На удержании» with the instruction to confirm it in the
   cabinet — v1 marked it paid (§0 note 4, §10.3); `enable_cooling` no longer decides the status (an application under cooling
   is never confirmed), it only shows the «не отгружайте до» date; a late signature on a cancelled order → «На удержании» +
@@ -423,8 +423,8 @@ test environment leaves exactly one buyer notice — the calm §6.4 text.
    (`S` smaller than the number of lines) the request is refused (unreachable at the 3 000 ₽ minimum, kept as a guard).
 5. **Split** every line into at most two bank items: `u = intdiv( g', q )`, `r = g' − u·q`. `r = 0` → one item `(q, u)`;
    `r > 0` → `(q − 1, u)` and `(1, u + r)` (then `q ≥ 2` because `0 < r < q`). A **non-integer** quantity (sold by weight), or
-   `g' < q` (a unit price below one kopeck, so `u = 0`) → one item `(1, g')`. The second item carries the same name. **Provisional (coordinator may revisit):** no suffix on the
-   remainder item's name (improvements §1 left the wording to the operator).
+   `g' < q` (a unit price below one kopeck, so `u = 0`) → one item `(1, g')`. The second item carries the same name. **Operator, 29.10.2026 (O3):** no suffix on the
+   remainder item's name.
 6. **Clean** names: `wp_strip_all_tags`, `html_entity_decode( ENT_QUOTES | ENT_HTML5, 'UTF-8' )` (v1 sent `&quot;`/`&amp;`
    through `htmlentities`, improvements §1), collapse whitespace, `mb_substr( …, 0, 255 )` (the stricter of 255/256, d-docs §8.4),
    empty → "Item" (storefront msgid). Shipping item name: `sprintf( __( 'Shipping: %s' ), $method_name )`. `vendorCode` = SKU only
@@ -694,8 +694,8 @@ added (and, for the post-signature rows below, the admin e-mail).
 | Bank state (current, matching attempt) | Order | Action |
 |---|---|---|
 | `new`, `inprogress` | any | details only; no status change, no note (v1 sent unknown states into the failure path, `v1fw:payment-gateway/class-payment-gateway-hosted.php:539-546`) |
-| `approved` | open | `pending` stays; note «Банк одобрил заявку»; **customer note** with the application link once per attempt (I6). **Provisional (coordinator may revisit):** v1 set `on-hold` and reduced stock; an approval is not a payment, an unsigned application gets no expiry webhook (d-docs §3), and a `pending` order stays under the I5a veto, so WooCommerce releases it after the limit instead of leaving it on hold forever |
-| `approved` | `failed` | **late approval after a refusal (D5 pattern 3):** `failed` → `pending` by an explicit `update_status( 'pending' )`, note «после отказа заявку одобрил другой банк — покупатель может подписать договор», the customer note with the application link once per attempt, and one admin e-mail (§10.4) — the merchant may already have told the buyer the payment failed or sold the goods. The next `signed` then lands on a `pending` order and takes the ordinary rows. **Provisional (coordinator may revisit):** `pending`, not `on-hold`, for the same reason as the row above — an unsigned approval must not hold the order forever |
+| `approved` | open | `pending` stays; note «Банк одобрил заявку»; **customer note** with the application link once per attempt (I6). **Operator, 29.10.2026 (O2):** v1 set `on-hold` and reduced stock; an approval is not a payment, an unsigned application gets no expiry webhook (d-docs §3), and a `pending` order stays under the I5a veto, so WooCommerce releases it after the limit instead of leaving it on hold forever |
+| `approved` | `failed` | **late approval after a refusal (D5 pattern 3):** `failed` → `pending` by an explicit `update_status( 'pending' )`, note «после отказа заявку одобрил другой банк — покупатель может подписать договор», the customer note with the application link once per attempt, and one admin e-mail (§10.4) — the merchant may already have told the buyer the payment failed or sold the goods. The next `signed` then lands on a `pending` order and takes the ordinary rows. **Operator, 29.10.2026 (O2):** `pending`, not `on-hold`, for the same reason as the row above — an unsigned approval must not hold the order forever |
 | `signed` (any `committed` / cooling) | `failed` | **late signature after a refusal (D5 pattern 3; the I5 rule applied to `failed`):** `on-hold` (not `processing` — the order's stock reservation is gone and the goods may have been sold), `hold_reason = manual_review`, note «договор подписан после отказа банка — проверьте наличие товара и заявку в кабинете банка», one admin e-mail (§10.4). Reached when the `approved` in between was never seen (a lost webhook, or a state read by «Обновить статус» or the return check) |
 | `signed`, cooling active | open | `mark_order_as_held()` (`on-hold`, stock reduced — v1), `hold_reason = cooling`, note «договор подписан, идёт период охлаждения — не отгружайте до {until}» (the date shown when `enable_cooling = yes`, v1's switch) |
 | `signed`, `committed = false`, no cooling or cooling over | open | `on-hold`, `hold_reason = not_committed`, a note that depends on the password (§0 note 4): **with it** «договор подписан, но банк ещё не подтвердил заявку — подтвердите её в кабинете банка в течение 14 дней, затем нажмите «Обновить статус»»; **without it** «договор подписан, но банк ещё не подтвердил заявку — подтвердите её в кабинете банка в течение 14 дней и затем переведите заказ в «Обработка» вручную: без пароля API плагин не узнаёт о подтверждении» (see «Manual confirmation without the password» below) |
@@ -762,7 +762,7 @@ v1's `intval()` truncation, `v1:includes/api/class-wc-api-ipn-response.php:194-2
 
 ### 10.4 The admin e-mails
 
-WooCommerce has no stock «order needs attention» e-mail. **Provisional (coordinator may revisit):** one plain message through
+WooCommerce has no stock «order needs attention» e-mail. **Operator, 29.10.2026 (O3):** one plain message through
 `WC()->mailer()` (WooCommerce's header/footer wrapper) to the shop's admin address, subject «Заказ №{n}: требуется ваше
 решение», body naming what the bank reported and what to check. Sent once per (attempt, event) — the side-effect key of §10.3
 step 3 — so a redelivery never repeats it and a different event on the same order still reports. Events: I5 late signature,
@@ -909,6 +909,12 @@ settings-page providers, so no tab appears (D7). An empty submitted password kee
 **Provisional (coordinator may revisit)** — the mapping is new; the alternative is a custom React step (contract D4).
 
 ### 14.2 Steps
+
+**As built — operator, 29.10.2026 (`kalbac/woodev-vkredit#19`):** the order is «Подключение» → «Режим» (the environment
+switch) → «Проверка и кабинет» (the demo check of step 2 below plus the checklist of step 3) → «Готово». The framework wizard
+engine shows either fields or content on one step, never both, so the checklist cannot share a screen with the switch. The demo
+check always uses `CreateDemo`, whatever mode is chosen, so the order changes nothing a merchant can break. The numbered list
+below is the original design and describes each step's content.
 
 1. **«Подключение»** — shop id, showcase id, API password; validation callback: ids non-empty, ≤ 50 characters. Description:
    where to find them, and that the password is needed for status checks — without it a manually confirmed application has to
@@ -1175,13 +1181,24 @@ tab (D7); scheduled status polling of any kind; a GlitchTip project (§22.3).
 | # | Question | Provisional choice |
 |---|---|---|
 | O1 | D5's cancellation history: what went wrong for merchants before? | **Closed in round 2.** Recovered from all 4 319 FreeScout conversations 2023–2026 ([e-d5-cancellation-history.md](../research/2026-10-26-tbank-v2/e-d5-cancellation-history.md)); three patterns, each mapped in §10.3 «Post-signature cancellation»; the branch W4 implements is decided from it, not interim |
-| O2 | `approved` → keep `pending` (new) or `on-hold` (v1)? | `pending` (§10.3) |
+| O2 | `approved` → keep `pending` (new) or `on-hold` (v1)? | **Decided by the operator 29.10.2026:** `pending` (§10.3) |
 | — | Critic round 1: no finding contradicted D1–D14 / I1–I14, so none was moved here instead of being applied | — |
-| O3 | Wording of the I5 admin e-mail and of the split remainder item | §10.4 text; same name |
-| O4 | A GlitchTip project for the plugin (the carriers have one each) | none in 2.0.0 |
-| O5 | Default host once R2 is measured | `forma.tinkoff.ru` |
-| O6 | Card to file: «Оформить кредит/рассрочку» button on the product card (D4) | after 2.0.0 |
+| O3 | Wording of the I5 admin e-mail and of the split remainder item | **Decided by the operator 29.10.2026:** §10.4 text as built; same name, no suffix (he expects support questions about the split and accepts that for now) |
+| O4 | A GlitchTip project for the plugin (the carriers have one each) | **Decided 29.10.2026:** project 6 on errors.woodev.ru, DSN filter in `woodev-vkredit.php` (vkredit PR #28) |
+| O5 | Default host once R2 is measured | **Settled by R2:** `forma.tinkoff.ru` |
+| O6 | Card to file: «Оформить кредит/рассрочку» button on the product card (D4) | **Filed 29.10.2026:** `kalbac/woodev-vkredit#1`, Бэклог · «После v2» |
 | O7 | Merchant-visible change for the release notes: a signed but not yet confirmed application now keeps the order «На удержании» (v1: paid). For a shop with manual confirmation and no API password this means moving the order to «Обработка» by hand after confirming in the cabinet — a required action (§10.3 «Manual confirmation without the password»); the notes recommend setting the API password, which support has long asked merchants for (D5 history); U13 decides whether auto-confirm shops see it at all. Also for the notes: a cancellation after signing now holds the order and e-mails the shop (D5 pattern 2), and a partner bank's approval after a refusal revives a failed order (pattern 3). Not a decision conflict (D12 forbids depending on auto-confirm; the bank's own text says ship after confirming) — listed so the notes and the merchant docs say it | applied as §10.3; the notes and docs explain it |
+
+**O7 release-notes text, approved by the operator 29.10.2026 (manual-confirmation bullet corrected after the PR #30 critic and re-approved the same day)** (goes into the changelog and the merchant docs verbatim):
+
+> **Изменилось поведение статусов заказа**
+>
+> - **Банк одобрил заявку** → заказ остаётся «Ожидает оплаты». Раньше он переходил в «На удержании». Одобрение ещё не оплата: покупателю нужно подписать договор.
+> - **Покупатель подписал договор** → заказ переходит в «На удержании», пока заявка не подтверждена. Раньше он сразу считался оплаченным. После подтверждения заказ переходит в «Обработку».
+>   - Если подтверждение у вас автоматическое, плагин переведёт заказ в «Обработку» сам.
+>   - Если вы подтверждаете заявки вручную в кабинете банка, после подтверждения откройте заказ и нажмите «Обновить статус»: плагин проверит заявку и переведёт заказ в «Обработку». Для этой кнопки нужен пароль API. Без пароля API переведите заказ в «Обработку» вручную. Мы рекомендуем указать пароль API.
+> - **Банк отменил заявку после подписания** → заказ переходит в «На удержании», а на почту магазина приходит письмо: товар отгружать нельзя, проверьте заявку в кабинете банка.
+> - **После отказа заявку одобрил другой банк** → неудавшийся заказ возвращается в «Ожидает оплаты», и покупатель может подписать договор. Магазин получает письмо.
 
 ## 23. Implementation plan in waves (repo `kalbac/woodev-vkredit`, one reviewable PR per wave into `main`)
 

@@ -238,6 +238,15 @@ internals (class-map wiring, build/CI, rig) are left out on purpose. Shipping-sp
   new payment request calls `start_payment_attempt()`. Never advance it from a webhook. See
   [services.md](services.md#hosted-payment-notifications) and
   `docs-internal/gotchas/a-hosted-gateway-s-default-response-flow-fails-orders-it-does-not-understand.md` (#1480).
+- A bank's documented notification IP range is not the range it calls from (T-Bank: `212.233.80.0/22`, not only `91.194.226.0/23`): an IP-only
+  trust list answers 403 and the bank retries. Trust the measured range too and prefer a signature or API password. →
+  `docs-internal/gotchas/a-bank-s-documented-notification-ip-range-is-not-the-range-it-calls-from.md`
+- Bank test keys are bound to the cabinet's site domain: `create` returns 400 for return URLs on another domain, and a probe without URLs passes
+  without proving it. Accept on the bound domain with the real URLs. →
+  `docs-internal/gotchas/a-bank-binds-its-test-keys-to-the-cabinet-domain-so-a-url-less-probe-proves-nothing.md`
+- A 4xx body thrown in `do_pre_parse_response_validation()` is logged EMPTY (framework card #1509); override
+  `get_sanitized_response_body()` in the plugin's API client and mask personal data. →
+  `docs-internal/gotchas/a-4xx-body-thrown-in-the-pre-parse-validation-is-logged-empty.md`
 
 ## Related
 
