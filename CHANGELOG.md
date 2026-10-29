@@ -1,6 +1,28 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.0.16] — 2026-10-29
+### Bug Fixes
+- **licensing**: Claim command nonces with INSERT IGNORE (#1485) (#1498)
+
+- **payment-gateway**: Preserve pending hosted orders and stable references (#1480) (#1499)
+
+- **payment-gateway**: Replace deprecated wc_enqueue_js (#1501) (#1506)
+
+- Dormant notice links Woodev → Плагины (#1503); hosted body log redaction (#1504) (#1507)
+
+
+### Documentation
+- **s200**: Ticket wave — framework 2.0.15, CDEK 2.3.0.10, Yandex 2.0.11, Russian Post 2.0.10 to EDD; session docs, handoff (#1495)
+
+- **loop**: The coordinator closes plugin issues once EDD serves the fix (#1496)
+
+- **s200**: Operator decisions (#149 stays open, #1480/#1485 approved), closed plugin cards, Support AI hand-over; handoff → T-Bank (#1497)
+
+- **s201**: Autonomous morning — #1485, #1480 merged; T-Bank W6, W8a, W8c and first rig acceptance; handoff (#1502)
+
+
+
 ## [2.0.15] — 2026-10-27
 ### Bug Fixes
 - **bootstrap**: Honest notice when a v1 and a v2 Woodev plugin cannot run together (#1389) (#1473)
