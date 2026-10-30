@@ -15,36 +15,55 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Helper' ) ) :
 	 */
 	class Woodev_Payment_Gateway_Helper {
 
-		/** @var string the Visa card type ID * */
+		/**
+		 * @var string the Visa card type ID *
+		 */
 		const CARD_TYPE_VISA = 'visa';
 
-		/** @var string the MasterCard card type ID * */
+		/**
+		 * @var string the MasterCard card type ID *
+		 */
 		const CARD_TYPE_MASTERCARD = 'mastercard';
 
-		/** @var string the American Express card type ID * */
+		/**
+		 * @var string the American Express card type ID *
+		 */
 		const CARD_TYPE_AMEX = 'amex';
 
-		/** @var string the Diners Club card type ID * */
+		/**
+		 * @var string the Diners Club card type ID *
+		 */
 		const CARD_TYPE_DINERSCLUB = 'dinersclub';
 
-		/** @var string the Discover card type ID * */
+		/**
+		 * @var string the Discover card type ID *
+		 */
 		const CARD_TYPE_DISCOVER = 'discover';
 
-		/** @var string the JCB card type ID * */
+		/**
+		 * @var string the JCB card type ID *
+		 */
 		const CARD_TYPE_JCB = 'jcb';
 
-		/** @var string the CarteBleue card type ID * */
+		/**
+		 * @var string the CarteBleue card type ID *
+		 */
 		const CARD_TYPE_CARTEBLEUE = 'cartebleue';
 
-		/** @var string the Maestro card type ID * */
+		/**
+		 * @var string the Maestro card type ID *
+		 */
 		const CARD_TYPE_MAESTRO = 'maestro';
 
-		/** @var string the Laser card type ID * */
+		/**
+		 * @var string the Laser card type ID *
+		 */
 		const CARD_TYPE_LASER = 'laser';
 
-		/** @var string the Laser card type ID * */
+		/**
+		 * @var string the Laser card type ID *
+		 */
 		const CARD_TYPE_MIR = 'mir';
-
 
 		/**
 		 * Perform standard luhn check.  Algorithm:
@@ -69,7 +88,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Helper' ) ) :
 
 			return substr( $account_number, $ix - 1 ) == ( ( 10 - $sum % 10 ) % 10 );
 		}
-
 
 		/**
 		 * Normalize a card type to a standard type ID and account for variations.
@@ -103,7 +121,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Helper' ) ) :
 			// otherwise, let it through unaltered
 			return $card_type;
 		}
-
 
 		/**
 		 * Determines the credit card type from a given account number (only first 4 required).
@@ -154,7 +171,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Helper' ) ) :
 			return apply_filters( 'wc_payment_gateway_loan_type_to_name', $name, $type );
 		}
 
-
 		/**
 		 * Translates a credit card type or bank account name to a full name,
 		 * e.g. 'mastercard' => 'MasterCard'
@@ -197,7 +213,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Helper' ) ) :
 			 */
 			return apply_filters( 'wc_payment_gateway_payment_type_to_name', $name, $type );
 		}
-
 
 		/**
 		 * Gets the known card types and their variations.

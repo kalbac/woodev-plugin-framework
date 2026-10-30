@@ -22,7 +22,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 	 * @since 2.0.2
 	 */
 	class Dadata_Api_Request extends \Woodev_API_JSON_Request {
-
 		/**
 		 * Configures a `POST suggest/address` request.
 		 *

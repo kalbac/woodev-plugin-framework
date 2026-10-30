@@ -9,61 +9,99 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 	 */
 	class Woodev_Control {
 
-		/** @var string the text control type */
+		/**
+		 * @var string the text control type
+		 */
 		const TYPE_TEXT = 'text';
 
-		/** @var string the textarea control type */
+		/**
+		 * @var string the textarea control type
+		 */
 		const TYPE_TEXTAREA = 'textarea';
 
-		/** @var string the number control type */
+		/**
+		 * @var string the number control type
+		 */
 		const TYPE_NUMBER = 'number';
 
-		/** @var string the email control type */
+		/**
+		 * @var string the email control type
+		 */
 		const TYPE_EMAIL = 'email';
 
-		/** @var string the tel (phone) control type */
+		/**
+		 * @var string the tel (phone) control type
+		 */
 		const TYPE_TEL = 'tel';
 
-		/** @var string the url control type */
+		/**
+		 * @var string the url control type
+		 */
 		const TYPE_URL = 'url';
 
-		/** @var string the password control type */
+		/**
+		 * @var string the password control type
+		 */
 		const TYPE_PASSWORD = 'password';
 
-		/** @var string the date control type */
+		/**
+		 * @var string the date control type
+		 */
 		const TYPE_DATE = 'date';
 
-		/** @var string the checkbox control type */
+		/**
+		 * @var string the checkbox control type
+		 */
 		const TYPE_CHECKBOX = 'checkbox';
 
-		/** @var string the radio control type */
+		/**
+		 * @var string the radio control type
+		 */
 		const TYPE_RADIO = 'radio';
 
-		/** @var string the select control type */
+		/**
+		 * @var string the select control type
+		 */
 		const TYPE_SELECT = 'select';
 
-		/** @var string scalar selection with server-side search and saved-label hydration. */
+		/**
+		 * @var string scalar selection with server-side search and saved-label hydration.
+		 */
 		const TYPE_SEARCH_SELECT = 'search-select';
 
-		/** @var string inline table over the store's compatible box-list text. */
+		/**
+		 * @var string inline table over the store's compatible box-list text.
+		 */
 		const TYPE_BOXES_TABLE = 'boxes-table';
 
-		/** @var string the file control type */
+		/**
+		 * @var string the file control type
+		 */
 		const TYPE_FILE = 'file';
 
-		/** @var string the color control type */
+		/**
+		 * @var string the color control type
+		 */
 		const TYPE_COLOR = 'color';
 
-		/** @var string the range control type */
+		/**
+		 * @var string the range control type
+		 */
 		const TYPE_RANGE = 'range';
 
-		/** @var string the toggle control type */
+		/**
+		 * @var string the toggle control type
+		 */
 		const TYPE_TOGGLE = 'toggle';
 
-		/** @var string the richtext control type */
+		/**
+		 * @var string the richtext control type
+		 */
 		const TYPE_RICHTEXT = 'richtext';
 
-		/** @var string the multiselect control type */
+		/**
+		 * @var string the multiselect control type
+		 */
 		const TYPE_MULTISELECT = 'multiselect';
 
 		/**
@@ -79,16 +117,24 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 		 */
 		const TYPE_LOCATION_PICKER = 'location-picker';
 
-		/** @var string|null the setting ID to which this control belongs */
+		/**
+		 * @var string|null the setting ID to which this control belongs
+		 */
 		protected $setting_id;
 
-		/** @var string|null the control type */
+		/**
+		 * @var string|null the control type
+		 */
 		protected $type;
 
-		/** @var string the control name */
+		/**
+		 * @var string the control name
+		 */
 		protected $name = '';
 
-		/** @var string the control description */
+		/**
+		 * @var string the control description
+		 */
 		protected $description = '';
 
 		/**
@@ -100,37 +146,59 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 		 */
 		protected $description_on = '';
 
-		/** @var array the control options, as $option => $label */
+		/**
+		 * @var array the control options, as $option => $label
+		 */
 		protected $options = [];
 
-		/** @var float|null the minimum value for range/number controls */
+		/**
+		 * @var float|null the minimum value for range/number controls
+		 */
 		protected $min = null;
 
-		/** @var float|null the maximum value for range/number controls */
+		/**
+		 * @var float|null the maximum value for range/number controls
+		 */
 		protected $max = null;
 
-		/** @var float|null the step value for range/number controls */
+		/**
+		 * @var float|null the step value for range/number controls
+		 */
 		protected $step = null;
 
-		/** @var bool whether a number control also hands min/max/step to the browser's own input (opt-in, see set_native_bounds()) */
+		/**
+		 * @var bool whether a number control also hands min/max/step to the browser's own input (opt-in, see set_native_bounds())
+		 */
 		protected $native_bounds = false;
 
-		/** @var string the tooltip text for the control */
+		/**
+		 * @var string the tooltip text for the control
+		 */
 		protected $tooltip = '';
 
-		/** @var string the placeholder text for the control */
+		/**
+		 * @var string the placeholder text for the control
+		 */
 		protected $placeholder = '';
 
-		/** @var int|null optional textarea row count; null keeps the renderer default. */
+		/**
+		 * @var int|null optional textarea row count; null keeps the renderer default.
+		 */
 		private ?int $rows = null;
 
-		/** @var array carrier preset metadata for a table cell; empty for ordinary controls. */
+		/**
+		 * @var array carrier preset metadata for a table cell; empty for ordinary controls.
+		 */
 		private array $box_preset = [];
 
-		/** @var bool whether the control is rendered disabled (D11: blocked controls are explained). */
+		/**
+		 * @var bool whether the control is rendered disabled (D11: blocked controls are explained).
+		 */
 		protected $disabled = false;
 
-		/** @var string the human-readable reason a disabled control cannot be used right now. */
+		/**
+		 * @var string the human-readable reason a disabled control cannot be used right now.
+		 */
 		protected $disabled_reason = '';
 
 		/**
@@ -146,10 +214,14 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 		 */
 		protected $country = '';
 
-		/** @var callable|null fn(string $term): array<int,array{value:int|string,label:string}> */
+		/**
+		 * @var callable|null fn(string $term): array<int,array{value:int|string,label:string}>
+		 */
 		private $search_callback;
 
-		/** @var callable|null fn(int|string $value): string (unknown value = ''). */
+		/**
+		 * @var callable|null fn(int|string $value): string (unknown value = '').
+		 */
 		private $label_callback;
 
 		/**

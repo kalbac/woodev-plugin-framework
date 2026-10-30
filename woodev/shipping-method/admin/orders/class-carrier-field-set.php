@@ -46,7 +46,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Carrier_Fiel
 	 * @since 2.0.2
 	 */
 	final class Carrier_Field_Set extends \Woodev_Abstract_Settings {
-
 		/**
 		 * The declaration as the carrier returned it: field id => definition.
 		 *

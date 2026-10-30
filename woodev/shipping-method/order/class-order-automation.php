@@ -56,10 +56,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Order_Automation' ) 
 		 */
 		public const SETTING_EXPORT_STATUSES = 'export_statuses';
 
-		/** @var string[] statuses a WooCommerce order is cancelled at the carrier in: cancelled, and a FULL refund */
+		/**
+		 * @var string[] statuses a WooCommerce order is cancelled at the carrier in: cancelled, and a FULL refund
+		 */
 		public const CANCEL_STATUSES = [ 'cancelled', 'refunded' ];
 
-		/** @var Orders_Registry */
+		/**
+		 * @var Orders_Registry
+		 */
 		private Orders_Registry $registry;
 
 		/**

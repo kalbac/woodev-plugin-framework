@@ -33,8 +33,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Popular_Settlemen
 	 * @since 2.0.2
 	 */
 	class Popular_Settlement_Verifier {
-
-		/** @var Popular_Settlement_Store */
+		/**
+		 * @var Popular_Settlement_Store
+		 */
 		private Popular_Settlement_Store $store;
 
 		/**

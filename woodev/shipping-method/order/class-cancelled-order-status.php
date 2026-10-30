@@ -15,6 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Cancelled_Order_Status' ) ) :
+
 	/**
 	 * Sets the carrier's «Статус отменённого заказа»
 	 * ({@see \Woodev\Framework\Shipping\Settings\Export_Settings::get_cancelled_status()}) on an order the

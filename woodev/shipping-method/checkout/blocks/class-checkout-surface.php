@@ -23,7 +23,6 @@ if ( ! class_exists( __NAMESPACE__ . '\Checkout_Surface' ) ) :
 	 * @since 2.0.2
 	 */
 	final class Checkout_Surface {
-
 		/**
 		 * Whether the page being rendered shows ONLY the Checkout block — no classic checkout form.
 		 *

@@ -26,12 +26,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 	class Store_Api_Pickup {
 		use Rest_Rate_Limit_Trait;
 
-		/** @var string Store API extension namespace. */
+		/**
+		 * @var string Store API extension namespace.
+		 */
 		public const EXTENSION_NAMESPACE = 'woodev-shipping';
-		/** @var string Package field that keys rates by confirmed pickup selection. */
+
+		/**
+		 * @var string Package field that keys rates by confirmed pickup selection.
+		 */
 		public const PACKAGE_KEY = 'woodev_pickup';
-		/** @var string Session key of the destination postcode's writer record ({@see self::adopted_postcode()}). */
+
+		/**
+		 * @var string Session key of the destination postcode's writer record ({@see self::adopted_postcode()}).
+		 */
 		private const ADOPTED_POSTCODE_KEY = 'woodev_store_api_adopted_postcode';
+
 		/**
 		 * @var string[] Where the writer record ends ({@see self::forget_adopted_postcode()}): the
 		 *      order placed on either checkout, the cart emptied, and the three address forms no
@@ -45,15 +54,30 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Store_Api_Pickup' )
 			'woocommerce_calculated_shipping',
 			'woocommerce_customer_save_address',
 		];
-		/** @var array<string, array<string, Pickup_Handler>> Active carrier field owners. */
+
+		/**
+		 * @var array<string, array<string, Pickup_Handler>> Active carrier field owners.
+		 */
 		private static array $handlers = [];
-		/** @var bool Whether initialization hooks were attached. */
+
+		/**
+		 * @var bool Whether initialization hooks were attached.
+		 */
 		private static bool $booted = false;
-		/** @var bool Whether the pickup rate-cache key filter was attached. */
+
+		/**
+		 * @var bool Whether the pickup rate-cache key filter was attached.
+		 */
 		private static bool $package_filter_registered = false;
-		/** @var bool Whether Store API callbacks were registered. */
+
+		/**
+		 * @var bool Whether Store API callbacks were registered.
+		 */
 		private static bool $registered = false;
-		/** @var array<int, array<string, mixed>> Request echoes, scoped to this PHP request. */
+
+		/**
+		 * @var array<int, array<string, mixed>> Request echoes, scoped to this PHP request.
+		 */
 		private static array $echoes = [];
 
 		/**

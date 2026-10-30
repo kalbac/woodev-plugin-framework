@@ -16,7 +16,6 @@ if ( ! class_exists( 'Woodev_REST_API_Account' ) ) :
 	 * @since 2.0.2
 	 */
 	final class Woodev_REST_API_Account {
-
 		/**
 		 * Idempotency guard.
 		 *

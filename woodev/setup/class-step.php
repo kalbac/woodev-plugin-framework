@@ -16,49 +16,79 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Step {
 
-	/** @var string a step that renders fields from the Settings API. */
+	/**
+	 * @var string a step that renders fields from the Settings API.
+	 */
 	const TYPE_SETTINGS = 'settings';
 
-	/** @var string a step that renders arbitrary content / an action. */
+	/**
+	 * @var string a step that renders arbitrary content / an action.
+	 */
 	const TYPE_CONTENT = 'content';
 
-	/** @var string step id. */
+	/**
+	 * @var string step id.
+	 */
 	private string $id;
 
-	/** @var string step label. */
+	/**
+	 * @var string step label.
+	 */
 	private string $label;
 
-	/** @var string|null optional short label for the stepper (null = the full label is used). */
+	/**
+	 * @var string|null optional short label for the stepper (null = the full label is used).
+	 */
 	private ?string $short_label = null;
 
-	/** @var string step type. */
+	/**
+	 * @var string step type.
+	 */
 	private string $type;
 
-	/** @var string[] referenced Woodev_Setting ids (settings steps). */
+	/**
+	 * @var string[] referenced Woodev_Setting ids (settings steps).
+	 */
 	private array $setting_ids;
 
-	/** @var callable|string|null content callback / markup (content steps). */
+	/**
+	 * @var callable|string|null content callback / markup (content steps).
+	 */
 	private $content;
 
-	/** @var callable|null server-side save side-effect. */
+	/**
+	 * @var callable|null server-side save side-effect.
+	 */
 	private $on_save;
 
-	/** @var string optional step description shown in the wizard UI. */
+	/**
+	 * @var string optional step description shown in the wizard UI.
+	 */
 	private string $description = '';
 
-	/** @var callable|null visibility predicate. */
+	/**
+	 * @var callable|null visibility predicate.
+	 */
 	private $visibility_callback;
 
-	/** @var bool whether the merchant may move past the step without saving it. */
+	/**
+	 * @var bool whether the merchant may move past the step without saving it.
+	 */
 	private bool $skippable = true;
 
-	/** @var callable|null server-side validation, run before anything is persisted. */
+	/**
+	 * @var callable|null server-side validation, run before anything is persisted.
+	 */
 	private $validation_callback;
 
-	/** @var array<string,Step_Action> actions bound to the step, keyed by id. */
+	/**
+	 * @var array<string,Step_Action> actions bound to the step, keyed by id.
+	 */
 	private array $actions = [];
 
-	/** @var array{handle: string, export: string}|null plugin-supplied React component for the step body. */
+	/**
+	 * @var array{handle: string, export: string}|null plugin-supplied React component for the step body.
+	 */
 	private ?array $component = null;
 
 	/**

@@ -17,7 +17,6 @@ if ( ! class_exists( 'Woodev_Plugin_Compatibility' ) ) :
 	 * latest WooCommerce APIs directly as support for older versions is dropped.
 	 */
 	class Woodev_Plugin_Compatibility {
-
 		/**
 		 * Retrieves a list of the latest available WooCommerce versions.
 		 *
@@ -65,7 +64,6 @@ if ( ! class_exists( 'Woodev_Plugin_Compatibility' ) ) :
 			return is_array( $latest_wc_versions ) ? $latest_wc_versions : [];
 		}
 
-
 		/**
 		 * Gets the version of the currently installed WooCommerce.
 		 *
@@ -74,7 +72,6 @@ if ( ! class_exists( 'Woodev_Plugin_Compatibility' ) ) :
 		public static function get_wc_version(): ?string {
 			return defined( 'WC_VERSION' ) && WC_VERSION ? WC_VERSION : null;
 		}
-
 
 		/**
 		 * Determines if the installed WooCommerce version matches a specific version.
@@ -91,7 +88,6 @@ if ( ! class_exists( 'Woodev_Plugin_Compatibility' ) ) :
 			return $wc_version === $version || ( $wc_version && version_compare( $wc_version, $version, '=' ) );
 		}
 
-
 		/**
 		 * Determines if the installed version of WooCommerce is equal or greater than a given version.
 		 *
@@ -105,7 +101,6 @@ if ( ! class_exists( 'Woodev_Plugin_Compatibility' ) ) :
 
 			return $wc_version && version_compare( $wc_version, $version, '>=' );
 		}
-
 
 		/**
 		 * Determines if the installed version of WooCommerce is lower than a given version.
@@ -121,7 +116,6 @@ if ( ! class_exists( 'Woodev_Plugin_Compatibility' ) ) :
 			return $wc_version && version_compare( $wc_version, $version, '<' );
 		}
 
-
 		/**
 		 * Determines if the installed version of WooCommerce is greater than a given version.
 		 *
@@ -136,7 +130,6 @@ if ( ! class_exists( 'Woodev_Plugin_Compatibility' ) ) :
 			return $wc_version && version_compare( $wc_version, $version, '>' );
 		}
 
-
 		/**
 		 * Determines whether the enhanced admin is available.
 		 *
@@ -146,9 +139,7 @@ if ( ! class_exists( 'Woodev_Plugin_Compatibility' ) ) :
 			return true;
 		}
 
-
 		/** WordPress core ******************************************************/
-
 
 		/**
 		 * Normalizes a WooCommerce page screen ID.
@@ -164,7 +155,6 @@ if ( ! class_exists( 'Woodev_Plugin_Compatibility' ) ) :
 
 			return $prefix . '_page_' . $slug;
 		}
-
 
 		/**
 		 * Converts a shorthand byte value to an integer byte value.
@@ -184,7 +174,6 @@ if ( ! class_exists( 'Woodev_Plugin_Compatibility' ) ) :
 		public static function convert_hr_to_bytes( string $value ): int {
 			return wp_convert_hr_to_bytes( $value );
 		}
-
 
 		/**
 		 * Determines whether HPOS is enabled.

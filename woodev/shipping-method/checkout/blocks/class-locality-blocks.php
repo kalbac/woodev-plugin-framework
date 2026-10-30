@@ -35,18 +35,29 @@ if ( ! class_exists( __NAMESPACE__ . '\Locality_Blocks' ) ) :
 	 */
 	final class Locality_Blocks {
 
-		/** WooCommerce integration name; the data key WooCommerce publishes is `{name}_data`. */
+		/**
+		 * WooCommerce integration name; the data key WooCommerce publishes is `{name}_data`.
+		 */
 		public const INTEGRATION_NAME = 'woodev-shipping-locality';
 
-		/** The forced inner block that carries the chooser under the shipping address. */
+		/**
+		 * The forced inner block that carries the chooser under the shipping address.
+		 */
 		public const BLOCK_SHIPPING = 'woodev/shipping-locality';
-		/** The forced inner block that carries the chooser under billing when it is the destination. */
+
+		/**
+		 * The forced inner block that carries the chooser under billing when it is the destination.
+		 */
 		public const BLOCK_BILLING = 'woodev/shipping-locality-billing';
 
-		/** @var bool whether this request already wired the hooks */
+		/**
+		 * @var bool whether this request already wired the hooks
+		 */
 		private static bool $registered = false;
 
-		/** @var Checkout_Handler|null the handler that answers for the fleet */
+		/**
+		 * @var Checkout_Handler|null the handler that answers for the fleet
+		 */
 		private static ?Checkout_Handler $handler = null;
 
 		/**

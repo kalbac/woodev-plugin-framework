@@ -33,7 +33,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 	 * @since 2.0.2
 	 */
 	final class Orders_Provider {
-
 		/**
 		 * Carrier/tab id.
 		 *
@@ -215,7 +214,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		 */
 		private $order_fields;
 
-		/** @var bool whether the carrier permits framework label/barcode downloads. */
+		/**
+		 * @var bool whether the carrier permits framework label/barcode downloads.
+		 */
 		private $supports_label_printing;
 
 		/**

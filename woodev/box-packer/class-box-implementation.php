@@ -5,12 +5,19 @@ defined( 'ABSPATH' ) || exit;
 if ( ! class_exists( 'Woodev_Packer_Box_Implementation' ) ) :
 
 	class Woodev_Packer_Box_Implementation extends Woodev_Packer_Item_Implementation implements Woodev_Box_Packer_Box {
-
-		/** @var float|null */
+		/**
+		 * @var float|null
+		 */
 		private $max_weight;
-		/** @var string */
+
+		/**
+		 * @var string
+		 */
 		private $name;
-		/** @var string */
+
+		/**
+		 * @var string
+		 */
 		private $id;
 
 		/**

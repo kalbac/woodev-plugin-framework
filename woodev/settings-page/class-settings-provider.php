@@ -20,29 +20,44 @@ defined( 'ABSPATH' ) || exit;
  * @since 2.0.2
  */
 final class Settings_Provider {
-
-	/** @var string provider/tab id (== handler id → option namespace). */
+	/**
+	 * @var string provider/tab id (== handler id → option namespace).
+	 */
 	private string $id;
 
-	/** @var string tab label. */
+	/**
+	 * @var string tab label.
+	 */
 	private string $label;
 
-	/** @var \Woodev_Abstract_Settings settings handler. */
+	/**
+	 * @var \Woodev_Abstract_Settings settings handler.
+	 */
 	private $handler;
 
-	/** @var Settings_Section[] section grouping. */
+	/**
+	 * @var Settings_Section[] section grouping.
+	 */
 	private array $sections;
 
-	/** @var string|null explicit capability override (null = resolve by rule). */
+	/**
+	 * @var string|null explicit capability override (null = resolve by rule).
+	 */
 	private ?string $capability;
 
-	/** @var string|null legacy single-array option key (migration source). */
+	/**
+	 * @var string|null legacy single-array option key (migration source).
+	 */
 	private ?string $legacy_option_key;
 
-	/** @var string|null legacy admin page query string (redirect source). */
+	/**
+	 * @var string|null legacy admin page query string (redirect source).
+	 */
 	private ?string $legacy_page;
 
-	/** @var array<string,bool> §4 support flags. */
+	/**
+	 * @var array<string,bool> §4 support flags.
+	 */
 	private array $supports;
 
 	/**
@@ -93,7 +108,6 @@ final class Settings_Provider {
 	public static function create( string $id, string $label, $handler, array $sections, array $args = [] ): self {
 		return new self( $id, $label, $handler, $sections, $args );
 	}
-
 
 	/**
 	 * Builds a provider descriptor from TYPED sections — the loud counterpart to

@@ -3,22 +3,32 @@
 defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
+
 	/**
 	 * Updater class.
 	 *
 	 * @since 1.2.1
 	 */
 	final class Woodev_Plugin_Updater {
-
 		private Woodev_Plugin $plugin;
-		/** @var Woodev_Licensing_API */
+
+		/**
+		 * @var Woodev_Licensing_API
+		 */
 		private $api_handler;
+
 		private string $api_url;
+
 		private array $api_data;
+
 		private string $name;
+
 		private string $slug;
+
 		private string $version;
+
 		private bool $beta;
+
 		private string $failed_request_cache_key;
 
 		/**

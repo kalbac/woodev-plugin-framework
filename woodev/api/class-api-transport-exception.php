@@ -16,6 +16,7 @@ if ( ! class_exists( 'Woodev_API_Transport_Exception' ) ) :
 	 *
 	 * @since 2.0.2
 	 */
-	class Woodev_API_Transport_Exception extends Woodev_API_Exception {}
+	class Woodev_API_Transport_Exception extends Woodev_API_Exception {
+	}
 
 endif;

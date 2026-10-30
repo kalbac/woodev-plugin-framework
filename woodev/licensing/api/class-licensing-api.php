@@ -5,8 +5,9 @@ defined( 'ABSPATH' ) || exit;
 if ( ! class_exists( 'Woodev_Licensing_API' ) ) :
 
 	class Woodev_Licensing_API extends Woodev_API_Base {
-
-		/** @var Woodev_Plugin */
+		/**
+		 * @var Woodev_Plugin
+		 */
 		private Woodev_Plugin $plugin;
 
 		/**

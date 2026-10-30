@@ -66,7 +66,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 	 * @since 2.0.2
 	 */
 	class Location_Settings extends \Woodev_Abstract_Settings {
-
 		/**
 		 * Registered provider options for the `active_provider` select, `id => name`.
 		 *

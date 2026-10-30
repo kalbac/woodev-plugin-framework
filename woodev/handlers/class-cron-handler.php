@@ -10,6 +10,7 @@ namespace Woodev\Framework\Handlers;
 defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( '\Woodev\Framework\Handlers\Cron_Handler' ) ) :
+
 	/**
 	 * Owns the framework's WP-Cron concern.
 	 *
@@ -25,8 +26,9 @@ if ( ! class_exists( '\Woodev\Framework\Handlers\Cron_Handler' ) ) :
 	 * @since 2.0.0
 	 */
 	class Cron_Handler {
-
-		/** @var \Woodev_Plugin current plugin instance */
+		/**
+		 * @var \Woodev_Plugin current plugin instance
+		 */
 		private \Woodev_Plugin $plugin;
 
 		/**

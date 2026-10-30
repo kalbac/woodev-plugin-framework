@@ -22,10 +22,14 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Browser_Script' ) ) :
 	 */
 	final class Browser_Script {
 
-		/** Script handle (and the config global's owner). */
+		/**
+		 * Script handle (and the config global's owner).
+		 */
 		const HANDLE = 'woodev-error-reporter';
 
-		/** Name of the config global. */
+		/**
+		 * Name of the config global.
+		 */
 		const GLOBAL = 'woodevErrorReporting';
 
 		/**

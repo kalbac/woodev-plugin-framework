@@ -129,10 +129,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Point_Query' ) ) :
 		 */
 		private $resolved_identity;
 
-		/** @var string|null Explicit shipping method context for admin queries. */
+		/**
+		 * @var string|null Explicit shipping method context for admin queries.
+		 */
 		private ?string $method_id;
 
-		/** @var int|null Explicit shipping method instance for admin queries. */
+		/**
+		 * @var int|null Explicit shipping method instance for admin queries.
+		 */
 		private ?int $instance_id;
 
 		/**

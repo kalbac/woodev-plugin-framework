@@ -29,7 +29,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 	 * @since 2.0.2
 	 */
 	class Orders_Controller extends \WP_REST_Controller {
-
 		/**
 		 * Registry to read providers/capability from.
 		 *
@@ -333,7 +332,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 		public function perform_action_permissions_check( $request ): bool {
 			return current_user_can( 'edit_shop_orders' );
 		}
-
 
 		/**
 		 * REST `validate_callback` for `after`/`before` (SP-10 spec D10/D11): an ISO 8601

@@ -4,8 +4,8 @@
 
 ## History
 
-Before #139, `phpcs.xml` set `warning-severity` to `0`, so all warning-level sniffs were silent.
-That was fixed in s110: `phpcs.xml` now sets `warning-severity` to `1`, and new violations from the
+Before #139, `phpcs.xml.dist` set `warning-severity` to `0`, so all warning-level sniffs were silent.
+That was fixed in s110: `phpcs.xml.dist` now sets `warning-severity` to `1`, and new violations from the
 remaining warning-level sniffs fail `composer phpcs`. The old count of 1,786 violations across 19
 sniffs is historical evidence for that decision, not a claim about today's gate.
 

@@ -35,25 +35,39 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Advanced_Settings
 	 */
 	class Advanced_Settings extends \Woodev_Abstract_Settings {
 
-		/** @var string the section id on the plugin's tab */
+		/**
+		 * @var string the section id on the plugin's tab
+		 */
 		public const SECTION_ID = 'advanced';
 
-		/** @var string the logging switch: off = errors only, on = also debug lines and the carrier API requests/responses. Also v1's key. */
+		/**
+		 * @var string the logging switch: off = errors only, on = also debug lines and the carrier API requests/responses. Also v1's key.
+		 */
 		public const SETTING_ENABLE_DEBUG = 'enable_debug';
 
-		/** @var string «Не показывать на странице корзины». Also v1's key. */
+		/**
+		 * @var string «Не показывать на странице корзины». Also v1's key.
+		 */
 		public const SETTING_DISABLE_ON_CART = 'disable_methods_on_cart';
 
-		/** @var string the suffix of the handler id (the option namespace) after the plugin id */
+		/**
+		 * @var string the suffix of the handler id (the option namespace) after the plugin id
+		 */
 		private const HANDLER_ID_SUFFIX = '_advanced';
 
-		/** @var string the key, in the handler's option namespace, of the option that records the one-time migration as done */
+		/**
+		 * @var string the key, in the handler's option namespace, of the option that records the one-time migration as done
+		 */
 		private const MIGRATED_FLAG = 'migrated_from_integration';
 
-		/** @var string the carrier plugin's underscored id */
+		/**
+		 * @var string the carrier plugin's underscored id
+		 */
 		private string $plugin_id;
 
-		/** @var \Closure|null returns the v1 integration option's name, or null when there is none */
+		/**
+		 * @var \Closure|null returns the v1 integration option's name, or null when there is none
+		 */
 		private ?\Closure $legacy_option_key_resolver;
 
 		/**

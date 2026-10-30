@@ -8,14 +8,15 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_User_Handler' ) ) :
 	 * Handle the admin user profile settings.
 	 */
 	class Woodev_Payment_Gateway_Admin_User_Handler {
-
-
-		/** @var Woodev_Payment_Gateway_Plugin the plugin instance * */
+		/**
+		 * @var Woodev_Payment_Gateway_Plugin the plugin instance *
+		 */
 		protected $plugin;
 
-		/** @var array the token editor for each gateway * */
+		/**
+		 * @var array the token editor for each gateway *
+		 */
 		protected $token_editors = [];
-
 
 		/**
 		 * Construct the user handler.
@@ -56,7 +57,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_User_Handler' ) ) :
 			);
 		}
 
-
 		/**
 		 * Set up a token editor for each gateway.
 		 */
@@ -71,7 +71,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_User_Handler' ) ) :
 				$this->token_editors[ $gateway->get_id() ] = $gateway->get_payment_tokens_handler()->get_token_editor();
 			}
 		}
-
 
 		/**
 		 * Display the customer profile settings markup.
@@ -91,7 +90,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_User_Handler' ) ) :
 
 			include $this->get_plugin()->get_payment_gateway_framework_path() . '/admin/views/html-user-profile-section.php';
 		}
-
 
 		/**
 		 * Display the token editor markup.
@@ -113,7 +111,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_User_Handler' ) ) :
 			}
 		}
 
-
 		/**
 		 * Display the customer ID field(s).
 		 *
@@ -130,7 +127,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_User_Handler' ) ) :
 				include $this->get_plugin()->get_payment_gateway_framework_path() . '/admin/views/html-user-profile-field-customer-id.php';
 			}
 		}
-
 
 		/**
 		 * Save the user profile section fields.
@@ -150,7 +146,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_User_Handler' ) ) :
 			$this->save_customer_ids( $user_id );
 		}
 
-
 		/**
 		 * Save the token data from each token editor.
 		 *
@@ -162,7 +157,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_User_Handler' ) ) :
 				$editor->save( $user_id );
 			}
 		}
-
 
 		/**
 		 * Save the customer IDs.
@@ -203,7 +197,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_User_Handler' ) ) :
 			return apply_filters( 'wc_payment_gateway_admin_user_profile_title', $title, $this->get_plugin() );
 		}
 
-
 		/**
 		 * Get the token editor section description.
 		 *
@@ -219,7 +212,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_User_Handler' ) ) :
 			return apply_filters( 'wc_payment_gateway_admin_user_profile_description', '', $this->get_plugin() );
 		}
 
-
 		/**
 		 * Get the token editor objects.
 		 *
@@ -228,7 +220,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_User_Handler' ) ) :
 		protected function get_token_editors() {
 			return $this->token_editors;
 		}
-
 
 		/**
 		 * Get the customer ID fields for the plugin's gateways.
@@ -286,7 +277,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_User_Handler' ) ) :
 			return $fields;
 		}
 
-
 		/**
 		 * Get the unique environments between the plugin's gateways.
 		 *
@@ -302,7 +292,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_User_Handler' ) ) :
 
 			return array_unique( $environments );
 		}
-
 
 		/**
 		 * Get the gateways that support tokenization and are enabled.
@@ -341,7 +330,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_User_Handler' ) ) :
 			return apply_filters( 'wc_payment_gateway_' . $this->get_plugin()->get_id() . '_display_user_profile', ! empty( $gateways ), $this->get_plugin() );
 		}
 
-
 		/**
 		 * Determine if the plugin has varying environments between its gateways.
 		 *
@@ -350,7 +338,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_User_Handler' ) ) :
 		public function has_multiple_environments() {
 			return 1 < count( $this->get_unique_environments() );
 		}
-
 
 		/**
 		 * Get the plugin instance.

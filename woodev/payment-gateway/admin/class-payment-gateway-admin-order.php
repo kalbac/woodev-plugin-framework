@@ -10,10 +10,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Order' ) ) :
 	 * Handle the admin order screens.
 	 */
 	class Woodev_Payment_Gateway_Admin_Order {
-
-		/** @var Woodev_Payment_Gateway_Plugin the plugin instance * */
+		/**
+		 * @var Woodev_Payment_Gateway_Plugin the plugin instance *
+		 */
 		protected $plugin;
-
 
 		/**
 		 * Constructs the class.
@@ -45,7 +45,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Order' ) ) :
 			}
 		}
 
-
 		/**
 		 * Enqueues the scripts and styles.
 		 *
@@ -76,7 +75,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Order' ) ) :
 				}
 			}
 		}
-
 
 		/**
 		 * Enqueues the assets for the Edit Order screen.
@@ -146,7 +144,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Order' ) ) :
 			}
 		}
 
-
 		/**
 		 * Processes the 'Capture Charge' custom bulk action.
 		 */
@@ -195,7 +192,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Order' ) ) :
 			}
 		}
 
-
 		/**
 		 * Adds a "Capture Charge" action to the admin Order Edit screen
 		 *
@@ -213,7 +209,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Order' ) ) :
 
 			return $actions;
 		}
-
 
 		/**
 		 * Adds the capture charge button to the order UI.
@@ -281,7 +276,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Order' ) ) :
 			}
 		}
 
-
 		/**
 		 * Outputs the partial capture UI HTML.
 		 *
@@ -296,7 +290,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Order' ) ) :
 
 			include $this->get_plugin()->get_payment_gateway_framework_path() . '/admin/views/html-order-partial-capture.php';
 		}
-
 
 		/**
 		 * Processes a capture via AJAX.
@@ -361,7 +354,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Order' ) ) :
 			}
 		}
 
-
 		/**
 		 * Gets the gateway object from an order.
 		 *
@@ -386,7 +378,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Order' ) ) :
 
 			return $capture_gateway;
 		}
-
 
 		/**
 		 * Gets the plugin instance.

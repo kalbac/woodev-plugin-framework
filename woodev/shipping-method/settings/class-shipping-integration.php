@@ -30,19 +30,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Integrat
 	 */
 	abstract class Shipping_Integration extends \WC_Integration {
 
-		/** The production environment identifier */
+		/**
+		 * The production environment identifier
+		 */
 		const ENVIRONMENT_PRODUCTION = 'production';
 
-		/** The test environment identifier */
+		/**
+		 * The test environment identifier
+		 */
 		const ENVIRONMENT_TEST = 'test';
 
-		/** @var null|Shipping_Plugin the parent plugin class */
+		/**
+		 * @var null|Shipping_Plugin the parent plugin class
+		 */
 		protected ?Shipping_Plugin $plugin;
 
-		/** @var string configuration option: whether to use a sibling plugins' connection/authentication settings */
+		/**
+		 * @var string configuration option: whether to use a sibling plugins' connection/authentication settings
+		 */
 		private string $inherit_settings;
 
-		/** @var array of shared setting names, if any. */
+		/**
+		 * @var array of shared setting names, if any.
+		 */
 		private array $shared_settings = [];
 
 		/**
@@ -292,7 +302,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Integrat
 			return true;
 		}
 
-
 		/**
 		 * Determines if settings should be inherited for this shipping plugin.
 		 *
@@ -302,7 +311,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Integrat
 		public function inherit_settings(): bool {
 			return wc_string_to_bool( $this->inherit_settings );
 		}
-
 
 		/**
 		 * Adds support for the named feature or features.
@@ -354,7 +362,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Integrat
 			$this->supports = array_values( $this->supports );
 		}
 
-
 		/**
 		 * Removes support for the named feature or features.
 		 *
@@ -393,7 +400,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Integrat
 			// re-index the array
 			$this->supports = array_values( $this->supports );
 		}
-
 
 		/**
 		 * Set all features supported.
@@ -442,7 +448,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Integrat
 			];
 		}
 
-
 		/**
 		 * Returns the environment setting, one of the $environments keys, ie 'production'
 		 *
@@ -452,7 +457,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Integrat
 		public function get_environment(): string {
 			return $this->get_option( 'environment', self::ENVIRONMENT_PRODUCTION );
 		}
-
 
 		/**
 		 * Get the configured environment's display name.
@@ -469,7 +473,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Integrat
 			return ( isset( $environments[ $environment_id ] ) ) ? $environments[ $environment_id ] : $environment_id;
 		}
 
-
 		/**
 		 * Returns true if the current environment is $environment_id.
 		 *
@@ -481,7 +484,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Integrat
 		public function is_environment( $environment_id ): bool {
 			return $environment_id == $this->get_environment();
 		}
-
 
 		/**
 		 * Returns true if the plugin environment is configured to 'production'.
@@ -501,7 +503,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Integrat
 			// default: check the current environment
 			return $this->is_environment( self::ENVIRONMENT_PRODUCTION );
 		}
-
 
 		/**
 		 * Returns true if the current gateway environment is configured to 'test'

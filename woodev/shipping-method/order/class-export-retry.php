@@ -44,10 +44,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Export_Retry' ) ) :
 	 */
 	final class Export_Retry {
 
-		/** @var string the Action Scheduler hook that performs one export attempt; its one argument is the order id */
+		/**
+		 * @var string the Action Scheduler hook that performs one export attempt; its one argument is the order id
+		 */
 		public const HOOK = 'woodev_shipping_export_retry';
 
-		/** @var string the Action Scheduler group of the framework's shipping actions */
+		/**
+		 * @var string the Action Scheduler group of the framework's shipping actions
+		 */
 		public const GROUP = 'woodev-shipping';
 
 		/**
@@ -68,37 +72,59 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Export_Retry' ) ) :
 		 */
 		public const DEFERRALS_META = '_woodev_shipment_export_deferrals';
 
-		/** @var string order meta ensuring the non-reconciling unknown-export warning is written once */
+		/**
+		 * @var string order meta ensuring the non-reconciling unknown-export warning is written once
+		 */
 		public const UNKNOWN_EXPORT_NOTE_META = '_woodev_shipment_export_unknown_note';
 
-		/** @var string {@see self::after_failure()}: the next attempt is waiting in the queue */
+		/**
+		 * @var string {@see self::after_failure()}: the next attempt is waiting in the queue
+		 */
 		public const SCHEDULED = 'scheduled';
 
-		/** @var string {@see self::defer()}: the due attempt was put back in the queue, uncounted */
+		/**
+		 * @var string {@see self::defer()}: the due attempt was put back in the queue, uncounted
+		 */
 		public const DEFERRED = 'deferred';
 
-		/** @var string {@see self::after_failure()}: the attempts ran out — the note is written and the chain is over */
+		/**
+		 * @var string {@see self::after_failure()}: the attempts ran out — the note is written and the chain is over
+		 */
 		public const GAVE_UP = 'gave_up';
 
-		/** @var string {@see self::after_failure()}: a next attempt was due but could not be queued (Action Scheduler is unavailable) */
+		/**
+		 * @var string {@see self::after_failure()}: a next attempt was due but could not be queued (Action Scheduler is unavailable)
+		 */
 		public const NOT_SCHEDULED = 'not_scheduled';
 
-		/** @var int attempts in all — the first export plus four retries — before the framework gives up */
+		/**
+		 * @var int attempts in all — the first export plus four retries — before the framework gives up
+		 */
 		public const MAX_ATTEMPTS = 5;
 
-		/** @var int how many times one chain may put a due attempt back because the order was busy — at {@see self::DEFER_DELAY} each, about two hours — before a busy order counts as a failed attempt */
+		/**
+		 * @var int how many times one chain may put a due attempt back because the order was busy — at {@see self::DEFER_DELAY} each, about two hours — before a busy order counts as a failed attempt
+		 */
 		public const MAX_DEFERRALS = 24;
 
-		/** @var int seconds a due attempt that met a busy order waits before it tries again */
+		/**
+		 * @var int seconds a due attempt that met a busy order waits before it tries again
+		 */
 		private const DEFER_DELAY = 5 * MINUTE_IN_SECONDS;
 
-		/** @var string the Action Scheduler status of an action that is waiting its turn — NOT `in-progress`, which is the action now being carried out (`ActionScheduler_Store::STATUS_PENDING`) */
+		/**
+		 * @var string the Action Scheduler status of an action that is waiting its turn — NOT `in-progress`, which is the action now being carried out (`ActionScheduler_Store::STATUS_PENDING`)
+		 */
 		private const PENDING_STATUS = 'pending';
 
-		/** @var string the Action Scheduler status of the action being carried out now (`ActionScheduler_Store::STATUS_RUNNING`) */
+		/**
+		 * @var string the Action Scheduler status of the action being carried out now (`ActionScheduler_Store::STATUS_RUNNING`)
+		 */
 		private const RUNNING_STATUS = 'in-progress';
 
-		/** @var array<int,int> seconds to wait after the Nth failed attempt, before attempt N + 1 */
+		/**
+		 * @var array<int,int> seconds to wait after the Nth failed attempt, before attempt N + 1
+		 */
 		private const DELAYS = [
 			1 => MINUTE_IN_SECONDS,
 			2 => 5 * MINUTE_IN_SECONDS,

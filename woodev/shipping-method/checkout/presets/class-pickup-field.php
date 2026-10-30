@@ -54,7 +54,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Presets\\Pickup_F
 	 * @since 2.0.2
 	 */
 	class Pickup_Field {
-
 		/**
 		 * Creates a Field builder pre-configured as a hidden pickup-point field.
 		 *

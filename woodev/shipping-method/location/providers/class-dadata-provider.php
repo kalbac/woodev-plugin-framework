@@ -1178,7 +1178,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 			return true;
 		}
 
-
 		/**
 		 * Derives a {@see Location_Record::LEVELS} value from a flat DaData field set,
 		 * for a lookup that (unlike `suggest()`/`normalize()`) carries no

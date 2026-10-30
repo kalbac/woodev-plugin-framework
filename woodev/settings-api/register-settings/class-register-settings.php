@@ -10,8 +10,8 @@ if ( ! class_exists( 'Woodev_Register_Settings' ) ) :
 	 * Base settings class - Shared between SP Lite & Pro (and other plugins)
 	 */
 	abstract class Woodev_Register_Settings {
-
 		protected $settings = [];
+
 		protected $option;
 
 		/**

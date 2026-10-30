@@ -58,16 +58,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 	 */
 	final class Order_Action_Fields {
 
-		/** @var string */
+		/**
+		 * @var string
+		 */
 		public const TYPE_DATE = 'date';
 
-		/** @var string */
+		/**
+		 * @var string
+		 */
 		public const TYPE_SELECT = 'select';
 
-		/** @var string */
+		/**
+		 * @var string
+		 */
 		public const TYPE_TIME_RANGE = 'time_range';
 
-		/** @var string */
+		/**
+		 * @var string
+		 */
 		public const TYPE_TEXTAREA = 'textarea';
 
 		/**
@@ -136,8 +144,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		 */
 		public const MAX_TEXTAREA_MAXLENGTH = 5000;
 
-		/** Not instantiable — a namespace of two pure functions. */
-		private function __construct() {}
+		/**
+		 * Not instantiable — a namespace of two pure functions.
+		 */
+		private function __construct() {
+		}
 
 		/**
 		 * Re-validates a declared `fields` list, dropping malformed entries rather than shipping them to

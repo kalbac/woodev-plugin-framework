@@ -27,7 +27,6 @@ if ( ! class_exists( __NAMESPACE__ . '\Fee_Payments_Blocks_Integration' ) ) :
 	 * @since 2.0.2
 	 */
 	class Fee_Payments_Blocks_Integration implements IntegrationInterface {
-
 		/**
 		 * @since 2.0.2
 		 *

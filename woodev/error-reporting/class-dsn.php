@@ -22,23 +22,34 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Dsn' ) ) :
 	 * @since 2.0.2
 	 */
 	final class Dsn {
-
-		/** @var string */
+		/**
+		 * @var string
+		 */
 		private string $scheme;
 
-		/** @var string */
+		/**
+		 * @var string
+		 */
 		private string $host;
 
-		/** @var int|null */
+		/**
+		 * @var int|null
+		 */
 		private ?int $port;
 
-		/** @var string Path prefix before `/api/`, without a trailing slash. */
+		/**
+		 * @var string Path prefix before `/api/`, without a trailing slash.
+		 */
 		private string $prefix;
 
-		/** @var string */
+		/**
+		 * @var string
+		 */
 		private string $project_id;
 
-		/** @var string */
+		/**
+		 * @var string
+		 */
 		private string $public_key;
 
 		/**

@@ -13,22 +13,30 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 	 */
 
 	class Woodev_Admin_Notice_Handler {
-
-		/** @var Woodev_Plugin the plugin */
+		/**
+		 * @var Woodev_Plugin the plugin
+		 */
 		private $plugin;
 
-		/** @var array associative array of id to notice text */
+		/**
+		 * @var array associative array of id to notice text
+		 */
 		private $admin_notices = [];
 
-		/** @var boolean static member to enforce a single rendering of the admin notice placeholder element */
+		/**
+		 * @var boolean static member to enforce a single rendering of the admin notice placeholder element
+		 */
 		private static $admin_notice_placeholder_rendered = false;
 
-		/** @var boolean static member to enforce a single rendering of the admin notice javascript */
+		/**
+		 * @var boolean static member to enforce a single rendering of the admin notice javascript
+		 */
 		private static $admin_notice_js_rendered = false;
 
-		/** @var string|null dasherized ID of the plugin whose handler actually echoed the admin notice placeholder */
+		/**
+		 * @var string|null dasherized ID of the plugin whose handler actually echoed the admin notice placeholder
+		 */
 		private static $admin_notice_placeholder_slug = null;
-
 
 		/**
 		 * Initialize and setup the Admin Notice Handler
@@ -45,7 +53,6 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 			// AJAX handler to dismiss any warning/error notices
 			add_action( 'wp_ajax_woodev_plugin_framework_' . $this->get_plugin()->get_id() . '_dismiss_notice', [ $this, 'handle_dismiss_notice' ] );
 		}
-
 
 		/**
 		 * Adds the given $message as a dismissible notice identified by $message_id,
@@ -87,7 +94,6 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 				];
 			}
 		}
-
 
 		/**
 		 * Returns true if the identified notice hasn't been cleared, or we're on
@@ -136,7 +142,6 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 			return ! $this->is_notice_dismissed( $message_id );
 		}
 
-
 		/**
 		 * Render any admin notices, as well as the admin notice placeholder
 		 *
@@ -170,7 +175,6 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 			}
 		}
 
-
 		/**
 		 * Render any delayed admin notices, which have not yet already been rendered
 		 *
@@ -181,7 +185,6 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 		public function render_delayed_admin_notices(): void {
 			$this->render_admin_notices( false );
 		}
-
 
 		/**
 		 * Render a single admin notice
@@ -234,7 +237,6 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 				wp_kses_post( $message )
 			);
 		}
-
 
 		/**
 		 * Render the javascript to handle the notice "dismiss" functionality
@@ -317,7 +319,6 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 			Woodev_Helper::enqueue_js( ob_get_clean() );
 		}
 
-
 		/**
 		 * Marks the identified admin notice as dismissed for the given user
 		 *
@@ -354,7 +355,6 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 			 */
 			do_action( 'woodev_' . $this->get_plugin()->get_id() . '_dismiss_notice', $message_id, $user_id );
 		}
-
 
 		/**
 		 * Marks the identified admin notice as not dismissed for the identified user
@@ -396,7 +396,6 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 			return isset( $dismissed_notices[ $message_id ] ) && $dismissed_notices[ $message_id ];
 		}
 
-
 		/**
 		 * Returns the full set of dismissed notices for the user identified by
 		 * $user_id, for this plugin
@@ -422,9 +421,7 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 			}
 		}
 
-
 		/** AJAX methods ******************************************************/
-
 
 		/**
 		 * Dismiss the identified notice
@@ -440,9 +437,7 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 			$this->dismiss_notice( sanitize_key( $_REQUEST['messageid'] ) );
 		}
 
-
 		/** Getter methods ******************************************************/
-
 
 		/**
 		 * Get the plugin

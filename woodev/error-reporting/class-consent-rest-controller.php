@@ -20,7 +20,6 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Consent_Rest_Controller'
 	 * @since 2.0.2
 	 */
 	final class Consent_Rest_Controller {
-
 		/**
 		 * @internal
 		 *

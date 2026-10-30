@@ -1,5 +1,7 @@
 <?php
-/** REST downloads for carrier documents. */
+/**
+ * REST downloads for carrier documents.
+ */
 
 namespace Woodev\Framework\Shipping\Rest_Api;
 
@@ -33,17 +35,25 @@ class Document_Controller extends \WP_REST_Controller {
 	 */
 	public const SKIP_CODES = [ 'not_found', 'not_shipping', 'not_exported', 'unsupported', 'carrier_skipped' ];
 
-	/** Response header naming the orders a bulk document leaves out: `id:code,id:code`. */
+	/**
+	 * Response header naming the orders a bulk document leaves out: `id:code,id:code`.
+	 */
 	public const SKIPPED_HEADER = 'X-Woodev-Skipped';
 
 	private Orders_Registry $registry;
 
-	/** @since 2.0.2 @param Orders_Registry $registry carrier registry */
+	/**
+	 * @since 2.0.2
+	 * @param Orders_Registry $registry carrier registry
+	 */
 	public function __construct( Orders_Registry $registry ) {
 		$this->registry = $registry;
 	}
 
-	/** @since 2.0.2 @return void */
+	/**
+	 * @since 2.0.2
+	 * @return void
+	 */
 	public function register_routes(): void {
 		add_filter( 'rest_pre_serve_request', [ $this, 'serve_binary_response' ], 10, 4 );
 		register_rest_route(

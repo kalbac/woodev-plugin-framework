@@ -38,6 +38,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 	 *
 	 * @since 2.0.2
 	 */
-	class Location_Provider_Exception extends \RuntimeException {}
+	class Location_Provider_Exception extends \RuntimeException {
+	}
 
 endif;

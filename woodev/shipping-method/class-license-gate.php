@@ -30,16 +30,24 @@ if ( ! class_exists( __NAMESPACE__ . '\License_Gate' ) ) :
 	 */
 	final class License_Gate {
 
-		/** @var int how many days before the end of the licence the «renew it» reminder starts */
+		/**
+		 * @var int how many days before the end of the licence the «renew it» reminder starts
+		 */
 		public const EXPIRY_WARNING_DAYS = 30;
 
-		/** The package key the licence state of the registered carriers travels under (#1270). */
+		/**
+		 * The package key the licence state of the registered carriers travels under (#1270).
+		 */
 		public const PACKAGE_KEY = 'woodev_license_state';
 
-		/** @var array<string, \Woodev_Plugin> the carrier plugins whose licence state keys the package, by plugin id */
+		/**
+		 * @var array<string, \Woodev_Plugin> the carrier plugins whose licence state keys the package, by plugin id
+		 */
 		private static array $tracked = [];
 
-		/** @var bool whether this request already wired the package filter */
+		/**
+		 * @var bool whether this request already wired the package filter
+		 */
 		private static bool $hooked = false;
 
 		/**

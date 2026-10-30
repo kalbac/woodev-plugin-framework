@@ -33,10 +33,14 @@ if ( ! class_exists( __NAMESPACE__ . '\Instance_Field_Conditions' ) ) :
 	 */
 	final class Instance_Field_Conditions {
 
-		/** Attribute carrying the JSON condition on the field's control. */
+		/**
+		 * Attribute carrying the JSON condition on the field's control.
+		 */
 		public const ATTRIBUTE = 'data-woodev-show-if';
 
-		/** Operators the browser handler knows — the same four the settings API evaluates. */
+		/**
+		 * Operators the browser handler knows — the same four the settings API evaluates.
+		 */
 		private const OPERATORS = [ '=', '!=', 'in', 'not_in' ];
 
 		/**

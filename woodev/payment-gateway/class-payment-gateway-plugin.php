@@ -31,36 +31,55 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 
 	abstract class Woodev_Payment_Gateway_Plugin extends \Woodev\Framework\Woocommerce_Plugin {
 
-		/** Customer ID feature */
+		/**
+		 * Customer ID feature
+		 */
 		const FEATURE_CUSTOMER_ID = 'customer_id';
 
-		/** Charge capture feature */
+		/**
+		 * Charge capture feature
+		 */
 		const FEATURE_CAPTURE_CHARGE = 'capture_charge';
 
-		/** My Payment Methods feature */
+		/**
+		 * My Payment Methods feature
+		 */
 		const FEATURE_MY_PAYMENT_METHODS = 'my_payment_methods';
 
-		/** @var array optional associative array of gateway id to array( 'gateway_class_name' => string, 'gateway' => Woodev_Payment_Gateway ) */
+		/**
+		 * @var array optional associative array of gateway id to array( 'gateway_class_name' => string, 'gateway' => Woodev_Payment_Gateway )
+		 */
 		private $gateways;
 
-		/** @var array optional array of currency codes this gateway is allowed for */
+		/**
+		 * @var array optional array of currency codes this gateway is allowed for
+		 */
 		private $currencies = [];
 
-		/** @var array named features that this plugin supports which require action from it (the `FEATURE_*` constants) */
+		/**
+		 * @var array named features that this plugin supports which require action from it (the `FEATURE_*` constants)
+		 */
 		private $supports = [];
 
-		/** @var array|bool gateway IDs that require SSL, or bool for all/none */
+		/**
+		 * @var array|bool gateway IDs that require SSL, or bool for all/none
+		 */
 		private $require_ssl;
 
-		/** @var Woodev_Payment_Gateway_Admin_Order order handler instance */
+		/**
+		 * @var Woodev_Payment_Gateway_Admin_Order order handler instance
+		 */
 		protected $admin_order_handler;
 
-		/** @var Woodev_Payment_Gateway_Admin_User_Handler user handler instance */
+		/**
+		 * @var Woodev_Payment_Gateway_Admin_User_Handler user handler instance
+		 */
 		protected $admin_user_handler;
 
-		/** @var Woodev_Payment_Gateway_My_Payment_Methods adds My Payment Method functionality */
+		/**
+		 * @var Woodev_Payment_Gateway_My_Payment_Methods adds My Payment Method functionality
+		 */
 		private $my_payment_methods;
-
 
 		/**
 		 * Initializes the plugin.
@@ -154,7 +173,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 			$this->admin_order_handler = new Woodev_Payment_Gateway_Admin_Order( $this );
 			$this->admin_user_handler  = new Woodev_Payment_Gateway_Admin_User_Handler( $this );
 		}
-
 
 		/**
 		 * Adds any gateways supported by this plugin to the list of available payment gateways.
@@ -543,7 +561,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 			}
 		}
 
-
 		/**
 		 * Adds notices about gateways not being configured.
 		 *
@@ -652,7 +669,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 			return $this->supports( self::FEATURE_CAPTURE_CHARGE );
 		}
 
-
 		/**
 		 * Returns true if the gateway supports the named feature
 		 *
@@ -674,7 +690,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 			return $this->admin_order_handler;
 		}
 
-
 		/**
 		 * Get the admin user handler instance.
 		 *
@@ -683,7 +698,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 		public function get_admin_user_handler() {
 			return $this->admin_user_handler;
 		}
-
 
 		/**
 		 * Returns the gateway settings option name for the identified gateway.
@@ -710,7 +724,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 			return get_option( $this->get_gateway_settings_name( $gateway_id ) );
 		}
 
-
 		/**
 		 * Returns true if this plugin requires SSL to function properly
 		 *
@@ -720,7 +733,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 		protected function requires_ssl() {
 			return $this->require_ssl;
 		}
-
 
 		/**
 		 * Gets the plugin configuration URL
@@ -761,7 +773,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 				admin_url( 'admin.php' )
 			);
 		}
-
 
 		/**
 		 * Returns true if the current page is the admin configuration page for a gateway
@@ -813,7 +824,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 			return $gateway_class_names;
 		}
 
-
 		/**
 		 * Gets the gateway class name for the given gateway id
 		 *
@@ -848,7 +858,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 
 			return $gateways;
 		}
-
 
 		/**
 		 * Adds the given $gateway to the internal gateways store
@@ -886,7 +895,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 			return $this->gateways[ $gateway_id ]['gateway'];
 		}
 
-
 		/**
 		 * Returns true if the plugin supports this gateway
 		 *
@@ -911,7 +919,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 
 			return array_keys( $this->gateways );
 		}
-
 
 		/**
 		 * Returns the gateway for a given token
@@ -940,7 +947,8 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 		 *
 		 * @see Woodev_Plugin::add_api_request_logging()
 		 */
-		public function add_api_request_logging() {}
+		public function add_api_request_logging() {
+		}
 
 		/**
 		 * The gateway's request logger raises the storefront debug notice from the same
@@ -954,7 +962,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 		public function is_api_broadcast_log_only(): bool {
 			return false;
 		}
-
 
 		/**
 		 * Returns the set of accepted currencies, or empty array if all currencies
@@ -977,7 +984,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 			return __FILE__;
 		}
 
-
 		/**
 		 * Returns the loaded payment gateway framework path, without trailing slash.
 		 *
@@ -990,7 +996,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 			return untrailingslashit( plugin_dir_path( $this->get_payment_gateway_framework_file() ) );
 		}
 
-
 		/**
 		 * Returns the absolute path to the loaded payment gateway framework image
 		 * directory, without a trailing slash
@@ -1000,7 +1005,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 		public function get_payment_gateway_framework_assets_path() {
 			return $this->get_payment_gateway_framework_path() . '/assets';
 		}
-
 
 		/**
 		 * Returns the loaded payment gateway framework assets URL, without a trailing slash

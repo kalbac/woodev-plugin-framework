@@ -18,7 +18,6 @@ defined( 'ABSPATH' ) || exit;
  * @since 2.0.16
  */
 interface Pending_Notification_Response extends \Woodev_Payment_Gateway_API_Payment_Notification_Response {
-
 	/**
 	 * Reports an intermediate state that must leave the order status unchanged.
 	 *

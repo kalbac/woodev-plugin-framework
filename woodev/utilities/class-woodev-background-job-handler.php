@@ -27,31 +27,45 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 	 * $background_job_handler->dispatch();
 	 */
 	abstract class Woodev_Background_Job_Handler extends Woodev_Async_Request {
-
-		/** @var string async request prefix */
+		/**
+		 * @var string async request prefix
+		 */
 		protected $prefix = 'woodev';
 
-		/** @var string async request action */
+		/**
+		 * @var string async request action
+		 */
 		protected $action = 'background_job';
 
-		/** @var string data key */
+		/**
+		 * @var string data key
+		 */
 		protected $data_key = 'data';
 
-		/** @var int start time of current process */
+		/**
+		 * @var int start time of current process
+		 */
 		protected $start_time = 0;
 
-		/** @var string cron hook identifier */
+		/**
+		 * @var string cron hook identifier
+		 */
 		protected $cron_hook_identifier;
 
-		/** @var string cron interval identifier */
+		/**
+		 * @var string cron interval identifier
+		 */
 		protected $cron_interval_identifier;
 
-		/** @var string debug message, used by the system status tool */
+		/**
+		 * @var string debug message, used by the system status tool
+		 */
 		protected $debug_message;
 
-		/** @var stdClass|object|null job being processed when PHP shuts down */
+		/**
+		 * @var stdClass|object|null job being processed when PHP shuts down
+		 */
 		protected $job_being_processed;
-
 
 		/**
 		 * Initiate new background job handler
@@ -65,7 +79,6 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 
 			$this->add_hooks();
 		}
-
 
 		/**
 		 * Adds the necessary action and filter hooks.
@@ -82,7 +95,6 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 			add_filter( 'gettext', [ $this, 'translate_success_message' ], 10, 3 );
 		}
 
-
 		/**
 		 * Dispatch
 		 *
@@ -95,7 +107,6 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 			// perform remote post
 			return parent::dispatch();
 		}
-
 
 		/**
 		 * Maybe processes job queue.
@@ -156,7 +167,6 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 			wp_die();
 		}
 
-
 		/**
 		 * Check whether job queue is empty or not
 		 *
@@ -188,7 +198,6 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 			return ( $count > 0 ) ? false : true;
 		}
 
-
 		/**
 		 * Check whether background process is running or not
 		 *
@@ -206,7 +215,6 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 
 			return (bool) get_transient( "{$this->identifier}_process_lock" );
 		}
-
 
 		/**
 		 * Lock process
@@ -233,7 +241,6 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 			set_transient( "{$this->identifier}_process_lock", microtime(), $lock_duration );
 		}
 
-
 		/**
 		 * Unlock process
 		 *
@@ -247,7 +254,6 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 
 			return $this;
 		}
-
 
 		/**
 		 * Check if memory limit is exceeded
@@ -275,7 +281,6 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 			return apply_filters( "{$this->identifier}_memory_exceeded", $return );
 		}
 
-
 		/**
 		 * Get memory limit
 		 *
@@ -297,7 +302,6 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 
 			return Woodev_Plugin_Compatibility::convert_hr_to_bytes( $memory_limit );
 		}
-
 
 		/**
 		 * Check whether request time limit has been exceeded or not
@@ -343,7 +347,6 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 			 */
 			return apply_filters( "{$this->identifier}_time_exceeded", $return );
 		}
-
 
 		/**
 		 * Create a background job
@@ -413,7 +416,6 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 
 			return $job;
 		}
-
 
 		/**
 		 * Get a job (by default the first in the queue)
@@ -492,7 +494,6 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 
 			return is_object( $filtered_job ) ? $filtered_job : $job;
 		}
-
 
 		/**
 		 * Gets jobs.
@@ -577,7 +578,6 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 			return $jobs;
 		}
 
-
 		/**
 		 * Handles jobs.
 		 *
@@ -615,7 +615,6 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 
 			wp_die();
 		}
-
 
 		/**
 		 * Process a job
@@ -708,7 +707,6 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 			return $job;
 		}
 
-
 		/**
 		 * Update job attrs
 		 *
@@ -739,7 +737,6 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 
 			return $job;
 		}
-
 
 		/**
 		 * Handles job completion.
@@ -772,7 +769,6 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 
 			return $job;
 		}
-
 
 		/**
 		 * Handle job failure
@@ -821,7 +817,6 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 			return $job;
 		}
 
-
 		/**
 		 * Delete a job
 		 *
@@ -850,7 +845,6 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 			do_action( "{$this->identifier}_job_deleted", $job );
 		}
 
-
 		/**
 		 * Handle job queue completion
 		 *
@@ -861,7 +855,6 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 			// unschedule the cron healthcheck
 			$this->clear_scheduled_event();
 		}
-
 
 		/**
 		 * Registers the single shutdown callback for the active process.
@@ -912,7 +905,6 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 			return $schedules;
 		}
 
-
 		/**
 		 * Handle cron healthcheck
 		 *
@@ -935,7 +927,6 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 			$this->dispatch();
 		}
 
-
 		/**
 		 * Schedule cron health check event
 		 */
@@ -949,7 +940,6 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 			}
 		}
 
-
 		/**
 		 * Clear scheduled health check event
 		 */
@@ -961,7 +951,6 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 				wp_unschedule_event( $timestamp, $this->cron_hook_identifier );
 			}
 		}
-
 
 		/**
 		 * Process an item from job data
@@ -976,7 +965,6 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 		 */
 		abstract protected function process_item( $item, $job );
 
-
 		/**
 		 * Gets the final PHP error, if the process is shutting down after one.
 		 *
@@ -989,7 +977,6 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 
 			return is_array( $error ) ? $error : null;
 		}
-
 
 		/**
 		 * Handles PHP shutdown, say after a fatal error.
@@ -1011,7 +998,6 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 			}
 		}
 
-
 		/**
 		 * Update a job option in options database.
 		 *
@@ -1029,7 +1015,6 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 			);
 		}
 
-
 		/**
 		 * Tests the background handler's connection.
 		 *
@@ -1046,7 +1031,6 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 			return $body && Woodev_Helper::str_exists( $body, '[TEST_LOOPBACK]' );
 		}
 
-
 		/**
 		 * Handles the connection test request.
 		 */
@@ -1054,7 +1038,6 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 			echo '[TEST_LOOPBACK]';
 			exit;
 		}
-
 
 		/**
 		 * Adds the WooCommerce debug tool.
@@ -1076,7 +1059,6 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 			return $tools;
 		}
 
-
 		/**
 		 * Runs the test connection debug tool.
 		 *
@@ -1094,7 +1076,6 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 
 			return $result;
 		}
-
 
 		/**
 		 * Translate the tool success message.
@@ -1116,7 +1097,6 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 
 			return $translated;
 		}
-
 
 		/**
 		 * Gets the job handler identifier.

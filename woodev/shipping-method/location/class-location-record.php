@@ -29,13 +29,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Record' 
 	 */
 	class Location_Record {
 
-		/** Region-level record (spec §3 "Level"). */
+		/**
+		 * Region-level record (spec §3 "Level").
+		 */
 		public const LEVEL_REGION = 'region';
 
-		/** Settlement-level record. */
+		/**
+		 * Settlement-level record.
+		 */
 		public const LEVEL_SETTLEMENT = 'settlement';
 
-		/** Address-level record. */
+		/**
+		 * Address-level record.
+		 */
 		public const LEVEL_ADDRESS = 'address';
 
 		/**

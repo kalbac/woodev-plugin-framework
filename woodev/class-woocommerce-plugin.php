@@ -21,7 +21,6 @@ if ( ! class_exists( Woocommerce_Plugin::class, false ) ) :
 	 * @since 2.0.0
 	 */
 	abstract class Woocommerce_Plugin extends \Woodev_Plugin {
-
 		/**
 		 * Plugin compatibility flags for WooCommerce runtime features.
 		 *

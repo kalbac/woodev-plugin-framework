@@ -15,7 +15,6 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 	 */
 
 	class Woodev_Order_Compatibility {
-
 		/**
 		 * Gets the formatted metadata for an order item.
 		 *
@@ -46,7 +45,6 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 			return $item_meta;
 		}
 
-
 		/**
 		 * Gets the orders screen admin URL according to HPOS availability.
 		 *
@@ -60,7 +58,6 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 
 			return add_query_arg( [ 'post_type' => 'shop_order' ], admin_url( 'edit.php' ) );
 		}
-
 
 		/**
 		 * Gets the admin Edit screen URL for an order according to HPOS compatibility.
@@ -81,7 +78,6 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 
 			return $order_url;
 		}
-
 
 		/**
 		 * Determines if the current admin screen is for the orders.
@@ -105,7 +101,6 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 					&& $_GET['page'] === 'wc-orders'
 					&& ! static::is_order_edit_screen();
 		}
-
 
 		/**
 		 * Determines if the current orders screen is for orders of a specific status.
@@ -132,7 +127,6 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 			return empty( $status ) || ( isset( $_GET['status'] ) && in_array( $_GET['status'], (array) $status, true ) );
 		}
 
-
 		/**
 		 * Determines if the current admin screen is for adding or editing an order.
 		 *
@@ -156,7 +150,6 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 					&& in_array( $_GET['action'], [ 'new', 'edit' ], true );
 		}
 
-
 		/**
 		 * Determines if the current admin page is for any kind of order screen.
 		 *
@@ -165,7 +158,6 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 		public static function is_order_screen(): bool {
 			return static::is_orders_screen() || static::is_order_edit_screen();
 		}
-
 
 		/**
 		 * Gets the ID of the order for the current edit screen.
@@ -181,7 +173,6 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 
 			return $post->ID ?? null;
 		}
-
 
 		/**
 		 * Gets the admin screen ID for orders.
@@ -205,7 +196,6 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 			return 'shop_order';
 		}
 
-
 		/**
 		 * Gets the orders table.
 		 *
@@ -215,7 +205,6 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 			global $wpdb;
 			return Woodev_Plugin_Compatibility::is_hpos_enabled() ? OrdersTableDataStore::get_orders_table_name() : $wpdb->posts;
 		}
-
 
 		/**
 		 * Gets the orders meta table.
@@ -227,7 +216,6 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 
 			return Woodev_Plugin_Compatibility::is_hpos_enabled() ? OrdersTableDataStore::get_meta_table_name() : $wpdb->postmeta;
 		}
-
 
 		/**
 		 * Determines whether a given identifier is a WooCommerce order or not, according to HPOS availability.
@@ -260,7 +248,6 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 			return $found_type && in_array( $found_type, (array) $order_type, true );
 		}
 
-
 		/**
 		 * Determines whether a given identifier is a WooCommerce refund or not, according to HPOS availability.
 		 *
@@ -270,7 +257,6 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 		public static function is_refund( $order_post_or_id ): bool {
 			return static::is_order( $order_post_or_id, 'shop_order_refund' );
 		}
-
 
 		/**
 		 * Gets the order meta according to HPOS availability.
@@ -301,7 +287,6 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 
 			return $value;
 		}
-
 
 		/**
 		 * Updates the order meta according to HPOS availability.
@@ -335,7 +320,6 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 				}
 			}
 		}
-
 
 		/**
 		 * Adds the order meta according to HPOS availability.
@@ -371,7 +355,6 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 			}
 		}
 
-
 		/**
 		 * Deletes the order meta according to HPOS availability.
 		 *
@@ -404,7 +387,6 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 				}
 			}
 		}
-
 
 		/**
 		 * Drops WooCommerce's cached copy of an order's meta after a raw post-meta write — only where
@@ -448,7 +430,6 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 			}
 		}
 
-
 		/**
 		 * Counts how many times each post-meta action has fired so far.
 		 *
@@ -462,7 +443,6 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 				'deleted_post_meta' => did_action( 'deleted_post_meta' ),
 			];
 		}
-
 
 		/**
 		 * Determines if an order meta exists according to HPOS availability.
@@ -493,7 +473,6 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 
 			return false;
 		}
-
 
 		/**
 		 * Gets the list of order post types.

@@ -8,11 +8,14 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 	 * The base settings handler.
 	 */
 	abstract class Woodev_Abstract_Settings {
-
-		/** @var string settings ID */
+		/**
+		 * @var string settings ID
+		 */
 		public $id;
 
-		/** @var Woodev_Setting[] registered settings */
+		/**
+		 * @var Woodev_Setting[] registered settings
+		 */
 		protected $settings = [];
 
 		/**

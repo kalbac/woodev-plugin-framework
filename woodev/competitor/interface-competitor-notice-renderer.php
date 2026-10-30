@@ -14,7 +14,6 @@ defined( 'ABSPATH' ) || exit;
  * @since 2.0.2
  */
 interface Competitor_Notice_Renderer {
-
 	/**
 	 * Creates or updates the notice for a rule whose competitor is active.
 	 *

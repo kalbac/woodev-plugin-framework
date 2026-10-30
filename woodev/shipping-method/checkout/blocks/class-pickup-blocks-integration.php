@@ -28,7 +28,6 @@ if ( ! class_exists( __NAMESPACE__ . '\Pickup_Blocks_Integration' ) ) :
 	 * @since 2.0.2
 	 */
 	class Pickup_Blocks_Integration implements IntegrationInterface {
-
 		/**
 		 * @since 2.0.2
 		 *

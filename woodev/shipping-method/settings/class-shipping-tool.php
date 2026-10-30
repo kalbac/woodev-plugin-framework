@@ -37,17 +37,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Tool' ) 
 	 * @since 2.0.2
 	 */
 	final class Shipping_Tool {
-
-		/** @var string tool id, unique within the registry. */
+		/**
+		 * @var string tool id, unique within the registry.
+		 */
 		private string $id;
 
-		/** @var string tool title. */
+		/**
+		 * @var string tool title.
+		 */
 		private string $name;
 
-		/** @var string what the tool does, shown under the title. */
+		/**
+		 * @var string what the tool does, shown under the title.
+		 */
 		private string $desc;
 
-		/** @var string the button's label. */
+		/**
+		 * @var string the button's label.
+		 */
 		private string $button;
 
 		/**
@@ -57,10 +64,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Tool' ) 
 		 */
 		private $callback;
 
-		/** @var bool whether the control renders but the action is refused. */
+		/**
+		 * @var bool whether the control renders but the action is refused.
+		 */
 		private bool $disabled;
 
-		/** @var string why the tool is disabled, or a live status line. */
+		/**
+		 * @var string why the tool is disabled, or a live status line.
+		 */
 		private string $status_text;
 
 		/**

@@ -30,7 +30,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_API_Response_Message_Helper' ) ) :
 	 * @since 2.0.2
 	 */
 	class Woodev_Payment_Gateway_API_Response_Message_Helper {
-
 		/**
 		 * Returns a message appropriate for a frontend user.  This should be used
 		 * to provide enough information to a user to allow them to resolve an

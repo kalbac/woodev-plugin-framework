@@ -97,7 +97,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 	 * @since 2.0.2
 	 */
 	class Pickup_Handler {
-
 		/**
 		 * Plugin identifier used to build the REST route and the JS config global name.
 		 *
@@ -2397,7 +2396,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				&& ( Selection_Scope::TYPE_ANY === $pair['type'] || $pair['type'] === $data['type']['code'] );
 		}
 
-
 		/**
 		 * Fetches a point via the {@see Point_Source}, memoized per instance by point id.
 		 *
@@ -3593,7 +3591,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			];
 		}
 
-
 		/**
 		 * Reports, via `_doing_it_wrong()`, a `Pickup_Handler` built WITHOUT `$plugin`
 		 * while the shop's Location Provider layer is otherwise active (issue #746).
@@ -4291,6 +4288,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *                remembered address does not belong to the posted id, or selection
 		 *                persistence is not wired for this handler).
 		 */
+
 		/**
 		 * The whole remembered-selection map for the CURRENTLY chosen shipping method, as
 		 * `locality => [ 'id' => …, 'address' => … ]` (issue #349).

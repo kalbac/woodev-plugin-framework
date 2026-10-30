@@ -8,19 +8,25 @@ if ( ! class_exists( 'Woodev_Plugin_Dependencies' ) ) :
 	 * Plugin dependencies handler.
 	 */
 	class Woodev_Plugin_Dependencies {
-
-		/** @var array required PHP extensions */
+		/**
+		 * @var array required PHP extensions
+		 */
 		protected $php_extensions = [];
 
-		/** @var array required PHP functions */
+		/**
+		 * @var array required PHP functions
+		 */
 		protected $php_functions = [];
 
-		/** @var array required PHP settings */
+		/**
+		 * @var array required PHP settings
+		 */
 		protected $php_settings = [];
 
-		/** @var Woodev_Plugin plugin instance */
+		/**
+		 * @var Woodev_Plugin plugin instance
+		 */
 		protected $plugin;
-
 
 		/**
 		 * Constructs the class.
@@ -47,7 +53,6 @@ if ( ! class_exists( 'Woodev_Plugin_Dependencies' ) ) :
 			// add the action & filter hooks
 			$this->add_hooks();
 		}
-
 
 		/**
 		 * Parses the dependency arguments and sets defaults.
@@ -83,14 +88,12 @@ if ( ! class_exists( 'Woodev_Plugin_Dependencies' ) ) :
 			return $dependencies;
 		}
 
-
 		/**
 		 * Adds the action & filter hooks.
 		 */
 		protected function add_hooks() {
 			add_action( 'admin_init', [ $this, 'add_admin_notices' ] );
 		}
-
 
 		/**
 		 * Adds the admin dependency notices.
@@ -103,7 +106,6 @@ if ( ! class_exists( 'Woodev_Plugin_Dependencies' ) ) :
 
 			$this->add_deprecated_notices();
 		}
-
 
 		/**
 		 * Adds notices for any missing PHP extensions.
@@ -130,7 +132,6 @@ if ( ! class_exists( 'Woodev_Plugin_Dependencies' ) ) :
 			}
 		}
 
-
 		/**
 		 * Adds notices for any missing PHP functions.
 		 */
@@ -155,7 +156,6 @@ if ( ! class_exists( 'Woodev_Plugin_Dependencies' ) ) :
 				$this->add_admin_notice( 'woodev-' . $this->get_plugin()->get_id_dasherized() . '-missing-functions', $message, 'error' );
 			}
 		}
-
 
 		/**
 		 * Adds notices for any incompatible PHP settings.
@@ -201,7 +201,6 @@ if ( ! class_exists( 'Woodev_Plugin_Dependencies' ) ) :
 			}
 		}
 
-
 		/**
 		 * Gets any deprecated warning notices.
 		 */
@@ -233,7 +232,6 @@ if ( ! class_exists( 'Woodev_Plugin_Dependencies' ) ) :
 				$this->add_admin_notice( 'woodev-deprecated-php-version', $message, 'error' );
 			}
 		}
-
 
 		/**
 		 * Adds an admin notice.
@@ -275,7 +273,6 @@ if ( ! class_exists( 'Woodev_Plugin_Dependencies' ) ) :
 			);
 		}
 
-
 		/**
 		 * Returns the active scripts optimization plugins.
 		 *
@@ -316,7 +313,6 @@ if ( ! class_exists( 'Woodev_Plugin_Dependencies' ) ) :
 			return $active_plugins;
 		}
 
-
 		/**
 		 * Returns true if any of the known scripts optimization plugins is active.
 		 *
@@ -326,9 +322,7 @@ if ( ! class_exists( 'Woodev_Plugin_Dependencies' ) ) :
 			return ! empty( $this->get_active_scripts_optimization_plugins() );
 		}
 
-
 		/** Getter methods ********************************************************/
-
 
 		/**
 		 * Gets any missing PHP extensions.
@@ -349,7 +343,6 @@ if ( ! class_exists( 'Woodev_Plugin_Dependencies' ) ) :
 			return $missing_extensions;
 		}
 
-
 		/**
 		 * Gets the required PHP extensions.
 		 *
@@ -358,7 +351,6 @@ if ( ! class_exists( 'Woodev_Plugin_Dependencies' ) ) :
 		public function get_php_extensions() {
 			return $this->php_extensions;
 		}
-
 
 		/**
 		 * Gets any missing PHP functions.
@@ -379,7 +371,6 @@ if ( ! class_exists( 'Woodev_Plugin_Dependencies' ) ) :
 			return $missing_functions;
 		}
 
-
 		/**
 		 * Gets the required PHP functions.
 		 *
@@ -388,7 +379,6 @@ if ( ! class_exists( 'Woodev_Plugin_Dependencies' ) ) :
 		public function get_php_functions() {
 			return $this->php_functions;
 		}
-
 
 		/**
 		 * Gets any incompatible PHP settings.
@@ -442,7 +432,6 @@ if ( ! class_exists( 'Woodev_Plugin_Dependencies' ) ) :
 			return $incompatible_settings;
 		}
 
-
 		/**
 		 * Converts a shorthand PHP size string to bytes.
 		 *
@@ -470,7 +459,6 @@ if ( ! class_exists( 'Woodev_Plugin_Dependencies' ) ) :
 			return (int) $value;
 		}
 
-
 		/**
 		 * Gets the required PHP settings.
 		 *
@@ -479,7 +467,6 @@ if ( ! class_exists( 'Woodev_Plugin_Dependencies' ) ) :
 		public function get_php_settings() {
 			return $this->php_settings;
 		}
-
 
 		/**
 		 * Gets the plugin instance.

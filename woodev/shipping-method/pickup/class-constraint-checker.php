@@ -29,7 +29,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Constraint_Checker'
 	 * @since 2.0.2
 	 */
 	class Constraint_Checker {
-
 		/**
 		 * Payment method ids treated as cash on delivery.
 		 *
@@ -164,7 +163,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Constraint_Checker'
 				// Concatenated rather than a single literal: one string long enough to name
 				// both the problem and the fix does not fit the 120-char line limit at this
 				// indent depth, and phpcs' Generic.Files.LineLength is a suppressed warning
-				// here (see phpcs.xml), not a hard gate — this file still targets 120 by hand.
+				// here (see phpcs.xml.dist), not a hard gate — this file still targets 120 by hand.
 				$verdict = [
 					'allowed' => false,
 					'reason'  => __(

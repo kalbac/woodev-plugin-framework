@@ -14,7 +14,9 @@ if ( ! class_exists( 'Woodev_Script_Handler' ) ) :
 
 		use \Woodev\Framework\Http\Rest_Rate_Limit_Trait;
 
-		/** @var string JS handler base class name */
+		/**
+		 * @var string JS handler base class name
+		 */
 		protected $js_handler_base_class_name = '';
 
 		/**
@@ -47,7 +49,6 @@ if ( ! class_exists( 'Woodev_Script_Handler' ) ) :
 			$this->add_hooks();
 		}
 
-
 		/**
 		 * Adds the action and filter hooks.
 		 */
@@ -62,7 +63,6 @@ if ( ! class_exists( 'Woodev_Script_Handler' ) ) :
 			);
 		}
 
-
 		/**
 		 * Returns the JS handler class name.
 		 *
@@ -71,7 +71,6 @@ if ( ! class_exists( 'Woodev_Script_Handler' ) ) :
 		protected function get_js_handler_class_name() {
 			return $this->js_handler_base_class_name;
 		}
-
 
 		/**
 		 * Returns the JS handler object name.
@@ -82,7 +81,6 @@ if ( ! class_exists( 'Woodev_Script_Handler' ) ) :
 			return 'wc_' . $this->get_id() . '_handler';
 		}
 
-
 		/**
 		 * Gets the JS event triggered after the JS handler class is loaded.
 		 *
@@ -91,7 +89,6 @@ if ( ! class_exists( 'Woodev_Script_Handler' ) ) :
 		protected function get_js_loaded_event() {
 			return sprintf( '%s_loaded', strtolower( $this->get_js_handler_class_name() ) );
 		}
-
 
 		/**
 		 * Gets the handler instantiation JS wrapped in a safe load technique.
@@ -133,7 +130,6 @@ if ( ! class_exists( 'Woodev_Script_Handler' ) ) :
 			return ob_get_clean();
 		}
 
-
 		/**
 		 * Gets the handler instantiation JS.
 		 *
@@ -166,7 +162,6 @@ if ( ! class_exists( 'Woodev_Script_Handler' ) ) :
 			return sprintf( 'window.%1$s = new %2$s( %3$s );', esc_js( $object_name ), esc_js( $handler_name ), wp_json_encode( $args ) );
 		}
 
-
 		/**
 		 * Gets the JS handler arguments.
 		 *
@@ -175,7 +170,6 @@ if ( ! class_exists( 'Woodev_Script_Handler' ) ) :
 		protected function get_js_handler_args() {
 			return [];
 		}
-
 
 		/**
 		 * Gets inline JavaScript code to issue an AJAX request to log a script error event.
@@ -216,7 +210,6 @@ if ( ! class_exists( 'Woodev_Script_Handler' ) ) :
 
 			return ob_get_clean();
 		}
-
 
 		/**
 		 * Logs an event via AJAX.
@@ -263,7 +256,6 @@ if ( ! class_exists( 'Woodev_Script_Handler' ) ) :
 				wp_send_json_error( $exception->getMessage() );
 			}
 		}
-
 
 		/**
 		 * Makes one posted field safe to put on a line of the plugin log (issue #402).

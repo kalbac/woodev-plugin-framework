@@ -40,19 +40,29 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Browser_Rest_Controller'
 
 		use Rest_Rate_Limit_Trait;
 
-		/** Route under the `woodev/v1` namespace. */
+		/**
+		 * Route under the `woodev/v1` namespace.
+		 */
 		const ROUTE = '/error-reporting/browser';
 
-		/** Largest request body accepted, in bytes. */
+		/**
+		 * Largest request body accepted, in bytes.
+		 */
 		const MAX_BODY = 8192;
 
-		/** Requests one client may send per minute. */
+		/**
+		 * Requests one client may send per minute.
+		 */
 		const RATE_LIMIT_MAX = 10;
 
-		/** Top-level keys of a report; anything else is refused. */
+		/**
+		 * Top-level keys of a report; anything else is refused.
+		 */
 		const KEYS = [ 'source', 'type', 'frames', 'pluginId', 'fieldId', 'code' ];
 
-		/** Keys of one frame; anything else is refused. */
+		/**
+		 * Keys of one frame; anything else is refused.
+		 */
 		const FRAME_KEYS = [ 'url', 'line', 'col' ];
 
 		/**

@@ -34,16 +34,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 	 */
 	class Order_Actions {
 
-		/** @var string */
+		/**
+		 * @var string
+		 */
 		public const EXPORT = 'export';
 
-		/** @since 2.0.2 Card #1253. @var string */
+		/**
+		 * @since 2.0.2 Card #1253.
+		 * @var string
+		 */
 		public const RETRY_EXPORT = 'woodev_retry_export';
 
-		/** @var string */
+		/**
+		 * @var string
+		 */
 		public const UPDATE = 'update';
 
-		/** @var string */
+		/**
+		 * @var string
+		 */
 		public const CANCEL = 'cancel';
 
 		/**

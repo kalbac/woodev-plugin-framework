@@ -25,7 +25,6 @@ if ( ! class_exists( 'Woodev_WC_Packer_Dispatcher' ) ) :
 	 * @since 1.4.1
 	 */
 	final class Woodev_WC_Packer_Dispatcher extends Woodev_Packer_Dispatcher {
-
 		/**
 		 * Converts WooCommerce cart items into Woodev_Packer_Input_Item instances.
 		 *

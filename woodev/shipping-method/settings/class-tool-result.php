@@ -29,11 +29,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Tool_Result' ) ) 
 	 * @since 2.0.2
 	 */
 	final class Tool_Result {
-
-		/** @var bool */
+		/**
+		 * @var bool
+		 */
 		private bool $success;
 
-		/** @var string */
+		/**
+		 * @var string
+		 */
 		private string $message;
 
 		/**

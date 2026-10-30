@@ -15,7 +15,6 @@ if ( ! class_exists( 'Woodev_Plugin_Install_Tab' ) ) :
 	 * @since 2.0.2
 	 */
 	class Woodev_Plugin_Install_Tab {
-
 		/**
 		 * Register WordPress hooks.
 		 *

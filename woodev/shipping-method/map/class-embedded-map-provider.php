@@ -74,7 +74,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Map\\Embedded_Map_Provider'
 	 */
 	final class Embedded_Map_Provider implements Map_Provider {
 
-		/** @var string provider identifier */
+		/**
+		 * @var string provider identifier
+		 */
 		private const PROVIDER_ID = 'embedded';
 
 		/**

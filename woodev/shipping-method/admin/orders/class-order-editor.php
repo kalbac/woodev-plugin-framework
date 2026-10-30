@@ -1101,7 +1101,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 			}
 		}
 
-
 		/**
 		 * Answers WooCommerce's `woocommerce_email_enabled_new_order` for an order an edit ARMED
 		 * ({@see self::apply_status()}): «disabled», once per entry, while the notification of

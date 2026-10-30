@@ -7,79 +7,129 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 	 */
 	class Woodev_Setting {
 
-		/** @var string the string setting type */
+		/**
+		 * @var string the string setting type
+		 */
 		const TYPE_STRING = 'string';
 
-		/** @var string the URL setting type */
+		/**
+		 * @var string the URL setting type
+		 */
 		const TYPE_URL = 'url';
 
-		/** @var string the email setting type */
+		/**
+		 * @var string the email setting type
+		 */
 		const TYPE_EMAIL = 'email';
 
-		/** @var string the integer setting type */
+		/**
+		 * @var string the integer setting type
+		 */
 		const TYPE_INTEGER = 'integer';
 
-		/** @var string the float setting type */
+		/**
+		 * @var string the float setting type
+		 */
 		const TYPE_FLOAT = 'float';
 
-		/** @var string the boolean setting type */
+		/**
+		 * @var string the boolean setting type
+		 */
 		const TYPE_BOOLEAN = 'boolean';
 
-		/** @var string unique setting ID */
+		/**
+		 * @var string unique setting ID
+		 */
 		protected $id;
 
-		/** @var string setting type */
+		/**
+		 * @var string setting type
+		 */
 		protected $type;
 
-		/** @var string setting name */
+		/**
+		 * @var string setting name
+		 */
 		protected $name;
 
-		/** @var string setting description */
+		/**
+		 * @var string setting description
+		 */
 		protected $description;
 
-		/** @var bool whether the setting holds an array of multiple values */
+		/**
+		 * @var bool whether the setting holds an array of multiple values
+		 */
 		protected $is_multi = false;
 
-		/** @var array valid setting options */
+		/**
+		 * @var array valid setting options
+		 */
 		protected $options = [];
 
-		/** @var bool whether options were declared as explicit value/label pairs */
+		/**
+		 * @var bool whether options were declared as explicit value/label pairs
+		 */
 		protected $options_are_pairs = false;
 
-		/** @var bool whether a malformed option declaration rejects all submitted values */
+		/**
+		 * @var bool whether a malformed option declaration rejects all submitted values
+		 */
 		private $options_invalid = false;
 
-		/** @var array ordered value/label pairs for UI payloads, or empty for map declarations */
+		/**
+		 * @var array ordered value/label pairs for UI payloads, or empty for map declarations
+		 */
 		protected $option_pairs = [];
 
-		/** @var mixed setting default value */
+		/**
+		 * @var mixed setting default value
+		 */
 		protected $default;
 
-		/** @var mixed setting current value */
+		/**
+		 * @var mixed setting current value
+		 */
 		protected $value;
 
-		/** @var Woodev_Control control object */
+		/**
+		 * @var Woodev_Control control object
+		 */
 		protected $control;
 
-		/** @var bool whether this setting holds a secret (masked in transport) */
+		/**
+		 * @var bool whether this setting holds a secret (masked in transport)
+		 */
 		protected $sensitive = false;
 
-		/** @var string|null name of a PHP constant that, when defined, supplies the value (kept out of the DB) */
+		/**
+		 * @var string|null name of a PHP constant that, when defined, supplies the value (kept out of the DB)
+		 */
 		protected $constant_name = null;
 
-		/** @var bool whether this setting must be filled (validated client + server) */
+		/**
+		 * @var bool whether this setting must be filled (validated client + server)
+		 */
 		protected $required = false;
 
-		/** @var callable|null plugin-supplied validator overriding the default format check */
+		/**
+		 * @var callable|null plugin-supplied validator overriding the default format check
+		 */
 		private $validate = null;
 
-		/** @var string custom error message for a failed validate callback */
+		/**
+		 * @var string custom error message for a failed validate callback
+		 */
 		private $validate_message = '';
 
-		/** @var array|callable show_if condition group, or a callback returning one. Default [] = always visible. */
+		/**
+		 * @var array|callable show_if condition group, or a callback returning one. Default [] = always visible.
+		 */
 		private $show_if = [];
 
-		/** @var array|callable conditional read-only rule; same shape as show_if. */
+		/**
+		 * @var array|callable conditional read-only rule; same shape as show_if.
+		 */
 		private $disabled_if = [];
 
 		/**
@@ -126,7 +176,6 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		public function is_is_multi() {
 			return $this->is_multi;
 		}
-
 
 		/**
 		 * Gets the setting options.
@@ -370,7 +419,6 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 		public function set_type( $type ) {
 			$this->type = $type;
 		}
-
 
 		/**
 		 * Sets the setting name.

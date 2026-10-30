@@ -16,7 +16,6 @@ if ( ! class_exists( 'Woodev_Installed_Plugins' ) ) :
 	 * @since 2.0.2
 	 */
 	final class Woodev_Installed_Plugins {
-
 		/**
 		 * Deduped positive-integer download ids from a list of plugin instances.
 		 *

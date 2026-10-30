@@ -65,13 +65,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Tools_Re
 		 */
 		public const FILTER_TOOLS = 'woodev_shipping_tools';
 
-		/** @var self|null */
+		/**
+		 * @var self|null
+		 */
 		private static $instance = null;
 
-		/** @var array<string, Shipping_Tool> */
+		/**
+		 * @var array<string, Shipping_Tool>
+		 */
 		private array $tools = [];
 
-		/** @var bool whether collect() has already run this request. */
+		/**
+		 * @var bool whether collect() has already run this request.
+		 */
 		private bool $collected = false;
 
 		/**

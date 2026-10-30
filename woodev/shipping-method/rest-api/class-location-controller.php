@@ -1598,7 +1598,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 			return $enriched;
 		}
 
-
 		/**
 		 * Handles a forget (erase) request — issue #356 part 2.
 		 *
@@ -1659,7 +1658,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 
 			return rest_ensure_response( $this->customer_chain_response() );
 		}
-
 
 		/**
 		 * Builds the `chain` + `implicit` response block {@see self::handle_select_request()}

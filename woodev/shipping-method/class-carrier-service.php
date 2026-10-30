@@ -39,28 +39,44 @@ if ( ! class_exists( __NAMESPACE__ . '\Carrier_Service' ) ) :
 	 */
 	final class Carrier_Service {
 
-		/** The parameter is the goods value of the package / order lines, in store currency. */
+		/**
+		 * The parameter is the goods value of the package / order lines, in store currency.
+		 */
 		public const SOURCE_DECLARED_VALUE = 'declared_value';
 
-		/** The carrier computes the parameter in {@see Shipping_Method::resolve_service_parameter()}. */
+		/**
+		 * The carrier computes the parameter in {@see Shipping_Method::resolve_service_parameter()}.
+		 */
 		public const SOURCE_CUSTOM = 'custom';
 
-		/** @var string */
+		/**
+		 * @var string
+		 */
 		private string $code;
 
-		/** @var string */
+		/**
+		 * @var string
+		 */
 		private string $name;
 
-		/** @var string */
+		/**
+		 * @var string
+		 */
 		private string $description;
 
-		/** @var string|null */
+		/**
+		 * @var string|null
+		 */
 		private ?string $parameter;
 
-		/** @var string */
+		/**
+		 * @var string
+		 */
 		private string $parameter_source;
 
-		/** @var bool */
+		/**
+		 * @var bool
+		 */
 		private bool $selectable;
 
 		/**

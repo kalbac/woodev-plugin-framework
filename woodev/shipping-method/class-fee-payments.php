@@ -48,28 +48,44 @@ if ( ! class_exists( __NAMESPACE__ . '\Fee_Payments' ) ) :
 	 */
 	final class Fee_Payments {
 
-		/** The instance setting that holds the gateway ids — the v1 CDEK plugin's key, so a migration carries it 1:1. */
+		/**
+		 * The instance setting that holds the gateway ids — the v1 CDEK plugin's key, so a migration carries it 1:1.
+		 */
 		public const OPTION_KEY = 'fee_payments';
 
-		/** The package key the chosen payment method travels under (the v1 CDEK plugin's name for it). */
+		/**
+		 * The package key the chosen payment method travels under (the v1 CDEK plugin's name for it).
+		 */
 		public const PACKAGE_KEY = 'chosen_payment_method';
 
-		/** The `cart/extensions` namespace of the block checkout's «payment method changed» command. */
+		/**
+		 * The `cart/extensions` namespace of the block checkout's «payment method changed» command.
+		 */
 		public const EXTENSION_NAMESPACE = 'woodev-shipping-fee-payments';
 
-		/** WooCommerce Blocks integration name; the data key WooCommerce publishes is `{name}_data`. */
+		/**
+		 * WooCommerce Blocks integration name; the data key WooCommerce publishes is `{name}_data`.
+		 */
 		public const INTEGRATION_NAME = 'woodev-shipping-fee-payments';
 
-		/** The registry: instance-settings options with a restricted fee or payment-dependent insurance. */
+		/**
+		 * The registry: instance-settings options with a restricted fee or payment-dependent insurance.
+		 */
 		public const REGISTRY_OPTION = 'woodev_shipping_fee_payment_instances';
 
-		/** @var bool whether this request already wired the hooks */
+		/**
+		 * @var bool whether this request already wired the hooks
+		 */
 		private static bool $registered = false;
 
-		/** @var bool whether a registered method class declared that its price always depends on the payment method */
+		/**
+		 * @var bool whether a registered method class declared that its price always depends on the payment method
+		 */
 		private static bool $price_depends_on_payment = false;
 
-		/** @var object|null a stand-in for `WC()`. Tests only: `WC` is never defined in the unit-test process. */
+		/**
+		 * @var object|null a stand-in for `WC()`. Tests only: `WC` is never defined in the unit-test process.
+		 */
 		private static ?object $runtime = null;
 
 		/**

@@ -17,6 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Exceptions\\Shipping_Exception' ) ) :
 
-	class Shipping_Exception extends \Woodev_Plugin_Exception {}
+	class Shipping_Exception extends \Woodev_Plugin_Exception {
+	}
 
 endif;

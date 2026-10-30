@@ -13,19 +13,25 @@ if ( ! class_exists( 'Woodev_Async_Request' ) ) :
 	 * Use Woodev_Async_Request::set_data() to set request data, instead of ::data().
 	 */
 	abstract class Woodev_Async_Request {
-
-		/** @var string request prefix */
+		/**
+		 * @var string request prefix
+		 */
 		protected $prefix = 'wp';
 
-		/** @var string request action name */
+		/**
+		 * @var string request action name
+		 */
 		protected $action = 'async_request';
 
-		/** @var string request identifier */
+		/**
+		 * @var string request identifier
+		 */
 		protected $identifier;
 
-		/** @var array request data */
+		/**
+		 * @var array request data
+		 */
 		protected $data = [];
-
 
 		/**
 		 * Initiate a new async request
@@ -36,7 +42,6 @@ if ( ! class_exists( 'Woodev_Async_Request' ) ) :
 			add_action( 'wp_ajax_' . $this->identifier, [ $this, 'maybe_handle' ] );
 			add_action( 'wp_ajax_nopriv_' . $this->identifier, [ $this, 'maybe_handle' ] );
 		}
-
 
 		/**
 		 * Set data used during the async request
@@ -51,7 +56,6 @@ if ( ! class_exists( 'Woodev_Async_Request' ) ) :
 			return $this;
 		}
 
-
 		/**
 		 * Dispatch the async request
 		 *
@@ -65,7 +69,6 @@ if ( ! class_exists( 'Woodev_Async_Request' ) ) :
 			// a POST, so the `set_data()` body reaches `$_POST` in handle(); a GET drops it
 			return wp_safe_remote_post( esc_url_raw( $url ), $args );
 		}
-
 
 		/**
 		 * Get query args
@@ -84,7 +87,6 @@ if ( ! class_exists( 'Woodev_Async_Request' ) ) :
 			];
 		}
 
-
 		/**
 		 * Get query URL
 		 *
@@ -98,7 +100,6 @@ if ( ! class_exists( 'Woodev_Async_Request' ) ) :
 
 			return admin_url( 'admin-ajax.php' );
 		}
-
 
 		/**
 		 * Get request args
@@ -125,7 +126,6 @@ if ( ! class_exists( 'Woodev_Async_Request' ) ) :
 			];
 		}
 
-
 		/**
 		 * Maybe handle
 		 *
@@ -138,7 +138,6 @@ if ( ! class_exists( 'Woodev_Async_Request' ) ) :
 
 			wp_die();
 		}
-
 
 		/**
 		 * Handle

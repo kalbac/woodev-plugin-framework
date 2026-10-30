@@ -11,7 +11,6 @@ if ( ! class_exists( 'Woodev_Notes_Helper' ) ) :
 
 		/** Conditional methods */
 
-
 		/**
 		 * Determines if any notes with the given name exist.
 		 *
@@ -22,9 +21,7 @@ if ( ! class_exists( 'Woodev_Notes_Helper' ) ) :
 			return ! empty( self::get_note_ids_with_name( $name ) );
 		}
 
-
 		/** Getter methods */
-
 
 		/**
 		 * Gets a note with the given name.
@@ -47,7 +44,6 @@ if ( ! class_exists( 'Woodev_Notes_Helper' ) ) :
 
 			return $note ?: null;
 		}
-
 
 		/**
 		 * Gets all notes with the given name.
@@ -72,7 +68,6 @@ if ( ! class_exists( 'Woodev_Notes_Helper' ) ) :
 			return $note_ids;
 		}
 
-
 		/**
 		 * Gets all note IDs from the given source.
 		 *
@@ -89,7 +84,6 @@ if ( ! class_exists( 'Woodev_Notes_Helper' ) ) :
 				)
 			);
 		}
-
 
 		/**
 		 * Deletes all notes from the given source.

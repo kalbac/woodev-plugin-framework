@@ -27,7 +27,6 @@ if ( ! interface_exists( 'Woodev_License_Command' ) ) :
 	 * @since 2.0.0
 	 */
 	interface Woodev_License_Command {
-
 		/**
 		 * Returns the command vocabulary name (matches envelope payload.command).
 		 *

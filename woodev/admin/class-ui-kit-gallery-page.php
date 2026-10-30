@@ -22,10 +22,14 @@ defined( 'ABSPATH' ) || exit;
  */
 class Ui_Kit_Gallery_Page {
 
-	/** @var string admin page slug. */
+	/**
+	 * @var string admin page slug.
+	 */
 	const PAGE_SLUG = 'woodev-ui-kit';
 
-	/** @var \Woodev_Plugin|null plugin used to source framework asset paths. */
+	/**
+	 * @var \Woodev_Plugin|null plugin used to source framework asset paths.
+	 */
 	private $plugin;
 
 	/**

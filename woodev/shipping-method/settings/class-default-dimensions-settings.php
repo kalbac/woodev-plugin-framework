@@ -38,25 +38,39 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Default_Dimension
 	 */
 	class Default_Dimensions_Settings extends \Woodev_Abstract_Settings {
 
-		/** @var string the section id on the «Доставка» tab */
+		/**
+		 * @var string the section id on the «Доставка» tab
+		 */
 		public const SECTION_ID = 'default_dimensions';
 
-		/** @var string setting id: length, in the store's dimension unit */
+		/**
+		 * @var string setting id: length, in the store's dimension unit
+		 */
 		public const SETTING_LENGTH = 'default_length';
 
-		/** @var string setting id: width, in the store's dimension unit */
+		/**
+		 * @var string setting id: width, in the store's dimension unit
+		 */
 		public const SETTING_WIDTH = 'default_width';
 
-		/** @var string setting id: height, in the store's dimension unit */
+		/**
+		 * @var string setting id: height, in the store's dimension unit
+		 */
 		public const SETTING_HEIGHT = 'default_height';
 
-		/** @var string setting id: weight, in the store's weight unit */
+		/**
+		 * @var string setting id: weight, in the store's weight unit
+		 */
 		public const SETTING_WEIGHT = 'default_weight';
 
-		/** @var float the built-in default weight, in grams (v1 CDEK / v1 Yandex used the same) */
+		/**
+		 * @var float the built-in default weight, in grams (v1 CDEK / v1 Yandex used the same)
+		 */
 		public const BUILTIN_WEIGHT_G = 100.0;
 
-		/** @var float the built-in default length, width and height, in centimetres */
+		/**
+		 * @var float the built-in default length, width and height, in centimetres
+		 */
 		public const BUILTIN_SIZE_CM = 10.0;
 
 		/**

@@ -17,23 +17,34 @@ defined( 'ABSPATH' ) || exit;
  * @since 2.0.2
  */
 final class Settings_Section {
-
-	/** @var string section id. */
+	/**
+	 * @var string section id.
+	 */
 	private string $id;
 
-	/** @var string section label (sub-heading). */
+	/**
+	 * @var string section label (sub-heading).
+	 */
 	private string $label;
 
-	/** @var string[] referenced Woodev_Setting ids. */
+	/**
+	 * @var string[] referenced Woodev_Setting ids.
+	 */
 	private array $setting_ids;
 
-	/** @var string optional section description (shown under the sub-tab). */
+	/**
+	 * @var string optional section description (shown under the sub-tab).
+	 */
 	private string $description;
 
-	/** @var bool whether this section is a self-contained connection block. */
+	/**
+	 * @var bool whether this section is a self-contained connection block.
+	 */
 	private bool $is_connection = false;
 
-	/** @var string label for the block's primary action button (e.g. «Проверить»/«Подключить»). */
+	/**
+	 * @var string label for the block's primary action button (e.g. «Проверить»/«Подключить»).
+	 */
 	private string $action_label = '';
 
 	/**

@@ -55,7 +55,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Se
 	 * @since 2.0.2
 	 */
 	class Checkout_Field_Settings extends \Woodev_Abstract_Settings {
-
 		/**
 		 * Environment facts the availability rules gate on, resolved once at
 		 * construction.
@@ -405,7 +404,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Se
 				);
 			}
 		}
-
 
 		/**
 		 * Builds the `phone_field_format` select's options: «Не использовать»,

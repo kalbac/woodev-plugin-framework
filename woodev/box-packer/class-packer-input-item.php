@@ -11,20 +11,39 @@ if ( ! class_exists( 'Woodev_Packer_Input_Item' ) ) :
 	 * @since 1.4.1
 	 */
 	final class Woodev_Packer_Input_Item implements Woodev_Packer_Packable_Item {
-
-		/** @var float */
+		/**
+		 * @var float
+		 */
 		private $length;
-		/** @var float */
+
+		/**
+		 * @var float
+		 */
 		private $width;
-		/** @var float */
+
+		/**
+		 * @var float
+		 */
 		private $height;
-		/** @var float */
+
+		/**
+		 * @var float
+		 */
 		private $weight;
-		/** @var int */
+
+		/**
+		 * @var int
+		 */
 		private $quantity;
-		/** @var string */
+
+		/**
+		 * @var string
+		 */
 		private $key;
-		/** @var int */
+
+		/**
+		 * @var int
+		 */
 		private $product_id;
 
 		/**

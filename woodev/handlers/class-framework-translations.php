@@ -18,7 +18,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Handlers\\Framework_Translations' ) )
 	 */
 	final class Framework_Translations {
 
-		/** @var string Framework text domain. */
+		/**
+		 * @var string Framework text domain.
+		 */
 		private const DOMAIN = 'woodev-plugin-framework';
 
 		/**

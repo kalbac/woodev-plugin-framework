@@ -10,7 +10,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_REST_API' ) ) :
 	 * @see Woodev_REST_API
 	 */
 	class Woodev_Payment_Gateway_REST_API extends Woodev_REST_API {
-
 		/**
 		 * Gets the data to add to the WooCommerce REST API System Status response.
 		 *

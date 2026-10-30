@@ -46,8 +46,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Shipping_Order_Handl
 	 * @since 1.5.0
 	 */
 	class Shipping_Order_Handler {
-
-		/** @var array<string, string> plugin-supplied map: logical field name => real installed-site order-meta key */
+		/**
+		 * @var array<string, string> plugin-supplied map: logical field name => real installed-site order-meta key
+		 */
 		private array $key_map;
 
 		/**

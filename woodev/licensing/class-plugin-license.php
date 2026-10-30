@@ -13,7 +13,6 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 	 * sub-classable.
 	 */
 	class Woodev_Plugins_License {
-
 		/**
 		 * The plugin URL.
 		 *

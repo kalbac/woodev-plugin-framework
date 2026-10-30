@@ -34,13 +34,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Export_Queue
 	 */
 	class Export_Queue_Notice {
 
-		/** @var string the heartbeat payload key: the client sends `true`, the server answers `{count, text}` */
+		/**
+		 * @var string the heartbeat payload key: the client sends `true`, the server answers `{count, text}`
+		 */
 		public const HEARTBEAT_KEY = 'woodev-exports-in-progress';
 
-		/** @var Orders_Registry */
+		/**
+		 * @var Orders_Registry
+		 */
 		private Orders_Registry $registry;
 
-		/** @var bool whether the hooks were added */
+		/**
+		 * @var bool whether the hooks were added
+		 */
 		private bool $hooked = false;
 
 		/**

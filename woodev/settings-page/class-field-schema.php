@@ -19,7 +19,6 @@ defined( 'ABSPATH' ) || exit;
  * @since 2.0.2
  */
 final class Field_Schema {
-
 	/**
 	 * Resolves the field schema for the given handler.
 	 *

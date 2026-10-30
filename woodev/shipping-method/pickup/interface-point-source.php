@@ -23,10 +23,14 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Point_Source' )
 	 */
 	interface Point_Source {
 
-		/** Load every point for a locality at once (Yandex, CDEK). */
+		/**
+		 * Load every point for a locality at once (Yandex, CDEK).
+		 */
 		public const STRATEGY_BULK = 'bulk';
 
-		/** Load points for the visible bounding box, details on demand (OZON, Pochta). */
+		/**
+		 * Load points for the visible bounding box, details on demand (OZON, Pochta).
+		 */
 		public const STRATEGY_VIEWPORT = 'viewport';
 
 		/**

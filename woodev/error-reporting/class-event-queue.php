@@ -27,13 +27,19 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Event_Queue' ) ) :
 	 */
 	final class Event_Queue {
 
-		/** Option holding the pending events. Never autoloaded. */
+		/**
+		 * Option holding the pending events. Never autoloaded.
+		 */
 		const OPTION = 'woodev_error_reporting_queue';
 
-		/** Most events kept; beyond it a PHP event drops the oldest (a browser event is refused instead). */
+		/**
+		 * Most events kept; beyond it a PHP event drops the oldest (a browser event is refused instead).
+		 */
 		const LIMIT = 20;
 
-		/** Most BROWSER events waiting at once — the rest of {@see self::LIMIT} is reserved for PHP events. */
+		/**
+		 * Most BROWSER events waiting at once — the rest of {@see self::LIMIT} is reserved for PHP events.
+		 */
 		const BROWSER_LIMIT = 10;
 
 		/**

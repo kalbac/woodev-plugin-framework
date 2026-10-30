@@ -14,7 +14,6 @@ if ( ! class_exists( 'Woodev_Packer_Separately' ) ) :
 	 * @since 1.4.1
 	 */
 	class Woodev_Packer_Separately extends Woodev_Packer {
-
 		/**
 		 * Label template for each package box.
 		 *

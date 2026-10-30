@@ -14,10 +14,14 @@ defined( 'ABSPATH' ) || exit;
  * @since 2.0.2
  */
 class Packaging_Settings extends \Woodev_Abstract_Settings {
-
-	/** @var array<string,array> validated carrier presets, keyed by stable id */
+	/**
+	 * @var array<string,array> validated carrier presets, keyed by stable id
+	 */
 	private array $presets;
-	/** @var string legacy integration namespace */
+
+	/**
+	 * @var string legacy integration namespace
+	 */
 	private string $plugin_id;
 
 	/**

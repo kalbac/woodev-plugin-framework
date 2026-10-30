@@ -1,14 +1,24 @@
 <?php
 
 abstract class Woodev_Packer implements Woodev_Packer_Interface {
-
-	/** @var Woodev_Box_Packer_Box[] */
+	/**
+	 * @var Woodev_Box_Packer_Box[]
+	 */
 	protected $boxes;
-	/** @var Woodev_Box_Packer_Item[] */
+
+	/**
+	 * @var Woodev_Box_Packer_Item[]
+	 */
 	protected $items;
-	/** @var Woodev_Box_Packer_Item[] */
+
+	/**
+	 * @var Woodev_Box_Packer_Item[]
+	 */
 	protected $items_cannot_pack;
-	/** @var Woodev_Box_Packer_Packed_Box[] */
+
+	/**
+	 * @var Woodev_Box_Packer_Packed_Box[]
+	 */
 	protected $packages;
 
 	/**

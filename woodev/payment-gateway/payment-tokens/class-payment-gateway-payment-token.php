@@ -11,9 +11,9 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 	 * Represents a credit card payment token.
 	 */
 	class Woodev_Payment_Gateway_Payment_Token {
-
-
-		/** @var string payment gateway token ID */
+		/**
+		 * @var string payment gateway token ID
+		 */
 		protected $id;
 
 		/**
@@ -25,7 +25,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 		 * @var string payment type image url
 		 */
 		protected $img_url;
-
 
 		/**
 		 * Initialize a payment token with associated $data which is expected to
@@ -66,7 +65,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 			$this->data = $data;
 		}
 
-
 		/**
 		/**
 		 * Returns the payment token string
@@ -77,7 +75,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 			return $this->id;
 		}
 
-
 		/**
 		 * Returns true if this payment token is default
 		 *
@@ -87,7 +84,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 		public function is_default() {
 			return isset( $this->data['default'] ) && $this->data['default'];
 		}
-
 
 		/**
 		 * Makes this payment token the default or a non-default one
@@ -100,7 +96,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 			$this->data['default'] = $default;
 		}
 
-
 		/**
 		 * Returns true if this payment token represents a credit card
 		 *
@@ -110,7 +105,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 		public function is_credit_card() {
 			return 'credit_card' == $this->data['type'];
 		}
-
 
 		/**
 		 * Returns true if this payment token represents the removed eCheck payment type.
@@ -122,7 +116,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 			return false;
 		}
 
-
 		/**
 		 * Returns the payment type.
 		 *
@@ -132,7 +125,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 		public function get_type() {
 			return $this->data['type'];
 		}
-
 
 		/**
 		 * Returns the card type ie visa, mc, amex, disc, diners, mir, etc
@@ -146,7 +138,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 			return isset( $this->data['card_type'] ) ? $this->data['card_type'] : null;
 		}
 
-
 		/**
 		 * Sets the credit card type
 		 *
@@ -159,7 +150,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 		public function set_card_type( $card_type ) {
 			$this->data['card_type'] = $card_type;
 		}
-
 
 		/**
 		 * Returns the credit card type from the given account number
@@ -180,7 +170,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 			return Woodev_Payment_Gateway_Helper::card_type_from_account_number( $account_number );
 		}
 
-
 		/**
 		 * Returns the full payment type, ie Visa, MasterCard, American Express, Discover, Diners, MIR, etc.
 		 *
@@ -198,7 +187,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 			return Woodev_Payment_Gateway_Helper::payment_type_to_name( $type );
 		}
 
-
 		/**
 		 * Returns the last four digits of the credit card account number.
 		 *
@@ -209,7 +197,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 			return isset( $this->data['last_four'] ) ? $this->data['last_four'] : null;
 		}
 
-
 		/**
 		 * Set the account last four
 		 *
@@ -218,7 +205,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 		public function set_last_four( $last_four ) {
 			$this->data['last_four'] = $last_four;
 		}
-
 
 		/**
 		 * Returns the expiration month of the credit card.  This should only be called for credit card tokens
@@ -230,7 +216,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 			return isset( $this->data['exp_month'] ) ? $this->data['exp_month'] : null;
 		}
 
-
 		/**
 		 * Set the expiration month
 		 *
@@ -239,7 +224,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 		public function set_exp_month( $month ) {
 			$this->data['exp_month'] = $month;
 		}
-
 
 		/**
 		 * Returns the expiration year of the credit card.  This should only be called for credit card tokens
@@ -250,7 +234,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 			return isset( $this->data['exp_year'] ) ? $this->data['exp_year'] : null;
 		}
 
-
 		/**
 		 * Set the expiration year
 		 *
@@ -259,7 +242,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 		public function set_exp_year( $year ) {
 			$this->data['exp_year'] = $year;
 		}
-
 
 		/**
 		 * Returns the expiration date in the format MM/YY, suitable for use in order notes or other customer-facing areas
@@ -271,7 +253,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 
 			return $this->get_exp_month() . '/' . substr( $this->get_exp_year(), - 2 );
 		}
-
 
 		/**
 		 * Set the full image URL based on the token payment type.  Note that this
@@ -287,7 +268,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 			$this->img_url = $url;
 		}
 
-
 		/**
 		 * Get the full image URL based on teh token payment type.
 		 *
@@ -299,7 +279,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 			return $this->img_url;
 		}
 
-
 		/**
 		 * Gets the payment method nickname.
 		 *
@@ -308,7 +287,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 		public function get_nickname() {
 			return isset( $this->data['nickname'] ) ? $this->data['nickname'] : '';
 		}
-
 
 		/**
 		 * Sets the payment method nickname.
@@ -319,7 +297,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 			$this->data['nickname'] = $value;
 		}
 
-
 		/**
 		 * Gets the billing address hash.
 		 *
@@ -329,7 +306,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 			return isset( $this->data['billing_hash'] ) ? $this->data['billing_hash'] : '';
 		}
 
-
 		/**
 		 * Sets the billing hash.
 		 *
@@ -338,7 +314,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Token' ) ) :
 		public function set_billing_hash( $value ) {
 			$this->data['billing_hash'] = $value;
 		}
-
 
 		/**
 		 * Returns a representation of this token suitable for persisting to a datastore

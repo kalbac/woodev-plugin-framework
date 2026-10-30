@@ -37,10 +37,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 	 */
 	class Orders_Registry {
 
-		/** @var string admin page slug. */
+		/**
+		 * @var string admin page slug.
+		 */
 		const PAGE_SLUG = 'woodev-shipping-orders';
 
-		/** Framework-owned heartbeat payload key for the order wizard edit lock. */
+		/**
+		 * Framework-owned heartbeat payload key for the order wizard edit lock.
+		 */
 		private const EDIT_LOCK_HEARTBEAT_KEY = 'woodev-refresh-order-lock';
 
 		/**
@@ -78,10 +82,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 */
 		const NEW_COUNTS_TTL = 60;
 
-		/** @var self|null singleton. */
+		/**
+		 * @var self|null singleton.
+		 */
 		private static $instance = null;
 
-		/** @var array<string, Orders_Provider> providers keyed by id. */
+		/**
+		 * @var array<string, Orders_Provider> providers keyed by id.
+		 */
 		private $providers = [];
 
 		/**
@@ -106,7 +114,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 */
 		private $tracking_handlers = [];
 
-		/** @var array<string, \Woodev\Framework\Shipping\Order\Document_Source> document sources keyed by provider id. */
+		/**
+		 * @var array<string, \Woodev\Framework\Shipping\Order\Document_Source> document sources keyed by provider id.
+		 */
 		private $document_sources = [];
 
 		/**
@@ -139,7 +149,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 */
 		private $export_notice;
 
-		/** @var bool whether the shared hooks were added. */
+		/**
+		 * @var bool whether the shared hooks were added.
+		 */
 		private $hooked = false;
 
 		/**
@@ -1967,7 +1979,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 
 			return $entries;
 		}
-
 
 		/**
 		 * The order wizard's reference data (#969): the shop's countries, their regions keyed by

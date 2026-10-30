@@ -17,7 +17,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Carrier_Order_Line' 
 	 * Immutable product line prepared for a carrier order.
 	 */
 	final class Carrier_Order_Line {
-
 		private string $name;
 
 		private string $sku;
@@ -28,7 +27,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Carrier_Order_Line' 
 
 		private int $total_minor;
 
-		/** @var array<string,mixed> */
+		/**
+		 * @var array<string,mixed>
+		 */
 		private array $tax_info;
 
 		/**

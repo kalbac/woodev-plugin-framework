@@ -21,13 +21,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 
 	abstract class Shipping_Method extends \WC_Shipping_Method {
 
-		/** Courier delivery type */
+		/**
+		 * Courier delivery type
+		 */
 		const TYPE_COURIER = 'courier';
 
-		/** Pickup point delivery type */
+		/**
+		 * Pickup point delivery type
+		 */
 		const TYPE_PICKUP = 'pickup';
 
-		/** Postal delivery type */
+		/**
+		 * Postal delivery type
+		 */
 		const TYPE_POSTAL = 'postal';
 
 		/**
@@ -41,30 +47,44 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 
 		const SHIPPING_CLASS_ANY = 'any';
 
-		/** Shipping zones feature */
+		/**
+		 * Shipping zones feature
+		 */
 		const FEATURE_SHIPPING_ZONES = 'shipping-zones';
 
-		/** Instance settings feature */
+		/**
+		 * Instance settings feature
+		 */
 		const FEATURE_INSTANCE_SETTINGS = 'instance-settings';
 
 		const FEATURE_SHIPPING_CLASSES = 'shipping-classes';
 
-		/** Box-packing feature: lets the method combine package contents into parcels. */
+		/**
+		 * Box-packing feature: lets the method combine package contents into parcels.
+		 */
 		const FEATURE_BOX_PACKING = 'box-packing';
 
-		/** COD (cash-on-delivery) payment support feature. */
+		/**
+		 * COD (cash-on-delivery) payment support feature.
+		 */
 		const FEATURE_COD = 'cod';
 
-		/** Insurance feature: adds the instance mode and the shared quote/order resolver. */
+		/**
+		 * Insurance feature: adds the instance mode and the shared quote/order resolver.
+		 */
 		const FEATURE_INSURANCE = 'insurance';
 
-		/** Yandex's installed-site setting key and values, preserved for migration. */
+		/**
+		 * Yandex's installed-site setting key and values, preserved for migration.
+		 */
 		const OPTION_INSURANCE = 'include_insurance';
 		const INSURANCE_NONE = 'none';
 		const INSURANCE_ALWAYS = 'always';
 		const INSURANCE_DELIVERY_PAYMENT = 'delivery_payment';
 
-		/** Declared-value support feature. */
+		/**
+		 * Declared-value support feature.
+		 */
 		const FEATURE_DECLARED_VALUE = 'declared-value';
 
 		/**
@@ -91,10 +111,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 */
 		const FEATURE_COST_LIMITS = 'cost-limits';
 
-		/** Instance setting holding the lowest cost the customer may pay — the Yandex plugin's key, so a migration carries it 1:1. */
+		/**
+		 * Instance setting holding the lowest cost the customer may pay — the Yandex plugin's key, so a migration carries it 1:1.
+		 */
 		const OPTION_MIN_COST = 'min_cost';
 
-		/** Instance setting holding the highest cost the customer may pay — the Yandex plugin's key. */
+		/**
+		 * Instance setting holding the highest cost the customer may pay — the Yandex plugin's key.
+		 */
 		const OPTION_MAX_COST = 'max_cost';
 
 		/**
@@ -177,7 +201,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 */
 		private bool $pending_form_rebuild = false;
 
-		/** @var array<string, array{package_hash: string, reason_code: string, message: string, context?: array}> Hidden method reasons for this request. */
+		/**
+		 * @var array<string, array{package_hash: string, reason_code: string, message: string, context?: array}> Hidden method reasons for this request.
+		 */
 		private static array $hidden_reasons = [];
 
 		/**
@@ -189,13 +215,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 */
 		private static array $hidden_reason_plugins = [];
 
-		/** WooCommerce session key for reasons belonging to session-cached package rates. */
+		/**
+		 * WooCommerce session key for reasons belonging to session-cached package rates.
+		 */
 		private const HIDDEN_REASONS_SESSION_KEY = 'woodev_shipping_hidden_reasons';
 
-		/** @var string|null Package/method key while rate_package() is running. */
+		/**
+		 * @var string|null Package/method key while rate_package() is running.
+		 */
 		private ?string $active_hidden_reason_key = null;
 
-		/** @var string|null Package/method key for the current calculate_shipping() call. */
+		/**
+		 * @var string|null Package/method key for the current calculate_shipping() call.
+		 */
 		private ?string $calculation_hidden_reason_key = null;
 
 		/**
@@ -609,7 +641,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 
 			return '';
 		}
-
 
 		/**
 		 * Get the default shipping method description, which is configurable
@@ -1147,7 +1178,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			call_user_func( [ $session, 'set' ], self::HIDDEN_REASONS_SESSION_KEY, $reasons );
 		}
 
-		/** @return array<string, array{package_hash: string, reason_code: string, message: string, title?: string, context?: array}> */
+		/**
+		 * @return array<string, array{package_hash: string, reason_code: string, message: string, title?: string, context?: array}>
+		 */
 		private static function get_persisted_hidden_reasons(): array {
 			$session = self::hidden_reason_session();
 			if ( null === $session ) {
@@ -1161,7 +1194,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			return is_array( $reasons ) ? $reasons : [];
 		}
 
-		/** @return object|null */
+		/**
+		 * @return object|null
+		 */
 		private static function hidden_reason_session(): ?object {
 			$woocommerce = $GLOBALS['woocommerce'] ?? null;
 			return is_object( $woocommerce ) && isset( $woocommerce->session ) && is_object( $woocommerce->session )
@@ -1336,7 +1371,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 *
 		 * @since 1.4.0
 		 */
-		protected function before_calculate( array $package ): void {}
+		protected function before_calculate( array $package ): void {
+		}
 
 		/**
 		 * Hook called after calculate_rate().
@@ -1346,7 +1382,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 *
 		 * @since 1.4.0
 		 */
-		protected function after_calculate( array $package, ?Shipping_Rate $rate ): void {}
+		protected function after_calculate( array $package, ?Shipping_Rate $rate ): void {
+		}
 
 		/**
 		 * Packs the package contents into parcels using the configured algorithm.
@@ -2363,7 +2400,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 
 			return is_string( $on_package ) && '' !== $on_package ? $on_package : $this->chosen_payment_method();
 		}
-
 
 		/**
 		 * Determines whether this method has declared support for cash-on-delivery (COD) payment.

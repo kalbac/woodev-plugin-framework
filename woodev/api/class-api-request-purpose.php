@@ -30,22 +30,34 @@ if ( ! class_exists( 'Woodev_API_Request_Purpose' ) ) :
 		 */
 		public const RATES = 'rates';
 
-		/** @var string a reference-data load outside a checkout request (pickup points, directories) */
+		/**
+		 * @var string a reference-data load outside a checkout request (pickup points, directories)
+		 */
 		public const REFERENCE = 'reference';
 
-		/** @var string a shipment export, cancel or update */
+		/**
+		 * @var string a shipment export, cancel or update
+		 */
 		public const EXPORT = 'export';
 
-		/** @var string anything the framework did not classify — every non-shipping API */
+		/**
+		 * @var string anything the framework did not classify — every non-shipping API
+		 */
 		public const DEFAULT_PURPOSE = 'default';
 
-		/** @var int the historical timeout of every API call, in seconds */
+		/**
+		 * @var int the historical timeout of every API call, in seconds
+		 */
 		public const DEFAULT_TIMEOUT = 60;
 
-		/** @var string[] the purposes of the scopes currently running, outermost first */
+		/**
+		 * @var string[] the purposes of the scopes currently running, outermost first
+		 */
 		private static array $scopes = [];
 
-		/** @var int how many {@see self::run_at_confirmation()} scopes are running now */
+		/**
+		 * @var int how many {@see self::run_at_confirmation()} scopes are running now
+		 */
 		private static int $confirmations = 0;
 
 		/**

@@ -4,6 +4,7 @@
 > [../GOTCHAS.md](../GOTCHAS.md). Format and the write protocol: `DOCS-SCHEMA.md` → "GOTCHAS.md Format".
 
 
+- [tooling/phpcs] **The WordPress PHPCS standard has no layout sniffs: `foo(); }`, missing blank lines between members and one-line docblocks all pass `composer phpcs` — the ruleset adds `ScopeClosingBrace`, `FunctionSpacing` and `MemberVarSpacing` explicitly.** → [wordpress-phpcs-has-no-layout-sniffs](../gotchas/wordpress-phpcs-has-no-layout-sniffs.md) (s205)
 - [tooling/codex] **An Orca Codex worker may leave its work uncommitted because the injected preamble blocks external posting — explicitly authorize commit/push or have the coordinator own the branch.** → [codex-worker-may-not-commit-without-explicit-authorization](../gotchas/codex-worker-may-not-commit-without-explicit-authorization.md) (s178)
 - [tooling/local-ci] **`npx run-local-ci --all …` omits the required `run` subcommand, prints usage and exits 1.** → [run-local-ci-requires-run-subcommand](../gotchas/run-local-ci-requires-run-subcommand.md) (s178)
 - [tooling/orca] **`watch-workers.py` can retrigger on an old `API Error` still in terminal scrollback; exclude the handle or match only new output.** → [watch-workers-retriggers-on-stale-api-error-buffer](../gotchas/watch-workers-retriggers-on-stale-api-error-buffer.md) (s178)

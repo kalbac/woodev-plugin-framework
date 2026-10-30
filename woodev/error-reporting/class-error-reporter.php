@@ -33,40 +33,64 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Error_Reporter' ) ) :
 	 */
 	final class Error_Reporter {
 
-		/** Fatal error types the shutdown handler reports. Warnings and notices are never touched. */
+		/**
+		 * Fatal error types the shutdown handler reports. Warnings and notices are never touched.
+		 */
 		const FATAL_TYPES = E_ERROR | E_PARSE | E_CORE_ERROR | E_COMPILE_ERROR | E_RECOVERABLE_ERROR;
 
-		/** Not secret, only stable: it makes the site hash differ from a bare hash of the address. */
+		/**
+		 * Not secret, only stable: it makes the site hash differ from a bare hash of the address.
+		 */
 		const SITE_SALT = 'woodev-error-reporter:v1:';
 
-		/** Most events one request may queue. */
+		/**
+		 * Most events one request may queue.
+		 */
 		const MAX_PER_REQUEST = 5;
 
-		/** Bytes held back at install so the shutdown handler still has room after an out-of-memory fatal. */
+		/**
+		 * Bytes held back at install so the shutdown handler still has room after an out-of-memory fatal.
+		 */
 		const MEMORY_RESERVE = 262144;
 
-		/** @var string|null Emergency memory buffer: freed first thing in the shutdown handler. */
+		/**
+		 * @var string|null Emergency memory buffer: freed first thing in the shutdown handler.
+		 */
 		private static ?string $reserve = null;
 
-		/** @var bool Install-once guard. */
+		/**
+		 * @var bool Install-once guard.
+		 */
 		private static bool $installed = false;
 
-		/** @var bool Re-entrancy guard for report(). */
+		/**
+		 * @var bool Re-entrancy guard for report().
+		 */
 		private static bool $busy = false;
 
-		/** @var bool Re-entrancy guard for the exception handler. */
+		/**
+		 * @var bool Re-entrancy guard for the exception handler.
+		 */
 		private static bool $in_handler = false;
 
-		/** @var array<string,bool> Throw sites (`file:line`) of exceptions our handler already saw. */
+		/**
+		 * @var array<string,bool> Throw sites (`file:line`) of exceptions our handler already saw.
+		 */
 		private static array $seen_sites = [];
 
-		/** @var int Events queued by this request. */
+		/**
+		 * @var int Events queued by this request.
+		 */
 		private static int $queued = 0;
 
-		/** @var callable|null Exception handler that was active before ours. */
+		/**
+		 * @var callable|null Exception handler that was active before ours.
+		 */
 		private static $previous_exception_handler = null;
 
-		/** @var Plugin_Scope|null */
+		/**
+		 * @var Plugin_Scope|null
+		 */
 		private static ?Plugin_Scope $scope = null;
 
 		/**

@@ -7,7 +7,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 if ( ! class_exists( 'Woodev_Register_Settings_Fields' ) ) :
 
 	class Woodev_Register_Settings_Fields extends Woodev_Register_Settings {
-
 		/**
 		 * Class constructor
 		 */

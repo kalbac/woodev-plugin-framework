@@ -46,10 +46,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Map\\Yandex_Map_Provider' )
 	 */
 	class Yandex_Map_Provider implements Map_Provider {
 
-		/** @var string provider identifier */
+		/**
+		 * @var string provider identifier
+		 */
 		private const PROVIDER_ID = 'yandex';
 
-		/** @var string base ymaps API script URL, matching the reference implementation. */
+		/**
+		 * @var string base ymaps API script URL, matching the reference implementation.
+		 */
 		private const API_BASE_URL = 'https://api-maps.yandex.ru/2.1/';
 
 		/**

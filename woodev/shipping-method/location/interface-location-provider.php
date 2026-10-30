@@ -474,7 +474,6 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Prov
 		 */
 		public function normalize( string $free_form, Location_Scope $scope ): ?Location_Record;
 
-
 		/**
 		 * By-key resolution — OPTIONAL, only when {@see self::get_capabilities()}
 		 * contains {@see self::CAPABILITY_RESOLVE_KEY}.

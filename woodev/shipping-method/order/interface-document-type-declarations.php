@@ -1,10 +1,13 @@
 <?php
-/** Optional carrier capability: names and labels of the document types a source offers. */
+/**
+ * Optional carrier capability: names and labels of the document types a source offers.
+ */
 
 namespace Woodev\Framework\Shipping\Order;
 
 if ( ! defined( 'ABSPATH' ) ) {
-	exit; }
+	exit;
+}
 
 /**
  * A {@see Document_Source} that declares the types it offers (#1257): the key, the label of the single-order button

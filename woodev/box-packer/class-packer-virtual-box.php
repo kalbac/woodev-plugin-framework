@@ -28,7 +28,9 @@ if ( ! class_exists( 'Woodev_Packer_Virtual_Box' ) ) :
 	 */
 	class Woodev_Packer_Virtual_Box extends Woodev_Packer {
 
-		/** Float comparison tolerance (sizes are cm with at most a few decimals). */
+		/**
+		 * Float comparison tolerance (sizes are cm with at most a few decimals).
+		 */
 		const EPSILON = 1e-6;
 
 		/**
@@ -48,13 +50,19 @@ if ( ! class_exists( 'Woodev_Packer_Virtual_Box' ) ) :
 		const MAX_PLACEMENTS = 400;
 		const MAX_UNITS = Woodev_Packer_Free_Space::MAX_UNITS;
 
-		/** The most the shortest side may grow, relatively, to settle a rounding error ({@see self::settled_box()}). */
+		/**
+		 * The most the shortest side may grow, relatively, to settle a rounding error ({@see self::settled_box()}).
+		 */
 		const SETTLE_LIMIT = 1e-7;
 
-		/** How many distinct item sides feed the footprint candidates (the largest ones). */
+		/**
+		 * How many distinct item sides feed the footprint candidates (the largest ones).
+		 */
 		const MAX_DISTINCT_SIDES = 12;
 
-		/** How many of those sides also form three-side sums. */
+		/**
+		 * How many of those sides also form three-side sums.
+		 */
 		const MAX_TRIPLE_SIDES = 6;
 
 		/**

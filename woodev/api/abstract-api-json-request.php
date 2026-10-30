@@ -5,7 +5,6 @@ defined( 'ABSPATH' ) || exit;
 if ( ! class_exists( 'Woodev_API_JSON_Request' ) ) :
 
 	abstract class Woodev_API_JSON_Request implements Woodev_API_Request {
-
 		protected $method;
 
 		protected $path;

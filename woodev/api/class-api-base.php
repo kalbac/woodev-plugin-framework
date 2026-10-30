@@ -5,44 +5,69 @@ defined( 'ABSPATH' ) || exit;
 if ( ! class_exists( 'Woodev_API_Base' ) ) :
 
 	abstract class Woodev_API_Base {
-
-		/** @var string request method, defaults to POST */
+		/**
+		 * @var string request method, defaults to POST
+		 */
 		protected $request_method = 'POST';
 
-		/** @var string URI used for the request */
+		/**
+		 * @var string URI used for the request
+		 */
 		protected $request_uri;
 
-		/** @var array request headers */
+		/**
+		 * @var array request headers
+		 */
 		protected $request_headers = [];
 
-		/** @var string request user-agent */
+		/**
+		 * @var string request user-agent
+		 */
 		protected $request_user_agent;
 
-		/** @var string request HTTP version, defaults to 1.0 */
+		/**
+		 * @var string request HTTP version, defaults to 1.0
+		 */
 		protected $request_http_version = '1.0';
 
-		/** @var float|null request duration in seconds */
+		/**
+		 * @var float|null request duration in seconds
+		 */
 		protected $request_duration;
 
-		/** @var Woodev_API_Request|object request */
+		/**
+		 * @var Woodev_API_Request|object request
+		 */
 		protected $request;
 
-		/** @var string|null response code */
+		/**
+		 * @var string|null response code
+		 */
 		protected $response_code;
 
-		/** @var string|null response message */
+		/**
+		 * @var string|null response message
+		 */
 		protected $response_message;
 
-		/** @var array|null response headers */
+		/**
+		 * @var array|null response headers
+		 */
 		protected $response_headers;
 
-		/** @var string|null raw response body */
+		/**
+		 * @var string|null raw response body
+		 */
 		protected $raw_response_body;
 
-		/** @var string response handler class name */
+		/**
+		 * @var string response handler class name
+		 */
 		protected $response_handler;
 
-		/** @var Woodev_API_Response|object|null response */
+		/**
+		 * @var Woodev_API_Response|object|null response
+		 */
 		protected $response;
 
 		/**
@@ -1226,7 +1251,8 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * an exception, as it will be included in the broadcast_request() method
 		 * which is typically used to log requests.
 		 */
-		protected function do_pre_parse_response_validation() {}
+		protected function do_pre_parse_response_validation() {
+		}
 
 		/**
 		 * Allow child classes to validate a response after it has been parsed
@@ -1239,7 +1265,8 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 *
 		 * Note: Response body sanitization is handled automatically
 		 */
-		protected function do_post_parse_response_validation() {}
+		protected function do_post_parse_response_validation() {
+		}
 
 		/**
 		 * Return the parsed response object for the request
@@ -1399,7 +1426,6 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 			return ( $this->get_request() ) ? $this->get_request()->get_path() : '';
 		}
 
-
 		/**
 		 * Gets the sanitized request path, for logging.
 		 *
@@ -1473,7 +1499,6 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 
 			return self::redact_secret_query_string( $uri, $this->get_secret_param_names(), $this->get_request_path(), false !== $this->masking_broadcast_for_log );
 		}
-
 
 		/**
 		 * Names of query-string / body params — as opposed to headers, see
@@ -1695,7 +1720,6 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 				$text
 			);
 		}
-
 
 		/**
 		 * Redacts a known secret param name out of arbitrary FREE-FORM log
@@ -2420,7 +2444,6 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 
 			return ( $this->get_request() && $this->get_request()->to_string() ) ? $this->get_request()->to_string() : '';
 		}
-
 
 		/**
 		 * Gets the sanitized request body, for logging.

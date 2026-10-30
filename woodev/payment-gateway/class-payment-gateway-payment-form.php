@@ -14,22 +14,30 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 	 * @since 1.0.0
 	 */
 	class Woodev_Payment_Gateway_Payment_Form extends Woodev_Script_Handler {
-
-		/** @var Woodev_Payment_Gateway gateway for this payment form */
+		/**
+		 * @var Woodev_Payment_Gateway gateway for this payment form
+		 */
 		protected $gateway;
 
-		/** @var array of Woodev_Payment_Gateway_Payment_Tokens, keyed by token ID */
+		/**
+		 * @var array of Woodev_Payment_Gateway_Payment_Tokens, keyed by token ID
+		 */
 		protected $tokens;
 
-		/** @var bool default to show new payment method form */
+		/**
+		 * @var bool default to show new payment method form
+		 */
 		protected $default_new_payment_method = true;
 
-		/** @var string JS handler base class name */
+		/**
+		 * @var string JS handler base class name
+		 */
 		protected $js_handler_base_class_name = 'Woodev_Payment_Form_Handler';
 
-		/** @var array memoization of gateways for which the payment JS has been rendered */
+		/**
+		 * @var array memoization of gateways for which the payment JS has been rendered
+		 */
 		protected $payment_form_js_rendered = [];
-
 
 		/**
 		 * Sets up class.
@@ -42,7 +50,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 
 			parent::__construct();
 		}
-
 
 		/**
 		 * Adds hooks for rendering the payment form.
@@ -75,7 +82,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			add_action( 'wp_footer', [ $this, 'maybe_render_js' ] );
 		}
 
-
 		/**
 		 * Gets the script ID.
 		 *
@@ -85,7 +91,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			return $this->get_gateway()->get_id() . '_payment_form';
 		}
 
-
 		/**
 		 * Gets the script ID, dasherized.
 		 *
@@ -94,7 +99,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 		public function get_id_dasherized() {
 			return $this->get_gateway()->get_id_dasherized() . '-payment-form';
 		}
-
 
 		/**
 		 * Returns the active tokens for the current user/gateway
@@ -126,7 +130,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			return $this->tokens = $tokens;
 		}
 
-
 		/**
 		 * Returns the gateway for this form.
 		 *
@@ -136,7 +139,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			return $this->gateway;
 		}
 
-
 		/**
 		 * Return true if the current user has active tokens to display
 		 *
@@ -145,7 +147,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 		public function has_tokens() {
 			return ! empty( $this->tokens );
 		}
-
 
 		/**
 		 * Returns true if tokenization is allowed for the payment form.
@@ -187,7 +188,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			return apply_filters( 'wc_' . $this->get_gateway()->get_id() . '_payment_form_tokenization_allowed', $tokenization_allowed, $this );
 		}
 
-
 		/**
 		 * Returns true if tokenization is forced for the payment form. This is generally
 		 * true when a subscription or pre-order is in the cart and the payment method must be tokenized.
@@ -216,7 +216,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			return apply_filters( 'wc_' . $this->get_gateway()->get_id() . '_payment_form_tokenization_forced', $tokenization_forced, $this );
 		}
 
-
 		/**
 		 * Return true if the payment form should default to showing the new payment
 		 * method form
@@ -226,7 +225,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 		public function default_new_payment_method() {
 			return $this->default_new_payment_method;
 		}
-
 
 		/**
 		 * Gets the payment fields.
@@ -266,7 +264,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 
 			return is_array( $filtered ) ? $filtered : $fields;
 		}
-
 
 		/**
 		 * Gets the credit card fields.
@@ -358,10 +355,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			return is_array( $filtered ) ? $filtered : $fields;
 		}
 
-
-
-
-
 		/**
 		 * Get the payment form description HTML, generally set by the admin in
 		 * the gateway settings
@@ -390,10 +383,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			 */
 			return apply_filters( 'wc_' . $this->get_gateway()->get_id() . '_payment_form_description', $description, $this );
 		}
-
-
-
-
 
 		/**
 		 * Get the saved payment methods HTML, this section includes the
@@ -428,7 +417,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			return apply_filters( 'wc_' . $this->get_gateway()->get_id() . '_payment_form_saved_payment_methods_html', $html, $this );
 		}
 
-
 		/**
 		 * Get the "Manage Payment Methods" button HTML
 		 *
@@ -461,7 +449,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			 */
 			return apply_filters( 'wc_' . $this->get_gateway()->get_id() . '_payment_form_manage_payment_methods_button_html', $html, $this );
 		}
-
 
 		/**
 		 * Get the saved payment method HTML for an given token, renders an input + label like:
@@ -501,7 +488,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			 */
 			return apply_filters( 'wc_' . $this->get_gateway()->get_id() . '_payment_form_payment_method_html', $html, $token, $this );
 		}
-
 
 		/**
 		 * Get the title for a saved payment method, like
@@ -561,7 +547,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			return apply_filters( 'wc_' . $this->get_gateway()->get_id() . '_payment_form_payment_method_title', $title, $token, $this );
 		}
 
-
 		/**
 		 * Get the "Use new payment method" radio input HTML, like
 		 *
@@ -595,7 +580,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			 */
 			return apply_filters( 'wc_' . $this->get_gateway()->get_id() . '_payment_form_new_payment_method_input_html', $html, $this );
 		}
-
 
 		/**
 		 * Get saved payment method checkbox HTML, like:
@@ -700,7 +684,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			do_action( 'wc_' . $this->get_gateway()->get_id() . '_payment_form_end', $this );
 		}
 
-
 		/**
 		 * Render the payment form description
 		 *
@@ -709,7 +692,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 		public function render_payment_form_description() {
 			echo $this->get_payment_form_description_html();
 		}
-
 
 		/**
 		 * Render the saved payment methods
@@ -726,7 +708,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			}
 		}
 
-
 		/**
 		 * Render the payment form opening fieldset tag and div
 		 *
@@ -739,7 +720,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			printf( '<div class="wc-%1$s-new-payment-method-form js-wc-%1$s-new-payment-method-form">', esc_attr( $this->get_gateway()->get_id_dasherized() ) );
 		}
 
-
 		/**
 		 * Render the payment fields (e.g. account number, expiry, etc)
 		 *
@@ -751,7 +731,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 				$this->render_payment_field( $field );
 			}
 		}
-
 
 		/**
 		 * Render the payment, a simple wrapper around woocommerce_form_field() to
@@ -768,7 +747,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			);
 		}
 
-
 		/**
 		 * Render the payment form closing fieldset tag, clearing div, and "save payment method" checkbox
 		 *
@@ -784,7 +762,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			echo '</fieldset>';
 		}
 
-
 		/**
 		 * Maybe renders the payment gateway JS on checkout or pay pages.
 		 *
@@ -796,7 +773,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 				$this->render_js();
 			}
 		}
-
 
 		/**
 		 * Renders the payment form JS.
@@ -833,7 +809,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			endswitch;
 		}
 
-
 		/**
 		 * Gets the handler instantiation JS.
 		 *
@@ -851,7 +826,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 
 			return $js;
 		}
-
 
 		/**
 		 * Gets the JS args for the payment form handler.
@@ -891,7 +865,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			return $args;
 		}
 
-
 		/**
 		 * Adds a log entry.
 		 *
@@ -900,7 +873,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 		protected function log_event( $message ) {
 			$this->get_gateway()->add_debug_message( $message );
 		}
-
 
 		/**
 		 * Determines whether logging is enabled.

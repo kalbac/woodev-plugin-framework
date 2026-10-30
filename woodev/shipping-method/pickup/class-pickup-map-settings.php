@@ -45,7 +45,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Map_Settings
 		 */
 		public const SETTING_ACCENT_COLOR = 'pickup_accent_color';
 
-		/** @var string store-wide Yandex Maps API key, shared by every carrier. */
+		/**
+		 * @var string store-wide Yandex Maps API key, shared by every carrier.
+		 */
 		public const SETTING_YANDEX_API_KEY = 'yandex_api_key';
 
 		/**

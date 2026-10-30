@@ -10,41 +10,64 @@ require_once __DIR__ . '/class-framework-resolver.php';
 if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 
 	class Woodev_Plugin_Bootstrap {
-
-		/** @var Woodev_Plugin_Bootstrap The single instance of the class */
+		/**
+		 * @var Woodev_Plugin_Bootstrap The single instance of the class
+		 */
 		protected static $instance = null;
 
-		/** @var Framework_Resolver Minimal framework resolver. */
+		/**
+		 * @var Framework_Resolver Minimal framework resolver.
+		 */
 		protected Framework_Resolver $resolver;
 
-		/** @var array registered framework plugins */
+		/**
+		 * @var array registered framework plugins
+		 */
 		protected array $registered_plugins = [];
 
-		/** @var array registered and active framework plugins */
+		/**
+		 * @var array registered and active framework plugins
+		 */
 		protected array $active_plugins = [];
 
-		/** @var array of plugins that need to be updated due to an outdated framework */
+		/**
+		 * @var array of plugins that need to be updated due to an outdated framework
+		 */
 		protected array $incompatible_framework_plugins = [];
 
-		/** @var array of plugins that require a newer version of WC */
+		/**
+		 * @var array of plugins that require a newer version of WC
+		 */
 		protected array $incompatible_wc_version_plugins = [];
 
-		/** @var array of plugins that require a newer version of WP */
+		/**
+		 * @var array of plugins that require a newer version of WP
+		 */
 		protected array $incompatible_wp_version_plugins = [];
 
-		/** @var array of plugins that require a newer version of PHP */
+		/**
+		 * @var array of plugins that require a newer version of PHP
+		 */
 		protected array $incompatible_php_version_plugins = [];
 
-		/** @var array invalid explicit loader definitions */
+		/**
+		 * @var array invalid explicit loader definitions
+		 */
 		protected array $invalid_loader_definitions = [];
 
-		/** @var array<int,array<string,mixed>> plugins refused a download id already claimed by another plugin */
+		/**
+		 * @var array<int,array<string,mixed>> plugins refused a download id already claimed by another plugin
+		 */
 		protected array $quarantined_download_id_plugins = [];
 
-		/** @var array<int,array<string,string>> Legacy (v1) plugins quarantined by the mixed-fleet tombstone — see B-1. */
+		/**
+		 * @var array<int,array<string,string>> Legacy (v1) plugins quarantined by the mixed-fleet tombstone — see B-1.
+		 */
 		protected array $mixed_fleet_incompatible_plugins = [];
 
-		/** @var bool Whether the mixed-fleet admin notice has already been hooked — idempotency guard (B-1). */
+		/**
+		 * @var bool Whether the mixed-fleet admin notice has already been hooked — idempotency guard (B-1).
+		 */
 		private bool $mixed_fleet_notice_hooked = false;
 
 		/**

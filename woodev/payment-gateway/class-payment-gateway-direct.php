@@ -10,7 +10,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 	 * WooCommerce Payment Gateway Framework Direct Gateway
 	 */
 	abstract class Woodev_Payment_Gateway_Direct extends Woodev_Payment_Gateway {
-
 		/**
 		 * Validate the payment fields when processing the checkout
 		 *
@@ -57,7 +56,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 			return $is_valid;
 		}
 
-
 		/**
 		 * Returns true if the posted credit card fields are valid, false otherwise
 		 *
@@ -99,7 +97,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 			return apply_filters( 'wc_payment_gateway_' . $this->get_id() . '_validate_credit_card_fields', $is_valid, $this );
 		}
 
-
 		/**
 		 * Validates the provided credit card expiration date
 		 *
@@ -133,7 +130,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 
 			return $is_valid;
 		}
-
 
 		/**
 		 * Validates the provided credit card account number
@@ -175,7 +171,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 			return $is_valid;
 		}
 
-
 		/**
 		 * Validates the provided Card Security Code, adding user error messages as needed
 		 *
@@ -210,7 +205,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 
 			return $is_valid;
 		}
-
 
 		/**
 		 * Handles payment processing.
@@ -331,7 +325,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 			}
 		}
 
-
 		/**
 		 * Handles updating a user's payment method during payment.
 		 *
@@ -412,7 +405,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 
 			return $order;
 		}
-
 
 		/**
 		 * Add payment and transaction information as class members of WC_Order instance.
@@ -527,7 +519,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 			return $filtered instanceof WC_Order ? $filtered : $order;
 		}
 
-
 		/**
 		 * Performs a credit card transaction for the given order and returns the result.
 		 *
@@ -607,7 +598,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 
 			return $response;
 		}
-
 
 		/**
 		 * Create a transaction.
@@ -723,7 +713,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 			exit();
 		}
 
-
 		/**
 		 * Perform the transaction to add the customer's payment method to their
 		 * account
@@ -824,7 +813,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 			return is_array( $filtered ) ? $filtered : $result;
 		}
 
-
 		/**
 		 * Creates the order required for adding a new payment method.
 		 *
@@ -910,7 +898,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 			return $filtered instanceof WC_Order ? $filtered : $order;
 		}
 
-
 		/**
 		 * Add customer data as part of the add payment method transaction, primarily customer ID
 		 *
@@ -937,7 +924,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 				$this->update_customer_id( $user_id, $customer_id );
 			}
 		}
-
 
 		/**
 		 * Adds data from the add payment method transaction, primarily:
@@ -970,7 +956,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 			update_user_meta( get_current_user_id(), $user_meta_key, array_filter( $data ) );
 		}
 
-
 		/**
 		 * Allow gateway implementations to add additional data to the data saved during the add payment method transaction
 		 *
@@ -991,7 +976,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 		public function is_direct_gateway() {
 			return true;
 		}
-
 
 		/**
 		 * Returns true if a transaction should be forced (meaning payment processed even if the order amount is 0).

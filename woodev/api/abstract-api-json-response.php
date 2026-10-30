@@ -8,13 +8,16 @@ if ( ! class_exists( 'Woodev_API_JSON_Response' ) ) :
 	 * @property mixed $response_data Decoded response body, parsed on first access.
 	 */
 	abstract class Woodev_API_JSON_Response implements Woodev_API_Response {
-
 		protected $raw_response_json;
 
-		/** @var mixed|null */
+		/**
+		 * @var mixed|null
+		 */
 		private $decoded_response_data;
 
-		/** @var bool */
+		/**
+		 * @var bool
+		 */
 		private $response_data_decoded = false;
 
 		public $response_data;

@@ -18,7 +18,6 @@ if ( ! interface_exists( 'Woodev_Settings_Connection_Test' ) ) :
 	 * @since 2.0.2
 	 */
 	interface Woodev_Settings_Connection_Test {
-
 		/**
 		 * Tests / performs the connection for one block.
 		 *

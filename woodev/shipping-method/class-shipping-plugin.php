@@ -19,60 +19,99 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 	abstract class Shipping_Plugin extends \Woodev\Framework\Woocommerce_Plugin {
 
-		/** @var string shipping-package key listing the plugin ids hiding their carriers on the cart page (part of the rate-cache hash) */
+		/**
+		 * @var string shipping-package key listing the plugin ids hiding their carriers on the cart page (part of the rate-cache hash)
+		 */
 		private const CART_PAGE_PACKAGE_KEY = 'woodev_hidden_on_cart';
 
-		/** @var string id of the «Автоэкспорт» card of the «Выгрузка заказов» section — a carrier group may not reuse it */
+		/**
+		 * @var string id of the «Автоэкспорт» card of the «Выгрузка заказов» section — a carrier group may not reuse it
+		 */
 		private const EXPORT_AUTO_GROUP_ID = 'auto-export';
 
-		/** @var string id of the «Документы для печати» card (the carrier's {@see self::get_export_section_setting_ids()} fields; the id stays `labels` — it is the card's key on the page, not a title) */
+		/**
+		 * @var string id of the «Документы для печати» card (the carrier's {@see self::get_export_section_setting_ids()} fields; the id stays `labels` — it is the card's key on the page, not a title)
+		 */
 		private const EXPORT_LABELS_GROUP_ID = 'labels';
 
-		/** @var string id of the «Статусы доставки» card */
+		/**
+		 * @var string id of the «Статусы доставки» card
+		 */
 		private const EXPORT_DELIVERY_GROUP_ID = 'delivery-status';
 
-		/** @var array optional associative array of shipping method id */
+		/**
+		 * @var array optional associative array of shipping method id
+		 */
 		private array $methods = [];
 
-		/** @var array supported feature flags */
+		/**
+		 * @var array supported feature flags
+		 */
 		private array $supports = [];
 
-		/** @var array accepted currency codes */
+		/**
+		 * @var array accepted currency codes
+		 */
 		private array $currencies = [];
 
-		/** @var array accepted country codes */
+		/**
+		 * @var array accepted country codes
+		 */
 		private array $countries = [];
 
-		/** @var string|null integration class name */
+		/**
+		 * @var string|null integration class name
+		 */
 		private ?string $integration_class = null;
 
-		/** @var Map\Map_Provider_Registry|null lazily-built map-provider registry */
+		/**
+		 * @var Map\Map_Provider_Registry|null lazily-built map-provider registry
+		 */
 		private ?Map\Map_Provider_Registry $map_provider_registry = null;
 
-		/** @var Location\Location_Service|null lazily-built location service façade */
+		/**
+		 * @var Location\Location_Service|null lazily-built location service façade
+		 */
 		private ?Location\Location_Service $location_service = null;
 
-		/** @var Settings\Export_Settings|null lazily-built «Выгрузка заказов» settings of this carrier (#1007) */
+		/**
+		 * @var Settings\Export_Settings|null lazily-built «Выгрузка заказов» settings of this carrier (#1007)
+		 */
 		private ?Settings\Export_Settings $export_settings = null;
-		/** @var Settings\Packaging_Settings|null carrier packing choices */
+
+		/**
+		 * @var Settings\Packaging_Settings|null carrier packing choices
+		 */
 		private ?Settings\Packaging_Settings $packaging_settings = null;
 
-		/** @var Settings\Advanced_Settings|null lazily-built «Дополнительно» settings of this carrier: logging, hide on cart */
+		/**
+		 * @var Settings\Advanced_Settings|null lazily-built «Дополнительно» settings of this carrier: logging, hide on cart
+		 */
 		private ?Settings\Advanced_Settings $advanced_settings = null;
 
-		/** @var bool whether the fleet-wide order-item meta filters have been registered */
+		/**
+		 * @var bool whether the fleet-wide order-item meta filters have been registered
+		 */
 		private static bool $order_item_meta_filters_registered = false;
 
-		/** @var array<string,string[]> carrier method id => item-meta keys hidden by that method */
+		/**
+		 * @var array<string,string[]> carrier method id => item-meta keys hidden by that method
+		 */
 		private static array $hidden_order_item_meta_keys_by_method = [];
 
-		/** @var string[] order-item meta keys hidden by any registered carrier method */
+		/**
+		 * @var string[] order-item meta keys hidden by any registered carrier method
+		 */
 		private static array $hidden_order_item_meta_keys = [];
 
-		/** @var bool whether the fleet-wide chosen-method filter has been registered */
+		/**
+		 * @var bool whether the fleet-wide chosen-method filter has been registered
+		 */
 		private static bool $chosen_method_filter_registered = false;
 
-		/** @var array<string,true> method ids of every framework carrier plugin in this process, as keys */
+		/**
+		 * @var array<string,true> method ids of every framework carrier plugin in this process, as keys
+		 */
 		private static array $carrier_method_ids = [];
 
 		/**
@@ -2145,7 +2184,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			}
 		}
 
-
 		/**
 		 * Adds notices about enabled debug logging.
 		 *
@@ -2173,7 +2211,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 				]
 			);
 		}
-
 
 		/**
 		 * Whether the carrier is configured — the override point for "not configured".
@@ -2628,7 +2665,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			];
 		}
 
-
 		/**
 		 * Gets all supported shipping method class names
 		 *
@@ -2649,7 +2685,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			return $shipping_method_class_names;
 		}
 
-
 		/**
 		 * Gets the shipping method class name for the given shipping method id
 		 *
@@ -2664,7 +2699,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 			return $this->methods[ $shipping_method_id ]['class_name'];
 		}
-
 
 		/**
 		 * Gets all supported gateway objects
@@ -2685,7 +2719,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 			return $shipping_methods;
 		}
-
 
 		/**
 		 * Adds the given $shipping_method to the internal shipping methods store
@@ -2721,7 +2754,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			$this->methods[ $shipping_method_id ]['shipping_method'] = $shipping_method;
 		}
 
-
 		/**
 		 * Returns the identified shipping method object
 		 *
@@ -2748,7 +2780,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			return $this->methods[ $shipping_method_id ]['shipping_method'];
 		}
 
-
 		/**
 		 * Returns true if the plugin supports this shipping method
 		 *
@@ -2760,7 +2791,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		public function has_shipping_method( string $shipping_method_id ): bool {
 			return isset( $this->methods[ $shipping_method_id ] );
 		}
-
 
 		/**
 		 * Returns all available shipping method ids for the plugin
@@ -2775,7 +2805,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 			return array_keys( $this->methods );
 		}
-
 
 		// ---- Subsystem accessors ----
 
@@ -3023,7 +3052,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		public function get_webhook_handler(): ?Order\Abstract_Webhook_Handler {
 			return null;
 		}
-
 
 		/**
 		 * Gets the plugin version to be used by any internal scripts.

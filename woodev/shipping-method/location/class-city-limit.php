@@ -32,28 +32,44 @@ if ( ! class_exists( __NAMESPACE__ . '\City_Limit' ) ) :
 	 */
 	final class City_Limit {
 
-		/** No limit. */
+		/**
+		 * No limit.
+		 */
 		public const MODE_OFF = '';
 
-		/** Available only in the listed cities. */
+		/**
+		 * Available only in the listed cities.
+		 */
 		public const MODE_INCLUDE = 'include';
 
-		/** Available everywhere except the listed cities. */
+		/**
+		 * Available everywhere except the listed cities.
+		 */
 		public const MODE_EXCLUDE = 'exclude';
 
-		/** Instance setting holding the mode. */
+		/**
+		 * Instance setting holding the mode.
+		 */
 		public const OPTION_MODE = 'city_limit_mode';
 
-		/** Instance setting holding the cities (JSON list of records). */
+		/**
+		 * Instance setting holding the cities (JSON list of records).
+		 */
 		public const OPTION_CITIES = 'city_limit_cities';
 
-		/** The custom WooCommerce form-field type of the cities list. */
+		/**
+		 * The custom WooCommerce form-field type of the cities list.
+		 */
 		public const FIELD_TYPE = 'woodev_city_limit';
 
-		/** A list longer than this is cut: the form is a handful of cities, not an import. */
+		/**
+		 * A list longer than this is cut: the form is a handful of cities, not an import.
+		 */
 		public const MAX_CITIES = 200;
 
-		/** A zone with more regions than this is searched country-wide (and filtered), not region by region. */
+		/**
+		 * A zone with more regions than this is searched country-wide (and filtered), not region by region.
+		 */
 		public const MAX_SEARCH_REGIONS = 8;
 
 		/**

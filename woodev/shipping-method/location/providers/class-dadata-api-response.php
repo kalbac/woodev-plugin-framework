@@ -25,7 +25,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 	 * @since 2.0.2
 	 */
 	class Dadata_Api_Response extends \Woodev_API_JSON_Response {
-
 		/**
 		 * Gets every raw suggestion from a `suggest/address` or `findById/address`
 		 * response body (`{ suggestions: [ { value, unrestricted_value, data }, … ] }`).

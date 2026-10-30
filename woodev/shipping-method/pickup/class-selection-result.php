@@ -35,7 +35,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Selection_Result' )
 	 * @since 2.0.2
 	 */
 	class Selection_Result {
-
 		/**
 		 * Seeds a selection result from a {@see Constraint_Checker} verdict.
 		 *

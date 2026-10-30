@@ -25,10 +25,14 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Consent' ) ) :
 	 */
 	final class Consent {
 
-		/** Site-wide consent option. `yes` | `no`; absent means `no`. */
+		/**
+		 * Site-wide consent option. `yes` | `no`; absent means `no`.
+		 */
 		const OPTION = 'woodev_error_reporting_enabled';
 
-		/** wp-config constant carrying the site-wide receiver DSN — the fallback for a plugin with none of its own. */
+		/**
+		 * wp-config constant carrying the site-wide receiver DSN — the fallback for a plugin with none of its own.
+		 */
 		const DSN_CONSTANT = 'WOODEV_ERROR_REPORTING_DSN';
 
 		/**

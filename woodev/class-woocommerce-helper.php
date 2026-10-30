@@ -32,7 +32,6 @@ if ( ! class_exists( Woocommerce_Helper::class, false ) ) :
 	 * @since 2.0.0
 	 */
 	class Woocommerce_Helper {
-
 		/**
 		 * Gets order line items (products) as an array of objects.
 		 *

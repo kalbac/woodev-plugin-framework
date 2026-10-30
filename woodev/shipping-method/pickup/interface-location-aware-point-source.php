@@ -37,7 +37,6 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Location_Aware_
 	 * @since 2.0.2
 	 */
 	interface Location_Aware_Point_Source extends Point_Source {
-
 		/**
 		 * Fetches one point for an explicit destination.
 		 *

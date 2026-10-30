@@ -37,7 +37,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Scope' )
 	 * @since 2.0.2
 	 */
 	class Location_Scope {
-
 		/**
 		 * ISO-3166 alpha-2 country code (upper-case).
 		 *
@@ -338,7 +337,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Scope' )
 		public function has_parent(): bool {
 			return null !== $this->parent_record || null !== $this->parent_components;
 		}
-
 
 		/**
 		 * Returns a CLONE of this scope, stamped for one {@see Location_Provider}

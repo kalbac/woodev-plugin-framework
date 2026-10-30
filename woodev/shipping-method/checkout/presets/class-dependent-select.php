@@ -40,7 +40,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Presets\\Dependen
 	 * @since 2.0.2
 	 */
 	class Dependent_Select {
-
 		/**
 		 * Creates a Field builder pre-configured as a dependent select.
 		 *

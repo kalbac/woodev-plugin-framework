@@ -35,7 +35,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Shipping_REST_API
 	 * @since 1.5.0
 	 */
 	class Shipping_REST_API extends \Woodev_REST_API {
-
 		/**
 		 * Registers the shipping REST API routes.
 		 *

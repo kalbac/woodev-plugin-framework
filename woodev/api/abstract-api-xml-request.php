@@ -6,7 +6,6 @@ if ( ! class_exists( 'Woodev_API_XML_Request' ) ) :
 
 
 	abstract class Woodev_API_XML_Request implements Woodev_API_Request {
-
 		protected $request_data;
 
 		protected $root_element;
@@ -15,7 +14,8 @@ if ( ! class_exists( 'Woodev_API_XML_Request' ) ) :
 
 		protected $request_xml;
 
-		public function get_method() {}
+		public function get_method() {
+		}
 
 		public function get_path() {
 			return '';

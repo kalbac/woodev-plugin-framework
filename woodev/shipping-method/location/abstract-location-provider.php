@@ -258,7 +258,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Abstract_Location
 			);
 		}
 
-
 		/**
 		 * {@inheritDoc}
 		 *

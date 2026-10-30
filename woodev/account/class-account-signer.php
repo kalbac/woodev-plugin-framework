@@ -17,7 +17,6 @@ if ( ! class_exists( 'Woodev_Account_Signer' ) ) :
 	 * @since 2.0.2
 	 */
 	final class Woodev_Account_Signer {
-
 		/**
 		 * Computes the canonical signature for a request with the given key.
 		 *

@@ -29,7 +29,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Order_Lock' ) ) :
 	 * @since 2.0.2
 	 */
 	final class Order_Lock {
-
 		/**
 		 * The lock's name for one order.
 		 *

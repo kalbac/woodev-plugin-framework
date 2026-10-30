@@ -10,24 +10,49 @@ if ( ! class_exists( 'Woodev_Packer_Package_Result' ) ) :
 	 * @since 1.4.1
 	 */
 	final class Woodev_Packer_Package_Result {
-
-		/** @var float */
+		/**
+		 * @var float
+		 */
 		private $length;
-		/** @var float */
+
+		/**
+		 * @var float
+		 */
 		private $width;
-		/** @var float */
+
+		/**
+		 * @var float
+		 */
 		private $height;
-		/** @var float */
+
+		/**
+		 * @var float
+		 */
 		private $weight;
-		/** @var int */
+
+		/**
+		 * @var int
+		 */
 		private $item_count;
-		/** @var array<int, array{key: string, product_id: int, quantity: int}> */
+
+		/**
+		 * @var array<int, array{key: string, product_id: int, quantity: int}>
+		 */
 		private $items;
-		/** @var string */
+
+		/**
+		 * @var string
+		 */
 		private $box_id;
-		/** @var string */
+
+		/**
+		 * @var string
+		 */
 		private $box_name;
-		/** @var array box origin and charging policy */
+
+		/**
+		 * @var array box origin and charging policy
+		 */
 		private array $box_details;
 
 		/**

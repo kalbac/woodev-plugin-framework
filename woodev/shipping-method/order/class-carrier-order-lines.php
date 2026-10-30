@@ -17,7 +17,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Carrier_Order_Lines'
 	 * Converts WooCommerce order products and fees into carrier-ready lines.
 	 */
 	final class Carrier_Order_Lines {
-
 		/**
 		 * Builds product and fee lines from an order; shipping remains separate.
 		 * Fees are folded into product prices only when reconciliation is enabled.

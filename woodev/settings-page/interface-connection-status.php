@@ -16,7 +16,6 @@ if ( ! interface_exists( 'Woodev_Settings_Connection_Status' ) ) :
 	 * @since 2.0.2
 	 */
 	interface Woodev_Settings_Connection_Status {
-
 		/**
 		 * Current known status for one block, or null if unknown / not applicable.
 		 *

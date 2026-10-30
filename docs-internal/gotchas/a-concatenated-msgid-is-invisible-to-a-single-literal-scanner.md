@@ -29,7 +29,7 @@ other is `Constraint_Checker`'s cash-on-delivery reason, which reaches the shopp
 ## Root cause
 
 The framework wraps at 120 characters by hand (`Generic.Files.LineLength` is a suppressed warning,
-not a gate — see `phpcs.xml`), so a message long enough to name both a problem and its fix does not
+not a gate — see `phpcs.xml.dist`), so a message long enough to name both a problem and its fix does not
 fit on one line at depth. Concatenation is the idiomatic way out, and the codebase's own comment at
 that site says exactly that. The scanner's "one token" rule was written against the common case and
 never met the idiom.

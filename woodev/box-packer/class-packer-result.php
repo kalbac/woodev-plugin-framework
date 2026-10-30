@@ -13,10 +13,14 @@ if ( ! class_exists( 'Woodev_Packer_Result' ) ) :
 	 * @since 1.4.1
 	 */
 	final class Woodev_Packer_Result {
-
-		/** @var string */
+		/**
+		 * @var string
+		 */
 		private $algorithm;
-		/** @var Woodev_Packer_Package_Result[] */
+
+		/**
+		 * @var Woodev_Packer_Package_Result[]
+		 */
 		private $packages;
 
 		/**

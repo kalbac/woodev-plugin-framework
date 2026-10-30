@@ -31,8 +31,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Map\\Map_Provider_Registry'
 	 * @since 1.5.0
 	 */
 	class Map_Provider_Registry {
-
-		/** @var array<string, Map_Provider> registered providers keyed by id */
+		/**
+		 * @var array<string, Map_Provider> registered providers keyed by id
+		 */
 		private array $providers = [];
 
 		/**

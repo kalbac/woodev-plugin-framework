@@ -50,11 +50,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Tracking_Ha
 	 * @since 1.5.0
 	 */
 	abstract class Abstract_Tracking_Handler {
-
-		/** @var Shipping_API carrier API seam */
+		/**
+		 * @var Shipping_API carrier API seam
+		 */
 		protected Shipping_API $api;
 
-		/** @var string plugin-supplied token that namespaces this handler's forward hooks */
+		/**
+		 * @var string plugin-supplied token that namespaces this handler's forward hooks
+		 */
 		protected string $hook_prefix;
 
 		/**

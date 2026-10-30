@@ -15,6 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Shipment_Facts_Flag' ) ) :
+
 	/**
 	 * Puts ONE «attention» badge on an order's row for what {@see Shipment_Facts_Events} found — never one per event,
 	 * because a row carries at most {@see \Woodev\Framework\Shipping\Admin\Orders\Order_Row_Flags::MAX_FLAGS} badges

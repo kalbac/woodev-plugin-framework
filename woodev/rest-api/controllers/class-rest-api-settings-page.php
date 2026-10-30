@@ -22,7 +22,6 @@ if ( ! class_exists( 'Woodev_REST_API_Settings_Page' ) ) :
 	 * @since 2.0.2
 	 */
 	class Woodev_REST_API_Settings_Page {
-
 		/**
 		 * Settings-page registry.
 		 *

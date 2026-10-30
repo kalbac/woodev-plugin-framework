@@ -25,10 +25,14 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Rate_Limiter' ) ) :
 		const DEFAULT_DEDUPE_HOURS = 6;
 		const DEFAULT_DAILY_CAP    = 20;
 
-		/** Browser reports sent per UTC day — a budget of their own, so guests cannot spend the PHP one. */
+		/**
+		 * Browser reports sent per UTC day — a budget of their own, so guests cannot spend the PHP one.
+		 */
 		const DEFAULT_BROWSER_DAILY_CAP = 10;
 
-		/** Browser reports the whole site may queue per UTC hour. */
+		/**
+		 * Browser reports the whole site may queue per UTC hour.
+		 */
 		const DEFAULT_BROWSER_HOURLY_CAP = 30;
 
 		/**

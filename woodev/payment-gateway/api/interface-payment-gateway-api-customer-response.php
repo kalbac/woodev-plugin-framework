@@ -10,7 +10,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API_Customer_Response' ) ) :
 	 * WooCommerce Direct Payment Gateway API Customer Response
 	 */
 	interface Woodev_Payment_Gateway_API_Customer_Response extends Woodev_Payment_Gateway_API_Response {
-
 		/**
 		 * Returns the customer ID.
 		 *
