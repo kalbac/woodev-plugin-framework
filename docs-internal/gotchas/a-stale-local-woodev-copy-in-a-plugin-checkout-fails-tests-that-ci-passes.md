@@ -21,9 +21,12 @@ in `ci.yml` moves.
 Re-sync from the pinned tag, never from the framework's `main`:
 
 ```bash
-# ✅ extract the exact pinned tag, then sync from it
-mkdir -p "$TMPDIR/woodev-pin" && git -C <framework checkout> archive v2.0.16 woodev | tar -x -C "$TMPDIR/woodev-pin"
-WOODEV_FRAMEWORK_DIR="$TMPDIR/woodev-pin" bash scripts/sync-framework.sh
+# ✅ extract the exact pinned tag, then sync from it (run in the plugin checkout)
+FRAMEWORK_CHECKOUT="$HOME/Projects/woodev-plugin-framework"   # your framework clone
+PIN=$(grep -oE 'WOODEV_FRAMEWORK_REF: *[^ #]+' .github/workflows/ci.yml | awk '{print $2}')
+mkdir -p "$TMPDIR/woodev-pin-$PIN"
+git -C "$FRAMEWORK_CHECKOUT" archive "$PIN" woodev | tar -x -C "$TMPDIR/woodev-pin-$PIN"
+WOODEV_FRAMEWORK_DIR="$TMPDIR/woodev-pin-$PIN" bash scripts/sync-framework.sh
 ```
 
 ```bash
