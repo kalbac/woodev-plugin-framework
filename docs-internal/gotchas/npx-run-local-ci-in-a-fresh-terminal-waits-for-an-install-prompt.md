@@ -17,13 +17,13 @@ answer.
 ## ❌ Wrong
 
 ```bash
-npx run-local-ci run -w .github/workflows/ci.yml --commit-status --github-token "$(gh auth token)"
+npx run-local-ci run -w .github/workflows/ci.yml --commit-status
 ```
 
 ## ✅ Correct
 
 ```bash
-npx -y run-local-ci run -w .github/workflows/ci.yml --commit-status --github-token "$(gh auth token)"
+npx -y run-local-ci run -w .github/workflows/ci.yml --commit-status
 ```
 
 ## Also (s196): the `run` subcommand is required
@@ -31,6 +31,8 @@ npx -y run-local-ci run -w .github/workflows/ci.yml --commit-status --github-tok
 `npx -y run-local-ci -w .github/workflows/ci.yml …` (no `run`) prints the usage text and exits — a waiter that greps for an
 exit marker reads it as a finished run. Always `npx -y run-local-ci run --workflow <file> …`, and read `Status: ✓ N passed`
 from the log, not only the exit code. Under zsh, `${PIPESTATUS[0]}` is empty — run the wrapper with `#!/bin/bash`.
+
+> **Token (s205):** `--commit-status` needs a GitHub token; export `LOCAL_CI_GITHUB_TOKEN` in the shell and never pass `--github-token` — the flag puts the token on argv: [local-ci-github-token-flag-puts-the-token-on-argv](local-ci-github-token-flag-puts-the-token-on-argv.md).
 
 ## Related
 
