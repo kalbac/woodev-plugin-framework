@@ -81,7 +81,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 		 * @since 2.0.2
 		 * @var string
 		 */
-		private const STORAGE_KEY = 'woodev_customer_location';
+		private const STORAGE_KEY = Session_Key_Merger::LOCATION_RECORD_KEY;
 
 		/**
 		 * The per-site row {@see self::forget()} leaves when a legacy network-wide

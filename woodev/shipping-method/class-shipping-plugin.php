@@ -536,6 +536,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			// `plugins_loaded`, always before `init`.
 			if ( $this->needs_location_provider() ) {
 				Location\Location_Provider_Registry::instance()->declare_needed();
+
+				// kalbac/woocommerce-yandex-delivery#150: on WooCommerce < 11.4 the customer's location record must
+				// survive a session save by a request that never read it — see the method for the request that does.
+				Session_Key_Merger::protect_location_record();
 			}
 
 			// wire the host-supplied subsystems; each accessor returns null in the base,
