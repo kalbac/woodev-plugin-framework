@@ -136,6 +136,7 @@ CI workflows: `ci.yml` (jobs: `unit-tests`, `test-js` — jest, added s55 PR #18
 | `specs/2026-08-25-shipping-tools-section.md` | The «Инструменты» section of the «Доставка» tab | ✅ |
 | `specs/2026-09-07-sp10-orders-page-design.md` | SP-10 «Заказы доставки» — the orders page: columns, filters, actions left open by #694 | ✅ |
 | `specs/2026-09-27-710-create-edit-order-design.md` | #710 «Создать заказ» / «Редактировать» — admin order wizard; operator’s brainstorm s141, increments I0–I8 | ✅ |
+| `specs/2026-10-30-ozon-delivery-v2-plugin-design.md` | Ozon Delivery plugin (new product) on Framework 2.0.16 — phone-first checkout, plugin-owned postings, returns; s203 decisions in `research/2026-10-30-ozon-gap-refresh/` | design |
 
 | Plan | Implements |
 |------|------------|
