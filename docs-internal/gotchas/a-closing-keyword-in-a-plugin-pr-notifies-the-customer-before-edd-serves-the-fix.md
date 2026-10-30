@@ -13,3 +13,8 @@ Support AI loop).
 ## Related
 
 - [edd-publish-release-does-not-set-the-update-file-so-check-it-in-the-release-checklist](edd-publish-release-does-not-set-the-update-file-so-check-it-in-the-release-checklist.md)
+
+## Recurrence
+
+- s206 (30.10.2026): the coordinator's OWN fix brief asked for `Closes #160` in edostavka PR #161; the card closed at merge
+  21:30 UTC, ~day before EDD served 2.3.0.12. Reopened, closed after EDD. Every plugin fix brief must say `Refs`, never `Closes`.

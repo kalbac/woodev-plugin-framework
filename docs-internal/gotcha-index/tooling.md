@@ -4,6 +4,7 @@
 > [../GOTCHAS.md](../GOTCHAS.md). Format and the write protocol: `DOCS-SCHEMA.md` → "GOTCHAS.md Format".
 
 
+- [tooling/gh] **`gh project item-edit --project-id PVT_…` now fails with `invalid number` — use `item-edit <number> --owner kalbac --url <issue> --field <name> --value <option>`, one field per call, and check the exit code.** → [gh-project-item-edit-takes-the-project-number-and-url-now](../gotchas/gh-project-item-edit-takes-the-project-number-and-url-now.md) (s206)
 - [tooling/phpcs] **The WordPress PHPCS standard has no layout sniffs: `foo(); }`, missing blank lines between members and one-line docblocks all pass `composer phpcs` — the ruleset adds `ScopeClosingBrace`, `FunctionSpacing` and `MemberVarSpacing` explicitly.** → [wordpress-phpcs-has-no-layout-sniffs](../gotchas/wordpress-phpcs-has-no-layout-sniffs.md) (s205)
 - [tooling/worktrees] **A stale gitignored `woodev/` in a plugin checkout fails tests CI passes, and `.worktreeinclude` copies it into every worker worktree — re-sync from the pinned tag after every pin bump.** → [a-stale-local-woodev-copy-in-a-plugin-checkout-fails-tests-that-ci-passes](../gotchas/a-stale-local-woodev-copy-in-a-plugin-checkout-fails-tests-that-ci-passes.md) (s205)
 - [tooling/local-ci] **`--github-token "$(gh auth token)"` puts the token on argv where any `ps` shows it — export `LOCAL_CI_GITHUB_TOKEN` and drop the flag.** → [local-ci-github-token-flag-puts-the-token-on-argv](../gotchas/local-ci-github-token-flag-puts-the-token-on-argv.md) (s205)
