@@ -12,7 +12,7 @@ npx run-local-ci --all --commit-status
 ✅ **Correct:**
 
 ```sh
-npx run-local-ci run --all --commit-status --github-token "$(gh auth token)"
+npx run-local-ci run --all --commit-status
 ```
 
 ## s184 additions (16.10.2026)
@@ -30,6 +30,8 @@ npx run-local-ci run --all --commit-status --github-token "$(gh auth token)"
 - **`/var/run/docker.sock` can be missing on the Mac** (OrbStack serves `~/.orbstack/run/docker.sock`; the `default` Docker context
   points at the missing path). local-ci then dies before any job with «couldn't use a Docker socket at /var/run/docker.sock». Pass the
   socket explicitly: `LOCAL_CI_DOCKER_HOST=unix://$HOME/.orbstack/run/docker.sock npx -y run-local-ci run -w .github/workflows/ci.yml …`.
+
+> **Token (s205):** `--commit-status` needs a GitHub token; export `LOCAL_CI_GITHUB_TOKEN` in the shell and never pass `--github-token` — the flag puts the token on argv: [local-ci-github-token-flag-puts-the-token-on-argv](local-ci-github-token-flag-puts-the-token-on-argv.md).
 
 ## Related
 
