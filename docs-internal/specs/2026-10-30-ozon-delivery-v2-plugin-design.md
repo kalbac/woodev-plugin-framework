@@ -135,6 +135,8 @@ Timeouts: `RATES` 8 s (a buyer is waiting), others 20 s — **interpretation**.
   `delivery-api.delivery`, `delivery-api.delivery-point`, `delivery-api.order`, `delivery-api.posting`, `delivery-api.return`.
   Optional: `delivery-api.shipment-method` (the settings dropdown, §5.2). Never requested in this release:
   `dropoff-point`, `return-point`, `container`, `arrival-pass`, `all` (D8; asking for an unapproved one kills the call).
+  `dropoff-point/search` (not called in 2.0) answers 403 without the `delivery-api.dropoff-point` scope and 400 without
+  `filters.viewport` (MEASURED R1, M12; `ozon:docs/research/2026-10-30-r1-live-rerecord.md`).
 - **`invalid_scope` fallback (MEASURED: «scope 'delivery-api.arrival-pass' is not approved», 400 for the whole call):** the
   first token call asks for required + `shipment-method`. On `invalid_scope` naming `shipment-method`, the client repeats
   once with the required set only and stores `shipment_method_scope = absent` (option, cleared when credentials change), so
@@ -163,14 +165,17 @@ Cookie persistence between calls is not built (it would only save one redirect p
 |---|---|---|
 | 400 `{"error":{"message":"…"}}` (no `code`) | validation | `Ozon_Api_Exception` with the message |
 | 400 `{"error":{"code":"posting_incorrect_state","message":"…"}}` (W, label before approve) | state refusal | exception carrying `code` |
-| 404 top-level `{"code":5,"message":"Not Found","details":[]}` | unknown route — a programming error | exception, logged as error |
+| 404 top-level `{"code":5,"message":"Not Found","details":[]}` | unknown route — a programming error. **Observed:** `return/download_barcode` answers this envelope on an account with no returns (R1, 30.10.2026, M8); whether the route is absent or no barcode was ever issued is unsettled until R3, so merchant wording must not say «programming error» (§11.4) | exception, logged as error |
 | 401 | token | drop token, retry once (§4.2) |
 | 403 | missing scope | exception «нет доступа {method}» |
 | 429 | rate limit (ceiling unknown, F-21) | `Woodev_API_Rate_Limit_Exception` honouring `Retry-After` if present (UNVERIFIED shape) |
 | 200 with `results[].error` (`order/checkout`, `check-availability`; NOT `order/create`, whose 200 has no per-posting `error`, §9.2) | per-item refusal; the key is ABSENT when fine (F-17) | typed per-item result, never an exception |
 | 200 with an empty list (`posting/info` of an unknown number, F-7) | absence | the caller compares asked vs returned |
+| 404 `{"error":{"code":"posting_not_found"}}` / `{"error":{"code":"return_not_found"}}` from `posting/status-history` / `return/status-history` for an unknown number (MEASURED, R1, M7) | absence — NOT an empty history | `Ozon_Api_Exception` with `code`; callers catch it, never assume an empty list |
 
-Timestamps are parsed with `new DateTimeImmutable()` (seven fractional digits break `DATE_ATOM`, F-12). Int64 ids
+**Per-item codes are snake_case live** (MEASURED R1, M1; the OAS and the old fixtures say PascalCase): `recipient_error`, `delivery_point_restrictions_error`, `delivery_availability_error`, `delivery_point_not_found`, `shipment_method_not_found`, `posting_not_found`, `return_not_found`. Codes of write calls (e.g. `NotEnoughBalance`) remain UNMEASURED. Source: `ozon:docs/gotchas/ozon-error-codes-are-snake-case.md`.
+
+Timestamps are parsed with `new DateTimeImmutable()` (six or seven fractional digits, MEASURED R1 M5; both break `DATE_ATOM`, F-12). Int64 ids
 (`shipment_method_id` 16 digits, F-13; point ids) are kept as strings end to end and decoded with `JSON_BIGINT_AS_STRING`;
 never a JavaScript number.
 
@@ -265,11 +270,19 @@ routine with `dbDelta`; dropped on uninstall.
 
 - **Generation.** A run gets generation `G = last + 1`, stored with its state in one option
   `woodev_ozon_delivery_catalogue_sync` (`generation`, `phase`, `cursor`, `pages`, `errors`, `started_at`).
-- **List phase.** Each action fetches up to 10 pages of `limit: 100` (F-19: 1000 → 400; the OAS «1000» is not trusted, A),
-  upserts `point_id`, `method_ids`, `seen_generation = G`, and saves `next_cursor` VERBATIM after every page (opaque, F-10).
+- **List phase.** Each action fetches up to 10 pages of `limit: 100`. The 100 is our choice, not Ozon's: live,
+  `delivery-point/list` does NOT enforce its page maximum (`limit` 101 returned 101 rows, 1000 returned 1000; R1 side
+  finding, `ozon:docs/research/2026-10-30-r1-live-rerecord.md`; undocumented, so the 100 stays unless sync cost justifies more).
+  Upserts `point_id`, `method_ids`, `seen_generation = G`, and saves `next_cursor` VERBATIM after every page (opaque, F-10).
   An absent or null `next_cursor` ends the phase (F-11 tolerance).
 - **Info phase.** Each action selects up to 10 × 100 ids with `seen_generation = G AND detail_generation < G`, calls
-  `delivery-point/info` with 100 ids per call (OAS allows 1000; unproven, A), and writes details with `detail_generation = G`.
+  `delivery-point/info` with at most 100 ids per call (MEASURED R1, U2 settled: 100 → 200, 1000 → 400, so the OAS «1000»
+  is wrong), and writes details with `detail_generation = G`.
+  - **Unknown id.** One id Ozon no longer knows fails the WHOLE batch with a 404 whose text names the id (`Не найдены пункты
+    выдачи: 999999999999.`, no `code`; MEASURED R1, M3). `fetch_details()` reads the named ids from that text, drops them,
+    marks them inactive like any id missing from an answer, and asks again: at most 5 extra calls per batch, at most 60 per
+    run. A 404 that names none of the batch's ids (the gateway's «no such route») propagates to the retry schedule below.
+    Source: `ozon:docs/gotchas/ozon-point-info-batch-limits.md`.
 - **Finish.** Rows with `seen_generation < G` get `is_active = 0` (kept as last-good history; rows unseen for three
   generations are deleted). The option records `last_complete = G` and the time.
 - **Pacing and failure.** 200 ms between calls (the measured safe spacing, F-21). A failed action is retried with backoff
@@ -319,9 +332,9 @@ defaults set, no rate (`missing_dimensions`).
 
 Price = Σ `estimated_delivery_cost` + Σ `estimated_insurance_cost` (Ozon charges both to the merchant; the framework's price
 options adjust what the buyer pays). Delivery days = max over postings. **Any posting with an `error` → no rate**, because a
-partial quote would place an order Ozon cannot create. `DeliveryPointRestrictionsError`, `DeliveryAvailabilityError`,
-`RecipientError` and `SameDeliveryPointError` are ordinary refusals (§7.5); `PrincipalError` (cabinet blocked) is logged as an
-error.
+partial quote would place an order Ozon cannot create. `delivery_point_restrictions_error`, `delivery_availability_error`,
+`recipient_error` and `same_delivery_point_error` are ordinary refusals (§7.5); `principal_error` (cabinet blocked) is logged as an
+error. The codes are snake_case live (§4.4): the first three are MEASURED; the last two follow the same rule and are UNMEASURED.
 
 **Pickup before a point is chosen** (settled by **O7**): the method quotes against a representative point — the
 nearest active point to the destination settlement's coordinates that passes the local restriction filter — and shows that
@@ -367,9 +380,11 @@ the WooCommerce setting, and the methods report `no_phone`. Nothing makes the fi
 - **Classic.** The plugin adds `update_totals_on_change` to `billing_phone` and `shipping_phone` (WooCommerce re-runs
   `update_order_review` on the field's `change`, not per keystroke), reads the phone from `post_data` in
   `woocommerce_checkout_update_order_review`, and keeps the normalized value in the WooCommerce session.
-- **Blocks.** The phone arrives with the customer address through the Store API customer update (UNVERIFIED U5 whether a
-  phone-only edit triggers that update; the W5 spike settles it; fallback donor: `src/checkout-blocks/payment-recalc.ts`, an
-  `extensionCartUpdate` on phone change).
+- **Blocks.** The phone arrives with the customer address through the Store API customer update. MEASURED (U5 settled by W5a,
+  30.10.2026, `ozon:docs/research/2026-10-30-w5a-phone-transport.md` on Ozon branch `kalbac/w5-phone-first` — PR to come, not on `main` yet): a phone-only edit DOES reach the server in block checkout
+  (`/cart/update-customer`, no client code), but rates do not re-run until the phone is in the package hash (the Both bullet);
+  classic sends nothing on a phone-only edit. The `extensionCartUpdate` fallback (`src/checkout-blocks/payment-recalc.ts`) is not
+  needed and stays unexercised.
 - **Both.** A `woocommerce_cart_shipping_packages` filter writes the normalized phone hash into every package
   (`woodev_ozon_phone`), so WooCommerce's own package hash changes and shipping is re-rated; other carriers then hit their own
   rate cache. The quote cache carries the same hash (§7.4).
@@ -411,9 +426,10 @@ extension data (`ExtendSchema`, namespace `woodev-ozon-delivery`) and a small pl
   accepts (the endpoint is a phone oracle). Above the cap the method is not offered and the outage row applies.
 - **A failed call (not a `false`) is never cached as an answer** and backs off under the `check_client` class (§4.6), so
   repeated recalculations of the SAME phone during an outage send at most the §4.6 probes.
-- Whether `order/checkout` itself returns `RecipientError` for a refused phone is UNVERIFIED (U4). If R1 shows it does,
-  `check-client` becomes redundant for the rate and stays only for the hint; the spec keeps it either way because the hint
-  needs a yes/no.
+- **MEASURED (U4 settled, R1):** `order/checkout` itself refuses a phone that `check-client` refuses: per item, inside a 200,
+  `results[].error.code` = `recipient_error` (3 of 3 numbers agreed with `check-client`;
+  `ozon:docs/research/2026-10-30-r1-live-rerecord.md`, U4). So `check-client` is a buyer HINT (the yes/no of §8.3), not the gate:
+  the rate path can read the refusal off the quote.
 
 ### 8.6 Re-check before placement
 
@@ -422,7 +438,8 @@ the order's recipient phone hash must equal the hash the chosen Ozon rate was co
 `ozon_phone_hash`), and `check-client` (cache allowed) must be true. Mismatch → a validation error «Номер телефона изменился —
 проверьте стоимость доставки Ozon и подтвердите заказ ещё раз.»; refusal → the refusal text of §8.3. Real case: the buyer edits
 the phone after choosing Ozon in a block checkout whose update had not landed yet. The pickup point re-check is the framework's
-own (`fetch_details()`).
+own (`fetch_details()`). R1/U4 measured that `order/checkout` refuses the same phones, so the gate and the quote agree;
+`check-client` stays the cheap pre-check.
 
 ## 9. Export and the posting model (D3)
 
@@ -724,7 +741,7 @@ P = non-terminal forward postings, R = open returns, E = exports per day, N = po
 
 | Source | Bound (cap + backoff) | Worst case per day |
 |---|---|---|
-| Catalogue sync | ~452 list + ~452 info calls per run, 200 ms spacing; daily; a failed action retried 5 → 15 → 60 min, ≤ 5 times, cursor kept (§6.3) | ~904, plus a manual «Обновить сейчас» |
+| Catalogue sync | Per run (one generation G): 452 list + 452 info successful calls = 904 (45 194 points, F-20; 100 per call; 200 ms spacing), in 92 scheduled 10-call chunks. A failed chunk is retried 5 → 15 → 60 min, at most 5 times (§6.3). Each attempt ends at most in one failing call, and the cursor / `detail_generation` make a retry resume after the last successful call, so successful calls are never repeated. Failing calls: 92 chunks × (1 + 5) attempts = 552. Unknown-id retries: ≤ 60 per run (§6.3). **Worst case per run: 904 + 552 + 60 = 1 516.** Healthy run: 904 | Healthy day with the first and the daily run both completing: 2 × 904 = 1 808; **worst case 2 × 1 516 = 3 032**; a manual «Обновить сейчас» adds a run |
 | Token | healthy: one per ~hour per scope set; failing: `auth` class of §4.6 | healthy ~24–48; during a failure ≤ 100 |
 | `check-client` | answers cached 24 h (true) / 1 h (false); ≤ 10 phones per buyer session per hour; failures: `check_client` class of §4.6 | healthy: proportional to checkouts reaching the phone; during a failure ≤ 100 |
 | Quotes | successes via the rate cache, refusals cached 1 h (§7.4); failures: `quote` class of §4.6 | healthy: proportional to checkouts; during a failure ≤ 100 |
@@ -768,7 +785,8 @@ integration test boots the real entry path with a signed in-force licence claim 
 
 - **Safe, read-only (worker may run with the operator's key, small volume):** token, `check-client`, `delivery/location`,
   `delivery-point/list|info|check-availability`, `order/checkout`, `posting/info|search|status-history`, `return/search|info|
-  status-history`, `return/download_barcode`, `shipment-method/search|info`, `dropoff-point/search` (needs `filters`, W).
+  status-history`, `return/download_barcode`, `shipment-method/search|info`, `dropoff-point/search` (needs scope `delivery-api.dropoff-point` and
+  `filters.viewport`, MEASURED R1, M12; not used in 2.0).
 - **Needs the operator's word (real shipment or account change):** `order/create`, `posting/approve` (balance),
   `posting/cancel`, `return/reset_barcode` (invalidates the merchant's barcode), anything under `shipment-method/create|update|
   delete`. `posting/label` is read-only but exists only after an approve.
@@ -804,17 +822,22 @@ onboarding wizard (§5.4); a cookie cache for testcookie (§4.3).
 | # | Item | How to settle | Blocks release? |
 |---|---|---|---|
 | U1 | Real rate limit behind 429 and its body shape | observed in production logs | No — pacing and backoff exist |
-| U2 | `delivery-point/info` with 1000 ids (OAS) | R1, one call | No — 100 is used |
 | U3 | `Idempotency-Key` retention time | not testable cheaply | No — keys are per generation, and a replay only follows a read-only reconcile search that found nothing (§9.3) |
-| U4 | Does `order/checkout` return `RecipientError` for a phone `check-client` refuses | R1 with `+79990000001` | No — §8.5 keeps check-client |
-| U5 | Does a phone-only edit in block checkout reach the server | W5 spike | No — fallback donor named |
 | U6 | Are DaData suggestion coordinates house-precise | R2 (courier create) + rig | No — house-level rule |
 | U7 | `country` value form in the courier create body | R2 | Courier only |
-| U8 | Does `return/search` honour its filters | R1 | No — local filtering fallback |
+| U8 | Does `return/search` honour its filters | OPEN. R1: the account holds no return, so an ignored filter and an honoured one look identical (every answer `{"returns":[]}`); `posting/search` on the same account does honour its filters, which is same-family evidence, not proof. Settle with a real return (R3); until then the local-filtering fallback of §11.2 stands | No — local filtering fallback |
 | U9 | Which field links a return to its posting | R3 (first real return) | Returns matching only |
-| U10 | Public tracking URL for a posting number | R1 (read the cabinet / docs) | No — no link until then |
+| U10 | Public tracking URL for a posting number | OPEN. The OAS has no tracking link or URL template; R1 did not open the seller cabinet (no operator session); third-party sites mention an unverified `tracking.ozon-dostavka.ru` page. Settle by reading a posting card in the cabinet and copying its public link pattern (`ozon:docs/research/2026-10-30-r1-live-rerecord.md`, U10) | No — no link until then |
 | U11 | `NotEnoughBalance` in practice (not seen at 0 ₽) | first funded/unfunded production shop | No |
 | U12 | Whether a shipment method of type `dropoff` can be handed over without a container | first real handover (D8) | Possibly — D8 revisit |
+
+### 16.1a Settled by measurement (s204, 30.10.2026)
+
+| # | Item | Result | Source |
+|---|---|---|---|
+| U2 | `delivery-point/info` with 1000 ids (OAS) | **Settled: the cap is 100.** 100 → 200; 1000 → 400 (`DeliveryPointIds: Слишком длинный список…`). §6.3 keeps 100 per call | `ozon:docs/research/2026-10-30-r1-live-rerecord.md` (U2) |
+| U4 | Does `order/checkout` return `recipient_error` for a phone `check-client` refuses | **Settled: yes**, per item inside a 200, snake_case `recipient_error`; 3 of 3 numbers agreed with `check-client`. §8.5: check-client is the hint, not the gate | `ozon:docs/research/2026-10-30-r1-live-rerecord.md` (U4) |
+| U5 | Does a phone-only edit in block checkout reach the server | **Settled: it reaches the server in blocks** (`/cart/update-customer`), but rates re-run only once the phone joins the package hash. Classic sends nothing on a phone-only edit; the package-hash transport of §8.2 is what makes both re-rate | `ozon:docs/research/2026-10-30-w5a-phone-transport.md` |
 
 ### 16.2 Interpretations (coordinator may revisit)
 
