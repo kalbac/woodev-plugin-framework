@@ -142,6 +142,12 @@ cleanest copy; CDEK `v2` has the same). Reuse it rather than inventing one:
 
 ## Releasing a plugin
 
+- **A fix PR for a customer ticket says `Refs #N`, never `Closes #N`**: closing the issue tells the customer «исправлено»
+  through Support AI, so close it only after EDD serves the release (s203, gotcha
+  `a-closing-keyword-in-a-plugin-pr-notifies-the-customer-before-edd-serves-the-fix`).
+- local-ci on an OrbStack Mac: `env -u DOCKER_HOST LOCAL_CI_DOCKER_HOST=unix://$HOME/.orbstack/run/docker.sock npx -y run-local-ci run …`
+  (gotcha `local-ci-on-orbstack-needs-local-ci-docker-host-not-docker-host`).
+
 Copy `release.yml` + `scripts/build-release-zip.sh` from either carrier plugin (s188, PRs CDEK #120 / Yandex #122):
 
 - **One script builds the ZIP, locally and in Actions**: `git archive HEAD` → an allowlist (main file, `includes/`,
