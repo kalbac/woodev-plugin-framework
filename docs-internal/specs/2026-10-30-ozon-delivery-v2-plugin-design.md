@@ -167,7 +167,7 @@ Cookie persistence between calls is not built (it would only save one redirect p
 | 401 | token | drop token, retry once (§4.2) |
 | 403 | missing scope | exception «нет доступа {method}» |
 | 429 | rate limit (ceiling unknown, F-21) | `Woodev_API_Rate_Limit_Exception` honouring `Retry-After` if present (UNVERIFIED shape) |
-| 200 with `results[].error` (`order/checkout`, `order/create`, `check-availability`) | per-item refusal; the key is ABSENT when fine (F-17) | typed per-item result, never an exception |
+| 200 with `results[].error` (`order/checkout`, `check-availability`; NOT `order/create`, whose 200 has no per-posting `error`, §9.2) | per-item refusal; the key is ABSENT when fine (F-17) | typed per-item result, never an exception |
 | 200 with an empty list (`posting/info` of an unknown number, F-7) | absence | the caller compares asked vs returned |
 
 Timestamps are parsed with `new DateTimeImmutable()` (seven fractional digits break `DATE_ATOM`, F-12). Int64 ids
