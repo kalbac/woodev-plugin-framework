@@ -22,7 +22,7 @@ through Serena on this worktree or taken from the gap refresh. `ozon:` = `/Users
 §1 lists the binding decisions; nothing below reopens them. §2 is the product boundary and identity, §3 the capability →
 seam map. §§4–12 are the design per area: transport, settings, catalogue, quoting, checkout, export and the posting model,
 tracking, returns, admin UI. §13 is the worst-case traffic the operator rule demands, §14 testing, §15 out of scope, §16 the
-registers (UNVERIFIED, interpretations, operator questions O1…), §17 the work breakdown W0…Wn.
+registers (UNVERIFIED, interpretations, the answered operator questions O1–O8), §17 the work breakdown W0…Wn.
 
 **Three source notes the reader must know.**
 
@@ -66,18 +66,20 @@ and buyer texts never say «чекаут» or «фреймворк».
 | Item | Value | Why |
 |---|---|---|
 | Repo | `kalbac/woodev-ozon-delivery` (private, existing; branch `main`) | groundwork, gotchas and the OpenAPI snapshot already live there; W0 replaces the rig harness |
-| Folder / main file | `woodev-ozon-delivery` / `woodev-ozon-delivery.php` | as the scaffold; a new product, no installed base to preserve |
-| Text domain | `woodev-ozon-delivery` | = slug |
+| Folder / main file | **provisional** `woocommerce-ozon-dostavka` / `woocommerce-ozon-dostavka.php`; alternative `ozon-rocket-woocommerce` (the EDD slug) | O1: keep the old 1.0.3 ZIP's folder and main-file names so WordPress treats 2.0.0 as an update of the same plugin. The names are UNKNOWN (ZIP lost, card `kalbac/woodev-ozon-delivery#9`). **One place:** the `slug` variable of `scripts/build-release-zip.sh` (the ZIP's top-level folder); the repo's main file is `${slug}.php` itself — no rename step in the build. If the ZIP turns up with other names: change `slug` and `git mv` the main file, nothing else (see the text-domain row) |
+| Text domain | `woodev-ozon-delivery` | decoupled from the folder slug on purpose (loaded through the plugin's own `languages/` path), so a folder rename never touches strings or `.po` files — **interpretation** |
 | Plugin id | `ozon_delivery` | **interpretation** (Yandex uses `yandex_delivery`); W0 runs the wp.org collision search RP's R7 ran |
 | Method ids | `ozon_delivery_pickup` (pickup points AND lockers), `ozon_delivery_courier` | one id per delivery type (shipping skill); a point's type rides on `Pickup_Point` |
 | Namespace | `Woodev\Ozon_Delivery` | Yandex shape `Woodev\Yandex_Delivery` |
-| Version | `1.0.0` provisional | a new product, not a v2 of anything — **O1** |
-| EDD product / `download_id` | unknown | needed by the loader definition and the licence — **O2** |
+| Version | `2.0.0` | O1: 2.0.0 of the existing product (old «Ozon доставка» 1.0.3, a different API, dead 4+ years, no real users) |
+| EDD product / `download_id` | `58107` | O1/O2: the existing download; nothing is published on it without the operator's word |
+| Error reporting | GlitchTip project exists (O8) | the DSN lives in the private Ozon repo (or the build's environment) and is injected by the plugin's DSN filter; it is never written into this public repo |
 | Framework | bundled 2.0.16, `framework_version` = `backwards_compatible` floor per the core skill | D1 |
 | Supported features | HPOS + cart/checkout blocks, declared in the loader definition | `.ai/skills/woodev-plugin-core/SKILL.md` |
 
-**Installed-site data.** None exists: the scaffold stores nothing. Every key this spec names is new and becomes the contract
-from 1.0.0 on (ADR-005 applies from the first release).
+**Installed-site data.** No migration from 1.0.3 (O1): its option keys and shipping method ids are neither read nor
+preserved; old buyers simply renew the licence. Every key this spec names is new and becomes the contract from 2.0.0 on
+(ADR-005 applies from the first release).
 
 **Licence gate.** Automatic through `Shipping\License_Gate` (`woodev/shipping-method/class-license-gate.php`): no rates, no
 export / cancel / documents without an in-force claim; tracking and status polling keep running (G §2 item 3). The plugin's
@@ -144,6 +146,8 @@ Timeouts: `RATES` 8 s (a buyer is waiting), others 20 s — **interpretation**.
   `ozon:docs/gotchas/ozon-expires-in-absolute-timestamp.md`). A value in the past or more than 24 h ahead is treated as
   60 min from now (the measured lifetime is ~1 h). A 401 on an API call drops the cached token and retries that call once.
   The `refresh_token` is ignored (F-2: untested; re-issue is one cheap call).
+- **A failed token call is backed off** under the `auth` class of §4.6 (invalid credentials, `invalid_scope` on a required
+  scope, 5xx, timeout, 429). Saving new credentials resets the `auth` state.
 - **Real case behind the single-flight:** a cold cache under a checkout burst issues several token calls; that is harmless
   (tokens are independent), so there is no lock.
 
@@ -179,6 +183,27 @@ never a JavaScript number.
 - `Idempotency-Key` on `order/create` only — **MEASURED honoured** (same key + same body 2 s later → same order and posting
   numbers). Derivation in §9.2. Retention time UNVERIFIED (U3).
 
+### 4.6 Failure backoff for automatic calls
+
+Real case: invalid credentials, a token-endpoint outage or a run of 429/5xx answers. The framework caches neither an
+exception nor a `null` rate (`class-shipping-method.php`, `class-shipping-rate-cache.php`), so without this every checkout
+re-render would call Ozon again.
+
+- **State:** one non-autoloaded option `woodev_ozon_delivery_backoff` with three classes — `auth` (token), `check_client`,
+  `quote` (`order/checkout`) — each `{failures, next_attempt_at}`.
+- **What counts as a failure:** timeout / transport error, 5xx, 429, a 401 that survives the one token retry, 403, a token
+  refusal. A per-item `results[].error` and a `check-client` `false` are ANSWERS, cached as such (§7.4, §8.5), never failures.
+- **Healthy path:** `failures = 0` → call freely, no write.
+- **In failure:** before `next_attempt_at` no call is made (the method is refused with `ozon_unavailable`; buyer side = the
+  outage row of §8.3, no stale rate is served). After it, ONE request claims the probe by a compare-and-swap `UPDATE` of the
+  option row that moves `next_attempt_at` forward before calling (one winner per window, so a checkout burst still sends
+  one probe). Success resets the class to 0; failure increments `failures`.
+- **Delay:** `min( 60 s × 2^(failures − 1), 15 min )`; a `Retry-After` larger than that wins, capped at 1 h.
+- **Bound per class during a failure:** probes at 0, 1, 3, 7, 15, 30, 45, 60 min… → ≤ 8 in the first hour, then 4 per hour
+  → **≤ 100 failed calls per day per class, ≤ 300 per day for all three**, whatever the checkout traffic.
+- Every automatic call — checkout, catalogue sync, poller — first consults `auth`: no token while `auth` is backed off.
+  Background jobs keep their own capped backoff on top (§6.3, §10.1, §11.2). Saving credentials resets `auth`.
+
 ## 5. Settings (`woodev-settings` → tab «Ozon Доставка»)
 
 Supplied through `get_tab_settings_providers()`; per-method price options stay on the WooCommerce shipping-zone instance.
@@ -209,7 +234,7 @@ Model: `yandex:includes/settings/class-yandex-settings-handler.php`.
 
 - «Пункты выдачи»: read-only status of the catalogue (§6.5): points served, last complete update, a running update's
   progress, and «Обновить сейчас».
-- «Упаковка» and default dimensions: the framework's packaging settings (store boxes, carrier presets none in 1.0.0).
+- «Упаковка» and default dimensions: the framework's packaging settings (store boxes, carrier presets none in 2.0.0).
 - «Выгрузка заказов»: the framework export section (auto-export statuses, delivered/cancelled statuses, «Обновить статусы
   сейчас») plus one plugin field through `get_export_section_extension()`: «Как часто проверять статусы» (15/30/60 min,
   default 30).
@@ -218,7 +243,7 @@ Model: `yandex:includes/settings/class-yandex-settings-handler.php`.
 
 ### 5.4 Setup wizard
 
-None in 1.0.0: a new plugin needs no migration wizard (G §2 item 9) and the settings screen carries the connection test and
+None in 2.0.0: a new plugin needs no migration wizard (G §2 item 9) and the settings screen carries the connection test and
 the method list. **interpretation** — a three-step onboarding wizard is a product choice for later.
 
 ## 6. Pickup and locker catalogue
@@ -281,8 +306,12 @@ routine with `dbDelta`; dropped on uninstall.
 ### 7.2 Packing → postings
 
 The framework packer (`FEATURE_BOX_PACKING`) returns N boxes; **one box = one posting**. Weight in grams, dimensions in mm,
-rounded up. Declared value per posting = the value of the items in that box (`Packaging::get_value_context()`), in kopecks,
-the last posting taking the rounding remainder so the sum equals the package declared value. More than 100 boxes → no rate
+rounded up. **Declared value = goods subtotal (D, «Declared value / insurance»)**: per unit = the line's `line_subtotal` ÷
+quantity at checkout and the order item's `get_subtotal()` ÷ quantity at export — before coupons, before tax, the same basis
+on both surfaces. NOT `Packaging::get_value_context()`: that helper uses `line_total` (after line discounts, READ
+`woodev/shipping-method/class-packaging.php`) and keeps its meaning for percentage costs. Declared value per posting = Σ unit
+value × quantity of the items in that box, in kopecks, the last posting taking the rounding remainder so the sum equals the
+package subtotal. Example (fixture): one line, subtotal 1 000 ₽, a 200 ₽ coupon → declared 1 000 ₽. More than 100 boxes → no rate
 (`report_hidden` reason `too_many_postings`). A product without weight or dimensions uses the framework defaults; with no
 defaults set, no rate (`missing_dimensions`).
 
@@ -294,7 +323,7 @@ partial quote would place an order Ozon cannot create. `DeliveryPointRestriction
 `RecipientError` and `SameDeliveryPointError` are ordinary refusals (§7.5); `PrincipalError` (cabinet blocked) is logged as an
 error.
 
-**Pickup before a point is chosen** (**interpretation**, **O7**): the method quotes against a representative point — the
+**Pickup before a point is chosen** (settled by **O7**): the method quotes against a representative point — the
 nearest active point to the destination settlement's coordinates that passes the local restriction filter — and shows that
 price; once the buyer picks a point, the rate is re-quoted for that point (the selected point is in the framework rate cache context). No point within 50 km → no rate (`no_points_nearby`).
 
@@ -303,14 +332,21 @@ price; once the buyer picks a point, the rate is re-quoted for that point (the s
 ### 7.4 Quote cache
 
 `FEATURE_RATE_CACHE` on; `get_rate_cache_context()` calls the parent and adds: a hash of the normalized recipient phone,
-the shipment method id, the client id, and (courier) the coordinates rounded to 6 decimals. Destination, package lines,
-packing, declared value and selected point are already in the parent context (READ). Real case: one checkout re-renders shipping
+the shipment method id, the client id, (courier) the coordinates rounded to 6 decimals, and the per-line `line_subtotal`
+map in kopecks (the declared-value basis of §7.2; the parent carries line totals, not subtotals). Destination, package
+lines, packing and selected point are already in the parent context (READ). Real case: one checkout re-renders shipping
 on every field change; without the cache each re-render is an Ozon call.
+
+**Refusals are cached too.** A quote whose postings carry a per-item `error` is an answer: the plugin keeps it 1 h in a
+transient keyed on the hash of the same context, so a destination Ozon refuses is not re-asked on every re-render (the
+framework does not cache a `null` rate). Failures (timeouts, 5xx, 429) are never cached as answers — they go to the §4.6
+backoff.
 
 ### 7.5 Refusal reasons (one helper)
 
 Every `null` from `rate_package()` goes through one helper that logs and calls `report_hidden( $code, $message )`: `credentials`,
-`no_method`, `catalogue_empty`, `no_phone`, `phone_invalid`, `phone_refused`, `check_client_failed`, `no_points_nearby`,
+`no_method`, `catalogue_empty`, `no_phone`, `phone_invalid`, `phone_refused`, `check_client_failed`, `ozon_unavailable`
+(§4.6 backoff), `no_points_nearby`,
 `courier_address_imprecise`, `missing_dimensions`, `too_many_postings`, `ozon_refused:{code}` (with the trace id). The buyer
 side of the phone and address reasons is §8.3.
 
@@ -373,6 +409,8 @@ extension data (`ExtendSchema`, namespace `woodev-ozon-delivery`) and a small pl
   negative).
 - **Per-session cap: 10 distinct phones per hour.** Real case: a script driving the storefront to learn which numbers Ozon
   accepts (the endpoint is a phone oracle). Above the cap the method is not offered and the outage row applies.
+- **A failed call (not a `false`) is never cached as an answer** and backs off under the `check_client` class (§4.6), so
+  repeated recalculations of the SAME phone during an outage send at most the §4.6 probes.
 - Whether `order/checkout` itself returns `RecipientError` for a refused phone is UNVERIFIED (U4). If R1 shows it does,
   `check-client` becomes redundant for the rate and stays only for the hint; the spec keeps it either way because the hint
   needs a yes/no.
@@ -395,40 +433,72 @@ own (`fetch_details()`).
 | framework carrier order id (`CARRIER_ORDER_ID_FIELD`) | Ozon `order_number` — the aggregate identity |
 | `_woodev_ozon_postings` | JSON list, one entry per posting: `posting_number`, `request_id`, `posting_external_id`, `status`, `status_changed_at`, `dimensions`, `declared_value`, `delivery_cost`, `insurance_cost`, `estimated_delivery_days`, `original_delivery_at`, `delivery_at`, `storage_expires_at`, `approve` (`pending`/`done`/`failed:{code}`), `cancel_requested_at`, `return` (`return_number`, `status`, `placement_name`, `placement_address`, `status_changed_at`) |
 | `_woodev_ozon_export_generation` | int, starts at 1 (§9.2) |
+| `_woodev_ozon_export_request` | the create request of the CURRENT generation: `generation`, `idempotency_key`, `body` (JSON), `sent_at`; written before the create call, deleted once the postings are stored or on a refusal (§9.2–§9.3) |
 | `_woodev_ozon_history` | earlier Ozon orders of this WooCommerce order after a full cancel (§9.7), same shape |
-| `_woodev_ozon_active` | `1` while any posting or return is non-terminal — the poller's scalar selector |
+| `_woodev_ozon_active` | `1` while any FORWARD posting of the current generation is non-terminal — the status poller's selector (§10.1); set before the create call |
+| `_woodev_ozon_return_open` | `1` while any known return (current or history) is non-terminal — the return refresher's selector (§11.2) |
 | framework status meta (`status_meta_key`) | the aggregate raw status (§10.2) |
 | `_woodev_ozon_courier_address` | §8.4 |
 
-JSON in order meta is enough: ≤ 100 postings per order, read with the order. Orders are found by `_woodev_ozon_active` through
-the datastore-aware helper (shipping skill: `wc_get_orders()` drops `meta_query` on the posts store).
+JSON in order meta is enough: ≤ 100 postings per order, read with the order. Orders are found by `_woodev_ozon_active` /
+`_woodev_ozon_return_open` through the datastore-aware helper (shipping skill: `wc_get_orders()` drops `meta_query` on the
+posts store).
 
 ### 9.2 `order/create` and the idempotency key
 
-- Before creating: a fresh `check-client` and a fresh `order/checkout` with the same body (Ozon's own advice). Any posting error
-  refuses export with Ozon's reason; a price change only adds an order note («Стоимость Ozon изменилась: было X, стало Y»).
-- Body: `order_external_id` = the order number; `recipient.phone_number` = the order's recipient phone (§8.1), `full_name` =
-  shipping name, else billing name; `delivery` = the pickup point from the framework selection, or the courier snapshot;
-  `postings[]` re-packed from the ORDER lines (not the cart) with `posting_external_id` = `{order number}-{n}` and
-  `description` = «{item} × {qty}, …» truncated to 500 characters (OAS: 1–500, required).
-- **`Idempotency-Key`** = a UUID (v5 shape) from SHA-1 of `home_url() | order id | export generation`. Deterministic, so a
-  crash between the call and the meta write repeats the same key and gets the same order back (MEASURED). The generation
-  increments only after a confirmed full cancel (§9.7), so a re-export is a new Ozon order.
-- `extract_carrier_order_id()` returns `order_number`; the postings list is written in the same lock.
+- **Body:** `order_external_id` = the order number for generation 1, `{order number}-{generation}` from generation 2 (no two
+  Ozon orders of one shop share it); `recipient.phone_number` = the order's recipient phone (§8.1), `full_name` = shipping
+  name, else billing name; `delivery` = the pickup point from the framework selection, or the courier snapshot; `postings[]`
+  re-packed from the ORDER lines (not the cart) with `posting_external_id` = **`{order id}-{generation}-{n}`** (the
+  immutable WooCommerce order id, never the order number; unique across generations, and it carries the order id a return
+  is matched to, §11.3) and `description` = «{item} × {qty}, …» truncated to 500 characters (OAS: 1–500, required).
+- **`Idempotency-Key`** = a UUID (v5 shape) from SHA-1 of `home_url() | order id | export generation`. Deterministic per
+  generation. The generation increments only after a confirmed full cancel (§9.7), so a re-export is a new Ozon order.
+- **Saved request — the same key is only ever sent with the same body.** The client's `create_order()` works in two modes:
+  - **First attempt** (no `_woodev_ozon_export_request` for the current generation): a fresh `check-client` and a fresh
+    `order/checkout` with the same body (Ozon's own advice). A refusal or a posting error refuses export with Ozon's reason
+    and nothing is saved; a price change only adds an order note («Стоимость Ozon изменилась: было X, стало Y»). Then,
+    BEFORE the create call, it writes `_woodev_ozon_export_request` and `_woodev_ozon_active = 1` and saves the order.
+  - **Replay** (a saved request exists — the previous attempt's outcome is unknown): it sends the SAVED body with the
+    saved key — no re-pack, no fresh phone or quote check, so recovering an order that may already exist at Ozon never
+    depends on today's phone answer or price, and an order edited meanwhile cannot ride on the old key.
+  - A refusal of the create call itself (4xx / per-item `error`: nothing was created) deletes the saved request and clears
+    `_woodev_ozon_active` before rethrowing, so the next export rebuilds from the current order.
 
-### 9.3 Approve right after create
+### 9.3 The create/approve boundary — create is committed before approve
 
 Export = create + `posting/approve` for every posting, in one merchant action «Выгрузить». Real case: a `created` posting
 cannot be handed over and has no label (MEASURED: `posting_incorrect_state`), so a separate «Подтвердить» step would only be
-forgotten. Approve answers 200 `[]`; the posting goes `forming` → `ready_for_shipping` in ~22 s (MEASURED).
+forgotten. Approve answers 200 `[]`; the posting goes `forming` → `ready_for_shipping` in ~22 s (MEASURED). The two calls are
+on opposite sides of the framework's commit point, so an approve failure can never turn into an export failure (READ
+`woodev/shipping-method/order/abstract-shipment-handler.php`: `create_order()` throwing → `fail_export()`, no id stored):
+
+1. **Create** — `api->create_order()` is ONLY `order/create` (§9.2). `extract_carrier_order_id()` returns `order_number` and
+   keeps the parsed postings in the handler for this request; the base `complete_export()` stores the carrier id.
+2. **Store** — on the plugin's own `{hook_prefix}shipment_exported` action (fired by `complete_export()` AFTER the id is
+   stored) the handler writes `_woodev_ozon_postings` with `approve = pending`, deletes `_woodev_ozon_export_request` and
+   saves the order.
+3. **Approve** — still in that callback: `posting/approve` for every posting, inside a catch of every
+   `Woodev_API_Exception`. A refusal records `approve = failed:{code}`; a transport failure leaves `pending`. Nothing is
+   rethrown — the export result is already success.
+4. **Verify** — the §9.4 action is scheduled whatever step 3 returned.
+
+**Recovery.** `supports_reconcile()` returns `true`; `find_exported_order()` is a READ-ONLY `posting/search` with
+`filters.shipment_method_id` = configured and `created_at` from `sent_at − 5 min` to `sent_at + 60 min` of the saved request,
+≤ 5 pages of 100, matching `posting_external_id` prefix `{order id}-{generation}-`: found → its `order_number` (the base
+completes the export, step 2 writes the postings from the search result); not found → `null`, and the base's retry
+(`Export_Retry`, ≤ 5 attempts) calls `create_order()` again, which REPLAYS the saved request (§9.2). A process killed after
+the create call but before step 2 leaves the carrier id with no postings list: the §9.4 action (or the poller, which selects
+`_woodev_ozon_active` orders) finds it and fills the list from the same window search, matching `order_number`. The created
+ids are never cleared by an approval failure.
 
 ### 9.4 Async approval with polling (CDEK pattern)
 
-After approve, a single Action Scheduler action per order checks `posting/info` at +15 s, +60 s, +5 min, +15 min, +1 h
-(CDEK `VERIFY_DELAYS` shape, shortened for the measured 22 s) under the export lock: `ready_for_shipping` → `approve = done`;
+One Action Scheduler action per order checks `posting/info` at +15 s, +60 s, +5 min, +15 min, +1 h (CDEK `VERIFY_DELAYS`
+shape, shortened for the measured 22 s) under the export lock: postings list missing → the recovery search of §9.3;
+`ready_for_shipping` → `approve = done`; still `created` (approve never landed) → re-send approve once at that step;
 `forming_failed` → `approve = failed`, order note, row flag; still `forming` → next delay; delays exhausted → note «Ozon долго
-подтверждает отправления — проверьте их в кабинете Ozon», then the regular poller (§10) takes over. The created ids are never
-cleared by an approval failure.
+подтверждает отправления — проверьте их в кабинете Ozon», then the regular poller (§10) takes over.
 
 ### 9.5 `NotEnoughBalance` and other approve errors
 
@@ -444,7 +514,7 @@ ends. A posting label is one PDF per posting; there is no merge endpoint, and th
 - **One labelable posting** (the common one-box order): `Ozon_Document_Source` declares «Этикетка Ozon» and returns
   `Document_Result::binary()`; framework single and bulk printing work.
 - **Several postings:** the document type is not offered; the plugin panel lists a «Этикетка» link per posting (admin route,
-  nonce, `edit_shop_orders`). **O4** asks whether a merged PDF is wanted later.
+  nonce, `edit_shop_orders`). Settled by **O4**: per-parcel links, no merged PDF.
 - Outside the window: `Document_Result::failed( 'Этикетка доступна после подтверждения отправления и до его приёмки Ozon' )`.
 
 ### 9.7 Cancel — asynchronous, without the framework's destructive cleanup
@@ -455,9 +525,15 @@ ends. A posting label is one PDF per posting; there is no merge endpoint, and th
   обновится в течение нескольких минут.»
 - A per-posting «Отменить отправление» lives in the plugin panel (destructive, with confirm).
 - The poller sees `canceled` (MEASURED: ~18 s). When EVERY posting is `canceled`: the plugin itself moves the Ozon order into
-  `_woodev_ozon_history`, clears the carrier id, calls `Shipment_Cancellation::mark()`, and increments the export generation —
-  so a re-export is possible and the returns of the old postings keep being followed from the history. Real case: the merchant
-  cancels to fix an address and ships again.
+  `_woodev_ozon_history`, clears the carrier id and `_woodev_ozon_active`, calls `Shipment_Cancellation::mark()`, sets the
+  aggregate raw status `canceled`, and increments the export generation — so a re-export is possible and the returns of the
+  old postings keep being followed from the history (§11). Real case: the merchant cancels to fix an address and ships again.
+- **The marker stays authoritative.** D: «cancelled when all cancelled». The framework resolves a marked order to
+  `cancelled` whatever the raw status says (READ `woodev/shipping-method/order/class-delivery-status.php` `resolve()`), and
+  this spec does not fight it: a return found later for those postings is shown in the plugin panel and the row flags
+  (§11.1), never through the aggregate. A re-export clears the marker through the base `complete_export()`
+  (`Shipment_Cancellation::clear()`), and from then on the aggregate follows the NEW generation only — a return of a
+  history generation never replaces a live export's aggregate.
 - MEASURED: a posting cancelled before handover produces no return. A cancel after `delivered` is impossible (Ozon).
 
 ## 10. Tracking
@@ -465,11 +541,15 @@ ends. A posting label is one PDF per posting; there is no merge endpoint, and th
 ### 10.1 Pull-only poller (Yandex pattern)
 
 `Ozon_Status_Poller` on Action Scheduler (`yandex:includes/tracking/class-yandex-status-poller.php`): a recurring action at
-the §5.3 interval selects orders with `_woodev_ozon_active = 1` (pages of 25 orders), collects their non-terminal posting
-numbers and calls `posting/info` in batches of 100. A changed status updates the posting entry; `posting/status-history` is
-fetched only for the panel on demand. Terminal posting states: `delivered`, `canceled`. An order whose last change is older
-than 60 days stops being polled (Yandex `COMPLETED_POLL_DAYS`). A posting asked for and absent from the answer (F-7) is left
-unchanged and logged, never treated as cancelled.
+the §5.3 interval selects orders with `_woodev_ozon_active = 1` (pages of 25 orders), collects their non-terminal FORWARD
+posting numbers and calls `posting/info` in batches of 100. A changed status updates the posting entry; `posting/status-history`
+is fetched only for the panel on demand. Terminal posting states: `delivered`, `canceled`; an order with none left drops
+`_woodev_ozon_active`. An active order with no carrier id yet (create outcome unknown) is skipped — the framework's
+export retry and reconcile own it (§9.3); one with a carrier id but no postings list gets the §9.3 recovery search. An order whose last change is older than 60 days stops being polled (Yandex `COMPLETED_POLL_DAYS`). A
+posting asked for and absent from the answer (F-7) is left unchanged and logged, never treated as cancelled. Returns are NOT
+found through this selector — they have their own discovery and refresh in the same run (§11.2), so an order that left the
+active set still receives a later return. One run at a time (an Action Scheduler unique action; a run still going when the
+next is due is skipped), and a failed run waits for the next interval behind the §4.6 `auth` state.
 
 ### 10.2 Ozon status → canonical, and the aggregate
 
@@ -485,19 +565,46 @@ Per posting (13 values, OAS enum = August):
 | `in_container` | `created` | `canceled` | `cancelled` |
 | `acceptance_in_progress` | `created` | | |
 
-The provider's status meta holds ONE aggregate raw status, computed in order (A = postings not `canceled`):
+The provider's status meta holds ONE aggregate raw status of the CURRENT generation's forward postings, computed in order
+(A = postings not `canceled`; **moving** = `on_way`, `in_courier_service`, `in_delivery_point`; **failed** =
+`forming_failed`, `not_accepted_to_delivery`). D: «in transit while any posting is moving; delivered when all are terminal
+and at least one delivered (cancelled ones do not block); cancelled when all cancelled».
 
-1. A empty (all cancelled): any return non-terminal → `return_moving`/`return_at_pickup_point` (→ `returning`); all returns
-   `received` → `returned`; no returns → `canceled` (→ `cancelled`).
-2. Any posting in A `forming_failed` or `not_accepted_to_delivery` → that status (→ `failed`).
-3. All of A `delivered` → `delivered` (cancelled siblings were the merchant's decision; the raw label says «Доставлен,
-   отменено отправлений: N»).
-4. Some of A `delivered`, some not → `partially_delivered` (→ `in_transit`, label «Частично доставлен: 2 из 3»).
-5. Otherwise the least advanced status of A along `created < forming < ready_for_shipping < in_container <
-   acceptance_in_progress < on_way < in_courier_service | in_delivery_point < delivered`.
+1. A empty (all cancelled) → `canceled` (→ `cancelled`; the §9.7 marker says the same).
+2. All of A `delivered` → `delivered` (the raw label says «Доставлен, отменено отправлений: N» when there are cancelled
+   siblings).
+3. Some of A `delivered`, some not → `partially_delivered` (→ `in_transit`, label «Частично доставлен: 2 из 3»).
+4. Any of A moving → the least advanced MOVING status, `on_way < in_courier_service < in_delivery_point` (→ `in_transit`, or
+   `ready_for_pickup` only when every moving posting is `in_delivery_point`). **A moving posting wins over failed and
+   unshipped siblings.**
+5. Every posting of A failed → `forming_failed` (or `not_accepted_to_delivery` when all are that) (→ `failed`).
+6. Otherwise the least advanced status of the NON-failed postings of A along `created < forming < ready_for_shipping <
+   in_container < acceptance_in_progress` (→ `created`).
 
-So the WooCommerce order is never marked delivered while a parcel is still on its way (G §2 item 6), and `in_delivery_point`
-on one of two postings stays `in_transit`. The status map registered on the provider covers every aggregate token.
+A failed posting inside a non-failed aggregate (rules 3, 4, 6) raises the row flag «Отправление не принято Ozon» and is
+named in the panel — the partial failure is visible without making a live shipment look terminal (canonical `failed`
+retires the shared «Отменить», READ `admin/orders/class-order-actions.php` `CANCEL_RETIRED_STATUSES`). Returns never enter
+the aggregate (§9.7, §11.1). The status map registered on the provider covers every aggregate token; `returning` and
+`returned` are not produced.
+
+Pinned mixtures (W8 tests, before any poller code):
+
+| Postings | Aggregate raw | Canonical | Flag |
+|---|---|---|---|
+| `forming_failed`, `on_way` | `on_way` | `in_transit` | not accepted |
+| `ready_for_shipping`, `on_way` | `on_way` | `in_transit` | — |
+| `in_delivery_point`, `in_courier_service` | `in_courier_service` | `in_transit` | — |
+| `in_delivery_point`, `in_delivery_point` | `in_delivery_point` | `ready_for_pickup` | — |
+| `delivered`, `on_way` | `partially_delivered` | `in_transit` | — |
+| `delivered`, `forming_failed` | `partially_delivered` | `in_transit` | not accepted |
+| `delivered`, `canceled` | `delivered` | `delivered` | — |
+| `canceled`, `canceled` (+ a later return) | `canceled` | `cancelled` | return flag (§11.1) |
+| `forming_failed`, `ready_for_shipping` | `ready_for_shipping` | `created` | not accepted |
+| `forming_failed`, `not_accepted_to_delivery` | `forming_failed` | `failed` | — |
+| `delivered` + a client return `moving` | `delivered` | `delivered` | — (panel shows the return) |
+
+So the WooCommerce order is never marked delivered while a parcel is still on its way (G §2 item 6), and a failed sibling
+never makes a moving shipment look failed.
 
 ### 10.3 `storage_expires_at`
 
@@ -514,36 +621,63 @@ would overwrite the single aggregate slot, G §2 item 7).
 
 ### 11.1 Model
 
-A return is attached to its posting entry (`return` in §9.1). 8 statuses (OAS = August): `unknown`, `moving`,
-`at_pickup_point`, `received`, `utilization`, `utilized`, `written_off`, `looking_for`. Terminal: `received`, `utilized`,
-`written_off`. Panel labels in Russian; `at_pickup_point` additionally a row flag «Возврат ждёт в пункте Ozon» (`warn`) and an
-order note on entry with `current_placement_name` / `_address`.
+A return is attached to its posting entry (`return` in §9.1) — in the current postings list or in `_woodev_ozon_history`.
+Both OAS return types are in scope: `client_return` (after delivery) and `cancellation`. 8 statuses (OAS = August):
+`unknown`, `moving`, `at_pickup_point`, `received`, `utilization`, `utilized`, `written_off`, `looking_for`. Terminal:
+`received`, `utilized`, `written_off`. Panel labels in Russian; `at_pickup_point` additionally a row flag «Возврат ждёт в
+пункте Ozon» (`warn`) and an order note on entry with `current_placement_name` / `_address`. Returns never change the
+aggregate status (§9.7, §10.2): a delivered order with a client return stays delivered, a cancelled one stays cancelled; the
+return lives in the panel, the row flag and the preview fields.
 
-### 11.2 Polling through `return/search` filters
+### 11.2 Two jobs: refresh known returns, discover new ones
 
-In the same poller run: `return/search` with `filters.shipment_method_id` = configured, `filters.statuses` = the five
-non-terminal values, `filters.created_at_from` = the oldest active export date − 1 day, pages of 100. The filters are in OAS
-but server behaviour is UNVERIFIED (U8); if the server ignores them the client filters locally — same result, more pages.
-The terminal transition of a return already tracked is caught by a second call with `statuses = [received, utilized,
-written_off]` and `created_at_from` = the oldest open return.
+Both run inside the poller run (§10.1), after the posting batch, independent of `_woodev_ozon_active` — so a cancelled or
+delivered order that left the active set still receives its later return.
+
+- **Refresh (known open returns).** Orders with `_woodev_ozon_return_open = 1` (pages of 25) → their non-terminal return
+  numbers → `return/info` with ≤ 100 `return_numbers` per call (OAS maxItems 100). A return reaching a terminal status
+  leaves the set; the order drops `_woodev_ozon_return_open` when none is left. Calls per run: ⌈open returns / 100⌉.
+- **Discovery (account-wide, resumable).** State in one option `woodev_ozon_delivery_return_scan`: `watermark`, `cursor`,
+  `pass_from`, `pass_max_created_at`. A pass sends `return/search` with `filters.shipment_method_id` = configured,
+  `filters.created_at_from` = `watermark − 24 h` (overlap for late-visible records), NO status filter, pages of 100, and
+  saves `next_cursor` verbatim after every page. **At most 3 pages per run**; an unfinished pass resumes from the saved
+  cursor in the next run. An empty `next_cursor` ends the pass: `watermark = pass_max_created_at`. The first watermark is
+  the time of the shop's first Ozon export. A return number already attached is skipped (no API call); a new one is
+  matched (§11.3) and attached; a non-terminal one sets `_woodev_ozon_return_open`.
+- **Failure.** A failed page keeps the cursor and ends the job for this run; the next run is the retry (the interval is
+  the backoff), behind the §4.6 `auth` state.
+- **If the server ignores the filters (U8):** the pass reads the whole account history and filters locally by method and
+  `created_at` — slower to catch up, but still ≤ 3 pages per run, so the bound holds.
+
+Real case behind the page cap: one `looking_for` return open for months must not make every run re-read all terminal
+returns since its creation (the earlier draft did exactly that).
 
 ### 11.3 Matching a return to a posting — UNVERIFIED (U9)
 
-The return record carries no posting number (OAS: `return_number`, `return_external_id`, `barcode`, …). Rule: match
-`return_external_id` = our `posting_external_id`, else `return_number` = `posting_number`. An unmatched return is logged and
-listed in the settings group «Возвраты без заказа» (number, status, placement) so the merchant still sees it. R3 (the first real
-return) settles the key; until then this is the release's least certain link.
+The return record carries no posting number (OAS: `return_number`, `return_external_id`, `barcode`, …). Rule:
+
+1. `return_external_id` = one of our `posting_external_id` values `{order id}-{generation}-{n}` (§9.2): the order id is
+   parsed from the key, that order is loaded, and the entry with exactly that key is found among the current postings and
+   `_woodev_ozon_history`. The key is unique across generations, so a generation-1 return arriving after a re-export
+   attaches to the generation-1 posting in history, never to the replacement.
+2. Else `return_number` = a `posting_number`: one datastore-aware meta search over `_woodev_ozon_postings` and
+   `_woodev_ozon_history` for the quoted number (≤ 300 lookups per run, bounded by the page cap).
+
+An unmatched return is logged and listed in the settings group «Возвраты без заказа» (number, status, placement) so the
+merchant still sees it. R3 (the first real return) settles the key; until then this is the release's least certain link.
 
 ### 11.4 Return barcode on demand
 
 The barcode is an ACCOUNT-level PDF the merchant shows to collect returns at the pickup point (`return/download_barcode`, no
-body; `return/reset_barcode` → `{barcode, expires_at}`); it expires, so it is never stored.
+body). `return/reset_barcode` answers the NESTED shape `{barcode_content: {barcode, expires_at}}` (READ OAS
+`Return.ResetBarcode.Response` → `Return.Types.ResetBarcodeContent`); the typed client result unwraps `barcode_content`, and a
+response fixture pins it. It expires, so it is never stored.
 
 - Where: the plugin order panel of an order with a return `at_pickup_point`, and the «Возвраты» group of the settings tab:
   «Скачать штрихкод для получения возвратов» (streams the PDF) and «Выпустить новый штрихкод» (`reset_barcode`, confirm
   «Старый штрихкод перестанет действовать»; shows the new code and its expiry).
 - Capability `manage_woocommerce`, nonce, at most one download per 10 s per user (real case: a double click hitting Ozon twice).
-- **Licence (provisional, O3):** both stay available without an in-force licence — an explicit exception to the gate, because
+- **Licence (settled, O3):** both stay available without an in-force licence — an explicit exception to the gate, because
   the parcels were shipped under a valid licence and the barcode is the only way to take the merchant's own goods back.
   `reset_barcode` writes at Ozon, so this is a deliberate exception, not a `read_only` declaration.
 
@@ -554,9 +688,10 @@ body; `return/reset_barcode` → `{barcode, expires_at}`); it expires, so it is 
 Registration on every request (donor `yandex:includes/orders/class-yandex-order-actions.php`): provider, shipment and tracking
 handlers, document source, `Order_Marker` writer (G §2 item 2). The row shows the aggregate status (§10.2), the Ozon order
 number as the tracking id, and the standard actions (export, cancel, label for single-posting orders, refresh). Tracking link
-template UNVERIFIED (U10) — none until measured. Row flags (meta only, never an API call): «Ждёт подтверждения Ozon»,
-«Пополните баланс Ozon», «Возврат ждёт в пункте Ozon», «Хранение до DD.MM» (≤ 3 per row, framework limit). Preview fields:
-number of postings, delivered/total, returns.
+template UNVERIFIED (U10) — none until measured. Row flags (meta only, never an API call), in this priority: «Пополните
+баланс Ozon», «Отправление не принято Ozon» (a failed posting beside live ones, §10.2), «Возврат ждёт в пункте Ozon», «Ждёт
+подтверждения Ozon», «Хранение до DD.MM» (the framework shows ≤ 3 per row). Preview fields: number of postings,
+delivered/total, returns (count and the most advanced return status, including returns of history generations).
 
 ### 12.2 Plugin order panel «Ozon Доставка» (order edit screen, HPOS and posts)
 
@@ -581,17 +716,25 @@ with the missing item named.
 
 ## 13. Worst-case Ozon traffic per shop
 
-| Source | Bound | Worst case per day |
-|---|---|---|
-| Catalogue sync | ~452 list + ~452 info calls per run, 200 ms spacing; daily; ≤ 5 retries | ~904, plus a manual «Обновить сейчас» |
-| Token | one per ~hour per scope set | ~24–48 |
-| `check-client` | one per distinct valid phone per 24 h (true) / 1 h (false); ≤ 10 phones per buyer session per hour | proportional to checkouts reaching the phone |
-| Quotes | per distinct (phone, destination, parcel, point) via the rate cache | proportional to checkouts |
-| Approval checks | ≤ 5 per exported order | 5 × exports |
-| Status poll | ⌈active postings / 100⌉ per run + 2+ return-search pages, 96 runs at 15 min | 1 000 active postings: ~1 150 |
-| Labels, barcode | merchant clicks only | — |
+P = non-terminal forward postings, R = open returns, E = exports per day, N = postings per export (≤ 100). Runs per day
+= 96 at the shortest poll interval (15 min). «During a failure» = Ozon or the key is broken (§4.6).
 
-No automatic call loops on an error: every scheduled job has a capped backoff.
+| Source | Bound (cap + backoff) | Worst case per day |
+|---|---|---|
+| Catalogue sync | ~452 list + ~452 info calls per run, 200 ms spacing; daily; a failed action retried 5 → 15 → 60 min, ≤ 5 times, cursor kept (§6.3) | ~904, plus a manual «Обновить сейчас» |
+| Token | healthy: one per ~hour per scope set; failing: `auth` class of §4.6 | healthy ~24–48; during a failure ≤ 100 |
+| `check-client` | answers cached 24 h (true) / 1 h (false); ≤ 10 phones per buyer session per hour; failures: `check_client` class of §4.6 | healthy: proportional to checkouts reaching the phone; during a failure ≤ 100 |
+| Quotes | successes via the rate cache, refusals cached 1 h (§7.4); failures: `quote` class of §4.6 | healthy: proportional to checkouts; during a failure ≤ 100 |
+| Export (automatic or button) | first attempt: 1 `check-client` + 1 quote + 1 create; unknown outcome: ≤ 5 `Export_Retry` attempts, each a ≤ 5-page reconcile search + at most one replayed create; then N approves | E × (3 + N) healthy; ≤ E × (3 + 30 + N) in the worst unknown-outcome case |
+| Approval checks (§9.4) | ≤ 5 steps per export, each ⌈N/100⌉ `posting/info` + a re-approve only for postings still `created` | ≤ E × 5 × (1 + N) |
+| Status poll (§10.1) | ⌈P/100⌉ `posting/info` per run; one run at a time | 96 × ⌈P/100⌉ |
+| Return refresh (§11.2) | ⌈R/100⌉ `return/info` per run | 96 × ⌈R/100⌉ |
+| Return discovery (§11.2) | ≤ 3 `return/search` pages per run, resumable cursor; a failed page waits for the next run | ≤ 288 |
+| Labels, barcode, «Обновить статусы Ozon» | merchant clicks only; barcode ≤ 1 per 10 s per user, refresh ≤ 1 per 30 s per order | — |
+
+Example: 1 000 active postings, 100 open returns → status poll + returns = 96 × (10 + 1 + 3) = **1 344 per day**, flat
+whatever the age of the oldest open return. No automatic call loops on an error: every automatic call above has a cap and
+a backoff, and the checkout classes cannot exceed 300 failed calls a day in total (§4.6).
 
 ## 14. Test strategy
 
@@ -602,9 +745,16 @@ Fixtures recorded from the live API (R1 re-records the read-only set; W's write 
 (incl. a past and a far-future value), `invalid_scope` fallback and stored scope state, both error envelopes, per-item errors
 with the key absent, `JSON_BIGINT_AS_STRING` ids, seven-digit timestamps, secret masking through the real sanitizer; phone
 normalization table (W's numbers); quote aggregation (sum, max, any error → null, >100 boxes); declared-value split to the
-kopeck; idempotency key determinism; aggregate status rules (§10.2, one test per rule plus mixed cases); return matching
-(§11.3); catalogue sync resume from a saved cursor, generation switch, last-good serving; `work_time` rendering skipping past
-dates.
+kopeck from `line_subtotal` incl. the coupon example of §7.2; refusal cache; §4.6 backoff (repeated recalculations during a
+token / `check-client` / quote failure send only the scheduled probes; the compare-and-swap claim lets one of two
+concurrent requests through; a credential save resets `auth`; no stale rate is served); idempotency key determinism; saved
+request replay (same key → same body, no fresh check; refusal deletes it); the create/approve boundary (§9.3: an approve
+exception after a successful create leaves the carrier id, the postings with `approve = pending|failed`, export success;
+reconcile search finds the order by `posting_external_id` prefix); aggregate status rules (§10.2: one test per rule plus
+every pinned mixture); return refresh / discovery (page cap, cursor resume, watermark overlap, terminal on discovery, a
+cancelled and a delivered order that left the active set still get their return); return matching (§11.3, both keys, a
+generation-1 return after a re-export); `reset_barcode` nested response; catalogue sync resume from a saved cursor,
+generation switch, last-good serving; `work_time` rendering skipping past dates.
 
 ### 14.2 Stub server and integration
 
@@ -619,6 +769,8 @@ integration test boots the real entry path with a signed in-force licence claim 
 - **Needs the operator's word (real shipment or account change):** `order/create`, `posting/approve` (balance),
   `posting/cancel`, `return/reset_barcode` (invalidates the merchant's barcode), anything under `shipment-method/create|update|
   delete`. `posting/label` is read-only but exists only after an approve.
+- **R2 is authorised (O5):** up to **10 real orders** on the operator's TEST cabinet, each cancelled before handover, in
+  the same run. Anything beyond that, and `return/reset_barcode`, still needs his word.
 - **No sandbox** (§0 note 2): settled; no O-question remains for it.
 
 ### 14.4 Rig acceptance (functional acceptance is the coordinator's)
@@ -633,7 +785,7 @@ cancel of one posting and of all, re-export; poller over a real order. Write ste
 `composer test`, `composer phpcs`, `composer phpstan`, `php -l`, local-ci (`-w` per workflow) + a critic of another lineage per
 PR; `npm run lint:docs` here for this spec.
 
-## 15. Out of scope for 1.0.0
+## 15. Out of scope for 2.0.0
 
 Containers, arrival passes, drop-off and return-point management (D8); several shipment methods per site or per zone instance;
 the admin create/edit-order wizard (§12.4); native per-posting rows/filters in the framework orders table and an
@@ -650,7 +802,7 @@ onboarding wizard (§5.4); a cookie cache for testcookie (§4.3).
 |---|---|---|---|
 | U1 | Real rate limit behind 429 and its body shape | observed in production logs | No — pacing and backoff exist |
 | U2 | `delivery-point/info` with 1000 ids (OAS) | R1, one call | No — 100 is used |
-| U3 | `Idempotency-Key` retention time | not testable cheaply | No — keys are per generation |
+| U3 | `Idempotency-Key` retention time | not testable cheaply | No — keys are per generation, and a replay only follows a read-only reconcile search that found nothing (§9.3) |
 | U4 | Does `order/checkout` return `RecipientError` for a phone `check-client` refuses | R1 with `+79990000001` | No — §8.5 keeps check-client |
 | U5 | Does a phone-only edit in block checkout reach the server | W5 spike | No — fallback donor named |
 | U6 | Are DaData suggestion coordinates house-precise | R2 (courier create) + rig | No — house-level rule |
@@ -663,10 +815,13 @@ onboarding wizard (§5.4); a cookie cache for testcookie (§4.3).
 
 ### 16.2 Interpretations (coordinator may revisit)
 
+Items 12–20 were added after critic round 1 (s204), each the simplest choice that closes the concrete failure the critic
+named.
+
 1. Plugin id `ozon_delivery`, method ids `ozon_delivery_pickup` / `ozon_delivery_courier` (§2).
 2. One pickup method for both pickup points and lockers (§2, §6.4).
 3. Rate = delivery + insurance, no setting (§7.3).
-4. Representative-point quote before a point is chosen (§7.3, O7).
+4. Representative-point quote before a point is chosen (§7.3) — now settled by O7, kept for numbering.
 5. Export = create + approve in one action (§9.3).
 6. Approval check delays 15 s … 1 h (§9.4).
 7. `check-client` cache 24 h / 1 h, cap 10 phones per session per hour (§8.5).
@@ -674,19 +829,29 @@ onboarding wizard (§5.4); a cookie cache for testcookie (§4.3).
 9. Labels: document source only for single-posting orders (§9.6).
 10. No onboarding wizard (§5.4).
 11. Status poll default 30 min (§5.3).
+12. Release identity in ONE place: the build script's `slug` = ZIP folder, the repo main file is `${slug}.php`
+    (provisional `woocommerce-ozon-dostavka`); the text domain stays `woodev-ozon-delivery`, decoupled (§2).
+13. `posting_external_id` = `{order id}-{generation}-{n}`; `order_external_id` gains `-{generation}` from generation 2 (§9.2).
+14. The create request is saved before the call and replayed verbatim with its key while the outcome is unknown; a
+    refusal deletes it (§9.2).
+15. Create/approve boundary: approve runs on the plugin's `shipment_exported` callback after the id is stored, catching every
+    API exception; reconcile = read-only `posting/search` over `sent_at − 5 min … + 60 min`, ≤ 5 pages (§9.3).
+16. Aggregate: a moving posting wins; `failed` only when every live posting failed; a failed sibling is a row flag (§10.2).
+17. Returns never enter the aggregate; the cancellation marker stays authoritative (§9.7, §11.1).
+18. Returns: refresh by `return/info` (100 per call), discovery by a resumable watermark scan (24 h overlap, ≤ 3 pages per
+    run, no status filter) (§11.2); matching parses the order id from `return_external_id` (§11.3).
+19. Failure backoff: three classes (`auth`, `check_client`, `quote`), 60 s doubling to 15 min, `Retry-After` ≤ 1 h, one
+    compare-and-swap probe per window (§4.6); quote refusals cached 1 h (§7.4).
+20. Declared value per unit from `line_subtotal` (cart) / `get_subtotal()` (order), not `Packaging::get_value_context()` (§7.2).
 
-### 16.3 Operator questions
+### 16.3 Operator questions — all answered
 
-| # | Question | Provisional choice |
-|---|---|---|
-| O1 | Release version: `1.0.0` for a new product, or another number? | `1.0.0` |
-| O2 | EDD product: which download id, price and licence terms? (needed by the loader definition and the licence gate before W0 can finish) | none — W0 waits for it |
-| O3 | Return barcode download and reset without an in-force licence: allowed as an explicit exception? | allowed (§11.4) |
-| O4 | Orders with several parcels: is a «Этикетка» link per parcel in the order panel enough, or is one merged PDF needed? | per-parcel links |
-| O5 | Write measurement R2 (a 2-box pickup order and one courier order, create → approve → label → cancel, ~2 × 100 ₽ quoted) — may it run? | waits for his word |
-| O6 | First real return R3 needs a handed-over parcel cancelled in transit — real money and a physical handover; when? | after the first real handover |
-| O7 | Pickup price before the buyer picks a point: show a price for the nearest point (re-quoted after the choice), or no price until a point is chosen? | nearest point |
-| O8 | A GlitchTip project for the plugin (the other plugins each have one)? | yes, as for T-Bank |
+O1–O8 were answered on 30.10.2026 («всё по рекомендациям, кроме п.1»); the binding text is the «Operator answers» table of
+[decisions.md](../research/2026-10-30-ozon-gap-refresh/decisions.md). Where they land: O1/O2 version 2.0.0 of EDD download
+58107, old folder/main-file names kept (§2, W0); O3 barcode without a licence (§11.4); O4 per-parcel labels (§9.6); O5 R2
+with ≤ 10 test-cabinet orders, each cancelled before handover (§14.3, R2); O6 R3 after the first real handover (R3); O7
+nearest-point price (§7.3); O8 the existing GlitchTip project, DSN in the private repo (§2, W0). No open operator question
+blocks any card.
 
 ## 17. Work breakdown (repo `kalbac/woodev-ozon-delivery`, one reviewable PR per card into `main`)
 
@@ -695,19 +860,19 @@ a detailed brief), read-only unless marked. Rounds: at most 2–3 per card, then
 
 | Card | Scope | Acceptance checks | Depends on |
 |---|---|---|---|
-| **W0** skeleton | remove the rig harness; `woodev-ozon-delivery.php` (loader literals, HPOS + blocks, `framework_version` 2.0.16), `includes/class-plugin.php` (`Shipping_Plugin`), lifecycle (install creates §6.2 table), autoloader, `composer.json`, CI + `.github/local-ci.Dockerfile`, `scripts/sync-framework.sh` and `scripts/build-release-zip.sh` + release workflow copied from `rp:`, `tests/bootstrap.php`, `languages/` header, DSN filter (O8); wp.org collision search for the ids | boot through `Woodev_Loader` from a ZIP-shaped tree; header/loader version test; licence gate active in an integration test; local-ci green | O1, O2 |
-| **W1** API client | `includes/api/*`: client, token (scopes + `invalid_scope` fallback), error envelopes, trace id, idempotency header, secrets, bigint/timestamp parsing; fixtures | §14.1 transport list; sanitizer test | W0 |
+| **W0** skeleton | **first step:** look for the old 1.0.3 ZIP (card `kalbac/woodev-ozon-delivery#9`); found → its folder and main-file names, else the provisional `woocommerce-ozon-dostavka` (§2) — W0 does NOT wait for it. Remove the rig harness; `${slug}.php` (header `Version: 2.0.0`, loader literals incl. `download_id` 58107, HPOS + blocks, `framework_version` 2.0.16), `includes/class-plugin.php` (`Shipping_Plugin`), lifecycle (install creates §6.2 table), autoloader, `composer.json`, CI + `.github/local-ci.Dockerfile`, `scripts/sync-framework.sh` and `scripts/build-release-zip.sh` (its `slug` = the ONE place of the folder name) + release workflow copied from `rp:`, `tests/bootstrap.php`, `languages/` header, DSN filter reading the DSN kept in the private repo / build env (O8) — never a DSN in this public repo; wp.org collision search for the ids | boot through `Woodev_Loader` from a ZIP-shaped tree whose folder = `slug` and main file = `${slug}.php`; header/loader version test (2.0.0, 58107); licence gate active in an integration test; no 1.0.3 option read; local-ci green | — |
+| **W1** API client | `includes/api/*`: client, token (scopes + `invalid_scope` fallback), error envelopes, trace id, idempotency header, secrets, bigint/timestamp parsing, the §4.6 backoff state (three classes, compare-and-swap probe, credential reset), `reset_barcode` nested result; fixtures | §14.1 transport list; sanitizer test; §4.6 backoff tests; nested `barcode_content` fixture | W0 |
 | **R1** read-only re-record | record fixtures for every safe call of §14.3 with the operator's key; settle U2, U4, U8, U10 | fixtures committed under `tests/fixtures/ozon/`, answers written into `docs-internal/research` of the plugin repo | W1 (or the recon harness) |
 | **W2** settings | settings handler, connection test, method select / manual id, scope state display, phone-field-hidden warning, `is_configured()` | settings round-trip incl. secret; select from fixture; manual-id fallback on `invalid_scope`; no call at checkout | W1 |
 | **W3** catalogue | table, sync job (list/info, cursor, generations, backoff), `Ozon_Point_Source`, `work_time`, settings status group | §14.1 sync tests; a stub run of 3 pages resumes after a killed action; bbox query returns only active, method-matching, fitting points | W1 |
-| **W4** quoting | two method classes, packing → postings, declared-value split, aggregation, representative point, rate cache context, refusal helper | §14.1 quote tests; every refusal path reports once | W2, W3 |
+| **W4** quoting | two method classes, packing → postings, declared value from `line_subtotal` and its split, aggregation, representative point, rate cache context (incl. the subtotal map), refusal cache, `quote` backoff, refusal helper | §14.1 quote tests incl. the coupon example; every refusal path reports once; repeated recalculation during a quote failure sends only the §4.6 probes, no stale rate | W2, W3 |
 | **W5a** spike: blocks phone transport | prove U5 on the rig (phone-only edit, shipping and billing phone); pick the transport | written result + a minimal working hook | W4 |
-| **W5** checkout phone-first | §8.1–8.6: normalization, session/customer transport, package hash, `check-client` cache and cap, hints (classic row, Store API data + blocks script), courier address rule and snapshot, placement re-check; `.po` entries | unit tests for normalization, cache, cap, rate meta hash; rig: the §8.3 table on both surfaces, phone edit after selection | W4, W5a |
-| **W6** export | shipment handler: re-quote, create with idempotency, approve, verification schedule, posting storage, `NotEnoughBalance`, «Подтвердить отправления», generation | fixture tests incl. W's transcribed write responses; same-key replay returns same numbers; approve failure keeps ids | W5 |
-| **R2** write round 2 (operator's word, O5) | 2-box pickup order and 1 courier order: create, approve, label, cancel one posting, cancel all; record country form (U7) | responses recorded; orders cancelled in the same run | W6, O5 |
-| **W7** documents, cancel, panel | document source (single posting), per-posting label route, async cancel (client exception, settle on all-cancelled, history), plugin order panel, order actions, row flags, preview fields | panel from fixtures (1 and 3 postings); cancel never clears the id early; re-export after full cancel uses generation 2 | W6 |
-| **W8** tracking | poller, status map, aggregate rules, `storage_expires_at`, shipment facts, 60-day stop | §10.2 rule tests; a mixed 3-posting fixture never reaches `delivered` early | W6 |
-| **W9** returns | return polling with filters + local fallback, matching, unmatched list, placement flag/note, barcode download/reset with licence exception | matching tests both keys; barcode never stored; licence-off still downloads | W8 |
+| **W5** checkout phone-first | §8.1–8.6: normalization, session/customer transport, package hash, `check-client` cache, cap and `check_client` backoff, hints (classic row, Store API data + blocks script), courier address rule and snapshot, placement re-check; `.po` entries | unit tests for normalization, cache, cap, backoff (same phone, outage → probes only), rate meta hash; rig: the §8.3 table on both surfaces, phone edit after selection | W4, W5a |
+| **W6** export | shipment handler and client: first attempt (fresh check + quote), saved request + `_woodev_ozon_active` before create, replay mode, refusal deletes the request, `posting_external_id` `{order id}-{generation}-{n}`, create/approve boundary on `shipment_exported` (§9.3), `supports_reconcile()` + `find_exported_order()` window search, approve, verification schedule incl. missing-postings recovery and re-approve, posting storage, `NotEnoughBalance`, «Подтвердить отправления», generation, export subtotal value | fixture tests incl. W's transcribed write responses; same-key replay sends the saved body with no fresh check; an approve exception after create → export success, id kept, `approve` = `pending` or `failed`; a killed request after create is recovered by the window search; a create refusal leaves no saved request | W5 |
+| **R2** write round 2 (authorised, O5) | ≤ 10 real orders on the operator's TEST cabinet, each cancelled before handover in the same run: a 2-box pickup order and a courier order — create, approve, label, cancel one posting, cancel all; one same-key replay; record country form (U7) | responses recorded; every order cancelled before handover; order count ≤ 10 stated in the result | W6 |
+| **W7** documents, cancel, panel | document source (single posting), per-posting label route, async cancel (client exception, settle on all-cancelled: history, marker, aggregate `canceled`), plugin order panel (postings, returns incl. history generations), order actions, row flags in the §12.1 priority, preview fields | panel from fixtures (1 and 3 postings); cancel never clears the id early; re-export after full cancel uses generation 2 and clears the marker | W6 |
+| **W8** tracking | poller (one run at a time, `auth`-gated), status map, aggregate rules of §10.2, failed-sibling flag, `storage_expires_at`, shipment facts, 60-day stop | every pinned mixture of the §10.2 table is a test written BEFORE the poller code; a mixed 3-posting fixture never reaches `delivered` early; no aggregate `returning`/`returned` | W6 |
+| **W9** returns | return refresh (`return/info`, `_woodev_ozon_return_open`), resumable discovery scan (watermark, 24 h overlap, ≤ 3 pages per run, cursor, local filter fallback), matching by the unique key across current + history, unmatched list, placement flag/note, barcode download/reset (nested result) with licence exception | §14.1 return tests: page cap holds with 10 000 stub returns; a cancelled and a delivered order outside the active set get their later return; a generation-1 return after a re-export attaches to history; matching both keys; barcode never stored; licence-off still downloads | W8 |
 | **R3** first real return (O6) | settle U9 | recorded return record | a real handover |
 | **W10** acceptance and release prep | rig acceptance §14.4, release ZIP installed on a clean site, merchant docs card (setup: application scopes, shipment method, balance; the phone-first behaviour) | rig run recorded; ZIP boots from its own `woodev/` | W5, W7, W8, W9 |
 
@@ -726,4 +891,4 @@ upload, framework pin) waits for the operator.
 - [Russian Post v2 plugin design](2026-10-21-russian-post-v2-plugin-design.md) and
   [Yandex v2 plugin design](2026-10-12-yandex-v2-plugin-design.md) — carrier patterns reused here (poller, settings, release ZIP).
 - [Framework architecture](../wiki/architecture.md) — where each shipping responsibility lives.
-- [Clean-break policy](../adr/005-platform-v2-clean-break-policy.md) — installed-site data is a contract from 1.0.0 on.
+- [Clean-break policy](../adr/005-platform-v2-clean-break-policy.md) — installed-site data is a contract from 2.0.0 on.
