@@ -408,7 +408,7 @@ final class ShippingPluginLocationProviderNoticeTest extends TestCase {
 	 */
 	public static function known_cause_provider(): array {
 		return [
-			'balance exhausted' => [ 'balance_exhausted', 'закончились средства', 'ополните баланс' ],
+			'balance exhausted' => [ 'balance_exhausted', 'не подтверждена почта аккаунта', 'платный тариф' ],
 			'keys rejected'     => [ 'keys_rejected', 'не принимает ключи', 'ключи в настройках' ],
 			'balance positive'  => [ 'balance_positive', 'средства на счёте есть', 'лимиты и статус аккаунта' ],
 			'unknown'           => [ 'unknown', 'Чаще всего это значит', 'пополните баланс' ],
@@ -429,6 +429,24 @@ final class ShippingPluginLocationProviderNoticeTest extends TestCase {
 		$this->assertStringContainsString( $says_what_to_do, $notice['message'] );
 		$this->assertStringContainsString( 'после первого успешного запроса подсказок', $notice['message'] );
 		$this->assertStringNotContainsString( 'снова начнёт отвечать', $notice['message'] );
+	}
+
+	/**
+	 * #1505 — the free DaData tariff always reports a 0 ₽ balance and bills suggestions by a
+	 * daily limit, not money, so a zero balance must not be read as «funds ran out».
+	 */
+	public function test_a_zero_balance_is_not_called_exhausted_funds_and_names_the_real_403_causes(): void {
+		$this->open_gate_with_dadata_state( 'dadata', 1700000000, 'balance_exhausted' );
+
+		$plugin = ( new \ReflectionClass( Notice_Opted_In_Shipping_Plugin_Fixture::class ) )->newInstanceWithoutConstructor();
+		$notice = $plugin->location_provider_access_denied_notice();
+
+		$this->assertNotNull( $notice );
+		$this->assertStringNotContainsString( 'закончились средства', $notice['message'] );
+		$this->assertStringContainsString( 'на бесплатном тарифе', $notice['message'] );
+		$this->assertStringContainsString( 'не подтверждена почта аккаунта', $notice['message'] );
+		$this->assertStringContainsString( 'исчерпан дневной лимит', $notice['message'] );
+		$this->assertStringContainsString( 'https://dadata.ru/profile/', $notice['message'] );
 	}
 
 	public function test_without_a_secret_the_notice_keeps_the_three_cause_text_and_asks_nothing(): void {

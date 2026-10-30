@@ -79,6 +79,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		/**
 		 * What the balance API says about a recorded 403 (#1060) — the values
 		 * {@see self::get_access_denied_cause()} returns.
+		 *
+		 * `CAUSE_BALANCE_EXHAUSTED` means only «balance <= 0»: the free tariff always reports 0 ₽, so the
+		 * merchant text must not claim the funds ran out (#1505).
 		 */
 		public const CAUSE_BALANCE_EXHAUSTED = 'balance_exhausted';
 		public const CAUSE_KEYS_REJECTED     = 'keys_rejected';
