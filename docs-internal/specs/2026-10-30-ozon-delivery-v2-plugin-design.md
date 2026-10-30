@@ -381,7 +381,7 @@ the WooCommerce setting, and the methods report `no_phone`. Nothing makes the fi
   `update_order_review` on the field's `change`, not per keystroke), reads the phone from `post_data` in
   `woocommerce_checkout_update_order_review`, and keeps the normalized value in the WooCommerce session.
 - **Blocks.** The phone arrives with the customer address through the Store API customer update. MEASURED (U5 settled by W5a,
-  30.10.2026, `ozon:docs/research/2026-10-30-w5a-phone-transport.md`): a phone-only edit DOES reach the server in block checkout
+  30.10.2026, `ozon:docs/research/2026-10-30-w5a-phone-transport.md` on Ozon branch `kalbac/w5-phone-first` — PR to come, not on `main` yet): a phone-only edit DOES reach the server in block checkout
   (`/cart/update-customer`, no client code), but rates do not re-run until the phone is in the package hash (the Both bullet);
   classic sends nothing on a phone-only edit. The `extensionCartUpdate` fallback (`src/checkout-blocks/payment-recalc.ts`) is not
   needed and stays unexercised.
@@ -438,7 +438,8 @@ the order's recipient phone hash must equal the hash the chosen Ozon rate was co
 `ozon_phone_hash`), and `check-client` (cache allowed) must be true. Mismatch → a validation error «Номер телефона изменился —
 проверьте стоимость доставки Ozon и подтвердите заказ ещё раз.»; refusal → the refusal text of §8.3. Real case: the buyer edits
 the phone after choosing Ozon in a block checkout whose update had not landed yet. The pickup point re-check is the framework's
-own (`fetch_details()`).
+own (`fetch_details()`). R1/U4 measured that `order/checkout` refuses the same phones, so the gate and the quote agree;
+`check-client` stays the cheap pre-check.
 
 ## 9. Export and the posting model (D3)
 
@@ -740,7 +741,7 @@ P = non-terminal forward postings, R = open returns, E = exports per day, N = po
 
 | Source | Bound (cap + backoff) | Worst case per day |
 |---|---|---|
-| Catalogue sync | Per full generation: 452 list + 452 info calls (45 194 points, F-20; 100 per call; 200 ms spacing). 92 scheduled 10-call chunks; a failed chunk retried 5 → 15 → 60 min, at most 5 times, cursor kept (§6.3). Bound as counted in Ozon PR #28: 904 + 92 × 5 = **1 364 per generation** (each retry counted as one call; a retry that fails after several calls costs more — not measured). ≤ 5 extra `info` calls per batch and ≤ 60 per run for unknown ids (§6.3) are NOT in that count | 1 364 on a normal day; **2 728** on a day the first and the daily run both complete; ≤ 60 more per run for unknown-id retries; a manual «Обновить сейчас» adds a run |
+| Catalogue sync | Per run (one generation G): 452 list + 452 info successful calls = 904 (45 194 points, F-20; 100 per call; 200 ms spacing), in 92 scheduled 10-call chunks. A failed chunk is retried 5 → 15 → 60 min, at most 5 times (§6.3). Each attempt ends at most in one failing call, and the cursor / `detail_generation` make a retry resume after the last successful call, so successful calls are never repeated. Failing calls: 92 chunks × (1 + 5) attempts = 552. Unknown-id retries: ≤ 60 per run (§6.3). **Worst case per run: 904 + 552 + 60 = 1 516.** Healthy run: 904 | Healthy day with the first and the daily run both completing: 2 × 904 = 1 808; **worst case 2 × 1 516 = 3 032**; a manual «Обновить сейчас» adds a run |
 | Token | healthy: one per ~hour per scope set; failing: `auth` class of §4.6 | healthy ~24–48; during a failure ≤ 100 |
 | `check-client` | answers cached 24 h (true) / 1 h (false); ≤ 10 phones per buyer session per hour; failures: `check_client` class of §4.6 | healthy: proportional to checkouts reaching the phone; during a failure ≤ 100 |
 | Quotes | successes via the rate cache, refusals cached 1 h (§7.4); failures: `quote` class of §4.6 | healthy: proportional to checkouts; during a failure ≤ 100 |
