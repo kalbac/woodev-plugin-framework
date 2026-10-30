@@ -462,8 +462,11 @@ posts store).
   - **Replay** (a saved request exists — the previous attempt's outcome is unknown): it sends the SAVED body with the
     saved key — no re-pack, no fresh phone or quote check, so recovering an order that may already exist at Ozon never
     depends on today's phone answer or price, and an order edited meanwhile cannot ride on the old key.
-  - A refusal of the create call itself (4xx / per-item `error`: nothing was created) deletes the saved request and clears
-    `_woodev_ozon_active` before rethrowing, so the next export rebuilds from the current order.
+  - A documented non-success response of the create call (a 4xx error envelope: nothing was created) deletes the saved
+    request and clears `_woodev_ozon_active` before rethrowing, so the next export rebuilds from the current order. A 200
+    `order/create` has no per-posting `error` (OAS `Ozon.Delivery.Order.Create.PostingResult`, `additionalProperties: false`);
+    per-item errors exist only in the `order/checkout` preflight. Any other outcome (timeout, 5xx, an undecodable 200) is
+    uncertain: the saved request stays and the reconcile path above applies.
 
 ### 9.3 The create/approve boundary — create is committed before approve
 
