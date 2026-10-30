@@ -389,6 +389,114 @@ namespace Woodev\Tests\Unit\Shipping {
 			$this->assertSame( 'KZN1', $handler->get( self::PICKUP_KEY )['cdek:424']['pvz']['id'], 'written key: kept' );
 		}
 
+		/**
+		 * kalbac/woocommerce-yandex-delivery#150: a request that saves the session without ever reading the
+		 * record (here an `apply_coupon` that only left a notice) loaded Moscow; `/location/select` saved
+		 * Kazan meanwhile. Nothing in the request reports the record, yet the merge adopts Kazan.
+		 *
+		 * @runInSeparateProcess
+		 * @preserveGlobalState disabled
+		 */
+		public function test_merge_adopts_the_location_record_in_a_request_that_never_read_it(): void {
+			require_once dirname( __DIR__, 2 ) . '/_stubs/wc-session-handler.php';
+
+			$handler = $this->dirty_handler( [ self::LOCATION_KEY => self::MOSCOW ] );
+			$wpdb    = $this->stored_row( [ self::LOCATION_KEY => self::KAZAN ] );
+			$merger  = new Session_Key_Merger_Probe( $handler );
+			Session_Key_Merger::reset_for_tests( $merger );
+
+			Session_Key_Merger::protect_location_record();
+			$merger->merge_before_save();
+
+			$this->assertSame( self::KAZAN, $handler->get( self::LOCATION_KEY ), 'the concurrent write wins over the stale copy' );
+			$this->assertCount( 1, $wpdb->queries );
+		}
+
+		/**
+		 * The same request when the shopper had NO record when it loaded and `/location/select` saved one
+		 * meanwhile: the record is adopted, not dropped by the whole-row save.
+		 *
+		 * @runInSeparateProcess
+		 * @preserveGlobalState disabled
+		 */
+		public function test_merge_adopts_a_record_saved_while_a_request_without_one_ran(): void {
+			require_once dirname( __DIR__, 2 ) . '/_stubs/wc-session-handler.php';
+
+			$handler = $this->dirty_handler( [] );
+			$this->stored_row( [ self::LOCATION_KEY => self::KAZAN ] );
+			$merger = new Session_Key_Merger_Probe( $handler );
+			Session_Key_Merger::reset_for_tests( $merger );
+
+			Session_Key_Merger::protect_location_record();
+			$merger->merge_before_save();
+
+			$this->assertSame( self::KAZAN, $handler->get( self::LOCATION_KEY ) );
+		}
+
+		/**
+		 * The protection is not a second path for the key: a request that writes the record after the
+		 * protection was set keeps its own value.
+		 *
+		 * @runInSeparateProcess
+		 * @preserveGlobalState disabled
+		 */
+		public function test_a_request_that_writes_the_protected_record_keeps_its_value(): void {
+			require_once dirname( __DIR__, 2 ) . '/_stubs/wc-session-handler.php';
+
+			$handler = $this->dirty_handler( [ self::LOCATION_KEY => self::MOSCOW ] );
+			$handler->set( self::LOCATION_KEY, self::KAZAN );
+			$wpdb   = $this->stored_row( [ self::LOCATION_KEY => self::MOSCOW ] );
+			$merger = new Session_Key_Merger_Probe( $handler );
+			Session_Key_Merger::reset_for_tests( $merger );
+
+			Session_Key_Merger::protect_location_record();
+			Session_Key_Merger::note_write( self::LOCATION_KEY );
+			$merger->merge_before_save();
+
+			$this->assertSame( self::KAZAN, $handler->get( self::LOCATION_KEY ) );
+			$this->assertSame( [], $wpdb->queries, 'nothing pending, nothing read' );
+		}
+
+		/**
+		 * A request that never saves the session pays no query for the protection: the gates run before
+		 * the read, and a clean session is left clean.
+		 *
+		 * @runInSeparateProcess
+		 * @preserveGlobalState disabled
+		 */
+		public function test_the_protection_costs_no_query_in_a_request_that_does_not_save_the_session(): void {
+			require_once dirname( __DIR__, 2 ) . '/_stubs/wc-session-handler.php';
+
+			$handler = new \WC_Session_Handler( 't_guest_1', [ self::LOCATION_KEY => self::MOSCOW ] );
+			$wpdb    = $this->stored_row( [ self::LOCATION_KEY => self::KAZAN ] );
+			$merger  = new Session_Key_Merger_Probe( $handler );
+			Session_Key_Merger::reset_for_tests( $merger );
+
+			Session_Key_Merger::protect_location_record();
+			$merger->merge_before_save();
+
+			$this->assertFalse( $handler->is_dirty() );
+			$this->assertSame( [], $wpdb->queries );
+		}
+
+		/**
+		 * WooCommerce 11.4+ merges per key itself: the protection registers nothing, so a shop on a current
+		 * WooCommerce carries no `shutdown` callback for it.
+		 *
+		 * @runInSeparateProcess
+		 * @preserveGlobalState disabled
+		 */
+		public function test_the_protection_hooks_nothing_when_woocommerce_merges_per_key_itself(): void {
+			require_once dirname( __DIR__, 2 ) . '/_stubs/wc-session-handler.php';
+			require_once dirname( __DIR__, 2 ) . '/_stubs/wc-session-data-writer.php';
+
+			Actions\expectAdded( 'shutdown' )->never();
+
+			Session_Key_Merger::protect_location_record();
+
+			$this->assertSame( [], Session_Key_Merger::instance()->pending_keys() );
+		}
+
 		// ------------------------------------------------------------------
 		// The gates — every one of them must leave the session untouched AND
 		// issue no query.
@@ -572,6 +680,16 @@ namespace Woodev\Tests\Unit\Shipping {
 			Session_Key_Merger::note_read( self::PICKUP_KEY );
 
 			$this->assertSame( 19, Session_Key_Merger::PRIORITY, 'WooCommerce saves at 20 (WC_Session_Handler::init_hooks())' );
+		}
+
+		public function test_the_location_record_protection_hooks_the_merge_once_and_pends_the_record_key(): void {
+			Actions\expectAdded( 'shutdown' )->once()->with( \Mockery::type( 'array' ), Session_Key_Merger::PRIORITY );
+
+			Session_Key_Merger::protect_location_record();
+			Session_Key_Merger::protect_location_record();
+
+			$this->assertSame( [ self::LOCATION_KEY ], Session_Key_Merger::instance()->pending_keys() );
+			$this->assertSame( self::LOCATION_KEY, Session_Key_Merger::LOCATION_RECORD_KEY, 'the store stores the record under this very key' );
 		}
 
 		public function test_nothing_is_hooked_in_a_request_that_never_touches_a_framework_key(): void {

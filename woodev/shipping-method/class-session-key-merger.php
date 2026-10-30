@@ -41,12 +41,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Session_Key_Merger' ) ) :
 	 *
 	 * WHEN IT RUNS, AND WHEN IT DOES NOTHING.
 	 *
-	 * - Only in a request that touched one of our keys. A request that never read the record cannot be
-	 *   told which keys to protect (the pickup keys are coined by each plugin's
-	 *   {@see \Woodev\Framework\Shipping\Pickup\Selection_Scope}), and the requests that race the
-	 *   shopper's picks — `update_order_review`, `wc-ajax=checkout`, Store API cart updates — all rate
-	 *   shipping and so read the record. A plain page load that never asks for a location pays nothing:
-	 *   no hook, no query.
+	 * - Only for the keys a request touched, plus the location record ALWAYS
+	 *   ({@see self::protect_location_record()}). The pickup keys are coined by each plugin's
+	 *   {@see \Woodev\Framework\Shipping\Pickup\Selection_Scope}, so a request that never read one
+	 *   cannot be told to protect it; the record's key is fixed, and a request that saves the session
+	 *   without rating shipping (`wc-ajax=apply_coupon` leaving a notice) would otherwise write back a
+	 *   stale copy of it (kalbac/woocommerce-yandex-delivery#150). The query is still paid only by a
+	 *   request that is about to SAVE the session — the gates below run before it — and on WooCommerce
+	 *   11.4+ nothing is hooked at all.
 	 * - Only while WooCommerce does not merge per key itself: from 11.4 (woocommerce#69559) `save_data()`
 	 *   applies only the keys the request changed, and this class steps aside. The gate is the ABSENCE of
 	 *   that class, not a version string, so it tracks the shipped code.
@@ -62,6 +64,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Session_Key_Merger' ) ) :
 	 * `customer`, …) stay whole-row last-writer-wins on < 11.4, as today.
 	 *
 	 * @since 2.0.15
+	 * @since 2.0.18 The location record is protected in every request that saves the session, not only in
+	 *               one that read it ({@see self::protect_location_record()}).
 	 */
 	class Session_Key_Merger {
 
@@ -95,6 +99,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Session_Key_Merger' ) ) :
 		 * @since 2.0.15
 		 */
 		private const CORE_HANDLER_CLASS = 'WC_Session_Handler';
+
+		/**
+		 * The session key of the customer's location record
+		 * ({@see \Woodev\Framework\Shipping\Location\Customer_Location_Store}) — the one key every request
+		 * is protected for, whether it read the key or not ({@see self::protect_location_record()}).
+		 *
+		 * @since 2.0.18
+		 */
+		public const LOCATION_RECORD_KEY = 'woodev_customer_location';
 
 		/**
 		 * The per-request instance.
@@ -141,6 +154,37 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Session_Key_Merger' ) ) :
 			}
 
 			return self::$instance;
+		}
+
+		/**
+		 * Puts the customer's location record under the merge for THIS request, although the request
+		 * never reads it (kalbac/woocommerce-yandex-delivery#150).
+		 *
+		 * The reads and writes of {@see Customer_Location_Store} report themselves, which covers every
+		 * request that rates shipping. A request that saves the session WITHOUT rating — an AJAX call that
+		 * only leaves a notice, such as `wc-ajax=apply_coupon` with a wrong code — holds a copy of the row
+		 * from the moment it loaded, never reports the record, and is written back whole by WooCommerce
+		 * < 11.4: a city picked while it ran is gone (measured on WooCommerce 11.2.1, a slow
+		 * `apply_coupon` across `/location/select`: the record lost, 2 of 2).
+		 *
+		 * Called once per request by every shipping plugin that uses the Location Provider layer; calling it
+		 * again changes nothing. A request that reads or writes the record afterwards is judged exactly as
+		 * before: the write keeps its value, the read has been pending since here.
+		 *
+		 * Registers nothing when WooCommerce merges per key itself ({@see self::core_merges_per_key()}).
+		 *
+		 * @since 2.0.18
+		 *
+		 * @return void
+		 */
+		public static function protect_location_record(): void {
+			$merger = self::instance();
+
+			if ( $merger->core_merges_per_key() ) {
+				return;
+			}
+
+			$merger->touch( self::LOCATION_RECORD_KEY, false );
 		}
 
 		/**
