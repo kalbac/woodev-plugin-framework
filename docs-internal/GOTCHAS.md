@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Topic map.** 470 atomic gotchas across 30 topics. At session start read THIS file, then open
+> **Topic map.** 478 atomic gotchas across 30 topics. At session start read THIS file, then open
 > the topic indexes your task touches — each holds one line per gotcha, linking the detail file.
 > `[tooling/*]`, `[testing/*]` and `[rig/*]` apply to almost every session.
 > **Adding one:** create `gotchas/{slug}.md`, then add ONE line to the right `gotcha-index/{topic}.md`
@@ -18,7 +18,7 @@
 | [`compat/*`](gotcha-index/compat.md) | 3 | Backward compatibility, HPOS |
 | [`lifecycle/*`](gotcha-index/lifecycle.md) | 1 | Install/upgrade routines |
 | [`woocommerce/states`](gotcha-index/woocommerce-states.md) | 2 | The `woocommerce_states` table |
-| [`woocommerce/*`](gotcha-index/woocommerce.md) | 42 | WooCommerce-specific · WooCommerce-specific (session) |
+| [`woocommerce/*`](gotcha-index/woocommerce.md) | 44 | WooCommerce-specific · WooCommerce-specific (session) |
 | [`framework/*`](gotcha-index/framework.md) | 10 | Framework internals |
 | [`framework/contracts`](gotcha-index/framework-contracts.md) | 3 | What the framework guarantees to its consumers |
 | [`shipping/location`](gotcha-index/shipping-location.md) | 21 | Location provider layer |
@@ -39,7 +39,7 @@
 | [`shipping/*`](gotcha-index/shipping.md) | 12 | Shipping module (S1) |
 | [`perf/*`](gotcha-index/perf.md) | 4 | Payload size and wire cost |
 | [`i18n/*`](gotcha-index/i18n.md) | 11 | Localization |
-| [`tooling/*`](gotcha-index/tooling.md) | 102 | Dev tooling, codex critic |
+| [`tooling/*`](gotcha-index/tooling.md) | 108 | Dev tooling, codex critic |
 
 ## Archive (resolved gotchas)
 <!-- Resolved gotchas move here; keep for 2 sessions then remove -->

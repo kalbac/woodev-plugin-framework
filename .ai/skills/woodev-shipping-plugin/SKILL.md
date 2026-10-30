@@ -73,6 +73,8 @@ One line per lesson that was found late on a real plugin; each links its detail.
 - **No `add_option()` as a lock** in any scan or poller ([core traps](../woodev-plugin-core/traps.md#php-and-wordpress-topic-php); edostavka PR #113).
 - **Acceptance judges on carrier data, in a real browser path** — block checkout through a real order POST, the classic city picked from the suggestions, never a typed name ([acceptance](references/acceptance-rig.md)).
 - **Also exercise a free-text city that has no provider record**: an old/default record must not supply another city's points or overwrite the typed city when a point is selected (#1433; [pickup](references/model-rates-location-pickup.md#pickup-and-checkout)).
+- **A rate that depends on the phone needs the phone in the package** (salted digit hash through `woocommerce_cart_shipping_packages`, plus `update_totals_on_change` on classic) — otherwise a phone-only edit re-runs nothing ([traps](references/traps.md#rates-cache-and-checkout); Ozon PR #35).
+- **Background chains on Action Scheduler: no `unique = true` from inside the running action, nothing scheduled before `action_scheduler_init`** — the chain silently stops after the first chunk ([traps](references/traps.md#background-work-on-action-scheduler); Ozon PR #28).
 
 ## Use fixtures as worked examples
 
