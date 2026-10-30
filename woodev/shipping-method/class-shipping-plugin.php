@@ -2436,6 +2436,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 * DaData signals an exhausted balance or daily limit with HTTP 403, the
 		 * same status it uses for an unknown key and an unconfirmed e-mail (it has
 		 * no 402), so the message names all three causes unless the balance API pins one down (#1060).
+		 * A zero balance is NOT read as «out of funds»: the free tariff always reports 0 ₽ and limits
+		 * suggestions by a daily quota, so that text names the unconfirmed e-mail and the daily limit (#1505).
 		 * A pure decision over {@see \Woodev\Framework\Shipping\Location\Providers\Dadata_Api_Client::is_access_denied()};
 		 * public for the same reason as its sibling.
 		 *
@@ -2490,7 +2492,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 				case Location\Providers\Dadata_Provider::CAUSE_BALANCE_EXHAUSTED:
 					return sprintf(
 						/* translators: %1$s - opening <a> tag to the DaData account, %2$s - closing </a> tag */
-						__( 'На счёте DaData закончились средства, поэтому подсказки адресов при оформлении заказа не работают — покупатели вводят адрес вручную. %1$sПополните баланс в личном кабинете DaData%2$s. Уведомление исчезнет после первого успешного запроса подсказок к DaData.', 'woodev-plugin-framework' ),
+						__( 'DaData отклонил запросы магазина (ответ 403), поэтому подсказки адресов при оформлении заказа не работают — покупатели вводят адрес вручную. Баланс счёта DaData равен 0 ₽: на бесплатном тарифе это норма, подсказки там ограничены дневным лимитом, а не деньгами. Скорее всего, не подтверждена почта аккаунта или исчерпан дневной лимит запросов — проверьте это в %1$sличном кабинете DaData%2$s. Если у вас платный тариф, пополните баланс там же. Уведомление исчезнет после первого успешного запроса подсказок к DaData.', 'woodev-plugin-framework' ),
 						$account,
 						'</a>'
 					);
