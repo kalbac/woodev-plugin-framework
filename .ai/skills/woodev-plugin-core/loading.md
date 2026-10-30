@@ -39,7 +39,7 @@ Woodev_Loader::register(
         'download_id'          => 1234,
         'plugin_name'          => 'My Plugin',
         'plugin_version'       => MY_PLUGIN_VERSION,
-        'framework_version'    => '2.0.16',
+        'framework_version'    => '2.0.17',
         'backwards_compatible' => '2.0.0',
         'platform'             => 'woocommerce',
         'requirements'         => [
