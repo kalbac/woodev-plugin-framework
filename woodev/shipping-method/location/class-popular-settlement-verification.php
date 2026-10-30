@@ -69,13 +69,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Popular_Settlemen
 		 */
 		public const OUTCOME_FAILED = 'failed';
 
-		/** @var string one of the self::OUTCOME_* constants */
+		/**
+		 * @var string one of the self::OUTCOME_* constants
+		 */
 		private string $outcome;
 
-		/** @var Location_Record|null the provider's fresh record for `unchanged`/`updated`; null otherwise */
+		/**
+		 * @var Location_Record|null the provider's fresh record for `unchanged`/`updated`; null otherwise
+		 */
 		private ?Location_Record $record;
 
-		/** @var \Throwable|null the caught failure for `failed`; null otherwise */
+		/**
+		 * @var \Throwable|null the caught failure for `failed`; null otherwise
+		 */
 		private ?\Throwable $error;
 
 		/**

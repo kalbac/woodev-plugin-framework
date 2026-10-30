@@ -13,91 +13,149 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 	 */
 	abstract class Woodev_Payment_Gateway extends WC_Payment_Gateway {
 
-		/** Sends through sale and request for funds to be charged to cardholder's credit card. */
+		/**
+		 * Sends through sale and request for funds to be charged to cardholder's credit card.
+		 */
 		const TRANSACTION_TYPE_CHARGE = 'charge';
 
-		/** Sends through a request for funds to be "reserved" on the cardholder's credit card. A standard authorization is reserved for 2-5 days. Reservation times are determined by cardholder's bank. */
+		/**
+		 * Sends through a request for funds to be "reserved" on the cardholder's credit card. A standard authorization is reserved for 2-5 days. Reservation times are determined by cardholder's bank.
+		 */
 		const TRANSACTION_TYPE_AUTHORIZATION = 'authorization';
 
-		/** The production environment identifier */
+		/**
+		 * The production environment identifier
+		 */
 		const ENVIRONMENT_PRODUCTION = 'production';
 
-		/** The test environment identifier */
+		/**
+		 * The test environment identifier
+		 */
 		const ENVIRONMENT_TEST = 'test';
 
-		/** Debug mode log to file */
+		/**
+		 * Debug mode log to file
+		 */
 		const DEBUG_MODE_LOG = 'log';
 
-		/** Debug mode display on checkout */
+		/**
+		 * Debug mode display on checkout
+		 */
 		const DEBUG_MODE_CHECKOUT = 'checkout';
 
-		/** Debug mode log to file and display on checkout */
+		/**
+		 * Debug mode log to file and display on checkout
+		 */
 		const DEBUG_MODE_BOTH = 'both';
 
-		/** Debug mode disabled */
+		/**
+		 * Debug mode disabled
+		 */
 		const DEBUG_MODE_OFF = 'off';
 
-		/** Gateway which supports direct (XML, REST, SOAP, custom, etc) communication */
+		/**
+		 * Gateway which supports direct (XML, REST, SOAP, custom, etc) communication
+		 */
 		const GATEWAY_TYPE_DIRECT = 'direct';
 
-		/** Gateway which supports redirecting to a gateway server for payment collection, or embedding an iframe on checkout */
+		/**
+		 * Gateway which supports redirecting to a gateway server for payment collection, or embedding an iframe on checkout
+		 */
 		const GATEWAY_TYPE_HOSTED = 'hosted';
 
-		/** Credit card payment type */
+		/**
+		 * Credit card payment type
+		 */
 		const PAYMENT_TYPE_CREDIT_CARD = 'credit-card';
 
-		/** Gateway with multiple payment options */
+		/**
+		 * Gateway with multiple payment options
+		 */
 		const PAYMENT_TYPE_MULTIPLE = 'multiple';
 
-		/** Bank transfer gateway */
+		/**
+		 * Bank transfer gateway
+		 */
 		const PAYMENT_TYPE_BANK_TRANSFER = 'bank_transfer';
 
-		/** Loans payment type */
+		/**
+		 * Loans payment type
+		 */
 		const PAYMENT_TYPE_LOANS = 'loans_transfer';
 
-		/** Products feature */
+		/**
+		 * Products feature
+		 */
 		const FEATURE_PRODUCTS = 'products';
 
-		/** Credit card types feature */
+		/**
+		 * Credit card types feature
+		 */
 		const FEATURE_CARD_TYPES = 'card_types';
 
-		/** Tokenization feature */
+		/**
+		 * Tokenization feature
+		 */
 		const FEATURE_TOKENIZATION = 'tokenization';
 
-		/** Credit Card charge transaction feature */
+		/**
+		 * Credit Card charge transaction feature
+		 */
 		const FEATURE_CREDIT_CARD_CHARGE = 'charge';
 
-		/** Credit Card authorization transaction feature */
+		/**
+		 * Credit Card authorization transaction feature
+		 */
 		const FEATURE_CREDIT_CARD_AUTHORIZATION = 'authorization';
 
-		/** Credit Card charge virtual-only orders feature */
+		/**
+		 * Credit Card charge virtual-only orders feature
+		 */
 		const FEATURE_CREDIT_CARD_CHARGE_VIRTUAL = 'charge-virtual';
 
-		/** Credit Card capture charge transaction feature */
+		/**
+		 * Credit Card capture charge transaction feature
+		 */
 		const FEATURE_CREDIT_CARD_CAPTURE = 'capture_charge';
 
-		/** Credit Card partial capture transaction feature */
+		/**
+		 * Credit Card partial capture transaction feature
+		 */
 		const FEATURE_CREDIT_CARD_PARTIAL_CAPTURE = 'partial_capture';
 
-		/** Display detailed customer decline messages on checkout */
+		/**
+		 * Display detailed customer decline messages on checkout
+		 */
 		const FEATURE_DETAILED_CUSTOMER_DECLINE_MESSAGES = 'customer_decline_messages';
 
-		/** Refunds feature */
+		/**
+		 * Refunds feature
+		 */
 		const FEATURE_REFUNDS = 'refunds';
 
-		/** Voids feature */
+		/**
+		 * Voids feature
+		 */
 		const FEATURE_VOIDS = 'voids';
 
-		/** Payment Form feature */
+		/**
+		 * Payment Form feature
+		 */
 		const FEATURE_PAYMENT_FORM = 'payment_form';
 
-		/** Customer ID feature */
+		/**
+		 * Customer ID feature
+		 */
 		const FEATURE_CUSTOMER_ID = 'customer_id';
 
-		/** Add new payment method feature */
+		/**
+		 * Add new payment method feature
+		 */
 		const FEATURE_ADD_PAYMENT_METHOD = 'add_payment_method';
 
-		/** Admin token editor feature */
+		/**
+		 * Admin token editor feature
+		 */
 		const FEATURE_TOKEN_EDITOR = 'token_editor';
 
 		/**
@@ -131,72 +189,115 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			return false;
 		}
 
-		/** @var Woodev_Payment_Gateway_Plugin the parent plugin class */
+		/**
+		 * @var Woodev_Payment_Gateway_Plugin the parent plugin class
+		 */
 		private $plugin;
 
-		/** @var string payment type, one of 'credit-card', 'bank_transfer', 'multiple', 'loans_transfer' */
+		/**
+		 * @var string payment type, one of 'credit-card', 'bank_transfer', 'multiple', 'loans_transfer'
+		 */
 		private $payment_type;
 
-		/** @var array associative array of environment id to display name, defaults to 'production' => 'Production' */
+		/**
+		 * @var array associative array of environment id to display name, defaults to 'production' => 'Production'
+		 */
 		private $environments;
 
-		/** @var array associative array of card type to display name */
+		/**
+		 * @var array associative array of card type to display name
+		 */
 		private $available_card_types;
 
-		/** @var array optional array of currency codes this gateway is allowed for */
+		/**
+		 * @var array optional array of currency codes this gateway is allowed for
+		 */
 		protected $currencies;
 
-		/** @var string configuration option: the transaction environment, one of $this->environments keys */
+		/**
+		 * @var string configuration option: the transaction environment, one of $this->environments keys
+		 */
 		private $environment;
 
-		/** @var string configuration option: the type of transaction, whether purchase or authorization, defaults to 'charge' */
+		/**
+		 * @var string configuration option: the type of transaction, whether purchase or authorization, defaults to 'charge'
+		 */
 		private $transaction_type;
 
-		/** @var string configuration option: whether transactions should always be charged if the order is virtual-only, defaults to 'no' */
+		/**
+		 * @var string configuration option: whether transactions should always be charged if the order is virtual-only, defaults to 'no'
+		 */
 		private $charge_virtual_orders;
 
-		/** @var string configuration option: whether orders can be partially captured multiple times */
+		/**
+		 * @var string configuration option: whether orders can be partially captured multiple times
+		 */
 		private $enable_partial_capture;
 
-		/** @var string configuration option: whether orders are captured when switched to a "paid" status */
+		/**
+		 * @var string configuration option: whether orders are captured when switched to a "paid" status
+		 */
 		private $enable_paid_capture;
 
-		/** @var array configuration option: card types to show images for */
+		/**
+		 * @var array configuration option: card types to show images for
+		 */
 		private $card_types;
 
-		/** @var string configuration option: indicates whether a Card Security Code field will be presented on checkout, either 'yes' or 'no' */
+		/**
+		 * @var string configuration option: indicates whether a Card Security Code field will be presented on checkout, either 'yes' or 'no'
+		 */
 		private $enable_csc;
 
-		/** @var string configuration option: indicates whether a Card Security Code field will be presented for saved cards at checkout, either 'yes' or 'no' */
+		/**
+		 * @var string configuration option: indicates whether a Card Security Code field will be presented for saved cards at checkout, either 'yes' or 'no'
+		 */
 		private $enable_token_csc;
 
-		/** @var string configuration option: indicates whether tokenization is enabled, either 'yes' or 'no' */
+		/**
+		 * @var string configuration option: indicates whether tokenization is enabled, either 'yes' or 'no'
+		 */
 		private $tokenization;
 
-		/** @var string configuration option: indicates whether detailed customer decline messages should be displayed at checkout, either 'yes' or 'no' */
+		/**
+		 * @var string configuration option: indicates whether detailed customer decline messages should be displayed at checkout, either 'yes' or 'no'
+		 */
 		private $enable_customer_decline_messages;
 
-		/** @var string configuration option: 4 options for debug mode - off, checkout, log, both */
+		/**
+		 * @var string configuration option: 4 options for debug mode - off, checkout, log, both
+		 */
 		private $debug_mode;
 
-		/** @var string configuration option: whether to use a sibling gateway's connection/authentication settings */
+		/**
+		 * @var string configuration option: whether to use a sibling gateway's connection/authentication settings
+		 */
 		private $inherit_settings;
 
-		/** @var array of shared setting names, if any. Used when a single plugin supports multiple payment gateway variants sharing credentials. */
+		/**
+		 * @var array of shared setting names, if any. Used when a single plugin supports multiple payment gateway variants sharing credentials.
+		 */
 		private $shared_settings = [];
 
-		/** @var Woodev_Payment_Gateway_Payment_Tokens_Handler payment tokens handler instance */
+		/**
+		 * @var Woodev_Payment_Gateway_Payment_Tokens_Handler payment tokens handler instance
+		 */
 		protected $payment_tokens_handler;
 
-		/** @var Woodev_Payment_Gateway_Capture_Handler capture handler instance */
+		/**
+		 * @var Woodev_Payment_Gateway_Capture_Handler capture handler instance
+		 */
 		protected $capture_handler;
 
-		/** @var Woodev_Payment_Gateway_Payment_Form|null payment form instance */
+		/**
+		 * @var Woodev_Payment_Gateway_Payment_Form|null payment form instance
+		 */
 		protected $payment_form;
 
-		/** @var array<int, string> transient voided order messages keyed by order ID, passed between mark_order_as_voided() and maybe_cancel_voided_order() */
+		/**
+		 * @var array<int, string> transient voided order messages keyed by order ID, passed between mark_order_as_voided() and maybe_cancel_voided_order()
+		 */
 		private $voided_order_messages = [];
-
 
 		/**
 		 * Initialize the gateway
@@ -555,7 +656,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			}
 		}
 
-
 		/**
 		 * Return the gateway-specifics JS script handle. This is used for:
 		 *
@@ -570,7 +670,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			return 'wc-' . $this->get_plugin()->get_id_dasherized();
 		}
 
-
 		/**
 		 * Returns an array of JS script params to localize for the gateway-specific
 		 * JS. Concrete classes must override this as needed.
@@ -579,7 +678,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 */
 		protected function get_gateway_js_localized_script_params() {
 		}
-
 
 		/**
 		 * Localize a script once. Gateway plugins that have multiple gateways should
@@ -628,7 +726,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 
 			$this->payment_form = $this->init_payment_form_instance();
 		}
-
 
 		/**
 		 * Initializes the payment form instance.
@@ -766,7 +863,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			$this->payment_tokens_handler = $this->build_payment_tokens_handler();
 		}
 
-
 		/**
 		 * Gets the payment tokens handler instance.
 		 *
@@ -778,7 +874,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			return new Woodev_Payment_Gateway_Payment_Tokens_Handler( $this );
 		}
 
-
 		/**
 		 * Gets the payment tokens handler instance.
 		 *
@@ -787,7 +882,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		public function get_payment_tokens_handler() {
 			return $this->payment_tokens_handler;
 		}
-
 
 		/**
 		 * Determines if tokenization takes place prior to transaction processing.
@@ -798,7 +892,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			return false;
 		}
 
-
 		/**
 		 * Determines tokenization takes place during a transaction request.
 		 *
@@ -808,7 +901,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			return false;
 		}
 
-
 		/**
 		 * Determines tokenization takes place after a transaction request.
 		 *
@@ -817,7 +909,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		public function tokenize_after_sale() {
 			return false;
 		}
-
 
 		/**
 		 * Determines if the gateway supports the admin token editor feature.
@@ -2390,7 +2481,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 				WC()->session->held_order_received_text = $user_message;
 			}
 		}
-
 
 		/**
 		 * Validates a "held order status" filter return value against real WooCommerce order

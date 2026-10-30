@@ -5,7 +5,6 @@ defined( 'ABSPATH' ) || exit;
 if ( ! class_exists( 'Woodev_String_Conversion' ) ) :
 
 	class Woodev_String_Conversion {
-
 		public static function sanitize_title( $title, $context = '' ) {
 
 			if ( 'query' === $context ) {

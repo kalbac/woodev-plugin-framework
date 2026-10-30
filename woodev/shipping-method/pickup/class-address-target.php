@@ -53,7 +53,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Address_Target' ) )
 	 * @since 2.0.2
 	 */
 	class Address_Target {
-
 		/**
 		 * Resolves the fieldset prefix that a pickup point's address should target.
 		 *

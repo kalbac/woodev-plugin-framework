@@ -28,29 +28,44 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Popular_Settlemen
 	 * @since 2.0.2
 	 */
 	class Popular_Settlement_Entry {
-
-		/** @var int surrogate row id (spec D3 — never the provider key) */
+		/**
+		 * @var int surrogate row id (spec D3 — never the provider key)
+		 */
 		private int $id;
 
-		/** @var string the owning provider's id */
+		/**
+		 * @var string the owning provider's id
+		 */
 		private string $provider_id;
 
-		/** @var string ISO-3166 alpha-2 country code */
+		/**
+		 * @var string ISO-3166 alpha-2 country code
+		 */
 		private string $country;
 
-		/** @var Location_Record the whole stored record (spec D1) */
+		/**
+		 * @var Location_Record the whole stored record (spec D1)
+		 */
 		private Location_Record $record;
 
-		/** @var int ranking counter (spec D2/D3) */
+		/**
+		 * @var int ranking counter (spec D2/D3)
+		 */
 		private int $order_count;
 
-		/** @var int|null usage clock — unix timestamp, or null when never ordered (spec D2) */
+		/**
+		 * @var int|null usage clock — unix timestamp, or null when never ordered (spec D2)
+		 */
 		private ?int $last_ordered_at;
 
-		/** @var int|null freshness clock — unix timestamp, or null when never verified (spec D2) */
+		/**
+		 * @var int|null freshness clock — unix timestamp, or null when never verified (spec D2)
+		 */
 		private ?int $last_verified_at;
 
-		/** @var int unix timestamp the row was first inserted */
+		/**
+		 * @var int unix timestamp the row was first inserted
+		 */
 		private int $created_at;
 
 		/**

@@ -40,7 +40,6 @@ if ( ! class_exists( 'Woodev_License_Authority_Claims' ) ) :
 	 * @since 2.0.0
 	 */
 	class Woodev_License_Authority_Claims {
-
 		/**
 		 * The owning plugin (supplies the option name + download id binding).
 		 *
@@ -331,7 +330,6 @@ if ( ! class_exists( 'Woodev_License_Authority_Claims' ) ) :
 		protected function now(): int {
 			return time();
 		}
-
 
 		/**
 		 * Resolves the base64 public key used to verify claims.

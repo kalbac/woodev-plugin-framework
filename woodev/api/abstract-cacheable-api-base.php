@@ -6,13 +6,21 @@ if ( ! class_exists( 'Woodev_Cacheable_API_Base' ) ) :
 
 	abstract class Woodev_Cacheable_API_Base extends Woodev_API_Base {
 
-		/** Default cap on a cached response's serialized size, in bytes. @see get_request_cache_max_bytes() */
+		/**
+		 * Default cap on a cached response's serialized size, in bytes.
+		 *
+		 * @see get_request_cache_max_bytes()
+		 */
 		public const DEFAULT_CACHE_MAX_BYTES = 524288;
 
-		/** @var bool whether the response was loaded from cache */
+		/**
+		 * @var bool whether the response was loaded from cache
+		 */
 		protected $response_loaded_from_cache = false;
 
-		/** @var array<string, true> request keys already reported as too big to cache, this page load */
+		/**
+		 * @var array<string, true> request keys already reported as too big to cache, this page load
+		 */
 		private static $oversized_response_logged = [];
 
 		/**
@@ -118,7 +126,6 @@ if ( ! class_exists( 'Woodev_Cacheable_API_Base' ) ) :
 			return $this->response_loaded_from_cache;
 		}
 
-
 		/**
 		 * Loads the response for the current request from the cache, if available.
 		 *
@@ -127,7 +134,6 @@ if ( ! class_exists( 'Woodev_Cacheable_API_Base' ) ) :
 		protected function load_response_from_cache() {
 			return get_transient( $this->get_request_transient_key() );
 		}
-
 
 		/**
 		 * Saves the response to cache.
@@ -254,7 +260,6 @@ if ( ! class_exists( 'Woodev_Cacheable_API_Base' ) ) :
 			);
 		}
 
-
 		/**
 		 * Gets the response data for broadcasting the request.
 		 * Adds a flag to the response data indicating whether the response was loaded from cache.
@@ -277,7 +282,6 @@ if ( ! class_exists( 'Woodev_Cacheable_API_Base' ) ) :
 
 			return $request_data;
 		}
-
 
 		/**
 		 * Gets the response data for broadcasting the request.

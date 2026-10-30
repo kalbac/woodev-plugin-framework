@@ -16,7 +16,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Helper' ) ) :
 
 	class Shipping_Helper {
-
 		/**
 		 * Package goods value after discounts, excluding taxes, shipping and fees.
 		 *

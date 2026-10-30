@@ -58,7 +58,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 		 */
 		const ADMIN_POST_ACTION = 'woodev_shipping_order_action';
 
-		/** @var string metabox id. */
+		/**
+		 * @var string metabox id.
+		 */
 		const METABOX_ID = 'woodev_shipping_order';
 
 		/**
@@ -88,13 +90,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 		 */
 		const NOTICE_TRANSIENT_KEY = 'woodev_shipping_order_action_notice_';
 
-		/** @var Orders_Registry registry this metabox resolves providers/handlers through */
+		/**
+		 * @var Orders_Registry registry this metabox resolves providers/handlers through
+		 */
 		private Orders_Registry $registry;
 
-		/** @var Order_Row_Builder|null lazily built; @see self::row_builder() */
+		/**
+		 * @var Order_Row_Builder|null lazily built;
+		 * @see self::row_builder()
+		 */
 		private ?Order_Row_Builder $row_builder = null;
 
-		/** @var Order_Actions|null lazily built; @see self::order_actions() */
+		/**
+		 * @var Order_Actions|null lazily built;
+		 * @see self::order_actions()
+		 */
 		private ?Order_Actions $order_actions = null;
 
 		/**

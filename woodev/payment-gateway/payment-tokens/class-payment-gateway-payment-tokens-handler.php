@@ -8,16 +8,20 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 	 * Handle the payment tokenization related functionality.
 	 */
 	class Woodev_Payment_Gateway_Payment_Tokens_Handler {
-
-		/** @var string the gateway environment ID */
+		/**
+		 * @var string the gateway environment ID
+		 */
 		protected $environment_id;
 
-		/** @var array|Woodev_Payment_Gateway_Payment_Token[] array of cached user id to array of Woodev_Payment_Gateway_Payment_Token token objects */
+		/**
+		 * @var array|Woodev_Payment_Gateway_Payment_Token[] array of cached user id to array of Woodev_Payment_Gateway_Payment_Token token objects
+		 */
 		protected $tokens;
 
-		/** @var Woodev_Payment_Gateway gateway instance */
+		/**
+		 * @var Woodev_Payment_Gateway gateway instance
+		 */
 		protected $gateway;
-
 
 		/**
 		 * Build the class.
@@ -34,7 +38,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 			add_action( 'woocommerce_payment_token_deleted', [ $this, 'handle_token_cache_invalidation' ], 10, 2 );
 			add_action( 'woocommerce_payment_token_set_default', [ $this, 'handle_token_cache_invalidation' ], 10 );
 		}
-
 
 		/**
 		 * A factory method to build and return a payment token object for the
@@ -158,7 +161,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 			return $order;
 		}
 
-
 		/**
 		 * Adds a payment method and token as user meta.
 		 *
@@ -193,7 +195,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 			return $this->update_tokens( $user_id, $tokens, $environment_id );
 		}
 
-
 		/**
 		 * Returns the payment token object identified by $token from the user identified by $user_id
 		 *
@@ -220,7 +221,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 			return null;
 		}
 
-
 		/**
 		 * Updates a single token by persisting it to user meta
 		 *
@@ -244,7 +244,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 
 			return $this->update_tokens( $user_id, $tokens, $environment_id );
 		}
-
 
 		/**
 		 * Deletes a credit card token from user meta
@@ -296,7 +295,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 			return $this->delete_token( $user_id, $token );
 		}
 
-
 		/**
 		 * Determines if a token's local meta should be deleted based on an API response.
 		 *
@@ -307,7 +305,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 		public function should_delete_token( Woodev_Payment_Gateway_Payment_Token $token, Woodev_Payment_Gateway_API_Response $response ) {
 			return false;
 		}
-
 
 		/**
 		 * Deletes a payment token from user meta.
@@ -346,7 +343,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 			// persist the updated tokens
 			return $this->update_tokens( $user_id, $tokens );
 		}
-
 
 		/**
 		 * Sets the default token for a user.
@@ -510,7 +506,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 			return $this->tokens[ $environment_id ][ $user_id ];
 		}
 
-
 		/**
 		 * Updates the given payment tokens for the identified user, in the database.
 		 *
@@ -547,7 +542,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 			return new Woodev_Payment_Gateway_Admin_Payment_Token_Editor( $this->get_gateway() );
 		}
 
-
 		/**
 		 * Determines if the identified user has the given payment token
 		 *
@@ -573,7 +567,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 			return ! is_null( $this->get_token( $user_id, $token, $environment_id ) );
 		}
 
-
 		/**
 		 * Determines if the current payment method should be tokenized.
 		 *
@@ -586,7 +579,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 		public function should_tokenize() {
 			return Woodev_Helper::get_posted_value( 'wc-' . $this->get_gateway()->get_id_dasherized() . '-tokenize-payment-method' ) && ! Woodev_Helper::get_posted_value( 'wc-' . $this->get_gateway()->get_id_dasherized() . '-payment-token' );
 		}
-
 
 		/**
 		 * Determines if tokenization should be forced on the checkout page.
@@ -649,7 +641,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 			return $remote_tokens;
 		}
 
-
 		/**
 		 * Returns the attributes that should be used to merge local token data into
 		 * a remote token.
@@ -664,7 +655,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 		protected function get_merge_attributes() {
 			return [ 'last_four', 'card_type', 'exp_month', 'exp_year', 'nickname' ];
 		}
-
 
 		/**
 		 * Gets the payment token transient key for the given user, gateway and environment.
@@ -723,7 +713,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 			return apply_filters( 'wc_payment_gateway_' . $this->get_gateway()->get_id() . '_payment_tokens_transient_key', $key, $user_id, $this->get_gateway() );
 		}
 
-
 		/**
 		 * Helper method to clear the tokens transient.
 		 *
@@ -738,7 +727,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 		public function clear_transient( $user_id ) {
 			delete_transient( $this->get_transient_key( $user_id ) );
 		}
-
 
 		/**
 		 * Handles cache invalidation when a WooCommerce payment token is deleted or set as default.
@@ -758,7 +746,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 				$this->clear_transient( $token->get_user_id() );
 			}
 		}
-
 
 		/**
 		 * Returns the payment token user meta name for persisting the payment tokens.
@@ -786,7 +773,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 			// leading underscore since this will never be displayed to an admin user in its raw form
 			return $this->get_gateway()->get_order_meta_prefix() . 'payment_tokens' . ( ! $this->get_gateway()->is_production_environment( $environment_id ) ? '_' . $environment_id : '' );
 		}
-
 
 		/**
 		 * Gets the order note message when a customer saves their payment method
@@ -817,7 +803,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 			return $message;
 		}
 
-
 		/**
 		 * Returns $tokens in a format suitable for data storage
 		 *
@@ -838,7 +823,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 			return $_tokens;
 		}
 
-
 		/**
 		 * Get the gateway environment ID.
 		 *
@@ -847,7 +831,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 		protected function get_environment_id() {
 			return $this->environment_id;
 		}
-
 
 		/**
 		 * Gets the gateway instance.

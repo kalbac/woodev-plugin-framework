@@ -24,7 +24,9 @@ if ( ! class_exists( __NAMESPACE__ . '\Locality_Blocks_Integration' ) ) :
 	 */
 	class Locality_Blocks_Integration implements IntegrationInterface {
 
-		/** Script handle of the built `checkout-blocks` bundle. */
+		/**
+		 * Script handle of the built `checkout-blocks` bundle.
+		 */
 		public const SCRIPT_HANDLE = 'woodev-checkout-blocks';
 
 		/**
@@ -35,7 +37,9 @@ if ( ! class_exists( __NAMESPACE__ . '\Locality_Blocks_Integration' ) ) :
 		 */
 		private const WC_SCRIPT_DEPENDENCIES = [ 'wc-blocks-checkout', 'wc-blocks-checkout-events', 'wc-blocks-data-store', 'wc-blocks-registry', 'wc-settings' ];
 
-		/** @var Checkout_Handler the handler answering for the fleet */
+		/**
+		 * @var Checkout_Handler the handler answering for the fleet
+		 */
 		private Checkout_Handler $handler;
 
 		/**

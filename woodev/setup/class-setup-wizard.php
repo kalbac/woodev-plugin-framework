@@ -18,17 +18,24 @@ defined( 'ABSPATH' ) || exit;
  * @since 2.0.2
  */
 abstract class Setup_Wizard {
-
-	/** @var \Woodev_Plugin owning plugin. */
+	/**
+	 * @var \Woodev_Plugin owning plugin.
+	 */
 	protected $plugin;
 
-	/** @var string required capability (neutral default). */
+	/**
+	 * @var string required capability (neutral default).
+	 */
 	protected string $required_capability = 'manage_options';
 
-	/** @var Step[] every registered step keyed by id (visible or not — see get_steps()). */
+	/**
+	 * @var Step[] every registered step keyed by id (visible or not — see get_steps()).
+	 */
 	protected array $steps = [];
 
-	/** @var bool Whether plugin steps have been registered for this request. */
+	/**
+	 * @var bool Whether plugin steps have been registered for this request.
+	 */
 	private bool $steps_initialized = false;
 
 	/**

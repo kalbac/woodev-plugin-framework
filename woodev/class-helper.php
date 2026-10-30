@@ -14,7 +14,9 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 	 */
 	class Woodev_Helper {
 
-		/** encoding used for mb_*() string functions */
+		/**
+		 * encoding used for mb_*() string functions
+		 */
 		const MB_ENCODING = 'UTF-8';
 
 		/** String manipulation functions (all multi-byte safe) ***************/
@@ -247,7 +249,6 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 
 		/** Array functions ***************************************************/
 
-
 		/**
 		 * Insert the given element after the given key in the array
 		 *
@@ -456,7 +457,6 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 
 		/** Number helper functions *******************************************/
 
-
 		/**
 		 * Format a number with 2 decimal points, using a period for the decimal
 		 * separator and no thousands separator.
@@ -532,7 +532,6 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 			return 0;
 		}
 
-
 		/**
 		 * Add and store a notice.
 		 *
@@ -563,7 +562,6 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 			}
 		}
 
-
 		/**
 		 * Gets the full URL to the log file for a given $handle
 		 *
@@ -574,7 +572,6 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 		public static function get_wc_log_file_url( string $handle ): string {
 			return admin_url( sprintf( 'admin.php?page=wc-status&tab=logs&log_file=%s-%s-log', $handle, sanitize_file_name( wp_hash( $handle ) ) ) );
 		}
-
 
 		/**
 		 * Gets the current WordPress site name.
@@ -760,7 +757,6 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 			return (string) $wpdb->prepare( implode( ', ', array_fill( 0, count( $values ), '%s' ) ), $values );
 		}
 
-
 		/**
 		 * Converts an array of numerical integers into a comma separated list of IDs.
 		 *
@@ -794,7 +790,6 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 
 		/** Framework translation functions ***********************************/
 
-
 		/**
 		 * Gettext `__()` wrapper for framework-translated strings
 		 *
@@ -812,7 +807,6 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 			return __( $text, 'woodev-plugin-framework' );
 		}
 
-
 		/**
 		 * Gettext `_e()` wrapper for framework-translated strings
 		 *
@@ -827,7 +821,6 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 
 			_e( $text, 'woodev-plugin-framework' );
 		}
-
 
 		/**
 		 * Gettext `_x()` wrapper for framework-translated strings
@@ -848,7 +841,6 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 		}
 
 		/** JavaScript helper functions ***************************************/
-
 
 		/**
 		 * Gets the WordPress current screen.
@@ -889,7 +881,6 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 			return is_admin() && Woodev_Plugin_Compatibility::is_enhanced_admin_available() && class_exists( '\Automattic\WooCommerce\Admin\PageController' ) && ( \Automattic\WooCommerce\Admin\PageController::is_admin_page() || \Automattic\WooCommerce\Admin\PageController::is_embed_page() );
 		}
 
-
 		/**
 		 * Determines whether the new WooCommerce enhanced navigation is supported and enabled.
 		 *
@@ -919,7 +910,6 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 				\Automattic\WooCommerce\Admin\Features\Features::is_enabled( 'navigation' );
 		}
 
-
 		/**
 		 * Determines if the current request is for a WC REST API endpoint.
 		 *
@@ -943,7 +933,6 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 
 			return (bool) apply_filters( 'woocommerce_is_rest_api_request', $is_rest_api_request );
 		}
-
 
 		/**
 		 * Displays a notice if the provided hook has not yet run.
@@ -1218,7 +1207,6 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 
 			return $countries[ $code ] ?? $code;
 		}
-
 
 		/** Filter-return guards ***********************************************/
 

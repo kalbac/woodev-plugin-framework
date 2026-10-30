@@ -6,42 +6,79 @@ if ( ! class_exists( 'Woodev_Box_Packer_Packed_Box' ) ) :
 
 	final class Woodev_Box_Packer_Packed_Box {
 
-		/** No floor: success percent is never negative, so nothing is given up. */
+		/**
+		 * No floor: success percent is never negative, so nothing is given up.
+		 */
 		const NO_FLOOR = -1.0;
 
-		/** A pass is given up only when it falls below the floor by more than this (percent, float noise). */
+		/**
+		 * A pass is given up only when it falls below the floor by more than this (percent, float noise).
+		 */
 		const FLOOR_MARGIN = 1e-7;
 
-		/** @var float */
+		/**
+		 * @var float
+		 */
 		private $packed_volume;
-		/** @var float */
+
+		/**
+		 * @var float
+		 */
 		private $packed_weight;
-		/** @var float */
+
+		/**
+		 * @var float
+		 */
 		private $packed_value;
-		/** @var Woodev_Box_Packer_Box */
+
+		/**
+		 * @var Woodev_Box_Packer_Box
+		 */
 		private $box;
-		/** @var Woodev_Box_Packer_Item[] */
+
+		/**
+		 * @var Woodev_Box_Packer_Item[]
+		 */
 		private $items_to_pack;
-		/** @var Woodev_Box_Packer_Item[] */
+
+		/**
+		 * @var Woodev_Box_Packer_Item[]
+		 */
 		private $packed_items = [];
-		/** @var Woodev_Box_Packer_Item[] */
+
+		/**
+		 * @var Woodev_Box_Packer_Item[]
+		 */
 		private $nofit_items = [];
-		/** @var float */
+
+		/**
+		 * @var float
+		 */
 		private $success_percent = 0.0;
 
-		/** @var bool */
+		/**
+		 * @var bool
+		 */
 		private $check_placement;
 
-		/** @var bool */
+		/**
+		 * @var bool
+		 */
 		private $packing_done = false;
 
-		/** @var bool Every order fell below the floor: the numbers are partial and the box cannot win. */
+		/**
+		 * @var bool Every order fell below the floor: the numbers are partial and the box cannot win.
+		 */
 		private $abandoned = false;
 
-		/** @var float */
+		/**
+		 * @var float
+		 */
 		private $abandoned_floor = self::NO_FLOOR;
 
-		/** @var float[] Total weight and volume of all the items, and their count: what the percent is relative to. */
+		/**
+		 * @var float[] Total weight and volume of all the items, and their count: what the percent is relative to.
+		 */
 		private $totals = [ 0.0, 0.0, 0 ];
 
 		/**

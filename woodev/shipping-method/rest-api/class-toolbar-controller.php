@@ -32,7 +32,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Toolbar_Controlle
 	 * @since 2.0.2
 	 */
 	class Toolbar_Controller extends \WP_REST_Controller {
-
 		/**
 		 * Registry to read the page capability from.
 		 *

@@ -41,16 +41,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 	 */
 	final class Shipping_Settings_Tab {
 
-		/** @var string tab/service id on the SP-1 surface. */
+		/**
+		 * @var string tab/service id on the SP-1 surface.
+		 */
 		public const SERVICE_ID = 'shipping';
 
-		/** @var self|null */
+		/**
+		 * @var self|null
+		 */
 		private static $instance = null;
 
-		/** @var bool whether ANY Shipping_Plugin declared itself (opens the tab). */
+		/**
+		 * @var bool whether ANY Shipping_Plugin declared itself (opens the tab).
+		 */
 		private $shipping_plugin_declared = false;
 
-		/** @var bool whether a constructed Pickup_Handler declared it needs the «Карта» section. */
+		/**
+		 * @var bool whether a constructed Pickup_Handler declared it needs the «Карта» section.
+		 */
 		private $map_needed = false;
 
 		/**
@@ -71,19 +79,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 		 */
 		private $location_setting_ids = [];
 
-		/** @var Checkout_Field_Settings|null lazily built so tests can read it without WP. */
+		/**
+		 * @var Checkout_Field_Settings|null lazily built so tests can read it without WP.
+		 */
 		private $field_settings = null;
 
-		/** @var Pickup_Map_Settings|null lazily built so tests can read it without WP. */
+		/**
+		 * @var Pickup_Map_Settings|null lazily built so tests can read it without WP.
+		 */
 		private $map_settings = null;
 
-		/** @var Default_Dimensions_Settings|null lazily built so tests (and the packer) can read it without the tab registered. */
+		/**
+		 * @var Default_Dimensions_Settings|null lazily built so tests (and the packer) can read it without the tab registered.
+		 */
 		private $default_dimensions_settings = null;
 
-		/** @var Boxes_Settings|null lazily built so tests (and the packer) can read it without the tab registered. */
+		/**
+		 * @var Boxes_Settings|null lazily built so tests (and the packer) can read it without the tab registered.
+		 */
 		private $boxes_settings = null;
 
-		/** @var bool whether the `init` registration hook has already been added. */
+		/**
+		 * @var bool whether the `init` registration hook has already been added.
+		 */
 		private $hooked = false;
 
 		/**

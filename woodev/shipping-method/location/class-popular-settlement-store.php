@@ -183,7 +183,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Popular_Settlemen
 			return (int) apply_filters( self::FILTER_TTL_SECONDS, self::DEFAULT_TTL_SECONDS );
 		}
 
-
 		/**
 		 * Gets the filtered freshness-clock (verification) TTL, in seconds (spec
 		 * D2's SECOND clock — mirrors the shape of {@see self::ttl_seconds()}, the
@@ -516,7 +515,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Popular_Settlemen
 
 			return $deleted;
 		}
-
 
 		/**
 		 * Finds a provider's stored entry by locality key, or null — the D5 lookup

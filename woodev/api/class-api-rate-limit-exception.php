@@ -18,10 +18,14 @@ if ( ! class_exists( 'Woodev_API_Rate_Limit_Exception' ) ) :
 	 */
 	class Woodev_API_Rate_Limit_Exception extends Woodev_API_Exception {
 
-		/** @var int the longest wait honoured, in seconds — a server asking for more is clamped to a day */
+		/**
+		 * @var int the longest wait honoured, in seconds — a server asking for more is clamped to a day
+		 */
 		public const MAX_RETRY_AFTER = 86400;
 
-		/** @var int|null seconds the server asked us to wait, or null when it did not say */
+		/**
+		 * @var int|null seconds the server asked us to wait, or null when it did not say
+		 */
 		private ?int $retry_after;
 
 		/**

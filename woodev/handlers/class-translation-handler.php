@@ -10,6 +10,7 @@ namespace Woodev\Framework\Handlers;
 defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( '\Woodev\Framework\Handlers\Translation_Handler' ) ) :
+
 	/**
 	 * Loads each plugin's own text domain.
 	 *
@@ -19,10 +20,14 @@ if ( ! class_exists( '\Woodev\Framework\Handlers\Translation_Handler' ) ) :
 	 */
 	class Translation_Handler {
 
-		/** @var string the fixed framework text domain */
+		/**
+		 * @var string the fixed framework text domain
+		 */
 		private const FRAMEWORK_TEXTDOMAIN = 'woodev-plugin-framework';
 
-		/** @var \Woodev_Plugin current plugin instance */
+		/**
+		 * @var \Woodev_Plugin current plugin instance
+		 */
 		private \Woodev_Plugin $plugin;
 
 		/**

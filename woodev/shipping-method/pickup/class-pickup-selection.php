@@ -209,7 +209,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Selection' )
 			$this->write_map( $session, $map );
 		}
 
-
 		/**
 		 * Recalls the point id remembered for an exact (locality, type) pair.
 		 *

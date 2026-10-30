@@ -19,7 +19,6 @@ defined( 'ABSPATH' ) || exit;
  * @since 2.0.2
  */
 abstract class Woocommerce_Setup_Wizard extends Setup_Wizard {
-
 	/**
 	 * WooCommerce capability.
 	 *

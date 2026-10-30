@@ -24,16 +24,24 @@ use InvalidArgumentException;
  */
 abstract class Competitor_Notification_Handler {
 
-	/** @since 2.0.2 neutral note type → WC E_WC_ADMIN_NOTE_UPDATE in the WC renderer */
+	/**
+	 * @since 2.0.2 neutral note type → WC E_WC_ADMIN_NOTE_UPDATE in the WC renderer
+	 */
 	public const TYPE_UPDATE = 'update';
 
-	/** @since 2.0.2 neutral note type → WC E_WC_ADMIN_NOTE_ERROR in the WC renderer */
+	/**
+	 * @since 2.0.2 neutral note type → WC E_WC_ADMIN_NOTE_ERROR in the WC renderer
+	 */
 	public const TYPE_ERROR = 'error';
 
-	/** @var Woodev_Plugin owning plugin */
+	/**
+	 * @var Woodev_Plugin owning plugin
+	 */
 	private Woodev_Plugin $plugin;
 
-	/** @var Competitor_Notice_Renderer|null lazily-resolved renderer */
+	/**
+	 * @var Competitor_Notice_Renderer|null lazily-resolved renderer
+	 */
 	private ?Competitor_Notice_Renderer $renderer = null;
 
 	/**

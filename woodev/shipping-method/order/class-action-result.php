@@ -30,20 +30,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Action_Result' ) ) :
 	 * @since 2.0.2
 	 */
 	final class Action_Result {
-
-		/** @var bool whether the carrier accepted the action */
+		/**
+		 * @var bool whether the carrier accepted the action
+		 */
 		private bool $success;
 
-		/** @var string the carrier's text, or '' when it gave none */
+		/**
+		 * @var string the carrier's text, or '' when it gave none
+		 */
 		private string $message;
 
-		/** @var string the carrier-assigned order id (export only), or '' */
+		/**
+		 * @var string the carrier-assigned order id (export only), or ''
+		 */
 		private string $carrier_order_id;
 
-		/** @var bool whether the action was not attempted because the order was busy — a transient refusal, not a carrier answer */
+		/**
+		 * @var bool whether the action was not attempted because the order was busy — a transient refusal, not a carrier answer
+		 */
 		private bool $busy;
 
-		/** @var bool whether the action was refused because the plugin's licence is not in force — the carrier was never called (#1270) */
+		/**
+		 * @var bool whether the action was refused because the plugin's licence is not in force — the carrier was never called (#1270)
+		 */
 		private bool $license_refused;
 
 		/**

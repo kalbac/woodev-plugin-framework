@@ -35,7 +35,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Carrier_Cancel' ) ) 
 	 */
 	final class Carrier_Cancel {
 
-		/** @var string the Action Scheduler hook that performs one cancellation; its one argument is the order id */
+		/**
+		 * @var string the Action Scheduler hook that performs one cancellation; its one argument is the order id
+		 */
 		public const HOOK = 'woodev_shipping_cancel_at_carrier';
 
 		/**
@@ -80,13 +82,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Carrier_Cancel' ) ) 
 		 */
 		public const REFUSAL_AT_META = '_woodev_shipment_refusal_requested_at';
 
-		/** @var int how many times one cancellation may be put back before the busy order is reported as a failure */
+		/**
+		 * @var int how many times one cancellation may be put back before the busy order is reported as a failure
+		 */
 		public const MAX_DEFERRALS = 12;
 
-		/** @var int seconds a cancellation that met a busy order waits before it tries again */
+		/**
+		 * @var int seconds a cancellation that met a busy order waits before it tries again
+		 */
 		private const DEFER_DELAY = MINUTE_IN_SECONDS;
 
-		/** @var string the Action Scheduler status of an action that is waiting its turn (`ActionScheduler_Store::STATUS_PENDING`) */
+		/**
+		 * @var string the Action Scheduler status of an action that is waiting its turn (`ActionScheduler_Store::STATUS_PENDING`)
+		 */
 		private const PENDING_STATUS = 'pending';
 
 		/**

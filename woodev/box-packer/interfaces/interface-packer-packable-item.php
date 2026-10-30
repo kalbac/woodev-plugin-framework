@@ -13,7 +13,6 @@ if ( ! interface_exists( 'Woodev_Packer_Packable_Item' ) ) :
 	 * @since 1.4.1
 	 */
 	interface Woodev_Packer_Packable_Item {
-
 		/**
 		 * @since 1.4.1
 		 * @return float Item length in cm (or any consistent unit).

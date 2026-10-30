@@ -43,7 +43,6 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Map\\Map_Provider' ) ) 
 	 * @since 1.5.0
 	 */
 	interface Map_Provider {
-
 		/**
 		 * Gets the provider's unique identifier.
 		 *

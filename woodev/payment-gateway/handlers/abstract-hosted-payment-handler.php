@@ -9,8 +9,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Hosted_Payment_Handler' ) 
 	 * Gateways can use this for common hosted response handling.
 	 */
 	abstract class Woodev_Payment_Gateway_Abstract_Hosted_Payment_Handler extends Woodev_Payment_Gateway_Abstract_Payment_Handler {
-
-
 		/**
 		 * Adds the action & filter hooks.
 		 */
@@ -39,7 +37,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Hosted_Payment_Handler' ) 
 			}
 		}
 
-
 		/**
 		 * Processes a new order payment.
 		 *
@@ -63,7 +60,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Hosted_Payment_Handler' ) 
 			];
 		}
 
-
 		/**
 		 * Renders the payment page.
 		 *
@@ -71,7 +67,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Hosted_Payment_Handler' ) 
 		 */
 		public function payment_page( $order_id ) {
 		}
-
 
 		/**
 		 * Gets payment params for the given order object.
@@ -84,14 +79,12 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Hosted_Payment_Handler' ) 
 			return [];
 		}
 
-
 		/**
 		 * Gets the URL for the hosted payment page or form.
 		 *
 		 * @return string
 		 */
 		abstract protected function get_hosted_payment_url();
-
 
 		/**
 		 * Gets the response handler URL.
@@ -101,7 +94,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Hosted_Payment_Handler' ) 
 		public function get_response_handler_url() {
 			return add_query_arg( 'wc-api', $this->get_gateway()->get_id() . '_process_payment', home_url( '/' ) );
 		}
-
 
 		/**
 		 * Handles a transaction response request via the wc-api endpoint.
@@ -151,7 +143,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Hosted_Payment_Handler' ) 
 			}
 		}
 
-
 		/**
 		 * Handles the response when processing is complete.
 		 *
@@ -162,7 +153,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Hosted_Payment_Handler' ) 
 
 			$this->do_transaction_request_response( $response, $this->get_gateway()->get_return_url( $order ) );
 		}
-
 
 		/**
 		 * Handles the response when processing has failed.
@@ -184,7 +174,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Hosted_Payment_Handler' ) 
 
 			$this->do_transaction_request_response( $response, $order ? $order->get_checkout_payment_url() : '' );
 		}
-
 
 		/**
 		 * Handles the response when the response data is invalid.
@@ -212,7 +201,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Hosted_Payment_Handler' ) 
 			$this->do_transaction_request_response( $response, $order ? $this->get_gateway()->get_return_url( $order ) : '' );
 		}
 
-
 		/**
 		 * Handles the final payment request response.
 		 *
@@ -232,7 +220,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Hosted_Payment_Handler' ) 
 			wp_safe_redirect( $url ?: home_url() );
 			exit;
 		}
-
 
 		/**
 		 * Logs a transaction response request.
@@ -256,7 +243,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Hosted_Payment_Handler' ) 
 				);
 			}
 		}
-
 
 		/**
 		 * Gets an order object from an API response.
@@ -302,7 +288,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Hosted_Payment_Handler' ) 
 			return $order;
 		}
 
-
 		/**
 		 * Gets an API response object for the given data.
 		 *
@@ -321,7 +306,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Hosted_Payment_Handler' ) 
 		public function is_ipn() {
 			return false;
 		}
-
 
 		/**
 		 * Determines whether this is a redirect hosted form.

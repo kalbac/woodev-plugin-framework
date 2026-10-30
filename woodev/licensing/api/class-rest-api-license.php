@@ -21,7 +21,6 @@ if ( ! class_exists( 'Woodev_REST_API_License' ) ) :
 	 * @since 2.0.0
 	 */
 	final class Woodev_REST_API_License {
-
 		/**
 		 * Whether boot() has already registered the controller (idempotency guard).
 		 *

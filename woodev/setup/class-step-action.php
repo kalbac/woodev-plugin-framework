@@ -24,20 +24,29 @@ defined( 'ABSPATH' ) || exit;
  * @since 2.0.2
  */
 final class Step_Action {
-
-	/** @var string */
+	/**
+	 * @var string
+	 */
 	private string $id;
 
-	/** @var string */
+	/**
+	 * @var string
+	 */
 	private string $label;
 
-	/** @var callable */
+	/**
+	 * @var callable
+	 */
 	private $callback;
 
-	/** @var bool */
+	/**
+	 * @var bool
+	 */
 	private bool $destructive;
 
-	/** @var string */
+	/**
+	 * @var string
+	 */
 	private string $confirm_message;
 
 	/**

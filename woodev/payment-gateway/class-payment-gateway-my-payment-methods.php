@@ -14,22 +14,30 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 	 * any associated actions (deleting a payment method, etc)
 	 */
 	class Woodev_Payment_Gateway_My_Payment_Methods extends Woodev_Script_Handler {
-
-		/** @var Woodev_Payment_Gateway_Plugin */
+		/**
+		 * @var Woodev_Payment_Gateway_Plugin
+		 */
 		protected $plugin;
 
-		/** @var Woodev_Payment_Gateway_Payment_Token[] array of token objects */
+		/**
+		 * @var Woodev_Payment_Gateway_Payment_Token[] array of token objects
+		 */
 		protected $tokens;
 
-		/** @var Woodev_Payment_Gateway_Payment_Token[] array of token objects */
+		/**
+		 * @var Woodev_Payment_Gateway_Payment_Token[] array of token objects
+		 */
 		protected $credit_card_tokens;
 
-		/** @var bool true if there are tokens */
+		/**
+		 * @var bool true if there are tokens
+		 */
 		protected $has_tokens;
 
-		/** @var string JS handler base class name, without the FW version */
+		/**
+		 * @var string JS handler base class name, without the FW version
+		 */
 		protected $js_handler_base_class_name = 'Woodev_Payment_Methods_Handler';
-
 
 		/**
 		 * Setup Class
@@ -42,7 +50,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 
 			parent::__construct();
 		}
-
 
 		/**
 		 * Adds the action and filter hooks.
@@ -63,7 +70,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 			);
 		}
 
-
 		/**
 		 * Gets the script ID.
 		 *
@@ -73,7 +79,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 			return $this->get_plugin()->get_id() . '_payment_methods';
 		}
 
-
 		/**
 		 * Gets the script ID, dasherized.
 		 *
@@ -82,7 +87,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 		public function get_id_dasherized() {
 			return $this->get_plugin()->get_id_dasherized() . '-payment-methods';
 		}
-
 
 		/**
 		 * Initializes the My Payment Methods table
@@ -153,7 +157,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 			add_action( 'woocommerce_after_account_payment_methods', [ $this, 'render_js' ] );
 		}
 
-
 		/**
 		 * Enqueue frontend CSS/JS
 		 */
@@ -176,7 +179,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 				true
 			);
 		}
-
 
 		/**
 		 * Gets the the available tokens for each plugin gateway and combine them.
@@ -220,7 +222,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 			return $this->tokens;
 		}
 
-
 		/**
 		 * Clear the tokens transients after making a method the default, so that the correct payment method shows as default.
 		 *
@@ -241,7 +242,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 			}
 		}
 
-
 		/**
 		 * Adds the token ID to the token data array.
 		 *
@@ -259,7 +259,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 
 			return $item;
 		}
-
 
 		/**
 		 * Adds the Edit and Save buttons to the Actions column.
@@ -307,7 +306,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 
 			return $item;
 		}
-
 
 		/**
 		 * Adds columns to the payment methods table.
@@ -361,7 +359,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 			return $columns;
 		}
 
-
 		/**
 		 * Gets FW token object from payment method token ID.
 		 *
@@ -384,7 +381,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 
 			return $token;
 		}
-
 
 		/**
 		 * Gets FW token object from payment method data array.
@@ -417,7 +413,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 			}
 		}
 
-
 		/**
 		 * Adds the Details column content.
 		 *
@@ -433,7 +428,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 			}
 		}
 
-
 		/**
 		 * Adds the Default column content.
 		 *
@@ -445,7 +439,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 
 			echo $this->get_payment_method_default_html( ! empty( $method['is_default'] ), $this->get_token_from_method_data_array( $method ) );
 		}
-
 
 		/**
 		 * Triggers the wc_{id}_before_my_payment_method_table action.
@@ -469,7 +462,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 			}
 		}
 
-
 		/**
 		 * Triggers the wc_{id}_after_my_payment_method_table action.
 		 *
@@ -491,7 +483,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 				do_action( 'wc_' . $this->get_plugin()->get_id() . '_after_my_payment_method_table', $this );
 			}
 		}
-
 
 		/**
 		 * Triggers action wc_payment_gateway_{id}_payment_method_deleted when a framework token is deleted.
@@ -531,7 +522,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 			}
 		}
 
-
 		/**
 		/**
 		 * Gets the JS args for the payment methods handler.
@@ -558,7 +548,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 			];
 		}
 
-
 		/**
 		/**
 		 * Adds a log entry.
@@ -568,7 +557,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 		protected function log_event( $message ) {
 			$this->get_plugin()->log( $message );
 		}
-
 
 		/**
 		 * Determines whether logging is enabled.
@@ -594,7 +582,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 
 			return $is_logging_enabled;
 		}
-
 
 		/**
 		 * Return the no payment methods section HTML
@@ -664,7 +651,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 			return apply_filters( 'wc_' . $this->get_plugin()->get_id() . '_my_payment_methods_table_method_title_html', $html, $token );
 		}
 
-
 		/**
 		 * Get a token's payment method "default" flag HTML.
 		 *
@@ -690,7 +676,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 
 			return $html;
 		}
-
 
 		/**
 		 * Gets a token's payment method details HTML.
@@ -723,7 +708,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 			 */
 			return apply_filters( 'wc_' . $this->get_plugin()->get_id() . '_my_payment_methods_table_details_html', $html, $token );
 		}
-
 
 		/**
 		/**
@@ -787,7 +771,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 			}
 		}
 
-
 		/**
 		 * Saves data to a token.
 		 *
@@ -816,7 +799,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 
 			return $token;
 		}
-
 
 		/**
 		 * Handles custom payment methods actions.
@@ -863,7 +845,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 			}
 		}
 
-
 		/**
 		 * Renders the JavaScript.
 		 */
@@ -874,7 +855,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 			);
 		}
 
-
 		/**
 		 * Redirect back to the Payment Methods (WC 2.6+) or My Account page
 		 */
@@ -884,7 +864,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 			exit;
 		}
 
-
 		/**
 		 * Return the gateway plugin, primarily a convenience method to other actors using filters
 		 *
@@ -893,7 +872,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 		public function get_plugin() {
 			return $this->plugin;
 		}
-
 
 		/**
 		 * Returns true if at least one of the plugin's gateways supports the add new payment method feature
@@ -911,7 +889,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 
 			return false;
 		}
-
 
 		/**
 		 * Determines if we're viewing the My Account -> Payment Methods page.

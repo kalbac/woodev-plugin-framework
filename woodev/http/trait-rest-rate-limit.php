@@ -38,7 +38,6 @@ if ( ! trait_exists( '\\Woodev\\Framework\\Http\\Rest_Rate_Limit_Trait' ) ) :
 	 * @since 2.0.2
 	 */
 	trait Rest_Rate_Limit_Trait {
-
 		/**
 		 * The bucket identity used when the web server reported no usable address at all.
 		 *

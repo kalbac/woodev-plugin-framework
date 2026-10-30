@@ -10,7 +10,6 @@ defined( 'ABSPATH' ) || exit;
  * @since 2.0.2
  */
 final class Carrier_Catalogue {
-
 	/**
 	 * Returns the carrier product catalogue.
 	 *

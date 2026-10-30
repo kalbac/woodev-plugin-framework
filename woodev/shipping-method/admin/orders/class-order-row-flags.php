@@ -71,8 +71,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Fl
 		 */
 		public const MAX_LABEL_LENGTH = 60;
 
-		/** Not instantiable — a namespace of pure functions. */
-		private function __construct() {}
+		/**
+		 * Not instantiable — a namespace of pure functions.
+		 */
+		private function __construct() {
+		}
 
 		/**
 		 * The flags one order carries, after the carrier plugins had their say.

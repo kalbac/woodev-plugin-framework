@@ -36,31 +36,49 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Delivery_Status' ) )
 	 */
 	final class Delivery_Status {
 
-		/** @var string awaiting carrier acceptance. */
+		/**
+		 * @var string awaiting carrier acceptance.
+		 */
 		const PENDING = 'pending';
 
-		/** @var string carrier has created the shipment. */
+		/**
+		 * @var string carrier has created the shipment.
+		 */
 		const CREATED = 'created';
 
-		/** @var string en route. */
+		/**
+		 * @var string en route.
+		 */
 		const IN_TRANSIT = 'in_transit';
 
-		/** @var string waiting at a pickup point for the customer. */
+		/**
+		 * @var string waiting at a pickup point for the customer.
+		 */
 		const READY_FOR_PICKUP = 'ready_for_pickup';
 
-		/** @var string handed to the customer. */
+		/**
+		 * @var string handed to the customer.
+		 */
 		const DELIVERED = 'delivered';
 
-		/** @var string on its way back to the sender. */
+		/**
+		 * @var string on its way back to the sender.
+		 */
 		const RETURNING = 'returning';
 
-		/** @var string back with the sender. */
+		/**
+		 * @var string back with the sender.
+		 */
 		const RETURNED = 'returned';
 
-		/** @var string delivery attempt failed. */
+		/**
+		 * @var string delivery attempt failed.
+		 */
 		const FAILED = 'failed';
 
-		/** @var string shipment cancelled. */
+		/**
+		 * @var string shipment cancelled.
+		 */
 		const CANCELLED = 'cancelled';
 
 		/**

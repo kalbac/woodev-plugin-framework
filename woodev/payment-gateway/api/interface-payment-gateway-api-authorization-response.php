@@ -13,7 +13,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API_Authorization_Response' ) )
 	 * also be used as the parent class for credit card charge (authorization + capture) responses.
 	 */
 	interface Woodev_Payment_Gateway_API_Authorization_Response extends Woodev_Payment_Gateway_API_Response {
-
 		/**
 		 * The authorization code is returned from the credit card processor to
 		 * indicate that the charge will be paid by the card issuer.
@@ -23,7 +22,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API_Authorization_Response' ) )
 		 */
 		public function get_authorization_code();
 
-
 		/**
 		 * Returns the result of the AVS check.
 		 *
@@ -32,7 +30,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API_Authorization_Response' ) )
 		 */
 		public function get_avs_result();
 
-
 		/**
 		 * Returns the result of the CSC check.
 		 *
@@ -40,7 +37,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API_Authorization_Response' ) )
 		 * @since 1.0.0
 		 */
 		public function get_csc_result();
-
 
 		/**
 		 * Returns true if the CSC check was successful.

@@ -12,11 +12,14 @@ use Woodev_Plugin;
  * @since 2.0.2
  */
 final class Carrier_Competitor_Notification_Handler extends Competitor_Notification_Handler {
-
-	/** @var bool whether fleet recommendations were evaluated this request */
+	/**
+	 * @var bool whether fleet recommendations were evaluated this request
+	 */
 	private static bool $recommendations_evaluated = false;
 
-	/** @var string carrier id declared by the owning plugin */
+	/**
+	 * @var string carrier id declared by the owning plugin
+	 */
 	private string $carrier_id;
 
 	/**

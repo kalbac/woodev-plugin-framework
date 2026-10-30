@@ -20,8 +20,9 @@ use Exception;
  * @since 2.0.2
  */
 final class WC_Admin_Notes_Renderer implements Competitor_Notice_Renderer {
-
-	/** @var string the owning plugin's dasherized id, used as the note source */
+	/**
+	 * @var string the owning plugin's dasherized id, used as the note source
+	 */
 	private string $source;
 
 	/**

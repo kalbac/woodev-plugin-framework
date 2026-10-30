@@ -26,7 +26,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method_Pickup' ) ) :
 
 	abstract class Shipping_Method_Pickup extends Shipping_Method {
-
 		/**
 		 * Gets the delivery type.
 		 *

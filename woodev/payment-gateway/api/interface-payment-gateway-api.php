@@ -10,7 +10,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API' ) ) :
 	 * WooCommerce Payment Gateway API
 	 */
 	interface Woodev_Payment_Gateway_API {
-
 		/**
 		 * Perform a credit card authorization for the given order
 		 *
@@ -23,7 +22,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API' ) ) :
 		 * @since 1.0.0
 		 */
 		public function credit_card_authorization( WC_Order $order );
-
 
 		/**
 		 * Perform a credit card charge for the given order
@@ -38,7 +36,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API' ) ) :
 		 */
 		public function credit_card_charge( WC_Order $order );
 
-
 		/**
 		 * Perform a credit card capture for a given authorized order
 		 *
@@ -52,7 +49,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API' ) ) :
 		 */
 		public function credit_card_capture( WC_Order $order );
 
-
 		/**
 		 * Perform a refund for the given order
 		 *
@@ -65,7 +61,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API' ) ) :
 		 */
 		public function refund( WC_Order $order );
 
-
 		/**
 		 * Perform a void for the given order
 		 *
@@ -77,7 +72,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API' ) ) :
 		 * @throws Woodev_Payment_Gateway_Exception network timeouts, etc
 		 */
 		public function void( WC_Order $order );
-
 
 		/**
 		 * Creates a payment token for the given order
@@ -92,7 +86,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API' ) ) :
 		 */
 		public function tokenize_payment_method( WC_Order $order );
 
-
 		/**
 		 * Updates a tokenized payment method.
 		 *
@@ -103,7 +96,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API' ) ) :
 		 */
 		public function update_tokenized_payment_method( WC_Order $order );
 
-
 		/**
 		 * Determines if this API supports updating tokenized payment methods.
 		 *
@@ -111,7 +103,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API' ) ) :
 		 * @see Woodev_Payment_Gateway_API::update_tokenized_payment_method()
 		 */
 		public function supports_update_tokenized_payment_method();
-
 
 		/**
 		 * Removes the tokenized payment method.  This method should not be invoked
@@ -127,7 +118,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API' ) ) :
 		 */
 		public function remove_tokenized_payment_method( $token, $customer_id );
 
-
 		/**
 		 * Returns true if this API supports a "remove tokenized payment method"
 		 * request.  If this method returns true, then remove_tokenized_payment_method() is considered safe to call.
@@ -138,7 +128,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API' ) ) :
 		 * @since 1.0.0
 		 */
 		public function supports_remove_tokenized_payment_method();
-
 
 		/**
 		 * Returns all tokenized payment methods for the customer.  This method
@@ -155,7 +144,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API' ) ) :
 		 */
 		public function get_tokenized_payment_methods( $customer_id );
 
-
 		/**
 		 * Returns true if this API supports a "get tokenized payment methods"
 		 * request.  If this method returns true, then get_tokenized_payment_methods() is considered safe to call.
@@ -167,7 +155,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API' ) ) :
 		 */
 		public function supports_get_tokenized_payment_methods();
 
-
 		/**
 		 * Returns the most recent request object
 		 *
@@ -176,7 +163,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API' ) ) :
 		 */
 		public function get_request();
 
-
 		/**
 		 * Returns the most recent response object
 		 *
@@ -184,7 +170,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API' ) ) :
 		 * @since 1.0.0
 		 */
 		public function get_response();
-
 
 		/**
 		 * Returns the WC_Order object associated with the request, if any

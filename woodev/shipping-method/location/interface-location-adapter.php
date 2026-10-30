@@ -36,7 +36,6 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Adap
 	 * @since 2.0.2
 	 */
 	interface Location_Adapter {
-
 		/**
 		 * Translates a neutral location record into this carrier's own identity.
 		 *

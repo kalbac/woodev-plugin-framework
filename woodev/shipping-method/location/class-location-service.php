@@ -184,7 +184,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 */
 		private const SAVED_CITY_MISS_META = '_woodev_location_saved_city_miss';
 
-		/** How many saved-city miss signatures are kept per customer (#1075). */
+		/**
+		 * How many saved-city miss signatures are kept per customer (#1075).
+		 */
 		private const SAVED_CITY_MISS_LIMIT = 10;
 
 		/**
@@ -910,7 +912,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 
 			return $is_region ? $resolved : null;
 		}
-
 
 		/**
 		 * Finds `$settlement`'s region ancestor by checking `$provider`'s WHOLE
@@ -2082,7 +2083,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 			$this->unpersisted_default = null;
 		}
 
-
 		/**
 		 * Erases the CURRENT visitor's own location chain — issue #356 part 2. Thin
 		 * pass-through to {@see Customer_Location_Store::forget()} with `null`, the
@@ -3082,7 +3082,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 			return $levels;
 		}
 
-
 		/**
 		 * Whether the locality CHOOSER can actually operate for one suggest level in
 		 * one country — the single predicate every server-side check that demands a
@@ -3281,7 +3280,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 			return null === $filtered || $filtered instanceof Location_Provider ? $filtered : $resolved;
 		}
 
-
 		/**
 		 * Whether a provider is registered under `$provider_id` — a thin proxy
 		 * for {@see Location_Provider_Registry::has_provider()} so a caller
@@ -3303,7 +3301,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		public function has_provider( string $provider_id ): bool {
 			return $this->registry->has_provider( $provider_id );
 		}
-
 
 		/**
 		 * Gets ONE registered provider by its raw id, with NO eligibility gating
@@ -3601,7 +3598,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 
 			return $this->provider_serves_level( $candidate, $level, $country ) ? $candidate : null;
 		}
-
 
 		/**
 		 * Whether the D15 chain COULD serve one suggest LEVEL — bypassing

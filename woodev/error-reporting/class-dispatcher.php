@@ -27,16 +27,24 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Dispatcher' ) ) :
 	 */
 	final class Dispatcher {
 
-		/** Single-event cron hook that drains the queue. */
+		/**
+		 * Single-event cron hook that drains the queue.
+		 */
 		const HOOK = 'woodev_error_reporting_dispatch';
 
-		/** Option row that is the drain lock. */
+		/**
+		 * Option row that is the drain lock.
+		 */
 		const LOCK_OPTION = 'woodev_error_reporting_lock';
 
-		/** Seconds after which a lock is considered abandoned. */
+		/**
+		 * Seconds after which a lock is considered abandoned.
+		 */
 		const LOCK_TTL = 300;
 
-		/** Seconds between the first enqueue and the cron run. */
+		/**
+		 * Seconds between the first enqueue and the cron run.
+		 */
 		const DELAY = 60;
 
 		/**

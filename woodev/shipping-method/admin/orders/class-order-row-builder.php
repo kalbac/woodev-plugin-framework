@@ -35,7 +35,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Bu
 	 * @since 2.0.2
 	 */
 	class Order_Row_Builder {
-
 		/**
 		 * Declares which of export/update/cancel are available on the row (card
 		 * #824). Defaults to one wired against the framework's shared registry

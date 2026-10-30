@@ -69,7 +69,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Abstract_Bulk_Point
 	 * @since 2.0.2
 	 */
 	abstract class Abstract_Bulk_Point_Source implements Point_Source {
-
 		/**
 		 * {@inheritDoc}
 		 *

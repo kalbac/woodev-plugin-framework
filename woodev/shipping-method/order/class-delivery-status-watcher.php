@@ -15,6 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Delivery_Status_Watcher' ) ) :
+
 	/**
 	 * Watches the order meta that decides an order's canonical delivery status.
 	 *
@@ -106,32 +107,74 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Delivery_Status_Watc
 			}
 		}
 
-		/** @since 2.0.2 @param int $meta_id Meta id. @param int $order_id Order id. @param string $key Meta key. @param mixed $value Value. @return void */
+		/**
+		 * @since 2.0.2
+		 * @param int    $meta_id Meta id.
+		 * @param int    $order_id Order id.
+		 * @param string $key Meta key.
+		 * @param mixed  $value Value.
+		 * @return void
+		 */
 		public function on_added_meta( $meta_id, $order_id, $key, $value ): void {
 			$this->touch( (int) $order_id, (string) $key, true );
 		}
 
-		/** @since 2.0.2 @param int $meta_id Meta id. @param int $order_id Order id. @param string $key Meta key. @param mixed $value Value. @return void */
+		/**
+		 * @since 2.0.2
+		 * @param int    $meta_id Meta id.
+		 * @param int    $order_id Order id.
+		 * @param string $key Meta key.
+		 * @param mixed  $value Value.
+		 * @return void
+		 */
 		public function on_updated_meta( $meta_id, $order_id, $key, $value ): void {
 			$this->touch( (int) $order_id, (string) $key, false );
 		}
 
-		/** @since 2.0.2 @param mixed $meta_ids Meta ids. @param int $order_id Order id. @param string $key Meta key. @param mixed $value Value. @return void */
+		/**
+		 * @since 2.0.2
+		 * @param mixed  $meta_ids Meta ids.
+		 * @param int    $order_id Order id.
+		 * @param string $key Meta key.
+		 * @param mixed  $value Value.
+		 * @return void
+		 */
 		public function on_deleted_meta( $meta_ids, $order_id, $key, $value ): void {
 			$this->touch( (int) $order_id, (string) $key, false );
 		}
 
-		/** @since 2.0.2 @param int $meta_id Meta id. @param int $post_id Post id. @param string $key Meta key. @param mixed $value Value. @return void */
+		/**
+		 * @since 2.0.2
+		 * @param int    $meta_id Meta id.
+		 * @param int    $post_id Post id.
+		 * @param string $key Meta key.
+		 * @param mixed  $value Value.
+		 * @return void
+		 */
 		public function on_added_post_meta( $meta_id, $post_id, $key, $value ): void {
 			$this->touch_post( (int) $post_id, (string) $key, true );
 		}
 
-		/** @since 2.0.2 @param int $meta_id Meta id. @param int $post_id Post id. @param string $key Meta key. @param mixed $value Value. @return void */
+		/**
+		 * @since 2.0.2
+		 * @param int    $meta_id Meta id.
+		 * @param int    $post_id Post id.
+		 * @param string $key Meta key.
+		 * @param mixed  $value Value.
+		 * @return void
+		 */
 		public function on_updated_post_meta( $meta_id, $post_id, $key, $value ): void {
 			$this->touch_post( (int) $post_id, (string) $key, false );
 		}
 
-		/** @since 2.0.2 @param mixed $meta_ids Meta ids. @param int $post_id Post id. @param string $key Meta key. @param mixed $value Value. @return void */
+		/**
+		 * @since 2.0.2
+		 * @param mixed  $meta_ids Meta ids.
+		 * @param int    $post_id Post id.
+		 * @param string $key Meta key.
+		 * @param mixed  $value Value.
+		 * @return void
+		 */
 		public function on_deleted_post_meta( $meta_ids, $post_id, $key, $value ): void {
 			$this->touch_post( (int) $post_id, (string) $key, false );
 		}

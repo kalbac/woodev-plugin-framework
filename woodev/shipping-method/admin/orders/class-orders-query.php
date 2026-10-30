@@ -66,13 +66,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 	 */
 	class Orders_Query {
 
-		/** @var int default page size, absent an explicit `per_page`. */
+		/**
+		 * @var int default page size, absent an explicit `per_page`.
+		 */
 		const DEFAULT_PER_PAGE = 20;
 
-		/** @var string `match` request value: every advanced filter must hold (the default). */
+		/**
+		 * @var string `match` request value: every advanced filter must hold (the default).
+		 */
 		const MATCH_ALL = 'all';
 
-		/** @var string `match` request value: at least one advanced filter must hold (#843). */
+		/**
+		 * @var string `match` request value: at least one advanced filter must hold (#843).
+		 */
 		const MATCH_ANY = 'any';
 
 		/**
@@ -108,7 +114,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 				'compare' => '=',
 			],
 		];
-
 
 		/**
 		 * Registry to read providers from.
@@ -1160,7 +1165,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 			return $clauses;
 		}
 
-
 		/**
 		 * Builds one pickup-point-presence meta clause per provider (#836) — the exact
 		 * same asymmetry as {@see self::tracking_meta_clauses()}. A provider with no
@@ -1223,7 +1227,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 
 			return $clauses;
 		}
-
 
 		/**
 		 * Builds one export-presence meta clause per provider (SP-10 #841; empty-id

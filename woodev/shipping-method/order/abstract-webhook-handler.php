@@ -52,8 +52,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Webhook_Han
 	 * @since 1.5.0
 	 */
 	abstract class Abstract_Webhook_Handler {
-
-		/** @var string plugin-supplied token that namespaces this handler's forward hooks */
+		/**
+		 * @var string plugin-supplied token that namespaces this handler's forward hooks
+		 */
 		protected string $hook_prefix;
 
 		/**

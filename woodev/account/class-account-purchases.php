@@ -18,7 +18,6 @@ if ( ! class_exists( 'Woodev_Account_Purchases' ) ) :
 	 * @since 2.0.2
 	 */
 	final class Woodev_Account_Purchases {
-
 		/**
 		 * Normalizes a connector /purchases response into the lean UI list.
 		 *

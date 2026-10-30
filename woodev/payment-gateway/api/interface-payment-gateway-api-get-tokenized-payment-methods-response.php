@@ -10,7 +10,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API_Get_Tokenized_Payment_Metho
 	 * WooCommerce Direct Payment Gateway API Create Payment Token Response
 	 */
 	interface Woodev_Payment_Gateway_API_Get_Tokenized_Payment_Methods_Response extends Woodev_Payment_Gateway_API_Response {
-
 		/**
 		 * Returns any payment tokens.
 		 *

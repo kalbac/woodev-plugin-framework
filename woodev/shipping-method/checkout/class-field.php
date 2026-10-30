@@ -44,7 +44,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Field' ) ) :
 	 * @since 2.0.2
 	 */
 	class Field {
-
 		/**
 		 * Raw definition accumulator.
 		 *

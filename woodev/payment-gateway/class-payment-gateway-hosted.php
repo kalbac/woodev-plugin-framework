@@ -19,8 +19,9 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 	 * @since 1.0.0
 	 */
 	abstract class Woodev_Payment_Gateway_Hosted extends Woodev_Payment_Gateway {
-
-		/** @var string the WC API url, used for the IPN and/or redirect-back handler */
+		/**
+		 * @var string the WC API url, used for the IPN and/or redirect-back handler
+		 */
 		protected $transaction_response_handler_url;
 
 		/**
@@ -57,7 +58,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 			}
 		}
 
-
 		/**
 		 * Display the payment fields on the checkout page
 		 *
@@ -73,7 +73,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 			}</style>
 			<?php
 		}
-
 
 		/**
 		 * Processes the payment by redirecting customer to the WooCommerce pay page or the gateway hosted pay page.
@@ -105,7 +104,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 			];
 		}
 
-
 		/**
 		 * Gets the payment URL: the checkout pay page
 		 *
@@ -136,7 +134,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 			return false;
 		}
 
-
 		/**
 		 * Determines if the customers cart should be emptied before redirecting to the payment form, after the order is created.
 		 *
@@ -147,7 +144,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 		protected function empty_cart_before_redirect() {
 			return true;
 		}
-
 
 		/**
 		 * Render the payment page for gateways that use a form post method
@@ -167,7 +163,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 				$this->generate_pay_form( $order_id );
 			}
 		}
-
 
 		/**
 		 * Generates the POST pay form.  Some inline javascript will attempt to
@@ -200,7 +195,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 			}
 		}
 
-
 		/**
 		 * Renders the gateway pay page direct post form.  This is used by gateways
 		 * that collect some or all payment information on-site, and POST the
@@ -214,7 +208,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 		public function render_pay_page_form( $order, $request_params ) {
 			// implemented by concrete class
 		}
-
 
 		/**
 		 * Renders the gateway auto post form.  This is used for gateways that
@@ -272,7 +265,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 			echo '</form>';
 		}
 
-
 		/**
 		 * Get the auto post form display arguments.
 		 *
@@ -311,7 +303,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 			return (array) apply_filters( 'wc_payment_gateway_' . $this->get_id() . '_auto_post_form_args', $args, $order );
 		}
 
-
 		/**
 		 * Get the auto post form params HTML.
 		 *
@@ -335,7 +326,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 			return $html;
 		}
 
-
 		/**
 		 * Returns the gateway hosted pay page parameters, if any
 		 *
@@ -347,7 +337,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 			// stub method
 			return [];
 		}
-
 
 		/**
 		 * Gets the hosted pay page url to redirect to, to allow the customer to
@@ -361,7 +350,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 		 * @see Woodev_Payment_Gateway_Hosted::get_hosted_pay_page_params()
 		 */
 		abstract public function get_hosted_pay_page_url( $order = null );
-
 
 		/**
 		 * Handle a payment notification request.
@@ -415,7 +403,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 			}
 		}
 
-
 		/**
 		 * Logs an error raised while handling a transaction response.
 		 *
@@ -433,7 +420,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 				$this->get_id()
 			);
 		}
-
 
 		/**
 		 * Gets the order object with transaction data.
@@ -480,7 +466,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 			return $order;
 		}
 
-
 		/**
 		 * Gets the order object with payment data added.
 		 *
@@ -504,7 +489,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 			// See Woodev_Payment_Gateway::get_order()'s guard (#613).
 			return $filtered instanceof WC_Order ? $filtered : $order;
 		}
-
 
 		/**
 		 * Validate a transaction response.
@@ -530,7 +514,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 				);
 			}
 		}
-
 
 		/**
 		 * Process the transaction response for the given order
@@ -582,7 +565,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 				$this->do_transaction_failed( $order, $response );
 			}
 		}
-
 
 		/**
 		 * Processes a transaction response's token data, if any.
@@ -676,7 +658,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 			return $order;
 		}
 
-
 		/**
 		 * Adds an order note, along with anything else required after an approved transaction.
 		 * This is a generic, default approved handler.
@@ -699,7 +680,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 			}
 		}
 
-
 		/**
 		 * Handle a held transaction response.
 		 *
@@ -719,7 +699,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 				exit;
 			}
 		}
-
 
 		/**
 		 * Acknowledges an intermediate status without changing the order.
@@ -759,7 +738,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 			}
 		}
 
-
 		/**
 		 * Handles a failed transaction response.
 		 *
@@ -779,7 +757,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 				exit;
 			}
 		}
-
 
 		/**
 		 * Handles an invalid transaction response.
@@ -806,7 +783,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 			}
 		}
 
-
 		/**
 		 * Returns an API response object for the current response request
 		 *
@@ -815,7 +791,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 		 * @return Woodev_Payment_Gateway_API_Payment_Notification_Response the response object
 		 */
 		abstract protected function get_transaction_response( $request_response_data );
-
 
 		/**
 		 * Returns the WC API URL for this gateway, based on the current protocol
@@ -838,7 +813,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 			return $this->transaction_response_handler_url;
 		}
 
-
 		/**
 		 * Returns true if currently doing a transaction response request
 		 *
@@ -847,7 +821,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 		public function doing_transaction_response_handler() {
 			return isset( $_REQUEST['wc-api'] ) && get_class( $this ) === sanitize_text_field( $_REQUEST['wc-api'] );
 		}
-
 
 		/**
 		 * Logs pay page form submission request.
@@ -866,7 +839,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 				'message'
 			);
 		}
-
 
 		/**
 		 * Logs IPN/redirect-back transaction response request to the log file.
@@ -901,7 +873,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 			return true;
 		}
 
-
 		/**
 		 * Returns true if this gateway uses a form-post from the pay page to "redirect" to a hosted payment page
 		 *
@@ -910,7 +881,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 		public function use_form_post() {
 			return false;
 		}
-
 
 		/**
 		 * Returns true if this gateway uses an automatic form-post from the pay

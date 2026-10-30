@@ -5,7 +5,6 @@ defined( 'ABSPATH' ) || exit;
 if ( ! class_exists( 'Woodev_Licensing_API_Request' ) ) :
 
 	class Woodev_Licensing_API_Request extends Woodev_API_JSON_Request {
-
 		public function get_license( $params ) {
 			$this->method = 'POST';
 			$this->params = $params;
@@ -22,7 +21,6 @@ if ( ! class_exists( 'Woodev_Licensing_API_Request' ) ) :
 
 			return $path;
 		}
-
 
 		/**
 		 * Gets the sanitized request path, for logging.

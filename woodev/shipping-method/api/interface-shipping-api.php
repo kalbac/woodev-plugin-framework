@@ -35,7 +35,6 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Api\\Shipping_API' ) ) 
 	 * @since 1.5.0
 	 */
 	interface Shipping_API {
-
 		/**
 		 * Calculates shipping rates for the given parameters.
 		 *
@@ -57,7 +56,6 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Api\\Shipping_API' ) ) 
 		 * @throws \Woodev_API_Exception on network timeouts, API errors, or invalid parameters
 		 */
 		public function calculate_rates( array $params ): \Woodev_API_Response;
-
 
 		/**
 		 * Retrieves available pickup points for the given parameters.
@@ -82,7 +80,6 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Api\\Shipping_API' ) ) 
 		 */
 		public function get_pickup_points( array $params ): \Woodev_API_Response;
 
-
 		/**
 		 * Creates a shipping order with the carrier.
 		 *
@@ -97,7 +94,6 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Api\\Shipping_API' ) ) 
 		 * @throws \Woodev_API_Exception on network timeouts, API errors, or validation failures
 		 */
 		public function create_order( \WC_Order $order ): \Woodev_API_Response;
-
 
 		/**
 		 * Retrieves the current status of a shipping order.
@@ -114,7 +110,6 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Api\\Shipping_API' ) ) 
 		 */
 		public function get_order( string $order_id ): \Woodev_API_Response;
 
-
 		/**
 		 * Cancels a shipping order with the carrier.
 		 *
@@ -129,7 +124,6 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Api\\Shipping_API' ) ) 
 		 * @throws \Woodev_API_Exception on network timeouts, API errors, or if cancellation is not allowed
 		 */
 		public function cancel_order( string $order_id ): \Woodev_API_Response;
-
 
 		/**
 		 * Retrieves tracking information for a shipment.
@@ -146,7 +140,6 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Api\\Shipping_API' ) ) 
 		 */
 		public function get_tracking( string $tracking_number ): \Woodev_API_Response;
 
-
 		/**
 		 * Returns the most recent request object.
 		 *
@@ -155,7 +148,6 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Api\\Shipping_API' ) ) 
 		 * @return \Woodev_API_Request the most recent request object
 		 */
 		public function get_request(): \Woodev_API_Request;
-
 
 		/**
 		 * Returns the most recent response object, or null before any request has run

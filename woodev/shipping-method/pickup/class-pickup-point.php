@@ -22,8 +22,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 	 * @since 2.0.2
 	 */
 	class Pickup_Point {
-
-		/** @var array<string, mixed> normalized data */
+		/**
+		 * @var array<string, mixed> normalized data
+		 */
 		private array $data;
 
 		/**

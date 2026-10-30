@@ -29,19 +29,29 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Browser_Event_Builder' )
 		const SOURCE_REJECTION = 'unhandledrejection';
 		const SOURCE_PICKUP    = 'pickup';
 
-		/** Frames kept, innermost first. */
+		/**
+		 * Frames kept, innermost first.
+		 */
 		const MAX_FRAMES = 30;
 
-		/** Longest frame URL read. */
+		/**
+		 * Longest frame URL read.
+		 */
 		const MAX_URL = 500;
 
-		/** Largest line / column number kept (a minified bundle is a long single line). */
+		/**
+		 * Largest line / column number kept (a minified bundle is a long single line).
+		 */
 		const MAX_POSITION = 10000000;
 
-		/** The standard JS error names; any other `error.name` is exported as {@see self::DEFAULT_ERROR_TYPE}. */
+		/**
+		 * The standard JS error names; any other `error.name` is exported as {@see self::DEFAULT_ERROR_TYPE}.
+		 */
 		const ERROR_TYPES = [ 'Error', 'TypeError', 'RangeError', 'ReferenceError', 'SyntaxError', 'EvalError', 'URIError', 'AggregateError' ];
 
-		/** Exported for an error name outside {@see self::ERROR_TYPES}. */
+		/**
+		 * Exported for an error name outside {@see self::ERROR_TYPES}.
+		 */
 		const DEFAULT_ERROR_TYPE = 'Error';
 
 		/**
@@ -57,16 +67,24 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Browser_Event_Builder' )
 			'woodev_pickup_embed_load_failed',
 		];
 
-		/** Exported for a pickup `code` outside {@see self::PICKUP_CODES}. */
+		/**
+		 * Exported for a pickup `code` outside {@see self::PICKUP_CODES}.
+		 */
 		const UNKNOWN_CODE = 'unknown';
 
-		/** @var Plugin_Scope */
+		/**
+		 * @var Plugin_Scope
+		 */
 		private Plugin_Scope $scope;
 
-		/** @var array<string,string> */
+		/**
+		 * @var array<string,string>
+		 */
 		private array $context;
 
-		/** @var array<string,string[]> Pickup field ids the handlers declared, by plugin id. */
+		/**
+		 * @var array<string,string[]> Pickup field ids the handlers declared, by plugin id.
+		 */
 		private array $pickup_fields = [];
 
 		/**

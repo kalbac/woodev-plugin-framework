@@ -5,21 +5,44 @@ defined( 'ABSPATH' ) || exit;
 if ( ! interface_exists( 'Woodev_Box_Packer_Item' ) ) :
 
 	interface Woodev_Box_Packer_Item {
-		/** @return string */
+		/**
+		 * @return string
+		 */
 		public function get_name();
-		/** @return float */
+
+		/**
+		 * @return float
+		 */
 		public function get_volume();
-		/** @return float */
+
+		/**
+		 * @return float
+		 */
 		public function get_height();
-		/** @return float */
+
+		/**
+		 * @return float
+		 */
 		public function get_width();
-		/** @return float */
+
+		/**
+		 * @return float
+		 */
 		public function get_length();
-		/** @return float */
+
+		/**
+		 * @return float
+		 */
 		public function get_weight();
-		/** @return float */
+
+		/**
+		 * @return float
+		 */
 		public function get_value();
-		/** @return mixed */
+
+		/**
+		 * @return mixed
+		 */
 		public function get_internal_data();
 	}
 

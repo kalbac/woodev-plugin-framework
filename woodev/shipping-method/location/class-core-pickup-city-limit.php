@@ -34,7 +34,9 @@ if ( ! class_exists( __NAMESPACE__ . '\Core_Pickup_City_Limit' ) ) :
 	 */
 	final class Core_Pickup_City_Limit {
 
-		/** WooCommerce's «Самовывоз» method id. */
+		/**
+		 * WooCommerce's «Самовывоз» method id.
+		 */
 		public const METHOD_ID = 'local_pickup';
 
 		/**

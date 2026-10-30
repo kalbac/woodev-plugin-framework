@@ -5,6 +5,7 @@ defined( 'ABSPATH' ) || exit;
 use Automattic\WooCommerce\Blocks\Utils\CartCheckoutUtils;
 
 if ( ! class_exists( 'Woodev_Blocks_Handler' ) ) :
+
 	/**
 	 * WooCommerce Blocks handler.
 	 *
@@ -15,8 +16,9 @@ if ( ! class_exists( 'Woodev_Blocks_Handler' ) ) :
 	 * @since 1.3.2
 	 */
 	class Woodev_Blocks_Handler {
-
-		/** @var Woodev_Plugin|Woodev_Payment_Gateway_Plugin current plugin instance */
+		/**
+		 * @var Woodev_Plugin|Woodev_Payment_Gateway_Plugin current plugin instance
+		 */
 		protected Woodev_Plugin $plugin;
 
 		/**
@@ -36,7 +38,6 @@ if ( ! class_exists( 'Woodev_Blocks_Handler' ) ) :
 			add_action( 'admin_notices', [ $this, 'add_admin_notices' ] );
 		}
 
-
 		/**
 		 * Determines if the plugin is compatible with the WooCommerce Cart block.
 		 *
@@ -51,7 +52,6 @@ if ( ! class_exists( 'Woodev_Blocks_Handler' ) ) :
 			return isset( $supports['blocks']['cart'] ) && true === $supports['blocks']['cart'];
 		}
 
-
 		/**
 		 * Determines if the plugin is compatible with the WooCommerce Checkout block.
 		 *
@@ -65,7 +65,6 @@ if ( ! class_exists( 'Woodev_Blocks_Handler' ) ) :
 
 			return isset( $supports['blocks']['checkout'] ) && true === $supports['blocks']['checkout'];
 		}
-
 
 		/**
 		 * Determines if the checkout page is using the checkout block.
@@ -83,7 +82,6 @@ if ( ! class_exists( 'Woodev_Blocks_Handler' ) ) :
 			return CartCheckoutUtils::is_checkout_block_default();
 		}
 
-
 		/**
 		 * Determines if the cart page is using the cart block.
 		 *
@@ -98,7 +96,6 @@ if ( ! class_exists( 'Woodev_Blocks_Handler' ) ) :
 
 			return CartCheckoutUtils::is_cart_block_default();
 		}
-
 
 		/**
 		 * Adds admin notices pertaining the blocks integration.

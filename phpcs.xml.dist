@@ -127,6 +127,22 @@
 		</properties>
 	</rule>
 
+	<!-- WPCS has no layout sniffs: closing brace on its own line, one blank line between members. -->
+	<rule ref="Squiz.WhiteSpace.ScopeClosingBrace"/>
+	<rule ref="Squiz.WhiteSpace.FunctionSpacing">
+		<properties>
+			<property name="spacing" value="1"/>
+			<property name="spacingBeforeFirst" value="0"/>
+			<property name="spacingAfterLast" value="0"/>
+		</properties>
+	</rule>
+	<rule ref="Squiz.WhiteSpace.MemberVarSpacing">
+		<properties>
+			<property name="spacing" value="1"/>
+			<property name="spacingBeforeFirst" value="0"/>
+		</properties>
+	</rule>
+
 	<!-- Конвенция «только короткий синтаксис []» из AGENTS.md — ДО #116(в) она
 		 держалась только вниманием автора: конфиг лишь РАЗРЕШАЛ [], но не запрещал
 		 array(). Снифф даёт ERROR (замерено: 640 в 73 файлах, все чинятся phpcbf),

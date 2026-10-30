@@ -21,25 +21,39 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Settings_Page_Registry {
 
-	/** @var string admin page slug. */
+	/**
+	 * @var string admin page slug.
+	 */
 	const PAGE_SLUG = 'woodev-settings';
 
-	/** @var self|null singleton. */
+	/**
+	 * @var self|null singleton.
+	 */
 	private static $instance = null;
 
-	/** @var \Woodev_Plugin[] plugins that may contribute providers. */
+	/**
+	 * @var \Woodev_Plugin[] plugins that may contribute providers.
+	 */
 	private array $plugins = [];
 
-	/** @var Settings_Provider[] framework-service providers (no owning plugin). */
+	/**
+	 * @var Settings_Provider[] framework-service providers (no owning plugin).
+	 */
 	private array $services = [];
 
-	/** @var bool whether the shared hooks were added. */
+	/**
+	 * @var bool whether the shared hooks were added.
+	 */
 	private bool $hooked = false;
 
-	/** @var array<int,array<string,mixed>>|null memoized tabs for this request. */
+	/**
+	 * @var array<int,array<string,mixed>>|null memoized tabs for this request.
+	 */
 	private $tabs_cache = null;
 
-	/** @var array<int,array<string,mixed>>|null memoized provider entries for this request. */
+	/**
+	 * @var array<int,array<string,mixed>>|null memoized provider entries for this request.
+	 */
 	private $entries_cache = null;
 
 	/**

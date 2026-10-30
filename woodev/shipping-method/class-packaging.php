@@ -14,7 +14,6 @@ defined( 'ABSPATH' ) || exit;
  * @since 2.0.2
  */
 final class Packaging {
-
 	/**
 	 * @since 2.0.2
 	 * @param array $declarations store rows in store units; carrier presets in cm/kg.

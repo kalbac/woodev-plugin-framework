@@ -17,43 +17,69 @@ use InvalidArgumentException;
  */
 final class Competitor_Rule {
 
-	/** @since 2.0.2 */
+	/**
+	 * @since 2.0.2
+	 */
 	public const MODE_RECOMMEND = 'recommend';
 
-	/** @since 2.0.2 */
+	/**
+	 * @since 2.0.2
+	 */
 	public const MODE_CONFLICT = 'conflict';
 
-	/** @var string[] competitor plugin basenames; note fires if ANY is active */
+	/**
+	 * @var string[] competitor plugin basenames; note fires if ANY is active
+	 */
 	private array $detect_slugs;
 
-	/** @var string one of MODE_* */
+	/**
+	 * @var string one of MODE_*
+	 */
 	private string $mode;
 
-	/** @var int our EDD download id for the smart link target (0 when absent) */
+	/**
+	 * @var int our EDD download id for the smart link target (0 when absent)
+	 */
 	private int $our_download_id;
 
-	/** @var string public product/buy URL */
+	/**
+	 * @var string public product/buy URL
+	 */
 	private string $our_url;
 
-	/** @var string our product display name */
+	/**
+	 * @var string our product display name
+	 */
 	private string $our_name;
 
-	/** @var string|null our equivalent plugin basename; suppress recommend when active */
+	/**
+	 * @var string|null our equivalent plugin basename; suppress recommend when active
+	 */
 	private ?string $our_plugin_file;
 
-	/** @var string competitor display name used in default templates */
+	/**
+	 * @var string competitor display name used in default templates
+	 */
 	private string $competitor_name;
 
-	/** @var string|null per-rule title override */
+	/**
+	 * @var string|null per-rule title override
+	 */
 	private ?string $title_override;
 
-	/** @var string|null per-rule content override */
+	/**
+	 * @var string|null per-rule content override
+	 */
 	private ?string $content_override;
 
-	/** @var string|null per-rule image URL override */
+	/**
+	 * @var string|null per-rule image URL override
+	 */
 	private ?string $image_override;
 
-	/** @var string|null stable name override for shared product notices */
+	/**
+	 * @var string|null stable name override for shared product notices
+	 */
 	private ?string $note_name_override;
 
 	/**
@@ -101,52 +127,72 @@ final class Competitor_Rule {
 		return $this->detect_slugs;
 	}
 
-	/** @since 2.0.2 */
+	/**
+	 * @since 2.0.2
+	 */
 	public function get_mode(): string {
 		return $this->mode;
 	}
 
-	/** @since 2.0.2 */
+	/**
+	 * @since 2.0.2
+	 */
 	public function is_recommend(): bool {
 		return self::MODE_RECOMMEND === $this->mode;
 	}
 
-	/** @since 2.0.2 */
+	/**
+	 * @since 2.0.2
+	 */
 	public function get_our_download_id(): int {
 		return $this->our_download_id;
 	}
 
-	/** @since 2.0.2 */
+	/**
+	 * @since 2.0.2
+	 */
 	public function get_our_url(): string {
 		return $this->our_url;
 	}
 
-	/** @since 2.0.2 */
+	/**
+	 * @since 2.0.2
+	 */
 	public function get_our_name(): string {
 		return $this->our_name;
 	}
 
-	/** @since 2.0.2 */
+	/**
+	 * @since 2.0.2
+	 */
 	public function get_our_plugin_file(): ?string {
 		return $this->our_plugin_file;
 	}
 
-	/** @since 2.0.2 */
+	/**
+	 * @since 2.0.2
+	 */
 	public function get_competitor_name(): string {
 		return $this->competitor_name;
 	}
 
-	/** @since 2.0.2 */
+	/**
+	 * @since 2.0.2
+	 */
 	public function get_title_override(): ?string {
 		return $this->title_override;
 	}
 
-	/** @since 2.0.2 */
+	/**
+	 * @since 2.0.2
+	 */
 	public function get_content_override(): ?string {
 		return $this->content_override;
 	}
 
-	/** @since 2.0.2 */
+	/**
+	 * @since 2.0.2
+	 */
 	public function get_image_override(): ?string {
 		return $this->image_override;
 	}

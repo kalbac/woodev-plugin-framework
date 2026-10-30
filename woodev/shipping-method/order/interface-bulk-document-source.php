@@ -1,10 +1,13 @@
 <?php
-/** Optional carrier capability: one document for several orders. */
+/**
+ * Optional carrier capability: one document for several orders.
+ */
 
 namespace Woodev\Framework\Shipping\Order;
 
 if ( ! defined( 'ABSPATH' ) ) {
-	exit; }
+	exit;
+}
 
 /**
  * A {@see Document_Source} that can also print one document for a SET of orders in a single file (#1192).

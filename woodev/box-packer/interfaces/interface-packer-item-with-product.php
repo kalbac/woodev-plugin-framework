@@ -19,7 +19,6 @@ if ( ! interface_exists( 'Woodev_Box_Packer_Item_With_Product' ) ) :
 	 * @since 2.0.0
 	 */
 	interface Woodev_Box_Packer_Item_With_Product extends Woodev_Box_Packer_Item {
-
 		/**
 		 * Returns the WooCommerce product associated with this item, or null.
 		 *

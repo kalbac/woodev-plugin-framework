@@ -47,10 +47,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Toolbar_Acti
 	 */
 	final class Toolbar_Actions {
 
-		/** @var string */
+		/**
+		 * @var string
+		 */
 		public const TAB_FORM = 'form';
 
-		/** @var string */
+		/**
+		 * @var string
+		 */
 		public const TAB_LIST = 'list';
 
 		/**

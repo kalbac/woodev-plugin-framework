@@ -5,7 +5,6 @@ defined( 'ABSPATH' ) || exit;
 if ( ! class_exists( 'Woodev_Packer_Boxes' ) ) :
 
 	class Woodev_Packer_Boxes extends Woodev_Packer {
-
 		/**
 		 * Pack items to boxes creating packages.
 		 *

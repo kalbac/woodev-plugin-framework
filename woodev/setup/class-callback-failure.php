@@ -20,7 +20,6 @@ defined( 'ABSPATH' ) || exit;
  * @since 2.0.2
  */
 final class Callback_Failure {
-
 	/**
 	 * Logs a caught Throwable (message only, secrets masked).
 	 *

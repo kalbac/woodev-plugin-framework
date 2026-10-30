@@ -33,22 +33,34 @@ if ( ! class_exists( '\Woodev\Framework\Error_Reporting\Event_Builder' ) ) :
 		const SDK_NAME    = 'woodev.error-reporter';
 		const SDK_VERSION = '1.0.0';
 
-		/** Longest engine message that leaves the site. */
+		/**
+		 * Longest engine message that leaves the site.
+		 */
 		const MAX_TEXT = 500;
 
-		/** Frames kept, innermost first. Scope matching runs on ALL frames before this cut. */
+		/**
+		 * Frames kept, innermost first. Scope matching runs on ALL frames before this cut.
+		 */
 		const MAX_FRAMES = 50;
 
-		/** Longest class / function name kept. */
+		/**
+		 * Longest class / function name kept.
+		 */
 		const MAX_SYMBOL = 200;
 
-		/** @var Plugin_Scope */
+		/**
+		 * @var Plugin_Scope
+		 */
 		private Plugin_Scope $scope;
 
-		/** @var array<string,string> */
+		/**
+		 * @var array<string,string>
+		 */
 		private array $context;
 
-		/** @var array<string,string> */
+		/**
+		 * @var array<string,string>
+		 */
 		private array $paths;
 
 		/**

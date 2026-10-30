@@ -15,18 +15,27 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emails' ) ) :
+
 	/**
 	 * Adds framework shipment emails to WooCommerce's standard email settings screen.
 	 *
 	 * @since 2.0.2
 	 */
 	final class Delivery_Status_Emails {
-		/** @var self|null */
+		/**
+		 * @var self|null
+		 */
 		private static ?self $instance = null;
-		/** @var array<string,Delivery_Status_Email> Registered email instances. */
+
+		/**
+		 * @var array<string,Delivery_Status_Email> Registered email instances.
+		 */
 		private array $emails = [];
 
-		/** @since 2.0.2 @return self */
+		/**
+		 * @since 2.0.2
+		 * @return self
+		 */
 		public static function instance(): self {
 			if ( null === self::$instance ) {
 				self::$instance = new self();
@@ -34,7 +43,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 			return self::$instance;
 		}
 
-		/** @since 2.0.2 */
+		/**
+		 * @since 2.0.2
+		 */
 		private function __construct() {
 			add_filter( 'woocommerce_email_classes', [ $this, 'register_emails' ] );
 			// ONE listener, added now: the emails exist only once WooCommerce has built its mailer, and a webhook or

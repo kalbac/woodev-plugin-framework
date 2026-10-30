@@ -15,6 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Delivered_Order_Status' ) ) :
+
 	/**
 	 * Sets the carrier's «Статус доставленного заказа»
 	 * ({@see \Woodev\Framework\Shipping\Settings\Export_Settings::get_delivered_status()}) on an order the

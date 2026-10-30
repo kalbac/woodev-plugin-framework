@@ -15,6 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Shipment_Facts_Events' ) ) :
+
 	/**
 	 * Turns what a carrier's API now says about a shipment into once-per-real-change events — the sibling of
 	 * {@see Delivery_Status_Events} for the facts that are not the delivery status: the carrier's cost, the

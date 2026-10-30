@@ -42,13 +42,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Popular_Settlemen
 	 */
 	final class Popular_Settlements_Tools {
 
-		/** @var string tool id: sweep. */
+		/**
+		 * @var string tool id: sweep.
+		 */
 		private const TOOL_ID_SWEEP = 'popular-settlements-sweep';
 
-		/** @var string tool id: clear. */
+		/**
+		 * @var string tool id: clear.
+		 */
 		private const TOOL_ID_CLEAR = 'popular-settlements-clear';
 
-		/** @var string selector field name carrying the chosen provider id. */
+		/**
+		 * @var string selector field name carrying the chosen provider id.
+		 */
 		private const SELECTOR_NAME = 'provider_id';
 
 		/**

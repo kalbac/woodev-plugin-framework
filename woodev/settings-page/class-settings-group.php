@@ -20,23 +20,34 @@ defined( 'ABSPATH' ) || exit;
  * @since 2.0.2
  */
 final class Settings_Group {
-
-	/** @var string group id, unique within its section. */
+	/**
+	 * @var string group id, unique within its section.
+	 */
 	private string $id;
 
-	/** @var string card title. */
+	/**
+	 * @var string card title.
+	 */
 	private string $title;
 
-	/** @var string optional text under the title (HTML, constrained at the schema boundary). */
+	/**
+	 * @var string optional text under the title (HTML, constrained at the schema boundary).
+	 */
 	private string $description;
 
-	/** @var string optional status line shown once under the group's buttons (plain text). */
+	/**
+	 * @var string optional status line shown once under the group's buttons (plain text).
+	 */
 	private string $notice = '';
 
-	/** @var string[] ids of the section's fields this group holds, in declaration order. */
+	/**
+	 * @var string[] ids of the section's fields this group holds, in declaration order.
+	 */
 	private array $setting_ids = [];
 
-	/** @var string[] ids of the section's actions this group holds, in declaration order. */
+	/**
+	 * @var string[] ids of the section's actions this group holds, in declaration order.
+	 */
 	private array $action_ids = [];
 
 	/**

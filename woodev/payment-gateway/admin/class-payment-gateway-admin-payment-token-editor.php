@@ -9,10 +9,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 	 * The token editor.
 	 */
 	class Woodev_Payment_Gateway_Admin_Payment_Token_Editor {
-
-		/** @var Woodev_Payment_Gateway the gateway object * */
+		/**
+		 * @var Woodev_Payment_Gateway the gateway object *
+		 */
 		protected $gateway;
-
 
 		/**
 		 * Constructs the editor.
@@ -64,7 +64,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 				]
 			);
 		}
-
 
 		/**
 		 * Load the editor scripts and styles.
@@ -118,7 +117,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 			);
 		}
 
-
 		/**
 		 * Display the token editor.
 		 *
@@ -137,7 +135,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 
 			include $this->get_gateway()->get_plugin()->get_payment_gateway_framework_path() . '/admin/views/html-user-payment-token-editor.php';
 		}
-
 
 		/**
 		 * Display the tokens.
@@ -162,7 +159,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 				++$index;
 			}
 		}
-
 
 		/**
 		 * The hidden input name that marks this editor as having been RENDERED (issue #393).
@@ -252,7 +248,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 			$this->update_tokens( $user_id, $built_tokens );
 		}
 
-
 		/**
 		 * Add a token via AJAX.
 		 *
@@ -297,7 +292,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 			}
 		}
 
-
 		/**
 		 * Remove a token via AJAX.
 		 *
@@ -335,7 +329,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 			}
 		}
 
-
 		/**
 		 * Refresh the tokens list via AJAX.
 		 *
@@ -370,7 +363,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 				wp_send_json_error( $e->getMessage() );
 			}
 		}
-
 
 		/**
 		 * Resolve and authorize the user ID targeted by an AJAX request.
@@ -427,7 +419,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 			return $user_id;
 		}
 
-
 		/**
 		 * Build a token object from data saved in the admin.
 		 *
@@ -445,7 +436,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 			return $this->get_gateway()->get_payment_tokens_handler()->build_token( $token_id, $data );
 		}
 
-
 		/**
 		 * Update the user's token data.
 		 *
@@ -456,7 +446,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 
 			$this->get_gateway()->get_payment_tokens_handler()->update_tokens( $user_id, $tokens, $this->get_gateway()->get_environment() );
 		}
-
 
 		/**
 		 * Remove a specific token.
@@ -470,7 +459,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 
 			return $this->get_gateway()->get_payment_tokens_handler()->remove_token( $user_id, $token_id, $this->get_gateway()->get_environment() );
 		}
-
 
 		/**
 		 * Validate a token's data before saving.
@@ -506,7 +494,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 			return is_array( $filtered ) || false === $filtered ? $filtered : $data;
 		}
 
-
 		/**
 		 * Correctly format a credit card expiration date for storage.
 		 *
@@ -529,7 +516,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 
 			return $data;
 		}
-
 
 		/**
 		 * Get the stored tokens for a user.
@@ -583,7 +569,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 			return $tokens;
 		}
 
-
 		/**
 		 * Get the editor title.
 		 *
@@ -606,7 +591,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 			 */
 			return apply_filters( 'wc_payment_gateway_' . $this->get_gateway()->get_id() . '_token_editor_title', $title, $this );
 		}
-
 
 		/**
 		 * Get the editor columns.
@@ -641,7 +625,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 
 			return is_array( $filtered ) ? $filtered : $columns;
 		}
-
 
 		/**
 		 * Get the editor fields.
@@ -724,7 +707,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 			return is_array( $filtered ) ? $filtered : $fields;
 		}
 
-
 		/**
 		 * Get the token payment type.
 		 *
@@ -733,7 +715,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 		protected function get_payment_type() {
 			return str_replace( '-', '_', $this->get_gateway()->get_payment_type() );
 		}
-
 
 		/**
 		 * Get the credit card type field options.
@@ -755,7 +736,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 			return $options;
 		}
 
-
 		/**
 		 * Get the HTML name for the token fields.
 		 *
@@ -764,7 +744,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 		protected function get_input_name() {
 			return 'wc_payment_gateway_' . $this->get_gateway()->get_id() . '_tokens';
 		}
-
 
 		/**
 		 * Get the available editor actions.
@@ -792,7 +771,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 			return apply_filters( 'wc_payment_gateway_' . $this->get_gateway()->get_id() . '_token_editor_actions', $actions, $this );
 		}
 
-
 		/**
 		 * Get the available token actions.
 		 *
@@ -812,7 +790,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 			 */
 			return apply_filters( 'wc_payment_gateway_' . $this->get_gateway()->get_id() . '_token_editor_token_actions', $actions, $this );
 		}
-
 
 		/**
 		 * Gets the gateway object.

@@ -13,6 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Shipment_Facts' ) ) :
+
 	/**
 	 * The carrier-neutral shipment facts a carrier plugin hands to {@see Shipment_Facts_Events::record()}.
 	 *

@@ -8,14 +8,19 @@ if ( ! class_exists( 'Woodev_REST_API_Settings' ) ) :
 	 * The settings controller class.
 	 */
 	class Woodev_REST_API_Settings extends WP_REST_Controller {
-
-		/** @var string REST namespace. */
+		/**
+		 * @var string REST namespace.
+		 */
 		protected $namespace;
 
-		/** @var string REST base. */
+		/**
+		 * @var string REST base.
+		 */
 		protected $rest_base;
 
-		/** @var Woodev_Abstract_Settings settings handler */
+		/**
+		 * @var Woodev_Abstract_Settings settings handler
+		 */
 		protected $settings;
 
 		/**

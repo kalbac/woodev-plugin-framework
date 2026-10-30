@@ -13,16 +13,20 @@ if ( ! class_exists( 'Woodev_Job_Batch_Handler' ) ) :
 	 * users to process or cancel jobs; a nonce alone is not authorization.
 	 */
 	abstract class Woodev_Job_Batch_Handler {
-
-		/** @var Woodev_Background_Job_Handler job handler instance */
+		/**
+		 * @var Woodev_Background_Job_Handler job handler instance
+		 */
 		protected $job_handler;
 
-		/** @var Woodev_Plugin $plugin WC plugin instance */
+		/**
+		 * @var Woodev_Plugin $plugin WC plugin instance
+		 */
 		protected $plugin;
 
-		/** @var int default items per batch */
+		/**
+		 * @var int default items per batch
+		 */
 		protected $items_per_batch = 20;
-
 
 		/**
 		 * Constructs the class.
@@ -44,7 +48,6 @@ if ( ! class_exists( 'Woodev_Job_Batch_Handler' ) ) :
 			$this->render_js();
 		}
 
-
 		/**
 		 * Adds the necessary action and filter hooks.
 		 */
@@ -56,14 +59,12 @@ if ( ! class_exists( 'Woodev_Job_Batch_Handler' ) ) :
 			add_action( 'wp_ajax_' . $this->get_job_handler()->get_identifier() . '_cancel_job', [ $this, 'ajax_cancel_job' ] );
 		}
 
-
 		/**
 		 * Enqueues the scripts.
 		 */
 		public function enqueue_scripts() {
 			wp_enqueue_script( $this->get_job_handler()->get_identifier() . '_batch_handler', $this->get_plugin()->get_framework_assets_url() . '/js/admin/woodev-admin-job-batch-handler' . Woodev_Plugin::get_assets_suffix() . '.js', [ 'jquery' ], $this->get_plugin()->get_version() );
 		}
-
 
 		/**
 		 * Renders the inline JavaScript for instantiating the batch handler class.
@@ -88,7 +89,6 @@ if ( ! class_exists( 'Woodev_Job_Batch_Handler' ) ) :
 			);
 		}
 
-
 		/**
 		 * Gets the JavaScript batch handler arguments.
 		 *
@@ -103,7 +103,6 @@ if ( ! class_exists( 'Woodev_Job_Batch_Handler' ) ) :
 			];
 		}
 
-
 		/**
 		 * Gets the JavaScript batch handler class name.
 		 *
@@ -114,7 +113,6 @@ if ( ! class_exists( 'Woodev_Job_Batch_Handler' ) ) :
 		protected function get_js_class() {
 			return 'Woodev_Job_Batch_Handler';
 		}
-
 
 		/**
 		 * Processes a job batch via AJAX.
@@ -156,7 +154,6 @@ if ( ! class_exists( 'Woodev_Job_Batch_Handler' ) ) :
 			}
 		}
 
-
 		/**
 		 * Cancels a job via AJAX.
 		 *
@@ -182,7 +179,6 @@ if ( ! class_exists( 'Woodev_Job_Batch_Handler' ) ) :
 			wp_send_json_success();
 		}
 
-
 		/**
 		 * Handles a job after processing one of its batches.
 		 *
@@ -200,7 +196,6 @@ if ( ! class_exists( 'Woodev_Job_Batch_Handler' ) ) :
 
 			return $job;
 		}
-
 
 		/**
 		 * Processes a batch of items for the given job.
@@ -224,7 +219,6 @@ if ( ! class_exists( 'Woodev_Job_Batch_Handler' ) ) :
 			return $this->get_job_handler()->process_job( $job, $this->get_items_per_batch() );
 		}
 
-
 		/**
 		 * Gets the number of items to process in a single request when processing job item batches.
 		 *
@@ -242,7 +236,6 @@ if ( ! class_exists( 'Woodev_Job_Batch_Handler' ) ) :
 			return $items_per_batch > 0 ? $items_per_batch : 1;
 		}
 
-
 		/**
 		 * Determines whether a job identifier uses the generated job ID format.
 		 *
@@ -254,7 +247,6 @@ if ( ! class_exists( 'Woodev_Job_Batch_Handler' ) ) :
 		private static function is_valid_job_id( string $job_id ): bool {
 			return 1 === preg_match( '/^[a-f0-9]{32}$/', $job_id );
 		}
-
 
 		/**
 		 * Gets the capability required to process and cancel jobs.
@@ -268,7 +260,6 @@ if ( ! class_exists( 'Woodev_Job_Batch_Handler' ) ) :
 		 */
 		abstract protected function get_required_capability(): string;
 
-
 		/**
 		 * Gets the job handler.
 		 *
@@ -278,7 +269,6 @@ if ( ! class_exists( 'Woodev_Job_Batch_Handler' ) ) :
 
 			return $this->job_handler;
 		}
-
 
 		/**
 		 * Gets the plugin instance.

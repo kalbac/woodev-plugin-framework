@@ -33,16 +33,24 @@ if ( ! class_exists( __NAMESPACE__ . '\Pickup_Blocks' ) ) :
 	 */
 	final class Pickup_Blocks {
 
-		/** WooCommerce integration name; the data key WooCommerce publishes is `{name}_data`. */
+		/**
+		 * WooCommerce integration name; the data key WooCommerce publishes is `{name}_data`.
+		 */
 		public const INTEGRATION_NAME = 'woodev-shipping-pickup';
 
-		/** The forced inner block that carries the button under the shipping methods. */
+		/**
+		 * The forced inner block that carries the button under the shipping methods.
+		 */
 		public const BLOCK = 'woodev/shipping-pickup';
 
-		/** @var bool whether this request already wired the hooks */
+		/**
+		 * @var bool whether this request already wired the hooks
+		 */
 		private static bool $registered = false;
 
-		/** @var array<string, Pickup_Handler> active pickup handlers, keyed by `plugin|field` */
+		/**
+		 * @var array<string, Pickup_Handler> active pickup handlers, keyed by `plugin|field`
+		 */
 		private static array $handlers = [];
 
 		/**

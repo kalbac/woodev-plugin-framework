@@ -21,52 +21,84 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 	 */
 	class Framework_Resolver {
 
-		/** @var string Transient key prefix (suffixed by the current user id) for a queued activation-guard notice — same post-redirect pattern as {@see \Woodev\Framework\Shipping\Admin\Shipping_Admin_Order::NOTICE_TRANSIENT_KEY}. */
+		/**
+		 * @var string Transient key prefix (suffixed by the current user id) for a queued activation-guard notice — same post-redirect pattern as {@see \Woodev\Framework\Shipping\Admin\Shipping_Admin_Order::NOTICE_TRANSIENT_KEY}.
+		 */
 		public const ACTIVATION_GUARD_NOTICE_TRANSIENT = 'woodev_download_id_guard_notice_';
 
-		/** @var array<int,array<string,mixed>> Registered plugin arrays. */
+		/**
+		 * @var array<int,array<string,mixed>> Registered plugin arrays.
+		 */
 		protected array $registered_plugins = [];
 
-		/** @var array<int,array<string,mixed>> Active plugin arrays. */
+		/**
+		 * @var array<int,array<string,mixed>> Active plugin arrays.
+		 */
 		protected array $active_plugins = [];
 
-		/** @var array<int,array<string,mixed>> Framework-incompatible plugins. */
+		/**
+		 * @var array<int,array<string,mixed>> Framework-incompatible plugins.
+		 */
 		protected array $incompatible_framework_plugins = [];
 
-		/** @var array<int,array<string,mixed>> WooCommerce-incompatible plugins. */
+		/**
+		 * @var array<int,array<string,mixed>> WooCommerce-incompatible plugins.
+		 */
 		protected array $incompatible_wc_version_plugins = [];
 
-		/** @var array<int,array<string,mixed>> WordPress-incompatible plugins. */
+		/**
+		 * @var array<int,array<string,mixed>> WordPress-incompatible plugins.
+		 */
 		protected array $incompatible_wp_version_plugins = [];
 
-		/** @var array<int,array<string,mixed>> PHP-incompatible plugins. */
+		/**
+		 * @var array<int,array<string,mixed>> PHP-incompatible plugins.
+		 */
 		protected array $incompatible_php_version_plugins = [];
 
-		/** @var array<int,array<string,mixed>> Invalid loader definitions. */
+		/**
+		 * @var array<int,array<string,mixed>> Invalid loader definitions.
+		 */
 		protected array $invalid_loader_definitions = [];
 
-		/** @var array<int,array<string,mixed>> Plugins refused a download id already claimed by another loaded/holder plugin — each entry carries the legacy plugin array plus a 'claimed_by' holder plugin name. */
+		/**
+		 * @var array<int,array<string,mixed>> Plugins refused a download id already claimed by another loaded/holder plugin — each entry carries the legacy plugin array plus a 'claimed_by' holder plugin name.
+		 */
 		protected array $quarantined_download_id_plugins = [];
 
-		/** @var array<string,bool> Plugin IDs already registered — prevents duplicates from colliding on options, cron, license keys, and logger handles. */
+		/**
+		 * @var array<string,bool> Plugin IDs already registered — prevents duplicates from colliding on options, cron, license keys, and logger handles.
+		 */
 		protected array $plugin_ids = [];
 
-		/** @var array<string,\Woodev\Framework\Framework_Plugin_Loader_Definition> Registered loader definitions keyed by plugin_id — the single source of truth Woodev_Plugin::get_download_id() reads from. */
+		/**
+		 * @var array<string,\Woodev\Framework\Framework_Plugin_Loader_Definition> Registered loader definitions keyed by plugin_id — the single source of truth Woodev_Plugin::get_download_id() reads from.
+		 */
 		protected array $definitions_by_plugin_id = [];
 
-		/** @var array<string,\Woodev\Framework\Framework_Plugin_Loader_Definition> Loader definitions keyed by their `main_class`, recorded at invocation time — the PRIMARY source Woodev_Plugin::get_download_id() reads from, since a plugin's `get_id()` is not guaranteed to equal its own definition's `plugin_id` (#916 follow-up: a plugin author error, not enforced anywhere else). */
+		/**
+		 * @var array<string,\Woodev\Framework\Framework_Plugin_Loader_Definition> Loader definitions keyed by their `main_class`, recorded at invocation time — the PRIMARY source Woodev_Plugin::get_download_id() reads from, since a plugin's `get_id()` is not guaranteed to equal its own definition's `plugin_id` (#916 follow-up: a plugin author error, not enforced anywhere else).
+		 */
 		protected array $definitions_by_main_class = [];
 
-		/** @var array<int,array<string,mixed>>|null Download ids already claimed at the `activated_plugin` guard, keyed by download id, lazily seeded from the already-loaded active plugins on first activation in this request. Null until seeded. */
+		/**
+		 * @var array<int,array<string,mixed>>|null Download ids already claimed at the `activated_plugin` guard, keyed by download id, lazily seeded from the already-loaded active plugins on first activation in this request. Null until seeded.
+		 */
 		protected ?array $activation_guard_claims = null;
 
-		/** @var bool Guards load_plugins() against double execution in long-running processes (WP-Cron, Action Scheduler). */
+		/**
+		 * @var bool Guards load_plugins() against double execution in long-running processes (WP-Cron, Action Scheduler).
+		 */
 		protected bool $loaded = false;
 
-		/** @var callable Wired to admin_notices when incompatible plugins are registered. Defaults to a no-op so the resolver stays decoupled from the legacy bootstrap. */
+		/**
+		 * @var callable Wired to admin_notices when incompatible plugins are registered. Defaults to a no-op so the resolver stays decoupled from the legacy bootstrap.
+		 */
 		protected $update_notice_renderer;
 
-		/** @var callable Wired to admin_notices when the deactivation action is requested. Defaults to a no-op for the same reason. */
+		/**
+		 * @var callable Wired to admin_notices when the deactivation action is requested. Defaults to a no-op for the same reason.
+		 */
 		protected $deactivation_notice_renderer;
 
 		/**
@@ -78,8 +110,10 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 		 * @param callable|null $deactivation_notice_renderer Callback wired to admin_notices when the framework deactivation action is requested. Default no-op for the same reason.
 		 */
 		public function __construct( ?callable $update_notice_renderer = null, ?callable $deactivation_notice_renderer = null ) {
-			$this->update_notice_renderer       = $update_notice_renderer ?? static function (): void {};
-			$this->deactivation_notice_renderer = $deactivation_notice_renderer ?? static function (): void {};
+			$this->update_notice_renderer       = $update_notice_renderer ?? static function (): void {
+			};
+			$this->deactivation_notice_renderer = $deactivation_notice_renderer ?? static function (): void {
+			};
 		}
 
 		/**
@@ -477,7 +511,6 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 
 			add_action( 'admin_notices', $this->deactivation_notice_renderer );
 		}
-
 
 		/**
 		 * Guards a single plugin activation against a download id collision.
@@ -922,7 +955,6 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 		public function get_invalid_loader_definitions(): array {
 			return $this->invalid_loader_definitions;
 		}
-
 
 		/**
 		 * Gets plugins refused a download id already claimed by another loaded/holder plugin.

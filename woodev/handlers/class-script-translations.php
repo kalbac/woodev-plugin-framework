@@ -10,6 +10,7 @@ namespace Woodev\Framework\Handlers;
 defined( 'ABSPATH' ) || exit;
 
 if ( ! class_exists( '\Woodev\Framework\Handlers\Script_Translations' ) ) :
+
 	/**
 	 * Hands the framework's JS translations to a built admin bundle.
 	 *
@@ -29,7 +30,9 @@ if ( ! class_exists( '\Woodev\Framework\Handlers\Script_Translations' ) ) :
 	 */
 	class Script_Translations {
 
-		/** @var string the fixed framework text domain */
+		/**
+		 * @var string the fixed framework text domain
+		 */
 		public const TEXTDOMAIN = 'woodev-plugin-framework';
 
 		/**

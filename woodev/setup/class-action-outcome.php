@@ -21,22 +21,34 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Action_Outcome {
 
-	/** @var string the action did what it was asked to. */
+	/**
+	 * @var string the action did what it was asked to.
+	 */
 	const STATUS_SUCCESS = 'success';
 
-	/** @var string the action ran, and the answer is "no" (a business outcome, not a crash). */
+	/**
+	 * @var string the action ran, and the answer is "no" (a business outcome, not a crash).
+	 */
 	const STATUS_ERROR = 'error';
 
-	/** @var string */
+	/**
+	 * @var string
+	 */
 	private string $status;
 
-	/** @var string */
+	/**
+	 * @var string
+	 */
 	private string $message;
 
-	/** @var array<string,mixed> */
+	/**
+	 * @var array<string,mixed>
+	 */
 	private array $data;
 
-	/** @var true|string[]|null edits of the step the client must drop (see discarding_edits()). */
+	/**
+	 * @var true|string[]|null edits of the step the client must drop (see discarding_edits()).
+	 */
 	private $discard_edits = null;
 
 	/**

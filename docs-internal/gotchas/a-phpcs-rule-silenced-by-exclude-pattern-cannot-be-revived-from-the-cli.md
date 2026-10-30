@@ -3,7 +3,7 @@
 
 ## What happens
 
-`phpcs.xml` silences a rule with `<exclude-pattern>*</exclude-pattern>`, and a comment next to it
+`phpcs.xml.dist` silences a rule with `<exclude-pattern>*</exclude-pattern>`, and a comment next to it
 tells the reader how to run the check on demand:
 
 ```
@@ -74,9 +74,9 @@ are indistinguishable from the exit code. If a documented command is supposed to
 run it once against a tree where you know it must fire.
 
 ⚠ Unrelated but adjacent, and it bites while writing exactly these comments: **an XML comment may
-not contain `--`**, so a CLI flag cannot be written literally inside one. `phpcs.xml` stops being
+not contain `--`**, so a CLI flag cannot be written literally inside one. `phpcs.xml.dist` stops being
 well-formed XML, and the failure surfaces as a confusing parse error rather than a phpcs message.
-Check with `python -c "import xml.dom.minidom;xml.dom.minidom.parse('phpcs.xml')"` after editing.
+Check with `python -c "import xml.dom.minidom;xml.dom.minidom.parse('phpcs.xml.dist')"` after editing.
 
 ## Related
 

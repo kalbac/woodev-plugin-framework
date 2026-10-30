@@ -84,7 +84,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Provider_Selection_
 	 * @since 2.0.2
 	 */
 	abstract class Provider_Selection_Scope implements Selection_Scope {
-
 		/**
 		 * The Location Provider layer's service façade this scope reads
 		 * `current_locality()` through: the injected one, the one the framework adopted from

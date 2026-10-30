@@ -41,7 +41,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Order_Marker' ) ) :
 	 * @since 2.0.2
 	 */
 	final class Order_Marker {
-
 		/**
 		 * Registry to read providers from; null resolves {@see Orders_Registry::instance()} lazily.
 		 *

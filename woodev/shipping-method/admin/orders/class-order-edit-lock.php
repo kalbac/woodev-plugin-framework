@@ -25,7 +25,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Edit_L
 	 * @since 2.0.2
 	 */
 	class Order_Edit_Lock {
-
 		/**
 		 * Returns the other manager holding this order's live native edit lock.
 		 *

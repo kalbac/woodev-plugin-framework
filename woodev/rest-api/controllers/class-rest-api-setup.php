@@ -19,7 +19,6 @@ if ( ! class_exists( 'Woodev_REST_API_Setup' ) ) :
 	 * @since 2.0.2
 	 */
 	class Woodev_REST_API_Setup {
-
 		/**
 		 * Wizard handler.
 		 *

@@ -15,27 +15,51 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Email' ) && class_exists( '\\WC_Email' ) ) :
+
 	/**
 	 * Sends a buyer email for one or more canonical shipment states.
 	 *
 	 * @since 2.0.2
 	 */
 	final class Delivery_Status_Email extends \WC_Email {
-		/** @var string[] Canonical states that trigger this email. */
+		/**
+		 * @var string[] Canonical states that trigger this email.
+		 */
 		private array $statuses;
-		/** @var string Default subject. */
+
+		/**
+		 * @var string Default subject.
+		 */
 		private string $default_subject;
-		/** @var string Default heading. */
+
+		/**
+		 * @var string Default heading.
+		 */
 		private string $default_heading;
-		/** @var string Default body. */
+
+		/**
+		 * @var string Default body.
+		 */
 		private string $default_body;
-		/** @var bool Whether this email is enabled by default. */
+
+		/**
+		 * @var bool Whether this email is enabled by default.
+		 */
 		private bool $default_enabled;
-		/** @var Orders_Provider|null Matched carrier. */
+
+		/**
+		 * @var Orders_Provider|null Matched carrier.
+		 */
 		private ?Orders_Provider $provider = null;
-		/** @var string Current canonical status. */
+
+		/**
+		 * @var string Current canonical status.
+		 */
 		private string $current_status = '';
-		/** @var array<string,string> WooCommerce's own placeholders ({site_title}, …), kept beside ours. */
+
+		/**
+		 * @var array<string,string> WooCommerce's own placeholders ({site_title}, …), kept beside ours.
+		 */
 		private array $base_placeholders = [];
 
 		/**
@@ -236,17 +260,30 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 			return strtr( $text, $values );
 		}
 
-		/** @return string */
+		/**
+		 * @return string
+		 */
 		public function get_default_subject() {
-			return $this->default_subject; }
-		/** @return string */
-		public function get_default_heading() {
-			return $this->default_heading; }
-		/** @return string */
-		public function get_default_body(): string {
-			return $this->default_body; }
+			return $this->default_subject;
+		}
 
-		/** @return string */
+		/**
+		 * @return string
+		 */
+		public function get_default_heading() {
+			return $this->default_heading;
+		}
+
+		/**
+		 * @return string
+		 */
+		public function get_default_body(): string {
+			return $this->default_body;
+		}
+
+		/**
+		 * @return string
+		 */
 		public function get_content_html() {
 			return wc_get_template_html(
 				$this->template_html,
@@ -261,7 +298,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 			);
 		}
 
-		/** @return string */
+		/**
+		 * @return string
+		 */
 		public function get_content_plain() {
 			return wc_get_template_html(
 				$this->template_plain,

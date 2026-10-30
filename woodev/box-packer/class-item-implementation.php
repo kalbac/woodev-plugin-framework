@@ -5,24 +5,49 @@ defined( 'ABSPATH' ) || exit;
 if ( ! class_exists( 'Woodev_Packer_Item_Implementation' ) ) :
 
 	class Woodev_Packer_Item_Implementation implements Woodev_Box_Packer_Item_With_Product {
-
-		/** @var string */
+		/**
+		 * @var string
+		 */
 		private $name;
-		/** @var float */
+
+		/**
+		 * @var float
+		 */
 		private $weight;
-		/** @var float */
+
+		/**
+		 * @var float
+		 */
 		private $height;
-		/** @var float */
+
+		/**
+		 * @var float
+		 */
 		private $width;
-		/** @var float */
+
+		/**
+		 * @var float
+		 */
 		private $length;
-		/** @var float */
+
+		/**
+		 * @var float
+		 */
 		private $volume;
-		/** @var float */
+
+		/**
+		 * @var float
+		 */
 		private $value;
-		/** @var mixed */
+
+		/**
+		 * @var mixed
+		 */
 		private $internal_data;
-		/** @var WC_Product|null */
+
+		/**
+		 * @var WC_Product|null
+		 */
 		private $product;
 
 		/**

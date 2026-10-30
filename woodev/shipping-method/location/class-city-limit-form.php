@@ -32,13 +32,19 @@ if ( ! class_exists( __NAMESPACE__ . '\City_Limit_Form' ) ) :
 	 */
 	final class City_Limit_Form {
 
-		/** Script / style handle of the built bundle. */
+		/**
+		 * Script / style handle of the built bundle.
+		 */
 		public const SCRIPT_HANDLE = 'woodev-city-limit';
 
-		/** Whether the render filter has been added. */
+		/**
+		 * Whether the render filter has been added.
+		 */
 		private static bool $hooked = false;
 
-		/** @var Location_Service|null A service a test put in place of the real one. */
+		/**
+		 * @var Location_Service|null A service a test put in place of the real one.
+		 */
 		private static ?Location_Service $service_for_tests = null;
 
 		/**

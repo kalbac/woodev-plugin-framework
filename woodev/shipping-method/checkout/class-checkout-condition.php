@@ -39,7 +39,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Conditio
 	 * @since 2.0.2
 	 */
 	class Checkout_Condition {
-
 		/**
 		 * Determine whether a field is required given its `required` descriptor
 		 * and the current checkout state.

@@ -32,8 +32,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Shipment_Fre
 	 * @since 2.0.2
 	 */
 	final class Shipment_Freshness {
-
-		/** @var Orders_Registry providers and plugins are resolved through it */
+		/**
+		 * @var Orders_Registry providers and plugins are resolved through it
+		 */
 		private Orders_Registry $registry;
 
 		/**

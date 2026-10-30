@@ -10,13 +10,15 @@ if ( ! class_exists( 'Woodev_Hook_Deprecator' ) ) :
 	 * This class handles triggering PHP notices for deprecated and removed hooks
 	 */
 	class Woodev_Hook_Deprecator {
-
-		/** @var string plugin name */
+		/**
+		 * @var string plugin name
+		 */
 		protected $plugin_name;
 
-		/** @var array deprecated/removed hooks */
+		/**
+		 * @var array deprecated/removed hooks
+		 */
 		protected $hooks;
-
 
 		/**
 		 * Setup class
@@ -33,7 +35,6 @@ if ( ! class_exists( 'Woodev_Hook_Deprecator' ) ) :
 
 			add_action( 'shutdown', [ $this, 'trigger_deprecated_errors' ], 999 );
 		}
-
 
 		/**
 		 * Sets the deprecated hook defaults.
@@ -52,7 +53,6 @@ if ( ! class_exists( 'Woodev_Hook_Deprecator' ) ) :
 			return wp_parse_args( $hook_params, $defaults );
 		}
 
-
 		/**
 		 * Map each deprecated hook to its replacement.
 		 */
@@ -65,7 +65,6 @@ if ( ! class_exists( 'Woodev_Hook_Deprecator' ) ) :
 				}
 			}
 		}
-
 
 		/**
 		 * Map a deprecated/renamed hook to a new one.
@@ -101,7 +100,6 @@ if ( ! class_exists( 'Woodev_Hook_Deprecator' ) ) :
 			return $data;
 		}
 
-
 		/**
 		 * Trigger a notice when other actors have attached callbacks to hooks that
 		 * are either deprecated or removed. This only runs when WP_DEBUG is on.
@@ -127,7 +125,6 @@ if ( ! class_exists( 'Woodev_Hook_Deprecator' ) ) :
 				}
 			}
 		}
-
 
 		/**
 		 * Trigger the deprecated/removed notice

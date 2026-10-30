@@ -17,16 +17,32 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 	 */
 	final class Woodev_Account_Connection {
 
-		/** Connector REST namespace. @var string */
+		/**
+		 * Connector REST namespace.
+		 *
+		 * @var string
+		 */
 		const REST_NAMESPACE = 'woodev-account/v1';
 
-		/** Stored-state option key (installed-site data — design-new, see spec). @var string */
+		/**
+		 * Stored-state option key (installed-site data — design-new, see spec).
+		 *
+		 * @var string
+		 */
 		const OPTION_KEY = 'woodev_account_data';
 
-		/** In-flight handshake transient key. @var string */
+		/**
+		 * In-flight handshake transient key.
+		 *
+		 * @var string
+		 */
 		const HANDSHAKE_KEY = 'woodev_account_handshake';
 
-		/** Admin page slug hosting the connect/return handlers. @var string */
+		/**
+		 * Admin page slug hosting the connect/return handlers.
+		 *
+		 * @var string
+		 */
 		const PAGE_SLUG = 'woodev-extensions';
 
 		/**
@@ -70,7 +86,6 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 		private function endpoint( string $path ): string {
 			return $this->api_base() . '/wp-json/' . self::REST_NAMESPACE . $path;
 		}
-
 
 		/**
 		 * The browser-facing authorize URL (the connector's front-end approval screen).
@@ -275,7 +290,6 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 		private function clear(): void {
 			delete_option( self::OPTION_KEY );
 		}
-
 
 		/**
 		 * The per-state handshake transient key.

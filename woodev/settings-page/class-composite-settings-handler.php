@@ -44,17 +44,24 @@ defined( 'ABSPATH' ) || exit;
  * @since 2.0.2
  */
 final class Composite_Settings_Handler implements \Woodev_Settings_Connection_Test, \Woodev_Settings_Connection_Status {
-
-	/** @var string */
+	/**
+	 * @var string
+	 */
 	private string $id;
 
-	/** @var array<int|string,\Woodev_Abstract_Settings> connection section id => the handler that contributed the section. */
+	/**
+	 * @var array<int|string,\Woodev_Abstract_Settings> connection section id => the handler that contributed the section.
+	 */
 	private array $connections;
 
-	/** @var \Woodev_Abstract_Settings[] setting id => owning child. */
+	/**
+	 * @var \Woodev_Abstract_Settings[] setting id => owning child.
+	 */
 	private array $owner_by_id = [];
 
-	/** @var \Woodev_Abstract_Settings[] */
+	/**
+	 * @var \Woodev_Abstract_Settings[]
+	 */
 	private array $children;
 
 	/**

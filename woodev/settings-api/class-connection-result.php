@@ -16,11 +16,14 @@ if ( ! class_exists( 'Woodev_Connection_Result' ) ) :
 	 * @since 2.0.2
 	 */
 	final class Woodev_Connection_Result {
-
-		/** @var bool */
+		/**
+		 * @var bool
+		 */
 		private $success;
 
-		/** @var string */
+		/**
+		 * @var string
+		 */
 		private $message;
 
 		/**

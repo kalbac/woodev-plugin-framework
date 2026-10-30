@@ -40,7 +40,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Export_Settings' 
 	 */
 	class Export_Settings extends \Woodev_Abstract_Settings {
 
-		/** @var string the section id on the plugin's tab */
+		/**
+		 * @var string the section id on the plugin's tab
+		 */
 		public const SECTION_ID = 'export';
 
 		/**
@@ -50,7 +52,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Export_Settings' 
 		 */
 		public const SETTING_STATUS_DELIVERED = 'status_delivered';
 
-		/** @var string the stored value of «Не менять» — v1's own spelling (its «Не использовать»), so a v1 value is carried verbatim */
+		/**
+		 * @var string the stored value of «Не менять» — v1's own spelling (its «Не использовать»), so a v1 value is carried verbatim
+		 */
 		public const STATUS_DELIVERED_NONE = 'none';
 
 		/**
@@ -60,19 +64,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Export_Settings' 
 		 */
 		public const SETTING_STATUS_CANCELLED = 'status_cancelled';
 
-		/** @var string the stored value of «Не менять» for the cancelled status — the same spelling as {@see self::STATUS_DELIVERED_NONE} */
+		/**
+		 * @var string the stored value of «Не менять» for the cancelled status — the same spelling as {@see self::STATUS_DELIVERED_NONE}
+		 */
 		public const STATUS_CANCELLED_NONE = 'none';
 
-		/** @var string the suffix of the handler id (the option namespace) after the plugin id */
+		/**
+		 * @var string the suffix of the handler id (the option namespace) after the plugin id
+		 */
 		private const HANDLER_ID_SUFFIX = '_export';
 
-		/** @var string the key, in the handler's option namespace, of the option that records the one-time migration as done */
+		/**
+		 * @var string the key, in the handler's option namespace, of the option that records the one-time migration as done
+		 */
 		private const MIGRATED_FLAG = 'migrated_from_integration';
 
-		/** @var string the carrier plugin's underscored id */
+		/**
+		 * @var string the carrier plugin's underscored id
+		 */
 		private string $plugin_id;
 
-		/** @var \Closure|null returns the v1 integration option's name (the handler's `get_option_key()`), or null when there is none */
+		/**
+		 * @var \Closure|null returns the v1 integration option's name (the handler's `get_option_key()`), or null when there is none
+		 */
 		private ?\Closure $legacy_option_key_resolver;
 
 		/**

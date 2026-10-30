@@ -17,7 +17,6 @@ if ( ! class_exists( 'Woodev_Account_Installer' ) ) :
 	 * @since 2.0.2
 	 */
 	class Woodev_Account_Installer {
-
 		/**
 		 * Installs the plugin for an owned download id.
 		 *

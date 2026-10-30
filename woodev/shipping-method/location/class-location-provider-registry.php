@@ -378,7 +378,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 */
 		private const POPULAR_SETTLEMENTS_SCHEMA_VERSION = '2';
 
-		/** @var self|null singleton. */
+		/**
+		 * @var self|null singleton.
+		 */
 		private static ?self $instance = null;
 
 		/**
@@ -457,7 +459,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 */
 		private array $related_list_states_countries = [];
 
-
 		/**
 		 * Notice ids already claimed via {@see self::claim_not_configured_notice()}
 		 * THIS request — the fleet-wide "one plugin renders it, every other
@@ -485,7 +486,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 *
 		 * @since 2.0.2
 		 */
-		private function __construct() {}
+		private function __construct() {
+		}
 
 		/**
 		 * Gets the singleton instance.
@@ -1265,7 +1267,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 			return isset( $this->providers[ $id ] );
 		}
 
-
 		/**
 		 * Claims `$notice_id` for the FIRST caller this request — the shared,
 		 * fleet-wide once-per-request dedup for BOTH Location notices the
@@ -1779,8 +1780,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 
 			return 'remove' === $this->region_field_effective_value();
 		}
-
-
 
 		/**
 		 * The RAW stored value of the `address_suggestions` switch (Task 10;
@@ -2509,7 +2508,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 			);
 		}
 
-
 		/**
 		 * One-time migration (issue #380): the single `field_mode` option
 		 * this layer used to store became two — {@see self::SETTING_FIELD_MODE_REGION}
@@ -2827,7 +2825,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 			}
 		}
 
-
 		/**
 		 * Computes the "fixed default locality is stale" admin notice — message
 		 * text and a stable notice id — or `null` when nothing should be shown
@@ -2895,7 +2892,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 				'notice_id' => 'location-default-locality-stale',
 			];
 		}
-
 
 		private function apply_address_suggestions_availability_gate(): void {
 			if ( $this->is_address_suggestions_available() ) {

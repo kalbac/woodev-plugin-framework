@@ -17,11 +17,14 @@ if ( ! class_exists( __NAMESPACE__ . '\\Checkout_Parent_Block_Notice' ) ) :
 	 * @since 2.0.2
 	 */
 	final class Checkout_Parent_Block_Notice {
-
-		/** @var array<int,bool> Request-local page result cache. */
+		/**
+		 * @var array<int,bool> Request-local page result cache.
+		 */
 		private static array $page_results = [];
 
-		/** @var bool Whether this site's notice was added during this request. */
+		/**
+		 * @var bool Whether this site's notice was added during this request.
+		 */
 		private static bool $notice_added = false;
 
 		/**
@@ -99,7 +102,9 @@ if ( ! class_exists( __NAMESPACE__ . '\\Checkout_Parent_Block_Notice' ) ) :
 			return $has_pickup_method && self::is_missing_parent_blocks( $content );
 		}
 
-		/** @param \Woodev\Framework\Shipping\Shipping_Plugin $plugin Shipping plugin. */
+		/**
+		 * @param \Woodev\Framework\Shipping\Shipping_Plugin $plugin Shipping plugin.
+		 */
 		private static function has_active_pickup_method( \Woodev\Framework\Shipping\Shipping_Plugin $plugin ): bool {
 			if ( ! class_exists( '\WC_Shipping_Zones' ) || ! class_exists( '\WC_Shipping_Zone' ) ) {
 				return false;
@@ -121,7 +126,10 @@ if ( ! class_exists( __NAMESPACE__ . '\\Checkout_Parent_Block_Notice' ) ) :
 			return self::zone_has_pickup_method( new \WC_Shipping_Zone( 0 ), $plugin_methods );
 		}
 
-		/** @param \WC_Shipping_Zone $zone Zone to inspect. @param array<string,bool> $plugin_methods Plugin method ids. */
+		/**
+		 * @param \WC_Shipping_Zone  $zone Zone to inspect.
+		 * @param array<string,bool> $plugin_methods Plugin method ids.
+		 */
 		private static function zone_has_pickup_method( \WC_Shipping_Zone $zone, array $plugin_methods ): bool {
 			foreach ( $zone->get_shipping_methods( true ) as $method ) {
 				if ( $method instanceof \Woodev\Framework\Shipping\Shipping_Method && isset( $plugin_methods[ $method->id ] ) && $method->is_pickup_shipping() ) {

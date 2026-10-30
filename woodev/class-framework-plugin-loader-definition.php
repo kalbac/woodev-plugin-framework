@@ -26,43 +26,69 @@ if ( ! class_exists( Framework_Plugin_Loader_Definition::class, false ) ) :
 		public const PLATFORM_EDD         = 'edd';
 		public const TYPE_SHIPPING        = 'shipping';
 
-		/** @var string Stable internal plugin ID. */
+		/**
+		 * @var string Stable internal plugin ID.
+		 */
 		protected string $plugin_id;
 
-		/** @var int EDD download (product) id on woodev.ru — the license identity. Required: two plugins sharing one is always an author error, guarded upstream by the resolver. */
+		/**
+		 * @var int EDD download (product) id on woodev.ru — the license identity. Required: two plugins sharing one is always an author error, guarded upstream by the resolver.
+		 */
 		protected int $download_id;
 
-		/** @var string Human-readable plugin name. */
+		/**
+		 * @var string Human-readable plugin name.
+		 */
 		protected string $plugin_name;
 
-		/** @var string Plugin version. */
+		/**
+		 * @var string Plugin version.
+		 */
 		protected string $plugin_version;
 
-		/** @var string Vendored framework version. */
+		/**
+		 * @var string Vendored framework version.
+		 */
 		protected string $framework_version;
 
-		/** @var string|null Oldest framework version compatible with this selected framework copy. */
+		/**
+		 * @var string|null Oldest framework version compatible with this selected framework copy.
+		 */
 		protected ?string $backwards_compatible;
 
-		/** @var string Main plugin file path. */
+		/**
+		 * @var string Main plugin file path.
+		 */
 		protected string $plugin_file;
 
-		/** @var string Platform value. */
+		/**
+		 * @var string Platform value.
+		 */
 		protected string $platform;
 
-		/** @var string|null Optional plugin type. */
+		/**
+		 * @var string|null Optional plugin type.
+		 */
 		protected ?string $type;
 
-		/** @var array<string,string> Requirements map. */
+		/**
+		 * @var array<string,string> Requirements map.
+		 */
 		protected array $requirements;
 
-		/** @var string|null Main plugin class name. */
+		/**
+		 * @var string|null Main plugin class name.
+		 */
 		protected ?string $main_class;
 
-		/** @var callable|null Initialization callback. */
+		/**
+		 * @var callable|null Initialization callback.
+		 */
 		protected $callback;
 
-		/** @var array<string,mixed> Early WooCommerce compatibility feature flags. */
+		/**
+		 * @var array<string,mixed> Early WooCommerce compatibility feature flags.
+		 */
 		protected array $supported_features;
 
 		/**

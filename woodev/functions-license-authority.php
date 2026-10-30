@@ -16,7 +16,6 @@
 defined( 'ABSPATH' ) || exit;
 
 if ( ! function_exists( 'woodev_normalize_site' ) ) {
-
 	/**
 	 * Normalizes a site URL for cryptographic claim binding.
 	 *

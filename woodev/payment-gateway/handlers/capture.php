@@ -8,9 +8,9 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Capture_Handler' ) ) :
 	 * The transaction capture handler.
 	 */
 	class Woodev_Payment_Gateway_Capture_Handler {
-
-
-		/** @var Woodev_Payment_Gateway payment gateway instance */
+		/**
+		 * @var Woodev_Payment_Gateway payment gateway instance
+		 */
 		private $gateway;
 
 		/**
@@ -27,7 +27,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Capture_Handler' ) ) :
 				add_action( 'woocommerce_order_status_changed', [ $this, 'maybe_capture_paid_order' ], 10, 3 );
 			}
 		}
-
 
 		/**
 		 * Captures an order on status change to a "paid" status.
@@ -62,7 +61,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Capture_Handler' ) ) :
 			$this->maybe_perform_capture( $order );
 		}
 
-
 		/**
 		 * Perform a capture on an order if it can be captured.
 		 *
@@ -84,7 +82,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Capture_Handler' ) ) :
 
 			return ! empty( $result['success'] );
 		}
-
 
 		/**
 		 * Performs a credit card capture for an order.
@@ -253,7 +250,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Capture_Handler' ) ) :
 			}
 		}
 
-
 		/**
 		 * Callback for the `woocommerce_payment_complete_reduce_order_stock` filter, used to suppress
 		 * stock reduction for an order whose stock was already reduced when the charge was authorized.
@@ -270,7 +266,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Capture_Handler' ) ) :
 
 			return false;
 		}
-
 
 		/**
 		 * Adds the standard capture data to an order.
@@ -290,7 +285,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Capture_Handler' ) ) :
 				$this->get_gateway()->update_order_meta( $order, 'capture_trans_id', $response->get_transaction_id() );
 			}
 		}
-
 
 		/**
 		 * Lets gateways handle any specific capture failure results for the order.
@@ -324,7 +318,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Capture_Handler' ) ) :
 			return ! $this->has_order_authorization_expired( $order );
 		}
 
-
 		/**
 		 * Determines if an order is ready for capture.
 		 *
@@ -346,7 +339,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Capture_Handler' ) ) :
 			) && $this->get_gateway()->get_order_meta( $order, 'trans_id' );
 		}
 
-
 		/**
 		 * Determines if an order has been fully captured
 		 *
@@ -365,7 +357,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Capture_Handler' ) ) :
 			return $captured;
 		}
 
-
 		/**
 		 * Determines if an order's authorization has expired.
 		 *
@@ -380,7 +371,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Capture_Handler' ) ) :
 
 			return $transaction_date && floor( ( time() - $transaction_time ) / 3600 ) > $this->get_gateway()->get_authorization_time_window();
 		}
-
 
 		/**
 		 * Determines if an order's authorization has been captured, even partially.
@@ -400,7 +390,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Capture_Handler' ) ) :
 			);
 		}
 
-
 		/**
 		 * Gets the maximum amount that can be captured from an order.
 		 *
@@ -416,7 +405,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Capture_Handler' ) ) :
 			return $this->get_order_authorization_amount( $order );
 		}
 
-
 		/**
 		 * Gets the amount originally authorized for an order.
 		 *
@@ -430,7 +418,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Capture_Handler' ) ) :
 
 			return (float) $amount;
 		}
-
 
 		/**
 		 * Gets the payment gateway instance.

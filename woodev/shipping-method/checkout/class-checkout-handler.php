@@ -50,7 +50,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 */
 		public const ACCOUNT_RECORD_FIELD = 'woodev_location_record';
 
-		/** Order meta holding the checkout's selected settlement record for the admin editor. */
+		/**
+		 * Order meta holding the checkout's selected settlement record for the admin editor.
+		 */
 		public const ORDER_LOCATION_META_KEY = '_woodev_shipping_checkout_location';
 
 		/**
@@ -61,10 +63,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 */
 		public const LOCATION_NONCE_NODE_ID = 'woodev-location-nonce';
 
-		/** @var Checkout_Fields the field definitions this handler manages */
+		/**
+		 * @var Checkout_Fields the field definitions this handler manages
+		 */
 		private Checkout_Fields $fields;
 
-		/** @var string plugin-supplied token that namespaces this handler's forward hooks */
+		/**
+		 * @var string plugin-supplied token that namespaces this handler's forward hooks
+		 */
 		private string $hook_prefix;
 
 		/**
@@ -125,9 +131,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 */
 		private static array $pickup_declarations_reconciled = [];
 
-		/** @var bool Whether Store API extension data has been registered this request. */
+		/**
+		 * @var bool Whether Store API extension data has been registered this request.
+		 */
 		private static bool $hidden_reason_endpoint_registered = false;
-		/** Store API namespace for admin-only hidden method explanations. */
+
+		/**
+		 * Store API namespace for admin-only hidden method explanations.
+		 */
 		private const HIDDEN_REASON_EXTENSION = 'woodev-shipping-hidden-reasons';
 
 		/**
@@ -813,7 +824,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 
 			return is_object( $wc ) && isset( $wc->customer ) ? $wc->customer : null;
 		}
-
 
 		/**
 		 * WC Address Autocomplete arbitration — the server-side half (location-provider
@@ -3044,7 +3054,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			return array_map( 'strval', array_keys( (array) WC()->countries->get_countries() ) );
 		}
 
-
 		/**
 		 * Returns the WooCommerce store's SELLING country codes — i.e. what the
 		 * merchant's "Selling location(s)" setting (`woocommerce_allowed_countries`
@@ -4300,7 +4309,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			return self::normalize_method_id( (string) $method );
 		}
 
-
 		/**
 		 * Resolves the `\Woodev\Framework\Shipping\Shipping_Method` instance for a bare
 		 * shipping method id.
@@ -4544,7 +4552,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		protected function is_native_wc_field( string $id ): bool {
 			return 0 === strpos( $id, 'billing_' ) || 0 === strpos( $id, 'shipping_' );
 		}
-
 
 		/**
 		 * The checkout section(s) a Location-Provider field's cascade attaches to (Rule

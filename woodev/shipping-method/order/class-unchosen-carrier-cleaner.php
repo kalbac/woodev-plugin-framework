@@ -42,7 +42,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Unchosen_Carrier_Cle
 	 * @since 2.0.2
 	 */
 	final class Unchosen_Carrier_Cleaner {
-
 		/**
 		 * Registry to read providers from; null resolves {@see Orders_Registry::instance()} lazily.
 		 *

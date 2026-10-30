@@ -16,8 +16,9 @@ defined( 'ABSPATH' ) || exit;
  * @since 2.0.2
  */
 final class Admin_Notice_Renderer implements Competitor_Notice_Renderer {
-
-	/** @var \Woodev_Admin_Notice_Handler the plugin's notice handler */
+	/**
+	 * @var \Woodev_Admin_Notice_Handler the plugin's notice handler
+	 */
 	private $notice_handler;
 
 	/**

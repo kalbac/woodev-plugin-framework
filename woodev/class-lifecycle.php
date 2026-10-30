@@ -12,15 +12,20 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 	 */
 
 	class Woodev_Lifecycle {
-		/** @var array the version numbers that have an upgrade routine */
+		/**
+		 * @var array the version numbers that have an upgrade routine
+		 */
 		protected $upgrade_versions = [];
 
-		/** @var string minimum milestone version */
+		/**
+		 * @var string minimum milestone version
+		 */
 		private $milestone_version;
 
-		/** @var Woodev_Plugin plugin instance */
+		/**
+		 * @var Woodev_Plugin plugin instance
+		 */
 		private $plugin;
-
 
 		/**
 		 * Constructs the class.
@@ -33,7 +38,6 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 
 			$this->add_hooks();
 		}
-
 
 		/**
 		 * Adds the action & filter hooks.
@@ -66,7 +70,6 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 				3
 			);
 		}
-
 
 		/**
 		 * Initializes the plugin lifecycle.
@@ -122,7 +125,6 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 			}
 		}
 
-
 		/**
 		 * Schedules a prompt refresh of the signed licence claim when a key is stored but no claim is (#1270).
 		 * Throttled and cron-only inside the licence engine; a failure here never blocks the lifecycle.
@@ -138,7 +140,6 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 				return;
 			}
 		}
-
 
 		/**
 		 * Triggers plugin activation.
@@ -177,7 +178,6 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 			}
 		}
 
-
 		/**
 		 * Triggers plugin deactivation.
 		 */
@@ -209,7 +209,6 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 			delete_option( 'woodev_' . $this->get_plugin()->get_id() . '_is_active' );
 		}
 
-
 		/**
 		 * Handles plugin activation.
 		 *
@@ -223,7 +222,6 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 			// stub
 		}
 
-
 		/**
 		 * Handles plugin deactivation.
 		 *
@@ -232,7 +230,6 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 		public function deactivate() {
 			// stub
 		}
-
 
 		/**
 		 * Helper method to install default settings for a plugin.
@@ -256,14 +253,12 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 			}
 		}
 
-
 		/**
 		 * Performs any install tasks.
 		 */
 		protected function install() {
 			// stub
 		}
-
 
 		/**
 		 * Performs any upgrade tasks based on the provided installed version.
@@ -291,7 +286,6 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 				}
 			}
 		}
-
 
 		/**
 		 * Adds any lifecycle admin notices.
@@ -333,9 +327,7 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 			}
 		}
 
-
 		/** Milestone Methods */
-
 
 		/**
 		 * Triggers a milestone.
@@ -363,7 +355,6 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 			return $this->register_milestone_message( $id, $message );
 		}
 
-
 		/**
 		 * Resolves framework milestone keys in the display locale, preserving legacy strings.
 		 *
@@ -385,7 +376,6 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 
 			return $message;
 		}
-
 
 		/**
 		 * Generates a milestone notice message.
@@ -434,7 +424,6 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 			return $message;
 		}
 
-
 		/**
 		 * Registers a milestone message to be displayed in the admin.
 		 *
@@ -467,9 +456,7 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 			return update_option( 'woodev_' . $this->get_plugin()->get_id() . '_milestone_messages', $milestone_messages );
 		}
 
-
 		/** Event history methods *****************************************************************************************/
-
 
 		/**
 		 * Adds an upgrade lifecycle event.
@@ -490,7 +477,6 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 
 			return $this->store_event( 'upgrade', $data );
 		}
-
 
 		/**
 		 * Adds a migration lifecycle event.
@@ -513,7 +499,6 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 
 			return $this->store_event( 'migrate', $data );
 		}
-
 
 		/**
 		 * Stores a lifecycle event.
@@ -561,7 +546,6 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 			);
 		}
 
-
 		/**
 		 * Gets the lifecycle event history.
 		 * The last 29 events are stored, with the latest first.
@@ -604,7 +588,6 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 			return $value;
 		}
 
-
 		/**
 		 * Gets the event history option name.
 		 *
@@ -614,9 +597,7 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 			return 'woodev_' . $this->get_plugin()->get_id() . '_lifecycle_events';
 		}
 
-
 		/** Utility Methods *******************************************************/
-
 
 		/**
 		 * Gets the registered milestone messages.
@@ -626,7 +607,6 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 		protected function get_milestone_messages(): array {
 			return get_option( 'woodev_' . $this->get_plugin()->get_id() . '_milestone_messages', [] );
 		}
-
 
 		/**
 		 * Sets the milestone version.
@@ -642,7 +622,6 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 			return update_option( 'woodev_' . $this->get_plugin()->get_id() . '_milestone_version', $version );
 		}
 
-
 		/**
 		 * Gets the milestone version.
 		 *
@@ -657,7 +636,6 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 			return $this->milestone_version;
 		}
 
-
 		/**
 		 * Gets the currently installed plugin version.
 		 *
@@ -666,7 +644,6 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 		protected function get_installed_version(): string {
 			return get_option( $this->get_plugin()->get_plugin_version_name() );
 		}
-
 
 		/**
 		 * Sets the installed plugin version.
@@ -677,7 +654,6 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 			update_option( $this->get_plugin()->get_plugin_version_name(), $version );
 		}
 
-
 		/**
 		 * Gets the plugin instance.
 		 *
@@ -687,9 +663,7 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 			return $this->plugin;
 		}
 
-
 		/** Deprecated methods ****************************************************/
-
 
 		/**
 		 * Handles tasks after the plugin has been updated.

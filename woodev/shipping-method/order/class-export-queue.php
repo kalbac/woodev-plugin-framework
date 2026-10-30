@@ -30,10 +30,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Export_Queue' ) ) :
 	 */
 	final class Export_Queue {
 
-		/** @var string the Action Scheduler status of an action being carried out now (`ActionScheduler_Store::STATUS_RUNNING`) */
+		/**
+		 * @var string the Action Scheduler status of an action being carried out now (`ActionScheduler_Store::STATUS_RUNNING`)
+		 */
 		private const RUNNING_STATUS = 'in-progress';
 
-		/** @var string the Action Scheduler status of an action waiting for its turn (`ActionScheduler_Store::STATUS_PENDING`) */
+		/**
+		 * @var string the Action Scheduler status of an action waiting for its turn (`ActionScheduler_Store::STATUS_PENDING`)
+		 */
 		private const PENDING_STATUS = 'pending';
 
 		/**

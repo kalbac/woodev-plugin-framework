@@ -16,64 +16,104 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 	 */
 	abstract class Woodev_Plugin {
 
-		/** Plugin Framework Version */
+		/**
+		 * Plugin Framework Version
+		 */
 		const VERSION = '2.0.16';
 
-		/** @var object single instance of plugin */
+		/**
+		 * @var object single instance of plugin
+		 */
 		protected static $instance;
 
-		/** @var bool whether the shared Woodev admin pages were initialized once, fleet-wide */
+		/**
+		 * @var bool whether the shared Woodev admin pages were initialized once, fleet-wide
+		 */
 		private static $admin_pages_initialized = false;
 
-		/** @var string plugin id */
+		/**
+		 * @var string plugin id
+		 */
 		private $id;
 
-		/** @var string version number */
+		/**
+		 * @var string version number
+		 */
 		private $version;
 
-		/** @var string plugin path, without trailing slash */
+		/**
+		 * @var string plugin path, without trailing slash
+		 */
 		private $plugin_path;
 
-		/** @var string plugin URL */
+		/**
+		 * @var string plugin URL
+		 */
 		private $plugin_url;
 
-		/** @var string template path, without trailing slash */
+		/**
+		 * @var string template path, without trailing slash
+		 */
 		private $template_path;
 
-		/** @var Woodev_Plugins_License instance */
+		/**
+		 * @var Woodev_Plugins_License instance
+		 */
 		protected $license;
 
-		/** @var  Woodev_Admin_Message_Handler instance */
+		/**
+		 * @var Woodev_Admin_Message_Handler instance
+		 */
 		private $message_handler;
 
-		/** @var string the plugin text domain */
+		/**
+		 * @var string the plugin text domain
+		 */
 		private $text_domain;
 
-		/** @var array memoized list of active plugins */
+		/**
+		 * @var array memoized list of active plugins
+		 */
 		private $active_plugins = [];
 
-		/** @var Woodev_Plugin_Dependencies dependency handler instance */
+		/**
+		 * @var Woodev_Plugin_Dependencies dependency handler instance
+		 */
 		private $dependency_handler;
 
-		/** @var Woodev_Hook_Deprecator hook deprecator instance */
+		/**
+		 * @var Woodev_Hook_Deprecator hook deprecator instance
+		 */
 		private $hook_deprecator;
 
-		/** @var Woodev_Lifecycle lifecycle handler instance */
+		/**
+		 * @var Woodev_Lifecycle lifecycle handler instance
+		 */
 		protected $lifecycle_handler;
 
-		/** @var Woodev_Admin_Notice_Handler the admin notice handler class */
+		/**
+		 * @var Woodev_Admin_Notice_Handler the admin notice handler class
+		 */
 		private $admin_notice_handler;
 
-		/** @var bool whether a download id resolution failure was already reported via `_doing_it_wrong()` in this request — `get_download_id()` runs from the constructor, so every request would otherwise print the notice several times over */
+		/**
+		 * @var bool whether a download id resolution failure was already reported via `_doing_it_wrong()` in this request — `get_download_id()` runs from the constructor, so every request would otherwise print the notice several times over
+		 */
 		private $download_id_resolution_warned = false;
 
-		/** @var Woodev_REST_API REST API handler instance */
+		/**
+		 * @var Woodev_REST_API REST API handler instance
+		 */
 		protected $rest_api_handler;
 
-		/** @var \Woodev\Framework\Setup\Setup_Wizard|null setup wizard handler (opt-in) */
+		/**
+		 * @var \Woodev\Framework\Setup\Setup_Wizard|null setup wizard handler (opt-in)
+		 */
 		protected $setup_wizard_handler;
 
-		/** @var \Woodev\Framework\Competitor\Competitor_Notification_Handler|null competitor notification engine (opt-in) */
+		/**
+		 * @var \Woodev\Framework\Competitor\Competitor_Notification_Handler|null competitor notification engine (opt-in)
+		 */
 		protected $competitor_handler;
 
 		/**
@@ -87,10 +127,14 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 */
 		protected ?Woodev_Blocks_Handler $blocks_handler = null;
 
-		/** @var \Woodev\Framework\Handlers\Translation_Handler translation handler instance */
+		/**
+		 * @var \Woodev\Framework\Handlers\Translation_Handler translation handler instance
+		 */
 		protected \Woodev\Framework\Handlers\Translation_Handler $translation_handler;
 
-		/** @var \Woodev\Framework\Handlers\Cron_Handler cron handler instance */
+		/**
+		 * @var \Woodev\Framework\Handlers\Cron_Handler cron handler instance
+		 */
 		protected \Woodev\Framework\Handlers\Cron_Handler $cron_handler;
 
 		/**
@@ -645,14 +689,16 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 *
 		 * Plugins can override this to set up any handlers after WordPress is ready.
 		 */
-		public function init_plugin() {}
+		public function init_plugin() {
+		}
 
 		/**
 		 * Initializes the plugin admin.
 		 *
 		 * Plugins can override this to set up any handlers after the WordPress admin is ready.
 		 */
-		public function init_admin() {}
+		public function init_admin() {
+		}
 
 		/**
 		 * Enqueue plugin scripts on frontend
@@ -1003,7 +1049,8 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		/**
 		 * Adds admin notices upon initialization.
 		 */
-		public function add_admin_notices() {}
+		public function add_admin_notices() {
+		}
 
 		/**
 		 * Convenience method to add delayed admin notices, which may depend upon
@@ -1279,7 +1326,8 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 * @param string|null $log_id Optional log id to segment the files by.
 		 * @return void
 		 */
-		public function log( $message, $log_id = null ) {}
+		public function log( $message, $log_id = null ) {
+		}
 
 		/**
 		 * Saves an informational diagnostic line — one a plugin may gate behind its own «Логирование» switch.
@@ -1337,7 +1385,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		public function require_tls_1_2() {
 			return false;
 		}
-
 
 		/**
 		 * Determines if TLS 1.2 is available.
@@ -1435,7 +1482,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		public function get_dependency_handler() {
 			return $this->dependency_handler;
 		}
-
 
 		/**
 		 * Gets the lifecycle handler instance.
@@ -1726,7 +1772,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			return defined( 'SCRIPT_DEBUG' ) && SCRIPT_DEBUG ? '' : '.min';
 		}
 
-
 		/**
 		 * Gets the plugin's textdomain.
 		 *
@@ -1737,7 +1782,6 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		public function get_textdomain(): string {
 			return $this->text_domain;
 		}
-
 
 		/**
 		 * Returns the "Configure" plugin action link to go directly to the plugin
@@ -1940,7 +1984,8 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 * @param string $default_path Optional default template path.
 		 * @return void
 		 */
-		public function load_template( $template, array $args = [], $path = '', $default_path = '' ) {}
+		public function load_template( $template, array $args = [], $path = '', $default_path = '' ) {
+		}
 
 		/**
 		 * Determines whether a plugin is active.

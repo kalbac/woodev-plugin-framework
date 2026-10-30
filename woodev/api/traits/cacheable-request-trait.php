@@ -5,16 +5,20 @@ defined( 'ABSPATH' ) || exit;
 if ( ! trait_exists( 'Woodev_Cacheable_Request_Trait' ) ) :
 
 	trait Woodev_Cacheable_Request_Trait {
-
-		/** @var int the cache lifetime for the request, in seconds, defaults to 86400 (24 hours) */
+		/**
+		 * @var int the cache lifetime for the request, in seconds, defaults to 86400 (24 hours)
+		 */
 		protected $cache_lifetime = 86400;
 
-		/** @var bool whether to force a fresh request regardless if a cached response is available */
+		/**
+		 * @var bool whether to force a fresh request regardless if a cached response is available
+		 */
 		protected $force_refresh = false;
 
-		/** @var bool whether to the current request should be cached or not */
+		/**
+		 * @var bool whether to the current request should be cached or not
+		 */
 		protected $should_cache = true;
-
 
 		/**
 		 * Sets the cache lifetime for this request.
@@ -27,7 +31,6 @@ if ( ! trait_exists( 'Woodev_Cacheable_Request_Trait' ) ) :
 			return $this;
 		}
 
-
 		/**
 		 * Gets the cache lifetime for this request.
 		 *
@@ -36,7 +39,6 @@ if ( ! trait_exists( 'Woodev_Cacheable_Request_Trait' ) ) :
 		public function get_cache_lifetime() {
 			return $this->cache_lifetime;
 		}
-
 
 		/**
 		 * Sets whether a fresh request should be attempted, regardless if a cached response is available.
@@ -49,7 +51,6 @@ if ( ! trait_exists( 'Woodev_Cacheable_Request_Trait' ) ) :
 			return $this;
 		}
 
-
 		/**
 		 * Determines whether a fresh request should be attempted.
 		 *
@@ -58,7 +59,6 @@ if ( ! trait_exists( 'Woodev_Cacheable_Request_Trait' ) ) :
 		public function should_refresh() {
 			return $this->force_refresh;
 		}
-
 
 		/**
 		 * Sets whether the request's response should be stored in cache.
@@ -71,7 +71,6 @@ if ( ! trait_exists( 'Woodev_Cacheable_Request_Trait' ) ) :
 			return $this;
 		}
 
-
 		/**
 		 * Determines whether the request's response should be stored in cache.
 		 *
@@ -80,7 +79,6 @@ if ( ! trait_exists( 'Woodev_Cacheable_Request_Trait' ) ) :
 		public function should_cache() {
 			return $this->should_cache;
 		}
-
 
 		/**
 		 * Bypasses caching for this request completely.

@@ -5,7 +5,6 @@ defined( 'ABSPATH' ) || exit;
 if ( ! class_exists( 'Woodev_API_XML_Response' ) ) :
 
 	abstract class Woodev_API_XML_Response implements Woodev_API_Response {
-
 		protected $raw_response_xml;
 
 		protected $response_xml;

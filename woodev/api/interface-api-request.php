@@ -6,7 +6,6 @@ defined( 'ABSPATH' ) || exit;
 if ( ! interface_exists( 'Woodev_API_Request' ) ) :
 
 	interface Woodev_API_Request {
-
 		public function get_method();
 
 		public function get_path();

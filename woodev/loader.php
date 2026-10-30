@@ -23,7 +23,6 @@ if ( ! class_exists( 'Woodev_Loader', false ) ) :
 	 * @since 2.0.2
 	 */
 	final class Woodev_Loader {
-
 		/**
 		 * Fleet-wide accumulator of plugins left dormant by a legacy (v1) rendezvous winner
 		 * (OB-1 / #104). Woodev_Loader is final and guarded by `class_exists(…, false)`, so
@@ -81,7 +80,6 @@ if ( ! class_exists( 'Woodev_Loader', false ) ) :
 
 			return (bool) $instance->register_loader_definition( $definition );
 		}
-
 
 		/**
 		 * Records a v2 plugin left dormant by a legacy (v1) rendezvous winner and hooks the

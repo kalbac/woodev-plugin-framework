@@ -21,7 +21,9 @@ if ( ! class_exists( 'Woodev_Packer_Free_Space' ) ) :
 	 */
 	final class Woodev_Packer_Free_Space {
 
-		/** Float comparison tolerance (sizes are cm with at most a few decimals). */
+		/**
+		 * Float comparison tolerance (sizes are cm with at most a few decimals).
+		 */
 		const EPSILON = 1e-6;
 
 		/**
@@ -39,7 +41,9 @@ if ( ! class_exists( 'Woodev_Packer_Free_Space' ) ) :
 		 */
 		private $spaces;
 
-		/** @var float */
+		/**
+		 * @var float
+		 */
 		private $min_side;
 
 		/**

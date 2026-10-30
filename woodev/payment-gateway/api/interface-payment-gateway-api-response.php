@@ -10,7 +10,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API_Response' ) ) :
 	 * WooCommerce Direct Payment Gateway API Response
 	 */
 	interface Woodev_Payment_Gateway_API_Response extends Woodev_API_Response {
-
 		/**
 		 * Checks if the transaction was successful.
 		 *
@@ -19,7 +18,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API_Response' ) ) :
 		 * @return bool true if approved, false otherwise
 		 */
 		public function transaction_approved();
-
 
 		/**
 		 * Returns true if the transaction was held, for instance due to AVS/CSC
@@ -31,7 +29,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API_Response' ) ) :
 		 */
 		public function transaction_held();
 
-
 		/**
 		 * Gets the response status message, or null if there is no status message associated with this transaction.
 		 *
@@ -40,7 +37,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API_Response' ) ) :
 		 * @return string status message
 		 */
 		public function get_status_message();
-
 
 		/**
 		 * Gets the response status code, or null if there is no status code associated with this transaction.
@@ -51,7 +47,6 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API_Response' ) ) :
 		 */
 		public function get_status_code();
 
-
 		/**
 		 * Gets the response transaction id, or null if there is no transaction id associated with this transaction.
 		 *
@@ -61,14 +56,12 @@ if ( ! interface_exists( 'Woodev_Payment_Gateway_API_Response' ) ) :
 		 */
 		public function get_transaction_id();
 
-
 		/**
 		 * Gets the payment type, such as 'credit-card'.
 		 *
 		 * @return string
 		 */
 		public function get_payment_type();
-
 
 		/**
 		 * Returns a message appropriate for a frontend user.  This should be used

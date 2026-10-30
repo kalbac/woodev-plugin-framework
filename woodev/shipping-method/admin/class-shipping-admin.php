@@ -45,14 +45,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin' ) ) 
 	 * @since 1.5.0
 	 */
 	class Shipping_Admin {
-
-		/** @var Shipping_Plugin the plugin instance this admin suite belongs to */
+		/**
+		 * @var Shipping_Plugin the plugin instance this admin suite belongs to
+		 */
 		private Shipping_Plugin $plugin;
 
-		/** @var object[] plugin-supplied admin handler objects (order, …) registered on admin_init */
+		/**
+		 * @var object[] plugin-supplied admin handler objects (order, …) registered on admin_init
+		 */
 		private array $handlers;
 
-		/** @var array<string, array<string, mixed>> plugin-supplied admin page definitions: logical name => { slug (installed-site contract), parent, page_title, menu_title, capability, callback } */
+		/**
+		 * @var array<string, array<string, mixed>> plugin-supplied admin page definitions: logical name => { slug (installed-site contract), parent, page_title, menu_title, capability, callback }
+		 */
 		private array $pages;
 
 		/**

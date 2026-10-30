@@ -18,14 +18,19 @@ if ( ! class_exists( 'Woodev_Framework_Autoloader', false ) ) :
 	 * @since 2.0.2
 	 */
 	final class Woodev_Framework_Autoloader {
-
-		/** @var bool Whether the autoloader has been registered. */
+		/**
+		 * @var bool Whether the autoloader has been registered.
+		 */
 		private static bool $registered = false;
 
-		/** @var string Absolute path to the selected framework copy root (the dir containing woodev/). */
+		/**
+		 * @var string Absolute path to the selected framework copy root (the dir containing woodev/).
+		 */
 		private static string $base_path = '';
 
-		/** @var array<string,string> FQCN => relative path map. */
+		/**
+		 * @var array<string,string> FQCN => relative path map.
+		 */
 		private static array $map = [];
 
 		/**

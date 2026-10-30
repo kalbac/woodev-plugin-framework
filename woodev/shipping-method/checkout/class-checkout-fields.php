@@ -88,7 +88,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Fields' 
 	 * @since 1.5.0
 	 */
 	class Checkout_Fields {
-
 		/**
 		 * Normalized field descriptors keyed by field id.
 		 *

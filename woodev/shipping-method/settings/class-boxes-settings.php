@@ -35,13 +35,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Boxes_Settings' )
 	 */
 	class Boxes_Settings extends \Woodev_Abstract_Settings {
 
-		/** @var string the section id on the «Доставка» tab */
+		/**
+		 * @var string the section id on the «Доставка» tab
+		 */
 		public const SECTION_ID = 'boxes';
 
-		/** @var string setting id: the list, one box per line */
+		/**
+		 * @var string setting id: the list, one box per line
+		 */
 		public const SETTING_BOXES = 'boxes';
 
-		/** @var string separates a line's fields */
+		/**
+		 * @var string separates a line's fields
+		 */
 		public const FIELD_SEPARATOR = ';';
 
 		/**

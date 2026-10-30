@@ -15,6 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Delivery_Status_Events' ) ) :
+
 	/**
 	 * Publishes canonical shipment status changes after carrier metadata is persisted.
 	 *

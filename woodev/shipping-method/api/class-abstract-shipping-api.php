@@ -53,7 +53,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Api\\Abstract_Shipping_API'
 	 * @since 1.5.0
 	 */
 	abstract class Abstract_Shipping_API extends \Woodev_API_Base implements Shipping_API {
-
 		/**
 		 * Returns the most recent request object.
 		 *

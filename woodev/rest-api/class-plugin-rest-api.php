@@ -11,8 +11,9 @@ if ( ! class_exists( 'Woodev_REST_API' ) ) :
 	 * routes and/or register new routes.
 	 */
 	class Woodev_REST_API {
-
-		/** @var Woodev_Plugin plugin instance */
+		/**
+		 * @var Woodev_Plugin plugin instance
+		 */
 		private $plugin;
 
 		/**

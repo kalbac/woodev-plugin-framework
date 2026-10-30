@@ -15,15 +15,20 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 	abstract class Woodev_Payment_Gateway_Abstract_Payment_Handler {
 
 
-		/** the success result code */
+		/**
+		 * the success result code
+		 */
 		const RESULT_CODE_SUCCESS = 'success';
 
-		/** the failure result code */
+		/**
+		 * the failure result code
+		 */
 		const RESULT_CODE_FAILURE = 'failure';
 
-		/** @var Woodev_Payment_Gateway gateway instance */
+		/**
+		 * @var Woodev_Payment_Gateway gateway instance
+		 */
 		protected $gateway;
-
 
 		/**
 		 * Constructs the class.
@@ -36,7 +41,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 
 			$this->add_hooks();
 		}
-
 
 		/**
 		 * Adds any action and filter hooks required by the handler.
@@ -53,7 +57,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 				2
 			);
 		}
-
 
 		/**
 		 * Renders a custom held order message if available.
@@ -75,7 +78,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 			return $text;
 		}
 
-
 		/**
 		 * Processes payment for an order.
 		 *
@@ -85,7 +87,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 		 * @throws Woodev_Plugin_Exception
 		 */
 		abstract public function process_order_payment( WC_Order $order );
-
 
 		/**
 		 * Processes a gateway API payment response and handles the order accordingly.
@@ -153,7 +154,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 			}
 		}
 
-
 		/**
 		 * Validates a transaction response & its order.
 		 *
@@ -181,7 +181,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 				);
 			}
 		}
-
 
 		/**
 		 * Handles actions after an approved transaction.
@@ -223,7 +222,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 			}
 		}
 
-
 		/**
 		 * Handles actions after a held transaction.
 		 *
@@ -250,7 +248,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 
 			$this->mark_order_as_held( $order, $note_message, $response );
 		}
-
 
 		/**
 		 * Handles actions after a failed transaction.
@@ -296,7 +293,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 			do_action( 'wc_payment_gateway_' . $this->get_gateway()->get_id() . '_payment_processed', $order, $this->get_gateway() );
 		}
 
-
 		/**
 		 * Marks an order as approved.
 		 *
@@ -308,7 +304,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 
 			$order->add_order_note( $message );
 		}
-
 
 		/**
 		 * Marks an order as held for review.
@@ -337,7 +332,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 				$order->add_order_note( $order_note );
 			}
 		}
-
 
 		/**
 		 * Gets the order status used for held orders.
@@ -383,7 +377,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 			return $this->get_gateway()->validate_held_order_status( $status );
 		}
 
-
 		/**
 		 * Marks an order as failed.
 		 *
@@ -408,7 +401,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 			}
 		}
 
-
 		/**
 		 * Marks an order as cancelled.
 		 *
@@ -432,7 +424,6 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 				$order->add_order_note( $order_note );
 			}
 		}
-
 
 		/**
 		 * Gets the gateway object.

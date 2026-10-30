@@ -108,7 +108,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 	 * @since 2.0.2
 	 */
 	class Checkout_Config {
-
 		/**
 		 * Plugin identifier used to build the REST endpoint.
 		 *
@@ -403,7 +402,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 				'country'  => $this->field_settings->effective( 'country_field' ),
 			];
 		}
-
 
 		/**
 		 * Resolves `block_place_order` (issue #725): whether `refreshGate()`

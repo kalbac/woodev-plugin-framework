@@ -31,7 +31,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Status_Sync_Tool'
 	 */
 	final class Status_Sync_Tool {
 
-		/** @var string the tool id inside the section */
+		/**
+		 * @var string the tool id inside the section
+		 */
 		public const TOOL_ID = 'sync_delivery_statuses';
 
 		/**

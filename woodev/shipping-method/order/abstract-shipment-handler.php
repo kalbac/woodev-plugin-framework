@@ -50,7 +50,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 	 */
 	abstract class Abstract_Shipment_Handler {
 
-		/** @var string logical order-meta field, resolved by the order handler to the plugin's real carrier-order-id meta key */
+		/**
+		 * @var string logical order-meta field, resolved by the order handler to the plugin's real carrier-order-id meta key
+		 */
 		protected const CARRIER_ORDER_ID_FIELD = 'carrier_order_id';
 
 		/**
@@ -66,16 +68,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 */
 		public const EXPORT_UNKNOWN_META = '_woodev_shipment_export_unknown';
 
-		/** @var string scope of the per-order export lock, see {@see Order_Lock} */
+		/**
+		 * @var string scope of the per-order export lock, see {@see Order_Lock}
+		 */
 		private const EXPORT_LOCK_SCOPE = 'export';
 
-		/** @var Shipping_API carrier API seam */
+		/**
+		 * @var Shipping_API carrier API seam
+		 */
 		protected Shipping_API $api;
 
-		/** @var Shipping_Order_Handler HPOS-safe order-meta accessor for the plugin's keys */
+		/**
+		 * @var Shipping_Order_Handler HPOS-safe order-meta accessor for the plugin's keys
+		 */
 		protected Shipping_Order_Handler $order_handler;
 
-		/** @var string plugin-supplied token that namespaces this handler's forward hooks */
+		/**
+		 * @var string plugin-supplied token that namespaces this handler's forward hooks
+		 */
 		protected string $hook_prefix;
 
 		/**

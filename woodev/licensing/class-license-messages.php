@@ -10,7 +10,6 @@ if ( ! class_exists( 'Woodev_License_Messages' ) ) :
 	 * @since 1.2.1
 	 */
 	class Woodev_License_Messages {
-
 		/**
 		 * The instance of Woodev_License class.
 		 *

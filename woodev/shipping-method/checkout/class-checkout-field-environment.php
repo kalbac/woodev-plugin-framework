@@ -18,7 +18,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Environment' ) ) :
 
 	class Checkout_Field_Environment {
-
 		/**
 		 * Whether WooCommerce currently serves the checkout BLOCK (as opposed to the
 		 * classic checkout shortcode) as the default checkout experience.
