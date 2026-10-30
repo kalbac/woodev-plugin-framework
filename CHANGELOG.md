@@ -1,6 +1,38 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.0.17] — 2026-10-30
+### Bug Fixes
+- **location**: DaData 403 notice no longer claims funds ran out on a 0 ₽ balance (#1505) (#1514)
+
+- **location**: A region the customer did not pick no longer scopes the city search (#1511) (#1515)
+
+
+### Documentation
+- **s202**: T-Bank 2.0.0 and framework 2.0.16 released; handoff (#1510)
+
+- **s203**: CDEK 2.3.0.11, Ozon brainstorm and measurements, overnight handoff (#1513)
+
+- **ozon**: Ozon Delivery v2 plugin design spec (#1512)
+
+- **ozon**: Spec corrections from live measurements (s204) (#1516)
+
+- **s204**: Overnight Ozon build W0–W6, framework #1505 #1511; handoff (#1517)
+
+- **s205**: Session record, handoff, three gotchas, local-ci token flag removed from docs
+
+- **s205**: Make the woodev re-sync command executable and pin-driven
+
+- **s205**: Record that the Ozon 1.0.3 ZIP URL is unreachable from every machine
+
+- **s205**: Ozon 1.0.3 folder name confirmed from the operator's ZIP
+
+
+### Style
+- Enforce WordPress code layout sniffs and reformat
+
+
+
 ## [2.0.16] — 2026-10-29
 ### Bug Fixes
 - **licensing**: Claim command nonces with INSERT IGNORE (#1485) (#1498)
