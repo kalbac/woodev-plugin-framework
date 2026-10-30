@@ -1496,6 +1496,12 @@
 			seenValues: {},
 			// Per-LEVEL confirmed record (only chain levels; postcode never has one of its own).
 			records: {},
+			// Issue #1511: the REGION record the customer picked themselves in the region field —
+			// the very object {@see onSelectFor} stored in `records.region`, `null` otherwise. A
+			// region record that came from anywhere else (a settlement pick's backwards fill, the
+			// server's saved chain, the store's default locality) does not scope the settlement
+			// search, see {@see scopeKeyFor}.
+			explicitRegion: null,
 			// Per-LEVEL text a COMPLETED search already proved the provider has nothing for
 			// (issue #350) — `{ [level]: string|null }`, written by {@see onAbandonFor}, cleared
 			// by a successful pick at that level ({@see onSelectFor}) or by the field's own text
@@ -1583,13 +1589,37 @@
 	 * ancestor: address is scoped by locality only, never by region even when both are present
 	 * (spec §4.4: "Address suggestions are scoped by locality"). A record is either the result
 	 * of a direct selection at that level or a restored `config.location.current` seed (Task 11
-	 * "restore state without re-fetching") — both carry a usable `.key`.
+	 * "restore state without re-fetching") — both carry a usable `.key`. EXCEPT a REGION, which
+	 * scopes only when the customer picked it themselves in the region field (issue #1511).
 	 *
 	 * @param {Object} entry
 	 * @param {string} level
 	 * @returns {string|null}
 	 */
 	function scopeKeyFor( entry, level ) {
+		var key = parentKeyFor( entry, level );
+
+		// Issue #1511: a region the customer did not choose themselves must not narrow the search. Picking a
+		// settlement writes its region into the chain (and the server keeps it), so scoping by that region
+		// locked the next search into the previous city's region, including after a reload, whether or not
+		// the region field is shown. Only a region picked in the region field scopes.
+		if ( key && 'region' === LEVELS[ LEVELS.indexOf( level ) - 1 ] && entry.records.region !== entry.explicitRegion ) {
+			return null;
+		}
+
+		return key;
+	}
+
+	/**
+	 * The key the immediate parent level recorded, whoever put it there — {@see scopeKeyFor} without the
+	 * issue #1511 "the customer must have picked the region" rule. The popular list narrows by it
+	 * ({@see popularFor}): that only filters what is offered, it never blocks a search.
+	 *
+	 * @param {Object} entry
+	 * @param {string} level
+	 * @returns {string|null}
+	 */
+	function parentKeyFor( entry, level ) {
 		var idx = LEVELS.indexOf( level );
 		var parentLevel = idx > 0 ? LEVELS[ idx - 1 ] : null;
 
@@ -1868,7 +1898,7 @@
 		return function() {
 			var country = countryFor( entry, node );
 			var raw = ( entry.location.popular && entry.location.popular[ country ] ) || [];
-			var within = scopeKeyFor( entry, node.level );
+			var within = parentKeyFor( entry, node.level );
 			// Issue #538: the ancestor set of the locality ALREADY standing at this level, used
 			// only when there is no parent key to scope by. See the filter's own note below.
 			// Issue #1069: no region field → nothing the customer can change narrows the list.
@@ -3785,6 +3815,11 @@
 			}
 
 			entry.records[ node.level ] = record;
+
+			if ( 'region' === node.level ) {
+				entry.explicitRegion = record;
+			}
+
 			// Task 13 / #295 finding 1: remembers WHICH field to anchor a future "not saved"
 			// notice to — see showNotPersistedNotice()'s own docblock for why this is an
 			// entry-level, not node-level, concept.
@@ -5800,6 +5835,8 @@
 		// would keep sending a `within` the server refuses to resolve, silently falling
 		// back to a country-wide search — the very seam this whole change exists to
 		// close.
+		var pickedRegion = entry.explicitRegion && entry.records.region === entry.explicitRegion ? entry.explicitRegion : null;
+
 		LEVELS.forEach( function( level ) {
 			if ( level === protectedLevel ) {
 				return; // see this function's own docblock, issue #490 round 3.
@@ -5807,6 +5844,12 @@
 
 			entry.records[ level ] = adopted[ level ] || null;
 		} );
+
+		// Issue #1511: the server answering with the same region the customer picked keeps it "picked";
+		// any other region (a different one, or none) is a derived record.
+		if ( pickedRegion && entry.records.region !== pickedRegion ) {
+			entry.explicitRegion = entry.records.region && entry.records.region.key === pickedRegion.key ? entry.records.region : null;
+		}
 	}
 
 	/**

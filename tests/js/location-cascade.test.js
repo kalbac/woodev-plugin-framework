@@ -539,6 +539,115 @@ describe( 'suggestion scoping', () => {
 		expect( fetchCalls[ fetchCalls.length - 1 ].url ).toContain( 'within=' + encodeURIComponent( 'dadata:region1' ) );
 	} );
 
+	// Issue #1511 — the region scopes the settlement search only when the customer picked it in the region field.
+	// Measured on the rig (region_field=show): pick «Подольск» → every later search carried the region of Podolsk,
+	// also after a reload, though the customer never chose a region.
+	describe( 'a region the customer did not pick does not scope the settlement search (issue #1511)', () => {
+		const MOSCOW_OBLAST = { key: 'dadata:r50', provider_id: 'dadata', level: 'region', country: 'RU', region: { name: 'Московская область', type: 'обл' }, label: 'Московская область' };
+		const PODOLSK = {
+			key: 'dadata:podolsk', provider_id: 'dadata', level: 'settlement', country: 'RU',
+			region: { name: 'Московская область', type: 'обл' }, settlement: { name: 'Подольск', type: 'г' }, label: 'Подольск',
+		};
+
+		it( 'picking a settlement fills the region field but the next settlement search carries no `within`', async () => {
+			boot( { region: true, settlement: true, address: true, regionFieldRemoved: false } );
+
+			const settlementCall = callFor( 'billing_city' );
+
+			selectViaFake( settlementCall, { key: PODOLSK.key, label: 'Подольск', level: 'settlement', record: PODOLSK } );
+
+			// The server answers with the chain it saved: the picked settlement AND its derived region.
+			fetchCalls[ fetchCalls.length - 1 ].resolve( {
+				current: { key: PODOLSK.key, level: 'settlement' },
+				persisted: true,
+				chain: { region: { key: MOSCOW_OBLAST.key, level: 'region' }, settlement: { key: PODOLSK.key, level: 'settlement' } },
+			} );
+			await flushMicrotasks();
+
+			settlementCall.fetch( 'Каз' );
+
+			expect( fetchCalls[ fetchCalls.length - 1 ].url ).toContain( 'level=settlement' );
+			expect( fetchCalls[ fetchCalls.length - 1 ].url ).not.toContain( 'within=' );
+		} );
+
+		it( 'a saved chain carrying a region does not scope the search after a reload', () => {
+			boot( {
+				region: true, settlement: true, address: true, regionFieldRemoved: false,
+				current: { key: PODOLSK.key, level: 'settlement' },
+				chain: { region: { key: MOSCOW_OBLAST.key, level: 'region' }, settlement: { key: PODOLSK.key, level: 'settlement' } },
+			} );
+
+			callFor( 'billing_city' ).fetch( 'Каз' );
+
+			expect( fetchCalls[ fetchCalls.length - 1 ].url ).not.toContain( 'within=' );
+
+			// The address level still scopes by the settlement (spec §4.4) — only the REGION rule changed.
+			callFor( 'billing_address_1' ).fetch( 'Твер' );
+
+			expect( fetchCalls[ fetchCalls.length - 1 ].url ).toContain( 'within=' + encodeURIComponent( PODOLSK.key ) );
+		} );
+
+		it( 'a region the customer picked keeps scoping after the server confirms it', async () => {
+			boot( { region: true, settlement: true, address: true, regionFieldRemoved: false } );
+
+			selectViaFake( callFor( 'billing_state' ), { key: MOSCOW_OBLAST.key, label: 'Московская область', level: 'region', record: MOSCOW_OBLAST } );
+			await settleLastSelect( MOSCOW_OBLAST );
+
+			callFor( 'billing_city' ).fetch( 'Под' );
+
+			expect( fetchCalls[ fetchCalls.length - 1 ].url ).toContain( 'within=' + encodeURIComponent( MOSCOW_OBLAST.key ) );
+		} );
+
+		it( 'a picked region stops scoping once a settlement pick derives another region', async () => {
+			boot( { region: true, settlement: true, address: true, regionFieldRemoved: false } );
+
+			selectViaFake( callFor( 'billing_state' ), { key: MOSCOW_OBLAST.key, label: 'Московская область', level: 'region', record: MOSCOW_OBLAST } );
+			await settleLastSelect( MOSCOW_OBLAST );
+
+			const kazan = {
+				key: 'dadata:kazan', provider_id: 'dadata', level: 'settlement', country: 'RU',
+				region: { name: 'Татарстан', type: 'респ' }, settlement: { name: 'Казань', type: 'г' }, label: 'Казань',
+			};
+
+			selectViaFake( callFor( 'billing_city' ), { key: kazan.key, label: 'Казань', level: 'settlement', record: kazan } );
+			fetchCalls[ fetchCalls.length - 1 ].resolve( {
+				current: { key: kazan.key, level: 'settlement' },
+				persisted: true,
+				chain: { region: { key: 'dadata:r16', level: 'region' }, settlement: { key: kazan.key, level: 'settlement' } },
+			} );
+			await flushMicrotasks();
+
+			callFor( 'billing_city' ).fetch( 'Под' );
+
+			expect( fetchCalls[ fetchCalls.length - 1 ].url ).not.toContain( 'within=' );
+		} );
+
+		it( 'clearing a picked region and then deriving the same region from a settlement does not scope', async () => {
+			boot( { region: true, settlement: true, address: true, regionFieldRemoved: false } );
+
+			const regionCall = callFor( 'billing_state' );
+
+			selectViaFake( regionCall, { key: MOSCOW_OBLAST.key, label: 'Московская область', level: 'region', record: MOSCOW_OBLAST } );
+			await settleLastSelect( MOSCOW_OBLAST );
+
+			// The customer empties the region field: its record is gone.
+			regionCall.el.value = '';
+			regionCall.el.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+			selectViaFake( callFor( 'billing_city' ), { key: PODOLSK.key, label: 'Подольск', level: 'settlement', record: PODOLSK } );
+			fetchCalls[ fetchCalls.length - 1 ].resolve( {
+				current: { key: PODOLSK.key, level: 'settlement' },
+				persisted: true,
+				chain: { region: { key: MOSCOW_OBLAST.key, level: 'region' }, settlement: { key: PODOLSK.key, level: 'settlement' } },
+			} );
+			await flushMicrotasks();
+
+			callFor( 'billing_city' ).fetch( 'Каз' );
+
+			expect( fetchCalls[ fetchCalls.length - 1 ].url ).not.toContain( 'within=' );
+		} );
+	} );
+
 	it( 'scopes settlement suggestions by country when the region field is present but empty', () => {
 		boot( { region: true, settlement: true, address: true } );
 
@@ -4132,17 +4241,20 @@ describe( 'Task 13 renderer seam (spec D7)', () => {
 		it( 'scopes `within` by the LIVE parent selection at call time, never captured at attach time', () => {
 			const specialCalls = [];
 
-			window.WoodevLocationRenderers = {
-				'custom-mode:settlement': ( el, options ) => {
-					specialCalls.push( { el, options } );
+			const attach = ( el, options ) => {
+				specialCalls.push( { el, options } );
 
-					return { detach: jest.fn() };
-				},
+				return { detach: jest.fn() };
 			};
+
+			window.WoodevLocationRenderers = { 'custom-mode:region': attach, 'custom-mode:settlement': attach };
 
 			boot( { region: true, settlement: true, mode: 'custom-mode' } );
 
-			specialCalls[ 0 ].options.list();
+			// [ region, settlement ] — attach order follows the chain.
+			const [ regionCall, settlementCall ] = specialCalls;
+
+			settlementCall.options.list();
 
 			expect( fetchCalls[ fetchCalls.length - 1 ].url ).not.toContain( 'within=' );
 
@@ -4150,14 +4262,14 @@ describe( 'Task 13 renderer seam (spec D7)', () => {
 			// the shared onSelect/backwards-fill route) — the NEXT list() call must scope to it.
 			const record = { key: 'dadata:region1', provider_id: 'dadata', level: 'region', country: 'RU', region: { name: 'Москва', type: 'г' }, label: 'г Москва' };
 
-			specialCalls[ 0 ].options.onSelect( { record } );
+			regionCall.options.onSelect( { record } );
 
 			const selectReq = fetchCalls[ fetchCalls.length - 1 ];
 
 			selectReq.resolve( { current: { key: record.key, level: 'region' }, persisted: true, chain: { region: { key: record.key, level: 'region' } } } );
 
 			return flushMicrotasks().then( () => {
-				specialCalls[ 0 ].options.list();
+				settlementCall.options.list();
 
 				expect( fetchCalls[ fetchCalls.length - 1 ].url ).toContain( 'within=' + encodeURIComponent( 'dadata:region1' ) );
 			} );
@@ -4546,7 +4658,8 @@ describe( 'Task 13 renderer seam (spec D7)', () => {
 // -----------------------------------------------------------------------
 
 describe( 'restoring config.location.current on load', () => {
-	it( 'scopes a child fetch by the restored key without any prior selection', () => {
+	// Issue #1511: a restored region is the server's saved chain, not something the customer picked in the region field.
+	it( 'does not scope a child fetch by a restored region the customer did not pick (issue #1511)', () => {
 		boot( {
 			region: true, settlement: true,
 			current: { key: 'dadata:region9', level: 'region' },
@@ -4556,7 +4669,8 @@ describe( 'restoring config.location.current on load', () => {
 		settlementCall.fetch( 'Мос' );
 
 		const req = fetchCalls[ fetchCalls.length - 1 ];
-		expect( req.url ).toContain( 'within=' + encodeURIComponent( 'dadata:region9' ) );
+		expect( req.url ).toContain( 'level=settlement' );
+		expect( req.url ).not.toContain( 'within=' );
 	} );
 } );
 
@@ -5056,21 +5170,22 @@ describe( 'woodev_location_applied\'s implicit detail (issue #309)', () => {
 		expect( seen ).toEqual( [ { key: 'dadata:city1', level: 'settlement', settlementKey: 'dadata:city1', implicit: true } ] );
 	} );
 
-	it( 'never gates scoping/addressing on the implicit flag — the restored key still scopes the child fetch', () => {
+	it( 'never gates scoping/addressing on the implicit flag — the restored settlement still scopes the address fetch', () => {
 		// Sibling assertion to "restoring config.location.current on load" above: the SAME
 		// implicit default fired here must stay fully usable for scoping — spec D11's other
-		// half ("implicit records participate in rate calculation").
+		// half ("implicit records participate in rate calculation"). A restored REGION is
+		// no longer a scope at all, picked or implicit (issue #1511).
 		boot( {
-			region: true, settlement: true,
-			current: { key: 'dadata:region9', level: 'region' },
+			settlement: true, address: true,
+			current: { key: 'dadata:city1', level: 'settlement' },
 			implicit: true,
 		} );
 
-		const settlementCall = callFor( 'billing_city' );
-		settlementCall.fetch( 'Мос' );
+		const addressCall = callFor( 'billing_address_1' );
+		addressCall.fetch( 'Твер' );
 
 		const req = fetchCalls[ fetchCalls.length - 1 ];
-		expect( req.url ).toContain( 'within=' + encodeURIComponent( 'dadata:region9' ) );
+		expect( req.url ).toContain( 'within=' + encodeURIComponent( 'dadata:city1' ) );
 	} );
 
 	/**
