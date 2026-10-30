@@ -56,7 +56,9 @@ worktree") is still right and still necessary — it is now simply insufficient 
 For the regenerated config: it is a real upgrade artefact, so either commit it deliberately or
 `git checkout -- .serena/project.yml`. Do not leave it modified in a worktree that will be removed —
 `orca worktree rm` refuses a worktree with any modified tracked file (gotcha
-[reusing-a-worker-terminal-needs-its-worktree-too](reusing-a-worker-terminal-needs-its-worktree-too.md)).
+[reusing-a-worker-terminal-needs-its-worktree-too](reusing-a-worker-terminal-needs-its-worktree-too.md)). s204 (30.10.2026): every worker's worktree
+gets it, and the refusal also names `.serena/cache` — before `orca worktree rm` run `git checkout -- .serena/project.yml` and
+`rm -rf .serena/cache`; never commit either.
 
 ## Related
 
