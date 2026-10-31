@@ -33,6 +33,7 @@
 - [shipping/pickup] **A `Pickup_Handler` without a `Selection_Scope` works on the classic checkout and has NO Store API transport: `owner: null`, no pickup button in the Checkout block.** → [a-pickup-handler-without-a-selection-scope-has-no-store-api-transport](../gotchas/a-pickup-handler-without-a-selection-scope-has-no-store-api-transport.md) (s151, #1089)
 - [shipping/pickup] **A value equal to what the point wrote does not prove the point wrote it — the customer may retype the same digits, unseen. Keep a WRITER record that ENDS with its checkout; the browser's word can only KEEP.** → [a-value-equal-to-the-one-you-wrote-does-not-prove-you-wrote-it](../gotchas/a-value-equal-to-the-one-you-wrote-does-not-prove-you-wrote-it.md) (s154, #1113)
 - [shipping/pickup] **A failed city geocode must not fall back to the default location — it shows another city's points as the buyer's. Centre on the record's own coordinates, else hold the map and say so.** → [a-failed-city-geocode-must-not-fall-back-to-another-citys-default-location](../gotchas/a-failed-city-geocode-must-not-fall-back-to-another-citys-default-location.md) (s195)
+- [shipping/pickup] **`Request_Purpose::RATES` without `is_confirmation()` is ALSO true inside `calculate_rate()` — never use it alone to decide a remote fetch for the card view; give the rate path a fetch-free entry.** → [a-rates-purpose-without-a-confirmation-mark-is-also-true-inside-calculate-rate](../gotchas/a-rates-purpose-without-a-confirmation-mark-is-also-true-inside-calculate-rate.md) (s207)
 
 ## Related
 
