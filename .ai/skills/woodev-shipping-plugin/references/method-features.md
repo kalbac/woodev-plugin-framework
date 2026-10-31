@@ -10,6 +10,7 @@ Source: constants in `woodev/shipping-method/class-shipping-method.php` (`FEATUR
 | `FEATURE_MARKUP`, `FEATURE_FREE_SHIPPING`, `FEATURE_ROUNDING` (#1417) | nothing — return the carrier's own price | [price options](#the-merchant-price-options-every-calculated-rate-method-offers) |
 | `FEATURE_DELIVERY_TIME` (#1417) | report the period with `Shipping_Rate::with_delivery_days()` | [price options](#the-merchant-price-options-every-calculated-rate-method-offers) |
 | `FEATURE_COST_LIMITS` (#1159) | nothing — the framework clamps | below |
+| `FEATURE_ORDER_AMOUNT_LIMITS` (#1417) | nothing — the framework hides the method outside the bounds | [price options](#the-merchant-price-options-every-calculated-rate-method-offers) |
 | `FEATURE_INSURANCE` (#1165) | read the resolver | below |
 | `FEATURE_FEE_PAYMENTS` (#1144) | ask `fee_applies_for_package()` / `apply_fee_for_package()` before adding a fee | below |
 | `FEATURE_CITY_LIMIT` (#1176) | nothing | below |
@@ -109,13 +110,19 @@ own price from `rate_package()`; it builds no price field and applies no markup,
 | «Округление цены» and «Шаг округления цены» | `round_cost`, `round_cost_range` | `FEATURE_ROUNDING` |
 | «Срок доставки» (show/hide) and «Добавочные дни доставки» | `show_delivery_time`, `additional_time` | `FEATURE_DELIVERY_TIME` + `with_delivery_days()` |
 | «Минимальная / Максимальная стоимость доставки» — clamps the price | `min_cost`, `max_cost` | `FEATURE_COST_LIMITS` |
-| «Минимальная / Максимальная сумма заказа» — hides the method | `min_order_cost`, `max_order_cost` (CDEK `min_price`, `max_price`) | still carrier-owned |
+| «Минимальная / Максимальная сумма заказа» — hides the method | `min_order_cost`, `max_order_cost` (CDEK `min_price`, `max_price`) | `FEATURE_ORDER_AMOUNT_LIMITS` |
 
 Order the framework applies (`Shipping_Method::apply_price_features()`, then `calculate_rate()`): carrier price → markup →
 free shipping (amount ABOVE the threshold, or a free-shipping coupon) → rounding → box cost → cost limits (a free rate stays
 free). Exactly AT the threshold the carrier price is quoted without the markup — the Yandex/CDEK v1 behaviour, kept so their
 migration does not move a quote. The order amount is the cart subtotal while coupons are applied, the contents cost otherwise.
-The framework adds the applied coupons and that amount to the rate-cache key of a method declaring the markup or free shipping.
+The framework adds the applied coupons, that amount and — with free shipping declared — whether a coupon grants free shipping
+to the rate-cache key of a method declaring the markup or free shipping.
+
+Order-amount limits are availability, not price: `is_available_for_package()` hides the method BEFORE the rate cache, the
+packing and any carrier call, and an amount equal to a bound is inside. Their amount is `cart_subtotal`, else `contents_cost`
+(the Yandex/CDEK rule) — NOT the price features' amount, which takes the contents cost whenever no coupon is applied. Empty or
+0 is no bound. CDEK redefines `OPTION_MIN_ORDER_AMOUNT = 'min_price'` and `OPTION_MAX_ORDER_AMOUNT = 'max_price'`.
 
 A plugin whose installed sites stored one of these under ANOTHER key redefines the `OPTION_*` constant in its method class
 (`const OPTION_FREE_SHIPPING_FROM = 'free';` for CDEK) — every key is read through `static::`, so no data migration is needed;

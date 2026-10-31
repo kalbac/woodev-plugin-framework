@@ -6434,3 +6434,27 @@ msgstr ""
 #: shipping-method/class-shipping-method.php:860
 msgid "Дни, которые добавляются к сроку доставки от перевозчика, например на сборку заказа. Оставьте поле пустым, если они не нужны."
 msgstr ""
+
+#: shipping-method/class-shipping-method.php:877
+msgid "Минимальная сумма заказа"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:880
+msgid "Например, 1000"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:882
+msgid "Если сумма заказа меньше, этот способ доставки не показывается. Оставьте поле пустым, если ограничения нет."
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:887
+msgid "Максимальная сумма заказа"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:890
+msgid "Например, 100000"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:892
+msgid "Если сумма заказа больше, этот способ доставки не показывается. Оставьте поле пустым, если ограничения нет."
+msgstr ""

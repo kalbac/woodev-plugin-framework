@@ -218,6 +218,33 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		const OPTION_EXTRA_DELIVERY_DAYS = 'additional_time';
 
 		/**
+		 * Order-amount-limits feature: the instance gets a minimum and a maximum order amount, and the framework does
+		 * not offer the method when the order amount is outside them (both bounds are inclusive; empty or 0 is no
+		 * bound). The check is part of availability, so it runs before the rate cache, the packing and any carrier call.
+		 * OFF unless declared.
+		 *
+		 * @since 2.0.19
+		 */
+		const FEATURE_ORDER_AMOUNT_LIMITS = 'order-amount-limits';
+
+		/**
+		 * Instance setting holding the order amount below which the method is not offered — the Yandex key (CDEK stores it
+		 * as `min_price`). Named for the ORDER so it cannot be taken for {@see self::OPTION_MIN_COST}, the limit on the
+		 * delivery price.
+		 *
+		 * @since 2.0.19
+		 */
+		const OPTION_MIN_ORDER_AMOUNT = 'min_order_cost';
+
+		/**
+		 * Instance setting holding the order amount above which the method is not offered — the Yandex key (CDEK stores
+		 * it as `max_price`).
+		 *
+		 * @since 2.0.19
+		 */
+		const OPTION_MAX_ORDER_AMOUNT = 'max_order_cost';
+
+		/**
 		 * City-limit feature: the instance gets a mode («Доступен только в городах» / «Недоступен в городах») and
 		 * a list of cities, and the framework hides the method from a customer whose city the limit excludes
 		 * ({@see City_Limit}). OFF unless declared; a method with no customer-chosen city (a postal one that
@@ -279,6 +306,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			self::FEATURE_FREE_SHIPPING,
 			self::FEATURE_ROUNDING,
 			self::FEATURE_DELIVERY_TIME,
+			self::FEATURE_ORDER_AMOUNT_LIMITS,
 		];
 
 		/**
@@ -579,6 +607,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			// markup, free shipping and rounding, in the order the framework applies them to the rate
 			$this->instance_form_fields = array_merge( $this->instance_form_fields, $this->get_price_feature_form_fields() );
 
+			if ( $this->supports_order_amount_limits() ) {
+				$this->instance_form_fields = array_merge( $this->instance_form_fields, $this->get_order_amount_limit_form_fields() );
+			}
+
 			if ( $this->supports_fee_payments() ) {
 
 				// the options are filled in when the control is rendered — see generate_multiselect_html()
@@ -829,6 +861,39 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			}
 
 			return $fields;
+		}
+
+		/**
+		 * The controls of the declared order-amount-limits feature.
+		 *
+		 * @since 2.0.19
+		 *
+		 * @return array<string, array<string, mixed>>
+		 */
+		private function get_order_amount_limit_form_fields(): array {
+
+			return [
+				static::OPTION_MIN_ORDER_AMOUNT => [
+					'title'       => __( 'Минимальная сумма заказа', 'woodev-plugin-framework' ),
+					'type'        => 'price',
+					'default'     => '',
+					'placeholder' => __( 'Например, 1000', 'woodev-plugin-framework' ),
+					'desc_tip'    => __(
+						'Если сумма заказа меньше, этот способ доставки не показывается. Оставьте поле пустым, если ограничения нет.',
+						'woodev-plugin-framework'
+					),
+				],
+				static::OPTION_MAX_ORDER_AMOUNT => [
+					'title'       => __( 'Максимальная сумма заказа', 'woodev-plugin-framework' ),
+					'type'        => 'price',
+					'default'     => '',
+					'placeholder' => __( 'Например, 100000', 'woodev-plugin-framework' ),
+					'desc_tip'    => __(
+						'Если сумма заказа больше, этот способ доставки не показывается. Оставьте поле пустым, если ограничения нет.',
+						'woodev-plugin-framework'
+					),
+				],
+			];
 		}
 
 		/**
@@ -1593,6 +1658,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 				}
 			}
 
+			// Before the rate cache, the packing and any carrier call: an order outside the limits never reaches them.
+			if ( $is_available && $this->supports_order_amount_limits() && ! $this->order_amount_within_limits( $package ) ) {
+
+				$is_available = false;
+
+				$this->get_plugin()->log_debug(
+					sprintf( 'The shipping method %s is not available for this order amount (order amount limits).', $this->get_title() ),
+					sprintf( '%s_%s', $this->get_plugin()->get_id(), $this->get_id() )
+				);
+			}
+
 			/**
 			 * Shipping Method Is Available Filter.
 			 *
@@ -2265,6 +2341,82 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		}
 
 		/**
+		 * Determines whether this method is kept away from orders below or above a merchant-set amount.
+		 *
+		 * Named predicate over {@see self::FEATURE_ORDER_AMOUNT_LIMITS}.
+		 *
+		 * @since 2.0.19
+		 *
+		 * @return bool
+		 */
+		public function supports_order_amount_limits(): bool {
+			return $this->supports( self::FEATURE_ORDER_AMOUNT_LIMITS );
+		}
+
+		/**
+		 * The order amount below which the method is not offered, or `0.0` for «no minimum» (also for a method that did
+		 * not declare {@see self::FEATURE_ORDER_AMOUNT_LIMITS}).
+		 *
+		 * @since 2.0.19
+		 *
+		 * @return float
+		 */
+		public function get_min_order_amount(): float {
+			return $this->get_order_amount_limit( static::OPTION_MIN_ORDER_AMOUNT );
+		}
+
+		/**
+		 * The order amount above which the method is not offered, or `0.0` for «no maximum» (also for a method that did
+		 * not declare {@see self::FEATURE_ORDER_AMOUNT_LIMITS}).
+		 *
+		 * @since 2.0.19
+		 *
+		 * @return float
+		 */
+		public function get_max_order_amount(): float {
+			return $this->get_order_amount_limit( static::OPTION_MAX_ORDER_AMOUNT );
+		}
+
+		/**
+		 * Reads one order-amount bound; empty, 0, negative and malformed values are «no bound».
+		 *
+		 * @since 2.0.19
+		 *
+		 * @param string $option the option key.
+		 * @return float
+		 */
+		private function get_order_amount_limit( string $option ): float {
+
+			if ( ! $this->supports_order_amount_limits() ) {
+				return 0.0;
+			}
+
+			return Shipping_Helper::normalize_cost_limit( $this->get_option( $option, '' ) ) ?? 0.0;
+		}
+
+		/**
+		 * Whether the order amount of `$package` is inside the merchant's bounds; an amount equal to a bound is inside.
+		 *
+		 * The amount is the cart subtotal, else the contents cost — the rule both carrier plugins kept. It is NOT
+		 * {@see self::price_order_amount()}: that one takes the contents cost (after discounts) when no coupon is applied,
+		 * and a cart that carries a subtotal but no coupon is measured differently by the two.
+		 *
+		 * @since 2.0.19
+		 *
+		 * @param array $package WooCommerce shipping package.
+		 * @return bool
+		 */
+		private function order_amount_within_limits( array $package ): bool {
+
+			$value  = $package['cart_subtotal'] ?? $package['contents_cost'] ?? 0;
+			$amount = is_numeric( $value ) ? (float) $value : 0.0;
+			$min    = $this->get_min_order_amount();
+			$max    = $this->get_max_order_amount();
+
+			return ! ( ( $min > 0 && $amount < $min ) || ( $max > 0 && $amount > $max ) );
+		}
+
+		/**
 		 * Determines whether this method can be limited to (or kept out of) cities.
 		 *
 		 * Named predicate over {@see self::FEATURE_CITY_LIMIT}.
@@ -2374,8 +2526,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 * A rate whose total cost is `$total`, whatever shape its cost has.
 		 *
 		 * A number is replaced. A per-item cost array (WooCommerce taxes each entry by its own class) is scaled
-		 * proportionally, so the mix of the entries is kept; an array that sums to 0 has nothing to scale and is set
-		 * to 0 only when `$total` is 0. A cost that is neither (a formula string) is left alone.
+		 * proportionally, so the mix of the entries is kept. An array that sums to 0 has nothing to scale: a `$total`
+		 * of 0 zeroes it, and a positive `$total` (a markup on a free carrier price) is carried by one extra
+		 * `woodev_surcharge` entry, the way the box cost rides in `woodev_packaging`. WooCommerce taxes that entry
+		 * like any other cost key, so the markup is taxed as the shop's shipping tax settings say. A cost that is
+		 * neither (a formula string) is left alone.
 		 *
 		 * @since 2.0.19
 		 *
@@ -2397,7 +2552,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			}
 
 			if ( $current <= 0 && $total > 0 ) {
-				return $rate;
+				$cost['woodev_surcharge'] = $total - $current;
+
+				return $rate->with_cost( $cost );
 			}
 
 			$factor = $current > 0 ? $total / $current : 0.0;
@@ -2903,6 +3060,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 					'coupons' => $coupons,
 					'amount'  => self::price_order_amount( $package ),
 				];
+
+				// the effective answer, not the inputs: a coupon's free-shipping flag edited behind an unchanged code,
+				// and the shop-wide coupon switch, both change the price without changing the codes above
+				if ( $this->supports_free_shipping() ) {
+					$context['price']['coupon_free'] = $this->free_shipping_coupon_applies( $package );
+				}
 			}
 
 			if ( $this->supports_insurance() ) {

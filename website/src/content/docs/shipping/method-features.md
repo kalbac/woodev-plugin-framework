@@ -14,6 +14,7 @@ Every feature is **off** until the method declares it. Most add a field to the m
 | [`FEATURE_ROUNDING`](#rounding) | A rounding mode and a step. | Nothing. The framework rounds the rate. |
 | [`FEATURE_DELIVERY_TIME`](#delivery-time) | Whether the delivery period is shown, and extra days. | Report the carrier's days on the rate. |
 | [`FEATURE_COST_LIMITS`](#cost-limits) | A minimum and a maximum delivery cost. | Nothing. The framework clamps the rate. |
+| [`FEATURE_ORDER_AMOUNT_LIMITS`](#order-amount-limits) | A minimum and a maximum order amount. | Nothing. The framework hides the method outside them. |
 | [`FEATURE_INSURANCE`](#insurance) | A choice of when to insure the shipment. | Read the insurance decision. |
 | [`FEATURE_FEE_PAYMENTS`](#fee-by-payment-method) | A list of payment methods the fee applies to. | Ask whether the fee applies. |
 | [`FEATURE_CITY_LIMIT`](#city-limit) | A list of cities where the method is available or unavailable. | Nothing. |
@@ -48,6 +49,7 @@ $this->supports = [
 	self::FEATURE_ROUNDING,
 	self::FEATURE_DELIVERY_TIME,
 	self::FEATURE_COST_LIMITS,
+	self::FEATURE_ORDER_AMOUNT_LIMITS,
 ];
 ```
 
@@ -130,7 +132,7 @@ final class My_Carrier_Express_Method extends Shipping_Method_Courier {
 }
 ```
 
-Every option of the four features has such a constant: `OPTION_MARKUP`, `OPTION_MARKUP_BASE`, `OPTION_FREE_SHIPPING_FROM`, `OPTION_FREE_SHIPPING_COUPON`, `OPTION_ROUNDING`, `OPTION_ROUNDING_STEP`, `OPTION_SHOW_DELIVERY_TIME` and `OPTION_EXTRA_DELIVERY_DAYS`. Only the key changes; the stored values must have the format described above.
+Every option of these features has such a constant: `OPTION_MARKUP`, `OPTION_MARKUP_BASE`, `OPTION_FREE_SHIPPING_FROM`, `OPTION_FREE_SHIPPING_COUPON`, `OPTION_ROUNDING`, `OPTION_ROUNDING_STEP`, `OPTION_SHOW_DELIVERY_TIME`, `OPTION_EXTRA_DELIVERY_DAYS`, `OPTION_MIN_ORDER_AMOUNT` and `OPTION_MAX_ORDER_AMOUNT`. Only the key changes; the stored values must have the format described above.
 
 ## Cost limits
 
@@ -148,6 +150,24 @@ $this->supports = [ self::FEATURE_COST_LIMITS ];
 The values are stored in the instance options `min_cost` and `max_cost`. Read them with `get_min_cost()` and `get_max_cost()`, which return a float or `null`. If you need the limited number earlier than the end of the calculation, call `apply_cost_limits( $cost )`. Calling it twice is harmless.
 
 Do not declare this feature when the merchant types the price themselves. A limit on a price the merchant already controls only gets in the way.
+
+## Order-amount limits
+
+`FEATURE_ORDER_AMOUNT_LIMITS` keeps the method away from orders that are too small or too large for the carrier.
+
+- **The merchant sees** «Минимальная сумма заказа» (Minimum order amount) and «Максимальная сумма заказа» (Maximum order amount). An empty field, or 0, means no limit.
+- **The framework does** the hiding. The method is not offered when the order amount is below the minimum or above the maximum; an amount equal to a limit is allowed. The check runs before the rate cache, the packing and any call to the carrier, so an order outside the limits never costs a request.
+- **You write** nothing.
+
+The order amount is the cart subtotal when the cart has one, and the contents cost otherwise.
+
+```php
+<?php
+// In the constructor of your method, before parent::__construct():
+$this->supports = [ self::FEATURE_ORDER_AMOUNT_LIMITS ];
+```
+
+The values are stored in `min_order_cost` and `max_order_cost`. Read them with `get_min_order_amount()` and `get_max_order_amount()`, which return a float, `0.0` meaning no limit. These are limits on the **order**. [Cost limits](#cost-limits) bound the **delivery price** instead; the two do not affect each other.
 
 ## Insurance
 

@@ -28,6 +28,25 @@ class Woodev_Test_Price_Features_Method extends Woodev_Test_Cost_Limits_Method {
 	public array $free_shipping_coupons = [];
 
 	/**
+	 * How many times the packing step ran.
+	 *
+	 * @var int
+	 */
+	public int $pack_calls = 0;
+
+	/**
+	 * Counts the packing step.
+	 *
+	 * @param array $package package.
+	 * @return \Woodev_Packer_Result|null
+	 */
+	protected function pack_package( array $package ): ?\Woodev_Packer_Result {
+		++$this->pack_calls;
+
+		return parent::pack_package( $package );
+	}
+
+	/**
 	 * Whether one coupon grants free shipping.
 	 *
 	 * @param string $code coupon code.
@@ -59,6 +78,26 @@ class Woodev_Test_Price_Features_Legacy_Key_Method extends Woodev_Test_Price_Fea
 	 * @var string
 	 */
 	const OPTION_FREE_SHIPPING_FROM = 'free';
+}
+
+/**
+ * A carrier whose installed sites store the order-amount limits under CDEK's keys.
+ */
+class Woodev_Test_Price_Features_Order_Amount_Legacy_Key_Method extends Woodev_Test_Price_Features_Method {
+
+	/**
+	 * The CDEK minimum key.
+	 *
+	 * @var string
+	 */
+	const OPTION_MIN_ORDER_AMOUNT = 'min_price';
+
+	/**
+	 * The CDEK maximum key.
+	 *
+	 * @var string
+	 */
+	const OPTION_MAX_ORDER_AMOUNT = 'max_price';
 }
 
 /**
@@ -106,7 +145,12 @@ final class PriceFeaturesTest extends TestCase {
 	 * @param string               $class    probe class.
 	 * @return Woodev_Test_Price_Features_Method
 	 */
-	private function method( array $features, array $options = [], $cost = 100, string $class = Woodev_Test_Price_Features_Method::class ): Woodev_Test_Price_Features_Method {
+	private function method(
+		array $features,
+		array $options = [],
+		$cost = 100,
+		string $class = Woodev_Test_Price_Features_Method::class
+	): Woodev_Test_Price_Features_Method {
 		$method                = new $class();
 		$method->supports      = $features;
 		$method->option_values = $options;
@@ -149,6 +193,7 @@ final class PriceFeaturesTest extends TestCase {
 		$this->assertSame( 'free-shipping', Shipping_Method::FEATURE_FREE_SHIPPING );
 		$this->assertSame( 'rounding', Shipping_Method::FEATURE_ROUNDING );
 		$this->assertSame( 'delivery-time', Shipping_Method::FEATURE_DELIVERY_TIME );
+		$this->assertSame( 'order-amount-limits', Shipping_Method::FEATURE_ORDER_AMOUNT_LIMITS );
 
 		$this->assertSame( 'fee', Shipping_Method::OPTION_MARKUP );
 		$this->assertSame( 'fee_type', Shipping_Method::OPTION_MARKUP_BASE );
@@ -158,6 +203,8 @@ final class PriceFeaturesTest extends TestCase {
 		$this->assertSame( 'round_cost_range', Shipping_Method::OPTION_ROUNDING_STEP );
 		$this->assertSame( 'show_delivery_time', Shipping_Method::OPTION_SHOW_DELIVERY_TIME );
 		$this->assertSame( 'additional_time', Shipping_Method::OPTION_EXTRA_DELIVERY_DAYS );
+		$this->assertSame( 'min_order_cost', Shipping_Method::OPTION_MIN_ORDER_AMOUNT );
+		$this->assertSame( 'max_order_cost', Shipping_Method::OPTION_MAX_ORDER_AMOUNT );
 	}
 
 	/**
@@ -201,6 +248,7 @@ final class PriceFeaturesTest extends TestCase {
 			Shipping_Method::FEATURE_FREE_SHIPPING => [ 'free_cost', 'coupon_free_shipping' ],
 			Shipping_Method::FEATURE_ROUNDING      => [ 'round_cost', 'round_cost_range' ],
 			Shipping_Method::FEATURE_DELIVERY_TIME => [ 'show_delivery_time', 'additional_time' ],
+			Shipping_Method::FEATURE_ORDER_AMOUNT_LIMITS => [ 'min_order_cost', 'max_order_cost' ],
 		];
 		$all      = array_merge( ...array_values( $expected ) );
 
@@ -225,7 +273,15 @@ final class PriceFeaturesTest extends TestCase {
 	 * @return void
 	 */
 	public function test_the_defaults_change_nothing(): void {
-		$method = $this->method( [ Shipping_Method::FEATURE_MARKUP, Shipping_Method::FEATURE_FREE_SHIPPING, Shipping_Method::FEATURE_ROUNDING, Shipping_Method::FEATURE_DELIVERY_TIME ] );
+		$method = $this->method(
+			[
+				Shipping_Method::FEATURE_MARKUP,
+				Shipping_Method::FEATURE_FREE_SHIPPING,
+				Shipping_Method::FEATURE_ROUNDING,
+				Shipping_Method::FEATURE_DELIVERY_TIME,
+				Shipping_Method::FEATURE_ORDER_AMOUNT_LIMITS,
+			]
+		);
 		$method->init_form_fields();
 
 		$fields = $method->instance_form_fields;
@@ -238,6 +294,8 @@ final class PriceFeaturesTest extends TestCase {
 		$this->assertSame( '10', $fields['round_cost_range']['default'] );
 		$this->assertSame( 'yes', $fields['show_delivery_time']['default'] );
 		$this->assertSame( '', $fields['additional_time']['default'] );
+		$this->assertSame( '', $fields['min_order_cost']['default'] );
+		$this->assertSame( '', $fields['max_order_cost']['default'] );
 
 		$this->assertSame( 100.0, $this->price( $method ) );
 	}
@@ -263,7 +321,12 @@ final class PriceFeaturesTest extends TestCase {
 	 * @return void
 	 */
 	public function test_a_carrier_can_keep_its_own_stored_key(): void {
-		$method = $this->method( [ Shipping_Method::FEATURE_FREE_SHIPPING ], [ 'free' => '500' ], 100, Woodev_Test_Price_Features_Legacy_Key_Method::class );
+		$method = $this->method(
+			[ Shipping_Method::FEATURE_FREE_SHIPPING ],
+			[ 'free' => '500' ],
+			100,
+			Woodev_Test_Price_Features_Legacy_Key_Method::class
+		);
 		$method->init_form_fields();
 
 		$this->assertArrayHasKey( 'free', $method->instance_form_fields );
@@ -284,7 +347,15 @@ final class PriceFeaturesTest extends TestCase {
 			'percent of the shipping'            => [ [ 'fee' => '10%', 'fee_type' => 'shipping' ], [ 'contents_cost' => 1000 ], 110.0 ],
 			'comma decimal'                      => [ [ 'fee' => ' 10,5 ' ], [ 'contents_cost' => 1000 ], 110.5 ],
 			'empty is no markup'                 => [ [ 'fee' => '' ], [ 'contents_cost' => 1000 ], 100.0 ],
-			'percent of the subtotal with coupons' => [ [ 'fee' => '10%' ], [ 'contents_cost' => 800, 'cart_subtotal' => 1000, 'applied_coupons' => [ 'sale' ] ], 200.0 ],
+			'percent of the subtotal with coupons' => [
+				[ 'fee' => '10%' ],
+				[
+					'contents_cost'   => 800,
+					'cart_subtotal'   => 1000,
+					'applied_coupons' => [ 'sale' ],
+				],
+				200.0,
+			],
 			'percent of an empty order is of the shipping' => [ [ 'fee' => '10%' ], [ 'contents_cost' => 0 ], 110.0 ],
 		];
 	}
@@ -338,7 +409,9 @@ final class PriceFeaturesTest extends TestCase {
 		$this->assertSame( 0.0, $this->price( $this->method( $features, $options ), [ 'contents_cost' => 5000.01 ] ) );
 		$this->assertSame( 100.0, $this->price( $this->method( $features, $options ), [ 'contents_cost' => 5000 ] ) );
 		$this->assertSame( 150.0, $this->price( $this->method( $features, $options ), [ 'contents_cost' => 4999 ] ) );
-		$this->assertSame( 150.0, $this->price( $this->method( $features, [ 'fee' => '50', 'free_cost' => '' ] ), [ 'contents_cost' => 99999 ] ), 'no threshold' );
+		$no_threshold = $this->method( $features, [ 'fee' => '50', 'free_cost' => '' ] );
+
+		$this->assertSame( 150.0, $this->price( $no_threshold, [ 'contents_cost' => 99999 ] ), 'no threshold' );
 	}
 
 	/**
@@ -427,7 +500,12 @@ final class PriceFeaturesTest extends TestCase {
 	 * @return void
 	 */
 	public function test_the_features_apply_in_their_fixed_order(): void {
-		$all = [ Shipping_Method::FEATURE_MARKUP, Shipping_Method::FEATURE_FREE_SHIPPING, Shipping_Method::FEATURE_ROUNDING, Shipping_Method::FEATURE_COST_LIMITS ];
+		$all = [
+			Shipping_Method::FEATURE_MARKUP,
+			Shipping_Method::FEATURE_FREE_SHIPPING,
+			Shipping_Method::FEATURE_ROUNDING,
+			Shipping_Method::FEATURE_COST_LIMITS,
+		];
 
 		// the markup is rounded, not the carrier price: 95 + 7 = 102 → 110 (rounding first would give 100 + 7 = 107)
 		$this->assertSame( 110.0, $this->price( $this->method( $all, [ 'fee' => '7', 'round_cost' => 'ceil' ], 95 ) ) );
@@ -448,7 +526,13 @@ final class PriceFeaturesTest extends TestCase {
 	 * @return void
 	 */
 	public function test_a_rate_made_free_stays_free_under_the_minimum(): void {
-		$method = $this->method( [ Shipping_Method::FEATURE_FREE_SHIPPING, Shipping_Method::FEATURE_COST_LIMITS ], [ 'free_cost' => '10', 'min_cost' => '300' ] );
+		$method = $this->method(
+			[ Shipping_Method::FEATURE_FREE_SHIPPING, Shipping_Method::FEATURE_COST_LIMITS ],
+			[
+				'free_cost' => '10',
+				'min_cost'  => '300',
+			]
+		);
 
 		$this->assertSame( 0.0, $this->price( $method ) );
 	}
@@ -467,6 +551,39 @@ final class PriceFeaturesTest extends TestCase {
 
 		$this->assertEqualsWithDelta( 120.0, $cost['a'], 0.0001 );
 		$this->assertEqualsWithDelta( 80.0, $cost['b'], 0.0001 );
+	}
+
+	/**
+	 * A per-item array that sums to 0 still carries a positive markup, in one extra entry.
+	 *
+	 * @return void
+	 */
+	public function test_a_zero_total_cost_array_keeps_a_positive_markup(): void {
+		$array  = $this->method( [ Shipping_Method::FEATURE_MARKUP ], [ 'fee' => '50' ], [ 'a' => 0, 'b' => 0 ] );
+		$scalar = $this->method( [ Shipping_Method::FEATURE_MARKUP ], [ 'fee' => '50' ], 0 );
+
+		$array->calculate_shipping( [ 'contents_cost' => 1000 ] );
+
+		$cost = $array->added_rates[0]['cost'];
+
+		$this->assertSame( 50.0, (float) array_sum( $cost ) );
+		$this->assertSame( 0.0, (float) $cost['a'] );
+		$this->assertSame( 0.0, (float) $cost['b'] );
+		$this->assertSame( 50.0, $this->price( $scalar ), 'the scalar zero is unchanged' );
+	}
+
+	/**
+	 * A zero-total array stays a zero-total array when nothing is added to it.
+	 *
+	 * @return void
+	 */
+	public function test_a_zero_total_cost_array_without_a_markup_stays_free(): void {
+		$method = $this->method( [ Shipping_Method::FEATURE_MARKUP ], [ 'fee' => '' ], [ 'a' => 0, 'b' => 0 ] );
+
+		$method->calculate_shipping( [ 'contents_cost' => 1000 ] );
+
+		$this->assertSame( 0.0, (float) array_sum( $method->added_rates[0]['cost'] ) );
+		$this->assertArrayNotHasKey( 'woodev_surcharge', $method->added_rates[0]['cost'] );
 	}
 
 	// ---- delivery time ----------------------------------------------------------------------------------
@@ -498,7 +615,13 @@ final class PriceFeaturesTest extends TestCase {
 	 * @param string|null           $expected the rate's delivery_time.
 	 * @return void
 	 */
-	public function test_the_reported_delivery_days_become_the_delivery_time( array $features, array $options, int $min, int $max, ?string $expected ): void {
+	public function test_the_reported_delivery_days_become_the_delivery_time(
+		array $features,
+		array $options,
+		int $min,
+		int $max,
+		?string $expected
+	): void {
 		$method            = $this->method( $features, $options );
 		$method->next_rate = $method->next_rate->with_delivery_days( $min, $max );
 
@@ -563,11 +686,177 @@ final class PriceFeaturesTest extends TestCase {
 			[
 				'coupons' => [ 'a', 'b' ],
 				'amount'  => 1000.0,
+				'coupon_free' => false,
 			],
 			$declared['price']
 		);
 
 		$this->assertArrayNotHasKey( 'price', $this->method( [ Shipping_Method::FEATURE_ROUNDING ] )->get_rate_cache_context( $package ) );
+		$this->assertArrayNotHasKey( 'coupon_free', $this->method( [ Shipping_Method::FEATURE_MARKUP ] )->get_rate_cache_context( $package )['price'] );
 		$this->assertArrayNotHasKey( 'price', $this->method( [] )->get_rate_cache_context( $package ) );
+	}
+
+	/**
+	 * A coupon's free-shipping flag edited behind an unchanged code, and the shop-wide coupon switch, change the cache key.
+	 *
+	 * @return void
+	 */
+	public function test_the_effective_free_shipping_coupon_is_part_of_the_cache_identity(): void {
+		Functions\when( 'get_option' )->justReturn( '' );
+
+		$package = [
+			'contents_cost'   => 1000,
+			'applied_coupons' => [ 'sale' ],
+		];
+		$options = [ 'coupon_free_shipping' => 'yes' ];
+
+		$key = function ( Woodev_Test_Price_Features_Method $method ) use ( $package ): string {
+			return (string) wp_json_encode( $method->get_rate_cache_context( $package ) );
+		};
+
+		$paid = $this->method( [ Shipping_Method::FEATURE_FREE_SHIPPING ], $options );
+		$free = $this->method( [ Shipping_Method::FEATURE_FREE_SHIPPING ], $options );
+
+		$free->free_shipping_coupons = [ 'sale' ];
+
+		$this->assertNotSame( $key( $paid ), $key( $free ), 'the coupon flag was switched on behind the same code' );
+
+		$enabled_key = $key( $free );
+
+		$this->coupons_enabled = false;
+
+		$this->assertNotSame( $enabled_key, $key( $free ), 'the shop switched its coupons off' );
+		$this->assertSame( $key( $paid ), $key( $free ), 'with coupons off the flagged coupon no longer counts' );
+	}
+
+	// ---- order-amount limits ----------------------------------------------------------------------------
+
+	/**
+	 * @return array<string, array{0: array<string, string>, 1: array<string, mixed>, 2: bool}>
+	 */
+	public function order_amount_limits(): array {
+		$limits = [
+			'min_order_cost' => '500',
+			'max_order_cost' => '2000',
+		];
+
+		return [
+			'below the minimum'         => [ $limits, [ 'contents_cost' => 499.99 ], false ],
+			'at the minimum'            => [ $limits, [ 'contents_cost' => 500 ], true ],
+			'inside'                    => [ $limits, [ 'contents_cost' => 1000 ], true ],
+			'at the maximum'            => [ $limits, [ 'contents_cost' => 2000 ], true ],
+			'above the maximum'         => [ $limits, [ 'contents_cost' => 2000.01 ], false ],
+			'only a minimum, below'     => [ [ 'min_order_cost' => '500' ], [ 'contents_cost' => 100 ], false ],
+			'only a minimum, far above' => [ [ 'min_order_cost' => '500' ], [ 'contents_cost' => 999999 ], true ],
+			'only a maximum, above'     => [ [ 'max_order_cost' => '2000' ], [ 'contents_cost' => 2500 ], false ],
+			'only a maximum, zero cart' => [ [ 'max_order_cost' => '2000' ], [ 'contents_cost' => 0 ], true ],
+			'no bound'                  => [ [], [ 'contents_cost' => 999999 ], true ],
+			'empty bounds'              => [ [ 'min_order_cost' => '', 'max_order_cost' => '' ], [ 'contents_cost' => 0 ], true ],
+			'zero is no bound'          => [ [ 'min_order_cost' => '0', 'max_order_cost' => '0' ], [ 'contents_cost' => 5000 ], true ],
+			'a comma decimal'           => [ [ 'min_order_cost' => '500,5' ], [ 'contents_cost' => 500.4 ], false ],
+		];
+	}
+
+	/**
+	 * The method is offered only inside the inclusive bounds; the carrier is not called outside them.
+	 *
+	 * @dataProvider order_amount_limits
+	 *
+	 * @param array<string, string> $options  saved bounds.
+	 * @param array<string, mixed>  $package  package.
+	 * @param bool                  $expected whether the method is offered.
+	 * @return void
+	 */
+	public function test_the_method_is_offered_only_inside_the_order_amount_limits( array $options, array $package, bool $expected ): void {
+		$method = $this->method( [ Shipping_Method::FEATURE_ORDER_AMOUNT_LIMITS ], $options );
+
+		$method->calculate_shipping( $package );
+
+		$this->assertCount( $expected ? 1 : 0, $method->added_rates );
+		$this->assertSame( $expected ? 1 : 0, $method->carrier_calls, 'no carrier call outside the bounds' );
+	}
+
+	/**
+	 * Outside the bounds nothing past availability runs: no cache lookup, no packing, no carrier call.
+	 *
+	 * @return void
+	 */
+	public function test_an_order_outside_the_limits_reaches_neither_the_cache_nor_the_packing(): void {
+		Functions\when( 'get_transient' )->alias(
+			function (): bool {
+				$this->fail( 'the rate cache was read for an order outside the limits' );
+			}
+		);
+
+		$method = $this->method(
+			[ Shipping_Method::FEATURE_ORDER_AMOUNT_LIMITS, Shipping_Method::FEATURE_RATE_CACHE, Shipping_Method::FEATURE_BOX_PACKING ],
+			[ 'max_order_cost' => '2000' ]
+		);
+
+		$method->calculate_shipping( [ 'contents_cost' => 5000 ] );
+
+		$this->assertSame( [], $method->added_rates );
+		$this->assertSame( 0, $method->pack_calls );
+		$this->assertSame( 0, $method->carrier_calls );
+	}
+
+	/**
+	 * The amount is the cart subtotal when the package has one, else the contents cost — the donors' rule, which differs
+	 * from the price features' amount when a subtotal comes without a coupon.
+	 *
+	 * @return void
+	 */
+	public function test_the_order_amount_is_the_subtotal_before_the_contents_cost(): void {
+		$method = $this->method( [ Shipping_Method::FEATURE_ORDER_AMOUNT_LIMITS ], [ 'min_order_cost' => '500' ] );
+
+		$method->calculate_shipping(
+			[
+				'contents_cost' => 300,
+				'cart_subtotal' => 900,
+			]
+		);
+
+		$this->assertCount( 1, $method->added_rates, 'the subtotal 900 clears the minimum, no coupon applied' );
+
+		$method = $this->method( [ Shipping_Method::FEATURE_ORDER_AMOUNT_LIMITS ], [ 'max_order_cost' => '500' ] );
+
+		$method->calculate_shipping(
+			[
+				'contents_cost' => 300,
+				'cart_subtotal' => 900,
+			]
+		);
+
+		$this->assertCount( 0, $method->added_rates, 'the subtotal 900 exceeds the maximum although the contents cost does not' );
+	}
+
+	/**
+	 * A method that did not declare the feature ignores saved bounds, and a carrier can keep its own stored keys.
+	 *
+	 * @return void
+	 */
+	public function test_undeclared_bounds_are_ignored_and_the_keys_can_be_redefined(): void {
+		$undeclared = $this->method( [], [ 'min_order_cost' => '500' ] );
+
+		$undeclared->init_form_fields();
+
+		$this->assertArrayNotHasKey( 'min_order_cost', $undeclared->instance_form_fields );
+		$this->assertSame( 100.0, $this->price( $undeclared, [ 'contents_cost' => 1 ] ) );
+
+		$legacy = $this->method(
+			[ Shipping_Method::FEATURE_ORDER_AMOUNT_LIMITS ],
+			[ 'min_price' => '500' ],
+			100,
+			Woodev_Test_Price_Features_Order_Amount_Legacy_Key_Method::class
+		);
+
+		$legacy->init_form_fields();
+
+		$this->assertArrayHasKey( 'min_price', $legacy->instance_form_fields );
+		$this->assertArrayNotHasKey( 'min_order_cost', $legacy->instance_form_fields );
+
+		$legacy->calculate_shipping( [ 'contents_cost' => 100 ] );
+
+		$this->assertSame( [], $legacy->added_rates );
 	}
 }
