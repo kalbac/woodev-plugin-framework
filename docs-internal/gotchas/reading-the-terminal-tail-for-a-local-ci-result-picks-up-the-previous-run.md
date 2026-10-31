@@ -27,6 +27,15 @@ result). Pick the run by `workflowPath` AND an `mtime` newer than the launch mom
 job finished, then read the result from there. The coordinator's `lc-wait.sh` of s204 did exactly this. (The log directory
 is shared by every project on the machine — never pick «the newest».)
 
+## Same trap through the exit file (s207, 31.10.2026)
+
+A watcher that waits for a `*.exit` marker file written by a previous local-ci run can read the OLD value before the new run
+truncates it, and report green for a run that has not started. The coordinator's per-PR exit files (`ci.yml 0`,
+`markdown-lint.yml 0`) were reused across runs of one PR.
+
+❌ Trust a marker file that exists. ✅ Truncate or delete it BEFORE launching, and confirm the result on the commit status of the
+head SHA the run was started for (`--commit-status` posts a `local-ci` check on the PR).
+
 ## Related
 
 - [local-ci-on-orbstack-needs-local-ci-docker-host-not-docker-host](local-ci-on-orbstack-needs-local-ci-docker-host-not-docker-host.md) — launching the run

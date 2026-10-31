@@ -69,6 +69,19 @@ are the same empty array** — and #538 deliberately decided the first must neve
 decision pinned by its own test. Telling the two apart needs a decision, not a patch. Card #707
 stays open for it.
 
+## Second half, found s207 (31.10.2026): the mapper puts DaData `city` into `settlement`, and a nested settlement is lost
+
+The framework's DaData mapper (`class-dadata-provider.php`, the `city` / `settlement` assignment) maps DaData's `city` to
+`Location_Record::settlement` BEFORE DaData's own nested `settlement`. For «поселение Коммунарка» in Moscow the record says
+«Москва»; the raw fields still name «Коммунарка». The Ozon courier geocoder compared a CDEK record's `settlement` straight with
+DaData's mapped `settlement`, rejected a correct same-building match, and the courier silently vanished for that whole locality.
+
+❌ `$cdek->settlement() === $dadata->settlement()` — one level, mapped differently by each provider.
+✅ Compare the locality across the hierarchy (city, nested settlement, region) and keep the named settlement of the source record.
+
+Also seen there: `корпус 3` (CDEK) against `строение 3` (DaData) are the same building — normalise the block spellings, without
+loosening the house/block boundary.
+
 ## Related
 
 - [a-derived-ancestor-is-not-the-one-the-customer-picked](a-derived-ancestor-is-not-the-one-the-customer-picked.md) — the other ancestry trap in this layer
