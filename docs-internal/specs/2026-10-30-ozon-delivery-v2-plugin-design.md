@@ -17,6 +17,8 @@ through Serena on this worktree or taken from the gap refresh. `ozon:` = `/Users
 **READ** (code or OAS), **UNVERIFIED** (with how to settle it), **interpretation** (a gap this spec closed; listed again in
 §16.2).
 
+**Amended 31.10.2026 (s206):** the operator's decisions after the rig review are listed in §16.4 and applied across §§3, 5–9, 11, 13–15 and 17; a §1 row that they change says so in its own cell.
+
 ## 0. How to read this spec
 
 §1 lists the binding decisions; nothing below reopens them. §2 is the product boundary and identity, §3 the capability →
@@ -47,11 +49,11 @@ Where any report disagrees, that file wins.
 | D1 | Do not wait for the framework: build on 2.0.16; the August SP-5 blocker is obsolete | §3, §17 |
 | D2 | First release: pickup points + parcel lockers + courier. Courier needs address-level coordinates and a persisted export snapshot | §7, §8.4 |
 | D3 | The plugin owns the postings: one framework orders-table row per order with an honest aggregate status; postings, statuses, labels, cancel in the plugin's own order UI; no framework multi-shipment change | §9, §12 |
-| D4 | Returns in the first release: status, current placement, return barcode on demand (expires — never stored) | §11 |
+| D4 | Returns in the first release: status and current placement. **Amended 31.10.2026 (ozon#55):** the return barcode is out of 2.0.0 (§11.4) | §11 |
 | D5 | Live write measurement done 30.10.2026 | W, §4, §9 |
 | D6 | Phone first: Ozon not offered (or shown as «укажите телефон для расчёта») until a phone is entered; re-rate on phone change; re-check at placement; the buyer sees why Ozon disappeared; classic and block checkout | §8 |
 | D7 | Credentials alive; a new key with all scopes issued (the old one lacked `shipment-method`). **Amended by W (same night):** a token carries only the scopes REQUESTED, and one unapproved scope fails the whole token call (`invalid_scope`) | §4.2, §5 |
-| D8 | Containers, arrival passes, drop-off point management out of the first release; revisit if the first real handover shows a method cannot be handed over without a container | §15 |
+| D8 | Containers, arrival passes, return-point management out of the first release; revisit if the first real handover shows a method cannot be handed over without a container. **Amended 31.10.2026 (ozon#52):** choosing and creating the drop-off point («Пункт отгрузки») is in | §5.2, §15 |
 | D— | Admin «create order» wizard: not in the first release unless a plugin-side way exists (the shared wizard does not pass the buyer phone) | §12.4 |
 | D— | Sandbox: emulates the Seller API, not `api-delivery`. **Settled by W:** it does not serve the delivery API at all | §0 note 2, §14 |
 
@@ -83,7 +85,7 @@ preserved; old buyers simply renew the licence. Every key this spec names is new
 
 **Licence gate.** Automatic through `Shipping\License_Gate` (`woodev/shipping-method/class-license-gate.php`): no rates, no
 export / cancel / documents without an in-force claim; tracking and status polling keep running (G §2 item 3). The plugin's
-own actions declare `read_only` where they only read (§12.2); the one explicit exception is the return barcode (§11.4).
+own actions declare `read_only` where they only read (§12.2); the one explicit exception was the return barcode (§11.4), now out of 2.0.0 (ozon#55).
 
 **Merchant setup the plugin cannot do** (stated in the settings help and the merchant docs): a delivery-only cabinet; a
 private application with the scopes of §4.2; at least one shipment method (handover point) created in the cabinet; a
@@ -102,6 +104,7 @@ Gap = needs a framework change; «No» = plugin work on an existing seam. Verdic
 | Phone-dependent availability | none (G-8: no phone transport, no phone cache identity); analogue `class-fee-payments.php` (payment-dependent rates) and `src/checkout-blocks/payment-recalc.ts` | phone transport on both surfaces, check-client cache, placement re-check, §8 | No (plugin) |
 | Buyer-facing hint | none for «why a method is missing» | classic row + Store API extension data + small blocks script, §8.3 | No (plugin) |
 | Packing | `FEATURE_BOX_PACKING`, `Packaging::get_value_context()` | box → posting, §7.2 | No |
+| Price options (markup, free delivery, rounding, cost limits, delivery days) | `FEATURE_*` declarations; `FEATURE_FEE_PAYMENTS` and `FEATURE_COST_LIMITS` exist today, the shared price options come with framework #1417 (release 2.0.19) | declare the options, §7.6 (ozon#57) | Yes — framework #1417 (2.0.19) |
 | Location / courier coordinates | `Location_Record` (`level`, `street`, `house`, `postcode`, `lat`, `lon`; `woodev/shipping-method/location/class-location-record.php`), DaData maps `geo_lat`/`geo_lon` | address-level rule and export snapshot, §8.4 (G-7) | No |
 | Pickup catalogue | `Point_Source` (`STRATEGY_VIEWPORT`, `fetch_points( Point_Query )`, `fetch_details()`), `Pickup_Point` `work_time` | own table + resumable sync, §6 (G-4) | No (plugin) |
 | Pickup selection, map, blocks | `Pickup_Handler`, `class-pickup-blocks.php`, map providers | reuse, no own map | No |
@@ -135,7 +138,7 @@ Timeouts: `RATES` 8 s (a buyer is waiting), others 20 s — **interpretation**.
   `delivery-api.delivery`, `delivery-api.delivery-point`, `delivery-api.order`, `delivery-api.posting`, `delivery-api.return`.
   Optional: `delivery-api.shipment-method` (the settings dropdown, §5.2). Never requested in this release:
   `dropoff-point`, `return-point`, `container`, `arrival-pass`, `all` (D8; asking for an unapproved one kills the call).
-  `dropoff-point/search` (not called in 2.0) answers 403 without the `delivery-api.dropoff-point` scope and 400 without
+  `dropoff-point/search` (used by ozon#52, the drop-off point choice) answers 403 without the `delivery-api.dropoff-point` scope and 400 without
   `filters.viewport` (MEASURED R1, M12; `ozon:docs/research/2026-10-30-r1-live-rerecord.md`).
 - **`invalid_scope` fallback (MEASURED: «scope 'delivery-api.arrival-pass' is not approved», 400 for the whole call):** the
   first token call asks for required + `shipment-method`. On `invalid_scope` naming `shipment-method`, the client repeats
@@ -220,7 +223,7 @@ Model: `yandex:includes/settings/class-yandex-settings-handler.php`.
 |---|---|---|
 | «Client ID» | text | from the private application |
 | «Client Secret» | `Woodev_Control::TYPE_PASSWORD`, `sensitive` | mask when stored; blank save keeps it |
-| Connection test | `Woodev_Settings_Connection_Test` | token with §4.2 fallback, then one read: `shipment-method/search` when the scope is present, else `check-client` for `+79000000000`. Shows «Подключено», the granted scopes, and whether the method list is available |
+| Connection test | `Woodev_Settings_Connection_Test` | token with §4.2 fallback, then one read: `shipment-method/search` when the scope is present, else `check-client` for `+79000000000`. Shows «Подключено», the granted scopes, and whether the method list is available. The DaData keys notice (§8.4, ozon#53) sits next to it. |
 
 ### 5.2 «Метод отгрузки»
 
@@ -233,12 +236,11 @@ Model: `yandex:includes/settings/class-yandex-settings-handler.php`.
   into a list.
 - A stored id is checked with `shipment-method/info` on save when the scope exists; a non-`active` method warns
   «Метод {name} в Ozon не активен — доставка Ozon не будет предлагаться».
-- One shipment method per site in this release (several methods = several handover points; §15).
+- A general drop-off point («Пункт отгрузки») per site, used by default. Each Ozon method may choose another one from the list instead (ozon#52). Creating one («Создать пункт отгрузки») calls `shipment-method/create`; containers and return points stay out (§15).
 
 ### 5.3 Other groups
 
-- «Пункты выдачи»: read-only status of the catalogue (§6.5): points served, last complete update, a running update's
-  progress, and «Обновить сейчас».
+- «Пункты выдачи» moved out of this tab (ozon#58): the catalogue status and the buttons «Обновить сейчас» and «Очистить» live in the tool «Woodev > Настройки > Доставка > Инструменты». The status shows points served, the last complete update and a running update's progress (§6.3).
 - «Упаковка» and default dimensions: the framework's packaging settings (store boxes, carrier presets none in 2.0.0).
 - «Выгрузка заказов»: the framework export section (auto-export statuses, delivered/cancelled statuses, «Обновить статусы
   сейчас») plus one plugin field through `get_export_section_extension()`: «Как часто проверять статусы» (15/30/60 min,
@@ -246,36 +248,43 @@ Model: `yandex:includes/settings/class-yandex-settings-handler.php`.
 - «Дополнительно»: the framework's logging switch; every merchant diagnostic of this spec appears only with it on.
 - `Shipping_Plugin::is_configured()` returns true when Client ID, secret and a shipment method id are set (cheap, no call).
 
-### 5.4 Setup wizard
+### 5.4 Setup wizard (ozon#54)
 
-None in 2.0.0: a new plugin needs no migration wizard (G §2 item 9) and the settings screen carries the connection test and
-the method list. **interpretation** — a three-step onboarding wizard is a product choice for later.
+Shipped in 2.0.0 on the framework's setup wizard (`woodev/setup/`; contract: [setup wizard v2 contract](2026-10-08-setup-wizard-v2-contract.md)). It has no migration step: nothing is carried over from v1 (G §2 item 9). The steps, as agreed on the rig on 31.10.2026:
+
+1. Ozon keys and the connection test (§5.1).
+2. Drop-off point («Пункт отгрузки»): choose one, or create it with «Создать пункт отгрузки» (ozon#52).
+3. Phone at checkout: Ozon needs the phone. If the WooCommerce phone field is not required, the step says so and offers «Сделать обязательным». That button changes the WooCommerce setting at once, and the text beside it says the phone becomes required for every shop delivery method (ozon#54). If the phone mask is off in «Woodev > Настройки», the step recommends it and offers «Включить».
+4. DaData keys for the courier (§8.4, ozon#53). The step can be skipped; then it says the courier will not work.
+5. Done: a link to the shipping zone where the Ozon methods are added. Methods are not added to a zone automatically (operator decision, ozon#54).
 
 ## 6. Pickup and locker catalogue
 
 ### 6.1 Why local
 
 `delivery-point/list` returns ids + `shipment_method_ids` only, accepts nothing but pagination, and `delivery/map` is 404 on
-this host (H-1). 45 194 points (F-20). Checkout must never call Ozon to draw a map (G-4).
+this host (H-1). 45 194 points (F-20). Checkout must never call Ozon to draw a map (G-4); the one exception is the schedule of a clicked point (§6.4, ozon#58).
+
+Measured on the rig, 31.10.2026: the catalogue table holds 247 MB (data 241 MB, indexes 6 MB), of which the schedules are 152.5 MB (about 1.7 KB per point), across 93 053 rows (ozon#58 quotes 93 051). **Decision (ozon#58, variant 1):** the table drops the schedules and a tool manages the catalogue. A compact table is estimated at 60–80 MB (estimate, not measured). The shared catalogue on woodev.ru (variant 2) is deferred (§15).
 
 ### 6.2 Table `{prefix}woodev_ozon_delivery_points`
 
 Columns: `point_id` BIGINT PK; `type` (`pvz` | `postamat` | `unknown`); `name`; `number`; `address`; `lat`, `lon` (indexed
 together); `is_active`; `is_bulky`; `storage_period_days`; restriction columns `min_weight_g`, `max_weight_g`,
 `max_length_mm`, `max_width_mm`, `max_height_mm`, `min_price`, `max_price`; `method_ids` (comma list as strings);
-`schedule` (JSON, the dated window); `seen_generation`, `detail_generation`; `updated_at`. Created by the lifecycle install
+`seen_generation`, `detail_generation`; `updated_at`. There is no schedule column: schedules are not stored (ozon#58, §6.4). Created by the lifecycle install
 routine with `dbDelta`; dropped on uninstall.
 
 ### 6.3 Resumable `list → info` sync over Action Scheduler
 
 - **Generation.** A run gets generation `G = last + 1`, stored with its state in one option
   `woodev_ozon_delivery_catalogue_sync` (`generation`, `phase`, `cursor`, `pages`, `errors`, `started_at`).
-- **List phase.** Each action fetches up to 10 pages of `limit: 100`. The 100 is our choice, not Ozon's: live,
+- **List phase.** Each action fetches up to 10 pages. Page size: ozon#58 asks for pages larger than 100 and sets no size; §13 keeps 100 as the figure until one is set. Live,
   `delivery-point/list` does NOT enforce its page maximum (`limit` 101 returned 101 rows, 1000 returned 1000; R1 side
-  finding, `ozon:docs/research/2026-10-30-r1-live-rerecord.md`; undocumented, so the 100 stays unless sync cost justifies more).
+  finding, `ozon:docs/research/2026-10-30-r1-live-rerecord.md`; undocumented, so the page size is one constant to set).
   Upserts `point_id`, `method_ids`, `seen_generation = G`, and saves `next_cursor` VERBATIM after every page (opaque, F-10).
   An absent or null `next_cursor` ends the phase (F-11 tolerance).
-- **Info phase.** Each action selects up to 10 × 100 ids with `seen_generation = G AND detail_generation < G`, calls
+- **Info phase.** The schedule in each answer is not stored (ozon#58); the other fields are. Each action selects up to 10 × 100 ids with `seen_generation = G AND detail_generation < G`, calls
   `delivery-point/info` with at most 100 ids per call (MEASURED R1, U2 settled: 100 → 200, 1000 → 400, so the OAS «1000»
   is wrong), and writes details with `detail_generation = G`.
   - **Unknown id.** One id Ozon no longer knows fails the WHOLE batch with a 404 whose text names the id (`Не найдены пункты
@@ -288,8 +297,8 @@ routine with `dbDelta`; dropped on uninstall.
 - **Pacing and failure.** 200 ms between calls (the measured safe spacing, F-21). A failed action is retried with backoff
   5 → 15 → 60 min, at most 5 times, then the run waits for the next schedule; the cursor survives, so a retry resumes
   rather than restarts. Real case: a hosting cron killed mid-run (~904 calls, ~8 min end to end).
-- **Schedule.** Daily at 03:00 site time, and once right after valid credentials and a method are first saved. The dated
-  schedule window is ~8 days (F-16), so a daily refresh keeps it current.
+- **Schedule.** Daily at 03:00 site time, and once right after valid credentials and a method are first saved. The daily refresh keeps the points current; the dated
+  schedule window (about 8 days, F-16) is no longer stored (§6.4).
 - **Last-good serving.** Checkout reads only `is_active = 1` rows; while run G is in progress, rows still carry G−1 data
   until overwritten with fresh data — never an empty catalogue. Before the first complete run the pickup method is not offered
   (`report_hidden` reason `catalogue_empty`; the settings group shows progress).
@@ -302,9 +311,9 @@ routine with `dbDelta`; dropped on uninstall.
   non-bulky points refuse a parcel above the point limits). Capped by the framework's bbox limit; no remote call.
 - `fetch_details( $id )`: the row, `null` when inactive or unknown (an authoritative negative; the `Pickup_Handler` re-check at
   confirmation calls it).
-- **Schedule as text.** `work_time` is rendered at fetch time from the dated schedule: the next days from today, past dates
+- **Schedule on click (ozon#58).** Schedules are not in the table. A click on one point calls `delivery-point/info` for that point only; the answer is cached for one day, and failures follow the §4.6 backoff. The result is `work_time` as text: the next days from today, past dates
   skipped, e.g. «пн 03.11: 10:00–21:00; вт 04.11: 10:00–21:00; …» (7 days at most; identical consecutive days may collapse into
-  one range — **interpretation**). No weekly `Pickup_Schedule` is invented (G §2 item 8).
+  one range — **interpretation**). No weekly `Pickup_Schedule` is invented (G §2 item 8). If Ozon does not answer, the point is shown without a schedule.
 - Buyer-visible strings only: name, address, type label, `work_time`, «Срок хранения: N дней» when known. Ozon codes never
   reach the buyer.
 
@@ -363,6 +372,10 @@ Every `null` from `rate_package()` goes through one helper that logs and calls `
 `courier_address_imprecise`, `missing_dimensions`, `too_many_postings`, `ozon_refused:{code}` (with the trace id). The buyer
 side of the phone and address reasons is §8.3.
 
+### 7.6 Price settings (ozon#57)
+
+The plugin builds no price options of its own. Markup and its base, free delivery from a sum and by coupon, rounding, order-sum limits and the delivery-days setting are the framework's `FEATURE_*` options: the plugin declares the ones it uses, and the fields appear in its method settings (decision 31.10.2026, ozon#57). They come with framework #1417, release 2.0.19 (the framework issue's later comment supersedes the 2.0.18 in the ozon card), and the Ozon 2.0.0 release waits for it. The order of application is the one proposed in #1417: carrier price, markup, free delivery, rounding, cost limits.
+
 ## 8. Checkout (classic AND blocks) — phone first (D6)
 
 ### 8.1 Which phone
@@ -396,6 +409,7 @@ the WooCommerce setting, and the methods report `no_phone`. Nothing makes the fi
 | No phone yet | none | «Доставка Ozon: укажите номер телефона — по нему рассчитаем стоимость и срок.» |
 | Phone not a Russian mobile format | none | «Доставка Ozon: проверьте номер телефона — нужен номер в формате +7 XXX XXX-XX-XX.» |
 | `check-client` = false | none | «Ozon не может доставить заказ на этот номер телефона. Проверьте номер или выберите другой способ доставки.» |
+| Courier, DaData keys missing | courier none (pickup unaffected) | none: no house-number hint for this case (ozon#53); the admin sees the keys notice (§8.4) |
 | Courier, no house-level address | courier none (pickup unaffected) | «Курьер Ozon: укажите адрес с номером дома — стоимость рассчитывается по точному адресу.» |
 | `check-client` or quote failed (outage) | none | no hint (an outage is not the buyer's fault); admin hint + log |
 | OK | shown | none |
@@ -410,6 +424,7 @@ extension data (`ExtendSchema`, namespace `woodev-ozon-delivery`) and a small pl
 - The courier method rates only when the customer's address-level `Location_Record` has `house`, `street`, `postcode`, `lat`
   and `lon`. A settlement-level coordinate (city centre) is not enough. Whether DaData's suggestion coordinates are
   house-precise is UNVERIFIED (U6); the rule accepts a house-level record with coordinates.
+- **Coordinates come from the framework's built-in DaData, whatever location provider the shop uses (ozon#53).** The CDEK provider does not return house coordinates, which is why the courier never appeared on the rig; the framework's address hints already come from DaData alone. Without DaData keys the courier is not offered, and the admin sees a «keys required» notice in three places: the courier method settings (required), the setup wizard step (§5.4), and the general Ozon settings next to the connection test (§5.1).
 - At order placement the plugin writes `_woodev_ozon_courier_address` (JSON: `lat`, `lon`, `zip_code`, `country`, `region`,
   `city`, `street`, `house_number`, `apartment` from `address_2` when it is a flat number, `entrance`/`floor`/`intercom` null)
   because the framework order snapshot keeps only the settlement record with `raw` stripped
@@ -532,10 +547,12 @@ row flag «Пополните баланс Ozon» and a note naming the postings
 ends. A posting label is one PDF per posting; there is no merge endpoint, and the framework document route is order-scoped.
 
 - **One labelable posting** (the common one-box order): `Ozon_Document_Source` declares «Этикетка Ozon» and returns
-  `Document_Result::binary()`; framework single and bulk printing work.
+  `Document_Result::binary()`; framework single printing works. **Bulk printing is not offered in 2.0.0** (ozon#43): a bulk source returns one PDF, which needs a merge that O4 forbids, and Ozon has no merge endpoint.
 - **Several postings:** the document type is not offered; the plugin panel lists a «Этикетка» link per posting (admin route,
   nonce, `edit_shop_orders`). Settled by **O4**: per-parcel links, no merged PDF.
 - Outside the window: `Document_Result::failed( 'Этикетка доступна после подтверждения отправления и до его приёмки Ozon' )`.
+
+A ZIP of separate per-posting PDFs for bulk printing is idea ozon#60, not 2.0.0. `posting/label` takes one `posting_number` per request (OAS, 30.10.2026).
 
 ### 9.7 Cancel — asynchronous, without the framework's destructive cleanup
 
@@ -686,20 +703,11 @@ The return record carries no posting number (OAS: `return_number`, `return_exter
 An unmatched return is logged and listed in the settings group «Возвраты без заказа» (number, status, placement) so the
 merchant still sees it. R3 (the first real return) settles the key; until then this is the release's least certain link.
 
-### 11.4 Return barcode on demand
+### 11.4 Return barcode: out of 2.0.0 (ozon#55)
 
-The barcode is an ACCOUNT-level PDF the merchant shows to collect returns at the pickup point (`return/download_barcode`, no
-body). `return/reset_barcode` answers the NESTED shape `{barcode_content: {barcode, expires_at}}` (READ OAS
-`Return.ResetBarcode.Response` → `Return.Types.ResetBarcodeContent`); the typed client result unwraps `barcode_content`, and a
-response fixture pins it. It expires, so it is never stored.
+The return barcode is removed from 2.0.0. On the rig both calls fail: `return/download_barcode` answers «Ozon не вернул штрихкод возврата», and `return/reset_barcode` answers 404 «маршрут не найден» (trap `ozon/return-barcode-404`). Ozon's own cabinet has a button for the barcode, so the merchant documentation (card ozon#42) tells the merchant to take it there. Nothing is written to Ozon about this (ozon#55).
 
-- Where: the plugin order panel of an order with a return `at_pickup_point`, and the «Возвраты» group of the settings tab:
-  «Скачать штрихкод для получения возвратов» (streams the PDF) and «Выпустить новый штрихкод» (`reset_barcode`, confirm
-  «Старый штрихкод перестанет действовать»; shows the new code and its expiry).
-- Capability `manage_woocommerce`, nonce, at most one download per 10 s per user (real case: a double click hitting Ozon twice).
-- **Licence (settled, O3):** both stay available without an in-force licence — an explicit exception to the gate, because
-  the parcels were shipped under a valid licence and the barcode is the only way to take the merchant's own goods back.
-  `reset_barcode` writes at Ozon, so this is a deliberate exception, not a `read_only` declaration.
+Removed with it: the download and reset buttons in the order panel and in the settings group, the one-download-per-10-s limit, and the licence exception of O3 (§16.3). Return status tracking (§11.1–§11.3) stays. Bringing the barcode back is idea ozon#56, to be decided after the 404 is explained (the R3 check on the test account).
 
 ## 12. Admin order UI
 
@@ -723,8 +731,8 @@ order), «История статусов» (`read_only`, on demand `posting/sta
 
 ### 12.3 What stays where
 
-Framework: export / cancel / bulk print / status filters / emails / delivered-cancelled order statuses — all on the aggregate.
-Plugin: anything per posting or per return, and the barcode. Nothing in the plugin re-implements a framework list or email.
+Framework: export / cancel / status filters / emails / delivered-cancelled order statuses — all on the aggregate. Bulk print is not offered for Ozon in 2.0.0 (ozon#43).
+Plugin: anything per posting or per return (the barcode is out of 2.0.0, §11.4). Nothing in the plugin re-implements a framework list or email.
 
 ### 12.4 Admin create-order wizard (decision row «—»)
 
@@ -750,7 +758,9 @@ P = non-terminal forward postings, R = open returns, E = exports per day, N = po
 | Status poll (§10.1) | ⌈P/100⌉ `posting/info` per run; one run at a time | 96 × ⌈P/100⌉ |
 | Return refresh (§11.2) | ⌈R/100⌉ `return/info` per run | 96 × ⌈R/100⌉ |
 | Return discovery (§11.2) | ≤ 3 `return/search` pages per run, resumable cursor; a failed page waits for the next run | ≤ 288 |
-| Labels, barcode, «Обновить статусы Ozon» | merchant clicks only; barcode ≤ 1 per 10 s per user, refresh ≤ 1 per 30 s per order | — |
+| Labels (one order per request), «Обновить статусы Ozon», a clicked point's schedule (§6.4) | merchant or buyer clicks only; refresh ≤ 1 per 30 s per order; a schedule is one call per clicked point, cached one day | **open:** ozon#58 sets no cap on the click call; §4.6 backoff covers its failures |
+
+The list counts above assume 100 per list page; ozon#58 asks for larger pages, which lowers them and does not raise them.
 
 Example: 1 000 active postings, 100 open returns → status poll + returns = 96 × (10 + 1 + 3) = **1 344 per day**, flat
 whatever the age of the oldest open return. No automatic call loops on an error: every automatic call above has a cap and
@@ -773,8 +783,8 @@ exception after a successful create leaves the carrier id, the postings with `ap
 reconcile search finds the order by `posting_external_id` prefix); aggregate status rules (§10.2: one test per rule plus
 every pinned mixture); return refresh / discovery (page cap, cursor resume, watermark overlap, terminal on discovery, a
 cancelled and a delivered order that left the active set still get their return); return matching (§11.3, both keys, a
-generation-1 return after a re-export); `reset_barcode` nested response; catalogue sync resume from a saved cursor,
-generation switch, last-good serving; `work_time` rendering skipping past dates.
+generation-1 return after a re-export); catalogue sync resume from a saved cursor,
+generation switch, last-good serving; `work_time` rendering skipping past dates; the schedule-on-click cache and its fallback without a schedule (ozon#58).
 
 ### 14.2 Stub server and integration
 
@@ -785,13 +795,14 @@ integration test boots the real entry path with a signed in-force licence claim 
 
 - **Safe, read-only (worker may run with the operator's key, small volume):** token, `check-client`, `delivery/location`,
   `delivery-point/list|info|check-availability`, `order/checkout`, `posting/info|search|status-history`, `return/search|info|
-  status-history`, `return/download_barcode`, `shipment-method/search|info`, `dropoff-point/search` (needs scope `delivery-api.dropoff-point` and
-  `filters.viewport`, MEASURED R1, M12; not used in 2.0).
+  status-history`, `shipment-method/search|info`, `dropoff-point/search` (needs scope `delivery-api.dropoff-point` and
+  `filters.viewport`, MEASURED R1, M12; used by the drop-off point choice, ozon#52).
 - **Needs the operator's word (real shipment or account change):** `order/create`, `posting/approve` (balance),
-  `posting/cancel`, `return/reset_barcode` (invalidates the merchant's barcode), anything under `shipment-method/create|update|
-  delete`. `posting/label` is read-only but exists only after an approve.
+  `posting/cancel`, anything under `shipment-method/update|
+  delete` (`create` and `delete` on the test cabinet are authorised by ozon#52, below). `posting/label` is read-only but exists only after an approve.
 - **R2 is authorised (O5):** up to **10 real orders** on the operator's TEST cabinet, each cancelled before handover, in
-  the same run. Anything beyond that, and `return/reset_barcode`, still needs his word.
+  the same run. Anything beyond that still needs his word.
+- **Drop-off point check (authorised, ozon#52, 31.10.2026):** on the operator's test cabinet at most 3 `shipment-method/create` a night, each removed with `shipment-method/delete` after the check; export and cancel of at most 3 test orders, each cancelled at once (ozon#52 comment).
 - **No sandbox** (§0 note 2): settled; no O-question remains for it.
 
 ### 14.4 Rig acceptance (functional acceptance is the coordinator's)
@@ -808,12 +819,13 @@ PR; `npm run lint:docs` here for this spec.
 
 ## 15. Out of scope for 2.0.0
 
-Containers, arrival passes, drop-off and return-point management (D8); several shipment methods per site or per zone instance;
-the admin create/edit-order wizard (§12.4); native per-posting rows/filters in the framework orders table and an
-`out_for_delivery` canonical status (G §3); a merged multi-posting label PDF (O4); insurance certificates
-(`posting/get-insurance-certificate`); a buyer-facing tracking page or e-mail beyond the framework's; a «only lockers / only
-pickup points» instance switch; COD (not in the API); Chestny Znak markings and cancel reasons (absent on this host, H-1); an
-onboarding wizard (§5.4); a cookie cache for testcookie (§4.3).
+Containers, arrival passes and return-point management (D8); several shipment methods per zone instance; the admin create/edit-order wizard (§12.4); native per-posting rows/filters in the framework orders table and an `out_for_delivery` canonical status (G §3); a merged multi-posting label PDF (O4); insurance certificates (`posting/get-insurance-certificate`); a buyer-facing tracking page or e-mail beyond the framework's; a «only lockers / only pickup points» instance switch; COD (not in the API); Chestny Znak markings and cancel reasons (absent on this host, H-1); a cookie cache for testcookie (§4.3).
+
+Moved here on 31.10.2026 (s206, rig review):
+
+- the return barcode (`return/download_barcode`, `return/reset_barcode`; §11.4, ozon#55); idea ozon#56 brings it back if asked;
+- a bulk label ZIP of separate PDFs (ozon#60; ozon#43 is resolved in §9.6);
+- the shared catalogue on woodev.ru with a viewport query (ozon#58 variant 2), deferred until the store table proves too big.
 
 ## 16. Registers
 
@@ -853,7 +865,7 @@ named.
 7. `check-client` cache 24 h / 1 h, cap 10 phones per session per hour (§8.5).
 8. Catalogue: daily at 03:00, 10 pages per action, inactive kept 3 generations (§6.3).
 9. Labels: document source only for single-posting orders (§9.6).
-10. No onboarding wizard (§5.4).
+10. Setup wizard in 2.0.0, five steps (§5.4, ozon#54); the earlier «no wizard» choice is superseded on 31.10.2026.
 11. Status poll default 30 min (§5.3).
 12. Release identity in ONE place: the build script's `slug` = ZIP folder, the repo main file is `${slug}.php`
     (provisional `woocommerce-ozon-dostavka`); the text domain stays `woodev-ozon-delivery`, decoupled (§2).
@@ -874,10 +886,28 @@ named.
 
 O1–O8 were answered on 30.10.2026 («всё по рекомендациям, кроме п.1»); the binding text is the «Operator answers» table of
 [decisions.md](../research/2026-10-30-ozon-gap-refresh/decisions.md). Where they land: O1/O2 version 2.0.0 of EDD download
-58107, old folder/main-file names kept (§2, W0); O3 barcode without a licence (§11.4); O4 per-parcel labels (§9.6); O5 R2
+58107, old folder/main-file names kept (§2, W0); O3 barcode without a licence (§11.4; the barcode is out of 2.0.0, ozon#55); O4 per-parcel labels (§9.6); O5 R2
 with ≤ 10 test-cabinet orders, each cancelled before handover (§14.3, R2); O6 R3 after the first real handover (R3); O7
 nearest-point price (§7.3); O8 the existing GlitchTip project, DSN in the private repo (§2, W0). No open operator question
 blocks any card.
+
+### 16.4 Operator decisions of 31.10.2026 (rig review, s206)
+
+Source: the ozon cards below, each with the operator's comment of 31.10.2026. Where a card and the framework issue differ, the later comment wins (ozon#57 and framework #1417: release 2.0.19).
+
+| Card | Decision | Where |
+|---|---|---|
+| ozon#43 | Labels per order only in 2.0.0; a bulk ZIP is idea ozon#60. **Resolved.** | §9.6 |
+| ozon#52 | General drop-off point with a per-method choice, and «Создать пункт отгрузки» | §5.2, §5.4, §14.3 |
+| ozon#53 | Courier coordinates from the framework's DaData; keys notice in three places | §5.1, §8.3, §8.4 |
+| ozon#54 | Setup wizard in 2.0.0 (five steps); no migration wizard | §5.4, §16.2 |
+| ozon#55 | Return barcode out of 2.0.0; the Ozon cabinet button is the way to get it | §1 D4, §11.4 |
+| ozon#56 | Barcode back only if asked; first explain the 404 | §11.4, §15 |
+| ozon#57 | Price options from the framework's `FEATURE_*` (#1417, 2.0.19) | §3, §7.6 |
+| ozon#58 | Compact table, schedule on click with a one-day cache, list pages above 100, tool «Woodev > Настройки > Доставка > Инструменты»; shared catalogue deferred | §5.3, §6, §13 |
+| ozon#60 | Bulk ZIP if shops ask | §9.6, §15 |
+
+Release: Ozon 2.0.0 is not published to EDD overnight. The wave takes it to a pre-release on the rig for the operator's check in the morning (ozon#57).
 
 ## 17. Work breakdown (repo `kalbac/woodev-ozon-delivery`, one reviewable PR per card into `main`)
 
@@ -887,7 +917,7 @@ a detailed brief), read-only unless marked. Rounds: at most 2–3 per card, then
 | Card | Scope | Acceptance checks | Depends on |
 |---|---|---|---|
 | **W0** skeleton | **first step:** look for the old 1.0.3 ZIP (card `kalbac/woodev-ozon-delivery#9`); found → its folder and main-file names, else the provisional `woocommerce-ozon-dostavka` (§2) — W0 does NOT wait for it. Remove the rig harness; `${slug}.php` (header `Version: 2.0.0`, loader literals incl. `download_id` 58107, HPOS + blocks, `framework_version` 2.0.16), `includes/class-plugin.php` (`Shipping_Plugin`), lifecycle (install creates §6.2 table), autoloader, `composer.json`, CI + `.github/local-ci.Dockerfile`, `scripts/sync-framework.sh` and `scripts/build-release-zip.sh` (its `slug` = the ONE place of the folder name) + release workflow copied from `rp:`, `tests/bootstrap.php`, `languages/` header, DSN filter reading the DSN kept in the private repo / build env (O8) — never a DSN in this public repo; wp.org collision search for the ids | boot through `Woodev_Loader` from a ZIP-shaped tree whose folder = `slug` and main file = `${slug}.php`; header/loader version test (2.0.0, 58107); licence gate active in an integration test; no 1.0.3 option read; local-ci green | — |
-| **W1** API client | `includes/api/*`: client, token (scopes + `invalid_scope` fallback), error envelopes, trace id, idempotency header, secrets, bigint/timestamp parsing, the §4.6 backoff state (three classes, compare-and-swap probe, credential reset), `reset_barcode` nested result; fixtures | §14.1 transport list; sanitizer test; §4.6 backoff tests; nested `barcode_content` fixture | W0 |
+| **W1** API client | `includes/api/*`: client, token (scopes + `invalid_scope` fallback), error envelopes, trace id, idempotency header, secrets, bigint/timestamp parsing, the §4.6 backoff state (three classes, compare-and-swap probe, credential reset); fixtures | §14.1 transport list; sanitizer test; §4.6 backoff tests | W0 |
 | **R1** read-only re-record | record fixtures for every safe call of §14.3 with the operator's key; settle U2, U4, U8, U10 | fixtures committed under `tests/fixtures/ozon/`, answers written into `docs-internal/research` of the plugin repo | W1 (or the recon harness) |
 | **W2** settings | settings handler, connection test, method select / manual id, scope state display, phone-field-hidden warning, `is_configured()` | settings round-trip incl. secret; select from fixture; manual-id fallback on `invalid_scope`; no call at checkout | W1 |
 | **W3** catalogue | table, sync job (list/info, cursor, generations, backoff), `Ozon_Point_Source`, `work_time`, settings status group | §14.1 sync tests; a stub run of 3 pages resumes after a killed action; bbox query returns only active, method-matching, fitting points | W1 |
@@ -898,9 +928,15 @@ a detailed brief), read-only unless marked. Rounds: at most 2–3 per card, then
 | **R2** write round 2 (authorised, O5) | ≤ 10 real orders on the operator's TEST cabinet, each cancelled before handover in the same run: a 2-box pickup order and a courier order — create, approve, label, cancel one posting, cancel all; one same-key replay; record country form (U7) | responses recorded; every order cancelled before handover; order count ≤ 10 stated in the result | W6 |
 | **W7** documents, cancel, panel | document source (single posting), per-posting label route, async cancel (client exception, settle on all-cancelled: history, marker, aggregate `canceled`), plugin order panel (postings, returns incl. history generations), order actions, row flags in the §12.1 priority, preview fields | panel from fixtures (1 and 3 postings); cancel never clears the id early; re-export after full cancel uses generation 2 and clears the marker | W6 |
 | **W8** tracking | poller (one run at a time, `auth`-gated), status map, aggregate rules of §10.2, failed-sibling flag, `storage_expires_at`, shipment facts, 60-day stop | every pinned mixture of the §10.2 table is a test written BEFORE the poller code; a mixed 3-posting fixture never reaches `delivered` early; no aggregate `returning`/`returned` | W6 |
-| **W9** returns | return refresh (`return/info`, `_woodev_ozon_return_open`), resumable discovery scan (watermark, 24 h overlap, ≤ 3 pages per run, cursor, local filter fallback), matching by the unique key across current + history, unmatched list, placement flag/note, barcode download/reset (nested result) with licence exception | §14.1 return tests: page cap holds with 10 000 stub returns; a cancelled and a delivered order outside the active set get their later return; a generation-1 return after a re-export attaches to history; matching both keys; barcode never stored; licence-off still downloads | W8 |
+| **W9** returns | return refresh (`return/info`, `_woodev_ozon_return_open`), resumable discovery scan (watermark, 24 h overlap, ≤ 3 pages per run, cursor, local filter fallback), matching by the unique key across current + history, unmatched list, placement flag/note | §14.1 return tests: page cap holds with 10 000 stub returns; a cancelled and a delivered order outside the active set get their later return; a generation-1 return after a re-export attaches to history; matching both keys | W8 |
 | **R3** first real return (O6) | settle U9 | recorded return record | a real handover |
 | **W10** acceptance and release prep | rig acceptance §14.4, release ZIP installed on a clean site, merchant docs card (setup: application scopes, shipment method, balance; the phone-first behaviour) | rig run recorded; ZIP boots from its own `woodev/` | W5, W7, W8, W9 |
+| **ozon#52** drop-off point | general default and per-method choice; «Создать пункт отгрузки» (`dropoff-point/search`, `shipment-method/create`); test-cabinet cap (≤ 3 creates a night, each deleted after the check) | created point appears in both selectors; deleted after the check; rig run recorded | W2 |
+| **ozon#53** courier coordinates | coordinates from the framework's DaData whatever the provider; keys notice in three places; no house-number hint when keys are missing | courier not offered without keys; notice in the three places; no buyer hint in that state | W5 |
+| **ozon#54** setup wizard | the five steps of §5.4 on `woodev/setup/` | wizard runs to «Готово» on a clean site; the phone actions write the settings | W2, ozon#52, ozon#53 |
+| **ozon#55** barcode removal | remove the barcode block and its buttons; merchant docs point to the Ozon cabinet | no barcode UI or route left; return tracking unchanged | W9 |
+| **ozon#57** price options | declare the `FEATURE_*` options; no own price code | fields appear in method settings; order of application as framework #1417 | framework 2.0.19 (#1417) |
+| **ozon#58** compact catalogue and tool | no schedule column; schedule on click with a one-day cache; list pages above 100; tool «Woodev > Настройки > Доставка > Инструменты» | table size measured on the rig; a click shows the schedule, or none when Ozon fails | W3 |
 
 **Parallelism (disjoint files).** W1 alone after W0. Then W2 ∥ W3 (settings vs `includes/pickup/` + the table) and R1. W4 after
 both. W5a → W5. W6 after W5. W7 ∥ W8 after W6 (panel/documents vs `includes/tracking/`); both add one wiring line to
