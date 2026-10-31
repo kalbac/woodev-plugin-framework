@@ -80,7 +80,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Record' 
 		 *
 		 * Required: `key`, `provider_id`, `level` (one of {@see self::LEVELS}),
 		 * `country` (ISO-3166 alpha-2; case-normalized to upper-case on the way in).
-		 * Everything else is optional. `region`/`district`/`settlement`/`street` are
+		 * Everything else is optional. `region`/`district`/`settlement`/`nested_settlement`/`street` are
 		 * `{ name, type }` shapes; `house`/`block`/`flat`/`postcode`/`label` are
 		 * display-ish strings; `lat`/`lon` are numeric; `raw` is the opaque provider
 		 * payload, stored and returned untouched, never inspected.
@@ -147,27 +147,28 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Record' 
 
 			return new self(
 				[
-					'key'         => $key,
-					'provider_id' => $provider_id,
-					'level'       => $level,
-					'country'     => $country,
-					'region'      => self::parse_component_group( $data, 'region' ),
-					'district'    => self::parse_component_group( $data, 'district' ),
-					'settlement'  => self::parse_component_group( $data, 'settlement' ),
-					'street'      => self::parse_component_group( $data, 'street' ),
-					'house'       => self::optional_string( $data, 'house' ),
-					'block'       => self::optional_string( $data, 'block' ),
-					'flat'        => self::optional_string( $data, 'flat' ),
-					'postcode'    => self::optional_string( $data, 'postcode' ),
-					'lat'         => self::optional_float( $data, 'lat' ),
-					'lon'         => self::optional_float( $data, 'lon' ),
-					'label'       => self::optional_string( $data, 'label' ),
+					'key'               => $key,
+					'provider_id'       => $provider_id,
+					'level'             => $level,
+					'country'           => $country,
+					'region'            => self::parse_component_group( $data, 'region' ),
+					'district'          => self::parse_component_group( $data, 'district' ),
+					'settlement'        => self::parse_component_group( $data, 'settlement' ),
+					'nested_settlement' => self::parse_component_group( $data, 'nested_settlement' ),
+					'street'            => self::parse_component_group( $data, 'street' ),
+					'house'             => self::optional_string( $data, 'house' ),
+					'block'             => self::optional_string( $data, 'block' ),
+					'flat'              => self::optional_string( $data, 'flat' ),
+					'postcode'          => self::optional_string( $data, 'postcode' ),
+					'lat'               => self::optional_float( $data, 'lat' ),
+					'lon'               => self::optional_float( $data, 'lon' ),
+					'label'             => self::optional_string( $data, 'label' ),
 					// Opaque: stored and returned untouched (spec D12). Absent and
 					// explicit null are deliberately indistinguishable — the framework
 					// never inspects this field, so there is nothing "null" would tell
 					// it that "absent" does not.
-					'raw'         => array_key_exists( 'raw', $data ) ? $data['raw'] : null,
-					'ancestors'   => self::parse_ancestors( $data, $key, $provider_id ),
+					'raw'               => array_key_exists( 'raw', $data ) ? $data['raw'] : null,
+					'ancestors'         => self::parse_ancestors( $data, $key, $provider_id ),
 				]
 			);
 		}
@@ -488,6 +489,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Record' 
 		}
 
 		/**
+		 * Gets the locality nested inside {@see self::settlement()}, or null when not supplied.
+		 *
+		 * An address can stand in two localities at once: DaData's «г Пушкино, рп Черкизово,
+		 * ул Ленина» carries the city Пушкино AND the settlement Черкизово inside it. The record's
+		 * `settlement` is the one the provider prefers (the city), and this is the other one, so a
+		 * buyer who picked Черкизово from another provider is still recognised
+		 * ({@see self::is_same_locality_as()}, issue #1534).
+		 *
+		 * @since 2.0.20
+		 *
+		 * @return array{name: string, type: string}|null
+		 */
+		public function nested_settlement(): ?array {
+			return $this->data['nested_settlement'];
+		}
+
+		/**
 		 * Gets the street component group, or null when not supplied.
 		 *
 		 * @since 2.0.2
@@ -662,18 +680,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Record' 
 		}
 
 		/**
-		 * Whether this record and `$other` name the same settlement — the kinship proof between
+		 * Whether this record and `$other` stand in the same locality — the kinship proof between
 		 * two records of DIFFERENT providers, whose keys {@see self::is_within()} can never
 		 * match (issue #1534: a DaData house over a CDEK settlement).
 		 *
-		 * Both records must be in the same country and carry a settlement name. The names are
-		 * compared through {@see self::normalize_city_name()}, each with its own type — the one
-		 * name-comparison contract; `namesSameSettlement()` in `location-cascade.js` is the
-		 * client half of this exact rule. Regions are deliberately not compared: providers spell
-		 * them differently («Ханты-Мансийский авт. округ», «Ханты-Мансийский Автономный округ -
-		 * Югра»), so a region check would drop a settlement that is right. The address
-		 * suggestions this proof serves are already narrowed by the provider to the settlement's
-		 * own region and city names (DaData's `locations` filter).
+		 * Three conditions, all required:
+		 *
+		 *  - the same country;
+		 *  - a shared locality name: the `settlement` or `nested_settlement` of one equals the
+		 *    `settlement` or `nested_settlement` of the other through {@see self::normalize_city_name()},
+		 *    each with its own type — so a house in «г Пушкино, рп Черкизово» matches a pick of
+		 *    either Пушкино or Черкизово;
+		 *  - no DEFINITE region disagreement ({@see self::regions_disagree()}): «Благовещенск» of
+		 *    Амурская область is not «Благовещенск» of Башкортостан.
+		 *
+		 * `isSameLocality()` in `location-cascade.js` is the client half of this exact rule.
 		 *
 		 * @since 2.0.20
 		 *
@@ -681,34 +702,89 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Record' 
 		 *
 		 * @return bool
 		 */
-		public function names_same_settlement( Location_Record $other ): bool {
-			if ( $this->country() !== $other->country() ) {
+		public function is_same_locality_as( Location_Record $other ): bool {
+			if ( $this->country() !== $other->country() || self::regions_disagree( $this, $other ) ) {
 				return false;
 			}
 
-			$name = self::normalized_settlement_name( $this );
-
-			return '' !== $name && self::normalized_settlement_name( $other ) === $name;
+			return [] !== array_intersect( self::locality_names( $this ), self::locality_names( $other ) );
 		}
 
 		/**
-		 * The record's settlement name through {@see self::normalize_city_name()}, or `''` when
-		 * the record carries no settlement name.
+		 * The record's `settlement` and `nested_settlement` names through
+		 * {@see self::normalize_city_name()}, each with its own type — `[]` when it carries neither.
 		 *
 		 * @since 2.0.20
 		 *
 		 * @param Location_Record $record The record.
 		 *
-		 * @return string
+		 * @return string[]
 		 */
-		private static function normalized_settlement_name( Location_Record $record ): string {
-			$component = $record->settlement();
+		private static function locality_names( Location_Record $record ): array {
+			$names = [];
 
-			if ( null === $component || '' === trim( $component['name'] ) ) {
-				return '';
+			foreach ( [ $record->settlement(), $record->nested_settlement() ] as $component ) {
+				if ( null !== $component && '' !== trim( $component['name'] ) ) {
+					$names[] = self::normalize_city_name( $component['name'], $component['type'] );
+				}
 			}
 
-			return self::normalize_city_name( $component['name'], $component['type'] );
+			return $names;
+		}
+
+		/**
+		 * Whether two records name regions that are DEFINITELY different (issue #1534).
+		 *
+		 * Providers spell one region differently («Московская область» / «Московская» + «обл»,
+		 * «Республика Саха (Якутия)» / «Саха /Якутия/»), so both names go through
+		 * {@see self::normalize_region_name()} and count as the same region when one normalised
+		 * form contains the other. A region missing on either side is not a disagreement — there is
+		 * nothing to disagree with. `regionsDisagree()` in `location-cascade.js` is the client half.
+		 *
+		 * @since 2.0.20
+		 *
+		 * @param Location_Record $one   One record.
+		 * @param Location_Record $other The other record.
+		 *
+		 * @return bool
+		 */
+		private static function regions_disagree( Location_Record $one, Location_Record $other ): bool {
+			$region       = null !== $one->region() ? self::normalize_region_name( $one->region()['name'] ) : '';
+			$other_region = null !== $other->region() ? self::normalize_region_name( $other->region()['name'] ) : '';
+
+			if ( '' === $region || '' === $other_region ) {
+				return false;
+			}
+
+			return false === mb_strpos( $region, $other_region ) && false === mb_strpos( $other_region, $region );
+		}
+
+		/**
+		 * Case, «ё» and region-type-word insensitive form of a region name («Московская обл.»,
+		 * «Московская область», «московская» compare equal).
+		 *
+		 * The service's saved-city and city-limit matching compare it EXACTLY (#1075); only
+		 * {@see self::regions_disagree()} applies a containment test to it.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 * @since 2.0.20 Moved here from `Location_Service` so the customer store can use it.
+		 *
+		 * @param string $name Raw region name.
+		 *
+		 * @return string
+		 */
+		public static function normalize_region_name( string $name ): string {
+			$name = str_replace( 'ё', 'е', mb_strtolower( trim( $name ) ) );
+			$name = (string) preg_replace( '/[^\p{L}\p{N}\s-]+/u', ' ', $name );
+			$name = (string) preg_replace(
+				'/(?<![\p{L}\p{N}-])(?:область|обл|край|республика|респ|г|город|автономный|автономная|округ|ао|аобл)(?![\p{L}\p{N}-])/u',
+				' ',
+				$name
+			);
+
+			return trim( (string) preg_replace( '/\s+/u', ' ', $name ) );
 		}
 
 		/**

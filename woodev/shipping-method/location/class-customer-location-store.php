@@ -926,10 +926,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 		 * (DaData) can never be `is_within()` a settlement of another provider (CDEK):
 		 * the keys live in different namespaces. Such a settlement — and every
 		 * record it is itself within, its region — is kept when
-		 * {@see self::foreign_settlement_anchor()} proves the house names the same
-		 * settlement. The settlement keeps driving the carrier that owns it, and the
-		 * house becomes `current` for a courier that needs a street and a house.
-		 * A house that names another settlement proves nothing and the rule above
+		 * {@see self::foreign_settlement_anchor()} proves the house stands in the
+		 * same locality (its city or the settlement nested in it, in a region that
+		 * does not disagree). The settlement keeps driving the carrier that owns it,
+		 * and the house becomes `current` for a courier that needs a street and a
+		 * house. A house of another locality proves nothing and the rule above
 		 * applies unchanged: the settlement is dropped, never kept under a house of
 		 * another city.
 		 *
@@ -991,7 +992,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 		 * Only an ADDRESS over a SETTLEMENT qualifies, and only when the providers differ:
 		 * a same-provider settlement is proven by {@see Location_Record::is_within()}
 		 * already, and must stay dropped when that proof fails. The proof itself is
-		 * {@see Location_Record::names_same_settlement()}; `location-cascade.js` posts a
+		 * {@see Location_Record::is_same_locality_as()}; `location-cascade.js` posts a
 		 * foreign house only under the same rule, so the two halves agree.
 		 *
 		 * @since 2.0.20
@@ -1012,7 +1013,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 				return null;
 			}
 
-			return $new_record->names_same_settlement( $settlement ) ? $settlement : null;
+			return $new_record->is_same_locality_as( $settlement ) ? $settlement : null;
 		}
 
 		/**

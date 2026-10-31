@@ -1931,7 +1931,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 			}
 
 			if ( count( $matches ) > 1 && '' !== $region ) {
-				$wanted_region = self::normalize_region_name( $region );
+				$wanted_region = Location_Record::normalize_region_name( $region );
 				$matches       = array_filter(
 					$matches,
 					static function ( Location_Record $candidate ) use ( $wanted_region ): bool {
@@ -1942,32 +1942,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 						}
 
 						// Exact equality only — the record's bare name or name + its own type field.
-						return self::normalize_region_name( (string) $component['name'] ) === $wanted_region
-							|| self::normalize_region_name( trim( $component['name'] . ' ' . $component['type'] ) ) === $wanted_region;
+						return Location_Record::normalize_region_name( (string) $component['name'] ) === $wanted_region
+							|| Location_Record::normalize_region_name( trim( $component['name'] . ' ' . $component['type'] ) ) === $wanted_region;
 					}
 				);
 			}
 
 			return 1 === count( $matches ) ? reset( $matches ) : null;
-		}
-
-		/**
-		 * Case, «ё» and region-type-word insensitive form of a region name («Московская обл.»,
-		 * «Московская область», «московская» compare equal) — for EXACT matching only: no
-		 * containment test is ever applied to it (#1075).
-		 *
-		 * @since 2.0.2
-		 *
-		 * @param string $name Raw region name.
-		 *
-		 * @return string
-		 */
-		private static function normalize_region_name( string $name ): string {
-			$name = str_replace( 'ё', 'е', mb_strtolower( trim( $name ) ) );
-			$name = (string) preg_replace( '/[^\p{L}\p{N}\s-]+/u', ' ', $name );
-			$name = (string) preg_replace( '/(?<![\p{L}\p{N}-])(?:область|обл|край|республика|респ|г|город|автономный|автономная|округ|ао|аобл)(?![\p{L}\p{N}-])/u', ' ', $name );
-
-			return trim( (string) preg_replace( '/\s+/u', ' ', $name ) );
 		}
 
 		/**
@@ -2431,7 +2412,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 			$stored_region    = $stored->region();
 			$stored_settle    = $stored->settlement();
 			$by_name          = Location_Record::LEVEL_SETTLEMENT === $stored->level() && null !== $stored_settle;
-			$stored_region_nm = null !== $stored_region ? self::normalize_region_name( (string) $stored_region['name'] ) : '';
+			$stored_region_nm = null !== $stored_region ? Location_Record::normalize_region_name( (string) $stored_region['name'] ) : '';
 			$stored_city_nm   = null !== $stored_settle ? Location_Record::normalize_city_name( (string) $stored_settle['name'], (string) ( $stored_settle['type'] ?? '' ) ) : '';
 
 			return array_values(
@@ -2445,7 +2426,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 						if ( null !== $stored_region ) {
 							$region = $candidate->region();
 
-							if ( null === $region || self::normalize_region_name( (string) $region['name'] ) !== $stored_region_nm ) {
+							if ( null === $region || Location_Record::normalize_region_name( (string) $region['name'] ) !== $stored_region_nm ) {
 								return false;
 							}
 						}

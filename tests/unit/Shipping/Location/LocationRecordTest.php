@@ -568,57 +568,160 @@ final class LocationRecordTest extends TestCase {
 	}
 
 	// -----------------------------------------------------------------
-	// names_same_settlement() — the cross-provider kinship proof (#1534)
+	// is_same_locality_as() — the cross-provider kinship proof (#1534)
 	// -----------------------------------------------------------------
 
 	/**
-	 * Builds a record carrying a settlement name.
+	 * Builds a record carrying locality components.
 	 *
-	 * @param string     $key        Locality key.
-	 * @param array|null $settlement The `{ name, type }` group, or null for none.
-	 * @param string     $country    ISO-3166 alpha-2.
+	 * @param string               $key     Locality key.
+	 * @param array<string, mixed> $parts   `settlement`, `nested_settlement`, `region` groups.
+	 * @param string               $country ISO-3166 alpha-2.
 	 *
 	 * @return Location_Record
 	 */
-	private function with_settlement( string $key, ?array $settlement, string $country = 'RU' ): Location_Record {
+	private function with_locality( string $key, array $parts, string $country = 'RU' ): Location_Record {
 		return Location_Record::from_array(
-			[
-				'key'         => $key,
-				'provider_id' => explode( ':', $key )[0],
-				'level'       => 'address',
-				'country'     => $country,
-				'settlement'  => $settlement,
-			]
+			array_merge(
+				[
+					'key'         => $key,
+					'provider_id' => explode( ':', $key )[0],
+					'level'       => 'address',
+					'country'     => $country,
+				],
+				$parts
+			)
 		);
 	}
 
-	public function test_names_same_settlement_matches_across_providers_and_type_words(): void {
-		$house = $this->with_settlement( 'dadata:house', [ 'name' => 'Москва', 'type' => 'г' ] );
-		$city  = $this->with_settlement( 'cdek:44', [ 'name' => 'москва' ] );
+	public function test_is_same_locality_as_matches_across_providers_and_type_words(): void {
+		$house = $this->with_locality( 'dadata:house', [ 'settlement' => [ 'name' => 'Москва', 'type' => 'г' ] ] );
+		$city  = $this->with_locality( 'cdek:44', [ 'settlement' => [ 'name' => 'москва' ] ] );
 
-		$this->assertTrue( $house->names_same_settlement( $city ) );
-		$this->assertTrue( $city->names_same_settlement( $house ) );
+		$this->assertTrue( $house->is_same_locality_as( $city ) );
+		$this->assertTrue( $city->is_same_locality_as( $house ) );
 	}
 
-	public function test_names_same_settlement_refuses_another_name(): void {
-		$house = $this->with_settlement( 'dadata:house', [ 'name' => 'Новое Село', 'type' => 'с' ] );
-		$city  = $this->with_settlement( 'cdek:1', [ 'name' => 'Село' ] );
+	public function test_is_same_locality_as_refuses_another_name(): void {
+		$house = $this->with_locality( 'dadata:house', [ 'settlement' => [ 'name' => 'Новое Село', 'type' => 'с' ] ] );
+		$city  = $this->with_locality( 'cdek:1', [ 'settlement' => [ 'name' => 'Село' ] ] );
 
-		$this->assertFalse( $house->names_same_settlement( $city ) );
+		$this->assertFalse( $house->is_same_locality_as( $city ) );
 	}
 
-	public function test_names_same_settlement_refuses_a_record_without_a_settlement_name(): void {
-		$house = $this->with_settlement( 'dadata:house', null );
-		$blank = $this->with_settlement( 'cdek:2', [ 'name' => '  ' ] );
+	public function test_is_same_locality_as_refuses_a_record_without_a_settlement_name(): void {
+		$house = $this->with_locality( 'dadata:house', [] );
+		$blank = $this->with_locality( 'cdek:2', [ 'settlement' => [ 'name' => '  ' ] ] );
 
-		$this->assertFalse( $house->names_same_settlement( $blank ) );
-		$this->assertFalse( $blank->names_same_settlement( $house ) );
+		$this->assertFalse( $house->is_same_locality_as( $blank ) );
+		$this->assertFalse( $blank->is_same_locality_as( $house ) );
 	}
 
-	public function test_names_same_settlement_refuses_another_country(): void {
-		$house = $this->with_settlement( 'dadata:house', [ 'name' => 'Минск' ], 'BY' );
-		$city  = $this->with_settlement( 'cdek:3', [ 'name' => 'Минск' ], 'RU' );
+	public function test_is_same_locality_as_refuses_another_country(): void {
+		$house = $this->with_locality( 'dadata:house', [ 'settlement' => [ 'name' => 'Минск' ] ], 'BY' );
+		$city  = $this->with_locality( 'cdek:3', [ 'settlement' => [ 'name' => 'Минск' ] ], 'RU' );
 
-		$this->assertFalse( $house->names_same_settlement( $city ) );
+		$this->assertFalse( $house->is_same_locality_as( $city ) );
+	}
+
+	public function test_is_same_locality_as_matches_the_settlement_nested_in_the_city(): void {
+		// Critic finding 2 (PR #1535): DaData names the city Пушкино as `settlement` and the
+		// buyer's own Черкизово as `nested_settlement`; a CDEK pick of either matches.
+		$house = $this->with_locality(
+			'dadata:house',
+			[
+				'settlement'        => [ 'name' => 'Пушкино', 'type' => 'г' ],
+				'nested_settlement' => [ 'name' => 'Черкизово', 'type' => 'рп' ],
+			]
+		);
+
+		$this->assertTrue( $house->is_same_locality_as( $this->with_locality( 'cdek:cherkizovo', [ 'settlement' => [ 'name' => 'Черкизово' ] ] ) ) );
+		$this->assertTrue( $house->is_same_locality_as( $this->with_locality( 'cdek:pushkino', [ 'settlement' => [ 'name' => 'Пушкино' ] ] ) ) );
+		$this->assertFalse( $house->is_same_locality_as( $this->with_locality( 'cdek:ivanteevka', [ 'settlement' => [ 'name' => 'Ивантеевка' ] ] ) ) );
+	}
+
+	public function test_is_same_locality_as_refuses_a_definite_region_disagreement(): void {
+		// Critic finding 1 (PR #1535): one city name, two regions.
+		$house = $this->with_locality(
+			'dadata:house',
+			[
+				'settlement' => [ 'name' => 'Благовещенск', 'type' => 'г' ],
+				'region'     => [ 'name' => 'Башкортостан', 'type' => 'Респ' ],
+			]
+		);
+		$city  = $this->with_locality(
+			'cdek:amur',
+			[
+				'settlement' => [ 'name' => 'Благовещенск' ],
+				'region'     => [ 'name' => 'Амурская область' ],
+			]
+		);
+
+		$this->assertFalse( $house->is_same_locality_as( $city ) );
+	}
+
+	/**
+	 * Region spellings of one region by CDEK (full) and DaData (name + separate type).
+	 *
+	 * @return array<string, array{0: string, 1: string}>
+	 */
+	public static function same_region_spellings(): array {
+		return [
+			'oblast'                 => [ 'Московская область', 'Московская' ],
+			'federal city'           => [ 'Москва', 'Москва' ],
+			'republic'               => [ 'Республика Саха (Якутия)', 'Саха /Якутия/' ],
+			'autonomous okrug'       => [ 'Ханты-Мансийский автономный округ - Югра', 'Ханты-Мансийский Автономный округ - Югра' ],
+			'one contains the other' => [ 'Чувашская Республика', 'Чувашская Республика - Чувашия' ],
+		];
+	}
+
+	/**
+	 * @dataProvider same_region_spellings
+	 *
+	 * @param string $cdek_region   The CDEK spelling.
+	 * @param string $dadata_region The DaData spelling.
+	 */
+	public function test_is_same_locality_as_accepts_two_spellings_of_one_region( string $cdek_region, string $dadata_region ): void {
+		$house = $this->with_locality(
+			'dadata:house',
+			[
+				'settlement' => [ 'name' => 'Город' ],
+				'region'     => [ 'name' => $dadata_region ],
+			]
+		);
+		$city  = $this->with_locality(
+			'cdek:city',
+			[
+				'settlement' => [ 'name' => 'Город' ],
+				'region'     => [ 'name' => $cdek_region ],
+			]
+		);
+
+		$this->assertTrue( $house->is_same_locality_as( $city ) );
+	}
+
+	public function test_is_same_locality_as_treats_a_missing_region_as_no_disagreement(): void {
+		$house = $this->with_locality(
+			'dadata:house',
+			[
+				'settlement' => [ 'name' => 'Благовещенск' ],
+				'region'     => [ 'name' => 'Башкортостан' ],
+			]
+		);
+		$city  = $this->with_locality( 'cdek:amur', [ 'settlement' => [ 'name' => 'Благовещенск' ] ] );
+
+		$this->assertTrue( $house->is_same_locality_as( $city ) );
+	}
+
+	public function test_nested_settlement_round_trips(): void {
+		$record = $this->with_locality( 'dadata:house', [ 'nested_settlement' => [ 'name' => 'Черкизово', 'type' => 'рп' ] ] );
+
+		$this->assertSame(
+			[
+				'name' => 'Черкизово',
+				'type' => 'рп',
+			],
+			Location_Record::from_array( $record->to_array() )->nested_settlement()
+		);
 	}
 }

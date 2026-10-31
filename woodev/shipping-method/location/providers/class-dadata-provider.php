@@ -1272,24 +1272,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 			$settlement_name_key = ! empty( $fields['city'] ) ? 'city' : 'settlement';
 			$settlement_type_key = ! empty( $fields['city'] ) ? 'city_type' : 'settlement_type';
 
+			// The settlement INSIDE that city («г Пушкино, рп Черкизово») is kept beside it, so a
+			// buyer who picked Черкизово from another provider is still recognised (#1534).
+			$nested_settlement = ! empty( $fields['city'] ) ? self::component_group( $fields, 'settlement', 'settlement_type' ) : null;
+
 			$record_data = [
-				'key'         => $key,
-				'provider_id' => self::PROVIDER_ID,
-				'level'       => $level,
-				'country'     => self::extract_country( $fields, $country ),
-				'region'      => self::component_group( $fields, 'region', 'region_type' ),
-				'district'    => self::component_group( $fields, 'area', 'area_type' ),
-				'settlement'  => self::component_group( $fields, $settlement_name_key, $settlement_type_key ),
-				'street'      => self::component_group( $fields, 'street', 'street_type' ),
-				'house'       => $fields['house'] ?? '',
-				'block'       => $fields['block'] ?? '',
-				'flat'        => $fields['flat'] ?? '',
-				'postcode'    => $fields['postal_code'] ?? '',
-				'lat'         => $fields['geo_lat'] ?? null,
-				'lon'         => $fields['geo_lon'] ?? null,
-				'label'       => $label,
-				'raw'         => $fields,
-				'ancestors'   => $this->ancestor_keys_from_dadata_fields( $fields, $fias_id ),
+				'key'               => $key,
+				'provider_id'       => self::PROVIDER_ID,
+				'level'             => $level,
+				'country'           => self::extract_country( $fields, $country ),
+				'region'            => self::component_group( $fields, 'region', 'region_type' ),
+				'district'          => self::component_group( $fields, 'area', 'area_type' ),
+				'settlement'        => self::component_group( $fields, $settlement_name_key, $settlement_type_key ),
+				'nested_settlement' => $nested_settlement,
+				'street'            => self::component_group( $fields, 'street', 'street_type' ),
+				'house'             => $fields['house'] ?? '',
+				'block'             => $fields['block'] ?? '',
+				'flat'              => $fields['flat'] ?? '',
+				'postcode'          => $fields['postal_code'] ?? '',
+				'lat'               => $fields['geo_lat'] ?? null,
+				'lon'               => $fields['geo_lon'] ?? null,
+				'label'             => $label,
+				'raw'               => $fields,
+				'ancestors'         => $this->ancestor_keys_from_dadata_fields( $fields, $fias_id ),
 			];
 
 			try {

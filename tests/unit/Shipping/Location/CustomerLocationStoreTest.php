@@ -2369,6 +2369,49 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertSame( [ Location_Record::LEVEL_ADDRESS ], array_keys( $chain['records'] ) );
 		}
 
+		public function test_a_dadata_house_of_a_same_named_city_in_another_region_drops_the_cdek_chain(): void {
+			// Critic finding 1 on PR #1535: Благовещенск of Амурская область is not Благовещенск
+			// of Башкортостан — a definite region disagreement proves nothing.
+			$this->stub_guest();
+
+			$store = new Customer_Location_Store_Probe( new Customer_Location_Store_Fake_Session() );
+
+			$store->set(
+				Location_Record::from_array(
+					[
+						'key'         => 'cdek:blagoveshchensk-amur',
+						'provider_id' => 'cdek',
+						'level'       => Location_Record::LEVEL_SETTLEMENT,
+						'country'     => 'RU',
+						'settlement'  => [ 'name' => 'Благовещенск' ],
+						'region'      => [ 'name' => 'Амурская область' ],
+					]
+				)
+			);
+			$store->set(
+				Location_Record::from_array(
+					[
+						'key'         => 'dadata:house-bashkortostan',
+						'provider_id' => 'dadata',
+						'level'       => Location_Record::LEVEL_ADDRESS,
+						'country'     => 'RU',
+						'settlement'  => [
+							'name' => 'Благовещенск',
+							'type' => 'г',
+						],
+						'region'      => [
+							'name' => 'Башкортостан',
+							'type' => 'Респ',
+						],
+					]
+				)
+			);
+
+			$chain = $store->get_chain();
+
+			$this->assertSame( [ Location_Record::LEVEL_ADDRESS ], array_keys( $chain['records'] ) );
+		}
+
 		public function test_a_same_provider_address_is_never_kept_by_its_settlement_name(): void {
 			// Issue #1534 scope: the name proof is for a FOREIGN settlement only. A DaData house
 			// under a DaData settlement is still judged by is_within() alone — the provider

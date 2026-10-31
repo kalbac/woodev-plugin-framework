@@ -3464,7 +3464,7 @@ describe( 'issue #352 — refusing to post a foreign-provider record into the se
 describe( 'issue #1534 — a foreign house naming the confirmed settlement is posted', () => {
 	const OWNERS_CDEK = { RU: { region: 'cdek', settlement: 'cdek', address: 'dadata' } };
 
-	function houseItem( settlement ) {
+	function houseItem( settlement, extra = {} ) {
 		return {
 			key: 'dadata:house1', label: 'ул Тверская, д 1', level: 'address',
 			record: {
@@ -3472,28 +3472,37 @@ describe( 'issue #1534 — a foreign house naming the confirmed settlement is po
 				settlement: { name: settlement, type: 'г' },
 				street: { name: 'Тверская', type: 'ул' }, house: '1', postcode: '125009',
 				label: 'ул Тверская, д 1',
+				...extra,
 			},
 		};
 	}
 
 	/**
-	 * Confirms the CDEK settlement «Москва» through the real round trip — after it the client
-	 * holds only the settlement's key ({@see adoptChain}), exactly as on the rig.
+	 * Confirms a CDEK settlement through the real round trip — after it the client holds only
+	 * the settlement's key ({@see adoptChain}), exactly as on the rig. With a region, backwards
+	 * fill writes it into the region field (CDEK owns the region level here).
 	 */
-	async function confirmCdekMoscow() {
-		selectViaFake( callFor( 'billing_city' ), {
-			key: 'cdek:44', label: 'Москва', value: 'Москва', level: 'settlement',
-			record: {
-				key: 'cdek:44', provider_id: 'cdek', level: 'settlement', country: 'RU',
-				settlement: { name: 'Москва' }, label: 'Москва',
-			},
-		} );
+	async function confirmCdek( name, region ) {
+		const record = {
+			key: 'cdek:44', provider_id: 'cdek', level: 'settlement', country: 'RU',
+			settlement: { name }, label: name,
+		};
+
+		if ( region ) {
+			record.region = { name: region };
+		}
+
+		selectViaFake( callFor( 'billing_city' ), { key: 'cdek:44', label: name, value: name, level: 'settlement', record } );
 
 		fetchCalls[ fetchCalls.length - 1 ].resolve( {
 			current: { key: 'cdek:44', level: 'settlement' }, persisted: true,
 			chain: { settlement: { key: 'cdek:44', level: 'settlement' } },
 		} );
 		await flushMicrotasks();
+	}
+
+	function confirmCdekMoscow() {
+		return confirmCdek( 'Москва' );
 	}
 
 	it( 'POSTs /select for a DaData house in the confirmed CDEK settlement', async () => {
@@ -3521,6 +3530,55 @@ describe( 'issue #1534 — a foreign house naming the confirmed settlement is po
 		expect( global.fetch.mock.calls.length ).toBe( fetchCallCountBefore );
 		// The CDEK city the customer confirmed is left exactly as it was.
 		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Москва' );
+	} );
+
+	it( 'POSTs a DaData house whose NESTED settlement is the confirmed CDEK one (г Пушкино, рп Черкизово)', async () => {
+		// Critic finding 2 on PR #1535: DaData's record names the city Пушкино as `settlement`
+		// and the buyer's Черкизово as `nested_settlement`.
+		boot( { region: true, settlement: true, address: true, owners: OWNERS_CDEK } );
+		await confirmCdek( 'Черкизово' );
+
+		const fetchCallCountBefore = global.fetch.mock.calls.length;
+
+		selectViaFake(
+			callFor( 'billing_address_1' ),
+			houseItem( 'Пушкино', { nested_settlement: { name: 'Черкизово', type: 'рп' } } )
+		);
+
+		expect( global.fetch.mock.calls.length ).toBe( fetchCallCountBefore + 1 );
+		expect( fetchCalls[ fetchCalls.length - 1 ].url ).toBe( SELECT_URL );
+	} );
+
+	it( 'does not POST a DaData house of a same-named city in ANOTHER region', async () => {
+		// Critic finding 1 on PR #1535: Благовещенск of Амурская область is not Благовещенск of
+		// Башкортостан.
+		boot( { region: true, settlement: true, address: true, owners: OWNERS_CDEK } );
+		await confirmCdek( 'Благовещенск', 'Амурская область' );
+
+		expect( document.getElementById( 'billing_state' ).value ).toBe( 'Амурская область' );
+
+		const fetchCallCountBefore = global.fetch.mock.calls.length;
+
+		selectViaFake(
+			callFor( 'billing_address_1' ),
+			houseItem( 'Благовещенск', { region: { name: 'Башкортостан', type: 'Респ' } } )
+		);
+
+		expect( global.fetch.mock.calls.length ).toBe( fetchCallCountBefore );
+	} );
+
+	it( 'POSTs a DaData house whose region is the same region spelled differently', async () => {
+		boot( { region: true, settlement: true, address: true, owners: OWNERS_CDEK } );
+		await confirmCdek( 'Благовещенск', 'Амурская область' );
+
+		const fetchCallCountBefore = global.fetch.mock.calls.length;
+
+		selectViaFake(
+			callFor( 'billing_address_1' ),
+			houseItem( 'Благовещенск', { region: { name: 'Амурская', type: 'обл' } } )
+		);
+
+		expect( global.fetch.mock.calls.length ).toBe( fetchCallCountBefore + 1 );
 	} );
 
 	it( 'does not POST a DaData house when no settlement was confirmed — typed city text proves nothing', () => {
