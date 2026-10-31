@@ -1,6 +1,30 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.0.19] — 2026-10-31
+### Bug Fixes
+- **shipping**: Coupon in the price cache key, zero-total cost arrays, order-amount limits
+
+- **shipping**: Report an order-amount refusal as a hidden reason
+
+
+### Documentation
+- **s206**: Session record, state, gotchas and the overnight handoff
+
+- **spec**: Ozon 2.0.0 scope after the 31.10.2026 rig review
+
+
+### Features
+- **shipping**: Price settings as FEATURE_* declarations
+
+
+
+## [2.0.18] — 2026-10-30
+### Bug Fixes
+- **shipping**: Protect the customer location record in every session-saving request
+
+
+
 ## [2.0.17] — 2026-10-30
 ### Bug Fixes
 - **location**: DaData 403 notice no longer claims funds ran out on a 0 ₽ balance (#1505) (#1514)
