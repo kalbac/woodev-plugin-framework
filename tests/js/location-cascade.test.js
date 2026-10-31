@@ -3581,6 +3581,22 @@ describe( 'issue #1534 — a foreign house naming the confirmed settlement is po
 		expect( global.fetch.mock.calls.length ).toBe( fetchCallCountBefore + 1 );
 	} );
 
+	it( 'POSTs a DaData house whose region differs from the field only by an em dash vs a hyphen', async () => {
+		// Critic round 2 on PR #1535: a dash between spaces separates two names whatever the
+		// dash; the hyphen inside «Ханты-Мансийский» stays.
+		boot( { region: true, settlement: true, address: true, owners: OWNERS_CDEK } );
+		await confirmCdek( 'Сургут', 'Ханты-Мансийский автономный округ — Югра' );
+
+		const fetchCallCountBefore = global.fetch.mock.calls.length;
+
+		selectViaFake(
+			callFor( 'billing_address_1' ),
+			houseItem( 'Сургут', { region: { name: 'Ханты-Мансийский автономный округ - Югра', type: 'АО' } } )
+		);
+
+		expect( global.fetch.mock.calls.length ).toBe( fetchCallCountBefore + 1 );
+	} );
+
 	it( 'does not POST a DaData house when no settlement was confirmed — typed city text proves nothing', () => {
 		boot( { region: true, settlement: true, address: true, owners: OWNERS_CDEK } );
 

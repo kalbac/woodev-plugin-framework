@@ -4264,17 +4264,19 @@
 
 	/**
 	 * A region name reduced to what identifies it — the client half of
-	 * `Location_Record::normalize_region_name()`: lower-cased, «ё» folded to «е», punctuation turned
-	 * into spaces, the region-type words dropped («Республика Саха (Якутия)» and «Саха /Якутия/»
-	 * both give «саха якутия»). Whole words only: «Ханты-Мансийский» keeps its hyphen and is never
-	 * cut. Written without Unicode property escapes so the file still parses in older browsers;
-	 * region names use the Cyrillic and Latin letters it keeps.
+	 * `Location_Record::normalize_region_name()`: lower-cased, «ё» folded to «е», a dash between
+	 * spaces («округ — Югра», «округ - Югра») and other punctuation turned into spaces, the
+	 * region-type words dropped («Республика Саха (Якутия)» and «Саха /Якутия/» both give «саха
+	 * якутия»). Whole words only: «Ханты-Мансийский» keeps its hyphen and is never cut. Written
+	 * without Unicode property escapes so the file still parses in older browsers; region names use
+	 * the Cyrillic and Latin letters it keeps.
 	 *
 	 * @param {string} value
 	 * @returns {string}
 	 */
 	function normalizeRegionName( value ) {
 		return String( value ).toLowerCase().replace( /ё/g, 'е' )
+			.replace( /\s+[-–—]+\s+/g, ' ' )
 			.replace( /[^0-9a-zа-я\s-]+/g, ' ' )
 			.split( /\s+/ )
 			.filter( function( word ) {
