@@ -1588,6 +1588,83 @@ final class DadataProviderTest extends TestCase {
 	}
 
 	/**
+	 * Issue #1534, critic finding 2 on PR #1535: the nested fixture («г Пушкино, рп Черкизово»)
+	 * keeps the city as the record's `settlement` (the buyer's own pick of the city must still
+	 * win) and carries Черкизово beside it, so a CDEK pick of Черкизово keeps its settlement
+	 * under the house in the stored chain.
+	 */
+	public function test_a_nested_settlement_house_keeps_a_cdek_pick_of_that_settlement_in_the_chain(): void {
+		$this->set_token( 'tok' );
+		$this->stub_http_response( 200, (string) json_encode( self::address_suggestion_with_nested_settlement() ) );
+
+		$house = ( self::provider() )->suggest( 'Ленина', Location_Scope::for_country( 'RU', Location_Record::LEVEL_ADDRESS ) )[0];
+
+		$this->assertSame( 'Пушкино', $house->settlement()['name'] );
+		$this->assertSame(
+			[
+				'name' => 'Черкизово',
+				'type' => 'рп',
+			],
+			$house->nested_settlement()
+		);
+
+		$cdek_pick = Location_Record::from_array(
+			[
+				'key'         => 'cdek:cherkizovo',
+				'provider_id' => 'cdek',
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'country'     => 'RU',
+				'settlement'  => [ 'name' => 'Черкизово' ],
+				'region'      => [ 'name' => 'Московская область' ],
+			]
+		);
+
+		require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-customer-location-store.php';
+
+		$rebuild = new \ReflectionMethod( \Woodev\Framework\Shipping\Location\Customer_Location_Store::class, 'rebuild_chain' );
+
+		if ( PHP_VERSION_ID < 80100 ) {
+			$rebuild->setAccessible( true );
+		}
+
+		$chain = $rebuild->invoke( null, [ 'records' => [ Location_Record::LEVEL_SETTLEMENT => $cdek_pick ] ], $house );
+
+		$this->assertSame( [ Location_Record::LEVEL_SETTLEMENT, Location_Record::LEVEL_ADDRESS ], array_keys( $chain ) );
+		$this->assertSame( 'cdek:cherkizovo', $chain[ Location_Record::LEVEL_SETTLEMENT ]->key() );
+	}
+
+	public function test_a_settlement_without_a_city_carries_no_nested_settlement(): void {
+		$this->set_token( 'tok' );
+		$this->stub_http_response(
+			200,
+			(string) json_encode(
+				[
+					'suggestions' => [
+						[
+							'value' => 'деревня Жуковка, ул Лесная, д 2',
+							'data'  => [
+								'country_iso_code' => 'RU',
+								'region'           => 'Нижегородская',
+								'settlement'       => 'Жуковка',
+								'settlement_type'  => 'д',
+								'street'           => 'Лесная',
+								'house'            => '2',
+								'fias_id'          => 'house-guid-2',
+								'fias_level'       => '8',
+							],
+						],
+					],
+				]
+			)
+		);
+
+		$house = ( self::provider() )->suggest( 'Лесная', Location_Scope::for_country( 'RU', Location_Record::LEVEL_ADDRESS ) )[0];
+
+		$this->assertSame( 'Жуковка', $house->settlement()['name'] );
+		$this->assertNull( $house->nested_settlement() );
+	}
+
+	/**
 	 * A foreign, OSM-derived row (Tashkent address): `region_fias_id` and
 	 * `city_fias_id` carry the SAME `relation:` id (measured: an address row in
 	 * that city repeats the settlement's own OSM id under `city_fias_id`), the

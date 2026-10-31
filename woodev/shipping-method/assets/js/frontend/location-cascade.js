@@ -3790,7 +3790,8 @@
 	 *
 	 * ONLY ENTERS THE SERVER-SIDE CHAIN WHEN {@see mayEnterChain} SAYS SO (issue #352, Variant
 	 * A): a record DEEPER than `settlement` whose own provider is not the one that owns the
-	 * `settlement` level never reaches `/select` at all — posting it would let the server's
+	 * `settlement` level never reaches `/select` at all (except a house naming the confirmed
+	 * settlement, issue #1534) — posting it would let the server's
 	 * `is_within()` ancestor-kinship check (issue #334, unchanged) amputate the settlement record
 	 * a DIFFERENT provider persisted, and that record is the one thing
 	 * `Provider_Selection_Scope::current_locality()` reads. See {@see mayEnterChain}'s own
@@ -4142,6 +4143,12 @@
 	 * conflict with) equals `record.provider_id`. Do NOT re-broaden this to every served level —
 	 * that is the exact change that regressed.
 	 *
+	 * ONE FOREIGN RECORD IS LET THROUGH (issue #1534): a house in the locality the
+	 * customer confirmed ({@see isSameLocality}). The server keeps the foreign settlement
+	 * under exactly that house (`Customer_Location_Store::rebuild_chain()`), so posting it no
+	 * longer amputates anything — and without it a CDEK shop never stores the house a courier
+	 * rate needs.
+	 *
 	 * WHAT THIS DOES NOT GATE (see {@see onSelectFor}'s own call site): `entry.records[node.level]`
 	 * (the LOCAL record the address widget/map read) and {@see refreshAddressLock} both still run
 	 * regardless of this predicate's answer, and {@see backwardsFill} makes its OWN,
@@ -4164,7 +4171,138 @@
 		var country = countryForRecord( entry, node, record );
 		var owner = levelOwner( entry, country, 'settlement' );
 
-		return ! owner || owner === record.provider_id;
+		if ( ! owner || owner === record.provider_id ) {
+			return true;
+		}
+
+		return 'address' === node.level && isSameLocality( entry, record );
+	}
+
+	/**
+	 * Whether a house from a provider that does NOT own the settlement level stands in the locality
+	 * the customer has confirmed (issue #1534) — the one foreign record {@see mayEnterChain} lets
+	 * into `/select`.
+	 *
+	 * The «Адрес» field is served by the bundled DaData provider whatever provider owns the
+	 * settlement, so on a CDEK shop every house is foreign. It is still the house a courier needs
+	 * (street, house, postcode, coordinates), so it is posted when it stands in the same locality:
+	 * `Customer_Location_Store::rebuild_chain()` then keeps the CDEK settlement and region under
+	 * it, by the server half of this exact rule (`Location_Record::is_same_locality_as()`):
+	 *
+	 *  - the city field's text equals the house's `settlement` OR its `nested_settlement` («г
+	 *    Пушкино, рп Черкизово» matches a pick of Пушкино and a pick of Черкизово), each through
+	 *    {@see normalizeSettlementName} with that component's own type;
+	 *  - the region field's text does not DEFINITELY disagree with the house's region
+	 *    ({@see regionsDisagree}).
+	 *
+	 * A house of another locality is refused exactly as before — it lives only as the text of the
+	 * fields, and the CDEK settlement stays the customer's locality.
+	 *
+	 * Both names are read from the FIELDS, not from `entry.records`: once the server answers,
+	 * {@see adoptChain} keeps only each record's key, and the fields hold the names the picks
+	 * wrote ({@see fieldValueFor}; gotcha `the-cascade-keeps-only-the-key-of-a-confirmed-chain-record`).
+	 * A city field without a confirmed record behind it (typed text, nothing picked) proves nothing.
+	 *
+	 * @param {Object} entry
+	 * @param {Object} record The house record.
+	 * @returns {boolean}
+	 */
+	function isSameLocality( entry, record ) {
+		var settlementNode = chainNodeForLevel( entry, 'settlement' );
+		var regionNode = chainNodeForLevel( entry, 'region' );
+		var confirmed = entry.records.settlement;
+
+		if ( ! settlementNode || ! confirmed || ! confirmed.key ) {
+			return false;
+		}
+
+		var region = record.region && record.region.name ? String( record.region.name ) : '';
+
+		if ( regionNode && regionsDisagree( fieldText( regionNode.fieldId ), region ) ) {
+			return false;
+		}
+
+		var shown = fieldText( settlementNode.fieldId );
+
+		return [ record.settlement, record.nested_settlement ].some( function( component ) {
+			if ( ! component || ! component.name ) {
+				return false;
+			}
+
+			var type = 'string' === typeof component.type ? component.type : '';
+			var name = normalizeSettlementName( shown, type );
+
+			return '' !== name && name === normalizeSettlementName( String( component.name ), type );
+		} );
+	}
+
+	/**
+	 * The text a field shows: a `<select>`'s chosen option text (WooCommerce's state field holds a
+	 * code as its value), any other element's value, `''` for an absent or empty field.
+	 *
+	 * @param {string} fieldId
+	 * @returns {string}
+	 */
+	function fieldText( fieldId ) {
+		var el = document.getElementById( fieldId );
+
+		if ( ! el || ! el.value ) {
+			return '';
+		}
+
+		if ( 'SELECT' === el.tagName && el.selectedIndex >= 0 ) {
+			return el.options[ el.selectedIndex ].textContent || '';
+		}
+
+		return String( el.value );
+	}
+
+	/** @type {string[]} The region-type words a region comparison drops (`Location_Record::normalize_region_name()`). */
+	var REGION_TYPE_WORDS = [
+		'область', 'обл', 'край', 'республика', 'респ', 'г', 'город', 'автономный', 'автономная', 'округ', 'ао', 'аобл',
+	];
+
+	/**
+	 * A region name reduced to what identifies it — the client half of
+	 * `Location_Record::normalize_region_name()`: lower-cased, «ё» folded to «е», a dash between
+	 * spaces («округ — Югра», «округ - Югра») and other punctuation turned into spaces, the
+	 * region-type words dropped («Республика Саха (Якутия)» and «Саха /Якутия/» both give «саха
+	 * якутия»). Whole words only: «Ханты-Мансийский» keeps its hyphen and is never cut. Written
+	 * without Unicode property escapes so the file still parses in older browsers; region names use
+	 * the Cyrillic and Latin letters it keeps.
+	 *
+	 * @param {string} value
+	 * @returns {string}
+	 */
+	function normalizeRegionName( value ) {
+		return String( value ).toLowerCase().replace( /ё/g, 'е' )
+			.replace( /\s+[-–—]+\s+/g, ' ' )
+			.replace( /[^0-9a-zа-я\s-]+/g, ' ' )
+			.split( /\s+/ )
+			.filter( function( word ) {
+				return '' !== word && REGION_TYPE_WORDS.indexOf( word ) === -1;
+			} )
+			.join( ' ' );
+	}
+
+	/**
+	 * Whether two region names are DEFINITELY different (issue #1534) — the client half of
+	 * `Location_Record::regions_disagree()`: both normalised ({@see normalizeRegionName}), the same
+	 * region when one contains the other, and never a disagreement when either side is empty.
+	 *
+	 * @param {string} one
+	 * @param {string} other
+	 * @returns {boolean}
+	 */
+	function regionsDisagree( one, other ) {
+		var a = normalizeRegionName( one );
+		var b = normalizeRegionName( other );
+
+		if ( '' === a || '' === b ) {
+			return false;
+		}
+
+		return -1 === a.indexOf( b ) && -1 === b.indexOf( a );
 	}
 
 	/**

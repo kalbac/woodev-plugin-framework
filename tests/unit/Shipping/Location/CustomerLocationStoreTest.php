@@ -2289,6 +2289,161 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			);
 		}
 
+		/**
+		 * Builds a record that carries a settlement name — the shape the issue #1534 tests
+		 * compare across providers.
+		 *
+		 * @param string   $key        Locality key.
+		 * @param string   $level      One of {@see Location_Record::LEVELS}.
+		 * @param string   $settlement Settlement name.
+		 * @param string   $type       Settlement type, or ''.
+		 * @param string[] $ancestors  The `ancestors` set to publish.
+		 *
+		 * @return Location_Record
+		 */
+		private function named_record( string $key, string $level, string $settlement, string $type = '', array $ancestors = [] ): Location_Record {
+			return Location_Record::from_array(
+				[
+					'key'         => $key,
+					'provider_id' => explode( ':', $key )[0],
+					'level'       => $level,
+					'country'     => 'RU',
+					'settlement'  => [
+						'name' => $settlement,
+						'type' => $type,
+					],
+					'ancestors'   => $ancestors,
+				]
+			);
+		}
+
+		/**
+		 * Stores the CDEK chain of the #1534 rig case: a region and a Moscow settlement
+		 * within it.
+		 *
+		 * @param Customer_Location_Store_Probe $store The store.
+		 *
+		 * @return void
+		 */
+		private function store_cdek_moscow( Customer_Location_Store_Probe $store ): void {
+			$store->set( $this->record_with_ancestors( 'cdek:r81', Location_Record::LEVEL_REGION, [] ) );
+			$store->set( $this->named_record( 'cdek:44', Location_Record::LEVEL_SETTLEMENT, 'Москва', '', [ 'cdek:r81' ] ) );
+		}
+
+		public function test_a_dadata_house_keeps_the_cdek_settlement_it_names(): void {
+			// Issue #1534: a shop on the CDEK provider takes the house from DaData. The house
+			// can never be is_within() a CDEK key, yet the CDEK settlement (its city code drives
+			// CDEK tariffs) and its region must survive, and the house must become current.
+			$this->stub_guest();
+
+			$store = new Customer_Location_Store_Probe( new Customer_Location_Store_Fake_Session() );
+
+			$this->store_cdek_moscow( $store );
+			$store->set( $this->named_record( 'dadata:house-1', Location_Record::LEVEL_ADDRESS, 'Москва', 'г', [ 'dadata:city-msk' ] ) );
+
+			$chain = $store->get_chain();
+
+			$this->assertSame(
+				[ Location_Record::LEVEL_REGION, Location_Record::LEVEL_SETTLEMENT, Location_Record::LEVEL_ADDRESS ],
+				array_keys( $chain['records'] )
+			);
+			$this->assertSame( 'cdek:r81', $chain['records'][ Location_Record::LEVEL_REGION ]->key() );
+			$this->assertSame( 'cdek:44', $chain['records'][ Location_Record::LEVEL_SETTLEMENT ]->key() );
+			$this->assertSame( 'dadata:house-1', $chain['records'][ Location_Record::LEVEL_ADDRESS ]->key() );
+			$this->assertSame( Location_Record::LEVEL_ADDRESS, $chain['current'] );
+		}
+
+		public function test_a_dadata_house_in_another_settlement_drops_the_cdek_chain(): void {
+			// Issue #1534, the mismatch case: a house of another city is never stored under the
+			// CDEK settlement (that would rate one city's address on another city's tariff).
+			// The rule of #334 applies unchanged — the unprovable ancestors are dropped.
+			$this->stub_guest();
+
+			$store = new Customer_Location_Store_Probe( new Customer_Location_Store_Fake_Session() );
+
+			$this->store_cdek_moscow( $store );
+			$store->set( $this->named_record( 'dadata:house-spb', Location_Record::LEVEL_ADDRESS, 'Санкт-Петербург', 'г', [ 'dadata:city-spb' ] ) );
+
+			$chain = $store->get_chain();
+
+			$this->assertSame( [ Location_Record::LEVEL_ADDRESS ], array_keys( $chain['records'] ) );
+		}
+
+		public function test_a_dadata_house_of_a_same_named_city_in_another_region_drops_the_cdek_chain(): void {
+			// Critic finding 1 on PR #1535: Благовещенск of Амурская область is not Благовещенск
+			// of Башкортостан — a definite region disagreement proves nothing.
+			$this->stub_guest();
+
+			$store = new Customer_Location_Store_Probe( new Customer_Location_Store_Fake_Session() );
+
+			$store->set(
+				Location_Record::from_array(
+					[
+						'key'         => 'cdek:blagoveshchensk-amur',
+						'provider_id' => 'cdek',
+						'level'       => Location_Record::LEVEL_SETTLEMENT,
+						'country'     => 'RU',
+						'settlement'  => [ 'name' => 'Благовещенск' ],
+						'region'      => [ 'name' => 'Амурская область' ],
+					]
+				)
+			);
+			$store->set(
+				Location_Record::from_array(
+					[
+						'key'         => 'dadata:house-bashkortostan',
+						'provider_id' => 'dadata',
+						'level'       => Location_Record::LEVEL_ADDRESS,
+						'country'     => 'RU',
+						'settlement'  => [
+							'name' => 'Благовещенск',
+							'type' => 'г',
+						],
+						'region'      => [
+							'name' => 'Башкортостан',
+							'type' => 'Респ',
+						],
+					]
+				)
+			);
+
+			$chain = $store->get_chain();
+
+			$this->assertSame( [ Location_Record::LEVEL_ADDRESS ], array_keys( $chain['records'] ) );
+		}
+
+		public function test_a_same_provider_address_is_never_kept_by_its_settlement_name(): void {
+			// Issue #1534 scope: the name proof is for a FOREIGN settlement only. A DaData house
+			// under a DaData settlement is still judged by is_within() alone — the provider
+			// `dadata` path is unchanged.
+			$this->stub_guest();
+
+			$store = new Customer_Location_Store_Probe( new Customer_Location_Store_Fake_Session() );
+
+			$store->set( $this->named_record( 'dadata:city-msk', Location_Record::LEVEL_SETTLEMENT, 'Москва', 'г' ) );
+			$store->set( $this->named_record( 'dadata:house-1', Location_Record::LEVEL_ADDRESS, 'Москва', 'г', [ 'dadata:city-other' ] ) );
+
+			$chain = $store->get_chain();
+
+			$this->assertSame( [ Location_Record::LEVEL_ADDRESS ], array_keys( $chain['records'] ) );
+		}
+
+		public function test_a_dadata_settlement_pick_over_a_cdek_chain_is_not_kept_by_name(): void {
+			// Issue #1534 scope: only an ADDRESS stands on a foreign settlement. A settlement of
+			// another provider replaces the stored one at its own level, as before.
+			$this->stub_guest();
+
+			$store = new Customer_Location_Store_Probe( new Customer_Location_Store_Fake_Session() );
+
+			$this->store_cdek_moscow( $store );
+			$store->set( $this->named_record( 'dadata:city-msk', Location_Record::LEVEL_SETTLEMENT, 'Москва', 'г' ) );
+
+			$chain = $store->get_chain();
+
+			$this->assertSame( [ Location_Record::LEVEL_SETTLEMENT ], array_keys( $chain['records'] ) );
+			$this->assertSame( 'dadata:city-msk', $chain['records'][ Location_Record::LEVEL_SETTLEMENT ]->key() );
+		}
+
 		public function test_a_stored_blob_with_two_records_at_one_level_is_refused_whole(): void {
 			// Adversarial review: re-indexing by the record's own level is what stops a
 			// corrupted outer key smuggling a record in under the wrong one — but a
