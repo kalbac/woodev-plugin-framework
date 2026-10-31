@@ -9,7 +9,12 @@ Every feature is **off** until the method declares it. Most add a field to the m
 
 | Feature | Merchant sees | You write |
 |---|---|---|
+| [`FEATURE_MARKUP`](#markup) | A markup, fixed or a percentage, and what the percentage is of. | Nothing. The framework adds it. |
+| [`FEATURE_FREE_SHIPPING`](#free-shipping) | Free delivery from an order amount, and by a free-shipping coupon. | Nothing. The framework makes the rate free. |
+| [`FEATURE_ROUNDING`](#rounding) | A rounding mode and a step. | Nothing. The framework rounds the rate. |
+| [`FEATURE_DELIVERY_TIME`](#delivery-time) | Whether the delivery period is shown, and extra days. | Report the carrier's days on the rate. |
 | [`FEATURE_COST_LIMITS`](#cost-limits) | A minimum and a maximum delivery cost. | Nothing. The framework clamps the rate. |
+| [`FEATURE_ORDER_AMOUNT_LIMITS`](#order-amount-limits) | A minimum and a maximum order amount. | Nothing. The framework hides the method outside them. |
 | [`FEATURE_INSURANCE`](#insurance) | A choice of when to insure the shipment. | Read the insurance decision. |
 | [`FEATURE_FEE_PAYMENTS`](#fee-by-payment-method) | A list of payment methods the fee applies to. | Ask whether the fee applies. |
 | [`FEATURE_CITY_LIMIT`](#city-limit) | A list of cities where the method is available or unavailable. | Nothing. |
@@ -20,12 +25,121 @@ Every feature is **off** until the method declares it. Most add a field to the m
 
 The examples below show the part of a method class that each feature touches. [Putting it together](#putting-it-together) shows them in one complete class.
 
+## Price features
+
+Four features give the merchant the price controls a shop expects from every carrier: a markup, free delivery, rounding and the delivery period. Declare the ones your method needs. Each adds its own fields to the method's settings, and the framework applies them to the rate your `rate_package()` returns. Your code returns the carrier's own price and nothing else.
+
+The framework applies them in a fixed order:
+
+1. The carrier's price, as `rate_package()` returned it.
+2. The markup.
+3. Free delivery. A free rate is 0, whatever the markup said.
+4. Rounding. A free rate stays 0.
+5. The box cost, when the method packs boxes.
+6. The [cost limits](#cost-limits), when declared. A free rate is never raised to the minimum.
+
+The order amount that free delivery and a percentage markup are measured on is the cart subtotal before discounts while a coupon is applied, and the contents cost otherwise.
+
+```php
+<?php
+// In the constructor of your method, before parent::__construct():
+$this->supports = [
+	self::FEATURE_MARKUP,
+	self::FEATURE_FREE_SHIPPING,
+	self::FEATURE_ROUNDING,
+	self::FEATURE_DELIVERY_TIME,
+	self::FEATURE_COST_LIMITS,
+	self::FEATURE_ORDER_AMOUNT_LIMITS,
+];
+```
+
+A method that declares none of them gets no new field, and its price is exactly what `rate_package()` returned.
+
+### Markup
+
+`FEATURE_MARKUP` adds a markup to the carrier's price.
+
+- **The merchant sees** «Наценка» (Markup), where `100` is an amount and `10%` is a percentage, and «База процента наценки» (Base of the percentage): «Стоимость заказа» (Order amount, the default) or «Стоимость доставки» (Delivery cost).
+- **The framework does** the arithmetic. With [`FEATURE_FEE_PAYMENTS`](#fee-by-payment-method) declared too, the markup applies only for the payment methods the merchant chose there.
+
+```php
+<?php
+// In the constructor of your method, before parent::__construct():
+$this->supports = [ self::FEATURE_MARKUP, self::FEATURE_FEE_PAYMENTS ];
+```
+
+The values are stored in the instance options `fee` and `fee_type` (`order` or `shipping`).
+
+### Free shipping
+
+`FEATURE_FREE_SHIPPING` makes the rate free.
+
+- **The merchant sees** «Бесплатная доставка от» (Free delivery from), an order amount, and, while the shop uses coupons, «Купон на бесплатную доставку» (Free-shipping coupon).
+- **The framework does** the check. An order amount above the threshold makes the rate free. Exactly at the threshold the carrier's price is quoted as it is, without the markup. With the coupon option on, an applied coupon that grants free shipping makes the rate free too.
+
+```php
+<?php
+// In the constructor of your method, before parent::__construct():
+$this->supports = [ self::FEATURE_FREE_SHIPPING ];
+```
+
+The values are stored in `free_cost` (empty means no threshold) and `coupon_free_shipping` (`yes` or `no`). Read the threshold with `get_free_shipping_threshold()`, which returns `0.0` when there is none.
+
+### Rounding
+
+`FEATURE_ROUNDING` rounds the price the customer sees.
+
+- **The merchant sees** «Округление цены» (Rounding): no rounding, up, down or to the nearest value, and «Шаг округления цены» (Rounding step): tens, hundreds or whole units.
+- **The framework does** the rounding after the markup and free delivery, and before the cost limits.
+
+```php
+<?php
+// In the constructor of your method, before parent::__construct():
+$this->supports = [ self::FEATURE_ROUNDING ];
+```
+
+The values are stored in `round_cost` (`none`, `ceil`, `floor` or `round`) and `round_cost_range` (`10`, `100` or `round`). The same rounding is available on its own as `Shipping_Helper::round_cost_to_step( $cost, $mode, $step )`.
+
+### Delivery time
+
+`FEATURE_DELIVERY_TIME` lets the merchant control the delivery period shown with the rate.
+
+- **The merchant sees** «Срок доставки» (Delivery time), a switch that shows the period to the customer, on by default, and «Добавочные дни доставки» (Extra delivery days), for example the days the shop needs to assemble the order.
+- **You write** the carrier's period, in days, on the rate with `with_delivery_days( $min, $max )`. The framework adds the extra days to both ends and writes the rate's delivery time, or shows none when the merchant switched it off.
+
+```php
+<?php
+// In rate_package(), when the carrier reported a period of 2 to 4 days:
+$rate = new Shipping_Rate( $this->id, $this->get_rate_id(), $this->get_title(), $cost );
+
+return $rate->with_delivery_days( 2, 4 );
+```
+
+The values are stored in `show_delivery_time` (`yes` or `no`) and `additional_time` (whole days). A method that reports days without declaring the feature still gets them shown, without extra days. A period of 0 days at both ends is not shown.
+
+### Keeping your plugin's own option keys
+
+The option keys above are the ones the existing carrier plugins already store, so a plugin that moves to these features keeps its merchants' settings. If your plugin stored the same setting under another key, redefine the constant in your method class, and the framework reads and saves that key instead:
+
+```php
+<?php
+use Woodev\Framework\Shipping\Shipping_Method_Courier;
+
+final class My_Carrier_Express_Method extends Shipping_Method_Courier {
+
+	/** The key this plugin's merchants already have the threshold under. */
+	const OPTION_FREE_SHIPPING_FROM = 'free';
+}
+```
+
+Every option of these features has such a constant: `OPTION_MARKUP`, `OPTION_MARKUP_BASE`, `OPTION_FREE_SHIPPING_FROM`, `OPTION_FREE_SHIPPING_COUPON`, `OPTION_ROUNDING`, `OPTION_ROUNDING_STEP`, `OPTION_SHOW_DELIVERY_TIME`, `OPTION_EXTRA_DELIVERY_DAYS`, `OPTION_MIN_ORDER_AMOUNT` and `OPTION_MAX_ORDER_AMOUNT`. Only the key changes; the stored values must have the format described above.
+
 ## Cost limits
 
 `FEATURE_COST_LIMITS` is for a carrier whose price is **calculated**, usually by its API.
 
 - **The merchant sees** two fields: «Минимальная стоимость доставки» (Minimum delivery cost) and «Максимальная стоимость доставки» (Maximum delivery cost). An empty field means no limit.
-- **The framework does** the clamping, as the last step of the calculation: after your fee, your free-shipping rule and the box cost. Equal limits make the price fixed, which is why there is no separate "fixed price" option. A rate of zero or less stays as it is, so a free rate is never raised to the minimum.
+- **The framework does** the clamping, as the last step of the calculation: after your fee, the [price features](#price-features) and the box cost. Equal limits make the price fixed, which is why there is no separate "fixed price" option. A rate of zero or less stays as it is, so a free rate is never raised to the minimum.
 
 ```php
 <?php
@@ -36,6 +150,24 @@ $this->supports = [ self::FEATURE_COST_LIMITS ];
 The values are stored in the instance options `min_cost` and `max_cost`. Read them with `get_min_cost()` and `get_max_cost()`, which return a float or `null`. If you need the limited number earlier than the end of the calculation, call `apply_cost_limits( $cost )`. Calling it twice is harmless.
 
 Do not declare this feature when the merchant types the price themselves. A limit on a price the merchant already controls only gets in the way.
+
+## Order-amount limits
+
+`FEATURE_ORDER_AMOUNT_LIMITS` keeps the method away from orders that are too small or too large for the carrier.
+
+- **The merchant sees** «Минимальная сумма заказа» (Minimum order amount) and «Максимальная сумма заказа» (Maximum order amount). An empty field, or 0, means no limit.
+- **The framework does** the hiding. The method is not offered when the order amount is below the minimum or above the maximum; an amount equal to a limit is allowed. The check runs before the rate cache, the packing and any call to the carrier, so an order outside the limits never costs a request.
+- **You write** nothing.
+
+The order amount is the cart subtotal when the cart has one, and the contents cost otherwise.
+
+```php
+<?php
+// In the constructor of your method, before parent::__construct():
+$this->supports = [ self::FEATURE_ORDER_AMOUNT_LIMITS ];
+```
+
+The values are stored in `min_order_cost` and `max_order_cost`. Read them with `get_min_order_amount()` and `get_max_order_amount()`, which return a float, `0.0` meaning no limit. These are limits on the **order**. [Cost limits](#cost-limits) bound the **delivery price** instead; the two do not affect each other.
 
 ## Insurance
 
@@ -87,9 +219,9 @@ Two things to know when you move a carrier from an older plugin onto this featur
 
 - **The merchant sees** «Оплата с наценкой» (Fee for payment methods), a list of the store's payment gateways. An empty list means the fee always applies. With a list, the fee applies only when the customer has chosen one of those gateways.
 - **The framework does** the hard part. It puts the chosen payment method into the shipping package, so WooCommerce cannot serve a stale rate, and it recalculates the rate when the customer changes the payment method, on both the classic and the block checkout.
-- **You write** the fee field and ask the framework whether the fee applies.
+- **You write** nothing more when the fee is the merchant's [markup](#markup): declare `FEATURE_MARKUP` and the framework limits it to the chosen payment methods.
 
-The framework gives you no fee field, because the fee is yours: a fixed amount, a percentage, a tariff-dependent surcharge. Add your own field in `get_method_form_fields()` and use `apply_fee_for_package()`, which returns the cost unchanged when the fee does not apply:
+When the fee is your own, such as a tariff-dependent surcharge, add your own field in `get_method_form_fields()` and use `apply_fee_for_package()`, which returns the cost unchanged when the fee does not apply. Give the field a key of its own: `fee` belongs to `FEATURE_MARKUP`.
 
 ```php
 <?php
@@ -104,7 +236,7 @@ final class My_Carrier_Express_Method extends Shipping_Method_Courier {
 	 */
 	protected function get_method_form_fields(): array {
 		return [
-			'fee' => [
+			'handling_fee' => [
 				'title'    => __( 'Handling fee', 'my-carrier' ),
 				'type'     => 'text',
 				'default'  => '',
@@ -119,7 +251,7 @@ Then, in `rate_package()`, after you know the carrier's price:
 
 ```php
 <?php
-$cost = $this->apply_fee_for_package( $cost, (string) $this->get_option( 'fee', '' ), $cost, $package );
+$cost = $this->apply_fee_for_package( $cost, (string) $this->get_option( 'handling_fee', '' ), $cost, $package );
 ```
 
 `apply_fee_for_package( float $cost, string $fee, float $base_for_percent, array $package )` reads `150` as an amount and `5%` as a percentage of `$base_for_percent`. If you only need the yes/no answer, call `fee_applies_for_package( $package )`. When no payment method has been chosen yet, a restricted fee does not apply.
@@ -373,6 +505,10 @@ final class My_Carrier_Express_Method extends Shipping_Method_Courier {
 		$this->method_title       = __( 'My Carrier: express courier', 'my-carrier' );
 		$this->method_description = __( 'Fast delivery to the customer\'s door.', 'my-carrier' );
 		$this->supports           = [
+			self::FEATURE_MARKUP,
+			self::FEATURE_FREE_SHIPPING,
+			self::FEATURE_ROUNDING,
+			self::FEATURE_DELIVERY_TIME,
 			self::FEATURE_COST_LIMITS,
 			self::FEATURE_INSURANCE,
 			self::FEATURE_FEE_PAYMENTS,
@@ -427,12 +563,6 @@ final class My_Carrier_Express_Method extends Shipping_Method_Courier {
 					'operator' => '=',
 					'value'    => 'fixed',
 				],
-			],
-			'fee'        => [
-				'title'    => __( 'Handling fee', 'my-carrier' ),
-				'type'     => 'text',
-				'default'  => '',
-				'desc_tip' => __( 'A fixed amount, or a percentage such as 5%.', 'my-carrier' ),
 			],
 		];
 	}
@@ -496,14 +626,16 @@ final class My_Carrier_Express_Method extends Shipping_Method_Courier {
 		}
 
 		$cost += 20.0 * count( $services );
-		$cost  = $this->apply_fee_for_package( $cost, (string) $this->get_option( 'fee', '' ), $cost, $package );
 
-		return new Shipping_Rate( $this->id, $this->get_rate_id(), $this->get_title(), $cost );
+		$rate = new Shipping_Rate( $this->id, $this->get_rate_id(), $this->get_title(), $cost );
+
+		// The carrier's delivery period; the framework adds the merchant's extra days.
+		return $rate->with_delivery_days( 2, 3 );
 	}
 }
 ```
 
-A merchant who adds this method to a zone sees the pricing choice, the fee, the cost limits, the insurance choice, the payment methods for the fee, the city limit, the packing mode, the shipping class and the services, all on one form. The cost limits clamp the rate after your code returns it.
+A merchant who adds this method to a zone sees the pricing choice, the markup, free delivery, rounding, the delivery period, the cost limits, the insurance choice, the payment methods for the markup, the city limit, the packing mode, the shipping class and the services, all on one form. The markup, free delivery, rounding and the cost limits apply to the rate after your code returns it.
 
 ## Next steps
 

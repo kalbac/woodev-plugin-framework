@@ -6333,3 +6333,158 @@ msgstr ""
 #, js-format
 msgid "Не удалось пересчитать доставку: сохранена цена %s. Заказ можно сохранить."
 msgstr ""
+
+#: shipping-method/class-shipping-method.php:750
+msgid "Наценка"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:753
+msgid "Например, 100 или 10%"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:754
+msgid "Фиксированная сумма или процент, которые добавляются к стоимости доставки. Оставьте поле пустым, если наценка не нужна."
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:761
+msgid "База процента наценки"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:766
+msgid "Стоимость заказа"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:769
+msgid "От какой суммы считается наценка, указанная в процентах."
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:776
+msgid "Бесплатная доставка от"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:779
+msgid "Например, 5000"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:780
+msgid "Если стоимость заказа больше этой суммы, доставка бесплатна. Оставьте поле пустым, если порог не нужен."
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:789
+msgid "Купон на бесплатную доставку"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:791
+msgid "Учитывать купоны на бесплатную доставку"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:793
+msgid "Если покупатель применил купон с бесплатной доставкой, этот способ доставки станет бесплатным."
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:804
+msgid "Округление цены"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:809
+msgid "Не округлять"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:810
+msgid "В большую сторону"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:811
+msgid "В меньшую сторону"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:812
+msgid "До ближайшего значения"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:814
+msgid "Как округлять стоимость доставки, которую увидит покупатель."
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:818
+msgid "Шаг округления цены"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:823
+msgid "До десятков"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:824
+msgid "До сотен"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:825
+msgid "До целого числа"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:827
+msgid "До какого значения округлять стоимость доставки."
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:845
+msgid "Срок доставки"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:847
+msgid "Показывать покупателю"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:849
+msgid "Срок доставки рассчитывает перевозчик. Если выключить, покупатель его не увидит."
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:852
+msgid "Добавочные дни доставки"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:855
+msgid "Например, 2"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:860
+msgid "Дни, которые добавляются к сроку доставки от перевозчика, например на сборку заказа. Оставьте поле пустым, если они не нужны."
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:877
+msgid "Минимальная сумма заказа"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:880
+msgid "Например, 1000"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:882
+msgid "Если сумма заказа меньше, этот способ доставки не показывается. Оставьте поле пустым, если ограничения нет."
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:887
+msgid "Максимальная сумма заказа"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:890
+msgid "Например, 100000"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:892
+msgid "Если сумма заказа больше, этот способ доставки не показывается. Оставьте поле пустым, если ограничения нет."
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:2192
+#, php-format
+msgid "сумма заказа вне ограничений метода (от %1$s до %2$s)"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:2194
+#, php-format
+msgid "сумма заказа ниже минимума метода (от %s)"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:2196
+#, php-format
+msgid "сумма заказа выше максимума метода (до %s)"
+msgstr ""

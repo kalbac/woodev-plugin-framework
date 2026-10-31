@@ -194,6 +194,16 @@ namespace Woodev\Tests\Unit\Shipping {
 		public function log_error( $message, $log_id = null ): void {
 			self::$errors[] = (string) $message;
 		}
+
+		/**
+		 * The debug line is not under test here; this probe does not write to the WooCommerce logger.
+		 *
+		 * @param string      $message log line.
+		 * @param string|null $log_id  log id.
+		 * @return void
+		 */
+		public function log_debug( $message, $log_id = null ): void {
+		}
 	}
 
 	/** Minimal Shipping_Method double that counts carrier calls. */
@@ -577,6 +587,43 @@ namespace Woodev\Tests\Unit\Shipping {
 			$method->report_hidden = false;
 			$method->calculate_shipping( $package );
 			$this->assertArrayNotHasKey( $this->hidden_key( $package ), Shipping_Method::get_hidden_reasons() );
+		}
+
+		/**
+		 * An order below the minimum is refused before the carrier, and the manager is told why (order-amount-limits).
+		 * «Логирование» is on for this file's probe.
+		 *
+		 * @return void
+		 */
+		public function test_an_order_outside_the_amount_limits_is_reported_as_a_hidden_reason(): void {
+			$method                           = $this->method();
+			$method->supports                 = [ Shipping_Method::FEATURE_ORDER_AMOUNT_LIMITS ];
+			$method->option_values            = [ 'min_order_cost' => '500' ];
+			$this->can_manage_woocommerce     = true;
+			$package                          = $this->package( [ 'contents_cost' => 400 ] );
+			$GLOBALS['woocommerce']->packages = [ $package ];
+
+			$method->calculate_shipping( $package );
+
+			$this->assertSame( 0, $method->carrier_calls, 'an order below the minimum never reaches the carrier' );
+			$reason = Shipping_Method::get_hidden_reasons()[ $this->hidden_key( $package ) ];
+			$this->assertSame( 'order_amount', $reason['reason_code'] );
+			$this->assertSame( 'сумма заказа ниже минимума метода (от 500)', $reason['message'] );
+		}
+
+		/** @return void */
+		public function test_an_order_inside_the_amount_limits_reports_no_hidden_reason(): void {
+			$method                           = $this->method();
+			$method->supports                 = [ Shipping_Method::FEATURE_ORDER_AMOUNT_LIMITS ];
+			$method->option_values            = [ 'min_order_cost' => '500' ];
+			$this->can_manage_woocommerce     = true;
+			$package                          = $this->package( [ 'contents_cost' => 600 ] );
+			$GLOBALS['woocommerce']->packages = [ $package ];
+
+			$method->calculate_shipping( $package );
+
+			$this->assertSame( 1, $method->carrier_calls );
+			$this->assertSame( [], Shipping_Method::get_hidden_reasons() );
 		}
 
 		/** @return void */
