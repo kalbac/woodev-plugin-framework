@@ -6458,3 +6458,18 @@ msgstr ""
 #: shipping-method/class-shipping-method.php:892
 msgid "Если сумма заказа больше, этот способ доставки не показывается. Оставьте поле пустым, если ограничения нет."
 msgstr ""
+
+#: shipping-method/class-shipping-method.php:2192
+#, php-format
+msgid "сумма заказа вне ограничений метода (от %1$s до %2$s)"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:2194
+#, php-format
+msgid "сумма заказа ниже минимума метода (от %s)"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:2196
+#, php-format
+msgid "сумма заказа выше максимума метода (до %s)"
+msgstr ""

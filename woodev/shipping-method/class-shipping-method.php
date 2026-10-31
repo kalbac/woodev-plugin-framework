@@ -1667,6 +1667,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 					sprintf( 'The shipping method %s is not available for this order amount (order amount limits).', $this->get_title() ),
 					sprintf( '%s_%s', $this->get_plugin()->get_id(), $this->get_id() )
 				);
+
+				$this->report_order_amount_hidden();
 			}
 
 			/**
@@ -2161,6 +2163,40 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 
 			$this->active_hidden_reason_key = $key;
 			$this->report_hidden( 'license_inactive', License_Gate::hidden_reason() );
+			$this->active_hidden_reason_key = null;
+		}
+
+		/**
+		 * Tells a store manager why the method gives no rate for an order outside its amount limits.
+		 *
+		 * The buyer is told nothing; the method is simply not offered. The reason is the merchant's own limit, so it is
+		 * safe to show, and it is reported before the rate cache, the packing and any carrier call.
+		 *
+		 * @since 2.0.19
+		 *
+		 * @return void
+		 */
+		private function report_order_amount_hidden(): void {
+
+			$key = $this->calculation_hidden_reason_key;
+
+			if ( null === $key ) {
+				return;
+			}
+
+			$min = $this->get_min_order_amount();
+			$max = $this->get_max_order_amount();
+
+			if ( $min > 0 && $max > 0 ) {
+				$message = sprintf( __( 'сумма заказа вне ограничений метода (от %1$s до %2$s)', 'woodev-plugin-framework' ), $min, $max );
+			} elseif ( $min > 0 ) {
+				$message = sprintf( __( 'сумма заказа ниже минимума метода (от %s)', 'woodev-plugin-framework' ), $min );
+			} else {
+				$message = sprintf( __( 'сумма заказа выше максимума метода (до %s)', 'woodev-plugin-framework' ), $max );
+			}
+
+			$this->active_hidden_reason_key = $key;
+			$this->report_hidden( 'order_amount', $message );
 			$this->active_hidden_reason_key = null;
 		}
 
