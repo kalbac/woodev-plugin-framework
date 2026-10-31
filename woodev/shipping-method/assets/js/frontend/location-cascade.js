@@ -3790,7 +3790,8 @@
 	 *
 	 * ONLY ENTERS THE SERVER-SIDE CHAIN WHEN {@see mayEnterChain} SAYS SO (issue #352, Variant
 	 * A): a record DEEPER than `settlement` whose own provider is not the one that owns the
-	 * `settlement` level never reaches `/select` at all — posting it would let the server's
+	 * `settlement` level never reaches `/select` at all (except a house naming the confirmed
+	 * settlement, issue #1534) — posting it would let the server's
 	 * `is_within()` ancestor-kinship check (issue #334, unchanged) amputate the settlement record
 	 * a DIFFERENT provider persisted, and that record is the one thing
 	 * `Provider_Selection_Scope::current_locality()` reads. See {@see mayEnterChain}'s own
@@ -4142,6 +4143,12 @@
 	 * conflict with) equals `record.provider_id`. Do NOT re-broaden this to every served level —
 	 * that is the exact change that regressed.
 	 *
+	 * ONE FOREIGN RECORD IS LET THROUGH (issue #1534): a house that names the settlement the
+	 * customer confirmed ({@see namesSameSettlement}). The server keeps the foreign settlement
+	 * under exactly that house (`Customer_Location_Store::rebuild_chain()`), so posting it no
+	 * longer amputates anything — and without it a CDEK shop never stores the house a courier
+	 * rate needs.
+	 *
 	 * WHAT THIS DOES NOT GATE (see {@see onSelectFor}'s own call site): `entry.records[node.level]`
 	 * (the LOCAL record the address widget/map read) and {@see refreshAddressLock} both still run
 	 * regardless of this predicate's answer, and {@see backwardsFill} makes its OWN,
@@ -4164,7 +4171,52 @@
 		var country = countryForRecord( entry, node, record );
 		var owner = levelOwner( entry, country, 'settlement' );
 
-		return ! owner || owner === record.provider_id;
+		if ( ! owner || owner === record.provider_id ) {
+			return true;
+		}
+
+		return 'address' === node.level && namesSameSettlement( entry, record );
+	}
+
+	/**
+	 * Whether a house from a provider that does NOT own the settlement level names the settlement
+	 * the customer has confirmed (issue #1534) — the one foreign record {@see mayEnterChain} lets
+	 * into `/select`.
+	 *
+	 * The «Адрес» field is served by the bundled DaData provider whatever provider owns the
+	 * settlement, so on a CDEK shop every house is foreign. A house only CDEK's own city can
+	 * carry is still a house a courier needs (street, house, postcode, coordinates), so it is
+	 * posted when it stands in the same settlement: `Customer_Location_Store::rebuild_chain()`
+	 * then keeps the CDEK settlement and region under it, by the server half of this exact rule
+	 * (`Location_Record::names_same_settlement()`). A house in another settlement is refused
+	 * exactly as before — it lives only as the text of the fields, and the CDEK settlement stays
+	 * the customer's locality.
+	 *
+	 * The settlement is read from its FIELD, not from `entry.records.settlement`: once the server
+	 * answers, {@see adoptChain} keeps only that record's key, and the field holds the name the
+	 * settlement pick wrote ({@see fieldValueFor}). A field without a confirmed record behind it
+	 * (typed text, nothing picked) proves nothing. Names compare through
+	 * {@see normalizeSettlementName} with the house's own type, as {@see isSameSettlement} does.
+	 *
+	 * @param {Object} entry
+	 * @param {Object} record The house record.
+	 * @returns {boolean}
+	 */
+	function namesSameSettlement( entry, record ) {
+		var settlementNode = chainNodeForLevel( entry, 'settlement' );
+		var confirmed = entry.records.settlement;
+		var component = record.settlement || {};
+		var name = component.name ? String( component.name ) : '';
+
+		if ( ! settlementNode || ! confirmed || ! confirmed.key || '' === name ) {
+			return false;
+		}
+
+		var field = document.getElementById( settlementNode.fieldId );
+		var type = 'string' === typeof component.type ? component.type : '';
+		var shown = normalizeSettlementName( field ? field.value : '', type );
+
+		return '' !== shown && shown === normalizeSettlementName( name, type );
 	}
 
 	/**

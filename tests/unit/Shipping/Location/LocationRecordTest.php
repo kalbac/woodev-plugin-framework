@@ -566,4 +566,59 @@ final class LocationRecordTest extends TestCase {
 		$this->assertSame( $record->ancestors(), $round_2->ancestors() );
 		$this->assertSame( $record->to_array(), $round_2->to_array(), 'a second round trip must be idempotent' );
 	}
+
+	// -----------------------------------------------------------------
+	// names_same_settlement() — the cross-provider kinship proof (#1534)
+	// -----------------------------------------------------------------
+
+	/**
+	 * Builds a record carrying a settlement name.
+	 *
+	 * @param string     $key        Locality key.
+	 * @param array|null $settlement The `{ name, type }` group, or null for none.
+	 * @param string     $country    ISO-3166 alpha-2.
+	 *
+	 * @return Location_Record
+	 */
+	private function with_settlement( string $key, ?array $settlement, string $country = 'RU' ): Location_Record {
+		return Location_Record::from_array(
+			[
+				'key'         => $key,
+				'provider_id' => explode( ':', $key )[0],
+				'level'       => 'address',
+				'country'     => $country,
+				'settlement'  => $settlement,
+			]
+		);
+	}
+
+	public function test_names_same_settlement_matches_across_providers_and_type_words(): void {
+		$house = $this->with_settlement( 'dadata:house', [ 'name' => 'Москва', 'type' => 'г' ] );
+		$city  = $this->with_settlement( 'cdek:44', [ 'name' => 'москва' ] );
+
+		$this->assertTrue( $house->names_same_settlement( $city ) );
+		$this->assertTrue( $city->names_same_settlement( $house ) );
+	}
+
+	public function test_names_same_settlement_refuses_another_name(): void {
+		$house = $this->with_settlement( 'dadata:house', [ 'name' => 'Новое Село', 'type' => 'с' ] );
+		$city  = $this->with_settlement( 'cdek:1', [ 'name' => 'Село' ] );
+
+		$this->assertFalse( $house->names_same_settlement( $city ) );
+	}
+
+	public function test_names_same_settlement_refuses_a_record_without_a_settlement_name(): void {
+		$house = $this->with_settlement( 'dadata:house', null );
+		$blank = $this->with_settlement( 'cdek:2', [ 'name' => '  ' ] );
+
+		$this->assertFalse( $house->names_same_settlement( $blank ) );
+		$this->assertFalse( $blank->names_same_settlement( $house ) );
+	}
+
+	public function test_names_same_settlement_refuses_another_country(): void {
+		$house = $this->with_settlement( 'dadata:house', [ 'name' => 'Минск' ], 'BY' );
+		$city  = $this->with_settlement( 'cdek:3', [ 'name' => 'Минск' ], 'RU' );
+
+		$this->assertFalse( $house->names_same_settlement( $city ) );
+	}
 }

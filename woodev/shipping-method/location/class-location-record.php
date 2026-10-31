@@ -662,6 +662,56 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Record' 
 		}
 
 		/**
+		 * Whether this record and `$other` name the same settlement — the kinship proof between
+		 * two records of DIFFERENT providers, whose keys {@see self::is_within()} can never
+		 * match (issue #1534: a DaData house over a CDEK settlement).
+		 *
+		 * Both records must be in the same country and carry a settlement name. The names are
+		 * compared through {@see self::normalize_city_name()}, each with its own type — the one
+		 * name-comparison contract; `namesSameSettlement()` in `location-cascade.js` is the
+		 * client half of this exact rule. Regions are deliberately not compared: providers spell
+		 * them differently («Ханты-Мансийский авт. округ», «Ханты-Мансийский Автономный округ -
+		 * Югра»), so a region check would drop a settlement that is right. The address
+		 * suggestions this proof serves are already narrowed by the provider to the settlement's
+		 * own region and city names (DaData's `locations` filter).
+		 *
+		 * @since 2.0.20
+		 *
+		 * @param Location_Record $other The record to compare with.
+		 *
+		 * @return bool
+		 */
+		public function names_same_settlement( Location_Record $other ): bool {
+			if ( $this->country() !== $other->country() ) {
+				return false;
+			}
+
+			$name = self::normalized_settlement_name( $this );
+
+			return '' !== $name && self::normalized_settlement_name( $other ) === $name;
+		}
+
+		/**
+		 * The record's settlement name through {@see self::normalize_city_name()}, or `''` when
+		 * the record carries no settlement name.
+		 *
+		 * @since 2.0.20
+		 *
+		 * @param Location_Record $record The record.
+		 *
+		 * @return string
+		 */
+		private static function normalized_settlement_name( Location_Record $record ): string {
+			$component = $record->settlement();
+
+			if ( null === $component || '' === trim( $component['name'] ) ) {
+				return '';
+			}
+
+			return self::normalize_city_name( $component['name'], $component['type'] );
+		}
+
+		/**
 		 * Normalizes a city name for comparing free address text with a record's bare settlement
 		 * name: lower-cased, «ё» folded to «е», whitespace collapsed, and ONE leading
 		 * settlement-type word dropped («г. Москва», «город Москва», «пос Внуково»). The record's

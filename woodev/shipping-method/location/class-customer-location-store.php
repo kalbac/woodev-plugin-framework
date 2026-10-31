@@ -356,7 +356,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 		 * - keeps every remaining SHALLOWER stored record only when it is in the
 		 *   same country AND `$record` `is_within()` it — a record whose ancestry
 		 *   cannot be PROVEN is dropped, never kept on the benefit of the doubt
-		 *   (see {@see self::rebuild_chain()} for why that draft was reversed);
+		 *   (see {@see self::rebuild_chain()} for why that draft was reversed, and
+		 *   for the one cross-provider proof — a house naming the settlement, #1534);
 		 * - writes the new record at its own level and makes it `current`.
 		 *
 		 * @since 2.0.2
@@ -921,7 +922,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 		 * the scope's country FROM THE PARENT — so a cross-country survivor would
 		 * silently move the customer's next search to another country.
 		 *
+		 * ONE CROSS-PROVIDER PROOF (issue #1534). A house from the address provider
+		 * (DaData) can never be `is_within()` a settlement of another provider (CDEK):
+		 * the keys live in different namespaces. Such a settlement — and every
+		 * record it is itself within, its region — is kept when
+		 * {@see self::foreign_settlement_anchor()} proves the house names the same
+		 * settlement. The settlement keeps driving the carrier that owns it, and the
+		 * house becomes `current` for a courier that needs a street and a house.
+		 * A house that names another settlement proves nothing and the rule above
+		 * applies unchanged: the settlement is dropped, never kept under a house of
+		 * another city.
+		 *
 		 * @since 2.0.2
+		 * @since 2.0.20 Keeps a foreign-provider settlement under an address that
+		 *               names it (issue #1534).
 		 *
 		 * @param array{records: array<string, Location_Record>, current: string, implicit: bool, saved_at: int}|null $current_chain The chain already stored, if any.
 		 * @param Location_Record                                                                                     $new_record    The record being written.
@@ -932,6 +946,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 			$records        = [];
 			$new_level      = $new_record->level();
 			$new_level_rank = array_search( $new_level, Location_Record::LEVELS, true );
+			$anchor         = self::foreign_settlement_anchor( $current_chain, $new_record );
 
 			if ( null !== $current_chain ) {
 				foreach ( $current_chain['records'] as $level => $stored_record ) {
@@ -949,7 +964,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 						continue; // Another country entirely — never an ancestor.
 					}
 
-					if ( $new_record->is_within( $stored_record->key() ) ) {
+					$kept_by_anchor = null !== $anchor
+						&& ( $anchor->key() === $stored_record->key() || $anchor->is_within( $stored_record->key() ) );
+
+					if ( $kept_by_anchor || $new_record->is_within( $stored_record->key() ) ) {
 						$records[ $level ] = $stored_record;
 					}
 				}
@@ -958,6 +976,43 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 			$records[ $new_level ] = $new_record;
 
 			return $records;
+		}
+
+		/**
+		 * The stored settlement an address of ANOTHER provider may stand on (issue #1534),
+		 * or `null` when there is none.
+		 *
+		 * A shop on the CDEK provider still takes the house from DaData: the address
+		 * field is served by the bundled DaData provider whatever provider owns the
+		 * settlement. The CDEK settlement must survive under that house — its city code
+		 * drives CDEK's tariffs (#352) — and the house must be stored, because a courier
+		 * rate needs its street, house, postcode and coordinates.
+		 *
+		 * Only an ADDRESS over a SETTLEMENT qualifies, and only when the providers differ:
+		 * a same-provider settlement is proven by {@see Location_Record::is_within()}
+		 * already, and must stay dropped when that proof fails. The proof itself is
+		 * {@see Location_Record::names_same_settlement()}; `location-cascade.js` posts a
+		 * foreign house only under the same rule, so the two halves agree.
+		 *
+		 * @since 2.0.20
+		 *
+		 * @param array{records: array<string, Location_Record>, current: string, implicit: bool, saved_at: int}|null $current_chain The chain already stored, if any.
+		 * @param Location_Record                                                                                     $new_record    The record being written.
+		 *
+		 * @return Location_Record|null
+		 */
+		private static function foreign_settlement_anchor( ?array $current_chain, Location_Record $new_record ): ?Location_Record {
+			if ( null === $current_chain || Location_Record::LEVEL_ADDRESS !== $new_record->level() ) {
+				return null;
+			}
+
+			$settlement = $current_chain['records'][ Location_Record::LEVEL_SETTLEMENT ] ?? null;
+
+			if ( null === $settlement || $settlement->provider_id() === $new_record->provider_id() ) {
+				return null;
+			}
+
+			return $new_record->names_same_settlement( $settlement ) ? $settlement : null;
 		}
 
 		/**
