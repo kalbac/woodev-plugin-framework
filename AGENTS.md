@@ -307,7 +307,7 @@ Any out-of-scope idea, bug or tech-debt item that surfaces mid-session:
 2. Add it to the board — auto-add is **not** enabled, so always do it explicitly:
    `gh project item-add 6 --owner kalbac --url <issue-url>`
 3. Set the status (the board has no default that suits us):
-   `gh project item-edit --id <item-id> --project-id PVT_kwHOAIbGB84BeLao --field-id PVTSSF_lAHOAIbGB84BeLaozhYnkgs --single-select-option-id <option>`
+   `gh project item-edit 6 --owner kalbac --url <issue-url> --field "Status" --value "<option name>"` (one field per call; gotcha `gh-project-item-edit-takes-the-project-number-and-url-now`)
 
    | Status | Option id | When |
    |---|---|---|
@@ -318,7 +318,7 @@ Any out-of-scope idea, bug or tech-debt item that surfaces mid-session:
 
 4. Set «Приоритет» — **no open card may be without one** (operator, 04.09.2026, #644 part 3; the
    board, not this repo's prose, is where priority lives). Same command,
-   `--field-id PVTSSF_lAHOAIbGB84BeLaozhhRouo`.
+   `--field "Приоритет" --value "<option name>"` (field id `PVTSSF_lAHOAIbGB84BeLaozhhRouo`).
 
    | Приоритет | Option id | When |
    |---|---|---|
