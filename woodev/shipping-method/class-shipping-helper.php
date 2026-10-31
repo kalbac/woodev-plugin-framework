@@ -217,6 +217,31 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Helper' ) ) :
 		}
 
 		/**
+		 * Rounds a shipping cost to a step: tens, hundreds or whole units.
+		 *
+		 * The values are the ones the rounding feature stores ({@see Shipping_Method::FEATURE_ROUNDING}). A cost of 0
+		 * or below (a free rate) is returned as is, and so is any cost under an unknown mode. Float noise is stripped
+		 * first: `100 * 1.07` is `107.00000000000001`, which `ceil()` would lift to 108.
+		 *
+		 * @since 2.0.19
+		 *
+		 * @param float  $cost shipping cost.
+		 * @param string $mode `none`, `ceil`, `floor` or `round`.
+		 * @param string $step `10`, `100` or `round` (whole units); anything else is 10.
+		 * @return float
+		 */
+		public static function round_cost_to_step( float $cost, string $mode, string $step ): float {
+
+			if ( $cost <= 0 || ! in_array( $mode, [ 'ceil', 'floor', 'round' ], true ) ) {
+				return $cost;
+			}
+
+			$unit = 'round' === $step ? 1 : ( '100' === $step ? 100 : 10 );
+
+			return self::round_cost( round( $cost, 6 ) / $unit, $mode ) * $unit;
+		}
+
+		/**
 		 * Applies a fee to the shipping cost.
 		 *
 		 * @since 1.5.0

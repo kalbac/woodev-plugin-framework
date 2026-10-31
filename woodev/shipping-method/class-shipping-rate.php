@@ -59,6 +59,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Rate' ) ) :
 		const POST_ADD_RATE_ATTRIBUTES = [ 'description', 'delivery_time' ];
 
 		/**
+		 * The arg holding the delivery days a carrier reported, `[ 'min' => int, 'max' => int ]`
+		 * ({@see self::with_delivery_days()}).
+		 *
+		 * The shipping method turns it into `delivery_time`; it never reaches `add_rate()`.
+		 *
+		 * @since 2.0.19
+		 * @var string
+		 */
+		const ARG_DELIVERY_DAYS = 'woodev_delivery_days';
+
+		/**
 		 * Identifier for the method
 		 *
 		 * @var string
@@ -381,7 +392,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Rate' ) ) :
 		 */
 		public function to_array(): array {
 
-			$rate = array_diff_key( $this->args, array_flip( self::POST_ADD_RATE_ATTRIBUTES ) );
+			$rate = array_diff_key( $this->args, array_flip( self::POST_ADD_RATE_ATTRIBUTES ), [ self::ARG_DELIVERY_DAYS => true ] );
 
 			$rate['id']        = $this->id;
 			$rate['label']     = $this->label;
@@ -495,6 +506,55 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Rate' ) ) :
 				$this->meta_data,
 				array_merge( $this->args, $args )
 			);
+		}
+
+		/**
+		 * Creates a rate carrying the delivery period the carrier reported, in days.
+		 *
+		 * The shipping method turns the days into the rate's `delivery_time` text: with
+		 * {@see Shipping_Method::FEATURE_DELIVERY_TIME} declared it adds the merchant's extra
+		 * days to both ends, or shows no period when the merchant switched it off.
+		 *
+		 * @since 2.0.19
+		 *
+		 * @param int $min_days the shortest delivery, in days.
+		 * @param int $max_days the longest delivery, in days; `0` (or less than the shortest) means the same.
+		 *
+		 * @return Shipping_Rate New rate instance carrying the days
+		 */
+		public function with_delivery_days( int $min_days, int $max_days = 0 ): Shipping_Rate {
+
+			$min_days = max( 0, $min_days );
+
+			return $this->with_args(
+				[
+					self::ARG_DELIVERY_DAYS => [
+						'min' => $min_days,
+						'max' => max( $min_days, $max_days ),
+					],
+				]
+			);
+		}
+
+		/**
+		 * Gets the delivery period the carrier reported, in days.
+		 *
+		 * @since 2.0.19
+		 *
+		 * @return array{min: int, max: int}|null `null` when the carrier reported none.
+		 */
+		public function get_delivery_days(): ?array {
+
+			$days = $this->args[ self::ARG_DELIVERY_DAYS ] ?? null;
+
+			if ( ! is_array( $days ) || ! isset( $days['min'], $days['max'] ) ) {
+				return null;
+			}
+
+			return [
+				'min' => (int) $days['min'],
+				'max' => (int) $days['max'],
+			];
 		}
 	}
 

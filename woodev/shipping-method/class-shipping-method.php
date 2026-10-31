@@ -122,6 +122,102 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		const OPTION_MAX_COST = 'max_cost';
 
 		/**
+		 * Markup feature: the instance gets a «Наценка» control (a fixed amount or a percentage) and the base of the
+		 * percentage, and the framework adds the markup to the carrier's price ({@see self::apply_price_features()}).
+		 * When the method also declared {@see self::FEATURE_FEE_PAYMENTS}, the markup applies only for the chosen
+		 * payment methods. OFF unless declared.
+		 *
+		 * @since 2.0.19
+		 */
+		const FEATURE_MARKUP = 'markup';
+
+		/**
+		 * Instance setting holding the markup: a fixed amount or a percentage, `100` or `10%` — the Yandex and CDEK key.
+		 *
+		 * Every price-feature option below is read through `static::`, so a carrier whose installed sites store the value
+		 * under another key redefines the constant in its method class and keeps the stored values without a migration.
+		 *
+		 * @since 2.0.19
+		 */
+		const OPTION_MARKUP = 'fee';
+
+		/**
+		 * Instance setting holding what a percentage markup is a percentage of: `order` (the order amount, the default)
+		 * or `shipping` (the carrier's price) — the Yandex and CDEK key and values.
+		 *
+		 * @since 2.0.19
+		 */
+		const OPTION_MARKUP_BASE = 'fee_type';
+
+		/**
+		 * Free-shipping feature: the instance gets a «Бесплатная доставка от» order amount and, while the shop uses
+		 * coupons, a switch that honours a free-shipping coupon; the framework then makes the rate free. OFF unless
+		 * declared.
+		 *
+		 * @since 2.0.19
+		 */
+		const FEATURE_FREE_SHIPPING = 'free-shipping';
+
+		/**
+		 * Instance setting holding the order amount above which delivery is free — the Yandex key (CDEK stores it as `free`).
+		 *
+		 * @since 2.0.19
+		 */
+		const OPTION_FREE_SHIPPING_FROM = 'free_cost';
+
+		/**
+		 * Instance setting (`yes`/`no`) telling whether a free-shipping coupon makes the method free — the Yandex and CDEK key.
+		 *
+		 * @since 2.0.19
+		 */
+		const OPTION_FREE_SHIPPING_COUPON = 'coupon_free_shipping';
+
+		/**
+		 * Rounding feature: the instance gets a rounding mode and a step, and the framework rounds the price the
+		 * customer sees. OFF unless declared.
+		 *
+		 * @since 2.0.19
+		 */
+		const FEATURE_ROUNDING = 'rounding';
+
+		/**
+		 * Instance setting holding the rounding mode: `none`, `ceil`, `floor` or `round` — the Yandex and CDEK key and values.
+		 *
+		 * @since 2.0.19
+		 */
+		const OPTION_ROUNDING = 'round_cost';
+
+		/**
+		 * Instance setting holding the rounding step: `10`, `100` or `round` (whole units) — the Yandex and CDEK key and values.
+		 *
+		 * @since 2.0.19
+		 */
+		const OPTION_ROUNDING_STEP = 'round_cost_range';
+
+		/**
+		 * Delivery-time feature: the instance gets a switch that shows or hides the delivery period and a number of
+		 * extra days added to both ends of it. The framework applies them to the days a carrier reported through
+		 * {@see Shipping_Rate::with_delivery_days()}. OFF unless declared.
+		 *
+		 * @since 2.0.19
+		 */
+		const FEATURE_DELIVERY_TIME = 'delivery-time';
+
+		/**
+		 * Instance setting (`yes`/`no`, `yes` by default) telling whether the customer sees the delivery period — the CDEK key.
+		 *
+		 * @since 2.0.19
+		 */
+		const OPTION_SHOW_DELIVERY_TIME = 'show_delivery_time';
+
+		/**
+		 * Instance setting holding the whole days added to the delivery period — the CDEK key.
+		 *
+		 * @since 2.0.19
+		 */
+		const OPTION_EXTRA_DELIVERY_DAYS = 'additional_time';
+
+		/**
 		 * City-limit feature: the instance gets a mode («Доступен только в городах» / «Недоступен в городах») and
 		 * a list of cities, and the framework hides the method from a customer whose city the limit excludes
 		 * ({@see City_Limit}). OFF unless declared; a method with no customer-chosen city (a postal one that
@@ -166,10 +262,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		/**
 		 * The features whose declaration changes what {@see self::init_form_fields()} builds.
 		 *
-		 * Exactly these six gate a control there. The rest declare intent and shape no form, so
+		 * Exactly these gate a control there. The rest declare intent and shape no form, so
 		 * {@see self::add_support()} must not pay for a rebuild on their account.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.19 The four price features.
 		 */
 		private const FORM_SHAPING_FEATURES = [
 			self::FEATURE_SHIPPING_CLASSES,
@@ -178,6 +275,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			self::FEATURE_COST_LIMITS,
 			self::FEATURE_INSURANCE,
 			self::FEATURE_CITY_LIMIT,
+			self::FEATURE_MARKUP,
+			self::FEATURE_FREE_SHIPPING,
+			self::FEATURE_ROUNDING,
+			self::FEATURE_DELIVERY_TIME,
 		];
 
 		/**
@@ -475,6 +576,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 				];
 			}
 
+			// markup, free shipping and rounding, in the order the framework applies them to the rate
+			$this->instance_form_fields = array_merge( $this->instance_form_fields, $this->get_price_feature_form_fields() );
+
 			if ( $this->supports_fee_payments() ) {
 
 				// the options are filled in when the control is rendered — see generate_multiselect_html()
@@ -551,6 +655,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 				];
 			}
 
+			if ( $this->supports_delivery_time() ) {
+				$this->instance_form_fields = array_merge( $this->instance_form_fields, $this->get_delivery_time_form_fields() );
+			}
+
 			if ( $this->supports_city_limit() ) {
 
 				// the cities control is a custom field type; its renderer is hooked once for every method that uses it
@@ -603,7 +711,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			 *
 			 * This terminates. The second pass runs with the feature already in `supports`, so
 			 * a callback that declares it again is a no-op in `add_support()` and sets nothing
-			 * pending; and only six features shape the form at all, which bounds even a
+			 * pending; and only ten features shape the form at all, which bounds even a
 			 * pathological callback that declares a different one each time.
 			 */
 			if ( $this->pending_form_rebuild ) {
@@ -621,6 +729,141 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 * @return array of form fields
 		 */
 		abstract protected function get_method_form_fields(): array;
+
+		/**
+		 * The controls of the declared markup, free-shipping and rounding features.
+		 *
+		 * Keyed by the `OPTION_*` constants read through `static::`, so a carrier that redefined a key gets its own
+		 * stored value in the control. The coupon switch is there only while the shop uses coupons.
+		 *
+		 * @since 2.0.19
+		 *
+		 * @return array<string, array<string, mixed>>
+		 */
+		private function get_price_feature_form_fields(): array {
+
+			$fields = [];
+
+			if ( $this->supports_markup() ) {
+
+				$fields[ static::OPTION_MARKUP ] = [
+					'title'       => __( 'Наценка', 'woodev-plugin-framework' ),
+					'type'        => 'text',
+					'default'     => '',
+					'placeholder' => __( 'Например, 100 или 10%', 'woodev-plugin-framework' ),
+					'desc_tip'    => __(
+						'Фиксированная сумма или процент, которые добавляются к стоимости доставки. Оставьте поле пустым, если наценка не нужна.',
+						'woodev-plugin-framework'
+					),
+				];
+
+				$fields[ static::OPTION_MARKUP_BASE ] = [
+					'title'    => __( 'База процента наценки', 'woodev-plugin-framework' ),
+					'type'     => 'select',
+					'class'    => 'wc-enhanced-select',
+					'default'  => 'order',
+					'options'  => [
+						'order'    => __( 'Стоимость заказа', 'woodev-plugin-framework' ),
+						'shipping' => __( 'Стоимость доставки', 'woodev-plugin-framework' ),
+					],
+					'desc_tip' => __( 'От какой суммы считается наценка, указанная в процентах.', 'woodev-plugin-framework' ),
+				];
+			}
+
+			if ( $this->supports_free_shipping() ) {
+
+				$fields[ static::OPTION_FREE_SHIPPING_FROM ] = [
+					'title'       => __( 'Бесплатная доставка от', 'woodev-plugin-framework' ),
+					'type'        => 'price',
+					'default'     => '',
+					'placeholder' => __( 'Например, 5000', 'woodev-plugin-framework' ),
+					'desc_tip'    => __(
+						'Если стоимость заказа больше этой суммы, доставка бесплатна. Оставьте поле пустым, если порог не нужен.',
+						'woodev-plugin-framework'
+					),
+				];
+
+				if ( self::coupons_enabled() ) {
+
+					$fields[ static::OPTION_FREE_SHIPPING_COUPON ] = [
+						'title'    => __( 'Купон на бесплатную доставку', 'woodev-plugin-framework' ),
+						'type'     => 'checkbox',
+						'label'    => __( 'Учитывать купоны на бесплатную доставку', 'woodev-plugin-framework' ),
+						'default'  => 'no',
+						'desc_tip' => __(
+							'Если покупатель применил купон с бесплатной доставкой, этот способ доставки станет бесплатным.',
+							'woodev-plugin-framework'
+						),
+					];
+				}
+			}
+
+			if ( $this->supports_rounding() ) {
+
+				$fields[ static::OPTION_ROUNDING ] = [
+					'title'    => __( 'Округление цены', 'woodev-plugin-framework' ),
+					'type'     => 'select',
+					'class'    => 'wc-enhanced-select',
+					'default'  => 'none',
+					'options'  => [
+						'none'  => __( 'Не округлять', 'woodev-plugin-framework' ),
+						'ceil'  => __( 'В большую сторону', 'woodev-plugin-framework' ),
+						'floor' => __( 'В меньшую сторону', 'woodev-plugin-framework' ),
+						'round' => __( 'До ближайшего значения', 'woodev-plugin-framework' ),
+					],
+					'desc_tip' => __( 'Как округлять стоимость доставки, которую увидит покупатель.', 'woodev-plugin-framework' ),
+				];
+
+				$fields[ static::OPTION_ROUNDING_STEP ] = [
+					'title'    => __( 'Шаг округления цены', 'woodev-plugin-framework' ),
+					'type'     => 'select',
+					'class'    => 'wc-enhanced-select',
+					'default'  => '10',
+					'options'  => [
+						'10'    => __( 'До десятков', 'woodev-plugin-framework' ),
+						'100'   => __( 'До сотен', 'woodev-plugin-framework' ),
+						'round' => __( 'До целого числа', 'woodev-plugin-framework' ),
+					],
+					'desc_tip' => __( 'До какого значения округлять стоимость доставки.', 'woodev-plugin-framework' ),
+				];
+			}
+
+			return $fields;
+		}
+
+		/**
+		 * The controls of the declared delivery-time feature.
+		 *
+		 * @since 2.0.19
+		 *
+		 * @return array<string, array<string, mixed>>
+		 */
+		private function get_delivery_time_form_fields(): array {
+
+			return [
+				static::OPTION_SHOW_DELIVERY_TIME  => [
+					'title'    => __( 'Срок доставки', 'woodev-plugin-framework' ),
+					'type'     => 'checkbox',
+					'label'    => __( 'Показывать покупателю', 'woodev-plugin-framework' ),
+					'default'  => 'yes',
+					'desc_tip' => __( 'Срок доставки рассчитывает перевозчик. Если выключить, покупатель его не увидит.', 'woodev-plugin-framework' ),
+				],
+				static::OPTION_EXTRA_DELIVERY_DAYS => [
+					'title'             => __( 'Добавочные дни доставки', 'woodev-plugin-framework' ),
+					'type'              => 'number',
+					'default'           => '',
+					'placeholder'       => __( 'Например, 2', 'woodev-plugin-framework' ),
+					'custom_attributes' => [
+						'min'  => '0',
+						'step' => '1',
+					],
+					'desc_tip'          => __(
+						'Дни, которые добавляются к сроку доставки от перевозчика, например на сборку заказа. Оставьте поле пустым, если они не нужны.',
+						'woodev-plugin-framework'
+					),
+				],
+			];
+		}
 
 		/**
 		 * Get the default shipping method title, which is configurable within the
@@ -989,6 +1232,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 * @since 2.0.0 Now a final template; carrier logic moved to {@see self::rate_package()}.
 		 * @since 2.0.2 Runs under the `rates` request purpose (#954): every API call the rating
 		 *              makes gets the short rates timeout. A rate call is never retried.
+		 * @since 2.0.19 Applies the declared price features ({@see self::apply_price_features()}) and the
+		 *               delivery days ({@see self::apply_delivery_days()}) to the carrier's rate, before the
+		 *               box cost and the cost limits.
 		 *
 		 * @param array $package Package data.
 		 * @return Shipping_Rate|null Shipping rate object, or null if no rate should be added.
@@ -1012,8 +1258,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 						$this->active_hidden_reason_key = null;
 					}
 
-					// «free» is the carrier's decision (a free-from threshold, a coupon), so it is read from the rate
-					// BEFORE the box cost is added: a 0 rate with a 25 box surcharge is still a free rate
+					// the merchant's price features come first, on the carrier's own price: markup, free shipping,
+					// rounding; then the declared delivery period gets its extra days
+					if ( null !== $rate ) {
+						$rate = $this->apply_price_features( $rate, $package );
+						$rate = $this->apply_delivery_days( $rate );
+					}
+
+					// «free» is decided by the carrier or the free-shipping feature (a free-from threshold, a coupon), so it
+					// is read from the rate BEFORE the box cost is added: a 0 rate with a 25 box surcharge is still free
 					$carrier_free = null !== $rate && $this->supports_cost_limits() && self::rate_cost_total( $rate ) <= 0;
 
 					if ( null !== $rate && null !== $packed ) {
@@ -2054,7 +2307,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 * The framework already runs this over every rate of a method that declared
 		 * {@see self::FEATURE_COST_LIMITS}, as the LAST step of {@see self::calculate_rate()} — after the
 		 * carrier's `rate_package()` (so after its fee, {@see self::apply_fee_for_package()}, and after its
-		 * free-shipping rule) and after the box-packing cost. A carrier therefore calls this only if it
+		 * free-shipping rule), after the declared price features ({@see self::apply_price_features()}) and
+		 * after the box-packing cost. A carrier therefore calls this only if it
 		 * needs the limited number earlier, for example to compare it with something; calling it twice is
 		 * harmless, the result does not change.
 		 *
@@ -2110,24 +2364,43 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 */
 		private function limit_rate_cost( Shipping_Rate $rate, bool $carrier_free = false ): Shipping_Rate {
 
-			$cost  = $rate->get_cost();
-			$total = self::rate_cost_total( $rate );
-
-			if ( ! is_array( $cost ) && ! is_numeric( $cost ) ) {
-				return $rate;
-			}
-
+			$total   = self::rate_cost_total( $rate );
 			$limited = Shipping_Helper::limit_cost( $total, $carrier_free ? null : $this->get_min_cost(), $this->get_max_cost() );
 
-			if ( $limited === $total ) {
+			return self::rate_with_total( $rate, $limited );
+		}
+
+		/**
+		 * A rate whose total cost is `$total`, whatever shape its cost has.
+		 *
+		 * A number is replaced. A per-item cost array (WooCommerce taxes each entry by its own class) is scaled
+		 * proportionally, so the mix of the entries is kept; an array that sums to 0 has nothing to scale and is set
+		 * to 0 only when `$total` is 0. A cost that is neither (a formula string) is left alone.
+		 *
+		 * @since 2.0.19
+		 *
+		 * @param Shipping_Rate $rate  rate.
+		 * @param float         $total the total the rate should cost.
+		 * @return Shipping_Rate the same rate when nothing changes.
+		 */
+		private static function rate_with_total( Shipping_Rate $rate, float $total ): Shipping_Rate {
+
+			$cost    = $rate->get_cost();
+			$current = self::rate_cost_total( $rate );
+
+			if ( ( ! is_array( $cost ) && ! is_numeric( $cost ) ) || $total === $current ) {
 				return $rate;
 			}
 
 			if ( ! is_array( $cost ) ) {
-				return $rate->with_cost( $limited );
+				return $rate->with_cost( $total );
 			}
 
-			$factor = $limited / $total;
+			if ( $current <= 0 && $total > 0 ) {
+				return $rate;
+			}
+
+			$factor = $current > 0 ? $total / $current : 0.0;
 
 			foreach ( $cost as $key => $part ) {
 				if ( is_numeric( $part ) ) {
@@ -2136,6 +2409,283 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			}
 
 			return $rate->with_cost( $cost );
+		}
+
+		/**
+		 * Determines whether this method adds the merchant's markup to the carrier's price.
+		 *
+		 * Named predicate over {@see self::FEATURE_MARKUP}.
+		 *
+		 * @since 2.0.19
+		 *
+		 * @return bool
+		 */
+		public function supports_markup(): bool {
+			return $this->supports( self::FEATURE_MARKUP );
+		}
+
+		/**
+		 * Determines whether this method can become free from an order amount or by a coupon.
+		 *
+		 * Named predicate over {@see self::FEATURE_FREE_SHIPPING}.
+		 *
+		 * @since 2.0.19
+		 *
+		 * @return bool
+		 */
+		public function supports_free_shipping(): bool {
+			return $this->supports( self::FEATURE_FREE_SHIPPING );
+		}
+
+		/**
+		 * Determines whether this method rounds the price the customer sees.
+		 *
+		 * Named predicate over {@see self::FEATURE_ROUNDING}.
+		 *
+		 * @since 2.0.19
+		 *
+		 * @return bool
+		 */
+		public function supports_rounding(): bool {
+			return $this->supports( self::FEATURE_ROUNDING );
+		}
+
+		/**
+		 * Determines whether the merchant controls the delivery period shown to the customer.
+		 *
+		 * Named predicate over {@see self::FEATURE_DELIVERY_TIME}.
+		 *
+		 * @since 2.0.19
+		 *
+		 * @return bool
+		 */
+		public function supports_delivery_time(): bool {
+			return $this->supports( self::FEATURE_DELIVERY_TIME );
+		}
+
+		/**
+		 * Prices the carrier's rate with the declared price features, in their fixed order.
+		 *
+		 * The order is the one the Yandex and CDEK plugins used before these features existed, so a plugin that moves
+		 * to them quotes the same price:
+		 *
+		 * 1. the markup ({@see self::FEATURE_MARKUP}) — a fixed amount, or a percentage of the order amount or of
+		 *    the carrier's price; restricted to the chosen payment methods when {@see self::FEATURE_FEE_PAYMENTS}
+		 *    is declared too ({@see self::apply_fee_for_package()});
+		 * 2. free shipping ({@see self::FEATURE_FREE_SHIPPING}) — an order amount ABOVE the threshold, or an applied
+		 *    coupon that grants free shipping, makes the price 0. Exactly AT the threshold the carrier's price is
+		 *    quoted without the markup: the order is not free yet, and both plugins kept that on purpose;
+		 * 3. the rounding ({@see self::FEATURE_ROUNDING}) — a price of 0 stays 0.
+		 *
+		 * The order amount is the cart subtotal while coupons are applied and the contents cost otherwise, as both
+		 * plugins measured it. The box cost and the cost limits ({@see self::FEATURE_COST_LIMITS}) come after this, in
+		 * {@see self::calculate_rate()}.
+		 *
+		 * @since 2.0.19
+		 *
+		 * @param Shipping_Rate $rate    the carrier's rate.
+		 * @param array         $package WooCommerce shipping package.
+		 * @return Shipping_Rate the same rate when the method declared none of the three features.
+		 */
+		private function apply_price_features( Shipping_Rate $rate, array $package ): Shipping_Rate {
+
+			if ( ! $this->supports_markup() && ! $this->supports_free_shipping() && ! $this->supports_rounding() ) {
+				return $rate;
+			}
+
+			$order_amount    = self::price_order_amount( $package );
+			$threshold       = $this->get_free_shipping_threshold();
+			$above_threshold = $threshold > 0 && $order_amount > $threshold;
+			$at_threshold    = $threshold > 0 && $order_amount === $threshold;
+			$price           = self::rate_cost_total( $rate );
+
+			// exactly at the threshold the order is not free yet and carries no markup either (the Yandex/CDEK v1 behaviour)
+			if ( $this->supports_markup() && ! $at_threshold ) {
+				$price = $this->apply_markup( $price, $order_amount, $package );
+			}
+
+			if ( $above_threshold || $this->free_shipping_coupon_applies( $package ) ) {
+				$price = 0.0;
+			}
+
+			if ( $this->supports_rounding() ) {
+				$price = Shipping_Helper::round_cost_to_step(
+					$price,
+					(string) $this->get_option( static::OPTION_ROUNDING, 'none' ),
+					(string) $this->get_option( static::OPTION_ROUNDING_STEP, '10' )
+				);
+			}
+
+			return self::rate_with_total( $rate, $price );
+		}
+
+		/**
+		 * Adds the merchant's markup to a price.
+		 *
+		 * @since 2.0.19
+		 *
+		 * @param float $price        the carrier's price.
+		 * @param float $order_amount see {@see self::price_order_amount()}.
+		 * @param array $package      WooCommerce shipping package.
+		 * @return float
+		 */
+		private function apply_markup( float $price, float $order_amount, array $package ): float {
+
+			$markup = $this->get_option( static::OPTION_MARKUP, '' );
+			$markup = is_scalar( $markup ) ? str_replace( ',', '.', trim( (string) $markup ) ) : '';
+			$base   = 'shipping' === $this->get_option( static::OPTION_MARKUP_BASE, 'order' ) ? $price : $order_amount;
+
+			return $this->apply_fee_for_package( $price, $markup, $base, $package );
+		}
+
+		/**
+		 * The order amount above which delivery is free, or `0.0` for «no threshold» (also for a method that did not
+		 * declare {@see self::FEATURE_FREE_SHIPPING}).
+		 *
+		 * @since 2.0.19
+		 *
+		 * @return float
+		 */
+		public function get_free_shipping_threshold(): float {
+
+			if ( ! $this->supports_free_shipping() ) {
+				return 0.0;
+			}
+
+			return Shipping_Helper::normalize_cost_limit( $this->get_option( static::OPTION_FREE_SHIPPING_FROM, '' ) ) ?? 0.0;
+		}
+
+		/**
+		 * Whether an applied coupon makes `$package` ship free: the method declared {@see self::FEATURE_FREE_SHIPPING},
+		 * the merchant switched the coupon option on, the shop uses coupons, and one of the coupons grants free shipping.
+		 *
+		 * @since 2.0.19
+		 *
+		 * @param array $package WooCommerce shipping package.
+		 * @return bool
+		 */
+		private function free_shipping_coupon_applies( array $package ): bool {
+
+			if ( ! $this->supports_free_shipping() || 'yes' !== $this->get_option( static::OPTION_FREE_SHIPPING_COUPON, 'no' ) ) {
+				return false;
+			}
+
+			if ( ! self::coupons_enabled() ) {
+				return false;
+			}
+
+			foreach ( (array) ( $package['applied_coupons'] ?? [] ) as $code ) {
+				if ( $this->coupon_grants_free_shipping( (string) $code ) ) {
+					return true;
+				}
+			}
+
+			return false;
+		}
+
+		/**
+		 * Whether one coupon grants free shipping.
+		 *
+		 * `protected` as a test seam: a probe overrides this one line rather than `WC_Coupon` having to exist in the
+		 * unit-test process.
+		 *
+		 * @since 2.0.19
+		 *
+		 * @param string $code coupon code.
+		 * @return bool
+		 */
+		protected function coupon_grants_free_shipping( string $code ): bool {
+
+			if ( ! class_exists( '\WC_Coupon' ) ) {
+				return false;
+			}
+
+			$coupon = new \WC_Coupon( $code );
+
+			return (bool) $coupon->get_free_shipping();
+		}
+
+		/**
+		 * Whether the shop uses coupons at all; the coupon switch is shown and honoured only then.
+		 *
+		 * @since 2.0.19
+		 *
+		 * @return bool
+		 */
+		private static function coupons_enabled(): bool {
+			return function_exists( 'wc_coupons_enabled' ) && wc_coupons_enabled();
+		}
+
+		/**
+		 * The order amount the free-shipping threshold and a percentage markup are measured on: the cart subtotal
+		 * (before discounts) while coupons are applied, the contents cost (after them) otherwise.
+		 *
+		 * @since 2.0.19
+		 *
+		 * @param array $package WooCommerce shipping package.
+		 * @return float
+		 */
+		private static function price_order_amount( array $package ): float {
+
+			$value = ! empty( $package['applied_coupons'] ) ? ( $package['cart_subtotal'] ?? 0 ) : ( $package['contents_cost'] ?? 0 );
+
+			return is_numeric( $value ) ? (float) $value : 0.0;
+		}
+
+		/**
+		 * Turns the delivery days a carrier reported ({@see Shipping_Rate::with_delivery_days()}) into the rate's
+		 * `delivery_time`.
+		 *
+		 * With {@see self::FEATURE_DELIVERY_TIME} declared, the merchant's extra days are added to both ends, and a
+		 * merchant who switched the period off gets none — not even one the carrier wrote as text. A method that did not
+		 * declare it still gets the reported days formatted, without extra days. A period that is 0 at both ends is not
+		 * shown.
+		 *
+		 * @since 2.0.19
+		 *
+		 * @param Shipping_Rate $rate the carrier's rate.
+		 * @return Shipping_Rate
+		 */
+		private function apply_delivery_days( Shipping_Rate $rate ): Shipping_Rate {
+
+			if ( $this->supports_delivery_time() && 'yes' !== $this->get_option( static::OPTION_SHOW_DELIVERY_TIME, 'yes' ) ) {
+				return '' === (string) $rate->get_arg( 'delivery_time', '' ) ? $rate : $rate->with_args( [ 'delivery_time' => '' ] );
+			}
+
+			$days = $rate->get_delivery_days();
+
+			if ( null === $days ) {
+				return $rate;
+			}
+
+			$extra = $this->get_extra_delivery_days();
+			$min   = $days['min'] + $extra;
+			$max   = max( $days['min'], $days['max'] ) + $extra;
+
+			if ( $min <= 0 && $max <= 0 ) {
+				return $rate;
+			}
+
+			return $rate->with_args( [ 'delivery_time' => Shipping_Helper::format_delivery_time( $min, $max ) ] );
+		}
+
+		/**
+		 * The whole days the merchant adds to the delivery period; `0` when none, malformed, negative, or the method
+		 * did not declare {@see self::FEATURE_DELIVERY_TIME}.
+		 *
+		 * @since 2.0.19
+		 *
+		 * @return int
+		 */
+		public function get_extra_delivery_days(): int {
+
+			if ( ! $this->supports_delivery_time() ) {
+				return 0;
+			}
+
+			$days = $this->get_option( static::OPTION_EXTRA_DELIVERY_DAYS, '' );
+
+			return is_numeric( $days ) ? max( 0, (int) $days ) : 0;
 		}
 
 		/**
@@ -2312,6 +2862,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 * Public, not protected, because {@see Shipping_Rate_Cache} reads it from outside the class.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.19 A method that declared {@see self::FEATURE_MARKUP} or {@see self::FEATURE_FREE_SHIPPING}
+		 *               adds the applied coupons and the order amount those features measure.
 		 *
 		 * @param array $package WooCommerce shipping package.
 		 *
@@ -2337,6 +2889,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 				$context['packing']['values'] = Packaging::get_value_context( (array) ( $package['contents'] ?? [] ) );
 			}
 			$context['payment'] = $this->payment_method_for_package( $package );
+
+			// the free-shipping coupon and the order amount the threshold and a percentage markup are measured on
+			// (the subtotal while coupons are applied) price the rate too; a method that declared neither feature adds
+			// nothing, so its cache identity stays what it was
+			if ( $this->supports_markup() || $this->supports_free_shipping() ) {
+
+				$coupons = array_map( 'strval', (array) ( $package['applied_coupons'] ?? [] ) );
+
+				sort( $coupons );
+
+				$context['price'] = [
+					'coupons' => $coupons,
+					'amount'  => self::price_order_amount( $package ),
+				];
+			}
 
 			if ( $this->supports_insurance() ) {
 				$context['insurance'] = $this->resolve_insurance_for_package( $package );

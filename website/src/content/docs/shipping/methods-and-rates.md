@@ -131,7 +131,7 @@ final class My_Carrier_Courier_Method extends Shipping_Method_Courier {
 `$args` accepts three keys that go straight to WooCommerce's `add_rate()`: `taxes`, `calc_tax` and `price_decimals`. It also accepts two attributes that the framework applies to the finished rate:
 
 - `description` is the text under the rate. When you leave it out, the merchant's `description` field is used.
-- `delivery_time` is the delivery time that WooCommerce shows next to the rate. `Shipping_Helper::format_delivery_time( 2, 3 )` returns «2-3 days». WooCommerce shows it from version 9.2.
+- `delivery_time` is the delivery time that WooCommerce shows next to the rate. `Shipping_Helper::format_delivery_time( 2, 3 )` returns «2-3 days». WooCommerce shows it from version 9.2. To let the merchant add extra days or hide the period, report the days with `$rate->with_delivery_days( 2, 3 )` instead and declare [`FEATURE_DELIVERY_TIME`](../method-features/#delivery-time).
 
 Use `with_cost()`, `with_label()`, `with_meta_data()` and `with_args()` to change a rate. Each returns a new rate.
 
