@@ -30,11 +30,15 @@ CDEK writes «Свердловская область». DaData writes «Све�
 
 ## Fix
 
-Send a foreign parent's locality name WITHOUT the region, twice: once as `city` and once as
-`settlement`. DaData's `locations` is an OR list, and a foreign settlement is not always DaData's city:
-CDEK's Черкизово (Пушкинский городской округ) is DaData's `settlement` inside «г Пушкино». Measured
-live, «Главная 1»: `city: «Черкизово»` → 0, `settlement: «Черкизово»` → 10. Keep the region only when
-there is no locality.
+Send a foreign parent's locality name WITHOUT the region, as DaData's `city`. A foreign settlement is
+not always DaData's city: CDEK's Черкизово (Пушкинский городской округ) is DaData's `settlement` inside
+«г Пушкино». Measured live, «Главная 1»: `city: «Черкизово»` → 0, `settlement: «Черкизово»` → 10. So when
+the city answer is empty after the filter below, `Dadata_Provider::suggest()` sends a SECOND request by
+`settlement`. Keep the region only when there is no locality.
+
+Do not put both names in one `locations` list, though it is a documented OR. Measured on the same day:
+with two entries DaData stops cutting the locality out of the labels under `restrict_value`, and every
+CDEK city's list reads «г Москва, ул Тверская, д 1» instead of «ул Тверская, д 1».
 
 Without the region, a same-named city in another region answers too, and `restrict_value` makes the
 labels identical: under CDEK's Благовещенск (Башкортостан) DaData lists «ул Ленина, д 1» of Амурская
@@ -48,11 +52,11 @@ cascade) stays as the second line.
 // ❌ 0 suggestions whenever the providers spell the region differently
 $locations = [ [ 'region' => 'Свердловская область', 'city' => 'Екатеринбург' ] ];
 
-// ✅ the name as a city OR a settlement; the region is checked on every result
-$locations = [
-	[ 'country_iso_code' => 'RU', 'city' => 'Черкизово' ],
-	[ 'country_iso_code' => 'RU', 'settlement' => 'Черкизово' ],
-];
+// ❌ finds Черкизово, but every label grows the locality prefix
+$locations = [ [ 'city' => 'Черкизово' ], [ 'settlement' => 'Черкизово' ] ];
+
+// ✅ the city alone; a second request by settlement only when the filtered answer is empty
+$locations = [ [ 'country_iso_code' => 'RU', 'city' => 'Черкизово' ] ];
 ```
 
 ## Related

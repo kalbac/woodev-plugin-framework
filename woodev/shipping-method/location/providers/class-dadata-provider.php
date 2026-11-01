@@ -461,15 +461,57 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		 * @since 2.0.2
 		 * @since 2.0.2 Rethrows an HTTP/network failure as {@see Location_Provider_Exception}
 		 *              instead of degrading to `[]` (#405).
-		 * @since 2.0.21 Drops a house that is not in a foreign parent's locality (#1534).
+		 * @since 2.0.21 Drops a house that is not in a foreign parent's locality, and asks again
+		 *               by `settlement` when the `city` answer is empty (#1534).
 		 */
 		public function suggest( string $query, Location_Scope $scope ): array {
 			if ( '' === trim( $query ) || ! $this->is_configured() ) {
 				return [];
 			}
 
+			$body            = $this->build_suggest_body( $scope );
+			$records         = $this->request_suggestions( $query, $body, $scope );
+			$locality_parent = self::foreign_locality_parent( $scope );
+
+			// A SECOND DaData request, sent only when the city answer is empty: a foreign locality can be
+			// DaData's `settlement` rather than its `city` (CDEK's Черкизово sits inside «г Пушкино»). Both
+			// names in one `locations` list would save the request, but DaData then stops cutting the
+			// locality out of every label («г Москва, ул Тверская, д 1» instead of «ул Тверская, д 1»).
+			if ( [] === $records && null !== $locality_parent ) {
+				$body['locations'] = [
+					[
+						'country_iso_code' => $scope->country(),
+						'settlement'       => $locality_parent->settlement()['name'],
+					],
+				];
+
+				$records = $this->request_suggestions( $query, $body, $scope );
+			}
+
+			return array_slice( $records, 0, self::SUGGESTION_COUNT );
+		}
+
+		/**
+		 * Sends one `suggest/address` request and maps its rows to records.
+		 *
+		 * Under a foreign locality parent every row that is not in that locality is dropped
+		 * ({@see self::foreign_locality_parent()}): a homonym from another region carries the same
+		 * `restrict_value` label, so the buyer could not tell it apart, and picking it writes the
+		 * wrong postcode into the form (#1534).
+		 *
+		 * @since 2.0.21
+		 *
+		 * @param string               $query Search text.
+		 * @param array<string, mixed> $body  Request body from {@see self::build_suggest_body()}.
+		 * @param Location_Scope       $scope Lookup scope.
+		 *
+		 * @return Location_Record[]
+		 *
+		 * @throws Location_Provider_Exception When the request fails.
+		 */
+		private function request_suggestions( string $query, array $body, Location_Scope $scope ): array {
 			try {
-				$raw_suggestions = $this->client()->suggest_address( $query, $this->build_suggest_body( $scope ) );
+				$raw_suggestions = $this->client()->suggest_address( $query, $body );
 			} catch ( \Throwable $exception ) {
 				$this->log_failure( 'suggest', $exception );
 
@@ -492,8 +534,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 					continue;
 				}
 
-				// A homonym from another region carries the same `restrict_value` label, so the
-				// buyer could not tell it apart — and picking it writes the wrong postcode (#1534).
 				if ( null !== $locality_parent && ! $locality_parent->is_same_locality_as( $record ) ) {
 					continue;
 				}
@@ -501,7 +541,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 				$records[] = $record;
 			}
 
-			return array_slice( $records, 0, self::SUGGESTION_COUNT );
+			return $records;
 		}
 
 		/**
@@ -1038,11 +1078,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		 * Москва and Татарстан happen to be spelt alike). A region-only parent
 		 * keeps its region, the only name it has.
 		 *
-		 * THE NAME GOES OUT TWICE, as a city OR a settlement. DaData's `locations`
-		 * is an OR list, and a foreign provider's settlement is not always
-		 * DaData's `city`. Measured live («Главная 1» under the CDEK pick of
-		 * Черкизово, Пушкинский городской округ): `city` «Черкизово» → 0,
+		 * The name goes out as DaData's `city`. A foreign provider's settlement
+		 * is not always DaData's city: measured live («Главная 1» under the CDEK
+		 * pick of Черкизово, Пушкинский городской округ), `city` «Черкизово» → 0,
 		 * `settlement` «Черкизово» → 10, starting with «г Пушкино, пгт Черкизово».
+		 * {@see self::suggest()} therefore asks again by `settlement` when the
+		 * city answer is empty. Both names in one OR list would save that
+		 * request, but measured the same day, DaData then stops cutting the
+		 * locality out of the labels («г Москва, ул Тверская, д 1»).
 		 *
 		 * Without the region, a same-named city elsewhere answers too
 		 * (Благовещенск of Амурская область next to Благовещенск of
@@ -1054,11 +1097,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		 * @since 2.0.2 Reports the narrowing verdict on `$scope` (#358): `exact`
 		 *              for the native-id branch, `degraded` for the name-components
 		 *              branch, `none` when neither could narrow.
-		 * @since 2.0.21 Sends a foreign parent's city without its region, as a city or a settlement.
+		 * @since 2.0.21 Sends a foreign parent's city without its region.
 		 *
 		 * @param Location_Scope $scope Lookup scope.
 		 *
-		 * @return array<int, array<string, mixed>> Zero, one or two `locations` entries.
+		 * @return array<int, array<string, mixed>> Zero or one `locations` entries.
 		 */
 		private function build_locations_constraint( Location_Scope $scope ): array {
 			if ( ! $scope->has_parent() ) {
@@ -1118,10 +1161,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 			if ( ! empty( $components['settlement']['name'] ) ) {
 				$scope->report_narrowing( Location_Provider::NARROWING_DEGRADED );
 
-				return [
-					array_merge( $country, [ 'city' => $components['settlement']['name'] ] ),
-					array_merge( $country, [ 'settlement' => $components['settlement']['name'] ] ),
-				];
+				return [ array_merge( $country, [ 'city' => $components['settlement']['name'] ] ) ];
 			}
 
 			if ( ! empty( $components['region']['name'] ) ) {
