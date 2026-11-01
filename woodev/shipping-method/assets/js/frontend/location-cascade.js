@@ -1527,6 +1527,9 @@
 			// fieldId -> { el, api } for every CURRENTLY attached widget (typeahead OR one of
 			// Task 13's mode-specific renderers — see attachOne()/resolveModeRenderer()).
 			widgets: {},
+			// fieldId -> the {@see createAddressTimerGuard} guard armed on that CLASSIC checkout
+			// address input, released by {@see detachOne}.
+			addressGuards: {},
 			// Single-flight /select queue state (Finding 2) — see enqueueSelect()/sendNextSelect().
 			pendingRecord: null,
 			selectInFlight: false,
@@ -4369,6 +4372,118 @@
 	}
 
 	/**
+	 * Builds the guard that keeps WooCommerce's keystroke timer away from a CLASSIC checkout
+	 * «Адрес» input while the customer is still typing into it (issue #1542; the V1 approach).
+	 *
+	 * WHY: `checkout.js` binds `keydown` on `.address-field input.input-text` and calls
+	 * `update_checkout` about a second after a keystroke whenever every required `.address-field`
+	 * input is filled. Once the postcode is filled (an edit of an already chosen address, a saved
+	 * address) that fires mid-typing: a reload the customer sees, XHRs WooCommerce aborts itself,
+	 * and a `update_order_review` that overlaps the pick's `/location/select` (both write the WC
+	 * session). The settlement and region levels never do this, as they change only on a pick.
+	 *
+	 * HOW: while the input is focused its `.form-row` loses `address-field`, so the delegated
+	 * `keydown` and `change` bindings no longer match it. The class comes back on a pick and on
+	 * blur. A pick is followed by the framework's own `update_checkout` once `/select` answered
+	 * (see {@see settleSelect}), so nothing else is triggered there; on blur exactly one
+	 * `update_checkout` is triggered, and only when the text differs from what it was at focus
+	 * or at the last pick — the manual entry that never picked a suggestion still recalculates.
+	 * The pick's own native `change` runs while the class is still off, so WooCommerce does not
+	 * recalculate BEFORE `/select` has stored the chosen record. Typing after a pick takes the
+	 * class off again on the next `keydown`.
+	 *
+	 * Only `form.checkout` is guarded: the cart, My Account and the block checkout (which never
+	 * loads this file) have no such timer. Nothing else in the framework reads `.address-field`;
+	 * WooCommerce's own `checkout.js` is the only other reader, and only for the bindings above
+	 * and the required-field gate, neither of which runs for an input that has the focus.
+	 *
+	 * The guard does nothing until {@see arm} is called, so an input that ends up with no widget
+	 * keeps WooCommerce's stock behaviour.
+	 *
+	 * @param {{level: string, fieldId: string}} node
+	 * @param {Element} el
+	 * @returns {?{arm: function(Object): void, onPick: function(): void, release: function(): void}}
+	 */
+	function createAddressTimerGuard( node, el ) {
+		var row = 'address' === node.level && el.closest ? el.closest( '.form-row' ) : null;
+
+		if ( ! row || ! el.closest( 'form.checkout' ) ) {
+			return null;
+		}
+
+		var suspended = false;
+		var armed = false;
+		var baseline = el.value;
+
+		function suspend() {
+			if ( suspended || ! row.classList.contains( 'address-field' ) ) {
+				return;
+			}
+
+			row.classList.remove( 'address-field' );
+			suspended = true;
+		}
+
+		function restore() {
+			if ( ! suspended ) {
+				return;
+			}
+
+			row.classList.add( 'address-field' );
+			suspended = false;
+		}
+
+		function handleFocus() {
+			baseline = el.value;
+			suspend();
+		}
+
+		function handleBlur() {
+			restore();
+
+			if ( el.value !== baseline ) {
+				baseline = el.value;
+				triggerCheckoutUpdate();
+			}
+		}
+
+		function onPick() {
+			restore();
+			baseline = el.value;
+		}
+
+		function release() {
+			if ( ! armed ) {
+				return;
+			}
+
+			armed = false;
+			el.removeEventListener( 'focus', handleFocus );
+			el.removeEventListener( 'keydown', suspend );
+			el.removeEventListener( 'blur', handleBlur );
+			restore();
+		}
+
+		function arm( entry ) {
+			if ( entry.addressGuards[ node.fieldId ] ) {
+				entry.addressGuards[ node.fieldId ].release();
+			}
+
+			armed = true;
+			entry.addressGuards[ node.fieldId ] = { release: release };
+			el.addEventListener( 'focus', handleFocus );
+			el.addEventListener( 'keydown', suspend );
+			el.addEventListener( 'blur', handleBlur );
+
+			if ( document.activeElement === el ) {
+				handleFocus();
+			}
+		}
+
+		return { arm: arm, onPick: onPick, release: release };
+	}
+
+	/**
 	 * Attaches a typeahead widget to one chain node, UNLESS its level is unsupported for that
 	 * node's own country per `config.location.levels` (D15) — an unsupported level stays a
 	 * plain native input; it still fully participates in the clearing gate below, just with no
@@ -4388,6 +4503,9 @@
 		}
 
 		var i18n = entry.location.i18n || {};
+		// Issue #1542: only a classic checkout address input gets one; `null` everywhere else.
+		var addressGuard = createAddressTimerGuard( node, el );
+		var onSelect = onSelectFor( entry, node );
 
 		// Handed to WHICHEVER renderer attaches — a Task 13 mode-specific one or the baseline
 		// typeahead below get the EXACT SAME `fetch`/`onSelect` (spec: "assert the shared code
@@ -4427,7 +4545,12 @@
 			// An address suggestion can be broader than the typed street (DaData can return the
 			// street without the house number). Keep the buyer's text unless they explicitly pick.
 			autoSelectFirstOnBlur: 'address' !== node.level,
-			onSelect: onSelectFor( entry, node ),
+			onSelect: addressGuard ? function( item ) {
+				// After the widget's own native `change` (which WooCommerce must not answer yet)
+				// and before the cascade queues `/select`, whose answer fires `update_checkout`.
+				addressGuard.onPick();
+				onSelect( item );
+			} : onSelect,
 			// Issue #350: OPTIONAL for the widget (a mode-specific Task 13 renderer is free to
 			// ignore it, same as every other primitive here) — see {@see onAbandonFor}'s own
 			// docblock.
@@ -4492,6 +4615,10 @@
 				// node replaced by a checkout re-render" check misfire on every single pass.
 				entry.widgets[ node.fieldId ] = { el: api.el || el, api: api };
 
+				if ( addressGuard && ( ! api.el || api.el === el ) ) {
+					addressGuard.arm( entry );
+				}
+
 				return;
 			}
 			// A renderer declining (returns a falsy value — e.g. `related-list`'s region
@@ -4507,6 +4634,10 @@
 		}
 
 		entry.widgets[ node.fieldId ] = { el: el, api: window.WoodevLocationTypeahead( el, options ) };
+
+		if ( addressGuard ) {
+			addressGuard.arm( entry );
+		}
 	}
 
 	/**
@@ -4533,6 +4664,11 @@
 		}
 
 		delete entry.widgets[ fieldId ];
+
+		if ( entry.addressGuards[ fieldId ] ) {
+			entry.addressGuards[ fieldId ].release();
+			delete entry.addressGuards[ fieldId ];
+		}
 	}
 
 	/**
