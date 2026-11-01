@@ -1,6 +1,18 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.0.22] — 2026-11-01
+### Bug Fixes
+- **location**: No checkout reload while typing the address
+
+- **location**: Restore the address row on checkout submit
+
+
+### Documentation
+- **s208**: The morning rig-look addendum and 2.0.21
+
+
+
 ## [2.0.21] — 2026-11-01
 ### Bug Fixes
 - **location**: Offer a DaData house over a CDEK city outside Moscow
