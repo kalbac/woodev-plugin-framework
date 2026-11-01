@@ -997,10 +997,30 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		 * a live capture (best-effort, documented here rather than asserted as
 		 * doc-confirmed).
 		 *
+		 * A NAMED CITY IS SENT ALONE, without the region. DaData matches the
+		 * `region` filter against its own spelling of the region name, and a
+		 * foreign provider spells it differently. Measured against the live API
+		 * (01.11.2026), «Ленина, 50» under the CDEK pick of Екатеринбург:
+		 *
+		 *   region «Свердловская область» + city «Екатеринбург» → 0 suggestions
+		 *   region «Свердловская»         + city «Екатеринбург» → 5
+		 *   city «Екатеринбург» alone                           → 5
+		 *
+		 * «Краснодарский край» gave 0 the same way, while «Ханты-Мансийский
+		 * автономный округ - Югра» needs the type word to match. So no type-word
+		 * strip can rebuild DaData's spelling, and a region sent next to a city
+		 * left a CDEK shop with no house suggestions in most regions (only
+		 * Москва and Татарстан happen to be spelt alike). A same-named city in
+		 * another region is still caught: a house enters the chain only when its
+		 * region does not disagree with the confirmed one
+		 * ({@see Location_Record::is_same_locality_as()}). A region-only parent
+		 * keeps its region, the only name it has.
+		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 Reports the narrowing verdict on `$scope` (#358): `exact`
 		 *              for the native-id branch, `degraded` for the name-components
 		 *              branch, `none` when neither could narrow.
+		 * @since 2.0.21 Sends a foreign parent's city without its region.
 		 *
 		 * @param Location_Scope $scope Lookup scope.
 		 *
@@ -1073,12 +1093,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 
 			$location = [];
 
-			if ( ! empty( $components['region']['name'] ) ) {
-				$location['region'] = $components['region']['name'];
-			}
-
 			if ( ! empty( $components['settlement']['name'] ) ) {
 				$location['city'] = $components['settlement']['name'];
+			} elseif ( ! empty( $components['region']['name'] ) ) {
+				$location['region'] = $components['region']['name'];
 			}
 
 			$scope->report_narrowing( [] !== $location ? Location_Provider::NARROWING_DEGRADED : Location_Provider::NARROWING_NONE );

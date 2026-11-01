@@ -1483,6 +1483,66 @@ final class DadataProviderTest extends TestCase {
 	}
 
 	/**
+	 * Rig, 01.11.2026: DaData matches `region` against its own spelling, so CDEK's
+	 * «Свердловская область» next to the city returned no house at all. A foreign
+	 * parent's city goes alone.
+	 */
+	public function test_a_foreign_city_is_sent_without_its_region(): void {
+		$this->set_token( 'tok' );
+
+		$foreign = Location_Record::from_array(
+			[
+				'key'         => 'cdek:250',
+				'provider_id' => 'cdek',
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'country'     => 'RU',
+				'region'      => [ 'name' => 'Свердловская область' ],
+				'settlement'  => [ 'name' => 'Екатеринбург' ],
+				'label'       => 'Екатеринбург, городской округ Екатеринбург',
+			]
+		);
+
+		$this->stub_http_response( 200, '{"suggestions":[]}' );
+		$scope = Location_Scope::within( $foreign, Location_Record::LEVEL_ADDRESS )->for_provider( Dadata_Provider::PROVIDER_ID );
+		( self::provider() )->suggest( 'Ленина, 50', $scope );
+
+		$this->assertSame( Location_Provider::NARROWING_DEGRADED, $scope->narrowing() );
+		$this->assertSame(
+			[
+				[
+					'country_iso_code' => 'RU',
+					'city'             => 'Екатеринбург',
+				],
+			],
+			$this->last_request_body()['locations']
+		);
+	}
+
+	/**
+	 * A foreign region with no city below it keeps the region: it is the only name there is.
+	 */
+	public function test_a_foreign_region_without_a_city_keeps_its_region(): void {
+		$this->set_token( 'tok' );
+
+		$foreign = Location_Record::from_array(
+			[
+				'key'         => 'cdek:r39',
+				'provider_id' => 'cdek',
+				'level'       => Location_Record::LEVEL_REGION,
+				'country'     => 'RU',
+				'region'      => [ 'name' => 'Татарстан' ],
+				'label'       => 'Татарстан',
+			]
+		);
+
+		$this->stub_http_response( 200, '{"suggestions":[]}' );
+		$scope = Location_Scope::within( $foreign, Location_Record::LEVEL_SETTLEMENT )->for_provider( Dadata_Provider::PROVIDER_ID );
+		( self::provider() )->suggest( 'Каз', $scope );
+
+		$this->assertSame( 'Татарстан', $this->last_request_body()['locations'][0]['region'] ?? null );
+	}
+
+	/**
 	 * #358: a parent that resolves to NEITHER a usable native id NOR any name
 	 * component (foreign provider, empty region/settlement) leaves DaData with
 	 * nothing to narrow by at all — `none`, not `degraded`.

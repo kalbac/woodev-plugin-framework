@@ -3597,6 +3597,74 @@ describe( 'issue #1534 — a foreign house naming the confirmed settlement is po
 		expect( global.fetch.mock.calls.length ).toBe( fetchCallCountBefore + 1 );
 	} );
 
+	it( 'POSTs a DaData house when the CDEK city <select> shows a district label as its option text', async () => {
+		// Rig, 01.11.2026: the ajax-select2 city keeps the bare name «Казань» as its value and
+		// CDEK's label «Казань, городской округ Казань» as its option text. Comparing the text
+		// refused every house outside Москва, so «Курьер Ozon» never appeared there.
+		installMarkup( { region: true, settlement: true, address: true }, 'RU' );
+
+		global.jQuery = require( 'jquery' );
+		global.$ = global.jQuery;
+		window.jQuery = global.jQuery;
+		window.WoodevCheckoutFieldStore = require(
+			'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
+		);
+
+		fakeTypeahead();
+		mockFetch();
+
+		require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
+
+		const instances = installFakeSelect2( window.jQuery );
+
+		window[ CONFIG_GLOBAL ] = buildConfig( {
+			region: true,
+			settlement: true,
+			address: true,
+			owners: OWNERS_CDEK,
+			mode: { settlement: 'ajax-select2' },
+		} );
+
+		require( '../../woodev/shipping-method/assets/js/frontend/location-cascade.js' );
+
+		const kazan = {
+			key: 'cdek:424', label: 'Казань, городской округ Казань', level: 'settlement',
+			record: {
+				key: 'cdek:424', provider_id: 'cdek', level: 'settlement', country: 'RU',
+				region: { name: 'Татарстан' }, settlement: { name: 'Казань' },
+				label: 'Казань, городской округ Казань',
+			},
+		};
+		const query = instances[ 0 ].query( 'Казань' );
+
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { suggestions: [ kazan ] } );
+		await flushMicrotasks();
+
+		const calls = query.success.mock.calls;
+
+		instances[ 0 ].pick( calls[ calls.length - 1 ][ 0 ].results[ 0 ] );
+		fetchCalls[ fetchCalls.length - 1 ].resolve( {
+			current: { key: 'cdek:424', level: 'settlement' }, persisted: true,
+			chain: { settlement: { key: 'cdek:424', level: 'settlement' } },
+		} );
+		await flushMicrotasks();
+
+		const city = document.getElementById( 'billing_city' );
+
+		expect( city.value ).toBe( 'Казань' );
+		expect( city.options[ city.selectedIndex ].textContent ).toBe( 'Казань, городской округ Казань' );
+
+		const fetchCallCountBefore = global.fetch.mock.calls.length;
+
+		selectViaFake(
+			callFor( 'billing_address_1' ),
+			houseItem( 'Казань', { region: { name: 'Татарстан', type: 'респ' } } )
+		);
+
+		expect( global.fetch.mock.calls.length ).toBe( fetchCallCountBefore + 1 );
+		expect( fetchCalls[ fetchCalls.length - 1 ].url ).toBe( SELECT_URL );
+	} );
+
 	it( 'does not POST a DaData house when no settlement was confirmed — typed city text proves nothing', () => {
 		boot( { region: true, settlement: true, address: true, owners: OWNERS_CDEK } );
 

@@ -36,6 +36,12 @@ A test of such a check must resolve the settlement's `/select` with a chain and 
 before the second pick. Otherwise it reads the optimistic full record, which production never has at
 that moment.
 
+Read the field's VALUE, not a `<select>`'s option text (s209). The `ajax-select2` city keeps the bare
+name as its value and the provider's label as its text, and CDEK labels a city with its district
+(«Казань, городской округ Казань»). The first #1534 check read the text, so it matched only cities whose
+label is the bare name, Москва among them: «Курьер Ozon» showed once in Москва and never in another
+city. A test of the check needs the real `ajax-select2` renderer and a label that differs from the name.
+
 ## Related
 
 - [a-locality-display-name-is-not-an-identifier.md](a-locality-display-name-is-not-an-identifier.md) — a name compare also fails when the two providers answer in different locales

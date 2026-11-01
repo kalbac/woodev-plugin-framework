@@ -4189,7 +4189,7 @@
 	 * `Customer_Location_Store::rebuild_chain()` then keeps the CDEK settlement and region under
 	 * it, by the server half of this exact rule (`Location_Record::is_same_locality_as()`):
 	 *
-	 *  - the city field's text equals the house's `settlement` OR its `nested_settlement` («г
+	 *  - the city field's value equals the house's `settlement` OR its `nested_settlement` («г
 	 *    Пушкино, рп Черкизово» matches a pick of Пушкино and a pick of Черкизово), each through
 	 *    {@see normalizeSettlementName} with that component's own type;
 	 *  - the region field's text does not DEFINITELY disagree with the house's region
@@ -4202,6 +4202,12 @@
 	 * {@see adoptChain} keeps only each record's key, and the fields hold the names the picks
 	 * wrote ({@see fieldValueFor}; gotcha `the-cascade-keeps-only-the-key-of-a-confirmed-chain-record`).
 	 * A city field without a confirmed record behind it (typed text, nothing picked) proves nothing.
+	 *
+	 * The city is read from the field's VALUE, never its option text. A `<select>` city keeps the
+	 * bare name as its value and the provider's label as its text, and CDEK labels a city with its
+	 * district («Казань, городской округ Казань»). Comparing that text refused every house outside
+	 * the cities whose label is the bare name, Москва among them (rig, 01.11.2026). The region is
+	 * still read as text ({@see fieldText}): WooCommerce's own state select holds a code as its value.
 	 *
 	 * @param {Object} entry
 	 * @param {Object} record The house record.
@@ -4222,7 +4228,8 @@
 			return false;
 		}
 
-		var shown = fieldText( settlementNode.fieldId );
+		var cityField = document.getElementById( settlementNode.fieldId );
+		var shown = cityField && cityField.value ? String( cityField.value ) : '';
 
 		return [ record.settlement, record.nested_settlement ].some( function( component ) {
 			if ( ! component || ! component.name ) {
