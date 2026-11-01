@@ -180,6 +180,15 @@ function type( input, text ) {
 	input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
 }
 
+function submitCheckout() {
+	// Dispatching the event does not submit anything in jsdom; it stands for the button and for Enter.
+	const submit = new Event( 'submit', { bubbles: true, cancelable: true } );
+
+	document.querySelector( 'form.checkout' ).dispatchEvent( submit );
+
+	return submit;
+}
+
 function blur( input ) {
 	// jsdom fires `change` for a programmatic blur only when asked; a real browser does it first.
 	input.dispatchEvent( new Event( 'change', { bubbles: true } ) );
@@ -389,6 +398,57 @@ describe( 'issue #1542: the classic checkout «Адрес» row while the buyer 
 		el( 'billing_state' ).focus();
 
 		expect( row( 'billing_state' ).classList.contains( 'address-field' ) ).toBe( true );
+	} );
+
+	it( 'submitting by clicking «Разместить заказ» after typing leaves the row restored and the guard reset', async () => {
+		boot();
+		await pickKazan();
+
+		const input = el( 'billing_address_1' );
+
+		input.focus();
+		type( input, 'ул Баумана, 1' );
+		submitCheckout();
+
+		// The click's blur ran first (its update is WooCommerce's to cancel); the submit changes nothing more.
+		blur( input );
+		expect( row( 'billing_address_1' ).classList.contains( 'address-field' ) ).toBe( true );
+		expect( updates ).toHaveBeenCalledTimes( 1 );
+
+		// The submission failed validation and the buyer edits again: the guard works as before.
+		input.focus();
+		type( input, 'ул Баумана, 2' );
+		expect( row( 'billing_address_1' ).classList.contains( 'address-field' ) ).toBe( false );
+		expect( wooKeydowns ).not.toHaveBeenCalled();
+		blur( input );
+		expect( row( 'billing_address_1' ).classList.contains( 'address-field' ) ).toBe( true );
+		expect( updates ).toHaveBeenCalledTimes( 2 );
+	} );
+
+	it( 'submitting with Enter while the address keeps the focus restores the row without blocking the submission', async () => {
+		boot();
+		await pickKazan();
+
+		const input = el( 'billing_address_1' );
+
+		input.focus();
+		type( input, 'ул Баумана, 1' );
+
+		expect( row( 'billing_address_1' ).classList.contains( 'address-field' ) ).toBe( false );
+
+		const submit = submitCheckout();
+
+		expect( submit.defaultPrevented ).toBe( false ); // not deferred, not blocked
+		expect( row( 'billing_address_1' ).classList.contains( 'address-field' ) ).toBe( true );
+		expect( updates ).not.toHaveBeenCalled(); // WooCommerce recalculates on the server
+
+		// Validation failed, the buyer keeps typing in the still-focused input: suspended again, one review on blur.
+		type( input, 'ул Баумана, 12' );
+		expect( row( 'billing_address_1' ).classList.contains( 'address-field' ) ).toBe( false );
+		expect( wooKeydowns ).not.toHaveBeenCalled();
+		blur( input );
+		expect( row( 'billing_address_1' ).classList.contains( 'address-field' ) ).toBe( true );
+		expect( updates ).toHaveBeenCalledTimes( 1 );
 	} );
 
 	it( 'does nothing outside the classic checkout form', async () => {

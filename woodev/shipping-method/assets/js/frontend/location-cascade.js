@@ -4392,6 +4392,16 @@
 	 * recalculate BEFORE `/select` has stored the chosen record. Typing after a pick takes the
 	 * class off again on the next `keydown`.
 	 *
+	 * SUBMIT (review of PR #1543): a click on «Разместить заказ» blurs the input first, so the blur's
+	 * `update_checkout` is queued with a 5 ms timer which WooCommerce's own `submit()` cancels at once;
+	 * Enter never blurs at all and would leave the row without `address-field`. So the checkout form's
+	 * `submit` (it covers the button and Enter alike, and runs before `checkout_place_order`) puts the
+	 * class back and nothing stays half-applied if validation fails and the buyer keeps editing.
+	 * Submission is deliberately NOT deferred or blocked: WooCommerce recalculates shipping and totals
+	 * on the server while it handles the order (`WC_Checkout::update_session()`), so a skipped
+	 * client-side review can never produce a wrong charge. The text baseline is left alone, so a later
+	 * blur after a failed submission still recalculates once.
+	 *
 	 * Only `form.checkout` is guarded: the cart, My Account and the block checkout (which never
 	 * loads this file) have no such timer. Nothing else in the framework reads `.address-field`;
 	 * WooCommerce's own `checkout.js` is the only other reader, and only for the bindings above
@@ -4411,6 +4421,7 @@
 			return null;
 		}
 
+		var form = el.closest( 'form.checkout' );
 		var suspended = false;
 		var armed = false;
 		var baseline = el.value;
@@ -4447,6 +4458,10 @@
 			}
 		}
 
+		function handleSubmit() {
+			restore();
+		}
+
 		function onPick() {
 			restore();
 			baseline = el.value;
@@ -4461,6 +4476,7 @@
 			el.removeEventListener( 'focus', handleFocus );
 			el.removeEventListener( 'keydown', suspend );
 			el.removeEventListener( 'blur', handleBlur );
+			form.removeEventListener( 'submit', handleSubmit, true );
 			restore();
 		}
 
@@ -4474,6 +4490,7 @@
 			el.addEventListener( 'focus', handleFocus );
 			el.addEventListener( 'keydown', suspend );
 			el.addEventListener( 'blur', handleBlur );
+			form.addEventListener( 'submit', handleSubmit, true );
 
 			if ( document.activeElement === el ) {
 				handleFocus();
