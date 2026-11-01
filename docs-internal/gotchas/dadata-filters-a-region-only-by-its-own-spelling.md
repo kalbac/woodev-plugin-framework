@@ -30,16 +30,29 @@ CDEK writes «Свердловская область». DaData writes «Све�
 
 ## Fix
 
-Send a foreign parent's city alone. Keep the region only when there is no city. A same-named city in
-another region is still refused: a house enters the chain only when its region does not disagree with
-the confirmed one (`Location_Record::is_same_locality_as()`, `isSameLocality()` in the cascade).
+Send a foreign parent's locality name WITHOUT the region, twice: once as `city` and once as
+`settlement`. DaData's `locations` is an OR list, and a foreign settlement is not always DaData's city:
+CDEK's Черкизово (Пушкинский городской округ) is DaData's `settlement` inside «г Пушкино». Measured
+live, «Главная 1»: `city: «Черкизово»` → 0, `settlement: «Черкизово»` → 10. Keep the region only when
+there is no locality.
+
+Without the region, a same-named city in another region answers too, and `restrict_value` makes the
+labels identical: under CDEK's Благовещенск (Башкортостан) DaData lists «ул Ленина, д 1» of Амурская
+область first. Picking it would write postcode 675002 into the form before the chain guard refuses it.
+So `Dadata_Provider::suggest()` drops every result that fails `Location_Record::is_same_locality_as()`
+against the foreign parent BEFORE the widget sees it, and asks DaData for 20 results (its cap) so
+homonyms do not use up the ten the buyer sees. The pick-time guard (`isSameLocality()` in the
+cascade) stays as the second line.
 
 ```php
 // ❌ 0 suggestions whenever the providers spell the region differently
-$location = [ 'region' => 'Свердловская область', 'city' => 'Екатеринбург' ];
+$locations = [ [ 'region' => 'Свердловская область', 'city' => 'Екатеринбург' ] ];
 
-// ✅ the city alone; the region is checked on the pick, not in the filter
-$location = [ 'city' => 'Екатеринбург' ];
+// ✅ the name as a city OR a settlement; the region is checked on every result
+$locations = [
+	[ 'country_iso_code' => 'RU', 'city' => 'Черкизово' ],
+	[ 'country_iso_code' => 'RU', 'settlement' => 'Черкизово' ],
+];
 ```
 
 ## Related

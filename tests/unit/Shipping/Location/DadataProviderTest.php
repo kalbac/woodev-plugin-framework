@@ -1513,6 +1513,10 @@ final class DadataProviderTest extends TestCase {
 					'country_iso_code' => 'RU',
 					'city'             => 'Екатеринбург',
 				],
+				[
+					'country_iso_code' => 'RU',
+					'settlement'       => 'Екатеринбург',
+				],
 			],
 			$this->last_request_body()['locations']
 		);
@@ -1540,6 +1544,187 @@ final class DadataProviderTest extends TestCase {
 		( self::provider() )->suggest( 'Каз', $scope );
 
 		$this->assertSame( 'Татарстан', $this->last_request_body()['locations'][0]['region'] ?? null );
+	}
+
+	/**
+	 * One DaData house row, shaped like the live `suggest/address` answer under
+	 * `restrict_value` (the matched locality is cut out of `value`).
+	 *
+	 * @param string               $value  The restricted label.
+	 * @param array<string, mixed> $fields The `data` fields that differ between rows.
+	 *
+	 * @return array<string, mixed>
+	 */
+	private static function house_row( string $value, array $fields ): array {
+		return [
+			'value'              => $value,
+			'unrestricted_value' => $value,
+			'data'               => array_merge(
+				[
+					'country'          => 'Россия',
+					'country_iso_code' => 'RU',
+					'fias_level'       => '8',
+				],
+				$fields
+			),
+		];
+	}
+
+	/**
+	 * Critic probe, 01.11.2026: under the CDEK pick of Благовещенск (Башкортостан) DaData
+	 * answers «ул Ленина, д 1» of Амурская область FIRST, with the same label as the
+	 * Bashkortostan house. Picking it wrote postcode 675002 into the form. The row from
+	 * the other region never reaches the widget, and DaData is asked for 20 results so
+	 * the homonym does not use up the ten the buyer sees.
+	 */
+	public function test_a_homonym_house_from_another_region_is_dropped(): void {
+		$this->set_token( 'tok' );
+
+		$amur = self::house_row(
+			'ул Ленина, д 1',
+			[
+				'fias_id'     => 'house-amur',
+				'postal_code' => '675002',
+				'region'      => 'Амурская',
+				'region_type' => 'обл',
+				'city'        => 'Благовещенск',
+				'city_type'   => 'г',
+				'street'      => 'Ленина',
+				'street_type' => 'ул',
+				'house'       => '1',
+			]
+		);
+
+		$bashkortostan = self::house_row(
+			'ул Ленина, д 1',
+			[
+				'fias_id'     => 'house-bashkortostan',
+				'postal_code' => '453430',
+				'region'      => 'Башкортостан',
+				'region_type' => 'респ',
+				'city'        => 'Благовещенск',
+				'city_type'   => 'г',
+				'street'      => 'Ленина',
+				'street_type' => 'ул',
+				'house'       => '1',
+			]
+		);
+
+		$this->stub_http_response( 200, (string) json_encode( [ 'suggestions' => [ $amur, $bashkortostan ] ] ) );
+
+		$cdek_city = Location_Record::from_array(
+			[
+				'key'         => 'cdek:656',
+				'provider_id' => 'cdek',
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'country'     => 'RU',
+				'region'      => [ 'name' => 'Республика Башкортостан' ],
+				'settlement'  => [ 'name' => 'Благовещенск' ],
+				'label'       => 'Благовещенск, Благовещенский район',
+			]
+		);
+
+		$scope   = Location_Scope::within( $cdek_city, Location_Record::LEVEL_ADDRESS )->for_provider( Dadata_Provider::PROVIDER_ID );
+		$records = ( self::provider() )->suggest( 'Ленина 1', $scope );
+
+		$this->assertSame( 20, $this->last_request_body()['count'] );
+		$this->assertCount( 1, $records );
+		$this->assertSame( '453430', $records[0]->postcode() );
+	}
+
+	/**
+	 * Critic probe, 01.11.2026: CDEK's Черкизово (Пушкинский городской округ) is DaData's
+	 * `settlement` inside «г Пушкино». `city` alone found no house; the `locations` OR list
+	 * carries the settlement too, and the nested house passes the locality filter.
+	 */
+	public function test_a_foreign_settlement_is_searched_as_a_dadata_settlement_too(): void {
+		$this->set_token( 'tok' );
+
+		$house = self::house_row(
+			'ул Главная, д 1',
+			[
+				'fias_id'         => 'house-cherkizovo',
+				'postal_code'     => '141221',
+				'region'          => 'Московская',
+				'region_type'     => 'обл',
+				'city'            => 'Пушкино',
+				'city_type'       => 'г',
+				'settlement'      => 'Черкизово',
+				'settlement_type' => 'пгт',
+				'street'          => 'Главная',
+				'street_type'     => 'ул',
+				'house'           => '1',
+			]
+		);
+
+		$this->stub_http_response( 200, (string) json_encode( [ 'suggestions' => [ $house ] ] ) );
+
+		$cdek_settlement = Location_Record::from_array(
+			[
+				'key'         => 'cdek:2786',
+				'provider_id' => 'cdek',
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'country'     => 'RU',
+				'region'      => [ 'name' => 'Московская область' ],
+				'settlement'  => [ 'name' => 'Черкизово' ],
+				'label'       => 'Черкизово, Пушкинский городской округ',
+			]
+		);
+
+		$scope   = Location_Scope::within( $cdek_settlement, Location_Record::LEVEL_ADDRESS )->for_provider( Dadata_Provider::PROVIDER_ID );
+		$records = ( self::provider() )->suggest( 'Главная 1', $scope );
+
+		$this->assertContains(
+			[
+				'country_iso_code' => 'RU',
+				'settlement'       => 'Черкизово',
+			],
+			$this->last_request_body()['locations']
+		);
+		$this->assertCount( 1, $records );
+		$this->assertSame( '141221', $records[0]->postcode() );
+	}
+
+	/**
+	 * A DaData parent with its own ids is pinned exactly, so its results are not filtered
+	 * and the usual ten are asked for.
+	 */
+	public function test_a_native_dadata_parent_is_not_filtered(): void {
+		$this->set_token( 'tok' );
+
+		$house = self::house_row(
+			'ул Ленина, д 1',
+			[
+				'fias_id'     => 'house-amur',
+				'postal_code' => '675002',
+				'region'      => 'Амурская',
+				'region_type' => 'обл',
+				'city'        => 'Благовещенск',
+				'city_type'   => 'г',
+				'house'       => '1',
+			]
+		);
+
+		$this->stub_http_response( 200, (string) json_encode( [ 'suggestions' => [ $house ] ] ) );
+
+		$dadata_city = Location_Record::from_array(
+			[
+				'key'         => 'dadata:city-guid',
+				'provider_id' => 'dadata',
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'country'     => 'RU',
+				'region'      => [ 'name' => 'Башкортостан' ],
+				'settlement'  => [ 'name' => 'Благовещенск' ],
+				'label'       => 'г Благовещенск',
+				'raw'         => [ 'city_fias_id' => 'city-guid' ],
+			]
+		);
+
+		$scope   = Location_Scope::within( $dadata_city, Location_Record::LEVEL_ADDRESS )->for_provider( Dadata_Provider::PROVIDER_ID );
+		$records = ( self::provider() )->suggest( 'Ленина 1', $scope );
+
+		$this->assertSame( 10, $this->last_request_body()['count'] );
+		$this->assertCount( 1, $records );
 	}
 
 	/**
