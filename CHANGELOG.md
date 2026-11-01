@@ -1,6 +1,24 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.0.21] — 2026-11-01
+### Bug Fixes
+- **location**: Offer a DaData house over a CDEK city outside Moscow
+
+- **location**: Keep DaData houses inside a foreign parent's locality
+
+- **location**: Ask DaData by settlement only after an empty city answer
+
+
+### Documentation
+- **s208**: Session record, state and the handoff
+
+- **s208**: The Actions pool reset on 01.11
+
+- **s208**: Keep the handoff under its size gate
+
+
+
 ## [2.0.20] — 2026-11-01
 ### Bug Fixes
 - **location**: Keep the DaData house address over a CDEK locality
