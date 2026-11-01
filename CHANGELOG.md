@@ -1,6 +1,24 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.0.20] — 2026-11-01
+### Bug Fixes
+- **location**: Keep the DaData house address over a CDEK locality
+
+- **location**: Match a nested settlement and refuse another region (#1534 review)
+
+- **location**: Treat a spaced dash as a region-name separator (#1534 review 2)
+
+
+### Documentation
+- **s207**: Session record, state, gotchas and the handoff
+
+- **s207**: Complete the rig-fix section and the handoff
+
+- **s207**: Keep the handoff under its size gate
+
+
+
 ## [2.0.19] — 2026-10-31
 ### Bug Fixes
 - **shipping**: Coupon in the price cache key, zero-total cost arrays, order-amount limits
