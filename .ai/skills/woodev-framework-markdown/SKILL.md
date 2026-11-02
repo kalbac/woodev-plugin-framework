@@ -9,32 +9,18 @@ This skill provides guidance for creating and editing markdown files in the Wood
 
 ## Critical Rules
 
-1. **Always lint after changes** - Run `markdownlint --fix` then `markdownlint` to verify
+1. **Always lint after changes** - Run `markdownlint --fix` then `markdownlint` to verify (for `docs-internal/` also `npm run lint:docs`)
 2. **Run from repository root** - Ensures `.markdownlint.json` config is loaded
 3. **Use UTF-8 encoding** - Especially for directory trees and special characters
 4. **Follow Woodev markdown standards** - See configuration rules below
 
 ## Woodev Markdown Configuration
 
-The project uses markdownlint with these specific rules (from `.markdownlint.json`):
+`.markdownlint.json` is the source of truth. It sets `"default": true` (every markdownlint rule on, with markdownlint's defaults) and switches **off**: MD013 (line length), MD024, MD028, MD031, MD032, MD033 (inline HTML), MD034, MD040, MD041, MD046, MD051 and MD060. Everything else is enforced with defaults — notably MD003 (ATX headings), MD007 (list indent: markdownlint default, 2 spaces), MD036 (no bold-as-heading) and MD047 (single trailing newline). Re-read the file instead of trusting a copy of the list. The CI `markdown-lint` workflow lints root and `website/` markdown only; `.ai/`, `docs-internal/`, `CLAUDE.md` and `AGENTS.md` are excluded from it.
 
-### Enabled Rules
+Disabled rules are a relaxation, not a style: still put blank lines around fences and lists, and give every code fence a language — readers and `docs-internal/` conventions expect it.
 
-- **MD003**: Heading style must be ATX (`# Heading` not `Heading\n===`)
-- **MD007**: Unordered list indentation must be 4 spaces
-- **MD013**: Line length limit disabled (set to 9999)
-- **MD024**: Multiple headings with same content allowed (only check siblings)
-- **MD031**: Fenced code blocks must be surrounded by blank lines
-- **MD032**: Lists must be surrounded by blank lines
-- **MD033**: HTML allowed for `<video>` elements only
-- **MD036**: Emphasis (bold/italic) should not be used as headings - use proper heading tags
-- **MD040**: Fenced code blocks should specify language
-- **MD047**: Files must end with a single newline
-
-### Disabled Rules
-
-- **no-hard-tabs**: Tabs are allowed
-- **whitespace**: Trailing whitespace rules disabled
+`docs-internal/` has two extra gates beyond markdownlint: `npm run lint:docs` (structure, size caps, gotcha index, and **every relative link must resolve**) and the `## Related` section required on gotchas, ADRs and wiki pages. The rules are in `docs-internal/DOCS-SCHEMA.md`.
 
 ## Markdown Writing Guidelines
 
@@ -61,8 +47,8 @@ The project uses markdownlint with these specific rules (from `.markdownlint.jso
 ```markdown
 - Item one
 - Item two
-    - Nested item (4 spaces)
-    - Another nested item
+  - Nested item (2 spaces)
+  - Another nested item
 - Item three
 ```
 
@@ -76,7 +62,7 @@ The project uses markdownlint with these specific rules (from `.markdownlint.jso
 
 **Important:**
 
-- Use 4 spaces for nested list items
+- Nested items follow markdownlint MD007 (2-space indent by default; the config does not override it)
 - Add blank line before and after lists
 - Use `-` for unordered lists (not `*` or `+`)
 
@@ -86,7 +72,7 @@ The project uses markdownlint with these specific rules (from `.markdownlint.jso
 
 ````markdown
 ```bash
-pnpm test:md
+npx markdownlint-cli2 path/to/file.md
 ```
 
 ```php
@@ -204,14 +190,14 @@ includes/
 
 ```markdown
 - Item
-  - Nested (only 2 spaces)
+    - Nested (4 spaces)
 ```
 
 **Fix:**
 
 ```markdown
 - Item
-    - Nested (4 spaces)
+  - Nested (2 spaces)
 ```
 
 ### MD031: Code blocks need blank lines

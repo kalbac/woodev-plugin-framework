@@ -10,7 +10,7 @@
   - [Private Methods and Internal Callbacks](#private-methods-and-internal-callbacks)
   - [@internal Annotation Placement](#internal-annotation-placement)
   - [@see Annotation Placement](#see-annotation-placement)
-  - [@deprecated Annotation (CRITICAL)](#deprecated-annotation-critical)
+  - [Removing or renaming API — no `@deprecated` shims](#removing-or-renaming-api--no-deprecated-shims)
 - [Hook Docblocks](#hook-docblocks)
 
 ## Naming Conventions
@@ -94,13 +94,13 @@ Add concise docblocks to all hooks and methods. One line is ideal.
 
 ### Public, Protected Methods, and Hooks
 
-Must include a `@since` annotation with the current framework version number.
+Must include a `@since` annotation carrying the planned release.
 
 The `@since` annotation must be:
 
 - The last line in the docblock
 - Preceded by a blank comment line
-- Use the version from `VERSION` constant in `woodev/class-plugin.php`
+- Use `composer.json` → `extra.woodev.planned-release`, not the `VERSION` constant (`docs-internal/AGENT-RULES.md` → Rule 5)
 
 **Good - Concise:**
 
@@ -203,29 +203,11 @@ It must be:
 public function create_order_by_api( array $args ) { }
 ```
 
-### @deprecated Annotation (CRITICAL)
+### Removing or renaming API — no `@deprecated` shims
 
-**For framework code, this is critical.** Any removal or renaming of public API requires:
+The framework follows the clean-break policy (ADR-005, `docs-internal/AGENT-RULES.md` → Rule 0): an internal API that is renamed or moved is **deleted** and every caller updated. Do not add `@deprecated`, `_deprecated_function()` wrappers or `class_alias()` shims.
 
-1. `@deprecated` annotation with version and replacement
-2. `_deprecated_function()` call inside the method
-3. `@see` pointing to replacement
-
-**Example:**
-
-```php
-/**
- * Old method name.
- *
- * @since 1.0.0
- * @deprecated 2.0.0 Use new_method_name() instead.
- * @see self::new_method_name()
- */
-public function old_method_name(): void {
-    _deprecated_function( __METHOD__, '2.0.0', __CLASS__ . '::new_method_name()' );
-    $this->new_method_name();
-}
-```
+What never breaks is installed-site data: option keys, hook names, IDs, slugs, meta keys. A renamed **hook** goes through `Woodev_Hook_Deprecator` (`woodev/class-woodev-hook-deprecator.php`, declared in `get_deprecated_hooks()`), not through a method shim.
 
 ## Hook Docblocks
 

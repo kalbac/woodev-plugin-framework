@@ -72,7 +72,7 @@ Source of truth: `woodev/error-reporting/`, spec `docs-internal/specs/2026-10-04
   ```
 
   Worked examples: `woocommerce-edostavka.php` (CDEK, PR #109) and the Yandex entry file (PR #103); both pin
-  the behaviour in `tests/unit/LoaderDefinitionTest.php`. Facts that follow from the design: the merchant's
+  the behaviour in `tests/unit/LoaderDefinitionTest.php` **in the plugin repo** (this repo has no such file). Facts that follow from the design: the merchant's
   consent stays ONE site-wide checkbox («Отправлять отчёты об ошибках», default off), offered when at least
   one registered plugin has a DSN; an event whose owner has no DSN is not queued; a throw inside the shared
   `woodev/` copy belongs to the first plugin-owned frame of the stack; dedupe and the daily budget (20 PHP +

@@ -149,15 +149,10 @@ Add blank lines:
 
 ## VS Code Settings
 
-Recommended `.vscode/settings.json`:
+Recommended `.vscode/settings.json` (do not override `markdownlint.config` — the editor must read the repo's `.markdownlint.json`, where MD013, MD031, MD032, MD033, MD040 and others are disabled):
 
 ```json
 {
-    "markdownlint.config": {
-        "default": true,
-        "MD013": { "line_length": 120 },
-        "MD033": false
-    },
     "editor.trimTrailingWhitespace": true,
     "editor.insertSpaces": false
 }

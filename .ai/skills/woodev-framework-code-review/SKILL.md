@@ -113,18 +113,11 @@ Fix: [Brief explanation or example]
 **Example:**
 
 ```text
-Backward Compatibility: Public method deleted without deprecation
-Location: woodev/class-plugin.php:123
+Backward Compatibility: Hook renamed without a deprecator entry
+Location: woodev/shipping-method/class-shipping-method.php:123
 Standard: woodev-framework-backend-dev/code-entities.md
-Fix: Add @deprecated annotation and keep method for at least one version.
-
-/**
- * @deprecated 2.0.0 Use new_method() instead.
- */
-public function old_method(): void {
-    _deprecated_function( __METHOD__, '2.0.0', __CLASS__ . '::new_method()' );
-    $this->new_method();
-}
+Fix: Keep the old hook name working through Woodev_Hook_Deprecator
+     (declare it in get_deprecated_hooks()). Do not add a method shim.
 ```
 
 ---
@@ -138,7 +131,7 @@ Before approving a PR, ensure:
 - [ ] All linting checks pass (`composer phpcs`)
 - [ ] All tests pass (unit + integration)
 - [ ] Commits follow Conventional Commits format
-- [ ] `@since` annotations are correct (from `VERSION` constant)
+- [ ] `@since` annotations are correct (the planned release from `composer.json` → `extra.woodev.planned-release`, not `VERSION`; `docs-internal/AGENT-RULES.md` → Rule 5)
 - [ ] CLAUDE.md updated (if architecture changed)
 
 ---

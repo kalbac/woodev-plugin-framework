@@ -54,18 +54,25 @@ TEST_SUITE=unit ./vendor/bin/phpunit --filter BootstrapTest
 
 ### 2. Integration Tests (WP_UnitTestCase + wp-env)
 
+Integration runs **only inside the wp-env `tests-cli` container**, on the branch checked out in the main tree, and is the coordinator's job (a worktree cannot run it — `WOODEV_FRAMEWORK_DIR` points at the main checkout). On the host, `composer test:integration` dies with `Class "WP_UnitTestCase" not found`, which reads like a bootstrap regression but is not one.
+
 ```bash
-# Run all integration tests (requires wp-env)
-composer test:integration
-
-# Or directly
-TEST_SUITE=integration ./vendor/bin/phpunit --testsuite Integration
-
-# Run specific test class
-TEST_SUITE=integration ./vendor/bin/phpunit --filter TestClassName
+npx wp-env start
+npx wp-env run tests-cli bash -c "cd /var/www/html/woodev-framework && TEST_SUITE=integration WP_TESTS_DIR=/wordpress-phpunit php vendor/bin/phpunit --testsuite=Integration"
 ```
 
-**IMPORTANT:** Ensure wp-env is running before integration tests.
+On Windows Git Bash the container paths are mangled; the exact command and the traps are in the gotcha `wpenv-windows-gitbash-path-mangling`. The integration bootstrap branches on `TEST_SUITE=integration` (`tests/bootstrap.php`).
+
+### Result cache
+
+`phpunit.xml` sets `executionOrder="depends,defects"`, so a stale `.phpunit.result.cache` reorders tests and two runs of the same tree disagree. Run `rm -f .phpunit.result.cache` before every measurement.
+
+### Other test and doc gates
+
+```bash
+npm run test:js      # jest (run from bash; jest-unit.config.js scopes roots)
+npm run lint:docs    # docs-internal structure, links, gotcha index
+```
 
 ### Fixture Plugins
 
@@ -74,8 +81,9 @@ Tests use fixture plugins in `tests/_fixtures/`:
 - `woodev-test-plugin` (general framework testing)
 - `woodev-test-payment-gateway` (payment gateway testing)
 - `woodev-test-shipping-method` (shipping method testing)
+- `woodev-realistic-shipping-plugin`, `woodev-realistic-payment-plugin` and others — the full list is `ls tests/_fixtures`
 
-These are mapped into wp-env via `.wp-env.json` mappings.
+They are mapped into wp-env via the `mappings` blocks of `.wp-env.json` (the file is the source of truth; it also sets `WOODEV_FRAMEWORK_DIR` and `WOODEV_UI_KIT_GALLERY`).
 
 ---
 
@@ -218,8 +226,7 @@ npx wp-env start
 # Run all unit tests
 composer test:unit
 
-# Run all integration tests
-composer test:integration
+# Integration: inside the tests-cli container only (see "Integration Tests" above)
 
 # Run specific test
 ./vendor/bin/phpunit tests/unit/BootstrapTest.php

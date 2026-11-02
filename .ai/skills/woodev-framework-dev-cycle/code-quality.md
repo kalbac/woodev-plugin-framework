@@ -29,10 +29,10 @@ composer phpcs -- woodev/path/to/File.php
 composer phpstan
 
 # Analyze specific file
-composer exec -- phpstan analyse woodev/path/to/File.php --memory-limit=2G
+composer exec -- phpstan analyse woodev/path/to/File.php --memory-limit=4G
 
 # Analyze entire project (use sparingly)
-composer exec -- phpstan analyse --memory-limit=2G
+composer exec -- phpstan analyse --memory-limit=4G
 ```
 
 ### Common Issues
