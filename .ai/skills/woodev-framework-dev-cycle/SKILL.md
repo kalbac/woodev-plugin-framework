@@ -46,7 +46,7 @@ The file is the source of truth — read `.wp-env.json` rather than a copy here.
 **Key points:**
 
 - `core: null` -- uses latest stable WordPress from WordPress.org
-- `phpVersion: "7.4"` -- matches compatibility requirements (platform target is PHP 8.1)
+- `phpVersion: "7.4"` -- the lowest supported PHP; the framework supports PHP 7.4–8.x (`composer.json` `require.php`), and 8.1 is only the Composer dev platform (`config.platform`)
 - WooCommerce installed from wordpress.org ZIP (latest stable)
 - Fixture plugins mapped individually (`ls tests/_fixtures`); each gets the shared `woodev/` directory mapped in
 - Separate `tests` and `development` environment configs; the integration run depends on `WOODEV_FRAMEWORK_DIR` from the `tests` env
