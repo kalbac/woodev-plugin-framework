@@ -23,7 +23,7 @@ so one shipped md5 file can match at most one of them — hence handle-named fil
 The wiring is three parts, all gated:
 
 1. `Woodev\Framework\Handlers\Script_Translations::register( $plugin, $handle )` right after each
-   `wp_enqueue_script()` of a built bundle (six of them). `ScriptTranslationsTest` scans `woodev/` and
+   `wp_enqueue_script()` of a built bundle (one per built bundle). `ScriptTranslationsTest` scans `woodev/` and
    fails for an enqueued `$build_url . '/index.js'` handle without the call.
 2. `npm run build:js-i18n` (`scripts/build-js-translations.mjs`, needs the rig) writes
    `woodev/languages/woodev-plugin-framework-ru_RU-{handle}.json`, translated entries only. The

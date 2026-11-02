@@ -56,4 +56,4 @@ that renamed classes, `composer dump-autoload` is required there — see
 
 - [a-worktree-s-vendor-autoload-goes-stale-after-a-class-rename](a-worktree-s-vendor-autoload-goes-stale-after-a-class-rename.md)
 - [framework-classmap-autoload-vendored-boot](framework-classmap-autoload-vendored-boot.md) — how the shipped autoloader finds classes
-- `docs-internal/AGENT-RULES.md` → Rule 3 — regenerate the class map after adding or moving a class
+- [AGENT-RULES](../AGENT-RULES.md) → Rule 3 — regenerate the class map after adding or moving a class

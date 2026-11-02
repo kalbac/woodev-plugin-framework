@@ -62,7 +62,7 @@ rebuilding produced exactly the ten files CI had flagged.
   anything under `src/`, the coordinator rebuilds:
 
   ```bash
-  cd D:/Projects/woodev_framework
+  cd <primary checkout>   # Windows desktop: D:/Projects/woodev_framework; Mac: ~/Projects/woodev-plugin-framework
   git fetch origin && git checkout --detach origin/<branch>
   npm run build
   git add woodev/assets/build/ && git commit
@@ -84,8 +84,8 @@ rebuilding produced exactly the ten files CI had flagged.
 - **A local `npm run build` is never parity evidence.** Say "CI will decide", and treat the
   `Assets build parity` job as the only authority.
 - Always run the **full** `npm run build`. `control-field.js` and `location-picker-field.js` are
-  shared UI-kit modules imported by all six entry bundles, so a single-entry build
-  (`npm run build:settings`) silently desyncs the other five.
+  shared UI-kit modules imported by every entry bundle (eight at 2.0.22), so a single-entry build
+  (`npm run build:settings`) silently desyncs the others.
 
 ## The second failure mode: built, but never COMMITTED (s133)
 

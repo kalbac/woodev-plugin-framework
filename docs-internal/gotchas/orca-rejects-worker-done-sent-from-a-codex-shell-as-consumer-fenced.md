@@ -33,5 +33,5 @@ WITHOUT calling `orchestration check` again, then send `worker_done`.
 
 ## Related
 
-- `docs-internal/wiki/orchestrating-agents-with-orca.md`
-- gotcha `an-orca-claude-worker-exits-after-worker-done-so-its-terminal-is-not-writable`
+- [orchestrating-agents-with-orca](../wiki/orchestrating-agents-with-orca.md)
+- [an-orca-claude-worker-exits-after-worker-done-so-its-terminal-is-not-writable](an-orca-claude-worker-exits-after-worker-done-so-its-terminal-is-not-writable.md)

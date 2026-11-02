@@ -4,7 +4,8 @@
 > A failed start can leave residual resources: inspect the receipt before retrying. Timeouts and quiet
 > terminals are not proof of failure. Settle the dispatch before release or reuse, and follow the
 > receipt’s recovery path for uncertain cleanup; historical sections below do not override it.
-> Local Qwen/Kilo recipes are historical fallbacks; the current model roster is `CLAUDE.md`.
+> Local Qwen/Kilo recipes are historical fallbacks; the current model roster is `CLAUDE.md` (Sonnet 5.5, Haiku 5.5, Codex
+> `gpt-6-luna` / `gpt-6.1-sol`, Fable 5 for hard tasks).
 > Compiled reference. Last compiled: 2026-09-06 (s121: closed #779, the last two Orca candidates left
 > over from #381's capability sweep — `worktree set --comment`/`--workspace-status`, live-verified and
 > adopted; `orca-per-workspace-env`, measured against `orca.yaml` and this project's actual pains, and
@@ -131,7 +132,10 @@ shell that ran them resolved no `orca` and the `2>&1 | grep '"ok"'` around each 
 command block and use the absolute path:
 
 ```bash
+# Windows desktop:
 ORCA="/c/Users/maksi/AppData/Local/Programs/orca/resources/bin/orca"
+# macOS laptop (the `orca` on PATH is unreadable to an agent shell there — measured s136, see two-machine-setup.md):
+# ORCA="/Applications/Orca.app/Contents/Resources/bin/orca"
 "$ORCA" orchestration worker-show --dispatch <id> --json
 ```
 
@@ -200,7 +204,7 @@ the shared-directory traps apply there too. `vendor` is copied separately.
 **Why inside the repo is safe here — measured, not assumed.** Every gate is path-scoped, so none of
 them sees a worktree: phpcs reads `./woodev`, phpstan `paths: woodev`, phpunit `./tests/unit`. With
 a worktree in place the main tree still reports phpcs clean, phpstan clean and 2475 unit tests —
-not one test double-counted. `/.orca/` is gitignored, and Serena honours that through
+not one test double-counted (s83 measurement; the unit suite has grown since — current counts live in `CURRENT-STATE.md`). `/.orca/` is gitignored, and Serena honours that through
 `ignore_all_files_in_gitignore: true`, so it does not index them either. The one real cost:
 `.wp-env.json` maps the whole repo root (`"woodev-framework": "."`), so worktrees do land inside the
 rig container. WordPress will not load them as plugins — those come from explicit mappings — but
@@ -220,15 +224,17 @@ Two checked-in files make a new worktree runnable the moment it exists, with **n
   silently.
 - **`.worktreeinclude`** → `vendor`, `.mcp.json`, `.wp-env.override.json`,
   `.claude/settings.local.json`, `plugins-reference` — **copied**, so each worktree owns them.
-  `plugins-reference` is the donor plugin copies the contract tests read; without it those tests
-  silently skip.
+  `plugins-reference` is the donor plugin copies a few tests still read (`DadataProviderTest`, `PickupPointTest`,
+  `TestLivePochtaPointSourceTest`, `ApiBaseResponseMessageRedactionTest`, two jest files); without it those
+  silently skip. The Yandex/CDEK contract tests no longer need it — they read the committed
+  `tests/_fixtures/legacy-v1/` (#1311, s183).
 
 `vendor` must be copied and never shared: Composer bakes `$baseDir = dirname(dirname(__DIR__))` into
 its autoloader and PHP resolves a symlink to its real path, so a shared `vendor` makes the classmap
 load the primary checkout's sources while the bootstrap loads the worktree's — every class declared
 twice (gotcha `sharing-vendor-breaks-composer-autoload-in-a-worktree`).
 
-Measured on a throwaway worktree: **2475 unit / 6112 assertions, 1260 jest, phpstan clean, zero
+Measured on a throwaway worktree: **2475 unit / 6112 assertions, 1260 jest (s83, dated), phpstan clean, zero
 installs** — against **411 seconds** for a `composer install` there.
 
 ## What we deliberately did not adopt
@@ -267,8 +273,9 @@ reading it). None of that overlaps with the pains the card named:
   runs its own `composer install` there; it never touches this machine's worktree at all.
 - `.worktreeinclude` is Orca's LOCAL worktree bootstrap mechanism, with no equivalent role in a
   recipe's remote checkout, which starts from a clean clone and its own base-image build.
-- `plugins-reference/` being gitignored is a LOCAL rig-fixture gap (five `Contract/Yandex*` tests
-  skip without it — fixed by adding the path to `.worktreeinclude`, not by moving compute off-machine).
+- `plugins-reference/` being gitignored is a LOCAL rig-fixture gap (a few tests that read donor sources skip without it —
+  fixed by adding the path to `.worktreeinclude`, not by moving compute off-machine; the Yandex contract tests are
+  fixture-backed since s183).
 
 There is also no adoption case independent of the card: this project runs on two machines, one at a time, with no
 cloud account or billing set up for sandboxes, and every worktree decision recorded above went the
@@ -348,8 +355,9 @@ Do NOT reach for `worktree.useRelativePaths` instead: it writes an `extensions.r
 line into the SHARED repo config, and git 2.43 then refuses the entire repository, main checkout
 included. Gotcha: `codex-in-wsl-needs-a-relative-gitdir`.
 
-**Two gates read green in a worktree and are not.** Five `Contract/Yandex*` tests SKIP there
-because `plugins-reference/` is gitignored (fixed in s84 by adding it to `.worktreeinclude`), and
+**Two gates read green in a worktree and are not.** (1) *Historical, s84:* five `Contract/Yandex*` tests SKIPPED there
+because `plugins-reference/` is gitignored (fixed by `.worktreeinclude`; since s183 / #1311 they read the committed
+`tests/_fixtures/legacy-v1/` and run everywhere — a few other tests still skip without `plugins-reference`). (2)
 `npm run build` in a worktree can never match CI, because webpack resolves the shared
 `node_modules` symlink out of the project and emits `../../../../node_modules/...` module requests,
 which changes every content hash. PR #422 went red on assets parity after two agents had
@@ -379,6 +387,11 @@ report — a third AJAX handler with the same hole, a preflight check that exist
 consumed, and a "the brief's baseline is stale" that turned out to be the skipped-test gap above.
 
 ## kilo as the critic — the recipe that actually returns an event (s97)
+
+> **The body below this note (from "Status, 28.08.2026" down to the end of this section) is HISTORICAL — the s97 measurement on an
+> older Orca. It is superseded by the s200 note directly below, which found `worker-start --agent kilo` working end to end.
+> Its "revokes the capability" and "dispatch WITHOUT `--inject`" claims no longer hold on current Orca (s200); keep it only as
+> a record of what was tried.**
 
 > **s200 (27.10.2026, Mac, Orca current, kilo 7.8.3): `worker-start --agent kilo` now works end to end** — the
 > brief is injected, the critic reads files, runs tests and sends a real `worker_done` (9 critic rounds, none revoked).
@@ -478,6 +491,10 @@ discount. Measure against the bill, not against a per-round estimate taken on th
 that was handy.
 
 ## Local qwen through Oh My Pi (`omp`) — a WORKER, never a critic (s142)
+
+> **Historical — superseded 08.10.2026 by Haiku 5.5** (operator: cheap bounded work with a detailed brief goes to
+> Haiku 5.5; the local qwen is "not worth it"). The recipe is kept for the day a local model is needed again; the current
+> roster is `CLAUDE.md` → Orca.
 
 Operator, 28.09.2026: the local **qwen3.8:27b** is a worker only, and it is launched through the
 `omp` agent (Oh My Pi), not kilocode. Measured in s142:

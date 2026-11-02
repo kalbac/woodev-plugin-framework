@@ -29,4 +29,4 @@ refactoring", 07.05.2026, Version 2.2.5.5; `efce9f6` already says 2.3.0).
 ## Related
 
 - [standing-up-a-second-carrier-plugin-has-three-traps-a-green-unit-suite-cannot-see](standing-up-a-second-carrier-plugin-has-three-traps-a-green-unit-suite-cannot-see.md)
-- `docs-internal/sessions/s167.md`
+- [`docs-internal/sessions/s167.md`](../sessions/s167.md)

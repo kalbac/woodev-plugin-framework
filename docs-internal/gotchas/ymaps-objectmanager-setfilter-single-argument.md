@@ -84,4 +84,4 @@ trusting a test written against an assumption.
 - [ymaps-objectmanager-properties-are-plain](ymaps-objectmanager-properties-are-plain.md)
 - [ymaps-control-options-must-be-nested](ymaps-control-options-must-be-nested.md)
 - [ymaps-html-icon-layout-needs-iconshape](ymaps-html-icon-layout-needs-iconshape.md)
-- `docs-internal/archive/specs/2026-08-03-sp5-pickup-map-visual-rework-design.md` — V-8, D-10
+- [2026-08-03-sp5-pickup-map-visual-rework-design.md](../archive/specs/2026-08-03-sp5-pickup-map-visual-rework-design.md) — V-8, D-10

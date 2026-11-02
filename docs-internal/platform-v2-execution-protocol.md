@@ -2,7 +2,7 @@
 
 > The single rulebook every session and every sub-agent follows while executing the Platform v2 program (S0 split → S1 shipping → … → S6 orchestration). Lean and operational by design — it references existing conventions, never duplicates them.
 >
-> **Authority:** direction = `platform-v2-direction-audit-2026-06-03.md` (D-1..D-5). Detailed work = the per-stage plans. Live status = `CURRENT-STATE.md` (`platform-v2-program-tracker.md` = program-history snapshot). Coding conventions = `CLAUDE.md` / `AGENTS.md`.
+> **Authority:** direction = `platform-v2-direction-audit-2026-06-03.md` (D-1..D-5). Detailed work = the per-stage plans. Live status = `CURRENT-STATE.md` (`platform-v2-program-tracker.md` = program-history snapshot). Coding conventions = `AGENTS.md` + `AGENT-RULES.md` (`CLAUDE.md` carries only Claude Code tooling).
 
 ## 0. Resume protocol
 
@@ -16,7 +16,7 @@ entirely. Follow that list, not a second copy. What this protocol adds, once you
 
 ## 1. Branch & baseline
 - Program work happens on **feature branches off `main`**, squash-merged via PR after **every CI job passes individually**. (`refactor/platform-v2-clean-break` merged 2026-06-04 and is deleted — never target it.)
-- Frozen references: `platform-v2-pivot-baseline` (v2-WIP pivot), `platform-v2-pre-refactor` (pristine pre-v2). Tag each stage gate (`platform-v2-split-done`, …).
+- The `platform-v2-*` git tags (`platform-v2-pivot-baseline`, `platform-v2-pre-refactor`, `platform-v2-split-done`) no longer exist; history lives in `main` and ADR-005. Do not cite them as references.
 
 ## 2. Clean-break policy (D-2) — the prime directive
 - **Internal code = free to break:** class/method names, registration shape, namespacing, file layout. Do **not** add `@deprecated`/`class_alias`/`_deprecated_function` shims for moved internal APIs. Delete existing ones.

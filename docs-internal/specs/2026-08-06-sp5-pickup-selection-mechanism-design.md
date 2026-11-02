@@ -1,6 +1,6 @@
 # SP-5 — Pickup point selection mechanism (design)
 
-> Status: **approved by the operator, not yet implemented** · Date: 2026-08-06 (s52)
+> Status: **IMPLEMENTED** (see `../plans/2026-08-06-sp5-pickup-selection-mechanism-plan.md` and git history; later specs build on its selection token) · Date: 2026-08-06 (s52)
 > Supersedes nothing. Extends the shipped SP-5 pickup map (PR #149, merged 2026-08-05).
 > Origin: operator review item #6 — "механизм выбранного ПВЗ", the only non-cosmetic item
 > left after the map was accepted.

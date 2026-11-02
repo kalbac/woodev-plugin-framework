@@ -80,4 +80,4 @@ same click opened the card, and exactly one marker took `data-state="active"`.
 
 - [ymaps-html-icon-layout-needs-iconshape](ymaps-html-icon-layout-needs-iconshape.md) — the prerequisite bug: no hit area at all before this one existed
 - [ymaps-margin-area-needs-explicit-width](ymaps-margin-area-needs-explicit-width.md) — same family: an ymaps option shape that silently isn't what a spec assumed, caught only by rig measurement
-- `docs-internal/archive/specs/2026-08-03-sp5-pickup-map-visual-rework-design.md` — V-9
+- [2026-08-03-sp5-pickup-map-visual-rework-design.md](../archive/specs/2026-08-03-sp5-pickup-map-visual-rework-design.md) — V-9

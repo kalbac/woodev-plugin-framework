@@ -1,13 +1,13 @@
 # Platform v2 — Program Tracker (history snapshot)
 
-> **Last updated: 2026-08-10 (#244 correction; s60 docs audit before that; previous update was s13 — treat pre-s60 claims as history).**
+> **Frozen snapshot — not maintained.** Treat every claim here as history.
 > This is a **program-history snapshot**, not the live tracker. Live status = [CURRENT-STATE.md](CURRENT-STATE.md).
 
 ## Stage map (final)
 
 | Stage | Scope | Outcome |
 |---|---|---|
-| S0 Platform Split | clean break + decompose base + minimal resolver | ✅ DONE (tag `platform-v2-split-done`, merged to `main` 2026-06-04) |
+| S0 Platform Split | clean break + decompose base + minimal resolver | ✅ DONE (merged to `main` 2026-06-04; the `platform-v2-split-done` tag no longer exists) |
 | S1 Shipping | universal shipping module; PVZ-map abstraction | ✅ DONE (PR #20, 2026-06-08) |
 | S2 Box-packer | minimal-virtual-box algorithm + neutral wrapper | ✅ DONE (PR #21/#22; conformance-audited PR #24) |
 | S3 Licensing | `is_need_license` → modern UI → webhooks (all 3 substages) | ✅ DONE (PR #25, PR #31, PR #35; frozen wire contract = `platform-v2-s3-licensing-webhooks-spec.md` §5, pinned by `LicenseCommandContractParityTest`) |
@@ -17,7 +17,7 @@
 
 ## Active program
 
-The active program since s32 is the **shipping SP-track (SP-1…SP-11)**:
+The program since s32 was the **shipping SP-track (SP-1…SP-11)** — complete (`CURRENT-STATE.md`):
 
 - Authoritative map: [specs/2026-06-25-shipping-module-decisions.md](specs/2026-06-25-shipping-module-decisions.md)
 - Live status: [CURRENT-STATE.md](CURRENT-STATE.md)

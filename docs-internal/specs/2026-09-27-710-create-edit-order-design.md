@@ -1,5 +1,7 @@
 # #710 «Создать заказ» / «Редактировать» — admin order wizard design
 
+> **Status: IMPLEMENTED** (increments I0–I8; code in `src/shipping-orders-page/order-wizard/`). Reuse-map paths below corrected 02.11.2026 (s210).
+>
 > Written in s141 (27.09.2026), in English per `DOCS-SCHEMA.md`, from a brainstorm WITH the operator.
 > Every decision marked **(operator)** is his and is not reopened by an implementing session; the
 > rest are the coordinator's defaults, marked **(default)** — change one only with a measurement or
@@ -54,8 +56,8 @@ Coordinator defaults (not asked; each is WooCommerce's own behaviour or a safety
 | Step / piece | Verdict | Evidence |
 |---|---|---|
 | Modal shell | **reuse** `@wordpress/components` `Modal`, the `OrderPreviewModal` pattern: the page owns fetch + cache, the modal receives data | `src/shipping-orders-page/app.tsx:42`, `:804`, `:2279` |
-| Stepper | **reuse the look** of `src/setup-wizard/stepper.js` (WC-style progress line); lift it into `src/components/` rather than copy | `src/setup-wizard/stepper.js` |
-| Address (country → region → НП → address → postcode) | **adapt** `src/components/location-picker-field.js` (#376): make `level`, `within`, REST root props; stop reading `window.woodevSettings`; add region + address levels and a settlement → postcode fill. **Never** `location-cascade.js` — it is welded to `billing_*`/`shipping_*` DOM ids and `update_checkout` | `location-cascade.js:169`, `:48-56`, `:60`; picker docblock `:1-75`, `:227` |
+| Stepper | **reuse the look** of the setup-wizard stepper (WC-style progress line); lifted into `src/components/stepper.tsx` rather than copied (shipped) | `src/components/stepper.tsx` |
+| Address (country → region → НП → address → postcode) | **adapt** `src/components/location-picker-field.tsx` (#376): make `level`, `within`, REST root props; stop reading `window.woodevSettings`; add region + address levels and a settlement → postcode fill. **Never** `location-cascade.js` — it is welded to `billing_*`/`shipping_*` DOM ids and `update_checkout` | `location-cascade.js:169`, `:48-56`, `:60`; picker docblock `:1-75`, `:227` |
 | Location REST | **reuse** stateless `GET woodev/v1/location/suggest` / `/location/list`; ⛔ **never** `/location/select` or `/location/forget` from admin — they write the ADMIN's own `Customer_Location_Store` | `class-location-controller.php:282`, `:406`; `class-customer-location-store.php:352-362` |
 | Items | **build** with WC `Search` autocompleter `'products'` (+ `'variations'`) from `wc-components` (already a page dependency) | `filters.ts:557` notes Search needs its autocompleter |
 | Customer | **build** with WC `Search` `'customers'` + a small create form; guest by default (O11) | — |

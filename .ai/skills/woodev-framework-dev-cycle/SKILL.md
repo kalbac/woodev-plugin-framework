@@ -41,34 +41,15 @@ The project uses `@wordpress/env` (wp-env) to run WordPress + WooCommerce in Doc
 
 ### `.wp-env.json`
 
-```json
-{
-  "core": null,
-  "phpVersion": "7.4",
-  "plugins": ["https://downloads.wordpress.org/plugin/woocommerce.latest-stable.zip"],
-  "mappings": {
-    "woodev-framework": ".",
-    "wp-content/plugins/woodev-test-plugin": "./tests/_fixtures/woodev-test-plugin",
-    "wp-content/plugins/woodev-test-plugin/woodev": "./woodev",
-    "wp-content/plugins/woodev-test-payment-gateway": "./tests/_fixtures/woodev-test-payment-gateway",
-    "wp-content/plugins/woodev-test-payment-gateway/woodev": "./woodev",
-    "wp-content/plugins/woodev-test-shipping-method": "./tests/_fixtures/woodev-test-shipping-method",
-    "wp-content/plugins/woodev-test-shipping-method/woodev": "./woodev"
-  },
-  "env": {
-    "tests": { "config": { "WP_DEBUG": true, "WP_DEBUG_LOG": true, "SCRIPT_DEBUG": true } },
-    "development": { "config": { "WP_DEBUG": true, "SCRIPT_DEBUG": true } }
-  }
-}
-```
+The file is the source of truth — read `.wp-env.json` rather than a copy here. It defines the `mappings` (framework plus every fixture plugin, each with the shared `woodev/` mapped in), a `tests` env (`WOODEV_FRAMEWORK_DIR`, its own `mappings`) and a `development` env (`WOODEV_UI_KIT_GALLERY`). Local overrides (port, WP core, credentials) live in the gitignored `.wp-env.override.json`.
 
 **Key points:**
 
 - `core: null` -- uses latest stable WordPress from WordPress.org
-- `phpVersion: "7.4"` -- matches compatibility requirements (platform target is PHP 8.1)
+- `phpVersion: "7.4"` -- the lowest supported PHP; the framework supports PHP 7.4–8.x (`composer.json` `require.php`), and 8.1 is only the Composer dev platform (`config.platform`)
 - WooCommerce installed from wordpress.org ZIP (latest stable)
-- Fixture plugins mapped individually; each gets the shared `woodev/` directory mapped in
-- Separate `tests` and `development` environment configs
+- Fixture plugins mapped individually (`ls tests/_fixtures`); each gets the shared `woodev/` directory mapped in
+- Separate `tests` and `development` environment configs; the integration run depends on `WOODEV_FRAMEWORK_DIR` from the `tests` env
 
 ### wp-env Commands
 
@@ -109,12 +90,12 @@ npx wp-env run cli "php -v"
 2. Make code changes
 3. Run linting            --> composer phpcs
 4. Fix linting issues     --> composer phpcbf
-5. Run tests              --> composer test:unit / composer test:integration
+5. Run tests              --> composer test:unit; integration only in the tests-cli container (see running-tests.md)
 6. Commit changes         --> Conventional Commits format
 7. Stop environment       --> npx wp-env stop (optional)
 ```
 
-**IMPORTANT:** Always ensure wp-env is running before running integration tests.
+**IMPORTANT:** Integration tests run inside the wp-env `tests-cli` container, not on the host — see [running-tests.md](running-tests.md).
 
 ---
 
@@ -157,7 +138,7 @@ composer phpcs -- woodev/path/to/File.php   # specific file
 
 ```bash
 composer phpstan
-composer exec -- phpstan analyse woodev/path/to/File.php --memory-limit=2G
+composer exec -- phpstan analyse woodev/path/to/File.php --memory-limit=4G
 ```
 
 ### Markdown Linting
@@ -179,11 +160,7 @@ npx markdownlint --fix "**/*.md"
    composer test:unit
    ```
 
-2. **Integration Tests** (WP_UnitTestCase + wp-env):
-
-   ```bash
-   composer test:integration
-   ```
+2. **Integration Tests** (WP_UnitTestCase + wp-env): run only inside the `tests-cli` container, coordinator's job — see [running-tests.md](running-tests.md). The host `composer test:integration` dies with `Class "WP_UnitTestCase" not found`.
 
 3. **Fixture Plugins** in `tests/_fixtures/`:
    - `woodev-test-plugin` (general)
@@ -198,6 +175,13 @@ npx markdownlint --fix "**/*.md"
 
 # Filter by class or method name
 TEST_SUITE=unit ./vendor/bin/phpunit --filter BootstrapTest
+
+# Always clear the result cache first (phpunit.xml: executionOrder="depends,defects")
+rm -f .phpunit.result.cache
+
+# JS and docs gates
+npm run test:js
+npm run lint:docs
 ```
 
 ---
@@ -221,8 +205,9 @@ All commits MUST follow Conventional Commits format for `git-cliff` CHANGELOG ge
 | `docs:` | Documentation | Documentation |
 | `refactor:` | Code refactoring | Refactoring |
 | `test:` | Tests | Tests |
-| `chore:` | Auxiliary tasks | Chores |
+| `perf:` | Performance | Performance |
 | `ci:` | CI/CD changes | CI/CD |
+| `chore:` | Auxiliary tasks | — (skipped by `cliff.toml`) |
 
 Breaking changes: add `!` after type (`feat!:`) and `BREAKING CHANGE:` footer.
 
@@ -233,7 +218,7 @@ Breaking changes: add `!` after type (`feat!:`) and `BREAKING CHANGE:` footer.
 ### wp-env Won't Start
 
 1. Ensure Docker Desktop is running: `docker ps`
-2. Check ports 8888/8889 are free
+2. Check the dev/tests ports are free (8973/8889 here; see `.wp-env.override.json`)
 3. Destroy and rebuild: `npx wp-env destroy && npx wp-env start`
 4. Update wp-env: `npm install -g @wordpress/env`
 

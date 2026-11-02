@@ -48,5 +48,5 @@ code with the pager's, and a push that failed then reads as `exit=0`.
 
 ## Related
 
-- [avoid-gh-pr-merge-auto] — the other place where the convenient git/gh path is the wrong one here
-- `AGENTS.md` → Git workflow — where the push actually happens in the cycle
+- Gotcha `avoid-gh-pr-merge-auto` — the other place where the convenient git/gh path is the wrong one here
+- [AGENTS.md](../../AGENTS.md) → Git workflow — where the push actually happens in the cycle

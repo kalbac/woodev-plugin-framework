@@ -22,7 +22,7 @@ TAB id=shipping sections=3
 
 Same symptom pre-exists on `main`, unrelated to the branch in flight: the test fixture's
 connection-only `widget` section (`Settings_Section::create( 'widget', 'Виджет ЛК', [], … )`,
-`tests/_fixtures/woodev-test-plugin/woodev-test-plugin.php:407`) renders all 20 fields of the
+`tests/_fixtures/woodev-test-plugin/woodev-test-plugin.php`, the `widget` section) renders all 20 fields of the
 `quarry` tab instead of none.
 
 ## Root cause

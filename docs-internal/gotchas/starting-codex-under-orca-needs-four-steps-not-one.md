@@ -25,7 +25,8 @@
 >   3. Continue without trusting`) → send the digit `3` alone — a digit selects AND confirms, no Enter.
 >
 > Then re-dispatch into the SAME terminal:
-> `worker-start --task <task> --retry-of <failed dispatch> --terminal <handle> --worktree current`.
+> `worker-start --task <task> --retry-of <failed dispatch> --terminal <handle> --worktree id:<that terminal's worktree>`
+> (NOT `--worktree current`: `current` is the coordinator's tree and fails with `terminal_worktree_mismatch`, see below).
 > Retrying while a dialog is still on screen fails `agent_unconfigured` («not running a recognized
 > agent»). A plain `--retry-of` WITHOUT `--terminal` spawns a fresh terminal that hits the same dialog.
 
@@ -364,8 +365,10 @@ embedded mode, and Orca's readiness probe never sees it ready. With the Codex li
 launch WITH `--model gpt-5.6-luna --effort low` failed again, and WITHOUT them it reached
 `input_accepted` and returned the right hash through `worker_done`. It was never the rate limit.
 
-✅ **Launch Codex WITHOUT `--model`/`--effort`** — `~/.codex/config.toml` already defaults to
-`gpt-5.6-terra`. When luna or astra is really needed, the fallback below still works.
+✅ **(s141, codex 0.157.1 / Orca 1.4.214 — superseded by the s171 note at the top)** Launch Codex WITHOUT `--model`/`--effort`; the
+`~/.codex/config.toml` default then applies (today `gpt-6-luna`, `CLAUDE.md` → Orca). On the current Orca/codex pair
+`--model gpt-6.1-sol --effort high` launched `ready` 9 of 9 (s171), so pass `--model` for a hard task. If a launch with the flags
+is stuck at readiness again, the fallback below still works.
 
 Fallback (used for all three s141 critics before the cause was known): keep the terminal the failed start
 created and
@@ -404,4 +407,4 @@ into every Codex launch until the CLI is updated or the notice is skipped for go
 
 - [input-accepted-is-not-proof-a-worker-started](input-accepted-is-not-proof-a-worker-started.md) — the s83 half of this: the receipt lies about delivery
 - [codex-shell-sandbox-broken-windows](codex-shell-sandbox-broken-windows.md) — why Codex must run in an Orca terminal at all
-- `../wiki/orchestrating-agents-with-orca.md` — the launch recipe
+- [orchestrating-agents-with-orca](../wiki/orchestrating-agents-with-orca.md) — the launch recipe

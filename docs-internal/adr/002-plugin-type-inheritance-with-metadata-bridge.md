@@ -49,4 +49,4 @@ Negative:
 - [ADR-005](005-platform-v2-clean-break-policy.md) — clean-break policy; superseded the metadata-bridge portion of this ADR.
 - [Platform v2 Dependency Matrix](../archive/platform-v2-dependency-matrix.md) — P0 plugin type spike, metadata vs inheritance tradeoff, and top production risks.
 - [PLANS.md](../archive/PLANS.md) — sections 2 and 5 define the target class hierarchy and plugin type open question (archived 01.09.2026, #695).
-- [FUTURE-BACKLOG.md](../FUTURE-BACKLOG.md) — framework decoupling backlog and deferred post-v2 work.
+- [FUTURE-BACKLOG.md](../FUTURE-BACKLOG.md) — framework decoupling backlog and deferred post-v2 work (frozen 2026-07-23).

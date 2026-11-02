@@ -44,7 +44,7 @@ A gotcha describing a defect in a rule does not fix the rule. **The exception no
 reads it, and both name the full ignore list rather than `tests/` alone:
 
 ```
-tests/**  docs/**  .github/**  .ai/**  .serena/**  .claude/**
+tests/**  website/**  .github/**  .ai/**  .serena/**  .claude/**
 ```
 
 (read off `.serena/project.yml` → `ignored_paths`, s112). The lesson generalises: when a gotcha's
@@ -54,7 +54,7 @@ start loads, not only in the gotcha that a session opens on demand.
 ## One benefit worth knowing
 
 Because Serena never touches `tests/`, test files **do not get the CRLF flip** that Serena applies
-to every production file it edits (gotcha `serena-replace-content-eol-flip`). A test file edited
+to every production file it edits **on the Windows desktop** (gotcha [serena-replace-content-eol-flip](serena-replace-content-eol-flip.md); not seen on the Mac). A test file edited
 with the built-in tools stays LF, so it needs no line-ending clean-up before committing.
 
 ## Related

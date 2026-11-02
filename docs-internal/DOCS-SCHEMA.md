@@ -37,6 +37,8 @@ directory.
 | **The operator's own words, quoted** | **His, verbatim** — a translated quote is no longer evidence of what he decided, and this repo settles arguments by quoting him |
 | **Domain data** (DaData answers, settlement names, method labels, UI captions) | **As it really is** — «Нижегородская обл, г Бор» translated is a false record |
 | **Source strings shown as examples** (i18n msgids, admin notices) | As in the code |
+| `docs-internal/specs/*.md`, `research/**` — the agent's own prose | English (`research/**/*.ru.md` operator agendas and user-facing drafts are exempt) |
+| `.ai/skills/**` | English |
 | `next-session-prompt.md`, `CURRENT-STATE.md`, `SESSION-LOG.md`, `sessions/*.md` | **Either** — the operator reads these himself, and they carry most of the Cyrillic in the tree by design |
 
 The point the old wording was protecting is still in force: **an agent must never have to translate
@@ -75,11 +77,13 @@ All expected files in `docs-internal/`:
 | `adr/NNN-slug.md` | Individual ADR | Agent on major decisions |
 | `gotchas/{slug}.md` | Individual gotcha detail | Agent (compilation step) |
 | `wiki/{topic}.md` | Topic deep-dive | Agent (compilation step) |
-| `specs/*.md` | Feature specifications | Agent when specifying a feature |
+| `specs/*.md` | Feature specifications — a `Status:` line (`draft` / `decided` / `IMPLEMENTED (PR or session)` / `superseded`) under the H1 and a `## Related` section | Agent when specifying a feature |
 | `plans/*.md` | Implementation plans | Agent when planning multi-step work |
 | `research/*.md` | Research notes | Agent during investigations |
 | `reviews/*.md` | Review reports | Agent after review passes |
-| `migration/*.md` | Per-plugin v2 migration docs (incl. data-preservation checklists) | Agent at plugin-rewrite time |
+| `migration/*.md` | Per-plugin v2 migration docs (incl. data-preservation checklists and `signature-probe.md`) | Agent at plugin-rewrite time |
+| `platform-v2-*.md`, `audit-2026-06-01.md` | Historical Platform v2 program docs (frozen; see the DOCS-INDEX historical table) | Not maintained |
+| `next-session-prompt.md.prev` | The previous handoff, kept by the save protocol (`AGENTS.md`) | Agent at session end |
 | `archive/*.md` | Superseded documents | Agent when archiving |
 
 ---
@@ -484,7 +488,7 @@ Before every commit touching docs:
 Moved here from `AGENTS.md` in s115: it is reference material, not a session-start rule, and
 `AGENTS.md` is read at the start of every session against a 28 KB gate.
 
-The public site is an Astro Starlight project in `website/` (own `package.json`; the root toolchain is not involved), English only, published to GitHub Pages at <https://kalbac.github.io/woodev-plugin-framework/>. Its pages are being written against framework 2.0.2 (s183). They must describe **only public capabilities a plugin author uses**, with a working example for each capability. Keep every explanation clear to a reader a year later. Never describe internal mechanics or disclose information a third party should not know; examples include how the licence check works and the remote plugin-deactivation hook.
+The public site is an Astro Starlight project in `website/` (own `package.json`; the root toolchain is not involved), English only, published to GitHub Pages at <https://kalbac.github.io/woodev-plugin-framework/>. It is published (33 pages written against 2.0.x); the framework version is substituted at build time. They must describe **only public capabilities a plugin author uses**, with a working example for each capability. Keep every explanation clear to a reader a year later. Never describe internal mechanics or disclose information a third party should not know; examples include how the licence check works and the remote plugin-deactivation hook.
 
 **How to edit**
 
@@ -502,7 +506,7 @@ against actual source. Every documented capability needs a working example.
 **What does NOT:** session logs, gotchas, ADRs, bug tracking, phase status, internal architecture
 decisions, deferred features, AI-agent workflow rules — all of those live in `docs-internal/`.
 
-**Deploy:** `.github/workflows/docs.yml` builds `website/` on every pull request that touches the site (build only, no deploy) and deploys to GitHub Pages on push to `main`. GitHub Pages must be enabled in the repository settings (source: GitHub Actions) for the deploy job to succeed; do not claim the site is live until that is verified.
+**Deploy:** `.github/workflows/docs.yml` builds `website/` on every pull request that touches the site (build only, no deploy) and deploys to GitHub Pages on push to `main`. GitHub Pages must be enabled in the repository settings (source: GitHub Actions) for the deploy job to succeed (it is enabled and the site is live: HTTP 200 verified 02.11.2026).
 
 ## Related
 

@@ -35,6 +35,8 @@ npx run-local-ci run --all --commit-status
 
 ## Related
 
+- [npx-run-local-ci-in-a-fresh-terminal-waits-for-an-install-prompt](npx-run-local-ci-in-a-fresh-terminal-waits-for-an-install-prompt.md) — owner of the `npx -y` rule summarised above
+- [local-ci-on-orbstack-needs-local-ci-docker-host-not-docker-host](local-ci-on-orbstack-needs-local-ci-docker-host-not-docker-host.md) — owner of the OrbStack `LOCAL_CI_DOCKER_HOST` rule summarised above
 - [local-ci-setup-php-dies-silently-when-the-launchpad-ppa-is-down-bake-php-into-the-image](local-ci-setup-php-dies-silently-when-the-launchpad-ppa-is-down-bake-php-into-the-image.md) — PHP baked into the image
 - [every-ci-job-failing-in-two-seconds-is-a-billing-block.md](every-ci-job-failing-in-two-seconds-is-a-billing-block.md) — local-ci runs the repository workflow locally
 - [../gotcha-index/tooling.md](../gotcha-index/tooling.md) — tooling index

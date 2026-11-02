@@ -21,8 +21,8 @@ fastest way to tell them apart, and it costs one grep:
 |---|---|
 | `… is a required field.` | WooCommerce (`WC_Checkout::validate_checkout()`) |
 | `Please fill in the “…” field.` | **us** — `Checkout_Handler::required_message()` |
-| `You have not chosen a pickup point.` | **us** — the pickup backstop in `Checkout_Handler::validate()` |
-| `This shipping method requires you to choose a pickup point.` | **us** — same backstop, other branch |
+| `You have not chosen a pickup point.` | **us** — `Checkout_Handler::required_message()` for a pickup-slot field (the Store API twin in `pickup/class-store-api-pickup.php` emits the same string) |
+| `This shipping method requires you to choose a pickup point.` | **us** — the real pickup backstop in `Checkout_Handler::validate()` |
 
 **2. Rendering and validation walk different sets.** `Checkout_Handler::inject()` deliberately
 SKIPS fields carrying a `takeover_condition` (they are "owned entirely by the CLIENT"), while
@@ -36,7 +36,7 @@ anyone. See card #708.
 
 ```bash
 grep -rn "Please fill in" woodev/          # ours  -> Checkout_Handler::validate()
-grep -rn "is a required field" woodev/     # none  -> WooCommerce's own validator
+grep -rn "is a required field" woodev/     # only a docblock mention (comments excluded) -> WooCommerce's own validator
 ```
 
 ✅ When the error names a field you cannot see, ask whether it is RENDERED at all before assuming it

@@ -100,10 +100,10 @@ Paths below are under `tests/_fixtures/`.
 | Checkout handler and pickup handler construction | `woodev-realistic-shipping-plugin/includes/class-realistic-shipping-plugin.php` (`get_checkout_handler()`, `init_realistic_pickup()`) |
 | Shipment handler | `woodev-realistic-shipping-plugin/includes/class-realistic-shipment-handler.php`; `woodev-test-shipping-method/class-test-shipment-handler.php` |
 | Tracking handler | `woodev-realistic-shipping-plugin/includes/class-realistic-tracking-handler.php` |
-| Webhook handler | No webhook fixture exists in this repo; the dispatch contract is `woodev/shipping-method/order/abstract-webhook-handler.php`. The first real one is the CDEK plugin's `includes/tracking/class-cdek-webhook-handler.php` (outside this repo, branch `v2`). |
+| Webhook handler | No webhook fixture exists in this repo; the dispatch contract is `woodev/shipping-method/order/abstract-webhook-handler.php`. The first real one is the CDEK plugin's `includes/tracking/class-cdek-webhook-handler.php` (outside this repo, branch `main`). |
 | Document source (single and bulk) | `woodev-realistic-shipping-plugin/includes/class-realistic-document-source.php` |
 | Plugin-global settings and connection test | `tests/unit/Shipping/Settings/CarrierSettingsTabTest.php` (seam); `woodev-test-plugin/woodev-test-plugin.php` (`Woodev_Test_Settings`, `Settings_Section::create()` / `create_connection()`). No fixture in this repo overrides `get_tab_settings_providers()`; the CDEK plugin does (`includes/class-plugin.php`, `includes/settings/`). |
-| A whole carrier plugin on these seams | `kalbac/woocommerce-edostavka`, branch `v2` (outside this repo): `includes/{shipping,pickup,orders,documents,tracking,location,lifecycle,setup,settings}/` |
+| A whole carrier plugin on these seams | `kalbac/woocommerce-edostavka`, branch `main` (outside this repo): `includes/{shipping,pickup,orders,documents,tracking,location,lifecycle,setup,settings}/` |
 | Integrations-tab EXCEPTION example (not the default path) | `woodev-test-shipping-method/class-test-cdek-integration.php` |
 
 ## Checkout traps

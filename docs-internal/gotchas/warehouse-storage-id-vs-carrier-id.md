@@ -2,6 +2,8 @@
 
 > Namespace: `shipping/*` — added session 2 (2026-06-09)
 
+> **REMOVED (#726, 2026-09-02):** the warehouse scaffold (`Warehouse`, `Warehouse_Store`, `Abstract_Warehouse_Store`, the warehouses REST controller) was deleted in commit `258b23cb` ("refactor(shipping)!: remove the warehouse scaffold"). Nothing in `woodev/` carries a storage id any more. Kept as a historical record of the identity trap; do not build against the API below.
+
 ## Context
 
 A warehouse has **two distinct identities**:

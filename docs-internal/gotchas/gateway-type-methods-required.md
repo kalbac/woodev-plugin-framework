@@ -3,6 +3,12 @@
 > Tags: phpstan, static-analysis, blank-ignores, gateway, payment, shipping, box-packer
 > Discovered: 2026-05-10 (s3); recurred + widened: 2026-05-31; audit of remaining ignores: 2026-06-01
 
+> **State now (s210):** the rule below ("never blanket-ignore `Call to an undefined method`") stands.
+> The 2026-06-01 audit table is a historical snapshot: patterns 2, 5 and 6 were fixed on 2026-06-02 and
+> pattern 3 (`get_check_number`) no longer exists. `phpstan.neon` keeps only the narrow
+> `Woodev_Plugin::get_gateways()` ignore (pattern 1) and the `Invalid array key type
+> Woodev_Payment_Gateway_Payment_Token` docblock ignore (pattern 4).
+
 ## 2026-06-01 audit — 3 remaining blanket-ignores with the same fatal risk
 
 A second-model independent audit of `phpstan.neon` (after the a7da0ea fix) found
@@ -18,7 +24,7 @@ The pattern, in every case, is the same as the a7da0ea bug:
 > implementation" never appears (or the parent class is used where the child
 > was assumed), the site fatals on every install that triggers that path.
 
-### Surviving suspect blanket-ignores (audit of `phpstan.neon` lines 86-156)
+### Suspect blanket-ignores found by the 2026-06-01 audit (historical — see State now)
 
 | # | Line | Regex | Risk | Where it actually exists | Notes |
 |---|------|-------|------|--------------------------|-------|
@@ -29,7 +35,7 @@ The pattern, in every case, is the same as the a7da0ea bug:
 | 5 | 127 | `Woodev_Box_Packer_Item::get_product()` | **HIGH** — **FIXED 2026-06-02** | Only in `Woodev_Packer_Item_Implementation` — not in the interface contract | `box-packer/class-packer-separatly.php:38` calls `$item->get_product()` on `Woodev_Box_Packer_Item[]`. **Fix:** added `Woodev_Box_Packer_Item_With_Product` extending `Woodev_Box_Packer_Item` (`woodev/box-packer/interfaces/interface-packer-item-with-product.php`); updated `Woodev_Packer_Item_Implementation` to implement the extended interface; `Woodev_Packer_Separately::pack()` now throws a clear `Woodev_Packer_Exception` when an item does not implement the extended contract. Removed the ignore at `phpstan.neon:127`. Plugins implementing only the base interface continue to work in all other packers; they get a clear exception in `Packer_Separately` instead of a `Call to undefined method` fatal. |
 | 6 | 130-131 | `(Woodev_Shipping\|Woodev_Exportable\|not subtype of Throwable)` (scoped to `interface-shipping-api.php`) | **HIGH** (broken contract) | The 6 types in this interface **do not exist** in the framework | `Woodev_Shipping_API_Rate_Response`, `Woodev_Shipping_API_Order_Response`, `Woodev_Shipping_API_Tracking_Response`, `Woodev_Shipping_API_Pickup_Points_Response`, `Woodev_Exportable_Order`, `Woodev_Shipping_Exception` — see [gotcha: shipping-api-broken-contract](shipping-api-broken-contract.md). 20 errors revealed when ignore removed. |
 
-### Required fixes (release-blocking for v2.0)
+### Required fixes at the time (historical — all applied or dropped by 2026-06-02)
 
 **Pattern 2 (`Payment_Notification_Response` class-wide) — copy pattern from sibling handler:**
 

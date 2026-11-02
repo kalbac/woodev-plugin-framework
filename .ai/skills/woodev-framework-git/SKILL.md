@@ -26,25 +26,27 @@ description: Guidelines for git and GitHub operations in Woodev Framework projec
 
 ### Branch Naming
 
-Use descriptive branch names following this pattern:
+Use descriptive branch names following this pattern (branch-naming rule: `AGENTS.md` → Git workflow):
 
-```
+```text
 {type}/{description}
 ```
 
+Worktrees created by Orca use `kalbac/<slug>` (for example `kalbac/s210-docs-audit`); keep that form for agent work.
+
 **Types:**
 
-- `feature/` — новые функции
-- `fix/` — исправления багов
-- `hotfix/` — срочные исправления для продакшена
-- `docs/` — документация
-- `refactor/` — рефакторинг кода
-- `chore/` — вспомогательные задачи (CI/CD, конфиги)
+- `feat/` — new features
+- `fix/` — bug fixes
+- `hotfix/` — urgent production fixes
+- `docs/` — documentation
+- `refactor/` — code refactoring
+- `chore/` — auxiliary tasks (CI/CD, configs)
 
 **Examples:**
 
-```
-feature/shipping-by-volume
+```text
+feat/shipping-by-volume
 fix/calculation-rounding-error
 docs/update-readme
 refactor/payment-gateway-class
@@ -64,18 +66,19 @@ refactor/payment-gateway-class
 [optional footer]
 ```
 
-**Types:**
+**Types** (the CHANGELOG sections are exactly what `cliff.toml` emits; `filter_unconventional = true`):
 
 | Type | Description | CHANGELOG Section |
 |------|-------------|-------------------|
-| `feat:` | Новая функция | ✨ Features |
-| `fix:` | Исправление бага | 🐛 Bug Fixes |
-| `docs:` | Документация | 📝 Documentation |
-| `style:` | Форматирование, отступы (не влияет на логику) | — |
-| `refactor:` | Рефакторинг без изменений функциональности | 🔧 Refactoring |
-| `test:` | Тесты | ✅ Tests |
-| `chore:` | Вспомогательные задачи | ⚙️ Chores |
-| `ci:` | CI/CD изменения | 🚀 CI/CD |
+| `feat:` | New feature | Features |
+| `fix:` | Bug fix | Bug Fixes |
+| `refactor:` | Refactoring, no behaviour change | Refactoring |
+| `perf:` | Performance improvement | Performance |
+| `docs:` | Documentation | Documentation |
+| `test:` | Tests | Tests |
+| `ci:` | CI/CD changes | CI/CD |
+| `chore:` | Auxiliary tasks | — (skipped) |
+| `style:` | Formatting, whitespace | — (no parser; dropped) |
 
 **Examples:**
 
@@ -112,9 +115,9 @@ This adds ⚠️ BREAKING CHANGE section to CHANGELOG.
 
 1. **Ensure all changes are committed**
 2. **Run linting** — `composer phpcs`
-3. **Run tests** — `composer test:unit` and `composer test:integration` (если есть тесты)
-4. **Update CLAUDE.md** — если изменилась архитектура или API
-5. **Update README.md** — если изменился пользовательский функционал
+3. **Run tests** — `composer test:unit`; integration runs only in the wp-env `tests-cli` container (coordinator, see `woodev-framework-dev-cycle/running-tests.md`)
+4. **Update the gateways** (`AGENTS.md` / `CLAUDE.md`) — if the architecture or API changed
+5. **Update README.md** — if user-facing behaviour changed
 6. **Commits are in Conventional Commits format** (for git-cliff)
 
 ### PR Template
@@ -151,7 +154,7 @@ Before merging, ensure:
 - [ ] No standalone functions (only class methods)
 - [ ] All new code has appropriate docblocks
 - [ ] `@since` annotations are correct
-- [ ] **No breaking changes without deprecation** (CRITICAL for framework)
+- [ ] **No installed-site data contract broken** (option keys, hook names, IDs, slugs, meta keys — release-blocking); internal API breaks cleanly, no `@deprecated` shims (ADR-005)
 - [ ] No changes in `woodev/` directory (unless intentional)
 
 ## Git Commands Reference
@@ -162,14 +165,14 @@ Before merging, ensure:
 # Create new branch from main
 git checkout main
 git pull origin main
-git checkout -b feature/my-feature
+git checkout -b feat/my-feature
 
 # Stage and commit changes (Conventional Commits)
 git add woodev/path/to/file.php
 git commit -m "feat: add new shipping method"
 
 # Push branch
-git push -u origin feature/my-feature
+git push -u origin feat/my-feature
 ```
 
 ### Creating PR with GitHub CLI
@@ -180,7 +183,7 @@ gh pr create \
   --title "feat: add shipping calculation by volume" \
   --body-file ".github/PULL_REQUEST_TEMPLATE.md" \
   --base main \
-  --head feature/shipping-by-volume
+  --head feat/shipping-by-volume
 ```
 
 ### Syncing with Main
@@ -189,7 +192,7 @@ gh pr create \
 # Update your branch with latest main
 git checkout main
 git pull origin main
-git checkout feature/my-feature
+git checkout feat/my-feature
 git rebase main
 
 # Or merge if you prefer
@@ -200,45 +203,16 @@ git merge main
 
 ### Framework Version
 
-**VERSION is stored in `woodev/class-plugin.php`:**
+`VERSION` is the released version, stored in `woodev/class-plugin.php`. `@since` and the next release are tracked separately in `composer.json` → `extra.woodev.planned-release` (see below).
 
-```php
-class Woodev_Plugin {
-    const VERSION = '2.0.0';  // ← Update this for releases
-}
-```
+### Release Workflow
 
-### Release Workflow — FULLY AUTOMATIC
+A release is a **pull request**, not a direct push. Raising `VERSION` on `main` is what publishes a release (#285).
 
-**No manual tagging or release scripts needed!**
-
-1. **Update VERSION** in `woodev/class-plugin.php`:
-
-   ```php
-   const VERSION = '2.1.0';  // Bump version
-   ```
-
-2. **Commit the change:**
-
-   ```bash
-   git commit -m "chore: release version 2.1.0"
-   ```
-
-3. **Push to main:**
-
-   ```bash
-   git push origin main
-   ```
-
-4. **GitHub Actions automatically:**
-
-   - Runs tests (PHPCS, PHPStan, Unit, Integration)
-   - Creates git tag `v2.1.0`
-   - Generates CHANGELOG via `git-cliff`
-   - Builds release ZIP
-   - Publishes GitHub Release
-
-**That's it!** No manual steps required.
+1. In a PR, bump `VERSION` in `woodev/class-plugin.php`, and bump `extra.woodev.planned-release` in `composer.json` to the next planned release. `SinceTagCeilingTest` goes red if `planned-release` is below `VERSION`.
+2. Update the single hand-written "currently …" sentence in `AGENTS.md` (the `@since` row). No other doc may carry the release number; if you find one, point it at `composer.json` instead.
+3. Merge the PR once CI is green.
+4. On the push to `main`, the `release` job in `.github/workflows/ci.yml` runs when the `version` job reports `changed == 'true'`: it tags `vX.Y.Z`, generates the CHANGELOG with `git-cliff`, builds the release ZIP (`git archive HEAD woodev/`) and publishes the GitHub Release.
 
 ### @since Annotations
 
@@ -246,9 +220,9 @@ class Woodev_Plugin {
 `woodev/class-plugin.php` until 2026-09-05; operator decision #409 settled the opposite, and the two
 are deliberately separate concepts.
 
-- `@since` = the **planned release** the change ships in — currently `2.0.23`. Plain semver:
+- `@since` = the **planned release** the change ships in (read it from `composer.json`). Plain semver:
   `2.0.x` = fixes only; the first feature PR raises it to the next minor; `3.0.0` = breaking.
-- `VERSION` = the **released** version (`2.0.22`). It lags on purpose, because raising it on `main`
+- `VERSION` = the **released** version. It lags on purpose, because raising it on `main`
   publishes a release.
 - The machine-readable authority is `composer.json` → `extra.woodev.planned-release`, and
   `tests/unit/SinceTagCeilingTest.php` gates every `@since` in `woodev/**` against it.

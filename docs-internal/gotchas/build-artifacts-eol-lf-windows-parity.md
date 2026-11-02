@@ -2,6 +2,7 @@
 
 **Namespace:** `[tooling/assets-build]`
 **Discovered:** s14 (2026-06-14, OB-2)
+> **Platform:** Windows only — the CRLF churn comes from a Windows working tree; on macOS the rebuilt artifacts are already LF.
 
 ## Symptom
 

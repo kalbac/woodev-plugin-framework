@@ -49,4 +49,4 @@ own.
 
 - [starting-codex-under-orca-needs-four-steps-not-one](starting-codex-under-orca-needs-four-steps-not-one.md) — why the coordinator ends up writing to every Codex terminal, which is what blocks release
 - [powershell-drops-the-roots-flag-from-the-jest-command](powershell-drops-the-roots-flag-from-the-jest-command.md) — the other way a jest run reports success it did not earn
-- `../wiki/orchestrating-agents-with-orca.md` — wave planning
+- [`../wiki/orchestrating-agents-with-orca.md`](../wiki/orchestrating-agents-with-orca.md) — wave planning

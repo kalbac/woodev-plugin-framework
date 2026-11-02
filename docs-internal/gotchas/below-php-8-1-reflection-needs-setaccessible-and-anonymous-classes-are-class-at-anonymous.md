@@ -41,3 +41,4 @@ local check on the floor is one line: `docker run --rm -v "$PWD":/app -w /app ph
 
 - [the-local-php-is-four-versions-above-the-ci-floor](the-local-php-is-four-versions-above-the-ci-floor.md) — why only CI sees this
 - `../gotcha-index/testing.md`
+- [reflection-setaccessible-version-guard](reflection-setaccessible-version-guard.md) — the older record of the same `setAccessible()` guard

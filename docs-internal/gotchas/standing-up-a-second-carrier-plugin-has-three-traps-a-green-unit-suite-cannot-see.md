@@ -32,7 +32,7 @@ does — has no license instance, so **every admin, cron and WP-CLI request dies
 
 ```text
 Fatal error: Uncaught Error: Call to a member function get_license() on null
-  in .../woodev/class-plugin.php:472
+  in .../woodev/class-plugin.php (Woodev_Plugin::load_updater())
 ```
 
 It took the rig down the moment the fixture was booted by a real WordPress for the first time. The

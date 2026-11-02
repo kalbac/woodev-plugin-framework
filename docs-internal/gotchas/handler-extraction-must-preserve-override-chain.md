@@ -12,7 +12,7 @@ moved method. It is **not** safe when a subclass polymorphically customizes the 
 behavior:
 
 - `Woodev_Payment_Gateway_Plugin::plugin_action_links()`
-  (`woodev/payment-gateway/class-payment-gateway-plugin.php:318`) overrides
+  (`woodev/payment-gateway/class-payment-gateway-plugin.php`) overrides
   `Woodev_Plugin::plugin_action_links()` and calls
   `parent::plugin_action_links( $actions )` to compose the base links with its own
   per-gateway links. If the filter callback registered at
@@ -21,7 +21,7 @@ behavior:
   handler's method directly, bypassing `$this` entirely. The gateway would lose its
   per-gateway configure links, silently.
 - `Woodev_Payment_Gateway_Plugin::add_api_request_logging()`
-  (`class-payment-gateway-plugin.php:937`) no-ops the base's `Woodev_Plugin::add_api_request_logging()`
+  (same file) no-ops the base's `Woodev_Plugin::add_api_request_logging()`
   registration, called from `add_hooks()`, on purpose, so
   gateways can log per-gateway via their own `Woodev_Payment_Gateway` listener instead
   (separate log files per gateway). If an `API_Logger` handler registered its action
@@ -30,10 +30,10 @@ behavior:
   gateway's own listener.
 - Two more `Woodev_Plugin` methods are called directly, outside the hook path entirely:
   `Woodev_Plugin::log_api_request()` by
-  `Woodev_Licensing_API::broadcast_request()` (`woodev/licensing/api/class-licensing-api.php:43`),
+  `Woodev_Licensing_API::broadcast_request()` (`woodev/licensing/api/class-licensing-api.php`),
   and `Woodev_Plugin::get_api_log_message()` by
   `Woodev_Payment_Gateway::log_api_request()` via `$this->get_plugin()->get_api_log_message()`
-  (`woodev/payment-gateway/class-payment-gateway.php:3533,3537`). Deleting either method
+  (`woodev/payment-gateway/class-payment-gateway.php`, in `log_api_request()`). Deleting either method
   in favor of a handler-only implementation breaks these call sites, which never go
   through the action at all.
 
@@ -93,7 +93,7 @@ the extraction doesn't shrink it, it hasn't paid for itself.
 ## Related
 - [dispatcher-files-unwired-in-includes](dispatcher-files-unwired-in-includes.md) — another "the general pattern isn't safe for
   every case" framework-internals trap
-- `docs-internal/archive/platform-v2-base-decomposition-subplan.md` — Tasks 2/3, the
+- [platform-v2-base-decomposition-subplan](../archive/platform-v2-base-decomposition-subplan.md) — Tasks 2/3, the
   original CANCELLED analysis this confirms
-- `docs-internal/platform-v2-program-tracker.md` — corrected #244 status (CANCELLED with
+- [platform-v2-program-tracker](../platform-v2-program-tracker.md) — corrected #244 status (CANCELLED with
   reasons, not "never executed")

@@ -5,6 +5,8 @@
 
 ## The trap
 
+> **State now (s210):** the CDEK v1 source is no longer under `plugins-reference/` (it is in `tests/_fixtures/legacy-v1/woocommerce-edostavka`); the lesson — search by behaviour — is unchanged.
+
 Asked whether the CDEK reference has a "popular settlements" list, s92 grepped
 `plugins-reference/woocommerce-edostavka` for `popular` / `популярн` — zero hits — and reported
 twice, to the operator, that the mechanism does not exist there. Then that the thing he remembered

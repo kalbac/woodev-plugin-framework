@@ -32,4 +32,4 @@ public function on_save( int $user_id, string $type, array $address = [], ?objec
 ## Related
 
 - [a-logged-in-customer-s-wc-session-outranks-the-profile](a-logged-in-customer-s-wc-session-outranks-the-profile.md) — the session/profile split behind the stale copy
-- `../gotcha-index/woocommerce.md`
+- [woocommerce.md](../gotcha-index/woocommerce.md)

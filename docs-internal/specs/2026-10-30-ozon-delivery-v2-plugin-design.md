@@ -1,6 +1,7 @@
 # Ozon Delivery v2 Plugin Design
 
 **Date:** 2026-10-30 (s203)  
+**Status:** shipped — Ozon 2.0.0 released (GitHub `v2.0.0`, EDD 58107), built on framework 2.0.22. The Target and Evidence lines below describe the state at design time (framework 2.0.16, rig harness `0.0.1-dev`).  
 **Target:** the first release of a NEW plugin «Ozon Доставка для WooCommerce» (`woodev-ozon-delivery`), written on Framework
 2.0.16 in the existing private repo `kalbac/woodev-ozon-delivery` (today a rig harness at `0.0.1-dev`, board №7). Ozon carries
 the merchant's own parcels to pickup points, parcel lockers and the buyer's door through the Ozon Delivery API

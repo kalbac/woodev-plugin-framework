@@ -86,4 +86,4 @@ follow-up.
 - [block-checkout-reads-country-locale-not-checkout-fields](block-checkout-reads-country-locale-not-checkout-fields.md) — the other half of the same map: which seam reaches which checkout
 - [wc-renders-a-label-for-hidden-fields](wc-renders-a-label-for-hidden-fields.md) — hiding a field on the classic form leaves more behind than it looks
 - [custom-checkout-field-is-empty-on-reload-by-construction](custom-checkout-field-is-empty-on-reload-by-construction.md) — the same family: what the DOM shows is not what the server received
-- `docs-internal/wiki/architecture.md` → «Доставка» tab, "The two-instrument rule" — where the JS-only options sit in the design
+- [architecture](../wiki/architecture.md) → «Доставка» tab, "The two-instrument rule" — where the JS-only options sit in the design

@@ -49,9 +49,10 @@ protected function upgrade( $installed_version ) {
 | Hook | Format | Fires when |
 |------|--------|------------|
 | Installed | `woodev_{plugin_id}_installed` | After install() completes |
-| Upgraded | `woodev_{plugin_id}_upgraded` | After all upgrade routines |
+| Updated | `woodev_{plugin_id}_updated` (passes `$installed_version`, the previous version) | After all upgrade routines |
+| Activated | `woodev_{plugin_id}_activated` | On plugin activation |
 | Milestone | `woodev_{plugin_id}_milestone_reached` | Plugin reaches N active installs |
 
 ## Related
-- [class-lifecycle.php](../../woodev/class-lifecycle.php) — Lines 74–100: install/upgrade detection
+- [class-lifecycle.php](../../woodev/class-lifecycle.php) — `Lifecycle::init()` / `upgrade()`: install/upgrade detection
 - [CURRENT-STATE.md](../CURRENT-STATE.md) — Framework version is `Woodev_Plugin::VERSION`

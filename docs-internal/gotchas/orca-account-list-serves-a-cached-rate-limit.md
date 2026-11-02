@@ -43,8 +43,11 @@ print(d['session']['usedPercent'], d['weekly']['usedPercent'],
 Orca, Codex runs with its OWN HOME, so the rollout is **not** in `~/.codex/`:
 
 ```text
-%APPDATA%/orca/codex-runtime-home/home/sessions/<YYYY>/<MM>/<DD>/rollout-*.jsonl
+<Orca app-data dir>/codex-runtime-home/home/sessions/<YYYY>/<MM>/<DD>/rollout-*.jsonl
 ```
+
+`<Orca app-data dir>` is `%APPDATA%/orca/` on Windows; on macOS it is Orca's Application Support directory
+(`~/Library/Application Support/orca/`).
 
 ⚠ **`multi_agent = true` means ONE run writes TWO rollout files** (a main thread plus a
 sub-agent). Sum both, or you under-count by roughly a third — the luna round split 6.07 M / 1.21 M
@@ -60,4 +63,4 @@ tokens across its pair.
 
 - [the-skipped-count-is-dominated-by-whether-sodium-is-enabled](the-skipped-count-is-dominated-by-whether-sodium-is-enabled.md) — the same shape: a measurement
   whose default reading answers a different question than the one asked.
-- `CLAUDE.md` → Orca — carries the measured luna/astra prices this gotcha's method produced.
+- [CLAUDE.md](../../CLAUDE.md) → Orca — carries the measured luna/astra prices this gotcha's method produced.

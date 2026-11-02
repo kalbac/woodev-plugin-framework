@@ -24,5 +24,5 @@ $bootstrap->register_plugin( '1.4.1', 'My Plugin', __FILE__, $callback );
 ```
 
 ## Related
-- [bootstrap.php](../../woodev/bootstrap.php) — Bootstrap source (constructor line 39, instance line 49)
+- [bootstrap.php](../../woodev/bootstrap.php) — Bootstrap source (`__construct()`, `instance()`)
 - [AGENT-RULES.md](../AGENT-RULES.md) — Rule 3: Singleton Bootstrap

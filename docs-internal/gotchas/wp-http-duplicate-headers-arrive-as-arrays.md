@@ -56,6 +56,6 @@ array, and stopped there. The container was right; the values were never looked 
 
 - [array-cast-of-get-states-false-is-not-empty](array-cast-of-get-states-false-is-not-empty.md) — the other "the type is not what the docblock says"
   finding in this codebase
-- `woodev/api/class-api-base.php` → `handle_response()`, `mask_secret_headers()`,
-  `get_sanitized_response_headers()`
+- [class-api-base.php](../../woodev/api/class-api-base.php) → `handle_response()`, `mask_secret_values()`
+  (renamed from `mask_secret_headers()`, `@since 2.0.2`), `get_sanitized_response_headers()`
 - #318 — the same raw response is still written into a `wp_options` transient by the cacheable base

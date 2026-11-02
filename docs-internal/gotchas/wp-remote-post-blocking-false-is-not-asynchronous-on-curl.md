@@ -29,6 +29,6 @@ wp_schedule_single_event( time() + 60, $hook );    // cron drains and posts with
 
 ## Related
 
-- `woodev/error-reporting/class-dispatcher.php`, `class-transport.php`; spec `../specs/2026-10-04-error-reporter-design.md` D6
+- [class-dispatcher.php](../../woodev/error-reporting/class-dispatcher.php), [class-transport.php](../../woodev/error-reporting/class-transport.php); spec [error-reporter-design](../specs/2026-10-04-error-reporter-design.md) D6
 - [WordPress/Requests cURL transport](https://github.com/WordPress/Requests/blob/v2.0.11/src/Transport/Curl.php)
-- `../gotcha-index/php.md`
+- [php.md](../gotcha-index/php.md)

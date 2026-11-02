@@ -19,7 +19,7 @@ applied mid-turn.
 
 | Need | Use |
 |---|---|
-| Correct a worker that is **working right now** | Send durable dispatch guidance, require `check` at checkpoints, and verify consumption; do not assume a busy-terminal injection is supervised |
+| Correct a worker that is **working right now** | Put hard constraints in the brief and require `check` at checkpoints; for a live correction use `orca terminal send --enter` (it landed at once in s92) and verify the output against it |
 | Guidance the worker will pick up at its next checkpoint | `orca orchestration send --to dispatch:<id>` |
 | A tracked new task | `worker-start` with a new task and the intended worktree |
 
@@ -35,3 +35,4 @@ brief before the start; a late one goes by `terminal send` as well, and the outp
 
 - [input-accepted-is-not-proof-a-worker-started](input-accepted-is-not-proof-a-worker-started.md)
 - [dispatch-inject-reports-failure-after-succeeding](dispatch-inject-reports-failure-after-succeeding.md)
+- [orchestration-mail-is-not-read-unless-the-worker-calls-check](orchestration-mail-is-not-read-unless-the-worker-calls-check.md) — the same pull-only mailbox trap, recorded at s118 (the broader file)

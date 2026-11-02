@@ -35,7 +35,7 @@ $registry->register_page();
 
 ## Why local + unit were clean
 
-`composer test:unit` (Brain Monkey, no WP) never loads WC and stubs `add_action`/`add_submenu_page` to no-ops, so neither trap fires. These only surface in the real WP integration matrix — and only on the WC versions that emit the deprecation. Integration runs on CI (no local `WP_TESTS_DIR`), so the loop is: push → read the failed matrix cell's log → fix → re-push.
+`composer test:unit` (Brain Monkey, no WP) never loads WC and stubs `add_action`/`add_submenu_page` to no-ops, so neither trap fires. These only surface in the real WP integration matrix — and only on the WC versions that emit the deprecation. Integration runs locally inside the wp-env `tests-cli` container (`composer test:integration` requires wp-env — see [wpenv-windows-gitbash-path-mangling](wpenv-windows-gitbash-path-mangling.md) for the in-container command), so the loop is: reproduce in the rig → fix; CI stays the arbiter across the WC/WP matrix.
 
 ## Related
 

@@ -7,7 +7,8 @@
 > `return false;` gate stubs) is superseded by
 > [ADR-005](../adr/005-platform-v2-clean-break-policy.md) — do **NOT** add shims.
 > Reference counts are as of the audit date; the current count is far lower
-> (~9 code references left, plus i18n catalogs) and Phases 2/4 have largely been
+> (as of 02.11.2026: two `@deprecated` stubs — `Payment_Gateway::is_echeck_gateway()` and
+> `Payment_Gateway_Payment_Token::is_echeck()` — plus a few docblock / translator-comment mentions, and the i18n catalogs) and Phases 2/4 have largely been
 > executed: the eCheck response interface file is deleted, the eCheck images
 > (`card-echeck.svg`/`.png`, `sample-check.png`) are gone, and the shared frontend
 > JS file no longer contains eCheck code. **Update (s113, 2026-09-02):** the paired CSS file
@@ -15,6 +16,8 @@
 > deleted in #111. The JS file (`woodev-payment-gateway-frontend.js`) is NOT a leftover: it is
 > the only definition of `Woodev_Payment_Form_Handler`, required by the payment form gateway;
 > see #738 for the enqueue defect that was hiding this.
+> **ADR-005 conflict:** those two stubs are exactly the `@deprecated` shims ADR-005 says not to keep; deleting them needs a code change
+> (parked in the s210 audit, not done here).
 > The WP-bump precondition ("must be preceded by" below) was satisfied in s36.
 
 ## Scope: 14 files, 6 categories

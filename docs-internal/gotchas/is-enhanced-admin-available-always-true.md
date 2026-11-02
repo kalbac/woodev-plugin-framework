@@ -37,12 +37,14 @@ if ( ! class_exists( '\Automattic\WooCommerce\Admin\Notes\Note' ) ) {
 }
 ```
 
-`Woodev_Notes_Helper::add_note()` and the deactivate command's
-`maybe_add_breadcrumb_note()` / `clear_remote_deactivation_artifacts()` all use this
-`Note`-class guard so the heavily mocked `LicenseCommandDeactivateTest` never reaches
-the WC path. The platform-neutral option-clearing path is intentionally NOT behind
-this guard (it must run regardless of WooCommerce).
+The framework's own guard is `WC_Admin_Notes_Renderer::is_available()`
+(`woodev/competitor/class-wc-admin-notes-renderer.php`, `class_exists( Note::class )`). It keeps the
+heavily mocked unit suite from reaching the WC path. The platform-neutral option-clearing path (the
+deactivate command's `clear_remote_deactivation_artifacts()`) is intentionally NOT behind this
+guard (it must run regardless of WooCommerce). `Woodev_Notes_Helper::add_note()` and
+`maybe_add_breadcrumb_note()`, which an earlier version of this note named, no longer exist (the breadcrumb
+note was reverted).
 
 ## Related
-- SESSION-LOG s12 — remote-deactivation UX (Finding B, since reverted)
-- `woodev/payment-gateway/class-payment-gateway-plugin.php` — live WC-note code that relies on this being true only inside a real WC context
+- [SESSION-LOG](../SESSION-LOG.md) (s12) — remote-deactivation UX (Finding B, since reverted)
+- [class-payment-gateway-plugin.php](../../woodev/payment-gateway/class-payment-gateway-plugin.php) — live WC-note code that relies on this being true only inside a real WC context

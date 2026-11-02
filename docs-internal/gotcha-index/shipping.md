@@ -10,7 +10,7 @@
 - [shipping/contracts] **Session key ≠ order-meta prefix — two distinct installed-site contracts.** → [session-key-vs-order-meta-prefix](../gotchas/session-key-vs-order-meta-prefix.md)
 - [shipping/contracts] **Installed-site contract strings are NOT mechanically derivable — the plugin must supply them.** → [contract-string-not-derivable](../gotchas/contract-string-not-derivable.md)
 - [shipping/rate-calc] **Do NOT sum per-parcel prices in the framework rate seam.** → [shipping-rate-no-parcel-sum](../gotchas/shipping-rate-no-parcel-sum.md) (s3)
-- [shipping/warehouse-identity] **Warehouse identity: storage row id ≠ carrier-unique id.** → [warehouse-storage-id-vs-carrier-id](../gotchas/warehouse-storage-id-vs-carrier-id.md)
+- [shipping/warehouse-identity] ~~**Warehouse identity: storage row id ≠ carrier-unique id.**~~ **REMOVED (#726): the warehouse scaffold was deleted.** → [warehouse-storage-id-vs-carrier-id](../gotchas/warehouse-storage-id-vs-carrier-id.md)
 
 - [shipping/rate-cache] **Percentage box costs require per-line merchandise values in cache identity; an unchanged package total does not guarantee an unchanged parcel surcharge.** → [percentage-box-cost-cache-needs-line-values](../gotchas/percentage-box-cost-cache-needs-line-values.md) (s158)
 

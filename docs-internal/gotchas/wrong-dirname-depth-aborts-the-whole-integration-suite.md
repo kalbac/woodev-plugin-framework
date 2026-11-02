@@ -30,7 +30,7 @@ is invisible to every other gate — phpcs, phpstan and the unit suite all stay 
 of them loads the file.
 
 ```bash
-MSYS_NO_PATHCONV=1 npx wp-env run tests-cli …
+MSYS_NO_PATHCONV=1 npx wp-env run tests-cli …   # Windows Git Bash; omit the prefix on macOS
 ```
 
 ## Related

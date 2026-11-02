@@ -1,5 +1,7 @@
 # select2/selectWoo reference study — location field renderer (`ajax-select2` mode)
 
+> **Measured on:** the Windows desktop — the `D:/Projects/wordpress/woocommerce/…` source paths below exist only there.
+
 > Written 21.08.2026 in response to the operator's rig pass (issues #447–#450). Reference-first
 > study, **no framework code changed**. Every claim below carries its source path; anything I could
 > not verify in a real file is marked **UNVERIFIED**.

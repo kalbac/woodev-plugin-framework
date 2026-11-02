@@ -84,7 +84,7 @@ After implementing each logical code block:
 When a task has **3+ independent workstreams each taking > 2 minutes**, use subagent-driven
 execution. Do NOT parallelize simple single-file edits or inherently sequential tasks.
 
-**The shape (operator decision, s83): worker = Sonnet 5, critic = Codex, and nobody accepts their
+**The shape (operator decision, s83): worker = Sonnet 5.5, critic = Codex, and nobody accepts their
 own work.** ⚠ That is the DEFAULT pairing, not a cap on Codex: the critic-only restriction was
 lifted 24.08.2026 and Codex is a full worker again — see `CLAUDE.md` → Orca for which model gets
 which task. The invariant that survives both is the last clause: nobody accepts their own work.
@@ -192,7 +192,7 @@ grandfather lists of pre-#647 exceptions) lives in `bin/generate-class-map.php`;
    `Woodev_API_Base` → `woodev/api/class-api-base.php`, not `class-woodev-api-base.php`.
 
 **Multi-version conventions (REQUIRED in every loader definition):**
-1. **Always set `framework_version`** (the framework version this plugin bundles) **and `backwards_compatible`** (the oldest framework version this plugin is compatible with). The guard at `resolver:148-153` is skipped if `backwards_compatible` is empty — then a too-old plugin is NOT quarantined. ⚠ **The definition field is `framework_version`; `version` is only the name it is mapped to internally** (`class-framework-plugin-loader-definition.php:258`) — this rule said `version` until s115, which does not match the contract the validator enforces. Required fields, per that validator (`:278`): `plugin_id`, `plugin_name`, `plugin_version`, `framework_version`, `plugin_file`, `platform`, `requirements`. ⚠ And the definition may contain **no framework constant at all** — gotcha `a-loader-definition-cannot-use-a-framework-class-constant`.
+1. **Always set `framework_version`** (the framework version this plugin bundles) **and `backwards_compatible`** (the oldest framework version this plugin is compatible with). The `backwards_compatible` guard in `Framework_Resolver` is skipped if `backwards_compatible` is empty — then a too-old plugin is NOT quarantined. ⚠ **The definition field is `framework_version`; `version` is only the name it is mapped to internally** (the `get_framework_version()` mapping in `class-framework-plugin-loader-definition.php`) — this rule said `version` until s115, which does not match the contract the validator enforces. Required fields, per that validator (its required-field loop): `plugin_id`, `plugin_name`, `plugin_version`, `framework_version`, `plugin_file`, `platform`, `requirements`. ⚠ And the definition may contain **no framework constant at all** — gotcha `a-loader-definition-cannot-use-a-framework-class-constant`.
 2. On `plugins_loaded` the resolver loads the **highest** registered framework version for the WHOLE fleet — so framework **classes always come from the highest copy**, regardless of which copy won the bootstrap class rendezvous (the rendezvous winner, first-loaded alphabetically, runs only orchestration; it registers the autoloader against the winning/highest path). A plugin whose bundled framework `version` is **older than the loaded copy's `backwards_compatible`** is deactivated with an "update the outdated plugin" admin notice.
 3. **The registration contract is additive-only from v2.0.0.** Future releases may ADD optional fields to the loader definition, but must not remove/rename required ones — an older copy that wins the rendezvous must always be able to read a newer plugin's registration. (This is why B-2 "loader-protocol forward-tolerance" is handled rather than a blocker: highest-wins class loading + additive contract.)
 
@@ -213,12 +213,12 @@ public function get_plugin_name() {
 
 ### Rule 5 — Docblocks
 Docblocks are **required** on all public and protected methods:
-- `@since` — the planned release: `composer.json` → `extra.woodev.planned-release`, currently `2.0.3`, gated by `SinceTagCeilingTest`. Plain semver: `2.0.x` = bug fixes only; `2.1.0` = minor, set by the first feature PR that merges (that PR raises `planned-release`); `3.0.0` = breaking. Until a feature PR merges, new code carries the next patch.
+- `@since` — the planned release: `composer.json` → `extra.woodev.planned-release` (the current value is stated once, in `AGENTS.md`), gated by `SinceTagCeilingTest`. Plain semver: `2.0.x` = bug fixes only; `2.1.0` = minor, set by the first feature PR that merges (that PR raises `planned-release`); `3.0.0` = breaking. Until a feature PR merges, new code carries the next patch.
   Raising `VERSION` on `main` publishes a release (#285). Operator decision, #409 (s83) —
   the earlier "uses current VERSION" wording contradicted 1388 tags against one and was wrong.
 - **Inherited code carries `1.0.0`, never an upstream number** (#116a, s111). This framework was
   forked with its upstream's docblocks, and that upstream's ladder ran to 5.x. Seven members read
-  `@since 3.0.0`/`4.0.0`/`5.2.0` — numbers ABOVE the released `2.0.2`, so anything comparing
+  `@since 3.0.0`/`4.0.0`/`5.2.0` — numbers ABOVE the then-released `2.0.2` (s111), so anything comparing
   versions concluded the API was unreleased. In THIS repo's history those members exist since the
   initial import (`01dfbe7`), which is exactly what `1.0.0` already marks in 151 other places.
   `2.0.2` would be equally untrue: it claims the API is new in the 2.0.2 release.
@@ -455,7 +455,7 @@ that file is what forced the split, and it is working as intended.
 | Static analysis | PHPStan (level 3, PHP 7.4+) | Every commit |
 | Code style | PHPCS (WordPress + PHPCompatibility) | Every commit |
 
-Test fixtures live in `tests/_fixtures/` — **eight** plugins: `woodev-test-plugin`, `woodev-test-payment-gateway`, `woodev-test-shipping-method`, `woodev-edostavka-pilot-plugin`, `woodev-realistic-payment-plugin`, `woodev-realistic-shipping-plugin`, `woodev-yandex-pilot-plugin`, `woodev-entry-path-fixture` (the v2 entry path's in-repo consumer, #763). `tests/_fixtures/dadata/` is JSON response data, not a plugin — count the directories carrying a `Plugin Name:` header, not the directories.
+Test fixtures live in `tests/_fixtures/` — **nine** plugins: `woodev-test-plugin`, `woodev-test-payment-gateway`, `woodev-test-shipping-method`, `woodev-edostavka-pilot-plugin`, `woodev-realistic-payment-plugin`, `woodev-realistic-shipping-plugin`, `woodev-yandex-pilot-plugin`, `woodev-entry-path-fixture` (the v2 entry path's in-repo consumer, #763), `woodev-failing-gateway`. `tests/_fixtures/dadata/` is JSON response data, not a plugin — count the directories carrying a `Plugin Name:` header, not the directories.
 
 Run a single test:
 ```bash

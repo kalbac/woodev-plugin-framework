@@ -15,6 +15,8 @@ Both measurements returned **zero**, and not because the search was wrong.
 
 ## Root cause: those plugins bundle framework 1.3.3 / 1.4.0
 
+> **State now (s210):** `plugins-reference/` holds only `woodev-russian-post` and `woodev-vkredit`; the CDEK and Yandex v1 sources the table below lists moved to `tests/_fixtures/legacy-v1/`. The table is the s1xx measurement.
+
 ```text
 plugins-reference/woocommerce-edostavka/woodev/class-plugin.php:20    const VERSION = '1.3.3';
 plugins-reference/woocommerce-yandex-delivery/woodev/class-plugin.php const VERSION = '1.4.0';

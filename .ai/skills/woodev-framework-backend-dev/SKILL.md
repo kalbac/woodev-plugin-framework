@@ -15,7 +15,7 @@ This skill provides guidance for developing Woodev Framework backend PHP code ac
 - Modifying existing backend PHP code
 - Adding hooks or filters
 - **Writing PHP unit tests** (invoke before creating `*Test.php` files)
-- **Adding deprecation notices**
+- **Deprecating a hook** (hooks only — internal API is deleted, not deprecated)
 
 **DO NOT use this skill for:**
 
@@ -31,7 +31,7 @@ Follow Woodev Framework project conventions when adding or modifying backend PHP
 2. **Naming conventions**: See [code-entities.md](code-entities.md) for naming methods, variables, and parameters
 3. **Coding style**: See [coding-conventions.md](coding-conventions.md) for general coding standards and best practices
 4. **Working with hooks**: See [hooks.md](hooks.md) for hook callback conventions and documentation
-5. **Dependency injection**: See [dependency-injection.md](dependency-injection.md) for DI container usage
+5. **Wiring**: this framework has no DI container. Plugins wire services through `Woodev_Plugin` lazy getters and the `Shipping_Plugin` override seams — see `docs-internal/wiki/architecture.md`
 6. **Data integrity**: See [data-integrity.md](data-integrity.md) for ensuring data integrity when performing CRUD operations
 7. **Testing**: See [../woodev-framework-dev-cycle/testing-guide.md](../woodev-framework-dev-cycle/testing-guide.md) for Brain Monkey/Mockery patterns and test writing conventions
 
@@ -48,7 +48,4 @@ Follow Woodev Framework project conventions when adding or modifying backend PHP
 
 ## Version Information
 
-To determine the current framework version number for `@since` annotations:
-
-- Read the `VERSION` constant in `woodev/class-plugin.php`
-- Example: If `const VERSION = '2.0.0'`, use `@since 2.0.0`
+`@since` is the **planned release**, not the `VERSION` constant (which lags on purpose). Read it from `composer.json` → `extra.woodev.planned-release`; the rule and its gate (`SinceTagCeilingTest`) are `docs-internal/AGENT-RULES.md` → Rule 5.

@@ -13,8 +13,8 @@ if ( is_wp_error( $response ) ) {
 ```
 
 `is_wp_error()` is true for **transport** failures — DNS, timeout, cURL. It is NOT true for an
-HTTP 400/422 carrying `{"errors":[{"code":"…","message":"…"}]}`. WordPress считает такой ответ
-успешным: `wp_remote_post()` returns an array, not a `WP_Error`.
+HTTP 400/422 carrying `{"errors":[{"code":"…","message":"…"}]}`. WordPress treats such a response as
+successful: `wp_remote_post()` returns an array, not a `WP_Error`.
 
 So the sentence "the API returned an error" splits in two, and only one half throws. A refusal —
 «габариты превышены», «ПВЗ закрыт», «город получателя не распознан» — arrives as an ordinary

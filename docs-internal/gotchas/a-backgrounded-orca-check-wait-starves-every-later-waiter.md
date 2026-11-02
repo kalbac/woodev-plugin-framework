@@ -64,5 +64,7 @@ If a correction must land, verify it was consumed — or plan to do that work yo
 
 ## Related
 
+- [one-check-wait-per-run-and-a-second-one-fails-invisibly](one-check-wait-per-run-and-a-second-one-fails-invisibly.md) — same Trap 1 from the `waiter_exists` error side
+- [orca-check-json-is-pretty-printed-so-a-line-parser-reads-it-as-empty](orca-check-json-is-pretty-printed-so-a-line-parser-reads-it-as-empty.md) — Trap 2 has its own file with the full parser
 - [starting-codex-under-orca-needs-four-steps-not-one](starting-codex-under-orca-needs-four-steps-not-one.md) — the other "the receipt does not prove what you think" trap
 - [a-worker-can-fan-out-to-background-forks-past-the-concurrency-cap](a-worker-can-fan-out-to-background-forks-past-the-concurrency-cap.md) — same area: what the coordinator can and cannot see

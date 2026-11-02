@@ -8,8 +8,10 @@ The repo has a `.markdownlintignore` (listing e.g. `docs-internal/SESSION-LOG.md
 workflow invokes:
 
 ```bash
-markdownlint-cli2 "**/*.md" "#node_modules" "#vendor" "#.ai" "#CLAUDE.md" "#QWEN.md"
+markdownlint-cli2 "**/*.md" "#node_modules" "#vendor" "#.ai" "#CLAUDE.md"
 ```
+
+(The command above is the shape at the time of discovery, 2026-06-08; the current one is under "Fix".)
 
 When you pass **explicit globs as command-line arguments**, markdownlint-cli2 does **not**
 apply `.markdownlintignore` — only the inline `#negation` glob args take effect. Proof:
@@ -21,20 +23,21 @@ this invocation. Adding new entries to `.markdownlintignore` had **zero** effect
 Exclude paths via the **workflow glob** (the authoritative mechanism here), not the ignore file:
 
 ```bash
-markdownlint-cli2 "**/*.md" "#node_modules" "#vendor" "#.ai" "#.kiro" \
-  "#CLAUDE.md" "#QWEN.md" "#AGENTS.md" "#docs-internal" "#.autodev" "#.serena"
+markdownlint-cli2 "**/*.md" "website/src/content/docs/**/*.mdx" "#node_modules" "#website/node_modules" \
+  "#website/dist" "#vendor" "#.ai" "#.kiro" "#CLAUDE.md" "#AGENTS.md" "#docs-internal" "#.serena" "#CHANGELOG.md"
 ```
 
-The markdown gate now covers the **published** `docs/` tree + root markdown. The not-published
-operational docs (`docs-internal/`, the `.autodev/` loop blackboard) and tooling dirs are
-excluded. `AGENTS.md` is excluded alongside `CLAUDE.md`/`QWEN.md` (agent-instruction /
-constitution doc, not publish-grade prose).
+The markdown gate covers the **published** site content (`website/src/content/docs`) + root markdown. The
+not-published operational docs (`docs-internal/`) and tooling dirs are excluded; the canonical command is
+`.github/workflows/markdown-lint.yml`. `AGENTS.md` is excluded alongside `CLAUDE.md` (agent-instruction
+doc, not publish-grade prose). `QWEN.md` and `PLANS.md` no longer exist (QWEN.md retired in #1312; PLANS.md is
+`docs-internal/archive/PLANS.md`).
 
 ## Also
 
 `MD051` (link-fragments) is disabled in `.markdownlint.json`: markdownlint's slugifier can't
-reproduce this project's **Cyrillic** heading anchors (e.g. `PLANS.md` `[§ 4.3](#43-…)`),
-producing false positives. Don't hand-edit constitution docs (`PLANS.md`, `AGENTS.md`) to
+reproduce this project's **Cyrillic** heading anchors (e.g. an archived PLANS.md `[§ 4.3](#43-…)`),
+producing false positives. Don't hand-edit constitution docs (`AGENTS.md`) to
 satisfy a linter — exclude/disable instead.
 
 ## How to apply
@@ -42,7 +45,7 @@ satisfy a linter — exclude/disable instead.
 - If markdownlint-cli2 is invoked with glob args, manage exclusions in the **glob**, not
   `.markdownlintignore`. (The ignore file works in "autoglob"/no-args mode only.)
 - Verify locally with the **exact** workflow glob, not a bare `markdownlint-cli2`.
-- Remember `.kiro/` and `.autodev/runtime/` are gitignored → absent on CI, so they don't need
+- Remember `.kiro/` is gitignored → absent on CI, so they don't need
   glob exclusion for CI (only for local-run parity).
 
 ## Related

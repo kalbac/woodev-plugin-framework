@@ -3,6 +3,11 @@
 > **Measured on:** the Windows desktop (PHP 8.5.1 with sodium disabled) — re-measured on the macOS
 > laptop in s138, where the answer is different: see "macOS: the flag is redundant AND noisy" below.
 
+> **State now (s210):** since #1311 (s183) the Yandex/CDEK contract tests run on the committed fixtures in
+> `tests/_fixtures/legacy-v1/`, so the unit suite skips **1** in every checkout — primary, worktree and CI
+> alike — once sodium is loaded. The "6 wherever `plugins-reference/` is absent" figures below are the
+> s102/s138 measurement and no longer apply; the sodium mechanism does.
+
 ## What happens
 
 `CURRENT-STATE.md` and every handoff since s84 carry the rule *"compare SKIPPED, not assertions —
@@ -25,7 +30,8 @@ configuration — and it is 274 assertions, not 66 tests, that actually go unrun
 
 ## Root cause
 
-Five test files gate themselves on the extension:
+Several test files gate themselves on the extension (five at s102; `LicenseInForceTest.php` and others
+have joined since — `grep -ln sodium tests/unit`):
 
 ```
 tests/unit/LicenseAuthorityClaimsTest.php
@@ -46,7 +52,7 @@ CI on the same branch reported `Skipped: 6`. That reconciles exactly:
 |---|---|---|
 | local, sodium off | 67 | 1 genuine + 66 sodium |
 | local, sodium on | 1 | 1 genuine |
-| CI (sodium installed) | 6 | 1 genuine + 5 `plugins-reference` contract tests |
+| CI (sodium installed), s102 | 6 | 1 genuine + 5 `plugins-reference` contract tests (since #1311: **1**) |
 
 The 5 are the ones `a-worktree-silently-skips-five-contract-tests` is about: `plugins-reference/` is
 gitignored, so it is absent from a CI checkout and from every worktree, present only in the primary.
@@ -68,14 +74,14 @@ vendor/bin/phpunit --testsuite=Unit          # "Skipped: 66, matches the baselin
 ```bash
 php -d extension=sodium vendor/bin/phpunit --testsuite=Unit --do-not-cache-result
 # primary checkout: Skipped: 1
-# a worktree / any checkout without plugins-reference: Skipped: 6
+# any checkout since #1311 (was 6 without plugins-reference at s102): Skipped: 1
 ```
 
 `-d extension=sodium` is used rather than editing `php.ini`, so the measurement does not depend on
 a machine change nobody else has.
 
-With sodium on, the numbers are legible again: **1 in the primary, 6 anywhere `plugins-reference` is
-absent**, and any other value is a real signal.
+With sodium on, the numbers are legible again: **1 in every checkout (since #1311; at s102 it was 1
+in the primary and 6 anywhere `plugins-reference` was absent)**, and any other value is a real signal.
 
 ## macOS (s138, 26.09.2026): the flag is redundant AND its warning lies
 
@@ -111,8 +117,8 @@ meaningless" has it exactly backwards.
 | Windows desktop (8.5.1) | no | **required** | 1 with the flag, 67 without |
 | macOS laptop (8.5.7) | **yes** | redundant, prints a false warning | **1 either way** |
 
-The rule that survives both is the one about what the NUMBER means, not about the flag: **1 in the
-primary checkout, 6 wherever `plugins-reference/` is absent, anything else is a real signal.** Check
+The rule that survives both is the one about what the NUMBER means, not about the flag: **1 in every
+checkout since #1311 (6 wherever `plugins-reference/` was absent before it), anything else is a real signal.** Check
 `php -m | grep sodium` before deciding whether the flag is needed at all, and never treat its warning
 as evidence about the extension's state.
 

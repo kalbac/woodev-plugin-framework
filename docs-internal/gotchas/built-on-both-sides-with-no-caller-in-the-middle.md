@@ -91,6 +91,9 @@ card, or the card overstates and gets triaged wrong.
 
 ## s66 addendum — third occurrence, and this one is a whole PUBLIC SEAM
 
+> **Resolved #311, 13.08.2026:** the address-normalizer seam and the dead DaData assets were removed
+> (commit `36a3c25a`); the paragraph below is history.
+
 Found while assembling the brainstorm brief for the locality/address cards, not while chasing a bug:
 
 - `Woodev\Framework\Shipping\Address\Address_Normalizer` — an interface with `suggest()` and

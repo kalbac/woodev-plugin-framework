@@ -3,7 +3,7 @@
 **Namespace:** `[shipping/location]` · **Discovered:** s87 (2026-08-24), after sending the operator
 to verify the wrong mode
 
-## The mapping — the only authority is `class-location-provider-registry.php:1005-1007`
+## The mapping — the only authority is `Location_Provider_Registry::field_mode_labels()`
 
 | Mode id | Label in the settings UI | What it is |
 |---|---|---|
@@ -31,28 +31,28 @@ Not symmetric, and both gates are read-side
 
 - `typeahead` — always, both axes.
 - `ajax-select2` — always, both axes (unconditional since #380; it no longer needs `CAPABILITY_LIST`).
-- `related-list` — needs the active provider to declare `CAPABILITY_LIST`, **and** for the SETTLEMENT
-  axis additionally requires the REGION axis to already be on `related-list` (the #404 cross-axis
-  condition).
+- `related-list` — needs the active provider to declare `CAPABILITY_LIST`, and is offered on the REGION
+  axis only. The SETTLEMENT axis never offers it (operator decision 24.08.2026, #437): the #404
+  cross-axis condition ("region axis must already be on `related-list`") was removed with the mode.
 
 Consequences worth knowing before you go to the rig:
 
 - **DaData can never offer `related-list`.** The CDEK fixture's own docblock says why: "This is the
   capability DaData structurally cannot have (a query-driven API cannot enumerate)". With `dadata`
   active, «Предустановленный список» is simply absent from both selects — not broken, absent.
-- To exercise the settlement `related-list` branch you must set the provider to `test-cdek`, then the
-  region axis, and only then does the settlement axis offer it.
+- The settlement axis therefore offers only «Текст с подсказками» and «Список с поиском»
+  (`typeahead` and `ajax-select2`), whatever the provider. There is no settlement `related-list`
+  branch to exercise on the rig.
 
-## And it is being deleted
+## And it has been deleted
 
 `specs/2026-08-21-settlement-search-design.md`, decision 1: **"The settlement axis is never a flat
-preset list. Removed as a mode."** `list_localities()` for settlements and `LIST_HARD_CAP` are
-deleted rather than tuned (#437). So `related-list` survives only on the REGION axis. Anything you
-fix in `attachRelatedListSettlement()` is fixing code with a delete date — #478 was closed for
-exactly that reason.
+preset list. Removed as a mode."** `list_localities()` for settlements, `LIST_HARD_CAP` and
+`attachRelatedListSettlement()` are gone (#437); `related-list` survives only on the REGION axis.
+#478 was closed for exactly that reason.
 
 ## Related
 
 - [a-level-served-can-come-from-the-fallback-not-the-active-provider](a-level-served-can-come-from-the-fallback-not-the-active-provider.md) — the other place where
   "which provider answers this" is not what the settings screen suggests.
-- `../specs/2026-08-21-settlement-search-design.md` — why the settlement axis loses the preset list.
+- [settlement-search design](../specs/2026-08-21-settlement-search-design.md) — why the settlement axis loses the preset list.

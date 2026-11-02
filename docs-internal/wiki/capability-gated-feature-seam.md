@@ -2,7 +2,7 @@
 
 > **Reference pattern (not a hard mandate).** Where it applies and is justified, build
 > optional behaviour this way. The `payment-gateway` module is the gold-standard
-> exemplar (`PLANS.md` §3.2 names it the architectural reference for shipping); the
+> exemplar (`archive/PLANS.md` §3.2 names it the architectural reference for shipping); the
 > `shipping-method` box-packing seam (s3, 2026-06-09) is the newest instance.
 > Decision record: [ADR-006](../adr/006-capability-gated-feature-seam.md).
 

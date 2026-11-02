@@ -1,6 +1,7 @@
 # Gotcha: [tooling/parallel-agents] — A `cd` in the Bash tool persists across calls, so a later `git checkout -b` lands in the worktree you visited, not the tree you meant
 
 > Tags: tooling, bash, git, worktrees | Session: s117
+> **Measured on:** the Windows desktop (paths like `D:/Projects/woodev_framework`). The `cd` persistence applies on the Mac too; there the primary checkout is `/Users/maksimmartirosov/Projects/woodev-plugin-framework`.
 
 ## What happens
 

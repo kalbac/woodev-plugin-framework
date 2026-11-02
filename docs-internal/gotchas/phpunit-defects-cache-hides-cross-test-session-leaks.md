@@ -5,7 +5,7 @@
 ## The trap
 
 `phpunit.xml` sets `executionOrder="depends,defects"`. Without a `.phpunit.result.cache`
-(gitignored, `.gitignore:26`), PHPUnit runs test **classes** in plain directory/declaration
+(gitignored in `.gitignore`), PHPUnit runs test **classes** in plain directory/declaration
 order — alphabetical within `tests/integration/Shipping/`. `LocationRouteTest` therefore always
 runs before `PickupRouteTest` on a fresh checkout: **every CI run, every time.**
 
@@ -64,3 +64,4 @@ that actually broke.
   a different failure mode (the write silently not happening at all)
 - [rig-serves-the-working-tree-branch-switch-reverts-fixes](rig-serves-the-working-tree-branch-switch-reverts-fixes.md) — a different "local environment
   quietly disagrees with what's being reviewed" trap on this same branch
+- [phpunit-result-cache-makes-a-run-unreproducible](phpunit-result-cache-makes-a-run-unreproducible.md) — the cache mechanism itself; `rm -f .phpunit.result.cache` is the shared cure

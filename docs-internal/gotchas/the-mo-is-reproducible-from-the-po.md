@@ -1,5 +1,6 @@
 # Gotcha: [i18n/catalogue] — The committed `.mo` IS `wp i18n make-mo` of the committed `.po`, so a catalogue edit is a reviewable diff
 > Tags: i18n, gettext, po, mo, tooling, measurement | Session: s104
+> **Measured on:** the Windows desktop (no local `msgfmt`, `MSYS_NO_PATHCONV=1` for Git Bash). On the Mac `msgfmt` is installed (`/opt/homebrew/bin/msgfmt`) and `scripts/lint-mo.mjs` checks the `.mo`; drop the `MSYS_NO_PATHCONV` prefix. The md5 below is a 29.08.2026 example — the `.mo` has changed since; the method is what holds.
 
 ## What happens
 
@@ -24,8 +25,8 @@ the control is free: run the compile on the unchanged file first, compare hashes
 
 ## Root cause
 
-`msgfmt` is deterministic for a given `.po`, and nobody has hand-edited this `.mo`. There is no
-local `msgfmt` on this machine — `wp i18n make-mo` inside the rig's `cli` container is the tool.
+`msgfmt` is deterministic for a given `.po`, and nobody has hand-edited this `.mo`. On the Windows desktop there is no
+local `msgfmt` — `wp i18n make-mo` inside the rig's `cli` container is the tool.
 
 ## Fix
 

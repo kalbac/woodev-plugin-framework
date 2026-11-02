@@ -1,6 +1,7 @@
 # Setup Wizard v2 Contract
 
 **Date:** 2026-10-08 (s162)  
+**Status:** IMPLEMENTED — #109 and #1177 are CLOSED (`woodev/setup/`, `src/setup-wizard/`); the "today" statements in the body describe the pre-contract state.  
 **Issues:** #109 (engine), #1177 (CDEK v1→v2 migration wizard, the first real consumer), #110 (item 7 stays on its trigger)  
 **Basis:** the read-only audit [2026-10-01-109-setup-wizard-audit.md](../research/2026-10-01-109-setup-wizard-audit.md) and the
 operator's decisions of 08.10.2026, taken item by item on the audit's proposals.

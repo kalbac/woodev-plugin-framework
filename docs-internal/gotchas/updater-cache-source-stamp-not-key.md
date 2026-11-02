@@ -46,7 +46,7 @@ Same move applies to any transient/option whose name is a data contract.
 
 ## Related
 
-- `docs-internal/archive/reviews/ob3-plugin-updater-review-2026-06-14.md` — F10 (and F3, the still-blocked key-isolation finding).
-- `woodev/licensing/updater/class-plugin-updater.php` `set_version_info_cache()` / `get_cached_version_info()`.
+- [`docs-internal/archive/reviews/ob3-plugin-updater-review-2026-06-14.md`](../archive/reviews/ob3-plugin-updater-review-2026-06-14.md) — F10 (and F3, the still-blocked key-isolation finding).
+- [`woodev/licensing/updater/class-plugin-updater.php`](../../woodev/licensing/updater/class-plugin-updater.php) `set_version_info_cache()` / `get_cached_version_info()`.
 - [in-plugin-update-message-arg-shape](in-plugin-update-message-arg-shape.md) — sibling OB-3 Step 4 finding (F8).
-- CLAUDE.md "Backward Compatibility — clean-break policy" → installed-site data contracts (never break).
+- [AGENTS.md](../../AGENTS.md) "Backward Compatibility — clean-break policy" and [ADR-005](../adr/005-platform-v2-clean-break-policy.md) → installed-site data contracts (never break).

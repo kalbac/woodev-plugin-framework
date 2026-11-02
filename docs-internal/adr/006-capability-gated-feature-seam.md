@@ -6,13 +6,13 @@
 
 ## Context
 
-The framework is a scaffold that plugins extend on contracts (`PLANS.md` §1). Across the
+The framework is a scaffold that plugins extend on contracts (`archive/PLANS.md` §1). Across the
 codebase, optional behaviour needs a consistent way to be wired so that: it cannot be
 forgotten by a plugin author, it costs nothing when unused, and the framework never makes a
 domain decision it is not entitled to make.
 
 The `payment-gateway` module already solves this uniformly and is explicitly held as the
-architectural reference for the rest of the framework — `PLANS.md` §3.2 names it the target
+architectural reference for the rest of the framework — `archive/PLANS.md` §3.2 names it the target
 architecture for the shipping module. The s3 work (weaving box-packing into
 `Shipping_Method::calculate_rate()`) reproduced the same shape in `shipping-method` and made
 the pattern concrete enough to name. We want future feature work (shipping, licensing, and

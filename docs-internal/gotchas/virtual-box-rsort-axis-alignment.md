@@ -7,6 +7,8 @@ session: 2026-06-09
 
 # virtual-box-rsort-axis-alignment
 
+> **SUPERSEDED (s210):** `calculate_virtual_box_dimensions()` was rewritten as a grid/placement algorithm (`fitted_dimensions()` in `woodev/box-packer/class-packer-virtual-box.php`); the `$best = null` / candidate-axis code below no longer exists. Kept as the record of the old algorithm's failure.
+
 `rsort()` on the `calculate_virtual_box_dimensions()` result array destroys axis-name alignment for non-normalized items.
 
 ## The bug

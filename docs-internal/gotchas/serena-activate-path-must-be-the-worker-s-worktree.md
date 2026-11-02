@@ -3,6 +3,8 @@
 **Namespace:** `[tooling/parallel-agents]`
 **Discovered:** s83 (2026-08-20)
 
+> **Measured on:** the Windows desktop — the `D:/Projects/woodev_framework` and `C:/Users/maksi/orca/workspaces/…` paths below are that machine's. On the Mac use `git rev-parse --show-toplevel` of the worker's own worktree (`CLAUDE.md` → Serena). `activate_project` now also needs a `session_id`: see [serena-activate-project-now-requires-a-session-id](serena-activate-project-now-requires-a-session-id.md).
+
 ## What happened
 
 Three Sonnet workers were dispatched into three separate Orca worktrees under
@@ -100,4 +102,6 @@ The harness says so, and it is easy to read past:
 - [two-agents-one-file-is-the-orchestrator-s-bug](two-agents-one-file-is-the-orchestrator-s-bug.md) — the same lesson: a worker cannot know what it was not told
 - [serena-replace-content-eol-flip](serena-replace-content-eol-flip.md) — the other Serena trap, and the one this is NOT
 - [git-checkout-destroys-uncommitted-mutation-revert](git-checkout-destroys-uncommitted-mutation-revert.md) — what a cleanup in the wrong tree can cost
-- `../wiki/orchestrating-agents-with-orca.md` — the brief checklist this rule belongs to
+- [orchestrating-agents-with-orca](../wiki/orchestrating-agents-with-orca.md) — the brief checklist this rule belongs to
+- [serena-index-vs-git-worktree](serena-index-vs-git-worktree.md) — the original index-vs-worktree account of the same split
+- [serena-activate-project-now-requires-a-session-id](serena-activate-project-now-requires-a-session-id.md) — the `session_id` argument the brief template must also carry

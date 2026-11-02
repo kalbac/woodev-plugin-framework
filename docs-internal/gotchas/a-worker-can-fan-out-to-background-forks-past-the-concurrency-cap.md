@@ -32,8 +32,8 @@ running on the machine.
 **Add the line to any brief whose task is a survey, sweep, or audit over many independent items:**
 
 > Do this work yourself, in this session. Do NOT spawn subagents or background forks — the
-> coordinator is running other agents on this machine and the concurrency cap is a hardware limit,
-> not a preference. If the task is too big for one lap, do a part of it and say so in your report.
+> coordinator is running other agents on this machine and the concurrency cap is set by the
+> coordinator, not by you. If the task is too big for one lap, do a part of it and say so in your report.
 
 The last clause matters: without an escape hatch, forbidding delegation invites a rushed, guessed
 "complete" answer instead of an honest partial one. The s104 worker, once it stopped forking,

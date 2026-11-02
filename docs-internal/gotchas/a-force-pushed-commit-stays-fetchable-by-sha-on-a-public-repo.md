@@ -24,4 +24,5 @@ until GitHub's GC runs; only GitHub Support can purge them sooner.
 
 ## Related
 
-- [server-details never go to the public tracker] — the same public-repo boundary for prod facts (operator memory)
+- [public-repo-third-party-credentials](public-repo-third-party-credentials.md) — the same public-repo boundary for secrets in tracked files
+- Operator memory «server details never go to the public tracker» — the same boundary for prod facts

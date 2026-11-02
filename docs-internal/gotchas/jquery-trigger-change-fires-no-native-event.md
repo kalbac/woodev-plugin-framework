@@ -88,5 +88,5 @@ library's dispatch path.
   which is why a destructive reaction must key off a transition rather than an event.
 - [an-invented-fixture-tests-your-assumptions-not-the-carrier](an-invented-fixture-tests-your-assumptions-not-the-carrier.md) — same lesson at the data layer:
   a fixture that differs from production in one dimension hides exactly the bug living there.
-- `pickup-mount.js`'s own file docblock records the mirror-image asymmetry for
+- [pickup-mount.js](../../woodev/shipping-method/assets/js/frontend/pickup-mount.js)'s own file docblock records the mirror-image asymmetry for
   `updated_checkout` (a jQuery *custom* event, unobservable natively at all).

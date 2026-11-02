@@ -250,7 +250,7 @@ without it (Codex) says so once and proceeds with git/shell inspection — stall
 - Message: `type(scope): description` — e.g. `fix(bootstrap): handle missing WC dependency`
 - Never commit broken code — `composer check` must pass
 - Breaking changes: add `!` after type + `BREAKING CHANGE:` footer
-- Branch naming: `{type}/{description}` — e.g. `feat/new-subsystem`
+- Branch naming: `{type}/{description}` — e.g. `feat/new-subsystem`; Orca-made worktree branches are `kalbac/<slug>` (e.g. `kalbac/s209-save`)
 
 ---
 

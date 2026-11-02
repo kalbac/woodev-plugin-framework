@@ -58,4 +58,4 @@ merged, which is why a squash-merged branch may survive the removal and still ne
 
 - [a-worktree-silently-skips-five-contract-tests](a-worktree-silently-skips-five-contract-tests.md) — the other way a fresh worktree differs from the primary checkout
 - [git-diff-name-only-interleaves-eol-warnings](git-diff-name-only-interleaves-eol-warnings.md) — the same CRLF files misreported by a different command
-- `../wiki/orchestrating-agents-with-orca.md` — the worktree contract
+- [orchestrating-agents-with-orca](../wiki/orchestrating-agents-with-orca.md) — the worktree contract

@@ -56,10 +56,10 @@ $base       = realpath( $base );
 $plugin_dir = $base . '/legacy-woodev-plugin/woodev';
 ```
 
-⚠ **The production question is separate and is NOT closed by this.** A real site whose
-`WP_PLUGIN_DIR` is symlinked loses the plugin name from the notice in exactly this way. The resolver
-is best-effort by design and falls back to truthful generic wording, so it is not a bug — but whether
-it should `realpath()` both sides is a decision for a card, not for a test fixture.
+✅ **Production is closed too (#885).** The loader that resolves the plugin name for the dormant notice
+(`woodev/loader.php`) runs `realpath()` on **both** the framework file and `WP_PLUGIN_DIR` before comparing,
+so a symlinked `WP_PLUGIN_DIR` no longer loses the plugin name; `tests/unit/LoaderDormantNoticeTest.php`
+pins it. Only the test fixture was wrong, and the fix above is the whole story.
 
 ## Related
 

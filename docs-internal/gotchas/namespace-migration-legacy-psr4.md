@@ -2,7 +2,7 @@
 > Tags: php, namespace, psr4, migration, naming | Session: s2
 
 ## What happens
-Mixing legacy global-namespace `Woodev_*` classes with new PSR-4 namespaced `Woodev\Framework\*` classes causes confusion about which convention to use for new code. Shipping module already uses PSR-4; the rest of the codebase uses legacy `Woodev_*`.
+Mixing legacy global-namespace `Woodev_*` classes with new PSR-4 namespaced `Woodev\Framework\*` classes causes confusion about which convention to use for new code. The shipping module, `setup/`, `competitor/`, `error-reporting/`, `http/` and (mostly) `settings-page/` use PSR-4; the older modules use legacy `Woodev_*`.
 
 ## Root cause
 The framework is mid-migration:
@@ -31,7 +31,7 @@ class My_New_Class { }  // ❌ inconsistent with rest of module
 class Woodev_My_New_Class extends Woodev_Plugin { }
 ```
 
-**For new modules** (shipping-method already uses this, future modules):
+**For new modules** (shipping-method, setup, competitor, error-reporting and http already use this, future modules):
 ```php
 namespace Woodev\Framework\MyModule;
 
@@ -46,6 +46,10 @@ abstract class My_Plugin extends \Woodev_Plugin { }
 | `licensing/` | Legacy `Woodev_*` | `Woodev_Plugins_License` |
 | `compatibility/` | Legacy `Woodev_*` | `Woodev_Order_Compatibility` |
 | `shipping-method/` | **PSR-4** `Woodev\Framework\Shipping\*` | `Woodev\Framework\Shipping\Shipping_Plugin` |
+| `setup/`, `competitor/`, `error-reporting/`, `http/` | **PSR-4** (all files namespaced) | `Woodev\Framework\Setup\…`, `Woodev\Framework\Competitor\…` |
+| `settings-page/`, `handlers/` | Mixed (most files namespaced, a few legacy) | check the sibling files before adding one |
+
+Counts of namespaced files per directory are a snapshot (2.0.22); `grep -l '^namespace ' woodev/<dir>/*.php` is the live answer.
 
 ## Related
 - [class-shipping-plugin.php](../../woodev/shipping-method/class-shipping-plugin.php) — PSR-4 example (line 12: `namespace Woodev\Framework\Shipping;`)

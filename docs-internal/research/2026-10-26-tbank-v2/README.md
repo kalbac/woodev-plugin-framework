@@ -1,5 +1,3 @@
-TBANKAG
-
 # T-Bank Instalments and Loans on framework v2 — consolidated fact base
 
 > **Wave 0, 26.10.2026.** Three reports feed this file: [a-v1-inventory.md](a-v1-inventory.md) (A), [b-api-market.md](b-api-market.md)

@@ -43,4 +43,4 @@ Translate the name only where it is rendered after `init` (admin pages), not in 
 ## Related
 
 - `woodev/class-plugin.php` — `Woodev_Plugin::__construct()`, the hook-deprecator line
-- `.ai/skills/woodev-plugin-core/traps.md` — plugin-author trap list
+- [woodev-plugin-core traps](../../.ai/skills/woodev-plugin-core/traps.md) — plugin-author trap list

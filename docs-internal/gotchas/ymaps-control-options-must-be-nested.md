@@ -53,7 +53,7 @@ this.searchControl = new this.ymaps.control.SearchControl( {
 ```
 
 Both live references get this right and are the fastest way to check the shape:
-`plugins-reference/woocommerce-yandex-delivery/assets/js/frontend/wc-yandex-delivery-widget-map.js`
+the v1 Yandex Delivery widget `assets/js/frontend/wc-yandex-delivery-widget-map.js` (a machine-local donor tree, no longer under `plugins-reference/` — see [plugins-reference-predates-every-v2-api](plugins-reference-predates-every-v2-api.md))
 (`new ymaps.control.SearchControl({ options: {...} })`, and the same for `ListBox`), and the Russian
 Post widget bundle.
 
@@ -81,5 +81,5 @@ feature behaves like it was never configured, suspect the shape before suspectin
 - [ymaps-objectmanager-properties-are-plain](ymaps-objectmanager-properties-are-plain.md) — the same class of silent shape mismatch
 - [ymaps-html-icon-layout-needs-iconshape](ymaps-html-icon-layout-needs-iconshape.md) — found in the same session
 - [ymaps-camera-moves-are-async](ymaps-camera-moves-are-async.md)
-- `docs-internal/archive/specs/2026-08-03-sp5-pickup-map-visual-rework-design.md` — V-6, and why the control
+- [2026-08-03-sp5-pickup-map-visual-rework-design.md](../archive/specs/2026-08-03-sp5-pickup-map-visual-rework-design.md) — V-6, and why the control
   is kept rather than replaced

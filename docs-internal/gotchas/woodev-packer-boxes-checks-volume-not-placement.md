@@ -18,7 +18,7 @@ will count at drop-off.
 
 ## Root cause
 
-`Woodev_Box_Packer_Packed_Box::try_to_pack()` (`woodev/box-packer/class-packed-box.php:94`) accepts an item when
+(pre-#1214) `Woodev_Box_Packer_Packed_Box::try_to_pack()` (`woodev/box-packer/class-packed-box.php`, now a private method that also takes the placement check) accepted an item when
 (a) its three sorted sides each fit the box's sorted sides and (b) the running SUM of item volumes stays within the
 box volume. No coordinates, no layers, no voids. Found by Fable while designing #1212 (s168): it was the intended
 «oracle» for the new virtual box and could not be one.
@@ -34,4 +34,4 @@ primitive with the cell as a fixed box (#1215).
 ## Related
 
 - [virtual-box-rsort-axis-alignment](virtual-box-rsort-axis-alignment.md)
-- `docs-internal/sessions/s168.md`
+- [s168.md](../sessions/s168.md)

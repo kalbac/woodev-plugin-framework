@@ -1,6 +1,7 @@
 # Issue #109 — Setup Wizard Audit
 
 **Date:** 2026-10-01  
+**Status:** the audit's proposals were taken up and implemented — see [setup-wizard-v2-contract](../specs/2026-10-08-setup-wizard-v2-contract.md); #109 and #1177 are CLOSED. The findings below describe the wizard as it was on 01.10.2026.  
 **Scope:** Read-only audit of the framework wizard, REST controller, React UI, fixture declaration/tests, and author API. No code changed and no integration suite run.  
 **Serena:** Unavailable in this Codex worker; PHP inspection used shell with line-numbered source.
 

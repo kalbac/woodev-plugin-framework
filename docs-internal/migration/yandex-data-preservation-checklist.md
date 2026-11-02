@@ -1,6 +1,6 @@
 # Yandex Delivery Data-Preservation Checklist (S1 second pilot)
 
-> Status: release-blocking contract list for the eventual production yandex rewrite.
+> Status: applied — the production rewrite shipped on v2 (Yandex 2.0.x, EDD 821); kept as the data-contract record.
 > Date: 2026-06-04
 > Plugin ID: `yandex_delivery` (dasherized `yandex-delivery`) — runtime `method_id` (`woocommerce-yandex-delivery.php:62`); the `wc-` prefix is used only for human-facing slugs/handles, not the id-derived REST namespace or option keys
 > EDD download ID: **821** (operator-supplied 2026-06-04)

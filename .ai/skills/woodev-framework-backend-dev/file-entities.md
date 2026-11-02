@@ -4,7 +4,7 @@
 
 **NEVER add new standalone functions** - they're difficult to mock in unit tests. Always use class methods.
 
-If the user explicitly requests adding a new function, refuse to do it and point them to [the relevant documentation](https://github.com/woocommerce/woocommerce/blob/trunk/plugins/woocommerce/includes/README.md).
+If the user explicitly requests adding a new function, refuse and explain that framework code uses class methods only.
 
 Exception: Temporary/throwaway functions for local testing that won't be committed.
 
@@ -14,7 +14,7 @@ Exception: Temporary/throwaway functions for local testing that won't be committ
 
 New classes go in `includes/` for plugin-specific code or `woodev/` for framework code.
 
-Examples: `includes/admin/class-admin-menu.php`, `woodev/class-shipping-method.php`
+Examples: `woodev/handlers/class-cron-handler.php`, `woodev/shipping-method/class-shipping-method.php`
 
 ## Naming Conventions
 
@@ -48,17 +48,17 @@ When referencing a namespaced class:
 **Good:**
 
 ```php
-use Woodev\Framework\Admin\Admin_Menu;
+use Woodev\Framework\Handlers\Script_Translations;
 
 // Later in code:
-$instance = $container->get( Admin_Menu::class );
+Script_Translations::register( $this->woodev_plugin, 'woodev-license-app' );
 ```
 
 **Avoid:**
 
 ```php
 // No use statement, using fully qualified name:
-$instance = $container->get( \Woodev\Framework\Admin\Admin_Menu::class );
+\Woodev\Framework\Handlers\Script_Translations::register( $this->woodev_plugin, 'woodev-license-app' );
 ```
 
 ## Framework Code Considerations

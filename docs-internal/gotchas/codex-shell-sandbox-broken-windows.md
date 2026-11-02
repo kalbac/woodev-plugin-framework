@@ -338,4 +338,4 @@ partially: nothing in it is evidence.
 
 ## Related
 
-- `autodev-critic-ratelimit-false-positive` (archived in `docs-internal/archive/autodev-gotchas/`) — the other codex-critic transport gotcha
+- [autodev-critic-ratelimit-false-positive](../archive/autodev-gotchas/autodev-critic-ratelimit-false-positive.md) (archived) — the other codex-critic transport gotcha

@@ -26,14 +26,11 @@ tells you the gate is open; it does not tell you WHICH condition opened it. Pick
 where the conditions you are not testing are all satisfied, or the one you are testing never gets
 a vote.
 
-Here `isAddressLocked()` reads:
-
-```js
-if ( ! chainNodeForLevel( entry, 'settlement' ) || ! isNodeActive( entry, node ) ) {
-    return false;                       // <- AM exits here, every time
-}
-return null === scopeKeyFor( entry, 'address' );   // <- the condition under test
-```
+Here `isAddressLocked()` (`location-cascade.js`) opens with an early `return false` guard: when the chain has
+no active settlement node for the entry, the address is never locked, whatever the stored record says. AM
+(Armenia) exits at that guard every time; the lock condition under test sits after it. (The function has since
+grown more branches — the implicit-record check #502, the saved-city-unresolved branch #1075,
+`hasUnconfirmedParent` — but the early guard this lesson relies on is still the first thing it does.)
 
 ## Fix
 

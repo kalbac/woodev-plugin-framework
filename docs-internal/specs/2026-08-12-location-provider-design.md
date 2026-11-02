@@ -1,6 +1,6 @@
 # Location Provider layer — design spec
 
-> Status: **approved in brainstorm, pending operator review of this write-up**
+> Status: **IMPLEMENTED** — approved in brainstorm (s67); built as the location-provider layer (`woodev/shipping-method/location/`, plan: `../plans/2026-08-12-location-provider-plan.md`); card #273 CLOSED
 > Session: s67 (12.08.2026). Participants: operator + agent. Brainstorm brief (facts only):
 > `research/2026-08-11-locality-field-brainstorm-brief.md`.
 > Cards: **#273** (who owns «Населённый пункт»), **#127** (SP-4 DaData suggestions + normalization),

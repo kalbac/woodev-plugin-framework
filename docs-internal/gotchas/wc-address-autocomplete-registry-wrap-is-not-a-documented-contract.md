@@ -99,9 +99,9 @@ the specific nested reference out into its own variable before the mutating call
 - [wc-address-autocomplete-hosts-only-address1-and-flattens-identity.md](wc-address-autocomplete-hosts-only-address1-and-flattens-identity.md) — the s67 measurement
   this Task builds on (registry shape, why `canSearch` needs no per-field/region context, the
   documented server-side full kill)
-- `docs-internal/specs/2026-08-12-location-provider-design.md` — D2 (per-country suppression),
+- [`docs-internal/specs/2026-08-12-location-provider-design.md`](../specs/2026-08-12-location-provider-design.md) — D2 (per-country suppression),
   §4.7 (coexistence & degradation)
-- `woodev/shipping-method/assets/js/frontend/location-cascade.js` — the suppression module
+- [`woodev/shipping-method/assets/js/frontend/location-cascade.js`](../../woodev/shipping-method/assets/js/frontend/location-cascade.js) — the suppression module
   section
-- `woodev/shipping-method/checkout/class-checkout-handler.php::maybe_suppress_wc_address_providers()`
+- [`woodev/shipping-method/checkout/class-checkout-handler.php::maybe_suppress_wc_address_providers()`](../../woodev/shipping-method/checkout/class-checkout-handler.php)
   — the server-side full-kill half (spec D2)

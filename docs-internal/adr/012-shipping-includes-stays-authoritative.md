@@ -152,6 +152,7 @@ this one is not a permanent bar to reopening the question, it is what the eviden
   integration-verified, not only measurement-based. What integration does NOT do is validate the
   eager list itself — see the matrix above: it stays green with a class missing from
   `includes()`, which is why the reverse-guard test exists.
+
 ## Related
 
 - `docs-internal/gotchas/dispatcher-files-unwired-in-includes.md`
