@@ -99,7 +99,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Bu
 				'id'              => $order->get_id(),
 				'order_number'    => $order->get_order_number(),
 				'edit_url'        => $order->get_edit_order_url(),
-				'date_created'    => $created ? $created->date( \DATE_ATOM ) : null,
+				'date_created'    => $created ? $created->format( \DATE_ATOM ) : null,
 				'status'          => [
 					'slug'  => $status,
 					'label' => wc_get_order_status_name( $status ),
@@ -166,7 +166,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Bu
 				'id'              => $order->get_id(),
 				'order_number'    => $order->get_order_number(),
 				'edit_url'        => $order->get_edit_order_url(),
-				'date_created'    => $created ? $created->date( \DATE_ATOM ) : null,
+				'date_created'    => $created ? $created->format( \DATE_ATOM ) : null,
 				'status'          => [
 					'slug'  => $status,
 					'label' => wc_get_order_status_name( $status ),
