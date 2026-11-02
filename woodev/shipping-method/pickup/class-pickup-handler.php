@@ -372,6 +372,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		private ?Selection_Scope $selection_scope;
 
 		/**
+		 * The point id remembered in the session for the method a classic checkout POST chose,
+		 * resolved once per request by {@see self::remembered_point_for_posted_method()}; `null`
+		 * until then (#1556).
+		 *
+		 * Cached because the session map is emptied by {@see self::forget_remembered_selections()}
+		 * on `woocommerce_checkout_order_processed`, while another handler's callback on that same
+		 * hook may still read the answer afterwards.
+		 *
+		 * @since 2.0.23
+		 * @var string|null
+		 */
+		private ?string $checkout_fallback_point = null;
+
+		/**
 		 * The pickup point a SINGLE calculation is told to price for, as `[ method_id, point_id ]`, or
 		 * `null` — set and cleared only by {@see self::with_request_selected_point()} (#1163).
 		 *
@@ -2578,6 +2592,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			add_action( 'woocommerce_checkout_order_processed', [ $this, 'handle_checkout_order_processed' ], 10, 3 );
 			add_action( 'woocommerce_store_api_checkout_order_processed', [ $this, 'handle_store_api_order_processed' ], 20 );
 			add_filter( 'woodev_shipping_store_api_posted_data', [ $this, 'contribute_store_api_posted_data' ], 10, 2 );
+			add_filter( 'woodev_shipping_checkout_posted_data', [ $this, 'contribute_checkout_posted_data' ] );
 			add_action( 'wp_footer', [ $this, 'print_nonce_node' ] );
 			add_filter( 'woocommerce_update_order_review_fragments', [ $this, 'inject_nonce_fragment' ] );
 			add_action( 'woodev_shipping_pickup_point_selected', [ $this, 'remember_selection' ], 10, 2 );
@@ -4367,7 +4382,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * Handles `woocommerce_checkout_process` — the server-side constraint re-check.
 		 *
 		 * A blank posted field value means nothing is our concern here — see the class
-		 * docblock's "does NOT re-implement a pickup point is required" note.
+		 * docblock's "does NOT re-implement a pickup point is required" note. A field the form
+		 * did not post AT ALL is read from the session instead, see {@see self::checkout_point_id()}.
 		 *
 		 * Reads the payment method via {@see self::checkout_payment_method()}, NOT
 		 * {@see self::rest_payment_method()} — the latter's session fallback is a
@@ -4383,7 +4399,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * @return void
 		 */
 		public function handle_checkout_process(): void {
-			$point_id = $this->posted_field_value();
+			$point_id = $this->checkout_point_id();
 
 			if ( '' === $point_id ) {
 				return;
@@ -4417,7 +4433,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * beyond the extra copy.
 		 *
 		 * Re-reads the field value from `$_POST` directly (rather than trusting
-		 * `$posted_data`), mirroring
+		 * `$posted_data`; see {@see self::checkout_point_id()} for the session fallback), mirroring
 		 * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Handler::handle_checkout_order_processed()}'s
 		 * own convention, and hands it to {@see self::persist_full_point()} — the
 		 * persistence core the Store API path and the admin order editor share. A blank
@@ -4439,6 +4455,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * @return void
 		 */
 		public function handle_checkout_order_processed( int $order_id, array $posted_data, \WC_Order $order ): void {
+			// Resolved BEFORE the map is emptied: the session is where a point the form never posted lives (#1556).
+			$point_id = $this->checkout_point_id();
+
 			$this->forget_remembered_selections();
 
 			// The posted value of this slot is persisted only for an order placed with one of this
@@ -4448,7 +4467,91 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				return;
 			}
 
-			$this->persist_full_point( $order, $this->posted_field_value(), true );
+			$this->persist_full_point( $order, $point_id, true );
+		}
+
+		/**
+		 * The point id a classic checkout submit carries — the single resolution both
+		 * {@see self::handle_checkout_process()} and {@see self::handle_checkout_order_processed()}
+		 * read, so the check and the save never disagree (#1556).
+		 *
+		 * A posted key is the buyer's answer, EMPTY INCLUDED, and is never overridden by a stale
+		 * session entry. Only a key the form did not post at all falls back to the session, as
+		 * {@see self::remembered_point_for_posted_method()} resolves it.
+		 *
+		 * @since 2.0.23
+		 *
+		 * @return string the point id, or `''` when nothing was posted and nothing applies.
+		 */
+		private function checkout_point_id(): string {
+			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- WC verifies the nonce before its checkout hooks fire.
+			if ( array_key_exists( $this->field_id, $_POST ) ) {
+				return $this->posted_field_value();
+			}
+
+			return $this->remembered_point_for_posted_method();
+		}
+
+		/**
+		 * The point remembered in the session for the method the classic checkout form posted.
+		 *
+		 * Answers only when that method is one this handler's carrier serves with a pickup point
+		 * ({@see self::owns_pickup_method()}); the recall is keyed by the current locality and the
+		 * method's pickup type, so a point from another locality or type is never returned.
+		 * Resolved once per request, see {@see self::$checkout_fallback_point}.
+		 *
+		 * @since 2.0.23
+		 *
+		 * @return string the point id, or `''` when nothing is remembered or the method is not ours.
+		 */
+		private function remembered_point_for_posted_method(): string {
+			if ( null !== $this->checkout_fallback_point ) {
+				return $this->checkout_fallback_point;
+			}
+
+			$this->checkout_fallback_point = '';
+
+			$selection = $this->selection();
+			$method    = self::posted_shipping_method();
+			$pair      = ( null !== $selection && '' !== $method ) ? $this->selection_pair_for_method( $method ) : null;
+
+			if ( null !== $pair ) {
+				$this->checkout_fallback_point = (string) $this->recall_for_pair( $selection, $pair );
+			}
+
+			return $this->checkout_fallback_point;
+		}
+
+		/**
+		 * Filters `woodev_shipping_checkout_posted_data` — adds the point remembered in the
+		 * session under this handler's own field id when the classic form did not post it, so
+		 * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Handler} validates and saves the
+		 * same point this handler does (#1556).
+		 *
+		 * Every other key is passed through untouched, as the filter is global and every plugin's
+		 * pickup handler sits on it.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.23
+		 *
+		 * @param mixed $posted raw values keyed by field id.
+		 *
+		 * @return mixed `$posted`, with this handler's field added when it was not posted and a
+		 *               point is remembered for the chosen method.
+		 */
+		public function contribute_checkout_posted_data( $posted ) {
+			if ( ! is_array( $posted ) || array_key_exists( $this->field_id, $posted ) ) {
+				return $posted;
+			}
+
+			$point_id = $this->remembered_point_for_posted_method();
+
+			if ( '' !== $point_id ) {
+				$posted[ $this->field_id ] = $point_id;
+			}
+
+			return $posted;
 		}
 
 		/**

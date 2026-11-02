@@ -888,6 +888,7 @@
 
 		chosenAddress[ config.fieldId ] = remembered.address;
 
+		ensurePickupInput( config.fieldId );
 		writeAndFireChange( config.fieldId, remembered.id );
 		syncTriggerLabel( config );
 	}
@@ -1073,6 +1074,37 @@
 		field.value = value;
 
 		return field;
+	}
+
+	/**
+	 * Gives the pickup point field a DOM home when the checkout form has none (#1556).
+	 *
+	 * The framework injects the hidden input into the `order` checkout section, and a theme,
+	 * a multi-step template or a field editor can leave that section unprinted. Without the
+	 * input the chosen point has nowhere to go and the POST carries nothing. A hidden input
+	 * appended to `form.checkout` rides the same submit; an existing field is never touched.
+	 *
+	 * @param {string} fieldId
+	 * @returns {void}
+	 */
+	function ensurePickupInput( fieldId ) {
+		if ( document.getElementById( fieldId ) ) {
+			return;
+		}
+
+		var form = document.querySelector( 'form.checkout' );
+
+		if ( ! form ) {
+			return;
+		}
+
+		var input = document.createElement( 'input' );
+
+		input.type = 'hidden';
+		input.id = fieldId;
+		input.name = fieldId;
+
+		form.appendChild( input );
 	}
 
 	/**
@@ -1553,6 +1585,7 @@
 		applyingSelection[ config.fieldId ] = true;
 
 		try {
+			ensurePickupInput( config.fieldId );
 			writeAndFireChange( config.fieldId, pointId );
 			applyAddressReplacement( config, point );
 		} finally {

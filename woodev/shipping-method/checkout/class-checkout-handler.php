@@ -2757,13 +2757,34 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * {@see self::sanitize_posted_data()}. WooCommerce verifies the checkout nonce
 		 * before its checkout hooks fire, so no separate nonce check is performed here.
 		 *
+		 * The result passes through `woodev_shipping_checkout_posted_data`, the classic
+		 * counterpart of the Store API filter {@see self::store_api_posted_data()} offers: a
+		 * value the form should have carried but did not (the pickup point when a theme or a
+		 * field editor left the `order` section unprinted, #1556) is contributed there, so
+		 * validation and saving read one and the same answer.
+		 *
 		 * @since 1.5.0
+		 * @since 2.0.23 Passes the data through `woodev_shipping_checkout_posted_data`.
 		 *
 		 * @return array<string, mixed>
 		 */
 		protected function get_posted_data(): array {
 			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- WooCommerce verifies the checkout nonce before its checkout hooks fire; values are cleaned in sanitize_posted_data().
-			return (array) wp_unslash( $_POST );
+			$posted = (array) wp_unslash( $_POST );
+
+			/**
+			 * Filters the raw values a classic checkout submit carries for the framework's fields.
+			 *
+			 * Each contributor adds only the field id it owns, and only when the form did not
+			 * post that key at all: a key that was posted, even empty, is the buyer's answer.
+			 *
+			 * @since 2.0.23
+			 *
+			 * @param array<string, mixed> $posted raw values keyed by field id
+			 */
+			$filtered = apply_filters( 'woodev_shipping_checkout_posted_data', $posted );
+
+			return is_array( $filtered ) ? $filtered : $posted;
 		}
 
 		/**
