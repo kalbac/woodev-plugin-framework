@@ -434,7 +434,7 @@ A carrier that never calls the seam sees nothing happen.
 
 ## Test fixtures
 
-`tests/_fixtures/` ships **eight** plugins used by both suites: `woodev-test-plugin`,
+`tests/_fixtures/` ships **nine** plugins used by both suites: `woodev-failing-gateway`, `woodev-test-plugin`,
 `woodev-test-payment-gateway`, `woodev-test-shipping-method`, `woodev-edostavka-pilot-plugin`,
 `woodev-realistic-payment-plugin`, `woodev-realistic-shipping-plugin`,
 `woodev-yandex-pilot-plugin`, `woodev-entry-path-fixture` (the v2 entry path's in-repo consumer,
@@ -450,7 +450,7 @@ test scaffolding).
 
 Base `Woodev_Plugin` is platform-neutral (**zero** WC/HPOS-named methods; enforced by
 `PlatformNeutralBaseHasNoWcMethodTest`, `PlatformNeutralRestApiTest`, `BootstrapRegistrationTest`)
-and not a god-object (`woodev/class-plugin.php` — ~1,274 lines / 74 methods at the P6 gate; 1,668 lines by s135).
+and not a god-object (`woodev/class-plugin.php` — ~1,274 lines / 74 methods at the P6 gate; 1,668 lines by s135; 2,039 lines on 02.11.2026).
 
 ## Checkout location layer — the contract facts that outlive their cards
 
@@ -699,7 +699,7 @@ Moved here from `CURRENT-STATE.md` in s139: they are reference, true regardless 
 | Phase | Code | Browser-verified | Notes |
 |-------|------|------------------|-------|
 | Framework Core | ✅ | ✅ | Bootstrap, Plugin base, Lifecycle — stable |
-| Payment Gateway | ✅ | ✅ | `class-payment-gateway.php`: ~3,632 lines (whole tree ~13.9k); trait-extraction candidate (#117, held behind #639) |
+| Payment Gateway | ✅ | ✅ | `class-payment-gateway.php`: ~3,744 lines on 02.11.2026 (whole tree ~13.9k at the P6 gate); trait-extraction candidate (#117, held behind #639) |
 | Shipping Method | ✅ | ✅ | PSR-4 namespaced |
 | Licensing | ✅ | ✅ | EDD store integration; React license page on core `woodev/v1` REST |
 | Settings API | ✅ | ✅ | Typed settings framework |

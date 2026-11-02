@@ -10,8 +10,8 @@ The support loop has two halves in two projects (operator decision s184, 16.10.2
 | Support | `woodev-support-ai-agent` (Homelab), ADR-004 + ADR-013 there | triage in FreeScout, filing the issue, linking ticket ↔ issue with its own FreeScout module `WoodevGithub` (signed webhooks, no GitHub token), sending the customer notice when the issue is CLOSED |
 | Development | this repo + the plugin repos | verifying the issue, the fix, the PR, the release, the customer-reply draft text |
 
-The two halves meet at **one GitHub issue in the plugin's repo** (`woocommerce-edostavka`, `woocommerce-yandex-delivery`,
-`woodev-russian-post`). The issue body carries one line `FreeScout: #17071, #17081` (last line); when another ticket has the
+The two halves meet at **one GitHub issue in the plugin's repo** (every released v2 plugin — e.g. `woocommerce-edostavka`,
+`woocommerce-yandex-delivery`, `woodev-russian-post`; Ozon and T-Bank are in the loop too). The issue body carries one line `FreeScout: #17071, #17081` (last line); when another ticket has the
 same cause, add its number there.
 
 **A plugin PR writes `Refs #N`, never `Closes #N`** (operator via Support AI, s46, 24.10.2026): a merge is not a release, and

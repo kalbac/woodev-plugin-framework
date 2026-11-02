@@ -171,12 +171,12 @@ simply not rendered, which looks like the feature is broken.
 
 ## Docker inventory — what must never be pruned
 
-- **`wordpress-test` stack** (`wordpress-test` + `wp-mysql` + `wp-phpmyadmin`, volume
+- **`wordpress-test` stack (Windows desktop only)** (`wordpress-test` + `wp-mysql` + `wp-phpmyadmin`, volume
   `wordpress-test_db_data`, ~`:8080`) is the operator's **production-plugins test instance — ALL real
   plugins in one env**, an intentional single instance for testing plugin-to-plugin compatibility.
   **NEVER delete it or its volume, even when the containers show `Exited`.**
-- That volume is unattached while the stack is down, so **never run `docker volume prune` or
-  `docker system prune --volumes` on this machine** — it would wipe `wordpress-test_db_data`. Clean
+- That volume is unattached while the stack is down, so **on the Windows desktop never run `docker volume prune` or
+  `docker system prune --volumes`** (the macOS laptop has no `wordpress-test` stack — `docker volume ls` shows only the project wp-env and issuer volumes) — it would wipe `wordpress-test_db_data`. Clean
   docker only surgically: `docker builder prune`, `docker image prune` (dangling only), and orphans
   you have identified by name.
 - Project wp-env = `de59f74e…` on the Windows desktop (dev `:8973`, tests `:8974`); issuer = `c8ec47a5…` (`:8090`). Both KEEP. ⚠ The prefix is a hash of the project's absolute path, so it is DIFFERENT on the macOS laptop — resolve it with `scripts/machine/rig-container.sh <role>`, never paste it.
@@ -211,7 +211,7 @@ cp .wp-env.override.json <somewhere>
 #    active plugins, mu-plugins
 
 # 3. edit "core" in .wp-env.override.json, then
-npx wp-env start --update
+npx @wordpress/env start --update
 wp core update-db          # 7.1 needs it: db 60717 -> 61833
 
 # 4. re-take the snapshot and diff it, then re-run the integration suite
@@ -247,6 +247,7 @@ by `docker inspect` or by reading this paragraph. Gotcha
   from their primary checkouts, each with `woodev/` → the framework checkout's `./woodev`. Both are ACTIVE; Yandex runs on the
   production contour (token from the container env `WOODEV_YANDEX_PROD_TOKEN`, calculator/points only — never `offers/confirm` or
   `request/*`), methods 599 pickup / 600 courier in zone 1. The plugin's own `woodev/` copy is NOT what the rig runs (s184 confirmed).
+- Ozon (`woodev-ozon-delivery`, 2.0.0 released) was added to the rig later and is ACTIVE too (`CURRENT-STATE.md`); the list above is the s176 state.
 - The container's `wp-config.php` carries `WP_MEMORY_LIMIT` 512M (Y15 workaround for #1262; the measured cold web peak is now
   ~85 MB after yandex#56) and the inert helper mu-plugin `zz-y15-coexistence-helper.php` (`tests/e2e/coexistence/rig/install.sh`,
   `install.sh remove`).
@@ -319,8 +320,9 @@ that is the whole reason this warning outlives the table it introduces.
 Санкт-Петербург (`r82`), all with `last_verified_at = NULL` so D5's lazy check really runs, plus 5
 `dadata` rows beside the 6 `test-cdek` (s112).
 
-`mu-plugins/` holds ONLY `zz-rig-yandex-key.php` since s113 — the third pickup method was removed
-(#737); why, and how to restore it, is in the sections above.
+Since s113 the third pickup method is gone (#737; why, and how to restore it, is in the sections above), so the standing
+`mu-plugins/` are `zz-rig-yandex-key.php`, `zz-y15-coexistence-helper.php` (`tests/e2e/coexistence/rig/install.sh`) and
+`zz-woodev-rig-license.php` (licence gate, below).
 
 **Licence gate on the rig (s177, #1270).** Since framework `8b56ae0a` a carrier with a store product works only under a
 SERVER-SIGNED licence claim. Two rules on the rig:

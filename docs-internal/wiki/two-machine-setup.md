@@ -6,7 +6,7 @@
 
 **The arrangement (operator, 13.09.2026):** the project is developed on a Windows desktop and on a
 MacBook Pro M1 (Apple Silicon, arm64), **one at a time, never both at once**, switching as
-circumstances require. It is not a migration: both machines stay first-class, so nothing here may
+circumstances require. (Workers can also be dispatched to a third environment, the Homelab host — see [Orchestrating agents with Orca](orchestrating-agents-with-orca.md) → "Workers in woodev-ru on Homelab".) It is not a migration: both machines stay first-class, so nothing here may
 turn a Windows fact into a macOS one — each fact says which machine it is about.
 
 ## What travels, and by which path
@@ -100,7 +100,7 @@ darwin binaries in `node_modules`. After the first setup the only path is git.
 | Docker engine | Docker Desktop, WSL2 backend (8 GB to the VM) | **OrbStack** (operator, 13.09.2026) |
 | Rig response time | **5–9 s to first byte, warm** — `/` 6.6 s, `/wp-admin/` 7–9 s, the orders page 5–6 s (measured s135, 13.09.2026). Cause: every rig file, WordPress core included (`~/.wp-env/<hash>/WordPress`), is a bind mount from the Windows filesystem into the WSL2 VM, and OPcache runs with `validate_timestamps=1`, so each request stats thousands of files across that bridge. Remedies, not applied: keep the project inside the WSL2 filesystem, or relax `opcache.revalidate_freq` (edits then show with a delay) | pages open in a fraction of a second (operator, 13.09.2026 — not yet timed by an agent) |
 | Agent concurrency cap | 3 (measured on 15.3 GB RAM) | **no RAM cap** — 64 GB host, ~33 GB free with four agents live (s141); the 5-hour rate limit sizes the wave (operator, 27.09.2026). Docker's VM sees 15.66 GB, which bounds the rig, not the agents |
-| `run-local-ci` (the global CI rehearsal tool) | does not run natively; WSL only | still unverified — not exercised in s136 |
+| `local-ci` (npm `run-local-ci`, the global CI rehearsal tool) | does not run natively; WSL only | runs natively (measured 13.10.2026, v0.18.1, arm64/OrbStack; rules: global `~/.agents/AGENTS.md` → CI section) |
 
 Gotchas that apply to only one OS carry a `> **Platform:**` or `> **Measured on:**` line under their
 H1 (`DOCS-SCHEMA.md` → Gotcha Detail File Format). `grep -rl '\*\*Platform:\*\*' docs-internal/gotchas`
@@ -128,7 +128,7 @@ where the temp dir is not a symlink (gotcha
 [on-macos-sys-get-temp-dir-is-a-symlink-so-a-reflected-path-never-matches-it](../gotchas/on-macos-sys-get-temp-dir-is-a-symlink-so-a-reflected-path-never-matches-it.md)).
 The framework itself needed no change.
 
-Still **unmeasured** here: `run-local-ci` and whether an Orca worktree reproduces the
+Still **unmeasured** here: whether an Orca worktree reproduces the
 build-parity caveat. Native Codex worktree access was measured in s171; the cap was
 measured in s141 above. Launch recovery remains version-specific (`CLAUDE.md`).
 

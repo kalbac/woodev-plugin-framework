@@ -100,6 +100,12 @@ After the P3 clean break (legacy adapter removed) and P4 base decomposition, `Fr
 
 **Kernel discipline (ADR Consequences "prevent the resolver from becoming a second framework kernel"):** the resolver-boundary negative test (resolver must not own runtime platform behavior) stays green; `composer check` green at 190 tests / 505 assertions (as of the P5 pass date, 2026-06-04; the unit suite is 1520 tests as of s60, 2026-08-09).
 
+### Addendum — 02.11.2026 (s210 docs audit): the table above is a dated snapshot
+
+The verification above is true **as of s60 (2026-08-09)** and is no longer a description of the file. `woodev/class-framework-resolver.php` is now **1159 lines / 21 public + 12 protected + 2 private methods**. One duty has been added that no ADR sanctions: `load_plugins()` calls the private `install_error_reporter()` (`class-framework-resolver.php:320`), which runs `\Woodev\Framework\Error_Reporting\Error_Reporter::install( $this->registered_plugins )` (`:464`; described in `wiki/architecture.md`, Error reporting). The "does-not-own" check and the kernel-discipline clause (do not let the resolver become a second kernel) were **not re-run** against this growth.
+
+**OPEN — operator decision:** whether the `Error_Reporter` install is a sanctioned resolver duty (add it to the owned list, like the final `woodev_plugins_loaded` timing) or a bounded exception recorded here (like the HPOS one above). This addendum records the facts only; it decides nothing.
+
 ## Related
 
 - [PLANS.md](../archive/PLANS.md) — target platform-first architecture and open bootstrap question (archived 01.09.2026, #695).
