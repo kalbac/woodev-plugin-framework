@@ -32,9 +32,13 @@
 5. **Audit the board** — move the session's cards (`В работе` → `Готово`), close cards resolved by unrelated work, file cards for anything that surfaced but was never written down (see Backlog rule below)
 6. **Update `docs-internal/next-session-prompt.md`** — replace it with the handoff for the next session (write it for someone with zero context)
 7. **Close the agent terminals this session started** — `orca terminal list --json`, then `orca terminal close` for each of yours (a critic that already sent `worker_done` is still a LIVE terminal holding RAM and a rate-limit slot; check at session START too).
-8. Commit with Conventional Commits format (`feat:`, `fix:`, `docs:`, etc.)
-9. **Push every branch that carries work** — git is how the other machine gets it; a local-only
-   branch simply does not travel.
+8. **Disk sweep** — delete every artifact a session left on the operator's machine (`~/Desktop`,
+   `~/Downloads`, `~/Documents`: release zips, screenshots, probes, exports). Reproducible or unneeded →
+   delete without asking; anything kept is named in the handoff with the step after which it goes.
+   Global rule: `~/.agents/AGENTS.md` → «Сохрани сессию» step 4.
+9. Commit with Conventional Commits format (`feat:`, `fix:`, `docs:`, etc.)
+10. **Push every branch that carries work** — git is how the other machine gets it; a local-only
+    branch simply does not travel.
 
 ---
 
