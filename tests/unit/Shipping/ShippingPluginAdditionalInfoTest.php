@@ -24,6 +24,10 @@ require_once dirname( __DIR__, 3 ) . '/woodev/shipping-method/class-shipping-plu
  */
 class Additional_Info_Plugin extends Shipping_Plugin {
 
+	public function get_id() {
+		return 'additional_info';
+	}
+
 	protected function get_shipping_method_classes(): array {
 		return [];
 	}
@@ -48,6 +52,7 @@ class Additional_Info_Plugin extends Shipping_Plugin {
 /**
  * @covers \Woodev\Framework\Shipping\Shipping_Plugin::is_rate_selected
  * @covers \Woodev\Framework\Shipping\Shipping_Plugin::enqueue_additional_info_styles
+ * @covers \Woodev\Framework\Shipping\Shipping_Plugin::get_delivery_time_block
  */
 final class ShippingPluginAdditionalInfoTest extends TestCase {
 
@@ -125,6 +130,66 @@ final class ShippingPluginAdditionalInfoTest extends TestCase {
 			'checkout' => [ true, false ],
 			'cart'     => [ false, true ],
 		];
+	}
+
+	// ----- the delivery time on the classic order form (#1558) -----
+
+	public function test_the_delivery_time_is_printed_as_a_block_with_the_plugin_class(): void {
+		Functions\when( 'esc_attr' )->returnArg( 1 );
+		Functions\when( 'esc_html' )->alias( static fn( $text ) => htmlspecialchars( (string) $text, ENT_QUOTES ) );
+
+		$this->assertSame(
+			'<p class="woodev-shipping-method-delivery-time additional-info-method-delivery-time">2-4 days</p>',
+			$this->delivery_time_block( $this->rate_with_delivery_time( '2-4 days' ) )
+		);
+	}
+
+	public function test_the_delivery_time_is_escaped(): void {
+		Functions\when( 'esc_attr' )->returnArg( 1 );
+		Functions\when( 'esc_html' )->alias( static fn( $text ) => htmlspecialchars( (string) $text, ENT_QUOTES ) );
+
+		$html = $this->delivery_time_block( $this->rate_with_delivery_time( '<b>2</b> days' ) );
+
+		$this->assertStringContainsString( '&lt;b&gt;2&lt;/b&gt; days', $html );
+		$this->assertStringNotContainsString( '<b>', $html );
+	}
+
+	/**
+	 * @dataProvider provide_empty_delivery_times
+	 */
+	public function test_an_empty_delivery_time_prints_nothing( $delivery_time ): void {
+		$this->assertSame( '', $this->delivery_time_block( $this->rate_with_delivery_time( $delivery_time ) ) );
+	}
+
+	/**
+	 * @return array<string,array{0:mixed}>
+	 */
+	public static function provide_empty_delivery_times(): array {
+		return [
+			'empty string' => [ '' ],
+			'blanks only'  => [ '  ' ],
+			'null'         => [ null ],
+		];
+	}
+
+	/**
+	 * @param mixed $delivery_time what `WC_Shipping_Rate::get_delivery_time()` returns.
+	 * @return \WC_Shipping_Rate
+	 */
+	private function rate_with_delivery_time( $delivery_time ): \WC_Shipping_Rate {
+		$rate = \Mockery::mock( '\WC_Shipping_Rate' );
+		$rate->shouldReceive( 'get_delivery_time' )->andReturn( $delivery_time );
+
+		return $rate;
+	}
+
+	private function delivery_time_block( \WC_Shipping_Rate $rate ): string {
+		$method = new \ReflectionMethod( Additional_Info_Plugin::class, 'get_delivery_time_block' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$method->setAccessible( true );
+		}
+
+		return $method->invoke( $this->plugin_without_constructor(), $rate );
 	}
 
 	private function plugin_without_constructor(): Additional_Info_Plugin {

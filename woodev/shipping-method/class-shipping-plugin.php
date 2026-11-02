@@ -878,6 +878,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 * `delivery_time` off the `WC_Shipping_Rate` through the Store API, which
 		 * {@see Shipping_Method::apply_rate_attributes()} fills in.
 		 *
+		 * The base renders the rate's delivery time here too (#1558), because WooCommerce prints it in the
+		 * block order form only. A plugin that still adds its own estimate under the `delivery_time`
+		 * key replaces ours; under another key it would show twice, so it should drop its block.
+		 *
 		 * The base renders the merchant's Description here, because that field is a
 		 * REQUIRED part of every woodev shipping plugin — settings screen AND order
 		 * form, on both form types. Until 2.0.2 the framework only DECLARED the field
@@ -940,6 +944,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 				);
 			}
 
+			$delivery_time = $this->get_delivery_time_block( $rate );
+
+			if ( '' !== $delivery_time ) {
+				$blocks['delivery_time'] = $delivery_time;
+			}
+
 			/**
 			 * Filters the blocks rendered under a shipping rate on the order form.
 			 *
@@ -984,6 +994,38 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 				esc_attr( $this->get_id_dasherized() ),
 				// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- each block is escaped by whoever built it; see the filter docblock.
 				implode( '', $blocks )
+			);
+		}
+
+		/**
+		 * Builds the delivery-time block of a rate for the classic order form (#1558).
+		 *
+		 * WooCommerce prints the rate's `delivery_time` only in the block order form, so the classic form
+		 * needs it printed here, for every carrier. The carrier's own wording is shown as it is, without a
+		 * label of ours ("2-4 days"). The block order form never reaches this method, so the time is not
+		 * shown twice. `WC_Shipping_Rate::get_delivery_time()` exists since WooCommerce 9.2; on an older
+		 * one there is nothing to print.
+		 *
+		 * @since 2.0.23
+		 *
+		 * @param \WC_Shipping_Rate $rate The rate being rendered.
+		 * @return string The escaped HTML, or an empty string when the rate has no delivery time.
+		 */
+		private function get_delivery_time_block( \WC_Shipping_Rate $rate ): string {
+			if ( ! is_callable( [ $rate, 'get_delivery_time' ] ) ) {
+				return '';
+			}
+
+			$delivery_time = trim( (string) $rate->get_delivery_time() );
+
+			if ( '' === $delivery_time ) {
+				return '';
+			}
+
+			return sprintf(
+				'<p class="woodev-shipping-method-delivery-time %s-method-delivery-time">%s</p>',
+				esc_attr( $this->get_id_dasherized() ),
+				esc_html( $delivery_time )
 			);
 		}
 
