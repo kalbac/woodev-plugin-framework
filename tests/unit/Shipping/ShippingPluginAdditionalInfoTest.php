@@ -53,6 +53,7 @@ class Additional_Info_Plugin extends Shipping_Plugin {
  * @covers \Woodev\Framework\Shipping\Shipping_Plugin::is_rate_selected
  * @covers \Woodev\Framework\Shipping\Shipping_Plugin::enqueue_additional_info_styles
  * @covers \Woodev\Framework\Shipping\Shipping_Plugin::get_delivery_time_block
+ * @covers \Woodev\Framework\Shipping\Shipping_Plugin::without_repeated_delivery_time
  */
 final class ShippingPluginAdditionalInfoTest extends TestCase {
 
@@ -134,6 +135,11 @@ final class ShippingPluginAdditionalInfoTest extends TestCase {
 
 	// ----- the delivery time on the classic order form (#1558) -----
 
+	/**
+	 * #1558: the rate's delivery time becomes one escaped paragraph, with the plugin's own class.
+	 *
+	 * @return void
+	 */
 	public function test_the_delivery_time_is_printed_as_a_block_with_the_plugin_class(): void {
 		Functions\when( 'esc_attr' )->returnArg( 1 );
 		Functions\when( 'esc_html' )->alias( static fn( $text ) => htmlspecialchars( (string) $text, ENT_QUOTES ) );
@@ -144,6 +150,11 @@ final class ShippingPluginAdditionalInfoTest extends TestCase {
 		);
 	}
 
+	/**
+	 * The carrier's wording is text, never markup.
+	 *
+	 * @return void
+	 */
 	public function test_the_delivery_time_is_escaped(): void {
 		Functions\when( 'esc_attr' )->returnArg( 1 );
 		Functions\when( 'esc_html' )->alias( static fn( $text ) => htmlspecialchars( (string) $text, ENT_QUOTES ) );
@@ -183,6 +194,12 @@ final class ShippingPluginAdditionalInfoTest extends TestCase {
 		return $rate;
 	}
 
+	/**
+	 * Calls the private block builder on a plugin created without its constructor.
+	 *
+	 * @param \WC_Shipping_Rate $rate The rate.
+	 * @return string
+	 */
 	private function delivery_time_block( \WC_Shipping_Rate $rate ): string {
 		$method = new \ReflectionMethod( Additional_Info_Plugin::class, 'get_delivery_time_block' );
 		if ( PHP_VERSION_ID < 80100 ) {
@@ -190,6 +207,79 @@ final class ShippingPluginAdditionalInfoTest extends TestCase {
 		}
 
 		return $method->invoke( $this->plugin_without_constructor(), $rate );
+	}
+
+	// ----- the same time already printed by another block (#1558, Yandex) -----
+
+	/**
+	 * Yandex's own renderer adds the estimate under `yandex_interval`; the framework's block must not repeat it.
+	 *
+	 * @return void
+	 */
+	public function test_the_delivery_time_is_dropped_when_another_block_already_shows_it(): void {
+		$blocks = [
+			'delivery_time'   => '<p class="own">2–4 days</p>',
+			'yandex_interval' => '<div class="yandex-interval">Delivery: <b>2–4  days</b></div>',
+		];
+
+		$this->assertSame(
+			[ 'yandex_interval' => '<div class="yandex-interval">Delivery: <b>2–4  days</b></div>' ],
+			$this->without_repeated_delivery_time( $blocks, '<p class="own">2–4 days</p>' )
+		);
+	}
+
+	/**
+	 * @return void
+	 */
+	public function test_the_delivery_time_is_kept_next_to_a_block_with_other_text(): void {
+		$blocks = [
+			'description'     => '<p>Pickup 12:00–14:00</p>',
+			'delivery_time'   => '<p class="own">2–4 days</p>',
+			'yandex_interval' => '<div>Interval: 10:00–12:00</div>',
+		];
+
+		$this->assertSame( $blocks, $this->without_repeated_delivery_time( $blocks, '<p class="own">2–4 days</p>' ) );
+	}
+
+	/**
+	 * A plugin that replaced the `delivery_time` block owns it, even if its text matches another block.
+	 *
+	 * @return void
+	 */
+	public function test_a_delivery_time_block_replaced_by_a_plugin_is_never_dropped(): void {
+		$blocks = [
+			'delivery_time'   => '<p class="plugin">2–4 days</p>',
+			'yandex_interval' => '<div>2–4 days</div>',
+		];
+
+		$this->assertSame( $blocks, $this->without_repeated_delivery_time( $blocks, '<p class="own">2–4 days</p>' ) );
+	}
+
+	/**
+	 * @return void
+	 */
+	public function test_nothing_is_dropped_when_the_rate_has_no_delivery_time(): void {
+		$blocks = [ 'description' => '<p>Text</p>' ];
+
+		$this->assertSame( $blocks, $this->without_repeated_delivery_time( $blocks, '' ) );
+	}
+
+	/**
+	 * Calls the private duplicate check on a plugin created without its constructor.
+	 *
+	 * @param array<string, mixed> $blocks    The blocks after the filter.
+	 * @param string               $own_block The framework's own block, or ''.
+	 * @return array<string, mixed>
+	 */
+	private function without_repeated_delivery_time( array $blocks, string $own_block ): array {
+		Functions\when( 'wp_strip_all_tags' )->alias( static fn( $html ) => strip_tags( (string) $html ) );
+
+		$method = new \ReflectionMethod( Additional_Info_Plugin::class, 'without_repeated_delivery_time' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$method->setAccessible( true );
+		}
+
+		return $method->invoke( $this->plugin_without_constructor(), $blocks, $own_block );
 	}
 
 	private function plugin_without_constructor(): Additional_Info_Plugin {

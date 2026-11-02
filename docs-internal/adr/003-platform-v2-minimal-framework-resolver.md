@@ -32,6 +32,7 @@ The resolver owns:
 - Incompatible registration tracking.
 - Admin notices and deactivation recovery for skipped registrations.
 - The final `woodev_plugins_loaded` action timing.
+- The bounded start-up of the error reporter (sanctioned 02.11.2026, #1551: one guarded call; see the addendum below).
 
 The resolver does not own:
 
@@ -102,7 +103,7 @@ After the P3 clean break (legacy adapter removed) and P4 base decomposition, `Fr
 
 ### Addendum — 02.11.2026 (s210 docs audit): the table above is a dated snapshot
 
-The verification above is true **as of s60 (2026-08-09)** and is no longer a description of the file. `woodev/class-framework-resolver.php` is now **1159 lines / 21 public + 12 protected + 2 private methods**. One duty has been added that no ADR sanctions: `load_plugins()` calls the private `install_error_reporter()` (`class-framework-resolver.php:320`), which runs `\Woodev\Framework\Error_Reporting\Error_Reporter::install( $this->registered_plugins )` (`:464`; described in `wiki/architecture.md`, Error reporting). The "does-not-own" check and the kernel-discipline clause (do not let the resolver become a second kernel) were **not re-run** against this growth.
+The verification above is true **as of s60 (2026-08-09)** and is no longer a description of the file. `woodev/class-framework-resolver.php` is now **1159 lines / 21 public + 12 protected + 2 private methods**. One duty was added that no ADR sanctioned until 02.11.2026 (it is sanctioned below): `load_plugins()` calls the private `install_error_reporter()` (`class-framework-resolver.php:320`), which runs `\Woodev\Framework\Error_Reporting\Error_Reporter::install( $this->registered_plugins )` (`:464`; described in `wiki/architecture.md`, Error reporting). The "does-not-own" check and the kernel-discipline clause (do not let the resolver become a second kernel) were **not re-run** against this growth.
 
 **Decision — operator, 02.11.2026 (#1551):** the `Error_Reporter` install is a **sanctioned resolver duty**, added to the owned list beside the final `woodev_plugins_loaded` timing, under three conditions:
 

@@ -686,6 +686,11 @@ class OrderRowBuilderTest extends TestCase {
 		};
 	}
 
+	/**
+	 * #1546: 20:30 local at gmt_offset = 6 leaves the builder as 14:30 UTC, not as local time labelled +00:00.
+	 *
+	 * @return void
+	 */
 	public function test_date_created_is_the_real_instant_on_a_site_with_a_gmt_offset(): void {
 		if ( ! defined( 'HOUR_IN_SECONDS' ) ) {
 			define( 'HOUR_IN_SECONDS', 3600 );

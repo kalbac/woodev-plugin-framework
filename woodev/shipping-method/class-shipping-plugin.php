@@ -879,8 +879,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 * {@see Shipping_Method::apply_rate_attributes()} fills in.
 		 *
 		 * The base renders the rate's delivery time here too (#1558), because WooCommerce prints it in the
-		 * block order form only. A plugin that still adds its own estimate under the `delivery_time`
-		 * key replaces ours; under another key it would show twice, so it should drop its block.
+		 * block order form only. A plugin that adds its own estimate under the `delivery_time` key replaces
+		 * ours; under another key, ours is dropped when that block already shows the same time
+		 * ({@see self::without_repeated_delivery_time()}), so an older plugin does not print it twice.
 		 *
 		 * The base renders the merchant's Description here, because that field is a
 		 * REQUIRED part of every woodev shipping plugin — settings screen AND order
@@ -944,10 +945,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 				);
 			}
 
-			$delivery_time = $this->get_delivery_time_block( $rate );
+			$delivery_time_block = $this->get_delivery_time_block( $rate );
 
-			if ( '' !== $delivery_time ) {
-				$blocks['delivery_time'] = $delivery_time;
+			if ( '' !== $delivery_time_block ) {
+				$blocks['delivery_time'] = $delivery_time_block;
 			}
 
 			/**
@@ -977,6 +978,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			if ( is_array( $filtered ) ) {
 				$blocks = $filtered;
 			}
+
+			$blocks = $this->without_repeated_delivery_time( $blocks, $delivery_time_block );
 
 			$blocks = array_filter(
 				$blocks,
@@ -1027,6 +1030,57 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 				esc_attr( $this->get_id_dasherized() ),
 				esc_html( $delivery_time )
 			);
+		}
+
+		/**
+		 * Drops the framework's own delivery-time block when another block already shows the same time (#1558).
+		 *
+		 * A carrier plugin written before the framework printed the time itself adds its own estimate to the
+		 * `woodev_shipping_rate_additional_info` blocks (Yandex does, under `yandex_interval`). The highest
+		 * framework version on a site serves every plugin, so such a plugin meets this block before it has
+		 * been updated; the check lives here, not in the plugin. Blocks are compared by their visible text
+		 * (tags stripped, whitespace collapsed). A `delivery_time` block a plugin replaced is never touched.
+		 *
+		 * @since 2.0.23
+		 *
+		 * @param array<string, mixed> $blocks     The blocks after the filter, block name => HTML.
+		 * @param string               $own_block  The block {@see self::get_delivery_time_block()} built, or ''.
+		 * @return array<string, mixed>
+		 */
+		private function without_repeated_delivery_time( array $blocks, string $own_block ): array {
+			if ( '' === $own_block || ( $blocks['delivery_time'] ?? null ) !== $own_block ) {
+				return $blocks;
+			}
+
+			$needle = self::get_visible_text( $own_block );
+
+			foreach ( $blocks as $name => $block ) {
+				if ( 'delivery_time' === $name || ! is_string( $block ) ) {
+					continue;
+				}
+
+				if ( false !== strpos( self::get_visible_text( $block ), $needle ) ) {
+					unset( $blocks['delivery_time'] );
+
+					break;
+				}
+			}
+
+			return $blocks;
+		}
+
+		/**
+		 * The text a visitor reads in a block of HTML: tags stripped, entities decoded, whitespace collapsed.
+		 *
+		 * @since 2.0.23
+		 *
+		 * @param string $html The block.
+		 * @return string
+		 */
+		private static function get_visible_text( string $html ): string {
+			$text = html_entity_decode( wp_strip_all_tags( $html ), ENT_QUOTES, 'UTF-8' );
+
+			return trim( (string) preg_replace( '/\s+/u', ' ', $text ) );
 		}
 
 		/**

@@ -127,7 +127,11 @@ namespace Woodev\Tests\Unit\Shipping {
 		/** @var string[] what the plugins wrote to the log at the error level (always written, whatever the debug mode). */
 		public static array $errors = [];
 
-		/** @var string[] what the plugins wrote to the log at the debug level. */
+		/**
+		 * What the plugins wrote to the log at the debug level.
+		 *
+		 * @var string[]
+		 */
 		public static array $debug_lines = [];
 
 		public function __construct() {}
