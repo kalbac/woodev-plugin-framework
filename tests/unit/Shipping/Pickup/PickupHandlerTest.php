@@ -1035,7 +1035,9 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			array $default_location,
 			?Selection_Scope $selection_scope,
 			?Pickup_Selection $forced_selection,
-			$chosen_shipping_methods_value = null
+			$chosen_shipping_methods_value = null,
+			?Shipping_Order_Handler $order_handler = null,
+			?string $point_field_logical = null
 		) {
 			parent::__construct(
 				$plugin_id,
@@ -1043,8 +1045,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				$source,
 				$map_provider,
 				$default_location,
-				null,
-				null,
+				$order_handler,
+				$point_field_logical,
 				[],
 				'#000000',
 				'',
@@ -7581,6 +7583,207 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$handler->handle_checkout_process();
 
 			$this->assertSame( 1, $fetched );
+		}
+
+		// -------------------------------------------------------------------
+		// #1556: a checkout whose form lost the pickup field falls back to the session.
+		// -------------------------------------------------------------------
+
+		/**
+		 * A handler for the own carrier with a point remembered in the session, as the select
+		 * route leaves it, and a source counting its carrier look-ups.
+		 *
+		 * @param array<int, string>        $fetched       receives every point id the source is asked for.
+		 * @param Shipping_Order_Handler|null $order_handler wired for full-point persistence when given.
+		 *
+		 * @return Pickup_Handler
+		 */
+		private function handler_with_remembered_point( array &$fetched, ?Shipping_Order_Handler $order_handler = null ): Pickup_Handler {
+			$scope     = $this->own_pickup_scope();
+			$selection = new Pickup_Handler_Selection_Probe( $scope, new Pickup_Handler_Fake_Session() );
+			$selection->remember( 'msk', 'pvz', 'P-SESSION' );
+
+			$source = new Pickup_Handler_Test_Source(
+				Point_Source::STRATEGY_BULK,
+				function ( string $id ) use ( &$fetched ) {
+					$fetched[] = $id;
+
+					return $this->point();
+				}
+			);
+
+			return new Pickup_Handler_With_Selection_Probe(
+				'p',
+				'pickup_point',
+				$source,
+				$this->yandex_provider(),
+				$this->default_location(),
+				$scope,
+				$selection,
+				null,
+				$order_handler,
+				null === $order_handler ? null : 'pickup_full'
+			);
+		}
+
+		/**
+		 * A form that did not post the field at all is checked against the point remembered in the session (#1556).
+		 *
+		 * @return void
+		 */
+		public function test_checkout_process_checks_the_session_point_when_the_form_did_not_post_the_field(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+
+			$fetched = [];
+			$_POST   = [ 'shipping_method' => [ 'own_pickup:7' ] ];
+			$handler = $this->handler_with_remembered_point( $fetched );
+
+			$handler->handle_checkout_process();
+
+			$this->assertSame( [ 'P-SESSION' ], $fetched );
+		}
+
+		/**
+		 * A posted empty value IS the buyer's answer; a remembered session point must not replace it (#1556).
+		 *
+		 * @return void
+		 */
+		public function test_checkout_process_does_not_replace_a_posted_empty_value_with_the_session_point(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+
+			$fetched = [];
+			$_POST   = [
+				'pickup_point'    => '',
+				'shipping_method' => [ 'own_pickup:7' ],
+			];
+			$handler = $this->handler_with_remembered_point( $fetched );
+
+			$handler->handle_checkout_process();
+
+			$this->assertSame( [], $fetched, 'a posted empty value IS the answer' );
+		}
+
+		/**
+		 * The session fallback applies only while the posted shipping method is this carrier's (#1556).
+		 *
+		 * @return void
+		 */
+		public function test_checkout_process_ignores_the_session_point_when_the_chosen_method_is_not_ours(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+
+			$fetched = [];
+			$_POST   = [ 'shipping_method' => [ 'other_carrier_pickup:7' ] ];
+			$handler = $this->handler_with_remembered_point( $fetched );
+
+			$handler->handle_checkout_process();
+
+			$this->assertSame( [], $fetched );
+		}
+
+		/**
+		 * A point remembered for another locality than the scope's current one is not used (#1556).
+		 *
+		 * @return void
+		 */
+		public function test_checkout_process_ignores_a_session_point_of_another_locality(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+
+			$scope     = $this->own_pickup_scope();
+			$selection = new Pickup_Handler_Selection_Probe( $scope, new Pickup_Handler_Fake_Session() );
+			$selection->remember( 'spb', 'pvz', 'P-OTHER-CITY' );
+
+			$fetched = [];
+			$source  = new Pickup_Handler_Test_Source(
+				Point_Source::STRATEGY_BULK,
+				static function ( string $id ) use ( &$fetched ) {
+					$fetched[] = $id;
+
+					return null;
+				}
+			);
+			$_POST   = [ 'shipping_method' => [ 'own_pickup:7' ] ];
+			$handler = new Pickup_Handler_With_Selection_Probe(
+				'p',
+				'pickup_point',
+				$source,
+				$this->yandex_provider(),
+				$this->default_location(),
+				$scope,
+				$selection
+			);
+
+			$handler->handle_checkout_process();
+
+			$this->assertSame( [], $fetched, 'the scope is on "msk"; a point remembered for "spb" does not apply' );
+		}
+
+		/**
+		 * The order save persists the full point from the session when the form did not post the field (#1556).
+		 *
+		 * @return void
+		 */
+		public function test_checkout_order_processed_stores_the_session_point_when_the_form_did_not_post_the_field(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+
+			$captured = [];
+			Functions\when( 'update_post_meta' )->alias(
+				static function ( $id, $key, $value ) use ( &$captured ) {
+					$captured[] = $key;
+
+					return true;
+				}
+			);
+
+			$fetched = [];
+			$_POST   = [ 'shipping_method' => [ 'own_pickup:7' ] ];
+			$handler = $this->handler_with_remembered_point(
+				$fetched,
+				new Shipping_Order_Handler( [ 'pickup_full' => 'own_full_point' ] )
+			);
+
+			$handler->handle_checkout_order_processed( 1, [], $this->order_shipped_with( 'own_pickup' ) );
+
+			$this->assertSame( [ 'P-SESSION' ], $fetched );
+			$this->assertSame( [ 'own_full_point' ], $captured );
+		}
+
+		/**
+		 * The session answer is resolved before the map is emptied, so a later reader on the same hook still gets it (#1556).
+		 *
+		 * @return void
+		 */
+		public function test_the_session_point_survives_the_selection_being_forgotten_on_order_processed(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+
+			$fetched = [];
+			$_POST   = [ 'shipping_method' => [ 'own_pickup:7' ] ];
+			$handler = $this->handler_with_remembered_point( $fetched );
+
+			// Another handler's callback on the same hook may still ask after the map was emptied.
+			$this->assertSame( [ 'pickup_point' => 'P-SESSION' ], $handler->contribute_checkout_posted_data( [] ) + [ 'pickup_point' => '' ] );
+			$handler->handle_checkout_order_processed( 1, [], $this->order_shipped_with( 'own_pickup' ) );
+			$this->assertSame(
+				[ 'pickup_point' => 'P-SESSION' ],
+				$handler->contribute_checkout_posted_data( [] )
+			);
+		}
+
+		/**
+		 * The posted-data filter adds this handler's key only when absent and passes any other value through (#1556).
+		 *
+		 * @return void
+		 */
+		public function test_contribute_checkout_posted_data_adds_the_field_only_when_it_was_not_posted(): void {
+			$fetched = [];
+			$_POST   = [ 'shipping_method' => [ 'own_pickup:7' ] ];
+			$handler = $this->handler_with_remembered_point( $fetched );
+
+			$this->assertSame(
+				[ 'billing_city' => 'Москва', 'pickup_point' => 'P-SESSION' ],
+				$handler->contribute_checkout_posted_data( [ 'billing_city' => 'Москва' ] )
+			);
+			$this->assertSame( [ 'pickup_point' => '' ], $handler->contribute_checkout_posted_data( [ 'pickup_point' => '' ] ) );
+			$this->assertSame( 'not-an-array', $handler->contribute_checkout_posted_data( 'not-an-array' ) );
 		}
 
 		public function test_order_meta_keys_lists_the_slot_and_every_mapped_point_key(): void {

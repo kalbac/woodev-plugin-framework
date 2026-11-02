@@ -5794,6 +5794,70 @@ describe( 'selection confirmation', () => {
 		expect( modal.close ).not.toHaveBeenCalled();
 	} );
 
+	it( 'creates the hidden field in form.checkout when a template dropped the order section (#1556)', async () => {
+		const form = document.createElement( 'form' );
+		form.className = 'checkout';
+		document.body.appendChild( form );
+		document.getElementById( FIELD_ID ).remove();
+
+		const { emitSelect, resolveSelect } = openPicker( { selection: { close: false } } );
+
+		emitSelect( { id: 'P1' } );
+		await resolveSelect( { allowed: true, reason: null, close: null, refresh_checkout: null } );
+
+		const created = form.querySelectorAll( '#' + FIELD_ID );
+
+		expect( created ).toHaveLength( 1 );
+		expect( created[ 0 ].type ).toBe( 'hidden' );
+		expect( created[ 0 ].name ).toBe( FIELD_ID );
+		expect( created[ 0 ].value ).toBe( 'P1' );
+	} );
+
+	it( 'adopts a template input that carries the field name but no id instead of adding a second one (#1556)', async () => {
+		const form = document.createElement( 'form' );
+		form.className = 'checkout';
+		form.innerHTML = '<input type="hidden" name="' + FIELD_ID + '" value="OLD" />';
+		document.body.appendChild( form );
+		document.getElementById( FIELD_ID ).remove();
+
+		const { emitSelect, resolveSelect } = openPicker( { selection: { close: false } } );
+
+		emitSelect( { id: 'NEW' } );
+		await resolveSelect( { allowed: true, reason: null, close: null, refresh_checkout: null } );
+
+		const controls = form.querySelectorAll( 'input[name="' + FIELD_ID + '"]' );
+
+		expect( controls ).toHaveLength( 1 );
+		expect( controls[ 0 ].id ).toBe( FIELD_ID );
+		expect( controls[ 0 ].value ).toBe( 'NEW' );
+	} );
+
+	it( 'leaves an existing field alone and adds nothing to form.checkout (#1556)', async () => {
+		const form = document.createElement( 'form' );
+		form.className = 'checkout';
+		document.body.appendChild( form );
+
+		const { emitSelect, resolveSelect, field } = openPicker( { selection: { close: false } } );
+
+		emitSelect( { id: 'P1' } );
+		await resolveSelect( { allowed: true, reason: null, close: null, refresh_checkout: null } );
+
+		expect( field.value ).toBe( 'P1' );
+		expect( form.querySelectorAll( 'input' ) ).toHaveLength( 0 );
+		expect( document.querySelectorAll( '#' + FIELD_ID ) ).toHaveLength( 1 );
+	} );
+
+	it( 'does not throw when the field and form.checkout are both missing (#1556)', async () => {
+		document.getElementById( FIELD_ID ).remove();
+
+		const { emitSelect, resolveSelect } = openPicker( { selection: { close: false } } );
+
+		emitSelect( { id: 'P1' } );
+		await resolveSelect( { allowed: true, reason: null, close: null, refresh_checkout: null } );
+
+		expect( document.getElementById( FIELD_ID ) ).toBeNull();
+	} );
+
 	it( 'closes immediately when the domain says so, overriding a false config default', async () => {
 		const { emitSelect, resolveSelect, modal } = openPicker( { selection: { close: false } } );
 
