@@ -38,6 +38,11 @@ require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-addre
  */
 final class CheckoutHandlerPostedDataFilterTest extends TestCase {
 
+	/**
+	 * Stubs the WordPress and WooCommerce functions the checkout validation reaches and posts a pickup method.
+	 *
+	 * @return void
+	 */
 	protected function setUp(): void {
 		parent::setUp();
 		Functions\when( 'wp_unslash' )->returnArg();
@@ -48,11 +53,21 @@ final class CheckoutHandlerPostedDataFilterTest extends TestCase {
 		$_POST = [ 'shipping_method' => [ 'carrier_pickup:7' ] ];
 	}
 
+	/**
+	 * Clears the superglobal the tests post into.
+	 *
+	 * @return void
+	 */
 	protected function tearDown(): void {
 		$_POST = [];
 		parent::tearDown();
 	}
 
+	/**
+	 * A handler with one required pickup-slot field whose carrier method requires a point.
+	 *
+	 * @return Checkout_Handler
+	 */
 	private function handler(): Checkout_Handler {
 		$handler = new Checkout_Handler(
 			Checkout_Fields::from_array( [ Field::create( 'carrier_pvz' )->set_type( 'hidden' )->mark_pickup_slot()->to_array() ] ),
@@ -63,6 +78,11 @@ final class CheckoutHandlerPostedDataFilterTest extends TestCase {
 		return $handler;
 	}
 
+	/**
+	 * Without a contribution the missing pickup field still blocks the checkout.
+	 *
+	 * @return void
+	 */
 	public function test_validation_blocks_a_pickup_method_when_nothing_supplies_the_point(): void {
 		Functions\when( 'apply_filters' )->returnArg( 2 );
 		Functions\expect( 'wc_add_notice' )->atLeast()->once();
@@ -70,6 +90,11 @@ final class CheckoutHandlerPostedDataFilterTest extends TestCase {
 		$this->handler()->handle_checkout_process();
 	}
 
+	/**
+	 * A point contributed through `woodev_shipping_checkout_posted_data` satisfies the pickup validation (#1556).
+	 *
+	 * @return void
+	 */
 	public function test_validation_accepts_a_point_contributed_through_the_filter(): void {
 		Functions\when( 'apply_filters' )->alias(
 			static function ( string $hook, $value ) {
@@ -85,6 +110,11 @@ final class CheckoutHandlerPostedDataFilterTest extends TestCase {
 		$this->handler()->handle_checkout_process();
 	}
 
+	/**
+	 * A filter that returns something unusable leaves the posted data, and so the validation, as it was.
+	 *
+	 * @return void
+	 */
 	public function test_a_filter_returning_a_non_array_leaves_the_posted_data_standing(): void {
 		Functions\when( 'apply_filters' )->alias(
 			static fn( string $hook, $value ) => 'woodev_shipping_checkout_posted_data' === $hook ? null : $value

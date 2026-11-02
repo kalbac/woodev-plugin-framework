@@ -5813,6 +5813,25 @@ describe( 'selection confirmation', () => {
 		expect( created[ 0 ].value ).toBe( 'P1' );
 	} );
 
+	it( 'adopts a template input that carries the field name but no id instead of adding a second one (#1556)', async () => {
+		const form = document.createElement( 'form' );
+		form.className = 'checkout';
+		form.innerHTML = '<input type="hidden" name="' + FIELD_ID + '" value="OLD" />';
+		document.body.appendChild( form );
+		document.getElementById( FIELD_ID ).remove();
+
+		const { emitSelect, resolveSelect } = openPicker( { selection: { close: false } } );
+
+		emitSelect( { id: 'NEW' } );
+		await resolveSelect( { allowed: true, reason: null, close: null, refresh_checkout: null } );
+
+		const controls = form.querySelectorAll( 'input[name="' + FIELD_ID + '"]' );
+
+		expect( controls ).toHaveLength( 1 );
+		expect( controls[ 0 ].id ).toBe( FIELD_ID );
+		expect( controls[ 0 ].value ).toBe( 'NEW' );
+	} );
+
 	it( 'leaves an existing field alone and adds nothing to form.checkout (#1556)', async () => {
 		const form = document.createElement( 'form' );
 		form.className = 'checkout';

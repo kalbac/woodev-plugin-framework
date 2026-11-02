@@ -7593,7 +7593,10 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		 * A handler for the own carrier with a point remembered in the session, as the select
 		 * route leaves it, and a source counting its carrier look-ups.
 		 *
-		 * @param array<int, string> $fetched receives every point id the source is asked for.
+		 * @param array<int, string>        $fetched       receives every point id the source is asked for.
+		 * @param Shipping_Order_Handler|null $order_handler wired for full-point persistence when given.
+		 *
+		 * @return Pickup_Handler
 		 */
 		private function handler_with_remembered_point( array &$fetched, ?Shipping_Order_Handler $order_handler = null ): Pickup_Handler {
 			$scope     = $this->own_pickup_scope();
@@ -7623,6 +7626,11 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			);
 		}
 
+		/**
+		 * A form that did not post the field at all is checked against the point remembered in the session (#1556).
+		 *
+		 * @return void
+		 */
 		public function test_checkout_process_checks_the_session_point_when_the_form_did_not_post_the_field(): void {
 			Functions\when( 'apply_filters' )->returnArg( 2 );
 
@@ -7635,6 +7643,11 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$this->assertSame( [ 'P-SESSION' ], $fetched );
 		}
 
+		/**
+		 * A posted empty value IS the buyer's answer; a remembered session point must not replace it (#1556).
+		 *
+		 * @return void
+		 */
 		public function test_checkout_process_does_not_replace_a_posted_empty_value_with_the_session_point(): void {
 			Functions\when( 'apply_filters' )->returnArg( 2 );
 
@@ -7650,6 +7663,11 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$this->assertSame( [], $fetched, 'a posted empty value IS the answer' );
 		}
 
+		/**
+		 * The session fallback applies only while the posted shipping method is this carrier's (#1556).
+		 *
+		 * @return void
+		 */
 		public function test_checkout_process_ignores_the_session_point_when_the_chosen_method_is_not_ours(): void {
 			Functions\when( 'apply_filters' )->returnArg( 2 );
 
@@ -7662,6 +7680,11 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$this->assertSame( [], $fetched );
 		}
 
+		/**
+		 * A point remembered for another locality than the scope's current one is not used (#1556).
+		 *
+		 * @return void
+		 */
 		public function test_checkout_process_ignores_a_session_point_of_another_locality(): void {
 			Functions\when( 'apply_filters' )->returnArg( 2 );
 
@@ -7694,6 +7717,11 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$this->assertSame( [], $fetched, 'the scope is on "msk"; a point remembered for "spb" does not apply' );
 		}
 
+		/**
+		 * The order save persists the full point from the session when the form did not post the field (#1556).
+		 *
+		 * @return void
+		 */
 		public function test_checkout_order_processed_stores_the_session_point_when_the_form_did_not_post_the_field(): void {
 			Functions\when( 'apply_filters' )->returnArg( 2 );
 
@@ -7719,6 +7747,11 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$this->assertSame( [ 'own_full_point' ], $captured );
 		}
 
+		/**
+		 * The session answer is resolved before the map is emptied, so a later reader on the same hook still gets it (#1556).
+		 *
+		 * @return void
+		 */
 		public function test_the_session_point_survives_the_selection_being_forgotten_on_order_processed(): void {
 			Functions\when( 'apply_filters' )->returnArg( 2 );
 
@@ -7735,6 +7768,11 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			);
 		}
 
+		/**
+		 * The posted-data filter adds this handler's key only when absent and passes any other value through (#1556).
+		 *
+		 * @return void
+		 */
 		public function test_contribute_checkout_posted_data_adds_the_field_only_when_it_was_not_posted(): void {
 			$fetched = [];
 			$_POST   = [ 'shipping_method' => [ 'own_pickup:7' ] ];
