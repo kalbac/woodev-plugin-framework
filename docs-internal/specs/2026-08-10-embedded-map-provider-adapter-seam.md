@@ -236,7 +236,7 @@ self-sufficient for DISPLAY does not make it self-sufficient for CONFIRMATION.
 - `cashOfDelivery` / `deliveryDescription` in `pvzData` mean the widget prices the shipment
   itself. Out of scope; noted because it will matter when a real plugin is built on this.
 
-## 8. Related
+## Related
 
 - Issue #251 (this), #201 (normalizer parity, landed first), #158 (fixture is too poor to
   exercise the type filter), #148 (verdict staleness — does not apply under `ownsChrome`).

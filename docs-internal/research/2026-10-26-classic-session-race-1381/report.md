@@ -1,5 +1,3 @@
-RACE1381
-
 # Classic checkout session race for the city record (framework #1381, yandex#140)
 
 Measured 26.10.2026 on the local rig (`http://localhost:8973`, WooCommerce 11.2.1, CDEK 2.3.0.9,

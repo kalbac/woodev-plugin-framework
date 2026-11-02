@@ -1,6 +1,7 @@
 # Russian Post v2 Plugin Design
 
 **Date:** 2026-10-21 (s191)  
+**Status:** shipped — Russian Post v2 line released on EDD download 8772 (2.0.3 and 2.0.4 published in s194; releases up to 2.0.9 recorded in `SESSION-LOG.md`).  
 **Target:** the next line (`2.0.0`) of the existing plugin `woodev-russian-post` (plugin id `wc_russian_post`, EDD download 8772, text domain `woocommerce-russian-post`), written from scratch on Framework v2. The third carrier plugin on the v2 framework, after CDEK (`2.3.0.4`) and Yandex (`2.0.5`).  
 **Release rule:** speed. Decision 13: the EDD folder is `woodev-russian-post`, so CDEK v2 and Yandex v2 load first and Russian Post v1 is quarantined on merchants' sites; every day without a v2 leaves those merchants without Russian Post. Nothing here is allowed to delay the release for a nice-to-have.  
 **Evidence:** code claims cite repository-relative file paths. Framework paths are relative to the framework repo root; `v1:` means `plugins-reference/woodev-russian-post` (1.2.6.0, read-only); `cdek:` means `/Users/maksimmartirosov/Projects/woocommerce-edostavka`, branch `v2`; `yandex:` means `/Users/maksimmartirosov/Projects/woocommerce-yandex-delivery`, branch `main` (both read-only). Measurements cite the fact base in `docs-internal/research/2026-10-21-russian-post-v2/` (letters A–L, V). Anything not read in code or measured is marked **UNVERIFIED**; anything the author inferred is marked **interpretation**.
@@ -512,7 +513,7 @@ A `Woocommerce_Setup_Wizard` subclass in the Yandex manner (`yandex:includes/set
 
 ## 13. Installed-site data contract
 
-ADR-005 lets the platform break APIs but not installed data. The v1 contract list is in the fact base ([README §3.1](../research/2026-10-21-russian-post-v2/README.md), [a-v1-inventory.md §2](../research/2026-10-21-russian-post-v2/a-v1-inventory.md)); the table below gives the **fate of every key** (a checklist file `docs-internal/migration/russian-post-data-preservation-checklist.md` is proposed as a card, P2, so the table is not lost; CDEK and Yandex have theirs).
+ADR-005 lets the platform break APIs but not installed data. The v1 contract list is in the fact base ([README §3.1](../research/2026-10-21-russian-post-v2/README.md), [a-v1-inventory.md §2](../research/2026-10-21-russian-post-v2/a-v1-inventory.md)); the table below gives the **fate of every key** (the checklist file lives in the plugin repo, not here: `docs/migration/russian-post-data-preservation-checklist.md` in `woodev-russian-post` (card P2); CDEK and Yandex have theirs under `docs-internal/migration/`).
 
 | Kind | v1 value | v2 fate |
 |---|---|---|
@@ -728,7 +729,7 @@ Repo codes: **Ф** = framework (`kalbac/woodev-plugin-framework`); **П** = the 
 | F1 | Ф | Источник точек сообщает, что вид слишком крупный | Поле `truncated` в ответе точек и подсказка на карте «приблизьте карту» (G1). Не блокирует релиз. ≤400 | — |
 | F2 | Ф | Общая основа миграции v1→v2 | Вынести хранилище строк зон, чтение опций, журнал и блокировку из плагинов (G2). Необязательная: только после выхода плагина и если третья копия покажет пользу; в первую волну не входит. ≤400 | выход плагина |
 | P1 | П | Каркас плагина 2.0.0 в существующем репозитории (ветка v2) | Репозиторий, загрузчик, пространство имён, закрепление фреймворка, id `wc_russian_post`, EDD 8772, лицензия, CI, пустая группа настроек. ≤400 | — |
-| P2 | П | Контракт данных: тесты и чек-лист | Три контрактных теста (опции, мета заказа включая новые ключи v2, таблица старых → новых id) и файл `docs-internal/migration/russian-post-data-preservation-checklist.md` из §13. ≤300 | P1 |
+| P2 | П | Контракт данных: тесты и чек-лист | Три контрактных теста (опции, мета заказа включая новые ключи v2, таблица старых → новых id) и файл `docs/migration/russian-post-data-preservation-checklist.md` (в репозитории плагина) из §13. ≤300 | P1 |
 | P3 | П | Подключение: поля, маскирование, проверка | Группа «Подключение» (пароли, `sensitive`), `Woodev_Settings_Connection_Test`, `X-User-Authorization` в списке секретов, тест санитайзера, проверка `#110` п.7 для мастера. ≤400 | P1 |
 | P4 | П | API-клиент «Отправки» и формы ошибок | Клиенты четырёх сервисов §11.2, формы ошибок, маскирование секретов, без кэша на записи. ≤400 | P3 |
 | P4b | П | Счётчики квот, единый бюджет виджета, предохранитель | Счётчик квоты «Отправки» и ярусы §6.5, суточный счётчик и предохранитель публичного калькулятора, единый бюджет всех обращений к виджету с резервом под подтверждение, ограничитель всплесков и предохранитель с возвратом (§5.7). ≤400 | P4 |

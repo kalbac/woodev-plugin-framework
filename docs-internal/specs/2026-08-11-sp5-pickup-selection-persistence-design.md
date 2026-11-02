@@ -1,6 +1,6 @@
 # SP-5 — Pickup selection persistence across checkout requests (#176)
 
-> Status: design agreed with the operator 11.08.2026 (s65). Implementation plan follows separately.
+> Status: **IMPLEMENTED** — design agreed with the operator 11.08.2026 (s65); plan: `../plans/2026-08-11-sp5-pickup-selection-persistence-plan.md`; closes #176 (CLOSED).
 > Cards: closes #176; resolves the open question in #178; makes #143's gotcha accurate again.
 
 ## 1. The defect, as measured

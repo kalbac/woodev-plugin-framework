@@ -1,6 +1,7 @@
 # CDEK v2 Plugin Design
 
 **Date:** 2026-10-06  
+**Status:** shipped — CDEK v2 line released from 2.3.0.0 (s188) on EDD download 216; 2.3.0.12 is current per `CURRENT-STATE.md`.  
 **Target:** new line in kalbac/woocommerce-edostavka, version 2.3.0.0; write from scratch on a new branch and leave old master untouched.  
 **Release rule:** ship to clients only after stages 1–4 reach full observable parity with 2.2.5.5.  
 **Evidence:** code claims cite repository-relative file:line. Ranges identify the specific function, registration, constant or settings group. The old plugin under plugins-reference/ is read-only evidence.

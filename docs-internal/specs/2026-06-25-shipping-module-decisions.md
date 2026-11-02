@@ -9,6 +9,17 @@
 >
 > **This is NOT an implementation spec.** It is the decomposition layer. Each sub-project below gets
 > its own `brainstorm → spec → plan → implementation` cycle. No code until a sub-project is picked.
+>
+> **Delivery status (02.11.2026, s210):** all of SP-1…SP-11 are delivered (`CURRENT-STATE.md` →
+> Program status: "Shipping SP-track ✅ DONE"). The sections below are the s32 decisions as they were
+> locked; they are not a to-do list.
+
+| SP | Status | Where it is specified |
+|---|---|---|
+| SP-1 … SP-4, SP-6 … SP-9 | ✅ delivered | the sections below (no separate spec); see [wiki/architecture.md](../wiki/architecture.md) |
+| SP-5 Map / PVZ | ✅ delivered | [selection mechanism](2026-08-06-sp5-pickup-selection-mechanism-design.md), [viewport accumulation](2026-08-09-sp5-viewport-point-accumulation-design.md), [persistence](2026-08-11-sp5-pickup-selection-persistence-design.md) |
+| SP-10 Orders page | ✅ delivered | [orders page](2026-09-07-sp10-orders-page-design.md) |
+| SP-11 Blocks adapter | ✅ delivered | [block checkout](2026-10-04-sp11-block-checkout-design.md) |
 
 ## Guiding principles (reaffirmed this session)
 
@@ -58,7 +69,7 @@ core:
 ### §11 — Block checkout ✅
 
 **Classic first; blocks = mandatory fast-follow.** Core is designed block-ready from day one; blocks must
-not break classic. Product cards already state "Checkout Blocks not supported" — no surprise to users.
+not break classic. (Written at s32, when blocks were unsupported; SP-11 has since shipped the Checkout Blocks adapter — see the SP-11 spec.)
 Minimal must-work-in-blocks set: city field (with value source), region field, **pickup-point button + map
 modal**, correct order-meta/session write. Pickup-point button+modal is the hard one (not covered by WC's
 standard additional-fields API).
@@ -294,5 +305,10 @@ needs none of the open items. The (A) items are small and fold into the relevant
 
 ## Next step
 
-Operator reviews this document → picks the **first sub-project** (recommended **SP-1 Settings page slot**) →
-that SP enters its own brainstorm → spec → plan. No implementation until then.
+None. SP-1…SP-11 are delivered; the live state is in `docs-internal/CURRENT-STATE.md`.
+
+## Related
+
+- [CURRENT-STATE](../CURRENT-STATE.md) — program status and the live release state
+- [Architecture](../wiki/architecture.md) — the per-subsystem matrix
+- [ADR-005](../adr/005-platform-v2-clean-break-policy.md) — clean-break policy

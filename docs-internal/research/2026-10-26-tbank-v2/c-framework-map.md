@@ -1,5 +1,3 @@
-TBANKC
-
 # Framework v2 payment-gateway capability map and gaps
 
 **Date:** 2026-10-26. **Scope:** read-only framework and T-Bank v1 reference inventory for a hosted loan gateway. **Evidence labels:** READ = inspected in source/docs; MEASURED = command/count output; UNVERIFIED = not established from the inspected evidence. Paths are relative to the framework repo unless stated otherwise. No credentials or account identifiers are included.

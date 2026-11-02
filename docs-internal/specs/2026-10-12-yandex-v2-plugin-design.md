@@ -1,6 +1,7 @@
 # Yandex Delivery v2 Plugin Design
 
 **Date:** 2026-10-12  
+**Status:** shipped — Yandex v2 line released from 2.0.0 (s188) on EDD download 821; 2.0.12 is current per `CURRENT-STATE.md`.  
 **Target:** new line `2.0.0` of the existing plugin `woocommerce-yandex-delivery` (plugin id `yandex_delivery`, EDD download 821), written from scratch on Framework v2. The second carrier required for the v2 release (#1179).  
 **Release rule:** #1179 is closed only when two plugins (CDEK + this one) run on Framework v2, are tested and work together on one site (coexistence scenarios, D9).  
 **Evidence:** code claims cite repository-relative file:line. Framework paths are relative to the framework repo root; `v1:` means `plugins-reference/woocommerce-yandex-delivery` (1.3.7, read-only); `cdek:` means `/Users/maksimmartirosov/Projects/woocommerce-edostavka`, branch `v2`, read-only. Measurements cite the three research folders of 12.10.2026. Anything not established in code or by measurement is marked **UNVERIFIED**.

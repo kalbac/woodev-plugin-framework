@@ -1,7 +1,7 @@
 # SP-11 — Checkout Blocks location and pickup adapter
 
-**Status:** DECIDED — the operator settled D-1…D-7 on 04.10.2026 (#1086). Implementation follows the slices in
-«Decomposition» (#1087–#1091).
+**Status:** IMPLEMENTED — the operator settled D-1…D-7 on 04.10.2026 (#1086); the slices #1087–#1091 and the SP-11
+epic #1078 are all CLOSED (see git history, e.g. #1094, #1104, #1105, #1120).
 
 ## Operator decisions (04.10.2026, #1086)
 
@@ -20,7 +20,6 @@ The option analysis below is kept as the record of why.
 
 **Scope:** #1078, the release minimum in shipping-module decisions §11: city suggestions, region,
 pickup-point selection with a map modal, session and order persistence, and classic checkout parity.
-No production implementation is included in this draft.
 
 ## Evidence baseline
 
@@ -39,7 +38,7 @@ Documentation establishes supported extension routes; installed source establish
 No browser acceptance or shared-database integration tests were run during this reconnaissance.
 
 `DOCS-SCHEMA.md` specifies language and live relative-link rules but no dedicated spec template.
-This document follows those rules, carries explicit draft status, and ends with Related links.
+This document follows those rules and ends with Related links.
 
 ## Findings
 
@@ -546,7 +545,6 @@ session as authority, then verify token/cookie parity in the D-7 acceptance matr
 
 ## Proposed cards — ordered, independently mergeable vertical slices
 
-No issues are created by this draft; the coordinator owns filing them after decisions.
 Each slice includes its own tests and operational acceptance. Later slices depend on earlier ones,
 but a merged slice must leave both checkout surfaces usable within the declared scope.
 
@@ -559,7 +557,7 @@ but a merged slice must leave both checkout surfaces usable within the declared 
 | C-4 | SP-11: приёмка блочного чекаута и границы совместимости | Verify D-5/D-6/D-7 coverage with actual supported fixtures, customized saved layouts, force deduplication, missing-parent detection, multiple active plugins, core Local pickup, separate billing, virtual carts, mobile/theme/keyboard dialog behavior, express-payment and Cart block scope, guest/logged-in/cart-token session ownership, and classic regressions. Include a forced-block matrix: shipping methods parent hidden when `!showShippingMethods` (including core Local pickup), shipping address hidden when `!showShippingFields`, billing address hidden when `!showBillingFields && !useBillingAsShipping`; locality UI is effective for billing exactly when `showBillingFields || useBillingAsShipping`. Confirm native address/custom meta/full point/marker and session cleanup; record supported WC surface. Additional version/package implementation belongs here only if selected in D-5/D-6/D-7, otherwise explicitly defer it through the coordinator's board. |
 
 C-1 and C-2b browser acceptance should accompany their merges; C-4 is the combined compatibility
-matrix, not permission to merge unverified earlier work. Public docs remain frozen per operator policy.
+matrix, not permission to merge unverified earlier work.
 
 ## Verification and remaining uncertainties
 

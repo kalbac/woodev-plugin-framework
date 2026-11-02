@@ -1,6 +1,7 @@
 # T-Bank «Рассрочки и кредиты» v2 Plugin Design
 
 **Date:** 2026-10-27 (s199, overnight)  
+**Status:** shipped — T-Bank 2.0.0 released and published on EDD download 1849 (s202, framework 2.0.16 era).  
 **Target:** release `2.0.0` of the existing plugin `woodev-vkredit` («Рассрочки и кредиты от Т-Банк», EDD product
 `tinkoff-kupi-v-kredit`, download id `1849`, plugin/gateway id `wc_tinkoff_kvk`), written from scratch on Framework v2 in the
 private repo `kalbac/woodev-vkredit`. The first payment plugin on the v2 framework.  
