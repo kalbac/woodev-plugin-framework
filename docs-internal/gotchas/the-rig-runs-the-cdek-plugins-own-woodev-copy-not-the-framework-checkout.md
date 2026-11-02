@@ -6,7 +6,13 @@
 > not mounted). The s162 text below (a gitignored `woodev/` in the plugin checkout shadowing the mount) was true for the rig
 > state measured then and is NOT the current state; the two disagree, so never trust either by reading — put a version marker or
 > observable behaviour on the page and check which code answers.
-> Tags: rig/plugin, tooling/parallel-agents | Session: s162
+> **⚠ s211 (03.11.2026, MacBook) — a THIRD carrier wins at a version tie.** The rig also runs «Ozon Доставка» from
+> `wp-content/plugins/woocommerce-ozon-dostavka` — an INSTALLED copy (not mounted) with its own `woodev/` at the same `VERSION`
+> (2.0.22) as the primary checkout. The loader picked Ozon's copy, so `pickup-mount.js` and the PHP of a framework PR in the
+> primary tree were NOT served: the #1556 acceptance first reproduced the pre-fix bug. Grep the served asset for a marker of the
+> new code; if a foreign copy answers, exclude that plugin for the probe browser only (an `option_active_plugins` filter in a
+> temporary mu-plugin, gated by a cookie), never by editing the installed plugin.
+> Tags: rig/plugin, tooling/parallel-agents | Session: s162, s211
 
 ## What happens
 

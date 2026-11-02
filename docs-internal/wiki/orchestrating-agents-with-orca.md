@@ -655,8 +655,11 @@ The merchant site woodev.ru is written and published from the `woodev-ru` projec
   ~2 min. Then write it with REST from a Homelab script that reads the app password from `woodev-ru/.mcp.json`
   (`/wp-json/wp/v2/media`, `/wp/v2/docs`, `/wp/v2/posts`, BetterDocs abilities at `/wp-json/wp-abilities/v1/abilities/betterdocs/<name>/run`).
   A script copies content byte-exact; an LLM worker calling MCP retypes the payload (s187 Haiku said so itself).
-- EDD downloads (product cards) are outside `woodev-mcp-adapter` on purpose and their `_faq_content` meta is not in REST — card
-  edits are the operator's until an ability is added (wanted later, s187).
+- EDD downloads (product cards) are outside `woodev-mcp-adapter` on purpose and their `_faq_content` meta is not in REST — but a
+  card IS editable by us: a `homelab-ai` worker edits `post_content` / meta through its WP-CLI route (backup the field to `/tmp`
+  first, change only the named sentence, re-read the public page). Done for download 58107 in s211; the operator asked «а ты это
+  не можешь сам сделать?» after I wrote «карточку правишь ты». The product FAQ answers are BetterDocs FAQ entries — a `woodev-ru`
+  worker edits them with `bd-update-faq` (answer_format html only).
 - **BetterDocs FAQ:** one group per plugin; `betterdocs/attach-faq` puts a `betterdocs/faq` block into a doc, and its section `<h2>`
   is always printed — set `faqSectionText` (default «Frequently Asked Questions»). On a card, the FAQ field takes
   `[betterdocs_faq_list_modern groups="<id>"]`.
