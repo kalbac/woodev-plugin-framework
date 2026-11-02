@@ -60,10 +60,10 @@ repair, and which is the likely reason `worker-read` falls back to `source: "ter
 for the stall, but worth repairing separately.
 
 **Every observed stall was a Codex launch**, where MCP server startup is slow enough to swallow
-the Enter. Claude workers hit it once; Codex hit it every single time. Budget for it.
+the Enter. Claude workers hit it once; Codex hit it every single time **in s83** (old Codex CLI / Orca). Later measurement: s171 (12.10.2026, macOS) launched plain Codex 9 of 9 clean — see [starting-codex-under-orca-needs-four-steps-not-one](starting-codex-under-orca-needs-four-steps-not-one.md). The rule "verify it started" stays valid; the "every single time" rate does not.
 
 ## Related
 
 - [codex-shell-sandbox-broken-windows](codex-shell-sandbox-broken-windows.md) — the other half of "the receipt looked fine"
 - [two-agents-one-file-is-the-orchestrator-s-bug](two-agents-one-file-is-the-orchestrator-s-bug.md) — verification is the orchestrator's job, not the worker's
-- `../wiki/orchestrating-agents-with-orca.md` — where the start-verification step belongs in the loop
+- [orchestrating-agents-with-orca](../wiki/orchestrating-agents-with-orca.md) — where the start-verification step belongs in the loop

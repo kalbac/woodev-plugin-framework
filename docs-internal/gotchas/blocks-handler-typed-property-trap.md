@@ -6,7 +6,7 @@
 ## What happens
 A pure-WordPress plugin that extends `Woodev_Plugin` (the platform-neutral base) and calls `$this->get_blocks_handler()` triggers a PHP `TypeError: Typed property Woodev_Plugin::$blocks_handler must not be accessed before initialization`. The method is declared with a non-nullable return type that promises a fully-initialized handler, but the base constructor never sets the property — only `Woodev_Woocommerce_Plugin::init_blocks_handler()` does, and only after `parent::__construct()` returns.
 
-### Where it is now
+### Where it was (pre-fix, 2026-06-01 — resolved, see Fix below)
 - `woodev/class-plugin.php:71` — `protected Woodev_Blocks_Handler $blocks_handler;` (typed, no default value)
 - `woodev/class-plugin.php:1018-1020` — `public function get_blocks_handler(): Woodev_Blocks_Handler { ... return $this->blocks_handler; }` (non-nullable return)
 - `woodev/class-woocommerce-plugin.php` — `init_blocks_handler()` is the only initializer; called from `__construct()` line 60+ after `parent::__construct()`

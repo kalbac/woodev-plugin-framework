@@ -2,6 +2,7 @@
 
 **Namespace:** `[testing/*]`
 **Found:** s73 (14–15.08.2026). Bit three times in one session, on three different fixes.
+> **Platform:** the PowerShell `-replace` / `.Replace()` examples were measured on the Windows desktop; the lesson (confirm the mutation applied) is platform-neutral.
 
 ## The trap
 

@@ -21,25 +21,24 @@ _deprecated_hook( 'my_old_hook', '1.5.0', 'my_new_hook', 'Use my_new_hook instea
 
 ✅ **Correct:**
 ```php
-// In plugin's init_hook_deprecator()
-protected function init_hook_deprecator() {
-    $this->hook_deprecator = new Woodev_Hook_Deprecator(
-        $this->get_plugin_name(),
-        [
-            'my_old_hook' => [
-                'version'     => '1.5.0',
-                'removed'     => true,
-                'replacement' => 'my_new_hook',
-                'map'         => true,  // ✅ Automatically remaps old callbacks
-            ],
-            'my_other_old_hook' => [
-                'version'     => '1.5.0',
-                'removed'     => false, // just deprecated, not removed
-                'replacement' => 'my_new_other_hook',
-                'map'         => false, // don't remap automatically
-            ],
-        ]
-    );
+// Override get_deprecated_hooks() — the base init_hook_deprecator() merges
+// get_framework_deprecated_hooks() with it, so the framework's own deprecated hooks stay covered.
+// Do NOT override init_hook_deprecator() with only your own list: that drops the framework's.
+protected function get_deprecated_hooks() {
+    return [
+        'my_old_hook' => [
+            'version'     => '1.5.0',
+            'removed'     => true,
+            'replacement' => 'my_new_hook',
+            'map'         => true,  // ✅ Automatically remaps old callbacks
+        ],
+        'my_other_old_hook' => [
+            'version'     => '1.5.0',
+            'removed'     => false, // just deprecated, not removed
+            'replacement' => 'my_new_other_hook',
+            'map'         => false, // don't remap automatically
+        ],
+    ];
 }
 ```
 

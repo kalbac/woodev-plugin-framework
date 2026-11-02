@@ -33,13 +33,13 @@ resolution.
 ## How to confirm it's environmental (not your code)
 
 Analyse a file you did **not** touch in isolation:
-`./vendor/bin/phpstan analyse --memory-limit=2G --no-progress woodev/account/class-account-connection.php`
+`./vendor/bin/phpstan analyse --memory-limit=4G --no-progress woodev/account/class-account-connection.php`
 If that crashes too, your change is not the cause.
 
 ## Resolution
 
 - **Linux CI is the authoritative PHPStan gate.** The `Lint` job (`ci.yml`, "Run PHPStan",
-  PHP 8.1) runs `./vendor/bin/phpstan analyse --memory-limit=2G` on Linux, which has a larger
+  PHP 8.1) runs `./vendor/bin/phpstan analyse --memory-limit=4G` on Linux, which has a larger
   native stack and does **not** segfault. In s28 the exact code that crashed locally passed
   "Run PHPStan: success" on CI.
 - Do **not** chase it as a code bug, and do **not** add ignores/baseline to "fix" it.
@@ -50,7 +50,7 @@ If that crashes too, your change is not the cause.
 
 ## s106 (2026-08-30): the same command now fails a SECOND way — the memory limit, not the stack
 
-`--memory-limit=2G`, the value this file recommends above and the one CI still uses, is **no longer
+`--memory-limit=2G`, the value this file recommended above (CI has since moved to 4G too), is **no longer
 enough for a local run on this tree**. The failure is a different one wearing the same coat:
 
 ```
@@ -65,9 +65,8 @@ run. The trap is the last two lines: `Found 1 error` plus "result is incomplete"
 real analysis failure prints, so a session reads it as "PHPStan found something" and starts hunting
 a defect in the diff it just wrote. There is nothing to find.
 
-**Locally, use `--memory-limit=4G`.** With it the same tree reports `[OK] No errors`. CI stays on
-2G and stays green, because a Linux worker's footprint on the same file set is smaller — so a local
-2G crash proves nothing about CI, in either direction.
+**Locally, use `--memory-limit=4G`.** With it the same tree reports `[OK] No errors`. CI (`ci.yml`) and `composer phpstan` also use
+4G now (they started at 2G); the 2G Windows crash this file describes proves nothing about CI, in either direction.
 
 Note the asymmetry with the segfault above: that one is environmental and CI is the authority; this
 one is a local resource setting and the fix is a flag, not a shrug.

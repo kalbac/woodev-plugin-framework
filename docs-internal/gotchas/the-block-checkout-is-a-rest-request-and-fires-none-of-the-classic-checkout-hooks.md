@@ -2,6 +2,8 @@
 > Tags: shipping, checkout, store-api, rest-request, blocks, hooks | Session: s142
 > **Measured on:** the rig, WooCommerce 11.1.0, 2026-09-28.
 
+> **RESOLVED (s210 check):** both halves are fixed and closed (#949, #964, #966). `Shipping_Method::should_send_cart_api_request()` now returns `is_store_api_request()` for a REST request, and the Store API order hook `woocommerce_store_api_checkout_order_processed` is wired in `Checkout_Handler`, `Pickup_Handler`, `Location_Provider_Registry`, `Unchosen_Carrier_Cleaner` and `Store_Api_Pickup`. The text below is the defect as measured; method names replace the old line anchors.
+
 ## What happens
 
 On the block cart/checkout (the WC Store API, `POST /wc/store/v1/…`), a package that should
@@ -27,9 +29,9 @@ fires none of the classic checkout hooks the framework writes that data on. The 
 Two independent gaps, both rooted in "the block checkout is a REST request."
 
 **1. The shipping guard treats every REST request as "not a cart request."**
-`Shipping_Method::calculate_shipping()` (`woodev/shipping-method/class-shipping-method.php:374`)
-is the sole caller of `Shipping_Method::should_send_cart_api_request()` (`:840`), at `:386`, and
-that guard returns `false` for ANY request with `REST_REQUEST` defined:
+`Shipping_Method::calculate_shipping()` was the sole caller of
+`Shipping_Method::should_send_cart_api_request()`, and that guard returned `false` for ANY request
+with `REST_REQUEST` defined:
 
 ```php
 private function should_send_cart_api_request(): bool {
@@ -52,11 +54,10 @@ result.
 **2. The Store API fires none of the classic checkout hooks.** The framework writes its order
 data on `woocommerce_checkout_process`, `woocommerce_checkout_posted_data`,
 `woocommerce_checkout_create_order` and `woocommerce_checkout_order_processed` (e.g.
-`Checkout_Handler` at `class-checkout-handler.php:258`, `Pickup_Checkout_Handler` at
-`class-pickup-handler.php:1863`, `Location_Provider_Registry` at
-`class-location-provider-registry.php:726`). The Store API fires none of them; its analogue is
+`Checkout_Handler` (`checkout/class-checkout-handler.php`), `Pickup_Handler`
+(`pickup/class-pickup-handler.php`), `Location_Provider_Registry`). The Store API fires none of them; its analogue is
 `woocommerce_store_api_checkout_order_processed( $order )`, which carries **no `$posted_data`**.
-Until that hook is wired, a block-checkout order has no framework meta and no carrier marker, and
+Until that hook was wired, a block-checkout order has no framework meta and no carrier marker, and
 the "pickup point required" guard — which reads posted data — does not run.
 
 ## How it hid
@@ -69,8 +70,7 @@ the classic one, so nothing saw the missing rates or the missing order meta.
 
 ## Fix
 
-Two halves: the first is in flight on #949 (`fix/949-store-api-rates`); the second is #963 / #964
-/ #966.
+Two halves, both done: the first on #949, the second on #963 / #964 / #966.
 
 **1. Let the Store API through the guard** — detect it explicitly instead of blocking all REST
 requests:
@@ -82,7 +82,8 @@ return ! (
 		( defined( 'REST_REQUEST' ) || defined( 'REST_API_REQUEST' ) || defined( 'XMLRPC_REQUEST' ) )
 	);
 
-// ✅ in flight on #949 — the Store API is the one REST request that MUST compute
+// ✅ shipped on #949 — the Store API is the one REST request that MUST compute
+// (the real guard in class-shipping-method.php also falls back to a path check below WC 9.0)
 if ( WC()->is_store_api_request() ) {
 	return true;
 }

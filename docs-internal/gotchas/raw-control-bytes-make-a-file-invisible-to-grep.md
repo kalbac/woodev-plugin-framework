@@ -1,14 +1,14 @@
 # A raw control byte anywhere in a text file makes git and grep treat the whole file as binary
 
 **Namespace:** `[tooling/*]`
-**Found:** s101 (28.08.2026), card #605, in `tests/unit/ScriptHandlerLogFieldTest.php`.
+**Found:** s101 (28.08.2026), card #605, in `tests/unit/Handlers/ScriptHandlerLogFieldTest.php`.
 
 ## The trap
 
 `grep -rn "Script_Handler_Log_Probe" --include='*.php' .` prints
 
 ```
-Binary file ./tests/unit/handlers/ScriptHandlerLogFieldTest.php matches
+Binary file ./tests/unit/Handlers/ScriptHandlerLogFieldTest.php matches
 ```
 
 instead of the matching line. **The file is silently absent from every grep sweep in the
@@ -42,7 +42,7 @@ comment, cost the file its visibility.
 should be text:
 
 ```bash
-file tests/unit/handlers/ScriptHandlerLogFieldTest.php
+file tests/unit/Handlers/ScriptHandlerLogFieldTest.php
 # …: data                     ← should be "PHP script, Unicode text, UTF-8 text"
 ```
 

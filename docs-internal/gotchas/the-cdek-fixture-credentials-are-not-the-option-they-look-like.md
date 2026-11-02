@@ -15,7 +15,7 @@ The rig carries **two** pairs of CDEK credential values, and only one of them is
 
 The fixture reads its credentials through
 `Woodev_Test_Shipping_Method_Plugin::instance()->get_integration_option( $field_id, '' )`
-(`tests/_fixtures/woodev-test-shipping-method/class-test-cdek-location-provider.php:935-937`),
+(`Woodev_Test_Cdek_Location_Provider::credential()` in `tests/_fixtures/woodev-test-shipping-method/class-test-cdek-location-provider.php`),
 i.e. the **WooCommerce integration settings array** — never the standalone `woodev_location_cdek_*`
 options, whose names are the obvious thing to grep for and edit.
 
@@ -41,7 +41,7 @@ That measurement was defeated by editing the decoy option. Two further things ma
   provider working no matter what the keys say.
 - **The REGION level never touches the network while its dictionary is warm.**
   `regions()` caches into `woodev_test_cdek_regions_{country}`
-  (`class-test-cdek-location-provider.php:685-702`), and region suggest is a local substring match
+  (`regions()` in `class-test-cdek-location-provider.php`), and region suggest is a local substring match
   over that dictionary. On a rig whose region axis is «Предустановленный список» (`related-list`),
   region browsing **cannot demonstrate a credential failure at all.**
 

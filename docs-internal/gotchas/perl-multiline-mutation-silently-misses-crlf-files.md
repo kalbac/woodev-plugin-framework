@@ -1,5 +1,6 @@
 # Gotcha: [testing/*] — A `perl -0pi` mutation with `\n` silently misses every CRLF file, and the green run reads as proof
 > Tags: mutation-testing, windows, crlf, verification | Session: s78
+> **Platform:** the CRLF cause (a Serena write flipping a file) is Windows-only; on the Mac working-tree files stay LF and this exact miss does not occur. The lesson — confirm a mutation applied — is platform-neutral.
 
 ## What happens
 
@@ -17,7 +18,7 @@ are vacuous. Read the other way round — "my fix is not covered" — and you wo
 working tests.
 
 Both readings are wrong. `perl` exited 0, changed nothing, and said nothing. The working tree on
-this box holds **CRLF**, so `\n` in the pattern never matched the `\r\n` in the file. The mutation
+the Windows desktop held **CRLF**, so `\n` in the pattern never matched the `\r\n` in the file. The mutation
 was never applied, so of course nothing failed.
 
 This is the exact shape of gotcha `a-mutation-you-did-not-confirm-applied-proves-nothing`, with

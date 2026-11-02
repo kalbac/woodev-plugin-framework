@@ -35,4 +35,4 @@ Never put a `wp wc shipping_zone_method delete` line into a brief. The rig's tes
 ## Related
 
 - [a-rig-option-left-switched-after-an-acceptance-reads-as-stale-e2e-tests](a-rig-option-left-switched-after-an-acceptance-reads-as-stale-e2e-tests.md)
-- `../gotcha-index/rig.md`
+- [rig.md](../gotcha-index/rig.md)

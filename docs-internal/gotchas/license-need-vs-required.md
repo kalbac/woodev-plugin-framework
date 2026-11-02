@@ -67,6 +67,6 @@ checkout, by activation / upgrade) and `refresh_claim_on_admin_init()` for a sto
 `expired` is the server's answer and is NOT re-fetched on that path — only the weekly check renews it.
 
 ## Related
-- Spec: `docs-internal/archive/platform-v2-s3-licensing-need-license-spec.md` (§2 two-layer model, §3.3, §6 anti-pirate)
+- Spec: [platform-v2-s3-licensing-need-license-spec](../archive/platform-v2-s3-licensing-need-license-spec.md) (§2 two-layer model, §3.3, §6 anti-pirate)
 - [contract-string-not-derivable](contract-string-not-derivable.md) — another "looks derivable but isn't" licensing/shipping trap
-- woodev-core server half: `D:\Projects\woodev_theme\docs\superpowers\specs\2026-06-10-woodev-core-license-authority-signing-spec.md`
+- woodev-core server half (in the separate woodev_theme repo, not this checkout; Windows desktop path `D:\Projects\woodev_theme\docs\superpowers\specs\2026-06-10-woodev-core-license-authority-signing-spec.md`)

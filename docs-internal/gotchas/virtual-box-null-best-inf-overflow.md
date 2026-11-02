@@ -7,6 +7,8 @@ session: 2026-06-09
 
 # virtual-box-null-best-inf-overflow
 
+> **SUPERSEDED (s210):** `calculate_virtual_box_dimensions()` was rewritten as a grid/placement algorithm (`fitted_dimensions()` in `woodev/box-packer/class-packer-virtual-box.php`); the `$best = null` / candidate-axis code below no longer exists. Kept as the record of the old algorithm's failure.
+
 Initializing `$best = null; $best_volume = PHP_FLOAT_MAX` in `calculate_virtual_box_dimensions()` causes a null dereference when all candidate volumes overflow to `INF`.
 
 ## The bug

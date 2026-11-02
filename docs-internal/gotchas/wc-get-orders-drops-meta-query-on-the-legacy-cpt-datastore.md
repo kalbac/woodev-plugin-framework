@@ -47,7 +47,7 @@ broken on the other half of the world. The integration suite is what caught it.
 
 Branch on the datastore, and on the legacy path pass a **custom query var** instead of `meta_query`,
 translating it through WooCommerce's own filter. This is what all three shipped v1 plugins already
-do (`plugins-reference/*/includes/admin/*list-table*.php`) — the answer was in the reference the
+do (their `includes/admin/*list-table*.php`, in the machine-local v1 donor checkouts — `plugins-reference/` here no longer holds them) — the answer was in the reference the
 whole time:
 
 ```php
@@ -62,7 +62,7 @@ public function handle_query_var( array $query, array $query_vars ): array {
 ```
 
 Gate on `Woodev_Plugin_Compatibility::is_hpos_enabled()`
-(`woodev/compatibility/class-plugin-compatibility.php:198`), not a raw `OrderUtil` call. On the
+(`woodev/compatibility/class-plugin-compatibility.php`), not a raw `OrderUtil` call. On the
 legacy path the args must carry **no `meta_query` key at all** — its mere presence is what trips the
 notice.
 
@@ -103,5 +103,5 @@ callers too: grep them when auditing `wc_get_orders()` uses.
 
 - [wpenv-windows-gitbash-path-mangling](wpenv-windows-gitbash-path-mangling.md) — how to run the
   integration suite that catches this
-- `specs/2026-09-07-sp10-orders-page-design.md` §M2 — the design this corrected, and the false
+- [2026-09-07-sp10-orders-page-design.md](../specs/2026-09-07-sp10-orders-page-design.md) §M2 — the design this corrected, and the false
   sentence it replaced

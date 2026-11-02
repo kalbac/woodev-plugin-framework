@@ -98,5 +98,5 @@ invisible off a real rig.
 - [ymaps-copyright-pane-is-trapped-in-a-stacking-context](ymaps-copyright-pane-is-trapped-in-a-stacking-context.md) — the follow-up (s51): fixing this
   file's `width` bug did NOT, as assumed here, pull the copyright strip out from under the sidebar.
   Margins move the camera only; the strip's visibility needed a separate fix.
-- `docs-internal/archive/specs/2026-08-01-sp5-pickup-map-rework-design.md` §6 — the spec paragraph that
+- [2026-08-01-sp5-pickup-map-rework-design.md](../archive/specs/2026-08-01-sp5-pickup-map-rework-design.md) §6 — the spec paragraph that
   specified the wrong shape; correct it there too if that document is ever revised.

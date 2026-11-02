@@ -55,8 +55,6 @@ This adds a classmap entry (`Foo => class-foo-alias.php`) and PHPStan sees
 
 ## Related
 
-- [B-2 audit 2026-06-01 — get_woocommerce_uploads_path() shim FQCN fix]
-  (../audit-2026-06-01.md#b-2) — Option A applied to the B-2 shim.
-- [M-1 + L-4 helper-class split (2026-06-02 polish session)]
-  (../../CURRENT-STATE.md#next-actions-priority-order) — Woodev_Woocommerce_Helper
-  uses Option A; the alias is for users and the deprecation message only.
+- [B-2 audit 2026-06-01 — get_woocommerce_uploads_path() shim FQCN fix](../audit-2026-06-01.md) — Option A applied to the B-2 shim.
+- M-1 + L-4 helper-class split (2026-06-02 polish session): `Woodev_Woocommerce_Helper`
+  uses Option A; the alias is for users and the deprecation message only (session note, no live link).

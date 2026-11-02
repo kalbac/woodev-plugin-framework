@@ -28,4 +28,4 @@ containers do not restart on their own.
 
 ## Related
 
-- `docs-internal/wiki/local-rig.md` — starting the rig
+- [local-rig](../wiki/local-rig.md) — starting the rig

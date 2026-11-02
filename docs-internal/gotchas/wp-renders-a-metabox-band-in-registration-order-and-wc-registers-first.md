@@ -34,6 +34,6 @@ Verify on the rig by reading `#side-sortables > .postbox` ids, not by reasoning 
 
 ## Related
 
-- `woodev/shipping-method/admin/class-shipping-admin-order.php` — `move_box_after()`
+- [class-shipping-admin-order.php](../../woodev/shipping-method/admin/class-shipping-admin-order.php) — `move_box_after()`
 - [wc-admin-register-page-ignores-order-and-its-neighbours-declare-no-position](wc-admin-register-page-ignores-order-and-its-neighbours-declare-no-position.md) — the same «position is registration order» trap on wc-admin pages
-- `../gotcha-index/admin-ui.md`
+- [admin-ui.md](../gotcha-index/admin-ui.md)

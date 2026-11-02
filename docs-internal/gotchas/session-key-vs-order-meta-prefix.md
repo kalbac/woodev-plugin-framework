@@ -42,10 +42,12 @@ The live API is a **map, not a slot** — the whole point of #176:
 
 | Method | Purpose |
 |---|---|
-| `remember( string $locality, string $type, string $point_id )` | Store one point under a `(locality, type)` pair |
+| `remember( string $locality, string $type, string $point_id, string $address = '' )` | Store one point (and optionally its address) under a `(locality, type)` pair |
 | `recall( string $locality, string $type ): ?string` | The point chosen for that exact pair |
 | `recall_latest( string $locality ): ?string` | Most recently written entry for the locality (`Selection_Scope::TYPE_ANY`) |
 | `forget_all()` | Drop the whole map — called only on order creation |
+
+The class has more methods than this table (`remember_confirmation`, `recall_address`, `recall_all`, `remember_placed`, … in `woodev/shipping-method/pickup/class-pickup-selection.php`); the table lists the ones this gotcha relies on.
 
 Three consequences worth carrying forward, all of them contract-level:
 

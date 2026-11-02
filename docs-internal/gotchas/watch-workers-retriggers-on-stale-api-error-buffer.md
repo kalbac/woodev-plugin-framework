@@ -11,3 +11,4 @@
 
 - [a-claude-worker-stalls-silently-on-api-connection-lost-mid-response.md](a-claude-worker-stalls-silently-on-api-connection-lost-mid-response.md) — recovery by nudging a worker after an API disconnect
 - [../gotcha-index/tooling.md](../gotcha-index/tooling.md) — tooling index
+- [the-worker-watchdog-re-alerts-on-a-stale-api-error-line](the-worker-watchdog-re-alerts-on-a-stale-api-error-line.md) — the same trap seen after a nudge (duplicate; the other index line is `tooling.md` s199)

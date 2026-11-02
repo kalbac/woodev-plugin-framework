@@ -71,3 +71,4 @@ Two things worth keeping from the recurrence:
 
 - [brain-monkey-function-pollution](brain-monkey-function-pollution.md), [ci-failing-gate-skips-dependent-jobs](ci-failing-gate-skips-dependent-jobs.md) — the other masked Unit failures
 - [php84-implicit-nullable-payment-handlers](php84-implicit-nullable-payment-handlers.md) — another PHP-version-specific test trap
+- [below-php-8-1-reflection-needs-setaccessible-and-anonymous-classes-are-class-at-anonymous](below-php-8-1-reflection-needs-setaccessible-and-anonymous-classes-are-class-at-anonymous.md) — the same `setAccessible()` / `PHP_VERSION_ID < 80100` guard, the s150 recurrence

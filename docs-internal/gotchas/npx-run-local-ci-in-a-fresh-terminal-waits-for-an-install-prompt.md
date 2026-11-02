@@ -36,4 +36,5 @@ from the log, not only the exit code. Under zsh, `${PIPESTATUS[0]}` is empty —
 
 ## Related
 
+- [run-local-ci-requires-run-subcommand](run-local-ci-requires-run-subcommand.md) — the sibling trap (the `run` subcommand); the `npx -y` rule is summarised there and owned here
 - [a-coordinator-terminal-consumes-one-orca-run-at-a-time](a-coordinator-terminal-consumes-one-orca-run-at-a-time.md)

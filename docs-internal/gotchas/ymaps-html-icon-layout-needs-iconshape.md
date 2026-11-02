@@ -69,4 +69,4 @@ organisation card.
 - [ymaps-control-options-must-be-nested](ymaps-control-options-must-be-nested.md) — same session, same family: a shape the library does not read
 - [ymaps-objectmanager-properties-are-plain](ymaps-objectmanager-properties-are-plain.md) — the layout's *data* side of the same feature
 - [ymaps-camera-moves-are-async](ymaps-camera-moves-are-async.md)
-- `docs-internal/archive/specs/2026-08-03-sp5-pickup-map-visual-rework-design.md` — V-9
+- [2026-08-03-sp5-pickup-map-visual-rework-design.md](../archive/specs/2026-08-03-sp5-pickup-map-visual-rework-design.md) — V-9

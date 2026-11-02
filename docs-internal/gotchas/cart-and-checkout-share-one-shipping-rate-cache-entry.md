@@ -26,4 +26,4 @@ and the request context — never from whether its methods are registered yet. T
 ## Related
 
 - `woodev/shipping-method/class-shipping-plugin.php` — `mark_cart_page_packages()`.
-- `tests/integration/Shipping/ShippingCartPageRateCacheTest.php`
+- [ShippingCartPageRateCacheTest](../../tests/integration/Shipping/ShippingCartPageRateCacheTest.php)

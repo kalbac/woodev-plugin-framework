@@ -29,6 +29,7 @@ Two standing rules keep this true (see `AGENT-RULES.md` Rule 3): (1) every loade
 
 ## Related
 
-- feedback_no_composer_in_shipped_plugins
-- Spec: `docs-internal/archive/specs/2026-06-21-plugin-type-autoloader-design.md`
-- Sibling WSOD gotcha: `box-packer-interface-unwired-in-includes.md`
+- Operator memory `feedback_no_composer_in_shipped_plugins` (no Composer in shipped plugins)
+- [Plugin-type autoloader spec](../archive/specs/2026-06-21-plugin-type-autoloader-design.md)
+- [box-packer-interface-unwired-in-includes](box-packer-interface-unwired-in-includes.md) — sibling WSOD gotcha
+- [dispatcher-files-unwired-in-includes](dispatcher-files-unwired-in-includes.md) — the original `includes()` account

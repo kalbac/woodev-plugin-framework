@@ -22,3 +22,4 @@ terminals; it still consumes the shared inbox, so the stuck worker's `worker_don
 
 - The rule to run a watchdog for every wave: the `orca-team` skill §11 (global, not in this repo)
 - [starting-codex-under-orca-needs-four-steps-not-one](starting-codex-under-orca-needs-four-steps-not-one.md)
+- [watch-workers-retriggers-on-stale-api-error-buffer](watch-workers-retriggers-on-stale-api-error-buffer.md) — the same stale-`API Error` retrigger, recorded for `watch-workers.py` (duplicate trap; see the s210 audit)

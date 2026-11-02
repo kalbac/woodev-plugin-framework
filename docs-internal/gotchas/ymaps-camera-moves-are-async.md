@@ -2,6 +2,10 @@
 
 **Namespace:** `[shipping/pickup]` · **Discovered:** s46 (2026-07-31), rig-verifying the SP-5 viewport strategy
 
+> **Illustrative snippets.** The s47 rework dropped ymaps balloons (`map-provider-yandex.js` owns no balloon now), so the
+> `placemark.balloon.open()` paths below are the shape of the trap, not current code. The sequencing lesson is live:
+> see `_focusSeq` / `_addressSeq` in `map-provider-yandex.js`.
+
 ## The trap
 
 `map.setBounds()` in Yandex Maps JS API 2.1 does **not** move the camera synchronously. It
@@ -36,8 +40,7 @@ one unclustered point proves nothing about the others.
 
 ## The fix — the reference implementation's move
 
-`plugins-reference/woocommerce-yandex-delivery/.../wc-yandex-delivery-widget-map.js`
-(`handlePlacemarkSelect()`) solves un-clustering in one deterministic step:
+the v1 Yandex Delivery widget (`wc-yandex-delivery-widget-map.js`, `handlePlacemarkSelect()`) (the v1 sources are private and machine-local: `plugins-reference/` here no longer holds them — only `woodev-russian-post` and `woodev-vkredit` — and `tests/_fixtures/legacy-v1/` keeps just contract excerpts; `handlePlacemarkSelect()` is not in the current `woocommerce-yandex-delivery` checkout either, so treat the pointer as the s-time donor, not a file to open today) solves un-clustering in one deterministic step:
 
 ```js
 map.setBounds( [ coords, coords ], { checkZoomRange: true, zoomMargin: 0, useMapMargin: true } )
@@ -95,7 +98,7 @@ resolve last and open A's balloon over B, the customer's actual choice. A monoto
 captured at call time and re-checked at resolve time fixes it:
 
 ```js
-var mySeq = ++this._openSeq;
+var mySeq = ++this._focusSeq;   // illustrative; current counters are _focusSeq (focusGroup) and _addressSeq (resolveAddress)
 … .then( function () { if ( self._destroyed || mySeq !== self._openSeq ) { return; } … } );
 ```
 

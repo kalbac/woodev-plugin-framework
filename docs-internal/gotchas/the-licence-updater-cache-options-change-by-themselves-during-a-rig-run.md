@@ -10,7 +10,7 @@ changed`. Nothing in the plugin code had touched them. A re-run minutes later wa
 ## Root cause
 
 Those options are the version-info cache of the framework's licence updater:
-`woodev/licensing/updater/class-plugin-updater.php:758` names them `'woodev_' . md5( serialize( … ) )` and stores
+`Woodev_Plugin_Updater::get_cache_key()` (`woodev/licensing/updater/class-plugin-updater.php`) names them `'woodev_' . md5( serialize( … ) )` and stores
 `{ timeout, value }`. When the TTL runs out during the ~7-minute run, any admin page load refreshes them. The rig
 snapshot's `VOLATILE_OPTION` list (`tests/acceptance/e2e/cdek-acceptance.spec.js:59`) does not know them.
 
@@ -25,4 +25,4 @@ value is a `{timeout, value}` cache — is card kalbac/woocommerce-edostavka#55.
 ## Related
 
 - [the-rig-runs-the-cdek-plugins-own-woodev-copy-not-the-framework-checkout](the-rig-runs-the-cdek-plugins-own-woodev-copy-not-the-framework-checkout.md)
-- `docs-internal/sessions/s168.md`
+- [`docs-internal/sessions/s168.md`](../sessions/s168.md)

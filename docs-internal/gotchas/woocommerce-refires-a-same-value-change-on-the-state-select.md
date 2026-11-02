@@ -39,4 +39,4 @@ checkout never showed the symptom.
 ## Related
 
 - [js-hidden-checkout-field-is-still-required-server-side](js-hidden-checkout-field-is-still-required-server-side.md) — another place where WooCommerce's own field machinery and ours disagree
-- `../gotcha-index/shipping-checkout.md`
+- [shipping-checkout.md](../gotcha-index/shipping-checkout.md)

@@ -1,5 +1,7 @@
 # `worker-start` needs `--worktree` on BOTH sides: a name for a new one, the terminal's own for reuse
 
+> **Measured on:** the `D:/Projects/woodev_framework` paths in the s89 examples are the Windows desktop's; the `--worktree` rules are the same on the Mac (s138 extension).
+
 **Namespace:** `[tooling/orca]` · **Discovered:** s89 (2026-08-24), dispatching round 2 to a worker
 that had already reported `worker_done` · **Extended:** s138 (2026-09-25), Orca 1.4.211 on macOS —
 the `name:` selector, the `--name` requirement for a new worktree, and the `worktree rm` refusal
@@ -63,7 +65,7 @@ looks for the diff where it is standing and finds nothing, and a probe that find
 **The same flag, the other failure: creating a worktree without naming it.**
 
 ```bash
-worker-start --spec "…" --worktree new-child --agent claude --model claude-sonnet-5
+worker-start --spec "…" --worktree new-child --agent claude --model claude-sonnet-5-5
 # → invalid_argument: New worktrees require --name.
 ```
 

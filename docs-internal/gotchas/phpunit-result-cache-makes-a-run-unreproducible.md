@@ -62,3 +62,4 @@ before you accept any "unrelated failure" claim.
 
 - [a-worktree-silently-skips-five-contract-tests](a-worktree-silently-skips-five-contract-tests.md) — the other way a test count misleads
 - [three-agents-is-the-concurrency-cap-on-this-machine](three-agents-is-the-concurrency-cap-on-this-machine.md) — the other source of failures that look like code defects
+- [phpunit-defects-cache-hides-cross-test-session-leaks](phpunit-defects-cache-hides-cross-test-session-leaks.md) — same stale `.phpunit.result.cache` + `executionOrder="depends,defects"` mechanism, seen through a session leak

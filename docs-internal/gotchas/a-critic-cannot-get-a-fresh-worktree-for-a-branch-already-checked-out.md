@@ -1,6 +1,7 @@
 # Gotcha: [tooling/parallel-agents] — a critic cannot be given a fresh worktree for the branch it is reviewing
 
 > Tags: tooling, parallel-agents, orca, review | Session: s121
+> **Measured on:** the Windows desktop (the `D:/Projects/woodev_framework/.orca/worktrees/…` path below). The rule is the same on the Mac with its own checkout path.
 
 ## What happens
 

@@ -14,7 +14,7 @@ Yandex's own public documentation.
 None of that made committing it correct, because of the combination that made this repo
 different from the places it was already public:
 
-- **`plugins-reference/` is gitignored** (`.gitignore:25`). The token had therefore never
+- **`plugins-reference/` is gitignored** (`.gitignore`, `/plugins-reference/`; the Yandex copy named above has since been removed from it — the v1 sources now live in `tests/_fixtures/legacy-v1/`). The token had therefore never
   been in this repository's history.
 - **This repository is PUBLIC.**
 

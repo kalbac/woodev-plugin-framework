@@ -3,6 +3,12 @@
 **Namespace:** `[build/assets-version]`
 **Found:** s62 (2026-08-10), during the rig verification of #238.
 
+> **RESOLVED.** `Woodev_Plugin::frontend_enqueue_scripts()` now registers the handle with
+> `$this->get_assets_version()` (and the `get_assets_suffix()` min/non-min suffix):
+> `wp_register_script( 'woodev-modal', … . '/js/frontend/woodev-modal' . self::get_assets_suffix() . '.js', [], $this->get_assets_version() )`.
+> `get_assets_version()` returns `time()` under `SCRIPT_DEBUG`/`WP_DEBUG`, the plugin version otherwise.
+> The sections below are the s62 history; the "Wrong" block is what the code used to do.
+
 ## What happened
 
 The #238 rig pass opened the pickup picker and asked the live session for its modal state:
@@ -92,5 +98,5 @@ If those disagree, reload with cache ignored — do not start debugging the sour
   same class of bug for `style-index.css`, and where the `filemtime()` rule came from.
 - [rig-serves-the-working-tree-branch-switch-reverts-fixes.md](rig-serves-the-working-tree-branch-switch-reverts-fixes.md)
   — the other reason the rig can be running code you did not expect.
-- [chrome-devtools-png-cache-stale] (s105, woodev-theme) — the same cache trap for a re-generated
-  PNG at an unchanged `file://` URL.
+- The same cache trap for a re-generated PNG at an unchanged `file://` URL was seen in the
+  woodev-theme repo (s105); no gotcha is kept for it here.

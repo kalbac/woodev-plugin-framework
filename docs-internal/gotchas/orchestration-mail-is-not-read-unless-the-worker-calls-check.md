@@ -83,3 +83,4 @@ The mail channel is a repair mechanism, and repair is more expensive than gettin
   correction was carrying.
 - [wiki/orchestrating-agents-with-orca.md](../wiki/orchestrating-agents-with-orca.md) — the worker
   loop this belongs to.
+- [orchestration-mail-does-not-reach-a-busy-worker](orchestration-mail-does-not-reach-a-busy-worker.md) — the s92 measurement of the same trap (`terminal send` landed at once)

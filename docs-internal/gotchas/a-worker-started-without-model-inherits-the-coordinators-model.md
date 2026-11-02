@@ -6,7 +6,7 @@
 
 `orca orchestration worker-start --agent claude` with no `--model` does not fall back to the
 project's worker model — it takes the session default, which is whatever the **coordinator** is
-running. This project's rule is worker = Sonnet 5, coordinator = Opus 5; the launch receipt reports
+running. This project's rule is worker = Sonnet 5.5 (`claude-sonnet-5-5`, never the bare `sonnet` alias), coordinator = Opus 5; the launch receipt reports
 the omission honestly and it still reads as harmless:
 
 ```json
@@ -30,7 +30,7 @@ orchestration surface.
 Name the model on every dispatch, even when it is «the default»:
 
 ```text
-ORCA orchestration worker-start --spec "…" --worktree <selector> --agent claude --model sonnet --json
+ORCA orchestration worker-start --spec "…" --worktree <selector> --agent claude --model claude-sonnet-5-5 --json
 ```
 
 And verify it the same way the project verifies that a worker started at all — by reading the

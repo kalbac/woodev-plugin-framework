@@ -55,7 +55,7 @@ customer location data by relying on `updated_checkout` is therefore built on an
 large share of real installs, does not arrive.
 
 The reference implementations do not rely on it: СДЭК saves on its own AJAX the moment the city
-changes (`WC_Edostavka_Ajax::set_customer_location_model()` → `$customer_location->save()`), which
+changes (the v1 plugin's `WC_Edostavka_Ajax::set_customer_location_model()` → `$customer_location->save()`; v1 code, not in this repo or in the current v2 `woocommerce-edostavka` checkout), which
 also solves the second, independent problem — WooCommerce has nowhere to put a carrier's own
 `city_id` / `fias_guid` / `city_uuid` anyway.
 

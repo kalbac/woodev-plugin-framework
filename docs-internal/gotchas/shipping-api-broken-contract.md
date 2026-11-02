@@ -2,6 +2,10 @@
 > Tags: shipping, interface, phpstan, static-analysis, contract
 > Discovered: 2026-06-01 (independent audit)
 
+> **RESOLVED 2026-06-02 (Option B):** the interface was narrowed to base framework contracts and the blanket
+> `phpstan.neon` ignore was removed (`woodev/shipping-method/api/interface-shipping-api.php`). The
+> defect description and the options below (incl. "Option A (preferred)", never taken) are the 2026-06-01 text.
+
 ## What happens
 `woodev/shipping-method/api/interface-shipping-api.php` (namespace `Woodev\Framework\Shipping`) declares the `Shipping_API` contract with return types and `@throws` for **6 classes/interfaces that do not exist in the framework**:
 - `Woodev_Shipping_API_Rate_Response`

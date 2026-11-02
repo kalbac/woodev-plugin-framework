@@ -26,11 +26,14 @@ and therefore took no action. The usual reason here is how the worker was starte
 `worker_dispatches` row, so `worker-stop` and `worker-abandon` never touch that process, and
 `worker-release` settles the dispatch while reporting `retained` with `no_owned_resource`.
 
-That path is easy to end up on without choosing it. `worker-start --agent codex` frequently fails
-with `Agent startup blocked: codex-update-prompt` (gotcha
-`starting-codex-under-orca-needs-four-steps-not-one`), and the documented recovery is exactly
-`terminal create` → ESC → `dispatch --inject` → submit. So the fix for the START problem is what
-produces the CLEANUP problem, and the two gotchas have to be read together.
+That path was easy to end up on without choosing it (s84/s117). `worker-start --agent codex` used to fail
+with `Agent startup blocked: codex-update-prompt`, and the recovery then in use was `terminal create` → ESC →
+`dispatch --inject` → submit — which produced the CLEANUP problem. **The current recipe is different:**
+`worker-start --task <task> --retry-of <failed dispatch> --terminal <handle> --worktree id:<that worktree>`
+is orchestration-owned, so release/stop work on it (see
+[starting-codex-under-orca-needs-four-steps-not-one](starting-codex-under-orca-needs-four-steps-not-one.md) and
+CLAUDE.md → Orca fact 3). The `--inject` route remains the way to end up with `retained`, and the two gotchas still
+have to be read together for older terminals.
 
 Orca also retains — correctly — reused or pre-existing terminals, setup terminals, coordinators,
 active workers, terminals the user took over, and identities it cannot prove. Retention is the safe

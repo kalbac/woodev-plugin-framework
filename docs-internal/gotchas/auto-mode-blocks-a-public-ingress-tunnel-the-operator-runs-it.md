@@ -19,5 +19,5 @@ Used for the OFFICE_AVAILABILITY production measurement (edostavka#27, s167).
 
 ## Related
 
-- `docs-internal/sessions/s167.md`
+- [s167 session](../sessions/s167.md)
 - the plugin's `tests/acceptance/README.md` → «Real CDEK deliveries» (the harness's own Funnel mode)

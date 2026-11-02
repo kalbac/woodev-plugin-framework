@@ -24,12 +24,14 @@ A mount listed in `docker inspect` is not proof the container sees it — what t
 ## Fix
 
 ❌ «The framework checkout holds the fix, the rig serves it» / «`docker inspect` lists the mount».
-✅ Before ANY plugin rig measurement after a framework change:
-`WOODEV_FRAMEWORK_DIR=/Users/maksimmartirosov/Projects/woodev-plugin-framework bash scripts/sync-framework.sh` in the plugin
-checkout, and prove it by observing the new behaviour on the page (or a version marker), not by the mount table. Put the sync line
-in every acceptance brief.
+✅ Before ANY plugin rig measurement after a framework change, **prove which `woodev/` answers**: put a version marker or an observable
+behaviour of the new code on the page and check it — the mount table proves nothing. If the marker shows stale code (the s162 state),
+refresh the plugin's own copy with `WOODEV_FRAMEWORK_DIR=<framework primary checkout> bash scripts/sync-framework.sh` in the plugin
+checkout and re-check. If it shows the new code (the s184 state on the Mac, where `.wp-env.override.json` bind-mounts the primary
+`./woodev`), no sync is needed — but the PRIMARY checkout must serve the branch under test. Put the marker check, not an unconditional
+sync, in every acceptance brief.
 
 ## Related
 
 - [a-fresh-cdek-plugin-worktree-has-no-vendor-and-no-woodev](a-fresh-cdek-plugin-worktree-has-no-vendor-and-no-woodev.md) — the same sync script, for worktrees
-- [../GOTCHAS.md](../GOTCHAS.md) — the topic map
+- [GOTCHAS.md](../GOTCHAS.md) — the topic map

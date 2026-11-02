@@ -18,7 +18,7 @@
 | [`compat/*`](gotcha-index/compat.md) | 3 | Backward compatibility, HPOS |
 | [`lifecycle/*`](gotcha-index/lifecycle.md) | 2 | Install/upgrade routines |
 | [`woocommerce/states`](gotcha-index/woocommerce-states.md) | 2 | The `woocommerce_states` table |
-| [`woocommerce/*`](gotcha-index/woocommerce.md) | 44 | WooCommerce-specific · WooCommerce-specific (session) |
+| [`woocommerce/*`](gotcha-index/woocommerce.md) | 44 | WooCommerce-specific |
 | [`framework/*`](gotcha-index/framework.md) | 10 | Framework internals |
 | [`framework/contracts`](gotcha-index/framework-contracts.md) | 3 | What the framework guarantees to its consumers |
 | [`shipping/location`](gotcha-index/shipping-location.md) | 24 | Location provider layer |
@@ -44,7 +44,4 @@
 ## Archive (resolved gotchas)
 <!-- Resolved gotchas move here; keep for 2 sessions then remove -->
 
-- [bootstrap/resolver-bootstrap-coupling] **RESOLVED.** `Framework_Resolver` no longer references
-  `Woodev_Plugin_Bootstrap::instance()` at all — the notice renderers are injected
-  (`$update_notice_renderer`, `$deactivation_notice_renderer`). Verified against the source at the
-  s75 docs cleanup; original finding: `audit-2026-06-01.md` §H2.
+_None at the moment._

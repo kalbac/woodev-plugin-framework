@@ -58,8 +58,8 @@ same place, rather than starting a spare.
 
 ## The neighbouring trap, same night
 
-A `check --wait` process **can be killed by the OS under memory pressure** (this machine's free RAM
-sat at ~0.55 GB of 15.3 with a single worker plus Docker). The harness reports that honestly as
+A `check --wait` process **can be killed by the OS under memory pressure** (on the Windows desktop — the 15.3 GB machine — free RAM
+sat at ~0.55 GB with a single worker plus Docker; the Mac has no such cap). The harness reports that honestly as
 `killed`, but the effect on the coordinator is identical to a silent timeout — no worker report
 arrives and nothing looks wrong. After any `killed` notification, re-establish the waiter rather
 than assuming the workers are simply slow.
@@ -68,4 +68,6 @@ than assuming the workers are simply slow.
 
 - [three-agents-is-the-concurrency-cap-on-this-machine](three-agents-is-the-concurrency-cap-on-this-machine.md) — the RAM ceiling that kills waiters as well as agents
 - [input-accepted-is-not-proof-a-worker-started](input-accepted-is-not-proof-a-worker-started.md) — the same family: an orchestration receipt that reads as progress
-- `docs-internal/wiki/orchestrating-agents-with-orca.md` — the adopted worker loop
+- [a-backgrounded-orca-check-wait-starves-every-later-waiter](a-backgrounded-orca-check-wait-starves-every-later-waiter.md) — the same one-waiter trap reached by backgrounding; this file is the `waiter_exists` error shape
+- [orca-check-json-is-pretty-printed-so-a-line-parser-reads-it-as-empty](orca-check-json-is-pretty-printed-so-a-line-parser-reads-it-as-empty.md) — the other way a parser reads a live wait as empty
+- [orchestrating-agents-with-orca](../wiki/orchestrating-agents-with-orca.md) — the adopted worker loop

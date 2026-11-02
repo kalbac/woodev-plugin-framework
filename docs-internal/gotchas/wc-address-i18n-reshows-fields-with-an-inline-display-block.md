@@ -117,4 +117,4 @@ added tests nothing.
 - [js-hidden-checkout-field-is-still-required-server-side](js-hidden-checkout-field-is-still-required-server-side.md) — the other half of the same feature: hiding the row in the browser is not enough on the server either
 - [wc-renders-a-label-for-hidden-fields](wc-renders-a-label-for-hidden-fields.md) — more of what WooCommerce keeps doing to a field you thought you had hidden
 - [block-checkout-reads-country-locale-not-checkout-fields](block-checkout-reads-country-locale-not-checkout-fields.md) — what the locale instrument does reach, and why it is not the tool for a value-preserving hide
-- `docs-internal/wiki/architecture.md` → «Доставка» tab, "The two-instrument rule"
+- [`docs-internal/wiki/architecture.md`](../wiki/architecture.md) → «Доставка» tab, "The two-instrument rule"

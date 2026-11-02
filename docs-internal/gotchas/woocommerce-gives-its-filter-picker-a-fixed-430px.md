@@ -75,4 +75,4 @@ has to re-run that measurement rather than assume the room is still there.
 ## Related
 
 - [a-filter-option-keyed-key-instead-of-value-disables-the-filter-button](a-filter-option-keyed-key-instead-of-value-disables-the-filter-button.md) — the other s128 case of a vendor contract that our own code could not reveal
-- `specs/2026-09-07-sp10-orders-page-design.md` §D7 — the row this constrains
+- [2026-09-07-sp10-orders-page-design.md](../specs/2026-09-07-sp10-orders-page-design.md) §D7 — the row this constrains

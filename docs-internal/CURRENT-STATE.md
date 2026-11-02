@@ -65,7 +65,7 @@ command is in gotcha `wpenv-windows-gitbash-path-mangling`.
 
 ⚠ **`phpstan` locally needs `--memory-limit=4G`** — at 2G the parallel worker dies printing `Found 1 error` + "result is incomplete", which reads like a real failure. CI also requests 4G in `.github/workflows/ci.yml`. Gotcha `phpstan-windows-parallel-worker-segfault`.
 
-⚠ **Check `extension_loaded('sodium')` before interpreting SKIPPED** — as measured in s138, 1 in the primary and 6 without `plugins-reference/`. Windows needs `-d extension=sodium`; Homebrew PHP already has it compiled in. Gotcha `the-skipped-count-is-dominated-by-whether-sodium-is-enabled`.
+⚠ **Check `extension_loaded('sodium')` before interpreting SKIPPED** — as measured in s138, 1 in every checkout since #1311 (the contract tests read the committed `tests/_fixtures/legacy-v1/`). Windows needs `-d extension=sodium`; Homebrew PHP already has it compiled in. Gotcha `the-skipped-count-is-dominated-by-whether-sodium-is-enabled`.
 
 ✅ **`npm run test:e2e` runs Playwright against the LIVE RIG `:8973`, outside CI (#723).** ⚠ Tests the WORKING TREE the rig serves, and does NOT replace his own pass.
 
@@ -210,8 +210,8 @@ dropped and reported. Current open work lives on the board.
 itself. Do not summarise it here; 7b was re-litigated once already because it lived only in a
 session file.
 
-**⚠ Compare SKIPPED, not assertions** — with sodium enabled, the s138 baseline was
-**1** with `plugins-reference/` and **6** without it; re-measure before using those as current counts (gotchas `a-worktree-silently-skips-five-contract-tests`,
+**⚠ Compare SKIPPED, not assertions** — with sodium enabled, the baseline is
+**1** everywhere since #1311 (it was 6 without `plugins-reference/` at s138); re-measure before using it as a current count (gotchas `a-worktree-silently-skips-five-contract-tests`,
 `the-skipped-count-is-dominated-by-whether-sodium-is-enabled`; the old "66" was never a contract).
 Every other trap — worktrees, jest/PowerShell, Codex under Orca, stacked-PR merges, integration
 flakiness, the three field modes and their Russian labels — is one line under the `[tooling/*]`,

@@ -32,8 +32,8 @@ add_filter( 'http_allowed_safe_ports', static function ( $ports ) {
 } );
 ```
 
-Plus point licensing at the issuer via the `woodev_licensing_api_url` filter
-(added in 2.0.1), and `define( 'WOODEV_LICENSE_AUTHORITY_PUBKEY', <local pubkey> )`
+Plus point licensing at the issuer via the `woodev_license_base_url` filter
+(`Woodev_Licensing_API`, `@since 2.0.2`; an earlier version of this note named a `woodev_licensing_api_url` filter that never existed), and `define( 'WOODEV_LICENSE_AUTHORITY_PUBKEY', <local pubkey> )`
 before the framework loads so the stand verifies the LOCAL issuer's signature.
 
 ## Cross-container note

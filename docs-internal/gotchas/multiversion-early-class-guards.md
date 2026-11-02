@@ -9,37 +9,29 @@ The bootstrap file is intentionally the compatibility entry path across all vend
 
 ## Fix
 
-❌ Wrong:
+> **Mechanism, not names.** This gotcha was written in s4 against the pre-namespace resolver. Today the resolver is
+> `Woodev\Framework\Framework_Resolver` (`woodev/class-framework-resolver.php`), and the early-capability loader
+> method this note used to quote no longer exists. The two rules below still hold; the snippets use the current guard.
+
+❌ Wrong — a globally named class declared with no guard in a file every vendored copy loads:
 
 ```php
-require_once __DIR__ . '/class-framework-resolver.php';
-
-class Woodev_Framework_Resolver {}
+class Framework_Resolver {}
 ```
 
-✅ Correct:
+✅ Correct — the guard that `class-framework-resolver.php` uses today:
 
 ```php
-require_once __DIR__ . '/class-framework-resolver.php';
-
-if ( ! class_exists( 'Woodev_Framework_Resolver', false ) ) :
-	class Woodev_Framework_Resolver {}
+if ( ! class_exists( Framework_Resolver::class, false ) ) :
+	class Framework_Resolver {}
 endif;
 ```
 
-✅ Correct for selected framework loading:
-
-```php
-$this->load_early_capability_classes( $plugin, $loaded_framework ?? $plugin );
-```
-
-❌ Wrong:
-
-```php
-$this->load_early_capability_classes( $plugin ); // Uses the current registration path.
-```
+Second rule: any runtime class that is not guarded this way must be sourced from the **selected** framework
+copy (the resolver's winner), never from the path of the plugin that happens to be registering. See
+[ADR-003](../adr/003-platform-v2-minimal-framework-resolver.md) for the resolver boundary.
 
 ## Related
 - [../GOTCHAS.md](../GOTCHAS.md) — gotcha index for bootstrap and multi-version loading rules
 - [../adr/003-platform-v2-minimal-framework-resolver.md](../adr/003-platform-v2-minimal-framework-resolver.md) — resolver boundary that keeps `bootstrap.php` as installed compatibility entry path
-- [../platform-v2-implementation-spec.md](../platform-v2-implementation-spec.md) — active Platform v2 implementation source
+- [../platform-v2-implementation-spec.md](../platform-v2-implementation-spec.md) — historical Platform v2 implementation spec; current design is [ADR-003](../adr/003-platform-v2-minimal-framework-resolver.md) and [wiki/architecture.md](../wiki/architecture.md)

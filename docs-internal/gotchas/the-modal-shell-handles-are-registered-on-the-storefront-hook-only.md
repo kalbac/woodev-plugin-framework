@@ -16,12 +16,12 @@ runs on `wp_enqueue_scripts`, which wp-admin never fires.
 
 ## Fix
 
-An admin surface that wants the shell registers it itself, once, if nobody has: `Orders_Registry::enqueue_modal_shell()`
+An admin surface that wants the shell registers it itself, once, if nobody has: the `private` method `Orders_Registry::enqueue_modal_shell()`
 (`wp_script_is` / `wp_style_is` guard, same URLs and versions as the storefront registration) is called from
-`enqueue_metabox_script()`, and the metabox script lists `woodev-modal` as its dependency. The next admin consumer
-should reuse that method rather than register a third copy.
+`enqueue_metabox_script()`, and the metabox script lists `woodev-modal` as its dependency. The method is `private`, so the next admin consumer
+should first extract it into a shared helper (or copy its guard exactly) rather than register a third divergent copy.
 
 ## Related
 
 - [modal-backdrop-opacity-dims-the-whole-dialog](modal-backdrop-opacity-dims-the-whole-dialog.md) — the shell's other trap
-- `docs-internal/wiki/architecture.md` — "Shipping orders page" → an order action may declare input fields
+- [`docs-internal/wiki/architecture.md`](../wiki/architecture.md) — "Shipping orders page" → an order action may declare input fields

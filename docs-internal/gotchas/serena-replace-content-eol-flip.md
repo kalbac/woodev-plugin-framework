@@ -39,9 +39,7 @@ file would also trip the **Assets-build-parity** / `.gitattributes eol=lf` guard
 
 ## What a MIXED-EOL file actually looks like when it breaks (s109)
 
-The flip does not have to be Serena's — any writer that emits `
-` into a CRLF file, or `
-`
+The flip does not have to be Serena's — any writer that emits `\n` into a CRLF file, or `\r\n`
 into an LF one, produces the same mixed state. In s109 a nine-line docblock was inserted into
 `class-checkout-field-settings.php` by a Python script, and phpcs then reported:
 
@@ -57,9 +55,7 @@ cause is the EOL mix confusing the tokenizer's column arithmetic.
 **Diagnose by counting, not by looking:**
 
 ```bash
-python -c "b=open('<file>','rb').read(); print('CRLF', b.count(b'
-'), 'LF', b.count(b'
-'))"
+python -c "b=open('<file>','rb').read(); print('CRLF', b.count(b'\r\n'), 'LF', b.count(b'\n'))"
 ```
 
 Equal numbers mean a pure-CRLF file; `CRLF == 0` means pure LF. Anything between is mixed, and that
