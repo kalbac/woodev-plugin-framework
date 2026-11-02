@@ -129,7 +129,7 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 		 */
 		private function make_order( array $overrides = [] ): \WC_Order {
 			$created = Mockery::mock( '\WC_DateTime' );
-			$created->shouldReceive( 'date' )->with( \DATE_ATOM )->andReturn( '2026-09-07T12:00:00+00:00' );
+			$created->shouldReceive( 'format' )->with( \DATE_ATOM )->andReturn( '2026-09-07T12:00:00+00:00' );
 
 			$defaults = [
 				'get_id'                           => 123,

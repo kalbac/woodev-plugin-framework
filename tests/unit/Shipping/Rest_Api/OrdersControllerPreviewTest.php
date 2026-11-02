@@ -236,6 +236,21 @@ final class OrdersControllerPreviewTest extends TestCase {
 		$this->assertIsArray( $result['actions'] );
 	}
 
+	/**
+	 * #1546: the date is a true ISO-8601 instant. A real DateTime has format() but no WC_DateTime::date(),
+	 * so a return to `->date( DATE_ATOM )` (local time labelled +00:00) fails here.
+	 */
+	public function test_the_preview_date_created_is_a_true_iso_8601_instant(): void {
+		$this->register_provider();
+
+		// 20:30 on a site with gmt_offset = 6 is 14:30 UTC.
+		$this->order( [ 'get_date_created' => new \DateTime( '2026-11-01 14:30:00', new \DateTimeZone( 'UTC' ) ) ] );
+
+		$result = $this->controller()->get_preview( $this->request( 239 ) );
+
+		$this->assertSame( '2026-11-01T14:30:00+00:00', $result['date_created'] );
+	}
+
 	// ----- #1180: extra lines a plugin adds -----
 
 	public function test_the_preview_has_no_extra_fields_unless_a_plugin_adds_some(): void {

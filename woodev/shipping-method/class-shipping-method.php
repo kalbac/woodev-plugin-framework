@@ -336,6 +336,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		private static array $hidden_reasons = [];
 
 		/**
+		 * Plugin id + reason code pairs already written to the log in this request (#1557), so a reason that
+		 * is reported on every package and rate refresh is logged once.
+		 *
+		 * @var array<string, true>
+		 */
+		private static array $logged_hidden_reasons = [];
+
+		/**
 		 * The shipping plugins of this process by plugin id — asked LIVE whether their debug mode is on when the
 		 * hint is rendered (#68). A reason is shown only if the plugin that reported it has «Логирование» on, and
 		 * a session-cached reason must follow a merchant who switches it, so the flag is never stored with the reason.
@@ -1372,6 +1380,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 * title (what the buyer sees, {@see self::get_title()}) beside it, and the checkout hint groups
 		 * the methods that share a reason into one line («Скрыты: А, Б — reason», #68).
 		 *
+		 * The reason is also written to the plugin's log (DEBUG level, once per reason code in a request, only
+		 * while «Логирование» is on) — for every visitor, not only a store manager, so support can find out
+		 * from the log why a method was hidden for a buyer (#1557).
+		 *
 		 * @since 2.0.2
 		 * @param string               $reason_code Stable reason identifier.
 		 * @param string               $message     Safe, plugin-supplied reason for the manager, without the method title.
@@ -1379,16 +1391,26 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 * @return void
 		 */
 		public function report_hidden( string $reason_code, string $message, array $context = [] ): void {
-			if ( null === $this->active_hidden_reason_key || ! current_user_can( 'manage_woocommerce' ) || '' === trim( $message ) ) {
+			if ( '' === trim( $message ) ) {
 				return;
 			}
 
-			$plugin = $this->get_plugin();
+			$plugin      = $this->get_plugin();
+			$reason_code = strtolower( (string) preg_replace( '/[^a-z0-9_\\-]/i', '', $reason_code ) );
+
+			// Before the capability gate on purpose: the buyer is not a store manager, and the buyer's
+			// checkout is exactly the one support needs to explain (#1557).
+			$this->log_hidden_reason( $plugin, $reason_code, $message );
+
+			if ( null === $this->active_hidden_reason_key || ! current_user_can( 'manage_woocommerce' ) ) {
+				return;
+			}
+
 			self::register_hidden_reason_plugin( $plugin );
 
 			self::$hidden_reasons[ $this->active_hidden_reason_key ] = [
 				'package_hash' => explode( ':', $this->active_hidden_reason_key, 2 )[0],
-				'reason_code' => strtolower( (string) preg_replace( '/[^a-z0-9_\\-]/i', '', $reason_code ) ),
+				'reason_code' => $reason_code,
 				'message'     => $message,
 				'title'       => $this->hidden_reason_title(),
 				'plugin_id'   => (string) $plugin->get_id(),
@@ -1404,6 +1426,39 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 				$reasons[ $this->active_hidden_reason_key ] = $reason;
 				call_user_func( [ $session, 'set' ], self::HIDDEN_REASONS_SESSION_KEY, $reasons );
 			}
+		}
+
+		/**
+		 * Writes the hidden reason to the plugin's log, once per plugin and reason code in a request.
+		 *
+		 * A cart is recalculated several times in one request (one call per package, per rate refresh), so the
+		 * same reason would otherwise repeat. The line carries the title of the first method that reported it.
+		 * It goes through {@see Shipping_Plugin::log_debug()}, so it is written only while «Логирование» is on.
+		 *
+		 * @since 2.0.23
+		 *
+		 * @param Shipping_Plugin $plugin      The plugin this method belongs to.
+		 * @param string          $reason_code Sanitised reason identifier.
+		 * @param string          $message     Safe, plugin-supplied reason, without the method title.
+		 * @return void
+		 */
+		private function log_hidden_reason( Shipping_Plugin $plugin, string $reason_code, string $message ): void {
+			$logged_key = $plugin->get_id() . ':' . $reason_code;
+
+			if ( isset( self::$logged_hidden_reasons[ $logged_key ] ) ) {
+				return;
+			}
+
+			self::$logged_hidden_reasons[ $logged_key ] = true;
+
+			$plugin->log_debug(
+				sprintf(
+					'The shipping method "%s" is hidden (%s): %s',
+					$this->hidden_reason_title(),
+					$reason_code,
+					$message
+				)
+			);
 		}
 
 		/**
@@ -1423,7 +1478,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		/**
 		 * Whether the admin hint may show this reason: only while the debug mode («Логирование», `enable_debug`)
 		 * of the plugin that reported it is on (#68). Non-IT merchants see the hint on their own checkout and
-		 * take it for a fault; the reason is always in the WooCommerce log regardless.
+		 * take it for a fault. The same switch gates the log line {@see self::report_hidden()} writes: at the
+		 * DEBUG level, once per reason code in a request, and only while the debug mode is on.
 		 *
 		 * Each plugin answers for its own reasons, so two carriers on one checkout show theirs independently.
 		 * An entry with no plugin id (persisted by an older version) or of an unknown plugin is not shown.

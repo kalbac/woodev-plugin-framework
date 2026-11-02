@@ -82,7 +82,7 @@ class OrderRowBuilderTest extends TestCase {
 	 */
 	private function make_order( array $overrides = [] ): \WC_Order {
 		$created = Mockery::mock( '\WC_DateTime' );
-		$created->shouldReceive( 'date' )->with( \DATE_ATOM )->andReturn( '2026-09-07T12:00:00+00:00' );
+		$created->shouldReceive( 'format' )->with( \DATE_ATOM )->andReturn( '2026-09-07T12:00:00+00:00' );
 
 		$defaults = [
 			'get_id'                          => 123,
@@ -659,6 +659,52 @@ class OrderRowBuilderTest extends TestCase {
 		$this->assertSame( '2026-09-07T12:00:00+00:00', $row['date_created'] );
 		$this->assertSame( [ 'slug' => 'processing', 'label' => 'Processing' ], $row['status'] );
 		$this->assertSame( [ 'id' => 'cdek', 'label' => 'СДЭК' ], $row['carrier'] );
+	}
+
+	// ----- date_created is a true instant (#1546) -----
+
+	/**
+	 * Stands in for WooCommerce's WC_DateTime on a site with a fixed UTC offset: the underlying DateTime
+	 * is UTC, and date() is `gmdate( $format, $timestamp + $offset )` — local wall-clock time dressed as UTC.
+	 *
+	 * @param string $utc_time   the instant, in UTC
+	 * @param int    $gmt_offset the site's `gmt_offset` in hours
+	 * @return \DateTime
+	 */
+	private function wc_date_time_with_offset( string $utc_time, int $gmt_offset ): \DateTime {
+		return new class( $utc_time, new \DateTimeZone( 'UTC' ), $gmt_offset ) extends \DateTime {
+			private $gmt_offset;
+
+			public function __construct( string $time, \DateTimeZone $timezone, int $gmt_offset ) {
+				parent::__construct( $time, $timezone );
+				$this->gmt_offset = $gmt_offset;
+			}
+
+			public function date( string $format ): string {
+				return gmdate( $format, $this->getTimestamp() + $this->gmt_offset * HOUR_IN_SECONDS );
+			}
+		};
+	}
+
+	/**
+	 * #1546: 20:30 local at gmt_offset = 6 leaves the builder as 14:30 UTC, not as local time labelled +00:00.
+	 *
+	 * @return void
+	 */
+	public function test_date_created_is_the_real_instant_on_a_site_with_a_gmt_offset(): void {
+		if ( ! defined( 'HOUR_IN_SECONDS' ) ) {
+			define( 'HOUR_IN_SECONDS', 3600 );
+		}
+
+		// 20:30 on 1 Nov at gmt_offset = 6 is 14:30 UTC.
+		$created = $this->wc_date_time_with_offset( '2026-11-01 14:30:00', 6 );
+		$order   = $this->make_order( [ 'get_date_created' => $created ] );
+
+		$row = ( new Order_Row_Builder() )->build( $order, $this->provider() );
+
+		$this->assertSame( '2026-11-01T14:30:00+00:00', $row['date_created'] );
+		$this->assertSame( $created->getTimestamp(), ( new \DateTime( $row['date_created'] ) )->getTimestamp() );
+		$this->assertNotSame( '2026-11-01T20:30:00+00:00', $row['date_created'], 'local time labelled +00:00 is the #1546 defect' );
 	}
 
 	// ----- is_exported / actions (card #824) -----

@@ -878,6 +878,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 * `delivery_time` off the `WC_Shipping_Rate` through the Store API, which
 		 * {@see Shipping_Method::apply_rate_attributes()} fills in.
 		 *
+		 * The base renders the rate's delivery time here too (#1558), because WooCommerce prints it in the
+		 * block order form only. A plugin that adds its own estimate under the `delivery_time` key replaces
+		 * ours; under another key, ours is dropped when that block already shows the same time
+		 * ({@see self::without_repeated_delivery_time()}), so an older plugin does not print it twice.
+		 *
 		 * The base renders the merchant's Description here, because that field is a
 		 * REQUIRED part of every woodev shipping plugin — settings screen AND order
 		 * form, on both form types. Until 2.0.2 the framework only DECLARED the field
@@ -940,6 +945,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 				);
 			}
 
+			$delivery_time_block = $this->get_delivery_time_block( $rate );
+
+			if ( '' !== $delivery_time_block ) {
+				$blocks['delivery_time'] = $delivery_time_block;
+			}
+
 			/**
 			 * Filters the blocks rendered under a shipping rate on the order form.
 			 *
@@ -968,6 +979,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 				$blocks = $filtered;
 			}
 
+			$blocks = $this->without_repeated_delivery_time( $blocks, $delivery_time_block );
+
 			$blocks = array_filter(
 				$blocks,
 				static function ( $block ) {
@@ -985,6 +998,89 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 				// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- each block is escaped by whoever built it; see the filter docblock.
 				implode( '', $blocks )
 			);
+		}
+
+		/**
+		 * Builds the delivery-time block of a rate for the classic order form (#1558).
+		 *
+		 * WooCommerce prints the rate's `delivery_time` only in the block order form, so the classic form
+		 * needs it printed here, for every carrier. The carrier's own wording is shown as it is, without a
+		 * label of ours ("2-4 days"). The block order form never reaches this method, so the time is not
+		 * shown twice. `WC_Shipping_Rate::get_delivery_time()` exists since WooCommerce 9.2; on an older
+		 * one there is nothing to print.
+		 *
+		 * @since 2.0.23
+		 *
+		 * @param \WC_Shipping_Rate $rate The rate being rendered.
+		 * @return string The escaped HTML, or an empty string when the rate has no delivery time.
+		 */
+		private function get_delivery_time_block( \WC_Shipping_Rate $rate ): string {
+			if ( ! is_callable( [ $rate, 'get_delivery_time' ] ) ) {
+				return '';
+			}
+
+			$delivery_time = trim( (string) $rate->get_delivery_time() );
+
+			if ( '' === $delivery_time ) {
+				return '';
+			}
+
+			return sprintf(
+				'<p class="woodev-shipping-method-delivery-time %s-method-delivery-time">%s</p>',
+				esc_attr( $this->get_id_dasherized() ),
+				esc_html( $delivery_time )
+			);
+		}
+
+		/**
+		 * Drops the framework's own delivery-time block when another block already shows the same time (#1558).
+		 *
+		 * A carrier plugin written before the framework printed the time itself adds its own estimate to the
+		 * `woodev_shipping_rate_additional_info` blocks (Yandex does, under `yandex_interval`). The highest
+		 * framework version on a site serves every plugin, so such a plugin meets this block before it has
+		 * been updated; the check lives here, not in the plugin. Blocks are compared by their visible text
+		 * (tags stripped, whitespace collapsed). A `delivery_time` block a plugin replaced is never touched.
+		 *
+		 * @since 2.0.23
+		 *
+		 * @param array<string, mixed> $blocks     The blocks after the filter, block name => HTML.
+		 * @param string               $own_block  The block {@see self::get_delivery_time_block()} built, or ''.
+		 * @return array<string, mixed>
+		 */
+		private function without_repeated_delivery_time( array $blocks, string $own_block ): array {
+			if ( '' === $own_block || ( $blocks['delivery_time'] ?? null ) !== $own_block ) {
+				return $blocks;
+			}
+
+			$needle = self::get_visible_text( $own_block );
+
+			foreach ( $blocks as $name => $block ) {
+				if ( 'delivery_time' === $name || ! is_string( $block ) ) {
+					continue;
+				}
+
+				if ( false !== strpos( self::get_visible_text( $block ), $needle ) ) {
+					unset( $blocks['delivery_time'] );
+
+					break;
+				}
+			}
+
+			return $blocks;
+		}
+
+		/**
+		 * The text a visitor reads in a block of HTML: tags stripped, entities decoded, whitespace collapsed.
+		 *
+		 * @since 2.0.23
+		 *
+		 * @param string $html The block.
+		 * @return string
+		 */
+		private static function get_visible_text( string $html ): string {
+			$text = html_entity_decode( wp_strip_all_tags( $html ), ENT_QUOTES, 'UTF-8' );
+
+			return trim( (string) preg_replace( '/\s+/u', ' ', $text ) );
 		}
 
 		/**
