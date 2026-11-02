@@ -127,6 +127,9 @@ namespace Woodev\Tests\Unit\Shipping {
 		/** @var string[] what the plugins wrote to the log at the error level (always written, whatever the debug mode). */
 		public static array $errors = [];
 
+		/** @var string[] what the plugins wrote to the log at the debug level. */
+		public static array $debug_lines = [];
+
 		public function __construct() {}
 
 		/** @return bool */
@@ -196,13 +199,14 @@ namespace Woodev\Tests\Unit\Shipping {
 		}
 
 		/**
-		 * The debug line is not under test here; this probe does not write to the WooCommerce logger.
+		 * Collects the debug line instead of writing it to the WooCommerce logger.
 		 *
 		 * @param string      $message log line.
 		 * @param string|null $log_id  log id.
 		 * @return void
 		 */
 		public function log_debug( $message, $log_id = null ): void {
+			self::$debug_lines[] = (string) $message;
 		}
 	}
 
@@ -413,6 +417,8 @@ namespace Woodev\Tests\Unit\Shipping {
 			// the plugin's «Логирование» is ON unless a test says otherwise (#68); each test starts with no log lines
 			Woodev_Test_Shipping_Plugin_For_Rate_Cache::$debug  = [ 'rate-cache' => true ];
 			Woodev_Test_Shipping_Plugin_For_Rate_Cache::$errors = [];
+			Woodev_Test_Shipping_Plugin_For_Rate_Cache::$debug_lines = [];
+			$this->reset_logged_hidden_reasons();
 
 			Functions\when( 'get_transient' )->alias(
 				function ( $key ) {
@@ -587,6 +593,41 @@ namespace Woodev\Tests\Unit\Shipping {
 			$method->report_hidden = false;
 			$method->calculate_shipping( $package );
 			$this->assertArrayNotHasKey( $this->hidden_key( $package ), Shipping_Method::get_hidden_reasons() );
+		}
+
+		/**
+		 * #1557: the reason reaches the log for a buyer too (not a store manager), once per code in a request.
+		 *
+		 * @return void
+		 */
+		public function test_a_hidden_reason_is_logged_once_per_code_even_for_a_buyer(): void {
+			$method                       = $this->method();
+			$method->next_rate            = null;
+			$method->report_hidden        = true;
+			$this->can_manage_woocommerce = false;
+			$package                      = $this->package();
+
+			$method->calculate_shipping( $package );
+			$method->calculate_shipping( $package );
+
+			$this->assertSame(
+				[ 'The shipping method "Rate Cache Method" is hidden (no_service): No service in this area.' ],
+				Woodev_Test_Shipping_Plugin_For_Rate_Cache::$debug_lines
+			);
+			$this->assertSame( [], Shipping_Method::get_hidden_reasons(), 'the buyer still gets no admin hint' );
+
+			$method->report_hidden( 'another_reason', 'Second reason.' );
+			$method->report_hidden( 'another_reason', 'Second reason.' );
+
+			$this->assertCount( 2, Woodev_Test_Shipping_Plugin_For_Rate_Cache::$debug_lines );
+			$this->assertStringContainsString( '(another_reason): Second reason.', Woodev_Test_Shipping_Plugin_For_Rate_Cache::$debug_lines[1] );
+		}
+
+		/** @return void */
+		public function test_an_empty_hidden_reason_is_not_logged(): void {
+			$this->method()->report_hidden( 'no_service', '   ' );
+
+			$this->assertSame( [], Woodev_Test_Shipping_Plugin_For_Rate_Cache::$debug_lines );
 		}
 
 		/**
@@ -1113,6 +1154,15 @@ namespace Woodev\Tests\Unit\Shipping {
 		/** @return void */
 		private function reset_hidden_reasons(): void {
 			$property = new \ReflectionProperty( Shipping_Method::class, 'hidden_reasons' );
+			if ( PHP_VERSION_ID < 80100 ) {
+				$property->setAccessible( true );
+			}
+			$property->setValue( null, [] );
+		}
+
+		/** @return void */
+		private function reset_logged_hidden_reasons(): void {
+			$property = new \ReflectionProperty( Shipping_Method::class, 'logged_hidden_reasons' );
 			if ( PHP_VERSION_ID < 80100 ) {
 				$property->setAccessible( true );
 			}
