@@ -104,7 +104,13 @@ After the P3 clean break (legacy adapter removed) and P4 base decomposition, `Fr
 
 The verification above is true **as of s60 (2026-08-09)** and is no longer a description of the file. `woodev/class-framework-resolver.php` is now **1159 lines / 21 public + 12 protected + 2 private methods**. One duty has been added that no ADR sanctions: `load_plugins()` calls the private `install_error_reporter()` (`class-framework-resolver.php:320`), which runs `\Woodev\Framework\Error_Reporting\Error_Reporter::install( $this->registered_plugins )` (`:464`; described in `wiki/architecture.md`, Error reporting). The "does-not-own" check and the kernel-discipline clause (do not let the resolver become a second kernel) were **not re-run** against this growth.
 
-**OPEN — operator decision:** whether the `Error_Reporter` install is a sanctioned resolver duty (add it to the owned list, like the final `woodev_plugins_loaded` timing) or a bounded exception recorded here (like the HPOS one above). This addendum records the facts only; it decides nothing.
+**Decision — operator, 02.11.2026 (#1551):** the `Error_Reporter` install is a **sanctioned resolver duty**, added to the owned list beside the final `woodev_plugins_loaded` timing, under three conditions:
+
+1. The resolver only **starts** the reporter: one call, and a repeat call does nothing (the static `$installed` guard in `Error_Reporter::install()`). It does not collect, filter, format or send anything.
+2. A failure in that call **never stops plugin loading** — the reporter is optional, the plugins are not.
+3. The reporting logic lives in `Error_Reporter`, not in the resolver.
+
+Reason: `load_plugins()` is the only point where the framework copy has already been chosen and plugin code has not started yet. Installed any later, a failure during a plugin's own start-up would go uncaught. The kernel-discipline clause stands: this duty is one start-up call, not a licence to grow the resolver.
 
 ## Related
 
