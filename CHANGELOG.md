@@ -1,6 +1,56 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.0.23] — 2026-11-02
+### Bug Fixes
+- **shipping**: Emit a true ISO-8601 instant for the order date
+
+- **shipping**: Log why a shipping method was hidden
+
+- **shipping**: Show the delivery time on the classic order form
+
+- **shipping**: Do not print a delivery time another block already shows
+
+- **pickup**: Keep the selected point when a template drops the order field section
+
+- **pickup**: Adopt a template's named pickup input instead of adding a second one
+
+
+### Documentation
+- **s208**: Addendum 2 — live order, #1542, 2.0.22
+
+- **s208**: Save — operator review of the Ozon release package, handoff for the release session
+
+- **s209**: Save — Ozon 2.0.0 released, disk-sweep step, handoff for the s210 docs audit
+
+- **s210**: Audit contradiction map
+
+- **s210**: Fix root docs, indexes and schema contradictions
+
+- **s210**: Fix spec and research status lines, canary tokens
+
+- **s210**: Fix ADR and wiki drift
+
+- **s210**: Align skills with the current rules (@since, clean break, tests, release)
+
+- **s210**: Fix gotchas — retire v1/removed-subject gotchas, resolve fixed ones, correct stale facts
+
+- **s210**: Record the audit outcome
+
+- **s210**: Dev-cycle skill states the supported PHP range, not 8.1
+
+- **s210**: Save — Ozon 2.0.1 hotfix, docs audit
+
+- **s210**: Morning decisions — #1551 decided, #1550 timing, key rotation after #1554
+
+- **adr**: ADR-003 sanctions the Error_Reporter install in the resolver
+
+
+### Build
+- **pickup**: Regenerate pickup-mount.min.js
+
+
+
 ## [2.0.22] — 2026-11-01
 ### Bug Fixes
 - **location**: No checkout reload while typing the address
