@@ -1,7 +1,7 @@
 # gotcha: a coordinator terminal consumes ONE Orca Run — a newer `run-create` fences `check` on the older Run
 
 **Namespace:** `[tooling/orca]`
-**Discovered:** s195 (2026-10-24), Orca 1.4.237
+**Discovered:** s195 (2026-10-24), Orca 1.4.237 · **Met again:** s210 (2026-11-02)
 
 ## Symptom
 
@@ -10,6 +10,10 @@ The coordinator opened a second Run (`run-create`) while a worker of the first R
 <newer run>, not <first run>» — and `worker-start --run <first run>` refused the same way. A worker's report sent to the
 first Run sat undelivered. Separately, two background waiters on the SAME Run raced: both got an error payload instead of
 the message.
+
+**s210 recurrence — the silent form.** A second Run was created while a background waiter was still blocked on the first. The
+waiter did not fail: it kept waiting on the old Run's inbox, which the coordinator no longer consumes, and a worker's
+`worker_done` for the new Run arrived where nobody was listening. `check --run <old run>` answered `consumer_fenced`.
 
 ## Root cause
 
@@ -29,6 +33,8 @@ orca orchestration check --run run_A     # -> consumer_fenced
 - If a second Run already exists, tell the remaining workers to report to `run:<bound run>`, or rebind with
   `orca orchestration run-use --id <run>` before reading the older one.
 - One background waiter per Run.
+- Pass `--run <id>` explicitly on every `check` and `worker-start` while two Runs are alive; never rely on the implicit bound Run.
+- Better: finish (or stop) the first Run before creating the next, and re-start any background waiter against the new Run id.
 
 ## Related
 

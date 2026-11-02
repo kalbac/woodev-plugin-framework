@@ -6,8 +6,8 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-11-02 (s209, with the operator, MacBook):** framework **2.0.22** (tag `v2.0.22` on `2f95bdd3`), planned next **2.0.23**; no framework code changed in s209. **«Ozon Доставка» 2.0.0 is RELEASED:** GitHub `v2.0.0` (tag on `c7f771b7`, asset sha256 `f226f7bb…c6d3`), EDD **58107** serves 2.0.0; card, docs 146398–146406, FAQ group 94 (23), blog 146456 published; Telegram post published by the operator; ozon #53 #54 #58 closed, #9 not planned. Yandex 2.0.12 on EDD 821; CDEK 2.3.0.12 on EDD 216. Open: key rotation (DaData and CDEK test keys — his word), framework cards #1526, #1532, #1519, #1528, the open PR #1478. **Next session s210: docs audit, autonomous overnight** (last audit s183, 15.10.2026). Rig :8973: Ozon 2.0.0 ACTIVE, provider `cdek`; DaData keys only as wp-env constants (read lengths, never print). Detail: `sessions/s209.md`.
-**Earlier sessions:** `SESSION-LOG.md` (index) and `sessions/sNN.md` hold the per-session state of s189–s208.
+**As of 2026-11-02 (s210, with the operator overnight, MacBook):** framework **2.0.22** (tag `v2.0.22` on `2f95bdd3`), planned next **2.0.23**; no framework code changed in s210. **«Ozon Доставка» 2.0.1 is RELEASED** (urgent hotfix: bundled catalogue of 93 441 points, first load ~1 h → ~3.5 min, map fallback key defined): GitHub `v2.0.1` (merge `1195888`, asset sha256 `59328507…83b4`), EDD **58107** serves 2.0.1, both demo sites run it; cards `woodev-ozon-delivery#76` `#78`. **Docs audit s210 DONE** (PR #1549, merged `ab81f632`; map `reviews/2026-11-02-docs-audit-s210.md`; gotchas **490**, ADRs **12**); **next audit s220**. Card audit closed #786 #417 #418 #419; parked findings → #1550 #1551 (both `Ждёт оператора`) and #1552. Yandex 2.0.12 on EDD 821; CDEK 2.3.0.12 on EDD 216. Open: key rotation (DaData and CDEK test keys — his word), framework cards #1526, #1532, #1519, #1528, the open PR #1478; his look at Ozon 2.0.1 on the demo sites. The Homelab `~/.agents/AGENTS.md` has no «last audit» line in the Mac form — check it. Rig :8973: Ozon 2.0.0 ACTIVE, provider `cdek`; DaData keys only as wp-env constants (read lengths, never print). Detail: `sessions/s210.md`.
+**Earlier sessions:** `SESSION-LOG.md` (index) and `sessions/sNN.md` hold the per-session state of s189–s209.
 
 ✅ **Fixtures carry real download ids `9001`-`9005`** (#910), so `LicenseCommandEndpointTest` drives
 the real signed-envelope route. The admin license REST route refuses an ambiguous id (#907) but
@@ -85,7 +85,7 @@ region whose `key()` is not in the settlement's own `ancestors()` is refused. �
 `Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that IS
 its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open issues — 54 in this repo, measured 02.11.2026 (s210):** board №6 holds 52 framework + 2 edostavka cards in Бэклог, Инбокс has **1** item, **#922** (Supermemory, parked by his word).
+**Open issues — 53 in this repo, measured 02.11.2026 (s210, after the card audit closed 4 and filed #1550–#1552):** board №6 held 52 framework + 2 edostavka cards in Бэклог before the audit, Инбокс has **1** item, **#922** (Supermemory, parked by his word).
 ⚠ Count with
 `gh issue list --repo kalbac/woodev-plugin-framework --state open --limit 500 --json number` and `project item-list --limit 1000` — s127's 53 was an undercount from
 exactly that trap, and a naive reader reports a milestone-carrying card as empty. **PRIORITY LIVES ON
