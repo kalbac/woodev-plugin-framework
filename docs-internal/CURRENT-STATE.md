@@ -6,16 +6,8 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-11-02 (s209, with the operator, MacBook):** framework **2.0.22** (tag `v2.0.22` on `2f95bdd3`), planned next **2.0.23**; no framework code changed in s209. **«Ozon Доставка» 2.0.0 is RELEASED:** GitHub `v2.0.0` (tag on `c7f771b7`, asset sha256 `f226f7bb…c6d3`), EDD **58107** serves 2.0.0; card, docs 146398–146406, FAQ group 94 (23), blog 146456 published; Telegram post published by the operator; ozon #53 #54 #58 closed, #9 not planned. Yandex 2.0.12 on EDD 821; CDEK 2.3.0.12 on EDD 216. Open: key rotation (DaData and CDEK test keys — his word), framework cards #1526, #1532, #1519, #1528, the open PR #1478, card #1342 (close or rephrase — his word). **Next session s210: docs audit, autonomous overnight** (last audit s183, 15.10.2026). Rig :8973: Ozon 2.0.0 ACTIVE, provider `cdek`; DaData keys only as wp-env constants (read lengths, never print). Detail: `sessions/s209.md`.
-**Earlier — as of 2026-11-02 (s208):** framework 2.0.20–2.0.22 released (#1534, #1539, #1543); Yandex 2.0.12 on EDD 821; Ozon 2.0.0 built on framework 2.0.22 and accepted on the rig by the operator. Detail: `sessions/s208.md`.
-**Earlier — as of 2026-10-31 (s207, overnight):** framework **2.0.19** released (`6e4f0415`: #1417, `FEATURE_MARKUP` / `FREE_SHIPPING` / `ROUNDING` / `DELIVERY_TIME` / `ORDER_AMOUNT_LIMITS`); Yandex 2.0.12 merged and rig-verified; the Ozon 2.0.0 wave (ozon#52 #53 #55 #57, PRs #61–#65) merged; the rig acceptance found one blocker (checkout map 44 s) and four smaller defects, fixed by ozon PR #67. Detail: `sessions/s207.md`.
-**Earlier — as of 2026-10-31 (s206, with the operator):** framework 2.0.17 (`ece068f0`) and 2.0.18 (#1524, yandex#150) released; CDEK 2.3.0.12 on EDD 216; the operator's rig review widened the Ozon 2.0.0 scope (cards ozon#52–#60, framework #1417/#1526). Detail: `sessions/s206.md`.
-**Earlier — as of 2026-10-30 (s205):** style wave in six repos (#1518 et al.); «Ozon доставка» reached pre-release on `main` `a006b60`. Detail: `sessions/s205.md`.
-**Earlier — as of 2026-10-30 (s204, overnight autonomous):** framework `main` `ef5854ee`; **#1505** (PR #1514) and **#1511** (PR #1515) merged unreleased; the Ozon spec merged (PR #1512, corrections #1516); the Ozon plugin W0–W6, W1b and R1 built on `main` `97ad183`. Detail: `sessions/s204.md`.
-**Earlier — as of 2026-10-30 (s203, with the operator):** CDEK **2.3.0.11** released (tag `v2.3.0.11` on `f161a25c`, framework 2.0.16) and published on EDD 216 — fixes edostavka#156 (city search locked to the previous city's region). Framework card **#1511** filed for the shared client cause. **«Ozon доставка»:** brainstorm done, decisions binding in `research/2026-10-30-ozon-gap-refresh/decisions.md` (2.0.0 of EDD 58107; pickup + lockers + courier; plugin-owned postings; returns in the first release; phone first), live API measured, design spec in **PR #1512 (critic pending)**. Ozon repo `~/Projects/woodev-ozon-delivery` registered in Orca; branch `kalbac/s203-groundwork` unmerged. Next: overnight autonomous Ozon build toward pre-release. Detail: `sessions/s203.md`.
-**Earlier — as of 2026-10-29 (s202):** framework **2.0.16** released; **T-Bank 2.0.0** released and on EDD 1849. Detail: `sessions/s202.md`.
-**Earlier — as of 2026-10-28 (s201):** framework `main` got #1485 (licence command nonces) and #1480 (hosted-gateway pending / verification / stable reference), released in 2.0.16; the handler-architecture hosted path still has both bugs → #1500. Detail: `sessions/s201.md`.
-**Earlier sessions:** see `SESSION-LOG.md` (s198–s200 `sessions/s198.md`…`sessions/s200.md`, s194 `sessions/s194.md`, s195 `sessions/s195.md`, s191–s193 `sessions/s191.md`…`sessions/s193.md`, s190 `sessions/s190.md`, s189 `sessions/s189.md`).
+**As of 2026-11-02 (s209, with the operator, MacBook):** framework **2.0.22** (tag `v2.0.22` on `2f95bdd3`), planned next **2.0.23**; no framework code changed in s209. **«Ozon Доставка» 2.0.0 is RELEASED:** GitHub `v2.0.0` (tag on `c7f771b7`, asset sha256 `f226f7bb…c6d3`), EDD **58107** serves 2.0.0; card, docs 146398–146406, FAQ group 94 (23), blog 146456 published; Telegram post published by the operator; ozon #53 #54 #58 closed, #9 not planned. Yandex 2.0.12 on EDD 821; CDEK 2.3.0.12 on EDD 216. Open: key rotation (DaData and CDEK test keys — his word), framework cards #1526, #1532, #1519, #1528, the open PR #1478. **Next session s210: docs audit, autonomous overnight** (last audit s183, 15.10.2026). Rig :8973: Ozon 2.0.0 ACTIVE, provider `cdek`; DaData keys only as wp-env constants (read lengths, never print). Detail: `sessions/s209.md`.
+**Earlier sessions:** `SESSION-LOG.md` (index) and `sessions/sNN.md` hold the per-session state of s189–s208.
 
 ✅ **Fixtures carry real download ids `9001`-`9005`** (#910), so `LicenseCommandEndpointTest` drives
 the real signed-envelope route. The admin license REST route refuses an ambiguous id (#907) but
@@ -93,7 +85,7 @@ region whose `key()` is not in the settlement's own `ancestors()` is refused. �
 `Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that IS
 its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open issues — 55, measured 12.10.2026 (s171):** board Инбокс has **1** item, **#922** (Supermemory, parked by his word).
+**Open issues — 54 in this repo, measured 02.11.2026 (s210):** board №6 holds 52 framework + 2 edostavka cards in Бэклог, Инбокс has **1** item, **#922** (Supermemory, parked by his word).
 ⚠ Count with
 `gh issue list --repo kalbac/woodev-plugin-framework --state open --limit 500 --json number` and `project item-list --limit 1000` — s127's 53 was an undercount from
 exactly that trap, and a naive reader reports a milestone-carrying card as empty. **PRIORITY LIVES ON
@@ -142,7 +134,7 @@ deliberate hole and needs its own ruleset** —
 `vendor/bin/phpcs --standard=phpcs-line-length.xml --report=summary ./woodev`; why it cannot be revived from the CLI: gotcha
 `a-phpcs-rule-silenced-by-exclude-pattern-cannot-be-revived-from-the-cli`.
 
-⚠ **`AGENTS.md` and this file both run near their 28 KB gates** — any addition must displace something.
+⚠ **`CLAUDE.md` (12 KB cap), `next-session-prompt.md` (16 KB cap) and this file (28 KB cap) run near their `lint:docs` gates** (`scripts/lint-docs.mjs`) — any addition must displace something.
 
 **The checkout invariants that survive their cards** — #708: `validate()` enforces a takeover
 field's `required` only when its condition owns the field AND WooCommerce rendered it. #707: ask
@@ -228,7 +220,7 @@ flakiness, the three field modes and their Russian labels — is one line under 
 ⚠ Before probing `test-cdek` credentials, read gotcha
 `the-cdek-fixture-credentials-are-not-the-option-they-look-like` — the obvious option is a decoy.
 
-**`@since` ceiling:** `composer.json` → `extra.woodev.planned-release` currently says `2.0.3`; the released `VERSION` is `2.0.2`. `SinceTagCeilingTest` enforces the configured ceiling. See `AGENT-RULES.md` Rule 5 (semver, and inherited code → `1.0.0`).
+**`@since` ceiling:** `composer.json` → `extra.woodev.planned-release` is the authority and `SinceTagCeilingTest` enforces it; the current values live in `AGENTS.md` (Tech stack table). See `AGENT-RULES.md` Rule 5 (semver, and inherited code → `1.0.0`).
 
 **Agents and Orca — the recipes, the caps and the launch traps are
 [wiki/orchestrating-agents-with-orca.md](wiki/orchestrating-agents-with-orca.md).** The two facts
@@ -246,7 +238,7 @@ Gotchas: count in the `GOTCHAS.md` header.
 
 | Stage | Status | Notes |
 |---|---|---|
-| S0 Platform Split | ✅ DONE | tag `platform-v2-split-done`; base platform-neutral, resolver minimal, clean-break Phase 3 shims deleted |
+| S0 Platform Split | ✅ DONE | the `platform-v2-*` git tags no longer exist (see ADR-005); base platform-neutral, resolver minimal, clean-break Phase 3 shims deleted |
 | S1 Shipping | ✅ DONE | PR #20; PSR-4 module; rate/packing seam + conformance audit |
 | S2 Box-packer | ✅ DONE | PR #21/#22; woven into rate-calc single-seam template |
 | S3 Licensing | ✅ DONE | need-license (PR #25) → React UI (PR #31) → webhooks + Ed25519 signing (PR #35) |
@@ -264,11 +256,6 @@ there is historical evidence, not a fresh acceptance run. The live programme sta
 
 ## Known Bugs / Open debt
 
-- **#1361:** framework-domain loading fix prepared on `fix/1361-framework-textdomain` for 2.0.5:
-  shared init-0 loader (including older resolvers), explicit bundled fallback, locale reloads, lazy gateway milestones/pickup labels.
-  Validation and delivery: [s188](sessions/s188.md#framework-translations-1361). Release VERSION unchanged.
-
-- **#1289 / PR #1353:** merged s186 (`7a74a8d8`); [validation](sessions/s186.md).
 - [⚠️] `class-payment-gateway.php` ~3.6k lines — trait-extraction candidate (#117).
 - **s184 open debt:** >1000 variations are silently truncated by the wizard (cap 20×50, rated near-zero, not carded). (#1332, the
   #1279 upstream issue and the rig orders were all closed on 16.10.2026.)
@@ -320,7 +307,7 @@ This section retains mutable state and the operating warnings.
   [wiki/rig-pickup-walkthrough.md](wiki/rig-pickup-walkthrough.md).
 ## Infrastructure Reference
 
-- **Version:** `Woodev_Plugin::VERSION` (in `woodev/class-plugin.php`) = 2.0.20, released at tag `v2.0.20`. **Raising VERSION on `main` publishes a release** — do it deliberately (#285).
-- **PHP target:** 8.1 · **WP min:** 6.6 · **WC min:** 7.0
+- **Version:** `Woodev_Plugin::VERSION` (in `woodev/class-plugin.php`) — the current value is in `woodev/class-plugin.php` (a release gets the matching `vX.Y.Z` tag). **Raising VERSION on `main` publishes a release** — do it deliberately (#285).
+- **PHP target:** 7.4–8.x (Composer dev platform 8.1) · **WP min:** 6.6 · **WC min:** 7.0
 - **Tests:** Brain Monkey (unit) + WP Test Library (integration). `composer check` = phpcs + phpstan L3 + unit. JS tests must run **from bash**, not PowerShell (gotcha `powershell-drops-the-roots-flag-from-the-jest-command`).
 - **CI:** GitHub Actions. **Merge PRs:** `gh pr merge <N> --squash --delete-branch` only after every job is confirmed green with state CLEAN; never `gh pr merge --auto`.

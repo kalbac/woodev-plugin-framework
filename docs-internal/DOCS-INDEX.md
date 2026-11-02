@@ -38,7 +38,6 @@ woodev_framework/
 │   ├── astro.config.mjs             #   site config + explicit sidebar
 │   ├── src/content/docs/            #   pages: getting-started/, core/, settings/, shipping/, payments/, reference/
 │   └── plugins/                     #   build-time %%FRAMEWORK_VERSION%% replacement
-│   └── overrides/home.html, assets/stylesheets/extra.css
 ├── docs-internal/                   # Internal docs → AI agents only
 │   ├── next-session-prompt.md       # Per-session handoff — every session starts here
 │   ├── CURRENT-STATE.md, SESSION-LOG.md (index), GOTCHAS.md (topic map)
@@ -61,28 +60,32 @@ woodev_framework/
 │   ├── class-helper.php             # Static utility helpers
 │   ├── admin/                       # Admin pages
 │   ├── api/                         # HTTP API base classes
+│   ├── account/, assets/, competitor/ # Account page, shared assets, competitor notice
 │   ├── box-packer/                  # Box packing algorithm
 │   ├── compatibility/               # HPOS + WooCommerce compat
+│   ├── error-reporting/             # Error reporter (opt-in)
 │   ├── handlers/                    # Blocks + script handlers
+│   ├── http/, languages/            # HTTP helpers, translation catalogues
 │   ├── licensing/                   # License key + EDD store integration (incl. updater/ — plugin update mechanism)
 │   ├── payment-gateway/             # Payment gateway base classes (~13.9k lines; main file ~3.6k)
 │   ├── rest-api/                    # REST API routes
 │   ├── settings-api/                # Typed settings framework
+│   ├── settings-page/, setup/       # woodev-settings page, setup wizard engine
 │   ├── shipping-method/             # Shipping plugin + method bases
 │   └── utilities/                   # Async requests, background jobs
 ├── tests/
 │   ├── unit/                        # Brain Monkey + Mockery (no WP needed)
 │   ├── integration/                 # WP_UnitTestCase (wp-env)
-│   └── _fixtures/                   # 10 fixture plugins (+ data fixtures)
+│   └── _fixtures/                   # 9 fixture plugins (+ data fixtures)
 ├── .ai/                             # AI agents and skills
-│   ├── agents/                      # 6 sub-agents
+│   ├── agents/                      # 5 sub-agents
 │   ├── skills/                      # 7 skill directories
 │   └── QUICK-REFERENCE.md
 └── .github/workflows/               # CI: ci.yml, dependabot-auto-merge.yml, docs.yml,
                                      #     integration-tests.yml, markdown-lint.yml, pr-triage.yml
 ```
 
-CI workflows: `ci.yml` (jobs: `unit-tests`, `test-js` — jest, added s55 PR #184, `secrets` — gitleaks, `assets` — build parity, `release`), `dependabot-auto-merge.yml`, `docs.yml`, `integration-tests.yml`, `markdown-lint.yml`, `pr-triage.yml`.
+CI workflows: `ci.yml` (jobs: `version`, `lint`, `compat`, `unit-tests`, `test-js` — jest, added s55 PR #184, `secrets` — gitleaks, `assets` — build parity, `release`), `dependabot-auto-merge.yml`, `docs.yml`, `integration-tests.yml`, `markdown-lint.yml`, `pr-triage.yml`.
 
 ---
 
@@ -115,9 +118,9 @@ CI workflows: `ci.yml` (jobs: `unit-tests`, `test-js` — jest, added s55 PR #18
 
 ## Specs / Plans / Research (live dirs — what remains after the s60 sweep)
 
-> The table below was three rows for four months while the directories grew to 13 specs and 7 plans
-> (flagged by the s104 audit, completed in s119). A design document stays here after its work ships:
-> it records WHY the shape is what it is, and the `Shipped` column says which ones that applies to.
+> A design document stays here after its work ships: it records WHY the shape is what it is, and the
+> `Shipped` column says which ones that applies to. No spec count is written here — the counts went
+> stale twice (s104, s210); `ls specs/` is the count.
 
 | Spec | Purpose | Shipped |
 |------|---------|---------|
@@ -136,7 +139,14 @@ CI workflows: `ci.yml` (jobs: `unit-tests`, `test-js` — jest, added s55 PR #18
 | `specs/2026-08-25-shipping-tools-section.md` | The «Инструменты» section of the «Доставка» tab | ✅ |
 | `specs/2026-09-07-sp10-orders-page-design.md` | SP-10 «Заказы доставки» — the orders page: columns, filters, actions left open by #694 | ✅ |
 | `specs/2026-09-27-710-create-edit-order-design.md` | #710 «Создать заказ» / «Редактировать» — admin order wizard; operator’s brainstorm s141, increments I0–I8 | ✅ |
-| `specs/2026-10-30-ozon-delivery-v2-plugin-design.md` | Ozon Delivery plugin (new product) on Framework 2.0.16 — phone-first checkout, plugin-owned postings, returns; s203 decisions in `research/2026-10-30-ozon-gap-refresh/` | design |
+| `specs/2026-10-04-error-reporter-design.md` | Framework PHP error reporter (#130) — consent, scope, anonymity, rate limits | ✅ |
+| `specs/2026-10-04-sp11-block-checkout-design.md` | SP-11 — Checkout Blocks location and pickup adapter (#1078, decisions #1086) | ✅ |
+| `specs/2026-10-06-cdek-v2-plugin-design.md` | CDEK v2 plugin (`woocommerce-edostavka` 2.3.x), written from scratch on Framework v2 | ✅ |
+| `specs/2026-10-08-setup-wizard-v2-contract.md` | Setup-wizard v2 contract (#109 engine, #1177 CDEK migration wizard) | ✅ |
+| `specs/2026-10-12-yandex-v2-plugin-design.md` | Yandex Delivery v2 plugin (`woocommerce-yandex-delivery` 2.0.x) — the second carrier for the v2 release | ✅ |
+| `specs/2026-10-21-russian-post-v2-plugin-design.md` | Russian Post v2 plugin (`woodev-russian-post` 2.0.x) | ✅ |
+| `specs/2026-10-27-tbank-v2-plugin-design.md` | T-Bank «Рассрочки и кредиты» v2 plugin (`woodev-vkredit` 2.0.0) — the first payment plugin on v2 | ✅ |
+| `specs/2026-10-30-ozon-delivery-v2-plugin-design.md` | Ozon Delivery plugin (new product, released 2.0.0) — phone-first checkout, plugin-owned postings, returns; s203 decisions in `research/2026-10-30-ozon-gap-refresh/` | ✅ |
 
 | Plan | Implements |
 |------|------------|
@@ -152,26 +162,27 @@ CI workflows: `ci.yml` (jobs: `unit-tests`, `test-js` — jest, added s55 PR #18
 That instruction is superseded — parallel work runs through Orca orchestration now
 (`AGENT-RULES.md`). The plans are kept as the record of what was built, not as live instructions.
 
-Shipped-work specs/plans are moved to `archive/specs/` and `archive/plans/`.
+Only the pre-s60 SP-5 map specs/plans were moved to `archive/specs/` and `archive/plans/`; shipped specs stay in `specs/` (see the note above).
 
 ⚠ **`research/` and `reviews/` are NOT archived** — this line used to say they were, and it was wrong:
 both are live directories an agent writes to, and `archive/` holds only the pre-s60 ones. No file count
 here: the last two counts written into this line went stale. **The earlier docs audits live in
-`reviews/`** — `2026-08-29-docs-and-board-audit.md` (s104) and `2026-09-05-644-part1-contradiction-map.md`
-(s119); read them before starting another, so a fixed contradiction is not re-litigated.
+`reviews/`** — `2026-08-29-docs-and-board-audit.md` (s104), `2026-09-05-644-part1-contradiction-map.md`
+(s119), `2026-10-12-docs-audit-s171.md`, `2026-10-15-docs-audit-s183.md` and `2026-11-02-docs-audit-s210.md`;
+read them before starting another (next due: s220), so a fixed contradiction is not re-litigated.
 
 ## Architecture Decision Records
 
 | File | Purpose |
 |------|---------|
 | `adr/README.md` | ADR index |
-| `adr/001` … `adr/012` | Bootstrap loader · plugin-type inheritance (002 superseded by 005) · minimal resolver · loader API · **005 clean-break policy** · capability-gated feature seam · React admin stack · conditional-fields operator set · map-provider seam (source, not library) · Yandex Maps JS API 2.1 not 3.0 · vendored IMask + generated phone masks · shipping `includes()` stays authoritative |
+| `adr/001` … `adr/012` | Bootstrap loader · plugin-type inheritance (002 partly superseded by 005 — the metadata bridge only; inheritance still holds) · minimal resolver · loader API · **005 clean-break policy** · capability-gated feature seam · React admin stack · conditional-fields operator set · map-provider seam (source, not library) · Yandex Maps JS API 2.1 not 3.0 · vendored IMask + generated phone masks · shipping `includes()` stays authoritative |
 
 ## Migration / Wiki / Autodev
 
 | File | Purpose |
 |------|---------|
-| `migration/edostavka-data-preservation-checklist.md` · `migration/yandex-...` | Per-plugin release-blocking data contracts (enforced at rewrite time) |
+| `migration/edostavka-data-preservation-checklist.md` · `migration/yandex-data-preservation-checklist.md` · `migration/signature-probe.md` | Per-plugin data contracts (applied — both rewrites shipped) and the signature-probe record. The Russian Post checklist lives in the plugin repo, not here |
 | `wiki/` | Deep-dive topic references — the full list with a line each is [wiki/README.md](wiki/README.md) |
 | `archive/autodev-loop-runbook.md` | Autodev loop runbook — retired s183 (`tools/autodev/` and `.autodev/` removed); history only |
 
@@ -188,7 +199,7 @@ Passed-gate audits, the completed platform-v2 program docs (plans/specs/prompts)
 
 ## Public Docs
 
-`website/` (repo root) is the public documentation site (Astro Starlight). Its pages are being written against framework 2.0.2 in s183; scope, editing and publishing rules are in [`DOCS-SCHEMA.md`](DOCS-SCHEMA.md#public-docs-website--how-to-work-with-them).
+`website/` (repo root) is the public documentation site (Astro Starlight). It is published (GitHub Pages); the framework version is substituted at build time and the pages are updated per release. Scope, editing and publishing rules are in [`DOCS-SCHEMA.md`](DOCS-SCHEMA.md#public-docs-website--how-to-work-with-them).
 
 ---
 

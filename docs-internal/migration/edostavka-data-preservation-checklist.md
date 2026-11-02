@@ -1,5 +1,5 @@
 # Edostavka Data-Preservation Checklist (Pilot Fixture)
-> Status: reference checklist for the eventual production rewrite
+> Status: applied — the production rewrite shipped on v2 (CDEK 2.x, EDD 216); kept as the data-contract record
 > Date: 2026-06-03
 > Plugin ID: edostavka (production); fixture id: woodev-edostavka-pilot
 > EDD download ID: 216
