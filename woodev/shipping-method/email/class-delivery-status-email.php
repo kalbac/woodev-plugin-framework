@@ -76,6 +76,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 		private string $own_tracking_number = '';
 
 		/**
+		 * @var string Default body used instead of {@see self::$default_body} when the order has several parcels and the
+		 *             merchant has not written a body of their own; empty when this email has no such variant.
+		 */
+		private string $default_body_multiple;
+
+		/**
 		 * Constructor.
 		 *
 		 * @since 2.0.2
@@ -87,8 +93,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 		 * @param string   $heading         Default heading.
 		 * @param string   $body            Default body.
 		 * @param bool     $enabled         Whether enabled by default.
+		 * @param string   $body_multiple   Default body for an order with several parcels (@since 2.0.25); empty for none.
 		 */
-		public function __construct( string $id, string $title, string $description, array $statuses, string $subject, string $heading, string $body, bool $enabled ) {
+		public function __construct( string $id, string $title, string $description, array $statuses, string $subject, string $heading, string $body, bool $enabled, string $body_multiple = '' ) {
 			$this->id               = $id;
 			$this->title            = $title;
 			$this->description      = $description;
@@ -97,6 +104,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 			$this->default_subject  = $subject;
 			$this->default_heading  = $heading;
 			$this->default_body     = $body;
+			$this->default_body_multiple = $body_multiple;
 			$this->default_enabled  = $enabled;
 			$this->template_html    = 'emails/shipment-status.php';
 			$this->template_plain   = 'emails/plain/shipment-status.php';
@@ -412,6 +420,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 		}
 
 		/**
+		 * The body text with placeholders: the merchant's, or the default.
+		 *
+		 * An order with zero or one parcel gets the default exactly as it has always read. Several parcels get the
+		 * variant laid out for a list of numbers — but only while the body is still the framework's default; a body the
+		 * merchant wrote or edited is never replaced.
+		 *
+		 * @return string
+		 */
+		private function body_text(): string {
+			$body = (string) $this->get_option( 'body', $this->default_body );
+
+			if ( count( $this->shipments ) > 1 && '' !== $this->default_body_multiple && $body === $this->default_body ) {
+				return $this->default_body_multiple;
+			}
+
+			return $body;
+		}
+
+		/**
 		 * @return string
 		 */
 		public function get_content_html() {
@@ -421,7 +448,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 					'email' => $this,
 					'order' => $this->object,
 					'heading' => $this->get_heading(),
-					'body' => $this->format_html( (string) $this->get_option( 'body', $this->default_body ) ),
+					'body' => $this->format_html( $this->body_text() ),
 				],
 				'',
 				$this->template_base
@@ -438,7 +465,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 					'email' => $this,
 					'order' => $this->object,
 					'heading' => $this->get_heading(),
-					'body' => $this->format_string( $this->get_option( 'body', $this->default_body ) ),
+					'body' => $this->format_string( $this->body_text() ),
 				],
 				'',
 				$this->template_base

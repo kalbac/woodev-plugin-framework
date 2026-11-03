@@ -9,7 +9,7 @@ All notable changes to Woodev Plugin Framework are documented here.
 - **shipping**: #1575 `Delivery_Status::buyer_label()`
 
 ### Bug Fixes
-- **shipping**: #1575 delivery status emails print every tracking number of an order with several parcels, each as its own link; the default handed-over email body no longer ends in a stray full stop
+- **shipping**: #1575 delivery status emails print every tracking number of an order with several parcels, each as its own link; the default handed-over email body is laid out as a list for several parcels and reads exactly as before for none or one
 
 ### Documentation
 - **shipping**: #1575 public page "Buyer tracking"

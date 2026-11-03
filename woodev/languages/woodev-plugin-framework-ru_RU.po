@@ -5542,6 +5542,9 @@ msgstr "Письмо покупателю после доставки заказ
 msgid "Sent to the customer after a return or failed delivery."
 msgstr "Письмо покупателю при возврате или неудачной доставке."
 
+msgid "Your shipment has been handed over to {carrier_name}. Tracking number: {tracking_number}. {tracking_url}"
+msgstr "Ваше отправление передано в {carrier_name}. Номер отслеживания: {tracking_number}. {tracking_url}"
+
 msgid "Your shipment has been handed over to {carrier_name}.\nTracking number: {tracking_number}\n{tracking_url}"
 msgstr "Ваше отправление передано в {carrier_name}.\nНомер отслеживания: {tracking_number}\n{tracking_url}"
 

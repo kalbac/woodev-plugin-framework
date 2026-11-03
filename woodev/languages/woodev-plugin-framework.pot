@@ -5557,6 +5557,9 @@ msgstr ""
 msgid "Sent to the customer after a return or failed delivery."
 msgstr ""
 
+msgid "Your shipment has been handed over to {carrier_name}. Tracking number: {tracking_number}. {tracking_url}"
+msgstr ""
+
 msgid "Your shipment has been handed over to {carrier_name}.\nTracking number: {tracking_number}\n{tracking_url}"
 msgstr ""
 
