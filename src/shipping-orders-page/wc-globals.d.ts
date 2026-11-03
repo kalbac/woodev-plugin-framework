@@ -297,6 +297,44 @@ export interface WcLinkProps {
 	children?: ReactNode;
 }
 
+/** `Chart`'s props the analytics tab uses (README). `data` rows are `{ date, [series]: { label, value } }`. */
+export interface WcChartProps {
+	data: Array< Record< string, unknown > >;
+	title?: string;
+	mode?: 'item-comparison' | 'time-comparison';
+	chartType?: 'line' | 'bar';
+	interval?: 'day' | 'week' | 'month';
+	allowedIntervals?: string[];
+	itemsLabel?: string;
+	emptyMessage?: string;
+	isRequesting?: boolean;
+	path?: string;
+	query?: Record< string, string | undefined >;
+	legendPosition?: 'bottom' | 'side' | 'top' | 'hidden';
+	tooltipValueFormat?: string | ( ( value: number ) => string );
+	valueType?: string;
+}
+
+/** `SummaryNumber`'s props (README). */
+export interface WcSummaryNumberProps {
+	label: string;
+	value?: string | number | null;
+	prevValue?: string | number | null;
+	prevLabel?: string;
+	delta?: number | null;
+	reverseTrend?: boolean;
+	selected?: boolean;
+	onToggle?: () => void;
+	children?: ReactNode;
+}
+
+/** `DateRangeFilterPicker`'s props (README); `dateQuery` is what `getCurrentDates()` / `getDateParamsFromQuery()` resolve. */
+export interface WcDateRangeFilterPickerProps {
+	dateQuery: object;
+	isoDateFormat: string;
+	onRangeSelect: ( data: Record< string, string | undefined > ) => void;
+}
+
 declare global {
 	interface Window {
 		wc?: {
@@ -325,6 +363,15 @@ declare global {
 				AdvancedFilters?: ComponentType< WcAdvancedFiltersProps >;
 				/** #841 — the «Все / Новые» scope links above the table. See {@link WcLinkProps}. */
 				Link?: ComponentType< WcLinkProps >;
+				/**
+				 * The «Аналитика» tab's building blocks (#711). Prop names are the ones in each component's README
+				 * (`packages/js/components/src/{chart,summary,date-range-filter-picker}/README.md`) and all four are
+				 * exported by the installed `wc-components` bundle (measured: WC 11.2.1, `assets/client/admin/components/index.js`).
+				 */
+				Chart?: ComponentType< WcChartProps >;
+				SummaryList?: ComponentType< { children: () => ReactNode } >;
+				SummaryNumber?: ComponentType< WcSummaryNumberProps >;
+				DateRangeFilterPicker?: ComponentType< WcDateRangeFilterPickerProps >;
 			};
 			/**
 			 * `@woocommerce/navigation`, behind the `wc-navigation` script handle

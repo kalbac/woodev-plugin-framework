@@ -15,7 +15,7 @@
 
 import { addFilter } from '@wordpress/hooks';
 import { __ } from '@wordpress/i18n';
-import OrdersPage from './app';
+import PageTabs from './page-tabs';
 import type { WcAdminPage } from './wc-globals';
 import './style.scss';
 
@@ -24,7 +24,7 @@ addFilter(
 	'woodev/shipping-orders',
 	( pages: WcAdminPage[] ) => {
 		pages.push( {
-			container: OrdersPage,
+			container: PageTabs,
 			path: '/woodev-shipping-orders',
 			breadcrumbs: [ __( 'Заказы доставки', 'woodev-plugin-framework' ) ],
 			// The page sits under the WooCommerce menu, so it opens the same item

@@ -1,6 +1,6 @@
 # #711 — Delivery analytics («Аналитика» tab): data research and implementation spec
 
-**Status:** draft — stage 1 of the s212 overnight (research + spec). Stage 2 implements §4–§7; stage 3 is §6.
+**Status:** IMPLEMENTED on branch `kalbac/711-roi-analytics` (stage 2, s212, draft PR — critic pending, not merged). §6 (WC Analytics report) is NOT built; see §9 for where the implementation diverged from this text.
 **Date:** 2026-11-03 (s212)
 **Scope:** framework only (`woodev-plugin-framework`); every carrier at once; **no framework release** (operator, #711 comment 03.11.2026).
 **Evidence:** framework paths are relative to this worktree (branch `kalbac/711-roi-analytics`, base `3dc1d019`, framework 2.0.23),
@@ -39,7 +39,7 @@ docs say; HPOS **on**). Labels: **READ** (code), **MEASURED** (rig query), **int
 | Needed | Stored? | Key / source | Notes |
 |---|---|---|---|
 | Carrier | yes | order meta `Orders_Provider::get_marker_meta_key()` (one key per provider, **non-empty scalar value**); first registered provider with a non-empty marker wins (`Orders_Registry::resolve_provider_for_order()` `:536`) | an order MAY carry several markers (CDEK writes one per package); the rule «first wins» must be reproduced in SQL |
-| Shipping method | yes | WC shipping line: `woocommerce_order_items` (`order_item_type='shipping'`) + itemmeta `method_id`, `instance_id`, `total`, `total_tax` | several lines per order are possible |
+| Shipping method | yes | WC shipping line: `woocommerce_order_items` (`order_item_type='shipping'`) + itemmeta `method_id`, `instance_id`, `cost`, `total_tax` (**MEASURED** on the rig; `total` does not exist) | several lines per order are possible |
 | Shipping paid by the buyer | yes | HPOS `wc_order_operational_data.shipping_total_amount` + `shipping_tax_amount`; legacy postmeta `_order_shipping` + `_order_shipping_tax` | **MEASURED** columns on the rig |
 | Order total | yes | HPOS `wc_orders.total_amount`; legacy `_order_total` | `wc_order_stats` also has it but is an async Action-Scheduler lookup, empty on the rig → **not used** |
 | Order date | yes | HPOS `wc_orders.date_created_gmt`; legacy `post_date_gmt` | |
@@ -88,7 +88,7 @@ substitute and §8 F2 the forward-only fix.
 | `avg_shipping` | `shipping_paid / orders` (null when `orders = 0`) |
 | `shipping_share` | `shipping_paid / revenue` (null when `revenue = 0`) |
 
-Per **shipping method**: group the shipping LINES by itemmeta `method_id`: `lines` = `COUNT(line)`, `shipping_paid` = `SUM(line.total + line.total_tax)`,
+Per **shipping method**: group the shipping LINES by itemmeta `method_id`: `lines` = `COUNT(line)`, `shipping_paid` = `SUM(line.cost + line.total_tax)`,
 `orders` = `COUNT(DISTINCT order)`. Method rows are NOT additive (an order with two methods counts in both) — the table says so in a
 footnote, and the totals row always comes from the carrier aggregate. `revenue` is not shown per method (an order total cannot be split across lines
 honestly). Each method row is attributed to the carrier whose `get_method_ids()` contains the `method_id`; a method no provider claims goes to the
@@ -336,6 +336,27 @@ Same REST, different frame. Confirmed against the WC docs (Context7, `client/adm
 | F7 | Refunds | **not netted** from revenue | WC Analytics nets them, but a per-order refund sum needs another correlated subquery per leg; v1 labels revenue «по сумме заказов». Easy add-on later. |
 | F8 | Excluded WC statuses | `pending, failed, cancelled, refunded, checkout-draft, auto-draft, trash`, filterable | `on-hold` is kept (paid-by-transfer shops live there); flips to match whatever the operator's reports expect. |
 | F9 | Multi-currency | not converted; one `currency` per response | out of the framework's market. |
+
+## 9. Implementation notes — where the code diverged from §1–§8 (stage 2)
+
+| # | Spec said | Implemented | Why |
+|---|---|---|---|
+| 1 | Shipping line price = itemmeta `total` + `total_tax` (§1.2, §2.2, §4.1) | `cost` + `total_tax` | Measured on the rig: a shipping item stores `method_id`, `instance_id`, `cost`, `total_tax`, `taxes`; there is no `total`. |
+| 2 | A method row belongs to the carrier whose `get_method_ids()` contains it (§2.2) | Grouped by (the ORDER's carrier, `method_id`) | One statement, no second lookup; a method id seen under two carriers is two rows, which is what the merchant sees. |
+| 3 | Default period `last_30_days` vs previous period (§5, F4) | `period=month&compare=previous_period` | `@woocommerce/date` has no such preset (measured: today, yesterday, week, month, quarter, year and their `last_*`, custom); `getCurrentDates()` throws on an unknown period. |
+| 4 | Chart: `time-comparison` for one carrier (§5) | Always `item-comparison`, one series per carrier, no previous-period overlay | The `time-comparison` data shape is not documented in the README; the previous period is shown on the KPI tiles (value, previous value, change). The server still returns `previous_intervals`. |
+| 5 | Money via `@woocommerce/currency` (§5) | `Intl.NumberFormat('ru-RU')` in `analytics/format.ts` | No runtime dependency to measure per WooCommerce version; `window.wc.currency` is a module object, not a callable (see the note in `wc-globals.d.ts`). |
+| 6 | Tab module imported lazily (§5) | Plain import; `page-tabs.tsx` wraps `OrdersPage` and `AnalyticsTab` | `React.lazy` is not usable in the wc-admin bundle context. `index.tsx` registers `PageTabs`; `app.tsx` changed only by removing `RoiPanel`. |
+| 7 | Methods for both periods | Methods are read for the current period only | The table has no comparison; saves a statement. Per request: 3 statements current + 2 previous (carrier, day). |
+| 8 | Cache invalidation on four events (§4.2) | Registered by `Orders_Registry::add_hooks()` through `Analytics_Cache::register()` | Same as spec; named here because it is the one place existing code was touched on the PHP side (plus `register_rest()`, `class-map.php`, `Shipping_Plugin::includes()`). |
+| 9 | Chart header controls | `interval` / `type` written to the URL by `Chart` itself (`path`, `query` props) and read back by the tab | WooCommerce's own mechanism. |
+
+**Rig measurement (HPOS, WC 11.2.1, 634 orders / ~700 marker rows, five providers, MariaDB):** server-side 4.2–4.8 ms per statement for the carrier and day statements,
+6.1–6.7 ms for the method statement, repeated runs identical (the first run is no slower: the data fits in the buffer pool). One report = 3 + 2 statements ≈ 25 ms cold.
+Results were cross-checked against independent counts (189 realistic orders, 33 delivered). `EXPLAIN`: the driver uses `meta_key_value`, the order join is by `PRIMARY`, the
+operational-data join by `order_id`, the correlated lookups by `order_id_meta_key_meta_value` (with a tiny filesort on `ORDER BY id DESC LIMIT 1`). Two legs showed the
+status lookup on `meta_key_value` instead — a small-table optimiser choice; whether it flips at scale is exactly what the 50 000-order measurement (§4.3, still open, a card) must answer.
+The legacy-datastore statement was run for syntax only (the rig is HPOS); its parity with HPOS is pinned by the unit tests and must be confirmed on a legacy install.
 
 ## Related
 
