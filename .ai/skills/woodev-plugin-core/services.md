@@ -57,7 +57,10 @@ Source of truth: `woodev/error-reporting/`, spec `docs-internal/specs/2026-10-04
   `( $dsn, $plugin_id )` — and returns `null` when nothing results; the owner of an event is routed to its
   own DSN. Your callback answers **only for your own plugin id** and returns `$dsn` untouched for every
   other, or two plugins on one site overwrite each other. Take the DSN from the operator — never invent one,
-  and keep server details out of the public repo. Register it at file level in the entry file (before
+  and keep server details out of the public repo. **The new plugin's GlitchTip project NAME MUST equal its GitHub
+  repo name under `kalbac`, lowercase** (e.g. `woocommerce-edostavka`): the n8n triage workflow (homelab-ai, since 03.11.2026)
+  derives the repo — cards, webhook — from the project name, so a new plugin needs no workflow edit (GlitchTip's UI does not edit
+  the slug). The DSN carries the numeric project id, so a rename never breaks sending. Register it at file level in the entry file (before
   `plugins_loaded`, when the reporter is installed), with priority and `accepted_args = 2`:
 
   ```php
