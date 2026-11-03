@@ -5153,6 +5153,118 @@ msgstr ""
 msgid "Заказов доставки пока нет."
 msgstr ""
 
+#: assets/build/shipping-orders-page/index.js:23
+msgid "Выручка по перевозчикам"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:23
+msgid "Оплачено за доставку по перевозчикам"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:23
+msgid "Доля доставленных по перевозчикам"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:23
+msgid "Заказы по перевозчикам"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:23
+msgid "Перевозчики"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:23
+msgid "За этот период данных нет."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:23
+msgid "Заказы"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:23
+msgid "Выручка"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:23
+msgid "Оплачено за доставку"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:23
+msgid "Отказы и возвраты"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:23
+msgid "От заказа до вручения, дней"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:24
+msgid "в работе: %s"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:24
+msgid "Нет данных: у доставленных заказов нет даты завершения"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:25
+msgid "по %1$s из %2$s доставленных"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:25
+msgid "Предыдущий период:"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:25
+msgid "Способ"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:25
+msgid "По перевозчикам"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:25
+msgid "В работе"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:25
+msgid "Отказ / возврат"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:25
+msgid "Нет статуса"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:25
+msgid "Нет заказов с доставкой перевозчиками."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:25
+msgid "По способам доставки"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:25
+msgid "Заказ с несколькими способами доставки учитывается в каждом из них."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:25
+msgid "Не удалось загрузить аналитику."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:25
+msgid "Аналитика недоступна: эта версия WooCommerce не предоставляет нужные компоненты."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:25
+msgid "За выбранный период нет заказов с доставкой перевозчиками. Выберите период шире."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:25
+msgid "Разделы страницы"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:25
+msgid "Аналитика"
+msgstr ""
+
 #: assets/build/shipping-orders-page/index.js:16
 msgid "Заказов"
 msgstr ""
