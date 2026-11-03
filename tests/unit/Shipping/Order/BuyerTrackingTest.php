@@ -17,7 +17,15 @@ require_once dirname( __DIR__, 4 ) . '/woodev/compatibility/class-plugin-compati
 require_once dirname( __DIR__, 4 ) . '/woodev/compatibility/class-order-compatibility.php';
 require_once __DIR__ . '/tracking-order-fakes.php';
 
-/** @covers \Woodev\Framework\Shipping\Order\Buyer_Tracking */
+/**
+ * Each test runs in its own process: the block formats dates with `wc_date_format()`, and a Brain Monkey stub of it
+ * would stay defined for every later test — `License_Messages` and its tests assert the path where that function is
+ * ABSENT (PlatformNeutralLicensingTest), so a leaked stub fails them depending on the run order (seen on PHP 7.4 in CI).
+ *
+ * @runTestsInSeparateProcesses
+ * @preserveGlobalState disabled
+ * @covers \Woodev\Framework\Shipping\Order\Buyer_Tracking
+ */
 final class BuyerTrackingTest extends TestCase {
 
 	use Fakes_Tracking_Orders;
