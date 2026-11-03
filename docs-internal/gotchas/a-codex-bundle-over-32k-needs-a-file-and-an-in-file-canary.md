@@ -62,6 +62,12 @@ want before trusting a verdict.
 - A stream of `PostToolUse hook (failed) — error: hook exited with code 1` lines is noise from a
   hook, not from the review. Both critics completed and delivered verdicts through it.
 
+## s212 — a path in the brief is not proof that the critic read the file
+
+A luna critic in s212 could not read files under the coordinator's `/private/tmp/…` scratchpad, while the sol critics
+could. It did not report the failure; it reviewed from the brief text alone. So the acceptance criteria belong in the
+dispatch text itself, and the file path is a supplement, never the only carrier of the scope.
+
 ## Related
 
 - [codex-shell-sandbox-broken-windows](codex-shell-sandbox-broken-windows.md) — why inline bundles exist at all

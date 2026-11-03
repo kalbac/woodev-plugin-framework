@@ -61,6 +61,14 @@ const dates = dateApi.getCurrentDates( own, DEFAULT );
 resolver throws `Cannot find compare:` without it. That is a contract of their input, not a
 feature of your UI.
 
+## The silent variant: a custom range without `compare` (s212)
+
+`getDateParamsFromQuery( query, DEFAULT )` does not throw when `period=custom` arrives with `after` and `before` but no
+`compare`. It falls back to the default window instead, so a report built on it shows the wrong period with no error.
+#711's custom-range URL did exactly that on the rig until the fix. Build the query with BOTH `period` and `compare` set
+(a default `compare` if your page compares nothing), then hand it to the resolvers. Measured after the fix on the rig:
+`period=custom&after=2026-06-01&before=2026-06-30` with no `compare` shows «Произвольно (Июн 1 - 30, 2026)» and 13 orders.
+
 ## Related
 
 - [wc-admin-re-adds-the-date-params-a-menu-link-does-not-carry](wc-admin-re-adds-the-date-params-a-menu-link-does-not-carry.md) — what `getPersistedQuery()` does and does not do

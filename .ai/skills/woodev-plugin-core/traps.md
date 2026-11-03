@@ -62,6 +62,10 @@ internals (class-map wiring, build/CI, rig) are left out on purpose. Shipping-sp
   `docs-internal/gotchas/user-meta-is-network-wide-on-multisite-store-per-site-data-with-user-option.md`
 - A `NOT IN` meta clause drops every row that has no such meta; only `NOT EXISTS` makes a LEFT JOIN. →
   `docs-internal/gotchas/a-not-in-meta-query-silently-drops-rows-that-have-no-meta-at-all.md`
+- Raw SQL through `$wpdb->prepare()`: numbered `%1$s` string placeholders go in UNQUOTED (only bare `%s` is quoted),
+  and reusing one numbered placeholder raises `_doing_it_wrong`. Quote `'%1$s'` yourself, one argument per occurrence,
+  and run the statement through the real prepare — a fake `wpdb` in a unit test never executes it. →
+  `docs-internal/gotchas/wpdb-prepare-inserts-numbered-string-placeholders-unquoted.md`
 - `add_option()` is NOT an atomic lock: it checks existence, then upserts, so two contenders both «acquire» (found in the CDEK
   courier-status scan, edostavka PR #113). Claim with `INSERT IGNORE` + an owner token and a conditional UPDATE/DELETE
   (`woodev/error-reporting/class-dispatcher.php`), or `GET_LOCK` (`Order_Lock`). →
