@@ -56,6 +56,7 @@ export function methodRows( methods: AnalyticsMethod[], carriers: AnalyticsCarri
 		cell( method.label, method.label ),
 		cell( carrierLabel( method.carrier_id ), carrierLabel( method.carrier_id ) ),
 		cell( formatCount( method.orders ), method.orders ),
+		cell( formatMoney( method.revenue, currency ), method.revenue ),
 		cell( formatMoney( method.shipping_paid, currency ), method.shipping_paid ),
 	] );
 }
@@ -78,6 +79,7 @@ export function Tables( { carriers, methods, currency, loading }: TablesProps ) 
 		{ key: 'method', label: __( 'Способ', 'woodev-plugin-framework' ), required: true },
 		{ key: 'carrier', label: __( 'Перевозчик', 'woodev-plugin-framework' ) },
 		{ key: 'orders', label: __( 'Заказы', 'woodev-plugin-framework' ) },
+		{ key: 'revenue', label: __( 'Выручка', 'woodev-plugin-framework' ) },
 		{ key: 'shipping_paid', label: __( 'Оплачено за доставку', 'woodev-plugin-framework' ) },
 	];
 

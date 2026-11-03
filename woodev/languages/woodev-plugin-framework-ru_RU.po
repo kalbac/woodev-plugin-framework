@@ -6215,6 +6215,10 @@ msgstr ""
 msgid "Такого перевозчика нет."
 msgstr ""
 
+#: shipping-method/rest-api/class-analytics-controller.php:152
+msgid "Не удалось собрать аналитику. Попробуйте позже."
+msgstr ""
+
 #: shipping-method/rest-api/class-analytics-controller.php:219
 msgid "Укажите период: начало не может быть позже конца."
 msgstr ""

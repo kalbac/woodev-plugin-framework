@@ -7,6 +7,7 @@
  */
 
 import { buildAnalyticsQuery } from '../../src/shipping-orders-page/analytics/analytics-rest';
+import { methodRows } from '../../src/shipping-orders-page/analytics/tables';
 import { buildChartData, isChartEmpty, seriesValue } from '../../src/shipping-orders-page/analytics/chart-data';
 import { DASH, formatCount, formatDays, formatMoney, formatShare } from '../../src/shipping-orders-page/analytics/format';
 import type { AnalyticsCarrier, AnalyticsInterval, AnalyticsRequest, AnalyticsSeries } from '../../src/shipping-orders-page/analytics/types';
@@ -135,5 +136,22 @@ describe( 'buildAnalyticsQuery', () => {
 
 		expect( none.has( 'compare_after' ) ).toBe( false );
 		expect( half.has( 'compare_after' ) ).toBe( false );
+	} );
+} );
+
+describe( 'methodRows', () => {
+	it( 'puts the revenue of each shipping method beside its orders and what the buyers paid for delivery', () => {
+		const rows = methodRows(
+			[
+				{ method_id: 'cdek_pickup', carrier_id: 'cdek', label: 'СДЭК: пункт', orders: 4, lines: 4, revenue: 10000, shipping_paid: 600 },
+				{ method_id: 'cdek_door', carrier_id: 'cdek', label: 'СДЭК: дверь', orders: 9, lines: 10, revenue: 30000, shipping_paid: 1800 },
+			],
+			CARRIERS,
+			'RUB'
+		);
+
+		expect( rows ).toHaveLength( 2 );
+		expect( rows[ 0 ].map( ( cell ) => cell.value ) ).toEqual( [ 'СДЭК: пункт', 'СДЭК', 4, 10000, 600 ] );
+		expect( String( rows[ 1 ][ 3 ].display ).replace( /\s/g, '' ) ).toContain( '30000' );
 	} );
 } );

@@ -90,8 +90,7 @@ substitute and §8 F2 the forward-only fix.
 
 Per **shipping method**: group the shipping LINES by itemmeta `method_id`: `lines` = `COUNT(line)`, `shipping_paid` = `SUM(line.cost + line.total_tax)`,
 `orders` = `COUNT(DISTINCT order)`. Method rows are NOT additive (an order with two methods counts in both) — the table says so in a
-footnote, and the totals row always comes from the carrier aggregate. `revenue` is not shown per method (an order total cannot be split across lines
-honestly). Each method row is attributed to the carrier whose `get_method_ids()` contains the `method_id`; a method no provider claims goes to the
+footnote, and the totals row always comes from the carrier aggregate. **Revenue per method (critic round 1, acceptance item 1):** `revenue` = the sum of ORDER totals, each order once per distinct (carrier, method, order) — an order with two lines of one method adds its total once; an order with two different methods adds it to both rows (hence the footnote). It is not a split of the total across lines, which cannot be done honestly. Each method row is attributed to the carrier whose `get_method_ids()` contains the `method_id`; a method no provider claims goes to the
 carrier of the order's marker.
 
 ### 2.3 Delivery outcomes (per carrier, total)
@@ -175,7 +174,7 @@ weakened.
   "currency": "RUB",
   "totals":   { "current": Metrics, "previous": Metrics | null, "delta": { "orders": 12.5, "revenue": null, … } },
   "carriers": [ { "id": "edostavka", "label": "СДЭК", "current": Metrics, "previous": Metrics | null, "delta": {…} } ],
-  "methods":  [ { "method_id": "edostavka_pickup", "carrier_id": "edostavka", "label": "…", "orders": 40, "lines": 41, "shipping_paid": 12345.0 } ],
+  "methods":  [ { "method_id": "edostavka_pickup", "carrier_id": "edostavka", "label": "…", "orders": 40, "lines": 41, "revenue": 98765.0, "shipping_paid": 12345.0 } ],
   "intervals":          [ { "start": "2026-10-01", "end": "2026-10-01", "totals": Series, "carriers": { "edostavka": Series } } ],
   "previous_intervals": [ … same shape … ] | null,
   "coverage": { "delivered": 120, "time_sample": 87 },
@@ -248,7 +247,7 @@ period runs the SAME statements with its own bounds (3 + 3 queries, plus the car
   `woodev_shipping_analytics_version` (autoload `no`).
 - TTL: **10 minutes** when the range contains today (store time), **1 hour** otherwise. The tab's «Обновить» control sends `refresh=1`.
 - Invalidation = bump the version, **debounced to once per 60 s** (a short transient lock), on `woodev_shipping_delivery_status_changed`,
-  `woocommerce_new_order`, `woocommerce_order_status_changed` and `woodev_shipping_order_exported`. A busy shop therefore writes one option per minute at most.
+  `woocommerce_new_order`, `woocommerce_order_status_changed`, `woodev_shipping_order_exported`, **`woocommerce_update_order`** (any save — a money or shipping-method edit changes no status) and `woocommerce_trash_order` / `untrash_order` / `delete_order` (critic round 1). A busy shop therefore writes one option per minute at most.
 - The provider signature (`md5` of ids + status-map hashes + marker keys) keeps a plugin update that changes a `status_map` from serving stale buckets.
 - Worst case with the cache cold = the 3–6 aggregate statements once per ten minutes per distinct filter set; the endpoint is rate-limited by the cache itself
   (a request storm hits the transient, not the DB). No cron, no per-order writes, no calls to the carriers.
@@ -349,7 +348,11 @@ Same REST, different frame. Confirmed against the WC docs (Context7, `client/adm
 | 6 | Tab module imported lazily (§5) | Plain import; `page-tabs.tsx` wraps `OrdersPage` and `AnalyticsTab` | `React.lazy` is not usable in the wc-admin bundle context. `index.tsx` registers `PageTabs`; `app.tsx` changed only by removing `RoiPanel`. |
 | 7 | Methods for both periods | Methods are read for the current period only | The table has no comparison; saves a statement. Per request: 3 statements current + 2 previous (carrier, day). |
 | 8 | Cache invalidation on four events (§4.2) | Registered by `Orders_Registry::add_hooks()` through `Analytics_Cache::register()` | Same as spec; named here because it is the one place existing code was touched on the PHP side (plus `register_rest()`, `class-map.php`, `Shipping_Plugin::includes()`). |
-| 9 | Chart header controls | `interval` / `type` written to the URL by `Chart` itself (`path`, `query` props) and read back by the tab | WooCommerce's own mechanism. |
+| 9 | Chart header controls | `interval` / `chartType` written to the URL by `Chart` itself (`path`, `query` props) and read back by the tab | WooCommerce's own mechanism. |
+| 10 | — (not in the spec) | Revenue per shipping method: an inner statement collapses an order's lines of one method into one row (`MAX(total)`), the outer sums the orders | Acceptance item 1 of the card; the first version of §2.2 dropped it. |
+| 11 | Chart header controls write `type` | They write **`chartType`** (read off the installed bundle: `handleTypeToggle` → `updateQueryString({ chartType })`); the tab reads that key | Round-1 finding 2. |
+| 12 | — | `DateRangeFilterPicker` is keyed by its effective date query; `Chart` is keyed by (metric, answer, period, carrier filter, carriers) so it remounts | The installed components copy their props into state once (`getResetState()` in the constructor; legend `visibleKeys` rebuilt only when the SET of series keys changes). Round-1 findings 3 and 4. |
+| 13 | Values bound through numbered placeholders `%N$s` (§4.1) | A string is bound as `'%N$s'` — **quoted in the template** — and every use of a bound value is its own argument; `run()` throws on a database error and the route answers a generic 500 that is never cached | Rig smoke: `wpdb::prepare()` inserts a numbered placeholder UNQUOTED (so every uncached request failed on a date) and raises a `_doing_it_wrong` notice when one numbered placeholder is used twice; an error returned as `[]` was cached as «no orders». Verified through the REAL `$wpdb->prepare()` on the rig: Oct 1–31 = 26 orders, Jul 1–Sep 30 = 88, Jun = 13 (carrier, day and method statements all agree). |
 
 **Rig measurement (HPOS, WC 11.2.1, 634 orders / ~700 marker rows, five providers, MariaDB):** server-side 4.2–4.8 ms per statement for the carrier and day statements,
 6.1–6.7 ms for the method statement, repeated runs identical (the first run is no slower: the data fits in the buffer pool). One report = 3 + 2 statements ≈ 25 ms cold.

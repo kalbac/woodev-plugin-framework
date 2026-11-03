@@ -164,13 +164,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Qu
 				$buckets[] = "SUM( x.bucket = '" . $bucket . "' ) AS " . $bucket;
 			}
 
-			$timed  = "x.bucket = 'delivered' AND x.diff > 0 AND x.diff <= " . $this->bind( $args, self::MAX_DELIVERY_SECONDS, 'd' );
+			// Each use of the bound is its OWN argument: `wpdb::prepare()` counts placeholder occurrences against arguments and
+			// raises a `_doing_it_wrong` notice (HTML in the REST body under WP_DEBUG) when one numbered placeholder is used twice.
 			$select = 'SELECT x.carrier, COUNT(*) AS orders, SUM( x.total ) AS revenue, SUM( x.ship ) AS shipping_paid, '
 				. implode( ', ', $buckets )
-				. ', SUM( CASE WHEN ' . $timed . ' THEN 1 ELSE 0 END ) AS time_sample'
-				. ', SUM( CASE WHEN ' . $timed . ' THEN x.diff ELSE 0 END ) AS time_seconds';
+				. ', SUM( CASE WHEN ' . $this->timed_sql( $args ) . ' THEN 1 ELSE 0 END ) AS time_sample'
+				. ', SUM( CASE WHEN ' . $this->timed_sql( $args ) . ' THEN x.diff ELSE 0 END ) AS time_seconds';
 
 			return [ $select . ' FROM ( ' . $legs . ' ) x GROUP BY x.carrier', $args ];
+		}
+
+		/**
+		 * The condition that an order counts for the average time: delivered, with a completion after the order, within the bound.
+		 *
+		 * @param array<int,mixed> $args statement arguments so far; appended to.
+		 * @return string
+		 */
+		private function timed_sql( array &$args ): string {
+			return "x.bucket = 'delivered' AND x.diff > 0 AND x.diff <= " . $this->bind( $args, self::MAX_DELIVERY_SECONDS, 'd' );
 		}
 
 		/**
@@ -205,6 +216,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Qu
 		 * The line's price is itemmeta `cost` plus `total_tax` (measured on the rig: a shipping item stores `method_id`,
 		 * `instance_id`, `cost`, `total_tax`, `taxes`).
 		 *
+		 * **Revenue is summed once per distinct (carrier, method, order).** The inner statement collapses an order's lines of one
+		 * method into a single row — carrying the order total once, the lines counted and their prices summed — and only then does
+		 * the outer statement add the orders up, so an order with two lines of the same method adds its total once. An order with two
+		 * DIFFERENT methods still counts in both (the method rows are not additive, which the tab's footnote says).
+		 *
 		 * @since 2.0.24
 		 *
 		 * @param Orders_Provider[]   $providers registered providers, in registry order.
@@ -223,13 +239,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Qu
 			$prefix = $this->wpdb->prefix;
 			$price  = 'COALESCE( CAST( cost.meta_value AS DECIMAL(18,4) ), 0 ) + COALESCE( CAST( tax.meta_value AS DECIMAL(18,4) ), 0 )';
 
-			$sql = 'SELECT x.carrier, method.meta_value AS method_id, COUNT( DISTINCT x.order_id ) AS orders, COUNT(*) AS line_count, SUM( ' . $price . ' ) AS shipping_paid'
+			$per_order = 'SELECT x.carrier, method.meta_value AS method_id, x.order_id, MAX( x.total ) AS total, COUNT(*) AS line_count, SUM( ' . $price . ' ) AS shipping_paid'
 				. ' FROM ( ' . $legs . ' ) x'
 				. ' JOIN ' . $prefix . "woocommerce_order_items line ON line.order_id = x.order_id AND line.order_item_type = 'shipping'"
 				. ' JOIN ' . $prefix . "woocommerce_order_itemmeta method ON method.order_item_id = line.order_item_id AND method.meta_key = 'method_id'"
 				. ' LEFT JOIN ' . $prefix . "woocommerce_order_itemmeta cost ON cost.order_item_id = line.order_item_id AND cost.meta_key = 'cost'"
 				. ' LEFT JOIN ' . $prefix . "woocommerce_order_itemmeta tax ON tax.order_item_id = line.order_item_id AND tax.meta_key = 'total_tax'"
-				. ' GROUP BY x.carrier, method.meta_value';
+				. ' GROUP BY x.carrier, method.meta_value, x.order_id';
+
+			$sql = 'SELECT m.carrier, m.method_id, COUNT(*) AS orders, SUM( m.line_count ) AS line_count, SUM( m.shipping_paid ) AS shipping_paid, SUM( m.total ) AS revenue'
+				. ' FROM ( ' . $per_order . ' ) m GROUP BY m.carrier, m.method_id';
 
 			return [ $sql, $args ];
 		}
@@ -481,15 +500,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Qu
 		/**
 		 * Registers one statement argument and returns its numbered placeholder.
 		 *
+		 * ⚠ A string placeholder is returned QUOTED (`'%3$s'`). `wpdb::prepare()` adds quotes only around the plain `%s`; a
+		 * numbered `%3$s` is inserted RAW, "for backward compatibility" — so a bare numbered placeholder turns a date into
+		 * `< 2026-10-31 21:00:00`, a syntax error on every uncached request (found on the rig by the coordinator's smoke). With the quotes
+		 * in the template, `prepare()` still escapes the value; the quotes are only the delimiters. An integer (`%d`) needs none.
+		 *
 		 * @param array<int,mixed> $args  statement arguments so far; appended to.
 		 * @param string|int       $value the value.
 		 * @param string           $type  `s` or `d`.
-		 * @return string e.g. `%3$s`.
+		 * @return string e.g. `'%3$s'` or `%4$d`.
 		 */
 		private function bind( array &$args, $value, string $type ): string {
 			$args[] = $value;
 
-			return '%' . count( $args ) . '$' . $type;
+			$placeholder = '%' . count( $args ) . '$' . $type;
+
+			return 's' === $type ? "'" . $placeholder . "'" : $placeholder;
 		}
 
 		/**
@@ -512,17 +538,30 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Qu
 		/**
 		 * Prepares and runs a statement.
 		 *
+		 * A failed statement is an EXCEPTION, never an empty result: an empty array would read as «no orders», be cached and be drawn as
+		 * zeros. `wpdb` errors are suppressed around the call so the database's HTML never lands in the REST body, then reported
+		 * through `last_error`; the message carries the database's text for the server log, never the SQL.
+		 *
 		 * @param array{0:string,1:array<int,mixed>}|null $statement `[ sql, args ]`, or null for «no provider in scope».
 		 * @return array<int,array<string,mixed>>
+		 * @throws \RuntimeException When the database reports an error or the statement could not be prepared.
 		 */
 		private function run( ?array $statement ): array {
 			if ( null === $statement ) {
 				return [];
 			}
 
-			$rows = $this->wpdb->get_results( $this->wpdb->prepare( $statement[0], $statement[1] ), 'ARRAY_A' ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- prepared on this line; the statement is composed of class literals and numbered placeholders only.
+			$previous                 = $this->wpdb->suppress_errors( true );
+			$this->wpdb->last_error   = '';
+			$rows                     = $this->wpdb->get_results( $this->wpdb->prepare( $statement[0], $statement[1] ), 'ARRAY_A' ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- prepared on this line; the statement is composed of class literals and numbered placeholders only.
+			$error                    = (string) $this->wpdb->last_error;
+			$this->wpdb->suppress_errors( $previous );
 
-			return is_array( $rows ) ? $rows : [];
+			if ( '' !== $error || ! is_array( $rows ) ) {
+				throw new \RuntimeException( '' !== $error ? $error : 'The analytics statement could not be prepared.' );
+			}
+
+			return $rows;
 		}
 	}
 

@@ -238,6 +238,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Re
 					'label'         => (string) call_user_func( $this->method_label, $method_id ),
 					'orders'        => (int) $row['orders'],
 					'lines'         => (int) $row['line_count'],
+					'revenue'       => round( (float) $row['revenue'], 2 ),
 					'shipping_paid' => round( (float) $row['shipping_paid'], 2 ),
 				];
 			}

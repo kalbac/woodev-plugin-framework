@@ -10,6 +10,7 @@
  */
 
 import '@testing-library/jest-dom';
+import { Component } from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import AnalyticsTab from '../../src/shipping-orders-page/analytics/analytics-tab';
 import PageTabs from '../../src/shipping-orders-page/page-tabs';
@@ -60,6 +61,61 @@ const EMPTY = { ...RESPONSE, totals: { current: metrics( { orders: 0 } ), previo
 
 const moment = ( text: string ) => ( { format: () => text } );
 
+/**
+ * `DateRangeFilterPicker` as the installed component behaves: it copies `dateQuery` into its OWN state when it is created and never
+ * syncs afterwards (WC 11.2.1, `getResetState()` in the constructor only) — so a picker that is not remounted keeps showing and editing
+ * the period it was first opened on.
+ */
+class StatefulDatePicker extends Component< any, { period: string } > {
+	constructor( props: any ) {
+		super( props );
+		this.state = { period: props.dateQuery.period };
+	}
+
+	render() {
+		return <div data-testid="picker">PICKER EDITS: { this.state.period }</div>;
+	}
+}
+
+/**
+ * `Chart` as the installed component behaves for legend visibility (`_l`, WC 11.2.1): in item-comparison mode the visible series are
+ * initialised once from the series with a non-zero total, and rebuilt only when the SET of data keys changes. The toggle buttons emit
+ * what the real header controls emit: `{ chartType }` (handleTypeToggle) through `updateQueryString( patch, path, query )`.
+ */
+class StatefulChart extends Component< any, { visible: string[] } > {
+	constructor( props: any ) {
+		super( props );
+		this.state = { visible: StatefulChart.nonZeroKeys( props.data ) };
+	}
+
+	static keys( data: any[] ): string[] {
+		return Array.from( new Set( data.flatMap( ( point ) => Object.keys( point ).filter( ( key ) => 'date' !== key ) ) ) ).sort();
+	}
+
+	static nonZeroKeys( data: any[] ): string[] {
+		return StatefulChart.keys( data ).filter( ( key ) => data.some( ( point ) => point[ key ]?.value > 0 ) );
+	}
+
+	componentDidUpdate( previous: any ) {
+		if ( StatefulChart.keys( previous.data ).join() !== StatefulChart.keys( this.props.data ).join() ) {
+			this.setState( { visible: StatefulChart.nonZeroKeys( this.props.data ) } );
+		}
+	}
+
+	render() {
+		const { title, interval, chartType, path, query } = this.props;
+
+		return (
+			<div data-testid="chart">
+				{ title }|{ interval }|{ this.props.data.length }|{ this.props.emptyMessage ?? '' }|type={ chartType }|visible=[{ this.state.visible.join( ',' ) }]
+				<button type="button" onClick={ () => ( window as any ).wc.navigation.updateQueryString( { chartType: 'bar' }, path, query ) }>
+					bar
+				</button>
+			</div>
+		);
+	}
+}
+
 let query: Record< string, string | undefined >;
 let listeners: Array< () => void >;
 const updateQueryString = jest.fn();
@@ -78,19 +134,21 @@ function installWooCommerce() {
 		},
 		date: {
 			isoDateFormat: 'YYYY-MM-DD',
-			getDateParamsFromQuery: () => ( { period: 'month', compare: 'previous_period', after: moment( '2026-10-01' ), before: moment( '2026-10-31' ) } ),
-			getCurrentDates: () => ( {
-				primary: { label: 'x', range: 'x', after: moment( '2026-10-01' ), before: moment( '2026-10-31' ) },
-				secondary: { label: 'y', range: 'y', after: moment( '2026-09-01' ), before: moment( '2026-09-30' ) },
-			} ),
+			getDateParamsFromQuery: ( q: Record< string, string | undefined > ) => ( { period: q.period ?? 'month', compare: 'previous_period', after: moment( '2026-10-01' ), before: moment( '2026-10-31' ) } ),
+			getCurrentDates: ( q: Record< string, string | undefined > ) =>
+				'last_month' === q.period
+					? {
+							primary: { label: 'x', range: 'x', after: moment( '2026-09-01' ), before: moment( '2026-09-30' ) },
+							secondary: { label: 'y', range: 'y', after: moment( '2026-08-01' ), before: moment( '2026-08-31' ) },
+					  }
+					: {
+							primary: { label: 'x', range: 'x', after: moment( '2026-10-01' ), before: moment( '2026-10-31' ) },
+							secondary: { label: 'y', range: 'y', after: moment( '2026-09-01' ), before: moment( '2026-09-30' ) },
+					  },
 		},
 		components: {
-			DateRangeFilterPicker: () => <div>DATE PICKER</div>,
-			Chart: ( props: any ) => (
-				<div data-testid="chart">
-					{ props.title }|{ props.interval }|{ props.data.length }|{ props.emptyMessage ?? '' }
-				</div>
-			),
+			DateRangeFilterPicker: StatefulDatePicker,
+			Chart: StatefulChart,
 			SummaryList: ( { children }: any ) => <div>{ children() }</div>,
 			SummaryNumber: ( props: any ) => (
 				<button type="button" disabled={ ! props.onToggle } aria-pressed={ !! props.selected } onClick={ props.onToggle }>
@@ -230,6 +288,66 @@ describe( 'AnalyticsTab', () => {
 		render( <AnalyticsTab /> );
 
 		await screen.findByText( /Заказы: 10/ );
+	} );
+} );
+
+describe( 'AnalyticsTab — the WooCommerce components it hands state to (#711 critic round 1)', () => {
+	it( 'the chart\'s line/bar control writes `chartType`, and the tab reads that same key', async () => {
+		( fetchAnalytics as jest.Mock ).mockResolvedValue( RESPONSE );
+		render( <AnalyticsTab /> );
+		expect( await screen.findByTestId( 'chart' ) ).toHaveTextContent( 'type=line' );
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'bar' } ) );
+
+		// What the installed Chart emits (handleTypeToggle → updateQueryString( { chartType }, path, query )).
+		expect( updateQueryString ).toHaveBeenCalledWith( { chartType: 'bar' }, '/woodev-shipping-orders', {} );
+
+		query = { chartType: 'bar' };
+		act( () => listeners.forEach( ( listener ) => listener() ) );
+
+		expect( screen.getByTestId( 'chart' ) ).toHaveTextContent( 'type=bar' );
+		expect( fetchAnalytics ).toHaveBeenCalledTimes( 1 ); // a chart toggle is not a new report.
+	} );
+
+	it( 'the date picker follows the URL after browser Back: it edits the period the report shows', async () => {
+		query = { period: 'month' };
+		( fetchAnalytics as jest.Mock ).mockResolvedValue( RESPONSE );
+		render( <AnalyticsTab /> );
+		expect( await screen.findByTestId( 'picker' ) ).toHaveTextContent( 'PICKER EDITS: month' );
+
+		query = { period: 'last_month' }; // the merchant picks September…
+		await act( async () => listeners.forEach( ( listener ) => listener() ) );
+		expect( screen.getByTestId( 'picker' ) ).toHaveTextContent( 'PICKER EDITS: last_month' );
+
+		query = { period: 'month' }; // …and presses Back.
+		await act( async () => listeners.forEach( ( listener ) => listener() ) );
+
+		expect( screen.getByTestId( 'picker' ) ).toHaveTextContent( 'PICKER EDITS: month' );
+	} );
+
+	it( 'a carrier that plots all-zero for one metric is visible again once the next metric is positive', async () => {
+		query = { chart: 'delivered_share' }; // nothing delivered yet: the carrier\'s share is 0 at every point.
+		( fetchAnalytics as jest.Mock ).mockResolvedValue( RESPONSE );
+		render( <AnalyticsTab /> );
+		expect( await screen.findByTestId( 'chart' ) ).toHaveTextContent( 'visible=[]' ); // empty: the series is hidden.
+
+		fireEvent.click( screen.getByText( /^Заказы:/ ) );
+		query = { chart: 'orders' };
+		act( () => listeners.forEach( ( listener ) => listener() ) );
+
+		expect( screen.getByTestId( 'chart' ) ).toHaveTextContent( 'visible=[СДЭК]' );
+	} );
+
+	it( 'the same remount rule covers a new period: a carrier hidden in one report is drawn in the next', async () => {
+		const quiet = { ...RESPONSE, intervals: [ { ...RESPONSE.intervals[ 0 ], carriers: { cdek: series( 0 ) } } ] };
+		( fetchAnalytics as jest.Mock ).mockResolvedValueOnce( quiet ).mockResolvedValue( { ...RESPONSE, generated_at: '2026-11-03T06:00:00+00:00' } );
+		render( <AnalyticsTab /> );
+		expect( await screen.findByTestId( 'chart' ) ).toHaveTextContent( 'visible=[]' );
+
+		query = { period: 'last_month' };
+		act( () => listeners.forEach( ( listener ) => listener() ) );
+
+		await waitFor( () => expect( screen.getByTestId( 'chart' ) ).toHaveTextContent( 'visible=[СДЭК]' ) );
 	} );
 } );
 

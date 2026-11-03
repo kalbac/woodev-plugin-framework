@@ -16,6 +16,18 @@ import type { OrdersProvider } from '../rest';
 import type { AnalyticsDateRange } from './date-range';
 import { navigate, type WcQuery } from './wc-query';
 
+/**
+ * The picker's identity: the date query it shows. `DateRangeFilterPicker` copies `dateQuery` into its own state when it is created
+ * and never again (the installed component syncs only in its constructor), so after a browser Back / Forward the report and the
+ * button label follow the URL while an unkeyed picker would keep editing the period it was first opened on — and its next «Применить»
+ * would apply dates the merchant did not intend. WooCommerce's own `Filters` wrapper keys it the same way.
+ */
+export function pickerKey( range: AnalyticsDateRange ): string {
+	const { period, compare } = range.dateQuery;
+
+	return JSON.stringify( [ period, compare, range.after, range.before, range.compareAfter, range.compareBefore ] );
+}
+
 interface FiltersProps {
 	range: AnalyticsDateRange | null;
 	query: WcQuery;
@@ -38,7 +50,7 @@ export function Filters( { range, query, carrier, providers, loading, onRefresh 
 		<div className="woodev-analytics__filters">
 			{ DateRangeFilterPicker && range && isoDateFormat && (
 				<DateRangeFilterPicker
-					key="daterange"
+					key={ pickerKey( range ) }
 					dateQuery={ range.dateQuery }
 					isoDateFormat={ isoDateFormat }
 					onRangeSelect={ ( selection ) => navigate( selection, query ) }

@@ -143,8 +143,8 @@ final class AnalyticsReportTest extends TestCase {
 		$query->shouldReceive( 'day_rows' )->andReturn( [] );
 		$query->shouldReceive( 'method_rows' )->andReturn(
 			[
-				[ 'carrier' => 'cdek', 'method_id' => 'cdek_pickup', 'orders' => '2', 'line_count' => '2', 'shipping_paid' => '200.456' ],
-				[ 'carrier' => 'cdek', 'method_id' => 'cdek_door', 'orders' => '9', 'line_count' => '10', 'shipping_paid' => '900' ],
+				[ 'carrier' => 'cdek', 'method_id' => 'cdek_pickup', 'orders' => '2', 'line_count' => '2', 'revenue' => '10000.5', 'shipping_paid' => '200.456' ],
+				[ 'carrier' => 'cdek', 'method_id' => 'cdek_door', 'orders' => '9', 'line_count' => '10', 'revenue' => '30000', 'shipping_paid' => '900' ],
 			]
 		);
 
@@ -154,6 +154,8 @@ final class AnalyticsReportTest extends TestCase {
 		$this->assertSame( 'Метод cdek_door', $methods[0]['label'] );
 		$this->assertSame( 10, $methods[0]['lines'] );
 		$this->assertSame( 200.46, $methods[1]['shipping_paid'] );
+		$this->assertSame( 30000.0, $methods[0]['revenue'] );
+		$this->assertSame( 10000.5, $methods[1]['revenue'] );
 	}
 
 	public function test_the_interval_is_picked_from_the_range_and_the_range_is_echoed(): void {

@@ -32,8 +32,11 @@ final class AnalyticsQueryTest extends TestCase {
 			public $posts    = 'wp_posts';
 			public $postmeta = 'wp_postmeta';
 
-			public $prepared = [];
-			public $rows     = [ [ 'carrier' => 'cdek' ] ];
+			public $prepared   = [];
+			public $rows       = [ [ 'carrier' => 'cdek' ] ];
+			public $last_error = '';
+			public $fail_with  = '';
+			public $suppressed = [];
 
 			public function prepare( $sql, $args ) {
 				$this->prepared[] = [ $sql, $args ];
@@ -41,7 +44,20 @@ final class AnalyticsQueryTest extends TestCase {
 				return 'PREPARED';
 			}
 
+			public function suppress_errors( $suppress = true ) {
+				$previous           = ! empty( $this->suppressed ) && end( $this->suppressed );
+				$this->suppressed[] = $suppress;
+
+				return $previous;
+			}
+
 			public function get_results( $query, $output ) {
+				if ( '' !== $this->fail_with ) {
+					$this->last_error = $this->fail_with;
+
+					return null;
+				}
+
 				return 'PREPARED' === $query && 'ARRAY_A' === $output ? $this->rows : [];
 			}
 		};
@@ -159,8 +175,8 @@ final class AnalyticsQueryTest extends TestCase {
 	public function test_the_window_is_half_open_and_the_population_excludes_statuses(): void {
 		[ $sql ] = $this->query( true )->carrier_sql( [ $this->cdek() ], self::SCOPE );
 
-		$this->assertMatchesRegularExpression( '/o\.date_created_gmt >= %\d+\$s AND o\.date_created_gmt < %\d+\$s/', $sql );
-		$this->assertMatchesRegularExpression( '/o\.status NOT IN \( %\d+\$s, %\d+\$s \)/', $sql );
+		$this->assertMatchesRegularExpression( "/o\\.date_created_gmt >= '%\\d+\\\$s' AND o\\.date_created_gmt < '%\\d+\\\$s'/", $sql );
+		$this->assertMatchesRegularExpression( "/o\\.status NOT IN \\( '%\\d+\\\$s', '%\\d+\\\$s' \\)/", $sql );
 
 		[ $open ] = $this->query( true )->carrier_sql( [ $this->cdek() ], [ 'excluded' => [] ] + self::SCOPE );
 		$this->assertStringNotContainsString( 'NOT IN', explode( 'GROUP BY', explode( 'FROM ( SELECT DISTINCT', $open )[1] )[0] );
@@ -192,7 +208,20 @@ final class AnalyticsQueryTest extends TestCase {
 		$this->assertStringContainsString( "method.meta_key = 'method_id'", $sql );
 		$this->assertStringContainsString( "cost.meta_key = 'cost'", $sql );
 		$this->assertStringContainsString( "tax.meta_key = 'total_tax'", $sql );
-		$this->assertStringEndsWith( 'GROUP BY x.carrier, method.meta_value', $sql );
+		$this->assertStringEndsWith( 'GROUP BY m.carrier, m.method_id', $sql );
+	}
+
+	public function test_method_revenue_adds_an_order_total_once_per_carrier_method_and_order(): void {
+		[ $sql ] = $this->query( true )->method_sql( [ $this->cdek() ], self::SCOPE );
+
+		// The inner statement collapses an order's lines of one method into ONE row carrying the total once…
+		$this->assertStringContainsString( 'MAX( x.total ) AS total, COUNT(*) AS line_count', $sql );
+		$this->assertStringContainsString( 'GROUP BY x.carrier, method.meta_value, x.order_id', $sql );
+		// …and only the outer statement adds the orders up: revenue is never summed over the shipping lines.
+		$this->assertStringContainsString( 'SUM( m.total ) AS revenue', $sql );
+		$this->assertStringContainsString( 'COUNT(*) AS orders, SUM( m.line_count ) AS line_count', $sql );
+		$this->assertStringNotContainsString( 'SUM( x.total )', $sql );
+		$this->assertStringNotContainsString( 'COUNT( DISTINCT', $sql );
 	}
 
 	public function test_no_provider_in_scope_runs_no_query(): void {
@@ -209,5 +238,68 @@ final class AnalyticsQueryTest extends TestCase {
 
 		$this->assertSame( [ [ 'carrier' => 'cdek' ] ], $this->query( true, $db )->carrier_rows( [ $this->cdek() ], self::SCOPE ) );
 		$this->assertCount( 1, $db->prepared );
+	}
+
+	/**
+	 * The two `wpdb::prepare()` rules a numbered-placeholder statement lives or dies by, found on the rig (#711): a numbered `%N$s` is
+	 * inserted UNQUOTED ("for backward compatibility"), so every string placeholder must carry its own quotes; and prepare() counts placeholder
+	 * OCCURRENCES against arguments, so one numbered placeholder used twice raises a `_doing_it_wrong` notice (HTML in the REST body).
+	 * No WordPress is loaded here, so the rules are asserted on the template, for every statement and both datastores.
+	 *
+	 * @dataProvider statements
+	 */
+	public function test_the_template_obeys_the_wpdb_prepare_placeholder_rules( string $method, bool $hpos ): void {
+		[ $sql, $args ] = $this->query( $hpos )->{$method}( [ $this->cdek(), $this->yandex() ], self::SCOPE );
+
+		preg_match_all( '/%(\d+)\$([sd])/', $sql, $found, PREG_OFFSET_CAPTURE );
+
+		$this->assertCount( count( $args ), $found[0], 'one placeholder occurrence per argument' );
+		$numbers = array_column( $found[1], 0 );
+		$this->assertSame( count( $numbers ), count( array_unique( $numbers ) ), 'no numbered placeholder is used twice' );
+
+		foreach ( $found[0] as $i => [ $placeholder, $offset ] ) {
+			$quoted = "'" === $sql[ $offset - 1 ] && "'" === $sql[ $offset + strlen( $placeholder ) ];
+
+			if ( 's' === $found[2][ $i ][0] ) {
+				$this->assertTrue( $quoted, $placeholder . ' is a string and must be quoted in the template' );
+			} else {
+				$this->assertFalse( $quoted, $placeholder . ' is an integer and must not be quoted' );
+			}
+		}
+	}
+
+	public static function statements(): array {
+		return [
+			'carrier, HPOS'   => [ 'carrier_sql', true ],
+			'carrier, legacy' => [ 'carrier_sql', false ],
+			'day, HPOS'       => [ 'day_sql', true ],
+			'day, legacy'     => [ 'day_sql', false ],
+			'method, HPOS'    => [ 'method_sql', true ],
+			'method, legacy'  => [ 'method_sql', false ],
+		];
+	}
+
+	public function test_a_failed_statement_is_an_exception_not_an_empty_result_and_errors_are_suppressed_around_it(): void {
+		$db            = $this->wpdb();
+		$db->fail_with = 'Unknown column x';
+
+		try {
+			$this->query( true, $db )->carrier_rows( [ $this->cdek() ], self::SCOPE );
+			$this->fail( 'a database error must not read as «no orders»' );
+		} catch ( \RuntimeException $e ) {
+			$this->assertSame( 'Unknown column x', $e->getMessage() );
+			$this->assertStringNotContainsString( 'SELECT', $e->getMessage(), 'the SQL never travels in the message' );
+		}
+
+		$this->assertSame( [ true, false ], $db->suppressed, 'wpdb errors (HTML) are suppressed during the call and restored after it' );
+	}
+
+	public function test_a_statement_that_could_not_be_prepared_is_a_failure_too(): void {
+		$db = $this->wpdb();
+		$db->rows = null; // get_results() on an unprepared (empty) query gives null.
+
+		$this->expectException( \RuntimeException::class );
+
+		$this->query( true, $db )->day_rows( [ $this->cdek() ], self::SCOPE );
 	}
 }

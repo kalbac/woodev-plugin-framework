@@ -135,15 +135,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Analytics_Control
 				return $this->bad_request( 'woodev_shipping_analytics_unknown_carrier', __( 'Такого перевозчика нет.', 'woodev-plugin-framework' ) );
 			}
 
-			$hpos   = \Woodev_Plugin_Compatibility::is_hpos_enabled();
-			$answer = Analytics_Cache::fetch(
-				$this->cache_key( $params, $providers, $hpos ),
-				Analytics_Cache::ttl_for( $params['before'], $params['timezone'] ),
-				function () use ( $params, $providers, $hpos ): array {
-					return $this->build( $params, $providers, $hpos );
-				},
-				$params['refresh']
-			);
+			$hpos = \Woodev_Plugin_Compatibility::is_hpos_enabled();
+
+			try {
+				$answer = Analytics_Cache::fetch(
+					$this->cache_key( $params, $providers, $hpos ),
+					Analytics_Cache::ttl_for( $params['before'], $params['timezone'] ),
+					function () use ( $params, $providers, $hpos ): array {
+						return $this->build( $params, $providers, $hpos );
+					},
+					$params['refresh']
+				);
+			} catch ( \RuntimeException $e ) {
+				// Nothing was stored: a failed read must not be cached as an answer. The database's text goes to the log, not to the client.
+				error_log( '[woodev] Delivery analytics query failed: ' . $e->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic for the server log; the client gets a generic message.
+
+				return new \WP_Error( 'woodev_shipping_analytics_failed', __( 'Не удалось собрать аналитику. Попробуйте позже.', 'woodev-plugin-framework' ), [ 'status' => 500 ] );
+			}
 
 			return rest_ensure_response( $answer['data'] + [ 'cached' => $answer['cached'] ] );
 		}

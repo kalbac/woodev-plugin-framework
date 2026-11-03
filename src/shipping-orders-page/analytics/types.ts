@@ -53,6 +53,8 @@ export interface AnalyticsMethod {
 	label: string;
 	orders: number;
 	lines: number;
+	/** Order totals, each order once per (carrier, method) — gross, like the carrier table. */
+	revenue: number;
 	shipping_paid: number;
 }
 

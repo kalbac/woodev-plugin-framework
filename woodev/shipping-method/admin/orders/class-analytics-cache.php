@@ -21,7 +21,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Ca
 	 *
 	 * **Key.** The request, the provider signature and a DATA VERSION. Invalidation is bumping that version — one
 	 * option write, no scan of transients — on the events that change what the aggregates say: an order is created, its
-	 * status changes, it is exported, its delivery status changes. The bump is DEBOUNCED to once a minute with a short
+	 * status changes, it is exported, its delivery status changes, it is SAVED (`woocommerce_update_order`, fired by both
+	 * datastores — an edit of an order's total, its shipping price or its shipping method changes no status and fires none of the others) or it
+	 * is trashed, restored or deleted. The bump is DEBOUNCED to once a minute with a short
 	 * transient lock, so a busy shop writes one option a minute at most; the price is that a change inside that minute
 	 * waits for the TTL, which is why a range containing today lives only {@see self::TTL_LIVE} seconds.
 	 *
@@ -83,6 +85,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Ca
 			'woodev_shipping_order_exported',
 			'woocommerce_new_order',
 			'woocommerce_order_status_changed',
+			'woocommerce_update_order',
+			'woocommerce_trash_order',
+			'woocommerce_untrash_order',
+			'woocommerce_delete_order',
 		];
 
 		/**

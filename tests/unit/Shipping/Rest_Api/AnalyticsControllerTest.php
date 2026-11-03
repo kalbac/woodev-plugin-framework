@@ -143,4 +143,48 @@ final class AnalyticsControllerTest extends TestCase {
 	public function test_the_method_label_falls_back_to_the_id_without_woocommerce(): void {
 		$this->assertSame( 'cdek_door', $this->controller()->method_label( 'cdek_door' ) );
 	}
+
+	/**
+	 * Rig smoke (#711): a failing statement used to come back as «no orders», get cached and be drawn as zeros — with the database's HTML
+	 * in the body. It is now a 500 with a generic sentence, nothing is stored, and the database's text goes to the log only.
+	 */
+	public function test_a_failing_query_is_a_500_that_is_never_cached_and_leaks_no_database_text(): void {
+		$logged = [];
+		Functions\when( 'error_log' )->alias(
+			static function ( $line ) use ( &$logged ) {
+				$logged[] = $line;
+			}
+		);
+		$GLOBALS['wpdb'] = new class() {
+			public $prefix     = 'wp_';
+			public $posts      = 'wp_posts';
+			public $postmeta   = 'wp_postmeta';
+			public $last_error = '';
+
+			public function suppress_errors( $suppress = true ) {
+				return false;
+			}
+
+			public function prepare( $sql, $args ) {
+				return 'PREPARED';
+			}
+
+			public function get_results( $query, $output ) {
+				$this->last_error = "You have an error in your SQL syntax near '2026-10-31'";
+
+				return null;
+			}
+		};
+
+		$result = $this->controller()->get_report( $this->request( [ 'after' => '2026-10-01', 'before' => '2026-10-31' ] ) );
+
+		unset( $GLOBALS['wpdb'] );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'woodev_shipping_analytics_failed', $result->code );
+		$this->assertSame( 500, $result->data['status'] );
+		$this->assertStringNotContainsString( 'SQL', $result->message );
+		$this->assertSame( [], $this->transients, 'a failed read is not stored as an answer' );
+		$this->assertStringContainsString( 'SQL syntax', $logged[0], 'the database text reaches the server log' );
+	}
 }

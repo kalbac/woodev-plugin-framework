@@ -125,7 +125,8 @@ final class AnalyticsCacheTest extends TestCase {
 		$this->assertLessThan( Analytics_Cache::TTL_PAST, Analytics_Cache::TTL_LIVE );
 	}
 
-	public function test_the_four_invalidating_events_are_subscribed(): void {
+	/** @return array<string,mixed> hook => callback of what {@see Analytics_Cache::register()} subscribed. */
+	private function registered_hooks(): array {
 		$hooks = [];
 		Functions\when( 'add_action' )->alias(
 			static function ( $hook, $callback ) use ( &$hooks ) {
@@ -135,10 +136,52 @@ final class AnalyticsCacheTest extends TestCase {
 
 		Analytics_Cache::register();
 
+		return $hooks;
+	}
+
+	public function test_every_event_that_changes_the_aggregates_is_subscribed(): void {
+		$hooks = $this->registered_hooks();
+
 		$this->assertEqualsCanonicalizing(
-			[ 'woodev_shipping_delivery_status_changed', 'woodev_shipping_order_exported', 'woocommerce_new_order', 'woocommerce_order_status_changed' ],
+			[
+				'woodev_shipping_delivery_status_changed',
+				'woodev_shipping_order_exported',
+				'woocommerce_new_order',
+				'woocommerce_order_status_changed',
+				'woocommerce_update_order',
+				'woocommerce_trash_order',
+				'woocommerce_untrash_order',
+				'woocommerce_delete_order',
+			],
 			array_keys( $hooks )
 		);
-		$this->assertSame( [ Analytics_Cache::class, 'bump' ], $hooks['woocommerce_new_order'] );
+		$this->assertSame( [ Analytics_Cache::class, 'bump' ], $hooks['woocommerce_update_order'] );
+	}
+
+	/**
+	 * The critic's case (#711 round 1, finding 5): a merchant edits last month's order — its shipping price or its method — without changing a
+	 * status. Only the persisted-order event fires, and the cached answer must be retired by it.
+	 */
+	public function test_saving_an_order_without_a_status_change_retires_the_cached_answer(): void {
+		$hooks = $this->registered_hooks();
+
+		Analytics_Cache::fetch( [ 'range' => 'last month' ], 3600, static fn(): array => [ 'shipping_paid' => 1500 ] );
+		$this->assertTrue( Analytics_Cache::fetch( [ 'range' => 'last month' ], 3600, static fn(): array => [] )['cached'] );
+
+		call_user_func( $hooks['woocommerce_update_order'], 4711 ); // a money / method-only update: no status event fires.
+
+		$after = Analytics_Cache::fetch( [ 'range' => 'last month' ], 3600, static fn(): array => [ 'shipping_paid' => 900 ] );
+		$this->assertFalse( $after['cached'] );
+		$this->assertSame( 900, $after['data']['shipping_paid'] );
+	}
+
+	public function test_a_deletion_is_invalidating_and_the_debounce_still_holds_across_event_kinds(): void {
+		$hooks = $this->registered_hooks();
+
+		call_user_func( $hooks['woocommerce_delete_order'], 1 );
+		call_user_func( $hooks['woocommerce_update_order'], 1 );
+		call_user_func( $hooks['woocommerce_trash_order'], 1 );
+
+		$this->assertCount( 1, $this->option_writes, 'one version write inside the lock, whatever the event' );
 	}
 }
