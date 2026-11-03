@@ -34,10 +34,12 @@ interface FiltersProps {
 	carrier: string;
 	providers: OrdersProvider[];
 	loading: boolean;
+	/** The `wc-admin` path the filters navigate on. */
+	path: string;
 	onRefresh: () => void;
 }
 
-export function Filters( { range, query, carrier, providers, loading, onRefresh }: FiltersProps ) {
+export function Filters( { range, query, carrier, providers, loading, path, onRefresh }: FiltersProps ) {
 	const DateRangeFilterPicker = window.wc?.components?.DateRangeFilterPicker;
 	const isoDateFormat = window.wc?.date?.isoDateFormat;
 
@@ -53,7 +55,7 @@ export function Filters( { range, query, carrier, providers, loading, onRefresh 
 					key={ pickerKey( range ) }
 					dateQuery={ range.dateQuery }
 					isoDateFormat={ isoDateFormat }
-					onRangeSelect={ ( selection ) => navigate( selection, query ) }
+					onRangeSelect={ ( selection ) => navigate( selection, query, path ) }
 				/>
 			) }
 			<SelectControl
@@ -62,7 +64,7 @@ export function Filters( { range, query, carrier, providers, loading, onRefresh 
 				hideLabelFromVision
 				value={ carrier }
 				options={ options }
-				onChange={ ( value: string ) => navigate( { carrier: 'all' === value ? undefined : value }, query ) }
+				onChange={ ( value: string ) => navigate( { carrier: 'all' === value ? undefined : value }, query, path ) }
 				__nextHasNoMarginBottom
 				__next40pxDefaultSize
 			/>

@@ -19,9 +19,12 @@ export function readQuery(): WcQuery {
 	return window.wc?.navigation?.getQuery() || {};
 }
 
-/** Merges `patch` into the current query and navigates; a `undefined` value removes the key. */
-export function navigate( patch: WcQuery, current: WcQuery = readQuery() ): void {
-	window.wc?.navigation?.updateQueryString?.( patch, PAGE_PATH, current );
+/**
+ * Merges `patch` into the current query and navigates; a `undefined` value removes the key. `path` is the `wc-admin` path the tab is shown
+ * on: the orders page's by default, the report's when the same body is the «Доставка перевозчиками» report in WooCommerce → Аналитика.
+ */
+export function navigate( patch: WcQuery, current: WcQuery = readQuery(), path: string = PAGE_PATH ): void {
+	window.wc?.navigation?.updateQueryString?.( patch, path, current );
 }
 
 export function useWcQuery(): WcQuery {

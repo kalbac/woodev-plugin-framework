@@ -6230,6 +6230,10 @@ msgstr ""
 msgid "Такого перевозчика нет."
 msgstr ""
 
+#: shipping-method/admin/orders/class-orders-registry.php
+msgid "Доставка перевозчиками"
+msgstr ""
+
 #: shipping-method/rest-api/class-analytics-controller.php:152
 msgid "Не удалось собрать аналитику. Попробуйте позже."
 msgstr ""

@@ -335,6 +335,14 @@ export interface WcDateRangeFilterPickerProps {
 	onRangeSelect: ( data: Record< string, string | undefined > ) => void;
 }
 
+/** One entry of `woocommerce_admin_reports_list` (WooCommerce's reports README): `report` is the tail of `/analytics/<report>`. */
+export interface WcReport {
+	report: string;
+	title: string;
+	component: ComponentType< any >;
+	navArgs?: { id: string };
+}
+
 declare global {
 	interface Window {
 		wc?: {

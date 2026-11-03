@@ -1,6 +1,6 @@
 # #711 — Delivery analytics («Аналитика» tab): data research and implementation spec
 
-**Status:** IMPLEMENTED on branch `kalbac/711-roi-analytics` (stage 2, s212, draft PR — critic pending, not merged). §6 (WC Analytics report) is NOT built; see §9 for where the implementation diverged from this text.
+**Status:** IMPLEMENTED on branch `kalbac/711-roi-analytics` (stages 2 and 3, s212, draft PR #1565 — not merged). See §9 for where the implementation diverged from this text.
 **Date:** 2026-11-03 (s212)
 **Scope:** framework only (`woodev-plugin-framework`); every carrier at once; **no framework release** (operator, #711 comment 03.11.2026).
 **Evidence:** framework paths are relative to this worktree (branch `kalbac/711-roi-analytics`, base `3dc1d019`, framework 2.0.23),
@@ -298,15 +298,28 @@ declarations for `Chart`, `SummaryList`, `SummaryNumber`, `DateRangeFilterPicker
 `npm run typecheck` and `npm run lint:ts-baseline` must not regress (no new baseline entries). Bundles are built in the PRIMARY checkout only (gotcha `local-npm-run-build-is-not-assets-parity-evidence`).
 Styles: a small `analytics.scss` imported from `style.scss`; reuse WC component styling, no new colours except the existing `$warn`/`$error` tokens.
 
-## 6. Stage 2 sketch — report in WooCommerce «Аналитика»
+## 6. Stage 3 — the report in WooCommerce «Аналитика» (BUILT, s212)
 
-Same REST, different frame. Confirmed against the WC docs (Context7, `client/admin/client/analytics/report/README.md`):
+The same body as the page's «Аналитика» tab, on `/analytics/woodev-delivery`, over the same REST route. Checked against the installed WooCommerce
+(11.2.1: `src/Internal/Admin/Analytics.php`, `src/Admin/PageController.php`, `assets/client/admin/app/index.js`) and the reports README (Context7).
 
-- **PHP** (menu entry): `add_filter( 'woocommerce_analytics_report_menu_items', fn( $items ) => [ …$items, [ 'id' => 'woodev-shipping-delivery', 'title' => __( 'Доставка перевозчиками', … ), 'parent' => 'woocommerce-analytics', 'path' => '/analytics/woodev-delivery' ] ] )` — registered by `Orders_Registry` only when `has_providers()` and the current user has the page capability.
-- **JS:** `addFilter( 'woocommerce_admin_reports_list', 'woodev/delivery-report', reports => [ …reports, { report: 'woodev-delivery', title, component: DeliveryReport, navArgs: { id: 'woodev-shipping-delivery' } } ] )`; `report` is the path tail `/analytics/<report>`.
-- `DeliveryReport` is the SAME `analytics/` module body (`analytics-tab.tsx` minus the page tabs) wrapped in `ReportFilters` (period/compare come from WC's own query, so `getCurrentDates` already works); it calls the SAME endpoint. The tab stays; the report adds the WC-native entry point and its saved date range.
-- Script loading: `wc-admin` loads extension reports from scripts enqueued on the `wc-admin` screen; the existing `enqueue_assets()` (`is_wc_admin_screen()`) already does this for our bundle, so no second bundle — `wc-components` + `wc-date` are already declared.
-- Open point for stage 2: the report must not appear when the licence gate/no providers; and `woocommerce_admin_reports_list` runs at script load, so the filter lives in `index.tsx` next to the page registration.
+- **PHP — `Orders_Registry::add_analytics_report_menu_item()`**, subscribed to `woocommerce_analytics_report_menu_items` in `add_hooks()`. It appends
+  `{ id: 'woodev-shipping-delivery', title: «Доставка перевозчиками», parent: 'woocommerce-analytics', path: '/analytics/woodev-delivery', capability }`
+  **only under the orders page's own gate:** `has_providers()` (what `register_page()` checks) and `current_user_can( get_page_capability() )` (what the REST route
+  checks and what `register_page()` passes as the page's capability). No new gate was invented. A non-array input is handed back untouched.
+- **Enqueue on the report screen needed no change.** `Analytics::register_pages()` (on `admin_menu`) passes every entry of that filter to `wc_admin_register_page()`
+  (default `js_page => true`), so the report is a registered `wc-admin` page and `Orders_Registry::is_wc_admin_screen()` (`wc_admin_is_registered_page()`) is true on it;
+  `enqueue_assets()` therefore loads the page bundle there. Verified read-only on the dev rig: with the filter added ad hoc, `get_report_pages()` returns the entry and
+  `PageController::get_pages()` holds it with `js_page = true` and the capability. The entry is registered at `admin_menu` priority 10, after our filter is subscribed.
+- **JS — one bundle.** `index.tsx` adds `addFilter( 'woocommerce_admin_reports_list', 'woodev/shipping-delivery-report', addDeliveryReport )` beside the
+  orders page's own `woocommerce_admin_pages_list` registration. `analytics/report-registration.ts` appends `{ report: 'woodev-delivery', title, component, navArgs: { id } }`
+  (WooCommerce wraps the component with its scheduled-import notice and applies the filter in `useFilters`, so a later `addFilter` re-renders).
+- **Shared body, no copy.** `AnalyticsTab` takes a `path` (default: the orders page's); `analytics/delivery-report.tsx` is `<AnalyticsTab path="/analytics/woodev-delivery" />`.
+  `Filters`, `ChartPanel` and the tile selection write `period` / `compare` / `after` / `before` / `chart` / `interval` / `chartType` / `carrier` to the path they are on — the query
+  WooCommerce's own reports use. Period and comparison come from `@woocommerce/date`'s `getCurrentDates()` exactly as in the tab (the tab's default, month vs previous period, applies
+  when the URL carries none).
+- **Not done / known:** the report has no WooCommerce `ReportFilters` wrapper (the tab's own filter row is used, so the two surfaces look and behave the same); the
+  report is not added to WooCommerce's Analytics overview/dashboard sections; no screenshot of the mounted report (bundles are built by the coordinator).
 
 ## 7. Test plan
 

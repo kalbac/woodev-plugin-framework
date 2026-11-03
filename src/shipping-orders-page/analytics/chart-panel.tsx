@@ -17,7 +17,7 @@
 import { __ } from '@wordpress/i18n';
 import { buildChartData, isChartEmpty } from './chart-data';
 import { formatCount, formatMoney, formatShare } from './format';
-import { PAGE_PATH, type WcQuery } from './wc-query';
+import type { WcQuery } from './wc-query';
 import type { AnalyticsResponse, ChartMetric } from './types';
 
 interface ChartPanelProps {
@@ -25,6 +25,8 @@ interface ChartPanelProps {
 	metric: ChartMetric;
 	query: WcQuery;
 	loading: boolean;
+	/** The `wc-admin` path the chart's own header controls write `interval` / `chartType` on. */
+	path: string;
 }
 
 function title( metric: ChartMetric ): string {
@@ -54,7 +56,7 @@ export function chartKey( data: AnalyticsResponse, metric: ChartMetric, query: W
 	return JSON.stringify( [ metric, data.generated_at, data.range, data.compare, query.carrier ?? 'all', data.carriers.map( ( carrier ) => carrier.id ) ] );
 }
 
-export function ChartPanel( { data, metric, query, loading }: ChartPanelProps ) {
+export function ChartPanel( { data, metric, query, loading, path }: ChartPanelProps ) {
 	const Chart = window.wc?.components?.Chart;
 
 	if ( ! Chart ) {
@@ -75,7 +77,7 @@ export function ChartPanel( { data, metric, query, loading }: ChartPanelProps ) 
 			itemsLabel={ __( 'Перевозчики', 'woodev-plugin-framework' ) }
 			emptyMessage={ isChartEmpty( points ) ? __( 'За этот период данных нет.', 'woodev-plugin-framework' ) : undefined }
 			isRequesting={ loading && 0 === points.length }
-			path={ PAGE_PATH }
+			path={ path }
 			query={ query }
 			legendPosition="bottom"
 			tooltipValueFormat={ tooltipFormat( metric, data.currency ) }

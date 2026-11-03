@@ -14,6 +14,7 @@ import { Component } from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import AnalyticsTab from '../../src/shipping-orders-page/analytics/analytics-tab';
 import PageTabs from '../../src/shipping-orders-page/page-tabs';
+import DeliveryReport, { REPORT_PATH } from '../../src/shipping-orders-page/analytics/delivery-report';
 import { fetchAnalytics } from '../../src/shipping-orders-page/analytics/analytics-rest';
 
 jest.mock( '../../src/shipping-orders-page/analytics/analytics-rest', () => ( {
@@ -377,3 +378,43 @@ describe( 'PageTabs', () => {
 		expect( updateQueryString ).toHaveBeenCalledWith( {}, '/woodev-shipping-orders', {} );
 	} );
 } );
+
+describe( 'DeliveryReport — the same body in WooCommerce → Аналитика (#711, stage 3)', () => {
+	it( 'lives on the report path the PHP menu entry declares', () => {
+		expect( REPORT_PATH ).toBe( '/analytics/woodev-delivery' );
+	} );
+
+	it( 'is the tab\'s body: the same request for the same period, the same tiles, chart and tables', async () => {
+		( fetchAnalytics as jest.Mock ).mockResolvedValue( RESPONSE );
+
+		render( <DeliveryReport /> );
+
+		await screen.findByText( /Заказы: 10/ );
+		expect( ( fetchAnalytics as jest.Mock ).mock.calls[ 0 ][ 0 ] ).toEqual( {
+			after: '2026-10-01',
+			before: '2026-10-31',
+			compareAfter: '2026-09-01',
+			compareBefore: '2026-09-30',
+			interval: 'auto',
+			carrier: 'all',
+		} );
+		expect( screen.getByTestId( 'chart' ) ).toHaveTextContent( 'Заказы по перевозчикам' );
+		expect( screen.getAllByTestId( 'table' ) ).toHaveLength( 2 );
+	} );
+
+	it( 'writes every control to the REPORT\'s path, not the orders page\'s', async () => {
+		( fetchAnalytics as jest.Mock ).mockResolvedValue( RESPONSE );
+		render( <DeliveryReport /> );
+		await screen.findByText( /Заказы: 10/ );
+
+		fireEvent.click( screen.getByText( /^Выручка:/ ) );
+		expect( updateQueryString ).toHaveBeenLastCalledWith( { chart: 'revenue' }, '/analytics/woodev-delivery', {} );
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'bar' } ) ); // the Chart\'s own header control gets the report\'s path as a prop.
+		expect( updateQueryString ).toHaveBeenLastCalledWith( { chartType: 'bar' }, '/analytics/woodev-delivery', {} );
+
+		fireEvent.change( screen.getByRole( 'combobox' ), { target: { value: 'cdek' } } );
+		expect( updateQueryString ).toHaveBeenLastCalledWith( { carrier: 'cdek' }, '/analytics/woodev-delivery', {} );
+	} );
+} );
+

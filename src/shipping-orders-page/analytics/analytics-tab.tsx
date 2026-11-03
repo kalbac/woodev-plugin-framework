@@ -19,7 +19,7 @@ import { Filters } from './filters';
 import { Summary } from './summary';
 import { Tables } from './tables';
 import { useAnalytics } from './use-analytics';
-import { navigate, useWcQuery, type WcQuery } from './wc-query';
+import { navigate, PAGE_PATH, useWcQuery, type WcQuery } from './wc-query';
 import { CHART_METRICS, type AnalyticsIntervalName, type AnalyticsRequest, type ChartMetric } from './types';
 
 const INTERVALS: AnalyticsIntervalName[] = [ 'day', 'week', 'month' ];
@@ -32,7 +32,16 @@ function intervalOf( query: WcQuery ): AnalyticsRequest[ 'interval' ] {
 	return INTERVALS.find( ( interval ) => interval === query.interval ) ?? 'auto';
 }
 
-export default function AnalyticsTab() {
+interface AnalyticsTabProps {
+	/**
+	 * The `wc-admin` path this body is shown on. It is the orders page's «Аналитика» tab by default; the «Доставка перевозчиками» report
+	 * in WooCommerce → Аналитика renders the SAME body on `/analytics/woodev-delivery` ({@see ./delivery-report}), and every control
+	 * writes its parameters to the path it is on.
+	 */
+	path?: string;
+}
+
+export default function AnalyticsTab( { path = PAGE_PATH }: AnalyticsTabProps ) {
 	const query = useWcQuery();
 	const carrier = query.carrier || 'all';
 	const metric = chartMetricOf( query );
@@ -63,7 +72,7 @@ export default function AnalyticsTab() {
 
 	return (
 		<section className="woodev-analytics">
-			<Filters range={ range } query={ query } carrier={ carrier } providers={ providers } loading={ loading } onRefresh={ reload } />
+			<Filters range={ range } query={ query } carrier={ carrier } providers={ providers } loading={ loading } path={ path } onRefresh={ reload } />
 			{ null === range && (
 				<Notice status="warning" isDismissible={ false }>
 					{ __( 'Аналитика недоступна: эта версия WooCommerce не предоставляет нужные компоненты.', 'woodev-plugin-framework' ) }
@@ -84,8 +93,8 @@ export default function AnalyticsTab() {
 			) }
 			{ null !== data && ! isEmpty && (
 				<div className={ loading ? 'woodev-analytics__body is-loading' : 'woodev-analytics__body' }>
-					<Summary data={ data } metric={ metric } onSelect={ ( next ) => navigate( { chart: next }, query ) } />
-					<ChartPanel data={ data } metric={ metric } query={ query } loading={ loading } />
+					<Summary data={ data } metric={ metric } onSelect={ ( next ) => navigate( { chart: next }, query, path ) } />
+					<ChartPanel data={ data } metric={ metric } query={ query } loading={ loading } path={ path } />
 					<Tables carriers={ data.carriers } methods={ data.methods } currency={ data.currency } loading={ loading } />
 				</div>
 			) }
