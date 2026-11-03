@@ -68,9 +68,12 @@ class AnalyticsDatastoresTest extends TestCase {
 		'beta'  => [
 			'marker'     => '_woodev_it_beta_marker',
 			'status_key' => '_woodev_it_beta_status',
+				// The carrier declares B_PICK a handover: «the carrier holds the parcel», though not in_transit (#1564).
+				'handover'   => [ 'B_PICK' ],
 			'map'        => [
 				'B_GO'   => Delivery_Status::IN_TRANSIT,
-				'B_DONE' => Delivery_Status::DELIVERED,
+				'B_PICK' => Delivery_Status::READY_FOR_PICKUP,
+					'B_DONE' => Delivery_Status::DELIVERED,
 			],
 		],
 		'gamma' => [
@@ -101,6 +104,10 @@ class AnalyticsDatastoresTest extends TestCase {
 				'status_meta_key' => $definition['status_key'],
 				'status_map'      => $definition['map'],
 			];
+
+			if ( ! empty( $definition['handover'] ) ) {
+				$args['handover_statuses'] = $definition['handover'];
+			}
 			$registry->register_provider( Orders_Provider::create( $id, ucfirst( $id ), $definition['marker'], [ $id . '_door', $id . '_pickup' ], $args ) );
 		}
 
@@ -194,7 +201,7 @@ class AnalyticsDatastoresTest extends TestCase {
 
 	/**
 	 * The status-log universe (#1564): orders whose delivery log is what the handover statement reads. Each `log` is the list of
-	 * `[ state, site-local time ]` the order's log holds, written through {@see Delivery_Status_Log::append()} with the explicit time.
+	 * `[ state, site-local time, raw code ]` the order's log holds, written through {@see Delivery_Status_Log::stage()} with the explicit time.
 	 * The `notify` orders are the exception: their log is written by {@see Delivery_Status_Events::notify()} at the real time, and read back.
 	 *
 	 * @return array<int,array<string,mixed>>
@@ -213,15 +220,15 @@ class AnalyticsDatastoresTest extends TestCase {
 			// alpha: in transit, then delivered two days later (the exact figure is 2.0 days; the completion metric says 1.0).
 			[ 'markers' => [ 'alpha' ], 'raw' => 'A_DONE', 'wc' => 'completed', 'at' => '2026-10-10 10:00:00', 'completed' => '2026-10-11 10:00:00', 'total' => 1300, 'lines' => [ [ 'alpha_door', 130, 0 ] ],
 				'log' => [ [ Delivery_Status::IN_TRANSIT, '2026-10-10 12:00:00' ], [ Delivery_Status::DELIVERED, '2026-10-12 12:00:00' ] ] ],
-			// alpha: a ready-for-pickup start, delivered 12 hours later.
+			// alpha: ready_for_pickup with NO declared code never starts the interval — arrival at the destination, not a handover: not counted.
 			[ 'markers' => [ 'alpha' ], 'raw' => 'A_DONE', 'wc' => 'processing', 'at' => '2026-10-10 11:00:00', 'total' => 1400, 'lines' => [ [ 'alpha_pickup', 140, 0 ] ],
 				'log' => [ [ Delivery_Status::READY_FOR_PICKUP, '2026-10-11 06:00:00' ], [ Delivery_Status::DELIVERED, '2026-10-11 18:00:00' ] ] ],
 			// beta: in transit, delivered 12.5 hours later.
 			[ 'markers' => [ 'beta' ], 'raw' => 'B_DONE', 'wc' => 'processing', 'at' => '2026-10-11 08:00:00', 'total' => 1500, 'lines' => [ [ 'beta_door', 150, 0 ] ],
-				'log' => [ [ Delivery_Status::IN_TRANSIT, '2026-10-11 09:00:00' ], [ Delivery_Status::DELIVERED, '2026-10-11 21:30:00' ] ] ],
-			// beta: a ready-for-pickup start, delivered two hours later.
+				'log' => [ [ Delivery_Status::IN_TRANSIT, '2026-10-11 09:00:00', 'B_GO' ], [ Delivery_Status::DELIVERED, '2026-10-11 21:30:00', 'B_DONE' ] ] ],
+			// beta: the carrier's DECLARED handover code (B_PICK, ready_for_pickup) starts the interval; delivered two hours later.
 			[ 'markers' => [ 'beta' ], 'raw' => 'B_DONE', 'wc' => 'processing', 'at' => '2026-10-12 00:30:00', 'total' => 1600, 'lines' => [ [ 'beta_pickup', 160, 0 ] ],
-				'log' => [ [ Delivery_Status::READY_FOR_PICKUP, '2026-10-12 01:00:00' ], [ Delivery_Status::DELIVERED, '2026-10-12 03:00:00' ] ] ],
+				'log' => [ [ Delivery_Status::READY_FOR_PICKUP, '2026-10-12 01:00:00', 'B_PICK' ], [ Delivery_Status::DELIVERED, '2026-10-12 03:00:00', 'B_DONE' ] ] ],
 			// alpha: delivered with NO handover before it — nothing to measure from.
 			[ 'markers' => [ 'alpha' ], 'raw' => 'A_DONE', 'wc' => 'processing', 'at' => '2026-10-10 14:00:00', 'total' => 1700, 'lines' => [ [ 'alpha_door', 170, 0 ] ],
 				'log' => [ [ Delivery_Status::CREATED, '2026-10-10 14:00:00' ], [ Delivery_Status::DELIVERED, '2026-10-10 18:00:00' ] ] ],
@@ -292,9 +299,12 @@ class AnalyticsDatastoresTest extends TestCase {
 		if ( isset( $spec['log'] ) ) {
 			$provider = Orders_Registry::instance()->get_provider( $owner );
 
-			foreach ( $spec['log'] as [ $state, $local ] ) {
-				Delivery_Status_Log::append( $order, $provider, $state, $this->timestamp( $local ) );
+			// Each entry is [ state, site-local time, raw code (optional) ]. stage() does not save: the spec saves once, below.
+			foreach ( $spec['log'] as $entry ) {
+				Delivery_Status_Log::stage( $order, $provider, $entry[0], $entry[2] ?? '', true, $this->timestamp( $entry[1] ) );
 			}
+
+			$order->save_meta_data();
 		}
 
 		if ( isset( $spec['notify'] ) ) {
@@ -310,6 +320,7 @@ class AnalyticsDatastoresTest extends TestCase {
 			$seeded['log'] = Delivery_Status_Log::read( $order, $provider );
 			$seeded['raw'] = end( $spec['notify'] );
 			$this->assertSame( [ Delivery_Status::IN_TRANSIT, Delivery_Status::DELIVERED ], array_column( $seeded['log'], 0 ), 'notify() must append one entry per real change' );
+			$this->assertSame( $spec['notify'], array_column( $seeded['log'], 2 ), 'each entry keeps the carrier raw code it came from' );
 		}
 
 		$this->seeded[] = $seeded;
@@ -503,11 +514,19 @@ class AnalyticsDatastoresTest extends TestCase {
 			$start = null;
 			$end   = null;
 
-			foreach ( $order['log'] as [ $state, $local ] ) {
+			$declared = $this->providers[ $order['owner'] ]['handover'] ?? [];
+
+			foreach ( $order['log'] as $entry ) {
+				[ $state, $local ] = $entry;
+				$raw               = $entry[2] ?? '';
+
 				// The notify-driven order's log is read back as unix times; the others are specs in site-local time.
 				$time = is_int( $local ) ? $local : $this->timestamp( $local );
 
-				if ( null === $start && in_array( $state, [ Delivery_Status::IN_TRANSIT, Delivery_Status::READY_FOR_PICKUP ], true ) ) {
+				// The handover is in_transit, or a raw code the carrier declared; ready_for_pickup alone never starts it.
+				$is_handover = Delivery_Status::IN_TRANSIT === $state || ( '' !== $raw && in_array( $raw, $declared, true ) );
+
+				if ( null === $start && $is_handover ) {
 					$start = $time;
 				} elseif ( null !== $start && Delivery_Status::DELIVERED === $state ) {
 					$end = $time;
@@ -732,8 +751,9 @@ class AnalyticsDatastoresTest extends TestCase {
 		$handover   = $this->expected_handover( $this->population( self::AFTER, self::BEFORE ) );
 		$by_carrier = array_column( $report['carriers'], null, 'id' );
 
-		// Four alpha orders and two beta orders are measurable; the other handover-universe orders are each excluded on purpose (see the spec comments).
-		$this->assertSame( [ 'alpha' => 4, 'beta' => 2 ], array_map( static fn( array $h ): int => $h['sample'], $handover ), 'the measurable handover orders' );
+		// Three alpha orders (in_transit starts) and two beta orders (one in_transit start, one DECLARED start) are measurable; the other
+		// handover-universe orders are each excluded on purpose (see the spec comments).
+		$this->assertSame( [ 'alpha' => 3, 'beta' => 2 ],array_map( static fn( array $h ): int => $h['sample'], $handover ), 'the measurable handover orders' );
 
 		$sum_sample  = 0;
 		$sum_seconds = 0;
