@@ -854,75 +854,6 @@
 	}
 }
 
-/**
- * The delivery-analytics panel (#711): announced today, built later.
- *
- * The frame is WooCommerce's own loading skeletons, so it matches «Аналитика»
- * exactly — but a permanently shimmering skeleton reads as "stuck loading", so
- * the animation is stopped and the whole frame is dimmed behind the overlay.
- * That is the one place this page reaches into WC's own markup, and it is
- * deliberate: the alternative is drawing a fake chart.
- */
-.woodev-orders-roi {
-	position: relative;
-	margin-top: wd.$gap-lg;
-	border: 1px solid wd.$border;
-	border-radius: wd.$radius;
-	background: wd.$surface;
-	padding: wd.$gap-lg;
-	overflow: hidden;
-
-	&__frame {
-		opacity: 0.35;
-		pointer-events: none;
-
-		// Stop the skeleton shimmer — see the block comment above.
-		*,
-		*::before,
-		*::after {
-			animation: none !important;
-		}
-
-		// `ChartPlaceholder` also renders a real `Spinner`. Freezing its animation
-		// is not enough: a motionless spinner glyph still reads as a stuck load,
-		// which is the exact impression this panel must not give.
-		.components-spinner {
-			display: none;
-		}
-	}
-
-	&__overlay {
-		position: absolute;
-		inset: 0;
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		gap: wd.$gap-sm;
-		text-align: center;
-		padding: wd.$gap;
-	}
-
-	&__badge {
-		margin: 0;
-		display: inline-block;
-		padding: wd.$gap-xs wd.$gap;
-		border-radius: wd.$radius-sm;
-		background: wd.$ink;
-		color: wd.$surface;
-		font-size: 12px;
-		font-weight: 600;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-	}
-
-	&__note {
-		margin: 0;
-		max-width: 40ch;
-		color: wd.$muted;
-		font-size: 13px;
-	}
-}
 
 /**
  * The «Период» control (#855). It renders `FilterPicker`'s own markup, so it inherits
@@ -1967,5 +1898,83 @@
 
 	&__footer-spacer {
 		flex: 1 1 auto;
+	}
+}
+
+/**
+ * The page's two tabs (#711): «Заказы» and «Аналитика». Plain buttons in WordPress' own nav-tab look — the tab is
+ * chosen by the URL (`tab=analytics`), so these only write it.
+ */
+.woodev-orders-tabs {
+	display: flex;
+	gap: wd.$gap-xs;
+	margin: wd.$gap 0;
+	border-bottom: 1px solid wd.$border;
+
+	&__tab {
+		margin: 0 0 -1px;
+		padding: wd.$gap-sm wd.$gap;
+		border: 1px solid transparent;
+		border-bottom: 0;
+		border-radius: wd.$radius-sm wd.$radius-sm 0 0;
+		background: transparent;
+		color: wd.$muted;
+		font-size: 14px;
+		font-weight: 600;
+		cursor: pointer;
+
+		&.is-active {
+			border-color: wd.$border;
+			background: wd.$surface;
+			color: wd.$ink;
+		}
+
+		&:focus-visible {
+			outline: 2px solid currentColor;
+			outline-offset: -2px;
+		}
+	}
+}
+
+/**
+ * The «Аналитика» tab (#711). WooCommerce's own components bring their own cards; this only spaces them, dims the
+ * body while a new period loads (the previous figures stay on screen). The filter row is the «Заказы» tab's own (`.woodev-orders__header`).
+ */
+.woodev-analytics {
+	display: flex;
+	flex-direction: column;
+	gap: wd.$gap-lg;
+
+	&__body {
+		display: flex;
+		flex-direction: column;
+		gap: wd.$gap-lg;
+		transition: opacity 0.15s;
+
+		&.is-loading {
+			opacity: 0.55;
+			pointer-events: none;
+		}
+	}
+
+	&__tile-note {
+		display: block;
+		color: wd.$muted;
+		font-size: 12px;
+	}
+
+	&__empty {
+		margin: 0;
+		padding: wd.$gap-lg;
+		border: 1px solid wd.$border;
+		border-radius: wd.$radius;
+		background: wd.$surface;
+		color: wd.$muted;
+	}
+
+	&__footnote {
+		margin: 0;
+		color: wd.$muted;
+		font-size: 12px;
 	}
 }

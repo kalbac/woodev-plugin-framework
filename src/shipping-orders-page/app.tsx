@@ -1365,56 +1365,12 @@ function buildRow( row: OrderRow, actions: OrderActionsCallbacks ): WcTableRowCe
 }
 
 /**
- * The delivery-analytics panel, announced rather than built (#711).
- *
- * Operator, 08.09.2026: put it BELOW the table, not above it the way Analytics
- * does, and ship the frame today behind a «Скоро» overlay — *«даже если ROI не
- * войдёт в V2, пользователи уже будут видеть, что такая возможность будет»*.
- * WHICH metric it plots is still open on #711; the shape is not — `SummaryList`
- * tiles over a `Chart`, which is why the frame is built from WooCommerce's own
- * `SummaryListPlaceholder`/`ChartPlaceholder` rather than a drawing of one.
- *
- * ⚠ Those two are LOADING skeletons, and a permanently shimmering block reads
- * as "stuck loading" rather than "not built yet". Two things make the
- * difference: the overlay, and `style.scss` stopping their animation. The frame
- * is `aria-hidden` — it is decoration, and the overlay carries the real message.
- */
-function RoiPanel() {
-	const SummaryListPlaceholder = window.wc?.components?.SummaryListPlaceholder;
-	const ChartPlaceholder = window.wc?.components?.ChartPlaceholder;
-
-	if ( ! SummaryListPlaceholder || ! ChartPlaceholder ) {
-		return null;
-	}
-
-	return (
-		<section className="woodev-orders-roi">
-			<div className="woodev-orders-roi__frame" aria-hidden="true">
-				<SummaryListPlaceholder numberOfItems={ 4 } />
-				<ChartPlaceholder height={ 260 } />
-			</div>
-			<div className="woodev-orders-roi__overlay">
-				<p className="woodev-orders-roi__badge">
-					{ __( 'Скоро', 'woodev-plugin-framework' ) }
-				</p>
-				<p className="woodev-orders-roi__note">
-					{ __(
-						'Здесь появится аналитика по доставке — показатели и график за период.',
-						'woodev-plugin-framework'
-					) }
-				</p>
-			</div>
-		</section>
-	);
-}
-
-/**
  * The «Data status» panel (#828 increment 8, SP-10 spec D9) — the third block
  * in the filter row, beside «Перевозчик» and the date range picker. Consumes
  * the seam `Orders_Controller::get_sync_status()` already exposes (#831,
  * increment 7's server half); this component only renders it.
  *
- * Degrades the same way {@link RoiPanel} does: no data yet, or the fetch
+ * Degrades gracefully: no data yet, or the fetch
  * failed, and the block simply does not render rather than breaking the page.
  * A registry with no carriers at all is the one case that is not a loading
  * or error state — it is rendered, and it means there is nothing to show.
@@ -1438,7 +1394,7 @@ function DataStatusPanel() {
 					setSyncStatus( res );
 				}
 			} )
-			// Degrades like `RoiPanel` — no error notice of its own; the block
+			// Degrades quietly — no error notice of its own; the block
 			// just does not render (`syncStatus` stays `null`).
 			.catch( () => undefined );
 
@@ -1562,7 +1518,7 @@ function DataStatusPanel() {
  * keeps the click inside the single-page app — the two are a documented pair, and
  * hand-building that prefix would be a guess. Missing either one means an older
  * runtime, and then this control does not render rather than rendering a dead link
- * (the same degrade rule {@link DataStatusPanel} and {@link RoiPanel} follow).
+ * (the same degrade rule {@link DataStatusPanel} follows).
  *
  * The shape is WordPress's own counted-scope row («Все (134) | Новые (7)»), including
  * marking the current one `current` the way a WP list table does. The separator is
@@ -2788,8 +2744,8 @@ export default function OrdersPage() {
 					 * and their class names for the shape.
 					 *
 					 * Degrades — renders nothing for this one control — when `wc-date`
-					 * is unavailable (an older WooCommerce), the same rule `RoiPanel`
-					 * already follows, rather than crashing the whole page over one
+					 * is unavailable (an older WooCommerce), the same degrade rule
+					 * the page's other WooCommerce-dependent parts follow, rather than crashing the whole page over one
 					 * missing filter. Without `wc.date` there is nothing to resolve a
 					 * period INTO, so a picker that still rendered would write a URL
 					 * that filters nothing.
@@ -2923,7 +2879,6 @@ export default function OrdersPage() {
 						: [ { label: __( 'Заказов', 'woodev-plugin-framework' ), value: total } ]
 				}
 			/>
-			<RoiPanel />
 			{ /* #875 — opened only once its data is in hand, from `previewCache`; see
 			     `onOpenPreview()` for the fetch, the icon spinner and the cache. */ }
 			{ null !== previewOrderId && previewCache[ previewOrderId ] && (

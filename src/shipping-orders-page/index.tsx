@@ -15,7 +15,8 @@
 
 import { addFilter } from '@wordpress/hooks';
 import { __ } from '@wordpress/i18n';
-import OrdersPage from './app';
+import PageTabs from './page-tabs';
+import { addDeliveryReport, REPORT_FILTER, REPORT_FILTER_NAMESPACE } from './analytics/report-registration';
 import type { WcAdminPage } from './wc-globals';
 import './style.scss';
 
@@ -24,7 +25,7 @@ addFilter(
 	'woodev/shipping-orders',
 	( pages: WcAdminPage[] ) => {
 		pages.push( {
-			container: OrdersPage,
+			container: PageTabs,
 			path: '/woodev-shipping-orders',
 			breadcrumbs: [ __( 'Заказы доставки', 'woodev-plugin-framework' ) ],
 			// The page sits under the WooCommerce menu, so it opens the same item
@@ -37,3 +38,8 @@ addFilter(
 		return pages;
 	}
 );
+
+// The «Доставка перевозчиками» report in WooCommerce → Аналитика (#711): the page's «Аналитика» tab body on `/analytics/woodev-delivery`.
+// Same bundle — `Orders_Registry::enqueue_assets()` puts it on every registered `wc-admin` page, and the report's menu entry is one
+// (`Analytics::register_pages()` passes the entries of `woocommerce_analytics_report_menu_items` to `wc_admin_register_page()`).
+addFilter( REPORT_FILTER, REPORT_FILTER_NAMESPACE, addDeliveryReport );

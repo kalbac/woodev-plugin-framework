@@ -12,7 +12,7 @@ namespace Woodev\Framework\Shipping\Admin\Orders;
 use Woodev\Framework\Settings\Settings_Page_Registry;
 use Woodev\Framework\Shipping\Admin\Shipping_Admin_Order;
 use Woodev\Framework\Shipping\Order\{Abstract_Shipment_Handler, Abstract_Tracking_Handler, Carrier_Cancel, Delivery_Status, Export_Retry, Order_Automation};
-use Woodev\Framework\Shipping\Rest_Api\{Document_Controller, Order_Editor_Controller, Orders_Controller, Rates_Controller, Toolbar_Controller};
+use Woodev\Framework\Shipping\Rest_Api\{Analytics_Controller, Document_Controller, Order_Editor_Controller, Orders_Controller, Rates_Controller, Toolbar_Controller};
 use Woodev\Framework\Shipping\Shipping_Plugin;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -41,6 +41,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 * @var string admin page slug.
 		 */
 		const PAGE_SLUG = 'woodev-shipping-orders';
+
+		/**
+		 * @var string id of the «Доставка перевозчиками» entry in WooCommerce → Аналитика (#711); the JS report's `navArgs.id`.
+		 */
+		const ANALYTICS_REPORT_ID = 'woodev-shipping-delivery';
+
+		/**
+		 * @var string `wc-admin` path of that report; its JS report is registered as `woodev-delivery`.
+		 */
+		const ANALYTICS_REPORT_PATH = '/analytics/woodev-delivery';
 
 		/**
 		 * Framework-owned heartbeat payload key for the order wizard edit lock.
@@ -715,6 +725,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			$this->hooked = true;
 
 			add_action( 'admin_menu', [ $this, 'register_page' ], 40 );
+			add_filter( 'woocommerce_analytics_report_menu_items', [ $this, 'add_analytics_report_menu_item' ] );
 			add_action( 'admin_menu', [ $this, 'check_method_ids_contract' ], 41 );
 			add_action( 'admin_menu', [ $this, 'check_auto_export_contract' ], 41 );
 			add_action( 'admin_menu', [ $this, 'move_menu_item_after_orders' ], 99 );
@@ -727,6 +738,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			add_action( Carrier_Cancel::HOOK, [ $this, 'run_cancel_at_carrier' ] );
 			add_action( 'woocommerce_order_status_changed', [ $this, 'handle_order_status_changed' ], 20, 4 );
 			$this->export_queue_notice()->add_hooks();
+			Analytics_Cache::register();
 			add_action( 'admin_page_access_denied', [ $this, 'maybe_redirect_legacy_page' ] );
 			add_filter( 'woocommerce_order_data_store_cpt_get_orders_query', [ $this, 'translate_marker_keys_query_var' ], 10, 2 );
 			add_filter( 'heartbeat_received', [ $this, 'refresh_order_edit_lock' ], 20, 2 );
@@ -966,6 +978,54 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 				'path'       => '/' . self::PAGE_SLUG,
 				'capability' => $this->get_page_capability(),
 			];
+		}
+
+		/**
+		 * Adds «Доставка перевозчиками» to WooCommerce → Аналитика (#711): the same figures as the page's «Аналитика» tab, over the same REST
+		 * route, inside WooCommerce's own reports.
+		 *
+		 * **The gate is the orders page's:** at least one provider is registered ({@see self::register_page()}) and the user holds the page
+		 * capability ({@see self::get_page_capability()}, which is also what the REST route checks). `Analytics::register_pages()` hands every
+		 * entry of this filter to `wc_admin_register_page()`, so the report is a registered `wc-admin` page: {@see self::is_wc_admin_screen()}
+		 * is true on it and {@see self::enqueue_assets()} puts the page's bundle (which registers the JS report) on that screen with no change.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.24
+		 *
+		 * @param mixed $items WooCommerce's report menu entries.
+		 * @return mixed The entries, with ours appended when the gate is open.
+		 */
+		public function add_analytics_report_menu_item( $items ) {
+			if ( ! is_array( $items ) || ! $this->analytics_report_allowed() ) {
+				return $items;
+			}
+
+			$items[] = [
+				'id'         => self::ANALYTICS_REPORT_ID,
+				'title'      => __( 'Доставка перевозчиками', 'woodev-plugin-framework' ),
+				'parent'     => 'woocommerce-analytics',
+				'path'       => self::ANALYTICS_REPORT_PATH,
+				'capability' => $this->get_page_capability(),
+			];
+
+			return $items;
+		}
+
+		/**
+		 * Whether the current user may use the «Доставка перевозчиками» report: a provider is registered and the user holds the page capability.
+		 *
+		 * ONE predicate for both halves of the report. The menu entry ({@see self::add_analytics_report_menu_item()}) is hidden by it, and the
+		 * page bundle is told the answer (`analyticsReport` in `window.woodevShippingOrders`) and registers the JS report only when it is true:
+		 * WooCommerce's generic `/analytics/:report` route needs just `view_woocommerce_reports`, so a role that has that and not the page
+		 * capability could otherwise reach our report by an in-app link and get a 403 screen from its REST route.
+		 *
+		 * @since 2.0.24
+		 *
+		 * @return bool
+		 */
+		public function analytics_report_allowed(): bool {
+			return $this->has_providers() && current_user_can( $this->get_page_capability() );
 		}
 
 		/**
@@ -1733,6 +1793,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 						// defect 4) — see build_reachable_delivery_statuses() for why the
 						// full canonical list was wrong to offer.
 						'deliveryStatuses' => $this->build_reachable_delivery_statuses(),
+						// Whether the JS report in WooCommerce → Аналитика may register for this user (#711): the menu entry's own predicate.
+						'analyticsReport'  => $this->analytics_report_allowed(),
 						// «Сейчас выгружаются N заказов» (#1007): the count at page load and the heartbeat
 						// key that keeps it current; the sentence arrives finished from the server.
 						'exportsInProgress' => $this->export_queue_notice()->state(),
@@ -2209,6 +2271,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			\Woodev_REST_V1_Registrar::register_controller( new Toolbar_Controller( $this ) );
 			\Woodev_REST_V1_Registrar::register_controller( new Order_Editor_Controller( $this ) );
 			\Woodev_REST_V1_Registrar::register_controller( new Rates_Controller( $this ) );
+			\Woodev_REST_V1_Registrar::register_controller( new Analytics_Controller( $this ) );
 		}
 
 		/**

@@ -442,6 +442,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/admin/orders/class-order-row-builder.php';
 			// the page-level actions above the orders table and their dialogs (s164)
 			require_once $path . '/admin/orders/class-toolbar-actions.php';
+			// the delivery analytics tab's aggregates, report and cache (#711)
+			require_once $path . '/admin/orders/class-analytics-aggregator.php';
+			require_once $path . '/admin/orders/class-analytics-query.php';
+			require_once $path . '/admin/orders/class-analytics-report.php';
+			require_once $path . '/admin/orders/class-analytics-cache.php';
 
 			// admin order wizard (#710): the create / update / load service and its payload check (#968)
 			require_once $path . '/admin/orders/class-carrier-field-set.php';
@@ -458,6 +463,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/rest-api/class-orders-controller.php';
 			require_once $path . '/rest-api/class-document-controller.php';
 			require_once $path . '/rest-api/class-toolbar-controller.php';
+			require_once $path . '/rest-api/class-analytics-controller.php';
 			require_once $path . '/rest-api/class-order-editor-controller.php';
 			require_once $path . '/rest-api/class-rates-controller.php';
 		}

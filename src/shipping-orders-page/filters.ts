@@ -557,7 +557,7 @@ export function readDateFilters( dateApi: WcDateApi, query: WcQuery ): DateFilte
  * autocompleter and `getLabels` — a separate piece of work, not a rule.
  *
  * `orderStatusOptions` is optional and omits that one filter when absent — the same
- * degrade-rather-than-crash rule `app.tsx`'s `RoiPanel` already follows — because the
+ * degrade-rather-than-crash rule the page's other WooCommerce-dependent panels follow — because the
  * option list has no framework-owned source; it comes from `window.wc.wcSettings`.
  */
 export function buildAdvancedFiltersConfig(

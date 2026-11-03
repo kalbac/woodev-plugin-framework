@@ -638,6 +638,15 @@ Moved here from `CURRENT-STATE.md` in s139: they are reference, true regardless 
   shipped). Every witness — the REST arg, the «Все / Новые» links, the carrier counts, the badge — reads
   it through the SAME `Orders_Query`, which is why their numbers agree by construction rather than by
   coincidence. Moved here from `CURRENT-STATE.md` in s139.
+- **The page has two tabs, and the second is analytics (#711).** `tab=analytics` (absent = the list) is read by `page-tabs.tsx`, which
+  renders `OrdersPage` (unchanged) or `analytics/analytics-tab.tsx`. The tab reads ONE route, `GET woodev/v1/shipping/orders/analytics`
+  (`Analytics_Controller`, page capability): `Analytics_Query` builds 2 `GROUP BY` statements (carrier × day — the carrier table and totals are those rows summed — and shipping method on slim legs) from one
+  `UNION ALL` leg per provider in the #928 resolver's form — the first REGISTERED provider with a marker owns the order, the outcome bucket comes from the
+  provider's own `status_map` — on HPOS or legacy tables; `Analytics_Aggregator` is the arithmetic, `Analytics_Report` the composition,
+  `Analytics_Cache` the transient (10 min when the range contains today, 1 h otherwise; the data version is bumped, debounced to 1/min, on new order /
+  order saved / status / export / trash / delete / delivery-status change). Period = ORDER date. The framework stores no status history or handover/delivered
+  timestamps, so the time tile is order → `date_completed` for delivered orders only, labelled as such with its sample size; no carrier stores an
+  actual shipping cost the shop pays (spec §3), so «paid vs carrier cost» is not shown. The same body is also WooCommerce → Аналитика → «Доставка перевозчиками» (`/analytics/woodev-delivery`): `Orders_Registry::add_analytics_report_menu_item()` adds the entry under the page's own gate (providers + page capability), `Analytics::register_pages()` makes it a registered `wc-admin` page so the page bundle is enqueued there, and the bundle's `woocommerce_admin_reports_list` filter renders `AnalyticsTab` with the report's path. Spec: [2026-11-03-711-roi-analytics.md](../specs/2026-11-03-711-roi-analytics.md).
 - **The carrier marker is a two-sided contract (#967, #710 I1b).** The page FINDS an order by the
   presence of `Orders_Provider::get_marker_meta_key()` (an `EXISTS` clause; `Orders_Id_Resolver`
   drives on the same key) and NAMES its carrier through `resolve_provider_for_order()`, which reads
