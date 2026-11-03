@@ -45,6 +45,7 @@ final class AnalyticsReportTest extends TestCase {
 	private function carrier_row( string $carrier, int $orders, float $revenue, int $delivered = 0, int $time_sample = 0, int $time_seconds = 0 ): array {
 		return [
 			'carrier'       => $carrier,
+			'day'           => '2026-10-01',
 			'orders'        => (string) $orders,
 			'revenue'       => (string) $revenue,
 			'shipping_paid' => '100',
@@ -61,14 +62,13 @@ final class AnalyticsReportTest extends TestCase {
 	public function test_the_window_is_the_store_days_both_inclusive_as_a_half_open_gmt_range(): void {
 		$scopes = [];
 		$query  = Mockery::mock( Analytics_Query::class );
-		$query->shouldReceive( 'carrier_rows' )->andReturnUsing(
+		$query->shouldReceive( 'day_rows' )->andReturnUsing(
 			static function ( $providers, $scope ) use ( &$scopes ) {
 				$scopes[] = $scope;
 
 				return [];
 			}
 		);
-		$query->shouldReceive( 'day_rows' )->andReturn( [] );
 		$query->shouldReceive( 'method_rows' )->andReturn( [] );
 
 		$this->report( $query )->build( $this->request() );
@@ -82,8 +82,7 @@ final class AnalyticsReportTest extends TestCase {
 
 	public function test_carriers_follow_registry_order_and_empty_ones_are_left_out(): void {
 		$query = Mockery::mock( Analytics_Query::class );
-		$query->shouldReceive( 'carrier_rows' )->andReturn( [ $this->carrier_row( 'yandex', 3, 300 ), $this->carrier_row( 'cdek', 7, 700, 4, 2, 4 * 86400 ) ] );
-		$query->shouldReceive( 'day_rows' )->andReturn( [] );
+		$query->shouldReceive( 'day_rows' )->andReturn( [ $this->carrier_row( 'yandex', 3, 300 ), $this->carrier_row( 'cdek', 7, 700, 4, 2, 4 * 86400 ) ] );
 		$query->shouldReceive( 'method_rows' )->andReturn( [] );
 
 		$report = $this->report( $query )->build( $this->request() );
@@ -102,7 +101,7 @@ final class AnalyticsReportTest extends TestCase {
 	public function test_a_previous_period_is_read_with_its_own_window_and_joined_per_carrier(): void {
 		$scopes = [];
 		$query  = Mockery::mock( Analytics_Query::class );
-		$query->shouldReceive( 'carrier_rows' )->twice()->andReturnUsing(
+		$query->shouldReceive( 'day_rows' )->twice()->andReturnUsing(
 			function ( $providers, $scope ) use ( &$scopes ) {
 				$scopes[] = $scope['from'];
 
@@ -111,7 +110,6 @@ final class AnalyticsReportTest extends TestCase {
 					: [ $this->carrier_row( 'cdek', 10, 1000 ), $this->carrier_row( 'ozon', 5, 500 ) ];
 			}
 		);
-		$query->shouldReceive( 'day_rows' )->twice()->andReturn( [] );
 		$query->shouldReceive( 'method_rows' )->once()->andReturn( [] );
 
 		$report = $this->report( $query )->build( $this->request( [ 'compare_after' => '2026-09-28', 'compare_before' => '2026-09-30' ] ) );
@@ -128,7 +126,6 @@ final class AnalyticsReportTest extends TestCase {
 
 	public function test_the_carrier_filter_reaches_every_query(): void {
 		$query = Mockery::mock( Analytics_Query::class );
-		$query->shouldReceive( 'carrier_rows' )->with( Mockery::any(), Mockery::any(), 'ozon' )->once()->andReturn( [] );
 		$query->shouldReceive( 'day_rows' )->with( Mockery::any(), Mockery::any(), 'ozon' )->once()->andReturn( [] );
 		$query->shouldReceive( 'method_rows' )->with( Mockery::any(), Mockery::any(), 'ozon' )->once()->andReturn( [] );
 
@@ -139,7 +136,6 @@ final class AnalyticsReportTest extends TestCase {
 
 	public function test_methods_are_labelled_and_sorted_busiest_first(): void {
 		$query = Mockery::mock( Analytics_Query::class );
-		$query->shouldReceive( 'carrier_rows' )->andReturn( [] );
 		$query->shouldReceive( 'day_rows' )->andReturn( [] );
 		$query->shouldReceive( 'method_rows' )->andReturn(
 			[
@@ -160,7 +156,6 @@ final class AnalyticsReportTest extends TestCase {
 
 	public function test_the_interval_is_picked_from_the_range_and_the_range_is_echoed(): void {
 		$query = Mockery::mock( Analytics_Query::class );
-		$query->shouldReceive( 'carrier_rows' )->andReturn( [] );
 		$query->shouldReceive( 'day_rows' )->andReturn( [] );
 		$query->shouldReceive( 'method_rows' )->andReturn( [] );
 

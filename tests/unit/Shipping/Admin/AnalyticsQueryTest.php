@@ -92,7 +92,7 @@ final class AnalyticsQueryTest extends TestCase {
 	}
 
 	public function test_hpos_reads_the_hpos_tables_and_columns(): void {
-		[ $sql ] = $this->query( true )->carrier_sql( [ $this->cdek() ], self::SCOPE );
+		[ $sql ] = $this->query( true )->day_sql( [ $this->cdek() ], self::SCOPE );
 
 		$this->assertStringContainsString( 'wp_wc_orders_meta', $sql );
 		$this->assertStringContainsString( 'JOIN wp_wc_orders o', $sql );
@@ -104,7 +104,7 @@ final class AnalyticsQueryTest extends TestCase {
 	}
 
 	public function test_legacy_reads_posts_and_postmeta(): void {
-		[ $sql ] = $this->query( false )->carrier_sql( [ $this->cdek() ], self::SCOPE );
+		[ $sql ] = $this->query( false )->day_sql( [ $this->cdek() ], self::SCOPE );
 
 		$this->assertStringContainsString( 'JOIN wp_posts o', $sql );
 		$this->assertStringContainsString( 'FROM wp_postmeta', $sql );
@@ -117,7 +117,7 @@ final class AnalyticsQueryTest extends TestCase {
 	}
 
 	public function test_every_value_is_bound_and_none_is_interpolated(): void {
-		[ $sql, $args ] = $this->query( true )->carrier_sql( [ $this->cdek() ], self::SCOPE );
+		[ $sql, $args ] = $this->query( true )->day_sql( [ $this->cdek() ], self::SCOPE );
 
 		foreach ( [ 'cdek', '_cdek_marker', '_cdek_status', 'DELIVERED', 'wc-pending', 'trash', '2026-09-30 21:00:00', '2026-10-31 21:00:00', 10800 ] as $value ) {
 			$this->assertContains( $value, $args );
@@ -131,7 +131,7 @@ final class AnalyticsQueryTest extends TestCase {
 	}
 
 	public function test_the_status_case_comes_from_the_providers_own_map(): void {
-		[ $sql, $args ] = $this->query( true )->carrier_sql( [ $this->cdek() ], self::SCOPE );
+		[ $sql, $args ] = $this->query( true )->day_sql( [ $this->cdek() ], self::SCOPE );
 
 		$this->assertStringContainsString( "THEN 'delivered'", $sql );
 		$this->assertStringContainsString( "THEN 'returned'", $sql );
@@ -146,7 +146,7 @@ final class AnalyticsQueryTest extends TestCase {
 	}
 
 	public function test_a_provider_without_a_status_key_is_always_unknown(): void {
-		[ $sql, $args ] = $this->query( true )->carrier_sql( [ $this->yandex() ], self::SCOPE );
+		[ $sql, $args ] = $this->query( true )->day_sql( [ $this->yandex() ], self::SCOPE );
 
 		$this->assertStringContainsString( 'NULL AS raw_status', $sql );
 		$this->assertStringNotContainsString( 'WHEN t.raw_status', $sql );
@@ -154,7 +154,7 @@ final class AnalyticsQueryTest extends TestCase {
 	}
 
 	public function test_one_leg_per_provider_and_the_first_registered_provider_wins(): void {
-		[ $sql, $args ] = $this->query( true )->carrier_sql( [ $this->cdek(), $this->yandex() ], self::SCOPE );
+		[ $sql, $args ] = $this->query( true )->day_sql( [ $this->cdek(), $this->yandex() ], self::SCOPE );
 
 		$this->assertSame( 1, substr_count( $sql, ' UNION ALL ' ) );
 		$this->assertSame( 1, substr_count( $sql, 'NOT EXISTS' ), 'only the second leg skips orders an earlier marker claimed' );
@@ -164,7 +164,7 @@ final class AnalyticsQueryTest extends TestCase {
 	}
 
 	public function test_the_carrier_filter_keeps_the_earlier_marker_rule(): void {
-		[ $sql, $args ] = $this->query( true )->carrier_sql( [ $this->cdek(), $this->yandex() ], self::SCOPE, 'yandex' );
+		[ $sql, $args ] = $this->query( true )->day_sql( [ $this->cdek(), $this->yandex() ], self::SCOPE, 'yandex' );
 
 		$this->assertSame( 0, substr_count( $sql, ' UNION ALL ' ) );
 		$this->assertSame( 1, substr_count( $sql, 'NOT EXISTS' ), 'restricting to yandex must not hand it the orders cdek owns' );
@@ -173,19 +173,20 @@ final class AnalyticsQueryTest extends TestCase {
 	}
 
 	public function test_the_window_is_half_open_and_the_population_excludes_statuses(): void {
-		[ $sql ] = $this->query( true )->carrier_sql( [ $this->cdek() ], self::SCOPE );
+		[ $sql ] = $this->query( true )->day_sql( [ $this->cdek() ], self::SCOPE );
 
 		$this->assertMatchesRegularExpression( "/o\\.date_created_gmt >= '%\\d+\\\$s' AND o\\.date_created_gmt < '%\\d+\\\$s'/", $sql );
 		$this->assertMatchesRegularExpression( "/o\\.status NOT IN \\( '%\\d+\\\$s', '%\\d+\\\$s' \\)/", $sql );
 
-		[ $open ] = $this->query( true )->carrier_sql( [ $this->cdek() ], [ 'excluded' => [] ] + self::SCOPE );
+		[ $open ] = $this->query( true )->day_sql( [ $this->cdek() ], [ 'excluded' => [] ] + self::SCOPE );
 		$this->assertStringNotContainsString( 'NOT IN', explode( 'GROUP BY', explode( 'FROM ( SELECT DISTINCT', $open )[1] )[0] );
 	}
 
-	public function test_the_carrier_statement_groups_by_carrier_with_the_bounded_time_sums(): void {
-		[ $sql, $args ] = $this->query( true )->carrier_sql( [ $this->cdek() ], self::SCOPE );
+	public function test_one_statement_feeds_carrier_table_and_chart_with_the_bounded_time_sums(): void {
+		[ $sql, $args ] = $this->query( true )->day_sql( [ $this->cdek() ], self::SCOPE );
 
-		$this->assertStringEndsWith( 'GROUP BY x.carrier', $sql );
+		$this->assertStringEndsWith( 'GROUP BY x.carrier, x.day', $sql );
+		$this->assertStringContainsString( 'SUM( x.bucket = \'unknown\' ) AS unknown', $sql );
 		$this->assertStringContainsString( 'AS time_sample', $sql );
 		$this->assertStringContainsString( 'AS time_seconds', $sql );
 		$this->assertStringContainsString( "x.bucket = 'delivered' AND x.diff > 0 AND x.diff <= ", $sql );
@@ -198,7 +199,26 @@ final class AnalyticsQueryTest extends TestCase {
 
 		$this->assertStringEndsWith( 'GROUP BY x.carrier, x.day', $sql );
 		$this->assertStringContainsString( 'DATE( DATE_ADD( o.date_created_gmt, INTERVAL', $sql );
-		$this->assertStringContainsString( "x.bucket IN ( 'delivered', 'returned', 'failed' )", $sql );
+		$this->assertStringContainsString( 'AS time_sample', $sql );
+	}
+
+	/**
+	 * #711 perf: the shipping-method statement needs only the carrier, the order id and the order total of the population. Its legs are
+	 * SLIM — no status subquery, no cancellation probe, no day, no completion time, no operational-data join — which is two thirds of a
+	 * full leg's work at 50 000 orders. The items are then probed by their own `order_id`.
+	 */
+	public function test_the_method_statement_runs_on_slim_legs_and_the_day_statement_on_full_ones(): void {
+		[ $method ] = $this->query( true )->method_sql( [ $this->cdek(), $this->yandex() ], self::SCOPE );
+		[ $day ]    = $this->query( true )->day_sql( [ $this->cdek(), $this->yandex() ], self::SCOPE );
+
+		foreach ( [ 'raw_status', 'cancelled', 'wc_order_operational_data', 'TIMESTAMPDIFF', 'DATE_ADD', 'CASE WHEN' ] as $fragment ) {
+			$this->assertStringNotContainsString( $fragment, $method, 'a slim leg does not carry ' . $fragment );
+			$this->assertStringContainsString( $fragment, $day, 'the full leg does' );
+		}
+
+		$this->assertStringContainsString( 'o.total_amount AS total', $method );
+		$this->assertSame( 1, substr_count( $method, ' UNION ALL ' ), 'one slim leg per provider' );
+		$this->assertSame( 1, substr_count( $method, 'NOT EXISTS' ), 'first registered provider wins in a slim leg too' );
 	}
 
 	public function test_the_method_statement_groups_shipping_lines_by_method_and_prices_them_from_cost_and_tax(): void {
@@ -227,16 +247,16 @@ final class AnalyticsQueryTest extends TestCase {
 	public function test_no_provider_in_scope_runs_no_query(): void {
 		$db = $this->wpdb();
 
-		$this->assertNull( $this->query( true, $db )->carrier_sql( [], self::SCOPE ) );
+		$this->assertNull( $this->query( true, $db )->day_sql( [], self::SCOPE ) );
 		$this->assertNull( $this->query( true, $db )->day_sql( [ $this->cdek() ], self::SCOPE, 'nobody' ) );
-		$this->assertSame( [], $this->query( true, $db )->carrier_rows( [], self::SCOPE ) );
+		$this->assertSame( [], $this->query( true, $db )->day_rows( [], self::SCOPE ) );
 		$this->assertSame( [], $db->prepared );
 	}
 
 	public function test_rows_come_from_one_prepared_statement(): void {
 		$db = $this->wpdb();
 
-		$this->assertSame( [ [ 'carrier' => 'cdek' ] ], $this->query( true, $db )->carrier_rows( [ $this->cdek() ], self::SCOPE ) );
+		$this->assertSame( [ [ 'carrier' => 'cdek' ] ], $this->query( true, $db )->day_rows( [ $this->cdek() ], self::SCOPE ) );
 		$this->assertCount( 1, $db->prepared );
 	}
 
@@ -270,8 +290,6 @@ final class AnalyticsQueryTest extends TestCase {
 
 	public static function statements(): array {
 		return [
-			'carrier, HPOS'   => [ 'carrier_sql', true ],
-			'carrier, legacy' => [ 'carrier_sql', false ],
 			'day, HPOS'       => [ 'day_sql', true ],
 			'day, legacy'     => [ 'day_sql', false ],
 			'method, HPOS'    => [ 'method_sql', true ],
@@ -284,7 +302,7 @@ final class AnalyticsQueryTest extends TestCase {
 		$db->fail_with = 'Unknown column x';
 
 		try {
-			$this->query( true, $db )->carrier_rows( [ $this->cdek() ], self::SCOPE );
+			$this->query( true, $db )->day_rows( [ $this->cdek() ], self::SCOPE );
 			$this->fail( 'a database error must not read as «no orders»' );
 		} catch ( \RuntimeException $e ) {
 			$this->assertSame( 'Unknown column x', $e->getMessage() );

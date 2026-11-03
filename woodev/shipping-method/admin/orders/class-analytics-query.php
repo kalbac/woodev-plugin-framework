@@ -93,26 +93,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Qu
 		}
 
 		/**
-		 * One row per carrier: orders, money, outcome counts and the order-to-delivery time sums.
+		 * One row per carrier and day — the ONE pass over the orders that feeds the carrier table, the totals and the chart: orders,
+		 * money, outcome counts and the order-to-delivery time sums. The carrier rows are these rows added up per carrier
+		 * ({@see Analytics_Aggregator::carrier_rows()}), a few hundred aggregate rows, never orders.
 		 *
 		 * @since 2.0.24
 		 *
 		 * @param Orders_Provider[]   $providers registered providers, in registry order.
-		 * @param array<string,mixed> $scope     {@see self::carrier_sql()}.
-		 * @param string|null         $only      one provider id to restrict to, or null for all.
-		 * @return array<int,array<string,mixed>> raw rows.
-		 */
-		public function carrier_rows( array $providers, array $scope, ?string $only = null ): array {
-			return $this->run( $this->carrier_sql( $providers, $scope, $only ) );
-		}
-
-		/**
-		 * One row per carrier and day, for the chart.
-		 *
-		 * @since 2.0.24
-		 *
-		 * @param Orders_Provider[]   $providers registered providers, in registry order.
-		 * @param array<string,mixed> $scope     {@see self::carrier_sql()}.
+		 * @param array<string,mixed> $scope     {@see self::day_sql()}.
 		 * @param string|null         $only      one provider id to restrict to, or null for all.
 		 * @return array<int,array<string,mixed>> raw rows.
 		 */
@@ -126,52 +114,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Qu
 		 * @since 2.0.24
 		 *
 		 * @param Orders_Provider[]   $providers registered providers, in registry order.
-		 * @param array<string,mixed> $scope     {@see self::carrier_sql()}.
+		 * @param array<string,mixed> $scope     {@see self::day_sql()}.
 		 * @param string|null         $only      one provider id to restrict to, or null for all.
 		 * @return array<int,array<string,mixed>> raw rows.
 		 */
 		public function method_rows( array $providers, array $scope, ?string $only = null ): array {
 			return $this->run( $this->method_sql( $providers, $scope, $only ) );
-		}
-
-		/**
-		 * The statement behind {@see self::carrier_rows()}.
-		 *
-		 * @since 2.0.24
-		 *
-		 * @param Orders_Provider[]   $providers registered providers, in registry order.
-		 * @param array<string,mixed> $scope     {
-		 *     The window and the population.
-		 *
-		 *     @type string   $from     inclusive lower bound, GMT `Y-m-d H:i:s`.
-		 *     @type string   $to       EXCLUSIVE upper bound, GMT `Y-m-d H:i:s`.
-		 *     @type int      $offset   site UTC offset in seconds, used only to bucket days.
-		 *     @type string[] $excluded WooCommerce order statuses that are not part of the population.
-		 * }
-		 * @param string|null         $only      one provider id to restrict to, or null for all.
-		 * @return array{0:string,1:array<int,mixed>}|null `[ sql, args ]`, or null when no provider is in scope.
-		 */
-		public function carrier_sql( array $providers, array $scope, ?string $only = null ): ?array {
-			$args = [];
-			$legs = $this->legs( $providers, $scope, $only, $args );
-
-			if ( '' === $legs ) {
-				return null;
-			}
-
-			$buckets = [];
-			foreach ( Analytics_Aggregator::BUCKETS as $bucket ) {
-				$buckets[] = "SUM( x.bucket = '" . $bucket . "' ) AS " . $bucket;
-			}
-
-			// Each use of the bound is its OWN argument: `wpdb::prepare()` counts placeholder occurrences against arguments and
-			// raises a `_doing_it_wrong` notice (HTML in the REST body under WP_DEBUG) when one numbered placeholder is used twice.
-			$select = 'SELECT x.carrier, COUNT(*) AS orders, SUM( x.total ) AS revenue, SUM( x.ship ) AS shipping_paid, '
-				. implode( ', ', $buckets )
-				. ', SUM( CASE WHEN ' . $this->timed_sql( $args ) . ' THEN 1 ELSE 0 END ) AS time_sample'
-				. ', SUM( CASE WHEN ' . $this->timed_sql( $args ) . ' THEN x.diff ELSE 0 END ) AS time_seconds';
-
-			return [ $select . ' FROM ( ' . $legs . ' ) x GROUP BY x.carrier', $args ];
 		}
 
 		/**
@@ -190,24 +138,38 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Qu
 		 * @since 2.0.24
 		 *
 		 * @param Orders_Provider[]   $providers registered providers, in registry order.
-		 * @param array<string,mixed> $scope     {@see self::carrier_sql()}.
+		 * @param array<string,mixed> $scope     {
+		 *     The window and the population.
+		 *
+		 *     @type string   $from     inclusive lower bound, GMT `Y-m-d H:i:s`.
+		 *     @type string   $to       EXCLUSIVE upper bound, GMT `Y-m-d H:i:s`.
+		 *     @type int      $offset   site UTC offset in seconds, used only to bucket days.
+		 *     @type string[] $excluded WooCommerce order statuses that are not part of the population.
+		 * }
 		 * @param string|null         $only      one provider id to restrict to, or null for all.
 		 * @return array{0:string,1:array<int,mixed>}|null `[ sql, args ]`, or null when no provider is in scope.
 		 */
 		public function day_sql( array $providers, array $scope, ?string $only = null ): ?array {
 			$args = [];
-			$legs = $this->legs( $providers, $scope, $only, $args );
+			$legs = $this->legs( $providers, $scope, $only, $args, false );
 
 			if ( '' === $legs ) {
 				return null;
 			}
 
-			$sql = 'SELECT x.carrier, x.day, COUNT(*) AS orders, SUM( x.total ) AS revenue, SUM( x.ship ) AS shipping_paid'
-				. ", SUM( x.bucket = 'delivered' ) AS delivered"
-				. ", SUM( x.bucket IN ( 'delivered', 'returned', 'failed' ) ) AS resolved"
-				. ' FROM ( ' . $legs . ' ) x GROUP BY x.carrier, x.day';
+			$buckets = [];
+			foreach ( Analytics_Aggregator::BUCKETS as $bucket ) {
+				$buckets[] = "SUM( x.bucket = '" . $bucket . "' ) AS " . $bucket;
+			}
 
-			return [ $sql, $args ];
+			// Each use of the bound is its OWN argument: `wpdb::prepare()` counts placeholder occurrences against arguments and
+			// raises a `_doing_it_wrong` notice (HTML in the REST body under WP_DEBUG) when one numbered placeholder is used twice.
+			$select = 'SELECT x.carrier, x.day, COUNT(*) AS orders, SUM( x.total ) AS revenue, SUM( x.ship ) AS shipping_paid, '
+				. implode( ', ', $buckets )
+				. ', SUM( CASE WHEN ' . $this->timed_sql( $args ) . ' THEN 1 ELSE 0 END ) AS time_sample'
+				. ', SUM( CASE WHEN ' . $this->timed_sql( $args ) . ' THEN x.diff ELSE 0 END ) AS time_seconds';
+
+			return [ $select . ' FROM ( ' . $legs . ' ) x GROUP BY x.carrier, x.day', $args ];
 		}
 
 		/**
@@ -215,6 +177,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Qu
 		 *
 		 * The line's price is itemmeta `cost` plus `total_tax` (measured on the rig: a shipping item stores `method_id`,
 		 * `instance_id`, `cost`, `total_tax`, `taxes`).
+		 *
+		 * **The population drives, the items are probed.** The legs are the SLIM ones — carrier, order id and total only, with no status, day
+		 * or completion time, which this table does not need and which cost two thirds of a full leg — and the statement joins them to
+		 * `woocommerce_order_items` by its `order_id` index (a core table: no index of ours is added to it). `STRAIGHT_JOIN` pins that
+		 * order: left to itself, the optimizer drives from a scan of the itemmeta table (154 000 rows at 50 000 orders) for a year or a
+		 * quarter and from the population for a month — the same statement, a 40 % swing in the time it takes.
 		 *
 		 * **Revenue is summed once per distinct (carrier, method, order).** The inner statement collapses an order's lines of one
 		 * method into a single row — carrying the order total once, the lines counted and their prices summed — and only then does
@@ -224,13 +192,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Qu
 		 * @since 2.0.24
 		 *
 		 * @param Orders_Provider[]   $providers registered providers, in registry order.
-		 * @param array<string,mixed> $scope     {@see self::carrier_sql()}.
+		 * @param array<string,mixed> $scope     {@see self::day_sql()}.
 		 * @param string|null         $only      one provider id to restrict to, or null for all.
 		 * @return array{0:string,1:array<int,mixed>}|null `[ sql, args ]`, or null when no provider is in scope.
 		 */
 		public function method_sql( array $providers, array $scope, ?string $only = null ): ?array {
 			$args = [];
-			$legs = $this->legs( $providers, $scope, $only, $args );
+			$legs = $this->legs( $providers, $scope, $only, $args, true );
 
 			if ( '' === $legs ) {
 				return null;
@@ -239,7 +207,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Qu
 			$prefix = $this->wpdb->prefix;
 			$price  = 'COALESCE( CAST( cost.meta_value AS DECIMAL(18,4) ), 0 ) + COALESCE( CAST( tax.meta_value AS DECIMAL(18,4) ), 0 )';
 
-			$per_order = 'SELECT x.carrier, method.meta_value AS method_id, x.order_id, MAX( x.total ) AS total, COUNT(*) AS line_count, SUM( ' . $price . ' ) AS shipping_paid'
+			$per_order = 'SELECT STRAIGHT_JOIN x.carrier, method.meta_value AS method_id, x.order_id, MAX( x.total ) AS total, COUNT(*) AS line_count, SUM( ' . $price . ' ) AS shipping_paid'
 				. ' FROM ( ' . $legs . ' ) x'
 				. ' JOIN ' . $prefix . "woocommerce_order_items line ON line.order_id = x.order_id AND line.order_item_type = 'shipping'"
 				. ' JOIN ' . $prefix . "woocommerce_order_itemmeta method ON method.order_item_id = line.order_item_id AND method.meta_key = 'method_id'"
@@ -260,15 +228,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Qu
 		 * @param array<string,mixed> $scope     the window.
 		 * @param string|null         $only      one provider id to restrict to, or null for all.
 		 * @param array<int,mixed>    $args      statement arguments so far; appended to.
+		 * @param bool                $slim      true => each leg is just `carrier`, `order_id`, `total` (the shipping-method statement).
 		 * @return string empty when no provider is in scope.
 		 */
-		private function legs( array $providers, array $scope, ?string $only, array &$args ): string {
+		private function legs( array $providers, array $scope, ?string $only, array &$args, bool $slim ): string {
 			$legs    = [];
 			$earlier = [];
 
 			foreach ( $providers as $provider ) {
 				if ( null === $only || $only === $provider->get_id() ) {
-					$legs[] = $this->leg( $provider, $earlier, $scope, $args );
+					$legs[] = $slim ? $this->slim_leg( $provider, $earlier, $scope, $args ) : $this->leg( $provider, $earlier, $scope, $args );
 				}
 
 				$earlier[] = $provider->get_marker_meta_key();
@@ -294,6 +263,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Qu
 		}
 
 		/**
+		 * One provider's SLIM leg: the orders of the window with only their carrier, id and total.
+		 *
+		 * @param Orders_Provider     $provider provider.
+		 * @param string[]            $earlier  marker keys of the providers registered before this one.
+		 * @param array<string,mixed> $scope    the window.
+		 * @param array<int,mixed>    $args     statement arguments so far; appended to.
+		 * @return string
+		 */
+		private function slim_leg( Orders_Provider $provider, array $earlier, array $scope, array &$args ): string {
+			$src = $this->source();
+
+			$select = 'SELECT ' . $this->bind( $args, $provider->get_id(), 's' ) . ' AS carrier, ' . $src['id'] . ' AS order_id, ' . $src['total'] . ' AS total';
+
+			return $select . $this->population_sql( $provider, $earlier, $scope, $args, '' );
+		}
+
+		/**
 		 * The inner select of a leg: the provider's orders in the window, one row each, raw status and cancellation flag included.
 		 *
 		 * @param Orders_Provider     $provider provider.
@@ -313,9 +299,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Qu
 				. ' ' . $this->meta_exists_sql( Shipment_Cancellation::CANCELLED_AT_META, $args ) . ' AS cancelled,'
 				. ' ' . $this->raw_status_sql( $provider, $args ) . ' AS raw_status';
 
+			return $select . $this->population_sql( $provider, $earlier, $scope, $args, $src['join'] );
+		}
+
+		/**
+		 * The FROM and WHERE of a leg: the provider's marked orders, in the window, outside the excluded statuses, not claimed by an
+		 * earlier provider.
+		 *
+		 * @param Orders_Provider     $provider provider.
+		 * @param string[]            $earlier  marker keys of the providers registered before this one.
+		 * @param array<string,mixed> $scope    the window.
+		 * @param array<int,mixed>    $args     statement arguments so far; appended to.
+		 * @param string              $join     extra JOIN clause the select list needs (HPOS operational data), or an empty string.
+		 * @return string
+		 */
+		private function population_sql( Orders_Provider $provider, array $earlier, array $scope, array &$args, string $join ): string {
+			$src     = $this->source();
+			$created = $src['created'];
+
 			$driver = ' FROM ( SELECT DISTINCT ' . $src['meta_fk'] . ' AS oid FROM ' . $src['meta']
 				. ' WHERE meta_key = ' . $this->bind( $args, $provider->get_marker_meta_key(), 's' ) . " AND meta_value <> '' ) mk"
-				. ' JOIN ' . $src['orders'] . ' o ON ' . $src['id'] . ' = mk.oid ' . $src['join'];
+				. ' JOIN ' . $src['orders'] . ' o ON ' . $src['id'] . ' = mk.oid ' . $join;
 
 			$where = ' WHERE ' . $src['type']
 				. $this->excluded_sql( $src['status'], (array) $scope['excluded'], $args )
@@ -323,7 +327,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Qu
 				. ' AND ' . $created . ' < ' . $this->bind( $args, (string) $scope['to'], 's' )
 				. $this->earlier_markers_sql( $earlier, $args );
 
-			return $select . $driver . $where;
+			return $driver . $where;
 		}
 
 		/**

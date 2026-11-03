@@ -88,6 +88,41 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Ag
 		}
 
 		/**
+		 * Casts one raw per-day row: its `carrier` and `day` kept, every count and sum cast like {@see self::normalize_row()}.
+		 *
+		 * @since 2.0.24
+		 *
+		 * @param array<string,mixed> $raw row as the driver returned it.
+		 * @return array<string,int|float|string>
+		 */
+		public static function normalize_day_row( array $raw ): array {
+			return [
+				'carrier' => (string) ( $raw['carrier'] ?? '' ),
+				'day'     => (string) ( $raw['day'] ?? '' ),
+			] + self::normalize_row( $raw );
+		}
+
+		/**
+		 * The carrier rows: the per-day rows added up per carrier. The query makes ONE pass over the orders, at the grain of a carrier and
+		 * a day; the carrier table and the totals are those rows summed here (a few hundred aggregate rows, never orders).
+		 *
+		 * @since 2.0.24
+		 *
+		 * @param array<int,array<string,int|float|string>> $day_rows normalized per-day rows.
+		 * @return array<string,array<string,int|float>> carrier id => row.
+		 */
+		public static function carrier_rows( array $day_rows ): array {
+			$rows = [];
+
+			foreach ( $day_rows as $day_row ) {
+				$carrier          = (string) $day_row['carrier'];
+				$rows[ $carrier ] = self::sum_rows( [ $rows[ $carrier ] ?? self::empty_row(), $day_row ] );
+			}
+
+			return $rows;
+		}
+
+		/**
 		 * Adds carrier rows together — the totals row. Orders are counted once per carrier by the query, so the
 		 * rows are additive.
 		 *
@@ -203,7 +238,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Ag
 		 *
 		 * @since 2.0.24
 		 *
-		 * @param array<int,array<string,mixed>> $day_rows   rows of `carrier`, `day`, `orders`, `revenue`, `shipping_paid`, `delivered`, `resolved`.
+		 * @param array<int,array<string,mixed>> $day_rows   normalized per-day rows ({@see self::normalize_day_row()}).
 		 * @param string                         $after      first day, `Y-m-d`.
 		 * @param string                         $before     last day, `Y-m-d`.
 		 * @param string                         $interval   `day`, `week` or `month`.
@@ -368,7 +403,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Ag
 			$series['revenue']       += (float) $row['revenue'];
 			$series['shipping_paid'] += (float) $row['shipping_paid'];
 			$series['delivered']     += (int) $row['delivered'];
-			$series['resolved']      += (int) $row['resolved'];
+			$series['resolved']      += (int) ( $row['delivered'] + $row['returned'] + $row['failed'] );
 
 			return $series;
 		}

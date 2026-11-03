@@ -130,14 +130,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Re
 			$scope = $this->scope( $after, $before, $request );
 			$only  = $request['carrier'] ?? null;
 
-			$carriers = [];
-			foreach ( $this->query->carrier_rows( $this->providers, $scope, $only ) as $raw ) {
-				$carriers[ (string) $raw['carrier'] ] = Analytics_Aggregator::normalize_row( $raw );
-			}
+			$days = array_map(
+				[ Analytics_Aggregator::class, 'normalize_day_row' ],
+				$this->query->day_rows( $this->providers, $scope, $only )
+			);
 
 			return [
-				'carriers' => $carriers,
-				'days'     => $this->query->day_rows( $this->providers, $scope, $only ),
+				'carriers' => Analytics_Aggregator::carrier_rows( $days ),
+				'days'     => $days,
 				'methods'  => $with_methods ? $this->query->method_rows( $this->providers, $scope, $only ) : [],
 			];
 		}

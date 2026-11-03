@@ -129,7 +129,8 @@ final class AnalyticsAggregatorTest extends TestCase {
 			'revenue'       => $revenue,
 			'shipping_paid' => 0.0,
 			'delivered'     => 0,
-			'resolved'      => 0,
+			'returned'      => 0,
+			'failed'        => 0,
 		];
 	}
 
@@ -174,5 +175,45 @@ final class AnalyticsAggregatorTest extends TestCase {
 		$this->assertSame( 2, $intervals[0]['totals']['orders'] );
 		$this->assertSame( 5, $intervals[2]['totals']['orders'] );
 		$this->assertSame( 7, array_sum( array_column( array_column( $intervals, 'totals' ), 'orders' ) ) );
+	}
+
+	public function test_the_carrier_rows_are_the_per_day_rows_added_up(): void {
+		$days = array_map(
+			[ Analytics_Aggregator::class, 'normalize_day_row' ],
+			[
+				[ 'carrier' => 'cdek', 'day' => '2026-10-01', 'orders' => '3', 'revenue' => '300.5', 'delivered' => '1', 'time_sample' => '1', 'time_seconds' => '86400' ],
+				[ 'carrier' => 'yandex', 'day' => '2026-10-01', 'orders' => '2', 'revenue' => '200', 'returned' => '2' ],
+				[ 'carrier' => 'cdek', 'day' => '2026-10-02', 'orders' => '4', 'revenue' => '400', 'delivered' => '2', 'failed' => '1', 'time_sample' => '1', 'time_seconds' => '259200' ],
+			]
+		);
+
+		$carriers = Analytics_Aggregator::carrier_rows( $days );
+
+		$this->assertSame( [ 'cdek', 'yandex' ], array_keys( $carriers ) );
+		$this->assertSame( 7, $carriers['cdek']['orders'] );
+		$this->assertSame( 700.5, $carriers['cdek']['revenue'] );
+		$this->assertSame( 3, $carriers['cdek']['delivered'] );
+		$this->assertSame( 2, $carriers['cdek']['time_sample'] );
+		$this->assertSame( 345600, $carriers['cdek']['time_seconds'] );
+		$this->assertSame( 2, $carriers['yandex']['returned'] );
+		$this->assertSame( [], Analytics_Aggregator::carrier_rows( [] ) );
+	}
+
+	public function test_a_day_row_keeps_its_carrier_and_day_and_casts_the_rest(): void {
+		$row = Analytics_Aggregator::normalize_day_row( [ 'carrier' => 'cdek', 'day' => '2026-10-01', 'orders' => '3', 'revenue' => '12.5', 'junk' => 'x' ] );
+
+		$this->assertSame( 'cdek', $row['carrier'] );
+		$this->assertSame( '2026-10-01', $row['day'] );
+		$this->assertSame( 3, $row['orders'] );
+		$this->assertSame( 12.5, $row['revenue'] );
+		$this->assertArrayNotHasKey( 'junk', $row );
+	}
+
+	public function test_a_chart_point_counts_resolved_as_delivered_returned_and_failed(): void {
+		$row       = Analytics_Aggregator::normalize_day_row( [ 'carrier' => 'cdek', 'day' => '2026-10-01', 'orders' => '9', 'delivered' => '2', 'returned' => '1', 'failed' => '1', 'in_progress' => '5' ] );
+		$intervals = Analytics_Aggregator::intervals( [ $row ], '2026-10-01', '2026-10-01', 'day', 1 );
+
+		$this->assertSame( 4, $intervals[0]['totals']['resolved'] );
+		$this->assertSame( 2, $intervals[0]['totals']['delivered'] );
 	}
 }

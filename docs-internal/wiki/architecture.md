@@ -640,7 +640,7 @@ Moved here from `CURRENT-STATE.md` in s139: they are reference, true regardless 
   coincidence. Moved here from `CURRENT-STATE.md` in s139.
 - **The page has two tabs, and the second is analytics (#711).** `tab=analytics` (absent = the list) is read by `page-tabs.tsx`, which
   renders `OrdersPage` (unchanged) or `analytics/analytics-tab.tsx`. The tab reads ONE route, `GET woodev/v1/shipping/orders/analytics`
-  (`Analytics_Controller`, page capability): `Analytics_Query` builds 3 `GROUP BY` statements (carrier, carrier × day, shipping method) from one
+  (`Analytics_Controller`, page capability): `Analytics_Query` builds 2 `GROUP BY` statements (carrier × day — the carrier table and totals are those rows summed — and shipping method on slim legs) from one
   `UNION ALL` leg per provider in the #928 resolver's form — the first REGISTERED provider with a marker owns the order, the outcome bucket comes from the
   provider's own `status_map` — on HPOS or legacy tables; `Analytics_Aggregator` is the arithmetic, `Analytics_Report` the composition,
   `Analytics_Cache` the transient (10 min when the range contains today, 1 h otherwise; the data version is bumped, debounced to 1/min, on new order /
