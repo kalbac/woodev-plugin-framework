@@ -1,6 +1,66 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.0.24] — 2026-11-03
+### Bug Fixes
+- **orders-page**: #711 critic round 1 and rig smoke
+
+- **orders-page**: #711 report gate, cache schema version, custom range without compare
+
+- **orders-page**: #711 KPI tiles and filter row layout
+
+- **shipping**: #1564 provider-declared handover and locked status log append
+
+
+### Documentation
+- **s211**: Save — Support AI cards, framework 2.0.23, Ozon 2.0.2, CDEK 2.3.0.13; #711 overnight handoff
+
+- **s212**: Save — #711 analytics PR #1565 parked for review, Yandex #1526 merged
+
+- **spec**: #711 ROI analytics spec
+
+- **skill**: Set the EDD «Обновлён» date after publish-release
+
+
+### Features
+- **orders-page**: #711 analytics aggregates REST
+
+- **orders-page**: #711 analytics tab
+
+- **orders-page**: #711 delivery report in WooCommerce Analytics
+
+- **shipping**: #1564 delivery status log and handover-to-delivery time
+
+
+### Performance
+- **orders-page**: #711 method aggregate probes order items by order id
+
+
+### Tests
+- **orders-page**: #711 analytics DB parity
+
+- **shipping**: #1564 status log analytics on both datastores
+
+- **shipping**: #1564 adapt status log integration test to stage() and declared handover
+
+
+### Build
+- **deps**: Bump taiki-e/install-action from 2.87.31 to 2.88.1 (#1562)
+
+- #711 shipping orders page bundles (primary checkout)
+
+- #711 bundles after critic round 1 (primary checkout)
+
+- #711 bundles after the WC Analytics report (primary checkout)
+
+- #711 bundles after fix round 2 (primary checkout)
+
+- #711 bundles after the tiles and filter row fix (primary checkout)
+
+- #1564 bundles (primary checkout)
+
+
+
 ## [2.0.23] — 2026-11-02
 ### Bug Fixes
 - **shipping**: Emit a true ISO-8601 instant for the order date
