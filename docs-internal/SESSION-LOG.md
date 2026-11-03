@@ -18,6 +18,7 @@
 > **From s140 a row is ONE LINE of at most 600 characters, enforced by `lint:docs` (#930)** — the
 > gate kept firing because rows had become paragraphs copied out of the session file.
 
+- **[s213](sessions/s213.md)** — 2026-11-03 — **Framework 2.0.24 and four plugin releases on EDD (Yandex 2.0.14, CDEK 2.3.0.15, Russian Post 2.0.12, Ozon 2.0.3); #711 analytics merged after the rig look, #1564 status log built (#1567), #1526 closed.** GlitchTip triage loop live in n8n; EDD three-field release checklist; 3 new gotchas.
 - **[s212](sessions/s212.md)** — 2026-11-03 — #711 delivery analytics built overnight (PR #1565 parked for the look); #1526 Yandex merged, no release
 - **[s211](sessions/s211.md)** — 2026-11-03 — **Карточки Support AI сверены с кодом (13/13 верны) → фреймворк 2.0.23 (#1546 #1556 #1557 #1558, ADR #1551), «Ozon Доставка» 2.0.2 (ozon#79 #80) и СДЭК 2.3.0.13 (edostavka#163 + #149 #164 #165) выпущены и загружены в EDD; статьи, карточка и FAQ Ozon на woodev.ru исправлены.** Решено: #711 (ROI) — овернайт s212, вкладка «Аналитика» + отчёт в WC «Аналитика».
 - **[s210](sessions/s210.md)** — 2026-11-02 — **«Ozon Доставка» 2.0.1 hotfix выпущен (встроенный каталог 93 441 пункта: первая загрузка ~1 ч → ~3,5 мин; EDD 58107, `woodev-ozon-delivery#76` `#78`); аудит документов s210 (PR #1549: 10 high + все medium исправлены, 2 готчи удалены, карточки #1550 #1551 #1552) и аудит Бэклога (закрыты #786 #417 #418 #419).** Ротация ключей не тронута; #1526 #1532 #1528 #1519 не начаты. Код фреймворка не менялся.

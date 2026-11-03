@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Topic map.** 492 atomic gotchas across 30 topics. At session start read THIS file, then open
+> **Topic map.** 495 atomic gotchas across 30 topics. At session start read THIS file, then open
 > the topic indexes your task touches — each holds one line per gotcha, linking the detail file.
 > `[tooling/*]`, `[testing/*]` and `[rig/*]` apply to almost every session.
 > **Adding one:** create `gotchas/{slug}.md`, then add ONE line to the right `gotcha-index/{topic}.md`
@@ -24,12 +24,12 @@
 | [`shipping/location`](gotcha-index/shipping-location.md) | 24 | Location provider layer |
 | [`rig/*`](gotcha-index/rig.md) | 30 | Local verification rig |
 | [`framework/wiring`](gotcha-index/framework-wiring.md) | 4 | Responsibilities that moved |
-| [`testing/*`](gotcha-index/testing.md) | 56 | Testing patterns |
+| [`testing/*`](gotcha-index/testing.md) | 57 | Testing patterns |
 | [`js/*`](gotcha-index/js.md) | 9 | JavaScript language traps |
 | [`testing/js`](gotcha-index/testing-js.md) | 9 | JavaScript testing pitfalls |
 | [`api/*`](gotcha-index/api.md) | 7 | API layer |
 | [`licensing/*`](gotcha-index/licensing.md) | 7 | License/EDD store |
-| [`build/*`](gotcha-index/build.md) | 27 | Build/CI/release |
+| [`build/*`](gotcha-index/build.md) | 28 | Build/CI/release |
 | [`admin-ui/*`](gotcha-index/admin-ui.md) | 10 | Admin pages / React UI |
 | [`admin-ui/modal`](gotcha-index/admin-ui-modal.md) | 5 | Framework modal shell |
 | [`admin-ui/react-state`](gotcha-index/admin-ui-react-state.md) | 2 | React component state |
@@ -39,7 +39,7 @@
 | [`shipping/*`](gotcha-index/shipping.md) | 12 | Shipping module (S1) |
 | [`perf/*`](gotcha-index/perf.md) | 4 | Payload size and wire cost |
 | [`i18n/*`](gotcha-index/i18n.md) | 11 | Localization |
-| [`tooling/*`](gotcha-index/tooling.md) | 115 | Dev tooling, codex critic |
+| [`tooling/*`](gotcha-index/tooling.md) | 116 | Dev tooling, codex critic |
 
 ## Archive (resolved gotchas)
 <!-- Resolved gotchas move here; keep for 2 sessions then remove -->

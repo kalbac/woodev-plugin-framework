@@ -34,3 +34,4 @@
 - [build/release] **A plugin release ZIP's sha256 changes with the commit it is built from (`git archive` stamps the commit time): compare the merge-commit build with the reviewed PR-head build by unzipped content, not by hash.** → [a-plugin-release-zip-hash-changes-with-the-commit-it-is-built-from](../gotchas/a-plugin-release-zip-hash-changes-with-the-commit-it-is-built-from.md) (s197)
 
 - [../GOTCHAS.md](../GOTCHAS.md) — the topic map
+- [build/release] **The Homelab `gh` token expired (401 on private release assets), so the EDD worker could not download the ZIP; the coordinator passes GitHub's ~5-minute pre-signed asset redirect URL, which carries no credential.** → [homelab-gh-token-expired-hand-the-worker-a-pre-signed-asset-url](../gotchas/homelab-gh-token-expired-hand-the-worker-a-pre-signed-asset-url.md) (s213)

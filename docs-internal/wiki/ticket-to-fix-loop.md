@@ -1,5 +1,5 @@
 # Ticket → fix → reply: the development half of the support loop — Woodev Framework Wiki
-> Compiled reference. Last compiled: 2026-10-27 (s200: the coordinator closes plugin issues after EDD; s196, card #780; Support AI reply s46).
+> Compiled reference. Last compiled: 2026-11-03 (s213: GlitchTip triage; s200: the coordinator closes plugin issues after EDD; s196, card #780; Support AI reply s46).
 
 ## Overview
 
@@ -49,6 +49,13 @@ had to reopen it.
    `fixed_in: <plugin version>` — the first plugin version that carries the fix. Support AI writes the letter from these facts
    and its module sends it automatically once EDD serves `fixed_in` (operator: «Полный автомат сразу», s46). The development
    side never writes to FreeScout.
+
+## The error-reporter half: GlitchTip triage (s213)
+
+The opt-in `Error_Reporter` events of our own plugins land in GlitchTip (errors.woodev.ru, one project per plugin, **project name = plugin repo name, lowercase**).
+An n8n workflow (`GtGhTriageLoop001`, project `homelab-ai` on the Homelab) turns them into cards: daily at 07:00 MSK plus a Webhook node (HMAC) on every plugin repo; skip list `woodev-rig`.
+A card goes to the **plugin** repo as Инбокс / Следом, labels `bug` + `glitchtip`, last line `GlitchTip: <id>` and never a `FreeScout:` line. Closing the card drives GlitchTip: *completed* → resolved, *not planned* → ignored, reopened → unresolved.
+At session start the coordinator verifies every open `glitchtip` card against the released code, exactly like a Support AI card (step 1 above); a buyer-side script error or an event from our own stand is closed *not planned*.
 
 ## What the development side never does
 
