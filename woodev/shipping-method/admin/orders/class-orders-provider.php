@@ -10,6 +10,7 @@
 namespace Woodev\Framework\Shipping\Admin\Orders;
 
 use Woodev\Framework\Shipping\Exceptions\Shipping_Exception;
+use Woodev\Framework\Shipping\Order\Tracking_Shipment;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -225,6 +226,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		private $order_fields;
 
 		/**
+		 * The carrier's own list of buyer-facing parcels — `fn( \WC_Order $order ): Tracking_Shipment[]` — or null when the
+		 * declared tracking meta key and link are enough. See {@see self::get_tracking_shipments()}.
+		 *
+		 * @since 2.0.25
+		 *
+		 * @var callable|null
+		 */
+		private $shipments_resolver;
+
+		/**
+		 * @var bool whether a failing `shipments_resolver` was already logged (one line per provider per request).
+		 */
+		private $resolver_failure_logged = false;
+
+		/**
 		 * @var bool whether the carrier permits framework label/barcode downloads.
 		 */
 		private $supports_label_printing;
@@ -252,6 +268,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		 * @param callable|null        $order_fields               carrier order-fields declaration (#973).
 		 * @param bool                 $supports_label_printing    whether carrier documents are available.
 		 * @param string[]             $handover_statuses          raw statuses meaning the carrier holds the parcel (#1564).
+		 * @param callable|null        $shipments_resolver         carrier's list of buyer-facing parcels (#1575).
 		 */
 		private function __construct(
 			string $id,
@@ -271,7 +288,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 			?callable $marker_writer = null,
 			?callable $order_fields = null,
 			bool $supports_label_printing = false,
-			array $handover_statuses = []
+			array $handover_statuses = [],
+			?callable $shipments_resolver = null
 		) {
 			$this->id                        = $id;
 			$this->label                     = $label;
@@ -291,6 +309,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 			$this->order_fields              = $order_fields;
 			$this->supports_label_printing   = $supports_label_printing;
 			$this->handover_statuses         = $handover_statuses;
+			$this->shipments_resolver        = $shipments_resolver;
 		}
 
 		/**
@@ -334,10 +353,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		 *                                                          entry that is `in_transit` OR carries one of these raw codes; leave it out
 		 *                                                          and only `in_transit` starts it. NEVER list a destination status such as
 		 *                                                          «ready for pickup» (see {@see self::get_handover_statuses()}).
+		 *     @type callable             $shipments_resolver        `fn( \WC_Order $order ): Tracking_Shipment[]` — the parcels a buyer can follow
+		 *                                                          for this order (@since 2.0.25). Optional: without it the framework builds ONE
+		 *                                                          parcel from `tracking_meta_key` and the tracking link. Declare it when the
+		 *                                                          tracking meta is not a number the buyer may see (an internal request id), when
+		 *                                                          an order can have several parcels, or when the link lives somewhere else
+		 *                                                          (see {@see self::get_tracking_shipments()}).
 		 * }
 		 * @return self
 		 *
-		 * @throws Shipping_Exception when a required field is empty, or `marker_writer` / `order_fields` is present but not callable.
+		 * @throws Shipping_Exception when a required field is empty, or `marker_writer` / `order_fields` / `shipments_resolver` is present but not callable.
 		 */
 		public static function create( string $id, string $label, string $marker_meta_key, array $method_ids, array $args = [] ): self {
 			foreach ( [
@@ -386,6 +411,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 				);
 			}
 
+			if ( isset( $args['shipments_resolver'] ) && ! is_callable( $args['shipments_resolver'] ) ) {
+				throw new Shipping_Exception(
+					sprintf( 'Orders_Provider "%s": "shipments_resolver" must be callable.', $id )
+				);
+			}
+
 			return new self(
 				$id,
 				$label,
@@ -404,7 +435,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 				$args['marker_writer'] ?? null,
 				$args['order_fields'] ?? null,
 				true === ( $args['supports_label_printing'] ?? false ),
-				array_values( array_unique( array_filter( array_map( 'strval', $string_list( $args, 'handover_statuses' ) ), 'strlen' ) ) )
+				array_values( array_unique( array_filter( array_map( 'strval', $string_list( $args, 'handover_statuses' ) ), 'strlen' ) ) ),
+				$args['shipments_resolver'] ?? null
 			);
 		}
 
@@ -527,30 +559,134 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 			return $this->tracking_url_template;
 		}
 
-		/**
-		 * Returns this order's declared absolute tracking URL when it is a valid HTTP(S) URL.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @param \WC_Order $order order.
-		 * @return string|null
-		 */
 		public function resolve_tracking_url( \WC_Order $order ): ?string {
 			if ( null === $this->tracking_url_meta_key || null === $this->tracking_meta_key ) {
 				return null;
 			}
 
-			$value = \Woodev_Order_Compatibility::get_order_meta( $order, $this->tracking_url_meta_key );
-			if ( ! is_string( $value ) || false === filter_var( $value, FILTER_VALIDATE_URL ) ) {
-				return null;
+			return Tracking_Shipment::valid_url( \Woodev_Order_Compatibility::get_order_meta( $order, $this->tracking_url_meta_key ) );
+		}
+
+		/**
+		 * Returns the parcels a buyer can follow for this order — the one source the My Account block and the shipment
+		 * status emails both read.
+		 *
+		 * 1. A declared `shipments_resolver` decides. Anything but a {@see Tracking_Shipment} with a number or a link is
+		 *    dropped; a resolver that throws or returns a non-array means «nothing to show», because a buyer's page must
+		 *    never fatal over carrier data (the failure is logged once).
+		 * 2. Without a resolver ONE parcel is built from the declarations already made: the number is the order meta at
+		 *    `tracking_meta_key`, the link is `tracking_url_meta_key` or else `tracking_url_template`. No number — no
+		 *    parcel. This is the whole story for a carrier whose tracking meta IS the buyer's number.
+		 *
+		 * ⚠ A carrier whose tracking meta is NOT a number the buyer may see (an internal request id) must declare a
+		 * resolver: the default path would print that meta as the number.
+		 *
+		 * @since 2.0.25
+		 *
+		 * @param \WC_Order $order order.
+		 * @return Tracking_Shipment[] empty when there is nothing to show.
+		 */
+		public function get_tracking_shipments( \WC_Order $order ): array {
+			$shipments = null === $this->shipments_resolver
+				? $this->default_tracking_shipments( $order )
+				: $this->resolve_tracking_shipments( $order );
+
+			/**
+			 * Filters the parcels a buyer sees for an order — in the My Account block and in the shipment emails.
+			 *
+			 * @since 2.0.25
+			 *
+			 * @param Tracking_Shipment[] $shipments Parcels, possibly empty.
+			 * @param \WC_Order           $order     Order.
+			 * @param Orders_Provider     $provider  Carrier descriptor.
+			 */
+			$filtered = apply_filters( 'woodev_shipping_order_tracking_shipments', $shipments, $order, $this );
+
+			return is_array( $filtered ) ? self::displayable_shipments( $filtered ) : $shipments;
+		}
+
+		/**
+		 * The one parcel the declared tracking meta and link describe.
+		 *
+		 * @param \WC_Order $order order.
+		 * @return Tracking_Shipment[]
+		 */
+		private function default_tracking_shipments( \WC_Order $order ): array {
+			if ( null === $this->tracking_meta_key ) {
+				return [];
 			}
 
-			$parts = wp_parse_url( $value );
-			if ( ! is_array( $parts ) || ! isset( $parts['scheme'], $parts['host'] ) || ! in_array( strtolower( $parts['scheme'] ), [ 'http', 'https' ], true ) ) {
-				return null;
+			$value  = \Woodev_Order_Compatibility::get_order_meta( $order, $this->tracking_meta_key );
+			$number = is_scalar( $value ) ? trim( (string) $value ) : '';
+			if ( '' === $number ) {
+				return [];
 			}
 
-			return $value;
+			$url = $this->resolve_tracking_url( $order );
+			if ( null === $url && null !== $this->tracking_url_template ) {
+				$url = str_replace( '{tracking}', rawurlencode( $number ), $this->tracking_url_template );
+			}
+
+			return [ Tracking_Shipment::create( $number, $url ) ];
+		}
+
+		/**
+		 * Asks the declared resolver, never letting its failure reach the page.
+		 *
+		 * @param \WC_Order $order order.
+		 * @return Tracking_Shipment[]
+		 */
+		private function resolve_tracking_shipments( \WC_Order $order ): array {
+			try {
+				$resolved = call_user_func( $this->shipments_resolver, $order );
+			} catch ( \Throwable $e ) {
+				$this->log_resolver_failure( $e->getMessage() );
+
+				return [];
+			}
+
+			if ( ! is_array( $resolved ) ) {
+				$this->log_resolver_failure( 'it returned ' . gettype( $resolved ) . ' instead of an array' );
+
+				return [];
+			}
+
+			return self::displayable_shipments( $resolved );
+		}
+
+		/**
+		 * Keeps the entries that are a {@see Tracking_Shipment} with something to show.
+		 *
+		 * @param array<mixed> $candidates a resolver's or a filter's result.
+		 * @return Tracking_Shipment[] re-indexed from zero.
+		 */
+		private static function displayable_shipments( array $candidates ): array {
+			return array_values(
+				array_filter(
+					$candidates,
+					static function ( $candidate ): bool {
+						return $candidate instanceof Tracking_Shipment && ! $candidate->is_empty();
+					}
+				)
+			);
+		}
+
+		/**
+		 * Writes one line to the owning plugin's log per request, however often the buyer page asks.
+		 *
+		 * @param string $reason what went wrong.
+		 * @return void
+		 */
+		private function log_resolver_failure( string $reason ): void {
+			if ( $this->resolver_failure_logged ) {
+				return;
+			}
+			$this->resolver_failure_logged = true;
+
+			$plugin = Orders_Registry::instance()->get_provider_plugin( $this->id );
+			if ( null !== $plugin ) {
+				$plugin->log( sprintf( 'Tracking shipments resolver of "%s" failed: %s', $this->id, $reason ) );
+			}
 		}
 
 		/**

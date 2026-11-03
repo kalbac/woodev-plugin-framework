@@ -5545,6 +5545,57 @@ msgstr "Письмо покупателю при возврате или неу�
 msgid "Your shipment has been handed over to {carrier_name}. Tracking number: {tracking_number}. {tracking_url}"
 msgstr "Ваше отправление передано в {carrier_name}. Номер отслеживания: {tracking_number}. {tracking_url}"
 
+msgid "Your shipment has been handed over to {carrier_name}.\nTracking number: {tracking_number}\n{tracking_url}"
+msgstr "Ваше отправление передано в {carrier_name}.\nНомер отслеживания: {tracking_number}\n{tracking_url}"
+
+msgid "Delivery tracking"
+msgstr "Отслеживание доставки"
+
+msgid "Tracking number"
+msgstr "Номер отслеживания"
+
+#, php-format
+msgid "Shipment %1$d of %2$d"
+msgstr "Отправление %1$d из %2$d"
+
+#, php-format
+msgid "Current status: %1$s, %2$s"
+msgstr "Текущий статус: %1$s, %2$s"
+
+#, php-format
+msgid "Current status: %s"
+msgstr "Текущий статус: %s"
+
+msgid "Track shipment"
+msgstr "Отследить отправление"
+
+msgid "Awaiting dispatch"
+msgstr "Ожидает отправки"
+
+msgid "Created"
+msgstr "Создано"
+
+msgid "In transit"
+msgstr "В пути"
+
+msgid "Ready for pickup"
+msgstr "Готово к выдаче"
+
+msgid "Delivered"
+msgstr "Доставлено"
+
+msgid "Returning to sender"
+msgstr "Возвращается отправителю"
+
+msgid "Returned"
+msgstr "Возвращено"
+
+msgid "Delivery failed"
+msgstr "Не доставлено"
+
+msgid "Cancelled"
+msgstr "Отменено"
+
 msgid "Available placeholders: {order_number}, {tracking_number}, {tracking_url}, {carrier_name}, {pickup_point}, {delivery_date}."
 msgstr "Доступны переменные: {order_number}, {tracking_number}, {tracking_url}, {carrier_name}, {pickup_point}, {delivery_date}."
 

@@ -64,7 +64,7 @@ use Brain\Monkey\Functions;
 use Mockery;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
 use Woodev\Framework\Shipping\Email\{Delivery_Status_Email, Delivery_Status_Emails};
-use Woodev\Framework\Shipping\Order\Delivery_Status;
+use Woodev\Framework\Shipping\Order\{Delivery_Status, Tracking_Shipment};
 use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__, 4 ) . '/woodev/compatibility/class-plugin-compatibility.php';
@@ -89,6 +89,8 @@ final class DeliveryStatusEmailTest extends TestCase {
 		}
 		$property->setValue( Delivery_Status_Emails::instance(), [] );
 		Functions\when( 'apply_filters' )->returnArg( 2 );
+		// Tracking_Shipment validates every link it is given, the template-built ones included.
+		Functions\when( 'wp_parse_url' )->alias( static function ( $url ) { return parse_url( $url ); } );
 		Functions\when( 'add_action' )->justReturn( null );
 		Functions\when( 'get_post_meta' )->alias( function ( int $id, string $key ) { return $this->meta[ $key ] ?? ''; } );
 		Functions\when( 'update_post_meta' )->alias( function ( int $id, string $key, $value ) { $this->meta[ $key ] = $value; return true; } );
@@ -366,6 +368,214 @@ final class DeliveryStatusEmailTest extends TestCase {
 
 		$this->assertCount( 1, \WC_Email::$sent );
 		$this->assertSame( 'Order 123 is waiting at the pickup point', \WC_Email::$sent[0][1], 'the pickup email, in its English msgid (the catalogue translates it)' );
+	}
+
+	/**
+	 * A carrier that reports the given parcels through its resolver (Ozon-like; Yandex-like when link-only).
+	 *
+	 * @param Tracking_Shipment[] $shipments parcels.
+	 */
+	private function carrier_with_shipments( array $shipments ): Orders_Provider {
+		return Orders_Provider::create( 'test', 'Carrier', '_marker', [ 'test_shipping' ], [ 'shipments_resolver' => static function () use ( $shipments ) { return $shipments; } ] );
+	}
+
+	/** Sends the body through the email and returns what HTML mail would carry (the template stub echoes the body). */
+	private function html_body_for( Orders_Provider $provider, string $body ): string {
+		Functions\when( 'wp_parse_url' )->alias( static function ( $url ) { return parse_url( $url ); } );
+		Functions\when( 'esc_url' )->alias( static function ( $url ) { return filter_var( $url, FILTER_VALIDATE_URL ) ? $url : ''; } );
+		Functions\when( 'wc_get_template_html' )->alias( static function ( $template, $args ) { return $args['body']; } );
+		$email = new Delivery_Status_Email( 'customer_shipment_created', 'T', 'D', [ Delivery_Status::CREATED ], 'S', 'H', $body, true );
+		$email->maybe_trigger( $this->order( 'buyer@example.test' ), null, Delivery_Status::CREATED, $provider );
+
+		return $email->get_content_html();
+	}
+
+	/**
+	 * Sends the REGISTERED handed-over email (its real default body) for an order whose carrier reports the given
+	 * parcels, and returns [ HTML body, plain-text body ] as the mail would carry them.
+	 *
+	 * @param Tracking_Shipment[] $shipments parcels.
+	 * @param array<string,string> $translations msgid => msgstr applied by __() (the ru_RU catalogue, or none).
+	 * @param string|null $saved_body a merchant's saved body, or null for the untouched default.
+	 * @return array{0:string,1:string}
+	 */
+	private function registered_created_email_bodies( array $shipments, array $translations = [], ?string $saved_body = null ): array {
+		Functions\when( '__' )->alias( static fn( $msgid, $domain = '' ) => $translations[ $msgid ] ?? $msgid );
+		Functions\when( 'wp_parse_url' )->alias( static function ( $url ) { return parse_url( $url ); } );
+		Functions\when( 'esc_url' )->alias( static function ( $url ) { return filter_var( $url, FILTER_VALIDATE_URL ) ? $url : ''; } );
+		Functions\when( 'wc_get_template_html' )->alias( static function ( $template, $args ) { return $args['body']; } );
+		// One send per order and email: forget an earlier call's flag.
+		unset( $this->meta['_woodev_delivery_email_customer_shipment_created'] );
+		// The registry keeps the emails it built, with the default text of the language then in force: start fresh.
+		$property = new \ReflectionProperty( Delivery_Status_Emails::class, 'emails' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$property->setAccessible( true );
+		}
+		$property->setValue( Delivery_Status_Emails::instance(), [] );
+		$email = Delivery_Status_Emails::instance()->register_emails( [] )['customer_shipment_created'];
+		if ( null !== $saved_body ) {
+			$email->form_fields['body']['default'] = $saved_body;
+		}
+		$provider = $this->carrier_with_shipments( $shipments );
+		$plugin   = Mockery::mock( \Woodev\Framework\Shipping\Shipping_Plugin::class );
+		$plugin->shouldReceive( 'get_carrier_name' )->andReturn( 'СДЭК' );
+		$registry = \Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::instance();
+		$registry->register_provider( $provider, $plugin );
+		try {
+			$email->maybe_trigger( $this->order( 'buyer@example.test' ), null, Delivery_Status::CREATED, $provider );
+		} finally {
+			$registry->reset_for_tests();
+		}
+
+		return [ $email->get_content_html(), $email->get_content_plain() ];
+	}
+
+	/** @return array<string,string> the committed ru_RU catalogue, single-line entries. */
+	private function russian_catalogue(): array {
+		$catalogue = file_get_contents( dirname( __DIR__, 4 ) . '/woodev/languages/woodev-plugin-framework-ru_RU.po' );
+		preg_match_all( '/^msgid "(.*)"\nmsgstr "(.*)"/m', $catalogue, $matches, PREG_SET_ORDER );
+		$translations = [];
+		foreach ( $matches as $match ) {
+			$translations[ stripcslashes( $match[1] ) ] = stripcslashes( $match[2] );
+		}
+
+		return $translations;
+	}
+
+	/**
+	 * Baseline: the default handed-over email for an order with no or one parcel reads exactly as it did in 2.0.24
+	 * (critic of PR #1584, §4 of the #1575 spec: M=0 and M=1 are byte-identical).
+	 */
+	public function test_the_default_handed_over_email_is_unchanged_since_2_0_24_for_no_parcel(): void {
+		[ $html, $plain ] = $this->registered_created_email_bodies( [] );
+		$this->assertSame( 'Your shipment has been handed over to СДЭК. Tracking number: . ', $html );
+		$this->assertSame( 'Your shipment has been handed over to СДЭК. Tracking number: . ', $plain );
+
+		[ $ru_html, $ru_plain ] = $this->registered_created_email_bodies( [], $this->russian_catalogue() );
+		$this->assertSame( 'Ваше отправление передано в СДЭК. Номер отслеживания: . ', $ru_html );
+		$this->assertSame( 'Ваше отправление передано в СДЭК. Номер отслеживания: . ', $ru_plain );
+	}
+
+	public function test_the_default_handed_over_email_is_unchanged_since_2_0_24_for_one_parcel(): void {
+		$parcel = [ Tracking_Shipment::create( 'TRK 42', 'https://track.test/TRK%2042' ) ];
+
+		[ $html, $plain ] = $this->registered_created_email_bodies( $parcel );
+		$this->assertSame( 'Your shipment has been handed over to СДЭК. Tracking number: TRK 42. <a href="https://track.test/TRK%2042">https://track.test/TRK%2042</a>', $html );
+		$this->assertSame( 'Your shipment has been handed over to СДЭК. Tracking number: TRK 42. https://track.test/TRK%2042', $plain );
+
+		[ $ru_html, $ru_plain ] = $this->registered_created_email_bodies( $parcel, $this->russian_catalogue() );
+		$this->assertSame( 'Ваше отправление передано в СДЭК. Номер отслеживания: TRK 42. <a href="https://track.test/TRK%2042">https://track.test/TRK%2042</a>', $ru_html );
+		$this->assertSame( 'Ваше отправление передано в СДЭК. Номер отслеживания: TRK 42. https://track.test/TRK%2042', $ru_plain );
+	}
+
+	public function test_several_parcels_get_the_list_layout_of_the_default_body_in_both_languages(): void {
+		$parcels = [ Tracking_Shipment::create( 'A1', 'https://track.test/A1' ), Tracking_Shipment::create( 'B2' ) ];
+
+		[ $html, $plain ] = $this->registered_created_email_bodies( $parcels );
+		$this->assertSame( "Your shipment has been handed over to СДЭК.\nTracking number: Shipment 1 of 2: <a href=\"https://track.test/A1\">A1</a><br>Shipment 2 of 2: B2\n", $html );
+		$this->assertSame( "Your shipment has been handed over to СДЭК.\nTracking number: Shipment 1 of 2: A1 — https://track.test/A1\nShipment 2 of 2: B2\n", $plain );
+
+		[ $ru_html ] = $this->registered_created_email_bodies( $parcels, $this->russian_catalogue() );
+		$this->assertStringStartsWith( "Ваше отправление передано в СДЭК.\nНомер отслеживания: ", $ru_html );
+	}
+
+	public function test_a_body_the_merchant_wrote_is_never_replaced_even_for_several_parcels(): void {
+		$parcels = [ Tracking_Shipment::create( 'A1' ), Tracking_Shipment::create( 'B2' ) ];
+
+		[ , $plain ] = $this->registered_created_email_bodies( $parcels, [], 'Our own text: {tracking_number}' );
+
+		$this->assertSame( "Our own text: Shipment 1 of 2: A1\nShipment 2 of 2: B2", $plain );
+	}
+
+	public function test_no_shipments_leave_both_tracking_placeholders_empty(): void {
+		$email = $this->email( [ Delivery_Status::CREATED ], true, '[{tracking_number}][{tracking_url}]' );
+
+		$email->maybe_trigger( $this->order( 'buyer@example.test' ), null, Delivery_Status::CREATED, $this->carrier_with_shipments( [] ) );
+
+		$this->assertSame( '[][]', \WC_Email::$sent[0][1] );
+	}
+
+	public function test_one_shipment_keeps_the_number_and_the_url_exactly_as_before_the_seam(): void {
+		Functions\when( 'wp_parse_url' )->alias( static function ( $url ) { return parse_url( $url ); } );
+		$this->meta['_tracking'] = 'TRK 42';
+		$provider                = Orders_Provider::create( 'test', 'Carrier', '_marker', [ 'test_shipping' ], [ 'tracking_meta_key' => '_tracking', 'tracking_url_template' => 'https://track.test/{tracking}' ] );
+		$email                   = $this->email( [ Delivery_Status::CREATED ], true, '{tracking_number}|{tracking_url}' );
+
+		$email->maybe_trigger( $this->order( 'buyer@example.test' ), null, Delivery_Status::CREATED, $provider );
+
+		$this->assertSame( 'TRK 42|https://track.test/TRK%2042', \WC_Email::$sent[0][1], 'M=1 reads the same as the inline computation it replaced' );
+	}
+
+	public function test_a_link_only_shipment_gives_an_empty_number_and_the_link(): void {
+		$email = $this->email( [ Delivery_Status::CREATED ], true, '[{tracking_number}][{tracking_url}]' );
+
+		$email->maybe_trigger( $this->order( 'buyer@example.test' ), null, Delivery_Status::CREATED, $this->carrier_with_shipments( [ Tracking_Shipment::create( '', 'https://yandex.test/share/1' ) ] ) );
+
+		$this->assertSame( '[][https://yandex.test/share/1]', \WC_Email::$sent[0][1], 'the internal request id never reaches the mail' );
+	}
+
+	public function test_several_shipments_are_one_captioned_line_each_in_plain_text(): void {
+		Functions\when( 'wc_get_template_html' )->alias( static function ( $template, $args ) { return $args['body']; } );
+		$provider = $this->carrier_with_shipments(
+			[
+				Tracking_Shipment::create( 'A1', 'https://track.test/A1' ),
+				Tracking_Shipment::create( 'B2' ),
+				Tracking_Shipment::create( '', 'https://track.test/C3' ),
+			]
+		);
+		$email = new Delivery_Status_Email( 'customer_shipment_created', 'T', 'D', [ Delivery_Status::CREATED ], 'S', 'H', '{tracking_number}|{tracking_url}', true );
+		$email->maybe_trigger( $this->order( 'buyer@example.test' ), null, Delivery_Status::CREATED, $provider );
+
+		$this->assertSame(
+			"Shipment 1 of 3: A1 — https://track.test/A1\nShipment 2 of 3: B2\nShipment 3 of 3: Track shipment — https://track.test/C3|",
+			$email->get_content_plain(),
+			'{tracking_url} is empty: every link is inside its own line'
+		);
+	}
+
+	public function test_several_shipments_are_one_linked_line_each_in_html(): void {
+		$html = $this->html_body_for(
+			$this->carrier_with_shipments(
+				[
+					Tracking_Shipment::create( 'A1', 'https://track.test/A1' ),
+					Tracking_Shipment::create( 'TRK<script>alert(1)</script>' ),
+				]
+			),
+			'{tracking_number}|{tracking_url}'
+		);
+
+		$this->assertSame(
+			'Shipment 1 of 2: <a href="https://track.test/A1">A1</a><br>Shipment 2 of 2: TRK&lt;script&gt;alert(1)&lt;/script&gt;|',
+			$html
+		);
+	}
+
+	public function test_the_subject_carries_the_numbers_alone_not_the_captioned_lines(): void {
+		$email = $this->email( [ Delivery_Status::CREATED ], true, 'Заказ {order_number}: {tracking_number}' );
+
+		$email->maybe_trigger( $this->order( 'buyer@example.test' ), null, Delivery_Status::CREATED, $this->carrier_with_shipments( [ Tracking_Shipment::create( 'A1' ), Tracking_Shipment::create( '', 'https://track.test/x' ), Tracking_Shipment::create( 'B2' ) ] ) );
+
+		$this->assertSame( 'Заказ 123: A1, B2', \WC_Email::$sent[0][1] );
+	}
+
+	public function test_the_placeholder_filter_sees_the_readable_text_and_a_replaced_value_is_escaped_not_linked(): void {
+		$seen = null;
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $tag, $value ) use ( &$seen ) {
+				if ( 'woodev_shipping_delivery_email_placeholders' === $tag ) {
+					$seen                       = $value['{tracking_number}'];
+					$value['{tracking_number}'] = '<b>Custom</b>';
+				}
+
+				return $value;
+			}
+		);
+		$provider = $this->carrier_with_shipments( [ Tracking_Shipment::create( 'A1', 'https://track.test/A1' ), Tracking_Shipment::create( 'B2' ) ] );
+
+		$html = $this->html_body_for( $provider, '{tracking_number}' );
+
+		$this->assertSame( "Shipment 1 of 2: A1 — https://track.test/A1\nShipment 2 of 2: B2", $seen );
+		$this->assertSame( '&lt;b&gt;Custom&lt;/b&gt;', $html, 'a filter result is escaped like any other value; no markup from the filter' );
 	}
 
 	private function email( array $statuses, bool $enabled, string $subject ): Delivery_Status_Email {

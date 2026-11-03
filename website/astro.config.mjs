@@ -86,6 +86,7 @@ export default defineConfig({
 						'shipping/location-and-checkout-fields',
 						'shipping/pickup-points-and-maps',
 						'shipping/orders-export-documents-and-tracking',
+						'shipping/buyer-tracking',
 					],
 				},
 				{

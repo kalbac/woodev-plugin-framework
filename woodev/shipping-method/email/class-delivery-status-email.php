@@ -9,6 +9,8 @@
 namespace Woodev\Framework\Shipping\Email;
 
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
+use Woodev\Framework\Shipping\Order\Buyer_Tracking;
+use Woodev\Framework\Shipping\Order\Tracking_Shipment;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -63,6 +65,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 		private array $base_placeholders = [];
 
 		/**
+		 * @var Tracking_Shipment[] The parcels of the order being mailed, from {@see Orders_Provider::get_tracking_shipments()}.
+		 */
+		private array $shipments = [];
+
+		/**
+		 * @var string The `{tracking_number}` value this class computed for several parcels (captions, one per line).
+		 *             Compared with the final value to tell whether a filter replaced it.
+		 */
+		private string $own_tracking_number = '';
+
+		/**
+		 * @var string Default body used instead of {@see self::$default_body} when the order has several parcels and the
+		 *             merchant has not written a body of their own; empty when this email has no such variant.
+		 */
+		private string $default_body_multiple;
+
+		/**
 		 * Constructor.
 		 *
 		 * @since 2.0.2
@@ -74,8 +93,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 		 * @param string   $heading         Default heading.
 		 * @param string   $body            Default body.
 		 * @param bool     $enabled         Whether enabled by default.
+		 * @param string   $body_multiple   Default body for an order with several parcels (@since 2.0.25); empty for none.
 		 */
-		public function __construct( string $id, string $title, string $description, array $statuses, string $subject, string $heading, string $body, bool $enabled ) {
+		public function __construct( string $id, string $title, string $description, array $statuses, string $subject, string $heading, string $body, bool $enabled, string $body_multiple = '' ) {
 			$this->id               = $id;
 			$this->title            = $title;
 			$this->description      = $description;
@@ -84,6 +104,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 			$this->default_subject  = $subject;
 			$this->default_heading  = $heading;
 			$this->default_body     = $body;
+			$this->default_body_multiple = $body_multiple;
 			$this->default_enabled  = $enabled;
 			$this->template_html    = 'emails/shipment-status.php';
 			$this->template_plain   = 'emails/plain/shipment-status.php';
@@ -196,34 +217,26 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 		 * @return array<string,string> Placeholder values.
 		 */
 		private function get_placeholders( \WC_Order $order, ?Orders_Provider $provider ): array {
-			$tracking = '';
-			$url      = '';
-			$pickup   = '';
-			$carrier  = null !== $provider ? $provider->get_label() : '';
+			$pickup  = '';
+			$carrier = null !== $provider ? $provider->get_label() : '';
 			if ( null !== $provider ) {
 				$plugin = \Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::instance()->get_provider_plugin( $provider->get_id() );
 				if ( null !== $plugin ) {
 					$carrier = $plugin->get_carrier_name();
 				}
 			}
-			if ( null !== $provider && null !== $provider->get_tracking_meta_key() ) {
-				$tracking = (string) \Woodev_Order_Compatibility::get_order_meta( $order, $provider->get_tracking_meta_key() );
-			}
-			if ( null !== $provider ) {
-				$url = '' !== $tracking ? ( $provider->resolve_tracking_url( $order ) ?? '' ) : '';
-				if ( '' === $url ) {
-					$template = $provider->get_tracking_url_template();
-					$url      = '' !== $tracking && null !== $template ? str_replace( '{tracking}', rawurlencode( $tracking ), $template ) : '';
-				}
-			}
+			// The same parcels the My Account block shows (#1575), so the page and the mail agree.
+			$this->shipments           = null !== $provider ? $provider->get_tracking_shipments( $order ) : [];
+			$this->own_tracking_number = $this->tracking_number_text();
 			if ( null !== $provider && null !== $provider->get_pickup_point_meta_key() ) {
 				$point  = \Woodev_Order_Compatibility::get_order_meta( $order, $provider->get_pickup_point_meta_key() );
 				$pickup = is_array( $point ) ? (string) ( $point['address'] ?? $point['name'] ?? '' ) : ( is_scalar( $point ) ? (string) $point : '' );
 			}
 			$placeholders = [
 				'{order_number}'   => (string) $order->get_order_number(),
-				'{tracking_number}' => $tracking,
-				'{tracking_url}'   => $url,
+				'{tracking_number}' => $this->own_tracking_number,
+				// One parcel: its link. Several: every link sits inside its own line of {tracking_number}.
+				'{tracking_url}'   => 1 === count( $this->shipments ) ? (string) $this->shipments[0]->get_url() : '',
 				'{carrier_name}'   => $carrier,
 				'{pickup_point}'   => $pickup,
 				'{delivery_date}'  => '',
@@ -251,13 +264,138 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 		private function format_html( string $text ): string {
 			$values = [];
 			foreach ( $this->placeholders as $key => $value ) {
-				$value        = (string) $value;
-				$values[ $key ] = '{tracking_url}' === $key && '' !== $value && '' !== esc_url( $value )
-					? '<a href="' . esc_url( $value ) . '">' . esc_html( $value ) . '</a>'
-					: esc_html( $value );
+				$values[ $key ] = $this->html_value( (string) $key, (string) $value );
 			}
 
 			return strtr( $text, $values );
+		}
+
+		/**
+		 * One placeholder value as safe HTML: escaped, except the framework's own markup — the tracking link, and the
+		 * per-parcel links of an order with several parcels.
+		 *
+		 * @param string $key   Placeholder, e.g. `{tracking_url}`.
+		 * @param string $value Its value.
+		 * @return string
+		 */
+		private function html_value( string $key, string $value ): string {
+			if ( '{tracking_url}' === $key && '' !== $value && '' !== esc_url( $value ) ) {
+				return '<a href="' . esc_url( $value ) . '">' . esc_html( $value ) . '</a>';
+			}
+
+			// A filter that replaced the value is escaped like any other; only OUR text becomes per-parcel links.
+			if ( '{tracking_number}' === $key && count( $this->shipments ) > 1 && $value === $this->own_tracking_number ) {
+				return $this->tracking_numbers_html();
+			}
+
+			return esc_html( $value );
+		}
+
+		/**
+		 * The `{tracking_number}` text: nothing, the number, or — for several parcels — one «Shipment N of M: number —
+		 * link» line each. Plain text, so a filter, the plain-text mail and a custom subject all read it as it is.
+		 *
+		 * @return string
+		 */
+		private function tracking_number_text(): string {
+			$count = count( $this->shipments );
+			if ( $count <= 1 ) {
+				return 1 === $count ? $this->shipments[0]->get_number() : '';
+			}
+
+			$lines = [];
+			foreach ( $this->shipments as $index => $shipment ) {
+				$line    = Buyer_Tracking::shipment_caption( $index + 1, $count ) . ': ' . $shipment->get_display_text();
+				$lines[] = null === $shipment->get_url() ? $line : $line . ' — ' . $shipment->get_url();
+			}
+
+			return implode( "\n", $lines );
+		}
+
+		/**
+		 * The several-parcels `{tracking_number}` for the HTML mail: each number is its own link when it has one.
+		 *
+		 * @return string
+		 */
+		private function tracking_numbers_html(): string {
+			$count = count( $this->shipments );
+			$lines = [];
+			foreach ( $this->shipments as $index => $shipment ) {
+				$text    = esc_html( $shipment->get_display_text() );
+				$href    = null === $shipment->get_url() ? '' : esc_url( $shipment->get_url() );
+				$lines[] = esc_html( Buyer_Tracking::shipment_caption( $index + 1, $count ) ) . ': '
+					. ( '' === $href ? $text : '<a href="' . $href . '">' . $text . '</a>' );
+			}
+
+			return implode( '<br>', $lines );
+		}
+
+		/**
+		 * The numbers alone, comma-separated — what a subject or heading can carry, with no captions or line breaks.
+		 *
+		 * @return string
+		 */
+		private function tracking_numbers_inline(): string {
+			$numbers = array_filter(
+				array_map(
+					static function ( Tracking_Shipment $shipment ): string {
+						return $shipment->get_number();
+					},
+					$this->shipments
+				),
+				'strlen'
+			);
+
+			return implode( ', ', $numbers );
+		}
+
+		/**
+		 * Runs a WooCommerce getter with the short, one-line form of `{tracking_number}` when it is still ours.
+		 *
+		 * The subject and the heading go through the same placeholders as the body, and several «Shipment N of M»
+		 * lines do not belong in either.
+		 *
+		 * @param callable $getter Reads the subject or the heading.
+		 * @return string
+		 */
+		private function with_inline_tracking_numbers( callable $getter ): string {
+			$original = $this->placeholders['{tracking_number}'] ?? null;
+			if ( count( $this->shipments ) <= 1 || $original !== $this->own_tracking_number ) {
+				return (string) $getter();
+			}
+
+			$this->placeholders['{tracking_number}'] = $this->tracking_numbers_inline();
+			try {
+				return (string) $getter();
+			} finally {
+				$this->placeholders['{tracking_number}'] = $original;
+			}
+		}
+
+		/**
+		 * @since 2.0.25
+		 *
+		 * @return string
+		 */
+		public function get_subject(): string {
+			return $this->with_inline_tracking_numbers(
+				function () {
+					return parent::get_subject();
+				}
+			);
+		}
+
+		/**
+		 * @since 2.0.25
+		 *
+		 * @return string
+		 */
+		public function get_heading(): string {
+			return $this->with_inline_tracking_numbers(
+				function () {
+					return parent::get_heading();
+				}
+			);
 		}
 
 		/**
@@ -282,6 +420,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 		}
 
 		/**
+		 * The body text with placeholders: the merchant's, or the default.
+		 *
+		 * An order with zero or one parcel gets the default exactly as it has always read. Several parcels get the
+		 * variant laid out for a list of numbers — but only while the body is still the framework's default; a body the
+		 * merchant wrote or edited is never replaced.
+		 *
+		 * @return string
+		 */
+		private function body_text(): string {
+			$body = (string) $this->get_option( 'body', $this->default_body );
+
+			if ( count( $this->shipments ) > 1 && '' !== $this->default_body_multiple && $body === $this->default_body ) {
+				return $this->default_body_multiple;
+			}
+
+			return $body;
+		}
+
+		/**
 		 * @return string
 		 */
 		public function get_content_html() {
@@ -291,7 +448,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 					'email' => $this,
 					'order' => $this->object,
 					'heading' => $this->get_heading(),
-					'body' => $this->format_html( (string) $this->get_option( 'body', $this->default_body ) ),
+					'body' => $this->format_html( $this->body_text() ),
 				],
 				'',
 				$this->template_base
@@ -308,7 +465,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 					'email' => $this,
 					'order' => $this->object,
 					'heading' => $this->get_heading(),
-					'body' => $this->format_string( $this->get_option( 'body', $this->default_body ) ),
+					'body' => $this->format_string( $this->body_text() ),
 				],
 				'',
 				$this->template_base
