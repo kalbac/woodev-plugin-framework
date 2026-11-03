@@ -177,9 +177,17 @@ Copy `release.yml` + `scripts/build-release-zip.sh` from either carrier plugin (
   - staged rollouts pick sites by `crc32(licence + site URL) % 100` (stable, never growing on their own). Bucket 0 is never eligible,
     so release to everyone by switching rollouts OFF, not by setting 100. Only the update API is gated; account downloads always
     serve the newest file. Start a full rewrite at 20 %.
-- **EDD publish-release does not set «Файл обновления» (`_edd_sl_upgrade_file_key`)** — unset on T-Bank 1849 and Russian Post 8772, only CDEK
-  216 has it. Harmless while a download has one file (EDD SL falls back to the first); check and set it in every release, then verify with
-  `get_version`. → `docs-internal/gotchas/edd-publish-release-does-not-set-the-update-file-so-check-it-in-the-release-checklist.md`
+- **⛔ Three fields after EVERY EDD publish — the operator's rule (03.11.2026: he had to fix them by hand in the admin after each
+  of our releases).** `publish-release` leaves all three stale, so the release is not done until each is set and read back:
+  1. **File name** in `edd_download_files` — the entry of the uploaded ZIP is named `<plugin name> <full version>`, e.g.
+     «Ozon Доставка для WooCommerce 2.0.2», never a shortened «… 2.0» or the previous version's name.
+  2. **«Файл обновления»** (`_edd_sl_upgrade_file_key`) — ALWAYS the key of the file just uploaded, even when the download has one
+     file (unset on T-Bank 1849 and Russian Post 8772 before; EDD SL falls back to the first file, which is the wrong one as soon as
+     a second file exists). → `docs-internal/gotchas/edd-publish-release-does-not-set-the-update-file-so-check-it-in-the-release-checklist.md`
+  3. **«Обновлён»** — see the next bullet.
+
+  Then verify: `get_version` returns the new version and the file name, the admin «Файлы загрузки» row shows the new name, and the
+  public page sidebar shows the release date. A release report lists all three values as read back.
 - **The sidebar «Обновлён» on the product page is the download's `post_modified`** (woodev-theme `inc/template-tags.php`,
   `get_the_modified_time()`), and `publish-release` writes only post meta, so it never moves it (operator, 03.11.2026: the changelog
   said 03.11 while the sidebar could show 29.10). After every publish set `post_modified` / `post_modified_gmt` to the release date

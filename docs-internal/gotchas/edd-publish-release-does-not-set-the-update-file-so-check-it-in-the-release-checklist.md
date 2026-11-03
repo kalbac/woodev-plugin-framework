@@ -16,8 +16,8 @@ of the download, so nothing breaks while the download has exactly one file.
 
 ❌ **Wrong** — assume the update API serves the new ZIP because the product page does.
 
-✅ **Correct** — add a line to every release: read `_edd_sl_upgrade_file_key` on the download, and set it when the download has
-more than one file or ever will. Verify with the update API (`get_version`) after publishing; keep the previous file ready for
+✅ **Correct** — in every release set `_edd_sl_upgrade_file_key` to the key of the file just uploaded, ALWAYS (operator rule,
+03.11.2026), and name that file entry `<plugin name> <full version>`. Verify with the update API (`get_version`) after publishing; keep the previous file ready for
 rollback.
 
 ## Related
