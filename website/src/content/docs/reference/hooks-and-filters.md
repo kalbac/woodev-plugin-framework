@@ -275,6 +275,7 @@ These hooks follow a shipment from the orders page to the carrier and back. The 
 | `woodev_shipping_shipment_fact_flag` | filter | `$flag`, `$kind`, `$order`, `$provider` | Decide whether a change puts the attention flag on an order row. | [Orders, export, documents & tracking](../../shipping/orders-export-documents-and-tracking/) |
 | `woodev_shipping_shipment_fact_note` | filter | `$note`, `$kind`, `$order`, `$provider`, `$event` | Reword the order note for a change, or return an empty string for no note. | [Orders, export, documents & tracking](../../shipping/orders-export-documents-and-tracking/) |
 | `woodev_shipping_delivery_email_placeholders` | filter | `$placeholders`, `$order`, `$provider` | Add carrier-specific placeholders to the delivery status email. | [Orders, export, documents & tracking](../../shipping/orders-export-documents-and-tracking/) |
+| `woodev_shipping_order_tracking_shipments` | filter | `$shipments`, `$order`, `$provider` | Add, drop or change the parcels a buyer sees in the order block and in the delivery status emails. | [Buyer tracking](../../shipping/buyer-tracking/) |
 
 ### The orders page
 

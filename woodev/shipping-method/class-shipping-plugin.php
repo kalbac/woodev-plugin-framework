@@ -388,6 +388,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/order/class-delivery-status-events.php';
 			require_once $path . '/order/class-delivery-status-watcher.php';
 
+			// What a buyer can follow: the parcel value object (read by Orders_Provider::get_tracking_shipments() and the
+			// emails below) and the tracking block under the order details, hooked once for every carrier plugin (#1575).
+			require_once $path . '/order/class-tracking-shipment.php';
+			require_once $path . '/order/class-buyer-tracking.php';
+			Order\Buyer_Tracking::instance();
+
 			// Status-driven customer notifications use WooCommerce's own Email settings registry.
 			require_once $path . '/email/class-delivery-status-emails.php';
 			if ( class_exists( '\\WC_Email' ) ) {

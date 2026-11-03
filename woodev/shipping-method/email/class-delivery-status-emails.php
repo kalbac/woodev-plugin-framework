@@ -96,7 +96,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 					'statuses'    => [ Delivery_Status::CREATED, Delivery_Status::IN_TRANSIT ],
 					'subject'     => __( 'Order {order_number} has been handed over for delivery', 'woodev-plugin-framework' ),
 					'heading'     => __( 'Your order has been handed over for delivery', 'woodev-plugin-framework' ),
-					'body'        => __( 'Your shipment has been handed over to {carrier_name}. Tracking number: {tracking_number}. {tracking_url}', 'woodev-plugin-framework' ),
+					'body'        => __( "Your shipment has been handed over to {carrier_name}.\nTracking number: {tracking_number}\n{tracking_url}", 'woodev-plugin-framework' ),
 					'enabled'     => true,
 				],
 				'customer_shipment_pickup' => [

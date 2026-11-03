@@ -5557,7 +5557,55 @@ msgstr ""
 msgid "Sent to the customer after a return or failed delivery."
 msgstr ""
 
-msgid "Your shipment has been handed over to {carrier_name}. Tracking number: {tracking_number}. {tracking_url}"
+msgid "Your shipment has been handed over to {carrier_name}.\nTracking number: {tracking_number}\n{tracking_url}"
+msgstr ""
+
+msgid "Delivery tracking"
+msgstr ""
+
+msgid "Tracking number"
+msgstr ""
+
+#, php-format
+msgid "Shipment %1$d of %2$d"
+msgstr ""
+
+#, php-format
+msgid "Current status: %1$s, %2$s"
+msgstr ""
+
+#, php-format
+msgid "Current status: %s"
+msgstr ""
+
+msgid "Track shipment"
+msgstr ""
+
+msgid "Awaiting dispatch"
+msgstr ""
+
+msgid "Created"
+msgstr ""
+
+msgid "In transit"
+msgstr ""
+
+msgid "Ready for pickup"
+msgstr ""
+
+msgid "Delivered"
+msgstr ""
+
+msgid "Returning to sender"
+msgstr ""
+
+msgid "Returned"
+msgstr ""
+
+msgid "Delivery failed"
+msgstr ""
+
+msgid "Cancelled"
 msgstr ""
 
 msgid "Available placeholders: {order_number}, {tracking_number}, {tracking_url}, {carrier_name}, {pickup_point}, {delivery_date}."

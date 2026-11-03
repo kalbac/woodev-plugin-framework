@@ -223,6 +223,44 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Delivery_Status' ) )
 		}
 
 		/**
+		 * Returns one state's wording for the BUYER — the storefront counterpart of {@see self::label()}, which is the
+		 * merchant's short badge text.
+		 *
+		 * Storefront strings carry an English msgid (the Russian comes from the catalogue). A state the buyer cannot be
+		 * told about — {@see self::UNKNOWN} or anything unrecognised — has no wording, so a caller prints no status line
+		 * rather than «Unknown».
+		 *
+		 * @since 2.0.25
+		 *
+		 * @param string $state one of the constants above.
+		 * @return string|null null when there is nothing to tell the buyer.
+		 */
+		public static function buyer_label( string $state ): ?string {
+			switch ( $state ) {
+				case self::PENDING:
+					return __( 'Awaiting dispatch', 'woodev-plugin-framework' );
+				case self::CREATED:
+					return __( 'Created', 'woodev-plugin-framework' );
+				case self::IN_TRANSIT:
+					return __( 'In transit', 'woodev-plugin-framework' );
+				case self::READY_FOR_PICKUP:
+					return __( 'Ready for pickup', 'woodev-plugin-framework' );
+				case self::DELIVERED:
+					return __( 'Delivered', 'woodev-plugin-framework' );
+				case self::RETURNING:
+					return __( 'Returning to sender', 'woodev-plugin-framework' );
+				case self::RETURNED:
+					return __( 'Returned', 'woodev-plugin-framework' );
+				case self::FAILED:
+					return __( 'Delivery failed', 'woodev-plugin-framework' );
+				case self::CANCELLED:
+					return __( 'Cancelled', 'woodev-plugin-framework' );
+				default:
+					return null;
+			}
+		}
+
+		/**
 		 * Resolves a carrier's raw status into the full row shape:
 		 * `{ canonical, canonical_label, raw, raw_label }` (SP-10 spec D4).
 		 *

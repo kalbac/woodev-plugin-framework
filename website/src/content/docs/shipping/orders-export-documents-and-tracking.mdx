@@ -355,7 +355,7 @@ final class My_Carrier_Tracking_Handler extends Abstract_Tracking_Handler {
 
 Buyer emails about a delivery come from the framework, under WooCommerce → Settings → Emails. **Your plugin does nothing to get them.** Declare `status_meta_key` and `status_map` and write the raw status; the framework sends each email once per shipment when the state really changes. Shipments that were already on their way when the framework first saw them are adopted silently, so nobody gets an email about an old status.
 
-Do not send buyer status emails of your own. To add carrier values to the text, use the filter `woodev_shipping_delivery_email_placeholders`, which receives the placeholders, the order and the provider. Values are escaped in the HTML email. The built-in placeholders cover the order number, the tracking number and link, the carrier name, the pickup point and the delivery date.
+Do not send buyer status emails of your own. To add carrier values to the text, use the filter `woodev_shipping_delivery_email_placeholders`, which receives the placeholders, the order and the provider. Values are escaped in the HTML email. The built-in placeholders cover the order number, the tracking number and link, the carrier name, the pickup point and the delivery date. The tracking number and link come from the same list the buyer sees on the order page; see [Buyer tracking](../buyer-tracking/).
 
 ## Cost, date, problems and couriers
 

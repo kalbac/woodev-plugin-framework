@@ -1,6 +1,19 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
+## [2.0.25] — Unreleased
+### Features
+- **shipping**: #1575 buyer tracking block under the order details (My Account and the order-received page): the tracking number as a link and the current delivery status, one row per parcel when an order has several; theme override at `woodev/shipping/order/tracking.php`
+- **shipping**: #1575 `Orders_Provider::get_tracking_shipments()`, the optional `shipments_resolver` argument and the `Tracking_Shipment` value object: one source of tracking numbers for the page and the delivery status emails
+- **shipping**: #1575 filter `woodev_shipping_order_tracking_shipments`
+- **shipping**: #1575 `Delivery_Status::buyer_label()`
+
+### Bug Fixes
+- **shipping**: #1575 delivery status emails print every tracking number of an order with several parcels, each as its own link; the default handed-over email body no longer ends in a stray full stop
+
+### Documentation
+- **shipping**: #1575 public page "Buyer tracking"
+
 ## [2.0.24] — 2026-11-03
 ### Bug Fixes
 - **orders-page**: #711 critic round 1 and rig smoke
