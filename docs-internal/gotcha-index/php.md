@@ -22,6 +22,7 @@
 - [php/stdlib] **Four PHP/WP stdlib behaviours that pass tests and fail in production — incl. `is_numeric()` accepting `0.5`/`+1`/`1e3`, after which `(int)` turns `0.5` into the deletion sentinel `0`.** → [php-stdlib-traps-that-survive-tests](../gotchas/php-stdlib-traps-that-survive-tests.md) (s45, extended s108)
 - [php/php84-implicit-nullable-payment-handlers] **RESOLVED (kept as history — the file is still linked).** Payment handlers use explicit nullable parameters after `ef3d067`; `PaymentGatewayImplicitNullableTest` is the regression guard. → [php84-implicit-nullable-payment-handlers](../gotchas/php84-implicit-nullable-payment-handlers.md)
 - [php/wp-admin] **`admin_init` never fires for an admin page slug nobody registers — core 403s in `includes/menu.php` first; a legacy-URL redirect copied from the settings one is dead code. Hook `admin_page_access_denied` and compare `$plugin_page`.** → [admin-init-never-fires-for-an-unregistered-admin-page-slug](../gotchas/admin-init-never-fires-for-an-unregistered-admin-page-slug.md) (s137)
+- [php/wpdb] **`wpdb::prepare()` leaves numbered `%N$s` strings UNQUOTED; reusing one numbered placeholder raises `_doing_it_wrong`. Quote them yourself, and run the SQL through the real prepare — a fake wpdb never executes it.** → [wpdb-prepare-inserts-numbered-string-placeholders-unquoted](../gotchas/wpdb-prepare-inserts-numbered-string-placeholders-unquoted.md) (s212)
 
 ## Related
 
