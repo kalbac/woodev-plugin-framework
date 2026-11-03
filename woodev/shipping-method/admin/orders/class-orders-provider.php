@@ -107,6 +107,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		private $status_labels;
 
 		/**
+		 * Raw carrier statuses that mean «the carrier has the parcel» although their canonical state may still be
+		 * `created` (#1564). Optional; empty means «the first `in_transit` entry is the handover».
+		 *
+		 * @since 2.0.24
+		 *
+		 * @var string[]
+		 */
+		private $handover_statuses;
+
+		/**
 		 * Tracking-number link template. Accepted, not yet consumed (increment 2).
 		 *
 		 * @since 2.0.2
@@ -240,6 +250,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		 * @param string|null          $cron_hook                  carrier cron hook that refreshes delivery statuses.
 		 * @param callable|null        $marker_writer              carrier marker writer (#967).
 		 * @param callable|null        $order_fields               carrier order-fields declaration (#973).
+		 * @param bool                 $supports_label_printing    whether carrier documents are available.
+		 * @param string[]             $handover_statuses          raw statuses meaning the carrier holds the parcel (#1564).
 		 */
 		private function __construct(
 			string $id,
@@ -258,7 +270,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 			?string $cron_hook,
 			?callable $marker_writer = null,
 			?callable $order_fields = null,
-			bool $supports_label_printing = false
+			bool $supports_label_printing = false,
+			array $handover_statuses = []
 		) {
 			$this->id                        = $id;
 			$this->label                     = $label;
@@ -277,6 +290,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 			$this->marker_writer             = $marker_writer;
 			$this->order_fields              = $order_fields;
 			$this->supports_label_printing   = $supports_label_printing;
+			$this->handover_statuses         = $handover_statuses;
 		}
 
 		/**
@@ -314,6 +328,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		 *                                                           carrier without it asks the manager for nothing extra
 		 *                                                           (see {@see self::get_order_fields()}).
 		 *     @type bool                $supports_label_printing   whether carrier documents are available.
+		 *     @type string[]            $handover_statuses         raw statuses (keys of `status_map`) that mean «the carrier has the
+		 *                                                          parcel» while the canonical state is still `created` — e.g. a warehouse
+		 *                                                          receipt. The «handover to delivery» figure starts at the first status log
+		 *                                                          entry that is `in_transit` OR carries one of these raw codes; leave it out
+		 *                                                          and only `in_transit` starts it. NEVER list a destination status such as
+		 *                                                          «ready for pickup» (see {@see self::get_handover_statuses()}).
 		 * }
 		 * @return self
 		 *
@@ -348,6 +368,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 				return isset( $args[ $key ] ) && is_array( $args[ $key ] ) ? $args[ $key ] : [];
 			};
 
+			$string_list = static function ( array $args, string $key ): array {
+				return isset( $args[ $key ] ) && is_array( $args[ $key ] ) ? array_filter( $args[ $key ], 'is_scalar' ) : [];
+			};
+
 			// Declared-but-broken is a plugin bug, not an absent writer: silently treating a
 			// typo'd callable as "none" would hide the carrier from the order editor with no trace.
 			if ( isset( $args['marker_writer'] ) && ! is_callable( $args['marker_writer'] ) ) {
@@ -379,7 +403,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 				$nullable_string( $args, 'cron_hook' ),
 				$args['marker_writer'] ?? null,
 				$args['order_fields'] ?? null,
-				true === ( $args['supports_label_printing'] ?? false )
+				true === ( $args['supports_label_printing'] ?? false ),
+				array_values( array_unique( array_filter( array_map( 'strval', $string_list( $args, 'handover_statuses' ) ), 'strlen' ) ) )
 			);
 		}
 
@@ -461,6 +486,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		 */
 		public function get_status_map(): array {
 			return $this->status_map;
+		}
+
+		/**
+		 * Returns the raw statuses that mean «the carrier already holds the parcel» (#1564), possibly empty.
+		 *
+		 * The status log keeps each entry's RAW code beside its canonical state, and the «from handover to delivery» time
+		 * starts at the first entry that is `in_transit` or whose raw code is listed here. A carrier lists the raw codes that
+		 * map to `created` although the parcel is already in its hands (CDEK: receipt at the sender's warehouse). A
+		 * destination status — «ready for pickup», «arrived at the pickup point» — is NOT a handover and must never be listed:
+		 * it would start the interval at the end of the journey.
+		 *
+		 * @since 2.0.24
+		 *
+		 * @return string[]
+		 */
+		public function get_handover_statuses(): array {
+			return $this->handover_statuses;
 		}
 
 		/**

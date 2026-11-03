@@ -61,6 +61,7 @@ class ShippingOrdersProviderTest extends TestCase {
 		$this->assertNull( $provider->get_cron_hook() );
 		$this->assertSame( [], $provider->get_status_map() );
 		$this->assertSame( [], $provider->get_status_labels() );
+		$this->assertSame( [], $provider->get_handover_statuses() );
 	}
 
 	/**
@@ -162,5 +163,24 @@ class ShippingOrdersProviderTest extends TestCase {
 
 		$this->assertSame( [], $provider->get_status_map() );
 		$this->assertSame( [], $provider->get_status_labels() );
+	}
+
+	/** #1564: the raw codes that mean «the carrier has the parcel» are optional and kept as clean strings. */
+	public function test_handover_statuses_are_declared_as_a_clean_list_of_raw_codes(): void {
+		$provider = Orders_Provider::create(
+			'cdek',
+			'СДЭК',
+			'_wc_edostavka_shipping',
+			[ 'cdek' ],
+			[ 'handover_statuses' => [ 'RECEIVED_AT_SHIPMENT_WAREHOUSE', '', 'RECEIVED_AT_SHIPMENT_WAREHOUSE', 7, [ 'x' ], null ] ]
+		);
+
+		$this->assertSame( [ 'RECEIVED_AT_SHIPMENT_WAREHOUSE', '7' ], $provider->get_handover_statuses() );
+	}
+
+	public function test_a_non_array_handover_declaration_falls_back_to_none(): void {
+		$provider = Orders_Provider::create( 'cdek', 'СДЭК', '_wc_edostavka_shipping', [ 'cdek' ], [ 'handover_statuses' => 'AT_WAREHOUSE' ] );
+
+		$this->assertSame( [], $provider->get_handover_statuses() );
 	}
 }

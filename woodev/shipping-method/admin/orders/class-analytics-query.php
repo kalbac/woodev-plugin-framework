@@ -128,7 +128,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Qu
 		 * The log is a JSON list inside ONE meta value, which SQL cannot average, so the statement returns the raw log of each
 		 * delivered order that has one and the figure is read out here with {@see Delivery_Status_Log::handover_to_delivery()}.
 		 * The loop is over those logs — only DELIVERED orders, only those logged since the framework started recording — and it
-		 * touches no order object. An order whose log shows no usable handover and delivery simply does not count.
+		 * touches no order object. An order whose log shows no usable handover and delivery simply does not count. What
+		 * counts as the handover is the carrier's: `in_transit`, or a raw status it declared
+		 * ({@see Orders_Provider::get_handover_statuses()}).
 		 *
 		 * @since 2.0.24
 		 *
@@ -138,10 +140,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Qu
 		 * @return array<string,array{sample:int,seconds:int}> carrier id => orders measured and their seconds added up.
 		 */
 		public function handover_rows( array $providers, array $scope, ?string $only = null ): array {
-			$totals = [];
+			$totals    = [];
+			$declared = [];
+
+			// Each carrier says which of its raw statuses mean «the carrier has the parcel» (#1564).
+			foreach ( $providers as $provider ) {
+				$declared[ $provider->get_id() ] = $provider->get_handover_statuses();
+			}
 
 			foreach ( $this->run( $this->handover_sql( $providers, $scope, $only ) ) as $row ) {
-				$seconds = Delivery_Status_Log::handover_to_delivery( Delivery_Status_Log::decode( $row['status_log'] ?? null ) );
+				$seconds = Delivery_Status_Log::handover_to_delivery(
+					Delivery_Status_Log::decode( $row['status_log'] ?? null ),
+					$declared[ (string) $row['carrier'] ] ?? []
+				);
 
 				if ( null === $seconds ) {
 					continue;

@@ -265,7 +265,7 @@ final class AnalyticsQueryTest extends TestCase {
 	public function test_handover_rows_add_up_only_the_logs_that_show_both_ends(): void {
 		$db       = $this->wpdb();
 		$db->rows = [
-			[ 'carrier' => 'cdek', 'status_log' => '[["created",100],["in_transit",1000],["delivered",1000]]' ],
+			[ 'carrier' => 'cdek', 'status_log' => '[["created",100],["in_transit",1000],["delivered",2200]]' ],
 			[ 'carrier' => 'cdek', 'status_log' => '[["created",100],["ready_for_pickup",500],["delivered",1700]]' ],
 			[ 'carrier' => 'cdek', 'status_log' => '[["delivered",900]]' ],
 			[ 'carrier' => 'cdek', 'status_log' => 'not json' ],
@@ -274,10 +274,42 @@ final class AnalyticsQueryTest extends TestCase {
 
 		$this->assertSame(
 			[
-				'cdek'   => [ 'sample' => 2, 'seconds' => 1200 ],
+				'cdek'   => [ 'sample' => 1, 'seconds' => 1200 ],
 				'yandex' => [ 'sample' => 1, 'seconds' => 86400 ],
 			],
-			$this->query( true, $db )->handover_rows( [ $this->cdek(), $this->yandex() ], self::SCOPE )
+			$this->query( true, $db )->handover_rows( [ $this->cdek(), $this->yandex() ], self::SCOPE ),
+			'a pickup arrival followed by delivery is not a handover-to-delivery time'
+		);
+	}
+
+	/** Each carrier's own declared raw codes decide where ITS orders start (a CDEK warehouse receipt is still `created`). */
+	public function test_handover_rows_use_the_carriers_declared_handover_codes(): void {
+		$declaring = Orders_Provider::create(
+			'cdek',
+			'СДЭК',
+			'_cdek_marker',
+			[ 'cdek' ],
+			[
+				'status_meta_key'   => '_cdek_status',
+				'status_map'        => [ 'AT_WAREHOUSE' => 'created', 'ROAD' => 'in_transit', 'DONE' => 'delivered' ],
+				'handover_statuses' => [ 'AT_WAREHOUSE' ],
+			]
+		);
+
+		$db       = $this->wpdb();
+		$db->rows = [
+			// Received on day 0, left on day 2, delivered on day 5: five days, not three.
+			[ 'carrier' => 'cdek', 'status_log' => '[["created",0,"NEW"],["created",86400,"AT_WAREHOUSE"],["in_transit",259200,"ROAD"],["delivered",518400,"DONE"]]' ],
+			// The same shape from a carrier that declares nothing: it starts at the transit.
+			[ 'carrier' => 'yandex', 'status_log' => '[["created",0,"NEW"],["created",86400,"AT_WAREHOUSE"],["in_transit",259200,"ROAD"],["delivered",518400,"DONE"]]' ],
+		];
+
+		$this->assertSame(
+			[
+				'cdek'   => [ 'sample' => 1, 'seconds' => 432000 ],
+				'yandex' => [ 'sample' => 1, 'seconds' => 259200 ],
+			],
+			$this->query( true, $db )->handover_rows( [ $declaring, $this->yandex() ], self::SCOPE )
 		);
 	}
 

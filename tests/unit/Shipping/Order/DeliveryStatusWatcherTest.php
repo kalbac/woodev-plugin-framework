@@ -15,26 +15,25 @@ use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__, 4 ) . '/woodev/compatibility/class-plugin-compatibility.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/compatibility/class-order-compatibility.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/order/class-order-lock.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/order/class-delivery-status-log.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/order/class-delivery-status-events.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/order/class-delivery-status-watcher.php';
+require_once __DIR__ . '/delivery-status-order-fakes.php';
 
 /** @covers \Woodev\Framework\Shipping\Order\Delivery_Status_Watcher */
 final class DeliveryStatusWatcherTest extends TestCase {
 
-	/** @var array<string,mixed> order meta fake. */
-	private array $meta = [];
+	use Fakes_Status_Orders;
 
 	/** @var string post type of every post id. */
 	private string $post_type = 'shop_order';
 
 	protected function setUp(): void {
 		parent::setUp();
-		$this->meta      = [ '_test_marker' => '1' ];
+		$this->fake_status_orders( [ '_test_marker' => '1' ] );
 		$this->post_type = 'shop_order';
 
-		Functions\when( 'apply_filters' )->returnArg( 2 );
-		Functions\when( 'get_post_meta' )->alias( function ( int $id, string $key ) { return $this->meta[ $key ] ?? ''; } );
-		Functions\when( 'update_post_meta' )->alias( function ( int $id, string $key, $value ) { $this->meta[ $key ] = $value; return true; } );
 		Functions\when( 'get_post_type' )->alias( function () { return $this->post_type; } );
 		Functions\when( 'wc_get_order' )->alias( function ( $id ) { return 123 === (int) $id ? $this->order() : false; } );
 
@@ -58,18 +57,14 @@ final class DeliveryStatusWatcherTest extends TestCase {
 	}
 
 	protected function tearDown(): void {
+		$this->restore_status_wpdb();
 		Delivery_Status_Watcher::reset_for_tests();
 		Orders_Registry::instance()->reset_for_tests();
 		parent::tearDown();
 	}
 
 	private function order(): \WC_Order {
-		$order = Mockery::mock( '\WC_Order' );
-		$order->shouldReceive( 'get_id' )->andReturn( 123 );
-		$order->shouldReceive( 'get_status' )->andReturn( 'processing' );
-		$order->shouldReceive( 'get_meta' )->andReturnUsing( function ( string $key ) { return $this->meta[ $key ] ?? ''; } );
-
-		return $order;
+		return $this->snapshot_order();
 	}
 
 	public function test_it_listens_to_both_order_storages_and_to_shutdown(): void {

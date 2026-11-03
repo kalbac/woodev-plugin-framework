@@ -343,6 +343,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Analytics_Control
 					$provider->get_marker_meta_key(),
 					$provider->get_status_meta_key(),
 					$provider->get_status_map(),
+					$provider->get_handover_statuses(),
 				];
 			}
 

@@ -56,6 +56,11 @@ A carrier that pushes events to you implements webhooks by extending `Abstract_W
   canonical state, whichever path wrote it — webhook handler, tracking sync, cron re-poll, manual edit. Declare
   `status_meta_key` and `status_map` on the provider and write the raw status with the order's meta API. Shipments
   already in flight when the framework starts watching are adopted silently (no email for an old status).
+  The framework also journals each real change with its time and the RAW status (`Delivery_Status_Log`, order meta
+  `_woodev_delivery_status_log_{provider id}`) — the analytics «от передачи до вручения» time reads it. If a raw status
+  means «the carrier has the parcel» although it maps to `created` (CDEK: receipt at the sender's warehouse), list it in
+  the provider's optional `handover_statuses`; the interval then starts at the first `in_transit` entry or the first
+  declared raw status. Never list a destination status (`ready_for_pickup`).
   `Delivery_Status_Events::notify( $order, $provider )` stays public for a carrier that keeps its status somewhere
   the watcher cannot see; it publishes nothing when the canonical state did not change. Each ready-made email is sent
   once per shipment (one flag per email, so «Передан в доставку» is not repeated across `created` → `in_transit`).
