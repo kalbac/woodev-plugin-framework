@@ -5219,6 +5219,10 @@ msgstr ""
 msgid "От заказа до вручения, дней"
 msgstr ""
 
+#: assets/build/shipping-orders-page/index.js:23
+msgid "От передачи до вручения, дней"
+msgstr ""
+
 #: assets/build/shipping-orders-page/index.js:24
 msgid "в работе: %s"
 msgstr ""

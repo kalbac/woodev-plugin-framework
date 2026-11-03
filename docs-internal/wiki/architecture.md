@@ -393,6 +393,37 @@ affected; closing the gap needs a framework-wide line↔shipment link, not a loc
 `resolve_service_parameter()` that reads anything beyond the package, the instance settings and the
 packing settings must add it to the cache key through its `get_rate_cache_context()` override.
 
+## Delivery status log — when each state was entered (`order/class-delivery-status-log.php`, #1564)
+
+`Delivery_Status_Events::notify()` / `sync()` share ONE private decision, `reconcile()`, and it is also the only writer of the history.
+An ordinary re-poll (published state == current state, nothing new for the log) returns before any lock. Everything else runs under
+`Order_Lock` (scope `status`, 5 s wait): the order is re-read (`read_meta_data( true )`), the published state, the current state (from
+the order object's fresh copy, not the legacy post-meta cache), the log entry (`Delivery_Status_Log::stage()`, which never saves) and
+the new published state are decided together and saved once; the lock is released in `finally` and `woodev_shipping_delivery_status_changed`
+fires after it. **A lock that is not granted, or a save that fails, records nothing — not the log and not the published state — so the
+next call finds the same change and retries it** (the lost update the first version had: two requests with the same snapshot, the second
+overwriting the first's entry, and the baseline already advanced so nothing could repair it). Same pattern as `Shipment_Facts_Events::record()`.
+
+**Data contract (installed sites, keep byte-for-byte):** order meta `_woodev_delivery_status_log_{provider id}` — a JSON
+string `[["created",1762170000,"NEW"],["in_transit",1762256400,"ROAD"],…]`: `[ canonical state, unix time (UTC), the carrier's RAW
+status code ]`, oldest first, the newest 20 kept (`Delivery_Status_Log::CAP`). A two-element entry still decodes (empty raw code).
+JSON, not a serialised array, because the analytics statement reads the raw column and never `unserialize()`s it. A state equal to the
+newest entry is not written. **Forward-only:** no back-fill, and an order adopted silently by `sync()` (it was already in flight when
+the framework began watching) gets no entry for the state it was found in — its log starts at its next real change.
+
+**Declaring the handover (`Orders_Provider` arg `handover_statuses`, a list of RAW codes, optional).** The canonical state cannot tell
+«carrier took the parcel» from «order registered» for a carrier that maps both to `created` (CDEK: `RECEIVED_AT_SHIPMENT_WAREHOUSE`).
+A provider lists such raw codes; the log then takes ONE extra entry for the first declared code even though the canonical state did not
+change (`Delivery_Status_Log::awaits_handover()`: only when the log already has entries — a silently adopted order never gets a
+«now»-stamped handover). A destination status (`ready_for_pickup`) is never listed.
+
+**Reading it.** `Delivery_Status_Log::handover_to_delivery( $entries, $provider->get_handover_statuses() )` is the one definition of the
+exact time: handover = the FIRST entry that is `in_transit` OR carries a declared raw code (`ready_for_pickup` NEVER starts the
+interval — it is arrival at the destination), delivery = the first `delivered` entry AFTER it; null when there is no handover before the
+delivery (a pickup-only log of a shipment already on its way at rollout is not counted), when the log has reached the cap (its beginning
+may have been dropped, so a «first» handover could be a later re-entry), or outside 0 … 180 days. `Analytics_Query::handover_rows()`
+passes each carrier's own list; the REST cache signature includes it.
+
 ## Shipment facts — carrier-neutral cost / date / issue / courier (`order/class-shipment-facts*.php`, #1205)
 
 Beside `Delivery_Status_Events` (the delivery STATUS) sits the seam for the facts that are not a status. A carrier
@@ -644,8 +675,9 @@ Moved here from `CURRENT-STATE.md` in s139: they are reference, true regardless 
   `UNION ALL` leg per provider in the #928 resolver's form — the first REGISTERED provider with a marker owns the order, the outcome bucket comes from the
   provider's own `status_map` — on HPOS or legacy tables; `Analytics_Aggregator` is the arithmetic, `Analytics_Report` the composition,
   `Analytics_Cache` the transient (10 min when the range contains today, 1 h otherwise; the data version is bumped, debounced to 1/min, on new order /
-  order saved / status / export / trash / delete / delivery-status change). Period = ORDER date. The framework stores no status history or handover/delivered
-  timestamps, so the time tile is order → `date_completed` for delivered orders only, labelled as such with its sample size; no carrier stores an
+  order saved / status / export / trash / delete / delivery-status change). Period = ORDER date. Handover/delivered times exist only from the day the status log (#1564, next section) started recording, so the time tile
+  is order → `date_completed` for delivered orders only, labelled as such with its sample size, until an order's log shows both ends; then the tile reads
+  «От передачи до вручения» (exact, `Analytics_Query::handover_rows()`, a 3rd statement per period that reads the delivered orders' logs) with its own coverage; no carrier stores an
   actual shipping cost the shop pays (spec §3), so «paid vs carrier cost» is not shown. The same body is also WooCommerce → Аналитика → «Доставка перевозчиками» (`/analytics/woodev-delivery`): `Orders_Registry::add_analytics_report_menu_item()` adds the entry under the page's own gate (providers + page capability), `Analytics::register_pages()` makes it a registered `wc-admin` page so the page bundle is enqueued there, and the bundle's `woocommerce_admin_reports_list` filter renders `AnalyticsTab` with the report's path. Spec: [2026-11-03-711-roi-analytics.md](../specs/2026-11-03-711-roi-analytics.md).
 - **The carrier marker is a two-sided contract (#967, #710 I1b).** The page FINDS an order by the
   presence of `Orders_Provider::get_marker_meta_key()` (an `EXISTS` clause; `Orders_Id_Resolver`

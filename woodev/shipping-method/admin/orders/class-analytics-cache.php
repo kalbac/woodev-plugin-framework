@@ -64,7 +64,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Ca
 		 *
 		 * @var int
 		 */
-		public const SCHEMA_VERSION = 1;
+		public const SCHEMA_VERSION = 2;
 
 		/**
 		 * Lifetime of an answer whose range contains today, in seconds.

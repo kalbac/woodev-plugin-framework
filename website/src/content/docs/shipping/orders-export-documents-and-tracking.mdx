@@ -153,6 +153,7 @@ The first argument of `Orders_Provider::create()` is the **carrier id**. Use the
 | `status_meta_key` | The order-meta key holding the carrier's **raw** status. |
 | `status_map` | Raw status → one of the framework's states, see below. A raw status you leave out reads as `unknown`. |
 | `status_labels` | Raw status → the text shown to the merchant. |
+| `handover_statuses` | Optional. The raw statuses that mean your carrier already has the parcel while the framework state is still `created`, for example the receipt at the sender's warehouse. The analytics tab's «from handover to delivery» time starts at the first `in_transit` status or the first of these. Never list a destination status such as «ready for pickup». |
 | `tracking_meta_key` | The key holding the tracking number. |
 | `tracking_url_template` | A link with `{tracking}` where the number goes. |
 | `tracking_url_meta_key` | A key holding an absolute tracking link, used instead of the template for an order that has a tracking number and a valid `http(s)` link in it. Needs `tracking_meta_key`. |

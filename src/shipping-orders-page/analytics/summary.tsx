@@ -4,8 +4,9 @@
  * Four tiles drive the chart (the selected one is underlined, like in WooCommerce's reports); the other two are plain
  * figures. A chart tile is a LINK to the same page with `chart=<metric>` (`href` from `getNewPath()`), the way WooCommerce's
  * own reports select a tile — not `onToggle`, which is the mobile open/close toggle of a collapsed list (a button with a chevron
- * and a shorter, clipped tile). The two bad-outcome tiles use `reverseTrend`, so a rise in returns is red. The time tile is honest about what it is:
- * the order-to-delivery time, measured only where the order has a completion date, with the sample size beside it.
+ * and a shorter, clipped tile). The two bad-outcome tiles use `reverseTrend`, so a rise in returns is red. The time tile is honest about what it is,
+ * with the sample size beside it: the order-to-delivery time, measured only where the order has a completion date — until the status log
+ * (#1564) has seen an order from the carrier taking the parcel to the buyer receiving it; from then on the exact handover-to-delivery time.
  *
  * Authored in JSX (automatic runtime — WP 6.6+).
  *
@@ -25,7 +26,12 @@ interface TileSpec {
 	reverseTrend?: boolean;
 }
 
-function tiles(): TileSpec[] {
+/** Whether the exact handover-to-delivery time has a sample, so its tile replaces the order-to-delivery one. */
+function hasExactTime( data: AnalyticsResponse ): boolean {
+	return data.totals.current.handover_sample > 0;
+}
+
+function tiles( data: AnalyticsResponse ): TileSpec[] {
 	return [
 		{ key: 'orders', chart: 'orders', label: __( 'Заказы', 'woodev-plugin-framework' ), value: ( m ) => formatCount( m.orders ) },
 		{ key: 'revenue', chart: 'revenue', label: __( 'Выручка', 'woodev-plugin-framework' ), value: ( m, c ) => formatMoney( m.revenue, c ) },
@@ -43,12 +49,19 @@ function tiles(): TileSpec[] {
 			value: ( m ) => formatShare( m.returned_share ),
 			reverseTrend: true,
 		},
-		{
-			key: 'avg_days_to_delivery',
-			chart: null,
-			label: __( 'От заказа до вручения, дней', 'woodev-plugin-framework' ),
-			value: ( m ) => formatDays( m.avg_days_to_delivery ),
-		},
+		hasExactTime( data )
+			? {
+					key: 'avg_days_handover_to_delivery',
+					chart: null,
+					label: __( 'От передачи до вручения, дней', 'woodev-plugin-framework' ),
+					value: ( m ) => formatDays( m.avg_days_handover_to_delivery ),
+			  }
+			: {
+					key: 'avg_days_to_delivery',
+					chart: null,
+					label: __( 'От заказа до вручения, дней', 'woodev-plugin-framework' ),
+					value: ( m ) => formatDays( m.avg_days_to_delivery ),
+			  },
 	];
 }
 
@@ -61,6 +74,15 @@ function note( key: string, data: AnalyticsResponse ): string | null {
 			/* translators: %s: how many orders are still on their way. */
 			__( 'в работе: %s', 'woodev-plugin-framework' ),
 			formatCount( current.outcomes.in_progress )
+		);
+	}
+
+	if ( 'avg_days_handover_to_delivery' === key ) {
+		return sprintf(
+			/* translators: 1: delivered orders whose status log shows the handover and the delivery, 2: delivered orders in the period. */
+			__( 'по %1$s из %2$s доставленных', 'woodev-plugin-framework' ),
+			formatCount( data.coverage.handover_sample ),
+			formatCount( data.coverage.delivered )
 		);
 	}
 
@@ -100,7 +122,7 @@ export function Summary( { data, metric, query, path }: SummaryProps ) {
 	return (
 		<SummaryList>
 			{ () =>
-				tiles().map( ( tile ) => {
+				tiles( data ).map( ( tile ) => {
 					const text = note( tile.key, data );
 					const chart = tile.chart;
 

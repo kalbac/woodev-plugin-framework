@@ -137,6 +137,7 @@ return [
 	'Woodev\\Framework\\Shipping\\Order\\Delivered_Order_Status' => 'woodev/shipping-method/order/class-delivered-order-status.php',
 	'Woodev\\Framework\\Shipping\\Order\\Delivery_Status' => 'woodev/shipping-method/order/class-delivery-status.php',
 	'Woodev\\Framework\\Shipping\\Order\\Delivery_Status_Events' => 'woodev/shipping-method/order/class-delivery-status-events.php',
+	'Woodev\\Framework\\Shipping\\Order\\Delivery_Status_Log' => 'woodev/shipping-method/order/class-delivery-status-log.php',
 	'Woodev\\Framework\\Shipping\\Order\\Delivery_Status_Watcher' => 'woodev/shipping-method/order/class-delivery-status-watcher.php',
 	'Woodev\\Framework\\Shipping\\Order\\Delivery_Sync_Status' => 'woodev/shipping-method/order/class-delivery-sync-status.php',
 	'Woodev\\Framework\\Shipping\\Order\\Document_Result' => 'woodev/shipping-method/order/class-document-result.php',

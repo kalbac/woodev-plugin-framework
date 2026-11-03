@@ -31,6 +31,10 @@ export interface AnalyticsMetrics {
 	failed_share: number | null;
 	avg_days_to_delivery: number | null;
 	time_sample: number;
+	/** Exact handover → delivery, from the status log (#1564); `null` until an order's log shows both ends. */
+	avg_days_handover_to_delivery: number | null;
+	/** Delivered orders the exact figure is based on. */
+	handover_sample: number;
 }
 
 /** Percent change against the previous period, per metric; `null` when there is nothing to compare with. */
@@ -85,8 +89,8 @@ export interface AnalyticsResponse {
 	methods: AnalyticsMethod[];
 	intervals: AnalyticsInterval[];
 	previous_intervals: AnalyticsInterval[] | null;
-	/** `delivered` orders in the period and how many of them the time metric could use. */
-	coverage: { delivered: number; time_sample: number };
+	/** `delivered` orders in the period and how many of them each time metric could use. */
+	coverage: { delivered: number; time_sample: number; handover_sample: number };
 	generated_at: string;
 	cached: boolean;
 }

@@ -55,13 +55,21 @@ final class AnalyticsReportTest extends TestCase {
 		];
 	}
 
+	/** A query double that, unless a test says otherwise, finds no status logs. */
+	private function query_double() {
+		$query = Mockery::mock( Analytics_Query::class );
+		$query->shouldReceive( 'handover_rows' )->byDefault()->andReturn( [] );
+
+		return $query;
+	}
+
 	private function report( Analytics_Query $query ): Analytics_Report {
 		return new Analytics_Report( $query, $this->providers(), static fn( string $id ): string => 'Метод ' . $id );
 	}
 
 	public function test_the_window_is_the_store_days_both_inclusive_as_a_half_open_gmt_range(): void {
 		$scopes = [];
-		$query  = Mockery::mock( Analytics_Query::class );
+		$query  = $this->query_double();
 		$query->shouldReceive( 'day_rows' )->andReturnUsing(
 			static function ( $providers, $scope ) use ( &$scopes ) {
 				$scopes[] = $scope;
@@ -81,7 +89,7 @@ final class AnalyticsReportTest extends TestCase {
 	}
 
 	public function test_carriers_follow_registry_order_and_empty_ones_are_left_out(): void {
-		$query = Mockery::mock( Analytics_Query::class );
+		$query = $this->query_double();
 		$query->shouldReceive( 'day_rows' )->andReturn( [ $this->carrier_row( 'yandex', 3, 300 ), $this->carrier_row( 'cdek', 7, 700, 4, 2, 4 * 86400 ) ] );
 		$query->shouldReceive( 'method_rows' )->andReturn( [] );
 
@@ -94,13 +102,13 @@ final class AnalyticsReportTest extends TestCase {
 		$this->assertNull( $report['totals']['previous'] );
 		$this->assertNull( $report['compare'] );
 		$this->assertNull( $report['previous_intervals'] );
-		$this->assertSame( [ 'delivered' => 4, 'time_sample' => 2 ], $report['coverage'] );
+		$this->assertSame( [ 'delivered' => 4, 'time_sample' => 2, 'handover_sample' => 0 ], $report['coverage'] );
 		$this->assertSame( 2.0, $report['carriers'][0]['current']['avg_days_to_delivery'] );
 	}
 
 	public function test_a_previous_period_is_read_with_its_own_window_and_joined_per_carrier(): void {
 		$scopes = [];
-		$query  = Mockery::mock( Analytics_Query::class );
+		$query  = $this->query_double();
 		$query->shouldReceive( 'day_rows' )->twice()->andReturnUsing(
 			function ( $providers, $scope ) use ( &$scopes ) {
 				$scopes[] = $scope['from'];
@@ -125,7 +133,7 @@ final class AnalyticsReportTest extends TestCase {
 	}
 
 	public function test_the_carrier_filter_reaches_every_query(): void {
-		$query = Mockery::mock( Analytics_Query::class );
+		$query = $this->query_double();
 		$query->shouldReceive( 'day_rows' )->with( Mockery::any(), Mockery::any(), 'ozon' )->once()->andReturn( [] );
 		$query->shouldReceive( 'method_rows' )->with( Mockery::any(), Mockery::any(), 'ozon' )->once()->andReturn( [] );
 
@@ -135,7 +143,7 @@ final class AnalyticsReportTest extends TestCase {
 	}
 
 	public function test_methods_are_labelled_and_sorted_busiest_first(): void {
-		$query = Mockery::mock( Analytics_Query::class );
+		$query = $this->query_double();
 		$query->shouldReceive( 'day_rows' )->andReturn( [] );
 		$query->shouldReceive( 'method_rows' )->andReturn(
 			[
@@ -155,7 +163,7 @@ final class AnalyticsReportTest extends TestCase {
 	}
 
 	public function test_the_interval_is_picked_from_the_range_and_the_range_is_echoed(): void {
-		$query = Mockery::mock( Analytics_Query::class );
+		$query = $this->query_double();
 		$query->shouldReceive( 'day_rows' )->andReturn( [] );
 		$query->shouldReceive( 'method_rows' )->andReturn( [] );
 
@@ -163,5 +171,38 @@ final class AnalyticsReportTest extends TestCase {
 
 		$this->assertSame( [ 'after' => '2026-10-01', 'before' => '2026-12-31', 'interval' => 'week' ], $report['range'] );
 		$this->assertSame( '2026-10-01', $report['intervals'][0]['start'] );
+	}
+
+	public function test_the_exact_handover_to_delivery_time_comes_from_the_status_logs_per_carrier(): void {
+		$query = $this->query_double();
+		$query->shouldReceive( 'day_rows' )->andReturn( [ $this->carrier_row( 'cdek', 7, 700, 4, 2, 4 * 86400 ), $this->carrier_row( 'yandex', 3, 300, 1 ) ] );
+		$query->shouldReceive( 'method_rows' )->andReturn( [] );
+		$query->shouldReceive( 'handover_rows' )->andReturn( [ 'cdek' => [ 'sample' => 3, 'seconds' => 3 * 2 * 86400 ] ] );
+
+		$report = $this->report( $query )->build( $this->request() );
+
+		$this->assertSame( 2.0, $report['carriers'][0]['current']['avg_days_handover_to_delivery'] );
+		$this->assertSame( 3, $report['carriers'][0]['current']['handover_sample'] );
+		$this->assertNull( $report['carriers'][1]['current']['avg_days_handover_to_delivery'], 'a carrier with no logged delivery has no exact figure' );
+		$this->assertSame( 2.0, $report['totals']['current']['avg_days_handover_to_delivery'] );
+		$this->assertSame( 5, $report['coverage']['delivered'] );
+		$this->assertSame( 3, $report['coverage']['handover_sample'] );
+		$this->assertSame( 2.0, $report['carriers'][0]['current']['avg_days_to_delivery'], 'the order-to-delivery substitute is untouched' );
+	}
+
+	public function test_the_previous_period_reads_its_own_logs_and_the_change_is_reported(): void {
+		$query = $this->query_double();
+		$query->shouldReceive( 'day_rows' )->twice()->andReturn( [ $this->carrier_row( 'cdek', 5, 500, 2 ) ] );
+		$query->shouldReceive( 'method_rows' )->once()->andReturn( [] );
+		$query->shouldReceive( 'handover_rows' )->twice()->andReturn(
+			[ 'cdek' => [ 'sample' => 2, 'seconds' => 2 * 3 * 86400 ] ],
+			[ 'cdek' => [ 'sample' => 2, 'seconds' => 2 * 4 * 86400 ] ]
+		);
+
+		$report = $this->report( $query )->build( $this->request( [ 'compare_after' => '2026-09-28', 'compare_before' => '2026-09-30' ] ) );
+
+		$this->assertSame( 3.0, $report['totals']['current']['avg_days_handover_to_delivery'] );
+		$this->assertSame( 4.0, $report['totals']['previous']['avg_days_handover_to_delivery'] );
+		$this->assertSame( -25.0, $report['totals']['delta']['avg_days_handover_to_delivery'] );
 	}
 }

@@ -244,6 +244,82 @@ final class AnalyticsQueryTest extends TestCase {
 		$this->assertStringNotContainsString( 'COUNT( DISTINCT', $sql );
 	}
 
+	public function test_the_handover_statement_reads_the_delivered_orders_status_log_by_its_bound_key(): void {
+		[ $sql, $args ] = $this->query( true )->handover_sql( [ $this->cdek(), $this->yandex() ], self::SCOPE );
+
+		$this->assertStringStartsWith( 'SELECT x.carrier, x.status_log FROM (', $sql );
+		$this->assertStringContainsString( "WHERE x.bucket = 'delivered' AND x.status_log IS NOT NULL", $sql );
+		$this->assertStringContainsString( 'AS status_log', $sql );
+		$this->assertContains( '_woodev_delivery_status_log_cdek', $args );
+		$this->assertContains( '_woodev_delivery_status_log_yandex', $args );
+		$this->assertStringNotContainsString( '_woodev_delivery_status_log', $sql, 'the key is bound, never interpolated' );
+	}
+
+	public function test_the_other_statements_do_not_read_the_log(): void {
+		[ $sql, $args ] = $this->query( true )->day_sql( [ $this->cdek() ], self::SCOPE );
+
+		$this->assertStringNotContainsString( 'status_log', $sql );
+		$this->assertNotContains( '_woodev_delivery_status_log_cdek', $args );
+	}
+
+	public function test_handover_rows_add_up_only_the_logs_that_show_both_ends(): void {
+		$db       = $this->wpdb();
+		$db->rows = [
+			[ 'carrier' => 'cdek', 'status_log' => '[["created",100],["in_transit",1000],["delivered",2200]]' ],
+			[ 'carrier' => 'cdek', 'status_log' => '[["created",100],["ready_for_pickup",500],["delivered",1700]]' ],
+			[ 'carrier' => 'cdek', 'status_log' => '[["delivered",900]]' ],
+			[ 'carrier' => 'cdek', 'status_log' => 'not json' ],
+			[ 'carrier' => 'yandex', 'status_log' => '[["in_transit",0],["delivered",86400]]' ],
+		];
+
+		$this->assertSame(
+			[
+				'cdek'   => [ 'sample' => 1, 'seconds' => 1200 ],
+				'yandex' => [ 'sample' => 1, 'seconds' => 86400 ],
+			],
+			$this->query( true, $db )->handover_rows( [ $this->cdek(), $this->yandex() ], self::SCOPE ),
+			'a pickup arrival followed by delivery is not a handover-to-delivery time'
+		);
+	}
+
+	/** Each carrier's own declared raw codes decide where ITS orders start (a CDEK warehouse receipt is still `created`). */
+	public function test_handover_rows_use_the_carriers_declared_handover_codes(): void {
+		$declaring = Orders_Provider::create(
+			'cdek',
+			'СДЭК',
+			'_cdek_marker',
+			[ 'cdek' ],
+			[
+				'status_meta_key'   => '_cdek_status',
+				'status_map'        => [ 'AT_WAREHOUSE' => 'created', 'ROAD' => 'in_transit', 'DONE' => 'delivered' ],
+				'handover_statuses' => [ 'AT_WAREHOUSE' ],
+			]
+		);
+
+		$db       = $this->wpdb();
+		$db->rows = [
+			// Received on day 0, left on day 2, delivered on day 5: five days, not three.
+			[ 'carrier' => 'cdek', 'status_log' => '[["created",0,"NEW"],["created",86400,"AT_WAREHOUSE"],["in_transit",259200,"ROAD"],["delivered",518400,"DONE"]]' ],
+			// The same shape from a carrier that declares nothing: it starts at the transit.
+			[ 'carrier' => 'yandex', 'status_log' => '[["created",0,"NEW"],["created",86400,"AT_WAREHOUSE"],["in_transit",259200,"ROAD"],["delivered",518400,"DONE"]]' ],
+		];
+
+		$this->assertSame(
+			[
+				'cdek'   => [ 'sample' => 1, 'seconds' => 432000 ],
+				'yandex' => [ 'sample' => 1, 'seconds' => 259200 ],
+			],
+			$this->query( true, $db )->handover_rows( [ $declaring, $this->yandex() ], self::SCOPE )
+		);
+	}
+
+	public function test_handover_rows_of_no_provider_run_no_query(): void {
+		$db = $this->wpdb();
+
+		$this->assertSame( [], $this->query( true, $db )->handover_rows( [], self::SCOPE ) );
+		$this->assertSame( [], $db->prepared );
+	}
+
 	public function test_no_provider_in_scope_runs_no_query(): void {
 		$db = $this->wpdb();
 
@@ -294,6 +370,8 @@ final class AnalyticsQueryTest extends TestCase {
 			'day, legacy'     => [ 'day_sql', false ],
 			'method, HPOS'    => [ 'method_sql', true ],
 			'method, legacy'  => [ 'method_sql', false ],
+			'handover, HPOS'  => [ 'handover_sql', true ],
+			'handover, legacy' => [ 'handover_sql', false ],
 		];
 	}
 

@@ -9,7 +9,7 @@
 
 namespace Woodev\Framework\Shipping\Admin\Orders;
 
-use Woodev\Framework\Shipping\Order\{Delivery_Status, Shipment_Cancellation};
+use Woodev\Framework\Shipping\Order\{Delivery_Status, Delivery_Status_Log, Shipment_Cancellation};
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -123,6 +123,74 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Qu
 		}
 
 		/**
+		 * The exact handover-to-delivery time (#1564), per carrier: the delivered orders of the window that carry a status log.
+		 *
+		 * The log is a JSON list inside ONE meta value, which SQL cannot average, so the statement returns the raw log of each
+		 * delivered order that has one and the figure is read out here with {@see Delivery_Status_Log::handover_to_delivery()}.
+		 * The loop is over those logs — only DELIVERED orders, only those logged since the framework started recording — and it
+		 * touches no order object. An order whose log shows no usable handover and delivery simply does not count. What
+		 * counts as the handover is the carrier's: `in_transit`, or a raw status it declared
+		 * ({@see Orders_Provider::get_handover_statuses()}).
+		 *
+		 * @since 2.0.24
+		 *
+		 * @param Orders_Provider[]   $providers registered providers, in registry order.
+		 * @param array<string,mixed> $scope     {@see self::day_sql()}.
+		 * @param string|null         $only      one provider id to restrict to, or null for all.
+		 * @return array<string,array{sample:int,seconds:int}> carrier id => orders measured and their seconds added up.
+		 */
+		public function handover_rows( array $providers, array $scope, ?string $only = null ): array {
+			$totals    = [];
+			$declared = [];
+
+			// Each carrier says which of its raw statuses mean «the carrier has the parcel» (#1564).
+			foreach ( $providers as $provider ) {
+				$declared[ $provider->get_id() ] = $provider->get_handover_statuses();
+			}
+
+			foreach ( $this->run( $this->handover_sql( $providers, $scope, $only ) ) as $row ) {
+				$seconds = Delivery_Status_Log::handover_to_delivery(
+					Delivery_Status_Log::decode( $row['status_log'] ?? null ),
+					$declared[ (string) $row['carrier'] ] ?? []
+				);
+
+				if ( null === $seconds ) {
+					continue;
+				}
+
+				$carrier = (string) $row['carrier'];
+
+				$totals[ $carrier ] = [
+					'sample'  => ( $totals[ $carrier ]['sample'] ?? 0 ) + 1,
+					'seconds' => ( $totals[ $carrier ]['seconds'] ?? 0 ) + $seconds,
+				];
+			}
+
+			return $totals;
+		}
+
+		/**
+		 * The statement behind {@see self::handover_rows()}: carrier and status log of every delivered order that has one.
+		 *
+		 * @since 2.0.24
+		 *
+		 * @param Orders_Provider[]   $providers registered providers, in registry order.
+		 * @param array<string,mixed> $scope     {@see self::day_sql()}.
+		 * @param string|null         $only      one provider id to restrict to, or null for all.
+		 * @return array{0:string,1:array<int,mixed>}|null `[ sql, args ]`, or null when no provider is in scope.
+		 */
+		public function handover_sql( array $providers, array $scope, ?string $only = null ): ?array {
+			$args = [];
+			$legs = $this->legs( $providers, $scope, $only, $args, false, true );
+
+			if ( '' === $legs ) {
+				return null;
+			}
+
+			return [ 'SELECT x.carrier, x.status_log FROM ( ' . $legs . " ) x WHERE x.bucket = 'delivered' AND x.status_log IS NOT NULL", $args ];
+		}
+
+		/**
 		 * The condition that an order counts for the average time: delivered, with a completion after the order, within the bound.
 		 *
 		 * @param array<int,mixed> $args statement arguments so far; appended to.
@@ -229,15 +297,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Qu
 		 * @param string|null         $only      one provider id to restrict to, or null for all.
 		 * @param array<int,mixed>    $args      statement arguments so far; appended to.
 		 * @param bool                $slim      true => each leg is just `carrier`, `order_id`, `total` (the shipping-method statement).
+		 * @param bool                $with_log  true => each full leg also carries the order's `status_log` (the handover statement).
 		 * @return string empty when no provider is in scope.
 		 */
-		private function legs( array $providers, array $scope, ?string $only, array &$args, bool $slim ): string {
+		private function legs( array $providers, array $scope, ?string $only, array &$args, bool $slim, bool $with_log = false ): string {
 			$legs    = [];
 			$earlier = [];
 
 			foreach ( $providers as $provider ) {
 				if ( null === $only || $only === $provider->get_id() ) {
-					$legs[] = $slim ? $this->slim_leg( $provider, $earlier, $scope, $args ) : $this->leg( $provider, $earlier, $scope, $args );
+					$legs[] = $slim ? $this->slim_leg( $provider, $earlier, $scope, $args ) : $this->leg( $provider, $earlier, $scope, $args, $with_log );
 				}
 
 				$earlier[] = $provider->get_marker_meta_key();
@@ -253,13 +322,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Qu
 		 * @param string[]            $earlier  marker keys of the providers registered before this one.
 		 * @param array<string,mixed> $scope    the window.
 		 * @param array<int,mixed>    $args     statement arguments so far; appended to.
+		 * @param bool                $with_log whether the leg also carries the order's status log.
 		 * @return string
 		 */
-		private function leg( Orders_Provider $provider, array $earlier, array $scope, array &$args ): string {
+		private function leg( Orders_Provider $provider, array $earlier, array $scope, array &$args, bool $with_log = false ): string {
 			return 'SELECT t.carrier, t.order_id, t.total, t.ship, t.day, t.created_gmt,'
 				. ' TIMESTAMPDIFF( SECOND, t.created_gmt, t.completed_gmt ) AS diff, '
+				. ( $with_log ? 't.status_log, ' : '' )
 				. $this->bucket_sql( $provider, $args ) . ' AS bucket'
-				. ' FROM ( ' . $this->inner_select( $provider, $earlier, $scope, $args ) . ' ) t';
+				. ' FROM ( ' . $this->inner_select( $provider, $earlier, $scope, $args, $with_log ) . ' ) t';
 		}
 
 		/**
@@ -286,9 +357,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Qu
 		 * @param string[]            $earlier  marker keys of the providers registered before this one.
 		 * @param array<string,mixed> $scope    the window.
 		 * @param array<int,mixed>    $args     statement arguments so far; appended to.
+		 * @param bool                $with_log whether to select the order's status log too.
 		 * @return string
 		 */
-		private function inner_select( Orders_Provider $provider, array $earlier, array $scope, array &$args ): string {
+		private function inner_select( Orders_Provider $provider, array $earlier, array $scope, array &$args, bool $with_log = false ): string {
 			$src     = $this->source();
 			$created = $src['created'];
 
@@ -297,7 +369,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Qu
 				. ' DATE( DATE_ADD( ' . $created . ', INTERVAL ' . $this->bind( $args, (int) $scope['offset'], 'd' ) . ' SECOND ) ) AS day,'
 				. ' ' . $created . ' AS created_gmt, ' . $src['completed'] . ' AS completed_gmt,'
 				. ' ' . $this->meta_exists_sql( Shipment_Cancellation::CANCELLED_AT_META, $args ) . ' AS cancelled,'
-				. ' ' . $this->raw_status_sql( $provider, $args ) . ' AS raw_status';
+				. ' ' . $this->raw_status_sql( $provider, $args ) . ' AS raw_status'
+				. ( $with_log ? ', ' . $this->newest_meta_sql( Delivery_Status_Log::meta_key( $provider ), $args ) . ' AS status_log' : '' );
 
 			return $select . $this->population_sql( $provider, $earlier, $scope, $args, $src['join'] );
 		}
@@ -388,6 +461,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Qu
 				return 'NULL';
 			}
 
+			return $this->newest_meta_sql( $key, $args );
+		}
+
+		/**
+		 * The newest meta value of the order under a bound key — the order's latest row if the key was written twice.
+		 *
+		 * @param string           $key  meta key (bound, never interpolated).
+		 * @param array<int,mixed> $args statement arguments so far; appended to.
+		 * @return string
+		 */
+		private function newest_meta_sql( string $key, array &$args ): string {
 			$src = $this->source();
 
 			return '( SELECT s.meta_value FROM ' . $src['meta'] . ' s WHERE s.' . $src['meta_fk'] . ' = ' . $src['id']

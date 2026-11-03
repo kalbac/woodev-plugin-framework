@@ -47,14 +47,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Ag
 		 *
 		 * @var string[]
 		 */
-		private const DELTA_KEYS = [ 'orders', 'revenue', 'shipping_paid', 'avg_order', 'avg_shipping', 'delivered_share', 'returned_share', 'avg_days_to_delivery' ];
+		private const DELTA_KEYS = [ 'orders', 'revenue', 'shipping_paid', 'avg_order', 'avg_shipping', 'delivered_share', 'returned_share', 'avg_days_to_delivery', 'avg_days_handover_to_delivery' ];
 
 		/**
 		 * The numeric columns a carrier row carries (everything {@see self::sum_rows()} adds up).
 		 *
 		 * @var string[]
 		 */
-		private const ROW_KEYS = [ 'orders', 'revenue', 'shipping_paid', 'in_progress', 'delivered', 'returned', 'failed', 'cancelled', 'unknown', 'time_sample', 'time_seconds' ];
+		private const ROW_KEYS = [ 'orders', 'revenue', 'shipping_paid', 'in_progress', 'delivered', 'returned', 'failed', 'cancelled', 'unknown', 'time_sample', 'time_seconds', 'handover_sample', 'handover_seconds' ];
 
 		/**
 		 * A carrier row with nothing in it.
@@ -155,6 +155,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Ag
 			$orders   = (int) $row['orders'];
 			$resolved = (int) ( $row['delivered'] + $row['returned'] + $row['failed'] );
 			$days     = $row['time_sample'] > 0 ? $row['time_seconds'] / $row['time_sample'] / self::SECONDS_PER_DAY : null;
+			$exact    = $row['handover_sample'] > 0 ? $row['handover_seconds'] / $row['handover_sample'] / self::SECONDS_PER_DAY : null;
 
 			return [
 				'orders'               => $orders,
@@ -170,6 +171,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Ag
 				'failed_share'         => self::ratio( $row['failed'], $resolved, 4 ),
 				'avg_days_to_delivery' => null === $days ? null : round( $days, 1 ),
 				'time_sample'          => (int) $row['time_sample'],
+				// The exact figure from the status log (#1564): handover to delivery, over the orders whose log shows both.
+				'avg_days_handover_to_delivery' => null === $exact ? null : round( $exact, 1 ),
+				'handover_sample'      => (int) $row['handover_sample'],
 			];
 		}
 
