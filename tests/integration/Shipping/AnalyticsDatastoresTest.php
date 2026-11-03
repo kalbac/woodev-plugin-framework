@@ -26,7 +26,7 @@
 namespace Woodev\Tests\Integration\Shipping;
 
 use Woodev\Framework\Shipping\Admin\Orders\{Orders_Provider, Orders_Registry};
-use Woodev\Framework\Shipping\Order\{Delivery_Status, Shipment_Cancellation};
+use Woodev\Framework\Shipping\Order\{Delivery_Status, Delivery_Status_Events, Delivery_Status_Log, Shipment_Cancellation};
 use Woodev\Tests\Integration\TestCase;
 use WP_REST_Request;
 
@@ -188,36 +188,131 @@ class AnalyticsDatastoresTest extends TestCase {
 	 */
 	private function seed(): void {
 		foreach ( $this->universe() as $spec ) {
-			$order = wc_create_order();
-
-			foreach ( $spec['markers'] as $provider_id ) {
-				$order->update_meta_data( $this->providers[ $provider_id ]['marker'], '1' );
-			}
-
-			$owner = $this->owner( $spec['markers'] );
-
-			if ( null !== $owner && null !== $spec['raw'] && null !== $this->providers[ $owner ]['status_key'] ) {
-				$order->update_meta_data( $this->providers[ $owner ]['status_key'], $spec['raw'] );
-			}
-
-			if ( ! empty( $spec['cancelled'] ) ) {
-				$order->update_meta_data( Shipment_Cancellation::CANCELLED_AT_META, '1790000000' );
-			}
-
-			$this->add_shipping_lines( $order, $spec['lines'] );
-
-			$order->set_total( $spec['total'] );
-			$order->set_status( $spec['wc'] );
-			$order->set_date_created( $this->timestamp( $spec['at'] ) );
-
-			if ( isset( $spec['completed'] ) ) {
-				$order->set_date_completed( $this->timestamp( $spec['completed'] ) );
-			}
-
-			$order->save();
-
-			$this->seeded[] = $spec + [ 'id' => $order->get_id() ];
+			$this->create( $spec );
 		}
+	}
+
+	/**
+	 * The status-log universe (#1564): orders whose delivery log is what the handover statement reads. Each `log` is the list of
+	 * `[ state, site-local time ]` the order's log holds, written through {@see Delivery_Status_Log::append()} with the explicit time.
+	 * The `notify` orders are the exception: their log is written by {@see Delivery_Status_Events::notify()} at the real time, and read back.
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function handover_universe(): array {
+		// 20 entries, the cap: a flapping carrier, hourly from midnight, ending delivered — the log has lost its beginning, so it counts for nothing.
+		$capped = [];
+
+		for ( $i = 0; $i < Delivery_Status_Log::CAP - 1; $i++ ) {
+			$capped[] = [ 0 === $i % 2 ? Delivery_Status::IN_TRANSIT : Delivery_Status::FAILED, sprintf( '2026-10-10 %02d:00:00', $i ) ];
+		}
+
+		$capped[] = [ Delivery_Status::DELIVERED, '2026-10-10 19:00:00' ];
+
+		return [
+			// alpha: in transit, then delivered two days later (the exact figure is 2.0 days; the completion metric says 1.0).
+			[ 'markers' => [ 'alpha' ], 'raw' => 'A_DONE', 'wc' => 'completed', 'at' => '2026-10-10 10:00:00', 'completed' => '2026-10-11 10:00:00', 'total' => 1300, 'lines' => [ [ 'alpha_door', 130, 0 ] ],
+				'log' => [ [ Delivery_Status::IN_TRANSIT, '2026-10-10 12:00:00' ], [ Delivery_Status::DELIVERED, '2026-10-12 12:00:00' ] ] ],
+			// alpha: a ready-for-pickup start, delivered 12 hours later.
+			[ 'markers' => [ 'alpha' ], 'raw' => 'A_DONE', 'wc' => 'processing', 'at' => '2026-10-10 11:00:00', 'total' => 1400, 'lines' => [ [ 'alpha_pickup', 140, 0 ] ],
+				'log' => [ [ Delivery_Status::READY_FOR_PICKUP, '2026-10-11 06:00:00' ], [ Delivery_Status::DELIVERED, '2026-10-11 18:00:00' ] ] ],
+			// beta: in transit, delivered 12.5 hours later.
+			[ 'markers' => [ 'beta' ], 'raw' => 'B_DONE', 'wc' => 'processing', 'at' => '2026-10-11 08:00:00', 'total' => 1500, 'lines' => [ [ 'beta_door', 150, 0 ] ],
+				'log' => [ [ Delivery_Status::IN_TRANSIT, '2026-10-11 09:00:00' ], [ Delivery_Status::DELIVERED, '2026-10-11 21:30:00' ] ] ],
+			// beta: a ready-for-pickup start, delivered two hours later.
+			[ 'markers' => [ 'beta' ], 'raw' => 'B_DONE', 'wc' => 'processing', 'at' => '2026-10-12 00:30:00', 'total' => 1600, 'lines' => [ [ 'beta_pickup', 160, 0 ] ],
+				'log' => [ [ Delivery_Status::READY_FOR_PICKUP, '2026-10-12 01:00:00' ], [ Delivery_Status::DELIVERED, '2026-10-12 03:00:00' ] ] ],
+			// alpha: delivered with NO handover before it — nothing to measure from.
+			[ 'markers' => [ 'alpha' ], 'raw' => 'A_DONE', 'wc' => 'processing', 'at' => '2026-10-10 14:00:00', 'total' => 1700, 'lines' => [ [ 'alpha_door', 170, 0 ] ],
+				'log' => [ [ Delivery_Status::CREATED, '2026-10-10 14:00:00' ], [ Delivery_Status::DELIVERED, '2026-10-10 18:00:00' ] ] ],
+			// alpha: the cap.
+			[ 'markers' => [ 'alpha' ], 'raw' => 'A_DONE', 'wc' => 'processing', 'at' => '2026-10-10 00:00:00', 'total' => 1800, 'lines' => [ [ 'alpha_door', 180, 0 ] ], 'log' => $capped ],
+			// alpha: delivered 182 days after the handover — beyond the 180-day bound.
+			[ 'markers' => [ 'alpha' ], 'raw' => 'A_DONE', 'wc' => 'processing', 'at' => '2026-10-10 11:00:00', 'total' => 1900, 'lines' => [ [ 'alpha_door', 190, 0 ] ],
+				'log' => [ [ Delivery_Status::IN_TRANSIT, '2026-10-10 12:00:00' ], [ Delivery_Status::DELIVERED, '2027-04-10 12:00:00' ] ] ],
+			// alpha: the carrier re-enters «in transit» after a failed attempt — the FIRST handover is the one that counts (09:00 → 21:00 = 12 hours).
+			[ 'markers' => [ 'alpha' ], 'raw' => 'A_DONE', 'wc' => 'processing', 'at' => '2026-10-11 08:00:00', 'total' => 2100, 'lines' => [ [ 'alpha_door', 210, 0 ] ],
+				'log' => [ [ Delivery_Status::IN_TRANSIT, '2026-10-11 09:00:00' ], [ Delivery_Status::FAILED, '2026-10-11 10:00:00' ], [ Delivery_Status::IN_TRANSIT, '2026-10-11 11:00:00' ], [ Delivery_Status::DELIVERED, '2026-10-11 21:00:00' ] ] ],
+			// alpha: the log ends delivered, but the order is now a return — the outcome bucket is «returned», so it is not a delivery.
+			[ 'markers' => [ 'alpha' ], 'raw' => 'A_RET', 'wc' => 'processing', 'at' => '2026-10-11 00:00:00', 'total' => 2200, 'lines' => [ [ 'alpha_door', 220, 0 ] ],
+				'log' => [ [ Delivery_Status::IN_TRANSIT, '2026-10-11 01:00:00' ], [ Delivery_Status::DELIVERED, '2026-10-11 05:00:00' ] ] ],
+			// alpha, end to end: the carrier reports in transit, then delivered, through notify() at the real time.
+			[ 'markers' => [ 'alpha' ], 'raw' => null, 'notify' => [ 'A_GO', 'A_DONE' ], 'wc' => 'processing', 'at' => '2026-10-11 16:00:00', 'total' => 2300, 'lines' => [ [ 'alpha_door', 230, 0 ] ] ],
+		];
+	}
+
+	/**
+	 * Creates the status-log universe on top of {@see self::seed()}: its orders are added to the population the oracle reads.
+	 *
+	 * @return void
+	 */
+	private function seed_handover(): void {
+		foreach ( $this->handover_universe() as $spec ) {
+			$this->create( $spec );
+		}
+	}
+
+	/**
+	 * Creates one order of a spec through WooCommerce's own API, then writes its status log and raw status where the spec says so.
+	 *
+	 * @param array<string,mixed> $spec the order spec.
+	 * @return void
+	 */
+	private function create( array $spec ): void {
+		$order = wc_create_order();
+
+		foreach ( $spec['markers'] as $provider_id ) {
+			$order->update_meta_data( $this->providers[ $provider_id ]['marker'], '1' );
+		}
+
+		$owner = $this->owner( $spec['markers'] );
+
+		if ( null !== $owner && null !== $spec['raw'] && null !== $this->providers[ $owner ]['status_key'] ) {
+			$order->update_meta_data( $this->providers[ $owner ]['status_key'], $spec['raw'] );
+		}
+
+		if ( ! empty( $spec['cancelled'] ) ) {
+			$order->update_meta_data( Shipment_Cancellation::CANCELLED_AT_META, '1790000000' );
+		}
+
+		$this->add_shipping_lines( $order, $spec['lines'] );
+
+		$order->set_total( $spec['total'] );
+		$order->set_status( $spec['wc'] );
+		$order->set_date_created( $this->timestamp( $spec['at'] ) );
+
+		if ( isset( $spec['completed'] ) ) {
+			$order->set_date_completed( $this->timestamp( $spec['completed'] ) );
+		}
+
+		$order->save();
+
+		$seeded = $spec + [ 'id' => $order->get_id() ];
+
+		if ( isset( $spec['log'] ) ) {
+			$provider = Orders_Registry::instance()->get_provider( $owner );
+
+			foreach ( $spec['log'] as [ $state, $local ] ) {
+				Delivery_Status_Log::append( $order, $provider, $state, $this->timestamp( $local ) );
+			}
+		}
+
+		if ( isset( $spec['notify'] ) ) {
+			$provider = Orders_Registry::instance()->get_provider( $owner );
+
+			foreach ( $spec['notify'] as $raw ) {
+				$order->update_meta_data( $this->providers[ $owner ]['status_key'], $raw );
+				$order->save_meta_data();
+				Delivery_Status_Events::notify( $order, $provider );
+			}
+
+			// What notify() wrote, read back: the oracle takes the log as stored (the real times are not known in advance).
+			$seeded['log'] = Delivery_Status_Log::read( $order, $provider );
+			$seeded['raw'] = end( $spec['notify'] );
+			$this->assertSame( [ Delivery_Status::IN_TRANSIT, Delivery_Status::DELIVERED ], array_column( $seeded['log'], 0 ), 'notify() must append one entry per real change' );
+		}
+
+		$this->seeded[] = $seeded;
 	}
 
 	/**
@@ -388,6 +483,51 @@ class AnalyticsDatastoresTest extends TestCase {
 		}
 
 		return $methods;
+	}
+
+	/**
+	 * The exact handover-to-delivery figures, from the specs' logs alone: per carrier, the delivered orders of the population whose log
+	 * has a handover state, then a delivered entry after it, within the bound, and that is not at the cap.
+	 *
+	 * @param array<int,array<string,mixed>> $orders population.
+	 * @return array<string,array{sample:int,seconds:int}>
+	 */
+	private function expected_handover( array $orders ): array {
+		$handover = [];
+
+		foreach ( $orders as $order ) {
+			if ( 'delivered' !== $order['bucket'] || ! isset( $order['log'] ) || count( $order['log'] ) >= 20 ) {
+				continue;
+			}
+
+			$start = null;
+			$end   = null;
+
+			foreach ( $order['log'] as [ $state, $local ] ) {
+				// The notify-driven order's log is read back as unix times; the others are specs in site-local time.
+				$time = is_int( $local ) ? $local : $this->timestamp( $local );
+
+				if ( null === $start && in_array( $state, [ Delivery_Status::IN_TRANSIT, Delivery_Status::READY_FOR_PICKUP ], true ) ) {
+					$start = $time;
+				} elseif ( null !== $start && Delivery_Status::DELIVERED === $state ) {
+					$end = $time;
+					break;
+				}
+			}
+
+			if ( null === $start || null === $end || $end - $start < 0 || $end - $start > 180 * DAY_IN_SECONDS ) {
+				continue;
+			}
+
+			$carrier = $order['owner'];
+
+			$handover[ $carrier ] = [
+				'sample'  => ( $handover[ $carrier ]['sample'] ?? 0 ) + 1,
+				'seconds' => ( $handover[ $carrier ]['seconds'] ?? 0 ) + ( $end - $start ),
+			];
+		}
+
+		return $handover;
 	}
 
 	// ---------------------------------------------------------------------------------------------------------------
@@ -575,6 +715,62 @@ class AnalyticsDatastoresTest extends TestCase {
 
 		$alpha = $this->analytics( [ 'carrier' => 'alpha' ] );
 		$this->assertSame( $alpha['totals']['current']['orders'], $this->list_total( 'alpha' ), 'alpha, the first registered: its tab and its analytics agree' );
+	}
+
+	/**
+	 * #1564: the exact handover-to-delivery time, per carrier and in the totals, equals the oracle read from the logs; the completion-based
+	 * `avg_days_to_delivery` keeps its own figure; the status-log universe is added on top of the base one.
+	 *
+	 * @dataProvider datastore_provider
+	 */
+	public function test_the_handover_time_equals_an_independent_count_and_leaves_the_completion_metric_alone( bool $hpos ): void {
+		$this->use_datastore( $hpos );
+		$this->seed();
+		$this->seed_handover();
+
+		$report     = $this->analytics();
+		$handover   = $this->expected_handover( $this->population( self::AFTER, self::BEFORE ) );
+		$by_carrier = array_column( $report['carriers'], null, 'id' );
+
+		// Four alpha orders and two beta orders are measurable; the other handover-universe orders are each excluded on purpose (see the spec comments).
+		$this->assertSame( [ 'alpha' => 4, 'beta' => 2 ], array_map( static fn( array $h ): int => $h['sample'], $handover ), 'the measurable handover orders' );
+
+		$sum_sample  = 0;
+		$sum_seconds = 0;
+
+		foreach ( [ 'alpha', 'beta', 'gamma' ] as $carrier ) {
+			$actual   = $by_carrier[ $carrier ]['current'];
+			$expected = $this->expected_carrier( $this->population( self::AFTER, self::BEFORE, $carrier ) );
+			$mine     = $handover[ $carrier ] ?? [ 'sample' => 0, 'seconds' => 0 ];
+
+			$this->assertSame( $mine['sample'], $actual['handover_sample'], $carrier . ' handover sample' );
+
+			if ( $mine['sample'] > 0 ) {
+				$this->assertEqualsWithDelta( round( $mine['seconds'] / $mine['sample'] / DAY_IN_SECONDS, 1 ), $actual['avg_days_handover_to_delivery'], 0.05, $carrier . ' exact handover to delivery' );
+			} else {
+				$this->assertNull( $actual['avg_days_handover_to_delivery'], $carrier . ' without a measurable order there is no figure' );
+			}
+
+			// The old figure: completion minus creation, over the same population as before this change.
+			$this->assertSame( $expected['time_sample'], $actual['time_sample'], $carrier . ' completion sample' );
+
+			if ( $expected['time_sample'] > 0 ) {
+				$this->assertEqualsWithDelta( round( $expected['time_seconds'] / $expected['time_sample'] / DAY_IN_SECONDS, 1 ), $actual['avg_days_to_delivery'], 0.05, $carrier . ' avg_days_to_delivery unchanged' );
+			} else {
+				$this->assertNull( $actual['avg_days_to_delivery'], $carrier . ' avg_days_to_delivery unchanged (no completion)' );
+			}
+
+			$sum_sample  += $mine['sample'];
+			$sum_seconds += $mine['seconds'];
+		}
+
+		$this->assertSame( $sum_sample, $report['totals']['current']['handover_sample'], 'totals sample equals the sum over carriers' );
+		$this->assertEqualsWithDelta( round( $sum_seconds / $sum_sample / DAY_IN_SECONDS, 1 ), $report['totals']['current']['avg_days_handover_to_delivery'], 0.05, 'totals exact figure' );
+
+		// The notify-driven order: its log was written at the real time, so its handover-to-delivery is short but counted.
+		$notified = array_values( array_filter( $this->seeded, static fn( array $spec ): bool => isset( $spec['notify'] ) ) );
+		$this->assertCount( 1, $notified );
+		$this->assertSame( [ Delivery_Status::IN_TRANSIT, Delivery_Status::DELIVERED ], array_column( $notified[0]['log'], 0 ) );
 	}
 
 	/**
