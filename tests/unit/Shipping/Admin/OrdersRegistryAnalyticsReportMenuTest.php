@@ -107,4 +107,22 @@ final class OrdersRegistryAnalyticsReportMenuTest extends TestCase {
 		$this->assertSame( 'woodev-shipping-delivery', Orders_Registry::ANALYTICS_REPORT_ID );
 		$this->assertSame( '/analytics/woodev-delivery', Orders_Registry::ANALYTICS_REPORT_PATH );
 	}
+
+	/**
+	 * Critic round 3: the JS report must be gated like the menu entry. The bundle learns the answer from ONE predicate that the menu uses too.
+	 */
+	public function test_one_predicate_decides_the_menu_entry_and_the_bundles_flag(): void {
+		Functions\when( 'current_user_can' )->alias( static fn( $capability ) => 'manage_woocommerce' === $capability );
+		$registry = Orders_Registry::instance();
+
+		$this->assertFalse( $registry->analytics_report_allowed(), 'no provider' );
+
+		$registry->register_provider( Orders_Provider::create( 'cdek', 'СДЭК', '_cdek_marker', [ 'cdek' ] ) );
+		$this->assertTrue( $registry->analytics_report_allowed() );
+		$this->assertCount( 1, $registry->add_analytics_report_menu_item( [] ) );
+
+		Functions\when( 'current_user_can' )->justReturn( false ); // a reporting-only role: view_woocommerce_reports without the page capability.
+		$this->assertFalse( $registry->analytics_report_allowed() );
+		$this->assertSame( [], $registry->add_analytics_report_menu_item( [] ) );
+	}
 }

@@ -340,6 +340,12 @@ export interface ShippingOrdersBootstrap {
 	 * offering every canonical state rather than offering none.
 	 */
 	deliveryStatuses?: string[];
+	/**
+	 * Whether the «Доставка перевозчиками» report in WooCommerce → Аналитика may register for this user (#711): the PHP menu entry's own
+	 * predicate (`Orders_Registry::analytics_report_allowed()` — a provider is registered and the user holds the page capability). Absent =
+	 * not allowed, so an older server never exposes the report.
+	 */
+	analyticsReport?: boolean;
 	/** The order wizard's reference data (#969). */
 	wizard?: WizardBootstrap;
 	/** #1007: the background carrier exports running right now, as the server worded them. */

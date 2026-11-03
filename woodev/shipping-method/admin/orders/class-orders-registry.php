@@ -997,7 +997,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 * @return mixed The entries, with ours appended when the gate is open.
 		 */
 		public function add_analytics_report_menu_item( $items ) {
-			if ( ! is_array( $items ) || ! $this->has_providers() || ! current_user_can( $this->get_page_capability() ) ) {
+			if ( ! is_array( $items ) || ! $this->analytics_report_allowed() ) {
 				return $items;
 			}
 
@@ -1010,6 +1010,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			];
 
 			return $items;
+		}
+
+		/**
+		 * Whether the current user may use the «Доставка перевозчиками» report: a provider is registered and the user holds the page capability.
+		 *
+		 * ONE predicate for both halves of the report. The menu entry ({@see self::add_analytics_report_menu_item()}) is hidden by it, and the
+		 * page bundle is told the answer (`analyticsReport` in `window.woodevShippingOrders`) and registers the JS report only when it is true:
+		 * WooCommerce's generic `/analytics/:report` route needs just `view_woocommerce_reports`, so a role that has that and not the page
+		 * capability could otherwise reach our report by an in-app link and get a 403 screen from its REST route.
+		 *
+		 * @since 2.0.24
+		 *
+		 * @return bool
+		 */
+		public function analytics_report_allowed(): bool {
+			return $this->has_providers() && current_user_can( $this->get_page_capability() );
 		}
 
 		/**
@@ -1777,6 +1793,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 						// defect 4) — see build_reachable_delivery_statuses() for why the
 						// full canonical list was wrong to offer.
 						'deliveryStatuses' => $this->build_reachable_delivery_statuses(),
+						// Whether the JS report in WooCommerce → Аналитика may register for this user (#711): the menu entry's own predicate.
+						'analyticsReport'  => $this->analytics_report_allowed(),
 						// «Сейчас выгружаются N заказов» (#1007): the count at page load and the heartbeat
 						// key that keeps it current; the sentence arrives finished from the server.
 						'exportsInProgress' => $this->export_queue_notice()->state(),

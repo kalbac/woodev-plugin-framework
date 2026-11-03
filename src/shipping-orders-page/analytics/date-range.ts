@@ -13,7 +13,10 @@
 import type { WcDateParams } from '../wc-globals';
 import type { WcQuery } from './wc-query';
 
-export const DEFAULT_DATE_RANGE = 'period=month&compare=previous_period';
+/** What the comparison is when the URL names a period but no `compare`. */
+export const DEFAULT_COMPARE = 'previous_period';
+
+export const DEFAULT_DATE_RANGE = `period=month&compare=${ DEFAULT_COMPARE }`;
 
 export interface AnalyticsDateRange {
 	after: string;
@@ -27,7 +30,18 @@ export interface AnalyticsDateRange {
 	};
 }
 
-function resolve( query: WcQuery ): AnalyticsDateRange | null {
+/**
+ * A URL that names a period but no `compare` (`period=custom&after=…&before=…`, as a link or a bookmark may carry it) is completed with the
+ * default comparison. `getDateParamsFromQuery()` honours a query only when it has BOTH `period` and `compare` and otherwise discards the
+ * lot for the default range (measured in the installed `@woocommerce/date`), so the merchant's custom range was silently replaced by
+ * «this month». The picker always writes both; nothing else does.
+ */
+export function withComparison( query: WcQuery ): WcQuery {
+	return query.period && ! query.compare ? { ...query, compare: DEFAULT_COMPARE } : query;
+}
+
+function resolve( rawQuery: WcQuery ): AnalyticsDateRange | null {
+	const query = withComparison( rawQuery );
 	const date = window.wc?.date;
 
 	if ( ! date ) {

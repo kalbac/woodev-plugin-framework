@@ -55,6 +55,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Ca
 		public const KEY_PREFIX = 'woodev_ship_an_';
 
 		/**
+		 * The version of the CODE that computes an answer: the SQL and the shape of the response. Part of every key.
+		 *
+		 * ⚠ BUMP IT whenever the statements or the response change in a way an older answer would not match. The data version below only
+		 * moves when ORDERS change, so without this an answer computed by an older build is served after a deploy until its TTL runs out
+		 * (up to {@see self::TTL_PAST}): found on the rig, where a zero from an earlier, broken build was still served for a whole quarter.
+		 * Adding the part at all retired every answer written before it existed (their keys have no such part); the current value is 1.
+		 *
+		 * @var int
+		 */
+		public const SCHEMA_VERSION = 1;
+
+		/**
 		 * Lifetime of an answer whose range contains today, in seconds.
 		 *
 		 * @var int
@@ -136,6 +148,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Ca
 		}
 
 		/**
+		 * The transient name of an answer: the request, the data version and the code's {@see self::SCHEMA_VERSION}.
+		 *
+		 * @since 2.0.24
+		 *
+		 * @param array<string,mixed> $key_parts everything the answer depends on.
+		 * @param int                 $schema    the code version; only a test passes another.
+		 * @return string
+		 */
+		public static function key( array $key_parts, int $schema = self::SCHEMA_VERSION ): string {
+			return self::KEY_PREFIX . md5( (string) wp_json_encode( [ $schema, (string) get_option( self::VERSION_OPTION, '0' ), $key_parts ] ) );
+		}
+
+		/**
 		 * Returns the cached answer for a key, or builds it, stores it and returns it.
 		 *
 		 * @since 2.0.24
@@ -147,7 +172,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Ca
 		 * @return array{data:array<string,mixed>,cached:bool}
 		 */
 		public static function fetch( array $key_parts, int $ttl, callable $build, bool $refresh = false ): array {
-			$name = self::KEY_PREFIX . md5( (string) wp_json_encode( [ (string) get_option( self::VERSION_OPTION, '0' ), $key_parts ] ) );
+			$name = self::key( $key_parts );
 
 			if ( ! $refresh ) {
 				$stored = get_transient( $name );

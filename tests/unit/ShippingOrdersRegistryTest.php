@@ -1053,6 +1053,8 @@ class ShippingOrdersRegistryTest extends TestCase {
 				'before'
 			);
 
+		Functions\when( 'current_user_can' )->justReturn( true ); // the report-access flag (#711) asks the page capability.
+
 		$registry->enqueue_assets();
 
 		$this->assertNotNull( $captured, 'wp_add_inline_script must have been called' );
@@ -1063,6 +1065,7 @@ class ShippingOrdersRegistryTest extends TestCase {
 
 		$this->assertSame( 'nonce-value', $data['nonce'] );
 		$this->assertArrayNotHasKey( 'adminUrl', $data );
+		$this->assertTrue( $data['analyticsReport'], 'the bundle is told the WooCommerce → Аналитика report is open to this user (#711)' );
 		$this->assertSame( [ 'all', 'cdek', 'yandex' ], array_column( $data['providers'], 'id' ) );
 		$this->assertSame( [ 'Все перевозчики', 'СДЭК', 'Яндекс' ], array_column( $data['providers'], 'label' ) );
 
@@ -1205,11 +1208,14 @@ class ShippingOrdersRegistryTest extends TestCase {
 			}
 		);
 
+		Functions\when( 'current_user_can' )->justReturn( false );
+
 		$registry->enqueue_assets();
 
 		$this->assertNotNull( $captured );
 		$data = json_decode( rtrim( substr( $captured, strlen( 'window.woodevShippingOrders = ' ) ), ';' ), true );
 
+		$this->assertFalse( $data['analyticsReport'], 'a user without the page capability is told the report is closed (#711, critic round 3)' );
 		$this->assertSame( [ 'RU' => 'Россия', 'KZ' => 'Казахстан' ], $data['wizard']['countries'] );
 		$this->assertSame( 'RU', $data['wizard']['defaultCountry'] );
 		$this->assertSame(

@@ -184,4 +184,28 @@ final class AnalyticsCacheTest extends TestCase {
 
 		$this->assertCount( 1, $this->option_writes, 'one version write inside the lock, whatever the event' );
 	}
+
+	/**
+	 * Rig smoke round 3: the data version moves with ORDERS only, so an answer computed by an older BUILD (the broken round-1 SQL) was still
+	 * served after the deploy. The code's schema version is part of the key: a different one misses, even for the same request and data.
+	 */
+	public function test_an_answer_stored_by_another_code_schema_is_not_served(): void {
+		$parts = [ 'range' => 'Q3' ];
+
+		set_transient( Analytics_Cache::key( $parts, Analytics_Cache::SCHEMA_VERSION - 1 ), [ 'orders' => 0 ], 3600 ); // the old build's zero.
+
+		$after = Analytics_Cache::fetch( $parts, 3600, static fn(): array => [ 'orders' => 88 ] );
+
+		$this->assertFalse( $after['cached'] );
+		$this->assertSame( 88, $after['data']['orders'] );
+	}
+
+	public function test_the_key_changes_with_the_schema_and_with_nothing_else_it_should_not(): void {
+		$parts = [ 'range' => 'Q3' ];
+
+		$this->assertNotSame( Analytics_Cache::key( $parts, 1 ), Analytics_Cache::key( $parts, 2 ) );
+		$this->assertSame( Analytics_Cache::key( $parts ), Analytics_Cache::key( $parts, Analytics_Cache::SCHEMA_VERSION ), 'the default is the current schema' );
+		$this->assertSame( Analytics_Cache::key( $parts ), Analytics_Cache::key( $parts ), 'deterministic' );
+		$this->assertStringStartsWith( Analytics_Cache::KEY_PREFIX, Analytics_Cache::key( $parts ) );
+	}
 }
