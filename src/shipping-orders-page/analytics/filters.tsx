@@ -2,6 +2,10 @@
  * The filter row of the «Аналитика» tab (#711): the period with its comparison (WooCommerce's own
  * `DateRangeFilterPicker`), the carrier, and «Обновить».
  *
+ * The row is the «Заказы» tab's own (`.woodev-orders__header` / `__basic-filters`, measured there against WooCommerce's Analytics):
+ * the carrier is the same `FilterPicker` as on that tab — a label above, the same width bounds, the bottoms of the controls on one
+ * line — so the two tabs cannot drift apart, and nothing here restates their metrics.
+ *
  * «Всё время» is not offered: an aggregate over the store's whole history is not what the tab is for, and the REST route
  * caps a range at 800 days. The picker does not navigate by itself, so its selection is written to the URL here.
  *
@@ -10,9 +14,10 @@
  * @package woodev-plugin-framework
  */
 
-import { Button, SelectControl } from '@wordpress/components';
+import { Button } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
 import type { OrdersProvider } from '../rest';
+import type { WcFilterPickerConfig } from '../wc-globals';
 import type { AnalyticsDateRange } from './date-range';
 import { navigate, type WcQuery } from './wc-query';
 
@@ -28,10 +33,15 @@ export function pickerKey( range: AnalyticsDateRange ): string {
 	return JSON.stringify( [ period, compare, range.after, range.before, range.compareAfter, range.compareBefore ] );
 }
 
+/**
+ * The URL keys a carrier pick must carry along: `FilterPicker` rewrites ONLY its own param and the ones listed here, so anything
+ * unlisted (the period, the chart and its type) would be dropped by the pick.
+ */
+const CARRIER_STATIC_PARAMS = [ 'period', 'compare', 'after', 'before', 'chart', 'chartType', 'interval' ];
+
 interface FiltersProps {
 	range: AnalyticsDateRange | null;
 	query: WcQuery;
-	carrier: string;
 	providers: OrdersProvider[];
 	loading: boolean;
 	/** The `wc-admin` path the filters navigate on. */
@@ -39,38 +49,40 @@ interface FiltersProps {
 	onRefresh: () => void;
 }
 
-export function Filters( { range, query, carrier, providers, loading, path, onRefresh }: FiltersProps ) {
+export function Filters( { range, query, providers, loading, path, onRefresh }: FiltersProps ) {
 	const DateRangeFilterPicker = window.wc?.components?.DateRangeFilterPicker;
+	const FilterPicker = window.wc?.components?.FilterPicker;
 	const isoDateFormat = window.wc?.date?.isoDateFormat;
 
-	const options = [
-		{ value: 'all', label: __( 'Все перевозчики', 'woodev-plugin-framework' ) },
-		...providers.map( ( provider ) => ( { value: provider.id, label: provider.label } ) ),
-	];
+	// `providers` already starts with «Все перевозчики» (`Orders_Registry::build_bootstrap_providers()`), so it is the option list as it
+	// is; with no carrier besides it there is nothing to choose, and the picker is not drawn (as on the «Заказы» tab).
+	const carrierConfig: WcFilterPickerConfig = {
+		label: __( 'Перевозчик', 'woodev-plugin-framework' ),
+		param: 'carrier',
+		staticParams: CARRIER_STATIC_PARAMS,
+		showFilters: () => true,
+		defaultValue: 'all',
+		filters: providers.map( ( provider ) => ( { value: provider.id, label: provider.label } ) ),
+	};
 
 	return (
-		<div className="woodev-analytics__filters">
-			{ DateRangeFilterPicker && range && isoDateFormat && (
-				<DateRangeFilterPicker
-					key={ pickerKey( range ) }
-					dateQuery={ range.dateQuery }
-					isoDateFormat={ isoDateFormat }
-					onRangeSelect={ ( selection ) => navigate( selection, query, path ) }
-				/>
-			) }
-			<SelectControl
-				className="woodev-analytics__carrier"
-				label={ __( 'Перевозчик', 'woodev-plugin-framework' ) }
-				hideLabelFromVision
-				value={ carrier }
-				options={ options }
-				onChange={ ( value: string ) => navigate( { carrier: 'all' === value ? undefined : value }, query, path ) }
-				__nextHasNoMarginBottom
-				__next40pxDefaultSize
-			/>
-			<Button variant="secondary" onClick={ onRefresh } disabled={ loading } isBusy={ loading }>
-				{ __( 'Обновить', 'woodev-plugin-framework' ) }
-			</Button>
+		<div className="woodev-orders__header">
+			<div className="woodev-orders__basic-filters">
+				{ DateRangeFilterPicker && range && isoDateFormat && (
+					<DateRangeFilterPicker
+						key={ pickerKey( range ) }
+						dateQuery={ range.dateQuery }
+						isoDateFormat={ isoDateFormat }
+						onRangeSelect={ ( selection ) => navigate( selection, query, path ) }
+					/>
+				) }
+				{ FilterPicker && providers.length > 1 && (
+					<FilterPicker config={ carrierConfig } path={ path } query={ query } />
+				) }
+				<Button variant="secondary" onClick={ onRefresh } disabled={ loading } isBusy={ loading }>
+					{ __( 'Обновить', 'woodev-plugin-framework' ) }
+				</Button>
+			</div>
 		</div>
 	);
 }

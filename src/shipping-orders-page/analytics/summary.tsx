@@ -2,7 +2,9 @@
  * The KPI tiles of the «Аналитика» tab (#711): WooCommerce's own `SummaryList` / `SummaryNumber`.
  *
  * Four tiles drive the chart (the selected one is underlined, like in WooCommerce's reports); the other two are plain
- * figures. The two bad-outcome tiles use `reverseTrend`, so a rise in returns is red. The time tile is honest about what it is:
+ * figures. A chart tile is a LINK to the same page with `chart=<metric>` (`href` from `getNewPath()`), the way WooCommerce's
+ * own reports select a tile — not `onToggle`, which is the mobile open/close toggle of a collapsed list (a button with a chevron
+ * and a shorter, clipped tile). The two bad-outcome tiles use `reverseTrend`, so a rise in returns is red. The time tile is honest about what it is:
  * the order-to-delivery time, measured only where the order has a completion date, with the sample size beside it.
  *
  * Authored in JSX (automatic runtime — WP 6.6+).
@@ -12,6 +14,7 @@
 
 import { __, sprintf } from '@wordpress/i18n';
 import { DASH, formatCount, formatDays, formatMoney, formatShare } from './format';
+import type { WcQuery } from './wc-query';
 import type { AnalyticsMetrics, AnalyticsResponse, ChartMetric } from './types';
 
 interface TileSpec {
@@ -78,12 +81,15 @@ function note( key: string, data: AnalyticsResponse ): string | null {
 interface SummaryProps {
 	data: AnalyticsResponse;
 	metric: ChartMetric;
-	onSelect: ( metric: ChartMetric ) => void;
+	/** The current `wc-admin` query and the path the tab is on: what a tile's link is built from. */
+	query: WcQuery;
+	path: string;
 }
 
-export function Summary( { data, metric, onSelect }: SummaryProps ) {
+export function Summary( { data, metric, query, path }: SummaryProps ) {
 	const SummaryList = window.wc?.components?.SummaryList;
 	const SummaryNumber = window.wc?.components?.SummaryNumber;
+	const getNewPath = window.wc?.navigation?.getNewPath;
 
 	if ( ! SummaryList || ! SummaryNumber ) {
 		return null;
@@ -108,7 +114,8 @@ export function Summary( { data, metric, onSelect }: SummaryProps ) {
 							delta={ previous ? delta[ tile.key ] ?? undefined : undefined }
 							reverseTrend={ tile.reverseTrend }
 							selected={ null !== chart && chart === metric }
-							onToggle={ null === chart ? undefined : () => onSelect( chart ) }
+							// Without `getNewPath` (an older wc-navigation) a tile is a plain figure rather than a dead link.
+							href={ null === chart || ! getNewPath ? undefined : getNewPath( { chart }, path, query ) }
 						>
 							{ null === text ? null : <span className="woodev-analytics__tile-note">{ text }</span> }
 						</SummaryNumber>

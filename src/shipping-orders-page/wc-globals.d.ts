@@ -324,7 +324,14 @@ export interface WcSummaryNumberProps {
 	delta?: number | null;
 	reverseTrend?: boolean;
 	selected?: boolean;
-	onToggle?: () => void;
+	/**
+	 * A wc-admin path (`getNewPath()`): the tile becomes a link and selecting it is a navigation, as in WooCommerce's reports.
+	 * ⚠ NOT `onToggle` — that is the MOBILE open/close toggle of a collapsed list: it renders a button with a chevron and the
+	 * `is-dropdown-button` styling (read off the installed `SummaryNumber`), which is the wrong control for choosing a chart metric.
+	 */
+	href?: string;
+	/** Called when the link is clicked; WooCommerce's reports use it to record the click. */
+	onLinkClickCallback?: () => void;
 	children?: ReactNode;
 }
 

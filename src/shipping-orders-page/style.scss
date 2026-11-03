@@ -1938,19 +1938,12 @@
 
 /**
  * The «Аналитика» tab (#711). WooCommerce's own components bring their own cards; this only spaces them, dims the
- * body while a new period loads (the previous figures stay on screen), and keeps the filter row on one line.
+ * body while a new period loads (the previous figures stay on screen). The filter row is the «Заказы» tab's own (`.woodev-orders__header`).
  */
 .woodev-analytics {
 	display: flex;
 	flex-direction: column;
 	gap: wd.$gap-lg;
-
-	&__filters {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: wd.$gap;
-	}
 
 	&__body {
 		display: flex;

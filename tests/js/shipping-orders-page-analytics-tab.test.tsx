@@ -132,6 +132,12 @@ function installWooCommerce() {
 				return () => undefined;
 			},
 			updateQueryString,
+			// `getNewPath( patch, path, current )`: the patch merged into the current query, as a path (the installed one does the same).
+			getNewPath: ( patch: Record< string, string | undefined >, path: string, current: Record< string, string | undefined > ) => {
+				const merged = Object.entries( { ...current, ...patch } ).filter( ( [ , value ] ) => undefined !== value ) as [ string, string ][];
+
+				return `${ path }?${ new URLSearchParams( merged ).toString() }`;
+			},
 		},
 		date: {
 			isoDateFormat: 'YYYY-MM-DD',
@@ -151,10 +157,66 @@ function installWooCommerce() {
 			DateRangeFilterPicker: StatefulDatePicker,
 			Chart: StatefulChart,
 			SummaryList: ( { children }: any ) => <div>{ children() }</div>,
-			SummaryNumber: ( props: any ) => (
-				<button type="button" disabled={ ! props.onToggle } aria-pressed={ !! props.selected } onClick={ props.onToggle }>
-					{ props.label }: { props.value } ({ props.delta ?? 'no delta' }) { props.children }
-				</button>
+			// The installed `SummaryNumber`: `onToggle` makes it the mobile collapse BUTTON (chevron, `is-dropdown-button`), `href` makes it a
+			// link that selects the tile, neither makes it a plain figure. A link click does what wc-admin's `Link` does: it navigates.
+			SummaryNumber: ( props: any ) => {
+				const text = (
+					<>
+						{ props.label }: { props.value } ({ props.delta ?? 'no delta' }) { props.children }
+					</>
+				);
+
+				if ( props.onToggle ) {
+					return (
+						<button type="button" data-chevron aria-expanded={ false } onClick={ props.onToggle }>
+							{ text }
+						</button>
+					);
+				}
+
+				if ( props.href ) {
+					return (
+						<a
+							href={ props.href }
+							aria-current={ props.selected ? 'page' : undefined }
+							onClick={ ( event ) => {
+								event.preventDefault();
+								props.onLinkClickCallback?.();
+								query = Object.fromEntries( new URLSearchParams( props.href.split( '?' )[ 1 ] ) );
+								act( () => listeners.forEach( ( listener ) => listener() ) );
+							} }
+						>
+							{ text }
+						</a>
+					);
+				}
+
+				return <div>{ text }</div>;
+			},
+			// `FilterPicker` is URL-driven: a pick rewrites its own param and the `staticParams` kept from the query.
+			FilterPicker: ( { config, path, query: current }: any ) => (
+				<label>
+					{ config.label }
+					<select
+						value={ current[ config.param ] ?? config.defaultValue }
+						onChange={ ( event ) =>
+							updateQueryString(
+								{
+									...Object.fromEntries( config.staticParams.filter( ( key: string ) => key in current ).map( ( key: string ) => [ key, current[ key ] ] ) ),
+									[ config.param ]: event.target.value,
+								},
+								path,
+								current
+							)
+						}
+					>
+						{ config.filters.map( ( filter: any ) => (
+							<option key={ filter.value } value={ filter.value }>
+								{ filter.label }
+							</option>
+						) ) }
+					</select>
+				</label>
 			),
 			TableCard: ( props: any ) => (
 				<div data-testid="table">
@@ -163,7 +225,7 @@ function installWooCommerce() {
 			),
 		},
 	};
-	( window as any ).woodevShippingOrders = { providers: [ { id: 'cdek', label: 'СДЭК' } ] };
+	( window as any ).woodevShippingOrders = { providers: [ { id: 'all', label: 'Все перевозчики' }, { id: 'cdek', label: 'СДЭК' } ] };
 }
 
 beforeEach( () => {
@@ -196,15 +258,39 @@ describe( 'AnalyticsTab', () => {
 		expect( screen.getByText( /по 5 из 6 доставленных/ ) ).toBeInTheDocument();
 	} );
 
-	it( 'a tile that drives the chart writes `chart=` to the URL; a plain figure cannot be selected', async () => {
+	it( 'a tile that drives the chart is a link to `chart=`, not a collapse toggle; a plain figure is neither', async () => {
 		( fetchAnalytics as jest.Mock ).mockResolvedValue( RESPONSE );
 		render( <AnalyticsTab /> );
 		await screen.findByText( /Заказы: 10/ );
 
-		fireEvent.click( screen.getByText( /^Выручка:/ ) );
+		// `onToggle` would draw the chevron button (shorter, clipped tile in the real component) — no tile may carry it.
+		expect( document.querySelector( '[data-chevron]' ) ).toBeNull();
+		expect( screen.getByText( /^Выручка:/ ).closest( 'a' ) ).toHaveAttribute( 'href', '/woodev-shipping-orders?chart=revenue' );
+		expect( screen.getByText( /^Отказы и возвраты:/ ).closest( 'a' ) ).toBeNull();
+		expect( screen.getByText( /^От заказа до вручения/ ).closest( 'a' ) ).toBeNull();
+	} );
 
-		expect( updateQueryString ).toHaveBeenCalledWith( { chart: 'revenue' }, '/woodev-shipping-orders', {} );
-		expect( screen.getByText( /^Отказы и возвраты:/ ) ).toBeDisabled();
+	it( 'choosing a tile switches the chart to its metric and marks the tile selected', async () => {
+		( fetchAnalytics as jest.Mock ).mockResolvedValue( RESPONSE );
+		render( <AnalyticsTab /> );
+		await screen.findByText( /Заказы: 10/ );
+		expect( screen.getByTestId( 'chart' ) ).toHaveTextContent( 'Заказы по перевозчикам' );
+
+		fireEvent.click( screen.getByText( /^Доставлено:/ ) );
+
+		await waitFor( () => expect( screen.getByTestId( 'chart' ) ).toHaveTextContent( 'Доля доставленных по перевозчикам' ) );
+		expect( screen.getByText( /^Доставлено:/ ).closest( 'a' ) ).toHaveAttribute( 'aria-current', 'page' );
+		expect( fetchAnalytics ).toHaveBeenCalledTimes( 1 ); // a chart switch is not a refetch.
+	} );
+
+	it( 'keeps a tile as a plain figure when this WooCommerce cannot build the link', async () => {
+		delete ( window as any ).wc.navigation.getNewPath;
+		( fetchAnalytics as jest.Mock ).mockResolvedValue( RESPONSE );
+		render( <AnalyticsTab /> );
+		await screen.findByText( /Заказы: 10/ );
+
+		expect( screen.getByText( /^Выручка:/ ).closest( 'a' ) ).toBeNull();
+		expect( document.querySelector( '[data-chevron]' ) ).toBeNull();
 	} );
 
 	it( 'plots the metric the URL names', async () => {
@@ -407,14 +493,14 @@ describe( 'DeliveryReport — the same body in WooCommerce → Аналитик�
 		render( <DeliveryReport /> );
 		await screen.findByText( /Заказы: 10/ );
 
-		fireEvent.click( screen.getByText( /^Выручка:/ ) );
-		expect( updateQueryString ).toHaveBeenLastCalledWith( { chart: 'revenue' }, '/analytics/woodev-delivery', {} );
+		expect( screen.getByText( /^Выручка:/ ).closest( 'a' ) ).toHaveAttribute( 'href', '/analytics/woodev-delivery?chart=revenue' );
 
 		fireEvent.click( screen.getByRole( 'button', { name: 'bar' } ) ); // the Chart\'s own header control gets the report\'s path as a prop.
 		expect( updateQueryString ).toHaveBeenLastCalledWith( { chartType: 'bar' }, '/analytics/woodev-delivery', {} );
 
 		fireEvent.change( screen.getByRole( 'combobox' ), { target: { value: 'cdek' } } );
 		expect( updateQueryString ).toHaveBeenLastCalledWith( { carrier: 'cdek' }, '/analytics/woodev-delivery', {} );
+		expect( screen.getByLabelText( 'Перевозчик' ) ).toBeInTheDocument(); // labelled, like the «Заказы» tab's picker.
 	} );
 } );
 

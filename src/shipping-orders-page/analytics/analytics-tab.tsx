@@ -19,7 +19,7 @@ import { Filters } from './filters';
 import { Summary } from './summary';
 import { Tables } from './tables';
 import { useAnalytics } from './use-analytics';
-import { navigate, PAGE_PATH, useWcQuery, type WcQuery } from './wc-query';
+import { PAGE_PATH, useWcQuery, type WcQuery } from './wc-query';
 import { CHART_METRICS, type AnalyticsIntervalName, type AnalyticsRequest, type ChartMetric } from './types';
 
 const INTERVALS: AnalyticsIntervalName[] = [ 'day', 'week', 'month' ];
@@ -72,7 +72,7 @@ export default function AnalyticsTab( { path = PAGE_PATH }: AnalyticsTabProps ) 
 
 	return (
 		<section className="woodev-analytics">
-			<Filters range={ range } query={ query } carrier={ carrier } providers={ providers } loading={ loading } path={ path } onRefresh={ reload } />
+			<Filters range={ range } query={ query } providers={ providers } loading={ loading } path={ path } onRefresh={ reload } />
 			{ null === range && (
 				<Notice status="warning" isDismissible={ false }>
 					{ __( 'Аналитика недоступна: эта версия WooCommerce не предоставляет нужные компоненты.', 'woodev-plugin-framework' ) }
@@ -93,7 +93,7 @@ export default function AnalyticsTab( { path = PAGE_PATH }: AnalyticsTabProps ) 
 			) }
 			{ null !== data && ! isEmpty && (
 				<div className={ loading ? 'woodev-analytics__body is-loading' : 'woodev-analytics__body' }>
-					<Summary data={ data } metric={ metric } onSelect={ ( next ) => navigate( { chart: next }, query, path ) } />
+					<Summary data={ data } metric={ metric } query={ query } path={ path } />
 					<ChartPanel data={ data } metric={ metric } query={ query } loading={ loading } path={ path } />
 					<Tables carriers={ data.carriers } methods={ data.methods } currency={ data.currency } loading={ loading } />
 				</div>
