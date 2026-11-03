@@ -6114,6 +6114,18 @@ msgstr ""
 msgid "Это действие сейчас недоступно."
 msgstr ""
 
+#: shipping-method/rest-api/class-analytics-controller.php:135
+msgid "Такого перевозчика нет."
+msgstr ""
+
+#: shipping-method/rest-api/class-analytics-controller.php:219
+msgid "Укажите период: начало не может быть позже конца."
+msgstr ""
+
+#: shipping-method/rest-api/class-analytics-controller.php:223
+msgid "Период слишком длинный — выберите не больше 800 дней."
+msgstr ""
+
 #. translators: %s: button label, e.g. "Отменить".
 #: assets/src/shipping-orders-page/toolbar-dialog.tsx
 #, php-format

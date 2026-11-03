@@ -12,7 +12,7 @@ namespace Woodev\Framework\Shipping\Admin\Orders;
 use Woodev\Framework\Settings\Settings_Page_Registry;
 use Woodev\Framework\Shipping\Admin\Shipping_Admin_Order;
 use Woodev\Framework\Shipping\Order\{Abstract_Shipment_Handler, Abstract_Tracking_Handler, Carrier_Cancel, Delivery_Status, Export_Retry, Order_Automation};
-use Woodev\Framework\Shipping\Rest_Api\{Document_Controller, Order_Editor_Controller, Orders_Controller, Rates_Controller, Toolbar_Controller};
+use Woodev\Framework\Shipping\Rest_Api\{Analytics_Controller, Document_Controller, Order_Editor_Controller, Orders_Controller, Rates_Controller, Toolbar_Controller};
 use Woodev\Framework\Shipping\Shipping_Plugin;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -727,6 +727,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			add_action( Carrier_Cancel::HOOK, [ $this, 'run_cancel_at_carrier' ] );
 			add_action( 'woocommerce_order_status_changed', [ $this, 'handle_order_status_changed' ], 20, 4 );
 			$this->export_queue_notice()->add_hooks();
+			Analytics_Cache::register();
 			add_action( 'admin_page_access_denied', [ $this, 'maybe_redirect_legacy_page' ] );
 			add_filter( 'woocommerce_order_data_store_cpt_get_orders_query', [ $this, 'translate_marker_keys_query_var' ], 10, 2 );
 			add_filter( 'heartbeat_received', [ $this, 'refresh_order_edit_lock' ], 20, 2 );
@@ -2209,6 +2210,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			\Woodev_REST_V1_Registrar::register_controller( new Toolbar_Controller( $this ) );
 			\Woodev_REST_V1_Registrar::register_controller( new Order_Editor_Controller( $this ) );
 			\Woodev_REST_V1_Registrar::register_controller( new Rates_Controller( $this ) );
+			\Woodev_REST_V1_Registrar::register_controller( new Analytics_Controller( $this ) );
 		}
 
 		/**
