@@ -135,8 +135,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Re
 				$this->query->day_rows( $this->providers, $scope, $only )
 			);
 
+			// The exact handover-to-delivery time is read apart from the day rows: it comes out of each order's status log, not a SUM.
+			$carriers = Analytics_Aggregator::carrier_rows( $days );
+
+			foreach ( $this->query->handover_rows( $this->providers, $scope, $only ) as $carrier => $handover ) {
+				if ( isset( $carriers[ $carrier ] ) ) {
+					$carriers[ $carrier ]['handover_sample']  = $handover['sample'];
+					$carriers[ $carrier ]['handover_seconds'] = $handover['seconds'];
+				}
+			}
+
 			return [
-				'carriers' => Analytics_Aggregator::carrier_rows( $days ),
+				'carriers' => $carriers,
 				'days'     => $days,
 				'methods'  => $with_methods ? $this->query->method_rows( $this->providers, $scope, $only ) : [],
 			];
@@ -257,7 +267,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Re
 		 * How many delivered orders there are and how many of them the time metric could use.
 		 *
 		 * @param array<string,mixed> $current current period.
-		 * @return array{delivered:int,time_sample:int}
+		 * @return array{delivered:int,time_sample:int,handover_sample:int}
 		 */
 		private function coverage( array $current ): array {
 			$sum = Analytics_Aggregator::sum_rows( $current['carriers'] );
@@ -265,6 +275,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Analytics_Re
 			return [
 				'delivered'   => (int) $sum['delivered'],
 				'time_sample' => (int) $sum['time_sample'],
+				'handover_sample' => (int) $sum['handover_sample'],
 			];
 		}
 	}

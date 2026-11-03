@@ -10,11 +10,12 @@ namespace Woodev\Tests\Unit\Shipping\Order;
 use Brain\Monkey\{Actions, Functions};
 use Mockery;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
-use Woodev\Framework\Shipping\Order\{Delivery_Status, Delivery_Status_Events};
+use Woodev\Framework\Shipping\Order\{Delivery_Status, Delivery_Status_Events, Delivery_Status_Log};
 use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__, 4 ) . '/woodev/compatibility/class-plugin-compatibility.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/compatibility/class-order-compatibility.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/order/class-delivery-status-log.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/order/class-delivery-status-events.php';
 
 /** @covers \Woodev\Framework\Shipping\Order\Delivery_Status_Events */
@@ -27,6 +28,7 @@ final class DeliveryStatusEventsTest extends TestCase {
 		parent::setUp();
 		$this->meta = [];
 		Functions\when( 'apply_filters' )->returnArg( 2 );
+		Functions\when( 'wp_json_encode' )->alias( 'json_encode' );
 		Functions\when( 'get_post_meta' )->alias( function ( int $id, string $key ) { return $this->meta[ $key ] ?? ''; } );
 		Functions\when( 'update_post_meta' )->alias( function ( int $id, string $key, $value ) { $this->meta[ $key ] = $value; return true; } );
 	}
@@ -131,5 +133,54 @@ final class DeliveryStatusEventsTest extends TestCase {
 		Actions\expectDone( 'woodev_shipping_delivery_status_changed' )->once()->with( $order, null, Delivery_Status::CREATED, $provider );
 
 		$this->assertSame( Delivery_Status::CREATED, Delivery_Status_Events::sync( $order, $provider, true ) );
+	}
+
+	/** A real change is journalled once, with its time, in the carrier's own log (#1564). */
+	public function test_a_published_change_is_appended_to_the_status_log(): void {
+		$this->meta['_test_status'] = 'ROAD';
+		$before                     = time();
+
+		Delivery_Status_Events::notify( $this->order(), $this->provider(), Delivery_Status::CREATED );
+
+		$log = Delivery_Status_Log::decode( $this->meta['_woodev_delivery_status_log_test'] );
+		$this->assertCount( 1, $log );
+		$this->assertSame( Delivery_Status::IN_TRANSIT, $log[0][0] );
+		$this->assertGreaterThanOrEqual( $before, $log[0][1] );
+	}
+
+	public function test_nothing_is_logged_when_the_state_did_not_change(): void {
+		$this->meta['_test_status'] = 'ROAD';
+
+		Delivery_Status_Events::notify( $this->order(), $this->provider(), Delivery_Status::IN_TRANSIT );
+		Delivery_Status_Events::notify( $this->order(), $this->provider() );
+
+		$this->assertArrayNotHasKey( '_woodev_delivery_status_log_test', $this->meta );
+	}
+
+	public function test_the_log_follows_the_states_and_a_re_poll_adds_nothing(): void {
+		$order    = $this->order();
+		$provider = $this->provider();
+
+		$this->meta['_test_status'] = 'NEW';
+		Delivery_Status_Events::sync( $order, $provider, true );
+		$this->meta['_test_status'] = 'ROAD';
+		Delivery_Status_Events::sync( $order, $provider );
+		Delivery_Status_Events::sync( $order, $provider );
+		$this->meta['_test_status'] = 'DELIVERED';
+		Delivery_Status_Events::sync( $order, $provider );
+
+		$this->assertSame(
+			[ Delivery_Status::CREATED, Delivery_Status::IN_TRANSIT, Delivery_Status::DELIVERED ],
+			array_column( Delivery_Status_Log::decode( $this->meta['_woodev_delivery_status_log_test'] ), 0 )
+		);
+	}
+
+	/** An order adopted silently (already in flight when the framework started) gets no back-filled entry. */
+	public function test_an_order_adopted_silently_is_not_back_filled(): void {
+		$this->meta['_test_status'] = 'ROAD';
+
+		Delivery_Status_Events::sync( $this->order(), $this->provider() );
+
+		$this->assertArrayNotHasKey( '_woodev_delivery_status_log_test', $this->meta );
 	}
 }

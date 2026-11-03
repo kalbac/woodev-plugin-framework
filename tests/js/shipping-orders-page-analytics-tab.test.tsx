@@ -39,6 +39,8 @@ const metrics = ( overrides = {} ) => ( {
 	failed_share: 0.125,
 	avg_days_to_delivery: 4.5,
 	time_sample: 5,
+	avg_days_handover_to_delivery: null,
+	handover_sample: 0,
 	...overrides,
 } );
 
@@ -53,7 +55,7 @@ const RESPONSE = {
 	methods: [ { method_id: 'cdek_door', carrier_id: 'cdek', label: 'СДЭК: до двери', orders: 6, lines: 6, shipping_paid: 900 } ],
 	intervals: [ { start: '2026-10-01', end: '2026-10-01', totals: series( 3 ), carriers: { cdek: series( 3 ) } } ],
 	previous_intervals: null,
-	coverage: { delivered: 6, time_sample: 5 },
+	coverage: { delivered: 6, time_sample: 5, handover_sample: 0 },
 	generated_at: '2026-11-03T05:00:00+00:00',
 	cached: false,
 };
@@ -268,6 +270,30 @@ describe( 'AnalyticsTab', () => {
 		expect( screen.getByText( /^Выручка:/ ).closest( 'a' ) ).toHaveAttribute( 'href', '/woodev-shipping-orders?chart=revenue' );
 		expect( screen.getByText( /^Отказы и возвраты:/ ).closest( 'a' ) ).toBeNull();
 		expect( screen.getByText( /^От заказа до вручения/ ).closest( 'a' ) ).toBeNull();
+	} );
+
+	it( 'the time tile stays the order-to-delivery figure until a status log has an exact sample (#1564)', async () => {
+		( fetchAnalytics as jest.Mock ).mockResolvedValue( RESPONSE );
+		render( <AnalyticsTab /> );
+		await screen.findByText( /Заказы: 10/ );
+
+		expect( screen.getByText( /^От заказа до вручения, дней:/ ) ).toBeInTheDocument();
+		expect( screen.queryByText( /^От передачи до вручения/ ) ).toBeNull();
+	} );
+
+	it( 'with an exact sample the tile reads «от передачи до вручения» with the exact value and its own coverage (#1564)', async () => {
+		( fetchAnalytics as jest.Mock ).mockResolvedValue( {
+			...RESPONSE,
+			totals: { ...RESPONSE.totals, current: metrics( { avg_days_handover_to_delivery: 2.5, handover_sample: 3 } ) },
+			coverage: { delivered: 6, time_sample: 5, handover_sample: 3 },
+		} );
+		render( <AnalyticsTab /> );
+		await screen.findByText( /Заказы: 10/ );
+
+		expect( screen.getByText( /^От передачи до вручения, дней: 2,5/ ) ).toBeInTheDocument();
+		expect( screen.getByText( /по 3 из 6 доставленных/ ) ).toBeInTheDocument();
+		expect( screen.queryByText( /^От заказа до вручения/ ) ).toBeNull();
+		expect( screen.queryByText( /по 5 из 6 доставленных/ ) ).toBeNull();
 	} );
 
 	it( 'choosing a tile switches the chart to its metric and marks the tile selected', async () => {

@@ -27,6 +27,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Delivery_Status_Even
 	 * The event fires once per REAL change: the last canonical state published for an order is kept in
 	 * order meta, and a call that finds the same state again publishes nothing.
 	 *
+	 * Each real change is also appended, with its time, to the order's {@see Delivery_Status_Log} — the only history
+	 * of delivery states the framework keeps.
+	 *
 	 * @since 2.0.2
 	 */
 	final class Delivery_Status_Events {
@@ -61,6 +64,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Delivery_Status_Even
 			if ( null !== $previous_status && $previous_status === $current_status ) {
 				return $current_status;
 			}
+
+			// The one place a REAL change is decided, so the only place the history is written (#1564).
+			Delivery_Status_Log::append( $order, $provider, $current_status );
 
 			/**
 			 * Fires when a carrier has persisted a shipment status change.

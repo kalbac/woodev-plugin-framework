@@ -78,6 +78,23 @@ final class AnalyticsAggregatorTest extends TestCase {
 		$this->assertSame( 2, $metrics['time_sample'] );
 	}
 
+	public function test_the_exact_handover_metric_averages_its_own_sample_apart_from_the_substitute(): void {
+		$metrics = Analytics_Aggregator::metrics(
+			$this->row( [ 'time_sample' => '4', 'time_seconds' => (string) ( 4 * 10 * 86400 ), 'handover_sample' => '2', 'handover_seconds' => (string) ( 2 * 3 * 86400 + 86400 ) ] )
+		);
+
+		$this->assertSame( 10.0, $metrics['avg_days_to_delivery'] );
+		$this->assertSame( 3.5, $metrics['avg_days_handover_to_delivery'] );
+		$this->assertSame( 2, $metrics['handover_sample'] );
+	}
+
+	public function test_the_exact_handover_metric_is_null_without_a_sample(): void {
+		$metrics = Analytics_Aggregator::metrics( $this->row() );
+
+		$this->assertNull( $metrics['avg_days_handover_to_delivery'] );
+		$this->assertSame( 0, $metrics['handover_sample'] );
+	}
+
 	public function test_sum_rows_adds_every_column(): void {
 		$sum = Analytics_Aggregator::sum_rows( [ $this->row(), $this->row( [ 'orders' => '5', 'revenue' => '100' ] ) ] );
 
