@@ -1,19 +1,43 @@
 # Changelog
 
 All notable changes to Woodev Plugin Framework are documented here.
-## [2.0.25] — Unreleased
-### Features
-- **shipping**: #1575 buyer tracking block under the order details (My Account and the order-received page): the tracking number as a link and the current delivery status, one row per parcel when an order has several; theme override at `{theme}/woocommerce/woodev/shipping/order/tracking.php`
-- **shipping**: #1575 `Orders_Provider::get_tracking_shipments()`, the optional `shipments_resolver` argument and the `Tracking_Shipment` value object: one source of tracking numbers for the page and the delivery status emails
-- **shipping**: #1575 filter `woodev_shipping_order_tracking_shipments`
-- **shipping**: #1575 `Delivery_Status::buyer_label()`
-
+## [2.0.25] — 2026-11-04
 ### Bug Fixes
-- **shipping**: #1575 delivery status emails print every tracking number of an order with several parcels, each as its own link; the default handed-over email body is laid out as a list for several parcels and reads exactly as before for none or one parcel with a number
-- **shipping**: #1575 the default handed-over email for one parcel that is only a link (Yandex) reads "Track your shipment: link" instead of an empty "Tracking number: ."; the buyer status line never shows a raw carrier code (a carrier label equal to the code falls back to the framework wording)
+- **shipping**: Keep the default handed-over email unchanged for zero or one parcel (#1575)
+
+- **shipping**: A shipment's own status wins for one shipment (#1575)
+
+- **shipping**: Buyer tracking rig defects (#1575)
+
 
 ### Documentation
-- **shipping**: #1575 public page "Buyer tracking"
+- **skill**: EDD release sets file name, upgrade file and date every time
+
+- **skill**: GlitchTip project slug equals the plugin repo name
+
+- **skill**: The GlitchTip project NAME is what the triage workflow reads
+
+- **s213**: Save — 2.0.24 + four plugin releases, #1526 done, GlitchTip triage in n8n
+
+- **s214**: Next v2 plugin — tracking 2.0.0 decisions, plugin spec, #1575 spec, overnight handoff
+
+- **shipping**: Status rule wording (#1575)
+
+- **s215**: Save — #1575 framework + carriers, tracking 2.0.0 code complete, rig W4
+
+- **s215**: Operator morning — PR #8, browser pass
+
+- **s216**: Set the release-wave mode in the next-session prompt
+
+
+### Features
+- **shipping**: Buyer tracking display (#1575)
+
+
+### Tests
+- **shipping**: Run the buyer tracking tests in separate processes (#1575)
+
+
 
 ## [2.0.24] — 2026-11-03
 ### Bug Fixes
