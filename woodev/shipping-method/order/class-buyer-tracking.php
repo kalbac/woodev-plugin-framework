@@ -96,7 +96,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Buyer_Tracking' ) ) 
 					'provider' => $provider,
 					'lines'    => $this->build_lines( $order, $provider, $shipments ),
 				],
-				'woodev/shipping/',
+				// The same `{theme}/woocommerce/` root the shipment emails use (their template path is empty, i.e. WooCommerce's
+				// default). The `woodev/shipping/` subfolder keeps a theme's own copy of WooCommerce's `order/tracking.php` apart.
+				'woocommerce/woodev/shipping/',
 				dirname( __DIR__ ) . '/templates/'
 			);
 		}
@@ -148,8 +150,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Buyer_Tracking' ) ) 
 		}
 
 		/**
-		 * The order's current status from the status log: the carrier's own wording when it has one for the raw code,
-		 * else the framework's buyer wording of the canonical state.
+		 * The order's current status from the status log: the carrier's own wording when it has one for the raw code (and
+		 * it is not just the code again), else the framework's buyer wording of the canonical state.
 		 *
 		 * @param \WC_Order       $order    order.
 		 * @param Orders_Provider $provider carrier descriptor.
@@ -164,8 +166,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Buyer_Tracking' ) ) 
 			list( $state, $time, $raw ) = end( $entries );
 
 			$carrier_labels = $provider->get_status_labels();
-			$label          = '' !== $raw && isset( $carrier_labels[ $raw ] ) && '' !== $carrier_labels[ $raw ]
-				? (string) $carrier_labels[ $raw ]
+			$carrier_label  = '' !== $raw && isset( $carrier_labels[ $raw ] ) ? trim( (string) $carrier_labels[ $raw ] ) : '';
+			// A carrier that maps its raw code to itself (CDEK «NEW») has no wording a buyer can read: fall back.
+			$label          = '' !== $carrier_label && $carrier_label !== $raw
+				? $carrier_label
 				: Delivery_Status::buyer_label( $state );
 
 			return null === $label ? null : [ $label, $time ];

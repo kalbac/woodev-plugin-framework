@@ -82,6 +82,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 		private string $default_body_multiple;
 
 		/**
+		 * @var string Default body used instead of {@see self::$default_body} when the order has ONE parcel that is only a
+		 *             link (no number, e.g. Yandex) and the merchant has not written a body of their own; empty for none.
+		 */
+		private string $default_body_link_only;
+
+		/**
 		 * Constructor.
 		 *
 		 * @since 2.0.2
@@ -94,8 +100,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 		 * @param string   $body            Default body.
 		 * @param bool     $enabled         Whether enabled by default.
 		 * @param string   $body_multiple   Default body for an order with several parcels (@since 2.0.25); empty for none.
+		 * @param string   $body_link_only  Default body for one parcel that has a link but no number (@since 2.0.25); empty for none.
 		 */
-		public function __construct( string $id, string $title, string $description, array $statuses, string $subject, string $heading, string $body, bool $enabled, string $body_multiple = '' ) {
+		public function __construct( string $id, string $title, string $description, array $statuses, string $subject, string $heading, string $body, bool $enabled, string $body_multiple = '', string $body_link_only = '' ) {
 			$this->id               = $id;
 			$this->title            = $title;
 			$this->description      = $description;
@@ -105,6 +112,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 			$this->default_heading  = $heading;
 			$this->default_body     = $body;
 			$this->default_body_multiple = $body_multiple;
+			$this->default_body_link_only = $body_link_only;
 			$this->default_enabled  = $enabled;
 			$this->template_html    = 'emails/shipment-status.php';
 			$this->template_plain   = 'emails/plain/shipment-status.php';
@@ -422,7 +430,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 		/**
 		 * The body text with placeholders: the merchant's, or the default.
 		 *
-		 * An order with zero or one parcel gets the default exactly as it has always read. Several parcels get the
+		 * An order with no parcel, or one parcel with a number, gets the default exactly as it has always read. One
+		 * parcel that is only a link (no number) gets the link-only variant. Several parcels get the
 		 * variant laid out for a list of numbers — but only while the body is still the framework's default; a body the
 		 * merchant wrote or edited is never replaced.
 		 *
@@ -433,6 +442,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 
 			if ( count( $this->shipments ) > 1 && '' !== $this->default_body_multiple && $body === $this->default_body ) {
 				return $this->default_body_multiple;
+			}
+
+			// One parcel that is only a link: no empty «Tracking number: .» — the link line stands alone.
+			if (
+				1 === count( $this->shipments )
+				&& '' === $this->shipments[0]->get_number()
+				&& '' !== $this->default_body_link_only
+				&& $body === $this->default_body
+			) {
+				return $this->default_body_link_only;
 			}
 
 			return $body;

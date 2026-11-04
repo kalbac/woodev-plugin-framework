@@ -103,6 +103,7 @@ The delivery status emails read the same list, so the number on the page and in 
 |---|---|---|
 | None | Empty. | Empty. |
 | One | The number. | Its link. |
+| One, only a link (no number) | Empty. The default handed-over email then reads **Track your shipment: link** instead of an empty tracking number. | Its link. |
 | Several | One line per parcel, **Shipment 1 of 2: number**, each number a link in the HTML mail. | Empty, because every link is inside its own line. |
 
 In a subject or a heading, several parcels appear as their numbers only, separated by commas.

@@ -3,13 +3,14 @@
 All notable changes to Woodev Plugin Framework are documented here.
 ## [2.0.25] — Unreleased
 ### Features
-- **shipping**: #1575 buyer tracking block under the order details (My Account and the order-received page): the tracking number as a link and the current delivery status, one row per parcel when an order has several; theme override at `woodev/shipping/order/tracking.php`
+- **shipping**: #1575 buyer tracking block under the order details (My Account and the order-received page): the tracking number as a link and the current delivery status, one row per parcel when an order has several; theme override at `{theme}/woocommerce/woodev/shipping/order/tracking.php`
 - **shipping**: #1575 `Orders_Provider::get_tracking_shipments()`, the optional `shipments_resolver` argument and the `Tracking_Shipment` value object: one source of tracking numbers for the page and the delivery status emails
 - **shipping**: #1575 filter `woodev_shipping_order_tracking_shipments`
 - **shipping**: #1575 `Delivery_Status::buyer_label()`
 
 ### Bug Fixes
-- **shipping**: #1575 delivery status emails print every tracking number of an order with several parcels, each as its own link; the default handed-over email body is laid out as a list for several parcels and reads exactly as before for none or one
+- **shipping**: #1575 delivery status emails print every tracking number of an order with several parcels, each as its own link; the default handed-over email body is laid out as a list for several parcels and reads exactly as before for none or one parcel with a number
+- **shipping**: #1575 the default handed-over email for one parcel that is only a link (Yandex) reads "Track your shipment: link" instead of an empty "Tracking number: ."; the buyer status line never shows a raw carrier code (a carrier label equal to the code falls back to the framework wording)
 
 ### Documentation
 - **shipping**: #1575 public page "Buyer tracking"
