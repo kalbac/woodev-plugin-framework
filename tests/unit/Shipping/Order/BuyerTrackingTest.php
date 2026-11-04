@@ -240,4 +240,21 @@ final class BuyerTrackingTest extends TestCase {
 		$this->assertStringNotContainsString( 'Returned', $html, 'the order-level log is not copied onto every line' );
 		$this->assertSame( 1, substr_count( $html, 'woodev-tracking__status' ), 'a parcel with no status of its own has no status text' );
 	}
+
+	public function test_one_shipment_with_its_own_status_shows_that_status_not_the_log(): void {
+		$this->carrier( [ Tracking_Shipment::create( 'A1', null, 'В контейнере', 1700000000 ) ] );
+		$this->log( [ [ Delivery_Status::IN_TRANSIT, 1700000000, '' ] ] );
+
+		$html = $this->rendered( $this->tracking_order() );
+
+		$this->assertStringContainsString( '<div class="woodev-tracking__status">Current status: В контейнере, 14.11.2023</div>', $html );
+		$this->assertStringNotContainsString( 'In transit', $html, 'the order-level log is not used when the parcel has its own status' );
+	}
+
+	public function test_one_shipment_own_status_without_a_time_prints_it_without_a_date(): void {
+		$this->carrier( [ Tracking_Shipment::create( 'A1', null, 'В контейнере' ) ] );
+		$this->log( [ [ Delivery_Status::IN_TRANSIT, 1700000000, '' ] ] );
+
+		$this->assertStringContainsString( '>Current status: В контейнере</div>', $this->rendered( $this->tracking_order() ) );
+	}
 }

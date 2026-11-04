@@ -111,14 +111,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Buyer_Tracking' ) ) 
 		 */
 		private function build_lines( \WC_Order $order, Orders_Provider $provider, array $shipments ): array {
 			$count = count( $shipments );
-			// One parcel: the order's own status. Several: each parcel's own, never the order-level one.
+			// A parcel's own status wins. Without one, a single parcel shows the order's status and several show none.
 			$order_status = 1 === $count ? $this->order_status( $order, $provider ) : null;
 			$lines        = [];
 
 			foreach ( $shipments as $index => $shipment ) {
-				$status = 1 === $count
-					? $order_status
-					: [ $shipment->get_status_label(), $shipment->get_status_time() ];
+				$own    = $shipment->get_status_label();
+				$status = null !== $own && '' !== $own
+					? [ $own, $shipment->get_status_time() ]
+					: $order_status;
 
 				$lines[] = [
 					'caption' => 1 === $count ? __( 'Tracking number', 'woodev-plugin-framework' ) : self::shipment_caption( $index + 1, $count ),

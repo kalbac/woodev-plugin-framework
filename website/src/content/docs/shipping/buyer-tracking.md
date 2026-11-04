@@ -20,7 +20,7 @@ When an order of one of your carriers has a tracking number, the framework print
 
 There is no setting to switch the block off: a delivery that has a tracking number always shows it.
 
-The status line comes from what the framework already stores while it follows the delivery. For one parcel it is the newest recorded state, worded by your carrier's `status_labels` when it has a label for the carrier's own status code, and by the framework's wording of the canonical state otherwise. It carries a date, in the shop's date format. Until the carrier has reported anything, the row shows the number alone. The page never calls the carrier.
+The status line comes from what the framework already stores while it follows the delivery. A parcel's own status, when your carrier supplies one, comes first. Otherwise, for one parcel it is the newest recorded state, worded by your carrier's `status_labels` when it has a label for the carrier's own status code, and by the framework's wording of the canonical state otherwise. It carries a date, in the shop's date format. Until the carrier has reported anything, the row shows the number alone. The page never calls the carrier.
 
 ## Report the tracking numbers
 
@@ -81,7 +81,7 @@ $provider = Orders_Provider::create(
 |---|---|
 | `$number` | Trimmed. May be empty **only** when `$url` is given. |
 | `$url` | An absolute `http` or `https` link. Anything else becomes "no link". |
-| `$status_label`, `$status_time` | Optional. Used **only** when the order has several parcels, so each row shows its own status. A single parcel shows the order's status instead. `$status_time` is a Unix time. |
+| `$status_label`, `$status_time` | Optional. When given, the row shows this status with its date. Without it, a single parcel shows the order's status and several parcels show no status line. `$status_time` is a Unix time. |
 
 A shipment with neither a number nor a usable link is dropped. A resolver that throws or does not return an array means "nothing to show": the buyer's page never fails over carrier data, and the failure goes to the plugin's log.
 
