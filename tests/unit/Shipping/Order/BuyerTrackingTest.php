@@ -33,6 +33,9 @@ final class BuyerTrackingTest extends TestCase {
 	/** @var string the format wp_date() was asked for. */
 	private string $date_format_used = '';
 
+	/** @var string the `$template_path` wc_get_template() was given. */
+	private string $template_path_used = '';
+
 	protected function setUp(): void {
 		parent::setUp();
 		$this->fake_tracking_orders();
@@ -50,7 +53,8 @@ final class BuyerTrackingTest extends TestCase {
 		);
 		// Prints the REAL template, so the markup and its escaping are what is asserted.
 		Functions\when( 'wc_get_template' )->alias(
-			static function ( string $name, array $args, string $template_path, string $default_path ) {
+			function ( string $name, array $args, string $template_path, string $default_path ) {
+				$this->template_path_used = $template_path;
 				extract( $args ); // phpcs:ignore WordPress.PHP.DontExtract.extract_extract
 				include $default_path . $name;
 			}
@@ -199,6 +203,38 @@ final class BuyerTrackingTest extends TestCase {
 		$this->assertStringContainsString( '<div class="woodev-tracking__status">Current status: Принят в пункте, 14.11.2023</div>', $html );
 		$this->assertStringNotContainsString( 'Created', $html, 'only the newest entry' );
 		$this->assertSame( 'j F Y', $this->date_format_used, 'the date is in the site\'s WooCommerce date format' );
+	}
+
+	/**
+	 * Rig defect D6 (#1575): CDEK maps every raw code to itself, which must never reach the buyer.
+	 */
+	public function test_a_carrier_label_equal_to_the_raw_code_falls_back_to_the_canonical_buyer_wording(): void {
+		$this->carrier( [ Tracking_Shipment::create( 'A1' ) ], [ 'status_labels' => [ 'NEW' => 'NEW' ] ] );
+		$this->log( [ [ Delivery_Status::CREATED, 1700000000, 'NEW' ] ] );
+
+		$html = $this->rendered( $this->tracking_order() );
+
+		$this->assertStringContainsString( 'Current status: Created, 14.11.2023', $html );
+		$this->assertStringNotContainsString( 'NEW', $html );
+	}
+
+	public function test_an_empty_carrier_label_falls_back_to_the_canonical_buyer_wording(): void {
+		$this->carrier( [ Tracking_Shipment::create( 'A1' ) ], [ 'status_labels' => [ 'ACCEPTED' => '  ' ] ] );
+		$this->log( [ [ Delivery_Status::IN_TRANSIT, 1700000000, 'ACCEPTED' ] ] );
+
+		$this->assertStringContainsString( 'Current status: In transit, 14.11.2023', $this->rendered( $this->tracking_order() ) );
+	}
+
+	/**
+	 * Rig defect D1 (#1575): the documented override is `{theme}/woocommerce/woodev/shipping/order/tracking.php`, the
+	 * same `woocommerce/` root the shipment emails use; WooCommerce prepends nothing to `$template_path`.
+	 */
+	public function test_the_template_is_looked_up_under_the_woocommerce_theme_folder(): void {
+		$this->carrier( [ Tracking_Shipment::create( 'A1' ) ] );
+
+		$this->rendered( $this->tracking_order() );
+
+		$this->assertSame( 'woocommerce/woodev/shipping/', $this->template_path_used );
 	}
 
 	public function test_without_a_carrier_label_the_canonical_buyer_wording_is_used(): void {

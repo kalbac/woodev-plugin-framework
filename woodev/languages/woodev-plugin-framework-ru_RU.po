@@ -5548,6 +5548,9 @@ msgstr "Ваше отправление передано в {carrier_name}. Но
 msgid "Your shipment has been handed over to {carrier_name}.\nTracking number: {tracking_number}\n{tracking_url}"
 msgstr "Ваше отправление передано в {carrier_name}.\nНомер отслеживания: {tracking_number}\n{tracking_url}"
 
+msgid "Your shipment has been handed over to {carrier_name}.\nTrack your shipment: {tracking_url}"
+msgstr "Ваше отправление передано в {carrier_name}.\nСсылка для отслеживания: {tracking_url}"
+
 msgid "Delivery tracking"
 msgstr "Отслеживание доставки"
 

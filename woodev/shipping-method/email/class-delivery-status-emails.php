@@ -99,6 +99,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 					'body'        => __( 'Your shipment has been handed over to {carrier_name}. Tracking number: {tracking_number}. {tracking_url}', 'woodev-plugin-framework' ),
 					// Zero or one parcel keep the sentence above untouched; several parcels read better as a list.
 					'body_multiple' => __( "Your shipment has been handed over to {carrier_name}.\nTracking number: {tracking_number}\n{tracking_url}", 'woodev-plugin-framework' ),
+					// One parcel that is only a link (no number): the link line stands alone, no empty «Tracking number: .».
+					'body_link_only' => __( "Your shipment has been handed over to {carrier_name}.\nTrack your shipment: {tracking_url}", 'woodev-plugin-framework' ),
 					'enabled'     => true,
 				],
 				'customer_shipment_pickup' => [
@@ -139,7 +141,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Email\\Delivery_Status_Emai
 					$definition['heading'],
 					$definition['body'],
 					$definition['enabled'],
-					$definition['body_multiple'] ?? ''
+					$definition['body_multiple'] ?? '',
+					$definition['body_link_only'] ?? ''
 				);
 				$this->emails[ $email->id ] = $email;
 			}

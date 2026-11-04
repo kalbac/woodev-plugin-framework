@@ -5563,6 +5563,9 @@ msgstr ""
 msgid "Your shipment has been handed over to {carrier_name}.\nTracking number: {tracking_number}\n{tracking_url}"
 msgstr ""
 
+msgid "Your shipment has been handed over to {carrier_name}.\nTrack your shipment: {tracking_url}"
+msgstr ""
+
 msgid "Delivery tracking"
 msgstr ""
 

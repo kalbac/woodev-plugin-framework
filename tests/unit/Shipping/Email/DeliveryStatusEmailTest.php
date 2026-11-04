@@ -468,6 +468,30 @@ final class DeliveryStatusEmailTest extends TestCase {
 		$this->assertSame( 'Ваше отправление передано в СДЭК. Номер отслеживания: TRK 42. https://track.test/TRK%2042', $ru_plain );
 	}
 
+	/**
+	 * Rig defect D3 (#1575): a single parcel that is only a link (Yandex) must not print «Tracking number: .».
+	 */
+	public function test_one_link_only_parcel_gets_the_link_line_in_both_languages_and_formats(): void {
+		$parcel = [ Tracking_Shipment::create( '', 'https://yandex.test/share/1' ) ];
+
+		[ $html, $plain ] = $this->registered_created_email_bodies( $parcel );
+		$this->assertSame( "Your shipment has been handed over to СДЭК.\nTrack your shipment: <a href=\"https://yandex.test/share/1\">https://yandex.test/share/1</a>", $html );
+		$this->assertSame( "Your shipment has been handed over to СДЭК.\nTrack your shipment: https://yandex.test/share/1", $plain );
+
+		[ $ru_html, $ru_plain ] = $this->registered_created_email_bodies( $parcel, $this->russian_catalogue() );
+		$this->assertSame( "Ваше отправление передано в СДЭК.\nСсылка для отслеживания: <a href=\"https://yandex.test/share/1\">https://yandex.test/share/1</a>", $ru_html );
+		$this->assertStringNotContainsString( 'Номер отслеживания', $ru_plain );
+		$this->assertStringNotContainsString( ': .', $ru_plain );
+	}
+
+	public function test_a_body_the_merchant_wrote_is_never_replaced_for_a_link_only_parcel(): void {
+		$parcel = [ Tracking_Shipment::create( '', 'https://yandex.test/share/1' ) ];
+
+		[ , $plain ] = $this->registered_created_email_bodies( $parcel, [], 'Our own text: {tracking_number}|{tracking_url}' );
+
+		$this->assertSame( 'Our own text: |https://yandex.test/share/1', $plain );
+	}
+
 	public function test_several_parcels_get_the_list_layout_of_the_default_body_in_both_languages(): void {
 		$parcels = [ Tracking_Shipment::create( 'A1', 'https://track.test/A1' ), Tracking_Shipment::create( 'B2' ) ];
 
