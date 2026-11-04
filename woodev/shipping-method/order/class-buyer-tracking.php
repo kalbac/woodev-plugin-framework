@@ -29,9 +29,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Buyer_Tracking' ) ) 
 	 * **No number — no output.** There is no setting and no off switch: a delivery that has a tracking number always
 	 * shows it (operator rule, #1575). Nothing is printed, not even the heading, when the carrier has no parcel to show.
 	 *
-	 * **Status line.** One parcel shows the order's current status from {@see Delivery_Status_Log}. Several parcels
-	 * (an Ozon order) show each parcel's OWN status from its {@see Tracking_Shipment}: the log is per order, so it
-	 * would put the same status on every line. A parcel with no status of its own gets no status text.
+	 * **Status line.** A parcel's own status wins at any count. Without one, a single parcel shows the order's current
+	 * status from {@see Delivery_Status_Log}; several parcels (an Ozon order) show no status text, because the log is per
+	 * order and would put the same status on every line.
 	 *
 	 * The markup lives in `templates/order/tracking.php`; a theme overrides it at
 	 * `{theme}/woocommerce/woodev/shipping/order/tracking.php`.
@@ -111,14 +111,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Buyer_Tracking' ) ) 
 		 */
 		private function build_lines( \WC_Order $order, Orders_Provider $provider, array $shipments ): array {
 			$count = count( $shipments );
-			// One parcel: the order's own status. Several: each parcel's own, never the order-level one.
+			// A parcel's own status wins. Without one, a single parcel shows the order's status and several show none.
 			$order_status = 1 === $count ? $this->order_status( $order, $provider ) : null;
 			$lines        = [];
 
 			foreach ( $shipments as $index => $shipment ) {
-				$status = 1 === $count
-					? $order_status
-					: [ $shipment->get_status_label(), $shipment->get_status_time() ];
+				$own    = $shipment->get_status_label();
+				$status = null !== $own && '' !== $own
+					? [ $own, $shipment->get_status_time() ]
+					: $order_status;
 
 				$lines[] = [
 					'caption' => 1 === $count ? __( 'Tracking number', 'woodev-plugin-framework' ) : self::shipment_caption( $index + 1, $count ),
