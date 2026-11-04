@@ -93,3 +93,15 @@ A plugin with a store product is gated on the server-SIGNED licence claim (`Wood
 ### Background work on Action Scheduler
 
 - **A self-continuing chain (catalogue sync, retry) never queues its successor with `unique = true` from inside the running action, and never schedules before `action_scheduler_init`.** The unique check counts the IN-PROGRESS action, so the successor is dropped as a duplicate and the chain dies after the first chunk with no error; before init the call does nothing at all. Queue the successor non-unique after checking for a *pending* action only, on or after `action_scheduler_init`, and test the `$unique` argument by stubbing `as_schedule_single_action` (Ozon W3, PR #28; Action Scheduler 4.1.0 source): [unique inside the running action](../../../../docs-internal/gotchas/as-unique-inside-the-running-action-or-before-init-schedules-nothing.md); [`as_has_scheduled_action()` matches the running action](../../../../docs-internal/gotchas/as-has-scheduled-action-matches-the-running-action.md).
+
+### Buyer-facing text and links (s215)
+
+- A carrier link or slug you store or compare (own-carrier URL templates, `sanitize_title()` slugs of Russian labels) must not pass
+  through `wc_clean()` — it strips `%XX`. →
+  `docs-internal/gotchas/wc-clean-strips-percent-encoded-octets-so-a-url-or-a-slug-never-goes-through-it.md`
+- A carrier plugin's own `WC_Email` subclasses translate their defaults lazily (after `setup_locale()`), not in the constructor. →
+  `docs-internal/gotchas/wc-email-default-texts-built-in-the-constructor-use-the-admins-locale.md`
+- The documented theme override for the buyer tracking block is `{theme}/woocommerce/woodev/shipping/order/tracking.php`
+  (framework 2.0.25 after #1586; 2.0.24-era code read `{theme}/woodev/shipping/…`). The `shipments_resolver` seam is described in
+  [orders-tracking.md](orders-tracking.md).
+

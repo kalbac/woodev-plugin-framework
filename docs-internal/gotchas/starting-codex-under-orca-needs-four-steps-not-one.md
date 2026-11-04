@@ -403,6 +403,13 @@ same as above and worked every time: ESC to the terminal (never Enter), read the
 `worker-start --retry-of <failed dispatch> --terminal <handle> --worktree <that terminal's worktree>`. Budget the extra round-trip
 into every Codex launch until the CLI is updated or the notice is skipped for good.
 
+## s215 addition (04.11.2026): Codex cannot be the PHP writer in this ecosystem
+
+Measured again: the tracking plugin's W2 (settings) went to a Codex structured worker and came back **blocked** — it has no
+Serena, and `CLAUDE.md` makes Serena mandatory for PHP. The brief's "authorize your own file tools" escape works for a
+bounded fix (s171), not for a feature wave in a repo whose rules say Serena. So: Codex = **critic** (and a docs/test-only writer
+with an explicit file-tools authorisation); PHP feature work goes to a Sonnet 5.5 / Haiku 5.5 worker. W2 was re-dispatched to Sonnet.
+
 ## Related
 
 - [input-accepted-is-not-proof-a-worker-started](input-accepted-is-not-proof-a-worker-started.md) — the s83 half of this: the receipt lies about delivery
