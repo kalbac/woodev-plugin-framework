@@ -18,6 +18,7 @@
 > **From s140 a row is ONE LINE of at most 600 characters, enforced by `lint:docs` (#930)** — the
 > gate kept firing because rows had become paragraphs copied out of the session file.
 
+- **[s215](sessions/s215.md)** — 2026-11-04 — **Overnight: framework #1575 on `main` unreleased (#1584 #1585 #1586), Ozon/Yandex resolvers, «Отслеживание доставки» 2.0.0 code complete (PR #1–#6), rig W4: 10 PASS, 1 FAIL fixed, defects D1–D7.** Releases wait for the operator's rig look. Gotchas +2. unit **8072**, tracking **201**.
 - **[s214](sessions/s214.md)** — 2026-11-04 — **Next v2 plugin chosen: «Отслеживание доставки» 2.0.0; 13 operator decisions, plugin spec + framework spec #1575 (buyer tracking display) written and reviewed by Codex.** Ozon Seller kept for its own session (#1574); WB has no shop delivery (#1576 closed); ozon#87 #88 filed. Implementation handed to an overnight session.
 - **[s213](sessions/s213.md)** — 2026-11-03 — **Framework 2.0.24 and four plugin releases on EDD (Yandex 2.0.14, CDEK 2.3.0.15, Russian Post 2.0.12, Ozon 2.0.3); #711 analytics merged after the rig look, #1564 status log built (#1567), #1526 closed.** GlitchTip triage loop live in n8n; EDD three-field release checklist; 3 new gotchas.
 - **[s212](sessions/s212.md)** — 2026-11-03 — #711 delivery analytics built overnight (PR #1565 parked for the look); #1526 Yandex merged, no release

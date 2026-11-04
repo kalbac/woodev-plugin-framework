@@ -120,6 +120,10 @@ internals (class-map wiring, build/CI, rig) are left out on purpose. Shipping-sp
   a setting) and then flips back keeps serving the cached empty set until the cart cache is cleared, unless the
   gate's state is part of the package. →
   `docs-internal/gotchas/woocommerce-caches-rates-per-package-hash-so-a-rate-gate-must-change-the-package.md`
+- `wc_clean()` / `sanitize_text_field()` strips percent-encoded octets: a URL template (`?return=foo%2Fbar`) or a
+  `sanitize_title()` slug (Cyrillic → `%d0%…`) comes out destroyed or empty. URLs go through `esc_url_raw()` only; slugs are
+  compared as stored, never re-cleaned. →
+  `docs-internal/gotchas/wc-clean-strips-percent-encoded-octets-so-a-url-or-a-slug-never-goes-through-it.md`
 - Legacy `Woodev_*` classes vs namespaced `Woodev\Framework\*`: new code is namespaced; know which
   spelling a symbol has before you type it. →
   `docs-internal/gotchas/namespace-migration-legacy-psr4.md`
@@ -232,6 +236,10 @@ internals (class-map wiring, build/CI, rig) are left out on purpose. Shipping-sp
   `docs-internal/gotchas/russian-source-i18n-plural-n.md`
 - `__( 'half.' . ' half.' )` is one msgid to gettext and zero to a single-literal scanner. →
   `docs-internal/gotchas/a-concatenated-msgid-is-invisible-to-a-single-literal-scanner.md`
+- A `WC_Email` default subject/heading/body assigned with `__()` in the constructor is frozen in the ADMIN's locale, so a
+  Russian buyer gets English mail from an English-profile admin. Resolve defaults lazily (`get_default_subject()`,
+  `get_default_heading()`, body at read time) after `setup_locale()`. →
+  `docs-internal/gotchas/wc-email-default-texts-built-in-the-constructor-use-the-admins-locale.md`
 - Classify a string by its RENDER PATH, not by its file's directory. →
   `docs-internal/gotchas/classify-an-i18n-string-by-its-render-path-not-its-file-path.md`
 

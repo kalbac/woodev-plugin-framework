@@ -20,6 +20,12 @@ Both s203 merge-evidence runs (edostavka#157, #158) were green 2/2 this way.
 
 > **Token (s205):** `--commit-status` needs a GitHub token; export `LOCAL_CI_GITHUB_TOKEN` in the shell and never pass `--github-token` — the flag puts the token on argv: [local-ci-github-token-flag-puts-the-token-on-argv](local-ci-github-token-flag-puts-the-token-on-argv.md).
 
+## s215 addition (04.11.2026, MacBook)
+
+Met again on the tracking plugin repo: `/var/run/docker.sock` missing, so every agent on the night shift needed
+`export LOCAL_CI_DOCKER_HOST=unix://$HOME/.orbstack/run/docker.sock` and the `run` subcommand
+(`run-local-ci run -w <workflow file>`). A brief that tells a worker to "run local-ci" must carry both, or the first lap is lost to the usage text.
+
 ## Related
 
 - [run-local-ci-requires-run-subcommand](run-local-ci-requires-run-subcommand.md)
