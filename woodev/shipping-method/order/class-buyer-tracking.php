@@ -29,9 +29,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Buyer_Tracking' ) ) 
 	 * **No number — no output.** There is no setting and no off switch: a delivery that has a tracking number always
 	 * shows it (operator rule, #1575). Nothing is printed, not even the heading, when the carrier has no parcel to show.
 	 *
-	 * **Status line.** One parcel shows the order's current status from {@see Delivery_Status_Log}. Several parcels
-	 * (an Ozon order) show each parcel's OWN status from its {@see Tracking_Shipment}: the log is per order, so it
-	 * would put the same status on every line. A parcel with no status of its own gets no status text.
+	 * **Status line.** A parcel's own status wins at any count. Without one, a single parcel shows the order's current
+	 * status from {@see Delivery_Status_Log}; several parcels (an Ozon order) show no status text, because the log is per
+	 * order and would put the same status on every line.
 	 *
 	 * The markup lives in `templates/order/tracking.php`; a theme overrides it at
 	 * `{theme}/woocommerce/woodev/shipping/order/tracking.php`.

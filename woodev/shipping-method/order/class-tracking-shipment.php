@@ -74,8 +74,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Tracking_Shipment' )
 		 * @param string      $number       the tracking number a buyer quotes. May be empty when `$url` is given
 		 *                                  (a carrier whose only buyer-facing handle is a tracking link).
 		 * @param string|null $url          absolute http(s) tracking URL; anything else is dropped to `null`.
-		 * @param string|null $status_label the parcel's own current status. Needed only when an order has several
-		 *                                  parcels — a single parcel shows the order's status log instead.
+		 * @param string|null $status_label the parcel's own current status. Wins at any count.
+		 *                                  Without one, a single parcel shows the order's status log instead,
+		 *                                  and several parcels show none.
 		 * @param int|null    $status_time  unix time of that status; zero or negative means «no date».
 		 * @return self
 		 */
