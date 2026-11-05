@@ -69,9 +69,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 	final class Location_Provider_Registry {
 
 		/**
-		 * CDEK's RU region labels, fetched through the connected production
-		 * account's `Woodev\Edostavka\Api\Cdek_Api_Client::get_regions( 'RU' )`
-		 * (`/v2/location/regions?country_codes=RU`) on 2026-11-06. The
+		 * CDEK's RU region labels from the production
+		 * `/v2/location/regions?country_codes=RU` endpoint, captured on 2026-11-06. The
 		 * shipping-zone editor reads `woocommerce_states`, but the active provider
 		 * may not enumerate regions after a provider switch. This last-resort list
 		 * keeps existing `RU:<wc_strtoupper(label)>` zone entries editable; the
@@ -2526,11 +2525,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		}
 
 		/**
-		 * Whether this request is rendering WooCommerce's shipping-zone editor.
+		 * Whether this request renders or saves WooCommerce shipping-zone locations.
 		 *
 		 * The method reads routing parameters only; it does not authorize or process a
-		 * state-changing request. Zone-method AJAX saves do not render the location
-		 * selector, so the fallback is limited to the settings screen that does.
+		 * state-changing request. WooCommerce's two zone-save AJAX actions also format
+		 * zone locations, so they need the same temporary state labels as the editor.
 		 *
 		 * @since 2.0.26
 		 *
@@ -2539,6 +2538,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		private static function is_shipping_zone_admin_request(): bool {
 			if ( ! is_admin() ) {
 				return false;
+			}
+
+			if ( wp_doing_ajax() ) {
+				// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only AJAX routing; the action only selects whether to expose static zone labels.
+				$action = isset( $_REQUEST['action'] ) && is_string( $_REQUEST['action'] ) ? wp_unslash( $_REQUEST['action'] ) : '';
+
+				return in_array(
+					$action,
+					[
+						'woocommerce_shipping_zones_save_changes',
+						'woocommerce_shipping_zone_methods_save_changes',
+					],
+					true
+				);
 			}
 
 			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only admin routing; these values only select whether to expose static zone labels.

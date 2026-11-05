@@ -271,9 +271,12 @@ final class LocationProviderRegistryTest extends TestCase {
 
 	private array $original_get;
 
+	private array $original_request;
+
 	protected function setUp(): void {
 		parent::setUp();
-		$this->original_get = $_GET;
+		$this->original_get     = $_GET;
+		$this->original_request = $_REQUEST;
 
 		// the default-dimensions handler converts its built-in defaults (#955): units are not under test here
 		Functions\when( 'wc_get_weight' )->returnArg( 1 );
@@ -284,6 +287,7 @@ final class LocationProviderRegistryTest extends TestCase {
 		// with assertions of their own where the test is actually ABOUT them.
 		Functions\when( 'remove_action' )->justReturn( true );
 		Functions\when( 'is_admin' )->justReturn( false );
+		Functions\when( 'wp_doing_ajax' )->justReturn( false );
 		Functions\when( 'wp_unslash' )->returnArg();
 		Functions\when( '__' )->returnArg( 1 );
 		Functions\when( 'get_option' )->justReturn( null );
@@ -305,7 +309,8 @@ final class LocationProviderRegistryTest extends TestCase {
 	}
 
 	protected function tearDown(): void {
-		$_GET = $this->original_get;
+		$_GET     = $this->original_get;
+		$_REQUEST = $this->original_request;
 		Location_Provider_Registry::instance()->reset_for_tests();
 		Settings_Page_Registry::instance()->reset_for_tests();
 		Shipping_Settings_Tab::reset_for_tests();
@@ -3010,6 +3015,40 @@ final class LocationProviderRegistryTest extends TestCase {
 		Functions\when( 'is_admin' )->justReturn( true );
 		$_GET['tab'] = 'general';
 		$this->assertSame( [], $registry->inject_related_list_states( [] ), 'other WooCommerce settings tabs never receive zone-only labels' );
+	}
+
+	public function test_zone_save_ajax_actions_get_the_fallback_when_they_format_locations(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		Functions\when( 'is_admin' )->justReturn( true );
+		Functions\when( 'wp_doing_ajax' )->justReturn( true );
+		Functions\when( 'wc_strtoupper' )->alias(
+			static function ( $string ) {
+				return mb_strtoupper( (string) $string );
+			}
+		);
+		$this->stub_providers_filter( [] );
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = null ) {
+				return 'woodev_location_field_mode_region' === $name ? Location_Provider_Registry::MODE_RELATED_LIST : $default;
+			}
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+		$_GET = [];
+
+		foreach (
+			[
+				'woocommerce_shipping_zones_save_changes',
+				'woocommerce_shipping_zone_methods_save_changes',
+			] as $action
+		) {
+			$_REQUEST['action'] = $action;
+			$states             = $registry->inject_related_list_states( [] );
+
+			$this->assertSame( 'Московская область', $states['RU']['МОСКОВСКАЯ ОБЛАСТЬ'], $action . ' must resolve existing CDEK region keys' );
+		}
 	}
 
 	/**
