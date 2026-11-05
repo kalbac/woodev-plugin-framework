@@ -38,13 +38,14 @@ export interface NativeLocality {
  */
 export function selectionFor(
 	record: LocationRecord,
-	context: { states: CountryStates; regionFieldRemoved: boolean }
+	context: { states: CountryStates; regionFieldRemoved: boolean; cityValue?: string }
 ): Selection {
 	const { name, type } = recordCityComponent( record );
 
 	return {
 		key: record.key,
-		city: name,
+		// City mode: a listed place posts its own name («Черкизово»), not the parent's («Пушкино»).
+		city: context.cityValue ? context.cityValue : name,
 		cityType: type,
 		country: record.country.toUpperCase(),
 		state: context.regionFieldRemoved ? null : matchState( record, context.states ),
@@ -90,7 +91,7 @@ export type SavedVerdict =
 export function judgeSavedRecord(
 	record: LocationRecord,
 	address: NativeLocality,
-	context: { states: CountryStates; regionFieldRemoved: boolean; authoritative: boolean }
+	context: { states: CountryStates; regionFieldRemoved: boolean; authoritative: boolean; cityValue?: string }
 ): SavedVerdict {
 	if ( ! context.authoritative || address.city.trim() === '' ) {
 		return { status: 'pending' };

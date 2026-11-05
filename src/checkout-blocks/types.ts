@@ -35,6 +35,15 @@ export interface Suggestion {
 	record: LocationRecord;
 }
 
+/**
+ * One place the merchant listed for city mode (`Checkout_Config::with_settlement_choices()`): a
+ * suggestion plus `value`, the text the City field shows and posts — the place's OWN name, so «рп
+ * Черкизово» posts «Черкизово», not its parent «Пушкино».
+ */
+export interface AllowedPlace extends Suggestion {
+	value: string;
+}
+
 /** `{ key, level }` — the narrowed shape `current` and every `chain` entry carry. */
 export interface ChainEntry {
 	key: string;
@@ -70,6 +79,13 @@ export interface LocationConfig {
 	 * against the native address before it claims a selection. `null` for no record or an implicit one.
 	 */
 	selection?: { record: LocationRecord } | null;
+	/**
+	 * City mode: the places the merchant lists, by country. Present only while the checkout's
+	 * settlement is a closed choice; absent — the settlement is searched as always.
+	 */
+	allowed?: Record< string, AllowedPlace[] >;
+	/** City mode: the merchant hides the settlement field. Works for exactly one listed place. */
+	hideSettlement?: boolean;
 	/** Server-side delivery mode, checked against WooCommerce's forcedBillingAddress setting. */
 	billingOnly?: boolean;
 	i18n: Record< string, string >;
