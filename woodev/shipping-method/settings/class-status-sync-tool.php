@@ -26,9 +26,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Status_Sync_Tool'
 	 * WordPress cron fires to refresh delivery statuses, with the carrier's callback attached to it. Firing the
 	 * same action by hand IS the carrier's own refresh — the framework knows nothing about how it polls. A carrier
 	 * with no cron hook (webhook-only) gets no button; one whose hook has no callback gets a disabled one. The
-	 * callback contract is `( int $offset = 0, bool $manual = false )`; scheduled runs use the defaults (and pass
-	 * `false` when supplying arguments), while this button starts a manual run with `0, true`. Explicit arguments
-	 * keep typed carrier callbacks safe when invoked outside WP-Cron.
+	 * callback contract is `( int $offset = 0, bool $manual = false )`; scheduled first polls use the defaults, while
+	 * a continuation passes its own offset and `manual` value as the carrier needs (Yandex queues `[ $next, true ]`
+	 * when polling is off). This button starts a manual run with `0, true`. Explicit arguments keep typed carrier
+	 * callbacks safe when invoked outside WP-Cron.
 	 *
 	 * @since 2.0.2
 	 */

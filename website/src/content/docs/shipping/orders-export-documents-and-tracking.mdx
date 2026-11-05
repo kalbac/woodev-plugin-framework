@@ -159,7 +159,7 @@ The first argument of `Orders_Provider::create()` is the **carrier id**. Use the
 | `tracking_url_meta_key` | A key holding an absolute tracking link, used instead of the template for an order that has a tracking number and a valid `http(s)` link in it. Needs `tracking_meta_key`. |
 | `pickup_point_meta_key` | The key holding the chosen pickup point. |
 | `carrier_order_id_meta_key` | The key holding the carrier's order id. |
-| `cron_hook` | The action your plugin runs to refresh statuses. The «Обновить статусы сейчас» (Update statuses now) button fires it. |
+| `cron_hook` | Хук опроса статусов. Его callback принимает `( int $offset = 0, bool $manual = false )`; зарегистрируйте его с `accepted_args = 2`. Кнопка «Обновить статусы сейчас» вызывает `do_action( $hook, 0, true )`. Первый плановый опрос может использовать значения по умолчанию; продолжение передаёт свой offset и флаг `manual`, необходимые перевозчику. Например, Яндекс передаёт `[ $next, true ]`, если автоматический опрос выключен. |
 | `marker_writer` | A callable `fn( \WC_Order $order, array $context ): void` that writes your marker onto an order. Without it the framework lists your orders but never creates or edits one for you. |
 | `order_fields` | A callable returning your own export fields for a tariff, shown when a manager puts an order together by hand. |
 | `supports_label_printing` | `true` when you register a `Document_Source`. |
