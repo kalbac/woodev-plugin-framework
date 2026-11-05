@@ -34,6 +34,24 @@ const TOGGLE_SPECS = [
 
 const RADIO_SPEC = { id: 'r1', name: 'Тип расчёта', controlType: 'radio', description: 'Сгруппированные опции.', options: { fixed: 'Фиксированная ставка', dynamic: 'По тарифу перевозчика' }, value: 'dynamic' };
 
+const RECORDS_SPEC = {
+	id: 'warehouses',
+	name: 'Склады',
+	controlType: 'records-table',
+	description: 'Таблица записей: текст, выбор адреса и «основной». Колонки задаёт плагин; строку проверяет сервер при сохранении.',
+	add_label: 'Добавить склад',
+	empty_text: 'У вас пока нет ни одного склада. Добавьте адрес, откуда курьер везёт заказы.',
+	columns: [
+		{ id: 'name', type: 'text', label: 'Название', required: true },
+		{ id: 'address', type: 'location-picker', label: 'Адрес', required: true, level: 'address' },
+		{ id: 'is_main', type: 'main-radio', label: 'Основной' },
+	],
+	value: JSON.stringify( [
+		{ id: 1, name: 'Основной склад', address: JSON.stringify( { key: 'demo-1', label: 'г Москва, Цветной б-р, д 22 стр 6' } ), is_main: true },
+		{ id: 2, name: 'Склад на Ленина', address: JSON.stringify( { key: 'demo-2', label: 'г Подольск, ул Ленина, д 1' } ), is_main: false },
+	] ),
+};
+
 const GROUP_FIELD_SPECS = [
 	{ id: 'g_site', name: 'Адрес сайта', controlType: 'text', description: 'Куда перевозчик пришлёт уведомление.', value: 'https://shop.example.ru' },
 	{ id: 'g_secret', name: 'Секрет', controlType: 'password', value: 'secret-token' },
@@ -110,6 +128,10 @@ export default function App() {
 					) ) }
 				</div>
 				<Field spec={ RADIO_SPEC } values={ values } setValues={ setValues } />
+			</Section>
+
+			<Section title="Таблица записей — добавить, изменить, удалить">
+				<Field spec={ RECORDS_SPEC } values={ values } setValues={ setValues } />
 			</Section>
 
 			<Section title="Группа полей — одна карточка с заголовком (Settings_Group)">

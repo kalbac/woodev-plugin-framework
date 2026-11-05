@@ -1,4 +1,5 @@
 import { validateBoxesText, validateBoxCost } from './boxes-table';
+import { validateRecordsValue } from './records-table';
 
 /**
  * UI-kit — client-side field validation (mirror of the PHP server validator).
@@ -141,6 +142,8 @@ export function validateField( schema, value, isTouched ) {
 	if ( isEmpty( kind, value ) ) {
 		return null;
 	}
+
+	if ( kind === 'records-table' ) { return validateRecordsValue( value, schema.columns || [] ); }
 
 	// A field with a plugin-supplied server validator can't be checked client-side
 	// (the PHP callback has no JS equivalent) — only required is enforced here; the

@@ -26,6 +26,7 @@ import FieldTip from './field-tip';
 import SelectField from './select-field';
 import SearchSelectField from './search-select-field';
 import BoxesTable from './boxes-table';
+import RecordsTable from './records-table';
 import LocationPickerField, { getProviderMismatchError } from './location-picker-field';
 import WizardRichText from './richtext';
 
@@ -469,6 +470,14 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 				value: value ?? schema.value ?? '', onChange, disabled,
 				dimensionFactor: schema.dimension_factor, weightFactor: schema.weight_factor,
 			} ), error ) );
+
+		case 'records-table':
+			// The consumer's server-side row check comes back as `schema.serverError`, shown under the table.
+			return withAnatomy( schema, createElement( RecordsTable, {
+				value: value ?? schema.value ?? '', onChange: ( next ) => { setTouched( true ); onChange( next ); }, disabled,
+				columns: schema.columns || [], name: settingId || 'records', country: schema.country || '',
+				addLabel: schema.add_label, emptyText: schema.empty_text,
+			} ), error );
 
 		case 'search-select':
 			return withAnatomy( schema, createElement( SearchSelectField, {

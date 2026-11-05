@@ -33,7 +33,7 @@
  * PHP uses to hand the client anything resolved server-side (tooltip,
  * placeholder, options…). The client never re-derives this cascade itself.
  *
- * LEVEL: fixed at `settlement` — "locality" already means the settlement level
+ * LEVEL: `settlement` by default (a records-table address cell passes `address`) — "locality" already means the settlement level
  * everywhere else in this layer (`Locality_Key`, `location-typeahead.js`'s own
  * "НП" widget, `DadataProvider`'s settlement branch); a "Зафиксированная
  * локация" default is that same concept, not a region or a street address.
@@ -72,13 +72,13 @@
 
 import { useMemo, Fragment } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
-import LocationPicker, { type LocationSuggestion } from './location-picker';
+import LocationPicker, { type LocationLevel, type LocationSuggestion } from './location-picker';
 
 /** The admin-only suggest route, under the `woodev/v1` root. */
 const ADMIN_SUGGEST_ENDPOINT = '/location/default-locality/suggest';
 
-/** The level every admin default-locality search runs at — see the file docblock. */
-const LEVEL = 'settlement';
+/** The level the admin default-locality search runs at unless a host asks for another — see the file docblock. */
+const DEFAULT_LEVEL: LocationLevel = 'settlement';
 
 /** What {@see parseStoredRecord} makes of a stored value. */
 export interface StoredRecord {
@@ -196,6 +196,13 @@ export interface LocationPickerFieldProps {
 	 * the server's own D15 chain resolution, matching this control's pre-#380 behaviour.
 	 */
 	provider?: string;
+	/**
+	 * The level a search runs at. The default-locality setting is always a settlement; a records-table
+	 * address cell asks for `address`. Both store the same serialized record.
+	 */
+	level?: LocationLevel;
+	/** Trigger text while nothing is picked. */
+	placeholder?: string;
 	/** Whether the control is disabled (D11). */
 	disabled?: boolean;
 	/** Change handler — called with the serialized record, or `''`. */
@@ -210,6 +217,8 @@ export default function LocationPickerField( {
 	value,
 	country,
 	provider = '',
+	level = DEFAULT_LEVEL,
+	placeholder,
 	disabled = false,
 	onChange,
 }: LocationPickerFieldProps ) {
@@ -238,7 +247,8 @@ export default function LocationPickerField( {
 			<LocationPicker
 				value={ 'ok' === stored.state ? { key: stored.key || '', label: stored.label || '' } : null }
 				broken={ 'broken' === stored.state }
-				level={ LEVEL }
+				level={ level }
+				placeholder={ placeholder }
 				country={ country || '' }
 				restRoot={ namespaceRoot( restRoot ) }
 				nonce={ nonce }

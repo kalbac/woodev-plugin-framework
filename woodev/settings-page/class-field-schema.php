@@ -140,6 +140,16 @@ final class Field_Schema {
 				$entry['weight_factor']    = (float) wc_get_weight( 1, 'kg' );
 			}
 
+			if ( $control && \Woodev_Control::TYPE_RECORDS_TABLE === $control->get_type() ) {
+				$entry['columns'] = $control->get_columns();
+				if ( '' !== $control->get_add_label() ) {
+					$entry['add_label'] = $control->get_add_label();
+				}
+				if ( '' !== $control->get_empty_text() ) {
+					$entry['empty_text'] = $control->get_empty_text();
+				}
+			}
+
 			if ( $control && [] !== $control->get_box_preset() ) {
 				$entry['box_preset'] = $control->get_box_preset();
 			}

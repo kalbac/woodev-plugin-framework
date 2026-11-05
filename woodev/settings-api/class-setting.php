@@ -727,6 +727,13 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 					}
 					break;
 
+				case Woodev_Control::TYPE_RECORDS_TABLE:
+					$table_error = \Woodev\Framework\Settings\Records_Table::get_error( $this->control, $value );
+					if ( null !== $table_error ) {
+						return $table_error;
+					}
+					break;
+
 				case Woodev_Control::TYPE_NUMBER:
 				case Woodev_Control::TYPE_RANGE:
 					if ( ! is_numeric( $value ) ) {
@@ -837,6 +844,11 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 
 			if ( in_array( $control_type, [ Woodev_Control::TYPE_SELECT, Woodev_Control::TYPE_RADIO ], true ) ) {
 				return '' === (string) $value;
+			}
+
+			// A records table with every row deleted is stored as `[]`: no rows, the same as `''`.
+			if ( Woodev_Control::TYPE_RECORDS_TABLE === $control_type && '[]' === trim( (string) $value ) ) {
+				return true;
 			}
 
 			return '' === trim( (string) $value );
