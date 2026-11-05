@@ -52,6 +52,31 @@ class SettingsTableTest extends TestCase {
 		$this->assertSame( [], $base->get_rows() );
 	}
 
+	public function test_a_row_link_is_kept_for_a_known_row_and_an_empty_url_or_unknown_row_is_ignored(): void {
+		$linked = $this->table()
+			->with_row_link( 'mapbox', 'https://account.mapbox.com/access-tokens/', 'Получить ключ Mapbox (откроется в новой вкладке)' )
+			->with_row_link( 'ghost', 'https://example.com/', 'Нет такой строки' )
+			->with_row_link( 'line', '', 'Пустой адрес' );
+		$rows   = $linked->get_rows();
+
+		$this->assertSame(
+			[
+				'url'   => 'https://account.mapbox.com/access-tokens/',
+				'label' => 'Получить ключ Mapbox (откроется в новой вкладке)',
+			],
+			$rows[1]['link']
+		);
+		$this->assertArrayNotHasKey( 'link', $rows[0] );
+	}
+
+	public function test_with_row_link_returns_a_copy_and_a_row_added_again_loses_its_link(): void {
+		$base   = $this->table();
+		$linked = $base->with_row_link( 'mapbox', 'https://account.mapbox.com/access-tokens/', 'Ключ' );
+
+		$this->assertArrayNotHasKey( 'link', $base->get_rows()[1] );
+		$this->assertArrayNotHasKey( 'link', $linked->with_row( 'mapbox', 'Mapbox', [] )->get_rows()[1] );
+	}
+
 	public function test_a_column_tip_is_kept_for_a_known_column_and_an_empty_text_removes_it(): void {
 		$tipped = $this->table()->with_column_tip( 'limit', 'Сколько запросов в сутки' )->with_column_tip( 'ghost', 'Нет такой колонки' );
 

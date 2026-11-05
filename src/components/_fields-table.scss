@@ -46,6 +46,27 @@
 		white-space: nowrap;
 	}
 
+	// The «opens in a new tab» icon beside a row label: small and muted, so the name stays the visual weight.
+	&__row-link {
+		display: inline-flex;
+		align-items: center;
+		margin-left: wd.$gap-xs;
+		vertical-align: middle;
+		color: wd.$muted;
+		text-decoration: none;
+
+		.dashicons {
+			width: 16px;
+			height: 16px;
+			font-size: 16px;
+		}
+
+		&:hover,
+		&:focus {
+			color: inherit;
+		}
+	}
+
 	// One logical row stays one visual row. `.woodev-settings .woodev-field` (label | control grid, 12px padding) would
 	// make every cell tall, so the cell's field is flattened here with a selector that outranks it.
 	&__field {

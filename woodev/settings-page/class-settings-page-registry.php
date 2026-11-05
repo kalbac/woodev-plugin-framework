@@ -387,11 +387,17 @@ final class Settings_Page_Registry {
 				}
 			}
 
-			$rows[] = [
+			$entry = [
 				'id'    => $row['id'],
 				'label' => $row['label'],
 				'cells' => (object) $cells,
 			];
+
+			if ( isset( $row['link'] ) ) {
+				$entry['link'] = $row['link'];
+			}
+
+			$rows[] = $entry;
 		}
 
 		return [

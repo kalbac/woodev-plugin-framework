@@ -101,6 +101,20 @@ test( 'a column header carries its tip icon, hover-reachable and focusable; a he
 	expect( tipOf( 'Статус' ) ).toBeNull();
 } );
 
+test( 'a row link is an icon beside the plain label, opening in a new tab with an accessible name', () => {
+	const table = TABLE();
+	table.rows[ 1 ].link = { url: 'https://account.mapbox.com/access-tokens/', label: 'Получить ключ Mapbox (откроется в новой вкладке)' };
+	render( <Harness table={ table } /> );
+
+	const link = screen.getByRole( 'link', { name: 'Получить ключ Mapbox (откроется в новой вкладке)' } );
+	expect( link ).toHaveAttribute( 'href', 'https://account.mapbox.com/access-tokens/' );
+	expect( link ).toHaveAttribute( 'target', '_blank' );
+	expect( link ).toHaveAttribute( 'rel', 'noopener noreferrer' );
+	// The link sits in the row header, so the header's accessible name is «Mapbox <link name>».
+	expect( screen.getByRole( 'rowheader', { name: /^Mapbox / } ) ).toContainElement( link );
+	expect( screen.getAllByRole( 'link' ) ).toHaveLength( 1 );
+} );
+
 test( 'a saved key is masked, never echoed, and the status says «Подключён»', () => {
 	render( <Harness /> );
 
@@ -159,10 +173,49 @@ test( 'a thrown check is reported in the row, not swallowed', async () => {
 	await waitFor( () => expect( within( rowOf( 'Mapbox' ) ).getByRole( 'button', { name: 'Проверить' } ) ).toBeEnabled() );
 } );
 
-test( 'the answer the server remembered shows on load', () => {
+test( 'the answer the server remembered feeds the status but draws no result line on load', () => {
 	render( <Harness table={ TABLE( { status: { success: true, message: 'Работает с 12:00.' } } ) } /> );
 
-	expect( screen.getByText( 'Работает с 12:00.' ) ).toBeInTheDocument();
+	expect( screen.queryByText( 'Работает с 12:00.' ) ).toBeNull();
+	expect( document.querySelector( '.woodev-fields-table__result-row' ) ).toBeNull();
+	expect( within( rowOf( 'Mapbox' ) ).getByText( '● Подключён' ) ).toBeInTheDocument();
+} );
+
+test( 'a remembered failure keeps the status «Ошибка» on load, without its message line', () => {
+	render( <Harness table={ TABLE( { status: { success: false, message: 'Ключ отклонён.' } } ) } /> );
+
+	expect( screen.queryByText( 'Ключ отклонён.' ) ).toBeNull();
+	expect( within( rowOf( 'Mapbox' ) ).getByText( '✖ Ошибка' ) ).toBeInTheDocument();
+} );
+
+test( 'a click shows the fresh answer line (not the remembered one)', async () => {
+	( testConnection as jest.Mock ).mockResolvedValue( { success: true, message: 'Ключ работает.' } );
+	render( <Harness table={ TABLE( { status: { success: true, message: 'Работает с 12:00.' } } ) } /> );
+
+	fireEvent.click( within( rowOf( 'Mapbox' ) ).getByRole( 'button', { name: 'Проверить' } ) );
+
+	expect( await screen.findByText( 'Ключ работает.' ) ).toBeInTheDocument();
+	expect( screen.queryByText( 'Работает с 12:00.' ) ).toBeNull();
+} );
+
+test( 'a stored failure stays «Ошибка» while a fresh check is pending, then follows the fresh answer', async () => {
+	let answer!: ( res: { success: boolean; message: string } ) => void;
+	( testConnection as jest.Mock ).mockReturnValue( new Promise( ( resolve ) => {
+		answer = resolve;
+	} ) );
+	render( <Harness table={ TABLE( { status: { success: false, message: 'Ключ отклонён.' } } ) } /> );
+
+	fireEvent.click( within( rowOf( 'Mapbox' ) ).getByRole( 'button', { name: 'Проверить' } ) );
+
+	// In flight: no false success, and no line (neither the remembered nor a fresh one) yet.
+	expect( within( rowOf( 'Mapbox' ) ).getByText( '✖ Ошибка' ) ).toBeInTheDocument();
+	expect( within( rowOf( 'Mapbox' ) ).queryByText( '● Подключён' ) ).toBeNull();
+	expect( screen.queryByText( 'Ключ отклонён.' ) ).toBeNull();
+
+	answer( { success: true, message: 'Ключ работает.' } );
+
+	expect( await screen.findByText( 'Ключ работает.' ) ).toBeInTheDocument();
+	await waitFor( () => expect( within( rowOf( 'Mapbox' ) ).getByText( '● Подключён' ) ).toBeInTheDocument() );
 } );
 
 test( 'a cell naming a missing field draws nothing, and a check the handler cannot test has no button', () => {
