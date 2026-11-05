@@ -7,6 +7,13 @@
 branch the tree holds. This article carries the part that does not change from session to session:
 why each of these fixtures exists and what breaks if it is removed.
 
+> ⚠ **Since s217 (05.11.2026, operator) the three fixture plugins are DEACTIVATED on the rig** —
+> `woodev-test-plugin`, `woodev-realistic-shipping-plugin`, `woodev-test-shipping-method` — so the
+> rig shows only the real plugins. Framework e2e (`npm run test:e2e`, e.g. `checkout-pickup.spec.js`)
+> and framework settings-page work need them: activate first, deactivate after —
+> `docker exec <cli container> wp plugin activate woodev-test-plugin woodev-realistic-shipping-plugin woodev-test-shipping-method`.
+> Zone method rows survive deactivation, so the methods come back as they were.
+
 ## The pickup-type shipping method, and why it lives outside the repo
 
 - **There IS a pickup-type shipping method on the rig now (s81), and it lives OUTSIDE the repo.** Until s81 the only active method was `Woodev Test Shipping`, whose `delivery_type` is `courier` — so `Checkout_Config::pickup_method_ids()` resolved to `[]` and the entire `hide_for_pickup` branch of the checkout-field policy was physically unreachable on the rig. Fixed with a container-only mu-plugin, `wp-content/mu-plugins/zz-rig-test-pickup-shipping.php` (that directory is NOT bind-mounted from the repo — `zz-rig-yandex-key.php` was already there as precedent), registering `woodev_test_pickup_shipping` (`Woodev Test Pickup`) whose `get_delivery_type()` is `pickup`. It is enabled in zone 1 «Russia» as instance 4, alongside `free_shipping` and `woodev_test_shipping`, so a checkout session can switch between a pickup rate and a courier rate. ⛔ **REMOVED in s113 (#737, operator 03.09.2026) — this paragraph is history.** The second real carrier (`woodev_realistic_pickup_shipping`) covers those scenarios properly, while the mu-method was a half-declared carrier whose chosen point never survived a reload. `mu-plugins/` now holds ONLY `zz-rig-yandex-key.php`. The file is not tracked by git; a copy is kept outside the repo, and restoring it means dropping it back into `mu-plugins/`. Verified after removal: the method is gone from the checkout, both real carriers still work, and the #736 reconciliation stays silent.
