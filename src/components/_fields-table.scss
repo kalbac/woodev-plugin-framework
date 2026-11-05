@@ -46,17 +46,22 @@
 		align-items: center;
 		gap: wd.$gap-sm;
 
-		// The control and, for a stored secret, its «Очистить» link share one line.
+		// The control, and for a stored secret its «Очистить» link at the input's right edge: the link overlays the
+		// (empty) input instead of sitting beside it, so every key input has the same width and left edge.
 		.woodev-field__control {
+			position: relative;
 			display: flex;
 			flex: 1 1 auto;
 			align-items: center;
-			gap: wd.$gap;
 			min-width: 0;
 		}
 
 		.woodev-field__secret-clear-link {
+			position: absolute;
+			top: 50%;
+			right: wd.$gap;
 			margin-top: 0;
+			transform: translateY( -50% );
 			white-space: nowrap;
 		}
 
@@ -91,7 +96,19 @@
 		width: 100%;
 	}
 
+	// A number cell is exactly as wide as its input, so every limit and the coefficient share one width and left edge;
+	// the short prefix («коэф.») hangs outside the cell's field, to its left.
+	&__field:has( input[type="number"] ) {
+		position: relative;
+		width: 168px;
+	}
+
 	&__prefix {
+		position: absolute;
+		top: 50%;
+		right: 100%;
+		margin-right: wd.$gap-sm;
+		transform: translateY( -50% );
 		color: wd.$muted;
 		font-size: 13px;
 		white-space: nowrap;
