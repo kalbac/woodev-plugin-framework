@@ -1,9 +1,10 @@
 # «Доставка в пределах города» (range shipping 2.0.0) — design
 
-**Date:** 2026-11-05. **Status:** draft r3 — **rewritten after the operator's redirect of 05.11.2026** (§0, binding): the list of places is the
-**granularity of the checkout's settlement choice and of DaData's address suggestions**, not a delivery boundary. The delivery boundary stays
-where it already is — the range method's own distance grid. r1/r2 designed a store-wide server-side restriction; §9 lists what was removed and why.
-Nothing in this revision waits for the operator.
+**Date:** 2026-11-05. **Status:** draft r4 — r3 was **rewritten after the operator's redirect of 05.11.2026** (§0, binding): the list of places is the
+**granularity of the checkout's settlement choice and of the active provider's address suggestions**, not a delivery boundary. The delivery boundary
+stays where it already is — the range method's own distance grid. r1/r2 designed a store-wide server-side restriction; §9 lists what was removed and
+why. **r4 (05.11.2026) replaces K11** («a federal city includes its districts») with the operator's **K11′**: the plugin hands the listed record to the
+provider and decides nothing about what a city contains; measured in §4.3. Nothing in this revision waits for the operator.
 **Target:** the same release `2.0.0` of «Расчёт стоимости доставки за расстояние» (plugin id `range_rate`) as
 [2026-11-05-range-shipping-v2-design.md](2026-11-05-range-shipping-v2-design.md) (called **v2 spec** below; its D1–D16 are binding). Two repos change:
 this framework (small, **in framework 2.0.26 itself — still unreleased, draft release PR #1606**) and `kalbac/woocommerce-range-shipping` (settings
@@ -36,7 +37,7 @@ Operator's redirect, 05.11.2026 (binding, overrides r1/r2's framing):
 | # | Decision | Source |
 |---|---|---|
 | K1 | The feature ships **in plugin 2.0.0**; its framework part ships **in framework 2.0.26 itself** — no later framework release | operator |
-| K2 | A list item is **any settlement** at DaData's city/settlement level (Химки, пос. Коммунарка, рп Черкизово), not only a city | operator |
+| K2 | A list item is **any settlement** at the active provider's city/settlement level (DaData: Химки, пос. Коммунарка, рп Черкизово; CDEK: a CDEK city), not only a city | operator |
 | K3 | Settings on a **new sub-tab «Доставка в городе»**; sub-tabs become **Склады · Сервисы · Доставка в городе · Дополнительно** | operator |
 | K4 | A **plugin setting that acts store-wide**: the checkout's settlement field offers only the listed places, whichever shipping method is chosen | operator |
 | K5 | Classic checkout is complete in the release; block-checkout gaps may follow it **only if classic is complete** | operator rule |
@@ -45,19 +46,20 @@ Operator's redirect, 05.11.2026 (binding, overrides r1/r2's framing):
 | K8 | **DaData key removed or DaData down → the settlement field still offers only the saved places**; only address suggestions stop | operator |
 | K9 | Sub-tab name «Доставка в городе»; any settlement allowed | operator |
 | K10 | **The list is presentation granularity, not a boundary.** No store-wide server-side city validation; the delivery boundary is the shipping method's own (the range method's distance grid) | operator redirect |
-| K11 | **A city of federal significance** (Москва, Санкт-Петербург, Севастополь) **includes all its municipal districts**: «Москва» covers Новая Москва (пос. Коммунарка …) and Зеленоград. Replaces r2's open P3 | operator redirect |
+| K11′ | **The plugin does not decide where addresses are searched — the provider does.** The merchant's chosen settlement record is passed to the active provider's own scoping **as-is**; there is no «federal city → region only» rule and no type-based special case. If the merchant lists only «Москва», addresses are searched in Москва *as the provider understands it*; Зеленоград (and Новая Москва, etc.) are **not** added automatically — the merchant adds them to the list himself. The settlement provider may be CDEK, and the plugin cannot tell which of its cities is federal, so any special rule would break. Replaces r3's K11 («federal cities include their districts») and r2's open P3. Measured 05.11.2026 (§4.3) | operator, 05.11.2026 (binding) |
 
 ## 1. Goal, scope, non-goals
 
 **Goal.** A food-delivery shop switches one option on and lists its places. From then on the checkout's «Населённый пункт» is a choice of only
-those places (or hidden and prefilled when there is one), and DaData's address suggestions stay inside the chosen place. Whether an address is
+those places (or hidden and prefilled when there is one), and the active provider's address suggestions stay inside the chosen place, as that
+provider scopes it (K11′). Whether an address is
 actually deliverable is decided, as today, by the shipping method — for the range method, its maximum distance.
 
 | In scope | Non-goals (named once, not built) |
 |---|---|
 | Settings sub-tab, storage, validation, notices (§3) | A server-side «outside the list» rejection of orders, packages or pickup points (§9) |
 | Checkout config + both clients: closed settlement choice, hidden single place, own value of a nested settlement (§4) | Restricting the payer's billing city (K6) |
-| DaData `locations` scoping to the chosen place, incl. federal cities (K11, §4.3) | My Account, the order-edit screen, REST/API order creation — unchanged |
+| Handing the chosen record to the active provider's own scoping — DaData `locations`, CDEK's name fallback — with no plugin-side rule (K11′, §4.3) | My Account, the order-edit screen, REST/API order creation — unchanged |
 | Offline behaviour of the choice (K8) and licence behaviour (K7) (§5) | Radius / polygon zones (the range method's grid already is one) |
 
 ## 2. The mechanism — reuse first
@@ -68,9 +70,9 @@ READ — what already exists and is reused unchanged:
 |---|---|---|
 | The checkout location config, incl. a per-country `popular` list in the `/suggest` wire shape `{ key, label, level, record }` that the classic cascade already renders before typing | `fw: checkout/class-checkout-config.php` `build_location_block()` (1126); `location/class-location-service.php` `get_popular_settlements_for_country()` (3455); `assets/js/frontend/location-cascade.js` `popularFor()` (1900) | The closed list is served in the same shape, so a pick is byte-identical to a search pick and goes through the same `/select` |
 | `/location/select` → the customer chain record | `fw: rest-api/class-location-controller.php` `handle_select_request()` (1402) | A pick writes the chosen place as the chain's settlement record, exactly as today |
-| DaData address suggestions scoped to the chain's settlement by an exact `locations` filter built from the record's FIAS ids | `fw: location/providers/class-dadata-provider.php` `build_locations_constraint()` (1106), `native_parent_ids()` (1188) | «Suggestions stay inside the chosen place» — the operator's «это не даст сделать сама DaData» |
+| Address suggestions scoped to the chain's settlement by the **provider's own** scoping: DaData builds an exact `locations` filter from the record's FIAS ids; a CDEK record reaches DaData's address search as a city-name filter | `fw: location/providers/class-dadata-provider.php` `build_locations_constraint()` (1106), `native_parent_ids()` (1188) | «Suggestions stay inside the chosen place» — the operator's «это не даст сделать сама DaData»; the plugin adds nothing to it (K11′) |
 | The **fixed default locality** (policy `fixed` + record): seeds an implicit chain record; the classic client prefills and locks from `defaultLocality` | `fw: location/class-location-provider-registry.php` `get_default_locality_policy()` (2025), `get_default_locality_record()` (2047); `class-location-service.php` `resolve_default()` (2147); `location-cascade.js` `defaultLocalitySource()` (6074) | The one-place case: the single item **is** the fixed default while the mode is on |
-| The `location-picker` column of a `records-table` control (DaData, level `settlement`) | `fw: settings-api/class-control.php:118,128` (F1, 2.0.26) | The settings list — the same control the warehouse address column uses (v2 spec D3) |
+| The `location-picker` column of a `records-table` control (the **active** location provider, level `settlement` — `class-control.php:107-110`) | `fw: settings-api/class-control.php:118,128` (F1, 2.0.26) | The settings list — the same control the warehouse address column uses (v2 spec D3). Its records come from whichever provider is active (DaData or CDEK) |
 | The range method's distance grid | `plugin:` v2 spec §2.3 | The delivery boundary (K10) — untouched |
 
 **One publication point (framework).** A new filter `woodev_location_settlement_choices` —
@@ -91,12 +93,13 @@ New sub-tab **«Доставка в городе»** (section id `city_mode`) be
 | Setting | Control | Option | Autoload | Notes |
 |---|---|---|---|---|
 | `city_mode` | toggle | `woodev_range_rate_city_mode` | yes | master switch, default **off** |
-| `city_mode_cities` | `records-table`, one `location-picker` column «Населённый пункт» (DaData, level `settlement`) | `woodev_range_rate_city_mode_cities` | no | JSON rows `{ "city": "<Location_Record JSON>" }`, decoded with `Records_Table::decode()` + `Location_Record::from_array()` |
+| `city_mode_cities` | `records-table`, one `location-picker` column «Населённый пункт» (active provider, level `settlement`) | `woodev_range_rate_city_mode_cities` | no | JSON rows `{ "city": "<Location_Record JSON>" }`, decoded with `Records_Table::decode()` + `Location_Record::from_array()` |
 | `city_mode_hide_field` | toggle | `woodev_range_rate_city_mode_hide_field` | yes | «Скрывать поле «Населённый пункт»», default **off** |
 
 **Store the record whole — never through `City_Limit::encode()`.** That codec nulls `raw`, and `native_parent_ids()` reads the FIAS ids **only** from
 `raw`; a compacted «рп Черкизово» would scope suggestions by the parent city's *name* instead of its own `settlement_fias_id` (measured by the r1
-critic). The row keeps the record as the picker produced it; a unit test round-trips save → reload → `locations` and asserts equality.
+critic). The row keeps the record as the picker produced it (the provider's own record, handed on as-is — K11′); a unit test round-trips save → reload →
+`locations` and asserts equality.
 
 **Conditions.** `city_mode_cities` and `city_mode_hide_field` carry `show_if = [ 'setting' => 'city_mode', 'operator' => '=', 'value' => true ]`
 — a **boolean** `true`, as ADR-008 requires for a toggle (a string `"yes"` evaluates false and `filter_visible_values()` then strips both fields from the
@@ -108,7 +111,7 @@ for one place, and it takes effect only when the list has exactly one.
 | Rule | Message |
 |---|---|
 | Mode on, list empty | «Добавьте хотя бы один населённый пункт — иначе покупателю будет нечего выбрать.» |
-| A row is not a DaData settlement-level record with a name, a country and a `fias_id` | «Выберите населённый пункт из подсказок.» |
+| A row is not a settlement-level record of a registered provider with a name, a country and a key (DaData: its `fias_id` too) | «Выберите населённый пункт из подсказок.» |
 | The same place twice (equal keys) | «Этот населённый пункт уже в списке.» |
 | Mode off | the list is kept and not validated |
 
@@ -137,9 +140,10 @@ No upper bound (operator). A list emptied by a crafted write is read as «featur
 
    Населённые пункты
    Выбирайте из подсказок — подойдёт город, посёлок или район, например Химки,
-   пос. Коммунарка. Москва, Санкт-Петербург и Севастополь включают все свои районы
-   и поселения (в том числе Новую Москву и Зеленоград). В обычном городе посёлок,
-   который покупатель должен видеть отдельно, добавьте отдельной строкой.
+   пос. Коммунарка. Подсказки адреса ищутся в том виде, как понимает выбранный
+   населённый пункт сервис подсказок: например, при «Москва» в списке Зеленоград
+   сам не добавится — если вы возите и туда, добавьте его отдельной строкой.
+   То же для посёлка, который покупатель должен видеть отдельно.
    ┌────┬─────────────────────────────────────────────────────────────┬────┐
    │ 1  │ г Москва                                                    │ 🗑 │
    │ 2  │ г Химки, Московская обл                                     │ 🗑 │
@@ -197,19 +201,48 @@ calculator — not for My Account: `enqueue_account_assets()` builds its own con
 | **Address pick** | Street/house/postcode filled as today; City/State are **not** rewritten from the address record (that backwards-fill would put «Пушкино» over «Черкизово») | Same |
 | **«Адрес»** | Untouched: still shown and required wherever the shop's own «Поля» policy shows it; city mode never hides or relaxes it | Same |
 
-### 4.3 Address suggestions inside the chosen place
+### 4.3 Address suggestions inside the chosen place — one provider-agnostic rule (K11′)
 
-After a pick the chain's settlement record is the listed record, so `/suggest` for the address level already sends DaData an exact `locations`
-filter from its FIAS ids (READ `build_locations_constraint()` → `native_parent_ids()`). Per kind of place:
+**The rule.** The plugin never decides where addresses are searched. The record the merchant picked from the list is the chain's settlement record
+after the buyer's pick, and it is passed **as-is** to the active provider's own scoping (`Location_Scope` parent → the provider's `suggest()` for the
+address level). No «federal city → region only» rule, no type-based special case, no `native_parent_ids()` change, no framework code for it at all —
+this section needs **no card** beyond what already exists. What the list scopes, per provider:
 
-| Place | `locations` sent | Result |
-|---|---|---|
-| Ordinary city (Химки) | its `region_fias_id` + `city_fias_id` (as today) | Streets of Химки, including settlements DaData files under the city |
-| Nested settlement (рп Черкизово) | + its own `settlement_fias_id` | Only Черкизово |
-| **City of federal significance** (Москва, Санкт-Петербург, Севастополь — K11) | **only** its `region_fias_id` (new rule in `native_parent_ids()`: when the record's region is itself the city — DaData `region_type` «г» — the city id is dropped) | The whole city incl. Новая Москва and Зеленоград. UNVERIFIED: that DaData's Moscow record carries a `city_fias_id` and the current filter therefore excludes Зеленоград — the C15 fixture records both before F2 merges; if the current filter already covers them, the rule is a no-op and is dropped |
+| Provider (registry) | The list's records | Address suggestions are scoped by | Source (READ) |
+|---|---|---|---|
+| **DaData** (framework, the default and the `address` fallback) | DaData settlement records, full `raw` | an exact `locations` filter: `country_iso_code` + every non-empty id of `region_fias_id`, `area_fias_id`, `city_fias_id`, `settlement_fias_id` of the record, `restrict_value: true` — whatever DaData files under those ids is inside the place, nothing else | `fw: class-dadata-provider.php:1145,1188-1210` (`native_parent_ids()`), `:1106` |
+| **CDEK** (`plugin: woocommerce-edostavka`, registered through `woodev_location_providers`) | CDEK city records: `key` `cdek:<code>`, `settlement.name`, `region.name`, `district`, `lat/lon`, `raw = { code }`, `ancestors = [ cdek:r<region_code> ]` — **no FIAS ids** | CDEK serves only the `region` and `settlement` levels, so the **choice** of the place is CDEK's; ADDRESS suggestions still come from DaData (the `address` level falls through the D15 chain to the bundled DaData provider when the key is set; with no key there are none, K8). DaData scopes them by the record's **settlement name** alone: `locations: [ { country_iso_code, city: <name> } ]` — the degraded path, reported as `NARROWING_DEGRADED` | `plugin: includes/location/class-cdek-location-provider.php:226-228` (levels), `:844-858` (`record_from_compact()`); `fw: class-location-service.php:3652` (`resolve_provider_for_level()`), `class-dadata-provider.php:1153-1170` (name fallback), `class-location-scope.php:270` (`components_from_record()`) |
+| **Others** | none other is registered by any Woodev plugin read on this machine (Yandex, Russian Post, Ozon: no `woodev_location_providers` hook) | whatever that provider's `suggest()` does with the parent record; the plugin neither knows nor adjusts it | `fw: interface-location-provider.php` |
 
-This is the operator's mechanism: a buyer who uses the suggestions cannot pick an address outside the place. A buyer who ignores them and types
-a far-away street gets no range rate, because the distance grid refuses it (K10).
+Consequences, stated once: with DaData, listing «Москва» searches addresses under DaData's Moscow ids; with CDEK, listing «Москва» searches DaData by the
+name «Москва». If the merchant also delivers to Зеленоград (or any place the provider treats as separate), he lists it as another row. The plugin makes
+no attempt to know that one place «contains» another.
+
+**Measured, DaData `/suggest/address`, 05.11.2026** (16 calls; address level `street`→`house`, `restrict_value: true`, `country_iso_code: RU`; only counts and
+city/settlement names kept). Records: «Москва» = `city_fias_id` = `region_fias_id` (`0c5b2444-…`); «Зеленоград» = its **own** `city_fias_id`
+(`ec44c0ee-…`) under the same `region_fias_id`; «Коммунарка» = `city_fias_id` Москва + own `settlement_fias_id` (`5a8a22a4-…`).
+
+| # | Query | Filter | Count | What came back |
+|---|---|---|---|---|
+| 1 | Зеленоград корп 1 | Москва record (region + city = Москва) | 10 | all `city = Москва` («Ленинградское шоссе, к 1» …) — **no Зеленоград row** |
+| 2 | Зеленоград корп 1 | Зеленоград record (region + own city id) | 10 | all `city = Зеленоград` («к 1», «к 100» …) |
+| 3 | Коммунарка ул Лазурная | Москва record | 10 | `city = Москва`, `settlement = Коммунарка` (and Дудкино) — **Новая Москва is inside** |
+| 4 | Коммунарка ул Лазурная | Зеленоград record | 0 | — |
+| 5 | Коммунарка ул Лазурная | Коммунарка record (+ `settlement_fias_id`) | 10 | only `settlement = Коммунарка` |
+| 6 | Москва ул Тверская 7 | Москва record | 10 | `city = Москва` (ул Тверская, д 7 …) |
+| 7 | Москва ул Тверская 7 | Зеленоград record | 0 | — (expected) |
+| 8 | Панфиловский проспект 10 (a Зеленоград street) | Москва record | **0** | Зеленоград is not in Москва's filter |
+| 9 | Панфиловский проспект 10 | Зеленоград record | 10 | `city = Зеленоград` (Панфиловский пр-кт) |
+| 10 | Коммунарка ул Лазурная | CDEK-style name filter `city: Москва` | 10 | `city = Москва`, Коммунарка (as row 3) |
+| 11 | Панфиловский проспект 10 | name filter `city: Москва` | 0 | Зеленоград is not under the name «Москва» either |
+| 12 | Панфиловский проспект 10 | name filter `city: Зеленоград` | 10 | `city = Зеленоград` |
+
+(Three more calls found the records themselves: `/suggest/address` at `city`→`settlement` bounds for «Москва», «Зеленоград», «Коммунарка».) So **DaData's own
+Moscow includes Новая Москва (Коммунарка) but not Зеленоград** — K11 (r3) was half wrong, and K11′ makes the question moot: whatever the provider decides
+is what the merchant gets, and a Зеленоград address needs a Зеленоград row. The fixtures behind this table are re-recorded in C15.
+
+This is the operator's mechanism: a buyer who uses the suggestions cannot pick an address outside the place as the provider scopes it. A buyer who
+ignores them and types a far-away street gets no range rate, because the distance grid refuses it (K10).
 
 ### 4.4 Returning customer with a saved other city
 
@@ -252,10 +285,10 @@ are part of **framework 2.0.26 itself** (draft release PR #1606); the plugin rel
 
 | Card | Scope | Depends | Size | Critic |
 |---|---|---|---|---|
-| **F2** | Framework PHP: `woodev_location_settlement_choices` (static-memoised) and `woodev_location_default_locality` filters; `build_location_block()` keys of §4.2 for checkout/cart configs only; the federal-city rule in `native_parent_ids()` (§4.3); the returning-customer rule + saved-city guard + view clearing (§4.4); the `record_names_city()` nested fix. Unit tests: config with 1/3 places and the hidden flag, account config unchanged, nested `value`, federal vs ordinary vs nested `locations`, saved Tula ignored, fixed default from the filter without touching the stored option | — | M | Codex |
+| **F2** | Framework PHP: `woodev_location_settlement_choices` (static-memoised) and `woodev_location_default_locality` filters; `build_location_block()` keys of §4.2 for checkout/cart configs only; the returning-customer rule + saved-city guard + view clearing (§4.4); the `record_names_city()` nested fix. Unit tests: config with 1/3 places and the hidden flag, account config unchanged, nested `value`, a listed record reaches the provider's scoping unchanged (DaData ordinary vs nested `locations`; a CDEK-style record → name filter; **no** type-based branch — K11′), saved Tula ignored, fixed default from the filter without touching the stored option | — | M | Codex |
 | **F3** | Framework clients: classic cascade (closed local list, no settlement `/suggest`, hidden row, no backwards-fill, region from the pick) and block chooser (closed list, native City/State write incl. the `resolveNativeAddress()` branch, hidden single writes the address store, rejected-city clearing); Jest + a rig check by the worker; the block hidden-field probe | F2 | M | Codex |
 | **C14** | Plugin: `City_Mode_Settings` (sub-tab, three options, boolean `show_if`, validation §3.2, texts §3.3), `City_Mode` (licence-gated publication), notices §3.4, the key-removed classic `select` fallback (§5), unit tests. The settings shell can start at once; publication codes against F2's filter signatures | F2 (interface) | M | Codex |
-| **C15** | Plugin: recorded DaData fixtures (Москва with Зеленоград and Коммунарка addresses, Химки, рп Черкизово), rig acceptance §8 on classic + block with a report and screenshots on disk, docs (`docs/CURRENT-STATE.md`, product page text, materials package), Russian catalogue | C14, F3 | M | operator reads the report |
+| **C15** | Plugin: recorded DaData fixtures (the §4.3 table: Москва filter with Зеленоград and Коммунарка queries, Зеленоград filter, a CDEK-style name filter; Химки, рп Черкизово), rig acceptance §8 on classic + block with a report and screenshots on disk, docs (`docs/CURRENT-STATE.md`, product page text, materials package), Russian catalogue | C14, F3 | M | operator reads the report |
 
 **Waves.** W-A: F2 ∥ C14. W-B: F3. W-C: C15. Inside the v2 spec's W5 slot; C13 (e2e, materials) waits for C15 because the product text describes this tab.
 
@@ -266,7 +299,9 @@ block for every row**; a row passes when the placed order's City/State/street ar
 
 | # | Scenario | Pass when |
 |---|---|---|
-| A1 | 1 place hidden (Москва) | No City/region row in the delivery section; «Адрес» shown and required; address suggestions only inside Москва — **including Зеленоград and Коммунарка streets** (K11); the order says Москва |
+| A1 | 1 place hidden (Москва) | No City/region row in the delivery section; «Адрес» shown and required; address suggestions only inside Москва as DaData scopes it — Коммунарка streets are offered, a **Зеленоград address is not suggested** (K11′, §4.3 rows 1, 3, 8); the order says Москва |
+| A1b | 2 places (Москва, Зеленоград) | Both filters apply per pick: after picking Зеленоград, «Панфиловский проспект 10» is suggested, «Тверская 7» is not; after picking Москва the reverse (§4.3 rows 8-9, 6-7) |
+| A1c | CDEK as the settlement provider, 1 place (Москва) with a DaData key | The place is CDEK's record; address suggestions come from DaData by the name «Москва» (degraded narrowing) — Коммунарка offered, Зеленоград street not; without a DaData key no suggestions and the typed address stays free (§4.3 CDEK row) |
 | A2 | 1 place, flag off | City row visible, prefilled and locked to Москва |
 | A3 | 3 places (Москва, Химки, пос. Коммунарка) | The field offers exactly these three; no settlement `/suggest` request in the network log; after picking Химки, suggestions only in Химки; picking an address does not change City |
 | A4 | Nested settlement (рп Черкизово listed) | City posts «Черкизово»; suggestions only in Черкизово; the chain survives placement (not dropped as stale); after saving and reloading the settings the `locations` filter is still the exact `settlement_fias_id` |
@@ -296,8 +331,9 @@ Everything below existed only to make the list a store-wide boundary, so it goes
 | My Account `context` parameter and suspended config | The account config simply never asks for the list (§4.2) |
 | Pickup-point gate (F6: G1/G2/G3, viewport-source unavailability, open P5) | Pickup maps are not restricted; a point is the carrier's matter |
 | «Адрес» override over `hide_for_pickup` (`override_field_policy()`, two projections) | City mode never hides «Адрес»; the shop's own «Поля» policy applies unchanged |
-| Mapped counterparts for non-DaData providers (`map_allowed_item()`, result type, budget, cache, cron) | The list is DaData's (the settings picker is DaData); suggestions and the chain stay DaData's |
-| Provisional P1–P5 | P3 decided by the operator (K11); the rest vanished with the boundary |
+| Mapped counterparts for non-DaData providers (`map_allowed_item()`, result type, budget, cache, cron) | The list holds the active provider's own records and passes each on as-is (K11′); the only cross-provider step is the existing name fallback of `build_locations_constraint()` |
+| Provisional P1–P5 | P3 decided by the operator (K11′, 05.11.2026 — no federal-city rule); the rest vanished with the boundary |
+| **r3's K11** and its `native_parent_ids()` federal-city rule | Replaced by K11′: measured, DaData's own Moscow already includes Новая Москва and excludes Зеленоград, and the operator wants the provider's scoping used unmodified. The `record_names_city()` nested fix **stays** — it serves nested settlements (рп Черкизово), not federal cities (§4.4) |
 | Cards F4–F6, C16 | Merged into F2/F3/C14/C15 |
 
 Still applied from the reviews: the record is stored whole (r1 finding 2), a nested settlement posts its own name and survives the staleness rule
