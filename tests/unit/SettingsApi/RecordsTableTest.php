@@ -14,7 +14,7 @@ final class RecordsTableTest extends TestCase {
 		[ 'id' => 'is_main', 'type' => 'main-radio', 'label' => 'Основной' ],
 	];
 
-	private const PLACE = '{"key":"k1","label":"г Москва, Цветной б-р, д 22"}';
+	private const PLACE = '{"key":"dadata:1","provider_id":"dadata","level":"address","country":"RU","label":"г Москва, Цветной б-р, д 22"}';
 
 	protected function setUp(): void {
 		parent::setUp();
@@ -113,7 +113,7 @@ final class RecordsTableTest extends TestCase {
 	public function test_an_unreadable_value_is_refused(): void {
 		$handler = $this->handler();
 
-		foreach ( [ 'not json', '{"a":1}', '[1,2]', '"text"' ] as $value ) {
+		foreach ( [ 'not json', '{"a":1}', '[1,2]', '"text"', '{}', '{"0":{"name":"x"}}', '[["x"]]' ] as $value ) {
 			$this->assertSame( 'Не удалось прочитать таблицу. Обновите страницу и повторите.', $this->error_for( $handler, $value ), $value );
 		}
 	}
@@ -128,6 +128,35 @@ final class RecordsTableTest extends TestCase {
 		$rows = [ $this->row( 'Склад', true, 'ул Ленина, просто текст' ) ];
 
 		$this->assertSame( 'Строка 1: Выберите «Адрес» из подсказок.', $this->error_for( $this->handler(), (string) json_encode( $rows ) ) );
+	}
+
+	public function test_an_address_the_location_reader_would_refuse_is_refused(): void {
+		$handler = $this->handler();
+
+		foreach ( [
+			'{"label":"arbitrary POST text"}',
+			'{"key":"dadata:1","provider_id":"other","level":"address","country":"RU","label":"x"}',
+			'{"key":"dadata:1","provider_id":"dadata","level":"address","country":"Russia","label":"x"}',
+			'{"key":"dadata:1","provider_id":"dadata","level":"address","country":"RU"}',
+		] as $address ) {
+			$this->assertSame(
+				'Строка 1: Выберите «Адрес» из подсказок.',
+				$this->error_for( $handler, (string) json_encode( [ $this->row( 'A', true, $address ) ] ) ),
+				$address
+			);
+		}
+	}
+
+	public function test_a_required_table_with_no_rows_is_empty_however_the_empty_list_is_spelled(): void {
+		$handler = $this->handler();
+		$handler->register_setting( 'needed', \Woodev_Setting::TYPE_STRING, [ 'required' => true ] );
+		$handler->register_control( 'needed', \Woodev_Control::TYPE_RECORDS_TABLE, [ 'columns' => self::COLUMNS ] );
+
+		foreach ( [ '', '[]', '[ ]', " [\n] " ] as $empty ) {
+			$this->assertSame( 'Обязательное поле.', $handler->get_setting( 'needed' )->get_validation_error( $empty ), json_encode( $empty ) );
+		}
+
+		$this->assertNull( $handler->get_setting( 'needed' )->get_validation_error( (string) json_encode( [ $this->row( 'A', true ) ] ) ) );
 	}
 
 	public function test_exactly_one_row_must_be_main(): void {

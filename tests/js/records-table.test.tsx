@@ -9,8 +9,8 @@ import { validateField } from '../../src/components/validate';
 jest.mock( '../../src/components/location-picker-field', () => ( {
 	__esModule: true,
 	...jest.requireActual( '../../src/components/location-picker-field' ),
-	default: ( { value, level, onChange }: { value: string; level: string; onChange: ( v: string ) => void } ) => (
-		<button type="button" data-level={ level } onClick={ () => onChange( JSON.stringify( { key: 'k-new', label: 'г Подольск, ул Ленина, д 1' } ) ) }>
+	default: ( { value, level, disabled, onChange }: { value: string; level: string; disabled?: boolean; onChange: ( v: string ) => void } ) => (
+		<button type="button" data-level={ level } disabled={ disabled } onClick={ () => onChange( JSON.stringify( { key: 'k-new', label: 'г Подольск, ул Ленина, д 1' } ) ) }>
 			{ 'pick address' + ( value ? ' (set)' : '' ) }
 		</button>
 	),
@@ -175,4 +175,30 @@ test( 'the server message for a rejected row shows under the table', () => {
 	render( <ControlField schema={ schema } value="" onChange={ jest.fn() } settingId="warehouses" /> );
 
 	expect( screen.getByText( 'Строка 2: Не удалось определить координаты адреса.' ) ).toBeInTheDocument();
+} );
+
+test( 'a table that becomes disabled while its form is open locks the form and refuses the save', () => {
+	const onChange = jest.fn();
+	const props = { value: stored( { name: 'A', address: place( 'г Москва' ), is_main: true } ), columns: COLUMNS, name: 'w', onChange };
+	const { rerender } = render( <RecordsTable { ...props } /> );
+
+	fireEvent.click( screen.getByRole( 'button', { name: 'Изменить, 1' } ) );
+	fillName( 'Правка' );
+	rerender( <RecordsTable { ...props } disabled /> );
+
+	expect( screen.getByRole( 'textbox', { name: 'Название' } ) ).toBeDisabled();
+	expect( screen.getByRole( 'button', { name: /pick address/ } ) ).toBeDisabled();
+	expect( screen.getByRole( 'checkbox', { name: 'Основной' } ) ).toBeDisabled();
+	expect( screen.getByRole( 'button', { name: 'Сохранить' } ) ).toBeDisabled();
+	fireEvent.click( screen.getByRole( 'button', { name: 'Сохранить' } ) );
+	expect( onChange ).not.toHaveBeenCalled();
+	expect( screen.getByRole( 'button', { name: 'Отмена' } ) ).toBeEnabled();
+} );
+
+test( 'a required table is empty for every spelling of an empty JSON list, but not for broken text', () => {
+	const schema = { controlType: 'records-table', name: 'Склады', columns: COLUMNS, required: true };
+
+	[ '', '[]', '[ ]', ' [\n] ' ].forEach( ( empty ) => expect( validateField( schema, empty ) ).toBe( 'Обязательное поле.' ) );
+	expect( validateField( schema, 'not json' ) ).not.toBe( 'Обязательное поле.' );
+	expect( validateField( schema, stored( { name: 'A', address: place( 'x' ), is_main: true } ) ) ).toBeNull();
 } );

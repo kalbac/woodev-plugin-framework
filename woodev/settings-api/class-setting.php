@@ -846,9 +846,10 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 				return '' === (string) $value;
 			}
 
-			// A records table with every row deleted is stored as `[]`: no rows, the same as `''`.
-			if ( Woodev_Control::TYPE_RECORDS_TABLE === $control_type && '[]' === trim( (string) $value ) ) {
-				return true;
+			// A records table with every row deleted is an empty JSON list however it is spelled (`[]`, `[ ]`):
+			// no rows, the same as `''`. Text that is not a list of rows is not empty — the format check rejects it.
+			if ( Woodev_Control::TYPE_RECORDS_TABLE === $control_type && is_string( $value ) ) {
+				return [] === \Woodev\Framework\Settings\Records_Table::decode( $value );
 			}
 
 			return '' === trim( (string) $value );

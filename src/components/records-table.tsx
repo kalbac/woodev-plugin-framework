@@ -178,7 +178,8 @@ export default function RecordsTable( { value, columns, name, country = '', addL
 	};
 
 	const saveDraft = () => {
-		if ( ! draft ) {
+		// A form left open while the table became disabled must not hand a change to the page.
+		if ( ! draft || disabled ) {
 			return;
 		}
 
@@ -242,7 +243,7 @@ export default function RecordsTable( { value, columns, name, country = '', addL
 					__nextHasNoMarginBottom
 					label={ column.label }
 					checked={ isMain( draft.row, column ) }
-					disabled={ locked }
+					disabled={ disabled || locked }
 					onChange={ setCell }
 				/>
 			);
@@ -257,6 +258,7 @@ export default function RecordsTable( { value, columns, name, country = '', addL
 						country={ country }
 						level={ column.level || 'address' }
 						placeholder={ column.placeholder }
+						disabled={ disabled }
 						onChange={ setCell }
 					/>
 				</div>
@@ -270,6 +272,7 @@ export default function RecordsTable( { value, columns, name, country = '', addL
 				label={ column.label }
 				placeholder={ column.placeholder || '' }
 				value={ cellText( draft.row, column ) }
+				disabled={ disabled }
 				onChange={ setCell }
 			/>
 		);
@@ -325,7 +328,7 @@ export default function RecordsTable( { value, columns, name, country = '', addL
 					{ draftError && <div className="woodev-field__error" role="alert">{ draftError }</div> }
 					<div className="woodev-records__form-actions">
 						<Button variant="tertiary" onClick={ () => openForm( null ) }>{ __( 'Отмена', 'woodev-plugin-framework' ) }</Button>
-						<Button variant="primary" onClick={ saveDraft }>{ __( 'Сохранить', 'woodev-plugin-framework' ) }</Button>
+						<Button variant="primary" disabled={ disabled } onClick={ saveDraft }>{ __( 'Сохранить', 'woodev-plugin-framework' ) }</Button>
 					</div>
 				</div>
 			) : (

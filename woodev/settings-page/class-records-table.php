@@ -7,6 +7,8 @@
 
 namespace Woodev\Framework\Settings;
 
+use Woodev\Framework\Shipping\Location\Location_Record;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -38,19 +40,15 @@ final class Records_Table {
 			return [];
 		}
 
-		$rows = json_decode( $value, true );
+		// Objects stay objects on this first pass, so a JSON object root (`{"0":{…}}`) or an array row
+		// (`[[…]]`) is told apart from the list of objects the table stores.
+		$parsed = json_decode( $value );
 
-		if ( ! is_array( $rows ) || ( [] !== $rows && array_keys( $rows ) !== range( 0, count( $rows ) - 1 ) ) ) {
+		if ( ! is_array( $parsed ) || array_filter( $parsed, static fn( $row ): bool => ! $row instanceof \stdClass ) ) {
 			return null;
 		}
 
-		foreach ( $rows as $row ) {
-			if ( ! is_array( $row ) ) {
-				return null;
-			}
-		}
-
-		return $rows;
+		return json_decode( $value, true );
 	}
 
 	/**
@@ -129,7 +127,8 @@ final class Records_Table {
 	}
 
 	/**
-	 * Whether a location cell holds what the picker stores: a `Location_Record` JSON object with a label.
+	 * Whether a location cell holds what the picker stores: a record the framework's own location reader
+	 * accepts, with a label to show. Coordinates and other consumer needs are the row validator's business.
 	 *
 	 * @param string $cell the cell text.
 	 * @return bool
@@ -138,7 +137,17 @@ final class Records_Table {
 
 		$record = json_decode( $cell, true );
 
-		return is_array( $record ) && is_string( $record['label'] ?? null ) && '' !== $record['label'];
+		if ( ! is_array( $record ) || ! is_string( $record['label'] ?? null ) || '' === $record['label'] ) {
+			return false;
+		}
+
+		try {
+			Location_Record::from_array( $record );
+		} catch ( \InvalidArgumentException $exception ) {
+			return false;
+		}
+
+		return true;
 	}
 
 	/**

@@ -24,6 +24,20 @@ export function isRequirable( controlType ) {
 }
 
 /**
+ * Parses JSON, or `null` when the text is not JSON.
+ *
+ * @param {string} text JSON text.
+ * @return {*} parsed value or null.
+ */
+function safeJson( text ) {
+	try {
+		return JSON.parse( text );
+	} catch {
+		return null;
+	}
+}
+
+/**
  * Whether a value counts as empty for the given control type.
  *
  * @param {string} controlType resolved control type.
@@ -36,6 +50,11 @@ export function isEmpty( controlType, value ) {
 	}
 	if ( [ 'select', 'radio' ].includes( controlType ) ) {
 		return '' === String( value ?? '' );
+	}
+	// A records table is empty when it is an empty JSON list, however spelled (`[]`, `[ ]`) — the server's rule.
+	if ( 'records-table' === controlType && '' !== String( value ?? '' ).trim() ) {
+		const rows = safeJson( value );
+		return Array.isArray( rows ) && 0 === rows.length;
 	}
 	return '' === String( value ?? '' ).trim();
 }
