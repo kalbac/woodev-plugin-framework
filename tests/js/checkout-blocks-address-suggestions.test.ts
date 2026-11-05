@@ -153,6 +153,33 @@ describe( 'Blocks address suggestions', () => {
 		stop();
 	} );
 
+	it( 'city mode: a street suggestion writes the street and postcode only — never the listed City or State', async () => {
+		mockCurrentAddress = { ...address, city: 'Черкизово', state: 'MOS' };
+		const input = document.createElement( 'input' );
+		input.id = 'shipping-address_1';
+		document.body.append( input );
+		const stop = watchBlockAddressSuggestions();
+		// The street's own record names «Пушкино» — the parent of the listed place «Черкизово».
+		const suggestion = {
+			key: 'address:main',
+			label: 'г Пушкино, ул Главная, 1',
+			value: 'ул Главная, 1',
+			record: {
+				key: 'address:main', provider_id: 'dadata', level: 'address', country: 'RU',
+				region: { name: 'Московская область' }, settlement: { name: 'Пушкино' },
+				street: { name: 'Главная', type: 'ул' }, house: '1', postcode: '141200',
+			},
+		};
+		input.value = suggestion.value;
+		attachedOptions[ 0 ].onSelect( suggestion );
+		await flushDom();
+
+		expect( mockCurrentAddress ).toEqual( {
+			...address, city: 'Черкизово', state: 'MOS', address_1: 'ул Главная, 1', postcode: '141200',
+		} );
+		stop();
+	} );
+
 	it( 'leaves the native input alone when the address suggestion setting is off', () => {
 		const stores = require( '../../src/checkout-blocks/wc-stores' );
 		stores.readLocalityData.mockReturnValueOnce( { enabled: true, location: { ...mockConfig, levels: { RU: { ...mockConfig.levels.RU, address: false } } } } );

@@ -850,7 +850,8 @@
 	 * @returns {function(Element, Object): ({detach: Function}|null)|null}
 	 */
 	function resolveModeRenderer( entry, node ) {
-		var mode = axisModeForLevel( entry, node.level );
+		// City mode: a closed list is a local select whatever the shop's field mode says.
+		var mode = closedListFor( entry, node ) ? 'ajax-select2' : axisModeForLevel( entry, node.level );
 
 		if ( null === mode ) {
 			return null;
@@ -1653,6 +1654,94 @@
 	}
 
 	// -------------------------------------------------------------------------
+	// City mode — the closed settlement choice (range-shipping city mode spec §4.2)
+	// -------------------------------------------------------------------------
+
+	/** The class that hides a field's ROW while its value stays in the form and still posts. */
+	var HIDDEN_ROW_CLASS = 'woodev-field--hidden';
+
+	/**
+	 * The places city mode lists for `country` — `config.location.allowed[ country ]`, entries in
+	 * the `popular` wire shape plus `value` (the text the City field shows and posts) — or `null`
+	 * when the merchant lists none: then nothing in this section applies.
+	 *
+	 * @param {Object} entry
+	 * @param {string} country
+	 * @returns {Array|null}
+	 */
+	function allowedPlaces( entry, country ) {
+		var allowed = entry.location && entry.location.allowed;
+		var places = allowed && 'object' === typeof allowed ? allowed[ country ] : null;
+
+		return Array.isArray( places ) && places.length ? places : null;
+	}
+
+	/**
+	 * The closed list for `node`, or `null`. Only the SETTLEMENT level is ever closed: the region
+	 * is not asked and the address stays a free search.
+	 *
+	 * @param {Object} entry
+	 * @param {{level: string}} node
+	 * @returns {Array|null}
+	 */
+	function closedListFor( entry, node ) {
+		return 'settlement' === node.level ? allowedPlaces( entry, countryFor( entry, node ) ) : null;
+	}
+
+	/**
+	 * The listed places whose label or value contains `query` (case-insensitive substring — the
+	 * same rule `matchingPopular()` in location-select-modes.js applies to the popular list). An
+	 * empty query keeps them all.
+	 *
+	 * @param {Array}  places
+	 * @param {string} query
+	 * @returns {Array}
+	 */
+	function placesMatching( places, query ) {
+		var needle = 'string' === typeof query ? query.trim().toLowerCase() : '';
+
+		if ( ! needle ) {
+			return places.slice();
+		}
+
+		return places.filter( function( place ) {
+			return [ place.label, place.value ].some( function( text ) {
+				return 'string' === typeof text && text.toLowerCase().indexOf( needle ) > -1;
+			} );
+		} );
+	}
+
+	/**
+	 * Hides the settlement and region ROWS of the delivery section while the merchant listed
+	 * exactly one place and asked to hide the field. The fields stay in the form with their
+	 * values — a row hidden by class still posts, which `unset()` on the server would not.
+	 * Every location field is judged by its own section, so the payer's billing row comes back
+	 * the moment «Доставить по другому адресу» moves delivery to shipping.
+	 *
+	 * @param {Object} entry
+	 * @returns {void}
+	 */
+	function syncHiddenSettlementRows( entry ) {
+		var fields = entry.config.fields || {};
+
+		Object.keys( fields ).forEach( function( fieldId ) {
+			var field = fields[ fieldId ];
+
+			if ( ! field || 'location' !== field.source_kind || ( 'settlement' !== field.location_level && 'region' !== field.location_level ) ) {
+				return;
+			}
+
+			var places = allowedPlaces( entry, countryFor( entry, { section: field.section } ) );
+			var hide = !! ( entry.location.hideSettlement && places && 1 === places.length && isActiveAddressSection( field.section ) );
+			var row = document.getElementById( fieldId + '_field' );
+
+			if ( row ) {
+				row.classList.toggle( HIDDEN_ROW_CLASS, hide );
+			}
+		} );
+	}
+
+	// -------------------------------------------------------------------------
 	// Fetch / select for one chain node
 	// -------------------------------------------------------------------------
 
@@ -1694,6 +1783,13 @@
 	 */
 	function fetchFor( entry, node, options ) {
 		return function( query, opts ) {
+			// City mode: the closed list is searched locally — no settlement-level `/suggest`.
+			var closed = closedListFor( entry, node );
+
+			if ( closed ) {
+				return Promise.resolve( placesMatching( closed, query ) );
+			}
+
 			var url = buildUrl( entry.location.endpoints.suggest, {
 				q: query,
 				level: node.level,
@@ -1899,6 +1995,14 @@
 
 	function popularFor( entry, node ) {
 		return function() {
+			// City mode: the closed list IS the list — all of it, not narrowed by a region, with
+			// the `value` the server stamped (a nested place posts its own name, not its parent's).
+			var closed = closedListFor( entry, node );
+
+			if ( closed ) {
+				return closed.slice();
+			}
+
 			var country = countryFor( entry, node );
 			var raw = ( entry.location.popular && entry.location.popular[ country ] ) || [];
 			var within = parentKeyFor( entry, node.level );
@@ -2288,8 +2392,13 @@
 		// {@see countryForRecord}'s own docblock for why.
 		var country = countryForRecord( entry, node, record );
 
+		// City mode: the city and region are the merchant's listed place, never what a street
+		// suggestion happens to name («Пушкино» must not overwrite «Черкизово»). The postcode below
+		// is still the street's own.
+		var keepListedPlace = 'address' === level && null !== allowedPlaces( entry, country );
+
 		LEVELS.forEach( function( ancestorLevel, i ) {
-			if ( i >= idx ) {
+			if ( i >= idx || keepListedPlace ) {
 				return;
 			}
 
@@ -4557,7 +4666,8 @@
 			// Issue #1071: only for the level that carries the popular list — what the CUSTOMER
 			// picked here, never what the store filled in (#536).
 			pickedSettlement: 'settlement' === node.level ? function() {
-				return customerPickFor( entry, node.level );
+				// City mode: the dropdown keeps offering every listed place after a pick.
+				return closedListFor( entry, node ) ? null : customerPickFor( entry, node.level );
 			} : null,
 			// An address suggestion can be broader than the typed street (DaData can return the
 			// street without the house number). Keep the buyer's text unless they explicitly pick.
@@ -5812,6 +5922,7 @@
 			// rebuildChainForActiveSection()'s own docblock for why this must run first).
 			rebuildChainForActiveSection( entry );
 			applyCountryArbitration( entry );
+			syncHiddenSettlementRows( entry );
 		} );
 
 		// Issue #337: the address level's own coverage is per COUNTRY (D15) and the section
@@ -5883,6 +5994,7 @@
 		// {@see applyPendingDefaultLocality}'s own docblock. A no-op whenever nothing is
 		// pending, or the target field is not promoted yet.
 		applyPendingDefaultLocality( entry );
+		syncHiddenSettlementRows( entry );
 
 		entry.chain.forEach( function( node ) {
 			if ( ! isNodeActive( entry, node ) ) {
@@ -6405,6 +6517,7 @@
 		entries.forEach( function( entry ) {
 			prefill( entry );
 			attachAll( entry ); // per-node gated internally via isNodeActive()
+			syncHiddenSettlementRows( entry );
 			// Issue #337: the lock's state is decided HERE, on the records {@see prefill} just
 			// restored — a customer who already picked a settlement must find the address field
 			// live immediately after a reload, never only after some first event nudges it.
