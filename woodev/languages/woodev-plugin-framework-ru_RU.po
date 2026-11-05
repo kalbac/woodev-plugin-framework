@@ -6699,3 +6699,15 @@ msgstr ""
 #: assets/build/settings-page/index.js
 msgid "Добавить"
 msgstr ""
+
+#: assets/build/settings-page/index.js
+msgid "○ Не подключён"
+msgstr ""
+
+#: assets/build/settings-page/index.js
+msgid "● Подключён"
+msgstr ""
+
+#: assets/build/settings-page/index.js
+msgid "✖ Ошибка"
+msgstr ""
