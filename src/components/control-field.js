@@ -473,11 +473,12 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 
 		case 'records-table':
 			// The consumer's server-side row check comes back as `schema.serverError`, shown under the table.
-			return withAnatomy( schema, createElement( RecordsTable, {
+			// The wrapper lets the settings page give the table the card's width instead of the 425px control column.
+			return createElement( 'div', { className: 'woodev-records-field' }, withAnatomy( schema, createElement( RecordsTable, {
 				value: value ?? schema.value ?? '', onChange: ( next ) => { setTouched( true ); onChange( next ); }, disabled,
 				columns: schema.columns || [], name: settingId || 'records', country: schema.country || '',
 				addLabel: schema.add_label, emptyText: schema.empty_text,
-			} ), error );
+			} ), error ) );
 
 		case 'search-select':
 			return withAnatomy( schema, createElement( SearchSelectField, {

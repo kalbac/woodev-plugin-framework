@@ -329,6 +329,47 @@ final class Settings_Section {
 	}
 
 	/**
+	 * The connection id of every check cell of this section's group tables, in declaration order.
+	 *
+	 * The tab's handler must be told which handler tests them, like a connection block's id.
+	 *
+	 * @since 2.0.26
+	 *
+	 * @return string[]
+	 */
+	public function get_table_check_ids(): array {
+		$ids = [];
+
+		foreach ( $this->get_groups() as $group ) {
+			$table = $group->get_table();
+			$ids   = null === $table ? $ids : array_merge( $ids, $table->get_check_ids() );
+		}
+
+		return array_values( array_unique( $ids ) );
+	}
+
+	/**
+	 * The fields a table's check cell reads, when one of this section's groups holds a check with that connection id.
+	 *
+	 * @since 2.0.26
+	 *
+	 * @param string $connection_id id of the check cell ({@see Settings_Table::check()}).
+	 * @return string[]|null Null when no group's table has that check.
+	 */
+	public function find_table_check( string $connection_id ): ?array {
+		foreach ( $this->get_groups() as $group ) {
+			$table = $group->get_table();
+			$found = null === $table ? null : $table->find_check( $connection_id );
+
+			if ( null !== $found ) {
+				return $found;
+			}
+		}
+
+		return null;
+	}
+
+	/**
 	 * Returns the section description.
 	 *
 	 * @since 2.0.2

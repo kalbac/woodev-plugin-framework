@@ -221,3 +221,11 @@ test( 'a required table is empty for every spelling of an empty JSON list, but n
 	expect( validateField( schema, 'not json' ) ).not.toBe( 'Обязательное поле.' );
 	expect( validateField( schema, stored( { name: 'A', address: place( 'x' ), is_main: true } ) ) ).toBeNull();
 } );
+
+test( 'ControlField wraps the table so the settings page can give it the whole card width', () => {
+	const schema = { controlType: 'records-table', name: 'Склады', columns: COLUMNS };
+	const { container } = render( <ControlField schema={ schema } value="" onChange={ jest.fn() } settingId="warehouses" /> );
+
+	// The settings stylesheet stretches `.woodev-records-field .woodev-field`; without the wrapper the table sat in the 425px control column.
+	expect( container.querySelector( '.woodev-records-field > .woodev-field .woodev-records' ) ).not.toBeNull();
+} );

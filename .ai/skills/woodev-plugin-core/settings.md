@@ -106,6 +106,14 @@ the setting's type is rejected with `_doing_it_wrong()`; `toggle`/`checkbox` fit
   `row_validator` (`fn( array $row, int $index ): true|string` — a string is the Russian message shown under the
   table), `add_label`, `empty_text`, and `country` for the address cells. The server re-checks required cells,
   a readable address and exactly one main row before the hook runs. It knows nothing about its records.
+  On the settings page it takes the card's full width (wrapper `.woodev-records-field`), not the 425px control column.
+- **A fixed-rows table of fields** (one row per service, one column per property) is `Settings_Group::with_table(
+  Settings_Table )`, not a control: `Settings_Table::create( $row_title, [ col_id => header ] )->with_row( $id, $label,
+  [ col_id => cell ] )`, cells `Settings_Table::field( $setting_id, $prefix )` / `text()` / `status()` /
+  `check( $connection_id, $setting_ids, $label )`. The fields stay the section's own (one «Сохранить», masked secrets
+  as before). A check is tested through `Woodev_Settings_Connection_Test::test_connection( $connection_id, $values )`
+  with the typed-but-unsaved values; on a composite tab the carrier's `get_tab_settings_providers()` section's
+  `get_table_check_ids()` map the check to its handler automatically.
 - **`file` has no React renderer.** The registry accepts it, but the settings page falls through to a plain
   text input — do not use it for uploads.
 

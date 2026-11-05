@@ -330,6 +330,13 @@ if ( ! class_exists( 'Woodev_REST_API_Settings_Page' ) ) :
 					$section_ids = $section->get_setting_ids();
 					break;
 				}
+
+				// A check cell of a group table ({@see Settings_Table::check()}) is a connection too.
+				$table_ids = $section->find_table_check( $connection_id );
+				if ( null !== $table_ids ) {
+					$section_ids = $table_ids;
+					break;
+				}
 			}
 
 			if ( null === $section_ids ) {

@@ -1,0 +1,116 @@
+/**
+ * Fields table (Settings_Table) — a fixed list of rows whose cells are a section's own fields, a line of text,
+ * a status or a button. Shared by the settings page and the UI-kit gallery.
+ *
+ * The table takes the full width of the card it sits in. A field's own row is a two-column grid on the settings
+ * page (label | control); inside a cell there is no label, so that grid is switched off here.
+ *
+ * @package woodev-plugin-framework
+ */
+
+@use './tokens' as wd;
+
+.woodev-fields-table {
+	width: 100%;
+	overflow-x: auto;
+
+	&__table {
+		width: 100%;
+
+		th,
+		td {
+			padding: wd.$gap wd.$gap;
+			vertical-align: middle;
+			text-align: left;
+		}
+
+		thead th {
+			font-size: 12px;
+			font-weight: 600;
+			color: wd.$muted;
+			white-space: nowrap;
+		}
+	}
+
+	&__row-label {
+		font-weight: 600;
+		white-space: nowrap;
+	}
+
+	// One logical row stays one visual row: the cell holds the control and its tip side by side.
+	&__field {
+		display: flex;
+		align-items: center;
+		gap: wd.$gap-sm;
+
+		.woodev-field {
+			display: block;
+			flex: 1 1 auto;
+			margin: 0;
+			padding: 0;
+			min-width: 0;
+		}
+
+		.woodev-field__control {
+			min-width: 0;
+		}
+
+		.woodev-field__password {
+			min-width: 220px;
+		}
+
+		input[type="number"] {
+			min-width: 84px;
+		}
+	}
+
+	&__prefix {
+		color: wd.$muted;
+		font-size: 13px;
+		white-space: nowrap;
+	}
+
+	&__text {
+		color: wd.$muted;
+
+		&.is-ok {
+			color: wd.$ok-text;
+		}
+	}
+
+	&__status {
+		white-space: nowrap;
+		color: wd.$muted;
+
+		&.is-ok {
+			color: wd.$ok-text;
+		}
+
+		&.is-error {
+			color: wd.$error-text;
+		}
+	}
+
+	// The answer to a check sits under its row, across the whole table.
+	&__result-row td {
+		padding-top: 0;
+	}
+
+	&__result {
+		display: block;
+		padding: wd.$gap-sm wd.$gap;
+		border-radius: wd.$radius-sm;
+		font-size: 13px;
+		line-height: 1.5;
+
+		&.is-ok {
+			color: wd.$ok-text;
+			background: rgba( 0, 163, 42, 0.12 );
+		}
+
+		&.is-error {
+			color: wd.$error-text;
+			background: rgba( 214, 54, 56, 0.12 );
+		}
+	}
+}
