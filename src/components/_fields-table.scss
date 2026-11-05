@@ -34,6 +34,13 @@
 		}
 	}
 
+	// A header with a tip icon: the label and the icon stay on one line.
+	&__head {
+		display: inline-flex;
+		align-items: center;
+		gap: wd.$gap-xs;
+	}
+
 	&__row-label {
 		font-weight: 600;
 		white-space: nowrap;
@@ -101,6 +108,16 @@
 	&__field:has( input[type="number"] ) {
 		position: relative;
 		width: 168px;
+	}
+
+	// A number's tip hangs outside the 168px cell field, to the right, so the input keeps its width and left edge
+	// whether or not the row has a tip. Other fields (a key) share the line with it.
+	&__field.has-tip:has( input[type="number"] ) > .woodev-field__tip {
+		position: absolute;
+		top: 50%;
+		left: 100%;
+		margin-left: wd.$gap-sm;
+		transform: translateY( -50% );
 	}
 
 	&__prefix {

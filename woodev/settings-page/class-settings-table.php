@@ -48,6 +48,11 @@ final class Settings_Table {
 	private array $columns;
 
 	/**
+	 * @var array<string,string> column id => help text shown as a tip icon beside the header; a column without an entry has none.
+	 */
+	private array $column_tips = [];
+
+	/**
 	 * @var array<int,array{id:string,label:string,cells:array<string,array<string,mixed>>}> rows in display order.
 	 */
 	private array $rows = [];
@@ -74,6 +79,34 @@ final class Settings_Table {
 	 */
 	public static function create( string $row_title, array $columns ): self {
 		return new self( $row_title, array_map( 'strval', $columns ) );
+	}
+
+	/**
+	 * A copy with a help tip on one column header: the framework's standard «?» icon, hover and keyboard focus show the text.
+	 *
+	 * Use it for what applies to the whole column («Лимит в сутки»); a hint for one cell is that field's own `tooltip`.
+	 * An unknown column id is ignored; an empty text removes the tip.
+	 *
+	 * @since 2.0.26
+	 *
+	 * @param string $column_id id of a column given to {@see self::create()}.
+	 * @param string $text      the help text, one or two short sentences.
+	 * @return self
+	 */
+	public function with_column_tip( string $column_id, string $text ): self {
+		if ( ! isset( $this->columns[ $column_id ] ) ) {
+			return $this;
+		}
+
+		$copy = clone $this;
+
+		if ( '' === trim( $text ) ) {
+			unset( $copy->column_tips[ $column_id ] );
+		} else {
+			$copy->column_tips[ $column_id ] = $text;
+		}
+
+		return $copy;
 	}
 
 	/**
@@ -188,6 +221,14 @@ final class Settings_Table {
 	 */
 	public function get_columns(): array {
 		return $this->columns;
+	}
+
+	/**
+	 * @since 2.0.26
+	 * @return array<string,string> column id => header help text, for the columns that have one.
+	 */
+	public function get_column_tips(): array {
+		return $this->column_tips;
 	}
 
 	/**

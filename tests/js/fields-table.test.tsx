@@ -21,8 +21,8 @@ jest.mock( '../../src/settings-page/rest', () => ( {
 } ) );
 
 const FIELDS = {
-	coefficient: { type: 'float', name: 'Коэффициент дороги', controlType: 'number', value: '1.2', description: 'Длинное описание', tooltip: '' },
-	mapbox_key: { type: 'string', name: 'Ключ API', controlType: 'password', sensitive: true, is_set: true, value: '', tooltip: 'Где взять ключ' },
+	coefficient: { type: 'float', name: 'Коэффициент дороги', controlType: 'number', value: '1.2', description: 'Длинное описание', tooltip: 'Прямая × коэффициент' },
+	mapbox_key: { type: 'string', name: 'Ключ API', controlType: 'password', sensitive: true, is_set: true, value: '' },
 	mapbox_limit: { type: 'string', name: 'Лимит', controlType: 'number', value: '1000' },
 	google_key: { type: 'string', name: 'Ключ API', controlType: 'password', sensitive: true, is_set: false, value: '' },
 };
@@ -31,7 +31,7 @@ const check = ( connection: string, setting: string, extra = {} ) => ( { type: '
 
 const TABLE = ( mapboxCheck = {} ): TableSchema => ( {
 	row_title: 'Сервис',
-	columns: [ { id: 'status', label: 'Статус' }, { id: 'key', label: 'Ключ API' }, { id: 'limit', label: 'Лимит в сутки' }, { id: 'check', label: '' } ],
+	columns: [ { id: 'status', label: 'Статус' }, { id: 'key', label: 'Ключ API', tooltip: 'Где взять ключ' }, { id: 'limit', label: 'Лимит в сутки' }, { id: 'check', label: '' } ],
 	rows: [
 		{ id: 'line', label: 'По прямой', cells: { status: { type: 'text', text: '● работает', tone: 'ok' }, limit: { type: 'field', setting: 'coefficient', prefix: 'коэф.' } } },
 		{ id: 'mapbox', label: 'Mapbox', cells: { status: { type: 'status' }, key: { type: 'field', setting: 'mapbox_key' }, limit: { type: 'field', setting: 'mapbox_limit' }, check: check( 'mapbox', 'mapbox_key', mapboxCheck ) } },
@@ -71,13 +71,34 @@ test( 'one row per service under the declared headers, the coefficient in the li
 	expect( line.queryByRole( 'button' ) ).toBeNull();
 } );
 
-test( 'a field cell holds the control alone: no label, description or tip icon', () => {
+test( 'a field cell holds the control alone: no label or description, only a tip icon for the field\'s own tooltip', () => {
 	render( <Harness /> );
 
 	expect( screen.queryByText( 'Коэффициент дороги' ) ).toBeNull();
 	expect( screen.queryByText( 'Длинное описание' ) ).toBeNull();
-	expect( screen.queryByLabelText( 'Где взять ключ' ) ).toBeNull();
-	expect( document.querySelector( '.woodev-field__tip' ) ).toBeNull();
+	expect( within( rowOf( 'По прямой' ) ).getByLabelText( 'Прямая × коэффициент' ) ).toBeInTheDocument();
+	expect( within( rowOf( 'Mapbox' ) ).queryByRole( 'img' ) ).toBeNull();
+} );
+
+test( 'a field without a tooltip gets no tip icon even when it has a description', () => {
+	const fields = { ...FIELDS, mapbox_limit: { ...FIELDS.mapbox_limit, description: '<a href="#">Запросов в сутки</a>' } };
+
+	render( <FieldsTable providerId="range" table={ TABLE() } fields={ fields } values={ {} } onFieldChange={ jest.fn() } onFieldRevert={ jest.fn() } /> );
+
+	expect( within( rowOf( 'Mapbox' ) ).queryByRole( 'img' ) ).toBeNull();
+	expect( screen.queryByText( 'Запросов в сутки' ) ).toBeNull();
+} );
+
+test( 'a column header carries its tip icon, hover-reachable and focusable; a header without a tip has none', () => {
+	render( <Harness /> );
+
+	const headers = screen.getAllByRole( 'columnheader' );
+	const tipOf = ( label: string ) => headers.find( ( th ) => th.textContent?.startsWith( label ) )!.querySelector( '.woodev-field__tip' );
+
+	expect( tipOf( 'Ключ API' ) ).toHaveAttribute( 'aria-label', 'Где взять ключ' );
+	expect( tipOf( 'Ключ API' ) ).toHaveAttribute( 'tabindex', '0' );
+	expect( tipOf( 'Лимит в сутки' ) ).toBeNull();
+	expect( tipOf( 'Статус' ) ).toBeNull();
 } );
 
 test( 'a saved key is masked, never echoed, and the status says «Подключён»', () => {

@@ -749,7 +749,7 @@ class SettingsPageRegistryTest extends TestCase {
 	}
 
 	private function table_provider( $handler ): Settings_Provider {
-		$table = Settings_Table::create( 'Сервис', [ 'key' => 'Ключ API', 'check' => '' ] )->with_row(
+		$table = Settings_Table::create( 'Сервис', [ 'key' => 'Ключ API', 'check' => '' ] )->with_column_tip( 'key', 'Где взять ключ' )->with_row(
 			'api',
 			'API',
 			[
@@ -772,7 +772,10 @@ class SettingsPageRegistryTest extends TestCase {
 
 		$this->assertSame( [ 'token' ], $group['fields'], 'the table field is the group\'s member; the unknown "ghost" is not' );
 		$this->assertSame( 'Сервис', $group['table']['row_title'] );
-		$this->assertSame( [ [ 'id' => 'key', 'label' => 'Ключ API' ], [ 'id' => 'check', 'label' => '' ] ], $group['table']['columns'] );
+		$this->assertSame( [
+				[ 'id' => 'key', 'label' => 'Ключ API', 'tooltip' => 'Где взять ключ' ],
+				[ 'id' => 'check', 'label' => '', 'tooltip' => '' ],
+			], $group['table']['columns'] );
 		$this->assertSame( [ 'api', 'lost' ], array_column( $group['table']['rows'], 'id' ) );
 		$this->assertSame( [ 'key', 'check' ], array_keys( (array) $group['table']['rows'][0]['cells'] ) );
 		$this->assertSame( [], (array) $group['table']['rows'][1]['cells'], 'a row whose only field is unknown keeps no cell' );

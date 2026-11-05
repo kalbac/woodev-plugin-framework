@@ -17,6 +17,7 @@ import { useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { Button } from '@wordpress/components';
 import ControlFieldSource from '../components/control-field';
+import FieldTip from '../components/field-tip';
 import { isFieldFilled } from './connection-block';
 import { testConnection } from './rest';
 
@@ -47,7 +48,7 @@ export interface TableRow {
 
 export interface TableSchema {
 	row_title: string;
-	columns: Array< { id: string; label: string } >;
+	columns: Array< { id: string; label: string; /** Help text for a tip icon beside the header. */ tooltip?: string } >;
 	rows: TableRow[];
 }
 
@@ -158,13 +159,17 @@ export default function FieldsTable( { providerId, table, fields, visibleFieldId
 			return null;
 		}
 
+		// A field's own `tooltip` shows as the standard tip icon beside its input. Its `description` stays out: it is HTML
+		// meant for a labelled row, and a tip is plain text.
+		const tip = String( schema.tooltip || '' );
+
 		return (
-			<div className="woodev-fields-table__field">
+			<div className={ `woodev-fields-table__field${ tip ? ' has-tip' : '' }` }>
 				{ cell.prefix && <span className="woodev-fields-table__prefix">{ cell.prefix }</span> }
 				<ControlField
 					settingId={ settingId }
-					// The column header names the field, so a cell holds the control alone: no label, description or tip
-					// (a hint belongs in the group's notice). A stored secret gets the short placeholder and clear link.
+					// The column header names the field, so a cell holds the control alone: no label, description or tip of
+					// its own (the tip icon is drawn beside the control below). A stored secret gets the short placeholder and clear link.
 					schema={ {
 						...schema,
 						name: '',
@@ -190,6 +195,7 @@ export default function FieldsTable( { providerId, table, fields, visibleFieldId
 					} }
 					showErrors={ !! showErrors }
 				/>
+				<FieldTip text={ tip } />
 			</div>
 		);
 	};
@@ -238,7 +244,10 @@ export default function FieldsTable( { providerId, table, fields, visibleFieldId
 						<th scope="col">{ table.row_title }</th>
 						{ table.columns.map( ( column ) => (
 							<th key={ column.id } scope="col">
-								{ column.label || <span className="screen-reader-text">{ __( 'Действия', 'woodev-plugin-framework' ) }</span> }
+								<span className="woodev-fields-table__head">
+									{ column.label || <span className="screen-reader-text">{ __( 'Действия', 'woodev-plugin-framework' ) }</span> }
+									<FieldTip text={ column.tooltip } />
+								</span>
 							</th>
 						) ) }
 					</tr>
