@@ -100,6 +100,7 @@ export default function SectionView( { providerId, section, tabFields, values, c
 								providerId={ providerId }
 								table={ item.group.table }
 								fields={ section.fields }
+								visibleFieldIds={ item.fieldIds }
 								values={ values }
 								conditionValues={ conditionValues || values }
 								onFieldChange={ onFieldChange }

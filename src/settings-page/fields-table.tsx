@@ -91,6 +91,8 @@ interface FieldsTableProps {
 	table: TableSchema;
 	/** The section's field schemas by setting id. */
 	fields: Fields;
+	/** The ids `show_if` leaves visible; a field cell outside the list stays empty. Absent: every field is drawn. */
+	visibleFieldIds?: string[];
 	/** The tab's staged edits. */
 	values: Values;
 	conditionValues?: Values;
@@ -106,7 +108,7 @@ interface FieldsTableProps {
  * @param {FieldsTableProps} props component props.
  * @return {JSX.Element} the table.
  */
-export default function FieldsTable( { providerId, table, fields, values, conditionValues, onFieldChange, onFieldRevert, showErrors, serverErrors, onCheck }: FieldsTableProps ) {
+export default function FieldsTable( { providerId, table, fields, visibleFieldIds, values, conditionValues, onFieldChange, onFieldRevert, showErrors, serverErrors, onCheck }: FieldsTableProps ) {
 	// connection id => the latest answer; `null` once an edit made it stale. No entry: the server's remembered answer.
 	const [ results, setResults ] = useState< Record< string, TableResult | null > >( {} );
 	const [ busy, setBusy ] = useState( '' );
@@ -151,12 +153,13 @@ export default function FieldsTable( { providerId, table, fields, values, condit
 		const settingId = cell.setting || '';
 		const schema = fields[ settingId ];
 
-		if ( ! schema ) {
+		// A field `show_if` hides is not edited (the server drops its value on save): its cell stays empty, so the row keeps its columns.
+		if ( ! schema || ( visibleFieldIds && ! visibleFieldIds.includes( settingId ) ) ) {
 			return null;
 		}
 
 		return (
-			<div className="woodev-fields-table__field" role="group" aria-label={ `${ columnLabel }: ${ row.label }` }>
+			<div className="woodev-fields-table__field">
 				{ cell.prefix && <span className="woodev-fields-table__prefix">{ cell.prefix }</span> }
 				<ControlField
 					settingId={ settingId }
@@ -167,6 +170,9 @@ export default function FieldsTable( { providerId, table, fields, values, condit
 						name: '',
 						description: '',
 						tooltip: '',
+						// The visible label is gone, so the input is named «column: row» — «Ключ API: Mapbox». A cell with a
+						// prefix holds a different quantity in the shared column (the coefficient), so the field's own name leads.
+						aria_label: `${ cell.prefix ? String( schema.name || columnLabel ) : columnLabel }: ${ row.label }`,
 						saved_placeholder: __( '•••••• сохранено', 'woodev-plugin-framework' ),
 						clear_label: __( 'Очистить', 'woodev-plugin-framework' ),
 						serverError: ( serverErrors || {} )[ settingId ],

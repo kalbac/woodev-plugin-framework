@@ -8,6 +8,7 @@
 import '@testing-library/jest-dom';
 import { useState } from '@wordpress/element';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { computeAccessibleName } from 'dom-accessibility-api';
 import FieldsTable, { rowState, findCheck, type TableSchema } from '../../src/settings-page/fields-table';
 import SectionView from '../../src/settings-page/section-view';
 import { testConnection } from '../../src/settings-page/rest';
@@ -95,7 +96,7 @@ test( 'the check button waits for the key, then the status follows the typed key
 	const google = within( rowOf( 'Google' ) );
 	expect( google.getByRole( 'button', { name: 'Проверить' } ) ).toBeDisabled();
 
-	fireEvent.change( google.getByLabelText( 'Ключ API: Google', { selector: 'div' } ).querySelector( 'input' ) as HTMLInputElement, { target: { value: 'KEY' } } );
+	fireEvent.change( google.getByLabelText( 'Ключ API: Google' ), { target: { value: 'KEY' } } );
 
 	expect( google.getByRole( 'button', { name: 'Проверить' } ) ).toBeEnabled();
 	expect( google.getByText( '● Подключён' ) ).toBeInTheDocument();
@@ -105,7 +106,7 @@ test( 'a check sends the typed values to the connection route and shows the answ
 	( testConnection as jest.Mock ).mockResolvedValue( { success: true, message: 'Ключ работает.' } );
 	render( <Harness /> );
 
-	fireEvent.change( within( rowOf( 'Google' ) ).getByLabelText( 'Ключ API: Google', { selector: 'div' } ).querySelector( 'input' ) as HTMLInputElement, { target: { value: 'KEY' } } );
+	fireEvent.change( within( rowOf( 'Google' ) ).getByLabelText( 'Ключ API: Google' ), { target: { value: 'KEY' } } );
 	fireEvent.click( within( rowOf( 'Google' ) ).getByRole( 'button', { name: 'Проверить' } ) );
 
 	expect( await screen.findByText( 'Ключ работает.' ) ).toBeInTheDocument();
@@ -121,7 +122,7 @@ test( 'a failed check turns the status to «Ошибка»; editing the key drop
 	expect( await screen.findByText( 'Ключ отклонён.' ) ).toBeInTheDocument();
 	expect( within( rowOf( 'Mapbox' ) ).getByText( '✖ Ошибка' ) ).toBeInTheDocument();
 
-	fireEvent.change( within( rowOf( 'Mapbox' ) ).getByLabelText( 'Ключ API: Mapbox', { selector: 'div' } ).querySelector( 'input' ) as HTMLInputElement, { target: { value: 'NEW' } } );
+	fireEvent.change( within( rowOf( 'Mapbox' ) ).getByLabelText( 'Ключ API: Mapbox' ), { target: { value: 'NEW' } } );
 
 	expect( screen.queryByText( 'Ключ отклонён.' ) ).toBeNull();
 	expect( within( rowOf( 'Mapbox' ) ).getByText( '● Подключён' ) ).toBeInTheDocument();
@@ -205,4 +206,43 @@ test( 'a titleless table group drops the card frame; a titled one keeps it', () 
 	rerender( <SectionView providerId="range" section={ section( 'Сервисы' ) } values={ {} } onFieldChange={ jest.fn() } onFieldRevert={ jest.fn() } /> );
 
 	expect( container.querySelector( '.woodev-group--flush' ) ).toBeNull();
+} );
+
+test( 'every input in a cell has its own accessible name: column and row, the coefficient by its own name', () => {
+	render( <Harness /> );
+
+	const nameOf = ( row: string, selector: string ) => computeAccessibleName( rowOf( row ).querySelector( selector ) as Element );
+
+	expect( nameOf( 'Mapbox', 'input[type="password"]' ) ).toBe( 'Ключ API: Mapbox' );
+	expect( nameOf( 'Mapbox', 'input[type="number"]' ) ).toBe( 'Лимит в сутки: Mapbox' );
+	expect( nameOf( 'Google', 'input[type="password"]' ) ).toBe( 'Ключ API: Google' );
+	expect( nameOf( 'По прямой', 'input[type="number"]' ) ).toBe( 'Коэффициент дороги: По прямой' );
+
+	// The visible labels stay hidden: the name lives on the input, not in a drawn label.
+	expect( document.querySelector( '.woodev-field__label' ) ).toBeNull();
+} );
+
+test( 'a field show_if hides is an empty cell in the table, while its siblings keep their inputs', () => {
+	const fields = {
+		enabled: { type: 'boolean', name: 'Включено', controlType: 'toggle', value: false },
+		mapbox_key: FIELDS.mapbox_key,
+		mapbox_limit: { ...FIELDS.mapbox_limit, show_if: { setting: 'enabled', operator: '=', value: true } },
+	};
+	const table = { row_title: 'Сервис', columns: [ { id: 'key', label: 'Ключ API' }, { id: 'limit', label: 'Лимит в сутки' } ], rows: [
+		{ id: 'mapbox', label: 'Mapbox', cells: { key: { type: 'field', setting: 'mapbox_key' }, limit: { type: 'field', setting: 'mapbox_limit' } } },
+	] } as TableSchema;
+	const section = { id: 's', label: 'S', description: '', fields, groups: [ { id: 'g', title: '', description: '', notice: '', fields: [ 'mapbox_key', 'mapbox_limit' ], actions: [], table } ] };
+	const view = ( enabled: boolean ) => <SectionView providerId="range" section={ section } values={ { enabled } } onFieldChange={ jest.fn() } onFieldRevert={ jest.fn() } />;
+
+	const { rerender } = render( view( false ) );
+
+	const row = within( rowOf( 'Mapbox' ) );
+	expect( row.getByLabelText( 'Ключ API: Mapbox' ) ).toBeInTheDocument();
+	expect( row.queryByRole( 'spinbutton' ) ).toBeNull();
+	expect( rowOf( 'Mapbox' ).querySelectorAll( 'td' ) ).toHaveLength( 2 );
+	expect( rowOf( 'Mapbox' ).querySelectorAll( 'td' )[ 1 ] ).toBeEmptyDOMElement();
+
+	rerender( view( true ) );
+
+	expect( within( rowOf( 'Mapbox' ) ).getByRole( 'spinbutton', { name: 'Лимит в сутки: Mapbox' } ) ).toBeInTheDocument();
 } );
