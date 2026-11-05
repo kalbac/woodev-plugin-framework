@@ -1,6 +1,6 @@
 # «Доставка в пределах города» (range shipping 2.0.0) — design
 
-**Date:** 2026-11-05. **Status:** draft r5 (06.11.2026) — history in the [revision log](#revision-log). r3 was **rewritten after the operator's
+**Date:** 2026-11-05. **Status:** draft r5.1 (06.11.2026) — history in the [revision log](#revision-log). r3 was **rewritten after the operator's
 redirect of 05.11.2026** (§0, binding): the list of places is the **granularity of the checkout's settlement choice and of the active provider's address
 suggestions**, not a delivery boundary. The delivery boundary stays where it already is — the range method's own distance grid. r1/r2 designed a
 store-wide server-side restriction; §9 lists what was removed and why. **r4** replaced K11 («a federal city includes its districts») with the operator's
@@ -66,7 +66,7 @@ actually deliverable is decided, as today, by the shipping method — for the ra
 |---|---|
 | Settings sub-tab, storage, validation, notices (§3) | A server-side «outside the list» rejection of orders, packages or pickup points (§9) |
 | Checkout config + both clients: closed settlement choice, hidden single place, own value of a nested settlement (§4) | Restricting the payer's billing city (K6) |
-| Handing the chosen record to the active provider's own scoping — DaData `locations` by the record's own ids, by its FIAS id (K13), or by name outside Russia (K14) — with no plugin-side rule (K11′, §4.3) | My Account, the order-edit screen, REST/API order creation — unchanged |
+| Handing the chosen record to the active provider's own scoping — DaData `locations` by the record's own ids, by its FIAS id (K13), or by name outside Russia (K14) — with no plugin-side rule (K11′, §4.3) | My Account, the order-edit screen, REST/API order creation — no city-mode restriction (the shared nested-locality comparison fix of §4.4 still applies to the order editor) |
 | Offline behaviour of the choice (K8) and licence behaviour (K7) (§5) | Radius / polygon zones (the range method's grid already is one) |
 
 ## 2. The mechanism — reuse first
