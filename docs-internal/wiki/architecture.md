@@ -106,6 +106,10 @@ automatically via the `woodev_{plugin_id}_api_request_performed` action.
 `Woodev_Abstract_Settings` provides a WooCommerce-style settings page. Settings are defined as
 `Woodev_Setting` objects registered through `Woodev_Register_Settings`.
 
+Control types live in `Woodev_Control`; the generic `records-table` (F1, #1598: rows of text / location-picker /
+main-radio cells, consumer-declared columns and row hook) is read and checked server-side by
+`Woodev\Framework\Settings\Records_Table`, rendered by `src/components/records-table.tsx`, shown in the UI Kit gallery.
+
 Note: `Woodev_Setting::get_value()` returns a **cached** property — an `update_option()` mid-request
 is invisible to it (gotcha `woodev-setting-get-value-is-cached-not-a-live-option-read`).
 

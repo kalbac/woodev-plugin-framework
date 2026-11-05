@@ -727,6 +727,13 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 					}
 					break;
 
+				case Woodev_Control::TYPE_RECORDS_TABLE:
+					$table_error = \Woodev\Framework\Settings\Records_Table::get_error( $this->control, $value );
+					if ( null !== $table_error ) {
+						return $table_error;
+					}
+					break;
+
 				case Woodev_Control::TYPE_NUMBER:
 				case Woodev_Control::TYPE_RANGE:
 					if ( ! is_numeric( $value ) ) {
@@ -837,6 +844,12 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 
 			if ( in_array( $control_type, [ Woodev_Control::TYPE_SELECT, Woodev_Control::TYPE_RADIO ], true ) ) {
 				return '' === (string) $value;
+			}
+
+			// A records table with every row deleted is an empty JSON list however it is spelled (`[]`, `[ ]`):
+			// no rows, the same as `''`. Text that is not a list of rows is not empty — the format check rejects it.
+			if ( Woodev_Control::TYPE_RECORDS_TABLE === $control_type && is_string( $value ) ) {
+				return [] === \Woodev\Framework\Settings\Records_Table::decode( $value );
 			}
 
 			return '' === trim( (string) $value );

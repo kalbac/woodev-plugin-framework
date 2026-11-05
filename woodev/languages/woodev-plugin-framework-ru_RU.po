@@ -6663,3 +6663,39 @@ msgstr ""
 #, php-format
 msgid "сумма заказа выше максимума метода (до %s)"
 msgstr ""
+
+#: settings-page/class-records-table.php:70
+msgid "Не удалось прочитать таблицу. Обновите страницу и повторите."
+msgstr ""
+
+#: settings-page/class-records-table.php:79
+#, php-format
+msgid "Строка %1$d: %2$s"
+msgstr ""
+
+#: settings-page/class-records-table.php:119
+#, php-format
+msgid "Выберите «%s» из подсказок."
+msgstr ""
+
+#: settings-page/class-records-table.php:124
+#, php-format
+msgid "Заполните «%s»."
+msgstr ""
+
+#: settings-page/class-records-table.php:163
+#, php-format
+msgid "Отметьте ровно одну строку в колонке «%s»."
+msgstr ""
+
+#: assets/build/settings-page/index.js
+msgid "Сначала отметьте основной другую строку"
+msgstr ""
+
+#: assets/build/settings-page/index.js
+msgid "Записей пока нет."
+msgstr ""
+
+#: assets/build/settings-page/index.js
+msgid "Добавить"
+msgstr ""

@@ -250,6 +250,15 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 					$control->set_search_callbacks( $args['search_callback'], $args['label_callback'] );
 				}
 
+				if ( Woodev_Control::TYPE_RECORDS_TABLE === $type ) {
+					if ( $setting->is_is_multi() || Woodev_Setting::TYPE_STRING !== $setting->get_type() ) {
+						throw new InvalidArgumentException( 'A records-table needs a scalar string setting (it stores a JSON list of rows)' );
+					}
+					$control->set_columns( is_array( $args['columns'] ?? null ) ? $args['columns'] : [] );
+					$control->set_row_validator( is_callable( $args['row_validator'] ?? null ) ? $args['row_validator'] : null );
+					$control->set_table_texts( (string) ( $args['add_label'] ?? '' ), (string) ( $args['empty_text'] ?? '' ) );
+				}
+
 				$setting->set_control( $control );
 
 				return true;
@@ -770,6 +779,7 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 				Woodev_Control::TYPE_RICHTEXT,
 				Woodev_Control::TYPE_MULTISELECT,
 				Woodev_Control::TYPE_LOCATION_PICKER,
+				Woodev_Control::TYPE_RECORDS_TABLE,
 			];
 
 			/**

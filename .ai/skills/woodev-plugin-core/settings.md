@@ -91,7 +91,7 @@ names are an installed-site data contract the moment you ship: choose setting id
 `register_control( $setting_id, $type, $args )` — `$type` is a `Woodev_Control::TYPE_*` constant:
 `text`, `textarea`, `number`, `email`, `tel`, `url`, `password`, `date`, `checkbox`, `radio`, `select`,
 `search-select`, `boxes-table`, `file`, `color`, `range`, `toggle`, `richtext`, `multiselect`, and
-`location-picker` (read the constant's docblock before using it). Args: `name`, `description`,
+`location-picker` (read the constant's docblock before using it), and `records-table`. Args: `name`, `description`,
 `description_on`, `options`, `min`, `max`, `step`, `native_bounds`, `tooltip`, `placeholder`, `rows`
 (textarea only), `country`, `disabled` + `disabled_reason`. A control type that does not fit
 the setting's type is rejected with `_doing_it_wrong()`; `toggle`/`checkbox` fit a scalar boolean only.
@@ -99,6 +99,12 @@ the setting's type is rejected with `_doing_it_wrong()`; `toggle`/`checkbox` fit
 - **`search-select`** needs a scalar string/integer setting and BOTH `search_callback` (term → value/label
   pairs) and `label_callback` (saved value → label, `''` when unknown); without them the control is rejected.
 - **`boxes-table`** is the inline table over the box-list text; `box_preset` seeds it.
+- **`records-table`** is a generic add / edit / delete table over a **string** setting holding a JSON list of rows
+  (`''` = none; read it back with `Woodev\Framework\Settings\Records_Table::decode()`). Args: `columns` (required —
+  `[ 'id', 'type' => text | location-picker | main-radio, 'label', 'required', 'level', 'placeholder' ]`),
+  `row_validator` (`fn( array $row, int $index ): true|string` — a string is the Russian message shown under the
+  table), `add_label`, `empty_text`, and `country` for the address cells. The server re-checks required cells,
+  a readable address and exactly one main row before the hook runs. It knows nothing about its records.
 - **`file` has no React renderer.** The registry accepts it, but the settings page falls through to a plain
   text input — do not use it for uploads.
 

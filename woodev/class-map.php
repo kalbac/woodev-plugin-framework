@@ -38,6 +38,7 @@ return [
 	'Woodev\\Framework\\Payment_Gateway\\Api\\Pending_Notification_Response' => 'woodev/payment-gateway/api/interface-pending-notification-response.php',
 	'Woodev\\Framework\\Settings\\Composite_Settings_Handler' => 'woodev/settings-page/class-composite-settings-handler.php',
 	'Woodev\\Framework\\Settings\\Field_Schema' => 'woodev/settings-page/class-field-schema.php',
+	'Woodev\\Framework\\Settings\\Records_Table' => 'woodev/settings-page/class-records-table.php',
 	'Woodev\\Framework\\Settings\\Settings_Group' => 'woodev/settings-page/class-settings-group.php',
 	'Woodev\\Framework\\Settings\\Settings_Page_Registry' => 'woodev/settings-page/class-settings-page-registry.php',
 	'Woodev\\Framework\\Settings\\Settings_Provider' => 'woodev/settings-page/class-settings-provider.php',

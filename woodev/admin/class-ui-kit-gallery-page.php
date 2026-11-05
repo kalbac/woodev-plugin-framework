@@ -145,5 +145,17 @@ class Ui_Kit_Gallery_Page {
 		wp_enqueue_style( 'woodev-ui-kit-gallery', $build_url . '/style-index.css', [ 'wp-components' ], $style_version );
 		wp_enqueue_script( 'woodev-ui-kit-gallery', $build_url . '/index.js', $asset['dependencies'], $asset['version'], true );
 		\Woodev\Framework\Handlers\Script_Translations::register( $this->plugin, 'woodev-ui-kit-gallery' );
+
+		// The same REST bootstrap the settings page ships: the records-table's address cell reads it to search.
+		wp_add_inline_script(
+			'woodev-ui-kit-gallery',
+			'window.woodevSettings = ' . wp_json_encode(
+				[
+					'restRoot' => esc_url_raw( rest_url( \Woodev_REST_V1_Registrar::ROUTE_NAMESPACE . '/settings' ) ),
+					'nonce'    => wp_create_nonce( 'wp_rest' ),
+				]
+			) . ';',
+			'before'
+		);
 	}
 }

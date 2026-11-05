@@ -106,8 +106,43 @@ Declare `options` on the setting. A control may narrow the list but cannot add k
 | `TYPE_RICHTEXT` | `richtext` | Formatted text. The value is passed through `wp_kses_post()` before it is saved. |
 | `TYPE_BOXES_TABLE` | `boxes-table` | The table of boxes used by shipping plugins. See [Packaging and box packing](../../shipping/packaging-and-box-packing/). |
 | `TYPE_LOCATION_PICKER` | `location-picker` | The default-locality search used by shipping plugins. See [Location and checkout fields](../../shipping/location-and-checkout-fields/). |
+| `TYPE_RECORDS_TABLE` | `records-table` | A table of records the merchant adds, edits and deletes. See [Records table](#records-table). |
 
 A toggle or checkbox only fits a single boolean. Registering one for a boolean setting with `is_multi` is refused.
+
+### Records table
+
+A `records-table` shows a list of records — warehouses, connected accounts, anything with a few cells per row.
+You declare the columns; the merchant adds, edits and deletes rows in the table. The setting must be a string:
+it holds the rows as a JSON list, and an empty string means no rows.
+
+```php
+$this->register_setting( 'warehouses', Woodev_Setting::TYPE_STRING, [ 'name' => __( 'Склады', 'my-plugin' ), 'default' => '' ] );
+$this->register_control( 'warehouses', Woodev_Control::TYPE_RECORDS_TABLE, [
+	'columns'       => [
+		[ 'id' => 'name', 'type' => Woodev_Control::COLUMN_TEXT, 'label' => __( 'Название', 'my-plugin' ), 'required' => true ],
+		[ 'id' => 'address', 'type' => Woodev_Control::COLUMN_LOCATION_PICKER, 'label' => __( 'Адрес', 'my-plugin' ), 'required' => true ],
+		[ 'id' => 'is_main', 'type' => Woodev_Control::COLUMN_MAIN_RADIO, 'label' => __( 'Основной', 'my-plugin' ) ],
+	],
+	'add_label'     => __( 'Добавить склад', 'my-plugin' ),
+	'empty_text'    => __( 'Складов пока нет.', 'my-plugin' ),
+	'row_validator' => static function ( array $row, int $index ) {
+		return strlen( $row['name'] ) <= 60 ? true : __( 'Название не длиннее 60 символов.', 'my-plugin' );
+	},
+] );
+
+$rows = \Woodev\Framework\Settings\Records_Table::decode( $settings->get_value( 'warehouses' ) );
+```
+
+| Column type | The cell |
+|---|---|
+| `text` | A text field. |
+| `location-picker` | An address search. The cell stores the picked record as JSON. `level` (`region`, `settlement` or `address`, default `address`) sets what the search finds. |
+| `main-radio` | The «основной» choice. Exactly one row has it while the table has rows; the first row added is main. |
+
+When the merchant saves, the framework checks required cells, that an address was picked from the suggestions and
+that one row is main. Then it calls your `row_validator` for each row: return `true` to accept, or a message that is
+shown under the table as «Строка N: …». Keys you add to a row yourself (an `id`, say) are kept when the merchant edits it.
 
 ### Control arguments
 

@@ -39,4 +39,20 @@ class UiKitGalleryPageTest extends TestCase {
 
 		$this->assertContains( Ui_Kit_Gallery_Page::PAGE_SLUG, $slugs );
 	}
+
+	/**
+	 * The records-table's address cell searches through `window.woodevSettings`, which only the settings
+	 * page used to ship; the gallery has to bootstrap it too or the cell cannot reach the REST route.
+	 */
+	public function test_gallery_ships_the_rest_bootstrap_the_address_picker_reads(): void {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		( new Ui_Kit_Gallery_Page( woodev_test_plugin() ) )->enqueue_assets();
+
+		$before = implode( '', (array) wp_scripts()->get_data( 'woodev-ui-kit-gallery', 'before' ) );
+
+		$this->assertStringContainsString( 'window.woodevSettings', $before );
+		$this->assertStringContainsString( 'woodev\/v1\/settings', $before ); // wp_json_encode() escapes slashes.
+		$this->assertStringContainsString( '"nonce"', $before );
+	}
 }

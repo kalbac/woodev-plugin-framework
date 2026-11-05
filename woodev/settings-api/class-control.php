@@ -118,6 +118,31 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 		const TYPE_LOCATION_PICKER = 'location-picker';
 
 		/**
+		 * A table of records: rows of text / location-picker / main-radio cells the merchant adds, edits and
+		 * deletes. The consumer declares the columns ({@see self::set_columns()}); the stored value is a JSON
+		 * list of rows keyed by column id, a string setting like `TYPE_LOCATION_PICKER`'s.
+		 *
+		 * @since 2.0.26
+		 * @var string
+		 */
+		const TYPE_RECORDS_TABLE = 'records-table';
+
+		/**
+		 * @var string a plain text cell of a `TYPE_RECORDS_TABLE` column
+		 */
+		const COLUMN_TEXT = 'text';
+
+		/**
+		 * @var string an address-choice cell: the `TYPE_LOCATION_PICKER` search, storing the record JSON string
+		 */
+		const COLUMN_LOCATION_PICKER = 'location-picker';
+
+		/**
+		 * @var string the «основной» radio: at most one row of the table carries it, exactly one while rows exist
+		 */
+		const COLUMN_MAIN_RADIO = 'main-radio';
+
+		/**
 		 * @var string|null the setting ID to which this control belongs
 		 */
 		protected $setting_id;
@@ -213,6 +238,29 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 		 * @var string
 		 */
 		protected $country = '';
+
+		/**
+		 * The columns of a `TYPE_RECORDS_TABLE` control, in display order. Empty for every other control type.
+		 *
+		 * @since 2.0.26
+		 * @var array<int,array{id:string,type:string,label:string,required:bool,level:string,placeholder:string}>
+		 */
+		private array $columns = [];
+
+		/**
+		 * @var callable|null fn(array $row, int $index): true|string — the consumer's check of one row; a string rejects it
+		 */
+		private $row_validator;
+
+		/**
+		 * @var string the «add a row» button text of a `TYPE_RECORDS_TABLE` control; empty keeps the default
+		 */
+		private string $add_label = '';
+
+		/**
+		 * @var string what a `TYPE_RECORDS_TABLE` control says while it has no rows; empty keeps the default
+		 */
+		private string $empty_text = '';
 
 		/**
 		 * @var callable|null fn(string $term): array<int,array{value:int|string,label:string}>
@@ -664,6 +712,134 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 				return '';
 			}
 			return (string) call_user_func( $this->label_callback, $value );
+		}
+
+		/**
+		 * Declares the columns of a `TYPE_RECORDS_TABLE` control.
+		 *
+		 * Each column is `[ 'id' => 'name', 'type' => COLUMN_*, 'label' => 'Название' ]`, plus the optional
+		 * `required` (the cell must be filled; ignored for the radio, which has its own rule), `placeholder`
+		 * and, for a location-picker cell, `level` (`region` | `settlement` | `address`, default `address`).
+		 * The ids are the keys of a stored row, so they must be unique.
+		 *
+		 * @since 2.0.26
+		 * @param array<int,array<string,mixed>> $columns column definitions, in display order.
+		 * @return void
+		 * @throws Woodev_Plugin_Exception on an empty list, a duplicate id or an unknown column type.
+		 */
+		public function set_columns( array $columns ): void {
+
+			$types      = [ self::COLUMN_TEXT, self::COLUMN_LOCATION_PICKER, self::COLUMN_MAIN_RADIO ];
+			$normalized = [];
+
+			foreach ( $columns as $column ) {
+
+				$id = is_array( $column ) && isset( $column['id'] ) ? (string) $column['id'] : '';
+
+				if ( '' === $id || isset( $normalized[ $id ] ) ) {
+					throw new Woodev_Plugin_Exception( 'Every records-table column needs a unique id' );
+				}
+
+				if ( ! in_array( $column['type'] ?? null, $types, true ) ) {
+					throw new Woodev_Plugin_Exception( sprintf( 'Records-table column type must be one of %s', Woodev_Helper::list_array_items( $types, 'or' ) ) );
+				}
+
+				$normalized[ $id ] = [
+					'id'          => $id,
+					'type'        => $column['type'],
+					'label'       => (string) ( $column['label'] ?? $id ),
+					'required'    => ! empty( $column['required'] ),
+					'level'       => (string) ( $column['level'] ?? 'address' ),
+					'placeholder' => (string) ( $column['placeholder'] ?? '' ),
+				];
+			}
+
+			if ( [] === $normalized ) {
+				throw new Woodev_Plugin_Exception( 'A records-table needs at least one column' );
+			}
+
+			$this->columns = array_values( $normalized );
+		}
+
+		/**
+		 * The columns of a `TYPE_RECORDS_TABLE` control.
+		 *
+		 * @since 2.0.26
+		 * @return array<int,array{id:string,type:string,label:string,required:bool,level:string,placeholder:string}>
+		 */
+		public function get_columns(): array {
+			return $this->columns;
+		}
+
+		/**
+		 * Sets the consumer's server-side check of one row (the control itself knows nothing about its records).
+		 *
+		 * It runs on Save, after the generic checks (required cells, one main row), with the decoded row and its
+		 * 0-based position. Return `true` to accept; anything else rejects the row, and a returned string is the
+		 * Russian message the merchant sees under the table. Any other return is a rejection with the stock message.
+		 *
+		 * @since 2.0.26
+		 * @param callable|null $validator fn(array $row, int $index): true|string
+		 * @return void
+		 */
+		public function set_row_validator( ?callable $validator ): void {
+			$this->row_validator = $validator;
+		}
+
+		/**
+		 * Asks the consumer's check about one row.
+		 *
+		 * @since 2.0.26
+		 * @param array<string,mixed> $row   the decoded row.
+		 * @param int                 $index the row's 0-based position.
+		 * @return string|null the rejection message, or null when the row is accepted (or no check is set).
+		 */
+		public function get_row_error( array $row, int $index ): ?string {
+
+			if ( null === $this->row_validator ) {
+				return null;
+			}
+
+			$result = call_user_func( $this->row_validator, $row, $index );
+
+			if ( true === $result ) {
+				return null;
+			}
+
+			return is_string( $result ) && '' !== $result ? $result : __( 'Неверное значение.', 'woodev-plugin-framework' );
+		}
+
+		/**
+		 * The «add a row» button text of a `TYPE_RECORDS_TABLE` control; empty keeps the client default.
+		 *
+		 * @since 2.0.26
+		 * @return string
+		 */
+		public function get_add_label(): string {
+			return $this->add_label;
+		}
+
+		/**
+		 * What a `TYPE_RECORDS_TABLE` control says while it has no rows; empty keeps the client default.
+		 *
+		 * @since 2.0.26
+		 * @return string
+		 */
+		public function get_empty_text(): string {
+			return $this->empty_text;
+		}
+
+		/**
+		 * Sets the two texts a `TYPE_RECORDS_TABLE` control shows around its rows.
+		 *
+		 * @since 2.0.26
+		 * @param string $add_label  the «add a row» button text.
+		 * @param string $empty_text what the table says while it has no rows.
+		 * @return void
+		 */
+		public function set_table_texts( string $add_label, string $empty_text ): void {
+			$this->add_label  = $add_label;
+			$this->empty_text = $empty_text;
 		}
 
 		/**
