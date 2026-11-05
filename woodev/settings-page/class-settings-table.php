@@ -53,7 +53,7 @@ final class Settings_Table {
 	private array $column_tips = [];
 
 	/**
-	 * @var array<int,array{id:string,label:string,cells:array<string,array<string,mixed>>}> rows in display order.
+	 * @var array<int,array{id:string,label:string,cells:array<string,array<string,mixed>>,link?:array{url:string,label:string}}> rows in display order.
 	 */
 	private array $rows = [];
 
@@ -135,6 +135,41 @@ final class Settings_Table {
 			'label' => $label,
 			'cells' => array_intersect_key( $cells, $this->columns ),
 		];
+
+		return $copy;
+	}
+
+	/**
+	 * A copy whose row carries an external link: the small «opens in a new tab» icon beside the row label, for the page where
+	 * the merchant gets what the row needs (an API key). The label text itself stays plain.
+	 *
+	 * Call it after {@see self::with_row()} — a row added again under the same id starts without a link. An unknown row id
+	 * and a URL that is not http(s) are ignored.
+	 *
+	 * @since 2.0.26
+	 *
+	 * @param string $row_id row id given to {@see self::with_row()}.
+	 * @param string $url    the page to open, http or https.
+	 * @param string $label  the icon's accessible name, which must say it opens in a new tab («Получить ключ Mapbox (откроется в новой вкладке)»).
+	 * @return self
+	 */
+	public function with_row_link( string $row_id, string $url, string $label ): self {
+		$url = '' === trim( $url ) ? '' : esc_url_raw( trim( $url ), [ 'http', 'https' ] );
+
+		if ( '' === $url ) {
+			return $this;
+		}
+
+		$copy = clone $this;
+
+		foreach ( $copy->rows as $index => $row ) {
+			if ( $row['id'] === $row_id ) {
+				$copy->rows[ $index ]['link'] = [
+					'url'   => $url,
+					'label' => $label,
+				];
+			}
+		}
 
 		return $copy;
 	}
@@ -233,7 +268,7 @@ final class Settings_Table {
 
 	/**
 	 * @since 2.0.26
-	 * @return array<int,array{id:string,label:string,cells:array<string,array<string,mixed>>}>
+	 * @return array<int,array{id:string,label:string,cells:array<string,array<string,mixed>>,link?:array{url:string,label:string}}>
 	 */
 	public function get_rows(): array {
 		return $this->rows;

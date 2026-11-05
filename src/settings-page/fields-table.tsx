@@ -7,7 +7,9 @@
  * section, so nothing here stores a value. Rows are never added or removed — see `RecordsTable` for that.
  *
  * A check cell runs the handler's connection test with the typed-but-unsaved values (the same REST route a
- * connection block uses) and shows the answer under its row, so one logical row stays one visual row.
+ * connection block uses) and shows the answer under its row, so one logical row stays one visual row. That line
+ * appears only after a click in this page view; a reload shows the status cell alone, which still follows the
+ * answer the server remembered (a failed check stays «Ошибка»).
  *
  * @package woodev-plugin-framework
  */
@@ -43,6 +45,8 @@ export interface TableCell {
 export interface TableRow {
 	id: string;
 	label: string;
+	/** Where to get what the row needs (a key): drawn as the «opens in a new tab» icon beside the label. */
+	link?: { url: string; label: string };
 	cells: Record< string, TableCell >;
 }
 
@@ -65,7 +69,8 @@ export const findCheck = ( row: TableRow ): TableCell | undefined => Object.valu
 /**
  * What the status cell says: «не подключён» until every field the check reads is filled, «ошибка» when the
  * latest check failed, «подключён» otherwise. The latest check is the one just run, else the one the server
- * remembered; an edit of a field the check reads drops both.
+ * remembered; an edit of a field the check reads drops both. (The message line under the row is a separate matter:
+ * it shows only the answer just run — see `justRun` in `FieldsTable`.)
  */
 export function rowState( check: TableCell | undefined, fields: Fields, values: Values, latest: TableResult | null | undefined ): RowState {
 	if ( ! check ) {
@@ -121,6 +126,9 @@ export default function FieldsTable( { providerId, table, fields, visibleFieldId
 		}
 		return check.connection in results ? results[ check.connection ] : check.status;
 	};
+
+	/** The answer of a check run in this page view, for the line under the row. The remembered one feeds the status cell only. */
+	const justRun = ( check: TableCell | undefined ): TableResult | null => ( check && check.connection ? results[ check.connection ] ?? null : null );
 
 	/** A changed credential makes the answer about the old one stale — drop it, like a connection block does. */
 	const forgetChecksReading = ( settingId: string ) => {
@@ -254,10 +262,24 @@ export default function FieldsTable( { providerId, table, fields, visibleFieldId
 				</thead>
 				<tbody>
 					{ table.rows.map( ( row ) => {
-						const answer = latestOf( findCheck( row ) );
+						const answer = justRun( findCheck( row ) );
 						return [
 							<tr key={ row.id }>
-								<th scope="row" className="woodev-fields-table__row-label">{ row.label }</th>
+								<th scope="row" className="woodev-fields-table__row-label">
+									{ row.label }
+									{ row.link && (
+										<a
+											className="woodev-fields-table__row-link"
+											href={ row.link.url }
+											target="_blank"
+											rel="noopener noreferrer"
+											aria-label={ row.link.label }
+											title={ row.link.label }
+										>
+											<span className="dashicons dashicons-external" aria-hidden="true" />
+										</a>
+									) }
+								</th>
 								{ table.columns.map( ( column ) => (
 									<td key={ column.id } className={ `woodev-fields-table__cell is-${ column.id }` }>
 										{ renderCell( row, column.label, row.cells[ column.id ] ) }

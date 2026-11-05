@@ -756,7 +756,8 @@ class SettingsPageRegistryTest extends TestCase {
 				'key'   => Settings_Table::field( 'token' ),
 				'check' => Settings_Table::check( 'api', [ 'token' ], 'Проверить' ),
 			]
-		)->with_row( 'lost', 'Lost', [ 'key' => Settings_Table::field( 'ghost' ) ] );
+		)->with_row( 'lost', 'Lost', [ 'key' => Settings_Table::field( 'ghost' ) ] )
+			->with_row_link( 'api', 'https://example.com/keys', 'Получить ключ API (откроется в новой вкладке)' );
 
 		return Settings_Provider::create(
 			'carrier',
@@ -779,6 +780,8 @@ class SettingsPageRegistryTest extends TestCase {
 		$this->assertSame( [ 'api', 'lost' ], array_column( $group['table']['rows'], 'id' ) );
 		$this->assertSame( [ 'key', 'check' ], array_keys( (array) $group['table']['rows'][0]['cells'] ) );
 		$this->assertSame( [], (array) $group['table']['rows'][1]['cells'], 'a row whose only field is unknown keeps no cell' );
+		$this->assertSame( [ 'url' => 'https://example.com/keys', 'label' => 'Получить ключ API (откроется в новой вкладке)' ], $group['table']['rows'][0]['link'] );
+		$this->assertArrayNotHasKey( 'link', $group['table']['rows'][1], 'a row without a link serialises none' );
 	}
 
 	public function test_a_table_check_knows_whether_the_handler_can_test_it_and_what_the_last_check_said(): void {
