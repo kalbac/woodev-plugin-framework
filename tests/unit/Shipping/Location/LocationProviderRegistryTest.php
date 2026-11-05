@@ -280,6 +280,7 @@ final class LocationProviderRegistryTest extends TestCase {
 		// touches; individual tests re-stub add_action/apply_filters/get_option
 		// with assertions of their own where the test is actually ABOUT them.
 		Functions\when( 'remove_action' )->justReturn( true );
+		Functions\when( 'is_admin' )->justReturn( false );
 		Functions\when( '__' )->returnArg( 1 );
 		Functions\when( 'get_option' )->justReturn( null );
 		Functions\when( 'wp_parse_args' )->alias(
@@ -2934,6 +2935,38 @@ final class LocationProviderRegistryTest extends TestCase {
 		$states = $registry->inject_related_list_states( [] );
 
 		$this->assertSame( [], $states );
+	}
+
+	/**
+	 * The shipping-zone editor still resolves existing CDEK state keys after
+	 * switching to DaData, whose provider cannot enumerate the region list.
+	 */
+	public function test_admin_states_keep_cdek_regions_available_without_a_list_provider(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		Functions\when( 'is_admin' )->justReturn( true );
+		Functions\when( 'wc_strtoupper' )->alias(
+			static function ( $string ) {
+				return mb_strtoupper( (string) $string );
+			}
+		);
+		$this->stub_providers_filter( [] );
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = null ) {
+				return 'woodev_location_field_mode_region' === $name ? Location_Provider_Registry::MODE_RELATED_LIST : $default;
+			}
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+		$states = $registry->inject_related_list_states( [] );
+
+		$zone_location = 'RU:МОСКОВСКАЯ ОБЛАСТЬ';
+		[ $country, $state ] = explode( ':', $zone_location, 2 );
+
+		$this->assertCount( 87, $states['RU'], 'the committed fallback matches the measured CDEK RU dictionary' );
+		$this->assertSame( 'Московская область', $states[ $country ][ $state ], 'the state portion of an existing zone location resolves without an undefined-key notice' );
+		$this->assertArrayHasKey( 'МОСКВА', $states['RU'] );
 	}
 
 	public function test_inject_is_a_no_op_when_the_active_provider_is_not_configured(): void {
