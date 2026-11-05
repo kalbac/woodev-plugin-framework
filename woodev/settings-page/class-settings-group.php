@@ -51,6 +51,11 @@ final class Settings_Group {
 	private array $action_ids = [];
 
 	/**
+	 * @var Settings_Table|null optional fixed-rows table drawn in place of the member fields' own rows.
+	 */
+	private ?Settings_Table $table = null;
+
+	/**
 	 * Use {@see self::create()} instead.
 	 *
 	 * @since 2.0.2
@@ -121,6 +126,33 @@ final class Settings_Group {
 		$copy->notice = $notice;
 
 		return $copy;
+	}
+
+	/**
+	 * A copy that draws its fields as the rows of a table ({@see Settings_Table}) instead of one labelled row each.
+	 *
+	 * The fields the table's cells name join the group's members, so the group keeps them and no other group
+	 * takes them; they are drawn only in the table. The group's own title and description stay above it.
+	 *
+	 * @since 2.0.26
+	 *
+	 * @param Settings_Table $table the table.
+	 * @return self
+	 */
+	public function with_table( Settings_Table $table ): self {
+		$copy              = clone $this;
+		$copy->table       = $table;
+		$copy->setting_ids = array_values( array_unique( array_merge( $this->setting_ids, $table->get_setting_ids() ) ) );
+
+		return $copy;
+	}
+
+	/**
+	 * @since 2.0.26
+	 * @return Settings_Table|null
+	 */
+	public function get_table(): ?Settings_Table {
+		return $this->table;
 	}
 
 	/**

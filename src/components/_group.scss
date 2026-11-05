@@ -16,6 +16,15 @@
 	background: wd.$surface;
 	margin-bottom: wd.$gap-lg;
 
+	// A group with no title and no description holds one table: it already sits in the section's card, so it
+	// needs no frame of its own.
+	&--flush {
+		border: 0;
+		padding: 0;
+		margin-bottom: 0;
+		background: transparent;
+	}
+
 	&__title {
 		margin: 0 0 wd.$gap-xs;
 		font-size: 14px;

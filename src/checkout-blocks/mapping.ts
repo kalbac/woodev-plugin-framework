@@ -232,11 +232,16 @@ export function matchState( record: LocationRecord, states: CountryStates ): str
 	return null;
 }
 
+/**
+ * `cityValue` is city mode's listed place: the text its City field posts (its own name). Without it
+ * the city is the record's settlement, as ever. The state rule is the same either way — written
+ * only where the shop HAS a region field (`regionFieldRemoved` false).
+ */
 export function resolveNativeAddress(
 	record: LocationRecord,
-	context: { states: CountryStates; regionFieldRemoved: boolean }
+	context: { states: CountryStates; regionFieldRemoved: boolean; cityValue?: string }
 ): NativeAddressPatch {
-	const city = recordCity( record );
+	const city = context.cityValue ? context.cityValue : recordCity( record );
 
 	if ( context.regionFieldRemoved ) {
 		return { city, state: null, stateMatched: true };

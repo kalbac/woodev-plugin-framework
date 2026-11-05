@@ -27,6 +27,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 	use Woodev\Framework\Shipping\Location\Location_Scope;
 	use Woodev\Framework\Shipping\Location\Location_Service;
 	use Woodev\Framework\Shipping\Location\Providers\Dadata_Provider;
+	use Woodev\Framework\Shipping\Rest_Api\Location_Controller;
 	use Woodev\Framework\Settings\Settings_Page_Registry;
 	use Woodev\Framework\Shipping\Shipping_Plugin;
 	use Woodev\Tests\Unit\TestCase;
@@ -67,6 +68,12 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/providers/class-dadata-api-response.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/providers/class-dadata-api-client.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/providers/class-dadata-provider.php';
+	// City mode (2.0.26): the My Account suggestion scope is asserted through the REAL controller.
+	if ( ! class_exists( '\\WP_REST_Controller' ) ) {
+		require_once dirname( __DIR__ ) . '/Rest_Api/wp-rest-controller-stub.php';
+	}
+	require_once dirname( __DIR__, 4 ) . '/woodev/http/trait-rest-rate-limit.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/rest-api/class-location-controller.php';
 
 	/**
 	 * Minimal `\WC_Session` stand-in shared by the customer-store probe and the
@@ -454,10 +461,12 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			Location_Provider_Registry::instance()->reset_for_tests();
 			Settings_Page_Registry::instance()->reset_for_tests();
+			Location_Service::reset_settlement_choices_for_tests();
 		}
 
 		protected function tearDown(): void {
 			$_POST = [];
+			Location_Service::reset_settlement_choices_for_tests();
 			Location_Provider_Registry::instance()->reset_for_tests();
 			Settings_Page_Registry::instance()->reset_for_tests();
 			parent::tearDown();
@@ -3224,6 +3233,83 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertCount( 1, $notices );
 		}
 
+		/**
+		 * City mode lists `$records` (range-shipping city mode spec §2) for the rest of the test,
+		 * every other filter passing its value through.
+		 *
+		 * @param Location_Record[] $records Listed places.
+		 */
+		private function city_mode_lists( array $records ): void {
+			Functions\when( 'apply_filters' )->alias(
+				static function ( string $tag, $value = null ) use ( $records ) {
+					return Location_Service::FILTER_SETTLEMENT_CHOICES === $tag
+						? [
+							'records'    => $records,
+							'hide_field' => false,
+						]
+						: $value;
+				}
+			);
+		}
+
+		public function test_city_mode_never_refuses_a_picked_unlisted_city_at_classic_placement(): void {
+			// Critic F2 round 1, Must-fix 1: a classic `ajax-select2` checkout with custom
+			// settlements off, a real Тула pick (a tab loaded before city mode was switched on),
+			// City Тула posted. City mode's list is presentation (K10): the REAL #531 guard over the
+			// REAL service must still find the picked record and pass — nothing is refused at submit.
+			$notices = [];
+			$tula    = $this->named_record(
+				[
+					'key'        => 'svc-fixture:tula',
+					'region'     => [ 'name' => 'Тульская область' ],
+					'settlement' => [ 'name' => 'Тула', 'type' => 'г' ],
+				]
+			);
+			$service = $this->service_in_request( $tula, $this->woocommerce_double( 'Тула' ) );
+			$handler = $this->custom_settlement_guard_over( $service, $notices );
+
+			$this->city_mode_lists( [ $this->city_mode_place( 'moscow', 'Москва' ), $this->city_mode_place( 'khimki', 'Химки' ) ] );
+			$this->place_order_with( [ 'billing_city' => 'Тула' ] );
+
+			$this->assertTrue( $service->has_settlement_choices(), 'city mode is on for this request' );
+			$this->assertTrue( $handler->guard_custom_settlement( [ 'billing_city' => 'Тула' ], 'RU', 'billing' ) );
+			$this->assertSame( [], $notices );
+		}
+
+		public function test_city_mode_checkout_config_reads_inside_the_checkout_view(): void {
+			// The view half of the same rule, end to end: Checkout_Config opens the checkout view
+			// itself, so the saved unlisted Тула is not the checkout's current record — while the
+			// same service, read outside the view in the same request, still holds it.
+			$tula    = $this->city_mode_place( 'tula', 'Тула' );
+			$service = $this->city_mode_service( [ $this->city_mode_place( 'moscow', 'Москва' ), $this->city_mode_place( 'khimki', 'Химки' ) ], $tula );
+			$config  = new \Woodev\Framework\Shipping\Checkout\Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service );
+
+			$block = $config->build_location_config();
+
+			$this->assertNull( $block['current'] );
+			$this->assertSame( [ 'svc-fixture:moscow', 'svc-fixture:khimki' ], array_column( $block['allowed']['RU'], 'key' ) );
+			$this->assertSame( 'svc-fixture:tula', $service->get_customer_record()['record']->key() );
+		}
+
+		public function test_city_mode_keeps_the_my_account_suggestion_scope_of_an_unlisted_saved_city(): void {
+			// Critic F2 round 1, Must-fix 1: the My Account form scopes address suggestions by its
+			// saved Тула (`/location/suggest?within=<Тула key>`). The REAL controller over the REAL
+			// service must still apply that parent while city mode lists only Москва and Химки.
+			$tula    = $this->city_mode_place( 'tula', 'Тула' );
+			$service = $this->city_mode_service( [ $this->city_mode_place( 'moscow', 'Москва' ), $this->city_mode_place( 'khimki', 'Химки' ) ], $tula );
+
+			$build_scope = new \ReflectionMethod( Location_Controller::class, 'build_scope' );
+			if ( PHP_VERSION_ID < 80100 ) {
+				$build_scope->setAccessible( true ); // A no-op (and deprecated) from 8.1.
+			}
+
+			$result = $build_scope->invoke( new Location_Controller( $service ), 'RU', Location_Record::LEVEL_ADDRESS, 'svc-fixture:tula' );
+
+			$this->assertTrue( $service->has_settlement_choices(), 'city mode is on for this request' );
+			$this->assertSame( Location_Controller::WITHIN_STATUS_APPLIED, $result['within_status'] );
+			$this->assertSame( 'svc-fixture:tula', $result['scope']->parent_record()->key() );
+		}
+
 		public function test_gate_drops_a_disagreeing_record_at_classic_order_placement(): void {
 			// yandex#140: the session row says Podolsk (a stale refresh saved last), the form the shopper
 			// is placing the order from says Kazan. The customer object agreeing with the RECORD changes
@@ -3345,6 +3431,185 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$service = $this->service_in_request( $this->named_record(), $this->woocommerce_double( 'Казань', null, true ) );
 
 			$this->assertNull( $service->get_customer_record() );
+		}
+
+		// ------------------------------------------------------------------
+		// City mode (range-shipping city mode spec §2, §4.4, framework 2.0.26):
+		// the settlement-choices and default-locality filters, the «not listed»
+		// staleness rule and the saved-city guard.
+		// ------------------------------------------------------------------
+
+		/**
+		 * A settlement record of the `svc-fixture` provider.
+		 *
+		 * @param string $slug    Native id.
+		 * @param string $name    Settlement name.
+		 * @param array  $nested  Optional nested settlement `{ name, type }`.
+		 */
+		private function city_mode_place( string $slug, string $name, array $nested = [] ): Location_Record {
+			return Location_Record::from_array(
+				[
+					'key'               => 'svc-fixture:' . $slug,
+					'provider_id'       => 'svc-fixture',
+					'level'             => Location_Record::LEVEL_SETTLEMENT,
+					'country'           => 'RU',
+					'settlement'        => [ 'name' => $name, 'type' => 'г' ],
+					'nested_settlement' => [] !== $nested ? $nested : null,
+					'label'             => 'г ' . $name,
+				]
+			);
+		}
+
+		/**
+		 * A service whose provider owns every fixture record, whose city mode lists `$listed`
+		 * (with `$default` as the filtered fixed default) and whose customer has `$stored`
+		 * saved and `$saved_city` in WooCommerce.
+		 *
+		 * @param Location_Record[] $listed Listed places.
+		 */
+		private function city_mode_service( array $listed, ?Location_Record $stored = null, ?Location_Record $default = null, string $saved_city = '' ): Location_Service {
+			$provider = new Location_Service_Fake_Provider( 'svc-fixture', Location_Record::LEVELS, true, [ 'RU' ] );
+			$registry = $this->activate_owning_provider( $provider );
+
+			Functions\when( 'apply_filters' )->alias(
+				static function ( string $tag, $value = null ) use ( $provider, $listed, $default ) {
+					switch ( $tag ) {
+						case Location_Provider_Registry::FILTER_PROVIDERS:
+							return [ $provider ];
+						case Location_Service::FILTER_SETTLEMENT_CHOICES:
+							return [
+								'records'    => $listed,
+								'hide_field' => false,
+							];
+						case Location_Service::FILTER_DEFAULT_LOCALITY:
+							return $default;
+						default:
+							return $value;
+					}
+				}
+			);
+
+			$store = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
+
+			if ( null !== $stored ) {
+				$store->set( $stored, false );
+			}
+
+			return new class( $registry, $store, $saved_city ) extends Location_Service {
+				private string $saved_city;
+
+				public function __construct( Location_Provider_Registry $registry, Customer_Location_Store $store, string $saved_city ) {
+					parent::__construct( $registry, $store );
+					$this->saved_city = $saved_city;
+				}
+
+				protected function customer_saved_city(): string {
+					return $this->saved_city;
+				}
+			};
+		}
+
+		public function test_city_mode_ignores_a_saved_tula_record_for_the_checkout_view(): void {
+			$tula    = $this->city_mode_place( 'tula', 'Тула' );
+			$service = $this->city_mode_service( [ $this->city_mode_place( 'moscow', 'Москва' ), $this->city_mode_place( 'khimki', 'Химки' ) ], $tula );
+
+			$this->assertNull( Location_Service::in_checkout_view( static fn() => $service->get_customer_record() ), 'a settlement city mode does not list reads as absent in the checkout view' );
+			$this->assertNull( Location_Service::in_checkout_view( static fn() => $service->get_customer_chain() ) );
+			$this->assertSame( 'svc-fixture:tula', $service->get_customer_record()['record']->key(), 'every other read keeps it' );
+		}
+
+		public function test_city_mode_keeps_a_saved_record_of_a_listed_place(): void {
+			$moscow  = $this->city_mode_place( 'moscow', 'Москва' );
+			$service = $this->city_mode_service( [ $moscow, $this->city_mode_place( 'khimki', 'Химки' ) ], $moscow );
+
+			$entry = $service->get_customer_record();
+
+			$this->assertNotNull( $entry );
+			$this->assertSame( 'svc-fixture:moscow', $entry['record']->key() );
+		}
+
+		public function test_city_mode_ignores_a_saved_tula_city_text_that_names_no_listed_place(): void {
+			$service = $this->city_mode_service( [ $this->city_mode_place( 'moscow', 'Москва' ), $this->city_mode_place( 'khimki', 'Химки' ) ], null, null, 'Тула' );
+
+			$this->assertSame( '', Location_Service::in_checkout_view( static fn() => $service->get_saved_city() ) );
+			$this->assertSame( 'Тула', $service->get_saved_city(), 'outside the checkout view the saved city is served as before' );
+		}
+
+		public function test_city_mode_keeps_a_saved_city_text_that_names_a_listed_place(): void {
+			$service = $this->city_mode_service( [ $this->city_mode_place( 'moscow', 'Москва' ), $this->city_mode_place( 'khimki', 'Химки' ) ], null, null, 'г. Химки' );
+
+			$this->assertSame( 'г. Химки', $service->get_saved_city() );
+		}
+
+		public function test_city_mode_single_place_is_the_fixed_default_from_the_filter_without_touching_the_stored_option(): void {
+			$written = [];
+			Functions\when( 'update_option' )->alias(
+				static function ( $name ) use ( &$written ) {
+					$written[] = $name;
+
+					return true;
+				}
+			);
+
+			$moscow  = $this->city_mode_place( 'moscow', 'Москва' );
+			$service = $this->city_mode_service( [ $moscow ], $this->city_mode_place( 'tula', 'Тула' ), $moscow, 'Тула' );
+
+			$this->assertSame( Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED, $service->get_default_locality_policy() );
+
+			$entry = Location_Service::in_checkout_view( static fn() => $service->get_customer_record() );
+
+			$this->assertNotNull( $entry, 'the saved Тула neither blocks nor replaces the single place' );
+			$this->assertSame( 'svc-fixture:moscow', $entry['record']->key() );
+			$this->assertTrue( $entry['implicit'] );
+			$this->assertSame( [], preg_grep( '/default_locality/', $written ), 'the store\'s «Локация» options are never written' );
+			$this->assertNull( Location_Provider_Registry::instance()->get_default_locality_record(), 'the stored fixed default stays unset' );
+		}
+
+		public function test_city_mode_is_suspended_for_a_view_it_does_not_restrict(): void {
+			$tula    = $this->city_mode_place( 'tula', 'Тула' );
+			$service = $this->city_mode_service( [ $this->city_mode_place( 'moscow', 'Москва' ) ], $tula, $this->city_mode_place( 'moscow', 'Москва' ) );
+
+			$entry = Location_Service::without_settlement_choices(
+				static fn() => Location_Service::in_checkout_view( static fn() => $service->get_customer_record() )
+			);
+
+			$this->assertNotNull( $entry );
+			$this->assertSame( 'svc-fixture:tula', $entry['record']->key(), 'My Account keeps the customer\'s own Тула' );
+			$this->assertTrue( $service->has_settlement_choices(), 'the suspension ends with the callback' );
+		}
+
+		public function test_settlement_choices_drop_a_malformed_answer_and_non_settlement_entries(): void {
+			$moscow = $this->city_mode_place( 'moscow', 'Москва' );
+			$region = Location_Record::from_array(
+				[
+					'key'         => 'svc-fixture:r77',
+					'provider_id' => 'svc-fixture',
+					'level'       => Location_Record::LEVEL_REGION,
+					'country'     => 'RU',
+					'region'      => [ 'name' => 'Москва', 'type' => 'г' ],
+				]
+			);
+			$service = $this->city_mode_service( [ $moscow, $region, 'not a record', $moscow ] );
+
+			$choices = $service->get_settlement_choices();
+
+			$this->assertSame( [ 'svc-fixture:moscow' ], array_map( static fn( Location_Record $r ) => $r->key(), $choices['records'] ) );
+		}
+
+		public function test_store_api_gate_keeps_a_nested_record_the_city_names_by_its_own_name(): void {
+			// City mode posts «Черкизово» for «рп Черкизово» (DaData: settlement Пушкино,
+			// nested_settlement Черкизово) — a Store API request must not drop the record as stale.
+			$cherkizovo = $this->named_record(
+				[
+					'key'               => 'svc-fixture:cherkizovo',
+					'settlement'        => [ 'name' => 'Пушкино', 'type' => 'г' ],
+					'nested_settlement' => [ 'name' => 'Черкизово', 'type' => 'рп' ],
+				]
+			);
+
+			$this->assertNotNull( $this->service_with_native_city( $cherkizovo, 'Черкизово' )->get_customer_record() );
+			$this->assertNotNull( $this->service_with_native_city( $cherkizovo, 'Пушкино' )->get_customer_record(), 'the parent still names it' );
+			$this->assertNull( $this->service_with_native_city( $cherkizovo, 'Казань' )->get_customer_record() );
 		}
 	}
 }

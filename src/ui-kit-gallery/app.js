@@ -12,6 +12,7 @@ import { Card, CardBody, Tooltip, Button } from '@wordpress/components';
 import ControlField from '../components/control-field';
 import TabsNav from '../components/tabs-nav';
 import GroupCard from '../settings-page/group-card';
+import FieldsTable from '../settings-page/fields-table';
 
 const FIELD_SPECS = [
 	{ id: 'text', name: 'Текстовое поле', controlType: 'text', description: 'Обычный однострочный ввод.', tooltip: 'Это длинная подсказка, которая раньше обрезалась за краем экрана; теперь она в портале и переносится корректно.', value: 'Карьер №1' },
@@ -65,6 +66,30 @@ const GROUP_ACTIONS = [
 	{ id: 'on', button: 'Подключить вебхуки', disabled: false, status_text: '' },
 	{ id: 'off', button: 'Отключить вебхуки', disabled: false, status_text: '' },
 ];
+
+// A fixed-rows table (Settings_Table): the fields are the section's own, drawn without their labels.
+const TABLE_FIELDS = {
+	coefficient: { id: 'coefficient', name: 'Коэффициент', controlType: 'number', value: '1.2', min: 1, max: 3, step: 0.1, tooltip: 'Расстояние по прямой умножается на это число: при 1,3 прямые 10 км считаются как 13 км.' },
+	mapbox_key: { id: 'mapbox_key', name: 'Ключ API', controlType: 'password', sensitive: true, is_set: true, value: '' },
+	mapbox_limit: { id: 'mapbox_limit', name: 'Лимит', controlType: 'number', value: '1000' },
+	google_key: { id: 'google_key', name: 'Ключ API', controlType: 'password', sensitive: true, is_set: false, value: '' },
+	google_limit: { id: 'google_limit', name: 'Лимит', controlType: 'number', value: '', placeholder: 'без ограничения' },
+};
+
+const TABLE_DEMO = {
+	row_title: 'Сервис',
+	columns: [ { id: 'status', label: 'Статус' }, { id: 'key', label: 'Ключ API', tooltip: 'Ключ доступа, который выдаёт сам сервис в своём кабинете.' }, { id: 'limit', label: 'Лимит в сутки', tooltip: 'Сколько раз за сутки плагин может обратиться к сервису; пусто — без ограничения.' }, { id: 'check', label: '' } ],
+	rows: [
+		{ id: 'line', label: 'По прямой', cells: { status: { type: 'text', text: '● работает', tone: 'ok' }, limit: { type: 'field', setting: 'coefficient', prefix: 'коэф.' } } },
+		{ id: 'mapbox', label: 'Mapbox', cells: { status: { type: 'status' }, key: { type: 'field', setting: 'mapbox_key' }, limit: { type: 'field', setting: 'mapbox_limit' }, check: { type: 'check', connection: 'mapbox', settings: [ 'mapbox_key' ], label: 'Проверить', supports_test: true } } },
+		{ id: 'google', label: 'Google', cells: { status: { type: 'status' }, key: { type: 'field', setting: 'google_key' }, limit: { type: 'field', setting: 'google_limit' }, check: { type: 'check', connection: 'google', settings: [ 'google_key' ], label: 'Проверить', supports_test: true } } },
+	],
+};
+
+// Stub for the REST connection test: the gallery has no server behind it.
+const demoCheck = () => new Promise( ( resolve ) => {
+	setTimeout( () => resolve( { success: true, message: 'Ключ работает: демо-ответ.' } ), 600 );
+} );
 
 // Stub for the REST tool route: the gallery has no server behind it.
 const demoRun = ( id ) => new Promise( ( resolve ) => {
@@ -144,6 +169,18 @@ export default function App() {
 
 			<Section title="Группа действий — кнопки в одном ряду, один результат">
 				<GroupCard providerId="demo" group={ GROUP_ACTIONS_DEMO } actions={ GROUP_ACTIONS } onRun={ demoRun } />
+			</Section>
+
+			<Section title="Таблица полей — фиксированные строки (Settings_Table)">
+				<FieldsTable
+					providerId="demo"
+					table={ TABLE_DEMO }
+					fields={ TABLE_FIELDS }
+					values={ values }
+					onFieldChange={ ( id, v ) => setValues( ( prev ) => ( { ...prev, [ id ]: v } ) ) }
+					onFieldRevert={ ( id ) => setValues( ( prev ) => { const next = { ...prev }; delete next[ id ]; return next; } ) }
+					onCheck={ demoCheck }
+				/>
 			</Section>
 
 			<Section title="Оверлеи и действия">

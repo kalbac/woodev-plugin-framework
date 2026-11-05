@@ -11,6 +11,7 @@ import CarrierBoxesTable from '../components/carrier-boxes-table';
 import ControlField from '../components/control-field';
 import ConnectionBlock from './connection-block';
 import ToolsBlock from './tools-block';
+import FieldsTable from './fields-table';
 import GroupCard, { arrangeFields } from './group-card';
 import { isFieldVisible } from '../components/validate';
 import { RawHTML } from '@wordpress/element';
@@ -94,7 +95,20 @@ export default function SectionView( { providerId, section, tabFields, values, c
 				}
 				return (
 					<GroupCard key={ `group:${ item.group.id }` } providerId={ providerId } group={ item.group } actions={ groupActions }>
-						{ item.fieldIds.map( renderField ) }
+						{ item.group.table ? (
+							<FieldsTable
+								providerId={ providerId }
+								table={ item.group.table }
+								fields={ section.fields }
+								visibleFieldIds={ item.fieldIds }
+								values={ values }
+								conditionValues={ conditionValues || values }
+								onFieldChange={ onFieldChange }
+								onFieldRevert={ onFieldRevert }
+								showErrors={ showErrors }
+								serverErrors={ serverErrors }
+							/>
+						) : item.fieldIds.map( renderField ) }
 						{ renderBoxTable( pickPresets( item.fieldIds ) ) }
 					</GroupCard>
 				);

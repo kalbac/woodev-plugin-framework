@@ -83,7 +83,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Record' 
 		 * Everything else is optional. `region`/`district`/`settlement`/`nested_settlement`/`street` are
 		 * `{ name, type }` shapes; `house`/`block`/`flat`/`postcode`/`label` are
 		 * display-ish strings; `lat`/`lon` are numeric; `raw` is the opaque provider
-		 * payload, stored and returned untouched, never inspected.
+		 * payload, stored and returned untouched, never inspected. `fias_id` is the
+		 * optional FIAS GUID of the record's own locality ({@see self::fias_id()}) — kept only
+		 * for a Russian record whose value is a UUID, stored as `''` otherwise, never refused.
 		 *
 		 * `key`'s own namespace prefix (per {@see Locality_Key::parse()}) MUST agree
 		 * with the declared `provider_id` — a mismatch is exactly the "stale
@@ -163,6 +165,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Record' 
 					'lat'               => self::optional_float( $data, 'lat' ),
 					'lon'               => self::optional_float( $data, 'lon' ),
 					'label'             => self::optional_string( $data, 'label' ),
+					'fias_id'           => self::canonical_fias_id( $data, $country ),
 					// Opaque: stored and returned untouched (spec D12). Absent and
 					// explicit null are deliberately indistinguishable — the framework
 					// never inspects this field, so there is nothing "null" would tell
@@ -412,6 +415,35 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Record' 
 		}
 
 		/**
+		 * Reads the optional canonical `fias_id` (city mode spec §4.3, K12/K14).
+		 *
+		 * FIAS is Russia's address registry, so only a Russian record can carry a FIAS id. Abroad
+		 * DaData fills its own `*_fias_id` fields with OpenStreetMap or GeoNames ids
+		 * (`relation:2216724` for Ташкент), and a DaData filter by such an id is not a FIAS filter.
+		 * Anything that is not a UUID of a Russian record is therefore stored as `''` — never
+		 * refused: a provider that passes a foreign id must not break its own record, it simply
+		 * gets name scoping instead of FIAS scoping.
+		 *
+		 * @since 2.0.26
+		 *
+		 * @param array<string, mixed> $data    Raw payload.
+		 * @param string               $country The record's normalised country code.
+		 *
+		 * @return string Lower-cased FIAS GUID, or `''`.
+		 */
+		private static function canonical_fias_id( array $data, string $country ): string {
+			$value = $data['fias_id'] ?? '';
+
+			if ( 'RU' !== $country || ! is_string( $value ) ) {
+				return '';
+			}
+
+			$value = strtolower( trim( $value ) );
+
+			return 1 === preg_match( '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/', $value ) ? $value : '';
+		}
+
+		/**
 		 * Gets the namespaced primary key (`provider_id:native_id`).
 		 *
 		 * @since 2.0.2
@@ -584,6 +616,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Record' 
 		}
 
 		/**
+		 * Gets the FIAS GUID of the record's own locality, or `''` when it has none.
+		 *
+		 * Provider-agnostic and top-level (not inside {@see self::raw()}), because the framework
+		 * never reads a foreign provider's `raw`: a CDEK record keeps its dictionary row's
+		 * `fias_guid` here, and DaData address suggestions are then scoped by it (city mode spec
+		 * §4.3, K12/K13). DaData's own records leave it `''` — their native ids in `raw` already
+		 * scope them exactly. Only a Russian record can carry one ({@see self::canonical_fias_id()}).
+		 *
+		 * @since 2.0.26
+		 *
+		 * @return string
+		 */
+		public function fias_id(): string {
+			return $this->data['fias_id'];
+		}
+
+		/**
 		 * The record as one node of the wire `chain`: `key` and `level`, plus `lat`/`lon` when the
 		 * provider supplied both (#1432).
 		 *
@@ -708,6 +757,58 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Record' 
 			}
 
 			return [] !== array_intersect( self::locality_names( $this ), self::locality_names( $other ) );
+		}
+
+		/**
+		 * The name of the locality this record itself stands for: the nested settlement when it
+		 * has one, else the settlement — `''` when it names neither.
+		 *
+		 * DaData files «рп Черкизово» under its parent city: `settlement` is «Пушкино» and
+		 * `nested_settlement` is «Черкизово». A buyer who picked Черкизово must see and post
+		 * «Черкизово» in the City field, so every place that turns a record into City text
+		 * reads this, not `settlement()` (city mode spec §4.2, §4.4).
+		 *
+		 * @since 2.0.26
+		 *
+		 * @return string
+		 */
+		public function own_locality_name(): string {
+			foreach ( [ $this->nested_settlement(), $this->settlement() ] as $component ) {
+				if ( null !== $component && '' !== trim( $component['name'] ) ) {
+					return trim( $component['name'] );
+				}
+			}
+
+			return '';
+		}
+
+		/**
+		 * Whether free City text names this record's locality — its own name or the settlement it
+		 * is nested in, each compared through {@see self::normalize_city_name()} with its own type.
+		 *
+		 * The ONE nested-name rule every City-vs-record comparison shares (the staleness rule,
+		 * the classic placement guard, the order meta, the order editor): a record of «рп
+		 * Черкизово» must accept the «Черкизово» the City field now posts and still accept a
+		 * saved «Пушкино» written before. A record that names no locality names no City.
+		 *
+		 * @since 2.0.26
+		 *
+		 * @param string $city Free City text.
+		 *
+		 * @return bool
+		 */
+		public function names_locality( string $city ): bool {
+			foreach ( [ $this->nested_settlement(), $this->settlement() ] as $component ) {
+				if ( null === $component || '' === trim( $component['name'] ) ) {
+					continue;
+				}
+
+				if ( self::normalize_city_name( $component['name'], $component['type'] ) === self::normalize_city_name( $city, $component['type'] ) ) {
+					return true;
+				}
+			}
+
+			return false;
 		}
 
 		/**

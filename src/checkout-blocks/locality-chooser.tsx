@@ -25,11 +25,13 @@ import type { KeyboardEvent } from 'react';
 import { resetSharedChainSync, sharedChainSync } from './chain-sync';
 import type { ChainSync } from './chain-sync';
 import { publishSettlementScope } from './address-scope';
+import { allowedPlaces, listedPlaceValue, namesListedPlace, placesMatching, singlePlace } from './city-mode';
 import { hasLocalityMoved, isSelectionStale, judgeSavedRecord, shouldClearAddress } from './invalidation';
 import { recordCity, recordCityComponent, resolveNativeAddress } from './mapping';
 import type { CountryStates } from './mapping';
 import { forgetSelection, selectRecord, suggest, SuggestUnavailableError } from './rest';
-import type { LocationConfig, Selection, Suggestion, WcAddress } from './types';
+import { SinglePlace } from './single-place';
+import type { AllowedPlace, LocationConfig, Selection, Suggestion, WcAddress } from './types';
 import {
 	cartNeedsShipping,
 	gateCheckout,
@@ -104,6 +106,7 @@ export function initialSelection(
 		states: context.states ?? readCountryStates( address.country ),
 		regionFieldRemoved: config.regionFieldRemoved === true,
 		authoritative: context.authoritative ?? true,
+		cityValue: listedPlaceValue( config, record ),
 	} );
 
 	return {
@@ -134,8 +137,23 @@ export function LocalityChooser( props: LocalityChooserProps ): JSX.Element | nu
 	// core renders shipping fields, the shipping chooser is the safe fallback. If core says billing-only
 	// without matching server publication, there is no server-backed billing chooser to mount.
 	const active = needsShipping && ( billingOnly ? props.config.billingOnly === true && coreBillingOnly : ! coreBillingOnly );
+	const country: string = useSelect(
+		( registrySelect ) => readDeliveryAddress( billingOnly, registrySelect ).country.toUpperCase(),
+		[ billingOnly ]
+	);
 
-	return active ? <ActiveLocalityChooser { ...props } /> : null;
+	if ( ! active ) {
+		return null;
+	}
+
+	// City mode with ONE listed place: nothing to choose, so the place is written, not asked for.
+	const only = isCountrySupported( props.config, country ) ? singlePlace( props.config, country ) : null;
+
+	return only ? (
+		<SinglePlace config={ props.config } place={ only } billingOnly={ billingOnly } />
+	) : (
+		<ActiveLocalityChooser { ...props } />
+	);
 }
 
 function ActiveLocalityChooser( {
@@ -151,6 +169,8 @@ function ActiveLocalityChooser( {
 	);
 	const country = address.country.toUpperCase();
 	const supported = isCountrySupported( config, country );
+	// City mode: the listed places of this country — the settlement is a closed choice.
+	const places: AllowedPlace[] | null = allowedPlaces( config, country );
 
 	const inputId = useId();
 	const listId = `${ inputId }-list`;
@@ -263,6 +283,7 @@ function ActiveLocalityChooser( {
 			states: readCountryStates( current.country ),
 			regionFieldRemoved: config.regionFieldRemoved === true,
 			authoritative: isDeliveryAddressAuthoritative( billingOnly ),
+			cityValue: listedPlaceValue( config, record ),
 		} );
 
 		if ( verdict.status === 'claimed' ) {
@@ -286,11 +307,41 @@ function ActiveLocalityChooser( {
 		forget();
 	}, [ selection, address, commit, forget ] );
 
+	// City mode: a saved city the merchant did not list is dropped once, when the address first
+	// loads — with the street and postcode prefilled from it (spec §4.4). Later edits are the shopper's.
+	const rejectedChecked = useRef( false );
+
+	useEffect( () => {
+		if ( ! places || ! authoritative || rejectedChecked.current ) {
+			return;
+		}
+
+		rejectedChecked.current = true;
+
+		if ( address.city.trim() === '' || namesListedPlace( places, address.city ) ) {
+			return;
+		}
+
+		writeDeliveryLocality( '', config.regionFieldRemoved === true ? null : '', billingOnly, true );
+	}, [ places, authoritative, address.city, config.regionFieldRemoved, billingOnly ] );
+
 	// Debounced, sequence-guarded search.
 	useEffect( () => {
 		abort.current?.abort();
 
 		const term = query.trim();
+
+		// City mode: the closed list is filtered locally — nothing is asked of `/suggest`.
+		if ( supported && places ) {
+			const found = placesMatching( places, term );
+
+			setSuggestions( found );
+			setActive( found.length > 0 ? 0 : -1 );
+			setSearching( false );
+			setMessage( term !== '' && found.length === 0 ? i18n.noResults ?? '' : '' );
+
+			return undefined;
+		}
 
 		if ( ! supported || term.length < MIN_QUERY_LENGTH ) {
 			setSuggestions( [] );
@@ -337,7 +388,7 @@ function ActiveLocalityChooser( {
 			window.clearTimeout( timer );
 			controller.abort();
 		};
-	}, [ query, supported, country, config, i18n ] );
+	}, [ query, supported, places, country, config, i18n ] );
 
 	const choose = useCallback(
 		( suggestion: Suggestion ) => {
@@ -354,8 +405,14 @@ function ActiveLocalityChooser( {
 			setMessage( '' );
 			setSyncFailed( false );
 
+			// City mode: a listed place posts its own name, not its record's parent settlement.
+			const cityValue = places ? ( suggestion as AllowedPlace ).value : undefined;
+
 			// A record of another country, or one that names no city, has nothing to write.
-			if ( recordCity( record ) === '' || origin.country.toUpperCase() !== record.country.toUpperCase() ) {
+			if (
+				( recordCity( record ) === '' && ! cityValue ) ||
+				origin.country.toUpperCase() !== record.country.toUpperCase()
+			) {
 				return;
 			}
 
@@ -401,6 +458,7 @@ function ActiveLocalityChooser( {
 					const patch = resolveNativeAddress( record, {
 						states: readCountryStates( current.country ),
 						regionFieldRemoved: config.regionFieldRemoved,
+						cityValue,
 					} );
 
 					const cityType = recordCityComponent( record ).type;
@@ -436,7 +494,7 @@ function ActiveLocalityChooser( {
 
 			setApplying( ticket );
 		},
-		[ config, i18n, commit, forget ]
+		[ config, i18n, commit, forget, places ]
 	);
 
 	const clear = useCallback( () => {
@@ -499,6 +557,14 @@ function ActiveLocalityChooser( {
 						setOpen( true );
 					} }
 					onKeyDown={ onKeyDown }
+					onFocus={ () => {
+						// City mode: the closed list is offered on focus, before anything is typed.
+						if ( places ) {
+							setSuggestions( placesMatching( places, query.trim() ) );
+							setActive( 0 );
+							setOpen( true );
+						}
+					} }
 					onBlur={ () => window.setTimeout( () => setOpen( false ), 120 ) }
 				/>
 				{ selection && (

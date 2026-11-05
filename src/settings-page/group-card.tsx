@@ -17,6 +17,7 @@ import { __ } from '@wordpress/i18n';
 import { Button } from '@wordpress/components';
 import { runTool } from './rest';
 import { ToolSelector, selectorDefault, toolArgs } from './tools-block';
+import type { TableSchema } from './fields-table';
 
 /** A group as the registry serialises it (`Settings_Page_Registry::build_groups()`). */
 export interface GroupSchema {
@@ -26,6 +27,8 @@ export interface GroupSchema {
 	notice: string;
 	fields: string[];
 	actions: string[];
+	/** A fixed-rows table drawn in place of the member fields' own rows (`Settings_Group::with_table()`). */
+	table?: TableSchema;
 }
 
 /** `Shipping_Tool::to_array()['selector']` — the input a selector-backed action runs with. */
@@ -159,8 +162,8 @@ export default function GroupCard( { providerId, group, actions, children, onRun
 	};
 
 	return (
-		<div className="woodev-group">
-			<h3 className="woodev-group__title">{ group.title }</h3>
+		<div className={ `woodev-group${ group.table && ! group.title && ! group.description ? ' woodev-group--flush' : '' }` }>
+			{ group.title && <h3 className="woodev-group__title">{ group.title }</h3> }
 			{ group.description && (
 				<div className="woodev-group__desc"><RawHTML>{ group.description }</RawHTML></div>
 			) }

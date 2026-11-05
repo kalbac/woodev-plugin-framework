@@ -269,8 +269,14 @@ class Fake_Country_Scoped_Location_Provider extends Abstract_Location_Provider {
  */
 final class LocationProviderRegistryTest extends TestCase {
 
+	private array $original_get;
+
+	private array $original_request;
+
 	protected function setUp(): void {
 		parent::setUp();
+		$this->original_get     = $_GET;
+		$this->original_request = $_REQUEST;
 
 		// the default-dimensions handler converts its built-in defaults (#955): units are not under test here
 		Functions\when( 'wc_get_weight' )->returnArg( 1 );
@@ -280,6 +286,9 @@ final class LocationProviderRegistryTest extends TestCase {
 		// touches; individual tests re-stub add_action/apply_filters/get_option
 		// with assertions of their own where the test is actually ABOUT them.
 		Functions\when( 'remove_action' )->justReturn( true );
+		Functions\when( 'is_admin' )->justReturn( false );
+		Functions\when( 'wp_doing_ajax' )->justReturn( false );
+		Functions\when( 'wp_unslash' )->returnArg();
 		Functions\when( '__' )->returnArg( 1 );
 		Functions\when( 'get_option' )->justReturn( null );
 		Functions\when( 'wp_parse_args' )->alias(
@@ -300,10 +309,17 @@ final class LocationProviderRegistryTest extends TestCase {
 	}
 
 	protected function tearDown(): void {
+		$_GET     = $this->original_get;
+		$_REQUEST = $this->original_request;
 		Location_Provider_Registry::instance()->reset_for_tests();
 		Settings_Page_Registry::instance()->reset_for_tests();
 		Shipping_Settings_Tab::reset_for_tests();
 		parent::tearDown();
+	}
+
+	private function set_shipping_zone_screen(): void {
+		$_GET['page'] = 'wc-settings';
+		$_GET['tab']  = 'shipping';
 	}
 
 	/**
@@ -2934,6 +2950,142 @@ final class LocationProviderRegistryTest extends TestCase {
 		$states = $registry->inject_related_list_states( [] );
 
 		$this->assertSame( [], $states );
+	}
+
+	public function test_zone_admin_uses_the_active_provider_regions_before_the_static_fallback(): void {
+		$provider = new Fake_List_Location_Provider(
+			'list-fixture',
+			'List Fixture',
+			[ 'RU' ],
+			[
+				'RU' => [
+					$this->region_record( 'list-fixture', 'region-1', 'RU', 'Альфа область' ),
+					$this->region_record( 'list-fixture', 'region-2', 'RU', 'Бета край' ),
+				],
+			]
+		);
+		$registry = $this->activate_related_list_mode( $provider );
+		Functions\when( 'is_admin' )->justReturn( true );
+		$this->set_shipping_zone_screen();
+
+		$states = $registry->inject_related_list_states( [] );
+
+		$this->assertSame( [ 'АЛЬФА ОБЛАСТЬ' => 'Альфа область', 'БЕТА КРАЙ' => 'Бета край' ], $states['RU'] );
+		$this->assertSame( 1, $provider->list_localities_calls, 'the provider list must be read before the fallback is considered' );
+		$this->assertTrue( $registry->owns_region_states( 'RU', $states['RU'] ), 'only the live list is recorded as location-owned' );
+	}
+
+	public function test_zone_admin_does_not_merge_the_fallback_into_preexisting_ru_states(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		Functions\when( 'is_admin' )->justReturn( true );
+		$this->set_shipping_zone_screen();
+		$this->stub_providers_filter( [] );
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = null ) {
+				return 'woodev_location_field_mode_region' === $name ? Location_Provider_Registry::MODE_RELATED_LIST : $default;
+			}
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+		$existing_states = [ 'RU' => [ '77' => 'Existing Russian state list' ] ];
+
+		$this->assertSame( $existing_states, $registry->inject_related_list_states( $existing_states ) );
+		$this->assertFalse( $registry->owns_region_states( 'RU', $existing_states['RU'] ), 'a pre-existing list is not attributed to the fallback' );
+	}
+
+	public function test_static_ru_fallback_is_absent_outside_the_shipping_zone_admin_screen(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [] );
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = null ) {
+				return 'woodev_location_field_mode_region' === $name ? Location_Provider_Registry::MODE_RELATED_LIST : $default;
+			}
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$this->set_shipping_zone_screen();
+		Functions\when( 'is_admin' )->justReturn( false );
+		$this->assertSame( [], $registry->inject_related_list_states( [] ), 'non-admin callers never receive zone-only labels' );
+
+		Functions\when( 'is_admin' )->justReturn( true );
+		$_GET['tab'] = 'general';
+		$this->assertSame( [], $registry->inject_related_list_states( [] ), 'other WooCommerce settings tabs never receive zone-only labels' );
+	}
+
+	public function test_zone_save_ajax_actions_get_the_fallback_when_they_format_locations(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		Functions\when( 'is_admin' )->justReturn( true );
+		Functions\when( 'wp_doing_ajax' )->justReturn( true );
+		Functions\when( 'wc_strtoupper' )->alias(
+			static function ( $string ) {
+				return mb_strtoupper( (string) $string );
+			}
+		);
+		$this->stub_providers_filter( [] );
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = null ) {
+				return 'woodev_location_field_mode_region' === $name ? Location_Provider_Registry::MODE_RELATED_LIST : $default;
+			}
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+		$_GET = [];
+
+		foreach (
+			[
+				'woocommerce_shipping_zones_save_changes',
+				'woocommerce_shipping_zone_methods_save_changes',
+			] as $action
+		) {
+			$_REQUEST['action'] = $action;
+			$states             = $registry->inject_related_list_states( [] );
+
+			$this->assertSame( 'Московская область', $states['RU']['МОСКОВСКАЯ ОБЛАСТЬ'], $action . ' must resolve existing CDEK region keys' );
+		}
+	}
+
+	/**
+	 * The shipping-zone editor still resolves existing CDEK state keys after
+	 * switching to DaData, whose provider cannot enumerate the region list.
+	 */
+	public function test_admin_states_keep_cdek_regions_available_without_a_list_provider(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		Functions\when( 'is_admin' )->justReturn( true );
+		$this->set_shipping_zone_screen();
+		Functions\when( 'wc_strtoupper' )->alias(
+			static function ( $string ) {
+				return mb_strtoupper( (string) $string );
+			}
+		);
+		$this->stub_providers_filter( [] );
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = null ) {
+				return 'woodev_location_field_mode_region' === $name ? Location_Provider_Registry::MODE_RELATED_LIST : $default;
+			}
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+		$states = $registry->inject_related_list_states( [] );
+
+		$zone_location = 'RU:МОСКОВСКАЯ ОБЛАСТЬ';
+		[ $country, $state ] = explode( ':', $zone_location, 2 );
+
+		$this->assertCount( 86, $states['RU'], 'the committed fallback matches production CDEK after excluding its test-only dummy region' );
+		$this->assertSame( 'Московская область', $states[ $country ][ $state ], 'the state portion of an existing zone location resolves without an undefined-key notice' );
+		$this->assertArrayHasKey( 'БАЙКОНУР', $states['RU'], 'production CDEK currently returns Байконур' );
+		$this->assertArrayHasKey( 'КЕМЕРОВСКАЯ ОБЛАСТЬ - КУЗБАСС', $states['RU'], 'production spelling is retained for matching saved zone keys' );
+		$this->assertArrayHasKey( 'МОСКВА', $states['RU'] );
+		$this->assertArrayNotHasKey( 'ФИКТИВНЫЙ', $states['RU'] );
+		$this->assertArrayNotHasKey( 'ДОНЕЦКАЯ НАРОДНАЯ РЕСПУБЛИКА', $states['RU'] );
 	}
 
 	public function test_inject_is_a_no_op_when_the_active_provider_is_not_configured(): void {

@@ -263,7 +263,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		 * @param string|null          $pickup_point_meta_key      pickup-point order-meta key.
 		 * @param string|null          $carrier_order_id_meta_key  carrier-order-id order-meta key.
 		 * @param string|null          $legacy_page_slug           legacy v1 orders-page slug.
-		 * @param string|null          $cron_hook                  carrier cron hook that refreshes delivery statuses.
+		 * @param string|null          $cron_hook                  carrier status-poll hook; callbacks accept `( int $offset = 0, bool $manual = false )`.
 		 * @param callable|null        $marker_writer              carrier marker writer (#967).
 		 * @param callable|null        $order_fields               carrier order-fields declaration (#973).
 		 * @param bool                 $supports_label_printing    whether carrier documents are available.
@@ -337,7 +337,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		 *     @type string               $pickup_point_meta_key     pickup-point order-meta key.
 		 *     @type string               $carrier_order_id_meta_key carrier-order-id order-meta key (SP-10 #841).
 		 *     @type string               $legacy_page_slug          legacy v1 orders-page slug.
-		 *     @type string               $cron_hook                 carrier cron hook that refreshes delivery statuses.
+		 *     @type string               $cron_hook                 carrier status-poll hook; callbacks accept `( int $offset = 0, bool $manual = false )`.
 		 *     @type callable             $marker_writer             `fn( \WC_Order $order, array $context ): void` — writes THIS
 		 *                                                           carrier's marker onto an order it owns (#967). Optional: a carrier
 		 *                                                           without one still gets its orders LISTED, but the framework will

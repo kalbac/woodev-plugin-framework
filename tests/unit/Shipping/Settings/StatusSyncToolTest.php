@@ -56,7 +56,12 @@ final class StatusSyncToolTest extends TestCase {
 
 	public function test_pressing_it_fires_the_carriers_cron_hook(): void {
 		Functions\when( 'has_action' )->justReturn( 10 );
-		Actions\expectDone( 'cdek_update' )->once();
+		$received = [];
+		Actions\expectDone( 'cdek_update' )->once()->with( 0, true )->whenHappen(
+			static function ( int $offset, bool $manual ) use ( &$received ): void {
+				$received = [ $offset, $manual ];
+			}
+		);
 
 		$tool   = Status_Sync_Tool::create( [ $this->provider( 'cdek', 'cdek_update' ) ] );
 		$result = call_user_func( $tool->get_callback(), [] );
@@ -64,6 +69,7 @@ final class StatusSyncToolTest extends TestCase {
 		$this->assertFalse( $tool->is_disabled() );
 		$this->assertTrue( $result->is_success() );
 		$this->assertSame( 'Статусы обновлены.', $result->get_message() );
+		$this->assertSame( [ 0, true ], $received );
 	}
 
 	public function test_it_quotes_the_refresh_time_only_when_the_run_moved_it(): void {

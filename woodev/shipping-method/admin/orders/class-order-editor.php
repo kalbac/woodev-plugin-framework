@@ -1403,33 +1403,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 				|| $record->country() !== strtoupper( $country )
 				|| null === $active
 				|| $active->get_id() !== $record->provider_id()
-				|| ! self::location_record_names_city( $record, $city )
+				// A nested record («рп Черкизово») names both its own locality and its parent.
+				|| ! $record->names_locality( $city )
 			) {
 				return null;
 			}
 
 			return $record;
-		}
-
-		/**
-		 * Whether a record's settlement component names an address city.
-		 *
-		 * @since 2.0.2
-		 * @param Location_Record $record The record.
-		 * @param string          $city The address city.
-		 * @return bool
-		 */
-		private static function location_record_names_city( Location_Record $record, string $city ): bool {
-			$settlement = $record->settlement();
-			$name       = null !== $settlement ? trim( (string) $settlement['name'] ) : '';
-
-			if ( '' === $name ) {
-				return false;
-			}
-
-			$type = (string) ( $settlement['type'] ?? '' );
-
-			return Location_Record::normalize_city_name( $name, $type ) === Location_Record::normalize_city_name( $city, $type );
 		}
 
 		/**

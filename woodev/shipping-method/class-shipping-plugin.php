@@ -1629,6 +1629,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 					if ( $section->is_connection() ) {
 						$connections[ $section->get_id() ] = $contribution->get_handler();
 					}
+
+					// a check cell of a group table is tested by the same handler (Settings_Table::check())
+					foreach ( $section->get_table_check_ids() as $check_id ) {
+						$connections[ $check_id ] = $contribution->get_handler();
+					}
 				}
 
 				// the tab-level attributes: the first contribution that declares one supplies it

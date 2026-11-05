@@ -1464,20 +1464,246 @@ final class DadataProviderTest extends TestCase {
 			]
 		);
 
-		$this->stub_http_response( 200, '{"suggestions":[]}' );
+		$sent  = $this->stub_http_sequence( [ '{"suggestions":[]}', '{"suggestions":[]}' ] );
 		$scope = Location_Scope::within( $tashkent, Location_Record::LEVEL_ADDRESS )->for_provider( Dadata_Provider::PROVIDER_ID );
 		( self::provider() )->suggest( 'Юнус', $scope );
 
-		// #358: still OWN-provider native ids (just OSM-derived, not FIAS) — exact.
+		// City mode spec §4.3, K14 (2.0.26): the OSM-derived ids are not FIAS, so a foreign
+		// DaData record is searched by country + its own locality NAME — degraded, like CDEK's.
+		$this->assertSame( Location_Provider::NARROWING_DEGRADED, $scope->narrowing() );
+
+		// Without the country the scoped search returns ZERO suggestions from the live API while
+		// the same query unscoped returns street after street — the defect the operator hit on
+		// the rig (s70): pick Tashkent, and the address field goes dead.
+		$this->assertSame(
+			[
+				[
+					'country_iso_code' => 'UZ',
+					'city'             => 'Ташкент',
+				],
+			],
+			$sent[0]['locations'],
+			'no *_fias_id key for a non-Russian record'
+		);
+		$this->assertSame( 20, $sent[0]['count'], 'the homonym post-filter is on, so twenty are asked for' );
+	}
+
+	/**
+	 * City mode spec §4.3, K14: the homonym post-filter now guards a foreign DaData parent too —
+	 * a house of another Ташкент-named locality never reaches the buyer.
+	 */
+	public function test_a_foreign_dadata_parent_post_filters_by_its_locality(): void {
+		$this->set_token( 'tok' );
+
+		$tashkent = Location_Record::from_array(
+			[
+				'key'         => 'dadata:relation:2216724',
+				'provider_id' => 'dadata',
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'country'     => 'UZ',
+				'settlement'  => [ 'name' => 'Ташкент', 'type' => 'г' ],
+				'raw'         => [ 'city_fias_id' => 'relation:2216724' ],
+			]
+		);
+
+		$row = static function ( string $city, string $postcode ): array {
+			return [
+				'value' => 'ул Юнусабад, д 19',
+				'data'  => [
+					'country'          => 'Узбекистан',
+					'country_iso_code' => 'UZ',
+					'fias_id'          => 'house-' . $postcode,
+					'postal_code'      => $postcode,
+					'city'             => $city,
+					'city_type'        => 'г',
+					'street'           => 'Юнусабад',
+					'street_type'      => 'ул',
+					'house'            => '19',
+				],
+			];
+		};
+
+		$this->stub_http_sequence( [ (string) json_encode( [ 'suggestions' => [ $row( 'Самарканд', '140100' ), $row( 'Ташкент', '100084' ) ] ] ) ] );
+
+		$scope   = Location_Scope::within( $tashkent, Location_Record::LEVEL_ADDRESS )->for_provider( Dadata_Provider::PROVIDER_ID );
+		$records = ( self::provider() )->suggest( 'Юнусабад 19', $scope );
+
+		$this->assertCount( 1, $records );
+		$this->assertSame( '100084', $records[0]->postcode() );
+	}
+
+	/**
+	 * City mode spec §4.3 branch 1: a RUSSIAN DaData parent still sends exactly its native ids —
+	 * the request body is the one sent before 2.0.26.
+	 */
+	public function test_a_russian_dadata_parent_sends_its_native_ids_exactly_as_before(): void {
+		$this->set_token( 'tok' );
+
+		$moscow = Location_Record::from_array(
+			[
+				'key'         => 'dadata:0c5b2444-70a0-4932-980c-b4dc0d3f02b5',
+				'provider_id' => 'dadata',
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'country'     => 'RU',
+				'settlement'  => [ 'name' => 'Москва', 'type' => 'г' ],
+				'raw'         => [
+					'fias_id'        => '0c5b2444-70a0-4932-980c-b4dc0d3f02b5',
+					'region_fias_id' => '0c5b2444-70a0-4932-980c-b4dc0d3f02b5',
+					'city_fias_id'   => '0c5b2444-70a0-4932-980c-b4dc0d3f02b5',
+				],
+			]
+		);
+
+		$sent  = $this->stub_http_sequence( [ '{"suggestions":[]}', '{"suggestions":[]}' ] );
+		$scope = Location_Scope::within( $moscow, Location_Record::LEVEL_ADDRESS )->for_provider( Dadata_Provider::PROVIDER_ID );
+		( self::provider() )->suggest( 'Тверская 7', $scope );
+
 		$this->assertSame( Location_Provider::NARROWING_EXACT, $scope->narrowing() );
+		$this->assertCount( 1, $sent, 'an exact parent gets no retry' );
+		$this->assertSame(
+			[
+				'query'          => 'Тверская 7',
+				'count'          => 10,
+				'from_bound'     => [ 'value' => 'street' ],
+				'to_bound'       => [ 'value' => 'house' ],
+				'locations'      => [
+					[
+						'country_iso_code' => 'RU',
+						'region_fias_id'   => '0c5b2444-70a0-4932-980c-b4dc0d3f02b5',
+						'city_fias_id'     => '0c5b2444-70a0-4932-980c-b4dc0d3f02b5',
+					],
+				],
+				'restrict_value' => true,
+			],
+			$sent[0]
+		);
+	}
 
-		$locations = $this->last_request_body()['locations'];
+	/**
+	 * A CDEK record that kept its dictionary row's `fias_guid` (card E1).
+	 *
+	 * @param string $country ISO country.
+	 */
+	private static function cdek_place_with_fias_id( string $country = 'RU' ): Location_Record {
+		return Location_Record::from_array(
+			[
+				'key'         => 'cdek:44',
+				'provider_id' => 'cdek',
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'country'     => $country,
+				'region'      => [ 'name' => 'Москва' ],
+				'settlement'  => [ 'name' => 'Москва' ],
+				'fias_id'     => '0c5b2444-70a0-4932-980c-b4dc0d3f02b5',
+			]
+		);
+	}
 
-		// Without the country this exact constraint returns ZERO suggestions from the live
-		// API while the same query unscoped returns street after street — the defect the
-		// operator hit on the rig (s70): pick Tashkent, and the address field goes dead.
-		$this->assertSame( 'UZ', $locations[0]['country_iso_code'] );
-		$this->assertSame( 'relation:2216724', $locations[0]['city_fias_id'] );
+	/**
+	 * City mode spec §4.3 branch 2 (K13): a parent with a canonical FIAS id is scoped by it as
+	 * a city, exactly.
+	 */
+	public function test_a_cdek_parent_with_a_fias_id_is_scoped_by_city_fias_id(): void {
+		$this->set_token( 'tok' );
+
+		$sent  = $this->stub_http_sequence( [ (string) json_encode( [ 'suggestions' => [ self::amur_lenina_1() ] ] ) ] );
+		$scope = Location_Scope::within( self::cdek_place_with_fias_id(), Location_Record::LEVEL_ADDRESS )->for_provider( Dadata_Provider::PROVIDER_ID );
+
+		$records = ( self::provider() )->suggest( 'Тверская 7', $scope );
+
+		$this->assertSame( Location_Provider::NARROWING_EXACT, $scope->narrowing() );
+		$this->assertSame(
+			[
+				[
+					'country_iso_code' => 'RU',
+					'city_fias_id'     => '0c5b2444-70a0-4932-980c-b4dc0d3f02b5',
+				],
+			],
+			$sent[0]['locations']
+		);
+		$this->assertTrue( $sent[0]['restrict_value'] );
+		$this->assertSame( 10, $sent[0]['count'], 'no post-filter, so no oversized request' );
+		// The id pins the place: a row whose city is not «Москва» by name is still DaData's answer.
+		$this->assertCount( 1, $records, 'no name post-filter drops a FIAS-pinned row' );
+	}
+
+	/**
+	 * City mode spec §4.3 branch 2: one GUID is either a FIAS city or a settlement, so an empty
+	 * city answer is asked exactly once more by `settlement_fias_id` — never by a region-only id.
+	 */
+	public function test_a_fias_pinned_parent_is_asked_once_more_by_settlement_fias_id(): void {
+		$this->set_token( 'tok' );
+
+		$sent  = $this->stub_http_sequence( [ '{"suggestions":[]}', '{"suggestions":[]}', '{"suggestions":[]}' ] );
+		$scope = Location_Scope::within( self::cdek_place_with_fias_id(), Location_Record::LEVEL_ADDRESS )->for_provider( Dadata_Provider::PROVIDER_ID );
+
+		( self::provider() )->suggest( 'Главная 1', $scope );
+
+		$this->assertCount( 2, $sent, 'exactly one more request' );
+		$this->assertSame(
+			[
+				[
+					'country_iso_code' => 'RU',
+					'settlement_fias_id' => '0c5b2444-70a0-4932-980c-b4dc0d3f02b5',
+				],
+			],
+			$sent[1]['locations']
+		);
+
+		foreach ( $sent as $body ) {
+			$this->assertArrayNotHasKey( 'region_fias_id', $body['locations'][0], 'never a region-only body' );
+		}
+	}
+
+	/**
+	 * City mode spec §4.3 branch 3: a nested parent («рп Черкизово» inside «г Пушкино») is
+	 * searched by its OWN name, not its parent's.
+	 */
+	public function test_a_nested_parent_is_searched_by_its_own_locality_name(): void {
+		$this->set_token( 'tok' );
+
+		$cherkizovo = Location_Record::from_array(
+			[
+				'key'               => 'cdek:2786',
+				'provider_id'       => 'cdek',
+				'level'             => Location_Record::LEVEL_SETTLEMENT,
+				'country'           => 'RU',
+				'settlement'        => [ 'name' => 'Пушкино', 'type' => 'г' ],
+				'nested_settlement' => [ 'name' => 'Черкизово', 'type' => 'рп' ],
+			]
+		);
+
+		$sent  = $this->stub_http_sequence( [ '{"suggestions":[]}', '{"suggestions":[]}' ] );
+		$scope = Location_Scope::within( $cherkizovo, Location_Record::LEVEL_ADDRESS )->for_provider( Dadata_Provider::PROVIDER_ID );
+
+		( self::provider() )->suggest( 'Главная 1', $scope );
+
+		$this->assertSame( Location_Provider::NARROWING_DEGRADED, $scope->narrowing() );
+		$this->assertSame( 'Черкизово', $sent[0]['locations'][0]['city'] );
+		$this->assertSame( 'Черкизово', $sent[1]['locations'][0]['settlement'] );
+	}
+
+	/**
+	 * City mode spec §4.3 branch 3 (K14): a non-Russian record never carries a canonical FIAS id,
+	 * so a KZ CDEK row is searched by country + name even when its payload names a UUID.
+	 */
+	public function test_a_cdek_kz_parent_is_scoped_by_country_and_name(): void {
+		$this->set_token( 'tok' );
+
+		$sent  = $this->stub_http_sequence( [ '{"suggestions":[]}', '{"suggestions":[]}' ] );
+		$scope = Location_Scope::within( self::cdek_place_with_fias_id( 'KZ' ), Location_Record::LEVEL_ADDRESS )->for_provider( Dadata_Provider::PROVIDER_ID );
+
+		( self::provider() )->suggest( 'Абая', $scope );
+
+		$this->assertSame( Location_Provider::NARROWING_DEGRADED, $scope->narrowing() );
+		$this->assertSame(
+			[
+				[
+					'country_iso_code' => 'KZ',
+					'city'             => 'Москва',
+				],
+			],
+			$sent[0]['locations']
+		);
 	}
 
 	public function test_a_components_only_parent_also_carries_its_country(): void {

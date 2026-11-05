@@ -87,10 +87,52 @@ $account = \Woodev\Framework\Settings\Settings_Group::create(
 | `with_fields( array $setting_ids )` | The fields in the card. |
 | `with_actions( array $action_ids )` | The section's buttons that sit in the card, in one row with one shared result line. |
 | `with_notice( string $notice )` | A plain-text line shown once under the card's buttons. |
+| `with_table( Settings_Table $table )` | Draws the card's fields as a table with one row per item instead of one labelled row each. See [Fields table](#fields-table). |
 
 A field or button belongs to **one** card. If two cards name it, the first card keeps it. An id the section does not declare is ignored, and a card left with nothing in it is not shown.
 
 Attach cards to a section with `with_groups()`. Like the card methods it returns a copy, and it only works on an ordinary section; on a connection or tools section it is ignored with a developer notice.
+
+### Fields table
+
+A card can draw its fields as a table with one row per thing and one column per property — for example one row per delivery service with its status, API key, daily limit and a «Проверить» button. The rows are fixed: the plugin declares them, the merchant never adds or removes one (for that, use a [records table](/settings/typed-settings/#records-table)). The table is only a layout. Its cells name the section's own fields, so values, validation, masked secrets and the single «Сохранить» stay with the section.
+
+`Settings_Table::create( $row_title, $columns )` takes the header of the first column (it holds each row's label) and the other columns as `id => header`; an empty header is a column with no title, for buttons. `with_row( $id, $label, $cells )` adds a row, with one cell per column id:
+
+| Cell | Shows |
+|---|---|
+| `Settings_Table::field( $setting_id, $prefix = '' )` | The field's own control, without its label. The optional prefix is a short text before it. A `tooltip` on the field's control shows as the standard «?» tip icon beside the input. |
+| `Settings_Table::text( $text, $tone = '' )` | A line of text; the tone `ok` makes it green. |
+| `Settings_Table::status()` | The state of the row's check: «Не подключён» until every field the check reads is filled, «Ошибка» when the last check failed, «Подключён» otherwise. |
+| `Settings_Table::check( $connection_id, $setting_ids, $label )` | A button that runs the handler's connection test and shows the answer under the row until the page is reloaded or a field the check reads is edited. |
+| `$table->with_row_link( $row_id, $url, $label )` | Call it after `with_row()`: a small «opens in a new tab» icon beside the row label that links to the page where the merchant gets what the row needs (an API key). `$label` is the icon's accessible name and should say it opens in a new tab. A non-http(s) or empty URL and an unknown row id are ignored. |
+
+```php
+<?php
+$table = Settings_Table::create( 'Сервис', [ 'status' => 'Статус', 'key' => 'Ключ API', 'limit' => 'Лимит в сутки', 'check' => '' ] )
+	->with_row(
+		'mapbox',
+		'Mapbox',
+		[
+			'status' => Settings_Table::status(),
+			'key'    => Settings_Table::field( 'mapbox_key' ),
+			'limit'  => Settings_Table::field( 'mapbox_limit' ),
+			'check'  => Settings_Table::check( 'mapbox', [ 'mapbox_key' ], 'Проверить' ),
+		]
+	);
+
+$section = Settings_Section::create( 'services', 'Сервисы', [ 'mapbox_key', 'mapbox_limit' ] )
+	->with_groups( [ Settings_Group::create( 'services', 'Сервисы' )->with_table( $table ) ] );
+```
+
+### Help tips in a table
+
+A cell holds the control alone, so help goes in tips, which are the same «?» icon the other settings use and show on hover and on keyboard focus:
+
+- **A column tip** explains what applies to the whole column. `$table->with_column_tip( 'limit', 'How many requests a day …' )` puts the icon beside that column's header. An unknown column id is ignored and an empty text removes the tip.
+- **A cell tip** explains one field, such as the road coefficient. Give the field's control a `tooltip` (`register_control( $id, $type, [ 'tooltip' => '…' ] )`) and the icon appears beside its input without changing the input's width or left edge. The field's `description` is not shown in a table cell; a tip is plain text, one or two short sentences.
+
+The check works like a connection section's button: the settings handler implements `Woodev_Settings_Connection_Test` and receives `$connection_id` with the typed-but-unsaved values of the fields listed in `check()`; a handler that also implements `Woodev_Settings_Connection_Status` supplies the answer the row's status cell follows on load (a remembered failure keeps the status «Ошибка»). The message line under the row is drawn only for a check the merchant ran in the current page view; a reload shows the status alone. A field cell that names a field the section does not declare is left empty.
 
 ### Buttons under the fields
 

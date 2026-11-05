@@ -43,6 +43,7 @@ return [
 	'Woodev\\Framework\\Settings\\Settings_Page_Registry' => 'woodev/settings-page/class-settings-page-registry.php',
 	'Woodev\\Framework\\Settings\\Settings_Provider' => 'woodev/settings-page/class-settings-provider.php',
 	'Woodev\\Framework\\Settings\\Settings_Section' => 'woodev/settings-page/class-settings-section.php',
+	'Woodev\\Framework\\Settings\\Settings_Table' => 'woodev/settings-page/class-settings-table.php',
 	'Woodev\\Framework\\Setup\\Action_Outcome' => 'woodev/setup/class-action-outcome.php',
 	'Woodev\\Framework\\Setup\\Callback_Failure' => 'woodev/setup/class-callback-failure.php',
 	'Woodev\\Framework\\Setup\\Setup_Wizard' => 'woodev/setup/class-setup-wizard.php',

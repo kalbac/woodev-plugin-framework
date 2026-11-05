@@ -1,0 +1,204 @@
+/**
+ * Fields table (Settings_Table) — a fixed list of rows whose cells are a section's own fields, a line of text,
+ * a status or a button. Shared by the settings page and the UI-kit gallery.
+ *
+ * The table takes the full width of the card it sits in. A field's own row is a two-column grid on the settings
+ * page (label | control); inside a cell there is no label, so that grid is switched off here.
+ *
+ * @package woodev-plugin-framework
+ */
+
+@use './tokens' as wd;
+
+.woodev-fields-table {
+	width: 100%;
+	overflow-x: auto;
+
+	// `.widefat` styles `tbody th` with its own vertical-align and padding; the doubled class outranks it so a row
+	// label sits on the same line as its controls.
+	&__table.widefat {
+		width: 100%;
+
+		th,
+		td {
+			padding: wd.$gap-sm wd.$gap;
+			vertical-align: middle;
+			text-align: left;
+		}
+
+		thead th {
+			font-size: 12px;
+			font-weight: 600;
+			color: wd.$muted;
+			white-space: nowrap;
+		}
+	}
+
+	// A header with a tip icon: the label and the icon stay on one line.
+	&__head {
+		display: inline-flex;
+		align-items: center;
+		gap: wd.$gap-xs;
+	}
+
+	&__row-label {
+		font-weight: 600;
+		white-space: nowrap;
+	}
+
+	// The «opens in a new tab» icon beside a row label: small and muted, so the name stays the visual weight.
+	&__row-link {
+		display: inline-flex;
+		align-items: center;
+		margin-left: wd.$gap-xs;
+		vertical-align: middle;
+		color: wd.$muted;
+		text-decoration: none;
+
+		.dashicons {
+			width: 16px;
+			height: 16px;
+			font-size: 16px;
+		}
+
+		&:hover,
+		&:focus {
+			color: inherit;
+		}
+	}
+
+	// One logical row stays one visual row. `.woodev-settings .woodev-field` (label | control grid, 12px padding) would
+	// make every cell tall, so the cell's field is flattened here with a selector that outranks it.
+	&__field {
+		display: flex;
+		align-items: center;
+		gap: wd.$gap-sm;
+
+		// The control, and for a stored secret its «Очистить» link at the input's right edge: the link overlays the
+		// (empty) input instead of sitting beside it, so every key input has the same width and left edge.
+		.woodev-field__control {
+			position: relative;
+			display: flex;
+			flex: 1 1 auto;
+			align-items: center;
+			min-width: 0;
+		}
+
+		.woodev-field__secret-clear-link {
+			position: absolute;
+			top: 50%;
+			right: wd.$gap;
+			margin-top: 0;
+			transform: translateY( -50% );
+			white-space: nowrap;
+		}
+
+		// The key fills its column.
+		.woodev-field__password {
+			flex: 1 1 auto;
+			min-width: 0;
+		}
+
+		.components-base-control {
+			margin: 0;
+		}
+
+		// A number is short: keep the control the width of its digits.
+		.woodev-field:has( input[type="number"] ) {
+			flex: 0 0 168px;
+			min-width: 168px;
+		}
+	}
+
+	// Outranks `.woodev-settings .woodev-field`.
+	.woodev-fields-table__field .woodev-field {
+		display: block;
+		flex: 1 1 auto;
+		margin: 0;
+		padding: 0;
+		min-width: 0;
+	}
+
+	// The key column takes what the other columns leave.
+	&__cell:has( .woodev-field__password ) {
+		width: 100%;
+	}
+
+	// A number cell is exactly as wide as its input, so every limit and the coefficient share one width and left edge;
+	// the short prefix («коэф.») hangs outside the cell's field, to its left.
+	&__field:has( input[type="number"] ) {
+		position: relative;
+		width: 168px;
+	}
+
+	// A number's tip hangs outside the 168px cell field, to the right, so the input keeps its width and left edge
+	// whether or not the row has a tip. Other fields (a key) share the line with it.
+	&__field.has-tip:has( input[type="number"] ) > .woodev-field__tip {
+		position: absolute;
+		top: 50%;
+		left: 100%;
+		margin-left: wd.$gap-sm;
+		transform: translateY( -50% );
+	}
+
+	&__prefix {
+		position: absolute;
+		top: 50%;
+		right: 100%;
+		margin-right: wd.$gap-sm;
+		transform: translateY( -50% );
+		color: wd.$muted;
+		font-size: 13px;
+		white-space: nowrap;
+	}
+
+	&__text {
+		color: wd.$muted;
+
+		&.is-ok {
+			color: wd.$ok-text;
+		}
+	}
+
+	&__status {
+		white-space: nowrap;
+		color: wd.$muted;
+
+		&.is-ok {
+			color: wd.$ok-text;
+		}
+
+		&.is-error {
+			color: wd.$error-text;
+		}
+	}
+
+	// The answer to a check sits under its row, across the whole table.
+	&__result-row td {
+		padding-top: 0;
+		padding-bottom: wd.$gap-sm;
+	}
+
+	&__result {
+		display: block;
+		padding: wd.$gap-xs wd.$gap;
+		border-radius: wd.$radius-sm;
+		font-size: 13px;
+		line-height: 1.5;
+
+		&.is-ok {
+			color: wd.$ok-text;
+			background: rgba( 0, 163, 42, 0.12 );
+		}
+
+		&.is-error {
+			color: wd.$error-text;
+			background: rgba( 214, 54, 56, 0.12 );
+		}
+	}
+}
+
+// The group's notice sits under the table, not against its border.
+.woodev-fields-table + .woodev-group__notice {
+	margin-top: wd.$gap;
+}

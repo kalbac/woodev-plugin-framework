@@ -57,6 +57,33 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		public const FILTER_DEFAULT_COUNTRY = 'woodev_location_default_country';
 
 		/**
+		 * Filter tag: the store-wide closed settlement choice of city mode (range-shipping city mode
+		 * spec §2, §4.2). Receives and must return
+		 * `array{ records: Location_Record[], hide_field: bool }`; `records` empty means «off».
+		 *
+		 * A list of the places the checkout's settlement field offers — presentation granularity,
+		 * never a delivery boundary (K10). Read once per request ({@see self::get_settlement_choices()});
+		 * hook it no later than `init`. Its only source is the range plugin's «Доставка в городе».
+		 *
+		 * @since 2.0.26
+		 * @var string
+		 */
+		public const FILTER_SETTLEMENT_CHOICES = 'woodev_location_settlement_choices';
+
+		/**
+		 * Filter tag: a fixed default locality that overrides the store's own «Локация» policy for
+		 * this request, without writing it (city mode spec §2, §4.2). Receives `null` and returns a
+		 * {@see Location_Record} or `null`; a record makes the policy `fixed` with that record.
+		 *
+		 * City mode hooks it with its single listed place, so that place is prefilled exactly like
+		 * a merchant's fixed default.
+		 *
+		 * @since 2.0.26
+		 * @var string
+		 */
+		public const FILTER_DEFAULT_LOCALITY = 'woodev_location_default_locality';
+
+		/**
 		 * Filter tag: overrides {@see self::cached_region_lookup()}'s cache TTL
 		 * (issue #551) — see that method's own docblock for the full
 		 * reasoning and default.
@@ -153,6 +180,31 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * @var Location_Record|null
 		 */
 		private ?Location_Record $unpersisted_default = null;
+
+		/**
+		 * The request's answer of {@see self::FILTER_SETTLEMENT_CHOICES}, or `null` before the
+		 * first read. Static, not per instance: every plugin's facade must see the same list.
+		 *
+		 * @since 2.0.26
+		 * @var array{records: Location_Record[], hide_field: bool}|null
+		 */
+		private static ?array $settlement_choices = null;
+
+		/**
+		 * How many {@see self::without_settlement_choices()} calls are in progress.
+		 *
+		 * @since 2.0.26
+		 * @var int
+		 */
+		private static int $settlement_choices_suspended = 0;
+
+		/**
+		 * How many {@see self::in_checkout_view()} calls are in progress.
+		 *
+		 * @since 2.0.26
+		 * @var int
+		 */
+		private static int $checkout_view_depth = 0;
 
 		/**
 		 * Whether {@see self::resolve_default()} already ran in THIS request (#1025).
@@ -398,7 +450,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 			// for the customer (profile meta or the session's customer) — the saved text
 			// stays in the field. Checked BEFORE the memoized unpersisted default is
 			// served, and never memoized itself: the customer can gain a city later in the request.
-			$saved_city = $this->customer_saved_city();
+			$saved_city = $this->saved_city_for_checkout();
 
 			if ( '' !== $saved_city ) {
 				// #1075 round 2: the saved city is resolved into a record ONCE (logged-in
@@ -1123,6 +1175,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 					continue;
 				}
 
+				// City mode asks no region (spec §4.2), so a stored one is not part of the chain
+				// the checkout shows — skipped without breaking the levels below it.
+				if ( Location_Record::LEVEL_REGION === $level && $this->settlement_choices_narrow_this_read() ) {
+					continue;
+				}
+
 				if ( $broken || $this->is_customer_record_stale( $chain['records'][ $level ], $for_country ) ) {
 					// Once an ancestor is stale, every deeper level is stale
 					// too by construction — its ancestry is broken even if
@@ -1203,6 +1261,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * placed against — a locality the address form no longer shows. Like (a) and (b)
 		 * it only READS.
 		 *
+		 * (d) NOT LISTED (city mode spec §4.4, 2.0.26) — checkout VIEW reads only
+		 * ({@see self::in_checkout_view()}): while city mode lists places
+		 * ({@see self::get_settlement_choices()}), a settlement record that is none of them —
+		 * a returning customer's Тула — is read as absent, so the checkout shows the
+		 * placeholder, or the single place as the fixed default. Presentation, not validation:
+		 * rating, the My Account suggestion scope and order placement keep the record, the
+		 * stored blob is kept and nothing is refused at submit.
+		 *
 		 * `$for_country` (optional, #350/#352 follow-up — call-site-aware
 		 * country authority): when given, rule (b) compares against IT
 		 * instead of the ambient {@see self::customer_shipping_country()}.
@@ -1256,6 +1322,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 			$owner = $this->provider_for_level( $record->level(), $record->country() );
 
 			if ( null === $owner || $owner->get_id() !== $record->provider_id() ) {
+				return true;
+			}
+
+			if ( $this->is_outside_settlement_choices( $record ) ) {
 				return true;
 			}
 
@@ -1314,7 +1384,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * (`recordNamesCity()`) share — so «рп Мостовской» names a record of type «рп» exactly as
 		 * «г. Подольск» names one of type «г», and nothing the chooser keeps is dropped here.
 		 *
+		 * A nested record («рп Черкизово» inside «г Пушкино») names both its own locality and its
+		 * parent ({@see Location_Record::names_locality()}): city mode posts «Черкизово», and a
+		 * Store API request must not drop that record as stale (city mode spec §4.4).
+		 *
 		 * @since 2.0.2
+		 * @since 2.0.26 Accepts the nested settlement's own name.
 		 *
 		 * @param Location_Record $record Stored record.
 		 * @param string          $city   Native city text.
@@ -1326,20 +1401,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 				return true;
 			}
 
-			$component = $record->settlement();
-			$name      = null !== $component ? trim( (string) $component['name'] ) : '';
-
-			if ( '' === $name ) {
-				$component = $record->region();
-				$name      = null !== $component ? trim( (string) $component['name'] ) : '';
+			if ( '' !== $record->own_locality_name() ) {
+				return $record->names_locality( $city );
 			}
+
+			// A city of federal significance may be published as its own region, with no
+			// settlement component — the chooser then writes the region's name as the City.
+			$region = $record->region();
+			$name   = null !== $region ? trim( (string) $region['name'] ) : '';
 
 			// A record that carries no name to compare cannot be shown to disagree.
 			if ( '' === $name ) {
 				return true;
 			}
 
-			$type = (string) ( $component['type'] ?? '' );
+			$type = (string) $region['type'];
 
 			return Location_Record::normalize_city_name( $name, $type ) === Location_Record::normalize_city_name( $city, $type );
 		}
@@ -1708,14 +1784,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		/**
 		 * The city WooCommerce holds for the customer — the public face of
 		 * {@see self::customer_saved_city()}, for the checkout config's «saved city, no record»
-		 * signal (#1075).
+		 * signal (#1075). `''` for a saved city city mode ignores ({@see self::saved_city_for_checkout()}).
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.26 Applies city mode's saved-city rule.
 		 *
 		 * @return string Trimmed city text, or '' when none is saved.
 		 */
 		public function get_saved_city(): string {
-			return $this->customer_saved_city();
+			return $this->saved_city_for_checkout();
 		}
 
 		/**
@@ -2157,11 +2234,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * never on a request that already has one. Nothing here is stored;
 		 * the caller decides whether/how to persist the result.
 		 *
+		 * A record from {@see self::FILTER_DEFAULT_LOCALITY} wins over the store's own policy and
+		 * is served as-is — city mode's single place, picked through the active provider.
+		 *
 		 * @since 2.0.2
+		 * @since 2.0.26 Honours {@see self::FILTER_DEFAULT_LOCALITY}.
 		 *
 		 * @return Location_Record|null
 		 */
 		public function resolve_default(): ?Location_Record {
+			$filtered = $this->filtered_default_locality();
+
+			if ( null !== $filtered ) {
+				return $filtered;
+			}
+
 			$policy = $this->registry->get_default_locality_policy();
 
 			if ( Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED === $policy ) {
@@ -2186,14 +2273,272 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * PURE READ, same discipline as {@see self::resolve_fixed_default()}'s
 		 * own "customer-facing getter must never mutate a store setting" rule.
 		 *
+		 * `fixed` whenever {@see self::FILTER_DEFAULT_LOCALITY} answers a record — the store's own
+		 * setting is then not consulted (city mode spec §2).
+		 *
 		 * @since 2.0.2
+		 * @since 2.0.26 Honours {@see self::FILTER_DEFAULT_LOCALITY}.
 		 *
 		 * @return string One of {@see Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_OFF} /
 		 *                {@see Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED} /
 		 *                {@see Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_GEOIP}.
 		 */
 		public function get_default_locality_policy(): string {
+			if ( null !== $this->filtered_default_locality() ) {
+				return Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED;
+			}
+
 			return $this->registry->get_default_locality_policy();
+		}
+
+		/**
+		 * The fixed default {@see self::FILTER_DEFAULT_LOCALITY} answers for this request, or `null`.
+		 *
+		 * Off while {@see self::without_settlement_choices()} runs: the filter exists for city mode,
+		 * and My Account keeps the store's own policy.
+		 *
+		 * @since 2.0.26
+		 *
+		 * @return Location_Record|null
+		 */
+		private function filtered_default_locality(): ?Location_Record {
+			if ( self::$settlement_choices_suspended > 0 ) {
+				return null;
+			}
+
+			$record = apply_filters( self::FILTER_DEFAULT_LOCALITY, null );
+
+			return $record instanceof Location_Record ? $record : null;
+		}
+
+		/**
+		 * The store-wide closed settlement choice of city mode for this request
+		 * ({@see self::FILTER_SETTLEMENT_CHOICES}): the listed settlement records, deduplicated by
+		 * key, and the merchant's «hide the field» flag. `records` is empty when city mode is off.
+		 *
+		 * Read once per request into a static, so every plugin's facade answers the same list; an
+		 * answer of the wrong shape, and any entry that is not a settlement-level record, is
+		 * dropped. While {@see self::without_settlement_choices()} runs it is always empty.
+		 *
+		 * @since 2.0.26
+		 *
+		 * @return array{records: Location_Record[], hide_field: bool}
+		 */
+		public function get_settlement_choices(): array {
+			if ( self::$settlement_choices_suspended > 0 ) {
+				return self::no_settlement_choices();
+			}
+
+			if ( null === self::$settlement_choices ) {
+				self::$settlement_choices = self::read_settlement_choices();
+			}
+
+			return self::$settlement_choices;
+		}
+
+		/**
+		 * Whether city mode lists any place right now.
+		 *
+		 * @since 2.0.26
+		 *
+		 * @return bool
+		 */
+		public function has_settlement_choices(): bool {
+			return [] !== $this->get_settlement_choices()['records'];
+		}
+
+		/**
+		 * Whether free City text names one of the listed places
+		 * ({@see Location_Record::names_locality()}).
+		 *
+		 * @since 2.0.26
+		 *
+		 * @param string $city City text.
+		 *
+		 * @return bool
+		 */
+		public function names_listed_settlement( string $city ): bool {
+			foreach ( $this->get_settlement_choices()['records'] as $listed ) {
+				if ( $listed->names_locality( $city ) ) {
+					return true;
+				}
+			}
+
+			return false;
+		}
+
+		/**
+		 * Runs `$callback` as if city mode were off: no settlement choices, no filtered default.
+		 *
+		 * For a view city mode does not restrict — the My Account address form (spec §1, A11) —
+		 * which otherwise shares every read of the customer's location with the checkout. Nested
+		 * calls unwind correctly; a throwing callback cannot leave the suspension in force.
+		 *
+		 * @since 2.0.26
+		 *
+		 * @param callable $callback Called with no arguments.
+		 *
+		 * @return mixed Whatever `$callback` returns.
+		 */
+		public static function without_settlement_choices( callable $callback ) {
+			++self::$settlement_choices_suspended;
+
+			try {
+				return $callback();
+			} finally {
+				--self::$settlement_choices_suspended;
+			}
+		}
+
+		/**
+		 * Forgets the memoised settlement choices — tests only, where one process serves many
+		 * «requests».
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.26
+		 *
+		 * @return void
+		 */
+		public static function reset_settlement_choices_for_tests(): void {
+			self::$settlement_choices           = null;
+			self::$settlement_choices_suspended = 0;
+			self::$checkout_view_depth          = 0;
+		}
+
+		/**
+		 * Runs `$callback` as a checkout VIEW read: the reads that build what the checkout or the
+		 * cart calculator SHOWS — the only place city mode's list narrows the customer's location
+		 * (spec §4.4). Inside it, a settlement the list does not name, a stored region and a saved
+		 * city naming no listed place read as absent, so the field shows its placeholder or the
+		 * single place as the fixed default.
+		 *
+		 * Everything else reads the customer's location as before city mode — rating, the
+		 * `/location/suggest` scope of the My Account form, order placement and its #531 guard: the
+		 * list is presentation, never a boundary, and nothing is refused at submit (K10).
+		 * Nested calls unwind correctly; a throwing callback cannot leave the view in force.
+		 *
+		 * @since 2.0.26
+		 *
+		 * @param callable $callback Called with no arguments.
+		 *
+		 * @return mixed Whatever `$callback` returns.
+		 */
+		public static function in_checkout_view( callable $callback ) {
+			++self::$checkout_view_depth;
+
+			try {
+				return $callback();
+			} finally {
+				--self::$checkout_view_depth;
+			}
+		}
+
+		/**
+		 * Whether this read is a checkout view read while city mode lists places — the condition
+		 * of every list-membership rule ({@see self::in_checkout_view()}).
+		 *
+		 * @since 2.0.26
+		 *
+		 * @return bool
+		 */
+		private function settlement_choices_narrow_this_read(): bool {
+			return self::$checkout_view_depth > 0 && $this->has_settlement_choices();
+		}
+
+		/**
+		 * Applies {@see self::FILTER_SETTLEMENT_CHOICES} and keeps only what the contract allows.
+		 *
+		 * @since 2.0.26
+		 *
+		 * @return array{records: Location_Record[], hide_field: bool}
+		 */
+		private static function read_settlement_choices(): array {
+			$answer = apply_filters( self::FILTER_SETTLEMENT_CHOICES, self::no_settlement_choices() );
+
+			if ( ! is_array( $answer ) || ! is_array( $answer['records'] ?? null ) ) {
+				return self::no_settlement_choices();
+			}
+
+			$records = [];
+
+			foreach ( $answer['records'] as $record ) {
+				if ( $record instanceof Location_Record && Location_Record::LEVEL_SETTLEMENT === $record->level() ) {
+					$records[ $record->key() ] = $record;
+				}
+			}
+
+			return [
+				'records'    => array_values( $records ),
+				'hide_field' => true === ( $answer['hide_field'] ?? false ),
+			];
+		}
+
+		/**
+		 * The «city mode is off» answer.
+		 *
+		 * @since 2.0.26
+		 *
+		 * @return array{records: Location_Record[], hide_field: bool}
+		 */
+		private static function no_settlement_choices(): array {
+			return [
+				'records'    => [],
+				'hide_field' => false,
+			];
+		}
+
+		/**
+		 * Whether this is a checkout view read ({@see self::in_checkout_view()}) while city mode
+		 * lists places, and `$record` is a settlement that is not one of them — such a record is
+		 * read as absent by the checkout view (city mode spec §4.4: a returning customer's saved
+		 * Тула). Every other read keeps it: nothing is deleted or refused at submit.
+		 *
+		 * @since 2.0.26
+		 *
+		 * @param Location_Record $record A stored or resolved record.
+		 *
+		 * @return bool
+		 */
+		private function is_outside_settlement_choices( Location_Record $record ): bool {
+			if ( Location_Record::LEVEL_SETTLEMENT !== $record->level() || ! $this->settlement_choices_narrow_this_read() ) {
+				return false;
+			}
+
+			foreach ( $this->get_settlement_choices()['records'] as $listed ) {
+				if ( $listed->key() === $record->key() ) {
+					return false;
+				}
+			}
+
+			return true;
+		}
+
+		/**
+		 * The saved WooCommerce city the checkout may build on ({@see self::customer_saved_city()}),
+		 * or `''` when city mode makes it irrelevant to the checkout VIEW (spec §4.4,
+		 * {@see self::in_checkout_view()}) — every other read gets the saved city as before.
+		 *
+		 * With one listed place that place is the fixed default whatever the customer saved, so
+		 * the saved city must not block it. With several, a saved city naming none of them is
+		 * ignored — the field then shows its placeholder.
+		 *
+		 * @since 2.0.26
+		 *
+		 * @return string
+		 */
+		private function saved_city_for_checkout(): string {
+			$city = $this->customer_saved_city();
+
+			if ( '' === $city || ! $this->settlement_choices_narrow_this_read() ) {
+				return $city;
+			}
+
+			if ( 1 === count( $this->get_settlement_choices()['records'] ) ) {
+				return '';
+			}
+
+			return $this->names_listed_settlement( $city ) ? $city : '';
 		}
 
 		/**
