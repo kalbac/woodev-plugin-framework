@@ -710,7 +710,7 @@ if ( ! class_exists( 'Woodev_License_Command_Dispatcher' ) ) :
 		}
 
 		/**
-		 * Resolves the base64 public key, overridable via the shared filter for tests.
+		 * Resolves the base64 public key (the override is honoured only in test environments).
 		 *
 		 * @since 2.0.0
 		 *
@@ -718,9 +718,7 @@ if ( ! class_exists( 'Woodev_License_Command_Dispatcher' ) ) :
 		 */
 		private static function get_public_key(): string {
 
-			$default = defined( 'WOODEV_LICENSE_AUTHORITY_PUBKEY' ) ? (string) WOODEV_LICENSE_AUTHORITY_PUBKEY : '';
-
-			return (string) apply_filters( 'woodev_license_authority_pubkey', $default );
+			return Woodev_License_Envelope_Verifier::resolve_public_key();
 		}
 
 		/**

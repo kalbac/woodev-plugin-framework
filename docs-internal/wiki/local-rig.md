@@ -339,6 +339,7 @@ SERVER-SIGNED licence claim. Two rules on the rig:
   `tests/e2e/rig/zz-woodev-rig-license.php`: a rig-local Ed25519 key (generated once, option `woodev_rig_license_keypair`),
   swapped in through `woodev_license_authority_pubkey` ONLY for those ids. Install it on a new rig with
   `docker exec -i <wordpress container> sh -c 'cat > /var/www/html/wp-content/mu-plugins/zz-woodev-rig-license.php' < tests/e2e/rig/zz-woodev-rig-license.php`.
+  The mu-plugin must also `define( 'WOODEV_LICENSE_TEST_KEYS', true )` (the repo copy does) — without it the framework ignores the key override (#1597).
   Without it every fixture carrier yields no rate. It is never shipped. Switching the default-locality policy
 to `geoip` needs `dadata` plus a pinned non-local IP: gotcha
 `the-geoip-default-locality-cannot-resolve-on-a-local-rig`.

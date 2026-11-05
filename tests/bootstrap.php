@@ -5,6 +5,10 @@
 
 require_once dirname( __DIR__ ) . '/vendor/autoload.php';
 
+// Licence tests sign claims with a fixture key, which the framework accepts only when this
+// constant is defined (unit and integration suites alike).
+defined( 'WOODEV_LICENSE_TEST_KEYS' ) || define( 'WOODEV_LICENSE_TEST_KEYS', true );
+
 $test_suite = getenv( 'TEST_SUITE' ) ?: 'unit';
 
 if ( 'integration' === $test_suite ) {

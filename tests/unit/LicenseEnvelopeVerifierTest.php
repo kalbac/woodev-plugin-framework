@@ -505,4 +505,45 @@ class LicenseEnvelopeVerifierTest extends TestCase {
 
 		$this->assertNull( $result );
 	}
+
+	/**
+	 * Without the test-keys switch the key filter is never applied and the embedded key wins.
+	 *
+	 * @return void
+	 */
+	public function test_resolve_public_key_ignores_the_filter_when_overrides_are_not_allowed(): void {
+		\Brain\Monkey\Filters\expectApplied( 'woodev_license_authority_pubkey' )->never();
+
+		$this->assertSame(
+			\Woodev_License_Envelope_Verifier::PRODUCTION_PUBKEY,
+			\Woodev_License_Envelope_Verifier::resolve_public_key( false )
+		);
+	}
+
+	/**
+	 * With the test-keys switch the filtered key replaces the embedded one.
+	 *
+	 * @return void
+	 */
+	public function test_resolve_public_key_honours_the_filter_when_overrides_are_allowed(): void {
+		\Brain\Monkey\Filters\expectApplied( 'woodev_license_authority_pubkey' )
+			->once()
+			->andReturn( self::VECTOR_PUBKEY );
+
+		$this->assertSame( self::VECTOR_PUBKEY, \Woodev_License_Envelope_Verifier::resolve_public_key( true ) );
+	}
+
+	/**
+	 * The switch defaults to the WOODEV_LICENSE_TEST_KEYS constant, which the bootstrap defines.
+	 *
+	 * @return void
+	 */
+	public function test_resolve_public_key_defaults_to_the_test_keys_constant(): void {
+		\Brain\Monkey\Filters\expectApplied( 'woodev_license_authority_pubkey' )
+			->once()
+			->andReturn( self::VECTOR_PUBKEY );
+
+		$this->assertTrue( \defined( \Woodev_License_Envelope_Verifier::TEST_KEYS_CONSTANT ) );
+		$this->assertSame( self::VECTOR_PUBKEY, \Woodev_License_Envelope_Verifier::resolve_public_key() );
+	}
 }

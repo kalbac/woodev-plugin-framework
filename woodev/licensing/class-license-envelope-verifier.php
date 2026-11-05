@@ -15,16 +15,6 @@
 
 defined( 'ABSPATH' ) || exit;
 
-// The Woodev authority PUBLIC key (base64, Ed25519/32 bytes) — the PRODUCTION
-// key captured from woodev.ru on 2026-06-12 (woodev-core License_Authority,
-// option woodev_license_authority_keys; capture procedure in the woodev-core
-// signing spec). Rotating the server key invalidates every issued claim and
-// command and REQUIRES updating this constant in lockstep. An empty or
-// undecodable value makes every verification fail — the safe default.
-if ( ! defined( 'WOODEV_LICENSE_AUTHORITY_PUBKEY' ) ) {
-	define( 'WOODEV_LICENSE_AUTHORITY_PUBKEY', '6N6HaUIrqZMuyDTYjvazMoQjpHwdeyLbmz5Zu3Fh2rM=' );
-}
-
 if ( ! class_exists( 'Woodev_License_Envelope_Verifier' ) ) :
 
 	/**
@@ -35,13 +25,29 @@ if ( ! class_exists( 'Woodev_License_Envelope_Verifier' ) ) :
 	final class Woodev_License_Envelope_Verifier {
 
 		/**
-		 * Name of the constant holding the embedded base64 public key.
+		 * The Woodev authority PUBLIC key (base64, Ed25519/32 bytes) embedded in the framework.
 		 *
-		 * @since 2.0.0
+		 * The PRODUCTION key captured from woodev.ru on 2026-06-12 (woodev-core License_Authority,
+		 * option woodev_license_authority_keys; capture procedure in the woodev-core signing spec).
+		 * A class constant, not a global one, so nothing defined earlier can replace it. Rotating
+		 * the server key invalidates every issued claim and command and REQUIRES updating this
+		 * value in lockstep. An empty or undecodable value makes every verification fail — the
+		 * safe default.
+		 *
+		 * @since 2.0.26
 		 *
 		 * @var string
 		 */
-		const PUBKEY_CONSTANT = 'WOODEV_LICENSE_AUTHORITY_PUBKEY';
+		const PRODUCTION_PUBKEY = '6N6HaUIrqZMuyDTYjvazMoQjpHwdeyLbmz5Zu3Fh2rM=';
+
+		/**
+		 * Name of the constant that enables the key override in test environments.
+		 *
+		 * @since 2.0.26
+		 *
+		 * @var string
+		 */
+		const TEST_KEYS_CONSTANT = 'WOODEV_LICENSE_TEST_KEYS';
 
 		/**
 		 * Ed25519 detached-signature length in bytes (protocol-fixed).
@@ -120,7 +126,7 @@ if ( ! class_exists( 'Woodev_License_Envelope_Verifier' ) ) :
 		 * @since 2.0.0
 		 *
 		 * @param array<string, mixed> $envelope       Envelope { payload, signature, kid? }.
-		 * @param string|null          $public_key_b64 Base64 public key; defaults to the embedded constant.
+		 * @param string|null          $public_key_b64 Base64 public key; defaults to the embedded production key.
 		 * @return array<string, mixed>|null The verified payload, or null on any failure.
 		 */
 		public static function verify( array $envelope, ?string $public_key_b64 = null ): ?array {
@@ -138,7 +144,7 @@ if ( ! class_exists( 'Woodev_License_Envelope_Verifier' ) ) :
 				return null;
 			}
 
-			$public_key_b64 = $public_key_b64 ?? (string) constant( self::PUBKEY_CONSTANT );
+			$public_key_b64 = $public_key_b64 ?? self::PRODUCTION_PUBKEY;
 
 			if ( '' === $public_key_b64 ) {
 				return null;
@@ -171,6 +177,30 @@ if ( ! class_exists( 'Woodev_License_Envelope_Verifier' ) ) :
 
 			return true === $verified ? $payload : null;
 		}
+
+		/**
+		 * Resolves the base64 public key used to verify licence envelopes.
+		 *
+		 * Returns the embedded production key (self::PRODUCTION_PUBKEY). The woodev_license_authority_pubkey
+		 * filter is applied only when the WOODEV_LICENSE_TEST_KEYS constant is truthy,
+		 * so the key can be overridden in test environments and nowhere else. An
+		 * empty/undecodable key makes every verification fail — the safe default.
+		 *
+		 * @since 2.0.26
+		 *
+		 * @param bool|null $allow_override Whether the filter is honoured; null reads WOODEV_LICENSE_TEST_KEYS (a test seam).
+		 * @return string The base64 public key.
+		 */
+		public static function resolve_public_key( ?bool $allow_override = null ): string {
+
+			$allow_override = $allow_override ?? ( defined( self::TEST_KEYS_CONSTANT ) && (bool) constant( self::TEST_KEYS_CONSTANT ) );
+
+			return $allow_override ? (string) apply_filters( 'woodev_license_authority_pubkey', self::PRODUCTION_PUBKEY ) : self::PRODUCTION_PUBKEY;
+		}
 	}
 
 endif;
+
+// Legacy alias of the embedded key for code that still reads the old global; the framework
+// itself no longer reads it, so defining it earlier does not change the authority key.
+defined( 'WOODEV_LICENSE_AUTHORITY_PUBKEY' ) || define( 'WOODEV_LICENSE_AUTHORITY_PUBKEY', Woodev_License_Envelope_Verifier::PRODUCTION_PUBKEY );
