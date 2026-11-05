@@ -306,6 +306,41 @@ describe( 'city mode — one place, field shown (classic)', () => {
 	} );
 } );
 
+describe( 'city mode — one NESTED place as the default (classic)', () => {
+	const nestedDefault = ( places ) => ( {
+		places,
+		extra: {
+			current: { key: 'dadata:cherkizovo', level: 'settlement' },
+			chain: { settlement: { key: 'dadata:cherkizovo', level: 'settlement' } },
+			implicit: true,
+			defaultLocality: {
+				policy: 'fixed',
+				record: { ...CHERKIZOVO.record, nested_settlement: { type: 'рп', name: 'Черкизово' } },
+			},
+		},
+	} );
+
+	it( 'shown: the field is seeded with the place\'s own name, not the parent\'s', () => {
+		boot( buildConfig( nestedDefault( [ CHERKIZOVO ] ) ) );
+
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Черкизово' );
+		expect( document.getElementById( 'billing_city_field' ).classList.contains( 'woodev-field--hidden' ) ).toBe( false );
+	} );
+
+	it( 'hidden: the concealed field holds the place\'s own name, which is what posts', () => {
+		boot( buildConfig( { ...nestedDefault( [ CHERKIZOVO ] ), hideSettlement: true } ) );
+
+		expect( document.getElementById( 'billing_city_field' ).classList.contains( 'woodev-field--hidden' ) ).toBe( true );
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Черкизово' );
+	} );
+
+	it( 'without city mode the old derivation stands (the record\'s settlement)', () => {
+		boot( buildConfig( nestedDefault( null ) ) );
+
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Пушкино' );
+	} );
+} );
+
 describe( 'city mode — one place, hidden (classic)', () => {
 	it( 'hides the settlement and region rows by class, keeps the values in the form, leaves the address row', () => {
 		boot( buildConfig( {

@@ -475,6 +475,31 @@ describe( 'city mode, one place shown — Blocks', () => {
 		expect( mockStore.customer.shippingAddress.postcode ).toBe( '101000' );
 	} );
 
+	it( 'a saved Москва with another region\'s State gets the place\'s State written, not left alone', async () => {
+		mockStore.customer.shippingAddress = { ...mockStore.customer.shippingAddress, city: 'Москва', state: 'ТУЛЬСКАЯ ОБЛАСТЬ' };
+		render( <LocalityChooser config={ cityMode( [ MOSCOW ] ) } /> );
+
+		await waitFor( () => expect( mockStore.setShippingAddress ).toHaveBeenCalledTimes( 1 ) );
+
+		// The city already names the place, so the street and postcode stay.
+		expect( mockStore.customer.shippingAddress ).toMatchObject( {
+			city: 'Москва', state: 'МОСКВА', address_1: 'Ленина 1', postcode: '101000',
+		} );
+	} );
+
+	it( 'a State the shopper chose is kept where the place maps to no single option', async () => {
+		mockStore.customer.shippingAddress = { ...mockStore.customer.shippingAddress, city: 'Москва', state: 'ТАТАРСТАН' };
+		const place = { ...MOSCOW, record: { ...MOSCOW.record, region: { name: 'Нигде' } } };
+		render( <LocalityChooser config={ cityMode( [ place ] ) } /> );
+
+		await act( async () => {
+			await settle();
+		} );
+
+		expect( mockStore.setShippingAddress ).not.toHaveBeenCalled();
+		expect( mockStore.customer.shippingAddress.state ).toBe( 'ТАТАРСТАН' );
+	} );
+
 	it( 'publishes the place as the scope of the address suggestions', () => {
 		render( <LocalityChooser config={ cityMode( [ MOSCOW ] ) } /> );
 
@@ -520,6 +545,19 @@ describe( 'city mode, one place hidden — Blocks', () => {
 		expect( mockStore.customer.shippingAddress ).toMatchObject( {
 			city: 'Москва', state: 'МОСКВА', country: 'RU', address_1: 'Ленина 1', postcode: '101000',
 		} );
+	} );
+
+	it( 'hides the State row only once the address carries the place\'s State (a saved wrong one is rewritten first)', async () => {
+		installNativeRows();
+		mockStore.customer.shippingAddress = { ...mockStore.customer.shippingAddress, city: 'Москва', state: 'ТУЛЬСКАЯ ОБЛАСТЬ' };
+		render( <LocalityChooser config={ cityMode( [ MOSCOW ], { hideSettlement: true } ) } /> );
+
+		await waitFor( () => expect( mockStore.customer.shippingAddress.state ).toBe( 'МОСКВА' ) );
+		await act( async () => {
+			await settle();
+		} );
+
+		expect( document.querySelector( '.wc-block-components-address-form__state' ) ).toHaveClass( 'woodev-field--hidden' );
 	} );
 
 	it( 'keeps the State row visible while no single region matched, so the shopper can still pick it', async () => {

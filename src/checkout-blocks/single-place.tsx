@@ -75,9 +75,11 @@ export function SinglePlace( { config, place, billingOnly }: SinglePlaceProps ):
 		lastSeen.current = seen;
 
 		const cityOk = address.city === place.value;
-		const stateMissing = state !== null && address.state === '';
+		// A state the place maps to unambiguously is written when it is missing OR differs (a saved
+		// Москва with a Tula State); with no such mapping the shopper's own State stands.
+		const stateWrong = state !== null && address.state !== state;
 
-		if ( cityOk && ! stateMissing ) {
+		if ( cityOk && ! stateWrong ) {
 			return;
 		}
 
@@ -92,7 +94,9 @@ export function SinglePlace( { config, place, billingOnly }: SinglePlaceProps ):
 	}, [ address.city, address.state, address.country, authoritative, place, state, regionFieldRemoved, billingOnly ] );
 
 	// Hide, or lock, the native fields. React may replace them at any time: re-apply on every change.
-	const stateKnown = regionFieldRemoved || address.state !== '';
+	// The State row is hidden only once it carries what the place stands for: the mapped value, or —
+	// where no single option maps — whatever the shopper has chosen.
+	const stateKnown = regionFieldRemoved || ( state !== null ? address.state === state : address.state !== '' );
 
 	useEffect( () => {
 		const prefix = billingOnly ? 'billing' : 'shipping';

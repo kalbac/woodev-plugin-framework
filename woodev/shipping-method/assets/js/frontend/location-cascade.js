@@ -6492,7 +6492,13 @@
 						entry.records[ current.level ].ancestors = defaultRecord.ancestors;
 					}
 
-					writeSilently( entry, defaultNode.fieldId, fieldValueFor( defaultRecord, current.level ) );
+					// City mode: a listed place posts its OWN name (the server stamps it as `value`) —
+					// «Черкизово», not the parent «Пушкино» its record's `settlement` carries.
+					var listedDefault = ( allowedPlaces( entry, countryFor( entry, defaultNode ) ) || [] ).filter( function( place ) {
+						return place.key === defaultRecord.key && 'string' === typeof place.value && '' !== place.value;
+					} )[ 0 ];
+
+					writeSilently( entry, defaultNode.fieldId, listedDefault ? listedDefault.value : fieldValueFor( defaultRecord, current.level ) );
 
 					// Issue #536 round 2: the ancestor write (region, under `related-list`) is NOT
 					// done here directly — see {@see applyPendingDefaultLocality}'s own docblock for
