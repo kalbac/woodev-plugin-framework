@@ -69,105 +69,104 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 	final class Location_Provider_Registry {
 
 		/**
-		 * CDEK's RU region labels, captured from its test contour's
-		 * `/v2/location/regions?country_codes=RU&size=1000` endpoint on 2026-11-06.
-		 * WooCommerce's shipping-zone editor also reads `woocommerce_states`, but
-		 * the active location provider may not be able to enumerate regions after
-		 * a provider switch. Keep these labels available in admin so existing
-		 * `RU:<wc_strtoupper(label)>` zone entries remain editable; storefront
-		 * checkout keeps the provider's existing field-mode behavior.
+		 * CDEK's RU region labels, fetched through the connected production
+		 * account's `Woodev\Edostavka\Api\Cdek_Api_Client::get_regions( 'RU' )`
+		 * (`/v2/location/regions?country_codes=RU`) on 2026-11-06. The
+		 * shipping-zone editor reads `woocommerce_states`, but the active provider
+		 * may not enumerate regions after a provider switch. This last-resort list
+		 * keeps existing `RU:<wc_strtoupper(label)>` zone entries editable; the
+		 * active provider's list and other registered RU state lists always win.
 		 *
 		 * @since 2.0.26
 		 * @var string[]
 		 */
 		private const RU_CDEK_REGION_LABELS = [
-			'Белгородская область',
-			'Кабардино-Балкария',
-			'Омская область',
-			'Пензенская область',
-			'Ленинградская область',
-			'Республика Бурятия',
-			'Воронежская область',
-			'Ульяновская область',
-			'Республика Крым',
-			'Башкортостан',
-			'Мордовия',
-			'Удмуртия',
-			'Санкт-Петербург',
-			'Республика Коми',
-			'Ханты-Мансийский автономный округ - Югра',
-			'Кировская область',
-			'Калмыкия',
-			'Ненецкий автономный округ',
-			'Курганская область',
-			'Республика Северная Осетия - Алания',
-			'Калужская область',
-			'Новосибирская область',
-			'Мурманская область',
-			'Камчатский край',
-			'Новгородская область',
+			'Адыгея',
 			'Алтайский край',
-			'Байконур',
-			'Фиктивный',
-			'Ставропольский край',
-			'Рязанская область',
-			'Ростовская область',
-			'Самарская область',
-			'Республика Карелия',
-			'Татарстан',
-			'Сахалинская область',
-			'Чувашия',
-			'Республика Алтай',
-			'Дагестан',
-			'Челябинская область',
-			'Астраханская область',
-			'Нижегородская область',
-			'Тульская область',
-			'Волгоградская область',
-			'Тамбовская область',
 			'Амурская область',
-			'Карачаево-Черкесия',
-			'Магаданская область',
-			'Калининградская область',
-			'Еврейская автономная область',
-			'Псковская область',
-			'Оренбургская область',
-			'Севастополь',
-			'Липецкая область',
-			'Свердловская область',
-			'Ярославская область',
-			'Курская область',
-			'Хабаровский край',
 			'Архангельская область',
-			'Тюменская область',
+			'Астраханская область',
+			'Байконур',
+			'Башкортостан',
+			'Белгородская область',
+			'Брянская область',
+			'Владимирская область',
+			'Волгоградская область',
+			'Вологодская область',
+			'Воронежская область',
+			'Еврейская автономная область',
 			'Забайкальский край',
 			'Ивановская область',
-			'Пермский край',
-			'Республика Хакасия',
-			'Смоленская область',
-			'Орловская область',
-			'Иркутская область',
-			'Кемеровская область',
-			'Краснодарский край',
-			'Костромская область',
-			'Чеченская Республика',
-			'Томская область',
-			'Красноярский край',
-			'Адыгея',
-			'Марий Эл',
-			'Ямало-Ненецкий автономный округ',
-			'Саратовская область',
-			'Тверская область',
-			'Республика Саха (Якутия)',
-			'Республика Тыва',
-			'Московская область',
 			'Ингушетия',
-			'Вологодская область',
-			'Брянская область',
-			'Чукотский автономный округ',
-			'Владимирская область',
-			'Приморский край',
+			'Иркутская область',
+			'Кабардино-Балкария',
+			'Калининградская область',
+			'Калмыкия',
+			'Калужская область',
+			'Камчатский край',
+			'Карачаево-Черкесская Республика',
+			'Кемеровская область - Кузбасс',
+			'Кировская область',
+			'Костромская область',
+			'Краснодарский край',
+			'Красноярский край',
+			'Курганская область',
+			'Курская область',
+			'Ленинградская область',
+			'Липецкая область',
+			'Магаданская область',
+			'Марий Эл',
+			'Мордовия',
 			'Москва',
+			'Московская область',
+			'Мурманская область',
+			'Ненецкий автономный округ',
+			'Нижегородская область',
+			'Новгородская область',
+			'Новосибирская область',
+			'Омская область',
+			'Оренбургская область',
+			'Орловская область',
+			'Пензенская область',
+			'Пермский край',
+			'Приморский край',
+			'Псковская область',
+			'Республика Алтай',
+			'Республика Башкортостан',
+			'Республика Бурятия',
+			'Республика Карелия',
+			'Республика Коми',
+			'Республика Крым',
+			'Республика Саха (Якутия)',
+			'Республика Северная Осетия - Алания',
+			'Республика Тыва',
+			'Республика Хакасия',
+			'Ростовская область',
+			'Рязанская область',
+			'Самарская область',
+			'Санкт-Петербург',
+			'Саратовская область',
+			'Сахалинская область',
+			'Свердловская область',
+			'Севастополь',
+			'Смоленская область',
+			'Ставропольский край',
+			'Тамбовская область',
+			'Татарстан',
+			'Тверская область',
+			'Томская область',
+			'Тульская область',
+			'Тюменская область',
+			'Удмуртия',
+			'Ульяновская область',
+			'Хабаровский край',
+			'Ханты-Мансийский автономный округ - Югра',
+			'Челябинская область',
+			'Чеченская Республика',
+			'Чувашская Республика - Чувашия',
+			'Чукотский автономный округ',
+			'Ямало-Ненецкий автономный округ',
+			'Ярославская область',
 		];
 
 		/**
@@ -2348,6 +2347,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 * related-list renderer maps the selected label back to a full record via
 		 * `/location/list` instead.
 		 *
+		 * The WooCommerce shipping-zone editor also needs to resolve stored
+		 * `RU:<UPPERCASED CDEK region label>` values after the store switches to a
+		 * provider that cannot enumerate regions. On the shipping-zone admin screen
+		 * only, this method adds a production-CDEK snapshot as a last resort after
+		 * provider and earlier-filter state lists have had the chance to win. The
+		 * fallback is not recorded as location-owned, and it is never merged into a
+		 * non-empty RU list; this keeps checkout and order screens on their normal
+		 * provider/state behavior.
+		 *
 		 * The KEY is the label UPPERCASED via WooCommerce's own `wc_strtoupper()`
 		 * — never the bare (possibly mixed-case) label — because
 		 * `WC_Checkout::validate_posted_data()` uppercases whatever the customer
@@ -2395,6 +2403,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 *              the bare label, and an empty/whitespace-only label is
 		 *              skipped rather than registered — PR #304 review findings 2
 		 *              and 4.
+		 * @since 2.0.26 Adds a last-resort production-CDEK state list for the
+		 *               WooCommerce shipping-zone admin screen after provider
+		 *               region injection.
 		 *
 		 * @param mixed $states WC states keyed by country code, as received from
 		 *                      whichever `woocommerce_states` callback ran before
@@ -2404,14 +2415,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 */
 		public function inject_related_list_states( $states ): array {
 			$states = is_array( $states ) ? $states : [];
-
-			// Zones persist state keys even when the selected provider cannot list
-			// regions. Restore CDEK's exact labels in admin only, so the zone editor
-			// can still resolve existing RU codes without changing storefront fields.
-			if ( is_admin() ) {
-				$existing_ru_states = isset( $states['RU'] ) && is_array( $states['RU'] ) ? $states['RU'] : [];
-				$states['RU']        = array_replace( self::cdek_compatible_ru_states(), $existing_ru_states );
-			}
 
 			// KNOWN LATENT CONSTRAINT (PR #304 review finding 7, not fixed — see
 			// that review's own "not in scope" note): this method is hooked at
@@ -2432,14 +2435,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 			// ONLY the region `<select>`'s options; whatever the settlement axis
 			// carries is irrelevant here.
 			if ( self::MODE_RELATED_LIST !== $this->get_field_mode_region() ) {
-				return $states;
+				return $this->maybe_inject_cdek_zone_states( $states );
 			}
 
 			$provider = $this->get_active_provider();
 
 			if ( null === $provider || ! $provider->is_configured()
 				|| ! in_array( Location_Provider::CAPABILITY_LIST, $provider->get_capabilities(), true ) ) {
-				return $states;
+				return $this->maybe_inject_cdek_zone_states( $states );
 			}
 
 			foreach ( $provider->get_countries() as $country ) {
@@ -2497,11 +2500,57 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 				$this->related_list_states_countries[ $country ] = $options;
 			}
 
+			return $this->maybe_inject_cdek_zone_states( $states );
+		}
+
+		/**
+		 * Adds the static RU dictionary only when the WooCommerce zones UI needs
+		 * legacy keys and no existing source supplied any RU states.
+		 *
+		 * A live provider list or another plugin's list is authoritative. This
+		 * fallback is only an editor lookup aid, so it must not be recorded by
+		 * {@see self::owns_region_states()} as a checkout field owned by location.
+		 *
+		 * @since 2.0.26
+		 *
+		 * @param array<string, mixed> $states State map filtered so far.
+		 *
+		 * @return array<string, mixed>
+		 */
+		private function maybe_inject_cdek_zone_states( array $states ): array {
+			if ( self::is_shipping_zone_admin_request() && empty( $states['RU'] ) ) {
+				$states['RU'] = self::cdek_compatible_ru_states();
+			}
+
 			return $states;
 		}
 
 		/**
-		 * Builds WooCommerce state keys from the captured CDEK region labels.
+		 * Whether this request is rendering WooCommerce's shipping-zone editor.
+		 *
+		 * The method reads routing parameters only; it does not authorize or process a
+		 * state-changing request. Zone-method AJAX saves do not render the location
+		 * selector, so the fallback is limited to the settings screen that does.
+		 *
+		 * @since 2.0.26
+		 *
+		 * @return bool
+		 */
+		private static function is_shipping_zone_admin_request(): bool {
+			if ( ! is_admin() ) {
+				return false;
+			}
+
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only admin routing; these values only select whether to expose static zone labels.
+			$page = isset( $_GET['page'] ) && is_string( $_GET['page'] ) ? wp_unslash( $_GET['page'] ) : '';
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only admin routing; these values only select whether to expose static zone labels.
+			$tab = isset( $_GET['tab'] ) && is_string( $_GET['tab'] ) ? wp_unslash( $_GET['tab'] ) : '';
+
+			return 'wc-settings' === $page && 'shipping' === $tab;
+		}
+
+		/**
+		 * Builds WooCommerce state keys from the production CDEK region labels.
 		 *
 		 * `WC_Shipping_Zone` stores `RU:<state key>`; CDEK's related-list injector
 		 * uses `wc_strtoupper( $label )` for that key. Repeating that transform
