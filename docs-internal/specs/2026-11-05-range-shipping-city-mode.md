@@ -7,7 +7,8 @@ store-wide server-side restriction; §9 lists what was removed and why. **r4** r
 **K11′**: the plugin hands the listed record to the provider and decides nothing about what a city contains. **r5** applies the operator's late inputs of
 05.11.2026 (K12–K14): a record carries its **FIAS id** wherever its provider knows one (the CDEK provider stops dropping `fias_guid` — card E1, a separate
 `woocommerce-edostavka` PR), and DaData address suggestions for such a record are scoped **by that id** (city OR settlement); FIAS is Russia-only, so
-outside Russia the scope stays country + name. Nothing in this revision blocks on the operator; §10 lists provisional choices.
+outside Russia the scope is country + the record's own locality name, for every provider. **r5.1** applies the r5 critic's four must-fix findings (revision
+log). Nothing in this revision blocks on the operator; §10 lists provisional choices.
 **Target:** the same release `2.0.0` of «Расчёт стоимости доставки за расстояние» (plugin id `range_rate`) as
 [2026-11-05-range-shipping-v2-design.md](2026-11-05-range-shipping-v2-design.md) (called **v2 spec** below; its D1–D16 are binding). Two repos change:
 this framework (small, **in framework 2.0.26 itself — still unreleased, draft release PR #1606**) and `kalbac/woocommerce-range-shipping` (settings
@@ -52,7 +53,7 @@ Operator's redirect, 05.11.2026 (binding, overrides r1/r2's framing):
 | K11′ | **The plugin does not decide where addresses are searched — the provider does.** The merchant's chosen settlement record is passed to the active provider's own scoping **as-is**; there is no «federal city → region only» rule and no type-based special case. If the merchant lists only «Москва», addresses are searched in Москва *as the provider understands it*; Зеленоград (and Новая Москва, etc.) are **not** added automatically — the merchant adds them to the list himself. The settlement provider may be CDEK, and the plugin cannot tell which of its cities is federal, so any special rule would break. Replaces r3's K11 («federal cities include their districts») and r2's open P3. Measured 05.11.2026 (§4.3) | operator, 05.11.2026 (binding) |
 | K12 | **A record keeps its FIAS id, whichever provider made it.** The CDEK provider keeps the dictionary row's `fias_guid` (and, as today, its coordinates) in the CDEK location record instead of dropping it (READ `woocommerce-edostavka` `includes/location/class-cdek-location-provider.php:22` «FIAS is not used»; the adapter already matches on it, `class-cdek-location-adapter.php:206`). It is a **separate `woocommerce-edostavka` card and PR (E1)**; the CDEK plugin release is not part of this wave | operator, 05.11.2026 late (s218 «City-mode r5 inputs») |
 | K13 | **DaData address suggestions for a listed place with a FIAS id are scoped by that id — as a city OR as a settlement** (`locations` keys `city_fias_id`, then `settlement_fias_id`; §4.3). This is still K11′: the id is the place's own, handed on as-is, and DaData decides what lies under it | operator, 05.11.2026 late |
-| K14 | **FIAS is Russia-only.** Outside Russia DaData's ids are OpenStreetMap/GeoNames ids and CDEK rows carry no `fias_guid`, so a record without a FIAS id is scoped by **country + name** (the r4 path). One provider-agnostic rule, no country branch in the plugin: «has a FIAS id» decides, and only a Russian record can have one (§4.3) | operator, 05.11.2026 late |
+| K14 | **FIAS is Russia-only.** Outside Russia DaData's ids are OpenStreetMap/GeoNames ids and CDEK rows carry no `fias_guid`, so **every non-RU record, whichever provider made it, is scoped by country + the record's own locality name** — DaData's OSM/GeoNames ids are no longer used for scoping. A Russian record without a FIAS id takes the same name path. One provider-agnostic rule, decided in the framework's DaData provider, nothing in the range plugin (§4.3) | operator, 05.11.2026 late; non-RU DaData case settled by the coordinator 06.11.2026 (r5.1: the operator's input wins) |
 
 ## 1. Goal, scope, non-goals
 
@@ -76,7 +77,7 @@ READ — what already exists and is reused unchanged:
 |---|---|---|
 | The checkout location config, incl. a per-country `popular` list in the `/suggest` wire shape `{ key, label, level, record }` that the classic cascade already renders before typing | `fw: checkout/class-checkout-config.php` `build_location_block()` (1126); `location/class-location-service.php` `get_popular_settlements_for_country()` (3455); `assets/js/frontend/location-cascade.js` `popularFor()` (1900) | The closed list is served in the same shape, so a pick is byte-identical to a search pick and goes through the same `/select` |
 | `/location/select` → the customer chain record | `fw: rest-api/class-location-controller.php` `handle_select_request()` (1402) | A pick writes the chosen place as the chain's settlement record, exactly as today |
-| Address suggestions scoped to the chain's settlement by the **provider's own** scoping: DaData builds an exact `locations` filter from the record's FIAS ids; a CDEK record reaches DaData's address search as a city-name filter, and the `settlement` retry when the city answer is empty | `fw: location/providers/class-dadata-provider.php` `build_locations_constraint()` (1106), `native_parent_ids()` (1188), `suggest()` retry (~472), `foreign_locality_parent()` (1221) | «Suggestions stay inside the chosen place» — the operator's «это не даст сделать сама DaData». r5 adds **one** branch: a foreign record that carries a FIAS id (K12) is scoped by that id (K13, §4.3) |
+| Address suggestions scoped to the chain's settlement by the **provider's own** scoping: DaData builds an exact `locations` filter from the record's FIAS ids; a CDEK record reaches DaData's address search as a city-name filter, and the `settlement` retry when the city answer is empty | `fw: location/providers/class-dadata-provider.php` `build_locations_constraint()` (1106), `native_parent_ids()` (1188), `suggest()` retry (~472), `foreign_locality_parent()` (1221) | «Suggestions stay inside the chosen place» — the operator's «это не даст сделать сама DaData». r5 adds **one** branch — a foreign record that carries a FIAS id (K12) is scoped by that id (K13) — and r5.1 sends every non-RU record by name (K14, §4.3) |
 | The **fixed default locality** (policy `fixed` + record): seeds an implicit chain record; the classic client prefills and locks from `defaultLocality` | `fw: location/class-location-provider-registry.php` `get_default_locality_policy()` (2025), `get_default_locality_record()` (2047); `class-location-service.php` `resolve_default()` (2147); `location-cascade.js` `defaultLocalitySource()` (6074) | The one-place case: the single item **is** the fixed default while the mode is on |
 | The `location-picker` column of a `records-table` control (the **active** location provider, level `settlement` — `class-control.php:107-110`) | `fw: settings-api/class-control.php:118,128` (F1, 2.0.26) | The settings list — the same control the warehouse address column uses (v2 spec D3). Its records come from whichever provider is active (DaData or CDEK) |
 | The range method's distance grid | `plugin:` v2 spec §2.3 | The delivery boundary (K10) — untouched |
@@ -117,7 +118,7 @@ for one place, and it takes effect only when the list has exactly one.
 | Rule | Message |
 |---|---|
 | Mode on, list empty | «Добавьте хотя бы один населённый пункт — иначе покупателю будет нечего выбрать.» |
-| A row is not a settlement-level record of a registered provider with a name, a country and a key (DaData: its `fias_id` too). A non-DaData row **without** a FIAS id is valid — it is scoped by country + name (K14) | «Выберите населённый пункт из подсказок.» |
+| A row is not a valid settlement record: its JSON is refused by `Location_Record::from_array()` (e.g. no `key`, or a `key` prefix that disagrees with `provider_id`); its `level` is not `settlement`; its `provider_id` is not a registered provider; or its `settlement.name` is empty. **No FIAS id is required from any provider** — neither the canonical `Location_Record::fias_id` (optional, §4.3) nor DaData's native `raw.fias_id` (a valid foreign DaData record may have an empty one and a derived key). A row without the canonical id is scoped by country + name (K14) | «Выберите населённый пункт из подсказок.» |
 | The same place twice (equal keys) | «Этот населённый пункт уже в списке.» |
 | Mode off | the list is kept and not validated |
 
@@ -224,16 +225,27 @@ lower-cased, kept only when it is a UUID **and** `country` is `RU`; anything els
 as `''`, never an exception, so a provider cannot break a record by passing a non-FIAS id. `to_array()` carries it, so it survives the option row, the
 session slot and `/select`. Coordinates need no new field: `lat`/`lon` already exist and the CDEK record already fills them (READ
 `class-cdek-location-provider.php:850-851` `record_from_compact()`, `:378-379` `enrich_selected_record()`). The DaData mapper does not fill `fias_id` in
-F2 — its own `raw` ids already scope a DaData record exactly (branch 1 below).
+F2 — its own `raw` ids already scope a Russian DaData record exactly (branch 1 below).
+
+**Two different things share the name «fias id» — keep them apart.** The **canonical** `Location_Record::fias_id` is the new optional top-level field
+above; F2 adds it, E1 fills it for CDEK, the DaData mapper leaves it `''`. DaData's **native** `raw.fias_id` (and `raw.city_fias_id`,
+`raw.settlement_fias_id`, …) is DaData's own payload inside `raw`, already there today: READ `record_from_dadata_fields()` (`class-dadata-provider.php:1396-1444`)
+puts an ordinary Москва pick's GUID into the key (`dadata:0c5b2444-…`) and `raw.fias_id`, with no canonical field — confirmed by the r5 critic's probe.
+Branch 1 reads only the native ids; branch 2 reads only the canonical one; **nothing validates or requires either** (§3.2).
 
 **The filter, in order** (`build_locations_constraint()` + `suggest()`; `restrict_value: true` whenever a parent narrows, as today):
 
 | # | Parent record | `locations` sent | Narrowing | Name post-filter (`foreign_locality_parent()`) |
 |---|---|---|---|---|
-| 1 | DaData record with ids in its own `raw` (unchanged) | `country_iso_code` + every non-empty `region_fias_id`, `area_fias_id`, `city_fias_id`, `settlement_fias_id` | `EXACT` | no |
-| 2 | **New:** any other record with a non-empty `fias_id()` | `[ { country_iso_code: RU, city_fias_id: <id> } ]`; **when that answer is empty**, one more request with `[ { country_iso_code: RU, settlement_fias_id: <id> } ]` | `EXACT` | **no** — the id pins the place; the name check would only lose rows |
-| 3 | A record with a settlement name and no id (non-RU, a CDEK row without `fias_guid`, a row saved before E1) — unchanged r4 path | `[ { country_iso_code, city: <name> } ]`, then the existing `settlement: <name>` retry | `DEGRADED` | yes, as today |
+| 1 | **Russian** (`country = RU`) DaData record with native ids in its own `raw` (unchanged for RU) | `country_iso_code` + every non-empty `region_fias_id`, `area_fias_id`, `city_fias_id`, `settlement_fias_id` | `EXACT` | no |
+| 2 | **New:** any other record with a non-empty canonical `fias_id()` (RU only, by construction) | `[ { country_iso_code: RU, city_fias_id: <id> } ]`; **when that answer is empty**, exactly one more request with `[ { country_iso_code: RU, settlement_fias_id: <id> } ]` | `EXACT` | **no** — the id pins the place; the name check would only lose rows |
+| 3 | **Every non-RU record of any provider** (a DaData `UZ`/`KZ` record **with** OSM/GeoNames ids included — **changed in r5.1**), and a Russian record with a locality name but no id (a CDEK row without `fias_guid`, a row saved before E1, a DaData record without native ids) | `[ { country_iso_code, city: <own name> } ]`, then the existing `settlement: <own name>` retry; **own name** = `nested_settlement.name` when the record has one, else `settlement.name` | `DEGRADED` | yes — `foreign_locality_parent()` returns the parent for every branch-3 record, DaData's included |
 | 4 | Region-only / nothing (unchanged) | `region: <name>` / country only | `DEGRADED` / `NONE` | no |
+
+Branch 3 for non-RU DaData records is a **framework-wide** change, not only city mode: `build_locations_constraint()` serves every checkout. A DaData shop
+whose customer picks Ташкент now gets `city: Ташкент` + country instead of `city_fias_id: relation:2216724` + country; the same 13.08.2026 measurement
+(READ `build_locations_constraint()` comment) gave 3 suggestions for both shapes, so no loss is expected, and the homonym post-filter now also guards
+those records. F2 re-records that pair live (§7).
 
 **Why city then settlement, in two requests.** One GUID is either a city or a settlement in FIAS, and the record does not say which (CDEK's row has no
 level). DaData's `locations` is a list whose entries combine as OR, but the existing name path measured that a two-entry list stops DaData cutting the
@@ -243,20 +255,23 @@ name path already has. Keys: `city_fias_id` and `settlement_fias_id` are the key
 `native_parent_ids()`, `:1196`) and the r4 measurement used them (rows 2, 5); DaData's address-suggestion docs list `locations` as «Ограничение по
 родителю» (Context7, `/websites/dadata_ru_api`, `suggest/address`) — the per-key table was not returned there, so the keys are evidenced by the live
 code and the r4 calls, not by the docs page. **UNVERIFIED:** whether `city_fias_id` **alone** scopes a federal city (Москва's GUID is also its
-`region_fias_id`; r4 row 1 sent both). F2 records two live calls (Москва GUID as `city_fias_id` alone: «Тверская 7» found, a Зеленоград street not;
-Черкизово's GUID: empty as city, found as settlement). If `city_fias_id` alone returns nothing for Москва, F2 adds `region_fias_id: <id>` as a third
-step after the same empty-answer rule — an order applied to every GUID, not a type branch.
+`region_fias_id`; r4 row 1 sent both). F2 records live calls: Москва GUID as `city_fias_id` alone — «Москва ул Тверская 7» found (positive) and
+«Панфиловский проспект 10», a Зеленоград street, **not** found (negative); Черкизово's GUID — empty as city, found as settlement. **There is no
+region-only step** (r5.1): `region_fias_id` alone would widen Москва to its whole region, which holds Зеленоград (§4.3 measured records). If the Москва
+positive call returns nothing, the only allowed third shape is the **pair** `[ { country_iso_code: RU, region_fias_id: <id>, city_fias_id: <id> } ]` —
+the same GUID in both keys, the shape r4 row 1 measured (Зеленоград excluded) — sent after the same empty-answer rule; F2 then re-records the Москва
+positive and the Зеленоград negative for that pair, and its retry-count test changes from «exactly one more request» to «at most two more». The pair keeps
+the city constraint, so it cannot widen any place; it applies to every GUID in the same order, not as a type branch.
 
-**What happens when a listed entry has no FIAS id** (K14): it takes branch 3 — country + settlement name, the r4 behaviour, `NARROWING_DEGRADED`, the
-homonym post-filter on. It is never an error: the settings save accepts it (§3.2), the checkout choice works, only the scoping is by name. A DaData
-record outside Russia keeps branch 1 with its own OSM/GeoNames ids plus `country_iso_code` — measured working (Tashkent, 13.08.2026, READ
-`build_locations_constraint()` comment); those ids are DaData's own, not FIAS, and never enter `fias_id` (§10 item 1).
+**What happens when a listed entry has no FIAS id** (K14): it takes branch 3 — country + its own locality name, `NARROWING_DEGRADED`, the homonym
+post-filter on. It is never an error: the settings save accepts it (§3.2), the checkout choice works, only the scoping is by name. This covers **every
+non-RU record of every provider**: DaData's OSM/GeoNames ids (`relation:…`) are never used for scoping and never enter the canonical `fias_id`.
 
 What the list scopes, per provider:
 
 | Provider (registry) | The list's records | Address suggestions are scoped by | Source (READ) |
 |---|---|---|---|
-| **DaData** (framework, the default and the `address` fallback) | DaData settlement records, full `raw` | branch 1: an exact `locations` filter from the record's own ids — whatever DaData files under those ids is inside the place, nothing else. Outside RU the ids are OSM/GeoNames ids, still exact with `country_iso_code` | `fw: class-dadata-provider.php:1145,1188-1210` (`native_parent_ids()`), `:1106` |
+| **DaData** (framework, the default and the `address` fallback) | DaData settlement records, full `raw` | **RU:** branch 1, an exact `locations` filter from the record's native ids — whatever DaData files under those ids is inside the place, nothing else. **Outside RU:** branch 3, country + own locality name (r5.1, K14) | `fw: class-dadata-provider.php:1145,1188-1210` (`native_parent_ids()`), `:1106` |
 | **CDEK** (`plugin: woocommerce-edostavka`, registered through `woodev_location_providers`) | CDEK city records: `key` `cdek:<code>`, `settlement.name`, `region.name`, `district`, `lat/lon`, `raw = { code }`, `ancestors = [ cdek:r<region_code> ]`; **after E1 also `fias_id`** (Russian rows whose dictionary row has a `fias_guid`) | CDEK serves only the `region` and `settlement` levels, so the **choice** of the place is CDEK's; ADDRESS suggestions still come from DaData (the `address` level falls through the D15 chain to the bundled DaData provider when the key is set; with no key there are none, K8). With E1: **branch 2**, by the place's FIAS id. Without E1 (today's CDEK release, non-RU rows, rows saved before E1): **branch 3**, by settlement name | `plugin: includes/location/class-cdek-location-provider.php:226-228` (levels), `:826-861` (`record_from_compact()`), `:931-951` (`compact_city()` — drops `fias_guid`); `fw: class-location-service.php:3652` (`resolve_provider_for_level()`), `class-dadata-provider.php:1153-1170` (name fallback), `class-location-scope.php:270` (`components_from_record()`) |
 | **Others** | none other is registered by any Woodev plugin read on this machine (Yandex, Russian Post, Ozon: no `woodev_location_providers` hook) | branch 2 if the provider fills `fias_id`, else branch 3/4 — whatever its records carry; the plugin neither knows nor adjusts it | `fw: interface-location-provider.php` |
 
@@ -299,8 +314,21 @@ default takes over (the saved-city early return in `get_customer_record()` would
 from that rejected city are cleared in the checkout view (classic `handle_checkout_get_value()`, 725; block: the cart address store). The customer's
 stored My Account address is never edited. This is presentation, not validation: nothing is rejected at submit.
 
-Related one-line fix: `record_names_city()` (staleness rule c, READ 1303) compares the native city with `settlement()` only, so a nested record whose
-native City correctly says «Черкизово» is dropped as stale on a Store API request (measured by the r2 critic); it also accepts the `nested_settlement` name.
+Related fix — **every consumer of the parent-city projection** must accept a nested record's own name, because §4.2 makes the native City post
+«Черкизово» (the `nested_settlement`), not the parent «Пушкино». The consumers (READ, all callers searched; r5 critic probe:
+`settlement_record_value()` = «Пушкино», `Checkout_Handler::record_names_city( record, "Черкизово" )` = false):
+
+| Consumer | Where (READ) | Today | Fix |
+|---|---|---|---|
+| `Location_Service::record_names_city()` (staleness rule c) | `class-location-service.php:1323`, caller `:1512` | compares with `settlement()` only → a Store API request drops the nested record as stale (r2 critic) | accept the own-locality name |
+| `Checkout_Handler::settlement_record_value()` | `checkout/class-checkout-handler.php:2421` | returns `settlement.name` = Пушкино | returns the own-locality name (`nested_settlement.name` when present, else `settlement.name`) — the same `value` §4.2 posts |
+| `Checkout_Handler::guard_custom_settlement()` | `:2304`, called from `handle_checkout_process()` `:2234` | compares the posted City with `settlement_record_value()` → in `ajax-select2` with custom localities off, a posted «Черкизово» is **refused** at placement | follows from the projection fix |
+| `Checkout_Handler::city_names_record()` | `:1875` (callers `:1449`, `:1819`, `:1854`) | compares through `settlement_record_value()` | follows from the projection fix; accepts the parent name too, so a saved «Пушкино» still matches |
+| `Checkout_Handler::record_names_city()` used by `remember_checkout_location()` | `:4090`, caller `:4061` | refuses the record → the order **loses** its settlement meta | accept the own-locality name |
+| `Order_Editor::location_record_names_city()` | `admin/orders/class-order-editor.php:1421`, caller `:1405` | same comparison on the order-edit screen | same rule (the screen itself is unchanged, §1) |
+
+One shared rule, not six: F2 adds one helper (on `Location_Record` — e.g. `locality_names()` already lists settlement + nested names, READ
+`class-location-record.php:712`) and every consumer above calls it; none keeps its own copy of the comparison.
 
 ## 5. Licence, key and outage
 
@@ -340,18 +368,29 @@ itself** (draft release PR #1606); the plugin release bundles the matching `wood
 
 **F2 — framework PHP.** Scope: `woodev_location_settlement_choices` (static-memoised) and `woodev_location_default_locality` filters (§2);
 `build_location_block()` keys of §4.2 for checkout/cart configs only; the returning-customer rule + saved-city guard + view clearing (§4.4); the
-`record_names_city()` nested fix; **`Location_Record::fias_id`** (§4.3: optional, normalised, RU + UUID only, in `to_array()`); **branch 2** of the DaData
-filter (`build_locations_constraint()`, the `suggest()` empty-answer retry, `foreign_locality_parent()` returning null for a FIAS-pinned parent); the two
-live probe calls of §4.3 recorded in the PR body. Acceptance (unit tests, each named after its case):
+nested-name fix in **every consumer of §4.4's table** (`Location_Service::record_names_city()`, `Checkout_Handler::settlement_record_value()` /
+`guard_custom_settlement()` / `city_names_record()` / `record_names_city()` + `remember_checkout_location()`, `Order_Editor::location_record_names_city()`)
+through one shared helper; **`Location_Record::fias_id`** (§4.3: canonical, optional, normalised, RU + UUID only, in `to_array()`); **branch 2** of the
+DaData filter (`build_locations_constraint()`, the `suggest()` empty-answer retry, `foreign_locality_parent()` returning null for a FIAS-pinned parent);
+**branch 3 for every non-RU parent** (DaData's included) with the own-locality name; the live probe calls of §4.3 (Москва positive, Зеленоград negative,
+Черкизово, Ташкент by name) recorded in the PR body. Acceptance (unit tests, each named after its case):
 
 - config with 1 and 3 places and the hidden flag carries `allowed`, `hideSettlement`, `allowCustomSettlement: false`, `levels.region: false`; the My
   Account config has none of them; a nested record's `value` is its own name («Черкизово»);
 - `Location_Record::from_array()` keeps `fias_id` for an RU UUID (lower-cased), stores `''` for a non-RU record, an OSM `relation:…` id and a malformed
   string, and never throws for them; `to_array()` → `from_array()` round-trips it; a payload without the key builds as before (existing record tests green);
-- a DaData parent sends branch 1 exactly as today (snapshot of the request body unchanged); a CDEK-style parent with `fias_id` sends
+- a **Russian** DaData parent sends branch 1 exactly as today (snapshot of the request body unchanged); a CDEK-style parent with `fias_id` sends
   `[ { country_iso_code: RU, city_fias_id } ]`, reports `NARROWING_EXACT`, and on an empty fake answer sends exactly one more request with
-  `settlement_fias_id`; no name post-filter drops its rows; a CDEK-style parent **without** `fias_id` (and a `KZ` one) sends the r4 name filter and
-  reports `NARROWING_DEGRADED`; no branch reads the record's type or a federal-city list (K11′);
+  `settlement_fias_id` (and never a `region_fias_id`-only body); no name post-filter drops its rows; a CDEK-style parent **without** `fias_id` sends the
+  name filter and reports `NARROWING_DEGRADED`;
+- **non-RU, every provider:** a DaData `UZ` Ташкент record whose `raw` holds `city_fias_id: relation:2216724` sends
+  `[ { country_iso_code: UZ, city: Ташкент } ]` — **no `*_fias_id` key** — reports `NARROWING_DEGRADED` and post-filters by locality; a CDEK `KZ`
+  Алматы record sends the same shape for its name; a nested record sends its `nested_settlement` name; existing DaData tests that asserted OSM-id bodies
+  for foreign records are updated to the name body, not deleted; no branch reads the record's type or a federal-city list (K11′);
+- **nested name at classic placement:** with the location field mode `ajax-select2` and custom localities **off**, a checkout POST with City «Черкизово»
+  and the рп Черкизово chain record (parent «Пушкино») passes `handle_checkout_process()` without the `guard_custom_settlement()` error, and after
+  `remember_checkout_location()` the order's location meta holds that record (not dropped); `city_names_record()` matches both «Черкизово» and
+  «Пушкино»; `Location_Service::record_names_city()` keeps the record on a Store API request; the order editor accepts «Черкизово»;
 - saved Tula ignored for the checkout view; the fixed default comes from the filter without touching the stored «Локация» option;
 - `composer test` (with `rm -f .phpunit.result.cache` first) and `composer phpcs` green.
 
@@ -364,16 +403,20 @@ the placed order's City/State/street; `npm run test:js` green. Bundles are built
 
 **C14 — plugin settings, publication, fallback.** Scope: `City_Mode_Settings` (sub-tab «Доставка в городе», three options, boolean `show_if`, validation
 §3.2, texts §3.3), `City_Mode` (licence-gated publication of the two F2 filters), notices §3.4, the key-removed classic `select` fallback (§5). The
-settings shell can start at once; publication codes against F2's filter signatures. Acceptance (unit tests): save rejects an empty list, a duplicate key
-and a DaData row without `fias_id`, and **accepts** a CDEK row without `fias_id` (K14); a saved row round-trips save → reload → the same
+settings shell can start at once; publication codes against F2's filter signatures. Acceptance (unit tests): save rejects an empty list, a duplicate key,
+and each invalid payload of §3.2 by name — a row JSON without `key`, a `region`-level record, a record with `provider_id: "nope"` (unregistered), a
+settlement record with an empty `settlement.name`; save **succeeds** for real mapper output with no canonical `fias_id` — a RU DaData Москва record built
+by `record_from_dadata_fields()` (key `dadata:0c5b2444-…`, GUID only in `raw.fias_id`), a non-RU DaData record (Ташкент, OSM-id `raw`, and one with a
+derived key and empty `raw.fias_id`), a CDEK RU record with and without `fias_id`, and a CDEK `KZ` record (K14); a saved row round-trips save → reload → the same
 `Location_Record::to_array()`, `raw` and `fias_id` included (never through `City_Limit::encode()`); the filters are not hooked when the switch is off, the
 list is empty or `License_Gate::is_in_force()` is false; each §3.4 notice renders under its condition and none is stored; with the location layer inactive
 the classic delivery City is a `select` of the listed `value`s; the plugin's phpcs and test suite green; the coordinator's Playwright look at the tab at
 1440 and 1280 before «done».
 
 **C15 — fixtures, rig, docs.** Scope: recorded DaData fixtures — the §4.3 measured table (Москва filter with Зеленоград and Коммунарка queries, Зеленоград
-filter, the CDEK-style name filter), **the branch-2 FIAS filter** (Москва GUID as `city_fias_id`; Черкизово GUID empty as city, answered as
-`settlement_fias_id`), Химки, рп Черкизово; rig acceptance §8 on classic + block with a report and screenshots on disk; docs (`docs/CURRENT-STATE.md`,
+filter, the CDEK-style name filter), **the branch-2 FIAS filter** (Москва GUID as `city_fias_id`: «Москва ул Тверская 7» positive, «Панфиловский
+проспект 10» negative — and the same pair for the `region_fias_id` + `city_fias_id` shape if F2 had to adopt it; Черкизово GUID empty as city, answered
+as `settlement_fias_id`), **the non-RU name filter** (Ташкент by `city` + `UZ`, Алматы by `city` + `KZ`; no OSM-id fixture), Химки, рп Черкизово; rig acceptance §8 on classic + block with a report and screenshots on disk; docs (`docs/CURRENT-STATE.md`,
 product page text, materials package); Russian catalogue. Acceptance: every §8 row reported pass/fail per surface with the placed order's fields; fixtures
 replay offline in the plugin's test suite; no key or real phone in any screenshot.
 
@@ -411,7 +454,7 @@ block for every row**; a row passes when the placed order's City/State/street ar
 | A1b | 2 places (Москва, Зеленоград) | Both filters apply per pick: after picking Зеленоград, «Панфиловский проспект 10» is suggested, «Тверская 7» is not; after picking Москва the reverse (§4.3 rows 8-9, 6-7) |
 | A1c | CDEK as the settlement provider, 1 place (Москва) with a DaData key — run **twice**: today's CDEK release (no `fias_id`) and an E1 build | The place is CDEK's record. Without E1: suggestions by the name «Москва» (branch 3) — Коммунарка offered, Зеленоград street not. With E1: the stored row carries Moscow's `fias_id` and the `/suggest` request sends `city_fias_id` (branch 2) — the same outcome. Without a DaData key no suggestions and the typed address stays free (§4.3 CDEK row) |
 | A1d | CDEK, nested place (Черкизово) with E1 | The `/suggest` network log shows `city_fias_id` answered empty, then `settlement_fias_id` answered; only Черкизово addresses; City posts «Черкизово» |
-| A1e | A place outside Russia (a CDEK `KZ` city, e.g. Алматы, and a DaData `KZ`/`UZ` settlement) | The CDEK row has no `fias_id` and is scoped by country + name (branch 3); the DaData row keeps its own OSM id + country (branch 1); both give addresses only in that city; saving the list accepts both (K14) |
+| A1e | A place outside Russia (a CDEK `KZ` city, e.g. Алматы, and a DaData `KZ`/`UZ` settlement) | Both rows have no canonical `fias_id` and **both** are scoped by country + own locality name (branch 3): the `/suggest` network log shows `city: <name>` + `country_iso_code` and **no `*_fias_id` key** for either, the DaData row included (r5.1); both give addresses only in that city; saving the list accepts both (K14) |
 | A2 | 1 place, flag off | City row visible, prefilled and locked to Москва |
 | A3 | 3 places (Москва, Химки, пос. Коммунарка) | The field offers exactly these three; no settlement `/suggest` request in the network log; after picking Химки, suggestions only in Химки; picking an address does not change City |
 | A4 | Nested settlement (рп Черкизово listed) | City posts «Черкизово»; suggestions only in Черкизово; the chain survives placement (not dropped as stale); after saving and reloading the settings the `locations` filter is still the exact `settlement_fias_id` |
@@ -420,7 +463,7 @@ block for every row**; a row passes when the placed order's City/State/street ar
 | A7 | `billing_only` shop, and a separate shipping address with «Доставить по другому адресу» toggled | The closed choice follows the delivery section on every toggle; the payer's billing city outside the list is accepted |
 | A8 | Licence not in force, then renewed | Ordinary City field, any city; range method hidden; the §3.4 notice; renewal restores the mode on the next request |
 | A9 | DaData key removed; DaData unreachable with the key present | Key removed — classic: City is a `select` of the listed places, no suggestions, notice; block: text City (K5 gap, recorded). Unreachable — the choice works, only suggestions fail |
-| A10 | Settings: save with the mode on and an empty list, with a duplicate, with a row without `fias_id`; toggle the mode on | Blocking errors of §3.2, nothing saved; the two dependent fields appear on toggle and are saved |
+| A10 | Settings: save with the mode on and an empty list; with a duplicate; with a crafted row that is a `region`-level record (posted by editing the request). Then save a list of real picks without a canonical `fias_id` — DaData Москва, DaData Ташкент, CDEK Алматы; toggle the mode on | The first three: blocking errors of §3.2, nothing saved. The real picks save without error. The two dependent fields appear on toggle and are saved |
 | A11 | Mode switched off after use; My Account address edit with the mode on | Off: the shop's own «Локация» behaviour, no leftovers. My Account: the unrestricted picker as today |
 | A12 | Another carrier active (СДЭК) | Its buyers also pick only listed places; its pickup map is not restricted (§9) |
 
@@ -454,14 +497,10 @@ Still applied from the reviews: the record is stored whole (r1 finding 2), a nes
 
 Provisional, reversible choices made in r5 so nothing waits. Each names what changes if he decides otherwise.
 
-1. **A DaData place outside Russia keeps DaData's own ids** (OSM/GeoNames, with the country) rather than being cut down to country + name. The r5 input
-   says «там фильтр по названию/стране»; r5 reads it as the rule for records **without** a FIAS id (CDEK rows, K14), because DaData's own ids for its
-   own record are the provider's scoping (K11′) and were measured working (Tashkent, 13.08.2026). Reversal: F2 sends branch 3 for every non-RU parent —
-   a few lines, no data change.
-2. **No migration and no notice for CDEK rows saved before E1.** They stay name-scoped (branch 3) until the merchant re-picks the row; city mode is new in
+1. **No migration and no notice for CDEK rows saved before E1.** They stay name-scoped (branch 3) until the merchant re-picks the row; city mode is new in
    2.0.0, so such rows exist only on shops that used it between the range release and the next CDEK release. Reversal: C14 re-enriches rows without
    `fias_id` on the settings render (one bounded CDEK lookup per row) or shows a debug-mode hint.
-3. **E1 ships with the next regular CDEK release**, not as its own hotfix. Until then CDEK shops get the r4 name scoping, measured right for Москва /
+2. **E1 ships with the next regular CDEK release**, not as its own hotfix. Until then CDEK shops get the r4 name scoping, measured right for Москва /
    Зеленоград / Коммунарка (§4.3 rows 10-12). Reversal: a CDEK patch release right after the range release.
 
 ## Revision log
@@ -473,6 +512,7 @@ Provisional, reversible choices made in r5 so nothing waits. Each names what cha
 | r3 | 05.11.2026 | Rewritten to the operator's redirect: the list is granularity, not a boundary (K10); cards F2, F3, C14, C15; rig A1-A12 (f9c4c9f3) |
 | r4 | 05.11.2026 | K11 («federal city includes its districts») replaced by K11′ — the provider decides what a place covers; DaData measured, 16 calls (48c9cb11) |
 | r5 | 06.11.2026 | Operator's late inputs of 05.11.2026: K12 (a record keeps its FIAS id; CDEK stops dropping `fias_guid` — card **E1**, separate edostavka PR), K13 (DaData scoped by that id, `city_fias_id` then `settlement_fias_id`), K14 (FIAS is Russia-only; no id → country + name). New `Location_Record::fias_id` field and DaData branch 2 in F2 (§4.3). **Contradicts r4 in one place:** r4 said §4.3 needs no framework code and no card — superseded (§9). K6-K10 and K11′ unchanged. §7 rewritten with per-card acceptance and E1; §8 gains A1c (twice), A1d, A1e; §10 added |
+| r5.1 | 06.11.2026 | Codex (gpt-6.1-sol) r5 review, four must-fix findings applied. (1) The canonical `Location_Record::fias_id` is kept apart from DaData's native `raw.fias_id`; §3.2 requires no FIAS id from any provider and names the exact invalid payloads; C14/A10 add successful saves of real RU and non-RU mapper output. (2) §4.4 lists every consumer of the parent-city projection (`Checkout_Handler::settlement_record_value()` / `guard_custom_settlement()` / `city_names_record()` / `record_names_city()` + `remember_checkout_location()`, `Location_Service::record_names_city()`, `Order_Editor::location_record_names_city()`); F2 fixes them through one helper, with a PHP case posting «Черкизово» under `ajax-select2` + custom localities off. (3) Coordinator decision: the operator's input wins — outside RU every provider, DaData included, is scoped by country + own locality name (OSM ids no longer used; a framework-wide change); §4.3, K14, F2 tests, C15 fixtures and A1e updated, r5's §10 item 1 dropped. (4) The region-only third retry is deleted; the only allowed third shape is the `region_fias_id` + `city_fias_id` pair, with a Москва positive and a Зеленоград negative probe in F2/C15 |
 
 ## Related
 
