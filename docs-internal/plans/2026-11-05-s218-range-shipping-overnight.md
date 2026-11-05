@@ -22,6 +22,7 @@
 ## Operator morning
 
 - **Ключи для живой проверки сервисов** (D4): Mapbox — у него есть; Google — «вроде был», где — не помнит; 2GIS — ключ поддержки 2021 г., лимит 1 000, может быть мёртв; Яндекс — нет; ORS — зарегистрировать (его почта). Ночью — только записанные фикстуры по документации; живые пробы — утром, с его ключами. Ключи НИКОГДА не печатать.
+- **Measured s218 (05.11.2026)**: keys live in `~/Projects/woocommerce-range-shipping/.env` (gitignored, copied into worktrees via `.worktreeinclude`; names in `.env.example`). Mapbox token WORKS (Directions `driving` 11.76 km / `driving-traffic` 10.84 km, Red Square → Moscow City, response shape as §4.5). 2GIS key is DEAD: 403 `invalid_key` on Routing 7.0.0, Distance Matrix and Catalog geocode — 10-char legacy key; a new key from platform.2gis.ru is needed (operator, tomorrow, together with Google/Yandex/ORS).
 - **Утром — взгляд на риг**: склады, «Расчёт расстояния», метод доставки, оба checkout, заказ, плюс пакет материалов на `~/Desktop/woodev-publications/range-2.0.0/`.
 
 ### Measured in s217
