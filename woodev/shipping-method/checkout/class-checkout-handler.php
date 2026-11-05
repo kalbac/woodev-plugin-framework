@@ -713,9 +713,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * one-character sentinel. A legitimate value is never `*` — it is WooCommerce's own
 		 * wildcard, not a place name.
 		 *
+		 * City mode also blanks a delivery City / street / postcode saved for a place it does not
+		 * list ({@see self::is_rejected_city_prefill()}).
+		 *
 		 * @internal
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.26 Blanks a city-mode-rejected prefill.
 		 *
 		 * @param string|null $value the value WooCommerce resolved
 		 * @param string      $input the field id being resolved
@@ -731,6 +735,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			// itself, and return null to mean "carry on, WC".
 			if ( null !== $value ) {
 				return $value;
+			}
+
+			if ( $this->is_rejected_city_prefill( (string) $input ) ) {
+				return '';
 			}
 
 			$fields = $this->effective_fields();
@@ -749,6 +757,45 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			// Short-circuit ONLY for the sentinel; every other value is left to WC's own
 			// resolution, so this filter cannot drift away from WC's behaviour over time.
 			return '*' === $customer->{$getter}() ? '' : $value;
+		}
+
+		/**
+		 * Whether `$input` is the City, street or postcode of the delivery section that city mode
+		 * shows empty: WooCommerce would prefill it from a saved city that names none of the listed
+		 * places (range-shipping city mode spec §4.4 — a returning customer's Тула).
+		 *
+		 * The checkout view only: the customer's stored address is never edited, and nothing is
+		 * refused at submit. The payer's billing address stays as saved while the order ships to
+		 * a separate shipping address (K6).
+		 *
+		 * @since 2.0.26
+		 *
+		 * @param string $input The field id WooCommerce resolves.
+		 *
+		 * @return bool
+		 */
+		private function is_rejected_city_prefill( string $input ): bool {
+			if ( 1 !== preg_match( '/^(billing|shipping)_(?:city|address_1|postcode)$/', $input, $matches ) ) {
+				return false;
+			}
+
+			$section = $matches[1];
+			$service = $this->location_service();
+
+			if ( ! $service->is_active() || ! $service->has_settlement_choices() || $section !== $this->classic_checkout_default_target() ) {
+				return false;
+			}
+
+			$customer = $this->wc_customer();
+			$getter   = 'get_' . $section . '_city';
+
+			if ( ! is_object( $customer ) || ! is_callable( [ $customer, $getter ] ) ) {
+				return false;
+			}
+
+			$city = trim( (string) $customer->{$getter}() );
+
+			return '' !== $city && ! $service->names_listed_settlement( $city );
 		}
 
 		/**
@@ -1310,7 +1357,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * no-ops (same seam as the cart's). No pickup layer, no takeover and no phone mask:
 		 * the account forms hold an address TEXT, not a delivery choice.
 		 *
+		 * City mode restricts the checkout only, so the config is built with it suspended
+		 * ({@see \Woodev\Framework\Shipping\Location\Location_Service::without_settlement_choices()}):
+		 * the account form keeps the unrestricted picker (range-shipping city mode spec §1).
+		 *
 		 * @since 2.0.2
+		 * @since 2.0.26 Built with city mode suspended.
 		 *
 		 * @return void
 		 */
@@ -1335,6 +1387,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 				return;
 			}
 
+			$config = \Woodev\Framework\Shipping\Location\Location_Service::without_settlement_choices(
+				fn() => $this->account_config( $service, $fields, $section )
+			);
+
+			if ( null === $config ) {
+				return;
+			}
+
+			$this->enqueue_location_client( $config );
+		}
+
+		/**
+		 * Builds the My Account form's client config, or null when it carries no location block.
+		 *
+		 * @since 2.0.26
+		 *
+		 * @param \Woodev\Framework\Shipping\Location\Location_Service $service The active location service.
+		 * @param array<string, array<string, mixed>>                  $fields  The section's field descriptors.
+		 * @param string                                               $section `billing` or `shipping`.
+		 *
+		 * @return array<string, mixed>|null
+		 */
+		private function account_config( \Woodev\Framework\Shipping\Location\Location_Service $service, array $fields, string $section ): ?array {
 			$config = ( new Checkout_Config(
 				$this->plugin_id(),
 				rtrim( rest_url( 'woodev/v1' ), '/' ),
@@ -1345,7 +1420,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			) )->build( Checkout_Fields::from_array( array_values( $fields ) ) );
 
 			if ( ! isset( $config['location'] ) ) {
-				return;
+				return null;
 			}
 
 			$config['takeover']          = [];
@@ -1355,7 +1430,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 
 			$config['location'] = $this->account_location_block( $config['location'], $section );
 
-			$this->enqueue_location_client( $config );
+			return $config;
 		}
 
 		protected function account_address_section(): string {
@@ -1865,7 +1940,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * the same city text in another country is a different place. A blank `$country` judges
 		 * the city alone.
 		 *
+		 * A nested record («рп Черкизово» inside «г Пушкино») is named by both «Черкизово» and a
+		 * saved «Пушкино» ({@see \Woodev\Framework\Shipping\Location\Location_Record::names_locality()}).
+		 *
 		 * @since 2.0.2
+		 * @since 2.0.26 Accepts a nested settlement's own name and its parent's.
 		 *
 		 * @param string                                              $city    The saved city text.
 		 * @param \Woodev\Framework\Shipping\Location\Location_Record $record  The stored record.
@@ -1878,11 +1957,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 				return false;
 			}
 
-			$settlement = $record->settlement();
-			$type       = null !== $settlement ? (string) $settlement['type'] : '';
+			if ( '' !== $record->own_locality_name() ) {
+				return $record->names_locality( $city );
+			}
 
-			return self::normalize_city_for_comparison( $city, $type )
-				=== self::normalize_city_for_comparison( self::settlement_record_value( $record ), $type );
+			// A record with no locality name is shown — and compared — by its label.
+			return self::normalize_city_for_comparison( $city ) === self::normalize_city_for_comparison( $record->label() );
 		}
 
 		/**
@@ -2338,9 +2418,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			);
 			$expected = self::settlement_record_value( $record );
 
+			// The record's own name is what the City field posts; a nested record («рп
+			// Черкизово» in «г Пушкино») also accepts its parent, which a client that predates
+			// city mode still posts (city mode spec §4.4).
 			if (
-				'' !== $expected
-				&& self::normalize_for_settlement_match( $posted ) === self::normalize_for_settlement_match( $expected )
+				null !== $record
+				&& '' !== $expected
+				&& ( self::normalize_for_settlement_match( $posted ) === self::normalize_for_settlement_match( $expected ) || $record->names_locality( $posted ) )
 			) {
 				return true;
 			}
@@ -2413,7 +2497,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * inlines the same `settlement()['name']` read at its own two call sites
 		 * rather than sharing a helper).
 		 *
+		 * A nested record («рп Черкизово» inside «г Пушкино») carries its OWN locality's name
+		 * ({@see \Woodev\Framework\Shipping\Location\Location_Record::own_locality_name()}), the
+		 * value city mode posts — not its parent's (city mode spec §4.4).
+		 *
 		 * @since 2.0.2
+		 * @since 2.0.26 A nested settlement's own name, not its parent city's.
 		 *
 		 * @param \Woodev\Framework\Shipping\Location\Location_Record|null $record
 		 *
@@ -2424,8 +2513,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 				return '';
 			}
 
-			$settlement = $record->settlement();
-			$name       = null !== $settlement ? trim( (string) $settlement['name'] ) : '';
+			$name = $record->own_locality_name();
 
 			return '' !== $name ? $name : $record->label();
 		}
@@ -4081,9 +4169,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		}
 
 		/**
-		 * Whether a settlement record names the order's saved city.
+		 * Whether a settlement record names the order's saved city — its own locality or, for a
+		 * nested record, its parent ({@see \Woodev\Framework\Shipping\Location\Location_Record::names_locality()}),
+		 * so an order placed with City «Черкизово» keeps its location meta.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.26 Accepts a nested settlement's own name.
 		 * @param \Woodev\Framework\Shipping\Location\Location_Record $record The settlement record.
 		 * @param string                                              $city The order's delivery city.
 		 * @return bool
@@ -4093,16 +4184,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 				return false;
 			}
 
-			$settlement = $record->settlement();
-			$name       = null !== $settlement ? trim( (string) $settlement['name'] ) : '';
-
-			if ( '' === $name ) {
-				return false;
-			}
-
-			$type = (string) ( $settlement['type'] ?? '' );
-
-			return \Woodev\Framework\Shipping\Location\Location_Record::normalize_city_name( $name, $type ) === \Woodev\Framework\Shipping\Location\Location_Record::normalize_city_name( $city, $type );
+			return $record->names_locality( $city );
 		}
 
 		/**

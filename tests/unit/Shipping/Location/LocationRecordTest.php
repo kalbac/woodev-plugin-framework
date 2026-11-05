@@ -725,4 +725,95 @@ final class LocationRecordTest extends TestCase {
 			Location_Record::from_array( $record->to_array() )->nested_settlement()
 		);
 	}
+
+	// -------------------------------------------------------------------------
+	// fias_id — the canonical FIAS id of the record's own locality (city mode spec
+	// §4.3, K12/K14, framework 2.0.26).
+	// -------------------------------------------------------------------------
+
+	/**
+	 * A CDEK-style settlement record with `$overrides` applied.
+	 *
+	 * @param array<string, mixed> $overrides Payload overrides.
+	 */
+	private static function cdek_place( array $overrides = [] ): Location_Record {
+		return Location_Record::from_array(
+			array_merge(
+				[
+					'key'         => 'cdek:44',
+					'provider_id' => 'cdek',
+					'level'       => Location_Record::LEVEL_SETTLEMENT,
+					'country'     => 'RU',
+					'settlement'  => [ 'name' => 'Москва' ],
+				],
+				$overrides
+			)
+		);
+	}
+
+	public function test_fias_id_is_kept_lower_cased_for_a_russian_uuid(): void {
+		$record = self::cdek_place( [ 'fias_id' => ' 0C5B2444-70A0-4932-980C-B4DC0D3F02B5 ' ] );
+
+		$this->assertSame( '0c5b2444-70a0-4932-980c-b4dc0d3f02b5', $record->fias_id() );
+	}
+
+	/**
+	 * @dataProvider not_a_canonical_fias_id
+	 *
+	 * @param array<string, mixed> $overrides Payload overrides.
+	 */
+	public function test_fias_id_is_stored_empty_and_never_throws( array $overrides ): void {
+		$this->assertSame( '', self::cdek_place( $overrides )->fias_id() );
+	}
+
+	/**
+	 * @return array<string, array{0: array<string, mixed>}>
+	 */
+	public static function not_a_canonical_fias_id(): array {
+		return [
+			'a non-RU record with a UUID' => [ [ 'country' => 'KZ', 'fias_id' => '0c5b2444-70a0-4932-980c-b4dc0d3f02b5' ] ],
+			'an OSM relation id'          => [ [ 'fias_id' => 'relation:2216724' ] ],
+			'a malformed string'          => [ [ 'fias_id' => '0c5b2444-70a0' ] ],
+			'a non-string value'          => [ [ 'fias_id' => [ 'nope' ] ] ],
+			'no key at all'               => [ [] ],
+		];
+	}
+
+	public function test_fias_id_round_trips_through_to_array(): void {
+		$record = self::cdek_place( [ 'fias_id' => '0c5b2444-70a0-4932-980c-b4dc0d3f02b5' ] );
+
+		$this->assertSame( '0c5b2444-70a0-4932-980c-b4dc0d3f02b5', $record->to_array()['fias_id'] );
+		$this->assertEquals( $record, Location_Record::from_array( $record->to_array() ) );
+	}
+
+	// -------------------------------------------------------------------------
+	// own_locality_name() / names_locality() — the ONE nested-name rule (city mode spec §4.4).
+	// -------------------------------------------------------------------------
+
+	private static function cherkizovo(): Location_Record {
+		return Location_Record::from_array(
+			[
+				'key'               => 'dadata:cherkizovo',
+				'provider_id'       => 'dadata',
+				'level'             => Location_Record::LEVEL_SETTLEMENT,
+				'country'           => 'RU',
+				'settlement'        => [ 'name' => 'Пушкино', 'type' => 'г' ],
+				'nested_settlement' => [ 'name' => 'Черкизово', 'type' => 'рп' ],
+			]
+		);
+	}
+
+	public function test_own_locality_name_is_the_nested_settlement_when_there_is_one(): void {
+		$this->assertSame( 'Черкизово', self::cherkizovo()->own_locality_name() );
+		$this->assertSame( 'Москва', self::cdek_place()->own_locality_name() );
+	}
+
+	public function test_names_locality_accepts_the_own_name_and_the_parent_but_nothing_else(): void {
+		$record = self::cherkizovo();
+
+		$this->assertTrue( $record->names_locality( 'Черкизово' ) );
+		$this->assertTrue( $record->names_locality( 'рп Черкизово' ) );
+		$this->assertTrue( $record->names_locality( 'г. Пушкино' ) );
+		$this->assertFalse( $record->names_locality( 'Москва' ) );
+	}
 }

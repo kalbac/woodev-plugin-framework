@@ -463,27 +463,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		 *              instead of degrading to `[]` (#405).
 		 * @since 2.0.21 Drops a house that is not in a foreign parent's locality, and asks again
 		 *               by `settlement` when the `city` answer is empty (#1534).
+		 * @since 2.0.26 A FIAS-pinned parent is asked again by `settlement_fias_id` (city mode spec §4.3).
 		 */
 		public function suggest( string $query, Location_Scope $scope ): array {
 			if ( '' === trim( $query ) || ! $this->is_configured() ) {
 				return [];
 			}
 
-			$body            = $this->build_suggest_body( $scope );
-			$records         = $this->request_suggestions( $query, $body, $scope );
-			$locality_parent = self::foreign_locality_parent( $scope );
+			$body    = $this->build_suggest_body( $scope );
+			$records = $this->request_suggestions( $query, $body, $scope );
+			$retry   = [] === $records ? self::retry_locations( $scope ) : null;
 
-			// A SECOND DaData request, sent only when the city answer is empty: a foreign locality can be
-			// DaData's `settlement` rather than its `city` (CDEK's Черкизово sits inside «г Пушкино»). Both
-			// names in one `locations` list would save the request, but DaData then stops cutting the
-			// locality out of every label («г Москва, ул Тверская, д 1» instead of «ул Тверская, д 1»).
-			if ( [] === $records && null !== $locality_parent ) {
-				$body['locations'] = [
-					[
-						'country_iso_code' => $scope->country(),
-						'settlement'       => $locality_parent->settlement()['name'],
-					],
-				];
+			// A SECOND DaData request, sent only when the first answer is empty: the parent may be
+			// DaData's settlement rather than its city — see retry_locations().
+			if ( null !== $retry ) {
+				$body['locations'] = $retry;
 
 				$records = $this->request_suggestions( $query, $body, $scope );
 			}
@@ -1098,6 +1092,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		 *              for the native-id branch, `degraded` for the name-components
 		 *              branch, `none` when neither could narrow.
 		 * @since 2.0.21 Sends a foreign parent's city without its region.
+		 * @since 2.0.26 City mode spec §4.3 — one provider-agnostic order, decided here and
+		 *               nowhere else (K11′): (1) a RUSSIAN DaData parent by its native ids,
+		 *               exact; (2) any other parent with a canonical FIAS id
+		 *               ({@see Location_Record::fias_id()}) by `city_fias_id`, exact —
+		 *               {@see self::retry_locations()} asks `settlement_fias_id` next; (3) every
+		 *               other parent — every non-Russian one, DaData's OSM-id records included —
+		 *               by its OWN locality name ({@see Location_Record::own_locality_name()}),
+		 *               degraded; (4) a region name, or nothing. No branch reads a record's
+		 *               type or knows a federal city.
 		 *
 		 * @param Location_Scope $scope Lookup scope.
 		 *
@@ -1140,6 +1143,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 			 *
 			 * Adding the country is a no-op for Russia — same measurement, Moscow's real
 			 * FIAS UUID: 3 suggestions with and without it, identical values.
+			 *
+			 * Since 2.0.26 a non-Russian parent is sent the third way, `[ country_iso_code, city ]`
+			 * (city mode spec §4.3, K14): the same count, and its homonym post-filter now runs.
 			 */
 			$country    = [ 'country_iso_code' => $scope->country() ];
 			$native_ids = self::native_parent_ids( $scope );
@@ -1150,6 +1156,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 				return [ array_merge( $country, $native_ids ) ];
 			}
 
+			$fias_id = self::parent_fias_id( $scope );
+
+			if ( '' !== $fias_id ) {
+				$scope->report_narrowing( Location_Provider::NARROWING_EXACT );
+
+				return [ self::fias_location( 'city_fias_id', $fias_id ) ];
+			}
+
 			$components = $scope->parent_components();
 
 			if ( null === $components ) {
@@ -1158,10 +1172,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 				return [];
 			}
 
-			if ( ! empty( $components['settlement']['name'] ) ) {
+			$locality = self::parent_locality_name( $scope );
+
+			if ( '' !== $locality ) {
 				$scope->report_narrowing( Location_Provider::NARROWING_DEGRADED );
 
-				return [ array_merge( $country, [ 'city' => $components['settlement']['name'] ] ) ];
+				return [ array_merge( $country, [ 'city' => $locality ] ) ];
 			}
 
 			if ( ! empty( $components['region']['name'] ) ) {
@@ -1177,9 +1193,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 
 		/**
 		 * The parent's own DaData ids, read from its `raw` payload — `[]` when the parent is
-		 * not a DaData record or carries none of them.
+		 * not a Russian DaData record or carries none of them.
+		 *
+		 * Russia only (city mode spec §4.3, K14): abroad DaData's `*_fias_id` fields hold
+		 * OpenStreetMap or GeoNames ids (`relation:2216724` for Ташкент), not FIAS, so a foreign
+		 * DaData parent is searched by its locality name like every other foreign record.
 		 *
 		 * @since 2.0.21
+		 * @since 2.0.26 Russian records only.
 		 *
 		 * @param Location_Scope $scope Lookup scope.
 		 *
@@ -1188,7 +1209,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		private static function native_parent_ids( Location_Scope $scope ): array {
 			$parent = $scope->parent_record();
 
-			if ( null === $parent || self::PROVIDER_ID !== $parent->provider_id() || ! is_array( $parent->raw() ) ) {
+			if ( null === $parent || self::PROVIDER_ID !== $parent->provider_id() || 'RU' !== $parent->country() || ! is_array( $parent->raw() ) ) {
 				return [];
 			}
 
@@ -1204,16 +1225,121 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		}
 
 		/**
+		 * The parent's canonical FIAS id ({@see Location_Record::fias_id()}) when it is scoped by
+		 * that id — `''` for a parent with native DaData ids (they already pin it) or none at all.
+		 *
+		 * Branch 2 of the city mode spec's §4.3 filter: a CDEK record that kept its dictionary
+		 * row's `fias_guid` is searched under exactly that place, not under its name (K13).
+		 *
+		 * @since 2.0.26
+		 *
+		 * @param Location_Scope $scope Lookup scope.
+		 *
+		 * @return string
+		 */
+		private static function parent_fias_id( Location_Scope $scope ): string {
+			$parent = $scope->parent_record();
+
+			if ( null === $parent || [] !== self::native_parent_ids( $scope ) ) {
+				return '';
+			}
+
+			return $parent->fias_id();
+		}
+
+		/**
+		 * One FIAS-scoped `locations` entry. A canonical FIAS id exists only on a Russian record
+		 * ({@see Location_Record::fias_id()}), so the country is always RU.
+		 *
+		 * @since 2.0.26
+		 *
+		 * @param string $id_field `city_fias_id` or `settlement_fias_id`.
+		 * @param string $fias_id  The FIAS GUID.
+		 *
+		 * @return array<string, string>
+		 */
+		private static function fias_location( string $id_field, string $fias_id ): array {
+			return [
+				'country_iso_code' => 'RU',
+				$id_field          => $fias_id,
+			];
+		}
+
+		/**
+		 * The name a parent is searched by: the record's own locality
+		 * ({@see Location_Record::own_locality_name()} — «Черкизово», not its parent «Пушкино»),
+		 * or the settlement name of a components-only parent.
+		 *
+		 * @since 2.0.26
+		 *
+		 * @param Location_Scope $scope Lookup scope.
+		 *
+		 * @return string
+		 */
+		private static function parent_locality_name( Location_Scope $scope ): string {
+			$parent = $scope->parent_record();
+
+			if ( null !== $parent ) {
+				return $parent->own_locality_name();
+			}
+
+			$components = $scope->parent_components();
+
+			return trim( (string) ( $components['settlement']['name'] ?? '' ) );
+		}
+
+		/**
+		 * The `locations` of the one extra request {@see self::suggest()} sends when the first
+		 * answer is empty, or null when there is none to send.
+		 *
+		 * One GUID is either a FIAS city or a FIAS settlement, and the record does not say which,
+		 * so a FIAS-pinned parent is asked as `city_fias_id` first and as `settlement_fias_id`
+		 * second. A name-searched parent is asked as DaData's `city` first and as its `settlement`
+		 * second — CDEK's Черкизово is DaData's settlement inside «г Пушкино». Both are two
+		 * requests rather than one OR list, because a two-entry list stops DaData cutting the
+		 * locality out of every label (measured 01.11.2026).
+		 *
+		 * @since 2.0.26
+		 *
+		 * @param Location_Scope $scope Lookup scope.
+		 *
+		 * @return array<int, array<string, string>>|null
+		 */
+		private static function retry_locations( Location_Scope $scope ): ?array {
+			$fias_id = self::parent_fias_id( $scope );
+
+			if ( '' !== $fias_id ) {
+				return [ self::fias_location( 'settlement_fias_id', $fias_id ) ];
+			}
+
+			$locality_parent = self::foreign_locality_parent( $scope );
+
+			if ( null === $locality_parent ) {
+				return null;
+			}
+
+			return [
+				[
+					'country_iso_code' => $scope->country(),
+					'settlement'       => $locality_parent->own_locality_name(),
+				],
+			];
+		}
+
+		/**
 		 * The parent record whose locality every suggestion must share, or null when the search
 		 * is not narrowed by a locality NAME.
 		 *
-		 * Only a parent searched by its settlement NAME qualifies: a DaData parent with its own
-		 * ids is already pinned exactly, and a region-only parent has no locality to compare. Each
+		 * Only a parent searched by its locality NAME qualifies — every non-Russian parent,
+		 * DaData's included, and a Russian one without ids. A Russian DaData parent with its own
+		 * ids, or any parent with a canonical FIAS id, is already pinned exactly, and the name
+		 * check would only lose rows; a region-only parent has no locality to compare. Each
 		 * result is then checked with {@see Location_Record::is_same_locality_as()}, the same
 		 * rule that guards a pick, so a same-named city in another region never reaches the
 		 * buyer (#1534).
 		 *
 		 * @since 2.0.21
+		 * @since 2.0.26 Not for a FIAS-pinned parent; for every non-Russian parent.
 		 *
 		 * @param Location_Scope $scope Lookup scope.
 		 *
@@ -1222,11 +1348,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		private static function foreign_locality_parent( Location_Scope $scope ): ?Location_Record {
 			$parent = $scope->parent_record();
 
-			if ( null === $parent || null === $parent->settlement() || '' === trim( $parent->settlement()['name'] ) ) {
+			if ( null === $parent || '' === $parent->own_locality_name() ) {
 				return null;
 			}
 
-			return [] === self::native_parent_ids( $scope ) ? $parent : null;
+			if ( [] !== self::native_parent_ids( $scope ) || '' !== self::parent_fias_id( $scope ) ) {
+				return null;
+			}
+
+			return $parent;
 		}
 
 		/**

@@ -321,7 +321,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 			];
 
 			if ( null !== $this->location_service && $this->location_service->is_active() ) {
-				$config['location'] = $this->build_location_block( $this->location_service );
+				$service            = $this->location_service;
+				$config['location'] = \Woodev\Framework\Shipping\Location\Location_Service::in_checkout_view(
+					fn() => $this->build_location_block( $service )
+				);
 			}
 
 			return $config;
@@ -343,7 +346,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 * as rule (c) of {@see \Woodev\Framework\Shipping\Location\Location_Service::is_customer_record_stale()}.
 		 * An address that names no city yet leaves it alone.
 		 *
+		 * Every read is a checkout VIEW read
+		 * ({@see \Woodev\Framework\Shipping\Location\Location_Service::in_checkout_view()}), so city
+		 * mode's list applies to the selection exactly as to the block.
+		 *
 		 * @since 2.0.2
+		 * @since 2.0.26 Built inside the checkout view.
 		 *
 		 * @return array<string, mixed>|null The block, or `null` when no location service was injected or
 		 *                                   the layer is inactive (no provider configured) — the chooser
@@ -354,12 +362,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 				return null;
 			}
 
-			$config    = $this->build_location_block( $this->location_service );
-			$customer  = $this->location_service->get_customer_record();
+			$service = $this->location_service;
+
+			return \Woodev\Framework\Shipping\Location\Location_Service::in_checkout_view( fn() => $this->build_blocks_location_config( $service ) );
+		}
+
+		/**
+		 * The body of {@see self::build_location_config()}, run inside the checkout view.
+		 *
+		 * @since 2.0.26
+		 *
+		 * @param \Woodev\Framework\Shipping\Location\Location_Service $service The active location service.
+		 *
+		 * @return array<string, mixed>
+		 */
+		private function build_blocks_location_config( \Woodev\Framework\Shipping\Location\Location_Service $service ): array {
+			$config    = $this->build_location_block( $service );
+			$customer  = $service->get_customer_record();
 			$selection = null;
 
 			if ( null !== $customer && ! $customer['implicit'] ) {
-				$settlement = $this->location_service->get_customer_record_at( \Woodev\Framework\Shipping\Location\Location_Record::LEVEL_SETTLEMENT );
+				$settlement = $service->get_customer_record_at( \Woodev\Framework\Shipping\Location\Location_Record::LEVEL_SETTLEMENT );
 
 				if ( null !== $settlement ) {
 					$selection = [ 'record' => $settlement->to_array() ];
@@ -1105,6 +1128,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *              `location-cascade.js::prefill()` cannot write a locality's
 		 *              text into a field from a bare key.
 		 *
+		 * @since 2.0.26 Gains city mode's `allowed` and `hideSettlement`, and clamps
+		 *              `allowCustomSettlement` / `levels[country].region`, while city mode lists
+		 *              places — see {@see self::with_settlement_choices()}.
+		 *
 		 * @param \Woodev\Framework\Shipping\Location\Location_Service $service The active, already-confirmed facade.
 		 *
 		 * @return array{
@@ -1120,7 +1147,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *     implicit: bool,
 		 *     savedCityUnresolved: string|null,
 		 *     defaultLocality: array{policy: string, record: array<string, mixed>}|null,
-		 *     defaultCountry: string
+		 *     defaultCountry: string,
+		 *     allowed?: array<string, array<int, array{key: string, label: string, level: string, record: array<string, mixed>, value: string}>>,
+		 *     hideSettlement?: bool
 		 * }
 		 */
 		private function build_location_block( \Woodev\Framework\Shipping\Location\Location_Service $service ): array {
@@ -1294,7 +1323,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 			// guard reads the SAME filtered strings — see that method's own docblock.
 			$strings = self::location_i18n_strings();
 
-			return [
+			$block = [
 				'endpoints'             => [
 					'suggest' => $this->rest_base . '/location/suggest',
 					'select'  => $this->rest_base . '/location/select',
@@ -1351,6 +1380,61 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 				'defaultCountry'        => $service->resolve_default_country(),
 				'i18n'                  => $strings,
 			];
+
+			return self::with_settlement_choices( $block, $service->get_settlement_choices() );
+		}
+
+		/**
+		 * Adds city mode's closed settlement choice to a location block (range-shipping city mode
+		 * spec §4.2) — the block is returned unchanged while city mode lists nothing.
+		 *
+		 * - `allowed` — `{ [country]: entry[] }`, the listed places in the `popular` wire shape
+		 *   `{ key, label, level, record }`, so a pick posts to `/select` byte-identical to a search
+		 *   pick, plus `value`: the text the City field shows and posts — the place's OWN name
+		 *   ({@see \Woodev\Framework\Shipping\Location\Location_Record::own_locality_name()}), so «рп
+		 *   Черкизово» posts «Черкизово», not its parent «Пушкино».
+		 * - `hideSettlement` — the merchant hides the field, which works for exactly one place.
+		 * - `allowCustomSettlement` — `false`: free text would defeat the choice. The store setting
+		 *   itself is not rewritten.
+		 * - `levels[country].region` — `false` for every country: the region is not asked, the pick
+		 *   writes its own region into the native State field.
+		 *
+		 * The My Account form never gets these keys: its config is built inside
+		 * {@see \Woodev\Framework\Shipping\Location\Location_Service::without_settlement_choices()}.
+		 *
+		 * @since 2.0.26
+		 *
+		 * @param array<string, mixed>                                                                    $block   The location block.
+		 * @param array{records: \Woodev\Framework\Shipping\Location\Location_Record[], hide_field: bool} $choices The service's settlement choices.
+		 *
+		 * @return array<string, mixed>
+		 */
+		private static function with_settlement_choices( array $block, array $choices ): array {
+			if ( [] === $choices['records'] ) {
+				return $block;
+			}
+
+			$allowed = [];
+
+			foreach ( $choices['records'] as $record ) {
+				$allowed[ $record->country() ][] = [
+					'key'    => $record->key(),
+					'label'  => esc_html( $record->label() ),
+					'level'  => $record->level(),
+					'record' => $record->to_array(),
+					'value'  => $record->own_locality_name(),
+				];
+			}
+
+			foreach ( array_keys( $block['levels'] ) as $country ) {
+				$block['levels'][ $country ]['region'] = false;
+			}
+
+			$block['allowed']               = $allowed;
+			$block['hideSettlement']        = $choices['hide_field'] && 1 === count( $choices['records'] );
+			$block['allowCustomSettlement'] = false;
+
+			return $block;
 		}
 
 		/**
