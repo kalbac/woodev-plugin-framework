@@ -17,11 +17,14 @@ namespace Woodev\Tests\Unit;
 class LicenseKeyHardeningTest extends TestCase {
 
 	/**
-	 * Another valid-looking key: the legacy global is defined to this before the framework loads.
+	 * Another valid Ed25519 public key, generated per run (a literal would trip the secret scan):
+	 * the legacy global is defined to this before the framework loads.
 	 *
-	 * @var string
+	 * @return string
 	 */
-	private const OTHER_KEY = 'iojj3XQJ8ZX9UtstPLpdcspnCb8dlBIb83SIAbQPb1w=';
+	private static function other_key(): string {
+		return base64_encode( sodium_crypto_sign_publickey( sodium_crypto_sign_keypair() ) );
+	}
 
 	/**
 	 * Runs the probe script in a fresh PHP process and returns its output lines.
@@ -47,7 +50,7 @@ $method = new ReflectionMethod( 'Woodev_License_Command_Dispatcher', 'get_public
 PHP_VERSION_ID < 80100 && $method->setAccessible( true );
 echo 'commands=', $method->invoke( null ), "\n";
 PHP,
-			var_export( self::OTHER_KEY, true ),
+			var_export( self::other_key(), true ),
 			var_export( $licensing . '/class-license-envelope-verifier.php', true ),
 			var_export( $licensing . '/class-license-authority-claims.php', true ),
 			var_export( $licensing . '/class-license-command-dispatcher.php', true )
