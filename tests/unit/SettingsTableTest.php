@@ -52,6 +52,20 @@ class SettingsTableTest extends TestCase {
 		$this->assertSame( [], $base->get_rows() );
 	}
 
+	public function test_a_column_tip_is_kept_for_a_known_column_and_an_empty_text_removes_it(): void {
+		$tipped = $this->table()->with_column_tip( 'limit', 'Сколько запросов в сутки' )->with_column_tip( 'ghost', 'Нет такой колонки' );
+
+		$this->assertSame( [ 'limit' => 'Сколько запросов в сутки' ], $tipped->get_column_tips() );
+		$this->assertSame( [], $tipped->with_column_tip( 'limit', '  ' )->get_column_tips() );
+	}
+
+	public function test_with_column_tip_returns_a_copy(): void {
+		$base = $this->table();
+		$base->with_column_tip( 'key', 'Где взять ключ' );
+
+		$this->assertSame( [], $base->get_column_tips() );
+	}
+
 	public function test_it_lists_the_fields_and_the_checks_its_cells_name(): void {
 		$table = $this->table();
 

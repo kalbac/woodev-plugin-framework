@@ -69,7 +69,7 @@ const GROUP_ACTIONS = [
 
 // A fixed-rows table (Settings_Table): the fields are the section's own, drawn without their labels.
 const TABLE_FIELDS = {
-	coefficient: { id: 'coefficient', name: 'Коэффициент', controlType: 'number', value: '1.2', min: 1, max: 3, step: 0.1 },
+	coefficient: { id: 'coefficient', name: 'Коэффициент', controlType: 'number', value: '1.2', min: 1, max: 3, step: 0.1, tooltip: 'Расстояние по прямой умножается на это число: при 1,3 прямые 10 км считаются как 13 км.' },
 	mapbox_key: { id: 'mapbox_key', name: 'Ключ API', controlType: 'password', sensitive: true, is_set: true, value: '' },
 	mapbox_limit: { id: 'mapbox_limit', name: 'Лимит', controlType: 'number', value: '1000' },
 	google_key: { id: 'google_key', name: 'Ключ API', controlType: 'password', sensitive: true, is_set: false, value: '' },
@@ -78,7 +78,7 @@ const TABLE_FIELDS = {
 
 const TABLE_DEMO = {
 	row_title: 'Сервис',
-	columns: [ { id: 'status', label: 'Статус' }, { id: 'key', label: 'Ключ API' }, { id: 'limit', label: 'Лимит в сутки' }, { id: 'check', label: '' } ],
+	columns: [ { id: 'status', label: 'Статус' }, { id: 'key', label: 'Ключ API', tooltip: 'Ключ доступа, который выдаёт сам сервис в своём кабинете.' }, { id: 'limit', label: 'Лимит в сутки', tooltip: 'Сколько раз за сутки плагин может обратиться к сервису; пусто — без ограничения.' }, { id: 'check', label: '' } ],
 	rows: [
 		{ id: 'line', label: 'По прямой', cells: { status: { type: 'text', text: '● работает', tone: 'ok' }, limit: { type: 'field', setting: 'coefficient', prefix: 'коэф.' } } },
 		{ id: 'mapbox', label: 'Mapbox', cells: { status: { type: 'status' }, key: { type: 'field', setting: 'mapbox_key' }, limit: { type: 'field', setting: 'mapbox_limit' }, check: { type: 'check', connection: 'mapbox', settings: [ 'mapbox_key' ], label: 'Проверить', supports_test: true } } },

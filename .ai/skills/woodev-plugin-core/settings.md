@@ -112,7 +112,8 @@ the setting's type is rejected with `_doing_it_wrong()`; `toggle`/`checkbox` fit
   [ col_id => cell ] )`, cells `Settings_Table::field( $setting_id, $prefix )` / `text()` / `status()` /
   `check( $connection_id, $setting_ids, $label )`. The fields stay the section's own (one «Сохранить», masked secrets
   as before). A check is tested through `Woodev_Settings_Connection_Test::test_connection( $connection_id, $values )`
-  with the typed-but-unsaved values; on a composite tab the carrier's `get_tab_settings_providers()` section's
+  with the typed-but-unsaved values; help tips: `->with_column_tip( $col_id, $text )` for a header, the field's control
+  `'tooltip'` for a cell (its `description` is not drawn in a cell); on a composite tab the carrier's `get_tab_settings_providers()` section's
   `get_table_check_ids()` map the check to its handler automatically.
 - **`file` has no React renderer.** The registry accepts it, but the settings page falls through to a plain
   text input — do not use it for uploads.

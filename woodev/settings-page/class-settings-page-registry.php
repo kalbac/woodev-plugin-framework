@@ -359,15 +359,18 @@ final class Settings_Page_Registry {
 	 * @param Settings_Table $table     the table.
 	 * @param string[]       $field_ids ids of the section's fields.
 	 * @param object|null    $handler   the tab's settings handler.
-	 * @return array{row_title:string,columns:array<int,array{id:string,label:string}>,rows:array<int,array<string,mixed>>}
+	 * @return array{row_title:string,columns:array<int,array{id:string,label:string,tooltip:string}>,rows:array<int,array<string,mixed>>}
 	 */
 	private static function build_table( Settings_Table $table, array $field_ids, $handler ): array {
 		$columns = [];
 
+		$tips = $table->get_column_tips();
+
 		foreach ( $table->get_columns() as $column_id => $label ) {
 			$columns[] = [
-				'id'    => (string) $column_id,
-				'label' => $label,
+				'id'      => (string) $column_id,
+				'label'   => $label,
+				'tooltip' => $tips[ $column_id ] ?? '',
 			];
 		}
 
