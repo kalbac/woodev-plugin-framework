@@ -312,7 +312,7 @@ interface Distance_Provider {
 `Distance_Exception` carries a category (`key_rejected`, `quota`, `no_route`, `transport`, `bad_response`) for the breaker.
 `no_route` (e.g. island without road) does NOT open the breaker; it falls back to straight line for that quote.
 Probe = one fixed request Москва, Красная пл. 1 (55.7539, 37.6208) → Москва, Цветной б-р 22 (55.7700, 37.6206); expects
-1–5 km; result message «Подключение работает: 2,1 км» / «Ключ не принят сервисом» / «Превышен лимит запросов» /
+1–15 km (widened in s218: Google 5,9 km and 2GIS 7,1 km in evening traffic were real detours); result message «Подключение работает: 2,1 км» / «Ключ не принят сервисом» / «Превышен лимит запросов» /
 «Сервис не ответил»; a probe counts against the daily cap; the probe response is never shown raw.
 
 **Straight line** (`straight`): `Haversine(from, to) × coefficient` (D12 global), `seconds = null`. Always connected,
