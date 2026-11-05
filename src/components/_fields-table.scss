@@ -14,12 +14,14 @@
 	width: 100%;
 	overflow-x: auto;
 
-	&__table {
+	// `.widefat` styles `tbody th` with its own vertical-align and padding; the doubled class outranks it so a row
+	// label sits on the same line as its controls.
+	&__table.widefat {
 		width: 100%;
 
 		th,
 		td {
-			padding: wd.$gap wd.$gap;
+			padding: wd.$gap-sm wd.$gap;
 			vertical-align: middle;
 			text-align: left;
 		}
@@ -55,12 +57,14 @@
 			min-width: 0;
 		}
 
+		// A masked key's placeholder («сохранено — введите новое для замены») must stay readable.
 		.woodev-field__password {
-			min-width: 220px;
+			min-width: 300px;
 		}
 
-		input[type="number"] {
-			min-width: 84px;
+		// A number is short: keep the control the width of its digits so its tip stays next to it.
+		.woodev-field:has( input[type="number"] ) {
+			flex: 0 1 140px;
 		}
 	}
 
@@ -113,4 +117,9 @@
 			background: rgba( 214, 54, 56, 0.12 );
 		}
 	}
+}
+
+// The group's notice sits under the table, not against its border.
+.woodev-fields-table + .woodev-group__notice {
+	margin-top: wd.$gap;
 }

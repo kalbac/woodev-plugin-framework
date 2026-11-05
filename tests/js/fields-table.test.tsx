@@ -195,3 +195,14 @@ test( 'a table group with no title draws no empty heading', () => {
 
 	expect( screen.queryByRole( 'heading' ) ).toBeNull();
 } );
+
+test( 'a titleless table group drops the card frame; a titled one keeps it', () => {
+	const section = ( title: string ) => ( { id: 's', label: 'S', description: '', fields: FIELDS, groups: [ { id: 'g', title, description: '', notice: '', fields: [ 'coefficient' ], actions: [], table: TABLE() } ] } );
+	const { container, rerender } = render( <SectionView providerId="range" section={ section( '' ) } values={ {} } onFieldChange={ jest.fn() } onFieldRevert={ jest.fn() } /> );
+
+	expect( container.querySelector( '.woodev-group--flush' ) ).not.toBeNull();
+
+	rerender( <SectionView providerId="range" section={ section( 'Сервисы' ) } values={ {} } onFieldChange={ jest.fn() } onFieldRevert={ jest.fn() } /> );
+
+	expect( container.querySelector( '.woodev-group--flush' ) ).toBeNull();
+} );
