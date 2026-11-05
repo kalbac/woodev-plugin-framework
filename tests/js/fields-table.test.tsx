@@ -198,6 +198,26 @@ test( 'a click shows the fresh answer line (not the remembered one)', async () =
 	expect( screen.queryByText( 'Работает с 12:00.' ) ).toBeNull();
 } );
 
+test( 'a stored failure stays «Ошибка» while a fresh check is pending, then follows the fresh answer', async () => {
+	let answer!: ( res: { success: boolean; message: string } ) => void;
+	( testConnection as jest.Mock ).mockReturnValue( new Promise( ( resolve ) => {
+		answer = resolve;
+	} ) );
+	render( <Harness table={ TABLE( { status: { success: false, message: 'Ключ отклонён.' } } ) } /> );
+
+	fireEvent.click( within( rowOf( 'Mapbox' ) ).getByRole( 'button', { name: 'Проверить' } ) );
+
+	// In flight: no false success, and no line (neither the remembered nor a fresh one) yet.
+	expect( within( rowOf( 'Mapbox' ) ).getByText( '✖ Ошибка' ) ).toBeInTheDocument();
+	expect( within( rowOf( 'Mapbox' ) ).queryByText( '● Подключён' ) ).toBeNull();
+	expect( screen.queryByText( 'Ключ отклонён.' ) ).toBeNull();
+
+	answer( { success: true, message: 'Ключ работает.' } );
+
+	expect( await screen.findByText( 'Ключ работает.' ) ).toBeInTheDocument();
+	await waitFor( () => expect( within( rowOf( 'Mapbox' ) ).getByText( '● Подключён' ) ).toBeInTheDocument() );
+} );
+
 test( 'a cell naming a missing field draws nothing, and a check the handler cannot test has no button', () => {
 	const table = TABLE( { supports_test: false } );
 	table.rows[ 1 ].cells.limit = { type: 'field', setting: 'ghost' };

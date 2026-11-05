@@ -127,8 +127,11 @@ export default function FieldsTable( { providerId, table, fields, visibleFieldId
 		return check.connection in results ? results[ check.connection ] : check.status;
 	};
 
-	/** The answer of a check run in this page view, for the line under the row. The remembered one feeds the status cell only. */
-	const justRun = ( check: TableCell | undefined ): TableResult | null => ( check && check.connection ? results[ check.connection ] ?? null : null );
+	/**
+	 * The answer of a check run in this page view, for the line under the row. The remembered one feeds the status cell only.
+	 * While a fresh check is in flight the line is cleared for the recheck, but the status keeps what it showed (`results` is untouched).
+	 */
+	const justRun = ( check: TableCell | undefined ): TableResult | null => ( check && check.connection && busy !== check.connection ? results[ check.connection ] ?? null : null );
 
 	/** A changed credential makes the answer about the old one stale — drop it, like a connection block does. */
 	const forgetChecksReading = ( settingId: string ) => {
@@ -146,8 +149,8 @@ export default function FieldsTable( { providerId, table, fields, visibleFieldId
 
 	const run = ( check: TableCell ) => {
 		const connection = check.connection || '';
+		// Pending is `busy`, kept apart from `results`: a stored failure must stay «Ошибка» until the fresh answer arrives.
 		setBusy( connection );
-		setResults( ( prev ) => ( { ...prev, [ connection ]: null } ) );
 
 		( onCheck ? onCheck( connection, values ) : ( testConnection( providerId, connection, values ) as Promise< TableResult > ) )
 			.then( ( res: TableResult ) => setResults( ( prev ) => ( { ...prev, [ connection ]: res } ) ) )
